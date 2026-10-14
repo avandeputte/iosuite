@@ -64,6 +64,9 @@ ask_app_settings() {
       captions "Photo descriptions (BLIP + PyTorch ~1.5 GB, slow on CPU)" OFF 3>&1 1>&2 2>&3) || exit 1
     DKV_FEATURES=$(echo "$DKV_FEATURES" | tr -d '"' | tr ' ' ',')
   fi
+  if [[ -z "${DKV_WRITE:-}" ]]; then
+    if whiptail --backtitle "$bt" --yesno "May the viewer write into the library?\n\nYes: metadata edits go to XMP sidecar files next to the photos (and to digiKam's database on request). The library is mounted read/write and the container is created PRIVILEGED, because an unprivileged container cannot write files owned by a host user.\n\nNo: browsing only, read-only mounts, unprivileged container." 16 76 3>&1 1>&2 2>&3; then DKV_WRITE=1; else DKV_WRITE=0; fi
+  fi
   if [[ -z "${DKV_ADMIN:-}" ]]; then
     local an aw
     an=$(whiptail --backtitle "$bt" --inputbox "Admin user name (visitors browse read-only; editors and admins sign in)" 9 72 "admin" 3>&1 1>&2 2>&3) || exit 1
@@ -100,27 +103,35 @@ function update_script() {
   exit
 }
 
-start
 ask_app_settings
+if [[ "${DKV_WRITE:-0}" = 1 ]]; then var_unprivileged="0"; fi
+start
 build_container
 description
 
 # ---- the library into the container, then the app's own setup with the answers
 msg_info "Mounting the library into CT ${CTID}"
-pct set "$CTID" -mp0 "$DKV_PHOTOS,mp=/library/photos,ro=1"
+RO=",ro=1"; [[ "${DKV_WRITE:-0}" = 1 ]] && RO=""
+pct set "$CTID" -mp0 "$DKV_PHOTOS,mp=/library/photos$RO"
 if [[ "$DKV_DB" == sqlite:* ]]; then
-  pct set "$CTID" -mp1 "${DKV_DB#sqlite:},mp=/library/digikamDB,ro=1"
+  pct set "$CTID" -mp1 "${DKV_DB#sqlite:},mp=/library/digikamDB$RO"
   DBARG="--sqlite /library/digikamDB"
 else
-  DBARG="--mysql ${DKV_DB#mysql:}"
+  DBARG="--mysql $(printf '%q' "${DKV_DB#mysql:}")"
 fi
 pct reboot "$CTID"; sleep 8
 msg_ok "Mounted the library"
 
 msg_info "Running the app's setup inside the container (packages, models, settings, admin, service)"
-ADMINARG=""; [[ -n "${DKV_ADMIN:-}" ]] && ADMINARG="--admin $DKV_ADMIN"
-# shellcheck disable=SC2086
-pct exec "$CTID" -- sh -c "cd /opt/digikam-viewer/app && sh ./setup.sh --yes --photos /library/photos $DBARG --data /opt/digikam-viewer/data --features '${DKV_FEATURES:-none}' $ADMINARG --service --no-system-deps --port 8600"
+ADMINARG=""; [[ -n "${DKV_ADMIN:-}" ]] && ADMINARG="--admin $(printf '%q' "$DKV_ADMIN")"
+SETUP_CMD="cd /opt/digikam-viewer/app && sh ./setup.sh --yes --photos /library/photos $DBARG --data /opt/digikam-viewer/data --features '${DKV_FEATURES:-none}' $ADMINARG --service --no-system-deps --port 8600"
+# the setup's output is kept in the container; on failure the last lines are shown here
+if ! pct exec "$CTID" -- bash -c "$SETUP_CMD > /opt/digikam-viewer/setup.log 2>&1"; then
+  msg_error "setup.sh failed inside the container; last lines of /opt/digikam-viewer/setup.log:"
+  pct exec "$CTID" -- tail -n 40 /opt/digikam-viewer/setup.log || true
+  msg_error "Fix the cause, then run it again with: pct exec $CTID -- bash -c \"$SETUP_CMD\""
+  exit 1
+fi
 # the container cannot see digiKam's process on the host: ask before database writes instead of pgrep
 pct exec "$CTID" -- sh -c "grep -q ^DIGIKAM_CHECK= /opt/digikam-viewer/app/digikam-viewer.env || echo DIGIKAM_CHECK=ask >> /opt/digikam-viewer/app/digikam-viewer.env; systemctl restart digikam-viewer"
 msg_ok "Setup finished"
@@ -129,4 +140,4 @@ msg_ok "Completed successfully!\n"
 echo -e "${CREATING}${GN}${APP} setup has been successfully initialized!${CL}"
 echo -e "${INFO}${YW}Access it using the following URL:${CL}"
 echo -e "${GATEWAY}${BGN}http://${IP}:8600${CL}"
-echo -e "${INFO}${YW}The library is mounted read-only. For metadata editing: pct set ${CTID} -mp0 ${DKV_PHOTOS},mp=/library/photos (no ro=1); for digiKam database writes with SQLite the same for -mp1.${CL}"
+[[ "${DKV_WRITE:-0}" = 1 ]] && echo -e "${INFO}${YW}The library is mounted read/write (sidecar edits, database writes on request).${CL}" || echo -e "${INFO}${YW}The library is mounted read-only (browsing only). To allow edits later: recreate with write access, or make the container privileged and remount without ro=1.${CL}"
