@@ -4,29 +4,28 @@ A Google-Photos-style web front end for a digiKam library: FastAPI + a single-pa
 
 ## Run
 
-    ./run.sh                      # then open http://localhost:8600
-    ./run.sh --host 0.0.0.0       # also reachable from phones/tablets on your network
+```sh
+git clone https://github.com/avandeputte/digikam-viewer && cd digikam-viewer
+./setup.sh
+```
 
-The first start creates `.venv` (with [uv](https://github.com/astral-sh/uv) when installed, else `python3 -m venv`) and installs `requirements.txt`. Python 3.10 or newer. System tools used when present on the PATH: `ffmpeg` (video thumbnails) and `exiftool` (all metadata writing and the consistency checker; digiKam's bundled copy at `/Applications/digiKam.org/digikam.app/Contents/bin/exiftool` is found automatically on a Mac).
+`setup.sh` is the installer: it asks where the photos are, whether digiKam's database is the SQLite file or MySQL/MariaDB (and tests the connection), which features you want (content search, places, objects, text recognition, descriptions; each downloads its model), the port, an admin account, and whether to start the viewer at login (launchd on macOS, systemd on Linux). Then it creates the Python environment, installs the packages, downloads the models, writes `digikam-viewer.env`, creates the admin and starts the service. Run it again at any time to add a feature; it keeps what is there. Flags skip the questions (`./setup.sh --help`), e.g. `./setup.sh --yes --photos /srv/photos --mysql db:3306/digikam:digikam:secret --features search,places --admin alex:secret`.
 
-**As a login item (macOS):** copy `tools/com.alex.digikam-viewer.plist` to `~/Library/LaunchAgents/` and run `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.alex.digikam-viewer.plist`. It starts at login, restarts if it stops (`KeepAlive`), and logs to `data/server.log`. Remove it with `launchctl bootout gui/$(id -u)/com.alex.digikam-viewer`. The plist hard-codes `/Users/alex/Pictures/digikam-viewer`; edit the paths for another machine.
+Needs Python 3.10+, and `exiftool` and `ffmpeg` on the PATH for metadata editing and video thumbnails (macOS: `brew install exiftool ffmpeg`). Without the service, `./run.sh` starts it in the foreground.
 
-**In Docker:** see [Running in Docker](#running-in-docker).
 
 ## Optional features
 
-Each script installs into `.venv` and/or downloads into `data/`, then needs a viewer restart. The same downloads are available from Settings › Models and data, which also shows the installed revision of each model and can check its source for updates (the server itself never contacts the model hub; downloads run in a child process).
+All chosen in `setup.sh` (or later from Maintenance › Models and data); each is a package plus a model downloaded into `data/models`:
 
-| Script | Turns on | Installs | Downloads |
-| --- | --- | --- | --- |
-| `./enable-search.sh` | content search, "More photos like this", Detected content, tag cover picking | `requirements-search.txt` (fastembed, onnxruntime, numpy) | CLIP ViT-B/32, about 600 MB |
-| `./enable-search.sh siglip2` | SigLIP 2 as an alternative search model | same | SigLIP 2 base, about 1.5 GB |
-| `./enable-places.sh` | place names, the Places page, place tags | nothing | GeoNames cities1000 (CC BY 4.0), about 10 MB download / 30 MB on disk |
-| `./enable-objects.sh` | object detection, the Objects and "people in the picture" filters | `requirements-objects.txt` (numpy, onnxruntime) | YOLOX-S (Apache-2.0), 35 MB |
-| `./enable-ocr.sh` | text in photos (portable engine) | `requirements-ocr.txt` (RapidOCR with bundled models, onnxruntime, headless OpenCV; about 60 MB) | nothing |
-| `./enable-captions.sh` | photo descriptions | `requirements-captions.txt` (PyTorch, transformers; torch alone is over 500 MB) | BLIP base, about 950 MB |
+| Feature | What it adds | Download |
+| --- | --- | --- |
+| Content search | find photos by what is in them; "Detected content" | SigLIP 2 base ~1.5 GB, or CLIP ViT-B/32 ~600 MB |
+| Places | town, region, country for GPS positions, offline | GeoNames ~30 MB |
+| Object detection | people, animals, vehicles, everyday objects with boxes | YOLOX-S 35 MB |
+| Text in photos | signs, jerseys, documents searchable | RapidOCR ~60 MB |
+| Photo descriptions | one sentence per photo, searchable | BLIP base ~950 MB plus PyTorch (CPU build ~1 GB) |
 
-Everything runs locally; only the map tiles (Leaflet + OpenStreetMap) are loaded from the internet.
 
 ## Browsing
 
@@ -51,17 +50,17 @@ Heavy work runs through one queue, one job at a time, in this order: thumbnails,
 | Job | Needs | What you get |
 | --- | --- | --- |
 | Sharpness and exposure | nothing | measured on a ~1000 px decode: Sharpest / Blurry / Very dark / Very bright filters, "Sharpest first" sort; sharpness shown as a rank within your library |
-| Object detection | `enable-objects.sh` | YOLOX-S, 80 everyday object types with boxes; Objects and "people in the picture" filters; O in the viewer |
-| Content search | `enable-search.sh` | CLIP (default) or SigLIP 2 embeddings: text search by description, "More photos like this", Detected content, tag cover photos |
-| Text in photos and face quality | `enable-ocr.sh` | portable engine (`VISION_ENGINE=portable`): RapidOCR text, searchable from the search box; face quality as the sharpness of digiKam's face regions. `VISION_ENGINE=apple` uses Apple's Vision framework through `tools/dkvision.swift` instead (macOS only, compiled with `swiftc` on first use) |
-| Photo descriptions | `enable-captions.sh` | one sentence per photo from BLIP base, through PyTorch on an Apple GPU when there is one, else on the CPU (about 0.5 s per photo); searchable and shown in the info panel. `CAPTIONS=0` turns the job off |
+| Object detection | `setup.sh` | YOLOX-S, 80 everyday object types with boxes; Objects and "people in the picture" filters; O in the viewer |
+| Content search | `setup.sh` | CLIP (default) or SigLIP 2 embeddings: text search by description, "More photos like this", Detected content, tag cover photos |
+| Text in photos and face quality | `setup.sh` | portable engine (`VISION_ENGINE=portable`): RapidOCR text, searchable from the search box; face quality as the sharpness of digiKam's face regions. `VISION_ENGINE=apple` uses Apple's Vision framework through `tools/dkvision.swift` instead (macOS only, compiled with `swiftc` on first use) |
+| Photo descriptions | `setup.sh` | one sentence per photo from BLIP base, through PyTorch on an Apple GPU when there is one, else on the CPU (about 0.5 s per photo); searchable and shown in the info panel. `CAPTIONS=0` turns the job off |
 
 Derived from these:
 
 - **Detected content**: Explore › Detected content files photos under 752 everyday subjects in 13 groups (landscapes, buildings, rooms, people, events, soccer, other sports, animals, food, vehicles and travel, objects, documents, photo style). These are guesses from the embeddings, not stored labels.
 - **Bursts & best shots**: frames taken within 2 seconds on the same camera that also look alike (embedding similarity ≥ 0.80 when content search is on) are grouped; the best frame is the sharpest, nudged by face quality. "Show only the best frame of each burst" is a filter; with editing on, the rest of a burst can be rejected in one click.
 - **Events & trips**: trips are runs of days photographed more than 75 km from the town where most of your photos are taken; events are other days with 20 or more photos, named after the title most of them share, else their main tag, else the town.
-- **Search model**: CLIP ViT-B/32 by default. After `./enable-search.sh siglip2`, choose SigLIP 2 under Settings › AI analysis; the library is re-indexed in the background and search switches when complete. You can switch back at any time.
+- **Search model**: CLIP ViT-B/32 by default. `setup.sh` offers SigLIP 2; switch between installed models under Settings › AI analysis; the library is re-indexed in the background and search switches when complete. You can switch back at any time.
 
 ## Users and permissions
 
@@ -101,7 +100,7 @@ Maps use OpenStreetMap by default (nothing to set up). Settings › Map provider
 - **Location**: "Set location on the map" / "change": click or drag on a map, type coordinates and altitude, copy from the previous photo, or remove. EXIF GPS block and XMP equivalents; `ImagePositions` in the database.
 - **Metadata templates**: Settings › Metadata templates defines them; "Apply a metadata template" in the info panel and Edit dialog. Dublin Core, Photoshop, IPTC Core contact and IPTC fields; `ImageCopyright` rows as digiKam's `ItemCopyright::setFromTemplate` writes them. As in digiKam, applying a template sets every field, so blanks clear.
 - **Tagging**: "Tag" on the selection bar, with recent tags and creation of new tags ("Parent/New tag" + Enter; digiKam closed).
-- **Place tags**: Settings › Place tags, or "Add place tags from GPS positions" in the Tag dialog: creates `Places/Country/Region/Town` tags from the offline geocoder (digiKam closed) and assigns them through the normal edit path. Needs `enable-places.sh`.
+- **Place tags**: Settings › Place tags, or "Add place tags from GPS positions" in the Tag dialog: creates `Places/Country/Region/Town` tags from the offline geocoder (digiKam closed) and assigns them through the normal edit path. Needs `setup.sh`.
 - **GPX correlation**: Edit › "Correlate with GPS track": like digiKam's Geolocation Editor; interpolates between track points, with camera UTC offset, clock correction and maximum gap; preview before writing.
 - **Faces**: F in the viewer. Unnamed faces, suggestions ("Name?") and ignored faces are shown next to confirmed ones, each with actions: confirm, name (person picker that can create a new person), ignore, forget the name, remove, and "Add a face" to draw a region. These mirror digiKam's `FaceTagsEditor` rows (`tagRegion`, `faceToTrain`, `autodetectedFace`, `autodetectedPerson`, `ignoredFace`), require digiKam closed, and rewrite the sidecar's `mwg-rs` and `MP` region structures as `MetadataHub::writeFaceTagsMap` does. The People page lists unnamed faces and suggestions to work through.
 
@@ -185,7 +184,7 @@ All settings are environment variables. `app/config.py` is the source of truth f
 
 `docker compose up` builds the image and runs the viewer with digiKam's folder and the photos mounted read-only and `./data` as its writable volume; edit the two host paths in `docker-compose.yml`. The image (Debian slim, Python 3.12) contains ffmpeg, exiftool, libheif and, with the default build argument `AI=1`, the content-search, text-recognition and object-detection packages; `CAPTIONS=1` adds PyTorch (CPU build) and transformers for photo descriptions, which are slow without a GPU.
 
-- **Models and data** are not in the image. Download them from Settings › Models and data, or with `docker compose exec -e HF_HUB_OFFLINE=0 digikam-viewer python -m app.models download <clip|siglip2|yolox|geonames|blip>`. They land in `/data/models` and `/data/geonames` on the volume and survive rebuilds. The `enable-*.sh` scripts are for the `.venv` install, not the container.
+- **Models and data** are not in the image. Download them from Settings › Models and data, or with `docker compose exec -e HF_HUB_OFFLINE=0 digikam-viewer python -m app.models download <clip|siglip2|yolox|geonames|blip>`. They land in `/data/models` and `/data/geonames` on the volume and survive rebuilds. The `setup.sh` scripts are for the `.venv` install, not the container.
 - **Editing** needs the photos mount writable (drop `:ro`): sidecars are written next to the photos, and in-file writing rewrites the photos themselves.
 - **Writing digiKam's database** ("Apply to digiKam database", tag manager, faces, place tags, badges) needs the digiKam folder writable too when digiKam uses SQLite. With MySQL the folder can stay read-only; set the `DIGIKAM_DB_*` variables (commented in `docker-compose.yml`, `DIGIKAM_DB_HOST: host.docker.internal` for a server on the host). The image has no `mysqldump`, so set `DIGIKAM_DB_BACKUP=skip` or `DIGIKAM_DB_DUMP`.
 - A container cannot see the host's processes, so the Dockerfile sets `DIGIKAM_CHECK=ask`: before a database write the viewer asks you to confirm digiKam is closed.

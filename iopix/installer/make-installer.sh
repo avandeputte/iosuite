@@ -15,7 +15,7 @@ OUT="dist/digikam-viewer-install.sh"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/digikam-viewer"
-cp -R app static requirements*.txt README.md "$TMP/digikam-viewer/"
+cp -R app static requirements*.txt README.md setup.sh "$TMP/digikam-viewer/"
 find "$TMP/digikam-viewer" -name '__pycache__' -prune -exec rm -rf {} + 2>/dev/null || true
 find "$TMP/digikam-viewer" -name '.DS_Store' -delete 2>/dev/null || true
 cp installer/digikam-viewer.service "$TMP/digikam-viewer/digikam-viewer.service"
