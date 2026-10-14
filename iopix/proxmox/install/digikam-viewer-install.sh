@@ -31,7 +31,7 @@ $STD git clone --depth 1 "$REPO" /opt/digikam-viewer/app
 rm -rf /opt/digikam-viewer/app/.git
 cd /opt/digikam-viewer/app
 $STD uv venv /opt/digikam-viewer/venv --python 3.12
-$STD uv pip install --python /opt/digikam-viewer/venv/bin/python -r requirements.txt -r requirements-search.txt -r requirements-ocr.txt -r requirements-objects.txt
+$STD uv pip install --python /opt/digikam-viewer/venv/bin/python -e "/opt/digikam-viewer/app[ai]"
 msg_ok "Installed digiKam Viewer"
 
 msg_info "Writing configuration"
@@ -41,7 +41,6 @@ cat <<EOF >/opt/digikam-viewer/digikam-viewer.env
 DIGIKAM_DB_DIR=/library/digikamDB
 PHOTOS_ROOT=/library/photos
 DATA_DIR=/opt/digikam-viewer/data
-VISION_ENGINE=portable
 HF_HUB_OFFLINE=1
 # the container cannot see digiKam's process on the host: confirm it is closed before database writes
 DIGIKAM_CHECK=ask

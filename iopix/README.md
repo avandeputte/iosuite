@@ -11,7 +11,7 @@ git clone https://github.com/avandeputte/digikam-viewer && cd digikam-viewer
 
 `setup.sh` is the installer: it asks where the photos are, whether digiKam's database is the SQLite file or MySQL/MariaDB (and tests the connection), which features you want (content search, places, objects, text recognition, descriptions; each downloads its model), the port, an admin account, and whether to start the viewer at login (launchd on macOS, systemd on Linux). Then it creates the Python environment, installs the packages, downloads the models, writes `digikam-viewer.env`, creates the admin and starts the service. Run it again at any time to add a feature; it keeps what is there. Flags skip the questions (`./setup.sh --help`), e.g. `./setup.sh --yes --photos /srv/photos --mysql db:3306/digikam:digikam:secret --features search,places --admin alex:secret`.
 
-Needs Python 3.10+, and `exiftool` and `ffmpeg` on the PATH for metadata editing and video thumbnails (macOS: `brew install exiftool ffmpeg`). Without the service, `./run.sh` starts it in the foreground.
+It also installs what the viewer needs from the system when it is missing: Python 3.10+, `exiftool` (metadata editing) and `ffmpeg` (video thumbnails), with Homebrew on macOS (offering to install Homebrew first) or apt/dnf/zypper/pacman on Linux (`--no-system-deps` to skip). Without the service, `./run.sh` starts it in the foreground.
 
 
 ## Optional features
@@ -52,7 +52,7 @@ Heavy work runs through one queue, one job at a time, in this order: thumbnails,
 | Sharpness and exposure | nothing | measured on a ~1000 px decode: Sharpest / Blurry / Very dark / Very bright filters, "Sharpest first" sort; sharpness shown as a rank within your library |
 | Object detection | `setup.sh` | YOLOX-S, 80 everyday object types with boxes; Objects and "people in the picture" filters; O in the viewer |
 | Content search | `setup.sh` | CLIP (default) or SigLIP 2 embeddings: text search by description, "More photos like this", Detected content, tag cover photos |
-| Text in photos and face quality | `setup.sh` | portable engine (`VISION_ENGINE=portable`): RapidOCR text, searchable from the search box; face quality as the sharpness of digiKam's face regions. `VISION_ENGINE=apple` uses Apple's Vision framework through `tools/dkvision.swift` instead (macOS only, compiled with `swiftc` on first use) |
+| Text in photos and face quality | `setup.sh` | RapidOCR text, searchable from the search box; face quality as the sharpness of digiKam's face regions.|
 | Photo descriptions | `setup.sh` | one sentence per photo from BLIP base, through PyTorch on an Apple GPU when there is one, else on the CPU (about 0.5 s per photo); searchable and shown in the info panel. `CAPTIONS=0` turns the job off |
 
 Derived from these:
@@ -124,12 +124,12 @@ Everything the app writes lives in `data/` (`DATA_DIR`), which must not be insid
 | `cache/t`, `cache/p`, `cache/f` | grid thumbnails, viewer previews (pruned at startup past `PREVIEW_CACHE_MAX_MB`), face crops | yes |
 | `analysis.db` | sharpness, objects, text, descriptions, consistency results | yes (recomputed) |
 | `embeddings*.npz`, `concepts-*.npy` | content-search vectors per model | yes (recomputed) |
-| `models/`, `geonames/`, `bin/` | downloaded models and data, compiled `dkvision` | yes (re-download) |
+| `models/`, `geonames/`, `bin/` | downloaded models and data | yes (re-download) |
 | `state.db` | favorites, app albums, settings, pending edits, tag-manager queue | **no** |
 | `sidecar-backups/` | each sidecar as it was before the viewer's first change to it, mirroring the album folders; `tag-ops/<operation>/` for tag-manager rewrites (last 8 operations kept) | your call |
 | `file-backups/` | the full original of each image file before its metadata was first rewritten (one per photo, never replaced) | your call |
 | `db-backups/` | `digikam4-<time>.db` copies (or `digikam-mysql-<time>.sql` dumps) before every database write; the last 10 kept | your call |
-| `server.log` | launchd output | yes |
+| `server.log` | the service's output (launchd on macOS; systemd and Docker log elsewhere) | yes |
 
 Every sidecar or file write goes through one function that refuses to proceed unless the backup exists and at least 2 GB of disk stays free. "Undo" in the info panel restores sidecar and file byte for byte. Sidecar and file backups are never deleted automatically; budget disk space for them. To roll back a database write, quit digiKam and copy a backup over `digikam4.db` (or restore the dump).
 
@@ -159,7 +159,6 @@ All settings are environment variables. `app/config.py` is the source of truth f
 | `SEMANTIC` | `1` | `0` turns content search off even when installed |
 | `ANALYSIS` | `1` | `0` turns the background analysis jobs off |
 | `CAPTIONS` | `1` | `0` turns the photo-description job off |
-| `VISION_ENGINE` | `portable` | `portable` (RapidOCR + face-region sharpness, runs anywhere) or `apple` (Vision framework, macOS only) |
 | `BG_THREADS` | half the cores | cores one background job may use (capped at cores − 1; also in Settings) |
 | `PREWARM_WORKERS` / `ANALYSIS_WORKERS` | `BG_THREADS` | thread counts for the thumbnail pre-warm and the analysis job, if you want them different |
 | `PREWARM` | `1` | build all grid thumbnails in the background after startup |
@@ -180,7 +179,7 @@ All settings are environment variables. `app/config.py` is the source of truth f
 
 ## Running in Docker
 
-`deploy/docker-compose.yml` is a ready-made stack for Dockge or Portainer that pulls the image from GitHub's registry (`ghcr.io/avandeputte/digikam-viewer:latest`) instead of building it: set the photos path, the database and the admin password and start it. The repository's own `docker-compose.yml` builds the image from source.
+`docker-compose.yml` pulls the published image (`ghcr.io/avandeputte/digikam-viewer:latest`) and works as a stack in Dockge or Portainer: set the photos path, the database and the admin password and start it; `docker compose up -d --build` builds from the checkout instead.
 
 `docker compose up` builds the image and runs the viewer with digiKam's folder and the photos mounted read-only and `./data` as its writable volume; edit the two host paths in `docker-compose.yml`. The image (Debian slim, Python 3.12) contains ffmpeg, exiftool, libheif and, with the default build argument `AI=1`, the content-search, text-recognition and object-detection packages; `CAPTIONS=1` adds PyTorch (CPU build) and transformers for photo descriptions, which are slow without a GPU.
 
@@ -188,8 +187,6 @@ All settings are environment variables. `app/config.py` is the source of truth f
 - **Editing** needs the photos mount writable (drop `:ro`): sidecars are written next to the photos, and in-file writing rewrites the photos themselves.
 - **Writing digiKam's database** ("Apply to digiKam database", tag manager, faces, place tags, badges) needs the digiKam folder writable too when digiKam uses SQLite. With MySQL the folder can stay read-only; set the `DIGIKAM_DB_*` variables (commented in `docker-compose.yml`, `DIGIKAM_DB_HOST: host.docker.internal` for a server on the host). The image has no `mysqldump`, so set `DIGIKAM_DB_BACKUP=skip` or `DIGIKAM_DB_DUMP`.
 - A container cannot see the host's processes, so the Dockerfile sets `DIGIKAM_CHECK=ask`: before a database write the viewer asks you to confirm digiKam is closed.
-- Text recognition uses the portable engine; `VISION_ENGINE=apple` is macOS only.
-- The launchd plist is for running directly on a Mac and is not used with Docker.
 
 The image holds no models. On its first start the container downloads the models named in `AUTO_MODELS` (default `siglip2,yolox,geonames`, about 1.6 GB) into the `/data` volume one after another; the library is browsable meanwhile and content search, objects and places switch on as each arrives. Later starts find them in the volume. `AUTO_MODELS=""` skips this; `blip` can be added when the image was built with `CAPTIONS=1`. The same variable works outside Docker (the Linux installer uses it).
 
@@ -237,6 +234,19 @@ About 60 tests in ~15 s. At start the suite cuts a small scratch library (240 ph
 
 ## Layout
 
+```
+app/            the server (FastAPI) and everything it does: index, search, edits, faces, tags, AI, users…
+static/         the web app: one HTML page, app.js, app.css, icons, PWA manifest and service worker
+tests/          pytest suite (API on a scratch library, browser tests with Playwright)
+setup.sh        the installer: asks, installs, downloads, starts the service      run.sh: foreground start
+pyproject.toml  dependencies (base + optional groups)                            mcp.sh: the MCP server
+Dockerfile, docker-compose.yml, .github/workflows/docker.yml   the container image and its build
+installer/      the self-extracting Linux installer (make-installer.sh builds dist/digikam-viewer-install.sh)
+proxmox/        Proxmox VE LXC scripts in the community-scripts layout
+```
+
+Inside `app/`:
+
     app/config.py        paths and tunables (environment variables)
     app/main.py          FastAPI routes, zip download, background scheduling
     app/dkdb.py          digiKam database access for SQLite and MySQL/MariaDB, backups
@@ -261,6 +271,6 @@ About 60 tests in ~15 s. At start the suite cuts a small scratch library (240 ph
     app/moments.py       bursts, events and trips
     app/models.py        model registry, update checks, downloads (python -m app.models download <key>)
     app/mcp_server.py    MCP server (run via ./mcp.sh)
-    static/              the single-page front end (no build step)
-    tools/dkvision.swift optional macOS OCR and face quality via Apple Vision
-    tools/*.plist        launchd agent
+    app/users.py         accounts, roles, sessions, per-user settings
+    app/geocode.py       place search for the location dialog (Nominatim / Google, offline towns)
+    app/maps.py          map provider: OpenStreetMap or Google Maps tiles with the owner's key

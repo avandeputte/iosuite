@@ -20,17 +20,17 @@ ARG CAPTIONS=0
 RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg libimage-exiftool-perl libheif1 libglib2.0-0 mariadb-client \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-COPY requirements*.txt ./
-RUN pip install --no-cache-dir -r requirements.txt \
-    && if [ "$AI" = "1" ]; then pip install --no-cache-dir -r requirements-search.txt -r requirements-ocr.txt -r requirements-objects.txt; fi \
-    && if [ "$CAPTIONS" = "1" ]; then pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu -r requirements-captions.txt; fi
+COPY pyproject.toml README.md ./
 COPY app ./app
 COPY static ./static
+# editable install: the app runs from /app (its static files sit next to the package)
+RUN pip install --no-cache-dir -e ".$([ "$AI" = "1" ] && echo [ai])" \
+    && if [ "$CAPTIONS" = "1" ]; then pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu -e ".[captions]"; fi
 # DIGIKAM_CHECK=ask: the container cannot see the host's processes, so before writing digiKam's
 # database the viewer asks you to confirm digiKam is closed. HF_HUB_OFFLINE=1: the server never
 # contacts the model hub (downloads run in a child process that turns it back on).
 ENV DIGIKAM_DB_DIR=/library/digikamDB PHOTOS_ROOT=/library/photos DATA_DIR=/data \
-    DIGIKAM_CHECK=ask VISION_ENGINE=portable HF_HUB_OFFLINE=1 CAPTIONS=${CAPTIONS} PYTHONUNBUFFERED=1 \
+    DIGIKAM_CHECK=ask HF_HUB_OFFLINE=1 CAPTIONS=${CAPTIONS} PYTHONUNBUFFERED=1 \
     AUTO_MODELS=siglip2,yolox,geonames
 EXPOSE 8600
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8600/api/status', timeout=4)" || exit 1

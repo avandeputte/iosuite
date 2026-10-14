@@ -4,8 +4,6 @@
   vision    text in the picture (OCR) and face quality. Portable engine: RapidOCR
             (onnxruntime) for text, and face quality measured as the sharpness of
             each face region digiKam knows, so it runs anywhere, Docker included.
-            On a Mac, Apple's Vision framework (tools/dkvision.swift) is used
-            instead only when VISION_ENGINE=apple is set.
   objects   everyday objects with boxes (see detector.py), when that model is installed
   captions  a one-sentence description of each photo from a local captioning model
             (BLIP base, see caption.py), so "boy holding a soccer ball" is searchable
@@ -18,10 +16,8 @@ Each analysis is one job in the shared background queue (jobs.py). A job checks
 `_run["gen"]` between batches: start() and reset() bump it, which makes the
 running job stop so the new submission can take over.
 """
-import json
 import logging
 import sqlite3
-import subprocess
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -37,8 +33,6 @@ except ImportError:  # numpy comes with the optional AI features; without it the
 
 log = logging.getLogger(__name__)
 DB = config.DATA_DIR / "analysis.db"
-VISION_BIN = config.DATA_DIR / "bin" / "dkvision"
-VISION_SRC = config.APP_DIR / "tools" / "dkvision.swift"
 JOBS = ("quality", "vision", "objects", "captions")
 progress = {key: {"running": False, "done": 0, "total": 0} for key in JOBS}
 _write_lock = threading.Lock()  # also taken by consistency.py, which shares this database
@@ -330,41 +324,9 @@ def _portable_batch(batch: list) -> list:
 
 
 def vision_available() -> bool:
-    """Whether the vision job can run: the OCR package for the portable engine, or
-    the compiled Vision helper (built on first use) for VISION_ENGINE=apple."""
-    if config.VISION_ENGINE != "apple":
-        return _ocr_engine() is not None
-    if VISION_BIN.exists():
-        return True
-    if not VISION_SRC.exists():
-        return False
-    try:  # compile once; needs the Xcode command line tools
-        VISION_BIN.parent.mkdir(parents=True, exist_ok=True)
-        subprocess.run(["swiftc", "-O", str(VISION_SRC), "-o", str(VISION_BIN)], check=True, capture_output=True, timeout=300)
-    except (OSError, subprocess.SubprocessError) as e:
-        log.warning("vision: could not build %s (%s)", VISION_BIN, e)
-        return False
-    return VISION_BIN.exists()
+    """RapidOCR is installed (the ocr dependency group)."""
+    return _ocr_engine() is not None
 
-
-def _vision_batch(batch: list) -> list:
-    """Apple Vision: one helper process per batch, paths in on stdin, one JSON line per photo out."""
-    by_path = {p["path"]: p for p in batch}
-    res = subprocess.run([str(VISION_BIN), "2048"], input="\n".join(by_path) + "\n", capture_output=True, text=True, timeout=1800)
-    rows = []
-    for line in res.stdout.splitlines():
-        try:
-            d = json.loads(line)
-        except ValueError:
-            continue
-        p = by_path.pop(d.get("path"), None)
-        if not p:
-            continue
-        faces = d.get("faces") or []
-        text = "\n".join(t.strip() for t in d.get("text") or [] if t.strip())[:4000]
-        rows.append((p["id"], _stamp(p), text, len(faces), max(faces) if faces else None))
-    rows += [(p["id"], _stamp(p), "", 0, None) for p in by_path.values()]  # unreadable: don't retry forever
-    return rows
 
 
 def _vision_workers() -> int:
@@ -380,7 +342,7 @@ def _vision_job(photos: list, gen: int):
     if not todo:
         return
     batches = [todo[i:i + 24] for i in range(0, len(todo), 24)]
-    recognise = _vision_batch if config.VISION_ENGINE == "apple" else _portable_batch
+    recognise = _portable_batch
     last = time.time()
     n = _vision_workers()
     with ThreadPoolExecutor(n, thread_name_prefix="vision") as pool:

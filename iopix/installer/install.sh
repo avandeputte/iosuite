@@ -23,7 +23,7 @@
 #
 # What it does: installs the system packages the viewer shells out to (ffmpeg, exiftool,
 # libheif) with apt, dnf, zypper or pacman; unpacks the app under PREFIX/app; creates a
-# Python venv in PREFIX/venv and installs the requirements; writes PREFIX/digikam-viewer.env;
+# Python venv and installs the packages; writes PREFIX/app/digikam-viewer.env;
 # then runs the app's own interactive setup (setup.sh: database, features and model downloads,
 # admin account) and installs a systemd service. Running it again upgrades the code and keeps DATA. The library is
 # only ever read unless you edit metadata from the viewer, which backs every file up first.
@@ -51,33 +51,8 @@ fi
 [ -n "$DATA" ] || DATA="$PREFIX/data"
 [ "$(id -u)" = 0 ] || die "run as root (sudo); it installs packages and a system service"
 
-# --- system packages -------------------------------------------------------------
-if [ "$SYSDEPS" = 1 ]; then
-  if command -v apt-get >/dev/null 2>&1; then
-    say "Installing system packages with apt"
-    export DEBIAN_FRONTEND=noninteractive
-    apt-get update -qq
-    apt-get install -y -qq --no-install-recommends python3 python3-venv python3-pip ffmpeg libimage-exiftool-perl libheif1 libglib2.0-0 ca-certificates curl >/dev/null
-  elif command -v dnf >/dev/null 2>&1; then
-    say "Installing system packages with dnf"
-    dnf install -y -q python3 python3-pip perl-Image-ExifTool libheif glib2 ca-certificates curl >/dev/null
-    # ffmpeg lives in RPM Fusion on Fedora/RHEL; the free build in Fedora's own repo is enough for thumbnails
-    dnf install -y -q ffmpeg-free >/dev/null 2>&1 || dnf install -y -q ffmpeg >/dev/null 2>&1 || say "ffmpeg not installed (video thumbnails need it): enable RPM Fusion and install ffmpeg"
-  elif command -v zypper >/dev/null 2>&1; then
-    say "Installing system packages with zypper"
-    zypper -n -q install python3 python3-pip ffmpeg exiftool libheif1 ca-certificates curl >/dev/null
-  elif command -v pacman >/dev/null 2>&1; then
-    say "Installing system packages with pacman"
-    pacman -Sy --noconfirm --needed python python-pip ffmpeg perl-image-exiftool libheif ca-certificates curl >/dev/null
-  else
-    say "No known package manager; make sure python3 (3.10+) with venv, ffmpeg, exiftool and libheif are installed"
-  fi
-fi
-PY=$(command -v python3) || die "python3 not found"
-"$PY" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)' || die "python3 >= 3.10 is required (found $("$PY" -V))"
-"$PY" -c 'import venv' 2>/dev/null || die "the python3 venv module is missing (apt: python3-venv)"
-command -v exiftool >/dev/null 2>&1 || say "exiftool not found: metadata editing and the consistency checker will be unavailable"
-command -v ffmpeg >/dev/null 2>&1 || say "ffmpeg not found: video thumbnails will be unavailable"
+# --- system packages are installed by the app's setup.sh (python3, exiftool, ffmpeg, libheif) ---------
+[ "$SYSDEPS" = 1 ] && SD="--system-deps" || SD="--no-system-deps"
 
 # --- unpack ------------------------------------------------------------------------
 say "Installing into $PREFIX"
@@ -93,7 +68,7 @@ VERSION=$(cat "$PREFIX/app/VERSION")
 
 # --- everything else is the interactive setup script shipped with the app ----------------------
 say "Running the setup"
-ARGS="--photos $PHOTOS --data $DATA --port $PORT"
+ARGS="--photos $PHOTOS --data $DATA --port $PORT $SD"
 if [ -n "$MYSQL" ]; then ARGS="$ARGS --mysql $MYSQL"; else ARGS="$ARGS --sqlite $DKDB"; fi
 [ "$MODELS" = none ] && ARGS="$ARGS --features none" 
 [ -n "$FEATURES" ] && ARGS="$ARGS --features $FEATURES"

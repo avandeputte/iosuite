@@ -8,6 +8,7 @@
 # Flags (each one skips its question): --photos DIR  --sqlite DIR | --mysql HOST:PORT/DB:USER:PASS
 #   --features search,places,objects,ocr,captions  --search-model clip|siglip2  --port N
 #   --admin NAME:PASSWORD | --no-admin   --service | --no-service   --data DIR   --python PATH
+#   --system-deps | --no-system-deps   install (or skip) python3, exiftool and ffmpeg with brew/apt/dnf/zypper/pacman
 # Run it again at any time: it keeps what is installed and only adds what you choose.
 set -e
 cd "$(dirname "$0")"
@@ -15,13 +16,13 @@ APP="$(pwd)"
 OS="$(uname -s)"
 say() { printf '\n\033[1;34m==>\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
-YES=0; PHOTOS=""; SQLITE=""; MYSQL=""; FEATURES=""; SEARCH_MODEL=""; PORT=""; ADMIN=""; NO_ADMIN=0; SERVICE=""; DATA=""; PY=""
+YES=0; PHOTOS=""; SQLITE=""; MYSQL=""; FEATURES=""; SEARCH_MODEL=""; PORT=""; ADMIN=""; NO_ADMIN=0; SERVICE=""; DATA=""; PY=""; SYSDEPS=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --yes) YES=1; shift;; --photos) PHOTOS="$2"; shift 2;; --sqlite) SQLITE="$2"; shift 2;; --mysql) MYSQL="$2"; shift 2;;
     --features) FEATURES="$2"; shift 2;; --search-model) SEARCH_MODEL="$2"; shift 2;; --port) PORT="$2"; shift 2;;
     --admin) ADMIN="$2"; shift 2;; --no-admin) NO_ADMIN=1; shift;; --service) SERVICE=1; shift;; --no-service) SERVICE=0; shift;;
-    --data) DATA="$2"; shift 2;; --python) PY="$2"; shift 2;;
+    --data) DATA="$2"; shift 2;; --python) PY="$2"; shift 2;; --system-deps) SYSDEPS=1; shift;; --no-system-deps) SYSDEPS=0; shift;;
     -h|--help) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 0;;
     *) die "unknown option $1 (try --help)";;
   esac
@@ -49,11 +50,57 @@ say "digiKam Viewer setup"
 echo "This asks a few questions, installs the Python packages, downloads the AI models you choose, writes the"
 echo "settings and starts the viewer as a service. Nothing in your photo library or digiKam database is changed."
 
-# --- python ----------------------------------------------------------------------------------------
-[ -n "$PY" ] || PY="$(command -v python3.12 || command -v python3.11 || command -v python3.10 || command -v python3 || true)"
-[ -n "$PY" ] || die "python3 (3.10 or newer) is needed"
-"$PY" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)' || die "python3 >= 3.10 is needed (found $("$PY" -V))"
-for t in exiftool ffmpeg; do command -v $t >/dev/null 2>&1 || echo "note: $t is not installed; $([ $t = exiftool ] && echo 'metadata editing and the consistency checker' || echo 'video thumbnails') will be unavailable (macOS: brew install $t; Debian: apt install $([ $t = exiftool ] && echo libimage-exiftool-perl || echo ffmpeg))"; done
+# --- system packages: python3, exiftool, ffmpeg ---------------------------------------------------
+pyok() { [ -n "$1" ] && "$1" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)' 2>/dev/null; }
+findpy() { for c in python3.13 python3.12 python3.11 python3.10 python3; do p="$(command -v $c 2>/dev/null || true)"; pyok "$p" && { echo "$p"; return 0; }; done; return 0; }  # prints nothing when none qualifies (never fails under set -e)
+[ -n "$PY" ] || PY="$(findpy)"
+MISSING=""
+pyok "$PY" || MISSING="$MISSING python3"
+command -v exiftool >/dev/null 2>&1 || MISSING="$MISSING exiftool"
+command -v ffmpeg >/dev/null 2>&1 || MISSING="$MISSING ffmpeg"
+if [ -n "$MISSING" ]; then
+  say "System packages"
+  echo "Missing:$MISSING (python3 3.10+ runs the viewer; exiftool edits metadata; ffmpeg makes video thumbnails)."
+  if [ -z "$SYSDEPS" ]; then yesno "Install them now?" y && SYSDEPS=1 || SYSDEPS=0; fi
+  if [ "$SYSDEPS" = 1 ]; then
+    SUDO=""; [ "$(id -u)" = 0 ] || SUDO="sudo"
+    case "$OS" in
+      Darwin)
+        if ! command -v brew >/dev/null 2>&1; then
+          if yesno "Homebrew is not installed; install it (https://brew.sh)?" y; then
+            /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" || die "Homebrew install failed"
+            eval "$(/opt/homebrew/bin/brew shellenv 2>/dev/null || /usr/local/bin/brew shellenv)"
+          else die "install python3 (3.10+), exiftool and ffmpeg yourself, then run setup again"; fi
+        fi
+        PKGS=""; case "$MISSING" in *python3*) PKGS="$PKGS python@3.12";; esac
+        case "$MISSING" in *exiftool*) PKGS="$PKGS exiftool";; esac; case "$MISSING" in *ffmpeg*) PKGS="$PKGS ffmpeg";; esac
+        echo "brew install$PKGS"; brew install $PKGS
+        [ -x /opt/homebrew/opt/python@3.12/bin/python3.12 ] && PY=/opt/homebrew/opt/python@3.12/bin/python3.12 || PY="$(findpy)";;
+      *)
+        if command -v apt-get >/dev/null 2>&1; then
+          echo "apt-get install python3 python3-venv python3-pip libimage-exiftool-perl ffmpeg libheif1 libglib2.0-0"
+          $SUDO env DEBIAN_FRONTEND=noninteractive sh -c 'apt-get update -qq && apt-get install -y -qq --no-install-recommends python3 python3-venv python3-pip libimage-exiftool-perl ffmpeg libheif1 libglib2.0-0 ca-certificates curl >/dev/null'
+        elif command -v dnf >/dev/null 2>&1; then
+          echo "dnf install python3 python3-pip perl-Image-ExifTool ffmpeg libheif"
+          $SUDO dnf install -y -q python3 python3-pip perl-Image-ExifTool libheif glib2 ca-certificates curl >/dev/null
+          $SUDO dnf install -y -q ffmpeg-free >/dev/null 2>&1 || $SUDO dnf install -y -q ffmpeg >/dev/null 2>&1 || echo "ffmpeg not available from the enabled repositories (video thumbnails need it): enable RPM Fusion and install ffmpeg"
+        elif command -v zypper >/dev/null 2>&1; then
+          echo "zypper install python3 python3-pip ffmpeg exiftool libheif1"; $SUDO zypper -n -q install python3 python3-pip ffmpeg exiftool libheif1 ca-certificates curl >/dev/null
+        elif command -v pacman >/dev/null 2>&1; then
+          echo "pacman -S python python-pip ffmpeg perl-image-exiftool libheif"; $SUDO pacman -Sy --noconfirm --needed python python-pip ffmpeg perl-image-exiftool libheif ca-certificates curl >/dev/null
+        else
+          die "no known package manager; install python3 (3.10+), exiftool and ffmpeg yourself, then run setup again"
+        fi
+        PY="$(findpy)";;
+    esac
+  else
+    pyok "$PY" || die "python3 (3.10 or newer) is needed"
+  fi
+fi
+pyok "$PY" || die "python3 (3.10 or newer) is needed (found ${PY:-none})"
+"$PY" -c 'import venv' 2>/dev/null || die "the python3 venv module is missing (Debian/Ubuntu: apt install python3-venv)"
+command -v exiftool >/dev/null 2>&1 || echo "note: exiftool is still not installed; metadata editing and the consistency checker will be unavailable"
+command -v ffmpeg >/dev/null 2>&1 || echo "note: ffmpeg is still not installed; video thumbnails will be unavailable"
 
 # --- the library ------------------------------------------------------------------------------------
 say "Your library"
@@ -107,11 +154,9 @@ VENV="$APP/.venv"
 VPY="$VENV/bin/python"
 pipi() { if command -v uv >/dev/null 2>&1; then uv pip install -q -p "$VPY" "$@"; else "$VPY" -m pip install -q "$@"; fi; }
 "$VPY" -m pip --version >/dev/null 2>&1 || command -v uv >/dev/null 2>&1 || "$VPY" -m ensurepip -q
-echo "installing the base packages"; pipi -r requirements.txt
-has search  && { echo "installing content search";  pipi -r requirements-search.txt; }
-has objects && { echo "installing object detection"; pipi -r requirements-objects.txt; }
-has ocr     && { echo "installing text recognition"; pipi -r requirements-ocr.txt; }
-has captions && { echo "installing PyTorch and transformers (large)"; pipi --extra-index-url https://download.pytorch.org/whl/cpu -r requirements-captions.txt; }
+G=""; has search && G="$G,search"; has objects && G="$G,objects"; has ocr && G="$G,ocr"
+G="${G#,}"; echo "installing the packages (pyproject.toml${G:+, groups: $G})"; if [ -n "$G" ]; then pipi -e ".[$G]"; else pipi -e .; fi
+has captions && { echo "installing PyTorch and transformers (large)"; pipi --extra-index-url https://download.pytorch.org/whl/cpu -e ".[captions]"; }
 
 say "Settings"
 ENVF="$APP/digikam-viewer.env"
@@ -125,7 +170,6 @@ ENVF="$APP/digikam-viewer.env"
     echo "DIGIKAM_DB_DIR=$SQLITE"
   fi
   echo "DATA_DIR=$DATA"
-  echo "VISION_ENGINE=portable"
   echo "HF_HUB_OFFLINE=1"
   echo "CAPTIONS=$(has captions && echo 1 || echo 0)"
   M=""; has search && M="$M,$SEARCH_MODEL"; has objects && M="$M,yolox"; has places && M="$M,geonames"; has captions && M="$M,blip"

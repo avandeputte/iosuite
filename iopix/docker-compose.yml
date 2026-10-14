@@ -1,32 +1,58 @@
+# digiKam Viewer with Docker: `docker compose up -d` pulls the published image; `docker compose up -d --build`
+# builds it from this checkout instead (build arguments AI / CAPTIONS, see the Dockerfile). Works as a stack in Dockge / Portainer.
+# Edit the three "CHANGE ME" spots (photos path, database, admin password). Everything the viewer
+# writes (index, thumbnails, models, users, backups) lives in the named volume `dkv-data`; the
+# library mounts are read-only. On the first start the container downloads the AI models named
+# in AUTO_MODELS (about 1.6 GB) into the volume while the library is already browsable.
+#
+# The image is on GitHub's registry and is private like the repository: either make the package
+# public (GitHub > Packages > digikam-viewer > Package settings > Change visibility) or give the
+# host a registry login (Portainer: Registries > ghcr.io with a GitHub token that has read:packages;
+# Dockge/CLI: `docker login ghcr.io`).
 services:
   digikam-viewer:
+    image: ghcr.io/avandeputte/digikam-viewer:latest
     build:
       context: .
-      # args: { AI: "1", CAPTIONS: "0" }   # see the Dockerfile; CAPTIONS=1 adds PyTorch for photo descriptions
-    ports: ["8600:8600"]
-    volumes:
-      # digiKam's database folder and the photos, both read-only. Drop ":ro" from the photos
-      # mount to edit metadata (XMP sidecars, optional in-file writes). Drop it from the
-      # digiKam folder only for "Apply to digiKam database", the tag manager, faces and place
-      # tags, which write digikam4.db (SQLite); with MySQL the folder can stay read-only.
-      - /Users/alex/Pictures/digikamDB:/library/digikamDB:ro
-      - /Users/alex/Pictures/photos:/library/photos:ro
-      # everything the viewer writes: index, thumbnails, models, state, backups
-      - ./data:/data
-    # Variable names as in app/config.py and app/dkdb.py (README "Configuration").
-    environment:
-      DIGIKAM_CHECK: ask            # the host's processes are invisible here; confirm instead of pgrep
-      # AUTO_MODELS: siglip2,yolox,geonames   # downloaded into ./data/models on the first start (image default); "" to skip
-      # READ_ONLY: "1"              # browsing only; every write endpoint is refused
-      # BG_THREADS: "2"             # cores one background job may use (default: half the cores)
-      # CAPTIONS: "0"               # photo descriptions off (also off unless built with CAPTIONS=1)
-      # digiKam on MySQL / MariaDB instead of SQLite:
-      # DIGIKAM_DB_TYPE: mysql
-      # DIGIKAM_DB_HOST: host.docker.internal
-      # DIGIKAM_DB_PORT: "3306"
-      # DIGIKAM_DB_NAME: digikam
-      # DIGIKAM_DB_USER: digikam
-      # DIGIKAM_DB_PASSWORD: secret
-      # DIGIKAM_DB_BACKUP: auto     # the image has mariadb-dump, so a dump is taken before each database write;
-      #                             # "skip" if the server is backed up elsewhere, or DIGIKAM_DB_DUMP for a custom command
+      # args: { AI: "1", CAPTIONS: "0" }
+    container_name: digikam-viewer
     restart: unless-stopped
+    ports:
+      - "8600:8600"
+    volumes:
+      - /path/to/photos:/library/photos:ro          # CHANGE ME: the folder digiKam manages
+      - dkv-data:/data
+      # SQLite instead of MariaDB: also mount the folder with digikam4.db and drop the DIGIKAM_DB_* lines below
+      # - /path/to/digikamDB:/library/digikamDB:ro
+    environment:
+      TZ: America/New_York
+      # digiKam's database on MariaDB (the viewer only reads it unless an editor changes metadata,
+      # and then it takes a mysqldump into the volume first)
+      DIGIKAM_DB_TYPE: mysql
+      DIGIKAM_DB_HOST: db.example.lan                 # CHANGE ME: your MariaDB host or IP
+      DIGIKAM_DB_PORT: "3306"
+      DIGIKAM_DB_NAME: digikam
+      DIGIKAM_DB_USER: digikam
+      DIGIKAM_DB_PASSWORD: change-me                  # CHANGE ME
+      # where the photos are inside this container; the album root digiKam recorded
+      # (e.g. /Users/alex/Pictures/photos) is mapped to it (Settings > Album roots can also do this per root)
+      PHOTOS_ROOT: /library/photos
+      # the first admin account; sign-in is enforced from the first start (remove to start open)
+      ADMIN_USER: admin
+      ADMIN_PASSWORD: change-me-please                # CHANGE ME (8 characters or more)
+      # models fetched on first start: content search (SigLIP 2), objects (YOLOX), places (GeoNames)
+      AUTO_MODELS: siglip2,yolox,geonames
+      # cores one background job may use (default: half); the container cannot see digiKam, so
+      # before database writes the viewer asks you to confirm digiKam is closed
+      # BG_THREADS: "2"
+      DIGIKAM_CHECK: ask
+      # READ_ONLY: "1"                               # browsing only, for everyone
+      # GOOGLE_MAPS_API_KEY: ""                      # Settings > Map provider can store it instead
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8600/api/status', timeout=4)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+
+volumes:
+  dkv-data:

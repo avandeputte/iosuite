@@ -5,7 +5,7 @@
 #
 #   ./installer/make-installer.sh            -> dist/digikam-viewer-install.sh
 #
-# The archive carries the code, static files, requirement files and README; no models
+# The archive carries the code, static files, pyproject.toml and README; no models
 # (they are downloaded at install time) and nothing from data/ or .venv/.
 set -e
 cd "$(dirname "$0")/.."
@@ -15,7 +15,7 @@ OUT="dist/digikam-viewer-install.sh"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/digikam-viewer"
-cp -R app static requirements*.txt README.md setup.sh "$TMP/digikam-viewer/"
+cp -R app static pyproject.toml README.md setup.sh run.sh "$TMP/digikam-viewer/"
 find "$TMP/digikam-viewer" -name '__pycache__' -prune -exec rm -rf {} + 2>/dev/null || true
 find "$TMP/digikam-viewer" -name '.DS_Store' -delete 2>/dev/null || true
 cp installer/digikam-viewer.service "$TMP/digikam-viewer/digikam-viewer.service"

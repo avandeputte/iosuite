@@ -27,7 +27,7 @@ jobs:
           python-version: "3.12"
       - name: Syntax and import checks
         run: |
-          python -m pip install -q -r requirements.txt pyflakes
+          python -m pip install -q -e ".[test]"
           python -m pyflakes app
           python -c "import app.main"
           node -e "new Function(require('fs').readFileSync('static/app.js','utf8'))"

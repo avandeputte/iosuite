@@ -9,3 +9,5 @@ __pycache__/
 dist/
 # macOS
 .DS_Store
+# editable-install metadata
+*.egg-info/

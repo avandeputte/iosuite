@@ -258,10 +258,9 @@ def _download_here(key: str):
         from . import places
         places.fetch()
     elif key == "ocr":
-        req = str(config.APP_DIR / "requirements-ocr.txt")
         # a uv-created venv has no pip; try uv first, then pip (Docker image)
         uv = shutil.which("uv")
-        cmd = [uv, "pip", "install", "--upgrade", "-p", sys.executable, "-r", req] if uv else [sys.executable, "-m", "pip", "install", "--upgrade", "-r", req]
+        cmd = [uv, "pip", "install", "--upgrade", "-p", sys.executable, "rapidocr"] if uv else [sys.executable, "-m", "pip", "install", "--upgrade", "rapidocr"]
         subprocess.run(cmd, check=True)
     print("done", key)
 

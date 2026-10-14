@@ -55,7 +55,7 @@ function update_script() {
   mv /opt/digikam-viewer/app.new /opt/digikam-viewer/app
   rm -rf /opt/digikam-viewer/app.old
   cd /opt/digikam-viewer/app
-  $STD uv pip install --python /opt/digikam-viewer/venv/bin/python -r requirements.txt -r requirements-search.txt -r requirements-ocr.txt -r requirements-objects.txt
+  $STD uv pip install --python /opt/digikam-viewer/venv/bin/python -e "/opt/digikam-viewer/app[ai]"
   msg_ok "Updated ${APP}"
 
   msg_info "Starting Service"

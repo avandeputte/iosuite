@@ -1,3 +1,0 @@
-# Object detection (YOLOX-S through onnxruntime). The model file itself is downloaded by enable-objects.sh.
-numpy
-onnxruntime
