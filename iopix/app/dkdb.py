@@ -368,10 +368,15 @@ def last_change_time():
 # backups before writing
 # --------------------------------------------------------------------------
 
-def backup(db_path=None):
-    """A copy of the database before it is changed. SQLite: the file. MySQL: a
-    mysqldump, when the tool is installed; otherwise the write is refused unless
-    DIGIKAM_DB_BACKUP=skip says the owner backs the server up another way."""
+DAILY_SECONDS = 24 * 3600
+
+
+def backup(db_path=None, force: bool = False):
+    """A copy of the database before it is changed. SQLite: the file (cheap, always). MySQL: a
+    mysqldump when the tool is installed; with backup mode `daily` a dump from the last 24 hours
+    is reused for ordinary edits (a badge, a tag, a face), while `force=True` (bulk or destructive
+    operations) always takes a fresh one. `skip` means the owner backs the server up another way,
+    otherwise a missing dump tool refuses the write."""
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
     stamp, n = time.strftime("%Y%m%d-%H%M%S"), 0
     if not is_mysql():
@@ -383,8 +388,13 @@ def backup(db_path=None):
         shutil.copy2(src, dst)
         _prune("digikam4-*.db")
         return dst
-    if settings()["backup"] == "skip":
+    mode = settings()["backup"]
+    if mode == "skip":
         return None
+    if mode == "daily" and not force:
+        recent = sorted(BACKUP_DIR.glob("digikam-mysql-*.sql"), key=lambda p: p.stat().st_mtime)
+        if recent and time.time() - recent[-1].stat().st_mtime < DAILY_SECONDS:
+            return recent[-1]  # today's dump covers this edit
     custom = os.environ.get("DIGIKAM_DB_DUMP", "").strip()
     tool = shutil.which("mysqldump") or shutil.which("mariadb-dump")
     if not tool and not custom:

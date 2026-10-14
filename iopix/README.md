@@ -181,7 +181,7 @@ All settings are environment variables. `app/config.py` is the source of truth f
 | `DIGIKAM_DB_TYPE` | `sqlite` | `sqlite` or `mysql` (MariaDB too) |
 | `DIGIKAM_DB_HOST` / `DIGIKAM_DB_PORT` | `127.0.0.1` / `3306` | server |
 | `DIGIKAM_DB_NAME` / `DIGIKAM_DB_USER` / `DIGIKAM_DB_PASSWORD` | `digikam` / `digikam` / empty | database and account (the same ones digiKam uses) |
-| `DIGIKAM_DB_BACKUP` | `auto` | before a write: `mysqldump`/`mariadb-dump` when installed, else the write is refused; `skip` if the server is backed up another way |
+| `DIGIKAM_DB_BACKUP` | `auto` | before a write: `mysqldump`/`mariadb-dump` when installed, else the write is refused; `daily`: at most one dump a day for ordinary edits, always a fresh one before bulk or destructive operations (recommended for MariaDB; also in Settings › digiKam database); `skip` if the server is backed up another way |
 | `DIGIKAM_DB_DUMP` | unset | a command writing a full dump to stdout, used instead of `mysqldump` (e.g. `docker exec mariadb mariadb-dump --single-transaction --routines --triggers -udigikam -pPASS digikam`) |
 
 ## Running in Docker

@@ -151,7 +151,7 @@ def apply_pending(db_path: Path = None, pending: dict = None, check_running: boo
     preflight(db_path, check_running)
     if not dkdb.is_mysql() and not os.access(db_path, os.W_OK):
         raise SyncError("The digiKam database file is not writable.")
-    backup = dkdb.backup(db_path)
+    backup = dkdb.backup(db_path, force=True)  # applying pending edits touches many rows: always a fresh dump
 
     applied, skipped = [], []
     with write_transaction(db_path, check_running) as con:

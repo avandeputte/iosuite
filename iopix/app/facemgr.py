@@ -126,7 +126,7 @@ def apply_many(ops: list, db_path=None, check_running: bool = True) -> list:
     dbsync.preflight(db_path, check_running, "faces")
     results, touched = [], []
     with _lock:
-        backup = dkdb.backup(db_path)
+        backup = dkdb.backup(db_path, force=len(ops) > 20)  # a big batch gets its own fresh dump
         with dbsync.write_transaction(db_path, check_running) as con:
             sp = _special(con)
             for op in ops:

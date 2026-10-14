@@ -128,7 +128,7 @@ def apply(op: dict, db_path: Path = None, check_running: bool = True, queue: boo
     dbsync.preflight(db_path, check_running, "tags")
     if queue and pending_jobs():
         raise SyncError("Sidecar files from the previous tag change are still being updated. Try again in a moment.")
-    backup_file = dkdb.backup(db_path) if backup else None
+    backup_file = dkdb.backup(db_path, force=(op.get("op") == "delete")) if backup else None  # deleting a tag is destructive
     stamp = time.strftime("%Y%m%d-%H%M%S")
     jobs, summary = [], {"op": kind}
 

@@ -85,3 +85,31 @@ def test_mysql_change_fingerprint_sees_edits_in_place(monkeypatch):
     monkeypatch.setattr(dkdb, "connect", lambda *a, **k: Con2())
     dkdb.source_version()
     assert any("CRC32" in s and "FROM Tags" in s for s in sqls) and any("FROM TagProperties" in s for s in sqls) and any("CRC32" in s and "FROM ImageTagProperties" in s for s in sqls)
+
+
+def test_daily_backup_mode_reuses_a_recent_dump(monkeypatch, tmp_path):
+    """MySQL, mode daily: ordinary edits reuse a dump from the last 24 h; bulk/destructive ones
+    (force=True) always dump; auto dumps every time."""
+    import os, time
+    from app import dkdb
+    monkeypatch.setattr(dkdb, "BACKUP_DIR", tmp_path)
+    monkeypatch.setattr(dkdb, "is_mysql", lambda: True)
+    mode = {"backup": "daily"}
+    monkeypatch.setattr(dkdb, "settings", lambda: {**{k: "" for k in dkdb.KEYS}, "type": "mysql", "host": "h", "port": 3306, "database": "d", "user": "u", "password": "p", **mode})
+    calls = []
+    def fake_run(cmd, stdout=None, stderr=None, env=None, timeout=None):
+        calls.append(cmd); stdout.write(b"x" * 2048)
+        class R: returncode = 0; stderr = b""
+        return R()
+    monkeypatch.setattr(dkdb.subprocess, "run", fake_run)
+    monkeypatch.setattr(dkdb.shutil, "which", lambda n: "/usr/bin/mysqldump")
+    first = dkdb.backup()
+    assert first.exists() and len(calls) == 1
+    assert dkdb.backup() == first and len(calls) == 1, "within the day: reused"
+    assert dkdb.backup(force=True) != first and len(calls) == 2, "forced: a new dump"
+    old = time.time() - 25 * 3600
+    for p in tmp_path.glob("digikam-mysql-*.sql"):
+        os.utime(p, (old, old))
+    dkdb.backup(); assert len(calls) == 3, "older than a day: a new dump"
+    mode["backup"] = "auto"
+    dkdb.backup(); dkdb.backup(); assert len(calls) == 5, "auto: every time"
