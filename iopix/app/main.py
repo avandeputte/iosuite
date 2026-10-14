@@ -367,7 +367,7 @@ def api_status(request: Request):
             "dbWrite": config.DB_WRITE and not appstate.read_only() and users.can_write(user), "writeFiles": edits.writes_files(),
             "user": ({"id": user["id"], "name": user["name"], "role": user["role"], "person": user.get("person")} if user else None), "usersExist": users.any_users(),
             "isAdmin": users.is_admin(user), "signedIn": users.is_signed_in(user),
-            "readOnly": appstate.read_only(), "readOnlyLocked": config.READ_ONLY,
+            "readOnly": appstate.read_only(), "readOnlyLocked": config.READ_ONLY, "digikamCheck": config.DIGIKAM_CHECK,
             "tagJobs": {**tagmanager.progress, "pending": tagmanager.pending_jobs()},
             "analysis": analysis.progress, "jobs": bgjobs.status()}
 

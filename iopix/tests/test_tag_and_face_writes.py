@@ -104,3 +104,16 @@ def test_batch_runs_in_one_transaction(dk):
     assert isinstance(r, (list, dict))
     results = r if isinstance(r, list) else r.get("results", [])
     assert any(x.get("error") for x in results), "the bad op is reported"
+
+
+def test_ask_mode_refuses_until_the_owner_vouches(client, dk):
+    """DIGIKAM_CHECK=ask (containers): a database write is refused with 409 until the owner
+    confirms digiKam is closed; the status tells the front end which mode is in force."""
+    from app import state
+    assert client.get("/api/status").json()["digikamCheck"] == "ask"
+    state.set_setting("digikam_closed_until", "0")  # the harness normally vouches; withdraw it
+    r = client.post("/api/tags/op", json={"op": "add", "parent": 0, "name": "zz-ask-probe"})
+    assert r.status_code == 409 and "digiKam is running" in r.json()["detail"]
+    assert client.post("/api/settings", json={"digikam_closed": True}).status_code == 200
+    r = client.post("/api/tags/op", json={"op": "add", "parent": 0, "name": "zz-ask-probe"})
+    assert r.status_code == 200, r.text
