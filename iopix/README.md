@@ -64,10 +64,10 @@ Derived from these:
 
 ## Updating
 
-- **Standalone (checkout or the Linux installer):** `./update.sh` in the app folder (`/opt/digikam-viewer/app` after the installer). It pulls the latest code (git, or the GitHub tarball when there is no `.git`), keeps `digikam-viewer.env`, the data folder and the Python environment, reinstalls the package groups that are already installed, and restarts the service (launchd or systemd). `./update.sh --check` only reports.
+- **Standalone (checkout or the Linux installer):** `./update.sh` in the app folder (`/opt/digikam-viewer/app` after the installer). It pulls the latest code (git, or the GitHub tarball when there is no `.git`), keeps `digikam-viewer.env`, the data folder and the Python environment, reinstalls the package groups that are already installed, and restarts the service (launchd or systemd). `./update.sh --check` only reports; `--force` reinstalls even when nothing is newer; `DIGIKAM_VIEWER_REF=<sha>` installs that commit. When the installed commit is already the one asked for, the script says so and does not restart.
 - **Proxmox:** `update` inside the container (the framework's command) runs the same script.
 - **Docker:** `docker compose pull && docker compose up -d`.
-- **From an MCP client (e.g. Claude):** the `check_for_update` and `update_viewer` tools; the latter needs the admin token shown under Maintenance › Viewer version › MCP update token (or `MCP_ADMIN_TOKEN` in the environment), because the MCP endpoint has no sign-in. Treat the token like a password.
+- **From an MCP client (e.g. Claude):** the `check_for_update` and `update_viewer` tools (`update_viewer` takes an optional `ref`, the commit to install; give it the sha just pushed, because GitHub can still report the previous commit for a short while, and `check_for_update` then shows the outcome under `lastUpdate`); the latter needs the admin token shown under Maintenance › Viewer version › MCP update token (or `MCP_ADMIN_TOKEN` in the environment), because the MCP endpoint has no sign-in. Treat the token like a password.
 - **From the app:** Maintenance › Viewer version shows the installed commit, "Check for updates" compares it with GitHub's main branch, and "Update now" runs `update.sh` (not in Docker, which says to pull instead). The viewer restarts itself when the update finishes.
 
 ## Users and permissions

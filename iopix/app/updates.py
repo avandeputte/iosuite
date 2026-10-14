@@ -17,6 +17,7 @@ REPO = os.environ.get("DIGIKAM_VIEWER_REPO", "avandeputte/digikam-viewer")
 BRANCH = os.environ.get("DIGIKAM_VIEWER_BRANCH", "main")
 progress = {"running": False, "log": "", "error": None, "finished": None}
 _checked = {}
+RESULT_FILE = "update-result.txt"  # in the data folder; update.sh writes the outcome there before restarting
 
 
 def admin_token() -> str:
@@ -80,23 +81,47 @@ def check() -> dict:
     return out
 
 
+def last_result() -> dict | None:
+    """The outcome of the last update.sh run, from the file it writes before the service restart
+    (the viewer's own record dies with the restart): {ok, text, at}."""
+    f = config.DATA_DIR / RESULT_FILE
+    try:
+        text = f.read_text().strip()
+    except OSError:
+        return None
+    if not text:
+        return None
+    return {"ok": text.startswith("ok:"), "text": text.split(":", 1)[-1].strip()[:300], "at": int(f.stat().st_mtime)}
+
+
 def status() -> dict:
     from . import __version__
     return {"version": __version__, "installed": local_commit()[:7], "docker": in_docker(), "canRun": (config.APP_DIR / "update.sh").exists() and not in_docker(),
-            "check": dict(_checked) if _checked else None, "progress": dict(progress)}
+            "check": dict(_checked) if _checked else None, "progress": dict(progress), "lastUpdate": last_result()}
 
 
-def run():
-    """update.sh in a child process; the service manager restarts the viewer when it finishes."""
+def run(ref: str = ""):
+    """update.sh in a child process; the service manager restarts the viewer when it finishes.
+    ref: a commit or branch to install instead of the tip of main (GitHub can still report the
+    previous commit for a short while after a push). update.sh does nothing when that commit is
+    already installed, and records its outcome in the data folder (see last_result)."""
     if in_docker():
         raise RuntimeError("In Docker, update by pulling the image: docker compose pull && docker compose up -d")
     if progress["running"]:
         raise RuntimeError("An update is already running")
+    ref = re.sub(r"[^A-Za-z0-9._/-]", "", ref or "")[:80]
     progress.update(running=True, log="", error=None, finished=None)
+    env = dict(os.environ, DIGIKAM_VIEWER_RESULT=str(config.DATA_DIR / RESULT_FILE))
+    if ref:
+        env["DIGIKAM_VIEWER_REF"] = ref
+    try:
+        (config.DATA_DIR / RESULT_FILE).unlink()
+    except OSError:
+        pass
 
     def work():
         try:
-            res = subprocess.run(["sh", str(config.APP_DIR / "update.sh")], cwd=str(config.APP_DIR), capture_output=True, text=True, timeout=1800)
+            res = subprocess.run(["sh", str(config.APP_DIR / "update.sh")], cwd=str(config.APP_DIR), capture_output=True, text=True, timeout=1800, env=env)
             progress["log"] = (res.stdout + res.stderr)[-3000:]
             if res.returncode != 0:
                 tail = re.sub(r"\x1b\[[0-9;]*m", "", (res.stderr or res.stdout)).strip()

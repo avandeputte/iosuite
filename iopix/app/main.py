@@ -1224,13 +1224,15 @@ def api_update():
 
 @app.post("/api/update")
 async def api_update_run(request: Request):
-    """Body: {action: check | run}. check asks GitHub (network); run starts update.sh (admin)."""
-    action = (await request.json()).get("action")
+    """Body: {action: check | run, ref?}. check asks GitHub (network); run starts update.sh
+    (admin), optionally for a given commit or branch."""
+    body = await request.json()
+    action = body.get("action")
     if action == "check":
         return await run_in_threadpool(updates.check)
     if action == "run":
         try:
-            updates.run()
+            updates.run(str(body.get("ref") or ""))
         except RuntimeError as e:
             raise HTTPException(409, str(e))
         return {"ok": True}

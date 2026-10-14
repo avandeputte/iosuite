@@ -38,3 +38,29 @@ def test_run_starts_update_script(client, monkeypatch, tmp_path):
             break
         time.sleep(0.1)
     assert updates.progress["error"] is None and "updated" in updates.progress["log"]
+
+
+def test_run_passes_the_ref_and_keeps_the_outcome(client, monkeypatch, tmp_path):
+    """The ref goes to update.sh in the environment; the outcome update.sh records in the data
+    folder survives the restart and is shown as lastUpdate (and by check_for_update)."""
+    monkeypatch.setattr(updates, "in_docker", lambda: False)
+    (tmp_path / "update.sh").write_text('#!/bin/sh\necho "ref=$DIGIKAM_VIEWER_REF"\necho "ok: updated to v9 (abc1234)" > "$DIGIKAM_VIEWER_RESULT"\n')
+    monkeypatch.setattr(updates.config, "APP_DIR", tmp_path)
+    assert client.post("/api/update", json={"action": "run", "ref": "abc1234; rm -rf /"}).status_code == 200
+    import time
+    for _ in range(50):
+        if not updates.progress["running"]:
+            break
+        time.sleep(0.1)
+    assert "ref=abc1234rm-rf/" in updates.progress["log"], "the ref is sanitised to a commit or branch name"
+    updates.progress.update(running=False, finished=None, log="", error=None)  # as after the restart
+    s = client.get("/api/update").json()
+    assert s["lastUpdate"]["ok"] is True and s["lastUpdate"]["text"] == "updated to v9 (abc1234)"
+    (tmp_path / "update.sh").write_text('#!/bin/sh\necho "error: could not reach GitHub" > "$DIGIKAM_VIEWER_RESULT"\nexit 1\n')
+    assert client.post("/api/update", json={"action": "run"}).status_code == 200
+    for _ in range(50):
+        if not updates.progress["running"]:
+            break
+        time.sleep(0.1)
+    s = client.get("/api/update").json()
+    assert s["lastUpdate"]["ok"] is False and "GitHub" in s["lastUpdate"]["text"]

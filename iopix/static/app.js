@@ -1775,9 +1775,10 @@ async function settingsPage(view) {
       const body = h('div', { class: 'muted', style: 'font-size:13px' }, 'Loading…');
       const draw = async () => {
         let u; try { u = await api('/api/update'); } catch (e) { fill(body, e.message); return; }
-        const c = u.check, p = u.progress;
+        const c = u.check, p = u.progress, last = u.lastUpdate;
+        const outcome = !p.running && !p.error && last ? h('div', { class: last.ok ? 'muted' : 'warn', style: 'font-size:12px;margin-top:2px' }, `last update: ${last.text}`) : null;
         const state = p.running ? 'updating… the viewer restarts when it is done' : p.error ? `last update failed: ${p.error}` : !c ? `v${u.version} · commit ${u.installed}` : c.status === 'current' ? `v${u.version} (${u.installed}) is the latest` : c.status === 'update' ? `newer version on GitHub: ${c.remote} from ${c.remoteDate} (${c.remoteMessage}); installed ${u.installed}` : `could not check: ${c.error}`;
-        fill(body, state, ' ', h('div', { style: 'display:flex;gap:6px;margin-top:6px' },
+        fill(body, state, outcome, h('div', { style: 'display:flex;gap:6px;margin-top:6px' },
           btn('Check for updates', async () => { fill(body, 'Checking…'); try { await post('/api/update', { action: 'check' }); } catch (e) { toast(e.message); } draw(); }),
           btn('MCP update token…', async () => { try { const t = await post('/api/update', { action: 'token' }); const back = modal('MCP update token', h('p', { class: 'muted' }, 'An MCP client (e.g. Claude) can run the update with the update_viewer tool and this token; the endpoint itself has no sign-in, so treat it like a password.'), h('div', { class: 'einput', style: 'font-family:monospace;user-select:all;word-break:break-all' }, t.token), t.fromEnv ? h('p', { class: 'muted' }, 'Set by MCP_ADMIN_TOKEN in the environment.') : null,
             h('div', { class: 'modal-btns' }, t.fromEnv ? null : h('button', { class: 'pillbtn', onclick: async () => { if (!confirm('Generate a new token? The old one stops working.')) return; try { await post('/api/update', { action: 'regenerate_token' }); } catch (e) { toast(e.message); } back.remove(); } }, 'Regenerate'), h('button', { class: 'pillbtn on', onclick: () => back.remove() }, 'Close'))); } catch (e) { toast(e.message); } }),

@@ -55,7 +55,7 @@ def test_diagnostic_tools(client, lib):
 def test_update_viewer_needs_the_admin_token(client, monkeypatch, tmp_path):
     from app import updates
     started = []
-    monkeypatch.setattr(updates, "run", lambda: started.append(1))
+    monkeypatch.setattr(updates, "run", lambda ref="": started.append(ref or 1))
     bad = _rpc(client, "tools/call", {"name": "update_viewer", "arguments": {"token": "nope"}}, id=20)["result"]
     assert bad.get("isError") and "token" in bad["content"][0]["text"].lower() and not started
     tok = client.post("/api/update", json={"action": "token"}).json()["token"]
@@ -63,6 +63,8 @@ def test_update_viewer_needs_the_admin_token(client, monkeypatch, tmp_path):
     assert tok not in client.get("/api/update").text, "the token is never in the plain status"
     ok = _rpc(client, "tools/call", {"name": "update_viewer", "arguments": {"token": tok}}, id=21)["result"]
     assert not ok.get("isError") and started == [1]
+    _rpc(client, "tools/call", {"name": "update_viewer", "arguments": {"token": tok, "ref": "abc1234"}}, id=24)
+    assert started == [1, "abc1234"], "the ref reaches the updater"
     new = client.post("/api/update", json={"action": "regenerate_token"}).json()["token"]
     assert new != tok
     again = _rpc(client, "tools/call", {"name": "update_viewer", "arguments": {"token": tok}}, id=22)["result"]

@@ -573,25 +573,30 @@ def photo_file(token: str, photo_id: int) -> dict:
 
 @server.tool(annotations=READ_ONLY)
 def check_for_update() -> dict:
-    """Installed version and commit versus GitHub's main branch (network)."""
+    """Installed version and commit versus GitHub's main branch (network), and the outcome of the
+    last update run (lastUpdate: ok, text, at)."""
     from . import __version__, updates
-    return {"version": __version__, **updates.check()}
+    return {"version": __version__, **updates.check(), "lastUpdate": updates.last_result()}
 
 
 @server.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=True))
-def update_viewer(token: str) -> dict:
+def update_viewer(token: str, ref: str = "") -> dict:
     """Update the viewer to the latest commit on GitHub and restart it (update.sh: code, packages,
     service; settings and data are kept). Needs the admin token from Maintenance > Viewer version,
-    because this endpoint has no sign-in. The connection drops when the viewer restarts; call
-    diagnostics afterwards to confirm the new version. Not available in Docker (pull the image)."""
+    because this endpoint has no sign-in. ref: the commit sha (or branch) to install; pass the sha
+    you just pushed, since GitHub can report the previous commit for a short while after a push.
+    Nothing happens when that commit is already installed. The connection drops when the viewer
+    restarts; call check_for_update afterwards: lastUpdate carries the outcome and installed the
+    commit. Not available in Docker (pull the image)."""
     from . import updates
     if not updates.token_ok(token):
         raise ToolError("Wrong or missing admin token (Maintenance > Viewer version shows it to an admin)")
     try:
-        updates.run()
+        updates.run(ref)
     except RuntimeError as e:
         raise ToolError(str(e))
-    return {"started": True, "note": "update.sh is running; the viewer restarts when it finishes (about a minute). Then call diagnostics."}
+    return {"started": True, "installed": updates.local_commit()[:7], "ref": ref or "main",
+            "note": "update.sh is running; the viewer restarts when it finishes (about a minute). Then call check_for_update: lastUpdate says what happened."}
 
 
 if __name__ == "__main__":
