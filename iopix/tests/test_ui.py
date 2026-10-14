@@ -248,3 +248,12 @@ def test_pasting_a_coordinate_pair_fills_both_fields(page, server, lib):
         el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })); }""")
     assert lon.input_value().startswith("-79.9623"), "a single number is left to the browser's own paste"
     page.locator(".modal button", has_text="Cancel").click()
+
+
+def test_pwa_service_worker_caches_the_shell(page, server):
+    page.goto(server + "/#/photos")
+    out = page.evaluate("""async () => { const r = await navigator.serviceWorker.ready; const c = await caches.open('dkv-shell-v1');
+        return { state: r.active && r.active.state, cached: (await c.keys()).map((k) => new URL(k.url).pathname) }; }""")
+    assert out["state"] == "activated"
+    assert {"/", "/app.js", "/app.css", "/manifest.webmanifest", "/icons/icon-192.png"} <= set(out["cached"])
+    assert not any(p.startswith("/api") or p.startswith("/thumb") for p in out["cached"]), "photos and the API are never cached"
