@@ -208,7 +208,8 @@ It installs the system packages the viewer shells out to (python3 with venv, ffm
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/digikam-viewer/main/proxmox/ct/digikam-viewer.sh)"
 ```
 
-It creates a Debian 13 container (4 CPU, 4 GB, 16 GB disk by default), installs the viewer under `/opt/digikam-viewer` with uv, downloads the models at install time, and starts the `digikam-viewer` service on port 8600. The library is bind-mounted from the host afterwards (the script prints the `pct set … -mp0 … -mp1 …` line): `/library/digikamDB` and `/library/photos`, read-only unless you want to edit metadata (photos) or write digiKam's database (digikamDB, digiKam closed; `DIGIKAM_CHECK=ask` makes the viewer ask, since it cannot see the host's processes). The container's `update` command pulls the latest code from the repository.
+After the framework's own questions (resources, network) it asks about the app: the photo folder and the digiKam folder on the host (or MariaDB host, port, database, user, password), which features to install (each downloads its model), and the admin account. It then creates a Debian 13 container (4 CPU, 4 GB, 16 GB disk by default), bind-mounts the library read-only at `/library/photos` and `/library/digikamDB`, and runs the app's own `setup.sh` inside with those answers: packages, model downloads, settings, admin, and the `digikam-viewer` service on port 8600. For unattended runs set `DKV_PHOTOS`, `DKV_DB` (`sqlite:/path` or `mysql:host:port/db:user:pass`), `DKV_FEATURES` and `DKV_ADMIN` in the environment. The container's `update` command pulls the latest code and keeps the settings and data. Because the container cannot see digiKam's process, `DIGIKAM_CHECK=ask` makes the viewer ask before database writes. I could not run these on a Proxmox host; they are checked for syntax and mirror the tested `setup.sh`.
+
 
 ## MCP server
 

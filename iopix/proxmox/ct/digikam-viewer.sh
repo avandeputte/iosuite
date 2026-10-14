@@ -2,15 +2,16 @@
 # digiKam Viewer LXC for Proxmox VE, in the community-scripts (ProxmoxVE) framework layout:
 # this is the ct/ script; proxmox/install/digikam-viewer-install.sh runs inside the container.
 #
+# After the framework's own questions (resources, network) it asks about the app: where the photos
+# and digiKam's database are on this host (or MariaDB details), which features to install (each
+# downloads its model), and the admin account. It then creates the container, bind-mounts the
+# library into it and runs the app's own setup.sh inside with those answers, which installs the
+# packages, downloads the models, writes the settings, creates the admin and starts the service.
+#
 # Until the scripts are merged upstream, the framework is pointed at this repository for the
 # install script (COMMUNITY_SCRIPTS_URL below; the core engine still comes from community-scripts).
 # Run on the Proxmox host as root:
 #   bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/digikam-viewer/main/proxmox/ct/digikam-viewer.sh)"
-#
-# The container mounts the digiKam database folder and the photo folder from the host
-# (bind mounts you add after creation, see the end of the install), installs the viewer under
-# /opt/digikam-viewer, downloads the models (SigLIP 2, YOLOX, GeoNames; ~1.6 GB) at install
-# time and runs it as a systemd service on port 8600.
 export COMMUNITY_SCRIPTS_URL="${COMMUNITY_SCRIPTS_URL:-https://raw.githubusercontent.com/avandeputte/digikam-viewer/main/proxmox}"
 _cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
 source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/build.func")
@@ -33,6 +34,44 @@ variables
 color
 catch_errors
 
+# ---- the app's own questions (whiptail on the host; env vars DKV_* skip them for unattended runs)
+ask_app_settings() {
+  local bt="digiKam Viewer"
+  DKV_PHOTOS="${DKV_PHOTOS:-$(whiptail --backtitle "$bt" --inputbox "Folder on this Proxmox host with the photos digiKam manages (bind-mounted read-only into the container):" 10 72 "/mnt/photos" 3>&1 1>&2 2>&3)}" || exit 1
+  [[ -d "$DKV_PHOTOS" ]] || { msg_error "Folder not found on this host: $DKV_PHOTOS"; exit 1; }
+  if [[ -z "${DKV_DB:-}" ]]; then
+    if whiptail --backtitle "$bt" --yesno "Is digiKam's database on MySQL/MariaDB?\n\nNo: the SQLite file digikam4.db in a folder on this host." 11 72 3>&1 1>&2 2>&3; then
+      local h p d u w
+      h=$(whiptail --backtitle "$bt" --inputbox "MariaDB host or IP" 9 60 "192.168.1.2" 3>&1 1>&2 2>&3) || exit 1
+      p=$(whiptail --backtitle "$bt" --inputbox "Port" 9 60 "3306" 3>&1 1>&2 2>&3) || exit 1
+      d=$(whiptail --backtitle "$bt" --inputbox "Database" 9 60 "digikam" 3>&1 1>&2 2>&3) || exit 1
+      u=$(whiptail --backtitle "$bt" --inputbox "User" 9 60 "digikam" 3>&1 1>&2 2>&3) || exit 1
+      w=$(whiptail --backtitle "$bt" --passwordbox "Password" 9 60 3>&1 1>&2 2>&3) || exit 1
+      DKV_DB="mysql:$h:$p/$d:$u:$w"
+    else
+      local f
+      f=$(whiptail --backtitle "$bt" --inputbox "Folder on this host containing digikam4.db (bind-mounted read-only; drop ro=1 later for database writes):" 10 72 "/mnt/digikamDB" 3>&1 1>&2 2>&3) || exit 1
+      [[ -f "$f/digikam4.db" ]] || { msg_error "digikam4.db not found in $f"; exit 1; }
+      DKV_DB="sqlite:$f"
+    fi
+  fi
+  if [[ -z "${DKV_FEATURES:-}" ]]; then
+    DKV_FEATURES=$(whiptail --backtitle "$bt" --checklist "Features (each downloads its model into the container):" 15 78 5 \
+      search "Content search: SigLIP 2 (~1.5 GB)" ON \
+      places "Places from GPS positions, offline (GeoNames ~30 MB)" ON \
+      objects "Object detection (YOLOX 35 MB)" ON \
+      ocr "Text in photos (RapidOCR ~60 MB)" ON \
+      captions "Photo descriptions (BLIP + PyTorch ~1.5 GB, slow on CPU)" OFF 3>&1 1>&2 2>&3) || exit 1
+    DKV_FEATURES=$(echo "$DKV_FEATURES" | tr -d '"' | tr ' ' ',')
+  fi
+  if [[ -z "${DKV_ADMIN:-}" ]]; then
+    local an aw
+    an=$(whiptail --backtitle "$bt" --inputbox "Admin user name (visitors browse read-only; editors and admins sign in)" 9 72 "admin" 3>&1 1>&2 2>&3) || exit 1
+    aw=$(whiptail --backtitle "$bt" --passwordbox "Admin password (8 characters or more; empty: no account yet)" 9 72 3>&1 1>&2 2>&3) || exit 1
+    [[ -n "$aw" ]] && DKV_ADMIN="$an:$aw" || DKV_ADMIN=""
+  fi
+}
+
 function update_script() {
   header_info
   check_container_storage
@@ -41,39 +80,53 @@ function update_script() {
     msg_error "No ${APP} Installation Found!"
     exit
   fi
-  msg_info "Stopping Service"
-  systemctl stop digikam-viewer
-  msg_ok "Stopped Service"
-
   msg_info "Updating ${APP}"
   REPO="${DIGIKAM_VIEWER_REPO:-https://github.com/avandeputte/digikam-viewer}"
+  systemctl stop digikam-viewer
   rm -rf /opt/digikam-viewer/app.new
   $STD git clone --depth 1 "$REPO" /opt/digikam-viewer/app.new
-  rm -rf /opt/digikam-viewer/app.new/.git /opt/digikam-viewer/app.new/data
+  rm -rf /opt/digikam-viewer/app.new/.git
+  cp /opt/digikam-viewer/app/digikam-viewer.env /opt/digikam-viewer/app.new/ 2>/dev/null || true
   rm -rf /opt/digikam-viewer/app.old
   mv /opt/digikam-viewer/app /opt/digikam-viewer/app.old
   mv /opt/digikam-viewer/app.new /opt/digikam-viewer/app
+  mv /opt/digikam-viewer/app.old/.venv /opt/digikam-viewer/app/.venv 2>/dev/null || true
   rm -rf /opt/digikam-viewer/app.old
   cd /opt/digikam-viewer/app
-  $STD uv pip install --python /opt/digikam-viewer/venv/bin/python -e "/opt/digikam-viewer/app[ai]"
-  msg_ok "Updated ${APP}"
-
-  msg_info "Starting Service"
+  # setup.sh keeps the settings and the data; with --yes it only refreshes the packages and the service
+  $STD sh ./setup.sh --yes --photos /library/photos --sqlite /library/digikamDB --data /opt/digikam-viewer/data --features none --no-admin --service --no-system-deps || true
   systemctl start digikam-viewer
-  msg_ok "Started Service"
   msg_ok "Updated successfully!"
   exit
 }
 
 start
+ask_app_settings
 build_container
 description
+
+# ---- the library into the container, then the app's own setup with the answers
+msg_info "Mounting the library into CT ${CTID}"
+pct set "$CTID" -mp0 "$DKV_PHOTOS,mp=/library/photos,ro=1"
+if [[ "$DKV_DB" == sqlite:* ]]; then
+  pct set "$CTID" -mp1 "${DKV_DB#sqlite:},mp=/library/digikamDB,ro=1"
+  DBARG="--sqlite /library/digikamDB"
+else
+  DBARG="--mysql ${DKV_DB#mysql:}"
+fi
+pct reboot "$CTID"; sleep 8
+msg_ok "Mounted the library"
+
+msg_info "Running the app's setup inside the container (packages, models, settings, admin, service)"
+ADMINARG=""; [[ -n "${DKV_ADMIN:-}" ]] && ADMINARG="--admin $DKV_ADMIN"
+# shellcheck disable=SC2086
+pct exec "$CTID" -- sh -c "cd /opt/digikam-viewer/app && sh ./setup.sh --yes --photos /library/photos $DBARG --data /opt/digikam-viewer/data --features '${DKV_FEATURES:-none}' $ADMINARG --service --no-system-deps --port 8600"
+# the container cannot see digiKam's process on the host: ask before database writes instead of pgrep
+pct exec "$CTID" -- sh -c "grep -q ^DIGIKAM_CHECK= /opt/digikam-viewer/app/digikam-viewer.env || echo DIGIKAM_CHECK=ask >> /opt/digikam-viewer/app/digikam-viewer.env; systemctl restart digikam-viewer"
+msg_ok "Setup finished"
 
 msg_ok "Completed successfully!\n"
 echo -e "${CREATING}${GN}${APP} setup has been successfully initialized!${CL}"
 echo -e "${INFO}${YW}Access it using the following URL:${CL}"
 echo -e "${GATEWAY}${BGN}http://${IP}:8600${CL}"
-echo -e "${INFO}${YW}Now bind-mount the library into the container (on the host), then restart it:${CL}"
-echo -e "  pct set ${CTID} -mp0 /path/to/digikamDB,mp=/library/digikamDB,ro=1 -mp1 /path/to/photos,mp=/library/photos,ro=1"
-echo -e "  pct reboot ${CTID}"
-echo -e "${INFO}${YW}Drop ro=1 from the photos mount to edit metadata, from the digikamDB mount for database writes (digiKam closed).${CL}"
+echo -e "${INFO}${YW}The library is mounted read-only. For metadata editing: pct set ${CTID} -mp0 ${DKV_PHOTOS},mp=/library/photos (no ro=1); for digiKam database writes with SQLite the same for -mp1.${CL}"
