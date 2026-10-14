@@ -88,6 +88,7 @@ class Engine:
         self._text = self._image = None
         self._image_threads = 0
         self._todo_ids = set()
+        self.failed = set()   # ids that could not be embedded (no thumbnail, unreadable file); they never block a switch-over
         self._lock = threading.Lock()
         self._run = 0
         self._text_cache = {}
@@ -158,18 +159,30 @@ class Engine:
                         paths.append(str(thumbs.make("t", p)))  # the grid thumbnail is plenty for a 224 px model
                         batch.append(p["id"])
                     except Exception as e:
+                        self.failed.add(p["id"])
                         log.warning("embeddings: no thumbnail for %s (%s)", p["path"], e)
                 if batch:
                     try:
                         vecs = _unit(list(self._image.embed(paths, batch_size=BATCH)))
+                    except Exception as e:
+                        # one unreadable image must not cost the whole batch: embed them one by one
+                        log.warning("embeddings: batch of %d failed (%s); retrying one at a time", len(batch), e)
+                        good, vl = [], []
+                        for pid, path in zip(batch, paths):
+                            try:
+                                vl.append(_unit(list(self._image.embed([path], batch_size=1))))
+                                good.append(pid)
+                            except Exception as e1:
+                                self.failed.add(pid)
+                                log.warning("embeddings: cannot embed %s (%s)", path, e1)
+                        batch, vecs = good, (np.concatenate(vl) if vl else None)
+                    if batch:
                         with self._lock:
                             if run != self._run:
                                 return
                             self.ids = np.concatenate([self.ids, np.asarray(batch, np.int32)])
                             self.vecs = np.concatenate([self.vecs, vecs])
                             self.gen += 1
-                    except Exception as e:
-                        log.warning("embeddings: batch of %d failed (%s)", len(batch), e)
                 self.done = min(len(todo), i + BATCH)
                 if time.time() - last_save > 60:
                     with self._lock:
@@ -254,10 +267,16 @@ class Semantic:
 
     @property
     def active(self) -> Engine:
+        """Searches go to the chosen engine once its index is complete. Until then the old CLIP
+        index answers, when there is one: on an install that never had CLIP, the new index
+        answers from the start, growing as it is built, rather than nothing at all."""
         new = self.engines["siglip2"]
-        if self.chosen() == "siglip2" and new.complete_marker.exists():
+        if self.chosen() == "siglip2" and (new.complete_marker.exists() or not self._has_clip()):
             return new
         return self.engines["clip"]
+
+    def _has_clip(self) -> bool:
+        return _ready("clip") and self.engines["clip"].file.exists()
 
     @property
     def upgrade(self):
@@ -295,12 +314,16 @@ class Semantic:
             def finished(engine):
                 engine.load()
                 have = set(engine.ids.tolist())
-                if all(p["id"] in have for p in photos):  # everything indexed: switch over
+                missing = {p["id"] for p in photos} - have
+                # every photo that can be embedded is: switch over. Files that have no thumbnail
+                # (a missing or unreadable video, say) would otherwise block the switch forever.
+                if missing <= engine.failed:
                     engine.complete_marker.write_text("ok\n")
                     engine.gen += 1
+                    log.info("embeddings: %s index complete (%d photos, %d could not be embedded); search uses it now", engine.name, len(have), len(missing))
             up.on_finish = finished
             up.start(photos)
-            if self.engines["clip"].file.exists():
+            if self._has_clip():
                 self.engines["clip"].load()      # keep searching the old index meanwhile, without extending it
             return
         self.active.start(photos)

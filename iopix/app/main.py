@@ -996,7 +996,8 @@ def api_analysis():
          "done": total - (prewarmer.total - prewarmer.done if prewarmer.running else 0), "total": total,
          "running": prewarmer.running, "enabled": True, "rerun": False, "since": prewarmer.started, "last": prewarmer.last, "current": list(prewarmer.current.values())[:3]},
         {"key": "embeddings", "label": "Content search", "enabled": act is not None, "rerun": True,
-         "detail": (f"Model: {names[act.name]}." + (f" Switching to {names[up.name]}: {nf(len(up.ids) if up.ids is not None else 0)} of {nf(total)} indexed; search stays on {names[act.name]} until it finishes." if up else "")) if act else "Not installed (see README).",
+         "detail": (f"Model: {names[act.name]}." + (("" if act is up else f" Switching to {names[up.name]}: ") + f"{nf(len(up.ids) if up.ids is not None else 0)} of {nf(total)} indexed" + ("; results come from the photos indexed so far." if act is up else f"; search stays on {names[act.name]} until it finishes.") if up else "")
+                    + (f" {nf(len(act.failed))} could not be embedded (no thumbnail; see the server log)." if act is not None and act.failed else "")) if act else "Not installed (see README).",
          "done": int(len(act.ids)) if act is not None and act.ids is not None else 0, "total": total, "running": semantic.running},
         {"key": "quality", "label": "Sharpness and exposure", "detail": "Used for the Blurry / Sharpest filters and for picking the best frame of a burst. Computed in the same pass as object detection (one decode per photo), so the two rows advance together.",
          "done": cov["quality"], "total": stills, "running": analysis.progress["quality"]["running"], "enabled": config.ANALYSIS, "rerun": True},
