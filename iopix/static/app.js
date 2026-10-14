@@ -841,8 +841,28 @@ async function locationDialog(ids, current, after) {
   const lon = h('input', { class: 'einput', type: 'number', step: 'any', placeholder: 'longitude', value: current?.lon ?? '', style: 'margin:0;width:140px' });
   const alt = h('input', { class: 'einput', type: 'number', step: 'any', placeholder: 'altitude m', value: current?.alt ?? '', style: 'margin:0;width:110px' });
   const mapEl = h('div', { class: 'imap', style: 'height:360px;margin:10px 0' });
+  // address or landmark search (OpenStreetMap Nominatim through the server; GeoNames towns offline)
+  let searchTimer = 0;
+  const results = h('div', { class: 'alist', style: 'max-height:160px;margin-top:4px', hidden: true });
+  const search = h('input', { class: 'einput', placeholder: 'Search an address or place, e.g. “Mt Lebanon High School”', style: 'margin:0;flex:1;min-width:240px',
+    onkeydown: (e) => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); clearTimeout(searchTimer); run(); } if (e.key === 'Escape') { results.hidden = true; } },
+    oninput: () => { clearTimeout(searchTimer); searchTimer = setTimeout(run, 500); } });
+  const run = async () => {
+    const q = search.value.trim();
+    if (q.length < 2) { results.hidden = true; return; }
+    let r;
+    try { r = await api('/api/geocode?q=' + encodeURIComponent(q)); } catch (e) { toast(e.message); return; }
+    if (search.value.trim() !== q) return;
+    results.hidden = false;
+    fill(results, r.results.length ? r.results.map((x) => h('div', { class: 'frow', style: 'height:auto;padding:6px 8px', title: `${x.lat}, ${x.lon}`, onclick: () => {
+      lat.value = x.lat; lon.value = x.lon; results.hidden = true; search.value = x.name; place();
+      if (map) map.setView([x.lat, x.lon], x.zoom || 14);
+    } }, icon('place'), h('span', { class: 'nm', style: 'white-space:normal' }, x.name, x.detail ? h('span', { class: 'muted' }, ' · ' + x.detail) : null)))
+      : h('div', { class: 'muted', style: 'padding:6px 8px' }, r.source === 'offline' ? 'No town by that name in the offline place list (no internet connection for the full search).' : 'Nothing found.'));
+  };
   const back = modal(ids.length > 1 ? `Set location for ${nf.format(ids.length)} photos` : 'Set location',
     h('p', { class: 'muted' }, 'Click the map or drag the pin, or type coordinates. Saved to the sidecar (and file, if on) and shown in digiKam after its database is updated.'),
+    h('div', { style: 'display:flex;gap:8px;align-items:center;margin-top:6px' }, search), results,
     mapEl,
     h('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;align-items:center' }, lat, lon, alt,
       h('button', { class: 'pillbtn', title: 'Use the location of the previous photo in the grid', onclick: () => { const i = G.data?.id.indexOf(ids[0]); for (let k = (i ?? 0) - 1; k >= 0; k--) { if (G.geo.has(k)) { getDetail(G.data.id[k]).then((d) => { lat.value = d.lat; lon.value = d.lon; alt.value = d.alt ?? ''; place(); }); return; } } toast('No earlier photo in this view has a location.'); } }, 'Copy from previous photo')),

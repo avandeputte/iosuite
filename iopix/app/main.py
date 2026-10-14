@@ -32,6 +32,7 @@ from . import (analysis, caption, concepts, config, consistency, dbsync, detecto
                moments, places, placetags, tagmanager, thumbs)
 from . import state as appstate
 from . import jobs as bgjobs
+from . import geocode
 from . import models as dlmodels
 from .semantic import ENGINES, semantic, enabled as semantic_enabled, _ready as semantic_ready
 from .query import SORTS, build_where
@@ -932,6 +933,16 @@ def api_analysis():
     for j in jobs:
         j["queued"] = bgjobs.is_queued(queue_key[j["key"]])
     return {"jobs": jobs, "photos": total, "models": models if act is not None else [], "queue": bgjobs.status()}
+
+
+@app.get("/api/geocode")
+async def api_geocode(q: str = ""):
+    """Address or landmark search for the location dialog: OpenStreetMap's Nominatim (the same
+    project the map tiles come from), with the offline GeoNames towns as a fallback."""
+    q = q.strip()
+    if len(q) < 2:
+        return {"results": [], "source": None}
+    return await run_in_threadpool(geocode.search, q)
 
 
 @app.get("/api/models")
