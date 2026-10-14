@@ -360,7 +360,7 @@ def _app_stamp() -> str:
 def api_status(request: Request):
     user = request.state.user
     return {"version": _public_version(), "error": state["error"], "rev": appstate.rev, "app": _app_stamp(),
-            "thumbs": {"running": prewarmer.running, "done": prewarmer.done, "total": prewarmer.total},
+            "thumbs": {"running": prewarmer.running, "done": prewarmer.done, "total": prewarmer.total, "since": prewarmer.started, "last": prewarmer.last, "current": list(prewarmer.current.values())[:3]},
             "semantic": {"enabled": semantic_enabled(), "running": semantic.running, "done": semantic.done,
                          "total": semantic.total, "indexed": 0 if semantic.ids is None else int(len(semantic.ids))},
             "places": places.available(), "editing": edits.available() and users.can_write(user), "pendingEdits": len(edits.pending()),
@@ -973,7 +973,7 @@ def api_analysis():
     jobs = [
         {"key": "thumbs", "label": "Thumbnails", "detail": "Small previews for the grid.",
          "done": total - (prewarmer.total - prewarmer.done if prewarmer.running else 0), "total": total,
-         "running": prewarmer.running, "enabled": True, "rerun": False},
+         "running": prewarmer.running, "enabled": True, "rerun": False, "since": prewarmer.started, "last": prewarmer.last, "current": list(prewarmer.current.values())[:3]},
         {"key": "embeddings", "label": "Content search", "enabled": act is not None, "rerun": True,
          "detail": (f"Model: {names[act.name]}." + (f" Switching to {names[up.name]}: {nf(len(up.ids) if up.ids is not None else 0)} of {nf(total)} indexed; search stays on {names[act.name]} until it finishes." if up else "")) if act else "Not installed (see README).",
          "done": int(len(act.ids)) if act is not None and act.ids is not None else 0, "total": total, "running": semantic.running},

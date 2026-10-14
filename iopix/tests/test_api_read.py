@@ -93,3 +93,13 @@ def test_pwa_files_are_served(client):
         assert client.get(p).status_code == 200, p
     html = client.get("/").text
     assert 'rel="manifest"' in html and "serviceWorker" in html and "theme-color" in html
+
+
+def test_job_rows_expose_progress_visibility(client):
+    """A running job can be told from a stuck one: start time, last progress, current file."""
+    s = client.get("/api/status").json()
+    for k in ("since", "last", "current"):
+        assert k in s["thumbs"], k
+    a = client.get("/api/analysis").json()
+    thumbs = next(j for j in a["jobs"] if j["key"] == "thumbs")
+    assert "since" in thumbs and "last" in thumbs and isinstance(thumbs["current"], list)

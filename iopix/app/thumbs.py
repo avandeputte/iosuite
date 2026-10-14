@@ -8,6 +8,8 @@ import shutil
 import subprocess
 import threading
 import zlib
+import time
+import logging
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from pathlib import Path
@@ -24,6 +26,7 @@ from . import config
 
 Image.MAX_IMAGE_PIXELS = None
 FFMPEG = shutil.which("ffmpeg")
+log = logging.getLogger(__name__)
 
 _locks: dict[str, threading.Lock] = {}
 _locks_guard = threading.Lock()
@@ -177,6 +180,8 @@ class Prewarmer:
         self.total = 0
         self.done = 0
         self.running = False
+        self.started = self.last = None   # unix times: job start, last finished item (progress visibility)
+        self.current = {}                 # thread name -> path being worked on right now
         self._gen = 0
 
     def start(self, photos: list[dict]):
@@ -192,16 +197,25 @@ class Prewarmer:
 
         def work(p):
             if gen == self._gen:
+                name = threading.current_thread().name
+                self.current[name] = p["path"]
+                t0 = time.time()
                 try:
                     make("t", p)
-                except Exception:
-                    pass
+                except Exception as e:
+                    log.warning("thumbnail: %s: %s", p["path"], e)
+                finally:
+                    self.current.pop(name, None)
+                    if time.time() - t0 > 60:
+                        log.warning("thumbnail: %s took %.0f s", p["path"], time.time() - t0)
             self.done += 1
+            self.last = time.time()
 
         def run():
             from . import jobs
             if gen != self._gen:
                 return
+            self.started = self.last = time.time()
             with ThreadPoolExecutor(config.PREWARM_WORKERS or jobs.threads(), thread_name_prefix="prewarm") as pool:
                 list(pool.map(work, todo))
             if gen == self._gen:
