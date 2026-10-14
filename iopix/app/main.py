@@ -33,6 +33,7 @@ from . import (analysis, caption, concepts, config, consistency, dbsync, detecto
 from . import state as appstate
 from . import jobs as bgjobs
 from . import geocode, maps, users
+from . import mcp_server
 from . import models as dlmodels
 from .semantic import ENGINES, semantic, enabled as semantic_enabled, _ready as semantic_ready
 from .query import SORTS, build_where
@@ -163,7 +164,8 @@ async def lifespan(_app):
     threading.Thread(target=_watch, name="reindex", daemon=True).start()
     if config.AUTO_MODELS:  # containers and fresh installs: fetch missing models, then start the jobs that need them
         dlmodels.auto_download(config.AUTO_MODELS, on_done=_models_arrived)
-    yield
+    async with mcp_server.server.session_manager.run():  # the MCP endpoint (/mcp) lives in this process
+        yield
 
 
 app = FastAPI(title="digiKam Viewer", lifespan=lifespan, docs_url=None, redoc_url=None)
@@ -1609,4 +1611,12 @@ async def static_revalidate(request: Request, call_next):
     return response
 
 
+# MCP over HTTP on the same port: an assistant connects to http://host:8600/mcp (read-only tools).
+# DNS-rebinding protection is off because the viewer is reached by LAN name or IP, not localhost only.
+from mcp.server.transport_security import TransportSecuritySettings  # noqa: E402
+
+_mcp_asgi = mcp_server.server.streamable_http_app(streamable_http_path="/mcp", stateless_http=True,
+                                                   transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False))
+# its route handles the exact path /mcp; placed first so the static root mount never sees it
+app.router.routes[:0] = list(_mcp_asgi.routes)
 app.mount("/", StaticFiles(directory=config.STATIC_DIR, html=True), name="static")

@@ -213,17 +213,12 @@ After the framework's own questions (resources, network) it asks about the app: 
 
 ## MCP server
 
-`./mcp.sh` is a read-only [MCP](https://modelcontextprotocol.io) server (stdio) so an assistant such as Claude can work with the library. It shares the index and thumbnail cache with the web app and does not need the web app running.
+The viewer is also a read-only [MCP](https://modelcontextprotocol.io) server, on the same port, at `/mcp` (streamable HTTP), so an assistant such as Claude can search and inspect the library through the running app; nothing is installed or downloaded, and no sign-in is needed for read-only use. Tools: library summary, search with every filter the web app has, photo details, people, places, albums, tags, similar photos, links into the viewer.
 
-Tools: `library_overview`, `search_photos` (by content and similarity too when content search is on), `count_by`, `get_photo`, `list_people`, `list_tags`, `list_albums`, `list_places`, `list_app_albums`, `find_duplicates`, `view_photo` (returns the image so the assistant can see it).
+    claude mcp add --transport http digikam-library http://localhost:8600/mcp
 
-Claude Code:
+Claude Desktop and other clients that take a remote MCP URL use the same address (substitute the host name or IP where the viewer runs; set `VIEWER_URL` if links in results should use a different address). Clients that only spawn stdio servers can run `.venv/bin/python -m app.mcp_server` from the checkout instead; it is the same code.
 
-    claude mcp add digikam-library -- /Users/alex/Pictures/digikam-viewer/mcp.sh
-
-Claude Desktop (Settings › Developer › Edit Config):
-
-    { "mcpServers": { "digikam-library": { "command": "/Users/alex/Pictures/digikam-viewer/mcp.sh" } } }
 
 ## Tests
 
@@ -240,7 +235,7 @@ app/            the server (FastAPI) and everything it does: index, search, edit
 static/         the web app: one HTML page, app.js, app.css, icons, PWA manifest and service worker
 tests/          pytest suite (API on a scratch library, browser tests with Playwright)
 setup.sh        the installer: asks, installs, downloads, starts the service      run.sh: foreground start
-pyproject.toml  dependencies (base + optional groups)                            mcp.sh: the MCP server
+pyproject.toml  dependencies (base + optional groups)
 Dockerfile, docker-compose.yml, .github/workflows/docker.yml   the container image and its build
 installer/      the self-extracting Linux installer (make-installer.sh builds dist/digikam-viewer-install.sh)
 proxmox/        Proxmox VE LXC scripts in the community-scripts layout
@@ -271,7 +266,7 @@ Inside `app/`:
     app/caption.py       BLIP photo descriptions
     app/moments.py       bursts, events and trips
     app/models.py        model registry, update checks, downloads (python -m app.models download <key>)
-    app/mcp_server.py    MCP server (run via ./mcp.sh)
+    app/mcp_server.py    MCP server (served at /mcp by the app; stdio with python -m app.mcp_server)
     app/users.py         accounts, roles, sessions, per-user settings
     app/geocode.py       place search for the location dialog (Nominatim / Google, offline towns)
     app/maps.py          map provider: OpenStreetMap or Google Maps tiles with the owner's key
