@@ -81,8 +81,6 @@ const dfDayLocal = new Intl.DateTimeFormat(undefined, { weekday: 'short', month:
 const dfTimeLocal = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
 const fmtWhen = (ts) => `${dfDayLocal.format(date(ts))} ${dfTimeLocal.format(date(ts))}`;
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-const PICKS = ['No pick label', 'Rejected', 'Pending', 'Accepted'];
-const COLOR_CSS = ['transparent', '#e53935', '#fb8c00', '#fdd835', '#43a047', '#1e88e5', '#d81b60', '#9e9e9e', '#212121', '#ffffff'];
 const date = (ts) => new Date(ts * 1000);
 const isoDay = (ts) => date(ts).toISOString().slice(0, 10);
 function fmtBytes(b) {
@@ -238,8 +236,6 @@ function chipList(p) {
     else if (k === 'fmt') add(k, v, v);
     else if (k === 'creator') add(k, v, `By ${v}`, { ic: 'copyright' });
     else if (k === 'rating') add(k, v, `${v}★ and up`, { ic: 'star' });
-    else if (k === 'pick') add(k, v, PICKS[v] || v);
-    else if (k === 'color') add(k, v, `${META?.colorNames[v] || v} label`);
     else if (k === 'type') add(k, v, v === 'video' ? 'Videos' : 'Photos only', { ic: v === 'video' ? 'video' : 'photo' });
     else if (k === 'geo') add(k, v, v === '1' ? 'Has location' : 'No location', { ic: 'place' });
     else if (k === 'untagged') add(k, v, 'Untagged', { ic: 'tag' });
@@ -702,7 +698,6 @@ function albumDialog(ids) {
 // ---------------------------------------------------------------- metadata editing (XMP sidecars only)
 function applyLocal(d, ch) {
   if ('rating' in ch) d.rating = ch.rating > 0 ? ch.rating : -1;
-  for (const k of ['pick', 'color']) if (k in ch) d[k] = ch[k];
   for (const k of ['title', 'caption']) if (k in ch) d[k] = ch[k] || null;
   if ('taken' in ch) { d.taken = ch.taken; d.ts = Math.floor(Date.UTC(+ch.taken.slice(0, 4), +ch.taken.slice(5, 7) - 1, +ch.taken.slice(8, 10), +ch.taken.slice(11, 13), +ch.taken.slice(14, 16), +ch.taken.slice(17, 19)) / 1000); d.day = ch.taken.slice(0, 10); }
   if ('gps' in ch) { d.lat = ch.gps ? ch.gps.lat : null; d.lon = ch.gps ? ch.gps.lon : null; d.alt = ch.gps ? ch.gps.alt : null; }
@@ -728,7 +723,7 @@ async function editPhotos(ids, changes) {
   return true;
 }
 function flashEdit(ch) {
-  const msg = 'rating' in ch ? (ch.rating ? '★'.repeat(ch.rating) : 'Rating cleared') : 'pick' in ch ? PICKS[ch.pick] : 'color' in ch ? `${META.colorNames[ch.color]} label` : null;
+  const msg = 'rating' in ch ? (ch.rating ? '★'.repeat(ch.rating) : 'Rating cleared') : null;
   if (msg) toast(msg, null, null, 1200);
 }
 let RECENT_TAGS = null;
@@ -766,14 +761,10 @@ function tagPickerInput(onPick, placeholder) {
   return inp;
 }
 function editControls(cur, save) {
-  // cur: {rating, pick, color} of a single photo, or {} for a batch
+  // cur: {rating} of a single photo, or {} for a batch (digiKam's pick and color labels are not offered here)
   return [
     h('div', { class: 'erow' }, h('span', { class: 'el' }, 'Rating'), h('div', { class: 'stars' }, [1, 2, 3, 4, 5].map((n) => h('button', { class: n <= (cur.rating || 0) ? 'on' : '', title: `${n} star${n > 1 ? 's' : ''}`,
       onclick: () => save({ rating: cur.rating === n ? 0 : n }) }, icon('star'))), h('button', { class: 'clr', title: 'No rating', onclick: () => save({ rating: 0 }) }, icon('close')))),
-    h('div', { class: 'erow' }, h('span', { class: 'el' }, 'Pick'), h('div', { class: 'eseg' }, [[3, 'Accept'], [2, 'Pending'], [1, 'Reject'], [0, 'None']].map(([v, l]) =>
-      h('button', { class: cur.pick === v ? 'on' : '', onclick: () => save({ pick: v }) }, l)))),
-    h('div', { class: 'erow' }, h('span', { class: 'el' }, 'Color'), h('div', { class: 'ecolors' }, COLOR_CSS.map((c, v) =>
-      h('button', { class: 'dot' + (cur.color === v ? ' on' : ''), title: META.colorNames[v], style: `background:${c}`, onclick: () => save({ color: v }) }, v === 0 ? '∅' : null)))),
   ];
 }
 function tagDialog(ids) {
@@ -1047,7 +1038,7 @@ async function showExplore() {
     h('div', { class: 'pills' },
       pill('Videos', META.videos, { type: 'video' }), pill('★★★★★', count(META.ratings, 5), { rating: 5 }),
       pill('★★★ and up', META.ratings.filter((r) => r[0] >= 3).reduce((a, r) => a + r[1], 0), { rating: 3 }),
-      pill('Accepted picks', count(META.picks, 3), { pick: 3 }), pill('Untagged', null, { untagged: 1 }),
+      pill('Untagged', null, { untagged: 1 }),
       pill('No location', META.total - META.geotagged, { geo: 0 }), pill('Favorites', ST.fav.size, { fav: 1 }),
       h('a', { class: 'pill', href: '#/duplicates' }, 'Duplicate files'), h('a', { class: 'pill', href: '#/bursts' }, 'Bursts & best shots'),
       h('a', { class: 'pill', href: '#/events' }, 'Events & trips'), h('a', { class: 'pill', href: '#/settings' }, 'Settings'), h('a', { class: 'pill', href: '#/maintenance' }, 'Maintenance'), pill('Contains text', null, { hastext: 1 }), pill('Blurry', null, { blurry: 1 }),
@@ -1257,14 +1248,12 @@ async function showBursts(vp) {
     const others = (keep) => g.items.filter((x) => x.id !== keep.id).map((x) => x.id);
     const start = src.id.length;
     g.items.forEach((x) => src.id.push(x.id));
-    const row = h('div', { class: 'duprow' }, g.items.map((x, k) => h('div', { class: 'dupitem burstitem' + (x.best ? ' best' : '') + (x.pick === 1 ? ' rejected' : '') },
+    const row = h('div', { class: 'duprow' }, g.items.map((x, k) => h('div', { class: 'dupitem burstitem' + (x.best ? ' best' : '') + '' },
       h('div', { class: 'tile', style: `width:${Math.round(150 * Math.min(2, x.w / (x.h || 1)))}px;height:150px`, onclick: () => openLightbox(src, start + k, true) },
         h('img', { src: `/thumb/${x.id}`, loading: 'lazy', alt: '' }), x.best ? h('span', { class: 'bestbadge' }, icon('star'), 'Best') : null),
-      h('div', { class: 'sb' }, [x.sharpn != null ? `sharpness ${pct(x.sharpn)}` : null, x.faceq != null ? `faces ${pct(x.faceq)}` : null, PICKS[x.pick] && x.pick ? PICKS[x.pick] : null].filter(Boolean).join(' · ') || ' '),
-      EDITING ? h('a', { class: 'sb lnk', onclick: async () => { if (await editPhotos(others(x), { pick: 1 })) { await editPhotos([x.id], { pick: 3 }); refresh(); } } }, 'Keep only this') : null)));
+      h('div', { class: 'sb' }, [x.sharpn != null ? `sharpness ${pct(x.sharpn)}` : null, x.faceq != null ? `faces ${pct(x.faceq)}` : null].filter(Boolean).join(' · ') || ' '),)));
     return h('div', { class: 'dupgroup' }, h('div', { style: 'display:flex;gap:14px;align-items:baseline;flex-wrap:wrap' },
       h('span', null, dfDay.format(date(g.items[0].ts)), ' ', h('span', { class: 'muted' }, `${dfTime.format(date(g.items[0].ts))} · ${g.items.length} frames`)),
-      EDITING ? h('a', { class: 'lnk', onclick: async () => { if (await editPhotos(others(best), { pick: 1 })) refresh(); } }, 'Reject all but the best') : null,
       h('a', { class: 'lnk', href: hashFor('photos', photosWith({ burst: g.burst, sort: 'old' })) }, 'Open in grid')), row);
   };
   const load = async () => {
@@ -1382,12 +1371,12 @@ function analysisSection(view, part = 'jobs') {
 }
 
 const SRC_LABEL = { db: 'Database', sidecar: 'Sidecar', file: 'Image file' };
-const FIELD_LABEL = { rating: 'Rating', pick: 'Pick label', color: 'Color label', title: 'Title', caption: 'Caption', tags: 'Tags' };
+const FIELD_LABEL = { rating: 'Rating', title: 'Title', caption: 'Caption', tags: 'Tags' };
 async function showConsistency() {
   let field = '', offset = 0, selected = new Set(), d;
   const head = h('div'), list = h('div'), more = h('button', { class: 'pillbtn', style: 'margin:16px 0', onclick: () => load(true) }, 'Show more');
   const fmtv = (f, v) => v == null ? h('i', { class: 'muted' }, 'absent') : f === 'tags' ? (v.length ? h('span', null, v.map((t) => h('span', { class: 'ichip', style: 'height:24px;font-size:12px;margin:1px' }, t.split('/').pop()))) : h('i', { class: 'muted' }, 'none'))
-    : f === 'rating' ? (v ? '★'.repeat(v) : h('i', { class: 'muted' }, 'none')) : f === 'pick' ? (PICKS[v] || 'none') : f === 'color' ? (META.colorNames[v] || 'none') : (v || h('i', { class: 'muted' }, 'empty'));
+    : f === 'rating' ? (v ? '★'.repeat(v) : h('i', { class: 'muted' }, 'none')) : (v || h('i', { class: 'muted' }, 'empty'));
   const item = (r) => {
     const cb = h('input', { type: 'checkbox', checked: selected.has(r.id), onchange: (e) => { e.target.checked ? selected.add(r.id) : selected.delete(r.id); bar(); } });
     return h('div', { class: 'crec' + (selected.has(r.id) ? ' sel' : '') },
@@ -1444,7 +1433,7 @@ async function showConsistency() {
   const sel = h('select', { onchange: (e) => { field = e.target.value; load(); } }, h('option', { value: '' }, 'Any field'), ...Object.entries(FIELD_LABEL).map(([f, l]) => h('option', { value: f }, l)));
   main.replaceChildren(h('div', { class: 'page' }, crumbs([['Maintenance', '#/maintenance'], ['Metadata consistency', null]]),
     h('h1', null, 'Metadata consistency'),
-    h('div', { class: 'muted', style: 'max-width:820px' }, 'For each photo, the rating, pick and color labels, title, caption and tags are read from three places: digiKam’s database, the XMP sidecar, and the metadata embedded in the image file. Photos where they disagree are listed below. Select photos, choose which copy is right, and sync the others to it. An absent value (no sidecar, nothing in the file) counts as a disagreement only when another copy has a value.'),
+    h('div', { class: 'muted', style: 'max-width:820px' }, 'For each photo, the rating, title, caption and tags are read from three places: digiKam’s database, the XMP sidecar, and the metadata embedded in the image file. Photos where they disagree are listed below. Select photos, choose which copy is right, and sync the others to it. An absent value (no sidecar, nothing in the file) counts as a disagreement only when another copy has a value.'),
     h('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:14px 0' },
       h('button', { class: 'pillbtn on', onclick: () => scan(false, false) }, icon('spark'), 'Check new and changed photos'),
       h('button', { class: 'pillbtn', onclick: () => { if (confirm('Re-check every photo in the library? This reads every sidecar and image file and takes a while.')) scan(false, true); } }, 'Re-check whole library'),
@@ -1860,9 +1849,6 @@ async function renderFilters() {
     h('h3', null, 'Rating at least'),
     h('div', { class: 'stars' }, [1, 2, 3, 4, 5].map((n) => h('button', { class: n <= rating ? 'on' : '', title: `${n} star${n > 1 ? 's' : ''} and up`,
       onclick: () => applyFilter((q) => setOne(q, 'rating', n)) }, icon('star')))),
-    section('Pick label', [...multi('pick', f.picks.sort((a, b) => b[0] - a[0]), (v) => PICKS[v]),
-      frow('Hide rejected', null, p.get('norejected') === '1', () => applyFilter((q) => setOne(q, 'norejected', '1')))], 9),
-    section('Color label', multi('color', f.colors.filter(([v]) => v > 0), (v) => META.colorNames[v], (v) => h('span', { class: 'dot', style: `background:${COLOR_CSS[v]}` })), 10),
     h('h3', null, 'Date'),
     dateIn('From', 'from', f.tsMin != null ? isoDay(f.tsMin) : ''), dateIn('Until', 'to', f.tsMax != null ? isoDay(f.tsMax) : ''),
     section('Year', multi('year', f.years), 6),
@@ -2292,8 +2278,6 @@ function renderInfo() {
   const kv = [];
   const addKv = (k, v) => { if (v != null && v !== '') kv.push(h('span', null, k), h('span', null, v)); };
   if (!EDITING) addKv('Rating', stars);
-  if (d.pick && !EDITING) kv.push(h('span', null, 'Pick label'), h('span', null, lnk(PICKS[d.pick], { pick: d.pick })));
-  if (d.color && !EDITING) kv.push(h('span', null, 'Color label'), h('span', null, lnk(META.colorNames[d.color], { color: d.color })));
   if (d.creator) kv.push(h('span', null, 'Creator'), h('span', null, lnk(d.creator, { creator: d.creator })));
   if (EDITING) kv.push(h('span', null, 'Template'), h('span', null, h('a', { class: 'lnk', onclick: () => templatePicker([d.id]) }, 'Apply a metadata template…')));
   addKv('Copyright', d.copyright);
@@ -2315,7 +2299,7 @@ function renderInfo() {
     d.camera || exposure ? irow('camera', d.camera ? lnk(d.camera, { camera: d.camera }) : 'Unknown camera',
       [d.lens ? lnk(d.lens, { lens: d.lens }) : null, d.lens && exposure ? h('br') : null, exposure]) : null,
     EDITING ? [h('h4', null, 'Edit'),
-      editControls({ rating: Math.max(d.rating, 0), pick: d.pick, color: d.color }, saveOne),
+      editControls({ rating: Math.max(d.rating, 0) }, saveOne),
       h('input', { class: 'einput', placeholder: 'Title', value: d.title || '', onkeydown: (e) => { e.stopPropagation(); if (e.key === 'Enter') e.target.blur(); },
         onchange: (e) => saveOne({ title: e.target.value }) }),
       h('textarea', { class: 'einput', placeholder: 'Caption', rows: 2, onkeydown: (e) => e.stopPropagation(), onchange: (e) => saveOne({ caption: e.target.value }) }, d.caption || ''),
@@ -2388,7 +2372,6 @@ document.addEventListener('keydown', (e) => {
     else if (e.key === 'd' || e.key === 'D') LB.el.dl.click();
     else if (e.key === 'l' || e.key === 'L') LB.el.favBtn.click();
     else if (EDITING && /^[0-5]$/.test(e.key)) editPhotos([LB.src.id[LB.i]], { rating: +e.key });
-    else if (EDITING && 'xXaAuU'.includes(e.key)) editPhotos([LB.src.id[LB.i]], { pick: { x: 1, a: 3, u: 0 }[e.key.toLowerCase()] });
     else if (e.key === ' ') { const v = LB.el.frame.querySelector('video'); v ? (v.paused ? v.play() : v.pause()) : toggleSlideshow(); }
     else return;
     e.preventDefault();

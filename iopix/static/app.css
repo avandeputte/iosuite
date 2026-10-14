@@ -258,9 +258,6 @@ body.filters-open #scrub { right: 354px; }
 .eseg button + button { border-left: 1px solid var(--line); }
 .eseg button.on { background: var(--accent-bg); color: var(--accent); font-weight: 600; }
 .eseg button:hover { background: var(--bg2); }
-.ecolors { display: flex; gap: 5px; flex-wrap: wrap; }
-.ecolors .dot { width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--line); font-size: 11px; color: var(--fg2); line-height: 18px; }
-.ecolors .dot.on { outline: 2px solid var(--accent); outline-offset: 2px; }
 .einput { width: 100%; margin-top: 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); padding: 8px 10px; outline: 0; resize: vertical; font: inherit; color: inherit; }
 .einput:focus { border-color: var(--accent); }
 .enote { margin-top: 10px; font-size: 12.5px; color: var(--fg2); background: var(--bg2); border-radius: 8px; padding: 8px 10px; }
