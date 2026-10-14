@@ -207,7 +207,8 @@ def test_settings_and_maintenance_pages(page, server):
     assert "Display" not in heads and "Editing" not in heads
     assert page.locator("b", has_text="Background work").count() == 1
     assert page.locator("b", has_text="Restart the viewer").count() == 1
-    assert page.locator("#nav a", has_text="Maintenance").count() == 1
+    assert page.locator("#nav a", has_text="Maintenance").count() == 0, "no longer in the main navigation"
+    assert page.locator("#topbar a.tool[href='#/maintenance']").count() == 1 and page.locator("#topbar a.tool[href='#/settings']").count() == 1
 
 
 def test_keyboard_navigation(page, server, lib):

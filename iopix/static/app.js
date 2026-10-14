@@ -133,7 +133,6 @@ const FILTER_VIEWS = ['photos', 'map'];
 const NAV = [
   ['photos', 'Photos', 'photo'], ['explore', 'Explore', 'explore'], ['favorites', 'Favorites', 'heartO', '#/photos?fav=1'],
   ['people', 'People', 'person'], ['places', 'Places', 'place'], ['albums', 'Albums', 'folder'], ['tags', 'Tags', 'tag'], ['map', 'Map', 'map'],
-  ['settings', 'Settings', 'tune'], ['maintenance', 'Maintenance', 'wrench'],
 ];
 // hash route name -> page renderer (function declarations are hoisted, so this can sit above them)
 const VIEW_FNS = { photos: showPhotos, explore: showExplore, people: showPeople, places: showPlaces, albums: showAlbums, tags: showTags, map: showMap, duplicates: showDuplicates,
@@ -201,7 +200,7 @@ function onRoute() {
   const fp = filterParams();
   const vp = new URLSearchParams(route.params); vp.delete('p');
   const key = route.view + '?' + (PARAM_VIEWS.includes(route.view) ? vp : fp).toString();
-  document.querySelectorAll('#nav a').forEach((a) => a.classList.toggle('on', a.dataset.v === (route.view === 'photos' && fp.get('fav') === '1' && [...fp.keys()].length === 1 ? 'favorites' : route.view)));
+  document.querySelectorAll('#nav a, #topbar a.tool').forEach((a) => a.classList.toggle('on', a.dataset.v === (route.view === 'photos' && fp.get('fav') === '1' && [...fp.keys()].length === 1 ? 'favorites' : route.view)));
   renderChips();
   if (key !== viewKey) {
     viewKey = key;

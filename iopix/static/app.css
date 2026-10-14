@@ -24,6 +24,10 @@ input, select { font: inherit; color: inherit; }
 .pillbtn:disabled { opacity: .45; pointer-events: none; }
 
 /* ---- top bar */
+/* settings and maintenance: small, quiet icons at the top right, not part of the main navigation */
+#topbar a.tool { width: 32px; height: 32px; color: var(--fg2); opacity: .7; }
+#topbar a.tool .ic { width: 20px; height: 20px; }
+#topbar a.tool:hover, #topbar a.tool.on { opacity: 1; background: var(--bg3); }
 #topbar { position: fixed; inset: 0 0 auto 0; height: var(--topbar); display: flex; align-items: center; gap: 16px; padding: 0 16px; background: var(--bg); z-index: 20; }
 .brand { display: flex; align-items: center; gap: 10px; width: 196px; flex: none; }
 .logo { width: 32px; height: 32px; border-radius: 50%; background: conic-gradient(#ea4335 0 25%, #fbbc04 0 50%, #34a853 0 75%, #4285f4 0); position: relative; }
