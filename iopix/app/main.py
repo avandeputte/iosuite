@@ -85,11 +85,10 @@ def _start_prewarm():
         rows = [dict(r) for r in con.execute(f"SELECT {THUMB_COLS} FROM photos ORDER BY ts DESC")]
     finally:
         con.close()
-    semantic.start(rows)
+    if config.PREWARM:
+        prewarmer.start(rows)  # first: its cache scan is slow over a mount, and thumbnails come first in the queue
     analysis.start(rows)
-    if not config.PREWARM:
-        return
-    prewarmer.start(rows)
+    semantic.start(rows)
 
 
 _kick = threading.Event()  # set after an edit so the index is rebuilt right away

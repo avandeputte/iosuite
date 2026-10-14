@@ -79,3 +79,16 @@ def test_thread_budget_is_bounded(monkeypatch):
     assert jobs.threads() == max(1, n - 1)
     state.set_setting("bg_threads", "0")
     assert jobs.threads() == max(1, min(jobs.config.BG_THREADS, n - 1))
+
+
+def test_a_burst_of_submissions_is_picked_in_order(monkeypatch):
+    """Startup submits several jobs within a second; the worker must not grab the first one
+    that arrives (embeddings) ahead of thumbnails."""
+    monkeypatch.setattr(jobs, "GRACE", 0.5)
+    order = []
+    jobs.submit("embeddings", lambda: order.append("embeddings"))
+    time.sleep(0.1)
+    jobs.submit("thumbs", lambda: order.append("thumbs"))
+    jobs.submit("pixels", lambda: order.append("pixels"))
+    assert _wait(lambda: len(order) == 3, timeout=5)
+    assert order == ["thumbs", "pixels", "embeddings"]

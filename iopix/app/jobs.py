@@ -26,6 +26,8 @@ _queue = {}          # key -> callable, at most one per key
 _current = None      # key of the job running now
 _started = None      # when it started
 _thread = None
+_last_submit = 0.0  # jobs submitted close together (a start, a library change) are picked in ORDER, not arrival order
+GRACE = 3.0
 
 
 def threads() -> int:
@@ -45,8 +47,10 @@ def submit(key: str, fn):
     global _thread
     if key not in ORDER:
         raise ValueError(key)
+    global _last_submit
     with _lock:
         _queue[key] = fn
+        _last_submit = time.time()
         if _thread is None or not _thread.is_alive():
             _thread = threading.Thread(target=_worker, name="jobs", daemon=True)
             _thread.start()
@@ -67,6 +71,15 @@ def is_queued(key: str) -> bool:
 def _worker():
     global _current, _started
     while True:
+        # wait until the queue has been quiet for GRACE seconds, so a burst of submissions
+        # (startup, a library change) settles before the first job is picked by ORDER
+        while True:
+            with _lock:
+                settle = GRACE - (time.time() - _last_submit)
+                if not _queue or settle <= 0:
+                    break
+            _wake.wait(timeout=settle)
+            _wake.clear()
         with _lock:
             key = next((k for k in ORDER if k in _queue), None)
             fn = _queue.pop(key) if key else None
