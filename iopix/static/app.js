@@ -106,9 +106,20 @@ async function api(path) {
   if (!r.ok) throw new Error(`${r.status} ${path}`);
   return r.json();
 }
-async function post(path, body) {
+async function post(path, body, retried) {
   const r = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-  if (!r.ok) { let msg = `${r.status} ${path}`; try { msg = (await r.json()).detail || msg; } catch { /* not json */ } throw new Error(msg); }
+  if (!r.ok) {
+    let msg = `${r.status} ${path}`; try { msg = (await r.json()).detail || msg; } catch { /* not json */ }
+    // in a container (DIGIKAM_CHECK=ask) the viewer cannot see digiKam's process, so a database write is
+    // refused until the owner vouches that digiKam is closed; ask once here, vouch for 10 minutes, retry
+    if (r.status === 409 && !retried && DIGIKAM_CHECK === 'ask' && /digiKam is running/i.test(msg) && path !== '/api/settings') {
+      if (confirm('The viewer cannot see whether digiKam is running (it runs in a container, or digiKam is on another machine).\n\nIs every digiKam that uses this database closed right now? Writing to the database while digiKam is open can corrupt it.\n\nOK: yes, it is closed; go ahead (remembered for 10 minutes).')) {
+        await post('/api/settings', { digikam_closed: true }, true);
+        return post(path, body, true);
+      }
+    }
+    throw new Error(msg);
+  }
   return r.json();
 }
 // Display preferences. Anonymous: the browser's localStorage. Signed in: the user's settings on the
@@ -154,7 +165,7 @@ let SEM = { enabled: false };
 let APP_STAMP = null;
 const applyBadgePref = () => document.body.classList.toggle('nobadges', store.get('badges', '1') === '0');
 let dragTag = null;
-let IS_ADMIN = true, SIGNED_IN = true, USERS_EXIST = false;
+let IS_ADMIN = true, SIGNED_IN = true, USERS_EXIST = false, DIGIKAM_CHECK = 'pgrep', APP_VERSION = '', APP_COMMIT = '';
 let EDITING = false, WRITE_FILES = false, CAN_MANAGE = false, manageTags = false, PENDING = 0, pollTimer = 0, keepView = false;
 /** Re-check server status soon (after an edit) instead of waiting for the regular poll. */
 function pollSoon(ms = 1500) { clearTimeout(pollTimer); pollTimer = setTimeout(pollStatus, ms); }
@@ -1669,7 +1680,7 @@ async function settingsPage(view) {
   const btn = (label, fn, primary) => h('button', { class: 'pillbtn' + (primary ? ' on' : ''), onclick: fn }, label);
   const st = m.storage;
   main.replaceChildren(h('div', { class: 'page' },
-    h('h1', null, view === 'settings' ? 'Settings' : 'Maintenance'),
+    h('h1', null, view === 'settings' ? 'Settings' : 'Maintenance', h('span', { class: 'muted', style: 'font-size:13px;font-weight:400;margin-left:12px' }, `digiKam Viewer v${APP_VERSION || '?'}${APP_COMMIT && APP_COMMIT !== 'unknown' ? ' · ' + APP_COMMIT : ''}`)),
     h('div', { class: 'muted', style: 'max-width:820px' }, `Library: ${m.paths.library} (${nf.format(m.photos)} items). digiKam database: ${m.paths.digikamDb}. Everything the viewer writes lives in ${m.paths.data}.`),
     !USERS_EXIST ? row('No users yet', 'The viewer is open to anyone who can reach it. Create the admin account to switch on sign-in: visitors then browse read-only, and only editors and admins can change the library.', btn('Create the admin account', setupDialog, true)) : null,
     ...(view === 'settings' ? [
@@ -1760,7 +1771,7 @@ async function settingsPage(view) {
       const draw = async () => {
         let u; try { u = await api('/api/update'); } catch (e) { fill(body, e.message); return; }
         const c = u.check, p = u.progress;
-        const state = p.running ? 'updating… the viewer restarts when it is done' : p.error ? `last update failed: ${p.error}` : !c ? `installed ${u.installed}` : c.status === 'current' ? `up to date (${u.installed})` : c.status === 'update' ? `newer version on GitHub: ${c.remote} from ${c.remoteDate} (${c.remoteMessage}); installed ${u.installed}` : `could not check: ${c.error}`;
+        const state = p.running ? 'updating… the viewer restarts when it is done' : p.error ? `last update failed: ${p.error}` : !c ? `v${u.version} · commit ${u.installed}` : c.status === 'current' ? `v${u.version} (${u.installed}) is the latest` : c.status === 'update' ? `newer version on GitHub: ${c.remote} from ${c.remoteDate} (${c.remoteMessage}); installed ${u.installed}` : `could not check: ${c.error}`;
         fill(body, state, ' ', h('div', { style: 'display:flex;gap:6px;margin-top:6px' },
           btn('Check for updates', async () => { fill(body, 'Checking…'); try { await post('/api/update', { action: 'check' }); } catch (e) { toast(e.message); } draw(); }),
           u.docker ? h('span', { class: 'muted' }, 'Docker: update by pulling the image (docker compose pull && docker compose up -d).')
@@ -2629,7 +2640,8 @@ async function pollStatus() {
     if (s.app && APP_STAMP && s.app !== APP_STAMP && !LB.open && !G.sel.size) { location.reload(); return; }  // the viewer was updated: use the new version
     if (s.app) APP_STAMP = s.app;
     SEM = s.semantic; EDITING = s.editing; PENDING = s.pendingEdits; WRITE_FILES = s.writeFiles; CAN_MANAGE = s.editing && s.dbWrite;
-    IS_ADMIN = s.isAdmin; SIGNED_IN = s.signedIn; USERS_EXIST = s.usersExist; if ((s.user && s.user.id) !== (USER && USER.id)) { USER = s.user; renderUserMenu(); }
+    IS_ADMIN = s.isAdmin; SIGNED_IN = s.signedIn; USERS_EXIST = s.usersExist; DIGIKAM_CHECK = s.digikamCheck || 'pgrep';
+    if (s.appVersion) { APP_VERSION = s.appVersion; APP_COMMIT = s.commit || ''; const b = $('.brand'); if (b) b.title = `digiKam Viewer v${APP_VERSION}${APP_COMMIT ? ' (' + APP_COMMIT + ')' : ''}`; } if ((s.user && s.user.id) !== (USER && USER.id)) { USER = s.user; renderUserMenu(); }
     document.body.classList.toggle('noadmin', !IS_ADMIN);
     if (PENDING && s.dbWrite && !el.childNodes.length) el.replaceChildren(h('a', { class: 'lnk', style: 'cursor:pointer', title: 'Edits saved in sidecars that digiKam’s database does not have yet', onclick: dbDialog },
       `${nf.format(PENDING)} ${PENDING === 1 ? 'edit' : 'edits'} not in digiKam yet`));

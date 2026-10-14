@@ -31,6 +31,7 @@ msg_info "Fetching digiKam Viewer"
 REPO="${DIGIKAM_VIEWER_REPO:-https://github.com/avandeputte/digikam-viewer}"
 mkdir -p /opt/digikam-viewer /opt/digikam-viewer/data /library
 $STD git clone --depth 1 "$REPO" /opt/digikam-viewer/app
+git -C /opt/digikam-viewer/app rev-parse HEAD > /opt/digikam-viewer/app/COMMIT  # the installed commit, shown in Maintenance
 rm -rf /opt/digikam-viewer/app/.git
 msg_ok "Fetched digiKam Viewer"
 

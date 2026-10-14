@@ -73,4 +73,4 @@ elif [ "$(uname -s)" = Darwin ]; then
 else
   echo "  no service found; restart the viewer yourself"
 fi
-say "Updated to $(local_commit | cut -c1-7)"
+say "Updated to v$(sed -n 's/^__version__ = "\([^"]*\)".*/\1/p' app/__init__.py) ($(local_commit | cut -c1-7))"

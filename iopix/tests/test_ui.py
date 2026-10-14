@@ -358,3 +358,25 @@ def test_database_row_tests_a_connection(page, server, lib):
     assert f"{len(lib['ids'])} photos" in row.locator(".muted", has_text="OK:").inner_text()
     row.locator("select").first.select_option("mysql")
     assert row.locator("input[placeholder='host']").is_visible() and row.locator("input[placeholder='folder with digikam4.db']").is_hidden()
+
+
+def test_container_mode_asks_before_a_database_write(page, server):
+    """DIGIKAM_CHECK=ask (the browser tests' server runs that way): a write that needs digiKam closed
+    shows one confirmation; accepting it vouches and the action goes through."""
+    import json, sqlite3, urllib.request
+    db = Path(os.environ["DATA_DIR"]).parent / "data-ui" / "state.db"
+    con = sqlite3.connect(db); con.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('digikam_closed_until', '0')"); con.commit(); con.close()
+    assert json.load(urllib.request.urlopen(server + "/api/status"))["digikamCheck"] == "ask"
+    dialogs = []
+    def on_dialog(d):
+        dialogs.append(d.type + ":" + d.message[:40])
+        d.accept("zz-ui-vouch") if d.type == "prompt" else d.accept()
+    page.on("dialog", on_dialog)
+    page.goto(server + "/#/tags"); page.wait_for_selector("h1", timeout=10000)
+    page.locator("button", has_text="Manage tags").first.click(); page.wait_for_timeout(300)
+    page.locator("button", has_text="New top-level tag").first.click()
+    page.wait_for_timeout(2500)
+    assert any(t.startswith("prompt:") for t in dialogs), dialogs
+    assert any(t.startswith("confirm:The viewer cannot see") for t in dialogs), "the container-mode confirmation must appear: " + str(dialogs)
+    tags = json.load(urllib.request.urlopen(server + "/api/meta"))["tags"]
+    assert any(t["name"] == "zz-ui-vouch" for t in tags), "after accepting, the tag is created"

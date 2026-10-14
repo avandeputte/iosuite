@@ -85,9 +85,10 @@ function update_script() {
   fi
   msg_info "Updating ${APP}"
   REPO="${DIGIKAM_VIEWER_REPO:-https://github.com/avandeputte/digikam-viewer}"
-  # the app's own updater: latest code, same settings, data and packages, service restarted
-  $STD sh /opt/digikam-viewer/app/update.sh
-  msg_ok "Updated successfully!"
+  # the app's own updater: latest code, same settings, data and packages, service restarted.
+  # Installs made before update.sh existed fetch it first; its output is shown, not hidden.
+  [[ -f /opt/digikam-viewer/app/update.sh ]] || curl -fsSL "https://raw.githubusercontent.com/avandeputte/digikam-viewer/main/update.sh" -o /opt/digikam-viewer/app/update.sh
+  if sh /opt/digikam-viewer/app/update.sh; then msg_ok "Updated successfully!"; else msg_error "update.sh failed; see the lines above"; exit 1; fi
   exit
 }
 
