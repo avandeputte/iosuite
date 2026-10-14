@@ -35,6 +35,8 @@ def init():
             CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL COLLATE NOCASE,
                 hash TEXT NOT NULL, role TEXT NOT NULL, settings TEXT NOT NULL DEFAULT '{}', created INTEGER, last_login INTEGER);
         """)
+        if "person" not in [r[1] for r in con.execute("PRAGMA table_info(users)")]:
+            con.execute("ALTER TABLE users ADD COLUMN person INTEGER")  # the digiKam person tag this account is
         con.commit()
     finally:
         con.close()
@@ -80,7 +82,7 @@ def check_password(pw: str, stored: str) -> bool:
 
 # ---- users
 def _row(r) -> dict:
-    return {"id": r[0], "name": r[1], "role": r[2], "created": r[3], "last_login": r[4], "passwordless": not r[5]}
+    return {"id": r[0], "name": r[1], "role": r[2], "created": r[3], "last_login": r[4], "passwordless": not r[5], "person": r[6]}
 
 
 def any_users() -> bool:
@@ -94,7 +96,7 @@ def any_users() -> bool:
 def list_users() -> list:
     con = state.connect()
     try:
-        return [_row(r) for r in con.execute("SELECT id, name, role, created, last_login, hash FROM users ORDER BY id")]
+        return [_row(r) for r in con.execute("SELECT id, name, role, created, last_login, hash, person FROM users ORDER BY id")]
     finally:
         con.close()
 
@@ -102,7 +104,7 @@ def list_users() -> list:
 def get(user_id: int):
     con = state.connect()
     try:
-        r = con.execute("SELECT id, name, role, created, last_login, hash FROM users WHERE id = ?", (user_id,)).fetchone()
+        r = con.execute("SELECT id, name, role, created, last_login, hash, person FROM users WHERE id = ?", (user_id,)).fetchone()
         return _row(r) if r else None
     finally:
         con.close()
@@ -191,7 +193,17 @@ def accounts() -> list:
     """What the sign-in picker shows to anyone: names and whether a password is asked for."""
     con = state.connect()
     try:
-        return [{"id": r[0], "name": r[1], "passwordless": not r[2]} for r in con.execute("SELECT id, name, hash FROM users ORDER BY lower(name)")]
+        return [{"id": r[0], "name": r[1], "passwordless": not r[2], "person": r[3]} for r in con.execute("SELECT id, name, hash, person FROM users ORDER BY lower(name)")]
+    finally:
+        con.close()
+
+
+def set_person(user_id: int, tag_id):
+    """Link the account to a digiKam person tag (None unlinks). The caller checks the tag is a person."""
+    con = state.connect()
+    try:
+        con.execute("UPDATE users SET person = ? WHERE id = ?", (int(tag_id) if tag_id else None, user_id))
+        con.commit()
     finally:
         con.close()
 

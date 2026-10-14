@@ -123,6 +123,8 @@ const store = {
 };
 /** A person's badge picture; the version key busts the cache when digiKam's tag icon changes. */
 const faceUrl = (tagId) => `/face/${tagId}?v=${tagById.get(tagId)?.icon || 0}`;
+// an account's avatar: the linked person's face badge from People, else the first letter
+const avatarOf = (u, big) => u.person ? h('img', { class: 'avatar' + (big ? ' big' : ''), src: faceUrl(u.person), alt: '' }) : h('span', { class: 'avatar' + (big ? ' big' : '') }, u.name[0].toUpperCase());
 function toast(msg, action, fn, ms = 6000) {
   const t = $('#toast');
   fill(t, msg, action ? h('a', { onclick: () => { t.hidden = true; fn(); } }, action) : null);
@@ -1067,6 +1069,7 @@ async function showExplore() {
     h('div', { class: 'pills' },
       pill('Videos', META.videos, { type: 'video' }), pill('★★★★★', count(META.ratings, 5), { rating: 5 }),
       pill('★★★ and up', META.ratings.filter((r) => r[0] >= 3).reduce((a, r) => a + r[1], 0), { rating: 3 }),
+      USER?.person && tagById.get(USER.person) ? pill('Photos of me', tagById.get(USER.person).nAll, { tag: USER.person }) : null,
       pill('Untagged', null, { untagged: 1 }),
       pill('No location', META.total - META.geotagged, { geo: 0 }), pill('Favorites', ST.fav.size, { fav: 1 }),
       h('a', { class: 'pill', href: '#/duplicates' }, 'Duplicate files'), h('a', { class: 'pill', href: '#/bursts' }, 'Bursts & best shots'),
@@ -1316,7 +1319,7 @@ async function loadUser() {
 function renderUserMenu() {
   const el = $('#usermenu'); if (!el) return;
   el.replaceChildren(USER
-    ? h('button', { class: 'iconbtn tool', title: `${USER.name} (${USER.role}) · account`, onclick: accountDialog }, h('span', { class: 'avatar' }, USER.name[0].toUpperCase()))
+    ? h('button', { class: 'iconbtn tool', title: `${USER.name} (${USER.role}) · account`, onclick: accountDialog }, avatarOf(USER))
     : h('button', { class: 'iconbtn tool', title: USERS_EXIST ? 'Sign in' : 'Create the admin account', onclick: () => (USERS_EXIST ? loginDialog() : setupDialog()) }, icon('person')));
 }
 async function afterLogin(me) {
@@ -1340,7 +1343,7 @@ function loginDialog() {
     fill(tiles, d.accounts.map((a) => h('button', { class: 'account', title: a.passwordless ? `Sign in as ${a.name}` : `${a.name} (password)`, onclick: async () => {
       if (a.passwordless) { try { const me = await post('/api/auth/login', { name: a.name }); back.remove(); await afterLogin(me); toast(`Signed in as ${a.name}.`); } catch (e) { toast(e.message); } return; }
       name.value = a.name; form.hidden = false; tiles.querySelectorAll('.account').forEach((t) => t.classList.toggle('on', t === tiles.querySelector(`[data-n="${CSS.escape(a.name)}"]`))); pw.focus();
-    }, 'data-n': a.name }, h('span', { class: 'avatar big' }, a.name[0].toUpperCase()), h('span', { class: 'nm' }, a.name), a.passwordless ? null : h('span', { class: 'muted', style: 'font-size:11px' }, 'password'))),
+    }, 'data-n': a.name }, avatarOf(a, true), h('span', { class: 'nm' }, a.name), a.passwordless ? null : h('span', { class: 'muted', style: 'font-size:11px' }, 'password'))),
       h('button', { class: 'account', title: 'Type a user name', onclick: () => { form.hidden = false; name.value = ''; name.focus(); } }, h('span', { class: 'avatar big', style: 'background:var(--bg3);color:var(--fg2)' }, '…'), h('span', { class: 'nm' }, 'Other')));
   }).catch(() => name.focus());
 }
@@ -1360,6 +1363,10 @@ function accountDialog() {
   [cur, pw].forEach((i) => { i.onkeydown = (e) => e.stopPropagation(); });
   const back = modal(`${USER.name} · ${USER.role}`,
     h('p', { class: 'muted' }, USER.role === 'admin' ? 'You can change the library, the settings and the users.' : USER.role === 'editor' ? 'You can change the library (edits, tags, faces, places).' : 'You can browse, and keep favorites, albums and display settings.'),
+    h('h4', null, 'Who you are in People'),
+    h('div', { style: 'display:flex;gap:8px;align-items:center;flex-wrap:wrap' }, avatarOf(USER, true), h('span', null, USER.person && tagById.get(USER.person) ? tagById.get(USER.person).name : 'not linked'),
+      h('button', { class: 'pillbtn', onclick: () => personPicker(async (t) => { try { USER = await post('/api/auth/person', { person: t.id }); renderUserMenu(); back.remove(); accountDialog(); } catch (e) { toast(e.message); } }) }, USER.person ? 'Change' : 'Link to a person'),
+      USER.person ? h('a', { class: 'lnk', href: hashFor('photos', photosWith({ tag: USER.person })), onclick: () => back.remove() }, 'Photos of me') : null),
     h('h4', null, 'Change password'), h('div', { style: 'display:grid;gap:8px' }, cur, pw),
     h('div', { style: 'margin-top:8px' }, h('button', { class: 'pillbtn', onclick: async () => { try { await post('/api/auth/password', { current: cur.value, password: pw.value }); toast('Password changed.'); cur.value = pw.value = ''; } catch (e) { toast(e.message); } } }, 'Change password')),
     h('div', { class: 'modal-btns' }, h('button', { class: 'pillbtn', onclick: async () => { back.remove(); await post('/api/auth/logout', {}); USER = null; USER_SETTINGS = null; renderUserMenu(); await pollStatus(); applyBadgePref(); viewKey = null; onRoute(); toast('Signed out.'); } }, 'Sign out'),
@@ -1376,7 +1383,9 @@ function usersSection() {
     const nopw = h('label', { style: 'display:flex;gap:6px;align-items:center;font-size:13px' }, h('input', { type: 'checkbox', onchange: (e) => { pw.disabled = e.target.checked; if (e.target.checked) { pw.value = ''; role.value = 'viewer'; } } }), 'no password (one-click sign-in, viewer only)');
     [name, pw].forEach((i) => { i.onkeydown = (e) => e.stopPropagation(); });
     fill(body, h('div', { class: 'alist', style: 'max-width:820px' }, d.users.map((u) => h('div', { class: 'frow', style: 'height:auto;padding:6px 8px;gap:10px' },
-      h('span', { class: 'avatar' }, u.name[0].toUpperCase()), h('span', { class: 'nm' }, u.name, u.id === USER?.id ? h('span', { class: 'muted' }, ' (you)') : null),
+      avatarOf(u), h('span', { class: 'nm' }, u.name, u.id === USER?.id ? h('span', { class: 'muted' }, ' (you)') : null, u.person && tagById.get(u.person) ? h('span', { class: 'muted' }, ` · ${tagById.get(u.person).name}`) : null),
+      h('button', { class: 'pillbtn', title: 'Which person in People this account is', onclick: () => personPicker(async (t) => { try { await post(`/api/users/${u.id}`, { person: t.id }); if (USER && USER.id === u.id) { USER.person = t.id; renderUserMenu(); } } catch (err) { toast(err.message); } draw(); }) }, u.person ? 'Change person' : 'Link to a person'),
+      u.person ? h('button', { class: 'pillbtn', onclick: async () => { try { await post(`/api/users/${u.id}`, { person: null }); if (USER && USER.id === u.id) { USER.person = null; renderUserMenu(); } } catch (err) { toast(err.message); } draw(); } }, 'Unlink') : null,
       h('select', { onchange: async (e) => { try { await post(`/api/users/${u.id}`, { role: e.target.value }); toast(`${u.name} is now ${e.target.value}.`); } catch (err) { toast(err.message); } draw(); } }, d.roles.map((r) => h('option', { value: r, selected: r === u.role }, r))),
       h('button', { class: 'pillbtn', onclick: async () => { const p = prompt(`New password for ${u.name} (8 characters or more)`); if (!p) return; try { await post(`/api/users/${u.id}`, { password: p }); toast('Password set.'); } catch (err) { toast(err.message); } } }, 'Set password'),
       u.role === 'viewer' && !u.passwordless ? h('button', { class: 'pillbtn', title: 'One-click sign-in from the account picker', onclick: async () => { if (!confirm(`Remove ${u.name}’s password? Anyone who can reach the viewer can then sign in as this viewer with one click.`)) return; try { await post(`/api/users/${u.id}`, { password: '' }); } catch (err) { toast(err.message); } draw(); } }, 'Remove password') : u.passwordless ? h('span', { class: 'muted', style: 'font-size:12px' }, 'no password') : null,

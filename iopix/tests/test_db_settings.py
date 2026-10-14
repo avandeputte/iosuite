@@ -50,8 +50,10 @@ def test_test_connection_sqlite_and_mysql(client, monkeypatch, lib):
         def close(self): pass
         def commit(self): pass
         def rollback(self): pass
-    import types, sys
-    monkeypatch.setitem(sys.modules, "pymysql", types.SimpleNamespace(connect=lambda **kw: FakeRaw()))
-    r = client.post("/api/db/test", json={"type": "mysql", "host": "h", "port": "3306", "database": "d", "user": "u", "password": "p"}).json()
+    import pymysql
+    monkeypatch.setattr(pymysql, "connect", lambda **kw: FakeRaw())  # the real module may already be imported
+    resp = client.post("/api/db/test", json={"type": "mysql", "host": "h", "port": "3306", "database": "d", "user": "u", "password": "p"})
+    assert resp.status_code == 200, resp.text
+    r = resp.json()
     assert r["ok"] and r["images"] == 3 and r["dbVersion"] == "17" and r["roots"] == ["/photos"]
     _clear()

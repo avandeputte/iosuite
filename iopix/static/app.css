@@ -34,6 +34,7 @@ input, select { font: inherit; color: inherit; }
 .account:hover, .account.on { background: var(--bg3); }
 .account .nm { font-size: 13px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .avatar.big { width: 48px; height: 48px; font-size: 22px; }
+img.avatar { object-fit: cover; }
 .avatar { width: 22px; height: 22px; border-radius: 50%; background: #f4a640; color: #1f2730; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; flex: none; }
 body.noadmin #topbar a.tool[href="#/maintenance"] { display: none; }  /* the icons sit alone at the far right; Filters stays with the search box */
 #topbar a.tool .ic { width: 20px; height: 20px; }

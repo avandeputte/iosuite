@@ -130,3 +130,20 @@ def test_passwordless_viewer_one_click_and_limits(client, fresh):
     assert client.post(f"/api/users/{kid['id']}", json={"password": "now-protected"}).status_code == 200
     client.cookies.clear()
     assert client.post("/api/auth/login", json={"name": "kid"}).status_code == 401
+
+
+def test_account_linked_to_a_person(client, fresh):
+    users.create("alex", "correct horse", "admin")
+    _login(client, "alex", "correct horse")
+    tags = client.get("/api/meta").json()["tags"]
+    person = next(t for t in tags if t.get("person") and t["full"] != "People")
+    plain = next(t for t in tags if not t.get("person"))
+    me = client.get("/api/auth/me").json()["user"]
+    assert client.post(f"/api/users/{me['id']}", json={"person": plain["id"]}).status_code == 400, "only a person tag"
+    assert client.post("/api/auth/person", json={"person": person["id"]}).json()["person"] == person["id"]
+    assert client.get("/api/status").json()["user"]["person"] == person["id"]
+    assert client.get("/api/users").json()["users"][0]["person"] == person["id"]
+    client.cookies.clear()
+    assert client.get("/api/auth/accounts").json()["accounts"][0]["person"] == person["id"], "the picker can show the face"
+    _login(client, "alex", "correct horse")
+    assert client.post("/api/auth/person", json={"person": None}).json()["person"] is None

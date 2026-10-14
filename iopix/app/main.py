@@ -363,7 +363,7 @@ def api_status(request: Request):
                          "total": semantic.total, "indexed": 0 if semantic.ids is None else int(len(semantic.ids))},
             "places": places.available(), "editing": edits.available() and users.can_write(user), "pendingEdits": len(edits.pending()),
             "dbWrite": config.DB_WRITE and not appstate.read_only() and users.can_write(user), "writeFiles": edits.writes_files(),
-            "user": ({"id": user["id"], "name": user["name"], "role": user["role"]} if user else None), "usersExist": users.any_users(),
+            "user": ({"id": user["id"], "name": user["name"], "role": user["role"], "person": user.get("person")} if user else None), "usersExist": users.any_users(),
             "isAdmin": users.is_admin(user), "signedIn": users.is_signed_in(user),
             "readOnly": appstate.read_only(), "readOnlyLocked": config.READ_ONLY,
             "tagJobs": {**tagmanager.progress, "pending": tagmanager.pending_jobs()},
@@ -1057,6 +1057,31 @@ async def api_setup(request: Request):
     return resp
 
 
+def _person_tag(tag_id) -> bool:
+    """Is this a person tag in the index (a tag under People with digiKam's person property)?"""
+    if not tag_id:
+        return True
+    con = db()
+    try:
+        r = con.execute("SELECT person FROM tags WHERE id = ?", (int(tag_id),)).fetchone()
+        return bool(r and r[0])
+    finally:
+        con.close()
+
+
+@app.post("/api/auth/person")
+async def api_my_person(request: Request):
+    """Link the signed-in account to a person from People: {person: tag id or null}."""
+    u = request.state.user
+    if not u:
+        raise HTTPException(401, "Sign in first")
+    body = await request.json()
+    if not _person_tag(body.get("person")):
+        raise HTTPException(400, "That tag is not a person")
+    users.set_person(u["id"], body.get("person"))
+    return users.get(u["id"])
+
+
 @app.get("/api/users")
 def api_users(request: Request):
     if not users.is_admin(request.state.user):
@@ -1086,6 +1111,10 @@ async def api_users_update(user_id: int, request: Request):
             users.delete(user_id)
         else:
             users.update(user_id, role=body.get("role"), password=body.get("password"), name=body.get("name"))
+            if "person" in body:
+                if not _person_tag(body["person"]):
+                    raise ValueError("That tag is not a person")
+                users.set_person(user_id, body["person"])
     except ValueError as e:
         raise HTTPException(400, str(e))
     return {"ok": True}
