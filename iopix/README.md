@@ -148,6 +148,7 @@ All settings are environment variables. `app/config.py` is the source of truth f
 | --- | --- | --- |
 | `DIGIKAM_DB_DIR` | `~/Pictures/digikamDB` | folder containing `digikam4.db` (SQLite) |
 | `PHOTOS_ROOT` | `~/Pictures/photos` | photo folder, used when the library has one album root; otherwise digiKam's own per-root paths |
+| | | Settings › Album roots maps each album root digiKam recorded (e.g. `/Users/alex/Pictures/photos`) to where it is mounted here (e.g. `/photos` in a container), per root; a saved mapping overrides `PHOTOS_ROOT` |
 | `DATA_DIR` | `./data` | everything the app writes; must not be inside the two folders above |
 | `AUTO_MODELS` | empty | models to download when missing at start, e.g. `siglip2,yolox,geonames` (keys as in Settings › Models and data); set by the Docker image and the installer |
 | `GOOGLE_MAPS_API_KEY` | unset | Google Maps API key (the Settings page can store one instead); used only when the map provider is set to Google |

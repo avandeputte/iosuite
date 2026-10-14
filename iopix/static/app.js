@@ -1702,6 +1702,24 @@ async function settingsPage(view) {
             btn('Save and switch', async () => { if (!confirm('Switch the viewer to this digiKam database now?')) return; try { await post('/api/settings', { database: payload() }); toast('Database settings saved; the index is rebuilding.'); } catch (e) { toast(e.message); return; } setTimeout(() => settingsPage(view), 2500); }, true)),
           result));
     })() : null,
+    IS_ADMIN ? (() => {
+      const body = h('div', { class: 'muted', style: 'font-size:12.5px' }, 'Loading…');
+      const draw = async () => {
+        let d; try { d = await api('/api/roots'); } catch (e) { fill(body, e.message); return; }
+        const inputs = new Map();
+        fill(body, h('div', { style: 'display:grid;gap:8px' }, d.roots.map((r) => {
+          const inp = h('input', { class: 'einput', placeholder: r.localPath, value: r.overridden ? r.localPath : '', style: 'margin:0;width:340px', onkeydown: (e) => e.stopPropagation() });
+          inputs.set(r.digikamPath, inp);
+          return h('div', null, h('div', null, h('b', null, r.label || 'Album root'), ' ', h('span', { class: 'muted' }, `digiKam: ${r.digikamPath}`)),
+            h('div', { style: 'display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:4px' }, inp,
+              h('span', { class: 'muted', style: 'font-size:12px' }, r.exists ? `found: ${r.localPath} (${r.sample >= 2000 ? '2,000+' : nf.format(r.sample)} files)` : `not found: ${r.localPath}`)));
+        }), h('div', { style: 'display:flex;gap:6px' },
+          btn('Check', draw),
+          btn('Save', async () => { const m = {}; inputs.forEach((inp, k) => { m[k] = inp.value.trim(); }); try { await post('/api/settings', { album_roots: m }); toast('Album roots saved; the index is rebuilding.'); } catch (e) { toast(e.message); return; } setTimeout(draw, 2500); }, true))));
+      };
+      draw();
+      return row('Album roots', `Where each album root digiKam knows is mounted here. Leave a field empty to use the default (PHOTOS_ROOT for a single-root library, else the path digiKam recorded); enter a path when the folder is mounted elsewhere, e.g. /photos in a container. Changing it rebuilds the index.`, body);
+    })() : null,
     IS_ADMIN ? row('Read-only mode', m.readOnlyLocked ? 'Locked on by READ_ONLY=1 in the environment: nothing in the library can be changed from the viewer.'
       : `${m.readOnly ? 'On' : 'Off'}. When on, the viewer only browses: editing, tagging, face naming, place tags, GPS tracks, metadata sync and database updates are switched off and refused by the server. Favorites and viewer albums keep working; they never touch the library.`,
       m.readOnlyLocked ? null : btn(m.readOnly ? 'Turn off' : 'Turn on', async () => { try { await post('/api/settings', { read_only: !m.readOnly }); const s = await api('/api/status'); EDITING = s.editing; CAN_MANAGE = s.editing && s.dbWrite; } catch (e) { toast(e.message); } settingsPage(view); })) : null,

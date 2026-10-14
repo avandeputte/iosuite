@@ -256,11 +256,55 @@ def tag_path(tags: dict, tid) -> str:
     return "/".join(reversed(parts))
 
 
+def root_overrides() -> dict:
+    """{path digiKam recorded: local path} from the `album_roots` setting (Settings > Album roots)."""
+    import json
+    from . import state
+    try:
+        d = json.loads(state.get_setting("album_roots", "") or "{}")
+        return {str(k).rstrip("/"): str(v).rstrip("/") for k, v in d.items() if v}
+    except (ValueError, AttributeError):
+        return {}
+
+
 def root_paths(con) -> dict:
-    """{album root id: folder path}. A single-root library is placed at the configured
-    PHOTOS_ROOT, so it may live elsewhere than digiKam recorded (e.g. inside Docker)."""
+    """{album root id: local folder}. digiKam records where each album root was on its own
+    machine; here it may be mounted elsewhere (Docker, another host). A saved override per
+    root wins, else a single-root library sits at PHOTOS_ROOT, else digiKam's path."""
     rows = con.execute("SELECT id, specificPath FROM AlbumRoots").fetchall()
-    return {rid: (str(config.PHOTOS_ROOT) if len(rows) == 1 else sp) for rid, sp in rows}
+    over = root_overrides()
+    out = {}
+    for rid, sp in rows:
+        key = (sp or "").rstrip("/")
+        out[rid] = over.get(key) or (str(config.PHOTOS_ROOT) if len(rows) == 1 else sp)
+    return out
+
+
+def album_roots() -> list:
+    """For Settings: each album root digiKam knows, with the local path in use and whether it is there."""
+    with connect() as con:
+        rows = con.execute("SELECT id, label, specificPath FROM AlbumRoots").fetchall()
+        paths = root_paths(con)
+    over = root_overrides()
+    out = []
+    for rid, label, sp in rows:
+        local = paths[rid]
+        out.append({"id": rid, "label": label, "digikamPath": sp, "localPath": local, "overridden": (sp or "").rstrip("/") in over,
+                    "exists": os.path.isdir(local), "sample": _sample_count(local)})
+    return out
+
+
+def _sample_count(folder: str, limit: int = 2000) -> int:
+    """How many files a quick walk finds (capped), to tell an empty mount from the real library."""
+    n = 0
+    try:
+        for root, _dirs, files in os.walk(folder):
+            n += len(files)
+            if n >= limit:
+                return limit
+    except OSError:
+        pass
+    return n
 
 
 # --------------------------------------------------------------------------

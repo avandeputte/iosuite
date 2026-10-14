@@ -874,7 +874,7 @@ async def api_edit_revert(request: Request):
 # --------------------------------------------------------------------------
 
 def _settings_public() -> dict:
-    return {"write_files": edits.writes_files(), "search_model": semantic.chosen(), "bg_threads": bgjobs.threads(), "read_only": appstate.read_only(), "database": _db_settings_public(), "map_provider": appstate.get_setting("map_provider", "osm"), "google_maps_key_set": bool(maps.key()), "templates": json.loads(appstate.get_setting("templates", "[]"))}
+    return {"write_files": edits.writes_files(), "search_model": semantic.chosen(), "bg_threads": bgjobs.threads(), "read_only": appstate.read_only(), "database": _db_settings_public(), "album_roots": dkdb.root_overrides(), "map_provider": appstate.get_setting("map_provider", "osm"), "google_maps_key_set": bool(maps.key()), "templates": json.loads(appstate.get_setting("templates", "[]"))}
 
 
 @app.get("/api/settings")
@@ -906,6 +906,12 @@ async def api_settings(request: Request):
                 continue  # an empty password field means "keep the stored one"
             if k in d:
                 appstate.set_setting("db_" + k, str(d[k]).strip() if d[k] is not None else "")
+        _kick.set()
+    if "album_roots" in body:  # admin: {digiKam path: local path}; empty value removes an override
+        d = body["album_roots"] or {}
+        if not isinstance(d, dict):
+            raise HTTPException(400, "album_roots must be an object")
+        appstate.set_setting("album_roots", json.dumps({str(k): str(v).strip() for k, v in d.items() if str(v).strip()}))
         _kick.set()
     if "map_provider" in body:  # osm or google; google needs a key (setting or GOOGLE_MAPS_API_KEY)
         if body["map_provider"] not in ("osm", "google"):
@@ -1123,6 +1129,14 @@ async def api_users_update(user_id: int, request: Request):
 def _db_settings_public() -> dict:
     c = dkdb.settings()
     return {k: c[k] for k in dkdb.KEYS if k != "password"} | {"password_set": bool(c["password"]), "env_type": dkdb.ENV["type"]}
+
+
+@app.get("/api/roots")
+async def api_roots(request: Request):
+    """Album roots from digiKam with the local folder each one maps to (admin)."""
+    if not users.is_admin(request.state.user):
+        raise HTTPException(403, "Admins only")
+    return {"roots": await run_in_threadpool(dkdb.album_roots), "photosRoot": str(config.PHOTOS_ROOT)}
 
 
 @app.post("/api/db/test")
