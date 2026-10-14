@@ -344,3 +344,17 @@ def test_account_picker_one_click_sign_in(page, server, browser):
     v.wait_for_selector("#usermenu .avatar", timeout=5000)
     assert v.evaluate("async () => (await (await fetch('/api/auth/me')).json()).user.name") == "kid"
     ctx.close()
+
+
+def test_database_row_tests_a_connection(page, server, lib):
+    page.goto(server + "/#/settings"); page.wait_for_selector("h1:has-text('Settings')", timeout=10000)
+    row = page.locator(".srow", has=page.locator("b", has_text="digiKam database"))
+    assert row.count() == 1
+    assert row.locator("select").first.input_value() == "sqlite"
+    from pathlib import Path
+    assert Path(row.locator("input[placeholder='folder with digikam4.db']").input_value()).resolve() == lib["db"].parent.resolve()
+    row.locator("button", has_text="Test connection").click()
+    page.wait_for_selector(".srow .muted:has-text('OK:')", timeout=10000)
+    assert f"{len(lib['ids'])} photos" in row.locator(".muted", has_text="OK:").inner_text()
+    row.locator("select").first.select_option("mysql")
+    assert row.locator("input[placeholder='host']").is_visible() and row.locator("input[placeholder='folder with digikam4.db']").is_hidden()

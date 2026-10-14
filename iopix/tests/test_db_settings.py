@@ -28,7 +28,9 @@ def test_settings_override_environment_and_hide_password(client):
 
 def test_test_connection_sqlite_and_mysql(client, monkeypatch, lib):
     _clear()
-    r = client.post("/api/db/test", json={"type": "sqlite", "sqlite_dir": str(lib["db"].parent)}).json()
+    resp = client.post("/api/db/test", json={"type": "sqlite", "sqlite_dir": str(lib["db"].parent)})
+    assert resp.status_code == 200, resp.text
+    r = resp.json()
     assert r["ok"] and r["images"] == len(lib["ids"]) and r["roots"]
     bad = client.post("/api/db/test", json={"type": "sqlite", "sqlite_dir": "/nowhere"})
     assert bad.status_code == 400 and "digikam4.db" in bad.json()["detail"]
