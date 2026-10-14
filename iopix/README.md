@@ -204,6 +204,14 @@ Claude Desktop (Settings › Developer › Edit Config):
 
     { "mcpServers": { "digikam-library": { "command": "/Users/alex/Pictures/digikam-viewer/mcp.sh" } } }
 
+## Tests
+
+```sh
+.venv/bin/python -m pytest tests
+```
+
+About 60 tests in ~15 s. At start the suite cuts a small scratch library (240 photos from a few albums: JPEG, HEIC, PNG, MOV, with faces, tags and GPS) from a real digiKam library by copying the database and letting digiKam's own cascade triggers remove the rest; every test runs against that copy with the viewer's data folder in a temporary directory, so nothing can touch the real library. `DIGIKAM_TEST_DB` and `DIGIKAM_TEST_ROOT` point it at another library (default: `~/Pictures/digikamDB/digikam4.db` and `~/Pictures/photos`). Covered: filters and search, the job queue, settings and read-only mode, the models registry (network stubbed), the read API, tag and face writes against digiKam's rows and backups, first-start model downloads, and browser tests with Playwright (headless Chromium; `python -m playwright install chromium` once) for the grid, lightbox, face toggle, People rows and menus, read-only mode, Settings and Maintenance.
+
 ## Layout
 
     app/config.py        paths and tunables (environment variables)

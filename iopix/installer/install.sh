@@ -80,7 +80,7 @@ command -v ffmpeg >/dev/null 2>&1 || say "ffmpeg not found: video thumbnails wil
 # --- unpack ------------------------------------------------------------------------
 say "Installing into $PREFIX"
 mkdir -p "$PREFIX" "$DATA"
-LINE=$(grep -n '^__PAYLOAD_BELOW__$' "$0" | head -1 | cut -d: -f1)
+LINE=$(grep -a -n '^__PAYLOAD_BELOW__$' "$0" | head -1 | cut -d: -f1)  # -a: the file ends in a binary payload
 [ -n "$LINE" ] || die "payload missing: build this file with installer/make-installer.sh"
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 tail -n +$((LINE + 1)) "$0" | tar xzf - -C "$TMP"

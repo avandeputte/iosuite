@@ -27,6 +27,6 @@ services:
       # DIGIKAM_DB_NAME: digikam
       # DIGIKAM_DB_USER: digikam
       # DIGIKAM_DB_PASSWORD: secret
-      # DIGIKAM_DB_BACKUP: skip     # the image has no mysqldump; "skip" if the server is backed up
-      #                             # elsewhere, or set DIGIKAM_DB_DUMP to a command that dumps it to stdout
+      # DIGIKAM_DB_BACKUP: auto     # the image has mariadb-dump, so a dump is taken before each database write;
+      #                             # "skip" if the server is backed up elsewhere, or DIGIKAM_DB_DUMP for a custom command
     restart: unless-stopped
