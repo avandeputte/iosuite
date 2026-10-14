@@ -2,6 +2,7 @@
 newer, and running update.sh (next to setup.sh) from Maintenance. Docker installs are
 updated by pulling the image, so there the check only reports."""
 import json
+import re
 import os
 import subprocess
 import threading
@@ -71,7 +72,8 @@ def run():
             res = subprocess.run(["sh", str(config.APP_DIR / "update.sh")], cwd=str(config.APP_DIR), capture_output=True, text=True, timeout=1800)
             progress["log"] = (res.stdout + res.stderr)[-3000:]
             if res.returncode != 0:
-                progress["error"] = (res.stderr or res.stdout).strip().splitlines()[-1][:300] if (res.stderr or res.stdout).strip() else f"exit {res.returncode}"
+                tail = re.sub(r"\x1b\[[0-9;]*m", "", (res.stderr or res.stdout)).strip()
+                progress["error"] = tail.splitlines()[-1][:300] if tail else f"exit {res.returncode}"
         except Exception as e:
             progress["error"] = str(e)[:300]
         finally:

@@ -16,10 +16,19 @@ BRANCH="${DIGIKAM_VIEWER_BRANCH:-main}"
 say() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 local_commit() { if [ -d .git ]; then git rev-parse HEAD 2>/dev/null; elif [ -f COMMIT ]; then cat COMMIT; else echo unknown; fi; }
-remote_commit() { curl -fsSL -H "Accept: application/vnd.github+json" "https://api.github.com/repos/$REPO/commits/$BRANCH" 2>/dev/null | sed -n 's/^  "sha": "\([0-9a-f]*\)",$/\1/p' | head -1; }
+# network access through the viewer's own Python (no curl needed inside a container)
+PYF="$(ls -d .venv/bin/python 2>/dev/null || command -v python3)"
+fetch() { "$PYF" - "$1" "$2" <<'PYEOF'
+import sys, urllib.request
+req = urllib.request.Request(sys.argv[1], headers={"User-Agent": "digikam-viewer-update", "Accept": "application/vnd.github+json"})
+with urllib.request.urlopen(req, timeout=60) as r, open(sys.argv[2], "wb") as f:
+    f.write(r.read())
+PYEOF
+}
+remote_commit() { T="$(mktemp)"; fetch "https://api.github.com/repos/$REPO/commits/$BRANCH" "$T" 2>/dev/null && sed -n 's/^  "sha": "\([0-9a-f]*\)",$/\1/p' "$T" | head -1; rm -f "$T"; }
 if [ "$1" = "--check" ]; then
   L="$(local_commit)"; R="$(remote_commit)"
-  [ -n "$R" ] || die "could not reach GitHub"
+  [ -n "$R" ] || die "could not reach GitHub (api.github.com) from here"
   if [ "$L" = "$R" ]; then echo "up to date ($(echo "$L" | cut -c1-7))"; else echo "update available: $(echo "$R" | cut -c1-7) (installed $(echo "$L" | cut -c1-7))"; fi
   exit 0
 fi
@@ -31,7 +40,7 @@ else
   TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
   # the archive is fetched by commit id, so the code and the recorded COMMIT always match
   R="$(remote_commit)"; [ -n "$R" ] || die "could not reach GitHub"
-  curl -fsSL "https://github.com/$REPO/archive/$R.tar.gz" -o "$TMP/src.tgz" || die "download failed"
+  fetch "https://github.com/$REPO/archive/$R.tar.gz" "$TMP/src.tgz" || die "download failed"
   tar xzf "$TMP/src.tgz" -C "$TMP"
   SRC="$(ls -d "$TMP"/*/ | head -1)"
   # stage everything first, then swap, so a failure never leaves a half-updated install;
