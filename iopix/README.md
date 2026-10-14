@@ -217,7 +217,20 @@ The viewer is also a read-only [MCP](https://modelcontextprotocol.io) server, on
 
     claude mcp add --transport http digikam-library http://localhost:8600/mcp
 
-Claude Desktop and other clients that take a remote MCP URL use the same address (substitute the host name or IP where the viewer runs; set `VIEWER_URL` if links in results should use a different address). Clients that only spawn stdio servers can run `.venv/bin/python -m app.mcp_server` from the checkout instead; it is the same code.
+**Claude Desktop on another computer** (same network): Claude Desktop's "custom connectors" are reached from Anthropic's servers, so a LAN address cannot be added there. Use the `mcp-remote` bridge in its local configuration instead, which needs Node.js on that computer. Edit `claude_desktop_config.json` (macOS: `~/Library/Application Support/Claude/`, Windows: `%APPDATA%\Claude\`), replacing the address with the viewer's host name or IP, then restart Claude Desktop:
+
+    {
+      "mcpServers": {
+        "digikam-library": {
+          "command": "npx",
+          "args": ["-y", "mcp-remote", "http://192.168.1.50:8600/mcp", "--allow-http"]
+        }
+      }
+    }
+
+`--allow-http` is needed because the viewer speaks plain HTTP on the LAN. The tools then appear in Claude Desktop's tool menu. To use the endpoint as a true remote connector (from claude.ai or a Claude Desktop away from home) it would have to be published over HTTPS with authentication, which the viewer does not provide; do not expose port 8600 to the internet as it is.
+
+Other clients that take an MCP URL use `http://<host>:8600/mcp` directly (set `VIEWER_URL` if links in results should use a different address). Clients that only spawn stdio servers on the machine running the viewer can use `.venv/bin/python -m app.mcp_server` from the checkout; it is the same code.
 
 
 ## Tests
