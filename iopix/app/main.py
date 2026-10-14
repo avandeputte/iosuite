@@ -32,7 +32,7 @@ from . import (analysis, caption, concepts, config, consistency, dbsync, detecto
                moments, places, placetags, tagmanager, thumbs)
 from . import state as appstate
 from . import jobs as bgjobs
-from . import geocode
+from . import geocode, maps
 from . import models as dlmodels
 from .semantic import ENGINES, semantic, enabled as semantic_enabled, _ready as semantic_ready
 from .query import SORTS, build_where
@@ -864,6 +864,15 @@ async def api_settings(request: Request):
         tpls = [{"name": str(t.get("name", ""))[:80], "fields": {k: str(v or "")[:1000] for k, v in (t.get("fields") or {}).items() if k in edits.TEMPLATE_FIELDS}}
                 for t in body["templates"] if isinstance(t, dict) and t.get("name")]
         appstate.set_setting("templates", json.dumps(tpls))
+    if "map_provider" in body:  # osm or google; google needs a key (setting or GOOGLE_MAPS_API_KEY)
+        if body["map_provider"] not in ("osm", "google"):
+            raise HTTPException(400, "Unknown map provider")
+        appstate.set_setting("map_provider", body["map_provider"])
+        maps.reset_session()
+        geocode._cache.clear()
+    if "google_maps_key" in body:  # stored, never shown back
+        appstate.set_setting("google_maps_key", str(body["google_maps_key"]).strip())
+        maps.reset_session()
     if "bg_threads" in body:  # cores one background job may use; takes effect when the next job starts
         n = int(body["bg_threads"])
         if not 1 <= n < (os.cpu_count() or 4):
@@ -876,7 +885,7 @@ async def api_settings(request: Request):
         appstate.set_setting("search_model", name)
         _photos_cached.cache_clear()
         await run_in_threadpool(_start_prewarm)  # starts indexing for the newly chosen model if needed
-    return {"write_files": edits.writes_files(), "search_model": semantic.chosen(), "bg_threads": bgjobs.threads(), "read_only": appstate.read_only(), "templates": json.loads(appstate.get_setting("templates", "[]"))}
+    return {"write_files": edits.writes_files(), "search_model": semantic.chosen(), "bg_threads": bgjobs.threads(), "read_only": appstate.read_only(), "map_provider": appstate.get_setting("map_provider", "osm"), "google_maps_key_set": bool(maps.key()), "templates": json.loads(appstate.get_setting("templates", "[]"))}
 
 
 def nf(n) -> str:
@@ -933,6 +942,12 @@ def api_analysis():
     for j in jobs:
         j["queued"] = bgjobs.is_queued(queue_key[j["key"]])
     return {"jobs": jobs, "photos": total, "models": models if act is not None else [], "queue": bgjobs.status()}
+
+
+@app.get("/api/maps")
+def api_maps():
+    """Tile provider for the browser: OpenStreetMap, or Google Maps with the owner's key (session created here)."""
+    return maps.config()
 
 
 @app.get("/api/geocode")
@@ -1000,7 +1015,7 @@ def api_maintenance():
             "analysis": analysis.DB.stat().st_size if analysis.DB.exists() else 0,
             "embeddings": sum(e.file.stat().st_size for e in semantic.engines.values() if e.file.exists()),
             "free": free},
-        "writeFiles": edits.writes_files(), "readOnly": appstate.read_only(), "readOnlyLocked": config.READ_ONLY, "searchModel": semantic.chosen(),
+        "writeFiles": edits.writes_files(), "readOnly": appstate.read_only(), "readOnlyLocked": config.READ_ONLY, "mapProvider": appstate.get_setting("map_provider", "osm"), "googleMapsKeySet": bool(maps.key()), "searchModel": semantic.chosen(),
         "templates": json.loads(appstate.get_setting("templates", "[]")), "templateFields": list(edits.TEMPLATE_FIELDS),
         "recentTags": json.loads(appstate.get_setting("recent_tags", "[]")),
     }

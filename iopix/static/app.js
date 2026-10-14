@@ -885,6 +885,7 @@ async function locationDialog(ids, current, after) {
   lat.onpaste = lon.onpaste = pastePair;
   try { await loadLeaflet(false); } catch { mapEl.replaceChildren(h('div', { class: 'empty' }, 'The map needs an internet connection; coordinates can still be typed.')); return; }
   const L = window.L;
+  await loadMaps();
   map = L.map(mapEl).setView(current ? [current.lat, current.lon] : [40.4, -80], current ? 13 : 4);
   tiles().addTo(map);
   map.on('click', (e) => { lat.value = e.latlng.lat.toFixed(6); lon.value = e.latlng.lng.toFixed(6); place(); });
@@ -922,6 +923,7 @@ async function gpxDialog(ids) {
       await loadLeaflet(false);
       const L = window.L;
       mapEl.replaceChildren();
+      await loadMaps();
       const map = L.map(mapEl).fitBounds([[t.bbox[0], t.bbox[1]], [t.bbox[2], t.bbox[3]]]);
       tiles().addTo(map);
       r.matches.slice(0, 500).forEach((m) => L.circleMarker([m.lat, m.lon], { radius: 4, color: '#1a73e8', fillOpacity: .8 }).bindTooltip(m.name).addTo(map));
@@ -1574,6 +1576,17 @@ async function settingsPage(view) {
     row('Thumbnail badges', 'The small marks on thumbnails: face tags, GPS coordinates and favorites. This is remembered per browser.',
       h('label', { style: 'display:flex;gap:8px;align-items:center;cursor:pointer' }, h('input', { type: 'checkbox', checked: store.get('badges', '1') !== '0',
         onchange: (e) => { store.set('badges', e.target.checked ? '1' : '0'); applyBadgePref(); } }), 'Show badges')),
+    (() => {
+      const sel = h('select', null, h('option', { value: 'osm', selected: m.mapProvider !== 'google' }, 'OpenStreetMap (no account needed)'), h('option', { value: 'google', selected: m.mapProvider === 'google' }, 'Google Maps (your API key)'));
+      const keyIn = h('input', { class: 'einput', type: 'password', placeholder: m.googleMapsKeySet ? 'key is set; paste a new one to replace it' : 'Google Maps API key', autocomplete: 'off', style: 'margin:0;width:260px' });
+      return row('Map provider', `Maps and place search use ${m.mapProvider === 'google' && m.googleMapsKeySet ? 'Google Maps' : 'OpenStreetMap'}. Google needs an API key from the Google Cloud console with the Map Tiles API and Geocoding API enabled and billing on; restrict the key to this viewer's address. The key is stored in the viewer's settings and never shown again.`,
+        h('span', { style: 'display:flex;gap:6px;flex-wrap:wrap;align-items:center' }, sel, keyIn, btn('Save', async () => {
+          const body = { map_provider: sel.value }; if (keyIn.value.trim()) body.google_maps_key = keyIn.value.trim();
+          if (sel.value === 'google' && !keyIn.value.trim() && !m.googleMapsKeySet) { toast('Enter the Google Maps API key first.'); return; }
+          try { await post('/api/settings', body); mapsLoaded = false; toast('Map provider saved.'); } catch (e) { toast(e.message); }
+          settingsPage(view);
+        })));
+    })(),
     row('Read-only mode', m.readOnlyLocked ? 'Locked on by READ_ONLY=1 in the environment: nothing in the library can be changed from the viewer.'
       : `${m.readOnly ? 'On' : 'Off'}. When on, the viewer only browses: editing, tagging, face naming, place tags, GPS tracks, metadata sync and database updates are switched off and refused by the server. Favorites and viewer albums keep working; they never touch the library.`,
       m.readOnlyLocked ? null : btn(m.readOnly ? 'Turn off' : 'Turn on', async () => { try { await post('/api/settings', { read_only: !m.readOnly }); const s = await api('/api/status'); EDITING = s.editing; CAN_MANAGE = s.editing && s.dbWrite; } catch (e) { toast(e.message); } settingsPage(view); })),
@@ -1756,7 +1769,12 @@ function loadLeaflet(cluster) {
   });
   return clusterP;
 }
-const tiles = () => window.L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap contributors' });
+// tile provider from the server (OpenStreetMap, or Google Maps with the owner's key); fetched once, OSM until it arrives
+let MAPS = { provider: 'osm', url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', attribution: '© OpenStreetMap contributors', maxZoom: 19, link: 'https://www.openstreetmap.org/?mlat={lat}&mlon={lon}#map=15/{lat}/{lon}', linkLabel: 'OpenStreetMap' };
+let mapsLoaded = false;
+async function loadMaps() { if (mapsLoaded) return MAPS; try { MAPS = await api('/api/maps'); if (MAPS.error) toast(MAPS.error, null, null, 8000); } catch { /* keep OSM */ } mapsLoaded = true; return MAPS; }
+const tiles = () => window.L.tileLayer(MAPS.url, { maxZoom: MAPS.maxZoom, attribution: MAPS.attribution });
+const mapLink = (lat, lon) => MAPS.link.replaceAll('{lat}', lat).replaceAll('{lon}', lon);
 
 async function showMap(fp) {
   const token = ++M.token;
@@ -1773,6 +1791,7 @@ async function showMap(fp) {
   if (token !== M.token || route.view !== 'map') return;
   const L = window.L;
   M.data = d;
+  await loadMaps();
   const map = M.map = L.map(el, { worldCopyJump: true }).setView([30, 0], 2);
   tiles().addTo(map);
   const dot = L.divIcon({ className: '', html: '<div class="pm"></div>', iconSize: [14, 14], iconAnchor: [7, 7] });
@@ -2364,15 +2383,17 @@ function renderInfo() {
         h('div', { class: 'b' }, d.alt != null && d.alt !== 0 ? `${Math.round(d.alt)} m altitude · ` : null, ex.orientationGps != null ? `facing ${Math.round(ex.orientationGps)}° · ` : null,
           h('a', { class: 'lnk', onclick: () => go('map', photosWith({ from: d.day, to: d.day, trail: d.day })) }, 'Day’s trail'), ' · ',
           lnk('Photos nearby', { bbox: [d.lat - 0.01, d.lon - 0.015, d.lat + 0.01, d.lon + 0.015].map((x) => x.toFixed(4)).join(',') }), ' · ',
-          h('a', { href: `https://www.openstreetmap.org/?mlat=${d.lat}&mlon=${d.lon}#map=15/${d.lat}/${d.lon}`, target: '_blank', rel: 'noopener' }, 'OpenStreetMap'))))] : null,
+          h('a', { href: mapLink(d.lat, d.lon), target: '_blank', rel: 'noopener' }, MAPS.linkLabel))))] : null,
     kv.length ? [h('h4', null, 'Details'), h('div', { class: 'kv' }, kv)] : null,
     h('h4', null, 'File'),
     h('div', { class: 'b muted', style: 'word-break:break-all;user-select:all;font-size:12.5px' }, d.path));
   if (mapEl) {
     const token = LB.token;
-    loadLeaflet(false).then(() => {
+    loadLeaflet(false).then(async () => {
       if (token !== LB.token || !mapEl.isConnected) return;
       const L = window.L;
+      await loadMaps();
+      if (token !== LB.token || !mapEl.isConnected) return;
       LB.mini = L.map(mapEl, { zoomControl: false, attributionControl: false, scrollWheelZoom: false }).setView([d.lat, d.lon], 13);
       tiles().addTo(LB.mini);
       L.marker([d.lat, d.lon], { icon: L.divIcon({ className: '', html: '<div class="pm"></div>', iconSize: [14, 14], iconAnchor: [7, 7] }) }).addTo(LB.mini);

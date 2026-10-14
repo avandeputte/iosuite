@@ -12,7 +12,7 @@ import urllib.parse
 import urllib.request
 from collections import OrderedDict
 
-from . import places
+from . import maps, places
 
 URL = "https://nominatim.openstreetmap.org/search"
 USER_AGENT = "digikam-viewer/1.0 (https://github.com/avandeputte/digikam-viewer)"
@@ -81,7 +81,7 @@ def search(q: str) -> dict:
             return _cache[key]
     if time.time() > _offline_until[0]:
         try:
-            res = {"results": _nominatim(q), "source": "osm"}
+            res = {"results": maps.geocode(q), "source": "google"} if maps.provider() == "google" else {"results": _nominatim(q), "source": "osm"}
         except Exception:
             _offline_until[0] = time.time() + 60  # don't hammer a dead connection; retry a minute later
             res = {"results": _offline(q), "source": "offline"}
