@@ -105,3 +105,28 @@ def test_own_password_change(client, fresh):
     assert client.post("/api/auth/password", json={"current": "wrong", "password": "another-pass"}).status_code == 403
     assert client.post("/api/auth/password", json={"current": "viewer-pass", "password": "another-pass"}).status_code == 200
     _login(client, "vi", "another-pass")
+
+
+def test_passwordless_viewer_one_click_and_limits(client, fresh):
+    users.create("alex", "correct horse", "admin")
+    _login(client, "alex", "correct horse")
+    assert client.post("/api/users", json={"name": "kid", "password": "", "role": "editor"}).status_code == 400, "no password means viewer only"
+    kid = client.post("/api/users", json={"name": "kid", "password": "", "role": "viewer"}).json()
+    assert kid["passwordless"] is True
+    assert client.post(f"/api/users/{kid['id']}", json={"role": "editor"}).status_code == 400, "cannot be promoted without a password"
+    alex = next(x for x in client.get("/api/users").json()["users"] if x["name"] == "alex")
+    assert client.post(f"/api/users/{alex['id']}", json={"password": ""}).status_code == 400, "an admin keeps a password"
+    client.cookies.clear()
+    acc = client.get("/api/auth/accounts").json()["accounts"]
+    assert [(a["name"], a["passwordless"]) for a in acc] == [("alex", False), ("kid", True)]
+    r = client.post("/api/auth/login", json={"name": "kid"})
+    assert r.status_code == 200 and r.json()["user"]["role"] == "viewer"
+    s = client.get("/api/status").json()
+    assert s["user"]["name"] == "kid" and s["editing"] is False and s["signedIn"] is True
+    assert client.post("/api/favorites", json={"ids": [], "on": True}).status_code == 200
+    client.cookies.clear()
+    assert client.post("/api/auth/login", json={"name": "alex"}).status_code == 401, "a protected account still needs its password"
+    _login(client, "alex", "correct horse")
+    assert client.post(f"/api/users/{kid['id']}", json={"password": "now-protected"}).status_code == 200
+    client.cookies.clear()
+    assert client.post("/api/auth/login", json={"name": "kid"}).status_code == 401

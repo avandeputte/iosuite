@@ -29,6 +29,11 @@ input, select { font: inherit; color: inherit; }
 #usermenu { margin-left: auto; display: inline-flex; }
 #usermenu .tool { width: 32px; height: 32px; color: var(--fg2); opacity: .85; }
 #usermenu .tool:hover { opacity: 1; background: var(--bg3); }
+.accounts { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; margin: 6px 0 4px; }
+.account { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 6px; border-radius: 12px; background: var(--bg2); cursor: pointer; }
+.account:hover, .account.on { background: var(--bg3); }
+.account .nm { font-size: 13px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.avatar.big { width: 48px; height: 48px; font-size: 22px; }
 .avatar { width: 22px; height: 22px; border-radius: 50%; background: #f4a640; color: #1f2730; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; flex: none; }
 body.noadmin #topbar a.tool[href="#/maintenance"] { display: none; }  /* the icons sit alone at the far right; Filters stays with the search box */
 #topbar a.tool .ic { width: 20px; height: 20px; }

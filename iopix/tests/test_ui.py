@@ -65,6 +65,16 @@ def browser():
         b.close()
 
 
+@pytest.fixture(autouse=True)
+def _ui_no_users(server):
+    """The browser tests' own server keeps its users in its own state.db: start each test in open mode."""
+    import sqlite3
+    db = Path(os.environ["DATA_DIR"]).parent / "data-ui" / "state.db"
+    if db.exists():
+        con = sqlite3.connect(db); con.execute("DELETE FROM users"); con.commit(); con.close()
+    yield
+
+
 @pytest.fixture
 def page(browser, server):
     ctx = browser.new_context(viewport={"width": 1280, "height": 900})
@@ -285,8 +295,9 @@ def test_users_flow_in_the_browser(page, server, browser):
     assert not visitor.locator("#topbar a.tool[href='#/maintenance']").is_visible()
     visitor.keyboard.press("Escape"); visitor.wait_for_timeout(400)  # the lightbox covers the top bar
     visitor.locator("#usermenu button").click()
-    visitor.wait_for_selector(".modal h3:has-text('Sign in')", timeout=5000)
-    visitor.locator(".modal input[placeholder='User name']").fill("alex"); visitor.locator(".modal input[type=password]").fill("wrong")
+    visitor.wait_for_selector(".modal .account", timeout=5000)
+    visitor.locator(".modal .account", has_text="alex").click()  # a protected account: the tile reveals the password field
+    visitor.locator(".modal input[type=password]").fill("wrong")
     visitor.locator(".modal button", has_text="Sign in").click(); visitor.wait_for_timeout(500)
     assert visitor.locator(".modal").count() == 1, "a wrong password keeps the dialog open"
     visitor.locator(".modal input[type=password]").fill("correct horse"); visitor.locator(".modal button", has_text="Sign in").click()
@@ -305,3 +316,31 @@ def test_users_flow_in_the_browser(page, server, browser):
     ctx.close()
     # leave the scratch server open again for the other tests
     urllib.request.urlopen(server + "/api/status").read()
+
+
+def test_account_picker_one_click_sign_in(page, server, browser):
+    import json, urllib.request
+    # an admin and a passwordless viewer, made through the API in open mode
+    req = lambda path, body: urllib.request.urlopen(urllib.request.Request(server + path, data=json.dumps(body).encode(), headers={"content-type": "application/json"}, method="POST")).read()
+    req("/api/auth/setup", {"name": "alex", "password": "correct horse"})
+    # the admin creates the passwordless viewer from the Users section
+    page.goto(server + "/#/settings"); page.wait_for_selector("h1:has-text('Settings')", timeout=10000)
+    page.locator("#usermenu button").click(); page.wait_for_selector(".modal h3:has-text('Sign in')", timeout=5000)
+    page.locator(".modal .account", has_text="alex").click(); page.locator(".modal input[type=password]").fill("correct horse"); page.locator(".modal button", has_text="Sign in").click()
+    page.wait_for_selector("#usermenu .avatar", timeout=5000)
+    page.goto(server + "/#/settings"); page.wait_for_selector("h2:has-text('Users')", timeout=10000)
+    page.locator("input[placeholder='User name']").last.fill("kid")
+    page.locator("label:has-text('no password') input").check()
+    page.locator("button", has_text="Add user").click(); page.wait_for_timeout(600)
+    assert page.locator(".frow", has_text="kid").locator("text=no password").count() == 1
+    # a visitor: two tiles, one click as kid
+    ctx = browser.new_context(viewport={"width": 1280, "height": 900}); v = ctx.new_page()
+    v.goto(server + "/#/photos"); v.wait_for_selector(".tile img", timeout=15000)
+    v.locator("#usermenu button").click(); v.wait_for_selector(".modal .account", timeout=5000)
+    names = v.locator(".modal .account .nm").all_inner_texts()
+    assert names == ["alex", "kid", "Other"]
+    assert v.locator(".modal input[type=password]").is_hidden(), "no password field until a protected tile is picked"
+    v.locator(".modal .account", has_text="kid").click()
+    v.wait_for_selector("#usermenu .avatar", timeout=5000)
+    assert v.evaluate("async () => (await (await fetch('/api/auth/me')).json()).user.name") == "kid"
+    ctx.close()

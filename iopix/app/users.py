@@ -3,7 +3,9 @@
 Three roles: viewer (signed in; own settings kept on the server; favorites and viewer
 albums), editor (viewer plus every library write: edits, tags, faces, place tags, GPX,
 sync, database apply) and admin (editor plus settings, maintenance and user management).
-Anyone not signed in browses read-only with display settings in the browser.
+Anyone not signed in browses read-only with display settings in the browser. A viewer may
+have no password at all: such an account signs in with one click from the account picker
+(like a media-server profile) and can never be more than a viewer.
 
 Until the first user exists the viewer stays open as before, so a fresh install is not
 locked out; Settings asks to create the admin, or ADMIN_USER / ADMIN_PASSWORD in the
@@ -78,7 +80,7 @@ def check_password(pw: str, stored: str) -> bool:
 
 # ---- users
 def _row(r) -> dict:
-    return {"id": r[0], "name": r[1], "role": r[2], "created": r[3], "last_login": r[4]}
+    return {"id": r[0], "name": r[1], "role": r[2], "created": r[3], "last_login": r[4], "passwordless": not r[5]}
 
 
 def any_users() -> bool:
@@ -92,7 +94,7 @@ def any_users() -> bool:
 def list_users() -> list:
     con = state.connect()
     try:
-        return [_row(r) for r in con.execute("SELECT id, name, role, created, last_login FROM users ORDER BY id")]
+        return [_row(r) for r in con.execute("SELECT id, name, role, created, last_login, hash FROM users ORDER BY id")]
     finally:
         con.close()
 
@@ -100,7 +102,7 @@ def list_users() -> list:
 def get(user_id: int):
     con = state.connect()
     try:
-        r = con.execute("SELECT id, name, role, created, last_login FROM users WHERE id = ?", (user_id,)).fetchone()
+        r = con.execute("SELECT id, name, role, created, last_login, hash FROM users WHERE id = ?", (user_id,)).fetchone()
         return _row(r) if r else None
     finally:
         con.close()
@@ -110,15 +112,17 @@ def create(name: str, password: str, role: str) -> dict:
     name = name.strip()
     if not name or len(name) > 64:
         raise ValueError("A user name is needed (up to 64 characters)")
-    if len(password) < 8:
-        raise ValueError("The password needs at least 8 characters")
     if role not in ROLES:
         raise ValueError("Unknown role")
+    if password == "" and role != "viewer":
+        raise ValueError("Only a viewer can have no password")
+    if password != "" and len(password) < 8:
+        raise ValueError("The password needs at least 8 characters")
     con = state.connect()
     try:
         if con.execute("SELECT 1 FROM users WHERE name = ?", (name,)).fetchone():
             raise ValueError("That user name is taken")
-        cur = con.execute("INSERT INTO users (name, hash, role, created) VALUES (?,?,?,?)", (name, hash_password(password), role, int(time.time())))
+        cur = con.execute("INSERT INTO users (name, hash, role, created) VALUES (?,?,?,?)", (name, hash_password(password) if password else "", role, int(time.time())))
         con.commit()
         return get(cur.lastrowid)
     finally:
@@ -134,11 +138,18 @@ def update(user_id: int, role: str = None, password: str = None, name: str = Non
             if role != "admin" and con.execute("SELECT count(*) FROM users WHERE role = 'admin' AND id != ?", (user_id,)).fetchone()[0] == 0 \
                     and con.execute("SELECT role FROM users WHERE id = ?", (user_id,)).fetchone()[0] == "admin":
                 raise ValueError("That is the only admin; make someone else admin first")
+            if role != "viewer" and not con.execute("SELECT hash FROM users WHERE id = ?", (user_id,)).fetchone()[0]:
+                raise ValueError("Set a password first; an account without one can only be a viewer")
             con.execute("UPDATE users SET role = ? WHERE id = ?", (role, user_id))
         if password is not None:
-            if len(password) < 8:
-                raise ValueError("The password needs at least 8 characters")
-            con.execute("UPDATE users SET hash = ? WHERE id = ?", (hash_password(password), user_id))
+            if password == "":  # remove the password: one-click sign-in, viewers only
+                if con.execute("SELECT role FROM users WHERE id = ?", (user_id,)).fetchone()[0] != "viewer":
+                    raise ValueError("Only a viewer can have no password")
+                con.execute("UPDATE users SET hash = '' WHERE id = ?", (user_id,))
+            else:
+                if len(password) < 8:
+                    raise ValueError("The password needs at least 8 characters")
+                con.execute("UPDATE users SET hash = ? WHERE id = ?", (hash_password(password), user_id))
         if name is not None:
             name = name.strip()
             if not name:
@@ -165,11 +176,22 @@ def authenticate(name: str, password: str):
     con = state.connect()
     try:
         r = con.execute("SELECT id, hash FROM users WHERE name = ?", (name.strip(),)).fetchone()
-        if not r or not check_password(password, r[1]):
+        if not r:
+            return None
+        if r[1] and not check_password(password, r[1]):  # an empty hash is a passwordless viewer: one click signs in
             return None
         con.execute("UPDATE users SET last_login = ? WHERE id = ?", (int(time.time()), r[0]))
         con.commit()
         return get(r[0])
+    finally:
+        con.close()
+
+
+def accounts() -> list:
+    """What the sign-in picker shows to anyone: names and whether a password is asked for."""
+    con = state.connect()
+    try:
+        return [{"id": r[0], "name": r[1], "passwordless": not r[2]} for r in con.execute("SELECT id, name, hash FROM users ORDER BY lower(name)")]
     finally:
         con.close()
 

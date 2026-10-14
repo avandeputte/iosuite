@@ -980,6 +980,12 @@ async def api_login(request: Request):
     return resp
 
 
+@app.get("/api/auth/accounts")
+def api_accounts():
+    """The account picker (public): names, and whether a password is needed."""
+    return {"accounts": users.accounts() if users.any_users() else []}
+
+
 @app.post("/api/auth/logout")
 def api_logout():
     resp = JSONResponse({"ok": True})
@@ -1009,7 +1015,7 @@ async def api_my_password(request: Request):
     if not u:
         raise HTTPException(401, "Sign in first")
     body = await request.json()
-    if not users.authenticate(u["name"], str(body.get("current", ""))):
+    if not u.get("passwordless") and not users.authenticate(u["name"], str(body.get("current", ""))):
         raise HTTPException(403, "The current password is wrong")
     try:
         users.update(u["id"], password=str(body.get("password", "")))

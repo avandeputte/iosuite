@@ -1324,14 +1324,25 @@ async function afterLogin(me) {
   await pollStatus(); applyBadgePref(); viewKey = null; onRoute();
 }
 function loginDialog() {
+  // the account picker: a tile per account; one click for a passwordless viewer, a password for the others
   const name = h('input', { class: 'einput', placeholder: 'User name', autocomplete: 'username', style: 'margin:0;width:100%' });
   const pw = h('input', { class: 'einput', type: 'password', placeholder: 'Password', autocomplete: 'current-password', style: 'margin:0;width:100%' });
+  const form = h('div', { style: 'display:grid;gap:8px;margin-top:10px' }, name, pw);
+  const tiles = h('div', { class: 'accounts' });
   const go = async () => { try { const me = await post('/api/auth/login', { name: name.value.trim(), password: pw.value }); back.remove(); await afterLogin(me); toast(`Signed in as ${me.user.name}.`); } catch (e) { toast(e.message); } };
   [name, pw].forEach((i) => { i.onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Enter') go(); }; });
-  const back = modal('Sign in', h('div', { style: 'display:grid;gap:8px' }, name, pw),
+  const back = modal('Sign in', tiles, form,
     h('p', { class: 'muted', style: 'font-size:12.5px' }, 'Without signing in you can browse everything; signing in keeps your display settings, favorites and albums on the server, and editors can change the library.'),
     h('div', { class: 'modal-btns' }, h('button', { class: 'pillbtn', onclick: () => back.remove() }, 'Cancel'), h('button', { class: 'pillbtn on', onclick: go }, 'Sign in')));
-  name.focus();
+  api('/api/auth/accounts').then((d) => {
+    if (!d.accounts.length) { name.focus(); return; }
+    form.hidden = true;
+    fill(tiles, d.accounts.map((a) => h('button', { class: 'account', title: a.passwordless ? `Sign in as ${a.name}` : `${a.name} (password)`, onclick: async () => {
+      if (a.passwordless) { try { const me = await post('/api/auth/login', { name: a.name }); back.remove(); await afterLogin(me); toast(`Signed in as ${a.name}.`); } catch (e) { toast(e.message); } return; }
+      name.value = a.name; form.hidden = false; tiles.querySelectorAll('.account').forEach((t) => t.classList.toggle('on', t === tiles.querySelector(`[data-n="${CSS.escape(a.name)}"]`))); pw.focus();
+    }, 'data-n': a.name }, h('span', { class: 'avatar big' }, a.name[0].toUpperCase()), h('span', { class: 'nm' }, a.name), a.passwordless ? null : h('span', { class: 'muted', style: 'font-size:11px' }, 'password'))),
+      h('button', { class: 'account', title: 'Type a user name', onclick: () => { form.hidden = false; name.value = ''; name.focus(); } }, h('span', { class: 'avatar big', style: 'background:var(--bg3);color:var(--fg2)' }, '…'), h('span', { class: 'nm' }, 'Other')));
+  }).catch(() => name.focus());
 }
 function setupDialog() {
   const name = h('input', { class: 'einput', placeholder: 'Admin user name', autocomplete: 'username', style: 'margin:0;width:100%' });
@@ -1362,14 +1373,16 @@ function usersSection() {
     let d; try { d = await api('/api/users'); } catch (e) { fill(body, h('div', { class: 'muted' }, e.message)); return; }
     const name = h('input', { class: 'einput', placeholder: 'User name', style: 'margin:0;width:160px' }), pw = h('input', { class: 'einput', type: 'password', placeholder: 'Password', style: 'margin:0;width:160px' });
     const role = h('select', null, d.roles.map((r) => h('option', { value: r }, r)));
+    const nopw = h('label', { style: 'display:flex;gap:6px;align-items:center;font-size:13px' }, h('input', { type: 'checkbox', onchange: (e) => { pw.disabled = e.target.checked; if (e.target.checked) { pw.value = ''; role.value = 'viewer'; } } }), 'no password (one-click sign-in, viewer only)');
     [name, pw].forEach((i) => { i.onkeydown = (e) => e.stopPropagation(); });
     fill(body, h('div', { class: 'alist', style: 'max-width:820px' }, d.users.map((u) => h('div', { class: 'frow', style: 'height:auto;padding:6px 8px;gap:10px' },
       h('span', { class: 'avatar' }, u.name[0].toUpperCase()), h('span', { class: 'nm' }, u.name, u.id === USER?.id ? h('span', { class: 'muted' }, ' (you)') : null),
       h('select', { onchange: async (e) => { try { await post(`/api/users/${u.id}`, { role: e.target.value }); toast(`${u.name} is now ${e.target.value}.`); } catch (err) { toast(err.message); } draw(); } }, d.roles.map((r) => h('option', { value: r, selected: r === u.role }, r))),
       h('button', { class: 'pillbtn', onclick: async () => { const p = prompt(`New password for ${u.name} (8 characters or more)`); if (!p) return; try { await post(`/api/users/${u.id}`, { password: p }); toast('Password set.'); } catch (err) { toast(err.message); } } }, 'Set password'),
+      u.role === 'viewer' && !u.passwordless ? h('button', { class: 'pillbtn', title: 'One-click sign-in from the account picker', onclick: async () => { if (!confirm(`Remove ${u.name}’s password? Anyone who can reach the viewer can then sign in as this viewer with one click.`)) return; try { await post(`/api/users/${u.id}`, { password: '' }); } catch (err) { toast(err.message); } draw(); } }, 'Remove password') : u.passwordless ? h('span', { class: 'muted', style: 'font-size:12px' }, 'no password') : null,
       u.id !== USER?.id ? h('button', { class: 'pillbtn', onclick: async () => { if (!confirm(`Delete the user ${u.name}?`)) return; try { await post(`/api/users/${u.id}`, { delete: true }); } catch (err) { toast(err.message); } draw(); } }, 'Delete') : null))),
-      h('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px' }, name, pw, role, h('button', { class: 'pillbtn on', onclick: async () => {
-        try { await post('/api/users', { name: name.value.trim(), password: pw.value, role: role.value }); toast(`Added ${name.value.trim()}.`); } catch (err) { toast(err.message); } draw();
+      h('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px' }, name, pw, role, nopw, h('button', { class: 'pillbtn on', onclick: async () => {
+        try { await post('/api/users', { name: name.value.trim(), password: nopw.querySelector('input').checked ? '' : pw.value, role: nopw.querySelector('input').checked ? 'viewer' : role.value }); toast(`Added ${name.value.trim()}.`); } catch (err) { toast(err.message); } draw();
       } }, icon('add'), 'Add user')));
   };
   draw();
