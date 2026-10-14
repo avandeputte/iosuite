@@ -62,6 +62,13 @@ Derived from these:
 - **Events & trips**: trips are runs of days photographed more than 75 km from the town where most of your photos are taken; events are other days with 20 or more photos, named after the title most of them share, else their main tag, else the town.
 - **Search model**: CLIP ViT-B/32 by default. `setup.sh` offers SigLIP 2; switch between installed models under Settings › AI analysis; the library is re-indexed in the background and search switches when complete. You can switch back at any time.
 
+## Updating
+
+- **Standalone (checkout or the Linux installer):** `./update.sh` in the app folder (`/opt/digikam-viewer/app` after the installer). It pulls the latest code (git, or the GitHub tarball when there is no `.git`), keeps `digikam-viewer.env`, the data folder and the Python environment, reinstalls the package groups that are already installed, and restarts the service (launchd or systemd). `./update.sh --check` only reports.
+- **Proxmox:** `update` inside the container (the framework's command) runs the same script.
+- **Docker:** `docker compose pull && docker compose up -d`.
+- **From the app:** Maintenance › Viewer version shows the installed commit, "Check for updates" compares it with GitHub's main branch, and "Update now" runs `update.sh` (not in Docker, which says to pull instead). The viewer restarts itself when the update finishes.
+
 ## Users and permissions
 
 Out of the box the viewer is open to anyone who can reach it (as before). Settings offers **Create the admin account** (or set `ADMIN_USER` and `ADMIN_PASSWORD` for a container or installer, or run `python -m app.users create <name> <password> admin`). Once a user exists:
@@ -264,6 +271,7 @@ app/            the server (FastAPI) and everything it does: index, search, edit
 static/         the web app: one HTML page, app.js, app.css, icons, PWA manifest and service worker
 tests/          pytest suite (API on a scratch library, browser tests with Playwright)
 setup.sh        the installer: asks, installs, downloads, starts the service      run.sh: foreground start
+update.sh       updates an installed copy in place (git or tarball), keeps settings and data
 pyproject.toml  dependencies (base + optional groups)
 Dockerfile, docker-compose.yml, .github/workflows/docker.yml   the container image and its build
 installer/      the self-extracting Linux installer (make-installer.sh builds dist/digikam-viewer-install.sh)

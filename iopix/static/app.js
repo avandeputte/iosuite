@@ -1751,6 +1751,21 @@ async function settingsPage(view) {
     row('Edits waiting for digiKam', m.pendingEdits ? `${plural(m.pendingEdits, 'photo has', 'photos have')} edits saved in sidecars that digiKam’s database does not have yet. digiKam is ${m.digikamRunning ? 'running, so they cannot be applied right now' : 'closed, so they can be applied now'}.` : 'None. digiKam’s database and the sidecars agree.',
       m.pendingEdits ? btn('Apply to digiKam database…', dbDialog, !m.digikamRunning) : null),
     ] : null,
+    (() => {
+      const body = h('div', { class: 'muted', style: 'font-size:13px' }, 'Loading…');
+      const draw = async () => {
+        let u; try { u = await api('/api/update'); } catch (e) { fill(body, e.message); return; }
+        const c = u.check, p = u.progress;
+        const state = p.running ? 'updating… the viewer restarts when it is done' : p.error ? `last update failed: ${p.error}` : !c ? `installed ${u.installed}` : c.status === 'current' ? `up to date (${u.installed})` : c.status === 'update' ? `newer version on GitHub: ${c.remote} from ${c.remoteDate} (${c.remoteMessage}); installed ${u.installed}` : `could not check: ${c.error}`;
+        fill(body, state, ' ', h('div', { style: 'display:flex;gap:6px;margin-top:6px' },
+          btn('Check for updates', async () => { fill(body, 'Checking…'); try { await post('/api/update', { action: 'check' }); } catch (e) { toast(e.message); } draw(); }),
+          u.docker ? h('span', { class: 'muted' }, 'Docker: update by pulling the image (docker compose pull && docker compose up -d).')
+            : u.canRun ? btn('Update now', async () => { if (!confirm('Fetch the latest version, refresh the packages and restart the viewer?')) return; try { await post('/api/update', { action: 'run' }); toast('Updating; the viewer restarts when it is done.'); } catch (e) { toast(e.message); } setTimeout(draw, 3000); }, c && c.status === 'update') : null));
+        if (p.running) setTimeout(() => { if (route.view === view) draw(); }, 5000);
+      };
+      draw();
+      return row('Viewer version', 'The code running here, and whether the GitHub main branch has something newer. "Update now" runs update.sh (git pull or a fresh tarball), keeps your settings and data, and restarts the service.', body);
+    })(),
     row('Restart the viewer', 'Stops the server; launchd, Docker or systemd starts it again within seconds. Needed after updating the RapidOCR package.',
       btn('Restart', async () => { if (!confirm('Restart the viewer now?')) return; try { await post('/api/restart', {}); toast('Restarting…'); } catch (e) { toast(e.message); } })),
     h('h2', null, 'Storage'),

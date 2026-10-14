@@ -85,20 +85,8 @@ function update_script() {
   fi
   msg_info "Updating ${APP}"
   REPO="${DIGIKAM_VIEWER_REPO:-https://github.com/avandeputte/digikam-viewer}"
-  systemctl stop digikam-viewer
-  rm -rf /opt/digikam-viewer/app.new
-  $STD git clone --depth 1 "$REPO" /opt/digikam-viewer/app.new
-  rm -rf /opt/digikam-viewer/app.new/.git
-  cp /opt/digikam-viewer/app/digikam-viewer.env /opt/digikam-viewer/app.new/ 2>/dev/null || true
-  rm -rf /opt/digikam-viewer/app.old
-  mv /opt/digikam-viewer/app /opt/digikam-viewer/app.old
-  mv /opt/digikam-viewer/app.new /opt/digikam-viewer/app
-  mv /opt/digikam-viewer/app.old/.venv /opt/digikam-viewer/app/.venv 2>/dev/null || true
-  rm -rf /opt/digikam-viewer/app.old
-  cd /opt/digikam-viewer/app
-  # setup.sh keeps the settings and the data; with --yes it only refreshes the packages and the service
-  $STD sh ./setup.sh --yes --photos /library/photos --sqlite /library/digikamDB --data /opt/digikam-viewer/data --features none --no-admin --service --no-system-deps || true
-  systemctl start digikam-viewer
+  # the app's own updater: latest code, same settings, data and packages, service restarted
+  $STD sh /opt/digikam-viewer/app/update.sh
   msg_ok "Updated successfully!"
   exit
 }

@@ -33,7 +33,7 @@ from . import (analysis, caption, concepts, config, consistency, dbsync, detecto
 from . import state as appstate
 from . import jobs as bgjobs
 from . import geocode, maps, users
-from . import mcp_server
+from . import mcp_server, updates
 from . import models as dlmodels
 from .semantic import ENGINES, semantic, enabled as semantic_enabled, _ready as semantic_ready
 from .query import SORTS, build_where
@@ -175,7 +175,7 @@ WRITE_PATHS = ("/api/edit", "/api/edits/db", "/api/consistency/sync", "/api/gpx/
                "/api/faces/person", "/api/placetags", "/api/tags/op")
 
 
-ADMIN_PATHS = ("/api/settings", "/api/maintenance", "/api/analysis/run", "/api/models/check", "/api/models/download", "/api/restart", "/api/users")
+ADMIN_PATHS = ("/api/settings", "/api/maintenance", "/api/analysis/run", "/api/models/check", "/api/models/download", "/api/restart", "/api/users", "/api/update")
 SIGNED_IN_PATHS = ("/api/favorites", "/api/ualbums", "/api/tags/recent", "/api/auth/settings", "/api/auth/password")
 
 
@@ -1193,6 +1193,27 @@ async def api_models_download(request: Request):
     except RuntimeError as e:
         raise HTTPException(409, str(e))
     return {"ok": True}
+
+
+@app.get("/api/update")
+def api_update():
+    """Installed commit, the last GitHub check, and whether update.sh can run here."""
+    return updates.status()
+
+
+@app.post("/api/update")
+async def api_update_run(request: Request):
+    """Body: {action: check | run}. check asks GitHub (network); run starts update.sh (admin)."""
+    action = (await request.json()).get("action")
+    if action == "check":
+        return await run_in_threadpool(updates.check)
+    if action == "run":
+        try:
+            updates.run()
+        except RuntimeError as e:
+            raise HTTPException(409, str(e))
+        return {"ok": True}
+    raise HTTPException(400, "action must be check or run")
 
 
 @app.post("/api/restart")
