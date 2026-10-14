@@ -103,3 +103,13 @@ def test_job_rows_expose_progress_visibility(client):
     a = client.get("/api/analysis").json()
     thumbs = next(j for j in a["jobs"] if j["key"] == "thumbs")
     assert "since" in thumbs and "last" in thumbs and isinstance(thumbs["current"], list)
+
+
+def test_version_is_single_sourced_and_shown(client):
+    import re
+    from app import __version__
+    toml = re.search(r'^version = "([^"]+)"', open("pyproject.toml").read(), re.M).group(1)
+    assert __version__ == toml, "bump app/__init__.py and pyproject.toml together"
+    s = client.get("/api/status").json()
+    assert s["appVersion"] == __version__ and "commit" in s
+    assert client.get("/api/update").json()["version"] == __version__

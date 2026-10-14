@@ -34,6 +34,7 @@ from . import state as appstate
 from . import jobs as bgjobs
 from . import geocode, maps, users
 from . import mcp_server, updates
+from . import __version__ as APP_VERSION
 from . import models as dlmodels
 from .semantic import ENGINES, semantic, enabled as semantic_enabled, _ready as semantic_ready
 from .query import SORTS, build_where
@@ -368,6 +369,7 @@ def api_status(request: Request):
             "user": ({"id": user["id"], "name": user["name"], "role": user["role"], "person": user.get("person")} if user else None), "usersExist": users.any_users(),
             "isAdmin": users.is_admin(user), "signedIn": users.is_signed_in(user),
             "readOnly": appstate.read_only(), "readOnlyLocked": config.READ_ONLY, "digikamCheck": config.DIGIKAM_CHECK,
+            "appVersion": APP_VERSION, "commit": updates.local_commit()[:7],
             "tagJobs": {**tagmanager.progress, "pending": tagmanager.pending_jobs()},
             "analysis": analysis.progress, "jobs": bgjobs.status()}
 

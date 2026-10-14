@@ -53,7 +53,8 @@ def check() -> dict:
 
 
 def status() -> dict:
-    return {"installed": local_commit()[:7], "docker": in_docker(), "canRun": (config.APP_DIR / "update.sh").exists() and not in_docker(),
+    from . import __version__
+    return {"version": __version__, "installed": local_commit()[:7], "docker": in_docker(), "canRun": (config.APP_DIR / "update.sh").exists() and not in_docker(),
             "check": dict(_checked) if _checked else None, "progress": dict(progress)}
 
 
