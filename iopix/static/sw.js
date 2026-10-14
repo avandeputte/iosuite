@@ -1,0 +1,16 @@
+// Service worker: makes the viewer installable and keeps the app shell (page, script, styles,
+// icons) available. Shell files are fetched network-first so updates land at once, with the cache
+// as the fallback. Photos, thumbnails and the API are never cached here: the library changes and
+// the page reloads itself when the server reports a new version.
+const SHELL = 'dkv-shell-v1';
+const FILES = ['./', './index.html', './app.js', './app.css', './manifest.webmanifest', './icons/mark.svg', './icons/icon-192.png', './icons/icon-512.png'];
+self.addEventListener('install', (e) => { e.waitUntil(caches.open(SHELL).then((c) => c.addAll(FILES)).then(() => self.skipWaiting())); });
+self.addEventListener('activate', (e) => { e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== SHELL).map((k) => caches.delete(k)))).then(() => self.clients.claim())); });
+self.addEventListener('fetch', (e) => {
+  const url = new URL(e.request.url);
+  if (e.request.method !== 'GET' || url.origin !== location.origin) return;
+  const shell = url.pathname === '/' || /\/(index\.html|app\.js|app\.css|manifest\.webmanifest|icons\/[^/]+)$/.test(url.pathname);
+  if (!shell) return;  // /api, /thumb, /preview, /orig, /face…: straight to the server
+  e.respondWith(fetch(e.request).then((r) => { const copy = r.clone(); caches.open(SHELL).then((c) => c.put(e.request, copy)); return r; })
+    .catch(() => caches.match(e.request, { ignoreSearch: true })));
+});

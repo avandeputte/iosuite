@@ -83,3 +83,13 @@ def test_models_and_analysis_endpoints(client):
     a = client.get("/api/analysis").json()
     assert [j["key"] for j in a["jobs"]][:2] == ["thumbs", "embeddings"]
     assert "queue" in a
+
+
+def test_pwa_files_are_served(client):
+    m = client.get("/manifest.webmanifest")
+    assert m.status_code == 200 and m.json()["display"] == "standalone" and len(m.json()["icons"]) == 3
+    assert client.get("/sw.js").status_code == 200 and "javascript" in client.get("/sw.js").headers["content-type"]
+    for p in ("/icons/icon-192.png", "/icons/icon-512.png", "/icons/icon-512-maskable.png", "/icons/apple-touch-icon.png", "/icons/mark.svg"):
+        assert client.get(p).status_code == 200, p
+    html = client.get("/").text
+    assert 'rel="manifest"' in html and "serviceWorker" in html and "theme-color" in html
