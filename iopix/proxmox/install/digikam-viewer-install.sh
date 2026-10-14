@@ -24,7 +24,8 @@ $STD apt-get install -y \
   ffmpeg \
   libimage-exiftool-perl \
   libheif1 \
-  libglib2.0-0
+  libglib2.0-0 \
+  mariadb-client
 msg_ok "Installed Dependencies"
 
 msg_info "Fetching digiKam Viewer"
