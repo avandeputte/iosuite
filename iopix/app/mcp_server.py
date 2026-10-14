@@ -558,5 +558,29 @@ def photo_file(photo_id: int) -> dict:
         pass
     return out
 
+
+@server.tool(annotations=READ_ONLY)
+def check_for_update() -> dict:
+    """Installed version and commit versus GitHub's main branch (network)."""
+    from . import __version__, updates
+    return {"version": __version__, **updates.check()}
+
+
+@server.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=True))
+def update_viewer(token: str) -> dict:
+    """Update the viewer to the latest commit on GitHub and restart it (update.sh: code, packages,
+    service; settings and data are kept). Needs the admin token from Maintenance > Viewer version,
+    because this endpoint has no sign-in. The connection drops when the viewer restarts; call
+    diagnostics afterwards to confirm the new version. Not available in Docker (pull the image)."""
+    from . import updates
+    if not updates.token_ok(token):
+        raise ToolError("Wrong or missing admin token (Maintenance > Viewer version shows it to an admin)")
+    try:
+        updates.run()
+    except RuntimeError as e:
+        raise ToolError(str(e))
+    return {"started": True, "note": "update.sh is running; the viewer restarts when it finishes (about a minute). Then call diagnostics."}
+
+
 if __name__ == "__main__":
     server.run()

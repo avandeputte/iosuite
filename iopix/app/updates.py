@@ -1,8 +1,10 @@
 """Updating the viewer itself: which commit is installed, whether GitHub's main branch is
 newer, and running update.sh (next to setup.sh) from Maintenance. Docker installs are
 updated by pulling the image, so there the check only reports."""
+import hmac
 import json
 import re
+import secrets
 import os
 import subprocess
 import threading
@@ -15,6 +17,31 @@ REPO = os.environ.get("DIGIKAM_VIEWER_REPO", "avandeputte/digikam-viewer")
 BRANCH = os.environ.get("DIGIKAM_VIEWER_BRANCH", "main")
 progress = {"running": False, "log": "", "error": None, "finished": None}
 _checked = {}
+
+
+def admin_token() -> str:
+    """The token that lets an MCP client run the update (the endpoint itself has no sign-in).
+    MCP_ADMIN_TOKEN in the environment wins; otherwise one is generated once and kept in settings."""
+    from . import state
+    env = os.environ.get("MCP_ADMIN_TOKEN", "").strip()
+    if env:
+        return env
+    tok = state.get_setting("mcp_admin_token", "")
+    if not tok:
+        tok = secrets.token_urlsafe(24)
+        state.set_setting("mcp_admin_token", tok)
+    return tok
+
+
+def regenerate_token() -> str:
+    from . import state
+    tok = secrets.token_urlsafe(24)
+    state.set_setting("mcp_admin_token", tok)
+    return tok
+
+
+def token_ok(given: str) -> bool:
+    return bool(given) and hmac.compare_digest(str(given), admin_token())
 
 
 def in_docker() -> bool:

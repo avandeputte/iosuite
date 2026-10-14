@@ -1234,7 +1234,13 @@ async def api_update_run(request: Request):
         except RuntimeError as e:
             raise HTTPException(409, str(e))
         return {"ok": True}
-    raise HTTPException(400, "action must be check or run")
+    if action == "token":  # admin: the MCP update token (shown once here, never in /api/update)
+        return {"token": updates.admin_token(), "fromEnv": bool(os.environ.get("MCP_ADMIN_TOKEN"))}
+    if action == "regenerate_token":
+        if os.environ.get("MCP_ADMIN_TOKEN"):
+            raise HTTPException(400, "The token comes from MCP_ADMIN_TOKEN in the environment; change it there")
+        return {"token": updates.regenerate_token()}
+    raise HTTPException(400, "action must be check, run, token or regenerate_token")
 
 
 @app.post("/api/restart")
