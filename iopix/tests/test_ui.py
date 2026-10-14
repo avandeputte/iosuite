@@ -219,3 +219,31 @@ def test_keyboard_navigation(page, server, lib):
     page.keyboard.press("Escape")
     page.wait_for_timeout(300)
     assert page.locator("#lightbox").is_hidden() or page.locator("#lightbox").count() == 0
+
+
+def test_pasting_a_coordinate_pair_fills_both_fields(page, server, lib):
+    pid = next(i for i in lib["ids"] if i not in lib["videos"])
+    _open_photo(page, server, pid)
+    if page.locator(".lb-info").is_hidden():
+        page.locator('[title^="Info"]').click()
+    page.wait_for_selector(".lb-info h4", timeout=10000)
+    # open the location dialog from the info pane ("Set location" link or the Location heading's "change")
+    link = page.locator(".lb-info a.lnk", has_text="Set location")
+    if not link.count():
+        link = page.locator(".lb-info a.lnk", has_text="change").last
+    link.click()
+    page.wait_for_selector(".modal input[placeholder='latitude']", timeout=5000)
+    lat = page.locator(".modal input[placeholder='latitude']")
+    lon = page.locator(".modal input[placeholder='longitude']")
+    lat.focus()
+    page.evaluate("""() => { const el = document.querySelector(".modal input[placeholder='latitude']");
+        const dt = new DataTransfer(); dt.setData('text', '40.44414979347404, -79.96231586013303');
+        el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })); }""")
+    assert lat.input_value().startswith("40.4441")
+    assert lon.input_value().startswith("-79.9623")
+    # a plain number pastes as usual
+    page.evaluate("""() => { const el = document.querySelector(".modal input[placeholder='longitude']");
+        const dt = new DataTransfer(); dt.setData('text', '12.5');
+        el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })); }""")
+    assert lon.input_value().startswith("-79.9623"), "a single number is left to the browser's own paste"
+    page.locator(".modal button", has_text="Cancel").click()

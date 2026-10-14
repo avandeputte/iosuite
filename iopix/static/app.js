@@ -860,6 +860,18 @@ async function locationDialog(ids, current, after) {
       h('button', { class: 'pillbtn on', onclick: async () => { const la = +lat.value, lo = +lon.value; if (!lat.value || !lon.value || Math.abs(la) > 90 || Math.abs(lo) > 180) { toast('Enter a valid latitude and longitude.'); return; } back.remove(); if (await editPhotos(ids, { gps: { lat: la, lon: lo, alt: alt.value === '' ? null : +alt.value } })) after?.(); } }, icon('place'), 'Save location')));
   let map, marker;
   const place = () => { if (!map || !lat.value || !lon.value) return; const ll = [+lat.value, +lon.value]; marker ? marker.setLatLng(ll) : (marker = L.marker(ll, { draggable: true }).addTo(map).on('dragend', () => { const p = marker.getLatLng(); lat.value = p.lat.toFixed(6); lon.value = p.lng.toFixed(6); })); map.setView(ll, Math.max(map.getZoom(), 12)); };
+  // a pasted "40.4441, -79.9623" (comma, semicolon or space separated; N/S/E/W suffixes allowed) fills both fields
+  const pastePair = (e) => {
+    const t = (e.clipboardData || window.clipboardData)?.getData('text') || '';
+    const m = t.trim().match(/^(-?\d+(?:\.\d+)?)\s*°?\s*([NS])?\s*[,;\s]\s*(-?\d+(?:\.\d+)?)\s*°?\s*([EW])?$/i);
+    if (!m) return;
+    e.preventDefault();
+    const la = +m[1] * (m[2] && m[2].toUpperCase() === 'S' ? -1 : 1), lo = +m[3] * (m[4] && m[4].toUpperCase() === 'W' ? -1 : 1);
+    if (Math.abs(la) > 90 || Math.abs(lo) > 180) { toast('That does not look like a latitude, longitude pair.'); return; }
+    lat.value = la; lon.value = lo; place();
+    if (map) map.setView([la, lo], Math.max(map.getZoom(), 12));
+  };
+  lat.onpaste = lon.onpaste = pastePair;
   try { await loadLeaflet(false); } catch { mapEl.replaceChildren(h('div', { class: 'empty' }, 'The map needs an internet connection; coordinates can still be typed.')); return; }
   const L = window.L;
   map = L.map(mapEl).setView(current ? [current.lat, current.lon] : [40.4, -80], current ? 13 : 4);
