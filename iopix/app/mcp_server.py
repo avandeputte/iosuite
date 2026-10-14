@@ -423,11 +423,20 @@ def view_photo(photo_id: int, size: Literal["small", "large"] = "small") -> Imag
 
 
 # ---- diagnostics: what an operator would check in a shell, read-only
+def _need_token(token: str):
+    """The diagnostics tools reveal paths, log lines and settings; on an endpoint without sign-in
+    they take the same admin token as update_viewer (Maintenance > Viewer version)."""
+    from . import updates
+    if not updates.token_ok(token):
+        raise ToolError("This tool needs the admin token (Maintenance > Viewer version > MCP update token)")
+
+
 @server.tool(annotations=READ_ONLY)
-def diagnostics() -> dict:
+def diagnostics(token: str) -> dict:
     """The viewer's own health: version and commit, platform, database backend, which external tools
     exist (exiftool, ffmpeg, mysqldump), disk space, the background job queue with timing, installed
     models and features, user and permission mode, settings without secrets. Start here for any issue."""
+    _need_token(token)
     import platform
     import shutil as sh
     import sys
@@ -478,9 +487,10 @@ def _public_settings() -> dict:
 
 
 @server.tool(annotations=READ_ONLY)
-def server_log(lines: int = 200, contains: str = "", level: Literal["any", "warning", "error"] = "any") -> dict:
+def server_log(token: str, lines: int = 200, contains: str = "", level: Literal["any", "warning", "error"] = "any") -> dict:
     """The last lines of the viewer's own log (data/viewer.log, rotating). `contains` keeps only lines
     with that text; `level` keeps only WARNING+ or ERROR+ lines (tracebacks count as errors)."""
+    _need_token(token)
     lines = max(1, min(int(lines), 2000))
     path = config.LOG_FILE
     if not path.exists():
@@ -504,10 +514,11 @@ def server_log(lines: int = 200, contains: str = "", level: Literal["any", "warn
 
 
 @server.tool(annotations=READ_ONLY)
-def job_queue() -> dict:
+def job_queue(token: str) -> dict:
     """What the background worker is doing right now: the running job, its start time and elapsed
     minutes, what is queued, the core budget, and per-job progress with the time of the last
     completed item (a stall shows as a large 'idle_seconds')."""
+    _need_token(token)
     import time
     from . import jobs
     from .analysis import progress as analysis_progress
@@ -527,9 +538,10 @@ def job_queue() -> dict:
 
 
 @server.tool(annotations=READ_ONLY)
-def photo_file(photo_id: int) -> dict:
+def photo_file(token: str, photo_id: int) -> dict:
     """Checks one photo's files on disk: the image (exists, size, readable), its XMP sidecar, the
     thumbnail cache entry, and any backups the viewer made. For 'this photo does not show' issues."""
+    _need_token(token)
     con = db()
     try:
         r = con.execute("SELECT id, path, name, size, hash, modified, video FROM photos WHERE id = ?", (photo_id,)).fetchone()

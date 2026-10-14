@@ -34,18 +34,21 @@ def test_a_read_only_tool_call_works_anonymously(client, lib):
 
 
 def test_diagnostic_tools(client, lib):
-    d = _rpc(client, "tools/call", {"name": "diagnostics", "arguments": {}}, id=10)["result"]
+    tok = client.post("/api/update", json={"action": "token"}).json()["token"]
+    denied = _rpc(client, "tools/call", {"name": "diagnostics", "arguments": {"token": "nope"}}, id=9)["result"]
+    assert denied.get("isError") and "token" in denied["content"][0]["text"].lower()
+    d = _rpc(client, "tools/call", {"name": "diagnostics", "arguments": {"token": tok}}, id=10)["result"]
     assert not d.get("isError"), d
     text = json.loads(d["content"][0]["text"])
     assert text["version"] and "tools" in text and "jobs" in text and text["database"]["type"] in ("sqlite", "mysql")
     assert "***" in json.dumps(text["settings"]) or not any("password" in k for k in text["settings"]), "secrets are masked"
-    q = json.loads(_rpc(client, "tools/call", {"name": "job_queue", "arguments": {}}, id=11)["result"]["content"][0]["text"])
+    q = json.loads(_rpc(client, "tools/call", {"name": "job_queue", "arguments": {"token": tok}}, id=11)["result"]["content"][0]["text"])
     assert "running" in q and "queued" in q
-    lg = json.loads(_rpc(client, "tools/call", {"name": "server_log", "arguments": {"lines": 5}}, id=12)["result"]["content"][0]["text"])
+    lg = json.loads(_rpc(client, "tools/call", {"name": "server_log", "arguments": {"token": tok, "lines": 5}}, id=12)["result"]["content"][0]["text"])
     assert "lines" in lg
-    pf = json.loads(_rpc(client, "tools/call", {"name": "photo_file", "arguments": {"photo_id": lib["ids"][0]}}, id=13)["result"]["content"][0]["text"])
+    pf = json.loads(_rpc(client, "tools/call", {"name": "photo_file", "arguments": {"token": tok, "photo_id": lib["ids"][0]}}, id=13)["result"]["content"][0]["text"])
     assert pf["exists"] is True and pf["readable"] is True and "sidecar" in pf
-    bad = _rpc(client, "tools/call", {"name": "photo_file", "arguments": {"photo_id": 999999999}}, id=14)["result"]
+    bad = _rpc(client, "tools/call", {"name": "photo_file", "arguments": {"token": tok, "photo_id": 999999999}}, id=14)["result"]
     assert bad.get("isError")
 
 
