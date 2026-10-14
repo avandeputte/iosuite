@@ -181,6 +181,8 @@ All settings are environment variables. `app/config.py` is the source of truth f
 
 ## Running in Docker
 
+`deploy/docker-compose.yml` is a ready-made stack for Dockge or Portainer that pulls the image from GitHub's registry (`ghcr.io/avandeputte/digikam-viewer:latest`) instead of building it: set the photos path, the database and the admin password and start it. The repository's own `docker-compose.yml` builds the image from source.
+
 `docker compose up` builds the image and runs the viewer with digiKam's folder and the photos mounted read-only and `./data` as its writable volume; edit the two host paths in `docker-compose.yml`. The image (Debian slim, Python 3.12) contains ffmpeg, exiftool, libheif and, with the default build argument `AI=1`, the content-search, text-recognition and object-detection packages; `CAPTIONS=1` adds PyTorch (CPU build) and transformers for photo descriptions, which are slow without a GPU.
 
 - **Models and data** are not in the image. Download them from Settings › Models and data, or with `docker compose exec -e HF_HUB_OFFLINE=0 digikam-viewer python -m app.models download <clip|siglip2|yolox|geonames|blip>`. They land in `/data/models` and `/data/geonames` on the volume and survive rebuilds. The `enable-*.sh` scripts are for the `.venv` install, not the container.
