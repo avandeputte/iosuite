@@ -235,7 +235,7 @@ With the proxy in place the addresses in this README change from `http://<host>:
 
 ## MCP server
 
-The viewer is also a read-only [MCP](https://modelcontextprotocol.io) server, on the same port, at `/mcp` (streamable HTTP), so an assistant such as Claude can search and inspect the library through the running app; nothing is installed or downloaded, and no sign-in is needed for read-only use. Tools: library summary, search with every filter the web app has, photo details, people, places, albums, tags, similar photos, links into the viewer.
+The viewer is also a read-only [MCP](https://modelcontextprotocol.io) server, on the same port, at `/mcp` (streamable HTTP), so an assistant such as Claude can search and inspect the library through the running app; nothing is installed or downloaded, and no sign-in is needed for read-only use. Tools: library summary, search with every filter the web app has, photo details, people, places, albums, tags, similar photos, links into the viewer. Diagnostics tools for operating it: `diagnostics` (version, platform, database, external tools, disk, job queue, models, settings without secrets), `server_log` (the viewer's rotating `data/viewer.log`, filterable), `job_queue`, `photo_file` (one photo's files, sidecar, cache and backups). They expose paths and log lines, so on an internet-facing proxy restrict `/mcp` (see Reverse proxy).
 
     claude mcp add --transport http digikam-library http://localhost:8600/mcp
     claude mcp add --transport http digikam-library https://photos.example.com/mcp     # behind the reverse proxy

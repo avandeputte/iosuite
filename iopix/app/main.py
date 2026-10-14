@@ -148,8 +148,28 @@ def _models_arrived(keys: list):
         _kick.set()
 
 
+def _setup_file_log():
+    """A rotating log in the data folder, with uvicorn's lines, readable from Maintenance and the MCP
+    diagnostics whatever the platform logs to (journald, launchd, docker)."""
+    import logging
+    from logging.handlers import RotatingFileHandler
+    try:
+        config.DATA_DIR.mkdir(parents=True, exist_ok=True)
+        h = RotatingFileHandler(config.LOG_FILE, maxBytes=2_000_000, backupCount=3, encoding="utf-8")
+    except OSError:
+        return
+    h.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+    for name in ("", "uvicorn", "uvicorn.error", "uvicorn.access"):
+        lg = logging.getLogger(name)
+        if not any(isinstance(x, RotatingFileHandler) and getattr(x, "baseFilename", "") == str(config.LOG_FILE) for x in lg.handlers):
+            lg.addHandler(h)
+        if lg.level == logging.NOTSET or lg.level > logging.INFO:
+            lg.setLevel(logging.INFO)
+
+
 @asynccontextmanager
 async def lifespan(_app):
+    _setup_file_log()
     appstate.init()
     users.init()
     edits.init()

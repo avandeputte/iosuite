@@ -55,6 +55,7 @@ for _p in (DIGIKAM_DB_DIR, PHOTOS_ROOT):
 # AUTO_MODELS: models to download on first start when missing, e.g. "siglip2,yolox,geonames"
 # (keys as in app/models.py). Containers and installers set it; the Mac service leaves it empty.
 AUTO_MODELS = [k.strip() for k in os.environ.get("AUTO_MODELS", "").split(",") if k.strip()]
+LOG_FILE = DATA_DIR / "viewer.log"  # rotating copy of the server's own log lines (Maintenance / MCP can show it)
 # READ_ONLY=1 locks the viewer to browsing: no edits, tags, faces or database writes, whatever the settings say
 READ_ONLY = os.environ.get("READ_ONLY", "0") in ("1", "true", "yes")
 # Allow metadata edits (XMP sidecars; image files too when the write_files setting is on).

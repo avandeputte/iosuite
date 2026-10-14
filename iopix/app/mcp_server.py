@@ -421,5 +421,142 @@ def view_photo(photo_id: int, size: Literal["small", "large"] = "small") -> Imag
     return Image(data=buf.getvalue(), format="jpeg")
 
 
+
+# ---- diagnostics: what an operator would check in a shell, read-only
+@server.tool(annotations=READ_ONLY)
+def diagnostics() -> dict:
+    """The viewer's own health: version and commit, platform, database backend, which external tools
+    exist (exiftool, ffmpeg, mysqldump), disk space, the background job queue with timing, installed
+    models and features, user and permission mode, settings without secrets. Start here for any issue."""
+    import platform
+    import shutil as sh
+    import sys
+    import time
+    from . import __version__, dkdb, jobs, models, updates, users
+    from .analysis import progress as analysis_progress
+    try:
+        free = sh.disk_usage(str(config.DATA_DIR)).free
+    except OSError:
+        free = None
+    q = jobs.status()
+    dbc = dkdb.settings()
+    out = {
+        "version": __version__, "commit": updates.local_commit()[:7], "docker": updates.in_docker(),
+        "platform": platform.platform(), "python": sys.version.split()[0], "app_dir": str(config.APP_DIR), "data_dir": str(config.DATA_DIR),
+        "database": {"type": dbc["type"], "location": dkdb.describe(), "backup_mode": dbc["backup"], "digikam_check": config.DIGIKAM_CHECK},
+        "tools": {"exiftool": bool(edits.EXIFTOOL), "ffmpeg": bool(thumbs.FFMPEG), "mysqldump": bool(sh.which("mysqldump") or sh.which("mariadb-dump"))},
+        "disk_free_gb": round(free / 1e9, 1) if free is not None else None,
+        "jobs": {**q, "running_for_min": round((time.time() - q["since"]) / 60, 1) if q.get("since") else None},
+        "analysis_progress": {k: {"running": v["running"], "done": v["done"], "total": v["total"]} for k, v in analysis_progress.items()},
+        "models": [{"key": m["key"], "installed": m["installed"], "revision": m.get("revision")} for m in models.listing()["models"]],
+        "search": {"enabled": semantic_enabled(), "running": semantic.running, "done": semantic.done, "total": semantic.total, "model": semantic.chosen()},
+        "users": {"exist": users.any_users(), "count": len(users.list_users())},
+        "read_only": appstate.read_only(),
+        "settings": {k: v for k, v in _public_settings().items()},
+        "log_file": str(config.LOG_FILE), "log_file_exists": config.LOG_FILE.exists(),
+    }
+    try:
+        con = db()
+        try:
+            out["index"] = {"photos": con.execute("SELECT count(*) FROM photos").fetchone()[0], "built": con.execute("SELECT value FROM meta WHERE key = 'built'").fetchone()[0]}
+        finally:
+            con.close()
+    except Exception as e:
+        out["index"] = {"error": str(e)[:200]}
+    return out
+
+
+def _public_settings() -> dict:
+    """Every stored setting except secrets (passwords, keys, session vouches)."""
+    con = appstate.connect()
+    try:
+        rows = con.execute("SELECT key, value FROM settings").fetchall()
+    finally:
+        con.close()
+    hide = ("password", "key", "secret", "token")
+    return {k: ("***" if any(h in k for h in hide) else v) for k, v in rows}
+
+
+@server.tool(annotations=READ_ONLY)
+def server_log(lines: int = 200, contains: str = "", level: Literal["any", "warning", "error"] = "any") -> dict:
+    """The last lines of the viewer's own log (data/viewer.log, rotating). `contains` keeps only lines
+    with that text; `level` keeps only WARNING+ or ERROR+ lines (tracebacks count as errors)."""
+    lines = max(1, min(int(lines), 2000))
+    path = config.LOG_FILE
+    if not path.exists():
+        return {"file": str(path), "lines": [], "note": "no log file yet (the server writes it from its next start)"}
+    try:
+        with open(path, "rb") as f:
+            f.seek(0, 2)
+            size = f.tell()
+            f.seek(max(0, size - 4_000_000))
+            text = f.read().decode("utf-8", "replace")
+    except OSError as e:
+        raise ToolError(f"cannot read the log: {e}")
+    out = text.splitlines()
+    if contains:
+        out = [l for l in out if contains.lower() in l.lower()]
+    if level == "warning":
+        out = [l for l in out if " WARNING " in l or " ERROR " in l or " CRITICAL " in l or "Traceback" in l]
+    elif level == "error":
+        out = [l for l in out if " ERROR " in l or " CRITICAL " in l or "Traceback" in l]
+    return {"file": str(path), "size_bytes": size, "returned": min(lines, len(out)), "lines": out[-lines:]}
+
+
+@server.tool(annotations=READ_ONLY)
+def job_queue() -> dict:
+    """What the background worker is doing right now: the running job, its start time and elapsed
+    minutes, what is queued, the core budget, and per-job progress with the time of the last
+    completed item (a stall shows as a large 'idle_seconds')."""
+    import time
+    from . import jobs
+    from .analysis import progress as analysis_progress
+    q = jobs.status()
+    now = time.time()
+    out = {"running": q["running"], "queued": q["queued"], "threads": q["threads"], "cores": q["cores"],
+           "running_for_min": round((now - q["since"]) / 60, 1) if q.get("since") else None,
+           "analysis": {k: {"running": v["running"], "done": v["done"], "total": v["total"]} for k, v in analysis_progress.items()},
+           "search": {"running": semantic.running, "done": semantic.done, "total": semantic.total}}
+    try:  # the thumbnail prewarmer lives in the web app; present when this runs inside it
+        from .main import prewarmer
+        out["thumbnails"] = {"running": prewarmer.running, "done": prewarmer.done, "total": prewarmer.total,
+                             "idle_seconds": round(now - prewarmer.last) if prewarmer.last else None, "current": list(prewarmer.current.values())[:3]}
+    except Exception:
+        pass
+    return out
+
+
+@server.tool(annotations=READ_ONLY)
+def photo_file(photo_id: int) -> dict:
+    """Checks one photo's files on disk: the image (exists, size, readable), its XMP sidecar, the
+    thumbnail cache entry, and any backups the viewer made. For 'this photo does not show' issues."""
+    con = db()
+    try:
+        r = con.execute("SELECT id, path, name, size, hash, modified, video FROM photos WHERE id = ?", (photo_id,)).fetchone()
+    finally:
+        con.close()
+    if not r:
+        raise ToolError(f"No item with id {photo_id}")
+    path = r["path"]
+    out = {"id": r["id"], "path": path, "indexed_size": r["size"], "video": bool(r["video"])}
+    try:
+        st = os.stat(path)
+        out.update(exists=True, size=st.st_size, readable=os.access(path, os.R_OK), writable=os.access(path, os.W_OK), size_matches=st.st_size == r["size"])
+    except OSError as e:
+        out.update(exists=False, error=str(e))
+    side = path + ".xmp"
+    out["sidecar"] = {"exists": os.path.exists(side), "writable_dir": os.access(os.path.dirname(path), os.W_OK)}
+    try:
+        tp = thumbs.cache_path("t", r["id"], thumbs.stamp_for(r["hash"], r["size"], r["modified"]))
+        out["thumbnail_cached"] = tp.exists()
+    except Exception:
+        pass
+    try:
+        out["sidecar_backup"] = edits._backup_path(path).exists()
+        out["file_backup"] = edits.file_backup_path(path).exists()
+    except Exception:
+        pass
+    return out
+
 if __name__ == "__main__":
     server.run()
