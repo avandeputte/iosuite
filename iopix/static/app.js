@@ -1675,6 +1675,24 @@ async function settingsPage(view) {
           settingsPage(view);
         })));
     })() : null,
+    IS_ADMIN ? (() => {
+      const d = m.database || {};
+      const inp = (k, ph, type = 'text', w = 160) => h('input', { class: 'einput', type, placeholder: ph, value: type === 'password' ? '' : (d[k] ?? ''), autocomplete: 'off', style: `margin:0;width:${w}px`, onkeydown: (e) => e.stopPropagation() });
+      const type = h('select', null, h('option', { value: 'sqlite', selected: d.type !== 'mysql' }, 'SQLite (digikam4.db file)'), h('option', { value: 'mysql', selected: d.type === 'mysql' }, 'MySQL / MariaDB'));
+      const f = { sqlite_dir: inp('sqlite_dir', 'folder with digikam4.db', 'text', 320), host: inp('host', 'host'), port: inp('port', 'port', 'text', 70), database: inp('database', 'database'), user: inp('user', 'user'),
+        password: inp('password', d.password_set ? 'password (stored; leave empty to keep)' : 'password', 'password', 220) };
+      const backup = h('select', null, [['auto', 'back up before each write (file copy / mysqldump)'], ['skip', 'no backup (the server is backed up elsewhere)']].map(([v, l]) => h('option', { value: v, selected: (d.backup || 'auto') === v }, l)));
+      const sq = h('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;margin-top:6px' }, f.sqlite_dir), my = h('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;margin-top:6px' }, f.host, f.port, f.database, f.user, f.password);
+      const show = () => { sq.hidden = type.value !== 'sqlite'; my.hidden = type.value !== 'mysql'; }; type.onchange = show; show();
+      const payload = () => ({ type: type.value, sqlite_dir: f.sqlite_dir.value, host: f.host.value, port: f.port.value, database: f.database.value, user: f.user.value, password: f.password.value, backup: backup.value });
+      const result = h('div', { class: 'muted', style: 'font-size:12.5px;margin-top:6px' });
+      return row('digiKam database', `Where digiKam keeps its database. Currently ${d.type === 'mysql' ? `MySQL ${d.user}@${d.host}:${d.port}/${d.database}` : `SQLite in ${d.sqlite_dir}`}. Changing it rebuilds the index from the other database within seconds; the viewer's own data (favorites, albums, users, analysis) stays. Test first.`,
+        h('div', null, h('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;align-items:center' }, type, backup), sq, my,
+          h('div', { style: 'display:flex;gap:6px;margin-top:8px' },
+            btn('Test connection', async () => { fill(result, 'Testing…'); try { const r = await post('/api/db/test', payload()); fill(result, `OK: ${nf.format(r.images)} photos, ${nf.format(r.tags)} tags, DBVersion ${r.dbVersion}, album root ${r.roots.join(', ')}`); } catch (e) { fill(result, e.message); } }),
+            btn('Save and switch', async () => { if (!confirm('Switch the viewer to this digiKam database now?')) return; try { await post('/api/settings', { database: payload() }); toast('Database settings saved; the index is rebuilding.'); } catch (e) { toast(e.message); return; } setTimeout(() => settingsPage(view), 2500); }, true)),
+          result));
+    })() : null,
     IS_ADMIN ? row('Read-only mode', m.readOnlyLocked ? 'Locked on by READ_ONLY=1 in the environment: nothing in the library can be changed from the viewer.'
       : `${m.readOnly ? 'On' : 'Off'}. When on, the viewer only browses: editing, tagging, face naming, place tags, GPS tracks, metadata sync and database updates are switched off and refused by the server. Favorites and viewer albums keep working; they never touch the library.`,
       m.readOnlyLocked ? null : btn(m.readOnly ? 'Turn off' : 'Turn on', async () => { try { await post('/api/settings', { read_only: !m.readOnly }); const s = await api('/api/status'); EDITING = s.editing; CAN_MANAGE = s.editing && s.dbWrite; } catch (e) { toast(e.message); } settingsPage(view); })) : null,

@@ -873,6 +873,16 @@ async def api_edit_revert(request: Request):
 # Settings, background analysis, models, maintenance
 # --------------------------------------------------------------------------
 
+def _settings_public() -> dict:
+    return {"write_files": edits.writes_files(), "search_model": semantic.chosen(), "bg_threads": bgjobs.threads(), "read_only": appstate.read_only(), "database": _db_settings_public(), "map_provider": appstate.get_setting("map_provider", "osm"), "google_maps_key_set": bool(maps.key()), "templates": json.loads(appstate.get_setting("templates", "[]"))}
+
+
+@app.get("/api/settings")
+def api_settings_get():
+    """The settings the Settings page shows (admin values are read-only here; secrets are never included)."""
+    return _settings_public()
+
+
 @app.post("/api/settings")
 async def api_settings(request: Request):
     """Body: {write_files: bool} - also write metadata into image files (JPEG, PNG, TIFF, WebP), not just sidecars."""
@@ -889,6 +899,14 @@ async def api_settings(request: Request):
         tpls = [{"name": str(t.get("name", ""))[:80], "fields": {k: str(v or "")[:1000] for k, v in (t.get("fields") or {}).items() if k in edits.TEMPLATE_FIELDS}}
                 for t in body["templates"] if isinstance(t, dict) and t.get("name")]
         appstate.set_setting("templates", json.dumps(tpls))
+    if "database" in body:  # admin: the digiKam database connection; applies at once (the index rebuilds)
+        d = body["database"] or {}
+        for k in dkdb.KEYS:
+            if k == "password" and not d.get("password"):
+                continue  # an empty password field means "keep the stored one"
+            if k in d:
+                appstate.set_setting("db_" + k, str(d[k]).strip() if d[k] is not None else "")
+        _kick.set()
     if "map_provider" in body:  # osm or google; google needs a key (setting or GOOGLE_MAPS_API_KEY)
         if body["map_provider"] not in ("osm", "google"):
             raise HTTPException(400, "Unknown map provider")
@@ -910,7 +928,7 @@ async def api_settings(request: Request):
         appstate.set_setting("search_model", name)
         _photos_cached.cache_clear()
         await run_in_threadpool(_start_prewarm)  # starts indexing for the newly chosen model if needed
-    return {"write_files": edits.writes_files(), "search_model": semantic.chosen(), "bg_threads": bgjobs.threads(), "read_only": appstate.read_only(), "map_provider": appstate.get_setting("map_provider", "osm"), "google_maps_key_set": bool(maps.key()), "templates": json.loads(appstate.get_setting("templates", "[]"))}
+    return _settings_public()
 
 
 def nf(n) -> str:
@@ -1071,6 +1089,23 @@ async def api_users_update(user_id: int, request: Request):
     except ValueError as e:
         raise HTTPException(400, str(e))
     return {"ok": True}
+
+
+def _db_settings_public() -> dict:
+    c = dkdb.settings()
+    return {k: c[k] for k in dkdb.KEYS if k != "password"} | {"password_set": bool(c["password"]), "env_type": dkdb.ENV["type"]}
+
+
+@app.post("/api/db/test")
+async def api_db_test(request: Request):
+    """Try connection settings without saving them (admin). Body: the database fields; an empty password keeps the stored one."""
+    if not users.is_admin(request.state.user):
+        raise HTTPException(403, "Admins only")
+    d = await request.json()
+    try:
+        return await run_in_threadpool(dkdb.test_connection, d)
+    except Exception as e:
+        raise HTTPException(400, f"Connection failed: {str(e)[:200]}")
 
 
 @app.get("/api/maps")

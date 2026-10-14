@@ -20,7 +20,7 @@ the file's own orientation and normalised to its unrotated size.
 import threading
 from pathlib import Path
 
-from . import config, dbsync, dkdb, edits, index, tagmanager
+from . import dbsync, dkdb, edits, index, tagmanager
 from .dbsync import SyncError
 
 # which ImageTagProperties row holds the rectangle of each kind of face
@@ -117,7 +117,7 @@ def apply_many(ops: list, db_path=None, check_running: bool = True) -> list:
     add:     a new region for person `tag`
     move:    change the rectangle of an existing face to new_rect
     Returns one summary per op; a failed op has an "error" and the others still apply."""
-    db_path = Path(db_path or config.DIGIKAM_DB)
+    db_path = Path(db_path or dkdb.sqlite_path())
     if not ops:
         return []
     for op in ops:
@@ -258,7 +258,7 @@ def _struct(v) -> str:
 
 def write_regions(image: int, db_path=None) -> str:
     """Rewrite the sidecar's (and file's, if enabled) face regions from the database."""
-    db_path = Path(db_path or config.DIGIKAM_DB)
+    db_path = Path(db_path or dkdb.sqlite_path())
     src = dkdb.connect(write=False, db_path=db_path)
     try:
         row = src.execute(

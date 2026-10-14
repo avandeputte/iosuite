@@ -27,15 +27,61 @@ from urllib.parse import quote
 
 from . import config
 
-TYPE = os.environ.get("DIGIKAM_DB_TYPE", "sqlite").lower()
-MYSQL = {
-    "host": os.environ.get("DIGIKAM_DB_HOST", "127.0.0.1"),
-    "port": int(os.environ.get("DIGIKAM_DB_PORT", "3306")),
-    "database": os.environ.get("DIGIKAM_DB_NAME", "digikam"),
-    "user": os.environ.get("DIGIKAM_DB_USER", "digikam"),
-    "password": os.environ.get("DIGIKAM_DB_PASSWORD", ""),
-}
-BACKUP_MODE = os.environ.get("DIGIKAM_DB_BACKUP", "auto")
+# The environment is the starting point; the admin can override it from Settings (the
+# `db_*` settings, see settings()). Everything below reads the current values per call.
+ENV = {"type": os.environ.get("DIGIKAM_DB_TYPE", "sqlite").lower(), "sqlite_dir": str(config.DIGIKAM_DB_DIR),
+       "host": os.environ.get("DIGIKAM_DB_HOST", "127.0.0.1"), "port": os.environ.get("DIGIKAM_DB_PORT", "3306"),
+       "database": os.environ.get("DIGIKAM_DB_NAME", "digikam"), "user": os.environ.get("DIGIKAM_DB_USER", "digikam"),
+       "password": os.environ.get("DIGIKAM_DB_PASSWORD", ""), "backup": os.environ.get("DIGIKAM_DB_BACKUP", "auto")}
+KEYS = tuple(ENV)
+
+
+def settings() -> dict:
+    """The effective connection settings: a `db_<key>` setting wins over the environment."""
+    from . import state
+    out = dict(ENV)
+    for k in KEYS:
+        v = state.get_setting("db_" + k, "")
+        if v != "":
+            out[k] = v
+    out["type"] = "mysql" if str(out["type"]).lower() in ("mysql", "mariadb") else "sqlite"
+    try:
+        out["port"] = int(out["port"])
+    except (TypeError, ValueError):
+        out["port"] = 3306
+    return out
+
+
+def sqlite_path() -> Path:
+    return Path(settings()["sqlite_dir"]) / "digikam4.db"
+
+
+def _mysql_kwargs() -> dict:
+    c = settings()
+    return {"host": c["host"], "port": c["port"], "database": c["database"], "user": c["user"], "password": c["password"]}
+
+
+def test_connection(c: dict = None) -> dict:
+    """Try the given (or current) settings without saving them: counts, DBVersion, album roots."""
+    c = {**settings(), **{k: v for k, v in (c or {}).items() if v not in (None, "")}}
+    if str(c["type"]).lower() in ("mysql", "mariadb"):
+        import pymysql
+        raw = pymysql.connect(host=c["host"], port=int(c["port"]), database=c["database"], user=c["user"], password=c["password"], connect_timeout=5)
+        con = Conn(raw, True, False)
+    else:
+        path = Path(c["sqlite_dir"]) / "digikam4.db"
+        if not path.exists():
+            raise SyncError(f"No digikam4.db in {c['sqlite_dir']}")
+        import sqlite3
+        con = Conn(sqlite3.connect(f"file:{quote(str(path))}?mode=ro", uri=True), False, False)
+    try:
+        images = con.execute("SELECT count(*) FROM Images WHERE status = 1").fetchone()[0]
+        tags = con.execute("SELECT count(*) FROM Tags").fetchone()[0]
+        ver = con.execute("SELECT value FROM Settings WHERE keyword = 'DBVersion'").fetchone()
+        roots = [r[0] for r in con.execute("SELECT specificPath FROM AlbumRoots")]
+        return {"ok": True, "images": images, "tags": tags, "dbVersion": ver[0] if ver else None, "roots": roots}
+    finally:
+        con.close()
 BACKUP_DIR = config.DATA_DIR / "db-backups"
 KEEP_BACKUPS = 10
 
@@ -48,11 +94,12 @@ class SyncError(Exception):
 
 
 def is_mysql() -> bool:
-    return TYPE in ("mysql", "mariadb")
+    return settings()["type"] == "mysql"
 
 
 def describe() -> str:
-    return f"MySQL {MYSQL['user']}@{MYSQL['host']}:{MYSQL['port']}/{MYSQL['database']}" if is_mysql() else str(config.DIGIKAM_DB)
+    c = settings()
+    return f"MySQL {c['user']}@{c['host']}:{c['port']}/{c['database']}" if is_mysql() else str(sqlite_path())
 
 
 # --------------------------------------------------------------------------
@@ -177,11 +224,11 @@ def connect(write: bool = False, db_path=None) -> Conn:
             import pymysql
         except ImportError:
             raise SyncError("MySQL support needs the PyMySQL package (pip install pymysql)")
-        raw = pymysql.connect(**MYSQL, charset="utf8mb4", autocommit=False, read_timeout=120, write_timeout=120)
+        raw = pymysql.connect(**_mysql_kwargs(), charset="utf8mb4", autocommit=False, read_timeout=120, write_timeout=120)
         if not write:
             raw.cursor().execute("SET SESSION TRANSACTION READ ONLY")
         return Conn(raw, True, write)
-    path = Path(db_path or config.DIGIKAM_DB)
+    path = Path(db_path or sqlite_path())
     uri = f"file:{quote(str(path))}?mode={'rw' if write else 'ro'}"
     raw = sqlite3.connect(uri, uri=True, timeout=30 if not write else 5, isolation_level=None if write else "")
     if not write:
@@ -223,7 +270,7 @@ def root_paths(con) -> dict:
 def source_version() -> str:
     """Changes whenever digiKam writes to its database."""
     if not is_mysql():
-        st = os.stat(config.DIGIKAM_DB)
+        st = os.stat(sqlite_path())
         return f"{st.st_mtime_ns}-{st.st_size}"
     with connect() as con:
         scanned = con.execute("SELECT value FROM Settings WHERE keyword = 'Scanned'").fetchone()
@@ -240,7 +287,7 @@ def busy_recently(seconds: float = 3) -> bool:
     if is_mysql():
         return False
     try:
-        return time.time() - os.stat(config.DIGIKAM_DB).st_mtime < seconds
+        return time.time() - os.stat(sqlite_path()).st_mtime < seconds
     except OSError:
         return False
 
@@ -249,7 +296,7 @@ def journal_pending(db_path=None) -> bool:
     """An unfinished SQLite write by digiKam (journal/WAL file left behind)."""
     if is_mysql():
         return False
-    p = str(db_path or config.DIGIKAM_DB)
+    p = str(db_path or sqlite_path())
     return Path(p + "-journal").exists() or Path(p + "-wal").exists()
 
 
@@ -257,7 +304,7 @@ def last_change_time():
     """When digiKam last changed its database, as a unix time, if known."""
     if not is_mysql():
         try:
-            return int(os.stat(config.DIGIKAM_DB).st_mtime)
+            return int(os.stat(sqlite_path()).st_mtime)
         except OSError:
             return None
     try:
@@ -279,7 +326,7 @@ def backup(db_path=None):
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
     stamp, n = time.strftime("%Y%m%d-%H%M%S"), 0
     if not is_mysql():
-        src = Path(db_path or config.DIGIKAM_DB)
+        src = Path(db_path or sqlite_path())
         dst = BACKUP_DIR / f"digikam4-{stamp}.db"
         while dst.exists():
             n += 1
@@ -287,7 +334,7 @@ def backup(db_path=None):
         shutil.copy2(src, dst)
         _prune("digikam4-*.db")
         return dst
-    if BACKUP_MODE == "skip":
+    if settings()["backup"] == "skip":
         return None
     custom = os.environ.get("DIGIKAM_DB_DUMP", "").strip()
     tool = shutil.which("mysqldump") or shutil.which("mariadb-dump")
@@ -299,9 +346,10 @@ def backup(db_path=None):
     while dst.exists():
         n += 1
         dst = BACKUP_DIR / f"digikam-mysql-{stamp}-{n}.sql"
-    env = dict(os.environ, MYSQL_PWD=MYSQL["password"])
-    cmd = shlex.split(custom) if custom else [tool, "--single-transaction", "--routines", "--triggers", f"--host={MYSQL['host']}",
-                                               f"--port={MYSQL['port']}", f"--user={MYSQL['user']}", MYSQL["database"]]
+    c = settings()
+    env = dict(os.environ, MYSQL_PWD=c["password"])
+    cmd = shlex.split(custom) if custom else [tool, "--single-transaction", "--routines", "--triggers", f"--host={c['host']}",
+                                               f"--port={c['port']}", f"--user={c['user']}", c["database"]]
     with open(dst, "wb") as f:
         res = subprocess.run(cmd, stdout=f, stderr=subprocess.PIPE, env=env, timeout=1800)
     if res.returncode != 0 or dst.stat().st_size < 1024:

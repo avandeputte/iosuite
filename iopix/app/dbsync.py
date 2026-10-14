@@ -144,7 +144,7 @@ def _set_label(con, image_id: int, label_tags: list, tag_id: int):
 
 def apply_pending(db_path: Path = None, pending: dict = None, check_running: bool = True) -> dict:
     """Write every pending viewer edit into the digiKam database."""
-    db_path = Path(db_path or config.DIGIKAM_DB)
+    db_path = Path(db_path or dkdb.sqlite_path())
     pending = edits.pending() if pending is None else pending
     if not pending:
         return {"applied": 0, "skipped": [], "backup": None}

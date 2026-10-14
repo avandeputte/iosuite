@@ -21,7 +21,7 @@ import threading
 import time
 from pathlib import Path
 
-from . import config, dbsync, dkdb, edits
+from . import dbsync, dkdb, edits
 from . import state as appstate
 from .dbsync import SyncError
 
@@ -121,7 +121,7 @@ def apply(op: dict, db_path: Path = None, check_running: bool = True, queue: boo
        | {op: icon, id, photo}. Returns a summary including how many sidecar files will be updated.
     `backup=False` is for callers that run several operations in a row and took one
     database backup themselves before the first."""
-    db_path = Path(db_path or config.DIGIKAM_DB)
+    db_path = Path(db_path or dkdb.sqlite_path())
     kind = op.get("op")
     if kind not in ("add", "rename", "move", "delete", "icon"):
         raise SyncError("Unknown tag operation.")
