@@ -18,14 +18,14 @@ die() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 local_commit() { if [ -d .git ]; then git rev-parse HEAD 2>/dev/null; elif [ -f COMMIT ]; then cat COMMIT; else echo unknown; fi; }
 # network access through the viewer's own Python (no curl needed inside a container)
 PYF="$(ls -d .venv/bin/python 2>/dev/null || command -v python3)"
-fetch() { "$PYF" - "$1" "$2" <<'PYEOF'
-import sys, urllib.request
+fetch() { "$PYF" -c 'import sys, urllib.request
 req = urllib.request.Request(sys.argv[1], headers={"User-Agent": "digikam-viewer-update", "Accept": "application/vnd.github+json"})
 with urllib.request.urlopen(req, timeout=60) as r, open(sys.argv[2], "wb") as f:
-    f.write(r.read())
-PYEOF
-}
-remote_commit() { T="$(mktemp)"; fetch "https://api.github.com/repos/$REPO/commits/$BRANCH" "$T" 2>/dev/null && sed -n 's/^  "sha": "\([0-9a-f]*\)",$/\1/p' "$T" | head -1; rm -f "$T"; }
+    f.write(r.read())' "$1" "$2"; }
+remote_commit() { "$PYF" -c 'import sys, json, urllib.request
+req = urllib.request.Request(sys.argv[1], headers={"User-Agent": "digikam-viewer-update", "Accept": "application/vnd.github+json"})
+with urllib.request.urlopen(req, timeout=30) as r:
+    print(json.load(r)["sha"])' "https://api.github.com/repos/$REPO/commits/$BRANCH" 2>/dev/null; }
 if [ "$1" = "--check" ]; then
   L="$(local_commit)"; R="$(remote_commit)"
   [ -n "$R" ] || die "could not reach GitHub (api.github.com) from here"
