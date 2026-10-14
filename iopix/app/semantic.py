@@ -42,12 +42,16 @@ except Exception:
 
 
 def enabled() -> bool:
-    return _HAVE and MODEL_DIR.exists() and config.SEMANTIC
+    """fastembed is installed, search is not switched off, and at least one model is on disk."""
+    return _HAVE and config.SEMANTIC and any(_ready(k) for k in ENGINES)
 
 
 def _ready(name: str) -> bool:
-    """clip counts as installed whenever the model folder exists (it was the first model)."""
-    return (MODEL_DIR / f"{name}.ready").exists() or (name == "clip" and MODEL_DIR.exists())
+    """The model's files are in data/models: the marker written after a download, or (for
+    clip, the first model, downloaded before markers existed) its hub cache folder."""
+    if (MODEL_DIR / f"{name}.ready").exists():
+        return True
+    return name == "clip" and (MODEL_DIR / "models--Qdrant--clip-ViT-B-32-vision" / "refs" / "main").exists()
 
 
 def download_models(name: str = "clip"):
