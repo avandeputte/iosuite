@@ -1,0 +1,11 @@
+# the viewer's own data: index, caches, models, backups, settings (gigabytes, machine-specific)
+data/
+# virtual environment and Python caches
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+# installer output
+dist/
+# macOS
+.DS_Store

@@ -1,0 +1,235 @@
+# digiKam Viewer
+
+A Google-Photos-style web front end for a digiKam library: FastAPI + a single-page vanilla JS app. It reads digiKam's database and your photos, keeps everything it builds in its own `data/` folder, and writes to the library only for the editing features you turn on.
+
+## Run
+
+    ./run.sh                      # then open http://localhost:8600
+    ./run.sh --host 0.0.0.0       # also reachable from phones/tablets on your network
+
+The first start creates `.venv` (with [uv](https://github.com/astral-sh/uv) when installed, else `python3 -m venv`) and installs `requirements.txt`. Python 3.10 or newer. System tools used when present on the PATH: `ffmpeg` (video thumbnails) and `exiftool` (all metadata writing and the consistency checker; digiKam's bundled copy at `/Applications/digiKam.org/digikam.app/Contents/bin/exiftool` is found automatically on a Mac).
+
+**As a login item (macOS):** copy `tools/com.alex.digikam-viewer.plist` to `~/Library/LaunchAgents/` and run `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.alex.digikam-viewer.plist`. It starts at login, restarts if it stops (`KeepAlive`), and logs to `data/server.log`. Remove it with `launchctl bootout gui/$(id -u)/com.alex.digikam-viewer`. The plist hard-codes `/Users/alex/Pictures/digikam-viewer`; edit the paths for another machine.
+
+**In Docker:** see [Running in Docker](#running-in-docker).
+
+## Optional features
+
+Each script installs into `.venv` and/or downloads into `data/`, then needs a viewer restart. The same downloads are available from Settings › Models and data, which also shows the installed revision of each model and can check its source for updates (the server itself never contacts the model hub; downloads run in a child process).
+
+| Script | Turns on | Installs | Downloads |
+| --- | --- | --- | --- |
+| `./enable-search.sh` | content search, "More photos like this", Detected content, tag cover picking | `requirements-search.txt` (fastembed, onnxruntime, numpy) | CLIP ViT-B/32, about 600 MB |
+| `./enable-search.sh siglip2` | SigLIP 2 as an alternative search model | same | SigLIP 2 base, about 1.5 GB |
+| `./enable-places.sh` | place names, the Places page, place tags | nothing | GeoNames cities1000 (CC BY 4.0), about 10 MB download / 30 MB on disk |
+| `./enable-objects.sh` | object detection, the Objects and "people in the picture" filters | `requirements-objects.txt` (numpy, onnxruntime) | YOLOX-S (Apache-2.0), 35 MB |
+| `./enable-ocr.sh` | text in photos (portable engine) | `requirements-ocr.txt` (RapidOCR with bundled models, onnxruntime, headless OpenCV; about 60 MB) | nothing |
+| `./enable-captions.sh` | photo descriptions | `requirements-captions.txt` (PyTorch, transformers; torch alone is over 500 MB) | BLIP base, about 950 MB |
+
+Everything runs locally; only the map tiles (Leaflet + OpenStreetMap) are loaded from the internet.
+
+## Browsing
+
+- **Photos**: the whole library as one virtualised timeline grouped by day, with a year scrubber, three tile sizes and several sort orders.
+- **Search**: instant suggestions for people, tags, albums, cameras, lenses, photographers, places, years and months; Enter for full-text search across file names, albums, titles, captions, tags, people, recognised text and descriptions. Every pick becomes a chip; chips combine. With content search on, "Photos that look like…" searches by description.
+- **Filters**: every piece of metadata for the current results with live counts: type, rating, pick and color labels, date range, years, people, tags, albums, location, camera, lens, ISO / aperture / focal length, photographer, file type, plus the analysis filters below.
+- **Explore, People, Albums, Tags, Places, Map**: face-crop avatars from digiKam's face regions, the album folder tree, the full tag tree, places from country to town, and a clustered map of geotagged photos ("Day's trail" draws a day's route).
+- **Explore** also lists: Duplicate files (byte-identical files, by digiKam's content hashes), Bursts & best shots, Events & trips, Detected content, Edited here not yet in digiKam.
+- **Viewer**: zoom and pan (switches to the original file when zoomed in), keyboard and swipe navigation, slideshow, face boxes, object boxes, video playback, download, and an info panel with all metadata, each value a link to matching photos.
+- **Select, favorite, collect**: hover a tile and click its check mark (shift-click for a range, the check on a day header for the whole day, or "Select all"). The selection bar can favorite, add to an app album, tag, edit or download. Favorites and "My albums" live in `data/state.db`, never in digiKam.
+- **Download as zip**: "Download" zips the originals of the current search, album or selection, keeping the album folder structure, optionally with XMP sidecars, streamed without temp files. The whole library is never offered as one download. Large downloads are split into parts of 1, 2, 4 or 8 GB (2 GB by default; the API accepts `part_mb` from 100 to 16000) that unzip into one folder.
+
+Keys: `/` focuses search. In the viewer: ← → navigate, Esc close, I info, F faces, O objects, L favorite, D download, Space slideshow / play-pause video; with editing on, 0–5 rating, A accept, X reject, U clear pick label.
+
+## AI analysis and background jobs
+
+All analysis runs locally and is stored in `data/analysis.db`; nothing is written to digiKam. New and changed photos are picked up automatically (the digiKam database is polled every `REINDEX_POLL` seconds, 20 by default). Settings › AI analysis shows every job with progress, "Check for new photos now" and "Run again from scratch".
+
+Heavy work runs through one queue, one job at a time, in this order: thumbnails, sharpness/exposure/objects, content-search embeddings, text and face quality, descriptions. Each job may use `BG_THREADS` cores (default half the machine, changeable in Settings; a change applies when the next job starts), so the viewer and other apps stay responsive.
+
+| Job | Needs | What you get |
+| --- | --- | --- |
+| Sharpness and exposure | nothing | measured on a ~1000 px decode: Sharpest / Blurry / Very dark / Very bright filters, "Sharpest first" sort; sharpness shown as a rank within your library |
+| Object detection | `enable-objects.sh` | YOLOX-S, 80 everyday object types with boxes; Objects and "people in the picture" filters; O in the viewer |
+| Content search | `enable-search.sh` | CLIP (default) or SigLIP 2 embeddings: text search by description, "More photos like this", Detected content, tag cover photos |
+| Text in photos and face quality | `enable-ocr.sh` | portable engine (`VISION_ENGINE=portable`): RapidOCR text, searchable from the search box; face quality as the sharpness of digiKam's face regions. `VISION_ENGINE=apple` uses Apple's Vision framework through `tools/dkvision.swift` instead (macOS only, compiled with `swiftc` on first use) |
+| Photo descriptions | `enable-captions.sh` | one sentence per photo from BLIP base, through PyTorch on an Apple GPU when there is one, else on the CPU (about 0.5 s per photo); searchable and shown in the info panel. `CAPTIONS=0` turns the job off |
+
+Derived from these:
+
+- **Detected content**: Explore › Detected content files photos under 752 everyday subjects in 13 groups (landscapes, buildings, rooms, people, events, soccer, other sports, animals, food, vehicles and travel, objects, documents, photo style). These are guesses from the embeddings, not stored labels.
+- **Bursts & best shots**: frames taken within 2 seconds on the same camera that also look alike (embedding similarity ≥ 0.80 when content search is on) are grouped; the best frame is the sharpest, nudged by face quality. "Show only the best frame of each burst" is a filter; with editing on, the rest of a burst can be rejected in one click.
+- **Events & trips**: trips are runs of days photographed more than 75 km from the town where most of your photos are taken; events are other days with 20 or more photos, named after the title most of them share, else their main tag, else the town.
+- **Search model**: CLIP ViT-B/32 by default. After `./enable-search.sh siglip2`, choose SigLIP 2 under Settings › AI analysis; the library is re-indexed in the background and search switches when complete. You can switch back at any time.
+
+## Editing
+
+Off by default in the sense that nothing is written until you act; `EDITING=0` removes the controls, `READ_ONLY=1` (or the switch in Settings › Display) locks the whole viewer to browsing and refuses every write endpoint.
+
+Rating, pick label, color label, title, caption and keyword tags can be changed in the info panel, with keys in the viewer, or for a whole selection with Edit. Dates, locations, metadata templates, place tags, GPX tracks, faces and the tag manager (below) use the same engine.
+
+**Where edits go, in order:**
+
+1. **XMP sidecar** (`photo.jpg.xmp`), rewritten with exiftool, setting the same fields digiKam writes (checked against digiKam 9.1.0: rating, pick and color labels, titles, captions, every tag-path namespace, always the complete tag list). exiftool rewrites the whole sidecar in its own layout (same data, different formatting).
+2. **Image file** (optional, Settings › Editing › "Write metadata into image files", like digiKam's "sidecar and file" mode): embedded XMP plus the EXIF, IPTC and JPEG-comment fields digiKam uses. JPEG, PNG, TIFF and WebP only. Only the metadata block changes; pixels are untouched. digiKam notices the changed files and rescans them.
+3. **digiKam's database**, only when you ask: "N edits not in digiKam yet" in the left rail or Explore › "Apply edits to digiKam database". Requires digiKam closed (see `DIGIKAM_CHECK`), backs the database up first, applies everything in one transaction and checks integrity before committing. `DB_WRITE=0` disables this. Until then the viewer shows your change and remembers it in `data/state.db`; digiKam picks sidecar changes up itself with Item › Reread Metadata From File, at which point the remembered edit is dropped. If you change an edited item in digiKam before that, digiKam may write its own values over the sidecar.
+
+Tag and face operations, place-tag creation and tag badges write the database directly (digiKam closed, backup first) because digiKam owns those tables.
+
+### Dates, locations, templates, place tags, GPX, faces
+
+- **Date and time**: info panel › "change", or Edit for a selection: set a date, or shift every photo by the same amount. Writes the EXIF, IPTC and XMP date tags digiKam's MetadataHub writes; `ImageInformation.creationDate` in the database.
+- **Location**: "Set location on the map" / "change": click or drag on a map, type coordinates and altitude, copy from the previous photo, or remove. EXIF GPS block and XMP equivalents; `ImagePositions` in the database.
+- **Metadata templates**: Settings › Metadata templates defines them; "Apply a metadata template" in the info panel and Edit dialog. Dublin Core, Photoshop, IPTC Core contact and IPTC fields; `ImageCopyright` rows as digiKam's `ItemCopyright::setFromTemplate` writes them. As in digiKam, applying a template sets every field, so blanks clear.
+- **Tagging**: "Tag" on the selection bar, with recent tags and creation of new tags ("Parent/New tag" + Enter; digiKam closed).
+- **Place tags**: Settings › Place tags, or "Add place tags from GPS positions" in the Tag dialog: creates `Places/Country/Region/Town` tags from the offline geocoder (digiKam closed) and assigns them through the normal edit path. Needs `enable-places.sh`.
+- **GPX correlation**: Edit › "Correlate with GPS track": like digiKam's Geolocation Editor; interpolates between track points, with camera UTC offset, clock correction and maximum gap; preview before writing.
+- **Faces**: F in the viewer. Unnamed faces, suggestions ("Name?") and ignored faces are shown next to confirmed ones, each with actions: confirm, name (person picker that can create a new person), ignore, forget the name, remove, and "Add a face" to draw a region. These mirror digiKam's `FaceTagsEditor` rows (`tagRegion`, `faceToTrain`, `autodetectedFace`, `autodetectedPerson`, `ignoredFace`), require digiKam closed, and rewrite the sidecar's `mwg-rs` and `MP` region structures as `MetadataHub::writeFaceTagsMap` does. The People page lists unnamed faces and suggestions to work through.
+
+### Tag manager
+
+Tags › "Manage tags" adds controls to create, rename, move (drag onto a parent or the "top level" zone) and delete keyword tags. Tag definitions live in digiKam's database, so digiKam must be closed and `digikam4.db` is backed up before every change. Renaming, moving or deleting a tag also rewrites the tag path in the sidecar of every photo carrying it or a sub-tag; this runs in the background, resumes after a restart, and backs each sidecar up first. People tags, digiKam's internal tags and tags with face or region data are left to digiKam.
+
+**Badge and thumbnail photos:** the viewer shows the photo chosen in digiKam ("Set as Tag Thumbnail"). To change it here, show faces with F and click "use as badge", or use the photo button on a person or tag chip in the info panel. This writes `Tags.icon` (digiKam closed, backup first).
+
+### Metadata consistency checker
+
+Settings › Metadata consistency compares rating, pick label, color label, title, caption and tags across digiKam's database, the XMP sidecar and the metadata embedded in the image file. A value absent in one place only counts as a disagreement when another place has one. Results are stored in `data/analysis.db`. "Check new and changed photos" scans what changed since the last check; "Re-check whole library" reads every sidecar and file; "Check the current search only" limits it to the active filters. To fix: select photos, choose the source copy, the targets and the fields, and press Sync. Writes go through the editing engine above (sidecar and file writes with backups; the database path requires digiKam closed and backs up first).
+
+## Backups and what the app writes
+
+Everything the app writes lives in `data/` (`DATA_DIR`), which must not be inside the digiKam or photo folders (the app refuses to start otherwise):
+
+| Path | Contents | Safe to delete? |
+| --- | --- | --- |
+| `index.db` | search index, rebuilt in about a second whenever digiKam's database changes | yes |
+| `cache/t`, `cache/p`, `cache/f` | grid thumbnails, viewer previews (pruned at startup past `PREVIEW_CACHE_MAX_MB`), face crops | yes |
+| `analysis.db` | sharpness, objects, text, descriptions, consistency results | yes (recomputed) |
+| `embeddings*.npz`, `concepts-*.npy` | content-search vectors per model | yes (recomputed) |
+| `models/`, `geonames/`, `bin/` | downloaded models and data, compiled `dkvision` | yes (re-download) |
+| `state.db` | favorites, app albums, settings, pending edits, tag-manager queue | **no** |
+| `sidecar-backups/` | each sidecar as it was before the viewer's first change to it, mirroring the album folders; `tag-ops/<operation>/` for tag-manager rewrites (last 8 operations kept) | your call |
+| `file-backups/` | the full original of each image file before its metadata was first rewritten (one per photo, never replaced) | your call |
+| `db-backups/` | `digikam4-<time>.db` copies (or `digikam-mysql-<time>.sql` dumps) before every database write; the last 10 kept | your call |
+| `server.log` | launchd output | yes |
+
+Every sidecar or file write goes through one function that refuses to proceed unless the backup exists and at least 2 GB of disk stays free. "Undo" in the info panel restores sidecar and file byte for byte. Sidecar and file backups are never deleted automatically; budget disk space for them. To roll back a database write, quit digiKam and copy a backup over `digikam4.db` (or restore the dump).
+
+The digiKam database is opened read-only (SQLite `mode=ro` + `PRAGMA query_only`; a read-only session on MySQL) except for the explicit writes above. Photo and video files are only opened for reading unless in-file writing is on.
+
+## digiKam on MySQL / MariaDB
+
+digiKam can keep its database in MySQL or MariaDB. Every read and write goes through one layer (`app/dkdb.py`), configured with the `DIGIKAM_DB_*` variables below; PyMySQL is in `requirements.txt`. Differences the layer handles: dates are UTC on MySQL and local time on SQLite; changes are detected by polling digiKam's scan timestamp and row counts instead of a file's mtime; digiKam's MySQL root tag (`_Digikam_root_tag_`) is treated as "no parent"; backups are `mysqldump`/`mariadb-dump` instead of a file copy. "Is digiKam running" cannot be seen across machines, so use `DIGIKAM_CHECK=ask`.
+
+## Configuration
+
+All settings are environment variables. `app/config.py` is the source of truth for the first table, `app/dkdb.py` for the second.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `DIGIKAM_DB_DIR` | `~/Pictures/digikamDB` | folder containing `digikam4.db` (SQLite) |
+| `PHOTOS_ROOT` | `~/Pictures/photos` | photo folder, used when the library has one album root; otherwise digiKam's own per-root paths |
+| `DATA_DIR` | `./data` | everything the app writes; must not be inside the two folders above |
+| `AUTO_MODELS` | empty | models to download when missing at start, e.g. `siglip2,yolox,geonames` (keys as in Settings › Models and data); set by the Docker image and the installer |
+| `READ_ONLY` | `0` | `1` locks the viewer to browsing: every write endpoint is refused, whatever the settings say |
+| `EDITING` | `1` | `0` removes metadata editing |
+| `DB_WRITE` | `1` | `0` disables "Apply to digiKam database" |
+| `DIGIKAM_CHECK` | `pgrep` | how to tell whether digiKam is running before a database write: `pgrep` looks for the process; `ask` (Docker) asks you to confirm it is closed, valid for 10 minutes |
+| `SEMANTIC` | `1` | `0` turns content search off even when installed |
+| `ANALYSIS` | `1` | `0` turns the background analysis jobs off |
+| `CAPTIONS` | `1` | `0` turns the photo-description job off |
+| `VISION_ENGINE` | `portable` | `portable` (RapidOCR + face-region sharpness, runs anywhere) or `apple` (Vision framework, macOS only) |
+| `BG_THREADS` | half the cores | cores one background job may use (capped at cores − 1; also in Settings) |
+| `PREWARM_WORKERS` / `ANALYSIS_WORKERS` | `BG_THREADS` | thread counts for the thumbnail pre-warm and the analysis job, if you want them different |
+| `PREWARM` | `1` | build all grid thumbnails in the background after startup |
+| `REINDEX_POLL` | `20` | seconds between checks for digiKam database changes |
+| `THUMB_HEIGHT` / `THUMB_MAX_WIDTH` / `THUMB_QUALITY` | `360` / `1080` / `76` | grid thumbnail size and JPEG quality |
+| `PREVIEW_SIZE` / `PREVIEW_QUALITY` | `2560` / `86` | viewer previews: long edge and JPEG quality |
+| `PREVIEW_CACHE_MAX_MB` | `8000` | preview cache cap, pruned at startup |
+| `EXIFTOOL` | unset | path to exiftool; otherwise the PATH, then digiKam's bundled copy |
+| `HF_HUB_OFFLINE` | `1` once models exist | set by the app so the server never contacts the model hub; the download scripts set `0` for their one command |
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `DIGIKAM_DB_TYPE` | `sqlite` | `sqlite` or `mysql` (MariaDB too) |
+| `DIGIKAM_DB_HOST` / `DIGIKAM_DB_PORT` | `127.0.0.1` / `3306` | server |
+| `DIGIKAM_DB_NAME` / `DIGIKAM_DB_USER` / `DIGIKAM_DB_PASSWORD` | `digikam` / `digikam` / empty | database and account (the same ones digiKam uses) |
+| `DIGIKAM_DB_BACKUP` | `auto` | before a write: `mysqldump`/`mariadb-dump` when installed, else the write is refused; `skip` if the server is backed up another way |
+| `DIGIKAM_DB_DUMP` | unset | a command writing a full dump to stdout, used instead of `mysqldump` (e.g. `docker exec mariadb mariadb-dump --single-transaction --routines --triggers -udigikam -pPASS digikam`) |
+
+## Running in Docker
+
+`docker compose up` builds the image and runs the viewer with digiKam's folder and the photos mounted read-only and `./data` as its writable volume; edit the two host paths in `docker-compose.yml`. The image (Debian slim, Python 3.12) contains ffmpeg, exiftool, libheif and, with the default build argument `AI=1`, the content-search, text-recognition and object-detection packages; `CAPTIONS=1` adds PyTorch (CPU build) and transformers for photo descriptions, which are slow without a GPU.
+
+- **Models and data** are not in the image. Download them from Settings › Models and data, or with `docker compose exec -e HF_HUB_OFFLINE=0 digikam-viewer python -m app.models download <clip|siglip2|yolox|geonames|blip>`. They land in `/data/models` and `/data/geonames` on the volume and survive rebuilds. The `enable-*.sh` scripts are for the `.venv` install, not the container.
+- **Editing** needs the photos mount writable (drop `:ro`): sidecars are written next to the photos, and in-file writing rewrites the photos themselves.
+- **Writing digiKam's database** ("Apply to digiKam database", tag manager, faces, place tags, badges) needs the digiKam folder writable too when digiKam uses SQLite. With MySQL the folder can stay read-only; set the `DIGIKAM_DB_*` variables (commented in `docker-compose.yml`, `DIGIKAM_DB_HOST: host.docker.internal` for a server on the host). The image has no `mysqldump`, so set `DIGIKAM_DB_BACKUP=skip` or `DIGIKAM_DB_DUMP`.
+- A container cannot see the host's processes, so the Dockerfile sets `DIGIKAM_CHECK=ask`: before a database write the viewer asks you to confirm digiKam is closed.
+- Text recognition uses the portable engine; `VISION_ENGINE=apple` is macOS only.
+- The launchd plist is for running directly on a Mac and is not used with Docker.
+
+The image holds no models. On its first start the container downloads the models named in `AUTO_MODELS` (default `siglip2,yolox,geonames`, about 1.6 GB) into the `/data` volume one after another; the library is browsable meanwhile and content search, objects and places switch on as each arrives. Later starts find them in the volume. `AUTO_MODELS=""` skips this; `blip` can be added when the image was built with `CAPTIONS=1`. The same variable works outside Docker (the Linux installer uses it).
+
+## Linux installer
+
+`installer/make-installer.sh` builds `dist/digikam-viewer-install.sh`, one self-extracting file (the app without models, about 200 KB). On the target machine, as root:
+
+```sh
+sh digikam-viewer-install.sh --photos /srv/photos --digikam-db /srv/digikamDB
+```
+
+It installs the system packages the viewer shells out to (python3 with venv, ffmpeg, exiftool, libheif) with apt, dnf, zypper or pacman; unpacks the app under `/opt/digikam-viewer`; creates a venv and installs the Python packages; writes `/opt/digikam-viewer/digikam-viewer.env`; downloads the models at install time (default `siglip2,yolox,geonames`; `--models none` to skip, `--captions` adds PyTorch and BLIP); installs and starts a systemd service as the `digikam-viewer` user on port 8600. `--help` lists the options (`--prefix`, `--data`, `--port`, `--user`, `--mysql HOST:PORT/DB:USER:PASSWORD`, `--read-only`, `--no-service`, `--no-system-deps`). Running it again upgrades the code and keeps the data folder and the env file. Tested on Ubuntu 24.04 and Fedora 41. The GitHub workflow builds the installer on every push and attaches it to tagged releases.
+
+## Proxmox VE (LXC)
+
+`proxmox/ct/digikam-viewer.sh` and `proxmox/install/digikam-viewer-install.sh` follow the community-scripts (ProxmoxVE) framework layout, so they can be submitted upstream as they are. Until then the ct script points the framework at this repository for the install script (`COMMUNITY_SCRIPTS_URL`), while the engine itself comes from community-scripts. On the Proxmox host, as root:
+
+```sh
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/digikam-viewer/main/proxmox/ct/digikam-viewer.sh)"
+```
+
+It creates a Debian 13 container (4 CPU, 4 GB, 16 GB disk by default), installs the viewer under `/opt/digikam-viewer` with uv, downloads the models at install time, and starts the `digikam-viewer` service on port 8600. The library is bind-mounted from the host afterwards (the script prints the `pct set … -mp0 … -mp1 …` line): `/library/digikamDB` and `/library/photos`, read-only unless you want to edit metadata (photos) or write digiKam's database (digikamDB, digiKam closed; `DIGIKAM_CHECK=ask` makes the viewer ask, since it cannot see the host's processes). The container's `update` command pulls the latest code from the repository.
+
+## MCP server
+
+`./mcp.sh` is a read-only [MCP](https://modelcontextprotocol.io) server (stdio) so an assistant such as Claude can work with the library. It shares the index and thumbnail cache with the web app and does not need the web app running.
+
+Tools: `library_overview`, `search_photos` (by content and similarity too when content search is on), `count_by`, `get_photo`, `list_people`, `list_tags`, `list_albums`, `list_places`, `list_app_albums`, `find_duplicates`, `view_photo` (returns the image so the assistant can see it).
+
+Claude Code:
+
+    claude mcp add digikam-library -- /Users/alex/Pictures/digikam-viewer/mcp.sh
+
+Claude Desktop (Settings › Developer › Edit Config):
+
+    { "mcpServers": { "digikam-library": { "command": "/Users/alex/Pictures/digikam-viewer/mcp.sh" } } }
+
+## Layout
+
+    app/config.py        paths and tunables (environment variables)
+    app/main.py          FastAPI routes, zip download, background scheduling
+    app/dkdb.py          digiKam database access for SQLite and MySQL/MariaDB, backups
+    app/index.py         builds data/index.db from the digiKam database
+    app/query.py         filter parameters to SQL (shared by web API and MCP)
+    app/thumbs.py        thumbnails, previews, face crops, background pre-warm
+    app/state.py         favorites, app albums, settings (data/state.db)
+    app/jobs.py          the single background job queue
+    app/edits.py         metadata edits to XMP sidecars and image files, with backups
+    app/dbsync.py        applies pending edits to digiKam's database (on request, digiKam closed)
+    app/tagmanager.py    create / rename / move / delete tags, tag badges
+    app/facemgr.py       face management mirroring digiKam's FaceTagsEditor
+    app/placetags.py     Places/Country/Region/Town tags from GPS
+    app/gpx.py           GPX track correlation
+    app/consistency.py   database / sidecar / file comparison and directional sync
+    app/places.py        offline reverse geocoding (GeoNames)
+    app/semantic.py      content search (CLIP or SigLIP 2)
+    app/concepts.py      the Detected content vocabulary and tag cover picking
+    app/analysis.py      background sharpness, OCR, object and caption analysis (data/analysis.db)
+    app/detector.py      YOLOX-S object detection
+    app/caption.py       BLIP photo descriptions
+    app/moments.py       bursts, events and trips
+    app/models.py        model registry, update checks, downloads (python -m app.models download <key>)
+    app/mcp_server.py    MCP server (run via ./mcp.sh)
+    static/              the single-page front end (no build step)
+    tools/dkvision.swift optional macOS OCR and face quality via Apple Vision
+    tools/*.plist        launchd agent

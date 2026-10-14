@@ -1,0 +1,4 @@
+# Content search and "Detected content" (CLIP / SigLIP 2 through fastembed + onnxruntime).
+fastembed
+huggingface_hub
+numpy

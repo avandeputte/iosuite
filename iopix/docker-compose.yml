@@ -1,0 +1,32 @@
+services:
+  digikam-viewer:
+    build:
+      context: .
+      # args: { AI: "1", CAPTIONS: "0" }   # see the Dockerfile; CAPTIONS=1 adds PyTorch for photo descriptions
+    ports: ["8600:8600"]
+    volumes:
+      # digiKam's database folder and the photos, both read-only. Drop ":ro" from the photos
+      # mount to edit metadata (XMP sidecars, optional in-file writes). Drop it from the
+      # digiKam folder only for "Apply to digiKam database", the tag manager, faces and place
+      # tags, which write digikam4.db (SQLite); with MySQL the folder can stay read-only.
+      - /Users/alex/Pictures/digikamDB:/library/digikamDB:ro
+      - /Users/alex/Pictures/photos:/library/photos:ro
+      # everything the viewer writes: index, thumbnails, models, state, backups
+      - ./data:/data
+    # Variable names as in app/config.py and app/dkdb.py (README "Configuration").
+    environment:
+      DIGIKAM_CHECK: ask            # the host's processes are invisible here; confirm instead of pgrep
+      # AUTO_MODELS: siglip2,yolox,geonames   # downloaded into ./data/models on the first start (image default); "" to skip
+      # READ_ONLY: "1"              # browsing only; every write endpoint is refused
+      # BG_THREADS: "2"             # cores one background job may use (default: half the cores)
+      # CAPTIONS: "0"               # photo descriptions off (also off unless built with CAPTIONS=1)
+      # digiKam on MySQL / MariaDB instead of SQLite:
+      # DIGIKAM_DB_TYPE: mysql
+      # DIGIKAM_DB_HOST: host.docker.internal
+      # DIGIKAM_DB_PORT: "3306"
+      # DIGIKAM_DB_NAME: digikam
+      # DIGIKAM_DB_USER: digikam
+      # DIGIKAM_DB_PASSWORD: secret
+      # DIGIKAM_DB_BACKUP: skip     # the image has no mysqldump; "skip" if the server is backed up
+      #                             # elsewhere, or set DIGIKAM_DB_DUMP to a command that dumps it to stdout
+    restart: unless-stopped

@@ -1,0 +1,13 @@
+# keep the build context small: the image gets code, static files and requirements only
+.venv
+data
+tests/.pytest_cache
+.pytest_cache
+__pycache__
+**/__pycache__
+*.pyc
+.git
+.github
+dist
+*.log
+.DS_Store

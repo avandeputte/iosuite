@@ -1,0 +1,2 @@
+# Text in photos: RapidOCR (models bundled in the package; pulls onnxruntime and headless OpenCV).
+rapidocr

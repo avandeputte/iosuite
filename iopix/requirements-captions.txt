@@ -1,0 +1,5 @@
+# Photo descriptions (BLIP base through PyTorch + transformers). Large: torch alone is
+# over 500 MB. In Docker, install with --extra-index-url https://download.pytorch.org/whl/cpu
+# for the smaller CPU-only build (the Dockerfile does this when built with CAPTIONS=1).
+torch>=2,<3
+transformers>=5,<6
