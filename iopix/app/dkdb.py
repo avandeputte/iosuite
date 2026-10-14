@@ -319,8 +319,13 @@ def source_version() -> str:
     with connect() as con:
         scanned = con.execute("SELECT value FROM Settings WHERE keyword = 'Scanned'").fetchone()
         parts = [str(scanned[0]) if scanned else "-"]
+        # counts and ids catch additions and removals; the CRC sums catch edits in place (a tag's badge
+        # picture, name or parent; face properties), which the viewer itself makes and must then re-index
         for sql in ("SELECT count(*), max(id) FROM Images", "SELECT count(*), max(modificationDate) FROM Albums",
-                    "SELECT count(*) FROM ImageTags", "SELECT count(*), max(id) FROM Tags", "SELECT count(*) FROM ImageTagProperties",
+                    "SELECT count(*) FROM ImageTags",
+                    "SELECT count(*), max(id), SUM(CRC32(CONCAT(id,'|',COALESCE(pid,0),'|',name,'|',COALESCE(icon,0),'|',COALESCE(iconkde,'')))) FROM Tags",
+                    "SELECT count(*), SUM(CRC32(CONCAT(tagid,'|',property,'|',COALESCE(value,'')))) FROM TagProperties",
+                    "SELECT count(*), SUM(CRC32(CONCAT(imageid,'|',tagid,'|',property,'|',COALESCE(value,'')))) FROM ImageTagProperties",
                     "SELECT count(*) FROM ImageComments", "SELECT count(*) FROM ImagePositions", "SELECT sum(rating) FROM ImageInformation"):
             parts.append(",".join(str(_norm_value(v)) for v in con.execute(sql).fetchone()))
         return "|".join(parts)

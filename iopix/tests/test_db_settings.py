@@ -57,3 +57,31 @@ def test_test_connection_sqlite_and_mysql(client, monkeypatch, lib):
     r = resp.json()
     assert r["ok"] and r["images"] == 3 and r["dbVersion"] == "17" and r["roots"] == ["/photos"]
     _clear()
+
+
+def test_mysql_change_fingerprint_sees_edits_in_place(monkeypatch):
+    """On MySQL the viewer notices its own tag edits (badge picture, rename, move) and face changes,
+    not only added or removed rows, so the index is rebuilt and the UI shows them."""
+    from app import dkdb
+    monkeypatch.setattr(dkdb, "is_mysql", lambda: True)
+    rows = {"icon": 86}
+    class Cur:
+        def __init__(self, sql): self.sql = sql
+        def fetchone(self):
+            if "Scanned" in self.sql: return ("2026-10-14",)
+            if "FROM Tags" in self.sql: return (10, 10, 1000 + rows["icon"])  # the CRC sum moves with the icon
+            return (1, 1)
+    class Con:
+        def execute(self, sql, params=()): return Cur(sql)
+        def __enter__(self): return self
+        def __exit__(self, *a): pass
+    monkeypatch.setattr(dkdb, "connect", lambda *a, **k: Con())
+    before = dkdb.source_version()
+    rows["icon"] = 30088
+    assert dkdb.source_version() != before
+    sqls = []
+    class Con2(Con):
+        def execute(self, sql, params=()): sqls.append(sql); return Cur(sql)
+    monkeypatch.setattr(dkdb, "connect", lambda *a, **k: Con2())
+    dkdb.source_version()
+    assert any("CRC32" in s and "FROM Tags" in s for s in sqls) and any("FROM TagProperties" in s for s in sqls) and any("CRC32" in s and "FROM ImageTagProperties" in s for s in sqls)
