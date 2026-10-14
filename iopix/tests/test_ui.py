@@ -278,6 +278,9 @@ def test_users_flow_in_the_browser(page, server, browser):
     ctx = browser.new_context(viewport={"width": 1280, "height": 900}); visitor = ctx.new_page()
     visitor.goto(server + "/#/photos?p=" + str(json.load(urllib.request.urlopen(server + "/api/photos"))["id"][0]))
     visitor.wait_for_selector("#lightbox .lb-frame img, #lightbox .lb-frame video", timeout=15000); visitor.wait_for_timeout(600)
+    if visitor.locator(".lb-info").is_hidden():
+        visitor.locator('[title^="Info"]').click(); visitor.wait_for_timeout(400)
+    assert visitor.locator(".lb-info h4", has_text="People").count() == 1, "the panel is open"
     assert visitor.locator(".lb-info h4", has_text="Edit").count() == 0
     assert not visitor.locator("#topbar a.tool[href='#/maintenance']").is_visible()
     visitor.keyboard.press("Escape"); visitor.wait_for_timeout(400)  # the lightbox covers the top bar
@@ -290,6 +293,8 @@ def test_users_flow_in_the_browser(page, server, browser):
     visitor.wait_for_selector("#usermenu .avatar", timeout=5000); visitor.wait_for_timeout(800)
     visitor.goto(server + "/#/photos?p=" + str(json.load(urllib.request.urlopen(server + "/api/photos"))["id"][0]))
     visitor.wait_for_selector("#lightbox .lb-frame img, #lightbox .lb-frame video", timeout=15000); visitor.wait_for_timeout(600)
+    if visitor.locator(".lb-info").is_hidden():
+        visitor.locator('[title^="Info"]').click(); visitor.wait_for_timeout(400)
     assert visitor.locator(".lb-info h4", has_text="Edit").count() == 1, "the admin can edit"
     visitor.keyboard.press("Escape"); visitor.wait_for_timeout(300)
     # a display setting now lives on the server
