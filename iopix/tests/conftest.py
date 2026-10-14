@@ -85,3 +85,12 @@ def _digikam_vouched_closed():
     state.init()  # the app's startup normally creates the tables; a test may run before any client exists
     state.set_setting("digikam_closed_until", str(time.time() + 3600))
     yield
+
+
+@pytest.fixture(autouse=True)
+def _no_users_by_default():
+    """Most tests run in the open (no users) mode the app has before the first admin is created."""
+    from app import state, users
+    state.init(); users.init()
+    con = state.connect(); con.execute("DELETE FROM users"); con.commit(); con.close()
+    yield

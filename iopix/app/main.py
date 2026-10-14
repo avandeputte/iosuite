@@ -32,7 +32,7 @@ from . import (analysis, caption, concepts, config, consistency, dbsync, detecto
                moments, places, placetags, tagmanager, thumbs)
 from . import state as appstate
 from . import jobs as bgjobs
-from . import geocode, maps
+from . import geocode, maps, users
 from . import models as dlmodels
 from .semantic import ENGINES, semantic, enabled as semantic_enabled, _ready as semantic_ready
 from .query import SORTS, build_where
@@ -150,6 +150,7 @@ def _models_arrived(keys: list):
 @asynccontextmanager
 async def lifespan(_app):
     appstate.init()
+    users.init()
     edits.init()
     tagmanager.init()
     analysis.init()
@@ -172,10 +173,31 @@ WRITE_PATHS = ("/api/edit", "/api/edits/db", "/api/consistency/sync", "/api/gpx/
                "/api/faces/person", "/api/placetags", "/api/tags/op")
 
 
+ADMIN_PATHS = ("/api/settings", "/api/maintenance", "/api/analysis/run", "/api/models/check", "/api/models/download", "/api/restart", "/api/users")
+SIGNED_IN_PATHS = ("/api/favorites", "/api/ualbums", "/api/tags/recent", "/api/auth/settings", "/api/auth/password")
+
+
+def _hits(path: str, paths) -> bool:
+    return any(path == p or path.startswith(p + "/") for p in paths)
+
+
 @app.middleware("http")
-async def _read_only_guard(request: Request, call_next):
-    if request.method == "POST" and appstate.read_only() and any(request.url.path == p or request.url.path.startswith(p + "/") for p in WRITE_PATHS):
-        return JSONResponse({"detail": "The viewer is in read-only mode; nothing in the library can be changed."}, status_code=403)
+async def _auth_guard(request: Request, call_next):
+    """Who is asking (session cookie), and may they do this? Library writes need an editor
+    or admin, settings and maintenance an admin, favorites and albums a signed-in user; all
+    of that only once a user exists. Read-only mode refuses library writes for everyone."""
+    user = users.user_from_token(request.cookies.get(users.COOKIE, "")) if request.cookies.get(users.COOKIE) else None
+    request.state.user = user
+    if request.method == "POST":
+        path = request.url.path
+        if _hits(path, WRITE_PATHS) and appstate.read_only():
+            return JSONResponse({"detail": "The viewer is in read-only mode; nothing in the library can be changed."}, status_code=403)
+        if _hits(path, WRITE_PATHS) and not users.can_write(user):
+            return JSONResponse({"detail": "Sign in as an editor to change the library."}, status_code=403 if user else 401)
+        if _hits(path, ADMIN_PATHS) and not users.is_admin(user):
+            return JSONResponse({"detail": "Only an admin can change settings or run maintenance."}, status_code=403 if user else 401)
+        if _hits(path, SIGNED_IN_PATHS) and not users.is_signed_in(user):
+            return JSONResponse({"detail": "Sign in to keep favorites and albums."}, status_code=401)
     return await call_next(request)
 
 
@@ -333,13 +355,16 @@ def _app_stamp() -> str:
 
 
 @app.get("/api/status")
-def api_status():
+def api_status(request: Request):
+    user = request.state.user
     return {"version": _public_version(), "error": state["error"], "rev": appstate.rev, "app": _app_stamp(),
             "thumbs": {"running": prewarmer.running, "done": prewarmer.done, "total": prewarmer.total},
             "semantic": {"enabled": semantic_enabled(), "running": semantic.running, "done": semantic.done,
                          "total": semantic.total, "indexed": 0 if semantic.ids is None else int(len(semantic.ids))},
-            "places": places.available(), "editing": edits.available(), "pendingEdits": len(edits.pending()),
-            "dbWrite": config.DB_WRITE and not appstate.read_only(), "writeFiles": edits.writes_files(),
+            "places": places.available(), "editing": edits.available() and users.can_write(user), "pendingEdits": len(edits.pending()),
+            "dbWrite": config.DB_WRITE and not appstate.read_only() and users.can_write(user), "writeFiles": edits.writes_files(),
+            "user": ({"id": user["id"], "name": user["name"], "role": user["role"]} if user else None), "usersExist": users.any_users(),
+            "isAdmin": users.is_admin(user), "signedIn": users.is_signed_in(user),
             "readOnly": appstate.read_only(), "readOnlyLocked": config.READ_ONLY,
             "tagJobs": {**tagmanager.progress, "pending": tagmanager.pending_jobs()},
             "analysis": analysis.progress, "jobs": bgjobs.status()}
@@ -942,6 +967,104 @@ def api_analysis():
     for j in jobs:
         j["queued"] = bgjobs.is_queued(queue_key[j["key"]])
     return {"jobs": jobs, "photos": total, "models": models if act is not None else [], "queue": bgjobs.status()}
+
+
+@app.post("/api/auth/login")
+async def api_login(request: Request):
+    body = await request.json()
+    u = users.authenticate(str(body.get("name", "")), str(body.get("password", "")))
+    if not u:
+        raise HTTPException(401, "Wrong user name or password")
+    resp = JSONResponse({"user": u, "settings": users.get_settings(u["id"])})
+    resp.set_cookie(users.COOKIE, users.make_token(u["id"]), max_age=users.SESSION_DAYS * 86400, httponly=True, samesite="lax", path="/")
+    return resp
+
+
+@app.post("/api/auth/logout")
+def api_logout():
+    resp = JSONResponse({"ok": True})
+    resp.delete_cookie(users.COOKIE, path="/")
+    return resp
+
+
+@app.get("/api/auth/me")
+def api_me(request: Request):
+    u = request.state.user
+    return {"user": u, "settings": users.get_settings(u["id"]) if u else {}, "usersExist": users.any_users(),
+            "isAdmin": users.is_admin(u), "canWrite": users.can_write(u), "signedIn": users.is_signed_in(u)}
+
+
+@app.post("/api/auth/settings")
+async def api_my_settings(request: Request):
+    """Per-user display settings: {key: value, …}; null removes a key."""
+    u = request.state.user
+    if not u:
+        raise HTTPException(401, "Sign in first")
+    return users.set_settings(u["id"], await request.json())
+
+
+@app.post("/api/auth/password")
+async def api_my_password(request: Request):
+    u = request.state.user
+    if not u:
+        raise HTTPException(401, "Sign in first")
+    body = await request.json()
+    if not users.authenticate(u["name"], str(body.get("current", ""))):
+        raise HTTPException(403, "The current password is wrong")
+    try:
+        users.update(u["id"], password=str(body.get("password", "")))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True}
+
+
+@app.post("/api/auth/setup")
+async def api_setup(request: Request):
+    """First admin, allowed only while no user exists."""
+    if users.any_users():
+        raise HTTPException(409, "Users already exist; sign in as an admin")
+    body = await request.json()
+    try:
+        u = users.create(str(body.get("name", "")), str(body.get("password", "")), "admin")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    resp = JSONResponse({"user": u})
+    resp.set_cookie(users.COOKIE, users.make_token(u["id"]), max_age=users.SESSION_DAYS * 86400, httponly=True, samesite="lax", path="/")
+    return resp
+
+
+@app.get("/api/users")
+def api_users(request: Request):
+    if not users.is_admin(request.state.user):
+        raise HTTPException(403, "Admins only")
+    return {"users": users.list_users(), "roles": list(users.ROLES)}
+
+
+@app.post("/api/users")
+async def api_users_create(request: Request):
+    body = await request.json()
+    try:
+        return users.create(str(body.get("name", "")), str(body.get("password", "")), str(body.get("role", "viewer")))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/users/{user_id}")
+async def api_users_update(user_id: int, request: Request):
+    """{role} and/or {password} and/or {name}; {delete: true} removes the user."""
+    body = await request.json()
+    if not users.get(user_id):
+        raise HTTPException(404, "No such user")
+    try:
+        if body.get("delete"):
+            if request.state.user and request.state.user["id"] == user_id:
+                raise ValueError("You cannot delete your own account while signed in")
+            users.delete(user_id)
+        else:
+            users.update(user_id, role=body.get("role"), password=body.get("password"), name=body.get("name"))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True}
 
 
 @app.get("/api/maps")

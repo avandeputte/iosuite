@@ -111,9 +111,15 @@ async function post(path, body) {
   if (!r.ok) { let msg = `${r.status} ${path}`; try { msg = (await r.json()).detail || msg; } catch { /* not json */ } throw new Error(msg); }
   return r.json();
 }
+// Display preferences. Anonymous: the browser's localStorage. Signed in: the user's settings on the
+// server (loaded with the session, written through, so they follow the user to another device).
+let USER = null, USER_SETTINGS = null, settingsFlush = 0, settingsPending = {};
 const store = {
-  get(k, d) { try { return localStorage.getItem(k) ?? d; } catch { return d; } },
-  set(k, v) { try { localStorage.setItem(k, v); } catch { /* private mode */ } },
+  get(k, d) { if (USER_SETTINGS) return k in USER_SETTINGS ? String(USER_SETTINGS[k]) : d; try { return localStorage.getItem(k) ?? d; } catch { return d; } },
+  set(k, v) {
+    if (USER_SETTINGS) { USER_SETTINGS[k] = v; settingsPending[k] = v; clearTimeout(settingsFlush); settingsFlush = setTimeout(() => { const b = settingsPending; settingsPending = {}; post('/api/auth/settings', b).catch(() => {}); }, 400); return; }
+    try { localStorage.setItem(k, v); } catch { /* private mode */ }
+  },
 };
 /** A person's badge picture; the version key busts the cache when digiKam's tag icon changes. */
 const faceUrl = (tagId) => `/face/${tagId}?v=${tagById.get(tagId)?.icon || 0}`;
@@ -146,6 +152,7 @@ let SEM = { enabled: false };
 let APP_STAMP = null;
 const applyBadgePref = () => document.body.classList.toggle('nobadges', store.get('badges', '1') === '0');
 let dragTag = null;
+let IS_ADMIN = true, SIGNED_IN = true, USERS_EXIST = false;
 let EDITING = false, WRITE_FILES = false, CAN_MANAGE = false, manageTags = false, PENDING = 0, pollTimer = 0, keepView = false;
 /** Re-check server status soon (after an edit) instead of waiting for the regular poll. */
 function pollSoon(ms = 1500) { clearTimeout(pollTimer); pollTimer = setTimeout(pollStatus, ms); }
@@ -1301,6 +1308,73 @@ async function showBursts(vp) {
   await load();
 }
 
+// ---- users: sign in / out, own password, first-admin setup, admin user management
+async function loadUser() {
+  try { const me = await api('/api/auth/me'); USER = me.user; USER_SETTINGS = me.user ? me.settings : null; IS_ADMIN = me.isAdmin; SIGNED_IN = me.signedIn; USERS_EXIST = me.usersExist; } catch { USER = null; USER_SETTINGS = null; }
+  renderUserMenu();
+}
+function renderUserMenu() {
+  const el = $('#usermenu'); if (!el) return;
+  el.replaceChildren(USER
+    ? h('button', { class: 'iconbtn tool', title: `${USER.name} (${USER.role}) · account`, onclick: accountDialog }, h('span', { class: 'avatar' }, USER.name[0].toUpperCase()))
+    : h('button', { class: 'iconbtn tool', title: USERS_EXIST ? 'Sign in' : 'Create the admin account', onclick: () => (USERS_EXIST ? loginDialog() : setupDialog()) }, icon('person')));
+}
+async function afterLogin(me) {
+  USER = me.user; USER_SETTINGS = me.settings || {}; renderUserMenu();
+  await pollStatus(); applyBadgePref(); viewKey = null; onRoute();
+}
+function loginDialog() {
+  const name = h('input', { class: 'einput', placeholder: 'User name', autocomplete: 'username', style: 'margin:0;width:100%' });
+  const pw = h('input', { class: 'einput', type: 'password', placeholder: 'Password', autocomplete: 'current-password', style: 'margin:0;width:100%' });
+  const go = async () => { try { const me = await post('/api/auth/login', { name: name.value.trim(), password: pw.value }); back.remove(); await afterLogin(me); toast(`Signed in as ${me.user.name}.`); } catch (e) { toast(e.message); } };
+  [name, pw].forEach((i) => { i.onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Enter') go(); }; });
+  const back = modal('Sign in', h('div', { style: 'display:grid;gap:8px' }, name, pw),
+    h('p', { class: 'muted', style: 'font-size:12.5px' }, 'Without signing in you can browse everything; signing in keeps your display settings, favorites and albums on the server, and editors can change the library.'),
+    h('div', { class: 'modal-btns' }, h('button', { class: 'pillbtn', onclick: () => back.remove() }, 'Cancel'), h('button', { class: 'pillbtn on', onclick: go }, 'Sign in')));
+  name.focus();
+}
+function setupDialog() {
+  const name = h('input', { class: 'einput', placeholder: 'Admin user name', autocomplete: 'username', style: 'margin:0;width:100%' });
+  const pw = h('input', { class: 'einput', type: 'password', placeholder: 'Password (8 characters or more)', autocomplete: 'new-password', style: 'margin:0;width:100%' });
+  const go = async () => { try { const me = await post('/api/auth/setup', { name: name.value.trim(), password: pw.value }); back.remove(); await afterLogin({ user: me.user, settings: {} }); toast('Admin account created; you are signed in.'); } catch (e) { toast(e.message); } };
+  [name, pw].forEach((i) => { i.onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Enter') go(); }; });
+  const back = modal('Create the admin account', h('p', { class: 'muted' }, 'Right now the viewer is open to anyone who can reach it. Once an admin exists, visitors browse read-only, signed-in users keep their settings on the server, and only editors and admins can change the library or the settings.'),
+    h('div', { style: 'display:grid;gap:8px' }, name, pw),
+    h('div', { class: 'modal-btns' }, h('button', { class: 'pillbtn', onclick: () => back.remove() }, 'Not now'), h('button', { class: 'pillbtn on', onclick: go }, 'Create')));
+  name.focus();
+}
+function accountDialog() {
+  const cur = h('input', { class: 'einput', type: 'password', placeholder: 'Current password', autocomplete: 'current-password', style: 'margin:0;width:100%' });
+  const pw = h('input', { class: 'einput', type: 'password', placeholder: 'New password (8 characters or more)', autocomplete: 'new-password', style: 'margin:0;width:100%' });
+  [cur, pw].forEach((i) => { i.onkeydown = (e) => e.stopPropagation(); });
+  const back = modal(`${USER.name} · ${USER.role}`,
+    h('p', { class: 'muted' }, USER.role === 'admin' ? 'You can change the library, the settings and the users.' : USER.role === 'editor' ? 'You can change the library (edits, tags, faces, places).' : 'You can browse, and keep favorites, albums and display settings.'),
+    h('h4', null, 'Change password'), h('div', { style: 'display:grid;gap:8px' }, cur, pw),
+    h('div', { style: 'margin-top:8px' }, h('button', { class: 'pillbtn', onclick: async () => { try { await post('/api/auth/password', { current: cur.value, password: pw.value }); toast('Password changed.'); cur.value = pw.value = ''; } catch (e) { toast(e.message); } } }, 'Change password')),
+    h('div', { class: 'modal-btns' }, h('button', { class: 'pillbtn', onclick: async () => { back.remove(); await post('/api/auth/logout', {}); USER = null; USER_SETTINGS = null; renderUserMenu(); await pollStatus(); applyBadgePref(); viewKey = null; onRoute(); toast('Signed out.'); } }, 'Sign out'),
+      h('button', { class: 'pillbtn on', onclick: () => back.remove() }, 'Done')));
+}
+function usersSection() {
+  const body = h('div');
+  const wrap = h('div', null, h('h2', null, 'Users'),
+    h('div', { class: 'muted', style: 'max-width:820px' }, 'Visitors who are not signed in browse read-only with display settings in their browser. Viewers keep settings, favorites and albums on the server; editors can also change the library; admins can also change settings, run maintenance and manage users.'), body);
+  const draw = async () => {
+    let d; try { d = await api('/api/users'); } catch (e) { fill(body, h('div', { class: 'muted' }, e.message)); return; }
+    const name = h('input', { class: 'einput', placeholder: 'User name', style: 'margin:0;width:160px' }), pw = h('input', { class: 'einput', type: 'password', placeholder: 'Password', style: 'margin:0;width:160px' });
+    const role = h('select', null, d.roles.map((r) => h('option', { value: r }, r)));
+    [name, pw].forEach((i) => { i.onkeydown = (e) => e.stopPropagation(); });
+    fill(body, h('div', { class: 'alist', style: 'max-width:820px' }, d.users.map((u) => h('div', { class: 'frow', style: 'height:auto;padding:6px 8px;gap:10px' },
+      h('span', { class: 'avatar' }, u.name[0].toUpperCase()), h('span', { class: 'nm' }, u.name, u.id === USER?.id ? h('span', { class: 'muted' }, ' (you)') : null),
+      h('select', { onchange: async (e) => { try { await post(`/api/users/${u.id}`, { role: e.target.value }); toast(`${u.name} is now ${e.target.value}.`); } catch (err) { toast(err.message); } draw(); } }, d.roles.map((r) => h('option', { value: r, selected: r === u.role }, r))),
+      h('button', { class: 'pillbtn', onclick: async () => { const p = prompt(`New password for ${u.name} (8 characters or more)`); if (!p) return; try { await post(`/api/users/${u.id}`, { password: p }); toast('Password set.'); } catch (err) { toast(err.message); } } }, 'Set password'),
+      u.id !== USER?.id ? h('button', { class: 'pillbtn', onclick: async () => { if (!confirm(`Delete the user ${u.name}?`)) return; try { await post(`/api/users/${u.id}`, { delete: true }); } catch (err) { toast(err.message); } draw(); } }, 'Delete') : null))),
+      h('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px' }, name, pw, role, h('button', { class: 'pillbtn on', onclick: async () => {
+        try { await post('/api/users', { name: name.value.trim(), password: pw.value, role: role.value }); toast(`Added ${name.value.trim()}.`); } catch (err) { toast(err.message); } draw();
+      } }, icon('add'), 'Add user')));
+  };
+  draw();
+  return wrap;
+}
 function showAnalysis() { go('maintenance', null, true); }  // the old #/analysis page now lives in Maintenance; keep bookmarks working
 
 // ---------------------------------------------------------------- settings & maintenance
@@ -1553,7 +1627,7 @@ async function showFaces(vp) {
 }
 
 async function showSettings() { return settingsPage('settings'); }
-async function showMaintenance() { return settingsPage('maintenance'); }
+async function showMaintenance() { if (!IS_ADMIN) { main.replaceChildren(h('div', { class: 'empty' }, 'Maintenance is for admins. Sign in as an admin to see it.')); return; } return settingsPage('maintenance'); }
 // Settings: preferences. Maintenance: library actions, job progress, models, storage. One loader, two layouts.
 async function settingsPage(view) {
   let m;
@@ -1571,12 +1645,13 @@ async function settingsPage(view) {
   main.replaceChildren(h('div', { class: 'page' },
     h('h1', null, view === 'settings' ? 'Settings' : 'Maintenance'),
     h('div', { class: 'muted', style: 'max-width:820px' }, `Library: ${m.paths.library} (${nf.format(m.photos)} items). digiKam database: ${m.paths.digikamDb}. Everything the viewer writes lives in ${m.paths.data}.`),
+    !USERS_EXIST ? row('No users yet', 'The viewer is open to anyone who can reach it. Create the admin account to switch on sign-in: visitors then browse read-only, and only editors and admins can change the library.', btn('Create the admin account', setupDialog, true)) : null,
     ...(view === 'settings' ? [
     h('h2', null, 'Display'),
     row('Thumbnail badges', 'The small marks on thumbnails: face tags, GPS coordinates and favorites. This is remembered per browser.',
       h('label', { style: 'display:flex;gap:8px;align-items:center;cursor:pointer' }, h('input', { type: 'checkbox', checked: store.get('badges', '1') !== '0',
         onchange: (e) => { store.set('badges', e.target.checked ? '1' : '0'); applyBadgePref(); } }), 'Show badges')),
-    (() => {
+    IS_ADMIN ? (() => {
       const sel = h('select', null, h('option', { value: 'osm', selected: m.mapProvider !== 'google' }, 'OpenStreetMap (no account needed)'), h('option', { value: 'google', selected: m.mapProvider === 'google' }, 'Google Maps (your API key)'));
       const keyIn = h('input', { class: 'einput', type: 'password', placeholder: m.googleMapsKeySet ? 'key is set; paste a new one to replace it' : 'Google Maps API key', autocomplete: 'off', style: 'margin:0;width:260px' });
       return row('Map provider', `Maps and place search use ${m.mapProvider === 'google' && m.googleMapsKeySet ? 'Google Maps' : 'OpenStreetMap'}. Google needs an API key from the Google Cloud console with the Map Tiles API and Geocoding API enabled and billing on; restrict the key to this viewer's address. The key is stored in the viewer's settings and never shown again.`,
@@ -1586,12 +1661,13 @@ async function settingsPage(view) {
           try { await post('/api/settings', body); mapsLoaded = false; toast('Map provider saved.'); } catch (e) { toast(e.message); }
           settingsPage(view);
         })));
-    })(),
-    row('Read-only mode', m.readOnlyLocked ? 'Locked on by READ_ONLY=1 in the environment: nothing in the library can be changed from the viewer.'
+    })() : null,
+    IS_ADMIN ? row('Read-only mode', m.readOnlyLocked ? 'Locked on by READ_ONLY=1 in the environment: nothing in the library can be changed from the viewer.'
       : `${m.readOnly ? 'On' : 'Off'}. When on, the viewer only browses: editing, tagging, face naming, place tags, GPS tracks, metadata sync and database updates are switched off and refused by the server. Favorites and viewer albums keep working; they never touch the library.`,
-      m.readOnlyLocked ? null : btn(m.readOnly ? 'Turn off' : 'Turn on', async () => { try { await post('/api/settings', { read_only: !m.readOnly }); const s = await api('/api/status'); EDITING = s.editing; CAN_MANAGE = s.editing && s.dbWrite; } catch (e) { toast(e.message); } settingsPage(view); })),
-    analysisSection(view, 'prefs'),
-    EDITING ? [
+      m.readOnlyLocked ? null : btn(m.readOnly ? 'Turn off' : 'Turn on', async () => { try { await post('/api/settings', { read_only: !m.readOnly }); const s = await api('/api/status'); EDITING = s.editing; CAN_MANAGE = s.editing && s.dbWrite; } catch (e) { toast(e.message); } settingsPage(view); })) : null,
+    IS_ADMIN ? analysisSection(view, 'prefs') : null,
+    IS_ADMIN && USERS_EXIST ? usersSection() : null,
+    IS_ADMIN && EDITING ? [
     h('h2', null, 'Editing'),
     row('Write metadata into image files', `Off: edits go to XMP sidecars only. On: also into JPEG, PNG, TIFF and WebP files, like digiKam’s “sidecar and file” mode. Currently ${m.writeFiles ? 'on' : 'off'}.`,
       btn(m.writeFiles ? 'Turn off' : 'Turn on', async () => { try { await post('/api/settings', { write_files: !m.writeFiles }); } catch (e) { toast(e.message); } settingsPage(view); })),
@@ -2476,6 +2552,8 @@ async function pollStatus() {
     if (s.app && APP_STAMP && s.app !== APP_STAMP && !LB.open && !G.sel.size) { location.reload(); return; }  // the viewer was updated: use the new version
     if (s.app) APP_STAMP = s.app;
     SEM = s.semantic; EDITING = s.editing; PENDING = s.pendingEdits; WRITE_FILES = s.writeFiles; CAN_MANAGE = s.editing && s.dbWrite;
+    IS_ADMIN = s.isAdmin; SIGNED_IN = s.signedIn; USERS_EXIST = s.usersExist; if ((s.user && s.user.id) !== (USER && USER.id)) { USER = s.user; renderUserMenu(); }
+    document.body.classList.toggle('noadmin', !IS_ADMIN);
     if (PENDING && s.dbWrite && !el.childNodes.length) el.replaceChildren(h('a', { class: 'lnk', style: 'cursor:pointer', title: 'Edits saved in sidecars that digiKam’s database does not have yet', onclick: dbDialog },
       `${nf.format(PENDING)} ${PENDING === 1 ? 'edit' : 'edits'} not in digiKam yet`));
     if (s.rev !== ST.rev && ST.rev >= 0) { const mine = ST.rev; await loadState(); if (mine !== ST.rev && route.view === 'albums') showAlbums(); }
@@ -2489,6 +2567,7 @@ async function pollStatus() {
   pollSoon(delay);
 }
 async function start() {
+  await loadUser();
   $('#nav').replaceChildren(...NAV.map(([v, label, ic, href]) => h('a', { href: href || `#/${v}`, 'data-v': v }, icon(ic), label)), h('div', { id: 'status' }));
   initSearch();
   applyBadgePref();

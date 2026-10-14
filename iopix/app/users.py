@@ -1,0 +1,247 @@
+"""Users, sessions and permissions.
+
+Three roles: viewer (signed in; own settings kept on the server; favorites and viewer
+albums), editor (viewer plus every library write: edits, tags, faces, place tags, GPX,
+sync, database apply) and admin (editor plus settings, maintenance and user management).
+Anyone not signed in browses read-only with display settings in the browser.
+
+Until the first user exists the viewer stays open as before, so a fresh install is not
+locked out; Settings asks to create the admin, or ADMIN_USER / ADMIN_PASSWORD in the
+environment create one at start (containers, installers). Passwords are scrypt-hashed;
+a session is a signed, HttpOnly cookie (secret in data/secret) valid for 30 days.
+"""
+import base64
+import hashlib
+import hmac
+import json
+import os
+import secrets
+import time
+
+from . import config, state
+
+ROLES = ("viewer", "editor", "admin")
+COOKIE = "dkv_session"
+SESSION_DAYS = 30
+_secret = None
+
+
+def init():
+    con = state.connect()
+    try:
+        con.executescript("""
+            CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL COLLATE NOCASE,
+                hash TEXT NOT NULL, role TEXT NOT NULL, settings TEXT NOT NULL DEFAULT '{}', created INTEGER, last_login INTEGER);
+        """)
+        con.commit()
+    finally:
+        con.close()
+    name, pw = os.environ.get("ADMIN_USER", "").strip(), os.environ.get("ADMIN_PASSWORD", "")
+    if name and pw and not any_users():
+        create(name, pw, "admin")
+
+
+def _key() -> bytes:
+    global _secret
+    if _secret is None:
+        p = config.DATA_DIR / "secret"
+        try:
+            _secret = p.read_bytes().strip()
+            if len(_secret) < 32:
+                raise ValueError
+        except (OSError, ValueError):
+            _secret = secrets.token_bytes(32)
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_bytes(_secret)
+            try:
+                os.chmod(p, 0o600)
+            except OSError:
+                pass
+    return _secret
+
+
+# ---- passwords
+def hash_password(pw: str) -> str:
+    salt = secrets.token_bytes(16)
+    h = hashlib.scrypt(pw.encode(), salt=salt, n=2 ** 14, r=8, p=1, dklen=32)
+    return "scrypt$" + base64.b64encode(salt).decode() + "$" + base64.b64encode(h).decode()
+
+
+def check_password(pw: str, stored: str) -> bool:
+    try:
+        _, s, h = stored.split("$")
+        got = hashlib.scrypt(pw.encode(), salt=base64.b64decode(s), n=2 ** 14, r=8, p=1, dklen=32)
+        return hmac.compare_digest(got, base64.b64decode(h))
+    except Exception:
+        return False
+
+
+# ---- users
+def _row(r) -> dict:
+    return {"id": r[0], "name": r[1], "role": r[2], "created": r[3], "last_login": r[4]}
+
+
+def any_users() -> bool:
+    con = state.connect()
+    try:
+        return con.execute("SELECT 1 FROM users LIMIT 1").fetchone() is not None
+    finally:
+        con.close()
+
+
+def list_users() -> list:
+    con = state.connect()
+    try:
+        return [_row(r) for r in con.execute("SELECT id, name, role, created, last_login FROM users ORDER BY id")]
+    finally:
+        con.close()
+
+
+def get(user_id: int):
+    con = state.connect()
+    try:
+        r = con.execute("SELECT id, name, role, created, last_login FROM users WHERE id = ?", (user_id,)).fetchone()
+        return _row(r) if r else None
+    finally:
+        con.close()
+
+
+def create(name: str, password: str, role: str) -> dict:
+    name = name.strip()
+    if not name or len(name) > 64:
+        raise ValueError("A user name is needed (up to 64 characters)")
+    if len(password) < 8:
+        raise ValueError("The password needs at least 8 characters")
+    if role not in ROLES:
+        raise ValueError("Unknown role")
+    con = state.connect()
+    try:
+        if con.execute("SELECT 1 FROM users WHERE name = ?", (name,)).fetchone():
+            raise ValueError("That user name is taken")
+        cur = con.execute("INSERT INTO users (name, hash, role, created) VALUES (?,?,?,?)", (name, hash_password(password), role, int(time.time())))
+        con.commit()
+        return get(cur.lastrowid)
+    finally:
+        con.close()
+
+
+def update(user_id: int, role: str = None, password: str = None, name: str = None):
+    con = state.connect()
+    try:
+        if role is not None:
+            if role not in ROLES:
+                raise ValueError("Unknown role")
+            if role != "admin" and con.execute("SELECT count(*) FROM users WHERE role = 'admin' AND id != ?", (user_id,)).fetchone()[0] == 0 \
+                    and con.execute("SELECT role FROM users WHERE id = ?", (user_id,)).fetchone()[0] == "admin":
+                raise ValueError("That is the only admin; make someone else admin first")
+            con.execute("UPDATE users SET role = ? WHERE id = ?", (role, user_id))
+        if password is not None:
+            if len(password) < 8:
+                raise ValueError("The password needs at least 8 characters")
+            con.execute("UPDATE users SET hash = ? WHERE id = ?", (hash_password(password), user_id))
+        if name is not None:
+            name = name.strip()
+            if not name:
+                raise ValueError("A user name is needed")
+            con.execute("UPDATE users SET name = ? WHERE id = ?", (name, user_id))
+        con.commit()
+    finally:
+        con.close()
+
+
+def delete(user_id: int):
+    con = state.connect()
+    try:
+        r = con.execute("SELECT role FROM users WHERE id = ?", (user_id,)).fetchone()
+        if r and r[0] == "admin" and con.execute("SELECT count(*) FROM users WHERE role = 'admin'").fetchone()[0] == 1:
+            raise ValueError("That is the only admin; make someone else admin first")
+        con.execute("DELETE FROM users WHERE id = ?", (user_id,))
+        con.commit()
+    finally:
+        con.close()
+
+
+def authenticate(name: str, password: str):
+    con = state.connect()
+    try:
+        r = con.execute("SELECT id, hash FROM users WHERE name = ?", (name.strip(),)).fetchone()
+        if not r or not check_password(password, r[1]):
+            return None
+        con.execute("UPDATE users SET last_login = ? WHERE id = ?", (int(time.time()), r[0]))
+        con.commit()
+        return get(r[0])
+    finally:
+        con.close()
+
+
+# ---- per-user settings (display preferences the browser used to keep in localStorage)
+def get_settings(user_id: int) -> dict:
+    con = state.connect()
+    try:
+        r = con.execute("SELECT settings FROM users WHERE id = ?", (user_id,)).fetchone()
+        return json.loads(r[0]) if r and r[0] else {}
+    finally:
+        con.close()
+
+
+def set_settings(user_id: int, changes: dict) -> dict:
+    cur = get_settings(user_id)
+    for k, v in changes.items():
+        if not isinstance(k, str) or len(k) > 64:
+            continue
+        if v is None:
+            cur.pop(k, None)
+        elif isinstance(v, (str, int, float, bool)) and len(str(v)) <= 2000:
+            cur[k] = v
+    con = state.connect()
+    try:
+        con.execute("UPDATE users SET settings = ? WHERE id = ?", (json.dumps(cur), user_id))
+        con.commit()
+    finally:
+        con.close()
+    return cur
+
+
+# ---- sessions
+def make_token(user_id: int) -> str:
+    payload = f"{user_id}.{int(time.time()) + SESSION_DAYS * 86400}"
+    sig = hmac.new(_key(), payload.encode(), hashlib.sha256).hexdigest()
+    return payload + "." + sig
+
+
+def user_from_token(token: str):
+    try:
+        uid, exp, sig = token.split(".")
+        if not hmac.compare_digest(hmac.new(_key(), f"{uid}.{exp}".encode(), hashlib.sha256).hexdigest(), sig):
+            return None
+        if int(exp) < time.time():
+            return None
+        return get(int(uid))
+    except (ValueError, AttributeError):
+        return None
+
+
+# ---- permissions
+def can_write(user) -> bool:
+    """Library writes (sidecars, files, digiKam's database)."""
+    return not any_users() or (user is not None and user["role"] in ("editor", "admin"))
+
+
+def is_admin(user) -> bool:
+    return not any_users() or (user is not None and user["role"] == "admin")
+
+
+def is_signed_in(user) -> bool:
+    return not any_users() or user is not None
+
+
+if __name__ == "__main__":
+    import sys
+    state.init(); init()
+    if len(sys.argv) >= 4 and sys.argv[1] == "create":
+        print(create(sys.argv[2], sys.argv[3], sys.argv[4] if len(sys.argv) > 4 else "admin"))
+    elif sys.argv[1:] == ["list"]:
+        for u in list_users():
+            print(u)
+    else:
+        print("usage: python -m app.users create <name> <password> [viewer|editor|admin] | list")

@@ -63,6 +63,19 @@ Derived from these:
 - **Events & trips**: trips are runs of days photographed more than 75 km from the town where most of your photos are taken; events are other days with 20 or more photos, named after the title most of them share, else their main tag, else the town.
 - **Search model**: CLIP ViT-B/32 by default. After `./enable-search.sh siglip2`, choose SigLIP 2 under Settings › AI analysis; the library is re-indexed in the background and search switches when complete. You can switch back at any time.
 
+## Users and permissions
+
+Out of the box the viewer is open to anyone who can reach it (as before). Settings offers **Create the admin account** (or set `ADMIN_USER` and `ADMIN_PASSWORD` for a container or installer, or run `python -m app.users create <name> <password> admin`). Once a user exists:
+
+| Who | Can |
+| --- | --- |
+| Not signed in | browse and search everything, read-only; display settings stay in the browser |
+| **viewer** | the same, plus settings, favorites and albums kept on the server (they follow the user to another device) |
+| **editor** | plus every library write: edits, tags, faces, place tags, GPS tracks, metadata sync, applying to digiKam's database |
+| **admin** | plus settings, maintenance, models, and managing users (Settings › Users) |
+
+Sign in from the person icon at the top right. Sessions are signed HttpOnly cookies (secret in `data/secret`) valid for 30 days; passwords are scrypt-hashed and never stored in clear. The server enforces all of it: write endpoints answer 401/403 regardless of what the page shows. Read-only mode (an admin setting) still refuses library writes for everyone, editors included.
+
 ## Editing
 
 Off by default in the sense that nothing is written until you act; `EDITING=0` removes the controls, `READ_ONLY=1` (or the switch in Settings › Display) locks the whole viewer to browsing and refuses every write endpoint.
@@ -137,6 +150,7 @@ All settings are environment variables. `app/config.py` is the source of truth f
 | `DATA_DIR` | `./data` | everything the app writes; must not be inside the two folders above |
 | `AUTO_MODELS` | empty | models to download when missing at start, e.g. `siglip2,yolox,geonames` (keys as in Settings › Models and data); set by the Docker image and the installer |
 | `GOOGLE_MAPS_API_KEY` | unset | Google Maps API key (the Settings page can store one instead); used only when the map provider is set to Google |
+| `ADMIN_USER` / `ADMIN_PASSWORD` | unset | create the admin account at start when no user exists yet (containers, installers) |
 | `READ_ONLY` | `0` | `1` locks the viewer to browsing: every write endpoint is refused, whatever the settings say |
 | `EDITING` | `1` | `0` removes metadata editing |
 | `DB_WRITE` | `1` | `0` disables "Apply to digiKam database" |

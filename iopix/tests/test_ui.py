@@ -257,3 +257,46 @@ def test_pwa_service_worker_caches_the_shell(page, server):
     assert out["state"] == "activated"
     assert {"/", "/app.js", "/app.css", "/manifest.webmanifest", "/icons/icon-192.png"} <= set(out["cached"])
     assert not any(p.startswith("/api") or p.startswith("/thumb") for p in out["cached"]), "photos and the API are never cached"
+
+
+def test_users_flow_in_the_browser(page, server, browser):
+    import json, urllib.request
+    # open mode: the person icon offers to create the admin
+    page.goto(server + "/#/settings")
+    page.wait_for_selector("h1:has-text('Settings')", timeout=10000)
+    assert page.locator("b", has_text="No users yet").count() == 1
+    page.locator("#usermenu button").click()
+    page.wait_for_selector(".modal h3", timeout=5000)
+    assert page.locator(".modal h3").inner_text().startswith("Create the admin")
+    page.locator(".modal input[placeholder^='Admin user name']").fill("alex")
+    page.locator(".modal input[type=password]").fill("correct horse")
+    page.locator(".modal button", has_text="Create").click()
+    page.wait_for_selector("#usermenu .avatar", timeout=5000)
+    page.goto(server + "/#/settings"); page.wait_for_selector("h2:has-text('Users')", timeout=10000)
+    assert page.locator("#topbar a.tool[href='#/maintenance']").is_visible()
+    # a visitor in a fresh context: read-only, no maintenance icon, sign-in dialog
+    ctx = browser.new_context(viewport={"width": 1280, "height": 900}); visitor = ctx.new_page()
+    visitor.goto(server + "/#/photos?p=" + str(json.load(urllib.request.urlopen(server + "/api/photos"))["id"][0]))
+    visitor.wait_for_selector("#lightbox .lb-frame img, #lightbox .lb-frame video", timeout=15000); visitor.wait_for_timeout(600)
+    assert visitor.locator(".lb-info h4", has_text="Edit").count() == 0
+    assert not visitor.locator("#topbar a.tool[href='#/maintenance']").is_visible()
+    visitor.keyboard.press("Escape"); visitor.wait_for_timeout(400)  # the lightbox covers the top bar
+    visitor.locator("#usermenu button").click()
+    visitor.wait_for_selector(".modal h3:has-text('Sign in')", timeout=5000)
+    visitor.locator(".modal input[placeholder='User name']").fill("alex"); visitor.locator(".modal input[type=password]").fill("wrong")
+    visitor.locator(".modal button", has_text="Sign in").click(); visitor.wait_for_timeout(500)
+    assert visitor.locator(".modal").count() == 1, "a wrong password keeps the dialog open"
+    visitor.locator(".modal input[type=password]").fill("correct horse"); visitor.locator(".modal button", has_text="Sign in").click()
+    visitor.wait_for_selector("#usermenu .avatar", timeout=5000); visitor.wait_for_timeout(800)
+    visitor.goto(server + "/#/photos?p=" + str(json.load(urllib.request.urlopen(server + "/api/photos"))["id"][0]))
+    visitor.wait_for_selector("#lightbox .lb-frame img, #lightbox .lb-frame video", timeout=15000); visitor.wait_for_timeout(600)
+    assert visitor.locator(".lb-info h4", has_text="Edit").count() == 1, "the admin can edit"
+    visitor.keyboard.press("Escape"); visitor.wait_for_timeout(300)
+    # a display setting now lives on the server
+    visitor.goto(server + "/#/settings"); visitor.wait_for_selector("h1:has-text('Settings')", timeout=10000)
+    visitor.locator("input[type=checkbox]").first.uncheck(); visitor.wait_for_timeout(900)
+    me = visitor.evaluate("async () => (await (await fetch('/api/auth/settings', {method:'POST', headers:{'content-type':'application/json'}, body:'{}'})).json())")
+    assert me.get("badges") == "0"
+    ctx.close()
+    # leave the scratch server open again for the other tests
+    urllib.request.urlopen(server + "/api/status").read()
