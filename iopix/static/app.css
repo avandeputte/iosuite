@@ -426,3 +426,11 @@ body.nobadges .cbadges, body.nobadges .fbadge { display: none; }
   .cardacts .carddl { opacity: 1; }
   .tacts { display: inline-flex; }
 }
+/* Settings > Users */
+.utable { border-collapse: collapse; width: 100%; max-width: 920px; font-size: 13.5px; margin-top: 4px; }
+.utable th { text-align: left; color: var(--fg2); font-weight: 500; padding: 6px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.utable td { padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; white-space: nowrap; }
+.utable td:first-child { width: 1%; }
+.utable .ucell { display: inline-flex; align-items: center; gap: 8px; }
+.utable select { height: 28px; }
+.utable .pillbtn { height: 28px; }

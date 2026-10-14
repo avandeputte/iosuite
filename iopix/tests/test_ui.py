@@ -332,7 +332,7 @@ def test_account_picker_one_click_sign_in(page, server, browser):
     page.locator("input[placeholder='User name']").last.fill("kid")
     page.locator("label:has-text('no password') input").check()
     page.locator("button", has_text="Add user").click(); page.wait_for_timeout(600)
-    assert page.locator(".frow", has_text="kid").locator("text=no password").count() == 1
+    assert page.locator(".utable tr[data-user='kid']", has_text="none (one-click)").count() == 1
     # a visitor: two tiles, one click as kid
     ctx = browser.new_context(viewport={"width": 1280, "height": 900}); v = ctx.new_page()
     v.goto(server + "/#/photos"); v.wait_for_selector(".tile img", timeout=15000)
