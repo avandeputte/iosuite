@@ -26,6 +26,7 @@ input, select { font: inherit; color: inherit; }
 /* ---- top bar */
 /* settings and maintenance: small, quiet icons at the top right, not part of the main navigation */
 #topbar a.tool { width: 32px; height: 32px; color: var(--fg2); opacity: .7; }
+#topbar a.tool:first-of-type { margin-left: auto; }  /* the icons sit alone at the far right; Filters stays with the search box */
 #topbar a.tool .ic { width: 20px; height: 20px; }
 #topbar a.tool:hover, #topbar a.tool.on { opacity: 1; background: var(--bg3); }
 #topbar { position: fixed; inset: 0 0 auto 0; height: var(--topbar); display: flex; align-items: center; gap: 16px; padding: 0 16px; background: var(--bg); z-index: 20; }
