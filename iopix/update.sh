@@ -29,7 +29,9 @@ if [ -d .git ]; then
   git pull -q --ff-only origin "$BRANCH" || die "git pull failed (local changes?)"
 else
   TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
-  curl -fsSL "https://github.com/$REPO/archive/refs/heads/$BRANCH.tar.gz" -o "$TMP/src.tgz" || die "download failed"
+  # the archive is fetched by commit id, so the code and the recorded COMMIT always match
+  R="$(remote_commit)"; [ -n "$R" ] || die "could not reach GitHub"
+  curl -fsSL "https://github.com/$REPO/archive/$R.tar.gz" -o "$TMP/src.tgz" || die "download failed"
   tar xzf "$TMP/src.tgz" -C "$TMP"
   SRC="$(ls -d "$TMP"/*/ | head -1)"
   # stage everything first, then swap, so a failure never leaves a half-updated install;
@@ -46,7 +48,7 @@ else
   done
   [ -f "$STAGE/installer/digikam-viewer.service" ] && cp "$STAGE/installer/digikam-viewer.service" "$APP/digikam-viewer.service"
   rm -rf "$STAGE"
-  remote_commit > COMMIT 2>/dev/null || true
+  echo "$R" > COMMIT
 fi
 chmod 755 setup.sh update.sh run.sh 2>/dev/null || true
 
