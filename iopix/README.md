@@ -211,11 +211,27 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/digikam-view
 After the framework's own questions (resources, network) it asks about the app: the photo folder and the digiKam folder on the host (or MariaDB host, port, database, user, password), which features to install (each downloads its model), and the admin account. It then creates a Debian 13 container (4 CPU, 4 GB, 16 GB disk by default), bind-mounts the library read-only at `/library/photos` and `/library/digikamDB`, and runs the app's own `setup.sh` inside with those answers: packages, model downloads, settings, admin, and the `digikam-viewer` service on port 8600. For unattended runs set `DKV_PHOTOS`, `DKV_DB` (`sqlite:/path` or `mysql:host:port/db:user:pass`), `DKV_FEATURES` and `DKV_ADMIN` in the environment. The container's `update` command pulls the latest code and keeps the settings and data. Because the container cannot see digiKam's process, `DIGIKAM_CHECK=ask` makes the viewer ask before database writes. I could not run these on a Proxmox host; they are checked for syntax and mirror the tested `setup.sh`.
 
 
+## Reverse proxy and HTTPS (strongly recommended)
+
+The viewer speaks plain HTTP on port 8600 and has no TLS of its own. Run it behind a reverse proxy that terminates HTTPS, such as [Caddy](https://caddyserver.com), [Nginx Proxy Manager](https://nginxproxymanager.com) or HAProxy, and reach it only through that. Besides encryption, HTTPS makes the browser treat the viewer as a secure context, which is what "Add to Home Screen" / "Install app" and the service worker need from any machine other than localhost. Caddy, with automatic certificates:
+
+    photos.example.com {
+        reverse_proxy localhost:8600
+    }
+
+Two things to keep in mind on any proxy:
+
+- `/mcp` streams responses (server-sent events): the proxy must not buffer that path. Caddy passes streams through as is; with nginx / Nginx Proxy Manager add `proxy_buffering off;` and a long `proxy_read_timeout` for `location /mcp`.
+- The web app enforces sign-in for every change, but the MCP endpoint is read-only **without** sign-in. On a proxy that faces the internet, restrict `/mcp` to your own networks or put basic authentication on it, or leave it LAN-only; otherwise anyone can read the library through it. Large uploads are not involved, but allow request bodies of a few MB for GPX files.
+
+With the proxy in place the addresses in this README change from `http://<host>:8600/...` to `https://photos.example.com/...`; set `VIEWER_URL=https://photos.example.com` so links in MCP results use it too.
+
 ## MCP server
 
 The viewer is also a read-only [MCP](https://modelcontextprotocol.io) server, on the same port, at `/mcp` (streamable HTTP), so an assistant such as Claude can search and inspect the library through the running app; nothing is installed or downloaded, and no sign-in is needed for read-only use. Tools: library summary, search with every filter the web app has, photo details, people, places, albums, tags, similar photos, links into the viewer.
 
     claude mcp add --transport http digikam-library http://localhost:8600/mcp
+    claude mcp add --transport http digikam-library https://photos.example.com/mcp     # behind the reverse proxy
 
 **Claude Desktop on another computer** (same network): Claude Desktop's "custom connectors" are reached from Anthropic's servers, so a LAN address cannot be added there. Use the `mcp-remote` bridge in its local configuration instead, which needs Node.js on that computer. Edit `claude_desktop_config.json` (macOS: `~/Library/Application Support/Claude/`, Windows: `%APPDATA%\Claude\`), replacing the address with the viewer's host name or IP, then restart Claude Desktop:
 
@@ -223,12 +239,12 @@ The viewer is also a read-only [MCP](https://modelcontextprotocol.io) server, on
       "mcpServers": {
         "digikam-library": {
           "command": "npx",
-          "args": ["-y", "mcp-remote", "http://192.168.1.50:8600/mcp", "--allow-http"]
+          "args": ["-y", "mcp-remote", "https://photos.example.com/mcp"]
         }
       }
     }
 
-`--allow-http` is needed because the viewer speaks plain HTTP on the LAN. The tools then appear in Claude Desktop's tool menu. To use the endpoint as a true remote connector (from claude.ai or a Claude Desktop away from home) it would have to be published over HTTPS with authentication, which the viewer does not provide; do not expose port 8600 to the internet as it is.
+That is the form behind the reverse proxy; without one, use `http://<host>:8600/mcp` and add `"--allow-http"` to the arguments, since the viewer itself speaks plain HTTP. The tools then appear in Claude Desktop's tool menu. To use the endpoint as a true remote connector (from claude.ai or a Claude Desktop away from home) it would have to be published over HTTPS with authentication, which the viewer does not provide; do not expose port 8600 to the internet as it is.
 
 Other clients that take an MCP URL use `http://<host>:8600/mcp` directly (set `VIEWER_URL` if links in results should use a different address). Clients that only spawn stdio servers on the machine running the viewer can use `.venv/bin/python -m app.mcp_server` from the checkout; it is the same code.
 
