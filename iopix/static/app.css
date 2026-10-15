@@ -547,3 +547,10 @@ body.nobadges .cbadges, body.nobadges .fbadge { display: none; }
 .spage .mwrap { width: 100%; }
 .mtable th:first-child, .mtable td:first-child { padding-left: 0; }
 .mtable th:last-child, .mtable td:last-child { padding-right: 0; }
+/* Settings and Maintenance section headings: larger, a coloured marker, a line under them */
+.spage h2 { font-size: 19px; font-weight: 600; color: var(--fg); margin: 40px 0 6px; padding-bottom: 8px; align-items: center;
+  border-bottom: 2px solid color-mix(in srgb, var(--accent) 35%, transparent); }
+.spage h2::before { content: ""; width: 5px; height: 20px; border-radius: 3px; flex: none; margin-right: -2px;
+  background: linear-gradient(180deg, #4f5bff, #a24bf0 55%, #ff5a7e); }
+.spage h2 .muted { font-size: 13px; font-weight: 400; }
+.spage h2 + .srow, .spage h2 + div > .srow:first-child { border-top: 0; }
