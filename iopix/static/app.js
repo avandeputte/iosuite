@@ -1172,7 +1172,7 @@ async function showExplore() {
       EDITING ? pill('Edited here, not yet in digiKam', PENDING, { edited: 1 }) : null,
       EDITING && PENDING ? h('a', { class: 'pill', onclick: dbDialog }, 'Apply edits to digiKam database…') : null,
       h('a', { class: 'pill', href: '#/map' }, 'Map', h('b', null, nf.format(META.geotagged)))),
-    EDITING ? [h('h2', null, 'Editing'),
+    EDITING ? [h('h2', { class: 'sec' }, 'Editing'),
       h('label', { style: 'display:flex;gap:10px;align-items:flex-start;max-width:760px;cursor:pointer' },
         h('input', { type: 'checkbox', checked: WRITE_FILES, style: 'margin-top:3px', onchange: async (e) => {
           try { WRITE_FILES = (await post('/api/settings', { write_files: e.target.checked })).write_files; } catch { e.target.checked = WRITE_FILES; toast('Could not change the setting.'); return; }
@@ -1402,7 +1402,7 @@ async function showDetected() {
     body.replaceChildren();
     const groups = new Map();
     for (const c of d.concepts) { if (f && !norm(c.name).includes(f)) continue; if (!groups.has(c.group)) groups.set(c.group, []); groups.get(c.group).push(c); }
-    for (const [g, list] of groups) body.append(h('h2', null, g, h('span', { class: 'muted' }, `${list.length} subjects`)),
+    for (const [g, list] of groups) body.append(h('h2', { class: 'sec' }, g, h('span', { class: 'muted' }, `${list.length} subjects`)),
       h('div', { class: 'cards' }, list.sort((a, b) => b.n - a.n).map(conceptCard)));
     if (!body.children.length) body.append(h('div', { class: 'empty' }, 'Nothing matches. Try the search box: type any description and pick “Photos that look like…”.'));
   };
@@ -1430,7 +1430,7 @@ async function showEvents() {
       if (!years.has(y)) years.set(y, []);
       years.get(y).push(e);
     }
-    for (const [y, list] of years) body.append(h('h2', null, y, h('span', { class: 'muted' }, `${list.length}`),
+    for (const [y, list] of years) body.append(h('h2', { class: 'sec' }, y, h('span', { class: 'muted' }, `${list.length}`),
       h('a', { href: hashFor('photos', photosWith({ year: y })) }, 'All of ' + y)), h('div', { class: 'cards' }, list.map(eventCard)));
     if (!body.children.length) body.append(h('div', { class: 'empty' }, 'Nothing matches.'));
   };
