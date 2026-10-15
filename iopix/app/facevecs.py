@@ -9,7 +9,6 @@ Vectors live in the viewer database (face_vecs) and are pruned when a face is de
 """
 import logging
 import threading
-import time
 
 import numpy as np
 
@@ -39,8 +38,8 @@ def available() -> bool:
     if not MODEL.exists():
         return False
     try:
-        import onnxruntime  # noqa: F401
-        return True
+        import onnxruntime
+        return bool(onnxruntime.__version__)
     except ImportError:
         return False
 

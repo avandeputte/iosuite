@@ -7,7 +7,6 @@ whether they are current.
 """
 import logging
 import threading
-import time
 
 import numpy as np
 
