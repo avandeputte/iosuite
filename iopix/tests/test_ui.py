@@ -575,3 +575,19 @@ def test_require_sign_in_shows_only_the_login_dialog(page, server, browser):
         ctx.close()
     finally:
         assert page.request.post(server + "/api/settings", data={"require_login": False}).ok
+
+
+def test_set_location_for_a_selection(page, server, lib):
+    """Select several photos: the selection bar offers Set location, and the dialog addresses them all."""
+    page.goto(server + "/#/photos")
+    page.wait_for_selector(".tile img", timeout=15000)
+    page.wait_for_timeout(1200)  # editing flags arrive with the status poll
+    page.locator(".tile .tcheck").nth(0).click(force=True)
+    page.locator(".tile .tcheck").nth(1).click(force=True)
+    page.wait_for_selector("#selbar", timeout=5000)
+    assert "2 selected" in page.locator("#selbar .n").inner_text()
+    page.locator("#selbar button[title='Set location']").click()
+    page.wait_for_selector(".modal h3:has-text('Set location for 2 photos')", timeout=5000)
+    assert "all 2 selected photos" in page.locator(".modal p").first.inner_text()
+    page.locator(".modal button", has_text="Cancel").click()
+    page.keyboard.press("Escape")

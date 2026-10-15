@@ -701,6 +701,7 @@ function updateSelBar() {
     btn('add', 'Add to album', () => albumDialog(ids())),
     EDITING ? btn('tag', 'Tag', () => tagDialog(ids())) : null,
     EDITING ? btn('edit', 'Edit', () => editDialog(ids())) : null,
+    EDITING ? btn('place', 'Set location', () => locationDialog(ids(), null)) : null,  // geotag the whole selection at once
     inAlbum ? btn('remove', 'Remove from album', async () => {
       try { await post(`/api/ualbums/${inAlbum}`, { ids: ids(), on: false }); } catch { toast('Could not update the album.'); return; }
       await loadState(); toast(`Removed ${nf.format(G.sel.size)} from the album.`); G.sel.clear(); viewKey = null; onRoute();
@@ -906,7 +907,7 @@ async function locationDialog(ids, current, after) {
       : h('div', { class: 'muted', style: 'padding:6px 8px' }, r.source === 'offline' ? 'No town by that name in the offline place list (no internet connection for the full search).' : 'Nothing found.'));
   };
   const back = modal(ids.length > 1 ? `Set location for ${nf.format(ids.length)} photos` : 'Set location',
-    h('p', { class: 'muted' }, 'Click the map or drag the pin, or type coordinates. Saved to the sidecar (and file, if on) and shown in digiKam after its database is updated.'),
+    h('p', { class: 'muted' }, ids.length > 1 ? `The same position goes to all ${nf.format(ids.length)} selected photos, replacing any they already have. ` : '', 'Click the map or drag the pin, or type coordinates. Saved to the sidecar (and file, if on) and shown in digiKam after its database is updated.'),
     h('div', { style: 'display:flex;gap:8px;align-items:center;margin-top:6px' }, search), results,
     mapEl,
     h('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;align-items:center' }, lat, lon, alt,
