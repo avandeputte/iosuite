@@ -168,6 +168,19 @@ let CONCEPTS = null;  // the detected-content vocabulary with counts, fetched on
 function loadConcepts() { if (CONCEPTS || !SEM.enabled) return; CONCEPTS = []; api('/api/concepts').then((c) => { CONCEPTS = c.concepts.map((x) => ({ ...x, _n: norm(x.name) })); }).catch(() => { CONCEPTS = null; }); }
 let APP_STAMP = null;
 const applyBadgePref = () => document.body.classList.toggle('nobadges', store.get('badges', '1') === '0');
+// The photo info panel's sections, each one a user can hide (Settings › Display › Info panel, or the gear in the
+// panel). What is stored is the hidden set, so a section added later shows by default.
+const INFO_SECTIONS = [
+  ['caption', 'Title and caption'], ['date', 'Date and time'], ['file', 'File name, size and folder'], ['people', 'People'], ['tags', 'Tags'],
+  ['location', 'Location and map'], ['details', 'Details: rating, creator, copyright, video'], ['camera', 'Camera, lens and exposure'],
+  ['ai', 'AI analysis: description, detected content, objects, text, sharpness'],
+];
+const infoHidden = () => new Set(store.get('info_hide', '').split(',').filter(Boolean));
+function infoPrefsEditor(onchange) {
+  const hid = infoHidden();
+  return h('div', { class: 'iprefs' }, INFO_SECTIONS.map(([k, label]) => h('label', null, h('input', { type: 'checkbox', checked: !hid.has(k), onchange: (e) => {
+    const s = infoHidden(); if (e.target.checked) s.delete(k); else s.add(k); store.set('info_hide', [...s].join(',')); onchange?.(); } }), label)));
+}
 /** Appearance: light, dark, or follow the system (the default). Set on <html> so the stylesheet
  *  picks the palette; the browser chrome (theme-color) follows the page background. */
 const THEMES = [['light', 'Light'], ['dark', 'Dark'], ['system', 'System']];  // light unless chosen otherwise
@@ -2045,6 +2058,7 @@ async function settingsPage(view) {
     row('Thumbnail badges', 'The small marks on thumbnails: face tags, GPS coordinates and favorites. This is remembered per browser.',
       h('label', { style: 'display:flex;gap:8px;align-items:center;cursor:pointer' }, h('input', { type: 'checkbox', checked: store.get('badges', '1') !== '0',
         onchange: (e) => { store.set('badges', e.target.checked ? '1' : '0'); applyBadgePref(); } }), 'Show badges')),
+    row('Info panel', `The sections the photo info panel shows; the gear at the top of the panel opens the same choices. ${USER ? 'Saved with your account, so it follows you to other devices.' : 'Remembered in this browser; sign in to keep it with an account.'}`, infoPrefsEditor()),
     IS_ADMIN ? (() => {
       const sel = h('select', null, h('option', { value: 'osm', selected: m.mapProvider !== 'google' }, 'OpenStreetMap (no account needed)'), h('option', { value: 'google', selected: m.mapProvider === 'google' }, 'Google Maps (your API key)'));
       const keyIn = h('input', { class: 'einput', type: 'password', placeholder: m.googleMapsKeySet ? 'key is set; paste a new one to replace it' : 'Google Maps API key', autocomplete: 'off', style: 'margin:0;width:260px' });
@@ -2539,7 +2553,7 @@ async function renderFilters() {
 
 // ---------------------------------------------------------------- lightbox
 // src = the list being browsed ({id, w, h, ts, video}); faces/objects = overlay toggles; pushed = we added a history entry for ?p=
-const LB = { open: false, src: null, i: 0, token: 0, info: store.get('info', '0') === '1', faces: false, objects: false, scale: 1, tx: 0, ty: 0, ar: 1.5, pushed: false, detail: null, play: 0, mini: null, hires: false };
+const LB = { open: false, src: null, i: 0, token: 0, info: store.get('info', '0') === '1', prefs: false, faces: false, objects: false, scale: 1, tx: 0, ty: 0, ar: 1.5, pushed: false, detail: null, play: 0, mini: null, hires: false };
 const details = new Map();  // photo id -> promise of /api/photo/:id, bounded LRU-ish cache
 const NATIVE = new Set(['JPG', 'PNG', 'GIF', 'WEBP']);
 function getDetail(id) {
@@ -2703,7 +2717,7 @@ function openLightbox(src, i, fromUser) {
   const wasOpen = LB.open;
   LB.open = true; LB.src = src; LB.i = i;
   if (!wasOpen) {  // the info panel opens the way it was last left (the account's setting, or this browser's)
-    LB.info = store.get('info', '0') === '1';
+    LB.info = store.get('info', '0') === '1'; LB.prefs = false;
     LB.el.info.hidden = !LB.info; LB.el.infoBtn.classList.toggle('on', LB.info);
   }
   $('#lightbox').hidden = false;
@@ -3029,9 +3043,11 @@ function renderInfo() {
   const d = LB.detail, el = LB.el.info;
   if (!d) return;
   LB.mini?.remove(); LB.mini = null;
+  const hid = infoHidden(), show = (k) => !hid.has(k);
   const lnk = (text, obj) => h('a', { onclick: () => filterFromLightbox(obj) }, text);
   const saveOne = (ch) => editPhotos([d.id], ch);
   const irow = (ic, a, b) => h('div', { class: 'irow' }, icon(ic), h('div', null, h('div', { class: 'a' }, a), b ? h('div', { class: 'b' }, b) : null));
+  const sub = (t) => h('div', { class: 'sub' }, t);
   const exposure = [d.aperture ? `ƒ/${+d.aperture.toFixed(1)}` : null,
     d.exposure ? (d.exposure < 1 ? `1/${Math.round(1 / d.exposure)} s` : `${+d.exposure.toFixed(1)} s`) : null,
     d.focal ? `${+d.focal.toFixed(1)} mm${d.focal35 && Math.round(d.focal35) !== Math.round(d.focal) ? ` (${Math.round(d.focal35)} mm eq.)` : ''}` : null,
@@ -3054,18 +3070,36 @@ function renderInfo() {
   for (const [k, v] of Object.entries(ex.properties || {})) addKv(k, v);
   if (d.video) { addKv('Duration', d.duration ? fmtDur(d.duration) : null); addKv('Video codec', vid.codec); addKv('Frame rate', vid.fps ? `${+(+vid.fps).toFixed(2)} fps` : null); addKv('Audio', vid.audio); }
   addKv('File modified', d.modified?.replace('T', ' '));
-  const mapEl = d.lat != null ? h('div', { class: 'imap' }) : null;
+  // the camera sits low in the panel, in the same small type as the details: most people never look at it
+  const ckv = [];
+  if (d.camera || exposure) ckv.push(h('span', null, 'Camera'), h('span', null, d.camera ? lnk(d.camera, { camera: d.camera }) : 'Unknown camera'));
+  if (d.lens) ckv.push(h('span', null, 'Lens'), h('span', null, lnk(d.lens, { lens: d.lens })));
+  if (exposure) ckv.push(h('span', null, 'Exposure'), h('span', null, exposure));
+  const mapEl = d.lat != null && show('location') ? h('div', { class: 'imap' }) : null;
+  // everything a model produced, together at the end: description, detected content, objects, text, sharpness, bursts, look-alikes
+  const ai = show('ai') ? [
+    d.caption_ai ? h('div', { class: 'muted', style: 'margin:2px 0 6px;font-style:italic' }, d.caption_ai.charAt(0).toUpperCase() + d.caption_ai.slice(1)) : null,
+    d.concepts?.length ? [sub('Detected'), h('div', { class: 'ichips' }, d.concepts.map((c) => h('span', { class: 'ichip', title: `The model’s guess (${Math.round(c.p * 100)}% of its vote)`, onclick: () => filterFromLightbox({ concept: c.name }) }, icon('spark'), c.name)))] : null,
+    d.boxes?.length ? [sub('Objects'), h('div', { class: 'ichips' }, [...new Set(d.boxes.map((b) => b.cls))].map((c) => h('span', { class: 'ichip', onclick: () => filterFromLightbox({ obj: c }) },
+      c, h('b', { style: 'font-weight:400;color:var(--fg2)' }, d.boxes.filter((b) => b.cls === c).length > 1 ? ` ×${d.boxes.filter((b) => b.cls === c).length}` : ''))))] : null,
+    d.ocr ? h('div', { class: 'irow' }, icon('text'), h('div', null, h('div', { class: 'b' }, 'Text in the picture'), h('div', { class: 'a', style: 'font-size:12.5px' }, d.ocr.slice(0, 600).split(/\n+/).map((t) => t.trim()).filter(Boolean).join(' · ')))) : null,
+    d.sharpn != null ? h('div', { class: 'irow' }, icon('spark'), h('div', null, h('div', { class: 'a' }, `Sharper than ${Math.round(d.sharpn * 100)}% of your photos`),
+      h('div', { class: 'b' }, [d.faceq != null ? `Face quality ${Math.round(d.faceq * 100)} / 100` : null, d.bright != null && (d.bright < 0.2 || d.clip_lo > 0.5) ? 'Very dark' : null,
+        d.bright != null && (d.bright > 0.8 || d.clip_hi > 0.3) ? 'Very bright' : null].filter(Boolean).join(' · ')))) : null,
+    d.burst ? h('div', { class: 'irow' }, icon('dup'), h('div', null, h('div', { class: 'a' }, lnk(`Part of a burst of ${d.burst_size} frames`, { burst: d.burst, sort: 'old' })),
+      h('div', { class: 'b' }, d.burst_best ? 'Picked as the best frame' : ['Not the best frame', d.burst_best_id ? [' · ', h('a', { class: 'lnk', title: d.burst_best_name, onclick: () => { const i = LB.src.id.indexOf(d.burst_best_id); if (i >= 0) { LB.i = i; setPhotoParam(d.burst_best_id, false); showItem(); } else openLightbox({ id: [d.burst_best_id] }, 0, true); } }, 'open the best frame')] : null]))) : null,
+    d.similar && !d.video ? h('div', { class: 'irow' }, icon('spark'), h('div', null, h('div', { class: 'a' }, lnk('More photos like this', { like: d.id })))) : null,
+  ].flat().filter(Boolean) : [];
   fill(el,
-    h('div', { class: 'ihead' }, h('button', { class: 'iconbtn', title: 'Close info', onclick: toggleInfo }, icon('close')), 'Info'),
-    d.title ? h('div', { class: 'title' }, d.title) : null,
-    d.caption_ai ? h('div', { class: 'muted', style: 'margin:4px 0 8px;font-style:italic' }, d.caption_ai.charAt(0).toUpperCase() + d.caption_ai.slice(1), h('span', { style: 'font-style:normal;font-size:11px;opacity:.7' }, ' · AI description')) : null,
-    d.caption ? h('div', { class: 'muted', style: 'margin:6px 0 10px;white-space:pre-wrap' }, d.caption) : null,
-    irow('calendar', lnk(dfLong.format(date(d.ts)), { from: d.day, to: d.day, sort: 'old' }), [dfTime.format(date(d.ts)), EDITING ? [' · ', h('a', { class: 'lnk', onclick: (e) => { const box = e.target.closest('.irow').nextSibling; box.hidden = !box.hidden; } }, 'change')] : null]),
-    EDITING ? h('div', { hidden: true, style: 'margin:0 0 8px 40px' }, dateEditor([d.id], d.taken)) : null,
-    irow(d.video ? 'video' : 'photo', d.name, [d.video ? null : `${mp >= 1 ? mp.toFixed(1) : mp.toFixed(2)} MP`, `${d.w} × ${d.h}`, fmtBytes(d.size), d.fmt].filter(Boolean).join(' · ')),
-    d.album ? irow('folder', lnk(d.album.path.replace(/^\//, '') || d.album.name, { album: d.album.id, sort: 'old' }), 'Folder') : null,
-    d.camera || exposure ? irow('camera', d.camera ? lnk(d.camera, { camera: d.camera }) : 'Unknown camera',
-      [d.lens ? lnk(d.lens, { lens: d.lens }) : null, d.lens && exposure ? h('br') : null, exposure]) : null,
+    h('div', { class: 'ihead' }, h('button', { class: 'iconbtn', title: 'Close info', onclick: toggleInfo }, icon('close')), 'Info',
+      h('button', { class: 'iconbtn' + (LB.prefs ? ' on' : ''), style: 'margin-left:auto', title: 'Choose what this panel shows', onclick: () => { LB.prefs = !LB.prefs; renderInfo(); } }, icon('gear'))),
+    LB.prefs ? infoPrefsEditor(renderInfo) : null,
+    show('caption') && d.title ? h('div', { class: 'title' }, d.title) : null,
+    show('caption') && d.caption ? h('div', { class: 'muted', style: 'margin:6px 0 10px;white-space:pre-wrap' }, d.caption) : null,
+    show('date') ? [irow('calendar', lnk(dfLong.format(date(d.ts)), { from: d.day, to: d.day, sort: 'old' }), [dfTime.format(date(d.ts)), EDITING ? [' · ', h('a', { class: 'lnk', onclick: (e) => { const box = e.target.closest('.irow').nextSibling; box.hidden = !box.hidden; } }, 'change')] : null]),
+      EDITING ? h('div', { hidden: true, style: 'margin:0 0 8px 40px' }, dateEditor([d.id], d.taken)) : null] : null,
+    show('file') ? [irow(d.video ? 'video' : 'photo', d.name, [d.video ? null : `${mp >= 1 ? mp.toFixed(1) : mp.toFixed(2)} MP`, `${d.w} × ${d.h}`, fmtBytes(d.size), d.fmt].filter(Boolean).join(' · ')),
+      d.album ? irow('folder', lnk(d.album.path.replace(/^\//, '') || d.album.name, { album: d.album.id, sort: 'old' }), 'Folder') : null] : null,
     EDITING ? [h('div', { style: 'height:10px' }),  // the rating, title and caption controls follow; they need no heading
       editControls({ rating: Math.max(d.rating, 0) }, saveOne),
       h('input', { class: 'einput', placeholder: 'Title', value: d.title || '', onkeydown: (e) => { e.stopPropagation(); if (e.key === 'Enter') e.target.blur(); },
@@ -3074,7 +3108,7 @@ function renderInfo() {
       d.edited ? h('div', { class: 'enote' }, WRITE_FILES ? 'Changed here and saved to the sidecar and the image file. ' : 'Changed here and saved to the sidecar. ', 'digiKam shows it after “Reread Metadata From File”, or apply it to digiKam’s database from Explore. ',
         h('a', { class: 'lnk', onclick: async () => { try { await post('/api/edit/revert', { ids: [d.id] }); } catch (e) { toast(e.message); return; } details.delete(d.id); toast('Viewer edits undone; sidecar restored.'); keepView = true; clearTimeout(pollTimer); pollTimer = setTimeout(async () => { await pollStatus(); if (LB.open && LB.src.id[LB.i] === d.id) showItem(); }, 1500); } }, 'Undo')) : null] : null,
     // one row per face (named, suggested, unknown); a person tag without a face region gets a row with the badge picture
-    (() => {
+    show('people') ? (() => {
       const faced = new Set(d.faces.map((f) => f.tag));
       const rows = [...faceRegions(d),
         ...peopleTags.filter((t) => !faced.has(t.id)).map((t) => ({ kind: 'tagonly', tag: t.id, name: t.name }))];
@@ -3088,23 +3122,12 @@ function renderInfo() {
         h('img', { src: f.kind === 'tagonly' ? faceUrl(f.tag) : `/facecrop/${d.id}/${f.x}/${f.y}/${f.w}/${f.h}.jpg`, alt: '' }),
         h('span', { class: 'nm' }, f.kind === 'confirmed' || f.kind === 'tagonly' ? f.name : f.kind === 'suggested' ? [h('i', null, 'Suggestion: '), f.name] : h('i', null, 'Unknown face')),
         CAN_MANAGE && f.kind !== 'tagonly' ? h('span', { class: 'muted', style: 'font-size:12px' }, 'options ▾') : null)))];
-    })(),
-    tags.length || EDITING ? [h('h4', null, 'Tags'), h('div', { class: 'ichips' }, tags.map((t) => { const c = chip(t);
+    })() : null,
+    show('tags') && (tags.length || EDITING) ? [h('h4', null, 'Tags'), h('div', { class: 'ichips' }, tags.map((t) => { const c = chip(t);
       if (EDITING) c.append(h('button', { class: 'tx', title: 'Remove this tag', onclick: (e) => { e.stopPropagation(); saveOne({ remove_tags: [t.id] }); } }, icon('close'))); return c; })),
       EDITING ? h('div', { style: 'margin-top:8px' }, tagPicker((t) => saveOne({ add_tags: [t.id] }))) : null] : null,
-    d.sharpn != null || d.burst || d.ocr ? [h('h4', null, 'Analysis'),
-      d.sharpn != null ? h('div', { class: 'irow' }, icon('spark'), h('div', null, h('div', { class: 'a' }, `Sharper than ${Math.round(d.sharpn * 100)}% of your photos`),
-        h('div', { class: 'b' }, [d.faceq != null ? `Face quality ${Math.round(d.faceq * 100)} / 100` : null, d.bright != null && (d.bright < 0.2 || d.clip_lo > 0.5) ? 'Very dark' : null,
-          d.bright != null && (d.bright > 0.8 || d.clip_hi > 0.3) ? 'Very bright' : null].filter(Boolean).join(' · ')))) : null,
-      d.burst ? h('div', { class: 'irow' }, icon('dup'), h('div', null, h('div', { class: 'a' }, lnk(`Part of a burst of ${d.burst_size} frames`, { burst: d.burst, sort: 'old' })),
-        h('div', { class: 'b' }, d.burst_best ? 'Picked as the best frame' : ['Not the best frame', d.burst_best_id ? [' · ', h('a', { class: 'lnk', title: d.burst_best_name, onclick: () => { const i = LB.src.id.indexOf(d.burst_best_id); if (i >= 0) { LB.i = i; setPhotoParam(d.burst_best_id, false); showItem(); } else openLightbox({ id: [d.burst_best_id] }, 0, true); } }, 'open the best frame')] : null]))) : null,
-      d.ocr ? h('div', { class: 'irow' }, icon('text'), h('div', null, h('div', { class: 'b' }, 'Text in the picture'), h('div', { class: 'a', style: 'font-size:12.5px' }, d.ocr.slice(0, 600).split(/\n+/).map((t) => t.trim()).filter(Boolean).join(' · ')))) : null] : null,
-    d.boxes?.length ? [h('h4', null, 'Objects'), h('div', { class: 'ichips' }, [...new Set(d.boxes.map((b) => b.cls))].map((c) => h('span', { class: 'ichip', onclick: () => filterFromLightbox({ obj: c }) },
-      c, h('b', { style: 'font-weight:400;color:var(--fg2)' }, d.boxes.filter((b) => b.cls === c).length > 1 ? ` ×${d.boxes.filter((b) => b.cls === c).length}` : ''))))] : null,
-    d.concepts?.length ? [h('h4', null, 'Detected'), h('div', { class: 'ichips' }, d.concepts.map((c) => h('span', { class: 'ichip', title: `The model’s guess (${Math.round(c.p * 100)}% of its vote)`, onclick: () => filterFromLightbox({ concept: c.name }) }, icon('spark'), c.name)))] : null,
-    d.similar && !d.video ? h('div', { class: 'irow' }, icon('spark'), h('div', null, h('div', { class: 'a' }, lnk('More photos like this', { like: d.id })))) : null,
-    EDITING && d.lat == null ? h('div', { class: 'irow' }, icon('place'), h('div', null, h('a', { class: 'lnk', onclick: () => locationDialog([d.id], null) }, 'Set location on the map'))) : null,
-    d.lat != null ? [h('h4', null, 'Location', EDITING ? h('a', { class: 'lnk', style: 'margin-left:10px;text-transform:none;letter-spacing:0;font-weight:400', onclick: () => locationDialog([d.id], { lat: d.lat, lon: d.lon, alt: d.alt }) }, 'change') : null),
+    show('location') && EDITING && d.lat == null ? h('div', { class: 'irow' }, icon('place'), h('div', null, h('a', { class: 'lnk', onclick: () => locationDialog([d.id], null) }, 'Set location on the map'))) : null,
+    show('location') && d.lat != null ? [h('h4', null, 'Location', EDITING ? h('a', { class: 'lnk', style: 'margin-left:10px;text-transform:none;letter-spacing:0;font-weight:400', onclick: () => locationDialog([d.id], { lat: d.lat, lon: d.lon, alt: d.alt }) }, 'change') : null),
       d.place ? h('div', { class: 'a', style: 'margin-bottom:6px' }, lnk(d.place, { place: d.place, ...(d.region ? { region: d.region } : {}) }),
         d.region ? [', ', lnk(d.region, { region: d.region })] : null, d.country ? [', ', lnk(d.country, { country: d.country })] : null) : null,
       mapEl,
@@ -3113,9 +3136,10 @@ function renderInfo() {
           h('a', { class: 'lnk', onclick: () => go('map', photosWith({ from: d.day, to: d.day, trail: d.day })) }, 'Day’s trail'), ' · ',
           lnk('Photos nearby', { bbox: [d.lat - 0.01, d.lon - 0.015, d.lat + 0.01, d.lon + 0.015].map((x) => x.toFixed(4)).join(',') }), ' · ',
           h('a', { href: mapLink(d.lat, d.lon), target: '_blank', rel: 'noopener' }, MAPS.linkLabel))))] : null,
-    kv.length ? [h('h4', null, 'Details'), h('div', { class: 'kv' }, kv)] : null,
-    h('h4', null, 'File'),
-    h('div', { class: 'b muted', style: 'word-break:break-all;user-select:all;font-size:12.5px' }, d.path));
+    show('details') && kv.length ? [h('h4', null, 'Details'), h('div', { class: 'kv' }, kv)] : null,
+    show('camera') && ckv.length ? [h('h4', null, 'Camera'), h('div', { class: 'kv' }, ckv)] : null,
+    show('file') ? [h('h4', null, 'File'), h('div', { class: 'b muted', style: 'word-break:break-all;user-select:all;font-size:12.5px' }, d.path)] : null,
+    ai.length ? [h('h4', null, 'AI analysis'), ai] : null);
   if (mapEl) {
     const token = LB.token;
     loadLeaflet(false).then(async () => {

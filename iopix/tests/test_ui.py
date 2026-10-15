@@ -798,3 +798,66 @@ def test_update_banner_shows_and_can_be_dismissed(page, server):
     page.wait_for_selector("#topbar", timeout=10000)
     page.wait_for_timeout(1500)
     assert page.locator("#updbanner").count() == 0, "dismissed for this version"
+
+
+def test_info_panel_order_and_section_preference(page, server, lib):
+    """The user's own words come first, the camera sits low in the panel in the small key-value type, everything a
+    model produced comes last under "AI analysis", and the gear in the panel (and Settings › Info panel) chooses
+    which sections show; the choice is remembered (per browser here, with the account when signed in)."""
+    import json as _json
+    pid = lib["ids"][0]
+
+    def fake_detail(route):
+        r = route.fetch()
+        body = r.json()
+        body.update({"caption_ai": "a test description", "concepts": [{"name": "audience", "p": 0.5}],
+                     "camera": body.get("camera") or "Test camera", "lens": "Test lens 50mm"})
+        route.fulfill(response=r, body=_json.dumps(body), headers={**r.headers, "content-type": "application/json"})
+    page.route(f"**/api/photo/{pid}", fake_detail)
+    _open_photo(page, server, pid)
+    if page.locator(".lb-info").is_hidden():
+        page.locator('[title^="Info"]').click()
+    page.wait_for_selector(".lb-info h4", timeout=10000)
+    # the headings' own words (inner_text would give the stylesheet's capitals; Location carries a "change" link)
+    heads = page.locator(".lb-info h4").evaluate_all("els => els.map((e) => e.firstChild.textContent.trim())")
+    assert heads[-1] == "AI analysis", heads
+    assert heads.index("Camera") > max(heads.index(x) for x in ("People", "Tags", "Details", "Location") if x in heads), heads
+    panel = page.locator(".lb-info").text_content()
+    assert panel.index("A test description") > panel.index("Camera"), "the AI description sits at the bottom, not at the top"
+    assert "audience" in page.locator(".lb-info h4:has-text('AI analysis') ~ .ichips").text_content()
+    assert page.locator(".lb-info .irow", has_text="Test camera").count() == 0, "the camera is a small key-value line, not a prominent row"
+    assert page.locator(".lb-info .kv span", has_text="Test lens 50mm").count() == 1
+    # hide the camera section from the panel's own gear
+    page.locator(".lb-info .ihead button[title^='Choose']").click()
+    page.locator(".lb-info .iprefs label", has_text="Camera").locator("input").uncheck()
+    page.wait_for_timeout(200)
+    assert page.locator(".lb-info h4", has_text="Camera").count() == 0
+    assert page.locator(".lb-info h4", has_text="AI analysis").count() == 1, "the other sections stay"
+    # remembered: reload, reopen
+    page.reload()
+    page.wait_for_selector("#lightbox .lb-frame img, #lightbox .lb-frame video", timeout=15000)
+    if page.locator(".lb-info").is_hidden():
+        page.locator('[title^="Info"]').click()
+    page.wait_for_selector(".lb-info h4", timeout=10000)
+    assert page.locator(".lb-info h4", has_text="Camera").count() == 0, "the choice survives a reload"
+    # the same choices in Settings › Display; switch the camera back on there
+    page.goto(server + "/#/settings")
+    page.wait_for_selector(".srow .iprefs", timeout=10000)
+    box = page.locator(".srow .iprefs label", has_text="Camera").locator("input")
+    assert not box.is_checked()
+    box.check()
+    page.wait_for_timeout(500)
+    _open_photo(page, server, pid)
+    if page.locator(".lb-info").is_hidden():
+        page.locator('[title^="Info"]').click()
+    page.wait_for_selector(".lb-info h4", timeout=10000)
+    assert page.locator(".lb-info h4", has_text="Camera").count() == 1
+
+
+def test_logo_lines_up_with_the_side_menu(page, server):
+    """The logo's centre is the side menu's centre, so the brand mark and the menu icons share one axis."""
+    page.goto(server + "/#/photos")
+    page.wait_for_selector("#nav a .ic", timeout=10000)
+    logo = page.locator(".brand .logo").bounding_box()
+    ic = page.locator("#nav a .ic").first.bounding_box()
+    assert abs((logo["x"] + logo["width"] / 2) - (ic["x"] + ic["width"] / 2)) < 1.5, (logo, ic)

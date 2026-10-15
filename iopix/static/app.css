@@ -54,7 +54,7 @@ body.noadmin #topbar a.tool[href="#/maintenance"] { display: none; }  /* the ico
 #topbar a.tool .ic { width: 20px; height: 20px; }
 #topbar a.tool:hover, #topbar a.tool.on { opacity: 1; background: var(--bg3); }
 #topbar { position: fixed; inset: 0 0 auto 0; height: var(--topbar); display: flex; align-items: center; gap: 16px; padding: 0 16px; background: var(--bg); z-index: 20; }
-.brand { display: flex; align-items: center; gap: 10px; width: 196px; flex: none; }
+.brand { display: flex; align-items: center; gap: 10px; width: 196px; flex: none; padding-left: 10px; }  /* 14 + 10 + 14 = 38px: the logo's centre is the side menu's centre */
 .logo { width: 32px; height: 32px; border-radius: 8px; background: url(icons/mark.svg) center / contain no-repeat; }
 .brand-name { font-size: 20px; font-weight: 500; white-space: nowrap; background: linear-gradient(90deg, #4f5bff, #a24bf0 55%, #ff5a7e); -webkit-background-clip: text; background-clip: text; color: transparent; }
 #search { position: relative; flex: 1; max-width: 860px; min-width: 0; }
@@ -283,6 +283,12 @@ a.stat:hover { transform: translateY(-2px); box-shadow: 0 6px 18px color-mix(in 
 .kv { display: grid; grid-template-columns: 96px 1fr; gap: 2px 8px; font-size: 12.5px; }
 .kv span:nth-child(odd) { color: var(--fg2); }
 .kv span { word-break: break-word; }
+.lb-info .sub { font-size: 11.5px; color: var(--fg2); margin: 8px 0 3px; }
+/* which sections the info panel shows: in Settings as a two-column list, in the panel as a boxed single column */
+.iprefs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 14px; font-size: 13px; }
+.iprefs label { display: flex; gap: 8px; align-items: center; cursor: pointer; }
+.srow .iprefs { max-width: 460px; }
+.lb-info .iprefs { grid-template-columns: 1fr; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; margin: 2px 0 8px; }
 
 /* ---- map */
 #map { position: absolute; inset: 0; }
