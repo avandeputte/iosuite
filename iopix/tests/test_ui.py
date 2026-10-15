@@ -432,8 +432,18 @@ def test_lightbox_film_strip_and_remembered_info_panel(page, server, lib):
     page.wait_for_selector("#lightbox .lb-strip.show", timeout=3000)
     page.mouse.move(box["x"] + box["width"] / 2, box["y"] + 200)
     page.wait_for_selector("#lightbox .lb-strip:not(.show)", timeout=3000)
+    # hovering another thumbnail previews it over the stage; leaving the strip restores the view
+    page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] - 20)
+    page.wait_for_selector("#lightbox .lb-strip.show", timeout=3000)
+    reel.nth(1).hover(force=True)
+    page.wait_for_selector("#lightbox .lb-peek", timeout=3000)
+    assert page.locator("#lightbox .lb-peek").get_attribute("data-id") == reel.nth(1).get_attribute("src").split("/")[-1]
+    assert page.locator("#lightbox .lb-strip .reel img.cur").get_attribute("data-i") == "0", "peeking does not move"
+    page.mouse.move(box["x"] + box["width"] / 2, box["y"] + 200)
+    page.wait_for_selector("#lightbox .lb-peek", state="detached", timeout=3000)
     reel.nth(1).click(force=True)
     page.wait_for_function("document.querySelector('#lightbox .lb-strip .reel img.cur')?.dataset.i === '1'", timeout=5000)
+    assert page.locator("#lightbox .lb-peek").count() == 0
     assert "p=" in page.url
     # the info panel: open it, leave, come back
     page.keyboard.press("i")

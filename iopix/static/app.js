@@ -2191,7 +2191,29 @@ function buildLightbox() {
       e.strip.classList.toggle('show', nearBottom || ev.target.closest('.lb-strip') !== null);
     }
   });
-  e.stage.addEventListener('pointerleave', () => e.strip.classList.remove('show'));
+  e.stage.addEventListener('pointerleave', () => { e.strip.classList.remove('show'); unpeek(); });
+  e.strip.addEventListener('pointerleave', unpeek);
+}
+
+/** Hovering a strip thumbnail shows that photo over the stage, without leaving the current one;
+ *  the thumbnail appears at once and the full preview replaces it when loaded. */
+function peek(id) {
+  clearTimeout(LB.peekT);
+  LB.peekT = setTimeout(() => {
+    if (!LB.open) return;
+    const { stage } = LB.el;
+    let im = LB.peekEl;
+    if (!im) { im = LB.peekEl = h('img', { class: 'lb-peek', alt: '', draggable: 'false' }); stage.append(im); }
+    im.dataset.id = id;
+    im.src = `/thumb/${id}`;
+    const full = new Image();
+    full.onload = () => { if (LB.peekEl === im && im.dataset.id === String(id)) im.src = full.src; };
+    full.src = `/preview/${id}`;
+  }, 90);
+}
+function unpeek() {
+  clearTimeout(LB.peekT);
+  LB.peekEl?.remove(); LB.peekEl = null;
 }
 
 /** Rebuild the strip around the current photo when it drifts out of the rendered window, and
@@ -2208,7 +2230,8 @@ function renderStrip() {
     for (let k = lo; k <= hi; k++) {
       const ar = src.w ? Math.max(0.6, Math.min(2.2, src.w[k] / (src.h[k] || 1))) : 1;
       kids.push(h('img', { src: `/thumb/${src.id[k]}`, alt: '', loading: 'lazy', draggable: 'false', 'data-i': k, style: `width:${Math.round(56 * ar)}px`,
-        onclick: () => { if (LB.i === k) return; LB.i = k; setPhotoParam(src.id[k], false); showItem(); } }));
+        onpointerenter: (ev) => { if (ev.pointerType === 'mouse' && k !== LB.i) peek(src.id[k]); else unpeek(); },
+        onclick: () => { unpeek(); if (LB.i === k) return; LB.i = k; setPhotoParam(src.id[k], false); showItem(); } }));
     }
     reel.replaceChildren(...kids);
   }
@@ -2256,6 +2279,7 @@ function step(d) {
 function showItem() {
   const { src, i, el } = LB;
   const id = src.id[i], token = ++LB.token;
+  unpeek();
   LB.scale = 1; LB.tx = LB.ty = 0; LB.detail = null; LB.hires = false;
   const img = h('img', { src: `/thumb/${id}`, alt: '', draggable: 'false' });
   LB.img = img;
