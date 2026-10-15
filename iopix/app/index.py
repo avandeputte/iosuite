@@ -729,7 +729,8 @@ def ensure_fresh() -> bool:
     viewer's copy of it), the viewer's remembered edits, analysis results, embeddings, or this
     schema. True if rebuilt."""
     src = probe()
-    if current_version() == _version_for(src[1]):
+    if current_version() == _version_for(src[1]) and not (src[0] == "digikam" and not mirror_info()):
+        # (a readable digiKam with no copy taken yet, as right after this version's first start, builds once to take it)
         last_source.update(kind=src[0], version=src[1])
         return False
     stats = build(source=src)
