@@ -1706,27 +1706,42 @@ async function showConsistency() {
     try { const res = await post('/api/consistency/sync', { ids: [r.id], source: src, targets, fields: r.mismatch }); toast(res.synced ? `Fixed ${r.name}.` : `Not fixed: ${res.skipped[0]?.reason || 'nothing to copy'}`, null, null, 8000); } catch (e) { toast(e.message, null, null, 9000); return; }
     load();
   };
-  const syncBar = h('div', { id: 'selbar', hidden: true });
+  // the bulk bar: fixed at the bottom of the page, wraps on narrow screens. One click per source ("take the values
+  // from"), applied to the other places that can hold them; the detailed choice (fields, targets) is one click away.
+  const syncBar = h('div', { class: 'cbulk', id: 'cbulk', hidden: true });
+  let advanced = false;
+  const runSync = async (src, targets, fields) => {
+    const n = selected.size;
+    if (!targets.length) { toast('Pick at least one place to copy to, other than the source.'); return; }
+    if (!confirm(`Copy ${fields.map((f) => (FIELD_LABEL[f] || f).toLowerCase()).join(', ')} from the ${SRC_LABEL[src].toLowerCase()} to the ${targets.map((t) => SRC_LABEL[t].toLowerCase()).join(' and ')} for ${nf.format(n)} ${n === 1 ? 'photo' : 'photos'}?` +
+      (targets.includes('db') ? '\n\ndigiKam must be closed; its database is backed up first.' : '') + (targets.includes('file') ? '\n\nImage files are rewritten in place (metadata only; pixels untouched); the original of each is kept in the viewer’s file-backups folder. Files that cannot hold metadata are skipped.' : '') + '\n\nSidecars are backed up before they change.')) return;
+    fill(syncBar, h('span', { class: 'n' }, `Syncing ${nf.format(n)} photos…`));
+    try {
+      const r = await post('/api/consistency/sync', { ids: [...selected], source: src, targets, fields });
+      toast(`Synced ${nf.format(r.synced)} ${r.synced === 1 ? 'photo' : 'photos'}${r.skipped.length ? `; ${nf.format(r.skipped.length)} skipped (${r.skipped[0].reason})` : ''}.`, null, null, 9000);
+    } catch (e) { toast(e.message, null, null, 9000); bar(); return; }
+    selected.clear(); bar(); load();
+  };
   const bar = () => {
     syncBar.hidden = !selected.size;
+    document.body.classList.toggle('cbulk-open', selected.size > 0);
     if (!selected.size) return;
-    const src = h('select', null, ['db', 'sidecar', 'file'].map((s) => h('option', { value: s }, SRC_LABEL[s])));
-    const tg = ['db', 'sidecar', 'file'].map((s) => h('label', { style: 'display:flex;gap:4px;align-items:center' }, h('input', { type: 'checkbox', value: s, checked: s !== 'db' }), SRC_LABEL[s]));
-    const fl = Object.keys(FIELD_LABEL).map((f) => h('label', { style: 'display:flex;gap:4px;align-items:center' }, h('input', { type: 'checkbox', value: f, checked: true }), FIELD_LABEL[f]));
-    fill(syncBar, h('button', { class: 'iconbtn', title: 'Clear selection', onclick: () => { selected.clear(); bar(); load(); } }, icon('close')),
-      h('span', { class: 'n' }, `${nf.format(selected.size)} selected`), h('span', { class: 'sp' }),
-      h('span', null, 'Copy from ', src, ' to '), h('span', { style: 'display:flex;gap:10px' }, tg), h('span', { class: 'muted' }, '|'), h('span', { style: 'display:flex;gap:8px' }, fl),
-      h('button', { class: 'pillbtn on', onclick: async () => {
-        const targets = tg.map((l) => l.firstChild).filter((c) => c.checked && c.value !== src.value).map((c) => c.value);
-        const fields = fl.map((l) => l.firstChild).filter((c) => c.checked).map((c) => c.value);
-        if (!targets.length) { toast('Pick at least one target other than the source.'); return; }
-        const n = selected.size;
-        if (!confirm(`Copy ${fields.map((f) => (FIELD_LABEL[f] || f).toLowerCase()).join(', ')} from the ${SRC_LABEL[src.value].toLowerCase()} to the ${targets.map((t) => SRC_LABEL[t].toLowerCase()).join(' and ')} for ${nf.format(n)} ${n === 1 ? 'photo' : 'photos'}?` +
-          (targets.includes('db') ? '\n\ndigiKam must be closed; its database is backed up first.' : '') + (targets.includes('file') ? '\n\nImage files are rewritten in place (metadata only; pixels untouched); the original of each is kept in the viewer’s file-backups folder.' : '') + '\n\nSidecars are backed up before they change.')) return;
-        try { const r = await post('/api/consistency/sync', { ids: [...selected], source: src.value, targets, fields }); toast(`Synced ${nf.format(r.synced)}${r.skipped.length ? `, skipped ${r.skipped.length}: ${r.skipped[0].reason}` : ''}.`, null, null, 9000); }
-        catch (e) { toast(e.message, null, null, 9000); return; }
-        selected.clear(); bar(); load();
-      } }, icon('spark'), 'Sync'));
+    const quick = ['db', 'sidecar', 'file'].map((src) => h('button', { class: 'pillbtn' + (src === 'sidecar' ? ' on' : ''), title: `Make the other places match the ${SRC_LABEL[src].toLowerCase()}`, 'data-src': src,
+      onclick: () => runSync(src, ['db', 'sidecar', 'file'].filter((t) => t !== src), Object.keys(FIELD_LABEL)) }, SRC_LABEL[src]));
+    const src = h('select', null, ['db', 'sidecar', 'file'].map((x) => h('option', { value: x }, SRC_LABEL[x])));
+    const tg = ['db', 'sidecar', 'file'].map((x) => h('label', null, h('input', { type: 'checkbox', value: x, checked: x !== 'db' }), SRC_LABEL[x]));
+    const fl = Object.keys(FIELD_LABEL).map((f) => h('label', null, h('input', { type: 'checkbox', value: f, checked: true }), FIELD_LABEL[f]));
+    fill(syncBar,
+      h('div', { class: 'cbrow' },
+        h('button', { class: 'iconbtn', title: 'Clear the selection', onclick: () => { selected.clear(); bar(); load(); } }, icon('close')),
+        h('span', { class: 'n' }, `${nf.format(selected.size)} selected`),
+        h('span', { class: 'muted' }, 'Take the values from:'), ...quick,
+        h('span', { class: 'sp' }),
+        h('a', { class: 'lnk', onclick: () => { advanced = !advanced; bar(); } }, advanced ? 'Fewer options' : 'Choose fields and places…')),
+      advanced ? h('div', { class: 'cbrow' },
+        h('span', null, 'Copy from ', src, ' to '), h('span', { class: 'cbchecks' }, tg), h('span', { class: 'muted' }, 'fields:'), h('span', { class: 'cbchecks' }, fl),
+        h('button', { class: 'pillbtn on', onclick: () => runSync(src.value, tg.map((l) => l.firstChild).filter((c) => c.checked && c.value !== src.value).map((c) => c.value),
+          fl.map((l) => l.firstChild).filter((c) => c.checked).map((c) => c.value)) }, icon('spark'), 'Sync')) : null);
   };
   const load = async (append) => {
     if (!append) offset = 0;
@@ -1769,13 +1784,16 @@ async function showConsistency() {
   const sel = h('select', { onchange: (e) => { field = e.target.value; load(); } }, h('option', { value: '' }, 'Any field'), ...Object.entries(FIELD_LABEL).map(([f, l]) => h('option', { value: f }, l)));
   main.replaceChildren(h('div', { class: 'page' }, crumbs([['Maintenance', '#/maintenance'], ['Metadata consistency', null]]),
     h('h1', null, 'Metadata consistency'),
-    h('div', { class: 'muted', style: 'max-width:820px' }, 'For each photo, the rating, title, caption and tags are read from three places: digiKam’s database, the XMP sidecar, and the metadata embedded in the image file. Photos where they disagree are listed below. Fix one with its “take the values from” buttons, or tick several, choose which copy is right in the bar that appears, and sync the others. A file type that cannot hold metadata (most videos, RAW files) shows n/a: the sidecar is its only copy and that is not a discrepancy. Select photos, choose which copy is right, and sync the others to it. An absent value (no sidecar, nothing in the file) counts as a disagreement only when another copy has a value.'),
+    h('div', { class: 'muted', style: 'max-width:820px' }, 'For each photo, the rating, title, caption and tags are read from three places: digiKam’s database, the XMP sidecar, and the metadata embedded in the image file. Photos where they disagree are listed below. Fix one with its “take the values from” buttons, or tick several (or “Select all”) and pick the copy that is right in the bar at the bottom: the other places are made to match. A file type that cannot hold metadata (most videos, RAW files) shows n/a; that is not a discrepancy. An absent value elsewhere (no sidecar, nothing in the file) does count as a disagreement when another copy has a value.'),
     h('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:14px 0' },
       h('button', { class: 'pillbtn on', onclick: () => scan(false, false) }, icon('spark'), 'Check new and changed photos'),
       h('button', { class: 'pillbtn', onclick: () => { if (confirm('Re-check every photo in the library? This reads every sidecar and image file and takes a while.')) scan(false, true); } }, 'Re-check whole library'),
       [...filterParams().keys()].length ? h('button', { class: 'pillbtn', onclick: () => scan(true, true) }, 'Check the current search only') : null,
       h('span', { class: 'sp' }), h('span', null, 'Show: ', sel),
-      h('button', { class: 'pillbtn', onclick: () => { d.items.forEach((r) => selected.add(r.id)); bar(); load(); } }, 'Select all shown')),
+      EDITING ? h('button', { class: 'pillbtn', onclick: async () => {  // every photo that disagrees (on this field), not only the ones shown
+        try { const all = await api(`/api/consistency?field=${field}&offset=0&limit=500`); all.items.forEach((r) => selected.add(r.id)); } catch (e) { toast(e.message); return; }
+        bar(); load();
+      } }, 'Select all') : null),
     head, list, more), syncBar);
   load();
 }

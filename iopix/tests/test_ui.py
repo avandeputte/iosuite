@@ -680,3 +680,36 @@ def test_save_search_jump_to_date_and_hotkeys(page, server, lib):
     page.locator(".card.smart").first.hover()
     page.locator(".card.smart .carddl[title^='Delete']").first.click(force=True)
     page.wait_for_selector(".card.smart", state="detached", timeout=5000)
+
+
+def test_consistency_bulk_sync_bar(page, server, lib):
+    """Ticking photos in the consistency report brings up the bar that syncs them all at once."""
+    import json, urllib.request
+    req = urllib.request.Request(server + "/api/consistency/scan", data=b"rescan_all=1", headers={"content-type": "application/x-www-form-urlencoded"}, method="POST")
+    urllib.request.urlopen(req).read()
+    for _ in range(100):
+        if not json.load(urllib.request.urlopen(server + "/api/consistency"))["progress"]["running"]:
+            break
+        time.sleep(0.2)
+    page.goto(server + "/#/consistency")
+    page.wait_for_selector(".crec", timeout=10000)
+    page.wait_for_timeout(1200)  # editing flags arrive with the status poll
+    boxes = page.locator(".crec .chead input[type=checkbox]")
+    assert boxes.count() >= 1, "editors get a checkbox per photo"
+    boxes.first.check()
+    page.wait_for_selector("#cbulk:not([hidden]) button[data-src=sidecar]", timeout=3000)
+    assert "1 selected" in page.locator("#cbulk .n").inner_text()
+    page.wait_for_timeout(4000)  # through a status poll
+    assert page.locator("#cbulk:not([hidden])").count() == 1, "the bar stays while photos are ticked"
+    bar = page.locator("#cbulk").bounding_box()
+    vp = page.viewport_size
+    for b in page.locator("#cbulk button[data-src]").all():
+        bb = b.bounding_box()
+        assert bb["x"] + bb["width"] <= vp["width"] and bb["y"] + bb["height"] <= vp["height"], "every button on screen"
+    # Select all takes every disagreeing photo, then one click syncs them from the sidecar
+    page.locator("button", has_text="Select all").click()
+    page.wait_for_function("document.querySelector('#cbulk .n') && !document.querySelector('#cbulk .n').textContent.startsWith('1 ')", timeout=5000) if page.locator(".crec").count() > 1 else None
+    page.on("dialog", lambda d: d.accept())
+    page.locator("#cbulk button[data-src=sidecar]").click()
+    page.wait_for_selector("#toast:has-text('Synced')", timeout=20000)
+    page.wait_for_selector("#cbulk", state="hidden", timeout=5000)
