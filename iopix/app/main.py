@@ -1225,15 +1225,17 @@ async def api_db_test(request: Request):
 
 
 @app.get("/api/maps")
-def api_maps():
+def api_maps(request: Request):
     """Tile provider for the browser: OpenStreetMap, or Google Maps with the owner's key (session created here)."""
+    maps.note_referer(request.headers)
     return maps.config()
 
 
 @app.get("/api/geocode")
-async def api_geocode(q: str = ""):
+async def api_geocode(request: Request, q: str = ""):
     """Address or landmark search for the location dialog: OpenStreetMap's Nominatim (the same
     project the map tiles come from), with the offline GeoNames towns as a fallback."""
+    maps.note_referer(request.headers)
     q = q.strip()
     if len(q) < 2:
         return {"results": [], "source": None}

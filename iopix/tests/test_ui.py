@@ -600,14 +600,24 @@ def test_folders_and_albums_are_separate_pages(page, server, lib):
     page.wait_for_selector("h1:has-text('Folders')", timeout=10000)
     page.wait_for_timeout(1200)
     assert page.locator("#nav a[data-v=folders]").count() == 1 and page.locator("#nav a[data-v=albums]").count() == 1
-    assert page.locator(".card").count() >= 1
-    assert page.locator("h2.sub .more", has_text="Upload photos").count() >= 1, "editors can upload"
-    assert page.locator("h2.sub .more", has_text="New folder").count() >= 1
+    assert page.locator(".tree .trow").count() >= 1, "a tree of folders"
+    assert page.locator(".tree .tact[title^='Upload photos']").count() >= 1, "editors can upload"
+    assert page.locator(".tree .tact[title^='New folder']").count() >= 1
+    # the tree opens hierarchically: a folder with sub-folders has an expander that reveals them
+    tw = page.locator(".tree > .tnode > .trow .tw[style='']").first
+    if tw.count():
+        before = page.locator(".tree .trow").count()
+        node = page.locator(".tree > .tnode").filter(has=tw).first
+        if "open" not in (node.get_attribute("class") or ""):
+            tw.click()
+        assert page.locator(".tree .trow").count() > before or "open" in (node.get_attribute("class") or "")
     # upload one JPEG from the library into the first top-level folder
     src = next(p for p in lib["root"].rglob("*") if p.suffix.lower() in (".jpg", ".jpeg") and "zz-" not in str(p))
     page.on("dialog", lambda d: d.accept())  # "is digiKam closed?" (the UI server runs with DIGIKAM_CHECK=ask)
+    first = page.locator(".tree .trow").first
+    first.hover()  # the row's actions appear on hover
     with page.expect_file_chooser() as fc:
-        page.locator("h2.sub .more", has_text="Upload photos").first.click()
+        first.locator(".tact[title^='Upload photos']").click()
     fc.value.set_files(str(src))
     page.wait_for_function("document.querySelector('#toast') && !document.querySelector('#toast').hidden && /added to|error|not|failed|running/i.test(document.querySelector('#toast').textContent)", timeout=20000)
     text = page.locator("#toast").inner_text()
@@ -616,7 +626,7 @@ def test_folders_and_albums_are_separate_pages(page, server, lib):
     page.goto(server + "/#/albums")
     page.wait_for_selector("h1:has-text('Albums')", timeout=10000)
     assert page.locator(".card .nm", has_text="New album").count() == 1
-    assert page.locator("h2.sub").count() == 0, "no digiKam folders on the Albums page"
+    assert page.locator(".tree").count() == 0, "no digiKam folders on the Albums page"
     assert page.locator("a.lnk", has_text="Folders").count() == 1
 
 

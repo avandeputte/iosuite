@@ -1234,34 +1234,41 @@ async function showFolders() {
     h('button', { class: 'carddl', title: 'Upload photos into this folder', onclick: (e) => { e.stopPropagation(); uploadTo(f); } }, icon('add')),
     h('button', { class: 'carddl', title: 'New folder inside this one', onclick: (e) => { e.stopPropagation(); newFolder(f); } }, icon('folder')),
     f.nAll ? h('button', { class: 'carddl', title: 'Download this folder as a zip', onclick: (e) => { e.stopPropagation(); downloadDialog(photosWith({ album: f.id })); } }, icon('download')) : null) : null;
-  const card = (f, name) => {
+  // the tree: one row per folder, sub-folders under an expander, like the tag tree
+  const kidsOf = new Map();
+  all.forEach((f) => { if (f.pid != null) { if (!kidsOf.has(f.pid)) kidsOf.set(f.pid, []); kidsOf.get(f.pid).push(f); } });
+  kidsOf.forEach((l) => l.sort((a, b) => b.name.localeCompare(a.name, undefined, { numeric: true })));
+  const act = (ic, title, fn) => h('button', { class: 'iconbtn tact', title, onclick: (e) => { e.stopPropagation(); fn(); } }, icon(ic));
+  const row = (f, flat) => {
+    const kids = flat ? [] : (kidsOf.get(f.id) || []);
+    const node = h('div', { class: 'tnode' }), box = h('div', { class: 'tkids', hidden: true });
+    const expand = (on) => { if (on && !box.children.length) box.append(...kids.map((k) => row(k))); node.classList.toggle('open', on); box.hidden = !on; on ? openFolders.add(f.id) : openFolders.delete(f.id); };
+    const tw = h('span', { class: 'tw', style: kids.length ? '' : 'visibility:hidden', onclick: (e) => { e.stopPropagation(); expand(!node.classList.contains('open')); } }, icon('right'));
     const a = albumById.get(f.id);
-    const c = card2(f, a, name);
-    const ac = acts(f); if (ac) c.querySelector('.cv').append(ac);
-    return c;
+    const cover = a?.cover ? h('img', { src: `/thumb/${a.cover}`, loading: 'lazy', alt: '' }) : h('span', { class: 'ph' }, icon('folder'));
+    const trow = h('div', { class: 'trow', title: f.path, onclick: () => { if (f.nAll) go('photos', photosWith({ album: f.id, sort: 'old' })); else if (can) uploadTo(f); else expand(!node.classList.contains('open')); } },
+      tw, cover, h('span', { class: 'nm' }, flat ? f.path.replace(/^\//, '').replaceAll('/', ' › ') : f.name),
+      can ? h('span', { class: 'tacts' }, act('add', 'Upload photos into this folder', () => uploadTo(f)), act('folder', 'New folder inside this one', () => newFolder(f)),
+        f.nAll ? act('download', 'Download this folder as a zip', () => downloadDialog(photosWith({ album: f.id }))) : null) : null,
+      h('span', { class: 'ct' }, f.nAll ? nf.format(f.nAll) : h('i', null, 'empty')));
+    if (!flat && kids.length && openFolders.has(f.id)) expand(true);
+    node.append(trow, box);
+    return node;
   };
-  const card2 = (f, a, name) => f.nAll ? thumbCard(a?.cover, name, `${nf.format(f.nAll)}${a ? ' · ' + fmtRange(a.tsMin, a.tsMax) : ''}`, { album: f.id, sort: 'old' })
-    : h('div', { class: 'card', onclick: () => { if (can) uploadTo(f); } }, h('span', { class: 'cv newalbum' }, icon('folder')), h('div', { class: 'nm', title: name }, name), h('div', { class: 'sb' }, can ? 'empty · click to upload' : 'empty'));
+  const tree = h('div', { class: 'tree' });
   const draw = (q) => {
-    body.replaceChildren();
-    for (const t of tops) {
-      const kids = all.filter((f) => f.path.startsWith(t.path + '/') && (!q || f._n.includes(q)));
-      const self = !q || t._n.includes(q);
-      if (!kids.length && !self) continue;
-      body.append(h('h2', { class: 'sub' }, t.name, h('span', { class: 'muted' }, nf.format(t.nAll)),
-        t.nAll ? h('a', { href: hashFor('photos', photosWith({ album: t.id, sort: 'old' })) }, 'View all') : null,
-        can ? h('span', { class: 'more', onclick: () => newFolder(t) }, 'New folder') : null,
-        can ? h('span', { class: 'more', onclick: () => uploadTo(t) }, 'Upload photos') : null,
-        t.nAll ? h('span', { class: 'more', onclick: () => downloadDialog(photosWith({ album: t.id })) }, 'Download zip') : null));
-      body.append(h('div', { class: 'cards' }, kids.length ? kids.map((f) => card(f, f.path.slice(t.path.length + 1))) : card(t, t.name)));
-    }
-    if (!body.querySelector('.card')) body.append(h('div', { class: 'empty' }, 'No folders match.'));
+    tree.replaceChildren();
+    if (q) tree.append(...all.filter((f) => f._n.includes(q)).map((f) => row(f, true)));
+    else tree.append(...tops.map((t) => row(t)));
+    if (!tree.children.length) tree.append(h('div', { class: 'empty' }, 'No folders match.'));
   };
+  if (!openFolders.size) tops.forEach((t) => openFolders.add(t.id));  // first visit: the top level open, deeper levels folded
   main.replaceChildren(h('div', { class: 'page' }, h('h1', null, 'Folders ', h('span', { class: 'muted' }, nf.format(all.length))),
-    h('div', { class: 'muted', style: 'max-width:820px' }, 'digiKam’s folders, as they are on disk.', can ? ' New folders and uploads go straight into the library; digiKam picks them up and reads their full metadata on its next start.' : ''),
-    h('input', { class: 'pagefilter', placeholder: 'Find a folder…', oninput: (e) => draw(norm(e.target.value)) }), body));
+    h('div', { class: 'muted', style: 'max-width:820px' }, 'digiKam’s folders, as they are on disk. Click a folder to see its photos (sub-folders included); the arrow opens its sub-folders.', can ? ' New folders and uploads go straight into the library; digiKam picks them up and reads their full metadata on its next start.' : ''),
+    h('input', { class: 'pagefilter', placeholder: 'Find a folder…', oninput: (e) => draw(norm(e.target.value)) }), tree));
   draw('');
 }
+const openFolders = new Set();  // which folder nodes are expanded, kept across visits
 /** Albums: groupings that exist only in this viewer (favorites-like lists stored in its own database). */
 function showAlbums() {
   const body = h('div');

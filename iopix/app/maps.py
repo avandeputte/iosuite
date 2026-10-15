@@ -22,6 +22,24 @@ TILE_URL = "https://tile.googleapis.com/v1/2dtiles/{z}/{x}/{y}"
 GEOCODE_URL = "https://maps.googleapis.com/maps/api/geocode/json"
 _session = {"token": None, "expires": 0}
 _lock = threading.Lock()
+# the address the browser uses for this viewer, from the last /api/maps request. Google checks the
+# Referer of every request against the key's "HTTP referrer" restriction, and the session and
+# geocoding calls are made from here, not from the browser, so the server sends that address along.
+REFERER = ""
+
+
+def note_referer(headers) -> None:
+    global REFERER
+    ref = headers.get("referer") or headers.get("origin") or ""
+    if ref:
+        REFERER = ref
+
+
+def _headers(extra: dict = None) -> dict:
+    h = dict(extra or {})
+    if REFERER:
+        h["Referer"] = REFERER
+    return h
 
 
 def provider() -> str:
@@ -35,7 +53,7 @@ def key() -> str:
 
 def _create_session(k: str) -> dict:
     body = json.dumps({"mapType": "roadmap", "language": "en-US", "region": "US"}).encode()
-    req = urllib.request.Request(SESSION_URL + "?key=" + urllib.parse.quote(k), data=body, headers={"Content-Type": "application/json"}, method="POST")
+    req = urllib.request.Request(SESSION_URL + "?key=" + urllib.parse.quote(k), data=body, headers=_headers({"Content-Type": "application/json"}), method="POST")
     with urllib.request.urlopen(req, timeout=10) as r:
         return json.load(r)
 
@@ -53,7 +71,9 @@ def config() -> dict:
             except Exception as e:
                 return {"provider": "osm", "url": "https://tile.openstreetmap.org/{z}/{x}/{y}.png", "attribution": "© OpenStreetMap contributors", "maxZoom": 19,
                         "link": "https://www.openstreetmap.org/?mlat={lat}&mlon={lon}#map=15/{lat}/{lon}", "linkLabel": "OpenStreetMap",
-                        "error": f"Google Maps session failed ({str(e)[:120]}); showing OpenStreetMap"}
+                        "error": f"Google Maps session failed ({str(e)[:120]}); showing OpenStreetMap. "
+                                 "Check that the Map Tiles API is enabled for the key and that an HTTP-referrer restriction matches this viewer's address"
+                                 + (f" ({REFERER})" if REFERER else "") + "."}
             _session.update(token=s["session"], expires=int(s.get("expiry", time.time() + 14 * 86400)))
         token = _session["token"]
     return {"provider": "google", "url": TILE_URL + "?session=" + urllib.parse.quote(token) + "&key=" + urllib.parse.quote(k), "attribution": "© Google", "maxZoom": 22,
@@ -62,7 +82,7 @@ def config() -> dict:
 
 def geocode(q: str) -> list:
     """Google Geocoding API: addresses and landmarks, in the shape geocode.search returns."""
-    req = urllib.request.Request(GEOCODE_URL + "?" + urllib.parse.urlencode({"address": q, "key": key()}))
+    req = urllib.request.Request(GEOCODE_URL + "?" + urllib.parse.urlencode({"address": q, "key": key()}), headers=_headers())
     with urllib.request.urlopen(req, timeout=8) as r:
         data = json.load(r)
     if data.get("status") not in ("OK", "ZERO_RESULTS"):

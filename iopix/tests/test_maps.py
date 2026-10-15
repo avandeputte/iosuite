@@ -58,3 +58,27 @@ def test_place_search_uses_google_when_chosen(client, monkeypatch):
     r = client.get("/api/geocode?q=Mt+Lebanon+High+School").json()
     assert r["source"] == "google" and r["results"][0]["lat"] == 40.37
     _reset()
+
+
+def test_google_requests_carry_the_viewer_address_as_referer(client, monkeypatch):
+    """A key restricted to HTTP referrers (e.g. *.iothing.net/*) rejects requests without one; the
+    session and geocoding calls are made by the server, which sends the browser's address."""
+    _reset()
+    state.set_setting("map_provider", "google"); state.set_setting("google_maps_key", "AIza-secret")
+    seen = []
+    class R:
+        def __init__(self, payload): self.payload = payload
+        def __enter__(self): return self
+        def __exit__(self, *a): pass
+        def read(self): return self.payload
+    import io, json as _json
+    def fake_urlopen(req, timeout=0):
+        seen.append(dict(req.header_items()))
+        body = {"session": "tok789", "expiry": 9999999999} if "createSession" in req.full_url else {"status": "OK", "results": []}
+        return io.BytesIO(_json.dumps(body).encode())
+    monkeypatch.setattr(maps.urllib.request, "urlopen", fake_urlopen)
+    c = client.get("/api/maps", headers={"referer": "https://photo.example.net/"}).json()
+    assert c["provider"] == "google" and seen and seen[0].get("Referer") == "https://photo.example.net/"
+    maps.geocode("somewhere")
+    assert seen[-1].get("Referer") == "https://photo.example.net/"
+    _reset()
