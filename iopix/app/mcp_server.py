@@ -363,7 +363,7 @@ def list_tags(query: str = "", parent: Optional[str] = None, limit: int = 200) -
 
 @server.tool(annotations=READ_ONLY)
 def list_albums(query: str = "", limit: int = 400) -> list[dict]:
-    """Albums (folders) with item counts including sub-albums and the date range they cover."""
+    """digiKam's folders ("albums" in digiKam's vocabulary: the directories on disk) with item counts including sub-folders and the date range they cover."""
     return _list("SELECT a.id, a.path, a.n_all AS items, "
                  "(SELECT min(day) FROM photos p JOIN album_closure c ON c.album = p.album_id WHERE c.anc = a.id) AS first_day, "
                  "(SELECT max(day) FROM photos p JOIN album_closure c ON c.album = p.album_id WHERE c.anc = a.id) AS last_day "
@@ -380,7 +380,7 @@ def list_places(query: str = "", limit: int = 200) -> list[dict]:
 
 @server.tool(annotations=READ_ONLY)
 def list_app_albums() -> list[dict]:
-    """Albums the owner created in the web viewer (separate from digiKam's folder albums), plus the favorites count."""
+    """Albums made in the web viewer: groupings that exist only there, separate from digiKam's folders; plus the favorites count."""
     out = _list("SELECT a.id, a.name, count(i.photo_id) AS items FROM st.ualbums a "
                 "LEFT JOIN st.ualbum_items i ON i.album_id = a.id GROUP BY a.id ORDER BY a.created DESC")
     return out + _list("SELECT 'favorites' AS name, count(*) AS items FROM st.favorites")

@@ -6,6 +6,7 @@ request) are listed in WRITE_PATHS and go through the modules that own those
 writes."""
 import gzip
 import json
+import logging
 import mimetypes
 import os
 import re
@@ -28,7 +29,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
-from . import (analysis, caption, concepts, config, consistency, dbsync, detector, dkdb, edits, facemgr, gpx, index,
+from . import (analysis, caption, concepts, config, consistency, dbsync, detector, dkdb, edits, facemgr, folders, gpx, index,
                moments, places, placetags, tagmanager, thumbs)
 from . import state as appstate
 from . import jobs as bgjobs
@@ -115,7 +116,10 @@ def _refresh(initial=False):
     """Rebuild the index when digiKam's database (or the viewer's own edits) changed."""
     try:
         if not initial and dkdb.busy_recently():
-            return  # digiKam is writing right now; pick it up on the next pass
+            # digiKam (or this viewer) wrote the file seconds ago: look again shortly rather than
+            # waiting for the next poll, so a write made here shows up without a long delay
+            t = threading.Timer(3.5, _kick.set); t.daemon = True; t.start()
+            return
         rebuilt = index.ensure_fresh()
         state["error"] = None
         version = index.current_version()
@@ -141,7 +145,11 @@ def _watch():
     while True:
         kicked = _kick.wait(timeout=config.REINDEX_POLL)
         _kick.clear()
-        _refresh(initial=kicked)
+        try:
+            _refresh(initial=kicked)
+        except Exception as e:  # e.g. a wrong database setting (MySQL unreachable): the watcher must outlive it
+            state["error"] = str(e)[:300]
+            logging.getLogger("app.index").warning("index refresh failed: %s", e)
 
 
 def _models_arrived(keys: list):
@@ -198,7 +206,7 @@ async def lifespan(_app):
 app = FastAPI(title="digiKam Viewer", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 # every endpoint that changes the library (sidecars, files, digiKam's database); refused in read-only mode
-WRITE_PATHS = ("/api/edit", "/api/edits/db", "/api/consistency/sync", "/api/gpx/apply", "/api/faces/op", "/api/faces/batch",
+WRITE_PATHS = ("/api/edit", "/api/edits/db", "/api/consistency/sync", "/api/gpx/apply", "/api/faces/op", "/api/faces/batch", "/api/folders",
                "/api/faces/person", "/api/placetags", "/api/tags/op")
 
 
@@ -1638,6 +1646,60 @@ async def api_tags_recent(request: Request):
     new = ids + [i for i in old if i not in ids]
     appstate.set_setting("recent_tags", json.dumps(new[:12]))
     return {"recent": new[:12]}
+
+
+@app.get("/api/folders")
+def api_folders():
+    """Every digiKam folder as a tree, empty ones included, with the viewer's item counts where it has them."""
+    try:
+        rows = folders.list_all()
+    except Exception as e:
+        raise HTTPException(503, f"Could not read digiKam's folder list: {e}")
+    con = db()
+    try:
+        counts = {r[0]: (r[1], r[2]) for r in con.execute("SELECT id, n, n_all FROM albums")}
+    finally:
+        con.close()
+    for r in rows:
+        r["n"], r["nAll"] = counts.get(r["id"], (0, 0))
+    return {"folders": rows, "canManage": config.DB_WRITE and edits.available() and not appstate.read_only()}
+
+
+@app.post("/api/folders")
+async def api_folder_create(request: Request):
+    """Body: {parent: folder id, name}. A new digiKam folder: the directory and its Albums row (digiKam closed)."""
+    if not (config.DB_WRITE and edits.available()):
+        raise HTTPException(403, "Creating folders is turned off (needs DB_WRITE and EDITING)")
+    body = await request.json()
+    try:
+        result = folders.create(int(body.get("parent") or 0), str(body.get("name", "")))
+    except dbsync.SyncError as e:
+        raise HTTPException(409 if "digiKam is running" in str(e) else 400, str(e))
+    except (sqlite3.Error, OSError, ValueError) as e:
+        raise HTTPException(500, f"The change failed and was rolled back: {e}")
+    _kick.set()
+    return result
+
+
+@app.post("/api/folders/{album_id}/upload")
+async def api_folder_upload(album_id: int, request: Request):
+    """Multipart: one or more `files`. Each is stored in the folder and registered in digiKam's
+    database for digiKam to scan fully on its next run."""
+    if not (config.DB_WRITE and edits.available()):
+        raise HTTPException(403, "Uploads are turned off (needs DB_WRITE and EDITING)")
+    form = await request.form()
+    ups = [f for f in form.getlist("files") if hasattr(f, "filename")]
+    if not ups:
+        raise HTTPException(400, "No files")
+    files = [(f.filename, await f.read()) for f in ups[:500]]
+    try:
+        result = await run_in_threadpool(folders.upload, album_id, files)
+    except dbsync.SyncError as e:
+        raise HTTPException(409 if "digiKam is running" in str(e) else 400, str(e))
+    except (sqlite3.Error, OSError, ValueError) as e:
+        raise HTTPException(500, f"The upload failed and was rolled back: {e}")
+    _kick.set()
+    return result
 
 
 @app.post("/api/tags/op")

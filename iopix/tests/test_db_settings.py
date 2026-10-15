@@ -113,3 +113,21 @@ def test_daily_backup_mode_reuses_a_recent_dump(monkeypatch, tmp_path):
     dkdb.backup(); assert len(calls) == 3, "older than a day: a new dump"
     mode["backup"] = "auto"
     dkdb.backup(); dkdb.backup(); assert len(calls) == 5, "auto: every time"
+
+
+def test_a_bad_database_setting_does_not_kill_the_index_watcher(client, lib):
+    """Pointing the settings at an unreachable MySQL made the refresh raise inside the watcher
+    thread, which then died silently: no later change was ever indexed. It survives now."""
+    import time
+    from app import main as appmain
+    _clear()
+    client.post("/api/settings", json={"database": {"type": "mysql", "host": "127.0.0.1", "port": "1", "database": "dk", "user": "u", "password": "p"}})
+    time.sleep(1.5)  # the kick from saving runs the refresh against the bad setting
+    _clear()
+    appmain.state["version"] = None  # make the next refresh observable
+    appmain._kick.set()
+    end = time.time() + 10
+    while time.time() < end and not appmain.state.get("version"):
+        time.sleep(0.2)
+    assert appmain.state.get("version"), "the watcher thread is still alive and refreshed the index"
+    assert any(t.name for t in __import__("threading").enumerate() if t.is_alive() and t._target is appmain._watch) if hasattr(appmain, "_watch") else True

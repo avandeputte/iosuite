@@ -406,7 +406,7 @@ def test_explore_summary_cards_link_to_their_views(page, server, lib):
     cards = page.locator(".stats .stat")
     assert cards.count() == 6
     labels = page.locator(".stats .stat div > span").all_inner_texts()
-    assert labels == ["photos", "videos", "people", "albums", "with location", "on disk"], labels
+    assert labels == ["photos", "videos", "people", "folders", "with location", "on disk"], labels
     assert page.locator(".stats a.stat").count() == 5, "all but 'on disk' open a view"
     assert page.locator(".stats .stat .sic .ic svg").count() == 6, "each card has an icon"
     page.click(".stats a.stat:has-text('people')")
@@ -591,3 +591,30 @@ def test_set_location_for_a_selection(page, server, lib):
     assert "all 2 selected photos" in page.locator(".modal p").first.inner_text()
     page.locator(".modal button", has_text="Cancel").click()
     page.keyboard.press("Escape")
+
+
+def test_folders_and_albums_are_separate_pages(page, server, lib):
+    """Folders are digiKam's folders on disk (with New folder and Upload for editors); Albums are
+    the viewer's own groupings. An upload through the page lands in the folder."""
+    page.goto(server + "/#/folders")
+    page.wait_for_selector("h1:has-text('Folders')", timeout=10000)
+    page.wait_for_timeout(1200)
+    assert page.locator("#nav a[data-v=folders]").count() == 1 and page.locator("#nav a[data-v=albums]").count() == 1
+    assert page.locator(".card").count() >= 1
+    assert page.locator("h2.sub .more", has_text="Upload photos").count() >= 1, "editors can upload"
+    assert page.locator("h2.sub .more", has_text="New folder").count() >= 1
+    # upload one JPEG from the library into the first top-level folder
+    src = next(p for p in lib["root"].rglob("*") if p.suffix.lower() in (".jpg", ".jpeg") and "zz-" not in str(p))
+    page.on("dialog", lambda d: d.accept())  # "is digiKam closed?" (the UI server runs with DIGIKAM_CHECK=ask)
+    with page.expect_file_chooser() as fc:
+        page.locator("h2.sub .more", has_text="Upload photos").first.click()
+    fc.value.set_files(str(src))
+    page.wait_for_function("document.querySelector('#toast') && !document.querySelector('#toast').hidden && /added to|error|not|failed|running/i.test(document.querySelector('#toast').textContent)", timeout=20000)
+    text = page.locator("#toast").inner_text()
+    assert "added to" in text, text
+    # Albums: only the viewer's own
+    page.goto(server + "/#/albums")
+    page.wait_for_selector("h1:has-text('Albums')", timeout=10000)
+    assert page.locator(".card .nm", has_text="New album").count() == 1
+    assert page.locator("h2.sub").count() == 0, "no digiKam folders on the Albums page"
+    assert page.locator("a.lnk", has_text="Folders").count() == 1

@@ -5,6 +5,7 @@ const $ = (s, r = document) => r.querySelector(s);
 const ICONS = {
   search: 'M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z',
   disk: 'M2 20h20v-4H2v4zm2-3h2v2H4v-2zM2 4v4h20V4H2zm4 3H4V5h2v2zm-4 7h20v-4H2v4zm2-3h2v2H4v-2z',
+  album: 'M22 16V4c0-1.1-.9-2-2-2H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2zm-11-4l2.03 2.71L16 11l4 5H8l3-4zM2 6v14c0 1.1.9 2 2 2h14v-2H4V6H2z',
   share: 'M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92-1.31-2.92-2.92-2.92z',
   gear: 'M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z',
   wrench: 'M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z',
@@ -154,10 +155,10 @@ const main = $('#main');
 const FILTER_VIEWS = ['photos', 'map'];
 const NAV = [
   ['photos', 'Photos', 'photo'], ['explore', 'Explore', 'explore'], ['favorites', 'Favorites', 'heartO', '#/photos?fav=1'],
-  ['people', 'People', 'person'], ['places', 'Places', 'place'], ['albums', 'Albums', 'folder'], ['tags', 'Tags', 'tag'], ['map', 'Map', 'map'],
+  ['people', 'People', 'person'], ['places', 'Places', 'place'], ['folders', 'Folders', 'folder'], ['albums', 'Albums', 'album'], ['tags', 'Tags', 'tag'], ['map', 'Map', 'map'],
 ];
 // hash route name -> page renderer (function declarations are hoisted, so this can sit above them)
-const VIEW_FNS = { photos: showPhotos, explore: showExplore, people: showPeople, places: showPlaces, albums: showAlbums, tags: showTags, map: showMap, duplicates: showDuplicates,
+const VIEW_FNS = { photos: showPhotos, explore: showExplore, people: showPeople, places: showPlaces, folders: showFolders, albums: showAlbums, tags: showTags, map: showMap, duplicates: showDuplicates,
   detected: showDetected, bursts: showBursts, events: showEvents, analysis: showAnalysis, settings: showSettings, maintenance: showMaintenance, consistency: showConsistency, faces: showFaces };
 const VIEWS = Object.keys(VIEW_FNS);
 const PARAM_VIEWS = ['places', 'bursts', 'faces'];  // views whose own query parameters (not photo filters) pick what they show
@@ -258,7 +259,7 @@ function chipList(p) {
     else if (k === 'tag' || k === 'nottag') {
       const t = tagById.get(+v);
       add(k, v, (k === 'nottag' ? 'Not ' : '') + (t ? t.name : `Tag ${v}`), t?.person ? { img: faceUrl(+v) } : { ic: 'tag' });
-    } else if (k === 'album') add(k, v, albumById.get(+v)?.name || `Album ${v}`, { ic: 'folder' });
+    } else if (k === 'album') add(k, v, albumById.get(+v)?.name || `Folder ${v}`, { ic: 'folder' });
     else if (k === 'year') add(k, v, v, { ic: 'calendar' });
     else if (k === 'month') add(k, v, MONTHS[v - 1] || v, { ic: 'calendar' });
     else if (k === 'from') add(k, v, `From ${v}`, { ic: 'calendar' });
@@ -276,7 +277,7 @@ function chipList(p) {
     else if (k === 'trail') add(k, v, `Trail for ${v}`, { ic: 'map' });
     else if (k === 'faces') add(k, v, { unknown: 'Unnamed faces', suggested: 'Face suggestions', ignored: 'Ignored faces', confirmed: 'Named faces' }[v] || v, { ic: 'face' });
     else if (k === 'fav') add(k, v, 'Favorites', { ic: 'heart' });
-    else if (k === 'ualbum') add(k, v, ualbumById(v)?.name || 'Album', { ic: 'folder' });
+    else if (k === 'ualbum') add(k, v, ualbumById(v)?.name || 'Album', { ic: 'album' });
     else if (k === 'place' || k === 'region' || k === 'country') add(k, v, v, { ic: 'place' });
     else if (k === 'sem') add(k, v, `Looks like “${v}”`, { ic: 'spark' });
     else if (k === 'like') add(k, v, 'Similar photos', { img: `/thumb/${v}` });
@@ -312,7 +313,7 @@ function renderChips() {
       rest.forEach((v) => q.append(c.key, v));
     }) }, icon('close')))));
   $('#clear').hidden = !chips.length && !$('#q').value;
-  $('#q').placeholder = chips.length ? 'Add to search…' : 'Search people, tags, albums, cameras, captions…';
+  $('#q').placeholder = chips.length ? 'Add to search…' : 'Search people, tags, folders, cameras, captions…';
 }
 
 let sgItems = [], sgSel = 0;
@@ -344,7 +345,9 @@ function suggestions(text) {
   for (const t of top(tags.filter((t) => !t.person), 6, '_n', (t) => t.nAll))
     out.push({ ic: 'tag', label: t.name, sub: t.full.includes('/') ? t.full.split('/').slice(0, -1).join(' › ') : '', kind: `Tag · ${nf.format(t.nAll)}`, act: (p) => p.append('tag', t.id) });
   for (const a of top(META.albums.filter((a) => a.pid != null), 5, '_n', (a) => a.nAll))
-    out.push({ ic: 'folder', label: a.name, sub: a.path, kind: `Album · ${nf.format(a.nAll)}`, act: (p) => { p.delete('album'); p.append('album', a.id); } });
+    out.push({ ic: 'folder', label: a.name, sub: a.path, kind: `Folder · ${nf.format(a.nAll)}`, act: (p) => { p.delete('album'); p.append('album', a.id); } });
+  for (const a of top(ST.albums.map((x) => ({ ...x, _n: norm(x.name) })), 3, '_n', (x) => x.n))
+    out.push({ ic: 'album', label: a.name, kind: `Album · ${nf.format(a.n)}`, act: (p) => { p.delete('ualbum'); p.set('ualbum', a.id); } });
   for (const [kind, key, list] of [['Camera', 'camera', META.cameras], ['Lens', 'lens', META.lenses], ['Creator', 'creator', META.creators]])
     for (const c of top(list.map(([name, n]) => ({ name, n, _n: norm(name) })), 3, '_n', (c) => c.n))
       out.push({ ic: kind === 'Creator' ? 'copyright' : 'camera', label: c.name, kind: `${kind} · ${nf.format(c.n)}`, act: (p) => p.append(key, c.name) });
@@ -408,9 +411,9 @@ function photoCrumbs(p) {
   if (albums.length === 1 && albumById.get(+albums[0])) {
     const chain = [];
     for (let a = albumById.get(+albums[0]); a && a.pid != null; a = albumById.get(a.pid)) chain.unshift(a);
-    return [['Albums', '#/albums'], ...chain.map((a) => [a.name, hashFor('photos', photosWith({ album: a.id, sort: 'old' }))])];
+    return [['Folders', '#/folders'], ...chain.map((a) => [a.name, hashFor('photos', photosWith({ album: a.id, sort: 'old' }))])];
   }
-  if (p.get('ualbum') && ualbumById(p.get('ualbum'))) return [['Albums', '#/albums'], ['My albums', '#/albums'], [ualbumById(p.get('ualbum')).name, null]];
+  if (p.get('ualbum') && ualbumById(p.get('ualbum'))) return [['Albums', '#/albums'], [ualbumById(p.get('ualbum')).name, null]];
   if (p.get('country') || p.get('region') || p.get('place')) {
     let [country, region, place] = [p.get('country'), p.get('region'), p.get('place')];
     const row = META.places.find((x) => (!place || x[0] === place) && (!region || x[1] === region) && (!country || x[2] === country));
@@ -1096,7 +1099,7 @@ async function showExplore() {
       stat('blue', 'photo', nf.format(META.total - META.videos), 'photos', '#/photos'),
       stat('purple', 'video', nf.format(META.videos), 'videos', hashFor('photos', photosWith({ type: 'video' }))),
       stat('amber', 'person', nf.format(ppl.length), 'people', '#/people'),
-      stat('teal', 'folder', nf.format(META.albums.length), 'albums', '#/albums'),
+      stat('teal', 'folder', nf.format(META.albums.length), 'folders', '#/folders'),
       stat('green', 'place', nf.format(META.geotagged), 'with location', '#/map'),
       stat('slate', 'disk', fmtBytes(META.bytes), 'on disk')),
     otd,
@@ -1173,12 +1176,83 @@ function showPeople() {
   draw('');
 }
 
-function showAlbums() {
-  const root = META.albums.find((a) => a.pid == null);
-  const tops = META.albums.filter((a) => root && a.pid === root.id).sort((a, b) => b.path.localeCompare(a.path, undefined, { numeric: true }));
+const UPLOAD_ACCEPT = '.jpg,.jpeg,.png,.gif,.tif,.tiff,.webp,.heic,.heif,.avif,.bmp,.dng,.cr2,.cr3,.nef,.arw,.raf,.orf,.rw2,.mov,.mp4,.m4v,.avi,.mkv,.webm,.3gp,.mts';
+/** Folders: digiKam's own (filesystem) folders, empty ones included, with new-folder and upload
+ *  actions for editors when the database can be written. Albums (the viewer's own groupings) are
+ *  a separate page. */
+async function showFolders() {
+  let d;
+  try { d = await api('/api/folders'); } catch (e) { main.replaceChildren(h('div', { class: 'page' }, h('div', { class: 'empty' }, e.message))); return; }
+  if (route.view !== 'folders') return;
+  const all = d.folders.map((f) => ({ ...f, _n: norm(f.path) }));
+  const tops = all.filter((f) => f.pid == null).sort((a, b) => b.path.localeCompare(a.path, undefined, { numeric: true }));
+  const can = d.canManage && CAN_MANAGE;
   const body = h('div');
-  const albumCard = (a, name) => withDl(a, thumbCard(a.cover, name, `${nf.format(a.nAll)} · ${fmtRange(a.tsMin, a.tsMax)}`, { album: a.id, sort: 'old' }));
-  const withDl = (a, c) => { c.querySelector('.cv').append(h('button', { class: 'carddl', title: 'Download this album as a zip', onclick: (e) => { e.stopPropagation(); downloadDialog(photosWith({ album: a.id })); } }, icon('download'))); return c; };
+  const refresh = () => { viewKey = null; pollSoon(600); setTimeout(() => { if (route.view === 'folders') showFolders(); }, 900); };
+  const newFolder = async (parent) => {
+    const n = prompt(`Name for the new folder in ${parent.path}`); if (!n || !n.trim()) return;
+    try { const r = await post('/api/folders', { parent: parent.id, name: n.trim() }); toast(`Created ${r.path}. digiKam sees it on its next start.`); } catch (e) { toast(e.message); return; }
+    refresh();
+  };
+  const uploadTo = (folder) => {
+    const inp = h('input', { type: 'file', multiple: true, accept: UPLOAD_ACCEPT, hidden: true });
+    inp.onchange = async () => {
+      const files = [...inp.files]; inp.remove();
+      if (!files.length) return;
+      const send = async (retried) => {
+        const fd = new FormData(); files.forEach((f) => fd.append('files', f));
+        toast(`Uploading ${plural(files.length, 'file')} to ${folder.path}…`, null, null, 120000);
+        const res = await fetch(`/api/folders/${folder.id}/upload`, { method: 'POST', body: fd });
+        let r = {}; try { r = await res.json(); } catch { /* not json */ }
+        if (res.status === 409 && !retried && DIGIKAM_CHECK === 'ask' && /digiKam is running/i.test(r.detail || '')) {
+          if (confirm('The viewer cannot see whether digiKam is running.\n\nIs every digiKam that uses this database closed right now?')) { await post('/api/settings', { digikam_closed: true }, true); return send(true); }
+        }
+        if (!res.ok) throw new Error(r.detail || `${res.status}`);
+        return r;
+      };
+      try {
+        const r = await send(false);
+        toast(`${plural(r.added.length, 'file')} added to ${folder.path}` + (r.skipped.length ? `; ${plural(r.skipped.length, 'file')} skipped (${r.skipped[0].reason})` : '') + '. digiKam reads the full metadata on its next run.', null, null, 9000);
+      } catch (e) { toast(e.message); }
+      refresh();
+    };
+    document.body.append(inp); inp.click();
+  };
+  const acts = (f) => can ? h('span', { class: 'cardacts' },
+    h('button', { class: 'carddl', title: 'Upload photos into this folder', onclick: (e) => { e.stopPropagation(); uploadTo(f); } }, icon('add')),
+    h('button', { class: 'carddl', title: 'New folder inside this one', onclick: (e) => { e.stopPropagation(); newFolder(f); } }, icon('folder')),
+    f.nAll ? h('button', { class: 'carddl', title: 'Download this folder as a zip', onclick: (e) => { e.stopPropagation(); downloadDialog(photosWith({ album: f.id })); } }, icon('download')) : null) : null;
+  const card = (f, name) => {
+    const a = albumById.get(f.id);
+    const c = card2(f, a, name);
+    const ac = acts(f); if (ac) c.querySelector('.cv').append(ac);
+    return c;
+  };
+  const card2 = (f, a, name) => f.nAll ? thumbCard(a?.cover, name, `${nf.format(f.nAll)}${a ? ' · ' + fmtRange(a.tsMin, a.tsMax) : ''}`, { album: f.id, sort: 'old' })
+    : h('div', { class: 'card', onclick: () => { if (can) uploadTo(f); } }, h('span', { class: 'cv newalbum' }, icon('folder')), h('div', { class: 'nm', title: name }, name), h('div', { class: 'sb' }, can ? 'empty · click to upload' : 'empty'));
+  const draw = (q) => {
+    body.replaceChildren();
+    for (const t of tops) {
+      const kids = all.filter((f) => f.path.startsWith(t.path + '/') && (!q || f._n.includes(q)));
+      const self = !q || t._n.includes(q);
+      if (!kids.length && !self) continue;
+      body.append(h('h2', { class: 'sub' }, t.name, h('span', { class: 'muted' }, nf.format(t.nAll)),
+        t.nAll ? h('a', { href: hashFor('photos', photosWith({ album: t.id, sort: 'old' })) }, 'View all') : null,
+        can ? h('span', { class: 'more', onclick: () => newFolder(t) }, 'New folder') : null,
+        can ? h('span', { class: 'more', onclick: () => uploadTo(t) }, 'Upload photos') : null,
+        t.nAll ? h('span', { class: 'more', onclick: () => downloadDialog(photosWith({ album: t.id })) }, 'Download zip') : null));
+      body.append(h('div', { class: 'cards' }, kids.length ? kids.map((f) => card(f, f.path.slice(t.path.length + 1))) : card(t, t.name)));
+    }
+    if (!body.querySelector('.card')) body.append(h('div', { class: 'empty' }, 'No folders match.'));
+  };
+  main.replaceChildren(h('div', { class: 'page' }, h('h1', null, 'Folders ', h('span', { class: 'muted' }, nf.format(all.length))),
+    h('div', { class: 'muted', style: 'max-width:820px' }, 'digiKam’s folders, as they are on disk.', can ? ' New folders and uploads go straight into the library; digiKam picks them up and reads their full metadata on its next start.' : ''),
+    h('input', { class: 'pagefilter', placeholder: 'Find a folder…', oninput: (e) => draw(norm(e.target.value)) }), body));
+  draw('');
+}
+/** Albums: groupings that exist only in this viewer (favorites-like lists stored in its own database). */
+function showAlbums() {
+  const body = h('div');
   // viewer albums: a change is posted, then the list is redrawn from the reloaded state
   const change = async (path, body) => { try { await post(path, body); } catch { toast('Could not update the album.'); return; } await loadState(); showAlbums(); };
   const mine = (a) => {
@@ -1196,20 +1270,11 @@ function showAlbums() {
   const draw = (f) => {
     body.replaceChildren();
     const my = ST.albums.filter((a) => !f || norm(a.name).includes(f));
-    if (my.length || !f) body.append(h('h2', null, 'My albums', h('span', { class: 'muted' }, 'made in this viewer')),
-      h('div', { class: 'cards' }, my.map(mine), f ? null : newCard), h('h2', { style: 'margin-top:40px' }, 'digiKam folders'));
-    for (const t of tops) {
-      const kids = META.albums.filter((a) => a.path.startsWith(t.path + '/') && (!f || a._n.includes(f)));
-      const self = !f || t._n.includes(f);
-      if (!kids.length && !self) continue;
-      body.append(h('h2', { class: 'sub' }, t.name, h('span', { class: 'muted' }, nf.format(t.nAll)),
-        h('a', { href: hashFor('photos', photosWith({ album: t.id, sort: 'old' })) }, 'View all'),
-        h('span', { class: 'more', onclick: () => downloadDialog(photosWith({ album: t.id })) }, 'Download zip')));
-      body.append(h('div', { class: 'cards' }, kids.length ? kids.map((a) => albumCard(a, a.path.slice(t.path.length + 1))) : albumCard(t, t.name)));
-    }
-    if (!body.querySelector('.card')) body.append(h('div', { class: 'empty' }, 'No albums match.'));
+    body.append(h('div', { class: 'cards' }, my.map(mine), f ? null : newCard));
+    if (!my.length && f) body.append(h('div', { class: 'empty' }, 'No albums match.'));
   };
-  main.replaceChildren(h('div', { class: 'page' }, h('h1', null, 'Albums ', h('span', { class: 'muted' }, nf.format(META.albums.length))),
+  main.replaceChildren(h('div', { class: 'page' }, h('h1', null, 'Albums ', h('span', { class: 'muted' }, nf.format(ST.albums.length))),
+    h('div', { class: 'muted', style: 'max-width:820px' }, 'Albums are groupings that exist only in this viewer: any photos, from any folder, under a name of your own. digiKam and the files on disk are not touched. The folders digiKam manages are under ', h('a', { href: '#/folders', class: 'lnk' }, 'Folders'), '.'),
     h('input', { class: 'pagefilter', placeholder: 'Find an album…', oninput: (e) => draw(norm(e.target.value)) }), body));
   draw('');
 }
@@ -2108,7 +2173,7 @@ async function renderFilters() {
     section('Year', multi('year', f.years), 6),
     section('People', tagRows(true)),
     section('Tags', [...tagRows(false), frow('Untagged', null, p.get('untagged') === '1', () => applyFilter((q) => setOne(q, 'untagged', '1')))]),
-    section('Album', f.albums.map(([id, n]) => albumById.get(id) && frow(albumById.get(id).path.replace(/^\//, ''), n, has('album', id),
+    section('Folder', f.albums.map(([id, n]) => albumById.get(id) && frow(albumById.get(id).path.replace(/^\//, ''), n, has('album', id),
       () => applyFilter((q) => toggle(q, 'album', id)))).filter(Boolean), 6),
     h('h3', null, 'Location'),
     frow('Favorites', null, p.get('fav') === '1', () => applyFilter((q) => setOne(q, 'fav', '1')), icon('heart')),
@@ -2660,7 +2725,7 @@ function renderInfo() {
     irow('calendar', lnk(dfLong.format(date(d.ts)), { from: d.day, to: d.day, sort: 'old' }), [dfTime.format(date(d.ts)), EDITING ? [' · ', h('a', { class: 'lnk', onclick: (e) => { const box = e.target.closest('.irow').nextSibling; box.hidden = !box.hidden; } }, 'change')] : null]),
     EDITING ? h('div', { hidden: true, style: 'margin:0 0 8px 40px' }, dateEditor([d.id], d.taken)) : null,
     irow(d.video ? 'video' : 'photo', d.name, [d.video ? null : `${mp >= 1 ? mp.toFixed(1) : mp.toFixed(2)} MP`, `${d.w} × ${d.h}`, fmtBytes(d.size), d.fmt].filter(Boolean).join(' · ')),
-    d.album ? irow('folder', lnk(d.album.path.replace(/^\//, '') || d.album.name, { album: d.album.id, sort: 'old' }), 'Album') : null,
+    d.album ? irow('folder', lnk(d.album.path.replace(/^\//, '') || d.album.name, { album: d.album.id, sort: 'old' }), 'Folder') : null,
     d.camera || exposure ? irow('camera', d.camera ? lnk(d.camera, { camera: d.camera }) : 'Unknown camera',
       [d.lens ? lnk(d.lens, { lens: d.lens }) : null, d.lens && exposure ? h('br') : null, exposure]) : null,
     EDITING ? [h('div', { style: 'height:10px' }),  // the rating, title and caption controls follow; they need no heading
