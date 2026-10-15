@@ -263,7 +263,7 @@ def test_pasting_a_coordinate_pair_fills_both_fields(page, server, lib):
 
 def test_pwa_service_worker_caches_the_shell(page, server):
     page.goto(server + "/#/photos")
-    out = page.evaluate("""async () => { const r = await navigator.serviceWorker.ready; const c = await caches.open('dkv-shell-v1');
+    out = page.evaluate("""async () => { const r = await navigator.serviceWorker.ready; const c = await caches.open('dkv-shell-v2');
         return { state: r.active && r.active.state, cached: (await c.keys()).map((k) => new URL(k.url).pathname) }; }""")
     assert out["state"] in ("activating", "activated")  # ready resolves while the worker may still be activating for a tick
     assert {"/", "/app.js", "/app.css", "/manifest.webmanifest", "/icons/icon-192.png"} <= set(out["cached"])
