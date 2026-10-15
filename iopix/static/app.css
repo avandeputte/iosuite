@@ -574,3 +574,28 @@ body.nobadges .cbadges, body.nobadges .fbadge { display: none; }
 .page h2.sec .muted, .page h2:has(> .hic) .muted { font-weight: 400; }
 .spage h2 .muted { font-size: 13px; font-weight: 400; }
 .spage h2 + .srow, .spage h2 + div > .srow:first-child { border-top: 0; }
+/* a slimmer top bar: functionally Google Photos, not its proportions */
+:root { --topbar: 52px; }
+@media (max-width: 800px) { :root { --topbar: 48px; } }
+#topbar { gap: 12px; padding: 0 14px; }
+.logo { width: 28px; height: 28px; border-radius: 7px; }
+.brand-name { font-size: 17px; }
+#searchbox { min-height: 36px; padding: 2px 4px 2px 12px; border-radius: 10px; gap: 6px; }
+#searchbox > .ic { width: 20px; height: 20px; }
+#q { height: 30px; font-size: 14px; }
+#clear { width: 30px; height: 30px; }
+.chip { height: 26px; border-radius: 13px; font-size: 12.5px; }
+.chip img { width: 20px; height: 20px; }
+#filterbtn { height: 34px; padding: 0 12px 0 10px; border-radius: 10px; font-size: 13px; }
+#filterbtn .ic { width: 20px; height: 20px; }
+#topbar a.tool, #usermenu .tool { width: 30px; height: 30px; }
+#topbar a.tool .ic, #usermenu .tool .ic { width: 18px; height: 18px; }
+#selbar .pillbtn { height: 34px; }
+@media (max-width: 800px) {
+  /* the grid bar on a phone: the essentials only, nothing pushed off the edge */
+  .gbar { gap: 6px; }
+  .gbar .count, .gbar .selall, .gbar .selnone { white-space: nowrap; }
+  .gbar .jumpdate, .gbar .groupsel, .gbar .seg { display: none; }
+  .gbar .dlbtn span:last-child { display: none; }
+  .gbar select { max-width: 120px; }
+}
