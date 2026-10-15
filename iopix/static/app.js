@@ -1145,7 +1145,7 @@ async function showExplore() {
   const sec = (hue, ic, title, link, linkLabel) => h('h2', { style: `--hue:var(--c-${hue})` }, h('span', { class: 'hic' }, icon(ic)), title, link ? h('a', { href: link }, linkLabel) : null);
   const group = (hue, ...kids) => h('div', { class: 'pills', style: `--hue:var(--c-${hue})` }, ...kids);
   main.replaceChildren(h('div', { class: 'page' },
-    h('h1', null, 'Explore'),
+    pageTitle('explore', 'purple', 'Explore'),
     h('div', { class: 'stats' },
       stat('blue', 'photo', nf.format(META.total - META.videos), 'photos', '#/photos'),
       stat('purple', 'video', nf.format(META.videos), 'videos', hashFor('photos', photosWith({ type: 'video' }))),
@@ -1222,7 +1222,7 @@ function showPeople() {
     s.suggested[0] ? h('a', { class: 'pill', href: '#/faces?tab=suggested' }, 'Suggestions to confirm', h('b', null, `${nf.format(s.suggested[1])} in ${nf.format(s.suggested[0])} photos`)) : null,
     s.unknown[0] ? h('a', { class: 'pill', href: '#/faces?tab=unknown' }, 'Unnamed faces', h('b', null, `${nf.format(s.unknown[1])} in ${nf.format(s.unknown[0])} photos`)) : null,
     s.ignored[0] ? h('a', { class: 'pill', href: '#/faces?tab=ignored' }, 'Ignored faces', h('b', null, nf.format(s.ignored[1]))) : null)).catch(() => {});
-  main.replaceChildren(h('div', { class: 'page' }, h('h1', null, 'People ', h('span', { class: 'muted' }, nf.format(all.length))), todo,
+  main.replaceChildren(h('div', { class: 'page' }, pageTitle('person', 'amber', 'People ', h('span', { class: 'muted' }, nf.format(all.length))), todo,
     h('input', { class: 'pagefilter', placeholder: 'Find a person…', oninput: (e) => draw(norm(e.target.value)) }), h('div', { style: 'height:14px' }), cards));
   draw('');
 }
@@ -1297,7 +1297,7 @@ async function showFolders() {
     if (!tree.children.length) tree.append(h('div', { class: 'empty' }, 'No folders match.'));
   };
   if (!openFolders.size) tops.forEach((t) => openFolders.add(t.id));  // first visit: the top level open, deeper levels folded
-  main.replaceChildren(h('div', { class: 'page' }, h('h1', null, 'Folders ', h('span', { class: 'muted' }, nf.format(all.length))),
+  main.replaceChildren(h('div', { class: 'page' }, pageTitle('folder', 'teal', 'Folders ', h('span', { class: 'muted' }, nf.format(all.length))),
     h('div', { class: 'muted', style: 'max-width:820px' }, 'digiKam’s folders, as they are on disk. Click a folder to see its photos (sub-folders included); the arrow opens its sub-folders.', can ? ' New folders and uploads go straight into the library; digiKam picks them up and reads their full metadata on its next start.' : ''),
     h('input', { class: 'pagefilter', placeholder: 'Find a folder…', oninput: (e) => draw(norm(e.target.value)) }), tree));
   draw('');
@@ -1343,7 +1343,7 @@ function showAlbums() {
       sm.length ? h('div', { class: 'cards' }, sm.map(smart)) : h('div', { class: 'muted', style: 'font-size:13px' }, 'None yet. Filter or search the photos, then use “Save search” in the bar above the grid.'));
     if (!my.length && !sm.length && f) body.append(h('div', { class: 'empty' }, 'No albums match.'));
   };
-  main.replaceChildren(h('div', { class: 'page' }, h('h1', null, 'Albums ', h('span', { class: 'muted' }, nf.format(ST.albums.length))),
+  main.replaceChildren(h('div', { class: 'page' }, pageTitle('album', 'indigo', 'Albums ', h('span', { class: 'muted' }, nf.format(ST.albums.length))),
     h('div', { class: 'muted', style: 'max-width:820px' }, 'Albums are groupings that exist only in this viewer: any photos, from any folder, under a name of your own. digiKam and the files on disk are not touched. The folders digiKam manages are under ', h('a', { href: '#/folders', class: 'lnk' }, 'Folders'), '.'),
     h('input', { class: 'pagefilter', placeholder: 'Find an album…', oninput: (e) => draw(norm(e.target.value)) }), body));
   draw('');
@@ -1379,8 +1379,8 @@ function showPlaces(vp) {
   const cards = h('div', { class: 'cards' });
   const draw = (f) => { const l = list.filter((g) => !f || norm(g.name).includes(f)); fill(cards, l.length ? l.map(mk) : h('div', { class: 'empty' }, 'No places match.')); };
   main.replaceChildren(h('div', { class: 'page' },
-    crumbs([['Places', '#/places'], ...(country ? [[country, placeHash({ country })]] : []), ...(region ? [[region, null]] : [])]),
-    h('h1', null, region || country || 'Places', ' ', h('span', { class: 'muted' }, nf.format(total))),
+    country ? crumbs([['Places', '#/places'], [country, region ? placeHash({ country }) : null], ...(region ? [[region, null]] : [])]) : null,  // no trail on the top level: it would only repeat the title
+    pageTitle('place', 'green', region || country || 'Places', ' ', h('span', { class: 'muted' }, nf.format(total))),
     h('div', { class: 'muted' }, level === 2 ? 'Countries where your geotagged photos were taken. Open one to see its regions, then towns. Names come from each photo’s GPS position, worked out offline.'
       : level === 1 ? `Regions of ${country}.` : `Towns in ${region}, ${country}.`),
     h('div', { style: 'display:flex;gap:10px;align-items:center;flex-wrap:wrap' },
@@ -1391,6 +1391,8 @@ function showPlaces(vp) {
   draw('');
 }
 
+/** A main page's title with its navigation icon in the page's colour (as in the left rail). */
+const pageTitle = (ic, hue, ...kids) => h('h1', { class: 'ptitle', style: `--hue:var(--c-${hue})` }, h('span', { class: 'pic' }, icon(ic)), ...kids);
 const conceptCard = (c) => thumbCard(c.cover, c.name[0].toUpperCase() + c.name.slice(1), nf.format(c.n), { concept: c.name });
 async function showDetected() {
   main.replaceChildren(h('div', { class: 'empty' }, 'Looking at what the model sees…'));
@@ -2304,7 +2306,7 @@ function showTags() {
   topZone.ondrop = (e) => { e.preventDefault(); topZone.classList.remove('over'); if (dragTag && dragTag.pid != null) { const d = dragTag; dragTag = null; tagOp({ op: 'move', id: d.id, parent: 0 }, d); } };
   const draw = (f) => tree.replaceChildren(...(f ? META.tags.filter((t) => t._n.includes(f)).sort((a, b) => b.nAll - a.nAll).slice(0, 200).map((t) => row(t, true))
     : (kidsOf.get(0) || []).map((t) => row(t))));
-  main.replaceChildren(h('div', { class: 'page' }, h('h1', null, 'Tags ', h('span', { class: 'muted' }, nf.format(META.tags.length))),
+  main.replaceChildren(h('div', { class: 'page' }, pageTitle('tag', 'orange', 'Tags ', h('span', { class: 'muted' }, nf.format(META.tags.length))),
     h('div', { class: 'muted' }, 'Selecting a tag also includes everything filed under it.'),
     h('div', { style: 'display:flex;gap:10px;align-items:center;flex-wrap:wrap' },
       h('input', { class: 'pagefilter', placeholder: 'Find a tag…', oninput: (e) => draw(norm(e.target.value)) }),

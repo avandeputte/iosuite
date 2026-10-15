@@ -99,6 +99,11 @@ body.noadmin #topbar a.tool[href="#/maintenance"] { display: none; }  /* the ico
 body.filters-open #main { right: 340px; }
 .page { padding: 8px 28px 80px 12px; max-width: 1500px; }
 .page h1 { font-size: 22px; font-weight: 400; margin: 14px 0 4px; }
+.page h1.ptitle { display: flex; align-items: center; gap: 10px; }
+.page h1.ptitle .pic { width: 34px; height: 34px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; flex: none;
+  background: color-mix(in srgb, var(--hue) calc(var(--mix) + 8%), transparent); color: var(--hue); }
+.page h1.ptitle .pic .ic { width: 22px; height: 22px; }
+.page h1.ptitle .muted { margin-left: -4px; }
 .page h2 { font-size: 16px; font-weight: 500; margin: 30px 0 12px; display: flex; align-items: baseline; gap: 12px; }
 .page h2 a, .page h2 .more { font-size: 13px; font-weight: 400; color: var(--accent); cursor: pointer; }
 .page h2 .muted { font-size: 13px; font-weight: 400; }
