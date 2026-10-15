@@ -505,3 +505,27 @@ def test_lightbox_bar_has_close_and_share_menu(page, server, lib):
     page.click("#lightbox .lb-top button[title^='Close']")
     page.wait_for_selector("#lightbox", state="hidden", timeout=5000)
     assert page.locator(".tile img").count() > 0, "back to the grid it came from"
+
+
+def test_share_button_opens_the_device_share_sheet_with_the_picture(page, server, lib):
+    """Where the browser has a share sheet, the share button hands it the photo as a JPEG named
+    after the file (the fallback menu is for browsers without one, tested above)."""
+    page.add_init_script("""
+      window.__shared = [];
+      navigator.share = async (d) => { window.__shared.push({ title: d.title, url: d.url, files: (d.files || []).map((f) => [f.name, f.type, f.size]) }); };
+      navigator.canShare = () => true;
+    """)
+    page.goto(server + "/#/photos")
+    page.wait_for_selector(".tile img", timeout=15000)
+    page.locator(".tile").first.click()
+    page.wait_for_selector("#lightbox .lb-frame img, #lightbox .lb-frame video", timeout=15000)
+    page.wait_for_timeout(1500)  # the picture for sharing is fetched once the photo is shown
+    page.click("#lightbox .lb-top button[title='Share']")
+    page.wait_for_function("window.__shared.length === 1", timeout=5000)
+    shared = page.evaluate("window.__shared[0]")
+    assert page.locator("#lightbox .sharemenu").count() == 0, "the sheet, not the menu"
+    if page.locator("#lightbox .lb-frame video").count():
+        assert shared["url"]
+    else:
+        assert shared["files"] and shared["files"][0][0].endswith(".jpg") and shared["files"][0][1] == "image/jpeg" and shared["files"][0][2] > 1000, shared
+    page.keyboard.press("Escape")

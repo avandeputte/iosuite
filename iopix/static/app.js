@@ -2167,7 +2167,7 @@ function buildLightbox() {
     albumBtn: btn('add', 'Add to album', () => albumDialog([LB.src.id[LB.i]])),
     playBtn: btn('play', 'Slideshow (space)', toggleSlideshow), facesBtn: btn('face', 'Show faces (F)', toggleFaces), addFaceBtn: btn('add', 'Add a face: drag a rectangle around it', startDrawFace), objectsBtn: btn('dup', 'Show detected objects (O)', toggleObjects),
     infoBtn: btn('info', 'Info (I)', toggleInfo, LB.info ? 'on' : ''),
-    shareBtn: btn('share', 'Share', () => shareMenu(LB.el.shareBtn)),
+    shareBtn: btn('share', 'Share', shareNow),
     dl: h('a', { class: 'iconbtn', title: 'Download original (D)', download: '' }, icon('download')),
     orig: h('a', { class: 'iconbtn', title: 'Open original in a new tab', target: '_blank', rel: 'noopener' }, icon('open')),
   };
@@ -2197,9 +2197,32 @@ function buildLightbox() {
   e.strip.addEventListener('pointerleave', unpeek);
 }
 
-/** Share: ways to pass this photo on. A link to it here, the device's own share sheet where the
- *  browser has one (with the preview JPEG attached when it can), the original or a smaller JPEG
- *  as a download, the original in a tab, and an email with the link. Anchored under the button. */
+/** Share: the device's own share sheet (AirDrop, Messages, Mail and the rest on a Mac or phone)
+ *  with the picture attached, as PhotoStructure does. The screen-size JPEG is fetched as soon as
+ *  the photo is shown, so the sheet opens inside the click, which browsers require. Where the
+ *  browser has no share sheet (Firefox on the desktop, plain http) the menu below opens instead. */
+function shareNow() {
+  const anchor = LB.el.shareBtn;
+  if (!navigator.share) { shareMenu(anchor); return; }
+  const id = LB.src.id[LB.i], d = LB.detail, name = d?.name || `photo-${id}.jpg`;
+  const data = { title: name, url: location.href };
+  const file = LB.shareFile && LB.shareFile.id === id ? LB.shareFile.file : null;
+  if (file && (!navigator.canShare || navigator.canShare({ files: [file] }))) { data.files = [file]; delete data.url; }
+  navigator.share(data).catch((e) => {
+    if (e.name === 'AbortError') return;  // the sheet was dismissed
+    shareMenu(anchor);
+  });
+}
+/** Fetch the picture a share would attach (the screen-size JPEG, named after the photo). */
+function prefetchShareFile(id, d) {
+  if (!navigator.share || d.video) { LB.shareFile = null; return; }
+  fetch(`/preview/${id}`).then((r) => r.blob()).then((blob) => {
+    if (LB.open && LB.src.id[LB.i] === id) LB.shareFile = { id, file: new File([blob], d.name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' }) };
+  }).catch(() => {});
+}
+
+/** The fallback menu: a link to the photo here, the original or a smaller JPEG as a download,
+ *  the original in a tab, and an email with the link. Anchored under the share button. */
 function shareMenu(anchor) {
   const open = $('.sharemenu');
   if (open) { open.remove(); return; }
@@ -2208,18 +2231,6 @@ function shareMenu(anchor) {
   const done = (msg) => { menu.remove(); if (msg) toast(msg); };
   const menu = h('div', { class: 'facemenu sharemenu' }, h('div', { class: 'fmh' }, 'Share'),
     item('Copy link', { onclick: async () => { try { await navigator.clipboard.writeText(url); done('Link copied.'); } catch { done('Could not copy; the address bar has the link.'); } } }, 'to this photo in the viewer'),
-    navigator.share ? item('Share…', { onclick: async () => {
-      menu.remove();
-      const data = { title: name, url };
-      try {
-        if (navigator.canShare && !d?.video) {
-          const blob = await (await fetch(`/preview/${id}`)).blob();
-          const file = new File([blob], name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' });
-          if (navigator.canShare({ files: [file] })) data.files = [file];
-        }
-        await navigator.share(data);
-      } catch (e) { if (e.name !== 'AbortError') toast('Sharing is not available here.'); }
-    } }, 'the device’s share sheet, with the picture') : null,
     item('Download original', { href: `/orig/${id}?dl=1`, download: name, onclick: () => menu.remove() }, d?.bytes ? `${name} · ${fmtBytes(d.bytes)}` : name),
     !d?.video ? item('Download preview', { href: `/preview/${id}?dl=1`, onclick: () => menu.remove() }, 'a smaller JPEG for messages and email') : null,
     item('Open original in a new tab', { href: `/orig/${id}`, target: '_blank', rel: 'noopener', onclick: () => menu.remove() }),
@@ -2357,6 +2368,7 @@ function showItem() {
     el.facesBtn.style.display = d.faces.length || d.faces_other?.length ? '' : 'none';
     el.addFaceBtn.style.display = CAN_MANAGE && !d.video ? '' : 'none';
     el.objectsBtn.style.display = d.boxes?.length ? '' : 'none';
+    prefetchShareFile(id, d);
     renderFaces();
     if (LB.info) renderInfo();
   }).catch(() => {});
