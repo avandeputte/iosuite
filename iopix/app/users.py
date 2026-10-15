@@ -106,6 +106,16 @@ def require_login() -> bool:
     return state.get_setting("require_login", "0") == "1" and any_users()
 
 
+def linked_persons() -> set:
+    """The person tags accounts are linked to: their face badges are the account picker's avatars,
+    so they stay visible on the sign-in screen even when sign-in is required."""
+    con = state.connect()
+    try:
+        return {r[0] for r in con.execute("SELECT person FROM users WHERE person IS NOT NULL")}
+    finally:
+        con.close()
+
+
 def any_users() -> bool:
     con = state.connect()
     try:

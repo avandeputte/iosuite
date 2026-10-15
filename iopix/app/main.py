@@ -216,6 +216,9 @@ OPEN_PREFIXES = ("/icons/", "/api/auth/")
 
 
 def _open_to_visitors(path: str) -> bool:
+    if path.startswith("/face/"):  # the avatars on the sign-in screen: only the faces accounts are linked to
+        tail = path[6:].split("/")[0]
+        return tail.isdigit() and int(tail) in users.linked_persons()
     return path in OPEN_PATHS or path.startswith(OPEN_PREFIXES)
 
 

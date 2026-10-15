@@ -186,6 +186,16 @@ def test_require_login_locks_everything_but_the_sign_in(client, fresh, lib):
     if pid:
         for path in (f"/thumb/{pid}", f"/preview/{pid}", f"/orig/{pid}", f"/api/photo/{pid}"):
             assert client.get(path).status_code == 401, path
+    # the account picker's avatars: the face badge of a linked person is served, other faces are not
+    _login(client, "alex", "correct horse")
+    tags = client.get("/api/meta").json()["tags"]
+    people = [t for t in tags if t.get("person") and t["full"] != "People"]
+    if len(people) >= 2:
+        assert client.post("/api/auth/person", json={"person": people[0]["id"]}).status_code == 200
+        client.cookies.clear()
+        assert client.get(f"/face/{people[0]['id']}").status_code != 401
+        assert client.get(f"/face/{people[1]['id']}").status_code == 401
+    client.cookies.clear()
     r = client.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, headers={"accept": "application/json, text/event-stream"})
     assert r.status_code == 401, "MCP needs the admin token as a bearer header"
     from app import updates
