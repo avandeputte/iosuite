@@ -189,7 +189,7 @@ def test_read_only_hides_every_editing_control(page, server, lib):
         page.wait_for_selector("#lightbox .lb-frame img", timeout=15000)
         page.wait_for_timeout(500)
         assert page.locator(".lb-info h4", has_text="Edit").count() == 0
-        assert page.locator('[title^="Add a face"]').is_hidden()
+        page.wait_for_function("getComputedStyle(document.querySelector('[title^=\"Add a face\"]')).display === 'none'", timeout=5000)
         assert page.locator(".facerow .muted", has_text="options").count() == 0
         assert page.locator(".lb-info a", has_text="change").count() == 0
         page.goto(server + "/#/settings")

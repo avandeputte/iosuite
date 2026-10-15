@@ -2254,7 +2254,8 @@ function showItem() {
   else img.onload = () => { if (token === LB.token && !LB.detail) { LB.ar = img.naturalWidth / img.naturalHeight; sizeFrame(); } };
   sizeFrame();
   el.ttl.textContent = src.ts ? dfDay.format(date(src.ts[i])) : '';
-  renderStrip();
+  // the strip's thumbnails come after the photo and its details, not in competition with them
+  setTimeout(() => { if (token === LB.token) renderStrip(); }, LB.stripSrc === src ? 0 : 350);
   updateFavBtn();
   el.dl.href = `/orig/${id}?dl=1`;
   el.orig.href = `/orig/${id}`;
