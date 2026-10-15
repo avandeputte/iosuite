@@ -431,7 +431,12 @@ function photoCrumbs(p) {
 const SIZES = { S: [120, 80], M: [190, 110], L: [280, 170] };
 // grid state: sel = selected photo ids; items = laid-out rows/headers; rendered = row index -> element currently in the DOM
 const G = { sel: new Set(), lastSel: -1, data: null, items: [], ar: null, total: 0, top0: 0, restore: 0, rendered: new Map(), token: 0,
-  size: store.get('tile', 'M') in SIZES ? store.get('tile', 'M') : 'M', lastTop: 0, lastT: 0, settle: 0, scrub: null };
+  size: store.get('tile', 'M') in SIZES ? store.get('tile', 'M') : 'M', group: store.get('group', 'day') === 'month' ? 'month' : 'day', lastTop: 0, lastT: 0, settle: 0, scrub: null };
+/** The section a timestamp belongs to in the chronological grid: its day, or its month. */
+function groupKey(ts) {
+  if (G.group === 'month') { const dt = date(ts); return dt.getUTCFullYear() * 12 + dt.getUTCMonth(); }
+  return Math.floor(ts / 86400);
+}
 const GAP = 4, BAR_H = 48, HEAD_H = 46;
 
 async function showPhotos(fp) {
@@ -481,9 +486,9 @@ function layoutGrid() {
   const items = [], byDate = G.sort === 'new' || G.sort === 'old';
   const sections = [];
   if (byDate) {
-    let start = 0, day = Math.floor(d.ts[0] / 86400);
+    let start = 0, day = groupKey(d.ts[0]);
     for (let i = 1; i <= d.count; i++) {
-      const dd = i < d.count ? Math.floor(d.ts[i] / 86400) : null;
+      const dd = i < d.count ? groupKey(d.ts[i]) : null;
       if (dd !== day) { sections.push([start, i]); start = i; day = dd; }
     }
   } else sections.push([0, d.count]);
@@ -517,12 +522,16 @@ function layoutGrid() {
     h('span', { class: 'count' }, plural(d.count, 'item')),
     byDate ? h('span', null, fmtRange(Math.min(d.ts[0], d.ts[d.count - 1]), Math.max(d.ts[0], d.ts[d.count - 1]))) : null,
     h('span', { class: 'sp' }),
-    h('span', { class: 'lnk', title: 'Select everything in this view', onclick: () => selectRange(0, d.count - 1, true) }, 'Select all'),
+    h('span', { class: 'lnk selall', title: 'Select or deselect everything in this view', onclick: () => { G.sel.size >= d.count ? clearSelection() : selectRange(0, d.count - 1, true); } }, G.sel.size >= d.count ? 'Deselect all' : 'Select all'),
     [...filterParams().keys()].some((k) => k !== 'sort') ? h('button', { class: 'pillbtn dlbtn', title: 'Download these as zip files', onclick: () => downloadDialog(filterParams()) }, icon('download'), h('span', null, 'Download')) : null,
     // the default sort (newest, or best match for ranked results) is left out of the URL
     h('select', { title: 'Sort', onchange: (e) => applyFilter((p) => { ['new', 'rel'].includes(e.target.value) && !(d.ranked && e.target.value === 'new') ? p.delete('sort') : p.set('sort', e.target.value); }) },
       ...[...(d.ranked ? [['rel', 'Best match']] : []), ['new', 'Newest first'], ['old', 'Oldest first'], ['added', 'Recently modified'], ['rating', 'Top rated'], ['sharp', 'Sharpest first'], ['blur', 'Blurriest first'], ['name', 'File name'], ['size', 'Largest files']]
         .map(([v, l]) => h('option', { value: v, selected: v === G.sort }, l))),
+    byDate ? h('select', { title: 'Group the photos by day or by month', class: 'groupsel', onchange: (e) => {
+      const anchor = firstVisibleIndex();
+      G.group = e.target.value; store.set('group', G.group); layoutGrid(); scrollToIndex(anchor, true); renderGrid(true);
+    } }, h('option', { value: 'day', selected: G.group === 'day' }, 'By day'), h('option', { value: 'month', selected: G.group === 'month' }, 'By month')) : null,
     h('span', { class: 'seg', title: 'Thumbnail size' }, ...Object.keys(SIZES).map((k) => h('button', { class: k === G.size ? 'on' : '', onclick: () => {
       const anchor = firstVisibleIndex();
       G.size = k; store.set('tile', k); layoutGrid(); scrollToIndex(anchor, true); renderGrid(true);
@@ -561,7 +570,7 @@ function renderGrid(force) {
     let el;
     if (it.head) {
       el = h('div', { class: 'ghead', style: `top:${it.y}px;height:${it.h}px` },
-        h('span', { class: 'hcheck', title: 'Select this day', 'data-s': it.s, 'data-e': it.e }, icon('check')), dfDay.format(date(d.ts[it.s])),
+        h('span', { class: 'hcheck', title: G.group === 'month' ? 'Select this month' : 'Select this day', 'data-s': it.s, 'data-e': it.e }, icon('check')), (G.group === 'month' ? dfMonth : dfDay).format(date(d.ts[it.s])),
         it.e - it.s > 12 ? h('span', { class: 'n' }, nf.format(it.e - it.s)) : null);
     } else {
       el = h('div', { class: 'grow', style: `top:${it.y}px;height:${it.h}px` });
@@ -672,6 +681,8 @@ function clearSelection(silent) {
 function updateSelBar() {
   let bar = $('#selbar');
   document.body.classList.toggle('selecting', G.sel.size > 0);
+  const sa = $('#grid .selall');
+  if (sa && G.data) sa.textContent = G.sel.size >= G.data.count ? 'Deselect all' : 'Select all';
   if (!G.sel.size) { bar?.remove(); return; }
   if (!bar) { bar = h('div', { id: 'selbar' }); document.body.append(bar); }
   const ids = () => [...G.sel];
@@ -1081,8 +1092,7 @@ async function showExplore() {
       stat('amber', 'person', nf.format(ppl.length), 'people', '#/people'),
       stat('teal', 'folder', nf.format(META.albums.length), 'albums', '#/albums'),
       stat('green', 'place', nf.format(META.geotagged), 'with location', '#/map'),
-      stat('slate', 'disk', fmtBytes(META.bytes), 'on disk'),
-      stat('rose', 'calendar', `${date(META.tsMin).getUTCFullYear()} – ${date(META.tsMax).getUTCFullYear()}`, 'years covered')),
+      stat('slate', 'disk', fmtBytes(META.bytes), 'on disk')),
     otd,
     META.places.length ? [sec('green', 'place', 'Places', '#/places', 'See all'),
       h('div', { class: 'cards' }, META.places.slice(0, 12).map(placeCard))] : null,

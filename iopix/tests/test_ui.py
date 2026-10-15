@@ -404,11 +404,11 @@ def test_explore_summary_cards_link_to_their_views(page, server, lib):
     page.goto(server + "/#/explore")
     page.wait_for_selector(".stats .stat", timeout=10000)
     cards = page.locator(".stats .stat")
-    assert cards.count() == 7
+    assert cards.count() == 6
     labels = page.locator(".stats .stat div > span").all_inner_texts()
-    assert labels[:5] == ["photos", "videos", "people", "albums", "with location"], labels
-    assert page.locator(".stats a.stat").count() == 5, "all but 'on disk' and 'years covered' open a view"
-    assert page.locator(".stats .stat .sic .ic svg").count() == 7, "each card has an icon"
+    assert labels == ["photos", "videos", "people", "albums", "with location", "on disk"], labels
+    assert page.locator(".stats a.stat").count() == 5, "all but 'on disk' open a view"
+    assert page.locator(".stats .stat .sic .ic svg").count() == 6, "each card has an icon"
     page.click(".stats a.stat:has-text('people')")
     page.wait_for_selector("#nav a[data-v=people].on", timeout=5000)
 
@@ -450,3 +450,30 @@ def test_lightbox_film_strip_and_remembered_info_panel(page, server, lib):
     page.wait_for_selector("#lightbox .lb-frame img, #lightbox .lb-frame video", timeout=15000)
     assert page.locator("#lightbox .lb-info").is_hidden()
     page.keyboard.press("Escape")
+
+
+def test_grid_select_all_toggles_and_groups_by_month(page, server, lib):
+    page.goto(server + "/#/photos")
+    page.wait_for_selector(".tile img", timeout=15000)
+    page.wait_for_selector(".gbar .selall", timeout=5000)
+    assert page.locator(".gbar .selall").inner_text() == "Select all"
+    page.click(".gbar .selall")
+    page.wait_for_selector("#selbar", timeout=5000)
+    assert page.locator(".gbar .selall").inner_text() == "Deselect all"
+    page.click(".gbar .selall")
+    page.wait_for_selector("#selbar", state="detached", timeout=5000)
+    assert page.locator(".gbar .selall").inner_text() == "Select all"
+    # grouping: the scratch library spans several days in a month, so months make fewer sections
+    page.locator("#main").evaluate("m => m.scrollTop = 0")
+    page.wait_for_timeout(300)
+    grid_h = page.evaluate("document.getElementById('grid').style.height")
+    days = page.locator(".ghead").count()
+    page.select_option(".gbar .groupsel", "month")
+    page.wait_for_function(f"document.getElementById('grid').style.height !== '{grid_h}'", timeout=5000)
+    page.wait_for_timeout(300)
+    months = page.locator(".ghead").count()
+    assert 0 < months < days, (days, months)
+    head = page.locator(".ghead").first.inner_text()
+    assert any(m in head for m in ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")) and "," not in head, head
+    assert page.evaluate("localStorage.getItem('group')") == "month"
+    page.select_option(".gbar .groupsel", "day")
