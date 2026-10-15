@@ -1630,12 +1630,13 @@ function aiSection(view) {
     const modelBtn = (m) => {
       if (!m) return null;
       const c = m.check, upd = c && (c.status === 'update' || c.status === 'newer' || c.status === 'missing');
+      if (m.installed && !upd) return null;  // installed and current: nothing to offer
       return h('button', { class: 'pillbtn small' + (!m.installed || upd ? ' on' : ''), disabled: !!p.running, title: m.installed ? `Download ${m.label} again (${m.size})` : `Download ${m.label} (${m.size})`,
         onclick: async () => {
           if (!confirm(`Download ${m.label} (${m.size})${m.installed ? ' again, replacing the installed files' : ''}? The viewer keeps working meanwhile.` + (m.kind === 'pip' ? '\n\nA package update takes effect after a restart of the viewer.' : ''))) return;
           try { await post('/api/models/download', { key: m.key }); toast(`Downloading ${m.label}…`); } catch (e) { toast(e.message); }
           draw();
-        } }, !m.installed ? 'Download' : upd ? 'Update' : 'Re-download');
+        } }, m.installed ? 'Update' : 'Download');
     };
     const progressCell = (j, m) => {
       if (!j) return h('td', { class: 'muted' }, '—');
