@@ -366,7 +366,7 @@ body.locked #main, body.locked #nav, body.locked #filters { visibility: hidden; 
 .crumbs a:hover { text-decoration: underline; }
 .crumbs .sep { opacity: .6; }
 .crumbs .cur { color: var(--fg); font-weight: 500; }
-#grid > .crumbs { position: absolute; left: 8px; right: 0; top: 4px; height: 30px; flex-wrap: nowrap; overflow: hidden; white-space: nowrap; }
+#grid > .crumbs { position: absolute; left: 8px; right: 0; top: 18px; height: 30px; flex-wrap: nowrap; overflow: hidden; white-space: nowrap; }  /* same spot as .page > .crumbs: 8 px page padding + 10 px margin */
 .page > .crumbs { margin-top: 10px; }
 
 /* ---- bursts, objects */

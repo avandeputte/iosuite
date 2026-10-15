@@ -509,7 +509,7 @@ function layoutGrid() {
     }
   } else sections.push([0, d.count]);
   const trail = photoCrumbs(filterParams());
-  const top0 = trail ? 30 : 0;
+  const top0 = trail ? 44 : 0;  // the trail sits where every other page has it (14 px down, as .page > .crumbs), then 30 px tall
   G.top0 = top0;
   let y = BAR_H + top0;
   for (const [s, e] of sections) {

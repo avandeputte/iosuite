@@ -721,3 +721,16 @@ def test_consistency_bulk_sync_bar(page, server, lib):
     page.locator("#cbulk button[data-src=sidecar]").click()
     page.wait_for_selector("#toast:has-text('Synced')", timeout=20000)
     page.wait_for_selector("#cbulk", state="hidden", timeout=5000)
+
+
+def test_breadcrumbs_sit_in_the_same_place_on_every_page(page, server):
+    """A trail on an ordinary page (Duplicate files) and above a photo grid (a folder) starts at the same spot."""
+    js = "(sel) => { const r = document.querySelector(sel).firstElementChild.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top)]; }"
+    page.goto(server + "/#/duplicates")
+    page.wait_for_selector(".page > .crumbs", timeout=10000)
+    a = page.evaluate(js, ".page > .crumbs")
+    aid = page.evaluate("fetch('/api/meta').then(r => r.json()).then(m => m.albums[m.albums.length - 1].id)")
+    page.goto(server + f"/#/photos?album={aid}&sort=old")
+    page.wait_for_selector("#grid > .crumbs", timeout=10000)
+    page.wait_for_timeout(300)
+    assert page.evaluate(js, "#grid > .crumbs") == a
