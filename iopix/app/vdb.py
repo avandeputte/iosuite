@@ -57,6 +57,9 @@ TABLES = {
     "ualbum_items": (["album_id", "photo_id", "hash", "added"],
                      "CREATE TABLE IF NOT EXISTS ualbum_items (album_id INTEGER, photo_id INTEGER, hash TEXT, added INTEGER, PRIMARY KEY (album_id, photo_id))",
                      "CREATE TABLE IF NOT EXISTS ualbum_items (album_id INT, photo_id BIGINT, hash VARCHAR(64), added BIGINT, PRIMARY KEY (album_id, photo_id))"),
+    "searches": (["id", "name", "query", "created"],
+                 "CREATE TABLE IF NOT EXISTS searches (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, query TEXT NOT NULL, created INTEGER)",
+                 "CREATE TABLE IF NOT EXISTS searches (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255) NOT NULL, query TEXT NOT NULL, created BIGINT)"),
     "edits": (["photo_id", "data", "ts"],
               "CREATE TABLE IF NOT EXISTS edits (photo_id INTEGER PRIMARY KEY, data TEXT, ts INTEGER)",
               "CREATE TABLE IF NOT EXISTS edits (photo_id BIGINT PRIMARY KEY, data MEDIUMTEXT, ts BIGINT)"),
@@ -78,11 +81,17 @@ TABLES = {
     "captions": (["photo_id", "stamp", "text"],
                  "CREATE TABLE IF NOT EXISTS captions (photo_id INTEGER PRIMARY KEY, stamp TEXT, text TEXT)",
                  "CREATE TABLE IF NOT EXISTS captions (photo_id BIGINT PRIMARY KEY, stamp VARCHAR(191), text MEDIUMTEXT)"),
+    "face_vecs": (["photo_id", "x", "y", "w", "h", "vec"],
+                  "CREATE TABLE IF NOT EXISTS face_vecs (photo_id INTEGER, x INTEGER, y INTEGER, w INTEGER, h INTEGER, vec BLOB, PRIMARY KEY (photo_id, x, y, w, h))",
+                  "CREATE TABLE IF NOT EXISTS face_vecs (photo_id BIGINT, x INT, y INT, w INT, h INT, vec BLOB, PRIMARY KEY (photo_id, x, y, w, h))"),
+    "near_dups": (["a", "b", "score"],
+                  "CREATE TABLE IF NOT EXISTS near_dups (a INTEGER, b INTEGER, score REAL)",
+                  "CREATE TABLE IF NOT EXISTS near_dups (a BIGINT, b BIGINT, score DOUBLE, INDEX near_dups_a (a))"),
     "consistency": (["photo_id", "stamp", "data", "mismatch", "has_sidecar", "file_xmp", "checked"],
                     "CREATE TABLE IF NOT EXISTS consistency (photo_id INTEGER PRIMARY KEY, stamp TEXT, data TEXT, mismatch INTEGER, has_sidecar INTEGER, file_xmp INTEGER, checked INTEGER)",
                     "CREATE TABLE IF NOT EXISTS consistency (photo_id BIGINT PRIMARY KEY, stamp VARCHAR(191), data MEDIUMTEXT, mismatch INT, has_sidecar INT, file_xmp INT, checked BIGINT)"),
 }
-SQLITE_INDEXES = ["CREATE INDEX IF NOT EXISTS objects_photo ON objects (photo_id)"]
+SQLITE_INDEXES = ["CREATE INDEX IF NOT EXISTS objects_photo ON objects (photo_id)", "CREATE INDEX IF NOT EXISTS near_dups_a ON near_dups (a)"]
 
 
 # ---- configuration

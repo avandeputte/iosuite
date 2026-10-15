@@ -647,3 +647,35 @@ def test_multi_edit_offers_title_caption_and_deselect_all(page, server, lib):
     page.click(".gbar .selnone")
     page.wait_for_selector("#selbar", state="detached", timeout=5000)
     assert page.locator(".gbar .selnone").is_hidden()
+
+
+def test_save_search_jump_to_date_and_hotkeys(page, server, lib):
+    page.goto(server + "/#/photos?type=video")
+    page.wait_for_selector(".gbar", timeout=15000)
+    page.wait_for_timeout(1200)
+    assert page.locator(".gbar .jumpdate").count() == 1, "the chronological view has a date box"
+    page.on("dialog", lambda d: d.accept("Clips") if d.type == "prompt" else d.accept())
+    page.locator(".gbar button[title^='Save this search']").click()
+    page.wait_for_selector("#toast:has-text('Saved')", timeout=5000)
+    page.wait_for_timeout(500)
+    assert page.locator(".crumbs .cur", has_text="Clips").count() == 1, "the saved search shows in the breadcrumbs"
+    page.goto(server + "/#/albums")
+    page.wait_for_selector("h2:has-text('Smart albums')", timeout=10000)
+    page.wait_for_selector(".card.smart .nm:has-text('Clips')", timeout=10000)
+    page.wait_for_function("document.querySelector('.card.smart .sb') && !document.querySelector('.card.smart .sb').textContent.includes('…')", timeout=10000)
+    # the lightbox hotkey T opens the tag dialog for an editor
+    page.goto(server + "/#/photos")
+    page.wait_for_selector(".tile img", timeout=15000)
+    page.wait_for_timeout(1200)
+    page.locator(".tile").first.click()
+    page.wait_for_selector("#lightbox .lb-frame img, #lightbox .lb-frame video", timeout=15000)
+    page.keyboard.press("t")
+    page.wait_for_selector(".modal h3:has-text('Tag')", timeout=5000)
+    page.locator(".modal button", has_text="Done").click()
+    page.keyboard.press("Escape")
+    # clean up the smart album
+    page.goto(server + "/#/albums")
+    page.wait_for_selector(".card.smart", timeout=10000)
+    page.locator(".card.smart").first.hover()
+    page.locator(".card.smart .carddl[title^='Delete']").first.click(force=True)
+    page.wait_for_selector(".card.smart", state="detached", timeout=5000)

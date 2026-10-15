@@ -43,6 +43,8 @@ REGISTRY = {
              "page": "https://huggingface.co/Salesforce/blip-image-captioning-base", "what": "Photo descriptions.", "size": "~950 MB"},
     "yolox": {"label": "YOLOX-S", "kind": "url", "url": "https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_s.onnx",
               "page": "https://github.com/Megvii-BaseDetection/YOLOX/releases", "what": "Object detection (people, balls, animals, vehicles…).", "size": "35 MB"},
+    "sface": {"label": "SFace (face grouping)", "kind": "url", "url": "https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_recognition_sface/face_recognition_sface_2021dec.onnx",
+              "page": "https://github.com/opencv/opencv_zoo/tree/main/models/face_recognition_sface", "what": "Groups look-alike unnamed faces on the Faces page so they can be named together (never proposes names).", "size": "37 MB"},
     "geonames": {"label": "GeoNames places", "kind": "data", "url": "https://download.geonames.org/export/dump/cities1000.zip",
                  "page": "https://download.geonames.org/export/dump/", "what": "Offline reverse geocoding: town, region and country for each GPS position. GeoNames regenerates this export daily.",
                  "size": "~30 MB"},
@@ -97,8 +99,8 @@ def local(key: str) -> dict:
             shas.append(sha[:7]); ats.append(at)
         return {"installed": True, "revision": "+".join(shas), "at": max(ats)}
     if m["kind"] in ("url", "data"):
-        from . import detector, places
-        paths = [detector.MODEL] if key == "yolox" else [places.DIR / f for f in places.FILES]
+        from . import detector, facevecs, places
+        paths = [detector.MODEL] if key == "yolox" else [facevecs.MODEL] if key == "sface" else [places.DIR / f for f in places.FILES]
         if not all(p.exists() for p in paths):
             return {"installed": False}
         at = int(max(p.stat().st_mtime for p in paths))
@@ -232,6 +234,9 @@ def _reset(key: str):
             from . import detector
             with detector._lock:
                 detector._instance = None
+        elif key == "sface":
+            from . import facevecs
+            facevecs.reset_session()
         elif key == "geonames":
             from . import places
             places._geo = None  # loaded again from the new files on the next lookup
@@ -254,6 +259,9 @@ def _download_here(key: str):
     elif key == "yolox":
         from . import detector
         detector.download()
+    elif key == "sface":
+        from . import facevecs
+        facevecs.download()
     elif key == "geonames":
         from . import places
         places.fetch()

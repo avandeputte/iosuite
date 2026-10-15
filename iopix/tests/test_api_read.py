@@ -112,3 +112,17 @@ def test_version_is_single_sourced_and_shown(client):
     s = client.get("/api/status").json()
     assert s["appVersion"] == __version__ and "commit" in s
     assert client.get("/api/update").json()["version"] == __version__
+
+
+def test_smart_albums_are_saved_searches(client):
+    """A saved search is listed with the viewer's albums and can be renamed and deleted."""
+    assert client.post("/api/searches", json={"name": "", "query": "year=2024"}).status_code == 400
+    r = client.post("/api/searches", json={"name": "Videos of 2024", "query": "?type=video&year=2024"})
+    assert r.status_code == 200
+    sid = r.json()["id"]
+    s = next(x for x in client.get("/api/state").json()["searches"] if x["id"] == sid)
+    assert s["name"] == "Videos of 2024" and s["query"] == "type=video&year=2024", "the leading ? is dropped"
+    assert client.post(f"/api/searches/{sid}", json={"name": "Clips"}).status_code == 200
+    assert next(x for x in client.get("/api/state").json()["searches"] if x["id"] == sid)["name"] == "Clips"
+    assert client.post(f"/api/searches/{sid}", json={"delete": True}).status_code == 200
+    assert all(x["id"] != sid for x in client.get("/api/state").json()["searches"])

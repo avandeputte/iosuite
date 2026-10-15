@@ -162,7 +162,7 @@ const VIEW_FNS = { photos: showPhotos, explore: showExplore, people: showPeople,
 const VIEWS = Object.keys(VIEW_FNS);
 const PARAM_VIEWS = ['places', 'bursts', 'faces'];  // views whose own query parameters (not photo filters) pick what they show
 // favorites and app albums (stored by the app, not in digiKam)
-const ST = { rev: -1, fav: new Set(), albums: [] };
+const ST = { rev: -1, fav: new Set(), albums: [], searches: [] };
 let SEM = { enabled: false };
 let CONCEPTS = null;  // the detected-content vocabulary with counts, fetched once for the search suggestions
 function loadConcepts() { if (CONCEPTS || !SEM.enabled) return; CONCEPTS = []; api('/api/concepts').then((c) => { CONCEPTS = c.concepts.map((x) => ({ ...x, _n: norm(x.name) })); }).catch(() => { CONCEPTS = null; }); }
@@ -183,7 +183,7 @@ let EDITING = false, WRITE_FILES = false, CAN_MANAGE = false, manageTags = false
 function pollSoon(ms = 1500) { clearTimeout(pollTimer); pollTimer = setTimeout(pollStatus, ms); }
 async function loadState() {
   const s = await api('/api/state');
-  ST.rev = s.rev; ST.fav = new Set(s.favorites); ST.albums = s.albums;
+  ST.rev = s.rev; ST.fav = new Set(s.favorites); ST.albums = s.albums; ST.searches = s.searches || [];
 }
 const ualbumById = (id) => ST.albums.find((a) => a.id === +id);
 
@@ -204,6 +204,12 @@ function filterParams() {
   const p = new URLSearchParams(FILTER_VIEWS.includes(route.view) ? route.params : '');
   p.delete('p');
   return p;
+}
+/** The smart album whose query is exactly this filter set (sort ignored), if any. */
+function savedSearchFor(p) {
+  const q = new URLSearchParams(p); q.delete('sort'); q.delete('p');
+  const key = [...q.entries()].sort().map((kv) => kv.join('=')).join('&');
+  return ST.searches.find((s) => [...new URLSearchParams(s.query).entries()].sort().map((kv) => kv.join('=')).join('&') === key) || null;
 }
 /** Change the active filters, staying on the map if that is where we are. */
 function applyFilter(mutate, view) {
@@ -408,6 +414,8 @@ const placeHash = (o) => hashFor('places', photosWith(o));
 /** Where the current photo list sits in a hierarchy (album, place, tag, ...), if it does. */
 function photoCrumbs(p) {
   const albums = p.getAll('album'), tags = p.getAll('tag');
+  const saved = savedSearchFor(p);
+  if (saved) return [['Albums', '#/albums'], [saved.name, null]];
   if (albums.length === 1 && albumById.get(+albums[0])) {
     const chain = [];
     for (let a = albumById.get(+albums[0]); a && a.pid != null; a = albumById.get(a.pid)) chain.unshift(a);
@@ -537,6 +545,21 @@ function layoutGrid() {
     h('select', { title: 'Sort', onchange: (e) => applyFilter((p) => { ['new', 'rel'].includes(e.target.value) && !(d.ranked && e.target.value === 'new') ? p.delete('sort') : p.set('sort', e.target.value); }) },
       ...[...(d.ranked ? [['rel', 'Best match']] : []), ['new', 'Newest first'], ['old', 'Oldest first'], ['added', 'Recently modified'], ['rating', 'Top rated'], ['sharp', 'Sharpest first'], ['blur', 'Blurriest first'], ['name', 'File name'], ['size', 'Largest files']]
         .map(([v, l]) => h('option', { value: v, selected: v === G.sort }, l))),
+    byDate ? h('input', { type: 'date', class: 'jumpdate', title: 'Jump to a date', onkeydown: (e) => e.stopPropagation(), onchange: (e) => {
+      if (!e.target.value) return;
+      const t0 = Date.parse(e.target.value + 'T00:00:00Z') / 1000, t1 = t0 + 86400;
+      const ts = d.ts, n = d.count;  // ts is sorted (desc for newest first, asc for oldest first): binary search for the day
+      let lo = 0, hi = n;
+      const desc = G.sort === 'new';
+      while (lo < hi) { const mid = (lo + hi) >> 1; (desc ? ts[mid] >= t1 : ts[mid] < t0) ? lo = mid + 1 : hi = mid; }
+      scrollToIndex(Math.min(lo, n - 1), true); renderGrid(true);
+      e.target.blur();
+    } }) : null,
+    [...filterParams().keys()].some((k) => k !== 'sort') && (USER || !USERS_EXIST) && !savedSearchFor(filterParams()) ? h('button', { class: 'pillbtn dlbtn', title: 'Save this search as a smart album (it updates itself)', onclick: async () => {
+      const n = prompt('Name for this smart album'); if (!n || !n.trim()) return;
+      const q = filterParams(); q.delete('sort');
+      try { await post('/api/searches', { name: n.trim(), query: q.toString() }); toast(`Saved “${n.trim()}” under Albums.`); await loadState(); layoutGrid(); renderGrid(true); } catch (e) { toast(e.message); }
+    } }, icon('album'), h('span', null, 'Save search')) : null,
     byDate ? h('select', { title: 'Group the photos by day or by month', class: 'groupsel', onchange: (e) => {
       const anchor = firstVisibleIndex();
       G.group = e.target.value; store.set('group', G.group); layoutGrid(); scrollToIndex(anchor, true); renderGrid(true);
@@ -631,6 +654,21 @@ function buildScrubber(byDate) {
     if (px - lastPx < 16) continue;
     lastPx = px;
     sc.append(h('span', { class: 'yr', style: `top:${px}px` }, yr));
+  }
+  // months as well when the whole list spans at most three years (a trip, a season), with room between them
+  const span = Math.abs(d.ts[0] - d.ts[d.count - 1]) / 86400 / 365;
+  if (span <= 3) {
+    let lastKey = null, lastMpx = -99;
+    for (const it of G.items) {
+      if (!it.head) continue;
+      const dt = date(d.ts[it.s]), key = dt.getUTCFullYear() * 12 + dt.getUTCMonth();
+      if (key === lastKey) continue;
+      lastKey = key;
+      const px = (it.y / G.total) * track;
+      if (px - lastMpx < 18 || sc.querySelector(`.yr[style="top:${px}px"]`)) continue;
+      lastMpx = px;
+      sc.append(h('span', { class: 'yr mo', style: `top:${px}px` }, MONTHS[dt.getUTCMonth()].slice(0, 3)));
+    }
   }
   const bubble = $('.bubble', sc);
   const at = (e) => Math.min(1, Math.max(0, (e.clientY - sc.getBoundingClientRect().top) / track));
@@ -1281,11 +1319,28 @@ function showAlbums() {
   };
   const newCard = h('div', { class: 'card', onclick: () => { const n = prompt('Name for the new album'); if (n && n.trim()) change('/api/ualbums', { name: n.trim() }); } },
     h('span', { class: 'cv newalbum' }, icon('add')), h('div', { class: 'nm' }, 'New album'), h('div', { class: 'sb' }, 'Stored in the viewer, not in digiKam'));
+  // smart albums: a saved search, evaluated live (count and cover fetched when the card is drawn)
+  const smart = (s) => {
+    const q = new URLSearchParams(s.query);
+    const c = thumbCard(null, s.name, '…', Object.fromEntries(q.entries()));
+    api('/api/photos?' + q.toString()).then((d) => { if (!c.isConnected) return; c.querySelector('.sb').textContent = plural(d.count, 'item'); if (d.count) { const im = h('img', { src: `/thumb/${d.id[0]}`, alt: '', loading: 'lazy' }); c.querySelector('.cv').prepend(im); } }).catch(() => { c.querySelector('.sb').textContent = 'could not run the search'; });
+    const act = (ic, title, fn) => h('button', { class: 'carddl', title, onclick: async (e) => { e.stopPropagation(); await fn(); } }, icon(ic));
+    c.querySelector('.cv').append(h('span', { class: 'cardacts' },
+      act('link', 'Copy a link to this smart album', async () => { await navigator.clipboard?.writeText(location.origin + '/' + hashFor('photos', q)); toast('Link copied.'); }),
+      act('edit', 'Rename', () => { const n = prompt('Smart album name', s.name); if (n && n.trim()) return change(`/api/searches/${s.id}`, { name: n.trim() }); }),
+      act('download', 'Download as a zip', () => downloadDialog(q)),
+      act('trash', 'Delete this smart album (the photos are not touched)', () => { if (confirm(`Delete the smart album “${s.name}”?`)) return change(`/api/searches/${s.id}`, { delete: true }); })));
+    c.classList.add('smart');
+    return c;
+  };
   const draw = (f) => {
     body.replaceChildren();
     const my = ST.albums.filter((a) => !f || norm(a.name).includes(f));
     body.append(h('div', { class: 'cards' }, my.map(mine), f ? null : newCard));
-    if (!my.length && f) body.append(h('div', { class: 'empty' }, 'No albums match.'));
+    const sm = ST.searches.filter((s) => !f || norm(s.name).includes(f));
+    if (sm.length || !f) body.append(h('h2', { style: '--hue:var(--c-indigo)' }, h('span', { class: 'hic' }, icon('search')), 'Smart albums', h('span', { class: 'muted' }, 'saved searches that update themselves')),
+      sm.length ? h('div', { class: 'cards' }, sm.map(smart)) : h('div', { class: 'muted', style: 'font-size:13px' }, 'None yet. Filter or search the photos, then use “Save search” in the bar above the grid.'));
+    if (!my.length && !sm.length && f) body.append(h('div', { class: 'empty' }, 'No albums match.'));
   };
   main.replaceChildren(h('div', { class: 'page' }, h('h1', null, 'Albums ', h('span', { class: 'muted' }, nf.format(ST.albums.length))),
     h('div', { class: 'muted', style: 'max-width:820px' }, 'Albums are groupings that exist only in this viewer: any photos, from any folder, under a name of your own. digiKam and the files on disk are not touched. The folders digiKam manages are under ', h('a', { href: '#/folders', class: 'lnk' }, 'Folders'), '.'),
@@ -1776,9 +1831,41 @@ async function showFaces(vp) {
     }
     return;
   }
+  // unnamed faces: look-alikes grouped (SFace embeddings), each group named or ignored in one go; the viewer never proposes a name
+  if (tab === 'unknown' && store.get('facegroups', '1') !== '0') {
+    let g = null;
+    try { g = await api('/api/faces/groups?kind=unknown'); } catch { g = null; }
+    if (route.view !== 'faces') return;
+    if (g && (g.groups.length || g.missing.length || g.progress.running)) {
+      const head = h('div', { class: 'muted', style: 'max-width:820px' }, `${nf.format(d.total)} faces digiKam found but could not name. Look-alikes are shown together so one decision covers the group; tick a face to leave it out. `,
+        h('a', { class: 'lnk', onclick: () => { store.set('facegroups', '0'); refresh(); } }, 'Show as a plain grid'));
+      const status = g.progress.running ? h('div', { class: 'enote' }, `Grouping… ${nf.format(g.progress.done)} / ${nf.format(g.progress.total)} faces compared.`)
+        : g.missing.length ? h('div', { class: 'enote' }, `${nf.format(g.missing.length)} faces have not been compared yet (the Face grouping job in Maintenance runs in the background).`) : null;
+      body.append(head, status);
+      const groupBlock = (faces, title, grouped) => {
+        const sel = new Set(faces.map((f, i) => i));
+        const grid = h('div', { class: 'fgrid' });
+        const draw = () => fill(grid, faces.map((f, i) => h('div', { class: 'fcell' + (sel.has(i) ? ' sel' : '') },
+          CAN_MANAGE ? h('label', { class: 'fchk' }, h('input', { type: 'checkbox', checked: sel.has(i), onchange: (e) => { e.target.checked ? sel.add(i) : sel.delete(i); draw(); } })) : null, crop(f),
+          h('div', { class: 'muted', style: 'font-size:11px;text-align:center' }, dfMonth.format(date(f.ts))))));
+        draw();
+        const chosen = () => faces.filter((f, i) => sel.has(i));
+        return h('div', { class: 'fgroup' }, h('div', { class: 'fghead' }, h('b', null, title), h('span', { class: 'sp' }),
+          CAN_MANAGE ? [h('button', { class: 'pillbtn on', onclick: () => personPicker(async (t) => { const c = chosen(); if (!c.length) return; if (!confirm(`Name ${c.length} faces as ${t.name}?`)) return; if (await facesBatch(c.map((f) => op(f, 'name', { tag: t.id })), `Named ${t.name}`)) refresh(); }) }, icon('person'), grouped ? 'Name these…' : 'Name selected…'),
+            h('button', { class: 'pillbtn', onclick: async () => { const c = chosen(); if (!c.length) return; if (!confirm(`Ignore ${c.length} faces? They stay, marked as not a person to name.`)) return; if (await facesBatch(c.map((f) => op(f, 'ignore')), 'Ignored')) refresh(); } }, 'Ignore'),
+            h('button', { class: 'pillbtn', onclick: () => { sel.size === faces.length ? sel.clear() : faces.forEach((f, i) => sel.add(i)); draw(); } }, 'Toggle all')] : null), grid);
+      };
+      g.groups.forEach((grp, k) => body.append(groupBlock(grp.faces, `Look-alikes ${k + 1} · ${grp.n} faces`, true)));
+      if (g.ungrouped.length) body.append(groupBlock(g.ungrouped, `${nf.format(g.ungrouped.length)} faces without a look-alike`, false));
+      if (g.missing.length) body.append(groupBlock(g.missing, `${nf.format(g.missing.length)} faces not compared yet`, false));
+      if (g.progress.running) setTimeout(() => { if (route.view === 'faces') refresh(); }, 5000);
+      return;
+    }
+  }
   // unnamed or ignored faces: a selectable grid, name or ignore many at once
   const sel = new Set();
   const grid = h('div', { class: 'fgrid' });
+  if (tab === 'unknown' && store.get('facegroups', '1') === '0') body.append(h('div', { class: 'muted', style: 'font-size:13px' }, h('a', { class: 'lnk', onclick: () => { store.set('facegroups', '1'); refresh(); } }, 'Group look-alikes'), ' (needs the SFace model from Maintenance › Models and data).'));
   const bar = h('div', { style: 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0' });
   const chosen = () => d.faces.filter((f, i) => sel.has(i));
   const drawBar = () => CAN_MANAGE && fill(bar,
@@ -1973,8 +2060,36 @@ async function showDuplicates() {
     d.groups.map((g) => h('div', { class: 'dupgroup' }, h('div', { class: 'muted' }, `${g.items.length} copies · ${fmtBytes(g.size)} each`),
       h('div', { class: 'duprow' }, g.items.map((x) => { const i = k++; return h('div', { class: 'dupitem' },
         h('div', { class: 'tile', style: `width:${Math.round(150 * Math.min(2, x.w / (x.h || 1)))}px;height:150px`, onclick: () => openLightbox(src, i, true) }, h('img', { src: `/thumb/${x.id}`, loading: 'lazy', alt: '' })),
-        h('div', { class: 'nm', title: x.name }, x.name), h('a', { class: 'sb lnk', href: hashFor('photos', photosWith({ album: albumIdByPath(x.album), sort: 'old' })) }, x.album.replace(/^\//, ''))); }))))));
+        h('div', { class: 'nm', title: x.name }, x.name), h('a', { class: 'sb lnk', href: hashFor('photos', photosWith({ album: albumIdByPath(x.album), sort: 'old' })) }, x.album.replace(/^\//, ''))); })))),
+    nearDupsSection(src)));
   syncLightbox();
+}
+/** Near-duplicates: look-alike photos found with the content-search embeddings (resized, re-saved, burst neighbours). */
+function nearDupsSection(src) {
+  const sec = h('div', { style: 'margin-top:36px' });
+  const draw = async () => {
+    let d; try { d = await api('/api/neardups'); } catch (e) { fill(sec, h('div', { class: 'muted' }, e.message)); return; }
+    if (route.view !== 'duplicates') return;
+    const p = d.progress;
+    const level = h('select', null, Object.keys(d.levels).map((k) => h('option', { value: k, selected: k === d.level }, `${k} (${d.levels[k]})`)));
+    const run = IS_ADMIN ? h('button', { class: 'pillbtn on', disabled: p.running || !d.enabled, onclick: async () => { try { await post('/api/neardups', { level: level.value }); toast('Looking for similar photos in the background.'); } catch (e) { toast(e.message, null, null, 8000); } setTimeout(draw, 1500); } }, icon('spark'), d.gen ? 'Find again' : 'Find similar photos') : null;
+    const note = !d.enabled ? 'Needs content search (SigLIP 2 or CLIP) installed: the similarity comes from its embeddings.'
+      : p.running ? `Comparing… ${nf.format(p.done)} / ${nf.format(p.total)} photos.`
+      : p.error ? `Last run failed: ${p.error}`
+      : !d.gen ? 'Not computed yet. Every photo is compared with every other using the content-search embeddings; a minute or two for a large library.'
+      : d.current ? `${nf.format(d.groups.length)} sets of similar photos at the “${d.level}” level. Sharpest copy first in each set.` : `Computed for an older search index (${d.level}); run it again for current results.`;
+    fill(sec, h('h2', { style: '--hue:var(--c-purple)' }, h('span', { class: 'hic' }, icon('spark')), 'Similar photos'),
+      h('div', { class: 'muted', style: 'max-width:820px' }, 'Resized, re-saved or re-edited copies and burst neighbours, which the byte-identical check above cannot see. The viewer never deletes anything; it only shows the sets.'),
+      h('div', { style: 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0' }, IS_ADMIN ? h('span', null, 'Strictness: ', level) : null, run, h('span', { class: 'muted' }, note)),
+      d.groups.map((g) => h('div', { class: 'dupgroup' }, h('div', { class: 'muted' }, `${g.n} similar · ${Math.round(g.score * 100)}% alike${g.identical ? ' · also byte-identical' : ''}`),
+        h('div', { class: 'duprow' }, g.items.map((x) => { const i = src.id.push(x.id) - 1; return h('div', { class: 'dupitem' },
+          h('div', { class: 'tile', style: `width:${Math.round(150 * Math.min(2, x.w / (x.h || 1)))}px;height:150px`, onclick: () => openLightbox(src, i, true) }, h('img', { src: `/thumb/${x.id}`, loading: 'lazy', alt: '' })),
+          h('div', { class: 'nm', title: x.name }, x.name), h('div', { class: 'sb' }, `${fmtBytes(x.size || 0)}${x.sharpn != null ? ' · sharpness ' + Math.round(x.sharpn * 100) + '%' : ''}`),
+          h('a', { class: 'sb lnk', href: hashFor('photos', photosWith({ album: albumIdByPath(x.album), sort: 'old' })) }, x.album.replace(/^\//, ''))); })))));
+    if (p.running) setTimeout(() => { if (route.view === 'duplicates') draw(); }, 4000);
+  };
+  draw();
+  return sec;
 }
 const albumIdByPath = (path) => META.albums.find((a) => a.path === path)?.id ?? '';
 
@@ -2299,7 +2414,7 @@ function buildLightbox() {
     info: h('aside', { class: 'lb-info', hidden: !LB.info }),
     favBtn: btn('heartO', 'Favorite (L)', () => setFavorite([LB.src.id[LB.i]], !ST.fav.has(LB.src.id[LB.i]))),
     albumBtn: btn('add', 'Add to album', () => albumDialog([LB.src.id[LB.i]])),
-    playBtn: btn('play', 'Slideshow (space)', toggleSlideshow), facesBtn: btn('face', 'Show faces (F)', toggleFaces), addFaceBtn: btn('add', 'Add a face: drag a rectangle around it', startDrawFace), objectsBtn: btn('dup', 'Show detected objects (O)', toggleObjects),
+    playBtn: btn('play', 'Slideshow (space)', toggleSlideshow), facesBtn: btn('face', 'Show faces (F)', toggleFaces), addFaceBtn: btn('add', 'Add a face: drag a rectangle around it (P names the next unnamed face)', startDrawFace), objectsBtn: btn('dup', 'Show detected objects (O)', toggleObjects),
     infoBtn: btn('info', 'Info (I)', toggleInfo, LB.info ? 'on' : ''),
     shareBtn: btn('share', 'Share', shareNow),
     dl: h('a', { class: 'iconbtn', title: 'Download original (D)', download: '' }, icon('download')),
@@ -2708,6 +2823,15 @@ function personPicker(onPick) {
   const back = modal('Who is this?', inp, list, h('div', { class: 'modal-btns' }, h('button', { class: 'pillbtn', onclick: () => back.remove() }, 'Cancel')));
   draw(); inp.focus();
 }
+/** P in the lightbox: name the first face digiKam has not named yet (its picker opens), or draw one when there is none. */
+function nameNextFace() {
+  const d = LB.detail;
+  if (!d || d.video) return;
+  const f = faceRegions(d).find((x) => x.kind === 'unknown' || x.kind === 'suggested');
+  if (!f) { startDrawFace(); return; }
+  if (!LB.faces) toggleFaces();
+  personPicker((t) => faceOp({ op: 'name', image: d.id, rect: [f.x, f.y, f.w, f.h], tag: t.id }));
+}
 function startDrawFace() {
   const { stage, frame } = LB.el, d = LB.detail;
   if (!d || d.video) return;
@@ -2857,6 +2981,8 @@ document.addEventListener('keydown', (e) => {
     else if (e.key === 'o' || e.key === 'O') toggleObjects();
     else if (e.key === 'd' || e.key === 'D') LB.el.dl.click();
     else if (e.key === 'l' || e.key === 'L') LB.el.favBtn.click();
+    else if ((e.key === 't' || e.key === 'T') && EDITING) tagDialog([LB.src.id[LB.i]]);
+    else if ((e.key === 'p' || e.key === 'P') && CAN_MANAGE) nameNextFace();
     else if (EDITING && /^[0-5]$/.test(e.key)) editPhotos([LB.src.id[LB.i]], { rating: +e.key });
     else if (e.key === ' ') { const v = LB.el.frame.querySelector('video'); v ? (v.paused ? v.play() : v.pause()) : toggleSlideshow(); }
     else return;

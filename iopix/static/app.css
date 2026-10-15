@@ -129,6 +129,9 @@ body.filters-open #main { right: 340px; }
 #scrub { position: fixed; top: calc(var(--topbar) + 8px); bottom: 8px; right: 14px; width: 44px; z-index: 5; cursor: pointer; touch-action: none; user-select: none; }
 body.filters-open #scrub { right: 354px; }
 #scrub .yr { position: absolute; right: 2px; font-size: 11px; color: var(--fg2); transform: translateY(-50%); pointer-events: none; }
+#scrub .yr.mo { font-size: 9.5px; opacity: .75; }
+.gbar .jumpdate { height: 30px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--fg); padding: 0 6px; font-size: 12.5px; }
+.card.smart .cv { outline: 2px dashed color-mix(in srgb, var(--c-indigo) 50%, transparent); outline-offset: -2px; }
 #scrub .pos { position: absolute; right: 0; width: 26px; height: 2px; background: var(--accent); pointer-events: none; }
 #scrub .bubble { position: absolute; right: 48px; transform: translateY(-50%); background: var(--bg); box-shadow: var(--shadow); border-bottom: 2px solid var(--accent); padding: 5px 12px; border-radius: 6px 6px 0 0; white-space: nowrap; font-weight: 500; pointer-events: none; }
 

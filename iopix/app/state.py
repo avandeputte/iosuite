@@ -103,6 +103,8 @@ def summary() -> dict:
                 "SELECT a.id, a.name, a.created, count(i.photo_id) AS n, "
                 "(SELECT photo_id FROM ualbum_items WHERE album_id = a.id ORDER BY added, photo_id LIMIT 1) AS cover "
                 "FROM ualbums a LEFT JOIN ualbum_items i ON i.album_id = a.id GROUP BY a.id ORDER BY a.created DESC")],
+            # smart albums: a saved filter query string, listed with the albums and evaluated live
+            "searches": [dict(r) for r in con.execute("SELECT id, name, query, created FROM searches ORDER BY created DESC")],
         }
     finally:
         con.close()
@@ -130,6 +132,18 @@ def delete_album(album_id: int):
         c.execute("DELETE FROM ualbum_items WHERE album_id = ?", (album_id,))
         c.execute("DELETE FROM ualbums WHERE id = ?", (album_id,))
     _write(run)
+
+
+def create_search(name: str, query: str) -> int:
+    return _write(lambda c: c.execute("INSERT INTO searches (name, query, created) VALUES (?,?,?)", (name, query, int(time.time()))).lastrowid)
+
+
+def rename_search(search_id: int, name: str):
+    _write(lambda c: c.execute("UPDATE searches SET name = ? WHERE id = ?", (name, search_id)))
+
+
+def delete_search(search_id: int):
+    _write(lambda c: c.execute("DELETE FROM searches WHERE id = ?", (search_id,)))
 
 
 def set_album_items(album_id: int, items: list, on: bool):

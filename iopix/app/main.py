@@ -29,7 +29,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
-from . import (analysis, caption, concepts, config, consistency, dbsync, detector, dkdb, edits, facemgr, folders, gpx, index, vdb,
+from . import (analysis, caption, concepts, config, consistency, dbsync, detector, dkdb, edits, facemgr, facevecs, folders, gpx, index, neardups, vdb,
                moments, places, placetags, tagmanager, thumbs)
 from . import state as appstate
 from . import jobs as bgjobs
@@ -97,6 +97,7 @@ def _start_prewarm():
     if config.PREWARM:
         prewarmer.start(rows)  # first: its cache scan is slow over a mount, and thumbnails come first in the queue
     analysis.start(rows)
+    facevecs.start()
     semantic.start(rows)
 
 
@@ -211,8 +212,8 @@ WRITE_PATHS = ("/api/edit", "/api/edits/db", "/api/consistency/sync", "/api/gpx/
                "/api/faces/person", "/api/placetags", "/api/tags/op")
 
 
-ADMIN_PATHS = ("/api/settings", "/api/maintenance", "/api/analysis/run", "/api/models/check", "/api/models/download", "/api/restart", "/api/users", "/api/update")
-SIGNED_IN_PATHS = ("/api/favorites", "/api/ualbums", "/api/tags/recent", "/api/auth/settings", "/api/auth/password")
+ADMIN_PATHS = ("/api/settings", "/api/maintenance", "/api/analysis/run", "/api/models/check", "/api/models/download", "/api/restart", "/api/users", "/api/update", "/api/neardups")
+SIGNED_IN_PATHS = ("/api/favorites", "/api/ualbums", "/api/searches", "/api/tags/recent", "/api/auth/settings", "/api/auth/password")
 
 
 def _hits(path: str, paths) -> bool:
@@ -840,6 +841,28 @@ async def api_ualbum_update(album_id: int, request: Request):
     return {"ok": True}
 
 
+@app.post("/api/searches")
+async def api_search_create(request: Request):
+    """A smart album: {name, query} where query is the photo filter query string (as in #/photos?...)."""
+    body = await request.json()
+    name = str(body.get("name", "")).strip()[:200]
+    query = str(body.get("query", "")).strip().lstrip("?")[:4000]
+    if not name or not query:
+        raise HTTPException(400, "A name and a search are required")
+    return {"id": appstate.create_search(name, query)}
+
+
+@app.post("/api/searches/{search_id}")
+async def api_search_update(search_id: int, request: Request):
+    """Body: {name} to rename, {delete: true} to remove."""
+    body = await request.json()
+    if body.get("delete"):
+        appstate.delete_search(search_id)
+    elif body.get("name"):
+        appstate.rename_search(search_id, str(body["name"]).strip()[:200])
+    return {"ok": True}
+
+
 # --------------------------------------------------------------------------
 # Metadata editing (sidecars, image files when enabled, digiKam's database on request)
 # --------------------------------------------------------------------------
@@ -1057,11 +1080,13 @@ def api_analysis():
         {"key": "objects", "label": "Object detection", "detail": "YOLOX-S: people, balls, animals, vehicles and other everyday objects, with boxes. Computed in the same pass as sharpness and exposure, so the two rows advance together.",
          "done": cov["objects"], "total": stills, "running": analysis.progress["objects"]["running"],
          "enabled": config.ANALYSIS and detector.MODEL.exists(), "rerun": True},
+        {"key": "faces", "label": "Face grouping", "detail": "An embedding (SFace) for every face digiKam has not named yet, so the Faces page can show look-alikes together and they can be named or ignored in one go. The viewer never proposes a name itself.",
+         "done": facevecs.coverage()[0], "total": facevecs.coverage()[1], "running": facevecs.progress["running"], "enabled": config.ANALYSIS and facevecs.available(), "rerun": True},
         {"key": "captions", "label": "Photo descriptions", "detail": "A one-sentence description of each photo (BLIP), searchable from the search box and shown in the info panel.",
          "done": cov["captions"], "total": stills, "running": analysis.progress["captions"]["running"],
          "enabled": config.ANALYSIS and caption.available(), "rerun": True},
     ]
-    queue_key = {"thumbs": "thumbs", "embeddings": "embeddings", "quality": "pixels", "objects": "pixels", "vision": "vision", "captions": "captions"}
+    queue_key = {"thumbs": "thumbs", "embeddings": "embeddings", "quality": "pixels", "objects": "pixels", "vision": "vision", "captions": "captions", "faces": "faces"}
     for j in jobs:
         j["queued"] = bgjobs.is_queued(queue_key[j["key"]])
     return {"jobs": jobs, "photos": total, "models": models if act is not None else [], "queue": bgjobs.status()}
@@ -1404,6 +1429,8 @@ async def api_analysis_run(request: Request):
             (semantic.upgrade or semantic.active).reset()
         elif job in ("quality", "vision", "objects", "captions"):
             analysis.reset(job)
+        elif job == "faces":
+            facevecs.reset()
         else:
             raise HTTPException(400, "Choose one analysis to run again from scratch")
     await run_in_threadpool(_start_prewarm)
@@ -1637,6 +1664,44 @@ async def api_face_person(request: Request):
         raise HTTPException(409, str(e))
     _kick.set()
     return {"id": tid}
+
+
+@app.get("/api/faces/groups")
+def api_faces_groups(kind: str = "unknown", tag: int = None, threshold: float = None):
+    """Undecided faces with look-alikes grouped (SFace embeddings); never a name proposal."""
+    if kind not in ("unknown", "suggested"):
+        raise HTTPException(400, "kind must be unknown or suggested")
+    t = max(0.2, min(0.9, threshold)) if threshold else facevecs.GROUP_THRESHOLD
+    try:
+        out = facevecs.groups(kind, t, tag)
+    except Exception as e:
+        raise HTTPException(500, f"Could not group faces: {str(e)[:200]}")
+    out["available"] = facevecs.available()
+    out["progress"] = dict(facevecs.progress)
+    return out
+
+
+@app.get("/api/neardups")
+def api_neardups(request: Request):
+    """Near-duplicate groups from the content-search embeddings, with whether they are current."""
+    st = neardups.status()
+    st["current"] = bool(st["gen"]) and st["gen"] == neardups.expected_gen(st["level"])
+    st["levels"] = neardups.LEVELS
+    st["groups"] = neardups.groups() if st["gen"] else []
+    return jresp(request, st)
+
+
+@app.post("/api/neardups")
+async def api_neardups_run(request: Request):
+    """Body: {level: strict|normal|loose}. Computes the pairs in the background (admin)."""
+    body = await request.json()
+    try:
+        neardups.start(str(body.get("level") or "normal"))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except RuntimeError as e:
+        raise HTTPException(409, str(e))
+    return {"ok": True}
 
 
 @app.get("/api/faces/summary")
