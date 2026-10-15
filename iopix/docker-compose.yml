@@ -5,10 +5,7 @@
 # library mounts are read-only. On the first start the container downloads the AI models named
 # in AUTO_MODELS (about 1.6 GB) into the volume while the library is already browsable.
 #
-# The image is on GitHub's registry and is private like the repository: either make the package
-# public (GitHub > Packages > digikam-viewer > Package settings > Change visibility) or give the
-# host a registry login (Portainer: Registries > ghcr.io with a GitHub token that has read:packages;
-# Dockge/CLI: `docker login ghcr.io`).
+# The image is public on GitHub's registry: no login is needed to pull it.
 services:
   digikam-viewer:
     image: ghcr.io/avandeputte/digikam-viewer:latest
