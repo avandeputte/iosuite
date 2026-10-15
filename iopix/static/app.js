@@ -658,6 +658,7 @@ function buildScrubber(byDate) {
   // months as well when the whole list spans at most three years (a trip, a season), with room between them
   const span = Math.abs(d.ts[0] - d.ts[d.count - 1]) / 86400 / 365;
   if (span <= 3) {
+    const yearPx = [...sc.querySelectorAll('.yr')].map((e) => parseFloat(e.style.top));
     let lastKey = null, lastMpx = -99;
     for (const it of G.items) {
       if (!it.head) continue;
@@ -665,7 +666,7 @@ function buildScrubber(byDate) {
       if (key === lastKey) continue;
       lastKey = key;
       const px = (it.y / G.total) * track;
-      if (px - lastMpx < 18 || sc.querySelector(`.yr[style="top:${px}px"]`)) continue;
+      if (px - lastMpx < 18 || yearPx.some((y) => Math.abs(y - px) < 16)) continue;  // never on top of a year
       lastMpx = px;
       sc.append(h('span', { class: 'yr mo', style: `top:${px}px` }, MONTHS[dt.getUTCMonth()].slice(0, 3)));
     }

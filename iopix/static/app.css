@@ -550,8 +550,12 @@ body.nobadges .cbadges, body.nobadges .fbadge { display: none; }
 /* Settings and Maintenance section headings: larger, a coloured marker, a line under them */
 .spage h2 { font-size: 19px; font-weight: 600; color: var(--fg); margin: 40px 0 6px; padding-bottom: 8px; align-items: center;
   border-bottom: 2px solid color-mix(in srgb, var(--accent) 35%, transparent); }
-.spage h2::before, .page h2.sec::before, .page h2:has(> .hic)::before { content: ""; width: 5px; height: 20px; border-radius: 3px; flex: none; margin-right: -2px;
+.spage h2::before, .page h2.sec::before, .ghead::before { content: ""; width: 5px; height: 20px; border-radius: 3px; flex: none; margin-right: -2px;
   background: linear-gradient(180deg, #4f5bff, #a24bf0 55%, #ff5a7e); }
+/* the date headings of the photo grid: the same marker, a little smaller, and the day in full weight */
+.ghead::before { width: 4px; height: 16px; margin: 0 8px 2px 0; align-self: flex-end; }
+.ghead { font-weight: 600; }
+.ghead:hover::before, body.selecting .ghead::before { display: none; }  /* the select-the-day check takes its place */
 /* content pages (Explore, Detected content, Events, Albums, Duplicates): the same marker, bolder titles, no underline;
    headings that carry a coloured icon keep it next to the marker */
 .page h2.sec, .page h2:has(> .hic) { font-size: 18px; font-weight: 600; color: var(--fg); align-items: center; margin-top: 34px; }
