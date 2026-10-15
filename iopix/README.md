@@ -300,36 +300,3 @@ Dockerfile, docker-compose.yml, .github/workflows/docker.yml   the container ima
 installer/      the self-extracting Linux installer (make-installer.sh builds dist/digikam-viewer-install.sh)
 proxmox/        Proxmox VE LXC scripts in the community-scripts layout
 ```
-
-Inside `app/`:
-
-    app/config.py        paths and tunables (environment variables)
-    app/main.py          FastAPI routes, zip download, background scheduling
-    app/dkdb.py          digiKam database access for SQLite and MySQL/MariaDB, backups
-    app/index.py         builds data/index.db from the digiKam database
-    app/query.py         filter parameters to SQL (shared by web API and MCP)
-    app/thumbs.py        thumbnails, previews, face crops, background pre-warm
-    app/vdb.py           the viewer's own database: SQLite (data/viewer.db) or MySQL/MariaDB, one bridge for every module below
-    app/state.py         favorites, app albums, settings, the pending-edit and tag-manager queues; migrates state.db + analysis.db
-    app/folders.py       digiKam folders: New folder and uploads (Albums and Images rows digiKam completes on its next scan)
-    app/jobs.py          the single background job queue
-    app/edits.py         metadata edits to XMP sidecars and image files, with backups
-    app/dbsync.py        applies pending edits to digiKam's database (on request, digiKam closed)
-    app/tagmanager.py    create / rename / move / delete tags, tag badges
-    app/facemgr.py       face management mirroring digiKam's FaceTagsEditor
-    app/placetags.py     Places/Country/Region/Town tags from GPS
-    app/gpx.py           GPX track correlation
-    app/consistency.py   database / sidecar / file comparison and directional sync
-    app/places.py        offline reverse geocoding (GeoNames)
-    app/semantic.py      content search (CLIP or SigLIP 2)
-    app/concepts.py      the Detected content vocabulary and tag cover picking
-    app/analysis.py      background sharpness, OCR, object and caption analysis (tables in data/viewer.db)
-    app/detector.py      YOLOX-S object detection
-    app/caption.py       BLIP photo descriptions
-    app/moments.py       bursts, events and trips
-    app/models.py        model registry, checks for newer model versions, downloads (python -m app.models download <key>)
-    app/updates.py       the viewer's own version: installed commit, GitHub check, running update.sh, the MCP admin token
-    app/mcp_server.py    MCP server (served at /mcp by the app; stdio with python -m app.mcp_server)
-    app/users.py         accounts, roles, sessions, per-user settings, person link and email
-    app/geocode.py       place search for the location dialog (Nominatim / Google, offline towns)
-    app/maps.py          map provider: OpenStreetMap or Google Maps tiles with the owner's key
