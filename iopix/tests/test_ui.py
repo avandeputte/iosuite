@@ -428,6 +428,8 @@ def test_explore_summary_cards_link_to_their_views(page, server, lib):
     assert labels == ["photos", "videos", "people", "folders", "with location", "on disk"], labels
     assert page.locator(".stats a.stat").count() == 5, "all but 'on disk' open a view"
     assert page.locator(".stats .stat .sic .ic svg").count() == 6, "each card has an icon"
+    colors = set(page.evaluate("[...document.querySelectorAll('.stat .sic .ic')].map(e => getComputedStyle(e).color)"))
+    assert colors == {"rgb(255, 255, 255)"}, f"white glyphs on the coloured tiles, for contrast: {colors}"
     page.click(".stats a.stat:has-text('people')")
     page.wait_for_selector("#nav a[data-v=people].on", timeout=5000)
 
