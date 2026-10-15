@@ -2121,6 +2121,10 @@ async function settingsPage(view) {
       })();
       return wrap;
     })() : null,
+    IS_ADMIN ? row('Check for updates daily', m.updateCheckLocked ? 'Switched off by UPDATE_CHECK=0 in the environment: the viewer never contacts GitHub on its own.'
+      : 'Once a day the viewer asks GitHub whether a newer version of the viewer exists and, if so, shows admins a banner. Only the public list of changes is fetched; nothing about this install or its photos is sent. Off: it never contacts GitHub on its own (Maintenance › Viewer can still check on request).',
+      h('label', { style: 'display:flex;gap:8px;align-items:center;cursor:pointer;white-space:nowrap' }, h('input', { type: 'checkbox', checked: !!m.updateCheck, disabled: !!m.updateCheckLocked, onchange: async (e) => {
+        try { await post('/api/settings', { update_check: e.target.checked }); toast(e.target.checked ? 'The viewer will check for updates once a day.' : 'The viewer will not contact GitHub on its own.'); pollSoon(2000); } catch (err) { e.target.checked = !e.target.checked; toast(err.message); } } }), 'Check daily')) : null,
     IS_ADMIN ? row('Read-only mode', m.readOnlyLocked ? 'Locked on by READ_ONLY=1 in the environment: nothing in the library can be changed from the viewer.'
       : `${m.readOnly ? 'On' : 'Off'}. When on, the viewer only browses: editing, tagging, face naming, place tags, GPS tracks, metadata sync and database updates are switched off and refused by the server. Favorites and viewer albums keep working; they never touch the library.`,
       m.readOnlyLocked ? null : btn(m.readOnly ? 'Turn off' : 'Turn on', async () => { try { await post('/api/settings', { read_only: !m.readOnly }); const s = await api('/api/status'); EDITING = s.editing; CAN_MANAGE = s.editing && s.dbWrite; } catch (e) { toast(e.message); } settingsPage(view); })) : null,
@@ -3183,6 +3187,22 @@ async function awaitReindex(until = () => true, tries = 20, ms = 400) {
   }
   return false;
 }
+/** The "a newer version is out" banner, for admins, when the daily check found one; dismissed per version in this browser. */
+function updateBanner(u) {
+  let b = $('#updbanner');
+  let gone = '';
+  try { gone = localStorage.getItem('upd-dismissed') || ''; } catch { /* private mode */ }
+  if (!u || gone === u.remote) { b?.remove(); return; }
+  if (b && b.dataset.remote === u.remote) return;
+  b?.remove();
+  b = h('div', { id: 'updbanner', 'data-remote': u.remote },
+    h('span', { class: 'ic-wrap' }, icon('spark')),
+    h('div', null, h('b', null, u.version ? `Version ${u.version} is available` : 'A newer version is available'),
+      h('div', { class: 'muted' }, `You have v${APP_VERSION || '?'}. ${(u.message || '').replace(/^v\d+\.\d+\.\d+:\s*/, '').slice(0, 140)}`)),
+    h('a', { class: 'pillbtn on', href: '#/maintenance', onclick: () => b.remove() }, 'Update…'),
+    h('button', { class: 'iconbtn', title: 'Not now (hidden until the next version)', onclick: () => { try { localStorage.setItem('upd-dismissed', u.remote); } catch { /* ignore */ } b.remove(); } }, icon('close')));
+  document.body.append(b);
+}
 async function pollStatus() {
   let delay = 20000;
   try {
@@ -3204,6 +3224,7 @@ async function pollStatus() {
     if (s.app) APP_STAMP = s.app;
     SEM = s.semantic; EDITING = s.editing; PENDING = s.pendingEdits; WRITE_FILES = s.writeFiles; CAN_MANAGE = s.editing && s.dbWrite;
     IS_ADMIN = s.isAdmin; USERS_EXIST = s.usersExist; DIGIKAM_CHECK = s.digikamCheck || 'pgrep';
+    updateBanner(s.updateAvailable);
     if (s.appVersion) { APP_VERSION = s.appVersion; APP_COMMIT = s.commit || ''; const b = $('.brand'); if (b) b.title = `digiKam Viewer v${APP_VERSION}${APP_COMMIT ? ' (' + APP_COMMIT + ')' : ''}`; } if ((s.user && s.user.id) !== (USER && USER.id)) { USER = s.user; renderUserMenu(); }
     document.body.classList.toggle('noadmin', !IS_ADMIN);
     if (PENDING && s.dbWrite && !el.childNodes.length) el.replaceChildren(h('a', { class: 'lnk', style: 'cursor:pointer', title: 'Edits saved in sidecars that digiKam’s database does not have yet', onclick: dbDialog },

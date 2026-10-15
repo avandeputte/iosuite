@@ -199,6 +199,7 @@ async def lifespan(_app):
     _refresh(initial=True)
     threading.Thread(target=thumbs.prune_previews, daemon=True).start()
     threading.Thread(target=_watch, name="reindex", daemon=True).start()
+    updates.start_daily()  # the daily "is there a newer version" check, when the setting allows it
     if config.AUTO_MODELS:  # containers and fresh installs: fetch missing models, then start the jobs that need them
         dlmodels.auto_download(config.AUTO_MODELS, on_done=_models_arrived)
     async with mcp_server.server.session_manager.run():  # the MCP endpoint (/mcp) lives in this process
@@ -429,6 +430,7 @@ def api_status(request: Request):
             "dbWrite": config.DB_WRITE and not appstate.read_only() and users.can_write(user), "writeFiles": edits.writes_files(),
             "user": ({"id": user["id"], "name": user["name"], "role": user["role"], "person": user.get("person")} if user else None), "usersExist": users.any_users(),
             "isAdmin": users.is_admin(user), "signedIn": users.is_signed_in(user), "requireLogin": users.require_login(),
+            "updateAvailable": updates.available() if users.is_admin(user) and updates.auto_check_enabled() else None,
             "readOnly": appstate.read_only(), "readOnlyLocked": config.READ_ONLY, "digikamCheck": config.DIGIKAM_CHECK,
             "appVersion": APP_VERSION, "commit": updates.local_commit()[:7],
             "tagJobs": {**tagmanager.progress, "pending": tagmanager.pending_jobs()},
@@ -966,7 +968,7 @@ async def api_edit_revert(request: Request):
 # --------------------------------------------------------------------------
 
 def _settings_public() -> dict:
-    return {"write_files": edits.writes_files(), "search_model": semantic.chosen(), "bg_threads": bgjobs.threads(), "read_only": appstate.read_only(), "require_login": users.require_login(), "database": _db_settings_public(), "album_roots": dkdb.root_overrides(), "map_provider": appstate.get_setting("map_provider", "osm"), "google_maps_key_set": bool(maps.key()), "templates": json.loads(appstate.get_setting("templates", "[]"))}
+    return {"write_files": edits.writes_files(), "search_model": semantic.chosen(), "bg_threads": bgjobs.threads(), "read_only": appstate.read_only(), "require_login": users.require_login(), "update_check": updates.auto_check_enabled(), "update_check_locked": os.environ.get("UPDATE_CHECK", "").strip() == "0", "database": _db_settings_public(), "album_roots": dkdb.root_overrides(), "map_provider": appstate.get_setting("map_provider", "osm"), "google_maps_key_set": bool(maps.key()), "templates": json.loads(appstate.get_setting("templates", "[]"))}
 
 
 @app.get("/api/settings")
@@ -981,6 +983,14 @@ async def api_settings(request: Request):
     body = await request.json()
     if "write_files" in body:
         appstate.set_setting("write_files", "1" if body["write_files"] else "0")
+    if "update_check" in body:  # the daily look at GitHub for a newer version (off: the viewer never contacts GitHub on its own)
+        if body["update_check"] and os.environ.get("UPDATE_CHECK", "").strip() == "0":
+            raise HTTPException(400, "Switched off by UPDATE_CHECK=0 in the environment")
+        appstate.set_setting("update_check", "1" if body["update_check"] else "0")
+        if body["update_check"]:
+            threading.Thread(target=updates.check, daemon=True).start()
+        else:
+            updates._checked.clear()
     if "require_login" in body:  # visitors get the sign-in screen and nothing else
         if body["require_login"] and not users.any_users():
             raise HTTPException(400, "Create an account first, or nobody could sign in")
@@ -1390,7 +1400,8 @@ def api_maintenance():
             "viewerDb": vdb.SQLITE_FILE.stat().st_size if not vdb.is_mysql() and vdb.SQLITE_FILE.exists() else 0,
             "embeddings": sum(e.file.stat().st_size for e in semantic.engines.values() if e.file.exists()),
             "free": free},
-        "writeFiles": edits.writes_files(), "readOnly": appstate.read_only(), "readOnlyLocked": config.READ_ONLY, "database": _db_settings_public(), "mapProvider": appstate.get_setting("map_provider", "osm"), "googleMapsKeySet": bool(maps.key()), "searchModel": semantic.chosen(),
+        "writeFiles": edits.writes_files(), "readOnly": appstate.read_only(), "readOnlyLocked": config.READ_ONLY,
+        "updateCheck": updates.auto_check_enabled(), "updateCheckLocked": os.environ.get("UPDATE_CHECK", "").strip() == "0", "database": _db_settings_public(), "mapProvider": appstate.get_setting("map_provider", "osm"), "googleMapsKeySet": bool(maps.key()), "searchModel": semantic.chosen(),
         "templates": json.loads(appstate.get_setting("templates", "[]")), "templateFields": list(edits.TEMPLATE_FIELDS),
         "recentTags": json.loads(appstate.get_setting("recent_tags", "[]")),
     }

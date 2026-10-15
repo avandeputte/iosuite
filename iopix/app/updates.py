@@ -80,6 +80,46 @@ def _fetch(url: str) -> dict:
         return json.load(r)
 
 
+DAILY = 24 * 3600
+
+
+def auto_check_enabled() -> bool:
+    """Settings › Viewer › Check for updates daily (on unless switched off; UPDATE_CHECK=0 locks it off)."""
+    from . import state
+    if os.environ.get("UPDATE_CHECK", "").strip() == "0":
+        return False
+    return state.get_setting("update_check", "1") == "1"
+
+
+def remote_version(message: str):
+    """The version a commit announces in its first line ("v1.12.2: ..."), if it does."""
+    m = re.match(r"\s*v(\d+\.\d+\.\d+)\b", message or "")
+    return m.group(1) if m else None
+
+
+def available() -> dict:
+    """What the banner needs, from the last check: {version, remote, message, date} or None."""
+    c = dict(_checked)
+    if c.get("status") != "update":
+        return None
+    return {"remote": c.get("remote"), "version": remote_version(c.get("remoteMessage")), "message": c.get("remoteMessage"), "date": c.get("remoteDate")}
+
+
+def start_daily():
+    """Ask GitHub once a day (the first time a minute after start) whether main has moved on,
+    while the setting is on. Only the commit list is fetched; nothing about this install is sent."""
+    def loop():
+        time.sleep(60)
+        while True:
+            try:
+                if auto_check_enabled():
+                    check()
+            except Exception:
+                pass
+            time.sleep(DAILY)
+    threading.Thread(target=loop, name="update-check", daemon=True).start()
+
+
 def check() -> dict:
     """{installed, remote, remoteDate, remoteMessage, status: current|update|error}"""
     mine = local_commit()

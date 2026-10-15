@@ -779,3 +779,22 @@ def test_timeline_rail_ribbon_marker_and_preview(page, server, lib):
     page.wait_for_timeout(300)
     assert page.locator("#main").evaluate("m => m.scrollTop") > 0
     assert page.locator("#scrub .pos").inner_text() != before or True
+
+
+def test_update_banner_shows_and_can_be_dismissed(page, server):
+    import json as _json
+    def fake_status(route):
+        r = route.fetch()
+        body = r.json()
+        body["updateAvailable"] = {"remote": "abc1234", "version": "9.9.9", "message": "v9.9.9: something new", "date": "2026-10-16"}
+        route.fulfill(response=r, body=_json.dumps(body), headers={**r.headers, "content-type": "application/json"})
+    page.route("**/api/status", fake_status)
+    page.goto(server + "/#/photos")
+    page.wait_for_selector("#updbanner", timeout=10000)
+    assert "9.9.9" in page.locator("#updbanner").inner_text()
+    page.locator("#updbanner button[title^='Not now']").click()
+    assert page.locator("#updbanner").count() == 0
+    page.reload()
+    page.wait_for_selector("#topbar", timeout=10000)
+    page.wait_for_timeout(1500)
+    assert page.locator("#updbanner").count() == 0, "dismissed for this version"

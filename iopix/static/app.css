@@ -614,3 +614,13 @@ body.nobadges .cbadges, body.nobadges .fbadge { display: none; }
 }
 
 @media (max-width: 800px) { #scrub .ribbon { width: 10px; } #scrub .pos { font-size: 9.5px; padding: 0 5px; } #scrub .bubble .bth img { width: 44px; height: 44px; } }
+
+/* the update banner: bottom right, above everything but dialogs */
+#updbanner { position: fixed; right: 16px; bottom: 16px; z-index: 120; display: flex; gap: 12px; align-items: center; max-width: 520px; padding: 12px 10px 12px 14px;
+  background: var(--bg); border-radius: 14px; box-shadow: var(--shadow); border: 1px solid color-mix(in srgb, #a24bf0 35%, transparent); font-size: 13px; }
+#updbanner .ic-wrap { width: 34px; height: 34px; border-radius: 10px; flex: none; display: inline-flex; align-items: center; justify-content: center; color: #fff;
+  background: linear-gradient(135deg, #4f5bff, #a24bf0 55%, #ff5a7e); }
+#updbanner .ic-wrap .ic { width: 20px; height: 20px; }
+#updbanner .muted { font-size: 12px; margin-top: 2px; white-space: normal; }
+#updbanner .pillbtn { height: 32px; }
+@media (max-width: 800px) { #updbanner { left: 8px; right: 8px; bottom: calc(64px + env(safe-area-inset-bottom)); max-width: none; } }

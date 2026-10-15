@@ -76,6 +76,7 @@ Derived from these:
 - **Proxmox:** `update` inside the container (the framework's command) runs the same script.
 - **Docker:** `docker compose pull && docker compose up -d`.
 - **From an MCP client (e.g. Claude):** the `check_for_update` and `update_viewer` tools (`update_viewer` takes an optional `ref`, the commit to install; give it the sha just pushed, because GitHub can still report the previous commit for a short while, and `check_for_update` then shows the outcome under `lastUpdate`); the latter needs the admin token shown under Maintenance › Viewer version › MCP update token (or `MCP_ADMIN_TOKEN` in the environment), because the MCP endpoint has no sign-in of its own; the diagnostics tools take the same token. Treat the token like a password.
+- **Daily check:** with Settings › Check for updates daily (on by default; `UPDATE_CHECK=0` locks it off) the viewer asks GitHub once a day whether a newer version exists and shows admins a banner with a link to the update; only the public commit list is fetched, nothing about the install is sent.
 - **From the app:** Maintenance › Viewer version shows the installed commit, "Check for updates" compares it with GitHub's main branch, and "Update now" runs `update.sh` (not in Docker, which says to pull instead). The viewer restarts itself when the update finishes.
 
 ## Users and permissions

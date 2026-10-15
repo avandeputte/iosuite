@@ -64,3 +64,23 @@ def test_run_passes_the_ref_and_keeps_the_outcome(client, monkeypatch, tmp_path)
         time.sleep(0.1)
     s = client.get("/api/update").json()
     assert s["lastUpdate"]["ok"] is False and "GitHub" in s["lastUpdate"]["text"]
+
+
+def test_daily_check_banner_and_setting(client, monkeypatch):
+    """The banner data appears in the status (for admins, with the setting on) once a check found a newer
+    commit; switching the setting off forgets it and stops the viewer contacting GitHub."""
+    from app import state
+    monkeypatch.setattr(updates, "local_commit", lambda: "abcdef1234567890")
+    monkeypatch.setattr(updates, "_fetch", lambda url: {"sha": "fedcba1234567890", "commit": {"committer": {"date": "2026-10-16T00:00:00Z"}, "message": "v9.9.9: something new\n\nbody"}})
+    state.set_setting("update_check", "1")
+    updates.check()
+    u = client.get("/api/status").json()["updateAvailable"]
+    assert u == {"remote": "fedcba1", "version": "9.9.9", "message": "v9.9.9: something new", "date": "2026-10-16"}
+    assert client.post("/api/settings", json={"update_check": False}).status_code == 200
+    assert client.get("/api/status").json()["updateAvailable"] is None and updates.auto_check_enabled() is False
+    assert client.get("/api/maintenance").json()["updateCheck"] is False
+    monkeypatch.setenv("UPDATE_CHECK", "0")
+    assert client.post("/api/settings", json={"update_check": True}).status_code == 400, "locked off by the environment"
+    monkeypatch.delenv("UPDATE_CHECK")
+    state.set_setting("update_check", "1")
+    assert updates.remote_version("v1.2.3: x") == "1.2.3" and updates.remote_version("docs: x") is None
