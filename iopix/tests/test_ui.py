@@ -411,3 +411,42 @@ def test_explore_summary_cards_link_to_their_views(page, server, lib):
     assert page.locator(".stats .stat .sic .ic svg").count() == 7, "each card has an icon"
     page.click(".stats a.stat:has-text('people')")
     page.wait_for_selector("#nav a[data-v=people].on", timeout=5000)
+
+
+def test_lightbox_film_strip_and_remembered_info_panel(page, server, lib):
+    """The film strip along the bottom of the lightbox shows the neighbours, marks the current
+    photo, jumps on click, and slides up when the mouse reaches the bottom edge. The info panel
+    reopens the way it was last left."""
+    page.goto(server + "/#/photos")
+    page.wait_for_selector(".tile img", timeout=15000)
+    page.locator(".tile").first.click()
+    page.wait_for_selector("#lightbox .lb-frame img, #lightbox .lb-frame video", timeout=15000)
+    page.wait_for_selector("#lightbox .lb-strip .reel img.cur", timeout=5000)
+    reel = page.locator("#lightbox .lb-strip .reel img")
+    assert reel.count() >= 2 and page.locator("#lightbox .lb-strip .reel img.cur").get_attribute("data-i") == "0"
+    strip = page.locator("#lightbox .lb-strip")
+    assert "show" not in (strip.get_attribute("class") or ""), "parked until the pointer comes near the bottom edge"
+    box = page.locator("#lightbox .lb-stage").bounding_box()
+    page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+    page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] - 20)
+    page.wait_for_selector("#lightbox .lb-strip.show", timeout=3000)
+    page.mouse.move(box["x"] + box["width"] / 2, box["y"] + 200)
+    page.wait_for_selector("#lightbox .lb-strip:not(.show)", timeout=3000)
+    reel.nth(1).click(force=True)
+    page.wait_for_function("document.querySelector('#lightbox .lb-strip .reel img.cur')?.dataset.i === '1'", timeout=5000)
+    assert "p=" in page.url
+    # the info panel: open it, leave, come back
+    page.keyboard.press("i")
+    page.wait_for_selector("#lightbox .lb-info:not([hidden])", timeout=3000)
+    page.keyboard.press("Escape")
+    page.wait_for_selector("#lightbox", state="hidden", timeout=5000)
+    page.locator(".tile").first.click()
+    page.wait_for_selector("#lightbox .lb-frame img, #lightbox .lb-frame video", timeout=15000)
+    assert page.locator("#lightbox .lb-info").is_visible(), "reopens with the info panel as it was left"
+    page.keyboard.press("i")
+    page.keyboard.press("Escape")
+    page.wait_for_selector("#lightbox", state="hidden", timeout=5000)
+    page.locator(".tile").first.click()
+    page.wait_for_selector("#lightbox .lb-frame img, #lightbox .lb-frame video", timeout=15000)
+    assert page.locator("#lightbox .lb-info").is_hidden()
+    page.keyboard.press("Escape")

@@ -2162,23 +2162,59 @@ function buildLightbox() {
   const e = LB.el;
   e.prev = h('button', { class: 'lb-nav prev', title: 'Previous (←)', onclick: (ev) => { ev.stopPropagation(); step(-1); } }, icon('left'));
   e.next = h('button', { class: 'lb-nav next', title: 'Next (→)', onclick: (ev) => { ev.stopPropagation(); step(1); } }, icon('right'));
+  // the film strip: thumbnails of the photos around the current one, along the bottom edge.
+  // Like a taskbar set to auto-hide it stays out of the way, slides up when the pointer reaches
+  // the bottom edge (or on a tap of its grip on touch screens) and drops again when it leaves.
+  e.strip = h('div', { class: 'lb-strip' }, h('div', { class: 'grip', title: 'Film strip', onclick: () => e.strip.classList.toggle('show') }), h('div', { class: 'reel' }));
   e.stage = h('div', { class: 'lb-stage' },
     h('div', { class: 'lb-top' }, btn('back', 'Close (Esc)', () => closeLightbox(true)), e.ttl, h('span', { class: 'sp' }), e.playBtn, e.facesBtn, e.addFaceBtn, e.objectsBtn, e.favBtn, e.albumBtn, e.orig, e.dl, e.infoBtn),
-    e.frame, e.prev, e.next);
+    e.frame, e.prev, e.next, e.strip);
   lb.replaceChildren(e.stage, e.info);
   initGestures(e.stage);
   let idle;
-  e.stage.addEventListener('pointermove', () => {
+  e.stage.addEventListener('pointermove', (ev) => {
     e.stage.classList.remove('lb-idle');
     clearTimeout(idle);
     idle = setTimeout(() => e.stage.classList.add('lb-idle'), 2800);
+    if (ev.pointerType === 'mouse') {
+      const nearBottom = e.stage.clientHeight - ev.clientY + e.stage.getBoundingClientRect().top < 110;
+      e.strip.classList.toggle('show', nearBottom || ev.target.closest('.lb-strip') !== null);
+    }
   });
+  e.stage.addEventListener('pointerleave', () => e.strip.classList.remove('show'));
+}
+
+/** Rebuild the strip around the current photo when it drifts out of the rendered window, and
+ *  keep the current one marked and centred. */
+function renderStrip() {
+  const { src, i, el } = LB, reel = el.strip.querySelector('.reel');
+  if (!src || src.id.length < 2) { el.strip.hidden = true; return; }
+  el.strip.hidden = false;
+  const W = 80;  // thumbnails rendered on each side; a window keeps a 30,000-photo grid cheap
+  if (LB.stripSrc !== src || LB.stripLo == null || i < LB.stripLo + 15 && LB.stripLo > 0 || i > LB.stripHi - 15 && LB.stripHi < src.id.length - 1) {
+    const lo = Math.max(0, i - W), hi = Math.min(src.id.length - 1, i + W);
+    LB.stripSrc = src; LB.stripLo = lo; LB.stripHi = hi;
+    const kids = [];
+    for (let k = lo; k <= hi; k++) {
+      const ar = src.w ? Math.max(0.6, Math.min(2.2, src.w[k] / (src.h[k] || 1))) : 1;
+      kids.push(h('img', { src: `/thumb/${src.id[k]}`, alt: '', loading: 'lazy', draggable: 'false', 'data-i': k, style: `width:${Math.round(56 * ar)}px`,
+        onclick: () => { if (LB.i === k) return; LB.i = k; setPhotoParam(src.id[k], false); showItem(); } }));
+    }
+    reel.replaceChildren(...kids);
+  }
+  for (const im of reel.children) im.classList.toggle('cur', +im.dataset.i === i);
+  const cur = reel.querySelector('.cur');
+  if (cur) cur.scrollIntoView({ inline: 'center', block: 'nearest', behavior: el.strip.classList.contains('show') ? 'smooth' : 'instant' });
 }
 
 function openLightbox(src, i, fromUser) {
   if (!LB.el) buildLightbox();
   const wasOpen = LB.open;
   LB.open = true; LB.src = src; LB.i = i;
+  if (!wasOpen) {  // the info panel opens the way it was last left (the account's setting, or this browser's)
+    LB.info = store.get('info', '0') === '1';
+    LB.el.info.hidden = !LB.info; LB.el.infoBtn.classList.toggle('on', LB.info);
+  }
   $('#lightbox').hidden = false;
   if (fromUser) { setPhotoParam(src.id[i], !wasOpen); if (!wasOpen) LB.pushed = true; }
   showItem();
@@ -2188,7 +2224,7 @@ function closeLightbox(fromUser) {
   stopSlideshow();
   LB.open = false; LB.token++;
   LB.el.frame.replaceChildren();
-  LB.mini?.remove(); LB.mini = null;
+  LB.mini?.remove(); LB.mini = null; LB.stripSrc = null;
   $('.facemenu')?.remove();
   $('#lightbox').hidden = true;
   const src = LB.src, i = LB.i;
@@ -2218,6 +2254,7 @@ function showItem() {
   else img.onload = () => { if (token === LB.token && !LB.detail) { LB.ar = img.naturalWidth / img.naturalHeight; sizeFrame(); } };
   sizeFrame();
   el.ttl.textContent = src.ts ? dfDay.format(date(src.ts[i])) : '';
+  renderStrip();
   updateFavBtn();
   el.dl.href = `/orig/${id}?dl=1`;
   el.orig.href = `/orig/${id}`;
@@ -2298,7 +2335,7 @@ function initGestures(stage) {
   const pts = new Map();
   let start = null, pinch = 0, moved = false;
   stage.addEventListener('wheel', (e) => {
-    if (e.target.closest('.lb-top')) return;
+    if (e.target.closest('.lb-top, .lb-strip')) return;
     e.preventDefault();
     zoomAt(Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0022)), e.clientX, e.clientY);
   }, { passive: false });
@@ -2308,7 +2345,7 @@ function initGestures(stage) {
   });
   stage.addEventListener('pointerdown', (e) => {
     // the face menu lives inside the stage; capturing its pointer would swallow its clicks
-    if (e.target.closest('button, a, video, .facebox, .facemenu')) return;
+    if (e.target.closest('button, a, video, .facebox, .facemenu, .lb-strip')) return;
     pts.set(e.pointerId, e);
     stage.setPointerCapture(e.pointerId);
     moved = false;
