@@ -1685,7 +1685,7 @@ function analysisSection(view, part = 'jobs') {
 const SRC_LABEL = { db: 'Database', sidecar: 'Sidecar', file: 'Image file' };
 const FIELD_LABEL = { rating: 'Rating', title: 'Title', caption: 'Caption', tags: 'Tags' };
 async function showConsistency() {
-  let field = '', offset = 0, selected = new Set(), d;
+  let field = '', offset = 0, selected = new Set(), d, wasRunning = false, pollT = 0;
   const head = h('div'), list = h('div'), more = h('button', { class: 'pillbtn', style: 'margin:16px 0', onclick: () => load(true) }, 'Show more');
   const fmtv = (f, v, na) => na ? h('i', { class: 'muted', title: 'This file type cannot hold metadata; the sidecar carries it' }, 'n/a') : v == null ? h('i', { class: 'muted' }, 'absent') : f === 'tags' ? (v.length ? h('span', null, v.map((t) => h('span', { class: 'ichip', style: 'height:24px;font-size:12px;margin:1px' }, t.split('/').pop()))) : h('i', { class: 'muted' }, 'none'))
     : f === 'rating' ? (v ? '★'.repeat(v) : h('i', { class: 'muted' }, 'none')) : (v || h('i', { class: 'muted' }, 'empty'));
@@ -1733,23 +1733,38 @@ async function showConsistency() {
     try { d = await api(`/api/consistency?field=${field}&offset=${offset}&limit=60`); } catch (e) { list.replaceChildren(h('div', { class: 'empty' }, e.message)); return; }
     if (route.view !== 'consistency') return;
     const s = d.summary, p = d.progress;
+    const pct = p.total ? Math.round(100 * p.done / p.total) : 0;
     fill(head,
-      p.running ? h('div', { class: 'enote' }, `Scanning… ${nf.format(p.done)} / ${nf.format(p.total)}`) : null,
+      p.running ? h('div', { class: 'enote ajob', style: 'border:0;padding:10px 12px' }, h('div', { class: 'ahead' }, h('b', null, p.rescan_all === false ? 'Checking new and changed photos…' : 'Checking the whole library…'), h('span', { class: 'sp' }), `${nf.format(p.done)} / ${nf.format(p.total)}`),
+        h('div', { class: 'bar' }, h('i', { style: `width:${pct}%` })), h('div', { class: 'muted', style: 'font-size:12px;margin-top:4px' }, 'Each photo’s sidecar and file are read with exiftool; the list below fills in when it is done.'))
+      : p.total === 0 && p.started ? h('div', { class: 'enote' }, 'Nothing to check: every photo was already compared since it last changed. Use “Re-check whole library” to compare them all again.') : null,
+      !p.running && p.failed ? h('p', { class: 'warn' }, `${nf.format(p.failed)} photos could not be compared: ${p.error}`) : null,
+      s.scanned_at ? h('div', { class: 'muted', style: 'font-size:12.5px;margin:6px 0' }, `Last checked ${fmtWhen(s.scanned_at)}.`) : null,
       s.scanned ? h('div', { class: 'stats' }, h('div', null, h('b', null, nf.format(s.scanned)), 'photos checked'), h('div', null, h('b', null, nf.format(s.mismatched)), 'disagree'),
         h('div', null, h('b', null, nf.format(s.no_sidecar)), 'without a sidecar'), ...Object.entries(s.by_field).filter(([, n]) => n).map(([f, n]) => h('div', null, h('b', null, nf.format(n)), FIELD_LABEL[f].toLowerCase()))) : h('p', { class: 'muted' }, 'Nothing scanned yet.'),
-      p.error ? h('p', { class: 'warn' }, 'Last error: ' + p.error) : null);
+      p.error && !p.failed ? h('p', { class: 'warn' }, 'Last error: ' + p.error) : null);
+    // a scan that just finished: say so once
+    if (wasRunning && !p.running) toast(p.failed ? `Check finished with errors: ${nf.format(p.failed)} photos could not be compared.` : `Check finished: ${nf.format(s.scanned)} photos compared, ${nf.format(s.mismatched)} disagree.`, null, null, 8000);
+    wasRunning = p.running;
     if (!append) list.replaceChildren();
     if (!d.items.length && !offset) list.append(h('div', { class: 'empty' }, s.scanned ? 'Everything that was scanned agrees.' : ''));
     list.append(...d.items.map(item));
     offset += d.items.length;
     more.hidden = offset >= d.total;
-    if (p.running) setTimeout(() => { if (route.view === 'consistency' && !offset) load(); }, 4000);
+    clearTimeout(pollT);
+    if (p.running) pollT = setTimeout(() => { if (route.view === 'consistency') load(); }, 3000);  // refresh the progress (and the list, from the top) until it is done
   };
   const scan = async (subset, rescanAll) => {
     const q = subset ? filterParams() : new URLSearchParams();
     q.set('rescan_all', rescanAll ? '1' : '0');
-    try { const r = await fetch('/api/consistency/scan', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: q.toString() }).then((x) => x.json()); toast(`Checking ${nf.format(r.queued)} photos in the background.`); } catch (e) { toast(e.message); }
-    setTimeout(load, 1500);
+    try {
+      const res = await fetch('/api/consistency/scan', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: q.toString() });
+      const r = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(r.detail || `${res.status}`);
+      toast(`Checking ${nf.format(r.queued)} photos in the background.`);
+    } catch (e) { toast('Could not start the check: ' + e.message, null, null, 8000); return; }
+    wasRunning = true;
+    load();
   };
   const sel = h('select', { onchange: (e) => { field = e.target.value; load(); } }, h('option', { value: '' }, 'Any field'), ...Object.entries(FIELD_LABEL).map(([f, l]) => h('option', { value: f }, l)));
   main.replaceChildren(h('div', { class: 'page' }, crumbs([['Maintenance', '#/maintenance'], ['Metadata consistency', null]]),

@@ -12,6 +12,7 @@ sidecar / file (edits.write_args), and dbsync for the database (digiKam closed,
 backup first).
 """
 import json
+import logging
 import os
 import subprocess
 import threading
@@ -21,6 +22,7 @@ from . import analysis, dbsync, dkdb, edits, index
 
 FIELDS = ["rating", "pick", "color", "title", "caption", "tags"]
 SOURCES = ["db", "sidecar", "file"]
+log = logging.getLogger("app.consistency")
 progress = {"running": False, "done": 0, "total": 0, "mismatched": 0, "scanned_at": None, "error": None}
 _run = {"gen": 0}
 TAGS_XMP = ["XMP-digiKam:TagsList", "XMP-microsoft:LastKeywordXMP", "XMP-lr:HierarchicalSubject", "XMP-mediapro:CatalogSets"]
@@ -168,7 +170,8 @@ def scan(photos: list, rescan_all: bool = True):
         finally:
             con.close()
         todo = [p for p in todo if have.get(p["id"]) != analysis._stamp(p)]
-    progress.update(running=True, done=0, total=len(todo), error=None)
+    progress.update(running=True, done=0, total=len(todo), error=None, failed=0, started=int(time.time()), rescan_all=bool(rescan_all))
+    log.info("consistency: checking %d photos (%s)", len(todo), "all" if rescan_all else "new and changed only")
 
     def work():
         try:
@@ -178,8 +181,11 @@ def scan(photos: list, rescan_all: bool = True):
                 batch = todo[i:i + 200]
                 try:
                     recs = compare(batch)
-                except Exception as e:
-                    progress["error"] = str(e)[:200]
+                except Exception as e:  # one bad batch must not end the scan, but it must be visible
+                    progress["error"] = f"{type(e).__name__}: {str(e)[:200]}"
+                    progress["failed"] = progress.get("failed", 0) + len(batch)
+                    log.warning("consistency: a batch of %d photos could not be compared", len(batch), exc_info=True)
+                    progress["done"] += len(batch)
                     continue
                 now = int(time.time())
                 rows = [(r["id"], analysis._stamp(p), json.dumps(r), len(r["mismatch"]), r["has_sidecar"], r["file_xmp"], now)
@@ -193,10 +199,15 @@ def scan(photos: list, rescan_all: bool = True):
                         con.close()
                 progress["done"] += len(batch)
             progress["scanned_at"] = int(time.time())
+        except Exception as e:
+            progress["error"] = f"{type(e).__name__}: {str(e)[:200]}"
+            log.warning("consistency: the scan stopped", exc_info=True)
         finally:
             if gen == _run["gen"]:
                 progress["running"] = False
                 progress["mismatched"] = summary()["mismatched"]
+                log.info("consistency: done, %d of %d photos checked, %d disagree%s", progress["done"] - progress.get("failed", 0),
+                         progress["total"], progress["mismatched"], f", {progress['failed']} failed ({progress['error']})" if progress.get("failed") else "")
 
     threading.Thread(target=work, name="consistency", daemon=True).start()
 
