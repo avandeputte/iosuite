@@ -42,6 +42,9 @@ from .query import SORTS, build_where
 
 THUMB_COLS = "id, path, video, duration, w, h, hash, size, modified"
 IMG_CACHE = {"Cache-Control": "private, max-age=86400"}
+# what a failed write to digiKam's database (SQLite or MySQL) or to the file system raises; the
+# writers roll back on any of these, so the route can report the failure as such
+DB_ERRORS = (*vdb.Error, OSError)
 
 # version: the index build the API answers from; source: digiKam's database as of
 # that build (background jobs restart only when this changes)
@@ -133,7 +136,7 @@ def _refresh(initial=False):
                 state["source"] = source
                 _start_prewarm()
                 threading.Thread(target=_compute_tag_covers, args=(source,), daemon=True).start()
-    except (sqlite3.Error, OSError) as e:  # e.g. database busy; try again later
+    except DB_ERRORS as e:  # e.g. database busy, MySQL unreachable; try again later
         state["error"] = str(e)
         if initial and not config.INDEX_DB.exists():
             raise
@@ -421,7 +424,7 @@ def api_status(request: Request):
             "thumbs": {"running": prewarmer.running, "done": prewarmer.done, "total": prewarmer.total, "since": prewarmer.started, "last": prewarmer.last, "current": list(prewarmer.current.values())[:3]},
             "semantic": {"enabled": semantic_enabled(), "running": semantic.running, "done": semantic.done,
                          "total": semantic.total, "indexed": 0 if semantic.ids is None else int(len(semantic.ids))},
-            "places": places.available(), "editing": edits.available() and users.can_write(user), "pendingEdits": len(edits.pending()),
+            "places": places.available(), "editing": edits.available() and users.can_write(user), "pendingEdits": edits.pending_count(),
             "dbWrite": config.DB_WRITE and not appstate.read_only() and users.can_write(user), "writeFiles": edits.writes_files(),
             "user": ({"id": user["id"], "name": user["name"], "role": user["role"], "person": user.get("person")} if user else None), "usersExist": users.any_users(),
             "isAdmin": users.is_admin(user), "signedIn": users.is_signed_in(user), "requireLogin": users.require_login(),
@@ -1353,13 +1356,13 @@ def api_maintenance():
     free = shutil.disk_usage(str(config.DATA_DIR)).free
     return {
         "photos": n, "indexBuilt": int(built[0]) if built else None, "digikamSaved": dk_mtime,
-        "digikamRunning": dbsync.digikam_running(), "pendingEdits": len(edits.pending()),
+        "digikamRunning": dbsync.digikam_running(), "pendingEdits": edits.pending_count(),
         "paths": {"library": str(config.PHOTOS_ROOT), "digikamDb": dkdb.describe(), "data": str(config.DATA_DIR)},
         "storage": {k: _dir_size(config.DATA_DIR / v) for k, v in (
             ("thumbnails", "cache/t"), ("previews", "cache/p"), ("faces", "cache/f"), ("models", "models"),
             ("backups", "sidecar-backups"), ("fileBackups", "file-backups"), ("dbBackups", "db-backups"))} | {
             "index": config.INDEX_DB.stat().st_size if config.INDEX_DB.exists() else 0,
-            "viewerDb": appstate.STATE_DB.stat().st_size if not vdb.is_mysql() and appstate.STATE_DB.exists() else 0,
+            "viewerDb": vdb.SQLITE_FILE.stat().st_size if not vdb.is_mysql() and vdb.SQLITE_FILE.exists() else 0,
             "embeddings": sum(e.file.stat().st_size for e in semantic.engines.values() if e.file.exists()),
             "free": free},
         "writeFiles": edits.writes_files(), "readOnly": appstate.read_only(), "readOnlyLocked": config.READ_ONLY, "database": _db_settings_public(), "mapProvider": appstate.get_setting("map_provider", "osm"), "googleMapsKeySet": bool(maps.key()), "searchModel": semantic.chosen(),
@@ -1453,7 +1456,7 @@ async def api_consistency_sync(request: Request):
 
 @app.get("/api/edits/db")
 def api_edits_db_status():
-    return {"pending": len(edits.pending()), "digikamRunning": dbsync.digikam_running(), "enabled": config.DB_WRITE,
+    return {"pending": edits.pending_count(), "digikamRunning": dbsync.digikam_running(), "enabled": config.DB_WRITE,
             "ask": config.DIGIKAM_CHECK == "ask"}
 
 
@@ -1466,7 +1469,7 @@ def api_edits_db_apply():
         result = dbsync.apply_pending()
     except dbsync.SyncError as e:
         raise HTTPException(409, str(e))
-    except (sqlite3.Error, OSError) as e:
+    except DB_ERRORS as e:
         raise HTTPException(500, f"The update failed and was rolled back: {e}")
     _kick.set()
     return result
@@ -1557,7 +1560,7 @@ async def api_face_op(request: Request):
         res = await run_in_threadpool(facemgr.apply, op)
     except dbsync.SyncError as e:
         raise HTTPException(409, str(e))
-    except (sqlite3.Error, OSError, ValueError, KeyError, TypeError) as e:
+    except (*DB_ERRORS, ValueError, KeyError, TypeError) as e:
         raise HTTPException(500, f"The change failed and was rolled back: {e}")
     _kick.set()
     return res
@@ -1576,7 +1579,7 @@ async def api_face_batch(request: Request):
         res = await run_in_threadpool(facemgr.apply_many, ops)
     except dbsync.SyncError as e:
         raise HTTPException(409, str(e))
-    except (sqlite3.Error, OSError, ValueError, KeyError, TypeError) as e:
+    except (*DB_ERRORS, ValueError, KeyError, TypeError) as e:
         raise HTTPException(500, f"The change failed and was rolled back: {e}")
     _kick.set()
     return {"results": res, "done": sum(1 for r in res if "error" not in r), "failed": [r for r in res if "error" in r]}
@@ -1697,7 +1700,7 @@ def api_backup(which: str, request: Request):
 
     def snapshot(db_file, dst):
         """A consistent copy of a SQLite database that may be in use."""
-        src = sqlite3.connect(f"file:{db_file}?mode=ro", uri=True)
+        src = sqlite3.connect(f"file:{quote(str(db_file))}?mode=ro", uri=True)
         try:
             out = sqlite3.connect(str(dst))
             try:
@@ -1708,7 +1711,6 @@ def api_backup(which: str, request: Request):
             src.close()
 
     if which == "app":  # everything the viewer keeps: its database (state and AI results) plus the content-search index
-        import zipfile
         dst = dkdb.BACKUP_DIR / f"viewer-backup-{stamp}.zip"
         tmp = dkdb.BACKUP_DIR / f".snap-{stamp}"
         tmp.mkdir(exist_ok=True)
@@ -1736,15 +1738,7 @@ def api_backup(which: str, request: Request):
             raise HTTPException(400, "Database backups are switched off (DIGIKAM_DB_BACKUP=skip)")
         return FileResponse(dst, media_type="application/sql", filename=dst.name, content_disposition_type="attachment")
     dst = dkdb.BACKUP_DIR / f"digikam4-download-{stamp}.db"
-    src = sqlite3.connect(f"file:{dkdb.sqlite_path()}?mode=ro", uri=True)
-    try:
-        out = sqlite3.connect(str(dst))
-        try:
-            src.backup(out)  # a consistent snapshot even while digiKam writes
-        finally:
-            out.close()
-    finally:
-        src.close()
+    snapshot(dkdb.sqlite_path(), dst)  # a consistent copy even while digiKam writes
     dkdb._prune("digikam4-download-*.db")
     return FileResponse(dst, media_type="application/vnd.sqlite3", filename=f"digikam4-{stamp}.db", content_disposition_type="attachment")
 
@@ -1776,7 +1770,7 @@ async def api_folder_create(request: Request):
         result = folders.create(int(body.get("parent") or 0), str(body.get("name", "")))
     except dbsync.SyncError as e:
         raise HTTPException(409 if "digiKam is running" in str(e) else 400, str(e))
-    except (sqlite3.Error, OSError, ValueError) as e:
+    except (*DB_ERRORS, ValueError) as e:
         raise HTTPException(500, f"The change failed and was rolled back: {e}")
     _kick.set()
     return result
@@ -1797,7 +1791,7 @@ async def api_folder_upload(album_id: int, request: Request):
         result = await run_in_threadpool(folders.upload, album_id, files)
     except dbsync.SyncError as e:
         raise HTTPException(409 if "digiKam is running" in str(e) else 400, str(e))
-    except (sqlite3.Error, OSError, ValueError) as e:
+    except (*DB_ERRORS, ValueError) as e:
         raise HTTPException(500, f"The upload failed and was rolled back: {e}")
     _kick.set()
     return result
@@ -1812,7 +1806,7 @@ def api_tag_op(op: dict):
         result = tagmanager.apply(op)
     except dbsync.SyncError as e:
         raise HTTPException(409, str(e))
-    except (sqlite3.Error, OSError, ValueError) as e:
+    except (*DB_ERRORS, ValueError) as e:
         raise HTTPException(500, f"The change failed and was rolled back: {e}")
     _kick.set()
     return result

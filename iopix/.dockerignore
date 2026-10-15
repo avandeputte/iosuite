@@ -1,4 +1,4 @@
-# keep the build context small: the image gets code, static files and requirements only
+# keep the build context small: the image gets the code, the static files, pyproject.toml and the README only
 .venv
 data
 tests/.pytest_cache

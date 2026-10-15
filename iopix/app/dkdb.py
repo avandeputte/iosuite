@@ -34,6 +34,15 @@ ENV = {"type": os.environ.get("DIGIKAM_DB_TYPE", "sqlite").lower(), "sqlite_dir"
        "database": os.environ.get("DIGIKAM_DB_NAME", "digikam"), "user": os.environ.get("DIGIKAM_DB_USER", "digikam"),
        "password": os.environ.get("DIGIKAM_DB_PASSWORD", ""), "backup": os.environ.get("DIGIKAM_DB_BACKUP", "auto")}
 KEYS = tuple(ENV)
+BACKUP_DIR = config.DATA_DIR / "db-backups"
+KEEP_BACKUPS = 10
+
+_INSERT_IGNORE = re.compile(r"\bINSERT\s+OR\s+IGNORE\b", re.I)
+_INSERT_REPLACE = re.compile(r"\bINSERT\s+OR\s+REPLACE\b", re.I)
+
+
+class SyncError(Exception):
+    pass
 
 
 def settings() -> dict:
@@ -72,7 +81,6 @@ def test_connection(c: dict = None) -> dict:
         path = Path(c["sqlite_dir"]) / "digikam4.db"
         if not path.exists():
             raise SyncError(f"No digikam4.db in {c['sqlite_dir']}")
-        import sqlite3
         con = Conn(sqlite3.connect(f"file:{quote(str(path))}?mode=ro", uri=True), False, False)
     try:
         images = con.execute("SELECT count(*) FROM Images WHERE status = 1").fetchone()[0]
@@ -82,15 +90,6 @@ def test_connection(c: dict = None) -> dict:
         return {"ok": True, "images": images, "tags": tags, "dbVersion": ver[0] if ver else None, "roots": roots}
     finally:
         con.close()
-BACKUP_DIR = config.DATA_DIR / "db-backups"
-KEEP_BACKUPS = 10
-
-_INSERT_IGNORE = re.compile(r"\bINSERT\s+OR\s+IGNORE\b", re.I)
-_INSERT_REPLACE = re.compile(r"\bINSERT\s+OR\s+REPLACE\b", re.I)
-
-
-class SyncError(Exception):
-    pass
 
 
 def is_mysql() -> bool:

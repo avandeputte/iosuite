@@ -3,9 +3,9 @@ newer, and running update.sh (next to setup.sh) from Maintenance. Docker install
 updated by pulling the image, so there the check only reports."""
 import hmac
 import json
+import os
 import re
 import secrets
-import os
 import subprocess
 import threading
 import time
@@ -17,6 +17,7 @@ REPO = os.environ.get("DIGIKAM_VIEWER_REPO", "avandeputte/digikam-viewer")
 BRANCH = os.environ.get("DIGIKAM_VIEWER_BRANCH", "main")
 progress = {"running": False, "log": "", "error": None, "finished": None}
 _checked = {}
+_commit = None  # local_commit() once known: it only changes with update.sh, which restarts the process
 RESULT_FILE = "update-result.txt"  # in the data folder; update.sh writes the outcome there before restarting
 
 
@@ -50,6 +51,17 @@ def in_docker() -> bool:
 
 
 def local_commit() -> str:
+    """The installed commit (cached: every status poll asks, and it cannot change while this process runs)."""
+    global _commit
+    if _commit is None:
+        found = _read_commit()
+        if found == "unknown":
+            return found  # not cached: a transient git failure gets another try
+        _commit = found
+    return _commit
+
+
+def _read_commit() -> str:
     git = config.APP_DIR / ".git"
     if git.exists():
         try:
@@ -70,11 +82,12 @@ def _fetch(url: str) -> dict:
 
 def check() -> dict:
     """{installed, remote, remoteDate, remoteMessage, status: current|update|error}"""
-    out = {"installed": local_commit()[:7], "checked": int(time.time())}
+    mine = local_commit()
+    out = {"installed": mine[:7], "checked": int(time.time())}
     try:
         c = _fetch(f"https://api.github.com/repos/{REPO}/commits/{BRANCH}")
         out.update(remote=c["sha"][:7], remoteDate=c["commit"]["committer"]["date"][:10], remoteMessage=c["commit"]["message"].splitlines()[0][:100])
-        out["status"] = "current" if c["sha"].startswith(local_commit()) and local_commit() != "unknown" else "update"
+        out["status"] = "current" if c["sha"].startswith(mine) and mine != "unknown" else "update"
     except Exception as e:
         out.update(status="error", error=str(e)[:160])
     _checked.clear(); _checked.update(out)

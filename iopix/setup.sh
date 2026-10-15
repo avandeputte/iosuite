@@ -8,7 +8,7 @@
 # Flags (each one skips its question): --photos DIR  --sqlite DIR | --mysql HOST:PORT/DB:USER:PASS
 #   --features search,places,objects,ocr,captions  --search-model clip|siglip2  --port N
 #   --admin NAME:PASSWORD | --no-admin   --service | --no-service   --data DIR   --python PATH
-#   --system-deps | --no-system-deps   install (or skip) python3, exiftool and ffmpeg with brew/apt/dnf/zypper/pacman
+#   --system-deps | --no-system-deps   install (or skip) python3, exiftool, ffmpeg and the MariaDB client with brew/apt/dnf/zypper/pacman
 # Run it again at any time: it keeps what is installed and only adds what you choose.
 set -e
 cd "$(dirname "$0")"
@@ -178,7 +178,8 @@ ENVF="$APP/digikam-viewer.env"
 } > "$ENVF"
 chmod 600 "$ENVF"
 mkdir -p "$DATA"
-set -a; . "$ENVF"; set +a
+# load what was just written for the commands below (not sourced: a path with spaces would break `. file`)
+while IFS= read -r line; do case "$line" in ''|'#'*|*[!A-Za-z0-9_]*=*) ;; *=*) export "$line";; esac; done < "$ENVF"
 echo "wrote $ENVF"
 if [ -n "$MYSQL" ]; then
   echo "testing the database connection"

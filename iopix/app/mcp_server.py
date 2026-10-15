@@ -1,9 +1,11 @@
-"""MCP server for the digiKam library (read-only).
+"""MCP server for the digiKam library.
 
 Lets an MCP client such as Claude search the library, read any photo's
-metadata, browse people / tags / albums, count things, and look at photos.
-Run with `./mcp.sh` (stdio transport). It shares the web app's index and
-thumbnail cache and does not need the web app to be running.
+metadata, browse people / tags / albums, count things, and look at photos
+(all read-only), plus a few operator tools behind the admin token: diagnostics,
+the server log, the job queue, a photo's files on disk, and running update.sh.
+It is served at /mcp by the web app (main.py) and can also run on its own with
+`./mcp.sh` (stdio transport), sharing the web app's index and thumbnail cache.
 """
 import io
 import json
@@ -17,7 +19,7 @@ from mcp.server.mcpserver import Image, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
 
-from . import config, edits, index, thumbs
+from . import config, edits, index, thumbs, updates
 from . import state as appstate
 from .query import DATE_RE, SORTS, build_where
 from .semantic import semantic, enabled as semantic_enabled
@@ -26,7 +28,7 @@ VIEWER = os.environ.get("VIEWER_URL", "http://localhost:8600").rstrip("/")  # fo
 READ_ONLY = ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False)
 PICKS = ["none", "rejected", "pending", "accepted"]
 MONTH_DAY_RE = re.compile(r"^\d\d-\d\d$")
-_state_ready = False  # the state database's tables are created on the first call, not on every one
+_state_ready = False  # the viewer database's tables are checked on the first call, not on every one
 
 server = MCPServer(
     "digikam-library",
@@ -40,10 +42,10 @@ server = MCPServer(
 
 
 def db() -> sqlite3.Connection:
-    """A read-only connection to the index with the viewer's state database attached as `st`."""
+    """A read-only connection to the index (the viewer's own data is read through appstate / vdb)."""
     try:
         index.ensure_fresh()  # cheap stat; rebuilds only if digiKam changed its database
-    except (sqlite3.Error, OSError):
+    except Exception:  # a busy or unreachable digiKam database (SQLite or MySQL): answer from the index we have
         if not config.INDEX_DB.exists():
             raise
     global _state_ready
@@ -139,8 +141,7 @@ def _items(con, f: dict) -> list:
         aid = appstate.album_id_by_name(f["app_album"])
         if aid is None:
             raise ToolError(f"No app album named '{f['app_album']}'. Use list_app_albums.")
-        row = (aid,)
-        add("ualbum", row[0])
+        add("ualbum", aid)
     return items
 
 
@@ -424,7 +425,6 @@ def view_photo(photo_id: int, size: Literal["small", "large"] = "small") -> Imag
 def _need_token(token: str):
     """The diagnostics tools reveal paths, log lines and settings; on an endpoint without sign-in
     they take the same admin token as update_viewer (Maintenance > Viewer version)."""
-    from . import updates
     if not updates.token_ok(token):
         raise ToolError("This tool needs the admin token (Maintenance > Viewer version > MCP update token)")
 
@@ -439,7 +439,7 @@ def diagnostics(token: str) -> dict:
     import shutil as sh
     import sys
     import time
-    from . import __version__, dkdb, jobs, models, updates, users
+    from . import __version__, dkdb, jobs, models, users
     from .analysis import progress as analysis_progress
     try:
         free = sh.disk_usage(str(config.DATA_DIR)).free
@@ -459,7 +459,7 @@ def diagnostics(token: str) -> dict:
         "search": {"enabled": semantic_enabled(), "running": semantic.running, "done": semantic.done, "total": semantic.total, "model": semantic.chosen()},
         "users": {"exist": users.any_users(), "count": len(users.list_users())},
         "read_only": appstate.read_only(),
-        "settings": {k: v for k, v in _public_settings().items()},
+        "settings": _public_settings(),
         "log_file": str(config.LOG_FILE), "log_file_exists": config.LOG_FILE.exists(),
     }
     try:
@@ -573,7 +573,7 @@ def photo_file(token: str, photo_id: int) -> dict:
 def check_for_update() -> dict:
     """Installed version and commit versus GitHub's main branch (network), and the outcome of the
     last update run (lastUpdate: ok, text, at)."""
-    from . import __version__, updates
+    from . import __version__
     return {"version": __version__, **updates.check(), "lastUpdate": updates.last_result()}
 
 
@@ -586,7 +586,6 @@ def update_viewer(token: str, ref: str = "") -> dict:
     Nothing happens when that commit is already installed. The connection drops when the viewer
     restarts; call check_for_update afterwards: lastUpdate carries the outcome and installed the
     commit. Not available in Docker (pull the image)."""
-    from . import updates
     if not updates.token_ok(token):
         raise ToolError("Wrong or missing admin token (Maintenance > Viewer version shows it to an admin)")
     try:

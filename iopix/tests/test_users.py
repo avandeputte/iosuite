@@ -1,18 +1,7 @@
 """Users and permissions: open until the first user exists; then anonymous is read-only,
 viewers keep settings and favorites on the server, editors write the library, admins
 manage settings, maintenance and users; sessions are signed cookies."""
-import pytest
-
-from app import state, users
-
-
-@pytest.fixture
-def fresh(client):
-    con = state.connect(); con.execute("DELETE FROM users"); con.commit(); con.close()
-    client.cookies.clear()
-    yield
-    con = state.connect(); con.execute("DELETE FROM users"); con.commit(); con.close()
-    client.cookies.clear()
+from app import users
 
 
 def _login(client, name, pw):

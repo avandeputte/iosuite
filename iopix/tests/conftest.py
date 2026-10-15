@@ -97,8 +97,9 @@ def _no_users_by_default():
 
 
 @pytest.fixture
-def fresh_users(client):
-    """No accounts before and after (so the viewer is in open mode for the test)."""
+def fresh(client):
+    """No accounts and no session cookie before and after: the open mode the app has before the
+    first admin exists, for tests that create their own accounts."""
     from app import state
     def clear():
         con = state.connect(); con.execute("DELETE FROM users"); con.commit(); con.close()

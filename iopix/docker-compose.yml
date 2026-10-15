@@ -37,7 +37,8 @@ services:
       # where the photos are inside this container; the album root digiKam recorded
       # (e.g. /Users/alex/Pictures/photos) is mapped to it (Settings > Album roots can also do this per root)
       PHOTOS_ROOT: /library/photos
-      # the first admin account; sign-in is enforced from the first start (remove to start open)
+      # the first admin account, created on the first start: visitors then browse read-only and every change
+      # needs an editor or admin sign-in (remove both lines to start open, and create the admin from Settings)
       ADMIN_USER: admin
       ADMIN_PASSWORD: change-me-please                # CHANGE ME (8 characters or more)
       # models fetched on first start: content search (SigLIP 2), objects (YOLOX), places (GeoNames)

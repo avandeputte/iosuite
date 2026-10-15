@@ -10,7 +10,6 @@ const ICONS = {
   gear: 'M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z',
   wrench: 'M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z',
   close: 'M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z',
-  back: 'M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z',
   left: 'M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z',
   right: 'M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z',
   info: 'M11 7h2v2h-2zm0 4h2v6h-2zm1-9C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z',
@@ -178,7 +177,7 @@ function applyTheme() {
   requestAnimationFrame(() => { const m = document.querySelector('meta[name=theme-color]'); if (m) m.content = getComputedStyle(document.body).backgroundColor; });
 }
 let dragTag = null;
-let IS_ADMIN = true, SIGNED_IN = true, USERS_EXIST = false, REQUIRE_LOGIN = false, BOOTED = false, DIGIKAM_CHECK = 'pgrep', APP_VERSION = '', APP_COMMIT = '';
+let IS_ADMIN = true, USERS_EXIST = false, REQUIRE_LOGIN = false, BOOTED = false, DIGIKAM_CHECK = 'pgrep', APP_VERSION = '', APP_COMMIT = '';
 let EDITING = false, WRITE_FILES = false, CAN_MANAGE = false, manageTags = false, PENDING = 0, pollTimer = 0, keepView = false;
 /** Re-check server status soon (after an edit) instead of waiting for the regular poll. */
 function pollSoon(ms = 1500) { clearTimeout(pollTimer); pollTimer = setTimeout(pollStatus, ms); }
@@ -242,6 +241,7 @@ function onRoute() {
     keepView = false;
     main.scrollTop = 0;
     removeScrubber();
+    if (M.map && route.view !== 'map') { M.map.remove(); M.map = null; }  // Leaflet keeps window listeners until the map is removed
     VIEW_FNS[route.view](PARAM_VIEWS.includes(route.view) ? vp : fp);
     if (!$('#filters').hidden) renderFilters();
   }
@@ -1068,17 +1068,17 @@ async function downloadDialog(p, selected) {
     if (!r.files) { fill(body, h('p', null, 'Nothing to download.')); return; }
     const one = r.parts.length === 1;
     fill(body,
-      h('p', null, `${nf.format(r.files)} original ${r.files === 1 ? 'file' : 'files'}, ${fmtBytes(r.bytes)}, in their album folders${one ? '.' : `, split into ${r.parts.length} zip files.`}`),
+      h('p', null, `${nf.format(r.files)} original ${r.files === 1 ? 'file' : 'files'}, ${fmtBytes(r.bytes)}, in their folders${one ? '.' : `, split into ${r.parts.length} zip files.`}`),
       one ? h('button', { class: 'pillbtn on', onclick: () => { fetchPart(0); toast('Download started.'); } }, icon('download'), 'Download')
         : [h('div', { class: 'alist' }, r.parts.map((pt, i) => { const b = h('div', { class: 'frow', title: `${pt.first} … ${pt.last}`, onclick: () => { fetchPart(i); b.classList.add('on'); } },
             icon('download'), h('span', { class: 'nm' }, `Part ${i + 1}`, h('span', { class: 'muted' }, `  ${pt.first === pt.last ? pt.first : pt.first + ' … ' + pt.last}`)), h('span', { class: 'ct' }, `${nf.format(pt.files)} · ${fmtBytes(pt.bytes)}`)); return b; })),
-          h('p', { class: 'muted', style: 'margin:10px 0 0;font-size:12.5px' }, 'Click each part to download it. Parts follow album order, and unzipping them all into one folder gives the complete set.')]);
+          h('p', { class: 'muted', style: 'margin:10px 0 0;font-size:12.5px' }, 'Click each part to download it. Parts follow folder order, and unzipping them all into one folder gives the complete set.')]);
   };
   size.onchange = plan;
   plan();
 }
 
-// ---------------------------------------------------------------- explore / people / albums / tags
+// ---------------------------------------------------------------- explore / people / folders / albums / tags
 function card({ img, fallback, name, sub, onclick }) {
   const im = img ? h('img', { src: img, alt: '', loading: 'lazy' }) : null;
   if (im && fallback) im.onerror = () => { im.onerror = null; im.src = fallback; };
@@ -1194,12 +1194,11 @@ const UPLOAD_ACCEPT = '.jpg,.jpeg,.png,.gif,.tif,.tiff,.webp,.heic,.heif,.avif,.
  *  a separate page. */
 async function showFolders() {
   let d;
-  try { d = await api('/api/folders'); } catch (e) { main.replaceChildren(h('div', { class: 'page' }, h('div', { class: 'empty' }, e.message))); return; }
+  try { d = await api('/api/folders'); } catch (e) { if (route.view === 'folders') main.replaceChildren(h('div', { class: 'page' }, h('div', { class: 'empty' }, e.message))); return; }
   if (route.view !== 'folders') return;
   const all = d.folders.map((f) => ({ ...f, _n: norm(f.path) }));
   const tops = all.filter((f) => f.pid == null).sort((a, b) => b.path.localeCompare(a.path, undefined, { numeric: true }));
   const can = d.canManage && CAN_MANAGE;
-  const body = h('div');
   const refresh = () => { viewKey = null; pollSoon(600); setTimeout(() => { if (route.view === 'folders') showFolders(); }, 900); };
   const newFolder = async (parent) => {
     const n = prompt(`Name for the new folder in ${parent.path}`); if (!n || !n.trim()) return;
@@ -1230,10 +1229,6 @@ async function showFolders() {
     };
     document.body.append(inp); inp.click();
   };
-  const acts = (f) => can ? h('span', { class: 'cardacts' },
-    h('button', { class: 'carddl', title: 'Upload photos into this folder', onclick: (e) => { e.stopPropagation(); uploadTo(f); } }, icon('add')),
-    h('button', { class: 'carddl', title: 'New folder inside this one', onclick: (e) => { e.stopPropagation(); newFolder(f); } }, icon('folder')),
-    f.nAll ? h('button', { class: 'carddl', title: 'Download this folder as a zip', onclick: (e) => { e.stopPropagation(); downloadDialog(photosWith({ album: f.id })); } }, icon('download')) : null) : null;
   // the tree: one row per folder, sub-folders under an expander, like the tag tree
   const kidsOf = new Map();
   all.forEach((f) => { if (f.pid != null) { if (!kidsOf.has(f.pid)) kidsOf.set(f.pid, []); kidsOf.get(f.pid).push(f); } });
@@ -1273,7 +1268,7 @@ const openFolders = new Set();  // which folder nodes are expanded, kept across 
 function showAlbums() {
   const body = h('div');
   // viewer albums: a change is posted, then the list is redrawn from the reloaded state
-  const change = async (path, body) => { try { await post(path, body); } catch { toast('Could not update the album.'); return; } await loadState(); showAlbums(); };
+  const change = async (path, payload) => { try { await post(path, payload); } catch { toast('Could not update the album.'); return; } await loadState(); showAlbums(); };
   const mine = (a) => {
     const c = thumbCard(a.cover, a.name, plural(a.n, 'item'), { ualbum: a.id });
     const act = (ic, title, fn) => h('button', { class: 'carddl', title, onclick: async (e) => { e.stopPropagation(); await fn(); } }, icon(ic));
@@ -1344,7 +1339,7 @@ const conceptCard = (c) => thumbCard(c.cover, c.name[0].toUpperCase() + c.name.s
 async function showDetected() {
   main.replaceChildren(h('div', { class: 'empty' }, 'Looking at what the model sees…'));
   let d;
-  try { d = await api('/api/concepts'); } catch { main.replaceChildren(h('div', { class: 'empty' }, 'Could not load detected content.')); return; }
+  try { d = await api('/api/concepts'); } catch { if (route.view === 'detected') main.replaceChildren(h('div', { class: 'empty' }, 'Could not load detected content.')); return; }
   if (route.view !== 'detected') return;
   if (!d.enabled) { main.replaceChildren(h('div', { class: 'empty' }, 'Content search is not enabled (see the README).')); return; }
   const body = h('div');
@@ -1367,7 +1362,7 @@ const eventCard = (e) => thumbCard(e.cover, e.title, `${e.when} · ${nf.format(e
 async function showEvents() {
   main.replaceChildren(h('div', { class: 'empty' }, 'Working out events and trips…'));
   let d;
-  try { d = await api('/api/events'); } catch { main.replaceChildren(h('div', { class: 'empty' }, 'Could not load events.')); return; }
+  try { d = await api('/api/events'); } catch { if (route.view === 'events') main.replaceChildren(h('div', { class: 'empty' }, 'Could not load events.')); return; }
   if (route.view !== 'events') return;
   let kind = '';
   const body = h('div');
@@ -1439,7 +1434,7 @@ async function showBursts(vp) {
 
 // ---- users: sign in / out, own password, first-admin setup, admin user management
 async function loadUser() {
-  try { const me = await api('/api/auth/me'); USER = me.user; USER_SETTINGS = me.user ? me.settings : null; IS_ADMIN = me.isAdmin; SIGNED_IN = me.signedIn; USERS_EXIST = me.usersExist; REQUIRE_LOGIN = !!me.requireLogin; } catch { USER = null; USER_SETTINGS = null; }
+  try { const me = await api('/api/auth/me'); USER = me.user; USER_SETTINGS = me.user ? me.settings : null; IS_ADMIN = me.isAdmin; USERS_EXIST = me.usersExist; REQUIRE_LOGIN = !!me.requireLogin; } catch { USER = null; USER_SETTINGS = null; }
   renderUserMenu();
 }
 function renderUserMenu() {
@@ -1460,11 +1455,11 @@ function loginDialog(required) {
   const pw = h('input', { class: 'einput', type: 'password', placeholder: 'Password', autocomplete: 'current-password', style: 'margin:0;width:100%' });
   const form = h('div', { style: 'display:grid;gap:8px;margin-top:10px' }, name, pw);
   const tiles = h('div', { class: 'accounts' });
-  const go = async () => { try { const me = await post('/api/auth/login', { name: name.value.trim(), password: pw.value }); back.remove(); await afterLogin(me); toast(`Signed in as ${me.user.name}.`); } catch (e) { toast(e.message); } };
-  [name, pw].forEach((i) => { i.onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Enter') go(); }; });
+  const submit = async () => { try { const me = await post('/api/auth/login', { name: name.value.trim(), password: pw.value }); back.remove(); await afterLogin(me); toast(`Signed in as ${me.user.name}.`); } catch (e) { toast(e.message); } };
+  [name, pw].forEach((i) => { i.onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Enter') submit(); }; });
   const back = modal('Sign in', tiles, form,
     h('p', { class: 'muted', style: 'font-size:12.5px' }, required ? 'Sign in to use this viewer.' : 'Without signing in you can browse everything; signing in keeps your display settings, favorites and albums on the server, and editors can change the library.'),
-    h('div', { class: 'modal-btns' }, required ? null : h('button', { class: 'pillbtn', onclick: () => back.remove() }, 'Cancel'), h('button', { class: 'pillbtn on', onclick: go }, 'Sign in')));
+    h('div', { class: 'modal-btns' }, required ? null : h('button', { class: 'pillbtn', onclick: () => back.remove() }, 'Cancel'), h('button', { class: 'pillbtn on', onclick: submit }, 'Sign in')));
   if (required) { back.onclick = null; back.classList.add('required'); }
   api('/api/auth/accounts').then((d) => {
     if (!d.accounts.length) { name.focus(); return; }
@@ -1479,11 +1474,11 @@ function loginDialog(required) {
 function setupDialog() {
   const name = h('input', { class: 'einput', placeholder: 'Admin user name', autocomplete: 'username', style: 'margin:0;width:100%' });
   const pw = h('input', { class: 'einput', type: 'password', placeholder: 'Password (8 characters or more)', autocomplete: 'new-password', style: 'margin:0;width:100%' });
-  const go = async () => { try { const me = await post('/api/auth/setup', { name: name.value.trim(), password: pw.value }); back.remove(); await afterLogin({ user: me.user, settings: {} }); toast('Admin account created; you are signed in.'); } catch (e) { toast(e.message); } };
-  [name, pw].forEach((i) => { i.onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Enter') go(); }; });
+  const submit = async () => { try { const me = await post('/api/auth/setup', { name: name.value.trim(), password: pw.value }); back.remove(); await afterLogin({ user: me.user, settings: {} }); toast('Admin account created; you are signed in.'); } catch (e) { toast(e.message); } };
+  [name, pw].forEach((i) => { i.onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Enter') submit(); }; });
   const back = modal('Create the admin account', h('p', { class: 'muted' }, 'Right now the viewer is open to anyone who can reach it. Once an admin exists, visitors browse read-only, signed-in users keep their settings on the server, and only editors and admins can change the library or the settings.'),
     h('div', { style: 'display:grid;gap:8px' }, name, pw),
-    h('div', { class: 'modal-btns' }, h('button', { class: 'pillbtn', onclick: () => back.remove() }, 'Not now'), h('button', { class: 'pillbtn on', onclick: go }, 'Create')));
+    h('div', { class: 'modal-btns' }, h('button', { class: 'pillbtn', onclick: () => back.remove() }, 'Not now'), h('button', { class: 'pillbtn on', onclick: submit }, 'Create')));
   name.focus();
 }
 function accountDialog() {
@@ -1806,7 +1801,7 @@ async function showMaintenance() { if (!IS_ADMIN) { main.replaceChildren(h('div'
 // Settings: preferences. Maintenance: library actions, job progress, models, storage. One loader, two layouts.
 async function settingsPage(view) {
   let m;
-  try { m = await api('/api/maintenance'); } catch (e) { main.replaceChildren(h('div', { class: 'empty' }, 'Could not load settings: ' + e.message)); return; }
+  try { m = await api('/api/maintenance'); } catch (e) { if (route.view === view) main.replaceChildren(h('div', { class: 'empty' }, 'Could not load settings: ' + e.message)); return; }
   if (route.view !== view) return;
   const when = (t) => (t ? fmtWhen(t) : 'never');
   const act = async (action, msg, confirmText) => {
@@ -1828,7 +1823,7 @@ async function settingsPage(view) {
         store.set('theme', k); applyTheme(); for (const b of e.currentTarget.parentNode.children) b.classList.toggle('on', b === e.currentTarget); } }, label)))),
     row('Thumbnail badges', 'The small marks on thumbnails: face tags, GPS coordinates and favorites. This is remembered per browser.',
       h('label', { style: 'display:flex;gap:8px;align-items:center;cursor:pointer' }, h('input', { type: 'checkbox', checked: store.get('badges', '1') !== '0',
-        onchange: (e) => { store.set('badges', e.target.checked ? '1' : '0'); applyBadgePref(); applyTheme(); } }), 'Show badges')),
+        onchange: (e) => { store.set('badges', e.target.checked ? '1' : '0'); applyBadgePref(); } }), 'Show badges')),
     IS_ADMIN ? (() => {
       const sel = h('select', null, h('option', { value: 'osm', selected: m.mapProvider !== 'google' }, 'OpenStreetMap (no account needed)'), h('option', { value: 'google', selected: m.mapProvider === 'google' }, 'Google Maps (your API key)'));
       const keyIn = h('input', { class: 'einput', type: 'password', placeholder: m.googleMapsKeySet ? 'key is set; paste a new one to replace it' : 'Google Maps API key', autocomplete: 'off', style: 'margin:0;width:260px' });
@@ -1968,7 +1963,7 @@ async function settingsPage(view) {
 async function showDuplicates() {
   main.replaceChildren(h('div', { class: 'empty' }, 'Looking for duplicates…'));
   let d;
-  try { d = await api('/api/duplicates'); } catch { main.replaceChildren(h('div', { class: 'empty' }, 'Could not load duplicates.')); return; }
+  try { d = await api('/api/duplicates'); } catch { if (route.view === 'duplicates') main.replaceChildren(h('div', { class: 'empty' }, 'Could not load duplicates.')); return; }
   if (route.view !== 'duplicates') return;
   const src = { id: d.groups.flatMap((g) => g.items.map((x) => x.id)) };
   let k = 0;
@@ -2125,7 +2120,7 @@ async function showMap(fp) {
   main.replaceChildren(el, bar);
   let d;
   try { [d] = await Promise.all([api('/api/map?' + fp.toString()), loadLeaflet(true)]); } catch {
-    main.replaceChildren(h('div', { class: 'empty' }, 'The map needs an internet connection for map tiles. Everything else works offline.'));
+    if (token === M.token && route.view === 'map') main.replaceChildren(h('div', { class: 'empty' }, 'The map needs an internet connection for map tiles. Everything else works offline.'));
     return;
   }
   if (token !== M.token || route.view !== 'map') return;
@@ -2308,7 +2303,6 @@ function buildLightbox() {
     infoBtn: btn('info', 'Info (I)', toggleInfo, LB.info ? 'on' : ''),
     shareBtn: btn('share', 'Share', shareNow),
     dl: h('a', { class: 'iconbtn', title: 'Download original (D)', download: '' }, icon('download')),
-    orig: h('a', { class: 'iconbtn', title: 'Open original in a new tab', target: '_blank', rel: 'noopener' }, icon('open')),
   };
   const e = LB.el;
   e.prev = h('button', { class: 'lb-nav prev', title: 'Previous (←)', onclick: (ev) => { ev.stopPropagation(); step(-1); } }, icon('left'));
@@ -2446,6 +2440,7 @@ function closeLightbox(fromUser) {
   stopSlideshow();
   LB.open = false; LB.token++;
   LB.el.frame.replaceChildren();
+  unpeek();
   LB.mini?.remove(); LB.mini = null; LB.stripSrc = null;
   $('.facemenu')?.remove();
   $('#lightbox').hidden = true;
@@ -2481,7 +2476,6 @@ function showItem() {
   setTimeout(() => { if (token === LB.token) renderStrip(); }, LB.stripSrc === src ? 0 : 350);
   updateFavBtn();
   el.dl.href = `/orig/${id}?dl=1`;
-  el.orig.href = `/orig/${id}`;
   el.prev.style.visibility = i > 0 ? '' : 'hidden';
   el.next.style.visibility = i < src.id.length - 1 ? '' : 'hidden';
   let isVideo = src.video ? i in src.video : undefined;
@@ -2927,7 +2921,7 @@ async function pollStatus() {
     if (s.app && APP_STAMP && s.app !== APP_STAMP && !LB.open && !G.sel.size) { location.reload(); return; }  // the viewer was updated: use the new version
     if (s.app) APP_STAMP = s.app;
     SEM = s.semantic; EDITING = s.editing; PENDING = s.pendingEdits; WRITE_FILES = s.writeFiles; CAN_MANAGE = s.editing && s.dbWrite;
-    IS_ADMIN = s.isAdmin; SIGNED_IN = s.signedIn; USERS_EXIST = s.usersExist; DIGIKAM_CHECK = s.digikamCheck || 'pgrep';
+    IS_ADMIN = s.isAdmin; USERS_EXIST = s.usersExist; DIGIKAM_CHECK = s.digikamCheck || 'pgrep';
     if (s.appVersion) { APP_VERSION = s.appVersion; APP_COMMIT = s.commit || ''; const b = $('.brand'); if (b) b.title = `digiKam Viewer v${APP_VERSION}${APP_COMMIT ? ' (' + APP_COMMIT + ')' : ''}`; } if ((s.user && s.user.id) !== (USER && USER.id)) { USER = s.user; renderUserMenu(); }
     document.body.classList.toggle('noadmin', !IS_ADMIN);
     if (PENDING && s.dbWrite && !el.childNodes.length) el.replaceChildren(h('a', { class: 'lnk', style: 'cursor:pointer', title: 'Edits saved in sidecars that digiKam’s database does not have yet', onclick: dbDialog },

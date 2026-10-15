@@ -7,8 +7,8 @@ An edit:
      first change to it: sidecars into data/sidecar-backups and image files
      into data/file-backups, both mirroring the album folders;
   2. rewrites it with one exiftool run, setting the same fields digiKam writes;
-  3. is remembered in data/viewer.db so the viewer shows the new values right
-     away. digiKam sees them after "Reread Metadata From File", or after
+  3. is remembered in the viewer's own database (vdb.py) so the viewer shows the
+     new values right away. digiKam sees them after "Reread Metadata From File", or after
      "Apply to digiKam database" (dbsync) writes them into its database; once
      the database agrees the remembered edit is dropped automatically.
 
@@ -92,6 +92,20 @@ def pending() -> dict:
         return {r[0]: json.loads(r[1]) for r in con.execute("SELECT photo_id, data FROM edits")}
     except Exception:
         return {}
+    finally:
+        con.close()
+
+
+def pending_count() -> int:
+    """How many edits are remembered (what status polls show; cheaper than loading them all)."""
+    from . import vdb
+    if not vdb.exists():
+        return 0
+    con = appstate.connect()
+    try:
+        return con.execute("SELECT count(*) FROM edits").fetchone()[0]
+    except Exception:
+        return 0
     finally:
         con.close()
 

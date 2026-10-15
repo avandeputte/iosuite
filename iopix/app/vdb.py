@@ -13,9 +13,10 @@ copied, the file is written, and the viewer restarts on the new database.
 import json
 import logging
 import os
+import re
 import sqlite3
 import threading
-import time
+from functools import lru_cache
 from pathlib import Path
 
 from . import config
@@ -28,6 +29,7 @@ KEYS = ("type", "host", "port", "database", "user", "password")
 _cfg = None
 _lock = threading.Lock()
 error = None  # why the configured database could not be used (then SQLite is used instead)
+_KEY_COL = re.compile(r"(?<![\w`.])key(?![\w`(])")  # the settings column, a reserved word on MySQL
 
 try:
     import pymysql
@@ -145,10 +147,6 @@ class _Row(tuple):
     __slots__ = ()
     _keys = ()
 
-    def __new__(cls, values, keys):
-        self = super().__new__(cls, values)
-        return self
-
     def __getitem__(self, k):
         if isinstance(k, str):
             return tuple.__getitem__(self, self._keys.index(k))
@@ -158,21 +156,22 @@ class _Row(tuple):
         return list(self._keys)
 
 
-def _row_class(keys):
-    cls = type("Row", (_Row,), {"__slots__": (), "_keys": tuple(keys)})
-    return cls
+@lru_cache(maxsize=256)
+def _row_class(keys: tuple):
+    """One row class per column list (the same few queries run again and again)."""
+    return type("Row", (_Row,), {"__slots__": (), "_keys": keys})
 
 
 class _VCursor(_Cursor):
     def __init__(self, cur, mysql: bool):
         super().__init__(cur, mysql)
         desc = getattr(cur, "description", None)
-        self._cls = _row_class([d[0] for d in desc]) if mysql and desc else None
+        self._cls = _row_class(tuple(d[0] for d in desc)) if mysql and desc else tuple
 
     def _fix(self, row):
         if row is None or not self._mysql:
             return row
-        return self._cls(tuple(_norm_value(v) for v in row), None) if self._cls else tuple(_norm_value(v) for v in row)
+        return self._cls(_norm_value(v) for v in row)
 
 
 class VConn(Conn):
@@ -210,10 +209,6 @@ class VConn(Conn):
                     self.execute(stmt)
         else:
             self.raw.executescript(script)
-
-
-import re  # noqa: E402
-_KEY_COL = re.compile(r"(?<![\w`.])key(?![\w`(])")
 
 
 def _mysql_raw(c: dict):
@@ -255,9 +250,7 @@ def ensure_schema(con: VConn = None):
                 con.execute("DROP TABLE tagjobs")
         for name, (cols, sq, my) in TABLES.items():
             con.execute(my if con.mysql else sq)
-        if con.mysql:
-            pass
-        else:
+        if not con.mysql:  # MySQL declares its index in the CREATE TABLE and never had the older schema
             for sql in SQLITE_INDEXES:
                 con.execute(sql)
             have = columns(con, "users")
@@ -317,6 +310,7 @@ def copy_all(src: VConn, dst: VConn, drop: bool = True, progress=None) -> dict:
     re-run or a stale copy never leaves rows behind); else existing rows are replaced by id."""
     counts = {}
     q = (lambda t: f"`{t}`") if dst.mysql else (lambda t: t)
+    qs = (lambda t: f"`{t}`") if src.mysql else (lambda t: t)
     for name, (cols, sq, my) in TABLES.items():  # the whole schema first, then the rows
         if drop:
             dst.execute(f"DROP TABLE IF EXISTS {q(name)}")
@@ -326,8 +320,9 @@ def copy_all(src: VConn, dst: VConn, drop: bool = True, progress=None) -> dict:
             dst.execute(sql)
     dst.commit()
     for name, (cols, sq, my) in TABLES.items():
-        qs = (lambda t: f"`{t}`") if src.mysql else (lambda t: t)
-        have = columns(src, name) if src.mysql or src.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?", (name,)).fetchone() else []
+        present = ({r[0] for r in src.execute("SHOW TABLES")} if src.mysql
+                   else {r[0] for r in src.execute("SELECT name FROM sqlite_master WHERE type = 'table'")})
+        have = columns(src, name) if name in present else []  # a table the source never had (hand-made schema) copies nothing
         if not have:
             counts[name] = 0
             dst.commit()
@@ -348,10 +343,19 @@ def copy_all(src: VConn, dst: VConn, drop: bool = True, progress=None) -> dict:
 def switch(c: dict, copy: bool = True, drop: bool = True) -> dict:
     """Move the viewer to the given database: test it, (re)create the tables there, copy the data from
     the current one, save the configuration. The caller restarts the viewer afterwards."""
-    c = {**settings(), **{k: v for k, v in c.items() if k in KEYS and v not in (None, "")}}
+    cur = settings()
+    c = {**cur, **{k: v for k, v in c.items() if k in KEYS and v not in (None, "")}}
     c["type"] = "mysql" if str(c["type"]).lower() in ("mysql", "mariadb") else "sqlite"
-    if c["type"] == "sqlite" and not is_mysql():
-        raise ValueError("The viewer already uses the SQLite file")
+    if c["type"] == "sqlite":
+        if cur["type"] == "sqlite":
+            raise ValueError("The viewer already uses the SQLite file")
+        if error is not None:  # the configured MySQL is unreachable: the viewer already runs on the
+            with _lock:        # SQLite file, so there is nothing to copy; only the configuration changes
+                save_settings(c)
+            return {"ok": True, "copied": {}, "database": describe()}
+    elif is_mysql() and all(str(c[k]) == str(cur[k]) for k in ("host", "port", "database")):
+        # copying a database onto itself would drop every table and then copy from the empty result
+        raise ValueError("The viewer already uses that MySQL database")
     counts = {}
     with _lock:
         dst = connect(cfg=c)

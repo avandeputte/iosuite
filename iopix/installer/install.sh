@@ -82,6 +82,8 @@ if ! id "$USER_NAME" >/dev/null 2>&1; then
 fi
 # shellcheck disable=SC2086
 sh "$PREFIX/app/setup.sh" $ARGS --no-service
+# --read-only: lock the viewer to browsing, whatever the settings say (setup.sh does not ask about it)
+[ "$READ_ONLY" = 1 ] && { grep -q '^READ_ONLY=' "$PREFIX/app/digikam-viewer.env" || echo "READ_ONLY=1" >> "$PREFIX/app/digikam-viewer.env"; }
 chown -R "$USER_NAME" "$DATA" "$PREFIX/app/digikam-viewer.env" 2>/dev/null || true
 if [ "$SERVICE" = 1 ] && command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
   say "Installing the systemd service"

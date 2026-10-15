@@ -265,17 +265,6 @@ def _download_here(key: str):
     print("done", key)
 
 
-if __name__ == "__main__":
-    if len(sys.argv) == 3 and sys.argv[1] == "download":
-        _download_here(sys.argv[2])
-    elif len(sys.argv) == 2 and sys.argv[1] == "check":
-        for row in check_all():
-            print(row)
-    else:
-        print("usage: python -m app.models download <key> | check")
-        sys.exit(2)
-
-
 def auto_download(keys: list, on_done=None):
     """First start of a container or a fresh install: fetch the listed models that are
     missing, one after another, in the background; `on_done(installed_keys)` runs at the
@@ -310,3 +299,14 @@ def auto_download(keys: list, on_done=None):
 
     threading.Thread(target=work, name="auto-models", daemon=True).start()
     return todo
+
+
+if __name__ == "__main__":
+    if len(sys.argv) == 3 and sys.argv[1] == "download":
+        _download_here(sys.argv[2])
+    elif len(sys.argv) == 2 and sys.argv[1] == "check":
+        for row in check_all():
+            print(row)
+    else:
+        print("usage: python -m app.models download <key> | check")
+        sys.exit(2)

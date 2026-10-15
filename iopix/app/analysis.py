@@ -1,4 +1,4 @@
-"""Background image analysis, stored in the app's own data/analysis.db.
+"""Background image analysis, stored in the viewer's own database (vdb.py).
 
   quality   sharpness and exposure, measured on a ~1000 px decode of each photo
   vision    text in the picture (OCR) and face quality. Portable engine: RapidOCR
@@ -32,8 +32,6 @@ except ImportError:  # numpy comes with the optional AI features; without it the
     np = None
 
 log = logging.getLogger(__name__)
-from . import state as _appstate
-DB = _appstate.STATE_DB  # one file for everything the viewer keeps (see state.py)
 JOBS = ("quality", "vision", "objects", "captions")
 progress = {key: {"running": False, "done": 0, "total": 0} for key in JOBS}
 _write_lock = threading.Lock()  # also taken by consistency.py, which shares this database

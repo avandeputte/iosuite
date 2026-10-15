@@ -20,7 +20,7 @@ def _mysql_cfg():
     return {"type": "mysql", "host": host, "port": int(port or 3306), "database": database, "user": user, "password": password}
 
 
-def test_sqlite_snapshot_and_copy_keep_every_row(client, tmp_path, fresh_users):
+def test_sqlite_snapshot_and_copy_keep_every_row(client, tmp_path, fresh):
     users.create("alex", "correct horse", "admin")
     state.set_setting("zz_probe", "value with ? and %s and `key`")
     state.set_favorites([(1, "h1"), (2, "h2")], True)
@@ -54,7 +54,7 @@ def test_switch_refuses_sqlite_to_sqlite(client):
         vdb.switch({"type": "sqlite"}, copy=False)
 
 
-def test_mysql_round_trip(client, tmp_path, fresh_users, monkeypatch):
+def test_mysql_round_trip(client, tmp_path, fresh, monkeypatch):
     cfg = _mysql_cfg()
     if not cfg:
         pytest.skip("VIEWER_TEST_MYSQL not set")

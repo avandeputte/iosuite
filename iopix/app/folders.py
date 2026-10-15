@@ -14,7 +14,6 @@ the id. Nothing else is guessed on digiKam's behalf.
 """
 import json
 import os
-import re
 import subprocess
 import time
 from pathlib import Path
@@ -158,7 +157,8 @@ def upload(album_id: int, files: list, check_running: bool = True) -> dict:
             tmp = folder["dir"] / (".upload-" + final)
             tmp.write_bytes(data)
             tmp.replace(folder["dir"] / final)
-            staged.append((final, cat, ext, folder["dir"] / final))
+            path = folder["dir"] / final
+            staged.append((final, cat, ext, path, _probe(path)))  # exiftool runs here, not inside the write lock below
         except (SyncError, OSError) as e:
             skipped.append({"name": name, "reason": str(e)})
     if not staged:
@@ -166,8 +166,7 @@ def upload(album_id: int, files: list, check_running: bool = True) -> dict:
     dkdb.backup(db_path)
     added = []
     with dbsync.write_transaction(db_path, check_running) as con:
-        for final, cat, ext, path in staged:
-            info = _probe(path)
+        for final, cat, ext, path, info in staged:
             cur = con.execute("INSERT INTO Images (album, name, status, category, modificationDate, fileSize, uniqueHash) "
                               "VALUES (?, ?, 1, ?, NULL, ?, NULL)", (album_id, final, cat, path.stat().st_size))
             iid = cur.lastrowid

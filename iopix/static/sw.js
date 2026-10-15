@@ -11,6 +11,7 @@ self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET' || url.origin !== location.origin) return;
   const shell = url.pathname === '/' || /\/(index\.html|app\.js|app\.css|manifest\.webmanifest|icons\/[^/]+)$/.test(url.pathname);
   if (!shell) return;  // /api, /thumb, /preview, /orig, /face…: straight to the server
-  e.respondWith(fetch(e.request).then((r) => { const copy = r.clone(); caches.open(SHELL).then((c) => c.put(e.request, copy)); return r; })
+  // only a good answer replaces the cached copy: a 503 while the server restarts must not become the offline fallback
+  e.respondWith(fetch(e.request).then((r) => { if (r.ok) { const copy = r.clone(); caches.open(SHELL).then((c) => c.put(e.request, copy)); } return r; })
     .catch(() => caches.match(e.request, { ignoreSearch: true })));
 });

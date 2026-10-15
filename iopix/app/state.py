@@ -1,13 +1,15 @@
 """The app's own writable state: favorites, app-side albums, settings, users, the
 pending-edit and tag-manager queues, and (through analysis.py and consistency.py,
-which share the file) the analysis results.
+which share the database) the analysis results.
 
-Everything lives in one SQLite file, data/viewer.db, never in digiKam's database.
-Photos are referenced by digiKam image id; the file hash is stored alongside so
-entries could be re-matched if digiKam ever renumbers its images. Installs from
-before v1.8 had two files, state.db and analysis.db: migrate_legacy() folds them
-into viewer.db once, keeping every row, and parks the old files in db-backups.
+Everything lives in the viewer's own database (vdb.py: the SQLite file data/viewer.db
+by default, or MySQL/MariaDB), never in digiKam's database. Photos are referenced by
+digiKam image id; the file hash is stored alongside so entries could be re-matched if
+digiKam ever renumbers its images. Installs from before v1.8 had two SQLite files,
+state.db and analysis.db: migrate_legacy() folds them into viewer.db once, keeping
+every row, and parks the old files in db-backups.
 """
+import logging
 import shutil
 import sqlite3
 import threading
@@ -15,8 +17,11 @@ import time
 
 from . import config
 
-STATE_DB = config.DATA_DIR / "viewer.db"
+STATE_DB = config.DATA_DIR / "viewer.db"  # the SQLite file (vdb.SQLITE_FILE); the legacy migration's target
 LEGACY = (config.DATA_DIR / "state.db", config.DATA_DIR / "analysis.db")
+rev = 0  # bumped on every write so cached query results can be invalidated
+_lock = threading.Lock()
+_settings = (-1, {})  # (stamp it was read at, {key: value}); settings are read on every poll and every POST
 
 
 def migrate_legacy():
@@ -60,9 +65,6 @@ def migrate_legacy():
             if g.exists():
                 shutil.move(str(g), str(park / g.name))
     return park
-rev = 0  # bumped on every write so cached query results can be invalidated
-_lock = threading.Lock()
-_settings = (-1, {})  # (rev it was read at, {key: value}); settings are read on every poll and every POST
 
 
 def connect():
@@ -75,7 +77,6 @@ def init():
     from . import vdb
     park = migrate_legacy()
     if park:
-        import logging
         logging.getLogger("app.state").info("state.db and analysis.db were folded into viewer.db; the old files are in %s", park)
     vdb.init()  # the tables of every module, on whichever database is configured
 
@@ -142,11 +143,12 @@ def set_album_items(album_id: int, items: list, on: bool):
 
 
 def _settings_stamp() -> tuple:
-    """Changes on every write: rev for this process, the file's mtime for writes by
-    another one (the MCP server shares this database)."""
+    """Changes on every write: rev for this process, and for writes by another one (the stdio
+    MCP server shares this database) the file's mtime on SQLite, or a few-second clock on MySQL,
+    where no cheap change marker exists."""
     from . import vdb
     if vdb.is_mysql():
-        return rev, None
+        return rev, int(time.time() / 5)
     try:
         return rev, STATE_DB.stat().st_mtime_ns
     except OSError:
