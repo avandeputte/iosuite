@@ -74,3 +74,14 @@ def test_update_viewer_needs_the_admin_token(client, monkeypatch, tmp_path):
     assert client.post("/api/update", json={"action": "regenerate_token"}).status_code == 400
     chk = _rpc(client, "tools/call", {"name": "check_for_update", "arguments": {}}, id=23)["result"]
     assert "version" in json.loads(chk["content"][0]["text"])
+
+
+def test_consistency_tools_need_the_token(client):
+    from app import updates
+    bad = _rpc(client, "tools/call", {"name": "consistency_report", "arguments": {"token": "nope"}}, id=40)["result"]
+    assert bad.get("isError")
+    tok = updates.admin_token()
+    ok = _rpc(client, "tools/call", {"name": "consistency_report", "arguments": {"token": tok}}, id=41)["result"]
+    assert not ok.get("isError") and "summary" in ok["content"][0]["text"]
+    r = _rpc(client, "tools/call", {"name": "consistency_sync", "arguments": {"token": tok, "photo_ids": [], "source": "db", "targets": ["db"], "fields": ["title"]}}, id=42)["result"]
+    assert r.get("isError"), "the source cannot also be a target"

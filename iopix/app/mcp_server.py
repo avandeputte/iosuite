@@ -578,6 +578,30 @@ def check_for_update() -> dict:
     return {"version": __version__, **updates.check(), "lastUpdate": updates.last_result()}
 
 
+@server.tool(annotations=READ_ONLY)
+def consistency_report(token: str, field: str = "", offset: int = 0, limit: int = 500) -> dict:
+    """The metadata consistency report (Maintenance › Metadata consistency): photos whose rating, title,
+    caption or tags differ between digiKam's database, the XMP sidecar and the image file, with each
+    source's value. field narrows it to one of rating|title|caption|tags. Needs the admin token."""
+    _need_token(token)
+    from . import consistency
+    return {"progress": dict(consistency.progress), "summary": consistency.summary(),
+            **consistency.report(field or None, max(0, offset), max(1, min(limit, 2000)))}
+
+
+@server.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=False))
+def consistency_sync(token: str, photo_ids: list[int], source: str, targets: list[str], fields: list[str]) -> dict:
+    """Copy the given fields of the given photos from one source (db|sidecar|file) to the targets, exactly
+    as the consistency page's Sync does: sidecars and files are backed up first; writing the database needs
+    digiKam closed and is backed up too. Returns {synced, skipped}. Needs the admin token."""
+    _need_token(token)
+    from . import consistency, dbsync
+    try:
+        return consistency.sync([int(i) for i in photo_ids][:20000], source, targets, fields)
+    except (ValueError, dbsync.SyncError) as e:
+        raise ToolError(str(e))
+
+
 @server.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=True))
 def update_viewer(token: str, ref: str = "") -> dict:
     """Update the viewer to the latest commit on GitHub and restart it (update.sh: code, packages,
