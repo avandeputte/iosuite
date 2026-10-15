@@ -402,6 +402,7 @@ body.managing .tacts { display: inline-flex; }
 .ctable th { text-align: left; color: var(--fg2); font-weight: 500; padding: 4px 8px; border-bottom: 1px solid var(--line); }
 .ctable td { padding: 6px 8px; vertical-align: top; border-bottom: 1px solid var(--line); width: 30%; }
 .ctable td:first-child { width: 10%; color: var(--fg2); }
+.cfix { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; font-size: 13px; }
 
 .cbadges { position: absolute; right: 5px; bottom: 4px; display: flex; gap: 2px; pointer-events: none; }
 .cbadge { width: 14px; height: 14px; color: #fff; filter: drop-shadow(0 0 2px rgba(0,0,0,.85)); opacity: .9; display: inline-flex; }

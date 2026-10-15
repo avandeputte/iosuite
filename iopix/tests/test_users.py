@@ -208,3 +208,18 @@ def test_require_login_locks_everything_but_the_sign_in(client, fresh, lib):
     assert client.post("/api/settings", json={"require_login": False}).status_code == 200
     client.cookies.clear()
     assert client.get("/api/meta").status_code == 200, "open browsing again"
+
+
+def test_backup_downloads_are_for_admins(client, fresh, lib):
+    users.create("alex", "correct horse", "admin")
+    users.create("vi", "", "viewer")
+    client.cookies.clear()
+    assert client.get("/api/backup/app").status_code == 401, "once accounts exist, a visitor gets nothing"
+    _login(client, "vi", "")
+    assert client.get("/api/backup/app").status_code == 403
+    _login(client, "alex", "correct horse")
+    r = client.get("/api/backup/app")
+    assert r.status_code == 200 and r.content.startswith(b"SQLite format 3") and "attachment" in r.headers["content-disposition"]
+    r = client.get("/api/backup/digikam")
+    assert r.status_code == 200 and r.content.startswith(b"SQLite format 3") and "digikam4-" in r.headers["content-disposition"]
+    assert client.get("/api/backup/other").status_code == 404

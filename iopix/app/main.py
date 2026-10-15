@@ -1648,6 +1648,51 @@ async def api_tags_recent(request: Request):
     return {"recent": new[:12]}
 
 
+@app.get("/api/backup/{which}")
+def api_backup(which: str, request: Request):
+    """A download of digiKam's database (a consistent copy of the SQLite file, or a fresh mysqldump)
+    or of the viewer's own state database. Admins only; the copy is also kept in db-backups."""
+    if not users.is_admin(request.state.user):
+        raise HTTPException(403 if request.state.user else 401, "Admins only")
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    dkdb.BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    if which == "app":
+        dst = dkdb.BACKUP_DIR / f"viewer-state-{stamp}.db"
+        src = sqlite3.connect(str(appstate.STATE_DB))
+        try:
+            out = sqlite3.connect(str(dst))
+            try:
+                src.backup(out)
+            finally:
+                out.close()
+        finally:
+            src.close()
+        dkdb._prune("viewer-state-*.db")
+        return FileResponse(dst, media_type="application/vnd.sqlite3", filename=f"digikam-viewer-state-{stamp}.db", content_disposition_type="attachment")
+    if which != "digikam":
+        raise HTTPException(404, "backup is 'digikam' or 'app'")
+    if dkdb.is_mysql():
+        try:
+            dst = dkdb.backup(force=True)
+        except dbsync.SyncError as e:
+            raise HTTPException(409, str(e))
+        if dst is None:
+            raise HTTPException(400, "Database backups are switched off (DIGIKAM_DB_BACKUP=skip)")
+        return FileResponse(dst, media_type="application/sql", filename=dst.name, content_disposition_type="attachment")
+    dst = dkdb.BACKUP_DIR / f"digikam4-download-{stamp}.db"
+    src = sqlite3.connect(f"file:{dkdb.sqlite_path()}?mode=ro", uri=True)
+    try:
+        out = sqlite3.connect(str(dst))
+        try:
+            src.backup(out)  # a consistent snapshot even while digiKam writes
+        finally:
+            out.close()
+    finally:
+        src.close()
+    dkdb._prune("digikam4-download-*.db")
+    return FileResponse(dst, media_type="application/vnd.sqlite3", filename=f"digikam4-{stamp}.db", content_disposition_type="attachment")
+
+
 @app.get("/api/folders")
 def api_folders():
     """Every digiKam folder as a tree, empty ones included, with the viewer's item counts where it has them."""

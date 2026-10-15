@@ -530,7 +530,8 @@ function layoutGrid() {
     h('span', { class: 'count' }, plural(d.count, 'item')),
     byDate ? h('span', null, fmtRange(Math.min(d.ts[0], d.ts[d.count - 1]), Math.max(d.ts[0], d.ts[d.count - 1]))) : null,
     h('span', { class: 'sp' }),
-    h('span', { class: 'lnk selall', title: 'Select or deselect everything in this view', onclick: () => { G.sel.size >= d.count ? clearSelection() : selectRange(0, d.count - 1, true); } }, G.sel.size >= d.count ? 'Deselect all' : 'Select all'),
+    h('span', { class: 'lnk selall', title: 'Select everything in this view', hidden: G.sel.size >= d.count, onclick: () => selectRange(0, d.count - 1, true) }, 'Select all'),
+    h('span', { class: 'lnk selnone', title: 'Deselect everything', hidden: !G.sel.size, onclick: () => clearSelection() }, 'Deselect all'),
     [...filterParams().keys()].some((k) => k !== 'sort') ? h('button', { class: 'pillbtn dlbtn', title: 'Download these as zip files', onclick: () => downloadDialog(filterParams()) }, icon('download'), h('span', null, 'Download')) : null,
     // the default sort (newest, or best match for ranked results) is left out of the URL
     h('select', { title: 'Sort', onchange: (e) => applyFilter((p) => { ['new', 'rel'].includes(e.target.value) && !(d.ranked && e.target.value === 'new') ? p.delete('sort') : p.set('sort', e.target.value); }) },
@@ -689,8 +690,8 @@ function clearSelection(silent) {
 function updateSelBar() {
   let bar = $('#selbar');
   document.body.classList.toggle('selecting', G.sel.size > 0);
-  const sa = $('#grid .selall');
-  if (sa && G.data) sa.textContent = G.sel.size >= G.data.count ? 'Deselect all' : 'Select all';
+  const sa = $('#grid .selall'), sn = $('#grid .selnone');
+  if (sa && G.data) { sa.hidden = G.sel.size >= G.data.count; sn.hidden = !G.sel.size; }
   if (!G.sel.size) { bar?.remove(); return; }
   if (!bar) { bar = h('div', { id: 'selbar' }); document.body.append(bar); }
   const ids = () => [...G.sel];
@@ -829,6 +830,17 @@ function editDialog(ids) {
   const back = modal(`Edit ${plural(ids.length, 'item')}`,
     h('p', null, 'Each change is saved straight away to the XMP sidecar files. digiKam’s database is not touched.'),
     editControls({}, save),
+    ...(() => {  // title and caption for every selected photo, applied on demand (not on each keystroke)
+      const title = h('input', { class: 'einput', placeholder: 'Title for all', style: 'margin:0;flex:1', onkeydown: (e) => { e.stopPropagation(); if (e.key === 'Enter') e.target.nextSibling.click(); } });
+      const caption = h('textarea', { class: 'einput', placeholder: 'Caption for all', rows: 2, style: 'margin:0;flex:1', onkeydown: (e) => e.stopPropagation() });
+      const apply = (field, el) => h('button', { class: 'pillbtn', style: 'height:32px', onclick: async () => {
+        const v = el.value.trim();
+        if (!v && !confirm(`Clear the ${field} of ${plural(ids.length, 'photo')}?`)) return;
+        if (await save({ [field]: v })) toast(`${field[0].toUpperCase() + field.slice(1)} ${v ? 'set' : 'cleared'} on ${plural(ids.length, 'photo')}.`);
+      } }, 'Apply');
+      return [h('div', { class: 'erow' }, h('span', { class: 'el' }, 'Title'), title, apply('title', title)),
+        h('div', { class: 'erow', style: 'align-items:flex-start' }, h('span', { class: 'el' }, 'Caption'), caption, apply('caption', caption))];
+    })(),
     h('div', { class: 'erow' }, h('span', { class: 'el' }, 'Add tag'), tagPicker((t) => save({ add_tags: [t.id] }))),
     h('div', { class: 'erow' }, h('span', { class: 'el' }, 'Remove tag'), tagPicker((t) => save({ remove_tags: [t.id] }), 'Remove a tag…')),
     h('h4', null, 'Date'), dateEditor(ids, null),
@@ -1618,7 +1630,7 @@ const FIELD_LABEL = { rating: 'Rating', title: 'Title', caption: 'Caption', tags
 async function showConsistency() {
   let field = '', offset = 0, selected = new Set(), d;
   const head = h('div'), list = h('div'), more = h('button', { class: 'pillbtn', style: 'margin:16px 0', onclick: () => load(true) }, 'Show more');
-  const fmtv = (f, v) => v == null ? h('i', { class: 'muted' }, 'absent') : f === 'tags' ? (v.length ? h('span', null, v.map((t) => h('span', { class: 'ichip', style: 'height:24px;font-size:12px;margin:1px' }, t.split('/').pop()))) : h('i', { class: 'muted' }, 'none'))
+  const fmtv = (f, v, na) => na ? h('i', { class: 'muted', title: 'This file type cannot hold metadata; the sidecar carries it' }, 'n/a') : v == null ? h('i', { class: 'muted' }, 'absent') : f === 'tags' ? (v.length ? h('span', null, v.map((t) => h('span', { class: 'ichip', style: 'height:24px;font-size:12px;margin:1px' }, t.split('/').pop()))) : h('i', { class: 'muted' }, 'none'))
     : f === 'rating' ? (v ? '★'.repeat(v) : h('i', { class: 'muted' }, 'none')) : (v || h('i', { class: 'muted' }, 'empty'));
   const item = (r) => {
     const cb = h('input', { type: 'checkbox', checked: selected.has(r.id), onchange: (e) => { e.target.checked ? selected.add(r.id) : selected.delete(r.id); bar(); } });
@@ -1626,7 +1638,16 @@ async function showConsistency() {
       h('div', { class: 'chead' }, EDITING ? cb : null, h('img', { src: `/thumb/${r.id}`, loading: 'lazy', alt: '', onclick: () => openLightbox({ id: [r.id] }, 0, true) }),
         h('div', null, h('b', null, r.name), h('div', { class: 'muted', style: 'font-size:12px' }, r.path.replace(/^.*\/photos\//, ''), !r.has_sidecar ? ' · no sidecar' : '', !r.file_xmp ? (r.file_editable ? ' · no metadata in the file' : ' · file type cannot hold metadata') : ''))),
       h('table', { class: 'ctable' }, h('tr', null, h('th'), ...['db', 'sidecar', 'file'].map((s) => h('th', null, SRC_LABEL[s]))),
-        ...r.mismatch.map((f) => h('tr', null, h('td', null, FIELD_LABEL[f]), ...['db', 'sidecar', 'file'].map((s) => h('td', null, fmtv(f, r.fields[f][s])))))));
+        ...r.mismatch.map((f) => h('tr', null, h('td', null, FIELD_LABEL[f]), ...['db', 'sidecar', 'file'].map((s) => h('td', null, fmtv(f, r.fields[f][s], s === 'file' && !r.file_xmp && !r.file_editable)))))),
+      EDITING ? h('div', { class: 'cfix' }, h('span', { class: 'muted' }, 'Fix this photo: take the values from the'),
+        ...['db', 'sidecar', 'file'].filter((s) => r.mismatch.some((f) => r.fields[f][s] != null)).map((s) => h('button', { class: 'pillbtn', style: 'height:30px', onclick: () => fixOne(r, s) }, SRC_LABEL[s].toLowerCase()))) : null);
+  };
+  // one photo: copy the chosen source's values to the other places that can hold them
+  const fixOne = async (r, src) => {
+    const targets = ['db', 'sidecar', 'file'].filter((t) => t !== src && (t !== 'file' || r.file_editable));
+    if (!confirm(`Copy ${r.mismatch.map((f) => FIELD_LABEL[f].toLowerCase()).join(', ')} from the ${SRC_LABEL[src].toLowerCase()} to the ${targets.map((t) => SRC_LABEL[t].toLowerCase()).join(' and ')} for ${r.name}?` + (targets.includes('db') ? '\n\ndigiKam must be closed; its database is backed up first.' : ''))) return;
+    try { const res = await post('/api/consistency/sync', { ids: [r.id], source: src, targets, fields: r.mismatch }); toast(res.synced ? `Fixed ${r.name}.` : `Not fixed: ${res.skipped[0]?.reason || 'nothing to copy'}`, null, null, 8000); } catch (e) { toast(e.message, null, null, 9000); return; }
+    load();
   };
   const syncBar = h('div', { id: 'selbar', hidden: true });
   const bar = () => {
@@ -1676,7 +1697,7 @@ async function showConsistency() {
   const sel = h('select', { onchange: (e) => { field = e.target.value; load(); } }, h('option', { value: '' }, 'Any field'), ...Object.entries(FIELD_LABEL).map(([f, l]) => h('option', { value: f }, l)));
   main.replaceChildren(h('div', { class: 'page' }, crumbs([['Maintenance', '#/maintenance'], ['Metadata consistency', null]]),
     h('h1', null, 'Metadata consistency'),
-    h('div', { class: 'muted', style: 'max-width:820px' }, 'For each photo, the rating, title, caption and tags are read from three places: digiKam’s database, the XMP sidecar, and the metadata embedded in the image file. Photos where they disagree are listed below. Select photos, choose which copy is right, and sync the others to it. An absent value (no sidecar, nothing in the file) counts as a disagreement only when another copy has a value.'),
+    h('div', { class: 'muted', style: 'max-width:820px' }, 'For each photo, the rating, title, caption and tags are read from three places: digiKam’s database, the XMP sidecar, and the metadata embedded in the image file. Photos where they disagree are listed below. Fix one with its “take the values from” buttons, or tick several, choose which copy is right in the bar that appears, and sync the others. A file type that cannot hold metadata (most videos, RAW files) shows n/a: the sidecar is its only copy and that is not a discrepancy. Select photos, choose which copy is right, and sync the others to it. An absent value (no sidecar, nothing in the file) counts as a disagreement only when another copy has a value.'),
     h('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:14px 0' },
       h('button', { class: 'pillbtn on', onclick: () => scan(false, false) }, icon('spark'), 'Check new and changed photos'),
       h('button', { class: 'pillbtn', onclick: () => { if (confirm('Re-check every photo in the library? This reads every sidecar and image file and takes a while.')) scan(false, true); } }, 'Re-check whole library'),
@@ -1900,6 +1921,8 @@ async function settingsPage(view) {
     row('Restart the viewer', 'Stops the server; launchd, Docker or systemd starts it again within seconds. Needed after updating the RapidOCR package.',
       btn('Restart', async () => { if (!confirm('Restart the viewer now?')) return; try { await post('/api/restart', {}); toast('Restarting…'); } catch (e) { toast(e.message); } })),
     h('h2', null, 'Storage'),
+    row('Download a backup', 'digiKam’s database as it is right now (a consistent copy of digikam4.db, or a mysqldump for MariaDB), and the viewer’s own database (users, albums, favorites, settings, pending edits). Keep them somewhere else; the copies made here before each write stay in the data folder.',
+      h('div', { style: 'display:flex;gap:8px;flex-wrap:wrap' }, h('a', { class: 'pillbtn', href: '/api/backup/digikam', download: '' }, icon('download'), h('span', null, 'digiKam database')), h('a', { class: 'pillbtn', href: '/api/backup/app', download: '' }, icon('download'), h('span', null, 'Viewer database')))),
     h('div', { class: 'kv', style: 'max-width:520px' }, ...[['Thumbnails', st.thumbnails], ['Previews', st.previews], ['Face crops', st.faces], ['Search index', st.index], ['Analysis results', st.analysis], ['Content embeddings', st.embeddings], ['AI models', st.models], ['Sidecar backups', st.backups], ['Image file backups (originals)', st.fileBackups], ['Database backups', st.dbBackups], ['Free disk space', st.free]].flatMap(([k, v]) => [h('span', null, k), h('span', null, fmtBytes(v) || '0 B')])),
     ]),
     h('div', { class: 'muted', style: 'font-size:13px;margin-top:10px;max-width:820px' }, 'Backups of sidecars, of image files whose metadata was rewritten (the full original file, kept once per photo), and of digiKam’s database are kept in the data folder. They are never deleted automatically; remove them by hand once you are happy with the corresponding changes.')));

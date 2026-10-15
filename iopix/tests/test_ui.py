@@ -466,13 +466,13 @@ def test_grid_select_all_toggles_and_groups_by_month(page, server, lib):
     page.goto(server + "/#/photos")
     page.wait_for_selector(".tile img", timeout=15000)
     page.wait_for_selector(".gbar .selall", timeout=5000)
-    assert page.locator(".gbar .selall").inner_text() == "Select all"
+    assert page.locator(".gbar .selall").is_visible() and page.locator(".gbar .selnone").is_hidden()
     page.click(".gbar .selall")
     page.wait_for_selector("#selbar", timeout=5000)
-    assert page.locator(".gbar .selall").inner_text() == "Deselect all"
-    page.click(".gbar .selall")
+    assert page.locator(".gbar .selall").is_hidden() and page.locator(".gbar .selnone").is_visible(), "everything selected: only Deselect all"
+    page.click(".gbar .selnone")
     page.wait_for_selector("#selbar", state="detached", timeout=5000)
-    assert page.locator(".gbar .selall").inner_text() == "Select all"
+    assert page.locator(".gbar .selall").is_visible() and page.locator(".gbar .selnone").is_hidden()
     # grouping: the scratch library spans several days in a month, so months make fewer sections
     page.locator("#main").evaluate("m => m.scrollTop = 0")
     page.wait_for_timeout(300)
@@ -618,3 +618,22 @@ def test_folders_and_albums_are_separate_pages(page, server, lib):
     assert page.locator(".card .nm", has_text="New album").count() == 1
     assert page.locator("h2.sub").count() == 0, "no digiKam folders on the Albums page"
     assert page.locator("a.lnk", has_text="Folders").count() == 1
+
+
+def test_multi_edit_offers_title_caption_and_deselect_all(page, server, lib):
+    page.goto(server + "/#/photos")
+    page.wait_for_selector(".tile img", timeout=15000)
+    page.wait_for_timeout(1200)
+    page.locator(".tile .tcheck").nth(0).click(force=True)
+    page.locator(".tile .tcheck").nth(1).click(force=True)
+    page.wait_for_selector("#selbar", timeout=5000)
+    assert page.locator(".gbar .selnone").is_visible() and page.locator(".gbar .selall").is_visible(), "partly selected: both links"
+    page.locator("#selbar button[title='Edit']").click()
+    page.wait_for_selector(".modal h3:has-text('Edit 2 items')", timeout=5000)
+    for ph in ("Title for all", "Caption for all"):
+        assert page.locator(f".modal [placeholder='{ph}']").count() == 1
+    assert page.locator(".modal .stars button").count() >= 5 and page.locator(".modal .erow .el", has_text="Add tag").count() == 1
+    page.locator(".modal button", has_text="Done").click()
+    page.click(".gbar .selnone")
+    page.wait_for_selector("#selbar", state="detached", timeout=5000)
+    assert page.locator(".gbar .selnone").is_hidden()
