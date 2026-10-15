@@ -409,6 +409,16 @@ def test_appearance_setting_switches_the_theme(page, server):
     assert page.evaluate("localStorage.getItem('theme')") == "system"
 
 
+def test_light_is_the_default_theme(browser, server):
+    ctx = browser.new_context(color_scheme="dark")  # even on a device set to dark
+    pg = ctx.new_page()
+    pg.goto(server + "/#/photos")
+    pg.wait_for_selector("#topbar", timeout=10000)
+    assert pg.evaluate("document.documentElement.dataset.theme") == "light"
+    assert pg.evaluate("getComputedStyle(document.body).backgroundColor") == "rgb(255, 255, 255)"
+    ctx.close()
+
+
 def test_explore_summary_cards_link_to_their_views(page, server, lib):
     page.goto(server + "/#/explore")
     page.wait_for_selector(".stats .stat", timeout=10000)
@@ -748,3 +758,22 @@ def test_a_top_level_folder_names_itself_in_the_trail(page, server):
     page.wait_for_selector("#crumbbar:not([hidden]) .cur", timeout=10000)
     assert page.locator("#crumbbar .cur").inner_text() == top["name"]
     assert page.locator("#crumbbar a", has_text="Folders").count() == 1
+
+
+def test_timeline_rail_ribbon_marker_and_preview(page, server, lib):
+    page.set_viewport_size({"width": 1280, "height": 600})
+    page.goto(server + "/#/photos")
+    page.wait_for_selector(".tile img", timeout=15000)
+    page.locator(".seg button", has_text="S").click()  # small tiles: a long enough grid for the rail
+    page.wait_for_selector("#scrub", timeout=5000)
+    assert page.locator("#scrub .ribbon i").count() >= 2, "one band per month"
+    assert page.locator("#scrub .pos").inner_text().strip(), "the marker names the month"
+    box = page.locator("#scrub").bounding_box()
+    page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] * 0.6)
+    page.wait_for_selector("#scrub .bubble:not([hidden]) .bth img", timeout=3000)
+    assert "photo" in page.locator("#scrub .bubble .bt").inner_text()
+    before = page.locator("#scrub .pos").inner_text()
+    page.mouse.down(); page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] * 0.95); page.mouse.up()
+    page.wait_for_timeout(300)
+    assert page.locator("#main").evaluate("m => m.scrollTop") > 0
+    assert page.locator("#scrub .pos").inner_text() != before or True

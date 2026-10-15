@@ -170,9 +170,9 @@ let APP_STAMP = null;
 const applyBadgePref = () => document.body.classList.toggle('nobadges', store.get('badges', '1') === '0');
 /** Appearance: light, dark, or follow the system (the default). Set on <html> so the stylesheet
  *  picks the palette; the browser chrome (theme-color) follows the page background. */
-const THEMES = [['system', 'System'], ['light', 'Light'], ['dark', 'Dark']];
+const THEMES = [['light', 'Light'], ['dark', 'Dark'], ['system', 'System']];  // light unless chosen otherwise
 function applyTheme() {
-  const t = store.get('theme', 'system');
+  const t = store.get('theme', 'light');
   if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;
   requestAnimationFrame(() => { const m = document.querySelector('meta[name=theme-color]'); if (m) m.content = getComputedStyle(document.body).backgroundColor; });
 }
@@ -651,7 +651,25 @@ function buildScrubber(byDate) {
   const sc = h('div', { id: 'scrub' }, pos, h('div', { class: 'bubble', hidden: true }));
   document.body.append(sc);
   const track = sc.clientHeight;
-  G.scrub = { pos, track };  // read once here; updateScrubPos runs on every scroll frame and must not force a layout
+  G.scrub = { pos, track, label: null, lastIt: -1 };  // read once here; updateScrubPos runs on every scroll frame and must not force a layout
+  // the density ribbon: one band per month, as tall as the month is on the timeline and as wide as it has photos
+  const months = [];
+  for (const it of G.items) {
+    if (!it.head) continue;
+    const dt = date(d.ts[it.s]), key = dt.getUTCFullYear() * 12 + dt.getUTCMonth();
+    const last = months[months.length - 1];
+    if (last && last.key === key) { last.n += it.e - it.s; continue; }
+    if (last) last.y1 = it.y;
+    months.push({ key, y0: it.y, n: it.e - it.s });
+  }
+  if (months.length) months[months.length - 1].y1 = G.total;
+  const most = Math.max(1, ...months.map((m) => m.n));
+  const ribbon = h('div', { class: 'ribbon' }, months.map((m) => {
+    const top = (m.y0 / G.total) * track, hgt = Math.max(1, ((m.y1 - m.y0) / G.total) * track - 1);
+    const w = 3 + Math.round(11 * Math.sqrt(m.n / most));  // square root: a quiet month still shows, a huge one does not swamp the rail
+    return h('i', { style: `top:${top.toFixed(1)}px;height:${hgt.toFixed(1)}px;width:${w}px;opacity:${(0.35 + 0.65 * m.n / most).toFixed(2)}` });
+  }));
+  sc.prepend(ribbon);
   let lastYear = null, lastPx = -99;
   for (const it of G.items) {
     if (!it.head) continue;
@@ -681,21 +699,38 @@ function buildScrubber(byDate) {
   }
   const bubble = $('.bubble', sc);
   const at = (e) => Math.min(1, Math.max(0, (e.clientY - sc.getBoundingClientRect().top) / track));
+  // the preview: month, how many photos it has, and a few thumbnails from where a click would land
+  let shown = -1;
+  const monthCount = (i) => { const dt = date(d.ts[i]), key = dt.getUTCFullYear() * 12 + dt.getUTCMonth(); return months.find((m) => m.key === key)?.n || 0; };
   const label = (f) => {
-    const it = G.items[itemAt(f * G.total)];
-    bubble.textContent = dfMonth.format(date(d.ts[it.s]));
-    bubble.style.top = f * track + 'px';
+    const k = itemAt(f * G.total), it = G.items[k];
+    bubble.style.top = Math.min(track - 60, Math.max(60, f * track)) + 'px';
     bubble.hidden = false;
+    if (k === shown) return;
+    shown = k;
+    const ids = [];
+    for (let j = it.s; j < Math.min(d.count, it.s + 4); j++) ids.push(d.id[j]);
+    fill(bubble, h('div', { class: 'bt' }, h('b', null, dfMonth.format(date(d.ts[it.s]))), h('span', { class: 'muted' }, plural(monthCount(it.s), 'photo'))),
+      h('div', { class: 'bth' }, ids.map((id) => h('img', { src: `/thumb/${id}`, alt: '', loading: 'eager', decoding: 'async' }))));
   };
   let drag = false;
-  sc.onpointerdown = (e) => { drag = true; sc.setPointerCapture(e.pointerId); main.scrollTop = at(e) * (G.total - main.clientHeight); label(at(e)); };
+  sc.onpointerdown = (e) => { drag = true; sc.classList.add('drag'); sc.setPointerCapture(e.pointerId); main.scrollTop = at(e) * (G.total - main.clientHeight); label(at(e)); };
   sc.onpointermove = (e) => { label(at(e)); if (drag) main.scrollTop = at(e) * (G.total - main.clientHeight); };
-  sc.onpointerup = sc.onpointercancel = () => { drag = false; };
-  sc.onpointerleave = () => { if (!drag) bubble.hidden = true; };
+  sc.onpointerup = sc.onpointercancel = () => { drag = false; sc.classList.remove('drag'); };
+  sc.onpointerleave = () => { if (!drag) { bubble.hidden = true; shown = -1; } };
   updateScrubPos();
 }
 function updateScrubPos(top = main.scrollTop, vh = main.clientHeight) {
-  if (G.scrub) G.scrub.pos.style.top = (top / Math.max(1, G.total - vh)) * (G.scrub.track - 2) + 'px';
+  const s = G.scrub;
+  if (!s) return;
+  s.pos.style.top = (top / Math.max(1, G.total - vh)) * (s.track - 2) + 'px';
+  const k = itemAt(top + Math.min(vh * 0.3, 240));  // what the eye is on, a little below the top; a binary search, and the label only changes with the month
+  if (k === s.lastIt) return;
+  s.lastIt = k;
+  const it = G.items[k];
+  if (!it || !G.data) return;
+  const dt = date(G.data.ts[it.s]), txt = `${MONTHS[dt.getUTCMonth()].slice(0, 3)} ${String(dt.getUTCFullYear()).slice(2)}`;
+  if (s.label !== txt) { s.label = txt; s.pos.textContent = txt; }
 }
 new ResizeObserver(() => {
   if (route.view === 'photos' && G.data?.count) {
@@ -2004,8 +2039,8 @@ async function settingsPage(view) {
     !USERS_EXIST ? row('No users yet', 'The viewer is open to anyone who can reach it. Create the admin account to switch on sign-in: visitors then browse read-only, and only editors and admins can change the library.', btn('Create the admin account', setupDialog, true)) : null,
     ...(view === 'settings' ? [
     h('h2', null, 'Display'),
-    row('Appearance', `Light or dark colours, or follow the device. ${USER ? 'Saved with your account, so it follows you to other devices.' : 'Remembered in this browser; sign in to keep it with an account.'}`,
-      h('div', { class: 'eseg', id: 'themeseg' }, THEMES.map(([k, label]) => h('button', { class: store.get('theme', 'system') === k ? 'on' : '', 'data-theme': k, onclick: (e) => {
+    row('Appearance', `Light (the default) or dark colours, or follow the device’s setting. ${USER ? 'Saved with your account, so it follows you to other devices.' : 'Remembered in this browser; sign in to keep it with an account.'}`,
+      h('div', { class: 'eseg', id: 'themeseg' }, THEMES.map(([k, label]) => h('button', { class: store.get('theme', 'light') === k ? 'on' : '', 'data-theme': k, onclick: (e) => {
         store.set('theme', k); applyTheme(); for (const b of e.currentTarget.parentNode.children) b.classList.toggle('on', b === e.currentTarget); } }, label)))),
     row('Thumbnail badges', 'The small marks on thumbnails: face tags, GPS coordinates and favorites. This is remembered per browser.',
       h('label', { style: 'display:flex;gap:8px;align-items:center;cursor:pointer' }, h('input', { type: 'checkbox', checked: store.get('badges', '1') !== '0',

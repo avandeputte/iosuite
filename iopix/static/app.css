@@ -137,8 +137,20 @@ body.filters-open #scrub { right: 354px; }
 #scrub .yr.mo { font-size: 9.5px; opacity: .75; }
 .gbar .jumpdate { height: 30px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--fg); padding: 0 6px; font-size: 12.5px; }
 .card.smart .cv { outline: 2px dashed color-mix(in srgb, var(--c-indigo) 50%, transparent); outline-offset: -2px; }
-#scrub .pos { position: absolute; right: 0; width: 26px; height: 2px; background: var(--accent); pointer-events: none; }
-#scrub .bubble { position: absolute; right: 48px; transform: translateY(-50%); background: var(--bg); box-shadow: var(--shadow); border-bottom: 2px solid var(--accent); padding: 5px 12px; border-radius: 6px 6px 0 0; white-space: nowrap; font-weight: 500; pointer-events: none; }
+/* the position marker: a pill in the app's gradient with the month it is at; larger while dragging */
+#scrub .pos { position: absolute; right: -2px; height: 18px; padding: 0 7px; margin-top: -9px; border-radius: 9px; pointer-events: none; z-index: 2;
+  background: linear-gradient(90deg, #4f5bff, #a24bf0 55%, #ff5a7e); color: #fff; font-size: 10.5px; font-weight: 600; line-height: 18px; white-space: nowrap;
+  box-shadow: 0 1px 6px rgba(0,0,0,.25); transition: transform .12s; transform-origin: right center; }
+#scrub.drag .pos { transform: scale(1.18); }
+/* the density ribbon along the left of the rail */
+#scrub .ribbon { position: absolute; inset: 0 auto 0 0; width: 16px; pointer-events: none; }
+#scrub .ribbon i { position: absolute; left: 0; border-radius: 0 3px 3px 0; background: linear-gradient(90deg, #a24bf0, #4f5bff); }
+#scrub:hover .ribbon i { filter: brightness(1.15); }
+#scrub .bubble { position: absolute; right: 52px; transform: translateY(-50%); background: var(--bg); box-shadow: var(--shadow); border-radius: 12px; padding: 8px; white-space: nowrap; z-index: 3; pointer-events: none; }
+#scrub .bubble .bt { display: flex; gap: 8px; align-items: baseline; font-size: 13px; margin: 0 2px 6px; }
+#scrub .bubble .bt .muted { font-size: 12px; }
+#scrub .bubble .bth { display: flex; gap: 3px; }
+#scrub .bubble .bth img { width: 56px; height: 56px; object-fit: cover; border-radius: 6px; background: var(--tile); display: block; }
 
 /* ---- cards (explore, people, albums) */
 .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 18px 14px; }
@@ -599,3 +611,5 @@ body.nobadges .cbadges, body.nobadges .fbadge { display: none; }
   .gbar .dlbtn span:last-child { display: none; }
   .gbar select { max-width: 120px; }
 }
+
+@media (max-width: 800px) { #scrub .ribbon { width: 10px; } #scrub .pos { font-size: 9.5px; padding: 0 5px; } #scrub .bubble .bth img { width: 44px; height: 44px; } }
