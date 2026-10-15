@@ -67,9 +67,9 @@ def browser():
 
 @pytest.fixture(autouse=True)
 def _ui_no_users(server):
-    """The browser tests' own server keeps its users in its own state.db: start each test in open mode."""
+    """The browser tests' own server keeps its users in its own viewer.db: start each test in open mode."""
     import sqlite3
-    db = Path(os.environ["DATA_DIR"]).parent / "data-ui" / "state.db"
+    db = Path(os.environ["DATA_DIR"]).parent / "data-ui" / "viewer.db"
     if db.exists():
         con = sqlite3.connect(db); con.execute("DELETE FROM users"); con.commit(); con.close()
     yield
@@ -364,7 +364,7 @@ def test_container_mode_asks_before_a_database_write(page, server):
     """DIGIKAM_CHECK=ask (the browser tests' server runs that way): a write that needs digiKam closed
     shows one confirmation; accepting it vouches and the action goes through."""
     import json, sqlite3, urllib.request
-    db = Path(os.environ["DATA_DIR"]).parent / "data-ui" / "state.db"
+    db = Path(os.environ["DATA_DIR"]).parent / "data-ui" / "viewer.db"
     con = sqlite3.connect(db); con.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('digikam_closed_until', '0')"); con.commit(); con.close()
     assert json.load(urllib.request.urlopen(server + "/api/status"))["digikamCheck"] == "ask"
     dialogs = []

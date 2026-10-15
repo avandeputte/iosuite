@@ -32,7 +32,8 @@ except ImportError:  # numpy comes with the optional AI features; without it the
     np = None
 
 log = logging.getLogger(__name__)
-DB = config.DATA_DIR / "analysis.db"
+from . import state as _appstate
+DB = _appstate.STATE_DB  # one file for everything the viewer keeps (see state.py)
 JOBS = ("quality", "vision", "objects", "captions")
 progress = {key: {"running": False, "done": 0, "total": 0} for key in JOBS}
 _write_lock = threading.Lock()  # also taken by consistency.py, which shares this database

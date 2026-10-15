@@ -7,7 +7,7 @@ An edit:
      first change to it: sidecars into data/sidecar-backups and image files
      into data/file-backups, both mirroring the album folders;
   2. rewrites it with one exiftool run, setting the same fields digiKam writes;
-  3. is remembered in data/state.db so the viewer shows the new values right
+  3. is remembered in data/viewer.db so the viewer shows the new values right
      away. digiKam sees them after "Reread Metadata From File", or after
      "Apply to digiKam database" (dbsync) writes them into its database; once
      the database agrees the remembered edit is dropped automatically.

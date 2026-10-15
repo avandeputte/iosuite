@@ -1,17 +1,65 @@
-"""The app's own writable state: favorites, app-side albums and settings.
+"""The app's own writable state: favorites, app-side albums, settings, users, the
+pending-edit and tag-manager queues, and (through analysis.py and consistency.py,
+which share the file) the analysis results.
 
-Lives in data/state.db, never in digiKam's database (edits.py and tagmanager.py
-keep their queues in the same file, through connect() and _write()). Photos are
-referenced by digiKam image id; the file hash is stored alongside so entries
-could be re-matched if digiKam ever renumbers its images.
+Everything lives in one SQLite file, data/viewer.db, never in digiKam's database.
+Photos are referenced by digiKam image id; the file hash is stored alongside so
+entries could be re-matched if digiKam ever renumbers its images. Installs from
+before v1.8 had two files, state.db and analysis.db: migrate_legacy() folds them
+into viewer.db once, keeping every row, and parks the old files in db-backups.
 """
+import shutil
 import sqlite3
 import threading
 import time
 
 from . import config
 
-STATE_DB = config.DATA_DIR / "state.db"
+STATE_DB = config.DATA_DIR / "viewer.db"
+LEGACY = (config.DATA_DIR / "state.db", config.DATA_DIR / "analysis.db")
+
+
+def migrate_legacy():
+    """state.db + analysis.db -> viewer.db, once. Returns where the old files were parked, or None."""
+    if STATE_DB.exists() or not any(p.exists() for p in LEGACY):
+        return None
+    old_state, old_an = LEGACY
+    tmp = STATE_DB.with_name(STATE_DB.name + ".migrating")
+    tmp.unlink(missing_ok=True)
+    if old_state.exists():  # the state file is the base: same tables, same ids
+        src = sqlite3.connect(f"file:{old_state}?mode=ro", uri=True)
+        try:
+            dst = sqlite3.connect(tmp)
+            try:
+                src.backup(dst)
+            finally:
+                dst.close()
+        finally:
+            src.close()
+    con = sqlite3.connect(tmp)
+    try:
+        if old_an.exists():  # the analysis tables are copied over, schema and rows (no name overlaps)
+            con.execute("ATTACH DATABASE ? AS a", (str(old_an),))
+            tables = con.execute("SELECT name, sql FROM a.sqlite_master WHERE type = 'table' AND sql IS NOT NULL").fetchall()
+            for name, sql in tables:
+                con.execute(sql)
+                con.execute(f'INSERT INTO main."{name}" SELECT * FROM a."{name}"')
+            for (sql,) in con.execute("SELECT sql FROM a.sqlite_master WHERE type = 'index' AND sql IS NOT NULL").fetchall():
+                con.execute(sql)
+            con.commit()
+            con.execute("DETACH DATABASE a")
+        con.execute("PRAGMA journal_mode = WAL")
+        con.commit()
+    finally:
+        con.close()
+    tmp.replace(STATE_DB)
+    park = config.DATA_DIR / "db-backups" / ("migrated-" + time.strftime("%Y%m%d-%H%M%S"))
+    park.mkdir(parents=True, exist_ok=True)
+    for f in LEGACY:
+        for g in (f, f.with_name(f.name + "-wal"), f.with_name(f.name + "-shm"), f.with_name(f.name + "-journal")):
+            if g.exists():
+                shutil.move(str(g), str(park / g.name))
+    return park
 rev = 0  # bumped on every write so cached query results can be invalidated
 _lock = threading.Lock()
 _settings = (-1, {})  # (rev it was read at, {key: value}); settings are read on every poll and every POST
@@ -24,7 +72,12 @@ def connect() -> sqlite3.Connection:
 
 
 def init():
+    park = migrate_legacy()
+    if park:
+        import logging
+        logging.getLogger("app.state").info("state.db and analysis.db were folded into viewer.db; the old files are in %s", park)
     con = connect()
+    con.execute("PRAGMA journal_mode = WAL")  # readers never wait for the analysis jobs' writes
     con.executescript("""
         CREATE TABLE IF NOT EXISTS favorites (photo_id INTEGER PRIMARY KEY, hash TEXT, added INTEGER);
         CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);

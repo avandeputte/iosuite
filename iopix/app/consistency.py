@@ -5,7 +5,7 @@ direction you choose.
 Compared fields: rating, pick label, color label, title, caption, tags.
 Values are read with exiftool from the sidecar and from the file (its embedded
 XMP), and straight from digiKam's database (read-only). Results are stored in
-data/analysis.db so the report can be browsed without rescanning.
+data/viewer.db so the report can be browsed without rescanning.
 
 Syncing writes with the same code paths as editing: digiKam's writers for the
 sidecar / file (edits.write_args), and dbsync for the database (digiKam closed,

@@ -1323,7 +1323,7 @@ def api_maintenance():
             ("thumbnails", "cache/t"), ("previews", "cache/p"), ("faces", "cache/f"), ("models", "models"),
             ("backups", "sidecar-backups"), ("fileBackups", "file-backups"), ("dbBackups", "db-backups"))} | {
             "index": config.INDEX_DB.stat().st_size if config.INDEX_DB.exists() else 0,
-            "analysis": analysis.DB.stat().st_size if analysis.DB.exists() else 0,
+            "viewerDb": appstate.STATE_DB.stat().st_size if appstate.STATE_DB.exists() else 0,
             "embeddings": sum(e.file.stat().st_size for e in semantic.engines.values() if e.file.exists()),
             "free": free},
         "writeFiles": edits.writes_files(), "readOnly": appstate.read_only(), "readOnlyLocked": config.READ_ONLY, "database": _db_settings_public(), "mapProvider": appstate.get_setting("map_provider", "osm"), "googleMapsKeySet": bool(maps.key()), "searchModel": semantic.chosen(),
@@ -1671,33 +1671,26 @@ def api_backup(which: str, request: Request):
         finally:
             src.close()
 
-    if which == "state":  # the small one: users, albums, favorites, settings, pending edits
-        dst = dkdb.BACKUP_DIR / f"viewer-state-{stamp}.db"
-        snapshot(appstate.STATE_DB, dst)
-        dkdb._prune("viewer-state-*.db")
-        return FileResponse(dst, media_type="application/vnd.sqlite3", filename=f"digikam-viewer-state-{stamp}.db", content_disposition_type="attachment")
-    if which == "app":  # everything the viewer keeps that is slow to recompute: the state plus the AI results
+    if which == "app":  # everything the viewer keeps: its database (state and AI results) plus the content-search index
         import zipfile
         dst = dkdb.BACKUP_DIR / f"viewer-backup-{stamp}.zip"
         tmp = dkdb.BACKUP_DIR / f".snap-{stamp}"
         tmp.mkdir(exist_ok=True)
         try:
             with zipfile.ZipFile(dst, "w", zipfile.ZIP_DEFLATED) as z:
-                for name, src in (("state.db", appstate.STATE_DB), ("analysis.db", analysis.DB)):
-                    if src.exists():
-                        snapshot(src, tmp / name)
-                        z.write(tmp / name, name)
+                snapshot(appstate.STATE_DB, tmp / "viewer.db")
+                z.write(tmp / "viewer.db", "viewer.db")
                 for f in sorted(config.DATA_DIR.glob("embeddings*.npz")) + sorted(config.DATA_DIR.glob("embeddings*.npz.complete")):
                     z.write(f, f.name)
                 z.writestr("README.txt", "digiKam Viewer backup. Restore by stopping the viewer and copying these files into its data folder "
-                           "(state.db: users, albums, favorites, settings, pending edits; analysis.db: sharpness, text, objects, captions, "
-                           "consistency report; embeddings*.npz: the content-search index). digiKam's own database is a separate download.\n")
+                           "(viewer.db: users, albums, favorites, settings, pending edits, and the analysis results: sharpness, text, objects, "
+                           "captions, consistency report; embeddings*.npz: the content-search index). digiKam's own database is a separate download.\n")
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
         dkdb._prune("viewer-backup-*.zip")
         return FileResponse(dst, media_type="application/zip", filename=f"digikam-viewer-backup-{stamp}.zip", content_disposition_type="attachment")
     if which != "digikam":
-        raise HTTPException(404, "backup is 'digikam', 'app' or 'state'")
+        raise HTTPException(404, "backup is 'digikam' or 'app'")
     if dkdb.is_mysql():
         try:
             dst = dkdb.backup(force=True)

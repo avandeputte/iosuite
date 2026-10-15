@@ -43,7 +43,7 @@ The viewer is a web app that installs like an app on a phone or tablet (PWA): op
 
 ## AI analysis and background jobs
 
-All analysis runs locally and is stored in `data/analysis.db`; nothing is written to digiKam. New and changed photos are picked up automatically (the digiKam database is polled every `REINDEX_POLL` seconds, 20 by default). Settings › AI analysis shows every job with progress, "Check for new photos now" and "Run again from scratch".
+All analysis runs locally and is stored in `data/viewer.db`; nothing is written to digiKam. New and changed photos are picked up automatically (the digiKam database is polled every `REINDEX_POLL` seconds, 20 by default). Settings › AI analysis shows every job with progress, "Check for new photos now" and "Run again from scratch".
 
 Heavy work runs through one queue, one job at a time, in this order: thumbnails, sharpness/exposure/objects, content-search embeddings, text and face quality, descriptions. Each job may use `BG_THREADS` cores (default half the machine, changeable in Settings; a change applies when the next job starts), so the viewer and other apps stay responsive.
 
@@ -134,10 +134,9 @@ Everything the app writes lives in `data/` (`DATA_DIR`), which must not be insid
 | --- | --- | --- |
 | `index.db` | search index, rebuilt in about a second whenever digiKam's database changes | yes |
 | `cache/t`, `cache/p`, `cache/f` | grid thumbnails, viewer previews (pruned at startup past `PREVIEW_CACHE_MAX_MB`), face crops | yes |
-| `analysis.db` | sharpness, objects, text, descriptions, consistency results | yes (recomputed) |
+| `viewer.db` | one SQLite file for everything the viewer keeps: favorites, app albums, users, settings, pending edits, the tag-manager queue, and the analysis results (sharpness, objects, text, descriptions, consistency). Installs from before v1.8 are migrated from `state.db` + `analysis.db` at the first start; the old files are parked in `db-backups/migrated-*/` | **no** (the analysis part can be recomputed, slowly) |
 | `embeddings*.npz`, `concepts-*.npy` | content-search vectors per model | yes (recomputed) |
 | `models/`, `geonames/`, `bin/` | downloaded models and data | yes (re-download) |
-| `state.db` | favorites, app albums, settings, pending edits, tag-manager queue | **no** |
 | `sidecar-backups/` | each sidecar as it was before the viewer's first change to it, mirroring the album folders; `tag-ops/<operation>/` for tag-manager rewrites (last 8 operations kept) | your call |
 | `file-backups/` | the full original of each image file before its metadata was first rewritten (one per photo, never replaced) | your call |
 | `db-backups/` | `digikam4-<time>.db` copies (or `digikam-mysql-<time>.sql` dumps) before every database write; the last 10 kept | your call |
@@ -291,7 +290,7 @@ Inside `app/`:
     app/index.py         builds data/index.db from the digiKam database
     app/query.py         filter parameters to SQL (shared by web API and MCP)
     app/thumbs.py        thumbnails, previews, face crops, background pre-warm
-    app/state.py         favorites, app albums, settings (data/state.db)
+    app/state.py         favorites, app albums, settings, users, queues (data/viewer.db, the one viewer database)
     app/jobs.py          the single background job queue
     app/edits.py         metadata edits to XMP sidecars and image files, with backups
     app/dbsync.py        applies pending edits to digiKam's database (on request, digiKam closed)
@@ -303,7 +302,7 @@ Inside `app/`:
     app/places.py        offline reverse geocoding (GeoNames)
     app/semantic.py      content search (CLIP or SigLIP 2)
     app/concepts.py      the Detected content vocabulary and tag cover picking
-    app/analysis.py      background sharpness, OCR, object and caption analysis (data/analysis.db)
+    app/analysis.py      background sharpness, OCR, object and caption analysis (tables in data/viewer.db)
     app/detector.py      YOLOX-S object detection
     app/caption.py       BLIP photo descriptions
     app/moments.py       bursts, events and trips

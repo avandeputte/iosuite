@@ -6,7 +6,7 @@ dbsync (backup first, one transaction, integrity check).
 
 Renaming, moving or deleting a tag also changes the tag path stored in the XMP
 sidecar of every photo that carries it (or a tag beneath it). Those sidecar
-rewrites are queued in data/state.db and done in the background, resumably,
+rewrites are queued in data/viewer.db and done in the background, resumably,
 after each sidecar is copied to data/sidecar-backups/tag-ops/<operation>/.
 
 People tags may be renamed and moved (regions are keyed by tag id) and new
