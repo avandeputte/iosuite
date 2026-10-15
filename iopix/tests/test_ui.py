@@ -529,3 +529,18 @@ def test_share_button_opens_the_device_share_sheet_with_the_picture(page, server
     else:
         assert shared["files"] and shared["files"][0][0].endswith(".jpg") and shared["files"][0][1] == "image/jpeg" and shared["files"][0][2] > 1000, shared
     page.keyboard.press("Escape")
+
+
+def test_on_this_day_is_a_justified_gallery_without_scrollbars(page, server, lib):
+    page.goto(server + "/#/explore")
+    page.wait_for_selector(".stats .stat", timeout=10000)
+    page.wait_for_timeout(1500)
+    if page.locator(".jrows .tile").count() == 0:
+        pytest.skip("no photo in the scratch library was taken on today's date")
+    g = page.locator(".jrows")
+    assert page.evaluate("(e) => e.scrollWidth <= e.clientWidth", g.element_handle()), "nothing to scroll sideways"
+    box = g.bounding_box()
+    tiles = page.locator(".jrows .tile")
+    for i in range(tiles.count()):
+        b = tiles.nth(i).bounding_box()
+        assert b["x"] >= box["x"] - 1 and b["x"] + b["width"] <= box["x"] + box["width"] + 1, "tiles wrap within the page width"

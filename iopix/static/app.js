@@ -1072,7 +1072,7 @@ const people = () => META.tags.filter((t) => t.person && t.n > 0 && !t.hasKids).
 async function showExplore() {
   const now = new Date();
   const md = `${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-  const strip = h('div', { class: 'strip' });
+  const strip = h('div', { class: 'jrows' });
   const otd = h('div', { hidden: true }, h('h2', { style: '--hue:var(--c-rose)' }, h('span', { class: 'hic' }, icon('calendar')), `On this day · ${MONTHS[now.getMonth()]} ${now.getDate()}`, h('a', { href: hashFor('photos', photosWith({ md })) }, 'See all')), strip);
   const detected = h('div', { hidden: true }), trips = h('div', { hidden: true });
   const rootTags = META.tags.filter((t) => t.pid == null && t.nAll && !(t.person && !META.tags.some((c) => c.pid === t.id))).sort((a, b) => b.nAll - a.nAll);
@@ -1146,8 +1146,8 @@ async function showExplore() {
   try {
     const d = await api(`/api/photos?md=${md}&norejected=1`);
     if (route.view !== 'explore' || !d.count) return;
-    for (let i = 0; i < Math.min(d.count, 40); i++) {
-      strip.append(h('div', { class: 'tile', style: `width:${Math.round(170 * Math.min(2.2, d.w[i] / (d.h[i] || 1)))}px`, title: dfDay.format(date(d.ts[i])),
+    for (let i = 0; i < Math.min(d.count, 24); i++) {  // a few rows; "See all" has the rest
+      strip.append(h('div', { class: 'tile', style: `--ar:${Math.max(0.5, Math.min(2.2, d.w[i] / (d.h[i] || 1))).toFixed(3)}`, title: dfDay.format(date(d.ts[i])),
         onclick: () => go('photos', photosWith({ md, norejected: 1, p: d.id[i] })) }, h('img', { src: `/thumb/${d.id[i]}`, loading: 'lazy', alt: '' })));
     }
     otd.hidden = false;
