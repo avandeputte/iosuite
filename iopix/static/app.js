@@ -1987,7 +1987,7 @@ async function settingsPage(view) {
   const row = (label, detail, btn) => h('div', { class: 'srow' }, h('div', null, h('b', null, label), h('div', { class: 'muted', style: 'font-size:13px' }, detail)), btn);
   const btn = (label, fn, primary) => h('button', { class: 'pillbtn' + (primary ? ' on' : ''), onclick: fn }, label);
   const st = m.storage;
-  main.replaceChildren(h('div', { class: 'page' },
+  main.replaceChildren(h('div', { class: 'page spage' },
     h('h1', null, view === 'settings' ? 'Settings' : 'Maintenance', h('span', { class: 'muted', style: 'font-size:13px;font-weight:400;margin-left:12px' }, `digiKam Viewer v${APP_VERSION || '?'}${APP_COMMIT && APP_COMMIT !== 'unknown' ? ' · ' + APP_COMMIT : ''}`)),
     h('div', { class: 'muted', style: 'max-width:820px' }, `Library: ${m.paths.library} (${nf.format(m.photos)} items). digiKam database: ${m.paths.digikamDb}. Everything the viewer writes lives in ${m.paths.data}.`),
     !USERS_EXIST ? row('No users yet', 'The viewer is open to anyone who can reach it. Create the admin account to switch on sign-in: visitors then browse read-only, and only editors and admins can change the library.', btn('Create the admin account', setupDialog, true)) : null,

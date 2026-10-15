@@ -540,3 +540,10 @@ body.nobadges .cbadges, body.nobadges .fbadge { display: none; }
 .utable .ucell { display: inline-flex; align-items: center; gap: 8px; }
 .utable select { height: 28px; }
 .utable .pillbtn { height: 28px; }
+
+/* Settings and Maintenance: every section, row and table shares one column width */
+.page.spage { max-width: 1040px; }
+.spage .srow, .spage .ajob, .spage .mwrap, .spage .stable.wide, .spage .utable, .spage [style*="max-width"] { max-width: none !important; }
+.spage .mwrap { width: 100%; }
+.mtable th:first-child, .mtable td:first-child { padding-left: 0; }
+.mtable th:last-child, .mtable td:last-child { padding-right: 0; }
