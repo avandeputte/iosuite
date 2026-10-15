@@ -443,6 +443,25 @@ def api_meta(request: Request):
     return jresp(request, {**_meta(state["version"]), "version": _public_version()})
 
 
+APP_NAME_DEFAULT = "DKViewer"
+
+
+def app_name() -> str:
+    """What the viewer calls itself (Settings › Name): the top bar, the tab title, the installed app."""
+    return (appstate.get_setting("app_name", "") or "").strip()[:40] or APP_NAME_DEFAULT
+
+
+@app.get("/manifest.webmanifest")
+def api_manifest():
+    """The PWA manifest, with the configured name (the file in static/ is the template)."""
+    data = json.loads((config.STATIC_DIR / "manifest.webmanifest").read_text())
+    name = app_name()
+    data["name"] = name
+    if len(name) <= 12:
+        data["short_name"] = name
+    return JSONResponse(data, media_type="application/manifest+json")
+
+
 def _app_stamp() -> str:
     """Changes whenever the front-end files change, so an open tab can tell it is stale."""
     try:
@@ -465,7 +484,7 @@ def api_status(request: Request):
             "updateAvailable": updates.available() if users.is_admin(user) and updates.auto_check_enabled() else None,
             "readOnly": appstate.read_only(), "readOnlyLocked": config.READ_ONLY, "digikamCheck": config.DIGIKAM_CHECK,
             "digikam": index.status(),
-            "appVersion": APP_VERSION, "commit": updates.local_commit()[:7],
+            "appVersion": APP_VERSION, "commit": updates.local_commit()[:7], "appName": app_name(),
             "tagJobs": {**tagmanager.progress, "pending": tagmanager.pending_jobs()},
             "analysis": analysis.progress, "jobs": bgjobs.status()}
 
@@ -1001,7 +1020,7 @@ async def api_edit_revert(request: Request):
 # --------------------------------------------------------------------------
 
 def _settings_public() -> dict:
-    return {"write_files": edits.writes_files(), "search_model": semantic.chosen(), "bg_threads": bgjobs.threads(), "read_only": appstate.read_only(), "require_login": users.require_login(), "update_check": updates.auto_check_enabled(), "update_check_locked": os.environ.get("UPDATE_CHECK", "").strip() == "0", "digikam_sync": index.sync_enabled(), "database": _db_settings_public(), "album_roots": dkdb.root_overrides(), "map_provider": appstate.get_setting("map_provider", "osm"), "google_maps_key_set": bool(maps.key()), "templates": json.loads(appstate.get_setting("templates", "[]"))}
+    return {"write_files": edits.writes_files(), "search_model": semantic.chosen(), "bg_threads": bgjobs.threads(), "read_only": appstate.read_only(), "require_login": users.require_login(), "update_check": updates.auto_check_enabled(), "update_check_locked": os.environ.get("UPDATE_CHECK", "").strip() == "0", "digikam_sync": index.sync_enabled(), "app_name": appstate.get_setting("app_name", ""), "database": _db_settings_public(), "album_roots": dkdb.root_overrides(), "map_provider": appstate.get_setting("map_provider", "osm"), "google_maps_key_set": bool(maps.key()), "templates": json.loads(appstate.get_setting("templates", "[]"))}
 
 
 @app.get("/api/settings")
@@ -1024,6 +1043,8 @@ async def api_settings(request: Request):
             threading.Thread(target=updates.check, daemon=True).start()
         else:
             updates._checked.clear()
+    if "app_name" in body:  # how the viewer brands itself; empty puts the default back
+        appstate.set_setting("app_name", str(body["app_name"] or "").strip()[:40])
     if "digikam_sync" in body:  # off: the viewer works from its own copy of the library and never opens digiKam's database
         appstate.set_setting("digikam_sync", "1" if body["digikam_sync"] else "0")
         if body["digikam_sync"]:
@@ -1438,7 +1459,7 @@ def api_maintenance():
             "viewerDb": vdb.SQLITE_FILE.stat().st_size if not vdb.is_mysql() and vdb.SQLITE_FILE.exists() else 0,
             "embeddings": sum(e.file.stat().st_size for e in semantic.engines.values() if e.file.exists()),
             "free": free},
-        "writeFiles": edits.writes_files(), "readOnly": appstate.read_only(), "readOnlyLocked": config.READ_ONLY, "digikam": index.status(),
+        "writeFiles": edits.writes_files(), "readOnly": appstate.read_only(), "readOnlyLocked": config.READ_ONLY, "digikam": index.status(), "appName": app_name(), "appNameSet": appstate.get_setting("app_name", ""),
         "updateCheck": updates.auto_check_enabled(), "updateCheckLocked": os.environ.get("UPDATE_CHECK", "").strip() == "0", "database": _db_settings_public(), "mapProvider": appstate.get_setting("map_provider", "osm"), "googleMapsKeySet": bool(maps.key()), "searchModel": semantic.chosen(),
         "templates": json.loads(appstate.get_setting("templates", "[]")), "templateFields": list(edits.TEMPLATE_FIELDS),
         "recentTags": json.loads(appstate.get_setting("recent_tags", "[]")),

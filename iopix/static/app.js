@@ -191,6 +191,12 @@ function applyTheme() {
 }
 let dragTag = null;
 let IS_ADMIN = true, USERS_EXIST = false, REQUIRE_LOGIN = false, BOOTED = false, DIGIKAM_CHECK = 'pgrep', APP_VERSION = '', APP_COMMIT = '';
+let APP_NAME = 'DKViewer';  // Settings › Name; applied to the top bar, the tab title and the installed app's name
+function applyAppName() {
+  const b = $('.brand-name'); if (b) b.textContent = APP_NAME;
+  document.title = APP_NAME;
+  const meta = document.querySelector('meta[name="apple-mobile-web-app-title"]'); if (meta) meta.content = APP_NAME;
+}
 let EDITING = false, WRITE_FILES = false, CAN_MANAGE = false, manageTags = false, PENDING = 0, pollTimer = 0, keepView = false;
 /** Re-check server status soon (after an edit) instead of waiting for the regular poll. */
 function pollSoon(ms = 1500) { clearTimeout(pollTimer); pollTimer = setTimeout(pollStatus, ms); }
@@ -2047,11 +2053,16 @@ async function settingsPage(view) {
   const btn = (label, fn, primary) => h('button', { class: 'pillbtn' + (primary ? ' on' : ''), onclick: fn }, label);
   const st = m.storage;
   main.replaceChildren(h('div', { class: 'page spage' },
-    h('h1', null, view === 'settings' ? 'Settings' : 'Maintenance', h('span', { class: 'muted', style: 'font-size:13px;font-weight:400;margin-left:12px' }, `DKViewer v${APP_VERSION || '?'}${APP_COMMIT && APP_COMMIT !== 'unknown' ? ' · ' + APP_COMMIT : ''}`)),
+    h('h1', null, view === 'settings' ? 'Settings' : 'Maintenance', h('span', { class: 'muted', style: 'font-size:13px;font-weight:400;margin-left:12px' }, `${APP_NAME} v${APP_VERSION || '?'}${APP_COMMIT && APP_COMMIT !== 'unknown' ? ' · ' + APP_COMMIT : ''}`)),
     h('div', { class: 'muted', style: 'max-width:820px' }, `Library: ${m.paths.library} (${nf.format(m.photos)} items). digiKam database: ${m.paths.digikamDb}. Everything the viewer writes lives in ${m.paths.data}.`),
     !USERS_EXIST ? row('No users yet', 'The viewer is open to anyone who can reach it. Create the admin account to switch on sign-in: visitors then browse read-only, and only editors and admins can change the library.', btn('Create the admin account', setupDialog, true)) : null,
     ...(view === 'settings' ? [
     h('h2', null, 'Display'),
+    IS_ADMIN ? (() => {
+      const inp = h('input', { class: 'einput', placeholder: 'DKViewer', value: m.appNameSet || '', maxlength: 40, style: 'margin:0;width:220px', onkeydown: (e) => { if (e.key === 'Enter') e.target.nextSibling.click(); } });
+      return row('Name', 'What the viewer calls itself, for everyone: the top bar, the browser tab and the installed app. Leave it empty for DKViewer.',
+        h('span', { style: 'display:flex;gap:6px;align-items:center' }, inp, btn('Save', async () => { try { await post('/api/settings', { app_name: inp.value }); toast('Name saved.'); pollSoon(300); } catch (e) { toast(e.message); } })));
+    })() : null,
     row('Appearance', `Light (the default) or dark colours, or follow the device’s setting. ${USER ? 'Saved with your account, so it follows you to other devices.' : 'Remembered in this browser; sign in to keep it with an account.'}`,
       h('div', { class: 'eseg', id: 'themeseg' }, THEMES.map(([k, label]) => h('button', { class: store.get('theme', 'light') === k ? 'on' : '', 'data-theme': k, onclick: (e) => {
         store.set('theme', k); applyTheme(); for (const b of e.currentTarget.parentNode.children) b.classList.toggle('on', b === e.currentTarget); } }, label)))),
@@ -3276,7 +3287,8 @@ async function pollStatus() {
     IS_ADMIN = s.isAdmin; USERS_EXIST = s.usersExist; DIGIKAM_CHECK = s.digikamCheck || 'pgrep';
     updateBanner(s.updateAvailable);
     dkBanner(s.digikam);
-    if (s.appVersion) { APP_VERSION = s.appVersion; APP_COMMIT = s.commit || ''; const b = $('.brand'); if (b) b.title = `DKViewer v${APP_VERSION}${APP_COMMIT ? ' (' + APP_COMMIT + ')' : ''}`; } if ((s.user && s.user.id) !== (USER && USER.id)) { USER = s.user; renderUserMenu(); }
+    if (s.appName && s.appName !== APP_NAME) { APP_NAME = s.appName; applyAppName(); }
+    if (s.appVersion) { APP_VERSION = s.appVersion; APP_COMMIT = s.commit || ''; const b = $('.brand'); if (b) b.title = `${APP_NAME} v${APP_VERSION}${APP_COMMIT ? ' (' + APP_COMMIT + ')' : ''}`; } if ((s.user && s.user.id) !== (USER && USER.id)) { USER = s.user; renderUserMenu(); }
     document.body.classList.toggle('noadmin', !IS_ADMIN);
     if (PENDING && s.dbWrite && !el.childNodes.length) el.replaceChildren(h('a', { class: 'lnk', style: 'cursor:pointer', title: 'Edits saved in sidecars that digiKam’s database does not have yet', onclick: dbDialog },
       `${nf.format(PENDING)} ${PENDING === 1 ? 'edit' : 'edits'} not in digiKam yet`));

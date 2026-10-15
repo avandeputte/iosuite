@@ -883,3 +883,19 @@ def test_digikam_offline_banner_and_sync_setting(page, server):
     page.goto(server + "/#/settings")
     page.wait_for_selector(".srow:has-text('Sync with digiKam')", timeout=10000)
     assert page.locator(".srow", has_text="Sync with digiKam").locator("button", has_text="Turn off").count() == 1
+
+
+def test_app_name_shows_in_the_top_bar_and_tab(page, server):
+    def set_name(v):
+        req = urllib.request.Request(server + "/api/settings", data=('{"app_name": "%s"}' % v).encode(), headers={"content-type": "application/json"}, method="POST")
+        urllib.request.urlopen(req, timeout=5).read()
+    set_name("iothing Photos")
+    try:
+        page.goto(server + "/#/photos")
+        page.wait_for_function("document.querySelector('.brand-name') && document.querySelector('.brand-name').textContent === 'iothing Photos'", timeout=10000)
+        assert page.title() == "iothing Photos"
+        page.goto(server + "/#/settings")
+        page.wait_for_selector(".srow:has-text('Name')", timeout=10000)
+        assert page.locator(".srow", has_text="What the viewer calls itself").locator("input").input_value() == "iothing Photos"
+    finally:
+        set_name("")
