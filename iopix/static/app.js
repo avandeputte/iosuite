@@ -2090,21 +2090,50 @@ async function settingsPage(view) {
     templatesSection(m),
     ] : null,
     ] : [
+    // 1. Library: everything about digiKam's data as the viewer sees it
     h('h2', null, 'Library'),
     row('Rescan the library now', `The index is rebuilt from digiKam’s database whenever digiKam saves (last saved ${when(m.digikamSaved)}; index built ${when(m.indexBuilt)}). Force it here if something looks stale.`,
       btn('Rescan now', () => act('reindex', 'Rescanning the library…'), true)),
-    row('Thumbnails', `${fmtBytes(st.thumbnails)} of grid thumbnails, ${fmtBytes(st.previews)} of viewer previews, ${fmtBytes(st.faces)} of face crops. Rebuilding thumbnails takes several minutes for the whole library.`,
-      h('span', { style: 'display:flex;gap:6px;flex-wrap:wrap' }, btn('Rebuild thumbnails', () => act('thumbs', 'Rebuilding thumbnails in the background.', `Delete all grid thumbnails (${fmtBytes(st.thumbnails)}) and rebuild them?`)),
-        btn('Clear previews', () => act('previews', 'Previews cleared; they are remade as you open photos.')), btn('Clear face crops', () => act('faces', 'Face crops cleared; they are remade as needed.')))),
+    (() => {  // metadata consistency, summarised in one line
+      const line = h('span', null, 'Loading…');
+      api('/api/consistency?limit=1').then((c) => {
+        const s = c.summary, p = c.progress;
+        fill(line, p.running ? `Checking… ${nf.format(p.done)} / ${nf.format(p.total)} photos.`
+          : !s.scanned ? 'Not checked yet.'
+          : `${s.mismatched ? plural(s.mismatched, 'photo disagrees', 'photos disagree') : 'Everything agrees'} across digiKam’s database, the sidecars and the files${s.scanned_at ? ` (last checked ${fmtWhen(s.scanned_at)})` : ''}.`);
+      }).catch(() => fill(line, ''));
+      return row('Metadata consistency', h('span', null, line, ' Rating, title, caption and tags are compared in the three places they live; disagreements can be synced in either direction.'),
+        h('a', { class: 'pillbtn on', href: '#/consistency' }, 'Open'));
+    })(),
+    EDITING ? row('Edits waiting for digiKam', m.pendingEdits ? `${plural(m.pendingEdits, 'photo has', 'photos have')} edits saved in sidecars that digiKam’s database does not have yet. digiKam is ${m.digikamRunning ? 'running, so they cannot be applied right now' : 'closed, so they can be applied now'}.` : 'None. digiKam’s database and the sidecars agree.',
+      m.pendingEdits ? btn('Apply to digiKam database…', dbDialog, !m.digikamRunning) : null) : null,
     row('Tag cover photos', 'The photo shown for each tag is chosen by the content model. Pick them again after big tagging changes.', btn('Pick again', () => act('covers', 'Choosing tag covers in the background.'))),
+    // 2. AI analysis and models
     aiSection(view),
-    h('h2', null, 'Metadata consistency'),
-    row('Database, sidecars and image files', 'Compares rating, labels, title, caption and tags across digiKam’s database, each photo’s XMP sidecar and the metadata embedded in the file, then lets you sync them in the direction you choose.',
-      h('a', { class: 'pillbtn on', href: '#/consistency' }, 'Open the checker')),
-    EDITING ? [h('h2', null, 'digiKam database'),
-    row('Edits waiting for digiKam', m.pendingEdits ? `${plural(m.pendingEdits, 'photo has', 'photos have')} edits saved in sidecars that digiKam’s database does not have yet. digiKam is ${m.digikamRunning ? 'running, so they cannot be applied right now' : 'closed, so they can be applied now'}.` : 'None. digiKam’s database and the sidecars agree.',
-      m.pendingEdits ? btn('Apply to digiKam database…', dbDialog, !m.digikamRunning) : null),
-    ] : null,
+    // 3. Storage and backups: each item's size with what can be done about it on the same row
+    h('h2', null, 'Storage and backups', h('span', { class: 'muted' }, `${fmtBytes(st.free)} free on the disk`)),
+    (() => {
+      const item = (label, size, detail, action) => h('tr', null, h('td', null, label, detail ? h('div', { class: 'muted', style: 'font-size:11.5px;white-space:normal' }, detail) : null),
+        h('td', { class: 'num' }, fmtBytes(size) || '0 B'), h('td', { class: 'act' }, action || null));
+      const small = (label, fn) => h('button', { class: 'pillbtn small', onclick: fn }, label);
+      return h('table', { class: 'stable wide' }, h('tbody', null,
+        item('Thumbnails', st.thumbnails, 'grid previews, rebuilt in the background (several minutes)', small('Rebuild', () => act('thumbs', 'Rebuilding thumbnails in the background.', `Delete all grid thumbnails (${fmtBytes(st.thumbnails)}) and rebuild them?`))),
+        item('Previews', st.previews, 'large images for the viewer, remade on demand', small('Clear', () => act('previews', 'Previews cleared; they are remade as you open photos.'))),
+        item('Face crops', st.faces, 'remade on demand', small('Clear', () => act('faces', 'Face crops cleared; they are remade as needed.'))),
+        item('Search index', st.index, 'rebuilt from digiKam’s database in seconds'),
+        item('Viewer database', st.viewerDb, 'users, albums, favorites, settings, AI results'),
+        item('Content embeddings', st.embeddings, 'the content-search index'),
+        item('AI models', st.models),
+        item('Sidecar backups', st.backups, 'each sidecar as it was before the viewer first changed it'),
+        item('Image file backups', st.fileBackups, 'the original of each file whose metadata was rewritten'),
+        item('Database backups', st.dbBackups, 'digiKam’s database before each write (the last 10)')));
+    })(),
+    h('div', { class: 'muted', style: 'font-size:12.5px;margin-top:8px;max-width:820px' }, 'Backups are never deleted automatically (apart from keeping the last ten database copies); remove them by hand once you are happy with the corresponding changes.'),
+    row('Download a backup', 'digiKam’s database as it is right now (a consistent copy of digikam4.db, or a mysqldump for MariaDB), and the viewer’s data as a zip (its database plus the content-search index). Keep them somewhere else.',
+      h('div', { style: 'display:flex;gap:8px;flex-wrap:wrap' }, h('a', { class: 'pillbtn', href: '/api/backup/digikam', download: '' }, icon('download'), h('span', null, 'digiKam database')),
+        h('a', { class: 'pillbtn', href: '/api/backup/app', download: '' }, icon('download'), h('span', null, 'Viewer data (zip)')))),
+    // 4. The viewer itself
+    h('h2', null, 'Viewer'),
     (() => {
       const body = h('div', { class: 'muted', style: 'font-size:13px' }, 'Loading…');
       const draw = async () => {
@@ -2125,14 +2154,7 @@ async function settingsPage(view) {
     })(),
     row('Restart the viewer', 'Stops the server; launchd, Docker or systemd starts it again within seconds. Needed after updating the RapidOCR package.',
       btn('Restart', async () => { if (!confirm('Restart the viewer now?')) return; try { await post('/api/restart', {}); toast('Restarting…'); } catch (e) { toast(e.message); } })),
-    h('h2', null, 'Storage'),
-    row('Download a backup', 'digiKam’s database as it is right now (a consistent copy of digikam4.db, or a mysqldump for MariaDB), and the viewer’s data as a zip: its one database (users, albums, favorites, settings, pending edits, and the AI results: sharpness, text, objects, captions, consistency report) plus the content-search index. Keep them somewhere else; the copies made here before each write stay in the data folder.',
-      h('div', { style: 'display:flex;gap:8px;flex-wrap:wrap' }, h('a', { class: 'pillbtn', href: '/api/backup/digikam', download: '' }, icon('download'), h('span', null, 'digiKam database')),
-        h('a', { class: 'pillbtn', href: '/api/backup/app', download: '' }, icon('download'), h('span', null, 'Viewer data (zip)')))),
-    h('table', { class: 'stable' }, h('tbody', null, [['Thumbnails', st.thumbnails], ['Previews', st.previews], ['Face crops', st.faces], ['Search index', st.index], ['Viewer database', st.viewerDb], ['Content embeddings', st.embeddings], ['AI models', st.models], ['Sidecar backups', st.backups], ['Image file backups (originals)', st.fileBackups], ['Database backups', st.dbBackups], ['Free disk space', st.free]]
-      .map(([k, v]) => h('tr', null, h('td', null, k), h('td', null, fmtBytes(v) || '0 B'))))),
-    ]),
-    h('div', { class: 'muted', style: 'font-size:13px;margin-top:10px;max-width:820px' }, 'Backups of sidecars, of image files whose metadata was rewritten (the full original file, kept once per photo), and of digiKam’s database are kept in the data folder. They are never deleted automatically; remove them by hand once you are happy with the corresponding changes.')));
+    ])));
 }
 
 async function showDuplicates() {

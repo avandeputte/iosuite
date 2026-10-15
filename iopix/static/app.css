@@ -416,6 +416,11 @@ body.managing .tacts { display: inline-flex; }
 .stable td { padding: 4px 24px 4px 0; border-bottom: 1px solid var(--line); white-space: nowrap; }
 .stable td:first-child { color: var(--fg2); }
 .stable td:last-child { text-align: right; font-variant-numeric: tabular-nums; padding-right: 0; }
+.stable.wide { width: 100%; max-width: 820px; }
+.stable.wide td { vertical-align: top; padding: 7px 16px 7px 0; }
+.stable.wide td:first-child { color: var(--fg); white-space: normal; }
+.stable.wide td.num { text-align: right; font-variant-numeric: tabular-nums; color: var(--fg2); width: 1%; }
+.stable.wide td.act { text-align: right; width: 1%; padding-right: 0; }
 
 .crec { max-width: 980px; padding: 12px 0; border-top: 1px solid var(--line); }
 .crec.sel { background: var(--accent-bg); margin: 0 -12px; padding: 12px; border-radius: 10px; }

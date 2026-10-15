@@ -213,8 +213,8 @@ def test_settings_and_maintenance_pages(page, server):
     page.goto(server + "/#/maintenance")
     page.wait_for_selector("h1:has-text('Maintenance')", timeout=10000)  # a hash-only navigation re-renders in place
     heads = page.locator("h2").all_inner_texts()
-    for h in ("Library", "AI analysis and models", "Metadata consistency", "Storage"):
-        assert h in heads, heads
+    for h in ("Library", "AI analysis and models", "Storage and backups", "Viewer"):
+        assert any(x == h or x.startswith(h + " ") or x.startswith(h + "\n") for x in heads), (h, heads)
     assert "Display" not in heads and "Editing" not in heads
     page.wait_for_selector(".mtable tbody tr", timeout=10000)
     assert page.locator("b", has_text="Background work").count() == 1
@@ -224,6 +224,8 @@ def test_settings_and_maintenance_pages(page, server):
     assert page.locator(".mtable tr[data-model=geonames]").count() == 1, "models without a job have a row too"
     assert page.locator(".mtable thead th").all_inner_texts()[:3] == ["Feature", "Model", "Progress"]
     assert page.locator("b", has_text="Restart the viewer").count() == 1
+    assert page.locator(".srow b", has_text="Metadata consistency").count() == 1, "consistency sits under Library"
+    assert page.locator(".stable.wide tr").count() >= 10 and page.locator(".stable.wide button", has_text="Rebuild").count() == 1
     assert page.locator("#nav a", has_text="Maintenance").count() == 0, "no longer in the main navigation"
     assert page.locator("#topbar a.tool[href='#/maintenance']").count() == 1 and page.locator("#topbar a.tool[href='#/settings']").count() == 1
 
