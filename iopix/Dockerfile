@@ -10,7 +10,7 @@
 # The image contains no models. On the first start the viewer downloads the ones named in
 # AUTO_MODELS (default: SigLIP 2 search, YOLOX objects, GeoNames places; about 1.6 GB) into the
 # /data volume, one after another, while the library is already browsable; later starts find them
-# there. Set AUTO_MODELS="" to skip, add "blip" with CAPTIONS=1, or use Maintenance > Models and data.
+# there. Set AUTO_MODELS="" to skip, add "blip" with CAPTIONS=1, or use Maintenance > AI analysis and models.
 FROM python:3.12-slim
 ARG AI=1
 ARG CAPTIONS=0

@@ -1951,7 +1951,7 @@ async function showFaces(vp) {
   // unnamed or ignored faces: a selectable grid, name or ignore many at once
   const sel = new Set();
   const grid = h('div', { class: 'fgrid' });
-  if (tab === 'unknown' && store.get('facegroups', '1') === '0') body.append(h('div', { class: 'muted', style: 'font-size:13px' }, h('a', { class: 'lnk', onclick: () => { store.set('facegroups', '1'); refresh(); } }, 'Group look-alikes'), ' (needs the SFace model from Maintenance › Models and data).'));
+  if (tab === 'unknown' && store.get('facegroups', '1') === '0') body.append(h('div', { class: 'muted', style: 'font-size:13px' }, h('a', { class: 'lnk', onclick: () => { store.set('facegroups', '1'); refresh(); } }, 'Group look-alikes'), ' (needs the SFace model from Maintenance › AI analysis and models).'));
   const bar = h('div', { style: 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0' });
   const chosen = () => d.faces.filter((f, i) => sel.has(i));
   const drawBar = () => CAN_MANAGE && fill(bar,
