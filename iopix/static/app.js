@@ -1420,15 +1420,18 @@ function usersSection() {
   const draw = async () => {
     let d; try { d = await api('/api/users'); } catch (e) { fill(body, h('div', { class: 'muted' }, e.message)); return; }
     const name = h('input', { class: 'einput', placeholder: 'User name', style: 'margin:0;width:160px' }), pw = h('input', { class: 'einput', type: 'password', placeholder: 'Password', style: 'margin:0;width:160px' });
+    const email = h('input', { class: 'einput', type: 'email', placeholder: 'Email (optional)', autocomplete: 'off', style: 'margin:0;width:200px' });
     const role = h('select', null, d.roles.map((r) => h('option', { value: r }, r)));
     const nopw = h('label', { style: 'display:flex;gap:6px;align-items:center;font-size:13px' }, h('input', { type: 'checkbox', onchange: (e) => { pw.disabled = e.target.checked; if (e.target.checked) { pw.value = ''; role.value = 'viewer'; } } }), 'no password (one-click sign-in, viewer only)');
-    [name, pw].forEach((i) => { i.onkeydown = (e) => e.stopPropagation(); });
+    [name, pw, email].forEach((i) => { i.onkeydown = (e) => e.stopPropagation(); });
     const act = async (fn, after = draw) => { try { await fn(); } catch (err) { toast(err.message); } after(); };
     const setPerson = (u, t) => act(async () => { await post(`/api/users/${u.id}`, { person: t ? t.id : null }); if (USER && USER.id === u.id) { USER.person = t ? t.id : null; renderUserMenu(); } });
     fill(body, h('table', { class: 'utable' },
-      h('thead', null, h('tr', null, ['Account', 'Person in People', 'Role', 'Password', ''].map((c) => h('th', null, c)))),
+      h('thead', null, h('tr', null, ['Account', 'Email', 'Person in People', 'Role', 'Password', ''].map((c) => h('th', null, c)))),
       h('tbody', null, d.users.map((u) => h('tr', { 'data-user': u.name },
         h('td', null, h('span', { class: 'ucell' }, avatarOf(u), h('span', null, u.name, u.id === USER?.id ? h('span', { class: 'muted' }, ' (you)') : null))),
+        h('td', null, u.email || h('span', { class: 'muted' }, 'none'), ' ',
+          h('a', { class: 'lnk', onclick: () => { const v = prompt(`Email address for ${u.name} (empty to clear)`, u.email || ''); if (v !== null) act(async () => { await post(`/api/users/${u.id}`, { email: v.trim() }); }); } }, u.email ? 'change' : 'set')),
         h('td', null, u.person && tagById.get(u.person) ? tagById.get(u.person).name : h('span', { class: 'muted' }, 'not linked'), ' ',
           h('a', { class: 'lnk', onclick: () => personPicker((t) => setPerson(u, t)) }, u.person ? 'change' : 'link'), u.person ? [' · ', h('a', { class: 'lnk', onclick: () => setPerson(u, null) }, 'unlink')] : null),
         h('td', null, h('select', { onchange: (e) => act(async () => { await post(`/api/users/${u.id}`, { role: e.target.value }); toast(`${u.name} is now ${e.target.value}.`); }) }, d.roles.map((r) => h('option', { value: r, selected: r === u.role }, r)))),
@@ -1436,8 +1439,8 @@ function usersSection() {
           h('a', { class: 'lnk', onclick: () => { const p = prompt(`New password for ${u.name} (8 characters or more)`); if (p) act(async () => { await post(`/api/users/${u.id}`, { password: p }); toast('Password set.'); }, () => {}); } }, 'set'),
           u.role === 'viewer' && !u.passwordless ? [' · ', h('a', { class: 'lnk', title: 'One-click sign-in from the account picker', onclick: () => { if (confirm(`Remove ${u.name}’s password? Anyone who can reach the viewer can then sign in as this viewer with one click.`)) act(() => post(`/api/users/${u.id}`, { password: '' })); } }, 'remove')] : null),
         h('td', { style: 'text-align:right' }, u.id !== USER?.id ? h('button', { class: 'pillbtn', onclick: () => { if (confirm(`Delete the user ${u.name}?`)) act(() => post(`/api/users/${u.id}`, { delete: true })); } }, 'Delete') : null))))),
-      h('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px' }, name, pw, role, nopw, h('button', { class: 'pillbtn on', onclick: async () => {
-        try { await post('/api/users', { name: name.value.trim(), password: nopw.querySelector('input').checked ? '' : pw.value, role: nopw.querySelector('input').checked ? 'viewer' : role.value }); toast(`Added ${name.value.trim()}.`); } catch (err) { toast(err.message); } draw();
+      h('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px' }, name, email, pw, role, nopw, h('button', { class: 'pillbtn on', onclick: async () => {
+        try { await post('/api/users', { name: name.value.trim(), email: email.value.trim(), password: nopw.querySelector('input').checked ? '' : pw.value, role: nopw.querySelector('input').checked ? 'viewer' : role.value }); toast(`Added ${name.value.trim()}.`); } catch (err) { toast(err.message); } draw();
       } }, icon('add'), 'Add user')));
   };
   draw();

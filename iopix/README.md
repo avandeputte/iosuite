@@ -82,6 +82,8 @@ Out of the box the viewer is open to anyone who can reach it (as before). Settin
 | **editor** | plus every library write: edits, tags, faces, place tags, GPS tracks, metadata sync, applying to digiKam's database |
 | **admin** | plus settings, maintenance, models, and managing users (Settings › Users) |
 
+Each account can carry an optional email address (Settings › Users). The viewer does not use it yet; it is there so a reverse proxy that authenticates users (Authelia, Authentik, Cloudflare Access…) can later be mapped onto these accounts by the identity it passes.
+
 Sign in from the person icon at the top right: the dialog shows a tile per account; a passwordless viewer signs in with one click, the others ask for their password. Sessions are signed HttpOnly cookies (secret in `data/secret`) valid for 30 days; passwords are scrypt-hashed and never stored in clear. The server enforces all of it: write endpoints answer 401/403 regardless of what the page shows. Read-only mode (an admin setting) still refuses library writes for everyone, editors included.
 
 ## Editing

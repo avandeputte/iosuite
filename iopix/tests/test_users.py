@@ -147,3 +147,23 @@ def test_account_linked_to_a_person(client, fresh):
     assert client.get("/api/auth/accounts").json()["accounts"][0]["person"] == person["id"], "the picker can show the face"
     _login(client, "alex", "correct horse")
     assert client.post("/api/auth/person", json={"person": None}).json()["person"] is None
+
+
+def test_optional_email_on_accounts(client, fresh):
+    """An account may carry an email address (for a proxy to identify users by later): set at
+    creation or afterwards, validated, unique, clearable, and shown in the admin's list."""
+    users.create("alex", "correct horse", "admin")
+    _login(client, "alex", "correct horse")
+    u = client.post("/api/users", json={"name": "ed", "password": "editor-pass", "role": "editor", "email": " Ed@Example.com "}).json()
+    assert u["email"] == "ed@example.com", "trimmed and lower-cased"
+    assert client.post("/api/users", json={"name": "ann", "password": "", "role": "viewer", "email": "not-an-address"}).status_code == 400
+    assert client.post("/api/users", json={"name": "ann", "password": "", "role": "viewer", "email": "ed@example.com"}).status_code == 400, "unique"
+    ann = client.post("/api/users", json={"name": "ann", "password": "", "role": "viewer"}).json()
+    assert ann["email"] == ""
+    assert client.post(f"/api/users/{ann['id']}", json={"email": "ann@example.com"}).status_code == 200
+    assert client.post(f"/api/users/{ann['id']}", json={"email": "ed@example.com"}).status_code == 400
+    listed = {x["name"]: x["email"] for x in client.get("/api/users").json()["users"]}
+    assert listed == {"alex": "", "ed": "ed@example.com", "ann": "ann@example.com"}
+    assert client.post(f"/api/users/{ann['id']}", json={"email": ""}).status_code == 200
+    assert next(x for x in client.get("/api/users").json()["users"] if x["name"] == "ann")["email"] == ""
+    assert "email" not in client.get("/api/auth/accounts").json()["accounts"][0], "the public picker shows no addresses"

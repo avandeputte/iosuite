@@ -17,6 +17,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import secrets
 import time
 
@@ -35,8 +36,11 @@ def init():
             CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL COLLATE NOCASE,
                 hash TEXT NOT NULL, role TEXT NOT NULL, settings TEXT NOT NULL DEFAULT '{}', created INTEGER, last_login INTEGER);
         """)
-        if "person" not in [r[1] for r in con.execute("PRAGMA table_info(users)")]:
+        cols = [r[1] for r in con.execute("PRAGMA table_info(users)")]
+        if "person" not in cols:
             con.execute("ALTER TABLE users ADD COLUMN person INTEGER")  # the digiKam person tag this account is
+        if "email" not in cols:
+            con.execute("ALTER TABLE users ADD COLUMN email TEXT")  # optional; the identity a proxy could pass later
         con.commit()
     finally:
         con.close()
@@ -81,8 +85,19 @@ def check_password(pw: str, stored: str) -> bool:
 
 
 # ---- users
+COLS = "id, name, role, created, last_login, hash, person, email"
+
+
 def _row(r) -> dict:
-    return {"id": r[0], "name": r[1], "role": r[2], "created": r[3], "last_login": r[4], "passwordless": not r[5], "person": r[6]}
+    return {"id": r[0], "name": r[1], "role": r[2], "created": r[3], "last_login": r[4], "passwordless": not r[5], "person": r[6], "email": r[7] or ""}
+
+
+def clean_email(email) -> str:
+    """An optional address: empty, or something@something.tld, at most 254 characters."""
+    email = (email or "").strip().lower()
+    if email and (len(email) > 254 or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email)):
+        raise ValueError("That does not look like an email address")
+    return email
 
 
 def any_users() -> bool:
@@ -96,7 +111,7 @@ def any_users() -> bool:
 def list_users() -> list:
     con = state.connect()
     try:
-        return [_row(r) for r in con.execute("SELECT id, name, role, created, last_login, hash, person FROM users ORDER BY id")]
+        return [_row(r) for r in con.execute(f"SELECT {COLS} FROM users ORDER BY id")]
     finally:
         con.close()
 
@@ -104,14 +119,15 @@ def list_users() -> list:
 def get(user_id: int):
     con = state.connect()
     try:
-        r = con.execute("SELECT id, name, role, created, last_login, hash, person FROM users WHERE id = ?", (user_id,)).fetchone()
+        r = con.execute(f"SELECT {COLS} FROM users WHERE id = ?", (user_id,)).fetchone()
         return _row(r) if r else None
     finally:
         con.close()
 
 
-def create(name: str, password: str, role: str) -> dict:
+def create(name: str, password: str, role: str, email: str = "") -> dict:
     name = name.strip()
+    email = clean_email(email)
     if not name or len(name) > 64:
         raise ValueError("A user name is needed (up to 64 characters)")
     if role not in ROLES:
@@ -124,16 +140,23 @@ def create(name: str, password: str, role: str) -> dict:
     try:
         if con.execute("SELECT 1 FROM users WHERE name = ?", (name,)).fetchone():
             raise ValueError("That user name is taken")
-        cur = con.execute("INSERT INTO users (name, hash, role, created) VALUES (?,?,?,?)", (name, hash_password(password) if password else "", role, int(time.time())))
+        if email and con.execute("SELECT 1 FROM users WHERE email = ?", (email,)).fetchone():
+            raise ValueError("Another account already has that email address")
+        cur = con.execute("INSERT INTO users (name, hash, role, created, email) VALUES (?,?,?,?,?)", (name, hash_password(password) if password else "", role, int(time.time()), email or None))
         con.commit()
         return get(cur.lastrowid)
     finally:
         con.close()
 
 
-def update(user_id: int, role: str = None, password: str = None, name: str = None):
+def update(user_id: int, role: str = None, password: str = None, name: str = None, email: str = None):
     con = state.connect()
     try:
+        if email is not None:
+            email = clean_email(email)
+            if email and con.execute("SELECT 1 FROM users WHERE email = ? AND id != ?", (email, user_id)).fetchone():
+                raise ValueError("Another account already has that email address")
+            con.execute("UPDATE users SET email = ? WHERE id = ?", (email or None, user_id))
         if role is not None:
             if role not in ROLES:
                 raise ValueError("Unknown role")
