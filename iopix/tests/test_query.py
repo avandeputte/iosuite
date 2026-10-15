@@ -51,3 +51,23 @@ def test_sorts_are_a_closed_set():
 def test_fts_query_escapes_quotes():
     out = query.fts_query('he said "hi" AND/OR')
     assert '""' in out or '"' not in out or out.count('"') % 2 == 0
+
+
+def test_text_query_also_covers_concept_photos_when_given():
+    """main.resolve adds qids (photos the content model labels with a matching concept) next to
+    each q; the clause is an OR of the text index and those ids, and ids are validated ints."""
+    sql, params = query.build_where([("q", "audience"), ("qids", "5,7,abc,9")])
+    assert "fts MATCH ?" in sql and "id IN (5,7,9)" in sql and " OR " in sql
+    assert "abc" not in sql
+    sql, params = query.build_where([("q", "audience"), ("qids", "0")])
+    assert "fts MATCH ?" in sql and "id IN (0)" not in sql, "0 stands for no concept photos"
+    sql, params = query.build_where([("q", "audience")])
+    assert "fts MATCH ?" in sql and " OR " not in sql
+
+
+def test_concept_names_matching_a_search():
+    from app import concepts
+    assert concepts.matching("audience") == ["audience"]
+    assert "beach" in concepts.matching("Beach") and "tropical beach with palm trees" in concepts.matching("beach")
+    assert concepts.matching("ice hockey") == ["ice hockey"], "a multi-word query matches by whole name only"
+    assert concepts.matching("sea") == [] and concepts.matching("") == []

@@ -164,6 +164,8 @@ const PARAM_VIEWS = ['places', 'bursts', 'faces'];  // views whose own query par
 // favorites and app albums (stored by the app, not in digiKam)
 const ST = { rev: -1, fav: new Set(), albums: [] };
 let SEM = { enabled: false };
+let CONCEPTS = null;  // the detected-content vocabulary with counts, fetched once for the search suggestions
+function loadConcepts() { if (CONCEPTS || !SEM.enabled) return; CONCEPTS = []; api('/api/concepts').then((c) => { CONCEPTS = c.concepts.map((x) => ({ ...x, _n: norm(x.name) })); }).catch(() => { CONCEPTS = null; }); }
 let APP_STAMP = null;
 const applyBadgePref = () => document.body.classList.toggle('nobadges', store.get('badges', '1') === '0');
 /** Appearance: light, dark, or follow the system (the default). Set on <html> so the stylesheet
@@ -318,7 +320,7 @@ function suggestions(text) {
   const words = norm(text).split(/\s+/).filter(Boolean);
   const out = [{ ic: 'search', label: `Search everything for “${text.trim()}”`, kind: 'Text', act: (p) => p.append('q', text.trim()) }];
   if (!words.length || !META) return [];
-  if (SEM.enabled) out.push({ ic: 'spark', label: `Photos that look like “${text.trim()}”`, kind: 'Content', act: (p) => { p.delete('like'); p.set('sem', text.trim()); } });
+  if (SEM.enabled) { loadConcepts(); out.push({ ic: 'spark', label: `Photos that look like “${text.trim()}”`, kind: 'Content', act: (p) => { p.delete('like'); p.set('sem', text.trim()); } }); }
   const score = (n) => {
     if (!words.every((w) => n.includes(w))) return -1;
     return n.startsWith(words[0]) ? 3 : new RegExp(`(^|[^a-z0-9])${words[0].replace(/[^\w]/g, '.')}`).test(n) ? 2 : 1;
@@ -333,6 +335,8 @@ function suggestions(text) {
     if (mi >= 0) out.push({ ic: 'calendar', label: MONTHS[mi] + (mm[2] ? ' ' + mm[2] : ''), kind: 'Month',
       act: (p) => { p.set('month', mi + 1); if (mm[2]) p.set('year', mm[2]); } });
   }
+  for (const c of top(CONCEPTS || [], 3, '_n', (c) => c.n))
+    out.push({ ic: 'spark', label: c.name, kind: `Detected · ${nf.format(c.n)}`, act: (p) => p.set('concept', c.name) });
   const used = new Set(filterParams().getAll('tag'));
   const tags = META.tags.filter((t) => t.nAll && !used.has(String(t.id)));
   for (const t of top(tags.filter((t) => t.person), 6, '_n', (t) => t.nAll))
@@ -2637,7 +2641,6 @@ function renderInfo() {
   for (const [k, v] of Object.entries(ex.properties || {})) addKv(k, v);
   if (d.video) { addKv('Duration', d.duration ? fmtDur(d.duration) : null); addKv('Video codec', vid.codec); addKv('Frame rate', vid.fps ? `${+(+vid.fps).toFixed(2)} fps` : null); addKv('Audio', vid.audio); }
   addKv('File modified', d.modified?.replace('T', ' '));
-  addKv('digiKam id', d.id);
   const mapEl = d.lat != null ? h('div', { class: 'imap' }) : null;
   fill(el,
     h('div', { class: 'ihead' }, h('button', { class: 'iconbtn', title: 'Close info', onclick: toggleInfo }, icon('close')), 'Info'),

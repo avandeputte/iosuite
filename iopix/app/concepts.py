@@ -224,6 +224,30 @@ def photos_for(name: str) -> list:
     return [int(d["ids"][r]) for r in rows[np.argsort(-score)]]
 
 
+def matching(text: str) -> list:
+    """Concept names a free-text search should also cover: the whole query is a concept name,
+    or a single query word of four letters or more is a whole word of one ("beach" also finds
+    "tropical beach with palm trees"). Short or multi-word queries match by name only, so "a"
+    or "red car" do not pull in half the vocabulary."""
+    q = " ".join(text.lower().split())
+    if not q:
+        return []
+    out = [n for n in INDEX if n == q]
+    if " " not in q and len(q) >= 4:
+        out += [n for n in INDEX if n != q and q in n.replace("'", " ").split()]
+    return out
+
+
+def photos_matching(text: str) -> list:
+    """Photo ids for every concept matching(text) covers, each once, most confident first."""
+    seen, out = set(), []
+    for name in matching(text):
+        for pid in photos_for(name):
+            if pid not in seen:
+                seen.add(pid); out.append(pid)
+    return out
+
+
 def summary(valid_ids=None) -> list:
     """[{group, name, n, cover}] for every concept with at least one photo (among valid_ids
     when given); the cover is the photo the model is most confident about."""

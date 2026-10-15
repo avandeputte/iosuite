@@ -43,11 +43,20 @@ def build_where(items) -> tuple[str, list]:
     one = lambda k: multi.get(k, [None])[0]
     where, params = [], []
 
-    for text in multi.get("q", []):
+    # q: the text index, plus (qids, aligned with q, filled in by main.resolve) the photos the
+    # content model labels with a matching concept, so "audience" finds what Detected content shows
+    qids = multi.get("qids", [])
+    for i, text in enumerate(multi.get("q", [])):
         fq = fts_query(text)
+        extra = [x for x in (_ints([qids[i]]) if i < len(qids) else []) if x > 0]  # "0": no concept photos
+        clauses = []
         if fq:
-            where.append("id IN (SELECT rowid FROM fts WHERE fts MATCH ?)")
+            clauses.append("id IN (SELECT rowid FROM fts WHERE fts MATCH ?)")
             params.append(fq)
+        if extra:
+            clauses.append(f"id IN ({','.join(map(str, extra[:50000]))})")
+        if clauses:
+            where.append("(" + " OR ".join(clauses) + ")")
     ids = _ints(multi.get("ids", []))
     if "ids" in multi:  # an explicit selection (ints only, so safe to inline)
         where.append(f"id IN ({','.join(map(str, ids[:50000])) or 'NULL'})")

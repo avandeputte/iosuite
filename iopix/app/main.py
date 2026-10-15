@@ -63,6 +63,13 @@ def resolve(items) -> tuple[str, list, dict | None]:
     items = list(items)
     d = dict(items)
     rank = None
+    if semantic_enabled():  # a plain search also covers the detected concepts of the same name
+        for key, text in list(items):
+            if key == "q" and text:
+                try:
+                    items.append(("qids", ",".join(map(str, concepts.photos_matching(text))) or "0"))
+                except Exception:
+                    traceback.print_exc()
     if d.get("sem") or d.get("like") or d.get("concept"):
         ids = []
         if semantic_enabled():
