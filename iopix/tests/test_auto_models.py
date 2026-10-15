@@ -17,7 +17,7 @@ def _wait(pred, timeout=5.0):
 
 def test_auto_download_sequences_missing_models(monkeypatch):
     installed = {"yolox"}
-    order, running = [], []
+    order = []
     monkeypatch.setattr(models, "local", lambda key: {"installed": key in installed})
 
     def fake_download(key):

@@ -1,6 +1,5 @@
 """Album roots: digiKam's recorded path can be mapped to where the folder is mounted here,
 per root, from Settings; the single-root PHOTOS_ROOT default still applies otherwise."""
-import json
 
 from app import config, dkdb, state
 

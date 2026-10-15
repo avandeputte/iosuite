@@ -1,7 +1,6 @@
 """Writes to the (scratch) digiKam database: the tag manager and face
 management mirror digiKam's own rows, back the database up first, refuse
 what digiKam would not allow, and keep the index in step."""
-import sqlite3
 
 import pytest
 

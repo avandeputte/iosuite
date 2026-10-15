@@ -3,9 +3,7 @@ an upload puts the file in the folder and registers it for digiKam's full scan (
 modificationDate) with the basics the viewer shows meanwhile. Writes go to the scratch copy."""
 import time
 
-import pytest
-
-from app import dkdb, folders
+from app import dkdb
 
 
 def _wait_meta_album(client, path, timeout=8):
@@ -70,7 +68,7 @@ def _create_and_upload(client, lib, root, base, disk):
         assert client.post("/api/folders", json={"parent": root, "name": bad}).status_code == 400, bad
     r = client.post("/api/folders", json={"parent": root, "name": "zz-upload-test"})
     assert r.status_code == 200, r.text
-    fid, folder_dir = r.json()["id"], r.json()["dir"]
+    fid = r.json()["id"]
     assert (disk / "zz-upload-test").is_dir()
     con = dkdb.connect()
     row = con.execute("SELECT albumRoot, relativePath, date, modificationDate FROM Albums WHERE id = ?", (fid,)).fetchone()
@@ -109,4 +107,4 @@ def _create_and_upload(client, lib, root, base, disk):
         time.sleep(0.3)
     assert d["count"] == 2 and iid in d["id"]
     assert client.get(f"/thumb/{iid}").status_code == 200
-    assert client.get(f"/api/folders/999999/upload").status_code in (404, 405)
+    assert client.get("/api/folders/999999/upload").status_code in (404, 405)

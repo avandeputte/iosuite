@@ -2,7 +2,6 @@
 compare the right thing per source, and the network is never required."""
 import io
 import json
-from pathlib import Path
 
 import pytest
 

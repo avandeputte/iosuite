@@ -1,7 +1,6 @@
 """The read side of the API against the scratch library: status, metadata,
 photo lists and details, facets, map, zip planning, and the shapes the
 front end relies on."""
-import pytest
 
 
 def test_status_shape(client):
