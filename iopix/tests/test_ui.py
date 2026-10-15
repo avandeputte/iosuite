@@ -380,3 +380,34 @@ def test_container_mode_asks_before_a_database_write(page, server):
     assert any(t.startswith("confirm:The viewer cannot see") for t in dialogs), "the container-mode confirmation must appear: " + str(dialogs)
     tags = json.load(urllib.request.urlopen(server + "/api/meta"))["tags"]
     assert any(t["name"] == "zz-ui-vouch" for t in tags), "after accepting, the tag is created"
+
+
+def test_appearance_setting_switches_the_theme(page, server):
+    """Settings > Display > Appearance: Light and Dark fix the palette (data-theme on <html>, the
+    page background follows, the choice is remembered), System follows the device again."""
+    page.goto(server + "/#/settings")
+    page.wait_for_selector("#themeseg", timeout=10000)
+    page.click("#themeseg [data-theme=dark]")
+    assert page.evaluate("document.documentElement.dataset.theme") == "dark"
+    assert page.evaluate("getComputedStyle(document.body).backgroundColor") == "rgb(23, 24, 27)"
+    page.reload()
+    page.wait_for_selector("#themeseg", timeout=10000)
+    assert page.evaluate("document.documentElement.dataset.theme") == "dark", "remembered across loads, applied before the first paint"
+    page.click("#themeseg [data-theme=light]")
+    assert page.evaluate("getComputedStyle(document.body).backgroundColor") == "rgb(255, 255, 255)"
+    page.click("#themeseg [data-theme=system]")
+    assert page.evaluate("document.documentElement.dataset.theme") is None
+    assert page.evaluate("localStorage.getItem('theme')") == "system"
+
+
+def test_explore_summary_cards_link_to_their_views(page, server, lib):
+    page.goto(server + "/#/explore")
+    page.wait_for_selector(".stats .stat", timeout=10000)
+    cards = page.locator(".stats .stat")
+    assert cards.count() == 7
+    labels = page.locator(".stats .stat div > span").all_inner_texts()
+    assert labels[:5] == ["photos", "videos", "people", "albums", "with location"], labels
+    assert page.locator(".stats a.stat").count() == 5, "all but 'on disk' and 'years covered' open a view"
+    assert page.locator(".stats .stat .sic .ic svg").count() == 7, "each card has an icon"
+    page.click(".stats a.stat:has-text('people')")
+    page.wait_for_selector("#nav a[data-v=people].on", timeout=5000)

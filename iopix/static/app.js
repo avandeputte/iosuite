@@ -4,6 +4,7 @@
 const $ = (s, r = document) => r.querySelector(s);
 const ICONS = {
   search: 'M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z',
+  disk: 'M2 20h20v-4H2v4zm2-3h2v2H4v-2zM2 4v4h20V4H2zm4 3H4V5h2v2zm-4 7h20v-4H2v4zm2-3h2v2H4v-2z',
   gear: 'M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z',
   wrench: 'M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z',
   close: 'M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z',
@@ -164,6 +165,14 @@ const ST = { rev: -1, fav: new Set(), albums: [] };
 let SEM = { enabled: false };
 let APP_STAMP = null;
 const applyBadgePref = () => document.body.classList.toggle('nobadges', store.get('badges', '1') === '0');
+/** Appearance: light, dark, or follow the system (the default). Set on <html> so the stylesheet
+ *  picks the palette; the browser chrome (theme-color) follows the page background. */
+const THEMES = [['system', 'System'], ['light', 'Light'], ['dark', 'Dark']];
+function applyTheme() {
+  const t = store.get('theme', 'system');
+  if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;
+  requestAnimationFrame(() => { const m = document.querySelector('meta[name=theme-color]'); if (m) m.content = getComputedStyle(document.body).backgroundColor; });
+}
 let dragTag = null;
 let IS_ADMIN = true, SIGNED_IN = true, USERS_EXIST = false, DIGIKAM_CHECK = 'pgrep', APP_VERSION = '', APP_COMMIT = '';
 let EDITING = false, WRITE_FILES = false, CAN_MANAGE = false, manageTags = false, PENDING = 0, pollTimer = 0, keepView = false;
@@ -291,7 +300,7 @@ function chipList(p) {
 function renderChips() {
   const p = filterParams();
   const chips = chipList(p);
-  $('#chips').replaceChildren(...chips.map((c) => h('span', { class: 'chip', title: c.label },
+  $('#chips').replaceChildren(...chips.map((c) => h('span', { class: 'chip', title: c.label, 'data-k': c.key },
     c.img ? h('img', { src: c.img, alt: '' }) : null,
     h('span', { class: 't' }, c.label),
     h('button', { title: 'Remove', onclick: () => applyFilter((q) => {
@@ -1052,31 +1061,37 @@ async function showExplore() {
   const now = new Date();
   const md = `${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   const strip = h('div', { class: 'strip' });
-  const otd = h('div', { hidden: true }, h('h2', null, `On this day · ${MONTHS[now.getMonth()]} ${now.getDate()}`, h('a', { href: hashFor('photos', photosWith({ md })) }, 'See all')), strip);
+  const otd = h('div', { hidden: true }, h('h2', { style: '--hue:var(--c-rose)' }, h('span', { class: 'hic' }, icon('calendar')), `On this day · ${MONTHS[now.getMonth()]} ${now.getDate()}`, h('a', { href: hashFor('photos', photosWith({ md })) }, 'See all')), strip);
   const detected = h('div', { hidden: true }), trips = h('div', { hidden: true });
   const rootTags = META.tags.filter((t) => t.pid == null && t.nAll && !(t.person && !META.tags.some((c) => c.pid === t.id))).sort((a, b) => b.nAll - a.nAll);
   const pill = (label, n, params) => h('a', { class: 'pill', href: hashFor('photos', photosWith(params)) }, label, n != null ? h('b', null, nf.format(n)) : null);
   const count = (list, v) => (list.find((x) => x[0] === v) || [0, 0])[1];
   const ppl = people();
+  // the summary: one card per number, each with an icon and its own colour; most open the matching view
+  const stat = (hue, ic, value, label, href) => h(href ? 'a' : 'div', { class: 'stat', style: `--hue:var(--c-${hue})`, href },
+    h('span', { class: 'sic' }, icon(ic)), h('div', null, h('b', null, value), h('span', null, label)));
+  // section headings with a coloured icon; the pill group below a heading shares its hue
+  const sec = (hue, ic, title, link, linkLabel) => h('h2', { style: `--hue:var(--c-${hue})` }, h('span', { class: 'hic' }, icon(ic)), title, link ? h('a', { href: link }, linkLabel) : null);
+  const group = (hue, ...kids) => h('div', { class: 'pills', style: `--hue:var(--c-${hue})` }, ...kids);
   main.replaceChildren(h('div', { class: 'page' },
     h('h1', null, 'Explore'),
     h('div', { class: 'stats' },
-      h('div', null, h('b', null, nf.format(META.total - META.videos)), 'photos'),
-      h('div', null, h('b', null, nf.format(META.videos)), 'videos'),
-      h('div', null, h('b', null, nf.format(ppl.length)), 'people'),
-      h('div', null, h('b', null, nf.format(META.albums.length)), 'albums'),
-      h('div', null, h('b', null, nf.format(META.geotagged)), 'with location'),
-      h('div', null, h('b', null, fmtBytes(META.bytes)), 'on disk'),
-      h('div', null, h('b', null, `${date(META.tsMin).getUTCFullYear()} – ${date(META.tsMax).getUTCFullYear()}`), 'years covered')),
+      stat('blue', 'photo', nf.format(META.total - META.videos), 'photos', '#/photos'),
+      stat('purple', 'video', nf.format(META.videos), 'videos', hashFor('photos', photosWith({ type: 'video' }))),
+      stat('amber', 'person', nf.format(ppl.length), 'people', '#/people'),
+      stat('teal', 'folder', nf.format(META.albums.length), 'albums', '#/albums'),
+      stat('green', 'place', nf.format(META.geotagged), 'with location', '#/map'),
+      stat('slate', 'disk', fmtBytes(META.bytes), 'on disk'),
+      stat('rose', 'calendar', `${date(META.tsMin).getUTCFullYear()} – ${date(META.tsMax).getUTCFullYear()}`, 'years covered')),
     otd,
-    META.places.length ? [h('h2', null, 'Places', h('a', { href: '#/places' }, 'See all')),
+    META.places.length ? [sec('green', 'place', 'Places', '#/places', 'See all'),
       h('div', { class: 'cards' }, META.places.slice(0, 12).map(placeCard))] : null,
-    h('h2', null, 'People', h('a', { href: '#/people' }, 'See all')),
+    sec('amber', 'person', 'People', '#/people', 'See all'),
     h('div', { class: 'cards people' }, ppl.slice(0, 16).map(personCard)),
     detected, trips,
-    h('h2', null, 'Things', h('a', { href: '#/tags' }, 'All tags')),
+    sec('orange', 'tag', 'Things', '#/tags', 'All tags'),
     h('div', { class: 'cards' }, rootTags.map((t) => thumbCard(t.cover, t.name, nf.format(t.nAll), { tag: t.id }))),
-    h('h2', null, 'Quick filters'),
+    sec('cyan', 'tune', 'Quick filters'),
     h('div', { class: 'pills' },
       pill('Videos', META.videos, { type: 'video' }), pill('★★★★★', count(META.ratings, 5), { rating: 5 }),
       pill('★★★ and up', META.ratings.filter((r) => r[0] >= 3).reduce((a, r) => a + r[1], 0), { rating: 3 }),
@@ -1096,24 +1111,24 @@ async function showExplore() {
         } }),
         h('span', null, 'Also write metadata into the image files (XMP, EXIF and IPTC), like digiKam’s “write to sidecar and file” mode. ',
           h('span', { class: 'muted' }, 'Applies to JPEG, PNG, TIFF and WebP; other formats and videos stay sidecar-only, as in digiKam. Before a file is first rewritten, the original is copied to the viewer’s file-backups folder, and Undo restores it.')))] : null,
-    h('h2', null, 'Years'),
-    h('div', { class: 'pills' }, META.years.map(([y, n]) => pill(y, n, { year: y }))),
-    h('h2', null, 'Cameras'),
-    h('div', { class: 'pills' }, META.cameras.map(([c, n]) => pill(c, n, { camera: c }))),
-    h('h2', null, 'Lenses'),
-    h('div', { class: 'pills' }, META.lenses.slice(0, 40).map(([c, n]) => pill(c, n, { lens: c }))),
-    META.creators.length ? [h('h2', null, 'Photographers'), h('div', { class: 'pills' }, META.creators.slice(0, 30).map(([c, n]) => pill(c, n, { creator: c })))] : null,
-    h('h2', null, 'File types'),
-    h('div', { class: 'pills' }, META.formats.map(([c, n]) => pill(c, n, { fmt: c })))));
+    sec('blue', 'calendar', 'Years'),
+    group('blue', META.years.map(([y, n]) => pill(y, n, { year: y }))),
+    sec('purple', 'camera', 'Cameras'),
+    group('purple', META.cameras.map(([c, n]) => pill(c, n, { camera: c }))),
+    sec('teal', 'camera', 'Lenses'),
+    group('teal', META.lenses.slice(0, 40).map(([c, n]) => pill(c, n, { lens: c }))),
+    META.creators.length ? [sec('rose', 'copyright', 'Photographers'), group('rose', META.creators.slice(0, 30).map(([c, n]) => pill(c, n, { creator: c })))] : null,
+    sec('slate', 'photo', 'File types'),
+    group('slate', META.formats.map(([c, n]) => pill(c, n, { fmt: c })))));
   api('/api/events').then((ev) => {
     const list = ev.events.filter((e) => e.kind === 'trip').slice(0, 8);
     if (route.view !== 'explore' || !list.length) return;
-    fill(trips, h('h2', null, 'Trips', h('a', { href: '#/events' }, 'All events & trips')), h('div', { class: 'cards' }, list.map(eventCard)));
+    fill(trips, h('h2', { style: '--hue:var(--c-cyan)' }, h('span', { class: 'hic' }, icon('map')), 'Trips', h('a', { href: '#/events' }, 'All events & trips')), h('div', { class: 'cards' }, list.map(eventCard)));
     trips.hidden = false;
   }).catch(() => {});
   if (SEM.enabled) api('/api/concepts').then((c) => {
     if (route.view !== 'explore' || !c.concepts.length) return;
-    fill(detected, h('h2', null, 'Detected content', h('a', { href: '#/detected' }, 'See all')),
+    fill(detected, h('h2', { style: '--hue:var(--c-purple)' }, h('span', { class: 'hic' }, icon('spark')), 'Detected content', h('a', { href: '#/detected' }, 'See all')),
       h('div', { class: 'cards' }, c.concepts.sort((a, b) => b.n - a.n).slice(0, 12).map(conceptCard)));
     detected.hidden = false;
   }).catch(() => {});
@@ -1335,7 +1350,7 @@ function renderUserMenu() {
 }
 async function afterLogin(me) {
   USER = me.user; USER_SETTINGS = me.settings || {}; renderUserMenu();
-  await pollStatus(); applyBadgePref(); viewKey = null; onRoute();
+  await pollStatus(); applyBadgePref(); applyTheme(); viewKey = null; onRoute();
 }
 function loginDialog() {
   // the account picker: a tile per account; one click for a passwordless viewer, a password for the others
@@ -1380,7 +1395,7 @@ function accountDialog() {
       USER.person ? h('a', { class: 'lnk', href: hashFor('photos', photosWith({ tag: USER.person })), onclick: () => back.remove() }, 'Photos of me') : null),
     h('h4', null, 'Change password'), h('div', { style: 'display:grid;gap:8px' }, cur, pw),
     h('div', { style: 'margin-top:8px' }, h('button', { class: 'pillbtn', onclick: async () => { try { await post('/api/auth/password', { current: cur.value, password: pw.value }); toast('Password changed.'); cur.value = pw.value = ''; } catch (e) { toast(e.message); } } }, 'Change password')),
-    h('div', { class: 'modal-btns' }, h('button', { class: 'pillbtn', onclick: async () => { back.remove(); await post('/api/auth/logout', {}); USER = null; USER_SETTINGS = null; renderUserMenu(); await pollStatus(); applyBadgePref(); viewKey = null; onRoute(); toast('Signed out.'); } }, 'Sign out'),
+    h('div', { class: 'modal-btns' }, h('button', { class: 'pillbtn', onclick: async () => { back.remove(); await post('/api/auth/logout', {}); USER = null; USER_SETTINGS = null; renderUserMenu(); await pollStatus(); applyBadgePref(); applyTheme(); viewKey = null; onRoute(); toast('Signed out.'); } }, 'Sign out'),
       h('button', { class: 'pillbtn on', onclick: () => back.remove() }, 'Done')));
 }
 function usersSection() {
@@ -1690,9 +1705,12 @@ async function settingsPage(view) {
     !USERS_EXIST ? row('No users yet', 'The viewer is open to anyone who can reach it. Create the admin account to switch on sign-in: visitors then browse read-only, and only editors and admins can change the library.', btn('Create the admin account', setupDialog, true)) : null,
     ...(view === 'settings' ? [
     h('h2', null, 'Display'),
+    row('Appearance', `Light or dark colours, or follow the device. ${USER ? 'Saved with your account, so it follows you to other devices.' : 'Remembered in this browser; sign in to keep it with an account.'}`,
+      h('div', { class: 'eseg', id: 'themeseg' }, THEMES.map(([k, label]) => h('button', { class: store.get('theme', 'system') === k ? 'on' : '', 'data-theme': k, onclick: (e) => {
+        store.set('theme', k); applyTheme(); for (const b of e.currentTarget.parentNode.children) b.classList.toggle('on', b === e.currentTarget); } }, label)))),
     row('Thumbnail badges', 'The small marks on thumbnails: face tags, GPS coordinates and favorites. This is remembered per browser.',
       h('label', { style: 'display:flex;gap:8px;align-items:center;cursor:pointer' }, h('input', { type: 'checkbox', checked: store.get('badges', '1') !== '0',
-        onchange: (e) => { store.set('badges', e.target.checked ? '1' : '0'); applyBadgePref(); } }), 'Show badges')),
+        onchange: (e) => { store.set('badges', e.target.checked ? '1' : '0'); applyBadgePref(); applyTheme(); } }), 'Show badges')),
     IS_ADMIN ? (() => {
       const sel = h('select', null, h('option', { value: 'osm', selected: m.mapProvider !== 'google' }, 'OpenStreetMap (no account needed)'), h('option', { value: 'google', selected: m.mapProvider === 'google' }, 'Google Maps (your API key)'));
       const keyIn = h('input', { class: 'einput', type: 'password', placeholder: m.googleMapsKeySet ? 'key is set; paste a new one to replace it' : 'Google Maps API key', autocomplete: 'off', style: 'margin:0;width:260px' });
@@ -2667,7 +2685,7 @@ async function start() {
   await loadUser();
   $('#nav').replaceChildren(...NAV.map(([v, label, ic, href]) => h('a', { href: href || `#/${v}`, 'data-v': v }, icon(ic), label)), h('div', { id: 'status' }));
   initSearch();
-  applyBadgePref();
+  applyBadgePref(); applyTheme();
   try { indexMeta(await api('/api/meta')); await loadState(); } catch (e) { main.replaceChildren(h('div', { class: 'empty' }, 'Could not reach the server: ' + e.message)); return; }
   if (store.get('filters', '0') === '1' && innerWidth >= 1100) toggleFilters(true);
   await pollStatus();
