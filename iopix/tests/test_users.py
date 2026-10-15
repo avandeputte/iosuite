@@ -167,3 +167,34 @@ def test_optional_email_on_accounts(client, fresh):
     assert client.post(f"/api/users/{ann['id']}", json={"email": ""}).status_code == 200
     assert next(x for x in client.get("/api/users").json()["users"] if x["name"] == "ann")["email"] == ""
     assert "email" not in client.get("/api/auth/accounts").json()["accounts"][0], "the public picker shows no addresses"
+
+
+def test_require_login_locks_everything_but_the_sign_in(client, fresh, lib):
+    assert client.post("/api/settings", json={"require_login": True}).status_code == 400, "no account yet: nobody could sign in"
+    users.create("alex", "correct horse", "admin")
+    _login(client, "alex", "correct horse")
+    assert client.post("/api/settings", json={"require_login": True}).status_code == 200
+    assert client.get("/api/status").json()["requireLogin"] is True
+    client.cookies.clear()
+    # a visitor: the shell and the sign-in endpoints work, nothing else does
+    for path in ("/", "/app.js", "/app.css", "/manifest.webmanifest", "/api/status", "/api/auth/me", "/api/auth/accounts"):
+        assert client.get(path).status_code == 200, path
+    assert client.get("/api/auth/me").json()["requireLogin"] is True
+    pid = lib["ids"][0] if isinstance(lib, dict) and "ids" in lib else client.get("/api/photos", cookies={}).json().get("id", [None])[0]
+    for path in ("/api/meta", "/api/photos", "/api/users", "/api/tags", "/api/concepts"):
+        assert client.get(path).status_code == 401, path
+    if pid:
+        for path in (f"/thumb/{pid}", f"/preview/{pid}", f"/orig/{pid}", f"/api/photo/{pid}"):
+            assert client.get(path).status_code == 401, path
+    r = client.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, headers={"accept": "application/json, text/event-stream"})
+    assert r.status_code == 401, "MCP needs the admin token as a bearer header"
+    from app import updates
+    r = client.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
+                    headers={"accept": "application/json, text/event-stream", "authorization": "Bearer " + updates.admin_token()})
+    assert r.status_code == 200
+    # signed in again: everything is back
+    _login(client, "alex", "correct horse")
+    assert client.get("/api/meta").status_code == 200
+    assert client.post("/api/settings", json={"require_login": False}).status_code == 200
+    client.cookies.clear()
+    assert client.get("/api/meta").status_code == 200, "open browsing again"

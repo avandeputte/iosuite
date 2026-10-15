@@ -210,6 +210,21 @@ def _hits(path: str, paths) -> bool:
     return any(path == p or path.startswith(p + "/") for p in paths)
 
 
+# what a visitor may still fetch when sign-in is required: the app shell and the sign-in endpoints
+OPEN_PATHS = ("/", "/index.html", "/app.js", "/app.css", "/sw.js", "/manifest.webmanifest", "/api/status")
+OPEN_PREFIXES = ("/icons/", "/api/auth/")
+
+
+def _open_to_visitors(path: str) -> bool:
+    return path in OPEN_PATHS or path.startswith(OPEN_PREFIXES)
+
+
+def _mcp_token_ok(request: Request) -> bool:
+    """With sign-in required, the MCP endpoint needs the admin token as a bearer header."""
+    auth = request.headers.get("authorization", "")
+    return auth.lower().startswith("bearer ") and updates.token_ok(auth[7:].strip())
+
+
 @app.middleware("http")
 async def _auth_guard(request: Request, call_next):
     """Who is asking (session cookie), and may they do this? Library writes need an editor
@@ -217,6 +232,13 @@ async def _auth_guard(request: Request, call_next):
     of that only once a user exists. Read-only mode refuses library writes for everyone."""
     user = users.user_from_token(request.cookies.get(users.COOKIE, "")) if request.cookies.get(users.COOKIE) else None
     request.state.user = user
+    if user is None and users.require_login():
+        path = request.url.path
+        if path.startswith("/mcp"):
+            if not _mcp_token_ok(request):
+                return JSONResponse({"detail": "Sign-in is required; MCP clients send the admin token as 'Authorization: Bearer <token>'"}, status_code=401)
+        elif not _open_to_visitors(path):
+            return JSONResponse({"detail": "Sign in to use the viewer."}, status_code=401)
     if request.method == "POST":
         path = request.url.path
         if _hits(path, WRITE_PATHS) and appstate.read_only():
@@ -393,7 +415,7 @@ def api_status(request: Request):
             "places": places.available(), "editing": edits.available() and users.can_write(user), "pendingEdits": len(edits.pending()),
             "dbWrite": config.DB_WRITE and not appstate.read_only() and users.can_write(user), "writeFiles": edits.writes_files(),
             "user": ({"id": user["id"], "name": user["name"], "role": user["role"], "person": user.get("person")} if user else None), "usersExist": users.any_users(),
-            "isAdmin": users.is_admin(user), "signedIn": users.is_signed_in(user),
+            "isAdmin": users.is_admin(user), "signedIn": users.is_signed_in(user), "requireLogin": users.require_login(),
             "readOnly": appstate.read_only(), "readOnlyLocked": config.READ_ONLY, "digikamCheck": config.DIGIKAM_CHECK,
             "appVersion": APP_VERSION, "commit": updates.local_commit()[:7],
             "tagJobs": {**tagmanager.progress, "pending": tagmanager.pending_jobs()},
@@ -909,7 +931,7 @@ async def api_edit_revert(request: Request):
 # --------------------------------------------------------------------------
 
 def _settings_public() -> dict:
-    return {"write_files": edits.writes_files(), "search_model": semantic.chosen(), "bg_threads": bgjobs.threads(), "read_only": appstate.read_only(), "database": _db_settings_public(), "album_roots": dkdb.root_overrides(), "map_provider": appstate.get_setting("map_provider", "osm"), "google_maps_key_set": bool(maps.key()), "templates": json.loads(appstate.get_setting("templates", "[]"))}
+    return {"write_files": edits.writes_files(), "search_model": semantic.chosen(), "bg_threads": bgjobs.threads(), "read_only": appstate.read_only(), "require_login": users.require_login(), "database": _db_settings_public(), "album_roots": dkdb.root_overrides(), "map_provider": appstate.get_setting("map_provider", "osm"), "google_maps_key_set": bool(maps.key()), "templates": json.loads(appstate.get_setting("templates", "[]"))}
 
 
 @app.get("/api/settings")
@@ -924,6 +946,10 @@ async def api_settings(request: Request):
     body = await request.json()
     if "write_files" in body:
         appstate.set_setting("write_files", "1" if body["write_files"] else "0")
+    if "require_login" in body:  # visitors get the sign-in screen and nothing else
+        if body["require_login"] and not users.any_users():
+            raise HTTPException(400, "Create an account first, or nobody could sign in")
+        appstate.set_setting("require_login", "1" if body["require_login"] else "0")
     if "read_only" in body:  # browse only: every library-changing endpoint is refused while it is on
         if config.READ_ONLY and not body["read_only"]:
             raise HTTPException(400, "Read-only mode is locked on by READ_ONLY=1 in the environment")
@@ -1057,7 +1083,7 @@ def api_logout():
 def api_me(request: Request):
     u = request.state.user
     return {"user": u, "settings": users.get_settings(u["id"]) if u else {}, "usersExist": users.any_users(),
-            "isAdmin": users.is_admin(u), "canWrite": users.can_write(u), "signedIn": users.is_signed_in(u)}
+            "isAdmin": users.is_admin(u), "canWrite": users.can_write(u), "signedIn": users.is_signed_in(u), "requireLogin": users.require_login()}
 
 
 @app.post("/api/auth/settings")

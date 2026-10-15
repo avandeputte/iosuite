@@ -100,6 +100,12 @@ def clean_email(email) -> str:
     return email
 
 
+def require_login() -> bool:
+    """Settings › Users › Require sign-in: nothing but the sign-in screen for visitors. Only
+    meaningful once an account exists (otherwise nobody could ever sign in)."""
+    return state.get_setting("require_login", "0") == "1" and any_users()
+
+
 def any_users() -> bool:
     con = state.connect()
     try:

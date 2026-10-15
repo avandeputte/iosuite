@@ -177,7 +177,7 @@ function applyTheme() {
   requestAnimationFrame(() => { const m = document.querySelector('meta[name=theme-color]'); if (m) m.content = getComputedStyle(document.body).backgroundColor; });
 }
 let dragTag = null;
-let IS_ADMIN = true, SIGNED_IN = true, USERS_EXIST = false, DIGIKAM_CHECK = 'pgrep', APP_VERSION = '', APP_COMMIT = '';
+let IS_ADMIN = true, SIGNED_IN = true, USERS_EXIST = false, REQUIRE_LOGIN = false, BOOTED = false, DIGIKAM_CHECK = 'pgrep', APP_VERSION = '', APP_COMMIT = '';
 let EDITING = false, WRITE_FILES = false, CAN_MANAGE = false, manageTags = false, PENDING = 0, pollTimer = 0, keepView = false;
 /** Re-check server status soon (after an edit) instead of waiting for the regular poll. */
 function pollSoon(ms = 1500) { clearTimeout(pollTimer); pollTimer = setTimeout(pollStatus, ms); }
@@ -1354,7 +1354,7 @@ async function showBursts(vp) {
 
 // ---- users: sign in / out, own password, first-admin setup, admin user management
 async function loadUser() {
-  try { const me = await api('/api/auth/me'); USER = me.user; USER_SETTINGS = me.user ? me.settings : null; IS_ADMIN = me.isAdmin; SIGNED_IN = me.signedIn; USERS_EXIST = me.usersExist; } catch { USER = null; USER_SETTINGS = null; }
+  try { const me = await api('/api/auth/me'); USER = me.user; USER_SETTINGS = me.user ? me.settings : null; IS_ADMIN = me.isAdmin; SIGNED_IN = me.signedIn; USERS_EXIST = me.usersExist; REQUIRE_LOGIN = !!me.requireLogin; } catch { USER = null; USER_SETTINGS = null; }
   renderUserMenu();
 }
 function renderUserMenu() {
@@ -1365,9 +1365,11 @@ function renderUserMenu() {
 }
 async function afterLogin(me) {
   USER = me.user; USER_SETTINGS = me.settings || {}; renderUserMenu();
+  if (!BOOTED) { applyBadgePref(); applyTheme(); await boot(); return; }  // sign-in was required: load the library now
   await pollStatus(); applyBadgePref(); applyTheme(); viewKey = null; onRoute();
 }
-function loginDialog() {
+/** required: the viewer shows nothing else until someone signs in (no Cancel, no closing). */
+function loginDialog(required) {
   // the account picker: a tile per account; one click for a passwordless viewer, a password for the others
   const name = h('input', { class: 'einput', placeholder: 'User name', autocomplete: 'username', style: 'margin:0;width:100%' });
   const pw = h('input', { class: 'einput', type: 'password', placeholder: 'Password', autocomplete: 'current-password', style: 'margin:0;width:100%' });
@@ -1376,8 +1378,9 @@ function loginDialog() {
   const go = async () => { try { const me = await post('/api/auth/login', { name: name.value.trim(), password: pw.value }); back.remove(); await afterLogin(me); toast(`Signed in as ${me.user.name}.`); } catch (e) { toast(e.message); } };
   [name, pw].forEach((i) => { i.onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Enter') go(); }; });
   const back = modal('Sign in', tiles, form,
-    h('p', { class: 'muted', style: 'font-size:12.5px' }, 'Without signing in you can browse everything; signing in keeps your display settings, favorites and albums on the server, and editors can change the library.'),
-    h('div', { class: 'modal-btns' }, h('button', { class: 'pillbtn', onclick: () => back.remove() }, 'Cancel'), h('button', { class: 'pillbtn on', onclick: go }, 'Sign in')));
+    h('p', { class: 'muted', style: 'font-size:12.5px' }, required ? 'Sign in to use this viewer.' : 'Without signing in you can browse everything; signing in keeps your display settings, favorites and albums on the server, and editors can change the library.'),
+    h('div', { class: 'modal-btns' }, required ? null : h('button', { class: 'pillbtn', onclick: () => back.remove() }, 'Cancel'), h('button', { class: 'pillbtn on', onclick: go }, 'Sign in')));
+  if (required) { back.onclick = null; back.classList.add('required'); }
   api('/api/auth/accounts').then((d) => {
     if (!d.accounts.length) { name.focus(); return; }
     form.hidden = true;
@@ -1410,13 +1413,16 @@ function accountDialog() {
       USER.person ? h('a', { class: 'lnk', href: hashFor('photos', photosWith({ tag: USER.person })), onclick: () => back.remove() }, 'Photos of me') : null),
     h('h4', null, 'Change password'), h('div', { style: 'display:grid;gap:8px' }, cur, pw),
     h('div', { style: 'margin-top:8px' }, h('button', { class: 'pillbtn', onclick: async () => { try { await post('/api/auth/password', { current: cur.value, password: pw.value }); toast('Password changed.'); cur.value = pw.value = ''; } catch (e) { toast(e.message); } } }, 'Change password')),
-    h('div', { class: 'modal-btns' }, h('button', { class: 'pillbtn', onclick: async () => { back.remove(); await post('/api/auth/logout', {}); USER = null; USER_SETTINGS = null; renderUserMenu(); await pollStatus(); applyBadgePref(); applyTheme(); viewKey = null; onRoute(); toast('Signed out.'); } }, 'Sign out'),
+    h('div', { class: 'modal-btns' }, h('button', { class: 'pillbtn', onclick: async () => { back.remove(); await post('/api/auth/logout', {}); if (REQUIRE_LOGIN) { location.reload(); return; } USER = null; USER_SETTINGS = null; renderUserMenu(); await pollStatus(); applyBadgePref(); applyTheme(); viewKey = null; onRoute(); toast('Signed out.'); } }, 'Sign out'),
       h('button', { class: 'pillbtn on', onclick: () => back.remove() }, 'Done')));
 }
 function usersSection() {
   const body = h('div');
   const wrap = h('div', null, h('h2', null, 'Users'),
-    h('div', { class: 'muted', style: 'max-width:820px' }, 'Visitors who are not signed in browse read-only with display settings in their browser. Viewers keep settings, favorites and albums on the server; editors can also change the library; admins can also change settings, run maintenance and manage users.'), body);
+    h('div', { class: 'muted', style: 'max-width:820px' }, 'Visitors who are not signed in browse read-only with display settings in their browser. Viewers keep settings, favorites and albums on the server; editors can also change the library; admins can also change settings, run maintenance and manage users.'),
+    h('div', { class: 'srow' }, h('div', null, h('b', null, 'Require sign-in'), h('div', { class: 'muted', style: 'font-size:13px' }, 'Visitors see only the sign-in screen; nothing from the library (not even thumbnails) is served without an account. MCP clients then need the admin token as a bearer header (see the README).')),
+      h('label', { style: 'display:flex;gap:8px;align-items:center;cursor:pointer;white-space:nowrap' }, h('input', { type: 'checkbox', id: 'reqlogin', checked: REQUIRE_LOGIN, disabled: !USERS_EXIST, onchange: async (e) => {
+        try { await post('/api/settings', { require_login: e.target.checked }); REQUIRE_LOGIN = e.target.checked; toast(REQUIRE_LOGIN ? 'Visitors now have to sign in.' : 'Visitors can browse again.'); } catch (err) { e.target.checked = !e.target.checked; toast(err.message); } } }), 'Require sign-in')), body);
   const draw = async () => {
     let d; try { d = await api('/api/users'); } catch (e) { fill(body, h('div', { class: 'muted' }, e.message)); return; }
     const name = h('input', { class: 'einput', placeholder: 'User name', style: 'margin:0;width:160px' }), pw = h('input', { class: 'einput', type: 'password', placeholder: 'Password', style: 'margin:0;width:160px' });
@@ -2815,6 +2821,12 @@ async function start() {
   $('#nav').replaceChildren(...NAV.map(([v, label, ic, href]) => h('a', { href: href || `#/${v}`, 'data-v': v }, icon(ic), label)), h('div', { id: 'status' }));
   initSearch();
   applyBadgePref(); applyTheme();
+  if (REQUIRE_LOGIN && !USER) { document.body.classList.add('locked'); loginDialog(true); return; }  // boot() runs after sign-in
+  await boot();
+}
+/** Load the library and show the first view; once per page load, after sign-in when that is required. */
+async function boot() {
+  BOOTED = true; document.body.classList.remove('locked');
   try { indexMeta(await api('/api/meta')); await loadState(); } catch (e) { main.replaceChildren(h('div', { class: 'empty' }, 'Could not reach the server: ' + e.message)); return; }
   if (store.get('filters', '0') === '1' && innerWidth >= 1100) toggleFilters(true);
   await pollStatus();

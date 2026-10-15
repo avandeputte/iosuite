@@ -544,3 +544,34 @@ def test_on_this_day_is_a_justified_gallery_without_scrollbars(page, server, lib
     for i in range(tiles.count()):
         b = tiles.nth(i).bounding_box()
         assert b["x"] >= box["x"] - 1 and b["x"] + b["width"] <= box["x"] + box["width"] + 1, "tiles wrap within the page width"
+
+
+def test_require_sign_in_shows_only_the_login_dialog(page, server, browser):
+    """With Require sign-in on, a visitor loading the app sees the sign-in dialog and nothing of
+    the library; signing in from it loads the library in place."""
+    accounts = page.request.get(server + "/api/auth/accounts").json()["accounts"]
+    if any(a["name"] == "alex" for a in accounts):
+        assert page.request.post(server + "/api/auth/login", data={"name": "alex", "password": "correct horse"}).ok
+    else:
+        assert page.request.post(server + "/api/auth/setup", data={"name": "alex", "password": "correct horse"}).ok
+    assert page.request.post(server + "/api/settings", data={"require_login": True}).ok
+    try:
+        ctx = browser.new_context(viewport={"width": 1280, "height": 900}); visitor = ctx.new_page()
+        visitor.goto(server + "/#/photos")
+        visitor.wait_for_selector(".modal-back.required .modal h3:has-text('Sign in')", timeout=10000)
+        visitor.wait_for_timeout(800)
+        assert visitor.locator(".tile").count() == 0 and visitor.locator("#main").is_hidden(), "nothing of the library before sign-in"
+        assert visitor.locator(".modal button", has_text="Cancel").count() == 0
+        visitor.mouse.click(5, 5)  # the backdrop does not dismiss it
+        assert visitor.locator(".modal-back.required").count() == 1
+        visitor.locator(".modal .account", has_text="alex").click()
+        visitor.locator(".modal input[type=password]").fill("correct horse")
+        visitor.locator(".modal button", has_text="Sign in").click()
+        visitor.wait_for_selector(".tile img", timeout=15000)
+        assert visitor.locator(".modal-back").count() == 0 and visitor.locator("#main").is_visible()
+        # the setting is on the Settings page and sign-out goes back to the dialog
+        visitor.goto(server + "/#/settings"); visitor.wait_for_selector("#reqlogin", timeout=10000)
+        assert visitor.locator("#reqlogin").is_checked()
+        ctx.close()
+    finally:
+        assert page.request.post(server + "/api/settings", data={"require_login": False}).ok
