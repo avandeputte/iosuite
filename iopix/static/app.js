@@ -2662,7 +2662,7 @@ function renderInfo() {
     d.album ? irow('folder', lnk(d.album.path.replace(/^\//, '') || d.album.name, { album: d.album.id, sort: 'old' }), 'Album') : null,
     d.camera || exposure ? irow('camera', d.camera ? lnk(d.camera, { camera: d.camera }) : 'Unknown camera',
       [d.lens ? lnk(d.lens, { lens: d.lens }) : null, d.lens && exposure ? h('br') : null, exposure]) : null,
-    EDITING ? [h('h4', null, 'Edit'),
+    EDITING ? [h('div', { style: 'height:10px' }),  // the rating, title and caption controls follow; they need no heading
       editControls({ rating: Math.max(d.rating, 0) }, saveOne),
       h('input', { class: 'einput', placeholder: 'Title', value: d.title || '', onkeydown: (e) => { e.stopPropagation(); if (e.key === 'Enter') e.target.blur(); },
         onchange: (e) => saveOne({ title: e.target.value }) }),

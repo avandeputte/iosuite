@@ -188,7 +188,7 @@ def test_read_only_hides_every_editing_control(page, server, lib):
         page.reload()
         page.wait_for_selector("#lightbox .lb-frame img", timeout=15000)
         page.wait_for_timeout(500)
-        assert page.locator(".lb-info h4", has_text="Edit").count() == 0
+        assert page.locator(".lb-info input[placeholder='Title']").count() == 0
         page.wait_for_function("getComputedStyle(document.querySelector('[title^=\"Add a face\"]')).display === 'none'", timeout=5000)
         assert page.locator(".facerow .muted", has_text="options").count() == 0
         assert page.locator(".lb-info a", has_text="change").count() == 0
@@ -291,7 +291,7 @@ def test_users_flow_in_the_browser(page, server, browser):
     if visitor.locator(".lb-info").is_hidden():
         visitor.locator('[title^="Info"]').click(); visitor.wait_for_timeout(400)
     assert visitor.locator(".lb-info h4", has_text="People").count() == 1, "the panel is open"
-    assert visitor.locator(".lb-info h4", has_text="Edit").count() == 0
+    assert visitor.locator(".lb-info input[placeholder='Title']").count() == 0
     assert not visitor.locator("#topbar a.tool[href='#/maintenance']").is_visible()
     visitor.keyboard.press("Escape"); visitor.wait_for_timeout(400)  # the lightbox covers the top bar
     visitor.locator("#usermenu button").click()
@@ -306,7 +306,7 @@ def test_users_flow_in_the_browser(page, server, browser):
     visitor.wait_for_selector("#lightbox .lb-frame img, #lightbox .lb-frame video", timeout=15000); visitor.wait_for_timeout(600)
     if visitor.locator(".lb-info").is_hidden():
         visitor.locator('[title^="Info"]').click(); visitor.wait_for_timeout(400)
-    assert visitor.locator(".lb-info h4", has_text="Edit").count() == 1, "the admin can edit"
+    assert visitor.locator(".lb-info input[placeholder='Title']").count() == 1, "the admin can edit"
     visitor.keyboard.press("Escape"); visitor.wait_for_timeout(300)
     # a display setting now lives on the server
     visitor.goto(server + "/#/settings"); visitor.wait_for_selector("h1:has-text('Settings')", timeout=10000)
