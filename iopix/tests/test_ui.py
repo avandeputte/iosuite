@@ -487,3 +487,21 @@ def test_grid_select_all_toggles_and_groups_by_month(page, server, lib):
     assert any(m in head for m in ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")) and "," not in head, head
     assert page.evaluate("localStorage.getItem('group')") == "month"
     page.select_option(".gbar .groupsel", "day")
+
+
+def test_lightbox_bar_has_close_and_share_menu(page, server, lib):
+    page.goto(server + "/#/photos")
+    page.wait_for_selector(".tile img", timeout=15000)
+    page.locator(".tile").first.click()
+    page.wait_for_selector("#lightbox .lb-frame img, #lightbox .lb-frame video", timeout=15000)
+    assert page.locator("#lightbox .lb-top button[title^='Close']").count() == 1
+    page.click("#lightbox .lb-top button[title='Share']")
+    page.wait_for_selector("#lightbox .sharemenu", timeout=3000)
+    labels = page.locator("#lightbox .sharemenu .fmi").all_inner_texts()
+    assert any(l.startswith("Copy link") for l in labels) and any(l.startswith("Download original") for l in labels) and any(l.startswith("Email") for l in labels), labels
+    assert page.locator("#lightbox .sharemenu a[href$='?dl=1']").count() >= 1
+    page.locator("#lightbox .lb-stage").click(position={"x": 60, "y": 400})
+    page.wait_for_selector("#lightbox .sharemenu", state="detached", timeout=3000)
+    page.click("#lightbox .lb-top button[title^='Close']")
+    page.wait_for_selector("#lightbox", state="hidden", timeout=5000)
+    assert page.locator(".tile img").count() > 0, "back to the grid it came from"

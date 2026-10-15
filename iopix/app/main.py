@@ -568,11 +568,15 @@ def _photo_row(photo_id: int, cols: str = THUMB_COLS) -> dict:
     return dict(row)
 
 
-def _cached_image(kind: str, photo_id: int) -> FileResponse:
+def _cached_image(kind: str, photo_id: int, dl: bool = False) -> FileResponse:
+    row = _photo_row(photo_id)
     try:
-        path = thumbs.make(kind, _photo_row(photo_id))
+        path = thumbs.make(kind, row)
     except FileNotFoundError:
         raise HTTPException(404, "Original file is not available")
+    if dl:  # a download of the resized JPEG, named after the photo (sharing a smaller file)
+        return FileResponse(path, media_type="image/jpeg", filename=os.path.splitext(row["name"])[0] + "-preview.jpg",
+                            content_disposition_type="attachment", headers=IMG_CACHE)
     return FileResponse(path, media_type="image/jpeg", headers=IMG_CACHE)
 
 
@@ -582,8 +586,9 @@ def thumb(photo_id: int):
 
 
 @app.get("/preview/{photo_id}")
-def preview(photo_id: int):
-    return _cached_image("p", photo_id)
+def preview(photo_id: int, dl: int = 0):
+    """The screen-size JPEG; dl=1 downloads it under the photo's name (Share > Download preview)."""
+    return _cached_image("p", photo_id, dl=bool(dl))
 
 
 @app.get("/face/{tag_id}")

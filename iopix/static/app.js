@@ -5,6 +5,7 @@ const $ = (s, r = document) => r.querySelector(s);
 const ICONS = {
   search: 'M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z',
   disk: 'M2 20h20v-4H2v4zm2-3h2v2H4v-2zM2 4v4h20V4H2zm4 3H4V5h2v2zm-4 7h20v-4H2v4zm2-3h2v2H4v-2z',
+  share: 'M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92-1.31-2.92-2.92-2.92z',
   gear: 'M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z',
   wrench: 'M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z',
   close: 'M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z',
@@ -2166,6 +2167,7 @@ function buildLightbox() {
     albumBtn: btn('add', 'Add to album', () => albumDialog([LB.src.id[LB.i]])),
     playBtn: btn('play', 'Slideshow (space)', toggleSlideshow), facesBtn: btn('face', 'Show faces (F)', toggleFaces), addFaceBtn: btn('add', 'Add a face: drag a rectangle around it', startDrawFace), objectsBtn: btn('dup', 'Show detected objects (O)', toggleObjects),
     infoBtn: btn('info', 'Info (I)', toggleInfo, LB.info ? 'on' : ''),
+    shareBtn: btn('share', 'Share', () => shareMenu(LB.el.shareBtn)),
     dl: h('a', { class: 'iconbtn', title: 'Download original (D)', download: '' }, icon('download')),
     orig: h('a', { class: 'iconbtn', title: 'Open original in a new tab', target: '_blank', rel: 'noopener' }, icon('open')),
   };
@@ -2177,7 +2179,7 @@ function buildLightbox() {
   // the bottom edge (or on a tap of its grip on touch screens) and drops again when it leaves.
   e.strip = h('div', { class: 'lb-strip' }, h('div', { class: 'grip', title: 'Film strip', onclick: () => e.strip.classList.toggle('show') }), h('div', { class: 'reel' }));
   e.stage = h('div', { class: 'lb-stage' },
-    h('div', { class: 'lb-top' }, btn('back', 'Close (Esc)', () => closeLightbox(true)), e.ttl, h('span', { class: 'sp' }), e.playBtn, e.facesBtn, e.addFaceBtn, e.objectsBtn, e.favBtn, e.albumBtn, e.orig, e.dl, e.infoBtn),
+    h('div', { class: 'lb-top' }, btn('close', 'Close (Esc): back to the list', () => closeLightbox(true)), e.ttl, h('span', { class: 'sp' }), e.playBtn, e.facesBtn, e.addFaceBtn, e.objectsBtn, e.shareBtn, e.dl, e.favBtn, e.albumBtn, e.infoBtn),
     e.frame, e.prev, e.next, e.strip);
   lb.replaceChildren(e.stage, e.info);
   initGestures(e.stage);
@@ -2193,6 +2195,42 @@ function buildLightbox() {
   });
   e.stage.addEventListener('pointerleave', () => { e.strip.classList.remove('show'); unpeek(); });
   e.strip.addEventListener('pointerleave', unpeek);
+}
+
+/** Share: ways to pass this photo on. A link to it here, the device's own share sheet where the
+ *  browser has one (with the preview JPEG attached when it can), the original or a smaller JPEG
+ *  as a download, the original in a tab, and an email with the link. Anchored under the button. */
+function shareMenu(anchor) {
+  const open = $('.sharemenu');
+  if (open) { open.remove(); return; }
+  const id = LB.src.id[LB.i], d = LB.detail, name = d?.name || `photo ${id}`, url = location.href;
+  const item = (label, attrs, sub) => h('a', { class: 'fmi', ...attrs }, label, sub ? h('div', { class: 'muted', style: 'font-size:12px' }, sub) : null);
+  const done = (msg) => { menu.remove(); if (msg) toast(msg); };
+  const menu = h('div', { class: 'facemenu sharemenu' }, h('div', { class: 'fmh' }, 'Share'),
+    item('Copy link', { onclick: async () => { try { await navigator.clipboard.writeText(url); done('Link copied.'); } catch { done('Could not copy; the address bar has the link.'); } } }, 'to this photo in the viewer'),
+    navigator.share ? item('Share…', { onclick: async () => {
+      menu.remove();
+      const data = { title: name, url };
+      try {
+        if (navigator.canShare && !d?.video) {
+          const blob = await (await fetch(`/preview/${id}`)).blob();
+          const file = new File([blob], name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' });
+          if (navigator.canShare({ files: [file] })) data.files = [file];
+        }
+        await navigator.share(data);
+      } catch (e) { if (e.name !== 'AbortError') toast('Sharing is not available here.'); }
+    } }, 'the device’s share sheet, with the picture') : null,
+    item('Download original', { href: `/orig/${id}?dl=1`, download: name, onclick: () => menu.remove() }, d?.bytes ? `${name} · ${fmtBytes(d.bytes)}` : name),
+    !d?.video ? item('Download preview', { href: `/preview/${id}?dl=1`, onclick: () => menu.remove() }, 'a smaller JPEG for messages and email') : null,
+    item('Open original in a new tab', { href: `/orig/${id}`, target: '_blank', rel: 'noopener', onclick: () => menu.remove() }),
+    item('Email a link', { href: `mailto:?subject=${encodeURIComponent(name)}&body=${encodeURIComponent(url)}`, onclick: () => menu.remove() }));
+  const { stage } = LB.el;
+  stage.append(menu);
+  // under the button's right edge; the bar sits at the stage's top-left, so the button's offsets are stage coordinates
+  menu.style.top = (anchor.offsetTop + anchor.offsetHeight + 4) + 'px';
+  menu.style.left = Math.max(8, Math.min(anchor.offsetLeft + anchor.offsetWidth - menu.offsetWidth, stage.clientWidth - menu.offsetWidth - 8)) + 'px';
+  const close = (e) => { if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener('pointerdown', close, true); } };
+  setTimeout(() => document.addEventListener('pointerdown', close, true), 0);
 }
 
 /** Hovering a strip thumbnail shows that photo over the stage, without leaving the current one;
@@ -2237,7 +2275,8 @@ function renderStrip() {
   }
   for (const im of reel.children) im.classList.toggle('cur', +im.dataset.i === i);
   const cur = reel.querySelector('.cur');
-  if (cur) cur.scrollIntoView({ inline: 'center', block: 'nearest', behavior: el.strip.classList.contains('show') ? 'smooth' : 'instant' });
+  // scroll the reel itself: scrollIntoView would also scroll the stage to reach a parked strip
+  if (cur) reel.scrollTo({ left: cur.offsetLeft - reel.clientWidth / 2 + cur.offsetWidth / 2, behavior: el.strip.classList.contains('show') ? 'smooth' : 'instant' });
 }
 
 function openLightbox(src, i, fromUser) {
@@ -2279,7 +2318,7 @@ function step(d) {
 function showItem() {
   const { src, i, el } = LB;
   const id = src.id[i], token = ++LB.token;
-  unpeek();
+  unpeek(); $('.sharemenu')?.remove();
   LB.scale = 1; LB.tx = LB.ty = 0; LB.detail = null; LB.hires = false;
   const img = h('img', { src: `/thumb/${id}`, alt: '', draggable: 'false' });
   LB.img = img;
