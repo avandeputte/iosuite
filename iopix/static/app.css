@@ -438,6 +438,10 @@ body.nobadges .cbadges, body.nobadges .fbadge { display: none; }
 
 /* ---- faces page */
 .fgroup { margin: 18px 0 26px; padding-top: 12px; border-top: 1px solid var(--line); }
+.lookslike { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--fg2); margin-left: 8px; }
+.lookslike img { width: 26px; height: 26px; border-radius: 50%; object-fit: cover; }
+.fsug { display: flex; align-items: center; justify-content: center; gap: 4px; font-size: 11px; margin-top: 3px; padding: 2px 6px; border-radius: 10px; background: color-mix(in srgb, var(--c-amber) var(--mix), transparent); cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fsug img { width: 16px; height: 16px; border-radius: 50%; object-fit: cover; flex: none; }
 .fghead { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
 .fghead img { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; }
 .fghead .sp { flex: 1; }

@@ -39,8 +39,21 @@ def test_face_groups_from_vectors(client):
     assert g["groups"] and g["groups"][0]["n"] == 2, g["groups"][:1]
     pair = {(f["photo"], f["x"]) for f in g["groups"][0]["faces"]}
     assert pair == {(faces[0][0], faces[0][1]), (faces[1][0], faces[1][1])}
-    assert all("name" in f for f in g["groups"][0]["faces"]), "the face facts come from the index; no proposed names are added"
+    assert g["groups"][0]["suggest"] is None and g["people"] == 0, "no named-person prototypes yet: no guess"
     assert len(g["ungrouped"]) >= 1
+    # a prototype of a named person that matches the pair: the group and that face carry a suggestion
+    person = index.open_index().execute("SELECT id, name FROM tags WHERE person = 1 AND n_all > 0 LIMIT 1").fetchone()
+    con = vdb.connect()
+    try:
+        con.execute("INSERT OR REPLACE INTO face_protos (tag_id, photo_id, x, y, w, h, vec) VALUES (?,?,?,?,?,?,?)", (person[0], 999999, 1, 1, 1, 1, _vec(5, base, 0.05).tobytes()))
+        con.commit()
+    finally:
+        con.close()
+    g = facevecs.groups("unknown", 0.45)
+    s0 = g["groups"][0]["suggest"]
+    assert s0 and s0["tag"] == person[0] and s0["name"] == person[1] and s0["score"] >= 0.4
+    assert all(f["suggest"] is None or f["suggest"]["score"] < 0.4 for f in g["ungrouped"]), "a face far from every prototype gets no guess"
+    con = vdb.connect(); con.execute("DELETE FROM face_protos"); con.commit(); con.close()
     r = client.get("/api/faces/groups?kind=unknown").json()
     assert r["groups"][0]["n"] == 2 and "available" in r and "progress" in r
     assert client.get("/api/faces/groups?kind=nope").status_code == 400

@@ -1837,25 +1837,30 @@ async function showFaces(vp) {
     try { g = await api('/api/faces/groups?kind=unknown'); } catch { g = null; }
     if (route.view !== 'faces') return;
     if (g && (g.groups.length || g.missing.length || g.progress.running)) {
-      const head = h('div', { class: 'muted', style: 'max-width:820px' }, `${nf.format(d.total)} faces digiKam found but could not name. Look-alikes are shown together so one decision covers the group; tick a face to leave it out. `,
+      const head = h('div', { class: 'muted', style: 'max-width:820px' }, `${nf.format(d.total)} faces digiKam found but could not name. Look-alikes are shown together so one decision covers the group, with the viewer’s own “looks like” guess when a named person matches; untick a face to leave it out. `,
         h('a', { class: 'lnk', onclick: () => { store.set('facegroups', '0'); refresh(); } }, 'Show as a plain grid'));
       const status = g.progress.running ? h('div', { class: 'enote' }, `Grouping… ${nf.format(g.progress.done)} / ${nf.format(g.progress.total)} faces compared.`)
         : g.missing.length ? h('div', { class: 'enote' }, `${nf.format(g.missing.length)} faces have not been compared yet (the Face grouping job in Maintenance runs in the background).`) : null;
       body.append(head, status);
-      const groupBlock = (faces, title, grouped) => {
+      const nameAs = async (faces, s) => { if (!faces.length) return; if (!confirm(`Name ${faces.length} ${faces.length === 1 ? 'face' : 'faces'} as ${s.name}?`)) return; if (await facesBatch(faces.map((f) => op(f, 'name', { tag: s.tag })), `Named ${s.name}`)) refresh(); };
+      const looksLike = (s, faces) => s ? h('span', { class: 'lookslike' }, h('img', { src: faceUrl(s.tag), alt: '' }), `looks like ${s.name} · ${Math.round(s.score * 100)}%`,
+        CAN_MANAGE ? h('button', { class: 'pillbtn on', style: 'height:26px;padding:0 10px', onclick: (e) => { e.stopPropagation(); nameAs(faces(), s); } }, `Name as ${s.name}`) : null) : null;
+      const groupBlock = (faces, title, grouped, suggest) => {
         const sel = new Set(faces.map((f, i) => i));
         const grid = h('div', { class: 'fgrid' });
+        const chosen = () => faces.filter((f, i) => sel.has(i));
         const draw = () => fill(grid, faces.map((f, i) => h('div', { class: 'fcell' + (sel.has(i) ? ' sel' : '') },
           CAN_MANAGE ? h('label', { class: 'fchk' }, h('input', { type: 'checkbox', checked: sel.has(i), onchange: (e) => { e.target.checked ? sel.add(i) : sel.delete(i); draw(); } })) : null, crop(f),
-          h('div', { class: 'muted', style: 'font-size:11px;text-align:center' }, dfMonth.format(date(f.ts))))));
+          h('div', { class: 'muted', style: 'font-size:11px;text-align:center' }, dfMonth.format(date(f.ts))),
+          !grouped && f.suggest ? h('div', { class: 'fsug', title: `looks like ${f.suggest.name} (${Math.round(f.suggest.score * 100)}%)`, onclick: () => nameAs([f], f.suggest) }, h('img', { src: faceUrl(f.suggest.tag), alt: '' }), f.suggest.name) : null)));
         draw();
-        const chosen = () => faces.filter((f, i) => sel.has(i));
-        return h('div', { class: 'fgroup' }, h('div', { class: 'fghead' }, h('b', null, title), h('span', { class: 'sp' }),
-          CAN_MANAGE ? [h('button', { class: 'pillbtn on', onclick: () => personPicker(async (t) => { const c = chosen(); if (!c.length) return; if (!confirm(`Name ${c.length} faces as ${t.name}?`)) return; if (await facesBatch(c.map((f) => op(f, 'name', { tag: t.id })), `Named ${t.name}`)) refresh(); }) }, icon('person'), grouped ? 'Name these…' : 'Name selected…'),
+        return h('div', { class: 'fgroup' }, h('div', { class: 'fghead' }, h('b', null, title), grouped ? looksLike(suggest, chosen) : null, h('span', { class: 'sp' }),
+          CAN_MANAGE ? [h('button', { class: 'pillbtn' + (suggest ? '' : ' on'), onclick: () => personPicker(async (t) => { const c = chosen(); if (!c.length) return; if (!confirm(`Name ${c.length} faces as ${t.name}?`)) return; if (await facesBatch(c.map((f) => op(f, 'name', { tag: t.id })), `Named ${t.name}`)) refresh(); }) }, icon('person'), grouped ? 'Name these…' : 'Name selected…'),
             h('button', { class: 'pillbtn', onclick: async () => { const c = chosen(); if (!c.length) return; if (!confirm(`Ignore ${c.length} faces? They stay, marked as not a person to name.`)) return; if (await facesBatch(c.map((f) => op(f, 'ignore')), 'Ignored')) refresh(); } }, 'Ignore'),
             h('button', { class: 'pillbtn', onclick: () => { sel.size === faces.length ? sel.clear() : faces.forEach((f, i) => sel.add(i)); draw(); } }, 'Toggle all')] : null), grid);
       };
-      g.groups.forEach((grp, k) => body.append(groupBlock(grp.faces, `Look-alikes ${k + 1} · ${grp.n} faces`, true)));
+      if (g.people === 0 && !g.progress.running) body.append(h('div', { class: 'muted', style: 'font-size:13px' }, 'Suggestions appear once the named people have been compared too (the Face grouping job does that first).'));
+      g.groups.forEach((grp, k) => body.append(groupBlock(grp.faces, `Look-alikes ${k + 1} · ${grp.n} faces`, true, grp.suggest)));
       if (g.ungrouped.length) body.append(groupBlock(g.ungrouped, `${nf.format(g.ungrouped.length)} faces without a look-alike`, false));
       if (g.missing.length) body.append(groupBlock(g.missing, `${nf.format(g.missing.length)} faces not compared yet`, false));
       if (g.progress.running) setTimeout(() => { if (route.view === 'faces') refresh(); }, 5000);

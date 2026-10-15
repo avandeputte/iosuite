@@ -44,7 +44,7 @@ REGISTRY = {
     "yolox": {"label": "YOLOX-S", "kind": "url", "url": "https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_s.onnx",
               "page": "https://github.com/Megvii-BaseDetection/YOLOX/releases", "what": "Object detection (people, balls, animals, vehicles…).", "size": "35 MB"},
     "sface": {"label": "SFace (face grouping)", "kind": "url", "url": "https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_recognition_sface/face_recognition_sface_2021dec.onnx",
-              "page": "https://github.com/opencv/opencv_zoo/tree/main/models/face_recognition_sface", "what": "Groups look-alike unnamed faces on the Faces page so they can be named together (never proposes names).", "size": "37 MB"},
+              "page": "https://github.com/opencv/opencv_zoo/tree/main/models/face_recognition_sface", "what": "Groups look-alike unnamed faces on the Faces page and suggests who they are, for one-click naming.", "size": "37 MB"},
     "geonames": {"label": "GeoNames places", "kind": "data", "url": "https://download.geonames.org/export/dump/cities1000.zip",
                  "page": "https://download.geonames.org/export/dump/", "what": "Offline reverse geocoding: town, region and country for each GPS position. GeoNames regenerates this export daily.",
                  "size": "~30 MB"},

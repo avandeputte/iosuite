@@ -1080,7 +1080,7 @@ def api_analysis():
         {"key": "objects", "label": "Object detection", "detail": "YOLOX-S: people, balls, animals, vehicles and other everyday objects, with boxes. Computed in the same pass as sharpness and exposure, so the two rows advance together.",
          "done": cov["objects"], "total": stills, "running": analysis.progress["objects"]["running"],
          "enabled": config.ANALYSIS and detector.MODEL.exists(), "rerun": True},
-        {"key": "faces", "label": "Face grouping", "detail": "An embedding (SFace) for every face digiKam has not named yet, so the Faces page can show look-alikes together and they can be named or ignored in one go. The viewer never proposes a name itself.",
+        {"key": "faces", "label": "Face grouping and suggestions", "detail": "An embedding (SFace) for every face digiKam has not named yet and for the most recent faces of each named person, so the Faces page shows look-alikes together with a “looks like” suggestion and a one-click name. A suggestion is written nowhere until you accept it.",
          "done": facevecs.coverage()[0], "total": facevecs.coverage()[1], "running": facevecs.progress["running"], "enabled": config.ANALYSIS and facevecs.available(), "rerun": True},
         {"key": "captions", "label": "Photo descriptions", "detail": "A one-sentence description of each photo (BLIP), searchable from the search box and shown in the info panel.",
          "done": cov["captions"], "total": stills, "running": analysis.progress["captions"]["running"],

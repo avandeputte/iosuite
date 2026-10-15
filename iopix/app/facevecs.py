@@ -1,11 +1,13 @@
-"""Face grouping for the work queue: an embedding per face digiKam has not named (its
-"Unknown" faces and its own suggestions), so the Faces page can show look-alike faces
-together and they can be named or ignored in one go.
+"""Face work queue: an embedding per face digiKam has not named (its "Unknown" faces and its
+own suggestions), so the Faces page shows look-alikes together and they can be named or
+ignored in one go, plus a few embeddings per named person (their most recent confirmed
+faces, the prototypes) so each group and face can carry a "looks like" suggestion with a
+one-click name. The suggestion is the viewer's own and is never written anywhere until
+the owner accepts it; accepting goes through the same face operations as naming by hand.
 
 The embeddings come from OpenCV's SFace model (ONNX, run locally with onnxruntime) on the
-square crops the face queue already shows. They are used only to group: the viewer never
-proposes a name for a face on its own; naming stays with digiKam's suggestions and the owner.
-Vectors live in the viewer database (face_vecs) and are pruned when a face is decided.
+square crops the face queue already shows. Vectors live in the viewer database (face_vecs
+for undecided faces, face_protos for the named prototypes) and are pruned as faces are decided.
 """
 import logging
 import threading
@@ -20,6 +22,8 @@ URL = "https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/f
 SIZE = 112
 KINDS = ("unknown", "suggested")
 GROUP_THRESHOLD = 0.45  # cosine; OpenCV's own same-identity threshold for SFace is 0.363, a little stricter here
+SUGGEST_THRESHOLD = 0.40  # a group or face "looks like" a person when its best prototype match is at least this
+PROTOS_PER_PERSON = 12  # the most recent confirmed faces of each person become their prototypes
 progress = {"running": False, "done": 0, "total": 0}
 _lock = threading.Lock()
 _session = None
@@ -86,6 +90,30 @@ def _faces():
         con.close()
 
 
+def _proto_faces():
+    """The newest confirmed faces of every person, a few each: [(tag, photo, x, y, w, h, path, pw, ph)]."""
+    con = index.open_index()
+    try:
+        rows = con.execute("SELECT f.tag_id, f.photo_id, f.x, f.y, f.w, f.h, p.path, p.w, p.h FROM faces f JOIN photos p ON p.id = f.photo_id "
+                           "JOIN tags t ON t.id = f.tag_id WHERE f.kind = 'confirmed' AND t.person = 1 AND p.video = 0 ORDER BY f.tag_id, p.ts DESC").fetchall()
+    finally:
+        con.close()
+    out, seen = [], {}
+    for r in rows:
+        if seen.get(r[0], 0) < PROTOS_PER_PERSON:
+            seen[r[0]] = seen.get(r[0], 0) + 1
+            out.append(r)
+    return out
+
+
+def _have_protos() -> dict:
+    con = vdb.connect()
+    try:
+        return {(r[1], r[2], r[3], r[4], r[5]): r[0] for r in con.execute("SELECT tag_id, photo_id, x, y, w, h FROM face_protos")}
+    finally:
+        con.close()
+
+
 def _have() -> set:
     con = vdb.connect()
     try:
@@ -95,9 +123,9 @@ def _have() -> set:
 
 
 def coverage() -> tuple:
-    """(faces with a vector, undecided faces) for the Maintenance row."""
+    """(faces with a vector, faces to embed) for the Maintenance row: undecided faces plus the prototypes."""
     try:
-        return len(_have()), len(_faces())
+        return len(_have()) + len(_have_protos()), len(_faces()) + len(_proto_faces())
     except Exception:
         return 0, 0
 
@@ -111,43 +139,66 @@ def start():
     jobs.submit("faces", lambda: _job(gen))
 
 
-def _job(gen: int):
-    faces = _faces()
-    have = _have()
-    todo = [f for f in faces if (f[0], f[1], f[2], f[3], f[4]) not in have]
-    progress.update(running=True, done=0, total=len(todo))
-    try:
-        for i in range(0, len(todo), 32):
-            if gen != _run["gen"]:
-                return
-            batch, paths = [], []
-            for pid, x, y, w, h, path, pw, ph in todo[i:i + 32]:
-                try:
-                    paths.append(str(thumbs.make_face(0, {"id": pid, "path": path, "w": pw, "h": ph}, (x, y, w, h))))
-                    batch.append((pid, x, y, w, h))
-                except Exception as e:
-                    log.warning("faces: no crop for photo %s (%s)", pid, e)
-            if batch:
-                try:
-                    vecs = embed_paths(paths)
-                except Exception as e:
-                    log.warning("faces: embedding failed (%s)", e)
-                    continue
-                con = vdb.connect()
-                try:
-                    con.executemany("INSERT OR REPLACE INTO face_vecs (photo_id, x, y, w, h, vec) VALUES (?,?,?,?,?,?)",
-                                    [(*key, vecs[k].astype(np.float32).tobytes()) for k, key in enumerate(batch)])
-                    con.commit()
-                finally:
-                    con.close()
-            progress["done"] = min(len(todo), i + 32)
-        # faces decided since (named, ignored, removed) no longer need a vector
-        current = {(f[0], f[1], f[2], f[3], f[4]) for f in faces}
-        stale = [k for k in have if k not in current]
-        if stale:
+def _embed_into(gen: int, todo: list, table: str, offset: int):
+    """todo: [(key..., path, pw, ph)] where key is (photo, x, y, w, h) or (tag, photo, x, y, w, h); rows go to `table`."""
+    tagged = table == "face_protos"
+    for i in range(0, len(todo), 32):
+        if gen != _run["gen"]:
+            return False
+        batch, paths = [], []
+        for row in todo[i:i + 32]:
+            key, (path, pw, ph) = row[:-3], row[-3:]
+            pid = key[1] if tagged else key[0]
+            rect = key[2:6] if tagged else key[1:5]
+            try:
+                paths.append(str(thumbs.make_face(0, {"id": pid, "path": path, "w": pw, "h": ph}, tuple(rect))))
+                batch.append(tuple(key))
+            except Exception as e:
+                log.warning("faces: no crop for photo %s (%s)", pid, e)
+        if batch:
+            try:
+                vecs = embed_paths(paths)
+            except Exception as e:
+                log.warning("faces: embedding failed (%s)", e)
+                continue
             con = vdb.connect()
             try:
-                con.executemany("DELETE FROM face_vecs WHERE photo_id = ? AND x = ? AND y = ? AND w = ? AND h = ?", stale)
+                if tagged:
+                    con.executemany("INSERT OR REPLACE INTO face_protos (tag_id, photo_id, x, y, w, h, vec) VALUES (?,?,?,?,?,?,?)",
+                                    [(*key, vecs[k].astype(np.float32).tobytes()) for k, key in enumerate(batch)])
+                else:
+                    con.executemany("INSERT OR REPLACE INTO face_vecs (photo_id, x, y, w, h, vec) VALUES (?,?,?,?,?,?)",
+                                    [(*key, vecs[k].astype(np.float32).tobytes()) for k, key in enumerate(batch)])
+                con.commit()
+            finally:
+                con.close()
+        progress["done"] = offset + min(len(todo), i + 32)
+    return True
+
+
+def _job(gen: int):
+    faces, protos = _faces(), _proto_faces()
+    have, have_p = _have(), _have_protos()
+    todo = [f for f in faces if (f[0], f[1], f[2], f[3], f[4]) not in have]
+    todo_p = [f for f in protos if (f[1], f[2], f[3], f[4], f[5]) not in have_p or have_p[(f[1], f[2], f[3], f[4], f[5])] != f[0]]
+    progress.update(running=True, done=0, total=len(todo) + len(todo_p))
+    try:
+        if not _embed_into(gen, todo_p, "face_protos", 0):  # the prototypes first: they make the suggestions possible
+            return
+        if not _embed_into(gen, todo, "face_vecs", len(todo_p)):
+            return
+        # faces decided since (named, ignored, removed) no longer need a vector; prototypes follow the newest faces
+        current = {(f[0], f[1], f[2], f[3], f[4]) for f in faces}
+        stale = [k for k in have if k not in current]
+        current_p = {(f[1], f[2], f[3], f[4], f[5]) for f in protos}
+        stale_p = [k for k in have_p if k not in current_p]
+        if stale or stale_p:
+            con = vdb.connect()
+            try:
+                if stale:
+                    con.executemany("DELETE FROM face_vecs WHERE photo_id = ? AND x = ? AND y = ? AND w = ? AND h = ?", stale)
+                if stale_p:
+                    con.executemany("DELETE FROM face_protos WHERE photo_id = ? AND x = ? AND y = ? AND w = ? AND h = ?", stale_p)
                 con.commit()
             finally:
                 con.close()
@@ -160,14 +211,48 @@ def reset():
     con = vdb.connect()
     try:
         con.execute("DELETE FROM face_vecs")
+        con.execute("DELETE FROM face_protos")
         con.commit()
     finally:
         con.close()
 
 
+def _prototypes() -> tuple:
+    """(matrix of prototype vectors, their tag ids, {tag: name}) for the suggestions; empty when none."""
+    con = vdb.connect()
+    try:
+        rows = [(r[0], np.frombuffer(r[1], dtype=np.float32)) for r in con.execute("SELECT tag_id, vec FROM face_protos")]
+    finally:
+        con.close()
+    if not rows:
+        return None, None, {}
+    icon = index.open_index()
+    try:
+        names = dict(icon.execute("SELECT id, name FROM tags WHERE person = 1").fetchall())
+    finally:
+        icon.close()
+    rows = [r for r in rows if r[0] in names]
+    if not rows:
+        return None, None, {}
+    return np.stack([v for _, v in rows]), np.asarray([t for t, _ in rows]), names
+
+
+def _suggest(vec, pm, ptags, names):
+    """The person whose prototypes match this vector best: {tag, name, score}, or None below the threshold."""
+    if pm is None:
+        return None
+    sims = pm @ vec
+    best = {}
+    for t, sc in zip(ptags.tolist(), sims.tolist()):
+        best[t] = max(best.get(t, -1), sc)
+    t, sc = max(best.items(), key=lambda kv: kv[1])
+    return {"tag": int(t), "name": names.get(int(t)), "score": round(float(sc), 3)} if sc >= SUGGEST_THRESHOLD else None
+
+
 def groups(kind: str = "unknown", threshold: float = GROUP_THRESHOLD, tag: int = None) -> dict:
-    """Undecided faces of one kind, look-alikes together: {groups: [{faces: [...], n}], ungrouped: [...],
-    missing: faces without a vector yet}. Groups are connected components of pairs above the threshold."""
+    """Undecided faces of one kind, look-alikes together: {groups: [{faces: [...], n, suggest}], ungrouped: [...],
+    missing: faces without a vector yet}. Groups are connected components of pairs above the threshold; each group
+    and each face carries the viewer's own "looks like" suggestion when a named person's prototypes match."""
     con = index.open_index()
     con.row_factory = __import__("sqlite3").Row
     try:
@@ -192,6 +277,8 @@ def groups(kind: str = "unknown", threshold: float = GROUP_THRESHOLD, tag: int =
     out = {"groups": [], "ungrouped": [], "missing": missing, "total": len(faces), "threshold": threshold}
     if not have:
         return out
+    pm, ptags, names = _prototypes()
+    out["people"] = len(set(ptags.tolist())) if ptags is not None else 0
     m = np.stack([v for _, v in have])
     sims = m @ m.T
     n = len(have)
@@ -213,10 +300,13 @@ def groups(kind: str = "unknown", threshold: float = GROUP_THRESHOLD, tag: int =
         members.setdefault(find(i), []).append(i)
     for root, idx in members.items():
         if len(idx) == 1:
-            out["ungrouped"].append(have[idx[0]][0])
+            f = dict(have[idx[0]][0])
+            f["suggest"] = _suggest(m[idx[0]], pm, ptags, names)
+            out["ungrouped"].append(f)
             continue
         c = m[idx].mean(axis=0)
+        c = c / max(float(np.linalg.norm(c)), 1e-9)
         order = sorted(idx, key=lambda k: -float(m[k] @ c))  # the most typical face first
-        out["groups"].append({"n": len(idx), "faces": [have[k][0] for k in order]})
+        out["groups"].append({"n": len(idx), "faces": [have[k][0] for k in order], "suggest": _suggest(c, pm, ptags, names)})
     out["groups"].sort(key=lambda g: -g["n"])
     return out
