@@ -1590,42 +1590,90 @@ function usersSection() {
 function showAnalysis() { go('maintenance', null, true); }  // the old #/analysis page now lives in Maintenance; keep bookmarks working
 
 // ---------------------------------------------------------------- settings & maintenance
-function modelsSection(view) {
+/** Maintenance › AI analysis and models: one table, a row per feature, with the model it runs on (download,
+ *  update check) and the background job that fills it (progress, run again). Models without a job (places)
+ *  and an installed search model that is not in use get rows of their own. */
+function aiSection(view) {
   const body = h('div');
-  const checkBtn = h('button', { class: 'pillbtn', onclick: async () => { checkBtn.disabled = true; checkBtn.textContent = 'Checking…'; try { await post('/api/models/check', {}); } catch (e) { toast(e.message); } draw(); } }, icon('spark'), 'Check for updates');
-  const wrap = h('div', null,
-    h('h2', null, 'Models and data'),
-    h('div', { class: 'muted', style: 'max-width:820px' }, 'Everything below was downloaded once and is never updated on its own. “Check for updates” asks each source whether the exact files the viewer uses have changed since they were downloaded (a commit on the model hub, a newer file, a newer package). It cannot tell whether a different, better model exists; the page link on each row is where to look for that, and switching models is a code change.'),
-    h('div', { style: 'margin:14px 0' }, checkBtn), body);
+  const checkBtn = h('button', { class: 'pillbtn', onclick: async () => { checkBtn.disabled = true; checkBtn.textContent = 'Checking…'; try { await post('/api/models/check', {}); } catch (e) { toast(e.message); } draw(); } }, icon('spark'), 'Check models for updates');
+  const wrap = h('div', null, h('h2', null, 'AI analysis and models'),
+    h('div', { class: 'muted', style: 'max-width:860px' }, 'Everything runs locally and is stored in the viewer’s data folder; nothing is written to digiKam. New and changed photos are picked up automatically, about 20 seconds after digiKam saves them. Models were downloaded once and never update on their own; “Check models for updates” asks each source whether the exact files used have changed.'),
+    h('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;margin:14px 0' },
+      h('button', { class: 'pillbtn on', onclick: async () => { try { await post('/api/analysis/run', { job: 'all' }); toast('Checking for new and changed photos…'); } catch (e) { toast(e.message); } draw(); } }, icon('spark'), 'Check new and changed photos'), checkBtn),
+    body);
   const fmtDate = (t) => (t ? dfDay.format(new Date(t * 1000)) : '');
+  const JOB_MODEL = { objects: 'yolox', vision: 'ocr', faces: 'sface', captions: 'blip' };
+  const modelState = (m, p) => {
+    const c = m.check;
+    return p.running === m.key ? ['downloading…', 'on']
+      : !m.installed ? ['not installed', 'warn']
+      : !c ? [`installed ${fmtDate(m.at)}`, '']
+      : c.status === 'current' ? ['up to date', 'ok']
+      : c.status === 'update' ? [`update available (${c.remote})`, 'on']
+      : c.status === 'newer' ? ['newer data available', 'on']
+      : c.status === 'error' ? ['could not check', 'warn'] : [`installed ${m.revision || ''}`, ''];
+  };
   const draw = async () => {
-    let d;
-    try { d = await api('/api/models'); } catch { return; }
+    let a, md;
+    try { [a, md] = await Promise.all([api('/api/analysis'), api('/api/models')]); } catch { return; }
     if (route.view !== view) return;
-    const p = d.progress || {};
+    const q = a.queue || {}, p = md.progress || {};
     if (p.finished && !p.running && p.error) toast(`Download of ${p.finished} failed: ${p.error}`, null, null, 9000);
-    fill(body, d.models.map((m) => {
-      const c = m.check;
-      const state = p.running === m.key ? 'downloading…'
-        : !m.installed ? 'not installed'
-        : !c ? `installed ${fmtDate(m.at)} · ${m.revision}`
-        : c.status === 'current' ? `up to date · ${m.revision}`
-        : c.status === 'update' ? `update available: ${c.remote}${c.remote_at ? ' (' + c.remote_at.slice(0, 10) + ')' : ''}, installed ${m.revision}`
-        : c.status === 'newer' ? `newer data available (${c.remote}); installed ${m.revision}`
-        : c.status === 'error' ? `could not check: ${c.error}` : `installed ${m.revision}`;
-      return h('div', { class: 'ajob' },
-        h('div', { class: 'ahead' }, h('b', null, m.label), h('span', { class: 'muted' }, state), h('span', { class: 'sp' }),
-          h('a', { class: 'lnk', href: m.page, target: '_blank', rel: 'noopener', style: 'font-size:13px' }, 'model page'),
-          h('button', { class: 'pillbtn' + (c && (c.status === 'update' || c.status === 'newer' || c.status === 'missing') ? ' on' : ''), disabled: !!p.running, style: 'margin-left:10px',
-            onclick: async () => {
-              if (!confirm(`Download ${m.label} (${m.size})${m.installed ? ' again, replacing the installed files' : ''}? The viewer keeps working meanwhile.`)) return;
-              try { await post('/api/models/download', { key: m.key }); toast(`Downloading ${m.label}…`); } catch (e) { toast(e.message); }
-              draw();
-            } }, m.installed ? (c && (c.status === 'update' || c.status === 'newer') ? 'Update' : 'Download again') : 'Download')),
-        h('div', { class: 'muted', style: 'font-size:13px;margin-top:6px' }, m.what, m.kind === 'pip' ? ' Updating the package takes effect after a restart of the viewer.' : ''));
-    }));
-    if (p.running) setTimeout(() => { if (route.view === view) draw(); }, 3000);
-    checkBtn.disabled = false; fill(checkBtn, icon('spark'), 'Check for updates');
+    const models = Object.fromEntries(md.models.map((m) => [m.key, m]));
+    const searchKey = (a.models || []).find((m) => m.active)?.key || (a.models || []).find((m) => m.chosen)?.key || 'siglip2';
+    const modelCell = (m) => {
+      if (!m) return h('td', { class: 'muted' }, 'built in');
+      const [st, cls] = modelState(m, p);
+      return h('td', null, h('div', null, h('a', { class: 'lnk', href: m.page, target: '_blank', rel: 'noopener', title: m.what }, m.label), h('span', { class: 'muted' }, ` · ${m.size}`)),
+        h('div', { class: 'mst ' + cls, title: m.revision ? `revision ${m.revision}` : '' }, st));
+    };
+    const modelBtn = (m) => {
+      if (!m) return null;
+      const c = m.check, upd = c && (c.status === 'update' || c.status === 'newer' || c.status === 'missing');
+      return h('button', { class: 'pillbtn small' + (!m.installed || upd ? ' on' : ''), disabled: !!p.running, title: m.installed ? `Download ${m.label} again (${m.size})` : `Download ${m.label} (${m.size})`,
+        onclick: async () => {
+          if (!confirm(`Download ${m.label} (${m.size})${m.installed ? ' again, replacing the installed files' : ''}? The viewer keeps working meanwhile.` + (m.kind === 'pip' ? '\n\nA package update takes effect after a restart of the viewer.' : ''))) return;
+          try { await post('/api/models/download', { key: m.key }); toast(`Downloading ${m.label}…`); } catch (e) { toast(e.message); }
+          draw();
+        } }, !m.installed ? 'Download' : upd ? 'Update' : 'Re-download');
+    };
+    const progressCell = (j, m) => {
+      if (!j) return h('td', { class: 'muted' }, '—');
+      const state = !j.enabled ? (m && !m.installed ? 'needs its model' : 'off') : j.running ? 'running…' : j.queued ? 'queued' : j.done >= j.total ? 'up to date' : 'waiting';
+      const now = Date.now() / 1000, idle = j.running && j.since ? (j.last ? now - j.last : now - j.since) : 0, stuck = idle > 300;
+      return h('td', { class: 'mprog' },
+        h('div', { class: 'ahead' }, h('span', { class: j.running ? 'mst on' : j.done >= j.total && j.enabled ? 'mst ok' : 'mst' }, state), h('span', { class: 'sp' }), h('span', { class: 'muted' }, `${nf.format(Math.min(j.done, j.total))} / ${nf.format(j.total)}`)),
+        h('div', { class: 'bar' }, h('i', { style: `width:${j.total ? Math.min(100, 100 * j.done / j.total).toFixed(1) : 0}%` })),
+        j.running && j.since ? h('div', { class: stuck ? 'warn' : 'muted', style: 'font-size:11.5px;margin-top:3px' }, `${Math.round((now - j.since) / 60)} min · last progress ${idle < 90 ? Math.round(idle) + ' s' : Math.round(idle / 60) + ' min'} ago`,
+          j.current && j.current.length ? ` · ${j.current.map((x) => x.split('/').pop()).join(', ')}` : '', stuck ? ' · probably stuck on that file: see the server log, or restart the viewer' : '') : null);
+    };
+    const rerun = (j) => j && j.rerun && j.enabled ? h('button', { class: 'pillbtn small', title: `Discard the results of “${j.label}” and compute them again for every photo`, onclick: async () => {
+      if (!confirm(`Run “${j.label}” again from scratch for all ${nf.format(j.total)} photos? The current results for it are discarded first. This can take from several minutes to a few hours.`)) return;
+      try { await post('/api/analysis/run', { job: j.key, reset: true }); toast(`Re-running “${j.label}”.`); } catch (e) { toast(e.message); }
+      draw();
+    } }, 'Run again') : null;
+    const row = (label, detail, j, m) => h('tr', { 'data-job': j?.key || '', 'data-model': m?.key || '' },
+      h('td', { class: 'mfeat' }, h('b', null, label), detail ? h('div', { class: 'muted mdet', title: detail }, detail) : null),
+      modelCell(m), progressCell(j, m), h('td', { class: 'macts' }, modelBtn(m), rerun(j)));
+    const rows = a.jobs.map((j) => {
+      const m = j.key === 'embeddings' ? models[searchKey] : models[JOB_MODEL[j.key]];
+      return row(j.label, j.detail, j, m);
+    });
+    const used = new Set([searchKey, ...Object.values(JOB_MODEL)]);
+    for (const m of md.models) {
+      if (used.has(m.key)) continue;
+      const label = m.key === 'geonames' ? 'Places from GPS positions' : (m.key === 'clip' || m.key === 'siglip2') ? 'Content search (other model)' : m.label;
+      const detail = m.key === 'geonames' ? 'Town, region and country for each GPS position, offline; looked up when the search index is built.' : (m.key === 'clip' || m.key === 'siglip2') ? 'Installed but not in use; switch the search model in Settings.' : m.what;
+      if (m.key === 'clip' && !m.installed) continue;  // the original search model: only listed when it is there
+      rows.push(row(label, detail, null, m));
+    }
+    fill(body,
+      h('div', { class: 'muted', style: 'font-size:13px;margin-bottom:8px' }, h('b', { style: 'color:var(--fg)' }, 'Background work: '), q.running ? `running ${(a.jobs.find((j) => (j.key === 'quality' && q.running === 'pixels') || j.key === q.running) || {}).label || q.running}` : 'idle',
+        `. Jobs run one at a time, in the order below, each with up to ${q.threads} of ${q.cores || '?'} cores (change that in Settings).`, q.queued?.length ? ` Waiting: ${q.queued.length}.` : ''),
+      h('div', { class: 'mwrap' }, h('table', { class: 'mtable' },
+        h('thead', null, h('tr', null, ['Feature', 'Model', 'Progress', ''].map((c) => h('th', null, c)))), h('tbody', null, rows))));
+    checkBtn.disabled = false; fill(checkBtn, icon('spark'), 'Check models for updates');
+    if (a.jobs.some((j) => j.running) || p.running) setTimeout(() => { if (route.view === view) draw(); }, 4000);
   };
   draw();
   return wrap;
@@ -2047,8 +2095,7 @@ async function settingsPage(view) {
       h('span', { style: 'display:flex;gap:6px;flex-wrap:wrap' }, btn('Rebuild thumbnails', () => act('thumbs', 'Rebuilding thumbnails in the background.', `Delete all grid thumbnails (${fmtBytes(st.thumbnails)}) and rebuild them?`)),
         btn('Clear previews', () => act('previews', 'Previews cleared; they are remade as you open photos.')), btn('Clear face crops', () => act('faces', 'Face crops cleared; they are remade as needed.')))),
     row('Tag cover photos', 'The photo shown for each tag is chosen by the content model. Pick them again after big tagging changes.', btn('Pick again', () => act('covers', 'Choosing tag covers in the background.'))),
-    analysisSection(view, 'jobs'),
-    modelsSection(view),
+    aiSection(view),
     h('h2', null, 'Metadata consistency'),
     row('Database, sidecars and image files', 'Compares rating, labels, title, caption and tags across digiKam’s database, each photo’s XMP sidecar and the metadata embedded in the file, then lets you sync them in the direction you choose.',
       h('a', { class: 'pillbtn on', href: '#/consistency' }, 'Open the checker')),

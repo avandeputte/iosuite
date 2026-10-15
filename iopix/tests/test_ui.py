@@ -213,10 +213,16 @@ def test_settings_and_maintenance_pages(page, server):
     page.goto(server + "/#/maintenance")
     page.wait_for_selector("h1:has-text('Maintenance')", timeout=10000)  # a hash-only navigation re-renders in place
     heads = page.locator("h2").all_inner_texts()
-    for h in ("Library", "AI analysis", "Models and data", "Metadata consistency", "Storage"):
+    for h in ("Library", "AI analysis and models", "Metadata consistency", "Storage"):
         assert h in heads, heads
     assert "Display" not in heads and "Editing" not in heads
+    page.wait_for_selector(".mtable tbody tr", timeout=10000)
     assert page.locator("b", has_text="Background work").count() == 1
+    rows = page.locator(".mtable tbody tr")
+    assert rows.count() >= 7, "one row per feature"
+    assert page.locator(".mtable tr[data-job=objects][data-model=yolox]").count() == 1, "a job and its model share a row"
+    assert page.locator(".mtable tr[data-model=geonames]").count() == 1, "models without a job have a row too"
+    assert page.locator(".mtable thead th").all_inner_texts()[:3] == ["Feature", "Model", "Progress"]
     assert page.locator("b", has_text="Restart the viewer").count() == 1
     assert page.locator("#nav a", has_text="Maintenance").count() == 0, "no longer in the main navigation"
     assert page.locator("#topbar a.tool[href='#/maintenance']").count() == 1 and page.locator("#topbar a.tool[href='#/settings']").count() == 1
