@@ -248,6 +248,7 @@ function onRoute() {
     main.scrollTop = 0;
     removeScrubber();
     if (M.map && route.view !== 'map') { M.map.remove(); M.map = null; }  // Leaflet keeps window listeners until the map is removed
+    crumbs(null);  // each view sets its own trail
     VIEW_FNS[route.view](PARAM_VIEWS.includes(route.view) ? vp : fp);
     if (!$('#filters').hidden) renderFilters();
   }
@@ -405,10 +406,18 @@ function initSearch() {
 
 // ---------------------------------------------------------------- breadcrumbs
 /** parts: [[label, hash or null]]; the last part is the current location. */
+/** The breadcrumb trail lives in one fixed strip right under the top bar (#crumbbar), so it is in the same
+ *  place on every page and stays put while the page scrolls. Views call crumbs(parts) while they render
+ *  (it returns null, so it can sit where the trail used to be built); the router clears it on every view change. */
 function crumbs(parts) {
-  return h('nav', { class: 'crumbs' }, parts.map(([label, href], i) => [
+  const bar = $('#crumbbar');
+  if (!parts || !parts.length) { bar.hidden = true; bar.replaceChildren(); document.body.classList.remove('crumbed'); return null; }
+  bar.replaceChildren(...parts.map(([label, href], i) => [
     i ? h('span', { class: 'sep' }, '›') : null,
-    href && i < parts.length - 1 ? h('a', { href }, label) : h('span', { class: i === parts.length - 1 ? 'cur' : '' }, label)]));
+    href && i < parts.length - 1 ? h('a', { href }, label) : h('span', { class: i === parts.length - 1 ? 'cur' : '' }, label)]).flat().filter(Boolean));
+  bar.hidden = false;
+  document.body.classList.add('crumbed');
+  return null;
 }
 const placeHash = (o) => hashFor('places', photosWith(o));
 /** Where the current photo list sits in a hierarchy (album, place, tag, ...), if it does. */
@@ -418,7 +427,7 @@ function photoCrumbs(p) {
   if (saved) return [['Albums', '#/albums'], [saved.name, null]];
   if (albums.length === 1 && albumById.get(+albums[0])) {
     const chain = [];
-    for (let a = albumById.get(+albums[0]); a && a.pid != null; a = albumById.get(a.pid)) chain.unshift(a);
+    for (let a = albumById.get(+albums[0]); a; a = a.pid != null ? albumById.get(a.pid) : null) chain.unshift(a);  // the folder itself too, even at the top level
     return [['Folders', '#/folders'], ...chain.map((a) => [a.name, hashFor('photos', photosWith({ album: a.id, sort: 'old' }))])];
   }
   if (p.get('ualbum') && ualbumById(p.get('ualbum'))) return [['Albums', '#/albums'], [ualbumById(p.get('ualbum')).name, null]];
@@ -509,7 +518,7 @@ function layoutGrid() {
     }
   } else sections.push([0, d.count]);
   const trail = photoCrumbs(filterParams());
-  const top0 = trail ? 44 : 0;  // the trail sits where every other page has it (14 px down, as .page > .crumbs), then 30 px tall
+  const top0 = 0;  // the trail is in the fixed strip above the page (crumbs())
   G.top0 = top0;
   let y = BAR_H + top0;
   for (const [s, e] of sections) {
@@ -532,8 +541,7 @@ function layoutGrid() {
   for (const el of G.rendered.values()) el.remove();
   G.rendered.clear();
   $('.gbar', grid)?.remove();
-  $('.crumbs', grid)?.remove();
-  if (trail) grid.append(crumbs(trail));
+  crumbs(trail);
   grid.append(h('div', { class: 'gbar', style: `top:${top0}px` },
     h('span', { class: 'count' }, plural(d.count, 'item')),
     byDate ? h('span', null, fmtRange(Math.min(d.ts[0], d.ts[d.count - 1]), Math.max(d.ts[0], d.ts[d.count - 1]))) : null,

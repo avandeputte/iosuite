@@ -727,10 +727,24 @@ def test_breadcrumbs_sit_in_the_same_place_on_every_page(page, server):
     """A trail on an ordinary page (Duplicate files) and above a photo grid (a folder) starts at the same spot."""
     js = "(sel) => { const r = document.querySelector(sel).firstElementChild.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top)]; }"
     page.goto(server + "/#/duplicates")
-    page.wait_for_selector(".page > .crumbs", timeout=10000)
-    a = page.evaluate(js, ".page > .crumbs")
+    page.wait_for_selector("#crumbbar:not([hidden]) .cur", timeout=10000)
+    a = page.evaluate(js, "#crumbbar")
+    page.locator("#main").evaluate("m => m.scrollTop = 400")
+    assert page.evaluate(js, "#crumbbar") == a, "the trail stays put while the page scrolls"
     aid = page.evaluate("fetch('/api/meta').then(r => r.json()).then(m => m.albums[m.albums.length - 1].id)")
     page.goto(server + f"/#/photos?album={aid}&sort=old")
-    page.wait_for_selector("#grid > .crumbs", timeout=10000)
+    page.wait_for_selector("#crumbbar:not([hidden]) .cur", timeout=10000)
     page.wait_for_timeout(300)
-    assert page.evaluate(js, "#grid > .crumbs") == a
+    assert page.evaluate(js, "#crumbbar") == a
+    page.goto(server + "/#/people")
+    page.wait_for_timeout(500)
+    assert page.locator("#crumbbar").is_hidden(), "a page without a trail has no strip"
+
+
+def test_a_top_level_folder_names_itself_in_the_trail(page, server):
+    m = page.request.get(server + "/api/meta").json()
+    top = next(a for a in m["albums"] if a["pid"] is None)
+    page.goto(server + f"/#/photos?album={top['id']}&sort=old")
+    page.wait_for_selector("#crumbbar:not([hidden]) .cur", timeout=10000)
+    assert page.locator("#crumbbar .cur").inner_text() == top["name"]
+    assert page.locator("#crumbbar a", has_text="Folders").count() == 1
