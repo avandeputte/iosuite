@@ -24,6 +24,7 @@ All chosen in `setup.sh` (or later from Maintenance › AI analysis and models);
 | Places | town, region, country for GPS positions, offline | GeoNames ~30 MB |
 | Object detection | people, animals, vehicles, everyday objects with boxes | YOLOX-S 35 MB |
 | Text in photos | signs, jerseys, documents searchable | RapidOCR ~60 MB |
+| Face grouping | look-alike unnamed faces grouped, with "looks like" name suggestions | SFace 37 MB |
 | Photo descriptions | one sentence per photo, searchable | BLIP base ~950 MB plus PyTorch (CPU build ~1 GB) |
 
 
@@ -50,15 +51,17 @@ The viewer is a web app that installs like an app on a phone or tablet (PWA): op
 
 All analysis runs locally and is stored in `data/viewer.db`; nothing is written to digiKam. New and changed photos are picked up automatically (the digiKam database is polled every `REINDEX_POLL` seconds, 20 by default). Maintenance › AI analysis shows every job with progress, "Check for new photos now" and "Run again from scratch".
 
-Heavy work runs through one queue, one job at a time, in this order: thumbnails, sharpness/exposure/objects, content-search embeddings, text and face quality, descriptions. Each job may use `BG_THREADS` cores (default half the machine, changeable in Settings; a change applies when the next job starts), so the viewer and other apps stay responsive.
+Heavy work runs through one queue, one job at a time, in this order: thumbnails, sharpness/exposure/objects, content-search embeddings, text and face quality, face grouping, similar photos (when asked for), descriptions. Each job may use `BG_THREADS` cores (default half the machine, changeable in Settings; a change applies when the next job starts), so the viewer and other apps stay responsive.
 
-| Job | Needs | What you get |
-| --- | --- | --- |
-| Sharpness and exposure | nothing | measured on a ~1000 px decode: Sharpest / Blurry / Very dark / Very bright filters, "Sharpest first" sort; sharpness shown as a rank within your library |
-| Object detection | `setup.sh` | YOLOX-S, 80 everyday object types with boxes; Objects and "people in the picture" filters; O in the viewer |
-| Content search | `setup.sh` | SigLIP 2 or CLIP embeddings: text search by description, "More photos like this", Detected content, tag cover photos |
-| Text in photos and face quality | `setup.sh` | RapidOCR text, searchable from the search box; face quality as the sharpness of digiKam's face regions.|
-| Photo descriptions | `setup.sh` | one sentence per photo from BLIP base, through PyTorch on an Apple GPU when there is one, else on the CPU (about 0.5 s per photo); searchable and shown in the info panel. `CAPTIONS=0` turns the job off |
+| Job | What you get |
+| --- | --- |
+| Sharpness and exposure | measured on a ~1000 px decode: Sharpest / Blurry / Very dark / Very bright filters, "Sharpest first" sort; sharpness shown as a rank within your library |
+| Object detection | YOLOX-S, 80 everyday object types with boxes; Objects and "people in the picture" filters; O in the viewer |
+| Content search | SigLIP 2 or CLIP embeddings: text search by description, "More photos like this", Detected content, tag cover photos |
+| Text in photos and face quality | RapidOCR text, searchable from the search box; face quality as the sharpness of digiKam's face regions. |
+| Face grouping and suggestions | SFace embeddings of the faces digiKam has not named and of each person's recent confirmed faces: look-alike groups on People › Faces with a "looks like" suggestion and one-click naming |
+| Photo descriptions | one sentence per photo from BLIP base, through PyTorch on an Apple GPU when there is one, else on the CPU (about 0.5 s per photo); searchable and shown in the info panel. `CAPTIONS=0` turns the job off |
+| Similar photos | on request from Explore › Duplicate files: resized, re-saved and burst-neighbour copies found from the content-search embeddings |
 
 Derived from these:
 
