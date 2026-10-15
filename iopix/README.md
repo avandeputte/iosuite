@@ -162,6 +162,15 @@ Every sidecar or file write goes through one function that refuses to proceed un
 
 The digiKam database is opened read-only (SQLite `mode=ro` + `PRAGMA query_only`; a read-only session on MySQL) except for the explicit writes above. Photo and video files are only opened for reading unless in-file writing is on.
 
+## Working without digiKam
+
+The viewer keeps its own copy of the library's metadata, so it does not depend on digiKam's database being there:
+
+- **Library copy.** At every read of digiKam's database the rows the index is built from (albums, tags and their properties, image tags, face regions, comments, copyright, properties and the image rows) are copied into the viewer's database (the `lib_*` tables). When digiKam's database is unreachable the index is rebuilt from that copy, with the same code, and the viewer keeps running; admins see a card saying so and when the copy was taken. The copy is part of the app backup (Maintenance › Storage and backups), so the backup carries the library's metadata too.
+- **Editing meanwhile.** Rating, pick and colour labels, title, caption, date, location, template and tags are written to the sidecars and remembered in the viewer's database exactly as when digiKam is there, and shown at once. When digiKam's database is reachable again and digiKam is closed, the queued edits are written into it automatically (a minute after the last edit, at most every five minutes, with a backup of the database first); Maintenance › "Apply to digiKam database" does the same on request.
+- **Sync with digiKam** (Settings, on by default). Off: the viewer never opens digiKam's database; it works from its copy and edits live in the sidecars and the viewer's database. Use it to retire digiKam, or while its database is being moved. Creating tags and folders, naming faces, place tags and uploads still need digiKam's database and say so when it is unreachable or sync is off.
+- **Photo ids.** digiKam's image id is the viewer's working key everywhere. The `photo_ids` table remembers which file (digiKam's uniqueHash and size) each id stood for, with a viewer id that never changes. If digiKam ever renumbers a photo, say after a fresh import, favorites, albums, edits, analysis results, face vectors, near-duplicate pairs and content-search embeddings follow the file to its new id automatically.
+
 ## digiKam on MySQL / MariaDB
 
 digiKam can keep its database in MySQL or MariaDB. Every read and write goes through one layer (`app/dkdb.py`), configured with the `DIGIKAM_DB_*` variables below (or Maintenance › digiKam database); PyMySQL is part of the base install (`pyproject.toml`). Differences the layer handles: dates are UTC on MySQL and local time on SQLite; changes are detected by polling digiKam's scan timestamp and row counts instead of a file's mtime; digiKam's MySQL root tag (`_Digikam_root_tag_`) is treated as "no parent"; backups are `mysqldump`/`mariadb-dump` instead of a file copy. "Is digiKam running" cannot be seen across machines, so use `DIGIKAM_CHECK=ask`.

@@ -2142,6 +2142,11 @@ async function settingsPage(view) {
     IS_ADMIN ? row('Read-only mode', m.readOnlyLocked ? 'Locked on by READ_ONLY=1 in the environment: nothing in the library can be changed from the viewer.'
       : `${m.readOnly ? 'On' : 'Off'}. When on, the viewer only browses: editing, tagging, face naming, place tags, GPS tracks, metadata sync and database updates are switched off and refused by the server. Favorites and viewer albums keep working; they never touch the library.`,
       m.readOnlyLocked ? null : btn(m.readOnly ? 'Turn off' : 'Turn on', async () => { try { await post('/api/settings', { read_only: !m.readOnly }); const s = await api('/api/status'); EDITING = s.editing; CAN_MANAGE = s.editing && s.dbWrite; } catch (e) { toast(e.message); } settingsPage(view); })) : null,
+    IS_ADMIN ? (() => {
+      const d = m.digikam || {}, copy = d.mirror ? `${nf.format(d.mirror.photos)} photos as of ${fmtWhen(d.mirror.taken)}` : 'not taken yet';
+      return row('Sync with digiKam', `${d.sync ? 'On' : 'Off'}. On: the viewer re-reads digiKam’s database whenever digiKam saves, and writes the edits made here into it whenever digiKam is closed (edits always go to the sidecars first). Off: the viewer never opens digiKam’s database; it works from its own copy of the library (${copy}) and edits live in the sidecars and the viewer’s database. Creating tags and folders and naming faces still need digiKam.${d.sync && !d.reachable ? ' digiKam’s database is unreachable right now; the copy is in use.' : ''}`,
+        btn(d.sync ? 'Turn off' : 'Turn on', async () => { try { await post('/api/settings', { digikam_sync: !d.sync }); } catch (e) { toast(e.message); } settingsPage(view); }));
+    })() : null,
     IS_ADMIN ? analysisSection(view, 'prefs') : null,
     IS_ADMIN && USERS_EXIST ? usersSection() : null,
     IS_ADMIN && EDITING ? [
@@ -2156,6 +2161,7 @@ async function settingsPage(view) {
     ] : [
     // 1. Library: everything about digiKam's data as the viewer sees it
     h('h2', null, 'Library'),
+    row('Library copy', (() => { const d = m.digikam || {}; return d.mirror ? `The viewer’s own copy of the library’s metadata: ${nf.format(d.mirror.photos)} photos as of ${fmtWhen(d.mirror.taken)}, refreshed at every read of digiKam and included in the app backup. The index is built from it whenever digiKam’s database is unreachable or Sync with digiKam is off${d.source === 'mirror' ? ' (as it is now)' : ''}.` : 'Not taken yet; it is taken at the next read of digiKam’s database.'; })(), null),
     row('Rescan the library now', `The index is rebuilt from digiKam’s database whenever digiKam saves (last saved ${when(m.digikamSaved)}; index built ${when(m.indexBuilt)}). Force it here if something looks stale.`,
       btn('Rescan now', () => act('reindex', 'Rescanning the library…'), true)),
     (() => {  // metadata consistency, summarised in one line
@@ -3211,6 +3217,26 @@ async function awaitReindex(until = () => true, tries = 20, ms = 400) {
   }
   return false;
 }
+/** For admins: digiKam's database is unreachable (the viewer works from its copy of the library) or Sync with digiKam is off.
+ *  Dismissed for this browser session, per episode. */
+function dkBanner(d) {
+  let b = $('#dkbanner');
+  const show = d && IS_ADMIN && (!d.sync || !d.reachable);
+  const key = !show ? null : d.sync ? 'offline:' + d.since : 'off';
+  let dismissed = null; try { dismissed = sessionStorage.getItem('dk-dismissed'); } catch { /* private mode */ }
+  if (!show || dismissed === key) { b?.remove(); return; }
+  if (b && b.dataset.key === key) return;
+  b?.remove();
+  const asOf = d.mirror?.taken ? fmtWhen(d.mirror.taken) : 'the last read';
+  const text = !d.sync
+    ? ['Sync with digiKam is off', 'The viewer works from its own copy of the library; edits go to the sidecars and the viewer’s database.']
+    : ['digiKam’s database is unreachable', `Since ${fmtWhen(d.since)}. Showing the library as of ${asOf}; edits are saved to the sidecars and will be applied to digiKam when it is back.`];
+  b = h('div', { id: 'dkbanner', class: 'sysbanner', 'data-key': key },
+    h('span', { class: 'ic-wrap', style: 'background:linear-gradient(135deg,#ff9a3c,#ff5a7e)' }, icon('wrench')),
+    h('div', null, h('b', null, text[0]), h('div', { class: 'muted' }, text[1], ' ', h('a', { href: '#/settings', class: 'lnk' }, 'Settings'))),
+    h('button', { class: 'iconbtn', title: 'Hide for now', onclick: () => { try { sessionStorage.setItem('dk-dismissed', key); } catch { /* private mode */ } b.remove(); } }, icon('close')));
+  document.body.append(b);
+}
 /** The "a newer version is out" banner, for admins, when the daily check found one; dismissed per version in this browser. */
 function updateBanner(u) {
   let b = $('#updbanner');
@@ -3249,6 +3275,7 @@ async function pollStatus() {
     SEM = s.semantic; EDITING = s.editing; PENDING = s.pendingEdits; WRITE_FILES = s.writeFiles; CAN_MANAGE = s.editing && s.dbWrite;
     IS_ADMIN = s.isAdmin; USERS_EXIST = s.usersExist; DIGIKAM_CHECK = s.digikamCheck || 'pgrep';
     updateBanner(s.updateAvailable);
+    dkBanner(s.digikam);
     if (s.appVersion) { APP_VERSION = s.appVersion; APP_COMMIT = s.commit || ''; const b = $('.brand'); if (b) b.title = `digiKam Viewer v${APP_VERSION}${APP_COMMIT ? ' (' + APP_COMMIT + ')' : ''}`; } if ((s.user && s.user.id) !== (USER && USER.id)) { USER = s.user; renderUserMenu(); }
     document.body.classList.toggle('noadmin', !IS_ADMIN);
     if (PENDING && s.dbWrite && !el.childNodes.length) el.replaceChildren(h('a', { class: 'lnk', style: 'cursor:pointer', title: 'Edits saved in sidecars that digiKam’s database does not have yet', onclick: dbDialog },

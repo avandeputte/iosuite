@@ -1,22 +1,41 @@
-"""Builds the app's own search index from the digiKam database.
+"""Builds the app's own search index from the digiKam database, or from the viewer's
+copy of it.
 
 The digiKam database is opened read-only (see dkdb) and read inside a single
-transaction; nothing is ever written to it. The result is a small denormalised
-SQLite file with a full-text table, stored in the app's data folder and swapped
-in atomically. Bump SCHEMA_VERSION whenever the tables, indexes or the meaning
-of a column change, so running viewers rebuild.
+transaction; nothing is ever written to it. What that read returns, the raw rows of
+the tables the index needs, is copied into the viewer's own database (the "library
+mirror", lib_* tables in vdb.py) whenever digiKam's database changed. When digiKam's
+database is unreachable, or "Sync with digiKam" is off, the index is built from the
+mirror instead, with the same code, so the viewer keeps working on its own. The
+mirror also feeds photo_ids, the viewer's stable identity for a photo (digiKam's
+uniqueHash and size), through which favorites, albums, edits and analysis results
+follow a photo if digiKam ever renumbers it.
+
+The result is a small denormalised SQLite file with a full-text table, stored in the
+app's data folder and swapped in atomically. Bump SCHEMA_VERSION whenever the tables,
+indexes or the meaning of a column change, so running viewers rebuild.
 """
 import calendar
 import json
+import logging
 import os
 import re
 import sqlite3
+import threading
 import time
 from collections import defaultdict
 from pathlib import Path
 from urllib.parse import quote
 
-from . import analysis, config, dkdb, edits, moments, places
+from . import analysis, config, dkdb, edits, moments, places, vdb
+from . import state as appstate
+
+log = logging.getLogger("app.index")
+SOURCE_ERRORS = (*vdb.Error, OSError, dkdb.SyncError)  # digiKam's database cannot be read right now
+
+
+class Unavailable(Exception):
+    """Neither digiKam's database nor a copy of the library can be read."""
 
 SCHEMA = """
 CREATE TABLE photos (
@@ -70,6 +89,259 @@ def source_version() -> str:
     return dkdb.source_version()
 
 
+def sync_enabled() -> bool:
+    return dkdb.sync_enabled()
+
+
+# whether digiKam's database answered the last time it was needed, and what the index was last built from
+offline = {"since": None, "error": None, "checked": None}
+last_source = {"kind": None, "version": None}
+_offline_lock = threading.Lock()
+
+
+def _set_online():
+    with _offline_lock:
+        if offline["since"]:
+            log.info("digiKam's database is reachable again")
+        offline.update(since=None, error=None, checked=int(time.time()))
+
+
+def _set_offline(err):
+    with _offline_lock:
+        if not offline["since"]:
+            log.warning("digiKam's database is unreachable; working from the viewer's copy of the library: %s", err)
+            offline["since"] = int(time.time())
+        offline.update(error=str(err)[:300], checked=int(time.time()))
+
+
+def mirror_info() -> dict:
+    """{source, taken, photos} of the viewer's copy of the library, or None when there is none yet."""
+    try:
+        con = appstate.connect()
+        try:
+            d = dict(con.execute("SELECT key, value FROM lib_meta").fetchall())
+        finally:
+            con.close()
+    except Exception:
+        return None
+    if not d.get("source"):
+        return None
+    return {"source": d["source"], "taken": int(d.get("taken") or 0), "photos": int(d.get("photos") or 0)}
+
+
+def probe() -> tuple:
+    """Where the next build reads from: ('digikam', its version) when sync is on and digiKam's
+    database answers, else ('mirror', the version the copy was taken from). Keeps `offline`."""
+    if sync_enabled():
+        try:
+            v = dkdb.source_version()
+            _set_online()
+            return "digikam", v
+        except SOURCE_ERRORS as e:
+            _set_offline(e)
+    m = mirror_info()
+    if not m:
+        raise Unavailable("digiKam's database cannot be read and the viewer has no copy of the library yet"
+                          + (f": {offline['error']}" if offline.get("error") and sync_enabled() else " (Sync with digiKam is off)"))
+    return "mirror", m["source"]
+
+
+def status() -> dict:
+    """For /api/status and the banner."""
+    return {"sync": sync_enabled(), "reachable": offline["since"] is None, "since": offline["since"], "error": offline["error"],
+            "source": last_source["kind"], "mirror": mirror_info()}
+
+
+# ---- the raw rows the index is built from, read from digiKam or from the mirror
+RAW_KEYS = ("roots", "albums", "tags", "tagprops", "imagetags", "regions", "comments", "copyright", "props", "images")
+IMAGE_SQL = """
+    SELECT i.id, i.album, i.name, i.fileSize, i.uniqueHash, i.modificationDate, i.category,
+           ii.rating, ii.creationDate, ii.orientation, ii.width, ii.height, ii.format,
+           m.make, m.model, m.lens, m.aperture, m.focalLength, m.focalLength35, m.exposureTime,
+           m.sensitivity, m.flash, m.whiteBalance, m.meteringMode, m.exposureProgram,
+           p.latitudeNumber, p.longitudeNumber, p.altitude, p.orientation AS gpsOrientation,
+           v.duration, v.videoCodec, v.frameRate, v.audioCompressor, v.aspectRatio
+    FROM Images i
+    LEFT JOIN ImageInformation ii ON ii.imageid = i.id
+    LEFT JOIN ImageMetadata m ON m.imageid = i.id
+    LEFT JOIN ImagePositions p ON p.imageid = i.id
+    LEFT JOIN VideoMetadata v ON v.imageid = i.id
+    WHERE i.status = 1 AND i.album IS NOT NULL AND i.category IN (1, 2)
+"""
+
+
+def read_digikam() -> dict:
+    """One consistent snapshot of the tables the index needs, straight from digiKam's database."""
+    src = dkdb.connect(write=False)
+    try:
+        src.begin_read()
+        q = src.execute
+        raw = {
+            "roots": [tuple(r) for r in q("SELECT id, label, specificPath FROM AlbumRoots")],
+            "albums": [tuple(r) for r in q("SELECT id, albumRoot, relativePath, caption FROM Albums")],
+            "tags": [tuple(r) for r in q("SELECT id, pid, name, icon FROM Tags")],
+            "tagprops": [tuple(r) for r in q("SELECT tagid, property, value FROM TagProperties")],
+            "imagetags": [tuple(r) for r in q("SELECT imageid, tagid FROM ImageTags")],
+            "regions": [tuple(r) for r in q("SELECT imageid, tagid, property, value FROM ImageTagProperties "
+                                            "WHERE property IN ('tagRegion', 'autodetectedFace', 'ignoredFace')")],
+            "comments": [tuple(r) for r in q("SELECT id, imageid, type, comment FROM ImageComments ORDER BY id")],
+            "copyright": [tuple(r) for r in q("SELECT imageid, property, value FROM ImageCopyright")],
+            "props": [tuple(r) for r in q("SELECT imageid, property, value FROM ImageProperties")],
+            "images": [tuple(r) for r in q(IMAGE_SQL).fetchall()],
+        }
+        # the version the same connection sees: a later write by digiKam must trigger another read
+        raw["source"] = dkdb.source_version()
+    finally:
+        src.rollback()
+        src.close()
+    raw["taken"] = int(time.time())
+    return raw
+
+
+_LIB_TABLES = {"roots": "lib_roots", "albums": "lib_albums", "tags": "lib_tags", "tagprops": "lib_tagprops", "imagetags": "lib_imagetags",
+               "regions": "lib_regions", "comments": "lib_comments", "copyright": "lib_copyright", "props": "lib_props", "images": "lib_images"}
+
+
+def _chunks(rows, n=1000):
+    for i in range(0, len(rows), n):
+        yield rows[i:i + n]
+
+
+def save_mirror(raw: dict):
+    """Replace the viewer's copy of the library with this read of digiKam, in one transaction."""
+    t0 = time.time()
+    with appstate._lock:
+        con = appstate.connect()
+        try:
+            for key, table in _LIB_TABLES.items():
+                cols = vdb.TABLES[table][0]
+                con.execute(f"DELETE FROM {table}")
+                sql = f"INSERT INTO {table} ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})"
+                for chunk in _chunks(raw[key]):
+                    con.executemany(sql, [tuple(r[:len(cols)]) for r in chunk])
+            con.execute("DELETE FROM lib_meta")
+            con.executemany("INSERT INTO lib_meta (key, value) VALUES (?,?)",
+                            [("source", raw["source"]), ("taken", str(raw["taken"])), ("photos", str(len(raw["images"])))])
+            con.commit()
+        except BaseException:
+            con.rollback()
+            raise
+        finally:
+            con.close()
+    log.info("library copy refreshed: %d photos in %.1fs", len(raw["images"]), time.time() - t0)
+
+
+def load_mirror() -> dict:
+    """The last read of digiKam, back in the shape read_digikam() returns."""
+    con = appstate.connect()
+    try:
+        meta = dict(con.execute("SELECT key, value FROM lib_meta").fetchall())
+        if not meta.get("source"):
+            raise Unavailable("the viewer has no copy of the library yet")
+        raw = {}
+        for key, table in _LIB_TABLES.items():
+            cols = vdb.TABLES[table][0]
+            order = " ORDER BY id" if key == "comments" else ""
+            raw[key] = [tuple(r) for r in con.execute(f"SELECT {', '.join(cols)} FROM {table}{order}").fetchall()]
+    finally:
+        con.close()
+    raw["source"], raw["taken"] = meta["source"], int(meta.get("taken") or 0)
+    return raw
+
+
+def mirror_tag_paths(image_ids: list) -> dict:
+    """{image id: [tag paths]} from the viewer's copy of the library: every assigned tag but digiKam's
+    internal ones, as edits.digikam_tag_paths() reads them from digiKam itself."""
+    ids = [int(x) for x in image_ids]
+    con = appstate.connect()
+    try:
+        tags = {r[0]: (r[1], r[2]) for r in con.execute("SELECT id, pid, name FROM lib_tags").fetchall()}
+        internal = {r[0] for r in con.execute("SELECT tagid FROM lib_tagprops WHERE property = 'internalTag'").fetchall()}
+        out = {}
+        for chunk in _chunks(ids, 500):
+            for iid, tid in con.execute(f"SELECT imageid, tagid FROM lib_imagetags WHERE imageid IN ({','.join(map(str, chunk))})").fetchall():
+                if tid in tags and tid not in internal:
+                    out.setdefault(iid, []).append(dkdb.tag_path(tags, tid))
+    finally:
+        con.close()
+    return {iid: out.get(iid, []) for iid in ids}
+
+
+# ---- photo_ids: the viewer's identity for a photo, and viewer data following a renumbered photo
+REKEY = [("favorites", "photo_id"), ("ualbum_items", "photo_id"), ("edits", "photo_id"), ("quality", "photo_id"), ("vision", "photo_id"),
+         ("objects", "photo_id"), ("objects_done", "photo_id"), ("captions", "photo_id"), ("face_vecs", "photo_id"), ("face_protos", "photo_id"),
+         ("consistency", "photo_id"), ("near_dups", "a"), ("near_dups", "b")]
+
+
+def sync_photo_ids(images: list, paths: dict) -> dict:
+    """images: the raw image rows just read from digiKam; paths: {digiKam id: full path}. Gives every
+    photo a viewer id once, and when a file (same uniqueHash and size) comes back under another digiKam
+    id, moves the viewer's rows about it to the new id. Returns {old digiKam id: new} for what moved."""
+    now = int(time.time())
+    current = {}
+    for r in images:
+        iid, name, size, uhash = r[0], r[2], r[3], r[4]
+        if uhash:
+            current[iid] = (uhash, size, paths.get(iid), name)
+    with appstate._lock:
+        con = appstate.connect()
+        try:
+            rows = con.execute("SELECT vid, dk_id, hash, size FROM photo_ids").fetchall()
+            by_key, by_dk = {}, {}
+            for vid, dk, h, sz in rows:
+                by_key.setdefault((h, sz), []).append((vid, dk))
+                if dk is not None:
+                    by_dk[dk] = (vid, h, sz)
+            inserts, updates, remap = [], [], {}
+            for dk, (h, sz, path, name) in current.items():
+                known = by_key.get((h, sz))
+                if known:
+                    vid, old = next(((v, d) for v, d in known if d == dk), known[0])
+                    if old != dk and old is not None and old not in current:
+                        remap[old] = dk  # the same file under a new number
+                    updates.append((dk, path, name, now, vid))
+                elif dk in by_dk:  # the number now stands for another file: that is a different photo
+                    inserts.append((dk, h, sz, path, name, now, now))
+                else:
+                    inserts.append((dk, h, sz, path, name, now, now))
+            if remap:
+                _rekey(con, remap)
+            # a number that now belongs to a different file is taken away from the rows that had it
+            for dk in current:
+                con.execute("UPDATE photo_ids SET dk_id = NULL WHERE dk_id = ? AND (hash, size) != (?, ?)" if not con.mysql
+                            else "UPDATE photo_ids SET dk_id = NULL WHERE dk_id = ? AND NOT (hash = ? AND size = ?)",
+                            (dk, current[dk][0], current[dk][1]))
+            con.executemany("UPDATE photo_ids SET dk_id = ?, path = ?, name = ?, last_seen = ? WHERE vid = ?", updates)
+            con.executemany("INSERT INTO photo_ids (dk_id, hash, size, path, name, first_seen, last_seen) VALUES (?,?,?,?,?,?,?)", inserts)
+            con.commit()
+        except BaseException:
+            con.rollback()
+            raise
+        finally:
+            con.close()
+    if remap:
+        log.warning("digiKam renumbered %d photos; the viewer's data about them follows: %s", len(remap),
+                    ", ".join(f"{a}->{b}" for a, b in list(remap.items())[:10]))
+        try:
+            from . import semantic
+            semantic.remap_ids(remap)
+        except Exception as e:  # the embeddings are recomputed for those photos instead
+            log.warning("content-search embeddings were not renumbered (%s); they are recomputed", e)
+    return remap
+
+
+def _rekey(con, remap: dict):
+    """Move the viewer's rows about renumbered photos to their new ids, in two passes through negative
+    ids so a swap of two numbers cannot collide. A row already under a new id that belongs to a photo
+    which is gone for good is dropped first (its photo no longer exists under any id)."""
+    targets = set(remap.values()) - set(remap)
+    for table, col in REKEY:
+        if targets:
+            con.execute(f"DELETE FROM {table} WHERE {col} IN ({','.join(map(str, targets))})")
+        con.executemany(f"UPDATE {table} SET {col} = ? WHERE {col} = ?", [(-new, old) for old, new in remap.items()])
+        con.execute(f"UPDATE {table} SET {col} = -{col} WHERE {col} < 0")
+
+
 def open_index(path: Path = config.INDEX_DB) -> sqlite3.Connection:
     """A read-only connection to the index (plain tuples; callers wanting rows set row_factory)."""
     return sqlite3.connect(f"file:{quote(str(path))}?mode=ro", uri=True)
@@ -101,130 +373,142 @@ def _camera(make, model):
     return f"{short} {model}"
 
 
-def build(dst_path: Path = config.INDEX_DB) -> dict:
-    """Read everything from digiKam's database in one snapshot, then write a fresh index
-    file and swap it in. Returns the stats also stored in the index's meta table."""
+_build_lock = threading.Lock()  # one build at a time in this process: the watcher, a request and the MCP server can all ask
+
+
+def build(dst_path: Path = config.INDEX_DB, source: tuple = None) -> dict:
+    """Read everything the index needs, from digiKam's database (and refresh the viewer's copy of it)
+    or from that copy when digiKam cannot be read, then write a fresh index file and swap it in.
+    Returns the stats also stored in the index's meta table."""
+    with _build_lock:
+        return _build(dst_path, source)
+
+
+def _build(dst_path: Path, source: tuple) -> dict:
     t0 = time.time()
-    version = expected_version()
     geo = places.geocoder()
-    src = dkdb.connect(write=False)
-    try:
-        src.begin_read()  # one consistent snapshot for all reads below
-        q = src.execute
+    kind, _ = source or probe()
+    raw = None
+    if kind == "digikam":
+        try:
+            raw = read_digikam()
+        except SOURCE_ERRORS as e:
+            _set_offline(e)
+            if not mirror_info():
+                raise Unavailable(f"digiKam's database cannot be read and the viewer has no copy of the library yet: {e}") from e
+            kind = "mirror"
+    if raw is None:
+        raw = load_mirror()
+    version = _version_for(raw["source"])
+    root_path = dkdb.resolve_root_paths([(r[0], r[2]) for r in raw["roots"]])
+    if kind == "digikam":
+        m = mirror_info()
+        if not m or m["source"] != raw["source"]:
+            save_mirror(raw)
+    last_source.update(kind=kind, version=raw["source"])
 
-        # ---- album roots and albums
-        roots = {r[0]: r[1] for r in q("SELECT id, label FROM AlbumRoots")}
-        single_root = len(roots) == 1
-        root_path = dkdb.root_paths(src)
-        albums = {}
-        for aid, root, rel, caption in q("SELECT id, albumRoot, relativePath, caption FROM Albums"):
-            if root in roots:
-                albums[aid] = {"id": aid, "root": root, "rel": rel, "caption": caption or None, "label": roots[root]}
-        by_path = {(a["root"], a["rel"]): aid for aid, a in albums.items()}
-        for a in albums.values():
-            rel = a["rel"]
-            if rel == "/":
-                a["pid"], a["name"] = None, a["label"] or "Library"
-            else:
-                parent = rel.rsplit("/", 1)[0] or "/"
-                a["pid"], a["name"] = by_path.get((a["root"], parent)), rel.rsplit("/", 1)[1]
-            a["path"] = rel if single_root else f"/{a['label']}{'' if rel == '/' else rel}"
+    # ---- album roots and albums
+    roots = {r[0]: r[1] for r in raw["roots"]}
+    single_root = len(roots) == 1
+    albums = {}
+    for aid, root, rel, caption in raw["albums"]:
+        if root in roots:
+            albums[aid] = {"id": aid, "root": root, "rel": rel, "caption": caption or None, "label": roots[root]}
+    by_path = {(a["root"], a["rel"]): aid for aid, a in albums.items()}
+    for a in albums.values():
+        rel = a["rel"]
+        if rel == "/":
+            a["pid"], a["name"] = None, a["label"] or "Library"
+        else:
+            parent = rel.rsplit("/", 1)[0] or "/"
+            a["pid"], a["name"] = by_path.get((a["root"], parent)), rel.rsplit("/", 1)[1]
+        a["path"] = rel if single_root else f"/{a['label']}{'' if rel == '/' else rel}"
+    if kind == "digikam":
+        full_paths = {r[0]: root_path[albums[r[1]]["root"]] + albums[r[1]]["rel"].rstrip("/") + "/" + r[2]
+                      for r in raw["images"] if r[1] in albums and albums[r[1]]["root"] in root_path}
+        try:
+            sync_photo_ids(raw["images"], full_paths)
+        except Exception as e:  # bookkeeping only; the index must still be built
+            log.warning("photo_ids were not updated: %s", e)
 
-        # ---- tags
-        # icon: the photo digiKam shows for the tag ("Set as Tag Thumbnail"); for people it is the face on that photo
-        tags = {tid: {"id": tid, "pid": pid, "name": name, "icon": icon} for tid, pid, name, icon in q("SELECT id, pid, name, icon FROM Tags")
-                if tid != 0}  # MySQL's "_Digikam_root_tag_" row; pid 0 means "no parent" on both backends
-        props = defaultdict(set)
-        for tid, prop in q("SELECT tagid, property FROM TagProperties"):
-            props[tid].add(prop)
+    # ---- tags
+    # icon: the photo digiKam shows for the tag ("Set as Tag Thumbnail"); for people it is the face on that photo
+    tags = {tid: {"id": tid, "pid": pid, "name": name, "icon": icon} for tid, pid, name, icon in raw["tags"]
+            if tid != 0}  # MySQL's "_Digikam_root_tag_" row; pid 0 means "no parent" on both backends
+    props = defaultdict(set)
+    for tid, prop, _ in raw["tagprops"]:
+        props[tid].add(prop)
 
-        def ancestors(tid):
-            out, seen = [], set()
-            cur = tags.get(tid, {}).get("pid")
-            while cur and cur in tags and cur not in seen:
-                seen.add(cur)
-                out.append(cur)
-                cur = tags[cur]["pid"]
-            return out
+    def ancestors(tid):
+        out, seen = [], set()
+        cur = tags.get(tid, {}).get("pid")
+        while cur and cur in tags and cur not in seen:
+            seen.add(cur)
+            out.append(cur)
+            cur = tags[cur]["pid"]
+        return out
 
-        internal_roots = {tid for tid, t in tags.items()
-                          if t["name"] == "_Digikam_Internal_Tags_" and not t["pid"]}
-        internal = {tid for tid in tags if tid in internal_roots or internal_roots & set(ancestors(tid))
-                    or "internalTag" in props[tid]}
-        special = {tid for tid in tags if props[tid] & set(SPECIAL_PERSON_PROPS)}
-        hidden = internal | special
-        for tid, t in tags.items():
-            t["anc"] = ancestors(tid)
-            t["full"] = "/".join(tags[x]["name"] for x in reversed([tid] + t["anc"]))
-            t["person"] = 1 if "person" in props[tid] and tid not in hidden else 0
+    internal_roots = {tid for tid, t in tags.items()
+                      if t["name"] == "_Digikam_Internal_Tags_" and not t["pid"]}
+    internal = {tid for tid in tags if tid in internal_roots or internal_roots & set(ancestors(tid))
+                or "internalTag" in props[tid]}
+    special = {tid for tid in tags if props[tid] & set(SPECIAL_PERSON_PROPS)}
+    hidden = internal | special
+    for tid, t in tags.items():
+        t["anc"] = ancestors(tid)
+        t["full"] = "/".join(tags[x]["name"] for x in reversed([tid] + t["anc"]))
+        t["person"] = 1 if "person" in props[tid] and tid not in hidden else 0
 
-        # ---- per-image side tables
-        img_tags, pick, color = defaultdict(list), {}, {}
-        for iid, tid in q("SELECT imageid, tagid FROM ImageTags"):
-            t = tags.get(tid)
-            if not t:
-                continue
-            if t["name"] in PICK and tid in internal:
-                pick[iid] = PICK[t["name"]]
-            elif t["name"] in COLOR and tid in internal:
-                color[iid] = COLOR[t["name"]]
-            elif tid not in hidden:
+    # ---- per-image side tables
+    img_tags, pick, color = defaultdict(list), {}, {}
+    for iid, tid in raw["imagetags"]:
+        t = tags.get(tid)
+        if not t:
+            continue
+        if t["name"] in PICK and tid in internal:
+            pick[iid] = PICK[t["name"]]
+        elif t["name"] in COLOR and tid in internal:
+            color[iid] = COLOR[t["name"]]
+        elif tid not in hidden:
+            img_tags[iid].append(tid)
+
+    faces = []
+    # every kind of face digiKam knows: confirmed regions, faces it found but could not name
+    # (on its "Unknown" tag), suggestions it is not sure about, and faces told to ignore
+    unknown_tag = next((tid for tid in special if "unknownPerson" in props[tid]), None)
+    ignored_tag = next((tid for tid in special if "ignoredPerson" in props[tid]), None)
+    for iid, tid, prop, val in raw["regions"]:
+        m = RECT_RE.search(val or "")
+        if not m or tid not in tags:
+            continue
+        rect = tuple(map(int, m.groups()))
+        if prop == "tagRegion" and tid not in hidden:
+            faces.append((iid, tid, *rect, "confirmed"))
+            if tid not in img_tags[iid]:
                 img_tags[iid].append(tid)
+            tags[tid]["person"] = 1
+        elif prop == "autodetectedFace" and tid == unknown_tag:
+            faces.append((iid, tid, *rect, "unknown"))
+        elif prop == "autodetectedFace" and tid not in hidden:
+            faces.append((iid, tid, *rect, "suggested"))
+        elif prop == "ignoredFace" and tid == ignored_tag:
+            faces.append((iid, tid, *rect, "ignored"))
 
-        faces = []
-        # every kind of face digiKam knows: confirmed regions, faces it found but could not name
-        # (on its "Unknown" tag), suggestions it is not sure about, and faces told to ignore
-        unknown_tag = next((tid for tid in special if "unknownPerson" in props[tid]), None)
-        ignored_tag = next((tid for tid in special if "ignoredPerson" in props[tid]), None)
-        for iid, tid, prop, val in q("SELECT imageid, tagid, property, value FROM ImageTagProperties "
-                                      "WHERE property IN ('tagRegion', 'autodetectedFace', 'ignoredFace')"):
-            m = RECT_RE.search(val or "")
-            if not m or tid not in tags:
-                continue
-            rect = tuple(map(int, m.groups()))
-            if prop == "tagRegion" and tid not in hidden:
-                faces.append((iid, tid, *rect, "confirmed"))
-                if tid not in img_tags[iid]:
-                    img_tags[iid].append(tid)
-                tags[tid]["person"] = 1
-            elif prop == "autodetectedFace" and tid == unknown_tag:
-                faces.append((iid, tid, *rect, "unknown"))
-            elif prop == "autodetectedFace" and tid not in hidden:
-                faces.append((iid, tid, *rect, "suggested"))
-            elif prop == "ignoredFace" and tid == ignored_tag:
-                faces.append((iid, tid, *rect, "ignored"))
+    title, caption = {}, {}
+    for _, iid, typ, text in raw["comments"]:
+        if text and text.strip():
+            (title if typ == 3 else caption).setdefault(iid, text.strip())
+    copyright_ = defaultdict(dict)
+    for iid, prop, val in raw["copyright"]:
+        if val and val.strip():
+            copyright_[iid].setdefault(prop, val.strip())
+    iprops = defaultdict(dict)
+    for iid, prop, val in raw["props"]:
+        if val and val.strip() and set(val) - set("?, "):
+            iprops[iid][prop] = val.strip()
 
-        title, caption = {}, {}
-        for iid, typ, text in q("SELECT imageid, type, comment FROM ImageComments ORDER BY id"):
-            if text and text.strip():
-                (title if typ == 3 else caption).setdefault(iid, text.strip())
-        copyright_ = defaultdict(dict)
-        for iid, prop, val in q("SELECT imageid, property, value FROM ImageCopyright"):
-            if val and val.strip():
-                copyright_[iid].setdefault(prop, val.strip())
-        iprops = defaultdict(dict)
-        for iid, prop, val in q("SELECT imageid, property, value FROM ImageProperties"):
-            if val and val.strip() and set(val) - set("?, "):
-                iprops[iid][prop] = val.strip()
-
-        # ---- photos
-        rows = q("""
-            SELECT i.id, i.album, i.name, i.fileSize, i.uniqueHash, i.modificationDate, i.category,
-                   ii.rating, ii.creationDate, ii.orientation, ii.width, ii.height, ii.format,
-                   m.make, m.model, m.lens, m.aperture, m.focalLength, m.focalLength35, m.exposureTime,
-                   m.sensitivity, m.flash, m.whiteBalance, m.meteringMode, m.exposureProgram,
-                   p.latitudeNumber, p.longitudeNumber, p.altitude, p.orientation AS gpsOrientation,
-                   v.duration, v.videoCodec, v.frameRate, v.audioCompressor, v.aspectRatio
-            FROM Images i
-            LEFT JOIN ImageInformation ii ON ii.imageid = i.id
-            LEFT JOIN ImageMetadata m ON m.imageid = i.id
-            LEFT JOIN ImagePositions p ON p.imageid = i.id
-            LEFT JOIN VideoMetadata v ON v.imageid = i.id
-            WHERE i.status = 1 AND i.album IS NOT NULL AND i.category IN (1, 2)
-        """).fetchall()
-    finally:
-        src.rollback()
-        src.close()
+    # ---- photos
+    rows = raw["images"]
 
     photos, fts_rows, photo_tag_rows = [], [], []
     # edits made in the viewer live in sidecars; show them until digiKam's database catches up
@@ -342,7 +626,7 @@ def build(dst_path: Path = config.INDEX_DB) -> dict:
 
     # ---- write the new index next to the old one, then swap
     dst_path = Path(dst_path)
-    tmp = dst_path.with_suffix(f".{os.getpid()}.tmp")  # the web app and MCP server may both rebuild
+    tmp = dst_path.with_suffix(f".{os.getpid()}-{threading.get_ident()}.tmp")  # another process (the MCP server) may build too
     for p in (tmp, Path(str(tmp) + "-journal")):
         p.unlink(missing_ok=True)
     dst = sqlite3.connect(tmp)
@@ -432,16 +716,23 @@ def _embed_signature() -> str:
         return "v0"
 
 
+def _version_for(source: str) -> str:
+    return f"{SCHEMA_VERSION}:{source}:{places.signature()}:{edits.signature()}:{analysis.signature()}:{_embed_signature()}"
+
+
 def expected_version() -> str:
-    return f"{SCHEMA_VERSION}:{source_version()}:{places.signature()}:{edits.signature()}:{analysis.signature()}:{_embed_signature()}"
+    return _version_for(probe()[1])
 
 
 def ensure_fresh() -> bool:
-    """Rebuild the index when anything it is built from changed: digiKam's database, the
-    viewer's remembered edits, analysis results, embeddings, or this schema. True if rebuilt."""
-    if current_version() == expected_version():
+    """Rebuild the index when anything it is built from changed: digiKam's database (or the
+    viewer's copy of it), the viewer's remembered edits, analysis results, embeddings, or this
+    schema. True if rebuilt."""
+    src = probe()
+    if current_version() == _version_for(src[1]):
+        last_source.update(kind=src[0], version=src[1])
         return False
-    stats = build()
+    stats = build(source=src)
     if stats["resolved_edits"]:  # digiKam now agrees with these edits; stop tracking them
         edits.resolved(stats["resolved_edits"])
     return True

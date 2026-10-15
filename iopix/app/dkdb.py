@@ -215,9 +215,19 @@ class Conn:
         self.close()
 
 
+def sync_enabled() -> bool:
+    """Settings > Sync with digiKam. Off: the viewer neither reads nor writes digiKam's database;
+    it works from its own copy of the library (index.py) and edits live in sidecars and its database."""
+    from . import state
+    return state.get_setting("digikam_sync", "1") != "0"
+
+
 def connect(write: bool = False, db_path=None) -> Conn:
     """A connection to digiKam's database. Read connections on SQLite are opened
     read-only at the file level, so a bug can never write through them."""
+    if not sync_enabled():
+        raise SyncError("Sync with digiKam is off (Settings): the viewer works from its own copy of the library "
+                        "and does not open digiKam's database.")
     if is_mysql():
         try:
             import pymysql
@@ -270,7 +280,11 @@ def root_paths(con) -> dict:
     """{album root id: local folder}. digiKam records where each album root was on its own
     machine; here it may be mounted elsewhere (Docker, another host). A saved override per
     root wins, else a single-root library sits at PHOTOS_ROOT, else digiKam's path."""
-    rows = con.execute("SELECT id, specificPath FROM AlbumRoots").fetchall()
+    return resolve_root_paths(con.execute("SELECT id, specificPath FROM AlbumRoots").fetchall())
+
+
+def resolve_root_paths(rows) -> dict:
+    """root_paths() for rows of (root id, digiKam's specificPath), from wherever they were read."""
     over = root_overrides()
     out = {}
     for rid, sp in rows:

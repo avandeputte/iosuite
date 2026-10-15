@@ -861,3 +861,25 @@ def test_logo_lines_up_with_the_side_menu(page, server):
     logo = page.locator(".brand .logo").bounding_box()
     ic = page.locator("#nav a .ic").first.bounding_box()
     assert abs((logo["x"] + logo["width"] / 2) - (ic["x"] + ic["width"] / 2)) < 1.5, (logo, ic)
+
+
+def test_digikam_offline_banner_and_sync_setting(page, server):
+    """Admins see a card when digiKam's database is unreachable (the viewer works from its copy); Settings has the
+    Sync with digiKam switch."""
+    import json as _json
+    def fake_status(route):
+        r = route.fetch()
+        body = r.json()
+        body["digikam"] = {"sync": True, "reachable": False, "since": 1760000000, "error": "gone", "source": "mirror",
+                           "mirror": {"source": "x", "taken": 1759990000, "photos": 123}}
+        route.fulfill(response=r, body=_json.dumps(body), headers={**r.headers, "content-type": "application/json"})
+    page.route("**/api/status", fake_status)
+    page.goto(server + "/#/photos")
+    page.wait_for_selector("#dkbanner", timeout=10000)
+    assert "unreachable" in page.locator("#dkbanner").inner_text()
+    page.locator("#dkbanner button[title^='Hide']").click()
+    assert page.locator("#dkbanner").count() == 0
+    page.unroute("**/api/status")
+    page.goto(server + "/#/settings")
+    page.wait_for_selector(".srow:has-text('Sync with digiKam')", timeout=10000)
+    assert page.locator(".srow", has_text="Sync with digiKam").locator("button", has_text="Turn off").count() == 1

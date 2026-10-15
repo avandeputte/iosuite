@@ -330,3 +330,26 @@ class Semantic:
 
 
 semantic = Semantic()
+
+
+def remap_ids(remap: dict):
+    """digiKam renumbered photos (index.sync_photo_ids): move their embeddings to the new ids in every
+    engine's file, so nothing is recomputed. Ids that now belong to another photo are dropped first."""
+    if not _HAVE or not remap:
+        return
+    for eng in semantic.engines.values():
+        with eng._lock:
+            if not eng.file.exists():
+                continue
+            if eng.ids is None:
+                with np.load(eng.file) as z:
+                    ids, vecs = z["ids"].astype(np.int32), z["vecs"].astype(np.float32)
+            else:
+                ids, vecs = eng.ids, eng.vecs
+            targets = np.array(sorted(set(remap.values()) - set(remap)), np.int32)
+            keep = ~np.isin(ids, targets) if len(targets) else np.ones(len(ids), bool)
+            ids, vecs = ids[keep], vecs[keep]
+            lut = {int(k): int(v) for k, v in remap.items()}
+            ids = np.array([lut.get(int(i), int(i)) for i in ids], np.int32)
+            eng.ids, eng.vecs = ids, vecs
+            eng._save()

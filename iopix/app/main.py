@@ -132,15 +132,47 @@ def _refresh(initial=False):
             _events.cache_clear()
             # background jobs restart only when the library itself changed, not each
             # time their own results are folded into the index
-            source = index.source_version()
+            source = index.last_source["version"]
             if source != state.get("source"):
                 state["source"] = source
                 _start_prewarm()
                 threading.Thread(target=_compute_tag_covers, args=(source,), daemon=True).start()
-    except DB_ERRORS as e:  # e.g. database busy, MySQL unreachable; try again later
+        _auto_apply()
+    except (*DB_ERRORS, index.Unavailable) as e:  # e.g. database busy, MySQL unreachable and no copy yet; try again later
         state["error"] = str(e)
         if initial and not config.INDEX_DB.exists():
             raise
+
+
+_auto = {"at": 0.0, "timer": None}
+
+
+def _auto_apply():
+    """Sync with digiKam on, digiKam reachable and closed, edits waiting: write them into digiKam's
+    database, what "Apply to digiKam database" does by hand. A minute after the last edit, so a run
+    of edits goes in one transaction with one backup, and at most every five minutes."""
+    if not (config.DB_WRITE and index.sync_enabled() and index.last_source["kind"] == "digikam" and not appstate.read_only()):
+        return
+    if not edits.pending_count():
+        return
+    due = max(edits.newest_pending() + 60, _auto["at"] + 300)
+    now = time.time()
+    if now < due:
+        if not _auto["timer"] or not _auto["timer"].is_alive():
+            t = threading.Timer(due - now + 1, _kick.set)
+            t.daemon = True
+            t.start()
+            _auto["timer"] = t
+        return
+    _auto["at"] = now
+    if dbsync.digikam_running():
+        return
+    try:
+        r = dbsync.apply_pending()
+        logging.getLogger("app.sync").info("edits applied to digiKam's database: %d photos, %d skipped", r.get("applied", 0), len(r.get("skipped", [])))
+        _kick.set()
+    except (dbsync.SyncError, *DB_ERRORS) as e:
+        logging.getLogger("app.sync").warning("edits were not applied to digiKam's database: %s", e)
 
 
 def _watch():
@@ -432,6 +464,7 @@ def api_status(request: Request):
             "isAdmin": users.is_admin(user), "signedIn": users.is_signed_in(user), "requireLogin": users.require_login(),
             "updateAvailable": updates.available() if users.is_admin(user) and updates.auto_check_enabled() else None,
             "readOnly": appstate.read_only(), "readOnlyLocked": config.READ_ONLY, "digikamCheck": config.DIGIKAM_CHECK,
+            "digikam": index.status(),
             "appVersion": APP_VERSION, "commit": updates.local_commit()[:7],
             "tagJobs": {**tagmanager.progress, "pending": tagmanager.pending_jobs()},
             "analysis": analysis.progress, "jobs": bgjobs.status()}
@@ -968,7 +1001,7 @@ async def api_edit_revert(request: Request):
 # --------------------------------------------------------------------------
 
 def _settings_public() -> dict:
-    return {"write_files": edits.writes_files(), "search_model": semantic.chosen(), "bg_threads": bgjobs.threads(), "read_only": appstate.read_only(), "require_login": users.require_login(), "update_check": updates.auto_check_enabled(), "update_check_locked": os.environ.get("UPDATE_CHECK", "").strip() == "0", "database": _db_settings_public(), "album_roots": dkdb.root_overrides(), "map_provider": appstate.get_setting("map_provider", "osm"), "google_maps_key_set": bool(maps.key()), "templates": json.loads(appstate.get_setting("templates", "[]"))}
+    return {"write_files": edits.writes_files(), "search_model": semantic.chosen(), "bg_threads": bgjobs.threads(), "read_only": appstate.read_only(), "require_login": users.require_login(), "update_check": updates.auto_check_enabled(), "update_check_locked": os.environ.get("UPDATE_CHECK", "").strip() == "0", "digikam_sync": index.sync_enabled(), "database": _db_settings_public(), "album_roots": dkdb.root_overrides(), "map_provider": appstate.get_setting("map_provider", "osm"), "google_maps_key_set": bool(maps.key()), "templates": json.loads(appstate.get_setting("templates", "[]"))}
 
 
 @app.get("/api/settings")
@@ -991,6 +1024,11 @@ async def api_settings(request: Request):
             threading.Thread(target=updates.check, daemon=True).start()
         else:
             updates._checked.clear()
+    if "digikam_sync" in body:  # off: the viewer works from its own copy of the library and never opens digiKam's database
+        appstate.set_setting("digikam_sync", "1" if body["digikam_sync"] else "0")
+        if body["digikam_sync"]:
+            index.offline.update(since=None, error=None)
+        _kick.set()
     if "require_login" in body:  # visitors get the sign-in screen and nothing else
         if body["require_login"] and not users.any_users():
             raise HTTPException(400, "Create an account first, or nobody could sign in")
@@ -1400,7 +1438,7 @@ def api_maintenance():
             "viewerDb": vdb.SQLITE_FILE.stat().st_size if not vdb.is_mysql() and vdb.SQLITE_FILE.exists() else 0,
             "embeddings": sum(e.file.stat().st_size for e in semantic.engines.values() if e.file.exists()),
             "free": free},
-        "writeFiles": edits.writes_files(), "readOnly": appstate.read_only(), "readOnlyLocked": config.READ_ONLY,
+        "writeFiles": edits.writes_files(), "readOnly": appstate.read_only(), "readOnlyLocked": config.READ_ONLY, "digikam": index.status(),
         "updateCheck": updates.auto_check_enabled(), "updateCheckLocked": os.environ.get("UPDATE_CHECK", "").strip() == "0", "database": _db_settings_public(), "mapProvider": appstate.get_setting("map_provider", "osm"), "googleMapsKeySet": bool(maps.key()), "searchModel": semantic.chosen(),
         "templates": json.loads(appstate.get_setting("templates", "[]")), "templateFields": list(edits.TEMPLATE_FIELDS),
         "recentTags": json.loads(appstate.get_setting("recent_tags", "[]")),

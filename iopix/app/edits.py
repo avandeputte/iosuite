@@ -110,6 +110,16 @@ def pending_count() -> int:
         con.close()
 
 
+def newest_pending() -> int:
+    """When the most recent remembered edit was made (unix time), 0 when there is none."""
+    con = appstate.connect()
+    try:
+        row = con.execute("SELECT max(ts) FROM edits").fetchone()
+        return int(row[0] or 0) if row else 0
+    finally:
+        con.close()
+
+
 def forget(photo_ids):
     """Drop remembered edits (digiKam has caught up, or they were undone)."""
     ids = [(int(i),) for i in photo_ids]
@@ -363,8 +373,15 @@ def write_args(ch: dict, tag_paths, in_file: bool) -> list:
 
 def digikam_tag_paths(image_ids: list) -> dict:
     """{image id: [tag paths]} straight from digiKam's database (read-only):
-    every assigned tag digiKam itself would write, i.e. all but its internal ones."""
-    src = dkdb.connect(write=False)
+    every assigned tag digiKam itself would write, i.e. all but its internal ones.
+    From the viewer's copy of the library when digiKam's database cannot be read."""
+    from . import index
+    if not dkdb.sync_enabled() or index.offline["since"]:
+        return index.mirror_tag_paths(image_ids)
+    try:
+        src = dkdb.connect(write=False)
+    except index.SOURCE_ERRORS:
+        return index.mirror_tag_paths(image_ids)
     try:
         tags = dkdb.tag_tree(src)
         internal = {r[0] for r in src.execute("SELECT tagid FROM TagProperties WHERE property = 'internalTag'")}
