@@ -1695,14 +1695,14 @@ async function showConsistency() {
       h('div', { class: 'chead' }, EDITING ? cb : null, h('img', { src: `/thumb/${r.id}`, loading: 'lazy', alt: '', onclick: () => openLightbox({ id: [r.id] }, 0, true) }),
         h('div', null, h('b', null, r.name), h('div', { class: 'muted', style: 'font-size:12px' }, r.path.replace(/^.*\/photos\//, ''), !r.has_sidecar ? ' · no sidecar' : '', !r.file_xmp ? (r.file_editable ? ' · no metadata in the file' : ' · file type cannot hold metadata') : ''))),
       h('table', { class: 'ctable' }, h('tr', null, h('th'), ...['db', 'sidecar', 'file'].map((s) => h('th', null, SRC_LABEL[s]))),
-        ...r.mismatch.map((f) => h('tr', null, h('td', null, FIELD_LABEL[f]), ...['db', 'sidecar', 'file'].map((s) => h('td', null, fmtv(f, r.fields[f][s], s === 'file' && !r.file_xmp && !r.file_editable)))))),
+        ...r.mismatch.map((f) => h('tr', null, h('td', null, FIELD_LABEL[f] || f), ...['db', 'sidecar', 'file'].map((s) => h('td', null, fmtv(f, r.fields[f][s], s === 'file' && !r.file_xmp && !r.file_editable)))))),
       EDITING ? h('div', { class: 'cfix' }, h('span', { class: 'muted' }, 'Fix this photo: take the values from the'),
         ...['db', 'sidecar', 'file'].filter((s) => r.mismatch.some((f) => r.fields[f][s] != null)).map((s) => h('button', { class: 'pillbtn', style: 'height:30px', onclick: () => fixOne(r, s) }, SRC_LABEL[s].toLowerCase()))) : null);
   };
   // one photo: copy the chosen source's values to the other places that can hold them
   const fixOne = async (r, src) => {
     const targets = ['db', 'sidecar', 'file'].filter((t) => t !== src && (t !== 'file' || r.file_editable));
-    if (!confirm(`Copy ${r.mismatch.map((f) => FIELD_LABEL[f].toLowerCase()).join(', ')} from the ${SRC_LABEL[src].toLowerCase()} to the ${targets.map((t) => SRC_LABEL[t].toLowerCase()).join(' and ')} for ${r.name}?` + (targets.includes('db') ? '\n\ndigiKam must be closed; its database is backed up first.' : ''))) return;
+    if (!confirm(`Copy ${r.mismatch.map((f) => (FIELD_LABEL[f] || f).toLowerCase()).join(', ')} from the ${SRC_LABEL[src].toLowerCase()} to the ${targets.map((t) => SRC_LABEL[t].toLowerCase()).join(' and ')} for ${r.name}?` + (targets.includes('db') ? '\n\ndigiKam must be closed; its database is backed up first.' : ''))) return;
     try { const res = await post('/api/consistency/sync', { ids: [r.id], source: src, targets, fields: r.mismatch }); toast(res.synced ? `Fixed ${r.name}.` : `Not fixed: ${res.skipped[0]?.reason || 'nothing to copy'}`, null, null, 8000); } catch (e) { toast(e.message, null, null, 9000); return; }
     load();
   };
@@ -1721,7 +1721,7 @@ async function showConsistency() {
         const fields = fl.map((l) => l.firstChild).filter((c) => c.checked).map((c) => c.value);
         if (!targets.length) { toast('Pick at least one target other than the source.'); return; }
         const n = selected.size;
-        if (!confirm(`Copy ${fields.map((f) => FIELD_LABEL[f].toLowerCase()).join(', ')} from the ${SRC_LABEL[src.value].toLowerCase()} to the ${targets.map((t) => SRC_LABEL[t].toLowerCase()).join(' and ')} for ${nf.format(n)} ${n === 1 ? 'photo' : 'photos'}?` +
+        if (!confirm(`Copy ${fields.map((f) => (FIELD_LABEL[f] || f).toLowerCase()).join(', ')} from the ${SRC_LABEL[src.value].toLowerCase()} to the ${targets.map((t) => SRC_LABEL[t].toLowerCase()).join(' and ')} for ${nf.format(n)} ${n === 1 ? 'photo' : 'photos'}?` +
           (targets.includes('db') ? '\n\ndigiKam must be closed; its database is backed up first.' : '') + (targets.includes('file') ? '\n\nImage files are rewritten in place (metadata only; pixels untouched); the original of each is kept in the viewer’s file-backups folder.' : '') + '\n\nSidecars are backed up before they change.')) return;
         try { const r = await post('/api/consistency/sync', { ids: [...selected], source: src.value, targets, fields }); toast(`Synced ${nf.format(r.synced)}${r.skipped.length ? `, skipped ${r.skipped.length}: ${r.skipped[0].reason}` : ''}.`, null, null, 9000); }
         catch (e) { toast(e.message, null, null, 9000); return; }
@@ -1741,7 +1741,7 @@ async function showConsistency() {
       !p.running && p.failed ? h('p', { class: 'warn' }, `${nf.format(p.failed)} photos could not be compared: ${p.error}`) : null,
       s.scanned_at ? h('div', { class: 'muted', style: 'font-size:12.5px;margin:6px 0' }, `Last checked ${fmtWhen(s.scanned_at)}.`) : null,
       s.scanned ? h('div', { class: 'stats' }, h('div', null, h('b', null, nf.format(s.scanned)), 'photos checked'), h('div', null, h('b', null, nf.format(s.mismatched)), 'disagree'),
-        h('div', null, h('b', null, nf.format(s.no_sidecar)), 'without a sidecar'), ...Object.entries(s.by_field).filter(([, n]) => n).map(([f, n]) => h('div', null, h('b', null, nf.format(n)), FIELD_LABEL[f].toLowerCase()))) : h('p', { class: 'muted' }, 'Nothing scanned yet.'),
+        h('div', null, h('b', null, nf.format(s.no_sidecar)), 'without a sidecar'), ...Object.entries(s.by_field).filter(([, n]) => n).map(([f, n]) => h('div', null, h('b', null, nf.format(n)), (FIELD_LABEL[f] || f).toLowerCase()))) : h('p', { class: 'muted' }, 'Nothing scanned yet.'),
       p.error && !p.failed ? h('p', { class: 'warn' }, 'Last error: ' + p.error) : null);
     // a scan that just finished: say so once
     if (wasRunning && !p.running) toast(p.failed ? `Check finished with errors: ${nf.format(p.failed)} photos could not be compared.` : `Check finished: ${nf.format(s.scanned)} photos compared, ${nf.format(s.mismatched)} disagree.`, null, null, 8000);

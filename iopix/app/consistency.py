@@ -20,7 +20,7 @@ import time
 
 from . import analysis, dbsync, dkdb, edits, index
 
-FIELDS = ["rating", "pick", "color", "title", "caption", "tags"]
+FIELDS = ["rating", "title", "caption", "tags"]  # what the viewer shows and edits (digiKam's pick and colour labels are not offered)
 SOURCES = ["db", "sidecar", "file"]
 log = logging.getLogger("app.consistency")
 progress = {"running": False, "done": 0, "total": 0, "mismatched": 0, "scanned_at": None, "error": None}
@@ -222,10 +222,13 @@ def summary() -> dict:
         scanned, mism, no_side, last = con.execute(
             "SELECT count(*), sum(mismatch > 0), sum(has_sidecar = 0), max(checked) FROM consistency").fetchone()
         by_field = {f: 0 for f in FIELDS}
+        mism = 0  # counted from the stored records: results from before a field was dropped may name it
         for (data,) in con.execute("SELECT data FROM consistency WHERE mismatch > 0"):
-            for f in json.loads(data)["mismatch"]:
+            fs = [f for f in json.loads(data)["mismatch"] if f in by_field]
+            for f in fs:
                 by_field[f] += 1
-        return {"scanned": scanned or 0, "mismatched": mism or 0, "no_sidecar": no_side or 0, "by_field": by_field, "scanned_at": last}
+            mism += bool(fs)
+        return {"scanned": scanned or 0, "mismatched": mism, "no_sidecar": no_side or 0, "by_field": by_field, "scanned_at": last}
     except Exception:
         return empty
     finally:
@@ -238,7 +241,13 @@ def report(field: str = None, offset: int = 0, limit: int = 100) -> dict:
         rows = con.execute("SELECT data FROM consistency WHERE mismatch > 0 ORDER BY photo_id DESC").fetchall()
     finally:
         con.close()
-    recs = [json.loads(r[0]) for r in rows]
+    recs = []
+    for (data,) in rows:
+        r = json.loads(data)
+        r["mismatch"] = [f for f in r["mismatch"] if f in FIELDS]
+        if r["mismatch"]:
+            r["fields"] = {f: v for f, v in r["fields"].items() if f in FIELDS}
+            recs.append(r)
     if field:
         recs = [r for r in recs if field in r["mismatch"]]
     return {"total": len(recs), "offset": offset, "items": recs[offset:offset + limit]}

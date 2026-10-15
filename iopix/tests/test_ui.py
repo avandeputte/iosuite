@@ -204,6 +204,7 @@ def test_read_only_hides_every_editing_control(page, server, lib):
 def test_settings_and_maintenance_pages(page, server):
     page.goto(server + "/#/settings")
     page.wait_for_selector("h1:has-text('Settings')", timeout=10000)
+    page.wait_for_selector("h2:has-text('Metadata templates')", timeout=10000)  # the sections arrive with /api/maintenance
     heads = page.locator("h2").all_inner_texts()
     for h in ("Display", "Search and background work", "Editing", "Place tags", "Metadata templates"):
         assert h in heads, heads
