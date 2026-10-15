@@ -65,28 +65,19 @@ _lock = threading.Lock()
 _settings = (-1, {})  # (rev it was read at, {key: value}); settings are read on every poll and every POST
 
 
-def connect() -> sqlite3.Connection:
-    con = sqlite3.connect(STATE_DB, timeout=10)
-    con.row_factory = sqlite3.Row
-    return con
+def connect():
+    """The viewer database, SQLite or MySQL as configured (see vdb.py); rows answer to names and indexes."""
+    from . import vdb
+    return vdb.connect(timeout=10)
 
 
 def init():
+    from . import vdb
     park = migrate_legacy()
     if park:
         import logging
         logging.getLogger("app.state").info("state.db and analysis.db were folded into viewer.db; the old files are in %s", park)
-    con = connect()
-    con.execute("PRAGMA journal_mode = WAL")  # readers never wait for the analysis jobs' writes
-    con.executescript("""
-        CREATE TABLE IF NOT EXISTS favorites (photo_id INTEGER PRIMARY KEY, hash TEXT, added INTEGER);
-        CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);
-        CREATE TABLE IF NOT EXISTS ualbums (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, created INTEGER);
-        CREATE TABLE IF NOT EXISTS ualbum_items (album_id INTEGER, photo_id INTEGER, hash TEXT, added INTEGER,
-                                                 PRIMARY KEY (album_id, photo_id));
-    """)
-    con.commit()
-    con.close()
+    vdb.init()  # the tables of every module, on whichever database is configured
 
 
 def _write(fn):
@@ -153,6 +144,9 @@ def set_album_items(album_id: int, items: list, on: bool):
 def _settings_stamp() -> tuple:
     """Changes on every write: rev for this process, the file's mtime for writes by
     another one (the MCP server shares this database)."""
+    from . import vdb
+    if vdb.is_mysql():
+        return rev, None
     try:
         return rev, STATE_DB.stat().st_mtime_ns
     except OSError:
@@ -169,7 +163,7 @@ def get_setting(key: str, default: str = "") -> str:
         con = connect()
         try:
             values = dict(con.execute("SELECT key, value FROM settings").fetchall())
-        except sqlite3.Error:
+        except Exception:
             return default
         finally:
             con.close()
@@ -183,4 +177,48 @@ def read_only() -> bool:
 
 
 def set_setting(key: str, value: str):
-    _write(lambda c: c.execute("INSERT OR REPLACE INTO settings VALUES (?,?)", (key, value)))
+    _write(lambda c: c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?,?)", (key, value)))
+
+
+# ---- what the index queries used to read through an attached copy of this database
+def favorite_ids() -> list:
+    con = connect()
+    try:
+        return [r[0] for r in con.execute("SELECT photo_id FROM favorites")]
+    finally:
+        con.close()
+
+
+def album_item_ids(album_ids: list) -> list:
+    if not album_ids:
+        return []
+    con = connect()
+    try:
+        return [r[0] for r in con.execute(f"SELECT photo_id FROM ualbum_items WHERE album_id IN ({','.join(str(int(a)) for a in album_ids)})")]
+    finally:
+        con.close()
+
+
+def albums_of(photo_id: int) -> list:
+    con = connect()
+    try:
+        return [r[0] for r in con.execute("SELECT album_id FROM ualbum_items WHERE photo_id = ?", (photo_id,))]
+    finally:
+        con.close()
+
+
+def is_favorite(photo_id: int) -> bool:
+    con = connect()
+    try:
+        return con.execute("SELECT 1 FROM favorites WHERE photo_id = ?", (photo_id,)).fetchone() is not None
+    finally:
+        con.close()
+
+
+def album_id_by_name(name_or_id) -> int:
+    con = connect()
+    try:
+        r = con.execute("SELECT id FROM ualbums WHERE lower(name) = lower(?) OR id = ?", (str(name_or_id), str(name_or_id))).fetchone()
+        return r[0] if r else None
+    finally:
+        con.close()

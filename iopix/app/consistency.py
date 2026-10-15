@@ -33,11 +33,7 @@ VALUE_KEYS = ("Rating", "PickLabel", "ColorLabel", "Title", "Description", *TAG_
 
 
 def init():
-    con = analysis.connect()
-    con.execute("CREATE TABLE IF NOT EXISTS consistency (photo_id INTEGER PRIMARY KEY, stamp TEXT, data TEXT, "
-                "mismatch INTEGER, has_sidecar INTEGER, file_xmp INTEGER, checked INTEGER)")
-    con.commit()
-    con.close()
+    pass  # the consistency table is part of the schema vdb.ensure_schema keeps (state.init)
 
 
 # --------------------------------------------------------------------------
@@ -208,7 +204,8 @@ def scan(photos: list, rescan_all: bool = True):
 
 def summary() -> dict:
     empty = {"scanned": 0, "mismatched": 0, "by_field": {}, "no_sidecar": 0, "scanned_at": None}
-    if not analysis.DB.exists():
+    from . import vdb
+    if not vdb.exists():
         return empty
     con = analysis.connect()
     try:
@@ -219,7 +216,7 @@ def summary() -> dict:
             for f in json.loads(data)["mismatch"]:
                 by_field[f] += 1
         return {"scanned": scanned or 0, "mismatched": mism or 0, "no_sidecar": no_side or 0, "by_field": by_field, "scanned_at": last}
-    except sqlite3.Error:
+    except Exception:
         return empty
     finally:
         con.close()

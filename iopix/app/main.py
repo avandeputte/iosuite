@@ -29,7 +29,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
-from . import (analysis, caption, concepts, config, consistency, dbsync, detector, dkdb, edits, facemgr, folders, gpx, index,
+from . import (analysis, caption, concepts, config, consistency, dbsync, detector, dkdb, edits, facemgr, folders, gpx, index, vdb,
                moments, places, placetags, tagmanager, thumbs)
 from . import state as appstate
 from . import jobs as bgjobs
@@ -52,8 +52,6 @@ prewarmer = thumbs.Prewarmer()
 def db() -> sqlite3.Connection:
     con = sqlite3.connect(f"file:{quote(str(config.INDEX_DB))}?mode=ro", uri=True)
     con.row_factory = sqlite3.Row
-    # favorites and app albums live in the app's own database
-    con.execute("ATTACH DATABASE ? AS st", (f"file:{quote(str(appstate.STATE_DB))}?mode=ro",))
     return con
 
 
@@ -580,7 +578,7 @@ def api_photo(photo_id: int, request: Request):
             "SELECT f.tag_id AS tag, f.kind, f.x, f.y, f.w, f.h, (SELECT name FROM tags t WHERE t.id = f.tag_id) AS name "
             "FROM faces f WHERE f.photo_id = ? AND f.kind != 'confirmed' ORDER BY f.x", (photo_id,))]
         d.pop("hash", None)
-        d["ualbums"] = [r[0] for r in con.execute("SELECT album_id FROM st.ualbum_items WHERE photo_id = ?", (photo_id,))]
+        d["ualbums"] = appstate.albums_of(photo_id)
         d["similar"] = semantic_enabled()
         d["concepts"] = concepts.for_photo(photo_id) if semantic_enabled() else []
         d["boxes"] = analysis.boxes(photo_id)
@@ -1224,6 +1222,44 @@ async def api_db_test(request: Request):
         raise HTTPException(400, f"Connection failed: {str(e)[:200]}")
 
 
+@app.get("/api/viewerdb")
+def api_viewerdb(request: Request):
+    """Where the viewer keeps its own data: SQLite (the default) or MySQL/MariaDB."""
+    if not users.is_admin(request.state.user):
+        raise HTTPException(403, "Admins only")
+    return vdb.public_settings()
+
+
+@app.post("/api/viewerdb/test")
+async def api_viewerdb_test(request: Request):
+    """Try the given viewer-database settings without saving (admin); an empty password keeps the stored one."""
+    if not users.is_admin(request.state.user):
+        raise HTTPException(403, "Admins only")
+    d = await request.json()
+    try:
+        return await run_in_threadpool(vdb.test_connection, d)
+    except Exception as e:
+        raise HTTPException(400, f"Connection failed: {str(e)[:200]}")
+
+
+@app.post("/api/viewerdb/switch")
+async def api_viewerdb_switch(request: Request):
+    """Body: the settings plus copy (default true: carry every row over) and drop (default true: drop
+    and recreate the viewer's tables at the target first). Saves the configuration and restarts the viewer."""
+    if not users.is_admin(request.state.user):
+        raise HTTPException(403, "Admins only")
+    d = await request.json()
+    try:
+        res = await run_in_threadpool(vdb.switch, d, bool(d.get("copy", True)), bool(d.get("drop", True)))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(400, f"Switch failed, nothing was saved: {str(e)[:300]}")
+    if not d.get("no_restart"):
+        threading.Timer(1.0, lambda: os._exit(0)).start()  # the service manager starts the viewer again on the new database
+    return {**res, "restarting": not d.get("no_restart")}
+
+
 @app.get("/api/maps")
 def api_maps(request: Request):
     """Tile provider for the browser: OpenStreetMap, or Google Maps with the owner's key (session created here)."""
@@ -1323,7 +1359,7 @@ def api_maintenance():
             ("thumbnails", "cache/t"), ("previews", "cache/p"), ("faces", "cache/f"), ("models", "models"),
             ("backups", "sidecar-backups"), ("fileBackups", "file-backups"), ("dbBackups", "db-backups"))} | {
             "index": config.INDEX_DB.stat().st_size if config.INDEX_DB.exists() else 0,
-            "viewerDb": appstate.STATE_DB.stat().st_size if appstate.STATE_DB.exists() else 0,
+            "viewerDb": appstate.STATE_DB.stat().st_size if not vdb.is_mysql() and appstate.STATE_DB.exists() else 0,
             "embeddings": sum(e.file.stat().st_size for e in semantic.engines.values() if e.file.exists()),
             "free": free},
         "writeFiles": edits.writes_files(), "readOnly": appstate.read_only(), "readOnlyLocked": config.READ_ONLY, "database": _db_settings_public(), "mapProvider": appstate.get_setting("map_provider", "osm"), "googleMapsKeySet": bool(maps.key()), "searchModel": semantic.chosen(),
@@ -1678,7 +1714,7 @@ def api_backup(which: str, request: Request):
         tmp.mkdir(exist_ok=True)
         try:
             with zipfile.ZipFile(dst, "w", zipfile.ZIP_DEFLATED) as z:
-                snapshot(appstate.STATE_DB, tmp / "viewer.db")
+                vdb.snapshot_sqlite(tmp / "viewer.db")  # a SQLite copy even when the viewer runs on MySQL
                 z.write(tmp / "viewer.db", "viewer.db")
                 for f in sorted(config.DATA_DIR.glob("embeddings*.npz")) + sorted(config.DATA_DIR.glob("embeddings*.npz.complete")):
                     z.write(f, f.name)

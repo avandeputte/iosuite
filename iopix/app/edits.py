@@ -64,15 +64,13 @@ def available() -> bool:
 
 
 def init():
-    con = appstate.connect()
-    con.execute("CREATE TABLE IF NOT EXISTS edits (photo_id INTEGER PRIMARY KEY, data TEXT, ts INTEGER)")
-    con.commit()
-    con.close()
+    pass  # the edits table is part of the schema vdb.ensure_schema keeps (state.init)
 
 
 def signature() -> str:
     """Changes whenever the set of remembered edits changes (part of the index version)."""
-    if not appstate.STATE_DB.exists():
+    from . import vdb
+    if not vdb.exists():
         return "e0"
     con = appstate.connect()
     try:
@@ -86,7 +84,8 @@ def signature() -> str:
 
 def pending() -> dict:
     """photo_id -> remembered edit."""
-    if not appstate.STATE_DB.exists():
+    from . import vdb
+    if not vdb.exists():
         return {}
     con = appstate.connect()
     try:

@@ -94,3 +94,13 @@ def _no_users_by_default():
     state.init(); users.init()
     con = state.connect(); con.execute("DELETE FROM users"); con.commit(); con.close()
     yield
+
+
+@pytest.fixture
+def fresh_users(client):
+    """No accounts before and after (so the viewer is in open mode for the test)."""
+    from app import state
+    def clear():
+        con = state.connect(); con.execute("DELETE FROM users"); con.commit(); con.close()
+        client.cookies.clear()
+    clear(); yield; clear()

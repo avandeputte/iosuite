@@ -30,20 +30,7 @@ _secret = None
 
 
 def init():
-    con = state.connect()
-    try:
-        con.executescript("""
-            CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL COLLATE NOCASE,
-                hash TEXT NOT NULL, role TEXT NOT NULL, settings TEXT NOT NULL DEFAULT '{}', created INTEGER, last_login INTEGER);
-        """)
-        cols = [r[1] for r in con.execute("PRAGMA table_info(users)")]
-        if "person" not in cols:
-            con.execute("ALTER TABLE users ADD COLUMN person INTEGER")  # the digiKam person tag this account is
-        if "email" not in cols:
-            con.execute("ALTER TABLE users ADD COLUMN email TEXT")  # optional; the identity a proxy could pass later
-        con.commit()
-    finally:
-        con.close()
+    # the users table (and its person / email columns) is part of the schema vdb.ensure_schema keeps; state.init ran it
     name, pw = os.environ.get("ADMIN_USER", "").strip(), os.environ.get("ADMIN_PASSWORD", "")
     if name and pw and not any_users():
         create(name, pw, "admin")
@@ -154,7 +141,7 @@ def create(name: str, password: str, role: str, email: str = "") -> dict:
         raise ValueError("The password needs at least 8 characters")
     con = state.connect()
     try:
-        if con.execute("SELECT 1 FROM users WHERE name = ?", (name,)).fetchone():
+        if con.execute("SELECT 1 FROM users WHERE lower(name) = lower(?)", (name,)).fetchone():
             raise ValueError("That user name is taken")
         if email and con.execute("SELECT 1 FROM users WHERE email = ?", (email,)).fetchone():
             raise ValueError("Another account already has that email address")

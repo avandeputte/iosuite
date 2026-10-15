@@ -53,7 +53,6 @@ def db() -> sqlite3.Connection:
         _state_ready = True
     con = sqlite3.connect(f"file:{quote(str(config.INDEX_DB))}?mode=ro", uri=True)
     con.row_factory = sqlite3.Row
-    con.execute("ATTACH DATABASE ? AS st", (f"file:{quote(str(appstate.STATE_DB))}?mode=ro",))
     return con
 
 
@@ -137,10 +136,10 @@ def _items(con, f: dict) -> list:
     if f.get("favorites_only"):
         add("fav", 1)
     if f.get("app_album"):
-        row = con.execute("SELECT id FROM st.ualbums WHERE name = ? COLLATE NOCASE OR id = ?",
-                          (f["app_album"], f["app_album"])).fetchone()
-        if not row:
+        aid = appstate.album_id_by_name(f["app_album"])
+        if aid is None:
             raise ToolError(f"No app album named '{f['app_album']}'. Use list_app_albums.")
+        row = (aid,)
         add("ualbum", row[0])
     return items
 
@@ -310,7 +309,7 @@ def get_photo(photo_id: int) -> dict:
             raise ToolError(f"No item with id {photo_id}")
         d = dict(r)
         extra = json.loads(d.pop("extra") or "{}")
-        d["favorite"] = bool(con.execute("SELECT 1 FROM st.favorites WHERE photo_id = ?", (photo_id,)).fetchone())
+        d["favorite"] = appstate.is_favorite(photo_id)
         for k in ("hash", "ts", "mts", "md", "day", "ntags", "album_id"):
             d.pop(k, None)
         d["width"], d["height"] = d.pop("w"), d.pop("h")
@@ -381,9 +380,8 @@ def list_places(query: str = "", limit: int = 200) -> list[dict]:
 @server.tool(annotations=READ_ONLY)
 def list_app_albums() -> list[dict]:
     """Albums made in the web viewer: groupings that exist only there, separate from digiKam's folders; plus the favorites count."""
-    out = _list("SELECT a.id, a.name, count(i.photo_id) AS items FROM st.ualbums a "
-                "LEFT JOIN st.ualbum_items i ON i.album_id = a.id GROUP BY a.id ORDER BY a.created DESC")
-    return out + _list("SELECT 'favorites' AS name, count(*) AS items FROM st.favorites")
+    s = appstate.summary()
+    return [{"id": a["id"], "name": a["name"], "items": a["n"]} for a in s["albums"]] + [{"name": "favorites", "items": len(s["favorites"])}]
 
 
 @server.tool(annotations=READ_ONLY)

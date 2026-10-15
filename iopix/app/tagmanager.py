@@ -33,20 +33,14 @@ _worker_lock = threading.Lock()
 
 
 def init():
-    con = appstate.connect()
-    cols = [r[1] for r in con.execute("PRAGMA table_info(tagjobs)")]
-    if cols and "image_id" not in cols:  # an early schema without the image id; its rows cannot be replayed
-        con.execute("DROP TABLE tagjobs")
-    con.execute("CREATE TABLE IF NOT EXISTS tagjobs (id INTEGER PRIMARY KEY AUTOINCREMENT, op TEXT, path TEXT, image_id INTEGER)")
-    con.commit()
-    con.close()
+    pass  # the tagjobs table (and the drop of the early schema) is part of vdb.ensure_schema (state.init)
 
 
 def pending_jobs() -> int:
     con = appstate.connect()
     try:
         return con.execute("SELECT count(*) FROM tagjobs").fetchone()[0]
-    except sqlite3.Error:
+    except Exception:
         return 0
     finally:
         con.close()

@@ -60,11 +60,13 @@ def build_where(items) -> tuple[str, list]:
     ids = _ints(multi.get("ids", []))
     if "ids" in multi:  # an explicit selection (ints only, so safe to inline)
         where.append(f"id IN ({','.join(map(str, ids[:50000])) or 'NULL'})")
-    if one("fav") == "1":  # st.* is the app's own state database, attached by the caller
-        where.append("id IN (SELECT photo_id FROM st.favorites)")
+    if one("fav") == "1":  # favorites and the viewer's albums live in the viewer database (SQLite or MySQL): inlined as ids
+        from . import state
+        where.append(f"id IN ({','.join(map(str, state.favorite_ids()[:50000])) or 'NULL'})")
     ualbums = _ints(multi.get("ualbum", []))
     if ualbums:
-        where.append(f"id IN (SELECT photo_id FROM st.ualbum_items WHERE album_id IN ({','.join(map(str, ualbums))}))")
+        from . import state
+        where.append(f"id IN ({','.join(map(str, state.album_item_ids(ualbums)[:50000])) or 'NULL'})")
     if one("blurry") == "1":   # the least sharp tenth of the library
         where.append("sharpn < 0.1")
     if one("sharpest") == "1":

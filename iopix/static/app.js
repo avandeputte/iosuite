@@ -1876,6 +1876,35 @@ async function settingsPage(view) {
       draw();
       return row('Album roots', `Where each album root digiKam knows is mounted here. Leave a field empty to use the default (PHOTOS_ROOT for a single-root library, else the path digiKam recorded); enter a path when the folder is mounted elsewhere, e.g. /photos in a container. Changing it rebuilds the index.`, body);
     })() : null,
+    IS_ADMIN ? (() => {  // the viewer's own database: SQLite file (default) or MySQL/MariaDB, with a one-time copy of the data
+      const body = h('div', { class: 'muted', style: 'font-size:13px' }, 'Loading…');
+      const wrap = row('Viewer database', 'Where the viewer keeps its own data: users, albums, favorites, settings, pending edits and the AI results. SQLite in the data folder by default, or a MySQL/MariaDB database of its own (not digiKam’s). Switching copies every row across and restarts the viewer; the configuration is kept in data/viewer-db.json, outside the database.', body);
+      (async () => {
+        let d; try { d = await api('/api/viewerdb'); } catch (e) { fill(body, e.message); return; }
+        const inp = (k, ph, type = 'text', w = 160) => h('input', { class: 'einput', type, placeholder: ph, value: type === 'password' ? '' : (d[k] ?? ''), autocomplete: 'off', style: `margin:0;width:${w}px`, onkeydown: (e) => e.stopPropagation() });
+        const type = h('select', null, h('option', { value: 'sqlite', selected: d.type !== 'mysql' }, 'SQLite file (viewer.db in the data folder)'), h('option', { value: 'mysql', selected: d.type === 'mysql' }, 'MySQL / MariaDB'));
+        const f = { host: inp('host', 'host'), port: inp('port', 'port', 'text', 70), database: inp('database', 'database'), user: inp('user', 'user'), password: inp('password', d.password_set ? 'password (stored; leave empty to keep)' : 'password', 'password', 220) };
+        const my = h('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;margin-top:6px' }, f.host, f.port, f.database, f.user, f.password);
+        const copy = h('input', { type: 'checkbox', checked: true }), drop = h('input', { type: 'checkbox', checked: true });
+        const opts = h('div', { style: 'display:grid;gap:4px;margin-top:8px;font-size:13px' },
+          h('label', { style: 'display:flex;gap:6px;align-items:center;cursor:pointer' }, copy, 'Copy all the data from the current database to the new one'),
+          h('label', { style: 'display:flex;gap:6px;align-items:center;cursor:pointer' }, drop, 'Drop and recreate the viewer’s tables at the target first (a clean slate; anything already there is lost)'));
+        const show = () => { my.hidden = type.value !== 'mysql'; }; type.onchange = show; show();
+        const payload = () => ({ type: type.value, host: f.host.value, port: f.port.value, database: f.database.value, user: f.user.value, password: f.password.value });
+        const result = h('div', { class: 'muted', style: 'font-size:12.5px;margin-top:6px' });
+        fill(body, h('div', null, `Currently: ${d.type === 'mysql' ? `MySQL ${d.user}@${d.host}:${d.port}/${d.database}` : `SQLite file ${d.sqlite_file}`}`, d.error ? h('span', { class: 'warn' }, ` · the configured MySQL database could not be used (${d.error}); the SQLite file is in use meanwhile`) : null),
+          h('div', { style: 'margin-top:8px' }, type), my, opts,
+          h('div', { style: 'display:flex;gap:6px;margin-top:8px' },
+            btn('Test connection', async () => { fill(result, 'Testing…'); try { const r = await post('/api/viewerdb/test', payload()); const t = Object.entries(r.tables); fill(result, `OK: ${r.version}. ${t.length ? 'Viewer tables already there: ' + t.map(([k, n]) => `${k} (${nf.format(n)})`).join(', ') : 'No viewer tables there yet.'}`); } catch (e) { fill(result, e.message); } }),
+            btn('Switch', async () => {
+              const p = payload();
+              if (!confirm(`Switch the viewer to ${p.type === 'mysql' ? `MySQL ${p.user}@${p.host}:${p.port}/${p.database}` : 'the SQLite file'}?` + (copy.checked ? '\n\nEvery row is copied there first' + (drop.checked ? ', after dropping and recreating the viewer’s tables at the target.' : ' (existing rows with the same ids are replaced).') : '\n\nThe data is NOT copied; the viewer starts empty there unless the tables already hold data.') + '\n\nThe viewer restarts when the copy is done; the page reloads by itself.')) return;
+              fill(result, 'Copying… this can take a minute on a large library.');
+              try { const r = await post('/api/viewerdb/switch', { ...p, copy: copy.checked, drop: drop.checked }); fill(result, `Switched to ${r.database}: ` + Object.entries(r.copied).map(([k, n]) => `${k} ${nf.format(n)}`).join(', ') + '. Restarting…'); setTimeout(() => location.reload(), 6000); } catch (e) { fill(result, e.message); }
+            }, true)), result);
+      })();
+      return wrap;
+    })() : null,
     IS_ADMIN ? row('Read-only mode', m.readOnlyLocked ? 'Locked on by READ_ONLY=1 in the environment: nothing in the library can be changed from the viewer.'
       : `${m.readOnly ? 'On' : 'Off'}. When on, the viewer only browses: editing, tagging, face naming, place tags, GPS tracks, metadata sync and database updates are switched off and refused by the server. Favorites and viewer albums keep working; they never touch the library.`,
       m.readOnlyLocked ? null : btn(m.readOnly ? 'Turn off' : 'Turn on', async () => { try { await post('/api/settings', { read_only: !m.readOnly }); const s = await api('/api/status'); EDITING = s.editing; CAN_MANAGE = s.editing && s.dbWrite; } catch (e) { toast(e.message); } settingsPage(view); })) : null,

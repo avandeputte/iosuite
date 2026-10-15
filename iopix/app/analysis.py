@@ -42,10 +42,9 @@ _ocr = None  # the OCR engine once loaded, False when none could be loaded
 on_progress = None  # set by the web app: called now and then so the index picks up new results
 
 
-def connect() -> sqlite3.Connection:
-    con = sqlite3.connect(DB, timeout=30)
-    con.row_factory = sqlite3.Row
-    return con
+def connect():
+    from . import vdb
+    return vdb.connect(timeout=30)
 
 
 @contextmanager
@@ -61,29 +60,19 @@ def _writer():
 
 
 def init():
-    con = connect()
-    con.executescript("""
-        CREATE TABLE IF NOT EXISTS quality (photo_id INTEGER PRIMARY KEY, stamp TEXT, sharp REAL, bright REAL,
-                                            clip_lo REAL, clip_hi REAL);
-        CREATE TABLE IF NOT EXISTS vision (photo_id INTEGER PRIMARY KEY, stamp TEXT, text TEXT, nfaces INTEGER, faceq REAL);
-        CREATE TABLE IF NOT EXISTS objects (photo_id INTEGER, cls TEXT, score REAL, x REAL, y REAL, w REAL, h REAL);
-        CREATE INDEX IF NOT EXISTS objects_photo ON objects (photo_id);
-        CREATE TABLE IF NOT EXISTS objects_done (photo_id INTEGER PRIMARY KEY, stamp TEXT);
-        CREATE TABLE IF NOT EXISTS captions (photo_id INTEGER PRIMARY KEY, stamp TEXT, text TEXT);
-    """)
-    con.commit()
-    con.close()
+    pass  # the analysis tables are part of the schema vdb.ensure_schema keeps (state.init)
 
 
 def _counts() -> dict:
     """{job: photos analysed so far}, or None when the database is missing or unreadable."""
-    if not DB.exists():
+    from . import vdb
+    if not vdb.exists():
         return None
     con = connect()
     try:
         return {key: con.execute(f"SELECT count(*) FROM {t}").fetchone()[0]
                 for key, t in zip(JOBS, ("quality", "vision", "objects_done", "captions"))}
-    except sqlite3.Error:
+    except Exception:
         return None
     finally:
         con.close()
@@ -398,7 +387,8 @@ def start(photos: list):
 
 def results() -> dict:
     """{photo_id: {...}} for the index build."""
-    if not DB.exists():
+    from . import vdb
+    if not vdb.exists():
         return {}
     con = connect()
     out = {}
@@ -416,7 +406,7 @@ def results() -> dict:
             d.setdefault("objects", {})[cls] = n
             if cls == "person":
                 d["npeople"] = n
-    except sqlite3.Error as e:
+    except Exception as e:
         log.warning("analysis: results unreadable (%s)", e)
     finally:
         con.close()
@@ -425,13 +415,14 @@ def results() -> dict:
 
 def boxes(photo_id: int) -> list:
     """Detected objects of one photo for the info panel: [{cls, score, x, y, w, h}], best first."""
-    if not DB.exists():
+    from . import vdb
+    if not vdb.exists():
         return []
     con = connect()
     try:
         return [dict(r) for r in con.execute(
             "SELECT cls, round(score, 2) AS score, x, y, w, h FROM objects WHERE photo_id = ? ORDER BY score DESC", (photo_id,))]
-    except sqlite3.Error:
+    except Exception:
         return []
     finally:
         con.close()
