@@ -8,7 +8,10 @@ whether they are current.
 import logging
 import threading
 
-import numpy as np
+try:
+    import numpy as np
+except ImportError:  # numpy comes with the search/objects extras; without it these features are simply off
+    np = None
 
 from . import index, jobs, state, vdb
 from .semantic import semantic
@@ -31,6 +34,8 @@ def status() -> dict:
 
 
 def _enabled() -> bool:
+    if np is None:
+        return False
     from .semantic import enabled
     return enabled()
 

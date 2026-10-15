@@ -12,7 +12,10 @@ for undecided faces, face_protos for the named prototypes) and are pruned as fac
 import logging
 import threading
 
-import numpy as np
+try:
+    import numpy as np
+except ImportError:  # numpy comes with the search/objects extras; without it these features are simply off
+    np = None
 
 from . import config, index, jobs, thumbs, vdb
 
@@ -39,7 +42,7 @@ def download():
 
 
 def available() -> bool:
-    if not MODEL.exists():
+    if np is None or not MODEL.exists():
         return False
     try:
         import onnxruntime
@@ -65,7 +68,7 @@ def reset_session():
         _session = None
 
 
-def embed_paths(paths: list) -> np.ndarray:
+def embed_paths(paths: list):
     """Unit vectors (128-d) for face crop files; SFace takes 112x112 BGR, pixel values as they are."""
     from PIL import Image
     s = _sess()
