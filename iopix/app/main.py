@@ -241,11 +241,11 @@ async def lifespan(_app):
 app = FastAPI(title="iopix", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 # every endpoint that changes the library (sidecars, files, digiKam's database); refused in read-only mode
-WRITE_PATHS = ("/api/edit", "/api/edits/db", "/api/faces/detect", "/api/photos/delete", "/api/history", "/api/library/merge", "/api/consistency/sync", "/api/gpx/apply", "/api/faces/op", "/api/faces/batch", "/api/folders",
+WRITE_PATHS = ("/api/edit", "/api/edits/db", "/api/faces/detect", "/api/photos/delete", "/api/history", "/api/library/merge", "/api/location/landmark", "/api/gpx/preview", "/api/consistency/sync", "/api/gpx/apply", "/api/faces/op", "/api/faces/batch", "/api/folders",
                "/api/faces/person", "/api/placetags", "/api/tags/op")
 
 
-ADMIN_PATHS = ("/api/settings", "/api/maintenance", "/api/log", "/api/library/merge", "/api/analysis/run", "/api/models/check", "/api/models/download", "/api/restart", "/api/users", "/api/update", "/api/neardups")
+ADMIN_PATHS = ("/api/settings", "/api/maintenance", "/api/log", "/api/library/merge", "/api/consistency/scan", "/api/analysis/run", "/api/models/check", "/api/models/download", "/api/restart", "/api/users", "/api/update", "/api/neardups")
 SIGNED_IN_PATHS = ("/api/favorites", "/api/ualbums", "/api/searches", "/api/tags/recent", "/api/auth/settings", "/api/auth/password")
 
 
@@ -1654,10 +1654,11 @@ async def api_photos_delete(request: Request):
         photos = []
         for i in range(0, len(ids), 500):
             chunk = ",".join(map(str, ids[i:i + 500]))
+            tags = {}
+            for pid, full in con.execute(f"SELECT pt.photo_id, t.full FROM photo_tags pt JOIN tags t ON t.id = pt.tag_id WHERE pt.photo_id IN ({chunk})"):
+                tags.setdefault(pid, []).append(full)
             for r in con.execute(f"SELECT id, path, name, hash, size, taken, rating, title, caption FROM photos WHERE id IN ({chunk})"):
-                d = dict(r)
-                d["tags"] = [t[0] for t in con.execute("SELECT t.full FROM photo_tags pt JOIN tags t ON t.id = pt.tag_id WHERE pt.photo_id = ?", (r["id"],))]
-                photos.append(d)
+                photos.append({**dict(r), "tags": tags.get(r["id"], [])})
     finally:
         con.close()
     try:

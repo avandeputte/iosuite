@@ -1,19 +1,15 @@
-"""Builds the app's own search index from the digiKam database, or from the viewer's
-copy of it.
+"""Builds the app's own search index from the library tables (library.py).
 
-The digiKam database is opened read-only (see dkdb) and read inside a single
-transaction; nothing is ever written to it. What that read returns, the raw rows of
-the tables the index needs, is copied into the viewer's own database (the "library
-mirror", lib_* tables in vdb.py) whenever digiKam's database changed. When digiKam's
-database is unreachable, or "Sync with digiKam" is off, the index is built from the
-mirror instead, with the same code, so the viewer keeps working on its own. The
-mirror also feeds photo_ids, the viewer's stable identity for a photo (digiKam's
-uniqueHash and size), through which favorites, albums, edits and analysis results
-follow a photo if digiKam ever renumbers it.
+The library tables in the viewer's database carry digiKam's columns. While Sync with digiKam is on
+they are copied from digiKam's database whenever it changed (refresh_library); with sync off, or
+when digiKam's database is unreachable, they are what the viewer has, and the index is built from
+them either way, with one code path. The build also keeps photo_identity, the viewer's stable
+identity for a photo (digiKam's uniqueHash and size), through which favorites, albums, edits and
+analysis results follow a photo if digiKam ever renumbers it.
 
-The result is a small denormalised SQLite file with a full-text table, stored in the
-app's data folder and swapped in atomically. Bump SCHEMA_VERSION whenever the tables,
-indexes or the meaning of a column change, so running viewers rebuild.
+The result is a small denormalised SQLite file with a full-text table, stored in the app's data
+folder and swapped in atomically. Bump SCHEMA_VERSION whenever the tables, indexes or the meaning
+of a column change, so running viewers rebuild.
 """
 import calendar
 import json
