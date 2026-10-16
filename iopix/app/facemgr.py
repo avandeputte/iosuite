@@ -333,7 +333,7 @@ def _region_args(src, image: int, roots: dict, tags: dict, persons: set):
     return path, args
 
 
-def write_regions_many(images: list, db_path=None, files: bool = None) -> dict:
+def write_regions_many(images: list, db_path=None, files: bool = None, sidecars: bool = True) -> dict:
     """Rewrite the face regions of these photos' sidecars (and image files when `files`, by default the "write
     into files" setting) from the database, in one exiftool run. Returns {image: written|failed|why}."""
     db_path = Path(db_path or dkdb.sqlite_path())
@@ -351,11 +351,15 @@ def write_regions_many(images: list, db_path=None, files: bool = None) -> dict:
         if path is None:
             out[image] = args
             continue
-        paths[image] = path
-        side = edits._prepare(path)
-        jobs.append((side, args)); owner[side] = image
+        if sidecars:
+            side = edits._prepare(path)
+            jobs.append((side, args)); owner[side] = image
         if files and edits.can_write_file(path):
             jobs.append((path, args)); owner[path] = image
+        elif not sidecars:
+            out[image] = "not a file the viewer writes into"
+            continue
+        paths[image] = path
     failed = {owner[t] for t in edits.run_exiftool(jobs)} if jobs else set()
     for image in paths:
         out[image] = "failed" if image in failed else "written"

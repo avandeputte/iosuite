@@ -598,18 +598,19 @@ def face_quality(token: str) -> dict:
 
 
 @server.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=True, openWorldHint=False))
-def face_cleanup(token: str) -> dict:
+def face_cleanup(token: str, files: bool = False) -> dict:
     """Remove the near-duplicate face regions, exactly as Maintenance > Face quality > Remove duplicates: one region
     of each group is kept, digiKam's database is backed up first, those photos' sidecars are rewritten (not the
-    image files) and each photo gets a change-log entry. Runs in the background; face_quality shows progress.
-    Needs the admin token."""
+    image files) and each photo gets a change-log entry. files=True, once that has finished: the image files of
+    the cleaned photos that still carry the duplicates are rewritten too (each backed up first, pixels checked
+    unchanged). Runs in the background; face_quality shows progress. Needs the admin token."""
     _need_token(token)
     from . import config, dbsync, facequality
     from . import state as appstate
     if not config.DB_WRITE or appstate.read_only():
         raise ToolError("Writing to digiKam's database is turned off")
     try:
-        return {"photos": facequality.fix_near_duplicates()}
+        return {"photos": facequality.fix_files() if files else facequality.fix_near_duplicates()}
     except dbsync.SyncError as e:
         raise ToolError(str(e))
 

@@ -442,28 +442,40 @@ def file_stamp(path: str):
 
 
 def stamp_files(items: list):
-    """items: [(digiKam image id, path)] whose file or sidecar the viewer just rewrote with what digiKam's
-    database already holds. digiKam rescans a file when its time or size no longer matches Images
-    (modificationDate, fileSize), and the rescan re-reads face regions, tags and captions from the file into
-    the database; a region read back one pixel off is added next to the existing one. So, as digiKam does
-    after writing metadata itself, the row takes the file's new time and size. Albums.modificationDate is left
-    alone: digiKam then still looks into the folder, and finds these files unchanged and any other file that is."""
+    """items: [(digiKam image id, path)] whose sidecar the viewer just rewrote with what digiKam's database already
+    holds. digiKam rescans a file when its time or size no longer matches Images (modificationDate, fileSize),
+    and the rescan re-reads face regions, tags and captions into the database; a region read back one pixel off
+    used to be added next to the existing one. So, as digiKam does after writing metadata itself, the row takes
+    the new time (the later of file and sidecar).
+    Only when the image file itself is unchanged: digiKam's uniqueHash covers the file's Exif, first 8 KB and
+    size (DImg::createUniqueHash), so a file rewritten in place needs digiKam's own rescan, which recomputes the
+    hash and reads back what the viewer wrote; that photo is left to it. Albums.modificationDate is left alone:
+    digiKam still looks into the folder, and finds these files unchanged and any other file that is."""
     if not items or standalone():
         return 0
     rows = []
-    for iid, path in items:
-        st = file_stamp(path)
-        if st:
-            rows.append((st[0], st[1], int(iid)))
-    if not rows:
-        return 0
     try:
         con = connect(write=True)
         try:
-            con.begin_write()
-            con.executemany("UPDATE Images SET modificationDate = ?, fileSize = ? WHERE id = ?", rows)
-            con.commit()
-            note_own_write()
+            ids = ",".join(str(int(i)) for i, _p in items)
+            known = {r[0]: (r[1], r[2]) for r in con.execute(f"SELECT id, modificationDate, fileSize FROM Images WHERE id IN ({ids})").fetchall()}
+            for iid, path in items:
+                st, was = file_stamp(path), known.get(int(iid))
+                if not st or not was:
+                    continue
+                try:
+                    recorded = _dt.datetime.fromisoformat(str(was[0])[:23]).timestamp() if was[0] else 0
+                    own = os.stat(path).st_mtime
+                except (OSError, ValueError):
+                    continue
+                if st[1] != was[1] or own > recorded + 2:
+                    continue  # the image file itself was rewritten: digiKam's rescan takes care of it (new hash)
+                rows.append((st[0], int(iid)))
+            if rows:
+                con.begin_write()
+                con.executemany("UPDATE Images SET modificationDate = ? WHERE id = ?", rows)
+                con.commit()
+                note_own_write()
         except BaseException:
             con.rollback()
             raise

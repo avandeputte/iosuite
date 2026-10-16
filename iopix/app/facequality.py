@@ -17,6 +17,7 @@ Reported, not changed: the same person in two clearly separate places on one pho
 and rectangles that are empty or fall outside the image.
 """
 import logging
+import os
 import threading
 import time
 from pathlib import Path
@@ -26,7 +27,8 @@ from . import dbsync, dkdb, index
 log = logging.getLogger("app.facequality")
 NEAR = 3          # pixels: regions of one person this close on every coordinate are the same face
 MARGIN = 5        # pixels a rectangle may stick out of the image before it counts as outside
-progress = {"running": False, "done": 0, "total": 0, "removed": 0, "photos": 0, "errors": 0, "started": None, "finished": None, "error": None, "backup": None}
+FILE_DONE = "Duplicate face regions removed from the image file"
+progress = {"running": False, "files": False, "done": 0, "total": 0, "removed": 0, "photos": 0, "errors": 0, "started": None, "finished": None, "error": None, "backup": None}
 _lock = threading.Lock()
 
 
@@ -98,6 +100,111 @@ def summary(s: dict = None, limit: int = 120) -> dict:
             "progress": dict(progress)}
 
 
+def _file_regions(paths: list) -> dict:
+    """{path: (mwg regions [(name, x, y, w, h) in pixels], mp regions [(name, x, y, w, h) as fractions])} embedded in
+    the image files themselves (not their sidecars)."""
+    import json
+    import subprocess
+    from . import edits
+    out = {}
+    if not paths:
+        return out
+    res = subprocess.run([edits.EXIFTOOL, "-j", "-struct", "-charset", "filename=UTF8", "-XMP-mwg-rs:RegionInfo", "-XMP-MP:RegionInfoMP", *paths],
+                         capture_output=True, text=True, timeout=600)
+    try:
+        items = json.loads(res.stdout or "[]")
+    except ValueError:
+        return out
+    for it in items:
+        mwg, mp = [], []
+        info = it.get("RegionInfo") or {}
+        dim = info.get("AppliedToDimensions") or {}
+        W, H = float(dim.get("W") or 0), float(dim.get("H") or 0)
+        for r in info.get("RegionList") or []:
+            a = r.get("Area") or {}
+            try:
+                w, h = float(a["W"]) * W, float(a["H"]) * H
+                mwg.append((r.get("Name") or "", float(a["X"]) * W - w / 2, float(a["Y"]) * H - h / 2, w, h))
+            except (KeyError, TypeError, ValueError):
+                pass
+        for r in (it.get("RegionInfoMP") or {}).get("Regions") or []:
+            try:
+                x, y, w, h = map(float, str(r["Rectangle"]).split(","))
+                mp.append((r.get("PersonDisplayName") or "", x, y, w, h))
+            except (KeyError, ValueError):
+                pass
+        out[it.get("SourceFile")] = (mwg, mp)
+    return out
+
+
+def _has_duplicates(mwg: list, mp: list) -> bool:
+    """A name twice with near-identical rectangles: within NEAR pixels (MWG), or within 0.2% of the size (MP)."""
+    def dup(rs, tol):
+        for i in range(len(rs)):
+            for j in range(i + 1, len(rs)):
+                if rs[i][0] and rs[i][0] == rs[j][0] and all(abs(rs[i][k] - rs[j][k]) <= tol for k in range(1, 5)):
+                    return True
+        return False
+    return dup(mwg, NEAR + 0.5) or dup(mp, 0.002)
+
+
+def fix_files(after=None) -> int:
+    """After the clean-up: the image files of the photos it cleaned that still carry the duplicate regions get
+    their regions rewritten from the database too (the file is backed up first, and its pixels are checked
+    unchanged). Runs in the background. Returns how many photos it will look at."""
+    from . import edits, vdb
+    if progress["running"]:
+        raise dbsync.SyncError("The clean-up is still running; the image files follow when it has finished.")
+    con = vdb.connect()
+    try:
+        cleaned = [r[0] for r in con.execute("SELECT DISTINCT photo_id FROM photo_history WHERE action = 'face' AND summary LIKE 'Duplicate face regions removed:%'")]
+        done = {r[0] for r in con.execute("SELECT DISTINCT photo_id FROM photo_history WHERE summary = ?", (FILE_DONE,))}
+    finally:
+        con.close()
+    todo = [(pid, p) for pid, p in dbsync._photo_paths([p for p in cleaned if p not in done]) if edits.can_write_file(p)]
+    if not todo:
+        return 0
+    import shutil
+    need = sum(os.path.getsize(p) for _i, p in todo if os.path.exists(p)) * 1.1 + 200 * 1024 ** 2
+    from . import config
+    if shutil.disk_usage(str(config.DATA_DIR)).free < need:
+        raise dbsync.SyncError(f"Not enough free space for the backups of the original files ({need / 1e9:.1f} GB needed).")
+    progress.update(running=True, files=True, done=0, total=len(todo), removed=0, photos=0, errors=0, started=int(time.time()), finished=None, error=None)
+
+    def job():
+        try:
+            _run_files(todo)
+        except Exception as e:
+            log.warning("face clean-up of the image files stopped: %s", e, exc_info=True)
+            progress["error"] = str(e)[:300]
+        finally:
+            progress.update(running=False, finished=int(time.time()))
+            if after:
+                after()
+    threading.Thread(target=job, name="face-cleanup-files", daemon=True).start()
+    return len(todo)
+
+
+def _run_files(todo: list):
+    from . import facemgr, history
+    for i in range(0, len(todo), 50):
+        batch = todo[i:i + 50]
+        regions = _file_regions([p for _i, p in batch])
+        dirty = [(pid, p) for pid, p in batch if p in regions and _has_duplicates(*regions[p])]
+        status = facemgr.write_regions_many([pid for pid, _p in dirty], files=True, sidecars=False) if dirty else {}
+        rows = []
+        for pid, p in dirty:
+            if status.get(pid) == "written":
+                progress["photos"] += 1
+                rows.append({"photo_id": pid, "action": "face", "path": p, "summary": FILE_DONE})
+            else:
+                progress["errors"] += 1
+        history.record(rows)
+        progress["done"] += len(batch)
+    log.info("face clean-up of the image files: %d files rewritten, %d failed, %d already clean", progress["photos"], progress["errors"],
+             progress["total"] - progress["photos"] - progress["errors"])
+
+
 def fix_near_duplicates(after=None, check_running: bool = True) -> int:
     """Start the clean-up in the background. Returns how many photos it will touch."""
     if progress["running"]:
@@ -110,7 +217,7 @@ def fix_near_duplicates(after=None, check_running: bool = True) -> int:
         return 0
     db_path = Path(dkdb.sqlite_path())
     dbsync.preflight(db_path, check_running, "faces")
-    progress.update(running=True, done=0, total=len(todo), removed=0, photos=0, errors=0, started=int(time.time()), finished=None, error=None, backup=None)
+    progress.update(running=True, files=False, done=0, total=len(todo), removed=0, photos=0, errors=0, started=int(time.time()), finished=None, error=None, backup=None)
 
     def job():
         try:

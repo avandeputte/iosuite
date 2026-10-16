@@ -2476,8 +2476,9 @@ async function settingsPage(view) {
       const draw = async () => {
         let q; try { q = await api('/api/quality'); } catch (e) { fill(line, e.message); return; }
         const p = q.progress || {};
-        if (p.running) { fill(line, `Removing duplicate faces… ${nf.format(p.done)} / ${nf.format(p.total)} photos, ${nf.format(p.removed)} regions removed.`); fill(acts); setTimeout(() => { if (line.isConnected) draw(); }, 3000); return; }
-        const done = p.finished ? ` Last clean-up: ${nf.format(p.removed)} duplicate regions removed on ${plural(p.photos, 'photo')}${p.errors ? `, ${nf.format(p.errors)} sidecars could not be rewritten` : ''}${p.error ? ` (stopped: ${p.error})` : ''}.` : '';
+        if (p.running) { fill(line, p.files ? `Fixing the image files… ${nf.format(p.done)} / ${nf.format(p.total)} photos looked at, ${nf.format(p.photos)} files rewritten.` : `Removing duplicate faces… ${nf.format(p.done)} / ${nf.format(p.total)} photos, ${nf.format(p.removed)} regions removed.`); fill(acts); setTimeout(() => { if (line.isConnected) draw(); }, 3000); return; }
+        const done = !p.finished ? '' : p.files ? ` Last pass over the image files: ${plural(p.photos, 'file')} rewritten${p.errors ? `, ${nf.format(p.errors)} could not be` : ''}${p.error ? ` (stopped: ${p.error})` : ''}.`
+          : ` Last clean-up: ${nf.format(p.removed)} duplicate regions removed on ${plural(p.photos, 'photo')}${p.errors ? `, ${nf.format(p.errors)} sidecars could not be rewritten` : ''}${p.error ? ` (stopped: ${p.error})` : ''}.`;
         fill(line, (q.near.extra ? `${plural(q.near.extra, 'face region is a duplicate', 'face regions are duplicates')} of another one of the same person, a few pixels away, on ${plural(q.near.photos, 'photo')}, so those people are listed twice. ` : 'No face is stored twice. ')
           + (q.separate.count ? `${plural(q.separate.count, 'photo has', 'photos have')} the same person in two separate places. ` : '')
           + (q.invalid.count ? `${plural(q.invalid.count, 'face rectangle is', 'face rectangles are')} empty or outside the photo.` : '') + done);
@@ -2487,6 +2488,11 @@ async function settingsPage(view) {
             try { const r = await post('/api/quality/fix', {}); toast(`Cleaning up ${plural(r.photos, 'photo')} in the background.`); } catch (e) { toast(e.message, null, null, 9000); }
             draw();
           }, true) : null,
+          p.finished && !p.files && CAN_MANAGE ? btn('Fix the image files too', async () => {
+            if (!confirm('Rewrite the face regions inside the image files of the cleaned photos that still carry the duplicates? Each file is backed up first (data/file-backups) and its pixels are checked unchanged; this needs free space about the size of those files.')) return;
+            try { const r = await post('/api/quality/fix', { files: true }); toast(`Looking at ${plural(r.photos, 'image file')} in the background.`); } catch (e) { toast(e.message, null, null, 9000); }
+            draw();
+          }) : null,
           q.separate.count || q.invalid.count ? btn('Review the others', () => qualityDialog(q)) : null);
       };
       draw();

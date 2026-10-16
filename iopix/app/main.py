@@ -1708,13 +1708,15 @@ def api_quality():
 
 
 @app.post("/api/quality/fix")
-async def api_quality_fix():
-    """Remove the near-duplicate face regions (one kept per group), rewrite those sidecars, in the background."""
+async def api_quality_fix(request: Request):
+    """Body {files: false}: remove the near-duplicate face regions (one kept per group) and rewrite those sidecars;
+    {files: true}: then the image files that still carry the duplicates. In the background."""
     from . import facequality
     if not config.DB_WRITE or appstate.read_only():
         raise HTTPException(403, "Writing to digiKam's database is turned off")
+    files = bool((await request.json() if (await request.body()) else {}).get("files"))
     try:
-        n = await run_in_threadpool(facequality.fix_near_duplicates, _rebuild_after_write)
+        n = await run_in_threadpool(facequality.fix_files if files else facequality.fix_near_duplicates, _rebuild_after_write)
     except dbsync.SyncError as e:
         raise HTTPException(409, str(e))
     return {"photos": n}
