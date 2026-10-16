@@ -255,3 +255,38 @@ def test_changes_made_with_sync_off_merge_back_into_digikam(client, lib):
     main.state["version"] = None
     index.build()
     _ = library
+
+
+def test_library_follows_digikam_row_by_row(client, lib):
+    """Bringing the library up to date writes only the rows that differ (none when nothing changed), and
+    leaves it identical to digiKam's tables, duplicates in the keyless tables included."""
+    from app import dkdb, library, vdb
+    index.refresh_library()
+    src = dkdb.connect(real=True)
+    try:
+        src.begin_read()
+        assert library.copy_from_digikam(src) == {}, "nothing changed: nothing written"
+    finally:
+        src.rollback(); src.close()
+    con = vdb.connect()
+    try:
+        pid = con.execute("SELECT imageid FROM photo_information LIMIT 1").fetchone()[0]
+        con.execute("UPDATE photo_information SET rating = 5 WHERE imageid = ?", (pid,))
+        tag_row = con.execute("SELECT imageid, tagid FROM photo_tags LIMIT 1").fetchone()
+        con.execute("DELETE FROM photo_tags WHERE imageid = ? AND tagid = ?", tuple(tag_row))
+        face = con.execute("SELECT imageid, tagid, property, value FROM face_regions LIMIT 1").fetchone()
+        con.execute("INSERT INTO face_regions VALUES (?,?,?,?)", tuple(face))  # a stray duplicate
+        con.commit()
+    finally:
+        con.close()
+    src = dkdb.connect(real=True)
+    try:
+        src.begin_read()
+        written = library.copy_from_digikam(src)
+    finally:
+        src.rollback(); src.close()
+    assert set(written) == {"photo_information", "photo_tags", "face_regions"} and sum(written.values()) <= 6, written
+    a = index.read_rows(library.connect())
+    src = dkdb.connect(real=True)
+    b = index.read_rows(src); src.close()
+    assert all(sorted(map(repr, a[k])) == sorted(map(repr, b[k])) for k in a)

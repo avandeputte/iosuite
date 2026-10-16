@@ -31,19 +31,30 @@ def _by(rows, cols, keycols):
     return {tuple(r[i] for i in idx): r for r in rows}
 
 
+_WHOLE = ("tag_properties", "photo_tags", "face_regions", "copyright")  # compared as whole rows
+
+
+def _keys():
+    return (("tags", ["id"]), ("folders", ["id"]), ("photos", ["id"]), ("comments", ["imageid", "type", "language", "author"]),
+            ("photo_properties", ["imageid", "property"]), *[(t, ["imageid"]) for t, _dk in PER_PHOTO])
+
+
 def diff() -> dict:
-    """Every difference between the base and the library now, by table, before any remapping."""
+    """Every difference between the base and the library now, by table, before any remapping. Nothing when
+    no change was made here since the library last matched digiKam (the base is from before the first one)."""
+    if not int(library.info().get("local_changes") or 0):
+        return {"conflicts": 0, **{t: {"new": [], "gone": [], "changed": [], "cols": _cols(t)}
+                                   for t in [k for k, _ in _keys()] + list(_WHOLE)}}
     base, ours = library.load_base(), library.current()
     if base is None:
         raise dbsync.SyncError("There is no record of what digiKam held when the library was copied, so the changes cannot be told apart. Replace the library with digiKam's, or keep sync off.")
     d = {"conflicts": 0}
-    for table, keys in (("tags", ["id"]), ("folders", ["id"]), ("photos", ["id"]), ("comments", ["imageid", "type", "language", "author"]),
-                        ("photo_properties", ["imageid", "property"]), *[(t, ["imageid"]) for t, _dk in PER_PHOTO]):
+    for table, keys in _keys():
         cols = _cols(table)
         b, o = _by(base[table], cols, keys), _by(ours[table], cols, keys)
         d[table] = {"new": [o[k] for k in o if k not in b], "gone": [b[k] for k in b if k not in o],
                     "changed": [(b[k], o[k]) for k in o if k in b and o[k] != b[k]], "cols": cols}
-    for table in ("tag_properties", "photo_tags", "face_regions", "copyright"):
+    for table in _WHOLE:
         cols = _cols(table)
         b, o = set(map(tuple, base[table])), set(map(tuple, ours[table]))
         d[table] = {"new": sorted(o - b, key=str), "gone": sorted(b - o, key=str), "changed": [], "cols": cols}

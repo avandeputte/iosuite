@@ -4,8 +4,9 @@ These tables have exactly the columns of the digiKam tables they correspond to (
 Albums -> folders, ImageTagProperties -> face_regions, ...), only with names that say what they hold.
 That is what lets the viewer work without digiKam:
 
-- While Sync with digiKam is on, every read of digiKam's database copies these tables over from it
-  (copy_from_digikam), and the search index is built from them.
+- While Sync with digiKam is on, these tables follow digiKam's database (copy_from_digikam, in the
+  background after the index is built): the rows on both sides are compared and only the rows that differ
+  are deleted, inserted or replaced, so a change, made here or in digiKam, costs a few row writes.
 - When Sync with digiKam is off, dkdb.connect() hands out a LibraryConn instead of a connection to
   digiKam's database. It speaks digiKam's table names and rewrites them to these, so every module that
   writes the library (tags, faces, folders, uploads, place tags, tag pictures, applying edits) works
@@ -104,6 +105,7 @@ def _vconn_class():
             return super().executemany(rename(sql), rows)
 
         def begin_write(self):
+            ensure_base()  # before the first change made here: what digiKam held, for the merge back
             self.raw.execute("BEGIN IMMEDIATE") if not self.mysql else self.raw.cursor().execute("START TRANSACTION")
 
         def begin_read(self):
@@ -175,16 +177,44 @@ def version() -> str:
     return f"local:{d.get('source', '-')}:{d.get('version', '0')}"
 
 
+def _canon(v):
+    """One form for a value read from either database, so equal values compare equal (5 and 5.0, bytes and text)."""
+    if v is None or isinstance(v, str):
+        return v
+    if isinstance(v, bool):
+        return int(v)
+    if isinstance(v, (bytes, bytearray, memoryview)):
+        return bytes(v).decode("utf-8", "replace")
+    if isinstance(v, int):
+        return v
+    try:
+        f = float(v)  # float, Decimal
+    except (TypeError, ValueError):
+        return str(v)
+    return int(f) if f.is_integer() else f
+
+
+def _key_cols(cols: list) -> list:
+    """The primary key of a library table: its id or imageid column; None for the tables without one,
+    whose rows are compared whole."""
+    first = cols[0]
+    return [first[0]] if "PRIMARY KEY" in first[1] else None
+
+
 def copy_from_digikam(src) -> dict:
-    """Replace the library tables with digiKam's current rows, in one transaction. src: a read connection
-    to digiKam's database (dkdb.Conn) inside a snapshot. Returns {table: rows}."""
+    """Bring the library tables to digiKam's current rows, in one transaction, writing only what differs:
+    rows digiKam no longer has are deleted, new and changed ones are written, the rest is left alone.
+    src: a read connection to digiKam's database (dkdb.Conn) inside a snapshot. Returns {table: rows
+    written}; the very first copy writes everything."""
     from . import dkdb, vdb
-    counts, t0 = {}, time.time()
-    data = {}
+    t0 = time.time()
+    theirs = {}
     for name, (dk, cols, *_rest) in SPEC.items():
-        data[name] = [tuple(r) for r in src.execute(f"SELECT {', '.join(c for c, _s, _m in cols)} FROM {dk}").fetchall()]
+        theirs[name] = [tuple(r) for r in src.execute(f"SELECT {', '.join(c for c, _s, _m in cols)} FROM {dk}").fetchall()]
     source = dkdb.source_version()
+    ours = current()
     con = vdb.connect()
+    written, photos = {}, len(theirs["photos"])
     try:
         if con.mysql:  # digiKam's MySQL root tag has id 0, which AUTO_INCREMENT would otherwise renumber
             con.execute("SET SESSION sql_mode = CONCAT(@@sql_mode, ',NO_AUTO_VALUE_ON_ZERO')")
@@ -192,24 +222,58 @@ def copy_from_digikam(src) -> dict:
             con.raw.execute("BEGIN IMMEDIATE")
         for name, (dk, cols, *_rest) in SPEC.items():
             names = [c for c, _s, _m in cols]
-            con.execute(f"DELETE FROM {name}")
-            ql = ", ".join(f"`{c}`" if con.mysql else c for c in names)
-            rows = data[name]
-            for i in range(0, len(rows), 2000):
-                con.executemany(f"INSERT INTO {name} ({ql}) VALUES ({', '.join('?' * len(names))})", rows[i:i + 2000])
-            counts[name] = len(rows)
-        _set_info(con, {"source": source, "taken": int(time.time()), "photos": counts["photos"], "local_changes": 0,
-                        "version": int(time.time())})
+            q = (lambda c: f"`{c}`") if con.mysql else (lambda c: c)
+            ql = ", ".join(q(c) for c in names)
+            insert = f"INSERT INTO {name} ({ql}) VALUES ({', '.join('?' * len(names))})"
+            keys = _key_cols(cols)
+            gone, add = [], []
+            if keys:  # one row per id: compare by id
+                mine = {r[0]: tuple(_canon(v) for v in r) for r in ours[name]}
+                for r in theirs[name]:
+                    c = tuple(_canon(v) for v in r)
+                    was = mine.pop(c[0], None)
+                    if was != c:
+                        if was is not None:
+                            gone.append((c[0],))
+                        add.append(r)
+                gone += [(k,) for k in mine]
+                for i in range(0, len(gone), 2000):
+                    con.executemany(f"DELETE FROM {name} WHERE {q(keys[0])} = ?", gone[i:i + 2000])
+            else:  # no key: rows are compared whole, duplicates counted
+                from collections import Counter
+                mine, want, raw_of = Counter(), Counter(), {}
+                for r in ours[name]:
+                    mine[tuple(_canon(v) for v in r)] += 1
+                for r in theirs[name]:
+                    c = tuple(_canon(v) for v in r)
+                    want[c] += 1
+                    raw_of.setdefault(c, r)
+                same = "<=>" if con.mysql else "IS"
+                where = " AND ".join(f"{q(c)} {same} ?" for c in names)
+                for c in set(mine) | set(want):
+                    if mine[c] != want[c]:
+                        if mine[c]:
+                            gone.append(c)
+                        if want[c]:
+                            add += [raw_of[c]] * want[c]
+                for i in range(0, len(gone), 2000):
+                    con.executemany(f"DELETE FROM {name} WHERE {where}", gone[i:i + 2000])
+            for i in range(0, len(add), 2000):
+                con.executemany(insert, add[i:i + 2000])
+            if gone or add:
+                written[name] = len(gone) + len(add)
+        _set_info(con, {"source": source, "taken": int(time.time()), "photos": photos, "local_changes": 0,
+                        "version": int(time.time()), "base_source": "-"})
         con.commit()
     except BaseException:
         con.rollback()
         raise
     finally:
         con.close()
-    save_base(data)
     import logging
-    logging.getLogger("app.library").info("library copied from digiKam: %d photos, %d tags in %.1fs", counts["photos"], counts["tags"], time.time() - t0)
-    return counts
+    logging.getLogger("app.library").info("library brought up to date with digiKam in %.1fs: %s", time.time() - t0,
+                                          ", ".join(f"{n} {k}" for k, n in written.items()) or "nothing changed")
+    return written
 
 
 BASE_FILE = None  # set from config below
@@ -218,6 +282,22 @@ BASE_FILE = None  # set from config below
 def _base_path():
     from . import config
     return config.DATA_DIR / "library-base.sqlite"
+
+
+def ensure_base():
+    """The merge base: the library as it was while it still matched digiKam, saved once before the first change
+    made here (sync off, or digiKam unreachable), rather than after every copy."""
+    d = info()
+    if not d.get("taken") or int(d.get("local_changes") or 0) or d.get("base_source") == d.get("source"):
+        return
+    save_base(current())
+    from . import vdb
+    con = vdb.connect()
+    try:
+        _set_info(con, {"base_source": d.get("source")})
+        con.commit()
+    finally:
+        con.close()
 
 
 def save_base(data: dict):
