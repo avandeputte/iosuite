@@ -410,4 +410,8 @@ def sync(photo_ids: list, source: str, targets: list, fields: list = None) -> di
         done += [i for i in dict.fromkeys(owner.values()) if i not in failed]
     done = sorted(set(done))
     recheck(done)
+    from . import history
+    labels = {"db": "the database", "sidecar": "the sidecar", "file": "the image file"}
+    history.record([{"photo_id": pid, "action": "sync", "summary": f"Synced {', '.join(fields)} from {labels[source]} to {' and '.join(labels[t] for t in targets)}",
+                     "path": stored.get(pid, {}).get("path")} for pid in done])
     return {"synced": len(done), "skipped": skipped}

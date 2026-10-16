@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from app import dbsync, dkdb, edits, index, state
+from app import dkdb, edits, index, state
 
 
 def _count(table: str) -> int:
@@ -213,3 +213,45 @@ def test_sync_off_folders_and_faces_go_to_the_library(client, lib):
         index.build()
         if made and made.exists():
             made.rmdir()
+
+
+def test_changes_made_with_sync_off_merge_back_into_digikam(client, lib):
+    """A tag, a face and a folder made with sync off; sync on: the merge writes them into digiKam's database
+    (new ids there), then the library is digiKam's again with nothing left to merge."""
+    from app import facemgr, library, main, tagmanager
+    index.ensure_fresh()
+    dbf = Path(lib["db"])
+    pid = lib["ids"][2]
+    con = index.open_index()
+    root = con.execute("SELECT id FROM albums WHERE pid IS NULL").fetchone()[0]
+    con.close()
+    client.post("/api/settings", json={"digikam_sync": False})
+    made = None
+    try:
+        r = client.post("/api/tags/op", json={"op": "add", "parent": 0, "name": "zz-merge-tag"}); assert r.status_code == 200, r.text
+        r = client.post("/api/folders", json={"parent": root, "name": "zz-merge-folder"}); assert r.status_code == 200, r.text
+        made = Path(r.json()["dir"])
+        res = facemgr.apply({"op": "detected", "image": pid, "rect": [7, 7, 50, 50]}); assert "error" not in res, res
+    finally:
+        client.post("/api/settings", json={"digikam_sync": True})
+    p = client.get("/api/library/merge").json()
+    assert p["tags"]["new"] == 1 and p["folders"]["new"] == 1 and p["face_regions"]["new"] == 1, p
+    assert any("1 new tags" in s for s in p["summary"])
+    r = client.post("/api/library/merge"); assert r.status_code == 200, r.text
+    dk = sqlite3.connect(dbf)
+    tid = dk.execute("SELECT id FROM Tags WHERE name = 'zz-merge-tag'").fetchone()
+    assert tid, "the tag is in digiKam"
+    assert dk.execute("SELECT count(*) FROM Albums WHERE relativePath LIKE '%zz-merge-folder'").fetchone()[0] == 1
+    assert dk.execute("SELECT count(*) FROM ImageTagProperties WHERE imageid = ? AND value LIKE '<rect x=\"7\" y=\"7\"%'", (pid,)).fetchone()[0] == 1
+    dk.close()
+    assert index.mirror_info()["local_changes"] == 0 and index.probe()[0] == "digikam"
+    assert client.get("/api/library/merge").json()["total"] == 0
+    # clean up the scratch library
+    tagmanager.apply({"op": "delete", "id": tid[0]})
+    facemgr.apply({"op": "remove", "image": pid, "rect": [7, 7, 50, 50]})
+    dk = sqlite3.connect(dbf); dk.execute("DELETE FROM Albums WHERE relativePath LIKE '%zz-merge-folder'"); dk.commit(); dk.close()
+    if made and made.exists():
+        made.rmdir()
+    main.state["version"] = None
+    index.build()
+    _ = library

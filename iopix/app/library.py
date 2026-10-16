@@ -206,9 +206,73 @@ def copy_from_digikam(src) -> dict:
         raise
     finally:
         con.close()
+    save_base(data)
     import logging
     logging.getLogger("app.library").info("library copied from digiKam: %d photos, %d tags in %.1fs", counts["photos"], counts["tags"], time.time() - t0)
     return counts
+
+
+BASE_FILE = None  # set from config below
+
+
+def _base_path():
+    from . import config
+    return config.DATA_DIR / "library-base.sqlite"
+
+
+def save_base(data: dict):
+    """The rows as they came from digiKam, in a SQLite file: the base of the three-way merge that brings
+    changes made with sync off back into digiKam (merge.py)."""
+    import os
+    import sqlite3
+    path = _base_path()
+    tmp = path.with_suffix(".tmp")
+    tmp.unlink(missing_ok=True)
+    con = sqlite3.connect(tmp)
+    try:
+        con.executescript("PRAGMA journal_mode = OFF; PRAGMA synchronous = OFF;")
+        for name, (dk, cols, sq_extra, _my) in SPEC.items():
+            names = [c for c, _s, _m in cols]
+            con.execute(f"CREATE TABLE {name} (" + ", ".join(f"{c} {s}" for c, s, _m in cols) + ")")
+            con.executemany(f"INSERT INTO {name} ({', '.join(names)}) VALUES ({', '.join('?' * len(names))})", data[name])
+        con.commit()
+    finally:
+        con.close()
+    os.replace(tmp, path)
+
+
+def load_base() -> dict:
+    """{table: rows} from the base file, or None when there is none."""
+    import sqlite3
+    path = _base_path()
+    if not path.exists():
+        return None
+    con = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    try:
+        out = {}
+        for name, (dk, cols, *_rest) in SPEC.items():
+            names = [c for c, _s, _m in cols]
+            try:
+                out[name] = [tuple(r) for r in con.execute(f"SELECT {', '.join(names)} FROM {name}").fetchall()]
+            except sqlite3.OperationalError:
+                out[name] = []
+        return out
+    finally:
+        con.close()
+
+
+def current() -> dict:
+    """{table: rows} of the library tables as they are now."""
+    from . import vdb
+    con = vdb.connect()
+    try:
+        out = {}
+        for name, (dk, cols, *_rest) in SPEC.items():
+            names = [c for c, _s, _m in cols]
+            out[name] = [tuple(r) for r in con.execute(f"SELECT {', '.join(names)} FROM {name}").fetchall()]
+        return out
+    finally:
+        con.close()
 
 
 def discard_local_changes():

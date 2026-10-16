@@ -200,6 +200,9 @@ def apply(op: dict, db_path: Path = None, check_running: bool = True, queue: boo
                     con.execute("DELETE FROM ImageTagProperties WHERE tagid = ?", (t,))
             # like digiKam, rewrite the full tag list of every affected item afterwards
             jobs = [(stamp, path, iid) for iid, path in photos.items()]
+            from . import history
+            what = f"Tag deleted: {old_full[tid]}" if kind == "delete" else f"Tag {'renamed' if kind == 'rename' else 'moved'}: {old_full[tid]} → {tree.full(tid)}"
+            history.record([{"photo_id": iid, "action": "tag", "summary": what, "path": path} for iid, path in photos.items()])
             summary.update(id=tid, path=old_full[tid], new_path=None if kind == "delete" else tree.full(tid),
                            tags=len(sub), photos=len(photos))
 

@@ -91,6 +91,12 @@ TABLES = {
     "ai_faces_scanned": (["photo_id", "stamp", "found", "added", "checked"],
                          "CREATE TABLE IF NOT EXISTS ai_faces_scanned (photo_id INTEGER PRIMARY KEY, stamp TEXT, found INTEGER, added INTEGER, checked INTEGER)",
                          "CREATE TABLE IF NOT EXISTS ai_faces_scanned (photo_id BIGINT PRIMARY KEY, stamp VARCHAR(191), found INT, added INT, checked BIGINT)"),
+    "photo_history": (["id", "photo_id", "ts", "user_name", "action", "summary", "details", "undo", "sidecar_copy", "path"],
+                      "CREATE TABLE IF NOT EXISTS photo_history (id INTEGER PRIMARY KEY AUTOINCREMENT, photo_id INTEGER, ts INTEGER, user_name TEXT, action TEXT, summary TEXT, details TEXT, undo TEXT, sidecar_copy TEXT, path TEXT)",
+                      "CREATE TABLE IF NOT EXISTS photo_history (id BIGINT AUTO_INCREMENT PRIMARY KEY, photo_id BIGINT, ts BIGINT, user_name VARCHAR(191), action VARCHAR(32), summary TEXT, details MEDIUMTEXT, undo MEDIUMTEXT, sidecar_copy TEXT, path TEXT, INDEX photo_history_photo (photo_id))"),
+    "image_data_checksums": (["path", "hash", "algorithm", "verified"],
+                             "CREATE TABLE IF NOT EXISTS image_data_checksums (path TEXT PRIMARY KEY, hash TEXT, algorithm TEXT, verified INTEGER)",
+                             "CREATE TABLE IF NOT EXISTS image_data_checksums (path VARCHAR(700) PRIMARY KEY, hash VARCHAR(128), algorithm VARCHAR(16), verified BIGINT)"),
     "ai_similar_photos": (["a", "b", "score"],
                   "CREATE TABLE IF NOT EXISTS ai_similar_photos (a INTEGER, b INTEGER, score REAL)",
                   "CREATE TABLE IF NOT EXISTS ai_similar_photos (a BIGINT, b BIGINT, score DOUBLE, INDEX ai_similar_photos_a (a))"),
@@ -109,7 +115,7 @@ TABLES = {
                     "CREATE TABLE IF NOT EXISTS metadata_check (photo_id INTEGER PRIMARY KEY, stamp TEXT, data TEXT, mismatch INTEGER, has_sidecar INTEGER, file_xmp INTEGER, checked INTEGER)",
                     "CREATE TABLE IF NOT EXISTS metadata_check (photo_id BIGINT PRIMARY KEY, stamp VARCHAR(191), data MEDIUMTEXT, mismatch INT, has_sidecar INT, file_xmp INT, checked BIGINT)"),
 }
-SQLITE_INDEXES = ["CREATE INDEX IF NOT EXISTS ai_objects_photo ON ai_objects (photo_id)",
+SQLITE_INDEXES = ["CREATE INDEX IF NOT EXISTS photo_history_photo ON photo_history (photo_id)", "CREATE INDEX IF NOT EXISTS ai_objects_photo ON ai_objects (photo_id)",
                   "CREATE INDEX IF NOT EXISTS ai_similar_photos_a ON ai_similar_photos (a)",
                   "CREATE INDEX IF NOT EXISTS photo_identity_dk ON photo_identity (dk_id)",
                   "CREATE INDEX IF NOT EXISTS photo_identity_hash ON photo_identity (hash, size)"] + _library.SQLITE_INDEXES

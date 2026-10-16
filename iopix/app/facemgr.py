@@ -138,6 +138,12 @@ def apply_many(ops: list, db_path=None, check_running: bool = True) -> list:
                     results.append({"op": op.get("op"), "image": op.get("image"), "error": str(e)})
             if not any("error" not in r for r in results):
                 raise SyncError(results[0]["error"])
+    from . import history
+    labels = {"name": "Face named {name}", "confirm": "Suggested face confirmed as {name}", "ignore": "Face marked as ignored", "unknown": "Face name removed (now unknown)",
+              "remove": "Face region removed", "add": "Face added for {name}", "move": "Face region moved", "detected": "Unnamed face added by face detection"}
+    history.record([{"photo_id": r["image"], "action": "face", "summary": labels.get(r.get("op"), "Face changed").format(name=(r.get("name") or "").split("/")[-1] or "a person"),
+                     "details": {k: v for k, v in r.items() if k in ("op", "tag", "name", "was", "from_tag")} | {"rect": next((o.get("rect") for o in ops if int(o.get("image") or 0) == r["image"] and o.get("op") == r.get("op")), None)}}
+                    for r in results if "error" not in r and not r.get("skipped")])
     for image in dict.fromkeys(touched):
         try:
             status = write_regions(image, db_path)

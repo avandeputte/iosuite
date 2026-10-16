@@ -426,12 +426,20 @@ def _run_exiftool(jobs: list) -> list:
     with tempfile.NamedTemporaryFile("w", suffix=".args", dir=config.DATA_DIR, delete=False, encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
         argfile = f.name
-    try:
-        res = subprocess.run([*exiftool_cmd(), "-@", argfile, "-common_args", "-overwrite_original", "-m", "-q",
-                              "-charset", "utf8", "-charset", "iptc=utf8"],
-                             capture_output=True, text=True, timeout=3600)
-    finally:
-        os.unlink(argfile)
+    from . import pixelguard
+    # image files (not sidecars) get their image data hashed before and after: a write that changed
+    # the picture itself is undone (pixelguard)
+    with pixelguard.Guard([t for t, _ in jobs]) as guard:
+        try:
+            res = subprocess.run([*exiftool_cmd(), "-@", argfile, "-common_args", "-overwrite_original", "-m", "-q",
+                                  "-charset", "utf8", "-charset", "iptc=utf8"],
+                                 capture_output=True, text=True, timeout=3600)
+        finally:
+            os.unlink(argfile)
+        damaged = guard.verify()
+    if damaged:
+        skipped += damaged
+        jobs = [j for j in jobs if j[0] not in damaged]
     for target, _ in jobs:
         if target.endswith(".xmp"):
             _keep_exiv2_namespace(target)
@@ -505,6 +513,8 @@ def apply(photos: list, changes: dict, per_photo: dict = None) -> dict:
         changes["caption_date"] = time.strftime("%Y-%m-%dT%H:%M:%S")
     in_files = writes_files()
     ok, failed = [], []
+    before = _current_values([p["id"] for p in photos])  # for the change log: what each field was
+    snaps = {}
     with _lock:
         old = pending()
         mine = {p["id"]: {**changes, **per_photo.get(p["id"], {})} for p in photos}
@@ -521,6 +531,8 @@ def apply(photos: list, changes: dict, per_photo: dict = None) -> dict:
                 failed.append({"id": p["id"], "error": str(e)})
                 continue
             paths = effective_tags(db_tags.get(p["id"], []), merged[p["id"]]) if tags_changed else None
+            from . import history
+            snaps[p["id"]] = history.snapshot(p["id"], side)
             jobs.append((side, write_args(mine[p["id"]], paths, False)))
             owner[side] = p["id"]
             if in_files and can_write_file(p["path"]):
@@ -534,7 +546,51 @@ def apply(photos: list, changes: dict, per_photo: dict = None) -> dict:
             appstate._write(lambda c: c.executemany(
                 "INSERT OR REPLACE INTO pending_edits VALUES (?,?,?)", [(pid, json.dumps(merged[pid]), now) for pid in ok]))
             _recheck(ok)
+    _log_edits(ok, photos, mine, before, snaps, in_files)
     return {"edited": len(ok), "failed": failed, "files": in_files}
+
+
+def _current_values(ids: list) -> dict:
+    """{photo: {rating, title, caption, taken, gps, pick, color, tags}} as the viewer shows them now."""
+    from . import index
+    out = {}
+    if not ids or not config.INDEX_DB.exists():
+        return out
+    con = index.open_index()
+    try:
+        for i in range(0, len(ids), 500):
+            chunk = ",".join(str(int(x)) for x in ids[i:i + 500])
+            for pid, rating, title, caption, taken, lat, lon, alt, pick, color in con.execute(
+                    f"SELECT id, rating, title, caption, taken, lat, lon, alt, pick, color FROM photos WHERE id IN ({chunk})"):
+                out[pid] = {"rating": max(rating or 0, 0), "title": title or "", "caption": caption or "", "taken": taken,
+                            "gps": {"lat": lat, "lon": lon, "alt": alt} if lat is not None else None, "pick": pick, "color": color, "tags": []}
+            for pid, full in con.execute(f"SELECT pt.photo_id, t.full FROM photo_tags pt JOIN tags t ON t.id = pt.tag_id WHERE pt.photo_id IN ({chunk})"):
+                if pid in out:
+                    out[pid]["tags"].append(full)
+    finally:
+        con.close()
+    return out
+
+
+def _log_edits(ok: list, photos: list, mine: dict, before: dict, snaps: dict, in_files: bool):
+    from . import history
+    paths = {p["id"]: p["path"] for p in photos}
+    rows = []
+    for pid in ok:
+        ch, b = mine[pid], before.get(pid, {})
+        undo = {}
+        for f, v in ch.items():
+            if f in ("rating", "pick", "color", "title", "caption", "taken", "gps") and f in b:
+                undo[f] = b[f]
+        if ch.get("add_tags"):
+            undo["remove_tags"] = [t for t in ch["add_tags"] if t not in b.get("tags", [])]
+        if ch.get("remove_tags"):
+            undo["add_tags"] = [t for t in ch["remove_tags"] if t in b.get("tags", [])]
+        rows.append({"photo_id": pid, "action": "edit", "summary": history.describe_edit(b, ch),
+                     "details": {"before": {k: b.get(k) for k in ch if k in b}, "after": {k: v for k, v in ch.items() if k != "caption_date"},
+                                 "written_to": "sidecar and file" if in_files else "sidecar"},
+                     "undo": undo or None, "sidecar": snaps.get(pid), "path": paths.get(pid)})
+    history.record(rows)
 
 
 def _recheck(ids: list):
@@ -594,4 +650,8 @@ def revert(photos: list) -> dict:
             except OSError as e:  # the edit stays remembered, so it can be retried
                 failed.append({"id": p["id"], "error": str(e)})
         forget(done)
+    from . import history
+    paths = {p["id"]: p["path"] for p in photos}
+    history.record([{"photo_id": pid, "action": "revert", "summary": "Viewer edits undone: sidecar (and file) put back as they were before the viewer first changed them",
+                     "path": paths.get(pid)} for pid in done])
     return {"reverted": len(done), "failed": failed}

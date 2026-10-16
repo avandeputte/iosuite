@@ -29,7 +29,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
-from . import (analysis, caption, concepts, config, consistency, dbsync, detector, deletion, dkdb, edits, facedetect, facemgr, facevecs, library, folders, gpx, index, neardups, vdb,
+from . import (analysis, caption, concepts, config, consistency, dbsync, detector, deletion, dkdb, edits, history, merge, facedetect, facemgr, facevecs, library, folders, gpx, index, neardups, vdb,
                moments, places, placetags, tagmanager, thumbs)
 from . import state as appstate
 from . import jobs as bgjobs
@@ -241,11 +241,11 @@ async def lifespan(_app):
 app = FastAPI(title="iopix", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 # every endpoint that changes the library (sidecars, files, digiKam's database); refused in read-only mode
-WRITE_PATHS = ("/api/edit", "/api/edits/db", "/api/faces/detect", "/api/photos/delete", "/api/consistency/sync", "/api/gpx/apply", "/api/faces/op", "/api/faces/batch", "/api/folders",
+WRITE_PATHS = ("/api/edit", "/api/edits/db", "/api/faces/detect", "/api/photos/delete", "/api/history", "/api/library/merge", "/api/consistency/sync", "/api/gpx/apply", "/api/faces/op", "/api/faces/batch", "/api/folders",
                "/api/faces/person", "/api/placetags", "/api/tags/op")
 
 
-ADMIN_PATHS = ("/api/settings", "/api/maintenance", "/api/log", "/api/analysis/run", "/api/models/check", "/api/models/download", "/api/restart", "/api/users", "/api/update", "/api/neardups")
+ADMIN_PATHS = ("/api/settings", "/api/maintenance", "/api/log", "/api/library/merge", "/api/analysis/run", "/api/models/check", "/api/models/download", "/api/restart", "/api/users", "/api/update", "/api/neardups")
 SIGNED_IN_PATHS = ("/api/favorites", "/api/ualbums", "/api/searches", "/api/tags/recent", "/api/auth/settings", "/api/auth/password")
 
 
@@ -278,6 +278,7 @@ async def _auth_guard(request: Request, call_next):
     of that only once a user exists. Read-only mode refuses library writes for everyone."""
     user = users.user_from_token(request.cookies.get(users.COOKIE, "")) if request.cookies.get(users.COOKIE) else None
     request.state.user = user
+    history.user.set(user["name"] if user else ("MCP" if request.url.path.startswith("/mcp") else "visitor"))
     if user is None and users.require_login():
         path = request.url.path
         if path.startswith("/mcp"):
@@ -1585,6 +1586,52 @@ def _face_detect_allowed():
         raise HTTPException(403, "Writing to digiKam's database is turned off")
     if not index.sync_enabled() or index.offline["since"]:
         raise HTTPException(409, "Face regions live in digiKam's database, which is unreachable (or Sync with digiKam is off)")
+
+
+@app.get("/api/library/merge")
+def api_library_merge_plan():
+    """What merging the changes made with sync off into digiKam's database would do (admins)."""
+    try:
+        return merge.plan()
+    except dbsync.SyncError as e:
+        raise HTTPException(409, str(e))
+
+
+@app.post("/api/library/merge")
+async def api_library_merge():
+    """Merge the changes made with sync off into digiKam's database (backup first), then copy the library from digiKam again."""
+    if not config.DB_WRITE or appstate.read_only():
+        raise HTTPException(403, "Writing to digiKam's database is turned off")
+    try:
+        r = await run_in_threadpool(merge.apply)
+    except dbsync.SyncError as e:
+        raise HTTPException(409, str(e))
+    except DB_ERRORS as e:
+        raise HTTPException(500, f"The merge failed and was rolled back: {e}")
+    await run_in_threadpool(_rebuild_after_write)
+    return r
+
+
+@app.get("/api/history")
+def api_history(photo: int = None, limit: int = 100, offset: int = 0, action: str = None):
+    """The change log: every change the viewer made, newest first; for one photo with ?photo=."""
+    return history.entries(photo, max(1, min(limit, 500)), max(0, offset), action or None)
+
+
+@app.post("/api/history/{entry_id}/restore")
+async def api_history_restore(entry_id: int, request: Request):
+    """Body: {kind: undo|sidecar|original|deleted}: bring back what that change log entry allows."""
+    body = await request.json()
+    try:
+        r = await run_in_threadpool(history.restore, entry_id, str(body.get("kind", "")))
+    except (LookupError, FileNotFoundError, FileExistsError, ValueError) as e:
+        raise HTTPException(409, str(e))
+    except dbsync.SyncError as e:
+        raise HTTPException(409, str(e))
+    except DB_ERRORS as e:
+        raise HTTPException(500, f"The restore failed and was rolled back: {e}")
+    await run_in_threadpool(_rebuild_after_write)
+    return r
 
 
 @app.post("/api/photos/delete")

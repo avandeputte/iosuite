@@ -112,6 +112,11 @@ def delete(photos: list, check_running: bool = True) -> dict:
         except OSError as e:
             failed.append({"id": p["id"], "error": f"removed from the database, but the file could not be deleted: {e}"})
             done.append(p["id"])
+    from . import history
+    man = {m["id"]: m for m in manifest}
+    history.record([{"photo_id": pid, "action": "deleted", "summary": "Photo deleted (files and sidecar copied to deleted-photos first)",
+                     "details": {"backup": str(dest), **{k: man.get(pid, {}).get(k) for k in ("name", "taken", "rating", "title", "caption", "tags", "files")}},
+                     "path": next((p["path"] for p in ok if p["id"] == pid), None)} for pid in done])
     forget(done)
     log.info("deleted %d photos (backup in %s%s)", len(done), dest, f", database backup {db_backup}" if db_backup else "")
     return {"deleted": len(done), "failed": failed, "backup": str(dest), "database_backup": str(db_backup) if db_backup else None}

@@ -92,6 +92,7 @@ def _open_photo(page, server, pid):
     page.goto(f"{server}/#/photos?p={pid}")
     page.wait_for_selector("#lightbox .lb-frame img, #lightbox .lb-frame video", timeout=15000)
     page.wait_for_timeout(300)
+    page.mouse.move(420, 40)  # the toolbar hides 2.8 s after the last mouse move: a slow load must not hide it before the test clicks
 
 
 def _set_read_only(server, on: bool):
@@ -721,7 +722,6 @@ def test_consistency_bulk_sync_bar(page, server, lib):
     assert "1 selected" in page.locator("#cbulk .n").inner_text()
     page.wait_for_timeout(4000)  # through a status poll
     assert page.locator("#cbulk:not([hidden])").count() == 1, "the bar stays while photos are ticked"
-    bar = page.locator("#cbulk").bounding_box()
     vp = page.viewport_size
     for b in page.locator("#cbulk button[data-src]").all():
         bb = b.bounding_box()

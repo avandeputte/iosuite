@@ -133,6 +133,31 @@ def _probe(path: Path) -> dict:
             "w": int(d.get("ImageWidth") or d.get("ExifImageWidth") or 0), "h": int(d.get("ImageHeight") or d.get("ExifImageHeight") or 0)}
 
 
+def staged_entry(path: Path) -> tuple:
+    """(name, category, extension, path, probe info) for a file already in place."""
+    name = path.name
+    ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
+    return (name, _category(ext), ext, path, _probe(path))
+
+
+def album_for_dir(directory: Path):
+    """The digiKam folder (Albums id) for a directory on disk, or None."""
+    con = dkdb.connect()
+    try:
+        roots = dkdb.root_paths(con)
+        d = str(directory).rstrip("/")
+        for rid, rpath in roots.items():
+            rp = str(rpath).rstrip("/")
+            if d == rp or d.startswith(rp + "/"):
+                rel = "/" + d[len(rp):].strip("/") if d != rp else "/"
+                row = con.execute("SELECT id FROM Albums WHERE albumRoot = ? AND relativePath = ?", (rid, rel)).fetchone()
+                if row:
+                    return row[0]
+        return None
+    finally:
+        con.close()
+
+
 def upload(album_id: int, files: list, check_running: bool = True) -> dict:
     """files: [(name, bytes)]. Each goes into the folder (a taken name gets ' (2)'), then one
     transaction adds their rows. Returns {added: [{id, name}], skipped: [{name, reason}]}."""
@@ -163,6 +188,16 @@ def upload(album_id: int, files: list, check_running: bool = True) -> dict:
             skipped.append({"name": name, "reason": str(e)})
     if not staged:
         return {"added": [], "skipped": skipped}
+    added = register(album_id, staged, check_running)
+    from . import history
+    history.record([{"photo_id": a["id"], "action": "added", "summary": f"Uploaded into {folder.get('rel') or folder['dir']}"} for a in added])
+    return {"added": added, "skipped": skipped}
+
+
+def register(album_id: int, staged: list, check_running: bool = True) -> list:
+    """Files already in the folder on disk -> their Images and ImageInformation rows, as an upload makes them.
+    staged: [(file name, category, extension, path, probe info)]."""
+    db_path = dkdb.sqlite_path()
     dkdb.backup(db_path)
     added = []
     with dbsync.write_transaction(db_path, check_running) as con:
@@ -174,4 +209,4 @@ def upload(album_id: int, files: list, check_running: bool = True) -> dict:
             con.execute("INSERT INTO ImageInformation (imageid, rating, creationDate, digitizationDate, orientation, width, height, format, colorDepth, colorModel) "
                         "VALUES (?, -1, ?, ?, ?, ?, ?, ?, 8, 1)", (iid, info["when"], info["when"], info["orientation"], info["w"], info["h"], fmt))
             added.append({"id": iid, "name": final})
-    return {"added": added, "skipped": skipped}
+    return added

@@ -150,9 +150,9 @@ const NAV = [
 ];
 // hash route name -> page renderer (function declarations are hoisted, so this can sit above them)
 const VIEW_FNS = { photos: showPhotos, explore: showExplore, people: showPeople, places: showPlaces, folders: showFolders, albums: showAlbums, tags: showTags, map: showMap, duplicates: showDuplicates,
-  detected: showDetected, bursts: showBursts, events: showEvents, analysis: showAnalysis, settings: showSettings, maintenance: showMaintenance, consistency: showConsistency, faces: showFaces };
+  detected: showDetected, bursts: showBursts, events: showEvents, history: showHistory, analysis: showAnalysis, settings: showSettings, maintenance: showMaintenance, consistency: showConsistency, faces: showFaces };
 const VIEWS = Object.keys(VIEW_FNS);
-const PARAM_VIEWS = ['places', 'bursts', 'faces'];  // views whose own query parameters (not photo filters) pick what they show
+const PARAM_VIEWS = ['places', 'bursts', 'faces', 'history'];  // views whose own query parameters (not photo filters) pick what they show
 // favorites and app albums (stored by the app, not in digiKam)
 const ST = { rev: -1, fav: new Set(), albums: [], searches: [] };
 let SEM = { enabled: false };
@@ -165,7 +165,7 @@ const applyBadgePref = () => document.body.classList.toggle('nobadges', store.ge
 const INFO_SECTIONS = [
   ['caption', 'Title and caption'], ['date', 'Date and time'], ['file', 'File name, size and folder'], ['people', 'People'], ['tags', 'Tags'],
   ['location', 'Location and map'], ['details', 'Details: rating, creator, copyright, video'], ['camera', 'Camera, lens and exposure'],
-  ['ai', 'AI analysis: description, detected content, objects, text, sharpness'],
+  ['ai', 'AI analysis: description, detected content, objects, text, sharpness'], ['history', 'Change log: every change made here, with undo'],
 ];
 const infoHidden = () => new Set(store.get('info_hide', '').split(',').filter(Boolean));
 function infoPrefsEditor(onchange) {
@@ -811,6 +811,39 @@ function updateSelBar() {
     }) : null,
     btn('download', 'Download zip', () => downloadDialog(photosWith({ ids: ids().join(',') }), G.sel.size)),
     CAN_MANAGE ? btn('trash', 'Delete', () => deletePhotos(ids())) : null);
+}
+// ---- the change log: entries for one photo (info panel) or the whole library (#/history)
+const HIST_ACTION = { edit: 'Edit', face: 'Face', tag: 'Tag', deleted: 'Deleted', restore: 'Restore', sync: 'Sync', database: 'digiKam', revert: 'Undo', added: 'Added', guard: 'Protected' };
+const HIST_RESTORE = { undo: ['Undo', 'Put back the values from before this change'], sidecar: ['Restore sidecar', 'Put the sidecar back as it was just before this change'],
+  original: ['Restore original file', 'Put the image file back as it was before the viewer first wrote into it'], deleted: ['Restore photo', 'Put the files back and add the photo to the library again'] };
+function histEntry(e, onDone, withPhoto) {
+  const btns = CAN_MANAGE ? e.restore.map((k) => h('a', { class: 'lnk', title: HIST_RESTORE[k][1], onclick: async () => {
+    if (!confirm(`${HIST_RESTORE[k][1]}?`)) return;
+    try { const r = await post(`/api/history/${e.id}/restore`, { kind: k }); toast(k === 'deleted' ? 'Photo restored.' : 'Restored.'); details.delete(e.photo); if (r && r.id) details.delete(r.id); } catch (err) { toast(err.message, null, null, 9000); return; }
+    keepView = true; pollSoon(600); onDone?.();
+  } }, HIST_RESTORE[k][0])) : [];
+  return h('div', { class: 'hrow' },
+    withPhoto ? (e.action === 'deleted' ? h('span', { class: 'ph' }, icon('trash')) : h('img', { src: `/thumb/${e.photo}`, alt: '', loading: 'lazy', onclick: () => openLightbox({ id: [e.photo] }, 0, true) })) : null,
+    h('div', { class: 'hmain' }, h('div', null, h('span', { class: 'hact a-' + e.action }, HIST_ACTION[e.action] || e.action), ' ', e.summary),
+      h('div', { class: 'muted' }, `${fmtWhen(e.ts)} · ${e.user || ''}`, withPhoto && e.details?.name ? ` · ${e.details.name}` : withPhoto && e.path ? ` · ${e.path.split('/').pop()}` : '', btns.length ? ' · ' : '', ...btns.flatMap((b, i) => (i ? [' · ', b] : [b])))));
+}
+async function showHistory(params) {
+  const photo = params.get('photo'), list = h('div', { class: 'hlist' }), more = h('button', { class: 'pillbtn', style: 'margin:14px 0', hidden: true }, 'Show more');
+  let action = params.get('action') || '', offset = 0;
+  const sel = h('select', { onchange: (e) => { action = e.target.value; offset = 0; load(); } }, h('option', { value: '' }, 'Every change'), ...Object.entries(HIST_ACTION).map(([k, l]) => h('option', { value: k, selected: k === action }, l)));
+  const load = async (append) => {
+    let r; try { r = await api(`/api/history?limit=100&offset=${offset}${photo ? '&photo=' + photo : ''}${action ? '&action=' + action : ''}`); } catch (e) { fill(list, h('div', { class: 'empty' }, e.message)); return; }
+    if (!append) list.replaceChildren();
+    if (!r.entries.length && !offset) list.append(h('div', { class: 'empty' }, 'No changes recorded yet.'));
+    list.append(...r.entries.map((e) => histEntry(e, () => { offset = 0; load(); }, true)));
+    offset += r.entries.length; more.hidden = offset >= r.total;
+  };
+  more.onclick = () => load(true);
+  main.replaceChildren(h('div', { class: 'page spage' }, crumbs([['Maintenance', '#/maintenance'], ['Change log', photo ? '#/history' : null], ...(photo ? [['One photo', null]] : [])]),
+    pageTitle('calendar', 'indigo', photo ? 'Change log of one photo' : 'Change log'),
+    h('p', { class: 'muted', style: 'margin:0 0 10px' }, 'Every change made in the viewer, kept for good: who, when, and the values before and after. Undo puts the earlier values back; the restore links use the backups (sidecar copies, original files, deleted photos) as long as they are still there.'),
+    h('div', { class: 'ctools' }, h('span', null, 'Show: ', sel)), list, more));
+  load();
 }
 /** Delete photos for good, after a confirmation: files, sidecars, the database rows, everything the viewer knows.
  *  The server copies the files and sidecars to data/deleted-photos and backs digiKam's database up first. */
@@ -2273,9 +2306,17 @@ async function settingsPage(view) {
       m.readOnlyLocked ? null : btn(m.readOnly ? 'Turn off' : 'Turn on', async () => { try { await post('/api/settings', { read_only: !m.readOnly }); const s = await api('/api/status'); EDITING = s.editing; CAN_MANAGE = s.editing && s.dbWrite; } catch (e) { toast(e.message); } settingsPage(view); })) : null,
     IS_ADMIN ? (() => {
       const d = m.digikam || {}, copy = d.mirror ? `${nf.format(d.mirror.photos)} photos as of ${fmtWhen(d.mirror.taken)}` : 'not taken yet';
-      if (d.conflict) return row('Sync with digiKam', `On, but ${plural(d.localChanges, 'change')} to tags, folders or faces made while it was off ${d.localChanges === 1 ? 'is' : 'are'} not in digiKam’s database, so the viewer keeps using its own library rather than overwrite ${d.localChanges === 1 ? 'it' : 'them'}. Edits to ratings, titles, captions and tags are in the sidecars either way and go to digiKam as usual. Replace: the library is copied from digiKam again and the changes made here are dropped (sidecar edits stay). Or turn sync off again to keep working on the viewer’s library.`,
-        h('span', { style: 'display:flex;gap:6px;flex-wrap:wrap' }, btn('Replace with digiKam’s', async () => { if (!confirm(`Drop the ${plural(d.localChanges, 'change')} made while sync was off and copy the library from digiKam again? Edits in sidecars are kept.`)) return; try { await post('/api/settings', { library_replace: true }); toast('Copying the library from digiKam…'); } catch (e) { toast(e.message); } setTimeout(() => settingsPage(view), 2500); }),
-          btn('Turn sync off', async () => { try { await post('/api/settings', { digikam_sync: false }); } catch (e) { toast(e.message); } settingsPage(view); })));
+      if (d.conflict) {
+        const planEl = h('div', { class: 'muted', style: 'font-size:13px;margin-top:6px' }, 'Working out what changed…');
+        api('/api/library/merge').then((p) => fill(planEl, p.total ? 'To merge: ' + p.summary.join(', ') + '.' : 'Nothing to merge.')).catch((e) => fill(planEl, e.message));
+        const wrap = row('Sync with digiKam', `On, but ${plural(d.localChanges, 'change')} made while it was off ${d.localChanges === 1 ? 'is' : 'are'} not in digiKam’s database yet, so the viewer keeps using its own library. Merge writes those changes into digiKam (new tags, folders and uploads get digiKam ids; renames, assignments, faces, ratings, captions and locations are applied; deleted photos are removed), after a backup of digiKam’s database. Replace drops them and copies the library from digiKam again. Sidecar edits are kept either way.`,
+          h('span', { style: 'display:flex;gap:6px;flex-wrap:wrap' },
+            btn('Merge into digiKam', async () => { if (!confirm('Write the changes made while sync was off into digiKam’s database? digiKam must be closed; its database is backed up first.')) return; try { const r = await post('/api/library/merge', {}); toast(`Merged: ${Object.entries(r.applied).map(([k, v]) => `${v} ${k.replace('_', ' ')}`).join(', ') || 'nothing to do'}${r.conflicts ? `; ${r.conflicts} rows digiKam had also changed (the viewer’s values won)` : ''}.`, null, null, 12000); } catch (e) { toast(e.message, null, null, 10000); } setTimeout(() => settingsPage(view), 2500); }, true),
+            btn('Replace with digiKam’s', async () => { if (!confirm(`Drop the ${plural(d.localChanges, 'change')} made while sync was off and copy the library from digiKam again? Edits in sidecars are kept.`)) return; try { await post('/api/settings', { library_replace: true }); toast('Copying the library from digiKam…'); } catch (e) { toast(e.message); } setTimeout(() => settingsPage(view), 2500); }),
+            btn('Turn sync off', async () => { try { await post('/api/settings', { digikam_sync: false }); } catch (e) { toast(e.message); } settingsPage(view); })));
+        wrap.firstChild.append(planEl);
+        return wrap;
+      }
       return row('Sync with digiKam', `Currently ${d.sync ? 'on' : 'off'}. On: the viewer re-reads digiKam’s database whenever digiKam saves, and writes the edits made here into it whenever digiKam is closed (edits always go to the sidecars first). Off: the viewer never opens digiKam’s database; the library lives in the viewer’s own tables (${copy}) and everything works there: edits, tags, folders, uploads, faces and place tags. Turning sync on again does not overwrite what was changed meanwhile; you choose what happens.${d.sync && !d.reachable ? ' digiKam’s database is unreachable right now; the copy is in use.' : ''}`,
         btn(d.sync ? 'Turn off' : 'Turn on', async () => { try { await post('/api/settings', { digikam_sync: !d.sync }); } catch (e) { toast(e.message); } settingsPage(view); }));
     })() : null,
@@ -2293,6 +2334,7 @@ async function settingsPage(view) {
     ] : [
     // 1. Library: everything about digiKam's data as the viewer sees it
     h('h2', null, 'Library'),
+    row('Change log', 'Every change made in the viewer, for every photo, kept for good: who, when, before and after, with undo and restore from the backups.', h('a', { class: 'pillbtn', href: '#/history' }, 'Open the change log')),
     row('Library copy', (() => { const d = m.digikam || {}; return d.mirror ? `The viewer’s own copy of the library’s metadata: ${nf.format(d.mirror.photos)} photos as of ${fmtWhen(d.mirror.taken)}, refreshed at every read of digiKam and included in the app backup. The index is built from it whenever digiKam’s database is unreachable or Sync with digiKam is off${d.source === 'mirror' ? ' (as it is now)' : ''}.` : 'Not taken yet; it is taken at the next read of digiKam’s database.'; })(), null),
     row('Rescan the library now', `The index is rebuilt from digiKam’s database whenever digiKam saves (last saved ${when(m.digikamSaved)}; index built ${when(m.indexBuilt)}). Force it here if something looks stale.`,
       btn('Rescan now', () => act('reindex', 'Rescanning the library…'), true)),
@@ -3295,6 +3337,15 @@ function renderInfo() {
     show('details') && kv.length ? [h('h4', null, 'Details'), h('div', { class: 'kv' }, kv)] : null,
     show('camera') && ckv.length ? [h('h4', null, 'Camera'), h('div', { class: 'kv' }, ckv)] : null,
     show('file') ? [h('h4', null, 'File'), h('div', { class: 'b muted', style: 'word-break:break-all;user-select:all;font-size:12.5px' }, d.path)] : null,
+    show('history') ? (() => {  // filled in when the answer arrives; nothing shows for a photo never changed here
+      const box = h('div', { class: 'hlist small' });
+      api(`/api/history?photo=${d.id}&limit=6`).then((r) => {
+        if (!r.entries.length || !box.isConnected) return;
+        box.before(h('h4', null, 'Change log', r.total > 6 ? h('a', { class: 'lnk', style: 'margin-left:10px;text-transform:none;letter-spacing:0;font-weight:400', href: `#/history?photo=${d.id}` }, `all ${r.total}`) : null));
+        box.append(...r.entries.map((e) => histEntry(e, () => { details.delete(d.id); showItem(); }, false)));
+      }).catch(() => {});
+      return box;
+    })() : null,
     ai.length ? [h('h4', null, 'AI analysis'), ai] : null);
   if (mapEl) {
     const token = LB.token;
@@ -3381,7 +3432,7 @@ function dkBanner(d) {
   b?.remove();
   const asOf = d.mirror?.taken ? fmtWhen(d.mirror.taken) : 'the last read';
   const text = d.conflict
-    ? ['Changes made while sync was off', `${plural(d.localChanges, 'change')} to tags, folders or faces made with Sync with digiKam off ${d.localChanges === 1 ? 'is' : 'are'} not in digiKam, so the viewer keeps using its own library. Settings › Sync with digiKam lets you replace it with digiKam’s.`]
+    ? ['Changes made while sync was off', `${plural(d.localChanges, 'change')} made with Sync with digiKam off ${d.localChanges === 1 ? 'is' : 'are'} not in digiKam yet, so the viewer keeps using its own library. Settings › Sync with digiKam merges them into digiKam, or replaces them with digiKam’s library.`]
     : !d.sync
     ? ['Sync with digiKam is off', 'The library lives in the viewer’s own tables and everything works there; digiKam’s database is not opened.']
     : ['digiKam’s database is unreachable', `Since ${fmtWhen(d.since)}. Showing the library as of ${asOf}; edits are saved to the sidecars and will be applied to digiKam when it is back.`];

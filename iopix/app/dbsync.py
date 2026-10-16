@@ -204,4 +204,7 @@ def apply_pending(db_path: Path = None, pending: dict = None, check_running: boo
                 con.execute("DELETE FROM ImageTagProperties WHERE imageid = ? AND tagid = ?", (image_id, tid))
             applied.append(image_id)
     edits._recheck(applied)
+    from . import history
+    history.record([{"photo_id": pid, "action": "database", "summary": "Edits written into " + ("the library" if dkdb.standalone() else "digiKam's database"),
+                     "details": {k: v for k, v in pending.get(pid, pending.get(str(pid), {})).items() if k != "caption_date"}} for pid in applied])
     return {"applied": len(applied), "skipped": skipped, "backup": str(backup) if backup else None}

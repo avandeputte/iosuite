@@ -227,7 +227,7 @@ def mirror_tag_paths(image_ids: list) -> dict:
 # ---- photo_ids: the viewer's identity for a photo, and viewer data following a renumbered photo
 REKEY = [("favorite_photos", "photo_id"), ("viewer_album_photos", "photo_id"), ("pending_edits", "photo_id"), ("ai_quality", "photo_id"), ("ai_text_and_faces", "photo_id"),
          ("ai_objects", "photo_id"), ("ai_objects_scanned", "photo_id"), ("ai_descriptions", "photo_id"), ("ai_face_embeddings", "photo_id"), ("ai_person_references", "photo_id"),
-         ("metadata_check", "photo_id"), ("ai_faces_scanned", "photo_id"), ("ai_similar_photos", "a"), ("ai_similar_photos", "b")]
+         ("metadata_check", "photo_id"), ("ai_faces_scanned", "photo_id"), ("photo_history", "photo_id"), ("ai_similar_photos", "a"), ("ai_similar_photos", "b")]
 
 
 def sync_photo_ids(images: list, paths: dict) -> dict:
