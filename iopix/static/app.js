@@ -6,6 +6,8 @@ const ICONS = {
   search: 'M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z',
   disk: 'M2 20h20v-4H2v4zm2-3h2v2H4v-2zM2 4v4h20V4H2zm4 3H4V5h2v2zm-4 7h20v-4H2v4zm2-3h2v2H4v-2z',
   album: 'M22 16V4c0-1.1-.9-2-2-2H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2zm-11-4l2.03 2.71L16 11l4 5H8l3-4zM2 6v14c0 1.1.9 2 2 2h14v-2H4V6H2z',
+  lock: 'M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z',
+  group: 'M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z',
   share: 'M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92-1.31-2.92-2.92-2.92z',
   gear: 'M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z',
   wrench: 'M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z',
@@ -87,6 +89,28 @@ const fmtWhen = (ts) => `${dfDayLocal.format(date(ts))} ${dfTimeLocal.format(dat
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const date = (ts) => new Date(ts * 1000);
 const isoDay = (ts) => date(ts).toISOString().slice(0, 10);
+/** iOS installed app with the translucent status bar: the box fixed elements are laid out in can be the screen's
+ *  height minus the status bar, so "bottom: 0" lands that far above the real bottom (seen on an iPhone 16 Pro: a
+ *  62-point empty band under the bottom bar). Measured, and applied only when the shortfall is exactly the
+ *  status-bar inset, so a correct viewport (or a later iOS fixing this) gives 0 and changes nothing. */
+function fixViewportGap() {
+  let gap = 0;
+  try {
+    if (navigator.standalone === true) {
+      const probe = document.createElement('div');
+      probe.style.cssText = 'position:fixed;top:0;bottom:0;left:0;width:1px;visibility:hidden;pointer-events:none;padding-top:env(safe-area-inset-top)';
+      document.body.append(probe);
+      const fixedH = probe.getBoundingClientRect().height, insetTop = parseFloat(getComputedStyle(probe).paddingTop) || 0;
+      probe.remove();
+      const portrait = window.matchMedia('(orientation: portrait)').matches;
+      const full = portrait ? Math.max(screen.width, screen.height) : Math.min(screen.width, screen.height);
+      const short = full - fixedH;
+      if (insetTop > 0 && Math.abs(short - insetTop) <= 2) gap = Math.round(short);
+    }
+  } catch (e) { gap = 0; }
+  document.documentElement.style.setProperty('--vgap', gap + 'px');
+}
+window.addEventListener('resize', () => setTimeout(fixViewportGap, 120));
 function fmtBytes(b) {
   if (!b) return '';
   const u = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -195,7 +219,7 @@ let EDITING = false, WRITE_FILES = false, CAN_MANAGE = false, FACE_DETECT = fals
 function pollSoon(ms = 1500) { clearTimeout(pollTimer); pollTimer = setTimeout(pollStatus, ms); }
 async function loadState() {
   const s = await api('/api/state');
-  ST.rev = s.rev; ST.fav = new Set(s.favorites); ST.albums = s.albums; ST.searches = s.searches || [];
+  ST.rev = s.rev; ST.fav = new Set(s.favorites); ST.albums = s.albums; ST.searches = s.searches || []; ST.canShare = !!s.canShareAlbums; ST.canPrivate = !!s.canPrivateAlbums;
 }
 const ualbumById = (id) => ST.albums.find((a) => a.id === +id);
 
@@ -794,7 +818,7 @@ function updateSelBar() {
   if (!G.sel.size) { bar?.remove(); return; }
   if (!bar) { bar = h('div', { id: 'selbar' }); document.body.append(bar); }
   const ids = () => [...G.sel];
-  const inAlbum = route.view === 'photos' ? filterParams().get('ualbum') : null;
+  const inAlbum = route.view === 'photos' && ualbumById(filterParams().get('ualbum'))?.canEdit ? filterParams().get('ualbum') : null;
   const allFav = ids().every((id) => ST.fav.has(id));
   const btn = (ic, label, fn) => h('button', { class: 'pillbtn', title: label, onclick: fn }, icon(ic), h('span', null, label));
   fill(bar,
@@ -907,23 +931,32 @@ function logDialog() {
   back.firstChild.classList.add('wide');
   load();
 }
+/** Shared (everyone sees it; editors and admins change it) or private (only you): a select when both are allowed. */
+function sharingPick(def) {
+  if (ST.canShare && ST.canPrivate) return h('select', { class: 'sharepick', title: 'Who sees this album' },
+    h('option', { value: '1', selected: def !== false }, 'Shared with everyone'), h('option', { value: '0', selected: def === false }, 'Private (only me)'));
+  return h('span', { class: 'muted', style: 'font-size:12.5px', 'data-shared': ST.canShare ? '1' : '0' }, ST.canShare ? 'Shared with everyone' : 'Private (only you see it)');
+}
+const pickedShared = (el) => (el.tagName === 'SELECT' ? el.value === '1' : el.dataset.shared === '1');
 function albumDialog(ids) {
-  const name = h('input', { class: 'pagefilter', style: 'margin:0;flex:1', placeholder: 'New album name' });
+  const name = h('input', { class: 'pagefilter', style: 'margin:0;flex:1;min-width:160px', placeholder: 'New album name' });
+  const share = sharingPick();
   const add = async (id, label) => {
     try {
-      if (id == null) { if (!name.value.trim()) { name.focus(); return; } await post('/api/ualbums', { name: name.value.trim(), ids }); label = name.value.trim(); }
+      if (id == null) { if (!name.value.trim()) { name.focus(); return; } await post('/api/ualbums', { name: name.value.trim(), ids, shared: pickedShared(share) }); label = name.value.trim(); }
       else await post(`/api/ualbums/${id}`, { ids, on: true });
-    } catch { toast('Could not update the album.'); return; }
+    } catch (e) { toast(e.message || 'Could not update the album.'); return; }
     await loadState();
     back.remove();
     toast(`Added ${nf.format(ids.length)} to “${label}”.`, 'Open', () => { const a = ST.albums.find((x) => x.name === label); if (a) go('photos', photosWith({ ualbum: a.id })); });
   };
+  const editable = ST.albums.filter((a) => a.canEdit);
   const back = modal(`Add ${plural(ids.length, 'item')} to an album`,
-    h('div', { class: 'alist' }, ST.albums.map((a) => h('div', { class: 'frow', onclick: () => add(a.id, a.name) }, icon('folder'), h('span', { class: 'nm' }, a.name), h('span', { class: 'ct' }, nf.format(a.n))))),
-    h('div', { style: 'display:flex;gap:8px;margin-top:12px' }, name, h('button', { class: 'pillbtn on', onclick: () => add(null) }, icon('add'), 'Create')),
+    h('div', { class: 'alist' }, editable.map((a) => h('div', { class: 'frow', onclick: () => add(a.id, a.name) }, icon(a.shared ? 'folder' : 'lock'), h('span', { class: 'nm' }, a.name), h('span', { class: 'ct' }, nf.format(a.n))))),
+    ST.canShare || ST.canPrivate ? h('div', { style: 'display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;align-items:center' }, name, share, h('button', { class: 'pillbtn on', onclick: () => add(null) }, icon('add'), 'Create')) : h('p', { class: 'muted' }, 'Sign in to make albums.'),
     h('div', { class: 'modal-btns' }, h('button', { class: 'pillbtn', onclick: () => back.remove() }, 'Cancel')));
   name.onkeydown = (e) => { if (e.key === 'Enter') add(null); };
-  if (!ST.albums.length) name.focus();
+  if (!editable.length) name.focus();
 }
 
 // ---------------------------------------------------------------- metadata editing (XMP sidecars only)
@@ -1489,19 +1522,30 @@ const openFolders = new Set();  // which folder nodes are expanded, kept across 
 function showAlbums() {
   const body = h('div');
   // viewer albums: a change is posted, then the list is redrawn from the reloaded state
-  const change = async (path, payload) => { try { await post(path, payload); } catch { toast('Could not update the album.'); return; } await loadState(); showAlbums(); };
+  const change = async (path, payload) => { try { await post(path, payload); } catch (e) { toast(e.message || 'Could not update the album.'); return; } await loadState(); showAlbums(); };
   const mine = (a) => {
     const c = thumbCard(a.cover, a.name, plural(a.n, 'item'), { ualbum: a.id });
     const act = (ic, title, fn) => h('button', { class: 'carddl', title, onclick: async (e) => { e.stopPropagation(); await fn(); } }, icon(ic));
+    if (!a.shared) c.querySelector('.cv').append(h('span', { class: 'privbadge', title: 'Private: only you see this album' }, icon('lock')));
     c.querySelector('.cv').append(h('span', { class: 'cardacts' },
-      act('link', 'Copy a link to this album', async () => { await navigator.clipboard?.writeText(location.origin + '/' + hashFor('photos', photosWith({ ualbum: a.id }))); toast('Link copied. It works for anyone who can reach this viewer.'); }),
-      act('edit', 'Rename', () => { const n = prompt('Album name', a.name); if (n && n.trim()) return change(`/api/ualbums/${a.id}`, { name: n.trim() }); }),
+      act('link', 'Copy a link to this album', async () => { await navigator.clipboard?.writeText(location.origin + '/' + hashFor('photos', photosWith({ ualbum: a.id }))); toast(a.shared ? 'Link copied. It works for anyone who can reach this viewer.' : 'Link copied. The album is private: it opens only for you.'); }),
+      a.canEdit ? act('edit', 'Rename', () => { const n = prompt('Album name', a.name); if (n && n.trim()) return change(`/api/ualbums/${a.id}`, { name: n.trim() }); }) : null,
+      a.canEdit && ST.canShare && ST.canPrivate ? act(a.shared ? 'lock' : 'group', a.shared ? 'Make private (only you will see it)' : 'Share with everyone',
+        () => { if (confirm(a.shared ? `Make “${a.name}” private? Only you will see it; other users lose it from their Albums.` : `Share “${a.name}” with everyone who can use this viewer? Editors and admins can then change it.`)) return change(`/api/ualbums/${a.id}`, { shared: !a.shared }); }) : null,
       act('download', 'Download as a zip', () => downloadDialog(photosWith({ ualbum: a.id }))),
-      act('trash', 'Delete this album (photos are not touched)', () => { if (confirm(`Delete the album “${a.name}”? The photos themselves are not affected.`)) return change(`/api/ualbums/${a.id}`, { delete: true }); })));
+      a.canEdit ? act('trash', 'Delete this album (photos are not touched)', () => { if (confirm(`Delete the album “${a.name}”? The photos themselves are not affected.`)) return change(`/api/ualbums/${a.id}`, { delete: true }); }) : null));
     return c;
   };
-  const newCard = h('div', { class: 'card', onclick: () => { const n = prompt('Name for the new album'); if (n && n.trim()) change('/api/ualbums', { name: n.trim() }); } },
-    h('span', { class: 'cv newalbum' }, icon('add')), h('div', { class: 'nm' }, 'New album'), h('div', { class: 'sb' }, 'Stored in the viewer, not in digiKam'));
+  const newAlbum = () => {
+    const name = h('input', { class: 'einput', placeholder: 'Album name', style: 'margin:0;width:100%' }), share = sharingPick();
+    const create = () => { if (!name.value.trim()) { name.focus(); return; } back.remove(); change('/api/ualbums', { name: name.value.trim(), shared: pickedShared(share) }); };
+    name.onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Enter') create(); };
+    const back = modal('New album', h('div', { style: 'display:grid;gap:10px' }, name, share),
+      h('div', { class: 'modal-btns' }, h('button', { class: 'pillbtn', onclick: () => back.remove() }, 'Cancel'), h('button', { class: 'pillbtn on', onclick: create }, 'Create')));
+    name.focus();
+  };
+  const newCard = ST.canShare || ST.canPrivate ? h('div', { class: 'card', onclick: newAlbum },
+    h('span', { class: 'cv newalbum' }, icon('add')), h('div', { class: 'nm' }, 'New album'), h('div', { class: 'sb' }, ST.canShare ? 'Shared or private' : 'Private: only you see it')) : null;
   // smart albums: a saved search, evaluated live (count and cover fetched when the card is drawn)
   const smart = (s) => {
     const q = new URLSearchParams(s.query);
@@ -1519,14 +1563,17 @@ function showAlbums() {
   const draw = (f) => {
     body.replaceChildren();
     const my = ST.albums.filter((a) => !f || norm(a.name).includes(f));
-    body.append(h('div', { class: 'cards' }, my.map(mine), f ? null : newCard));
+    const shared = my.filter((a) => a.shared), priv = my.filter((a) => !a.shared);
+    body.append(h('div', { class: 'cards' }, shared.map(mine), f ? null : newCard));
+    if (priv.length) body.append(h('h2', { style: '--hue:var(--c-indigo)' }, h('span', { class: 'hic' }, icon('lock')), 'Private albums', h('span', { class: 'muted' }, 'only you see these')),
+      h('div', { class: 'cards' }, priv.map(mine)));
     const sm = ST.searches.filter((s) => !f || norm(s.name).includes(f));
     if (sm.length || !f) body.append(h('h2', { style: '--hue:var(--c-indigo)' }, h('span', { class: 'hic' }, icon('search')), 'Smart albums', h('span', { class: 'muted' }, 'saved searches that update themselves')),
       sm.length ? h('div', { class: 'cards' }, sm.map(smart)) : h('div', { class: 'muted', style: 'font-size:13px' }, 'None yet. Filter or search the photos, then use “Save search” in the bar above the grid.'));
     if (!my.length && !sm.length && f) body.append(h('div', { class: 'empty' }, 'No albums match.'));
   };
   main.replaceChildren(h('div', { class: 'page' }, pageTitle('album', 'indigo', 'Albums ', h('span', { class: 'muted' }, nf.format(ST.albums.length))),
-    h('div', { class: 'muted', style: 'max-width:820px' }, 'Albums are groupings that exist only in this viewer: any photos, from any folder, under a name of your own. digiKam and the files on disk are not touched. The folders digiKam manages are under ', h('a', { href: '#/folders', class: 'lnk' }, 'Folders'), '.'),
+    h('div', { class: 'muted', style: 'max-width:820px' }, 'Albums are groupings that exist only in this viewer: any photos, from any folder, under a name of your own. digiKam and the files on disk are not touched. A shared album is seen by everyone and changed by editors and admins; a private album is seen and changed only by the person who made it. The folders digiKam manages are under ', h('a', { href: '#/folders', class: 'lnk' }, 'Folders'), '.'),
     h('input', { class: 'pagefilter', placeholder: 'Find an album…', oninput: (e) => draw(norm(e.target.value)) }), body));
   draw('');
 }
@@ -1745,7 +1792,8 @@ function accountDialog() {
     h('p', { class: 'muted' }, USER.role === 'admin' ? 'You can change the library, the settings and the users.' : USER.role === 'editor' ? 'You can change the library (edits, tags, faces, places).' : 'You can browse, and keep favorites, albums and display settings.'),
     h('h4', null, 'Who you are in People'),
     h('div', { style: 'display:flex;gap:8px;align-items:center;flex-wrap:wrap' }, avatarOf(USER, true), h('span', null, USER.person && tagById.get(USER.person) ? tagById.get(USER.person).name : 'not linked'),
-      h('button', { class: 'pillbtn', onclick: () => personPicker(async (t) => { try { USER = await post('/api/auth/person', { person: t.id }); renderUserMenu(); back.remove(); accountDialog(); } catch (e) { toast(e.message); } }) }, USER.person ? 'Change' : 'Link to a person'),
+      IS_ADMIN ? h('button', { class: 'pillbtn', onclick: () => personPicker(async (t) => { try { USER = await post('/api/auth/person', { person: t.id }); renderUserMenu(); back.remove(); accountDialog(); } catch (e) { toast(e.message); } }) }, USER.person ? 'Change' : 'Link to a person')
+        : h('span', { class: 'muted', style: 'font-size:12.5px' }, USER.person ? '' : '(an admin can link your account in Settings › Users)'),
       USER.person ? h('a', { class: 'lnk', href: hashFor('photos', photosWith({ tag: USER.person })), onclick: () => back.remove() }, 'Photos of me') : null),
     h('h4', null, 'Change password'), h('div', { style: 'display:grid;gap:8px' }, cur, pw),
     h('div', { style: 'margin-top:8px' }, h('button', { class: 'pillbtn', onclick: async () => { try { await post('/api/auth/password', { current: cur.value, password: pw.value }); toast('Password changed.'); cur.value = pw.value = ''; } catch (e) { toast(e.message); } } }, 'Change password')),
@@ -3571,4 +3619,5 @@ async function boot() {
   await pollStatus();
   onRoute();
 }
+fixViewportGap();
 start();

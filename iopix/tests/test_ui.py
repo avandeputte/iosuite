@@ -966,5 +966,13 @@ def test_phone_layout_fits_the_screen(browser, server):
         for b in page.locator("#selbar button.pillbtn").all():
             box = b.bounding_box()
             assert box and box["x"] + box["width"] <= 393 and box["width"] >= 30, box
+        # no installed-app shortfall here: the bar sits on the bottom edge, and the grid ends where it starts
+        assert page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--vgap').trim()") == "0px"
+        nav, main = page.locator("#nav").bounding_box(), page.locator("#main").bounding_box()
+        assert abs(nav["y"] + nav["height"] - 852) < 1 and abs(main["y"] + main["height"] - nav["y"]) < 1.5, (nav, main)
+        # iOS's shortfall (the layout box ends 62 points above the screen): everything anchored at the bottom moves down by it
+        page.evaluate("document.documentElement.style.setProperty('--vgap', '62px')")
+        nav, main = page.locator("#nav").bounding_box(), page.locator("#main").bounding_box()
+        assert abs(nav["y"] + nav["height"] - (852 + 62)) < 1 and abs(main["y"] + main["height"] - nav["y"]) < 1.5, (nav, main)
     finally:
         ctx.close()

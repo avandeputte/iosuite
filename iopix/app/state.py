@@ -9,6 +9,7 @@ digiKam ever renumbers its images. Installs from before v1.8 had two SQLite file
 state.db and analysis.db: migrate_legacy() folds them into viewer.db once, keeping
 every row, and parks the old files in db-backups.
 """
+import contextvars
 import logging
 import shutil
 import sqlite3
@@ -94,15 +95,35 @@ def _write(fn):
         return out
 
 
-def summary() -> dict:
+# who is asking, set per request by the server (a user_accounts row, or None for visitors, MCP and jobs): private
+# albums are seen only by their owner, so every album read below goes through _visible()
+viewer = contextvars.ContextVar("album_viewer", default=None)
+
+
+def _uid(user=...):
+    u = viewer.get() if user is ... else user
+    return int(u["id"]) if u and u.get("id") is not None else None
+
+
+def _visible(user=..., alias: str = "") -> tuple:
+    """SQL condition (and its parameters) for the albums this user may see: shared ones, and their own private ones."""
+    a, uid = (alias + ".") if alias else "", _uid(user)
+    if uid is None:
+        return f"{a}is_shared = 1", []
+    return f"({a}is_shared = 1 OR {a}owner_id = ?)", [uid]
+
+
+def summary(user=...) -> dict:
+    vis, vp = _visible(user, "a")
     con = connect()
     try:
         return {
             "favorites": [r[0] for r in con.execute("SELECT photo_id FROM favorite_photos ORDER BY added DESC")],
             "albums": [dict(r) for r in con.execute(
-                "SELECT a.id, a.name, a.created, count(i.photo_id) AS n, "
+                "SELECT a.id, a.name, a.created, a.owner_id, a.is_shared, count(i.photo_id) AS n, "
                 "(SELECT photo_id FROM viewer_album_photos WHERE album_id = a.id ORDER BY added, photo_id LIMIT 1) AS cover "
-                "FROM viewer_albums a LEFT JOIN viewer_album_photos i ON i.album_id = a.id GROUP BY a.id ORDER BY a.created DESC")],
+                f"FROM viewer_albums a LEFT JOIN viewer_album_photos i ON i.album_id = a.id WHERE {vis} "
+                "GROUP BY a.id, a.name, a.created, a.owner_id, a.is_shared ORDER BY a.created DESC", vp)],
             # smart albums: a saved filter query string, listed with the albums and evaluated live
             "searches": [dict(r) for r in con.execute("SELECT id, name, query, created FROM saved_searches ORDER BY created DESC")],
         }
@@ -119,8 +140,25 @@ def set_favorites(items: list, on: bool):
         _write(lambda c: c.executemany("DELETE FROM favorite_photos WHERE photo_id = ?", [(i,) for i, _ in items]))
 
 
-def create_album(name: str) -> int:
-    return _write(lambda c: c.execute("INSERT INTO viewer_albums (name, created) VALUES (?,?)", (name, int(time.time()))).lastrowid)
+def create_album(name: str, owner_id: int = None, shared: bool = True) -> int:
+    return _write(lambda c: c.execute("INSERT INTO viewer_albums (name, created, owner_id, is_shared) VALUES (?,?,?,?)",
+                                      (name, int(time.time()), owner_id, 1 if shared else 0)).lastrowid)
+
+
+def album(album_id: int) -> dict:
+    """{id, name, owner_id, is_shared}, or None; no visibility check (callers decide what the user may do)."""
+    con = connect()
+    try:
+        r = con.execute("SELECT id, name, owner_id, is_shared FROM viewer_albums WHERE id = ?", (int(album_id),)).fetchone()
+        return {"id": r[0], "name": r[1], "owner_id": r[2], "is_shared": bool(r[3])} if r else None
+    finally:
+        con.close()
+
+
+def set_album_sharing(album_id: int, shared: bool, owner_id: int = None):
+    """Shared: everyone sees it. Private: only owner_id does (the user who made it private)."""
+    _write(lambda c: c.execute("UPDATE viewer_albums SET is_shared = ?, owner_id = COALESCE(?, owner_id) WHERE id = ?",
+                               (1 if shared else 0, owner_id, int(album_id))))
 
 
 def rename_album(album_id: int, name: str):
@@ -206,19 +244,25 @@ def favorite_ids() -> list:
 
 
 def album_item_ids(album_ids: list) -> list:
+    """The photos in these albums, counting only the albums the current user may see."""
     if not album_ids:
         return []
+    vis, vp = _visible(alias="a")
     con = connect()
     try:
-        return [r[0] for r in con.execute(f"SELECT photo_id FROM viewer_album_photos WHERE album_id IN ({','.join(str(int(a)) for a in album_ids)})")]
+        return [r[0] for r in con.execute(
+            "SELECT i.photo_id FROM viewer_album_photos i JOIN viewer_albums a ON a.id = i.album_id "
+            f"WHERE i.album_id IN ({','.join(str(int(a)) for a in album_ids)}) AND {vis}", vp)]
     finally:
         con.close()
 
 
 def albums_of(photo_id: int) -> list:
+    vis, vp = _visible(alias="a")
     con = connect()
     try:
-        return [r[0] for r in con.execute("SELECT album_id FROM viewer_album_photos WHERE photo_id = ?", (photo_id,))]
+        return [r[0] for r in con.execute(
+            f"SELECT i.album_id FROM viewer_album_photos i JOIN viewer_albums a ON a.id = i.album_id WHERE i.photo_id = ? AND {vis}", [photo_id] + vp)]
     finally:
         con.close()
 
@@ -232,9 +276,10 @@ def is_favorite(photo_id: int) -> bool:
 
 
 def album_id_by_name(name_or_id) -> int:
+    vis, vp = _visible()
     con = connect()
     try:
-        r = con.execute("SELECT id FROM viewer_albums WHERE lower(name) = lower(?) OR id = ?", (str(name_or_id), str(name_or_id))).fetchone()
+        r = con.execute(f"SELECT id FROM viewer_albums WHERE (lower(name) = lower(?) OR id = ?) AND {vis}", [str(name_or_id), str(name_or_id)] + vp).fetchone()
         return r[0] if r else None
     finally:
         con.close()

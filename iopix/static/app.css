@@ -708,3 +708,23 @@ body:has(#dkbanner) #updbanner { bottom: 96px; }  /* both at once: the update ca
 .sheetgrid a.on { background: color-mix(in srgb, var(--hue) var(--mix), transparent); color: var(--hue); font-weight: 600; }
 .sheetgrid .sic { width: 36px; height: 36px; border-radius: 11px; display: inline-flex; align-items: center; justify-content: center; background: var(--hue); color: #fff; }
 .sheetgrid .sic .ic { width: 20px; height: 20px; }
+/* Installed app on iOS with the translucent status bar: the viewport fixed elements are placed in can end
+   short of the screen by the status bar's height (measured at start into --vgap; 0 everywhere else), which left
+   a band of empty screen under the bottom bar. Everything anchored to the bottom moves down by that much. */
+@media (max-width: 800px) {
+  #nav { bottom: calc(-1 * var(--vgap, 0px)); }
+  #main, #filters { bottom: calc(56px + env(safe-area-inset-bottom) - var(--vgap, 0px)); }
+  #scrub { top: calc(var(--topbar) + env(safe-area-inset-top) + 8px); bottom: calc(64px + env(safe-area-inset-bottom) - var(--vgap, 0px)); }
+  body.crumbed #scrub { top: calc(var(--topbar) + env(safe-area-inset-top) + 44px); }
+  #lightbox, .modal-back { bottom: calc(-1 * var(--vgap, 0px)); }
+  #toast { bottom: calc(68px + env(safe-area-inset-bottom) - var(--vgap, 0px)); max-width: calc(100vw - 24px); }
+  .cbulk { bottom: calc(56px + env(safe-area-inset-bottom) - var(--vgap, 0px)); }
+  #updbanner, #dkbanner { bottom: calc(64px + env(safe-area-inset-bottom) - var(--vgap, 0px)); }
+  body:has(#dkbanner) #updbanner { bottom: calc(150px + env(safe-area-inset-bottom) - var(--vgap, 0px)); }
+  .gbar { height: 42px; }
+}
+
+/* private albums: a lock on the card */
+.privbadge { position: absolute; left: 8px; top: 8px; width: 26px; height: 26px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: rgba(0,0,0,.55); color: #fff; }
+.privbadge .ic { width: 15px; height: 15px; }
+.sharepick { height: 36px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--fg); padding: 0 8px; }

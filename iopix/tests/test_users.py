@@ -143,6 +143,13 @@ def test_account_linked_to_a_person(client, fresh):
     assert client.get("/api/auth/accounts").json()["accounts"][0]["person"] == person["id"], "the picker can show the face"
     _login(client, "alex", "correct horse")
     assert client.post("/api/auth/person", json={"person": None}).json()["person"] is None
+    # only an admin links accounts to people: an editor or viewer cannot link themselves
+    users.create("ed", "editor-pass", "editor")
+    _login(client, "ed", "editor-pass")
+    assert client.post("/api/auth/person", json={"person": person["id"]}).status_code == 403
+    _login(client, "alex", "correct horse")
+    ed = next(u for u in client.get("/api/users").json()["users"] if u["name"] == "ed")
+    assert client.post(f"/api/users/{ed['id']}", json={"person": person["id"]}).status_code == 200
 
 
 def test_optional_email_on_accounts(client, fresh):

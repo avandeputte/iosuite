@@ -52,9 +52,10 @@ TABLES = {
     "favorite_photos": (["photo_id", "hash", "added"],
                   "CREATE TABLE IF NOT EXISTS favorite_photos (photo_id INTEGER PRIMARY KEY, hash TEXT, added INTEGER)",
                   "CREATE TABLE IF NOT EXISTS favorite_photos (photo_id BIGINT PRIMARY KEY, hash VARCHAR(64), added BIGINT)"),
-    "viewer_albums": (["id", "name", "created"],
-                "CREATE TABLE IF NOT EXISTS viewer_albums (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, created INTEGER)",
-                "CREATE TABLE IF NOT EXISTS viewer_albums (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255) NOT NULL, created BIGINT)"),
+    # is_shared 1: everyone sees it, editors and admins change it; 0: only owner_id (a user_accounts id) sees and changes it
+    "viewer_albums": (["id", "name", "created", "owner_id", "is_shared"],
+                "CREATE TABLE IF NOT EXISTS viewer_albums (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, created INTEGER, owner_id INTEGER, is_shared INTEGER NOT NULL DEFAULT 1)",
+                "CREATE TABLE IF NOT EXISTS viewer_albums (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255) NOT NULL, created BIGINT, owner_id BIGINT NULL, is_shared INT NOT NULL DEFAULT 1)"),
     "viewer_album_photos": (["album_id", "photo_id", "hash", "added"],
                      "CREATE TABLE IF NOT EXISTS viewer_album_photos (album_id INTEGER, photo_id INTEGER, hash TEXT, added INTEGER, PRIMARY KEY (album_id, photo_id))",
                      "CREATE TABLE IF NOT EXISTS viewer_album_photos (album_id INT, photo_id BIGINT, hash VARCHAR(64), added BIGINT, PRIMARY KEY (album_id, photo_id))"),
@@ -362,6 +363,11 @@ def ensure_schema(con: VConn = None):
                 con.execute("ALTER TABLE user_accounts ADD COLUMN email TEXT")
             if "undo" in columns(con, "photo_history"):  # v1.24 named the column after a reserved word
                 con.execute("ALTER TABLE photo_history RENAME COLUMN undo TO undo_values")
+        have = columns(con, "viewer_albums")  # v1.27: shared and private albums; albums from before are shared
+        if "owner_id" not in have:
+            con.execute("ALTER TABLE viewer_albums ADD COLUMN owner_id " + ("BIGINT NULL" if con.mysql else "INTEGER"))
+        if "is_shared" not in have:
+            con.execute("ALTER TABLE viewer_albums ADD COLUMN is_shared " + ("INT NOT NULL DEFAULT 1" if con.mysql else "INTEGER NOT NULL DEFAULT 1"))
         con.commit()
     finally:
         if own:

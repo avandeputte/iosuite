@@ -283,6 +283,7 @@ async def _auth_guard(request: Request, call_next):
     user = users.user_from_token(request.cookies.get(users.COOKIE, "")) if request.cookies.get(users.COOKIE) else None
     request.state.user = user
     history.user.set(user["name"] if user else ("MCP" if request.url.path.startswith("/mcp") else "visitor"))
+    appstate.viewer.set(user)  # private albums: seen only by their owner
     if user is None and users.require_login():
         path = request.url.path
         if path.startswith("/mcp"):
@@ -360,7 +361,9 @@ def api_photos(request: Request):
     fetches thumbnails lazily, so scrolling never waits on the server."""
     try:
         # the prefix makes cached results expire when favorites, albums or embeddings change
-        body = _photos_cached(state["version"], f"{appstate.rev}.{semantic.key}|{request.url.query}")
+        # an album filter depends on who asks (private albums), so the cached answer is kept per user then
+        who = f".u{(request.state.user or {}).get('id')}" if "ualbum" in request.url.query else ""
+        body = _photos_cached(state["version"], f"{appstate.rev}.{semantic.key}{who}|{request.url.query}")
     except sqlite3.OperationalError as e:
         raise HTTPException(400, f"Bad query: {e}")
     if "gzip" in request.headers.get("accept-encoding", ""):
@@ -868,9 +871,27 @@ def _with_hashes(ids) -> list:
         con.close()
 
 
+def _album_rights(user) -> dict:
+    """What this user may do with albums: shared ones are created and changed by editors and admins; private
+    ones by their owner, any signed-in user (with no accounts yet, every album is shared)."""
+    return {"canShareAlbums": bool(users.can_write(user)), "canPrivateAlbums": bool(user and user.get("id") is not None)}
+
+
+def _can_change_album(a: dict, user) -> bool:
+    if a["is_shared"]:
+        return bool(users.can_write(user))
+    return bool(user) and a["owner_id"] == user.get("id")
+
+
 @app.get("/api/state")
 def api_state(request: Request):
-    return jresp(request, {"rev": appstate.rev, **appstate.summary()})
+    user = request.state.user
+    s = appstate.summary(user)
+    for a in s["albums"]:
+        a["shared"] = bool(a.pop("is_shared"))
+        a["mine"] = bool(user) and a["owner_id"] == user.get("id")
+        a["canEdit"] = _can_change_album({"is_shared": a["shared"], "owner_id": a.pop("owner_id")}, user)
+    return jresp(request, {"rev": appstate.rev, **s, **_album_rights(user)})
 
 
 @app.post("/api/favorites")
@@ -882,11 +903,20 @@ async def api_favorites(request: Request):
 
 @app.post("/api/ualbums")
 async def api_ualbum_create(request: Request):
+    """Body: {name, shared: bool (default: shared when allowed), ids?}. Shared albums: editors and admins;
+    private albums: any signed-in user, seen only by them."""
     body = await request.json()
+    user = request.state.user
     name = str(body.get("name", "")).strip()[:200]
     if not name:
         raise HTTPException(400, "Album name is required")
-    album_id = appstate.create_album(name)
+    rights = _album_rights(user)
+    shared = bool(body["shared"]) if "shared" in body else rights["canShareAlbums"]
+    if shared and not rights["canShareAlbums"]:
+        raise HTTPException(403, "Only editors and admins can create shared albums; make it private instead")
+    if not shared and not rights["canPrivateAlbums"]:
+        raise HTTPException(403, "Sign in to keep private albums")
+    album_id = appstate.create_album(name, user.get("id") if user else None, shared)
     if body.get("ids"):
         appstate.set_album_items(album_id, _with_hashes(body["ids"]), True)
     return {"id": album_id}
@@ -894,10 +924,25 @@ async def api_ualbum_create(request: Request):
 
 @app.post("/api/ualbums/{album_id}")
 async def api_ualbum_update(album_id: int, request: Request):
-    """Body: {name} to rename, {ids, on} to add or remove photos, {delete: true} to remove the album."""
+    """Body: {name} to rename, {ids, on} to add or remove photos, {shared: bool} to share it or make it
+    private, {delete: true} to remove the album. A shared album is changed by editors and admins, a private
+    one by its owner; sharing needs both (the owner, and editor or admin)."""
     body = await request.json()
+    user = request.state.user
+    a = appstate.album(album_id)
+    if not a or not (a["is_shared"] or (user and a["owner_id"] == user.get("id"))):
+        raise HTTPException(404, "No such album")
+    if not _can_change_album(a, user):
+        raise HTTPException(403, "Only editors and admins can change a shared album")
+    if "shared" in body and bool(body["shared"]) != a["is_shared"]:
+        if bool(body["shared"]) and not users.can_write(user):
+            raise HTTPException(403, "Only editors and admins can share an album")
+        if not bool(body["shared"]) and not (user and user.get("id") is not None):
+            raise HTTPException(403, "Sign in to keep private albums")
+        appstate.set_album_sharing(album_id, bool(body["shared"]), None if body["shared"] else user["id"])
     if body.get("delete"):
         appstate.delete_album(album_id)
+        return {"ok": True}
     if body.get("name"):
         appstate.rename_album(album_id, str(body["name"]).strip()[:200])
     if "ids" in body:
@@ -1279,10 +1324,14 @@ def _person_tag(tag_id) -> bool:
 
 @app.post("/api/auth/person")
 async def api_my_person(request: Request):
-    """Link the signed-in account to a person from People: {person: tag id or null}."""
+    """Link the signed-in admin's own account to a person from People: {person: tag id or null}. Admins only:
+    a linked person's face is shown on the sign-in screen, so who is who is the admin's call (other accounts
+    are linked from Settings › Users)."""
     u = request.state.user
     if not u:
         raise HTTPException(401, "Sign in first")
+    if not users.is_admin(u):
+        raise HTTPException(403, "Only an admin can link an account to a person")
     body = await request.json()
     if not _person_tag(body.get("person")):
         raise HTTPException(400, "That tag is not a person")

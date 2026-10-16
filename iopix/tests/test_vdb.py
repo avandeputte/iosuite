@@ -97,6 +97,27 @@ def test_mysql_round_trip(client, tmp_path, fresh, monkeypatch):
         assert u["email"] == "new@example.com" and users.get(u["id"])["name"] == "new"
         assert any(a["name"] == "Trip" and a["n"] == 1 for a in state.summary()["albums"])
         assert 1 in state.favorite_ids() and state.albums_of(1) == [aid] and state.album_id_by_name("trip") == aid
+        # private albums on MySQL: seen by their owner only (the GROUP BY must satisfy ONLY_FULL_GROUP_BY too)
+        priv = state.create_album("Secret", me["id"], shared=False); state.set_album_items(priv, [(1, "h1")], True)
+        assert "Secret" not in {a["name"] for a in state.summary(None)["albums"]}
+        assert {a["name"] for a in state.summary(me)["albums"]} >= {"Trip", "Secret"}
+        assert state.album_item_ids([priv]) == [] and state.album(priv)["is_shared"] is False
+        tok = state.viewer.set(me)
+        try:
+            assert state.album_item_ids([priv]) == [1] and sorted(state.albums_of(1)) == sorted([aid, priv])
+        finally:
+            state.viewer.reset(tok)
+        # an older MySQL table without the two columns is migrated in place, its albums shared
+        c = vdb.connect()
+        try:
+            c.execute("CREATE TABLE zz_old_albums AS SELECT id, name, created FROM viewer_albums")
+            c.execute("DROP TABLE viewer_albums"); c.execute("RENAME TABLE zz_old_albums TO viewer_albums")
+            c.commit()
+            vdb.ensure_schema(c)
+            assert {"owner_id", "is_shared"} <= set(vdb.columns(c, "viewer_albums"))
+            assert {r[0] for r in c.execute("SELECT is_shared FROM viewer_albums")} == {1}
+        finally:
+            c.close()
         with analysis._writer() as con:
             con.execute("INSERT OR REPLACE INTO ai_quality VALUES (?,?,?,?,?,?)", (2, "2026-10-15T00:00:00.000", 0.1, 0.9, 0, 0))
         res = analysis.results()
