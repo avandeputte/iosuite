@@ -119,7 +119,7 @@ def mirror_info() -> dict:
     try:
         con = appstate.connect()
         try:
-            d = dict(con.execute("SELECT key, value FROM digikam_copy_info").fetchall())
+            d = dict(con.execute("SELECT key, value FROM library_info").fetchall())
         finally:
             con.close()
     except Exception:
@@ -198,8 +198,8 @@ def read_digikam() -> dict:
     return raw
 
 
-_LIB_TABLES = {"roots": "digikam_copy_album_roots", "albums": "digikam_copy_folders", "tags": "digikam_copy_tags", "tagprops": "digikam_copy_tag_properties", "imagetags": "digikam_copy_photo_tags",
-               "regions": "digikam_copy_face_regions", "comments": "digikam_copy_comments", "copyright": "digikam_copy_copyright", "props": "digikam_copy_photo_properties", "images": "digikam_copy_photos"}
+_LIB_TABLES = {"roots": "album_roots", "albums": "folders", "tags": "tags", "tagprops": "tag_properties", "imagetags": "photo_tags",
+               "regions": "face_regions", "comments": "comments", "copyright": "copyright", "props": "photo_properties", "images": "photos"}
 
 
 def _chunks(rows, n=1000):
@@ -219,8 +219,8 @@ def save_mirror(raw: dict):
                 sql = f"INSERT INTO {table} ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})"
                 for chunk in _chunks(raw[key]):
                     con.executemany(sql, [tuple(r[:len(cols)]) for r in chunk])
-            con.execute("DELETE FROM digikam_copy_info")
-            con.executemany("INSERT INTO digikam_copy_info (key, value) VALUES (?,?)",
+            con.execute("DELETE FROM library_info")
+            con.executemany("INSERT INTO library_info (key, value) VALUES (?,?)",
                             [("source", raw["source"]), ("taken", str(raw["taken"])), ("photos", str(len(raw["images"])))])
             con.commit()
         except BaseException:
@@ -235,7 +235,7 @@ def load_mirror() -> dict:
     """The last read of digiKam, back in the shape read_digikam() returns."""
     con = appstate.connect()
     try:
-        meta = dict(con.execute("SELECT key, value FROM digikam_copy_info").fetchall())
+        meta = dict(con.execute("SELECT key, value FROM library_info").fetchall())
         if not meta.get("source"):
             raise Unavailable("the viewer has no copy of the library yet")
         raw = {}
@@ -255,11 +255,11 @@ def mirror_tag_paths(image_ids: list) -> dict:
     ids = [int(x) for x in image_ids]
     con = appstate.connect()
     try:
-        tags = {r[0]: (r[1], r[2]) for r in con.execute("SELECT id, pid, name FROM digikam_copy_tags").fetchall()}
-        internal = {r[0] for r in con.execute("SELECT tagid FROM digikam_copy_tag_properties WHERE property = 'internalTag'").fetchall()}
+        tags = {r[0]: (r[1], r[2]) for r in con.execute("SELECT id, pid, name FROM tags").fetchall()}
+        internal = {r[0] for r in con.execute("SELECT tagid FROM tag_properties WHERE property = 'internalTag'").fetchall()}
         out = {}
         for chunk in _chunks(ids, 500):
-            for iid, tid in con.execute(f"SELECT imageid, tagid FROM digikam_copy_photo_tags WHERE imageid IN ({','.join(map(str, chunk))})").fetchall():
+            for iid, tid in con.execute(f"SELECT imageid, tagid FROM photo_tags WHERE imageid IN ({','.join(map(str, chunk))})").fetchall():
                 if tid in tags and tid not in internal:
                     out.setdefault(iid, []).append(dkdb.tag_path(tags, tid))
     finally:
@@ -270,7 +270,7 @@ def mirror_tag_paths(image_ids: list) -> dict:
 # ---- photo_ids: the viewer's identity for a photo, and viewer data following a renumbered photo
 REKEY = [("favorite_photos", "photo_id"), ("viewer_album_photos", "photo_id"), ("pending_edits", "photo_id"), ("ai_quality", "photo_id"), ("ai_text_and_faces", "photo_id"),
          ("ai_objects", "photo_id"), ("ai_objects_scanned", "photo_id"), ("ai_descriptions", "photo_id"), ("ai_face_embeddings", "photo_id"), ("ai_person_references", "photo_id"),
-         ("metadata_check", "photo_id"), ("ai_similar_photos", "a"), ("ai_similar_photos", "b")]
+         ("metadata_check", "photo_id"), ("ai_faces_scanned", "photo_id"), ("ai_similar_photos", "a"), ("ai_similar_photos", "b")]
 
 
 def sync_photo_ids(images: list, paths: dict) -> dict:

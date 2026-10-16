@@ -27,6 +27,7 @@ All chosen in `setup.sh` (or later from Maintenance › AI analysis and models);
 | Object detection | people, animals, vehicles, everyday objects with boxes | YOLOX-S 35 MB |
 | Text in photos | signs, jerseys, documents searchable | RapidOCR ~60 MB |
 | Face grouping | look-alike unnamed faces grouped, with "looks like" name suggestions | SFace 37 MB |
+| Face detection | YuNet (OpenCV, 0.2 MB, onnxruntime) finds faces nothing has marked yet, on request only: a photo (info panel › People › detect faces), a folder (the face button on its row in Folders, subfolders included) or the whole library (Maintenance › AI analysis and models › Run). Every existing face region, named, unknown, suggested or ignored, from digiKam or any other tool, is honoured: a detection that overlaps one (centre inside it, or a third of the smaller box covered) is the same face and is not added, even when the rectangles differ. New faces are written to digiKam's database the way digiKam writes an unnamed face, so they appear under People › Unnamed faces with a "looks like" suggestion. The library run remembers which photos it looked at and next time checks only new and changed ones; "Run again" looks at every photo again |
 | Photo descriptions | one sentence per photo, searchable | BLIP base ~950 MB plus PyTorch (CPU build ~1 GB) |
 
 
@@ -155,7 +156,7 @@ Maintenance › Metadata consistency compares rating, title, caption and tags ac
 
 ### The viewer's database
 
-Everything the viewer keeps of its own lives in one database (`data/viewer.db`, or MySQL/MariaDB), in tables named for what they hold. Databases from before v1.18 are renamed in place the first time a newer version opens them; no rows change.
+Everything the viewer keeps of its own lives in one database (`data/viewer.db`, or MySQL/MariaDB), in tables named for what they hold. Databases from older versions are renamed in place the first time a newer version opens them; no rows change.
 
 | Group | Tables |
 |---|---|
@@ -164,7 +165,7 @@ Everything the viewer keeps of its own lives in one database (`data/viewer.db`, 
 | Edits and their queues | `pending_edits` (edits in sidecars that digiKam's database does not have yet), `tag_rewrite_queue` (sidecars to rewrite after a tag was renamed, moved or deleted) |
 | AI results | `ai_quality` (sharpness, exposure), `ai_text_and_faces` (text in the picture, face quality), `ai_objects` and `ai_objects_scanned`, `ai_descriptions`, `ai_face_embeddings`, `ai_person_references` (the faces each person is recognised by), `ai_similar_photos` |
 | Checks | `metadata_check` (the metadata consistency results) |
-| The copy of digiKam's library | `digikam_copy_info`, `digikam_copy_album_roots`, `digikam_copy_folders`, `digikam_copy_photos`, `digikam_copy_tags`, `digikam_copy_tag_properties`, `digikam_copy_photo_tags`, `digikam_copy_face_regions`, `digikam_copy_comments`, `digikam_copy_copyright`, `digikam_copy_photo_properties` |
+| The library itself (copied from digiKam at every read while Sync with digiKam is on; the record of the library when it is off) | `library_info`, `album_roots`, `folders`, `photos`, `tags`, `tag_properties`, `photo_tags`, `face_regions`, `comments`, `copyright`, `photo_properties` |
 | Identity | `photo_identity` (the viewer's own id for each photo, with the file's hash and size, so viewer data follows a photo digiKam renumbers) |
 
 The search index (`data/index.db`) is separate and disposable: it is rebuilt from the tables above and digiKam's database.
@@ -197,7 +198,7 @@ The digiKam database is opened read-only (SQLite `mode=ro` + `PRAGMA query_only`
 
 The viewer keeps its own copy of the library's metadata, so it does not depend on digiKam's database being there:
 
-- **Library copy.** At every read of digiKam's database the rows the index is built from (albums, tags and their properties, image tags, face regions, comments, copyright, properties and the image rows) are copied into the viewer's database (the `digikam_copy_*` tables). When digiKam's database is unreachable the index is rebuilt from that copy, with the same code, and the viewer keeps running; admins see a card saying so and when the copy was taken. The copy is part of the app backup (Maintenance › Storage and backups), so the backup carries the library's metadata too.
+- **Library copy.** At every read of digiKam's database the rows the index is built from (albums, tags and their properties, image tags, face regions, comments, copyright, properties and the image rows) are copied into the viewer's database (the library tables: `photos`, `folders`, `tags`, `photo_tags`, `face_regions` and the others listed under Backups). When digiKam's database is unreachable the index is rebuilt from that copy, with the same code, and the viewer keeps running; admins see a card saying so and when the copy was taken. The copy is part of the app backup (Maintenance › Storage and backups), so the backup carries the library's metadata too.
 - **Editing meanwhile.** Rating, pick and colour labels, title, caption, date, location, template and tags are written to the sidecars and remembered in the viewer's database exactly as when digiKam is there, and shown at once. When digiKam's database is reachable again and digiKam is closed, the queued edits are written into it automatically (a minute after the last edit, at most every five minutes, with a backup of the database first); Maintenance › "Apply to digiKam database" does the same on request.
 - **Sync with digiKam** (Settings, on by default). Off: the viewer never opens digiKam's database; it works from its copy and edits live in the sidecars and the viewer's database. Use it to retire digiKam, or while its database is being moved. Creating tags and folders, naming faces, place tags and uploads still need digiKam's database and say so when it is unreachable or sync is off.
 - **Photo ids.** digiKam's image id is the viewer's working key everywhere. The `photo_identity` table remembers which file (digiKam's uniqueHash and size) each id stood for, with a viewer id that never changes. If digiKam ever renumbers a photo, say after a fresh import, favorites, albums, edits, analysis results, face vectors, near-duplicate pairs and content-search embeddings follow the file to its new id automatically.

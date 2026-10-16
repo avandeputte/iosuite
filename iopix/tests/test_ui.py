@@ -908,3 +908,18 @@ def test_server_log_dialog_opens_from_maintenance(page, server):
     page.wait_for_selector(".modal pre.logview", timeout=5000)
     page.wait_for_function("!document.querySelector('.modal pre.logview').textContent.startsWith('Loading')", timeout=5000)
     assert page.locator(".modal a", has_text="Download the log").count() == 1
+
+
+def test_filter_pane_steps_aside_on_pages_it_does_not_apply_to(page, server):
+    page.set_viewport_size({"width": 1400, "height": 900})
+    page.goto(server + "/#/photos")
+    page.wait_for_selector("#filterbtn", timeout=10000)
+    if page.locator("#filters").is_hidden():
+        page.locator("#filterbtn").click()
+    page.wait_for_selector("#filters:not([hidden])", timeout=5000)
+    page.goto(server + "/#/maintenance")
+    page.wait_for_timeout(600)
+    assert page.locator("#filters").is_hidden(), "no filter pane on Maintenance"
+    page.goto(server + "/#/photos")
+    page.wait_for_selector("#filters:not([hidden])", timeout=5000)
+    page.locator("#filterbtn").click()  # leave it closed for the other tests

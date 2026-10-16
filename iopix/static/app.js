@@ -189,7 +189,7 @@ function applyAppName() {
   document.title = APP_NAME;
   const meta = document.querySelector('meta[name="apple-mobile-web-app-title"]'); if (meta) meta.content = APP_NAME;
 }
-let EDITING = false, WRITE_FILES = false, CAN_MANAGE = false, manageTags = false, PENDING = 0, pollTimer = 0, keepView = false;
+let EDITING = false, WRITE_FILES = false, CAN_MANAGE = false, FACE_DETECT = false, manageTags = false, PENDING = 0, pollTimer = 0, keepView = false;
 /** Re-check server status soon (after an edit) instead of waiting for the regular poll. */
 function pollSoon(ms = 1500) { clearTimeout(pollTimer); pollTimer = setTimeout(pollStatus, ms); }
 async function loadState() {
@@ -260,6 +260,9 @@ function onRoute() {
     removeScrubber();
     if (M.map && route.view !== 'map') { M.map.remove(); M.map = null; }  // Leaflet keeps window listeners until the map is removed
     crumbs(null);  // each view sets its own trail
+    // the filter pane belongs to the photo and map views: it steps aside elsewhere and comes back with them
+    if (!FILTER_VIEWS.includes(route.view)) { if (!$('#filters').hidden) toggleFilters(false, false); }
+    else if ($('#filters').hidden && store.get('filters', '0') === '1' && innerWidth >= 1100) toggleFilters(true, false);
     VIEW_FNS[route.view](PARAM_VIEWS.includes(route.view) ? vp : fp);
     if (!$('#filters').hidden) renderFilters();
   }
@@ -1007,6 +1010,17 @@ function dateEditor(ids, current, after) {
     h('div', { class: 'erow' }, h('span', { class: 'el' }, 'Shift by'), amount, unit, h('button', { class: 'pillbtn', title: 'Move the date later', onclick: shift(1) }, '+ later'), h('button', { class: 'pillbtn', title: 'Move the date earlier', onclick: shift(-1) }, '− earlier')),
     h('div', { class: 'muted', style: 'font-size:12px' }, 'Shifting keeps each photo’s own time and moves it by the same amount, for a camera clock that was wrong.'));
 }
+/** Face detection on request: a photo (answered at once) or a folder (in the background). Faces already
+ *  marked, by digiKam or anything else, are kept; only faces nothing marked become new unnamed faces. */
+async function detectFaces(ids, folder) {
+  if (folder && !confirm(`Look for faces in the ${nf.format(folder.nAll)} photos of “${folder.path.replace(/^\//, '')}” (with its subfolders)? New faces are added to digiKam’s database as unnamed faces (backed up first); faces already marked stay as they are.`)) return;
+  if (!folder) toast('Looking for faces…', null, null, 30000);
+  let r;
+  try { r = await post('/api/faces/detect', folder ? { album: folder.id } : { ids }); } catch (e) { toast(e.message, null, null, 9000); return; }
+  if (!r.done) { toast(`Looking for faces in ${plural(r.queued, 'photo')} in the background; progress in Maintenance › AI analysis and models.`, null, null, 9000); return; }
+  toast(r.added ? `Found ${plural(r.added, 'new face')}; ${r.found - r.added ? `${plural(r.found - r.added, 'face was', 'faces were')} already marked.` : ''} Name ${r.added === 1 ? 'it' : 'them'} under People or here.` : r.found ? `No new faces: the ${plural(r.found, 'face')} found ${r.found === 1 ? 'is' : 'are'} already marked.` : 'No faces found.', null, null, 9000);
+  if (r.added && LB.open) { (ids || []).forEach((i) => details.delete(i)); keepView = true; setTimeout(() => { pollStatus().then(() => { if (LB.open) showItem(); }); }, 800); }
+}
 async function locationDialog(ids, current, after) {
   // current: {lat, lon, alt} or null. Drag the marker or click the map; coordinates can also be typed.
   const lat = h('input', { class: 'einput', type: 'number', step: 'any', placeholder: 'latitude', value: current?.lat ?? '', style: 'margin:0;width:140px' });
@@ -1368,7 +1382,8 @@ async function showFolders() {
     const trow = h('div', { class: 'trow', title: f.path, onclick: () => { if (f.nAll) go('photos', photosWith({ album: f.id, sort: 'old' })); else if (can) uploadTo(f); else expand(!node.classList.contains('open')); } },
       tw, cover, h('span', { class: 'nm' }, flat ? f.path.replace(/^\//, '').replaceAll('/', ' › ') : f.name),
       can ? h('span', { class: 'tacts' }, act('add', 'Upload photos into this folder', () => uploadTo(f)), act('folder', 'New folder inside this one', () => newFolder(f)),
-        f.nAll ? act('download', 'Download this folder as a zip', () => downloadDialog(photosWith({ album: f.id }))) : null) : null,
+        f.nAll ? act('download', 'Download this folder as a zip', () => downloadDialog(photosWith({ album: f.id }))) : null,
+        f.nAll && CAN_MANAGE && FACE_DETECT ? act('face', 'Detect faces in this folder and its subfolders', () => detectFaces(null, f)) : null) : null,
       h('span', { class: 'ct' }, f.nAll ? nf.format(f.nAll) : h('i', null, 'empty')));
     if (!flat && kids.length && openFolders.has(f.id)) expand(true);
     node.append(trow, box);
@@ -1690,7 +1705,7 @@ function aiSection(view) {
       h('button', { class: 'pillbtn on', onclick: async () => { try { await post('/api/analysis/run', { job: 'all' }); toast('Checking for new and changed photos…'); } catch (e) { toast(e.message); } draw(); } }, icon('spark'), 'Check new and changed photos'), checkBtn),
     body);
   const fmtDate = (t) => (t ? dfDay.format(new Date(t * 1000)) : '');
-  const JOB_MODEL = { objects: 'yolox', vision: 'ocr', faces: 'sface', captions: 'blip' };
+  const JOB_MODEL = { objects: 'yolox', vision: 'ocr', faces: 'sface', facedetect: 'yunet', captions: 'blip' };
   const modelState = (m, p) => {
     const c = m.check;
     return p.running === m.key ? ['downloading…', 'on']
@@ -1728,7 +1743,7 @@ function aiSection(view) {
     };
     const progressCell = (j, m, extra) => {
       if (!j) return h('td', { class: 'muted' }, '—');
-      const state = !j.enabled ? (m && !m.installed ? 'needs its model' : 'off') : j.running ? 'running…' : j.queued ? 'queued' : j.done >= j.total ? 'up to date' : 'waiting';
+      const state = !j.enabled ? (m && !m.installed ? 'needs its model' : 'off') : j.running ? 'running…' : j.queued ? 'queued' : j.done >= j.total ? 'up to date' : j.key === 'facedetect' ? 'on request' : 'waiting';
       const now = Date.now() / 1000, idle = j.running && j.since ? (j.last ? now - j.last : now - j.since) : 0, stuck = idle > 300;
       return h('td', { class: 'mprog' },
         h('div', { class: 'ahead' }, h('span', { class: j.running ? 'mst on' : j.done >= j.total && j.enabled ? 'mst ok' : 'mst' }, state), h('span', { class: 'sp' }), h('span', { class: 'muted' }, `${nf.format(Math.min(j.done, j.total))} / ${nf.format(j.total)}`)),
@@ -1737,6 +1752,12 @@ function aiSection(view) {
           j.current && j.current.length ? ` · ${j.current.map((x) => x.split('/').pop()).join(', ')}` : '', stuck ? ' · probably stuck on that file: see the server log, or restart the viewer' : '') : null,
         extra);
     };
+    // face detection writes to digiKam's database, so it never starts by itself: a Run link for the photos not looked at yet
+    const runNow = (j) => j && j.key === 'facedetect' && j.enabled && !j.running && j.done < j.total ? h('a', { class: 'lnk mrerun', style: 'margin-right:12px', title: 'Look for faces in every photo not looked at yet', onclick: async () => {
+      if (!confirm(`Look for faces in the ${nf.format(j.total - j.done)} photos not checked yet? New faces are added to digiKam’s database as unnamed faces (backed up first); faces already marked are kept as they are.`)) return;
+      try { const r = await post('/api/analysis/run', { job: 'facedetect' }); toast(`Looking for faces in ${nf.format(r.queued)} photos.`); } catch (e) { toast(e.message); }
+      draw();
+    } }, 'Run') : null;
     const rerun = (j) => j && j.rerun && j.enabled ? h('a', { class: 'lnk mrerun', title: `Discard the results of “${j.label}” and compute them again for every photo`, onclick: async () => {
       if (!confirm(`Run “${j.label}” again from scratch for all ${nf.format(j.total)} photos? The current results for it are discarded first. This can take from several minutes to a few hours.`)) return;
       try { await post('/api/analysis/run', { job: j.key, reset: true }); toast(`Re-running “${j.label}”.`); } catch (e) { toast(e.message); }
@@ -1744,7 +1765,7 @@ function aiSection(view) {
     } }, 'Run again') : null;
     const row = (label, detail, j, m) => h('tr', { 'data-job': j?.key || '', 'data-model': m?.key || '' },
       h('td', { class: 'mfeat' }, h('b', null, label), detail ? h('div', { class: 'muted mdet', title: detail }, detail) : null),
-      modelCell(m), progressCell(j, m, rerun(j)), h('td', { class: 'macts' }, modelBtn(m)));
+      modelCell(m), progressCell(j, m, [runNow(j), rerun(j)]), h('td', { class: 'macts' }, modelBtn(m)));
     const rows = a.jobs.map((j) => {
       const m = j.key === 'embeddings' ? models[searchKey] : models[JOB_MODEL[j.key]];
       return row(j.label, j.detail, j, m);
@@ -2532,13 +2553,15 @@ async function showMap(fp) {
 
 // ---------------------------------------------------------------- filter drawer (browse all metadata)
 const expanded = new Set();
-function toggleFilters(force) {
+function toggleFilters(force, remember = true) {
   const el = $('#filters');
-  el.hidden = force != null ? !force : !el.hidden;
-  document.body.classList.toggle('filters-open', !el.hidden);
-  $('#filterbtn').classList.toggle('on', !el.hidden);
-  store.set('filters', el.hidden ? '0' : '1');
-  if (!el.hidden) renderFilters();
+  const show = force != null ? !!force : el.hidden;
+  if (show && !FILTER_VIEWS.includes(route.view)) { location.hash = '#/photos'; }  // the filters act on photos: go there with the pane open
+  el.hidden = !show;
+  document.body.classList.toggle('filters-open', show);
+  $('#filterbtn').classList.toggle('on', show);
+  if (remember) store.set('filters', show ? '1' : '0');
+  if (show) renderFilters();
 }
 let facetToken = 0;
 async function renderFilters() {
@@ -3181,8 +3204,10 @@ function renderInfo() {
       const faced = new Set(d.faces.map((f) => f.tag));
       const rows = [...faceRegions(d),
         ...peopleTags.filter((t) => !faced.has(t.id)).map((t) => ({ kind: 'tagonly', tag: t.id, name: t.name }))];
-      if (!rows.length) return null;
-      return [h('h4', null, 'People'), h('div', { class: 'facerows' }, rows.map((f) => h('div', { class: 'facerow', title: f.kind === 'confirmed' || f.kind === 'tagonly' ? (CAN_MANAGE ? 'Options for this face' : `Show all photos of ${f.name}`) : 'Show the face on the photo',
+      const canDetect = CAN_MANAGE && FACE_DETECT && !d.video;
+      if (!rows.length && !canDetect) return null;
+      return [h('h4', null, 'People', canDetect ? h('a', { class: 'lnk', style: 'margin-left:10px;text-transform:none;letter-spacing:0;font-weight:400', title: 'Look for faces nobody has marked yet; faces already marked are kept', onclick: () => detectFaces([d.id]) }, 'detect faces') : null),
+        h('div', { class: 'facerows' }, rows.map((f) => h('div', { class: 'facerow', title: f.kind === 'confirmed' || f.kind === 'tagonly' ? (CAN_MANAGE ? 'Options for this face' : `Show all photos of ${f.name}`) : 'Show the face on the photo',
         onclick: (e) => {
           if (f.kind !== 'tagonly' && !LB.faces) toggleFaces();
           if (CAN_MANAGE && f.kind !== 'tagonly') faceMenu(e.currentTarget, f, d);
@@ -3335,7 +3360,7 @@ async function pollStatus() {
     }
     if (s.app && APP_STAMP && s.app !== APP_STAMP && !LB.open && !G.sel.size) { location.reload(); return; }  // the viewer was updated: use the new version
     if (s.app) APP_STAMP = s.app;
-    SEM = s.semantic; EDITING = s.editing; PENDING = s.pendingEdits; WRITE_FILES = s.writeFiles; CAN_MANAGE = s.editing && s.dbWrite;
+    SEM = s.semantic; EDITING = s.editing; FACE_DETECT = !!s.faceDetect; PENDING = s.pendingEdits; WRITE_FILES = s.writeFiles; CAN_MANAGE = s.editing && s.dbWrite;
     IS_ADMIN = s.isAdmin; USERS_EXIST = s.usersExist; DIGIKAM_CHECK = s.digikamCheck || 'pgrep';
     updateBanner(s.updateAvailable);
     dkBanner(s.digikam);
@@ -3366,7 +3391,7 @@ async function start() {
 async function boot() {
   BOOTED = true; document.body.classList.remove('locked');
   try { indexMeta(await api('/api/meta')); await loadState(); } catch (e) { main.replaceChildren(h('div', { class: 'empty' }, 'Could not reach the server: ' + e.message)); return; }
-  if (store.get('filters', '0') === '1' && innerWidth >= 1100) toggleFilters(true);
+  if (store.get('filters', '0') === '1' && innerWidth >= 1100 && FILTER_VIEWS.includes(parseHash().view)) toggleFilters(true, false);
   await pollStatus();
   onRoute();
 }

@@ -29,7 +29,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
-from . import (analysis, caption, concepts, config, consistency, dbsync, detector, dkdb, edits, facemgr, facevecs, folders, gpx, index, neardups, vdb,
+from . import (analysis, caption, concepts, config, consistency, dbsync, detector, dkdb, edits, facedetect, facemgr, facevecs, folders, gpx, index, neardups, vdb,
                moments, places, placetags, tagmanager, thumbs)
 from . import state as appstate
 from . import jobs as bgjobs
@@ -241,7 +241,7 @@ async def lifespan(_app):
 app = FastAPI(title="iopix", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 # every endpoint that changes the library (sidecars, files, digiKam's database); refused in read-only mode
-WRITE_PATHS = ("/api/edit", "/api/edits/db", "/api/consistency/sync", "/api/gpx/apply", "/api/faces/op", "/api/faces/batch", "/api/folders",
+WRITE_PATHS = ("/api/edit", "/api/edits/db", "/api/faces/detect", "/api/consistency/sync", "/api/gpx/apply", "/api/faces/op", "/api/faces/batch", "/api/folders",
                "/api/faces/person", "/api/placetags", "/api/tags/op")
 
 
@@ -483,7 +483,7 @@ def api_status(request: Request):
             "isAdmin": users.is_admin(user), "signedIn": users.is_signed_in(user), "requireLogin": users.require_login(),
             "updateAvailable": updates.available() if users.is_admin(user) and updates.auto_check_enabled() else None,
             "readOnly": appstate.read_only(), "readOnlyLocked": config.READ_ONLY, "digikamCheck": config.DIGIKAM_CHECK,
-            "digikam": index.status(),
+            "digikam": index.status(), "faceDetect": facedetect.available(),
             "appVersion": APP_VERSION, "commit": updates.local_commit()[:7], "appName": app_name(),
             "tagJobs": {**tagmanager.progress, "pending": tagmanager.pending_jobs()},
             "analysis": analysis.progress, "jobs": bgjobs.status()}
@@ -1151,11 +1151,14 @@ def api_analysis():
          "enabled": config.ANALYSIS and detector.MODEL.exists(), "rerun": True},
         {"key": "faces", "label": "Face grouping and suggestions", "detail": "An embedding (SFace) for every face digiKam has not named yet and for the most recent faces of each named person, so the Faces page shows look-alikes together with a “looks like” suggestion and a one-click name. A suggestion is written nowhere until you accept it.",
          "done": facevecs.coverage()[0], "total": facevecs.coverage()[1], "running": facevecs.progress["running"], "enabled": config.ANALYSIS and facevecs.available(), "rerun": True},
+        {"key": "facedetect", "label": "Face detection", "detail": "Finds faces nothing has marked yet (YuNet) and adds them as unnamed faces, ready for grouping and naming. Existing face regions, from digiKam or any other tool, are kept: a face that overlaps one is not added again, even when the two rectangles differ. Runs only when you start it (here for the library, or from a folder or a photo); writes to digiKam's database, backed up first."
+         + (f" Last run: {nf(facedetect.progress['added'])} new faces in {nf(facedetect.progress['photos_with_new'])} photos." if facedetect.progress.get("started") else ""),
+         "done": facedetect.coverage(), "total": stills, "running": facedetect.progress["running"], "enabled": facedetect.available() and config.DB_WRITE, "rerun": True},
         {"key": "captions", "label": "Photo descriptions", "detail": "A one-sentence description of each photo (BLIP), searchable from the search box and shown in the info panel.",
          "done": cov["captions"], "total": stills, "running": analysis.progress["captions"]["running"],
          "enabled": config.ANALYSIS and caption.available(), "rerun": True},
     ]
-    queue_key = {"thumbs": "thumbs", "embeddings": "embeddings", "quality": "pixels", "objects": "pixels", "vision": "vision", "captions": "captions", "faces": "faces"}
+    queue_key = {"thumbs": "thumbs", "embeddings": "embeddings", "quality": "pixels", "objects": "pixels", "vision": "vision", "captions": "captions", "faces": "faces", "facedetect": "facedetect"}
     for j in jobs:
         j["queued"] = bgjobs.is_queued(queue_key[j["key"]])
     return {"jobs": jobs, "photos": total, "models": models if act is not None else [], "queue": bgjobs.status()}
@@ -1514,12 +1517,55 @@ async def api_maintenance_run(request: Request):
     return {"ok": True}
 
 
+def _face_detect_allowed():
+    if not facedetect.available():
+        raise HTTPException(409, "Face detection needs the YuNet model: download it in Maintenance › AI analysis and models")
+    if not config.DB_WRITE or appstate.read_only():
+        raise HTTPException(403, "Writing to digiKam's database is turned off")
+    if not index.sync_enabled() or index.offline["since"]:
+        raise HTTPException(409, "Face regions live in digiKam's database, which is unreachable (or Sync with digiKam is off)")
+
+
+@app.post("/api/faces/detect")
+async def api_faces_detect(request: Request):
+    """Body: {ids: [...]} | {album: id} | {all: true}, optional redo. Up to five photos are looked at now and
+    the answer says what was found; a folder, the library or a larger selection runs in the background."""
+    body = await request.json()
+    _face_detect_allowed()
+    ids = [int(i) for i in body.get("ids") or []][:50000]
+    if ids and len(ids) <= 5:
+        photos = await run_in_threadpool(facedetect._photos, ids)
+        try:
+            r = await run_in_threadpool(facedetect.detect, photos)
+        except dbsync.SyncError as e:
+            raise HTTPException(409, str(e))
+        if r["added"]:
+            await run_in_threadpool(_rebuild_after_write)
+            facevecs.start()  # embed the new faces for grouping and "looks like" suggestions
+        return {"done": True, **r}
+    album = body.get("album")
+    if not ids and album is None and not body.get("all"):
+        raise HTTPException(400, "Choose photos, a folder or the whole library")
+
+    def after():
+        _rebuild_after_write()
+        facevecs.start()
+    n = facedetect.start(ids or None, int(album) if album is not None else None, bool(body.get("redo")), after=after)
+    return {"done": False, "queued": n}
+
+
 @app.post("/api/analysis/run")
 async def api_analysis_run(request: Request):
     """Body: {job: all|embeddings|quality|vision|objects, reset: bool}. Without reset it only
     picks up photos that are new or changed; with reset that analysis starts over."""
     body = await request.json()
     job, reset = body.get("job", "all"), bool(body.get("reset"))
+    if job == "facedetect":  # writes faces into digiKam's database, so only ever on request
+        _face_detect_allowed()
+        if reset:
+            facedetect.reset()
+        n = facedetect.start(after=_rebuild_after_write)
+        return {"ok": True, "queued": n}
     if reset:
         if job == "embeddings" and semantic_enabled():
             (semantic.upgrade or semantic.active).reset()
@@ -1527,6 +1573,8 @@ async def api_analysis_run(request: Request):
             analysis.reset(job)
         elif job == "faces":
             facevecs.reset()
+        elif job == "facedetect":
+            facedetect.reset()
         else:
             raise HTTPException(400, "Choose one analysis to run again from scratch")
     await run_in_threadpool(_start_prewarm)

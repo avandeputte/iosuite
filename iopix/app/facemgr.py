@@ -115,13 +115,14 @@ def apply_many(ops: list, db_path=None, check_running: bool = True) -> list:
     unknown: forget the name, keep the region as an unknown face
     remove:  delete the region entirely
     add:     a new region for person `tag`
+    detected: a new unknown face (face detection), unless a face already sits at that exact rectangle
     move:    change the rectangle of an existing face to new_rect
     Returns one summary per op; a failed op has an "error" and the others still apply."""
     db_path = Path(db_path or dkdb.sqlite_path())
     if not ops:
         return []
     for op in ops:
-        if op.get("op") not in ("name", "confirm", "ignore", "unknown", "remove", "add", "move"):
+        if op.get("op") not in ("name", "confirm", "ignore", "unknown", "remove", "add", "move", "detected"):
             raise SyncError("Unknown face operation")
     dbsync.preflight(db_path, check_running, "faces")
     results, touched = [], []
@@ -157,6 +158,12 @@ def _apply_one(con, sp: dict, op: dict) -> dict:
         raise SyncError("That photo is not in the digiKam database.")
     tag, kind = _find(con, sp, image, rect) if rect else (None, None)
     summary = {"op": kind_op, "image": image}
+    if kind_op == "detected":  # FaceTagsEditor::add for an unnamed face: the Unknown tag's autodetectedFace row
+        if kind is not None:
+            summary.update(skipped=True)
+            return summary
+        _add_prop(con, image, sp["unknownPerson"], "autodetectedFace", rect)
+        return summary
     if kind_op == "add":
         new_tag = int(op.get("tag") or 0)
         if new_tag in sp.values() or not con.execute("SELECT 1 FROM Tags WHERE id = ?", (new_tag,)).fetchone():

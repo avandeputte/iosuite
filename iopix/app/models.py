@@ -43,6 +43,8 @@ REGISTRY = {
              "page": "https://huggingface.co/Salesforce/blip-image-captioning-base", "what": "Photo descriptions.", "size": "~950 MB"},
     "yolox": {"label": "YOLOX-S", "kind": "url", "url": "https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_s.onnx",
               "page": "https://github.com/Megvii-BaseDetection/YOLOX/releases", "what": "Object detection (people, balls, animals, vehicles…).", "size": "35 MB"},
+    "yunet": {"label": "YuNet (face detection)", "kind": "url", "url": "https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx",
+              "page": "https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet", "what": "Finds faces digiKam or any other tool has not marked yet, on a photo, a folder or the whole library, and adds them as unnamed faces.", "size": "0.2 MB"},
     "sface": {"label": "SFace (face grouping)", "kind": "url", "url": "https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_recognition_sface/face_recognition_sface_2021dec.onnx",
               "page": "https://github.com/opencv/opencv_zoo/tree/main/models/face_recognition_sface", "what": "Groups look-alike unnamed faces on the Faces page and suggests who they are, for one-click naming.", "size": "37 MB"},
     "geonames": {"label": "GeoNames places", "kind": "data", "url": "https://download.geonames.org/export/dump/cities1000.zip",
@@ -99,8 +101,8 @@ def local(key: str) -> dict:
             shas.append(sha[:7]); ats.append(at)
         return {"installed": True, "revision": "+".join(shas), "at": max(ats)}
     if m["kind"] in ("url", "data"):
-        from . import detector, facevecs, places
-        paths = [detector.MODEL] if key == "yolox" else [facevecs.MODEL] if key == "sface" else [places.DIR / f for f in places.FILES]
+        from . import detector, facedetect, facevecs, places
+        paths = [detector.MODEL] if key == "yolox" else [facevecs.MODEL] if key == "sface" else [facedetect.MODEL] if key == "yunet" else [places.DIR / f for f in places.FILES]
         if not all(p.exists() for p in paths):
             return {"installed": False}
         at = int(max(p.stat().st_mtime for p in paths))
@@ -237,6 +239,9 @@ def _reset(key: str):
         elif key == "sface":
             from . import facevecs
             facevecs.reset_session()
+        elif key == "yunet":
+            from . import facedetect
+            facedetect.reset_session()
         elif key == "geonames":
             from . import places
             places._geo = None  # loaded again from the new files on the next lookup
@@ -262,6 +267,9 @@ def _download_here(key: str):
     elif key == "sface":
         from . import facevecs
         facevecs.download()
+    elif key == "yunet":
+        from . import facedetect
+        facedetect.download()
     elif key == "geonames":
         from . import places
         places.fetch()
