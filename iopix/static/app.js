@@ -3486,16 +3486,20 @@ function renderInfo() {
     show('details') && kv.length ? [h('h4', null, 'Details'), h('div', { class: 'kv' }, kv)] : null,
     show('camera') && ckv.length ? [h('h4', null, 'Camera'), h('div', { class: 'kv' }, ckv)] : null,
     show('file') ? [h('h4', null, 'File'), h('div', { class: 'b muted', style: 'word-break:break-all;user-select:all;font-size:12.5px' }, d.path)] : null,
-    show('history') && EDITING ? (() => {  // editors only; filled in when the answer arrives, nothing shows for a photo never changed here
-      const box = h('div', { class: 'hlist small' });
+    ai.length ? [h('h4', null, 'AI analysis'), ai] : null,
+    show('history') && EDITING ? (() => {  // last, folded; editors only; nothing shows for a photo never changed here
+      const box = h('details', { class: 'hfold' });
+      const list = h('div', { class: 'hlist small' });
+      box.hidden = true;
       api(`/api/history?photo=${d.id}&limit=6`).then((r) => {
         if (!r.entries.length || !box.isConnected) return;
-        box.before(h('h4', null, 'Change log', r.total > 6 ? h('a', { class: 'lnk', style: 'margin-left:10px;text-transform:none;letter-spacing:0;font-weight:400', href: `#/history?photo=${d.id}` }, `all ${r.total}`) : null));
-        box.append(...r.entries.map((e) => histEntry(e, () => { details.delete(d.id); showItem(); }, false)));
+        box.append(h('summary', null, `Change log · ${plural(r.total, 'change')}`), list,
+          r.total > 6 ? h('a', { class: 'lnk', style: 'font-size:12.5px', href: `#/history?photo=${d.id}` }, `See all ${nf.format(r.total)}`) : null);
+        list.append(...r.entries.map((e) => histEntry(e, () => { details.delete(d.id); showItem(); }, false)));
+        box.hidden = false;
       }).catch(() => {});
       return box;
-    })() : null,
-    ai.length ? [h('h4', null, 'AI analysis'), ai] : null);
+    })() : null);
   if (mapEl) {
     const token = LB.token;
     loadLeaflet(false).then(async () => {

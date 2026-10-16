@@ -978,3 +978,25 @@ def test_phone_layout_fits_the_screen(browser, server):
         assert label["y"] + label["height"] <= 852 + 1, label  # the 1 px top border overlaps the link's bottom padding, not its label
     finally:
         ctx.close()
+
+
+def test_info_panel_change_log_is_last_and_folded(page, server):
+    """A photo changed here shows its change log at the very end of the info panel, folded until opened."""
+    import json as _json
+    ids = _json.loads(urllib.request.urlopen(server + "/api/photos").read())["id"]
+    pid = ids[3]
+    req = urllib.request.Request(server + "/api/edit", data=_json.dumps({"ids": [pid], "changes": {"rating": 2}}).encode(), headers={"Content-Type": "application/json"}, method="POST")
+    urllib.request.urlopen(req).read()  # one change, recorded in the server's change log
+    _open_photo(page, server, pid)
+    page.keyboard.press("i")
+    page.wait_for_selector(".lb-info details.hfold summary", timeout=10000)
+    last = page.evaluate("""() => { const kids = [...document.querySelector('.lb-info .ibody, .lb-info').querySelectorAll(':scope > *')].filter((e) => !e.hidden);
+                                    return kids.length ? kids[kids.length - 1].className : ''; }""")
+    fold = page.locator(".lb-info details.hfold")
+    assert fold.evaluate("(e) => !e.open"), "folded until opened"
+    assert "change log" in fold.locator("summary").inner_text().lower()
+    assert page.evaluate("() => { const f = document.querySelector('.lb-info details.hfold'); let n = f.nextElementSibling; while (n && n.hidden) n = n.nextElementSibling; return n === null; }"), last
+    fold.locator("summary").click()
+    assert fold.locator(".hrow").count() >= 1
+    req = urllib.request.Request(server + "/api/edit/revert", data=_json.dumps({"ids": [pid]}).encode(), headers={"Content-Type": "application/json"}, method="POST")
+    urllib.request.urlopen(req).read()  # put the scratch library back

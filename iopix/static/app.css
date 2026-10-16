@@ -735,3 +735,8 @@ body:has(#dkbanner) #updbanner { bottom: 96px; }  /* both at once: the update ca
 .privbadge { position: absolute; left: 8px; top: 8px; width: 26px; height: 26px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: rgba(0,0,0,.55); color: #fff; }
 .privbadge .ic { width: 15px; height: 15px; }
 .sharepick { height: 36px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--fg); padding: 0 8px; }
+
+/* the info panel's change log: last, folded until opened */
+.hfold { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 10px; }
+.hfold summary { cursor: pointer; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--fg2); font-weight: 600; list-style-position: inside; }
+.hfold[open] summary { margin-bottom: 8px; }
