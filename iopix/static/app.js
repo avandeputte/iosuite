@@ -1062,9 +1062,29 @@ async function locationDialog(ids, current, after) {
     } }, icon('place'), h('span', { class: 'nm', style: 'white-space:normal' }, x.name, x.detail ? h('span', { class: 'muted' }, ' · ' + x.detail) : null)))
       : h('div', { class: 'muted', style: 'padding:6px 8px' }, r.source === 'offline' ? 'No town by that name in the offline place list (no internet connection for the full search).' : 'Nothing found.'));
   };
+  // "Suggest location": the places of the photos taken nearest in time, and on request a landmark Google recognises
+  const sugBox = h('div', { class: 'alist', style: 'max-height:200px;margin-top:4px', hidden: true });
+  const useSpot = (x) => { lat.value = x.lat; lon.value = x.lon; if (x.alt != null) { alt.value = x.alt; altAuto = false; fill(altNote, 'altitude from that photo'); } sugBox.hidden = true; place(); if (map) map.setView([x.lat, x.lon], 16); };
+  const ago = (m) => { const a = Math.abs(m); const t = a < 60 ? `${a} min` : a < 1440 ? `${Math.round(a / 6) / 10} h` : `${Math.round(a / 144) / 10} days`; return m === 0 ? 'same time' : m < 0 ? `${t} before` : `${t} after`; };
+  const suggest = async () => {
+    sugBox.hidden = false; fill(sugBox, h('div', { class: 'muted', style: 'padding:6px 8px' }, 'Looking at the photos taken around the same time…'));
+    let r; try { r = await api(`/api/location/suggest?id=${ids[0]}`); } catch (e) { fill(sugBox, h('div', { class: 'muted', style: 'padding:6px 8px' }, e.message)); return; }
+    const landmark = r.landmarks ? h('div', { class: 'frow', style: 'height:auto;padding:6px 8px', onclick: async (e) => {
+      const row = e.currentTarget; fill(row, icon('spark'), h('span', { class: 'nm muted' }, 'Asking Google Cloud Vision…'));
+      let L2; try { L2 = await post('/api/location/landmark', { id: ids[0] }); } catch (err) { fill(row, icon('spark'), h('span', { class: 'nm muted', style: 'white-space:normal' }, err.message)); return; }
+      row.replaceWith(...(L2.landmarks.length ? L2.landmarks.map((x) => h('div', { class: 'frow', style: 'height:auto;padding:6px 8px', onclick: () => useSpot(x) }, icon('spark'),
+        h('span', { class: 'nm', style: 'white-space:normal' }, x.name, h('span', { class: 'muted' }, ` · landmark, ${Math.round(x.score * 100)}% sure`))))
+        : [h('div', { class: 'muted', style: 'padding:6px 8px' }, 'Google recognised no landmark in this photo.')]));
+    } }, icon('spark'), h('span', { class: 'nm' }, 'Recognise a landmark in the photo', h('span', { class: 'muted' }, ' · Google Cloud Vision, about $0.0015 a photo after 1,000 free a month'))) : null;
+    fill(sugBox, r.suggestions.length ? r.suggestions.map((x) => h('div', { class: 'frow', style: 'height:auto;padding:6px 8px', title: `${x.lat}, ${x.lon}`, onclick: () => useSpot(x) },
+      h('img', { src: `/thumb/${x.id}`, alt: '', style: 'width:34px;height:34px;object-fit:cover;border-radius:5px;flex:none' }),
+      h('span', { class: 'nm', style: 'white-space:normal' }, x.place || `${x.lat.toFixed(4)}, ${x.lon.toFixed(4)}`, h('span', { class: 'muted' }, ` · ${x.name}, taken ${ago(x.minutes)}${x.same_camera ? '' : ' (another camera)'}`))))
+      : h('div', { class: 'muted', style: 'padding:6px 8px' }, 'No photo with a location was taken within 6 hours of this one.'), landmark);
+  };
   const back = modal(ids.length > 1 ? `Set location for ${nf.format(ids.length)} photos` : 'Set location',
     h('p', { class: 'muted' }, ids.length > 1 ? `The same position goes to all ${nf.format(ids.length)} selected photos, replacing any they already have. ` : '', 'Click the map or drag the pin, or type coordinates. Saved to the sidecar (and file, if on) and shown in digiKam after its database is updated.'),
-    h('div', { style: 'display:flex;gap:8px;align-items:center;margin-top:6px' }, search), results,
+    h('div', { style: 'display:flex;gap:8px;align-items:center;margin-top:6px' }, search,
+      h('button', { class: 'pillbtn', title: 'Places of the photos taken around the same time, or a landmark Google recognises', onclick: suggest }, icon('spark'), 'Suggest location')), results, sugBox,
     mapEl,
     h('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;align-items:center' }, lat, lon, alt, altNote,
       h('button', { class: 'pillbtn', title: 'Use the location of the previous photo in the grid', onclick: () => { const i = G.data?.id.indexOf(ids[0]); for (let k = (i ?? 0) - 1; k >= 0; k--) { if (G.geo.has(k)) { getDetail(G.data.id[k]).then((d) => { lat.value = d.lat; lon.value = d.lon; alt.value = d.alt ?? ''; altAuto = d.alt == null; fill(altNote); place(); }); return; } } toast('No earlier photo in this view has a location.'); } }, 'Copy from previous photo')),

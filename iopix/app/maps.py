@@ -150,6 +150,36 @@ def elevation(lat: float, lon: float) -> dict:
     return {"alt": round(float(data["elevation"][0]), 1), "source": "Open-Meteo", "note": "; ".join(errors) or None}
 
 
+VISION_URL = "https://vision.googleapis.com/v1/images:annotate"
+
+
+def landmarks(jpeg: bytes) -> list:
+    """Google Cloud Vision landmark detection: famous places recognised in a picture, with coordinates.
+    Needs the Cloud Vision API enabled for the key, and a key Google accepts from a server."""
+    import base64
+    body = json.dumps({"requests": [{"image": {"content": base64.b64encode(jpeg).decode()}, "features": [{"type": "LANDMARK_DETECTION", "maxResults": 5}]}]}).encode()
+    req = urllib.request.Request(VISION_URL + "?key=" + urllib.parse.quote(key()), data=body, method="POST", headers=_headers({"Content-Type": "application/json"}))
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r:
+            data = json.load(r)
+    except urllib.error.HTTPError as e:
+        try:
+            msg = json.load(e).get("error", {}).get("message") or str(e)
+        except Exception:
+            msg = str(e)
+        raise RuntimeError(msg) from e
+    res = (data.get("responses") or [{}])[0]
+    if res.get("error"):
+        raise RuntimeError(res["error"].get("message", "error"))
+    out = []
+    for a in res.get("landmarkAnnotations", []):
+        for loc in a.get("locations", [])[:1]:
+            ll = loc.get("latLng") or {}
+            if "latitude" in ll:
+                out.append({"name": a.get("description", ""), "score": round(float(a.get("score", 0)), 2), "lat": ll["latitude"], "lon": ll["longitude"]})
+    return out
+
+
 def reset_session():
     with _lock:
         _session.update(token=None, expires=0)

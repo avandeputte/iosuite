@@ -109,3 +109,25 @@ def test_elevation_endpoint(client, monkeypatch):
     r = client.get("/api/elevation", params={"lat": 40.49, "lon": -80.23})
     assert r.status_code == 200 and r.json()["alt"] == 367.0
     assert client.get("/api/elevation", params={"lat": 140, "lon": 0}).status_code == 400
+
+
+def test_location_suggestions_come_from_photos_nearest_in_time(client, lib):
+    from app import index
+    con = index.open_index()
+    rows = con.execute("SELECT id, ts FROM photos WHERE lat IS NOT NULL ORDER BY ts").fetchall()
+    con.close()
+    pid = rows[len(rows) // 2][0]
+    r = client.get("/api/location/suggest", params={"id": pid, "hours": 72}).json()
+    assert all(s["id"] != pid for s in r["suggestions"])
+    mins = [abs(s["minutes"]) for s in r["suggestions"]]
+    assert mins == sorted(mins), "nearest in time first"
+    spots = [(round(s["lat"], 3), round(s["lon"], 3)) for s in r["suggestions"]]
+    assert len(spots) == len(set(spots)), "one suggestion per place"
+
+
+def test_landmark_endpoint(client, lib, monkeypatch):
+    from app import maps
+    monkeypatch.setattr(maps, "key", lambda: "k")
+    monkeypatch.setattr(maps, "landmarks", lambda jpeg: [{"name": "Eiffel Tower", "score": 0.93, "lat": 48.8584, "lon": 2.2945}] if jpeg[:2] == b"\xff\xd8" else [])
+    r = client.post("/api/location/landmark", json={"id": lib["ids"][0]})
+    assert r.status_code == 200 and r.json()["landmarks"][0]["name"] == "Eiffel Tower", r.text
