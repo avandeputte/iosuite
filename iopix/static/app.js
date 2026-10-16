@@ -2405,7 +2405,7 @@ async function settingsPage(view) {
         item('Previews', st.previews, 'large images for the viewer, remade on demand', small('Clear', () => act('previews', 'Previews cleared; they are remade as you open photos.'))),
         item('Face crops', st.faces, 'remade on demand', small('Clear', () => act('faces', 'Face crops cleared; they are remade as needed.'))),
         item('Search index', st.index, 'rebuilt from digiKam’s database in seconds'),
-        item('Viewer database', st.viewerDb, 'users, albums, favorites, settings, AI results'),
+        item('Viewer database', st.viewerDb, st.viewerDbError ? h('span', { class: 'warn' }, `MySQL/MariaDB is configured but could not be used when the viewer started (${st.viewerDbError}), so the SQLite file is in use since then: anything saved now is not in the MySQL database. Fix the cause (Settings › Viewer database) and restart the viewer.`) : 'users, albums, favorites, settings, AI results'),
         item('Content embeddings', st.embeddings, 'the content-search index'),
         item('AI models', st.models),
         item('Sidecar backups', st.backups, 'each sidecar as it was before the viewer first changed it'),

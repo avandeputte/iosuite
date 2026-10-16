@@ -52,7 +52,7 @@ def record(rows: list):
     try:
         con = vdb.connect()
         try:
-            con.executemany("INSERT INTO photo_history (photo_id, ts, user_name, action, summary, details, undo, sidecar_copy, path) VALUES (?,?,?,?,?,?,?,?,?)",
+            con.executemany("INSERT INTO photo_history (photo_id, ts, user_name, action, summary, details, undo_values, sidecar_copy, path) VALUES (?,?,?,?,?,?,?,?,?)",
                             [(int(r["photo_id"]), now, r.get("user") or who, r["action"], r["summary"][:500],
                               json.dumps(r.get("details")) if r.get("details") is not None else None,
                               json.dumps(r.get("undo")) if r.get("undo") is not None else None,
@@ -102,7 +102,7 @@ def entries(photo_id: int = None, limit: int = 100, offset: int = 0, action: str
             where.append("action = ?"); params.append(action)
         w = (" WHERE " + " AND ".join(where)) if where else ""
         total = con.execute(f"SELECT count(*) FROM photo_history{w}", params).fetchone()[0]
-        rows = con.execute(f"SELECT id, photo_id, ts, user_name, action, summary, details, undo, sidecar_copy, path FROM photo_history{w} "
+        rows = con.execute(f"SELECT id, photo_id, ts, user_name, action, summary, details, undo_values, sidecar_copy, path FROM photo_history{w} "
                            f"ORDER BY id DESC LIMIT ? OFFSET ?", params + [int(limit), int(offset)]).fetchall()
     finally:
         con.close()
@@ -137,7 +137,7 @@ def _deleted_backup(details_json):
 def get(entry_id: int) -> dict:
     con = vdb.connect()
     try:
-        r = con.execute("SELECT id, photo_id, action, details, undo, sidecar_copy, path FROM photo_history WHERE id = ?", (int(entry_id),)).fetchone()
+        r = con.execute("SELECT id, photo_id, action, details, undo_values, sidecar_copy, path FROM photo_history WHERE id = ?", (int(entry_id),)).fetchone()
     finally:
         con.close()
     if not r:

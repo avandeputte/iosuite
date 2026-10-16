@@ -91,9 +91,10 @@ TABLES = {
     "ai_faces_scanned": (["photo_id", "stamp", "found", "added", "checked"],
                          "CREATE TABLE IF NOT EXISTS ai_faces_scanned (photo_id INTEGER PRIMARY KEY, stamp TEXT, found INTEGER, added INTEGER, checked INTEGER)",
                          "CREATE TABLE IF NOT EXISTS ai_faces_scanned (photo_id BIGINT PRIMARY KEY, stamp VARCHAR(191), found INT, added INT, checked BIGINT)"),
-    "photo_history": (["id", "photo_id", "ts", "user_name", "action", "summary", "details", "undo", "sidecar_copy", "path"],
-                      "CREATE TABLE IF NOT EXISTS photo_history (id INTEGER PRIMARY KEY AUTOINCREMENT, photo_id INTEGER, ts INTEGER, user_name TEXT, action TEXT, summary TEXT, details TEXT, undo TEXT, sidecar_copy TEXT, path TEXT)",
-                      "CREATE TABLE IF NOT EXISTS photo_history (id BIGINT AUTO_INCREMENT PRIMARY KEY, photo_id BIGINT, ts BIGINT, user_name VARCHAR(191), action VARCHAR(32), summary TEXT, details MEDIUMTEXT, undo MEDIUMTEXT, sidecar_copy TEXT, path TEXT, INDEX photo_history_photo (photo_id))"),
+    # undo_values, not "undo": UNDO is a reserved word on MariaDB and MySQL
+    "photo_history": (["id", "photo_id", "ts", "user_name", "action", "summary", "details", "undo_values", "sidecar_copy", "path"],
+                      "CREATE TABLE IF NOT EXISTS photo_history (id INTEGER PRIMARY KEY AUTOINCREMENT, photo_id INTEGER, ts INTEGER, user_name TEXT, action TEXT, summary TEXT, details TEXT, undo_values TEXT, sidecar_copy TEXT, path TEXT)",
+                      "CREATE TABLE IF NOT EXISTS photo_history (id BIGINT AUTO_INCREMENT PRIMARY KEY, photo_id BIGINT, ts BIGINT, user_name VARCHAR(191), action VARCHAR(32), summary TEXT, details MEDIUMTEXT, undo_values MEDIUMTEXT, sidecar_copy TEXT, path TEXT, INDEX photo_history_photo (photo_id))"),
     "image_data_checksums": (["path", "hash", "algorithm", "verified"],
                              "CREATE TABLE IF NOT EXISTS image_data_checksums (path TEXT PRIMARY KEY, hash TEXT, algorithm TEXT, verified INTEGER)",
                              "CREATE TABLE IF NOT EXISTS image_data_checksums (path VARCHAR(700) PRIMARY KEY, hash VARCHAR(128), algorithm VARCHAR(16), verified BIGINT)"),
@@ -359,6 +360,8 @@ def ensure_schema(con: VConn = None):
                 con.execute("ALTER TABLE user_accounts ADD COLUMN person INTEGER")
             if "email" not in have:
                 con.execute("ALTER TABLE user_accounts ADD COLUMN email TEXT")
+            if "undo" in columns(con, "photo_history"):  # v1.24 named the column after a reserved word
+                con.execute("ALTER TABLE photo_history RENAME COLUMN undo TO undo_values")
         con.commit()
     finally:
         if own:

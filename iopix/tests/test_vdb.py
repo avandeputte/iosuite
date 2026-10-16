@@ -115,3 +115,23 @@ def test_mysql_round_trip(client, tmp_path, fresh, monkeypatch):
     finally:
         admin.cursor().execute(f"DROP DATABASE IF EXISTS `{cfg['database']}`")
         admin.close()
+
+
+def test_v124_undo_column_is_renamed_on_sqlite(tmp_path, monkeypatch):
+    """v1.24 called the change log column "undo", a reserved word on MariaDB/MySQL (the table could not be
+    created there at all). SQLite files from then are migrated in place; the row data is kept."""
+    db = tmp_path / "viewer.db"
+    con = sqlite3.connect(db)
+    con.execute("CREATE TABLE photo_history (id INTEGER PRIMARY KEY AUTOINCREMENT, photo_id INTEGER, ts INTEGER, user_name TEXT, action TEXT, summary TEXT, details TEXT, undo TEXT, sidecar_copy TEXT, path TEXT)")
+    con.execute("INSERT INTO photo_history (photo_id, ts, action, summary, undo) VALUES (1, 2, 'edit', 's', '{\"rating\": 3}')")
+    con.commit(); con.close()
+    monkeypatch.setattr(vdb, "SQLITE_FILE", db)
+    monkeypatch.setattr(vdb, "settings", lambda: {"type": "sqlite"})
+    vdb.ensure_schema()
+    c = vdb.connect()
+    try:
+        assert "undo_values" in vdb.columns(c, "photo_history") and "undo" not in vdb.columns(c, "photo_history")
+        assert c.execute("SELECT undo_values FROM photo_history WHERE photo_id = 1").fetchone()[0] == '{"rating": 3}'
+    finally:
+        c.close()
+    assert "undo" not in vdb.TABLES["photo_history"][0] and " undo " not in vdb.TABLES["photo_history"][2]
