@@ -332,6 +332,27 @@ class Semantic:
 semantic = Semantic()
 
 
+def remove_ids(ids: list):
+    """Deleted photos: drop their embeddings from every engine's file."""
+    if not _HAVE or not ids:
+        return
+    gone = np.array(sorted({int(i) for i in ids}), np.int32)
+    for eng in semantic.engines.values():
+        with eng._lock:
+            if not eng.file.exists():
+                continue
+            if eng.ids is None:
+                with np.load(eng.file) as z:
+                    eids, vecs = z["ids"].astype(np.int32), z["vecs"].astype(np.float32)
+            else:
+                eids, vecs = eng.ids, eng.vecs
+            keep = ~np.isin(eids, gone)
+            if keep.all():
+                continue
+            eng.ids, eng.vecs = eids[keep], vecs[keep]
+            eng._save()
+
+
 def remap_ids(remap: dict):
     """digiKam renumbered photos (index.sync_photo_ids): move their embeddings to the new ids in every
     engine's file, so nothing is recomputed. Ids that now belong to another photo are dropped first."""

@@ -923,3 +923,25 @@ def test_filter_pane_steps_aside_on_pages_it_does_not_apply_to(page, server):
     page.goto(server + "/#/photos")
     page.wait_for_selector("#filters:not([hidden])", timeout=5000)
     page.locator("#filterbtn").click()  # leave it closed for the other tests
+
+
+def test_grid_header_stays_while_scrolling_and_delete_asks_first(page, server):
+    page.set_viewport_size({"width": 1300, "height": 800})
+    page.goto(server + "/#/photos")
+    page.wait_for_selector("#grid .tile", timeout=15000)
+    page.locator("#main").evaluate("m => m.scrollTop = 1500")
+    page.wait_for_timeout(400)
+    bar = page.locator("#grid .gbar").bounding_box()
+    main = page.locator("#main").bounding_box()
+    assert abs(bar["y"] - main["y"]) < 2, "the header with Select all is still at the top of the page"
+    assert page.locator("#grid .selall").is_visible()
+    page.locator("#grid .selall").click()
+    page.wait_for_selector("#selbar", timeout=3000)
+    assert page.locator("#selbar a", has_text="Deselect all").count() == 1
+    page.wait_for_timeout(1500)  # the editing flags arrive with the status poll
+    if page.locator("#selbar button[title='Delete']").count():
+        page.locator("#selbar button[title='Delete']").click()
+        page.wait_for_selector(".modal .pillbtn.danger", timeout=3000)
+        page.locator(".modal button", has_text="Cancel").click()
+    page.locator("#selbar a", has_text="Deselect all").click()
+    page.wait_for_selector("#selbar", state="detached", timeout=3000)

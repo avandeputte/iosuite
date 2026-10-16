@@ -29,7 +29,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
-from . import (analysis, caption, concepts, config, consistency, dbsync, detector, dkdb, edits, facedetect, facemgr, facevecs, library, folders, gpx, index, neardups, vdb,
+from . import (analysis, caption, concepts, config, consistency, dbsync, detector, deletion, dkdb, edits, facedetect, facemgr, facevecs, library, folders, gpx, index, neardups, vdb,
                moments, places, placetags, tagmanager, thumbs)
 from . import state as appstate
 from . import jobs as bgjobs
@@ -241,7 +241,7 @@ async def lifespan(_app):
 app = FastAPI(title="iopix", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 # every endpoint that changes the library (sidecars, files, digiKam's database); refused in read-only mode
-WRITE_PATHS = ("/api/edit", "/api/edits/db", "/api/faces/detect", "/api/consistency/sync", "/api/gpx/apply", "/api/faces/op", "/api/faces/batch", "/api/folders",
+WRITE_PATHS = ("/api/edit", "/api/edits/db", "/api/faces/detect", "/api/photos/delete", "/api/consistency/sync", "/api/gpx/apply", "/api/faces/op", "/api/faces/batch", "/api/folders",
                "/api/faces/person", "/api/placetags", "/api/tags/op")
 
 
@@ -1544,7 +1544,7 @@ def api_maintenance():
         "paths": {"library": str(config.PHOTOS_ROOT), "digikamDb": dkdb.describe(), "data": str(config.DATA_DIR)},
         "storage": {k: _dir_size(config.DATA_DIR / v) for k, v in (
             ("thumbnails", "cache/t"), ("previews", "cache/p"), ("faces", "cache/f"), ("models", "models"),
-            ("backups", "sidecar-backups"), ("fileBackups", "file-backups"), ("dbBackups", "db-backups"))} | {
+            ("backups", "sidecar-backups"), ("fileBackups", "file-backups"), ("dbBackups", "db-backups"), ("deletedPhotos", "deleted-photos"))} | {
             "index": config.INDEX_DB.stat().st_size if config.INDEX_DB.exists() else 0,
             "viewerDb": vdb.SQLITE_FILE.stat().st_size if not vdb.is_mysql() and vdb.SQLITE_FILE.exists() else 0,
             "embeddings": sum(e.file.stat().st_size for e in semantic.engines.values() if e.file.exists()),
@@ -1585,6 +1585,42 @@ def _face_detect_allowed():
         raise HTTPException(403, "Writing to digiKam's database is turned off")
     if not index.sync_enabled() or index.offline["since"]:
         raise HTTPException(409, "Face regions live in digiKam's database, which is unreachable (or Sync with digiKam is off)")
+
+
+@app.post("/api/photos/delete")
+async def api_photos_delete(request: Request):
+    """Body: {ids, confirm: true}. Deletes the photos for good: a backup of the files, sidecars and
+    database first (data/deleted-photos, db-backups), then the database rows, the files and sidecars,
+    and everything the viewer keeps about them. Editors and admins only; refused in read-only mode."""
+    body = await request.json()
+    if body.get("confirm") is not True:
+        raise HTTPException(400, "Deleting needs confirmation")
+    if not config.DB_WRITE:
+        raise HTTPException(403, "Writing to digiKam's database is turned off (DB_WRITE=0)")
+    if index.sync_enabled() and index.offline["since"]:
+        raise HTTPException(409, "digiKam's database is unreachable: photos cannot be deleted from it right now")
+    ids = [int(i) for i in body.get("ids") or []][:20000]
+    if not ids:
+        raise HTTPException(400, "Choose photos to delete")
+    con = db()
+    try:
+        photos = []
+        for i in range(0, len(ids), 500):
+            chunk = ",".join(map(str, ids[i:i + 500]))
+            for r in con.execute(f"SELECT id, path, name, hash, size, taken, rating, title, caption FROM photos WHERE id IN ({chunk})"):
+                d = dict(r)
+                d["tags"] = [t[0] for t in con.execute("SELECT t.full FROM photo_tags pt JOIN tags t ON t.id = pt.tag_id WHERE pt.photo_id = ?", (r["id"],))]
+                photos.append(d)
+    finally:
+        con.close()
+    try:
+        result = await run_in_threadpool(deletion.delete, photos)
+    except dbsync.SyncError as e:
+        raise HTTPException(409, str(e))
+    except DB_ERRORS as e:
+        raise HTTPException(500, f"The deletion failed and was rolled back: {e}")
+    await run_in_threadpool(_rebuild_after_write)
+    return result
 
 
 @app.post("/api/faces/detect")

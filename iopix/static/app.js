@@ -189,7 +189,7 @@ function applyAppName() {
   document.title = APP_NAME;
   const meta = document.querySelector('meta[name="apple-mobile-web-app-title"]'); if (meta) meta.content = APP_NAME;
 }
-let EDITING = false, WRITE_FILES = false, CAN_MANAGE = false, FACE_DETECT = false, manageTags = false, PENDING = 0, pollTimer = 0, keepView = false;
+let EDITING = false, WRITE_FILES = false, CAN_MANAGE = false, FACE_DETECT = false, SYNC_OFF = false, manageTags = false, PENDING = 0, pollTimer = 0, keepView = false;
 /** Re-check server status soon (after an edit) instead of waiting for the regular poll. */
 function pollSoon(ms = 1500) { clearTimeout(pollTimer); pollTimer = setTimeout(pollStatus, ms); }
 async function loadState() {
@@ -796,7 +796,10 @@ function updateSelBar() {
   const btn = (ic, label, fn) => h('button', { class: 'pillbtn', title: label, onclick: fn }, icon(ic), h('span', null, label));
   fill(bar,
     h('button', { class: 'iconbtn', title: 'Clear selection (Esc)', onclick: () => clearSelection() }, icon('close')),
-    h('span', { class: 'n' }, `${nf.format(G.sel.size)} selected`), h('span', { class: 'sp' }),
+    h('span', { class: 'n' }, `${nf.format(G.sel.size)} selected`),
+    G.data && G.sel.size < G.data.count ? h('a', { class: 'lnk', style: 'margin-left:6px', title: 'Select everything in this view', onclick: () => selectRange(0, G.data.count - 1, true) }, `Select all ${nf.format(G.data.count)}`) : null,
+    h('a', { class: 'lnk', style: 'margin-left:6px', title: 'Deselect everything', onclick: () => clearSelection() }, 'Deselect all'),
+    h('span', { class: 'sp' }),
     btn(allFav ? 'heart' : 'heartO', allFav ? 'Unfavorite' : 'Favorite', async () => { await setFavorite(ids(), !allFav); }),
     btn('add', 'Add to album', () => albumDialog(ids())),
     EDITING ? btn('tag', 'Tag', () => tagDialog(ids())) : null,
@@ -806,7 +809,30 @@ function updateSelBar() {
       try { await post(`/api/ualbums/${inAlbum}`, { ids: ids(), on: false }); } catch { toast('Could not update the album.'); return; }
       await loadState(); toast(`Removed ${nf.format(G.sel.size)} from the album.`); G.sel.clear(); viewKey = null; onRoute();
     }) : null,
-    btn('download', 'Download zip', () => downloadDialog(photosWith({ ids: ids().join(',') }), G.sel.size)));
+    btn('download', 'Download zip', () => downloadDialog(photosWith({ ids: ids().join(',') }), G.sel.size)),
+    CAN_MANAGE ? btn('trash', 'Delete', () => deletePhotos(ids())) : null);
+}
+/** Delete photos for good, after a confirmation: files, sidecars, the database rows, everything the viewer knows.
+ *  The server copies the files and sidecars to data/deleted-photos and backs digiKam's database up first. */
+function deletePhotos(ids, after) {
+  const n = ids.length;
+  const go = h('button', { class: 'pillbtn danger', onclick: async () => {
+    go.disabled = true; go.textContent = 'Deleting…';
+    let r;
+    try { r = await post('/api/photos/delete', { ids, confirm: true }); } catch (e) { back.remove(); toast(e.message, null, null, 10000); return; }
+    back.remove();
+    const where = (r.backup || '').split('/').slice(-2).join('/');
+    toast(`Deleted ${plural(r.deleted, 'photo')}.${r.failed.length ? ` ${nf.format(r.failed.length)}: ${r.failed[0].error}.` : ''} A copy is kept in the data folder (${where}).`, null, null, 12000);
+    ids.forEach((i) => { details.delete(i); G.sel.delete(i); ST.fav.delete(i); });
+    updateSelBar();
+    after?.(r);
+    keepView = true; viewKey = null; await pollStatus(); onRoute();
+  } }, icon('trash'), n === 1 ? 'Delete the photo' : `Delete ${nf.format(n)} photos`);
+  const back = modal(n === 1 ? 'Delete this photo?' : `Delete ${nf.format(n)} photos?`,
+    h('div', { class: 'delthumbs' }, ids.slice(0, 12).map((id) => h('img', { src: `/thumb/${id}`, alt: '' })), n > 12 ? h('span', { class: 'muted' }, `+${nf.format(n - 12)}`) : null),
+    h('p', null, `${n === 1 ? 'The file and its sidecar are' : 'The files and their sidecars are'} deleted from the disk and removed from ${SYNC_OFF ? 'the library' : 'digiKam’s database'}, with ${n === 1 ? 'its' : 'their'} tags, faces, captions, favorites and album places.`),
+    h('p', { class: 'muted', style: 'font-size:12.5px' }, 'Before anything is removed, the files and sidecars are copied to the viewer’s data folder (deleted-photos) and the database is backed up, so they can be recovered by hand.'),
+    h('div', { class: 'modal-btns' }, h('button', { class: 'pillbtn', onclick: () => back.remove() }, 'Cancel'), go));
 }
 async function setFavorite(ids, on) {
   try { await post('/api/favorites', { ids, on }); } catch { toast('Could not save the favorite.'); return; }
@@ -2302,7 +2328,8 @@ async function settingsPage(view) {
         item('AI models', st.models),
         item('Sidecar backups', st.backups, 'each sidecar as it was before the viewer first changed it'),
         item('Image file backups', st.fileBackups, 'the original of each file whose metadata was rewritten'),
-        item('Database backups', st.dbBackups, 'digiKam’s database before each write (the last 10)')));
+        item('Database backups', st.dbBackups, 'digiKam’s database before each write (the last 10)'),
+        item('Deleted photos', st.deletedPhotos, 'copies of deleted photos and their sidecars, kept until you remove them (data/deleted-photos)')));
     })(),
     h('div', { class: 'muted', style: 'font-size:12.5px;margin-top:8px;max-width:820px' }, 'Backups are never deleted automatically (apart from keeping the last ten database copies); remove them by hand once you are happy with the corresponding changes.'),
     row('Download a backup', 'digiKam’s database as it is right now (a consistent copy of digikam4.db, or a mysqldump for MariaDB), and the viewer’s data as a zip (its database plus the content-search index). Keep them somewhere else.',
@@ -2703,6 +2730,7 @@ function buildLightbox() {
     info: h('aside', { class: 'lb-info', hidden: !LB.info }),
     favBtn: btn('heartO', 'Favorite (L)', () => setFavorite([LB.src.id[LB.i]], !ST.fav.has(LB.src.id[LB.i]))),
     albumBtn: btn('add', 'Add to album', () => albumDialog([LB.src.id[LB.i]])),
+    delBtn: btn('trash', 'Delete (Delete key)', () => deleteCurrent()),
     playBtn: btn('play', 'Slideshow (space)', toggleSlideshow), facesBtn: btn('face', 'Show faces (F)', toggleFaces), addFaceBtn: btn('add', 'Add a face: drag a rectangle around it (P names the next unnamed face)', startDrawFace), objectsBtn: btn('dup', 'Show detected objects (O)', toggleObjects),
     infoBtn: btn('info', 'Info (I)', toggleInfo, LB.info ? 'on' : ''),
     shareBtn: btn('share', 'Share', shareNow),
@@ -2716,7 +2744,7 @@ function buildLightbox() {
   // the bottom edge (or on a tap of its grip on touch screens) and drops again when it leaves.
   e.strip = h('div', { class: 'lb-strip' }, h('div', { class: 'grip', title: 'Film strip', onclick: () => e.strip.classList.toggle('show') }), h('div', { class: 'reel' }));
   e.stage = h('div', { class: 'lb-stage' },
-    h('div', { class: 'lb-top' }, btn('close', 'Close (Esc): back to the list', () => closeLightbox(true)), e.ttl, h('span', { class: 'sp' }), e.playBtn, e.facesBtn, e.addFaceBtn, e.objectsBtn, e.shareBtn, e.dl, e.favBtn, e.albumBtn, e.infoBtn),
+    h('div', { class: 'lb-top' }, btn('close', 'Close (Esc): back to the list', () => closeLightbox(true)), e.ttl, h('span', { class: 'sp' }), e.playBtn, e.facesBtn, e.addFaceBtn, e.objectsBtn, e.shareBtn, e.dl, e.favBtn, e.albumBtn, e.delBtn, e.infoBtn),
     e.frame, e.prev, e.next, e.strip);
   lb.replaceChildren(e.stage, e.info);
   initGestures(e.stage);
@@ -2839,6 +2867,16 @@ function openLightbox(src, i, fromUser) {
   if (fromUser) { setPhotoParam(src.id[i], !wasOpen); if (!wasOpen) LB.pushed = true; }
   showItem();
 }
+function deleteCurrent() {
+  if (!CAN_MANAGE || !LB.open) return;
+  const id = LB.src.id[LB.i];
+  deletePhotos([id], () => {  // drop it from the sequence and show the next one (or close when it was the last)
+    const k = LB.src.id.indexOf(id);
+    if (k >= 0) LB.src = { ...LB.src, id: LB.src.id.filter((x) => x !== id) };
+    if (!LB.src.id.length) { closeLightbox(true); return; }
+    LB.i = Math.min(LB.i, LB.src.id.length - 1); setPhotoParam(LB.src.id[LB.i], false); showItem();
+  });
+}
 function closeLightbox(fromUser) {
   if (!LB.open) return;
   stopSlideshow();
@@ -2904,6 +2942,7 @@ function showItem() {
     el.ttl.replaceChildren(d.title || d.name, h('small', null, `${dfDay.format(date(d.ts))} · ${dfTime.format(date(d.ts))}`));
     el.facesBtn.style.display = d.faces.length || d.faces_other?.length ? '' : 'none';
     el.addFaceBtn.style.display = CAN_MANAGE && !d.video ? '' : 'none';
+    el.delBtn.style.display = CAN_MANAGE ? '' : 'none';
     el.objectsBtn.style.display = d.boxes?.length ? '' : 'none';
     prefetchShareFile(id, d);
     renderFaces();
@@ -3285,11 +3324,13 @@ document.addEventListener('keydown', (e) => {
     else if ((e.key === 't' || e.key === 'T') && EDITING) tagDialog([LB.src.id[LB.i]]);
     else if ((e.key === 'p' || e.key === 'P') && CAN_MANAGE) nameNextFace();
     else if (EDITING && /^[0-5]$/.test(e.key)) editPhotos([LB.src.id[LB.i]], { rating: +e.key });
+    else if ((e.key === 'Delete' || e.key === 'Backspace') && CAN_MANAGE) deleteCurrent();
     else if (e.key === ' ') { const v = LB.el.frame.querySelector('video'); v ? (v.paused ? v.play() : v.pause()) : toggleSlideshow(); }
     else return;
     e.preventDefault();
   } else if (e.key === '/') { $('#q').focus(); e.preventDefault(); }
   else if (e.key === 'Escape' && G.sel.size) clearSelection();
+  else if ((e.key === 'Delete' || e.key === 'Backspace') && G.sel.size && CAN_MANAGE && !document.querySelector('.modal-back')) { deletePhotos([...G.sel]); e.preventDefault(); }
 });
 
 // ---------------------------------------------------------------- startup
@@ -3385,7 +3426,7 @@ async function pollStatus() {
     }
     if (s.app && APP_STAMP && s.app !== APP_STAMP && !LB.open && !G.sel.size) { location.reload(); return; }  // the viewer was updated: use the new version
     if (s.app) APP_STAMP = s.app;
-    SEM = s.semantic; EDITING = s.editing; FACE_DETECT = !!s.faceDetect; PENDING = s.pendingEdits; WRITE_FILES = s.writeFiles; CAN_MANAGE = s.editing && s.dbWrite;
+    SEM = s.semantic; EDITING = s.editing; FACE_DETECT = !!s.faceDetect; SYNC_OFF = !!(s.digikam && !s.digikam.sync); PENDING = s.pendingEdits; WRITE_FILES = s.writeFiles; CAN_MANAGE = s.editing && s.dbWrite;
     IS_ADMIN = s.isAdmin; USERS_EXIST = s.usersExist; DIGIKAM_CHECK = s.digikamCheck || 'pgrep';
     updateBanner(s.updateAvailable);
     dkBanner(s.digikam);
