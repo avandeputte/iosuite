@@ -1,17 +1,17 @@
 #!/bin/sh
-# digiKam Viewer installer for Linux, version @VERSION@ (self-extracting; built by installer/make-installer.sh).
+# iopix installer for Linux, version @VERSION@ (self-extracting; built by installer/make-installer.sh).
 #
-#   sh digikam-viewer-install.sh --photos /srv/photos --digikam-db /srv/digikamDB [options]
+#   sh iopix-install.sh --photos /srv/photos --digikam-db /srv/digikamDB [options]
 #
 # Options
 #   --photos DIR        the photo folder digiKam manages (required)
 #   --digikam-db DIR    the folder containing digikam4.db (required unless --mysql)
 #   --mysql HOST:PORT/DB:USER:PASSWORD   digiKam on MySQL/MariaDB instead of SQLite
-#   --prefix DIR        install location            (default /opt/digikam-viewer)
+#   --prefix DIR        install location            (default /opt/iopix)
 #   --data DIR          the viewer's own data       (default PREFIX/data)
 #   --port N            listen port                 (default 8600)
 #   --host ADDR         listen address              (default 0.0.0.0)
-#   --user NAME         service user                (default: digikam-viewer, created if missing)
+#   --user NAME         service user                (default: iopix, created if missing)
 #   --features LIST     search,places,objects,ocr,captions (default: ask; "none" for browsing only)
 #   --admin NAME:PASS   the admin account (default: ask)
 #   --models LIST       kept for compatibility: "none" means --features none
@@ -23,12 +23,12 @@
 #
 # What it does: installs the system packages the viewer shells out to (ffmpeg, exiftool,
 # libheif) with apt, dnf, zypper or pacman; unpacks the app under PREFIX/app; creates a
-# Python venv and installs the packages; writes PREFIX/app/digikam-viewer.env;
+# Python venv and installs the packages; writes PREFIX/app/iopix.env;
 # then runs the app's own interactive setup (setup.sh: database, features and model downloads,
 # admin account) and installs a systemd service. Running it again upgrades the code and keeps DATA. The library is
 # only ever read unless you edit metadata from the viewer, which backs every file up first.
 set -e
-PREFIX=/opt/digikam-viewer; DATA=""; PHOTOS=""; DKDB=""; MYSQL=""; PORT=8600; HOST=0.0.0.0; USER_NAME=digikam-viewer
+PREFIX=/opt/iopix; DATA=""; PHOTOS=""; DKDB=""; MYSQL=""; PORT=8600; HOST=0.0.0.0; USER_NAME=iopix
 MODELS=""; FEATURES=""; ADMIN=""; CAPTIONS=0; READ_ONLY=0; SERVICE=1; SYSDEPS=1; YES=0
 say() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
@@ -61,7 +61,8 @@ LINE=$(grep -a -n '^__PAYLOAD_BELOW__$' "$0" | head -1 | cut -d: -f1)  # -a: the
 [ -n "$LINE" ] || die "payload missing: build this file with installer/make-installer.sh"
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 tail -n +$((LINE + 1)) "$0" | tar xzf - -C "$TMP"
-rm -rf "$PREFIX/app.new"; mv "$TMP/digikam-viewer" "$PREFIX/app.new"
+[ "$PREFIX" = /opt/iopix ] && [ -d /opt/digikam-viewer/app ] && [ ! -L /opt/digikam-viewer ] && die "an install from before the rename is in /opt/digikam-viewer: move it first with $TMP/iopix/migrate-to-iopix.sh (or pass --prefix /opt/digikam-viewer to upgrade it in place)"
+rm -rf "$PREFIX/app.new"; mv "$TMP/iopix" "$PREFIX/app.new"
 if [ -d "$PREFIX/app" ]; then rm -rf "$PREFIX/app.old"; mv "$PREFIX/app" "$PREFIX/app.old"; fi
 mv "$PREFIX/app.new" "$PREFIX/app"; rm -rf "$PREFIX/app.old"
 VERSION=$(cat "$PREFIX/app/VERSION")
@@ -83,13 +84,13 @@ fi
 # shellcheck disable=SC2086
 sh "$PREFIX/app/setup.sh" $ARGS --no-service
 # --read-only: lock the viewer to browsing, whatever the settings say (setup.sh does not ask about it)
-[ "$READ_ONLY" = 1 ] && { grep -q '^READ_ONLY=' "$PREFIX/app/digikam-viewer.env" || echo "READ_ONLY=1" >> "$PREFIX/app/digikam-viewer.env"; }
-chown -R "$USER_NAME" "$DATA" "$PREFIX/app/digikam-viewer.env" 2>/dev/null || true
+[ "$READ_ONLY" = 1 ] && { grep -q '^READ_ONLY=' "$PREFIX/app/iopix.env" || echo "READ_ONLY=1" >> "$PREFIX/app/iopix.env"; }
+chown -R "$USER_NAME" "$DATA" "$PREFIX/app/iopix.env" 2>/dev/null || true
 if [ "$SERVICE" = 1 ] && command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
   say "Installing the systemd service"
-  sed -e "s|@PREFIX@|$PREFIX|g" -e "s|@USER@|$USER_NAME|g" -e "s|@HOST@|$HOST|g" -e "s|@PORT@|$PORT|g" "$PREFIX/app/digikam-viewer.service" | sed -e "s|EnvironmentFile=.*|EnvironmentFile=$PREFIX/app/digikam-viewer.env|" -e "s|ExecStart=.*|ExecStart=$PREFIX/app/.venv/bin/python -m uvicorn app.main:app --host $HOST --port $PORT|" > /etc/systemd/system/digikam-viewer.service
-  systemctl daemon-reload && systemctl enable --now digikam-viewer.service && sleep 2
-  systemctl is-active --quiet digikam-viewer.service && say "digiKam Viewer $VERSION is running on port $PORT" || say "the service did not start; see: journalctl -u digikam-viewer"
+  sed -e "s|@PREFIX@|$PREFIX|g" -e "s|@USER@|$USER_NAME|g" -e "s|@HOST@|$HOST|g" -e "s|@PORT@|$PORT|g" "$PREFIX/app/iopix.service" | sed -e "s|EnvironmentFile=.*|EnvironmentFile=$PREFIX/app/iopix.env|" -e "s|ExecStart=.*|ExecStart=$PREFIX/app/.venv/bin/python -m uvicorn app.main:app --host $HOST --port $PORT|" > /etc/systemd/system/iopix.service
+  systemctl daemon-reload && systemctl enable --now iopix.service && sleep 2
+  systemctl is-active --quiet iopix.service && say "iopix $VERSION is running on port $PORT" || say "the service did not start; see: journalctl -u iopix"
 fi
-say "Settings: $PREFIX/app/digikam-viewer.env   Data: $DATA   Logs: journalctl -u digikam-viewer"
+say "Settings: $PREFIX/app/iopix.env   Data: $DATA   Logs: journalctl -u iopix"
 exit 0

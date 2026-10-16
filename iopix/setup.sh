@@ -1,5 +1,5 @@
 #!/bin/sh
-# digiKam Viewer setup: one interactive script that asks everything and does all the work.
+# iopix setup: one interactive script that asks everything and does all the work.
 #
 #   ./setup.sh                 ask the questions, then install packages, download models,
 #                              write the settings, create the admin and start the service
@@ -46,7 +46,7 @@ secret() {  # secret VAR "question"
   printf '%s: ' "$2"; stty -echo 2>/dev/null < "$TTY" || true; read -r _a < "$TTY" || _a=""; stty echo 2>/dev/null < "$TTY" || true; echo; eval "$1=\"\$_a\""
 }
 
-say "digiKam Viewer setup"
+say "iopix setup"
 echo "This asks a few questions, installs the Python packages, downloads the AI models you choose, writes the"
 echo "settings and starts the viewer as a service. Nothing in your photo library or digiKam database is changed."
 
@@ -160,9 +160,9 @@ G="${G#,}"; echo "installing the packages (pyproject.toml${G:+, groups: $G})"; i
 has captions && { echo "installing PyTorch and transformers (large)"; pipi --extra-index-url https://download.pytorch.org/whl/cpu -e ".[captions]"; }
 
 say "Settings"
-ENVF="$APP/digikam-viewer.env"
+ENVF="$APP/iopix.env"
 {
-  echo "# digiKam Viewer settings, written by setup.sh (variable names as in the README). Edit and restart the service."
+  echo "# iopix settings, written by setup.sh (variable names as in the README). Edit and restart the service."
   echo "PHOTOS_ROOT=$PHOTOS"
   if [ -n "$MYSQL" ]; then
     hp=${MYSQL%%/*}; rest=${MYSQL#*/}; db=${rest%%:*}; rest=${rest#*:}; us=${rest%%:*}; pw=${rest#*:}
@@ -205,7 +205,7 @@ fi
 
 say "Service"
 if [ "$SERVICE" = 1 ] && [ "$OS" = Darwin ]; then
-  PL="$HOME/Library/LaunchAgents/com.digikam-viewer.plist"
+  PL="$HOME/Library/LaunchAgents/com.iopix.plist"
   "$VPY" - "$PL" "$APP" "$VPY" "$PORT" "$ENVF" <<'PYEOF'
 import plistlib, sys, os
 pl, app, vpy, port, envf = sys.argv[1:6]
@@ -214,21 +214,22 @@ for line in open(envf):
     line = line.strip()
     if line and not line.startswith("#") and "=" in line:
         k, v = line.split("=", 1); env[k] = v
-d = {"Label": "com.digikam-viewer", "ProgramArguments": [vpy, "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", str(port)],
+d = {"Label": "com.iopix", "ProgramArguments": [vpy, "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", str(port)],
      "WorkingDirectory": app, "RunAtLoad": True, "KeepAlive": True, "ThrottleInterval": 10, "EnvironmentVariables": env,
      "StandardOutPath": os.path.join(env["DATA_DIR"], "server.log"), "StandardErrorPath": os.path.join(env["DATA_DIR"], "server.log")}
 os.makedirs(os.path.dirname(pl), exist_ok=True)
 with open(pl, "wb") as f: plistlib.dump(d, f)
 print("  wrote", pl)
 PYEOF
-  launchctl bootout "gui/$(id -u)/com.digikam-viewer" 2>/dev/null || true
+  launchctl bootout "gui/$(id -u)/com.iopix" 2>/dev/null || true
+  launchctl bootout "gui/$(id -u)/com.digikam-viewer" 2>/dev/null && rm -f "$HOME/Library/LaunchAgents/com.digikam-viewer.plist"  # the name before the rename
   launchctl bootstrap "gui/$(id -u)" "$PL" && echo "  started (login item)"
 elif [ "$SERVICE" = 1 ] && command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
-  UNIT=/etc/systemd/system/digikam-viewer.service
+  UNIT=/etc/systemd/system/iopix.service
   if [ "$(id -u)" = 0 ]; then SUDO=""; else SUDO="sudo"; fi
   $SUDO sh -c "cat > $UNIT" <<UEOF
 [Unit]
-Description=digiKam Viewer
+Description=iopix
 After=network.target
 
 [Service]
@@ -244,7 +245,10 @@ Nice=5
 [Install]
 WantedBy=multi-user.target
 UEOF
-  $SUDO systemctl daemon-reload && $SUDO systemctl enable --now digikam-viewer && echo "  started (systemd)"
+  if [ -f /etc/systemd/system/digikam-viewer.service ]; then  # the service under its name before the rename
+    $SUDO systemctl disable --now digikam-viewer 2>/dev/null || true; $SUDO rm -f /etc/systemd/system/digikam-viewer.service
+  fi
+  $SUDO systemctl daemon-reload && $SUDO systemctl enable --now iopix && echo "  started (systemd)"
 else
   echo "  not installed as a service. Start the viewer with:"
   echo "    cd $APP && set -a && . $ENVF && set +a && $VPY -m uvicorn app.main:app --host 0.0.0.0 --port $PORT"

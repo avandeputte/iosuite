@@ -1,25 +1,27 @@
 #!/bin/sh
-# Update an installed digiKam Viewer in place (standalone checkout, the Linux installer's
-# /opt/digikam-viewer/app, or the Proxmox container; Docker users pull the image instead).
+# Update an installed iopix in place (standalone checkout, the Linux installer's
+# /opt/iopix/app, or the Proxmox container; Docker users pull the image instead).
 #
 #   ./update.sh            fetch the latest code, refresh the packages, restart the service
 #   ./update.sh --check    only say whether something newer exists
 #   ./update.sh --force    reinstall and restart even when the installed commit is already the latest
-#   DIGIKAM_VIEWER_REF=<sha|branch> ./update.sh   install that commit instead of the tip of main
+#   IOPIX_REF=<sha|branch> ./update.sh   install that commit instead of the tip of main
 #     (right after a push GitHub may still report the previous commit; naming the sha avoids that)
-#   DIGIKAM_VIEWER_RESULT=<file>  write the outcome ("ok: ..." or "error: ...") there before the
+#   IOPIX_RESULT=<file>  write the outcome ("ok: ..." or "error: ...") there before the
 #     restart, so the viewer can show it afterwards (its own child process dies in the restart)
 #
-# Keeps digikam-viewer.env, the data folder and the Python environment. A git checkout is
+# Keeps iopix.env (or digikam-viewer.env from before the rename), the data folder and the Python environment. A git checkout is
 # pulled; an installed copy (no .git) is replaced from the GitHub tarball of the main branch.
 # Maintenance > Viewer version runs this same script from the web app.
 set -e
 cd "$(dirname "$0")"
 APP="$(pwd)"
-REPO="${DIGIKAM_VIEWER_REPO:-avandeputte/digikam-viewer}"
-BRANCH="${DIGIKAM_VIEWER_BRANCH:-main}"
-REF="${DIGIKAM_VIEWER_REF:-$BRANCH}"
-RESULT="${DIGIKAM_VIEWER_RESULT:-}"
+# IOPIX_*; the DIGIKAM_VIEWER_* names from before the rename still work
+REPO="${IOPIX_REPO:-${DIGIKAM_VIEWER_REPO:-avandeputte/iopix}}"
+[ "$REPO" = avandeputte/digikam-viewer ] && REPO=avandeputte/iopix  # the repository was renamed
+BRANCH="${IOPIX_BRANCH:-${DIGIKAM_VIEWER_BRANCH:-main}}"
+REF="${IOPIX_REF:-${DIGIKAM_VIEWER_REF:-$BRANCH}}"
+RESULT="${IOPIX_RESULT:-${DIGIKAM_VIEWER_RESULT:-}}"
 FORCE=0; [ "$1" = "--force" ] && FORCE=1
 say() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 note() { [ -n "$RESULT" ] && printf '%s\n' "$*" > "$RESULT" 2>/dev/null || true; }
@@ -28,11 +30,11 @@ local_commit() { if [ -d .git ]; then git rev-parse HEAD 2>/dev/null; elif [ -f 
 # network access through the viewer's own Python (no curl needed inside a container)
 PYF="$(ls -d .venv/bin/python 2>/dev/null || command -v python3)"
 fetch() { "$PYF" -c 'import sys, urllib.request
-req = urllib.request.Request(sys.argv[1], headers={"User-Agent": "digikam-viewer-update", "Accept": "application/vnd.github+json"})
+req = urllib.request.Request(sys.argv[1], headers={"User-Agent": "iopix-update", "Accept": "application/vnd.github+json"})
 with urllib.request.urlopen(req, timeout=60) as r, open(sys.argv[2], "wb") as f:
     f.write(r.read())' "$1" "$2"; }
 remote_commit() { "$PYF" -c 'import sys, json, urllib.request
-req = urllib.request.Request(sys.argv[1], headers={"User-Agent": "digikam-viewer-update", "Accept": "application/vnd.github+json"})
+req = urllib.request.Request(sys.argv[1], headers={"User-Agent": "iopix-update", "Accept": "application/vnd.github+json"})
 with urllib.request.urlopen(req, timeout=30) as r:
     print(json.load(r)["sha"])' "https://api.github.com/repos/$REPO/commits/${1:-$BRANCH}" 2>/dev/null; }
 if [ "$1" = "--check" ]; then
@@ -62,20 +64,20 @@ else
   # stage everything first, then swap, so a failure never leaves a half-updated install;
   # keep settings, data and the environment (they live outside these items)
   STAGE="$APP/.update-stage"; rm -rf "$STAGE"; mkdir -p "$STAGE"
-  for item in app static pyproject.toml README.md setup.sh run.sh update.sh installer/digikam-viewer.service; do
+  for item in app static pyproject.toml README.md setup.sh run.sh update.sh migrate-to-iopix.sh installer/iopix.service; do
     [ -e "$SRC/$item" ] && { mkdir -p "$STAGE/$(dirname "$item")"; cp -R "$SRC/$item" "$STAGE/$item"; }
   done
   [ -d "$STAGE/app" ] && [ -d "$STAGE/static" ] || die "the downloaded tarball looks incomplete"
-  for item in app static pyproject.toml README.md setup.sh run.sh update.sh; do
+  for item in app static pyproject.toml README.md setup.sh run.sh update.sh migrate-to-iopix.sh; do
     [ -e "$STAGE/$item" ] || continue
     rm -rf "$APP/$item.old"; [ -e "$APP/$item" ] && mv "$APP/$item" "$APP/$item.old"
     mv "$STAGE/$item" "$APP/$item"; rm -rf "$APP/$item.old"
   done
-  [ -f "$STAGE/installer/digikam-viewer.service" ] && cp "$STAGE/installer/digikam-viewer.service" "$APP/digikam-viewer.service"
+  [ -f "$STAGE/installer/iopix.service" ] && cp "$STAGE/installer/iopix.service" "$APP/iopix.service"
   rm -rf "$STAGE"
   echo "$R" > COMMIT
 fi
-chmod 755 setup.sh update.sh run.sh 2>/dev/null || true
+chmod 755 setup.sh update.sh run.sh migrate-to-iopix.sh 2>/dev/null || true
 
 say "Refreshing the Python packages"
 VPY="$APP/.venv/bin/python"
@@ -94,10 +96,12 @@ NEWV="$(sed -n 's/^__version__ = "\([^"]*\)".*/\1/p' app/__init__.py)"
 # when the viewer started it
 note "ok: updated to v$NEWV ($(local_commit | cut -c1-7)) on $(date '+%Y-%m-%d %H:%M')"
 say "Restarting the service"
-if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet digikam-viewer 2>/dev/null; then
-  systemctl restart digikam-viewer && echo "  systemd: restarted"
+SVC=""; for s in iopix digikam-viewer; do command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet "$s" 2>/dev/null && { SVC="$s"; break; }; done
+if [ -n "$SVC" ]; then
+  systemctl restart "$SVC" && echo "  systemd: restarted $SVC"
+  [ "$SVC" = digikam-viewer ] && echo "  (installed under the old name; ./migrate-to-iopix.sh moves it to /opt/iopix and the iopix service)"
 elif [ "$(uname -s)" = Darwin ]; then
-  L="$(launchctl list 2>/dev/null | grep -o 'com\.[a-z.]*digikam-viewer' | head -1)"
+  L="$(launchctl list 2>/dev/null | grep -o 'com\.[a-z.]*\(iopix\|digikam-viewer\)' | head -1)"
   if [ -n "$L" ]; then launchctl kickstart -k "gui/$(id -u)/$L" && echo "  launchd: restarted $L"; else echo "  no service found; restart the viewer yourself"; fi
 else
   echo "  no service found; restart the viewer yourself"

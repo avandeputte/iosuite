@@ -1,5 +1,5 @@
 {
-  "name": "DKViewer",
+  "name": "iopix",
   "short_name": "Photos",
   "description": "Browse and search a digiKam photo library",
   "start_url": "./#/photos",

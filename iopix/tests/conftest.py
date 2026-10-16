@@ -21,7 +21,7 @@ sys.path.insert(0, str(APP))
 SRC_DB = Path(os.environ.get("DIGIKAM_TEST_DB", str(Path.home() / "Pictures/digikamDB/digikam4.db")))
 SRC_ROOT = Path(os.environ.get("DIGIKAM_TEST_ROOT", str(Path.home() / "Pictures/photos")))
 
-_tmp = Path(tempfile.mkdtemp(prefix="dkv-tests-"))
+_tmp = Path(tempfile.mkdtemp(prefix="iopix-tests-"))
 _lib = _tmp / "lib"
 _data = _tmp / "data"
 

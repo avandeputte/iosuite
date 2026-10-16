@@ -2,7 +2,7 @@
 // icons) available. Shell files are fetched network-first so updates land at once, with the cache
 // as the fallback. Photos, thumbnails and the API are never cached here: the library changes and
 // the page reloads itself when the server reports a new version.
-const SHELL = 'dkv-shell-v2';  // bump when the shell files change in a way the network-first fetch would not refresh (new icons)
+const SHELL = 'iopix-shell-v1';  // bump when the shell files change in a way the network-first fetch would not refresh (new icons)
 const FILES = ['./', './index.html', './app.js', './app.css', './manifest.webmanifest', './icons/mark.svg', './icons/icon-192.png', './icons/icon-512.png'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(SHELL).then((c) => c.addAll(FILES)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', (e) => { e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== SHELL).map((k) => caches.delete(k)))).then(() => self.clients.claim())); });

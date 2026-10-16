@@ -1,4 +1,4 @@
-// digiKam Viewer front end. No build step: plain ES module.
+// iopix front end. No build step: plain ES module.
 
 // ---------------------------------------------------------------- helpers
 const $ = (s, r = document) => r.querySelector(s);
@@ -191,7 +191,7 @@ function applyTheme() {
 }
 let dragTag = null;
 let IS_ADMIN = true, USERS_EXIST = false, REQUIRE_LOGIN = false, BOOTED = false, DIGIKAM_CHECK = 'pgrep', APP_VERSION = '', APP_COMMIT = '';
-let APP_NAME = 'DKViewer';  // Settings › Name; applied to the top bar, the tab title and the installed app's name
+let APP_NAME = 'iopix';  // Settings › Name; applied to the top bar, the tab title and the installed app's name
 function applyAppName() {
   const b = $('.brand-name'); if (b) b.textContent = APP_NAME;
   document.title = APP_NAME;
@@ -1772,7 +1772,7 @@ function analysisSection(view, part = 'jobs') {
       j.running && j.since ? (() => { const now = Date.now() / 1000, idle = j.last ? now - j.last : now - j.since, stuck = idle > 300;
         return h('div', { class: stuck ? 'warn' : 'muted', style: 'font-size:12px;margin-top:4px' }, `running for ${Math.round((now - j.since) / 60)} min · last progress ${idle < 90 ? Math.round(idle) + ' s' : Math.round(idle / 60) + ' min'} ago`,
           j.current && j.current.length ? ` · working on ${j.current.map((p) => p.split('/').pop()).join(', ')}` : '',
-          stuck ? ' · no progress for over 5 minutes: probably stuck on that file; see the server log (journalctl -u digikam-viewer, docker logs, or data/server.log) and consider restarting the viewer from Maintenance' : ''); })() : null,
+          stuck ? ' · no progress for over 5 minutes: probably stuck on that file; see the server log (journalctl -u iopix, docker logs, or data/server.log) and consider restarting the viewer from Maintenance' : ''); })() : null,
       h('div', { class: 'muted', style: 'font-size:13px;margin-top:6px' }, j.detail, ' ',
         j.rerun && j.enabled ? h('a', { class: 'lnk', onclick: async () => {
           if (!confirm(`Run “${j.label}” again from scratch for all ${nf.format(j.total)} photos? The current results for it are discarded first. This can take from several minutes to a few hours.`)) return;
@@ -2059,8 +2059,8 @@ async function settingsPage(view) {
     ...(view === 'settings' ? [
     h('h2', null, 'Display'),
     IS_ADMIN ? (() => {
-      const inp = h('input', { class: 'einput', placeholder: 'DKViewer', value: m.appNameSet || '', maxlength: 40, style: 'margin:0;width:220px', onkeydown: (e) => { if (e.key === 'Enter') e.target.nextSibling.click(); } });
-      return row('Name', 'What the viewer calls itself, for everyone: the top bar, the browser tab and the installed app. Leave it empty for DKViewer.',
+      const inp = h('input', { class: 'einput', placeholder: 'iopix', value: m.appNameSet || '', maxlength: 40, style: 'margin:0;width:220px', onkeydown: (e) => { if (e.key === 'Enter') e.target.nextSibling.click(); } });
+      return row('Name', 'What the viewer calls itself, for everyone: the top bar, the browser tab and the installed app. Leave it empty for iopix.',
         h('span', { style: 'display:flex;gap:6px;align-items:center' }, inp, btn('Save', async () => { try { await post('/api/settings', { app_name: inp.value }); toast('Name saved.'); pollSoon(300); } catch (e) { toast(e.message); } })));
     })() : null,
     row('Appearance', `Light (the default) or dark colours, or follow the device’s setting. ${USER ? 'Saved with your account, so it follows you to other devices.' : 'Remembered in this browser; sign in to keep it with an account.'}`,

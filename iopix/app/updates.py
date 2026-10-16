@@ -13,8 +13,9 @@ import urllib.request
 
 from . import config
 
-REPO = os.environ.get("DIGIKAM_VIEWER_REPO", "avandeputte/digikam-viewer")
-BRANCH = os.environ.get("DIGIKAM_VIEWER_BRANCH", "main")
+# IOPIX_*; the DIGIKAM_VIEWER_* names from before the rename are still honoured
+REPO = os.environ.get("IOPIX_REPO") or os.environ.get("DIGIKAM_VIEWER_REPO") or "avandeputte/iopix"
+BRANCH = os.environ.get("IOPIX_BRANCH") or os.environ.get("DIGIKAM_VIEWER_BRANCH") or "main"
 progress = {"running": False, "log": "", "error": None, "finished": None}
 _checked = {}
 _commit = None  # local_commit() once known: it only changes with update.sh, which restarts the process
@@ -75,7 +76,7 @@ def _read_commit() -> str:
 
 
 def _fetch(url: str) -> dict:
-    req = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json", "User-Agent": "digikam-viewer"})
+    req = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json", "User-Agent": "iopix"})
     with urllib.request.urlopen(req, timeout=10) as r:
         return json.load(r)
 
@@ -164,9 +165,9 @@ def run(ref: str = ""):
         raise RuntimeError("An update is already running")
     ref = re.sub(r"[^A-Za-z0-9._/-]", "", ref or "")[:80]
     progress.update(running=True, log="", error=None, finished=None)
-    env = dict(os.environ, DIGIKAM_VIEWER_RESULT=str(config.DATA_DIR / RESULT_FILE))
+    env = dict(os.environ, IOPIX_RESULT=str(config.DATA_DIR / RESULT_FILE), IOPIX_REPO=REPO, IOPIX_BRANCH=BRANCH)
     if ref:
-        env["DIGIKAM_VIEWER_REF"] = ref
+        env["IOPIX_REF"] = ref
     try:
         (config.DATA_DIR / RESULT_FILE).unlink()
     except OSError:

@@ -15,7 +15,7 @@ from collections import OrderedDict
 from . import maps, places
 
 URL = "https://nominatim.openstreetmap.org/search"
-USER_AGENT = "digikam-viewer/1.0 (https://github.com/avandeputte/digikam-viewer)"
+USER_AGENT = "iopix/1.0 (https://github.com/avandeputte/iopix)"
 _cache = OrderedDict()
 _lock = threading.Lock()
 _last = [0.0]

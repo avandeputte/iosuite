@@ -1,15 +1,17 @@
-# digiKam Viewer
+# iopix
+
+*A web companion for your digiKam library.* iopix was called digiKam Viewer until version 1.17; see [Renamed from digiKam Viewer](#renamed-from-digikam-viewer).
 
 A Google-Photos-style web front end for a digiKam library: FastAPI + a single-page vanilla JS app. It reads digiKam's database and your photos, keeps everything it builds in its own `data/` folder, and writes to the library only for the editing features you turn on.
 
 ## Run
 
 ```sh
-git clone https://github.com/avandeputte/digikam-viewer && cd digikam-viewer
+git clone https://github.com/avandeputte/iopix && cd iopix
 ./setup.sh
 ```
 
-`setup.sh` is the installer: it asks where the photos are, whether digiKam's database is the SQLite file or MySQL/MariaDB (and tests the connection), which features you want (content search, places, objects, text recognition, descriptions; each downloads its model), the port, an admin account, and whether to start the viewer at login (launchd on macOS, systemd on Linux). Then it creates the Python environment, installs the packages, downloads the models, writes `digikam-viewer.env`, creates the admin and starts the service. Run it again at any time to add a feature; it keeps what is there. Flags skip the questions (`./setup.sh --help`), e.g. `./setup.sh --yes --photos /srv/photos --mysql db:3306/digikam:digikam:secret --features search,places --admin alex:secret`.
+`setup.sh` is the installer: it asks where the photos are, whether digiKam's database is the SQLite file or MySQL/MariaDB (and tests the connection), which features you want (content search, places, objects, text recognition, descriptions; each downloads its model), the port, an admin account, and whether to start the viewer at login (launchd on macOS, systemd on Linux). Then it creates the Python environment, installs the packages, downloads the models, writes `iopix.env`, creates the admin and starts the service. Run it again at any time to add a feature; it keeps what is there. Flags skip the questions (`./setup.sh --help`), e.g. `./setup.sh --yes --photos /srv/photos --mysql db:3306/digikam:digikam:secret --features search,places --admin alex:secret`.
 
 It also installs what the viewer needs from the system when it is missing: Python 3.10+, `exiftool` (metadata editing), `ffmpeg` (video thumbnails) and the MariaDB client (`mysqldump`, to back a MySQL/MariaDB digiKam database up before writes), with Homebrew on macOS (offering to install Homebrew first) or apt/dnf/zypper/pacman on Linux (`--no-system-deps` to skip). Without the service, `./run.sh` starts it in the foreground.
 
@@ -30,7 +32,7 @@ All chosen in `setup.sh` (or later from Maintenance › AI analysis and models);
 
 ## Browsing
 
-The viewer is a web app that installs like an app on a phone or tablet (PWA): open it in the browser and choose "Add to Home Screen" (iOS Safari) or "Install app" (Android Chrome, desktop Chrome/Edge). The layout adapts to narrow screens (bottom navigation, full-width info panel, swipe between photos); a service worker keeps the app shell available, but photos and search always come from the server, so nothing shown is ever stale. Settings › Name sets what the viewer calls itself (the top bar, the tab title and the installed app's name; the default is DKViewer).
+The viewer is a web app that installs like an app on a phone or tablet (PWA): open it in the browser and choose "Add to Home Screen" (iOS Safari) or "Install app" (Android Chrome, desktop Chrome/Edge). The layout adapts to narrow screens (bottom navigation, full-width info panel, swipe between photos); a service worker keeps the app shell available, but photos and search always come from the server, so nothing shown is ever stale. Settings › Name sets what the viewer calls itself (the top bar, the tab title and the installed app's name; the default is iopix).
 
 - **Photos**: the whole library as one virtualised timeline grouped by day, with a year scrubber, three tile sizes and several sort orders.
 - **Search**: instant suggestions for people, tags, albums, cameras, lenses, photographers, places, years and months; Enter for full-text search across file names, albums, titles, captions, tags, people, recognised text and descriptions. Every pick becomes a chip; chips combine. With content search on, "Photos that look like…" searches by description.
@@ -72,12 +74,22 @@ Derived from these:
 
 ## Updating
 
-- **Standalone (checkout or the Linux installer):** `./update.sh` in the app folder (`/opt/digikam-viewer/app` after the installer). It pulls the latest code (git, or the GitHub tarball when there is no `.git`), keeps `digikam-viewer.env`, the data folder and the Python environment, reinstalls the package groups that are already installed, and restarts the service (launchd or systemd). `./update.sh --check` only reports; `--force` reinstalls even when nothing is newer; `DIGIKAM_VIEWER_REF=<sha>` installs that commit. When the installed commit is already the one asked for, the script says so and does not restart.
+- **Standalone (checkout or the Linux installer):** `./update.sh` in the app folder (`/opt/iopix/app` after the installer). It pulls the latest code (git, or the GitHub tarball when there is no `.git`), keeps `iopix.env`, the data folder and the Python environment, reinstalls the package groups that are already installed, and restarts the service (launchd or systemd). `./update.sh --check` only reports; `--force` reinstalls even when nothing is newer; `IOPIX_REF=<sha>` installs that commit. When the installed commit is already the one asked for, the script says so and does not restart.
 - **Proxmox:** `update` inside the container (the framework's command) runs the same script.
 - **Docker:** `docker compose pull && docker compose up -d`.
 - **From an MCP client (e.g. Claude):** the `check_for_update` and `update_viewer` tools (`update_viewer` takes an optional `ref`, the commit to install; give it the sha just pushed, because GitHub can still report the previous commit for a short while, and `check_for_update` then shows the outcome under `lastUpdate`); the latter needs the admin token shown under Maintenance › Viewer version › MCP update token (or `MCP_ADMIN_TOKEN` in the environment), because the MCP endpoint has no sign-in of its own; the diagnostics tools take the same token. Treat the token like a password.
 - **Daily check:** with Settings › Check for updates daily (on by default; `UPDATE_CHECK=0` locks it off) the viewer asks GitHub once a day whether a newer version exists and shows admins a banner with a link to the update; only the public commit list is fetched, nothing about the install is sent.
 - **From the app:** Maintenance › Viewer version shows the installed commit, "Check for updates" compares it with GitHub's main branch, and "Update now" runs `update.sh` (not in Docker, which says to pull instead). The viewer restarts itself when the update finishes.
+
+### Renamed from digiKam Viewer
+
+Version 1.17 renamed the project iopix: the repository (github.com/avandeputte/iopix; the old address redirects), the container image (`ghcr.io/avandeputte/iopix`; the old image name keeps receiving the same builds), the install folder (`/opt/iopix`), the systemd service (`iopix`), the settings file (`iopix.env`) and the `IOPIX_*` variables. Nothing breaks for an existing install: `update.sh` keeps updating an install under the old names, which also still accepts `digikam-viewer.env`, the `digikam-viewer` service and the `DIGIKAM_VIEWER_*` variables. To move it to the new names, run as root where it runs (inside the Proxmox container, `update` does it):
+
+```sh
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iopix/main/migrate-to-iopix.sh)"
+```
+
+It updates the code, stops the old service, moves `/opt/digikam-viewer` to `/opt/iopix` (leaving a symlink behind), renames the settings file with its paths, installs `iopix.service` with the same user and port, and starts it. The data folder moves unchanged, so users, favorites, edits, the library copy, AI results, thumbnails and models all stay. Docker stacks keep their `dkv-data` volume; change the image line to `ghcr.io/avandeputte/iopix:latest` when convenient.
 
 ## Users and permissions
 
@@ -93,7 +105,7 @@ Out of the box the viewer is open to anyone who can reach it. `setup.sh` asks fo
 
 **Require sign-in** (Settings › Users) turns the open browsing off: visitors get the sign-in screen and nothing else; no thumbnail, preview or API answer is served without an account. With it on, an MCP client must send the admin token as a header, `Authorization: Bearer <token>` (in Claude Desktop's `mcp-remote` config: `"args": ["mcp-remote", "https://…/mcp", "--header", "Authorization: Bearer <token>"]`).
 
-**Viewer database on MySQL/MariaDB** (Settings › Viewer database, admin): by default the viewer keeps its own data in `data/viewer.db` (SQLite). It can use a MySQL/MariaDB database of its own instead (give it its own database, e.g. `digikam_viewer`, not digiKam's): test the connection, tick "copy all the data" (and "drop and recreate" for a clean slate), and Switch; every row is copied across and the viewer restarts on the new database. The connection settings live in `data/viewer-db.json` (or `VIEWER_DB_TYPE`, `VIEWER_DB_HOST`, `VIEWER_DB_PORT`, `VIEWER_DB_DATABASE`, `VIEWER_DB_USER`, `VIEWER_DB_PASSWORD`), outside the database itself. If that server is unreachable at start, the viewer falls back to the SQLite file and says so in Settings. The backup zip always contains a SQLite copy, whichever is in use, so switching back is the same procedure in reverse.
+**Viewer database on MySQL/MariaDB** (Settings › Viewer database, admin): by default the viewer keeps its own data in `data/viewer.db` (SQLite). It can use a MySQL/MariaDB database of its own instead (give it its own database, e.g. `iopix`, not digiKam's): test the connection, tick "copy all the data" (and "drop and recreate" for a clean slate), and Switch; every row is copied across and the viewer restarts on the new database. The connection settings live in `data/viewer-db.json` (or `VIEWER_DB_TYPE`, `VIEWER_DB_HOST`, `VIEWER_DB_PORT`, `VIEWER_DB_DATABASE`, `VIEWER_DB_USER`, `VIEWER_DB_PASSWORD`), outside the database itself. If that server is unreachable at start, the viewer falls back to the SQLite file and says so in Settings. The backup zip always contains a SQLite copy, whichever is in use, so switching back is the same procedure in reverse.
 
 Each account can be linked to a person from People (Settings › Users, or "Link to a person" in the account dialog): that person's face badge becomes the account's avatar in the account picker and the menu. Each account can also carry an optional email address (Settings › Users). The viewer does not use it yet; it is there so a reverse proxy that authenticates users (Authelia, Authentik, Cloudflare Access…) can later be mapped onto these accounts by the identity it passes.
 
@@ -177,7 +189,7 @@ digiKam can keep its database in MySQL or MariaDB. Every read and write goes thr
 
 ## Configuration
 
-All settings are environment variables; `setup.sh` writes the ones it asks about to `digikam-viewer.env`. `app/config.py` is the source of truth for the first table (the last five rows live in `app/updates.py`, `app/mcp_server.py` and `app/vdb.py`), `app/dkdb.py` for the second.
+All settings are environment variables; `setup.sh` writes the ones it asks about to `iopix.env`. `app/config.py` is the source of truth for the first table (the last five rows live in `app/updates.py`, `app/mcp_server.py` and `app/vdb.py`), `app/dkdb.py` for the second.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
@@ -207,7 +219,7 @@ All settings are environment variables; `setup.sh` writes the ones it asks about
 | `MCP_ADMIN_TOKEN` | unset | the admin token for the MCP diagnostics and update tools (and for `/mcp` when sign-in is required); otherwise one is generated once and shown under Maintenance › Viewer version |
 | `VIEWER_URL` | `http://localhost:8600` | the address used for the links in MCP results |
 | `VIEWER_DB_TYPE` / `VIEWER_DB_HOST` / `VIEWER_DB_PORT` / `VIEWER_DB_DATABASE` / `VIEWER_DB_USER` / `VIEWER_DB_PASSWORD` | unset | the viewer's own database on MySQL/MariaDB instead of `data/viewer.db` (Settings › Viewer database writes the same thing to `data/viewer-db.json`) |
-| `DIGIKAM_VIEWER_REPO` / `DIGIKAM_VIEWER_BRANCH` | `avandeputte/digikam-viewer` / `main` | where update checks and `update.sh` fetch from |
+| `IOPIX_REPO` / `IOPIX_BRANCH` | `avandeputte/iopix` / `main` | where update checks and `update.sh` fetch from (`DIGIKAM_VIEWER_*` still work) |
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
@@ -219,11 +231,11 @@ All settings are environment variables; `setup.sh` writes the ones it asks about
 
 ## Running in Docker
 
-`docker-compose.yml` pulls the published image (`ghcr.io/avandeputte/digikam-viewer:latest`, built by the GitHub workflow for amd64 and arm64) and works as a stack in Dockge or Portainer: set the photos path, the database and the admin password and start it; `docker compose up -d --build` builds from the checkout instead. The image is public; no registry login is needed.
+`docker-compose.yml` pulls the published image (`ghcr.io/avandeputte/iopix:latest`, built by the GitHub workflow for amd64 and arm64) and works as a stack in Dockge or Portainer: set the photos path, the database and the admin password and start it; `docker compose up -d --build` builds from the checkout instead. The image is public; no registry login is needed.
 
 The stack mounts the photo folder read-only at `/library/photos`, keeps everything the viewer writes in the named volume `dkv-data` (mounted at `/data`), and is written for digiKam on MariaDB (`DIGIKAM_DB_*` in the `environment` block); for SQLite drop those lines and uncomment the mount of the digiKam folder at `/library/digikamDB`. `ADMIN_USER` / `ADMIN_PASSWORD` create the admin on the first start. The image (Debian slim, Python 3.12) contains ffmpeg, exiftool, libheif, the MariaDB client and, with the default build argument `AI=1`, the content-search, text-recognition and object-detection packages; `CAPTIONS=1` adds PyTorch (CPU build) and transformers for photo descriptions, which are slow without a GPU. The container's health check polls `/api/status`, which stays open when sign-in is required.
 
-- **Models and data** are not in the image. Download them from Maintenance › AI analysis and models, or with `docker compose exec -e HF_HUB_OFFLINE=0 digikam-viewer python -m app.models download <clip|siglip2|yolox|geonames|blip>`. They land in `/data/models` and `/data/geonames` on the volume and survive rebuilds. `setup.sh` is for the `.venv` install, not the container.
+- **Models and data** are not in the image. Download them from Maintenance › AI analysis and models, or with `docker compose exec -e HF_HUB_OFFLINE=0 iopix python -m app.models download <clip|siglip2|yolox|geonames|blip>`. They land in `/data/models` and `/data/geonames` on the volume and survive rebuilds. `setup.sh` is for the `.venv` install, not the container.
 - **Editing** needs the photos mount writable (drop `:ro`): sidecars are written next to the photos, and in-file writing rewrites the photos themselves.
 - **Writing digiKam's database** ("Apply to digiKam database", tag manager, faces, place tags, badges, new folders and uploads) needs the digiKam folder writable too when digiKam uses SQLite. With MySQL the folder is not mounted at all (`DIGIKAM_DB_HOST: host.docker.internal` for a server on the Docker host); the image's `mariadb-dump` takes the backup before each write, or `DIGIKAM_DB_DUMP` names a command that does.
 - A container cannot see the host's processes, so the Dockerfile sets `DIGIKAM_CHECK=ask`: before a database write the viewer asks you to confirm digiKam is closed.
@@ -232,23 +244,23 @@ The image holds no models. On its first start the container downloads the models
 
 ## Linux installer
 
-`installer/make-installer.sh` builds `dist/digikam-viewer-install.sh`, one self-extracting file (the app without models, about 200 KB). On the target machine, as root:
+`installer/make-installer.sh` builds `dist/iopix-install.sh`, one self-extracting file (the app without models, about 200 KB). On the target machine, as root:
 
 ```sh
-sh digikam-viewer-install.sh --photos /srv/photos --digikam-db /srv/digikamDB
+sh iopix-install.sh --photos /srv/photos --digikam-db /srv/digikamDB
 ```
 
-It unpacks the app under `/opt/digikam-viewer/app`, then runs the app's own `setup.sh` there with the answers it was given: the system packages the viewer shells out to (python3 with venv, ffmpeg, exiftool, libheif, the MariaDB client) with apt, dnf, zypper or pacman; the venv and the Python packages; the features and their model downloads (`--features search,places,objects,ocr,captions`, `--features none` for browsing only, `--captions` for all of them; asked when not given); the admin account (`--admin NAME:PASS`, asked when not given); the settings in `/opt/digikam-viewer/app/digikam-viewer.env` with the data in `/opt/digikam-viewer/data`. Then it installs and starts a systemd service as the `digikam-viewer` user on port 8600. `--yes` takes every default; `--help` lists the rest (`--prefix`, `--data`, `--port`, `--host`, `--user`, `--mysql HOST:PORT/DB:USER:PASSWORD`, `--read-only`, `--no-service`, `--no-system-deps`). Running it again upgrades the code and keeps the data folder and the env file; so does `./update.sh` in `/opt/digikam-viewer/app`. Tested on Ubuntu 24.04 and Fedora 41. The GitHub workflow builds the installer on every push and attaches it to tagged releases.
+It unpacks the app under `/opt/iopix/app`, then runs the app's own `setup.sh` there with the answers it was given: the system packages the viewer shells out to (python3 with venv, ffmpeg, exiftool, libheif, the MariaDB client) with apt, dnf, zypper or pacman; the venv and the Python packages; the features and their model downloads (`--features search,places,objects,ocr,captions`, `--features none` for browsing only, `--captions` for all of them; asked when not given); the admin account (`--admin NAME:PASS`, asked when not given); the settings in `/opt/iopix/app/iopix.env` with the data in `/opt/iopix/data`. Then it installs and starts a systemd service as the `iopix` user on port 8600. `--yes` takes every default; `--help` lists the rest (`--prefix`, `--data`, `--port`, `--host`, `--user`, `--mysql HOST:PORT/DB:USER:PASSWORD`, `--read-only`, `--no-service`, `--no-system-deps`). Running it again upgrades the code and keeps the data folder and the env file; so does `./update.sh` in `/opt/iopix/app`. Tested on Ubuntu 24.04 and Fedora 41. The GitHub workflow builds the installer on every push and attaches it to tagged releases.
 
 ## Proxmox VE (LXC)
 
-`proxmox/ct/digikam-viewer.sh` and `proxmox/install/digikam-viewer-install.sh` follow the community-scripts (ProxmoxVE) framework layout, so they can be submitted upstream as they are. Until then the ct script points the framework at this repository for the install script (`COMMUNITY_SCRIPTS_URL`), while the engine itself comes from community-scripts. On the Proxmox host, as root:
+`proxmox/ct/iopix.sh` and `proxmox/install/iopix-install.sh` follow the community-scripts (ProxmoxVE) framework layout, so they can be submitted upstream as they are. Until then the ct script points the framework at this repository for the install script (`COMMUNITY_SCRIPTS_URL`), while the engine itself comes from community-scripts. On the Proxmox host, as root:
 
 ```sh
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/digikam-viewer/main/proxmox/ct/digikam-viewer.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iopix/main/proxmox/ct/iopix.sh)"
 ```
 
-It asks about the app first: the photo folder and the digiKam folder on the host (or MariaDB host, port, database, user, password), whether the viewer may write into the library (yes: sidecar edits; the mounts are read/write and the container is created privileged, since an unprivileged container cannot write files owned by a host user), which features to install (each downloads its model), and the admin account; then the framework's own questions (resources, network). It creates a Debian 13 container (4 CPU, 4 GB, 16 GB disk by default), bind-mounts the library at `/library/photos` and `/library/digikamDB`, and runs the app's own `setup.sh` inside with those answers: packages, model downloads, settings, admin, and the `digikam-viewer` service on port 8600. For unattended runs set `DKV_PHOTOS`, `DKV_DB` (`sqlite:/path` or `mysql:host:port/db:user:pass`), `DKV_WRITE` (1/0), `DKV_FEATURES` and `DKV_ADMIN` in the environment. The setup's output inside the container is kept in `/opt/digikam-viewer/setup.log`; on failure its last lines are shown and the command to rerun it is printed. The container's `update` command pulls the latest code and keeps the settings and data. Because the container cannot see digiKam's process, `DIGIKAM_CHECK=ask` makes the viewer ask before database writes: the first write that needs digiKam closed (a badge, a tag, a face, applying edits) shows a confirmation; answering yes is remembered for 10 minutes. With MariaDB the question simply means "is every digiKam that uses this database closed?" I could not run these on a Proxmox host; they are checked for syntax and mirror the tested `setup.sh`.
+It asks about the app first: the photo folder and the digiKam folder on the host (or MariaDB host, port, database, user, password), whether the viewer may write into the library (yes: sidecar edits; the mounts are read/write and the container is created privileged, since an unprivileged container cannot write files owned by a host user), which features to install (each downloads its model), and the admin account; then the framework's own questions (resources, network). It creates a Debian 13 container (4 CPU, 4 GB, 16 GB disk by default), bind-mounts the library at `/library/photos` and `/library/digikamDB`, and runs the app's own `setup.sh` inside with those answers: packages, model downloads, settings, admin, and the `iopix` service on port 8600. For unattended runs set `IOPIX_PHOTOS`, `IOPIX_DB` (`sqlite:/path` or `mysql:host:port/db:user:pass`), `IOPIX_WRITE` (1/0), `IOPIX_FEATURES` and `IOPIX_ADMIN` in the environment. The setup's output inside the container is kept in `/opt/iopix/setup.log`; on failure its last lines are shown and the command to rerun it is printed. The container's `update` command pulls the latest code and keeps the settings and data. Because the container cannot see digiKam's process, `DIGIKAM_CHECK=ask` makes the viewer ask before database writes: the first write that needs digiKam closed (a badge, a tag, a face, applying edits) shows a confirmation; answering yes is remembered for 10 minutes. With MariaDB the question simply means "is every digiKam that uses this database closed?" I could not run these on a Proxmox host; they are checked for syntax and mirror the tested `setup.sh`.
 
 
 ## Reverse proxy and HTTPS (strongly recommended)
@@ -307,6 +319,6 @@ setup.sh        the installer: asks, installs, downloads, starts the service    
 update.sh       updates an installed copy in place (git or tarball), keeps settings and data
 pyproject.toml  dependencies (base + optional groups)
 Dockerfile, docker-compose.yml, .github/workflows/docker.yml   the container image; the workflow also runs the syntax checks and builds the installer
-installer/      the self-extracting Linux installer (make-installer.sh builds dist/digikam-viewer-install.sh)
+installer/      the self-extracting Linux installer (make-installer.sh builds dist/iopix-install.sh)
 proxmox/        Proxmox VE LXC scripts in the community-scripts layout
 ```

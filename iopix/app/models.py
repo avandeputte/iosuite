@@ -118,7 +118,7 @@ def local(key: str) -> dict:
 # --------------------------------------------------------------------------
 
 def _get(url: str, head: bool = False):
-    req = urllib.request.Request(url, method="HEAD" if head else "GET", headers={"User-Agent": "digikam-viewer"})
+    req = urllib.request.Request(url, method="HEAD" if head else "GET", headers={"User-Agent": "iopix"})
     return urllib.request.urlopen(req, timeout=20)
 
 

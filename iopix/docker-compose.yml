@@ -1,18 +1,18 @@
-# digiKam Viewer with Docker: `docker compose up -d` pulls the published image; `docker compose up -d --build`
+# iopix with Docker: `docker compose up -d` pulls the published image; `docker compose up -d --build`
 # builds it from this checkout instead (build arguments AI / CAPTIONS, see the Dockerfile). Works as a stack in Dockge / Portainer.
 # Edit the three "CHANGE ME" spots (photos path, database, admin password). Everything the viewer
-# writes (index, thumbnails, models, users, backups) lives in the named volume `dkv-data`; the
+# writes (index, thumbnails, models, users, backups) lives in the named volume `dkv-data` (its name from before the rename, kept so existing stacks keep their data); the
 # library mounts are read-only. On the first start the container downloads the AI models named
 # in AUTO_MODELS (about 1.6 GB) into the volume while the library is already browsable.
 #
 # The image is public on GitHub's registry: no login is needed to pull it.
 services:
-  digikam-viewer:
-    image: ghcr.io/avandeputte/digikam-viewer:latest
+  iopix:
+    image: ghcr.io/avandeputte/iopix:latest
     build:
       context: .
       # args: { AI: "1", CAPTIONS: "0" }
-    container_name: digikam-viewer
+    container_name: iopix
     restart: unless-stopped
     ports:
       - "8600:8600"

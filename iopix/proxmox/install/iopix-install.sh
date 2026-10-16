@@ -2,8 +2,8 @@
 
 # Copyright (c) 2026 Alex Van de Putte
 # License: MIT
-# Source: https://github.com/avandeputte/digikam-viewer
-# digiKam Viewer: runs inside the LXC, driven by proxmox/ct/digikam-viewer.sh (community-scripts framework).
+# Source: https://github.com/avandeputte/iopix
+# iopix: runs inside the LXC, driven by proxmox/ct/iopix.sh (community-scripts framework).
 # This only installs the system packages and fetches the code; the ct script then runs the app's own
 # setup.sh inside the container with the answers given on the host (features, models, admin, service).
 
@@ -29,13 +29,13 @@ $STD apt-get install -y \
   curl
 msg_ok "Installed Dependencies"
 
-msg_info "Fetching digiKam Viewer"
-REPO="${DIGIKAM_VIEWER_REPO:-https://github.com/avandeputte/digikam-viewer}"
-mkdir -p /opt/digikam-viewer /opt/digikam-viewer/data /library
-$STD git clone --depth 1 "$REPO" /opt/digikam-viewer/app
-git -C /opt/digikam-viewer/app rev-parse HEAD > /opt/digikam-viewer/app/COMMIT  # the installed commit, shown in Maintenance
-rm -rf /opt/digikam-viewer/app/.git
-msg_ok "Fetched digiKam Viewer"
+msg_info "Fetching iopix"
+REPO="${IOPIX_REPO:-https://github.com/avandeputte/iopix}"
+mkdir -p /opt/iopix /opt/iopix/data /library
+$STD git clone --depth 1 "$REPO" /opt/iopix/app
+git -C /opt/iopix/app rev-parse HEAD > /opt/iopix/app/COMMIT  # the installed commit, shown in Maintenance
+rm -rf /opt/iopix/app/.git
+msg_ok "Fetched iopix"
 
 motd_ssh
 customize

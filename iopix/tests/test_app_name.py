@@ -1,8 +1,8 @@
-"""Settings › Name: the viewer brands itself as the admin wishes (status, manifest), DKViewer by default."""
+"""Settings › Name: the viewer brands itself as the admin wishes (status, manifest), iopix by default."""
 
 
 def test_app_name_setting_brands_status_and_manifest(client):
-    assert client.get("/api/status").json()["appName"] == "DKViewer"
+    assert client.get("/api/status").json()["appName"] == "iopix"
     assert client.post("/api/settings", json={"app_name": "  iothing Photos "}).status_code == 200
     try:
         assert client.get("/api/status").json()["appName"] == "iothing Photos"
@@ -13,4 +13,4 @@ def test_app_name_setting_brands_status_and_manifest(client):
         assert client.get("/manifest.webmanifest").json()["short_name"] == "Pix"
     finally:
         client.post("/api/settings", json={"app_name": ""})
-    assert client.get("/api/status").json()["appName"] == "DKViewer"
+    assert client.get("/api/status").json()["appName"] == "iopix"

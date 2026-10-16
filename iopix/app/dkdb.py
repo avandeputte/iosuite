@@ -12,7 +12,7 @@ Settings (environment):
   DIGIKAM_DB_HOST/PORT/NAME/USER/PASSWORD                (mysql; NAME defaults to "digikam")
   DIGIKAM_DB_BACKUP    auto (default: file copy, or mysqldump when installed) or skip
   DIGIKAM_DB_DUMP      optional: a command that writes a full dump to stdout, used instead of
-                       mysqldump, e.g. "docker exec dkv-mariadb mariadb-dump -udigikam -pX digikam"
+                       mysqldump, e.g. "docker exec iopix-mariadb mariadb-dump -udigikam -pX digikam"
 """
 import datetime as _dt
 import os

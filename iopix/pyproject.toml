@@ -1,4 +1,4 @@
-# digiKam Viewer: one place for the Python dependencies. The base set runs the viewer;
+# iopix: one place for the Python dependencies. The base set runs the viewer;
 # the optional groups add the AI features (setup.sh asks which ones you want):
 #   pip install -e '.[search,ocr,objects]'        (or: '.[ai]' for those three)
 #   pip install -e '.[captions]' --extra-index-url https://download.pytorch.org/whl/cpu
@@ -8,8 +8,8 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "digikam-viewer"
-version = "1.16.0"
+name = "iopix"
+version = "1.17.0"
 description = "Google-Photos-like web front end for a digiKam library, with local AI search"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -34,7 +34,7 @@ ai = ["fastembed", "huggingface_hub", "numpy", "rapidocr", "onnxruntime"]
 test = ["pytest", "httpx", "playwright", "pytest-playwright", "pyflakes"]
 
 [project.urls]
-Homepage = "https://github.com/avandeputte/digikam-viewer"
+Homepage = "https://github.com/avandeputte/iopix"
 
 [tool.setuptools]
 packages = ["app"]

@@ -1,4 +1,4 @@
-"""digiKam Viewer: a Google-Photos-style web front end for a digiKam library.
+"""iopix: a Google-Photos-style web front end for a digiKam library.
 
 The library (digiKam's database and the photo files) is only read here; the
 few endpoints that change it (sidecars, image files, digiKam's database on
@@ -238,7 +238,7 @@ async def lifespan(_app):
         yield
 
 
-app = FastAPI(title="digiKam Viewer", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title="iopix", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 # every endpoint that changes the library (sidecars, files, digiKam's database); refused in read-only mode
 WRITE_PATHS = ("/api/edit", "/api/edits/db", "/api/consistency/sync", "/api/gpx/apply", "/api/faces/op", "/api/faces/batch", "/api/folders",
@@ -443,7 +443,7 @@ def api_meta(request: Request):
     return jresp(request, {**_meta(state["version"]), "version": _public_version()})
 
 
-APP_NAME_DEFAULT = "DKViewer"
+APP_NAME_DEFAULT = "iopix"
 
 
 def app_name() -> str:
@@ -1855,13 +1855,13 @@ def api_backup(which: str, request: Request):
                 z.write(tmp / "viewer.db", "viewer.db")
                 for f in sorted(config.DATA_DIR.glob("embeddings*.npz")) + sorted(config.DATA_DIR.glob("embeddings*.npz.complete")):
                     z.write(f, f.name)
-                z.writestr("README.txt", "digiKam Viewer backup. Restore by stopping the viewer and copying these files into its data folder "
+                z.writestr("README.txt", "iopix backup. Restore by stopping the viewer and copying these files into its data folder "
                            "(viewer.db: users, albums, favorites, settings, pending edits, and the analysis results: sharpness, text, objects, "
                            "captions, consistency report; embeddings*.npz: the content-search index). digiKam's own database is a separate download.\n")
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
         dkdb._prune("viewer-backup-*.zip")
-        return FileResponse(dst, media_type="application/zip", filename=f"digikam-viewer-backup-{stamp}.zip", content_disposition_type="attachment")
+        return FileResponse(dst, media_type="application/zip", filename=f"iopix-backup-{stamp}.zip", content_disposition_type="attachment")
     if which != "digikam":
         raise HTTPException(404, "backup is 'digikam' or 'app'")
     if dkdb.is_mysql():

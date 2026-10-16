@@ -1,18 +1,19 @@
 #!/bin/sh
-# Start digiKam Viewer in the foreground. Usage: ./run.sh [--host 0.0.0.0] [--port 8600]
+# Start iopix in the foreground. Usage: ./run.sh [--host 0.0.0.0] [--port 8600]
 # The first run creates .venv (with uv when available, else python3 -m venv) and installs
 # pyproject.toml (base set only; ./setup.sh installs the AI features). The settings setup.sh wrote
-# to digikam-viewer.env are loaded when the file exists (variables already in the environment win).
+# to iopix.env are loaded when the file exists (variables already in the environment win).
 # Extra arguments are passed to uvicorn. The services setup.sh installs (launchd, systemd) and
 # Docker run uvicorn directly instead.
 set -e
 cd "$(dirname "$0")"
-if [ -f digikam-viewer.env ]; then
+ENVF=iopix.env; [ ! -f iopix.env ] && [ -f digikam-viewer.env ] && ENVF=digikam-viewer.env  # the name before the rename
+if [ -f "$ENVF" ]; then
   while IFS= read -r line; do
     case "$line" in ''|'#'*) continue;; *=*) ;; *) continue;; esac
     k="${line%%=*}"; case "$k" in ''|*[!A-Za-z0-9_]*) continue;; esac
     eval "[ -n \"\${$k+x}\" ]" || export "$line"
-  done < digikam-viewer.env
+  done < "$ENVF"
 fi
 if [ ! -x .venv/bin/python ]; then
   if command -v uv >/dev/null 2>&1; then
