@@ -1066,3 +1066,16 @@ def test_face_quality_page_and_adjusting_a_box(page, server):
     req = urllib.request.Request(server + "/api/faces/op", data=_json.dumps({"op": "move", "image": f["photo"], "rect": posted[0]["new_rect"], "new_rect": posted[0]["rect"]}).encode(),
                                  headers={"Content-Type": "application/json"}, method="POST")
     urllib.request.urlopen(req).read()  # put the scratch library back
+
+
+def test_explore_is_home_and_menu_icons_are_coloured(page, server):
+    page.set_viewport_size({"width": 1280, "height": 800})
+    page.goto(server + "/")
+    page.wait_for_selector("#nav a[data-v=explore].on", timeout=10000)
+    assert page.locator("#nav a").first.get_attribute("data-v") == "explore"
+    grey = page.evaluate("getComputedStyle(document.body).getPropertyValue('--fg2')")
+    col = page.evaluate("getComputedStyle(document.querySelector('#nav a[data-v=people] .ic')).color")
+    assert col and "rgb" in col and page.evaluate("(c) => { const d = document.createElement('div'); d.style.color = c; document.body.append(d); const v = getComputedStyle(d).color; d.remove(); return v; }", grey.strip()) != col, col
+    page.hover("#nav a[data-v=people]")
+    page.wait_for_timeout(250)
+    assert page.evaluate("getComputedStyle(document.querySelector('#nav a[data-v=people]')).backgroundColor") in ("rgba(0, 0, 0, 0)", "transparent")

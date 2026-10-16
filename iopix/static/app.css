@@ -85,9 +85,9 @@ body.noadmin #topbar a.tool[href="#/maintenance"] { display: none; }  /* the ico
 /* ---- nav rail */
 #nav { position: fixed; top: var(--topbar); bottom: 0; left: 0; width: var(--nav); display: flex; flex-direction: column; align-items: center; gap: 2px; padding-top: 6px; z-index: 10; background: var(--bg); }
 #nav a { width: 68px; padding: 8px 0 6px; border-radius: 14px; display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 11.5px; color: var(--fg2); }
-#nav a:hover { background: var(--bg2); }
+#nav a:hover { background: none; color: var(--fg); }
 #nav a.on { background: color-mix(in srgb, var(--hue, var(--accent)) var(--mix), transparent); color: var(--hue, var(--accent)); font-weight: 600; }
-#nav a .ic { transition: transform .15s; }
+#nav a .ic { transition: transform .15s; color: var(--hue, var(--fg2)); }  /* each destination's icon in its own colour */
 #nav a:hover .ic { transform: translateY(-1px) scale(1.08); color: var(--hue, var(--fg)); }
 #nav a[data-v="photos"] { --hue: var(--c-blue); } #nav a[data-v="explore"] { --hue: var(--c-purple); } #nav a[data-v="favorites"] { --hue: var(--c-rose); }
 #nav a[data-v="people"] { --hue: var(--c-amber); } #nav a[data-v="places"] { --hue: var(--c-green); }

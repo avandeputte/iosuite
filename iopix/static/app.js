@@ -176,7 +176,7 @@ let viewKey = null;
 const main = $('#main');
 const FILTER_VIEWS = ['photos', 'map'];
 const NAV = [
-  ['photos', 'Photos', 'photo'], ['explore', 'Explore', 'explore'], ['favorites', 'Favorites', 'heartO', '#/photos?fav=1'],
+  ['explore', 'Explore', 'explore'], ['photos', 'Photos', 'photo'], ['favorites', 'Favorites', 'heartO', '#/photos?fav=1'],
   ['people', 'People', 'person'], ['places', 'Places', 'place'], ['folders', 'Folders', 'folder'], ['albums', 'Albums', 'album'], ['tags', 'Tags', 'tag'], ['map', 'Map', 'map'],
 ];
 // hash route name -> page renderer (function declarations are hoisted, so this can sit above them)
@@ -232,7 +232,7 @@ const ualbumById = (id) => ST.albums.find((a) => a.id === +id);
 function parseHash() {
   const raw = location.hash.replace(/^#\/?/, '');
   const [path, qs = ''] = raw.split('?');
-  return { view: VIEWS.includes(path) ? path : 'photos', params: new URLSearchParams(qs) };
+  return { view: VIEWS.includes(path) ? path : 'explore', params: new URLSearchParams(qs) };  // Explore is the home page
 }
 function hashFor(view, params) {
   const qs = params ? params.toString() : '';
