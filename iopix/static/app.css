@@ -409,6 +409,7 @@ body.filters-open #crumbbar { right: 340px; }
 .mtable { border-collapse: collapse; width: 100%; font-size: 13px; }
 .mtable th { text-align: left; color: var(--fg2); font-weight: 500; padding: 6px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
 .mtable td { padding: 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.mtable .mpick { max-width: 240px; height: 30px; font-size: 13px; }
 .mtable .mfeat { width: 34%; min-width: 220px; }
 .mtable .mdet { font-size: 12px; margin-top: 3px; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .mtable .mprog .ahead { display: flex; gap: 10px; align-items: baseline; }

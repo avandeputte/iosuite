@@ -33,26 +33,85 @@ MODEL_DIR = config.DATA_DIR / "models"
 RECORD = MODEL_DIR / "downloads.json"
 
 REGISTRY = {
-    "clip": {"label": "CLIP ViT-B/32", "kind": "hf", "repos": ["Qdrant/clip-ViT-B-32-vision", "Qdrant/clip-ViT-B-32-text"],
-             "page": "https://huggingface.co/Qdrant/clip-ViT-B-32-vision", "what": "Content search and “Detected content” (the original search model).",
+    # Content search (choice "search_model"; the engines in semantic.py)
+    "clip": {"label": "CLIP ViT-B/32", "kind": "hf", "repos": ["Qdrant/clip-ViT-B-32-vision", "Qdrant/clip-ViT-B-32-text"], "choice": "search_model",
+             "page": "https://huggingface.co/Qdrant/clip-ViT-B-32-vision", "what": "Content search: the original model, the fastest to index.",
              "size": "~600 MB"},
-    "siglip2": {"label": "SigLIP 2 base", "kind": "hf", "repos": ["onnx-community/siglip2-base-patch16-224-ONNX"],
-                "page": "https://huggingface.co/onnx-community/siglip2-base-patch16-224-ONNX", "what": "Content search (the current search model).",
+    "siglip2": {"label": "SigLIP 2 base", "kind": "hf", "repos": ["onnx-community/siglip2-base-patch16-224-ONNX"], "choice": "search_model",
+                "page": "https://huggingface.co/onnx-community/siglip2-base-patch16-224-ONNX", "what": "Content search: a little better than CLIP on average, about 4 times slower to index.",
                 "size": "~1.5 GB"},
-    "blip": {"label": "BLIP base (captions)", "kind": "hf", "repos": ["Salesforce/blip-image-captioning-base"],
+    "jinaclip": {"label": "Jina CLIP v1", "kind": "hf", "repos": ["jinaai/jina-clip-v1"], "choice": "search_model",
+                 "page": "https://huggingface.co/jinaai/jina-clip-v1", "what": "Content search: a larger CLIP (ViT-B/16 images, a BERT text side) that understands longer, more natural queries.",
+                 "size": "~900 MB"},
+    # Photo descriptions (choice "caption_model")
+    "blip": {"label": "BLIP base (captions)", "kind": "hf", "repos": ["Salesforce/blip-image-captioning-base"], "choice": "caption_model",
              "page": "https://huggingface.co/Salesforce/blip-image-captioning-base", "what": "Photo descriptions.", "size": "~950 MB"},
-    "yolox": {"label": "YOLOX-S", "kind": "url", "url": "https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_s.onnx",
-              "page": "https://github.com/Megvii-BaseDetection/YOLOX/releases", "what": "Object detection (people, balls, animals, vehicles…).", "size": "35 MB"},
-    "yunet": {"label": "YuNet (face detection)", "kind": "url", "url": "https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx",
-              "page": "https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet", "what": "Finds faces digiKam or any other tool has not marked yet, on a photo, a folder or the whole library, and adds them as unnamed faces.", "size": "0.2 MB"},
-    "sface": {"label": "SFace (face grouping)", "kind": "url", "url": "https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_recognition_sface/face_recognition_sface_2021dec.onnx",
-              "page": "https://github.com/opencv/opencv_zoo/tree/main/models/face_recognition_sface", "what": "Groups look-alike unnamed faces on the Faces page and suggests who they are, for one-click naming.", "size": "37 MB"},
+    "blip_large": {"label": "BLIP large (captions)", "kind": "hf", "repos": ["Salesforce/blip-image-captioning-large"], "choice": "caption_model",
+                   "page": "https://huggingface.co/Salesforce/blip-image-captioning-large", "what": "Photo descriptions: richer and more accurate sentences, about 3 times slower.", "size": "~1.9 GB"},
+    # Object detection (choice "object_model"): the same YOLOX network at four sizes
+    "yolox": {"label": "YOLOX-S", "kind": "url", "file": "yolox_s.onnx", "url": "https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_s.onnx", "choice": "object_model",
+              "page": "https://github.com/Megvii-BaseDetection/YOLOX/releases", "what": "Object detection (people, balls, animals, vehicles…): the small, fast model.", "size": "35 MB"},
+    "yolox_m": {"label": "YOLOX-M", "kind": "url", "file": "yolox_m.onnx", "url": "https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_m.onnx", "choice": "object_model",
+                "page": "https://github.com/Megvii-BaseDetection/YOLOX/releases", "what": "Object detection: medium model, noticeably more accurate (47 vs 40 AP on COCO), about 3 times slower.", "size": "101 MB"},
+    "yolox_l": {"label": "YOLOX-L", "kind": "url", "file": "yolox_l.onnx", "url": "https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_l.onnx", "choice": "object_model",
+                "page": "https://github.com/Megvii-BaseDetection/YOLOX/releases", "what": "Object detection: large model (50 AP on COCO), about 6 times slower than YOLOX-S.", "size": "217 MB"},
+    "yolox_x": {"label": "YOLOX-X", "kind": "url", "file": "yolox_x.onnx", "url": "https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_x.onnx", "choice": "object_model",
+                "page": "https://github.com/Megvii-BaseDetection/YOLOX/releases", "what": "Object detection: the largest model (51 AP on COCO), about 10 times slower than YOLOX-S.", "size": "396 MB"},
+    # Face detection (choice "face_detector")
+    "yunet": {"label": "YuNet", "kind": "url", "file": "face_detection_yunet_2023mar.onnx", "url": "https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx", "choice": "face_detector",
+              "page": "https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet", "what": "Face detection: OpenCV's tiny, fast detector. Finds faces digiKam or any other tool has not marked yet, on a photo, a folder or the whole library, and adds them as unnamed faces.", "size": "0.2 MB"},
+    "scrfd": {"label": "SCRFD 10G", "kind": "zip", "file": "scrfd_10g.onnx", "url": "https://github.com/deepinsight/insightface/releases/download/v0.7/buffalo_l.zip", "member": "det_10g.onnx", "choice": "face_detector",
+              "page": "https://github.com/deepinsight/insightface/tree/master/detection/scrfd", "what": "Face detection: InsightFace's detector, clearly better on small, turned and partly hidden faces (95.2% on the hard WIDER Face set vs YuNet's 80%), about 10 times slower. Comes in a 289 MB pack of which this file is kept.", "size": "17 MB (289 MB download)"},
+    "retinaface": {"label": "RetinaFace ResNet-50", "kind": "url", "file": "retinaface_resnet50.onnx", "url": "https://github.com/clibdev/Pytorch_Retinaface/releases/latest/download/retinaface-resnet-50.onnx", "choice": "face_detector",
+                   "page": "https://github.com/clibdev/Pytorch_Retinaface", "what": "Face detection: the classic heavy detector (95.5% / 94.0% / 84.4% on WIDER Face easy, medium, hard), the slowest of the three.", "size": "104 MB"},
+    # Face grouping (choice "face_vectors")
+    "sface": {"label": "SFace", "kind": "url", "file": "face_recognition_sface_2021dec.onnx", "url": "https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_recognition_sface/face_recognition_sface_2021dec.onnx", "choice": "face_vectors",
+              "page": "https://github.com/opencv/opencv_zoo/tree/main/models/face_recognition_sface", "what": "Face grouping: groups look-alike unnamed faces on the Faces page and suggests who they are, for one-click naming. Small and fast.", "size": "37 MB"},
+    "arcface": {"label": "ArcFace ResNet-50", "kind": "zip", "file": "arcface_w600k_r50.onnx", "url": "https://github.com/deepinsight/insightface/releases/download/v0.7/buffalo_l.zip", "member": "w600k_r50.onnx", "choice": "face_vectors",
+                "page": "https://github.com/deepinsight/insightface/tree/master/model_zoo", "what": "Face grouping: InsightFace's recognition model (trained on WebFace600K), much better at telling people apart; each face is aligned on its eyes, nose and mouth first, with the chosen face detector. About 5 times slower. Comes in a 289 MB pack of which this file is kept.", "size": "174 MB (289 MB download)"},
+    # Data
     "geonames": {"label": "GeoNames places", "kind": "data", "url": "https://download.geonames.org/export/dump/cities1000.zip",
                  "page": "https://download.geonames.org/export/dump/", "what": "Offline reverse geocoding: town, region and country for each GPS position. GeoNames regenerates this export daily.",
                  "size": "~30 MB"},
     "ocr": {"label": "RapidOCR", "kind": "pip", "package": "rapidocr", "page": "https://pypi.org/project/rapidocr/",
             "what": "Text in photos (signs, jerseys, documents).", "size": "~60 MB"},
 }
+
+# Where a feature can run on one of several models: the setting that holds the choice, and the default.
+# Switching is a setting; each model is downloaded once from Maintenance. The feature code asks
+# chosen() / path_for() so a switch takes effect at the next use (or the next job).
+CHOICES = {
+    "search_model": {"label": "Content search", "default": "clip"},
+    "caption_model": {"label": "Photo descriptions", "default": "blip"},
+    "object_model": {"label": "Object detection", "default": "yolox"},
+    "face_detector": {"label": "Face detection", "default": "yunet"},
+    "face_vectors": {"label": "Face grouping", "default": "sface"},
+}
+
+
+def options(group: str) -> list:
+    return [k for k, m in REGISTRY.items() if m.get("choice") == group]
+
+
+def chosen(group: str) -> str:
+    """The model key the owner picked for this feature (a setting), else the default."""
+    try:
+        from . import state
+        key = state.get_setting(group, "")
+    except Exception:
+        key = ""
+    return key if key in REGISTRY and REGISTRY[key].get("choice") == group else CHOICES[group]["default"]
+
+
+def path(key: str):
+    """Where a single-file model (kinds url and zip) lives."""
+    return MODEL_DIR / REGISTRY[key]["file"]
+
+
+def path_for(group: str):
+    """The file of the model chosen for this feature."""
+    return path(chosen(group))
+
 
 progress = {"running": None, "error": None, "finished": None, "log": ""}
 _checked = {}
@@ -100,9 +159,12 @@ def local(key: str) -> dict:
                 return {"installed": False}
             shas.append(sha[:7]); ats.append(at)
         return {"installed": True, "revision": "+".join(shas), "at": max(ats)}
-    if m["kind"] in ("url", "data"):
-        from . import detector, facedetect, facevecs, places
-        paths = [detector.MODEL] if key == "yolox" else [facevecs.MODEL] if key == "sface" else [facedetect.MODEL] if key == "yunet" else [places.DIR / f for f in places.FILES]
+    if m["kind"] in ("url", "zip", "data"):
+        if m["kind"] == "data":
+            from . import places
+            paths = [places.DIR / f for f in places.FILES]
+        else:
+            paths = [path(key)]
         if not all(p.exists() for p in paths):
             return {"installed": False}
         at = int(max(p.stat().st_mtime for p in paths))
@@ -141,7 +203,7 @@ def check(key: str) -> dict:
                 out["remote_at"] = info.get("lastModified")
             out["remote"] = "+".join(remote)
             out["status"] = "missing" if not loc["installed"] else ("update" if changed else "current")
-        elif m["kind"] in ("url", "data"):
+        elif m["kind"] in ("url", "zip", "data"):
             with _get(m["url"], head=True) as r:
                 lm = r.headers.get("Last-Modified")
             if lm:
@@ -182,7 +244,8 @@ def listing() -> dict:
     for k, m in REGISTRY.items():
         rows.append({"key": k, "label": m["label"], "what": m["what"], "page": m["page"], "size": m["size"], "kind": m["kind"],
                      **local(k), "check": checked.get(k)})
-    return {"models": rows, "progress": dict(progress)}
+    choices = {g: {"label": c["label"], "chosen": chosen(g), "options": options(g)} for g, c in CHOICES.items()}
+    return {"models": rows, "progress": dict(progress), "choices": choices}
 
 
 # --------------------------------------------------------------------------
@@ -219,27 +282,28 @@ def download(key: str):
 
 
 def _reset(key: str):
-    """Drop the loaded model objects so the next use reads the new files."""
+    """Drop the loaded model objects so the next use reads the new files (after a download or a switch)."""
+    group = REGISTRY.get(key, {}).get("choice")
     try:
-        if key in ("clip", "siglip2"):
+        if group == "search_model":
             from .semantic import semantic
             e = semantic.engines.get(key)
             if e is not None:
                 e._image = e._text = None
                 e._image_threads = 0
                 e._text_cache.clear()
-        elif key == "blip":
+        elif group == "caption_model":
             from . import caption
             with caption._lock:
                 caption._state.clear()
-        elif key == "yolox":
+        elif group == "object_model":
             from . import detector
             with detector._lock:
                 detector._instance = None
-        elif key == "sface":
+        elif group == "face_vectors":
             from . import facevecs
             facevecs.reset_session()
-        elif key == "yunet":
+        elif group == "face_detector":
             from . import facedetect
             facedetect.reset_session()
         elif key == "geonames":
@@ -249,27 +313,42 @@ def _reset(key: str):
         traceback.print_exc()
 
 
+def fetch_file(url: str, dst, member: str = None):
+    """Download one file to dst (through a .part file), or one member of a zip at url. The archive is
+    untrusted data: only the named member is read, and only into dst."""
+    import tempfile
+    import zipfile
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dst.with_suffix(".part")
+    if not member:
+        urllib.request.urlretrieve(url, tmp)
+        tmp.replace(dst)
+        return
+    with tempfile.TemporaryDirectory(dir=str(dst.parent)) as d:
+        archive = os.path.join(d, "download.zip")
+        urllib.request.urlretrieve(url, archive)
+        with zipfile.ZipFile(archive) as z:
+            names = [n for n in z.namelist() if os.path.basename(n) == member and not n.endswith("/")]
+            if not names:
+                raise FileNotFoundError(f"{member} is not in {url}")
+            with z.open(names[0]) as src, open(tmp, "wb") as out:
+                shutil.copyfileobj(src, out)
+    tmp.replace(dst)
+
+
 def _download_here(key: str):
     """Runs in the child process, with the hub reachable."""
     m = REGISTRY[key]
-    if m["kind"] == "hf" and key in ("clip", "siglip2"):
+    if m.get("choice") == "search_model":
         from . import semantic
         semantic.download_models(key)
-    elif key == "blip":
+    elif m.get("choice") == "caption_model":
         from transformers import BlipForConditionalGeneration, BlipProcessor
-        from . import caption
         MODEL_DIR.mkdir(parents=True, exist_ok=True)
-        BlipProcessor.from_pretrained(caption.MODEL, cache_dir=str(MODEL_DIR))
-        BlipForConditionalGeneration.from_pretrained(caption.MODEL, cache_dir=str(MODEL_DIR))
-    elif key == "yolox":
-        from . import detector
-        detector.download()
-    elif key == "sface":
-        from . import facevecs
-        facevecs.download()
-    elif key == "yunet":
-        from . import facedetect
-        facedetect.download()
+        BlipProcessor.from_pretrained(m["repos"][0], cache_dir=str(MODEL_DIR))
+        BlipForConditionalGeneration.from_pretrained(m["repos"][0], cache_dir=str(MODEL_DIR))
+    elif m["kind"] in ("url", "zip"):
+        fetch_file(m["url"], path(key), m.get("member"))
     elif key == "geonames":
         from . import places
         places.fetch()
@@ -294,7 +373,7 @@ def auto_download(keys: list, on_done=None):
     def work():
         got = []
         for key in todo:
-            if key == "blip" and importlib.util.find_spec("torch") is None:
+            if REGISTRY[key].get("choice") == "caption_model" and importlib.util.find_spec("torch") is None:
                 continue  # captions need the optional PyTorch install
             try:
                 download(key)
@@ -324,5 +403,5 @@ if __name__ == "__main__":
         for row in check_all():
             print(row)
     else:
-        print("usage: python -m app.models download <key> | check")
+        print("usage: python -m app.models download <" + "|".join(REGISTRY) + "> | check")
         sys.exit(2)

@@ -1791,12 +1791,14 @@ function aiSection(view) {
   const body = h('div');
   const checkBtn = h('button', { class: 'pillbtn', onclick: async () => { checkBtn.disabled = true; checkBtn.textContent = 'Checking…'; try { await post('/api/models/check', {}); } catch (e) { toast(e.message); } draw(); } }, icon('spark'), 'Check models for updates');
   const wrap = h('div', null, h('h2', null, 'AI analysis and models'),
-    h('div', { class: 'muted', style: 'max-width:860px' }, 'Everything runs locally and is stored in the viewer’s data folder; nothing is written to digiKam. New and changed photos are picked up automatically, about 20 seconds after digiKam saves them. Models were downloaded once and never update on their own; “Check models for updates” asks each source whether the exact files used have changed.'),
+    h('div', { class: 'muted', style: 'max-width:860px' }, 'Everything runs locally and is stored in the viewer’s data folder; nothing is written to digiKam. New and changed photos are picked up automatically, about 20 seconds after digiKam saves them. Where a feature can run on more than one model, the menu in the Model column picks it: the default is the small, fast one, the others are more accurate and slower, each downloaded once. Models never update on their own; “Check models for updates” asks each source whether the exact files used have changed.'),
     h('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;margin:14px 0' },
       h('button', { class: 'pillbtn on', onclick: async () => { try { await post('/api/analysis/run', { job: 'all' }); toast('Checking for new and changed photos…'); } catch (e) { toast(e.message); } draw(); } }, icon('spark'), 'Check new and changed photos'), checkBtn),
     body);
   const fmtDate = (t) => (t ? dfDay.format(new Date(t * 1000)) : '');
-  const JOB_MODEL = { objects: 'yolox', vision: 'ocr', faces: 'sface', facedetect: 'yunet', captions: 'blip' };
+  // a job's model: fixed (vision: RapidOCR) or the one chosen for the feature (Maintenance offers the alternatives in a menu)
+  const JOB_MODEL = { vision: 'ocr' };
+  const JOB_CHOICE = { embeddings: 'search_model', objects: 'object_model', faces: 'face_vectors', facedetect: 'face_detector', captions: 'caption_model' };
   const modelState = (m, p) => {
     const c = m.check;
     return p.running === m.key ? ['downloading…', 'on']
@@ -1814,12 +1816,35 @@ function aiSection(view) {
     const q = a.queue || {}, p = md.progress || {};
     if (p.finished && !p.running && p.error) toast(`Download of ${p.finished} failed: ${p.error}`, null, null, 9000);
     const models = Object.fromEntries(md.models.map((m) => [m.key, m]));
-    const searchKey = (a.models || []).find((m) => m.active)?.key || (a.models || []).find((m) => m.chosen)?.key || 'siglip2';
-    const modelCell = (m) => {
+    const choices = md.choices || {};
+    // the menu of models a feature can run on; picking one that is not installed offers its download first
+    const chooser = (group) => {
+      const c = choices[group];
+      if (!c) return null;
+      const sel = h('select', { class: 'mpick', title: `Which model ${c.label.toLowerCase()} runs on`, onchange: async (e) => {
+        const key = e.target.value, m = models[key];
+        if (!m) return;
+        if (!m.installed) {
+          e.target.value = c.chosen;
+          if (!confirm(`${m.label} is not installed. Download it (${m.size})? The viewer keeps working meanwhile; choose it here again once it has arrived.`)) return;
+          try { await post('/api/models/download', { key }); toast(`Downloading ${m.label}…`); } catch (err) { toast(err.message); }
+          draw(); return;
+        }
+        const note = group === 'search_model' ? ' The library is indexed again with it in the background; search stays on the current model until that finishes.'
+          : group === 'face_vectors' ? ' Every face is embedded again with it (the groups and suggestions rebuild in the background).'
+          : group === 'face_detector' ? ' Used by the next face detection run.'
+          : ' New photos use it from now on; “Run again” redoes the whole library with it.';
+        if (!confirm(`Switch ${c.label.toLowerCase()} to ${m.label}?${note}`)) { e.target.value = c.chosen; return; }
+        try { await post('/api/settings', { [group]: key }); toast(`${c.label}: now ${m.label}.`); } catch (err) { toast(err.message); }
+        draw();
+      } }, c.options.map((k) => h('option', { value: k, selected: k === c.chosen }, models[k] ? models[k].label + (models[k].installed ? '' : ' (not installed)') : k)));
+      return sel;
+    };
+    const modelCell = (m, group) => {
       if (!m) return h('td', { class: 'muted' }, 'built in');
       const [st, cls] = modelState(m, p);
-      return h('td', null, h('div', null, h('a', { class: 'lnk', href: m.page, target: '_blank', rel: 'noopener', title: m.what }, m.label), h('span', { class: 'muted' }, ` · ${m.size}`)),
-        h('div', { class: 'mst ' + cls, title: m.revision ? `revision ${m.revision}` : '' }, st));
+      return h('td', null, h('div', null, group ? chooser(group) : h('a', { class: 'lnk', href: m.page, target: '_blank', rel: 'noopener', title: m.what }, m.label), h('span', { class: 'muted' }, ` · ${m.size}`)),
+        h('div', { class: 'mst ' + cls, title: m.revision ? `revision ${m.revision}` : '' }, st, group ? [' · ', h('a', { class: 'lnk', href: m.page, target: '_blank', rel: 'noopener', title: m.what }, 'about')] : null));
     };
     const modelBtn = (m) => {
       if (!m) return null;
@@ -1854,19 +1879,19 @@ function aiSection(view) {
       try { await post('/api/analysis/run', { job: j.key, reset: true }); toast(`Re-running “${j.label}”.`); } catch (e) { toast(e.message); }
       draw();
     } }, 'Run again') : null;
-    const row = (label, detail, j, m) => h('tr', { 'data-job': j?.key || '', 'data-model': m?.key || '' },
+    const row = (label, detail, j, m, group) => h('tr', { 'data-job': j?.key || '', 'data-model': m?.key || '' },
       h('td', { class: 'mfeat' }, h('b', null, label), detail ? h('div', { class: 'muted mdet', title: detail }, detail) : null),
-      modelCell(m), progressCell(j, m, [runNow(j), rerun(j)]), h('td', { class: 'macts' }, modelBtn(m)));
+      modelCell(m, group), progressCell(j, m, [runNow(j), rerun(j)]), h('td', { class: 'macts' }, modelBtn(m)));
     const rows = a.jobs.map((j) => {
-      const m = j.key === 'embeddings' ? models[searchKey] : models[JOB_MODEL[j.key]];
-      return row(j.label, j.detail, j, m);
+      const group = JOB_CHOICE[j.key];
+      const m = group ? models[choices[group]?.chosen] : models[JOB_MODEL[j.key]];
+      return row(j.label, j.detail, j, m, group && choices[group] ? group : null);
     });
-    const used = new Set([searchKey, ...Object.values(JOB_MODEL)]);
+    const inMenus = new Set(Object.values(choices).flatMap((c) => c.options));
     for (const m of md.models) {
-      if (used.has(m.key)) continue;
-      const label = m.key === 'geonames' ? 'Places from GPS positions' : (m.key === 'clip' || m.key === 'siglip2') ? 'Content search (other model)' : m.label;
-      const detail = m.key === 'geonames' ? 'Town, region and country for each GPS position, offline; looked up when the search index is built.' : (m.key === 'clip' || m.key === 'siglip2') ? 'Installed but not in use; switch the search model in Settings.' : m.what;
-      if (m.key === 'clip' && !m.installed) continue;  // the original search model: only listed when it is there
+      if (inMenus.has(m.key) || m.key === 'ocr') continue;
+      const label = m.key === 'geonames' ? 'Places from GPS positions' : m.label;
+      const detail = m.key === 'geonames' ? 'Town, region and country for each GPS position, offline; looked up when the search index is built.' : m.what;
       rows.push(row(label, detail, null, m));
     }
     fill(body,
@@ -1914,18 +1939,21 @@ function analysisSection(view, part = 'jobs') {
           try { await post('/api/analysis/run', { job: j.key, reset: true }); toast(`Re-running “${j.label}”.`); } catch (e) { toast(e.message); }
           draw();
         } }, 'Run again from scratch') : null))) : null);
-    const other = (d.models || []).find((m) => m.installed && !m.chosen);
-    if (other && part === 'prefs') body.append(h('div', { class: 'ajob' },
+    const others = (d.models || []).filter((m) => m.installed && !m.chosen);
+    if (others.length && part === 'prefs') body.append(h('div', { class: 'ajob' },
       h('div', { class: 'ahead' }, h('b', null, 'Search model'), h('span', { class: 'muted' }, `using ${d.models.find((m) => m.active)?.label || 'none'}`)),
       h('div', { class: 'muted', style: 'font-size:13px;margin-top:6px' },
-        other.key === 'siglip2'
-          ? 'SigLIP 2 base is also installed. Measured on 2,160 of your photos against your own tags it was slightly better on average than CLIP (better for animals, zoo, costumes; worse for weddings, bowling, food), and it indexes about 4 times slower. Switching re-indexes the whole library in the background; search stays on the current model until that finishes, and you can switch back at any time. '
-          : `${other.label} is also installed. Switching back is immediate; its index is kept. `,
-        h('a', { class: 'lnk', onclick: async () => {
-          if (!confirm(`Switch content search to ${other.label}?`)) return;
-          try { await post('/api/settings', { search_model: other.key }); toast(`Switching to ${other.label}.`); } catch (e) { toast(e.message); }
-          draw();
-        } }, `Switch to ${other.label}`))));
+        others.map((other) => h('div', { style: 'margin-bottom:4px' },
+          other.key === 'siglip2'
+            ? 'SigLIP 2 base is also installed. Measured on 2,160 photos against their tags it was slightly better on average than CLIP (better for animals, zoo, costumes; worse for weddings, bowling, food), and it indexes about 4 times slower. '
+            : other.key === 'jinaclip' ? 'Jina CLIP v1 is also installed: a larger CLIP that understands longer, more natural queries; it indexes about 3 times slower than CLIP. '
+            : `${other.label} is also installed. `,
+          'Switching re-indexes the whole library in the background when that model has no index yet; search stays on the current model until it finishes, and you can switch back at any time. ',
+          h('a', { class: 'lnk', onclick: async () => {
+            if (!confirm(`Switch content search to ${other.label}?`)) return;
+            try { await post('/api/settings', { search_model: other.key }); toast(`Switching to ${other.label}.`); } catch (e) { toast(e.message); }
+            draw();
+          } }, `Switch to ${other.label}`))))));
     if (part === 'jobs' && d.jobs.some((j) => j.running)) setTimeout(() => { if (route.view === view) draw(); }, 4000);
   };
   draw();

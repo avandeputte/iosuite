@@ -1,7 +1,14 @@
 """Face detection on request: a photo, a folder or the whole library.
 
-The detector is OpenCV's YuNet (face_detection_yunet_2023mar.onnx, 230 KB, run with onnxruntime).
-Every face it finds is compared with the face regions the photo already has, of any kind and from any
+Three detectors, chosen in Maintenance › AI analysis and models (the setting face_detector), all run with
+onnxruntime on a 640 px letterboxed copy of the picture:
+- YuNet (OpenCV, 230 KB): the default, tiny and fast;
+- SCRFD 10G (InsightFace): clearly better on small, turned and partly hidden faces, about 10x slower;
+- RetinaFace ResNet-50: the classic heavy detector, the slowest.
+Each returns boxes with a score and the five landmarks (eyes, nose, mouth corners) that face grouping
+uses to align a face before embedding it.
+
+Every face found is compared with the face regions the photo already has, of any kind and from any
 tool (named, unknown, suggested or ignored, digiKam's or the viewer's): a detection that overlaps an
 existing region is the same face, even when the two rectangles differ in size or position, and is left
 alone. Only faces nothing else marked become new regions, written the way digiKam writes a face it
@@ -17,9 +24,8 @@ import json
 import logging
 import threading
 import time
-import urllib.request
 
-from . import analysis, config, index, jobs, thumbs, vdb
+from . import analysis, index, jobs, models, thumbs, vdb
 
 try:
     import numpy as np
@@ -27,28 +33,32 @@ except ImportError:  # optional: the AI packages
     np = None
 
 log = logging.getLogger("app.facedetect")
-MODEL = config.DATA_DIR / "models" / "face_detection_yunet_2023mar.onnx"
-URL = "https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx"
-SIDE = 640           # the model's fixed input
-SCORE = 0.85         # YuNet's own default is 0.9; a little lower finds more turned and partly hidden faces
+SIDE = 640           # every detector runs on a 640x640 letterboxed copy
+SCORES = {"yunet": 0.85, "scrfd": 0.5, "retinaface": 0.6}  # YuNet's own default is 0.9; a little lower finds more turned and partly hidden faces
 NMS_IOU = 0.3
 MIN_FACE = 28        # pixels at full resolution: smaller detections are mostly noise
 OVERLAP = 0.3        # a detection covering this much of an existing region (or the other way round) is that face
 progress = {"running": False, "done": 0, "total": 0, "added": 0, "photos_with_new": 0, "errors": 0, "started": None, "scope": None}
 _lock = threading.Lock()
 _session = None
+_session_path = None
 _run = {"gen": 0}
 
 
+def chosen() -> str:
+    return models.chosen("face_detector")
+
+
+def model_path():
+    return models.path_for("face_detector")
+
+
 def download():
-    MODEL.parent.mkdir(parents=True, exist_ok=True)
-    tmp = MODEL.with_suffix(".part")
-    urllib.request.urlretrieve(URL, tmp)
-    tmp.replace(MODEL)
+    models.fetch_file(models.REGISTRY["yunet"]["url"], models.path("yunet"))
 
 
 def available() -> bool:
-    if np is None or not MODEL.exists():
+    if np is None or not model_path().exists():
         return False
     try:
         import onnxruntime
@@ -58,13 +68,15 @@ def available() -> bool:
 
 
 def _sess():
-    global _session
+    global _session, _session_path
     with _lock:
-        if _session is None:
+        path = model_path()
+        if _session is None or _session_path != path:
             import onnxruntime as ort
             opts = ort.SessionOptions()
             opts.intra_op_num_threads = max(1, jobs.threads())
-            _session = ort.InferenceSession(str(MODEL), sess_options=opts, providers=["CPUExecutionProvider"])
+            _session = ort.InferenceSession(str(path), sess_options=opts, providers=["CPUExecutionProvider"])
+            _session_path = path
         return _session
 
 
@@ -74,30 +86,93 @@ def reset_session():
         _session = None
 
 
-# ---- the detector
+# ---- the detectors: each takes the letterboxed 640x640 RGB array (H, W, 3, values 0..255) and returns
+# [(x, y, w, h, score, [(lx, ly)] * 5)] in the 640 px frame
+def _yunet(arr, sess) -> list:
+    blob = np.ascontiguousarray(np.transpose(arr[:, :, ::-1], (2, 0, 1))[None])  # BGR, 0..255
+    out = dict(zip([o.name for o in sess.get_outputs()], sess.run(None, {sess.get_inputs()[0].name: blob})))
+    found, thr = [], SCORES["yunet"]
+    for stride in (8, 16, 32):
+        cols = SIDE // stride
+        cls, obj, box, kps = out[f"cls_{stride}"][0, :, 0], out[f"obj_{stride}"][0, :, 0], out[f"bbox_{stride}"][0], out[f"kps_{stride}"][0]
+        score = np.sqrt(np.clip(cls, 0, 1) * np.clip(obj, 0, 1))
+        for i in np.nonzero(score >= thr)[0]:
+            r, c = divmod(int(i), cols)
+            cx, cy = (c + box[i, 0]) * stride, (r + box[i, 1]) * stride
+            bw, bh = float(np.exp(box[i, 2])) * stride, float(np.exp(box[i, 3])) * stride
+            pts = [((c + kps[i, 2 * k]) * stride, (r + kps[i, 2 * k + 1]) * stride) for k in range(5)]
+            found.append((cx - bw / 2, cy - bh / 2, bw, bh, float(score[i]), pts))
+    return found
+
+
+def _scrfd(arr, sess) -> list:
+    """SCRFD with keypoints: nine outputs, scores then boxes then landmarks for strides 8, 16, 32, two anchors per cell."""
+    blob = np.ascontiguousarray(((np.transpose(arr, (2, 0, 1)) - 127.5) / 128.0)[None].astype(np.float32))  # RGB
+    outs = sess.run(None, {sess.get_inputs()[0].name: blob})
+    found, thr = [], SCORES["scrfd"]
+    for k, stride in enumerate((8, 16, 32)):
+        scores, boxes, kps = outs[k][:, 0], outs[k + 3] * stride, outs[k + 6] * stride
+        n = SIDE // stride
+        ys, xs = np.meshgrid(np.arange(n), np.arange(n), indexing="ij")
+        centers = np.repeat(np.stack((xs, ys), -1).reshape(-1, 2) * stride, 2, axis=0).astype(np.float32)
+        for i in np.nonzero(scores >= thr)[0]:
+            cx, cy = centers[i]
+            x1, y1, x2, y2 = cx - boxes[i, 0], cy - boxes[i, 1], cx + boxes[i, 2], cy + boxes[i, 3]
+            pts = [(cx + kps[i, 2 * j], cy + kps[i, 2 * j + 1]) for j in range(5)]
+            found.append((float(x1), float(y1), float(x2 - x1), float(y2 - y1), float(scores[i]), pts))
+    return found
+
+
+_RF_PRIORS = None
+
+
+def _rf_priors():
+    """RetinaFace's anchor boxes for a 640 px input: two sizes per cell at strides 8, 16, 32 (16,800 in all), as fractions."""
+    global _RF_PRIORS
+    if _RF_PRIORS is None:
+        rows = []
+        for stride, sizes in ((8, (16, 32)), (16, (64, 128)), (32, (256, 512))):
+            n = SIDE // stride
+            for i in range(n):
+                for j in range(n):
+                    for ms in sizes:
+                        rows.append(((j + 0.5) * stride / SIDE, (i + 0.5) * stride / SIDE, ms / SIDE, ms / SIDE))
+        _RF_PRIORS = np.asarray(rows, dtype=np.float32)
+    return _RF_PRIORS
+
+
+def _retinaface(arr, sess) -> list:
+    """RetinaFace (biubug6 / clibdev export): loc [1,N,4], conf [1,N,2] (softmaxed), landms [1,N,10]; input BGR minus (104,117,123)."""
+    bgr = arr[:, :, ::-1].astype(np.float32) - np.asarray((104, 117, 123), dtype=np.float32)
+    blob = np.ascontiguousarray(np.transpose(bgr, (2, 0, 1))[None])
+    outs = {o.shape[-1]: v[0] for o, v in zip(sess.get_outputs(), sess.run(None, {sess.get_inputs()[0].name: blob}))}
+    loc, conf, landms = outs[4], outs[2], outs[10]
+    pri = _rf_priors()
+    scores = conf[:, 1]
+    found, thr = [], SCORES["retinaface"]
+    for i in np.nonzero(scores >= thr)[0]:
+        pcx, pcy, pw, ph = pri[i]
+        cx, cy = (pcx + loc[i, 0] * 0.1 * pw) * SIDE, (pcy + loc[i, 1] * 0.1 * ph) * SIDE
+        w, h = float(pw * np.exp(loc[i, 2] * 0.2)) * SIDE, float(ph * np.exp(loc[i, 3] * 0.2)) * SIDE
+        pts = [(float((pcx + landms[i, 2 * j] * 0.1 * pw) * SIDE), float((pcy + landms[i, 2 * j + 1] * 0.1 * ph) * SIDE)) for j in range(5)]
+        found.append((float(cx - w / 2), float(cy - h / 2), w, h, float(scores[i]), pts))
+    return found
+
+
+DETECTORS = {"yunet": _yunet, "scrfd": _scrfd, "retinaface": _retinaface}
+
+
 def _run_square(img) -> list:
-    """One pass over a PIL image letterboxed into 640x640: [(x, y, w, h, score)] in the image's pixels."""
+    """One pass of the chosen detector over a PIL image letterboxed into 640x640:
+    [(x, y, w, h, score, landmarks)] in the image's pixels."""
     from PIL import Image
     s = min(SIDE / img.width, SIDE / img.height)
     w, h = max(1, round(img.width * s)), max(1, round(img.height * s))
     canvas = Image.new("RGB", (SIDE, SIDE))
     canvas.paste(img.convert("RGB").resize((w, h), Image.Resampling.BILINEAR), (0, 0))
-    arr = np.asarray(canvas, dtype=np.float32)[:, :, ::-1]  # RGB -> BGR, values 0..255 as the model expects
-    blob = np.ascontiguousarray(np.transpose(arr, (2, 0, 1))[None])
-    sess = _sess()
-    names = [o.name for o in sess.get_outputs()]
-    out = dict(zip(names, sess.run(None, {sess.get_inputs()[0].name: blob})))
-    found = []
-    for stride in (8, 16, 32):
-        cols = SIDE // stride
-        cls, obj, box = out[f"cls_{stride}"][0, :, 0], out[f"obj_{stride}"][0, :, 0], out[f"bbox_{stride}"][0]
-        score = np.sqrt(np.clip(cls, 0, 1) * np.clip(obj, 0, 1))
-        for i in np.nonzero(score >= SCORE)[0]:
-            r, c = divmod(int(i), cols)
-            cx, cy = (c + box[i, 0]) * stride, (r + box[i, 1]) * stride
-            bw, bh = float(np.exp(box[i, 2])) * stride, float(np.exp(box[i, 3])) * stride
-            found.append(((cx - bw / 2) / s, (cy - bh / 2) / s, bw / s, bh / s, float(score[i])))
-    return found
+    arr = np.asarray(canvas, dtype=np.float32)
+    found = DETECTORS[chosen()](arr, _sess())
+    return [(x / s, y / s, bw / s, bh / s, sc, [(px / s, py / s) for px, py in pts]) for x, y, bw, bh, sc, pts in found]
 
 
 def _iou(a, b) -> float:
@@ -115,16 +190,18 @@ def _nms(boxes: list) -> list:
     return keep
 
 
-def detect_image(img) -> list:
-    """Faces in an upright PIL image: [(x, y, w, h, score)] in its pixels. Large pictures also get a
-    2x2 pass of overlapping tiles, so small faces in group photos are not lost to the 640 px input."""
+def detect_image(img, landmarks: bool = False) -> list:
+    """Faces in an upright PIL image: [(x, y, w, h, score)] in its pixels, each with its five landmarks
+    appended when asked. Large pictures also get a 2x2 pass of overlapping tiles, so small faces in
+    group photos are not lost to the 640 px input."""
     boxes = _run_square(img)
     if max(img.width, img.height) > 1.6 * SIDE:
         tw, th = int(img.width * 0.6), int(img.height * 0.6)
         for ox in (0, img.width - tw):
             for oy in (0, img.height - th):
-                boxes += [(x + ox, y + oy, w, h, sc) for x, y, w, h, sc in _run_square(img.crop((ox, oy, ox + tw, oy + th)))]
-    return _nms(boxes)
+                boxes += [(x + ox, y + oy, w, h, sc, [(px + ox, py + oy) for px, py in pts]) for x, y, w, h, sc, pts in _run_square(img.crop((ox, oy, ox + tw, oy + th)))]
+    kept = _nms(boxes)
+    return kept if landmarks else [b[:5] for b in kept]
 
 
 def detect_photo(path: str, full_w: int, full_h: int) -> list:

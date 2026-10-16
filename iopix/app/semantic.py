@@ -27,6 +27,8 @@ ENGINES = {
              "file": "embeddings.npz", "dim": 512, "prompt": "a photo of {}"},
     "siglip2": {"image": "google/siglip2-base-patch16-224", "text": "google/siglip2-base-patch16-224",
                 "file": "embeddings-siglip2.npz", "dim": 768, "prompt": "a photo of {}"},
+    "jinaclip": {"image": "jinaai/jina-clip-v1", "text": "jinaai/jina-clip-v1",
+                 "file": "embeddings-jinaclip.npz", "dim": 768, "prompt": "a photo of {}"},
 }
 
 if MODEL_DIR.exists():  # models are already here: never contact the model hub at runtime
@@ -265,15 +267,22 @@ class Semantic:
             name = "clip"
         return name if name in ENGINES and _ready(name) else "clip"
 
+    def _complete(self, e: Engine) -> bool:
+        """An index that can answer searches: finished, or CLIP's (the first model, from before markers existed)."""
+        return e.complete_marker.exists() or (e.name == "clip" and e.file.exists())
+
     @property
     def active(self) -> Engine:
-        """Searches go to the chosen engine once its index is complete. Until then the old CLIP
-        index answers, when there is one: on an install that never had CLIP, the new index
+        """Searches go to the chosen engine once its index is complete. Until then the newest complete
+        index answers, when there is one: on an install that never had another index, the new one
         answers from the start, growing as it is built, rather than nothing at all."""
-        new = self.engines["siglip2"]
-        if self.chosen() == "siglip2" and (new.complete_marker.exists() or not self._has_clip()):
+        new = self.engines[self.chosen()]
+        if self._complete(new):
             return new
-        return self.engines["clip"]
+        others = [e for n, e in self.engines.items() if n != new.name and _ready(n) and self._complete(e)]
+        if not others:
+            return new
+        return max(others, key=lambda e: e.file.stat().st_mtime if e.file.exists() else 0)
 
     def _has_clip(self) -> bool:
         return _ready("clip") and self.engines["clip"].file.exists()
@@ -281,8 +290,8 @@ class Semantic:
     @property
     def upgrade(self):
         """The newly chosen engine while it is still indexing, else None."""
-        new = self.engines["siglip2"]
-        return new if self.chosen() == "siglip2" and not new.complete_marker.exists() else None
+        new = self.engines[self.chosen()]
+        return None if self._complete(new) else new
 
     def __getattr__(self, name):  # ids, vecs, gen, load, search_text, similar, text_vector, _lock, ...
         return getattr(self.active, name)
@@ -323,8 +332,9 @@ class Semantic:
                     log.info("embeddings: %s index complete (%d photos, %d could not be embedded); search uses it now", engine.name, len(have), len(missing))
             up.on_finish = finished
             up.start(photos)
-            if self._has_clip():
-                self.engines["clip"].load()      # keep searching the old index meanwhile, without extending it
+            old = self.active
+            if old is not up:
+                old.load()      # keep searching the old index meanwhile, without extending it
             return
         self.active.start(photos)
 

@@ -22,13 +22,25 @@ All chosen in `setup.sh` (or later from Maintenance › AI analysis and models);
 
 | Feature | What it adds | Download |
 | --- | --- | --- |
-| Content search | find photos by what is in them; "Detected content" | SigLIP 2 base ~1.5 GB, or CLIP ViT-B/32 ~600 MB |
+| Content search | find photos by what is in them; "Detected content" | SigLIP 2 base ~1.5 GB, CLIP ViT-B/32 ~600 MB or Jina CLIP v1 ~900 MB |
 | Places | town, region, country for GPS positions, offline | GeoNames ~30 MB |
-| Object detection | people, animals, vehicles, everyday objects with boxes | YOLOX-S 35 MB |
+| Object detection | people, animals, vehicles, everyday objects with boxes | YOLOX-S 35 MB (or M 101 MB, L 217 MB, X 396 MB) |
 | Text in photos | signs, jerseys, documents searchable | RapidOCR ~60 MB |
-| Face grouping | look-alike unnamed faces grouped, with "looks like" name suggestions | SFace 37 MB |
-| Face detection | faces nothing has marked yet, added as unnamed faces (on request) | YuNet 0.2 MB |
-| Photo descriptions | one sentence per photo, searchable | BLIP base ~950 MB plus PyTorch (CPU build ~1 GB) |
+| Face grouping | look-alike unnamed faces grouped, with "looks like" name suggestions | SFace 37 MB (or ArcFace ResNet-50 174 MB) |
+| Face detection | faces nothing has marked yet, added as unnamed faces (on request) | YuNet 0.2 MB (or SCRFD 10G 17 MB, RetinaFace ResNet-50 104 MB) |
+| Photo descriptions | one sentence per photo, searchable | BLIP base ~950 MB (or BLIP large ~1.9 GB) plus PyTorch (CPU build ~1 GB) |
+
+Where a feature can run on more than one model, the default is the small, fast one and the menu in the Model column of Maintenance › AI analysis and models switches to a larger, more accurate one (downloaded once; the sizes and speeds are shown there):
+
+| Feature | Default | Alternatives | What changes when you switch |
+| --- | --- | --- | --- |
+| Content search | CLIP ViT-B/32 (SigLIP 2 on new installs) | SigLIP 2 base (a little better on average, 4x slower to index), Jina CLIP v1 (longer, more natural queries, 3x slower) | the library is indexed again with the new model in the background; search stays on the old index until that finishes |
+| Object detection | YOLOX-S (40 AP on COCO) | YOLOX-M (47 AP, 3x slower), -L (50 AP, 6x), -X (51 AP, 10x) | new photos use it at once; "Run again" redoes the whole library |
+| Face detection | YuNet (80% on the hard WIDER Face set) | SCRFD 10G (95%, 10x slower; InsightFace), RetinaFace ResNet-50 (84% hard, the slowest) | the next detection run uses it |
+| Face grouping | SFace (128-d, on the raw crop) | ArcFace ResNet-50 (512-d, WebFace600K; InsightFace), each face aligned on its eyes, nose and mouth first with the chosen face detector; much better at telling people apart (on a sample of confirmed faces, mean cosine similarity: same person 0.71 vs different people 0.05, where SFace gives 0.75 vs 0.38), 5x slower | every face is embedded again in the background |
+| Photo descriptions | BLIP base | BLIP large (richer sentences, 3x slower) | new photos use it at once; "Run again" redoes the whole library |
+
+SCRFD and ArcFace come from InsightFace's `buffalo_l` pack (a 289 MB zip); only the one file each needs is kept.
 
 
 ## Browsing
@@ -59,12 +71,12 @@ Heavy work runs through one queue, one job at a time, in this order: thumbnails,
 | Job | What you get |
 | --- | --- |
 | Sharpness and exposure | measured on a ~1000 px decode: Sharpest / Blurry / Very dark / Very bright filters, "Sharpest first" sort; sharpness shown as a rank within your library |
-| Object detection | YOLOX-S, 80 everyday object types with boxes; Objects and "people in the picture" filters; O in the viewer |
-| Content search | SigLIP 2 or CLIP embeddings: text search by description, "More photos like this", Detected content, tag cover photos |
+| Object detection | YOLOX (S by default; M, L or X as an option), 80 everyday object types with boxes; Objects and "people in the picture" filters; O in the viewer |
+| Content search | SigLIP 2, CLIP or Jina CLIP embeddings: text search by description, "More photos like this", Detected content, tag cover photos |
 | Text in photos and face quality | RapidOCR text, searchable from the search box; face quality as the sharpness of digiKam's face regions. |
-| Face grouping and suggestions | SFace embeddings of the faces digiKam has not named and of each person's recent confirmed faces: look-alike groups on People › Faces with a "looks like" suggestion and one-click naming |
-| Face detection | YuNet (OpenCV, 0.2 MB, onnxruntime) finds faces nothing has marked yet, on request only: a photo (info panel › People › detect faces), a folder (the face button on its row in Folders, subfolders included) or the whole library (Maintenance › AI analysis and models › Run). Every existing face region, named, unknown, suggested or ignored, from digiKam or any other tool, is honoured: a detection that overlaps one (centre inside it, or a third of the smaller box covered) is the same face and is not added, even when the rectangles differ. New faces are written to digiKam's database the way digiKam writes an unnamed face, so they appear under People › Unnamed faces with a "looks like" suggestion. The library run remembers which photos it looked at and next time checks only new and changed ones; "Run again" looks at every photo again |
-| Photo descriptions | one sentence per photo from BLIP base, through PyTorch on an Apple GPU when there is one, else on the CPU (about 0.5 s per photo); searchable and shown in the info panel. `CAPTIONS=0` turns the job off |
+| Face grouping and suggestions | SFace (or ArcFace, aligned on the landmarks) embeddings of the faces digiKam has not named and of each person's recent confirmed faces: look-alike groups on People › Faces with a "looks like" suggestion and one-click naming |
+| Face detection | YuNet (OpenCV, 0.2 MB, onnxruntime; or SCRFD 10G or RetinaFace ResNet-50, chosen in Maintenance) finds faces nothing has marked yet, on request only: a photo (info panel › People › detect faces), a folder (the face button on its row in Folders, subfolders included) or the whole library (Maintenance › AI analysis and models › Run). Every existing face region, named, unknown, suggested or ignored, from digiKam or any other tool, is honoured: a detection that overlaps one (centre inside it, or a third of the smaller box covered) is the same face and is not added, even when the rectangles differ. New faces are written to digiKam's database the way digiKam writes an unnamed face, so they appear under People › Unnamed faces with a "looks like" suggestion. The library run remembers which photos it looked at and next time checks only new and changed ones; "Run again" looks at every photo again |
+| Photo descriptions | one sentence per photo from BLIP base (or BLIP large), through PyTorch on an Apple GPU when there is one, else on the CPU (about 0.5 s per photo); searchable and shown in the info panel. `CAPTIONS=0` turns the job off |
 | Similar photos | on request from Explore › Duplicate files: resized, re-saved and burst-neighbour copies found from the content-search embeddings |
 
 Derived from these:
@@ -260,7 +272,7 @@ All settings are environment variables; `setup.sh` writes the ones it asks about
 
 The stack mounts the photo folder read-only at `/library/photos`, keeps everything the viewer writes in the named volume `dkv-data` (mounted at `/data`), and is written for digiKam on MariaDB (`DIGIKAM_DB_*` in the `environment` block); for SQLite drop those lines and uncomment the mount of the digiKam folder at `/library/digikamDB`. `ADMIN_USER` / `ADMIN_PASSWORD` create the admin on the first start. The image (Debian slim, Python 3.12) contains ffmpeg, exiftool, libheif, the MariaDB client and, with the default build argument `AI=1`, the content-search, text-recognition and object-detection packages; `CAPTIONS=1` adds PyTorch (CPU build) and transformers for photo descriptions, which are slow without a GPU. The container's health check polls `/api/status`, which stays open when sign-in is required.
 
-- **Models and data** are not in the image. Download them from Maintenance › AI analysis and models, or with `docker compose exec -e HF_HUB_OFFLINE=0 iopix python -m app.models download <clip|siglip2|yolox|geonames|blip>`. They land in `/data/models` and `/data/geonames` on the volume and survive rebuilds. `setup.sh` is for the `.venv` install, not the container.
+- **Models and data** are not in the image. Download them from Maintenance › AI analysis and models, or with `docker compose exec -e HF_HUB_OFFLINE=0 iopix python -m app.models download <key>` (the keys are those of Maintenance › AI analysis and models: `clip`, `siglip2`, `jinaclip`, `blip`, `blip_large`, `yolox`, `yolox_m`, `yolox_l`, `yolox_x`, `yunet`, `scrfd`, `retinaface`, `sface`, `arcface`, `geonames`, `ocr`). They land in `/data/models` and `/data/geonames` on the volume and survive rebuilds. `setup.sh` is for the `.venv` install, not the container.
 - **Editing** needs the photos mount writable (drop `:ro`): sidecars are written next to the photos, and in-file writing rewrites the photos themselves.
 - **Writing digiKam's database** ("Apply to digiKam database", tag manager, faces, place tags, badges, new folders and uploads) needs the digiKam folder writable too when digiKam uses SQLite. With MySQL the folder is not mounted at all (`DIGIKAM_DB_HOST: host.docker.internal` for a server on the Docker host); the image's `mariadb-dump` takes the backup before each write, or `DIGIKAM_DB_DUMP` names a command that does.
 - A container cannot see the host's processes, so the Dockerfile sets `DIGIKAM_CHECK=none`: the viewer does not check whether digiKam is open before a database write. Changes made in the viewer and in digiKam at the same moment to the same photo can overwrite each other; on MariaDB the database itself stays consistent.

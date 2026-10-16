@@ -1,16 +1,15 @@
-"""Object detection with YOLOX-S (Apache-2.0, 80 everyday object types), run
-locally with onnxruntime. load() returns None until data/models/yolox_s.onnx
-exists (./enable-objects.sh downloads it), so the app works without it."""
+"""Object detection with YOLOX (Apache-2.0, 80 everyday object types), run locally with
+onnxruntime. Four sizes of the same network (S, M, L, X; chosen in Maintenance, the setting
+object_model) share one decoder. load() returns None until the chosen model's file exists in
+data/models, so the app works without it."""
 import logging
 import threading
 
 from PIL import Image
 
-from . import config
+from . import config, models
 
 log = logging.getLogger(__name__)
-MODEL = config.DATA_DIR / "models" / "yolox_s.onnx"
-URL = "https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_s.onnx"
 SIZE = 640
 MIN_SCORE = 0.45
 NMS_IOU = 0.45
@@ -27,23 +26,32 @@ _lock = threading.Lock()
 _instance = None
 
 
+def chosen() -> str:
+    return models.chosen("object_model")
+
+
+def model_path():
+    return models.path_for("object_model")
+
+
+def available() -> bool:
+    return model_path().exists()
+
+
 def download():
-    import urllib.request
-    MODEL.parent.mkdir(parents=True, exist_ok=True)
-    tmp = MODEL.with_suffix(".part")
-    urllib.request.urlretrieve(URL, tmp)
-    tmp.replace(MODEL)
+    models.fetch_file(models.REGISTRY["yolox"]["url"], models.path("yolox"))
 
 
 class Detector:
     """One ONNX session plus the anchor grid YOLOX's raw output is decoded against."""
 
-    def __init__(self, threads: int = 2):
+    def __init__(self, threads: int = 2, path=None):
         import numpy as np
         import onnxruntime as ort
         opts = ort.SessionOptions()
         opts.intra_op_num_threads = max(1, threads)  # several photos are analysed at once; keep each run small
-        self.session = ort.InferenceSession(str(MODEL), sess_options=opts, providers=["CPUExecutionProvider"])
+        self.path = path or model_path()
+        self.session = ort.InferenceSession(str(self.path), sess_options=opts, providers=["CPUExecutionProvider"])
         grids, strides = [], []
         for stride in (8, 16, 32):
             n = SIZE // stride
@@ -100,18 +108,19 @@ def load(threads: int = 2):
     """The shared detector, created on first use with this thread count; None when the
     model is not installed or fails to load (tried again on the next job)."""
     global _instance
-    if not MODEL.exists() or not config.ANALYSIS:
+    path = model_path()
+    if not path.exists() or not config.ANALYSIS:
         return None
     with _lock:
-        if _instance is None:
+        if _instance is None or _instance.path != path:  # another size was chosen since
             try:
-                _instance = Detector(threads)
+                _instance = Detector(threads, path)
             except Exception as e:
-                log.warning("objects: cannot load %s (%s)", MODEL, e)
+                log.warning("objects: cannot load %s (%s)", path, e)
                 return None
     return _instance
 
 
 if __name__ == "__main__":
     download()
-    print("Model saved to", MODEL)
+    print("Model saved to", models.path("yolox"))

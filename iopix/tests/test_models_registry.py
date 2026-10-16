@@ -85,3 +85,32 @@ def test_listing_shape():
     for m in out["models"]:
         assert {"label", "what", "page", "size", "kind", "installed"} <= set(m)
     assert "running" in out["progress"]
+
+
+def test_choice_groups_and_defaults(monkeypatch):
+    from app import state
+    for group, c in models.CHOICES.items():
+        opts = models.options(group)
+        assert c["default"] in opts and len(opts) >= 2, group
+    state.set_setting("face_detector", "scrfd")
+    assert models.chosen("face_detector") == "scrfd"
+    assert models.path_for("face_detector").name == "scrfd_10g.onnx"
+    state.set_setting("face_detector", "yolox")  # a model of another feature: ignored
+    assert models.chosen("face_detector") == "yunet"
+    state.set_setting("face_detector", "")
+    assert models.listing()["choices"]["object_model"] == {"label": "Object detection", "chosen": "yolox", "options": ["yolox", "yolox_m", "yolox_l", "yolox_x"]}
+
+
+def test_fetch_file_takes_one_member_out_of_a_zip(tmp_path):
+    import zipfile
+    z = tmp_path / "pack.zip"
+    with zipfile.ZipFile(z, "w") as zf:
+        zf.writestr("other.onnx", b"no")
+        zf.writestr("models/det_10g.onnx", b"yes")
+    dst = tmp_path / "out" / "scrfd_10g.onnx"
+    models.fetch_file(z.as_uri(), dst, "det_10g.onnx")
+    assert dst.read_bytes() == b"yes" and sorted(p.name for p in dst.parent.iterdir()) == ["scrfd_10g.onnx"]
+    with pytest.raises(FileNotFoundError):
+        models.fetch_file(z.as_uri(), tmp_path / "out" / "x.onnx", "missing.onnx")
+    models.fetch_file(z.as_uri(), tmp_path / "plain.zip")
+    assert (tmp_path / "plain.zip").read_bytes() == z.read_bytes()

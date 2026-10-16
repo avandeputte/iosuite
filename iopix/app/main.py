@@ -189,7 +189,7 @@ def _watch():
 def _models_arrived(keys: list):
     """After a first-start download: pick the search model that just arrived if none is chosen, and kick the jobs."""
     if keys:
-        for k in ("siglip2", "clip"):
+        for k in ("siglip2", "jinaclip", "clip"):
             if k in keys and not appstate.get_setting("search_model"):
                 appstate.set_setting("search_model", k)
                 break
@@ -1021,7 +1021,7 @@ async def api_edit_revert(request: Request):
 # --------------------------------------------------------------------------
 
 def _settings_public() -> dict:
-    return {"write_files": edits.writes_files(), "search_model": semantic.chosen(), "bg_threads": bgjobs.threads(), "read_only": appstate.read_only(), "require_login": users.require_login(), "update_check": updates.auto_check_enabled(), "update_check_locked": os.environ.get("UPDATE_CHECK", "").strip() == "0", "digikam_sync": index.sync_enabled(), "app_name": appstate.get_setting("app_name", ""), "database": _db_settings_public(), "album_roots": dkdb.root_overrides(), "map_provider": appstate.get_setting("map_provider", "osm"), "google_maps_key_set": bool(maps.key()), "templates": json.loads(appstate.get_setting("templates", "[]"))}
+    return {"write_files": edits.writes_files(), "search_model": semantic.chosen(), **{g: dlmodels.chosen(g) for g in ("face_detector", "object_model", "caption_model", "face_vectors")}, "bg_threads": bgjobs.threads(), "read_only": appstate.read_only(), "require_login": users.require_login(), "update_check": updates.auto_check_enabled(), "update_check_locked": os.environ.get("UPDATE_CHECK", "").strip() == "0", "digikam_sync": index.sync_enabled(), "app_name": appstate.get_setting("app_name", ""), "database": _db_settings_public(), "album_roots": dkdb.root_overrides(), "map_provider": appstate.get_setting("map_provider", "osm"), "google_maps_key_set": bool(maps.key()), "templates": json.loads(appstate.get_setting("templates", "[]"))}
 
 
 @app.get("/api/settings")
@@ -1103,6 +1103,19 @@ async def api_settings(request: Request):
         appstate.set_setting("search_model", name)
         _photos_cached.cache_clear()
         await run_in_threadpool(_start_prewarm)  # starts indexing for the newly chosen model if needed
+    for group in ("face_detector", "object_model", "caption_model", "face_vectors"):  # which model a feature runs on
+        if group in body:
+            key = str(body[group])
+            if key not in dlmodels.options(group):
+                raise HTTPException(400, f"Unknown model for {dlmodels.CHOICES[group]['label'].lower()}")
+            if not dlmodels.local(key)["installed"]:
+                raise HTTPException(400, f"{dlmodels.REGISTRY[key]['label']} is not installed; download it first")
+            appstate.set_setting(group, key)
+            dlmodels._reset(key)  # the next use loads the new model
+            if group == "face_vectors":
+                await run_in_threadpool(facevecs.start)  # every face is embedded again with the new model
+            elif group in ("object_model", "caption_model"):
+                await run_in_threadpool(_start_prewarm)  # new photos use the new model; "Run again" redoes the rest
     return _settings_public()
 
 
@@ -1135,6 +1148,7 @@ def api_analysis():
     if act is not None:
         act.load()
     names = {k: dlmodels.REGISTRY[k]["label"] for k in ENGINES}
+    mname = lambda group: dlmodels.REGISTRY[dlmodels.chosen(group)]["label"]  # noqa: E731
     models = [{"key": k, "label": names[k], "installed": semantic_ready(k), "chosen": semantic.chosen() == k,
                "active": act is not None and act.name == k} for k in ENGINES]
     jobs = [
@@ -1150,15 +1164,15 @@ def api_analysis():
         {"key": "vision", "label": "Text in photos and face quality", "detail": "Text recognition (RapidOCR) makes signs, jerseys, documents and screenshots searchable; face quality is measured on each face region.",
          "done": cov["vision"], "total": stills, "running": analysis.progress["vision"]["running"],
          "enabled": config.ANALYSIS and analysis.vision_available(), "rerun": True},
-        {"key": "objects", "label": "Object detection", "detail": "YOLOX-S: people, balls, animals, vehicles and other everyday objects, with boxes. Computed in the same pass as sharpness and exposure, so the two rows advance together.",
+        {"key": "objects", "label": "Object detection", "detail": f"{mname('object_model')}: people, balls, animals, vehicles and other everyday objects, with boxes. Computed in the same pass as sharpness and exposure, so the two rows advance together. After switching to another size, “Run again” redoes every photo with it; until then only new photos use it.",
          "done": cov["objects"], "total": stills, "running": analysis.progress["objects"]["running"],
-         "enabled": config.ANALYSIS and detector.MODEL.exists(), "rerun": True},
-        {"key": "faces", "label": "Face grouping and suggestions", "detail": "An embedding (SFace) for every face digiKam has not named yet and for the most recent faces of each named person, so the Faces page shows look-alikes together with a “looks like” suggestion and a one-click name. A suggestion is written nowhere until you accept it.",
+         "enabled": config.ANALYSIS and detector.available(), "rerun": True},
+        {"key": "faces", "label": "Face grouping and suggestions", "detail": f"An embedding ({mname('face_vectors')}) for every face digiKam has not named yet and for the most recent faces of each named person, so the Faces page shows look-alikes together with a “looks like” suggestion and a one-click name. A suggestion is written nowhere until you accept it.",
          "done": facevecs.coverage()[0], "total": facevecs.coverage()[1], "running": facevecs.progress["running"], "enabled": config.ANALYSIS and facevecs.available(), "rerun": True},
-        {"key": "facedetect", "label": "Face detection", "detail": "Finds faces nothing has marked yet (YuNet) and adds them as unnamed faces, ready for grouping and naming. Existing face regions, from digiKam or any other tool, are kept: a face that overlaps one is not added again, even when the two rectangles differ. Runs only when you start it (here for the library, or from a folder or a photo); writes to digiKam's database, backed up first."
+        {"key": "facedetect", "label": "Face detection", "detail": f"Finds faces nothing has marked yet ({mname('face_detector')}) and adds them as unnamed faces, ready for grouping and naming. Existing face regions, from digiKam or any other tool, are kept: a face that overlaps one is not added again, even when the two rectangles differ. Runs only when you start it (here for the library, or from a folder or a photo); writes to digiKam's database, backed up first."
          + (f" Last run: {nf(facedetect.progress['added'])} new faces in {nf(facedetect.progress['photos_with_new'])} photos." if facedetect.progress.get("started") else ""),
          "done": facedetect.coverage(), "total": stills, "running": facedetect.progress["running"], "enabled": facedetect.available() and config.DB_WRITE, "rerun": True},
-        {"key": "captions", "label": "Photo descriptions", "detail": "A one-sentence description of each photo (BLIP), searchable from the search box and shown in the info panel.",
+        {"key": "captions", "label": "Photo descriptions", "detail": f"A one-sentence description of each photo ({mname('caption_model')}), searchable from the search box and shown in the info panel. After switching to the other size, “Run again” redoes every photo with it; until then only new photos use it.",
          "done": cov["captions"], "total": stills, "running": analysis.progress["captions"]["running"],
          "enabled": config.ANALYSIS and caption.available(), "rerun": True},
     ]

@@ -5,9 +5,13 @@ faces, the prototypes) so each group and face can carry a "looks like" suggestio
 one-click name. The suggestion is the viewer's own and is never written anywhere until
 the owner accepts it; accepting goes through the same face operations as naming by hand.
 
-The embeddings come from OpenCV's SFace model (ONNX, run locally with onnxruntime) on the
-square crops the face queue already shows. Vectors live in the viewer database (face_vecs
-for undecided faces, face_protos for the named prototypes) and are pruned as faces are decided.
+The embeddings come from one of two models (ONNX, run locally with onnxruntime; chosen in
+Maintenance, the setting face_vectors): OpenCV's SFace (the default, 128-d, on the square crops
+the face queue already shows) or InsightFace's ArcFace ResNet-50 (512-d, much better at telling
+people apart; each crop is first aligned on its eyes, nose and mouth, found by the chosen face
+detector, the way ArcFace was trained). Vectors live in the viewer database (ai_face_embeddings
+for undecided faces, ai_person_references for the named prototypes), are pruned as faces are
+decided, and are all recomputed when the model changes, since vectors of different models do not compare.
 """
 import logging
 import threading
@@ -17,12 +21,12 @@ try:
 except ImportError:  # numpy comes with the search/objects extras; without it these features are simply off
     np = None
 
-from . import config, index, jobs, thumbs, vdb
+from . import config, index, jobs, models, thumbs, vdb
 
 log = logging.getLogger("app.facevecs")
-MODEL = config.DATA_DIR / "models" / "face_recognition_sface_2021dec.onnx"
-URL = "https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_recognition_sface/face_recognition_sface_2021dec.onnx"
 SIZE = 112
+# ArcFace's reference landmark positions (left eye, right eye, nose, left and right mouth corner) in its 112x112 input
+ARCFACE_TEMPLATE = ((38.2946, 51.6963), (73.5318, 51.5014), (56.0252, 71.7366), (41.5493, 92.3655), (70.7299, 92.2041))
 KINDS = ("unknown", "suggested")
 GROUP_THRESHOLD = 0.45  # cosine; OpenCV's own same-identity threshold for SFace is 0.363, a little stricter here
 SUGGEST_THRESHOLD = 0.40  # a group or face "looks like" a person when its best prototype match is at least this
@@ -30,19 +34,24 @@ PROTOS_PER_PERSON = 12  # the most recent confirmed faces of each person become 
 progress = {"running": False, "done": 0, "total": 0}
 _lock = threading.Lock()
 _session = None
+_session_path = None
 _run = {"gen": 0}
 
 
+def chosen() -> str:
+    return models.chosen("face_vectors")
+
+
+def model_path():
+    return models.path_for("face_vectors")
+
+
 def download():
-    import urllib.request
-    MODEL.parent.mkdir(parents=True, exist_ok=True)
-    tmp = MODEL.with_suffix(".part")
-    urllib.request.urlretrieve(URL, tmp)
-    tmp.replace(MODEL)
+    models.fetch_file(models.REGISTRY["sface"]["url"], models.path("sface"))
 
 
 def available() -> bool:
-    if np is None or not MODEL.exists():
+    if np is None or not model_path().exists():
         return False
     try:
         import onnxruntime
@@ -52,13 +61,15 @@ def available() -> bool:
 
 
 def _sess():
-    global _session
+    global _session, _session_path
     with _lock:
-        if _session is None:
+        path = model_path()
+        if _session is None or _session_path != path:
             import onnxruntime as ort
             opts = ort.SessionOptions()
             opts.intra_op_num_threads = max(1, jobs.threads())
-            _session = ort.InferenceSession(str(MODEL), sess_options=opts, providers=["CPUExecutionProvider"])
+            _session = ort.InferenceSession(str(path), sess_options=opts, providers=["CPUExecutionProvider"])
+            _session_path = path
         return _session
 
 
@@ -68,17 +79,74 @@ def reset_session():
         _session = None
 
 
+def _similarity(src, dst):
+    """The similarity transform (scale, rotation, translation; Umeyama) taking the points src onto dst, as a 2x3 matrix."""
+    src, dst = np.asarray(src, np.float64), np.asarray(dst, np.float64)
+    n = len(src)
+    ms, md = src.mean(0), dst.mean(0)
+    s0, d0 = src - ms, dst - md
+    u, sv, vt = np.linalg.svd(d0.T @ s0 / n)
+    d = np.ones(2)
+    if np.linalg.det(u) * np.linalg.det(vt) < 0:
+        d[1] = -1
+    r = u @ np.diag(d) @ vt
+    scale = (sv * d).sum() / max((s0 ** 2).sum() / n, 1e-12)
+    t = md - scale * r @ ms
+    return np.hstack([scale * r, t[:, None]])
+
+
+def _landmarks(im):
+    """The five landmarks of the face in the middle of a crop, from the chosen face detector; None when none is found."""
+    from . import facedetect
+    if not facedetect.available():
+        return None
+    try:
+        found = facedetect.detect_image(im, landmarks=True)
+    except Exception as e:
+        log.warning("faces: no landmarks (%s)", e)
+        return None
+    cx, cy = im.width / 2, im.height / 2
+    near = [f for f in found if abs(f[0] + f[2] / 2 - cx) < im.width * 0.25 and abs(f[1] + f[3] / 2 - cy) < im.height * 0.25]
+    if not near:
+        return None
+    return max(near, key=lambda f: f[2] * f[3])[5]
+
+
+def align(im, pts):
+    """The crop warped so its landmarks sit on ArcFace's template: a 112x112 RGB image."""
+    from PIL import Image
+    m = np.vstack([_similarity(pts, ARCFACE_TEMPLATE), [0, 0, 1]])
+    inv = np.linalg.inv(m)  # PIL wants the matrix from output pixels back to input pixels
+    return im.convert("RGB").transform((SIZE, SIZE), Image.AFFINE, tuple(inv[:2].ravel()), Image.Resampling.BICUBIC)
+
+
+def _prepare(im, kind: str):
+    """The model's input array (3, 112, 112) for one crop image."""
+    from PIL import Image
+    if kind == "arcface":
+        pts = _landmarks(im)
+        if pts is not None:
+            face = align(im, pts)
+        else:  # no landmarks: the middle of the crop, where make_face put the face
+            m = int(im.width * 0.18)
+            face = im.crop((m, m, im.width - m, im.height - m)).convert("RGB").resize((SIZE, SIZE), Image.Resampling.BILINEAR)
+        arr = (np.asarray(face, dtype=np.float32) - 127.5) / 127.5  # RGB, -1..1
+    else:  # sface: 112x112 BGR, pixel values as they are
+        im = im.convert("RGB").resize((SIZE, SIZE), Image.Resampling.BILINEAR)
+        arr = np.asarray(im, dtype=np.float32)[:, :, ::-1]
+    return np.ascontiguousarray(np.transpose(arr, (2, 0, 1)))
+
+
 def embed_paths(paths: list):
-    """Unit vectors (128-d) for face crop files; SFace takes 112x112 BGR, pixel values as they are."""
+    """Unit vectors (128-d for SFace, 512-d for ArcFace) for face crop files."""
     from PIL import Image
     s = _sess()
     name = s.get_inputs()[0].name
+    kind = chosen()
     out = []
     for p in paths:
-        im = Image.open(p).convert("RGB").resize((SIZE, SIZE), Image.Resampling.BILINEAR)
-        arr = np.asarray(im, dtype=np.float32)[:, :, ::-1]  # RGB -> BGR
-        blob = np.transpose(arr, (2, 0, 1))[None]
-        v = s.run(None, {name: np.ascontiguousarray(blob)})[0][0]
+        blob = _prepare(Image.open(p), kind)[None]
+        v = s.run(None, {name: blob})[0][0]
         out.append(v / max(float(np.linalg.norm(v)), 1e-9))
     return np.asarray(out, dtype=np.float32)
 
@@ -179,7 +247,24 @@ def _embed_into(gen: int, todo: list, table: str, offset: int):
     return True
 
 
+def _same_model():
+    """Vectors from another model are useless now: forget them (once) when the choice changed."""
+    from . import state
+    kind = chosen()
+    if state.get_setting("face_vectors_built", "sface") != kind:
+        con = vdb.connect()
+        try:
+            con.execute("DELETE FROM ai_face_embeddings")
+            con.execute("DELETE FROM ai_person_references")
+            con.commit()
+        finally:
+            con.close()
+        state.set_setting("face_vectors_built", kind)
+        log.info("faces: embeddings recomputed with %s", kind)
+
+
 def _job(gen: int):
+    _same_model()
     faces, protos = _faces(), _proto_faces()
     have, have_p = _have(), _have_protos()
     todo = [f for f in faces if (f[0], f[1], f[2], f[3], f[4]) not in have]

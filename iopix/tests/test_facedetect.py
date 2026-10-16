@@ -5,9 +5,10 @@ from pathlib import Path
 
 import pytest
 
-from app import facedetect, index
+from app import facedetect, index, models, state
 
-YUNET = Path("/private/tmp/claude-501/-Users-alex-Pictures/cd6ab508-dd1f-4df1-999c-d6fe0a83fe5c/scratchpad/yunet/yunet.onnx")
+# a folder holding the detector files under their registry names (symlinks are fine); tests skip what is missing
+MODELS = Path("/private/tmp/claude-501/-Users-alex-Pictures/cd6ab508-dd1f-4df1-999c-d6fe0a83fe5c/scratchpad/models")
 
 
 def test_same_face_tolerates_different_rectangles():
@@ -19,22 +20,38 @@ def test_same_face_tolerates_different_rectangles():
     assert facedetect.new_faces(found, [digikam]) == [found[1]]
 
 
-def test_detector_finds_the_faces_digikam_marked(client, lib):
-    if not YUNET.exists() or facedetect.np is None:
-        pytest.skip("YuNet model not available here")
-    facedetect.MODEL = YUNET
+@pytest.mark.parametrize("detector", ["yunet", "scrfd", "retinaface"])
+def test_detector_finds_the_faces_digikam_marked(client, lib, monkeypatch, detector):
+    """Each of the three detectors, decoded by the viewer's own code, finds most of the faces digiKam marked,
+    and returns five landmarks per face inside its box."""
+    if facedetect.np is None or not (MODELS / models.REGISTRY[detector]["file"]).exists():
+        pytest.skip(f"{detector} model not available here")
+    monkeypatch.setattr(models, "MODEL_DIR", MODELS)
+    state.set_setting("face_detector", detector)
+    assert facedetect.chosen() == detector and facedetect.available()
     facedetect.reset_session()
     con = index.open_index()
     rows = con.execute("SELECT p.id, p.path, p.w, p.h FROM photos p WHERE p.video = 0 AND EXISTS "
                        "(SELECT 1 FROM faces f WHERE f.photo_id = p.id AND f.kind = 'confirmed') LIMIT 12").fetchall()
     matched = total = 0
-    for pid, path, w, h in rows:
-        found = facedetect.detect_photo(path, w, h)
-        for e in con.execute("SELECT x, y, w, h FROM faces WHERE photo_id = ? AND kind = 'confirmed'", (pid,)).fetchall():
-            total += 1
-            matched += any(facedetect.same_face(f, e) for f in found)
-    con.close()
-    assert total and matched / total >= 0.7, (matched, total)
+    try:
+        for pid, path, w, h in rows:
+            found = facedetect.detect_photo(path, w, h)
+            for e in con.execute("SELECT x, y, w, h FROM faces WHERE photo_id = ? AND kind = 'confirmed'", (pid,)).fetchall():
+                total += 1
+                matched += any(facedetect.same_face(f, e) for f in found)
+        from app import thumbs
+        img, _ = thumbs._open_oriented(rows[0][1], 1600, 1600)
+        with_pts = facedetect.detect_image(img, landmarks=True)
+        for x, y, w, h, sc, pts in with_pts:
+            assert len(pts) == 5
+            for px, py in pts:  # eyes, nose and mouth lie within the face box, give or take a margin
+                assert x - w * 0.3 <= px <= x + w * 1.3 and y - h * 0.3 <= py <= y + h * 1.3, (detector, (x, y, w, h), pts)
+    finally:
+        con.close()
+        state.set_setting("face_detector", "")
+        facedetect.reset_session()
+    assert total and matched / total >= 0.7, (detector, matched, total)
 
 
 def test_detect_endpoint_adds_only_unmarked_faces(client, lib, monkeypatch):

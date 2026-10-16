@@ -222,6 +222,8 @@ def test_settings_and_maintenance_pages(page, server):
     rows = page.locator(".mtable tbody tr")
     assert rows.count() >= 7, "one row per feature"
     assert page.locator(".mtable tr[data-job=objects][data-model=yolox]").count() == 1, "a job and its model share a row"
+    assert page.locator(".mtable tr[data-job=objects] select.mpick option").count() == 4, "the four YOLOX sizes are offered in a menu"
+    assert page.locator(".mtable tr[data-job=facedetect] select.mpick option").count() == 3, "YuNet, SCRFD and RetinaFace"
     assert page.locator(".mtable tr[data-model=geonames]").count() == 1, "models without a job have a row too"
     assert page.locator(".mtable thead th").all_inner_texts()[:3] == ["Feature", "Model", "Progress"]
     assert page.locator("b", has_text="Restart the viewer").count() == 1

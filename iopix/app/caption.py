@@ -1,15 +1,20 @@
-"""One-sentence descriptions of photos with BLIP base (Salesforce), run locally
-through PyTorch (Apple GPU when available, else CPU). The model lives in
-data/models (downloaded from the AI analysis page or `python -m app.models
-download blip`) and is loaded offline; nothing leaves the machine."""
+"""One-sentence descriptions of photos with BLIP (Salesforce; base by default, large as an
+option chosen in Maintenance, the setting caption_model), run locally through PyTorch (Apple
+GPU when available, else CPU). The model lives in data/models (downloaded from the AI analysis
+page or `python -m app.models download blip|blip_large`) and is loaded offline; nothing leaves
+the machine."""
 import logging
 import threading
 
-from . import config, jobs, thumbs
+from . import config, jobs, models, thumbs
 
 log = logging.getLogger(__name__)
-MODEL = "Salesforce/blip-image-captioning-base"
 MODEL_DIR = config.DATA_DIR / "models"
+
+
+def repo() -> str:
+    return models.REGISTRY[models.chosen("caption_model")]["repos"][0]
+
 _lock = threading.Lock()
 _state = {}  # model, processor, device and the torch module once loaded; models.py clears it after a re-download
 
@@ -19,22 +24,24 @@ def available() -> bool:
     if not config.CAPTIONS:
         return False
     try:
-        return any(MODEL_DIR.glob(f"models--{MODEL.replace('/', '--')}/snapshots/*/config.json"))
+        return any(MODEL_DIR.glob(f"models--{repo().replace('/', '--')}/snapshots/*/config.json"))
     except OSError:
         return False
 
 
 def _load():
     with _lock:
-        if "model" in _state:
+        name = repo()
+        if "model" in _state and _state.get("repo") == name:
             return _state
+        _state.clear()  # first load, or another size was chosen since
         import torch
         from transformers import BlipForConditionalGeneration, BlipProcessor
-        proc = BlipProcessor.from_pretrained(MODEL, cache_dir=str(MODEL_DIR), local_files_only=True)
-        model = BlipForConditionalGeneration.from_pretrained(MODEL, cache_dir=str(MODEL_DIR), local_files_only=True)
+        proc = BlipProcessor.from_pretrained(name, cache_dir=str(MODEL_DIR), local_files_only=True)
+        model = BlipForConditionalGeneration.from_pretrained(name, cache_dir=str(MODEL_DIR), local_files_only=True)
         torch.set_num_threads(jobs.threads())  # the CPU side of generation, and all of it without a GPU
         dev = "mps" if torch.backends.mps.is_available() else "cpu"
-        _state.update(model=model.to(dev).eval(), proc=proc, dev=dev, torch=torch)
+        _state.update(model=model.to(dev).eval(), proc=proc, dev=dev, torch=torch, repo=name)
         return _state
 
 
