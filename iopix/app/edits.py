@@ -533,7 +533,17 @@ def apply(photos: list, changes: dict, per_photo: dict = None) -> dict:
             now = int(time.time())
             appstate._write(lambda c: c.executemany(
                 "INSERT OR REPLACE INTO pending_edits VALUES (?,?,?)", [(pid, json.dumps(merged[pid]), now) for pid in ok]))
+            _recheck(ok)
     return {"edited": len(ok), "failed": failed, "files": in_files}
+
+
+def _recheck(ids: list):
+    """The metadata consistency results of these photos are out of date: compare them again."""
+    try:
+        from . import consistency
+        consistency.recheck(ids)
+    except Exception:  # never fail an edit over the report
+        pass
 
 
 def rewrite_tags(photos: list) -> list:

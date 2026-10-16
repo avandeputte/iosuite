@@ -369,13 +369,13 @@ def test_database_row_tests_a_connection(page, server, lib):
     assert row.locator("input[placeholder='host']").is_visible() and row.locator("input[placeholder='folder with digikam4.db']").is_hidden()
 
 
-def test_container_mode_asks_before_a_database_write(page, server):
-    """DIGIKAM_CHECK=ask (the browser tests' server runs that way): a write that needs digiKam closed
-    shows one confirmation; accepting it vouches and the action goes through."""
+def test_container_mode_writes_without_a_confirmation(page, server):
+    """DIGIKAM_CHECK=ask/none (the browser tests' server runs that way): the viewer cannot see digiKam,
+    so a database write goes through without asking whether digiKam is closed."""
     import json, sqlite3, urllib.request
     db = Path(os.environ["DATA_DIR"]).parent / "data-ui" / "viewer.db"
     con = sqlite3.connect(db); con.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('digikam_closed_until', '0')"); con.commit(); con.close()
-    assert json.load(urllib.request.urlopen(server + "/api/status"))["digikamCheck"] == "ask"
+    assert json.load(urllib.request.urlopen(server + "/api/status"))["digikamCheck"] == "none"
     dialogs = []
     def on_dialog(d):
         dialogs.append(d.type + ":" + d.message[:40])
@@ -386,7 +386,7 @@ def test_container_mode_asks_before_a_database_write(page, server):
     page.locator("button", has_text="New top-level tag").first.click()
     page.wait_for_timeout(2500)
     assert any(t.startswith("prompt:") for t in dialogs), dialogs
-    assert any(t.startswith("confirm:The viewer cannot see") for t in dialogs), "the container-mode confirmation must appear: " + str(dialogs)
+    assert not any("closed" in t or "cannot see" in t for t in dialogs), "no confirmation about digiKam: " + str(dialogs)
     tags = json.load(urllib.request.urlopen(server + "/api/meta"))["tags"]
     assert any(t["name"] == "zz-ui-vouch" for t in tags), "after accepting, the tag is created"
 
@@ -727,7 +727,7 @@ def test_consistency_bulk_sync_bar(page, server, lib):
         bb = b.bounding_box()
         assert bb["x"] + bb["width"] <= vp["width"] and bb["y"] + bb["height"] <= vp["height"], "every button on screen"
     # Select all takes every disagreeing photo, then one click syncs them from the sidecar
-    page.locator("button", has_text="Select all").click()
+    page.locator("a.lnk", has_text="Select all").click()
     page.wait_for_function("document.querySelector('#cbulk .n') && !document.querySelector('#cbulk .n').textContent.startsWith('1 ')", timeout=5000) if page.locator(".crec").count() > 1 else None
     page.on("dialog", lambda d: d.accept())
     page.locator("#cbulk button[data-src=sidecar]").click()

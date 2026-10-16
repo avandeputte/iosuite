@@ -33,8 +33,11 @@ SyncError = dkdb.SyncError  # one error type for every refusal to write digiKam'
 
 
 def digikam_running() -> bool:
-    if config.DIGIKAM_CHECK == "ask":
-        return not _confirmed_closed()
+    """Whether digiKam is open, as far as this machine can tell. DIGIKAM_CHECK=none (and "ask", its name
+    before v1.19): the viewer cannot see digiKam's process (a container, digiKam on another machine), so
+    it does not check and does not ask; a write goes ahead."""
+    if config.DIGIKAM_CHECK in ("none", "ask"):
+        return False
     try:
         if subprocess.run(["pgrep", "-x", "digikam"], capture_output=True).returncode == 0:
             return True
@@ -200,4 +203,5 @@ def apply_pending(db_path: Path = None, pending: dict = None, check_running: boo
                 # a face region on a removed tag would be left dangling; keyword tags have none, but be safe
                 con.execute("DELETE FROM ImageTagProperties WHERE imageid = ? AND tagid = ?", (image_id, tid))
             applied.append(image_id)
+    edits._recheck(applied)
     return {"applied": len(applied), "skipped": skipped, "backup": str(backup) if backup else None}

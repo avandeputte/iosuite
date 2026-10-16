@@ -67,8 +67,10 @@ ANALYSIS = os.environ.get("ANALYSIS", "1") not in ("0", "false", "no")
 # Threads for sharpness scoring and object detection; by default the shared BG_THREADS budget.
 ANALYSIS_WORKERS = int(os.environ["ANALYSIS_WORKERS"]) if os.environ.get("ANALYSIS_WORKERS") else None  # None: BG_THREADS
 # How to tell whether digiKam is running before writing its database: "pgrep" looks for the
-# process on this machine; "ask" (for Docker, where the host is invisible) makes the viewer
-# ask you to confirm digiKam is closed.
-DIGIKAM_CHECK = os.environ.get("DIGIKAM_CHECK", "pgrep")
+# process on this machine; "none" (Docker, a container, digiKam on another machine: it cannot be
+# seen) does not check. "ask", the old name for the container mode, now means "none".
+DIGIKAM_CHECK = os.environ.get("DIGIKAM_CHECK", "pgrep").strip().lower()
+if DIGIKAM_CHECK == "ask":
+    DIGIKAM_CHECK = "none"
 # Describe every photo in a sentence with a local captioning model (BLIP base), for search.
 CAPTIONS = os.environ.get("CAPTIONS", "1") not in ("0", "false", "no")

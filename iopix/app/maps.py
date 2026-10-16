@@ -12,6 +12,7 @@ import json
 import os
 import threading
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -95,6 +96,58 @@ def geocode(q: str) -> list:
         out.append({"name": name, "detail": detail[:110], "lat": loc["lat"], "lon": loc["lng"],
                     "zoom": 16 if kinds & {"establishment", "point_of_interest", "premise", "street_address", "school"} else 13 if kinds & {"locality", "sublocality"} else 14})
     return out
+
+
+PLACES_URL = "https://places.googleapis.com/v1/places:searchText"
+ELEVATION_URL = "https://maps.googleapis.com/maps/api/elevation/json"
+OPEN_METEO_ELEVATION = "https://api.open-meteo.com/v1/elevation"
+
+
+def places_search(q: str) -> list:
+    """Google Places API (New) text search: named places the Geocoding API does not know as addresses
+    (airports, stadiums, businesses). Needs "Places API (New)" enabled for the key."""
+    body = json.dumps({"textQuery": q, "maxResultCount": 8}).encode()
+    req = urllib.request.Request(PLACES_URL, data=body, method="POST", headers=_headers({
+        "Content-Type": "application/json", "X-Goog-Api-Key": key(),
+        "X-Goog-FieldMask": "places.displayName,places.formattedAddress,places.location,places.types"}))
+    try:
+        with urllib.request.urlopen(req, timeout=8) as r:
+            data = json.load(r)
+    except urllib.error.HTTPError as e:
+        try:
+            msg = json.load(e).get("error", {}).get("message") or str(e)
+        except Exception:
+            msg = str(e)
+        raise RuntimeError(msg) from e
+    out = []
+    for x in data.get("places", [])[:8]:
+        loc = x.get("location") or {}
+        if "latitude" not in loc:
+            continue
+        addr = x.get("formattedAddress", "")
+        out.append({"name": (x.get("displayName") or {}).get("text") or addr.partition(", ")[0], "detail": addr[:110],
+                    "lat": loc["latitude"], "lon": loc["longitude"], "zoom": 15})
+    return out
+
+
+def elevation(lat: float, lon: float) -> dict:
+    """Ground height in metres at a point: Google's Elevation API when Google is the provider and the
+    key allows it, else Open-Meteo's (Copernicus 90 m terrain model, no key needed)."""
+    errors = []
+    if provider() == "google":
+        try:
+            req = urllib.request.Request(ELEVATION_URL + "?" + urllib.parse.urlencode({"locations": f"{lat},{lon}", "key": key()}), headers=_headers())
+            with urllib.request.urlopen(req, timeout=8) as r:
+                data = json.load(r)
+            if data.get("status") == "OK" and data.get("results"):
+                return {"alt": round(float(data["results"][0]["elevation"]), 1), "source": "Google"}
+            errors.append(f"Google: {data.get('error_message') or data.get('status')}")
+        except Exception as e:
+            errors.append(f"Google: {e}")
+    req = urllib.request.Request(OPEN_METEO_ELEVATION + "?" + urllib.parse.urlencode({"latitude": lat, "longitude": lon}), headers={"User-Agent": "iopix"})
+    with urllib.request.urlopen(req, timeout=8) as r:
+        data = json.load(r)
+    return {"alt": round(float(data["elevation"][0]), 1), "source": "Open-Meteo", "note": "; ".join(errors) or None}
 
 
 def reset_session():

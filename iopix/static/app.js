@@ -108,18 +108,10 @@ async function api(path) {
   if (!r.ok) throw new Error(`${r.status} ${path}`);
   return r.json();
 }
-async function post(path, body, retried) {
+async function post(path, body) {
   const r = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   if (!r.ok) {
     let msg = `${r.status} ${path}`; try { msg = (await r.json()).detail || msg; } catch { /* not json */ }
-    // in a container (DIGIKAM_CHECK=ask) the viewer cannot see digiKam's process, so a database write is
-    // refused until the owner vouches that digiKam is closed; ask once here, vouch for 10 minutes, retry
-    if (r.status === 409 && !retried && DIGIKAM_CHECK === 'ask' && /digiKam is running/i.test(msg) && path !== '/api/settings') {
-      if (confirm('The viewer cannot see whether digiKam is running (it runs in a container, or digiKam is on another machine).\n\nIs every digiKam that uses this database closed right now? Writing to the database while digiKam is open can corrupt it.\n\nOK: yes, it is closed; go ahead (remembered for 10 minutes).')) {
-        await post('/api/settings', { digikam_closed: true }, true);
-        return post(path, body, true);
-      }
-    }
     throw new Error(msg);
   }
   return r.json();
@@ -979,13 +971,8 @@ async function dbDialog() {
   let st;
   try { st = await api('/api/edits/db'); } catch { toast('Could not check the digiKam database status.'); return; }
   const msg = h('p', { class: st.digikamRunning ? 'warn' : '' }, st.digikamRunning
-    ? (st.ask ? 'The viewer cannot see digiKam from inside its container. Quit digiKam, then confirm below.' : 'digiKam is running. Quit digiKam first; its database must not be changed while it is open.')
-    : 'digiKam is closed, so its database can be updated now.');
-  const vouch = st.ask && st.digikamRunning ? h('label', null, h('input', { type: 'checkbox', onchange: async (e) => {
-    if (!e.target.checked) return;
-    try { await post('/api/settings', { digikam_closed: true }); } catch (err) { toast(err.message); return; }
-    back.remove(); dbDialog();
-  } }), ' I have quit digiKam (this is trusted for 10 minutes)') : null;
+    ? 'digiKam is running. Quit digiKam first; its database must not be changed while it is open.'
+    : st.ask ? 'The viewer cannot see from here whether digiKam is open, so it does not check.' : 'digiKam is closed, so its database can be updated now.');
   const applyBtn = h('button', { class: 'pillbtn on', disabled: !!st.digikamRunning || !st.pending, onclick: async () => {
     applyBtn.textContent = 'Updating…';
     try {
@@ -998,7 +985,7 @@ async function dbDialog() {
   const back = modal('Apply edits to digiKam’s database',
     h('p', null, `${plural(st.pending, 'photo has', 'photos have')} edits that are saved in XMP sidecars but not yet in digiKam’s database.`),
     h('p', null, 'This writes the same ratings, labels, titles, captions and tags into digikam4.db. A copy of the database is saved in the viewer’s data/db-backups folder first.'),
-    msg, vouch,
+    msg,
     h('div', { class: 'modal-btns' }, h('button', { class: 'pillbtn', onclick: () => back.remove() }, 'Cancel'),
       h('a', { class: 'pillbtn', href: hashFor('photos', photosWith({ edited: 1 })), onclick: () => back.remove() }, 'Show them'), applyBtn));
 }
@@ -1024,7 +1011,22 @@ async function locationDialog(ids, current, after) {
   // current: {lat, lon, alt} or null. Drag the marker or click the map; coordinates can also be typed.
   const lat = h('input', { class: 'einput', type: 'number', step: 'any', placeholder: 'latitude', value: current?.lat ?? '', style: 'margin:0;width:140px' });
   const lon = h('input', { class: 'einput', type: 'number', step: 'any', placeholder: 'longitude', value: current?.lon ?? '', style: 'margin:0;width:140px' });
-  const alt = h('input', { class: 'einput', type: 'number', step: 'any', placeholder: 'altitude m', value: current?.alt ?? '', style: 'margin:0;width:110px' });
+  const alt = h('input', { class: 'einput', type: 'number', step: 'any', placeholder: 'altitude m', value: current?.alt ?? '', style: 'margin:0;width:110px', oninput: () => { altAuto = false; fill(altNote); } });
+  // the altitude follows the position (ground height from Google or Open-Meteo) until it is typed by hand
+  let altAuto = current?.alt == null, altTimer = 0;
+  const altNote = h('span', { class: 'muted', style: 'font-size:12px' });
+  const fetchAlt = () => {
+    clearTimeout(altTimer);
+    if (!altAuto || !lat.value || !lon.value) return;
+    altTimer = setTimeout(async () => {
+      const la = lat.value, lo = lon.value;
+      try {
+        const r = await api(`/api/elevation?lat=${encodeURIComponent(la)}&lon=${encodeURIComponent(lo)}`);
+        if (!altAuto || la !== lat.value || lo !== lon.value) return;
+        alt.value = r.alt; fill(altNote, `ground height from ${r.source}`);
+      } catch { fill(altNote, 'no altitude service reachable'); }
+    }, 400);
+  };
   const mapEl = h('div', { class: 'imap', style: 'height:360px;margin:10px 0' });
   // address or landmark search (OpenStreetMap Nominatim through the server; GeoNames towns offline)
   let searchTimer = 0;
@@ -1039,7 +1041,8 @@ async function locationDialog(ids, current, after) {
     try { r = await api('/api/geocode?q=' + encodeURIComponent(q)); } catch (e) { toast(e.message); return; }
     if (search.value.trim() !== q) return;
     results.hidden = false;
-    fill(results, r.results.length ? r.results.map((x) => h('div', { class: 'frow', style: 'height:auto;padding:6px 8px', title: `${x.lat}, ${x.lon}`, onclick: () => {
+    const note = r.note ? h('div', { class: 'muted', style: 'padding:4px 8px;font-size:12px' }, r.note) : null;
+    fill(results, note, r.results.length ? r.results.map((x) => h('div', { class: 'frow', style: 'height:auto;padding:6px 8px', title: `${x.lat}, ${x.lon}`, onclick: () => {
       lat.value = x.lat; lon.value = x.lon; results.hidden = true; search.value = x.name; place();
       if (map) map.setView([x.lat, x.lon], x.zoom || 14);
     } }, icon('place'), h('span', { class: 'nm', style: 'white-space:normal' }, x.name, x.detail ? h('span', { class: 'muted' }, ' · ' + x.detail) : null)))
@@ -1049,13 +1052,13 @@ async function locationDialog(ids, current, after) {
     h('p', { class: 'muted' }, ids.length > 1 ? `The same position goes to all ${nf.format(ids.length)} selected photos, replacing any they already have. ` : '', 'Click the map or drag the pin, or type coordinates. Saved to the sidecar (and file, if on) and shown in digiKam after its database is updated.'),
     h('div', { style: 'display:flex;gap:8px;align-items:center;margin-top:6px' }, search), results,
     mapEl,
-    h('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;align-items:center' }, lat, lon, alt,
-      h('button', { class: 'pillbtn', title: 'Use the location of the previous photo in the grid', onclick: () => { const i = G.data?.id.indexOf(ids[0]); for (let k = (i ?? 0) - 1; k >= 0; k--) { if (G.geo.has(k)) { getDetail(G.data.id[k]).then((d) => { lat.value = d.lat; lon.value = d.lon; alt.value = d.alt ?? ''; place(); }); return; } } toast('No earlier photo in this view has a location.'); } }, 'Copy from previous photo')),
+    h('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;align-items:center' }, lat, lon, alt, altNote,
+      h('button', { class: 'pillbtn', title: 'Use the location of the previous photo in the grid', onclick: () => { const i = G.data?.id.indexOf(ids[0]); for (let k = (i ?? 0) - 1; k >= 0; k--) { if (G.geo.has(k)) { getDetail(G.data.id[k]).then((d) => { lat.value = d.lat; lon.value = d.lon; alt.value = d.alt ?? ''; altAuto = d.alt == null; fill(altNote); place(); }); return; } } toast('No earlier photo in this view has a location.'); } }, 'Copy from previous photo')),
     h('div', { class: 'modal-btns' }, h('button', { class: 'pillbtn', onclick: () => back.remove() }, 'Cancel'),
       current ? h('button', { class: 'pillbtn', onclick: async () => { if (confirm('Remove the location from ' + (ids.length > 1 ? 'these photos' : 'this photo') + '?')) { back.remove(); if (await editPhotos(ids, { gps: null })) after?.(); } } }, 'Remove location') : null,
       h('button', { class: 'pillbtn on', onclick: async () => { const la = +lat.value, lo = +lon.value; if (!lat.value || !lon.value || Math.abs(la) > 90 || Math.abs(lo) > 180) { toast('Enter a valid latitude and longitude.'); return; } back.remove(); if (await editPhotos(ids, { gps: { lat: la, lon: lo, alt: alt.value === '' ? null : +alt.value } })) after?.(); } }, icon('place'), 'Save location')));
   let map, marker;
-  const place = () => { if (!map || !lat.value || !lon.value) return; const ll = [+lat.value, +lon.value]; marker ? marker.setLatLng(ll) : (marker = L.marker(ll, { draggable: true }).addTo(map).on('dragend', () => { const p = marker.getLatLng(); lat.value = p.lat.toFixed(6); lon.value = p.lng.toFixed(6); })); map.setView(ll, Math.max(map.getZoom(), 12)); };
+  const place = () => { fetchAlt(); if (!map || !lat.value || !lon.value) return; const ll = [+lat.value, +lon.value]; marker ? marker.setLatLng(ll) : (marker = L.marker(ll, { draggable: true }).addTo(map).on('dragend', () => { const p = marker.getLatLng(); lat.value = p.lat.toFixed(6); lon.value = p.lng.toFixed(6); fetchAlt(); })); map.setView(ll, Math.max(map.getZoom(), 12)); };
   // a pasted "40.4441, -79.9623" (comma, semicolon or space separated; N/S/E/W suffixes allowed) fills both fields
   const pastePair = (e) => {
     const t = (e.clipboardData || window.clipboardData)?.getData('text') || '';
@@ -1339,9 +1342,6 @@ async function showFolders() {
         toast(`Uploading ${plural(files.length, 'file')} to ${folder.path}…`, null, null, 120000);
         const res = await fetch(`/api/folders/${folder.id}/upload`, { method: 'POST', body: fd });
         let r = {}; try { r = await res.json(); } catch { /* not json */ }
-        if (res.status === 409 && !retried && DIGIKAM_CHECK === 'ask' && /digiKam is running/i.test(r.detail || '')) {
-          if (confirm('The viewer cannot see whether digiKam is running.\n\nIs every digiKam that uses this database closed right now?')) { await post('/api/settings', { digikam_closed: true }, true); return send(true); }
-        }
         if (!res.ok) throw new Error(r.detail || `${res.status}`);
         return r;
       };
@@ -1829,6 +1829,10 @@ async function showConsistency() {
     : f === 'rating' ? (v ? '★'.repeat(v) : h('i', { class: 'muted' }, 'none')) : (v || h('i', { class: 'muted' }, 'empty'));
   const item = (r) => {
     const cb = h('input', { type: 'checkbox', checked: selected.has(r.id), onchange: (e) => { e.target.checked ? selected.add(r.id) : selected.delete(r.id); bar(); } });
+    if (field === 'nosidecar') return h('div', { class: 'crec slim' + (selected.has(r.id) ? ' sel' : '') },
+      h('div', { class: 'chead' }, EDITING ? cb : null, h('img', { src: `/thumb/${r.id}`, loading: 'lazy', alt: '', onclick: () => openLightbox({ id: [r.id] }, 0, true) }),
+        h('div', { style: 'flex:1;min-width:0' }, h('b', null, r.name), h('div', { class: 'muted', style: 'font-size:12px' }, r.path.replace(/^.*\/photos\//, ''))),
+        EDITING ? h('button', { class: 'pillbtn', style: 'height:30px', onclick: () => makeSidecars([r.id]) }, 'Create sidecar') : null));
     return h('div', { class: 'crec' + (selected.has(r.id) ? ' sel' : '') },
       h('div', { class: 'chead' }, EDITING ? cb : null, h('img', { src: `/thumb/${r.id}`, loading: 'lazy', alt: '', onclick: () => openLightbox({ id: [r.id] }, 0, true) }),
         h('div', null, h('b', null, r.name), h('div', { class: 'muted', style: 'font-size:12px' }, r.path.replace(/^.*\/photos\//, ''), !r.has_sidecar ? ' · no sidecar' : '', !r.file_xmp ? (r.file_editable ? ' · no metadata in the file' : ' · file type cannot hold metadata') : ''))),
@@ -1836,6 +1840,18 @@ async function showConsistency() {
         ...r.mismatch.map((f) => h('tr', null, h('td', null, FIELD_LABEL[f] || f), ...['db', 'sidecar', 'file'].map((s) => h('td', null, fmtv(f, r.fields[f][s], s === 'file' && !r.file_xmp && !r.file_editable)))))),
       EDITING ? h('div', { class: 'cfix' }, h('span', { class: 'muted' }, 'Fix this photo: take the values from the'),
         ...['db', 'sidecar', 'file'].filter((s) => r.mismatch.some((f) => r.fields[f][s] != null)).map((s) => h('button', { class: 'pillbtn', style: 'height:30px', onclick: () => fixOne(r, s) }, SRC_LABEL[s].toLowerCase()))) : null);
+  };
+  // photos without a sidecar: write one from digiKam's database (rating, title, caption, tags), as digiKam would
+  const makeSidecars = async (ids) => {
+    if (ids.length > 1 && !confirm(`Create an XMP sidecar for ${nf.format(ids.length)} photos, with the rating, title, caption and tags from digiKam’s database? Nothing else changes.`)) return;
+    toast(`Creating ${plural(ids.length, 'sidecar')}…`, null, null, 60000);
+    let done = 0, skipped = [];
+    for (let i = 0; i < ids.length; i += 200) {
+      try { const r = await post('/api/consistency/sync', { ids: ids.slice(i, i + 200), source: 'db', targets: ['sidecar'], fields: Object.keys(FIELD_LABEL) }); done += r.synced; skipped = skipped.concat(r.skipped); }
+      catch (e) { toast(e.message, null, null, 9000); break; }
+    }
+    toast(`Created ${plural(done, 'sidecar')}${skipped.length ? `; ${nf.format(skipped.length)} skipped (${skipped[0].reason})` : ''}.`, null, null, 9000);
+    selected.clear(); bar(); setTimeout(load, 2500);
   };
   // one photo: copy the chosen source's values to the other places that can hold them
   const fixOne = async (r, src) => {
@@ -1864,6 +1880,11 @@ async function showConsistency() {
     syncBar.hidden = !selected.size;
     document.body.classList.toggle('cbulk-open', selected.size > 0);
     if (!selected.size) return;
+    if (field === 'nosidecar') {
+      fill(syncBar, h('div', { class: 'cbrow' }, h('button', { class: 'iconbtn', title: 'Clear the selection', onclick: () => { selected.clear(); bar(); load(); } }, icon('close')),
+        h('span', { class: 'n' }, `${nf.format(selected.size)} selected`), h('button', { class: 'pillbtn on', onclick: () => makeSidecars([...selected]) }, 'Create sidecars from digiKam’s database')));
+      return;
+    }
     const quick = ['db', 'sidecar', 'file'].map((src) => h('button', { class: 'pillbtn' + (src === 'sidecar' ? ' on' : ''), title: `Make the other places match the ${SRC_LABEL[src].toLowerCase()}`, 'data-src': src,
       onclick: () => runSync(src, ['db', 'sidecar', 'file'].filter((t) => t !== src), Object.keys(FIELD_LABEL)) }, SRC_LABEL[src]));
     const src = h('select', null, ['db', 'sidecar', 'file'].map((x) => h('option', { value: x }, SRC_LABEL[x])));
@@ -1886,6 +1907,8 @@ async function showConsistency() {
     try { d = await api(`/api/consistency?field=${field}&offset=${offset}&limit=60`); } catch (e) { list.replaceChildren(h('div', { class: 'empty' }, e.message)); return; }
     if (route.view !== 'consistency') return;
     const s = d.summary, p = d.progress;
+    const tile = (hue, ic, n, label, f) => h(f == null ? 'div' : 'a', { class: 'stat' + (f != null && f === field ? ' on' : '') + (f != null ? ' click' : ''), style: `--hue:var(--c-${hue})`,
+      onclick: f == null ? null : () => { field = f; selected.clear(); bar(); load(); } }, h('span', { class: 'sic' }, icon(ic)), h('div', null, h('b', null, nf.format(n)), h('span', null, label)));
     const pct = p.total ? Math.round(100 * p.done / p.total) : 0;
     fill(head,
       p.running ? h('div', { class: 'enote ajob', style: 'border:0;padding:10px 12px' }, h('div', { class: 'ahead' }, h('b', null, p.rescan_all === false ? 'Checking new and changed photos…' : 'Checking the whole library…'), h('span', { class: 'sp' }), `${nf.format(p.done)} / ${nf.format(p.total)}`),
@@ -1893,14 +1916,25 @@ async function showConsistency() {
       : p.total === 0 && p.started ? h('div', { class: 'enote' }, 'Nothing to check: every photo was already compared since it last changed. Use “Re-check whole library” to compare them all again.') : null,
       !p.running && p.failed ? h('p', { class: 'warn' }, `${nf.format(p.failed)} photos could not be compared: ${p.error}`) : null,
       s.scanned_at ? h('div', { class: 'muted', style: 'font-size:12.5px;margin:6px 0' }, `Last checked ${fmtWhen(s.scanned_at)}.`) : null,
-      s.scanned ? h('div', { class: 'stats' }, h('div', null, h('b', null, nf.format(s.scanned)), 'photos checked'), h('div', null, h('b', null, nf.format(s.mismatched)), 'disagree'),
-        h('div', null, h('b', null, nf.format(s.no_sidecar)), 'without a sidecar'), ...Object.entries(s.by_field).filter(([, n]) => n).map(([f, n]) => h('div', null, h('b', null, nf.format(n)), (FIELD_LABEL[f] || f).toLowerCase()))) : h('p', { class: 'muted' }, 'Nothing scanned yet.'),
+      s.scanned ? h('div', { class: 'stats cstats' },
+        tile('teal', 'check', s.scanned, 'photos checked', null),
+        tile('rose', 'dup', s.mismatched, s.mismatched === 1 ? 'photo disagrees' : 'photos disagree', ''),
+        tile('amber', 'text', s.no_sidecar, 'without a sidecar', 'nosidecar'),
+        ...Object.entries(s.by_field).filter(([, n]) => n).map(([f, n]) => tile('indigo', { rating: 'star', tags: 'tag' }[f] || 'edit', n, `differ in ${(FIELD_LABEL[f] || f).toLowerCase()}`, f))) : h('p', { class: 'muted' }, 'Nothing scanned yet.'),
+      s.scanned ? h('h2', { class: 'sec' }, field === 'nosidecar' ? 'Photos without a sidecar' : field ? `Photos whose ${(FIELD_LABEL[field] || field).toLowerCase()} differs` : 'Photos that disagree',
+        h('span', { class: 'muted', style: 'font-size:13px;font-weight:400;margin-left:10px' }, nf.format(d.total)),
+        h('span', { class: 'sp' }),
+        EDITING && d.total ? h('a', { class: 'lnk', style: 'font-size:13px;font-weight:400', onclick: async () => {  // every photo listed (on this filter), not only the ones shown
+          try { const all = await api(`/api/consistency?field=${field}&offset=0&limit=5000`); all.items.forEach((r) => selected.add(r.id)); } catch (e) { toast(e.message); return; }
+          bar(); load();
+        } }, `Select all ${nf.format(d.total)}`) : null) : null,
+      field === 'nosidecar' && d.total ? h('p', { class: 'muted', style: 'margin-top:0' }, 'These photos keep their metadata only in digiKam’s database (and the file, when it can hold it). A sidecar is not required, but digiKam and other programs read it, and the viewer writes edits there. Creating one copies the rating, title, caption and tags from digiKam’s database.') : null,
       p.error && !p.failed ? h('p', { class: 'warn' }, 'Last error: ' + p.error) : null);
     // a scan that just finished: say so once
     if (wasRunning && !p.running) toast(p.failed ? `Check finished with errors: ${nf.format(p.failed)} photos could not be compared.` : `Check finished: ${nf.format(s.scanned)} photos compared, ${nf.format(s.mismatched)} disagree.`, null, null, 8000);
     wasRunning = p.running;
     if (!append) list.replaceChildren();
-    if (!d.items.length && !offset) list.append(h('div', { class: 'empty' }, s.scanned ? 'Everything that was scanned agrees.' : ''));
+    if (!d.items.length && !offset) list.append(h('div', { class: 'empty' }, !s.scanned ? '' : field === 'nosidecar' ? 'Every photo has a sidecar.' : 'Everything that was checked agrees.'));
     list.append(...d.items.map(item));
     offset += d.items.length;
     more.hidden = offset >= d.total;
@@ -1919,19 +1953,13 @@ async function showConsistency() {
     wasRunning = true;
     load();
   };
-  const sel = h('select', { onchange: (e) => { field = e.target.value; load(); } }, h('option', { value: '' }, 'Any field'), ...Object.entries(FIELD_LABEL).map(([f, l]) => h('option', { value: f }, l)));
-  main.replaceChildren(h('div', { class: 'page' }, crumbs([['Maintenance', '#/maintenance'], ['Metadata consistency', null]]),
-    h('h1', null, 'Metadata consistency'),
-    h('div', { class: 'muted', style: 'max-width:820px' }, 'For each photo, the rating, title, caption and tags are read from three places: digiKam’s database, the XMP sidecar, and the metadata embedded in the image file. Photos where they disagree are listed below. Fix one with its “take the values from” buttons, or tick several (or “Select all”) and pick the copy that is right in the bar at the bottom: the other places are made to match. A file type that cannot hold metadata (most videos, RAW files) shows n/a; that is not a discrepancy. An absent value elsewhere (no sidecar, nothing in the file) does count as a disagreement when another copy has a value.'),
-    h('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:14px 0' },
+  main.replaceChildren(h('div', { class: 'page spage cpage' }, crumbs([['Maintenance', '#/maintenance'], ['Metadata consistency', null]]),
+    pageTitle('check', 'teal', 'Metadata consistency'),
+    h('p', { class: 'muted', style: 'margin:0' }, 'The rating, title, caption and tags of each photo are read from digiKam’s database, its XMP sidecar and the image file, and compared. Fix a photo with its buttons, or tick several and choose the right copy in the bar at the bottom; the other places are made to match. Files that cannot hold metadata (most videos, RAW) show n/a, which is not a disagreement.'),
+    h('div', { class: 'ctools' },
       h('button', { class: 'pillbtn on', onclick: () => scan(false, false) }, icon('spark'), 'Check new and changed photos'),
       h('button', { class: 'pillbtn', onclick: () => { if (confirm('Re-check every photo in the library? This reads every sidecar and image file and takes a while.')) scan(false, true); } }, 'Re-check whole library'),
-      [...filterParams().keys()].length ? h('button', { class: 'pillbtn', onclick: () => scan(true, true) }, 'Check the current search only') : null,
-      h('span', { class: 'sp' }), h('span', null, 'Show: ', sel),
-      EDITING ? h('button', { class: 'pillbtn', onclick: async () => {  // every photo that disagrees (on this field), not only the ones shown
-        try { const all = await api(`/api/consistency?field=${field}&offset=0&limit=500`); all.items.forEach((r) => selected.add(r.id)); } catch (e) { toast(e.message); return; }
-        bar(); load();
-      } }, 'Select all') : null),
+      [...filterParams().keys()].length ? h('button', { class: 'pillbtn', onclick: () => scan(true, true) }, 'Check the current search only') : null),
     head, list, more), syncBar);
   load();
 }

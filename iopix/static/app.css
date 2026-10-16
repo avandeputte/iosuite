@@ -633,3 +633,17 @@ body.nobadges .cbadges, body.nobadges .fbadge { display: none; }
 #updbanner .pillbtn, #dkbanner .pillbtn { height: 32px; }
 body:has(#dkbanner) #updbanner { bottom: 96px; }  /* both at once: the update card sits above the digiKam card */
 @media (max-width: 800px) { #updbanner, #dkbanner { left: 8px; right: 8px; bottom: calc(64px + env(safe-area-inset-bottom)); max-width: none; } body:has(#dkbanner) #updbanner { bottom: calc(150px + env(safe-area-inset-bottom)); } }
+
+/* metadata consistency: the summary tiles are the filter; everything in one column */
+.cpage .ctools { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 16px 0 4px; }
+.cpage .enote { margin: 10px 0 0; }
+.cpage .cstats { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+.stat.click { cursor: pointer; transition: transform .12s, box-shadow .12s; }
+.stat.click:hover { transform: translateY(-1px); }
+.stat.on { box-shadow: inset 0 0 0 2px var(--hue); }
+.cpage h2.sec { display: flex; align-items: baseline; }
+.cpage h2.sec .sp { flex: 1; }
+.cpage .crec { max-width: none; }
+.crec.slim .chead { margin-bottom: 0; }
+.crec.slim .chead img { width: 44px; height: 44px; }
+.stat.click.on { box-shadow: inset 0 0 0 2px var(--hue) !important; }

@@ -2,6 +2,8 @@
 stores the results, reports progress while it runs and a summary when it is done."""
 import time
 
+import pytest
+
 from app import consistency
 
 
@@ -58,3 +60,27 @@ def test_results_naming_a_dropped_field_do_not_break_the_report(client):
     assert d["total"] == 1 and d["items"][0]["mismatch"] == ["title"] and "pick" not in d["items"][0]["fields"]
     with analysis._writer() as con:
         con.execute("DELETE FROM metadata_check")
+
+
+def test_photos_without_a_sidecar_are_listed_and_can_get_one(client, lib):
+    import time
+    from app import consistency, edits
+    if not edits.available():
+        pytest.skip("exiftool not available")
+    from pathlib import Path
+    pid = next((i for i in lib["ids"] if not Path(client.get(f"/api/photo/{i}").json()["path"] + ".xmp").exists()), None)
+    if pid is None:
+        pytest.skip("every scratch photo has a sidecar")
+    row = client.get(f"/api/photo/{pid}").json()
+    consistency.scan([{"id": pid, "path": row["path"], "name": row["name"], "hash": row.get("hash") or "", "size": row["size"], "modified": row["modified"], "video": row["video"]}])
+    for _ in range(100):
+        if not consistency.progress["running"]:
+            break
+        time.sleep(0.1)
+    r = client.get("/api/consistency", params={"field": "nosidecar", "limit": 5000}).json()
+    assert any(x["id"] == pid for x in r["items"])
+    assert isinstance(r["summary"]["no_sidecar"], int)
+    s = client.post("/api/consistency/sync", json={"ids": [pid], "source": "db", "targets": ["sidecar"], "fields": ["rating", "title", "caption", "tags"]})
+    assert s.status_code == 200 and s.json()["synced"] == 1, s.text
+    assert Path(row["path"] + ".xmp").exists()
+    client.post("/api/edit/revert", json={"ids": [pid]})  # put the library back: the created sidecar is removed

@@ -157,6 +157,17 @@ def compare(photos: list) -> list:
 # scanning (background) and the stored report
 # --------------------------------------------------------------------------
 
+def _cstamp(p: dict) -> str:
+    """The image file's stamp plus the sidecar's size and time: a sidecar rewritten by the viewer or by
+    digiKam (the image untouched) makes the photo "changed" for "Check new and changed photos"."""
+    try:
+        st = os.stat(p["path"] + ".xmp")
+        side = f"{st.st_size}.{int(st.st_mtime)}"
+    except OSError:
+        side = "-"
+    return f"{analysis._stamp(p)}|{side}"
+
+
 def scan(photos: list, rescan_all: bool = True):
     """Compare every given photo (rows with id, path, name, hash, size, modified) in the background."""
     init()
@@ -169,7 +180,7 @@ def scan(photos: list, rescan_all: bool = True):
             have = dict(con.execute("SELECT photo_id, stamp FROM metadata_check").fetchall())
         finally:
             con.close()
-        todo = [p for p in todo if have.get(p["id"]) != analysis._stamp(p)]
+        todo = [p for p in todo if have.get(p["id"]) != _cstamp(p)]
     progress.update(running=True, done=0, total=len(todo), error=None, failed=0, started=int(time.time()), rescan_all=bool(rescan_all))
     log.info("consistency: checking %d photos (%s)", len(todo), "all" if rescan_all else "new and changed only")
 
@@ -188,7 +199,7 @@ def scan(photos: list, rescan_all: bool = True):
                     progress["done"] += len(batch)
                     continue
                 now = int(time.time())
-                rows = [(r["id"], analysis._stamp(p), json.dumps(r), len(r["mismatch"]), r["has_sidecar"], r["file_xmp"], now)
+                rows = [(r["id"], _cstamp(p), json.dumps(r), len(r["mismatch"]), r["has_sidecar"], r["file_xmp"], now)
                         for p, r in zip(batch, recs)]
                 with analysis._write_lock:
                     con = analysis.connect()
@@ -228,7 +239,7 @@ def summary() -> dict:
             for f in fs:
                 by_field[f] += 1
             mism += bool(fs)
-        return {"scanned": scanned or 0, "mismatched": mism, "no_sidecar": no_side or 0, "by_field": by_field, "scanned_at": last}
+        return {"scanned": int(scanned or 0), "mismatched": mism, "no_sidecar": int(no_side or 0), "by_field": by_field, "scanned_at": int(last) if last else None}
     except Exception:
         return empty
     finally:
@@ -236,8 +247,13 @@ def summary() -> dict:
 
 
 def report(field: str = None, offset: int = 0, limit: int = 100) -> dict:
+    """The photos that disagree (on `field`, or on any), newest first; field "nosidecar": those without a sidecar."""
     con = analysis.connect()
     try:
+        if field == "nosidecar":
+            rows = con.execute("SELECT data FROM metadata_check WHERE has_sidecar = 0 ORDER BY photo_id DESC").fetchall()
+            recs = [json.loads(d) for (d,) in rows]
+            return {"total": len(recs), "offset": offset, "items": recs[offset:offset + limit]}
         rows = con.execute("SELECT data FROM metadata_check WHERE mismatch > 0 ORDER BY photo_id DESC").fetchall()
     finally:
         con.close()
@@ -251,6 +267,44 @@ def report(field: str = None, offset: int = 0, limit: int = 100) -> dict:
     if field:
         recs = [r for r in recs if field in r["mismatch"]]
     return {"total": len(recs), "offset": offset, "items": recs[offset:offset + limit]}
+
+
+def recheck(photo_ids: list):
+    """Compare these photos again now, in the background (after the viewer changed them), if they were compared before."""
+    ids = [int(i) for i in photo_ids]
+    if not ids:
+        return
+    con = analysis.connect()
+    try:
+        known = {r[0] for r in con.execute(f"SELECT photo_id FROM metadata_check WHERE photo_id IN ({','.join(map(str, ids))})")}
+    finally:
+        con.close()
+    if not known:
+        return
+    from . import index
+    icon = index.open_index()
+    try:
+        icon.row_factory = __import__("sqlite3").Row
+        photos = [dict(r) for r in icon.execute(f"SELECT id, path, name, hash, size, modified, video FROM photos WHERE id IN ({','.join(map(str, known))})")]
+    finally:
+        icon.close()
+
+    def work():
+        time.sleep(2)  # let the write (sidecar, database) settle
+        try:
+            recs = compare(photos)
+            now = int(time.time())
+            rows = [(r["id"], _cstamp(p), json.dumps(r), len(r["mismatch"]), r["has_sidecar"], r["file_xmp"], now) for p, r in zip(photos, recs)]
+            with analysis._write_lock:
+                c = analysis.connect()
+                try:
+                    c.executemany("INSERT OR REPLACE INTO metadata_check VALUES (?,?,?,?,?,?,?)", rows)
+                    c.commit()
+                finally:
+                    c.close()
+        except Exception:
+            log.warning("consistency: re-checking %d edited photos failed", len(photos), exc_info=True)
+    threading.Thread(target=work, name="consistency-recheck", daemon=True).start()
 
 
 def forget(photo_ids: list):
@@ -355,5 +409,5 @@ def sync(photo_ids: list, source: str, targets: list, fields: list = None) -> di
         skipped += [{"id": i, "reason": "exiftool could not write this file"} for i in failed]
         done += [i for i in dict.fromkeys(owner.values()) if i not in failed]
     done = sorted(set(done))
-    forget(done)
+    recheck(done)
     return {"synced": len(done), "skipped": skipped}

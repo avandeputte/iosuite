@@ -1375,6 +1375,18 @@ async def api_geocode(request: Request, q: str = ""):
     return await run_in_threadpool(geocode.search, q)
 
 
+@app.get("/api/elevation")
+async def api_elevation(request: Request, lat: float, lon: float):
+    """Ground height at a point for the location dialog's altitude field (Google Elevation, else Open-Meteo)."""
+    maps.note_referer(request.headers)
+    if abs(lat) > 90 or abs(lon) > 180:
+        raise HTTPException(400, "Not a position")
+    try:
+        return await run_in_threadpool(maps.elevation, lat, lon)
+    except Exception as e:
+        raise HTTPException(502, f"No elevation service could be reached: {str(e)[:160]}")
+
+
 @app.get("/api/models")
 def api_models():
     """The downloadable models and data: what is installed, and the last update check."""
@@ -1530,7 +1542,7 @@ async def api_analysis_run(request: Request):
 def api_consistency(field: str = None, offset: int = 0, limit: int = 100):
     """The metadata consistency report: photos whose database, sidecar and file disagree."""
     return {"progress": consistency.progress, "summary": consistency.summary(),
-            **consistency.report(field or None, max(0, offset), max(1, min(limit, 500)))}
+            **consistency.report(field or None, max(0, offset), max(1, min(limit, 5000)))}
 
 
 @app.post("/api/consistency/scan")
@@ -1568,7 +1580,7 @@ async def api_consistency_sync(request: Request):
 @app.get("/api/edits/db")
 def api_edits_db_status():
     return {"pending": edits.pending_count(), "digikamRunning": dbsync.digikam_running(), "enabled": config.DB_WRITE,
-            "ask": config.DIGIKAM_CHECK == "ask"}
+            "ask": config.DIGIKAM_CHECK == "none"}
 
 
 @app.post("/api/edits/db")

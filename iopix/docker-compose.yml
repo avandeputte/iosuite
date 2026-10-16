@@ -43,7 +43,7 @@ services:
       # cores one background job may use (default: half); the container cannot see digiKam, so
       # before database writes the viewer asks you to confirm digiKam is closed
       # BG_THREADS: "2"
-      DIGIKAM_CHECK: ask
+      DIGIKAM_CHECK: none
       # READ_ONLY: "1"                               # browsing only, for everyone
       # GOOGLE_MAPS_API_KEY: ""                      # Settings > Map provider can store it instead
     healthcheck:

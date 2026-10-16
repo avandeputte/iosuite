@@ -131,7 +131,7 @@ if ! pct exec "$CTID" -- bash -c "$SETUP_CMD > /opt/iopix/setup.log 2>&1"; then
   exit 1
 fi
 # the container cannot see digiKam's process on the host: ask before database writes instead of pgrep
-pct exec "$CTID" -- sh -c "grep -q ^DIGIKAM_CHECK= /opt/iopix/app/iopix.env || echo DIGIKAM_CHECK=ask >> /opt/iopix/app/iopix.env; systemctl restart iopix"
+pct exec "$CTID" -- sh -c "grep -q ^DIGIKAM_CHECK= /opt/iopix/app/iopix.env || echo DIGIKAM_CHECK=none >> /opt/iopix/app/iopix.env; systemctl restart iopix"
 msg_ok "Setup finished"
 
 msg_ok "Completed successfully!\n"

@@ -82,3 +82,30 @@ def test_google_requests_carry_the_viewer_address_as_referer(client, monkeypatch
     maps.geocode("somewhere")
     assert seen[-1].get("Referer") == "https://photo.example.net/"
     _reset()
+
+
+def test_place_search_falls_back_from_google_to_openstreetmap(monkeypatch):
+    """A Google key restricted to browser referrers is refused by Google's server-side APIs: the search
+    then answers from OpenStreetMap and says why, instead of finding nothing."""
+    from app import geocode, maps
+    geocode._cache.clear()
+    monkeypatch.setattr(maps, "provider", lambda: "google")
+    monkeypatch.setattr(maps, "geocode", lambda q: (_ for _ in ()).throw(RuntimeError("REQUEST_DENIED: API keys with referer restrictions cannot be used with this API.")))
+    monkeypatch.setattr(maps, "places_search", lambda q: [])
+    monkeypatch.setattr(geocode, "_nominatim", lambda q: [{"name": "Pittsburgh International Airport", "detail": "aerodrome", "lat": 40.49, "lon": -80.23, "zoom": 14}])
+    r = geocode.search("Pittsburgh International Airport")
+    assert r["source"] == "osm" and r["results"][0]["name"] == "Pittsburgh International Airport"
+    assert "referer restrictions" in r["note"]
+    geocode._cache.clear()
+    monkeypatch.setattr(maps, "geocode", lambda q: [])
+    monkeypatch.setattr(maps, "places_search", lambda q: [{"name": "PIT", "detail": "airport", "lat": 1, "lon": 2, "zoom": 15}])
+    assert geocode.search("pit airport")["source"] == "google", "Google Places answers named places the geocoder misses"
+    geocode._cache.clear()
+
+
+def test_elevation_endpoint(client, monkeypatch):
+    from app import maps
+    monkeypatch.setattr(maps, "elevation", lambda lat, lon: {"alt": 367.0, "source": "Open-Meteo", "note": None})
+    r = client.get("/api/elevation", params={"lat": 40.49, "lon": -80.23})
+    assert r.status_code == 200 and r.json()["alt"] == 367.0
+    assert client.get("/api/elevation", params={"lat": 140, "lon": 0}).status_code == 400

@@ -26,11 +26,11 @@ COPY static ./static
 # editable install: the app runs from /app (its static files sit next to the package)
 RUN pip install --no-cache-dir -e ".$([ "$AI" = "1" ] && echo [ai])" \
     && if [ "$CAPTIONS" = "1" ]; then pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu -e ".[captions]"; fi
-# DIGIKAM_CHECK=ask: the container cannot see the host's processes, so before writing digiKam's
-# database the viewer asks you to confirm digiKam is closed. HF_HUB_OFFLINE=1: the server never
+# DIGIKAM_CHECK=none: the container cannot see the host's processes, so the viewer does not check
+# whether digiKam is open before writing its database. HF_HUB_OFFLINE=1: the server never
 # contacts the model hub (downloads run in a child process that turns it back on).
 ENV DIGIKAM_DB_DIR=/library/digikamDB PHOTOS_ROOT=/library/photos DATA_DIR=/data \
-    DIGIKAM_CHECK=ask HF_HUB_OFFLINE=1 CAPTIONS=${CAPTIONS} PYTHONUNBUFFERED=1 \
+    DIGIKAM_CHECK=none HF_HUB_OFFLINE=1 CAPTIONS=${CAPTIONS} PYTHONUNBUFFERED=1 \
     AUTO_MODELS=siglip2,yolox,geonames
 EXPOSE 8600
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8600/api/status', timeout=4)" || exit 1

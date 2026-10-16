@@ -10,6 +10,7 @@ import threading
 import time
 import urllib.parse
 import urllib.request
+import logging
 from collections import OrderedDict
 
 from . import maps, places
@@ -20,6 +21,7 @@ _cache = OrderedDict()
 _lock = threading.Lock()
 _last = [0.0]
 _offline_until = [0.0]
+log = logging.getLogger("app.geocode")
 
 
 def _fetch(q: str) -> list:
@@ -73,6 +75,29 @@ def _offline(q: str) -> list:
     return [h[1] for h in hits[:8]]
 
 
+def _online(q: str):
+    """Google (Geocoding, then Places for named places such as airports) when it is the provider, and
+    OpenStreetMap whenever Google finds nothing or refuses (a key restricted to browser referrers is
+    refused by Google's server-side APIs). None when no service could be reached."""
+    notes = []
+    if maps.provider() == "google":
+        for name, fn in (("Geocoding API", maps.geocode), ("Places API (New)", maps.places_search)):
+            try:
+                rows = fn(q)
+                if rows:
+                    return {"results": rows, "source": "google"}
+            except Exception as e:
+                notes.append(f"Google {name}: {str(e)[:160]}")
+        if notes:
+            log.warning("place search %r: %s; using OpenStreetMap", q, "; ".join(notes))
+    try:
+        rows = _nominatim(q)
+    except Exception as e:
+        log.warning("place search %r: OpenStreetMap unreachable (%s)", q, e)
+        return None
+    return {"results": rows, "source": "osm", "note": ("Google could not search (" + "; ".join(notes) + "); these results are from OpenStreetMap.") if notes else None}
+
+
 def search(q: str) -> dict:
     key = q.strip().lower()
     with _lock:
@@ -80,9 +105,8 @@ def search(q: str) -> dict:
             _cache.move_to_end(key)
             return _cache[key]
     if time.time() > _offline_until[0]:
-        try:
-            res = {"results": maps.geocode(q), "source": "google"} if maps.provider() == "google" else {"results": _nominatim(q), "source": "osm"}
-        except Exception:
+        res = _online(q)
+        if res is None:
             _offline_until[0] = time.time() + 60  # don't hammer a dead connection; retry a minute later
             res = {"results": _offline(q), "source": "offline"}
     else:
