@@ -87,10 +87,9 @@ def test_mysql_change_fingerprint_sees_edits_in_place(monkeypatch):
     assert any("CRC32" in s and "FROM Tags" in s for s in sqls) and any("FROM TagProperties" in s for s in sqls) and any("CRC32" in s and "FROM ImageTagProperties" in s for s in sqls)
 
 
-def test_daily_backup_mode_reuses_a_recent_dump(monkeypatch, tmp_path):
-    """MySQL, mode daily: ordinary edits reuse a dump from the last 24 h; bulk/destructive ones
-    (force=True) always dump; auto dumps every time."""
-    import os, time
+def test_mysql_dump_only_for_destructive_operations(monkeypatch, tmp_path):
+    """MySQL: ordinary changes take no dump (whatever the mode); destructive ones (force=True) take a fresh one
+    each time in auto and daily (the old name for auto); skip never dumps."""
     from app import dkdb
     monkeypatch.setattr(dkdb, "BACKUP_DIR", tmp_path)
     monkeypatch.setattr(dkdb, "is_mysql", lambda: True)
@@ -103,16 +102,15 @@ def test_daily_backup_mode_reuses_a_recent_dump(monkeypatch, tmp_path):
         return R()
     monkeypatch.setattr(dkdb.subprocess, "run", fake_run)
     monkeypatch.setattr(dkdb.shutil, "which", lambda n: "/usr/bin/mysqldump")
-    first = dkdb.backup()
+    assert dkdb.backup() is None and not calls, "an ordinary change: no dump"
+    first = dkdb.backup(force=True)
     assert first.exists() and len(calls) == 1
-    assert dkdb.backup() == first and len(calls) == 1, "within the day: reused"
-    assert dkdb.backup(force=True) != first and len(calls) == 2, "forced: a new dump"
-    old = time.time() - 25 * 3600
-    for p in tmp_path.glob("digikam-mysql-*.sql"):
-        os.utime(p, (old, old))
-    dkdb.backup(); assert len(calls) == 3, "older than a day: a new dump"
+    assert dkdb.backup(force=True) != first and len(calls) == 2, "each destructive operation gets its own"
     mode["backup"] = "auto"
-    dkdb.backup(); dkdb.backup(); assert len(calls) == 5, "auto: every time"
+    dkdb.backup(); assert len(calls) == 2
+    dkdb.backup(force=True); assert len(calls) == 3
+    mode["backup"] = "skip"
+    assert dkdb.backup(force=True) is None and len(calls) == 3
 
 
 def test_a_bad_database_setting_does_not_kill_the_index_watcher(client, lib):

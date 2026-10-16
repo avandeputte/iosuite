@@ -22,13 +22,22 @@ def _people_root(con):
     return con.execute("SELECT id FROM Tags WHERE name = 'People' AND pid = 0").fetchone()[0]
 
 
-def test_backups_are_taken_and_capped(dk, client):
-    before = sorted((config.DATA_DIR / "db-backups").glob("digikam4-*.db")) if (config.DATA_DIR / "db-backups").exists() else []
-    for i in range(12):
-        tagmanager.apply({"op": "add", "parent": 0, "name": f"zz-backup-probe-{i}"}, check_running=False)
-    after = sorted((config.DATA_DIR / "db-backups").glob("digikam4-*.db"))
-    assert len(after) == dkdb.KEEP_BACKUPS, "at most KEEP_BACKUPS copies are kept"
-    assert len(after) >= min(dkdb.KEEP_BACKUPS, len(before) + 1)
+def _backups():
+    d = config.DATA_DIR / "db-backups"
+    return sorted(d.glob("digikam4-*.db")) if d.exists() else []
+
+
+def test_ordinary_changes_take_no_backup_destructive_ones_do_and_are_capped(dk, client):
+    """A full copy of digiKam's database on every change made changes slow (seconds on MariaDB): ordinary
+    changes take none; deleting a tag (destructive) does, and at most KEEP_BACKUPS copies are kept."""
+    before = _backups()
+    ids = [tagmanager.apply({"op": "add", "parent": 0, "name": f"zz-backup-probe-{i}"}, check_running=False)["id"] for i in range(12)]
+    tagmanager.apply({"op": "rename", "id": ids[0], "name": "zz-backup-probe-renamed"}, check_running=False)
+    assert _backups() == before, "adding and renaming tags take no full backup"
+    for tid in ids:
+        tagmanager.apply({"op": "delete", "id": tid}, check_running=False)
+    after = _backups()
+    assert len(after) == min(dkdb.KEEP_BACKUPS, len(before) + len(ids)), "deleting a tag takes one; at most KEEP_BACKUPS are kept"
 
 
 def test_add_rename_move_delete_plain_tag(dk):

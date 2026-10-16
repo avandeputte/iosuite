@@ -83,6 +83,7 @@ def write_transaction(db_path: Path = None, check_running: bool = True):
         if check_running and digikam_running():
             raise SyncError("digiKam was started during the update; nothing was changed.")
         con.commit()
+        dkdb.note_own_write()
     except BaseException:
         try:
             con.rollback()
@@ -154,7 +155,7 @@ def apply_pending(db_path: Path = None, pending: dict = None, check_running: boo
     preflight(db_path, check_running)
     if not dkdb.is_mysql() and not dkdb.standalone() and not os.access(db_path, os.W_OK):
         raise SyncError("The digiKam database file is not writable.")
-    backup = dkdb.backup(db_path, force=True)  # applying pending edits touches many rows: always a fresh dump
+    backup = None  # ordinary edits: no full database copy (each is in the change log, and the sidecars have their own backups)
 
     applied, skipped = [], []
     with write_transaction(db_path, check_running) as con:

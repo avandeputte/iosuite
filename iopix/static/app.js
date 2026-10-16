@@ -1114,7 +1114,7 @@ function dateEditor(ids, current, after) {
 /** Face detection on request: a photo (answered at once) or a folder (in the background). Faces already
  *  marked, by digiKam or anything else, are kept; only faces nothing marked become new unnamed faces. */
 async function detectFaces(ids, folder) {
-  if (folder && !confirm(`Look for faces in the ${nf.format(folder.nAll)} photos of “${folder.path.replace(/^\//, '')}” (with its subfolders)? New faces are added to digiKam’s database as unnamed faces (backed up first); faces already marked stay as they are.`)) return;
+  if (folder && !confirm(`Look for faces in the ${nf.format(folder.nAll)} photos of “${folder.path.replace(/^\//, '')}” (with its subfolders)? New faces are added to digiKam’s database as unnamed faces; faces already marked stay as they are.`)) return;
   if (!folder) toast('Looking for faces…', null, null, 30000);
   let r;
   try { r = await post('/api/faces/detect', folder ? { album: folder.id } : { ids }); } catch (e) { toast(e.message, null, null, 9000); return; }
@@ -1932,7 +1932,7 @@ function aiSection(view) {
     };
     // face detection writes to digiKam's database, so it never starts by itself: a Run link for the photos not looked at yet
     const runNow = (j) => j && j.key === 'facedetect' && j.enabled && !j.running && j.done < j.total ? h('a', { class: 'lnk mrerun', style: 'margin-right:12px', title: 'Look for faces in every photo not looked at yet', onclick: async () => {
-      if (!confirm(`Look for faces in the ${nf.format(j.total - j.done)} photos not checked yet? New faces are added to digiKam’s database as unnamed faces (backed up first); faces already marked are kept as they are.`)) return;
+      if (!confirm(`Look for faces in the ${nf.format(j.total - j.done)} photos not checked yet? New faces are added to digiKam’s database as unnamed faces; faces already marked are kept as they are.`)) return;
       try { const r = await post('/api/analysis/run', { job: 'facedetect' }); toast(`Looking for faces in ${nf.format(r.queued)} photos.`); } catch (e) { toast(e.message); }
       draw();
     } }, 'Run') : null;
@@ -2064,7 +2064,7 @@ async function showConsistency() {
   // one photo: copy the chosen source's values to the other places that can hold them
   const fixOne = async (r, src) => {
     const targets = ['db', 'sidecar', 'file'].filter((t) => t !== src && (t !== 'file' || r.file_editable));
-    if (!confirm(`Copy ${r.mismatch.map((f) => (FIELD_LABEL[f] || f).toLowerCase()).join(', ')} from the ${SRC_LABEL[src].toLowerCase()} to the ${targets.map((t) => SRC_LABEL[t].toLowerCase()).join(' and ')} for ${r.name}?` + (targets.includes('db') ? '\n\ndigiKam must be closed; its database is backed up first.' : ''))) return;
+    if (!confirm(`Copy ${r.mismatch.map((f) => (FIELD_LABEL[f] || f).toLowerCase()).join(', ')} from the ${SRC_LABEL[src].toLowerCase()} to the ${targets.map((t) => SRC_LABEL[t].toLowerCase()).join(' and ')} for ${r.name}?` + (targets.includes('db') ? '\n\nThis writes into digiKam’s database.' : ''))) return;
     try { const res = await post('/api/consistency/sync', { ids: [r.id], source: src, targets, fields: r.mismatch }); toast(res.synced ? `Fixed ${r.name}.` : `Not fixed: ${res.skipped[0]?.reason || 'nothing to copy'}`, null, null, 8000); } catch (e) { toast(e.message, null, null, 9000); return; }
     load();
   };
@@ -2076,7 +2076,7 @@ async function showConsistency() {
     const n = selected.size;
     if (!targets.length) { toast('Pick at least one place to copy to, other than the source.'); return; }
     if (!confirm(`Copy ${fields.map((f) => (FIELD_LABEL[f] || f).toLowerCase()).join(', ')} from the ${SRC_LABEL[src].toLowerCase()} to the ${targets.map((t) => SRC_LABEL[t].toLowerCase()).join(' and ')} for ${nf.format(n)} ${n === 1 ? 'photo' : 'photos'}?` +
-      (targets.includes('db') ? '\n\ndigiKam must be closed; its database is backed up first.' : '') + (targets.includes('file') ? '\n\nImage files are rewritten in place (metadata only; pixels untouched); the original of each is kept in the viewer’s file-backups folder. Files that cannot hold metadata are skipped.' : '') + '\n\nSidecars are backed up before they change.')) return;
+      (targets.includes('db') ? '\n\nThis writes into digiKam’s database.' : '') + (targets.includes('file') ? '\n\nImage files are rewritten in place (metadata only; pixels untouched); the original of each is kept in the viewer’s file-backups folder. Files that cannot hold metadata are skipped.' : '') + '\n\nSidecars are backed up before they change.')) return;
     fill(syncBar, h('span', { class: 'n' }, `Syncing ${nf.format(n)} photos…`));
     try {
       const r = await post('/api/consistency/sync', { ids: [...selected], source: src, targets, fields });
@@ -2346,7 +2346,7 @@ async function settingsPage(view) {
       const type = h('select', null, h('option', { value: 'sqlite', selected: d.type !== 'mysql' }, 'SQLite (digikam4.db file)'), h('option', { value: 'mysql', selected: d.type === 'mysql' }, 'MySQL / MariaDB'));
       const f = { sqlite_dir: inp('sqlite_dir', 'folder with digikam4.db', 'text', 320), host: inp('host', 'host'), port: inp('port', 'port', 'text', 70), database: inp('database', 'database'), user: inp('user', 'user'),
         password: inp('password', d.password_set ? 'password (stored; leave empty to keep)' : 'password', 'password', 220) };
-      const backup = h('select', null, [['auto', 'back up before every write (file copy / mysqldump)'], ['daily', 'MySQL: at most one dump a day for ordinary edits; always before bulk or destructive ones'], ['skip', 'no backup (the server is backed up elsewhere)']].map(([v, l]) => h('option', { value: v, selected: (d.backup || 'auto') === v }, l)));
+      const backup = h('select', null, [['auto', 'full backup only before deleting photos or a tag, or a merge'], ['skip', 'never (the server is backed up elsewhere)']].map(([v, l]) => h('option', { value: v, selected: (d.backup === 'skip' ? 'skip' : 'auto') === v }, l)));
       const sq = h('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;margin-top:6px' }, f.sqlite_dir), my = h('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;margin-top:6px' }, f.host, f.port, f.database, f.user, f.password);
       const show = () => { sq.hidden = type.value !== 'sqlite'; my.hidden = type.value !== 'mysql'; }; type.onchange = show; show();
       const payload = () => ({ type: type.value, sqlite_dir: f.sqlite_dir.value, host: f.host.value, port: f.port.value, database: f.database.value, user: f.user.value, password: f.password.value, backup: backup.value });
@@ -3287,12 +3287,12 @@ function personPicker(onPick) {
   const createPerson = (name) => {
     const fam = h('select', null, h('option', { value: 0 }, 'directly under People'), families.map((t) => h('option', { value: t.id }, t.name)));
     const sub = modal(`New person “${name}”`, h('div', { class: 'erow' }, h('span', { class: 'el' }, 'Family'), fam),
-      h('p', { class: 'muted', style: 'font-size:12.5px' }, 'Created in digiKam’s database as a person tag (digiKam closed, backup first).'),
+      h('p', { class: 'muted', style: 'font-size:12.5px' }, 'Created in digiKam’s database as a person tag.'),
       h('div', { class: 'modal-btns' }, h('button', { class: 'pillbtn', onclick: () => sub.remove() }, 'Cancel'), h('button', { class: 'pillbtn on', onclick: async () => {
         let r;
         try { r = await post('/api/faces/person', { name, parent: +fam.value || (META.tags.find((t) => t.full === 'People')?.id || 0) }); } catch (e) { toast(e.message, null, null, 9000); return; }
         sub.remove(); back.remove();
-        await awaitReindex((m) => m.tags.some((t) => t.id === r.id));
+        await awaitReindex((m) => m.tags.some((t) => t.id === r.id), 50, 300);
         const t = tagById.get(r.id); if (t) onPick(t); else toast('Person created; it will appear shortly.');
       } }, 'Create')));
   };

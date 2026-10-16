@@ -191,6 +191,36 @@ def read_rows(src) -> dict:
         src.rollback()
 
 
+_copy_lock = threading.Lock()
+_copy_wanted = threading.Event()
+
+
+def refresh_library_soon():
+    """Bring the viewer's copy of the library up to date in the background, one copy at a time; changes that
+    arrive meanwhile are folded into one more copy. Skipped when sync was turned off since, or when the copy
+    holds changes made with sync off (those are merged, never overwritten)."""
+    _copy_wanted.set()
+    if _copy_lock.locked():
+        return
+
+    def run():
+        with _copy_lock:
+            while _copy_wanted.is_set():
+                _copy_wanted.clear()
+                try:
+                    m = mirror_info()
+                    if not sync_enabled() or (m and m["local_changes"]):
+                        return
+                    if m and m["source"] == dkdb.source_version():
+                        continue
+                    refresh_library()
+                except SOURCE_ERRORS as e:
+                    log.info("the library copy was not refreshed (digiKam unreachable): %s", e)
+                except Exception as e:
+                    log.warning("the library copy was not refreshed: %s", e, exc_info=True)
+    threading.Thread(target=run, name="library-copy", daemon=True).start()
+
+
 def refresh_library():
     """Copy digiKam's tables into the library tables (one snapshot, one transaction)."""
     src = dkdb.connect(write=False, real=True)
@@ -344,22 +374,35 @@ def _build(dst_path: Path, source: tuple) -> dict:
     t0 = time.time()
     geo = places.geocoder()
     kind, ver = source or probe()
+    raw = None
     if kind == "digikam":
         m = mirror_info()
         try:
-            if not m or m["source"] != ver:
+            if not m:  # the very first copy: taken now, and the index is read from it
                 refresh_library()
+            elif m["source"] != ver:
+                # digiKam changed (often a change made here a moment ago): the index is read from digiKam
+                # itself, and the viewer's copy of the library follows in the background. Copying first put
+                # several seconds (on MariaDB) between a change and its showing up.
+                src = dkdb.connect(write=False, real=True)
+                try:
+                    raw = read_rows(src)
+                    root_path = dkdb.root_paths(src)
+                finally:
+                    src.close()
+                refresh_library_soon()
         except SOURCE_ERRORS as e:
             _set_offline(e)
             if not m:
                 raise Unavailable(f"digiKam's database cannot be read and the viewer has no copy of the library yet: {e}") from e
-            kind, ver = "library", library.version()
-    con = library.connect()
-    try:
-        raw = read_rows(con)
-        root_path = dkdb.root_paths(con)
-    finally:
-        con.close()
+            kind, ver, raw = "library", library.version(), None
+    if raw is None:
+        con = library.connect()
+        try:
+            raw = read_rows(con)
+            root_path = dkdb.root_paths(con)
+        finally:
+            con.close()
     version = _version_for(ver)
     last_source.update(kind=kind, version=ver)
 
@@ -645,6 +688,7 @@ def _build(dst_path: Path, source: tuple) -> dict:
         raise
     dst.close()
     os.replace(tmp, dst_path)
+    log.info("index built from %s in %.1fs: %d photos", "digiKam's database" if kind == "digikam" else "the library copy", time.time() - t0, len(photos))
     return stats
 
 

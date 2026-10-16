@@ -10,7 +10,7 @@ Settings (environment):
   DIGIKAM_DB_TYPE      sqlite (default) or mysql
   DIGIKAM_DB_DIR       folder with digikam4.db          (sqlite)
   DIGIKAM_DB_HOST/PORT/NAME/USER/PASSWORD                (mysql; NAME defaults to "digikam")
-  DIGIKAM_DB_BACKUP    auto (default: file copy, or mysqldump when installed) or skip
+  DIGIKAM_DB_BACKUP    auto (default: a full copy before destructive operations only) or skip (never); daily, the old name, means auto
   DIGIKAM_DB_DUMP      optional: a command that writes a full dump to stdout, used instead of
                        mysqldump, e.g. "docker exec iopix-mariadb mariadb-dump -udigikam -pX digikam"
 """
@@ -355,14 +355,25 @@ def source_version() -> str:
         return "|".join(parts)
 
 
+_own_write = {"at": 0.0}  # when this viewer last committed a write to digiKam's database
+
+
+def note_own_write():
+    _own_write["at"] = time.time()
+
+
 def busy_recently(seconds: float = 3) -> bool:
-    """SQLite: digiKam wrote the file within the last few seconds, so wait a bit."""
+    """SQLite: digiKam wrote the file within the last few seconds, so wait a bit. A write this viewer
+    just made is not digiKam busy: the index is rebuilt at once, so the change shows without the wait."""
     if is_mysql() or standalone():
         return False
     try:
-        return time.time() - os.stat(sqlite_path()).st_mtime < seconds
+        mtime = os.stat(sqlite_path()).st_mtime
     except OSError:
         return False
+    if abs(mtime - _own_write["at"]) < 2:
+        return False
+    return time.time() - mtime < seconds
 
 
 def journal_pending(db_path=None) -> bool:
@@ -396,18 +407,17 @@ def last_change_time():
 # backups before writing
 # --------------------------------------------------------------------------
 
-DAILY_SECONDS = 24 * 3600
 
 
 def backup(db_path=None, force: bool = False):
-    """A copy of the database before it is changed. SQLite: the file (cheap, always). MySQL: a
-    mysqldump when the tool is installed; with backup mode `daily` a dump from the last 24 hours
-    is reused for ordinary edits (a badge, a tag, a face), while `force=True` (bulk or destructive
-    operations) always takes a fresh one. `skip` means the owner backs the server up another way,
-    otherwise a missing dump tool refuses the write.
-    With Sync with digiKam off the change goes to the library tables in the viewer's own database,
-    which the app backup covers: nothing to copy here."""
-    if standalone():
+    """A full copy of digiKam's database, only before a destructive operation (force=True: deleting photos,
+    deleting a tag, merging changes made with sync off, or the backup download). Ordinary changes (a face, a
+    tag, a person, an edit, a folder, an upload) take none: a full copy on every change made them slow, and
+    each of those is recorded in the change log with what it changed. SQLite: the file. MySQL: a mysqldump
+    when the tool is installed, else the operation is refused. Backup mode `skip`: never (the owner backs
+    the server up another way). With Sync with digiKam off the change goes to the library tables in the
+    viewer's own database, which the app backup covers: nothing to copy here."""
+    if not force or standalone():
         return None
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
     stamp, n = time.strftime("%Y%m%d-%H%M%S"), 0
@@ -420,13 +430,8 @@ def backup(db_path=None, force: bool = False):
         shutil.copy2(src, dst)
         _prune("digikam4-*.db")
         return dst
-    mode = settings()["backup"]
-    if mode == "skip":
+    if settings()["backup"] == "skip":
         return None
-    if mode == "daily" and not force:
-        recent = sorted(BACKUP_DIR.glob("digikam-mysql-*.sql"), key=lambda p: p.stat().st_mtime)
-        if recent and time.time() - recent[-1].stat().st_mtime < DAILY_SECONDS:
-            return recent[-1]  # today's dump covers this edit
     custom = os.environ.get("DIGIKAM_DB_DUMP", "").strip()
     tool = shutil.which("mysqldump") or shutil.which("mariadb-dump")
     if not tool and not custom:

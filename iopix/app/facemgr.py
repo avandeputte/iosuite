@@ -127,7 +127,7 @@ def apply_many(ops: list, db_path=None, check_running: bool = True) -> list:
     dbsync.preflight(db_path, check_running, "faces")
     results, touched = [], []
     with _lock:
-        backup = dkdb.backup(db_path, force=len(ops) > 20)  # a big batch gets its own fresh dump
+        backup = None  # face changes take no full database copy; each is in the change log
         with dbsync.write_transaction(db_path, check_running) as con:
             sp = _special(con)
             for op in ops:
@@ -225,6 +225,7 @@ def create_person(name: str, parent: int = 0) -> int:
         con.begin_write()
         _ensure_person(con, tid)
         con.commit()
+        dkdb.note_own_write()
     except BaseException:
         con.rollback()
         raise
