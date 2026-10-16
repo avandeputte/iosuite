@@ -914,6 +914,20 @@ function modal(title, ...kids) {
   document.body.append(back);
   return back;
 }
+/** Maintenance › Face quality › Review: the same person in two places, and broken rectangles; each photo opens in the viewer. */
+function qualityDialog(q) {
+  const item = (x, what) => h('div', { class: 'hrow' },
+    h('img', { src: `/thumb/${x.photo}`, alt: '', loading: 'lazy', onclick: () => { back.remove(); openLightbox({ id: [x.photo] }, 0, true); } }),
+    h('div', { class: 'hmain' }, h('div', null, h('b', null, x.name), ' ', what(x))));
+  const back = modal('Faces to look at',
+    q.separate.count ? [h('h4', null, `Same person in two places (${nf.format(q.separate.count)})`), h('p', { class: 'muted', style: 'font-size:12.5px' }, 'Usually one of the two is someone else, named by mistake. Open the photo, show the faces (F) and rename or remove the wrong one.'),
+      h('div', { class: 'hlist' }, q.separate.items.map((x) => item(x, (y) => `${y.rects.length} regions`)))] : null,
+    q.invalid.count ? [h('h4', null, `Empty or outside the photo (${nf.format(q.invalid.count)})`),
+      h('div', { class: 'hlist' }, q.invalid.items.map((x) => item(x, (y) => y.rect ? `${y.rect[2]} × ${y.rect[3]} at ${y.rect[0]}, ${y.rect[1]} on a ${y.size[0]} × ${y.size[1]} photo` : 'unreadable rectangle')))] : null,
+    (q.separate.count > q.separate.items.length || q.invalid.count > q.invalid.items.length) ? h('p', { class: 'muted' }, 'The first ones are shown.') : null,
+    h('div', { class: 'modal-btns' }, h('button', { class: 'pillbtn on', onclick: () => back.remove() }, 'Close')));
+  back.firstChild.classList.add('wide');
+}
 /** Maintenance › Server log: the end of data/viewer.log, filtered by level and text; page requests hidden unless asked. */
 function logDialog() {
   const level = h('select', null, h('option', { value: 'any' }, 'Everything'), h('option', { value: 'warning' }, 'Warnings and errors'), h('option', { value: 'error' }, 'Errors only'));
@@ -2456,6 +2470,27 @@ async function settingsPage(view) {
       }).catch(() => fill(line, ''));
       return row('Metadata consistency', h('span', null, line, ' Rating, title, caption and tags are compared in the three places they live; disagreements can be synced in either direction.'),
         h('a', { class: 'pillbtn on', href: '#/consistency' }, 'Open'));
+    })(),
+    (() => {  // face metadata quality: duplicates (fixable in one go), and what needs a person to look
+      const line = h('span', null, 'Checking…'), acts = h('span', { style: 'display:inline-flex;gap:8px;flex-wrap:wrap' });
+      const draw = async () => {
+        let q; try { q = await api('/api/quality'); } catch (e) { fill(line, e.message); return; }
+        const p = q.progress || {};
+        if (p.running) { fill(line, `Removing duplicate faces… ${nf.format(p.done)} / ${nf.format(p.total)} photos, ${nf.format(p.removed)} regions removed.`); fill(acts); setTimeout(() => { if (line.isConnected) draw(); }, 3000); return; }
+        const done = p.finished ? ` Last clean-up: ${nf.format(p.removed)} duplicate regions removed on ${plural(p.photos, 'photo')}${p.errors ? `, ${nf.format(p.errors)} sidecars could not be rewritten` : ''}${p.error ? ` (stopped: ${p.error})` : ''}.` : '';
+        fill(line, (q.near.extra ? `${plural(q.near.extra, 'face region is a duplicate', 'face regions are duplicates')} of another one of the same person, a few pixels away, on ${plural(q.near.photos, 'photo')}, so those people are listed twice. ` : 'No face is stored twice. ')
+          + (q.separate.count ? `${plural(q.separate.count, 'photo has', 'photos have')} the same person in two separate places. ` : '')
+          + (q.invalid.count ? `${plural(q.invalid.count, 'face rectangle is', 'face rectangles are')} empty or outside the photo.` : '') + done);
+        fill(acts,
+          q.near.extra && CAN_MANAGE ? btn(`Remove ${nf.format(q.near.extra)} duplicates`, async () => {
+            if (!confirm(`Remove ${nf.format(q.near.extra)} duplicate face regions on ${plural(q.near.photos, 'photo')}? Of each person's near-identical regions one is kept. digiKam's database is backed up first, the sidecars of those photos are rewritten (not the image files), and each photo gets a change-log entry with its old sidecar.`)) return;
+            try { const r = await post('/api/quality/fix', {}); toast(`Cleaning up ${plural(r.photos, 'photo')} in the background.`); } catch (e) { toast(e.message, null, null, 9000); }
+            draw();
+          }, true) : null,
+          q.separate.count || q.invalid.count ? btn('Review the others', () => qualityDialog(q)) : null);
+      };
+      draw();
+      return row('Face quality', h('span', null, line, ' '), acts);
     })(),
     EDITING ? row('Edits waiting for digiKam', m.pendingEdits ? `${plural(m.pendingEdits, 'photo has', 'photos have')} edits saved in sidecars that digiKam’s database does not have yet. digiKam is ${m.digikamRunning ? 'running, so they cannot be applied right now' : 'closed, so they can be applied now'}.` : 'None. digiKam’s database and the sidecars agree.',
       m.pendingEdits ? btn('Apply to digiKam database…', dbDialog, !m.digikamRunning) : null) : null,

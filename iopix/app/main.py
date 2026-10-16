@@ -245,11 +245,11 @@ WRITE_PATHS = ("/api/edit", "/api/edits/db", "/api/faces/detect", "/api/photos/d
                "/api/faces/person", "/api/placetags", "/api/tags/op")
 
 
-ADMIN_PATHS = ("/api/settings", "/api/maintenance", "/api/log", "/api/library/merge", "/api/consistency/scan", "/api/analysis/run", "/api/models/check", "/api/models/download", "/api/restart", "/api/users", "/api/update", "/api/neardups")
+ADMIN_PATHS = ("/api/settings", "/api/maintenance", "/api/quality", "/api/log", "/api/library/merge", "/api/consistency/scan", "/api/analysis/run", "/api/models/check", "/api/models/download", "/api/restart", "/api/users", "/api/update", "/api/neardups")
 SIGNED_IN_PATHS = ("/api/favorites", "/api/ualbums", "/api/searches", "/api/tags/recent", "/api/auth/settings", "/api/auth/password")
 # reads that are not for everyone, whatever the method: the server log and the merge plan (admins); the change log and
 # the elevation lookup, which spends Google credits (editors)
-ADMIN_READ_PATHS = ("/api/log", "/api/library/merge")
+ADMIN_READ_PATHS = ("/api/log", "/api/library/merge", "/api/quality")
 EDITOR_READ_PATHS = ("/api/history", "/api/elevation")
 
 
@@ -1695,6 +1695,29 @@ async def api_library_merge():
         raise HTTPException(500, f"The merge failed and was rolled back: {e}")
     await run_in_threadpool(_rebuild_after_write)
     return r
+
+
+@app.get("/api/quality")
+def api_quality():
+    """Maintenance › Metadata quality: face regions stored twice, the same person in two places, broken rectangles."""
+    from . import facequality
+    try:
+        return facequality.summary()
+    except (*DB_ERRORS, dbsync.SyncError) as e:
+        raise HTTPException(503, f"Could not read the face regions: {str(e)[:200]}")
+
+
+@app.post("/api/quality/fix")
+async def api_quality_fix():
+    """Remove the near-duplicate face regions (one kept per group), rewrite those sidecars, in the background."""
+    from . import facequality
+    if not config.DB_WRITE or appstate.read_only():
+        raise HTTPException(403, "Writing to digiKam's database is turned off")
+    try:
+        n = await run_in_threadpool(facequality.fix_near_duplicates, _rebuild_after_write)
+    except dbsync.SyncError as e:
+        raise HTTPException(409, str(e))
+    return {"photos": n}
 
 
 @app.get("/api/history")

@@ -156,6 +156,18 @@ def apply_many(ops: list, db_path=None, check_running: bool = True) -> list:
     return results
 
 
+def _person_already_there(con, image: int, tag: int, rect) -> bool:
+    """Whether this person already has a face region on the photo within a few pixels of rect (the duplicates
+    Maintenance › Metadata quality cleans up must not be made here)."""
+    from .facequality import NEAR
+    x, y, w, h = map(int, rect)
+    for (val,) in con.execute("SELECT value FROM ImageTagProperties WHERE imageid = ? AND tagid = ? AND property = 'tagRegion'", (image, tag)):
+        m = index.RECT_RE.search(val or "")
+        if m and all(abs(a - b) <= NEAR for a, b in zip(map(int, m.groups()), (x, y, w, h))):
+            return True
+    return False
+
+
 def _apply_one(con, sp: dict, op: dict) -> dict:
     kind_op = op.get("op")
     image = int(op.get("image") or 0)
@@ -176,6 +188,8 @@ def _apply_one(con, sp: dict, op: dict) -> dict:
             raise SyncError("Choose a person for the new face.")
         if kind is not None:
             raise SyncError("There is already a face at exactly that rectangle.")
+        if _person_already_there(con, image, new_tag, op["rect"]):
+            raise SyncError("That person already has a face there; a second region would list them twice.")
         _add_confirmed(con, image, new_tag, rect)
         summary.update(tag=new_tag, name=_full(con, new_tag))
         return summary
@@ -185,6 +199,8 @@ def _apply_one(con, sp: dict, op: dict) -> dict:
         new_tag = int(op.get("tag") or 0)
         if new_tag in sp.values() or not con.execute("SELECT 1 FROM Tags WHERE id = ?", (new_tag,)).fetchone():
             raise SyncError("Choose a person.")
+        if new_tag != tag and _person_already_there(con, image, new_tag, op["rect"]):
+            raise SyncError("That person already has a face there; remove this region instead of naming it.")
         _remove_face(con, sp, image, tag, kind, rect, touch_tags=(tag != new_tag))
         _add_confirmed(con, image, new_tag, rect)
         summary.update(tag=new_tag, name=_full(con, new_tag), was=kind)
@@ -272,34 +288,32 @@ def _struct(v) -> str:
 
 def write_regions(image: int, db_path=None) -> str:
     """Rewrite the sidecar's (and file's, if enabled) face regions from the database."""
-    db_path = Path(db_path or dkdb.sqlite_path())
-    src = dkdb.connect(write=False, db_path=db_path)
-    try:
-        row = src.execute(
-            "SELECT i.name, a.albumRoot, a.relativePath, ii.width, ii.height, ii.orientation FROM Images i "
-            "JOIN Albums a ON a.id = i.album LEFT JOIN ImageInformation ii ON ii.imageid = i.id WHERE i.id = ?", (image,)).fetchone()
-        if not row:
-            return "no such image"
-        path = dkdb.root_paths(src).get(row[1], "") + row[2].rstrip("/") + "/" + row[0]
-        tags = dkdb.tag_tree(src)
-        faces = []
-        for tid, val in src.execute("SELECT tagid, value FROM ImageTagProperties WHERE imageid = ? AND property = 'tagRegion'", (image,)):
-            m = index.RECT_RE.search(val or "")
-            if m:
-                faces.append((dkdb.tag_path(tags, tid).split("/")[-1], tuple(map(int, m.groups()))))
-        # people assigned without a region are written as name-only MP regions, as digiKam does
-        with_region = {n for n, _ in faces}
-        persons = {r[0] for r in src.execute("SELECT tagid FROM TagProperties WHERE property = 'person'")}
-        for (tid,) in src.execute("SELECT tagid FROM ImageTags WHERE imageid = ?", (image,)):
-            if tid in persons:
-                n = dkdb.tag_path(tags, tid).split("/")[-1]
-                if n not in with_region:
-                    faces.append((n, None))
-        w, h, orient = row[3] or 0, row[4] or 0, row[5] or 1
-    finally:
-        src.close()
+    return write_regions_many([image], db_path).get(int(image), "failed")
+
+
+def _region_args(src, image: int, roots: dict, tags: dict, persons: set):
+    """(photo path, exiftool arguments) that write this photo's regions as the database has them, or (None, why)."""
+    row = src.execute(
+        "SELECT i.name, a.albumRoot, a.relativePath, ii.width, ii.height, ii.orientation FROM Images i "
+        "JOIN Albums a ON a.id = i.album LEFT JOIN ImageInformation ii ON ii.imageid = i.id WHERE i.id = ?", (image,)).fetchone()
+    if not row:
+        return None, "no such image"
+    path = roots.get(row[1], "") + row[2].rstrip("/") + "/" + row[0]
+    faces = []
+    for tid, val in src.execute("SELECT tagid, value FROM ImageTagProperties WHERE imageid = ? AND property = 'tagRegion'", (image,)):
+        m = index.RECT_RE.search(val or "")
+        if m:
+            faces.append((dkdb.tag_path(tags, tid).split("/")[-1], tuple(map(int, m.groups()))))
+    # people assigned without a region are written as name-only MP regions, as digiKam does
+    with_region = {n for n, _ in faces}
+    for (tid,) in src.execute("SELECT tagid FROM ImageTags WHERE imageid = ?", (image,)):
+        if tid in persons:
+            n = dkdb.tag_path(tags, tid).split("/")[-1]
+            if n not in with_region:
+                faces.append((n, None))
+    w, h, orient = row[3] or 0, row[4] or 0, row[5] or 1
     if not w or not h:
-        return "no image size known"
+        return None, "no image size known"
     # the database stores the unrotated size; the regions are upright
     up_w, up_h = (h, w) if orient in (5, 6, 7, 8) else (w, h)
     mwg, mp = [], []
@@ -316,11 +330,35 @@ def write_regions(image: int, db_path=None) -> str:
     else:
         args += ["-XMP-mwg-rs:RegionInfo="]
     args += [f"-XMP-MP:RegionInfoMP={_struct({'Regions': mp})}" if mp else "-XMP-MP:RegionInfoMP="]
-    side = edits._prepare(path)
-    jobs = [(side, args)]
-    if edits.writes_files() and edits.can_write_file(path):
-        jobs.append((path, args))
-    failed = edits.run_exiftool(jobs)
-    if not failed:
-        dkdb.stamp_files([(image, path)])  # digiKam need not rescan a file that says what its database says
-    return "failed" if failed else "written"
+    return path, args
+
+
+def write_regions_many(images: list, db_path=None, files: bool = None) -> dict:
+    """Rewrite the face regions of these photos' sidecars (and image files when `files`, by default the "write
+    into files" setting) from the database, in one exiftool run. Returns {image: written|failed|why}."""
+    db_path = Path(db_path or dkdb.sqlite_path())
+    files = edits.writes_files() if files is None else files
+    out, jobs, owner = {}, [], {}
+    src = dkdb.connect(write=False, db_path=db_path)
+    try:
+        roots, tags = dkdb.root_paths(src), dkdb.tag_tree(src)
+        persons = {r[0] for r in src.execute("SELECT tagid FROM TagProperties WHERE property = 'person'")}
+        built = {int(i): _region_args(src, int(i), roots, tags, persons) for i in dict.fromkeys(images)}
+    finally:
+        src.close()
+    paths = {}
+    for image, (path, args) in built.items():
+        if path is None:
+            out[image] = args
+            continue
+        paths[image] = path
+        side = edits._prepare(path)
+        jobs.append((side, args)); owner[side] = image
+        if files and edits.can_write_file(path):
+            jobs.append((path, args)); owner[path] = image
+    failed = {owner[t] for t in edits.run_exiftool(jobs)} if jobs else set()
+    for image in paths:
+        out[image] = "failed" if image in failed else "written"
+    # digiKam need not rescan a file that now says what its database says
+    dkdb.stamp_files([(i, p) for i, p in paths.items() if i not in failed])
+    return out

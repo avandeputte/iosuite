@@ -587,6 +587,33 @@ def consistency_sync(token: str, photo_ids: list[int], source: str, targets: lis
         raise ToolError(str(e))
 
 
+@server.tool(annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False))
+def face_quality(token: str) -> dict:
+    """Face metadata quality (Maintenance > Face quality): regions of one person stored twice a few pixels apart
+    (near), the same person in two separate places (separate), empty or out-of-photo rectangles (invalid), and
+    the progress of the last clean-up. Needs the admin token."""
+    _need_token(token)
+    from . import facequality
+    return facequality.summary(limit=20)
+
+
+@server.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=True, openWorldHint=False))
+def face_cleanup(token: str) -> dict:
+    """Remove the near-duplicate face regions, exactly as Maintenance > Face quality > Remove duplicates: one region
+    of each group is kept, digiKam's database is backed up first, those photos' sidecars are rewritten (not the
+    image files) and each photo gets a change-log entry. Runs in the background; face_quality shows progress.
+    Needs the admin token."""
+    _need_token(token)
+    from . import config, dbsync, facequality
+    from . import state as appstate
+    if not config.DB_WRITE or appstate.read_only():
+        raise ToolError("Writing to digiKam's database is turned off")
+    try:
+        return {"photos": facequality.fix_near_duplicates()}
+    except dbsync.SyncError as e:
+        raise ToolError(str(e))
+
+
 @server.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=True))
 def update_viewer(token: str, ref: str = "") -> dict:
     """Update the viewer to the latest commit on GitHub and restart it (update.sh: code, packages,

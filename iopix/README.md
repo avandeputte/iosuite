@@ -212,6 +212,8 @@ Every sidecar or file write goes through one function that refuses to proceed un
 
 The digiKam database is opened read-only (SQLite `mode=ro` + `PRAGMA query_only`; a read-only session on MySQL) except for the explicit writes above. Photo and video files are only opened for reading unless in-file writing is on.
 
+**Face quality** (Maintenance, admins): checks every face region in digiKam's database. A person's face stored twice a few pixels apart shows that person twice in the people list; this comes from a rounding round trip in older digiKam versions (regions are fractions of the image size in files and pixels in the database, and a rescan added the region it read back one pixel off next to the one it had). "Remove duplicates" keeps one region of each group, backs digiKam's database up first, rewrites those photos' sidecars (not the image files) and records their new file dates so digiKam does not import the pair again; each photo gets a change-log entry with its old sidecar. The same person in two separate places and empty or out-of-photo rectangles are listed for review, never changed automatically. The viewer itself refuses to add or name a face that would give a person a second region on top of their first. The MCP tools `face_quality` and `face_cleanup` do the same with the admin token.
+
 ## Working without digiKam
 
 The viewer keeps the library itself in its own database, so it can run with or without digiKam:
