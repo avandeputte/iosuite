@@ -47,9 +47,9 @@ def test_copy_follows_digikam_and_every_photo_has_a_viewer_id(client):
     index.ensure_fresh()
     m = index.mirror_info()
     assert m and m["source"] == dkdb.source_version()
-    assert m["photos"] == _count("lib_images") > 0
-    assert _count("photo_ids") == m["photos"]
-    assert _count("lib_tags") > 0 and _count("lib_imagetags") > 0 and _count("lib_albums") > 0
+    assert m["photos"] == _count("digikam_copy_photos") > 0
+    assert _count("photo_identity") == m["photos"]
+    assert _count("digikam_copy_tags") > 0 and _count("digikam_copy_photo_tags") > 0 and _count("digikam_copy_folders") > 0
     s = client.get("/api/status").json()["digikam"]
     assert s["sync"] and s["reachable"] and s["source"] == "digikam" and s["mirror"]["photos"] == m["photos"]
 
@@ -115,8 +115,8 @@ def test_viewer_data_follows_a_photo_digikam_renumbered(client, lib):
     pid = lib["ids"][1]
     con = state.connect()
     try:
-        vid, uhash = con.execute("SELECT vid, hash FROM photo_ids WHERE dk_id = ?", (pid,)).fetchone()
-        new = con.execute("SELECT max(dk_id) FROM photo_ids").fetchone()[0] + 1000
+        vid, uhash = con.execute("SELECT vid, hash FROM photo_identity WHERE dk_id = ?", (pid,)).fetchone()
+        new = con.execute("SELECT max(dk_id) FROM photo_identity").fetchone()[0] + 1000
     finally:
         con.close()
     state.set_favorites([(pid, uhash)], True)
@@ -127,8 +127,8 @@ def test_viewer_data_follows_a_photo_digikam_renumbered(client, lib):
         assert new in state.favorite_ids() and pid not in state.favorite_ids(), "the favorite followed the file"
         con = state.connect()
         try:
-            assert con.execute("SELECT dk_id FROM photo_ids WHERE vid = ?", (vid,)).fetchone()[0] == new, "same viewer id, new digiKam id"
-            assert con.execute("SELECT count(*) FROM photo_ids WHERE dk_id = ?", (pid,)).fetchone()[0] == 0
+            assert con.execute("SELECT dk_id FROM photo_identity WHERE vid = ?", (vid,)).fetchone()[0] == new, "same viewer id, new digiKam id"
+            assert con.execute("SELECT count(*) FROM photo_identity WHERE dk_id = ?", (pid,)).fetchone()[0] == 0
         finally:
             con.close()
     finally:

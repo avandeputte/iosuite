@@ -51,10 +51,10 @@ def test_results_naming_a_dropped_field_do_not_break_the_report(client):
     rec = lambda pid, mism: (pid, "s", json.dumps({"id": pid, "name": f"p{pid}", "path": f"/x/{pid}.jpg", "has_sidecar": True, "file_xmp": False, "file_editable": False,
                                                     "fields": {f: {"db": 0, "sidecar": 1, "file": None, "ok": f not in mism} for f in ("rating", "pick", "title")}, "mismatch": mism}), len(mism), 1, 0, 1)
     with analysis._writer() as con:
-        con.execute("DELETE FROM consistency")
-        con.executemany("INSERT INTO consistency VALUES (?,?,?,?,?,?,?)", [rec(900001, ["pick"]), rec(900002, ["pick", "title"])])
+        con.execute("DELETE FROM metadata_check")
+        con.executemany("INSERT INTO metadata_check VALUES (?,?,?,?,?,?,?)", [rec(900001, ["pick"]), rec(900002, ["pick", "title"])])
     d = client.get("/api/consistency").json()
     assert d["summary"]["mismatched"] == 1 and "pick" not in d["summary"]["by_field"] and d["summary"]["by_field"]["title"] == 1
     assert d["total"] == 1 and d["items"][0]["mismatch"] == ["title"] and "pick" not in d["items"][0]["fields"]
     with analysis._writer() as con:
-        con.execute("DELETE FROM consistency")
+        con.execute("DELETE FROM metadata_check")

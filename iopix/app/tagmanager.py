@@ -38,7 +38,7 @@ def init():
 def pending_jobs() -> int:
     con = appstate.connect()
     try:
-        return con.execute("SELECT count(*) FROM tagjobs").fetchone()[0]
+        return con.execute("SELECT count(*) FROM tag_rewrite_queue").fetchone()[0]
     except Exception:
         return 0
     finally:
@@ -202,7 +202,7 @@ def apply(op: dict, db_path: Path = None, check_running: bool = True, queue: boo
     summary.update(sidecars=len(jobs), backup=str(backup_file) if backup_file else None)
     if queue and jobs:
         appstate._write(lambda c: c.executemany(
-            "INSERT INTO tagjobs (op, path, image_id) VALUES (?,?,?)", jobs))
+            "INSERT INTO tag_rewrite_queue (op, path, image_id) VALUES (?,?,?)", jobs))
         start_worker()
     elif not queue:
         summary["jobs"] = jobs
@@ -239,10 +239,10 @@ def start_worker():
             while True:
                 con = appstate.connect()
                 try:
-                    first = con.execute("SELECT op FROM tagjobs ORDER BY id LIMIT 1").fetchone()
+                    first = con.execute("SELECT op FROM tag_rewrite_queue ORDER BY id LIMIT 1").fetchone()
                     if not first:
                         break
-                    rows = con.execute("SELECT id, path, image_id FROM tagjobs WHERE op = ? ORDER BY id LIMIT 200",
+                    rows = con.execute("SELECT id, path, image_id FROM tag_rewrite_queue WHERE op = ? ORDER BY id LIMIT 200",
                                        tuple(first)).fetchall()
                 finally:
                     con.close()
@@ -251,7 +251,7 @@ def start_worker():
                 except Exception as e:  # leave the rows queued; they are retried on the next start
                     progress["error"] = str(e)
                     break
-                appstate._write(lambda c: c.executemany("DELETE FROM tagjobs WHERE id = ?", [(r[0],) for r in rows]))
+                appstate._write(lambda c: c.executemany("DELETE FROM tag_rewrite_queue WHERE id = ?", [(r[0],) for r in rows]))
                 progress["done"] += len(rows)
             if OPS_BACKUP_DIR.exists():
                 for old in sorted(p for p in OPS_BACKUP_DIR.iterdir() if p.is_dir())[:-KEEP_OPS]:

@@ -40,114 +40,114 @@ except ImportError:  # pragma: no cover
 
 # ---- schema: one definition per table, the SQLite and the MySQL spelling; columns in copy order
 TABLES = {
-    "settings": (["key", "value"],
-                 "CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)",
-                 "CREATE TABLE IF NOT EXISTS settings (`key` VARCHAR(191) PRIMARY KEY, value MEDIUMTEXT)"),
-    "users": (["id", "name", "hash", "role", "settings", "created", "last_login", "person", "email"],
-              "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL COLLATE NOCASE, hash TEXT NOT NULL, "
+    "app_settings": (["key", "value"],
+                 "CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT)",
+                 "CREATE TABLE IF NOT EXISTS app_settings (`key` VARCHAR(191) PRIMARY KEY, value MEDIUMTEXT)"),
+    "user_accounts": (["id", "name", "hash", "role", "settings", "created", "last_login", "person", "email"],
+              "CREATE TABLE IF NOT EXISTS user_accounts (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL COLLATE NOCASE, hash TEXT NOT NULL, "
               "role TEXT NOT NULL, settings TEXT NOT NULL DEFAULT '{}', created INTEGER, last_login INTEGER, person INTEGER, email TEXT)",
-              "CREATE TABLE IF NOT EXISTS users (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(191) NOT NULL UNIQUE, hash TEXT NOT NULL, "
+              "CREATE TABLE IF NOT EXISTS user_accounts (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(191) NOT NULL UNIQUE, hash TEXT NOT NULL, "
               "role VARCHAR(32) NOT NULL, settings MEDIUMTEXT NOT NULL DEFAULT ('{}'), created BIGINT, last_login BIGINT, person INT, email VARCHAR(191))"),
-    "favorites": (["photo_id", "hash", "added"],
-                  "CREATE TABLE IF NOT EXISTS favorites (photo_id INTEGER PRIMARY KEY, hash TEXT, added INTEGER)",
-                  "CREATE TABLE IF NOT EXISTS favorites (photo_id BIGINT PRIMARY KEY, hash VARCHAR(64), added BIGINT)"),
-    "ualbums": (["id", "name", "created"],
-                "CREATE TABLE IF NOT EXISTS ualbums (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, created INTEGER)",
-                "CREATE TABLE IF NOT EXISTS ualbums (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255) NOT NULL, created BIGINT)"),
-    "ualbum_items": (["album_id", "photo_id", "hash", "added"],
-                     "CREATE TABLE IF NOT EXISTS ualbum_items (album_id INTEGER, photo_id INTEGER, hash TEXT, added INTEGER, PRIMARY KEY (album_id, photo_id))",
-                     "CREATE TABLE IF NOT EXISTS ualbum_items (album_id INT, photo_id BIGINT, hash VARCHAR(64), added BIGINT, PRIMARY KEY (album_id, photo_id))"),
-    "searches": (["id", "name", "query", "created"],
-                 "CREATE TABLE IF NOT EXISTS searches (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, query TEXT NOT NULL, created INTEGER)",
-                 "CREATE TABLE IF NOT EXISTS searches (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255) NOT NULL, query TEXT NOT NULL, created BIGINT)"),
-    "edits": (["photo_id", "data", "ts"],
-              "CREATE TABLE IF NOT EXISTS edits (photo_id INTEGER PRIMARY KEY, data TEXT, ts INTEGER)",
-              "CREATE TABLE IF NOT EXISTS edits (photo_id BIGINT PRIMARY KEY, data MEDIUMTEXT, ts BIGINT)"),
-    "tagjobs": (["id", "op", "path", "image_id"],
-                "CREATE TABLE IF NOT EXISTS tagjobs (id INTEGER PRIMARY KEY AUTOINCREMENT, op TEXT, path TEXT, image_id INTEGER)",
-                "CREATE TABLE IF NOT EXISTS tagjobs (id INT AUTO_INCREMENT PRIMARY KEY, op VARCHAR(64), path TEXT, image_id BIGINT)"),
-    "quality": (["photo_id", "stamp", "sharp", "bright", "clip_lo", "clip_hi"],
-                "CREATE TABLE IF NOT EXISTS quality (photo_id INTEGER PRIMARY KEY, stamp TEXT, sharp REAL, bright REAL, clip_lo REAL, clip_hi REAL)",
-                "CREATE TABLE IF NOT EXISTS quality (photo_id BIGINT PRIMARY KEY, stamp VARCHAR(191), sharp DOUBLE, bright DOUBLE, clip_lo DOUBLE, clip_hi DOUBLE)"),
-    "vision": (["photo_id", "stamp", "text", "nfaces", "faceq"],
-               "CREATE TABLE IF NOT EXISTS vision (photo_id INTEGER PRIMARY KEY, stamp TEXT, text TEXT, nfaces INTEGER, faceq REAL)",
-               "CREATE TABLE IF NOT EXISTS vision (photo_id BIGINT PRIMARY KEY, stamp VARCHAR(191), text MEDIUMTEXT, nfaces INT, faceq DOUBLE)"),
-    "objects": (["photo_id", "cls", "score", "x", "y", "w", "h"],
-                "CREATE TABLE IF NOT EXISTS objects (photo_id INTEGER, cls TEXT, score REAL, x REAL, y REAL, w REAL, h REAL)",
-                "CREATE TABLE IF NOT EXISTS objects (photo_id BIGINT, cls VARCHAR(64), score DOUBLE, x DOUBLE, y DOUBLE, w DOUBLE, h DOUBLE, INDEX objects_photo (photo_id))"),
-    "objects_done": (["photo_id", "stamp"],
-                     "CREATE TABLE IF NOT EXISTS objects_done (photo_id INTEGER PRIMARY KEY, stamp TEXT)",
-                     "CREATE TABLE IF NOT EXISTS objects_done (photo_id BIGINT PRIMARY KEY, stamp VARCHAR(191))"),
-    "captions": (["photo_id", "stamp", "text"],
-                 "CREATE TABLE IF NOT EXISTS captions (photo_id INTEGER PRIMARY KEY, stamp TEXT, text TEXT)",
-                 "CREATE TABLE IF NOT EXISTS captions (photo_id BIGINT PRIMARY KEY, stamp VARCHAR(191), text MEDIUMTEXT)"),
-    "face_vecs": (["photo_id", "x", "y", "w", "h", "vec"],
-                  "CREATE TABLE IF NOT EXISTS face_vecs (photo_id INTEGER, x INTEGER, y INTEGER, w INTEGER, h INTEGER, vec BLOB, PRIMARY KEY (photo_id, x, y, w, h))",
-                  "CREATE TABLE IF NOT EXISTS face_vecs (photo_id BIGINT, x INT, y INT, w INT, h INT, vec BLOB, PRIMARY KEY (photo_id, x, y, w, h))"),
-    "face_protos": (["tag_id", "photo_id", "x", "y", "w", "h", "vec"],
-                    "CREATE TABLE IF NOT EXISTS face_protos (tag_id INTEGER, photo_id INTEGER, x INTEGER, y INTEGER, w INTEGER, h INTEGER, vec BLOB, PRIMARY KEY (photo_id, x, y, w, h))",
-                    "CREATE TABLE IF NOT EXISTS face_protos (tag_id BIGINT, photo_id BIGINT, x INT, y INT, w INT, h INT, vec BLOB, PRIMARY KEY (photo_id, x, y, w, h))"),
-    "near_dups": (["a", "b", "score"],
-                  "CREATE TABLE IF NOT EXISTS near_dups (a INTEGER, b INTEGER, score REAL)",
-                  "CREATE TABLE IF NOT EXISTS near_dups (a BIGINT, b BIGINT, score DOUBLE, INDEX near_dups_a (a))"),
+    "favorite_photos": (["photo_id", "hash", "added"],
+                  "CREATE TABLE IF NOT EXISTS favorite_photos (photo_id INTEGER PRIMARY KEY, hash TEXT, added INTEGER)",
+                  "CREATE TABLE IF NOT EXISTS favorite_photos (photo_id BIGINT PRIMARY KEY, hash VARCHAR(64), added BIGINT)"),
+    "viewer_albums": (["id", "name", "created"],
+                "CREATE TABLE IF NOT EXISTS viewer_albums (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, created INTEGER)",
+                "CREATE TABLE IF NOT EXISTS viewer_albums (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255) NOT NULL, created BIGINT)"),
+    "viewer_album_photos": (["album_id", "photo_id", "hash", "added"],
+                     "CREATE TABLE IF NOT EXISTS viewer_album_photos (album_id INTEGER, photo_id INTEGER, hash TEXT, added INTEGER, PRIMARY KEY (album_id, photo_id))",
+                     "CREATE TABLE IF NOT EXISTS viewer_album_photos (album_id INT, photo_id BIGINT, hash VARCHAR(64), added BIGINT, PRIMARY KEY (album_id, photo_id))"),
+    "saved_searches": (["id", "name", "query", "created"],
+                 "CREATE TABLE IF NOT EXISTS saved_searches (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, query TEXT NOT NULL, created INTEGER)",
+                 "CREATE TABLE IF NOT EXISTS saved_searches (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255) NOT NULL, query TEXT NOT NULL, created BIGINT)"),
+    "pending_edits": (["photo_id", "data", "ts"],
+              "CREATE TABLE IF NOT EXISTS pending_edits (photo_id INTEGER PRIMARY KEY, data TEXT, ts INTEGER)",
+              "CREATE TABLE IF NOT EXISTS pending_edits (photo_id BIGINT PRIMARY KEY, data MEDIUMTEXT, ts BIGINT)"),
+    "tag_rewrite_queue": (["id", "op", "path", "image_id"],
+                "CREATE TABLE IF NOT EXISTS tag_rewrite_queue (id INTEGER PRIMARY KEY AUTOINCREMENT, op TEXT, path TEXT, image_id INTEGER)",
+                "CREATE TABLE IF NOT EXISTS tag_rewrite_queue (id INT AUTO_INCREMENT PRIMARY KEY, op VARCHAR(64), path TEXT, image_id BIGINT)"),
+    "ai_quality": (["photo_id", "stamp", "sharp", "bright", "clip_lo", "clip_hi"],
+                "CREATE TABLE IF NOT EXISTS ai_quality (photo_id INTEGER PRIMARY KEY, stamp TEXT, sharp REAL, bright REAL, clip_lo REAL, clip_hi REAL)",
+                "CREATE TABLE IF NOT EXISTS ai_quality (photo_id BIGINT PRIMARY KEY, stamp VARCHAR(191), sharp DOUBLE, bright DOUBLE, clip_lo DOUBLE, clip_hi DOUBLE)"),
+    "ai_text_and_faces": (["photo_id", "stamp", "text", "nfaces", "faceq"],
+               "CREATE TABLE IF NOT EXISTS ai_text_and_faces (photo_id INTEGER PRIMARY KEY, stamp TEXT, text TEXT, nfaces INTEGER, faceq REAL)",
+               "CREATE TABLE IF NOT EXISTS ai_text_and_faces (photo_id BIGINT PRIMARY KEY, stamp VARCHAR(191), text MEDIUMTEXT, nfaces INT, faceq DOUBLE)"),
+    "ai_objects": (["photo_id", "cls", "score", "x", "y", "w", "h"],
+                "CREATE TABLE IF NOT EXISTS ai_objects (photo_id INTEGER, cls TEXT, score REAL, x REAL, y REAL, w REAL, h REAL)",
+                "CREATE TABLE IF NOT EXISTS ai_objects (photo_id BIGINT, cls VARCHAR(64), score DOUBLE, x DOUBLE, y DOUBLE, w DOUBLE, h DOUBLE, INDEX ai_objects_photo (photo_id))"),
+    "ai_objects_scanned": (["photo_id", "stamp"],
+                     "CREATE TABLE IF NOT EXISTS ai_objects_scanned (photo_id INTEGER PRIMARY KEY, stamp TEXT)",
+                     "CREATE TABLE IF NOT EXISTS ai_objects_scanned (photo_id BIGINT PRIMARY KEY, stamp VARCHAR(191))"),
+    "ai_descriptions": (["photo_id", "stamp", "text"],
+                 "CREATE TABLE IF NOT EXISTS ai_descriptions (photo_id INTEGER PRIMARY KEY, stamp TEXT, text TEXT)",
+                 "CREATE TABLE IF NOT EXISTS ai_descriptions (photo_id BIGINT PRIMARY KEY, stamp VARCHAR(191), text MEDIUMTEXT)"),
+    "ai_face_embeddings": (["photo_id", "x", "y", "w", "h", "vec"],
+                  "CREATE TABLE IF NOT EXISTS ai_face_embeddings (photo_id INTEGER, x INTEGER, y INTEGER, w INTEGER, h INTEGER, vec BLOB, PRIMARY KEY (photo_id, x, y, w, h))",
+                  "CREATE TABLE IF NOT EXISTS ai_face_embeddings (photo_id BIGINT, x INT, y INT, w INT, h INT, vec BLOB, PRIMARY KEY (photo_id, x, y, w, h))"),
+    "ai_person_references": (["tag_id", "photo_id", "x", "y", "w", "h", "vec"],
+                    "CREATE TABLE IF NOT EXISTS ai_person_references (tag_id INTEGER, photo_id INTEGER, x INTEGER, y INTEGER, w INTEGER, h INTEGER, vec BLOB, PRIMARY KEY (photo_id, x, y, w, h))",
+                    "CREATE TABLE IF NOT EXISTS ai_person_references (tag_id BIGINT, photo_id BIGINT, x INT, y INT, w INT, h INT, vec BLOB, PRIMARY KEY (photo_id, x, y, w, h))"),
+    "ai_similar_photos": (["a", "b", "score"],
+                  "CREATE TABLE IF NOT EXISTS ai_similar_photos (a INTEGER, b INTEGER, score REAL)",
+                  "CREATE TABLE IF NOT EXISTS ai_similar_photos (a BIGINT, b BIGINT, score DOUBLE, INDEX ai_similar_photos_a (a))"),
     # ---- the library mirror: what the index is built from, copied from digiKam's database at every read
     # (index.py). With it the index can be rebuilt without digiKam, so the viewer runs on its own.
-    "lib_meta": (["key", "value"],
-                 "CREATE TABLE IF NOT EXISTS lib_meta (key TEXT PRIMARY KEY, value TEXT)",
-                 "CREATE TABLE IF NOT EXISTS lib_meta (`key` VARCHAR(191) PRIMARY KEY, value MEDIUMTEXT)"),
-    "lib_roots": (["id", "label", "specific_path"],
-                  "CREATE TABLE IF NOT EXISTS lib_roots (id INTEGER PRIMARY KEY, label TEXT, specific_path TEXT)",
-                  "CREATE TABLE IF NOT EXISTS lib_roots (id INT PRIMARY KEY, label VARCHAR(255), specific_path TEXT)"),
-    "lib_albums": (["id", "root", "rel", "caption"],
-                   "CREATE TABLE IF NOT EXISTS lib_albums (id INTEGER PRIMARY KEY, root INTEGER, rel TEXT, caption TEXT)",
-                   "CREATE TABLE IF NOT EXISTS lib_albums (id INT PRIMARY KEY, root INT, rel TEXT, caption TEXT)"),
-    "lib_tags": (["id", "pid", "name", "icon"],
-                 "CREATE TABLE IF NOT EXISTS lib_tags (id INTEGER PRIMARY KEY, pid INTEGER, name TEXT, icon INTEGER)",
-                 "CREATE TABLE IF NOT EXISTS lib_tags (id INT PRIMARY KEY, pid INT, name VARCHAR(255), icon BIGINT)"),
-    "lib_tagprops": (["tagid", "property", "value"],
-                     "CREATE TABLE IF NOT EXISTS lib_tagprops (tagid INTEGER, property TEXT, value TEXT)",
-                     "CREATE TABLE IF NOT EXISTS lib_tagprops (tagid INT, property VARCHAR(191), value TEXT, INDEX lib_tagprops_tag (tagid))"),
-    "lib_imagetags": (["imageid", "tagid"],
-                      "CREATE TABLE IF NOT EXISTS lib_imagetags (imageid INTEGER, tagid INTEGER)",
-                      "CREATE TABLE IF NOT EXISTS lib_imagetags (imageid BIGINT, tagid INT, INDEX lib_imagetags_image (imageid))"),
-    "lib_regions": (["imageid", "tagid", "property", "value"],
-                    "CREATE TABLE IF NOT EXISTS lib_regions (imageid INTEGER, tagid INTEGER, property TEXT, value TEXT)",
-                    "CREATE TABLE IF NOT EXISTS lib_regions (imageid BIGINT, tagid INT, property VARCHAR(64), value TEXT, INDEX lib_regions_image (imageid))"),
-    "lib_comments": (["id", "imageid", "type", "comment"],
-                     "CREATE TABLE IF NOT EXISTS lib_comments (id INTEGER PRIMARY KEY, imageid INTEGER, type INTEGER, comment TEXT)",
-                     "CREATE TABLE IF NOT EXISTS lib_comments (id BIGINT PRIMARY KEY, imageid BIGINT, type INT, comment MEDIUMTEXT, INDEX lib_comments_image (imageid))"),
-    "lib_copyright": (["imageid", "property", "value"],
-                      "CREATE TABLE IF NOT EXISTS lib_copyright (imageid INTEGER, property TEXT, value TEXT)",
-                      "CREATE TABLE IF NOT EXISTS lib_copyright (imageid BIGINT, property VARCHAR(191), value TEXT, INDEX lib_copyright_image (imageid))"),
-    "lib_props": (["imageid", "property", "value"],
-                  "CREATE TABLE IF NOT EXISTS lib_props (imageid INTEGER, property TEXT, value TEXT)",
-                  "CREATE TABLE IF NOT EXISTS lib_props (imageid BIGINT, property VARCHAR(191), value TEXT, INDEX lib_props_image (imageid))"),
-    "lib_images": (["id", "album", "name", "file_size", "hash", "modification_date", "category", "rating", "creation_date", "orientation",
+    "digikam_copy_info": (["key", "value"],
+                 "CREATE TABLE IF NOT EXISTS digikam_copy_info (key TEXT PRIMARY KEY, value TEXT)",
+                 "CREATE TABLE IF NOT EXISTS digikam_copy_info (`key` VARCHAR(191) PRIMARY KEY, value MEDIUMTEXT)"),
+    "digikam_copy_album_roots": (["id", "label", "specific_path"],
+                  "CREATE TABLE IF NOT EXISTS digikam_copy_album_roots (id INTEGER PRIMARY KEY, label TEXT, specific_path TEXT)",
+                  "CREATE TABLE IF NOT EXISTS digikam_copy_album_roots (id INT PRIMARY KEY, label VARCHAR(255), specific_path TEXT)"),
+    "digikam_copy_folders": (["id", "root", "rel", "caption"],
+                   "CREATE TABLE IF NOT EXISTS digikam_copy_folders (id INTEGER PRIMARY KEY, root INTEGER, rel TEXT, caption TEXT)",
+                   "CREATE TABLE IF NOT EXISTS digikam_copy_folders (id INT PRIMARY KEY, root INT, rel TEXT, caption TEXT)"),
+    "digikam_copy_tags": (["id", "pid", "name", "icon"],
+                 "CREATE TABLE IF NOT EXISTS digikam_copy_tags (id INTEGER PRIMARY KEY, pid INTEGER, name TEXT, icon INTEGER)",
+                 "CREATE TABLE IF NOT EXISTS digikam_copy_tags (id INT PRIMARY KEY, pid INT, name VARCHAR(255), icon BIGINT)"),
+    "digikam_copy_tag_properties": (["tagid", "property", "value"],
+                     "CREATE TABLE IF NOT EXISTS digikam_copy_tag_properties (tagid INTEGER, property TEXT, value TEXT)",
+                     "CREATE TABLE IF NOT EXISTS digikam_copy_tag_properties (tagid INT, property VARCHAR(191), value TEXT, INDEX digikam_copy_tag_properties_tag (tagid))"),
+    "digikam_copy_photo_tags": (["imageid", "tagid"],
+                      "CREATE TABLE IF NOT EXISTS digikam_copy_photo_tags (imageid INTEGER, tagid INTEGER)",
+                      "CREATE TABLE IF NOT EXISTS digikam_copy_photo_tags (imageid BIGINT, tagid INT, INDEX digikam_copy_photo_tags_image (imageid))"),
+    "digikam_copy_face_regions": (["imageid", "tagid", "property", "value"],
+                    "CREATE TABLE IF NOT EXISTS digikam_copy_face_regions (imageid INTEGER, tagid INTEGER, property TEXT, value TEXT)",
+                    "CREATE TABLE IF NOT EXISTS digikam_copy_face_regions (imageid BIGINT, tagid INT, property VARCHAR(64), value TEXT, INDEX digikam_copy_face_regions_image (imageid))"),
+    "digikam_copy_comments": (["id", "imageid", "type", "comment"],
+                     "CREATE TABLE IF NOT EXISTS digikam_copy_comments (id INTEGER PRIMARY KEY, imageid INTEGER, type INTEGER, comment TEXT)",
+                     "CREATE TABLE IF NOT EXISTS digikam_copy_comments (id BIGINT PRIMARY KEY, imageid BIGINT, type INT, comment MEDIUMTEXT, INDEX digikam_copy_comments_image (imageid))"),
+    "digikam_copy_copyright": (["imageid", "property", "value"],
+                      "CREATE TABLE IF NOT EXISTS digikam_copy_copyright (imageid INTEGER, property TEXT, value TEXT)",
+                      "CREATE TABLE IF NOT EXISTS digikam_copy_copyright (imageid BIGINT, property VARCHAR(191), value TEXT, INDEX digikam_copy_copyright_image (imageid))"),
+    "digikam_copy_photo_properties": (["imageid", "property", "value"],
+                  "CREATE TABLE IF NOT EXISTS digikam_copy_photo_properties (imageid INTEGER, property TEXT, value TEXT)",
+                  "CREATE TABLE IF NOT EXISTS digikam_copy_photo_properties (imageid BIGINT, property VARCHAR(191), value TEXT, INDEX digikam_copy_photo_properties_image (imageid))"),
+    "digikam_copy_photos": (["id", "album", "name", "file_size", "hash", "modification_date", "category", "rating", "creation_date", "orientation",
                     "width", "height", "format", "make", "model", "lens", "aperture", "focal", "focal35", "exposure", "iso", "flash",
                     "white_balance", "metering", "program", "lat", "lon", "alt", "gps_orientation", "duration", "video_codec", "frame_rate", "audio", "aspect"],
-                   "CREATE TABLE IF NOT EXISTS lib_images (id INTEGER PRIMARY KEY, album INTEGER, name TEXT, file_size INTEGER, hash TEXT, modification_date TEXT, "
+                   "CREATE TABLE IF NOT EXISTS digikam_copy_photos (id INTEGER PRIMARY KEY, album INTEGER, name TEXT, file_size INTEGER, hash TEXT, modification_date TEXT, "
                    "category INTEGER, rating INTEGER, creation_date TEXT, orientation INTEGER, width INTEGER, height INTEGER, format TEXT, make TEXT, model TEXT, lens TEXT, "
                    "aperture REAL, focal REAL, focal35 REAL, exposure REAL, iso INTEGER, flash INTEGER, white_balance INTEGER, metering INTEGER, program INTEGER, "
                    "lat REAL, lon REAL, alt REAL, gps_orientation REAL, duration TEXT, video_codec TEXT, frame_rate TEXT, audio TEXT, aspect TEXT)",
-                   "CREATE TABLE IF NOT EXISTS lib_images (id BIGINT PRIMARY KEY, album INT, name VARCHAR(255), file_size BIGINT, hash VARCHAR(64), modification_date VARCHAR(32), "
+                   "CREATE TABLE IF NOT EXISTS digikam_copy_photos (id BIGINT PRIMARY KEY, album INT, name VARCHAR(255), file_size BIGINT, hash VARCHAR(64), modification_date VARCHAR(32), "
                    "category INT, rating INT, creation_date VARCHAR(32), orientation INT, width INT, height INT, format VARCHAR(32), make VARCHAR(255), model VARCHAR(255), lens VARCHAR(255), "
                    "aperture DOUBLE, focal DOUBLE, focal35 DOUBLE, exposure DOUBLE, iso INT, flash INT, white_balance INT, metering INT, program INT, "
                    "lat DOUBLE, lon DOUBLE, alt DOUBLE, gps_orientation DOUBLE, duration VARCHAR(32), video_codec VARCHAR(64), frame_rate VARCHAR(32), audio VARCHAR(64), aspect VARCHAR(32))"),
     # the viewer's own identity for a photo: digiKam's id is the working key everywhere, this row remembers
     # which file it stood for (digiKam's uniqueHash + size), so viewer data can follow a photo if digiKam renumbers
-    "photo_ids": (["vid", "dk_id", "hash", "size", "path", "name", "first_seen", "last_seen"],
-                  "CREATE TABLE IF NOT EXISTS photo_ids (vid INTEGER PRIMARY KEY AUTOINCREMENT, dk_id INTEGER, hash TEXT, size INTEGER, path TEXT, name TEXT, first_seen INTEGER, last_seen INTEGER)",
-                  "CREATE TABLE IF NOT EXISTS photo_ids (vid INT AUTO_INCREMENT PRIMARY KEY, dk_id BIGINT, hash VARCHAR(64), size BIGINT, path TEXT, name VARCHAR(255), first_seen BIGINT, last_seen BIGINT, "
-                  "INDEX photo_ids_dk (dk_id), INDEX photo_ids_hash (hash, size))"),
-    "consistency": (["photo_id", "stamp", "data", "mismatch", "has_sidecar", "file_xmp", "checked"],
-                    "CREATE TABLE IF NOT EXISTS consistency (photo_id INTEGER PRIMARY KEY, stamp TEXT, data TEXT, mismatch INTEGER, has_sidecar INTEGER, file_xmp INTEGER, checked INTEGER)",
-                    "CREATE TABLE IF NOT EXISTS consistency (photo_id BIGINT PRIMARY KEY, stamp VARCHAR(191), data MEDIUMTEXT, mismatch INT, has_sidecar INT, file_xmp INT, checked BIGINT)"),
+    "photo_identity": (["vid", "dk_id", "hash", "size", "path", "name", "first_seen", "last_seen"],
+                  "CREATE TABLE IF NOT EXISTS photo_identity (vid INTEGER PRIMARY KEY AUTOINCREMENT, dk_id INTEGER, hash TEXT, size INTEGER, path TEXT, name TEXT, first_seen INTEGER, last_seen INTEGER)",
+                  "CREATE TABLE IF NOT EXISTS photo_identity (vid INT AUTO_INCREMENT PRIMARY KEY, dk_id BIGINT, hash VARCHAR(64), size BIGINT, path TEXT, name VARCHAR(255), first_seen BIGINT, last_seen BIGINT, "
+                  "INDEX photo_identity_dk (dk_id), INDEX photo_identity_hash (hash, size))"),
+    "metadata_check": (["photo_id", "stamp", "data", "mismatch", "has_sidecar", "file_xmp", "checked"],
+                    "CREATE TABLE IF NOT EXISTS metadata_check (photo_id INTEGER PRIMARY KEY, stamp TEXT, data TEXT, mismatch INTEGER, has_sidecar INTEGER, file_xmp INTEGER, checked INTEGER)",
+                    "CREATE TABLE IF NOT EXISTS metadata_check (photo_id BIGINT PRIMARY KEY, stamp VARCHAR(191), data MEDIUMTEXT, mismatch INT, has_sidecar INT, file_xmp INT, checked BIGINT)"),
 }
-SQLITE_INDEXES = ["CREATE INDEX IF NOT EXISTS objects_photo ON objects (photo_id)", "CREATE INDEX IF NOT EXISTS near_dups_a ON near_dups (a)",
-                  "CREATE INDEX IF NOT EXISTS lib_imagetags_image ON lib_imagetags (imageid)", "CREATE INDEX IF NOT EXISTS lib_regions_image ON lib_regions (imageid)",
-                  "CREATE INDEX IF NOT EXISTS lib_comments_image ON lib_comments (imageid)", "CREATE INDEX IF NOT EXISTS lib_copyright_image ON lib_copyright (imageid)",
-                  "CREATE INDEX IF NOT EXISTS lib_props_image ON lib_props (imageid)", "CREATE INDEX IF NOT EXISTS lib_tagprops_tag ON lib_tagprops (tagid)",
-                  "CREATE INDEX IF NOT EXISTS photo_ids_dk ON photo_ids (dk_id)", "CREATE INDEX IF NOT EXISTS photo_ids_hash ON photo_ids (hash, size)"]
+SQLITE_INDEXES = ["CREATE INDEX IF NOT EXISTS ai_objects_photo ON ai_objects (photo_id)", "CREATE INDEX IF NOT EXISTS ai_similar_photos_a ON ai_similar_photos (a)",
+                  "CREATE INDEX IF NOT EXISTS digikam_copy_photo_tags_image ON digikam_copy_photo_tags (imageid)", "CREATE INDEX IF NOT EXISTS digikam_copy_face_regions_image ON digikam_copy_face_regions (imageid)",
+                  "CREATE INDEX IF NOT EXISTS digikam_copy_comments_image ON digikam_copy_comments (imageid)", "CREATE INDEX IF NOT EXISTS digikam_copy_copyright_image ON digikam_copy_copyright (imageid)",
+                  "CREATE INDEX IF NOT EXISTS digikam_copy_photo_properties_image ON digikam_copy_photo_properties (imageid)", "CREATE INDEX IF NOT EXISTS digikam_copy_tag_properties_tag ON digikam_copy_tag_properties (tagid)",
+                  "CREATE INDEX IF NOT EXISTS photo_identity_dk ON photo_identity (dk_id)", "CREATE INDEX IF NOT EXISTS photo_identity_hash ON photo_identity (hash, size)"]
 
 
 # ---- configuration
@@ -303,6 +303,42 @@ def columns(con: VConn, table: str) -> list:
     return [r[1] for r in con.execute(f"PRAGMA table_info({table})")]
 
 
+# the table names before v1.18, renamed in place (rows kept) the first time a newer viewer opens the database
+OLD_NAMES = {
+    "settings": "app_settings", "users": "user_accounts", "favorites": "favorite_photos",
+    "ualbums": "viewer_albums", "ualbum_items": "viewer_album_photos", "searches": "saved_searches",
+    "edits": "pending_edits", "tagjobs": "tag_rewrite_queue",
+    "quality": "ai_quality", "vision": "ai_text_and_faces", "objects": "ai_objects", "objects_done": "ai_objects_scanned",
+    "captions": "ai_descriptions", "face_vecs": "ai_face_embeddings", "face_protos": "ai_person_references",
+    "near_dups": "ai_similar_photos", "consistency": "metadata_check",
+    "lib_meta": "digikam_copy_info", "lib_roots": "digikam_copy_album_roots", "lib_albums": "digikam_copy_folders",
+    "lib_tags": "digikam_copy_tags", "lib_tagprops": "digikam_copy_tag_properties", "lib_imagetags": "digikam_copy_photo_tags",
+    "lib_regions": "digikam_copy_face_regions", "lib_comments": "digikam_copy_comments", "lib_copyright": "digikam_copy_copyright",
+    "lib_props": "digikam_copy_photo_properties", "lib_images": "digikam_copy_photos", "photo_ids": "photo_identity",
+}
+OLD_SQLITE_INDEXES = ["objects_photo", "near_dups_a", "lib_imagetags_image", "lib_regions_image", "lib_comments_image",
+                      "lib_copyright_image", "lib_props_image", "lib_tagprops_tag", "photo_ids_dk", "photo_ids_hash"]
+
+
+def table_names(con: VConn) -> set:
+    if con.mysql:
+        return {r[0] for r in con.execute("SHOW TABLES")}
+    return {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+
+
+def rename_old_tables(con: VConn):
+    """Give tables from before v1.18 their self-explanatory names, keeping every row."""
+    have = table_names(con)
+    todo = [(a, b) for a, b in OLD_NAMES.items() if a in have and b not in have]
+    for a, b in todo:
+        con.execute(f"RENAME TABLE `{a}` TO `{b}`" if con.mysql else f'ALTER TABLE "{a}" RENAME TO "{b}"')
+    if todo and not con.mysql:
+        for ix in OLD_SQLITE_INDEXES:  # recreated under the new names by ensure_schema
+            con.execute(f'DROP INDEX IF EXISTS "{ix}"')
+    if todo:
+        log.info("viewer database: renamed %d tables to their new names", len(todo))
+
+
 def ensure_schema(con: VConn = None):
     """Every table, idempotently; SQLite gets WAL and the two column additions older files lack."""
     own = con is None
@@ -310,19 +346,21 @@ def ensure_schema(con: VConn = None):
     try:
         if not con.mysql:
             con.execute("PRAGMA journal_mode = WAL")
-            cols = columns(con, "tagjobs")
+        rename_old_tables(con)
+        if not con.mysql:
+            cols = columns(con, "tag_rewrite_queue")
             if cols and "image_id" not in cols:  # an early schema whose rows cannot be replayed
-                con.execute("DROP TABLE tagjobs")
+                con.execute("DROP TABLE tag_rewrite_queue")
         for name, (cols, sq, my) in TABLES.items():
             con.execute(my if con.mysql else sq)
         if not con.mysql:  # MySQL declares its index in the CREATE TABLE and never had the older schema
             for sql in SQLITE_INDEXES:
                 con.execute(sql)
-            have = columns(con, "users")
+            have = columns(con, "user_accounts")
             if "person" not in have:
-                con.execute("ALTER TABLE users ADD COLUMN person INTEGER")
+                con.execute("ALTER TABLE user_accounts ADD COLUMN person INTEGER")
             if "email" not in have:
-                con.execute("ALTER TABLE users ADD COLUMN email TEXT")
+                con.execute("ALTER TABLE user_accounts ADD COLUMN email TEXT")
         con.commit()
     finally:
         if own:
@@ -365,7 +403,7 @@ def test_connection(c: dict) -> dict:
         for t in TABLES:
             if t in have:
                 counts[t] = con.execute(f"SELECT count(*) FROM `{t}`" if con.mysql else f"SELECT count(*) FROM {t}").fetchone()[0]
-        return {"ok": True, "version": ver, "tables": counts, "existing": sorted(have & set(TABLES))}
+        return {"ok": True, "version": ver, "tables": counts, "existing": sorted({OLD_NAMES.get(t, t) for t in have} & set(TABLES))}
     finally:
         con.close()
 
@@ -376,6 +414,7 @@ def copy_all(src: VConn, dst: VConn, drop: bool = True, progress=None) -> dict:
     counts = {}
     q = (lambda t: f"`{t}`") if dst.mysql else (lambda t: t)
     qs = (lambda t: f"`{t}`") if src.mysql else (lambda t: t)
+    rename_old_tables(dst)  # a target last written by an older viewer
     for name, (cols, sq, my) in TABLES.items():  # the whole schema first, then the rows
         if drop:
             dst.execute(f"DROP TABLE IF EXISTS {q(name)}")

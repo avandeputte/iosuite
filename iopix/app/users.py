@@ -98,7 +98,7 @@ def linked_persons() -> set:
     so they stay visible on the sign-in screen even when sign-in is required."""
     con = state.connect()
     try:
-        return {r[0] for r in con.execute("SELECT person FROM users WHERE person IS NOT NULL")}
+        return {r[0] for r in con.execute("SELECT person FROM user_accounts WHERE person IS NOT NULL")}
     finally:
         con.close()
 
@@ -106,7 +106,7 @@ def linked_persons() -> set:
 def any_users() -> bool:
     con = state.connect()
     try:
-        return con.execute("SELECT 1 FROM users LIMIT 1").fetchone() is not None
+        return con.execute("SELECT 1 FROM user_accounts LIMIT 1").fetchone() is not None
     finally:
         con.close()
 
@@ -114,7 +114,7 @@ def any_users() -> bool:
 def list_users() -> list:
     con = state.connect()
     try:
-        return [_row(r) for r in con.execute(f"SELECT {COLS} FROM users ORDER BY id")]
+        return [_row(r) for r in con.execute(f"SELECT {COLS} FROM user_accounts ORDER BY id")]
     finally:
         con.close()
 
@@ -122,7 +122,7 @@ def list_users() -> list:
 def get(user_id: int):
     con = state.connect()
     try:
-        r = con.execute(f"SELECT {COLS} FROM users WHERE id = ?", (user_id,)).fetchone()
+        r = con.execute(f"SELECT {COLS} FROM user_accounts WHERE id = ?", (user_id,)).fetchone()
         return _row(r) if r else None
     finally:
         con.close()
@@ -141,11 +141,11 @@ def create(name: str, password: str, role: str, email: str = "") -> dict:
         raise ValueError("The password needs at least 8 characters")
     con = state.connect()
     try:
-        if con.execute("SELECT 1 FROM users WHERE lower(name) = lower(?)", (name,)).fetchone():
+        if con.execute("SELECT 1 FROM user_accounts WHERE lower(name) = lower(?)", (name,)).fetchone():
             raise ValueError("That user name is taken")
-        if email and con.execute("SELECT 1 FROM users WHERE email = ?", (email,)).fetchone():
+        if email and con.execute("SELECT 1 FROM user_accounts WHERE email = ?", (email,)).fetchone():
             raise ValueError("Another account already has that email address")
-        cur = con.execute("INSERT INTO users (name, hash, role, created, email) VALUES (?,?,?,?,?)", (name, hash_password(password) if password else "", role, int(time.time()), email or None))
+        cur = con.execute("INSERT INTO user_accounts (name, hash, role, created, email) VALUES (?,?,?,?,?)", (name, hash_password(password) if password else "", role, int(time.time()), email or None))
         con.commit()
         return get(cur.lastrowid)
     finally:
@@ -157,32 +157,32 @@ def update(user_id: int, role: str = None, password: str = None, name: str = Non
     try:
         if email is not None:
             email = clean_email(email)
-            if email and con.execute("SELECT 1 FROM users WHERE email = ? AND id != ?", (email, user_id)).fetchone():
+            if email and con.execute("SELECT 1 FROM user_accounts WHERE email = ? AND id != ?", (email, user_id)).fetchone():
                 raise ValueError("Another account already has that email address")
-            con.execute("UPDATE users SET email = ? WHERE id = ?", (email or None, user_id))
+            con.execute("UPDATE user_accounts SET email = ? WHERE id = ?", (email or None, user_id))
         if role is not None:
             if role not in ROLES:
                 raise ValueError("Unknown role")
-            if role != "admin" and con.execute("SELECT count(*) FROM users WHERE role = 'admin' AND id != ?", (user_id,)).fetchone()[0] == 0 \
-                    and con.execute("SELECT role FROM users WHERE id = ?", (user_id,)).fetchone()[0] == "admin":
+            if role != "admin" and con.execute("SELECT count(*) FROM user_accounts WHERE role = 'admin' AND id != ?", (user_id,)).fetchone()[0] == 0 \
+                    and con.execute("SELECT role FROM user_accounts WHERE id = ?", (user_id,)).fetchone()[0] == "admin":
                 raise ValueError("That is the only admin; make someone else admin first")
-            if role != "viewer" and not con.execute("SELECT hash FROM users WHERE id = ?", (user_id,)).fetchone()[0]:
+            if role != "viewer" and not con.execute("SELECT hash FROM user_accounts WHERE id = ?", (user_id,)).fetchone()[0]:
                 raise ValueError("Set a password first; an account without one can only be a viewer")
-            con.execute("UPDATE users SET role = ? WHERE id = ?", (role, user_id))
+            con.execute("UPDATE user_accounts SET role = ? WHERE id = ?", (role, user_id))
         if password is not None:
             if password == "":  # remove the password: one-click sign-in, viewers only
-                if con.execute("SELECT role FROM users WHERE id = ?", (user_id,)).fetchone()[0] != "viewer":
+                if con.execute("SELECT role FROM user_accounts WHERE id = ?", (user_id,)).fetchone()[0] != "viewer":
                     raise ValueError("Only a viewer can have no password")
-                con.execute("UPDATE users SET hash = '' WHERE id = ?", (user_id,))
+                con.execute("UPDATE user_accounts SET hash = '' WHERE id = ?", (user_id,))
             else:
                 if len(password) < 8:
                     raise ValueError("The password needs at least 8 characters")
-                con.execute("UPDATE users SET hash = ? WHERE id = ?", (hash_password(password), user_id))
+                con.execute("UPDATE user_accounts SET hash = ? WHERE id = ?", (hash_password(password), user_id))
         if name is not None:
             name = name.strip()
             if not name:
                 raise ValueError("A user name is needed")
-            con.execute("UPDATE users SET name = ? WHERE id = ?", (name, user_id))
+            con.execute("UPDATE user_accounts SET name = ? WHERE id = ?", (name, user_id))
         con.commit()
     finally:
         con.close()
@@ -191,10 +191,10 @@ def update(user_id: int, role: str = None, password: str = None, name: str = Non
 def delete(user_id: int):
     con = state.connect()
     try:
-        r = con.execute("SELECT role FROM users WHERE id = ?", (user_id,)).fetchone()
-        if r and r[0] == "admin" and con.execute("SELECT count(*) FROM users WHERE role = 'admin'").fetchone()[0] == 1:
+        r = con.execute("SELECT role FROM user_accounts WHERE id = ?", (user_id,)).fetchone()
+        if r and r[0] == "admin" and con.execute("SELECT count(*) FROM user_accounts WHERE role = 'admin'").fetchone()[0] == 1:
             raise ValueError("That is the only admin; make someone else admin first")
-        con.execute("DELETE FROM users WHERE id = ?", (user_id,))
+        con.execute("DELETE FROM user_accounts WHERE id = ?", (user_id,))
         con.commit()
     finally:
         con.close()
@@ -203,12 +203,12 @@ def delete(user_id: int):
 def authenticate(name: str, password: str):
     con = state.connect()
     try:
-        r = con.execute("SELECT id, hash FROM users WHERE name = ?", (name.strip(),)).fetchone()
+        r = con.execute("SELECT id, hash FROM user_accounts WHERE name = ?", (name.strip(),)).fetchone()
         if not r:
             return None
         if r[1] and not check_password(password, r[1]):  # an empty hash is a passwordless viewer: one click signs in
             return None
-        con.execute("UPDATE users SET last_login = ? WHERE id = ?", (int(time.time()), r[0]))
+        con.execute("UPDATE user_accounts SET last_login = ? WHERE id = ?", (int(time.time()), r[0]))
         con.commit()
         return get(r[0])
     finally:
@@ -219,7 +219,7 @@ def accounts() -> list:
     """What the sign-in picker shows to anyone: names and whether a password is asked for."""
     con = state.connect()
     try:
-        return [{"id": r[0], "name": r[1], "passwordless": not r[2], "person": r[3]} for r in con.execute("SELECT id, name, hash, person FROM users ORDER BY lower(name)")]
+        return [{"id": r[0], "name": r[1], "passwordless": not r[2], "person": r[3]} for r in con.execute("SELECT id, name, hash, person FROM user_accounts ORDER BY lower(name)")]
     finally:
         con.close()
 
@@ -228,7 +228,7 @@ def set_person(user_id: int, tag_id):
     """Link the account to a digiKam person tag (None unlinks). The caller checks the tag is a person."""
     con = state.connect()
     try:
-        con.execute("UPDATE users SET person = ? WHERE id = ?", (int(tag_id) if tag_id else None, user_id))
+        con.execute("UPDATE user_accounts SET person = ? WHERE id = ?", (int(tag_id) if tag_id else None, user_id))
         con.commit()
     finally:
         con.close()
@@ -238,7 +238,7 @@ def set_person(user_id: int, tag_id):
 def get_settings(user_id: int) -> dict:
     con = state.connect()
     try:
-        r = con.execute("SELECT settings FROM users WHERE id = ?", (user_id,)).fetchone()
+        r = con.execute("SELECT settings FROM user_accounts WHERE id = ?", (user_id,)).fetchone()
         return json.loads(r[0]) if r and r[0] else {}
     finally:
         con.close()
@@ -255,7 +255,7 @@ def set_settings(user_id: int, changes: dict) -> dict:
             cur[k] = v
     con = state.connect()
     try:
-        con.execute("UPDATE users SET settings = ? WHERE id = ?", (json.dumps(cur), user_id))
+        con.execute("UPDATE user_accounts SET settings = ? WHERE id = ?", (json.dumps(cur), user_id))
         con.commit()
     finally:
         con.close()

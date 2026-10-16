@@ -98,13 +98,13 @@ def summary() -> dict:
     con = connect()
     try:
         return {
-            "favorites": [r[0] for r in con.execute("SELECT photo_id FROM favorites ORDER BY added DESC")],
+            "favorites": [r[0] for r in con.execute("SELECT photo_id FROM favorite_photos ORDER BY added DESC")],
             "albums": [dict(r) for r in con.execute(
                 "SELECT a.id, a.name, a.created, count(i.photo_id) AS n, "
-                "(SELECT photo_id FROM ualbum_items WHERE album_id = a.id ORDER BY added, photo_id LIMIT 1) AS cover "
-                "FROM ualbums a LEFT JOIN ualbum_items i ON i.album_id = a.id GROUP BY a.id ORDER BY a.created DESC")],
+                "(SELECT photo_id FROM viewer_album_photos WHERE album_id = a.id ORDER BY added, photo_id LIMIT 1) AS cover "
+                "FROM viewer_albums a LEFT JOIN viewer_album_photos i ON i.album_id = a.id GROUP BY a.id ORDER BY a.created DESC")],
             # smart albums: a saved filter query string, listed with the albums and evaluated live
-            "searches": [dict(r) for r in con.execute("SELECT id, name, query, created FROM searches ORDER BY created DESC")],
+            "searches": [dict(r) for r in con.execute("SELECT id, name, query, created FROM saved_searches ORDER BY created DESC")],
         }
     finally:
         con.close()
@@ -114,45 +114,45 @@ def set_favorites(items: list, on: bool):
     """items: [(photo_id, hash)]"""
     now = int(time.time())
     if on:
-        _write(lambda c: c.executemany("INSERT OR IGNORE INTO favorites VALUES (?,?,?)", [(i, h, now) for i, h in items]))
+        _write(lambda c: c.executemany("INSERT OR IGNORE INTO favorite_photos VALUES (?,?,?)", [(i, h, now) for i, h in items]))
     else:
-        _write(lambda c: c.executemany("DELETE FROM favorites WHERE photo_id = ?", [(i,) for i, _ in items]))
+        _write(lambda c: c.executemany("DELETE FROM favorite_photos WHERE photo_id = ?", [(i,) for i, _ in items]))
 
 
 def create_album(name: str) -> int:
-    return _write(lambda c: c.execute("INSERT INTO ualbums (name, created) VALUES (?,?)", (name, int(time.time()))).lastrowid)
+    return _write(lambda c: c.execute("INSERT INTO viewer_albums (name, created) VALUES (?,?)", (name, int(time.time()))).lastrowid)
 
 
 def rename_album(album_id: int, name: str):
-    _write(lambda c: c.execute("UPDATE ualbums SET name = ? WHERE id = ?", (name, album_id)))
+    _write(lambda c: c.execute("UPDATE viewer_albums SET name = ? WHERE id = ?", (name, album_id)))
 
 
 def delete_album(album_id: int):
     def run(c):
-        c.execute("DELETE FROM ualbum_items WHERE album_id = ?", (album_id,))
-        c.execute("DELETE FROM ualbums WHERE id = ?", (album_id,))
+        c.execute("DELETE FROM viewer_album_photos WHERE album_id = ?", (album_id,))
+        c.execute("DELETE FROM viewer_albums WHERE id = ?", (album_id,))
     _write(run)
 
 
 def create_search(name: str, query: str) -> int:
-    return _write(lambda c: c.execute("INSERT INTO searches (name, query, created) VALUES (?,?,?)", (name, query, int(time.time()))).lastrowid)
+    return _write(lambda c: c.execute("INSERT INTO saved_searches (name, query, created) VALUES (?,?,?)", (name, query, int(time.time()))).lastrowid)
 
 
 def rename_search(search_id: int, name: str):
-    _write(lambda c: c.execute("UPDATE searches SET name = ? WHERE id = ?", (name, search_id)))
+    _write(lambda c: c.execute("UPDATE saved_searches SET name = ? WHERE id = ?", (name, search_id)))
 
 
 def delete_search(search_id: int):
-    _write(lambda c: c.execute("DELETE FROM searches WHERE id = ?", (search_id,)))
+    _write(lambda c: c.execute("DELETE FROM saved_searches WHERE id = ?", (search_id,)))
 
 
 def set_album_items(album_id: int, items: list, on: bool):
     now = int(time.time())
     if on:
-        _write(lambda c: c.executemany("INSERT OR IGNORE INTO ualbum_items VALUES (?,?,?,?)",
+        _write(lambda c: c.executemany("INSERT OR IGNORE INTO viewer_album_photos VALUES (?,?,?,?)",
                                        [(album_id, i, h, now) for i, h in items]))
     else:
-        _write(lambda c: c.executemany("DELETE FROM ualbum_items WHERE album_id = ? AND photo_id = ?",
+        _write(lambda c: c.executemany("DELETE FROM viewer_album_photos WHERE album_id = ? AND photo_id = ?",
                                        [(album_id, i) for i, _ in items]))
 
 
@@ -178,7 +178,7 @@ def get_setting(key: str, default: str = "") -> str:
     if stamp != now:
         con = connect()
         try:
-            values = dict(con.execute("SELECT key, value FROM settings").fetchall())
+            values = dict(con.execute("SELECT key, value FROM app_settings").fetchall())
         except Exception:
             return default
         finally:
@@ -193,14 +193,14 @@ def read_only() -> bool:
 
 
 def set_setting(key: str, value: str):
-    _write(lambda c: c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?,?)", (key, value)))
+    _write(lambda c: c.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES (?,?)", (key, value)))
 
 
 # ---- what the index queries used to read through an attached copy of this database
 def favorite_ids() -> list:
     con = connect()
     try:
-        return [r[0] for r in con.execute("SELECT photo_id FROM favorites")]
+        return [r[0] for r in con.execute("SELECT photo_id FROM favorite_photos")]
     finally:
         con.close()
 
@@ -210,7 +210,7 @@ def album_item_ids(album_ids: list) -> list:
         return []
     con = connect()
     try:
-        return [r[0] for r in con.execute(f"SELECT photo_id FROM ualbum_items WHERE album_id IN ({','.join(str(int(a)) for a in album_ids)})")]
+        return [r[0] for r in con.execute(f"SELECT photo_id FROM viewer_album_photos WHERE album_id IN ({','.join(str(int(a)) for a in album_ids)})")]
     finally:
         con.close()
 
@@ -218,7 +218,7 @@ def album_item_ids(album_ids: list) -> list:
 def albums_of(photo_id: int) -> list:
     con = connect()
     try:
-        return [r[0] for r in con.execute("SELECT album_id FROM ualbum_items WHERE photo_id = ?", (photo_id,))]
+        return [r[0] for r in con.execute("SELECT album_id FROM viewer_album_photos WHERE photo_id = ?", (photo_id,))]
     finally:
         con.close()
 
@@ -226,7 +226,7 @@ def albums_of(photo_id: int) -> list:
 def is_favorite(photo_id: int) -> bool:
     con = connect()
     try:
-        return con.execute("SELECT 1 FROM favorites WHERE photo_id = ?", (photo_id,)).fetchone() is not None
+        return con.execute("SELECT 1 FROM favorite_photos WHERE photo_id = ?", (photo_id,)).fetchone() is not None
     finally:
         con.close()
 
@@ -234,7 +234,7 @@ def is_favorite(photo_id: int) -> bool:
 def album_id_by_name(name_or_id) -> int:
     con = connect()
     try:
-        r = con.execute("SELECT id FROM ualbums WHERE lower(name) = lower(?) OR id = ?", (str(name_or_id), str(name_or_id))).fetchone()
+        r = con.execute("SELECT id FROM viewer_albums WHERE lower(name) = lower(?) OR id = ?", (str(name_or_id), str(name_or_id))).fetchone()
         return r[0] if r else None
     finally:
         con.close()

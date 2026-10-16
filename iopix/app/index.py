@@ -119,7 +119,7 @@ def mirror_info() -> dict:
     try:
         con = appstate.connect()
         try:
-            d = dict(con.execute("SELECT key, value FROM lib_meta").fetchall())
+            d = dict(con.execute("SELECT key, value FROM digikam_copy_info").fetchall())
         finally:
             con.close()
     except Exception:
@@ -198,8 +198,8 @@ def read_digikam() -> dict:
     return raw
 
 
-_LIB_TABLES = {"roots": "lib_roots", "albums": "lib_albums", "tags": "lib_tags", "tagprops": "lib_tagprops", "imagetags": "lib_imagetags",
-               "regions": "lib_regions", "comments": "lib_comments", "copyright": "lib_copyright", "props": "lib_props", "images": "lib_images"}
+_LIB_TABLES = {"roots": "digikam_copy_album_roots", "albums": "digikam_copy_folders", "tags": "digikam_copy_tags", "tagprops": "digikam_copy_tag_properties", "imagetags": "digikam_copy_photo_tags",
+               "regions": "digikam_copy_face_regions", "comments": "digikam_copy_comments", "copyright": "digikam_copy_copyright", "props": "digikam_copy_photo_properties", "images": "digikam_copy_photos"}
 
 
 def _chunks(rows, n=1000):
@@ -219,8 +219,8 @@ def save_mirror(raw: dict):
                 sql = f"INSERT INTO {table} ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})"
                 for chunk in _chunks(raw[key]):
                     con.executemany(sql, [tuple(r[:len(cols)]) for r in chunk])
-            con.execute("DELETE FROM lib_meta")
-            con.executemany("INSERT INTO lib_meta (key, value) VALUES (?,?)",
+            con.execute("DELETE FROM digikam_copy_info")
+            con.executemany("INSERT INTO digikam_copy_info (key, value) VALUES (?,?)",
                             [("source", raw["source"]), ("taken", str(raw["taken"])), ("photos", str(len(raw["images"])))])
             con.commit()
         except BaseException:
@@ -235,7 +235,7 @@ def load_mirror() -> dict:
     """The last read of digiKam, back in the shape read_digikam() returns."""
     con = appstate.connect()
     try:
-        meta = dict(con.execute("SELECT key, value FROM lib_meta").fetchall())
+        meta = dict(con.execute("SELECT key, value FROM digikam_copy_info").fetchall())
         if not meta.get("source"):
             raise Unavailable("the viewer has no copy of the library yet")
         raw = {}
@@ -255,11 +255,11 @@ def mirror_tag_paths(image_ids: list) -> dict:
     ids = [int(x) for x in image_ids]
     con = appstate.connect()
     try:
-        tags = {r[0]: (r[1], r[2]) for r in con.execute("SELECT id, pid, name FROM lib_tags").fetchall()}
-        internal = {r[0] for r in con.execute("SELECT tagid FROM lib_tagprops WHERE property = 'internalTag'").fetchall()}
+        tags = {r[0]: (r[1], r[2]) for r in con.execute("SELECT id, pid, name FROM digikam_copy_tags").fetchall()}
+        internal = {r[0] for r in con.execute("SELECT tagid FROM digikam_copy_tag_properties WHERE property = 'internalTag'").fetchall()}
         out = {}
         for chunk in _chunks(ids, 500):
-            for iid, tid in con.execute(f"SELECT imageid, tagid FROM lib_imagetags WHERE imageid IN ({','.join(map(str, chunk))})").fetchall():
+            for iid, tid in con.execute(f"SELECT imageid, tagid FROM digikam_copy_photo_tags WHERE imageid IN ({','.join(map(str, chunk))})").fetchall():
                 if tid in tags and tid not in internal:
                     out.setdefault(iid, []).append(dkdb.tag_path(tags, tid))
     finally:
@@ -268,9 +268,9 @@ def mirror_tag_paths(image_ids: list) -> dict:
 
 
 # ---- photo_ids: the viewer's identity for a photo, and viewer data following a renumbered photo
-REKEY = [("favorites", "photo_id"), ("ualbum_items", "photo_id"), ("edits", "photo_id"), ("quality", "photo_id"), ("vision", "photo_id"),
-         ("objects", "photo_id"), ("objects_done", "photo_id"), ("captions", "photo_id"), ("face_vecs", "photo_id"), ("face_protos", "photo_id"),
-         ("consistency", "photo_id"), ("near_dups", "a"), ("near_dups", "b")]
+REKEY = [("favorite_photos", "photo_id"), ("viewer_album_photos", "photo_id"), ("pending_edits", "photo_id"), ("ai_quality", "photo_id"), ("ai_text_and_faces", "photo_id"),
+         ("ai_objects", "photo_id"), ("ai_objects_scanned", "photo_id"), ("ai_descriptions", "photo_id"), ("ai_face_embeddings", "photo_id"), ("ai_person_references", "photo_id"),
+         ("metadata_check", "photo_id"), ("ai_similar_photos", "a"), ("ai_similar_photos", "b")]
 
 
 def sync_photo_ids(images: list, paths: dict) -> dict:
@@ -286,7 +286,7 @@ def sync_photo_ids(images: list, paths: dict) -> dict:
     with appstate._lock:
         con = appstate.connect()
         try:
-            rows = con.execute("SELECT vid, dk_id, hash, size FROM photo_ids").fetchall()
+            rows = con.execute("SELECT vid, dk_id, hash, size FROM photo_identity").fetchall()
             by_key, by_dk = {}, {}
             for vid, dk, h, sz in rows:
                 by_key.setdefault((h, sz), []).append((vid, dk))
@@ -308,11 +308,11 @@ def sync_photo_ids(images: list, paths: dict) -> dict:
                 _rekey(con, remap)
             # a number that now belongs to a different file is taken away from the rows that had it
             for dk in current:
-                con.execute("UPDATE photo_ids SET dk_id = NULL WHERE dk_id = ? AND (hash, size) != (?, ?)" if not con.mysql
-                            else "UPDATE photo_ids SET dk_id = NULL WHERE dk_id = ? AND NOT (hash = ? AND size = ?)",
+                con.execute("UPDATE photo_identity SET dk_id = NULL WHERE dk_id = ? AND (hash, size) != (?, ?)" if not con.mysql
+                            else "UPDATE photo_identity SET dk_id = NULL WHERE dk_id = ? AND NOT (hash = ? AND size = ?)",
                             (dk, current[dk][0], current[dk][1]))
-            con.executemany("UPDATE photo_ids SET dk_id = ?, path = ?, name = ?, last_seen = ? WHERE vid = ?", updates)
-            con.executemany("INSERT INTO photo_ids (dk_id, hash, size, path, name, first_seen, last_seen) VALUES (?,?,?,?,?,?,?)", inserts)
+            con.executemany("UPDATE photo_identity SET dk_id = ?, path = ?, name = ?, last_seen = ? WHERE vid = ?", updates)
+            con.executemany("INSERT INTO photo_identity (dk_id, hash, size, path, name, first_seen, last_seen) VALUES (?,?,?,?,?,?,?)", inserts)
             con.commit()
         except BaseException:
             con.rollback()

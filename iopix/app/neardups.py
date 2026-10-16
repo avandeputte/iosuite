@@ -77,9 +77,9 @@ def _job(gen: int, level: str):
             progress["done"] = min(n, s + block)
         con = vdb.connect()
         try:
-            con.execute("DELETE FROM near_dups")
+            con.execute("DELETE FROM ai_similar_photos")
             for k in range(0, len(pairs), 2000):
-                con.executemany("INSERT INTO near_dups (a, b, score) VALUES (?,?,?)", pairs[k:k + 2000])
+                con.executemany("INSERT INTO ai_similar_photos (a, b, score) VALUES (?,?,?)", pairs[k:k + 2000])
             con.commit()
         finally:
             con.close()
@@ -97,7 +97,7 @@ def groups(limit: int = 300) -> list:
     """Connected components of the stored pairs, each with its photos (index facts) and the strongest score."""
     con = vdb.connect()
     try:
-        pairs = [tuple(r) for r in con.execute("SELECT a, b, score FROM near_dups")]
+        pairs = [tuple(r) for r in con.execute("SELECT a, b, score FROM ai_similar_photos")]
     finally:
         con.close()
     if not pairs:

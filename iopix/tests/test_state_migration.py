@@ -28,12 +28,15 @@ def test_two_files_become_one(tmp_path, monkeypatch):
     park = state.migrate_legacy()
     assert park and park.parent.name == "db-backups" and (park / "state.db").exists() and (park / "analysis.db").exists()
     assert not old_state.exists() and not old_an.exists() and new.exists()
+    from app import vdb
+    vc = vdb.VConn(sqlite3.connect(new), False, True)
+    vdb.rename_old_tables(vc); vc.commit(); vc.raw.close()  # what vdb.init does next at start
     con = sqlite3.connect(new)
     tables = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
-    assert {"settings", "users", "favorites", "quality", "objects", "captions"} <= tables
-    assert con.execute("SELECT value FROM settings WHERE key = 'theme'").fetchone()[0] == "dark"
-    assert con.execute("SELECT count(*) FROM quality").fetchone()[0] == 2 and con.execute("SELECT text FROM captions").fetchone()[0] == "a dog"
-    assert con.execute("SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'objects_photo'").fetchone()
+    assert {"app_settings", "user_accounts", "favorite_photos", "ai_quality", "ai_objects", "ai_descriptions"} <= tables, "old names are renamed in place"
+    assert con.execute("SELECT value FROM app_settings WHERE key = 'theme'").fetchone()[0] == "dark"
+    assert con.execute("SELECT count(*) FROM ai_quality").fetchone()[0] == 2 and con.execute("SELECT text FROM ai_descriptions").fetchone()[0] == "a dog"
+    assert not con.execute("SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'objects_photo'").fetchone(), "the old index name is dropped (recreated under the new one)"
     assert con.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
     con.close()
     assert state.migrate_legacy() is None, "runs once"

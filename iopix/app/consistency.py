@@ -166,7 +166,7 @@ def scan(photos: list, rescan_all: bool = True):
     if not rescan_all:
         con = analysis.connect()
         try:
-            have = dict(con.execute("SELECT photo_id, stamp FROM consistency").fetchall())
+            have = dict(con.execute("SELECT photo_id, stamp FROM metadata_check").fetchall())
         finally:
             con.close()
         todo = [p for p in todo if have.get(p["id"]) != analysis._stamp(p)]
@@ -193,7 +193,7 @@ def scan(photos: list, rescan_all: bool = True):
                 with analysis._write_lock:
                     con = analysis.connect()
                     try:
-                        con.executemany("INSERT OR REPLACE INTO consistency VALUES (?,?,?,?,?,?,?)", rows)
+                        con.executemany("INSERT OR REPLACE INTO metadata_check VALUES (?,?,?,?,?,?,?)", rows)
                         con.commit()
                     finally:
                         con.close()
@@ -220,10 +220,10 @@ def summary() -> dict:
     con = analysis.connect()
     try:
         scanned, mism, no_side, last = con.execute(
-            "SELECT count(*), sum(mismatch > 0), sum(has_sidecar = 0), max(checked) FROM consistency").fetchone()
+            "SELECT count(*), sum(mismatch > 0), sum(has_sidecar = 0), max(checked) FROM metadata_check").fetchone()
         by_field = {f: 0 for f in FIELDS}
         mism = 0  # counted from the stored records: results from before a field was dropped may name it
-        for (data,) in con.execute("SELECT data FROM consistency WHERE mismatch > 0"):
+        for (data,) in con.execute("SELECT data FROM metadata_check WHERE mismatch > 0"):
             fs = [f for f in json.loads(data)["mismatch"] if f in by_field]
             for f in fs:
                 by_field[f] += 1
@@ -238,7 +238,7 @@ def summary() -> dict:
 def report(field: str = None, offset: int = 0, limit: int = 100) -> dict:
     con = analysis.connect()
     try:
-        rows = con.execute("SELECT data FROM consistency WHERE mismatch > 0 ORDER BY photo_id DESC").fetchall()
+        rows = con.execute("SELECT data FROM metadata_check WHERE mismatch > 0 ORDER BY photo_id DESC").fetchall()
     finally:
         con.close()
     recs = []
@@ -259,7 +259,7 @@ def forget(photo_ids: list):
         with analysis._write_lock:
             con = analysis.connect()
             try:
-                con.executemany("DELETE FROM consistency WHERE photo_id = ?", [(int(i),) for i in photo_ids])
+                con.executemany("DELETE FROM metadata_check WHERE photo_id = ?", [(int(i),) for i in photo_ids])
                 con.commit()
             finally:
                 con.close()
@@ -293,7 +293,7 @@ def sync(photo_ids: list, source: str, targets: list, fields: list = None) -> di
         stored = {}
         for i in range(0, len(photo_ids), 500):
             chunk = ",".join(str(int(x)) for x in photo_ids[i:i + 500])
-            for pid, data in con.execute(f"SELECT photo_id, data FROM consistency WHERE photo_id IN ({chunk})"):
+            for pid, data in con.execute(f"SELECT photo_id, data FROM metadata_check WHERE photo_id IN ({chunk})"):
                 stored[pid] = json.loads(data)
     finally:
         con.close()

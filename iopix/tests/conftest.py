@@ -92,7 +92,7 @@ def _no_users_by_default():
     """Most tests run in the open (no users) mode the app has before the first admin is created."""
     from app import state, users
     state.init(); users.init()
-    con = state.connect(); con.execute("DELETE FROM users"); con.commit(); con.close()
+    con = state.connect(); con.execute("DELETE FROM user_accounts"); con.commit(); con.close()
     yield
 
 
@@ -102,6 +102,6 @@ def fresh(client):
     first admin exists, for tests that create their own accounts."""
     from app import state
     def clear():
-        con = state.connect(); con.execute("DELETE FROM users"); con.commit(); con.close()
+        con = state.connect(); con.execute("DELETE FROM user_accounts"); con.commit(); con.close()
         client.cookies.clear()
     clear(); yield; clear()

@@ -112,7 +112,7 @@ def _proto_faces():
 def _have_protos() -> dict:
     con = vdb.connect()
     try:
-        return {(r[1], r[2], r[3], r[4], r[5]): r[0] for r in con.execute("SELECT tag_id, photo_id, x, y, w, h FROM face_protos")}
+        return {(r[1], r[2], r[3], r[4], r[5]): r[0] for r in con.execute("SELECT tag_id, photo_id, x, y, w, h FROM ai_person_references")}
     finally:
         con.close()
 
@@ -120,7 +120,7 @@ def _have_protos() -> dict:
 def _have() -> set:
     con = vdb.connect()
     try:
-        return {tuple(r) for r in con.execute("SELECT photo_id, x, y, w, h FROM face_vecs")}
+        return {tuple(r) for r in con.execute("SELECT photo_id, x, y, w, h FROM ai_face_embeddings")}
     finally:
         con.close()
 
@@ -144,7 +144,7 @@ def start():
 
 def _embed_into(gen: int, todo: list, table: str, offset: int):
     """todo: [(key..., path, pw, ph)] where key is (photo, x, y, w, h) or (tag, photo, x, y, w, h); rows go to `table`."""
-    tagged = table == "face_protos"
+    tagged = table == "ai_person_references"
     for i in range(0, len(todo), 32):
         if gen != _run["gen"]:
             return False
@@ -167,10 +167,10 @@ def _embed_into(gen: int, todo: list, table: str, offset: int):
             con = vdb.connect()
             try:
                 if tagged:
-                    con.executemany("INSERT OR REPLACE INTO face_protos (tag_id, photo_id, x, y, w, h, vec) VALUES (?,?,?,?,?,?,?)",
+                    con.executemany("INSERT OR REPLACE INTO ai_person_references (tag_id, photo_id, x, y, w, h, vec) VALUES (?,?,?,?,?,?,?)",
                                     [(*key, vecs[k].astype(np.float32).tobytes()) for k, key in enumerate(batch)])
                 else:
-                    con.executemany("INSERT OR REPLACE INTO face_vecs (photo_id, x, y, w, h, vec) VALUES (?,?,?,?,?,?)",
+                    con.executemany("INSERT OR REPLACE INTO ai_face_embeddings (photo_id, x, y, w, h, vec) VALUES (?,?,?,?,?,?)",
                                     [(*key, vecs[k].astype(np.float32).tobytes()) for k, key in enumerate(batch)])
                 con.commit()
             finally:
@@ -186,9 +186,9 @@ def _job(gen: int):
     todo_p = [f for f in protos if (f[1], f[2], f[3], f[4], f[5]) not in have_p or have_p[(f[1], f[2], f[3], f[4], f[5])] != f[0]]
     progress.update(running=True, done=0, total=len(todo) + len(todo_p))
     try:
-        if not _embed_into(gen, todo_p, "face_protos", 0):  # the prototypes first: they make the suggestions possible
+        if not _embed_into(gen, todo_p, "ai_person_references", 0):  # the prototypes first: they make the suggestions possible
             return
-        if not _embed_into(gen, todo, "face_vecs", len(todo_p)):
+        if not _embed_into(gen, todo, "ai_face_embeddings", len(todo_p)):
             return
         # faces decided since (named, ignored, removed) no longer need a vector; prototypes follow the newest faces
         current = {(f[0], f[1], f[2], f[3], f[4]) for f in faces}
@@ -199,9 +199,9 @@ def _job(gen: int):
             con = vdb.connect()
             try:
                 if stale:
-                    con.executemany("DELETE FROM face_vecs WHERE photo_id = ? AND x = ? AND y = ? AND w = ? AND h = ?", stale)
+                    con.executemany("DELETE FROM ai_face_embeddings WHERE photo_id = ? AND x = ? AND y = ? AND w = ? AND h = ?", stale)
                 if stale_p:
-                    con.executemany("DELETE FROM face_protos WHERE photo_id = ? AND x = ? AND y = ? AND w = ? AND h = ?", stale_p)
+                    con.executemany("DELETE FROM ai_person_references WHERE photo_id = ? AND x = ? AND y = ? AND w = ? AND h = ?", stale_p)
                 con.commit()
             finally:
                 con.close()
@@ -213,8 +213,8 @@ def reset():
     _run["gen"] += 1
     con = vdb.connect()
     try:
-        con.execute("DELETE FROM face_vecs")
-        con.execute("DELETE FROM face_protos")
+        con.execute("DELETE FROM ai_face_embeddings")
+        con.execute("DELETE FROM ai_person_references")
         con.commit()
     finally:
         con.close()
@@ -224,7 +224,7 @@ def _prototypes() -> tuple:
     """(matrix of prototype vectors, their tag ids, {tag: name}) for the suggestions; empty when none."""
     con = vdb.connect()
     try:
-        rows = [(r[0], np.frombuffer(r[1], dtype=np.float32)) for r in con.execute("SELECT tag_id, vec FROM face_protos")]
+        rows = [(r[0], np.frombuffer(r[1], dtype=np.float32)) for r in con.execute("SELECT tag_id, vec FROM ai_person_references")]
     finally:
         con.close()
     if not rows:
@@ -271,7 +271,7 @@ def groups(kind: str = "unknown", threshold: float = GROUP_THRESHOLD, tag: int =
     faces = [dict(r) for r in rows]
     vcon = vdb.connect()
     try:
-        vecs = {(r[0], r[1], r[2], r[3], r[4]): np.frombuffer(r[5], dtype=np.float32) for r in vcon.execute("SELECT photo_id, x, y, w, h, vec FROM face_vecs")}
+        vecs = {(r[0], r[1], r[2], r[3], r[4]): np.frombuffer(r[5], dtype=np.float32) for r in vcon.execute("SELECT photo_id, x, y, w, h, vec FROM ai_face_embeddings")}
     finally:
         vcon.close()
     keyed = [(f, vecs.get((f["photo"], f["x"], f["y"], f["w"], f["h"]))) for f in faces]

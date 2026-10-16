@@ -71,7 +71,7 @@ def _ui_no_users(server):
     import sqlite3
     db = Path(os.environ["DATA_DIR"]).parent / "data-ui" / "viewer.db"
     if db.exists():
-        con = sqlite3.connect(db); con.execute("DELETE FROM users"); con.commit(); con.close()
+        con = sqlite3.connect(db); con.execute("DELETE FROM user_accounts"); con.commit(); con.close()
     yield
 
 
@@ -374,7 +374,7 @@ def test_container_mode_asks_before_a_database_write(page, server):
     shows one confirmation; accepting it vouches and the action goes through."""
     import json, sqlite3, urllib.request
     db = Path(os.environ["DATA_DIR"]).parent / "data-ui" / "viewer.db"
-    con = sqlite3.connect(db); con.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('digikam_closed_until', '0')"); con.commit(); con.close()
+    con = sqlite3.connect(db); con.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('digikam_closed_until', '0')"); con.commit(); con.close()
     assert json.load(urllib.request.urlopen(server + "/api/status"))["digikamCheck"] == "ask"
     dialogs = []
     def on_dialog(d):

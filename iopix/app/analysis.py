@@ -69,7 +69,7 @@ def _counts() -> dict:
     con = connect()
     try:
         return {key: con.execute(f"SELECT count(*) FROM {t}").fetchone()[0]
-                for key, t in zip(JOBS, ("quality", "vision", "objects_done", "captions"))}
+                for key, t in zip(JOBS, ("ai_quality", "ai_text_and_faces", "ai_objects_scanned", "ai_descriptions"))}
     except Exception:
         return None
     finally:
@@ -167,8 +167,8 @@ def _pixel_job(photos: list, gen: int):
     detector = det.load(max(1, jobs.threads() // workers))  # None until the model is installed
     con = connect()
     try:
-        q_todo = {p["id"] for p in _todo("quality", photos, con)}
-        o_todo = {p["id"] for p in _todo("objects_done", photos, con)} if detector else set()
+        q_todo = {p["id"] for p in _todo("ai_quality", photos, con)}
+        o_todo = {p["id"] for p in _todo("ai_objects_scanned", photos, con)} if detector else set()
     finally:
         con.close()
     todo = [p for p in photos if p["id"] in q_todo or p["id"] in o_todo]
@@ -204,13 +204,13 @@ def _pixel_job(photos: list, gen: int):
                     done.append((p["id"], st))
                     orows += [(p["id"], *o) for o in out.get("objects", [])]
             if qrows:
-                _save("INSERT OR REPLACE INTO quality VALUES (?,?,?,?,?,?)", qrows)
+                _save("INSERT OR REPLACE INTO ai_quality VALUES (?,?,?,?,?,?)", qrows)
                 progress["quality"]["done"] += len(qrows)
             if done:
                 with _writer() as con:
-                    con.executemany("DELETE FROM objects WHERE photo_id = ?", [(d[0],) for d in done])
-                    con.executemany("INSERT INTO objects VALUES (?,?,?,?,?,?,?)", orows)
-                    con.executemany("INSERT OR REPLACE INTO objects_done VALUES (?,?)", done)
+                    con.executemany("DELETE FROM ai_objects WHERE photo_id = ?", [(d[0],) for d in done])
+                    con.executemany("INSERT INTO ai_objects VALUES (?,?,?,?,?,?,?)", orows)
+                    con.executemany("INSERT OR REPLACE INTO ai_objects_scanned VALUES (?,?)", done)
                 progress["objects"]["done"] += len(done)
             last = _notify(last, 60)
     _finish("quality", "objects")
@@ -325,7 +325,7 @@ def _vision_workers() -> int:
 def _vision_job(photos: list, gen: int):
     if not vision_available():
         return
-    todo = _todo("vision", photos)
+    todo = _todo("ai_text_and_faces", photos)
     progress["vision"].update(running=bool(todo), done=0, total=len(todo))
     if not todo:
         return
@@ -338,7 +338,7 @@ def _vision_job(photos: list, gen: int):
             if gen != _run["gen"]:
                 return
             for rows in pool.map(recognise, batches[i:i + n]):
-                _save("INSERT OR REPLACE INTO vision VALUES (?,?,?,?,?)", rows)
+                _save("INSERT OR REPLACE INTO ai_text_and_faces VALUES (?,?,?,?,?)", rows)
                 progress["vision"]["done"] += len(rows)
             last = _notify(last, 60)
     _finish("vision")
@@ -348,7 +348,7 @@ def _caption_job(photos: list, gen: int):
     from . import caption
     if not caption.available():
         return
-    todo = _todo("captions", photos)
+    todo = _todo("ai_descriptions", photos)
     progress["captions"].update(running=bool(todo), done=0, total=len(todo))
     if not todo:
         return
@@ -363,7 +363,7 @@ def _caption_job(photos: list, gen: int):
             log.warning("captions: batch starting at %s failed (%s)", batch[0]["path"], e)
             texts = [None] * len(batch)
         rows = [(p["id"], _stamp(p), (t or "")[:500]) for p, t in zip(batch, texts)]
-        _save("INSERT OR REPLACE INTO captions VALUES (?,?,?)", rows)
+        _save("INSERT OR REPLACE INTO ai_descriptions VALUES (?,?,?)", rows)
         progress["captions"]["done"] += len(batch)
         last = _notify(last, 120)
     _finish("captions")
@@ -391,15 +391,15 @@ def results() -> dict:
     con = connect()
     out = {}
     try:
-        for r in con.execute("SELECT photo_id, sharp, bright, clip_lo, clip_hi FROM quality"):
+        for r in con.execute("SELECT photo_id, sharp, bright, clip_lo, clip_hi FROM ai_quality"):
             out.setdefault(r[0], {}).update(sharp=r[1], bright=r[2], clip_lo=r[3], clip_hi=r[4])
-        for r in con.execute("SELECT photo_id, text, nfaces, faceq FROM vision"):
+        for r in con.execute("SELECT photo_id, text, nfaces, faceq FROM ai_text_and_faces"):
             out.setdefault(r[0], {}).update(ocr=r[1] or None, vfaces=r[2], faceq=r[3])
-        for r in con.execute("SELECT photo_id FROM objects_done"):
+        for r in con.execute("SELECT photo_id FROM ai_objects_scanned"):
             out.setdefault(r[0], {}).update(objects={}, npeople=0)
-        for r in con.execute("SELECT photo_id, text FROM captions WHERE text != ''"):
+        for r in con.execute("SELECT photo_id, text FROM ai_descriptions WHERE text != ''"):
             out.setdefault(r[0], {}).update(caption_ai=r[1])
-        for pid, cls, n in con.execute("SELECT photo_id, cls, count(*) FROM objects GROUP BY 1, 2"):
+        for pid, cls, n in con.execute("SELECT photo_id, cls, count(*) FROM ai_objects GROUP BY 1, 2"):
             d = out.setdefault(pid, {})
             d.setdefault("objects", {})[cls] = n
             if cls == "person":
@@ -419,7 +419,7 @@ def boxes(photo_id: int) -> list:
     con = connect()
     try:
         return [dict(r) for r in con.execute(
-            "SELECT cls, round(score, 2) AS score, x, y, w, h FROM objects WHERE photo_id = ? ORDER BY score DESC", (photo_id,))]
+            "SELECT cls, round(score, 2) AS score, x, y, w, h FROM ai_objects WHERE photo_id = ? ORDER BY score DESC", (photo_id,))]
     except Exception:
         return []
     finally:
@@ -428,7 +428,7 @@ def boxes(photo_id: int) -> list:
 
 def reset(job: str):
     """Throw away one analysis so it is computed again from scratch."""
-    tables = {"quality": ["quality"], "vision": ["vision"], "objects": ["objects", "objects_done"], "captions": ["captions"]}.get(job, [])
+    tables = {"quality": ["ai_quality"], "vision": ["ai_text_and_faces"], "objects": ["ai_objects", "ai_objects_scanned"], "captions": ["ai_descriptions"]}.get(job, [])
     _run["gen"] += 1  # stop the running jobs; the caller restarts them
     with _writer() as con:
         for t in tables:

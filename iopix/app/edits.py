@@ -74,7 +74,7 @@ def signature() -> str:
         return "e0"
     con = appstate.connect()
     try:
-        n, ts = con.execute("SELECT count(*), coalesce(max(ts), 0) FROM edits").fetchone()
+        n, ts = con.execute("SELECT count(*), coalesce(max(ts), 0) FROM pending_edits").fetchone()
         return f"e{n}.{ts}"
     except Exception:
         return "e0"
@@ -89,7 +89,7 @@ def pending() -> dict:
         return {}
     con = appstate.connect()
     try:
-        return {r[0]: json.loads(r[1]) for r in con.execute("SELECT photo_id, data FROM edits")}
+        return {r[0]: json.loads(r[1]) for r in con.execute("SELECT photo_id, data FROM pending_edits")}
     except Exception:
         return {}
     finally:
@@ -103,7 +103,7 @@ def pending_count() -> int:
         return 0
     con = appstate.connect()
     try:
-        return con.execute("SELECT count(*) FROM edits").fetchone()[0]
+        return con.execute("SELECT count(*) FROM pending_edits").fetchone()[0]
     except Exception:
         return 0
     finally:
@@ -114,7 +114,7 @@ def newest_pending() -> int:
     """When the most recent remembered edit was made (unix time), 0 when there is none."""
     con = appstate.connect()
     try:
-        row = con.execute("SELECT max(ts) FROM edits").fetchone()
+        row = con.execute("SELECT max(ts) FROM pending_edits").fetchone()
         return int(row[0] or 0) if row else 0
     finally:
         con.close()
@@ -124,7 +124,7 @@ def forget(photo_ids):
     """Drop remembered edits (digiKam has caught up, or they were undone)."""
     ids = [(int(i),) for i in photo_ids]
     if ids:
-        appstate._write(lambda c: c.executemany("DELETE FROM edits WHERE photo_id = ?", ids))
+        appstate._write(lambda c: c.executemany("DELETE FROM pending_edits WHERE photo_id = ?", ids))
 
 
 def resolved(photo_ids):
@@ -532,7 +532,7 @@ def apply(photos: list, changes: dict, per_photo: dict = None) -> dict:
         if ok:
             now = int(time.time())
             appstate._write(lambda c: c.executemany(
-                "INSERT OR REPLACE INTO edits VALUES (?,?,?)", [(pid, json.dumps(merged[pid]), now) for pid in ok]))
+                "INSERT OR REPLACE INTO pending_edits VALUES (?,?,?)", [(pid, json.dumps(merged[pid]), now) for pid in ok]))
     return {"edited": len(ok), "failed": failed, "files": in_files}
 
 
