@@ -2001,7 +2001,7 @@ async def api_face_op(request: Request):
         raise HTTPException(403, "Face management needs editing and database writes enabled")
     op = await request.json()
     try:
-        res = await run_in_threadpool(facemgr.apply, op)
+        res = await run_in_threadpool(facemgr.apply, op, None, True, True)  # sidecar written after the answer
     except dbsync.SyncError as e:
         raise HTTPException(409, str(e))
     except (*DB_ERRORS, ValueError, KeyError, TypeError) as e:
@@ -2020,7 +2020,7 @@ async def api_face_batch(request: Request):
     if not ops:
         raise HTTPException(400, "No operations")
     try:
-        res = await run_in_threadpool(facemgr.apply_many, ops)
+        res = await run_in_threadpool(facemgr.apply_many, ops, None, True, True)
     except dbsync.SyncError as e:
         raise HTTPException(409, str(e))
     except (*DB_ERRORS, ValueError, KeyError, TypeError) as e:

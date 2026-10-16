@@ -121,3 +121,30 @@ def test_container_mode_writes_without_asking(client, dk):
     state.set_setting("digikam_closed_until", "0")  # no vouch in force
     r = client.post("/api/tags/op", json={"op": "add", "parent": 0, "name": "zz-ask-probe"})
     assert r.status_code == 200, r.text
+
+
+def test_face_change_answers_before_the_sidecar_is_written(client, lib):
+    """The web app's face change returns right after the database write; the sidecar follows in the background."""
+    import time as _t
+    from app import edits, facemgr
+    if not edits.available():
+        import pytest
+        pytest.skip("exiftool is not available here")
+    pid = lib["with_faces"][3]
+    con = dkdb.connect()
+    val = con.execute("SELECT value FROM ImageTagProperties WHERE imageid = ? AND property = 'tagRegion' LIMIT 1", (pid,)).fetchone()[0]
+    con.close()
+    import re
+    x, y, w, h = map(int, re.search(r'x="(\d+)" y="(\d+)" width="(\d+)" height="(\d+)"', val).groups())
+    r = client.post("/api/faces/op", json={"op": "move", "image": pid, "rect": [x, y, w, h], "new_rect": [x + 2, y, w, h]})
+    assert r.status_code == 200 and r.json()["sidecar"] == "queued", r.text
+    for _ in range(100):
+        if not facemgr.sidecars_pending():
+            break
+        _t.sleep(0.1)
+    _t.sleep(1.5)
+    from app import index
+    ic = index.open_index(); path = ic.execute("SELECT path FROM photos WHERE id = ?", (pid,)).fetchone()[0]; ic.close()
+    side = open(path + ".xmp", encoding="utf-8").read()
+    assert "mwg-rs" in side or "RegionInfo" in side
+    client.post("/api/faces/op", json={"op": "move", "image": pid, "rect": [x + 2, y, w, h], "new_rect": [x, y, w, h]})

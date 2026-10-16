@@ -17,11 +17,14 @@ After a change the photo's sidecar gets digiKam's face-region XMP rewritten
 face as an mwg-rs region and an MP region, with the rectangle rotated back to
 the file's own orientation and normalised to its unrotated size.
 """
+import logging
 import threading
 from pathlib import Path
 
 from . import dbsync, dkdb, edits, index, tagmanager
 from .dbsync import SyncError
+
+log = logging.getLogger("app.facemgr")
 
 # which ImageTagProperties row holds the rectangle of each kind of face
 REGION_PROP = {"confirmed": "tagRegion", "unknown": "autodetectedFace", "suggested": "autodetectedFace", "ignored": "ignoredFace"}
@@ -101,12 +104,54 @@ def _find(con, sp, image, rect):
     return None, None
 
 
-def apply(op: dict, db_path=None, check_running: bool = True) -> dict:
+def apply(op: dict, db_path=None, check_running: bool = True, background: bool = False) -> dict:
     """One face change (see apply_many for the operations)."""
-    return apply_many([op], db_path, check_running)[0]
+    return apply_many([op], db_path, check_running, background)[0]
 
 
-def apply_many(ops: list, db_path=None, check_running: bool = True) -> list:
+_side_queue = {}            # image -> db_path, waiting for its sidecar rewrite (latest database state is written)
+_side_cond = threading.Condition()
+_side_worker = {"thread": None}
+
+
+def _sidecar_worker():
+    while True:
+        with _side_cond:
+            while not _side_queue:
+                _side_cond.wait()
+            batch = list(_side_queue.items())[:50]
+            for image, _p in batch:
+                _side_queue.pop(image, None)
+        by_db = {}
+        for image, path in batch:
+            by_db.setdefault(path, []).append(image)
+        for db_path, images in by_db.items():
+            try:
+                res = write_regions_many(images, db_path)
+                bad = [i for i, v in res.items() if v != "written"]
+                if bad:
+                    log.warning("face regions not written to the sidecars of %s: %s", bad[:10], {i: res[i] for i in bad[:3]})
+            except Exception as e:
+                log.warning("face regions not written to the sidecars of %s: %s", images[:10], e)
+
+
+def queue_sidecars(images: list, db_path=None):
+    """Rewrite these photos' sidecar regions from the database in the background, in order, one worker."""
+    with _side_cond:
+        for i in images:
+            _side_queue[int(i)] = db_path
+        if _side_worker["thread"] is None or not _side_worker["thread"].is_alive():
+            _side_worker["thread"] = threading.Thread(target=_sidecar_worker, name="face-sidecars", daemon=True)
+            _side_worker["thread"].start()
+        _side_cond.notify()
+
+
+def sidecars_pending() -> int:
+    with _side_cond:
+        return len(_side_queue)
+
+
+def apply_many(ops: list, db_path=None, check_running: bool = True, background: bool = False) -> list:
     """Several face changes in one transaction with one backup. Each op:
     {op: name|confirm|ignore|unknown|remove|add|move, image, rect: [x,y,w,h], tag?, new_rect?}
     name:    give the face at rect (unknown, suggested or confirmed) the person `tag`
@@ -117,7 +162,9 @@ def apply_many(ops: list, db_path=None, check_running: bool = True) -> list:
     add:     a new region for person `tag`
     detected: a new unknown face (face detection), unless a face already sits at that exact rectangle
     move:    change the rectangle of an existing face to new_rect
-    Returns one summary per op; a failed op has an "error" and the others still apply."""
+    Returns one summary per op; a failed op has an "error" and the others still apply.
+    background: return right after the database write and rewrite the sidecars afterwards (what the web app
+    asks for, so a face change shows at once); otherwise each op carries its sidecar outcome."""
     db_path = Path(db_path or dkdb.sqlite_path())
     if not ops:
         return []
@@ -144,6 +191,12 @@ def apply_many(ops: list, db_path=None, check_running: bool = True) -> list:
     history.record([{"photo_id": r["image"], "action": "face", "summary": labels.get(r.get("op"), "Face changed").format(name=(r.get("name") or "").split("/")[-1] or "a person"),
                      "details": {k: v for k, v in r.items() if k in ("op", "tag", "name", "was", "from_tag")} | {"rect": next((o.get("rect") for o in ops if int(o.get("image") or 0) == r["image"] and o.get("op") == r.get("op")), None)}}
                     for r in results if "error" not in r and not r.get("skipped")])
+    if background:
+        queue_sidecars(list(dict.fromkeys(touched)), db_path)
+        for r in results:
+            if "error" not in r:
+                r["sidecar"] = "queued"
+        return results
     for image in dict.fromkeys(touched):
         try:
             status = write_regions(image, db_path)

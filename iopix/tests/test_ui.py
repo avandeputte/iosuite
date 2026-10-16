@@ -1000,3 +1000,39 @@ def test_info_panel_change_log_is_last_and_folded(page, server):
     assert fold.locator(".hrow").count() >= 1
     req = urllib.request.Request(server + "/api/edit/revert", data=_json.dumps({"ids": [pid]}).encode(), headers={"Content-Type": "application/json"}, method="POST")
     urllib.request.urlopen(req).read()  # put the scratch library back
+
+
+def test_face_change_shows_before_the_server_answers(page, server):
+    """Ignoring a face in the viewer changes the overlay at once, even when the server takes seconds."""
+    import json as _json
+    faces = _json.loads(urllib.request.urlopen(server + "/api/faces/queue?kind=unknown&limit=5").read())["faces"]
+    if not faces:
+        faces = _json.loads(urllib.request.urlopen(server + "/api/faces/queue?kind=suggested&limit=5").read())["faces"]
+    if not faces:
+        pytest.skip("no undecided face in the fixture")
+    f = faces[0]
+    seen = {"posted": False}
+
+    def slow(route):
+        seen["posted"] = True
+        time.sleep(2.5)
+        route.continue_()
+    page.route("**/api/faces/op", slow)
+    _open_photo(page, server, f["photo"])
+    page.keyboard.press("f")
+    page.wait_for_selector(".facebox.face-unknown, .facebox.face-suggested", timeout=10000)
+    before = page.locator(".facebox.face-unknown, .facebox.face-suggested").count()
+    page.locator(".facebox.face-unknown, .facebox.face-suggested").first.click()
+    page.locator(".facemenu .fmi", has_text="ignore").first.click()
+    page.wait_for_timeout(250)
+    assert page.locator(".facebox.face-unknown, .facebox.face-suggested").count() == before - 1, "gone at once"
+    page.wait_for_timeout(3500)
+    assert seen["posted"]
+    page.unroute("**/api/faces/op")
+    # put the scratch library back: every ignored face of that photo becomes unknown again
+    d = _json.loads(urllib.request.urlopen(f"{server}/api/photo/{f['photo']}").read())
+    for o in d.get("faces_other", []):
+        if o["kind"] == "ignored":
+            req = urllib.request.Request(server + "/api/faces/op", data=_json.dumps({"op": "unknown", "image": f["photo"], "rect": [o["x"], o["y"], o["w"], o["h"]]}).encode(),
+                                         headers={"Content-Type": "application/json"}, method="POST")
+            urllib.request.urlopen(req).read()

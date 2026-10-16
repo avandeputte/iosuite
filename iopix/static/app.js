@@ -2207,14 +2207,31 @@ async function placeTagsDialog(ids) {
       } }, icon('place'), 'Create and assign')));
 }
 
+/** Faces page: the decided faces leave the page at once; the batch is written in the background, and a
+ *  failure puts them back. DECIDED hides them from the queue until the index has caught up. */
+const DECIDED = new Map();  // "photo:x:y:w:h" -> when it was decided
+const faceKey = (o) => `${o.image ?? o.photo}:${(o.rect || [o.x, o.y, o.w, o.h]).join(':')}`;
 async function facesBatch(ops, msg) {
-  let r;
-  try { r = await post('/api/faces/batch', { ops }); } catch (e) { toast(e.message, null, null, 9000); return null; }
-  toast(`${msg}: ${nf.format(r.done)} done${r.failed.length ? `, ${r.failed.length} failed (${r.failed[0].error})` : ''}.`, null, null, 7000);
-  await awaitReindex(() => true, 20, 500);
-  details.clear();
-  return r;
+  const now = Date.now();
+  ops.forEach((o) => DECIDED.set(faceKey(o), now));
+  toast(`${msg}: ${plural(ops.length, 'face')}.`, null, null, 4000);
+  post('/api/faces/batch', { ops }).then(async (r) => {
+    if (r.failed.length) {
+      r.failed.forEach((f) => { const o = ops.find((x) => x.image === f.image); if (o) DECIDED.delete(faceKey(o)); });
+      toast(`${r.failed.length} of those could not be changed (${r.failed[0].error}).`, null, null, 9000);
+      if (route.view === 'faces') onRouteFaces();
+    }
+    await awaitReindex(() => true, 30, 500);
+    details.clear();
+    for (const [k, t] of DECIDED) if (t <= now) DECIDED.delete(k);  // the index has them now
+  }, (e) => {
+    ops.forEach((o) => DECIDED.delete(faceKey(o)));
+    toast(`Those face changes did not go through: ${e.message}`, null, null, 9000);
+    if (route.view === 'faces') onRouteFaces();
+  });
+  return true;
 }
+function onRouteFaces() { viewKey = null; onRoute(); }
 async function showFaces(vp) {
   const tab = (vp && vp.get('tab')) || 'suggested';
   const page = h('div', { class: 'page' });
@@ -2225,6 +2242,12 @@ async function showFaces(vp) {
   let d;
   try { d = await api(`/api/faces/queue?kind=${tab}&limit=500`); } catch (e) { body.replaceChildren(h('div', { class: 'empty' }, e.message)); return; }
   if (route.view !== 'faces') return;
+  if (DECIDED.size) {  // decided here a moment ago, not in the index yet: not shown again
+    const before = d.faces.length;
+    d.faces = d.faces.filter((f) => !DECIDED.has(faceKey(f)));
+    d.total = Math.max(0, (d.total || 0) - (before - d.faces.length));
+    if (d.groups) d.groups = d.groups.map(([tag, name, count]) => [tag, name, d.faces.filter((f) => f.tag === tag).length]).filter((g) => g[2] > 0);
+  }
   const crop = (f) => h('img', { class: 'fcrop', src: `/facecrop/${f.photo}/${f.x}/${f.y}/${f.w}/${f.h}.jpg`, alt: '', loading: 'lazy', title: `${f.file} · ${dfDay.format(date(f.ts))} · click to open the photo`, onclick: () => openLightbox({ id: [f.photo] }, 0, true) });
   const op = (f, o, extra) => ({ op: o, image: f.photo, rect: [f.x, f.y, f.w, f.h], ...extra });
   const refresh = () => showFaces(vp);
@@ -2256,6 +2279,11 @@ async function showFaces(vp) {
   if (tab === 'unknown' && store.get('facegroups', '1') !== '0') {
     let g = null;
     try { g = await api('/api/faces/groups?kind=unknown'); } catch { g = null; }
+    if (g && DECIDED.size) {  // decided here a moment ago: gone from the groups too
+      const keep = (f) => !DECIDED.has(faceKey(f));
+      g.groups = g.groups.map((grp) => ({ ...grp, faces: grp.faces.filter(keep) })).map((grp) => ({ ...grp, n: grp.faces.length })).filter((grp) => grp.faces.length);
+      g.ungrouped = g.ungrouped.filter(keep);
+    }
     if (route.view !== 'faces') return;
     if (g && (g.groups.length || g.missing.length || g.progress.running)) {
       const head = h('div', { class: 'muted', style: 'max-width:820px' }, `${nf.format(d.total)} faces digiKam found but could not name. Look-alikes are shown together so one decision covers the group, with the viewer’s own “looks like” guess when a named person matches; untick a face to leave it out. `,
@@ -3304,14 +3332,54 @@ function faceMenu(box, f, d) {
   const close = (e) => { if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener('pointerdown', close, true); } };
   setTimeout(() => document.addEventListener('pointerdown', close, true), 0);
 }
-async function faceOp(op) {
-  let r;
-  try { r = await post('/api/faces/op', op); } catch (e) { toast(e.message, null, null, 9000); return; }
-  toast({ name: `Named ${r.name}.`, confirm: `Confirmed ${r.name}.`, ignore: 'Face ignored.', unknown: 'Name removed; the face stays as unknown.', remove: 'Face region removed.', add: `Added ${r.name}.`, move: 'Region moved.' }[op.op] + (r.sidecar_error ? ` (sidecar not updated: ${r.sidecar_error})` : ''));
+/** A face change shows at once: the photo's details are changed here first, the request follows in the
+ *  background (one at a time per photo, in order), and only a failure brings the server's version back. */
+const FACE_Q = new Map();  // photo id -> promise of the last change sent for it
+function applyFaceLocally(d, op) {
+  const same = (f) => f.x === op.rect?.[0] && f.y === op.rect?.[1] && f.w === op.rect?.[2] && f.h === op.rect?.[3];
+  const t = op.tag ? tagById.get(op.tag) : null;
+  const confirmed = (d.faces || []).find(same), other = (d.faces_other || []).find(same);
+  const was = confirmed ? { ...confirmed, kind: 'confirmed' } : other;
+  d.faces = (d.faces || []).filter((f) => !same(f));
+  d.faces_other = (d.faces_other || []).filter((f) => !same(f));
+  const at = (r) => ({ x: r[0], y: r[1], w: r[2], h: r[3] });
+  const keepTag = (id, name) => { if (id && !d.tags.some((x) => x.id === id)) { const tt = tagById.get(id); d.tags.push({ id, name: name || tt?.name, full: tt?.full || name, person: 1 }); } };
+  const dropTag = (id) => { if (id && !d.faces.some((f) => f.tag === id)) d.tags = d.tags.filter((x) => x.id !== id); };
+  if (op.op === 'name' || op.op === 'add') { d.faces.push({ tag: op.tag, name: t?.name || '…', ...at(op.rect) }); keepTag(op.tag, t?.name); if (was && was.tag !== op.tag && was.kind === 'confirmed') dropTag(was.tag); }
+  else if (op.op === 'confirm' && was) { d.faces.push({ tag: was.tag, name: was.name, ...at(op.rect) }); keepTag(was.tag, was.name); }
+  else if (op.op === 'ignore' && was) { d.faces_other.push({ ...at(op.rect), kind: 'ignored', tag: null, name: null }); if (was.kind === 'confirmed') dropTag(was.tag); }
+  else if (op.op === 'unknown' && was) { d.faces_other.push({ ...at(op.rect), kind: 'unknown', tag: null, name: null }); if (was.kind === 'confirmed') dropTag(was.tag); }
+  else if (op.op === 'remove' && was) { if (was.kind === 'confirmed') dropTag(was.tag); }
+  else if (op.op === 'move' && was) { const moved = { ...was, ...at(op.new_rect) }; if (was.kind === 'confirmed') { delete moved.kind; d.faces.push(moved); } else d.faces_other.push(moved); }
+}
+function redrawPhoto(id) {
+  if (LB.open && LB.src.id[LB.i] === id && LB.detail) { renderFaces(); if (LB.info) renderInfo(); }
+}
+function faceOp(op) {
   const id = op.image;
-  await awaitReindex(() => true, 15, 500);
-  details.delete(id);
-  if (LB.open && LB.src.id[LB.i] === id) { LB.detail = null; getDetail(id).then((d) => { if (LB.src.id[LB.i] === id) { LB.detail = d; renderFaces(); if (LB.info) renderInfo(); } }); }
+  const shown = LB.open && LB.src.id[LB.i] === id ? LB.detail : null, cached = details.get(id);
+  if (shown) applyFaceLocally(shown, op);
+  if (cached && cached !== shown && typeof cached === 'object' && cached.faces) applyFaceLocally(cached, op);
+  redrawPhoto(id);
+  const name = op.tag ? tagById.get(op.tag)?.name : null;
+  toast({ name: `Named ${name}.`, confirm: 'Confirmed.', ignore: 'Face ignored.', unknown: 'Name removed; the face stays as unknown.', remove: 'Face region removed.', add: `Added ${name}.`, move: 'Region moved.' }[op.op]);
+  const prev = FACE_Q.get(id) || Promise.resolve();
+  const mine = prev.then(() => post('/api/faces/op', op)).then(() => true, (e) => {
+    toast(`That face change did not go through: ${e.message}`, null, null, 9000);
+    details.delete(id);
+    if (LB.open && LB.src.id[LB.i] === id) getDetail(id).then((fresh) => { if (LB.src.id[LB.i] === id) { LB.detail = fresh; redrawPhoto(id); } });
+    return false;
+  });
+  FACE_Q.set(id, mine);
+  // once the index has it, take the server's version (unless another change for this photo is still on its way)
+  mine.then(async (ok) => {
+    if (!ok) return;
+    await awaitReindex(() => true, 30, 500);
+    if (FACE_Q.get(id) !== mine) return;
+    FACE_Q.delete(id);
+    details.delete(id);
+    if (LB.open && LB.src.id[LB.i] === id) getDetail(id).then((fresh) => { if (LB.src.id[LB.i] === id && !FACE_Q.has(id)) { LB.detail = fresh; redrawPhoto(id); } });
+  });
 }
 function personPicker(onPick) {
   // the "People" root carries digiKam's person property too, but it is not someone a face can be named after
