@@ -945,3 +945,24 @@ def test_grid_header_stays_while_scrolling_and_delete_asks_first(page, server):
         page.locator(".modal button", has_text="Cancel").click()
     page.locator("#selbar a", has_text="Deselect all").click()
     page.wait_for_selector("#selbar", state="detached", timeout=3000)
+
+
+def test_phone_layout_fits_the_screen(browser, server):
+    """At phone width: the bottom bar shows four destinations and More (the rest in a sheet), the selection
+    bar keeps every action on screen as icons, and nothing in the page is wider than the screen."""
+    ctx = browser.new_context(viewport={"width": 393, "height": 852}, device_scale_factor=2, is_mobile=True, has_touch=True)
+    page = ctx.new_page()
+    try:
+        page.goto(server + "/#/photos"); page.wait_for_selector("#grid .tile", timeout=20000); page.wait_for_timeout(800)
+        visible = [a for a in page.locator("#nav a").all() if a.is_visible()]
+        assert len(visible) == 4 and page.locator("#nav .navmore").is_visible()
+        assert page.evaluate("document.documentElement.scrollWidth") <= 393
+        page.locator("#nav .navmore").tap(); page.wait_for_selector(".sheetgrid a", timeout=3000)
+        assert page.locator(".sheetgrid a", has_text="Folders").count() == 1 and page.locator(".sheetgrid a", has_text="Places").count() == 0
+        page.locator(".modal button", has_text="Close").tap(); page.wait_for_timeout(200)
+        page.locator("#grid .selall").tap(); page.wait_for_selector("#selbar button.pillbtn", timeout=3000); page.wait_for_timeout(1200)
+        for b in page.locator("#selbar button.pillbtn").all():
+            box = b.bounding_box()
+            assert box and box["x"] + box["width"] <= 393 and box["width"] >= 30, box
+    finally:
+        ctx.close()

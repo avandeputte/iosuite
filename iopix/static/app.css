@@ -665,3 +665,45 @@ body:has(#dkbanner) #updbanner { bottom: 96px; }  /* both at once: the update ca
 .hact.a-deleted, .hact.a-guard { background: #fde7e5; color: #b3261e; }
 .hact.a-restore, .hact.a-revert { background: #e3f4e8; color: #1e7e34; }
 .hact.a-edit, .hact.a-sync { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+
+/* ---- phones as installed apps: safe areas, a five-item bottom bar, no page zoom on inputs, sheets instead of dialogs */
+.navmore { display: none; }
+@media (max-width: 800px) {
+  #topbar { padding: env(safe-area-inset-top) 8px 0 8px; height: calc(var(--topbar) + env(safe-area-inset-top)); }
+  #selbar { padding: env(safe-area-inset-top) 6px 0 6px; height: calc(var(--topbar) + env(safe-area-inset-top)); overflow-x: auto; scrollbar-width: none; }
+  #selbar .pillbtn > span:not(.ic), #selbar .lnk { display: none; }  /* icons only: every action stays on screen */
+  #selbar .pillbtn { padding: 0 6px; flex: none; }
+  #selbar .iconbtn { width: 36px; flex: none; }
+  #selbar .n { font-size: 14px; margin: 0 2px 0 0; white-space: nowrap; }
+  input, select, textarea, #q { font-size: 16px; }  /* under 16px, iOS zooms the whole page in when a field gets focus */
+  #nav { overflow: hidden; justify-content: space-around; padding-bottom: env(safe-area-inset-bottom); height: calc(56px + env(safe-area-inset-bottom)); }
+  #nav a, #nav .navmore { min-width: 0; flex: 1; width: auto; border-radius: 0; }
+  #nav a[data-v="favorites"], #nav a[data-v="folders"], #nav a[data-v="albums"], #nav a[data-v="tags"], #nav a[data-v="map"] { display: none; }
+  .navmore { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 0 6px; font-size: 11.5px; color: var(--fg2); background: none; border: 0; font-family: inherit; }
+  .navmore.on { color: var(--accent); font-weight: 600; }
+  #main, #filters { bottom: calc(56px + env(safe-area-inset-bottom)); }
+  #grid { margin: 0 34px 0 0; }  /* the year rail sits on the right */
+  #selbar .sp { display: none; }  /* the actions follow the count instead of being pushed off the edge */
+  .gbar { padding-left: 10px; gap: 8px; }
+  .gbar .count { font-size: 14px; }
+  .srow { flex-direction: column; align-items: stretch; gap: 8px; }
+  .srow > :not(:first-child) { max-width: none; }
+  .srow .iprefs { max-width: none; }
+  .mtable, .stable, .utable { display: block; overflow-x: auto; }
+  .modal-back { padding: 0; align-items: flex-end; }
+  .modal { width: 100%; max-width: none; max-height: calc(100dvh - env(safe-area-inset-top) - 24px); overflow-y: auto; border-radius: 18px 18px 0 0; padding: 16px 16px calc(14px + env(safe-area-inset-bottom)); }
+  .modal.wide { width: 100%; }
+  .lb-top { padding: env(safe-area-inset-top) 4px 0 4px; height: calc(56px + env(safe-area-inset-top)); gap: 0; }
+  .lb-top .iconbtn { width: 40px; height: 40px; }
+  .lb-top button[title^="Slideshow"], .lb-top button[title^="Show detected objects"] { display: none; }  /* nine buttons do not fit: the two least used go */
+  .lb-info { padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
+  .lb-strip { padding-bottom: env(safe-area-inset-bottom); }
+  .page { padding: 4px 12px calc(24px + env(safe-area-inset-bottom)); }
+  .ctools .pillbtn { flex: 1 1 auto; justify-content: center; }
+  .hrow { align-items: flex-start; }
+}
+.sheetgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 4px 0 6px; }
+.sheetgrid a { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 6px; border-radius: 14px; background: var(--bg2); color: var(--fg); font-size: 13px; text-decoration: none; }
+.sheetgrid a.on { background: color-mix(in srgb, var(--hue) var(--mix), transparent); color: var(--hue); font-weight: 600; }
+.sheetgrid .sic { width: 36px; height: 36px; border-radius: 11px; display: inline-flex; align-items: center; justify-content: center; background: var(--hue); color: #fff; }
+.sheetgrid .sic .ic { width: 20px; height: 20px; }

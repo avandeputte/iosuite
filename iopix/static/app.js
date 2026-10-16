@@ -28,6 +28,7 @@ const ICONS = {
   camera: 'M9 2 7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8.2a3.2 3.2 0 1 0 0 6.4 3.2 3.2 0 0 0 0-6.4z',
   open: 'M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z',
   calendar: 'M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20a2 2 0 0 0 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V9h14v11z',
+  more: 'M6 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4z',
   face: 'M9 11.75a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5zm6 0a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5zM12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8 0-.29.02-.58.05-.86 2.36-1.05 4.23-2.98 5.21-5.37a9.974 9.974 0 0 0 10.41 3.97c.21.71.33 1.47.33 2.26 0 4.41-3.59 8-8 8z',
   text: 'M2.5 4v3h5v12h3V7h5V4h-13zm19 5h-9v3h3v7h3v-7h3V9z',
   heart: 'M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z',
@@ -250,7 +251,9 @@ function onRoute() {
   const fp = filterParams();
   const vp = new URLSearchParams(route.params); vp.delete('p');
   const key = route.view + '?' + (PARAM_VIEWS.includes(route.view) ? vp : fp).toString();
-  document.querySelectorAll('#nav a, #topbar a.tool').forEach((a) => a.classList.toggle('on', a.dataset.v === (route.view === 'photos' && fp.get('fav') === '1' && [...fp.keys()].length === 1 ? 'favorites' : route.view)));
+  const cur = route.view === 'photos' && fp.get('fav') === '1' && [...fp.keys()].length === 1 ? 'favorites' : route.view;
+  document.querySelectorAll('#nav a, #topbar a.tool').forEach((a) => a.classList.toggle('on', a.dataset.v === cur));
+  $('#nav .navmore')?.classList.toggle('on', ['favorites', 'folders', 'albums', 'tags', 'map', 'settings', 'maintenance', 'history', 'consistency'].includes(cur));
   renderChips();
   if (key !== viewKey) {
     viewKey = key;
@@ -1673,6 +1676,15 @@ async function showBursts(vp) {
 async function loadUser() {
   try { const me = await api('/api/auth/me'); USER = me.user; USER_SETTINGS = me.user ? me.settings : null; IS_ADMIN = me.isAdmin; USERS_EXIST = me.usersExist; REQUIRE_LOGIN = !!me.requireLogin; } catch { USER = null; USER_SETTINGS = null; }
   renderUserMenu();
+}
+/** Phones: the bottom bar shows four destinations; the rest, with Settings and Maintenance, open from "More". */
+function moreSheet() {
+  const rest = NAV.filter(([v]) => ['favorites', 'folders', 'albums', 'tags', 'map'].includes(v)).map(([v, label, ic, href]) => [href || `#/${v}`, label, ic, v]);  // the ones the phone bar hides
+  rest.push(['#/settings', 'Settings', 'gear', 'settings']);
+  if (IS_ADMIN) rest.push(['#/maintenance', 'Maintenance', 'wrench', 'maintenance']);
+  const back = modal('More', h('div', { class: 'sheetgrid' }, rest.map(([href, label, ic, v]) => h('a', { href, class: route.view === v || (v === 'favorites' && route.view === 'photos' && filterParams().get('fav') === '1') ? 'on' : '', style: `--hue:var(--c-${{ favorites: 'rose', folders: 'teal', albums: 'indigo', tags: 'orange', map: 'cyan' }[v] || 'slate'})`, onclick: () => back.remove() }, h('span', { class: 'sic' }, icon(ic)), label))),
+    h('div', { class: 'modal-btns' }, h('button', { class: 'pillbtn', onclick: () => back.remove() }, 'Close')));
+  back.firstChild.classList.add('sheet');
 }
 function renderUserMenu() {
   const el = $('#usermenu'); if (!el) return;
@@ -3498,7 +3510,8 @@ async function pollStatus() {
 }
 async function start() {
   await loadUser();
-  $('#nav').replaceChildren(...NAV.map(([v, label, ic, href]) => h('a', { href: href || `#/${v}`, 'data-v': v }, icon(ic), label)), h('div', { id: 'status' }));
+  $('#nav').replaceChildren(...NAV.map(([v, label, ic, href]) => h('a', { href: href || `#/${v}`, 'data-v': v }, icon(ic), label)),
+    h('button', { class: 'navmore', 'data-v': 'more', title: 'More', onclick: moreSheet }, icon('more'), 'More'), h('div', { id: 'status' }));
   initSearch();
   applyBadgePref(); applyTheme();
   if (REQUIRE_LOGIN && !USER) { document.body.classList.add('locked'); loginDialog(true); return; }  // boot() runs after sign-in
