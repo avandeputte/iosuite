@@ -269,33 +269,37 @@ def sync_photo_ids(images: list, paths: dict) -> dict:
     with appstate._lock:
         con = appstate.connect()
         try:
-            rows = con.execute("SELECT vid, dk_id, hash, size FROM photo_identity").fetchall()
-            by_key, by_dk = {}, {}
-            for vid, dk, h, sz in rows:
+            rows = con.execute("SELECT vid, dk_id, hash, size, path, name, last_seen FROM photo_identity").fetchall()
+            by_key, by_dk, stored = {}, {}, {}
+            for vid, dk, h, sz, pth, nm, seen in rows:
                 by_key.setdefault((h, sz), []).append((vid, dk))
+                stored[vid] = (dk, pth, nm, seen or 0)
                 if dk is not None:
                     by_dk[dk] = (vid, h, sz)
             inserts, updates, remap = [], [], {}
+            # only what changed is written: on MySQL every statement is a round trip, and a statement per photo
+            # on every build (30,000 of them) made each rebuild seconds slower. last_seen is refreshed daily.
             for dk, (h, sz, path, name) in current.items():
                 known = by_key.get((h, sz))
                 if known:
                     vid, old = next(((v, d) for v, d in known if d == dk), known[0])
                     if old != dk and old is not None and old not in current:
                         remap[old] = dk  # the same file under a new number
-                    updates.append((dk, path, name, now, vid))
-                elif dk in by_dk:  # the number now stands for another file: that is a different photo
-                    inserts.append((dk, h, sz, path, name, now, now))
-                else:
+                    was = stored.get(vid)
+                    if not was or was[0] != dk or was[1] != path or was[2] != name or now - was[3] > 86400:
+                        updates.append((dk, path, name, now, vid))
+                else:  # new, or the number now stands for another file: that is a different photo
                     inserts.append((dk, h, sz, path, name, now, now))
             if remap:
                 _rekey(con, remap)
-            # a number that now belongs to a different file is taken away from the rows that had it
-            for dk in current:
-                con.execute("UPDATE photo_identity SET dk_id = NULL WHERE dk_id = ? AND (hash, size) != (?, ?)" if not con.mysql
-                            else "UPDATE photo_identity SET dk_id = NULL WHERE dk_id = ? AND NOT (hash = ? AND size = ?)",
-                            (dk, current[dk][0], current[dk][1]))
-            con.executemany("UPDATE photo_identity SET dk_id = ?, path = ?, name = ?, last_seen = ? WHERE vid = ?", updates)
-            con.executemany("INSERT INTO photo_identity (dk_id, hash, size, path, name, first_seen, last_seen) VALUES (?,?,?,?,?,?,?)", inserts)
+            # a number that now belongs to a different file is taken away from the row that had it
+            taken = [(vid,) for dk, (vid, h, sz) in by_dk.items() if dk in current and (h, sz) != current[dk][:2]]
+            if taken:
+                con.executemany("UPDATE photo_identity SET dk_id = NULL WHERE vid = ?", taken)
+            if updates:
+                con.executemany("UPDATE photo_identity SET dk_id = ?, path = ?, name = ?, last_seen = ? WHERE vid = ?", updates)
+            if inserts:
+                con.executemany("INSERT INTO photo_identity (dk_id, hash, size, path, name, first_seen, last_seen) VALUES (?,?,?,?,?,?,?)", inserts)
             con.commit()
         except BaseException:
             con.rollback()
