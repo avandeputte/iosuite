@@ -93,11 +93,32 @@ def scan() -> dict:
                              "apart": max(abs(a[k] - b[k]) for _va, a in g for _vb, b in g for k in range(4))})
         if len(groups) > 1:
             separate.append({"photo": img, "name": name, "rects": [list(g[0][1]) for g in groups]})
+    untagged = _untagged()
+    acc_u = _accepted("untagged")
+    untagged_shown = [u for u in untagged if acc_u.get(u["photo"]) != u["signature"]]
     accepted = _accepted("unnamed")
     unnamed = [{"photo": img, "faces": n[1], "signature": f"{n[0]}:{n[1]}"} for img, n in sorted(faces_of.items()) if n[1] and not n[0]]
     shown = [u for u in unnamed if accepted.get(u["photo"]) != u["signature"]]
     return {"checked": len(rows), "near": near, "separate": separate, "invalid": invalid, "unnamed": shown,
-            "unnamed_accepted": len(unnamed) - len(shown), "at": int(time.time())}
+            "unnamed_accepted": len(unnamed) - len(shown), "untagged": untagged_shown, "untagged_accepted": len(untagged) - len(untagged_shown),
+            "at": int(time.time())}
+
+
+def _untagged() -> list:
+    """Photos in which object detection sees people, with no face region of any kind and no person tagged:
+    [{photo, people, signature}], the most people first."""
+    con = index.open_index()
+    try:
+        rows = con.execute(
+            "SELECT p.id, p.npeople FROM photos p WHERE p.video = 0 AND p.npeople > 0 "
+            "AND NOT EXISTS (SELECT 1 FROM faces f WHERE f.photo_id = p.id) "
+            "AND NOT EXISTS (SELECT 1 FROM photo_tags pt JOIN tags t ON t.id = pt.tag_id WHERE pt.photo_id = p.id AND t.person = 1) "
+            "ORDER BY p.npeople DESC, p.ts DESC").fetchall()
+    except Exception:  # an index from before object detection: nothing to say
+        return []
+    finally:
+        con.close()
+    return [{"photo": r[0], "people": r[1], "signature": f"p{r[1]}"} for r in rows]
 
 
 def _accepted(check: str) -> dict:
@@ -135,10 +156,10 @@ def ignore_unnamed(photos: list) -> dict:
 def accept(photos: list, check: str = "unnamed", on: bool = True) -> int:
     """Accept these photos' finding as it is (they leave the list until their faces change), or take it back."""
     from . import history, vdb
-    if check != "unnamed":
+    if check not in ("unnamed", "untagged"):
         raise ValueError("Unknown check")
     want = {int(p) for p in photos}
-    current = {u["photo"]: u["signature"] for u in scan()["unnamed"]} if on else {}
+    current = {u["photo"]: u["signature"] for u in scan()[check]} if on else {}
     con = vdb.connect()
     try:
         if on:
@@ -165,6 +186,7 @@ def summary(s: dict = None, limit: int = 120) -> dict:
             "separate": {"count": len(s["separate"]), "items": s["separate"][:limit]},
             "invalid": {"count": len(s["invalid"]), "items": s["invalid"][:limit]},
             "unnamed": {"count": len(s["unnamed"]), "faces": sum(u["faces"] for u in s["unnamed"]), "items": s["unnamed"][:limit], "accepted": s["unnamed_accepted"]},
+            "untagged": {"count": len(s["untagged"]), "items": s["untagged"][:limit], "accepted": s["untagged_accepted"]},
             "progress": dict(progress)}
 
 

@@ -158,3 +158,33 @@ def test_photos_with_only_unnamed_faces_can_be_accepted_or_ignored(client, lib):
     assert not any(x["photo"] == pid for x in client.get("/api/quality").json()["unnamed"]["items"]), "an ignored face does not count"
     con = sqlite3.connect(lib["db"])
     con.execute("DELETE FROM ImageTagProperties WHERE imageid = ?", (pid,)); con.commit(); con.close()
+
+
+def test_people_without_any_face_or_tag_are_listed_and_can_be_accepted(client, lib):
+    from app import analysis, vdb
+    q = client.get("/api/quality").json()["untagged"]
+    assert {"count", "items", "accepted"} <= set(q)
+    # object detection saw two people on a photo nobody is tagged on
+    ic = index.open_index()
+    pid = ic.execute("SELECT p.id FROM photos p WHERE p.video = 0 "
+                     "AND NOT EXISTS (SELECT 1 FROM photo_tags pt JOIN tags t ON t.id = pt.tag_id WHERE pt.photo_id = p.id AND t.person = 1) LIMIT 1").fetchone()[0]
+    ic.close()
+    dk = sqlite3.connect(lib["db"])  # the fixture's photos all carry some face region: take this one's away for the test
+    saved = dk.execute("SELECT imageid, tagid, property, value FROM ImageTagProperties WHERE imageid = ?", (pid,)).fetchall()
+    dk.execute("DELETE FROM ImageTagProperties WHERE imageid = ?", (pid,)); dk.commit(); dk.close()
+    with analysis._write_lock:
+        con = vdb.connect()
+        con.executemany("INSERT INTO ai_objects (photo_id, cls, score, x, y, w, h) VALUES (?,?,?,?,?,?,?)", [(pid, "person", 0.9, 0.1, 0.1, 0.2, 0.4), (pid, "person", 0.8, 0.5, 0.1, 0.2, 0.4)])
+        con.commit(); con.close()
+    index.build()
+    q = client.get("/api/quality").json()["untagged"]
+    assert any(x["photo"] == pid and x["people"] == 2 for x in q["items"]), q["items"][:3]
+    assert client.post("/api/quality/accept", json={"photos": [pid], "check": "untagged"}).json()["accepted"] == 1
+    q2 = client.get("/api/quality").json()["untagged"]
+    assert not any(x["photo"] == pid for x in q2["items"]) and q2["accepted"] >= 1
+    client.post("/api/quality/accept", json={"photos": [pid], "check": "untagged", "on": False})
+    assert any(x["photo"] == pid for x in client.get("/api/quality").json()["untagged"]["items"])
+    with analysis._write_lock:
+        con = vdb.connect(); con.execute("DELETE FROM ai_objects WHERE photo_id = ?", (pid,)); con.commit(); con.close()
+    dk = sqlite3.connect(lib["db"]); dk.executemany("INSERT INTO ImageTagProperties VALUES (?,?,?,?)", saved); dk.commit(); dk.close()
+    index.build()

@@ -981,6 +981,22 @@ async function showQuality() {
           CAN_MANAGE ? [h('a', { class: 'lnk', onclick: () => ignore([x.photo]) }, 'Ignore'), ' · '] : null,
           h('a', { class: 'lnk', onclick: () => accept([x.photo]) }, 'Accept as it is')))));
     })(),
+    (() => {  // people in the photo (object detection), nobody marked or tagged
+      const u = q.untagged || { count: 0, items: [], accepted: 0 }, items = u.items;
+      const accept = async (ids, on = true) => { try { await post('/api/quality/accept', { photos: ids, check: 'untagged', on }); toast(on ? `${plural(ids.length, 'photo')} accepted as they are.` : 'Shown again.'); } catch (e) { toast(e.message, null, null, 9000); return; } showQuality(); };
+      const find = async (ids) => {
+        try { const r = await post('/api/faces/detect', { ids }); toast(r.done ? `${plural(r.added || 0, 'face')} found; they are listed under Faces without a name.` : `Looking for faces in ${plural(r.queued, 'photo')} in the background.`, null, null, 7000); } catch (e) { toast(e.message, null, null, 9000); return; }
+        setTimeout(showQuality, 2500);
+      };
+      const again = u.accepted ? h('button', { class: 'pillbtn', onclick: async () => { const acc = await api('/api/quality/accepted?check=untagged'); if (acc.photos.length && confirm(`List the ${plural(acc.photos.length, 'accepted photo')} again?`)) accept(acc.photos, false); } }, 'Show the accepted ones again') : null;
+      return sec('People, but nobody tagged', u.count,
+        `Photos where object detection sees people but no face is marked and no person is tagged (crowds, people from behind, strangers…).${u.accepted ? ` ${plural(u.accepted, 'photo')} you accepted ${u.accepted === 1 ? 'is' : 'are'} not listed.` : ''} Find their faces to name them, or accept the photo as it is: it leaves this list unless it changes.`,
+        [items.length ? h('button', { class: 'pillbtn', onclick: () => accept(items.map((x) => x.photo)) }, `Accept the ${nf.format(items.length)} shown`) : null,
+          items.length && FACE_DETECT && CAN_MANAGE ? h('button', { class: 'pillbtn', onclick: () => find(items.map((x) => x.photo)) }, `Find faces in the ${nf.format(items.length)} shown`) : null, again].filter(Boolean),
+        items.map((x) => h('div', { class: 'hrow' }, thumb(x), h('div', { class: 'hmain' }, h('b', null, plural(x.people, 'person', 'people')), ' detected · ',
+          FACE_DETECT && CAN_MANAGE ? [h('a', { class: 'lnk', onclick: () => find([x.photo]) }, 'Find faces'), ' · '] : null,
+          h('a', { class: 'lnk', onclick: () => accept([x.photo]) }, 'Accept as it is')))));
+    })(),
     sec('Outside the photo or empty', q.invalid.count, 'A box that sticks out of the photo can be trimmed to its edges here, or moved and resized in the viewer (click the face, “Adjust the box”). Empty boxes are removed.', fitAll ? [fitAll] : null,
       q.invalid.items.map((x) => h('div', { class: 'hrow' }, thumb(x), h('div', { class: 'hmain' }, h('b', null, x.name), ' ',
         x.rect ? `${x.rect[2]} × ${x.rect[3]} at ${x.rect[0]}, ${x.rect[1]} on a ${x.size[0]} × ${x.size[1]} photo` : 'unreadable rectangle',
@@ -2562,6 +2578,7 @@ async function settingsPage(view) {
       api('/api/quality').then((q) => fill(line, (q.near.extra ? `${plural(q.near.extra, 'face is', 'faces are')} stored twice. ` : 'No face is stored twice. ')
         + (q.separate.count ? `${plural(q.separate.count, 'photo has', 'photos have')} the same person in two places. ` : '')
         + (q.unnamed.count ? `${plural(q.unnamed.count, 'photo has', 'photos have')} faces but no names. ` : '')
+        + (q.untagged?.count ? `${plural(q.untagged.count, 'photo shows', 'photos show')} people but nobody is tagged. ` : '')
         + (q.invalid.count ? `${plural(q.invalid.count, 'box is', 'boxes are')} outside the photo or empty.` : ''))).catch(() => fill(line, ''));
       return row('Face quality', h('span', null, line, ' Duplicate faces, the same person twice, and boxes outside the photo.'), h('a', { class: 'pillbtn on', href: '#/quality' }, 'Open'));
     })(),
