@@ -89,28 +89,34 @@ const fmtWhen = (ts) => `${dfDayLocal.format(date(ts))} ${dfTimeLocal.format(dat
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const date = (ts) => new Date(ts * 1000);
 const isoDay = (ts) => date(ts).toISOString().slice(0, 10);
-/** iOS installed app with the translucent status bar: the box fixed elements are laid out in can be the screen's
- *  height minus the status bar, so "bottom: 0" lands that far above the real bottom (seen on an iPhone 16 Pro: a
- *  62-point empty band under the bottom bar). Measured, and applied only when the shortfall is exactly the
- *  status-bar inset, so a correct viewport (or a later iOS fixing this) gives 0 and changes nothing. */
-function fixViewportGap() {
-  let gap = 0;
-  try {
-    if (navigator.standalone === true) {
-      const probe = document.createElement('div');
-      probe.style.cssText = 'position:fixed;top:0;bottom:0;left:0;width:1px;visibility:hidden;pointer-events:none;padding-top:env(safe-area-inset-top)';
-      document.body.append(probe);
-      const fixedH = probe.getBoundingClientRect().height, insetTop = parseFloat(getComputedStyle(probe).paddingTop) || 0;
-      probe.remove();
-      const portrait = window.matchMedia('(orientation: portrait)').matches;
-      const full = portrait ? Math.max(screen.width, screen.height) : Math.min(screen.width, screen.height);
-      const short = full - fixedH;
-      if (insetTop > 0 && Math.abs(short - insetTop) <= 2) gap = Math.round(short);
-    }
-  } catch (e) { gap = 0; }
-  document.documentElement.style.setProperty('--vgap', gap + 'px');
+/** iOS installed app: WebKit can leave the viewport short by the status bar's height (62 points on an iPhone
+ *  16 Pro) once the keyboard has opened, and keeps it so until the app is force-quit, even across reloads. Fixed
+ *  elements are then clipped there, so the bottom bar floats above an empty band. Hiding and showing the page for
+ *  one reflow makes WebKit measure the viewport again; it is done only when the viewport is short (its height
+ *  below the screen's), after a text field loses focus, on start and on return to the app. If the viewport stays
+ *  short, html.vpshort makes the bottom bar fit the part that is drawn. */
+const IOS_APP = navigator.standalone === true;
+function screenTall() {
+  const portrait = window.matchMedia('(orientation: portrait)').matches;
+  return portrait ? Math.max(screen.width, screen.height) : Math.min(screen.width, screen.height);
 }
-window.addEventListener('resize', () => setTimeout(fixViewportGap, 120));
+const viewportShort = () => IOS_APP && screenTall() - window.innerHeight > 4;
+function healViewport() {
+  if (!IOS_APP) return;
+  if (viewportShort()) {
+    const keep = ['#main', '#filters', '.lb-info'].map((q) => { const el = $(q); return el ? [el, el.scrollTop] : null; }).filter(Boolean);
+    document.body.style.display = 'none';
+    void document.body.offsetHeight;  // a synchronous reflow with the page gone: WebKit recomputes the viewport
+    document.body.style.display = '';
+    keep.forEach(([el, top]) => { el.scrollTop = top; });
+  }
+  document.documentElement.classList.toggle('vpshort', viewportShort());
+}
+function healSoon() { [150, 700].forEach((ms) => setTimeout(healViewport, ms)); }  // after the keyboard has gone
+document.addEventListener('focusout', (e) => { if (IOS_APP && e.target.matches?.('input, textarea, select')) healSoon(); });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') healSoon(); });
+window.addEventListener('pageshow', healSoon);
+window.addEventListener('resize', () => { if (IOS_APP) setTimeout(() => document.documentElement.classList.toggle('vpshort', viewportShort()), 120); });
 function fmtBytes(b) {
   if (!b) return '';
   const u = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -3543,7 +3549,7 @@ function dkBanner(d) {
     ? ['Sync with digiKam is off', 'The library lives in the viewer’s own tables and everything works there; digiKam’s database is not opened.']
     : ['digiKam’s database is unreachable', `Since ${fmtWhen(d.since)}. Showing the library as of ${asOf}; edits are saved to the sidecars and will be applied to digiKam when it is back.`];
   b = h('div', { id: 'dkbanner', class: 'sysbanner', 'data-key': key },
-    h('span', { class: 'ic-wrap', style: 'background:linear-gradient(135deg,#ff9a3c,#ff5a7e)' }, icon('wrench')),
+    h('span', { class: 'ic-wrap', style: 'background:#c0873a' }, icon('wrench')),
     h('div', null, h('b', null, text[0]), h('div', { class: 'muted' }, text[1], ' ', h('a', { href: '#/settings', class: 'lnk' }, 'Settings'))),
     h('button', { class: 'iconbtn', title: 'Hide for now', onclick: () => { try { sessionStorage.setItem('dk-dismissed', key); } catch { /* private mode */ } b.remove(); } }, icon('close')));
   document.body.append(b);
@@ -3619,5 +3625,5 @@ async function boot() {
   await pollStatus();
   onRoute();
 }
-fixViewportGap();
+healSoon();
 start();

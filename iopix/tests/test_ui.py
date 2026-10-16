@@ -274,7 +274,7 @@ def test_pasting_a_coordinate_pair_fills_both_fields(page, server, lib):
 
 def test_pwa_service_worker_caches_the_shell(page, server):
     page.goto(server + "/#/photos")
-    out = page.evaluate("""async () => { const r = await navigator.serviceWorker.ready; const c = await caches.open('iopix-shell-v1');
+    out = page.evaluate("""async () => { const r = await navigator.serviceWorker.ready; const c = await caches.open('iopix-shell-v2');
         return { state: r.active && r.active.state, cached: (await c.keys()).map((k) => new URL(k.url).pathname) }; }""")
     assert out["state"] in ("activating", "activated")  # ready resolves while the worker may still be activating for a tick
     assert {"/", "/app.js", "/app.css", "/manifest.webmanifest", "/icons/icon-192.png"} <= set(out["cached"])
@@ -966,13 +966,15 @@ def test_phone_layout_fits_the_screen(browser, server):
         for b in page.locator("#selbar button.pillbtn").all():
             box = b.bounding_box()
             assert box and box["x"] + box["width"] <= 393 and box["width"] >= 30, box
-        # no installed-app shortfall here: the bar sits on the bottom edge, and the grid ends where it starts
-        assert page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--vgap').trim()") == "0px"
+        # not an installed iOS app: no short-viewport handling; the bar sits on the bottom edge and the grid ends where it starts
+        assert not page.evaluate("document.documentElement.classList.contains('vpshort')")
         nav, main = page.locator("#nav").bounding_box(), page.locator("#main").bounding_box()
         assert abs(nav["y"] + nav["height"] - 852) < 1 and abs(main["y"] + main["height"] - nav["y"]) < 1.5, (nav, main)
-        # iOS's shortfall (the layout box ends 62 points above the screen): everything anchored at the bottom moves down by it
-        page.evaluate("document.documentElement.style.setProperty('--vgap', '62px')")
+        # a viewport iOS left short: the bar keeps its 56 px for icons and labels inside what is drawn, no padding under them
+        page.evaluate("document.documentElement.classList.add('vpshort')")
         nav, main = page.locator("#nav").bounding_box(), page.locator("#main").bounding_box()
-        assert abs(nav["y"] + nav["height"] - (852 + 62)) < 1 and abs(main["y"] + main["height"] - nav["y"]) < 1.5, (nav, main)
+        assert abs(nav["height"] - 56) < 1 and abs(nav["y"] + nav["height"] - 852) < 1 and abs(main["y"] + main["height"] - nav["y"]) < 1.5, (nav, main)
+        label = page.locator("#nav a", has_text="Photos").bounding_box()
+        assert label["y"] + label["height"] <= 852 + 1, label  # the 1 px top border overlaps the link's bottom padding, not its label
     finally:
         ctx.close()
