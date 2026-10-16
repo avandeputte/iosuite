@@ -282,7 +282,12 @@ class Semantic:
         others = [e for n, e in self.engines.items() if n != new.name and _ready(n) and self._complete(e)]
         if not others:
             return new
-        return max(others, key=lambda e: e.file.stat().st_mtime if e.file.exists() else 0)
+        def age(e):
+            try:
+                return e.file.stat().st_mtime
+            except OSError:  # reset() removed it between the checks
+                return 0
+        return max(others, key=age)
 
     def _has_clip(self) -> bool:
         return _ready("clip") and self.engines["clip"].file.exists()

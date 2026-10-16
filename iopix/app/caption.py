@@ -33,7 +33,7 @@ def _load():
     with _lock:
         name = repo()
         if "model" in _state and _state.get("repo") == name:
-            return _state
+            return dict(_state)  # a snapshot: a reset or switch meanwhile cannot pull the model from under a running describe()
         _state.clear()  # first load, or another size was chosen since
         import torch
         from transformers import BlipForConditionalGeneration, BlipProcessor
@@ -42,7 +42,7 @@ def _load():
         torch.set_num_threads(jobs.threads())  # the CPU side of generation, and all of it without a GPU
         dev = "mps" if torch.backends.mps.is_available() else "cpu"
         _state.update(model=model.to(dev).eval(), proc=proc, dev=dev, torch=torch, repo=name)
-        return _state
+        return dict(_state)
 
 
 def describe(paths: list) -> list:

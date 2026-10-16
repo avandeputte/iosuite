@@ -251,9 +251,9 @@ function onRoute() {
   const fp = filterParams();
   const vp = new URLSearchParams(route.params); vp.delete('p');
   const key = route.view + '?' + (PARAM_VIEWS.includes(route.view) ? vp : fp).toString();
-  const cur = route.view === 'photos' && fp.get('fav') === '1' && [...fp.keys()].length === 1 ? 'favorites' : route.view;
+  const cur = currentNav();
   document.querySelectorAll('#nav a, #topbar a.tool').forEach((a) => a.classList.toggle('on', a.dataset.v === cur));
-  $('#nav .navmore')?.classList.toggle('on', ['favorites', 'folders', 'albums', 'tags', 'map', 'settings', 'maintenance', 'history', 'consistency'].includes(cur));
+  $('#nav .navmore')?.classList.toggle('on', MORE_VIEWS.includes(cur));
   renderChips();
   if (key !== viewKey) {
     viewKey = key;
@@ -1677,14 +1677,21 @@ async function loadUser() {
   try { const me = await api('/api/auth/me'); USER = me.user; USER_SETTINGS = me.user ? me.settings : null; IS_ADMIN = me.isAdmin; USERS_EXIST = me.usersExist; REQUIRE_LOGIN = !!me.requireLogin; } catch { USER = null; USER_SETTINGS = null; }
   renderUserMenu();
 }
+// which bar item a view belongs to: Explore's sub-pages light Explore, the Faces page People, Maintenance's pages Maintenance
+const NAV_OF = { duplicates: 'explore', detected: 'explore', bursts: 'explore', events: 'explore', faces: 'people', analysis: 'maintenance', history: 'maintenance', consistency: 'maintenance' };
+const MORE_VIEWS = ['favorites', 'folders', 'albums', 'tags', 'map', 'settings', 'maintenance'];
+function currentNav() {
+  const fp = filterParams();
+  if (route.view === 'photos' && fp.get('fav') === '1' && [...fp.keys()].length === 1) return 'favorites';
+  return NAV_OF[route.view] || route.view;
+}
 /** Phones: the bottom bar shows four destinations; the rest, with Settings and Maintenance, open from "More". */
 function moreSheet() {
   const rest = NAV.filter(([v]) => ['favorites', 'folders', 'albums', 'tags', 'map'].includes(v)).map(([v, label, ic, href]) => [href || `#/${v}`, label, ic, v]);  // the ones the phone bar hides
   rest.push(['#/settings', 'Settings', 'gear', 'settings']);
   if (IS_ADMIN) rest.push(['#/maintenance', 'Maintenance', 'wrench', 'maintenance']);
-  const back = modal('More', h('div', { class: 'sheetgrid' }, rest.map(([href, label, ic, v]) => h('a', { href, class: route.view === v || (v === 'favorites' && route.view === 'photos' && filterParams().get('fav') === '1') ? 'on' : '', style: `--hue:var(--c-${{ favorites: 'rose', folders: 'teal', albums: 'indigo', tags: 'orange', map: 'cyan' }[v] || 'slate'})`, onclick: () => back.remove() }, h('span', { class: 'sic' }, icon(ic)), label))),
+  const back = modal('More', h('div', { class: 'sheetgrid' }, rest.map(([href, label, ic, v]) => h('a', { href, class: currentNav() === v ? 'on' : '', style: `--hue:var(--c-${{ favorites: 'rose', folders: 'teal', albums: 'indigo', tags: 'orange', map: 'cyan' }[v] || 'slate'})`, onclick: () => back.remove() }, h('span', { class: 'sic' }, icon(ic)), label))),
     h('div', { class: 'modal-btns' }, h('button', { class: 'pillbtn', onclick: () => back.remove() }, 'Close')));
-  back.firstChild.classList.add('sheet');
 }
 function renderUserMenu() {
   const el = $('#usermenu'); if (!el) return;
@@ -1789,6 +1796,7 @@ function showAnalysis() { go('maintenance', null, true); }  // the old #/analysi
  *  and an installed search model that is not in use get rows of their own. */
 function aiSection(view) {
   const body = h('div');
+  let timer = 0;
   const checkBtn = h('button', { class: 'pillbtn', onclick: async () => { checkBtn.disabled = true; checkBtn.textContent = 'Checking…'; try { await post('/api/models/check', {}); } catch (e) { toast(e.message); } draw(); } }, icon('spark'), 'Check models for updates');
   const wrap = h('div', null, h('h2', null, 'AI analysis and models'),
     h('div', { class: 'muted', style: 'max-width:860px' }, 'Everything runs locally and is stored in the viewer’s data folder; nothing is written to digiKam. New and changed photos are picked up automatically, about 20 seconds after digiKam saves them. Where a feature can run on more than one model, the menu in the Model column picks it: the default is the small, fast one, the others are more accurate and slower, each downloaded once. Models never update on their own; “Check models for updates” asks each source whether the exact files used have changed.'),
@@ -1835,7 +1843,7 @@ function aiSection(view) {
           : group === 'face_detector' ? ' Used by the next face detection run.'
           : ' New photos use it from now on; “Run again” redoes the whole library with it.';
         if (!confirm(`Switch ${c.label.toLowerCase()} to ${m.label}?${note}`)) { e.target.value = c.chosen; return; }
-        try { await post('/api/settings', { [group]: key }); toast(`${c.label}: now ${m.label}.`); } catch (err) { toast(err.message); }
+        try { await post('/api/settings', { [group]: key }); toast(`${c.label}: now ${m.label}.`); } catch (err) { e.target.value = c.chosen; toast(err.message); }
         draw();
       } }, c.options.map((k) => h('option', { value: k, selected: k === c.chosen }, models[k] ? models[k].label + (models[k].installed ? '' : ' (not installed)') : k)));
       return sel;
@@ -1900,9 +1908,15 @@ function aiSection(view) {
       h('div', { class: 'mwrap' }, h('table', { class: 'mtable' },
         h('thead', null, h('tr', null, ['Feature', 'Model', 'Progress', ''].map((c) => h('th', null, c)))), h('tbody', null, rows))));
     checkBtn.disabled = false; fill(checkBtn, icon('spark'), 'Check models for updates');
-    if (a.jobs.some((j) => j.running) || p.running) setTimeout(() => { if (route.view === view) draw(); }, 4000);
+    clearTimeout(timer);
+    if (a.jobs.some((j) => j.running) || p.running) timer = setTimeout(() => { if (route.view === view) drawSafe(); }, 4000);
   };
-  draw();
+  const drawRaw = draw;
+  const drawSafe = async () => {  // a menu the user has open is not replaced under their pointer; try again shortly
+    if (body.contains(document.activeElement) && document.activeElement.matches('select')) { clearTimeout(timer); timer = setTimeout(drawSafe, 1500); return; }
+    return drawRaw();
+  };
+  drawSafe();
   return wrap;
 }
 function analysisSection(view, part = 'jobs') {
@@ -2245,7 +2259,7 @@ async function settingsPage(view) {
   const st = m.storage;
   main.replaceChildren(h('div', { class: 'page spage' },
     h('h1', null, view === 'settings' ? 'Settings' : 'Maintenance', h('span', { class: 'muted', style: 'font-size:13px;font-weight:400;margin-left:12px' }, `${APP_NAME} v${APP_VERSION || '?'}${APP_COMMIT && APP_COMMIT !== 'unknown' ? ' · ' + APP_COMMIT : ''}`)),
-    h('div', { class: 'muted', style: 'max-width:820px' }, `Library: ${m.paths.library} (${nf.format(m.photos)} items). digiKam database: ${m.paths.digikamDb}. Everything the viewer writes lives in ${m.paths.data}.`),
+    h('div', { class: 'muted', style: 'max-width:820px' }, m.paths ? `Library: ${m.paths.library} (${nf.format(m.photos)} items). digiKam database: ${m.paths.digikamDb}. Everything the viewer writes lives in ${m.paths.data}.` : `${nf.format(m.photos)} items in the library.`),
     !USERS_EXIST ? row('No users yet', 'The viewer is open to anyone who can reach it. Create the admin account to switch on sign-in: visitors then browse read-only, and only editors and admins can change the library.', btn('Create the admin account', setupDialog, true)) : null,
     ...(view === 'settings' ? [
     h('h2', null, 'Display'),
@@ -3377,7 +3391,7 @@ function renderInfo() {
     show('details') && kv.length ? [h('h4', null, 'Details'), h('div', { class: 'kv' }, kv)] : null,
     show('camera') && ckv.length ? [h('h4', null, 'Camera'), h('div', { class: 'kv' }, ckv)] : null,
     show('file') ? [h('h4', null, 'File'), h('div', { class: 'b muted', style: 'word-break:break-all;user-select:all;font-size:12.5px' }, d.path)] : null,
-    show('history') ? (() => {  // filled in when the answer arrives; nothing shows for a photo never changed here
+    show('history') && EDITING ? (() => {  // editors only; filled in when the answer arrives, nothing shows for a photo never changed here
       const box = h('div', { class: 'hlist small' });
       api(`/api/history?photo=${d.id}&limit=6`).then((r) => {
         if (!r.entries.length || !box.isConnected) return;
@@ -3402,6 +3416,10 @@ function renderInfo() {
 }
 
 document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {  // a dialog first; the sign-in dialog stays
+    const backs = [...document.querySelectorAll('.modal-back:not(.required)')];
+    if (backs.length) { backs[backs.length - 1].remove(); return; }
+  }
   if (e.target.matches('input, select, textarea') || e.metaKey || e.ctrlKey || e.altKey) return;
   if (LB.open) {
     if (e.key === 'Escape') closeLightbox(true);

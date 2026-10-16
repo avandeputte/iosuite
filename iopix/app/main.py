@@ -247,6 +247,10 @@ WRITE_PATHS = ("/api/edit", "/api/edits/db", "/api/faces/detect", "/api/photos/d
 
 ADMIN_PATHS = ("/api/settings", "/api/maintenance", "/api/log", "/api/library/merge", "/api/consistency/scan", "/api/analysis/run", "/api/models/check", "/api/models/download", "/api/restart", "/api/users", "/api/update", "/api/neardups")
 SIGNED_IN_PATHS = ("/api/favorites", "/api/ualbums", "/api/searches", "/api/tags/recent", "/api/auth/settings", "/api/auth/password")
+# reads that are not for everyone, whatever the method: the server log and the merge plan (admins); the change log and
+# the elevation lookup, which spends Google credits (editors)
+ADMIN_READ_PATHS = ("/api/log", "/api/library/merge")
+EDITOR_READ_PATHS = ("/api/history", "/api/elevation")
 
 
 def _hits(path: str, paths) -> bool:
@@ -286,8 +290,12 @@ async def _auth_guard(request: Request, call_next):
                 return JSONResponse({"detail": "Sign-in is required; MCP clients send the admin token as 'Authorization: Bearer <token>'"}, status_code=401)
         elif not _open_to_visitors(path):
             return JSONResponse({"detail": "Sign in to use the viewer."}, status_code=401)
+    path = request.url.path
+    if _hits(path, ADMIN_READ_PATHS) and not users.is_admin(user):
+        return JSONResponse({"detail": "Admins only"}, status_code=403 if user else 401)
+    if _hits(path, EDITOR_READ_PATHS) and not users.can_write(user):
+        return JSONResponse({"detail": "Editors only"}, status_code=403 if user else 401)
     if request.method == "POST":
-        path = request.url.path
         if _hits(path, WRITE_PATHS) and appstate.read_only():
             return JSONResponse({"detail": "The viewer is in read-only mode; nothing in the library can be changed."}, status_code=403)
         if _hits(path, WRITE_PATHS) and not users.can_write(user):
@@ -475,7 +483,8 @@ def _app_stamp() -> str:
 def api_status(request: Request):
     user = request.state.user
     return {"version": _public_version(), "error": state["error"], "rev": appstate.rev, "app": _app_stamp(),
-            "thumbs": {"running": prewarmer.running, "done": prewarmer.done, "total": prewarmer.total, "since": prewarmer.started, "last": prewarmer.last, "current": list(prewarmer.current.values())[:3]},
+            "thumbs": {"running": prewarmer.running, "done": prewarmer.done, "total": prewarmer.total, "since": prewarmer.started, "last": prewarmer.last,
+                       "current": list(prewarmer.current.values())[:3] if users.is_signed_in(user) else []},  # file paths: not for anonymous clients
             "semantic": {"enabled": semantic_enabled(), "running": semantic.running, "done": semantic.done,
                          "total": semantic.total, "indexed": 0 if semantic.ids is None else int(len(semantic.ids))},
             "places": places.available(), "editing": edits.available() and users.can_write(user), "pendingEdits": edits.pending_count(),
@@ -1025,9 +1034,13 @@ def _settings_public() -> dict:
 
 
 @app.get("/api/settings")
-def api_settings_get():
-    """The settings the Settings page shows (admin values are read-only here; secrets are never included)."""
-    return _settings_public()
+def api_settings_get(request: Request):
+    """The settings the Settings page shows (admin values are read-only here; secrets are never included;
+    where the databases are is for admins)."""
+    out = _settings_public()
+    if not users.is_admin(request.state.user):
+        out.pop("database", None); out.pop("album_roots", None)
+    return out
 
 
 @app.post("/api/settings")
@@ -1111,7 +1124,7 @@ async def api_settings(request: Request):
             if not dlmodels.local(key)["installed"]:
                 raise HTTPException(400, f"{dlmodels.REGISTRY[key]['label']} is not installed; download it first")
             appstate.set_setting(group, key)
-            dlmodels._reset(key)  # the next use loads the new model
+            await run_in_threadpool(dlmodels._reset, key)  # the next use loads the new model (its locks may be held by a loading job)
             if group == "face_vectors":
                 await run_in_threadpool(facevecs.start)  # every face is embedded again with the new model
             elif group in ("object_model", "caption_model"):
@@ -1381,7 +1394,8 @@ async def api_viewerdb_switch(request: Request):
 @app.get("/api/maps")
 def api_maps(request: Request):
     """Tile provider for the browser: OpenStreetMap, or Google Maps with the owner's key (session created here)."""
-    maps.note_referer(request.headers)
+    if users.is_signed_in(request.state.user):
+        maps.note_referer(request.headers)  # a visitor's Referer must not steer the key's referrer restriction
     return maps.config()
 
 
@@ -1389,7 +1403,8 @@ def api_maps(request: Request):
 async def api_geocode(request: Request, q: str = ""):
     """Address or landmark search for the location dialog: OpenStreetMap's Nominatim (the same
     project the map tiles come from), with the offline GeoNames towns as a fallback."""
-    maps.note_referer(request.headers)
+    if users.is_signed_in(request.state.user):
+        maps.note_referer(request.headers)  # a visitor's Referer must not steer the key's referrer restriction
     q = q.strip()
     if len(q) < 2:
         return {"results": [], "source": None}
@@ -1446,7 +1461,8 @@ async def api_location_landmark(request: Request):
         buf = io.BytesIO()
         im.save(buf, "JPEG", quality=85)
         return maps.landmarks(buf.getvalue())
-    maps.note_referer(request.headers)
+    if users.is_signed_in(request.state.user):
+        maps.note_referer(request.headers)  # a visitor's Referer must not steer the key's referrer restriction
     try:
         found = await run_in_threadpool(work)
     except RuntimeError as e:
@@ -1457,7 +1473,8 @@ async def api_location_landmark(request: Request):
 @app.get("/api/elevation")
 async def api_elevation(request: Request, lat: float, lon: float):
     """Ground height at a point for the location dialog's altitude field (Google Elevation, else Open-Meteo)."""
-    maps.note_referer(request.headers)
+    if users.is_signed_in(request.state.user):
+        maps.note_referer(request.headers)  # a visitor's Referer must not steer the key's referrer restriction
     if abs(lat) > 90 or abs(lon) > 180:
         raise HTTPException(400, "Not a position")
     try:
@@ -1543,8 +1560,8 @@ def api_log_download():
 
 
 @app.get("/api/maintenance")
-def api_maintenance():
-    """Library and storage facts for the Settings page."""
+def api_maintenance(request: Request):
+    """Library and storage facts for the Settings page (paths, databases and storage for admins only)."""
     con = db()
     try:
         built = con.execute("SELECT value FROM meta WHERE key = 'built'").fetchone()
@@ -1553,7 +1570,7 @@ def api_maintenance():
         con.close()
     dk_mtime = dkdb.last_change_time()
     free = shutil.disk_usage(str(config.DATA_DIR)).free
-    return {
+    out = {
         "photos": n, "indexBuilt": int(built[0]) if built else None, "digikamSaved": dk_mtime,
         "digikamRunning": dbsync.digikam_running(), "pendingEdits": edits.pending_count(),
         "paths": {"library": str(config.PHOTOS_ROOT), "digikamDb": dkdb.describe(), "data": str(config.DATA_DIR)},
@@ -1570,6 +1587,10 @@ def api_maintenance():
         "templates": json.loads(appstate.get_setting("templates", "[]")), "templateFields": list(edits.TEMPLATE_FIELDS),
         "recentTags": json.loads(appstate.get_setting("recent_tags", "[]")),
     }
+    if not users.is_admin(request.state.user):
+        for k in ("paths", "database", "storage", "albumRoots", "album_roots"):
+            out.pop(k, None)
+    return out
 
 
 @app.post("/api/maintenance")
@@ -1596,7 +1617,7 @@ async def api_maintenance_run(request: Request):
 
 def _face_detect_allowed():
     if not facedetect.available():
-        raise HTTPException(409, "Face detection needs the YuNet model: download it in Maintenance › AI analysis and models")
+        raise HTTPException(409, f"Face detection needs the {dlmodels.REGISTRY[dlmodels.chosen('face_detector')]['label']} model: download it in Maintenance › AI analysis and models")
     if not config.DB_WRITE or appstate.read_only():
         raise HTTPException(403, "Writing to digiKam's database is turned off")
     if not index.sync_enabled() or index.offline["since"]:
@@ -1993,7 +2014,7 @@ def api_faces_groups(kind: str = "unknown", tag: int = None, threshold: float = 
     """Undecided faces with look-alikes grouped (SFace embeddings); never a name proposal."""
     if kind not in ("unknown", "suggested"):
         raise HTTPException(400, "kind must be unknown or suggested")
-    t = max(0.2, min(0.9, threshold)) if threshold else facevecs.GROUP_THRESHOLD
+    t = max(0.2, min(0.9, threshold)) if threshold else facevecs.group_threshold()
     try:
         out = facevecs.groups(kind, t, tag)
     except Exception as e:
@@ -2173,6 +2194,8 @@ async def api_folder_upload(album_id: int, request: Request):
     ups = [f for f in form.getlist("files") if hasattr(f, "filename")]
     if not ups:
         raise HTTPException(400, "No files")
+    if any((f.size or 0) > 2 * 1024 ** 3 for f in ups):
+        raise HTTPException(413, "Files over 2 GB cannot be uploaded this way")
     files = [(f.filename, await f.read()) for f in ups[:500]]
     try:
         result = await run_in_threadpool(folders.upload, album_id, files)

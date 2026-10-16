@@ -46,13 +46,20 @@ def test_roles(client, fresh, lib):
     assert client.post("/api/edit", json={"ids": [lib["ids"][0]], "rating": 3}).status_code == 403
     assert client.post("/api/settings", json={"bg_threads": 2}).status_code == 403
     assert client.get("/api/users").status_code == 403
+    # reads that are not for everyone: the server log and the merge plan (admins), the change log and the elevation lookup (editors)
+    assert client.get("/api/log").status_code == 403 and client.get("/api/log/download").status_code == 403
+    assert client.get("/api/library/merge").status_code == 403
+    assert client.get("/api/history").status_code == 403 and client.get("/api/elevation?lat=1&lon=1").status_code == 403
+    assert "database" not in client.get("/api/settings").json() and "paths" not in client.get("/api/maintenance").json()
     _login(client, "ed", "editor-pass")
     s = client.get("/api/status").json()
     assert s["editing"] is True and s["isAdmin"] is False
     assert client.post("/api/settings", json={"bg_threads": 2}).status_code == 403
+    assert client.get("/api/history").status_code == 200 and client.get("/api/log").status_code == 403
     assert client.post("/api/users", json={"name": "z", "password": "password1", "role": "viewer"}).status_code == 403
     _login(client, "alex", "correct horse")
     assert client.get("/api/status").json()["isAdmin"] is True
+    assert client.get("/api/log").status_code == 200 and "paths" in client.get("/api/maintenance").json()
     assert client.post("/api/settings", json={"bg_threads": 2}).status_code == 200
     assert client.get("/api/users").status_code == 200 and len(client.get("/api/users").json()["users"]) == 3
 

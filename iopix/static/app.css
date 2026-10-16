@@ -676,7 +676,7 @@ body:has(#dkbanner) #updbanner { bottom: 96px; }  /* both at once: the update ca
   #selbar .pillbtn { padding: 0 6px; flex: none; }
   #selbar .iconbtn { width: 36px; flex: none; }
   #selbar .n { font-size: 14px; margin: 0 2px 0 0; white-space: nowrap; }
-  input, select, textarea, #q { font-size: 16px; }  /* under 16px, iOS zooms the whole page in when a field gets focus */
+  input, select, textarea, #q, .einput, .mtable .mpick, .modal input[type=file], .gbar select, #selbar select { font-size: 16px; }  /* under 16px, iOS zooms the whole page in when a field gets focus */
   #nav { overflow: hidden; justify-content: space-around; padding-bottom: env(safe-area-inset-bottom); height: calc(56px + env(safe-area-inset-bottom)); }
   #nav a, #nav .navmore { min-width: 0; flex: 1; width: auto; border-radius: 0; }
   #nav a[data-v="favorites"], #nav a[data-v="folders"], #nav a[data-v="albums"], #nav a[data-v="tags"], #nav a[data-v="map"] { display: none; }

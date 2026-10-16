@@ -359,9 +359,10 @@ def _caption_job(photos: list, gen: int):
         batch = todo[i:i + 8]
         try:
             texts = caption.describe([p["path"] for p in batch])
-        except Exception as e:
+        except Exception as e:  # the batch is not recorded, so these photos are tried again on the next run
             log.warning("captions: batch starting at %s failed (%s)", batch[0]["path"], e)
-            texts = [None] * len(batch)
+            progress["captions"]["done"] += len(batch)
+            continue
         rows = [(p["id"], _stamp(p), (t or "")[:500]) for p, t in zip(batch, texts)]
         _save("INSERT OR REPLACE INTO ai_descriptions VALUES (?,?,?)", rows)
         progress["captions"]["done"] += len(batch)

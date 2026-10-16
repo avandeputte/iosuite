@@ -28,8 +28,11 @@ SIZE = 112
 # ArcFace's reference landmark positions (left eye, right eye, nose, left and right mouth corner) in its 112x112 input
 ARCFACE_TEMPLATE = ((38.2946, 51.6963), (73.5318, 51.5014), (56.0252, 71.7366), (41.5493, 92.3655), (70.7299, 92.2041))
 KINDS = ("unknown", "suggested")
-GROUP_THRESHOLD = 0.45  # cosine; OpenCV's own same-identity threshold for SFace is 0.363, a little stricter here
-SUGGEST_THRESHOLD = 0.40  # a group or face "looks like" a person when its best prototype match is at least this
+# cosine thresholds per model: (same group, "looks like" suggestion). OpenCV's own same-identity threshold for SFace is
+# 0.363, a little stricter here; ArcFace keeps different people near 0 (measured 0.05 against 0.71 for the same person)
+THRESHOLDS = {"sface": (0.45, 0.40), "arcface": (0.40, 0.35)}
+DIMS = {"sface": 128, "arcface": 512}
+GROUP_THRESHOLD = 0.45  # SFace's; group_threshold() gives the chosen model's
 PROTOS_PER_PERSON = 12  # the most recent confirmed faces of each person become their prototypes
 progress = {"running": False, "done": 0, "total": 0}
 _lock = threading.Lock()
@@ -40,6 +43,14 @@ _run = {"gen": 0}
 
 def chosen() -> str:
     return models.chosen("face_vectors")
+
+
+def group_threshold() -> float:
+    return THRESHOLDS.get(chosen(), THRESHOLDS["sface"])[0]
+
+
+def suggest_threshold() -> float:
+    return THRESHOLDS.get(chosen(), THRESHOLDS["sface"])[1]
 
 
 def model_path():
@@ -113,10 +124,16 @@ def _landmarks(im):
 
 
 def align(im, pts):
-    """The crop warped so its landmarks sit on ArcFace's template: a 112x112 RGB image."""
+    """The crop warped so its landmarks sit on ArcFace's template: a 112x112 RGB image. None when the
+    landmarks are degenerate (all on a line, say) and no transform exists."""
     from PIL import Image
-    m = np.vstack([_similarity(pts, ARCFACE_TEMPLATE), [0, 0, 1]])
-    inv = np.linalg.inv(m)  # PIL wants the matrix from output pixels back to input pixels
+    try:
+        m = np.vstack([_similarity(pts, ARCFACE_TEMPLATE), [0, 0, 1]])
+        inv = np.linalg.inv(m)  # PIL wants the matrix from output pixels back to input pixels
+    except (np.linalg.LinAlgError, ValueError):
+        return None
+    if not np.all(np.isfinite(inv)):
+        return None
     return im.convert("RGB").transform((SIZE, SIZE), Image.AFFINE, tuple(inv[:2].ravel()), Image.Resampling.BICUBIC)
 
 
@@ -125,9 +142,8 @@ def _prepare(im, kind: str):
     from PIL import Image
     if kind == "arcface":
         pts = _landmarks(im)
-        if pts is not None:
-            face = align(im, pts)
-        else:  # no landmarks: the middle of the crop, where make_face put the face
+        face = align(im, pts) if pts is not None else None
+        if face is None:  # no landmarks: the middle of the crop, where make_face put the face
             m = int(im.width * 0.18)
             face = im.crop((m, m, im.width - m, im.height - m)).convert("RGB").resize((SIZE, SIZE), Image.Resampling.BILINEAR)
         arr = (np.asarray(face, dtype=np.float32) - 127.5) / 127.5  # RGB, -1..1
@@ -137,12 +153,13 @@ def _prepare(im, kind: str):
     return np.ascontiguousarray(np.transpose(arr, (2, 0, 1)))
 
 
-def embed_paths(paths: list):
-    """Unit vectors (128-d for SFace, 512-d for ArcFace) for face crop files."""
+def embed_paths(paths: list, kind: str = None, sess=None):
+    """Unit vectors (128-d for SFace, 512-d for ArcFace) for face crop files. A job passes the model it
+    started with, so a switch made meanwhile cannot mix two models' vectors in one batch."""
     from PIL import Image
-    s = _sess()
+    kind = kind or chosen()
+    s = sess or _sess()
     name = s.get_inputs()[0].name
-    kind = chosen()
     out = []
     for p in paths:
         blob = _prepare(Image.open(p), kind)[None]
@@ -210,7 +227,7 @@ def start():
     jobs.submit("faces", lambda: _job(gen))
 
 
-def _embed_into(gen: int, todo: list, table: str, offset: int):
+def _embed_into(gen: int, todo: list, table: str, offset: int, kind: str, sess):
     """todo: [(key..., path, pw, ph)] where key is (photo, x, y, w, h) or (tag, photo, x, y, w, h); rows go to `table`."""
     tagged = table == "ai_person_references"
     for i in range(0, len(todo), 32):
@@ -228,10 +245,12 @@ def _embed_into(gen: int, todo: list, table: str, offset: int):
                 log.warning("faces: no crop for photo %s (%s)", pid, e)
         if batch:
             try:
-                vecs = embed_paths(paths)
+                vecs = embed_paths(paths, kind, sess)
             except Exception as e:
                 log.warning("faces: embedding failed (%s)", e)
                 continue
+            if gen != _run["gen"]:  # a switch or reset happened while this batch was computed: its vectors are not kept
+                return False
             con = vdb.connect()
             try:
                 if tagged:
@@ -265,15 +284,16 @@ def _same_model():
 
 def _job(gen: int):
     _same_model()
+    kind, sess = chosen(), _sess()  # the model this whole run uses
     faces, protos = _faces(), _proto_faces()
     have, have_p = _have(), _have_protos()
     todo = [f for f in faces if (f[0], f[1], f[2], f[3], f[4]) not in have]
     todo_p = [f for f in protos if (f[1], f[2], f[3], f[4], f[5]) not in have_p or have_p[(f[1], f[2], f[3], f[4], f[5])] != f[0]]
     progress.update(running=True, done=0, total=len(todo) + len(todo_p))
     try:
-        if not _embed_into(gen, todo_p, "ai_person_references", 0):  # the prototypes first: they make the suggestions possible
+        if not _embed_into(gen, todo_p, "ai_person_references", 0, kind, sess):  # the prototypes first: they make the suggestions possible
             return
-        if not _embed_into(gen, todo, "ai_face_embeddings", len(todo_p)):
+        if not _embed_into(gen, todo, "ai_face_embeddings", len(todo_p), kind, sess):
             return
         # faces decided since (named, ignored, removed) no longer need a vector; prototypes follow the newest faces
         current = {(f[0], f[1], f[2], f[3], f[4]) for f in faces}
@@ -312,6 +332,7 @@ def _prototypes() -> tuple:
         rows = [(r[0], np.frombuffer(r[1], dtype=np.float32)) for r in con.execute("SELECT tag_id, vec FROM ai_person_references")]
     finally:
         con.close()
+    rows = [r for r in rows if len(r[1]) == DIMS.get(chosen(), 128)]  # never a stray vector of another model
     if not rows:
         return None, None, {}
     icon = index.open_index()
@@ -334,10 +355,10 @@ def _suggest(vec, pm, ptags, names):
     for t, sc in zip(ptags.tolist(), sims.tolist()):
         best[t] = max(best.get(t, -1), sc)
     t, sc = max(best.items(), key=lambda kv: kv[1])
-    return {"tag": int(t), "name": names.get(int(t)), "score": round(float(sc), 3)} if sc >= SUGGEST_THRESHOLD else None
+    return {"tag": int(t), "name": names.get(int(t)), "score": round(float(sc), 3)} if sc >= suggest_threshold() else None
 
 
-def groups(kind: str = "unknown", threshold: float = GROUP_THRESHOLD, tag: int = None) -> dict:
+def groups(kind: str = "unknown", threshold: float = None, tag: int = None) -> dict:
     """Undecided faces of one kind, look-alikes together: {groups: [{faces: [...], n, suggest}], ungrouped: [...],
     missing: faces without a vector yet}. Groups are connected components of pairs above the threshold; each group
     and each face carries the viewer's own "looks like" suggestion when a named person's prototypes match."""
@@ -359,9 +380,12 @@ def groups(kind: str = "unknown", threshold: float = GROUP_THRESHOLD, tag: int =
         vecs = {(r[0], r[1], r[2], r[3], r[4]): np.frombuffer(r[5], dtype=np.float32) for r in vcon.execute("SELECT photo_id, x, y, w, h, vec FROM ai_face_embeddings")}
     finally:
         vcon.close()
+    dim = DIMS.get(chosen(), 128)
     keyed = [(f, vecs.get((f["photo"], f["x"], f["y"], f["w"], f["h"]))) for f in faces]
+    keyed = [(f, v if v is not None and len(v) == dim else None) for f, v in keyed]  # a vector of another model counts as missing
     missing = [f for f, v in keyed if v is None]
     have = [(f, v) for f, v in keyed if v is not None]
+    threshold = threshold or group_threshold()
     out = {"groups": [], "ungrouped": [], "missing": missing, "total": len(faces), "threshold": threshold}
     if not have:
         return out

@@ -68,16 +68,19 @@ def available() -> bool:
 
 
 def _sess():
+    """(detector name, its onnxruntime session), read together so a switch meanwhile cannot pair one model's
+    decoder with another's session."""
     global _session, _session_path
     with _lock:
-        path = model_path()
+        kind = chosen()
+        path = models.path(kind)
         if _session is None or _session_path != path:
             import onnxruntime as ort
             opts = ort.SessionOptions()
             opts.intra_op_num_threads = max(1, jobs.threads())
             _session = ort.InferenceSession(str(path), sess_options=opts, providers=["CPUExecutionProvider"])
             _session_path = path
-        return _session
+        return kind, _session
 
 
 def reset_session():
@@ -171,7 +174,8 @@ def _run_square(img) -> list:
     canvas = Image.new("RGB", (SIDE, SIDE))
     canvas.paste(img.convert("RGB").resize((w, h), Image.Resampling.BILINEAR), (0, 0))
     arr = np.asarray(canvas, dtype=np.float32)
-    found = DETECTORS[chosen()](arr, _sess())
+    kind, sess = _sess()
+    found = DETECTORS[kind](arr, sess)
     return [(x / s, y / s, bw / s, bh / s, sc, [(px / s, py / s) for px, py in pts]) for x, y, bw, bh, sc, pts in found]
 
 
