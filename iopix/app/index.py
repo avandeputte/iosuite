@@ -396,6 +396,7 @@ def _build(dst_path: Path, source: tuple) -> dict:
             if not m:
                 raise Unavailable(f"digiKam's database cannot be read and the viewer has no copy of the library yet: {e}") from e
             kind, ver, raw = "library", library.version(), None
+    direct = raw is not None  # read straight from digiKam (the copy follows), or from the copy
     if raw is None:
         con = library.connect()
         try:
@@ -405,6 +406,7 @@ def _build(dst_path: Path, source: tuple) -> dict:
             con.close()
     version = _version_for(ver)
     last_source.update(kind=kind, version=ver)
+    phases = {"read": time.time() - t0}
 
     # ---- album roots and albums
     roots = {r[0]: r[1] for r in raw["roots"]}
@@ -511,8 +513,10 @@ def _build(dst_path: Path, source: tuple) -> dict:
 
     photos, fts_rows, photo_tag_rows = [], [], []
     # edits made in the viewer live in sidecars; show them until digiKam's database catches up
+    t1 = time.time()
     pending, resolved = edits.pending(), []
     seen = analysis.results()  # sharpness, OCR text, objects... from the app's own analysis
+    phases["analysis"] = time.time() - t1
     burst_rows = []
     tag_by_full = {t["full"]: tid for tid, t in tags.items() if tid not in hidden}
     tag_direct, tag_all = defaultdict(set), defaultdict(set)
@@ -628,6 +632,8 @@ def _build(dst_path: Path, source: tuple) -> dict:
     tmp = dst_path.with_suffix(f".{os.getpid()}-{threading.get_ident()}.tmp")  # another process (the MCP server) may build too
     for p in (tmp, Path(str(tmp) + "-journal")):
         p.unlink(missing_ok=True)
+    phases["compute"] = time.time() - t0 - sum(phases.values())
+    t2 = time.time()
     dst = sqlite3.connect(tmp)
     try:
         dst.executescript("PRAGMA journal_mode = OFF; PRAGMA synchronous = OFF;" + SCHEMA)
@@ -688,7 +694,9 @@ def _build(dst_path: Path, source: tuple) -> dict:
         raise
     dst.close()
     os.replace(tmp, dst_path)
-    log.info("index built from %s in %.1fs: %d photos", "digiKam's database" if kind == "digikam" else "the library copy", time.time() - t0, len(photos))
+    phases["write"] = time.time() - t2
+    log.info("index built from %s in %.1fs: %d photos (%s)", "digiKam's database" if direct else "the library copy", time.time() - t0, len(photos),
+             ", ".join(f"{k} {v:.1f}s" for k, v in phases.items()))
     return stats
 
 
