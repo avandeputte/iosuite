@@ -90,6 +90,8 @@ def _vconn_class():
             super().__init__(raw, mysql, writable)
             self.changed = False
             self.standalone = True
+            if mysql:  # keep digiKam's root tag (id 0) as it is when rows are written back
+                raw.cursor().execute("SET SESSION sql_mode = CONCAT(@@sql_mode, ',NO_AUTO_VALUE_ON_ZERO')")
 
         def execute(self, sql: str, params=()):
             if _WRITE.match(sql):
@@ -184,7 +186,9 @@ def copy_from_digikam(src) -> dict:
     source = dkdb.source_version()
     con = vdb.connect()
     try:
-        if not con.mysql:
+        if con.mysql:  # digiKam's MySQL root tag has id 0, which AUTO_INCREMENT would otherwise renumber
+            con.execute("SET SESSION sql_mode = CONCAT(@@sql_mode, ',NO_AUTO_VALUE_ON_ZERO')")
+        else:
             con.raw.execute("BEGIN IMMEDIATE")
         for name, (dk, cols, *_rest) in SPEC.items():
             names = [c for c, _s, _m in cols]
