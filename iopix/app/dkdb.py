@@ -107,11 +107,79 @@ def describe() -> str:
 # the SQLite form, and may write either form.
 # --------------------------------------------------------------------------
 
+# How digiKam's MySQL/MariaDB database holds date-times. digiKam's source converts them to UTC for QMYSQL
+# connections (BdEngineBackend::asDBDateTime), but real libraries are found holding local time (the owner's
+# library: all 30,267 Images.modificationDate values equal the files' local modification times). So it is
+# measured, once, by comparing Images.modificationDate with the files' own times; DIGIKAM_MYSQL_DATES=local|utc
+# settles it by hand. Getting it wrong shifts every date by the server's UTC offset, both ways.
+_dates = {"utc": None}
+
+
+def mysql_dates_utc() -> bool:
+    forced = os.environ.get("DIGIKAM_MYSQL_DATES", "").strip().lower()
+    if forced in ("local", "utc"):
+        return forced == "utc"
+    if not is_mysql():
+        return False
+    if _dates["utc"] is None:
+        _dates["utc"] = _detect_mysql_dates()
+    return _dates["utc"]
+
+
+def _detect_mysql_dates() -> bool:
+    """True when Images.modificationDate (the later of the file's and its sidecar's modification time, as
+    digiKam's scanner records it) matches the files in UTC rather than in local time; local when unsure."""
+    try:
+        import pymysql
+        raw = pymysql.connect(**_mysql_kwargs(), charset="utf8mb4", connect_timeout=10, read_timeout=60)
+    except Exception:
+        return False
+    try:
+        cur = raw.cursor()
+        cur.execute("SELECT id, specificPath FROM AlbumRoots")
+        roots = resolve_root_paths(cur.fetchall())
+        cur.execute("SELECT a.albumRoot, a.relativePath, i.name, i.modificationDate FROM Images i JOIN Albums a ON a.id = i.album "
+                    "WHERE i.status = 1 AND i.modificationDate IS NOT NULL ORDER BY i.id DESC LIMIT 200")
+        local = utc = 0
+        for root, rel, name, md in cur.fetchall():
+            p = os.path.join(roots.get(root, ""), (rel or "/").strip("/"), name)
+            try:
+                m = os.stat(p).st_mtime
+            except OSError:
+                continue
+            for side in (p + ".xmp", os.path.splitext(p)[0] + ".xmp"):
+                try:
+                    m = max(m, os.stat(side).st_mtime)
+                except OSError:
+                    pass
+            if abs((md - _dt.datetime.fromtimestamp(m)).total_seconds()) <= 2:
+                local += 1
+            elif abs((md - _dt.datetime.fromtimestamp(m, _dt.timezone.utc).replace(tzinfo=None)).total_seconds()) <= 2:
+                utc += 1
+        import logging
+        logging.getLogger("app.dkdb").info("digiKam's MySQL dates are %s time (%d files matched in local time, %d in UTC)",
+                                           "UTC" if utc > local and utc >= 5 else "local", local, utc)
+        return utc > local and utc >= 5
+    except Exception:
+        return False
+    finally:
+        raw.close()
+
+
+def _norm_plain(v):
+    """Dates as ISO text without any time-zone conversion (the viewer's own database)."""
+    if isinstance(v, _dt.datetime):
+        return v.strftime("%Y-%m-%dT%H:%M:%S.") + f"{v.microsecond // 1000:03d}"
+    if isinstance(v, _dt.date):
+        return v.strftime("%Y-%m-%dT00:00:00.000")
+    return v
+
+
 def _norm_value(v):
     if isinstance(v, _dt.datetime):
-        # digiKam stores UTC on MySQL (BdEngineBackend::asDBDateTime) and local time on SQLite;
-        # the app works in the SQLite convention, so MySQL values are converted to local time
-        v = v.replace(tzinfo=_dt.timezone.utc).astimezone().replace(tzinfo=None)
+        # the app works in local time, digiKam's SQLite convention; a MySQL library holding UTC is converted
+        if mysql_dates_utc():
+            v = v.replace(tzinfo=_dt.timezone.utc).astimezone().replace(tzinfo=None)
         return v.strftime("%Y-%m-%dT%H:%M:%S.") + f"{v.microsecond // 1000:03d}"
     if isinstance(v, _dt.date):
         return v.strftime("%Y-%m-%dT00:00:00.000")
@@ -119,12 +187,12 @@ def _norm_value(v):
 
 
 def db_datetime(s):
-    """A value this backend accepts in a DATETIME/TEXT column, from an ISO string."""
+    """A value this backend accepts in a DATETIME/TEXT column, from an ISO string (local time)."""
     if s is None or not is_mysql():
         return s
     try:
         local = _dt.datetime.fromisoformat(str(s)[:23])
-        return local.astimezone().astimezone(_dt.timezone.utc).replace(tzinfo=None)
+        return local.astimezone().astimezone(_dt.timezone.utc).replace(tzinfo=None) if mysql_dates_utc() else local
     except ValueError:
         return s
 
@@ -353,6 +421,59 @@ def source_version() -> str:
                     "SELECT count(*), SUM(CRC32(CONCAT(imageid,'|',property,'|',COALESCE(value,'')))) FROM ImageCopyright"):
             parts.append(",".join(str(_norm_value(v)) for v in con.execute(sql).fetchone()))
         return "|".join(parts)
+
+
+def file_stamp(path: str):
+    """(modificationDate, fileSize) as digiKam's scanner records them for a file: the later of the file's and its
+    sidecar's modification times, local ISO text, and the file's size (ItemScanner::prepareAddImage,
+    CollectionScanner::scanFileNormal). None when the file is not there."""
+    try:
+        st = os.stat(path)
+    except OSError:
+        return None
+    m = st.st_mtime
+    for side in (path + ".xmp", os.path.splitext(path)[0] + ".xmp"):
+        try:
+            m = max(m, os.stat(side).st_mtime)
+        except OSError:
+            pass
+    t = _dt.datetime.fromtimestamp(m)
+    return t.strftime("%Y-%m-%dT%H:%M:%S.") + f"{t.microsecond // 1000:03d}", st.st_size
+
+
+def stamp_files(items: list):
+    """items: [(digiKam image id, path)] whose file or sidecar the viewer just rewrote with what digiKam's
+    database already holds. digiKam rescans a file when its time or size no longer matches Images
+    (modificationDate, fileSize), and the rescan re-reads face regions, tags and captions from the file into
+    the database; a region read back one pixel off is added next to the existing one. So, as digiKam does
+    after writing metadata itself, the row takes the file's new time and size. Albums.modificationDate is left
+    alone: digiKam then still looks into the folder, and finds these files unchanged and any other file that is."""
+    if not items or standalone():
+        return 0
+    rows = []
+    for iid, path in items:
+        st = file_stamp(path)
+        if st:
+            rows.append((st[0], st[1], int(iid)))
+    if not rows:
+        return 0
+    try:
+        con = connect(write=True)
+        try:
+            con.begin_write()
+            con.executemany("UPDATE Images SET modificationDate = ?, fileSize = ? WHERE id = ?", rows)
+            con.commit()
+            note_own_write()
+        except BaseException:
+            con.rollback()
+            raise
+        finally:
+            con.close()
+    except Exception as e:  # digiKam then rescans these files once; nothing is lost
+        import logging
+        logging.getLogger("app.dkdb").warning("file dates were not updated in digiKam's database: %s", e)
+        return 0
+    return len(rows)
 
 
 _own_write = {"at": 0.0}  # when this viewer last committed a write to digiKam's database

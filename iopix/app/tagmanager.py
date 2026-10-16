@@ -231,6 +231,8 @@ def _run_group(op: str, rows: list):
     failed = edits.rewrite_tags([{"id": i, "path": p} for i, p in rows])
     if failed:
         progress.setdefault("failed", []).extend(failed)
+    bad = set(failed or [])
+    dkdb.stamp_files([(i, p) for i, p in rows if i not in bad])  # the sidecars now list digiKam's tags: no rescan needed
 
 
 def start_worker():

@@ -146,6 +146,20 @@ def _set_label(con, image_id: int, label_tags: list, tag_id: int):
     con.execute("INSERT OR IGNORE INTO ImageTags (imageid, tagid) VALUES (?,?)", (image_id, tag_id))
 
 
+def _photo_paths(ids: list) -> list:
+    """[(id, file path)] from the search index."""
+    from . import index
+    out = []
+    con = index.open_index()
+    try:
+        for i in range(0, len(ids), 500):
+            chunk = ",".join(str(int(x)) for x in ids[i:i + 500])
+            out += [tuple(r) for r in con.execute(f"SELECT id, path FROM photos WHERE id IN ({chunk})")]
+    finally:
+        con.close()
+    return out
+
+
 def apply_pending(db_path: Path = None, pending: dict = None, check_running: bool = True) -> dict:
     """Write every pending viewer edit into the digiKam database."""
     db_path = Path(db_path or dkdb.sqlite_path())
@@ -204,6 +218,8 @@ def apply_pending(db_path: Path = None, pending: dict = None, check_running: boo
                 # a face region on a removed tag would be left dangling; keyword tags have none, but be safe
                 con.execute("DELETE FROM ImageTagProperties WHERE imageid = ? AND tagid = ?", (image_id, tid))
             applied.append(image_id)
+    if applied:  # the database now says what the sidecars (and files) say: digiKam need not rescan them
+        dkdb.stamp_files(_photo_paths(applied))
     edits._recheck(applied)
     from . import history
     history.record([{"photo_id": pid, "action": "database", "summary": "Edits written into " + ("the library" if dkdb.standalone() else "digiKam's database"),

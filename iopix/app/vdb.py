@@ -21,7 +21,7 @@ from pathlib import Path
 
 from . import config
 from . import library as _library
-from .dkdb import Conn, _Cursor, _norm_value
+from .dkdb import Conn, _Cursor, _norm_plain
 
 log = logging.getLogger("app.vdb")
 CONF = config.DATA_DIR / "viewer-db.json"
@@ -209,7 +209,7 @@ class _VCursor(_Cursor):
     def _fix(self, row):
         if row is None or not self._mysql:
             return row
-        return self._cls(_norm_value(v) for v in row)
+        return self._cls(_norm_plain(v) for v in row)
 
 
 class VConn(Conn):

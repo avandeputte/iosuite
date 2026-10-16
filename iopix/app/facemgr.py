@@ -321,4 +321,6 @@ def write_regions(image: int, db_path=None) -> str:
     if edits.writes_files() and edits.can_write_file(path):
         jobs.append((path, args))
     failed = edits.run_exiftool(jobs)
+    if not failed:
+        dkdb.stamp_files([(image, path)])  # digiKam need not rescan a file that says what its database says
     return "failed" if failed else "written"
