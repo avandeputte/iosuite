@@ -27,7 +27,7 @@ All chosen in `setup.sh` (or later from Maintenance › AI analysis and models);
 | Object detection | people, animals, vehicles, everyday objects with boxes | YOLOX-S 35 MB |
 | Text in photos | signs, jerseys, documents searchable | RapidOCR ~60 MB |
 | Face grouping | look-alike unnamed faces grouped, with "looks like" name suggestions | SFace 37 MB |
-| Face detection | YuNet (OpenCV, 0.2 MB, onnxruntime) finds faces nothing has marked yet, on request only: a photo (info panel › People › detect faces), a folder (the face button on its row in Folders, subfolders included) or the whole library (Maintenance › AI analysis and models › Run). Every existing face region, named, unknown, suggested or ignored, from digiKam or any other tool, is honoured: a detection that overlaps one (centre inside it, or a third of the smaller box covered) is the same face and is not added, even when the rectangles differ. New faces are written to digiKam's database the way digiKam writes an unnamed face, so they appear under People › Unnamed faces with a "looks like" suggestion. The library run remembers which photos it looked at and next time checks only new and changed ones; "Run again" looks at every photo again |
+| Face detection | faces nothing has marked yet, added as unnamed faces (on request) | YuNet 0.2 MB |
 | Photo descriptions | one sentence per photo, searchable | BLIP base ~950 MB plus PyTorch (CPU build ~1 GB) |
 
 
@@ -63,6 +63,7 @@ Heavy work runs through one queue, one job at a time, in this order: thumbnails,
 | Content search | SigLIP 2 or CLIP embeddings: text search by description, "More photos like this", Detected content, tag cover photos |
 | Text in photos and face quality | RapidOCR text, searchable from the search box; face quality as the sharpness of digiKam's face regions. |
 | Face grouping and suggestions | SFace embeddings of the faces digiKam has not named and of each person's recent confirmed faces: look-alike groups on People › Faces with a "looks like" suggestion and one-click naming |
+| Face detection | YuNet (OpenCV, 0.2 MB, onnxruntime) finds faces nothing has marked yet, on request only: a photo (info panel › People › detect faces), a folder (the face button on its row in Folders, subfolders included) or the whole library (Maintenance › AI analysis and models › Run). Every existing face region, named, unknown, suggested or ignored, from digiKam or any other tool, is honoured: a detection that overlaps one (centre inside it, or a third of the smaller box covered) is the same face and is not added, even when the rectangles differ. New faces are written to digiKam's database the way digiKam writes an unnamed face, so they appear under People › Unnamed faces with a "looks like" suggestion. The library run remembers which photos it looked at and next time checks only new and changed ones; "Run again" looks at every photo again |
 | Photo descriptions | one sentence per photo from BLIP base, through PyTorch on an Apple GPU when there is one, else on the CPU (about 0.5 s per photo); searchable and shown in the info panel. `CAPTIONS=0` turns the job off |
 | Similar photos | on request from Explore › Duplicate files: resized, re-saved and burst-neighbour copies found from the content-search embeddings |
 
