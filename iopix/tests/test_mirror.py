@@ -61,12 +61,12 @@ def test_index_builds_from_the_copy_while_digikam_is_unreachable_and_edits_still
     gone = Path(str(dbf) + ".gone")
     shutil.move(dbf, gone)
     try:
-        assert index.probe()[0] == "mirror" and index.offline["since"]
+        assert index.probe()[0] == "library" and index.offline["since"]
         assert index.ensure_fresh() is False, "the copy is what the index was last built from: nothing changed"
         stats = index.build()
-        assert stats["photos"] == n and index.last_source["kind"] == "mirror"
+        assert stats["photos"] == n and index.last_source["kind"] == "library"
         s = client.get("/api/status").json()["digikam"]
-        assert s["sync"] and not s["reachable"] and s["source"] == "mirror"
+        assert s["sync"] and not s["reachable"] and s["source"] == "library"
         assert edits.digikam_tag_paths([photo_id])[photo_id] is not None, "tag paths come from the copy"
         if edits.available():
             r = client.post("/api/edit", json={"ids": [photo_id], "changes": {"rating": 4}})
@@ -91,23 +91,50 @@ def test_index_builds_from_the_copy_while_digikam_is_unreachable_and_edits_still
     assert photo_id not in edits.pending()
 
 
-def test_sync_off_keeps_digikam_closed_and_the_viewer_on_its_copy(client, photo_id):
+def test_sync_off_everything_works_on_the_viewers_own_library(client, lib, photo_id):
+    """Sync with digiKam off: digiKam's database is never opened, and tags, folders and faces are created in the
+    library tables instead; turning sync on again does not overwrite them until the owner says so."""
+    from app import main
+
+    def rebuilt():  # what the watcher does after a change: rebuild, and drop the cached answers
+        index.build()
+        main.state["version"] = None
+        main._refresh(initial=True)
     index.ensure_fresh()
+    dbf = Path(lib["db"])
+    dk_before = sqlite3.connect(dbf).execute("SELECT count(*) FROM Tags").fetchone()[0]
     assert client.post("/api/settings", json={"digikam_sync": False}).status_code == 200
     try:
         assert client.get("/api/status").json()["digikam"]["sync"] is False
-        assert client.get("/api/settings").json()["digikam_sync"] is False
-        with pytest.raises(dkdb.SyncError):
-            dkdb.connect()
-        with pytest.raises(dkdb.SyncError):
-            with dbsync.write_transaction():
-                pass
+        con = dkdb.connect()
+        assert getattr(con, "standalone", False), "digiKam's names reach the library tables"
+        assert con.execute("SELECT count(*) FROM Images").fetchone()[0] == _count("photos")
+        con.close()
+        # a tag, a folder and a face, all without digiKam
+        r = client.post("/api/tags/op", json={"op": "add", "parent": 0, "name": "zz-standalone-tag"})
+        assert r.status_code == 200, r.text
+        rebuilt()
+        tags = client.get("/api/meta").json()["tags"]
+        assert any(t["name"] == "zz-standalone-tag" for t in tags), "the new tag is in the viewer"
+        assert sqlite3.connect(dbf).execute("SELECT count(*) FROM Tags").fetchone()[0] == dk_before, "digiKam's database untouched"
+        assert index.mirror_info()["local_changes"] >= 1
         stats = index.build()
-        assert stats["photos"] > 0 and index.last_source["kind"] == "mirror"
+        assert stats["photos"] > 0 and index.last_source["kind"] == "library"
         assert isinstance(edits.digikam_tag_paths([photo_id])[photo_id], list)
+        assert client.post("/api/edits/db").status_code == 409, "edits wait for digiKam while sync is off"
     finally:
         client.post("/api/settings", json={"digikam_sync": True})
+    # sync back on: the library keeps the change and says so, until the owner chooses digiKam's data
+    assert index.probe()[0] == "library"
+    st = client.get("/api/status").json()["digikam"]
+    assert st["conflict"] and st["localChanges"] >= 1
+    rebuilt()
+    assert any(t["name"] == "zz-standalone-tag" for t in client.get("/api/meta").json()["tags"])
+    assert client.post("/api/settings", json={"library_replace": True}).status_code == 200
     assert index.probe()[0] == "digikam"
+    rebuilt()
+    assert not any(t["name"] == "zz-standalone-tag" for t in client.get("/api/meta").json()["tags"]), "digiKam's library again"
+
 
 
 def test_viewer_data_follows_a_photo_digikam_renumbered(client, lib):
@@ -148,3 +175,41 @@ def test_applying_an_edit_rebuilds_so_it_no_longer_shows_as_waiting(client, phot
     assert r.status_code == 200 and r.json()["applied"] >= 1, r.text
     assert photo_id not in edits.pending(), "the rebuild right after the write resolves the edit"
     assert client.get(f"/api/photo/{photo_id}").json()["edited"] == 0
+
+
+def test_sync_off_folders_and_faces_go_to_the_library(client, lib):
+    from app import edits, facemgr, library
+    if not edits.available():
+        pytest.skip("exiftool not available")
+    index.ensure_fresh()
+    dbf = Path(lib["db"])
+    dk = sqlite3.connect(dbf)
+    albums_before = dk.execute("SELECT count(*) FROM Albums").fetchone()[0]
+    faces_before = dk.execute("SELECT count(*) FROM ImageTagProperties").fetchone()[0]
+    dk.close()
+    con = index.open_index()
+    root = con.execute("SELECT id FROM albums WHERE pid IS NULL").fetchone()[0]
+    con.close()
+    client.post("/api/settings", json={"digikam_sync": False})
+    made = None
+    try:
+        r = client.post("/api/folders", json={"parent": root, "name": "zz-standalone-folder"})
+        assert r.status_code == 200, r.text
+        made = Path(r.json()["dir"])
+        pid = lib["ids"][0]
+        res = facemgr.apply({"op": "detected", "image": pid, "rect": [1, 1, 40, 40]})
+        assert "error" not in res, res
+        lc = library.connect()
+        assert lc.execute("SELECT count(*) FROM Albums WHERE relativePath LIKE '%zz-standalone-folder'").fetchone()[0] == 1
+        assert lc.execute("SELECT count(*) FROM ImageTagProperties WHERE imageid = ? AND value LIKE '<rect x=\"1\" y=\"1\"%'", (pid,)).fetchone()[0] == 1
+        lc.close()
+        dk = sqlite3.connect(dbf)
+        assert dk.execute("SELECT count(*) FROM Albums").fetchone()[0] == albums_before
+        assert dk.execute("SELECT count(*) FROM ImageTagProperties").fetchone()[0] == faces_before
+        dk.close()
+    finally:
+        client.post("/api/settings", json={"digikam_sync": True})
+        client.post("/api/settings", json={"library_replace": True})
+        index.build()
+        if made and made.exists():
+            made.rmdir()

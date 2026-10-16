@@ -216,18 +216,24 @@ class Conn:
 
 
 def sync_enabled() -> bool:
-    """Settings > Sync with digiKam. Off: the viewer neither reads nor writes digiKam's database;
-    it works from its own copy of the library (index.py) and edits live in sidecars and its database."""
+    """Settings > Sync with digiKam. Off: the viewer never opens digiKam's database; the library lives in
+    the viewer's own tables (library.py) and every change is made there."""
     from . import state
     return state.get_setting("digikam_sync", "1") != "0"
 
 
-def connect(write: bool = False, db_path=None) -> Conn:
-    """A connection to digiKam's database. Read connections on SQLite are opened
-    read-only at the file level, so a bug can never write through them."""
-    if not sync_enabled():
-        raise SyncError("Sync with digiKam is off (Settings): the viewer works from its own copy of the library "
-                        "and does not open digiKam's database.")
+def standalone() -> bool:
+    return not sync_enabled()
+
+
+def connect(write: bool = False, db_path=None, real: bool = False) -> Conn:
+    """A connection to digiKam's database (read connections on SQLite are opened read-only at the file
+    level, so a bug can never write through them). With Sync with digiKam off, the library tables in the
+    viewer's own database instead, through digiKam's table names, so every reader and writer works as is.
+    real: digiKam's database whatever the setting (copying it into the library)."""
+    if not real and not sync_enabled():
+        from . import library
+        return library.connect(write)
     if is_mysql():
         try:
             import pymysql
@@ -329,7 +335,7 @@ def source_version() -> str:
     if not is_mysql():
         st = os.stat(sqlite_path())
         return f"{st.st_mtime_ns}-{st.st_size}"
-    with connect() as con:
+    with connect(real=True) as con:
         scanned = con.execute("SELECT value FROM Settings WHERE keyword = 'Scanned'").fetchone()
         parts = [str(scanned[0]) if scanned else "-"]
         # counts catch additions and removals; the CRC sums catch edits in place (a caption, a rating, a
@@ -351,7 +357,7 @@ def source_version() -> str:
 
 def busy_recently(seconds: float = 3) -> bool:
     """SQLite: digiKam wrote the file within the last few seconds, so wait a bit."""
-    if is_mysql():
+    if is_mysql() or standalone():
         return False
     try:
         return time.time() - os.stat(sqlite_path()).st_mtime < seconds
@@ -361,14 +367,18 @@ def busy_recently(seconds: float = 3) -> bool:
 
 def journal_pending(db_path=None) -> bool:
     """An unfinished SQLite write by digiKam (journal/WAL file left behind)."""
-    if is_mysql():
+    if is_mysql() or standalone():
         return False
     p = str(db_path or sqlite_path())
     return Path(p + "-journal").exists() or Path(p + "-wal").exists()
 
 
 def last_change_time():
-    """When digiKam last changed its database, as a unix time, if known."""
+    """When digiKam last changed its database (with sync off: the library), as a unix time, if known."""
+    if standalone():
+        from . import library
+        d = library.info()
+        return int(d.get("changed") or d.get("taken") or 0) or None
     if not is_mysql():
         try:
             return int(os.stat(sqlite_path()).st_mtime)
@@ -394,7 +404,11 @@ def backup(db_path=None, force: bool = False):
     mysqldump when the tool is installed; with backup mode `daily` a dump from the last 24 hours
     is reused for ordinary edits (a badge, a tag, a face), while `force=True` (bulk or destructive
     operations) always takes a fresh one. `skip` means the owner backs the server up another way,
-    otherwise a missing dump tool refuses the write."""
+    otherwise a missing dump tool refuses the write.
+    With Sync with digiKam off the change goes to the library tables in the viewer's own database,
+    which the app backup covers: nothing to copy here."""
+    if standalone():
+        return None
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
     stamp, n = time.strftime("%Y%m%d-%H%M%S"), 0
     if not is_mysql():

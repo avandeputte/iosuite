@@ -194,6 +194,10 @@ def apply(op: dict, db_path: Path = None, check_running: bool = True, queue: boo
             else:  # delete, children first so each row's own cleanup trigger fires
                 for t in reversed(sub):
                     con.execute("DELETE FROM Tags WHERE id = ?", (t,))
+                    # what digiKam's delete trigger does; the viewer's own library tables have no triggers
+                    con.execute("DELETE FROM ImageTags WHERE tagid = ?", (t,))
+                    con.execute("DELETE FROM TagProperties WHERE tagid = ?", (t,))
+                    con.execute("DELETE FROM ImageTagProperties WHERE tagid = ?", (t,))
             # like digiKam, rewrite the full tag list of every affected item afterwards
             jobs = [(stamp, path, iid) for iid, path in photos.items()]
             summary.update(id=tid, path=old_full[tid], new_path=None if kind == "delete" else tree.full(tid),

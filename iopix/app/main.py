@@ -29,7 +29,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
-from . import (analysis, caption, concepts, config, consistency, dbsync, detector, dkdb, edits, facedetect, facemgr, facevecs, folders, gpx, index, neardups, vdb,
+from . import (analysis, caption, concepts, config, consistency, dbsync, detector, dkdb, edits, facedetect, facemgr, facevecs, library, folders, gpx, index, neardups, vdb,
                moments, places, placetags, tagmanager, thumbs)
 from . import state as appstate
 from . import jobs as bgjobs
@@ -1045,6 +1045,9 @@ async def api_settings(request: Request):
             updates._checked.clear()
     if "app_name" in body:  # how the viewer brands itself; empty puts the default back
         appstate.set_setting("app_name", str(body["app_name"] or "").strip()[:40])
+    if body.get("library_replace"):  # changes made with sync off are dropped: the next read of digiKam replaces the library
+        library.discard_local_changes()
+        _kick.set()
     if "digikam_sync" in body:  # off: the viewer works from its own copy of the library and never opens digiKam's database
         appstate.set_setting("digikam_sync", "1" if body["digikam_sync"] else "0")
         if body["digikam_sync"]:
@@ -1695,6 +1698,8 @@ async def api_edits_db_apply():
     if not config.DB_WRITE:
         raise HTTPException(403, "Writing to the digiKam database is turned off (DB_WRITE=0)")
     log = logging.getLogger("app.sync")
+    if dkdb.standalone():
+        raise HTTPException(409, "Sync with digiKam is off: the edits stay in the sidecars and in the viewer, and go into digiKam's database when sync is turned on again")
     try:
         result = dbsync.apply_pending()
     except dbsync.SyncError as e:

@@ -870,7 +870,7 @@ def test_digikam_offline_banner_and_sync_setting(page, server):
     def fake_status(route):
         r = route.fetch()
         body = r.json()
-        body["digikam"] = {"sync": True, "reachable": False, "since": 1760000000, "error": "gone", "source": "mirror",
+        body["digikam"] = {"sync": True, "reachable": False, "since": 1760000000, "error": "gone", "source": "library",
                            "mirror": {"source": "x", "taken": 1759990000, "photos": 123}}
         route.fulfill(response=r, body=_json.dumps(body), headers={**r.headers, "content-type": "application/json"})
     page.route("**/api/status", fake_status)

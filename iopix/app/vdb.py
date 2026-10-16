@@ -20,6 +20,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from . import config
+from . import library as _library
 from .dkdb import Conn, _Cursor, _norm_value
 
 log = logging.getLogger("app.vdb")
@@ -93,49 +94,11 @@ TABLES = {
     "ai_similar_photos": (["a", "b", "score"],
                   "CREATE TABLE IF NOT EXISTS ai_similar_photos (a INTEGER, b INTEGER, score REAL)",
                   "CREATE TABLE IF NOT EXISTS ai_similar_photos (a BIGINT, b BIGINT, score DOUBLE, INDEX ai_similar_photos_a (a))"),
-    # ---- the library mirror: what the index is built from, copied from digiKam's database at every read
-    # (index.py). With it the index can be rebuilt without digiKam, so the viewer runs on its own.
+    # ---- the library itself (library.py): digiKam's columns under names that say what they hold
     "library_info": (["key", "value"],
-                 "CREATE TABLE IF NOT EXISTS library_info (key TEXT PRIMARY KEY, value TEXT)",
-                 "CREATE TABLE IF NOT EXISTS library_info (`key` VARCHAR(191) PRIMARY KEY, value MEDIUMTEXT)"),
-    "album_roots": (["id", "label", "specific_path"],
-                  "CREATE TABLE IF NOT EXISTS album_roots (id INTEGER PRIMARY KEY, label TEXT, specific_path TEXT)",
-                  "CREATE TABLE IF NOT EXISTS album_roots (id INT PRIMARY KEY, label VARCHAR(255), specific_path TEXT)"),
-    "folders": (["id", "root", "rel", "caption"],
-                   "CREATE TABLE IF NOT EXISTS folders (id INTEGER PRIMARY KEY, root INTEGER, rel TEXT, caption TEXT)",
-                   "CREATE TABLE IF NOT EXISTS folders (id INT PRIMARY KEY, root INT, rel TEXT, caption TEXT)"),
-    "tags": (["id", "pid", "name", "icon"],
-                 "CREATE TABLE IF NOT EXISTS tags (id INTEGER PRIMARY KEY, pid INTEGER, name TEXT, icon INTEGER)",
-                 "CREATE TABLE IF NOT EXISTS tags (id INT PRIMARY KEY, pid INT, name VARCHAR(255), icon BIGINT)"),
-    "tag_properties": (["tagid", "property", "value"],
-                     "CREATE TABLE IF NOT EXISTS tag_properties (tagid INTEGER, property TEXT, value TEXT)",
-                     "CREATE TABLE IF NOT EXISTS tag_properties (tagid INT, property VARCHAR(191), value TEXT, INDEX tag_properties_tag (tagid))"),
-    "photo_tags": (["imageid", "tagid"],
-                      "CREATE TABLE IF NOT EXISTS photo_tags (imageid INTEGER, tagid INTEGER)",
-                      "CREATE TABLE IF NOT EXISTS photo_tags (imageid BIGINT, tagid INT, INDEX photo_tags_image (imageid))"),
-    "face_regions": (["imageid", "tagid", "property", "value"],
-                    "CREATE TABLE IF NOT EXISTS face_regions (imageid INTEGER, tagid INTEGER, property TEXT, value TEXT)",
-                    "CREATE TABLE IF NOT EXISTS face_regions (imageid BIGINT, tagid INT, property VARCHAR(64), value TEXT, INDEX face_regions_image (imageid))"),
-    "comments": (["id", "imageid", "type", "comment"],
-                     "CREATE TABLE IF NOT EXISTS comments (id INTEGER PRIMARY KEY, imageid INTEGER, type INTEGER, comment TEXT)",
-                     "CREATE TABLE IF NOT EXISTS comments (id BIGINT PRIMARY KEY, imageid BIGINT, type INT, comment MEDIUMTEXT, INDEX comments_image (imageid))"),
-    "copyright": (["imageid", "property", "value"],
-                      "CREATE TABLE IF NOT EXISTS copyright (imageid INTEGER, property TEXT, value TEXT)",
-                      "CREATE TABLE IF NOT EXISTS copyright (imageid BIGINT, property VARCHAR(191), value TEXT, INDEX copyright_image (imageid))"),
-    "photo_properties": (["imageid", "property", "value"],
-                  "CREATE TABLE IF NOT EXISTS photo_properties (imageid INTEGER, property TEXT, value TEXT)",
-                  "CREATE TABLE IF NOT EXISTS photo_properties (imageid BIGINT, property VARCHAR(191), value TEXT, INDEX photo_properties_image (imageid))"),
-    "photos": (["id", "album", "name", "file_size", "hash", "modification_date", "category", "rating", "creation_date", "orientation",
-                    "width", "height", "format", "make", "model", "lens", "aperture", "focal", "focal35", "exposure", "iso", "flash",
-                    "white_balance", "metering", "program", "lat", "lon", "alt", "gps_orientation", "duration", "video_codec", "frame_rate", "audio", "aspect"],
-                   "CREATE TABLE IF NOT EXISTS photos (id INTEGER PRIMARY KEY, album INTEGER, name TEXT, file_size INTEGER, hash TEXT, modification_date TEXT, "
-                   "category INTEGER, rating INTEGER, creation_date TEXT, orientation INTEGER, width INTEGER, height INTEGER, format TEXT, make TEXT, model TEXT, lens TEXT, "
-                   "aperture REAL, focal REAL, focal35 REAL, exposure REAL, iso INTEGER, flash INTEGER, white_balance INTEGER, metering INTEGER, program INTEGER, "
-                   "lat REAL, lon REAL, alt REAL, gps_orientation REAL, duration TEXT, video_codec TEXT, frame_rate TEXT, audio TEXT, aspect TEXT)",
-                   "CREATE TABLE IF NOT EXISTS photos (id BIGINT PRIMARY KEY, album INT, name VARCHAR(255), file_size BIGINT, hash VARCHAR(64), modification_date VARCHAR(32), "
-                   "category INT, rating INT, creation_date VARCHAR(32), orientation INT, width INT, height INT, format VARCHAR(32), make VARCHAR(255), model VARCHAR(255), lens VARCHAR(255), "
-                   "aperture DOUBLE, focal DOUBLE, focal35 DOUBLE, exposure DOUBLE, iso INT, flash INT, white_balance INT, metering INT, program INT, "
-                   "lat DOUBLE, lon DOUBLE, alt DOUBLE, gps_orientation DOUBLE, duration VARCHAR(32), video_codec VARCHAR(64), frame_rate VARCHAR(32), audio VARCHAR(64), aspect VARCHAR(32))"),
+                     "CREATE TABLE IF NOT EXISTS library_info (key TEXT PRIMARY KEY, value TEXT)",
+                     "CREATE TABLE IF NOT EXISTS library_info (`key` VARCHAR(191) PRIMARY KEY, value MEDIUMTEXT)"),
+    **_library.tables(),
     # the viewer's own identity for a photo: digiKam's id is the working key everywhere, this row remembers
     # which file it stood for (digiKam's uniqueHash + size), so viewer data can follow a photo if digiKam renumbers
     "photo_identity": (["vid", "dk_id", "hash", "size", "path", "name", "first_seen", "last_seen"],
@@ -146,11 +109,10 @@ TABLES = {
                     "CREATE TABLE IF NOT EXISTS metadata_check (photo_id INTEGER PRIMARY KEY, stamp TEXT, data TEXT, mismatch INTEGER, has_sidecar INTEGER, file_xmp INTEGER, checked INTEGER)",
                     "CREATE TABLE IF NOT EXISTS metadata_check (photo_id BIGINT PRIMARY KEY, stamp VARCHAR(191), data MEDIUMTEXT, mismatch INT, has_sidecar INT, file_xmp INT, checked BIGINT)"),
 }
-SQLITE_INDEXES = ["CREATE INDEX IF NOT EXISTS ai_objects_photo ON ai_objects (photo_id)", "CREATE INDEX IF NOT EXISTS ai_similar_photos_a ON ai_similar_photos (a)",
-                  "CREATE INDEX IF NOT EXISTS photo_tags_image ON photo_tags (imageid)", "CREATE INDEX IF NOT EXISTS face_regions_image ON face_regions (imageid)",
-                  "CREATE INDEX IF NOT EXISTS comments_image ON comments (imageid)", "CREATE INDEX IF NOT EXISTS copyright_image ON copyright (imageid)",
-                  "CREATE INDEX IF NOT EXISTS photo_properties_image ON photo_properties (imageid)", "CREATE INDEX IF NOT EXISTS tag_properties_tag ON tag_properties (tagid)",
-                  "CREATE INDEX IF NOT EXISTS photo_identity_dk ON photo_identity (dk_id)", "CREATE INDEX IF NOT EXISTS photo_identity_hash ON photo_identity (hash, size)"]
+SQLITE_INDEXES = ["CREATE INDEX IF NOT EXISTS ai_objects_photo ON ai_objects (photo_id)",
+                  "CREATE INDEX IF NOT EXISTS ai_similar_photos_a ON ai_similar_photos (a)",
+                  "CREATE INDEX IF NOT EXISTS photo_identity_dk ON photo_identity (dk_id)",
+                  "CREATE INDEX IF NOT EXISTS photo_identity_hash ON photo_identity (hash, size)"] + _library.SQLITE_INDEXES
 
 
 # ---- configuration
@@ -343,6 +305,18 @@ def table_names(con: VConn) -> set:
     return {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
 
 
+def _drop_old_library_shape(con: VConn):
+    """v1.15-v1.20 kept a reduced copy of the library (photos with columns of its own). The library tables
+    now have digiKam's columns: drop the old ones; the next read of digiKam fills the new ones."""
+    have = table_names(con)
+    if "photos" in have and "file_size" in columns(con, "photos"):
+        for t in ("album_roots", "folders", "photos", "tags", "tag_properties", "photo_tags", "face_regions", "comments", "copyright", "photo_properties"):
+            con.execute(f"DROP TABLE IF EXISTS {t}")
+        if "library_info" in have:
+            con.execute("DELETE FROM library_info")
+        log.info("viewer database: the library tables take digiKam's full columns now; they are filled again at the next read of digiKam")
+
+
 def rename_old_tables(con: VConn):
     """Give tables from before v1.18 their self-explanatory names, keeping every row."""
     have = table_names(con)
@@ -364,6 +338,7 @@ def ensure_schema(con: VConn = None):
         if not con.mysql:
             con.execute("PRAGMA journal_mode = WAL")
         rename_old_tables(con)
+        _drop_old_library_shape(con)
         if not con.mysql:
             cols = columns(con, "tag_rewrite_queue")
             if cols and "image_id" not in cols:  # an early schema whose rows cannot be replayed

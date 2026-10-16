@@ -36,7 +36,7 @@ def digikam_running() -> bool:
     """Whether digiKam is open, as far as this machine can tell. DIGIKAM_CHECK=none (and "ask", its name
     before v1.19): the viewer cannot see digiKam's process (a container, digiKam on another machine), so
     it does not check and does not ask; a write goes ahead."""
-    if config.DIGIKAM_CHECK in ("none", "ask"):
+    if config.DIGIKAM_CHECK in ("none", "ask") or dkdb.standalone():
         return False
     try:
         if subprocess.run(["pgrep", "-x", "digikam"], capture_output=True).returncode == 0:
@@ -152,7 +152,7 @@ def apply_pending(db_path: Path = None, pending: dict = None, check_running: boo
     if not pending:
         return {"applied": 0, "skipped": [], "backup": None}
     preflight(db_path, check_running)
-    if not dkdb.is_mysql() and not os.access(db_path, os.W_OK):
+    if not dkdb.is_mysql() and not dkdb.standalone() and not os.access(db_path, os.W_OK):
         raise SyncError("The digiKam database file is not writable.")
     backup = dkdb.backup(db_path, force=True)  # applying pending edits touches many rows: always a fresh dump
 

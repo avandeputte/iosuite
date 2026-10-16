@@ -2247,7 +2247,10 @@ async function settingsPage(view) {
       m.readOnlyLocked ? null : btn(m.readOnly ? 'Turn off' : 'Turn on', async () => { try { await post('/api/settings', { read_only: !m.readOnly }); const s = await api('/api/status'); EDITING = s.editing; CAN_MANAGE = s.editing && s.dbWrite; } catch (e) { toast(e.message); } settingsPage(view); })) : null,
     IS_ADMIN ? (() => {
       const d = m.digikam || {}, copy = d.mirror ? `${nf.format(d.mirror.photos)} photos as of ${fmtWhen(d.mirror.taken)}` : 'not taken yet';
-      return row('Sync with digiKam', `Currently ${d.sync ? 'on' : 'off'}. On: the viewer re-reads digiKam’s database whenever digiKam saves, and writes the edits made here into it whenever digiKam is closed (edits always go to the sidecars first). Off: the viewer never opens digiKam’s database; it works from its own copy of the library (${copy}) and edits live in the sidecars and the viewer’s database. Creating tags and folders and naming faces still need digiKam.${d.sync && !d.reachable ? ' digiKam’s database is unreachable right now; the copy is in use.' : ''}`,
+      if (d.conflict) return row('Sync with digiKam', `On, but ${plural(d.localChanges, 'change')} to tags, folders or faces made while it was off ${d.localChanges === 1 ? 'is' : 'are'} not in digiKam’s database, so the viewer keeps using its own library rather than overwrite ${d.localChanges === 1 ? 'it' : 'them'}. Edits to ratings, titles, captions and tags are in the sidecars either way and go to digiKam as usual. Replace: the library is copied from digiKam again and the changes made here are dropped (sidecar edits stay). Or turn sync off again to keep working on the viewer’s library.`,
+        h('span', { style: 'display:flex;gap:6px;flex-wrap:wrap' }, btn('Replace with digiKam’s', async () => { if (!confirm(`Drop the ${plural(d.localChanges, 'change')} made while sync was off and copy the library from digiKam again? Edits in sidecars are kept.`)) return; try { await post('/api/settings', { library_replace: true }); toast('Copying the library from digiKam…'); } catch (e) { toast(e.message); } setTimeout(() => settingsPage(view), 2500); }),
+          btn('Turn sync off', async () => { try { await post('/api/settings', { digikam_sync: false }); } catch (e) { toast(e.message); } settingsPage(view); })));
+      return row('Sync with digiKam', `Currently ${d.sync ? 'on' : 'off'}. On: the viewer re-reads digiKam’s database whenever digiKam saves, and writes the edits made here into it whenever digiKam is closed (edits always go to the sidecars first). Off: the viewer never opens digiKam’s database; the library lives in the viewer’s own tables (${copy}) and everything works there: edits, tags, folders, uploads, faces and place tags. Turning sync on again does not overwrite what was changed meanwhile; you choose what happens.${d.sync && !d.reachable ? ' digiKam’s database is unreachable right now; the copy is in use.' : ''}`,
         btn(d.sync ? 'Turn off' : 'Turn on', async () => { try { await post('/api/settings', { digikam_sync: !d.sync }); } catch (e) { toast(e.message); } settingsPage(view); }));
     })() : null,
     IS_ADMIN ? analysisSection(view, 'prefs') : null,
@@ -3329,15 +3332,17 @@ async function awaitReindex(until = () => true, tries = 20, ms = 400) {
  *  Dismissed for this browser session, per episode. */
 function dkBanner(d) {
   let b = $('#dkbanner');
-  const show = d && IS_ADMIN && (!d.sync || !d.reachable);
-  const key = !show ? null : d.sync ? 'offline:' + d.since : 'off';
+  const show = d && IS_ADMIN && (!d.sync || !d.reachable || d.conflict);
+  const key = !show ? null : d.conflict ? 'conflict:' + d.localChanges : d.sync ? 'offline:' + d.since : 'off';
   let dismissed = null; try { dismissed = sessionStorage.getItem('dk-dismissed'); } catch { /* private mode */ }
   if (!show || dismissed === key) { b?.remove(); return; }
   if (b && b.dataset.key === key) return;
   b?.remove();
   const asOf = d.mirror?.taken ? fmtWhen(d.mirror.taken) : 'the last read';
-  const text = !d.sync
-    ? ['Sync with digiKam is off', 'The viewer works from its own copy of the library; edits go to the sidecars and the viewer’s database.']
+  const text = d.conflict
+    ? ['Changes made while sync was off', `${plural(d.localChanges, 'change')} to tags, folders or faces made with Sync with digiKam off ${d.localChanges === 1 ? 'is' : 'are'} not in digiKam, so the viewer keeps using its own library. Settings › Sync with digiKam lets you replace it with digiKam’s.`]
+    : !d.sync
+    ? ['Sync with digiKam is off', 'The library lives in the viewer’s own tables and everything works there; digiKam’s database is not opened.']
     : ['digiKam’s database is unreachable', `Since ${fmtWhen(d.since)}. Showing the library as of ${asOf}; edits are saved to the sidecars and will be applied to digiKam when it is back.`];
   b = h('div', { id: 'dkbanner', class: 'sysbanner', 'data-key': key },
     h('span', { class: 'ic-wrap', style: 'background:linear-gradient(135deg,#ff9a3c,#ff5a7e)' }, icon('wrench')),

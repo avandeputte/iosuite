@@ -27,7 +27,7 @@ from collections import defaultdict
 from pathlib import Path
 from urllib.parse import quote
 
-from . import analysis, config, dkdb, edits, moments, places, vdb
+from . import analysis, config, dkdb, edits, library, moments, places, vdb
 from . import state as appstate
 
 log = logging.getLogger("app.index")
@@ -115,45 +115,48 @@ def _set_offline(err):
 
 
 def mirror_info() -> dict:
-    """{source, taken, photos} of the viewer's copy of the library, or None when there is none yet."""
-    try:
-        con = appstate.connect()
-        try:
-            d = dict(con.execute("SELECT key, value FROM library_info").fetchall())
-        finally:
-            con.close()
-    except Exception:
+    """{source, taken, photos, local_changes} of the library tables, or None when they were never filled."""
+    d = library.info()
+    if not d.get("taken"):
         return None
-    if not d.get("source"):
-        return None
-    return {"source": d["source"], "taken": int(d.get("taken") or 0), "photos": int(d.get("photos") or 0)}
+    return {"source": d.get("source"), "taken": int(d.get("taken") or 0), "photos": int(d.get("photos") or 0),
+            "local_changes": int(d.get("local_changes") or 0), "changed": int(d.get("changed") or 0) or None}
+
+
+conflict = {"digikam": None}  # digiKam's version while the library holds changes made with sync off
 
 
 def probe() -> tuple:
-    """Where the next build reads from: ('digikam', its version) when sync is on and digiKam's
-    database answers, else ('mirror', the version the copy was taken from). Keeps `offline`."""
+    """Where the next build reads from. ('digikam', its version): sync on, digiKam answers, and the library
+    holds nothing digiKam lacks; the library tables are refreshed from it first. ('library', their version):
+    sync off, digiKam unreachable, or changes made with sync off that a copy would overwrite."""
+    m = mirror_info()
     if sync_enabled():
         try:
             v = dkdb.source_version()
             _set_online()
+            if m and m["local_changes"]:
+                conflict["digikam"] = v
+                return "library", library.version()
+            conflict["digikam"] = None
             return "digikam", v
         except SOURCE_ERRORS as e:
             _set_offline(e)
-    m = mirror_info()
     if not m:
         raise Unavailable("digiKam's database cannot be read and the viewer has no copy of the library yet"
                           + (f": {offline['error']}" if offline.get("error") and sync_enabled() else " (Sync with digiKam is off)"))
-    return "mirror", m["source"]
+    return "library", library.version()
 
 
 def status() -> dict:
     """For /api/status and the banner."""
+    m = mirror_info()
     return {"sync": sync_enabled(), "reachable": offline["since"] is None, "since": offline["since"], "error": offline["error"],
-            "source": last_source["kind"], "mirror": mirror_info()}
+            "source": last_source["kind"], "mirror": m, "localChanges": (m or {}).get("local_changes", 0),
+            "conflict": bool(conflict["digikam"]) and sync_enabled()}
 
 
-# ---- the raw rows the index is built from, read from digiKam or from the mirror
-RAW_KEYS = ("roots", "albums", "tags", "tagprops", "imagetags", "regions", "comments", "copyright", "props", "images")
+# ---- the rows the index is built from, read with digiKam's table names (from the library tables)
 IMAGE_SQL = """
     SELECT i.id, i.album, i.name, i.fileSize, i.uniqueHash, i.modificationDate, i.category,
            ii.rating, ii.creationDate, ii.orientation, ii.width, ii.height, ii.format,
@@ -170,13 +173,12 @@ IMAGE_SQL = """
 """
 
 
-def read_digikam() -> dict:
-    """One consistent snapshot of the tables the index needs, straight from digiKam's database."""
-    src = dkdb.connect(write=False)
+def read_rows(src) -> dict:
+    """One consistent snapshot of what the index needs, through a connection that speaks digiKam's names."""
+    src.begin_read()
     try:
-        src.begin_read()
         q = src.execute
-        raw = {
+        return {
             "roots": [tuple(r) for r in q("SELECT id, label, specificPath FROM AlbumRoots")],
             "albums": [tuple(r) for r in q("SELECT id, albumRoot, relativePath, caption FROM Albums")],
             "tags": [tuple(r) for r in q("SELECT id, pid, name, icon FROM Tags")],
@@ -189,77 +191,32 @@ def read_digikam() -> dict:
             "props": [tuple(r) for r in q("SELECT imageid, property, value FROM ImageProperties")],
             "images": [tuple(r) for r in q(IMAGE_SQL).fetchall()],
         }
-        # the version the same connection sees: a later write by digiKam must trigger another read
-        raw["source"] = dkdb.source_version()
+    finally:
+        src.rollback()
+
+
+def refresh_library():
+    """Copy digiKam's tables into the library tables (one snapshot, one transaction)."""
+    src = dkdb.connect(write=False, real=True)
+    try:
+        src.begin_read()
+        library.copy_from_digikam(src)
     finally:
         src.rollback()
         src.close()
-    raw["taken"] = int(time.time())
-    return raw
-
-
-_LIB_TABLES = {"roots": "album_roots", "albums": "folders", "tags": "tags", "tagprops": "tag_properties", "imagetags": "photo_tags",
-               "regions": "face_regions", "comments": "comments", "copyright": "copyright", "props": "photo_properties", "images": "photos"}
-
-
-def _chunks(rows, n=1000):
-    for i in range(0, len(rows), n):
-        yield rows[i:i + n]
-
-
-def save_mirror(raw: dict):
-    """Replace the viewer's copy of the library with this read of digiKam, in one transaction."""
-    t0 = time.time()
-    with appstate._lock:
-        con = appstate.connect()
-        try:
-            for key, table in _LIB_TABLES.items():
-                cols = vdb.TABLES[table][0]
-                con.execute(f"DELETE FROM {table}")
-                sql = f"INSERT INTO {table} ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})"
-                for chunk in _chunks(raw[key]):
-                    con.executemany(sql, [tuple(r[:len(cols)]) for r in chunk])
-            con.execute("DELETE FROM library_info")
-            con.executemany("INSERT INTO library_info (key, value) VALUES (?,?)",
-                            [("source", raw["source"]), ("taken", str(raw["taken"])), ("photos", str(len(raw["images"])))])
-            con.commit()
-        except BaseException:
-            con.rollback()
-            raise
-        finally:
-            con.close()
-    log.info("library copy refreshed: %d photos in %.1fs", len(raw["images"]), time.time() - t0)
-
-
-def load_mirror() -> dict:
-    """The last read of digiKam, back in the shape read_digikam() returns."""
-    con = appstate.connect()
-    try:
-        meta = dict(con.execute("SELECT key, value FROM library_info").fetchall())
-        if not meta.get("source"):
-            raise Unavailable("the viewer has no copy of the library yet")
-        raw = {}
-        for key, table in _LIB_TABLES.items():
-            cols = vdb.TABLES[table][0]
-            order = " ORDER BY id" if key == "comments" else ""
-            raw[key] = [tuple(r) for r in con.execute(f"SELECT {', '.join(cols)} FROM {table}{order}").fetchall()]
-    finally:
-        con.close()
-    raw["source"], raw["taken"] = meta["source"], int(meta.get("taken") or 0)
-    return raw
 
 
 def mirror_tag_paths(image_ids: list) -> dict:
-    """{image id: [tag paths]} from the viewer's copy of the library: every assigned tag but digiKam's
-    internal ones, as edits.digikam_tag_paths() reads them from digiKam itself."""
+    """{image id: [tag paths]} from the library tables (every tag but digiKam's internal ones)."""
     ids = [int(x) for x in image_ids]
-    con = appstate.connect()
+    con = library.connect()
     try:
-        tags = {r[0]: (r[1], r[2]) for r in con.execute("SELECT id, pid, name FROM tags").fetchall()}
-        internal = {r[0] for r in con.execute("SELECT tagid FROM tag_properties WHERE property = 'internalTag'").fetchall()}
+        tags = dkdb.tag_tree(con)
+        internal = {r[0] for r in con.execute("SELECT tagid FROM TagProperties WHERE property = 'internalTag'").fetchall()}
         out = {}
-        for chunk in _chunks(ids, 500):
-            for iid, tid in con.execute(f"SELECT imageid, tagid FROM photo_tags WHERE imageid IN ({','.join(map(str, chunk))})").fetchall():
+        for i in range(0, len(ids), 500):
+            chunk = ",".join(map(str, ids[i:i + 500]))
+            for iid, tid in con.execute(f"SELECT imageid, tagid FROM ImageTags WHERE imageid IN ({chunk})").fetchall():
                 if tid in tags and tid not in internal:
                     out.setdefault(iid, []).append(dkdb.tag_path(tags, tid))
     finally:
@@ -390,25 +347,25 @@ def build(dst_path: Path = config.INDEX_DB, source: tuple = None) -> dict:
 def _build(dst_path: Path, source: tuple) -> dict:
     t0 = time.time()
     geo = places.geocoder()
-    kind, _ = source or probe()
-    raw = None
-    if kind == "digikam":
-        try:
-            raw = read_digikam()
-        except SOURCE_ERRORS as e:
-            _set_offline(e)
-            if not mirror_info():
-                raise Unavailable(f"digiKam's database cannot be read and the viewer has no copy of the library yet: {e}") from e
-            kind = "mirror"
-    if raw is None:
-        raw = load_mirror()
-    version = _version_for(raw["source"])
-    root_path = dkdb.resolve_root_paths([(r[0], r[2]) for r in raw["roots"]])
+    kind, ver = source or probe()
     if kind == "digikam":
         m = mirror_info()
-        if not m or m["source"] != raw["source"]:
-            save_mirror(raw)
-    last_source.update(kind=kind, version=raw["source"])
+        try:
+            if not m or m["source"] != ver:
+                refresh_library()
+        except SOURCE_ERRORS as e:
+            _set_offline(e)
+            if not m:
+                raise Unavailable(f"digiKam's database cannot be read and the viewer has no copy of the library yet: {e}") from e
+            kind, ver = "library", library.version()
+    con = library.connect()
+    try:
+        raw = read_rows(con)
+        root_path = dkdb.root_paths(con)
+    finally:
+        con.close()
+    version = _version_for(ver)
+    last_source.update(kind=kind, version=ver)
 
     # ---- album roots and albums
     roots = {r[0]: r[1] for r in raw["roots"]}
