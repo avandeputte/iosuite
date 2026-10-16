@@ -59,6 +59,7 @@ def scan() -> dict:
     con = dkdb.connect()
     try:
         tags = dkdb.tag_tree(con)
+        special = {r[0] for r in con.execute("SELECT tagid FROM TagProperties WHERE property IN ('unknownPerson', 'ignoredPerson', 'unconfirmedPerson')")}
         rows = con.execute(
             "SELECT p.imageid, p.tagid, p.property, p.value, ii.width, ii.height, ii.orientation FROM ImageTagProperties p "
             "JOIN Images i ON i.id = p.imageid AND i.status = 1 LEFT JOIN ImageInformation ii ON ii.imageid = p.imageid "
@@ -66,7 +67,12 @@ def scan() -> dict:
     finally:
         con.close()
     by, invalid = {}, []
+    faces_of = {}  # photo -> [named faces, unnamed faces] (ignored ones do not count)
     for img, tag, prop, val, w, h, orient in rows:
+        if prop == "tagRegion" and tag not in special:
+            faces_of.setdefault(img, [0, 0])[0] += 1
+        elif prop == "autodetectedFace":  # an unknown face, or one digiKam suggests a name for
+            faces_of.setdefault(img, [0, 0])[1] += 1
         r = _rect(val)
         up_w, up_h = ((h, w) if (orient or 1) in (5, 6, 7, 8) else (w, h))
         if r is None or r[2] <= 0 or r[3] <= 0 or (up_w and up_h and (r[0] < -MARGIN or r[1] < -MARGIN or r[0] + r[2] > up_w + MARGIN or r[1] + r[3] > up_h + MARGIN)):
@@ -87,7 +93,67 @@ def scan() -> dict:
                              "apart": max(abs(a[k] - b[k]) for _va, a in g for _vb, b in g for k in range(4))})
         if len(groups) > 1:
             separate.append({"photo": img, "name": name, "rects": [list(g[0][1]) for g in groups]})
-    return {"checked": len(rows), "near": near, "separate": separate, "invalid": invalid, "at": int(time.time())}
+    accepted = _accepted("unnamed")
+    unnamed = [{"photo": img, "faces": n[1], "signature": f"{n[0]}:{n[1]}"} for img, n in sorted(faces_of.items()) if n[1] and not n[0]]
+    shown = [u for u in unnamed if accepted.get(u["photo"]) != u["signature"]]
+    return {"checked": len(rows), "near": near, "separate": separate, "invalid": invalid, "unnamed": shown,
+            "unnamed_accepted": len(unnamed) - len(shown), "at": int(time.time())}
+
+
+def _accepted(check: str) -> dict:
+    """{photo: signature} the owner accepted for this check."""
+    from . import vdb
+    con = vdb.connect()
+    try:
+        return dict(con.execute("SELECT photo_id, signature FROM quality_accepted WHERE check_name = ?", (check,)).fetchall())
+    finally:
+        con.close()
+
+
+def ignore_unnamed(photos: list) -> dict:
+    """Mark every unnamed face on these photos as not a face to name (digiKam's Ignored), through the normal
+    face operations (change log, undo). Returns {ignored, failed}."""
+    from . import facemgr
+    con = dkdb.connect()
+    try:
+        ops = []
+        for i in range(0, len(photos), 500):
+            chunk = ",".join(str(int(p)) for p in photos[i:i + 500])
+            for img, val in con.execute(f"SELECT imageid, value FROM ImageTagProperties WHERE property = 'autodetectedFace' AND imageid IN ({chunk})"):
+                r = _rect(val)
+                if r:
+                    ops.append({"op": "ignore", "image": img, "rect": list(r)})
+    finally:
+        con.close()
+    out = {"ignored": 0, "failed": 0}
+    for i in range(0, len(ops), 200):
+        for r in facemgr.apply_many(ops[i:i + 200], background=True):
+            out["failed" if "error" in r else "ignored"] += 1
+    return out
+
+
+def accept(photos: list, check: str = "unnamed", on: bool = True) -> int:
+    """Accept these photos' finding as it is (they leave the list until their faces change), or take it back."""
+    from . import history, vdb
+    if check != "unnamed":
+        raise ValueError("Unknown check")
+    want = {int(p) for p in photos}
+    current = {u["photo"]: u["signature"] for u in scan()["unnamed"]} if on else {}
+    con = vdb.connect()
+    try:
+        if on:
+            sig = current.copy()
+            missing = want - set(sig)
+            if missing:  # already accepted, or not a finding (any more): keep what is there
+                want -= missing
+            con.executemany("INSERT OR REPLACE INTO quality_accepted (photo_id, check_name, signature, user_name, ts) VALUES (?,?,?,?,?)",
+                            [(p, check, sig[p], history._who(), int(time.time())) for p in want])
+        else:
+            con.executemany("DELETE FROM quality_accepted WHERE photo_id = ? AND check_name = ?", [(p, check) for p in want])
+        con.commit()
+    finally:
+        con.close()
+    return len(want)
 
 
 def summary(s: dict = None, limit: int = 120) -> dict:
@@ -98,6 +164,7 @@ def summary(s: dict = None, limit: int = 120) -> dict:
                      "examples": [{"photo": n["photo"], "name": n["name"], "apart": n["apart"]} for n in s["near"][:limit]]},
             "separate": {"count": len(s["separate"]), "items": s["separate"][:limit]},
             "invalid": {"count": len(s["invalid"]), "items": s["invalid"][:limit]},
+            "unnamed": {"count": len(s["unnamed"]), "faces": sum(u["faces"] for u in s["unnamed"]), "items": s["unnamed"][:limit], "accepted": s["unnamed_accepted"]},
             "progress": dict(progress)}
 
 

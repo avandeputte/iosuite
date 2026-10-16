@@ -1707,6 +1707,40 @@ def api_quality():
         raise HTTPException(503, f"Could not read the face regions: {str(e)[:200]}")
 
 
+@app.post("/api/quality/accept")
+async def api_quality_accept(request: Request):
+    """Body {photos: [ids], check: "unnamed", on: true}: accept these findings as they are (on: false takes it back)."""
+    from . import facequality
+    body = await request.json()
+    try:
+        n = await run_in_threadpool(facequality.accept, body.get("photos") or [], body.get("check", "unnamed"), bool(body.get("on", True)))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"accepted": n}
+
+
+@app.get("/api/quality/accepted")
+def api_quality_accepted(check: str = "unnamed"):
+    """The photos accepted as they are for a check."""
+    from . import facequality
+    return {"photos": sorted(facequality._accepted(check))}
+
+
+@app.post("/api/quality/ignore")
+async def api_quality_ignore(request: Request):
+    """Body {photos: [ids]}: every unnamed face on them becomes "not a face to name"."""
+    from . import facequality
+    if not config.DB_WRITE or appstate.read_only():
+        raise HTTPException(403, "Writing to digiKam's database is turned off")
+    body = await request.json()
+    try:
+        r = await run_in_threadpool(facequality.ignore_unnamed, [int(p) for p in body.get("photos") or []])
+    except dbsync.SyncError as e:
+        raise HTTPException(409, str(e))
+    _kick.set()
+    return r
+
+
 @app.post("/api/quality/fit")
 async def api_quality_fit(request: Request):
     """Body {photos?: [ids]}: trim face rectangles that stick out of their photo to its edges, remove empty ones."""

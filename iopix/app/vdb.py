@@ -114,6 +114,11 @@ TABLES = {
                   "CREATE TABLE IF NOT EXISTS photo_identity (vid INTEGER PRIMARY KEY AUTOINCREMENT, dk_id INTEGER, hash TEXT, size INTEGER, path TEXT, name TEXT, first_seen INTEGER, last_seen INTEGER)",
                   "CREATE TABLE IF NOT EXISTS photo_identity (vid INT AUTO_INCREMENT PRIMARY KEY, dk_id BIGINT, hash VARCHAR(64), size BIGINT, path TEXT, name VARCHAR(255), first_seen BIGINT, last_seen BIGINT, "
                   "INDEX photo_identity_dk (dk_id), INDEX photo_identity_hash (hash, size))"),
+    # a Face quality finding the owner accepted as it is (check_name, not "check": a reserved word on MariaDB);
+    # signature: what the photo's faces were then, so a photo whose faces change is looked at again
+    "quality_accepted": (["photo_id", "check_name", "signature", "user_name", "ts"],
+                         "CREATE TABLE IF NOT EXISTS quality_accepted (photo_id INTEGER, check_name TEXT, signature TEXT, user_name TEXT, ts INTEGER, PRIMARY KEY (photo_id, check_name))",
+                         "CREATE TABLE IF NOT EXISTS quality_accepted (photo_id BIGINT, check_name VARCHAR(32), signature VARCHAR(191), user_name VARCHAR(191), ts BIGINT, PRIMARY KEY (photo_id, check_name))"),
     "metadata_check": (["photo_id", "stamp", "data", "mismatch", "has_sidecar", "file_xmp", "checked"],
                     "CREATE TABLE IF NOT EXISTS metadata_check (photo_id INTEGER PRIMARY KEY, stamp TEXT, data TEXT, mismatch INTEGER, has_sidecar INTEGER, file_xmp INTEGER, checked INTEGER)",
                     "CREATE TABLE IF NOT EXISTS metadata_check (photo_id BIGINT PRIMARY KEY, stamp VARCHAR(191), data MEDIUMTEXT, mismatch INT, has_sidecar INT, file_xmp INT, checked BIGINT)"),

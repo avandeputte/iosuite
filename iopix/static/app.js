@@ -961,6 +961,26 @@ async function showQuality() {
       near.examples.map((x) => h('div', { class: 'hrow' }, thumb(x), h('div', { class: 'hmain' }, h('b', null, x.name), ` · ${x.apart} px apart`)))),
     sec('Same person in two places', q.separate.count, 'Usually one of the two is someone else, named by mistake. Open the photo, show the faces (F), and rename, adjust or remove the wrong box.', null,
       q.separate.items.map((x) => h('div', { class: 'hrow' }, thumb(x), h('div', { class: 'hmain' }, h('b', null, x.name), ` · ${x.rects.length} boxes`)))),
+    (() => {  // photos whose faces are all unnamed: name them, ignore them, or accept them as they are
+      const u = q.unnamed, items = u.items;
+      const accept = async (ids, on = true) => { try { await post('/api/quality/accept', { photos: ids, check: 'unnamed', on }); toast(on ? `${plural(ids.length, 'photo')} accepted as they are.` : 'Shown again.'); } catch (e) { toast(e.message, null, null, 9000); return; } showQuality(); };
+      const ignore = async (ids) => {
+        if (!confirm(`Mark the unnamed faces on ${plural(ids.length, 'photo')} as not faces to name? Each change is in the change log with undo.`)) return;
+        try { const r = await post('/api/quality/ignore', { photos: ids }); toast(`${plural(r.ignored, 'face')} ignored${r.failed ? `, ${nf.format(r.failed)} failed` : ''}.`); } catch (e) { toast(e.message, null, null, 9000); return; }
+        setTimeout(showQuality, 1200);
+      };
+      const nameThem = (x) => { openLightbox({ id: [x.photo] }, 0, true); setTimeout(() => { if (!LB.faces) toggleFaces(); }, 700); };
+      return sec('Faces without a name', u.count,
+        `Photos with faces where none is named.${u.accepted ? ` ${plural(u.accepted, 'photo')} you accepted as they are ${u.accepted === 1 ? 'is' : 'are'} not listed.` : ''} Name the faces, mark them as not faces to name, or accept the photo as it is: it leaves this list until its faces change.`,
+        items.length ? [h('button', { class: 'pillbtn', onclick: () => accept(items.map((x) => x.photo)) }, `Accept the ${nf.format(items.length)} shown`),
+          CAN_MANAGE ? h('button', { class: 'pillbtn', onclick: () => ignore(items.map((x) => x.photo)) }, 'Ignore their faces') : null,
+          u.accepted ? h('button', { class: 'pillbtn', onclick: async () => { const acc = await api('/api/quality/accepted?check=unnamed'); if (acc.photos.length && confirm(`List the ${plural(acc.photos.length, 'accepted photo')} again?`)) accept(acc.photos, false); } }, 'Show the accepted ones again') : null]
+          : u.accepted ? [h('button', { class: 'pillbtn', onclick: async () => { const acc = await api('/api/quality/accepted?check=unnamed'); if (acc.photos.length && confirm(`List the ${plural(acc.photos.length, 'accepted photo')} again?`)) accept(acc.photos, false); } }, 'Show the accepted ones again')] : null,
+        items.map((x) => h('div', { class: 'hrow' }, thumb(x), h('div', { class: 'hmain' }, h('b', null, plural(x.faces, 'unnamed face')), ' · ',
+          h('a', { class: 'lnk', onclick: () => nameThem(x) }, 'Name them'), ' · ',
+          CAN_MANAGE ? [h('a', { class: 'lnk', onclick: () => ignore([x.photo]) }, 'Ignore'), ' · '] : null,
+          h('a', { class: 'lnk', onclick: () => accept([x.photo]) }, 'Accept as it is')))));
+    })(),
     sec('Outside the photo or empty', q.invalid.count, 'A box that sticks out of the photo can be trimmed to its edges here, or moved and resized in the viewer (click the face, “Adjust the box”). Empty boxes are removed.', fitAll ? [fitAll] : null,
       q.invalid.items.map((x) => h('div', { class: 'hrow' }, thumb(x), h('div', { class: 'hmain' }, h('b', null, x.name), ' ',
         x.rect ? `${x.rect[2]} × ${x.rect[3]} at ${x.rect[0]}, ${x.rect[1]} on a ${x.size[0]} × ${x.size[1]} photo` : 'unreadable rectangle',
@@ -2541,6 +2561,7 @@ async function settingsPage(view) {
       const line = h('span', null, 'Checking…');
       api('/api/quality').then((q) => fill(line, (q.near.extra ? `${plural(q.near.extra, 'face is', 'faces are')} stored twice. ` : 'No face is stored twice. ')
         + (q.separate.count ? `${plural(q.separate.count, 'photo has', 'photos have')} the same person in two places. ` : '')
+        + (q.unnamed.count ? `${plural(q.unnamed.count, 'photo has', 'photos have')} faces but no names. ` : '')
         + (q.invalid.count ? `${plural(q.invalid.count, 'box is', 'boxes are')} outside the photo or empty.` : ''))).catch(() => fill(line, ''));
       return row('Face quality', h('span', null, line, ' Duplicate faces, the same person twice, and boxes outside the photo.'), h('a', { class: 'pillbtn on', href: '#/quality' }, 'Open'));
     })(),

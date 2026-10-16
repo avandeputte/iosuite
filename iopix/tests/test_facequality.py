@@ -134,3 +134,27 @@ def test_boxes_outside_the_photo_are_trimmed_and_empty_ones_removed(client, lib)
     con = sqlite3.connect(lib["db"])
     con.execute("DELETE FROM ImageTagProperties WHERE imageid = ? AND tagid = ? AND value = ?", (pid, tag, f'<rect x="{W - 40}" y="10" width="40" height="80"/>'))
     con.commit(); con.close()
+
+
+def test_photos_with_only_unnamed_faces_can_be_accepted_or_ignored(client, lib):
+    q = client.get("/api/quality").json()["unnamed"]
+    assert {"count", "items", "accepted", "faces"} <= set(q)
+    # make one: a photo whose faces are all unknown
+    con = sqlite3.connect(lib["db"])
+    unknown = con.execute("SELECT tagid FROM TagProperties WHERE property = 'unknownPerson'").fetchone()[0]
+    pid = next(i for i in lib["ids"][20:] if i not in lib["with_faces"])
+    con.execute("INSERT INTO ImageTagProperties (imageid, tagid, property, value) VALUES (?,?,?,?)", (pid, unknown, "autodetectedFace", '<rect x="20" y="20" width="60" height="60"/>'))
+    con.commit(); con.close()
+    q = client.get("/api/quality").json()["unnamed"]
+    assert any(x["photo"] == pid and x["faces"] == 1 for x in q["items"]), q
+    assert client.post("/api/quality/accept", json={"photos": [pid]}).json()["accepted"] == 1
+    q2 = client.get("/api/quality").json()["unnamed"]
+    assert not any(x["photo"] == pid for x in q2["items"]) and q2["accepted"] >= 1
+    assert pid in client.get("/api/quality/accepted").json()["photos"]
+    assert client.post("/api/quality/accept", json={"photos": [pid], "on": False}).status_code == 200
+    assert any(x["photo"] == pid for x in client.get("/api/quality").json()["unnamed"]["items"]), "shown again"
+    r = client.post("/api/quality/ignore", json={"photos": [pid]}).json()
+    assert r["ignored"] == 1, r
+    assert not any(x["photo"] == pid for x in client.get("/api/quality").json()["unnamed"]["items"]), "an ignored face does not count"
+    con = sqlite3.connect(lib["db"])
+    con.execute("DELETE FROM ImageTagProperties WHERE imageid = ?", (pid,)); con.commit(); con.close()
