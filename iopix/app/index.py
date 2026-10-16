@@ -381,7 +381,10 @@ def build(dst_path: Path = config.INDEX_DB, source: tuple = None) -> dict:
     or from that copy when digiKam cannot be read, then write a fresh index file and swap it in.
     Returns the stats also stored in the index's meta table."""
     with _build_lock:
-        return _build(dst_path, source)
+        stats = _build(dst_path, source)
+    if stats["resolved_edits"] and Path(dst_path) == config.INDEX_DB:  # digiKam now agrees with these edits; stop tracking them
+        edits.resolved(stats["resolved_edits"])
+    return stats
 
 
 def _build(dst_path: Path, source: tuple) -> dict:
@@ -733,9 +736,7 @@ def ensure_fresh() -> bool:
         # (a readable digiKam with no copy taken yet, as right after this version's first start, builds once to take it)
         last_source.update(kind=src[0], version=src[1])
         return False
-    stats = build(source=src)
-    if stats["resolved_edits"]:  # digiKam now agrees with these edits; stop tracking them
-        edits.resolved(stats["resolved_edits"])
+    build(source=src)
     return True
 
 

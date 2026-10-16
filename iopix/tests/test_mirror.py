@@ -136,3 +136,15 @@ def test_viewer_data_follows_a_photo_digikam_renumbered(client, lib):
         index.build()
     assert pid in state.favorite_ids()
     state.set_favorites([(pid, uhash)], False)
+
+
+def test_applying_an_edit_rebuilds_so_it_no_longer_shows_as_waiting(client, photo_id):
+    from app import edits
+    if not edits.available():
+        pytest.skip("exiftool not available")
+    assert client.post("/api/edit", json={"ids": [photo_id], "changes": {"caption": "Applied caption probe"}}).status_code == 200
+    assert photo_id in edits.pending()
+    r = client.post("/api/edits/db")
+    assert r.status_code == 200 and r.json()["applied"] >= 1, r.text
+    assert photo_id not in edits.pending(), "the rebuild right after the write resolves the edit"
+    assert client.get(f"/api/photo/{photo_id}").json()["edited"] == 0

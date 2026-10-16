@@ -332,14 +332,19 @@ def source_version() -> str:
     with connect() as con:
         scanned = con.execute("SELECT value FROM Settings WHERE keyword = 'Scanned'").fetchone()
         parts = [str(scanned[0]) if scanned else "-"]
-        # counts and ids catch additions and removals; the CRC sums catch edits in place (a tag's badge
-        # picture, name or parent; face properties), which the viewer itself makes and must then re-index
-        for sql in ("SELECT count(*), max(id) FROM Images", "SELECT count(*), max(modificationDate) FROM Albums",
-                    "SELECT count(*) FROM ImageTags",
+        # counts catch additions and removals; the CRC sums catch edits in place (a caption, a rating, a
+        # date, a position, a swapped tag, a tag's badge picture, face properties), whether digiKam or the
+        # viewer made them: a count alone misses an edited caption, and the edit then never shows as applied
+        for sql in ("SELECT count(*), max(id), SUM(CRC32(CONCAT(id,'|',COALESCE(album,''),'|',name,'|',status,'|',COALESCE(modificationDate,''),'|',COALESCE(uniqueHash,'')))) FROM Images",
+                    "SELECT count(*), max(modificationDate) FROM Albums",
+                    "SELECT count(*), SUM(CRC32(CONCAT(imageid,'|',tagid))) FROM ImageTags",
                     "SELECT count(*), max(id), SUM(CRC32(CONCAT(id,'|',COALESCE(pid,0),'|',name,'|',COALESCE(icon,0),'|',COALESCE(iconkde,'')))) FROM Tags",
                     "SELECT count(*), SUM(CRC32(CONCAT(tagid,'|',property,'|',COALESCE(value,'')))) FROM TagProperties",
                     "SELECT count(*), SUM(CRC32(CONCAT(imageid,'|',tagid,'|',property,'|',COALESCE(value,'')))) FROM ImageTagProperties",
-                    "SELECT count(*) FROM ImageComments", "SELECT count(*) FROM ImagePositions", "SELECT sum(rating) FROM ImageInformation"):
+                    "SELECT count(*), SUM(CRC32(CONCAT(id,'|',imageid,'|',type,'|',COALESCE(language,''),'|',COALESCE(comment,'')))) FROM ImageComments",
+                    "SELECT count(*), SUM(CRC32(CONCAT(imageid,'|',COALESCE(latitudeNumber,''),'|',COALESCE(longitudeNumber,''),'|',COALESCE(altitude,'')))) FROM ImagePositions",
+                    "SELECT count(*), SUM(CRC32(CONCAT(imageid,'|',COALESCE(rating,''),'|',COALESCE(creationDate,''),'|',COALESCE(orientation,'')))) FROM ImageInformation",
+                    "SELECT count(*), SUM(CRC32(CONCAT(imageid,'|',property,'|',COALESCE(value,'')))) FROM ImageCopyright"):
             parts.append(",".join(str(_norm_value(v)) for v in con.execute(sql).fetchone()))
         return "|".join(parts)
 

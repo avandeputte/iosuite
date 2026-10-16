@@ -899,3 +899,12 @@ def test_app_name_shows_in_the_top_bar_and_tab(page, server):
         assert page.locator(".srow", has_text="What the viewer calls itself").locator("input").input_value() == "iothing Photos"
     finally:
         set_name("")
+
+
+def test_server_log_dialog_opens_from_maintenance(page, server):
+    page.goto(server + "/#/maintenance")
+    page.wait_for_selector(".srow:has-text('Server log') button", timeout=10000)
+    page.locator(".srow", has_text="Server log").locator("button").click()
+    page.wait_for_selector(".modal pre.logview", timeout=5000)
+    page.wait_for_function("!document.querySelector('.modal pre.logview').textContent.startsWith('Loading')", timeout=5000)
+    assert page.locator(".modal a", has_text="Download the log").count() == 1

@@ -827,6 +827,29 @@ function modal(title, ...kids) {
   document.body.append(back);
   return back;
 }
+/** Maintenance › Server log: the end of data/viewer.log, filtered by level and text; page requests hidden unless asked. */
+function logDialog() {
+  const level = h('select', null, h('option', { value: 'any' }, 'Everything'), h('option', { value: 'warning' }, 'Warnings and errors'), h('option', { value: 'error' }, 'Errors only'));
+  const text = h('input', { class: 'einput', placeholder: 'Filter, e.g. sync or a file name', style: 'margin:0;flex:1;min-width:140px', onkeydown: (e) => { e.stopPropagation(); if (e.key === 'Enter') load(); } });
+  const reqs = h('input', { type: 'checkbox' });
+  const pre = h('pre', { class: 'logview' }, 'Loading…');
+  const info = h('div', { class: 'muted', style: 'font-size:12px' });
+  async function load() {
+    let r; try { r = await api(`/api/log?lines=500&level=${level.value}&requests=${reqs.checked ? 1 : 0}&contains=${encodeURIComponent(text.value.trim())}`); } catch (e) { pre.textContent = e.message; return; }
+    pre.textContent = r.lines.length ? r.lines.join('\n') : (r.note || 'Nothing matches.');
+    pre.scrollTop = pre.scrollHeight;
+    fill(info, `${r.file} · ${fmtBytes(r.size_bytes)} · showing the last ${nf.format(r.returned)} lines`);
+  }
+  level.onchange = load; reqs.onchange = load;
+  const back = modal('Server log',
+    h('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px' }, level, text,
+      h('label', { style: 'display:flex;gap:6px;align-items:center;font-size:13px;cursor:pointer' }, reqs, 'Page requests'),
+      h('button', { class: 'pillbtn', onclick: load }, 'Refresh')),
+    pre, info,
+    h('div', { class: 'modal-btns' }, h('a', { class: 'pillbtn', href: '/api/log/download', download: '' }, 'Download the log'), h('button', { class: 'pillbtn on', onclick: () => back.remove() }, 'Close')));
+  back.firstChild.classList.add('wide');
+  load();
+}
 function albumDialog(ids) {
   const name = h('input', { class: 'pagefilter', style: 'margin:0;flex:1', placeholder: 'New album name' });
   const add = async (id, label) => {
@@ -2215,6 +2238,7 @@ async function settingsPage(view) {
         h('a', { class: 'pillbtn', href: '/api/backup/app', download: '' }, icon('download'), h('span', null, 'Viewer data (zip)')))),
     // 4. The viewer itself
     h('h2', null, 'Viewer'),
+    row('Server log', 'What the server has been doing: edits, database writes, updates, background jobs and any errors, from the viewer’s own log file in the data folder.', btn('Show the log', logDialog)),
     (() => {
       const body = h('div', { class: 'muted', style: 'font-size:13px' }, 'Loading…');
       const draw = async () => {

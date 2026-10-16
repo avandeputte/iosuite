@@ -169,8 +169,8 @@ def _auto_apply():
         return
     try:
         r = dbsync.apply_pending()
-        logging.getLogger("app.sync").info("edits applied to digiKam's database: %d photos, %d skipped", r.get("applied", 0), len(r.get("skipped", [])))
-        _kick.set()
+        logging.getLogger("app.sync").info("edits applied to digiKam's database (automatically): %d photos, %d skipped", r.get("applied", 0), len(r.get("skipped", [])))
+        threading.Thread(target=_rebuild_after_write, daemon=True).start()
     except (dbsync.SyncError, *DB_ERRORS) as e:
         logging.getLogger("app.sync").warning("edits were not applied to digiKam's database: %s", e)
 
@@ -245,7 +245,7 @@ WRITE_PATHS = ("/api/edit", "/api/edits/db", "/api/consistency/sync", "/api/gpx/
                "/api/faces/person", "/api/placetags", "/api/tags/op")
 
 
-ADMIN_PATHS = ("/api/settings", "/api/maintenance", "/api/analysis/run", "/api/models/check", "/api/models/download", "/api/restart", "/api/users", "/api/update", "/api/neardups")
+ADMIN_PATHS = ("/api/settings", "/api/maintenance", "/api/log", "/api/analysis/run", "/api/models/check", "/api/models/download", "/api/restart", "/api/users", "/api/update", "/api/neardups")
 SIGNED_IN_PATHS = ("/api/favorites", "/api/ualbums", "/api/searches", "/api/tags/recent", "/api/auth/settings", "/api/auth/password")
 
 
@@ -1437,6 +1437,20 @@ def api_restart():
     return {"ok": True}
 
 
+@app.get("/api/log")
+def api_log(lines: int = 300, level: str = "any", contains: str = "", requests: int = 0):
+    """Maintenance › Server log: the end of data/viewer.log, filtered (admins)."""
+    from . import logs
+    return logs.tail(lines, contains[:200], level if level in ("any", "warning", "error") else "any", bool(requests))
+
+
+@app.get("/api/log/download")
+def api_log_download():
+    if not config.LOG_FILE.exists():
+        raise HTTPException(404, "No log file yet")
+    return FileResponse(config.LOG_FILE, media_type="text/plain", filename="iopix-viewer.log", content_disposition_type="attachment")
+
+
 @app.get("/api/maintenance")
 def api_maintenance():
     """Library and storage facts for the Settings page."""
@@ -1558,18 +1572,34 @@ def api_edits_db_status():
 
 
 @app.post("/api/edits/db")
-def api_edits_db_apply():
+async def api_edits_db_apply():
     """Write the pending edits into digiKam's database. Refused while digiKam is running."""
     if not config.DB_WRITE:
         raise HTTPException(403, "Writing to the digiKam database is turned off (DB_WRITE=0)")
+    log = logging.getLogger("app.sync")
     try:
         result = dbsync.apply_pending()
     except dbsync.SyncError as e:
+        log.warning("apply to digiKam's database refused: %s", e)
         raise HTTPException(409, str(e))
     except DB_ERRORS as e:
+        log.error("apply to digiKam's database failed and was rolled back: %s", e)
         raise HTTPException(500, f"The update failed and was rolled back: {e}")
-    _kick.set()
+    log.info("edits applied to digiKam's database (on request): %d photos, %d skipped%s", result["applied"], len(result["skipped"]),
+             "".join(f"; {s['id']}: {s['reason']}" for s in result["skipped"][:5]))
+    await run_in_threadpool(_rebuild_after_write)
     return result
+
+
+def _rebuild_after_write():
+    """The viewer just wrote into digiKam's database: rebuild the index now rather than wait for the
+    change to be noticed, so applied edits stop showing as waiting at once."""
+    try:
+        index.build()
+    except Exception as e:  # the watcher retries; the cause goes to the log
+        logging.getLogger("app.index").warning("rebuild after a database write failed: %s", e)
+    state["version"] = None
+    _kick.set()
 
 
 # --------------------------------------------------------------------------

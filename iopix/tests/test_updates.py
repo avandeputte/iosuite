@@ -84,3 +84,14 @@ def test_daily_check_banner_and_setting(client, monkeypatch):
     monkeypatch.delenv("UPDATE_CHECK")
     state.set_setting("update_check", "1")
     assert updates.remote_version("v1.2.3: x") == "1.2.3" and updates.remote_version("docs: x") is None
+
+
+def test_server_log_endpoint_filters(client):
+    import logging
+    logging.getLogger("app.sync").warning("probe-warning for the log test")
+    r = client.get("/api/log", params={"level": "warning", "contains": "probe-warning"})
+    assert r.status_code == 200
+    j = r.json()
+    if j["lines"]:  # the file handler is installed by the app's start; present in the test client
+        assert all("probe-warning" in l for l in j["lines"])
+    assert client.get("/api/log", params={"requests": 0}).status_code == 200

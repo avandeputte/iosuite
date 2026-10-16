@@ -490,26 +490,11 @@ def server_log(token: str, lines: int = 200, contains: str = "", level: Literal[
     """The last lines of the viewer's own log (data/viewer.log, rotating). `contains` keeps only lines
     with that text; `level` keeps only WARNING+ or ERROR+ lines (tracebacks count as errors)."""
     _need_token(token)
-    lines = max(1, min(int(lines), 2000))
-    path = config.LOG_FILE
-    if not path.exists():
-        return {"file": str(path), "lines": [], "note": "no log file yet (the server writes it from its next start)"}
+    from . import logs
     try:
-        with open(path, "rb") as f:
-            f.seek(0, 2)
-            size = f.tell()
-            f.seek(max(0, size - 4_000_000))
-            text = f.read().decode("utf-8", "replace")
+        return logs.tail(min(int(lines), 2000), contains, level)
     except OSError as e:
         raise ToolError(f"cannot read the log: {e}")
-    out = text.splitlines()
-    if contains:
-        out = [l for l in out if contains.lower() in l.lower()]
-    if level == "warning":
-        out = [l for l in out if " WARNING " in l or " ERROR " in l or " CRITICAL " in l or "Traceback" in l]
-    elif level == "error":
-        out = [l for l in out if " ERROR " in l or " CRITICAL " in l or "Traceback" in l]
-    return {"file": str(path), "size_bytes": size, "returned": min(lines, len(out)), "lines": out[-lines:]}
 
 
 @server.tool(annotations=READ_ONLY)
