@@ -61,7 +61,9 @@ def preflight(db_path: Path, check_running: bool = True, holds: str = None):
     write left behind. `holds` names what lives in the database for the message."""
     if check_running and digikam_running():
         raise SyncError("digiKam is running. Quit digiKam first" + (f"; {holds} live in its database." if holds else ", then try again."))
-    if dkdb.journal_pending(db_path):
+    with dkdb.write_lock:  # a write of the viewer's own still running is not an unfinished write
+        pending = dkdb.journal_pending(db_path)
+    if pending:
         raise SyncError("The digiKam database has an unfinished write (journal file present). "
                         "Open and close digiKam once so it can recover, then try again.")
 
@@ -71,7 +73,12 @@ def write_transaction(db_path: Path = None, check_running: bool = True):
     """One guarded write to digiKam's database: BEGIN, schema-version check, the caller's
     statements, integrity check, a last look for a running digiKam, COMMIT. Any error
     rolls back; the connection is always closed."""
-    con = dkdb.connect(write=True, db_path=db_path)
+    dkdb.write_lock.acquire()
+    try:
+        con = dkdb.connect(write=True, db_path=db_path)
+    except BaseException:
+        dkdb.write_lock.release()
+        raise
     try:
         con.begin_write()
         ver = con.execute("SELECT value FROM Settings WHERE keyword = 'DBVersion'").fetchone()
@@ -92,6 +99,7 @@ def write_transaction(db_path: Path = None, check_running: bool = True):
         raise
     finally:
         con.close()
+        dkdb.write_lock.release()
 
 
 def gps_text(is_lat: bool, v: float) -> str:

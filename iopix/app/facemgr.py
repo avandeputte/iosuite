@@ -169,7 +169,7 @@ def apply_many(ops: list, db_path=None, check_running: bool = True, background: 
     if not ops:
         return []
     for op in ops:
-        if op.get("op") not in ("name", "confirm", "ignore", "unknown", "remove", "add", "move", "detected"):
+        if op.get("op") not in ("name", "confirm", "ignore", "unknown", "remove", "add", "move", "detected", "suggest"):
             raise SyncError("Unknown face operation")
     dbsync.preflight(db_path, check_running, "faces")
     results, touched = [], []
@@ -187,10 +187,24 @@ def apply_many(ops: list, db_path=None, check_running: bool = True, background: 
                 raise SyncError(results[0]["error"])
     from . import history
     labels = {"name": "Face named {name}", "confirm": "Suggested face confirmed as {name}", "ignore": "Face marked as ignored", "unknown": "Face name removed (now unknown)",
-              "remove": "Face region removed", "add": "Face added for {name}", "move": "Face region moved", "detected": "Unnamed face added by face detection"}
-    history.record([{"photo_id": r["image"], "action": "face", "summary": labels.get(r.get("op"), "Face changed").format(name=(r.get("name") or "").split("/")[-1] or "a person"),
-                     "details": {k: v for k, v in r.items() if k in ("op", "tag", "name", "was", "from_tag")} | {"rect": next((o.get("rect") for o in ops if int(o.get("image") or 0) == r["image"] and o.get("op") == r.get("op")), None)}}
-                    for r in results if "error" not in r and not r.get("skipped")])
+              "remove": "Face region removed", "add": "Face added for {name}", "move": "Face region moved", "detected": "Unnamed face added by face detection",
+              "suggest": "Suggestion for {name} put back"}
+    done = [r for r in results if "error" not in r and not r.get("skipped")]
+    try:
+        paths = dict(dbsync._photo_paths(list({r["image"] for r in done})))
+    except Exception:
+        paths = {}
+    rows = []
+    for r in done:
+        src = next((o for o in ops if int(o.get("image") or 0) == r["image"] and o.get("op") == r.get("op")), {})
+        det = {k: v for k, v in r.items() if k in ("op", "tag", "name", "was", "from_tag")} | {"rect": src.get("rect")}
+        if src.get("new_rect"):
+            det["new_rect"] = src["new_rect"]
+        inv = inverse_ops(det)
+        rows.append({"photo_id": r["image"], "action": "face", "path": paths.get(r["image"]),
+                     "summary": labels.get(r.get("op"), "Face changed").format(name=(r.get("name") or "").split("/")[-1] or "a person"),
+                     "details": det, "undo": {"face_ops": inv} if inv else None})
+    history.record(rows)
     if background:
         queue_sidecars(list(dict.fromkeys(touched)), db_path)
         for r in results:
@@ -207,6 +221,42 @@ def apply_many(ops: list, db_path=None, check_running: bool = True, background: 
                 r["sidecar"] = status
                 r["backup"] = str(backup) if backup else None
     return results
+
+
+def inverse_ops(d: dict) -> list:
+    """The face operations that take a photo back to how it was before the recorded change d (its history
+    details: op, rect, tag, was, from_tag, new_rect). Empty when the change cannot be undone that way."""
+    op, at, was, before = d.get("op"), d.get("rect"), d.get("was"), d.get("from_tag")
+    if not at:
+        return []
+
+    def back_to(kind, t):
+        if kind == "confirmed" and t:
+            return [{"op": "name", "rect": at, "tag": t}]
+        if kind == "unknown":
+            return [{"op": "unknown", "rect": at}]
+        if kind == "ignored":
+            return [{"op": "ignore", "rect": at}]
+        if kind == "suggested" and t:
+            return [{"op": "remove", "rect": at}, {"op": "suggest", "rect": at, "tag": t}]
+        return []
+    if op in ("add", "detected", "suggest"):
+        return [{"op": "remove", "rect": at}]
+    if op in ("name", "confirm", "ignore", "unknown"):
+        return back_to(was, before)
+    if op == "remove":
+        if was == "confirmed" and before:
+            return [{"op": "add", "rect": at, "tag": before}]
+        if was == "suggested" and before:
+            return [{"op": "suggest", "rect": at, "tag": before}]
+        if was == "unknown":
+            return [{"op": "detected", "rect": at}]
+        if was == "ignored":
+            return [{"op": "detected", "rect": at}, {"op": "ignore", "rect": at}]
+        return []
+    if op == "move" and d.get("new_rect"):
+        return [{"op": "move", "rect": d["new_rect"], "new_rect": at}]
+    return []
 
 
 def _person_already_there(con, image: int, tag: int, rect) -> bool:
@@ -234,6 +284,14 @@ def _apply_one(con, sp: dict, op: dict) -> dict:
             summary.update(skipped=True)
             return summary
         _add_prop(con, image, sp["unknownPerson"], "autodetectedFace", rect)
+        return summary
+    if kind_op == "suggest":  # a suggestion for person `tag` (digiKam's unconfirmed face), as undo puts one back
+        new_tag = int(op.get("tag") or 0)
+        if kind is not None:
+            raise SyncError("There is already a face at exactly that rectangle.")
+        _add_prop(con, image, new_tag, "autodetectedFace", rect)
+        _add_prop(con, image, sp["unconfirmedPerson"], "autodetectedPerson", f"{new_tag},autodetectedFace,{rect}")
+        summary.update(tag=new_tag, name=_full(con, new_tag))
         return summary
     if kind_op == "add":
         new_tag = int(op.get("tag") or 0)
@@ -289,17 +347,18 @@ def create_person(name: str, parent: int = 0) -> int:
     r = tagmanager.apply({"op": "add", "parent": parent, "name": name})
     tid = int(r["id"])
     # tagmanager.apply just ran every check and took the backup; this follow-up row is tiny
-    con = dkdb.connect(write=True)
-    try:
-        con.begin_write()
-        _ensure_person(con, tid)
-        con.commit()
-        dkdb.note_own_write()
-    except BaseException:
-        con.rollback()
-        raise
-    finally:
-        con.close()
+    with dkdb.write_lock:
+        con = dkdb.connect(write=True)
+        try:
+            con.begin_write()
+            _ensure_person(con, tid)
+            con.commit()
+            dkdb.note_own_write()
+        except BaseException:
+            con.rollback()
+            raise
+        finally:
+            con.close()
     return tid
 
 

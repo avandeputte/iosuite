@@ -1707,6 +1707,21 @@ def api_quality():
         raise HTTPException(503, f"Could not read the face regions: {str(e)[:200]}")
 
 
+@app.post("/api/quality/fit")
+async def api_quality_fit(request: Request):
+    """Body {photos?: [ids]}: trim face rectangles that stick out of their photo to its edges, remove empty ones."""
+    from . import facequality
+    if not config.DB_WRITE or appstate.read_only():
+        raise HTTPException(403, "Writing to digiKam's database is turned off")
+    body = await request.json() if (await request.body()) else {}
+    try:
+        r = await run_in_threadpool(facequality.fit_inside, body.get("photos"))
+    except dbsync.SyncError as e:
+        raise HTTPException(409, str(e))
+    _kick.set()
+    return r
+
+
 @app.post("/api/quality/fix")
 async def api_quality_fix(request: Request):
     """Body {files: false}: remove the near-duplicate face regions (one kept per group) and rewrite those sidecars;

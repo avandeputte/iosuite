@@ -2,6 +2,7 @@
 import os
 import shutil
 import sqlite3
+import time
 from pathlib import Path
 
 import pytest
@@ -58,3 +59,64 @@ def test_a_deleted_photo_can_be_restored(client, lib):
     assert acts[:2] == ["restore", "deleted"], "the history follows the photo to its new id"
     keep.unlink()
     shutil.rmtree(backup, ignore_errors=True)
+
+
+def _face_rows(db, pid):
+    import sqlite3 as _s
+    con = _s.connect(db)
+    try:
+        return sorted(con.execute("SELECT tagid, property, value FROM ImageTagProperties WHERE imageid = ?", (pid,)).fetchall())
+    finally:
+        con.close()
+
+
+@pytest.mark.parametrize("op", ["ignore", "unknown", "remove", "move"])
+def test_face_changes_can_be_undone(client, lib, op):
+    """Every face change in the change log offers Undo, which puts the photo's faces back as they were."""
+    import re
+    from app import facemgr
+    pid = lib["with_faces"][4]
+    before = _face_rows(lib["db"], pid)
+    val = next(v for t, p, v in before if p == "tagRegion")
+    x, y, w, h = map(int, re.search(r'x="(\d+)" y="(\d+)" width="(\d+)" height="(\d+)"', val).groups())
+    body = {"op": op, "image": pid, "rect": [x, y, w, h]} | ({"new_rect": [x + 5, y, w, h]} if op == "move" else {})
+    assert client.post("/api/faces/op", json=body).status_code == 200
+    assert _face_rows(lib["db"], pid) != before
+    e = client.get(f"/api/history?photo={pid}&limit=1").json()["entries"][0]
+    assert "undo" in e["restore"], e
+    r = client.post(f"/api/history/{e['id']}/restore", json={"kind": "undo"})
+    assert r.status_code == 200, r.text
+    assert _face_rows(lib["db"], pid) == before
+    for _ in range(100):
+        if not facemgr.sidecars_pending():
+            break
+        time.sleep(0.1)
+
+
+def test_older_face_entries_without_undo_data_are_undone_from_their_details(client, lib):
+    from app import facemgr
+    assert facemgr.inverse_ops({"op": "remove", "was": "confirmed", "from_tag": 26, "rect": [1, 2, 3, 4]}) == [{"op": "add", "rect": [1, 2, 3, 4], "tag": 26}]
+    assert facemgr.inverse_ops({"op": "name", "tag": 194, "was": "confirmed", "from_tag": 89, "rect": [1, 2, 3, 4]}) == [{"op": "name", "rect": [1, 2, 3, 4], "tag": 89}]
+    assert facemgr.inverse_ops({"op": "add", "tag": 26, "rect": [1, 2, 3, 4]}) == [{"op": "remove", "rect": [1, 2, 3, 4]}]
+    assert facemgr.inverse_ops({"op": "confirm", "was": "suggested", "from_tag": 7, "rect": [1, 2, 3, 4]})[-1] == {"op": "suggest", "rect": [1, 2, 3, 4], "tag": 7}
+    assert facemgr.inverse_ops({"op": "move", "rect": [1, 2, 3, 4]}) == [], "an old move without its new rectangle cannot be undone"
+
+
+def test_backed_up_image_file_can_be_restored_from_any_change(client, lib):
+    """A change whose photo has its original in file-backups offers "Restore original file", whatever kind of change it is."""
+    import shutil
+    from app import edits, history as h
+    pid = lib["ids"][7]
+    ic = __import__("app.index", fromlist=["open_index"]).open_index()
+    path = ic.execute("SELECT path FROM photos WHERE id = ?", (pid,)).fetchone()[0]; ic.close()
+    b = edits.file_backup_path(path)
+    b.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(path, b)
+    h.record([{"photo_id": pid, "action": "face", "summary": "Face region removed", "details": {"op": "remove", "rect": [1, 2, 3, 4]}}])
+    e = client.get(f"/api/history?photo={pid}&limit=1").json()["entries"][0]
+    assert "original" in e["restore"] and e["path"] == path, e
+    with open(path, "ab") as f:
+        f.write(b"changed")
+    assert client.post(f"/api/history/{e['id']}/restore", json={"kind": "original"}).status_code == 200
+    assert open(path, "rb").read() == open(b, "rb").read()
+    b.unlink()

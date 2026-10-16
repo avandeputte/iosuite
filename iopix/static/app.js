@@ -181,7 +181,7 @@ const NAV = [
 ];
 // hash route name -> page renderer (function declarations are hoisted, so this can sit above them)
 const VIEW_FNS = { photos: showPhotos, explore: showExplore, people: showPeople, places: showPlaces, folders: showFolders, albums: showAlbums, tags: showTags, map: showMap, duplicates: showDuplicates,
-  detected: showDetected, bursts: showBursts, events: showEvents, history: showHistory, analysis: showAnalysis, settings: showSettings, maintenance: showMaintenance, consistency: showConsistency, faces: showFaces };
+  detected: showDetected, bursts: showBursts, events: showEvents, history: showHistory, analysis: showAnalysis, settings: showSettings, maintenance: showMaintenance, consistency: showConsistency, quality: showQuality, faces: showFaces };
 const VIEWS = Object.keys(VIEW_FNS);
 const PARAM_VIEWS = ['places', 'bursts', 'faces', 'history'];  // views whose own query parameters (not photo filters) pick what they show
 // favorites and app albums (stored by the app, not in digiKam)
@@ -858,7 +858,10 @@ function histEntry(e, onDone, withPhoto) {
   return h('div', { class: 'hrow' },
     withPhoto ? (e.action === 'deleted' ? h('span', { class: 'ph' }, icon('trash')) : h('img', { src: `/thumb/${e.photo}`, alt: '', loading: 'lazy', onclick: () => openLightbox({ id: [e.photo] }, 0, true) })) : null,
     h('div', { class: 'hmain' }, h('div', null, h('span', { class: 'hact a-' + e.action }, HIST_ACTION[e.action] || e.action), ' ', e.summary),
-      h('div', { class: 'muted' }, `${fmtWhen(e.ts)} · ${e.user || ''}`, withPhoto && e.details?.name ? ` · ${e.details.name}` : withPhoto && e.path ? ` · ${e.path.split('/').pop()}` : '', btns.length ? ' · ' : '', ...btns.flatMap((b, i) => (i ? [' · ', b] : [b])))));
+      h('div', { class: 'muted' }, `${fmtWhen(e.ts)} · ${e.user || ''}`, withPhoto && e.details?.name ? ` · ${e.details.name}` : withPhoto && e.path ? ` · ${e.path.split('/').pop()}` : '', btns.length ? ' · ' : '', ...btns.flatMap((b, i) => (i ? [' · ', b] : [b]))),
+      withPhoto && (e.sidecar_copy || e.file_copy) ? h('div', { class: 'muted', style: 'font-size:11.5px;word-break:break-all' }, 'Backups: ',
+        e.sidecar_copy ? h('span', { title: e.sidecar_copy }, 'sidecar before this change') : null, e.sidecar_copy && e.file_copy ? ' · ' : null,
+        e.file_copy ? h('span', { title: e.file_copy }, `original image file (${e.file_copy.split('/').slice(-3).join('/')})`) : null) : null));
 }
 async function showHistory(params) {
   const photo = params.get('photo'), list = h('div', { class: 'hlist' }), more = h('button', { class: 'pillbtn', style: 'margin:14px 0', hidden: true }, 'Show more');
@@ -914,19 +917,54 @@ function modal(title, ...kids) {
   document.body.append(back);
   return back;
 }
-/** Maintenance › Face quality › Review: the same person in two places, and broken rectangles; each photo opens in the viewer. */
-function qualityDialog(q) {
-  const item = (x, what) => h('div', { class: 'hrow' },
-    h('img', { src: `/thumb/${x.photo}`, alt: '', loading: 'lazy', onclick: () => { back.remove(); openLightbox({ id: [x.photo] }, 0, true); } }),
-    h('div', { class: 'hmain' }, h('div', null, h('b', null, x.name), ' ', what(x))));
-  const back = modal('Faces to look at',
-    q.separate.count ? [h('h4', null, `Same person in two places (${nf.format(q.separate.count)})`), h('p', { class: 'muted', style: 'font-size:12.5px' }, 'Usually one of the two is someone else, named by mistake. Open the photo, show the faces (F) and rename or remove the wrong one.'),
-      h('div', { class: 'hlist' }, q.separate.items.map((x) => item(x, (y) => `${y.rects.length} regions`)))] : null,
-    q.invalid.count ? [h('h4', null, `Empty or outside the photo (${nf.format(q.invalid.count)})`),
-      h('div', { class: 'hlist' }, q.invalid.items.map((x) => item(x, (y) => y.rect ? `${y.rect[2]} × ${y.rect[3]} at ${y.rect[0]}, ${y.rect[1]} on a ${y.size[0]} × ${y.size[1]} photo` : 'unreadable rectangle')))] : null,
-    (q.separate.count > q.separate.items.length || q.invalid.count > q.invalid.items.length) ? h('p', { class: 'muted' }, 'The first ones are shown.') : null,
-    h('div', { class: 'modal-btns' }, h('button', { class: 'pillbtn on', onclick: () => back.remove() }, 'Close')));
-  back.firstChild.classList.add('wide');
+/** Maintenance › Face quality: faces stored twice, the same person in two places, boxes outside the photo or empty.
+ *  The check runs every time the page is opened, and again with "Check again". */
+async function showQuality() {
+  const body = h('div', null, h('div', { class: 'muted' }, 'Checking every face in the library…'));
+  main.replaceChildren(h('div', { class: 'page spage cpage' }, crumbs([['Maintenance', '#/maintenance'], ['Face quality', null]]),
+    pageTitle('face', 'amber', 'Face quality'),
+    h('p', { class: 'muted', style: 'max-width:820px;margin-top:0' }, 'Every face region in digiKam’s database is checked: the same person stored twice a few pixels apart (shown twice in the people list), the same person in two separate places, and boxes that stick out of the photo or are empty. Fixes go through the normal face changes, so each one is in the change log with undo.'),
+    body));
+  let q;
+  try { q = await api('/api/quality'); } catch (e) { fill(body, h('div', { class: 'empty' }, e.message)); return; }
+  if (route.view !== 'quality') return;
+  const p = q.progress || {};
+  const again = h('button', { class: 'pillbtn', onclick: () => showQuality() }, icon('spark'), 'Check again');
+  const thumb = (x) => h('img', { src: `/thumb/${x.photo}`, alt: '', loading: 'lazy', onclick: () => openLightbox({ id: [x.photo] }, 0, true) });
+  const sec = (title, n, intro, acts, items) => h('div', { class: 'qsec' },
+    h('h2', null, title, h('span', { class: 'muted', style: 'font-size:14px;font-weight:400;margin-left:8px' }, nf.format(n))),
+    intro ? h('p', { class: 'muted', style: 'margin:0 0 10px;max-width:820px' }, intro) : null,
+    acts ? h('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px' }, acts) : null,
+    items && items.length ? h('div', { class: 'hlist' }, items) : null,
+    items && n > items.length ? h('p', { class: 'muted' }, `The first ${nf.format(items.length)} are shown; fix these and check again for the next ones.`) : null);
+  const busy = p.running ? h('div', { class: 'enote' }, p.files ? `Fixing the image files… ${nf.format(p.done)} / ${nf.format(p.total)}.` : `Removing duplicate faces… ${nf.format(p.done)} / ${nf.format(p.total)} photos.`) : null;
+  if (p.running) setTimeout(() => { if (route.view === 'quality') showQuality(); }, 4000);
+  const near = q.near;
+  const fitOne = async (x) => { try { const r = await post('/api/quality/fit', { photos: [x.photo] }); toast(r.fitted ? 'Box trimmed to the photo.' : r.removed ? 'Empty box removed.' : 'Nothing to fix there.'); } catch (e) { toast(e.message, null, null, 9000); return; } setTimeout(showQuality, 1200); };
+  const fitAll = q.invalid.count && CAN_MANAGE ? h('button', { class: 'pillbtn on', onclick: async () => {
+    if (!confirm(`Trim ${plural(q.invalid.count, 'face box', 'face boxes')} to the edges of their photos (empty ones are removed)? Each change is in the change log with undo.`)) return;
+    try { const r = await post('/api/quality/fit', {}); toast(`${nf.format(r.fitted)} trimmed, ${nf.format(r.removed)} removed${r.failed ? `, ${nf.format(r.failed)} failed` : ''}.`, null, null, 7000); } catch (e) { toast(e.message, null, null, 9000); return; }
+    setTimeout(showQuality, 1500);
+  } }, 'Fit them all inside their photos') : null;
+  fill(body, h('div', { style: 'display:flex;gap:10px;align-items:center;margin:4px 0 6px' }, again, h('span', { class: 'muted' }, `${nf.format(q.checked)} face regions checked ${fmtWhen(q.at)}.`)), busy,
+    sec('Stored twice', near.extra, near.extra ? `${plural(near.extra, 'region is a copy', 'regions are copies')} of another one of the same person a few pixels away, on ${plural(near.photos, 'photo')}.` : 'No face is stored twice.',
+      near.extra && CAN_MANAGE && !p.running ? [h('button', { class: 'pillbtn on', onclick: async () => {
+        if (!confirm(`Remove ${nf.format(near.extra)} duplicate face regions on ${plural(near.photos, 'photo')}? One of each pair is kept; the sidecars are rewritten.`)) return;
+        try { const r = await post('/api/quality/fix', {}); toast(`Cleaning up ${plural(r.photos, 'photo')} in the background.`); } catch (e) { toast(e.message, null, null, 9000); }
+        setTimeout(showQuality, 1500);
+      } }, `Remove ${nf.format(near.extra)} duplicates`)]
+        : p.finished && !p.files && !p.running && CAN_MANAGE ? [h('button', { class: 'pillbtn', onclick: async () => {
+          if (!confirm('Rewrite the face regions inside the image files of the cleaned photos that still carry the duplicates? Each file is backed up first and its pixels are checked unchanged.')) return;
+          try { const r = await post('/api/quality/fix', { files: true }); toast(`Looking at ${plural(r.photos, 'image file')} in the background.`); } catch (e) { toast(e.message, null, null, 9000); }
+          setTimeout(showQuality, 1500);
+        } }, 'Fix the image files too')] : null,
+      near.examples.map((x) => h('div', { class: 'hrow' }, thumb(x), h('div', { class: 'hmain' }, h('b', null, x.name), ` · ${x.apart} px apart`)))),
+    sec('Same person in two places', q.separate.count, 'Usually one of the two is someone else, named by mistake. Open the photo, show the faces (F), and rename, adjust or remove the wrong box.', null,
+      q.separate.items.map((x) => h('div', { class: 'hrow' }, thumb(x), h('div', { class: 'hmain' }, h('b', null, x.name), ` · ${x.rects.length} boxes`)))),
+    sec('Outside the photo or empty', q.invalid.count, 'A box that sticks out of the photo can be trimmed to its edges here, or moved and resized in the viewer (click the face, “Adjust the box”). Empty boxes are removed.', fitAll ? [fitAll] : null,
+      q.invalid.items.map((x) => h('div', { class: 'hrow' }, thumb(x), h('div', { class: 'hmain' }, h('b', null, x.name), ' ',
+        x.rect ? `${x.rect[2]} × ${x.rect[3]} at ${x.rect[0]}, ${x.rect[1]} on a ${x.size[0]} × ${x.size[1]} photo` : 'unreadable rectangle',
+        CAN_MANAGE && x.fix ? [' · ', h('a', { class: 'lnk', onclick: () => fitOne(x) }, x.fix === 'fit' ? 'Fit inside' : 'Remove')] : null)))));
 }
 /** Maintenance › Server log: the end of data/viewer.log, filtered by level and text; page requests hidden unless asked. */
 function logDialog() {
@@ -1745,7 +1783,7 @@ async function loadUser() {
   renderUserMenu();
 }
 // which bar item a view belongs to: Explore's sub-pages light Explore, the Faces page People, Maintenance's pages Maintenance
-const NAV_OF = { duplicates: 'explore', detected: 'explore', bursts: 'explore', events: 'explore', faces: 'people', analysis: 'maintenance', history: 'maintenance', consistency: 'maintenance' };
+const NAV_OF = { duplicates: 'explore', detected: 'explore', bursts: 'explore', events: 'explore', faces: 'people', analysis: 'maintenance', history: 'maintenance', consistency: 'maintenance', quality: 'maintenance' };
 const MORE_VIEWS = ['favorites', 'folders', 'albums', 'tags', 'map', 'settings', 'maintenance'];
 function currentNav() {
   const fp = filterParams();
@@ -2499,32 +2537,12 @@ async function settingsPage(view) {
       return row('Metadata consistency', h('span', null, line, ' Rating, title, caption and tags are compared in the three places they live; disagreements can be synced in either direction.'),
         h('a', { class: 'pillbtn on', href: '#/consistency' }, 'Open'));
     })(),
-    (() => {  // face metadata quality: duplicates (fixable in one go), and what needs a person to look
-      const line = h('span', null, 'Checking…'), acts = h('span', { style: 'display:inline-flex;gap:8px;flex-wrap:wrap' });
-      const draw = async () => {
-        let q; try { q = await api('/api/quality'); } catch (e) { fill(line, e.message); return; }
-        const p = q.progress || {};
-        if (p.running) { fill(line, p.files ? `Fixing the image files… ${nf.format(p.done)} / ${nf.format(p.total)} photos looked at, ${nf.format(p.photos)} files rewritten.` : `Removing duplicate faces… ${nf.format(p.done)} / ${nf.format(p.total)} photos, ${nf.format(p.removed)} regions removed.`); fill(acts); setTimeout(() => { if (line.isConnected) draw(); }, 3000); return; }
-        const done = !p.finished ? '' : p.files ? ` Last pass over the image files: ${plural(p.photos, 'file')} rewritten${p.errors ? `, ${nf.format(p.errors)} could not be` : ''}${p.error ? ` (stopped: ${p.error})` : ''}.`
-          : ` Last clean-up: ${nf.format(p.removed)} duplicate regions removed on ${plural(p.photos, 'photo')}${p.errors ? `, ${nf.format(p.errors)} sidecars could not be rewritten` : ''}${p.error ? ` (stopped: ${p.error})` : ''}.`;
-        fill(line, (q.near.extra ? `${plural(q.near.extra, 'face region is a duplicate', 'face regions are duplicates')} of another one of the same person, a few pixels away, on ${plural(q.near.photos, 'photo')}, so those people are listed twice. ` : 'No face is stored twice. ')
-          + (q.separate.count ? `${plural(q.separate.count, 'photo has', 'photos have')} the same person in two separate places. ` : '')
-          + (q.invalid.count ? `${plural(q.invalid.count, 'face rectangle is', 'face rectangles are')} empty or outside the photo.` : '') + done);
-        fill(acts,
-          q.near.extra && CAN_MANAGE ? btn(`Remove ${nf.format(q.near.extra)} duplicates`, async () => {
-            if (!confirm(`Remove ${nf.format(q.near.extra)} duplicate face regions on ${plural(q.near.photos, 'photo')}? Of each person's near-identical regions one is kept. digiKam's database is backed up first, the sidecars of those photos are rewritten (not the image files), and each photo gets a change-log entry with its old sidecar.`)) return;
-            try { const r = await post('/api/quality/fix', {}); toast(`Cleaning up ${plural(r.photos, 'photo')} in the background.`); } catch (e) { toast(e.message, null, null, 9000); }
-            draw();
-          }, true) : null,
-          p.finished && !p.files && CAN_MANAGE ? btn('Fix the image files too', async () => {
-            if (!confirm('Rewrite the face regions inside the image files of the cleaned photos that still carry the duplicates? Each file is backed up first (data/file-backups) and its pixels are checked unchanged; this needs free space about the size of those files.')) return;
-            try { const r = await post('/api/quality/fix', { files: true }); toast(`Looking at ${plural(r.photos, 'image file')} in the background.`); } catch (e) { toast(e.message, null, null, 9000); }
-            draw();
-          }) : null,
-          q.separate.count || q.invalid.count ? btn('Review the others', () => qualityDialog(q)) : null);
-      };
-      draw();
-      return row('Face quality', h('span', null, line, ' '), acts);
+    (() => {  // face quality, summarised in one line; the page has the details and the fixes
+      const line = h('span', null, 'Checking…');
+      api('/api/quality').then((q) => fill(line, (q.near.extra ? `${plural(q.near.extra, 'face is', 'faces are')} stored twice. ` : 'No face is stored twice. ')
+        + (q.separate.count ? `${plural(q.separate.count, 'photo has', 'photos have')} the same person in two places. ` : '')
+        + (q.invalid.count ? `${plural(q.invalid.count, 'box is', 'boxes are')} outside the photo or empty.` : ''))).catch(() => fill(line, ''));
+      return row('Face quality', h('span', null, line, ' Duplicate faces, the same person twice, and boxes outside the photo.'), h('a', { class: 'pillbtn on', href: '#/quality' }, 'Open'));
     })(),
     EDITING ? row('Edits waiting for digiKam', m.pendingEdits ? `${plural(m.pendingEdits, 'photo has', 'photos have')} edits saved in sidecars that digiKam’s database does not have yet. digiKam is ${m.digikamRunning ? 'running, so they cannot be applied right now' : 'closed, so they can be applied now'}.` : 'None. digiKam’s database and the sidecars agree.',
       m.pendingEdits ? btn('Apply to digiKam database…', dbDialog, !m.digikamRunning) : null) : null,
@@ -3306,15 +3324,18 @@ function faceMenu(box, f, d) {
     item('This is someone else…', nameIt),
     item('Forget the name (keep as unknown face)', () => faceOp({ op: 'unknown', image: d.id, rect: rect() })),
     item('Not a face to name (ignore)', () => faceOp({ op: 'ignore', image: d.id, rect: rect() })),
+    item('Adjust the box (move or resize)…', () => adjustFace(f, d)),
     item('Remove this face region', () => { if (confirm(`Remove ${f.name}’s face region from this photo?`)) faceOp({ op: 'remove', image: d.id, rect: rect() }); }, true),
   ] : f.kind === 'suggested' ? [
     item(`Yes, this is ${f.name}`, () => faceOp({ op: 'confirm', image: d.id, rect: rect() })),
     item('No, this is someone else…', nameIt),
     item('Not a face to name (ignore)', () => faceOp({ op: 'ignore', image: d.id, rect: rect() })),
+    item('Adjust the box (move or resize)…', () => adjustFace(f, d)),
     item('Remove this region', () => faceOp({ op: 'remove', image: d.id, rect: rect() }), true),
   ] : [
     item('Who is this?…', nameIt),
     f.kind !== 'ignored' ? item('Not a face to name (ignore)', () => faceOp({ op: 'ignore', image: d.id, rect: rect() })) : item('Keep as unknown face', () => faceOp({ op: 'unknown', image: d.id, rect: rect() })),
+    item('Adjust the box (move or resize)…', () => adjustFace(f, d)),
     item('Remove this region', () => faceOp({ op: 'remove', image: d.id, rect: rect() }), true),
   ];
   const menu = h('div', { class: 'facemenu' }, h('div', { class: 'fmh' }, f.kind === 'confirmed' ? f.name : f.kind === 'suggested' ? `Suggestion: ${f.name}` : f.kind === 'unknown' ? 'Unknown face' : 'Ignored face'), items);
@@ -3440,6 +3461,48 @@ function startDrawFace() {
   stage.style.cursor = 'crosshair';
   stage.addEventListener('pointerdown', down, true); stage.addEventListener('pointermove', move, true); stage.addEventListener('pointerup', up, true);
 }
+/** Move or resize a face box: drag inside it to move, drag a corner to resize; it stays inside the photo.
+ *  Saved as a move of the region (digiKam's database and the sidecar), with undo in the change log. */
+function adjustFace(f, d) {
+  const { frame } = LB.el;
+  if (!d || d.video) return;
+  const W = d.w, H = d.h;
+  let r = { x: Math.max(0, f.x), y: Math.max(0, f.y), w: Math.min(f.w, W), h: Math.min(f.h, H) };  // starts fitted inside the photo
+  r.w = Math.min(r.w, W - r.x); r.h = Math.min(r.h, H - r.y);
+  frame.querySelectorAll('.facebox').forEach((x) => { x.style.visibility = 'hidden'; });
+  const box = h('div', { class: 'facebox face-adjust' }, ...['nw', 'ne', 'sw', 'se'].map((c) => h('i', { class: 'fh fh-' + c, 'data-c': c })));
+  const place = () => { box.style.cssText = `left:${r.x / W * 100}%;top:${r.y / H * 100}%;width:${r.w / W * 100}%;height:${r.h / H * 100}%`; };
+  place(); frame.append(box);
+  const toImg = (e) => { const b = frame.getBoundingClientRect(); return [(e.clientX - b.left) / b.width * W, (e.clientY - b.top) / b.height * H]; };
+  let drag = null;
+  box.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); drag = { c: e.target.dataset.c || 'move', p: toImg(e), r: { ...r } }; box.setPointerCapture(e.pointerId); });
+  box.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    const [px, py] = toImg(e), dx = px - drag.p[0], dy = py - drag.p[1], o = drag.r, min = 16;
+    let { x, y, w, h: hh } = o;
+    if (drag.c === 'move') { x = Math.min(Math.max(0, o.x + dx), W - o.w); y = Math.min(Math.max(0, o.y + dy), H - o.h); }
+    else {
+      if (drag.c.includes('w')) { x = Math.min(Math.max(0, o.x + dx), o.x + o.w - min); w = o.x + o.w - x; }
+      if (drag.c.includes('e')) w = Math.min(Math.max(min, o.w + dx), W - o.x);
+      if (drag.c.includes('n')) { y = Math.min(Math.max(0, o.y + dy), o.y + o.h - min); hh = o.y + o.h - y; }
+      if (drag.c.includes('s')) hh = Math.min(Math.max(min, o.h + dy), H - o.y);
+    }
+    r = { x, y, w, h: hh }; place();
+  });
+  box.addEventListener('pointerup', () => { drag = null; });
+  const done = () => { bar.remove(); box.remove(); frame.querySelectorAll('.facebox').forEach((x) => { x.style.visibility = ''; }); document.removeEventListener('keydown', esc, true); };
+  const esc = (e) => { if (e.key === 'Escape') { e.stopPropagation(); done(); } };
+  document.addEventListener('keydown', esc, true);
+  const bar = h('div', { class: 'adjustbar' }, h('span', null, `Adjusting ${f.name || 'this face'}: drag to move, drag a corner to resize.`),
+    h('button', { class: 'pillbtn', onclick: done }, 'Cancel'),
+    h('button', { class: 'pillbtn on', onclick: () => {
+      const nr = [Math.round(r.x), Math.round(r.y), Math.round(r.w), Math.round(r.h)];
+      done();
+      if (nr.join() === [f.x, f.y, f.w, f.h].join()) return;
+      faceOp({ op: 'move', image: d.id, rect: [f.x, f.y, f.w, f.h], new_rect: nr });
+    } }, 'Save'));
+  LB.el.stage.append(bar);
+}
 async function setTagIcon(t, photoId) {
   if (!confirm(`Use this photo as the ${t.person ? 'badge picture' : 'thumbnail'} for “${t.name}”? This is saved in digiKam’s database (digiKam must be closed; a backup is made first).`)) return;
   await tagOp({ op: 'icon', id: t.id, photo: photoId }, t);
@@ -3561,8 +3624,8 @@ function renderInfo() {
       box.hidden = true;
       api(`/api/history?photo=${d.id}&limit=6`).then((r) => {
         if (!r.entries.length || !box.isConnected) return;
-        box.append(h('summary', null, `Change log · ${plural(r.total, 'change')}`), list,
-          r.total > 6 ? h('a', { class: 'lnk', style: 'font-size:12.5px', href: `#/history?photo=${d.id}` }, `See all ${nf.format(r.total)}`) : null);
+        box.append(h('summary', null, `Change log · ${plural(r.total, 'change')}`), list);
+        if (r.total > 6) box.append(h('a', { class: 'lnk', style: 'font-size:12.5px', href: `#/history?photo=${d.id}` }, `See all ${nf.format(r.total)}`));
         list.append(...r.entries.map((e) => histEntry(e, () => { details.delete(d.id); showItem(); }, false)));
         box.hidden = false;
       }).catch(() => {});

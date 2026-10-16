@@ -112,3 +112,25 @@ def test_image_files_with_the_duplicates_are_rewritten_too(client, lib):
     finally:
         con.close()
     assert facequality.fix_files() == 0 or facequality.progress["photos"] == 0, "a second run finds nothing left to do"
+
+
+def test_boxes_outside_the_photo_are_trimmed_and_empty_ones_removed(client, lib):
+    pid = lib["with_faces"][5] if len(lib["with_faces"]) > 5 else lib["with_faces"][-1]
+    con = sqlite3.connect(lib["db"])
+    tag = con.execute("SELECT tagid FROM ImageTagProperties WHERE imageid = ? AND property = 'tagRegion' LIMIT 1", (pid,)).fetchone()[0]
+    w, h, o = con.execute("SELECT width, height, orientation FROM ImageInformation WHERE imageid = ?", (pid,)).fetchone()
+    W, H = (h, w) if (o or 1) in (5, 6, 7, 8) else (w, h)
+    out = f'<rect x="{W - 40}" y="10" width="100" height="80"/>'
+    con.execute("INSERT INTO ImageTagProperties (imageid, tagid, property, value) VALUES (?,?,?,?)", (pid, tag, "tagRegion", out))
+    con.commit(); con.close()
+    q = client.get("/api/quality").json()
+    assert any(x["photo"] == pid and x["fix"] == "fit" for x in q["invalid"]["items"]), q["invalid"]
+    r = client.post("/api/quality/fit", json={"photos": [pid]})
+    assert r.status_code == 200 and r.json()["fitted"] >= 1, r.text
+    left = _regions(lib["db"], pid, tag)
+    assert out not in left and f'<rect x="{W - 40}" y="10" width="40" height="80"/>' in left, left
+    e = client.get(f"/api/history?photo={pid}&limit=1").json()["entries"][0]
+    assert "undo" in e["restore"], "trimmed through the normal face change: undo is there"
+    con = sqlite3.connect(lib["db"])
+    con.execute("DELETE FROM ImageTagProperties WHERE imageid = ? AND tagid = ? AND value = ?", (pid, tag, f'<rect x="{W - 40}" y="10" width="40" height="80"/>'))
+    con.commit(); con.close()

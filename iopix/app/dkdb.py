@@ -472,10 +472,11 @@ def stamp_files(items: list):
                     continue  # the image file itself was rewritten: digiKam's rescan takes care of it (new hash)
                 rows.append((st[0], int(iid)))
             if rows:
-                con.begin_write()
-                con.executemany("UPDATE Images SET modificationDate = ? WHERE id = ?", rows)
-                con.commit()
-                note_own_write()
+                with write_lock:
+                    con.begin_write()
+                    con.executemany("UPDATE Images SET modificationDate = ? WHERE id = ?", rows)
+                    con.commit()
+                    note_own_write()
         except BaseException:
             con.rollback()
             raise
@@ -489,6 +490,8 @@ def stamp_files(items: list):
 
 
 _own_write = {"at": 0.0}  # when this viewer last committed a write to digiKam's database
+import threading as _threading
+write_lock = _threading.RLock()  # the viewer's own writes to digiKam's database, one at a time (SQLite journal checks)
 
 
 def note_own_write():

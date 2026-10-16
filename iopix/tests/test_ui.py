@@ -1036,3 +1036,33 @@ def test_face_change_shows_before_the_server_answers(page, server):
             req = urllib.request.Request(server + "/api/faces/op", data=_json.dumps({"op": "unknown", "image": f["photo"], "rect": [o["x"], o["y"], o["w"], o["h"]]}).encode(),
                                          headers={"Content-Type": "application/json"}, method="POST")
             urllib.request.urlopen(req).read()
+
+
+def test_face_quality_page_and_adjusting_a_box(page, server):
+    page.goto(server + "/#/quality")
+    page.wait_for_selector("h1:has-text('Face quality')", timeout=10000)
+    page.wait_for_selector("button:has-text('Check again')", timeout=20000)
+    assert page.locator("h2", has_text="Stored twice").count() == 1 and page.locator("h2", has_text="Outside the photo").count() == 1
+    import json as _json
+    faces = _json.loads(urllib.request.urlopen(server + "/api/faces/queue?kind=unknown&limit=5").read())["faces"]
+    if not faces:
+        pytest.skip("no unknown face to adjust in the fixture")
+    f = faces[0]
+    posted = []
+    page.route("**/api/faces/op", lambda route: (posted.append(_json.loads(route.request.post_data)), route.continue_()))
+    _open_photo(page, server, f["photo"])
+    page.keyboard.press("f")
+    page.wait_for_selector(".facebox.face-unknown", timeout=10000)
+    page.locator(".facebox.face-unknown").first.click()
+    page.locator(".facemenu .fmi", has_text="Adjust the box").click()
+    box = page.locator(".facebox.face-adjust")
+    b = box.bounding_box()
+    page.mouse.move(b["x"] + b["width"] / 2, b["y"] + b["height"] / 2); page.mouse.down()
+    page.mouse.move(b["x"] + b["width"] / 2 + 15, b["y"] + b["height"] / 2 + 10, steps=4); page.mouse.up()
+    page.locator(".adjustbar button", has_text="Save").click()
+    page.wait_for_timeout(1500)
+    assert posted and posted[0]["op"] == "move" and posted[0]["new_rect"] != posted[0]["rect"], posted
+    page.unroute("**/api/faces/op")
+    req = urllib.request.Request(server + "/api/faces/op", data=_json.dumps({"op": "move", "image": f["photo"], "rect": posted[0]["new_rect"], "new_rect": posted[0]["rect"]}).encode(),
+                                 headers={"Content-Type": "application/json"}, method="POST")
+    urllib.request.urlopen(req).read()  # put the scratch library back

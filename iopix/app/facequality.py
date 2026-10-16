@@ -70,7 +70,8 @@ def scan() -> dict:
         r = _rect(val)
         up_w, up_h = ((h, w) if (orient or 1) in (5, 6, 7, 8) else (w, h))
         if r is None or r[2] <= 0 or r[3] <= 0 or (up_w and up_h and (r[0] < -MARGIN or r[1] < -MARGIN or r[0] + r[2] > up_w + MARGIN or r[1] + r[3] > up_h + MARGIN)):
-            invalid.append({"photo": img, "name": tags.get(tag, (0, "?"))[1] if tag in tags else "?", "rect": list(r) if r else None, "size": [up_w, up_h]})
+            invalid.append({"photo": img, "name": dkdb.tag_path(tags, tag).split("/")[-1] if tag in tags else "?", "rect": list(r) if r else None, "size": [up_w, up_h],
+                            "fix": "fit" if r and r[2] > 0 and r[3] > 0 and up_w and up_h else "remove" if r else None})
             continue
         if prop == "tagRegion":
             by.setdefault((img, tag), []).append((val, r))
@@ -203,6 +204,36 @@ def _run_files(todo: list):
         progress["done"] += len(batch)
     log.info("face clean-up of the image files: %d files rewritten, %d failed, %d already clean", progress["photos"], progress["errors"],
              progress["total"] - progress["photos"] - progress["errors"])
+
+
+def fit_inside(photos: list = None) -> dict:
+    """Face rectangles that stick out of their photo are trimmed to its edges, and empty ones removed (all of
+    them, or those on the given photos). Through the normal face operations, so each is in the change log
+    with undo. Returns {fitted, removed, failed}."""
+    from . import facemgr
+    want = {int(p) for p in photos} if photos else None
+    ops = []
+    for it in scan()["invalid"]:
+        if want is not None and it["photo"] not in want or not it["rect"]:
+            continue
+        x, y, w, h = it["rect"]
+        if it["fix"] == "fit":
+            W, H = it["size"]
+            nx, ny = max(0, x), max(0, y)
+            nw, nh = min(x + w, W) - nx, min(y + h, H) - ny
+            if nw >= 8 and nh >= 8:
+                ops.append({"op": "move", "image": it["photo"], "rect": [x, y, w, h], "new_rect": [nx, ny, nw, nh]})
+                continue
+        ops.append({"op": "remove", "image": it["photo"], "rect": [x, y, w, h]})
+    out = {"fitted": 0, "removed": 0, "failed": 0}
+    for i in range(0, len(ops), 200):
+        res = facemgr.apply_many(ops[i:i + 200], background=True)
+        for o, r in zip(ops[i:i + 200], res):
+            if "error" in r:
+                out["failed"] += 1
+            else:
+                out["fitted" if o["op"] == "move" else "removed"] += 1
+    return out
 
 
 def fix_near_duplicates(after=None, check_running: bool = True) -> int:

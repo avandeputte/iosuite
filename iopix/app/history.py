@@ -44,19 +44,32 @@ def snapshot(photo_id: int, sidecar: str) -> str:
     return str(dst)
 
 
+def _file_copy(path):
+    """The backed-up original of this image file, when there is one."""
+    if not path:
+        return None
+    try:
+        from . import edits
+        b = edits.file_backup_path(path)
+        return str(b) if b.exists() else None
+    except Exception:
+        return None
+
+
 def record(rows: list):
-    """rows: [{photo_id, action, summary, details?, undo?, sidecar?, path?}], one transaction."""
+    """rows: [{photo_id, action, summary, details?, undo?, sidecar?, path?}], one transaction. Each entry also
+    records the backed-up original of the photo's image file (file_copy) when one exists."""
     if not rows:
         return
     now, who = int(time.time()), _who()
     try:
         con = vdb.connect()
         try:
-            con.executemany("INSERT INTO photo_history (photo_id, ts, user_name, action, summary, details, undo_values, sidecar_copy, path) VALUES (?,?,?,?,?,?,?,?,?)",
+            con.executemany("INSERT INTO photo_history (photo_id, ts, user_name, action, summary, details, undo_values, sidecar_copy, path, file_copy) VALUES (?,?,?,?,?,?,?,?,?,?)",
                             [(int(r["photo_id"]), now, r.get("user") or who, r["action"], r["summary"][:500],
                               json.dumps(r.get("details")) if r.get("details") is not None else None,
                               json.dumps(r.get("undo")) if r.get("undo") is not None else None,
-                              r.get("sidecar") or None, r.get("path")) for r in rows])
+                              r.get("sidecar") or None, r.get("path"), r.get("file_copy") or _file_copy(r.get("path"))) for r in rows])
             con.commit()
         finally:
             con.close()
@@ -102,27 +115,42 @@ def entries(photo_id: int = None, limit: int = 100, offset: int = 0, action: str
             where.append("action = ?"); params.append(action)
         w = (" WHERE " + " AND ".join(where)) if where else ""
         total = con.execute(f"SELECT count(*) FROM photo_history{w}", params).fetchone()[0]
-        rows = con.execute(f"SELECT id, photo_id, ts, user_name, action, summary, details, undo_values, sidecar_copy, path FROM photo_history{w} "
+        rows = con.execute(f"SELECT id, photo_id, ts, user_name, action, summary, details, undo_values, sidecar_copy, path, file_copy FROM photo_history{w} "
                            f"ORDER BY id DESC LIMIT ? OFFSET ?", params + [int(limit), int(offset)]).fetchall()
     finally:
         con.close()
-    from . import edits
+    from . import edits, facemgr
+    known_paths = _paths([r[1] for r in rows if not r[9]])
     out = []
     for r in rows:
-        d = {"id": r[0], "photo": r[1], "ts": r[2], "user": r[3], "action": r[4], "summary": r[5],
-             "details": json.loads(r[6]) if r[6] else None, "path": r[9]}
+        details = json.loads(r[6]) if r[6] else None
+        path = r[9] or known_paths.get(r[1])
+        backup = r[10] if r[10] and os.path.isfile(r[10]) else (str(edits.file_backup_path(path)) if path and edits.file_backup_path(path).exists() else None)
+        d = {"id": r[0], "photo": r[1], "ts": r[2], "user": r[3], "action": r[4], "summary": r[5], "details": details, "path": path,
+             "sidecar_copy": r[8] if r[8] and os.path.isfile(r[8]) else None, "file_copy": backup}
         restore = []
-        if r[7]:
+        if r[7] or (r[4] == "face" and isinstance(details, dict) and facemgr.inverse_ops(details)):
             restore.append("undo")
         if r[8] and os.path.isfile(r[8]):
             restore.append("sidecar")
         if r[4] == "deleted" and r[9] and _deleted_backup(r[6]):
             restore.append("deleted")
-        if r[9] and r[4] in ("edit", "sync") and edits.file_backup_path(r[9]).exists():
-            restore.append("original")
+        elif backup and r[4] != "restore":
+            restore.append("original")  # the image file as it was before the viewer first wrote into it
         d["restore"] = restore
         out.append(d)
     return {"total": total, "entries": out}
+
+
+def _paths(ids: list) -> dict:
+    """{photo: path} from the index, for entries recorded without one."""
+    if not ids:
+        return {}
+    try:
+        from . import dbsync
+        return dict(dbsync._photo_paths(list(set(ids))))
+    except Exception:
+        return {}
 
 
 def _deleted_backup(details_json):
@@ -137,13 +165,13 @@ def _deleted_backup(details_json):
 def get(entry_id: int) -> dict:
     con = vdb.connect()
     try:
-        r = con.execute("SELECT id, photo_id, action, details, undo_values, sidecar_copy, path FROM photo_history WHERE id = ?", (int(entry_id),)).fetchone()
+        r = con.execute("SELECT id, photo_id, action, details, undo_values, sidecar_copy, path, file_copy FROM photo_history WHERE id = ?", (int(entry_id),)).fetchone()
     finally:
         con.close()
     if not r:
         return None
     return {"id": r[0], "photo": r[1], "action": r[2], "details": json.loads(r[3]) if r[3] else {}, "undo": json.loads(r[4]) if r[4] else None,
-            "sidecar": r[5], "path": r[6]}
+            "sidecar": r[5], "path": r[6], "file_copy": r[7]}
 
 
 def restore(entry_id: int, kind: str) -> dict:
@@ -158,6 +186,17 @@ def restore(entry_id: int, kind: str) -> dict:
     photo = _photo(pid)
     if not photo:
         raise LookupError("That photo is not in the library any more")
+    if kind == "undo" and e["action"] == "face":
+        from . import facemgr
+        ops = (e["undo"] or {}).get("face_ops") or facemgr.inverse_ops(e["details"] or {})
+        if not ops:
+            raise ValueError("This face change cannot be undone")
+        res = facemgr.apply_many([{**o, "image": pid} for o in ops], background=True)
+        bad = [r for r in res if "error" in r]
+        if bad:
+            raise ValueError(f"Could not undo it: {bad[0]['error']}")
+        record([{"photo_id": pid, "action": "restore", "summary": f"Change #{entry_id} undone", "path": photo["path"]}])
+        return {"undone": len(res)}
     if kind == "undo":
         if not e["undo"]:
             raise ValueError("This change has nothing to undo")
@@ -176,12 +215,12 @@ def restore(entry_id: int, kind: str) -> dict:
         record([{"photo_id": pid, "action": "restore", "summary": f"Sidecar put back as it was before change #{entry_id}", "sidecar": mine, "path": photo["path"]}])
         return {"restored": "sidecar"}
     if kind == "original":
-        b = edits.file_backup_path(photo["path"])
+        b = Path(e["file_copy"]) if e.get("file_copy") and os.path.isfile(e["file_copy"]) else edits.file_backup_path(photo["path"])
         if not b.exists():
             raise FileNotFoundError("The original of this file is no longer in file-backups")
         shutil.copy2(b, photo["path"])
         record([{"photo_id": pid, "action": "restore", "summary": "Image file put back as it was before the viewer first wrote into it", "path": photo["path"]}])
-        index.build()
+        index.build()  # digiKam rescans the file on its own (its time and size changed) and reads it back
         return {"restored": "original"}
     raise ValueError("Unknown kind of restore")
 

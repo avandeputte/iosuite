@@ -740,3 +740,13 @@ body:has(#dkbanner) #updbanner { bottom: 96px; }  /* both at once: the update ca
 .hfold { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 10px; }
 .hfold summary { cursor: pointer; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--fg2); font-weight: 600; list-style-position: inside; }
 .hfold[open] summary { margin-bottom: 8px; }
+
+/* adjusting a face box in the viewer */
+.facebox.face-adjust { border-color: #34a853; cursor: move; touch-action: none; z-index: 4; background: rgba(52,168,83,.08); }
+.facebox.face-adjust .fh { position: absolute; width: 16px; height: 16px; background: #34a853; border: 2px solid #fff; border-radius: 50%; }
+.fh-nw { left: -9px; top: -9px; cursor: nwse-resize; } .fh-se { right: -9px; bottom: -9px; cursor: nwse-resize; }
+.fh-ne { right: -9px; top: -9px; cursor: nesw-resize; } .fh-sw { left: -9px; bottom: -9px; cursor: nesw-resize; }
+.adjustbar { position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 6; display: flex; gap: 10px; align-items: center; background: var(--bg); color: var(--fg); padding: 8px 10px 8px 16px; border-radius: 14px; box-shadow: var(--shadow); font-size: 13px; }
+@media (max-width: 800px) { .adjustbar { left: 8px; right: 8px; transform: none; flex-wrap: wrap; } }
+
+.qsec { margin-top: 26px; }

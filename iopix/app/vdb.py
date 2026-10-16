@@ -93,9 +93,10 @@ TABLES = {
                          "CREATE TABLE IF NOT EXISTS ai_faces_scanned (photo_id INTEGER PRIMARY KEY, stamp TEXT, found INTEGER, added INTEGER, checked INTEGER)",
                          "CREATE TABLE IF NOT EXISTS ai_faces_scanned (photo_id BIGINT PRIMARY KEY, stamp VARCHAR(191), found INT, added INT, checked BIGINT)"),
     # undo_values, not "undo": UNDO is a reserved word on MariaDB and MySQL
-    "photo_history": (["id", "photo_id", "ts", "user_name", "action", "summary", "details", "undo_values", "sidecar_copy", "path"],
-                      "CREATE TABLE IF NOT EXISTS photo_history (id INTEGER PRIMARY KEY AUTOINCREMENT, photo_id INTEGER, ts INTEGER, user_name TEXT, action TEXT, summary TEXT, details TEXT, undo_values TEXT, sidecar_copy TEXT, path TEXT)",
-                      "CREATE TABLE IF NOT EXISTS photo_history (id BIGINT AUTO_INCREMENT PRIMARY KEY, photo_id BIGINT, ts BIGINT, user_name VARCHAR(191), action VARCHAR(32), summary TEXT, details MEDIUMTEXT, undo_values MEDIUMTEXT, sidecar_copy TEXT, path TEXT, INDEX photo_history_photo (photo_id))"),
+    # file_copy: the backed-up image file (data/file-backups, the original from before the viewer first wrote into it)
+    "photo_history": (["id", "photo_id", "ts", "user_name", "action", "summary", "details", "undo_values", "sidecar_copy", "path", "file_copy"],
+                      "CREATE TABLE IF NOT EXISTS photo_history (id INTEGER PRIMARY KEY AUTOINCREMENT, photo_id INTEGER, ts INTEGER, user_name TEXT, action TEXT, summary TEXT, details TEXT, undo_values TEXT, sidecar_copy TEXT, path TEXT, file_copy TEXT)",
+                      "CREATE TABLE IF NOT EXISTS photo_history (id BIGINT AUTO_INCREMENT PRIMARY KEY, photo_id BIGINT, ts BIGINT, user_name VARCHAR(191), action VARCHAR(32), summary TEXT, details MEDIUMTEXT, undo_values MEDIUMTEXT, sidecar_copy TEXT, path TEXT, file_copy TEXT, INDEX photo_history_photo (photo_id))"),
     "image_data_checksums": (["path", "hash", "algorithm", "verified"],
                              "CREATE TABLE IF NOT EXISTS image_data_checksums (path TEXT PRIMARY KEY, hash TEXT, algorithm TEXT, verified INTEGER)",
                              "CREATE TABLE IF NOT EXISTS image_data_checksums (path VARCHAR(700) PRIMARY KEY, hash VARCHAR(128), algorithm VARCHAR(16), verified BIGINT)"),
@@ -363,6 +364,8 @@ def ensure_schema(con: VConn = None):
                 con.execute("ALTER TABLE user_accounts ADD COLUMN email TEXT")
             if "undo" in columns(con, "photo_history"):  # v1.24 named the column after a reserved word
                 con.execute("ALTER TABLE photo_history RENAME COLUMN undo TO undo_values")
+        if "file_copy" not in columns(con, "photo_history"):  # v1.32: the backed-up image file of each change
+            con.execute("ALTER TABLE photo_history ADD COLUMN file_copy TEXT")
         have = columns(con, "viewer_albums")  # v1.27: shared and private albums; albums from before are shared
         if "owner_id" not in have:
             con.execute("ALTER TABLE viewer_albums ADD COLUMN owner_id " + ("BIGINT NULL" if con.mysql else "INTEGER"))
