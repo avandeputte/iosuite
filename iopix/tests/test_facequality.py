@@ -188,3 +188,15 @@ def test_people_without_any_face_or_tag_are_listed_and_can_be_accepted(client, l
         con = vdb.connect(); con.execute("DELETE FROM ai_objects WHERE photo_id = ?", (pid,)); con.commit(); con.close()
     dk = sqlite3.connect(lib["db"]); dk.executemany("INSERT INTO ImageTagProperties VALUES (?,?,?,?)", saved); dk.commit(); dk.close()
     index.build()
+
+
+def test_lists_page_through_their_entries(client, lib):
+    full = client.get("/api/quality/items?check=invalid&offset=0&limit=500").json()
+    if full["total"] < 2:
+        pytest.skip("fewer than two entries in the fixture")
+    a = client.get("/api/quality/items?check=invalid&offset=0&limit=1").json()["items"]
+    b = client.get("/api/quality/items?check=invalid&offset=1&limit=1").json()["items"]
+    assert a == full["items"][:1] and b == full["items"][1:2]
+    for k in ("near", "separate", "unnamed", "untagged"):
+        assert client.get(f"/api/quality/items?check={k}").status_code == 200
+    assert client.get("/api/quality/items?check=nonsense").status_code == 400

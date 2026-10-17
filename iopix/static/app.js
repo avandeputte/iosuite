@@ -949,12 +949,31 @@ async function showQuality() {
     if (n) n.textContent = nf.format(Math.max(0, (parseInt(n.textContent.replace(/\D/g, ''), 10) || 1) - 1));
     return true;
   };
-  const sec = (title, n, intro, acts, items) => h('div', { class: 'qsec' },
-    h('h2', null, title, h('span', { class: 'muted', style: 'font-size:14px;font-weight:400;margin-left:8px' }, nf.format(n))),
-    intro ? h('p', { class: 'muted', style: 'margin:0 0 10px;max-width:820px' }, intro) : null,
-    acts ? h('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px' }, acts) : null,
-    items && items.length ? h('div', { class: 'hlist qitems ' + size }, items) : null,
-    items && n > items.length ? h('p', { class: 'muted' }, `The first ${nf.format(items.length)} are shown; fix these and check again for the next ones.`) : null);
+  // a list: its first entries, and "Load the next ..." appending more in place (the page is not redrawn)
+  const sec = (title, n, intro, acts, pager) => {
+    const all = pager?.list || [];  // the list itself grows, so the buttons that act on all shown see the new ones
+    const box = h('div', { class: 'hlist qitems ' + size }, all.map((x) => pager.row(x, all)));
+    const more = h('button', { class: 'pillbtn', style: 'margin-top:10px' });
+    const label = () => { const left = n - all.length; more.hidden = !pager || left <= 0; fill(more, `Load the next ${nf.format(Math.min(PAGE, left))}`, h('span', { class: 'muted' }, ` · ${nf.format(left)} more`)); };
+    more.onclick = async () => {
+      more.disabled = true;
+      try {
+        const r = await api(`/api/quality/items?check=${pager.key}&offset=${all.length}&limit=${PAGE}`);
+        const fresh = r.items.filter((x) => !all.some((y) => y.photo === x.photo && (y.name || '') === (x.name || '') && JSON.stringify(y.rect || y.rects || '') === JSON.stringify(x.rect || x.rects || '')));
+        all.push(...fresh);
+        box.append(...fresh.map((x) => pager.row(x, all)));
+        if (!fresh.length) n = all.length;
+      } catch (e) { toast(e.message, null, null, 9000); }
+      more.disabled = false; label();
+    };
+    label();
+    return h('div', { class: 'qsec' },
+      h('h2', null, title, h('span', { class: 'muted', style: 'font-size:14px;font-weight:400;margin-left:8px' }, nf.format(n))),
+      intro ? h('p', { class: 'muted', style: 'margin:0 0 10px;max-width:820px' }, intro) : null,
+      acts ? h('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px' }, acts) : null,
+      all.length ? box : null, more);
+  };
+  const PAGE = 120;
   const busy = p.running ? h('div', { class: 'enote' }, p.files ? `Fixing the image files… ${nf.format(p.done)} / ${nf.format(p.total)}.` : `Removing duplicate faces… ${nf.format(p.done)} / ${nf.format(p.total)} photos.`) : null;
   if (p.running) setTimeout(() => { if (route.view === 'quality') showQuality(); }, 4000);
   const near = q.near;
@@ -977,9 +996,9 @@ async function showQuality() {
           try { const r = await post('/api/quality/fix', { files: true }); toast(`Looking at ${plural(r.photos, 'image file')} in the background.`); } catch (e) { toast(e.message, null, null, 9000); }
           setTimeout(showQuality, 1500);
         } }, 'Fix the image files too')] : null,
-      near.examples.map((x, i, all) => h('div', { class: 'hrow' }, thumb(x, all), h('div', { class: 'hmain' }, h('b', null, x.name), ` · ${x.apart} px apart`)))),
+      { list: near.examples, key: 'near', row: (x, all) => h('div', { class: 'hrow' }, thumb(x, all), h('div', { class: 'hmain' }, h('b', null, x.name), ` · ${x.apart} px apart`)) }),
     sec('Same person in two places', q.separate.count, 'Usually one of the two is someone else, named by mistake. Open the photo, show the faces (F), and rename, adjust or remove the wrong box.', null,
-      q.separate.items.map((x, i, all) => h('div', { class: 'hrow' }, thumb(x, all), h('div', { class: 'hmain' }, h('b', null, x.name), ` · ${x.rects.length} boxes`)))),
+      { list: q.separate.items, key: 'separate', row: (x, all) => h('div', { class: 'hrow' }, thumb(x, all), h('div', { class: 'hmain' }, h('b', null, x.name), ` · ${x.rects.length} boxes`)) }),
     (() => {  // photos whose faces are all unnamed: name them, ignore them, or accept them as they are
       const u = q.unnamed, items = u.items;
       const accept = async (ids, on = true, ev) => { try { await post('/api/quality/accept', { photos: ids, check: 'unnamed', on }); toast(on ? `${plural(ids.length, 'photo')} accepted as they are.` : 'Shown again.'); } catch (e) { toast(e.message, null, null, 9000); return; } if (!gone(ev)) showQuality(); };
@@ -991,14 +1010,14 @@ async function showQuality() {
       const nameThem = (x) => { openLightbox({ id: [x.photo] }, 0, true); setTimeout(() => { if (!LB.faces) toggleFaces(); }, 700); };
       return sec('Faces without a name', u.count,
         `Photos with faces where none is named.${u.accepted ? ` ${plural(u.accepted, 'photo')} you accepted as they are ${u.accepted === 1 ? 'is' : 'are'} not listed.` : ''} Name the faces, mark them as not faces to name, or accept the photo as it is: it leaves this list until its faces change.`,
-        items.length ? [h('button', { class: 'pillbtn', onclick: () => accept(items.map((x) => x.photo)) }, `Accept the ${nf.format(items.length)} shown`),
+        items.length ? [h('button', { class: 'pillbtn', onclick: () => accept(items.map((x) => x.photo)) }, 'Accept all shown'),
           CAN_MANAGE ? h('button', { class: 'pillbtn', onclick: () => ignore(items.map((x) => x.photo)) }, 'Ignore their faces') : null,
           u.accepted ? h('button', { class: 'pillbtn', onclick: async () => { const acc = await api('/api/quality/accepted?check=unnamed'); if (acc.photos.length && confirm(`List the ${plural(acc.photos.length, 'accepted photo')} again?`)) accept(acc.photos, false); } }, 'Show the accepted ones again') : null]
           : u.accepted ? [h('button', { class: 'pillbtn', onclick: async () => { const acc = await api('/api/quality/accepted?check=unnamed'); if (acc.photos.length && confirm(`List the ${plural(acc.photos.length, 'accepted photo')} again?`)) accept(acc.photos, false); } }, 'Show the accepted ones again')] : null,
-        items.map((x, i, all) => h('div', { class: 'hrow' }, thumb(x, all), h('div', { class: 'hmain' }, h('b', null, plural(x.faces, 'unnamed face')), ' · ',
+        { list: items, key: 'unnamed', row: (x, all) => h('div', { class: 'hrow' }, thumb(x, all), h('div', { class: 'hmain' }, h('b', null, plural(x.faces, 'unnamed face')), ' · ',
           h('a', { class: 'lnk', onclick: () => nameThem(x) }, 'Name them'), ' · ',
           CAN_MANAGE ? [h('a', { class: 'lnk', onclick: (ev) => ignore([x.photo], ev) }, 'Ignore'), ' · '] : null,
-          h('a', { class: 'lnk', onclick: (ev) => accept([x.photo], true, ev) }, 'Accept as it is')))));
+          h('a', { class: 'lnk', onclick: (ev) => accept([x.photo], true, ev) }, 'Accept as it is'))) });
     })(),
     (() => {  // people in the photo (object detection), nobody marked or tagged
       const u = q.untagged || { count: 0, items: [], accepted: 0 }, items = u.items;
@@ -1011,16 +1030,16 @@ async function showQuality() {
       const again = u.accepted ? h('button', { class: 'pillbtn', onclick: async () => { const acc = await api('/api/quality/accepted?check=untagged'); if (acc.photos.length && confirm(`List the ${plural(acc.photos.length, 'accepted photo')} again?`)) accept(acc.photos, false); } }, 'Show the accepted ones again') : null;
       return sec('People, but nobody tagged', u.count,
         `Photos where object detection sees people but no face is marked and no person is tagged (crowds, people from behind, strangers…).${u.accepted ? ` ${plural(u.accepted, 'photo')} you accepted ${u.accepted === 1 ? 'is' : 'are'} not listed.` : ''} Find their faces to name them, or accept the photo as it is: it leaves this list unless it changes.`,
-        [items.length ? h('button', { class: 'pillbtn', onclick: () => accept(items.map((x) => x.photo)) }, `Accept the ${nf.format(items.length)} shown`) : null,
-          items.length && FACE_DETECT && CAN_MANAGE ? h('button', { class: 'pillbtn', onclick: () => find(items.map((x) => x.photo)) }, `Find faces in the ${nf.format(items.length)} shown`) : null, again].filter(Boolean),
-        items.map((x, i, all) => h('div', { class: 'hrow' }, thumb(x, all), h('div', { class: 'hmain' }, h('b', null, plural(x.people, 'person', 'people')), ' detected · ',
+        [items.length ? h('button', { class: 'pillbtn', onclick: () => accept(items.map((x) => x.photo)) }, 'Accept all shown') : null,
+          items.length && FACE_DETECT && CAN_MANAGE ? h('button', { class: 'pillbtn', onclick: () => find(items.map((x) => x.photo)) }, 'Find faces in all shown') : null, again].filter(Boolean),
+        { list: items, key: 'untagged', row: (x, all) => h('div', { class: 'hrow' }, thumb(x, all), h('div', { class: 'hmain' }, h('b', null, plural(x.people, 'person', 'people')), ' detected · ',
           FACE_DETECT && CAN_MANAGE ? [h('a', { class: 'lnk', onclick: (ev) => find([x.photo], ev) }, 'Find faces'), ' · '] : null,
-          h('a', { class: 'lnk', onclick: (ev) => accept([x.photo], true, ev) }, 'Accept as it is')))));
+          h('a', { class: 'lnk', onclick: (ev) => accept([x.photo], true, ev) }, 'Accept as it is'))) });
     })(),
     sec('Outside the photo or empty', q.invalid.count, 'A box that sticks out of the photo can be trimmed to its edges here, or moved and resized in the viewer (click the face, “Adjust the box”). Empty boxes are removed.', fitAll ? [fitAll] : null,
-      q.invalid.items.map((x, i, all) => h('div', { class: 'hrow' }, thumb(x, all), h('div', { class: 'hmain' }, h('b', null, x.name), ' ',
+      { list: q.invalid.items, key: 'invalid', row: (x, all) => h('div', { class: 'hrow' }, thumb(x, all), h('div', { class: 'hmain' }, h('b', null, x.name), ' ',
         x.rect ? `${x.rect[2]} × ${x.rect[3]} at ${x.rect[0]}, ${x.rect[1]} on a ${x.size[0]} × ${x.size[1]} photo` : 'unreadable rectangle',
-        CAN_MANAGE && x.fix ? [' · ', h('a', { class: 'lnk', onclick: (ev) => fitOne(x, ev) }, x.fix === 'fit' ? 'Fit inside' : 'Remove')] : null)))));
+        CAN_MANAGE && x.fix ? [' · ', h('a', { class: 'lnk', onclick: (ev) => fitOne(x, ev) }, x.fix === 'fit' ? 'Fit inside' : 'Remove')] : null)) }));
 }
 /** Maintenance › Server log: the end of data/viewer.log, filtered by level and text; page requests hidden unless asked. */
 function logDialog() {

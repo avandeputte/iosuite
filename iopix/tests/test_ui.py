@@ -1145,3 +1145,28 @@ def test_accept_as_it_is_removes_only_that_entry(page, server, lib):
         for p in pids:
             req = urllib.request.Request(server + "/api/quality/accept", data=_json.dumps({"photos": [p], "on": False}).encode(), headers={"Content-Type": "application/json"}, method="POST")
             urllib.request.urlopen(req).read()
+
+
+def test_face_quality_loads_the_next_entries_in_place(page, server, lib):
+    """A list longer than one page offers "Load the next ...", which appends entries without redrawing the page."""
+    import json as _json
+    ids = lib["ids"][:3]
+    real = _json.loads(urllib.request.urlopen(server + "/api/quality").read())
+    real["untagged"] = {"count": 3, "accepted": 0, "items": [{"photo": ids[0], "people": 2, "signature": "p2"}]}
+
+    def first(route):
+        route.fulfill(status=200, content_type="application/json", body=_json.dumps(real))
+
+    def nxt(route):
+        route.fulfill(status=200, content_type="application/json", body=_json.dumps({"total": 3, "items": [{"photo": i, "people": 1, "signature": "p1"} for i in ids[1:]]}))
+    page.route("**/api/quality", first)
+    page.route("**/api/quality/items*", nxt)
+    page.goto(server + "/#/quality")
+    sec = page.locator(".qsec", has=page.locator("h2", has_text="People, but nobody tagged"))
+    sec.wait_for(timeout=20000)
+    assert sec.locator(".hrow").count() == 1
+    page.evaluate("document.querySelector('.qsec').dataset.mark = 'kept'")
+    sec.locator("button", has_text="Load the next").click()
+    page.wait_for_timeout(500)
+    assert sec.locator(".hrow").count() == 3 and page.evaluate("document.querySelector('.qsec').dataset.mark") == "kept"
+    assert not sec.locator("button", has_text="Load the next").is_visible(), "nothing left to load"

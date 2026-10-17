@@ -177,6 +177,18 @@ def accept(photos: list, check: str = "unnamed", on: bool = True) -> int:
     return len(want)
 
 
+def items(check: str, offset: int = 0, limit: int = 120) -> dict:
+    """The next entries of one list of the page: near | separate | invalid | unnamed | untagged."""
+    s = scan()
+    if check == "near":
+        rows = [{"photo": n["photo"], "name": n["name"], "apart": n["apart"]} for n in s["near"]]
+    elif check in ("separate", "invalid", "unnamed", "untagged"):
+        rows = s[check]
+    else:
+        raise ValueError("Unknown list")
+    return {"total": len(rows), "items": rows[max(0, offset):max(0, offset) + max(1, min(limit, 500))]}
+
+
 def summary(s: dict = None, limit: int = 120) -> dict:
     s = s or scan()
     photos = sorted({n["photo"] for n in s["near"]})

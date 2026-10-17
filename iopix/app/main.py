@@ -1719,6 +1719,16 @@ async def api_quality_accept(request: Request):
     return {"accepted": n}
 
 
+@app.get("/api/quality/items")
+def api_quality_items(check: str, offset: int = 0, limit: int = 120):
+    """The next entries of one Face quality list."""
+    from . import facequality
+    try:
+        return facequality.items(check, offset, limit)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 @app.get("/api/quality/accepted")
 def api_quality_accepted(check: str = "unnamed"):
     """The photos accepted as they are for a check."""
