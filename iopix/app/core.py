@@ -271,7 +271,8 @@ def app_name() -> str:
 def _app_stamp() -> str:
     """Changes whenever the front-end files change, so an open tab can tell it is stale."""
     try:
-        return str(max(int(os.stat(config.STATIC_DIR / f).st_mtime) for f in ("app.js", "app.css", "index.html")))
+        files = [config.STATIC_DIR / f for f in ("app.js", "app.css", "index.html")] + list((config.STATIC_DIR / "js").glob("*.js"))
+        return str(max(int(os.stat(f).st_mtime) for f in files))
     except OSError:
         return "0"
 

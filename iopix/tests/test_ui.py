@@ -274,10 +274,10 @@ def test_pasting_a_coordinate_pair_fills_both_fields(page, server, lib):
 
 def test_pwa_service_worker_caches_the_shell(page, server):
     page.goto(server + "/#/photos")
-    out = page.evaluate("""async () => { const r = await navigator.serviceWorker.ready; const c = await caches.open('iopix-shell-v2');
+    out = page.evaluate("""async () => { const r = await navigator.serviceWorker.ready; const c = await caches.open('iopix-shell-v3');
         return { state: r.active && r.active.state, cached: (await c.keys()).map((k) => new URL(k.url).pathname) }; }""")
     assert out["state"] in ("activating", "activated")  # ready resolves while the worker may still be activating for a tick
-    assert {"/", "/app.js", "/app.css", "/manifest.webmanifest", "/icons/icon-192.png"} <= set(out["cached"])
+    assert {"/", "/app.js", "/js/core.js", "/js/lightbox.js", "/app.css", "/manifest.webmanifest", "/icons/icon-192.png"} <= set(out["cached"]), "the shell and every module are cached"
     assert not any(p.startswith("/api") or p.startswith("/thumb") for p in out["cached"]), "photos and the API are never cached"
 
 
@@ -1235,9 +1235,11 @@ def test_person_options_menu_opens_in_front_of_the_map(page, server, lib):
     opt.click()
     menu = page.locator(".facemenu")
     menu.wait_for(timeout=5000)
+    # a toast, or the update banner an earlier test's version check switched on, would sit where the probe lands
+    page.evaluate("document.querySelector('#toast').hidden = true; document.querySelector('#updbanner')?.remove()")
     b = menu.bounding_box()
-    hit = page.evaluate("([x, y]) => { const e = document.elementFromPoint(x, y); return e && e.closest('.facemenu') ? 'menu' : (e ? e.className + '' : 'none'); }", [b["x"] + b["width"] / 2, b["y"] + b["height"] - 12])
-    assert hit == "menu", hit
+    hit = page.evaluate("([x, y]) => { const e = document.elementFromPoint(x, y); if (e && e.closest('.facemenu')) return 'menu'; if (!e) return 'none'; const cs = getComputedStyle(e); const chain = []; for (let p = e; p && p !== document.body; p = p.parentElement) chain.push(`${p.tagName}#${p.id}.${p.className}`); return `${e.outerHTML.slice(0, 160)} | ${cs.position}/${cs.zIndex} | ${chain.join(' < ')}`; }", [b["x"] + b["width"] / 2, b["y"] + b["height"] - 12])
+    assert hit == "menu", (hit, b, page.viewport_size)
 
 
 def test_delete_key_moves_to_the_trash_without_a_question_and_undo_restores(page, server, lib):

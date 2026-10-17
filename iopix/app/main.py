@@ -71,7 +71,7 @@ def _hits(path: str, paths) -> bool:
 
 # what a visitor may still fetch when sign-in is required: the app shell and the sign-in endpoints
 OPEN_PATHS = ("/", "/index.html", "/app.js", "/app.css", "/sw.js", "/manifest.webmanifest", "/api/status", "/share")
-OPEN_PREFIXES = ("/icons/", "/api/auth/")
+OPEN_PREFIXES = ("/icons/", "/js/", "/api/auth/")
 
 
 def _open_to_visitors(path: str) -> bool:

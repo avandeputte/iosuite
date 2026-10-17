@@ -357,8 +357,11 @@ About 180 tests in ~95 s (the browser tests are most of that). At start the suit
 ## Layout
 
 ```
-app/            the server (FastAPI) and everything it does: index, search, edits, faces, tags, AI, users…
-static/         the web app: one HTML page, app.js, app.css, icons, PWA manifest and service worker
+app/            the server: main.py is the application (lifespan, middleware, mounts), core.py what every part shares
+app/routes/     the HTTP endpoints by area: browse, images, albums, editing, admin, review, organize, faces
+app/*.py        one module per feature: index, library copy, edits, faces, tags, organize, importer, lossless, AI, users…
+static/         the web app: index.html, app.js (the entry) and js/ (one ES module per area: core, state, search, grid,
+                actions, editing, download, pages, admin, map, filters, lightbox, main), app.css, icons, PWA manifest, service worker
 tests/          pytest suite (API on a scratch library, browser tests with Playwright)
 setup.sh        the installer: asks, installs, downloads, starts the service      run.sh: foreground start
 update.sh       updates an installed copy in place (git or tarball), keeps settings and data
