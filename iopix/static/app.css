@@ -750,3 +750,11 @@ body:has(#dkbanner) #updbanner { bottom: 96px; }  /* both at once: the update ca
 @media (max-width: 800px) { .adjustbar { left: 8px; right: 8px; transform: none; flex-wrap: wrap; } }
 
 .qsec { margin-top: 26px; }
+
+/* Face quality lists: as a list, or as larger pictures with the details and actions under each */
+.qitems.large, .qitems.huge { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+.qitems.huge { grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); }
+.qitems.large .hrow, .qitems.huge .hrow { flex-direction: column; align-items: stretch; gap: 8px; border: 1px solid var(--line); border-radius: 12px; padding: 8px; }
+.qitems.large .hrow img { width: 100%; height: 200px; border-radius: 8px; }
+.qitems.huge .hrow img { width: 100%; height: 320px; border-radius: 8px; }
+@media (max-width: 800px) { .qitems.large, .qitems.huge { grid-template-columns: 1fr; } .qitems.huge .hrow img, .qitems.large .hrow img { height: 260px; } }

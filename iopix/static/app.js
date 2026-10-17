@@ -930,12 +930,18 @@ async function showQuality() {
   if (route.view !== 'quality') return;
   const p = q.progress || {};
   const again = h('button', { class: 'pillbtn', onclick: () => showQuality() }, icon('spark'), 'Check again');
-  const thumb = (x) => h('img', { src: `/thumb/${x.photo}`, alt: '', loading: 'lazy', onclick: () => openLightbox({ id: [x.photo] }, 0, true) });
+  // the photos of a list open in the viewer as a set (step through them with the arrows), faces shown
+  const thumb = (x, all) => h('img', { src: `/thumb/${x.photo}`, alt: '', loading: 'lazy', title: 'Open in the viewer', onclick: () => {
+    const ids = (all || [x]).map((y) => y.photo).filter((v, i, arr) => arr.indexOf(v) === i);
+    openLightbox({ id: ids }, Math.max(0, ids.indexOf(x.photo)), true);
+    setTimeout(() => { if (LB.open && !LB.faces) toggleFaces(); }, 600);
+  } });
+  const size = store.get('qsize', 'large');
   const sec = (title, n, intro, acts, items) => h('div', { class: 'qsec' },
     h('h2', null, title, h('span', { class: 'muted', style: 'font-size:14px;font-weight:400;margin-left:8px' }, nf.format(n))),
     intro ? h('p', { class: 'muted', style: 'margin:0 0 10px;max-width:820px' }, intro) : null,
     acts ? h('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px' }, acts) : null,
-    items && items.length ? h('div', { class: 'hlist' }, items) : null,
+    items && items.length ? h('div', { class: 'hlist qitems ' + size }, items) : null,
     items && n > items.length ? h('p', { class: 'muted' }, `The first ${nf.format(items.length)} are shown; fix these and check again for the next ones.`) : null);
   const busy = p.running ? h('div', { class: 'enote' }, p.files ? `Fixing the image files… ${nf.format(p.done)} / ${nf.format(p.total)}.` : `Removing duplicate faces… ${nf.format(p.done)} / ${nf.format(p.total)} photos.`) : null;
   if (p.running) setTimeout(() => { if (route.view === 'quality') showQuality(); }, 4000);
@@ -946,7 +952,8 @@ async function showQuality() {
     try { const r = await post('/api/quality/fit', {}); toast(`${nf.format(r.fitted)} trimmed, ${nf.format(r.removed)} removed${r.failed ? `, ${nf.format(r.failed)} failed` : ''}.`, null, null, 7000); } catch (e) { toast(e.message, null, null, 9000); return; }
     setTimeout(showQuality, 1500);
   } }, 'Fit them all inside their photos') : null;
-  fill(body, h('div', { style: 'display:flex;gap:10px;align-items:center;margin:4px 0 6px' }, again, h('span', { class: 'muted' }, `${nf.format(q.checked)} face regions checked ${fmtWhen(q.at)}.`)), busy,
+  const sizes = h('div', { class: 'eseg', title: 'Picture size' }, [['list', 'List'], ['large', 'Large'], ['huge', 'Larger']].map(([k, l]) => h('button', { class: k === size ? 'on' : '', onclick: () => { store.set('qsize', k); showQuality(); } }, l)));
+  fill(body, h('div', { style: 'display:flex;gap:10px;align-items:center;margin:4px 0 6px;flex-wrap:wrap' }, again, h('span', { class: 'muted' }, `${nf.format(q.checked)} face regions checked ${fmtWhen(q.at)}.`), h('span', { style: 'flex:1' }), sizes), busy,
     sec('Stored twice', near.extra, near.extra ? `${plural(near.extra, 'region is a copy', 'regions are copies')} of another one of the same person a few pixels away, on ${plural(near.photos, 'photo')}.` : 'No face is stored twice.',
       near.extra && CAN_MANAGE && !p.running ? [h('button', { class: 'pillbtn on', onclick: async () => {
         if (!confirm(`Remove ${nf.format(near.extra)} duplicate face regions on ${plural(near.photos, 'photo')}? One of each pair is kept; the sidecars are rewritten.`)) return;
@@ -958,9 +965,9 @@ async function showQuality() {
           try { const r = await post('/api/quality/fix', { files: true }); toast(`Looking at ${plural(r.photos, 'image file')} in the background.`); } catch (e) { toast(e.message, null, null, 9000); }
           setTimeout(showQuality, 1500);
         } }, 'Fix the image files too')] : null,
-      near.examples.map((x) => h('div', { class: 'hrow' }, thumb(x), h('div', { class: 'hmain' }, h('b', null, x.name), ` · ${x.apart} px apart`)))),
+      near.examples.map((x, i, all) => h('div', { class: 'hrow' }, thumb(x, all), h('div', { class: 'hmain' }, h('b', null, x.name), ` · ${x.apart} px apart`)))),
     sec('Same person in two places', q.separate.count, 'Usually one of the two is someone else, named by mistake. Open the photo, show the faces (F), and rename, adjust or remove the wrong box.', null,
-      q.separate.items.map((x) => h('div', { class: 'hrow' }, thumb(x), h('div', { class: 'hmain' }, h('b', null, x.name), ` · ${x.rects.length} boxes`)))),
+      q.separate.items.map((x, i, all) => h('div', { class: 'hrow' }, thumb(x, all), h('div', { class: 'hmain' }, h('b', null, x.name), ` · ${x.rects.length} boxes`)))),
     (() => {  // photos whose faces are all unnamed: name them, ignore them, or accept them as they are
       const u = q.unnamed, items = u.items;
       const accept = async (ids, on = true) => { try { await post('/api/quality/accept', { photos: ids, check: 'unnamed', on }); toast(on ? `${plural(ids.length, 'photo')} accepted as they are.` : 'Shown again.'); } catch (e) { toast(e.message, null, null, 9000); return; } showQuality(); };
@@ -976,7 +983,7 @@ async function showQuality() {
           CAN_MANAGE ? h('button', { class: 'pillbtn', onclick: () => ignore(items.map((x) => x.photo)) }, 'Ignore their faces') : null,
           u.accepted ? h('button', { class: 'pillbtn', onclick: async () => { const acc = await api('/api/quality/accepted?check=unnamed'); if (acc.photos.length && confirm(`List the ${plural(acc.photos.length, 'accepted photo')} again?`)) accept(acc.photos, false); } }, 'Show the accepted ones again') : null]
           : u.accepted ? [h('button', { class: 'pillbtn', onclick: async () => { const acc = await api('/api/quality/accepted?check=unnamed'); if (acc.photos.length && confirm(`List the ${plural(acc.photos.length, 'accepted photo')} again?`)) accept(acc.photos, false); } }, 'Show the accepted ones again')] : null,
-        items.map((x) => h('div', { class: 'hrow' }, thumb(x), h('div', { class: 'hmain' }, h('b', null, plural(x.faces, 'unnamed face')), ' · ',
+        items.map((x, i, all) => h('div', { class: 'hrow' }, thumb(x, all), h('div', { class: 'hmain' }, h('b', null, plural(x.faces, 'unnamed face')), ' · ',
           h('a', { class: 'lnk', onclick: () => nameThem(x) }, 'Name them'), ' · ',
           CAN_MANAGE ? [h('a', { class: 'lnk', onclick: () => ignore([x.photo]) }, 'Ignore'), ' · '] : null,
           h('a', { class: 'lnk', onclick: () => accept([x.photo]) }, 'Accept as it is')))));
@@ -993,12 +1000,12 @@ async function showQuality() {
         `Photos where object detection sees people but no face is marked and no person is tagged (crowds, people from behind, strangers…).${u.accepted ? ` ${plural(u.accepted, 'photo')} you accepted ${u.accepted === 1 ? 'is' : 'are'} not listed.` : ''} Find their faces to name them, or accept the photo as it is: it leaves this list unless it changes.`,
         [items.length ? h('button', { class: 'pillbtn', onclick: () => accept(items.map((x) => x.photo)) }, `Accept the ${nf.format(items.length)} shown`) : null,
           items.length && FACE_DETECT && CAN_MANAGE ? h('button', { class: 'pillbtn', onclick: () => find(items.map((x) => x.photo)) }, `Find faces in the ${nf.format(items.length)} shown`) : null, again].filter(Boolean),
-        items.map((x) => h('div', { class: 'hrow' }, thumb(x), h('div', { class: 'hmain' }, h('b', null, plural(x.people, 'person', 'people')), ' detected · ',
+        items.map((x, i, all) => h('div', { class: 'hrow' }, thumb(x, all), h('div', { class: 'hmain' }, h('b', null, plural(x.people, 'person', 'people')), ' detected · ',
           FACE_DETECT && CAN_MANAGE ? [h('a', { class: 'lnk', onclick: () => find([x.photo]) }, 'Find faces'), ' · '] : null,
           h('a', { class: 'lnk', onclick: () => accept([x.photo]) }, 'Accept as it is')))));
     })(),
     sec('Outside the photo or empty', q.invalid.count, 'A box that sticks out of the photo can be trimmed to its edges here, or moved and resized in the viewer (click the face, “Adjust the box”). Empty boxes are removed.', fitAll ? [fitAll] : null,
-      q.invalid.items.map((x) => h('div', { class: 'hrow' }, thumb(x), h('div', { class: 'hmain' }, h('b', null, x.name), ' ',
+      q.invalid.items.map((x, i, all) => h('div', { class: 'hrow' }, thumb(x, all), h('div', { class: 'hmain' }, h('b', null, x.name), ' ',
         x.rect ? `${x.rect[2]} × ${x.rect[3]} at ${x.rect[0]}, ${x.rect[1]} on a ${x.size[0]} × ${x.size[1]} photo` : 'unreadable rectangle',
         CAN_MANAGE && x.fix ? [' · ', h('a', { class: 'lnk', onclick: () => fitOne(x) }, x.fix === 'fit' ? 'Fit inside' : 'Remove')] : null)))));
 }

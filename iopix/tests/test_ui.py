@@ -1043,6 +1043,12 @@ def test_face_quality_page_and_adjusting_a_box(page, server):
     page.wait_for_selector("h1:has-text('Face quality')", timeout=10000)
     page.wait_for_selector("button:has-text('Check again')", timeout=20000)
     assert page.locator("h2", has_text="Stored twice").count() == 1 and page.locator("h2", has_text="Outside the photo").count() == 1
+    page.locator(".eseg button", has_text="Larger").click()
+    page.wait_for_selector(".qitems.huge, h2:has-text('Stored twice')", timeout=10000)
+    if page.locator(".qitems.huge .hrow img").count():
+        assert page.locator(".qitems.huge .hrow img").first.bounding_box()["height"] >= 250, "large pictures"
+    page.locator(".eseg button", has_text="List").click()
+    page.wait_for_timeout(800)
     import json as _json
     faces = _json.loads(urllib.request.urlopen(server + "/api/faces/queue?kind=unknown&limit=5").read())["faces"]
     if not faces:
