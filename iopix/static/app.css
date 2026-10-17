@@ -770,3 +770,13 @@ body:has(#dkbanner) #updbanner { bottom: 96px; }  /* both at once: the update ca
 .mopt { border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; }
 .mopt.on { border-color: color-mix(in srgb, var(--brand) 60%, transparent); background: color-mix(in srgb, var(--brand) 6%, transparent); }
 .mopt .muted { font-size: 12px; }
+
+/* Explore › Then and now */
+.tnrow { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+.tncard { border: 1px solid var(--line); border-radius: 14px; padding: 12px; }
+.tnfaces { display: flex; align-items: center; justify-content: center; gap: 10px; }
+.tnface { display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; font-size: 12px; color: var(--fg2); }
+.tnface img { width: 120px; height: 120px; object-fit: cover; border-radius: 50%; background: var(--bg2); }
+.tnarrow { font-size: 22px; color: var(--fg2); }
+.tnname { text-align: center; margin-top: 8px; font-size: 14px; } .tnname a { color: var(--fg); font-weight: 600; }
+@media (max-width: 800px) { .tnrow { grid-template-columns: 1fr; } .tnface img { width: 100px; height: 100px; } }

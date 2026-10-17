@@ -126,3 +126,12 @@ def test_smart_albums_are_saved_searches(client):
     assert next(x for x in client.get("/api/state").json()["searches"] if x["id"] == sid)["name"] == "Clips"
     assert client.post(f"/api/searches/{sid}", json={"delete": True}).status_code == 200
     assert all(x["id"] != sid for x in client.get("/api/state").json()["searches"])
+
+
+def test_then_and_now_pairs_people_years_apart(client, lib):
+    r = client.get("/api/thenandnow?n=3").json()
+    assert "pairs" in r
+    for p in r["pairs"]:
+        assert p["years"] >= 3 and p["then"]["ts"] <= p["now"]["ts"] and len(p["then"]["rect"]) == 4
+        one = client.get(f"/api/thenandnow?person={p['tag']}").json()["pairs"]
+        assert one and one[0]["tag"] == p["tag"]

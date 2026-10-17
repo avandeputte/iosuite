@@ -1504,6 +1504,21 @@ async function showExplore() {
     rediscover.hidden = false;
   };
   setTimeout(shuffle, 0);
+  // Then and now: a person's earliest and latest named face, years apart; "Others" picks new people
+  const thenNow = h('div', { hidden: true });
+  const years = (ts) => new Date(ts * 1000).getFullYear();
+  const drawThenNow = async () => {
+    let r; try { r = await api('/api/thenandnow?n=3'); } catch { return; }
+    if (!r.pairs.length || !thenNow.isConnected) return;
+    const face = (e, label) => h('a', { class: 'tnface', onclick: () => openLightbox({ id: [e.photo] }, 0, true) },
+      h('img', { src: `/facecrop/${e.photo}/${e.rect.join('/')}.jpg`, alt: '', loading: 'lazy' }), h('span', null, label));
+    fill(thenNow, h('h2', { style: '--hue:var(--c-amber)' }, h('span', { class: 'hic' }, icon('person')), 'Then and now', h('a', { onclick: drawThenNow }, 'Others')),
+      h('div', { class: 'tnrow' }, r.pairs.map((p) => h('div', { class: 'tncard' },
+        h('div', { class: 'tnfaces' }, face(p.then, String(years(p.then.ts))), h('span', { class: 'tnarrow' }, '→'), face(p.now, String(years(p.now.ts)))),
+        h('div', { class: 'tnname' }, h('a', { href: hashFor('photos', photosWith({ tag: p.tag, sort: 'old' })) }, p.name), h('span', { class: 'muted' }, ` · ${p.years} years apart`))))));
+    thenNow.hidden = false;
+  };
+  setTimeout(drawThenNow, 0);
   const group = (hue, ...kids) => h('div', { class: 'pills', style: `--hue:var(--c-${hue})` }, ...kids);
   main.replaceChildren(h('div', { class: 'page' },
     pageTitle('explore', 'purple', 'Explore'),
@@ -1514,7 +1529,7 @@ async function showExplore() {
       stat('teal', 'folder', nf.format(META.albums.length), 'folders', '#/folders'),
       stat('green', 'place', nf.format(META.geotagged), 'with location', '#/map'),
       stat('slate', 'disk', fmtBytes(META.bytes), 'on disk')),
-    otd, rediscover,
+    otd, rediscover, thenNow,
     META.places.length ? [sec('green', 'place', 'Places', '#/places', 'See all'),
       h('div', { class: 'cards' }, META.places.slice(0, 12).map(placeCard))] : null,
     sec('amber', 'person', 'People', '#/people', 'See all'),

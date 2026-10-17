@@ -367,6 +367,29 @@ def api_random(request: Request, n: int = 12):
     return {"id": [r[0] for r in rows], "w": [r[1] for r in rows], "h": [r[2] for r in rows], "ts": [r[3] for r in rows]}
 
 
+@app.get("/api/thenandnow")
+def api_then_and_now(request: Request, n: int = 3, person: int = None):
+    """Explore › Then and now: people photographed years apart, with their earliest and latest named face:
+    {pairs: [{tag, name, then: {photo, ts, rect}, now: {...}, years}]}. person: that one person; else random ones."""
+    con = db()
+    try:
+        rows = con.execute(
+            "SELECT f.tag_id, t.name, min(p.ts), max(p.ts), count(*) FROM faces f JOIN photos p ON p.id = f.photo_id JOIN tags t ON t.id = f.tag_id "
+            "WHERE f.kind = 'confirmed' AND t.person = 1 AND p.video = 0 AND p.pick != 1 GROUP BY f.tag_id HAVING max(p.ts) - min(p.ts) >= ? "
+            + ("AND f.tag_id = ? " if person else "") + "ORDER BY random() LIMIT ?", [3 * 365 * 86400] + ([int(person)] if person else []) + [max(1, min(int(n), 12))]).fetchall()
+        pairs = []
+        for tag, name, t0, t1, cnt in rows:
+            ends = []
+            for order in ("ASC", "DESC"):
+                r = con.execute("SELECT f.photo_id, p.ts, f.x, f.y, f.w, f.h FROM faces f JOIN photos p ON p.id = f.photo_id "
+                                f"WHERE f.tag_id = ? AND f.kind = 'confirmed' AND p.video = 0 AND p.pick != 1 ORDER BY p.ts {order}, f.w * f.h DESC LIMIT 1", (tag,)).fetchone()
+                ends.append({"photo": r[0], "ts": r[1], "rect": [r[2], r[3], r[4], r[5]]})
+            pairs.append({"tag": tag, "name": name, "then": ends[0], "now": ends[1], "years": round((t1 - t0) / (365.25 * 86400), 1), "photos": cnt})
+    finally:
+        con.close()
+    return {"pairs": pairs}
+
+
 @app.get("/api/photos")
 def api_photos(request: Request):
     """The whole result set in compact column form; the browser lays it out and
