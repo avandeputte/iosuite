@@ -1,5 +1,5 @@
 /** The map page (Leaflet, loaded on demand). */
-import { $, api, date, dfDay, dfTime, fill, h, icon, main, nf, plural } from './core.js';
+import { $, api, date, dfDay, dfTime, fill, h, icon, main, nf, plural, store } from './core.js';
 import { S, applyFilter, filterParams, go, toast } from './state.js';
 import { editPhotos } from './editing.js';
 import { openLightbox, syncLightbox } from './lightbox.js';
@@ -139,7 +139,29 @@ async function placeTray(map, fp, el) {
   el.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; });
   el.addEventListener('drop', (e) => { e.preventDefault(); if (e.dataTransfer.getData('text/plain') === 'iopix-place') place(map.mouseEventToLatLng(e)); });
   el.style.cursor = 'crosshair';
-  fill(tray, h('div', { class: 'mthead' }, count, h('span', { class: 'sp' }), h('button', { class: 'pillbtn', onclick: () => { ids.slice(0, shown).forEach((x) => sel.add(x)); draw(); } }, 'Select shown'),
-    h('button', { class: 'pillbtn', onclick: () => { sel.clear(); draw(); } }, 'Clear')), hint, grid);
+  // find a place: a name, landmark or address (the same search as Set location), then the map zooms there
+  let st = 0;
+  const results = h('div', { class: 'alist', hidden: true, style: 'max-height:180px' });
+  const search = h('input', { class: 'einput', placeholder: 'Find a place, landmark or address', style: 'margin:0;width:100%',
+    onkeydown: (e) => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); clearTimeout(st); look(); } if (e.key === 'Escape') results.hidden = true; },
+    oninput: () => { clearTimeout(st); st = setTimeout(look, 500); } });
+  const look = async () => {
+    const q = search.value.trim();
+    if (q.length < 2) { results.hidden = true; return; }
+    let r; try { r = await api('/api/geocode?q=' + encodeURIComponent(q)); } catch (e) { toast(e.message); return; }
+    if (search.value.trim() !== q) return;
+    results.hidden = false;
+    fill(results, r.results.length ? r.results.map((x) => h('div', { class: 'frow', style: 'height:auto;padding:6px 8px', onclick: () => { results.hidden = true; search.value = x.name; map.setView([x.lat, x.lon], x.zoom || 15); } },
+      icon('place'), h('span', { class: 'nm', style: 'white-space:normal' }, x.name, x.detail ? h('span', { class: 'muted' }, ' · ' + x.detail) : null)))
+      : h('div', { class: 'muted', style: 'padding:6px 8px' }, 'Nothing found.'));
+  };
+  // thumbnail size, remembered
+  const px = () => +store.get('tray-size', '70');
+  const sizer = h('input', { type: 'range', min: 60, max: 200, step: 10, value: px(), title: 'Thumbnail size', style: 'flex:1',
+    oninput: () => { store.set('tray-size', sizer.value); grid.style.setProperty('--tsz', sizer.value + 'px'); } });
+  grid.style.setProperty('--tsz', px() + 'px');
+  fill(tray, h('div', { class: 'mapsearch' }, search, results), h('div', { class: 'mthead' }, count, h('span', { class: 'sp' }), h('button', { class: 'pillbtn', onclick: () => { ids.slice(0, shown).forEach((x) => sel.add(x)); draw(); } }, 'Select shown'),
+    h('button', { class: 'pillbtn', onclick: () => { sel.clear(); draw(); } }, 'Clear')), hint,
+    h('label', { class: 'mtsize' }, icon('photo'), sizer, icon('photo')), grid);
   draw();
 }

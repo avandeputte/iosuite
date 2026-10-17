@@ -1346,6 +1346,7 @@ def test_map_place_mode_shows_the_tray(page, server):
         pytest.skip("the map needs tiles from the internet")
     page.locator(".mapbar button:has-text('Place photos')").click()
     page.wait_for_selector(".maptray .mthead", timeout=15000)
+    assert page.locator(".maptray .mapsearch input").count() == 1 and page.locator(".maptray .mtsize input[type=range]").count() == 1
     assert "without a location" in page.locator(".maptray .mthead b").inner_text() or page.locator(".maptray .tgrid img").count() >= 0
     page.locator(".mapbar button:has-text('Done placing')").click()
     page.wait_for_selector(".mapbar button:has-text('Place photos')", timeout=10000)

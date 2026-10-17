@@ -803,9 +803,9 @@ body:has(#dkbanner) #updbanner { bottom: 96px; }  /* both at once: the update ca
 .fcov.on { outline-color: var(--accent); }
 
 /* Map: placing photos without a location */
-.maptray { position: absolute; top: 56px; right: 12px; bottom: 12px; width: min(340px, 44vw); z-index: 900; background: var(--bg); border-radius: 14px; box-shadow: var(--shadow); padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+.maptray { position: absolute; top: 56px; right: 12px; bottom: 12px; width: min(420px, 46vw); z-index: 900; background: var(--bg); border-radius: 14px; box-shadow: var(--shadow); padding: 10px; display: flex; flex-direction: column; gap: 6px; }
 .maptray .mthead { display: flex; gap: 6px; align-items: center; } .maptray .mthead .sp { flex: 1; }
-.maptray .tgrid { flex: 1; overflow: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); gap: 4px; align-content: start; }
+.maptray .tgrid { flex: 1; overflow: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--tsz, 70px), 1fr)); gap: 4px; align-content: start; }
 .maptray .tgrid img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; cursor: pointer; outline: 3px solid transparent; outline-offset: -3px; }
 .maptray .tgrid img.on { outline-color: var(--accent); }
 @media (max-width: 800px) { .maptray { top: auto; left: 8px; right: 8px; width: auto; height: 42vh; } }
@@ -829,3 +829,5 @@ body:has(#dkbanner) #updbanner { bottom: 96px; }  /* both at once: the update ca
 .adjrow input[type=range] { width: 100%; } .adjv { text-align: right; font-variant-numeric: tabular-nums; color: var(--fg2); }
 .modal.fpmodal { width: min(640px, 94vw); }
 .fpbody { display: grid; gap: 10px; } .fpbody label { display: grid; gap: 4px; } .fpbody textarea, .fpbody input { width: 100%; box-sizing: border-box; margin: 0; }
+.maptray .mapsearch { position: relative; } .maptray .mapsearch .alist { position: absolute; left: 0; right: 0; top: 100%; z-index: 2; background: var(--bg); box-shadow: var(--shadow); border-radius: 10px; }
+.maptray .mtsize { display: flex; gap: 6px; align-items: center; color: var(--fg2); } .maptray .mtsize .ic { width: 14px; height: 14px; } .maptray .mtsize .ic:last-child { width: 20px; height: 20px; }
