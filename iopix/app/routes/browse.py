@@ -357,6 +357,8 @@ def api_photo(photo_id: int, request: Request):
         d["similar"] = semantic_enabled()
         d["concepts"] = concepts.for_photo(photo_id) if semantic_enabled() else []
         d["boxes"] = analysis.boxes(photo_id)
+        from .. import versions
+        d["versions"] = versions.versions_of(photo_id)  # digiKam's version family (ImageRelations), when there is one
         if d.get("burst"):
             d["burst_size"] = con.execute("SELECT count(*) FROM photos WHERE burst = ?", (d["burst"],)).fetchone()[0]
             best = con.execute("SELECT id, name FROM photos WHERE burst = ? AND burst_best = 1", (d["burst"],)).fetchone()

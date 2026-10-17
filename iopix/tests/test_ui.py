@@ -1350,3 +1350,35 @@ def test_map_place_mode_shows_the_tray(page, server):
     page.locator(".mapbar button:has-text('Done placing')").click()
     page.wait_for_selector(".mapbar button:has-text('Place photos')", timeout=10000)
     assert page.locator(".maptray").count() == 0
+
+
+def test_all_metadata_and_adjust_panels_open(page, server, lib):
+    page.goto(f"{server}/#/photos?sort=old")
+    page.wait_for_selector("#grid .tile img", timeout=20000)
+    page.locator("#grid .tile").first.click()
+    page.wait_for_selector("#lightbox .lb-frame img", timeout=15000)
+    page.keyboard.press("i")
+    page.wait_for_selector(".lb-info a:has-text('All metadata')", timeout=10000)
+    page.locator(".lb-info a:has-text('All metadata')").click()
+    page.wait_for_selector(".mdmodal .mdgroup", timeout=15000)
+    assert page.locator(".mdmodal .mdtable tr").count() > 5
+    page.locator(".mdmodal button:has-text('Close')").click()
+    page.locator("#lightbox button[title^='Rotate, flip or crop']").click()
+    page.locator(".facemenu .fmi:has-text('Adjust')").click()
+    page.wait_for_selector(".adjbar input[type=range]", timeout=5000)
+    assert page.locator(".adjbar input[type=range]").count() == 5
+    page.locator(".adjbar button:has-text('Cancel')").click()
+    assert page.locator(".adjbar").count() == 0
+
+
+def test_copy_metadata_dialog_from_a_selection(page, server):
+    page.goto(server + "/#/photos?sort=old")
+    page.wait_for_selector("#grid .tile img", timeout=20000)
+    tiles = page.locator("#grid .tile")
+    for k in (0, 1):
+        tiles.nth(k).hover(); tiles.nth(k).locator(".tcheck").click(force=True)
+    page.wait_for_selector("#selbar button[title='Copy metadata']", timeout=5000)
+    page.locator("#selbar button[title='Copy metadata']").click()
+    page.wait_for_selector(".modal h3:has-text('Copy metadata')", timeout=5000)
+    assert page.locator(".modal .fcov").count() == 2 and page.locator(".modal input[type=checkbox]").count() == 8
+    page.locator(".modal button:has-text('Cancel')").click()

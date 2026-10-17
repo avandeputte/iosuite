@@ -3,7 +3,7 @@ import { $, api, date, fill, fmtBytes, fmtWhen, h, icon, main, nf, norm, plural,
 import { S, ST, filterParams, go, loadState, onRoute, photosWith, pollSoon, toast, ualbumById } from './state.js';
 import { crumbs } from './search.js';
 import { G, renderGrid } from './grid.js';
-import { editDialog, locationDialog, tagDialog } from './editing.js';
+import { copyMetadata, editDialog, locationDialog, tagDialog } from './editing.js';
 import { downloadDialog } from './download.js';
 import { pageTitle, people } from './pages.js';
 import { LB, details, editMenu, openLightbox, showItem, toggleFaces, updateFavBtn } from './lightbox.js';
@@ -63,6 +63,7 @@ export function updateSelBar() {
     }) : null,
     btn('download', 'Export', () => downloadDialog(photosWith({ ids: ids().join(',') }), G.sel.size)),
     S.CAN_MANAGE ? btn('edit', 'Rename by date', () => renameByDate(ids())) : null,
+    S.EDITING && G.sel.size > 1 ? btn('dup', 'Copy metadata', () => copyMetadata(ids())) : null,
     S.CAN_MANAGE ? btn('folder', 'Move to a folder', () => movePhotos(ids())) : null,
     S.CAN_MANAGE && S.LOSSLESS ? btn('rotate', 'Rotate or flip', (e) => editMenu(ids(), e.currentTarget, false)) : null,
     S.CAN_MANAGE ? btn('trash', 'Move to trash (Delete key)', () => trashPhotos(ids())) : null);

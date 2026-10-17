@@ -50,6 +50,25 @@ async def api_photos_transform(request: Request):
     return r
 
 
+@router.post("/api/photos/adjust")
+async def api_photo_adjust(request: Request):
+    """Body {id, exposure, contrast, saturation, warmth, angle, autolevel}: save an adjusted copy as a new version
+    (name_v1.jpg beside it, linked as digiKam links versions); the original is not changed."""
+    from .. import versions
+    _organize_allowed()
+    if not edits.available():
+        raise HTTPException(403, "Editing is turned off (EDITING=0 or no exiftool)")
+    body = await request.json()
+    try:
+        r = await run_in_threadpool(versions.adjust, int(body.get("id") or 0), body)
+    except dbsync.SyncError as e:
+        raise HTTPException(409 if "digiKam is running" in str(e) else 400, str(e))
+    except (OSError, ValueError) as e:
+        raise HTTPException(500, f"The version could not be saved: {e}")
+    await run_in_threadpool(_rebuild_after_write)
+    return r
+
+
 @router.post("/api/photos/crop")
 async def api_photos_crop(request: Request):
     """Body {id, rect: [x, y, w, h]} in upright pixels: crop the file (JPEG without loss via jpegtran; PNG, TIFF,

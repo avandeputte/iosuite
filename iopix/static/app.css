@@ -676,7 +676,7 @@ body:has(#dkbanner) #updbanner { bottom: 96px; }  /* both at once: the update ca
   #topbar { padding: env(safe-area-inset-top) 8px 0 8px; height: calc(var(--topbar) + env(safe-area-inset-top)); }
   #selbar { padding: env(safe-area-inset-top) 6px 0 6px; height: calc(var(--topbar) + env(safe-area-inset-top)); overflow-x: auto; scrollbar-width: none; }
   #selbar .pillbtn > span:not(.ic), #selbar .lnk { display: none; }  /* icons only: every action stays on screen */
-  #selbar .pillbtn[title="Move to a folder"], #selbar .pillbtn[title="Rotate or flip"], #selbar .pillbtn[title="Rename by date"] { display: none; }  /* on phones: from the photo's info panel instead; seven actions fit, eight do not */
+  #selbar .pillbtn[title="Move to a folder"], #selbar .pillbtn[title="Rotate or flip"], #selbar .pillbtn[title="Rename by date"], #selbar .pillbtn[title="Copy metadata"] { display: none; }  /* on phones: from the photo's info panel instead; seven actions fit, eight do not */
   #selbar .pillbtn { padding: 0 6px; flex: none; }
   #selbar .iconbtn { width: 36px; flex: none; }
   #selbar .n { font-size: 14px; margin: 0 2px 0 0; white-space: nowrap; }
@@ -798,7 +798,7 @@ body:has(#dkbanner) #updbanner { bottom: 96px; }  /* both at once: the update ca
 /* Folder properties */
 .tree .nm .fcap { display: block; font-size: 12px; font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fcovers { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 6px; max-height: 260px; overflow: auto; padding: 2px; }
-.fcov { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; cursor: pointer; outline: 2px solid transparent; outline-offset: 1px; }
+.fcov { width: 100%; height: 76px; object-fit: cover; border-radius: 8px; cursor: pointer; outline: 2px solid transparent; outline-offset: 1px; }
 .fcov.auto { display: flex; align-items: center; justify-content: center; background: var(--chip); font-size: 13px; color: var(--fg2); }
 .fcov.on { outline-color: var(--accent); }
 
@@ -813,3 +813,19 @@ body:has(#dkbanner) #updbanner { bottom: 96px; }  /* both at once: the update ca
 /* Export dialog */
 .expopts { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-top: 12px; }
 .expopts label { display: grid; gap: 4px; } .expopts select { width: 100%; }
+
+/* All metadata */
+.modal.mdmodal { width: min(920px, 94vw); max-height: 88vh; display: flex; flex-direction: column; }
+.mdbody { flex: 1; overflow: auto; margin-top: 8px; min-height: 200px; }
+.mdgroup { border-top: 1px solid var(--line); padding: 6px 0; } .mdgroup summary { cursor: pointer; }
+.mdtable { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 4px; }
+.mdtable td { padding: 3px 6px; vertical-align: top; } .mdtable .mdk { width: 34%; color: var(--fg2); word-break: break-word; }
+.mdin { width: 100%; font: inherit; padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); }
+.mdadd { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+
+/* Adjust (new version) */
+.adjbar { position: absolute; right: 16px; bottom: 18px; z-index: 1002; width: min(340px, 92vw); background: var(--bg); color: var(--fg); border-radius: 14px; box-shadow: var(--shadow); padding: 12px 14px; display: grid; gap: 8px; font-size: 13px; }
+.adjrow { display: grid; grid-template-columns: 90px 1fr 56px; gap: 8px; align-items: center; }
+.adjrow input[type=range] { width: 100%; } .adjv { text-align: right; font-variant-numeric: tabular-nums; color: var(--fg2); }
+.modal.fpmodal { width: min(640px, 94vw); }
+.fpbody { display: grid; gap: 10px; } .fpbody label { display: grid; gap: 4px; } .fpbody textarea, .fpbody input { width: 100%; box-sizing: border-box; margin: 0; }

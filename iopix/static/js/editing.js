@@ -1,5 +1,5 @@
 /** Metadata editing dialogs: rating, titles, captions, tags, dates, locations and templates. */
-import { $, UTC, api, date, dfTimeLocal, fill, fmtWhen, h, icon, nf, plural, post } from './core.js';
+import { $, UTC, api, date, dfTimeLocal, fill, fmtWhen, h, icon, nf, norm, plural, post } from './core.js';
 import { S, go, hashFor, photosWith, pollSoon, toast } from './state.js';
 import { G } from './grid.js';
 import { modal } from './actions.js';
@@ -17,6 +17,80 @@ export function applyLocal(d, ch) {
   for (const id of ch.remove_tags || []) d.tags = d.tags.filter((t) => t.id !== id);
   for (const id of ch.add_tags || []) { const t = S.tagById.get(id); if (t && !d.tags.some((x) => x.id === id)) d.tags.push({ id, name: t.name, full: t.full, person: 0 }); }
   d.edited = 1;
+}
+/** Every EXIF, IPTC and XMP field of a photo's file and sidecar; editable ones are changed in place, then the
+ *  database is read again from the metadata. "Reread from file" is digiKam's Read Metadata From File. */
+export async function metadataEditor(d) {
+  const body = h('div', { class: 'mdbody' }, h('div', { class: 'muted' }, 'Reading the metadata…'));
+  const filter = h('input', { class: 'einput', placeholder: 'Filter fields, e.g. Make, GPS, Keywords', style: 'margin:0;flex:1', oninput: () => draw() });
+  const which = h('select', { class: 'sharepick', onchange: () => draw() }, h('option', { value: 'file' }, 'Image file'), h('option', { value: 'sidecar' }, 'Sidecar (XMP)'));
+  const changed = new Map();
+  const saveBtn = h('button', { class: 'pillbtn on', disabled: true, onclick: () => save() }, 'Save changes');
+  let m = null;
+  const where = (g) => g.startsWith('XMP-') ? (m.writesFiles ? 'sidecar and file' : 'sidecar') : (m.writesFiles ? 'file' : 'file: needs “Write metadata into image files”');
+  const draw = () => {
+    if (!m) return;
+    const q = norm(filter.value || '');
+    const rows = m[which.value].filter((x) => !q || norm(`${x.group} ${x.tag} ${x.value}`).includes(q));
+    const groups = new Map();
+    rows.forEach((x) => { if (!groups.has(x.group)) groups.set(x.group, []); groups.get(x.group).push(x); });
+    fill(body, rows.length ? [...groups].map(([g, list]) => h('details', { class: 'mdgroup', open: groups.size < 6 || !!q },
+      h('summary', null, h('b', null, g), h('span', { class: 'muted' }, ` · ${plural(list.length, 'field')}${!list.some((x) => x.editable) ? ' · read only' : S.CAN_MANAGE ? ' · edits go to the ' + where(g) : ''}`)),
+      h('table', { class: 'mdtable' }, h('tbody', null, list.map((x) => {
+        const key = `${x.group}:${x.tag}`;
+        const cell = S.CAN_MANAGE && x.editable ? h('input', { class: 'mdin', value: changed.has(key) ? changed.get(key).value : x.value,
+          oninput: (e) => { if (e.target.value === x.value) changed.delete(key); else changed.set(key, { group: x.group, tag: x.tag, value: e.target.value }); saveBtn.disabled = !changed.size; fill(saveBtn, changed.size ? `Save ${plural(changed.size, 'change')}` : 'Save changes'); } })
+          : h('span', { class: x.editable ? '' : 'muted' }, x.value);
+        return h('tr', null, h('td', { class: 'mdk', title: key }, x.tag), h('td', null, cell));
+      }))))) : h('div', { class: 'muted' }, which.value === 'sidecar' && !m.hasSidecar ? 'This photo has no sidecar yet; the first edit creates one.' : 'No field matches.'));
+  };
+  const load = async () => { try { m = await api(`/api/metadata/${d.id}`); } catch (e) { fill(body, h('div', { class: 'warn' }, e.message)); return; } draw(); };
+  const save = async () => {
+    saveBtn.disabled = true; fill(saveBtn, 'Saving…');
+    try { await post(`/api/metadata/${d.id}`, { changes: [...changed.values()] }); } catch (e) { toast(e.message, null, null, 10000); saveBtn.disabled = false; fill(saveBtn, `Save ${plural(changed.size, 'change')}`); return; }
+    toast(`${plural(changed.size, 'field')} saved; the library now says the same.`); changed.clear(); fill(saveBtn, 'Save changes');
+    details.delete(d.id); S.keepView = true; pollSoon(600); load();
+  };
+  const reread = h('button', { class: 'pillbtn', title: 'Fill the library’s fields for this photo again from its file and sidecar (digiKam: Read Metadata From File)', onclick: async () => {
+    try { await post(`/api/metadata/${d.id}/reread`, {}); toast('Read again from the file and sidecar.'); details.delete(d.id); S.keepView = true; pollSoon(600); } catch (e) { toast(e.message, null, null, 9000); } } }, 'Reread from file');
+  const add = S.CAN_MANAGE ? (() => {
+    const g = h('select', { class: 'sharepick' }, ['XMP-dc', 'XMP-photoshop', 'XMP-iptcCore', 'XMP-xmp', 'XMP-xmpRights', 'IFD0', 'ExifIFD', 'GPS', 'IPTC'].map((x) => h('option', null, x)));
+    const t = h('input', { class: 'einput', placeholder: 'Field, e.g. Headline', style: 'margin:0;width:160px' });
+    const v = h('input', { class: 'einput', placeholder: 'Value', style: 'margin:0;flex:1;min-width:140px' });
+    return h('div', { class: 'mdadd' }, h('span', { class: 'muted' }, 'Add a field'), g, t, v, h('button', { class: 'pillbtn', onclick: () => {
+      if (!t.value.trim()) return; changed.set(`${g.value}:${t.value.trim()}`, { group: g.value, tag: t.value.trim(), value: v.value }); saveBtn.disabled = false; fill(saveBtn, `Save ${plural(changed.size, 'change')}`); toast('Added; save to write it.'); } }, 'Add'));
+  })() : null;
+  const back = modal(`All metadata · ${d.name}`, h('div', { style: 'display:flex;gap:8px;align-items:center;flex-wrap:wrap' }, filter, which), body, add,
+    h('div', { class: 'modal-btns' }, S.CAN_MANAGE ? reread : null, h('button', { class: 'pillbtn', onclick: () => back.remove() }, 'Close'), S.CAN_MANAGE ? saveBtn : null));
+  back.querySelector('.modal').classList.add('mdmodal');
+  load();
+}
+/** Copy chosen fields from one photo to the others of a selection, through the normal edit path. */
+export async function copyMetadata(ids) {
+  let src = ids[0];
+  const thumbs = h('div', { class: 'fcovers' }, ids.slice(0, 60).map((id) => h('img', { class: 'fcov' + (id === src ? ' on' : ''), src: `/thumb/${id}`, alt: '', onclick: (e) => {
+    src = id; thumbs.querySelectorAll('.fcov').forEach((x) => x.classList.toggle('on', x === e.currentTarget)); } })));
+  const F = [['rating', 'Rating'], ['labels', 'Pick and color labels'], ['title', 'Title'], ['caption', 'Caption'], ['tags', 'Keywords (added)'], ['gps', 'Location'], ['taken', 'Date and time taken'], ['rights', 'Creator and copyright']];
+  const boxes = Object.fromEntries(F.map(([k]) => [k, h('input', { type: 'checkbox', checked: ['tags', 'gps', 'rights'].includes(k) })]));
+  const go_ = h('button', { class: 'pillbtn on', onclick: async () => {
+    const s = await getDetail(src);
+    const ch = {};
+    if (boxes.rating.checked) ch.rating = Math.max(0, s.rating || 0);
+    if (boxes.labels.checked) { ch.pick = s.pick || 0; ch.color = s.color || 0; }
+    if (boxes.title.checked) ch.title = s.title || '';
+    if (boxes.caption.checked) ch.caption = s.caption || '';
+    if (boxes.tags.checked) { const t = s.tags.filter((x) => !x.person).map((x) => x.full); if (t.length) ch.add_tags = t; }
+    if (boxes.gps.checked) ch.gps = s.lat != null ? { lat: s.lat, lon: s.lon, alt: s.alt ?? null } : null;
+    if (boxes.taken.checked && s.taken) ch.taken = s.taken.slice(0, 19);
+    if (boxes.rights.checked) { const tpl = {}; if (s.creator) tpl.creator = s.creator; if (s.copyright) tpl.copyrightNotice = s.copyright; if (Object.keys(tpl).length) ch.template = tpl; }
+    const targets = ids.filter((x) => x !== src);
+    if (!Object.keys(ch).length || !targets.length) { toast('Nothing to copy.'); return; }
+    back.remove();
+    if (await editPhotos(targets, ch)) toast(`Copied to ${plural(targets.length, 'photo')}. Each change is in the change log with undo.`);
+  } }, 'Copy to the others');
+  const back = modal(`Copy metadata to ${plural(ids.length - 1, 'photo')}`, h('div', { class: 'muted', style: 'margin-bottom:6px' }, 'Copy from this photo (click to choose):'), thumbs,
+    h('div', { class: 'expopts' }, F.map(([k, l]) => h('label', { style: 'display:flex;gap:6px;align-items:center;cursor:pointer' }, boxes[k], l))),
+    h('div', { class: 'modal-btns' }, h('button', { class: 'pillbtn', onclick: () => back.remove() }, 'Cancel'), go_));
 }
 export async function editPhotos(ids, changes) {
   let r;

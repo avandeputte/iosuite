@@ -34,6 +34,46 @@ router = APIRouter()
 # Metadata editing (sidecars, image files when enabled, digiKam's database on request)
 # --------------------------------------------------------------------------
 
+@router.get("/api/metadata/{photo_id}")
+def api_metadata(photo_id: int):
+    """Every metadata field of the photo's file and sidecar (exiftool, grouped), with which ones can be edited."""
+    from .. import metaedit
+    try:
+        return metaedit.read(photo_id)
+    except dbsync.SyncError as e:
+        raise HTTPException(404, str(e))
+
+
+@router.post("/api/metadata/{photo_id}")
+async def api_metadata_write(photo_id: int, request: Request):
+    """Body {changes: [{group, tag, value}]}: write fields (XMP to the sidecar, EXIF/GPS/IPTC to the file), then read the
+    photo's database rows again from its metadata."""
+    from .. import metaedit
+    if not (config.DB_WRITE and edits.available()):
+        raise HTTPException(403, "Editing is turned off")
+    body = await request.json()
+    try:
+        r = await run_in_threadpool(metaedit.write, photo_id, list(body.get("changes") or [])[:200])
+    except dbsync.SyncError as e:
+        raise HTTPException(409 if "digiKam is running" in str(e) else 400, str(e))
+    await run_in_threadpool(_rebuild_after_write)
+    return r
+
+
+@router.post("/api/metadata/{photo_id}/reread")
+async def api_metadata_reread(photo_id: int):
+    """digiKam's Read Metadata From File: the photo's database rows filled again from its file and sidecar."""
+    from .. import metaedit
+    if not config.DB_WRITE:
+        raise HTTPException(403, "Writing to digiKam's database is turned off (DB_WRITE=0)")
+    try:
+        r = await run_in_threadpool(metaedit.reread, photo_id)
+    except dbsync.SyncError as e:
+        raise HTTPException(409 if "digiKam is running" in str(e) else 400, str(e))
+    await run_in_threadpool(_rebuild_after_write)
+    return r
+
+
 @router.post("/api/edit")
 async def api_edit(request: Request):
     """Change metadata for one or more photos. Written to XMP sidecars (and into the image

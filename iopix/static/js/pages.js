@@ -152,7 +152,7 @@ export async function folderProperties(f, all, after) {
   api('/api/photos?' + photosWith({ album: f.id, sort: 'old' }).toString()).then((d) => {
     const ids = (d.id || []).slice(0, 80);
     fill(covers, h('div', { class: 'fcov auto', 'data-id': 'auto', title: 'Chosen automatically: the best-rated photo', onclick: () => pick(null) }, 'Auto'),
-      ids.map((id) => h('img', { class: 'fcov', 'data-id': id, src: `/thumb/${id}`, loading: 'lazy', alt: '', onclick: () => pick(id) })));
+      ids.map((id) => h('img', { class: 'fcov', 'data-id': id, src: `/thumb/${id}`, alt: '', onclick: () => pick(id) })));
     pick(icon_);
   }).catch(() => fill(covers, h('div', { class: 'muted' }, 'This folder has no photos yet.')));
   const save = async () => {
@@ -162,13 +162,14 @@ export async function folderProperties(f, all, after) {
     back.remove(); toast('Folder properties saved.'); after?.();
   };
   const back = modal(`Properties of “${f.name}”`,
-    h('div', { style: 'display:grid;gap:10px;min-width:min(560px,86vw)' },
+    h('div', { class: 'fpbody' },
       h('label', null, h('div', { class: 'muted' }, 'Caption'), caption),
       h('div', { style: 'display:flex;gap:12px;flex-wrap:wrap' }, h('label', null, h('div', { class: 'muted' }, 'Date'), date),
         h('label', { style: 'flex:1;min-width:200px' }, h('div', { class: 'muted' }, 'Category'), category, list)),
       h('div', null, h('div', { class: 'muted' }, 'Cover'), covers),
       h('div', { style: 'display:flex;gap:8px;justify-content:flex-end' }, h('button', { class: 'pillbtn', onclick: () => back.remove() }, 'Cancel'),
         h('button', { class: 'pillbtn on', onclick: save }, 'Save'))));
+  back.querySelector('.modal').classList.add('fpmodal');
 }
 export async function showFolders() {
   let d;

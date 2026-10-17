@@ -3,7 +3,7 @@ import { $, api, date, dfDay, dfLong, dfTime, fill, fmtBytes, fmtDur, h, icon, n
 import { S, ST, faceUrl, go, hashFor, infoHidden, infoPrefsEditor, parseHash, photosWith, pollSoon, toast } from './state.js';
 import { G, renderGrid, scrollToIndex } from './grid.js';
 import { albumDialog, clearSelection, histEntry, modal, movePhotos, renamePhoto, setFavorite, trashPhotos } from './actions.js';
-import { dateEditor, detectFaces, editControls, editPhotos, locationDialog, tagDialog, tagPicker, templatePicker } from './editing.js';
+import { dateEditor, detectFaces, editControls, editPhotos, locationDialog, metadataEditor, tagDialog, tagPicker, templatePicker } from './editing.js';
 import { people } from './pages.js';
 import { tagOp } from './admin.js';
 import { M, loadLeaflet, loadMaps, mapLink, tiles } from './map.js';
@@ -193,6 +193,7 @@ export function editMenu(ids, anchor, withCrop) {
   const menu = h('div', { class: 'facemenu' }, h('div', { class: 'fmh' }, ids.length > 1 ? `${plural(ids.length, 'photo')}, without loss` : 'Without loss'),
     TRANSFORMS.map(([op, label]) => item(label, () => transformPhotos(ids, op))),
     withCrop ? item('Crop…', () => startCrop()) : null,
+    withCrop ? item('Adjust (new version)…', () => startAdjust()) : null,
     h('div', { class: 'fmi muted', style: 'font-size:12px;cursor:default' }, S.LOSSLESS?.jpegtran ? 'JPEG pixels are turned as they are; other files by their orientation flag.' : 'By the orientation flag (jpegtran is not on the server, so JPEG pixels are not rewritten).'));
   const host = LB.open ? LB.el.stage : document.body;
   const sr = LB.open ? host.getBoundingClientRect() : { left: 0, top: 0, width: innerWidth, height: innerHeight }, br = anchor.getBoundingClientRect();
@@ -235,6 +236,46 @@ export async function transformPhotos(ids, op) {
   const label = TRANSFORMS.find((t) => t[0] === op)[1].toLowerCase();
   if (r.failed.length) toast(`${r.done.length ? `${plural(r.done.length, 'photo')} ${label.replace('rotate', 'rotated').replace('flip', 'flipped').replace('turn', 'turned')}; ` : ''}${plural(r.failed.length, 'photo')} not: ${r.failed[0].error}`, null, null, 10000);
   else toast(ids.length > 1 ? `${plural(r.done.length, 'photo')}: ${label}.` : `${label[0].toUpperCase()}${label.slice(1)}.`, r.done.length === 1 ? 'Undo' : null, () => undoLast(r.done[0].id));
+}
+/** Adjust: exposure, contrast, saturation, warmth, straighten and auto levels, previewed live on screen and saved
+ *  as a new version next to the original (digiKam's "save as new version"); the original stays as it is. */
+function startAdjust() {
+  const { stage, frame } = LB.el, d = LB.detail;
+  if (!d || d.video) return;
+  stage.querySelector('.adjbar')?.remove();
+  const img = frame.querySelector('img');
+  const v = { exposure: 0, contrast: 0, saturation: 0, warmth: 0, angle: 0, autolevel: false };
+  const preview = () => {
+    if (!img) return;
+    const warm = v.warmth / 100;
+    img.style.filter = `brightness(${2 ** v.exposure}) contrast(${1 + v.contrast / 100}) saturate(${1 + v.saturation / 100})${warm > 0 ? ` sepia(${warm * 0.35})` : warm < 0 ? ` hue-rotate(${warm * 12}deg)` : ''}${v.autolevel ? ' contrast(1.08)' : ''}`;
+    const a = Math.abs(v.angle) * Math.PI / 180, r = img.naturalWidth / (img.naturalHeight || 1);
+    const s = v.angle ? Math.cos(a) + Math.sin(a) * Math.max(r, 1 / r) : 1;
+    img.style.transform = v.angle ? `rotate(${v.angle}deg) scale(${s})` : '';
+  };
+  const slider = (key, label, min, max, step) => {
+    const out = h('span', { class: 'adjv' }, '0');
+    const inp = h('input', { type: 'range', min, max, step, value: 0, oninput: () => { v[key] = +inp.value; fill(out, (v[key] > 0 ? '+' : '') + v[key] + (key === 'angle' ? '°' : key === 'exposure' ? ' EV' : '')); preview(); } });
+    return h('label', { class: 'adjrow' }, h('span', null, label), inp, out);
+  };
+  const auto = h('input', { type: 'checkbox', onchange: () => { v.autolevel = auto.checked; preview(); } });
+  frame.style.overflow = 'hidden';  // the straightened preview shows what the saved crop keeps
+  const stop = () => { if (img) { img.style.filter = ''; img.style.transform = ''; } frame.style.overflow = ''; bar.remove(); };
+  const save = async () => {
+    fill(saveBtn, 'Saving…'); saveBtn.disabled = true;
+    let r;
+    try { r = await post('/api/photos/adjust', { id: d.id, ...v }); } catch (e) { toast(e.message, null, null, 9000); saveBtn.disabled = false; fill(saveBtn, 'Save as new version'); return; }
+    stop(); S.keepView = true; pollSoon(600); details.delete(d.id);
+    toast(`Saved as ${r.name}, next to the original (which is unchanged).`, 'Show', () => openLightbox({ id: [r.id, d.id] }, 0, true), 10000);
+  };
+  const saveBtn = h('button', { class: 'pillbtn on', onclick: (e) => { e.stopPropagation(); save(); } }, 'Save as new version');
+  const bar = h('div', { class: 'adjbar', onclick: (e) => e.stopPropagation(), onpointerdown: (e) => e.stopPropagation() },
+    slider('exposure', 'Exposure', -2, 2, 0.1), slider('contrast', 'Contrast', -60, 60, 1), slider('saturation', 'Saturation', -100, 100, 1),
+    slider('warmth', 'Warmth', -100, 100, 1), slider('angle', 'Straighten', -15, 15, 0.5),
+    h('label', { class: 'adjrow' }, h('span', null, 'Auto levels'), auto),
+    h('div', { class: 'muted', style: 'font-size:12px' }, 'The preview is approximate; the saved version is rendered at full size.'),
+    h('div', { style: 'display:flex;gap:8px;justify-content:flex-end' }, h('button', { class: 'pillbtn', onclick: (e) => { e.stopPropagation(); stop(); } }, 'Cancel'), saveBtn));
+  stage.append(bar);
 }
 /** Crop: drag a rectangle over the photo, adjust it by its corners, then Crop. The dark edge shows what goes. */
 export function startCrop() {
@@ -770,7 +811,9 @@ export function renderInfo() {
     show('date') ? [irow('calendar', lnk(dfLong.format(date(d.ts)), { from: d.day, to: d.day, sort: 'old' }), [dfTime.format(date(d.ts)), S.EDITING ? [' · ', h('a', { class: 'lnk', onclick: (e) => { const box = e.target.closest('.irow').nextSibling; box.hidden = !box.hidden; } }, 'change')] : null]),
       S.EDITING ? h('div', { hidden: true, style: 'margin:0 0 8px 40px' }, dateEditor([d.id], d.taken)) : null] : null,
     show('file') ? [irow(d.video ? 'video' : 'photo', d.name, [d.video ? null : `${mp >= 1 ? mp.toFixed(1) : mp.toFixed(2)} MP`, `${d.w} × ${d.h}`, fmtBytes(d.size), d.fmt].filter(Boolean).join(' · ')),
-      d.album ? irow('folder', lnk(d.album.path.replace(/^\//, '') || d.album.name, { album: d.album.id, sort: 'old' }), 'Folder') : null] : null,
+      d.album ? irow('folder', lnk(d.album.path.replace(/^\//, '') || d.album.name, { album: d.album.id, sort: 'old' }), 'Folder') : null,
+      d.versions?.length ? irow('dup', h('span', null, d.versions.map((x, k) => [k ? ' · ' : '', x.id === d.id ? h('b', null, x.role === 'original' ? 'Original' : 'This version')
+        : h('a', { class: 'lnk', onclick: () => openLightbox({ id: d.versions.map((y) => y.id) }, k, true) }, x.role === 'original' ? 'Original' : `Version ${k}`)])), 'Versions') : null] : null,
     S.EDITING ? [h('div', { style: 'height:10px' }),  // the rating, title and caption controls follow; they need no heading
       editControls({ rating: Math.max(d.rating, 0) }, saveOne),
       h('input', { class: 'einput', placeholder: 'Title', value: d.title || '', onkeydown: (e) => { e.stopPropagation(); if (e.key === 'Enter') e.target.blur(); },
@@ -812,7 +855,7 @@ export function renderInfo() {
     show('details') && kv.length ? [h('h4', null, 'Details'), h('div', { class: 'kv' }, kv)] : null,
     show('camera') && ckv.length ? [h('h4', null, 'Camera'), h('div', { class: 'kv' }, ckv)] : null,
     show('file') ? [h('h4', null, 'File'), h('div', { class: 'b muted', style: 'word-break:break-all;user-select:all;font-size:12.5px' }, d.path),
-      S.CAN_MANAGE ? h('div', { style: 'font-size:12.5px;margin-top:4px' }, h('a', { class: 'lnk', onclick: () => renamePhoto(d) }, 'Rename'), ' · ', h('a', { class: 'lnk', onclick: () => movePhotos([d.id], () => { LB.detail = null; details.delete(d.id); setTimeout(showItem, 1500); }) }, 'Move to a folder'),
+      S.CAN_MANAGE ? h('div', { style: 'font-size:12.5px;margin-top:4px' }, h('a', { class: 'lnk', onclick: () => renamePhoto(d) }, 'Rename'), ' · ', h('a', { class: 'lnk', onclick: () => metadataEditor(d) }, 'All metadata'), ' · ', h('a', { class: 'lnk', onclick: () => movePhotos([d.id], () => { LB.detail = null; details.delete(d.id); setTimeout(showItem, 1500); }) }, 'Move to a folder'),
         d.album && !d.video ? [' · ', h('a', { class: 'lnk', title: `Show this photo on “${d.album.name}” in Folders (digiKam's album icon)`, onclick: async () => { try { await post(`/api/folders/${d.album.id}/properties`, { icon: d.id }); toast('Folder cover set.'); S.keepView = true; pollSoon(600); } catch (e) { toast(e.message); } } }, 'Use as folder cover')] : null) : null] : null,
     ai.length ? [h('h4', null, 'AI analysis'), ai] : null,
     show('history') && S.EDITING ? (() => {  // last, folded; editors only; nothing shows for a photo never changed here
