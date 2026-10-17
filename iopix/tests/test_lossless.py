@@ -162,3 +162,43 @@ def test_other_formats_turn_by_their_orientation_flag(client, lib):
         forget_identity([pid])
         png.unlink(missing_ok=True); Path(str(png) + ".xmp").unlink(missing_ok=True)
         index.build()
+
+
+def test_heic_crops_by_re_encoding(client, lib):
+    pytest.importorskip("pillow_heif")
+    _pid0, path, _reg, _dims = _face_jpeg(lib)
+    folders = client.get("/api/folders").json()["folders"]
+    f = next(x for x in folders if x["rel"] != "/")
+    buf = io.BytesIO()
+    with Image.open(path) as im:
+        small = im.convert("RGB").resize((400, 300))
+    small = Image.frombytes("RGB", small.size, small.tobytes())  # pixels only: the source's orientation flag must not travel along
+    small.save(buf, format="HEIF", quality=92)
+    r = client.post(f"/api/folders/{f['id']}/upload", files=[("files", ("zz-crop.heic", buf.getvalue(), "image/heic"))])
+    assert r.status_code == 200, r.text
+    pid = r.json()["added"][0]["id"]
+    heic = Path(lib["root"]) / f["rel"].strip("/") / "zz-crop.heic"
+    original = heic.read_bytes()
+    try:
+        assert ".heic" in client.get("/api/status").json()["lossless"]["crop"]
+        r = client.post("/api/photos/crop", json={"id": pid, "rect": [20, 10, 200, 150]})
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert (d["w"], d["h"], d["how"]) == (200, 150, "re-encoded")
+        with Image.open(heic) as im:
+            assert im.size == (200, 150) and im.format == "HEIF"
+        assert _info(lib["db"], pid)[0] == (200, 150, 1)
+        e = client.get(f"/api/history?photo={pid}&limit=1").json()["entries"][0]
+        assert "re-encoded" in e["summary"] and "undo" in e["restore"]
+        assert client.post(f"/api/history/{e['id']}/restore", json={"kind": "undo"}).status_code == 200
+        assert heic.read_bytes() == original
+        # rotation of a HEIC is by the flag, the file untouched
+        r = client.post("/api/photos/transform", json={"ids": [pid], "op": "left"})
+        assert r.json()["done"][0]["orientation"] == 8 and heic.read_bytes() == original
+    finally:
+        con = sqlite3.connect(lib["db"])
+        con.execute("DELETE FROM ImageInformation WHERE imageid = ?", (pid,)); con.execute("DELETE FROM Images WHERE id = ?", (pid,)); con.commit(); con.close()
+        from test_import import forget_identity
+        forget_identity([pid])
+        heic.unlink(missing_ok=True); Path(str(heic) + ".xmp").unlink(missing_ok=True)
+        index.build()

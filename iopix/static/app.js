@@ -3474,7 +3474,7 @@ function startCrop() {
     let res;
     try { res = await post('/api/photos/crop', { id, rect }); } catch (e) { toast(e.message, null, null, 9000); return; }
     await afterFileChange(id, res);
-    toast(`Cropped to ${res.w} × ${res.h}${res.faces_dropped ? `; ${plural(res.faces_dropped, 'face')} outside it removed` : ''}.`, 'Undo', () => undoLast(id), 10000);
+    toast(`Cropped to ${res.w} × ${res.h}${res.how === 're-encoded' ? ' (re-encoded: this format cannot be cut without it)' : ''}${res.faces_dropped ? `; ${plural(res.faces_dropped, 'face')} outside it removed` : ''}.`, 'Undo', () => undoLast(id), 10000);
   };
   stage.style.cursor = 'crosshair';
   frame.append(box); stage.append(bar);

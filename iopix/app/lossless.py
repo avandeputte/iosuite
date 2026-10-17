@@ -12,7 +12,8 @@ Crop
   JPEG: jpegtran -crop after the pixels were made upright. The crop's origin snaps to the JPEG block grid
   (8 or 16 pixels), so the result can be a few pixels larger than asked; the right and bottom edges are kept.
   PNG, TIFF and WebP: Pillow (PNG and TIFF without loss, WebP at quality 95), metadata copied back from the
-  original. Other formats are refused.
+  original. HEIC/HEIF (Apple's format): decoded and re-encoded at quality 92, as Apple Photos does on export,
+  since HEVC cannot be cut without re-encoding; the change log says "re-encoded". RAW and the rest are refused.
 Every edit: the true original is kept once in file-backups and a copy of the file as it was just before
 this edit is kept beside it (Undo puts it back); digiKam's rows change (ImageInformation width, height,
 orientation; Images fileSize, with modificationDate cleared so digiKam fully rescans the file next time,
@@ -42,6 +43,8 @@ _PIL_UPRIGHT = {2: _T.FLIP_LEFT_RIGHT, 3: _T.ROTATE_180, 4: _T.FLIP_TOP_BOTTOM, 
 _PIL_OP = {"right": _T.ROTATE_270, "left": _T.ROTATE_90, "180": _T.ROTATE_180, "fliph": _T.FLIP_LEFT_RIGHT, "flipv": _T.FLIP_TOP_BOTTOM}
 JPEG_EXT = {".jpg", ".jpeg", ".jpe"}
 PIL_CROP_EXT = {".png", ".tif", ".tiff", ".webp"}
+HEIF_EXT = {".heic", ".heif"}
+LOSSY_EXT = {".webp", *HEIF_EXT}  # re-encoded on crop
 MIN_CROP = 16
 
 
@@ -57,8 +60,14 @@ def available() -> bool:
     return edits.available() and config.DB_WRITE
 
 
+def _heif() -> bool:
+    import importlib.util
+    return importlib.util.find_spec("pillow_heif") is not None
+
+
 def capabilities() -> dict:
-    return {"jpegtran": bool(jpegtran()), "crop": sorted(JPEG_EXT if jpegtran() else set()) + sorted(PIL_CROP_EXT)}
+    return {"jpegtran": bool(jpegtran()), "crop": sorted(JPEG_EXT if jpegtran() else set()) + sorted(PIL_CROP_EXT) + (sorted(HEIF_EXT) if _heif() else []),
+            "reencoded": sorted(LOSSY_EXT)}
 
 
 # ---- geometry
@@ -328,8 +337,10 @@ def crop(pid: int, rect: list, check_running: bool = True) -> dict:
     jt = jpegtran()
     if p["ext"] in JPEG_EXT and not jt:
         raise SyncError("Cropping a JPEG without loss needs jpegtran (libjpeg-turbo) on the server")
-    if p["ext"] not in JPEG_EXT and p["ext"] not in PIL_CROP_EXT:
-        raise SyncError("Cropping here works for JPEG, PNG, TIFF and WebP files")
+    if p["ext"] in HEIF_EXT and not _heif():
+        raise SyncError("Cropping HEIC needs the pillow-heif package on the server")
+    if p["ext"] not in JPEG_EXT and p["ext"] not in PIL_CROP_EXT and p["ext"] not in HEIF_EXT:
+        raise SyncError("Cropping here works for JPEG, PNG, TIFF, WebP and HEIC files")
     dbsync.preflight(dkdb.sqlite_path(), check_running, "the photo")
     before = {"width": p["w"], "height": p["h"], "orientation": p["orientation"], "fileSize": p["size"], "regions": p["regions"]}
     copy = _copy_before(p["path"])
@@ -360,6 +371,9 @@ def crop(pid: int, rect: list, check_running: bool = True) -> dict:
                 kw = {"icc_profile": im.info.get("icc_profile")} if im.info.get("icc_profile") else {}
                 if fmt == "WEBP":
                     kw["quality"] = 95
+                if p["ext"] in HEIF_EXT:
+                    fmt, kw = "HEIF", {"quality": 92}  # HEVC: decoded and encoded again, as Apple Photos does on export
+                    out.info["icc_profile"] = im.info.get("icc_profile")
                 out.save(t2, format=fmt, **kw)
             os.replace(t2, p["path"])
         finally:
@@ -373,10 +387,11 @@ def crop(pid: int, rect: list, check_running: bool = True) -> dict:
     kept, dropped = _new_values(p["regions"], lambda r: crop_rect(r, box))
     size = os.stat(p["path"]).st_size
     _write_db(p["id"], nw, nh, 1, size, kept, dropped, check_running)
-    r = _finish(p, 1, f"Cropped to {nw} x {nh} (lossless)" if p["ext"] in JPEG_EXT else f"Cropped to {nw} x {nh}", before, copy, nw, nh,
-                {"lossless": "crop", "box": list(box), "faces_dropped": len(dropped)})
+    how = "lossless" if p["ext"] in JPEG_EXT or p["ext"] in (".png", ".tif", ".tiff") else "re-encoded"
+    r = _finish(p, 1, f"Cropped to {nw} x {nh} ({how})", before, copy, nw, nh, {"lossless": "crop", "box": list(box), "faces_dropped": len(dropped), "how": how})
     r["box"] = list(box)
     r["faces_dropped"] = len(dropped)
+    r["how"] = how
     return r
 
 
