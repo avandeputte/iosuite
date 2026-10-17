@@ -93,6 +93,9 @@ def scan() -> dict:
                              "apart": max(abs(a[k] - b[k]) for _va, a in g for _vb, b in g for k in range(4))})
         if len(groups) > 1:
             separate.append({"photo": img, "name": name, "rects": [list(g[0][1]) for g in groups]})
+    noloc = _nolocation()
+    acc_l = _accepted("nolocation")
+    noloc_shown = [u for u in noloc if acc_l.get(u["photo"]) != u["signature"]]
     untagged = _untagged()
     acc_u = _accepted("untagged")
     untagged_shown = [u for u in untagged if acc_u.get(u["photo"]) != u["signature"]]
@@ -101,6 +104,7 @@ def scan() -> dict:
     shown = [u for u in unnamed if accepted.get(u["photo"]) != u["signature"]]
     return {"checked": len(rows), "near": near, "separate": separate, "invalid": invalid, "unnamed": shown,
             "unnamed_accepted": len(unnamed) - len(shown), "untagged": untagged_shown, "untagged_accepted": len(untagged) - len(untagged_shown),
+            "nolocation": noloc_shown, "nolocation_accepted": len(noloc) - len(noloc_shown),
             "at": int(time.time())}
 
 
@@ -119,6 +123,17 @@ def _untagged() -> list:
     finally:
         con.close()
     return [{"photo": r[0], "people": r[1], "signature": f"p{r[1]}"} for r in rows]
+
+
+def _nolocation() -> list:
+    """Photos and videos with no position: [{photo, ts, name, signature}], the newest first. Accepting one keeps it
+    off the list for good (a photo that gets a location leaves it anyway)."""
+    con = index.open_index()
+    try:
+        rows = con.execute("SELECT id, ts, name FROM photos WHERE lat IS NULL OR lon IS NULL ORDER BY ts DESC, id DESC").fetchall()
+    finally:
+        con.close()
+    return [{"photo": r[0], "ts": r[1], "name": r[2], "signature": "nogps"} for r in rows]
 
 
 def _accepted(check: str) -> dict:
@@ -156,7 +171,7 @@ def ignore_unnamed(photos: list) -> dict:
 def accept(photos: list, check: str = "unnamed", on: bool = True) -> int:
     """Accept these photos' finding as it is (they leave the list until their faces change), or take it back."""
     from . import history, vdb
-    if check not in ("unnamed", "untagged"):
+    if check not in ("unnamed", "untagged", "nolocation"):
         raise ValueError("Unknown check")
     want = {int(p) for p in photos}
     current = {u["photo"]: u["signature"] for u in scan()[check]} if on else {}
@@ -182,7 +197,7 @@ def items(check: str, offset: int = 0, limit: int = 120) -> dict:
     s = scan()
     if check == "near":
         rows = [{"photo": n["photo"], "name": n["name"], "apart": n["apart"]} for n in s["near"]]
-    elif check in ("separate", "invalid", "unnamed", "untagged"):
+    elif check in ("separate", "invalid", "unnamed", "untagged", "nolocation"):
         rows = s[check]
     else:
         raise ValueError("Unknown list")
@@ -199,6 +214,7 @@ def summary(s: dict = None, limit: int = 120) -> dict:
             "invalid": {"count": len(s["invalid"]), "items": s["invalid"][:limit]},
             "unnamed": {"count": len(s["unnamed"]), "faces": sum(u["faces"] for u in s["unnamed"]), "items": s["unnamed"][:limit], "accepted": s["unnamed_accepted"]},
             "untagged": {"count": len(s["untagged"]), "items": s["untagged"][:limit], "accepted": s["untagged_accepted"]},
+            "nolocation": {"count": len(s["nolocation"]), "items": s["nolocation"][:limit], "accepted": s["nolocation_accepted"]},
             "progress": dict(progress)}
 
 

@@ -1,5 +1,5 @@
 /** Selection bar actions and app-side state: favorites, albums, trash, move, rename, the change log entries. */
-import { $, api, date, fill, fmtBytes, fmtWhen, h, icon, main, nf, norm, plural, post, store } from './core.js';
+import { $, api, date, dfDay, fill, fmtBytes, fmtWhen, h, icon, main, nf, norm, plural, post, store } from './core.js';
 import { S, ST, filterParams, go, loadState, onRoute, photosWith, pollSoon, toast, ualbumById } from './state.js';
 import { crumbs } from './search.js';
 import { G, renderGrid } from './grid.js';
@@ -204,12 +204,12 @@ export function modal(title, ...kids) {
   document.body.append(back);
   return back;
 }
-/** Maintenance › Face quality: faces stored twice, the same person in two places, boxes outside the photo or empty.
+/** Maintenance › Metadata quality (was Face quality): photos without a location, and faces stored twice, the same person in two places, boxes outside the photo or empty.
  *  The check runs every time the page is opened, and again with "Check again". */
 export async function showQuality() {
   const body = h('div', null, h('div', { class: 'muted' }, 'Checking every face in the library…'));
   main.replaceChildren(h('div', { class: 'page spage cpage' }, crumbs([['Maintenance', '#/maintenance'], ['Face quality', null]]),
-    pageTitle('face', 'amber', 'Face quality'),
+    pageTitle('face', 'amber', 'Metadata quality'),
     h('p', { class: 'muted', style: 'max-width:820px;margin-top:0' }, 'Every face region in digiKam’s database is checked: the same person stored twice a few pixels apart (shown twice in the people list), the same person in two separate places, and boxes that stick out of the photo or are empty. Fixes go through the normal face changes, so each one is in the change log with undo.'),
     body));
   let q;
@@ -319,6 +319,20 @@ export async function showQuality() {
           items.length && S.FACE_DETECT && S.CAN_MANAGE ? h('button', { class: 'pillbtn', onclick: () => find(items.map((x) => x.photo)) }, 'Find faces in all shown') : null, again].filter(Boolean),
         { list: items, key: 'untagged', row: (x, all) => h('div', { class: 'hrow' }, thumb(x, all), h('div', { class: 'hmain' }, h('b', null, plural(x.people, 'person', 'people')), ' detected · ',
           S.FACE_DETECT && S.CAN_MANAGE ? [h('a', { class: 'lnk', onclick: (ev) => find([x.photo], ev) }, 'Find faces'), ' · '] : null,
+          h('a', { class: 'lnk', onclick: (ev) => accept([x.photo], true, ev) }, 'Accept as it is'))) });
+    })(),
+    (() => {  // no location: set one, or accept the photo as it is
+      const u = q.nolocation || { count: 0, items: [], accepted: 0 }, items = u.items;
+      const accept = async (ids, on = true, ev) => { try { await post('/api/quality/accept', { photos: ids, check: 'nolocation', on }); toast(on ? `${plural(ids.length, 'photo')} accepted without a location.` : 'Shown again.'); } catch (e) { toast(e.message, null, null, 9000); return; } if (!gone(ev)) showQuality(); };
+      const place = (ids, ev) => locationDialog(ids, null, () => { if (!gone(ev)) setTimeout(showQuality, 1200); });
+      const again = u.accepted ? h('button', { class: 'pillbtn', onclick: async () => { const acc = await api('/api/quality/accepted?check=nolocation'); if (acc.photos.length && confirm(`List the ${plural(acc.photos.length, 'accepted photo')} again?`)) accept(acc.photos, false); } }, 'Show the accepted ones again') : null;
+      return sec('No location', u.count,
+        `Photos and videos with no place recorded.${u.accepted ? ` ${plural(u.accepted, 'photo')} you accepted without one ${u.accepted === 1 ? 'is' : 'are'} not listed.` : ''} Set the location (the dialog suggests the places of photos taken around the same time), place them on the map (Map › Place photos), or accept the photo as it is: it leaves this list for good.`,
+        [items.length && S.EDITING ? h('button', { class: 'pillbtn', onclick: () => place(items.map((x) => x.photo)) }, 'Set location for all shown') : null,
+          items.length ? h('button', { class: 'pillbtn', onclick: () => accept(items.map((x) => x.photo)) }, 'Accept all shown') : null,
+          h('a', { class: 'pillbtn', href: '#/map' }, 'Open the map'), again].filter(Boolean),
+        { list: items, key: 'nolocation', row: (x, all) => h('div', { class: 'hrow' }, thumb(x, all), h('div', { class: 'hmain' }, h('b', null, x.name), ' · ', x.ts ? dfDay.format(date(x.ts)) : 'no date', ' · ',
+          S.EDITING ? [h('a', { class: 'lnk', onclick: (ev) => place([x.photo], ev) }, 'Set location'), ' · '] : null,
           h('a', { class: 'lnk', onclick: (ev) => accept([x.photo], true, ev) }, 'Accept as it is'))) });
     })(),
     sec('Outside the photo or empty', q.invalid.count, 'A box that sticks out of the photo can be trimmed to its edges here, or moved and resized in the viewer (click the face, “Adjust the box”). Empty boxes are removed.', fitAll ? [fitAll] : null,

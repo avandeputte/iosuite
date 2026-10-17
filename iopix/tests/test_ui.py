@@ -1042,7 +1042,7 @@ def test_face_change_shows_before_the_server_answers(page, server):
 
 def test_face_quality_page_and_adjusting_a_box(page, server):
     page.goto(server + "/#/quality")
-    page.wait_for_selector("h1:has-text('Face quality')", timeout=10000)
+    page.wait_for_selector("h1:has-text('Metadata quality')", timeout=10000)
     page.wait_for_selector("button:has-text('Check again')", timeout=20000)
     assert page.locator("h2", has_text="Stored twice").count() == 1 and page.locator("h2", has_text="Outside the photo").count() == 1
     page.locator(".eseg button", has_text="Larger").click()
@@ -1382,3 +1382,9 @@ def test_copy_metadata_dialog_from_a_selection(page, server):
     page.wait_for_selector(".modal h3:has-text('Copy metadata')", timeout=5000)
     assert page.locator(".modal .fcov").count() == 2 and page.locator(".modal input[type=checkbox]").count() == 8
     page.locator(".modal button:has-text('Cancel')").click()
+
+
+def test_metadata_quality_lists_photos_without_a_location(page, server):
+    page.goto(server + "/#/quality")
+    page.wait_for_selector("h1:has-text('Metadata quality')", timeout=10000)
+    page.wait_for_selector("h2:has-text('No location')", timeout=20000)
