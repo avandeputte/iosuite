@@ -225,6 +225,17 @@ class Prewarmer:
         jobs.submit("thumbs", run)  # one background job at a time
 
 
+def forget(photo_id: int):
+    """Drop the cached thumbnail and preview of a photo whose picture just changed."""
+    for kind in ("t", "p"):
+        d = config.CACHE_DIR / kind / f"{photo_id % 256:02x}"
+        try:
+            for f in d.glob(f"{photo_id}-*.jpg"):
+                f.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
 def prune_previews():
     """Keep the preview cache under its size cap by deleting the oldest files."""
     root = config.CACHE_DIR / "p"

@@ -201,6 +201,9 @@ def restore(entry_id: int, kind: str) -> dict:
         if r["failed"]:
             raise ValueError(r["failed"][0]["error"])
         return {"undone": 1}
+    if kind == "undo" and e["action"] == "lossless":
+        from . import lossless
+        return lossless.undo(e)
     photo = _photo(pid)
     if not photo:
         raise LookupError("That photo is not in the library any more")

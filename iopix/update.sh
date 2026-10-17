@@ -95,6 +95,12 @@ NEWV="$(sed -n 's/^__version__ = "\([^"]*\)".*/\1/p' app/__init__.py)"
 # the outcome goes to the result file now: the service restart below also ends this script
 # when the viewer started it
 note "ok: updated to v$NEWV ($(local_commit | cut -c1-7)) on $(date '+%Y-%m-%d %H:%M')"
+# jpegtran (libjpeg-turbo) turns and crops JPEGs without loss; newer than most installs, so it is added here when it can be
+if ! command -v jpegtran >/dev/null 2>&1 && command -v apt-get >/dev/null 2>&1 && [ "$(id -u)" = 0 ]; then
+  say "Installing jpegtran (libjpeg-turbo-progs) for lossless JPEG rotate and crop"
+  DEBIAN_FRONTEND=noninteractive sh -c 'apt-get update -qq && apt-get install -y -qq --no-install-recommends libjpeg-turbo-progs >/dev/null' || echo "  could not install it; JPEGs are turned by their orientation flag until it is installed"
+fi
+
 say "Restarting the service"
 SVC=""; for s in iopix digikam-viewer; do command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet "$s" 2>/dev/null && { SVC="$s"; break; }; done
 if [ -n "$SVC" ]; then

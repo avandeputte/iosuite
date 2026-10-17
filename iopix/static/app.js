@@ -3,6 +3,8 @@
 // ---------------------------------------------------------------- helpers
 const $ = (s, r = document) => r.querySelector(s);
 const ICONS = {
+  rotate: 'M15.55 5.55L11 1v3.07C7.06 4.56 4 7.92 4 12s3.05 7.44 7 7.93v-2.02c-2.84-.48-5-2.94-5-5.91s2.16-5.43 5-5.91V10l4.55-4.45zM19.93 11c-.17-1.39-.72-2.73-1.62-3.89l-1.42 1.42c.54.75.88 1.6 1.02 2.47h2.02zM13 17.9v2.02c1.39-.17 2.74-.71 3.9-1.61l-1.44-1.44c-.75.54-1.59.89-2.46 1.03zm3.89-2.42l1.42 1.41c.9-1.16 1.45-2.5 1.62-3.89h-2.02c-.14.87-.48 1.72-1.02 2.48z',
+  crop: 'M17 15h2V7c0-1.1-.9-2-2-2H9v2h8v8zM7 17V1H5v4H1v2h4v10c0 1.1.9 2 2 2h10v4h2v-4h4v-2H7z',
   search: 'M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z',
   disk: 'M2 20h20v-4H2v4zm2-3h2v2H4v-2zM2 4v4h20V4H2zm4 3H4V5h2v2zm-4 7h20v-4H2v4zm2-3h2v2H4v-2z',
   album: 'M22 16V4c0-1.1-.9-2-2-2H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2zm-11-4l2.03 2.71L16 11l4 5H8l3-4zM2 6v14c0 1.1.9 2 2 2h14v-2H4V6H2z',
@@ -222,6 +224,7 @@ function applyAppName() {
   document.title = APP_NAME;
   const meta = document.querySelector('meta[name="apple-mobile-web-app-title"]'); if (meta) meta.content = APP_NAME;
 }
+let LOSSLESS = null;  // what the server can do to image files without loss (null: editing off)
 let EDITING = false, WRITE_FILES = false, CAN_MANAGE = false, FACE_DETECT = false, SYNC_OFF = false, manageTags = false, PENDING = 0, pollTimer = 0, keepView = false;
 /** Re-check server status soon (after an edit) instead of waiting for the regular poll. */
 function pollSoon(ms = 1500) { clearTimeout(pollTimer); pollTimer = setTimeout(pollStatus, ms); }
@@ -846,10 +849,11 @@ function updateSelBar() {
     }) : null,
     btn('download', 'Download zip', () => downloadDialog(photosWith({ ids: ids().join(',') }), G.sel.size)),
     CAN_MANAGE ? btn('folder', 'Move to a folder', () => movePhotos(ids())) : null,
+    CAN_MANAGE && LOSSLESS ? btn('rotate', 'Rotate or flip', (e) => editMenu(ids(), e.currentTarget, false)) : null,
     CAN_MANAGE ? btn('trash', 'Move to trash (Delete key)', () => trashPhotos(ids())) : null);
 }
 // ---- the change log: entries for one photo (info panel) or the whole library (#/history)
-const HIST_ACTION = { edit: 'Edit', face: 'Face', tag: 'Tag', deleted: 'Deleted', trashed: 'Trashed', moved: 'Moved', restore: 'Restore', sync: 'Sync', database: 'digiKam', revert: 'Undo', added: 'Added', guard: 'Protected' };
+const HIST_ACTION = { edit: 'Edit', face: 'Face', tag: 'Tag', deleted: 'Deleted', trashed: 'Trashed', moved: 'Moved', restore: 'Restore', sync: 'Sync', database: 'digiKam', revert: 'Undo', added: 'Added', guard: 'Protected', lossless: 'File' };
 const HIST_RESTORE = { undo: ['Undo', 'Put back the values from before this change'], trash: ['Restore from trash', 'Put the photo back where it was'], sidecar: ['Restore sidecar', 'Put the sidecar back as it was just before this change'],
   original: ['Restore original file', 'Put the image file back as it was before the viewer first wrote into it'], deleted: ['Restore photo', 'Put the files back and add the photo to the library again'] };
 function histEntry(e, onDone, withPhoto) {
@@ -2200,7 +2204,8 @@ function aiSection(view) {
     const compare = (group) => {
       const c = choices[group];
       if (!c || c.options.length < 2) return null;
-      return h('details', { class: 'mcompare' }, h('summary', null, `Compare the ${c.options.length} models`),
+      // the table is redrawn while jobs run; a fold the user opened stays open until they close it
+      return h('details', { class: 'mcompare', open: OPEN_COMPARE.has(group), ontoggle: (e) => { if (e.target.open) OPEN_COMPARE.add(group); else OPEN_COMPARE.delete(group); } }, h('summary', null, `Compare the ${c.options.length} models`),
         h('div', { class: 'mopts' }, c.options.map((k) => { const o = models[k]; if (!o) return null;
           return h('div', { class: 'mopt' + (k === c.chosen ? ' on' : '') },
             h('div', null, h('b', null, o.label), h('span', { class: 'muted' }, ` · ${o.size}${k === c.chosen ? ' · in use' : o.installed ? ' · installed' : ' · not installed'}`),
@@ -2633,6 +2638,7 @@ async function showFaces(vp) {
 async function showSettings() { return settingsPage('settings'); }
 async function showMaintenance() { if (!IS_ADMIN) { main.replaceChildren(h('div', { class: 'empty' }, 'Maintenance is for admins. Sign in as an admin to see it.')); return; } return settingsPage('maintenance'); }
 // Settings: preferences. Maintenance: library actions, job progress, models, storage. One loader, two layouts.
+const OPEN_COMPARE = new Set();  // model groups whose "Compare the models" fold is open on the Maintenance page
 async function settingsPage(view) {
   let m;
   try { m = await api('/api/maintenance'); } catch (e) { if (route.view === view) main.replaceChildren(h('div', { class: 'empty' }, 'Could not load settings: ' + e.message)); return; }
@@ -3226,6 +3232,7 @@ function buildLightbox() {
     info: h('aside', { class: 'lb-info', hidden: !LB.info }),
     favBtn: btn('heartO', 'Favorite (L)', () => setFavorite([LB.src.id[LB.i]], !ST.fav.has(LB.src.id[LB.i]))),
     albumBtn: btn('albumAdd', 'Add to album', () => albumDialog([LB.src.id[LB.i]])),
+    editBtn: btn('rotate', 'Rotate, flip or crop without loss ([ and ] rotate)', () => editMenu([LB.src.id[LB.i]], LB.el.editBtn, true)),
     delBtn: btn('trash', 'Move to trash (Delete key)', () => deleteCurrent()),
     playBtn: btn('play', 'Slideshow (space)', toggleSlideshow), facesBtn: btn('face', 'Show faces (F)', toggleFaces), addFaceBtn: btn('faceAdd', 'Add a face: drag a rectangle around it (P names the next unnamed face)', startDrawFace), objectsBtn: btn('dup', 'Show detected objects (O)', toggleObjects),
     infoBtn: btn('info', 'Info (I)', toggleInfo, LB.info ? 'on' : ''),
@@ -3240,7 +3247,7 @@ function buildLightbox() {
   // the bottom edge (or on a tap of its grip on touch screens) and drops again when it leaves.
   e.strip = h('div', { class: 'lb-strip' }, h('div', { class: 'grip', title: 'Film strip', onclick: () => e.strip.classList.toggle('show') }), h('div', { class: 'reel' }));
   e.stage = h('div', { class: 'lb-stage' },
-    h('div', { class: 'lb-top' }, btn('close', 'Close (Esc): back to the list', () => closeLightbox(true)), e.ttl, h('span', { class: 'sp' }), e.playBtn, e.facesBtn, e.addFaceBtn, e.objectsBtn, e.shareBtn, e.dl, e.favBtn, e.albumBtn, e.delBtn, e.infoBtn),
+    h('div', { class: 'lb-top' }, btn('close', 'Close (Esc): back to the list', () => closeLightbox(true)), e.ttl, h('span', { class: 'sp' }), e.playBtn, e.facesBtn, e.addFaceBtn, e.objectsBtn, e.shareBtn, e.dl, e.favBtn, e.albumBtn, e.editBtn, e.delBtn, e.infoBtn),
     e.frame, e.prev, e.next, e.strip);
   lb.replaceChildren(e.stage, e.info);
   initGestures(e.stage);
@@ -3363,6 +3370,113 @@ function openLightbox(src, i, fromUser) {
   if (fromUser) { setPhotoParam(src.id[i], !wasOpen); if (!wasOpen) LB.pushed = true; }
   showItem();
 }
+/** Rotate, flip and crop without loss. JPEG pixels are turned by jpegtran (nothing re-encoded); other files by
+ *  their orientation flag. Faces turn with the picture. Each edit keeps a copy, so the toast and the change
+ *  log offer Undo. Cached pictures of the photo are fetched afresh, so the browser shows the new one. */
+const TRANSFORMS = [['right', 'Rotate right'], ['left', 'Rotate left'], ['180', 'Turn upside down'], ['fliph', 'Flip horizontally'], ['flipv', 'Flip vertically']];
+function editMenu(ids, anchor, withCrop) {
+  $('.facemenu')?.remove();
+  const item = (label, fn, cls = '') => h('div', { class: 'fmi ' + cls, onclick: (e) => { e.stopPropagation(); menu.remove(); fn(); } }, label);
+  const menu = h('div', { class: 'facemenu' }, h('div', { class: 'fmh' }, ids.length > 1 ? `${plural(ids.length, 'photo')}, without loss` : 'Without loss'),
+    TRANSFORMS.map(([op, label]) => item(label, () => transformPhotos(ids, op))),
+    withCrop ? item('Crop…', () => startCrop()) : null,
+    h('div', { class: 'fmi muted', style: 'font-size:12px;cursor:default' }, LOSSLESS?.jpegtran ? 'JPEG pixels are turned as they are; other files by their orientation flag.' : 'By the orientation flag (jpegtran is not on the server, so JPEG pixels are not rewritten).'));
+  const host = LB.open ? LB.el.stage : document.body;
+  const sr = LB.open ? host.getBoundingClientRect() : { left: 0, top: 0, width: innerWidth, height: innerHeight }, br = anchor.getBoundingClientRect();
+  if (!LB.open) menu.style.position = 'fixed';
+  host.append(menu);
+  const mw = menu.offsetWidth, mh = menu.offsetHeight;
+  let left = br.left - sr.left, top = br.bottom - sr.top + 4;
+  if (left + mw > sr.width - 8) left = Math.max(8, sr.width - mw - 8);
+  if (top + mh > sr.height - 8) top = Math.max(8, br.top - sr.top - mh - 4);
+  menu.style.left = left + 'px'; menu.style.top = top + 'px';
+  const close = (e) => { if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener('pointerdown', close, true); } };
+  setTimeout(() => document.addEventListener('pointerdown', close, true), 0);
+}
+async function refreshImages(id) {
+  await Promise.all([fetch(`/thumb/${id}`, { cache: 'reload' }), fetch(`/preview/${id}`, { cache: 'reload' })]).catch(() => {});
+  document.querySelectorAll(`img[src$="/thumb/${id}"], img[src$="/preview/${id}"]`).forEach((img) => { const u = img.src; img.src = ''; img.src = u; });
+}
+async function afterFileChange(id, d) {
+  details.delete(id);
+  await refreshImages(id);
+  if (LB.open) {
+    const i = LB.src.id.indexOf(id);
+    if (i >= 0 && LB.src.w && d?.upright) { LB.src.w[i] = d.upright[0]; LB.src.h[i] = d.upright[1]; }
+    if (i === LB.i) { LB.detail = null; showItem(); }
+  }
+  keepView = true; pollSoon(600);
+}
+async function undoLast(id) {
+  try {
+    const e = (await api(`/api/history?photo=${id}&limit=1`)).entries[0];
+    if (!e || e.action !== 'lossless') throw new Error('Nothing to undo');
+    await post(`/api/history/${e.id}/restore`, { kind: 'undo' });
+    await afterFileChange(id, null); toast('Put back as it was.');
+  } catch (err) { toast(err.message, null, null, 8000); }
+}
+async function transformPhotos(ids, op) {
+  let r;
+  try { r = await post('/api/photos/transform', { ids, op }); } catch (e) { toast(e.message, null, null, 9000); return; }
+  for (const d of r.done) await afterFileChange(d.id, d);
+  const label = TRANSFORMS.find((t) => t[0] === op)[1].toLowerCase();
+  if (r.failed.length) toast(`${r.done.length ? `${plural(r.done.length, 'photo')} ${label.replace('rotate', 'rotated').replace('flip', 'flipped').replace('turn', 'turned')}; ` : ''}${plural(r.failed.length, 'photo')} not: ${r.failed[0].error}`, null, null, 10000);
+  else toast(ids.length > 1 ? `${plural(r.done.length, 'photo')}: ${label}.` : `${label[0].toUpperCase()}${label.slice(1)}.`, r.done.length === 1 ? 'Undo' : null, () => undoLast(r.done[0].id));
+}
+/** Crop: drag a rectangle over the photo, adjust it by its corners, then Crop. The dark edge shows what goes. */
+function startCrop() {
+  const { stage, frame } = LB.el, d = LB.detail;
+  if (!d || d.video || !LOSSLESS) return;
+  const W = d.w, H = d.h;
+  const ext = (d.name || '').split('.').pop().toLowerCase();
+  if (LOSSLESS.crop && !LOSSLESS.crop.includes('.' + ext)) { toast(`Cropping here works for ${LOSSLESS.crop.map((x) => x.slice(1).toUpperCase()).join(', ')} files.`, null, null, 8000); return; }
+  stage.querySelector('.cropbar')?.remove(); frame.querySelector('.cropbox')?.remove();
+  toast('Drag a rectangle over the part to keep.', null, null, 4000);
+  let r = null, start = null, drag = null;
+  const box = h('div', { class: 'facebox face-adjust cropbox', hidden: true }, ...['nw', 'ne', 'sw', 'se'].map((c) => h('i', { class: 'fh fh-' + c, 'data-c': c })));
+  const size = h('span', null, '');
+  const bar = h('div', { class: 'cropbar' }, size, h('button', { class: 'pillbtn on', onclick: (e) => { e.stopPropagation(); apply(); } }, icon('crop'), 'Crop'), h('button', { class: 'pillbtn', onclick: (e) => { e.stopPropagation(); stop(); } }, 'Cancel'));
+  const place = () => { box.hidden = false; box.style.cssText = `left:${r.x / W * 100}%;top:${r.y / H * 100}%;width:${r.w / W * 100}%;height:${r.h / H * 100}%`; size.textContent = `${Math.round(r.w)} × ${Math.round(r.h)}`; };
+  const toImg = (e) => { const b = frame.getBoundingClientRect(); return [Math.min(W, Math.max(0, (e.clientX - b.left) / b.width * W)), Math.min(H, Math.max(0, (e.clientY - b.top) / b.height * H))]; };
+  const down = (e) => {
+    if (bar.contains(e.target)) return;
+    e.preventDefault(); e.stopPropagation(); stage.setPointerCapture(e.pointerId);
+    if (e.target.dataset?.c || (r && e.target === box)) { drag = { c: e.target.dataset?.c || 'move', p: toImg(e), r: { ...r } }; return; }
+    start = toImg(e); r = null; box.hidden = true;
+  };
+  const move = (e) => {
+    if (drag) {
+      const [px, py] = toImg(e), dx = px - drag.p[0], dy = py - drag.p[1], o = drag.r, min = 16;
+      let { x, y, w, h: hh } = o;
+      if (drag.c === 'move') { x = Math.min(Math.max(0, o.x + dx), W - o.w); y = Math.min(Math.max(0, o.y + dy), H - o.h); }
+      else {
+        if (drag.c.includes('w')) { x = Math.min(Math.max(0, o.x + dx), o.x + o.w - min); w = o.x + o.w - x; }
+        if (drag.c.includes('e')) w = Math.min(Math.max(min, o.w + dx), W - o.x);
+        if (drag.c.includes('n')) { y = Math.min(Math.max(0, o.y + dy), o.y + o.h - min); hh = o.y + o.h - y; }
+        if (drag.c.includes('s')) hh = Math.min(Math.max(min, o.h + dy), H - o.y);
+      }
+      r = { x, y, w, h: hh }; place(); return;
+    }
+    if (!start) return;
+    const p = toImg(e);
+    r = { x: Math.min(start[0], p[0]), y: Math.min(start[1], p[1]), w: Math.abs(p[0] - start[0]), h: Math.abs(p[1] - start[1]) };
+    place();
+  };
+  const up = () => { if (drag) { drag = null; return; } if (!start) return; start = null; if (!r || r.w < 16 || r.h < 16) { r = null; box.hidden = true; } };
+  const stop = () => { stage.removeEventListener('pointerdown', down, true); stage.removeEventListener('pointermove', move, true); stage.removeEventListener('pointerup', up, true); stage.style.cursor = ''; box.remove(); bar.remove(); };
+  const apply = async () => {
+    if (!r || r.w < 16 || r.h < 16) { toast('Drag a rectangle first.'); return; }
+    const id = d.id, rect = [Math.round(r.x), Math.round(r.y), Math.round(r.w), Math.round(r.h)];
+    stop();
+    let res;
+    try { res = await post('/api/photos/crop', { id, rect }); } catch (e) { toast(e.message, null, null, 9000); return; }
+    await afterFileChange(id, res);
+    toast(`Cropped to ${res.w} × ${res.h}${res.faces_dropped ? `; ${plural(res.faces_dropped, 'face')} outside it removed` : ''}.`, 'Undo', () => undoLast(id), 10000);
+  };
+  stage.style.cursor = 'crosshair';
+  frame.append(box); stage.append(bar);
+  stage.addEventListener('pointerdown', down, true); stage.addEventListener('pointermove', move, true); stage.addEventListener('pointerup', up, true);
+}
 function deleteCurrent() {
   if (!CAN_MANAGE || !LB.open) return;
   const id = LB.src.id[LB.i];
@@ -3438,6 +3552,7 @@ function showItem() {
     el.facesBtn.style.display = d.faces.length || d.faces_other?.length ? '' : 'none';
     el.addFaceBtn.style.display = CAN_MANAGE && !d.video ? '' : 'none';
     el.delBtn.style.display = CAN_MANAGE ? '' : 'none';
+    el.editBtn.style.display = CAN_MANAGE && LOSSLESS && !d.video ? '' : 'none';
     el.objectsBtn.style.display = d.boxes?.length ? '' : 'none';
     prefetchShareFile(id, d);
     renderFaces();
@@ -3932,6 +4047,7 @@ document.addEventListener('keydown', (e) => {
     else if ((e.key === 'p' || e.key === 'P') && CAN_MANAGE) nameNextFace();
     else if (EDITING && /^[0-5]$/.test(e.key)) editPhotos([LB.src.id[LB.i]], { rating: +e.key });
     else if ((e.key === 'Delete' || e.key === 'Backspace') && CAN_MANAGE) deleteCurrent();
+    else if ((e.key === ']' || e.key === '[') && CAN_MANAGE && LOSSLESS) transformPhotos([LB.src.id[LB.i]], e.key === ']' ? 'right' : 'left');
     else if (e.key === ' ') { const v = LB.el.frame.querySelector('video'); v ? (v.paused ? v.play() : v.pause()) : toggleSlideshow(); }
     else return;
     e.preventDefault();
@@ -4033,7 +4149,7 @@ async function pollStatus() {
     }
     if (s.app && APP_STAMP && s.app !== APP_STAMP && !LB.open && !G.sel.size) { location.reload(); return; }  // the viewer was updated: use the new version
     if (s.app) APP_STAMP = s.app;
-    SEM = s.semantic; EDITING = s.editing; FACE_DETECT = !!s.faceDetect; SYNC_OFF = !!(s.digikam && !s.digikam.sync); PENDING = s.pendingEdits; WRITE_FILES = s.writeFiles; CAN_MANAGE = s.editing && s.dbWrite;
+    SEM = s.semantic; EDITING = s.editing; FACE_DETECT = !!s.faceDetect; LOSSLESS = s.lossless || null; SYNC_OFF = !!(s.digikam && !s.digikam.sync); PENDING = s.pendingEdits; WRITE_FILES = s.writeFiles; CAN_MANAGE = s.editing && s.dbWrite;
     IS_ADMIN = s.isAdmin; USERS_EXIST = s.usersExist; DIGIKAM_CHECK = s.digikamCheck || 'pgrep';
     updateBanner(s.updateAvailable);
     dkBanner(s.digikam);

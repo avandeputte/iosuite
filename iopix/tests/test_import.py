@@ -31,11 +31,24 @@ def _dated(lib, tmp_path, stamp="1999:12:31 10:00:00"):
     return p
 
 
+def forget_identity(ids):
+    """Test photos removed behind the viewer's back lose their viewer ids too (the mirror test counts them)."""
+    from app import vdb
+    con = vdb.connect()
+    try:
+        for i in ids:
+            con.execute("DELETE FROM photo_identity WHERE dk_id = ?", (int(i),))
+        con.commit()
+    finally:
+        con.close()
+
+
 def _cleanup(client, lib, rels):
     root = Path(lib["root"])
     con = sqlite3.connect(lib["db"])
     for rel in rels:
         for (aid,) in con.execute("SELECT id FROM Albums WHERE relativePath = ? OR relativePath LIKE ?", (rel, rel + "/%")).fetchall():
+            forget_identity([r[0] for r in con.execute("SELECT id FROM Images WHERE album = ?", (aid,)).fetchall()])
             con.execute("DELETE FROM ImageInformation WHERE imageid IN (SELECT id FROM Images WHERE album = ?)", (aid,))
             con.execute("DELETE FROM Images WHERE album = ?", (aid,))
             con.execute("DELETE FROM Albums WHERE id = ?", (aid,))
@@ -133,6 +146,7 @@ def test_uploads_get_a_sidecar_too(client, lib):
         assert "sidecar created" in e["summary"]
     finally:
         con = sqlite3.connect(lib["db"]); con.execute("DELETE FROM Images WHERE id = ?", (r.json()["added"][0]["id"],)); con.commit(); con.close()
+        forget_identity([r.json()["added"][0]["id"]])
         path.unlink(missing_ok=True); Path(str(path) + ".xmp").unlink(missing_ok=True)
         index.build()
     assert dkdb  # imported for the reader: the rows above are digiKam's

@@ -676,7 +676,7 @@ body:has(#dkbanner) #updbanner { bottom: 96px; }  /* both at once: the update ca
   #topbar { padding: env(safe-area-inset-top) 8px 0 8px; height: calc(var(--topbar) + env(safe-area-inset-top)); }
   #selbar { padding: env(safe-area-inset-top) 6px 0 6px; height: calc(var(--topbar) + env(safe-area-inset-top)); overflow-x: auto; scrollbar-width: none; }
   #selbar .pillbtn > span:not(.ic), #selbar .lnk { display: none; }  /* icons only: every action stays on screen */
-  #selbar .pillbtn[title="Move to a folder"] { display: none; }  /* on phones: from the photo's info panel instead; seven actions fit, eight do not */
+  #selbar .pillbtn[title="Move to a folder"], #selbar .pillbtn[title="Rotate or flip"] { display: none; }  /* on phones: from the photo's info panel instead; seven actions fit, eight do not */
   #selbar .pillbtn { padding: 0 6px; flex: none; }
   #selbar .iconbtn { width: 36px; flex: none; }
   #selbar .n { font-size: 14px; margin: 0 2px 0 0; white-space: nowrap; }
@@ -789,3 +789,8 @@ body:has(#dkbanner) #updbanner { bottom: 96px; }  /* both at once: the update ca
 .dropzone .ic { width: 36px; height: 36px; color: var(--c-teal); }
 .dropzone.over { border-color: var(--accent); background: var(--accent-bg); }
 .stable tr.dup td { color: var(--fg2); }
+
+/* Crop */
+.facebox.cropbox { border-color: #fff; box-shadow: 0 0 0 100vmax rgba(0, 0, 0, .45); cursor: move; border-radius: 2px; }
+.cropbar { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 1002; display: flex; gap: 8px; align-items: center; background: var(--bg); color: var(--fg); border-radius: 22px; padding: 6px 8px 6px 14px; box-shadow: var(--shadow); font-size: 13.5px; }
+.cropbar span { min-width: 72px; font-variant-numeric: tabular-nums; }

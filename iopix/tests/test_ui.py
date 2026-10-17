@@ -1285,3 +1285,33 @@ def test_import_page_plans_then_imports_a_dropped_photo(page, server, lib, tmp_p
         assert side is not None and side.with_suffix("").exists(), "the photo and its sidecar are in the dated folder"
     finally:
         _cleanup(None, lib, ["/1998"])
+
+
+def test_rotate_key_turns_the_photo_and_undo_from_the_toast(page, server, lib):
+    from test_lossless import _face_jpeg, _info
+    from app import lossless
+    if not lossless.jpegtran():
+        pytest.skip("jpegtran is not installed here")
+    pid, path, (tag, rect), (w, h, o) = _face_jpeg(lib)
+    original = path.read_bytes()
+    page.goto(f"{server}/#/photos?p={pid}")
+    page.wait_for_selector("#lightbox .lb-frame img", timeout=15000)
+    page.wait_for_selector("#lightbox button[title^='Rotate, flip or crop']", timeout=10000)
+    page.keyboard.press("]")
+    page.wait_for_selector("#toast:has-text('Rotate right.')", timeout=30000)
+    W, H = lossless.upright_size(w, h, o)
+    assert _info(lib["db"], pid)[0] == (H, W, 1)
+    page.click("#toast a:has-text('Undo')")
+    page.wait_for_selector("#toast:has-text('Put back as it was.')", timeout=30000)
+    assert path.read_bytes() == original and _info(lib["db"], pid)[0] == (w, h, o)
+    # the crop tool: drag over the picture, a size appears, Cancel leaves everything alone
+    page.click("#lightbox button[title^='Rotate, flip or crop']")
+    page.click(".facemenu .fmi:has-text('Crop')")
+    box = page.locator("#lightbox .lb-frame").bounding_box()
+    page.mouse.move(box["x"] + box["width"] * 0.2, box["y"] + box["height"] * 0.2)
+    page.mouse.down()
+    page.mouse.move(box["x"] + box["width"] * 0.7, box["y"] + box["height"] * 0.7, steps=5)
+    page.mouse.up()
+    assert page.locator(".cropbar > span").first.inner_text().count("×") == 1
+    page.click(".cropbar button:has-text('Cancel')")
+    assert page.locator(".cropbox").count() == 0 and path.read_bytes() == original

@@ -58,10 +58,11 @@ MISSING=""
 pyok "$PY" || MISSING="$MISSING python3"
 command -v exiftool >/dev/null 2>&1 || MISSING="$MISSING exiftool"
 command -v ffmpeg >/dev/null 2>&1 || MISSING="$MISSING ffmpeg"
+command -v jpegtran >/dev/null 2>&1 || [ -x /opt/homebrew/bin/jpegtran ] || [ -x /opt/local/bin/jpegtran ] || MISSING="$MISSING jpegtran"
 command -v mysqldump >/dev/null 2>&1 || command -v mariadb-dump >/dev/null 2>&1 || [ -x /opt/homebrew/opt/mysql-client/bin/mysqldump ] || MISSING="$MISSING mariadb-client"
 if [ -n "$MISSING" ]; then
   say "System packages"
-  echo "Missing:$MISSING (python3 3.10+ runs the viewer; exiftool edits metadata; ffmpeg makes video thumbnails; mariadb-client backs a MySQL/MariaDB digiKam database up before writes)."
+  echo "Missing:$MISSING (python3 3.10+ runs the viewer; exiftool edits metadata; ffmpeg makes video thumbnails; jpegtran (libjpeg-turbo) rotates and crops JPEGs without loss; mariadb-client backs a MySQL/MariaDB digiKam database up before writes)."
   if [ -z "$SYSDEPS" ]; then yesno "Install them now?" y && SYSDEPS=1 || SYSDEPS=0; fi
   if [ "$SYSDEPS" = 1 ]; then
     SUDO=""; [ "$(id -u)" = 0 ] || SUDO="sudo"
@@ -74,21 +75,21 @@ if [ -n "$MISSING" ]; then
           else die "install python3 (3.10+), exiftool and ffmpeg yourself, then run setup again"; fi
         fi
         PKGS=""; case "$MISSING" in *python3*) PKGS="$PKGS python@3.12";; esac
-        case "$MISSING" in *exiftool*) PKGS="$PKGS exiftool";; esac; case "$MISSING" in *ffmpeg*) PKGS="$PKGS ffmpeg";; esac; case "$MISSING" in *mariadb-client*) PKGS="$PKGS mysql-client";; esac
+        case "$MISSING" in *exiftool*) PKGS="$PKGS exiftool";; esac; case "$MISSING" in *ffmpeg*) PKGS="$PKGS ffmpeg";; esac; case "$MISSING" in *jpegtran*) PKGS="$PKGS jpeg-turbo";; esac; case "$MISSING" in *mariadb-client*) PKGS="$PKGS mysql-client";; esac
         echo "brew install$PKGS"; brew install $PKGS
         [ -x /opt/homebrew/opt/python@3.12/bin/python3.12 ] && PY=/opt/homebrew/opt/python@3.12/bin/python3.12 || PY="$(findpy)";;
       *)
         if command -v apt-get >/dev/null 2>&1; then
-          echo "apt-get install python3 python3-venv python3-pip libimage-exiftool-perl ffmpeg libheif1 libglib2.0-0 mariadb-client"
-          $SUDO env DEBIAN_FRONTEND=noninteractive sh -c 'apt-get update -qq && apt-get install -y -qq --no-install-recommends python3 python3-venv python3-pip libimage-exiftool-perl ffmpeg libheif1 libglib2.0-0 mariadb-client ca-certificates curl >/dev/null'
+          echo "apt-get install python3 python3-venv python3-pip libimage-exiftool-perl ffmpeg libjpeg-turbo-progs libheif1 libglib2.0-0 mariadb-client"
+          $SUDO env DEBIAN_FRONTEND=noninteractive sh -c 'apt-get update -qq && apt-get install -y -qq --no-install-recommends python3 python3-venv python3-pip libimage-exiftool-perl ffmpeg libjpeg-turbo-progs libheif1 libglib2.0-0 mariadb-client ca-certificates curl >/dev/null'
         elif command -v dnf >/dev/null 2>&1; then
           echo "dnf install python3 python3-pip perl-Image-ExifTool ffmpeg libheif"
-          $SUDO dnf install -y -q python3 python3-pip perl-Image-ExifTool libheif glib2 mariadb ca-certificates curl >/dev/null
+          $SUDO dnf install -y -q python3 python3-pip perl-Image-ExifTool libjpeg-turbo-utils libheif glib2 mariadb ca-certificates curl >/dev/null
           $SUDO dnf install -y -q ffmpeg-free >/dev/null 2>&1 || $SUDO dnf install -y -q ffmpeg >/dev/null 2>&1 || echo "ffmpeg not available from the enabled repositories (video thumbnails need it): enable RPM Fusion and install ffmpeg"
         elif command -v zypper >/dev/null 2>&1; then
-          echo "zypper install python3 python3-pip ffmpeg exiftool libheif1"; $SUDO zypper -n -q install python3 python3-pip ffmpeg exiftool libheif1 mariadb-client ca-certificates curl >/dev/null
+          echo "zypper install python3 python3-pip ffmpeg exiftool libheif1"; $SUDO zypper -n -q install python3 python3-pip ffmpeg exiftool libjpeg-turbo libheif1 mariadb-client ca-certificates curl >/dev/null
         elif command -v pacman >/dev/null 2>&1; then
-          echo "pacman -S python python-pip ffmpeg perl-image-exiftool libheif"; $SUDO pacman -Sy --noconfirm --needed python python-pip ffmpeg perl-image-exiftool libheif mariadb-clients ca-certificates curl >/dev/null
+          echo "pacman -S python python-pip ffmpeg perl-image-exiftool libheif"; $SUDO pacman -Sy --noconfirm --needed python python-pip ffmpeg perl-image-exiftool libjpeg-turbo libheif mariadb-clients ca-certificates curl >/dev/null
         else
           die "no known package manager; install python3 (3.10+), exiftool and ffmpeg yourself, then run setup again"
         fi

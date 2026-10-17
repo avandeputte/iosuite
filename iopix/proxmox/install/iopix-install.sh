@@ -23,6 +23,7 @@ $STD apt-get install -y \
   python3-pip \
   ffmpeg \
   libimage-exiftool-perl \
+  libjpeg-turbo-progs \
   libheif1 \
   libglib2.0-0 \
   mariadb-client \

@@ -29,7 +29,7 @@ from fastapi.responses import RedirectResponse, FileResponse, JSONResponse, Resp
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
-from . import (analysis, caption, concepts, config, consistency, dbsync, detector, deletion, dkdb, edits, history, merge, facedetect, facemgr, facevecs, library, folders, gpx, index, neardups, vdb,
+from . import (analysis, caption, concepts, config, consistency, dbsync, detector, deletion, dkdb, edits, history, merge, facedetect, facemgr, facevecs, library, folders, gpx, index, neardups, vdb, lossless,
                moments, places, placetags, tagmanager, thumbs)
 from . import state as appstate
 from . import jobs as bgjobs
@@ -241,7 +241,7 @@ async def lifespan(_app):
 app = FastAPI(title="iopix", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 # every endpoint that changes the library (sidecars, files, digiKam's database); refused in read-only mode
-WRITE_PATHS = ("/api/edit", "/api/edits/db", "/api/faces/detect", "/api/photos/delete", "/api/photos/trash", "/api/photos/move", "/api/photos/rename", "/api/trash", "/api/import", "/api/history", "/api/library/merge", "/api/location/landmark", "/api/gpx/preview", "/api/consistency/sync", "/api/gpx/apply", "/api/faces/op", "/api/faces/batch", "/api/folders",
+WRITE_PATHS = ("/api/edit", "/api/edits/db", "/api/faces/detect", "/api/photos/delete", "/api/photos/trash", "/api/photos/move", "/api/photos/rename", "/api/photos/transform", "/api/photos/crop", "/api/trash", "/api/import", "/api/history", "/api/library/merge", "/api/location/landmark", "/api/gpx/preview", "/api/consistency/sync", "/api/gpx/apply", "/api/faces/op", "/api/faces/batch", "/api/folders",
                "/api/faces/person", "/api/placetags", "/api/tags/op")
 
 
@@ -531,7 +531,7 @@ def api_status(request: Request):
             "isAdmin": users.is_admin(user), "signedIn": users.is_signed_in(user), "requireLogin": users.require_login(),
             "updateAvailable": updates.available() if users.is_admin(user) and updates.auto_check_enabled() else None,
             "readOnly": appstate.read_only(), "readOnlyLocked": config.READ_ONLY, "digikamCheck": config.DIGIKAM_CHECK,
-            "digikam": index.status(), "faceDetect": facedetect.available(),
+            "digikam": index.status(), "faceDetect": facedetect.available(), "lossless": lossless.capabilities() if config.DB_WRITE and edits.available() else None,
             "appVersion": APP_VERSION, "commit": updates.local_commit()[:7], "appName": app_name(),
             "tagJobs": {**tagmanager.progress, "pending": tagmanager.pending_jobs()},
             "analysis": analysis.progress, "jobs": bgjobs.status()}
@@ -1855,6 +1855,48 @@ def _run_organize(fn, *args):
         raise HTTPException(500, f"The change failed and was rolled back: {e}")
     finally:
         _ = organize
+
+
+@app.post("/api/photos/transform")
+async def api_photos_transform(request: Request):
+    """Body {ids, op: right|left|180|fliph|flipv}: turn or flip photos without loss (JPEG pixels with jpegtran,
+    otherwise the orientation flag); face regions turn with them; each is in the change log with Undo."""
+    _organize_allowed()
+    if not edits.available():
+        raise HTTPException(403, "Editing is turned off (EDITING=0 or no exiftool)")
+    body = await request.json()
+    ids = [int(i) for i in (body.get("ids") or [])][:500]
+    op = str(body.get("op") or "")
+    if not ids or op not in lossless.OPS:
+        raise HTTPException(400, "ids and op (right, left, 180, fliph, flipv) are needed")
+    try:
+        r = await run_in_threadpool(lossless.transform, ids, op)
+    except dbsync.SyncError as e:
+        raise HTTPException(409, str(e))
+    if r["done"]:
+        await run_in_threadpool(_rebuild_after_write)
+    return r
+
+
+@app.post("/api/photos/crop")
+async def api_photos_crop(request: Request):
+    """Body {id, rect: [x, y, w, h]} in upright pixels: crop the file (JPEG without loss via jpegtran; PNG, TIFF,
+    WebP re-saved), faces shifted or dropped with it, a copy kept for Undo."""
+    _organize_allowed()
+    if not edits.available():
+        raise HTTPException(403, "Editing is turned off (EDITING=0 or no exiftool)")
+    body = await request.json()
+    rect = body.get("rect")
+    if not body.get("id") or not isinstance(rect, list) or len(rect) != 4:
+        raise HTTPException(400, "id and rect [x, y, w, h] are needed")
+    try:
+        r = await run_in_threadpool(lossless.crop, int(body["id"]), rect)
+    except dbsync.SyncError as e:
+        raise HTTPException(409 if "digiKam is running" in str(e) else 400, str(e))
+    except (*DB_ERRORS, ValueError) as e:
+        raise HTTPException(500, f"The crop failed: {e}")
+    await run_in_threadpool(_rebuild_after_write)
+    return r
 
 
 @app.post("/api/photos/trash")

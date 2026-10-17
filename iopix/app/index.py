@@ -277,7 +277,7 @@ def sync_photo_ids(images: list, paths: dict) -> dict:
                 stored[vid] = (dk, pth, nm, seen or 0)
                 if dk is not None:
                     by_dk[dk] = (vid, h, sz)
-            inserts, updates, remap = [], [], {}
+            inserts, updates, rewritten, remap = [], [], [], {}
             # only what changed is written: on MySQL every statement is a round trip, and a statement per photo
             # on every build (30,000 of them) made each rebuild seconds slower. last_seen is refreshed daily.
             for dk, (h, sz, path, name) in current.items():
@@ -289,12 +289,19 @@ def sync_photo_ids(images: list, paths: dict) -> dict:
                     was = stored.get(vid)
                     if not was or was[0] != dk or was[1] != path or was[2] != name or now - was[3] > 86400:
                         updates.append((dk, path, name, now, vid))
+                elif dk in by_dk and stored[by_dk[dk][0]][1] == path:
+                    # the same file under the same number, rewritten in place (metadata written into it, a lossless
+                    # rotate or crop, digiKam's rescan after one): the photo keeps its viewer id
+                    rewritten.append((h, sz, name, now, by_dk[dk][0]))
                 else:  # new, or the number now stands for another file: that is a different photo
                     inserts.append((dk, h, sz, path, name, now, now))
             if remap:
                 _rekey(con, remap)
             # a number that now belongs to a different file is taken away from the row that had it
-            taken = [(vid,) for dk, (vid, h, sz) in by_dk.items() if dk in current and (h, sz) != current[dk][:2]]
+            kept = {vid for _h, _s, _n, _t, vid in rewritten}
+            taken = [(vid,) for dk, (vid, h, sz) in by_dk.items() if dk in current and (h, sz) != current[dk][:2] and vid not in kept]
+            if rewritten:
+                con.executemany("UPDATE photo_identity SET hash = ?, size = ?, name = ?, last_seen = ? WHERE vid = ?", rewritten)
             if taken:
                 con.executemany("UPDATE photo_identity SET dk_id = NULL WHERE vid = ?", taken)
             if updates:
