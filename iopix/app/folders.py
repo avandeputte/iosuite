@@ -183,6 +183,8 @@ def upload(album_id: int, files: list, check_running: bool = True) -> dict:
             tmp.write_bytes(data)
             tmp.replace(folder["dir"] / final)
             path = folder["dir"] / final
+            from . import importer
+            importer.make_sidecar(str(path))  # the file's own metadata in a sidecar, as digiKam would write one
             staged.append((final, cat, ext, path, _probe(path)))  # exiftool runs here, not inside the write lock below
         except (SyncError, OSError) as e:
             skipped.append({"name": name, "reason": str(e)})
@@ -190,7 +192,7 @@ def upload(album_id: int, files: list, check_running: bool = True) -> dict:
         return {"added": [], "skipped": skipped}
     added = register(album_id, staged, check_running)
     from . import history
-    history.record([{"photo_id": a["id"], "action": "added", "summary": f"Uploaded into {folder.get('rel') or folder['dir']}"} for a in added])
+    history.record([{"photo_id": a["id"], "action": "added", "summary": f"Uploaded into {folder.get('rel') or folder['dir']} (sidecar created)", "path": str(folder["dir"] / a["name"])} for a in added])
     return {"added": added, "skipped": skipped}
 
 

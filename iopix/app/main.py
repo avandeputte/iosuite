@@ -25,7 +25,7 @@ from urllib.parse import parse_qsl, quote
 
 import orjson
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
+from fastapi.responses import RedirectResponse, FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
@@ -241,7 +241,7 @@ async def lifespan(_app):
 app = FastAPI(title="iopix", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 # every endpoint that changes the library (sidecars, files, digiKam's database); refused in read-only mode
-WRITE_PATHS = ("/api/edit", "/api/edits/db", "/api/faces/detect", "/api/photos/delete", "/api/photos/trash", "/api/photos/move", "/api/photos/rename", "/api/trash", "/api/history", "/api/library/merge", "/api/location/landmark", "/api/gpx/preview", "/api/consistency/sync", "/api/gpx/apply", "/api/faces/op", "/api/faces/batch", "/api/folders",
+WRITE_PATHS = ("/api/edit", "/api/edits/db", "/api/faces/detect", "/api/photos/delete", "/api/photos/trash", "/api/photos/move", "/api/photos/rename", "/api/trash", "/api/import", "/api/history", "/api/library/merge", "/api/location/landmark", "/api/gpx/preview", "/api/consistency/sync", "/api/gpx/apply", "/api/faces/op", "/api/faces/batch", "/api/folders",
                "/api/faces/person", "/api/placetags", "/api/tags/op")
 
 
@@ -250,7 +250,7 @@ SIGNED_IN_PATHS = ("/api/favorites", "/api/ualbums", "/api/searches", "/api/tags
 # reads that are not for everyone, whatever the method: the server log and the merge plan (admins); the change log and
 # the elevation lookup, which spends Google credits (editors)
 ADMIN_READ_PATHS = ("/api/log", "/api/library/merge", "/api/quality")
-EDITOR_READ_PATHS = ("/api/history", "/api/elevation")
+EDITOR_READ_PATHS = ("/api/history", "/api/elevation", "/api/import")
 
 
 def _hits(path: str, paths) -> bool:
@@ -258,7 +258,7 @@ def _hits(path: str, paths) -> bool:
 
 
 # what a visitor may still fetch when sign-in is required: the app shell and the sign-in endpoints
-OPEN_PATHS = ("/", "/index.html", "/app.js", "/app.css", "/sw.js", "/manifest.webmanifest", "/api/status")
+OPEN_PATHS = ("/", "/index.html", "/app.js", "/app.css", "/sw.js", "/manifest.webmanifest", "/api/status", "/share")
 OPEN_PREFIXES = ("/icons/", "/api/auth/")
 
 
@@ -2491,6 +2491,88 @@ async def api_folder_create(request: Request):
         raise HTTPException(500, f"The change failed and was rolled back: {e}")
     _kick.set()
     return result
+
+
+@app.get("/api/import/layouts")
+def api_import_layouts(request: Request):
+    """The folder layouts an import can use, and the one in use."""
+    from . import importer
+    return {"layouts": importer.layouts(), "layout": importer.layout()}
+
+
+@app.post("/api/import/stage")
+async def api_import_stage(request: Request):
+    """Multipart `files` (and an optional `token` to add to an import started earlier): the files are kept
+    aside and looked at; nothing goes into the library yet. Returns the plan."""
+    from . import importer
+    if not (config.DB_WRITE and edits.available()):
+        raise HTTPException(403, "Imports are turned off (needs DB_WRITE and EDITING)")
+    form = await request.form()
+    ups = [f for f in form.getlist("files") if hasattr(f, "filename")]
+    if not ups:
+        raise HTTPException(400, "No files")
+    if any((f.size or 0) > 2 * 1024 ** 3 for f in ups):
+        raise HTTPException(413, "Files over 2 GB cannot be uploaded this way")
+    files = [(f.filename, await f.read()) for f in ups[:500]]
+    token = str(form.get("token") or "") or None
+    try:
+        token = await run_in_threadpool(importer.stage, files, token)
+        return await run_in_threadpool(importer.plan, token, str(form.get("layout") or "") or None)
+    except dbsync.SyncError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.get("/api/import/{token}")
+def api_import_plan(token: str, layout: str = None):
+    from . import importer
+    try:
+        return importer.plan(token, layout if layout in importer.LAYOUTS else None)
+    except dbsync.SyncError as e:
+        raise HTTPException(404, str(e))
+
+
+@app.post("/api/import/{token}/run")
+async def api_import_run(token: str, request: Request):
+    """Body {layout?, include?: [names], duplicates?: 'skip'|'import', remember?: bool}: import the staged files."""
+    from . import importer
+    if not (config.DB_WRITE and edits.available()):
+        raise HTTPException(403, "Imports are turned off (needs DB_WRITE and EDITING)")
+    body = await request.json() if (await request.body()) else {}
+    key = body.get("layout") if body.get("layout") in importer.LAYOUTS else None
+    if key and body.get("remember") and users.is_admin(request.state.user):
+        importer.set_layout(key)
+    try:
+        r = await run_in_threadpool(importer.run, token, key, body.get("include"), body.get("duplicates") != "import")
+    except dbsync.SyncError as e:
+        raise HTTPException(409 if "digiKam is running" in str(e) else 400, str(e))
+    except (*DB_ERRORS, ValueError) as e:
+        raise HTTPException(500, f"The import failed and was rolled back: {e}")
+    await run_in_threadpool(_rebuild_after_write)
+    return r
+
+
+@app.post("/api/import/{token}/discard")
+def api_import_discard(token: str):
+    from . import importer
+    importer.discard(token)
+    return {"ok": True}
+
+
+@app.post("/share")
+async def share_target(request: Request):
+    """The installed app as a share target (Android): files shared to it are staged, then the Import page opens."""
+    from . import importer
+    if not users.can_write(request.state.user):  # the share sheet cannot show a JSON error: the page explains
+        return RedirectResponse("/#/import?error=signin", status_code=303)
+    if appstate.read_only() or not (config.DB_WRITE and edits.available()):
+        return RedirectResponse("/#/import?error=off", status_code=303)
+    form = await request.form()
+    ups = [f for f in form.getlist("files") if hasattr(f, "filename")]
+    if not ups:
+        return RedirectResponse("/#/import", status_code=303)
+    files = [(f.filename, await f.read()) for f in ups[:200]]
+    token = await run_in_threadpool(importer.stage, files)
+    return RedirectResponse(f"/#/import?staged={token}", status_code=303)
 
 
 @app.post("/api/folders/{album_id}/upload")

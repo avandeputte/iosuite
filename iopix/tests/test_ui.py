@@ -1259,3 +1259,29 @@ def test_delete_key_moves_to_the_trash_without_a_question_and_undo_restores(page
     page.locator("#toast a", has_text="Undo").click()
     page.wait_for_timeout(2500)
     assert not any(t["id"] == pid for t in _json.loads(urllib.request.urlopen(server + "/api/trash").read())["items"]), "back out of the trash"
+
+
+def test_import_page_plans_then_imports_a_dropped_photo(page, server, lib, tmp_path):
+    from test_import import _dated, _cleanup, _src
+    new = _dated(lib, tmp_path, "1998:07:04 12:00:00")
+    same = _src(lib)[0]
+    page.goto(server + "/#/import")
+    page.wait_for_selector("h1:has-text('Import')", timeout=10000)
+    page.wait_for_selector(".dropzone", timeout=10000)
+    with page.expect_file_chooser() as fc:
+        page.click(".dropzone button:has-text('Choose photos')")
+    fc.value.set_files([str(new), str(same)])
+    page.wait_for_selector(".stable.wide tbody tr", timeout=20000)
+    rows = page.locator(".stable.wide tbody tr")
+    assert rows.count() == 2
+    assert page.locator(".stable.wide td", has_text="/1998/199807").count() == 1, "the folder follows the date taken"
+    assert page.locator(".stable.wide a", has_text="already in the library").count() == 1 and page.locator(".stable.wide .mst.ok", has_text="new").count() == 1
+    btn = page.locator("button.pillbtn.on", has_text="Import 1")
+    assert btn.count() == 1
+    try:
+        btn.click()
+        page.wait_for_selector("#toast:has-text('1 photo imported')", timeout=20000)
+        side = next(Path(lib["root"]).glob("1998/199807/*.xmp"), None)
+        assert side is not None and side.with_suffix("").exists(), "the photo and its sidecar are in the dated folder"
+    finally:
+        _cleanup(None, lib, ["/1998"])

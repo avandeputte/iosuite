@@ -783,3 +783,9 @@ body:has(#dkbanner) #updbanner { bottom: 96px; }  /* both at once: the update ca
 @media (max-width: 800px) { .tnrow { grid-template-columns: 1fr; } .tnface img { width: 100px; height: 100px; } }
 
 .card.sel .cv { outline: 3px solid var(--accent); outline-offset: -3px; }
+
+/* Import */
+.dropzone { border: 2px dashed var(--line); border-radius: 16px; padding: 28px 18px; display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; color: var(--fg2); }
+.dropzone .ic { width: 36px; height: 36px; color: var(--c-teal); }
+.dropzone.over { border-color: var(--accent); background: var(--accent-bg); }
+.stable tr.dup td { color: var(--fg2); }

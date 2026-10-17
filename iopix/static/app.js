@@ -183,9 +183,9 @@ const NAV = [
 ];
 // hash route name -> page renderer (function declarations are hoisted, so this can sit above them)
 const VIEW_FNS = { photos: showPhotos, explore: showExplore, people: showPeople, places: showPlaces, folders: showFolders, albums: showAlbums, tags: showTags, map: showMap, duplicates: showDuplicates,
-  detected: showDetected, bursts: showBursts, events: showEvents, history: showHistory, analysis: showAnalysis, settings: showSettings, maintenance: showMaintenance, consistency: showConsistency, quality: showQuality, trash: showTrash, faces: showFaces };
+  detected: showDetected, bursts: showBursts, events: showEvents, history: showHistory, analysis: showAnalysis, settings: showSettings, maintenance: showMaintenance, consistency: showConsistency, quality: showQuality, trash: showTrash, import: showImport, faces: showFaces };
 const VIEWS = Object.keys(VIEW_FNS);
-const PARAM_VIEWS = ['places', 'bursts', 'faces', 'history'];  // views whose own query parameters (not photo filters) pick what they show
+const PARAM_VIEWS = ['places', 'bursts', 'faces', 'history', 'import'];  // views whose own query parameters (not photo filters) pick what they show
 // favorites and app albums (stored by the app, not in digiKam)
 const ST = { rev: -1, fav: new Set(), albums: [], searches: [] };
 let SEM = { enabled: false };
@@ -1088,6 +1088,82 @@ async function showQuality() {
         x.rect ? `${x.rect[2]} × ${x.rect[3]} at ${x.rect[0]}, ${x.rect[1]} on a ${x.size[0]} × ${x.size[1]} photo` : 'unreadable rectangle',
         CAN_MANAGE && x.fix ? [' · ', h('a', { class: 'lnk', onclick: (ev) => fitOne(x, ev) }, x.fix === 'fit' ? 'Fit inside' : 'Remove')] : null)) }));
 }
+/** Import: photos and videos from this device (or shared to the installed app) go into folders by date,
+ *  duplicates are left out, each new file gets a sidecar. */
+async function showImport(params) {
+  const body = h('div');
+  main.replaceChildren(h('div', { class: 'page' }, pageTitle('add', 'teal', 'Import'),
+    h('p', { class: 'muted', style: 'max-width:820px;margin-top:0' }, 'Photos and videos from this device go into folders by the date they were taken, under the library root. Files already in the library (same size and contents) are left out. Each new file gets a sidecar with its own metadata, and digiKam reads the full metadata on its next run. On Android, the installed app also appears in the Share sheet; on an iPhone, choose from the photo library below.'),
+    body));
+  if (!CAN_MANAGE) { fill(body, h('div', { class: 'empty' }, 'Importing needs an editor or admin account.')); return; }
+  let lay; try { lay = await api('/api/import/layouts'); } catch (e) { fill(body, h('div', { class: 'empty' }, e.message)); return; }
+  let token = params.get('staged') || null, plan = null;
+  const layoutSel = h('select', { class: 'sharepick' }, lay.layouts.map((l) => h('option', { value: l.key, selected: l.key === lay.layout }, `${l.pattern}  ·  ${l.example}`)));
+  const remember = IS_ADMIN ? h('label', { style: 'display:flex;gap:6px;align-items:center;font-size:12.5px;cursor:pointer' }, h('input', { type: 'checkbox', checked: true }), 'Remember as the default layout') : null;
+  const dupSel = h('select', { class: 'sharepick' }, h('option', { value: 'skip', selected: true }, 'Leave duplicates out'), h('option', { value: 'import' }, 'Import duplicates too'));
+  const status = h('div', { class: 'muted', style: 'margin:8px 0' });
+  const table = h('div');
+  const run = h('button', { class: 'pillbtn on', hidden: true });
+  const drop = h('div', { class: 'dropzone' }, icon('add'), h('div', null, h('b', null, 'Drop photos here'), h('div', { class: 'muted' }, 'or')),
+    h('button', { class: 'pillbtn', onclick: () => pick(false) }, 'Choose photos…'), h('button', { class: 'pillbtn', onclick: () => pick(true) }, 'Take a photo'));
+  const pick = (camera) => {
+    const inp = h('input', { type: 'file', multiple: !camera, accept: 'image/*,video/*', hidden: true });
+    if (camera) inp.setAttribute('capture', 'environment');
+    inp.onchange = () => { const files = [...inp.files]; inp.remove(); if (files.length) send(files); };
+    document.body.append(inp); inp.click();
+  };
+  const send = async (files) => {
+    fill(status, `Uploading ${plural(files.length, 'file')}…`);
+    try {
+      let done = 0;
+      for (let i = 0; i < files.length; i += 20) {  // in batches, so a phone upload does not hold one request for minutes
+        const fd = new FormData(); files.slice(i, i + 20).forEach((f) => fd.append('files', f)); if (token) fd.append('token', token); fd.append('layout', layoutSel.value);
+        const res = await fetch('/api/import/stage', { method: 'POST', body: fd });
+        const r = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(r.detail || `${res.status}`);
+        token = r.token; plan = r; done += Math.min(20, files.length - i);
+        fill(status, `Uploaded ${nf.format(done)} of ${nf.format(files.length)}…`);
+      }
+    } catch (e) { fill(status, h('span', { class: 'warn' }, e.message)); return; }
+    location.hash = `#/import?staged=${token}`;
+    draw();
+  };
+  const draw = async () => {
+    if (!token) { fill(status, ''); fill(table); run.hidden = true; return; }
+    if (!plan) { try { plan = await api(`/api/import/${token}?layout=${layoutSel.value}`); } catch (e) { fill(status, h('span', { class: 'warn' }, e.message)); token = null; return; } }
+    const items = plan.items;
+    fill(status, `${plural(items.length, 'file')} ready: ${nf.format(plan.new)} new${plan.duplicates ? `, ${nf.format(plan.duplicates)} already in the library` : ''}${items.some((i) => i.error) ? `, ${nf.format(items.filter((i) => i.error).length)} not accepted` : ''}.`);
+    fill(table, h('table', { class: 'stable wide' }, h('thead', null, h('tr', null, ['File', 'Taken', 'Goes to', ''].map((c) => h('th', null, c)))),
+      h('tbody', null, items.map((i) => h('tr', { class: i.error ? 'muted' : i.duplicate_of ? 'dup' : '' },
+        h('td', null, i.name, h('div', { class: 'muted', style: 'font-size:11.5px' }, fmtBytes(i.size))),
+        h('td', null, i.when ? i.when.replace('T', ' ').slice(0, 16) : ''),
+        h('td', null, i.folder || ''),
+        h('td', null, i.error ? h('span', { class: 'warn' }, i.error) : i.duplicate_of ? h('a', { class: 'lnk', onclick: () => openLightbox({ id: [i.duplicate_of] }, 0, true) }, 'already in the library') : h('span', { class: 'mst ok' }, 'new')))))));
+    run.hidden = false;
+    fill(run, icon('add'), plan.new ? `Import ${nf.format(dupSel.value === 'import' ? items.filter((i) => !i.error).length : plan.new)}` : 'Nothing new to import');
+    run.disabled = !plan.new && dupSel.value !== 'import';
+  };
+  layoutSel.onchange = () => { plan = null; draw(); };
+  dupSel.onchange = () => draw();
+  run.onclick = async () => {
+    run.disabled = true; fill(run, 'Importing…');
+    let r;
+    try { r = await post(`/api/import/${token}/run`, { layout: layoutSel.value, duplicates: dupSel.value, remember: !!remember?.firstChild.checked }); } catch (e) { toast(e.message, null, null, 10000); run.disabled = false; draw(); return; }
+    const folders = [...new Set(r.added.map((a) => a.folder))];
+    toast(`${plural(r.added.length, 'photo')} imported${folders.length ? ` into ${folders.slice(0, 3).join(', ')}${folders.length > 3 ? '…' : ''}` : ''}${r.skipped.length ? `; ${plural(r.skipped.length, 'file')} left out` : ''}.`, r.added.length ? 'Show' : null, () => go('photos', photosWith({ album: undefined, sort: 'new' })), 12000);
+    token = null; plan = null; location.hash = '#/import'; keepView = true; pollSoon(600);
+    fill(status, r.added.length ? h('span', null, `${plural(r.added.length, 'photo')} imported. `, h('a', { class: 'lnk', href: '#/folders' }, 'Open Folders')) : 'Nothing was imported.'); fill(table); run.hidden = true;
+  };
+  ['dragenter', 'dragover'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove('over'); }));
+  drop.addEventListener('drop', (e) => { const files = [...e.dataTransfer.files]; if (files.length) send(files); });
+  fill(body, drop,
+    h('div', { style: 'display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:14px 0 4px' }, h('span', null, 'Folders: '), layoutSel, remember, h('span', { style: 'margin-left:8px' }, 'Duplicates: '), dupSel),
+    status, table, h('div', { style: 'margin-top:12px;display:flex;gap:8px' }, run, token ? h('button', { class: 'pillbtn', onclick: async () => { await post(`/api/import/${token}/discard`, {}).catch(() => {}); token = null; plan = null; location.hash = '#/import'; draw(); } }, 'Discard') : null));
+  if (params.get('error') === 'off') fill(status, h('span', { class: 'warn' }, 'Imports are turned off on this server.'));
+  if (params.get('error') === 'signin') fill(status, h('span', { class: 'warn' }, 'Sign in as an editor, then share the photos again.'));
+  draw();
+}
 /** The trash: what was moved there here or in digiKam (the same .dtrash folders), with restore and delete for good. */
 async function showTrash() {
   const body = h('div');
@@ -1735,7 +1811,7 @@ async function showFolders() {
     if (!tree.children.length) tree.append(h('div', { class: 'empty' }, 'No folders match.'));
   };
   if (!openFolders.size) tops.forEach((t) => openFolders.add(t.id));  // first visit: the top level open, deeper levels folded
-  main.replaceChildren(h('div', { class: 'page' }, pageTitle('folder', 'teal', 'Folders ', h('span', { class: 'muted' }, nf.format(all.length)), can ? h('a', { class: 'lnk', href: '#/trash', style: 'margin-left:14px;font-size:14px;font-weight:400' }, 'Trash') : null),
+  main.replaceChildren(h('div', { class: 'page' }, pageTitle('folder', 'teal', 'Folders ', h('span', { class: 'muted' }, nf.format(all.length)), can ? [h('a', { class: 'lnk', href: '#/import', style: 'margin-left:14px;font-size:14px;font-weight:400' }, 'Import…'), h('a', { class: 'lnk', href: '#/trash', style: 'margin-left:12px;font-size:14px;font-weight:400' }, 'Trash')] : null),
     h('div', { class: 'muted', style: 'max-width:820px' }, 'digiKam’s folders, as they are on disk. Click a folder to see its photos (sub-folders included); the arrow opens its sub-folders.', can ? ' New folders and uploads go straight into the library; digiKam picks them up and reads their full metadata on its next start.' : ''),
     h('input', { class: 'pagefilter', placeholder: 'Find a folder…', oninput: (e) => draw(norm(e.target.value)) }), tree));
   draw('');
@@ -1948,7 +2024,7 @@ async function loadUser() {
   renderUserMenu();
 }
 // which bar item a view belongs to: Explore's sub-pages light Explore, the Faces page People, Maintenance's pages Maintenance
-const NAV_OF = { duplicates: 'explore', detected: 'explore', bursts: 'explore', events: 'explore', faces: 'people', analysis: 'maintenance', history: 'maintenance', consistency: 'maintenance', quality: 'maintenance', trash: 'folders' };
+const NAV_OF = { duplicates: 'explore', detected: 'explore', bursts: 'explore', events: 'explore', faces: 'people', analysis: 'maintenance', history: 'maintenance', consistency: 'maintenance', quality: 'maintenance', trash: 'folders', import: 'folders' };
 const MORE_VIEWS = ['favorites', 'folders', 'albums', 'tags', 'map', 'settings', 'maintenance'];
 function currentNav() {
   const fp = filterParams();
@@ -1958,6 +2034,7 @@ function currentNav() {
 /** Phones: the bottom bar shows four destinations; the rest, with Settings and Maintenance, open from "More". */
 function moreSheet() {
   const rest = NAV.filter(([v]) => ['favorites', 'folders', 'albums', 'tags', 'map'].includes(v)).map(([v, label, ic, href]) => [href || `#/${v}`, label, ic, v]);  // the ones the phone bar hides
+  if (CAN_MANAGE) rest.push(['#/import', 'Import', 'add', 'import']);
   rest.push(['#/settings', 'Settings', 'gear', 'settings']);
   if (IS_ADMIN) rest.push(['#/maintenance', 'Maintenance', 'wrench', 'maintenance']);
   const back = modal('More', h('div', { class: 'sheetgrid' }, rest.map(([href, label, ic, v]) => h('a', { href, class: currentNav() === v ? 'on' : '', style: `--hue:var(--c-${{ favorites: 'rose', folders: 'teal', albums: 'indigo', tags: 'orange', map: 'cyan' }[v] || 'slate'})`, onclick: () => back.remove() }, h('span', { class: 'sic' }, icon(ic)), label))),
@@ -2701,6 +2778,7 @@ async function settingsPage(view) {
     // 1. Library: everything about digiKam's data as the viewer sees it
     h('h2', null, 'Library'),
     row('Change log', 'Every change made in the viewer, for every photo, kept for good: who, when, before and after, with undo and restore from the backups.', h('a', { class: 'pillbtn', href: '#/history' }, 'Open the change log')),
+    row('Import', 'Photos and videos from a phone, a card or a computer, into folders by date, duplicates left out, a sidecar for each. The installed app is a share target on Android.', h('a', { class: 'pillbtn', href: '#/import' }, 'Open Import')),
     row('Trash', 'Photos moved to the trash here or in digiKam (each album root’s .dtrash folder), with their sidecars, until restored or deleted for good.', h('a', { class: 'pillbtn', href: '#/trash' }, 'Open the trash')),
     row('Library copy', (() => { const d = m.digikam || {}; return d.mirror ? `The viewer’s own copy of the library’s metadata: ${nf.format(d.mirror.photos)} photos as of ${fmtWhen(d.mirror.taken)}, refreshed at every read of digiKam and included in the app backup. The index is built from it whenever digiKam’s database is unreachable or Sync with digiKam is off${d.source === 'mirror' ? ' (as it is now)' : ''}.` : 'Not taken yet; it is taken at the next read of digiKam’s database.'; })(), null),
     row('Rescan the library now', `The index is rebuilt from digiKam’s database whenever digiKam saves (last saved ${when(m.digikamSaved)}; index built ${when(m.indexBuilt)}). Force it here if something looks stale.`,
