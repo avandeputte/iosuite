@@ -2409,7 +2409,7 @@ async function showFaces(vp) {
     h('button', { class: 'pillbtn on', disabled: !sel.size, onclick: () => personPicker(async (t) => { const c = chosen(); if (!confirm(`Name ${c.length} faces as ${t.name}?`)) return; if (await facesBatch(c.map((f) => op(f, 'name', { tag: t.id })), `Named ${t.name}`)) refresh(); }) }, icon('person'), 'Name selected…'),
     tab === 'unknown' ? h('button', { class: 'pillbtn', disabled: !sel.size, onclick: async () => { const c = chosen(); if (!confirm(`Ignore ${c.length} faces? They stay, marked as not a person to name.`)) return; if (await facesBatch(c.map((f) => op(f, 'ignore')), 'Ignored')) refresh(); } }, 'Ignore selected') : null,
     tab === 'ignored' ? h('button', { class: 'pillbtn', disabled: !sel.size, onclick: async () => { const c = chosen(); if (await facesBatch(c.map((f) => op(f, 'unknown')), 'Back to unknown')) refresh(); } }, 'Back to unnamed') : null,
-    h('button', { class: 'pillbtn', disabled: !sel.size, onclick: async () => { const c = chosen(); if (!confirm(`Remove ${c.length} face regions? The photos are not touched.`)) return; if (await facesBatch(c.map((f) => op(f, 'remove')), 'Removed')) refresh(); } }, 'Remove selected'));
+    h('button', { class: 'pillbtn', disabled: !sel.size, onclick: async () => { const c = chosen(); if (await facesBatch(c.map((f) => op(f, 'remove')), 'Removed')) refresh(); } }, 'Remove selected'));
   const draw = () => { fill(grid, d.faces.map((f, i) => h('div', { class: 'fcell' + (sel.has(i) ? ' sel' : ''), onclick: (e) => { if (e.target.tagName === 'IMG' && !e.shiftKey && !sel.size) return; if (!CAN_MANAGE) return; e.preventDefault(); sel.has(i) ? sel.delete(i) : sel.add(i); draw(); } },
     CAN_MANAGE ? h('label', { class: 'fchk' }, h('input', { type: 'checkbox', checked: sel.has(i), onclick: (e) => e.stopPropagation(), onchange: (e) => { e.target.checked ? sel.add(i) : sel.delete(i); draw(); } })) : null, crop(f),
     h('div', { class: 'muted', style: 'font-size:11px;text-align:center' }, dfMonth.format(date(f.ts)))))); drawBar(); };
@@ -3370,18 +3370,18 @@ function faceMenu(box, f, d) {
     item('Forget the name (keep as unknown face)', () => faceOp({ op: 'unknown', image: d.id, rect: rect() })),
     item('Not a face to name (ignore)', () => faceOp({ op: 'ignore', image: d.id, rect: rect() })),
     item('Adjust the box (move or resize)…', () => adjustFace(f, d)),
-    item('Remove this face region', () => { if (confirm(`Remove ${f.name}’s face region from this photo?`)) faceOp({ op: 'remove', image: d.id, rect: rect() }); }, true),
+    item('Remove this face region', () => removeFace(f, d), true),
   ] : f.kind === 'suggested' ? [
     item(`Yes, this is ${f.name}`, () => faceOp({ op: 'confirm', image: d.id, rect: rect() })),
     item('No, this is someone else…', nameIt),
     item('Not a face to name (ignore)', () => faceOp({ op: 'ignore', image: d.id, rect: rect() })),
     item('Adjust the box (move or resize)…', () => adjustFace(f, d)),
-    item('Remove this region', () => faceOp({ op: 'remove', image: d.id, rect: rect() }), true),
+    item('Remove this region', () => removeFace(f, d), true),
   ] : [
     item('Who is this?…', nameIt),
     f.kind !== 'ignored' ? item('Not a face to name (ignore)', () => faceOp({ op: 'ignore', image: d.id, rect: rect() })) : item('Keep as unknown face', () => faceOp({ op: 'unknown', image: d.id, rect: rect() })),
     item('Adjust the box (move or resize)…', () => adjustFace(f, d)),
-    item('Remove this region', () => faceOp({ op: 'remove', image: d.id, rect: rect() }), true),
+    item('Remove this region', () => removeFace(f, d), true),
   ];
   const menu = h('div', { class: 'facemenu' }, h('div', { class: 'fmh' }, f.kind === 'confirmed' ? f.name : f.kind === 'suggested' ? `Suggestion: ${f.name}` : f.kind === 'unknown' ? 'Unknown face' : 'Ignored face'), items);
   const inPanel = !!box.closest('.lb-info');
@@ -3416,19 +3416,28 @@ function applyFaceLocally(d, op) {
   else if (op.op === 'ignore' && was) { d.faces_other.push({ ...at(op.rect), kind: 'ignored', tag: null, name: null }); if (was.kind === 'confirmed') dropTag(was.tag); }
   else if (op.op === 'unknown' && was) { d.faces_other.push({ ...at(op.rect), kind: 'unknown', tag: null, name: null }); if (was.kind === 'confirmed') dropTag(was.tag); }
   else if (op.op === 'remove' && was) { if (was.kind === 'confirmed') dropTag(was.tag); }
+  else if (op.op === 'detected') d.faces_other.push({ ...at(op.rect), kind: 'unknown', tag: null, name: null });
+  else if (op.op === 'suggest') d.faces_other.push({ ...at(op.rect), kind: 'suggested', tag: op.tag, name: t?.name || '…' });
   else if (op.op === 'move' && was) { const moved = { ...was, ...at(op.new_rect) }; if (was.kind === 'confirmed') { delete moved.kind; d.faces.push(moved); } else d.faces_other.push(moved); }
 }
 function redrawPhoto(id) {
   if (LB.open && LB.src.id[LB.i] === id && LB.detail) { renderFaces(); if (LB.info) renderInfo(); }
 }
-function faceOp(op) {
+/** Remove a face region at once (no question); the message offers Undo, which puts the same region back. */
+function removeFace(f, d) {
+  const rect = [f.x, f.y, f.w, f.h];
+  const back = f.kind === 'confirmed' ? { op: 'add', tag: f.tag } : f.kind === 'suggested' ? { op: 'suggest', tag: f.tag } : f.kind === 'unknown' ? { op: 'detected' } : null;
+  faceOp({ op: 'remove', image: d.id, rect }, back ? () => faceOp({ ...back, image: d.id, rect }) : null);
+}
+function faceOp(op, undo) {
   const id = op.image;
   const shown = LB.open && LB.src.id[LB.i] === id ? LB.detail : null, cached = details.get(id);
   if (shown) applyFaceLocally(shown, op);
   if (cached && cached !== shown && typeof cached === 'object' && cached.faces) applyFaceLocally(cached, op);
   redrawPhoto(id);
   const name = op.tag ? tagById.get(op.tag)?.name : null;
-  toast({ name: `Named ${name}.`, confirm: 'Confirmed.', ignore: 'Face ignored.', unknown: 'Name removed; the face stays as unknown.', remove: 'Face region removed.', add: `Added ${name}.`, move: 'Region moved.' }[op.op]);
+  const said = { name: `Named ${name}.`, confirm: 'Confirmed.', ignore: 'Face ignored.', unknown: 'Name removed; the face stays as unknown.', remove: 'Face region removed.', add: `Added ${name}.`, move: 'Region moved.', detected: 'Face put back.', suggest: 'Suggestion put back.' }[op.op];
+  if (said) undo ? toast(said, 'Undo', undo, 7000) : toast(said);
   const prev = FACE_Q.get(id) || Promise.resolve();
   const mine = prev.then(() => post('/api/faces/op', op)).then(() => true, (e) => {
     toast(`That face change did not go through: ${e.message}`, null, null, 9000);

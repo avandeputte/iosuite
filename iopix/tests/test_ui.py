@@ -1085,3 +1085,28 @@ def test_explore_is_home_and_menu_icons_are_coloured(page, server):
     page.hover("#nav a[data-v=people]")
     page.wait_for_timeout(250)
     assert page.evaluate("getComputedStyle(document.querySelector('#nav a[data-v=people]')).backgroundColor") in ("rgba(0, 0, 0, 0)", "transparent")
+
+
+def test_removing_a_face_needs_no_question_and_can_be_undone(page, server):
+    import json as _json
+    faces = _json.loads(urllib.request.urlopen(server + "/api/faces/queue?kind=unknown&limit=5").read())["faces"]
+    if not faces:
+        pytest.skip("no unknown face in the fixture")
+    f = faces[0]
+    dialogs = []
+    page.on("dialog", lambda d: (dialogs.append(d.message), d.dismiss()))
+    _open_photo(page, server, f["photo"])
+    page.keyboard.press("f")
+    page.wait_for_selector(".facebox.face-unknown", timeout=10000)
+    n = page.locator(".facebox.face-unknown").count()
+    page.locator(".facebox.face-unknown").first.click()
+    page.locator(".facemenu .fmi", has_text="Remove this region").click()
+    page.wait_for_timeout(300)
+    assert not dialogs, dialogs
+    assert page.locator(".facebox.face-unknown").count() == n - 1
+    page.locator("#toast a", has_text="Undo").click()
+    page.wait_for_timeout(300)
+    assert page.locator(".facebox.face-unknown").count() == n, "Undo puts it back"
+    page.wait_for_timeout(2500)  # both changes reach the server before the page goes
+    d = _json.loads(urllib.request.urlopen(f"{server}/api/photo/{f['photo']}").read())
+    assert any((o["x"], o["y"], o["w"], o["h"]) == (f["x"], f["y"], f["w"], f["h"]) for o in d.get("faces_other", [])), "and on the server too"
