@@ -98,8 +98,8 @@ export async function showHistory(params) {
     offset += r.entries.length; more.hidden = offset >= r.total;
   };
   more.onclick = () => load(true);
-  main.replaceChildren(h('div', { class: 'page spage' }, crumbs([['Maintenance', '#/maintenance'], ['Change log', photo ? '#/history' : null], ...(photo ? [['One photo', null]] : [])]),
-    pageTitle('calendar', 'indigo', photo ? 'Change log of one photo' : 'Change log'),
+  main.replaceChildren(h('div', { class: 'page spage' }, crumbs([['Maintenance', '#/maintenance'], ['Edit log', photo ? '#/history' : null], ...(photo ? [['One photo', null]] : [])]),
+    pageTitle('calendar', 'indigo', photo ? 'Edit log of one photo' : 'Edit log'),
     h('p', { class: 'muted', style: 'margin:0 0 10px' }, 'Every change made in the viewer, kept for good: who, when, and the values before and after. Undo puts the earlier values back; the restore links use the backups (sidecar copies, original files, deleted photos) as long as they are still there.'),
     h('div', { class: 'ctools' }, h('span', null, 'Show: ', sel)), list, more));
   load();

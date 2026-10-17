@@ -996,7 +996,7 @@ def test_info_panel_change_log_is_last_and_folded(page, server):
                                     return kids.length ? kids[kids.length - 1].className : ''; }""")
     fold = page.locator(".lb-info details.hfold")
     assert fold.evaluate("(e) => !e.open"), "folded until opened"
-    assert "change log" in fold.locator("summary").inner_text().lower()
+    assert "edit log" in fold.locator("summary").inner_text().lower()
     assert page.evaluate("() => { const f = document.querySelector('.lb-info details.hfold'); let n = f.nextElementSibling; while (n && n.hidden) n = n.nextElementSibling; return n === null; }"), last
     fold.locator("summary").click()
     assert fold.locator(".hrow").count() >= 1

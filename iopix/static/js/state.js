@@ -88,7 +88,7 @@ export const applyBadgePref = () => document.body.classList.toggle('nobadges', s
 export const INFO_SECTIONS = [
   ['caption', 'Title and caption'], ['date', 'Date and time'], ['file', 'File name, size and folder'], ['people', 'People'], ['tags', 'Tags'],
   ['location', 'Location and map'], ['details', 'Details: rating, creator, copyright, video'], ['camera', 'Camera, lens and exposure'],
-  ['ai', 'AI analysis: description, detected content, objects, text, sharpness'], ['history', 'Change log: every change made here, with undo'],
+  ['ai', 'AI analysis: description, detected content, objects, text, sharpness'], ['history', 'Edit log: every change made here, with undo'],
 ];
 export const infoHidden = () => new Set(store.get('info_hide', '').split(',').filter(Boolean));
 export function infoPrefsEditor(onchange) {

@@ -661,7 +661,6 @@ export async function settingsPage(view) {
     ] : [
     // 1. Library: everything about digiKam's data as the viewer sees it
     h('h2', null, 'Library'),
-    row('Change log', 'Every change made in the viewer, for every photo, kept for good: who, when, before and after, with undo and restore from the backups.', h('a', { class: 'pillbtn', href: '#/history' }, 'Open the change log')),
     row('Import', 'Photos and videos from a phone, a card or a computer, into folders by date, duplicates left out, a sidecar for each. The installed app is a share target on Android.', h('a', { class: 'pillbtn', href: '#/import' }, 'Open Import')),
     scannerRow(m, row, btn, () => { if (S.route.view === view) settingsPage(view); }),
     row('Lossless JPEG edits', S.LOSSLESS?.jpegtran ? 'jpegtran (libjpeg-turbo) is installed: JPEGs are rotated, flipped and cropped without re-encoding; other files by their orientation flag.'
@@ -721,6 +720,7 @@ export async function settingsPage(view) {
         h('a', { class: 'pillbtn', href: '/api/backup/app', download: '' }, icon('download'), h('span', null, 'Viewer data (zip)')))),
     // 4. The viewer itself
     h('h2', null, 'Viewer'),
+    row('Edit log', 'Every change made in the viewer, for every photo, kept for good: who, when, what it was before and after, with Undo and restore of the sidecar or the original file from the backups.', h('a', { class: 'pillbtn', href: '#/history' }, 'Open the edit log')),
     row('Server log', 'What the server has been doing: edits, database writes, updates, background jobs and any errors, from the viewer’s own log file in the data folder.', btn('Show the log', logDialog)),
     (() => {
       const body = h('div', { class: 'muted', style: 'font-size:13px' }, 'Loading…');

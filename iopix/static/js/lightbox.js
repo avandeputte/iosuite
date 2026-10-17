@@ -864,7 +864,7 @@ export function renderInfo() {
       box.hidden = true;
       api(`/api/history?photo=${d.id}&limit=6`).then((r) => {
         if (!r.entries.length || !box.isConnected) return;
-        box.append(h('summary', null, `Change log · ${plural(r.total, 'change')}`), list);
+        box.append(h('summary', null, `Edit log · ${plural(r.total, 'change')}`), list);
         if (r.total > 6) box.append(h('a', { class: 'lnk', style: 'font-size:12.5px', href: `#/history?photo=${d.id}` }, `See all ${nf.format(r.total)}`));
         list.append(...r.entries.map((e) => histEntry(e, () => { details.delete(d.id); showItem(); }, false)));
         box.hidden = false;
