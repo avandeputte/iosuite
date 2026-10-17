@@ -1110,3 +1110,38 @@ def test_removing_a_face_needs_no_question_and_can_be_undone(page, server):
     page.wait_for_timeout(2500)  # both changes reach the server before the page goes
     d = _json.loads(urllib.request.urlopen(f"{server}/api/photo/{f['photo']}").read())
     assert any((o["x"], o["y"], o["w"], o["h"]) == (f["x"], f["y"], f["w"], f["h"]) for o in d.get("faces_other", [])), "and on the server too"
+
+
+def test_accept_as_it_is_removes_only_that_entry(page, server, lib):
+    """Accepting one photo folds its entry away in place: the page is not redrawn, so the spot is kept."""
+    import json as _json
+    import sqlite3 as _s
+    dk = _s.connect(lib["db"])
+    unknown = dk.execute("SELECT tagid FROM TagProperties WHERE property = 'unknownPerson'").fetchone()[0]
+    pids = [i for i in lib["ids"][30:] if i not in lib["with_faces"]][:2]
+    saved = {p: dk.execute("SELECT imageid, tagid, property, value FROM ImageTagProperties WHERE imageid = ?", (p,)).fetchall() for p in pids}
+    for p in pids:  # two photos whose only faces are unknown
+        dk.execute("DELETE FROM ImageTagProperties WHERE imageid = ?", (p,))
+        dk.execute("INSERT INTO ImageTagProperties (imageid, tagid, property, value) VALUES (?,?,?,?)", (p, unknown, "autodetectedFace", '<rect x="20" y="20" width="60" height="60"/>'))
+    dk.commit(); dk.close()
+    try:
+        page.goto(server + "/#/quality")
+        page.wait_for_selector("h2:has-text('Faces without a name')", timeout=20000)
+        sec = page.locator(".qsec", has=page.locator("h2", has_text="Faces without a name"))
+        before = sec.locator(".hrow").count()
+        if before < 1:
+            pytest.skip("the planted photos did not reach the list")
+        page.evaluate("document.querySelector('.qsec').dataset.mark = 'kept'")
+        sec.locator(".hrow").first.locator("a", has_text="Accept as it is").click()
+        page.wait_for_timeout(800)
+        assert sec.locator(".hrow").count() == before - 1
+        assert page.evaluate("document.querySelector('.qsec').dataset.mark") == "kept", "the page was not redrawn"
+    finally:
+        dk = _s.connect(lib["db"])
+        for p in pids:
+            dk.execute("DELETE FROM ImageTagProperties WHERE imageid = ?", (p,))
+            dk.executemany("INSERT INTO ImageTagProperties VALUES (?,?,?,?)", saved[p])
+        dk.commit(); dk.close()
+        for p in pids:
+            req = urllib.request.Request(server + "/api/quality/accept", data=_json.dumps({"photos": [p], "on": False}).encode(), headers={"Content-Type": "application/json"}, method="POST")
+            urllib.request.urlopen(req).read()

@@ -937,6 +937,16 @@ async function showQuality() {
     setTimeout(() => { if (LB.open && !LB.faces) toggleFaces(); }, 600);
   } });
   const size = store.get('qsize', 'large');
+  // one entry handled: it folds away where it is, its list's count goes down, and the page stays where it was
+  const gone = (ev) => {
+    const row = ev?.target?.closest('.hrow'), sec = row?.closest('.qsec');
+    if (!row) return false;
+    row.classList.add('qgone');
+    setTimeout(() => row.remove(), 250);
+    const n = sec?.querySelector('h2 .muted');
+    if (n) n.textContent = nf.format(Math.max(0, (parseInt(n.textContent.replace(/\D/g, ''), 10) || 1) - 1));
+    return true;
+  };
   const sec = (title, n, intro, acts, items) => h('div', { class: 'qsec' },
     h('h2', null, title, h('span', { class: 'muted', style: 'font-size:14px;font-weight:400;margin-left:8px' }, nf.format(n))),
     intro ? h('p', { class: 'muted', style: 'margin:0 0 10px;max-width:820px' }, intro) : null,
@@ -946,7 +956,7 @@ async function showQuality() {
   const busy = p.running ? h('div', { class: 'enote' }, p.files ? `Fixing the image files… ${nf.format(p.done)} / ${nf.format(p.total)}.` : `Removing duplicate faces… ${nf.format(p.done)} / ${nf.format(p.total)} photos.`) : null;
   if (p.running) setTimeout(() => { if (route.view === 'quality') showQuality(); }, 4000);
   const near = q.near;
-  const fitOne = async (x) => { try { const r = await post('/api/quality/fit', { photos: [x.photo] }); toast(r.fitted ? 'Box trimmed to the photo.' : r.removed ? 'Empty box removed.' : 'Nothing to fix there.'); } catch (e) { toast(e.message, null, null, 9000); return; } setTimeout(showQuality, 1200); };
+  const fitOne = async (x, ev) => { try { const r = await post('/api/quality/fit', { photos: [x.photo] }); toast(r.fitted ? 'Box trimmed to the photo.' : r.removed ? 'Empty box removed.' : 'Nothing to fix there.'); } catch (e) { toast(e.message, null, null, 9000); return; } if (!gone(ev)) setTimeout(showQuality, 1200); };
   const fitAll = q.invalid.count && CAN_MANAGE ? h('button', { class: 'pillbtn on', onclick: async () => {
     if (!confirm(`Trim ${plural(q.invalid.count, 'face box', 'face boxes')} to the edges of their photos (empty ones are removed)? Each change is in the change log with undo.`)) return;
     try { const r = await post('/api/quality/fit', {}); toast(`${nf.format(r.fitted)} trimmed, ${nf.format(r.removed)} removed${r.failed ? `, ${nf.format(r.failed)} failed` : ''}.`, null, null, 7000); } catch (e) { toast(e.message, null, null, 9000); return; }
@@ -970,11 +980,11 @@ async function showQuality() {
       q.separate.items.map((x, i, all) => h('div', { class: 'hrow' }, thumb(x, all), h('div', { class: 'hmain' }, h('b', null, x.name), ` · ${x.rects.length} boxes`)))),
     (() => {  // photos whose faces are all unnamed: name them, ignore them, or accept them as they are
       const u = q.unnamed, items = u.items;
-      const accept = async (ids, on = true) => { try { await post('/api/quality/accept', { photos: ids, check: 'unnamed', on }); toast(on ? `${plural(ids.length, 'photo')} accepted as they are.` : 'Shown again.'); } catch (e) { toast(e.message, null, null, 9000); return; } showQuality(); };
-      const ignore = async (ids) => {
-        if (!confirm(`Mark the unnamed faces on ${plural(ids.length, 'photo')} as not faces to name? Each change is in the change log with undo.`)) return;
+      const accept = async (ids, on = true, ev) => { try { await post('/api/quality/accept', { photos: ids, check: 'unnamed', on }); toast(on ? `${plural(ids.length, 'photo')} accepted as they are.` : 'Shown again.'); } catch (e) { toast(e.message, null, null, 9000); return; } if (!gone(ev)) showQuality(); };
+      const ignore = async (ids, ev) => {
+        if (!ev && !confirm(`Mark the unnamed faces on ${plural(ids.length, 'photo')} as not faces to name? Each change is in the change log with undo.`)) return;
         try { const r = await post('/api/quality/ignore', { photos: ids }); toast(`${plural(r.ignored, 'face')} ignored${r.failed ? `, ${nf.format(r.failed)} failed` : ''}.`); } catch (e) { toast(e.message, null, null, 9000); return; }
-        setTimeout(showQuality, 1200);
+        if (!gone(ev)) setTimeout(showQuality, 1200);
       };
       const nameThem = (x) => { openLightbox({ id: [x.photo] }, 0, true); setTimeout(() => { if (!LB.faces) toggleFaces(); }, 700); };
       return sec('Faces without a name', u.count,
@@ -985,15 +995,16 @@ async function showQuality() {
           : u.accepted ? [h('button', { class: 'pillbtn', onclick: async () => { const acc = await api('/api/quality/accepted?check=unnamed'); if (acc.photos.length && confirm(`List the ${plural(acc.photos.length, 'accepted photo')} again?`)) accept(acc.photos, false); } }, 'Show the accepted ones again')] : null,
         items.map((x, i, all) => h('div', { class: 'hrow' }, thumb(x, all), h('div', { class: 'hmain' }, h('b', null, plural(x.faces, 'unnamed face')), ' · ',
           h('a', { class: 'lnk', onclick: () => nameThem(x) }, 'Name them'), ' · ',
-          CAN_MANAGE ? [h('a', { class: 'lnk', onclick: () => ignore([x.photo]) }, 'Ignore'), ' · '] : null,
-          h('a', { class: 'lnk', onclick: () => accept([x.photo]) }, 'Accept as it is')))));
+          CAN_MANAGE ? [h('a', { class: 'lnk', onclick: (ev) => ignore([x.photo], ev) }, 'Ignore'), ' · '] : null,
+          h('a', { class: 'lnk', onclick: (ev) => accept([x.photo], true, ev) }, 'Accept as it is')))));
     })(),
     (() => {  // people in the photo (object detection), nobody marked or tagged
       const u = q.untagged || { count: 0, items: [], accepted: 0 }, items = u.items;
-      const accept = async (ids, on = true) => { try { await post('/api/quality/accept', { photos: ids, check: 'untagged', on }); toast(on ? `${plural(ids.length, 'photo')} accepted as they are.` : 'Shown again.'); } catch (e) { toast(e.message, null, null, 9000); return; } showQuality(); };
-      const find = async (ids) => {
-        try { const r = await post('/api/faces/detect', { ids }); toast(r.done ? `${plural(r.added || 0, 'face')} found; they are listed under Faces without a name.` : `Looking for faces in ${plural(r.queued, 'photo')} in the background.`, null, null, 7000); } catch (e) { toast(e.message, null, null, 9000); return; }
-        setTimeout(showQuality, 2500);
+      const accept = async (ids, on = true, ev) => { try { await post('/api/quality/accept', { photos: ids, check: 'untagged', on }); toast(on ? `${plural(ids.length, 'photo')} accepted as they are.` : 'Shown again.'); } catch (e) { toast(e.message, null, null, 9000); return; } if (!gone(ev)) showQuality(); };
+      const find = async (ids, ev) => {
+        let r;
+        try { r = await post('/api/faces/detect', { ids }); toast(r.done ? `${plural(r.added || 0, 'face')} found${r.added ? '; name them from the photo, or under Faces without a name after Check again' : ''}.` : `Looking for faces in ${plural(r.queued, 'photo')} in the background.`, null, null, 7000); } catch (e) { toast(e.message, null, null, 9000); return; }
+        if (ev && r.done && r.added) gone(ev); else if (!ev) setTimeout(showQuality, 2500);
       };
       const again = u.accepted ? h('button', { class: 'pillbtn', onclick: async () => { const acc = await api('/api/quality/accepted?check=untagged'); if (acc.photos.length && confirm(`List the ${plural(acc.photos.length, 'accepted photo')} again?`)) accept(acc.photos, false); } }, 'Show the accepted ones again') : null;
       return sec('People, but nobody tagged', u.count,
@@ -1001,13 +1012,13 @@ async function showQuality() {
         [items.length ? h('button', { class: 'pillbtn', onclick: () => accept(items.map((x) => x.photo)) }, `Accept the ${nf.format(items.length)} shown`) : null,
           items.length && FACE_DETECT && CAN_MANAGE ? h('button', { class: 'pillbtn', onclick: () => find(items.map((x) => x.photo)) }, `Find faces in the ${nf.format(items.length)} shown`) : null, again].filter(Boolean),
         items.map((x, i, all) => h('div', { class: 'hrow' }, thumb(x, all), h('div', { class: 'hmain' }, h('b', null, plural(x.people, 'person', 'people')), ' detected · ',
-          FACE_DETECT && CAN_MANAGE ? [h('a', { class: 'lnk', onclick: () => find([x.photo]) }, 'Find faces'), ' · '] : null,
-          h('a', { class: 'lnk', onclick: () => accept([x.photo]) }, 'Accept as it is')))));
+          FACE_DETECT && CAN_MANAGE ? [h('a', { class: 'lnk', onclick: (ev) => find([x.photo], ev) }, 'Find faces'), ' · '] : null,
+          h('a', { class: 'lnk', onclick: (ev) => accept([x.photo], true, ev) }, 'Accept as it is')))));
     })(),
     sec('Outside the photo or empty', q.invalid.count, 'A box that sticks out of the photo can be trimmed to its edges here, or moved and resized in the viewer (click the face, “Adjust the box”). Empty boxes are removed.', fitAll ? [fitAll] : null,
       q.invalid.items.map((x, i, all) => h('div', { class: 'hrow' }, thumb(x, all), h('div', { class: 'hmain' }, h('b', null, x.name), ' ',
         x.rect ? `${x.rect[2]} × ${x.rect[3]} at ${x.rect[0]}, ${x.rect[1]} on a ${x.size[0]} × ${x.size[1]} photo` : 'unreadable rectangle',
-        CAN_MANAGE && x.fix ? [' · ', h('a', { class: 'lnk', onclick: () => fitOne(x) }, x.fix === 'fit' ? 'Fit inside' : 'Remove')] : null)))));
+        CAN_MANAGE && x.fix ? [' · ', h('a', { class: 'lnk', onclick: (ev) => fitOne(x, ev) }, x.fix === 'fit' ? 'Fit inside' : 'Remove')] : null)))));
 }
 /** Maintenance › Server log: the end of data/viewer.log, filtered by level and text; page requests hidden unless asked. */
 function logDialog() {
