@@ -35,22 +35,22 @@ RECORD = MODEL_DIR / "downloads.json"
 REGISTRY = {
     # Content search (choice "search_model"; the engines in semantic.py)
     "clip": {"label": "CLIP ViT-B/32", "kind": "hf", "repos": ["Qdrant/clip-ViT-B-32-vision", "Qdrant/clip-ViT-B-32-text"], "choice": "search_model",
-             "page": "https://huggingface.co/Qdrant/clip-ViT-B-32-vision", "what": "Content search: the original model, the fastest to index.",
+             "page": "https://huggingface.co/Qdrant/clip-ViT-B-32-vision", "what": "Content search: the original model. The fastest to index and the smallest; good with short queries (a dog, a beach), weaker with longer descriptions.",
              "size": "~600 MB"},
     "siglip2": {"label": "SigLIP 2 base", "kind": "hf", "repos": ["onnx-community/siglip2-base-patch16-224-ONNX"], "choice": "search_model",
-                "page": "https://huggingface.co/onnx-community/siglip2-base-patch16-224-ONNX", "what": "Content search: a little better than CLIP on average, about 4 times slower to index.",
+                "page": "https://huggingface.co/onnx-community/siglip2-base-patch16-224-ONNX", "what": "Content search: a little better than CLIP on average in a test on 2,160 of your photos (better for animals and costumes, worse for weddings and food), about 4 times slower to index.",
                 "size": "~1.5 GB"},
     "jinaclip": {"label": "Jina CLIP v1", "kind": "hf", "repos": ["jinaai/jina-clip-v1"], "choice": "search_model",
                  "page": "https://huggingface.co/jinaai/jina-clip-v1", "what": "Content search: a larger CLIP (ViT-B/16 images, a BERT text side) that understands longer, more natural queries.",
                  "size": "~900 MB"},
     # Photo descriptions (choice "caption_model")
     "blip": {"label": "BLIP base (captions)", "kind": "hf", "repos": ["Salesforce/blip-image-captioning-base"], "choice": "caption_model",
-             "page": "https://huggingface.co/Salesforce/blip-image-captioning-base", "what": "Photo descriptions.", "size": "~950 MB"},
+             "page": "https://huggingface.co/Salesforce/blip-image-captioning-base", "what": "Photo descriptions: short, plain sentences (\u201ca group of people standing on a beach\u201d). The fastest, about 0.5 s a photo.", "size": "~950 MB"},
     "blip_large": {"label": "BLIP large (captions)", "kind": "hf", "repos": ["Salesforce/blip-image-captioning-large"], "choice": "caption_model",
                    "page": "https://huggingface.co/Salesforce/blip-image-captioning-large", "what": "Photo descriptions: richer and more accurate sentences, about 3 times slower.", "size": "~1.9 GB"},
     # Object detection (choice "object_model"): the same YOLOX network at four sizes
     "yolox": {"label": "YOLOX-S", "kind": "url", "file": "yolox_s.onnx", "url": "https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_s.onnx", "choice": "object_model",
-              "page": "https://github.com/Megvii-BaseDetection/YOLOX/releases", "what": "Object detection (people, balls, animals, vehicles…): the small, fast model.", "size": "35 MB"},
+              "page": "https://github.com/Megvii-BaseDetection/YOLOX/releases", "what": "Object detection (people, balls, animals, vehicles…): the small, fast model (40 AP on COCO). Misses more small or partly hidden objects than the larger sizes.", "size": "35 MB"},
     "yolox_m": {"label": "YOLOX-M", "kind": "url", "file": "yolox_m.onnx", "url": "https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_m.onnx", "choice": "object_model",
                 "page": "https://github.com/Megvii-BaseDetection/YOLOX/releases", "what": "Object detection: medium model, noticeably more accurate (47 vs 40 AP on COCO), about 3 times slower.", "size": "101 MB"},
     "yolox_l": {"label": "YOLOX-L", "kind": "url", "file": "yolox_l.onnx", "url": "https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_l.onnx", "choice": "object_model",
@@ -59,14 +59,14 @@ REGISTRY = {
                 "page": "https://github.com/Megvii-BaseDetection/YOLOX/releases", "what": "Object detection: the largest model (51 AP on COCO), about 10 times slower than YOLOX-S.", "size": "396 MB"},
     # Face detection (choice "face_detector")
     "yunet": {"label": "YuNet", "kind": "url", "file": "face_detection_yunet_2023mar.onnx", "url": "https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx", "choice": "face_detector",
-              "page": "https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet", "what": "Face detection: OpenCV's tiny, fast detector. Finds faces digiKam or any other tool has not marked yet, on a photo, a folder or the whole library, and adds them as unnamed faces.", "size": "0.2 MB"},
+              "page": "https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet", "what": "Face detection: OpenCV's tiny, fast detector (80% on the hard WIDER Face set). Good on clear, front-facing faces; misses more small, turned or partly hidden ones.", "size": "0.2 MB"},
     "scrfd": {"label": "SCRFD 10G", "kind": "zip", "file": "scrfd_10g.onnx", "url": "https://github.com/deepinsight/insightface/releases/download/v0.7/buffalo_l.zip", "member": "det_10g.onnx", "choice": "face_detector",
               "page": "https://github.com/deepinsight/insightface/tree/master/detection/scrfd", "what": "Face detection: InsightFace's detector, clearly better on small, turned and partly hidden faces (95.2% on the hard WIDER Face set vs YuNet's 80%), about 10 times slower. Comes in a 289 MB pack of which this file is kept.", "size": "17 MB (289 MB download)"},
     "retinaface": {"label": "RetinaFace ResNet-50", "kind": "url", "file": "retinaface_resnet50.onnx", "url": "https://github.com/clibdev/Pytorch_Retinaface/releases/latest/download/retinaface-resnet-50.onnx", "choice": "face_detector",
                    "page": "https://github.com/clibdev/Pytorch_Retinaface", "what": "Face detection: the classic heavy detector (95.5% / 94.0% / 84.4% on WIDER Face easy, medium, hard), the slowest of the three.", "size": "104 MB"},
     # Face grouping (choice "face_vectors")
     "sface": {"label": "SFace", "kind": "url", "file": "face_recognition_sface_2021dec.onnx", "url": "https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_recognition_sface/face_recognition_sface_2021dec.onnx", "choice": "face_vectors",
-              "page": "https://github.com/opencv/opencv_zoo/tree/main/models/face_recognition_sface", "what": "Face grouping: groups look-alike unnamed faces on the Faces page and suggests who they are, for one-click naming. Small and fast.", "size": "37 MB"},
+              "page": "https://github.com/opencv/opencv_zoo/tree/main/models/face_recognition_sface", "what": "Face grouping: groups look-alike unnamed faces and suggests who they are. Small and fast, but less sure telling similar-looking people apart (relatives, children) than ArcFace.", "size": "37 MB"},
     "arcface": {"label": "ArcFace ResNet-50", "kind": "zip", "file": "arcface_w600k_r50.onnx", "url": "https://github.com/deepinsight/insightface/releases/download/v0.7/buffalo_l.zip", "member": "w600k_r50.onnx", "choice": "face_vectors",
                 "page": "https://github.com/deepinsight/insightface/tree/master/model_zoo", "what": "Face grouping: InsightFace's recognition model (trained on WebFace600K), much better at telling people apart; each face is aligned on its eyes, nose and mouth first, with the chosen face detector. About 5 times slower. Comes in a 289 MB pack of which this file is kept.", "size": "174 MB (289 MB download)"},
     # Data

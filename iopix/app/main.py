@@ -355,6 +355,18 @@ def _photos_cached(version: str, key: str) -> bytes:
     return gzip.compress(orjson.dumps(data), compresslevel=3)
 
 
+@app.get("/api/random")
+def api_random(request: Request, n: int = 12):
+    """Explore › Rediscover: photos picked at random from the whole library (stills, not rejected): {id, w, h, ts}."""
+    where, params, _rank = resolve([("type", "photo"), ("norejected", "1")])
+    con = db()
+    try:
+        rows = con.execute(f"SELECT id, w, h, ts FROM photos WHERE {where} ORDER BY random() LIMIT ?", [*params, max(1, min(int(n), 60))]).fetchall()
+    finally:
+        con.close()
+    return {"id": [r[0] for r in rows], "w": [r[1] for r in rows], "h": [r[2] for r in rows], "ts": [r[3] for r in rows]}
+
+
 @app.get("/api/photos")
 def api_photos(request: Request):
     """The whole result set in compact column form; the browser lays it out and

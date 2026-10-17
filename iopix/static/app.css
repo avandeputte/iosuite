@@ -761,3 +761,12 @@ body:has(#dkbanner) #updbanner { bottom: 96px; }  /* both at once: the update ca
 
 .qitems .hrow { transition: opacity .2s, transform .2s; }
 .qitems .hrow.qgone { opacity: 0; transform: scale(.96); }
+
+/* Maintenance › models: what the chosen model is, and how the others compare */
+.mtable .mwhat { font-size: 12px; margin-top: 4px; max-width: 360px; }
+.mcompare { margin-top: 6px; font-size: 12.5px; }
+.mcompare summary { cursor: pointer; color: var(--accent); }
+.mopts { display: grid; gap: 8px; margin-top: 8px; max-width: 420px; }
+.mopt { border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; }
+.mopt.on { border-color: color-mix(in srgb, var(--brand) 60%, transparent); background: color-mix(in srgb, var(--brand) 6%, transparent); }
+.mopt .muted { font-size: 12px; }

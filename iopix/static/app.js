@@ -1493,6 +1493,17 @@ async function showExplore() {
     h('span', { class: 'sic' }, icon(ic)), h('div', null, h('b', null, value), h('span', null, label)));
   // section headings with a coloured icon; the pill group below a heading shares its hue
   const sec = (hue, ic, title, link, linkLabel) => h('h2', { style: `--hue:var(--c-${hue})` }, h('span', { class: 'hic' }, icon(ic)), title, link ? h('a', { href: link }, linkLabel) : null);
+  // Rediscover: a dozen photos picked at random from the whole library, new ones on every visit or with Shuffle
+  const rediscover = h('div', { hidden: true });
+  const shuffle = async () => {
+    let r; try { r = await api('/api/random?n=12'); } catch { return; }
+    if (!r.id.length || !rediscover.isConnected) return;
+    const tiles = r.id.map((id, i) => h('div', { class: 'tile', style: `--ar:${Math.max(0.5, Math.min(2.2, r.w[i] / (r.h[i] || 1))).toFixed(3)}`, title: dfDay.format(date(r.ts[i])),
+      onclick: () => openLightbox({ id: r.id }, i, true) }, h('img', { src: `/thumb/${id}`, alt: '', loading: 'lazy' })));
+    fill(rediscover, h('h2', { style: '--hue:var(--c-indigo)' }, h('span', { class: 'hic' }, icon('spark')), 'Rediscover', h('a', { onclick: shuffle }, 'Shuffle')), h('div', { class: 'jrows' }, tiles));
+    rediscover.hidden = false;
+  };
+  setTimeout(shuffle, 0);
   const group = (hue, ...kids) => h('div', { class: 'pills', style: `--hue:var(--c-${hue})` }, ...kids);
   main.replaceChildren(h('div', { class: 'page' },
     pageTitle('explore', 'purple', 'Explore'),
@@ -1503,7 +1514,7 @@ async function showExplore() {
       stat('teal', 'folder', nf.format(META.albums.length), 'folders', '#/folders'),
       stat('green', 'place', nf.format(META.geotagged), 'with location', '#/map'),
       stat('slate', 'disk', fmtBytes(META.bytes), 'on disk')),
-    otd,
+    otd, rediscover,
     META.places.length ? [sec('green', 'place', 'Places', '#/places', 'See all'),
       h('div', { class: 'cards' }, META.places.slice(0, 12).map(placeCard))] : null,
     sec('amber', 'person', 'People', '#/people', 'See all'),
@@ -1519,18 +1530,9 @@ async function showExplore() {
       pill('Untagged', null, { untagged: 1 }),
       pill('No location', META.total - META.geotagged, { geo: 0 }), pill('Favorites', ST.fav.size, { fav: 1 }),
       h('a', { class: 'pill', href: '#/duplicates' }, 'Duplicate files'), h('a', { class: 'pill', href: '#/bursts' }, 'Bursts & best shots'),
-      h('a', { class: 'pill', href: '#/events' }, 'Events & trips'), h('a', { class: 'pill', href: '#/settings' }, 'Settings'), h('a', { class: 'pill', href: '#/maintenance' }, 'Maintenance'), pill('Contains text', null, { hastext: 1 }), pill('Blurry', null, { blurry: 1 }),
+      h('a', { class: 'pill', href: '#/events' }, 'Events & trips'), pill('Contains text', null, { hastext: 1 }), pill('Blurry', null, { blurry: 1 }),
       EDITING ? pill('Edited here, not yet in digiKam', PENDING, { edited: 1 }) : null,
-      EDITING && PENDING ? h('a', { class: 'pill', onclick: dbDialog }, 'Apply edits to digiKam database…') : null,
       h('a', { class: 'pill', href: '#/map' }, 'Map', h('b', null, nf.format(META.geotagged)))),
-    EDITING ? [h('h2', { class: 'sec' }, 'Editing'),
-      h('label', { style: 'display:flex;gap:10px;align-items:flex-start;max-width:760px;cursor:pointer' },
-        h('input', { type: 'checkbox', checked: WRITE_FILES, style: 'margin-top:3px', onchange: async (e) => {
-          try { WRITE_FILES = (await post('/api/settings', { write_files: e.target.checked })).write_files; } catch { e.target.checked = WRITE_FILES; toast('Could not change the setting.'); return; }
-          toast(WRITE_FILES ? 'Edits will now also be written into JPEG, PNG, TIFF and WebP files.' : 'Edits will be written to sidecars only.');
-        } }),
-        h('span', null, 'Also write metadata into the image files (XMP, EXIF and IPTC), like digiKam’s “write to sidecar and file” mode. ',
-          h('span', { class: 'muted' }, 'Applies to JPEG, PNG, TIFF and WebP; other formats and videos stay sidecar-only, as in digiKam. Before a file is first rewritten, the original is copied to the viewer’s file-backups folder, and Undo restores it.')))] : null,
     sec('blue', 'calendar', 'Years'),
     group('blue', META.years.map(([y, n]) => pill(y, n, { year: y }))),
     sec('purple', 'camera', 'Cameras'),
@@ -2029,11 +2031,24 @@ function aiSection(view) {
       } }, c.options.map((k) => h('option', { value: k, selected: k === c.chosen }, models[k] ? models[k].label + (models[k].installed ? '' : ' (not installed)') : k)));
       return sel;
     };
+    // what each choice is: size, speed, accuracy (the registry's own words), the chosen one marked
+    const compare = (group) => {
+      const c = choices[group];
+      if (!c || c.options.length < 2) return null;
+      return h('details', { class: 'mcompare' }, h('summary', null, `Compare the ${c.options.length} models`),
+        h('div', { class: 'mopts' }, c.options.map((k) => { const o = models[k]; if (!o) return null;
+          return h('div', { class: 'mopt' + (k === c.chosen ? ' on' : '') },
+            h('div', null, h('b', null, o.label), h('span', { class: 'muted' }, ` · ${o.size}${k === c.chosen ? ' · in use' : o.installed ? ' · installed' : ' · not installed'}`),
+              ' ', h('a', { class: 'lnk', href: o.page, target: '_blank', rel: 'noopener' }, 'about')),
+            h('div', { class: 'muted' }, o.what)); })));
+    };
     const modelCell = (m, group) => {
       if (!m) return h('td', { class: 'muted' }, 'built in');
       const [st, cls] = modelState(m, p);
       return h('td', null, h('div', null, group ? chooser(group) : h('a', { class: 'lnk', href: m.page, target: '_blank', rel: 'noopener', title: m.what }, m.label), h('span', { class: 'muted' }, ` · ${m.size}`)),
-        h('div', { class: 'mst ' + cls, title: m.revision ? `revision ${m.revision}` : '' }, st, group ? [' · ', h('a', { class: 'lnk', href: m.page, target: '_blank', rel: 'noopener', title: m.what }, 'about')] : null));
+        h('div', { class: 'mst ' + cls, title: m.revision ? `revision ${m.revision}` : '' }, st, group ? [' · ', h('a', { class: 'lnk', href: m.page, target: '_blank', rel: 'noopener', title: m.what }, 'about')] : null),
+        group ? h('div', { class: 'muted mwhat' }, m.what) : null,
+        group ? compare(group) : null);
     };
     const modelBtn = (m) => {
       if (!m) return null;
@@ -3497,7 +3512,7 @@ function personPicker(onPick) {
   const draw = () => {
     const f = norm(inp.value);
     const hits = people.filter((t) => !f || t._n.includes(f)).sort((a, b) => b.nAll - a.nAll).slice(0, 30);
-    fill(list, hits.map((t) => h('div', { class: 'frow', onclick: () => { back.remove(); onPick(t); } }, h('img', { src: faceUrl(t.id), loading: 'lazy', alt: '' }), h('span', { class: 'nm' }, t.name, h('span', { class: 'muted' }, '  ' + t.full.split('/').slice(1, -1).join(' › '))), h('span', { class: 'ct' }, nf.format(t.nAll)))),
+    fill(list, hits.map((t) => h('div', { class: 'frow', onclick: () => { back.remove(); onPick(t); } }, h('img', { src: faceUrl(t.id), loading: 'lazy', alt: '' }), h('span', { class: 'nm' }, t.name, h('span', { hidden: true }, '  ' + t.full.split('/').slice(1, -1).join(' › '))), h('span', { class: 'ct' }, nf.format(t.nAll)))),
       f && !hits.some((t) => t._n === f) ? h('div', { class: 'frow', onclick: () => createPerson(inp.value.trim()) }, icon('add'), h('span', { class: 'nm' }, `New person “${inp.value.trim()}”…`)) : null);
   };
   const createPerson = (name) => {

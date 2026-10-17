@@ -559,12 +559,12 @@ def test_on_this_day_is_a_justified_gallery_without_scrollbars(page, server, lib
     page.goto(server + "/#/explore")
     page.wait_for_selector(".stats .stat", timeout=10000)
     page.wait_for_timeout(1500)
-    if page.locator(".jrows .tile").count() == 0:
+    g = page.locator("h2:has-text('On this day') + .jrows")
+    if g.count() == 0 or g.locator(".tile").count() == 0:
         pytest.skip("no photo in the scratch library was taken on today's date")
-    g = page.locator(".jrows")
     assert page.evaluate("(e) => e.scrollWidth <= e.clientWidth", g.element_handle()), "nothing to scroll sideways"
     box = g.bounding_box()
-    tiles = page.locator(".jrows .tile")
+    tiles = g.locator(".tile")
     for i in range(tiles.count()):
         b = tiles.nth(i).bounding_box()
         assert b["x"] >= box["x"] - 1 and b["x"] + b["width"] <= box["x"] + box["width"] + 1, "tiles wrap within the page width"
@@ -1170,3 +1170,47 @@ def test_face_quality_loads_the_next_entries_in_place(page, server, lib):
     page.wait_for_timeout(500)
     assert sec.locator(".hrow").count() == 3 and page.evaluate("document.querySelector('.qsec').dataset.mark") == "kept"
     assert not sec.locator("button", has_text="Load the next").is_visible(), "nothing left to load"
+
+
+def test_explore_rediscover_and_no_settings(page, server):
+    page.set_viewport_size({"width": 1280, "height": 900})
+    page.goto(server + "/#/explore")
+    page.wait_for_selector("h2:has-text('Rediscover')", timeout=15000)
+    sec = page.locator("h2:has-text('Rediscover') + .jrows")
+    assert 1 <= sec.locator(".tile").count() <= 12
+    first = sec.locator(".tile img").first.get_attribute("src")
+    page.locator("h2:has-text('Rediscover') a", has_text="Shuffle").click()
+    page.wait_for_timeout(800)
+    assert sec.locator(".tile").count() >= 1
+    order = page.evaluate("[...document.querySelectorAll('#main h2')].map((e) => e.textContent)")
+    i = next(k for k, t in enumerate(order) if t.startswith("Rediscover"))
+    assert i == 0 or order[i - 1].startswith("On this day"), order
+    assert order[i + 1].startswith("Places") or order[i + 1].startswith("People"), "right before Places (or People when there are no places)"
+    assert page.locator("#main h2", has_text="Editing").count() == 0 and page.locator("#main input[type=checkbox]").count() == 0, "no settings on Explore"
+    assert page.locator("#main a.pill", has_text="Settings").count() == 0 and page.locator("#main a.pill", has_text="Maintenance").count() == 0
+    _ = first
+
+
+def test_person_picker_shows_only_the_name(page, server, lib):
+    import json as _json
+    faces = _json.loads(urllib.request.urlopen(server + "/api/faces/queue?kind=unknown&limit=5").read())["faces"]
+    if not faces:
+        pytest.skip("no unknown face in the fixture")
+    _open_photo(page, server, faces[0]["photo"])
+    page.keyboard.press("f")
+    page.wait_for_selector(".facebox.face-unknown", timeout=10000)
+    page.locator(".facebox.face-unknown").first.click()
+    page.locator(".facemenu .fmi", has_text="Who is this").click()
+    page.wait_for_selector(".alist .frow", timeout=5000)
+    texts = page.locator(".alist .frow .nm").all_inner_texts()
+    assert texts and all("/" not in t and "  " not in t.strip() for t in texts), texts[:5]
+    page.keyboard.press("Escape")
+
+
+def test_maintenance_explains_the_model_choices(page, server):
+    page.goto(server + "/#/maintenance")
+    page.wait_for_selector(".mtable tr[data-job=facedetect] .mcompare", timeout=15000)
+    row = page.locator(".mtable tr[data-job=facedetect]")
+    assert "Face detection" in row.locator(".mwhat").inner_text()
+    row.locator(".mcompare summary").click()
+    assert row.locator(".mopt").count() == 3 and "WIDER Face" in row.locator(".mopts").inner_text()
