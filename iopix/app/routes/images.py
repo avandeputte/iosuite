@@ -2,6 +2,7 @@
 import mimetypes
 import os
 import re
+import time
 import sqlite3
 import zipfile
 
@@ -96,10 +97,20 @@ class _Sink:
 
 def _zip_stream(entries):
     """Yield a zip of (absolute path, name in archive) pairs without ever holding
-    more than a chunk in memory. Stored, not deflated: photos don't compress."""
+    more than a chunk in memory. Stored, not deflated: photos don't compress.
+    An entry may instead be (bytes, name), for a converted copy."""
     sink = _Sink()
     with zipfile.ZipFile(sink, "w", zipfile.ZIP_STORED, allowZip64=True) as zf:
         for path, arc in entries:
+            if isinstance(path, (bytes, bytearray)):
+                info = zipfile.ZipInfo(arc, time.localtime()[:6])
+                info.compress_type = zipfile.ZIP_STORED
+                with zf.open(info, "w", force_zip64=True) as dst:
+                    for i in range(0, len(path), 1 << 20):
+                        dst.write(path[i:i + (1 << 20)])
+                        yield sink.take()
+                yield sink.take()
+                continue
             try:
                 info = zipfile.ZipInfo.from_file(path, arc)
                 src = open(path, "rb")
@@ -127,7 +138,7 @@ def api_zip(request: Request, sidecars: int = 0, name: str = "photos"):
     return _zip_response(request.query_params.multi_items(), sidecars, name)
 
 
-FILTER_KEYS_IGNORED = {"sort", "name", "sidecars", "part", "part_mb", "sem_k"}
+FILTER_KEYS_IGNORED = {"sort", "name", "sidecars", "part", "part_mb", "sem_k", "xsize", "xfmt", "xquality", "nogps", "xname", "flat"}
 
 
 def _zip_parts(items, part_mb: int):
@@ -139,7 +150,7 @@ def _zip_parts(items, part_mb: int):
     con = db()
     try:
         rows = con.execute(
-            f"SELECT p.path, a.path, p.name, p.size FROM photos p JOIN albums a ON a.id = p.album_id "
+            f"SELECT p.path, a.path, p.name, p.size, p.ts FROM photos p JOIN albums a ON a.id = p.album_id "
             f"WHERE p.id IN (SELECT id FROM photos WHERE {where}) ORDER BY a.path, p.name", params).fetchall()
     except sqlite3.OperationalError as e:
         raise HTTPException(400, f"Bad query: {e}")
@@ -180,12 +191,25 @@ def _zip_response(items, sidecars: int, name: str):
     if part < 0 or part >= len(parts):
         raise HTTPException(404, "No such part")
     rows = parts[part]
+    from .. import export
+    # export options (x-prefixed: "size" and "fmt" are search filters)
+    opts = {"size": int(d.get("xsize") or 0), "fmt": d.get("xfmt") or "keep", "quality": int(d.get("xquality") or 90),
+            "nogps": d.get("nogps") == "1"}
+    pattern, flat = d.get("xname") or "keep", d.get("flat") == "1"
+    used = {}
 
     def entries():
-        for path, album, fname, _size in rows:
-            arc = f"{album.strip('/')}/{fname}".lstrip("/")
-            yield path, arc
-            if sidecars and os.path.isfile(path + ".xmp"):
+        for path, album, fname, _size, ts in rows:
+            folder = "" if flat else album.strip("/")
+            ext = export.out_ext(path, opts)
+            fname2 = export.name_for(pattern, ts, fname, used.setdefault(folder, set()), ext)
+            arc = f"{folder}/{fname2}".lstrip("/")
+            try:
+                data = export.prepare(path, opts)
+            except Exception:  # a file Pillow cannot read: the original goes in instead
+                data, arc = None, f"{folder}/{export.name_for(pattern, ts, fname, used[folder])}".lstrip("/")
+            yield (data if data is not None else path), arc
+            if sidecars and os.path.isfile(path + ".xmp") and not opts["nogps"]:
                 yield path + ".xmp", arc + ".xmp"
 
     safe = re.sub(r"[^\w .()+-]+", "_", name).strip(" ._")[:80] or "photos"

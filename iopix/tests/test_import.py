@@ -90,10 +90,10 @@ def test_import_sorts_by_date_leaves_duplicates_out_and_writes_sidecars(client, 
         assert "1999-12-31" in xmp and "import probe" in xmp, "the sidecar holds the file's own metadata"
         con = sqlite3.connect(lib["db"])
         rels = dict(con.execute("SELECT relativePath, id FROM Albums WHERE relativePath IN ('/', '/1999', '/1999/199912')").fetchall())
-        img = con.execute("SELECT album, name, status, modificationDate FROM Images WHERE id = ?", (res["added"][0]["id"],)).fetchone()
+        img = con.execute("SELECT album, name, status, modificationDate IS NOT NULL, uniqueHash IS NOT NULL FROM Images WHERE id = ?", (res["added"][0]["id"],)).fetchone()
         con.close()
         assert set(rels) == {"/", "/1999", "/1999/199912"}, "parents first, as digiKam lays them out"
-        assert img == (rels["/1999/199912"], "trip.jpg", 1, None), "registered as an upload: digiKam scans it fully next time"
+        assert img == (rels["/1999/199912"], "trip.jpg", 1, 1, 1), "scanned as digiKam would: its hash and time recorded"
         e = client.get(f"/api/history?photo={res['added'][0]['id']}&limit=1").json()["entries"][0]
         assert e["action"] == "added" and "Imported into /1999/199912" in e["summary"]
         assert client.get(f"/api/photos?album={rels['/1999/199912']}").json()["count"] == 1, "in the viewer at once"

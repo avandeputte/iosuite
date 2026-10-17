@@ -94,8 +94,8 @@ def _create_and_upload(client, lib, root, base, disk):
     img = con.execute("SELECT album, name, status, category, modificationDate, fileSize, uniqueHash FROM Images WHERE id = ?", (iid,)).fetchone()
     info = con.execute("SELECT rating, creationDate, orientation, width, height, format, colorDepth, colorModel FROM ImageInformation WHERE imageid = ?", (iid,)).fetchone()
     con.close()
-    assert img == (fid, "New Photo.JPG", 1, 1, None, len(data), None), "modificationDate NULL: digiKam does its full scan next time"
-    assert info[0] == -1 and info[1] and info[1][4] == "-" and info[3] > 0 and info[4] > 0 and info[5] == "JPG" and info[6:] == (8, 1)
+    assert img[:4] == (fid, "New Photo.JPG", 1, 1) and img[4] and img[5] == len(data) and img[6], "scanned at once as digiKam would: time, size and digiKam's hash"
+    assert info[0] == -1 and info[1] and info[1][4] == "-" and info[3] > 0 and info[4] > 0 and info[5] == "JPG" and info[6:] == (8, 5)  # YCbCr for a JPEG, as digiKam records it
     # the viewer shows the folder and the photos as soon as the index catches up
     assert _wait_meta_album(client, base + "/zz-upload-test")
     end = time.time() + 8
@@ -108,3 +108,26 @@ def _create_and_upload(client, lib, root, base, disk):
     assert d["count"] == 2 and iid in d["id"]
     assert client.get(f"/thumb/{iid}").status_code == 200
     assert client.get("/api/folders/999999/upload").status_code in (404, 405)
+
+
+def test_folder_properties_are_digikams_album_fields(client, lib):
+    import sqlite3
+    folders = client.get("/api/folders").json()["folders"]
+    f = next(x for x in folders if x["rel"] != "/" and x["nAll"])
+    pid = client.get(f"/api/photos?album={f['id']}").json()["id"][-1]
+    r = client.post(f"/api/folders/{f['id']}/properties", json={"caption": "Our trip", "date": "2024-07-04", "category": "Holidays", "icon": pid})
+    assert r.status_code == 200, r.text
+    con = sqlite3.connect(lib["db"])
+    row = con.execute("SELECT caption, date, collection, icon FROM Albums WHERE id = ?", (f["id"],)).fetchone()
+    con.close()
+    assert row[0] == "Our trip" and str(row[1])[:10] == "2024-07-04" and row[2] == "Holidays" and row[3] == pid
+    g = next(x for x in client.get("/api/folders").json()["folders"] if x["id"] == f["id"])
+    assert g["caption"] == "Our trip" and g["category"] == "Holidays" and g["date"] == "2024-07-04" and g["icon"] == pid
+    a = next(x for x in client.get("/api/meta").json()["albums"] if x["id"] == f["id"])
+    assert a["cover"] == pid and a["caption"] == "Our trip", "the chosen cover is the folder's picture"
+    assert client.post(f"/api/folders/{f['id']}/properties", json={"date": "July 4"}).status_code == 400
+    assert client.post(f"/api/folders/{f['id']}/properties", json={"icon": 99999999}).status_code == 400
+    client.post(f"/api/folders/{f['id']}/properties", json={"caption": "", "date": "", "category": "", "icon": None})
+    con = sqlite3.connect(lib["db"])
+    assert con.execute("SELECT caption, date, collection, icon FROM Albums WHERE id = ?", (f["id"],)).fetchone() == (None, None, None, None)
+    con.close()

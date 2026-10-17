@@ -54,12 +54,12 @@ def list_all() -> list:
     try:
         roots = {r[0]: r[1] for r in con.execute("SELECT id, label FROM AlbumRoots")}
         single = len(roots) == 1
-        rows = con.execute("SELECT id, albumRoot, relativePath FROM Albums ORDER BY albumRoot, relativePath").fetchall()
+        rows = con.execute("SELECT id, albumRoot, relativePath, caption, date, collection, icon FROM Albums ORDER BY albumRoot, relativePath").fetchall()
     finally:
         con.close()
     by_path = {(r[1], r[2]): r[0] for r in rows}
     out = []
-    for aid, root, rel in rows:
+    for aid, root, rel, caption, adate, collection, icon in rows:
         if root not in roots:
             continue
         if rel == "/":
@@ -67,8 +67,41 @@ def list_all() -> list:
         else:
             pid, name = by_path.get((root, rel.rsplit("/", 1)[0] or "/")), rel.rsplit("/", 1)[1]
         out.append({"id": aid, "pid": pid, "name": name, "root": root, "rel": rel,
-                    "path": rel if single else f"/{roots[root]}{'' if rel == '/' else rel}"})
+                    "path": rel if single else f"/{roots[root]}{'' if rel == '/' else rel}",
+                    "caption": caption or "", "date": str(adate)[:10] if adate else "", "category": collection or "", "icon": icon})
     return out
+
+
+def set_properties(album_id: int, props: dict, check_running: bool = True) -> dict:
+    """digiKam's Album Properties: caption, date (YYYY-MM-DD), category (Albums.collection) and cover (Albums.icon,
+    an image id; None for automatic). Only the keys given change."""
+    import re as _re
+    con = dkdb.connect()
+    try:
+        _album(con, album_id)
+        if props.get("icon") is not None and not con.execute("SELECT 1 FROM Images WHERE id = ? AND status = 1", (int(props["icon"]),)).fetchone():
+            raise SyncError("That photo is not in the library")
+    finally:
+        con.close()
+    sets, vals = [], []
+    if "caption" in props:
+        sets.append("caption = ?"); vals.append((props["caption"] or "").strip()[:2000] or None)
+    if "date" in props:
+        d = (props["date"] or "").strip()
+        if d and not _re.fullmatch(r"\d{4}-\d{2}-\d{2}", d):
+            raise SyncError("The date must look like 2026-10-17")
+        sets.append("date = ?"); vals.append(d or None)
+    if "category" in props:
+        sets.append("collection = ?"); vals.append((props["category"] or "").strip()[:200] or None)
+    if "icon" in props:
+        sets.append("icon = ?"); vals.append(int(props["icon"]) if props["icon"] is not None else None)
+    if not sets:
+        return {"id": album_id}
+    db_path = dkdb.sqlite_path()
+    dbsync.preflight(db_path, check_running, "folders")
+    with dbsync.write_transaction(db_path, check_running) as con:
+        con.execute(f"UPDATE Albums SET {', '.join(sets)} WHERE id = ?", (*vals, album_id))
+    return {"id": album_id, **{k: props[k] for k in ("caption", "date", "category", "icon") if k in props}}
 
 
 def create(parent_id: int, name: str, check_running: bool = True) -> dict:
@@ -191,6 +224,8 @@ def upload(album_id: int, files: list, check_running: bool = True) -> dict:
     if not staged:
         return {"added": [], "skipped": skipped}
     added = register(album_id, staged, check_running)
+    from . import scanner
+    scanner.complete([a["id"] for a in added], check_running)  # camera, place, keywords, faces, digiKam's hash, as digiKam's scan would
     from . import history
     history.record([{"photo_id": a["id"], "action": "added", "summary": f"Uploaded into {folder.get('rel') or folder['dir']} (sidecar created)", "path": str(folder["dir"] / a["name"])} for a in added])
     return {"added": added, "skipped": skipped}

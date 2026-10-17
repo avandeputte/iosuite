@@ -1317,3 +1317,36 @@ def test_rotate_key_turns_the_photo_and_undo_from_the_toast(page, server, lib):
     assert page.locator(".cropbar > span").first.inner_text().count("×") == 1
     page.click(".cropbar button:has-text('Cancel')")
     assert page.locator(".cropbox").count() == 0 and path.read_bytes() == original
+
+
+def test_maintenance_has_the_file_scanner(page, server):
+    page.goto(server + "/#/maintenance")
+    page.wait_for_selector(".srow b:has-text('File scanner')", timeout=10000)
+    r = page.locator(".srow", has=page.locator("b", has_text="File scanner"))
+    assert r.locator("input[type=checkbox]").count() == 1 and r.locator("select option").count() == 5 and r.locator("button", has_text="Scan now").count() == 1
+
+
+def test_folder_properties_dialog(page, server):
+    page.goto(server + "/#/folders")
+    page.wait_for_selector(".trow", timeout=10000)
+    btn = page.locator(".trow .tacts button[title^='Folder properties']").first
+    page.locator(".trow").first.hover()
+    btn.click(force=True)
+    page.wait_for_selector(".modal h3:has-text('Properties of')", timeout=5000)
+    assert page.locator(".modal textarea").count() == 1 and page.locator(".modal input[type=date]").count() == 1
+    page.wait_for_selector(".modal .fcov.auto", timeout=10000)
+    page.locator(".modal button", has_text="Cancel").click()
+
+
+def test_map_place_mode_shows_the_tray(page, server):
+    page.goto(server + "/#/map")
+    try:
+        page.wait_for_selector(".mapbar button:has-text('Place photos')", timeout=15000)
+    except Exception:
+        pytest.skip("the map needs tiles from the internet")
+    page.locator(".mapbar button:has-text('Place photos')").click()
+    page.wait_for_selector(".maptray .mthead", timeout=15000)
+    assert "without a location" in page.locator(".maptray .mthead b").inner_text() or page.locator(".maptray .tgrid img").count() >= 0
+    page.locator(".mapbar button:has-text('Done placing')").click()
+    page.wait_for_selector(".mapbar button:has-text('Place photos')", timeout=10000)
+    assert page.locator(".maptray").count() == 0

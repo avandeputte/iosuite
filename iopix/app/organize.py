@@ -131,7 +131,7 @@ def trash(ids: list, check_running: bool = True) -> dict:
         history.record([{"photo_id": r["id"], "action": "trashed", "summary": "Moved to the trash", "path": r["path"],
                          "details": {"trash": r["trash"], "info": r["info"], "album": r["album"], "name": r["name"]}} for r in moved])
         _forget_index_only([r["id"] for r in moved])
-    return {"trashed": [r["id"] for r in moved], "failed": failed}
+    return {"trashed": [r["id"] for r in moved], "infos": [r["info"] for r in moved], "failed": failed}
 
 
 def _forget_index_only(ids: list):
@@ -324,6 +324,40 @@ def rename_photo(photo_id: int, new_name: str, check_running: bool = True) -> di
 def _folder(con, album_id: int) -> dict:
     from .folders import _album
     return _album(con, int(album_id))
+
+
+def rename_by_pattern(ids: list, pattern: str, check_running: bool = True) -> dict:
+    """Rename library files by a date pattern (export.name_for), each a normal rename: the id stays, sidecars move
+    along, every one is in the change log with undo. Returns {renamed: [{id, name}], unchanged, failed}."""
+    from . import export, index
+    if pattern not in ("date", "date-name", "date-seq"):
+        raise SyncError("Unknown naming pattern")
+    con = index.open_index()
+    try:
+        rows = {r[0]: r for r in con.execute(f"SELECT id, album_id, name, ts FROM photos WHERE id IN ({','.join(str(int(i)) for i in ids)})")}
+        taken = {}
+        for aid, name in con.execute(f"SELECT album_id, name FROM photos WHERE album_id IN ({','.join(str(r[1]) for r in rows.values()) or '0'})"):
+            taken.setdefault(aid, set()).add(name.lower())
+    finally:
+        con.close()
+    out = {"renamed": [], "unchanged": 0, "failed": []}
+    for iid in sorted(rows, key=lambda i: (rows[i][3] or 0, i)):
+        _id, aid, name, ts = rows[iid]
+        used = taken.setdefault(aid, set())
+        used.discard(name.lower())
+        new = export.name_for(pattern, ts, name, used)
+        if new == name:
+            out["unchanged"] += 1
+            continue
+        try:
+            r = rename_photo(iid, new, check_running)
+            got = (r.get("moved") or [{}])[0].get("name", new)
+            used.add(got.lower())
+            out["renamed"].append({"id": iid, "name": got, "was": name})
+        except (SyncError, OSError) as e:
+            used.add(name.lower())
+            out["failed"].append({"id": iid, "error": str(e)})
+    return out
 
 
 def rename_folder(album_id: int, new_name: str, check_running: bool = True) -> dict:

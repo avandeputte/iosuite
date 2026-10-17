@@ -154,7 +154,8 @@ def _meta(version: str) -> dict:
                  "face": r["id"] if r["id"] in own else (faces.get(r["id"]) if r["full"].split("/")[0] == "People" else None)}
                 for r in q("SELECT * FROM tags ORDER BY name COLLATE NOCASE")]
         albums = [{"id": r["id"], "pid": r["pid"], "path": r["path"], "name": r["name"], "caption": r["caption"],
-                   "n": r["n"], "nAll": r["n_all"], "cover": r["cover"], "tsMin": r["ts_min"], "tsMax": r["ts_max"]}
+                   "n": r["n"], "nAll": r["n_all"], "cover": r["cover"], "tsMin": r["ts_min"], "tsMax": r["ts_max"],
+                   "date": r["adate"], "category": r["category"], "icon": r["icon"]}
                   for r in q("SELECT * FROM albums ORDER BY path COLLATE NOCASE")]
 
         def counts(col, where="1"):

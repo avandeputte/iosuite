@@ -34,7 +34,7 @@ LIB = build(SRC_DB, SRC_ROOT, _lib)
 os.environ.update({
     "DATA_DIR": str(_data), "DIGIKAM_DB_DIR": str(_lib / "db"), "PHOTOS_ROOT": str(LIB["root"]),
     "PREWARM": "0", "SEMANTIC": "0", "ANALYSIS": "0", "CAPTIONS": "0", "REINDEX_POLL": "3600",
-    "DIGIKAM_CHECK": "ask", "BG_THREADS": "2", "HF_HUB_OFFLINE": "1",
+    "DIGIKAM_CHECK": "ask", "BG_THREADS": "2", "HF_HUB_OFFLINE": "1", "SCANNER_LOOP": "0",
 })
 _data.mkdir(parents=True, exist_ok=True)
 

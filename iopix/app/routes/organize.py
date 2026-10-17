@@ -171,6 +171,33 @@ async def api_photos_rename(request: Request):
     return r
 
 
+@router.post("/api/folders/{album_id}/properties")
+async def api_folder_properties(album_id: int, request: Request):
+    """Body {caption?, date?, category?, icon?}: digiKam's folder properties (Albums caption, date, collection, icon)."""
+    _organize_allowed()
+    body = await request.json()
+    try:
+        r = await run_in_threadpool(folders.set_properties, album_id, {k: body[k] for k in ("caption", "date", "category", "icon") if k in body})
+    except dbsync.SyncError as e:
+        raise HTTPException(409 if "digiKam is running" in str(e) else 400, str(e))
+    await run_in_threadpool(_rebuild_after_write)
+    return r
+
+
+@router.post("/api/photos/rename-pattern")
+async def api_photos_rename_pattern(request: Request):
+    """Body {ids, pattern: date|date-name|date-seq}: rename the files by the date they were taken (ids kept, undo per photo)."""
+    from .. import organize
+    _organize_allowed()
+    body = await request.json()
+    ids = [int(i) for i in (body.get("ids") or [])][:2000]
+    if not ids:
+        raise HTTPException(400, "No photos")
+    r = await run_in_threadpool(_run_organize, organize.rename_by_pattern, ids, str(body.get("pattern") or ""))
+    await run_in_threadpool(_rebuild_after_write)
+    return r
+
+
 @router.post("/api/folders/{album_id}/rename")
 async def api_folder_rename(album_id: int, request: Request):
     """Body {name}: rename the folder on disk and in the database (subfolders follow)."""

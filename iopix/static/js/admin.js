@@ -503,6 +503,19 @@ export async function showFaces(vp) {
 export async function showSettings() { return settingsPage('settings'); }
 export async function showMaintenance() { if (!S.IS_ADMIN) { main.replaceChildren(h('div', { class: 'empty' }, 'Maintenance is for admins. Sign in as an admin to see it.')); return; } return settingsPage('maintenance'); }
 // Settings: preferences. Maintenance: library actions, job progress, models, storage. One loader, two layouts.
+/** Maintenance › File scanner: on or off, how often, Scan now, and what the last pass found. */
+function scannerRow(m, row, btn, again) {
+  const sc = m.scanner || {};
+  const last = sc.last;
+  const said = last ? `Last pass ${fmtWhen(last.finished)}: ${[last.added && plural(last.added, 'new file'), last.modified && plural(last.modified, 'changed file'), last.removed && plural(last.removed, 'file') + ' gone', last.folders && plural(last.folders, 'new folder')].filter(Boolean).join(', ') || 'nothing new'}.${last.skipped?.length ? ' ' + last.skipped.join(' ') : ''}${last.error ? ' Error: ' + last.error : ''}` : 'No pass yet.';
+  const on = h('input', { type: 'checkbox', checked: !!sc.enabled, onchange: async (e) => { try { await post('/api/settings', { file_scanner: e.target.checked }); toast(e.target.checked ? 'File scanner on: a first pass starts now.' : 'File scanner off.'); } catch (err) { e.target.checked = !e.target.checked; toast(err.message); } } });
+  const every = h('select', { class: 'sharepick', onchange: async (e) => { try { await post('/api/settings', { scan_interval: +e.target.value }); } catch (err) { toast(err.message); } } },
+    [[5, 'every 5 minutes'], [15, 'every 15 minutes'], [60, 'every hour'], [360, 'every 6 hours'], [1440, 'once a day']].map(([v, l]) => h('option', { value: v, selected: v === sc.interval }, l)));
+  return row('File scanner',
+    h('span', null, 'Looks in the album folders for photos and videos added, changed or removed outside the viewer (Finder, a sync tool, a phone backup), as digiKam’s scanner does, and records them the same way: camera, place, keywords, faces, digiKam’s file fingerprint. Leave it off if everything arrives through Upload or Import; those are always read in full. A disk that looks unmounted is left alone. ', h('span', { class: 'muted' }, sc.running ? 'Scanning now…' : said)),
+    h('span', { style: 'display:flex;gap:8px;align-items:center;flex-wrap:wrap' }, h('label', { style: 'display:flex;gap:6px;align-items:center;cursor:pointer' }, on, 'On'), every,
+      btn('Scan now', async () => { try { await post('/api/scan', {}); toast('Scanning the album folders…'); setTimeout(again, 4000); } catch (e) { toast(e.message); } })));
+}
 export const OPEN_COMPARE = new Set();  // model groups whose "Compare the models" fold is open on the Maintenance page
 export async function settingsPage(view) {
   let m;
@@ -650,6 +663,7 @@ export async function settingsPage(view) {
     h('h2', null, 'Library'),
     row('Change log', 'Every change made in the viewer, for every photo, kept for good: who, when, before and after, with undo and restore from the backups.', h('a', { class: 'pillbtn', href: '#/history' }, 'Open the change log')),
     row('Import', 'Photos and videos from a phone, a card or a computer, into folders by date, duplicates left out, a sidecar for each. The installed app is a share target on Android.', h('a', { class: 'pillbtn', href: '#/import' }, 'Open Import')),
+    scannerRow(m, row, btn, () => { if (S.route.view === view) settingsPage(view); }),
     row('Lossless JPEG edits', S.LOSSLESS?.jpegtran ? 'jpegtran (libjpeg-turbo) is installed: JPEGs are rotated, flipped and cropped without re-encoding; other files by their orientation flag.'
       : 'jpegtran (libjpeg-turbo) is not installed on the server, so JPEGs are turned by their orientation flag only and cannot be cropped. Install it there, as root: apt-get install -y libjpeg-turbo-progs (Debian, Ubuntu, Proxmox LXC); dnf install libjpeg-turbo-utils; brew install jpeg-turbo. Nothing needs restarting.',
       h('span', { class: 'mst ' + (S.LOSSLESS?.jpegtran ? 'ok' : 'warn') }, S.LOSSLESS?.jpegtran ? 'installed' : S.LOSSLESS ? 'missing' : 'editing off')),

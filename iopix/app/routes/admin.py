@@ -88,6 +88,16 @@ async def api_settings(request: Request):
             threading.Thread(target=updates.check, daemon=True).start()
         else:
             updates._checked.clear()
+    if "file_scanner" in body:  # watch the album folders for files added, changed or removed outside the viewer
+        appstate.set_setting("file_scanner", "1" if body["file_scanner"] else "0")
+        if body["file_scanner"]:
+            from .. import scanner
+            scanner.run_soon()
+    if "scan_interval" in body:
+        try:
+            appstate.set_setting("scan_interval", str(max(1, min(1440, int(body["scan_interval"])))))
+        except (TypeError, ValueError):
+            raise HTTPException(400, "scan_interval: minutes between passes")
     if "app_name" in body:  # how the viewer brands itself; empty puts the default back
         appstate.set_setting("app_name", str(body["app_name"] or "").strip()[:40])
     if body.get("library_replace"):  # changes made with sync off are dropped: the next read of digiKam replaces the library
@@ -621,11 +631,34 @@ def api_maintenance(request: Request):
         "updateCheck": updates.auto_check_enabled(), "updateCheckLocked": os.environ.get("UPDATE_CHECK", "").strip() == "0", "database": _db_settings_public(), "mapProvider": appstate.get_setting("map_provider", "osm"), "googleMapsKeySet": bool(maps.key()), "searchModel": semantic.chosen(),
         "templates": json.loads(appstate.get_setting("templates", "[]")), "templateFields": list(edits.TEMPLATE_FIELDS),
         "recentTags": json.loads(appstate.get_setting("recent_tags", "[]")),
+        "scanner": _scanner_state(),
     }
     if not users.is_admin(request.state.user):
         for k in ("paths", "database", "storage", "albumRoots", "album_roots"):
             out.pop(k, None)
     return out
+
+
+def _scanner_state() -> dict:
+    from .. import scanner
+    return {"enabled": scanner.enabled(), "interval": scanner.interval(), "running": scanner.progress["running"], "last": scanner.progress["last"]}
+
+
+@router.get("/api/scan")
+def api_scan_status():
+    return _scanner_state()
+
+
+@router.post("/api/scan")
+async def api_scan_run():
+    """Scan the album folders now (also when the setting is off): new, changed and vanished files and folders."""
+    from .. import scanner
+    if not config.DB_WRITE:
+        raise HTTPException(403, "Writing to digiKam's database is turned off (DB_WRITE=0)")
+    if scanner.progress["running"]:
+        raise HTTPException(409, "A scan is already running")
+    scanner.run_soon()
+    return {"started": True}
 
 
 @router.post("/api/maintenance")

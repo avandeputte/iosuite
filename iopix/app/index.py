@@ -57,7 +57,8 @@ CREATE TABLE tag_closure (anc INTEGER, tag INTEGER, PRIMARY KEY (anc, tag)) WITH
 CREATE TABLE photo_tags (tag_id INTEGER, photo_id INTEGER, PRIMARY KEY (tag_id, photo_id)) WITHOUT ROWID;
 CREATE INDEX photo_tags_photo ON photo_tags (photo_id);
 CREATE TABLE albums (id INTEGER PRIMARY KEY, pid INTEGER, path TEXT, name TEXT, root TEXT,
-                     caption TEXT, n INTEGER, n_all INTEGER, cover INTEGER, ts_min INTEGER, ts_max INTEGER);
+                     caption TEXT, n INTEGER, n_all INTEGER, cover INTEGER, ts_min INTEGER, ts_max INTEGER,
+                     adate TEXT, category TEXT, icon INTEGER);
 CREATE TABLE album_closure (anc INTEGER, album INTEGER, PRIMARY KEY (anc, album)) WITHOUT ROWID;
 CREATE TABLE faces (photo_id INTEGER, tag_id INTEGER, x INTEGER, y INTEGER, w INTEGER, h INTEGER, kind TEXT DEFAULT 'confirmed');
 CREATE INDEX faces_kind ON faces (kind);
@@ -76,7 +77,7 @@ COLOR = {f"Color Label {n}": i for i, n in enumerate(COLORS)}
 MONTHS = ["", "January", "February", "March", "April", "May", "June", "July",
           "August", "September", "October", "November", "December"]
 SPECIAL_PERSON_PROPS = ("unknownPerson", "ignoredPerson", "unconfirmedPerson")
-SCHEMA_VERSION = "9"
+SCHEMA_VERSION = "10"  # 10: folder date, category and chosen cover
 RECT_RE = re.compile(r'x="(-?\d+)" y="(-?\d+)" width="(\d+)" height="(\d+)"')
 
 
@@ -176,7 +177,7 @@ def read_rows(src) -> dict:
         q = src.execute
         return {
             "roots": [tuple(r) for r in q("SELECT id, label, specificPath FROM AlbumRoots")],
-            "albums": [tuple(r) for r in q("SELECT id, albumRoot, relativePath, caption FROM Albums")],
+            "albums": [tuple(r) for r in q("SELECT id, albumRoot, relativePath, caption, date, collection, icon FROM Albums")],
             "tags": [tuple(r) for r in q("SELECT id, pid, name, icon FROM Tags")],
             "tagprops": [tuple(r) for r in q("SELECT tagid, property, value FROM TagProperties")],
             "imagetags": [tuple(r) for r in q("SELECT imageid, tagid FROM ImageTags")],
@@ -424,9 +425,10 @@ def _build(dst_path: Path, source: tuple) -> dict:
     roots = {r[0]: r[1] for r in raw["roots"]}
     single_root = len(roots) == 1
     albums = {}
-    for aid, root, rel, caption in raw["albums"]:
+    for aid, root, rel, caption, adate, collection, icon in raw["albums"]:
         if root in roots:
-            albums[aid] = {"id": aid, "root": root, "rel": rel, "caption": caption or None, "label": roots[root]}
+            albums[aid] = {"id": aid, "root": root, "rel": rel, "caption": caption or None, "label": roots[root],
+                           "date": str(adate)[:10] if adate else None, "category": collection or None, "icon": icon}
     by_path = {(a["root"], a["rel"]): aid for aid, a in albums.items()}
     for a in albums.values():
         rel = a["rel"]
@@ -682,16 +684,17 @@ def _build(dst_path: Path, source: tuple) -> dict:
                 closure.append((cur, aid))
                 cur = albums[cur]["pid"]
         dst.executemany("INSERT OR IGNORE INTO album_closure VALUES (?,?)", closure)
-        dst.executemany("INSERT INTO albums (id, pid, path, name, root, caption, n) VALUES (?,?,?,?,?,?,?)", [
-            (aid, a["pid"], a["path"], a["name"], root_path[a["root"]], a["caption"], album_n[aid])
+        dst.executemany("INSERT INTO albums (id, pid, path, name, root, caption, n, adate, category, icon) VALUES (?,?,?,?,?,?,?,?,?,?)", [
+            (aid, a["pid"], a["path"], a["name"], root_path[a["root"]], a["caption"], album_n[aid], a["date"], a["category"], a["icon"])
             for aid, a in albums.items()])
         dst.execute("""
             UPDATE albums SET
               n_all  = (SELECT count(*) FROM photos p JOIN album_closure c ON c.album = p.album_id WHERE c.anc = albums.id),
               ts_min = (SELECT min(ts) FROM photos p JOIN album_closure c ON c.album = p.album_id WHERE c.anc = albums.id),
               ts_max = (SELECT max(ts) FROM photos p JOIN album_closure c ON c.album = p.album_id WHERE c.anc = albums.id),
-              cover  = (SELECT p.id FROM photos p JOIN album_closure c ON c.album = p.album_id WHERE c.anc = albums.id
-                        ORDER BY p.video, (p.pick = 1), p.rating DESC, p.ts LIMIT 1)
+              cover  = coalesce((SELECT p.id FROM photos p WHERE p.id = albums.icon),  -- the cover chosen in digiKam or here
+                                (SELECT p.id FROM photos p JOIN album_closure c ON c.album = p.album_id WHERE c.anc = albums.id
+                                 ORDER BY p.video, (p.pick = 1), p.rating DESC, p.ts LIMIT 1))
         """)
         dst.execute("DELETE FROM albums WHERE n_all = 0")
         stats = {"version": version, "built": int(time.time()), "photos": len(photos), "resolved_edits": resolved,

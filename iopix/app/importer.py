@@ -265,6 +265,8 @@ def run(token: str, key: str = None, include: list = None, skip_duplicates: bool
                 skipped.append({"name": it["name"], "reason": str(e)})
         if staged:
             regs = folders.register(album_id, staged, check_running)
+            from . import scanner
+            scanner.complete([a["id"] for a in regs], check_running)  # the full rows digiKam's scan would write
             for a, (final, _c, _e, dst, _i) in zip(regs, staged):
                 added.append({"id": a["id"], "name": final, "path": str(dst), "folder": rel})
             history.record([{"photo_id": a["id"], "action": "added", "summary": f"Imported into {rel} (sidecar created)", "path": str(dst)} for a, (_f, _c, _e, dst, _i) in zip(regs, staged)])

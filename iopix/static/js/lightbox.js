@@ -812,7 +812,8 @@ export function renderInfo() {
     show('details') && kv.length ? [h('h4', null, 'Details'), h('div', { class: 'kv' }, kv)] : null,
     show('camera') && ckv.length ? [h('h4', null, 'Camera'), h('div', { class: 'kv' }, ckv)] : null,
     show('file') ? [h('h4', null, 'File'), h('div', { class: 'b muted', style: 'word-break:break-all;user-select:all;font-size:12.5px' }, d.path),
-      S.CAN_MANAGE ? h('div', { style: 'font-size:12.5px;margin-top:4px' }, h('a', { class: 'lnk', onclick: () => renamePhoto(d) }, 'Rename'), ' · ', h('a', { class: 'lnk', onclick: () => movePhotos([d.id], () => { LB.detail = null; details.delete(d.id); setTimeout(showItem, 1500); }) }, 'Move to a folder')) : null] : null,
+      S.CAN_MANAGE ? h('div', { style: 'font-size:12.5px;margin-top:4px' }, h('a', { class: 'lnk', onclick: () => renamePhoto(d) }, 'Rename'), ' · ', h('a', { class: 'lnk', onclick: () => movePhotos([d.id], () => { LB.detail = null; details.delete(d.id); setTimeout(showItem, 1500); }) }, 'Move to a folder'),
+        d.album && !d.video ? [' · ', h('a', { class: 'lnk', title: `Show this photo on “${d.album.name}” in Folders (digiKam's album icon)`, onclick: async () => { try { await post(`/api/folders/${d.album.id}/properties`, { icon: d.id }); toast('Folder cover set.'); S.keepView = true; pollSoon(600); } catch (e) { toast(e.message); } } }, 'Use as folder cover')] : null) : null] : null,
     ai.length ? [h('h4', null, 'AI analysis'), ai] : null,
     show('history') && S.EDITING ? (() => {  // last, folded; editors only; nothing shows for a photo never changed here
       const box = h('details', { class: 'hfold' });

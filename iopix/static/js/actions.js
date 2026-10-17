@@ -61,7 +61,8 @@ export function updateSelBar() {
       try { await post(`/api/ualbums/${inAlbum}`, { ids: ids(), on: false }); } catch { toast('Could not update the album.'); return; }
       await loadState(); toast(`Removed ${nf.format(G.sel.size)} from the album.`); G.sel.clear(); S.viewKey = null; onRoute();
     }) : null,
-    btn('download', 'Download zip', () => downloadDialog(photosWith({ ids: ids().join(',') }), G.sel.size)),
+    btn('download', 'Export', () => downloadDialog(photosWith({ ids: ids().join(',') }), G.sel.size)),
+    S.CAN_MANAGE ? btn('edit', 'Rename by date', () => renameByDate(ids())) : null,
     S.CAN_MANAGE ? btn('folder', 'Move to a folder', () => movePhotos(ids())) : null,
     S.CAN_MANAGE && S.LOSSLESS ? btn('rotate', 'Rotate or flip', (e) => editMenu(ids(), e.currentTarget, false)) : null,
     S.CAN_MANAGE ? btn('trash', 'Move to trash (Delete key)', () => trashPhotos(ids())) : null);
@@ -112,8 +113,7 @@ export async function trashPhotos(ids, after) {
   updateSelBar();
   const failed = r.failed.length ? ` ${nf.format(r.failed.length)} could not be: ${r.failed[0].error}.` : '';
   if (r.trashed.length) {
-    const hist = await api(`/api/history?limit=${Math.min(500, r.trashed.length)}&action=trashed`).catch(() => null);
-    const infos = (hist?.entries || []).filter((e) => r.trashed.includes(e.photo) && e.details?.info).map((e) => e.details.info);
+    const infos = r.infos || [];  // the trash records, for Undo
     toast(`${plural(r.trashed.length, 'photo')} moved to the trash.${failed}`, infos.length ? 'Undo' : null, async () => {
       try { await post('/api/trash/restore', { infos }); toast('Restored.'); } catch (e) { toast(e.message, null, null, 9000); return; }
       S.keepView = true; S.viewKey = null; pollSoon(600);
@@ -142,6 +142,25 @@ export function movePhotos(ids, after) {
     after?.(r);
     S.keepView = true; S.viewKey = null; await pollStatus(); onRoute();
   });
+}
+/** Rename the selected files by the date they were taken; ids, sidecars and history stay with them, Undo puts the names back. */
+export function renameByDate(ids) {
+  const ex = { date: '2026-10-17_143205.jpg', 'date-name': '2026-10-17_IMG_1234.jpg', 'date-seq': '2026-10-17_001.jpg' };
+  const pat = h('select', { class: 'sharepick', onchange: () => fill(eg, 'For example: ' + ex[pat.value]) }, [['date', 'Date and time'], ['date-name', 'Date and original name'], ['date-seq', 'Date and number']].map(([v, l]) => h('option', { value: v }, l)));
+  const eg = h('div', { class: 'muted', style: 'font-size:12.5px' }, 'For example: ' + ex.date);
+  const go_ = h('button', { class: 'pillbtn on', onclick: async () => {
+    go_.disabled = true; fill(go_, 'Renaming…');
+    let r;
+    try { r = await post('/api/photos/rename-pattern', { ids, pattern: pat.value }); } catch (e) { toast(e.message, null, null, 9000); back.remove(); return; }
+    back.remove();
+    for (const x of r.renamed) details.delete(x.id);
+    S.keepView = true; pollSoon(600);
+    const undo = async () => { let n = 0; for (const x of r.renamed) { try { await post('/api/photos/rename', { id: x.id, name: x.was }); n++; } catch { /* reported below */ } } toast(`${plural(n, 'name')} put back.`); S.keepView = true; pollSoon(600); };
+    toast(`${plural(r.renamed.length, 'file')} renamed${r.unchanged ? `, ${nf.format(r.unchanged)} already named so` : ''}${r.failed.length ? `; ${nf.format(r.failed.length)} not: ${r.failed[0].error}` : ''}.`, r.renamed.length ? 'Undo' : null, undo, 12000);
+  } }, 'Rename');
+  const back = modal(`Rename ${plural(ids.length, 'file')} by date`, h('div', { style: 'display:grid;gap:8px' }, pat, eg,
+    h('p', { class: 'muted', style: 'font-size:12.5px;margin:0' }, 'The files are renamed in their folders, with their sidecars. Extensions stay. A name already taken gets -2, -3. digiKam sees the same files under their new names.')),
+    h('div', { class: 'modal-btns' }, h('button', { class: 'pillbtn', onclick: () => back.remove() }, 'Cancel'), go_));
 }
 export async function renamePhoto(d) {
   const n = prompt('New file name (the extension stays)', d.name);

@@ -1,6 +1,7 @@
 /** The map page (Leaflet, loaded on demand). */
-import { $, api, date, dfTime, h, icon, main, nf } from './core.js';
+import { $, api, date, dfDay, dfTime, fill, h, icon, main, nf, plural } from './core.js';
 import { S, applyFilter, filterParams, go, toast } from './state.js';
+import { editPhotos } from './editing.js';
 import { openLightbox, syncLightbox } from './lightbox.js';
 
 export const M = { data: null, map: null, token: 0 };
@@ -44,7 +45,10 @@ export async function showMap(fp) {
   tiles().addTo(map);
   const dot = L.divIcon({ className: '', html: '<div class="pm"></div>', iconSize: [14, 14], iconAnchor: [7, 7] });
   const group = L.markerClusterGroup({ chunkedLoading: true, maxClusterRadius: 55, showCoverageOnHover: false, zoomToBoundsOnClick: false });
-  group.addLayers(d.id.map((id, i) => L.marker([d.lat[i], d.lon[i]], { icon: dot, idx: i }).on('click', () => openLightbox(M.data, i, true))));
+  const marker = (i) => L.marker([d.lat[i], d.lon[i]], { icon: dot, idx: i, draggable: !!M.placing }).on('click', () => openLightbox(M.data, i, true))
+    .on('dragend', (ev) => moveMarker(ev.target, d, i));
+  group.addLayers(d.id.map((id, i) => marker(i)));
+  M.group = group;
   // clicking a bubble offers all of its photos at once instead of forcing a drill-down
   group.on('clusterclick', (ev) => {
     const idxs = ev.layer.getAllChildMarkers().map((m) => m.options.idx).sort((a, b) => a - b);
@@ -77,10 +81,65 @@ export async function showMap(fp) {
     bar.append(h('span', { class: 'pillbtn', style: 'cursor:default' }, `Trail: ${t.id.length} photos, ${km.toFixed(1)} km, ${dfTime.format(date(t.ts[0]))} to ${dfTime.format(date(t.ts[t.ts.length - 1]))}`));
     map.fitBounds(L.latLngBounds(pts).pad(0.15));
   }).catch(() => {});
+  if (S.CAN_MANAGE) bar.append(h('button', { class: 'pillbtn' + (M.placing ? ' on' : ''), title: 'Put photos without a location on the map: select them in the tray, then click the map or drag them onto it. Markers can then be dragged to a better spot.',
+    onclick: () => { M.placing = !M.placing; showMap(fp); } }, icon('place'), M.placing ? 'Done placing' : 'Place photos'));
   bar.append(h('span', { class: 'pillbtn', style: 'cursor:default' }, `${nf.format(d.id.length)} with location`),
     h('button', { class: 'pillbtn', onclick: () => {
       const b = map.getBounds();
       applyFilter((p) => p.set('bbox', [b.getSouth(), b.getWest(), b.getNorth(), b.getEast()].map((x) => x.toFixed(4)).join(',')), 'photos');
     } }, icon('photo'), 'Show photos in this area'));
+  if (M.placing && S.CAN_MANAGE) placeTray(map, fp, el);
   syncLightbox();
+}
+/** A marker dragged to a new spot (placing mode): the photo's location follows, with Undo. */
+async function moveMarker(mk, d, i) {
+  const was = { lat: d.lat[i], lon: d.lon[i] };
+  const to = mk.getLatLng();
+  if (!(await editPhotos([d.id[i]], { gps: { lat: +to.lat.toFixed(7), lon: +to.lng.toFixed(7), alt: null } }))) { mk.setLatLng([was.lat, was.lon]); return; }
+  d.lat[i] = to.lat; d.lon[i] = to.lng;
+  toast('Location moved.', 'Undo', async () => { if (await editPhotos([d.id[i]], { gps: { lat: was.lat, lon: was.lon, alt: null } })) { mk.setLatLng([was.lat, was.lon]); d.lat[i] = was.lat; d.lon[i] = was.lon; } }, 8000);
+}
+/** The tray of photos without a location: pick some, then click the map or drag them onto it. */
+async function placeTray(map, fp, el) {
+  const L = window.L;
+  const q = new URLSearchParams(fp); q.set('geo', '0'); q.delete('bbox');
+  const tray = h('aside', { class: 'maptray' }, h('div', { class: 'muted' }, 'Loading the photos without a location…'));
+  el.parentElement.append(tray);
+  let d;
+  try { d = await api('/api/photos?' + q.toString()); } catch (e) { fill(tray, h('div', { class: 'empty' }, e.message)); return; }
+  const sel = new Set();
+  let last = -1, shown = 240;
+  const count = h('b');
+  const hint = h('div', { class: 'muted', style: 'font-size:12.5px' });
+  const grid = h('div', { class: 'tgrid' });
+  const ids = d.id.slice();
+  const refreshHead = () => { fill(count, sel.size ? `${nf.format(sel.size)} selected` : `${nf.format(ids.length)} without a location`); fill(hint, sel.size ? 'Click the map where they were taken, or drag them onto it.' : 'Click photos to select them (Shift for a range), or drag one straight onto the map.'); };
+  const tile = (id, k) => {
+    const im = h('img', { src: `/thumb/${id}`, alt: '', loading: 'lazy', draggable: 'true', title: d.ts ? dfDay.format(date(d.ts[d.id.indexOf(id)])) : '',
+      class: sel.has(id) ? 'on' : '',
+      onclick: (e) => {
+        if (e.shiftKey && last >= 0) { const [a, b] = [Math.min(last, k), Math.max(last, k)]; for (let j = a; j <= b; j++) sel.add(ids[j]); }
+        else sel.has(id) ? sel.delete(id) : sel.add(id);
+        last = k; draw();
+      },
+      ondragstart: (e) => { if (!sel.has(id)) { sel.clear(); sel.add(id); draw(); } e.dataTransfer.setData('text/plain', 'iopix-place'); e.dataTransfer.effectAllowed = 'move'; } });
+    return im;
+  };
+  const draw = () => { refreshHead(); grid.replaceChildren(...ids.slice(0, shown).map(tile), ids.length > shown ? h('button', { class: 'pillbtn', onclick: () => { shown += 240; draw(); } }, `Show ${nf.format(Math.min(240, ids.length - shown))} more`) : ''); };
+  const place = async (latlng) => {
+    if (!sel.size) { toast('Select photos in the tray first.'); return; }
+    const picked = [...sel], at = { lat: +latlng.lat.toFixed(7), lon: +latlng.lng.toFixed(7), alt: null };
+    if (!(await editPhotos(picked, { gps: at }))) return;
+    for (const id of picked) { const k = ids.indexOf(id); if (k >= 0) ids.splice(k, 1); }
+    sel.clear(); draw();
+    const pin = L.circleMarker([at.lat, at.lon], { radius: 9, color: '#1a73e8', fillOpacity: .6 }).addTo(map).bindTooltip(`${picked.length} placed`);
+    toast(`${plural(picked.length, 'photo')} placed.`, 'Undo', async () => { if (await editPhotos(picked, { gps: null })) { map.removeLayer(pin); ids.unshift(...picked); draw(); } }, 10000);
+  };
+  map.on('click', (e) => place(e.latlng));
+  el.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; });
+  el.addEventListener('drop', (e) => { e.preventDefault(); if (e.dataTransfer.getData('text/plain') === 'iopix-place') place(map.mouseEventToLatLng(e)); });
+  el.style.cursor = 'crosshair';
+  fill(tray, h('div', { class: 'mthead' }, count, h('span', { class: 'sp' }), h('button', { class: 'pillbtn', onclick: () => { ids.slice(0, shown).forEach((x) => sel.add(x)); draw(); } }, 'Select shown'),
+    h('button', { class: 'pillbtn', onclick: () => { sel.clear(); draw(); } }, 'Clear')), hint, grid);
+  draw();
 }

@@ -139,6 +139,37 @@ export const UPLOAD_ACCEPT = '.jpg,.jpeg,.png,.gif,.tif,.tiff,.webp,.heic,.heif,
 /** Folders: digiKam's own (filesystem) folders, empty ones included, with new-folder and upload
  *  actions for editors when the database can be written. Albums (the viewer's own groupings) are
  *  a separate page. */
+/** digiKam's Album Properties: caption, date, category and the cover photo, stored in its Albums row. */
+export async function folderProperties(f, all, after) {
+  const caption = h('textarea', { class: 'einput', rows: 3, placeholder: 'What this folder holds', value: f.caption || '' });
+  const date = h('input', { class: 'einput', type: 'date', value: f.date || '', style: 'max-width:180px' });
+  const cats = [...new Set((all || []).map((x) => x.category).filter(Boolean))].sort();
+  const list = h('datalist', { id: 'fcats' }, cats.map((c) => h('option', { value: c })));
+  const category = h('input', { class: 'einput', list: 'fcats', placeholder: 'e.g. Holidays, Family, Work', value: f.category || '' });
+  let icon_ = f.icon ?? null;
+  const covers = h('div', { class: 'fcovers' }, h('div', { class: 'muted' }, 'Loading photos…'));
+  const pick = (id) => { icon_ = id; covers.querySelectorAll('.fcov').forEach((el) => el.classList.toggle('on', String(el.dataset.id) === String(id ?? 'auto'))); };
+  api('/api/photos?' + photosWith({ album: f.id, sort: 'old' }).toString()).then((d) => {
+    const ids = (d.id || []).slice(0, 80);
+    fill(covers, h('div', { class: 'fcov auto', 'data-id': 'auto', title: 'Chosen automatically: the best-rated photo', onclick: () => pick(null) }, 'Auto'),
+      ids.map((id) => h('img', { class: 'fcov', 'data-id': id, src: `/thumb/${id}`, loading: 'lazy', alt: '', onclick: () => pick(id) })));
+    pick(icon_);
+  }).catch(() => fill(covers, h('div', { class: 'muted' }, 'This folder has no photos yet.')));
+  const save = async () => {
+    try {
+      await post(`/api/folders/${f.id}/properties`, { caption: caption.value, date: date.value, category: category.value, icon: icon_ });
+    } catch (e) { toast(e.message, null, null, 9000); return; }
+    back.remove(); toast('Folder properties saved.'); after?.();
+  };
+  const back = modal(`Properties of “${f.name}”`,
+    h('div', { style: 'display:grid;gap:10px;min-width:min(560px,86vw)' },
+      h('label', null, h('div', { class: 'muted' }, 'Caption'), caption),
+      h('div', { style: 'display:flex;gap:12px;flex-wrap:wrap' }, h('label', null, h('div', { class: 'muted' }, 'Date'), date),
+        h('label', { style: 'flex:1;min-width:200px' }, h('div', { class: 'muted' }, 'Category'), category, list)),
+      h('div', null, h('div', { class: 'muted' }, 'Cover'), covers),
+      h('div', { style: 'display:flex;gap:8px;justify-content:flex-end' }, h('button', { class: 'pillbtn', onclick: () => back.remove() }, 'Cancel'),
+        h('button', { class: 'pillbtn on', onclick: save }, 'Save'))));
+}
 export async function showFolders() {
   let d;
   try { d = await api('/api/folders'); } catch (e) { if (S.route.view === 'folders') main.replaceChildren(h('div', { class: 'page' }, h('div', { class: 'empty' }, e.message))); return; }
@@ -186,10 +217,12 @@ export async function showFolders() {
     const a = S.albumById.get(f.id);
     const cover = a?.cover ? h('img', { src: `/thumb/${a.cover}`, loading: 'lazy', alt: '' }) : h('span', { class: 'ph' }, icon('folder'));
     const trow = h('div', { class: 'trow', title: f.path, onclick: () => { if (f.nAll) go('photos', photosWith({ album: f.id, sort: 'old' })); else if (can) uploadTo(f); else expand(!node.classList.contains('open')); } },
-      tw, cover, h('span', { class: 'nm' }, flat ? f.path.replace(/^\//, '').replaceAll('/', ' › ') : f.name),
+      tw, cover, h('span', { class: 'nm' }, flat ? f.path.replace(/^\//, '').replaceAll('/', ' › ') : f.name,
+        f.caption || f.category ? h('span', { class: 'muted fcap' }, [f.category, f.caption].filter(Boolean).join(' · ')) : null),
       can ? h('span', { class: 'tacts' }, act('add', 'Upload photos into this folder', () => uploadTo(f)), act('folder', 'New folder inside this one', () => newFolder(f)),
         f.pid != null ? act('edit', 'Rename this folder', async () => { const n = prompt('Folder name', f.name); if (!n || n.trim() === f.name) return; try { await post(`/api/folders/${f.id}/rename`, { name: n.trim() }); toast(`Renamed to ${n.trim()}.`); } catch (e) { toast(e.message, null, null, 9000); return; } refresh(); }) : null,
         f.pid != null ? act('open', 'Move this folder under another one', () => folderPicker(`Move “${f.name}” under…`, async (p) => { try { const r = await post(`/api/folders/${f.id}/move`, { parent: p.id }); toast(`Moved to ${r.path}.`); } catch (e) { toast(e.message, null, null, 9000); return; } refresh(); }, (x) => x.id === f.id || x.path.startsWith(f.path + '/'))) : null,
+        act('info', 'Folder properties: caption, date, category, cover', () => folderProperties(f, all, refresh)),
         f.nAll ? act('download', 'Download this folder as a zip', () => downloadDialog(photosWith({ album: f.id }))) : null,
         f.nAll && S.CAN_MANAGE && S.FACE_DETECT ? act('face', 'Detect faces in this folder and its subfolders', () => detectFaces(null, f)) : null) : null,
       h('span', { class: 'ct' }, f.nAll ? nf.format(f.nAll) : h('i', null, 'empty')));
