@@ -21,6 +21,8 @@ def test_old_ai_tables_are_migrated_with_their_rows(tmp_path, monkeypatch):
         INSERT INTO ai_faces_scanned VALUES (7, 'f7', 3, 1, 1700000000);
         CREATE TABLE image_data_checksums (path TEXT PRIMARY KEY, hash TEXT, algorithm TEXT, verified INTEGER);
         INSERT INTO image_data_checksums VALUES ('/lib/a.jpg', 'abc', 'SHA-256', 1), ('/lib/gone.jpg', 'zzz', 'SHA-256', 1);
+        CREATE TABLE metadata_check (photo_id INTEGER PRIMARY KEY, stamp TEXT, data TEXT, mismatch INTEGER, has_sidecar INTEGER, file_xmp INTEGER, checked INTEGER);
+        INSERT INTO metadata_check VALUES (7, 's', '{"big": "report"}', 0, 1, 0, 1), (8, 's', '{"big": "report"}', 1, 1, 0, 1), (9, 's', '{"big": "report"}', 0, 0, 0, 1);
         CREATE TABLE photo_identity (vid INTEGER PRIMARY KEY AUTOINCREMENT, dk_id INTEGER, hash TEXT, size INTEGER, path TEXT, name TEXT, first_seen INTEGER, last_seen INTEGER);
         INSERT INTO photo_identity (dk_id, hash, size, path, name, first_seen, last_seen) VALUES (7, 'h', 1, '/lib/a.jpg', 'a.jpg', 1, 1);
     """); con.commit(); con.close()
@@ -44,6 +46,7 @@ def test_old_ai_tables_are_migrated_with_their_rows(tmp_path, monkeypatch):
     assert con.execute("SELECT text FROM ai_descriptions WHERE photo_id = 7").fetchone()[0] == "a dog"
     assert con.execute("SELECT count(*) FROM ai_objects").fetchone()[0] == 1, "untouched"
     assert con.execute("SELECT photo_id, hash FROM image_data_checksums").fetchall() == [(7, "abc")], "keyed by photo; a path no photo has is dropped"
+    assert [r[0] for r in con.execute("SELECT photo_id FROM metadata_check WHERE data IS NULL ORDER BY photo_id")] == [7], "the report stays only where copies disagree or no sidecar exists"
     con.close()
     backups = list((tmp_path / "db-backups").glob("viewer-before-1.43-*.db"))
     assert len(backups) == 1 and sqlite3.connect(backups[0]).execute("SELECT count(*) FROM ai_text_and_faces").fetchone()[0] == 1, "the copy has the old shape"

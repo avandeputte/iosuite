@@ -475,6 +475,9 @@ def ensure_schema(con: VConn = None):
             con.execute("ALTER TABLE viewer_albums ADD COLUMN owner_id " + ("BIGINT NULL" if con.mysql else "INTEGER"))
         if "is_shared" not in have:
             con.execute("ALTER TABLE viewer_albums ADD COLUMN is_shared " + ("INT NOT NULL DEFAULT 1" if con.mysql else "INTEGER NOT NULL DEFAULT 1"))
+        # v1.43: the full comparison is kept only for photos whose copies disagree or that lack a sidecar; rows from
+        # before carried it for every photo (tens of MB), and nothing reads it for the others
+        con.execute("UPDATE metadata_check SET data = NULL WHERE data IS NOT NULL AND mismatch = 0 AND has_sidecar = 1")
         con.commit()
     finally:
         if own:
