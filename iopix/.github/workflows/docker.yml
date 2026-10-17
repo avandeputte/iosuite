@@ -32,7 +32,7 @@ jobs:
           python -m pip install -q -e ".[test]"
           python -m pyflakes app
           python -c "import app.main"
-          node -e "new Function(require('fs').readFileSync('static/app.js','utf8'))"
+          for f in static/app.js static/sw.js static/js/*.js; do node --check "$f"; done  # ES modules: the entry, every module, the service worker
           for f in *.sh installer/*.sh; do sh -n "$f"; done
           bash -n proxmox/ct/iopix.sh proxmox/ct/digikam-viewer.sh proxmox/install/iopix-install.sh migrate-to-iopix.sh
       # the full test suite needs a digiKam library to cut its scratch copy from, so it runs
