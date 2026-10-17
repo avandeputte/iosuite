@@ -16,7 +16,7 @@ found but could not name (an "Unknown" region), so they show up under People ›
 "looks like" suggestion from face grouping, and can be named there or in digiKam.
 
 Nothing runs on its own: the library job starts only from Maintenance, a folder or a photo. Each photo
-checked is remembered (ai_faces_scanned) so a library run picks up only new and changed photos; a run
+checked is remembered (ai_scans, job facedetect) so a library run picks up only new and changed photos; a run
 on one photo or one folder always looks again. A face removed after a run is not brought back by the
 next library run, since that photo is not looked at again unless it changes.
 """
@@ -278,7 +278,7 @@ def _existing(ids: list) -> dict:
 def _scanned() -> dict:
     con = vdb.connect()
     try:
-        return dict(con.execute("SELECT photo_id, stamp FROM ai_faces_scanned").fetchall())
+        return dict(con.execute("SELECT photo_id, stamp FROM ai_scans WHERE job = 'facedetect'").fetchall())
     finally:
         con.close()
 
@@ -289,7 +289,7 @@ def coverage() -> int:
         return 0
     con = v.connect()
     try:
-        return con.execute("SELECT count(*) FROM ai_faces_scanned").fetchone()[0]
+        return con.execute("SELECT count(*) FROM ai_scans WHERE job = 'facedetect'").fetchone()[0]
     except Exception:
         return 0
     finally:
@@ -302,7 +302,7 @@ def reset():
     with analysis._write_lock:
         con = vdb.connect()
         try:
-            con.execute("DELETE FROM ai_faces_scanned")
+            con.execute("DELETE FROM ai_scans WHERE job = 'facedetect'")
             con.commit()
         finally:
             con.close()
@@ -328,7 +328,8 @@ def _record(rows: list):
     with analysis._write_lock:
         con = vdb.connect()
         try:
-            con.executemany("INSERT OR REPLACE INTO ai_faces_scanned (photo_id, stamp, found, added, checked) VALUES (?,?,?,?,?)", rows)
+            con.executemany("INSERT OR REPLACE INTO ai_scans (photo_id, job, stamp, detail) VALUES (?,'facedetect',?,?)",
+                            [(r[0], r[1], json.dumps({"found": r[2], "added": r[3], "checked": r[4]})) for r in rows])
             con.commit()
         finally:
             con.close()

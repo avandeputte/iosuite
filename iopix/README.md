@@ -177,15 +177,15 @@ Maintenance › Metadata consistency compares rating, title, caption and tags ac
 
 ### The viewer's database
 
-Everything the viewer keeps of its own lives in one database (`data/viewer.db`, or MySQL/MariaDB), in tables named for what they hold. Databases from older versions are renamed in place the first time a newer version opens them; no rows change.
+Everything the viewer keeps of its own lives in one database (`data/viewer.db`, or MySQL/MariaDB), in tables named for what they hold. Databases from older versions are brought to the current shape the first time a newer version opens them (v1.43 restructured the AI tables; a copy goes to `db-backups/` first); no rows change.
 
 | Group | Tables |
 |---|---|
 | The app and its people | `app_settings`, `user_accounts` |
 | Collections made in the viewer | `favorite_photos`, `viewer_albums`, `viewer_album_photos`, `saved_searches` |
 | Edits and their queues | `pending_edits` (edits in sidecars that digiKam's database does not have yet), `tag_rewrite_queue` (sidecars to rewrite after a tag was renamed, moved or deleted) |
-| AI results | `ai_quality` (sharpness, exposure), `ai_text_and_faces` (text in the picture, face quality), `ai_objects` and `ai_objects_scanned`, `ai_descriptions`, `ai_face_embeddings`, `ai_person_references` (the faces each person is recognised by), `ai_similar_photos` |
-| Checks | `metadata_check` (the metadata consistency results) |
+| AI results | `ai_scans` (which version of each photo every job last looked at: quality, vision, objects, captions, facedetect), `ai_quality` (sharpness, exposure), `ai_text` (text read in the picture), `ai_face_count` (faces seen and their sharpness), `ai_objects`, `ai_descriptions`, `ai_face_embeddings`, `ai_person_references` (the faces each person is recognised by), `ai_similar_photos` |
+| Checks | `metadata_check` (the metadata consistency results: one row per photo checked, the full comparison kept only where the copies disagree), `quality_accepted` (Face quality findings accepted as they are), `image_data_checksums` (the verified image-data hash of each file the viewer wrote into, by photo) |
 | The library itself, in digiKam's columns (copied from digiKam while Sync with digiKam is on; the record of the library when it is off) | `library_info`, `library_settings`, `album_roots`, `folders`, `photos`, `photo_information`, `photo_metadata`, `photo_positions`, `video_metadata`, `tags`, `tag_properties`, `photo_tags`, `face_regions`, `comments`, `copyright`, `photo_properties` |
 | Identity | `photo_identity` (the viewer's own id for each photo, with the file's hash and size, so viewer data follows a photo digiKam renumbers) |
 

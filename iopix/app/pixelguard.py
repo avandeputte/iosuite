@@ -104,15 +104,34 @@ def _log_refused(path: str):
         pass
 
 
+def _photo_ids(paths: list) -> dict:
+    """{path: photo id} from the index, for the checksum rows (which are kept by photo, so moves and renames keep them)."""
+    from . import index
+    out = {}
+    try:
+        con = index.open_index()
+        try:
+            for i in range(0, len(paths), 400):
+                chunk = paths[i:i + 400]
+                for pid, path in con.execute(f"SELECT id, path FROM photos WHERE path IN ({','.join('?' * len(chunk))})", chunk):
+                    out[path] = pid
+        finally:
+            con.close()
+    except Exception:
+        pass
+    return out
+
+
 def _store(rows: list):
     if not rows:
         return
     try:
         from . import vdb
+        ids = _photo_ids([p for p, _h, _t in rows])
         con = vdb.connect()
         try:
-            con.executemany("INSERT OR REPLACE INTO image_data_checksums (path, hash, algorithm, verified) VALUES (?,?,?,?)",
-                            [(p, h, "SHA-256", t) for p, h, t in rows])
+            con.executemany("INSERT OR REPLACE INTO image_data_checksums (photo_id, hash, algorithm, verified) VALUES (?,?,?,?)",
+                            [(ids[p], h, "SHA-256", t) for p, h, t in rows if p in ids])
             con.commit()
         finally:
             con.close()

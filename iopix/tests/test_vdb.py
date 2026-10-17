@@ -26,7 +26,8 @@ def test_sqlite_snapshot_and_copy_keep_every_row(client, tmp_path, fresh):
     state.set_favorites([(1, "h1"), (2, "h2")], True)
     aid = state.create_album("Trip"); state.set_album_items(aid, [(1, "h1")], True)
     with analysis._writer() as con:
-        con.execute("INSERT OR REPLACE INTO ai_quality VALUES (?,?,?,?,?,?)", (1, "s1", 0.5, 0.4, 0, 0))
+        con.execute("INSERT OR REPLACE INTO ai_quality VALUES (?,?,?,?,?)", (1, 0.5, 0.4, 0, 0))
+        con.execute("INSERT OR REPLACE INTO ai_scans VALUES (?,?,?,?)", (1, "quality", "s1", None))
     snap = tmp_path / "snap.db"
     vdb.snapshot_sqlite(snap)
     con = sqlite3.connect(snap)
@@ -71,8 +72,9 @@ def test_mysql_round_trip(client, tmp_path, fresh, monkeypatch):
         state.set_setting("zz_probe", "héllo ? %s"); state.set_favorites([(1, "h1")], True)
         aid = state.create_album("Trip"); state.set_album_items(aid, [(1, "h1")], True)
         with analysis._writer() as con:
-            con.execute("INSERT OR REPLACE INTO ai_quality VALUES (?,?,?,?,?,?)", (1, "2026-10-15T00:00:00.000", 0.5, 0.4, 0, 0))
-            con.execute("INSERT OR REPLACE INTO ai_descriptions VALUES (?,?,?)", (1, "stamp", "a dog on a beach"))
+            con.execute("INSERT OR REPLACE INTO ai_quality VALUES (?,?,?,?,?)", (1, 0.5, 0.4, 0, 0))
+            con.execute("INSERT OR REPLACE INTO ai_scans VALUES (?,?,?,?)", (1, "quality", "2026-10-15T00:00:00.000", None))
+            con.execute("INSERT OR REPLACE INTO ai_descriptions VALUES (?,?)", (1, "a dog on a beach"))
         t = vdb.test_connection(cfg)
         assert t["ok"] and "MariaDB" in t["version"] or "ok" in str(t)
         src = vdb.connect(); dst = vdb.connect(cfg=cfg)
@@ -119,12 +121,13 @@ def test_mysql_round_trip(client, tmp_path, fresh, monkeypatch):
         finally:
             c.close()
         with analysis._writer() as con:
-            con.execute("INSERT OR REPLACE INTO ai_quality VALUES (?,?,?,?,?,?)", (2, "2026-10-15T00:00:00.000", 0.1, 0.9, 0, 0))
+            con.execute("INSERT OR REPLACE INTO ai_quality VALUES (?,?,?,?,?)", (2, 0.1, 0.9, 0, 0))
+            con.execute("INSERT OR REPLACE INTO ai_scans VALUES (?,?,?,?)", (2, "quality", "2026-10-15T00:00:00.000", None))
         res = analysis.results()
         assert res[1]["sharp"] == 0.5 and res[2]["bright"] == 0.9 and res[1]["caption_ai"] == "a dog on a beach"
         con = vdb.connect()
         try:
-            assert con.execute("SELECT stamp FROM ai_quality WHERE photo_id = ?", (1,)).fetchone()[0] == "2026-10-15T00:00:00.000", "text stamps stay text on MySQL"
+            assert con.execute("SELECT stamp FROM ai_scans WHERE photo_id = ? AND job = 'quality'", (1,)).fetchone()[0] == "2026-10-15T00:00:00.000", "text stamps stay text on MySQL"
         finally:
             con.close()
         # and back to SQLite: the portable snapshot

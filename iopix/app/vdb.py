@@ -14,8 +14,11 @@ import json
 import logging
 import os
 import re
+import shutil
 import sqlite3
+import subprocess
 import threading
+import time
 from functools import lru_cache
 from pathlib import Path
 
@@ -68,38 +71,40 @@ TABLES = {
     "tag_rewrite_queue": (["id", "op", "path", "image_id"],
                 "CREATE TABLE IF NOT EXISTS tag_rewrite_queue (id INTEGER PRIMARY KEY AUTOINCREMENT, op TEXT, path TEXT, image_id INTEGER)",
                 "CREATE TABLE IF NOT EXISTS tag_rewrite_queue (id INT AUTO_INCREMENT PRIMARY KEY, op VARCHAR(64), path TEXT, image_id BIGINT)"),
-    "ai_quality": (["photo_id", "stamp", "sharp", "bright", "clip_lo", "clip_hi"],
-                "CREATE TABLE IF NOT EXISTS ai_quality (photo_id INTEGER PRIMARY KEY, stamp TEXT, sharp REAL, bright REAL, clip_lo REAL, clip_hi REAL)",
-                "CREATE TABLE IF NOT EXISTS ai_quality (photo_id BIGINT PRIMARY KEY, stamp VARCHAR(191), sharp DOUBLE, bright DOUBLE, clip_lo DOUBLE, clip_hi DOUBLE)"),
-    "ai_text_and_faces": (["photo_id", "stamp", "text", "nfaces", "faceq"],
-               "CREATE TABLE IF NOT EXISTS ai_text_and_faces (photo_id INTEGER PRIMARY KEY, stamp TEXT, text TEXT, nfaces INTEGER, faceq REAL)",
-               "CREATE TABLE IF NOT EXISTS ai_text_and_faces (photo_id BIGINT PRIMARY KEY, stamp VARCHAR(191), text MEDIUMTEXT, nfaces INT, faceq DOUBLE)"),
+    # ---- AI results: one row per photo and job in ai_scans says which version of the file (stamp) each job
+    # last looked at (detail: a small JSON note, e.g. face detection's counts); the result tables hold data only
+    "ai_scans": (["photo_id", "job", "stamp", "detail"],
+                 "CREATE TABLE IF NOT EXISTS ai_scans (photo_id INTEGER, job TEXT, stamp TEXT, detail TEXT, PRIMARY KEY (photo_id, job))",
+                 "CREATE TABLE IF NOT EXISTS ai_scans (photo_id BIGINT, job VARCHAR(32), stamp VARCHAR(191), detail TEXT, PRIMARY KEY (photo_id, job), INDEX ai_scans_job (job))"),
+    "ai_quality": (["photo_id", "sharp", "bright", "clip_lo", "clip_hi"],
+                   "CREATE TABLE IF NOT EXISTS ai_quality (photo_id INTEGER PRIMARY KEY, sharp REAL, bright REAL, clip_lo REAL, clip_hi REAL)",
+                   "CREATE TABLE IF NOT EXISTS ai_quality (photo_id BIGINT PRIMARY KEY, sharp DOUBLE, bright DOUBLE, clip_lo DOUBLE, clip_hi DOUBLE)"),
+    "ai_text": (["photo_id", "text"],
+                "CREATE TABLE IF NOT EXISTS ai_text (photo_id INTEGER PRIMARY KEY, text TEXT)",
+                "CREATE TABLE IF NOT EXISTS ai_text (photo_id BIGINT PRIMARY KEY, text MEDIUMTEXT)"),
+    "ai_face_count": (["photo_id", "nfaces", "faceq"],
+                      "CREATE TABLE IF NOT EXISTS ai_face_count (photo_id INTEGER PRIMARY KEY, nfaces INTEGER, faceq REAL)",
+                      "CREATE TABLE IF NOT EXISTS ai_face_count (photo_id BIGINT PRIMARY KEY, nfaces INT, faceq DOUBLE)"),
     "ai_objects": (["photo_id", "cls", "score", "x", "y", "w", "h"],
                 "CREATE TABLE IF NOT EXISTS ai_objects (photo_id INTEGER, cls TEXT, score REAL, x REAL, y REAL, w REAL, h REAL)",
                 "CREATE TABLE IF NOT EXISTS ai_objects (photo_id BIGINT, cls VARCHAR(64), score DOUBLE, x DOUBLE, y DOUBLE, w DOUBLE, h DOUBLE, INDEX ai_objects_photo (photo_id))"),
-    "ai_objects_scanned": (["photo_id", "stamp"],
-                     "CREATE TABLE IF NOT EXISTS ai_objects_scanned (photo_id INTEGER PRIMARY KEY, stamp TEXT)",
-                     "CREATE TABLE IF NOT EXISTS ai_objects_scanned (photo_id BIGINT PRIMARY KEY, stamp VARCHAR(191))"),
-    "ai_descriptions": (["photo_id", "stamp", "text"],
-                 "CREATE TABLE IF NOT EXISTS ai_descriptions (photo_id INTEGER PRIMARY KEY, stamp TEXT, text TEXT)",
-                 "CREATE TABLE IF NOT EXISTS ai_descriptions (photo_id BIGINT PRIMARY KEY, stamp VARCHAR(191), text MEDIUMTEXT)"),
+    "ai_descriptions": (["photo_id", "text"],
+                        "CREATE TABLE IF NOT EXISTS ai_descriptions (photo_id INTEGER PRIMARY KEY, text TEXT)",
+                        "CREATE TABLE IF NOT EXISTS ai_descriptions (photo_id BIGINT PRIMARY KEY, text TEXT)"),
     "ai_face_embeddings": (["photo_id", "x", "y", "w", "h", "vec"],
                   "CREATE TABLE IF NOT EXISTS ai_face_embeddings (photo_id INTEGER, x INTEGER, y INTEGER, w INTEGER, h INTEGER, vec BLOB, PRIMARY KEY (photo_id, x, y, w, h))",
                   "CREATE TABLE IF NOT EXISTS ai_face_embeddings (photo_id BIGINT, x INT, y INT, w INT, h INT, vec BLOB, PRIMARY KEY (photo_id, x, y, w, h))"),
     "ai_person_references": (["tag_id", "photo_id", "x", "y", "w", "h", "vec"],
                     "CREATE TABLE IF NOT EXISTS ai_person_references (tag_id INTEGER, photo_id INTEGER, x INTEGER, y INTEGER, w INTEGER, h INTEGER, vec BLOB, PRIMARY KEY (photo_id, x, y, w, h))",
                     "CREATE TABLE IF NOT EXISTS ai_person_references (tag_id BIGINT, photo_id BIGINT, x INT, y INT, w INT, h INT, vec BLOB, PRIMARY KEY (photo_id, x, y, w, h))"),
-    "ai_faces_scanned": (["photo_id", "stamp", "found", "added", "checked"],
-                         "CREATE TABLE IF NOT EXISTS ai_faces_scanned (photo_id INTEGER PRIMARY KEY, stamp TEXT, found INTEGER, added INTEGER, checked INTEGER)",
-                         "CREATE TABLE IF NOT EXISTS ai_faces_scanned (photo_id BIGINT PRIMARY KEY, stamp VARCHAR(191), found INT, added INT, checked BIGINT)"),
     # undo_values, not "undo": UNDO is a reserved word on MariaDB and MySQL
     # file_copy: the backed-up image file (data/file-backups, the original from before the viewer first wrote into it)
     "photo_history": (["id", "photo_id", "ts", "user_name", "action", "summary", "details", "undo_values", "sidecar_copy", "path", "file_copy"],
                       "CREATE TABLE IF NOT EXISTS photo_history (id INTEGER PRIMARY KEY AUTOINCREMENT, photo_id INTEGER, ts INTEGER, user_name TEXT, action TEXT, summary TEXT, details TEXT, undo_values TEXT, sidecar_copy TEXT, path TEXT, file_copy TEXT)",
                       "CREATE TABLE IF NOT EXISTS photo_history (id BIGINT AUTO_INCREMENT PRIMARY KEY, photo_id BIGINT, ts BIGINT, user_name VARCHAR(191), action VARCHAR(32), summary TEXT, details MEDIUMTEXT, undo_values MEDIUMTEXT, sidecar_copy TEXT, path TEXT, file_copy TEXT, INDEX photo_history_photo (photo_id))"),
-    "image_data_checksums": (["path", "hash", "algorithm", "verified"],
-                             "CREATE TABLE IF NOT EXISTS image_data_checksums (path TEXT PRIMARY KEY, hash TEXT, algorithm TEXT, verified INTEGER)",
-                             "CREATE TABLE IF NOT EXISTS image_data_checksums (path VARCHAR(700) PRIMARY KEY, hash VARCHAR(128), algorithm VARCHAR(16), verified BIGINT)"),
+    "image_data_checksums": (["photo_id", "hash", "algorithm", "verified"],
+                             "CREATE TABLE IF NOT EXISTS image_data_checksums (photo_id INTEGER PRIMARY KEY, hash TEXT, algorithm TEXT, verified INTEGER)",
+                             "CREATE TABLE IF NOT EXISTS image_data_checksums (photo_id BIGINT PRIMARY KEY, hash VARCHAR(128), algorithm VARCHAR(16), verified BIGINT)"),
     "ai_similar_photos": (["a", "b", "score"],
                   "CREATE TABLE IF NOT EXISTS ai_similar_photos (a INTEGER, b INTEGER, score REAL)",
                   "CREATE TABLE IF NOT EXISTS ai_similar_photos (a BIGINT, b BIGINT, score DOUBLE, INDEX ai_similar_photos_a (a))"),
@@ -344,6 +349,98 @@ def rename_old_tables(con: VConn):
         log.info("viewer database: renamed %d tables to their new names", len(todo))
 
 
+def _backup_before_migration(tag: str):
+    """A copy of the viewer database before its tables change shape: the SQLite file through the backup API, or a
+    mysqldump of the MySQL database when a dump tool is installed. A copy that cannot be made is logged, not fatal:
+    the migration itself carries every row over."""
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    d = config.DATA_DIR / "db-backups"
+    try:
+        d.mkdir(parents=True, exist_ok=True)
+        if not is_mysql():
+            dst = d / f"viewer-before-{tag}-{stamp}.db"
+            src = sqlite3.connect(f"file:{SQLITE_FILE}?mode=ro", uri=True)
+            try:
+                out = sqlite3.connect(str(dst))
+                try:
+                    src.backup(out)
+                finally:
+                    out.close()
+            finally:
+                src.close()
+        else:
+            tool = shutil.which("mysqldump") or shutil.which("mariadb-dump") or next((c for c in ("/opt/homebrew/opt/mysql-client/bin/mysqldump", "/usr/local/opt/mysql-client/bin/mysqldump") if os.access(c, os.X_OK)), None)
+            if not tool:
+                log.warning("viewer database: no mysqldump/mariadb-dump here, so no copy before the %s migration", tag)
+                return
+            c = settings()
+            dst = d / f"viewer-before-{tag}-{stamp}.sql"
+            with open(dst, "wb") as f:
+                res = subprocess.run([tool, "-h", str(c["host"]), "-P", str(c["port"]), "-u", c["user"], f"-p{c['password']}", "--single-transaction", c["database"]],
+                                     stdout=f, stderr=subprocess.PIPE, timeout=1800)
+            if res.returncode != 0:
+                raise RuntimeError(res.stderr.decode(errors="replace")[-300:])
+        log.info("viewer database: copied to %s before the %s migration", dst, tag)
+    except Exception as e:
+        log.warning("viewer database: no copy before the %s migration (%s)", tag, e)
+
+
+def _old_ai_shape(con: VConn) -> bool:
+    """Whether the AI tables are still in their pre-1.43 shape (a stamp column per table, five marker tables)."""
+    have = table_names(con)
+    return ("ai_text_and_faces" in have or "ai_objects_scanned" in have or "ai_faces_scanned" in have
+            or "stamp" in columns(con, "ai_quality") or "stamp" in columns(con, "ai_descriptions")
+            or "path" in columns(con, "image_data_checksums"))
+
+
+def _migrate_ai_tables(con: VConn):
+    """v1.43: one ai_scans table says which version of each photo every job looked at (it was a stamp column in
+    four result tables plus two marker tables); ai_text_and_faces is split into ai_text and ai_face_count;
+    image_data_checksums is keyed by photo rather than file path. Every row is carried over; a SQLite snapshot
+    of the whole database is written to db-backups first."""
+    _backup_before_migration("1.43")
+    have = table_names(con)
+    q = (lambda t: f"`{t}`") if con.mysql else (lambda t: f'"{t}"')
+
+    def rename(a, b):
+        con.execute(f"RENAME TABLE {q(a)} TO {q(b)}" if con.mysql else f"ALTER TABLE {q(a)} RENAME TO {q(b)}")
+
+    old = {}
+    for t in ("ai_quality", "ai_descriptions", "image_data_checksums"):
+        if t in have and (("stamp" in columns(con, t)) or (t == "image_data_checksums" and "path" in columns(con, t))):
+            rename(t, t + "_old"); old[t] = t + "_old"
+    for name, (cols, sq, my) in TABLES.items():
+        if name.startswith("ai_") or name == "image_data_checksums":
+            con.execute(my if con.mysql else sq)
+    if "ai_quality" in old:
+        con.execute("INSERT INTO ai_quality (photo_id, sharp, bright, clip_lo, clip_hi) SELECT photo_id, sharp, bright, clip_lo, clip_hi FROM ai_quality_old")
+        con.execute("INSERT INTO ai_scans (photo_id, job, stamp, detail) SELECT photo_id, 'quality', stamp, NULL FROM ai_quality_old")
+        con.execute("DROP TABLE ai_quality_old")
+    if "ai_descriptions" in old:
+        con.execute("INSERT INTO ai_descriptions (photo_id, text) SELECT photo_id, text FROM ai_descriptions_old")
+        con.execute("INSERT INTO ai_scans (photo_id, job, stamp, detail) SELECT photo_id, 'captions', stamp, NULL FROM ai_descriptions_old")
+        con.execute("DROP TABLE ai_descriptions_old")
+    if "ai_text_and_faces" in have:
+        con.execute("INSERT INTO ai_text (photo_id, text) SELECT photo_id, text FROM ai_text_and_faces")
+        con.execute("INSERT INTO ai_face_count (photo_id, nfaces, faceq) SELECT photo_id, nfaces, faceq FROM ai_text_and_faces")
+        con.execute("INSERT INTO ai_scans (photo_id, job, stamp, detail) SELECT photo_id, 'vision', stamp, NULL FROM ai_text_and_faces")
+        con.execute("DROP TABLE ai_text_and_faces")
+    if "ai_objects_scanned" in have:
+        con.execute("INSERT INTO ai_scans (photo_id, job, stamp, detail) SELECT photo_id, 'objects', stamp, NULL FROM ai_objects_scanned")
+        con.execute("DROP TABLE ai_objects_scanned")
+    if "ai_faces_scanned" in have:
+        rows = con.execute("SELECT photo_id, stamp, found, added, checked FROM ai_faces_scanned").fetchall()
+        con.executemany("INSERT INTO ai_scans (photo_id, job, stamp, detail) VALUES (?, 'facedetect', ?, ?)",
+                        [(r[0], r[1], json.dumps({"found": r[2], "added": r[3], "checked": r[4]})) for r in rows])
+        con.execute("DROP TABLE ai_faces_scanned")
+    if "image_data_checksums" in old:
+        # the photo each path stood for is known from photo_identity; paths no photo has any more are dropped
+        con.execute("INSERT INTO image_data_checksums (photo_id, hash, algorithm, verified) "
+                    "SELECT i.dk_id, c.hash, c.algorithm, c.verified FROM image_data_checksums_old c JOIN photo_identity i ON i.path = c.path WHERE i.dk_id IS NOT NULL")
+        con.execute("DROP TABLE image_data_checksums_old")
+    log.info("viewer database: AI tables restructured (ai_scans, ai_text, ai_face_count; checksums by photo)")
+
+
 def ensure_schema(con: VConn = None):
     """Every table, idempotently; SQLite gets WAL and the two column additions older files lack."""
     own = con is None
@@ -353,6 +450,8 @@ def ensure_schema(con: VConn = None):
             con.execute("PRAGMA journal_mode = WAL")
         rename_old_tables(con)
         _drop_old_library_shape(con)
+        if _old_ai_shape(con):
+            _migrate_ai_tables(con)
         if not con.mysql:
             cols = columns(con, "tag_rewrite_queue")
             if cols and "image_id" not in cols:  # an early schema whose rows cannot be replayed

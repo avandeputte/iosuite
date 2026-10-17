@@ -68,8 +68,8 @@ def _counts() -> dict:
         return None
     con = connect()
     try:
-        return {key: con.execute(f"SELECT count(*) FROM {t}").fetchone()[0]
-                for key, t in zip(JOBS, ("ai_quality", "ai_text_and_faces", "ai_objects_scanned", "ai_descriptions"))}
+        have = dict(con.execute("SELECT job, count(*) FROM ai_scans GROUP BY job").fetchall())
+        return {key: int(have.get(key, 0)) for key in JOBS}
     except Exception:
         return None
     finally:
@@ -94,12 +94,12 @@ def _stamp(p: dict) -> str:
     return thumbs.stamp_for(p["hash"], p["size"], p["modified"])
 
 
-def _todo(table: str, photos: list, con=None) -> list:
-    """The still photos whose stored result is missing or belongs to an older version of the file."""
+def _todo(job: str, photos: list, con=None) -> list:
+    """The still photos this job has not looked at, or looked at in an older version of the file (ai_scans)."""
     own = con is None
     con = con or connect()
     try:
-        have = dict(con.execute(f"SELECT photo_id, stamp FROM {table}").fetchall())
+        have = dict(con.execute("SELECT photo_id, stamp FROM ai_scans WHERE job = ?", (job,)).fetchall())
     finally:
         if own:
             con.close()
@@ -167,8 +167,8 @@ def _pixel_job(photos: list, gen: int):
     detector = det.load(max(1, jobs.threads() // workers))  # None until the model is installed
     con = connect()
     try:
-        q_todo = {p["id"] for p in _todo("ai_quality", photos, con)}
-        o_todo = {p["id"] for p in _todo("ai_objects_scanned", photos, con)} if detector else set()
+        q_todo = {p["id"] for p in _todo("quality", photos, con)}
+        o_todo = {p["id"] for p in _todo("objects", photos, con)} if detector else set()
     finally:
         con.close()
     todo = [p for p in photos if p["id"] in q_todo or p["id"] in o_todo]
@@ -199,18 +199,20 @@ def _pixel_job(photos: list, gen: int):
                 p, out = res
                 st = _stamp(p)
                 if "quality" in out:
-                    qrows.append((p["id"], st, *out["quality"]))
+                    qrows.append((p["id"], st, *out["quality"]))  # (photo, stamp, sharp, bright, clip_lo, clip_hi)
                 if p["id"] in o_todo:
                     done.append((p["id"], st))
                     orows += [(p["id"], *o) for o in out.get("objects", [])]
             if qrows:
-                _save("INSERT OR REPLACE INTO ai_quality VALUES (?,?,?,?,?,?)", qrows)
+                with _writer() as con:
+                    con.executemany("INSERT OR REPLACE INTO ai_quality VALUES (?,?,?,?,?)", [(r[0], *r[2:]) for r in qrows])
+                    con.executemany("INSERT OR REPLACE INTO ai_scans VALUES (?,'quality',?,NULL)", [(r[0], r[1]) for r in qrows])
                 progress["quality"]["done"] += len(qrows)
             if done:
                 with _writer() as con:
                     con.executemany("DELETE FROM ai_objects WHERE photo_id = ?", [(d[0],) for d in done])
                     con.executemany("INSERT INTO ai_objects VALUES (?,?,?,?,?,?,?)", orows)
-                    con.executemany("INSERT OR REPLACE INTO ai_objects_scanned VALUES (?,?)", done)
+                    con.executemany("INSERT OR REPLACE INTO ai_scans VALUES (?,'objects',?,NULL)", done)
                 progress["objects"]["done"] += len(done)
             last = _notify(last, 60)
     _finish("quality", "objects")
@@ -325,7 +327,7 @@ def _vision_workers() -> int:
 def _vision_job(photos: list, gen: int):
     if not vision_available():
         return
-    todo = _todo("ai_text_and_faces", photos)
+    todo = _todo("vision", photos)
     progress["vision"].update(running=bool(todo), done=0, total=len(todo))
     if not todo:
         return
@@ -337,8 +339,11 @@ def _vision_job(photos: list, gen: int):
         for i in range(0, len(batches), n):
             if gen != _run["gen"]:
                 return
-            for rows in pool.map(recognise, batches[i:i + n]):
-                _save("INSERT OR REPLACE INTO ai_text_and_faces VALUES (?,?,?,?,?)", rows)
+            for rows in pool.map(recognise, batches[i:i + n]):  # (photo, stamp, text, nfaces, faceq)
+                with _writer() as con:
+                    con.executemany("INSERT OR REPLACE INTO ai_text VALUES (?,?)", [(r[0], r[2]) for r in rows])
+                    con.executemany("INSERT OR REPLACE INTO ai_face_count VALUES (?,?,?)", [(r[0], r[3], r[4]) for r in rows])
+                    con.executemany("INSERT OR REPLACE INTO ai_scans VALUES (?,'vision',?,NULL)", [(r[0], r[1]) for r in rows])
                 progress["vision"]["done"] += len(rows)
             last = _notify(last, 60)
     _finish("vision")
@@ -348,7 +353,7 @@ def _caption_job(photos: list, gen: int):
     from . import caption
     if not caption.available():
         return
-    todo = _todo("ai_descriptions", photos)
+    todo = _todo("captions", photos)
     progress["captions"].update(running=bool(todo), done=0, total=len(todo))
     if not todo:
         return
@@ -364,7 +369,9 @@ def _caption_job(photos: list, gen: int):
             progress["captions"]["done"] += len(batch)
             continue
         rows = [(p["id"], _stamp(p), (t or "")[:500]) for p, t in zip(batch, texts)]
-        _save("INSERT OR REPLACE INTO ai_descriptions VALUES (?,?,?)", rows)
+        with _writer() as con:
+            con.executemany("INSERT OR REPLACE INTO ai_descriptions VALUES (?,?)", [(r[0], r[2]) for r in rows])
+            con.executemany("INSERT OR REPLACE INTO ai_scans VALUES (?,'captions',?,NULL)", [(r[0], r[1]) for r in rows])
         progress["captions"]["done"] += len(batch)
         last = _notify(last, 120)
     _finish("captions")
@@ -394,9 +401,11 @@ def results() -> dict:
     try:
         for r in con.execute("SELECT photo_id, sharp, bright, clip_lo, clip_hi FROM ai_quality"):
             out.setdefault(r[0], {}).update(sharp=r[1], bright=r[2], clip_lo=r[3], clip_hi=r[4])
-        for r in con.execute("SELECT photo_id, text, nfaces, faceq FROM ai_text_and_faces"):
-            out.setdefault(r[0], {}).update(ocr=r[1] or None, vfaces=r[2], faceq=r[3])
-        for r in con.execute("SELECT photo_id FROM ai_objects_scanned"):
+        for r in con.execute("SELECT photo_id, text FROM ai_text"):
+            out.setdefault(r[0], {}).update(ocr=r[1] or None)
+        for r in con.execute("SELECT photo_id, nfaces, faceq FROM ai_face_count"):
+            out.setdefault(r[0], {}).update(vfaces=r[1], faceq=r[2])
+        for r in con.execute("SELECT photo_id FROM ai_scans WHERE job = 'objects'"):
             out.setdefault(r[0], {}).update(objects={}, npeople=0)
         for r in con.execute("SELECT photo_id, text FROM ai_descriptions WHERE text != ''"):
             out.setdefault(r[0], {}).update(caption_ai=r[1])
@@ -429,8 +438,10 @@ def boxes(photo_id: int) -> list:
 
 def reset(job: str):
     """Throw away one analysis so it is computed again from scratch."""
-    tables = {"quality": ["ai_quality"], "vision": ["ai_text_and_faces"], "objects": ["ai_objects", "ai_objects_scanned"], "captions": ["ai_descriptions"]}.get(job, [])
+    tables = {"quality": ["ai_quality"], "vision": ["ai_text", "ai_face_count"], "objects": ["ai_objects"], "captions": ["ai_descriptions"]}.get(job, [])
     _run["gen"] += 1  # stop the running jobs; the caller restarts them
     with _writer() as con:
         for t in tables:
             con.execute(f"DELETE FROM {t}")
+        if job in JOBS:
+            con.execute("DELETE FROM ai_scans WHERE job = ?", (job,))

@@ -199,7 +199,7 @@ def scan(photos: list, rescan_all: bool = True):
                     progress["done"] += len(batch)
                     continue
                 now = int(time.time())
-                rows = [(r["id"], _cstamp(p), json.dumps(r), len(r["mismatch"]), r["has_sidecar"], r["file_xmp"], now)
+                rows = [(r["id"], _cstamp(p), _report(r), len(r["mismatch"]), r["has_sidecar"], r["file_xmp"], now)
                         for p, r in zip(batch, recs)]
                 with analysis._write_lock:
                     con = analysis.connect()
@@ -294,7 +294,7 @@ def recheck(photo_ids: list):
         try:
             recs = compare(photos)
             now = int(time.time())
-            rows = [(r["id"], _cstamp(p), json.dumps(r), len(r["mismatch"]), r["has_sidecar"], r["file_xmp"], now) for p, r in zip(photos, recs)]
+            rows = [(r["id"], _cstamp(p), _report(r), len(r["mismatch"]), r["has_sidecar"], r["file_xmp"], now) for p, r in zip(photos, recs)]
             with analysis._write_lock:
                 c = analysis.connect()
                 try:
@@ -337,6 +337,12 @@ def _changes_from(values: dict, fields: list, db_tags: list) -> dict:
     return ch
 
 
+def _report(r: dict):
+    """The stored report: the full comparison for a photo whose copies disagree or that has no sidecar (what the pages
+    and the sync read), nothing for one that agrees. That keeps the table at a few hundred KB instead of tens of MB."""
+    return json.dumps(r) if r["mismatch"] or not r["has_sidecar"] else None
+
+
 def sync(photo_ids: list, source: str, targets: list, fields: list = None) -> dict:
     """Copy the chosen fields from `source` (db|sidecar|file) to each of `targets`."""
     if source not in SOURCES or any(t not in SOURCES or t == source for t in targets) or not targets:
@@ -348,7 +354,8 @@ def sync(photo_ids: list, source: str, targets: list, fields: list = None) -> di
         for i in range(0, len(photo_ids), 500):
             chunk = ",".join(str(int(x)) for x in photo_ids[i:i + 500])
             for pid, data in con.execute(f"SELECT photo_id, data FROM metadata_check WHERE photo_id IN ({chunk})"):
-                stored[pid] = json.loads(data)
+                if data:  # photos that agree have no stored report (nothing to copy anyway)
+                    stored[pid] = json.loads(data)
     finally:
         con.close()
     done, skipped = [], []

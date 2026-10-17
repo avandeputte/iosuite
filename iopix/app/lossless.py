@@ -239,12 +239,12 @@ def _write_db(pid: int, w: int, h: int, orientation: int, size: int, kept: list,
             con.execute("DELETE FROM ImageTagProperties WHERE imageid = ? AND tagid = ? AND property = ? AND value = ?", (pid, tagid, prop, old))
 
 
-def _forget_checksum(path: str):
+def _forget_checksum(pid: int):
     try:
         from . import vdb
         con = vdb.connect()
         try:
-            con.execute("DELETE FROM image_data_checksums WHERE path = ?", (path,))
+            con.execute("DELETE FROM image_data_checksums WHERE photo_id = ?", (int(pid),))
             con.commit()
         finally:
             con.close()
@@ -257,7 +257,7 @@ def _finish(p: dict, orientation: int, summary: str, before: dict, copy: str, w:
     _sidecar(p["path"], orientation)
     facemgr.write_regions_many([p["id"]])
     thumbs.forget(p["id"])
-    _forget_checksum(p["path"])
+    _forget_checksum(p["id"])
     history.record([{"photo_id": p["id"], "action": "lossless", "summary": summary, "path": p["path"], "file_copy": copy,
                      "details": action_detail, "undo": {"lossless": {**before, "file_copy": copy}}}])
     return {"id": p["id"], "w": w, "h": h, "orientation": orientation, "upright": list(upright_size(w, h, orientation))}
@@ -415,6 +415,6 @@ def undo(entry: dict, check_running: bool = True) -> dict:
     _sidecar(p["path"], u["orientation"])
     facemgr.write_regions_many([p["id"]])
     thumbs.forget(p["id"])
-    _forget_checksum(p["path"])
+    _forget_checksum(p["id"])
     history.record([{"photo_id": p["id"], "action": "restore", "summary": f"Change #{entry['id']} undone: the file is as it was before", "path": p["path"]}])
     return {"undone": 1, "id": p["id"]}
