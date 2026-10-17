@@ -74,8 +74,8 @@ export function updateBanner(u) {
   b?.remove();
   b = h('div', { id: 'updbanner', 'data-remote': u.remote },
     h('span', { class: 'ic-wrap' }, icon('spark')),
-    h('div', null, h('b', null, u.version ? `Version ${u.version} is available` : 'A newer version is available'),
-      h('div', { class: 'muted' }, `You have v${S.APP_VERSION || '?'}. ${(u.message || '').replace(/^v\d+\.\d+\.\d+:\s*/, '').slice(0, 140)}`)),
+    h('div', null, h('b', null, u.version ? `Version ${u.version} is available` : 'A newer build is available'),
+      h('div', { class: 'muted' }, `You have v${S.APP_VERSION || '?'}${S.APP_COMMIT && S.APP_COMMIT !== 'unknown' ? ` (${S.APP_COMMIT})` : ''}. ${u.version ? '' : 'Latest change: '}${(u.message || '').replace(/^v\d+\.\d+\.\d+:\s*/, '').slice(0, 140)}`)),
     h('a', { class: 'pillbtn on', href: '#/maintenance', onclick: () => b.remove() }, 'Update…'),
     h('button', { class: 'iconbtn', title: 'Not now (hidden until the next version)', onclick: () => { try { localStorage.setItem('upd-dismissed', u.remote); } catch { /* ignore */ } b.remove(); } }, icon('close')));
   document.body.append(b);
@@ -101,10 +101,10 @@ export async function pollStatus() {
     if (s.app) S.APP_STAMP = s.app;
     S.SEM = s.semantic; S.EDITING = s.editing; S.FACE_DETECT = !!s.faceDetect; S.LOSSLESS = s.lossless || null; S.SYNC_OFF = !!(s.digikam && !s.digikam.sync); S.PENDING = s.pendingEdits; S.WRITE_FILES = s.writeFiles; S.CAN_MANAGE = s.editing && s.dbWrite;
     S.IS_ADMIN = s.isAdmin; S.USERS_EXIST = s.usersExist; S.DIGIKAM_CHECK = s.digikamCheck || 'pgrep';
+    if (s.appVersion) { S.APP_VERSION = s.appVersion; S.APP_COMMIT = s.commit || ''; const b = $('.brand'); if (b) b.title = `${S.APP_NAME} v${S.APP_VERSION}${S.APP_COMMIT ? ' (' + S.APP_COMMIT + ')' : ''}`; } if ((s.user && s.user.id) !== (S.USER && S.USER.id)) { S.USER = s.user; renderUserMenu(); }  // before the banner, which names the installed version
     updateBanner(s.updateAvailable);
     dkBanner(s.digikam);
     if (s.appName && s.appName !== S.APP_NAME) { S.APP_NAME = s.appName; applyAppName(); }
-    if (s.appVersion) { S.APP_VERSION = s.appVersion; S.APP_COMMIT = s.commit || ''; const b = $('.brand'); if (b) b.title = `${S.APP_NAME} v${S.APP_VERSION}${S.APP_COMMIT ? ' (' + S.APP_COMMIT + ')' : ''}`; } if ((s.user && s.user.id) !== (S.USER && S.USER.id)) { S.USER = s.user; renderUserMenu(); }
     document.body.classList.toggle('noadmin', !S.IS_ADMIN);
     if (S.PENDING && s.dbWrite && !el.childNodes.length) el.replaceChildren(h('a', { class: 'lnk', style: 'cursor:pointer', title: 'Edits saved in sidecars that digiKam’s database does not have yet', onclick: dbDialog },
       `${nf.format(S.PENDING)} ${S.PENDING === 1 ? 'edit' : 'edits'} not in digiKam yet`));
