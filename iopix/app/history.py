@@ -131,6 +131,8 @@ def entries(photo_id: int = None, limit: int = 100, offset: int = 0, action: str
         restore = []
         if r[7] or (r[4] == "face" and isinstance(details, dict) and facemgr.inverse_ops(details)):
             restore.append("undo")
+        if r[4] == "trashed" and isinstance(details, dict) and details.get("info") and os.path.isfile(details["info"]):
+            restore.append("trash")
         if r[8] and os.path.isfile(r[8]):
             restore.append("sidecar")
         if r[4] == "deleted" and r[9] and _deleted_backup(r[6]):
@@ -183,6 +185,22 @@ def restore(entry_id: int, kind: str) -> dict:
     pid = e["photo"]
     if kind == "deleted":
         return _restore_deleted(e)
+    if kind == "trash":  # back out of the trash
+        from . import organize
+        info = (e["details"] or {}).get("info")
+        if not info or not os.path.isfile(info):
+            raise FileNotFoundError("That photo is no longer in the trash")
+        r = organize.restore([info])
+        if not r["restored"]:
+            raise ValueError(r["failed"][0]["error"] if r["failed"] else "Could not restore it")
+        return {"restored": "trash", "id": r["restored"][0]}
+    if kind == "undo" and e["action"] == "moved" and (e["undo"] or {}).get("move"):
+        from . import organize
+        back = e["undo"]["move"]
+        r = organize.move_photos([pid], int(back["album"]), True, back.get("name"))
+        if r["failed"]:
+            raise ValueError(r["failed"][0]["error"])
+        return {"undone": 1}
     photo = _photo(pid)
     if not photo:
         raise LookupError("That photo is not in the library any more")

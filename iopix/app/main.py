@@ -241,7 +241,7 @@ async def lifespan(_app):
 app = FastAPI(title="iopix", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 # every endpoint that changes the library (sidecars, files, digiKam's database); refused in read-only mode
-WRITE_PATHS = ("/api/edit", "/api/edits/db", "/api/faces/detect", "/api/photos/delete", "/api/history", "/api/library/merge", "/api/location/landmark", "/api/gpx/preview", "/api/consistency/sync", "/api/gpx/apply", "/api/faces/op", "/api/faces/batch", "/api/folders",
+WRITE_PATHS = ("/api/edit", "/api/edits/db", "/api/faces/detect", "/api/photos/delete", "/api/photos/trash", "/api/photos/move", "/api/photos/rename", "/api/trash", "/api/history", "/api/library/merge", "/api/location/landmark", "/api/gpx/preview", "/api/consistency/sync", "/api/gpx/apply", "/api/faces/op", "/api/faces/batch", "/api/folders",
                "/api/faces/person", "/api/placetags", "/api/tags/op")
 
 
@@ -1834,6 +1834,147 @@ async def api_history_restore(entry_id: int, request: Request):
         raise HTTPException(409, str(e))
     except DB_ERRORS as e:
         raise HTTPException(500, f"The restore failed and was rolled back: {e}")
+    await run_in_threadpool(_rebuild_after_write)
+    return r
+
+
+def _organize_allowed():
+    if not config.DB_WRITE:
+        raise HTTPException(403, "Writing to digiKam's database is turned off (DB_WRITE=0)")
+    if index.sync_enabled() and index.offline["since"]:
+        raise HTTPException(409, "digiKam's database is unreachable right now")
+
+
+def _run_organize(fn, *args):
+    from . import organize
+    try:
+        return fn(*args)
+    except dbsync.SyncError as e:
+        raise HTTPException(409, str(e))
+    except DB_ERRORS as e:
+        raise HTTPException(500, f"The change failed and was rolled back: {e}")
+    finally:
+        _ = organize
+
+
+@app.post("/api/photos/trash")
+async def api_photos_trash(request: Request):
+    """Body {ids}: move the photos to the trash of their album root, digiKam's way (.dtrash); restorable."""
+    from . import organize
+    _organize_allowed()
+    ids = [int(i) for i in (await request.json()).get("ids") or []][:20000]
+    if not ids:
+        raise HTTPException(400, "Choose photos")
+    r = await run_in_threadpool(_run_organize, organize.trash, ids)
+    await run_in_threadpool(_rebuild_after_write)
+    return r
+
+
+@app.get("/api/trash")
+def api_trash(request: Request):
+    """What is in the trash (every album root), newest first."""
+    from . import organize
+    if not users.can_write(request.state.user):
+        raise HTTPException(403 if request.state.user else 401, "Editors only")
+    items = organize.listing()
+    return {"items": items, "bytes": sum(i["size"] for i in items)}
+
+
+@app.get("/api/trash/thumb")
+def api_trash_thumb(info: str):
+    """A thumbnail of a trashed file, named by its .dtrashinfo record (which must sit in an album root's trash)."""
+    from . import organize
+    item = next((t for t in organize.listing() if t["info"] == info), None)
+    if not item or not item["exists"]:
+        raise HTTPException(404)
+    import hashlib
+    key = hashlib.sha1(f"{item['trash']}:{os.path.getmtime(item['trash'])}".encode()).hexdigest()[:16]
+    dst = config.CACHE_DIR / "t" / "trash" / f"{key}.jpg"
+    if not dst.exists():
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            if item["name"].rsplit(".", 1)[-1].lower() in folders.VIDEO_EXT:
+                if not thumbs._video_frame(item["trash"], dst, 360, None):
+                    raise HTTPException(404)
+            else:
+                im, icc = thumbs._open_oriented(item["trash"], 540, 360)
+                im.thumbnail((540, 360))
+                thumbs._save(im, dst, 76, icc)
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(404)
+    return FileResponse(dst, media_type="image/jpeg", headers=IMG_CACHE)
+
+
+@app.post("/api/trash/restore")
+async def api_trash_restore(request: Request):
+    """Body {infos: [.dtrashinfo paths]}: put those photos back where they were."""
+    from . import organize
+    _organize_allowed()
+    infos = [str(i) for i in (await request.json()).get("infos") or []][:20000]
+    r = await run_in_threadpool(_run_organize, organize.restore, infos)
+    await run_in_threadpool(_rebuild_after_write)
+    return r
+
+
+@app.post("/api/trash/empty")
+async def api_trash_empty(request: Request):
+    """Body {infos: [...]} or {all: true}: delete those trash entries for good."""
+    from . import organize
+    _organize_allowed()
+    body = await request.json()
+    infos = None if body.get("all") is True else [str(i) for i in body.get("infos") or []][:20000]
+    if infos is not None and not infos:
+        raise HTTPException(400, "Choose what to delete")
+    r = await run_in_threadpool(_run_organize, organize.empty, infos)
+    await run_in_threadpool(_rebuild_after_write)
+    return r
+
+
+@app.post("/api/photos/move")
+async def api_photos_move(request: Request):
+    """Body {ids, album}: move the photos (and their sidecars) into that folder; ids and everything attached stay."""
+    from . import organize
+    _organize_allowed()
+    body = await request.json()
+    ids = [int(i) for i in body.get("ids") or []][:20000]
+    if not ids or body.get("album") is None:
+        raise HTTPException(400, "Choose photos and a folder")
+    r = await run_in_threadpool(_run_organize, organize.move_photos, ids, int(body["album"]))
+    await run_in_threadpool(_rebuild_after_write)
+    return r
+
+
+@app.post("/api/photos/rename")
+async def api_photos_rename(request: Request):
+    """Body {id, name}: a new file name (the extension stays)."""
+    from . import organize
+    _organize_allowed()
+    body = await request.json()
+    r = await run_in_threadpool(_run_organize, organize.rename_photo, int(body.get("id") or 0), str(body.get("name") or ""))
+    await run_in_threadpool(_rebuild_after_write)
+    return r
+
+
+@app.post("/api/folders/{album_id}/rename")
+async def api_folder_rename(album_id: int, request: Request):
+    """Body {name}: rename the folder on disk and in the database (subfolders follow)."""
+    from . import organize
+    _organize_allowed()
+    body = await request.json()
+    r = await run_in_threadpool(_run_organize, organize.rename_folder, album_id, str(body.get("name") or ""))
+    await run_in_threadpool(_rebuild_after_write)
+    return r
+
+
+@app.post("/api/folders/{album_id}/move")
+async def api_folder_move(album_id: int, request: Request):
+    """Body {parent}: move the folder (with everything in it) under another folder of the same album root."""
+    from . import organize
+    _organize_allowed()
+    body = await request.json()
+    r = await run_in_threadpool(_run_organize, organize.move_folder, album_id, int(body.get("parent") or 0))
     await run_in_threadpool(_rebuild_after_write)
     return r
 

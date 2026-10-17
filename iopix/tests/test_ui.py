@@ -964,6 +964,8 @@ def test_phone_layout_fits_the_screen(browser, server):
         page.locator(".modal button", has_text="Close").tap(); page.wait_for_timeout(200)
         page.locator("#grid .selall").tap(); page.wait_for_selector("#selbar button.pillbtn", timeout=3000); page.wait_for_timeout(1200)
         for b in page.locator("#selbar button.pillbtn").all():
+            if not b.is_visible():
+                continue  # Move to a folder stays off the phone bar (the info panel has it)
             box = b.bounding_box()
             assert box and box["x"] + box["width"] <= 393 and box["width"] >= 30, box
         # not an installed iOS app: no short-viewport handling; the bar sits on the bottom edge and the grid ends where it starts
@@ -1236,3 +1238,24 @@ def test_person_options_menu_opens_in_front_of_the_map(page, server, lib):
     b = menu.bounding_box()
     hit = page.evaluate("([x, y]) => { const e = document.elementFromPoint(x, y); return e && e.closest('.facemenu') ? 'menu' : (e ? e.className + '' : 'none'); }", [b["x"] + b["width"] / 2, b["y"] + b["height"] - 12])
     assert hit == "menu", hit
+
+
+def test_delete_key_moves_to_the_trash_without_a_question_and_undo_restores(page, server, lib):
+    import json as _json
+    dialogs = []
+    page.on("dialog", lambda d: (dialogs.append(d.message), d.dismiss()))
+    page.goto(server + "/#/photos?sort=old"); page.wait_for_selector("#grid .tile img", timeout=20000); page.wait_for_timeout(500)
+    tile = page.locator("#grid .tile").first
+    pid = int(tile.locator("img").get_attribute("src").split("/thumb/")[1].split("?")[0].split("-")[0])
+    tile.hover()
+    tile.locator(".tcheck").click(force=True)
+    page.wait_for_selector("#selbar", timeout=5000)
+    page.keyboard.press("Delete")
+    page.wait_for_selector("#toast:not([hidden])", timeout=10000)
+    page.wait_for_timeout(1500)
+    assert not dialogs, dialogs
+    assert "trash" in page.locator("#toast").inner_text().lower()
+    assert any(t["id"] == pid for t in _json.loads(urllib.request.urlopen(server + "/api/trash").read())["items"])
+    page.locator("#toast a", has_text="Undo").click()
+    page.wait_for_timeout(2500)
+    assert not any(t["id"] == pid for t in _json.loads(urllib.request.urlopen(server + "/api/trash").read())["items"]), "back out of the trash"

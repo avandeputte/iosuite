@@ -676,6 +676,7 @@ body:has(#dkbanner) #updbanner { bottom: 96px; }  /* both at once: the update ca
   #topbar { padding: env(safe-area-inset-top) 8px 0 8px; height: calc(var(--topbar) + env(safe-area-inset-top)); }
   #selbar { padding: env(safe-area-inset-top) 6px 0 6px; height: calc(var(--topbar) + env(safe-area-inset-top)); overflow-x: auto; scrollbar-width: none; }
   #selbar .pillbtn > span:not(.ic), #selbar .lnk { display: none; }  /* icons only: every action stays on screen */
+  #selbar .pillbtn[title="Move to a folder"] { display: none; }  /* on phones: from the photo's info panel instead; seven actions fit, eight do not */
   #selbar .pillbtn { padding: 0 6px; flex: none; }
   #selbar .iconbtn { width: 36px; flex: none; }
   #selbar .n { font-size: 14px; margin: 0 2px 0 0; white-space: nowrap; }
@@ -780,3 +781,5 @@ body:has(#dkbanner) #updbanner { bottom: 96px; }  /* both at once: the update ca
 .tnarrow { font-size: 22px; color: var(--fg2); }
 .tnname { text-align: center; margin-top: 8px; font-size: 14px; } .tnname a { color: var(--fg); font-weight: 600; }
 @media (max-width: 800px) { .tnrow { grid-template-columns: 1fr; } .tnface img { width: 100px; height: 100px; } }
+
+.card.sel .cv { outline: 3px solid var(--accent); outline-offset: -3px; }
