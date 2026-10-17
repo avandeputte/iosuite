@@ -1214,3 +1214,25 @@ def test_maintenance_explains_the_model_choices(page, server):
     assert "Face detection" in row.locator(".mwhat").inner_text()
     row.locator(".mcompare summary").click()
     assert row.locator(".mopt").count() == 3 and "WIDER Face" in row.locator(".mopts").inner_text()
+
+
+def test_person_options_menu_opens_in_front_of_the_map(page, server, lib):
+    """The info pane's person Options menu sits above the map (Leaflet's panes have high z-indexes)."""
+    import json as _json
+    ids = _json.loads(urllib.request.urlopen(server + "/api/photos?geo=1").read())["id"]
+    with_face = set(lib["with_faces"])
+    pid = next((i for i in ids if i in with_face), None)
+    if pid is None:
+        pytest.skip("no geotagged photo with a named face in the fixture")
+    page.set_viewport_size({"width": 1280, "height": 800})
+    _open_photo(page, server, pid)
+    page.keyboard.press("i")
+    page.wait_for_selector(".lb-info .imap", timeout=10000)
+    page.wait_for_timeout(800)
+    opt = page.locator(".lb-info", has_text="options").locator("text=options").first
+    opt.click()
+    menu = page.locator(".facemenu")
+    menu.wait_for(timeout=5000)
+    b = menu.bounding_box()
+    hit = page.evaluate("([x, y]) => { const e = document.elementFromPoint(x, y); return e && e.closest('.facemenu') ? 'menu' : (e ? e.className + '' : 'none'); }", [b["x"] + b["width"] / 2, b["y"] + b["height"] - 12])
+    assert hit == "menu", hit
