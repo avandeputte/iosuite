@@ -8,7 +8,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app import APP_VERSION, api, carddav, config, db, ldapd, proxyauth, users
+from app import APP_VERSION, api, carddav, config, db, ldapd, mcp, proxyauth, updates, users
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("iocontacts")
@@ -24,7 +24,11 @@ async def lifespan(app: FastAPI):
             server = await ldapd.serve(config.LDAP_HOST, config.LDAP_PORT)
         except OSError as e:
             log.warning("LDAP directory not started on port %s: %s", config.LDAP_PORT, e)
-    yield
+    updates.start_daily()  # the daily "is there a newer version" check, while the setting allows it
+    sm = mcp.server.session_manager
+    sm._has_started = False  # a second start in the same process (the tests start the app once per test) is allowed
+    async with sm.run():  # the MCP endpoint (/mcp) lives in this process
+        yield
     if server:
         server.close()
 
@@ -76,6 +80,14 @@ async def who(request: Request, call_next):
     if not user and "authorization" in request.headers:
         user = await run_in_threadpool(_basic, request)
     request.state.user = user
+    if path == "/mcp" or path.startswith("/mcp/"):
+        if not await run_in_threadpool(api.mcp_enabled):
+            return JSONResponse({"detail": "The MCP server is switched off (Settings › Server in the web app)."}, status_code=404)
+        if not user:
+            return JSONResponse({"detail": "Sign in with your user name and an app password (HTTP Basic), or send "
+                                           "'Authorization: Bearer <app password>'. Make one in Settings › Apps and devices."},
+                                status_code=401, headers={"WWW-Authenticate": 'Basic realm="ioContacts", Bearer realm="ioContacts"'})
+        mcp.current_user.set(user)  # every tool acts as this account
     if path.startswith("/api/") and not user and path not in OPEN:
         return JSONResponse({"detail": "Sign in first"}, status_code=401,
                             headers={"WWW-Authenticate": 'Basic realm="ioContacts"'} if "authorization" in request.headers else {})
@@ -93,6 +105,15 @@ async def who(request: Request, call_next):
 
 app.include_router(api.router)
 app.include_router(carddav.router)
+
+# MCP over streamable HTTP on the same port: an assistant connects to https://host/mcp with an app password.
+# DNS-rebinding protection is off because the server is reached by LAN name, IP or a public name, not localhost only;
+# every request is signed in anyway.
+from mcp.server.transport_security import TransportSecuritySettings  # noqa: E402
+
+_mcp_asgi = mcp.server.streamable_http_app(streamable_http_path="/mcp", stateless_http=True,
+                                           transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False))
+app.router.routes[:0] = list(_mcp_asgi.routes)  # the exact path /mcp, ahead of everything else
 
 
 @app.get("/", include_in_schema=False)

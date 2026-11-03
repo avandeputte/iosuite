@@ -39,6 +39,9 @@ const ICONS = {
   image: 'M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z',
   more: 'M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z',
   check: 'M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z',
+  update: 'M21 10.12h-6.78l2.74-2.82c-2.73-2.7-7.15-2.8-9.88-.1a6.875 6.875 0 0 0 0 9.79 7.02 7.02 0 0 0 9.88 0C18.32 15.65 19 14.08 19 12.1h2c0 1.98-.88 4.55-2.64 6.29-3.51 3.48-9.21 3.48-12.72 0-3.5-3.47-3.53-9.11-.02-12.58a8.987 8.987 0 0 1 12.65 0L21 3v7.12z',
+  ai: 'M19 9l1.25-2.75L23 5l-2.75-1.25L19 1l-1.25 2.75L15 5l2.75 1.25L19 9zm-7.5.5L9 4 6.5 9.5 1 12l5.5 2.5L9 20l2.5-5.5L17 12l-5.5-2.5zM19 15l-1.25 2.75L15 19l2.75 1.25L19 23l1.25-2.75L23 19l-2.75-1.25L19 15z',
+  server: 'M20 13H4c-.55 0-1 .45-1 1v6c0 .55.45 1 1 1h16c.55 0 1-.45 1-1v-6c0-.55-.45-1-1-1zM7 19c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zM20 3H4c-.55 0-1 .45-1 1v6c0 .55.45 1 1 1h16c.55 0 1-.45 1-1V4c0-.55-.45-1-1-1zM7 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z',
   theme: 'M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 0 1-4.4 2.26 5.403 5.403 0 0 1-3.14-9.8c-.44-.06-.9-.1-1.36-.1z',
   org: 'M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z',
   select: 'M3 5h2V3c-1.1 0-2 .9-2 2zm0 8h2v-2H3v2zm4 8h2v-2H7v2zM3 9h2V7H3v2zm10-6h-2v2h2V3zm6 0v2h2c0-1.1-.9-2-2-2zM5 21v-2H3c0 1.1.9 2 2 2zm-2-4h2v-2H3v2zM9 3H7v2h2V3zm2 18h2v-2h-2v2zm8-8h2v-2h-2v2zm0 8c1.1 0 2-.9 2-2h-2v2zm0-12h2V7h-2v2zm0 8h2v-2h-2v2zm-4 4h2v-2h-2v2zm0-16h2V3h-2v2zM7 17h10V7H7v10zm2-8h6v6H9V9z',
@@ -673,11 +676,11 @@ async function showIopix(page) {
 
 // ------------------------------------------------------------------ settings
 async function showSettings(page, r) {
-  const tabs = [['account', 'Account'], ['devices', 'Apps and devices'], ['books', 'Address books'], ...(S.user.role === 'admin' ? [['users', 'Users'], ['iopix', 'ioPix']] : [])];
+  const tabs = [['account', 'Account'], ['devices', 'Apps and devices'], ['books', 'Address books'], ...(S.user.role === 'admin' ? [['users', 'Users'], ['iopix', 'ioPix'], ['server', 'Server']] : [])];
   page.append(h('div', { class: 'pagehead' }, h('h1', null, 'Settings')),
     h('div', { class: 'tabs' }, tabs.map(([k, l]) => h('button', { class: r.tab === k ? 'on' : '', onclick: () => { location.hash = `#/settings/${k}`; } }, l))));
   const body = h('div'); page.append(body);
-  await ({ account: setAccount, devices: setDevices, books: setBooks, users: setUsers, iopix: setIopix }[r.tab] || setAccount)(body);
+  await ({ account: setAccount, devices: setDevices, books: setBooks, users: setUsers, iopix: setIopix, server: setServer }[r.tab] || setAccount)(body);
 }
 
 async function setAccount(el) {
@@ -696,7 +699,7 @@ async function setDevices(el) {
   const pw = await api('/api/app-passwords');
   const label = h('input', { class: 't', placeholder: 'e.g. Alex’s iPhone', style: 'max-width:280px' });
   const shown = h('div');
-  el.append(
+  el.append(...[
     h('div', { class: 'box' }, h('h2', null, icon('key'), 'App passwords'),
       h('p', { class: 'muted' }, 'Give every app or device its own password instead of yours; you can revoke one without touching the others. Use your user name with it.'),
       h('div', { class: 'multi' }, label, h('button', { class: 'pillbtn primary', onclick: async () => {
@@ -723,9 +726,17 @@ async function setDevices(el) {
       h('div', { class: 'kv' }, h('div', { class: 'k' }, 'Base DN'), h('div', { class: 'v', style: { flex: 1 } }, copyRow(info.ldap.base))),
       h('div', { class: 'kv' }, h('div', { class: 'k' }, 'Bind DN'), h('div', { class: 'v', style: { flex: 1 } }, copyRow(info.ldap.bindDn))),
       h('p', { class: 'muted small' }, 'Sign in with an app password. The directory speaks plain LDAP: keep it on your own network, or put a TLS proxy in front for ldaps://.')) : null,
+    S.status.mcp ? h('div', { class: 'box' }, h('h2', null, icon('ai'), 'AI assistants (MCP)'),
+      h('p', null, 'Claude and other assistants that speak the Model Context Protocol can search, read and update the contacts you can see, as you. Give the assistant its own app password (above), sent as a Bearer token.'),
+      h('div', { class: 'kv' }, h('div', { class: 'k' }, 'MCP address'), h('div', { class: 'v', style: { flex: 1 } }, copyRow(`${info.server}/mcp`))),
+      h('p', { class: 'muted small' }, 'Claude Code:'),
+      copyRow(`claude mcp add --transport http iocontacts ${info.server}/mcp --header "Authorization: Bearer APP-PASSWORD"`),
+      h('p', { class: 'muted small' }, 'Apps configured with JSON (Claude Desktop through mcp-remote, Cursor, VS Code…):'),
+      copyRow(JSON.stringify({ mcpServers: { iocontacts: { command: 'npx', args: ['-y', 'mcp-remote', `${info.server}/mcp`, '--header', 'Authorization: Bearer APP-PASSWORD'] } } })))
+      : (S.user.role === 'admin' ? h('div', { class: 'box' }, h('h2', null, icon('ai'), 'AI assistants (MCP)'), h('p', { class: 'muted' }, 'The MCP server is off. Turn it on in ', h('a', { class: 'lnk', href: '#/settings/server' }, 'Settings › Server'), ' to let Claude and other assistants work with the contacts.')) : null),
     h('div', { class: 'box' }, h('h2', null, icon('link'), 'Other apps (REST API)'),
       h('p', null, 'JSON, vCard or jCard over HTTPS, with your user name and an app password (HTTP Basic) or the app password as a Bearer token. ', h('a', { class: 'lnk', href: '/api/docs', target: '_blank' }, 'API documentation')),
-      copyRow(`curl -u ${info.user}:APP-PASSWORD -H 'Accept: application/vcard+json' ${info.server}/api/contacts?q=smith`)));
+      copyRow(`curl -u ${info.user}:APP-PASSWORD -H 'Accept: application/vcard+json' ${info.server}/api/contacts?q=smith`))].filter(Boolean));
   const drawPw = (items) => {
     const box = el.querySelector('#pwlist');
     box.replaceChildren(items.length ? h('table', { class: 't' }, h('tr', null, h('th', null, 'Name'), h('th', null, 'Made'), h('th', null, 'Last used'), h('th')),
@@ -789,6 +800,73 @@ async function setIopix(el) {
 }
 
 // ------------------------------------------------------------------ sign-in
+async function setServer(el) {
+  const draw = async () => {
+    let s; try { s = await api('/api/server'); } catch (e) { el.replaceChildren(h('p', null, e.message)); return; }
+    if (!el.isConnected) return;
+    const c = s.check, p = s.progress, last = s.lastUpdate;
+    const state = p.running ? 'Updating… ioContacts restarts when it is done, and this page reloads.'
+      : p.error ? `The last update failed: ${p.error}`
+      : !c ? `You have v${s.version}${s.installed !== 'unknown' ? ` (${s.installed})` : ''}.`
+      : c.status === 'current' ? `v${s.version} is the latest version.`
+      : c.status === 'update' ? `You have v${s.version}; ${c.remoteVersion ? `v${c.remoteVersion}` : 'a newer build'} is available${c.remoteDate ? ` (${c.remoteDate})` : ''}${c.remoteMessage ? `: ${c.remoteMessage.replace(/^v\d+\.\d+\.\d+:\s*/, '')}` : ''}.`
+      : `Could not check: ${c.error}`;
+    const sw = (on, label, key, locked) => h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: on, disabled: locked, onchange: async (e) => {
+      try { await api('/api/server', { method: 'POST', json: { [key]: e.target.checked } }); S.status = await api('/api/status'); toast('Saved'); draw(); } catch (err) { e.target.checked = !e.target.checked; fail(err); }
+    } }), ' ', label);
+    el.replaceChildren(
+      h('div', { class: 'box' }, h('h2', null, icon('update'), 'ioContacts version'),
+        h('p', null, state),
+        !p.running && !p.error && last ? h('p', { class: last.ok ? 'muted small' : 'warn small' }, `Last update: ${last.text}`) : null,
+        h('p', null,
+          h('button', { class: 'pillbtn', onclick: async () => { el.querySelector('.box p').textContent = 'Checking…'; try { await api('/api/server', { method: 'POST', json: { action: 'check' } }); } catch (e) { fail(e); } draw(); } }, icon('update', 's'), 'Check for updates'), ' ',
+          s.docker ? h('span', { class: 'muted' }, 'Docker: update by pulling the image (docker compose pull && docker compose up -d).')
+            : s.canRun ? h('button', { class: `pillbtn ${c && c.status === 'update' ? 'primary' : ''}`, disabled: p.running, onclick: async () => {
+              if (!await confirmDialog('Update ioContacts', 'Fetch the newest version, refresh its packages and restart ioContacts? Settings and contacts stay; the page reloads when the new version is up.', 'Update now')) return;
+              if (await runUpdate()) setTimeout(draw, 2500);
+            } }, icon('check', 's'), 'Update now')
+            : h('span', { class: 'muted' }, 'This install cannot update itself from here (run ./update.sh in the app folder).')),
+        h('p', null, sw(s.autoCheck, 'Check for a new version once a day (only GitHub’s public list of changes is asked; nothing about this server is sent)', 'autoCheck', s.autoCheckLocked)),
+        s.autoCheckLocked ? h('p', { class: 'muted small' }, 'UPDATE_CHECK=0 in the environment keeps it off.') : null,
+        h('p', { class: 'muted small' }, `Follows ${s.repo} (${s.branch}).`)),
+      h('div', { class: 'box' }, h('h2', null, icon('ai'), 'MCP server'),
+        h('p', null, 'The address /mcp that lets an AI assistant (Claude, for example) search, read and keep the contacts: look people up, add and correct contacts, link relatives, list birthdays, import and export, and for admins check for and install updates. Each assistant signs in with an app password and acts as that account, with its rights. Off: /mcp does not answer at all.'),
+        h('p', null, sw(s.mcpEnabled, 'The MCP server is on', 'mcpEnabled', s.mcpLocked)),
+        s.mcpLocked ? h('p', { class: 'muted small' }, 'MCP=1 in the environment keeps it on.') : null,
+        s.mcpEnabled ? [h('div', { class: 'kv' }, h('div', { class: 'k' }, 'Address'), h('div', { class: 'v', style: { flex: 1 } }, copyRow(s.mcpUrl))),
+          h('p', { class: 'muted small' }, 'How to connect an assistant: ', h('a', { class: 'lnk', href: '#/settings/devices' }, 'Settings › Apps and devices'), '. On the server itself, `python -m app.mcp --user NAME` serves it over stdio.')] : null));
+    if (p.running) setTimeout(() => { if (el.isConnected) draw(); }, 4000);
+  };
+  await draw();
+}
+
+/** Start update.sh on the server, then watch /api/status until another version or commit answers, and reload. */
+async function runUpdate() {
+  try { await api('/api/server', { method: 'POST', json: { action: 'update' } }); } catch (e) { fail(e); return false; }
+  toast('Updating; ioContacts restarts when it is done, and the page reloads.');
+  const was = `${S.status.version}|${S.status.commit || ''}`, until = Date.now() + 240000;
+  const look = async () => {
+    try { const s = await fetch('/api/status', { credentials: 'same-origin' }).then((r) => r.json()); if (s.version && `${s.version}|${s.commit || ''}` !== was) { location.reload(); return; } } catch { /* restarting */ }
+    if (Date.now() < until) setTimeout(look, 4000); else toast('The update did not finish; see Settings › Server.');
+  };
+  setTimeout(look, 4000);
+  return true;
+}
+
+/** Admins: a note when the daily check found a newer version, with Update now. Hidden until the next version when dismissed. */
+function updateBanner() {
+  $('#updbanner')?.remove();
+  const u = S.status && S.status.updateAvailable;
+  let dismissed = null; try { dismissed = localStorage.getItem('ioc.updateDismissed'); } catch { /* private mode */ }
+  if (!u || dismissed === u.remote) return;
+  const b = h('div', { id: 'updbanner', role: 'status' }, icon('update'),
+    h('span', null, `ioContacts ${u.version ? `v${u.version}` : 'update'} is available${u.message ? `: ${u.message.replace(/^v\d+\.\d+\.\d+:\s*/, '')}` : ''}`),
+    h('button', { class: 'pillbtn primary noic', onclick: async () => { if (await confirmDialog('Update ioContacts', 'Install the new version and restart? The page reloads when it is back.', 'Update now')) { b.remove(); runUpdate(); } } }, 'Update now'),
+    h('a', { class: 'pillbtn noic', href: '#/settings/server', onclick: () => b.remove() }, 'Details'),
+    h('button', { class: 'iconbtn', title: 'Not now (hidden until the next version)', onclick: () => { try { localStorage.setItem('ioc.updateDismissed', u.remote); } catch { /* */ } b.remove(); } }, icon('close', 's')));
+  document.body.append(b);
+}
+
 function showSignIn() {
   if (document.querySelector('.signin')) return;
   const first = !S.status.usersExist;
@@ -833,5 +911,7 @@ async function start() {
   });
   window.addEventListener('hashchange', onRoute);
   onRoute();
+  updateBanner();
+  setInterval(async () => { try { S.status = await api('/api/status'); updateBanner(); } catch { /* restarting */ } }, 15 * 60 * 1000);
 }
 start().catch(fail);

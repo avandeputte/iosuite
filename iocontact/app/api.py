@@ -11,7 +11,7 @@ from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
 
-from app import APP_VERSION, calendar, config, csvio, db, iopix, model, relations as rel, users, vcard
+from app import APP_VERSION, calendar, config, csvio, db, iopix, model, relations as rel, updates, users, vcard
 
 router = APIRouter()
 
@@ -119,8 +119,59 @@ async def body_contact(request: Request) -> dict:
 
 @router.get("/api/status")
 def status(request: Request):
-    return {"app": "ioContacts", "version": APP_VERSION, "usersExist": users.any_users(), "user": users.public(request.state.user),
-            "iopix": bool(iopix.settings()["url"]), "viaProxy": getattr(request.state, "via_proxy", False)}
+    u = request.state.user
+    adm = users.is_admin(u)
+    return {"app": "ioContacts", "version": APP_VERSION, "commit": updates.local_commit()[:7] if u else None,
+            "usersExist": users.any_users(), "user": users.public(u),
+            "iopix": bool(iopix.settings()["url"]), "viaProxy": getattr(request.state, "via_proxy", False),
+            "mcp": mcp_enabled() if u else None,
+            "updateAvailable": updates.available() if adm and updates.auto_check_enabled() else None}
+
+
+def mcp_enabled() -> bool:
+    """Settings › Server › MCP server: off until an admin turns it on (or MCP=1 in the environment)."""
+    if config.MCP_FORCED:
+        return True
+    try:
+        return db.get_setting("mcp_enabled", "0") == "1"
+    except Exception:  # noqa: BLE001
+        return False
+
+
+# ------------------------------------------------------------------ the server: version, updates, MCP
+
+@router.get("/api/server")
+def server_info(request: Request):
+    """Admins: the installed version, the last update check, whether update.sh can run here, and the switches."""
+    admin(request)
+    return {**updates.status(), "mcpEnabled": mcp_enabled(), "mcpLocked": config.MCP_FORCED, "mcpUrl": f"{_base(request)}/mcp"}
+
+
+@router.post("/api/server")
+async def server_action(request: Request):
+    """Admins. Body: {action: check | update, ref?} or {mcpEnabled: bool} / {autoCheck: bool}."""
+    admin(request)
+    b = await request.json()
+    if "mcpEnabled" in b:
+        if config.MCP_FORCED and not b["mcpEnabled"]:
+            raise HTTPException(400, "MCP=1 in the environment keeps the MCP server on")
+        db.set_setting("mcp_enabled", "1" if b["mcpEnabled"] else "0")
+    if "autoCheck" in b:
+        if config.UPDATE_CHECK_LOCKED and b["autoCheck"]:
+            raise HTTPException(400, "UPDATE_CHECK=0 in the environment keeps the daily check off")
+        db.set_setting("update_check", "1" if b["autoCheck"] else "0")
+        if not b["autoCheck"]:
+            updates.forget_check()
+    action = b.get("action")
+    if action == "check":
+        return await run_in_threadpool(updates.check)
+    if action == "update":
+        try:
+            updates.run(str(b.get("ref") or ""))
+        except RuntimeError as e:
+            raise HTTPException(409, str(e))
+        return {"started": True}
+    return server_info(request)
 
 
 def _cookie(resp: Response, request: Request, uid: int) -> None:
@@ -511,7 +562,11 @@ def family(cid: int, request: Request, depth: int = 3):
     """The relation graph around a contact: {nodes: [{id, fn, gender, hasPhoto}], edges: [{from, to, type}]}."""
     u = me(request)
     readable_contact(u, cid)
-    allowed = set(book_ids(u))
+    return family_graph(cid, book_ids(u), depth)
+
+
+def family_graph(cid: int, allowed_ids: list[int], depth: int = 3) -> dict:
+    allowed = set(allowed_ids)
     seen, frontier, edges = {cid}, [cid], []
     for _ in range(max(1, min(depth, 6))):
         if not frontier:
@@ -544,40 +599,46 @@ async def import_file(request: Request, file: UploadFile = File(...), book: str 
     u = writer(request)
     b = writable_book(u, book)
     raw = (await file.read()).decode("utf-8-sig", "replace")
-    name = (file.filename or "").lower()
     try:
-        if name.endswith(".csv") or (not raw.lstrip().upper().startswith("BEGIN:VCARD") and "," in raw.split("\n", 1)[0] and not raw.lstrip().startswith("[")):
-            cards = csvio.parse(raw)
-        elif raw.lstrip().startswith("["):
-            j = json.loads(raw)
-            cards = [vcard.from_jcard(x) for x in (j if j and isinstance(j[0], list) and j[0] and j[0][0] == "vcard" else [j])]
-        else:
-            cards = vcard.parse(raw)
+        cards = parse_cards(raw, file.filename or "")
     except (ValueError, KeyError, IndexError) as e:
         raise HTTPException(400, f"Could not read the file: {e}")
+    return await run_in_threadpool(import_cards, u, b, cards, mode)
 
-    def run():
-        made = updated = skipped = 0
-        ids = book_ids(u)
-        for c in cards:
-            existing = model.by_uid(b["id"], c["uid"]) if c.get("uid") else None
-            if not existing and not c.get("uid"):
-                em = next((e["value"] for e in c.get("emails") or []), None)
-                if em:
-                    existing = db.one("SELECT c.* FROM contacts c JOIN contact_emails e ON e.contact_id = c.id WHERE c.book_id = %s "
-                                      "AND c.deleted = 0 AND e.value = %s AND c.fn = %s LIMIT 1", (b["id"], em, model.display_name(c)))
-            if existing and mode == "skip":
-                skipped += 1
-                continue
-            if c.get("iopix") is None:
-                c.pop("iopix", None)
-            model.save(b["id"], c, existing["id"] if existing else None, None, True, ids)
-            if existing:
-                updated += 1
-            else:
-                made += 1
-        return made, updated, skipped
-    made, updated, skipped = await run_in_threadpool(run)
+
+def parse_cards(raw: str, name: str = "") -> list[dict]:
+    """Contacts from a vCard file (2.1/3.0/4.0), a jCard (one or a list) or a Google / Outlook CSV."""
+    name = name.lower()
+    raw = raw.lstrip("\ufeff")
+    if name.endswith(".csv") or (not raw.lstrip().upper().startswith("BEGIN:VCARD") and "," in raw.split("\n", 1)[0] and not raw.lstrip().startswith("[")):
+        return csvio.parse(raw)
+    if raw.lstrip().startswith("["):
+        j = json.loads(raw)
+        return [vcard.from_jcard(x) for x in (j if j and isinstance(j[0], list) and j[0] and j[0][0] == "vcard" else [j])]
+    return vcard.parse(raw)
+
+
+def import_cards(u: dict, b: dict, cards: list[dict], mode: str = "update") -> dict:
+    """Save cards into book b. mode: update (a card whose UID is already in the book replaces it) or skip."""
+    made = updated = skipped = 0
+    ids = book_ids(u)
+    for c in cards:
+        existing = model.by_uid(b["id"], c["uid"]) if c.get("uid") else None
+        if not existing and not c.get("uid"):
+            em = next((e["value"] for e in c.get("emails") or []), None)
+            if em:
+                existing = db.one("SELECT c.* FROM contacts c JOIN contact_emails e ON e.contact_id = c.id WHERE c.book_id = %s "
+                                  "AND c.deleted = 0 AND e.value = %s AND c.fn = %s LIMIT 1", (b["id"], em, model.display_name(c)))
+        if existing and mode == "skip":
+            skipped += 1
+            continue
+        if c.get("iopix") is None:
+            c.pop("iopix", None)
+        model.save(b["id"], c, existing["id"] if existing else None, None, True, ids)
+        if existing:
+            updated += 1
+        else:
+            made += 1
     return {"created": made, "updated": updated, "skipped": skipped, "read": len(cards)}
 
 
@@ -591,19 +652,24 @@ def export(request: Request, book: str | None = None, format: str = "vcf", ids: 
     else:
         sel = [x["id"] for x in model.search(bids, limit=100000)[0]]
     stamp = dt.date.today().isoformat()
+    text, mtype, ext = export_text(sel, format)
+    name = f"iocontacts-{stamp}{'-' + format.replace('csv-', '') if format.startswith('csv') else ''}.{ext}"
+    return Response(text, media_type=mtype, headers={"Content-Disposition": f'attachment; filename="{name}"'})
+
+
+EXPORT_FORMATS = ("vcf", "vcf4", "jcard", "csv-google", "csv-outlook")
+
+
+def export_text(ids: list[int], format: str = "vcf") -> tuple[str, str, str]:
+    """(text, media type, file extension) of these contacts in one of EXPORT_FORMATS."""
     if format in ("vcf", "vcf4"):
         v = "4.0" if format == "vcf4" else "3.0"
-        return vcard_response("".join(model.vcard_text(x, v) for x in sel), v, f"iocontacts-{stamp}.vcf")
+        return "".join(model.vcard_text(x, v) for x in ids), f"text/vcard; charset=utf-8; version={v}", "vcf"
     if format == "jcard":
-        return JSONResponse([vcard.to_jcard(model.full(x, with_photo=True)) for x in sel], media_type=JCARD_TYPE,
-                            headers={"Content-Disposition": f'attachment; filename="iocontacts-{stamp}.json"'})
-    full = [model.full(x) for x in sel]
-    if format == "csv-outlook":
-        text = csvio.export_outlook(full)
-    else:
-        text = csvio.export_google(full)
-    return Response("﻿" + text, media_type="text/csv; charset=utf-8",
-                    headers={"Content-Disposition": f'attachment; filename="iocontacts-{stamp}-{format.replace("csv-", "")}.csv"'})
+        return json.dumps([vcard.to_jcard(model.full(x, with_photo=True)) for x in ids], ensure_ascii=False), JCARD_TYPE, "json"
+    full = [model.full(x) for x in ids]
+    text = csvio.export_outlook(full) if format == "csv-outlook" else csvio.export_google(full)
+    return "\ufeff" + text, "text/csv; charset=utf-8", "csv"
 
 
 # ------------------------------------------------------------------ calendar and connection details

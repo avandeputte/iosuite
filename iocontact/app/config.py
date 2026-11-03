@@ -54,3 +54,14 @@ IOPIX_CF_CLIENT_ID = env("IOPIX_CF_CLIENT_ID")
 IOPIX_CF_CLIENT_SECRET = env("IOPIX_CF_CLIENT_SECRET")
 
 MAX_PHOTO_BYTES = 2 * 1024 * 1024
+
+# updates: the GitHub repository and branch followed by the version check and update.sh
+REPO = env("IOCONTACTS_REPO", "avandeputte/iocontacts")
+BRANCH = env("IOCONTACTS_BRANCH", "main")
+# UPDATE_CHECK=0 turns the daily "is there a newer version" check off for good (the setting cannot turn it back on)
+UPDATE_CHECK_LOCKED = env("UPDATE_CHECK", "").strip().lower() in ("0", "off", "false", "no")
+
+# the MCP server at /mcp: off until an admin turns it on in Settings, or MCP=1 here
+MCP_FORCED = env("MCP", "").strip().lower() in ("1", "on", "true", "yes")
+# `python -m app.mcp` (stdio) acts as this account
+MCP_USER = env("IOCONTACTS_MCP_USER")

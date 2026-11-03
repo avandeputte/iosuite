@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "iocontacts"
-version = "0.1.0"
+version = "0.2.0"
 description = "Self-hosted contacts for the family: web app, CardDAV, LDAP, REST/jCard, birthday calendar"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -15,6 +15,7 @@ dependencies = [
   "pymysql<2",
   "python-multipart<1",
   "pyjwt[crypto]<3",   # Cloudflare Access tokens (proxy sign-in)
+  "mcp>=2,<3",         # the MCP server at /mcp
 ]
 
 [project.optional-dependencies]
