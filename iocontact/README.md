@@ -177,7 +177,7 @@ Run it behind a reverse proxy that terminates HTTPS (Caddy, Nginx Proxy Manager,
 
 ```sh
 pip install -e '.[test]'
-DB_HOST=127.0.0.1 python -m pytest tests     # against a scratch database contacts_test (TEST_DB_NAME), dropped per test
+python -m pytest tests     # on a test MariaDB of its own: a Docker container it starts, or IOTHING_TEST_DB=host:port:user:password
 ```
 
 Covered: vCard 2.1/3.0/4.0 and jCard reading and writing (an Apple Contacts card round-trips with relations, dates, social profiles, custom labels, photo and unknown properties), relations and their inverse side, search, content negotiation, Google and Outlook CSV import and every export format, roles and private books, app passwords over Basic and Bearer, the birthday calendar, duplicates and merging, CardDAV discovery, PUT with preconditions and UID conflicts, multiget, addressbook-query, sync-collection with deletions, LDAP bind and search with substring, phone and size-limit cases, the MCP server (switch, sign-in, reading, changing, relations, a viewer's limits), duplicate scoring (nicknames, shared home numbers, other birthdays), merging with choices and undo, the data quality checks and fixes, and enrichment (lookups, suggestions that wait, accepting and dismissing, over MCP too). CI runs them against MariaDB.

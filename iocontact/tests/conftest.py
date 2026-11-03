@@ -1,15 +1,22 @@
-"""Tests run against a scratch MariaDB database (TEST_DB_NAME, default contacts_test), dropped and recreated per test.
-Set DB_HOST / DB_PORT / DB_USER / DB_PASSWORD for the server; the account needs rights on that database."""
+"""Tests run against a test MariaDB of their own (iothing_auth.testing: a Docker container, or the server named by
+IOTHING_TEST_DB=host:port:user:password): two scratch databases, contacts_test and contacts_test_auth, dropped and
+recreated per session, never a live one. Without a test server the suite is skipped."""
 import os
 import sys
 
-os.environ["DB_NAME"] = os.environ.get("TEST_DB_NAME", "contacts_test")
-# the shared accounts (iothing-auth) in a database of their own, never the suite's `auth`
-os.environ["IOTHING_AUTH_DB_NAME"] = os.environ.get("IOTHING_TEST_AUTH_DB", "auth_test_iocontacts")
+import pytest  # noqa: E402
+
+from iothing_auth import testing as _authtest  # noqa: E402
+
+if _authtest.server() is None:
+    pytest.skip(f"{_authtest.server.reason}: the tests need a MariaDB (Docker, or IOTHING_TEST_DB=host:port:user:password)", allow_module_level=True)
+_s = _authtest.server()
+os.environ.update(DB_HOST=_s["host"], DB_PORT=str(_s["port"]), DB_USER=_s["user"], DB_PASSWORD=_s["password"], DB_NAME="contacts_test")
+_authtest.fresh_database("contacts_test")
+os.environ.update(_authtest.auth_env("contacts_test_auth"))
 os.environ.setdefault("LDAP_PORT", "0")
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
 from app import db, users  # noqa: E402
