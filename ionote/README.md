@@ -237,6 +237,8 @@ static/            the web app (index.html, app.css, js/*.js modules, service wo
 tests/             pytest; IONOTES_TEST_DB=mysql runs them on MariaDB
 ```
 
-Tests: `pip install -e '.[test]' && pytest tests` (SQLite), and `IONOTES_TEST_DB=mysql pytest tests` with a MariaDB
-database `notes_test` for the user `notes`/`notes` on 127.0.0.1 (`IONOTES_TEST_DB_HOST` and friends change that).
+Tests: `pip install -e '.[test]' && pytest tests` (SQLite for the notes), and `IONOTES_TEST_DB=mysql pytest tests` with a
+MariaDB database `notes_test` for the user `notes`/`notes` on 127.0.0.1 (`IONOTES_TEST_DB_HOST` and friends change that).
+The shared accounts always go to a test MariaDB of their own: a Docker container the suite starts
+(`iothing-test-mariadb`), or `IOTHING_TEST_DB=host:port:user:password`; never a live `auth` database.
 CI runs both.

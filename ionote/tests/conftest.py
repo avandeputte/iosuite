@@ -1,4 +1,5 @@
-"""Test set-up: a scratch DATA_DIR and a scratch database, emptied before every test.
+"""Test set-up: a scratch DATA_DIR and a scratch database, emptied before every test; the shared accounts on a
+test MariaDB of their own (iothing_auth.testing: Docker, or IOTHING_TEST_DB).
 
 SQLite by default. With IONOTES_TEST_DB=mysql the same tests run on MySQL/MariaDB, on the database named by
 IONOTES_TEST_DB_HOST / _PORT / _NAME / _USER / _PASSWORD (default 127.0.0.1:3306, notes_test, notes/notes);
@@ -19,8 +20,13 @@ if os.environ.get("IONOTES_TEST_DB") == "mysql":
                       DB_USER=os.environ.get("IONOTES_TEST_DB_USER", "notes"), DB_PASSWORD=os.environ.get("IONOTES_TEST_DB_PASSWORD", "notes"))
 else:
     os.environ["DB_TYPE"] = "sqlite"
-# the shared accounts (iothing-auth) in a database of their own on the auth server, never the suite's `auth`
-os.environ["IOTHING_AUTH_DB_NAME"] = os.environ.get("IOTHING_TEST_AUTH_DB", "auth_test_ionotes")
+# the shared accounts (iothing-auth): a fresh database on the test MariaDB (a Docker container, or
+# IOTHING_TEST_DB=host:port:user:password), never the suite's live `auth`
+from iothing_auth import testing as _authtest  # noqa: E402
+
+if _authtest.server() is None:
+    pytest.skip(f"{_authtest.server.reason}: the shared accounts need a MariaDB (Docker, or IOTHING_TEST_DB=host:port:user:password)", allow_module_level=True)
+os.environ.update(_authtest.auth_env("ionotes_test_auth"))
 
 from app import db, users, proxyauth  # noqa: E402
 
