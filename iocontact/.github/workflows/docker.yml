@@ -42,9 +42,21 @@ jobs:
           node --input-type=module --check < static/app.js
           for f in *.sh; do sh -n "$f"; done
           bash -n proxmox/ct/iocontacts.sh proxmox/install/iocontacts-install.sh
+      - name: Auth test database
+        # the shared accounts (iothing-auth) live in a database of their own; the test user gets it too
+        run: |
+          python - <<'PY'
+          import pymysql
+          c = pymysql.connect(host="127.0.0.1", user="root", password="root", autocommit=True)
+          c.cursor().execute("CREATE DATABASE IF NOT EXISTS auth_test_iocontacts")
+          c.cursor().execute("GRANT ALL ON auth_test_iocontacts.* TO 'contacts'@'%'")
+          PY
       - name: Tests
         env:
           DB_HOST: 127.0.0.1
+          IOTHING_AUTH_DB_HOST: 127.0.0.1
+          IOTHING_AUTH_DB_USER: contacts
+          IOTHING_AUTH_DB_PASSWORD: contacts
         run: python -m pytest -q -p no:cacheprovider tests
 
   image:
