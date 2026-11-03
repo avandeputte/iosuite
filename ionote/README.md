@@ -109,7 +109,9 @@ account) become the first admin's. A note id that belongs to another account is 
 
 **Require sign-in** (Settings › Users and sign-in) also closes `/api/status`-style open routes and the MCP endpoint to visitors.
 Sessions are random tokens in an HttpOnly cookie (`iothing_session`, shared by the apps on the domain) valid for
-30 days and renewed while in use; passwords are scrypt-hashed; wrong passwords cost a growing wait. **Read-only** (Settings, or `READ_ONLY=1`) refuses every
+30 days and renewed while in use; each records where it began and was last seen (address, through Cloudflare or
+not, web or which app): `GET /api/auth/sessions` for your own, `GET /api/users/<id>/sessions` for admins. Passwords
+are scrypt-hashed; wrong passwords cost a growing wait. **Read-only** (Settings, or `READ_ONLY=1`) refuses every
 change, for everyone. Write requests from another site are refused.
 
 
