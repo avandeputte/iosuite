@@ -13,7 +13,7 @@
   --c-red: #d93025; --c-orange: #e8710a; --c-yellow: #e0a800; --c-green: #1e8e3e; --c-mint: #00a88a; --c-teal: #0b8a9e;
   --c-blue: #1a73e8; --c-indigo: #4b53c7; --c-purple: #8e44d6; --c-pink: #e0426a; --c-brown: #8d6e63; --c-gray: #5f6b7a;
   --mix: 12%;
-  --topbar: 56px; --side: 248px; --list: 380px;
+  --topbar: 56px; --side: 236px; --list: 380px; --nav: 0px;
   --side-bg: #f6f7f9;
 }
 :root[data-theme="dark"] {
@@ -50,14 +50,17 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .muted { color: var(--fg2); }
 .small { font-size: var(--fs-s); }
 
-/* ---- top bar */
-#topbar { position: fixed; inset: 0 0 auto 0; height: calc(var(--topbar) + env(safe-area-inset-top)); padding: env(safe-area-inset-top) max(12px, env(safe-area-inset-right)) 0 max(8px, env(safe-area-inset-left));
-  display: flex; align-items: center; gap: 10px; background: var(--bg); border-bottom: 1px solid var(--line); z-index: var(--z-bar); }
-.brand { display: flex; align-items: center; gap: 8px; color: inherit; flex: none; }
-.brand img { border-radius: 7px; }
-.brand-name { font-weight: 700; font-size: var(--fs-xl); letter-spacing: -.2px; }
+/* ---- top bar: the search beside the sidebar, New note, the account at the right; the menu button shows only while the
+   sidebar is put away. Laid out as iopix's. */
+#topbar { position: fixed; inset: 0 0 auto var(--nav); height: calc(var(--topbar) + env(safe-area-inset-top)); padding: env(safe-area-inset-top) max(16px, env(safe-area-inset-right)) 0 20px;
+  display: flex; align-items: center; gap: 12px; background: var(--bg); z-index: var(--z-bar); }
+#menubtn { margin-left: -8px; }
+body.side-docked #menubtn { display: none; }
+.brand { display: flex; align-items: center; gap: 8px; color: inherit; flex: none; min-width: 0; }
+.brand-name { font-weight: 700; font-size: var(--fs-xl); letter-spacing: -.2px; white-space: nowrap; }
+.navhead .brand-name { font-size: 26px; letter-spacing: -.03em; }  /* the name, bold and tight, as on the icon (iopix's) */
 .brand-name .io { color: var(--name-io); } .brand-name .nm { color: var(--name-nm); }
-#search { flex: 1 1 0; min-width: 0; max-width: 640px; margin: 0 auto; display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 14px;
+#search { flex: 1 1 0; min-width: 0; display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 14px;
   background: var(--bg2); border-radius: var(--r-pill); color: var(--fg2); }
 #search:focus-within { background: var(--bg); box-shadow: var(--shadow); }
 #q { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--fg); }
@@ -65,35 +68,50 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .iconbtn { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; border: 0; border-radius: 50%; background: transparent; color: var(--fg2); cursor: pointer; flex: none; }
 .iconbtn:hover { background: var(--bg2); color: var(--fg); }
 .iconbtn.on { color: var(--accent); }
-.pillbtn { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; border: 1px solid var(--line); border-radius: var(--r-pill); background: var(--bg); cursor: pointer; white-space: nowrap; }
+.pillbtn { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; border: 1px solid var(--line); border-radius: var(--r-pill); background: var(--bg); cursor: pointer; white-space: nowrap; color: var(--fg); }
 .pillbtn:hover { background: var(--bg2); }
 .pillbtn.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
 .pillbtn.primary:hover { filter: brightness(1.08); }
 .pillbtn.danger { color: var(--danger); }
 .pillbtn:disabled { opacity: .5; cursor: default; }
-#menubtn { display: none; }
-#usermenu { display: flex; align-items: center; }
-.avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--brand); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-weight: 600; }
+#newbtn .ic { color: var(--accent); }
+#usermenu { margin-left: auto; display: inline-flex; align-items: center; }
+#usermenu .tool { width: 30px; height: 30px; color: var(--fg2); opacity: .85; }
+#usermenu .tool:hover { opacity: 1; background: var(--bg3); }
+#usermenu .tool .ic { width: 18px; height: 18px; }
+.avatar { width: 22px; height: 22px; border-radius: 50%; background: var(--c-amber-av); color: #1f2730; font-size: var(--fs-s); font-weight: 600; display: inline-flex; align-items: center; justify-content: center; flex: none; }
 
-/* ---- sidebar */
-#nav { position: fixed; top: calc(var(--topbar) + env(safe-area-inset-top)); bottom: 0; left: 0; width: var(--side); overflow-y: auto; padding: 8px 8px 24px max(8px, env(safe-area-inset-left));
-  background: var(--side-bg); border-right: 1px solid var(--line); z-index: var(--z-panel); }
-.navsec { margin-top: 14px; }
-.navhead { display: flex; align-items: center; justify-content: space-between; padding: 4px 10px; font-size: var(--fs-s); font-weight: 600; color: var(--fg2); text-transform: uppercase; letter-spacing: .4px; }
-.navhead .iconbtn { width: 28px; height: 28px; }
-.navitem { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: var(--r-s); color: var(--fg); cursor: pointer; user-select: none; }
-.navitem:hover { background: var(--bg3); }
-.navitem.on { background: var(--accent-bg); color: var(--brand-ink); font-weight: 600; }
-.navitem .n { margin-left: auto; color: var(--fg2); font-size: var(--fs-s); font-weight: 400; }
-.navitem .ic { color: var(--fg2); }
-.navitem.on .ic { color: var(--brand-ink); }
-.navitem.drop { outline: 2px dashed var(--accent); }
-.navitem .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* ---- sidebar: the name on top, the views, Folders, Tags and Manage, then Settings and Maintenance at the foot above the
+   status line. Docked (body.side-docked) on a wide screen; otherwise hidden off the left edge and slid over the page
+   (body.side-open). The same as iopix. */
+#nav { position: fixed; top: 0; bottom: 0; left: 0; width: var(--side); display: flex; flex-direction: column; gap: 2px; padding: env(safe-area-inset-top) 12px 0 max(12px, env(safe-area-inset-left));
+  overflow-y: auto; overscroll-behavior: contain; background: var(--side-bg); z-index: var(--z-panel); transform: translateX(-100%); visibility: hidden; transition: transform .2s ease, visibility 0s .2s; }
+body.side-open #nav { transform: none; visibility: visible; transition: transform .2s ease; box-shadow: var(--shadow); }
+body.side-docked #nav { transform: none; visibility: visible; transition: none; z-index: 10; box-shadow: none; border-right: 1px solid var(--line); }
+body.side-docked { --nav: var(--side); }
+#navscrim { position: fixed; inset: 0; z-index: calc(var(--z-panel) - 1); background: rgba(0,0,0,.32); }
+.navhead { display: flex; align-items: center; justify-content: space-between; flex: none; height: var(--topbar); padding-left: 12px; margin-bottom: 10px; }
+#sidebtn { width: 34px; height: 34px; margin-right: -4px; opacity: .75; } #sidebtn:hover { opacity: 1; } #sidebtn .ic { width: 20px; height: 20px; }
+#nav a { flex: none; display: flex; align-items: center; gap: 14px; height: 40px; padding: 0 12px; border-radius: var(--r-m); font-size: var(--fs-base); color: var(--fg); user-select: none; }
+#nav a.on { background: color-mix(in srgb, var(--hue, var(--accent)) var(--mix), transparent); color: var(--hue, var(--accent)); font-weight: 600; }
+#nav a .ic { width: 20px; height: 20px; transition: transform .15s; color: var(--hue, var(--fg2)); }  /* each destination's icon in its own colour */
+#nav a:hover .ic { transform: scale(1.08); color: var(--hue, var(--fg)); }
+#nav a .nl { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#nav a .n { color: var(--fg2); font-size: var(--fs-s); font-weight: 400; }
+#nav a.foot { color: var(--fg2); }
+#nav a.drop { outline: 2px dashed var(--accent); }
+#nav a .dot { width: 20px; display: inline-flex; align-items: center; justify-content: center; background: none; opacity: 1; }
+#nav a .dot::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--hue, var(--fg2)); opacity: .8; }
+.navgap { flex: none; height: 14px; }
+.navsec { flex: none; display: flex; align-items: center; justify-content: space-between; min-height: 24px; padding: 0 4px 4px 12px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--fg2); }
+.navsec .iconbtn { width: 26px; height: 26px; } .navsec .iconbtn .ic { width: 18px; height: 18px; }
+.navmore { display: none; }
+.navfoot { margin-top: auto; padding-top: 14px; display: flex; flex-direction: column; gap: 2px; }
+#status { padding: 8px 12px calc(12px + env(safe-area-inset-bottom)); font-size: var(--fs-xs); color: var(--fg2); line-height: 1.3; }
 .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; background: var(--fg2); opacity: .55; }
-#navscrim { position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: calc(var(--z-panel) - 1); }
 
 /* ---- the two panes: list and note */
-#main { position: fixed; top: calc(var(--topbar) + env(safe-area-inset-top)); bottom: 0; left: var(--side); right: 0; display: flex; }
+#main { position: fixed; top: calc(var(--topbar) + env(safe-area-inset-top)); bottom: 0; left: var(--nav); right: 0; display: flex; }
 #list { width: var(--list); flex: none; border-right: 1px solid var(--line); overflow-y: auto; display: flex; flex-direction: column; }
 #listbar { position: sticky; top: 0; display: flex; align-items: center; gap: 8px; padding: 10px 12px 8px 16px; background: var(--bg); border-bottom: 1px solid var(--line); z-index: 1; }
 #listbar h2 { margin: 0; font-size: var(--fs-l); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -139,7 +157,28 @@ details.ocr pre { white-space: pre-wrap; word-break: break-word; font: inherit; 
 /* ---- pages (settings, change log) */
 .page { flex: 1; overflow-y: auto; }
 .pagein { max-width: 820px; margin: 0 auto; padding: 20px 24px 80px; }
-.pagein h1 { font-size: var(--fs-xxl); margin: 4px 0 18px; }
+.pagein h1 { font-size: var(--fs-xxl); font-weight: 400; margin: 14px 0 4px; }
+.pagein h1.ptitle { display: flex; align-items: center; gap: 10px; }
+.ptitle .pic { width: 34px; height: 34px; border-radius: var(--r-m); display: inline-flex; align-items: center; justify-content: center; flex: none;
+  background: color-mix(in srgb, var(--hue) calc(var(--mix) + 8%), transparent); color: var(--hue); }
+.ptitle .pic .ic { width: 22px; height: 22px; }
+.pagein h1 + p { margin-top: 10px; }
+/* tabs under a page's title, as iopix's Settings and Maintenance */
+.stabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 14px 0 16px; border-bottom: 1px solid var(--line); }
+.stabs .pillbtn { height: 40px; padding: 0 12px; border: 0; border-radius: 0; background: none; color: var(--fg2); font-weight: 500; position: relative; }
+.stabs .pillbtn:hover { color: var(--fg); background: none; }
+.stabs .pillbtn.on { color: var(--accent); background: none; }
+.stabs .pillbtn.on::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: -1px; height: 3px; border-radius: 3px 3px 0 0; background: var(--accent); }
+/* the account panel and the phone's More sheet */
+.acct h4, .sheeth { display: flex; align-items: center; justify-content: space-between; margin: 16px 0 6px; font-size: var(--fs-base); }
+.sheetgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 4px 0 6px; }
+.sheetgrid a { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 6px; border-radius: var(--r-l); background: var(--bg2); color: var(--fg); font-size: var(--fs-m); text-align: center; }
+.sheetgrid a.on { background: color-mix(in srgb, var(--hue) var(--mix), transparent); color: var(--hue); font-weight: 600; }
+.sheetgrid .sic { width: 36px; height: 36px; border-radius: var(--r-m); display: inline-flex; align-items: center; justify-content: center; background: var(--hue); color: #fff; }
+.sheetgrid .sic .ic { width: 20px; height: 20px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { padding: 6px 12px; border-radius: var(--r-pill); border: 1px solid var(--line); color: var(--hue, var(--fg)); font-size: var(--fs-m); }
+.chip.on { background: color-mix(in srgb, var(--hue, var(--accent)) var(--mix), transparent); color: var(--hue, var(--accent)); font-weight: 600; }
 .box { border: 1px solid var(--line); border-radius: var(--r-l); padding: 16px 18px; margin-bottom: 16px; }
 .box h2 { font-size: var(--fs-l); margin: 0 0 4px; }
 .box p { margin: 6px 0 10px; color: var(--fg2); }
@@ -163,7 +202,7 @@ pre.log { font: var(--fs-xs)/1.4 ui-monospace, Menlo, monospace; background: var
 .dialog .acts { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
 .dialog input[type=text], .dialog input[type=password] { width: 100%; border: 1px solid var(--line); border-radius: var(--r-s); padding: 9px 12px; background: var(--bg); margin: 4px 0 10px; }
 .scrim.required { background: var(--bg); }  /* sign-in required: nothing of the app shows behind it */
-body.locked #main, body.locked #nav, body.locked #topbar > :not(.brand) { visibility: hidden; }
+body.locked #main, body.locked #nav, body.locked #topbar { visibility: hidden; }
 /* the sign-in, as in iopix: the logo and name above the title, a tile per account */
 .signin-brand { display: flex; align-items: center; gap: 10px; margin: -4px 0 14px; }
 .signin-brand .logo { width: 36px; height: 36px; border-radius: var(--r-s); }
@@ -204,11 +243,19 @@ body.locked #main, body.locked #nav, body.locked #topbar > :not(.brand) { visibi
 #updbanner > div { min-width: 0; }
 
 @media (max-width: 1000px) { :root { --list: 320px; } }
-@media (max-width: 820px) {
-  #menubtn { display: inline-flex; }
-  #nav { transform: translateX(-100%); transition: transform .2s; box-shadow: var(--shadow); }
-  body.navopen #nav { transform: none; }
-  #main { left: 0; }
+/* ---- phones: the sidebar is the bottom bar (four destinations and More, as iopix's); the list and the note take turns */
+@media (max-width: 800px) {
+  :root { --topbar: 52px; --nav: 0px; }
+  #menubtn, #navscrim, .navhead, .navgap, .navsec, .navfoot, #nav > a:not(.bar) { display: none !important; }
+  #topbar { gap: 8px; padding: env(safe-area-inset-top) max(8px, env(safe-area-inset-right)) 0 max(8px, env(safe-area-inset-left)); left: 0; }
+  #nav { top: auto; bottom: 0; left: 0; right: 0; width: auto; height: calc(56px + env(safe-area-inset-bottom)); flex-direction: row; overflow: hidden; padding: 0 0 env(safe-area-inset-bottom); gap: 0;
+    border-top: 1px solid var(--line); background: var(--bg); transform: none; visibility: visible; transition: none; box-shadow: none; z-index: 10; }
+  #nav a, #nav .navmore { flex: 1; min-width: 0; width: auto; height: auto; border-radius: 0; flex-direction: column; justify-content: center; gap: 2px; padding: 8px 0 6px; font-size: var(--fs-s); color: var(--fg2); }
+  #nav a .ic, #nav .navmore .ic { width: 24px; height: 24px; }
+  #nav a .n { display: none; }
+  #nav a .nl { flex: none; max-width: 100%; text-align: center; }
+  .navmore { display: flex; align-items: center; background: none; border: 0; cursor: pointer; font: inherit; }
+  #main { left: 0; bottom: calc(56px + env(safe-area-inset-bottom)); }
   #list { width: 100%; border-right: 0; }
   #note { display: none; }
   body.reading #list { display: none; }
@@ -216,14 +263,19 @@ body.locked #main, body.locked #nav, body.locked #topbar > :not(.brand) { visibi
   #backbtn { display: inline-flex; }
   .editor { padding: 8px 16px 80px; }
   #newbtn .lbl { display: none; }
-  #newbtn { width: 38px; padding: 0; justify-content: center; }
-  .brand-name { display: none; }
-  #topbar { gap: 6px; }
+  #newbtn { width: 38px; padding: 0; justify-content: center; border: 0; }
+  #newbtn .ic { width: 24px; height: 24px; }
   #search { padding: 0 10px; }
+  #usermenu .tool { width: 40px; height: 40px; }
   .row label { min-width: 100%; }
+  .pagein { padding: 8px 16px 40px; }
+  .stabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .stabs .pillbtn { flex: none; }
+  .navmore.on { color: var(--accent) !important; font-weight: 600; }
+  #toast { bottom: calc(68px + env(safe-area-inset-bottom)); }
 }
-@media (max-width: 820px) {
-  #updbanner { left: 8px; right: 8px; bottom: calc(8px + env(safe-area-inset-bottom)); max-width: none; flex-wrap: wrap; justify-content: flex-end; }
+@media (max-width: 800px) {
+  #updbanner { left: 8px; right: 8px; bottom: calc(64px + env(safe-area-inset-bottom)); max-width: none; flex-wrap: wrap; justify-content: flex-end; }
   #updbanner > div { flex: 1 1 200px; }
 }
 @media (max-width: 800px) {

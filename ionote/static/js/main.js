@@ -1,11 +1,11 @@
-/** Start-up and routing: #/notes (the list and the open note), #/note/<id>, #/settings, #/changes. Pasting or
+/** Start-up and routing: #/notes (the list and the open note), #/note/<id>, #/settings[/tab], #/maintenance[/tab], #/changes. Pasting or
  *  dropping a picture makes a note of it; N makes a new note; / goes to the search box. */
 import { $, h, api, state, icon, paintIcons, toast, fail, canWrite, confirmIt, debounce } from './core.js';
 import { runUpdate } from './update.js';
 import { loadMe, renderUserMenu, signIn } from './auth.js';
-import { view, viewFromHash, go, loadMeta, renderNav, loadList, setOpenHandler, refresh, markSelected } from './notes.js';
+import { view, viewFromHash, go, loadMeta, renderNav, loadList, setOpenHandler, refresh, markSelected, setStatus } from './notes.js';
 import { openNote, flush, uploadPicture, currentNote } from './editor.js';
-import { render as renderSettings, renderChanges } from './settings.js';
+import { renderSettings, renderMaintenance, renderChanges } from './settings.js';
 
 let lastList = '';
 
@@ -20,7 +20,7 @@ function updateBanner(u) {
   if (b) b.remove();
   const text = h('div', h('b', u.version ? `Version ${u.version} is available` : 'A newer build is available'),
     h('div.muted', `You have v${state.version || '?'}. ${(u.message || '').replace(/^v\d+\.\d+\.\d+:\s*/, '').slice(0, 140)}`));
-  const more = h('a.pillbtn', { href: '#/settings', onclick: () => b.remove() }, 'Details');
+  const more = h('a.pillbtn', { href: '#/maintenance/ionotes', onclick: () => b.remove() }, 'Details');
   const run = u.canRun ? h('button.pillbtn.primary', { onclick: async () => {
     if (!await confirmIt('Update ionotes', `Fetch ${u.version ? 'version ' + u.version : 'the latest version'}, refresh the packages and restart ionotes? The page reloads when the new version is up.`, 'Update')) return;
     runUpdate((msg, failed) => {
@@ -34,6 +34,38 @@ function updateBanner(u) {
   document.body.append(b);
 }
 
+/** The sidebar docks beside the page on a wide screen, unless its button put it away (remembered in this browser).
+ *  Put away, or on a narrower screen, it hides off the left edge and the menu button in the top bar slides it over the
+ *  page; choosing a destination, the dimmed page or Escape puts it away again. Phones keep the bottom bar instead.
+ *  The same as iopix. */
+const DOCK_MIN = 1100, SIDEBAR = 'ionotes.sidebar';
+function initSidebar() {
+  const body = document.body, btn = $('#sidebtn');
+  const canDock = () => innerWidth >= DOCK_MIN;
+  const pref = () => { try { return localStorage.getItem(SIDEBAR) || '1'; } catch (e) { return '1'; } };
+  const setPref = (v) => { try { localStorage.setItem(SIDEBAR, v); } catch (e) { /* private mode */ } };
+  const setOpen = (on) => { body.classList.toggle('side-open', on); $('#navscrim').hidden = !on; };
+  const apply = () => {
+    const docked = canDock() && pref() === '1';
+    body.classList.toggle('side-docked', docked);
+    if (docked) setOpen(false);
+    const [ic, title] = docked ? ['menuOpen', 'Hide the sidebar'] : canDock() ? ['pin', 'Keep the sidebar open'] : ['close', 'Close the sidebar'];
+    btn.replaceChildren(icon(ic)); btn.title = title; btn.setAttribute('aria-label', title);
+  };
+  btn.onclick = () => {
+    if (body.classList.contains('side-docked')) setPref('0');
+    else if (canDock()) setPref('1');
+    else { setOpen(false); return; }
+    apply();
+  };
+  $('#menubtn').onclick = () => setOpen(true);
+  $('#navscrim').onclick = () => setOpen(false);
+  $('#nav').addEventListener('click', (e) => { if (e.target.closest('a') && !body.classList.contains('side-docked')) setOpen(false); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && body.classList.contains('side-open')) { setOpen(false); e.stopPropagation(); } }, true);
+  addEventListener('resize', apply);
+  apply();
+}
+
 function notesLayout() {
   const main = $('#main');
   if (!$('#list')) { main.textContent = ''; main.append(h('section#list', { 'aria-label': 'Notes' }), h('section#note', { 'aria-label': 'Note' })); lastList = ''; }
@@ -41,9 +73,11 @@ function notesLayout() {
 
 async function route() {
   const path = location.hash.replace(/^#/, '').split('?')[0] || '/notes';
-  document.body.classList.remove('navopen');
-  if (path === '/settings') { await flush(); renderNav(); return renderSettings(); }
-  if (path === '/changes') { await flush(); renderNav(); return renderChanges(); }
+  const [, page, tab] = path.split('/');
+  document.body.classList.remove('reading');
+  if (page === 'settings') { await flush(); renderNav(); return renderSettings(tab); }
+  if (page === 'maintenance') { await flush(); renderNav(); return renderMaintenance(tab); }
+  if (page === 'changes') { await flush(); renderNav(); return renderChanges(); }
   viewFromHash();
   $('#q').value = view.q;
   notesLayout();
@@ -77,8 +111,6 @@ async function pictureNote(file) {
 }
 
 function wire() {
-  $('#menubtn').addEventListener('click', () => document.body.classList.toggle('navopen'));
-  document.addEventListener('click', (e) => { if (document.body.classList.contains('navopen') && !e.target.closest('#nav, #menubtn')) document.body.classList.remove('navopen'); });
   $('#newbtn').addEventListener('click', () => newNote());
   const search = debounce(() => go({ q: $('#q').value.trim(), n: null }), 300);
   $('#q').addEventListener('input', search);
@@ -117,16 +149,18 @@ function wire() {
     if (document.hidden) return;
     try {
       const s = await api('/api/status');
+      setStatus(`ionotes ${s.version || ''}`.trim());
       updateBanner(s.update);
       if (!$('#list')) return;
       if (rev !== null && s.rev !== undefined && s.rev !== rev && !document.activeElement.closest('.editor')) { lastList = ''; await loadMeta(); renderNav(); await loadList(); markSelected(); }
       rev = s.rev;
-    } catch (e) { /* offline: try again later */ }
+    } catch (e) { setStatus('Cannot reach the server'); }
   }, 15000);
 }
 
 async function start() {
   paintIcons();
+  initSidebar();
   state.onSignedOut = () => { if (state.me && state.me.user) location.reload(); };
   try { state.settings = await api('/api/settings'); } catch (e) { state.settings = {}; }
   await loadMe();
@@ -139,7 +173,7 @@ async function start() {
   if (state.settings.app_name && state.settings.app_name !== 'ionotes') document.title = state.settings.app_name;
   await loadMeta();
   wire();
-  api('/api/status').then((s) => { state.version = s.version; updateBanner(s.update); }).catch(() => {});
+  api('/api/status').then((s) => { state.version = s.version; setStatus(`ionotes ${s.version}`); updateBanner(s.update); }).catch(() => {});
   if (!location.hash) history.replaceState(null, '', '#/notes');
   await route();
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});

@@ -1,5 +1,5 @@
-/** Settings (appearance for everyone; accounts, sign-in, proxy, database, MCP, export and import, updates and the
- *  log for admins) and the change log. Laid out like iopix's Settings and Maintenance. */
+/** Settings (Display for everyone; Users and sign-in for admins), Maintenance (admins: storage and backups, MCP and
+ *  OCR, version and log) and the change log. Laid out like iopix's Settings and Maintenance pages. */
 import { $, h, api, state, icon, toast, fail, isAdmin, canWrite, dialog, confirmIt, fmtDate } from './core.js';
 import { runUpdate } from './update.js';
 
@@ -182,28 +182,46 @@ function logBox() {
   return box('Server log', null, h('div.row', h('label', 'Show'), level, h('button.pillbtn', { onclick: load }, 'Reload')), pre);
 }
 
-export async function render() {
+/** A page as iopix lays one out: the title with its icon tile, the tabs under it (the tab is in the address:
+ *  #/settings/users), then the tab's boxes. */
+let again = () => {};
+function pageTitle(text, ic, hue) { return h('h1.ptitle', h('span.pic', { style: `--hue:${hue}` }, icon(ic)), text); }
+async function tabbedPage(base, title, ic, hue, tabs, tab) {
   const main = $('#main');
   main.textContent = '';
-  const inner = h('div.pagein', h('h1', 'Settings'));
+  const cur = tabs.find((t) => t[0] === tab) || tabs[0];
+  const inner = h('div.pagein', pageTitle(title, ic, hue),
+    tabs.length > 1 ? h('div.stabs', { role: 'tablist' }, tabs.map(([k, label]) => h('a.pillbtn' + (k === cur[0] ? '.on' : ''), { href: `#/${base}/${k}`, role: 'tab', 'aria-selected': String(k === cur[0]) }, label))) : null);
   main.append(h('div.page', inner));
-  inner.append(appearance());
-  if (!state.me.user) {
-    inner.append(box('Account', state.me.usersExist ? 'Sign in to change notes.' : 'No accounts yet: anyone who can reach ionotes can read and change the notes. Create the admin account from the person icon at the top right.'));
-  }
-  if (!isAdmin()) return;
-  try {
-    const s = await api('/api/settings');
-    if (state.me.usersExist) inner.append(await usersBox());
-    inner.append(signInBox(s), await proxyBox(), databaseBox(s), await mcpBox(s), ocrBox(s), exportBox(), await updateBox(s), logBox());
-  } catch (e) { inner.append(h('p.err', e.message)); }
+  again = () => tabbedPage(base, title, ic, hue, tabs, cur[0]);
+  try { for (const b of await cur[2]()) if (b) inner.append(b); } catch (e) { inner.append(h('p.err', e.message)); }
+}
+const render = () => again();
+
+/** Settings: Display for everyone; Users and sign-in for admins (as iopix's Settings). */
+export function renderSettings(tab) {
+  const tabs = [['display', 'Display', async () => [appearance(), state.me.user ? null : box('Account', state.me.usersExist ? 'Sign in to see your notes.' : 'No accounts yet: anyone who can reach ionotes can read and change the notes. Create the admin account from the person icon at the top right.')]]];
+  if (isAdmin()) tabs.push(['users', 'Users and sign-in', async () => { const s = await api('/api/settings'); return [state.me.usersExist ? await usersBox() : null, signInBox(s), await proxyBox()]; }]);
+  return tabbedPage('settings', 'Settings', 'gear', 'var(--c-gray)', tabs, tab);
+}
+
+/** Maintenance (admins): where the notes are kept and their backups, MCP and the text in pictures, and ionotes itself
+ *  (version, updates, the server log). Laid out like iopix's Maintenance. */
+export function renderMaintenance(tab) {
+  if (!isAdmin()) { const main = $('#main'); main.textContent = ''; main.append(h('div.page', h('div.pagein', pageTitle('Maintenance', 'wrench', 'var(--c-orange)'), h('p.muted', 'For admins only.')))); return null; }
+  const s = () => api('/api/settings');
+  return tabbedPage('maintenance', 'Maintenance', 'wrench', 'var(--c-orange)', [
+    ['storage', 'Storage and backups', async () => { const x = await s(); return [databaseBox(x), exportBox()]; }],
+    ['mcp', 'MCP and text in pictures', async () => { const x = await s(); return [await mcpBox(x), ocrBox(x)]; }],
+    ['ionotes', 'ionotes', async () => { const x = await s(); return [await updateBox(x), logBox()]; }],
+  ], tab);
 }
 
 export async function renderChanges() {
   const main = $('#main');
   main.textContent = '';
   const tbody = h('tbody');
-  const inner = h('div.pagein', h('h1', 'Change log'), h('p.muted', 'Every change to a note, folder or tag, from the web app, the Mac and iPhone apps and MCP, newest first.'),
+  const inner = h('div.pagein', pageTitle('Change log', 'history', 'var(--c-indigo)'), h('p.muted', 'Every change to a note, folder or tag, from the web app, the Mac and iPhone apps and MCP, newest first.'),
     h('table.grid', h('thead', h('tr', h('th', 'When'), h('th', 'Who'), h('th', 'What'), h('th', ''))), tbody));
   main.append(h('div.page', inner));
   if (!canWrite()) { tbody.append(h('tr', h('td', { colspan: 4 }, 'Editors only.'))); return; }

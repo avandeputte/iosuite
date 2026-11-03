@@ -1,5 +1,5 @@
 /** The sidebar (views, folders, tags) and the list of notes. */
-import { $, h, api, state, icon, fmtDate, colorVar, menu, colorPicker, ask, confirmIt, toast, fail, canWrite, displayTitle } from './core.js';
+import { $, h, api, state, icon, fmtDate, colorVar, menu, colorPicker, ask, confirmIt, toast, fail, canWrite, isAdmin, dialog, displayTitle } from './core.js';
 
 export const view = { v: 'all', f: null, t: null, q: '', sort: localSort(), n: null };
 const PAGE = 100;
@@ -41,9 +41,10 @@ function title() {
 // ---- sidebar
 export async function loadMeta() { state.meta = await api('/api/meta'); return state.meta; }
 
-function navItem(label, ic, count, on, onclick, extra = {}) {
-  const el = h('div.navitem' + (on ? '.on' : ''), { onclick, role: 'link', tabindex: 0, ...extra }, typeof ic === 'string' ? icon(ic) : ic, h('span.nm', label), count != null ? h('span.n', count) : null);
-  el.addEventListener('keydown', (e) => { if (e.key === 'Enter') onclick(); });
+/** A sidebar destination, as in iopix: a link with its icon in its own colour (--hue), the count on the right. */
+function navItem(label, ic, count, on, href, hue, cls = '') {
+  const el = h('a' + cls + (on ? '.on' : ''), { href }, typeof ic === 'string' ? icon(ic) : ic, h('span.nl', label), count != null ? h('span.n', count) : null);
+  if (hue) el.style.setProperty('--hue', hue);
   return el;
 }
 
@@ -60,39 +61,78 @@ function dropTarget(el, folderId) {
   return el;
 }
 
+/** The sidebar, laid out as iopix's: the name on top (in index.html), the views, Folders, Tags and Manage, then
+ *  Settings and Maintenance at the foot above the status line. On phones it is the bottom bar: the four .bar links
+ *  and More, which opens the rest (moreSheet). */
 export function renderNav() {
   const m = state.meta, nav = $('#nav');
-  nav.textContent = '';
-  const close = () => document.body.classList.remove('navopen');
-  const sel = (changes) => { close(); go({ v: 'all', f: null, t: null, n: null, ...changes }); };
-  nav.append(
-    navItem('All notes', 'notes', m.total, view.v === 'all' && !view.q, () => sel({ q: '' })),
-    navItem('Pinned', 'pin', m.pinned, view.v === 'pinned', () => sel({ v: 'pinned' })),
-    navItem('Pictures', 'photo', m.images, view.v === 'images', () => sel({ v: 'images' })),
-    dropTarget(navItem('No folder', 'folderOff', m.noFolder, view.v === 'nofolder', () => sel({ v: 'nofolder' })), null),
-  );
-  const fsec = h('div.navsec', h('div.navhead', h('span', 'Folders'), canWrite() ? h('button.iconbtn', { title: 'New folder', 'aria-label': 'New folder', onclick: newFolder }, icon('add')) : null));
+  [...nav.children].forEach((c) => { if (!c.classList.contains('navhead')) c.remove(); });
+  const to = (changes) => hashFor({ v: 'all', f: null, t: null, n: null, q: '', ...changes });
+  const page = location.hash.replace(/^#/, '').split(/[?/]/)[1] || 'notes';
+  const notes = page === 'notes' || page === 'note';
+  const on = (v) => notes && view.v === v && (v !== 'all' || !view.q);
+  const sec = (label, btn) => h('div.navsec', h('span', label), btn || null);
+  const out = [
+    navItem('All notes', 'notes', m.total, on('all'), to({}), 'var(--c-teal)', '.bar'),
+    navItem('Pinned', 'pin', m.pinned || null, on('pinned'), to({ v: 'pinned' }), 'var(--c-orange)', '.bar'),
+    navItem('Pictures', 'photo', m.images || null, on('images'), to({ v: 'images' }), 'var(--c-blue)', '.bar'),
+    h('div.navgap'),
+    sec('Folders', canWrite() ? h('button.iconbtn', { title: 'New folder', 'aria-label': 'New folder', onclick: newFolder }, icon('add')) : null),
+  ];
   for (const f of m.folders) {
-    const ic = icon('folder');
-    if (f.color) ic.style.color = colorVar(f.color);
-    const item = navItem(f.name, ic, f.count, view.v === 'folder' && view.f === f.id, () => sel({ v: 'folder', f: f.id }));
+    const item = navItem(f.name, 'folder', f.count, notes && view.v === 'folder' && view.f === f.id, to({ v: 'folder', f: f.id }), f.color ? colorVar(f.color) : 'var(--c-teal)');
     if (canWrite()) item.addEventListener('contextmenu', (e) => { e.preventDefault(); folderMenu(e, f); });
-    fsec.append(dropTarget(item, f.id));
+    out.push(dropTarget(item, f.id));
   }
-  if (!m.folders.length) fsec.append(h('div.navitem.muted.small', canWrite() ? 'Make folders like Work or AI with +' : 'No folders yet'));
-  nav.append(fsec);
+  out.push(dropTarget(navItem('No folder', 'folderOff', m.noFolder, on('nofolder'), to({ v: 'nofolder' }), 'var(--c-gray)'), null));
   if (m.tags.length) {
-    const tsec = h('div.navsec', h('div.navhead', h('span', 'Tags')));
+    out.push(h('div.navgap'), sec('Tags'));
     for (const t of m.tags) {
       const d = h('span.dot');
-      if (t.color) { d.style.background = colorVar(t.color); d.style.opacity = 1; }
-      const item = navItem(t.name, d, t.count, view.v === 'tag' && view.t && view.t.toLowerCase() === t.name.toLowerCase(), () => sel({ v: 'tag', t: t.name }));
+      const item = navItem(t.name, d, t.count, notes && view.v === 'tag' && view.t && view.t.toLowerCase() === t.name.toLowerCase(), to({ v: 'tag', t: t.name }), t.color ? colorVar(t.color) : null);
       if (canWrite()) item.addEventListener('contextmenu', (e) => { e.preventDefault(); tagMenu(e, t); });
-      tsec.append(item);
+      out.push(item);
     }
-    nav.append(tsec);
   }
-  nav.append(h('div.navsec', navItem('Trash', 'trash', m.trash || null, view.v === 'trash', () => sel({ v: 'trash' }))));
+  out.push(h('div.navgap'), sec('Manage'),
+    navItem('Trash', 'trash', m.trash || null, on('trash'), to({ v: 'trash' }), 'var(--c-gray)', '.bar'),
+    canWrite() ? navItem('Change log', 'history', null, page === 'changes', '#/changes', 'var(--c-indigo)') : null,
+    h('button.navmore' + (['settings', 'maintenance', 'changes'].includes(page) || (notes && ['folder', 'tag', 'nofolder'].includes(view.v)) ? '.on' : ''), { type: 'button', title: 'More', onclick: moreSheet }, icon('more'), h('span.nl', 'More')),
+    h('div.navfoot',
+      navItem('Settings', 'gear', null, page === 'settings', '#/settings', null, '.foot'),
+      isAdmin() ? navItem('Maintenance', 'wrench', null, page === 'maintenance', '#/maintenance', null, '.foot') : null,
+      h('div#status', { role: 'status', 'aria-live': 'polite' }, statusText)));
+  nav.append(...out.filter(Boolean));
+}
+
+let statusText = '';
+/** The line under Settings and Maintenance (as iopix's): the version, or that the server cannot be reached. */
+export function setStatus(text) { statusText = text; const s = $('#status'); if (s) s.textContent = text; }
+
+/** Phones: the bottom bar shows four destinations; the rest (folders, tags, the change log, Settings and Maintenance)
+ *  open from More, as in iopix. */
+function moreSheet() {
+  const m = state.meta;
+  const page = location.hash.replace(/^#/, '').split(/[?/]/)[1] || 'notes';
+  const to = (changes) => hashFor({ v: 'all', f: null, t: null, n: null, q: '', ...changes });
+  let close = () => {};
+  const tile = (href, label, ic, hue, on) => h('a' + (on ? '.on' : ''), { href, style: `--hue:${hue}`, onclick: () => close() }, h('span.sic', icon(ic)), label);
+  const chip = (href, label, hue, on) => { const a = h('a.chip' + (on ? '.on' : ''), { href, onclick: () => close() }, label); if (hue) a.style.setProperty('--hue', hue); return a; };
+  const grid = [
+    tile(to({ v: 'nofolder' }), 'No folder', 'folderOff', 'var(--c-gray)', view.v === 'nofolder'),
+    canWrite() ? tile('#/changes', 'Change log', 'history', 'var(--c-indigo)', page === 'changes') : null,
+    tile('#/settings', 'Settings', 'gear', 'var(--c-gray)', page === 'settings'),
+    isAdmin() ? tile('#/maintenance', 'Maintenance', 'wrench', 'var(--c-orange)', page === 'maintenance') : null,
+  ].filter(Boolean);
+  const content = h('div',
+    h('div.sheetgrid', grid),
+    h('h4.sheeth', 'Folders', canWrite() ? h('button.iconbtn', { title: 'New folder', 'aria-label': 'New folder', onclick: () => { close(); newFolder(); } }, icon('add')) : null),
+    m.folders.length ? h('div.chips', m.folders.map((f) => chip(to({ v: 'folder', f: f.id }), f.name, f.color ? colorVar(f.color) : null, view.v === 'folder' && view.f === f.id)))
+      : h('p.muted.small', canWrite() ? 'No folders yet: make one with +.' : 'No folders yet.'),
+    m.tags.length ? [h('h4.sheeth', 'Tags'), h('div.chips', m.tags.map((t) => chip(to({ v: 'tag', t: t.name }), '#' + t.name, t.color ? colorVar(t.color) : null, view.v === 'tag' && view.t === t.name)))] : null);
+  const p = dialog('More', content, [{ label: 'Close' }]);
+  close = () => { const b = content.closest('.dialog'); if (b) b.querySelector('.acts button').click(); };
+  return p;
 }
 
 async function newFolder() {

@@ -14,7 +14,9 @@ and sign-in (Cloudflare Access too), the same installer, updater, Docker image a
 - **Web app**: folders and tags in the sidebar (right-click one to rename it, give it a colour or delete it; drag a
   note onto a folder to file it), all notes / pinned / pictures / no folder / trash, sorting, full-text search,
   editing that saves as you type, pictures pasted (⌘V) or dropped anywhere become notes, copy text or picture,
-  download. Installs like an app on a phone (PWA); light, dark or the device's theme.
+  download. Installs like an app on a phone (PWA); light, dark or the device's theme. Laid out like iopix: the
+  sidebar (dockable) has the views, Folders, Tags and Manage (trash, change log), with Settings and Maintenance at its
+  foot; the search, New note and your account are along the top. On a phone the sidebar is a bottom bar with More.
 - **Search**: every word you type must match (prefix) in the title, the text, the text in the picture or the tags,
   through MariaDB's full-text index.
 - **Text in pictures**: read on the device where the picture was taken (Apple's Vision framework, on the Mac and
@@ -46,7 +48,7 @@ foreground. `--sqlite` keeps everything in a SQLite file in the data folder inst
 
 The database user needs to create tables in its database (`GRANT ALL ON notes.* TO 'notes'@'%'`). Pictures are
 stored in the database: MariaDB's `max_allowed_packet` (16 MB by default) must be larger than the largest picture
-(`MAX_IMAGE_MB`, 15 MB); Settings › Database warns when it is not.
+(`MAX_IMAGE_MB`, 15 MB); Maintenance › Storage and backups warns when it is not.
 
 ## Running in Docker
 
@@ -105,7 +107,7 @@ account) become the first admin's. A note id that belongs to another account is 
 | **editor** | plus every change to their own notes, folders and tags, and export/import of them (the Mac and iPhone apps sign in as an editor) |
 | **admin** | plus settings, accounts, the MCP token, updates and the server log |
 
-**Require sign-in** (Settings › Sign-in) also closes `/api/status`-style open routes and the MCP endpoint to visitors.
+**Require sign-in** (Settings › Users and sign-in) also closes `/api/status`-style open routes and the MCP endpoint to visitors.
 Sessions are random tokens in an HttpOnly cookie (`iothing_session`, shared by the apps on the domain) valid for
 30 days and renewed while in use; passwords are scrypt-hashed; wrong passwords cost a growing wait. **Read-only** (Settings, or `READ_ONLY=1`) refuses every
 change, for everyone. Write requests from another site are refused.
@@ -118,7 +120,7 @@ buffer that path.
 
 When the proxy already makes people sign in, ionotes takes that sign-in, exactly as iopix does: the proxy passes who
 signed in in a header, and ionotes treats that person as signed in when an account exists for them (matched on the
-account's email address, then its name). Settings › Sign-in at the proxy (saved there, the settings are kept in the
+account's email address, then its name). Settings › Users and sign-in › Sign-in at the proxy (saved there, the settings are kept in the
 shared auth database for the whole suite: one Cloudflare Access application covering every app, set up once), or
 in `ionotes.env`, which wins:
 
@@ -158,11 +160,11 @@ server has is answered with 409 (or `stale` in a push) and the server's copy, wh
 
 ## MCP server
 
-Settings › MCP server turns on an MCP endpoint at `/mcp` (off by default), in the same shape as iopix's. An assistant
+Maintenance › MCP and text in pictures turns on an MCP endpoint at `/mcp` (off by default), in the same shape as iopix's. An assistant
 such as Claude can then:
 
 Notes are private to each account, so the tools work on the notes of one account: the first admin's, or the one
-chosen under Settings › MCP server › Notes of (`notes_overview` names it).
+chosen under Maintenance › MCP server › Notes of (`notes_overview` names it).
 
 - read: `notes_overview`, `search_notes` (words, folder, tag, pinned, picture, source, dates, sort), `get_note`,
   `view_note_image` (the picture itself, small or large), `list_folders`, `list_tags`, `recent_changes`, `list_trash`
@@ -170,23 +172,23 @@ chosen under Settings › MCP server › Notes of (`notes_overview` names it).
   folder, pin), `organize_notes` (many notes at once), `delete_note`, `restore_note`, `manage_folder`, `manage_tag`
 - operate, with the admin token: `diagnostics`, `server_log`, `proxy_signin`, `check_for_update`, `update_ionotes`
 
-The admin token is shown to admins under Settings › MCP server (or set `MCP_ADMIN_TOKEN`). With Require sign-in on,
+The admin token is shown to admins under Maintenance › MCP server (or set `MCP_ADMIN_TOKEN`). With Require sign-in on,
 every `/mcp` request needs it as `Authorization: Bearer <token>` (Claude Desktop with `mcp-remote`:
 `"args": ["mcp-remote", "https://notes.example.com/mcp", "--header", "Authorization: Bearer <token>"]`).
 `python -m app.mcp` serves the same tools on stdio. Treat the token like the admin password.
 
 ## Export, import and backups
 
-Settings › Export downloads every note as Markdown (with front matter: id, dates, tags, source) next to its picture,
+Maintenance › Storage and backups › Export downloads every note as Markdown (with front matter: id, dates, tags, source) next to its picture,
 in a directory per folder, plus `notes.json` with everything. Such a zip imports again on any ionotes server (admins,
-Settings › Import): records keep their ids, and a newer copy on the server wins. For backups, back the database up
+Maintenance › Import): records keep their ids, and a newer copy on the server wins. For backups, back the database up
 (`mariadb-dump --single-transaction notes`): notes, pictures, accounts and settings are all in it.
 
 ## Updating
 
 - **Standalone:** `./update.sh` fetches the latest code (git, or the GitHub tarball), installs the packages the new
-  version asks for and only then moves the code in, then restarts the service. `--check` only reports. Settings ›
-  ionotes version › Update now runs the same script; a daily check (on by default; `UPDATE_CHECK=0` locks it off)
+  version asks for and only then moves the code in, then restarts the service. `--check` only reports. Maintenance ›
+  ionotes › Update now runs the same script; a daily check (on by default; `UPDATE_CHECK=0` locks it off)
   shows admins a card when a newer version exists, with Update now right on it (as in iopix; dismissed per version).
 - **Proxmox:** `update` inside the container (the framework's command) runs the same script.
 - **Docker:** `docker compose pull && docker compose up -d`.

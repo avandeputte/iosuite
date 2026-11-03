@@ -19,15 +19,19 @@
 <body>
 <header id="topbar">
   <button id="menubtn" class="iconbtn" title="Show the sidebar" aria-label="Show the sidebar"><span class="ic" data-ic="menu"></span></button>
-  <a class="brand" href="#/notes" title="All notes"><img src="icons/mark-64.png" alt="" width="28" height="28"><span class="brand-name"><span class="io">io</span><span class="nm">notes</span></span></a>
   <div id="search">
     <span class="ic" data-ic="search"></span>
     <input id="q" type="search" placeholder="Search notes, text in pictures, tags…" autocomplete="off" spellcheck="false" aria-label="Search">
   </div>
-  <button id="newbtn" class="pillbtn primary" title="New note (N)"><span class="ic" data-ic="add"></span><span class="lbl">New note</span></button>
+  <button id="newbtn" class="pillbtn" title="New note (N)"><span class="ic" data-ic="add"></span><span class="lbl">New note</span></button>
   <span id="usermenu"></span>
 </header>
-<nav id="nav" aria-label="Folders and tags"></nav>
+<nav id="nav" aria-label="Notes, folders and tags">
+  <div class="navhead">
+    <a class="brand" href="#/notes" title="All notes"><span class="brand-name"><span class="io">io</span><span class="nm">notes</span></span></a>
+    <button id="sidebtn" class="iconbtn"><span class="ic" data-ic="menuOpen"></span></button>
+  </div>
+</nav>
 <div id="navscrim" hidden></div>
 <main id="main"></main>
 <div id="toast" hidden role="status" aria-live="polite"></div>

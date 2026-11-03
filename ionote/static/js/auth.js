@@ -1,6 +1,6 @@
 /** Signing in: the account picker (one click for an account without a password), the password dialog, the first
  *  admin, the account menu. The same flow as iopix. */
-import { $, h, api, state, dialog, menu, toast, fail, initials, icon } from './core.js';
+import { $, h, api, state, dialog, toast, fail, initials, icon } from './core.js';
 
 export async function loadMe() {
   state.me = await api('/api/auth/me');
@@ -61,15 +61,6 @@ async function firstAdmin() {
   ]);
 }
 
-async function changePassword() {
-  const cur = h('input', { type: 'password', placeholder: 'Current password', autocomplete: 'current-password' });
-  const pw = h('input', { type: 'password', placeholder: 'New password (8 characters or more)', autocomplete: 'new-password' });
-  const msg = h('p.err.small');
-  await dialog('Change your password', h('div', cur, pw, msg), [{ label: 'Cancel' }, { label: 'Change', primary: true, action: async () => {
-    try { await api('/api/auth/password', { method: 'POST', body: { current: cur.value, password: pw.value } }); toast('Password changed; your other sessions are signed out'); } catch (e) { msg.textContent = e.message; return false; }
-  } }]);
-}
-
 async function signOut() {
   try {
     const r = await api('/api/auth/logout', { method: 'POST' });
@@ -78,22 +69,42 @@ async function signOut() {
   location.reload();
 }
 
+/** The account panel, as iopix's: who you are and what your role allows, how this browser is signed in, a new
+ *  password, and Sign out everywhere else / Sign out / Done. */
+function accountDialog() {
+  const me = state.me, u = me.user;
+  const cur = h('input.einput', { type: 'password', placeholder: 'Current password', autocomplete: 'current-password' });
+  const pw = h('input.einput', { type: 'password', placeholder: 'New password (8 characters or more)', autocomplete: 'new-password' });
+  const by = me.signedInBy;
+  const how = h('p.muted.small', h('b', 'Signed in: '), by === 'cloudflare' ? (me.throughCloudflare ? 'through Cloudflare Access, from outside your network.' : 'through Cloudflare Access; this browser stays signed in on your home network too.')
+    : by === 'proxy' ? 'at the sign-in page of your proxy; sign out there.' : by === 'oneclick' || u.passwordless ? 'here, with one click (no password).' : 'here, with a password.');
+  const role = u.role === 'admin' || u.role === 'suiteAdmin' ? 'You can change your notes, the settings and the accounts.' : u.role === 'editor' ? 'You can read and change your notes.' : 'You can read and search your notes.';
+  const viaProxy = by === 'proxy' || me.viaProxy;
+  const change = h('button.pillbtn', { type: 'button', onclick: async () => {
+    try { await api('/api/auth/password', { method: 'POST', body: { current: cur.value, password: pw.value } }); toast('Password changed; your other sessions are signed out'); cur.value = pw.value = ''; } catch (e) { fail(e); }
+  } }, 'Change password');
+  const buttons = [];
+  if (by !== 'proxy') {
+    buttons.push({ label: 'Sign out everywhere else', action: async () => {
+      try { await api('/api/auth/logout_all', { method: 'POST' }); toast('Signed out everywhere else'); } catch (e) { fail(e); }
+      return false;
+    } });
+    buttons.push({ label: by === 'cloudflare' && me.throughCloudflare ? 'Sign out (of Cloudflare too)' : 'Sign out', action: signOut });
+  }
+  buttons.push({ label: 'Done', primary: true });
+  return dialog(`${u.name} · ${u.role}`, h('div.acct', h('p.muted', role), how,
+    viaProxy || u.passwordless ? null : [h('h4', 'Change password'), h('div.signin-form', cur, pw), h('div.row', change)]), buttons);
+}
+
+/** The top right, as in iopix: the account's initial in a small amber circle, which opens the account panel; signed out,
+ *  a person icon that signs in (or creates the admin account). */
 export function renderUserMenu() {
   const el = $('#usermenu');
   el.textContent = '';
   const me = state.me;
   if (!me.user) {
-    el.append(h('button.pillbtn', { onclick: signIn }, icon('person'), h('span.lbl', me.usersExist ? 'Sign in' : 'Set up')));
+    el.append(h('button.iconbtn.tool', { title: me.usersExist ? 'Sign in' : 'Create the admin account', 'aria-label': 'Sign in', onclick: () => signIn() }, icon('person')));
     return;
   }
-  const btn = h('button.iconbtn', { title: me.user.name, 'aria-label': 'Account', onclick: () => menu(btn, [
-    { head: `${me.user.name} · ${me.user.role}${me.signedInBy === 'cloudflare' ? ' · via Cloudflare' : ''}` },
-    { icon: 'gear', label: 'Settings', action: () => { location.hash = '#/settings'; } },
-    me.canWrite ? { icon: 'history', label: 'Change log', action: () => { location.hash = '#/changes'; } } : null,
-    !me.user.passwordless ? { icon: 'edit', label: 'Change password', action: changePassword } : null,
-    { icon: 'logout', label: 'Sign out everywhere', action: async () => { await api('/api/auth/logout_all', { method: 'POST' }); toast('Your other sessions are signed out'); } },
-    '-',
-    { icon: 'logout', label: 'Sign out', action: signOut },
-  ]) }, h('span.avatar', initials(me.user.name)));
-  el.append(btn);
+  el.append(h('button.iconbtn.tool', { title: `${me.user.name} (${me.user.role}) · account`, 'aria-label': 'Account', onclick: accountDialog }, h('span.avatar', initials(me.user.name))));
 }
