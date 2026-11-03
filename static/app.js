@@ -1,5 +1,5 @@
-/* ioSuite web app: one module, no build step, as in the other io apps. The start page (a tile per app) and the
-   settings (account, users, apps, server). Each tile keeps a `.more` block under its name, empty for now: the place for
+/* ioSuite web app: one module, no build step, as in the other io apps. The start page (the weather, a tile per app,
+   the bookmarks as homepage lays them out) and the settings (account, apps, weather, bookmarks, users, server). Each tile keeps a `.more` block under its name, empty for now: the place for
    what an app will show on the start page later (today's events, the newest photos…), filled from /api/apps. */
 
 // ------------------------------------------------------------------ helpers
@@ -17,6 +17,12 @@ const ICONS = {
   check: 'M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z',
   update: 'M21 10.12h-6.78l2.74-2.82c-2.73-2.7-7.15-2.8-9.88-.1a6.875 6.875 0 0 0 0 9.79 7.02 7.02 0 0 0 9.88 0C18.32 15.65 19 14.08 19 12.1h2c0 1.98-.88 4.55-2.64 6.29-3.51 3.48-9.21 3.48-12.72 0-3.5-3.47-3.53-9.11-.02-12.58a8.987 8.987 0 0 1 12.65 0L21 3v7.12z',
   theme: 'M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 0 1-4.4 2.26 5.403 5.403 0 0 1-3.14-9.8c-.44-.06-.9-.1-1.36-.1z',
+  link: 'M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z',
+  cloud: 'M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z',
+  up: 'M7.41 15.41 12 10.83l4.59 4.58L18 14l-6-6-6 6z',
+  down: 'M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z',
+  edit: 'M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 0 0 0-1.41l-2.34-2.34a.996.996 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z',
+  delete: 'M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z',
   server: 'M20 13H4c-.55 0-1 .45-1 1v6c0 .55.45 1 1 1h16c.55 0 1-.45 1-1v-6c0-.55-.45-1-1-1zM7 19c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zM20 3H4c-.55 0-1 .45-1 1v6c0 .55.45 1 1 1h16c.55 0 1-.45 1-1V4c0-.55-.45-1-1-1zM7 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z',
 };
 const icon = (n, cls = '') => { const s = document.createElement('span'); s.className = 'ic ' + cls; s.innerHTML = `<svg viewBox="0 0 24 24"><path d="${ICONS[n] || ''}"/></svg>`; return s; };
@@ -76,6 +82,29 @@ const initials = (fn) => { const p = (fn || '?').trim().split(/\s+/); return ((p
 async function copyText(t) { try { await navigator.clipboard.writeText(t); toast('Copied'); } catch { toast(t); } }
 const copyRow = (v) => h('div', { class: 'copy' }, h('code', null, v), h('button', { class: 'iconbtn', title: 'Copy', onclick: () => copyText(v) }, icon('copy', 's')));
 /** An app's name as the apps write it: "io" in gold, the rest in the app's colour. */
+/* The weather: AccuWeather's icon numbers (1-44) drawn with a handful of glyphs. */
+const WX = {
+  sun: '<circle cx="12" cy="12" r="4.2"/><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"/></g>',
+  moon: '<path d="M14.5 3.5a8.5 8.5 0 1 0 6 14.5 7 7 0 0 1-6-14.5z"/>',
+  cloud: '<path d="M18.5 19H7a4.5 4.5 0 0 1-.7-8.95A6 6 0 0 1 17.8 9.5 4.75 4.75 0 0 1 18.5 19z"/>',
+  partly: '<circle cx="8" cy="8" r="3.4"/><g stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 1.8v1.6M1.8 8h1.6M3.6 3.6l1.1 1.1M12.4 3.6l-1.1 1.1"/></g><path d="M19 20.5H9.5a3.8 3.8 0 0 1-.6-7.55A5 5 0 0 1 18.4 12 4 4 0 0 1 19 20.5z"/>',
+  partlyNight: '<path d="M9.2 2.2a5.2 5.2 0 1 0 4.1 8.6 4.4 4.4 0 0 1-4.1-8.6z"/><path d="M19 20.5H9.5a3.8 3.8 0 0 1-.6-7.55A5 5 0 0 1 18.4 12 4 4 0 0 1 19 20.5z"/>',
+  rain: '<path d="M18.5 15H7a4.5 4.5 0 0 1-.7-8.95A6 6 0 0 1 17.8 5.5 4.75 4.75 0 0 1 18.5 15z"/><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8.5 17.5l-1 3M12.5 17.5l-1 3M16.5 17.5l-1 3"/></g>',
+  storm: '<path d="M18.5 14H7a4.5 4.5 0 0 1-.7-8.95A6 6 0 0 1 17.8 4.5 4.75 4.75 0 0 1 18.5 14z"/><path d="M12.5 13.5 9 19h3l-1 4.5 4.5-6.5h-3l1.5-3.5z"/>',
+  snow: '<path d="M18.5 14H7a4.5 4.5 0 0 1-.7-8.95A6 6 0 0 1 17.8 4.5 4.75 4.75 0 0 1 18.5 14z"/><g fill="currentColor"><circle cx="8.5" cy="18" r="1.3"/><circle cx="12.5" cy="20.5" r="1.3"/><circle cx="16.5" cy="18" r="1.3"/></g>',
+  fog: '<g stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 9h16M3 13h18M5 17h14"/></g>',
+  wind: '<g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 9h11a2.5 2.5 0 1 0-2.5-2.5M3 14h15a2.5 2.5 0 1 1-2.5 2.5M3 19h7"/></g>',
+  hot: '<circle cx="12" cy="12" r="4.2"/><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5"/></g>',
+};
+const WX_MAP = { 1: 'sun', 2: 'sun', 3: 'partly', 4: 'partly', 5: 'partly', 6: 'cloud', 7: 'cloud', 8: 'cloud', 11: 'fog', 12: 'rain', 13: 'rain', 14: 'partly', 15: 'storm', 16: 'storm', 17: 'partly',
+  18: 'rain', 19: 'snow', 20: 'snow', 21: 'snow', 22: 'snow', 23: 'snow', 24: 'snow', 25: 'snow', 26: 'rain', 29: 'snow', 30: 'hot', 31: 'snow', 32: 'wind',
+  33: 'moon', 34: 'moon', 35: 'partlyNight', 36: 'partlyNight', 37: 'fog', 38: 'cloud', 39: 'rain', 40: 'rain', 41: 'storm', 42: 'storm', 43: 'snow', 44: 'snow' };
+const wxIcon = (n, cls = '') => { const s = document.createElement('span'); s.className = 'wx ' + cls; s.innerHTML = `<svg viewBox="0 0 24 24">${WX[WX_MAP[n] || 'cloud']}</svg>`; return s; };
+const degF = (c) => (c == null ? null : c * 9 / 5 + 32);
+const fmtTemp = (v) => (v == null ? '–' : `${Math.round(v)}°`);
+/** A bookmark's icon as homepage reads it: a full address, or a file name from the dashboard-icons collection. */
+const bmIconUrl = (icon) => { if (!icon) return ''; if (/^https?:\/\//.test(icon)) return icon; const m = icon.match(/^([\w.-]+)\.(png|svg|webp)$/); return m ? `https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/${m[2]}/${m[1]}.${m[2]}` : ''; };
+
 const appName = (name, color) => h('span', { class: 'nm', style: { '--c': color } }, h('span', { class: 'io' }, 'io'), h('span', { class: 'ap' }, name.replace(/^io/, '')));
 
 // ------------------------------------------------------------------ state
@@ -94,6 +123,7 @@ function drawUser() {
     menu = h('div', { class: 'menu' },
       h('div', { class: 'who' }, h('b', null, S.user.displayName), h('div', { class: 'muted small' }, `${S.user.name} · ${S.user.role}`)),
       h('a', { class: 'mi', href: '#/settings/account', onclick: closeMenu }, icon('person', 's'), 'Account'),
+      ['editor', 'admin'].includes(S.user.role) ? h('a', { class: 'mi', href: '#/settings/bookmarks', onclick: closeMenu }, icon('link', 's'), 'Bookmarks') : null,
       S.user.role === 'admin' ? h('a', { class: 'mi', href: '#/settings/apps', onclick: closeMenu }, icon('settings', 's'), 'Settings') : null,
       h('button', { class: 'mi', onclick: () => { const n = { system: 'light', light: 'dark', dark: 'system' }[theme]; localStorage.setItem('iosuite.theme', n); applyTheme(); closeMenu(); toast(`Appearance: ${n}`); } },
         icon('theme', 's'), `Appearance: ${theme}`),
@@ -127,24 +157,68 @@ const greeting = () => { const hr = new Date().getHours(); return hr < 5 ? 'Good
 async function showHome(page) {
   S.apps = (await api('/api/apps')).items;
   const first = (S.user.displayName || S.user.name).split(/\s+/)[0];
-  page.append(h('div', { class: 'hello' }, h('h1', null, `${greeting()}, ${first}`),
-    h('div', { class: 'muted' }, new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' }))));
-  if (!S.apps.length) { page.append(h('div', { class: 'empty' }, 'No apps to show. ', S.user.role === 'admin' ? h('a', { class: 'lnk', href: '#/settings/apps' }, 'Settings › Apps') : null)); return; }
-  page.append(h('div', { class: 'apps' }, S.apps.map((a) =>
+  const wx = h('div', { class: 'weather' });
+  page.append(h('div', { class: 'top' }, h('div', { class: 'hello' }, h('h1', null, `${greeting()}, ${first}`),
+    h('div', { class: 'muted' }, new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' }))), wx));
+  drawWeather(wx);  // fills in when AccuWeather (or the server's copy) answers
+  if (!S.apps.length) page.append(h('div', { class: 'empty' }, 'No apps to show. ', S.user.role === 'admin' ? h('a', { class: 'lnk', href: '#/settings/apps' }, 'Settings › Apps') : null));
+  else page.append(h('div', { class: 'apps' }, S.apps.map((a) =>
     h('a', { class: 'app', href: a.url, 'data-app': a.key, title: a.url },
       h('img', { src: a.icon, alt: '' }), appName(a.name, a.color), h('span', { class: 'tag' }, a.tagline),
       h('div', { class: 'more' })))));  // room for what the app shows here later
+  const bm = h('div', { class: 'bookmarks' });
+  page.append(bm);
+  drawBookmarks(bm);
+}
+
+/** The weather widget: the conditions now, a line of details, and the days ahead. Hidden until an admin sets it up. */
+async function drawWeather(el) {
+  let w;
+  try { w = await api('/api/weather'); } catch (e) { el.replaceChildren(h('div', { class: 'muted small' }, e.message)); return; }
+  if (!el.isConnected) return;
+  if (!w.enabled) { el.replaceChildren(S.user.role === 'admin' ? h('a', { class: 'lnk small', href: '#/settings/weather' }, 'Add the weather') : null); return; }
+  if (!w.current) { el.replaceChildren(h('div', { class: 'wxerr' }, wxIcon(7, 'big'), h('div', null, h('div', null, 'No weather right now'), h('div', { class: 'muted small' }, w.error || '')))); return; }
+  const c = w.current, imp = w.units === 'imperial', u = imp ? 'imperial' : 'metric';
+  const day = (d) => new Date(`${d.date}T12:00:00`).toLocaleDateString([], { weekday: 'short' });
+  const t = (v) => fmtTemp(imp ? degF(v) : v);  // the forecast comes in °C
+  el.replaceChildren(
+    h('a', { class: 'wxnow', href: c.link || '#', target: c.link ? '_blank' : null, rel: 'noreferrer', title: w.location },
+      wxIcon(c.icon, 'big'),
+      h('div', null, h('div', { class: 'wxtemp' }, fmtTemp(c.temp[u])), h('div', { class: 'wxtext' }, c.text),
+        h('div', { class: 'muted small' }, [w.location, c.feels[u] != null ? `feels ${fmtTemp(c.feels[u])}` : null, c.humidity != null ? `${c.humidity}% humidity` : null,
+          c.wind[u] != null ? `wind ${Math.round(c.wind[u])} ${imp ? 'mph' : 'km/h'}` : null].filter(Boolean).join(' · ')))),
+    w.forecast && w.forecast.days && w.forecast.days.length ? h('div', { class: 'wxdays' }, w.forecast.days.map((d) =>
+      h('div', { class: 'wxday', title: `${d.text || ''}${d.rain != null ? ` · ${d.rain}% chance of rain` : ''}` }, h('span', { class: 'muted small' }, day(d)), wxIcon(d.icon), h('span', { class: 'small' }, `${t(d.max)} `, h('span', { class: 'muted' }, t(d.min)))))) : null,
+    w.stale ? h('div', { class: 'muted small' }, `Older reading (${w.error || 'AccuWeather did not answer'})`) : h('span'));
+}
+
+/** The bookmarks, as homepage lays them out: a column per group, a row per link with its abbreviation (or icon), name and host. */
+async function drawBookmarks(el) {
+  let gs;
+  try { gs = (await api('/api/bookmarks')).groups; } catch (e) { el.replaceChildren(h('div', { class: 'muted small' }, e.message)); return; }
+  if (!el.isConnected) return;
+  const canEdit = ['editor', 'admin'].includes(S.user.role);
+  if (!gs.length) { el.replaceChildren(canEdit ? h('a', { class: 'lnk small', href: '#/settings/bookmarks' }, 'Add bookmarks') : null); return; }
+  el.replaceChildren(...gs.filter((g) => g.links.length || canEdit).map((g) => h('div', { class: 'bmgroup' }, h('h2', null, g.name),
+    g.links.map((l) => {
+      const src = bmIconUrl(l.icon);
+      return h('a', { class: 'bm', href: l.href, title: l.href, target: '_blank', rel: 'noreferrer' },
+        h('span', { class: 'bmic' }, src ? h('img', { src, alt: '', onerror: (e) => { e.target.replaceWith(l.abbr); } }) : l.abbr),
+        h('span', { class: 'bmname' }, l.name), h('span', { class: 'bmdesc muted small' }, l.description));
+    }),
+    canEdit && !g.links.length ? h('a', { class: 'lnk small', href: '#/settings/bookmarks' }, 'Empty: add a link') : null)));
 }
 
 // ------------------------------------------------------------------ settings
 async function showSettings(page, r) {
   const adm = S.user.role === 'admin';
-  const tabs = [['account', 'Account'], ...(adm ? [['apps', 'Apps'], ['users', 'Users'], ['server', 'Server']] : [])];
+  const canEdit = ['editor', 'admin'].includes(S.user.role);
+  const tabs = [['account', 'Account'], ...(adm ? [['apps', 'Apps'], ['weather', 'Weather']] : []), ...(canEdit ? [['bookmarks', 'Bookmarks']] : []), ...(adm ? [['users', 'Users'], ['server', 'Server']] : [])];
   if (!tabs.some(([k]) => k === r.tab)) r.tab = 'account';
   page.append(h('div', { class: 'pagehead' }, h('h1', null, 'Settings')),
     h('div', { class: 'tabs' }, tabs.map(([k, l]) => h('button', { class: r.tab === k ? 'on' : '', onclick: () => { location.hash = `#/settings/${k}`; } }, l))));
   const body = h('div'); page.append(body);
-  await ({ account: setAccount, apps: setApps, users: setUsers, server: setServer }[r.tab] || setAccount)(body);
+  await ({ account: setAccount, apps: setApps, weather: setWeather, bookmarks: setBookmarks, users: setUsers, server: setServer }[r.tab] || setAccount)(body);
 }
 const fld = (l, e) => h('label', { class: 'field' }, h('span', null, l), e);
 const kv = (k, v) => h('div', { class: 'kv' }, h('div', { class: 'k' }, k), h('div', { class: 'v', style: { flex: 1 } }, typeof v === 'string' ? copyRow(v) : v));
@@ -167,7 +241,7 @@ async function setApps(el) {
   const rows = items.map((a) => {
     const url = h('input', { class: 't', value: a.envUrl || a.url, placeholder: `empty: this host, port ${a.port}`, disabled: a.envUrl ? true : null });
     const shown = h('input', { type: 'checkbox', checked: !a.hidden });
-    return { a, url, shown, el: h('div', { class: 'approw' }, h('img', { src: `static/icons/apps/${a.key}.${a.key === 'ionotes' ? 'png' : 'svg'}`, alt: '' }), h('span', { class: 'nm' }, a.name), url,
+    return { a, url, shown, el: h('div', { class: 'approw' }, h('img', { src: `static/icons/apps/${a.key}.svg`, alt: '' }), h('span', { class: 'nm' }, a.name), url,
       h('label', { class: 'check' }, shown, ' On the page'), a.envUrl ? h('span', { class: 'muted small' }, `${a.key.toUpperCase()}_URL in the environment`) : null) };
   });
   el.append(h('div', { class: 'box' }, h('h2', null, icon('apps'), 'The apps on the start page'),
@@ -177,6 +251,85 @@ async function setApps(el) {
       const body = Object.fromEntries(rows.map((r) => [r.a.key, { ...(r.a.envUrl ? {} : { url: r.url.value.trim() }), hidden: !r.shown.checked }]));
       try { await api('/api/apps/settings', { method: 'POST', json: body }); toast('Saved'); } catch (e) { fail(e); }
     } }, icon('check', 's'), 'Save'))));
+}
+
+async function setWeather(el) {
+  const s = await api('/api/weather/settings');
+  const key = h('input', { class: 't', type: 'password', placeholder: s.hasKey ? '(kept)' : 'API key from developer.accuweather.com', disabled: s.keyFromEnv ? true : null, autocomplete: 'off' });
+  const units = h('select', { class: 't', style: 'width:auto' }, [['metric', '°C, km/h'], ['imperial', '°F, mph']].map(([v, l]) => h('option', { value: v, selected: v === s.units ? true : null }, l)));
+  const q = h('input', { class: 't', placeholder: 'City, e.g. Boston or Antwerp', disabled: s.locationFromEnv ? true : null });
+  const found = h('div', { class: 'found' });
+  const where = h('p', null, s.locationKey ? `Place: ${s.locationName || s.locationKey}${s.locationFromEnv ? ' (ACCUWEATHER_LOCATION in the environment)' : ''}` : 'No place chosen yet.');
+  const save = async (body) => { try { const r = await api('/api/weather/settings', { method: 'POST', json: body }); toast('Saved'); return r; } catch (e) { fail(e); return null; } };
+  const search = async () => {
+    found.replaceChildren(h('span', { class: 'muted small' }, 'Looking…'));
+    try {
+      const r = await api(`/api/weather/search?${new URLSearchParams({ q: q.value.trim(), key: key.value.trim() })}`);
+      found.replaceChildren(r.items.length ? r.items.map((p) => h('button', { class: 'pillbtn noic', onclick: async () => {
+        const name = [p.name, p.region, p.country].filter(Boolean).join(', ');
+        if (await save({ ...(key.value.trim() ? { key: key.value.trim() } : {}), locationKey: p.key, locationName: name })) { where.textContent = `Place: ${name}`; key.value = ''; key.placeholder = '(kept)'; found.replaceChildren(); }
+      } }, [p.name, p.region, p.country].filter(Boolean).join(', '))) : h('span', { class: 'muted small' }, 'Nothing found'));
+    } catch (e) { found.replaceChildren(h('span', { class: 'err' }, e.message)); }
+  };
+  q.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); search(); } };
+  el.append(h('div', { class: 'box' }, h('h2', null, icon('cloud'), 'Weather'),
+    h('p', { class: 'muted' }, 'The weather on the start page comes from AccuWeather. A free key (developer.accuweather.com, "Core Weather", 50 calls a day) is enough: this server asks AccuWeather at most every 45 minutes for the conditions and every 6 hours for the forecast, and only while someone opens the page; browsers never talk to AccuWeather.'),
+    h('div', { class: 'grid' }, fld('API key', key), fld('Units', units)),
+    s.keyFromEnv ? h('p', { class: 'muted small' }, 'ACCUWEATHER_API_KEY in the environment sets the key.') : null,
+    h('p', null, h('button', { class: 'pillbtn primary', onclick: async () => { if (await save({ ...(key.value.trim() ? { key: key.value.trim() } : {}), units: units.value })) { key.value = ''; key.placeholder = '(kept)'; } } }, icon('check', 's'), 'Save'), ' ',
+      s.hasKey && !s.keyFromEnv ? h('button', { class: 'pillbtn noic', onclick: async () => { if (await confirmDialog('Remove the key', 'Remove the AccuWeather key? The widget disappears from the page.', 'Remove', true)) { await save({ key: '' }); onRoute(); } } }, 'Remove the key') : null)),
+  h('div', { class: 'box' }, h('h2', null, icon('cloud'), 'Place'), where,
+    s.locationFromEnv ? null : [h('div', { class: 'multi' }, q, h('button', { class: 'pillbtn noic', onclick: search }, 'Find')), found,
+      h('p', { class: 'muted small' }, 'Type a city and pick it from the list (one AccuWeather call per search).')]));
+}
+
+async function setBookmarks(el) {
+  const draw = async () => {
+    const gs = (await api('/api/bookmarks')).groups;
+    if (!el.isConnected) return;
+    const call = async (path, opts, msg) => { try { await api(path, opts); if (msg) toast(msg); await draw(); } catch (e) { fail(e); } };
+    const linkForm = (g, l) => {
+      const name = h('input', { class: 't', value: l ? l.name : '', placeholder: 'Name' }), href = h('input', { class: 't', value: l ? l.href : '', placeholder: 'https://…' });
+      const abbr = h('input', { class: 't', value: l ? l.abbr : '', placeholder: 'Two letters (from the name when empty)', maxlength: 4 });
+      const desc = h('input', { class: 't', value: l ? l.customDescription : '', placeholder: 'Line under the name (the host name when empty)' });
+      const ic = h('input', { class: 't', value: l ? l.icon : '', placeholder: 'Icon: an image address, or a name from dashboard-icons (github.png)' });
+      const grp = h('select', { class: 't' }, gs.map((x) => h('option', { value: x.id, selected: x.id === g.id ? true : null }, x.name)));
+      return { body: h('div', { class: 'grid' }, fld('Name', name), fld('Address', href), fld('Abbreviation', abbr), fld('Description', desc), fld('Icon', ic), fld('Group', grp)),
+        value: () => ({ name: name.value, href: href.value, abbr: abbr.value, description: desc.value, icon: ic.value, groupId: +grp.value }) };
+    };
+    const editLink = async (g, l) => {
+      const f = linkForm(g, l);
+      const v = await dialog(l ? 'Change the link' : 'New link', f.body, [{ label: 'Cancel', value: null }, { label: l ? 'Save' : 'Add', value: f.value, primary: true }]);
+      if (!v) return;
+      await call(l ? `/api/bookmarks/links/${l.id}` : `/api/bookmarks/groups/${g.id}/links`, { method: l ? 'PATCH' : 'POST', json: v }, 'Saved');
+    };
+    const move = (list, i, d) => { const ids = list.map((x) => x.id); const [x] = ids.splice(i, 1); ids.splice(i + d, 0, x); return ids; };
+    const newGroup = h('input', { class: 't', placeholder: 'New group, e.g. Developer', style: 'max-width:280px' });
+    const yaml = h('textarea', { class: 't', placeholder: '- Developer:\n    - Github:\n        - abbr: GH\n          href: https://github.com/', spellcheck: 'false' });
+    const replace = h('input', { type: 'checkbox' });
+    el.replaceChildren(
+      h('div', { class: 'box' }, h('h2', null, icon('link'), 'Bookmarks'),
+        h('p', { class: 'muted' }, 'Groups of links under the apps, as homepage shows them: a two-letter badge (or an icon), the name and the site. Everyone in the family sees the same bookmarks; editors and admins change them.'),
+        gs.length ? gs.map((g, gi) => h('div', { class: 'bmedit' },
+          h('div', { class: 'bmhead' }, h('b', null, g.name),
+            h('button', { class: 'iconbtn', title: 'Up', disabled: gi === 0 ? true : null, onclick: () => call('/api/bookmarks/groups/order', { method: 'POST', json: { ids: move(gs, gi, -1) } }) }, icon('up', 's')),
+            h('button', { class: 'iconbtn', title: 'Down', disabled: gi === gs.length - 1 ? true : null, onclick: () => call('/api/bookmarks/groups/order', { method: 'POST', json: { ids: move(gs, gi, 1) } }) }, icon('down', 's')),
+            h('button', { class: 'iconbtn', title: 'Rename', onclick: async () => { const i = h('input', { class: 't', value: g.name }); const v = await dialog('Rename the group', i, [{ label: 'Cancel', value: null }, { label: 'Save', value: () => i.value, primary: true }]); if (v) call(`/api/bookmarks/groups/${g.id}`, { method: 'PATCH', json: { name: v } }, 'Saved'); } }, icon('edit', 's')),
+            h('button', { class: 'iconbtn', title: 'Delete the group', onclick: async () => { if (await confirmDialog('Delete the group', `Delete "${g.name}" and its ${g.links.length} link(s)?`, 'Delete', true)) call(`/api/bookmarks/groups/${g.id}`, { method: 'DELETE' }, 'Deleted'); } }, icon('delete', 's')),
+            h('button', { class: 'pillbtn', style: 'margin-left:auto', onclick: () => editLink(g, null) }, icon('add', 's'), 'Link')),
+          g.links.map((l, li) => h('div', { class: 'bmrow' }, h('span', { class: 'bmic' }, bmIconUrl(l.icon) ? h('img', { src: bmIconUrl(l.icon), alt: '', onerror: (e) => { e.target.replaceWith(l.abbr); } }) : l.abbr), h('span', { class: 'bmname' }, l.name), h('span', { class: 'muted small bmdesc' }, l.description),
+            h('span', { class: 'bmtools' },
+              h('button', { class: 'iconbtn', title: 'Up', disabled: li === 0 ? true : null, onclick: () => call(`/api/bookmarks/groups/${g.id}/order`, { method: 'POST', json: { ids: move(g.links, li, -1) } }) }, icon('up', 's')),
+              h('button', { class: 'iconbtn', title: 'Down', disabled: li === g.links.length - 1 ? true : null, onclick: () => call(`/api/bookmarks/groups/${g.id}/order`, { method: 'POST', json: { ids: move(g.links, li, 1) } }) }, icon('down', 's')),
+              h('button', { class: 'iconbtn', title: 'Change', onclick: () => editLink(g, l) }, icon('edit', 's')),
+              h('button', { class: 'iconbtn', title: 'Delete', onclick: async () => { if (await confirmDialog('Delete the link', `Delete "${l.name}"?`, 'Delete', true)) call(`/api/bookmarks/links/${l.id}`, { method: 'DELETE' }, 'Deleted'); } }, icon('delete', 's'))))))) : h('p', { class: 'muted' }, 'No bookmarks yet.'),
+        h('div', { class: 'multi', style: 'margin-top:12px' }, newGroup, h('button', { class: 'pillbtn primary', onclick: () => { if (newGroup.value.trim()) call('/api/bookmarks/groups', { method: 'POST', json: { name: newGroup.value } }, 'Group made'); } }, icon('add', 's'), 'Group'))),
+      h('div', { class: 'box' }, h('h2', null, icon('link'), 'Import from homepage'),
+        h('p', { class: 'muted' }, 'Paste a homepage bookmarks.yaml: its groups and links are added here (a group with the same name gets the links).'),
+        yaml, h('p', null, h('label', { class: 'check' }, replace, ' Replace everything that is here first')),
+        h('p', null, h('button', { class: 'pillbtn primary', onclick: async () => { try { const r = await api('/api/bookmarks/import', { method: 'POST', json: { yaml: yaml.value, replace: replace.checked } }); toast(`${r.groups} group(s) and ${r.links} link(s) added`); yaml.value = ''; draw(); } catch (e) { fail(e); } } }, icon('check', 's'), 'Import'))));
+  };
+  await draw();
 }
 
 async function setUsers(el) {

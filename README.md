@@ -15,6 +15,14 @@ what the app will show on the start page later (today's events, the newest photo
   environment (`IOPIX_URL` and friends), from **Settings › Apps** (admins), or, failing both, from the host the page was
   opened on with the app's usual port (the one-box install): `http://<this host>:8600` for ioPix, `47800` ioHealth,
   `8620` ioCalendar, `8610` ioContacts and ioNotes. An app can be taken off the page in Settings.
+- **The weather**, from AccuWeather: the conditions now and the five days ahead, at the top of the page. Settings ›
+  Weather (admins) takes a free API key from developer.accuweather.com and finds the place by its name. The server
+  keeps a copy and asks AccuWeather at most every 45 minutes (conditions) and 6 hours (forecast), and only while
+  someone opens the page, so a free key's 50 calls a day are enough; browsers never talk to AccuWeather.
+- **Bookmarks**, as [homepage](https://gethomepage.dev/configs/bookmarks/) lays them out: groups of links under the
+  apps, each with a two-letter badge (or an icon: an image address, or a file name from the dashboard-icons
+  collection, `github.png`), the name and the site. Editors and admins add, change, reorder and move them in
+  Settings › Bookmarks, or paste a homepage `bookmarks.yaml` to import it.
 - **The suite's accounts**: the same sign-in as every io app (the account tiles, one click for a passwordless viewer),
   the account page (display name, email, password, sign out everywhere) and, for admins, the family's accounts and their
   role here. Sign-in at a reverse proxy (Cloudflare Access…) works as in the other apps.
@@ -95,6 +103,7 @@ git clone https://github.com/avandeputte/iosuite && cd iosuite
 | `PORT` | web port for `run.sh` and the service (8630) |
 | `PUBLIC_URL` | the address people use (behind a proxy) |
 | `IOPIX_URL`, `IOHEALTH_URL`, `IOCALENDAR_URL`, `IOCONTACTS_URL`, `IONOTES_URL` | where each app is, as the family's browsers reach it (or Settings › Apps; empty: this host with the app's usual port) |
+| `ACCUWEATHER_API_KEY`, `ACCUWEATHER_LOCATION` | the weather: an AccuWeather key and a location key (or Settings › Weather, which finds the location from a city name) |
 | `ADMIN_USER`, `ADMIN_PASSWORD` | the first admin, made on the first start when there are no accounts |
 | `AUTH_PROXY`, `AUTH_PROXY_HEADER`, `AUTH_PROXY_TRUSTED`, `CF_ACCESS_TEAM`, `CF_ACCESS_AUD` | sign-in at a reverse proxy, as in the other io apps (Cloudflare Access, Authelia, Authentik, oauth2-proxy…) |
 | `UPDATE_CHECK` | `0` turns the daily version check off for good |
@@ -113,7 +122,9 @@ python -m pytest tests     # on a test MariaDB of its own: a Docker container it
 ```
 
 Covered: status and sign-in, the tiles and where they point (this host, the forwarded host behind a proxy, Settings,
-the environment), hiding an app, what a viewer may not change, the server page. CI runs them against MariaDB.
+the environment), hiding an app, the weather (AccuWeather mocked: set-up, the place search, the server's copy and its
+age, a stale reading when AccuWeather is down), the bookmarks (groups, links, order, moves, the homepage import) and
+what a viewer may not change. CI runs them against MariaDB.
 
 ## Layout
 
@@ -121,9 +132,11 @@ the environment), hiding an app, what a viewer may not change, the server page. 
 app/main.py        the application: start-up (tables, first admin, the update check), who is asking, routes
 app/api.py         the REST API: status, the apps and their settings, the server (version, updates)
 app/apps.py        the catalogue of the suite's apps and where each one is (environment, Settings, this host)
+app/weather.py     AccuWeather: the settings, the place search, the cached conditions and forecast
+app/bookmarks.py   the bookmark groups and links, and the homepage bookmarks.yaml import
 app/auth.py        the shared accounts (iothing-auth), as ioSuite uses them
 app/users.py       accounts and roles, seen from ioSuite
-app/db.py          MariaDB access and the schema (a meta table of settings, for now)
+app/db.py          MariaDB access and the schema (the meta settings table, the bookmarks)
 app/config.py      settings from iosuite.env / the environment
 app/updates.py     the version check and the self-update (update.sh)
 app/cli.py         python -m app.cli: migrate, check, create-user, set-password
