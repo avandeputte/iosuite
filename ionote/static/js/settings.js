@@ -3,20 +3,25 @@
 import { $, h, api, state, icon, toast, fail, isAdmin, canWrite, dialog, confirmIt, fmtDate } from './core.js';
 import { runUpdate } from './update.js';
 
-function box(title, intro, ...kids) { return h('div.box', h('h2', title), intro ? h('p', intro) : null, ...kids); }
+/** A section of a settings page, as iopix draws one: the heading with its coloured marker and a line under it, an
+ *  intro, then rows (title and explanation on the left, the control on the right, a line between rows). */
+function box(title, intro, ...kids) { return h('section.sec', h('h2', title), intro ? h('p.intro', intro) : null, ...kids); }
 function sw(label, checked, onchange, disabled = false, hint = '') {
-  return h('label.switch', h('input', { type: 'checkbox', checked, disabled, onchange: (e) => onchange(e.target.checked, e.target) }), h('span', label, hint ? h('span.muted.small', ' ' + hint) : null));
+  return h('div.srow', h('div', h('b', label), hint ? h('div.muted.small', hint) : null),
+    h('label.check', h('input', { type: 'checkbox', checked, disabled, onchange: (e) => onchange(e.target.checked, e.target) }), h('span', label)));
 }
 async function setSetting(k, v) { try { await api('/api/settings', { method: 'POST', body: { [k]: v } }); toast('Saved'); } catch (e) { fail(e); } }
 
+const THEMES = [['light', 'Light'], ['dark', 'Dark'], ['system', 'System']];
 function appearance() {
   let cur = 'light'; try { cur = localStorage.getItem('ionotes.theme') || 'light'; } catch (e) {}
-  const sel = h('select', { onchange: (e) => {
-    try { localStorage.setItem('ionotes.theme', e.target.value); } catch (err) {}
-    if (e.target.value === 'system') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = e.target.value;
-    if (state.me.user) api('/api/auth/settings', { method: 'POST', body: { theme: e.target.value } }).catch(() => {});
-  } }, [['light', 'Light'], ['dark', 'Dark'], ['system', 'Same as the device']].map(([v, l]) => h('option', { value: v, selected: cur === v }, l)));
-  return box('Appearance', null, h('div.row', h('label', 'Theme'), sel));
+  const seg = h('div.eseg', THEMES.map(([k, label]) => h('button' + (cur === k ? '.on' : ''), { type: 'button', onclick: (e) => {
+    try { localStorage.setItem('ionotes.theme', k); } catch (err) {}
+    if (k === 'system') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = k;
+    if (state.me.user) api('/api/auth/settings', { method: 'POST', body: { theme: k } }).catch(() => {});
+    for (const b of seg.children) b.classList.toggle('on', b === e.currentTarget);
+  } }, label)));
+  return box('Display', null, h('div.srow', h('div', h('b', 'Appearance'), h('div.muted.small', `Light (the default) or dark colors, or follow the device's setting. ${state.me.user ? 'Saved with your account, so it follows you to other devices.' : 'Remembered in this browser.'}`)), seg));
 }
 
 async function usersBox() {
@@ -27,7 +32,7 @@ async function usersBox() {
     for (const u of list) {
       const role = h('select', { onchange: async (e) => { try { await api(`/api/users/${u.id}`, { method: 'POST', body: { role: e.target.value } }); toast('Saved'); } catch (err) { fail(err); e.target.value = u.role; } } },
         roles.map((r) => h('option', { value: r, selected: r === u.role }, r)));
-      tbody.append(h('tr', h('td', u.name, u.passwordless ? h('span.muted.small', ' (one click)') : null), h('td', role), h('td.small', u.email || ''),
+      tbody.append(h('tr', h('td', h('span.ucell', h('span.avatar', (u.name || '?')[0].toUpperCase()), h('span', u.name, state.me.user && u.id === state.me.user.id ? h('span.muted', ' (you)') : null, u.passwordless ? h('span.muted.small', ' (one click)') : null))), h('td', role), h('td.small', u.email || ''),
         h('td.small.muted', u.last_login ? fmtDate(u.last_login) : 'never'),
         h('td', h('button.iconbtn', { title: 'Change', onclick: () => editUser(u) }, icon('edit')))));
     }
@@ -35,7 +40,7 @@ async function usersBox() {
   draw(users);
   const add = h('button.pillbtn', { onclick: () => editUser(null) }, icon('add'), 'Add an account');
   return box('Accounts', 'Viewers read and search; editors also change notes (the Mac and iPhone apps sign in as an editor); admins also change these settings. The same roles as iopix.',
-    h('table.grid', h('thead', h('tr', h('th', 'Name'), h('th', 'Role'), h('th', 'Email'), h('th', 'Last sign-in'), h('th', ''))), tbody), h('div.row', add));
+    h('table.grid.utable', h('thead', h('tr', h('th', 'Name'), h('th', 'Role'), h('th', 'Email'), h('th', 'Last sign-in'), h('th', ''))), tbody), h('div.row', add));
 }
 
 async function editUser(u) {
@@ -206,12 +211,13 @@ function logBox() {
 /** A page as iopix lays one out: the title with its icon tile, the tabs under it (the tab is in the address:
  *  #/settings/users), then the tab's boxes. */
 let again = () => {};
-function pageTitle(text, ic, hue) { return h('h1.ptitle', h('span.pic', { style: `--hue:${hue}` }, icon(ic)), text); }
+function pageTitle(text, ic, hue, sub = '') { return h('h1.ptitle', h('span.pic', { style: `--hue:${hue}` }, icon(ic)), text, sub ? h('span.muted', sub) : null); }
 async function tabbedPage(base, title, ic, hue, tabs, tab) {
+  if (!state.version) { try { state.version = (await api('/api/status')).version; } catch (e) { /* the title goes without it */ } }
   const main = $('#main');
   main.textContent = '';
   const cur = tabs.find((t) => t[0] === tab) || tabs[0];
-  const inner = h('div.pagein', pageTitle(title, ic, hue),
+  const inner = h('div.pagein', pageTitle(title, ic, hue, state.version ? `ionotes v${state.version}` : ''),
     tabs.length > 1 ? h('div.stabs', { role: 'tablist' }, tabs.map(([k, label]) => h('a.pillbtn' + (k === cur[0] ? '.on' : ''), { href: `#/${base}/${k}`, role: 'tab', 'aria-selected': String(k === cur[0]) }, label))) : null);
   main.append(h('div.page', inner));
   again = () => tabbedPage(base, title, ic, hue, tabs, cur[0]);
