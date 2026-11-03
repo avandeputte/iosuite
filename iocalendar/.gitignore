@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.venv/
+data/
+iocalendar.env
+.pytest_cache/
+*.egg-info/
