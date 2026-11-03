@@ -3,9 +3,10 @@
 Clients authenticate with the web session cookie (the suite's, shared by every io app on the domain), HTTP Basic or
 `Authorization: Bearer <app password>`, as in the other io apps."""
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import Response
 from fastapi.concurrency import run_in_threadpool
 
-from app import APP_VERSION, apps, bookmarks, config, db, updates, users, weather
+from app import APP_VERSION, apps, bookmarks, config, db, updates, users, weather, widgets
 
 router = APIRouter()
 
@@ -204,6 +205,31 @@ async def import_bookmarks(request: Request):
     editor(request)
     b = await request.json()
     return _bm(bookmarks.import_yaml, b.get("yaml") or "", bool(b.get("replace")))
+
+# ------------------------------------------------------------------ what the tiles show (app/widgets.py)
+
+@router.get("/api/widgets/{key}")
+def widget(key: str, request: Request, tz: str = ""):
+    """A glimpse of one app for its tile, asked of the app with the viewer's own sign-in. tz: the viewer's time zone
+    (IANA, e.g. Europe/Brussels), for what "today" is. 404 for an app without one; 401/403 when the app refuses this
+    account; 502 when it does not answer. The page leaves the tile as it is on any of these."""
+    me(request)
+    try:
+        return widgets.get(request, key, tz)
+    except widgets.Unavailable as e:
+        raise HTTPException(e.status, str(e))
+
+
+@router.get("/api/widgets/iopix/thumb/{photo_id}")
+def widget_thumb(photo_id: int, request: Request):
+    """An ioPix thumbnail (square, cropped around its subject), passed through: the page shows images from here only."""
+    me(request)
+    try:
+        body, ctype = widgets.iopix_thumb(request, photo_id)
+    except widgets.Unavailable as e:
+        raise HTTPException(e.status, str(e))
+    return Response(body, media_type=ctype if ctype.startswith("image/") else "image/jpeg",
+                    headers={"Cache-Control": "private, max-age=86400"})
 
 
 # ------------------------------------------------------------------ the server: version, updates

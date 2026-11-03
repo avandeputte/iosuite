@@ -15,6 +15,12 @@ what the app will show on the start page later (today's events, the newest photo
   environment (`IOPIX_URL` and friends), from **Settings › Apps** (admins), or, failing both, from the host the page was
   opened on with the app's usual port (the one-box install): `http://<this host>:8600` for ioPix, `47800` ioHealth,
   `8620` ioCalendar, `8610` ioContacts and ioNotes. An app can be taken off the page in Settings.
+- **A glimpse of each app on its tile**: ioPix shows photos taken on this day in earlier years (one per year, "3 years
+  ago"), or a few picked at random (Rediscover) on a day without any; ioCalendar the rest of today (else the next event
+  in the coming 60 days), in each calendar's colour; ioHealth today's steps and the move, exercise and stand rings. The
+  server asks each app over its own API with the viewer's sign-in (the suite's session cookie, or the Basic / bearer
+  credentials they came with), so everyone sees only what that app shows them; ioPix's thumbnails come through the
+  start page too. An app that is down, or not open to that account, leaves its tile as it was. Nothing is kept.
 - **The weather**, from AccuWeather: the conditions now and the five days ahead, at the top of the page. Settings ›
   Weather (admins) takes a free API key from developer.accuweather.com and finds the place by its name. The server
   keeps a copy and asks AccuWeather at most every 45 minutes (conditions) and 6 hours (forecast), and only while
@@ -123,7 +129,8 @@ python -m pytest tests     # on a test MariaDB of its own: a Docker container it
 
 Covered: status and sign-in, the tiles and where they point (this host, the forwarded host behind a proxy, Settings,
 the environment), hiding an app, the weather (AccuWeather mocked: set-up, the place search, the server's copy and its
-age, a stale reading when AccuWeather is down), the bookmarks (groups, links, order, moves, the homepage import) and
+age, a stale reading when AccuWeather is down), the tiles' glimpses (the apps' answers mocked: On this day and
+Rediscover, the rest of today and what's next, steps and rings, an app that refuses or is down), the bookmarks (groups, links, order, moves, the homepage import) and
 what a viewer may not change. CI runs them against MariaDB.
 
 ## Layout
@@ -132,6 +139,7 @@ what a viewer may not change. CI runs them against MariaDB.
 app/main.py        the application: start-up (tables, first admin, the update check), who is asking, routes
 app/api.py         the REST API: status, the apps and their settings, the server (version, updates)
 app/apps.py        the catalogue of the suite's apps and where each one is (environment, Settings, this host)
+app/widgets.py     what the tiles show: ioPix, ioCalendar and ioHealth asked over their APIs with the viewer's sign-in
 app/weather.py     AccuWeather: the settings, the place search, the cached conditions and forecast
 app/bookmarks.py   the bookmark groups and links, and the homepage bookmarks.yaml import
 app/auth.py        the shared accounts (iothing-auth), as ioSuite uses them
@@ -149,10 +157,11 @@ proxmox/           the Proxmox VE scripts (community-scripts layout)
 
 ### Growing the page
 
-A tile is drawn from `/api/apps` (`app/apps.py`, `showHome` in `static/app.js`) and keeps an empty `.more` block under
-its name. Dynamic content is meant to come in beside the catalogue: a module per app that asks the app over its API
-(with the suite's session or an app password), a field per tile in `/api/apps`, and the block filled from it; what the
-page needs to keep goes in new tables in `app/db.py`, migrated at start as in the other io apps.
+A tile is drawn from `/api/apps` (`app/apps.py`, `showHome` in `static/app.js`) and keeps a `.more` block under its
+name, filled from `GET /api/widgets/<app>?tz=<IANA zone>` (`app/widgets.py`, `drawWidgets` in `static/app.js`). To give
+another app a glimpse: a function in `app/widgets.py` that asks the app with `fetch()` (the viewer's credentials go
+along) and returns what the tile needs, and a drawing function in `WIDGETS` in `static/app.js`. Images go through the
+start page (its Content-Security-Policy allows only its own origin), as `/api/widgets/iopix/thumb/<id>` does.
 
 ## License
 

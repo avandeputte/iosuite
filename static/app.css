@@ -10,6 +10,7 @@
   --accent: #3b4a8c; --accent-bg: #e8ebf7; --shadow: 0 2px 10px rgba(0,0,0,.18);
   --mix: 14%;
   --topbar: 60px; --app-lift: 0%;  /* how much white goes into an app's own colour (its name on a tile) in the dark theme */
+  --ring-move: #f2295b; --ring-exercise: #7ed321; --ring-stand: #18c8d6;
   color-scheme: light;
 }
 :root[data-theme="dark"] { --warn: #fcad70; --danger: #f28b82; --ok: #81c995; --star: #fdd663; --bg: #17181b; --bg2: #24262b; --bg3: #2f3237;
@@ -69,7 +70,7 @@ input, select, textarea { font: inherit; color: inherit; }
 .pagehead h1 { font-size: var(--fs-xxl); font-weight: 500; margin: 0; }
 
 /* ---- the start page: a tile per app. Each tile has room under its name for what the app will show later (today's
-   events, the newest photos…): the `.more` block, empty for now. */
+   events, the newest photos…): the `.more` block, filled by drawWidgets. */
 .top { display: flex; gap: 24px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; margin: 8px 0 24px; }
 .hello { min-width: 0; }
 .hello h1 { font-size: 28px; font-weight: 500; margin: 0 0 4px; }
@@ -84,6 +85,24 @@ input, select, textarea { font: inherit; color: inherit; }
 .app .tag { color: var(--fg2); font-size: var(--fs-m); margin-top: -6px; }
 .app .more { width: 100%; min-height: 0; }
 .app .more:empty { display: none; }
+/* what a tile shows (drawWidgets): left-aligned under the name, small */
+.wg { text-align: left; border-top: 1px solid var(--line); padding-top: 10px; margin-top: 2px; font-size: var(--fs-m); display: flex; flex-direction: column; gap: 6px; }
+.wghead { display: flex; justify-content: space-between; gap: 8px; font-size: var(--fs-s); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--fg2); }
+.wghead .muted { font-weight: 400; text-transform: none; letter-spacing: 0; }
+.wgpix { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; }
+.wgph { position: relative; aspect-ratio: 1; border-radius: var(--r-s); overflow: hidden; background: var(--bg2); }
+.wgph img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.wgph span { position: absolute; left: 0; right: 0; bottom: 0; padding: 10px 6px 4px; font-size: var(--fs-xs); color: #fff; background: linear-gradient(transparent, rgba(0,0,0,.6)); }
+.wgev, .wgring { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.wg .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.wgwhen { flex: none; font-size: var(--fs-s); }
+.wgtitle { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.wghealth { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.wgrings { width: 58px; height: 58px; flex: none; }
+.wgsteps { font-size: var(--fs-l); margin-bottom: 2px; white-space: nowrap; }
+.wgring { font-size: var(--fs-s); white-space: nowrap; }
+.wgring .muted { margin-left: auto; }
+.wghealth > div { flex: 1 1 92px; min-width: 0; }  /* beside the rings, or under them on a narrow tile */
 .empty { padding: 48px 24px; text-align: center; color: var(--fg2); }
 
 /* ---- the weather (AccuWeather): now on the left, the days ahead on the right */
