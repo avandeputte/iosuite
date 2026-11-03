@@ -51,8 +51,11 @@ async def api_settings_set(request: Request):
     body = await json_body(request)
     for k, v in body.items():
         if k in SWITCHES:
-            if k == "require_login" and v and not users.any_users():
-                raise HTTPException(400, "Create an account first, or nobody could sign in")
+            if k == "require_login":
+                if v and not users.any_users():
+                    raise HTTPException(400, "Create an account first, or nobody could sign in")
+                users.set_require_login(bool(v))  # in the auth database, per app
+                continue
             db.set_setting(k, "1" if v else "0")
         elif k in TEXTS:
             db.set_setting(k, str(v or "").strip()[:40])

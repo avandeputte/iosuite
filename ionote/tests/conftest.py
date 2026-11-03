@@ -19,10 +19,12 @@ if os.environ.get("IONOTES_TEST_DB") == "mysql":
                       DB_USER=os.environ.get("IONOTES_TEST_DB_USER", "notes"), DB_PASSWORD=os.environ.get("IONOTES_TEST_DB_PASSWORD", "notes"))
 else:
     os.environ["DB_TYPE"] = "sqlite"
+# the shared accounts (iothing-auth) in a database of their own on the auth server, never the suite's `auth`
+os.environ["IOTHING_AUTH_DB_NAME"] = os.environ.get("IOTHING_TEST_AUTH_DB", "auth_test_ionotes")
 
 from app import db, users, proxyauth  # noqa: E402
 
-TABLES = ["notes", "note_images", "folders", "tag_colors", "change_log", "change_counter", "user_accounts", "app_settings"]
+TABLES = ["notes", "note_images", "folders", "tag_colors", "change_log", "change_counter", "app_settings"]
 
 
 @pytest.fixture(scope="session")
@@ -38,10 +40,14 @@ def clean():
         for t in TABLES:
             con.execute(f"DELETE FROM {t}")
         con.commit()
+    from iothing_auth import db as authdb
+    users.init()
+    authdb.ex("DELETE FROM users")
+    authdb.ex("ALTER TABLE users AUTO_INCREMENT = 1")  # the tests count on the first account being #1
+    authdb.ex("DELETE FROM settings")
     users.invalidate()
     users._attempts.clear()
     proxyauth.forget_identities()
-    proxyauth._opts["at"] = 0.0
     yield
 
 

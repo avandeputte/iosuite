@@ -7,16 +7,14 @@ required at all, and refuses cross-site writes. The same scheme as iopix.
 import json
 import logging
 import logging.handlers
-import time
 from contextlib import asynccontextmanager
-from urllib.parse import urlsplit
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from starlette.concurrency import run_in_threadpool
 
 from app import config, db, mcp, proxyauth, updates, users
+from app.auth import auth as auth_shared
 
 proxyauth.remember_peer()  # before uvicorn's forwarded-header rewrite runs: proxy sign-in trusts the real peer
 from app.routes import auth, notes as notes_routes, settings, users as users_routes  # noqa: E402
@@ -81,62 +79,23 @@ def _mcp_token_ok(request: Request) -> bool:
     return auth_h.lower().startswith("bearer ") and updates.token_ok(auth_h[7:].strip())
 
 
-def _no_access(request: Request, ident: str):
-    msg = f"{ident} has no account on these notes. Ask their owner for access."
-    if request.url.path.startswith("/api/"):
-        return JSONResponse({"detail": msg, "noAccess": True}, status_code=403)
-    from html import escape
-    out = "/cdn-cgi/access/logout" if proxyauth.external(request.headers, proxyauth.peer_of(request)) else None
-    return HTMLResponse(f"""<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>No access</title><style>body{{font:16px system-ui,sans-serif;max-width:520px;margin:15vh auto;padding:0 16px;color:#222;background:#fff}}
-@media (prefers-color-scheme:dark){{body{{color:#eee;background:#111}}a{{color:#78d9ec}}}}</style>
-<h1>No access</h1><p>{escape(msg)}</p>{f'<p><a href="{out}">Sign in with another account</a></p>' if out else ''}""", status_code=403)
-
-
-@app.middleware("http")
-async def _auth_guard(request: Request, call_next):
-    """Who is asking (session cookie or the proxy's identity), whether sign-in is required at all, and the
-    cross-site check on writes. What each route needs beyond that is declared on the route (app/access.py)."""
-    session = request.cookies.get(users.COOKIE)
-    user = (await run_in_threadpool(users.user_from_token, session)) if session else None
-    cookie_uid = user["id"] if user else None
-    request.state.via_proxy = False
-    if "cf-access-jwt-assertion" in request.headers and time.time() - proxyauth.seen.get("at", 0) > 60:
-        proxyauth.note(request.headers, proxyauth.peer_of(request))
-    if proxyauth.mode() != "off":
-        pu = await run_in_threadpool(proxyauth.user, request)
-        if pu:
-            user, request.state.via_proxy = pu, True
-        elif getattr(request.state, "proxy_ident", None) and proxyauth.deny_unknown() and not request.url.path.startswith("/mcp"):
-            return _no_access(request, request.state.proxy_ident)
-    if user and not request.state.via_proxy and user.get("passwordless") and proxyauth.external(request.headers, proxyauth.peer_of(request)):
-        user = None  # a passwordless account's session (begun on the LAN) does not work from outside
-    request.state.user = user
+def _gate(request: Request):
+    """Once the user is known (app/auth.py's middleware): the MCP endpoint's own gates (the switch; with sign-in
+    required, the admin token on every request)."""
     path = request.url.path
     if path.startswith("/mcp"):
-        if not await run_in_threadpool(mcp_enabled):
+        if not mcp_enabled():
             return JSONResponse({"detail": "The MCP server is switched off (Settings › MCP server)."}, status_code=404)
         mcp.token_given.set(_mcp_token_ok(request))
-    if user is None and await run_in_threadpool(users.require_login):
-        if path.startswith("/mcp"):
-            if not _mcp_token_ok(request):
-                return JSONResponse({"detail": "Sign-in is required; MCP clients send the admin token as 'Authorization: Bearer <token>'"}, status_code=401)
-        elif not _open_to_visitors(path):
-            return JSONResponse({"detail": "Sign in to use ionotes."}, status_code=401)
-    if request.method not in ("GET", "HEAD", "OPTIONS"):
-        # a page on another site cannot drive this one with the browser's cookies (the apps send no Origin)
-        origin, site = request.headers.get("origin"), request.headers.get("sec-fetch-site")
-        if site == "cross-site" or (origin and (origin == "null" or urlsplit(origin).netloc.lower() != (request.headers.get("host") or "").lower())):
-            return JSONResponse({"detail": "Requests from another site are refused"}, status_code=403)
-    response = await call_next(request)
-    if (user and not request.state.via_proxy and cookie_uid == user["id"] and path not in ("/api/auth/logout", "/api/auth/logout_all", "/api/auth/password")
-            and users.renew_due(session) and "set-cookie" not in response.headers):
-        users.set_session(response, user["id"], request.cookies.get(users.VIA_COOKIE) or "password", users.over_https(request))
-    if request.state.via_proxy and user and cookie_uid != user["id"] and path != "/api/auth/logout":
-        # signed in at the proxy (Cloudflare Access): a session here too, so the same browser or app stays signed in
-        # on the home network, where requests reach ionotes directly
-        users.set_session(response, user["id"], "cloudflare" if proxyauth.mode() == "cloudflare" else "proxy", users.over_https(request))
-    return response
+        if request.state.user is None and users.require_login() and not _mcp_token_ok(request):
+            return JSONResponse({"detail": "Sign-in is required; MCP clients send the admin token as 'Authorization: Bearer <token>'"}, status_code=401)
+    return None
+
+
+# who is asking (the shared session cookie, the proxy's identity), whether sign-in is required at all, and the
+# cross-site check on writes: iothing-auth's middleware. What each route needs beyond that is declared on the
+# route (app/access.py).
+app.middleware("http")(auth_shared.middleware(is_open=_open_to_visitors, open_prefixes=("/mcp",), before=_gate))
 
 
 @app.middleware("http")

@@ -50,14 +50,6 @@ def test_every_api_route_declares_who_may_call_it(app):
     assert not missing, missing
 
 
-def test_the_account_tables_match_iopix(client):
-    """ionotes keeps users and settings exactly as iopix does, so the two can share them later."""
-    from app import db
-    with db.connect() as con:
-        cols = [d for d in con.execute("SELECT * FROM user_accounts LIMIT 0").cur.description]
-    assert [c[0] for c in cols] == ["id", "name", "hash", "role", "settings", "created", "last_login", "person", "email", "session_gen", "listed"]
-
-
 def test_cloudflare_access_needs_the_team_and_aud_before_any_header_is_believed(client, admin):
     client.post("/api/settings/proxy", json={"AUTH_PROXY": "cloudflare"})
     client.post("/api/auth/logout")

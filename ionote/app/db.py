@@ -39,16 +39,11 @@ except ImportError:  # pragma: no cover
 
 # ---- schema: one definition per table, the SQLite and the MySQL spelling
 TABLES = {
-    # app_settings and user_accounts: the same tables, columns and types as iopix's viewer database, so the two can
-    # later share one set of accounts and settings. `person` (iopix's link to a face) is kept, unused here.
+    # accounts live in the suite's shared auth database (iothing-auth, app/auth.py); the user_accounts table of
+    # ionotes 1.0 is folded into it by `iothing-auth migrate` and renamed user_accounts_migrated
     "app_settings": (
         "CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT)",
         "CREATE TABLE IF NOT EXISTS app_settings (`key` VARCHAR(191) PRIMARY KEY, value MEDIUMTEXT)"),
-    "user_accounts": (
-        "CREATE TABLE IF NOT EXISTS user_accounts (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL COLLATE NOCASE, hash TEXT NOT NULL, "
-        "role TEXT NOT NULL, settings TEXT NOT NULL DEFAULT '{}', created INTEGER, last_login INTEGER, person INTEGER, email TEXT, session_gen INTEGER DEFAULT 0, listed INTEGER NOT NULL DEFAULT 1)",
-        "CREATE TABLE IF NOT EXISTS user_accounts (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(191) NOT NULL UNIQUE, hash TEXT NOT NULL, "
-        "role VARCHAR(32) NOT NULL, settings MEDIUMTEXT NOT NULL DEFAULT ('{}'), created BIGINT, last_login BIGINT, person INT, email VARCHAR(191), session_gen INT DEFAULT 0, listed INT NOT NULL DEFAULT 1)"),
     # one row per change: its id is the rev stamped on what changed
     "change_counter": (
         "CREATE TABLE IF NOT EXISTS change_counter (rev INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER)",

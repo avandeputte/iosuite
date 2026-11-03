@@ -82,9 +82,15 @@ checked for syntax in CI and drive the tested `setup.sh`; they have not been run
 
 ## Users and permissions
 
-The same model as iopix, down to the database tables (`user_accounts`, `app_settings`), so the two can later share
-one set of accounts. Out of the box ionotes is open to anyone who can reach it; `setup.sh` (or `ADMIN_USER` /
-`ADMIN_PASSWORD`, or the person icon in the web app) creates the admin. Once an account exists:
+Accounts are the **ioThing suite's shared accounts** (the `iothing-auth` library: a MariaDB database shared with
+iopix and ioContacts), so one name, password and session serve every app, and someone signed in at
+`photo.example.com` is signed in at `notes.example.com` too when the apps share a domain (`IOTHING_COOKIE_DOMAIN`).
+What is ionotes' own is kept per app: the role an account holds here and its settings. A *suite admin* is admin in
+every app. Point ionotes at that database with `IOTHING_AUTH_DB_HOST`, `IOTHING_AUTH_DB_NAME`, `IOTHING_AUTH_DB_USER`
+and `IOTHING_AUTH_DB_PASSWORD` in `ionotes.env` (the tables are created at start; `iothing-auth migrate --ionotes`
+folds a 1.0 install's `user_accounts` table into it). Out of the box ionotes is open to anyone who can reach it;
+`setup.sh` (or `ADMIN_USER` / `ADMIN_PASSWORD`, or the person icon in the web app) creates the admin. Once an
+account exists:
 
 | Who | Can |
 | --- | --- |
@@ -95,8 +101,8 @@ one set of accounts. Out of the box ionotes is open to anyone who can reach it; 
 | **admin** | plus settings, accounts, export/import, the MCP token, updates and the server log |
 
 **Require sign-in** (Settings › Sign-in) turns the open reading off: visitors get the sign-in screen and nothing else.
-Sessions are signed HttpOnly cookies (secret in `data/secret`) valid for 30 days and renewed while in use; passwords
-are scrypt-hashed; wrong passwords cost a growing wait. **Read-only** (Settings, or `READ_ONLY=1`) refuses every
+Sessions are random tokens in an HttpOnly cookie (`iothing_session`, shared by the apps on the domain) valid for
+30 days and renewed while in use; passwords are scrypt-hashed; wrong passwords cost a growing wait. **Read-only** (Settings, or `READ_ONLY=1`) refuses every
 change, for everyone. Write requests from another site are refused.
 
 ## Reverse proxy, HTTPS and Cloudflare Access
@@ -107,7 +113,9 @@ buffer that path.
 
 When the proxy already makes people sign in, ionotes takes that sign-in, exactly as iopix does: the proxy passes who
 signed in in a header, and ionotes treats that person as signed in when an account exists for them (matched on the
-account's email address, then its name). Settings › Sign-in at the proxy, or in `ionotes.env`:
+account's email address, then its name). Settings › Sign-in at the proxy (saved there, the settings are kept in the
+shared auth database for the whole suite: one Cloudflare Access application covering every app, set up once), or
+in `ionotes.env`, which wins:
 
 | Variable | |
 | --- | --- |
@@ -183,9 +191,11 @@ Settings › Import): records keep their ids, and a newer copy on the server win
 | `DB_TYPE` | `sqlite` | `mysql` for MariaDB/MySQL (setup.sh writes it) |
 | `DB_HOST` / `DB_PORT` / `DB_DATABASE` / `DB_USER` / `DB_PASSWORD` | | the database |
 | `PORT` | `8610` | |
-| `DATA_DIR` | `./data` | the session secret, the log (`ionotes.log`) and settings saved from the web app |
+| `DATA_DIR` | `./data` | the log (`ionotes.log`) and the database settings saved from the web app |
 | `APP_URL` | `http://localhost:8610` | the address ionotes is reached at, for links in MCP answers |
 | `ADMIN_USER` / `ADMIN_PASSWORD` | | the first admin, created on a first start with no accounts |
+| `IOTHING_AUTH_DB_HOST` / `_PORT` / `_NAME` / `_USER` / `_PASSWORD` | `127.0.0.1` / `3306` / `auth` / `auth` / `auth` | the suite's shared account database (MariaDB) |
+| `IOTHING_COOKIE_DOMAIN` | | the domain the session cookie is shared on (e.g. `example.com`); a LAN address outside it gets a cookie of its own |
 | `READ_ONLY` | `0` | nothing can be changed, by anyone |
 | `OCR` | `1` | `0`: the server never reads text in pictures (the apps still do) |
 | `MAX_IMAGE_MB` | `15` | the largest picture a note may carry |
