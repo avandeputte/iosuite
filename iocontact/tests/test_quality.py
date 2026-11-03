@@ -19,9 +19,13 @@ def test_duplicates_scored_with_reasons(client, family_id):
     mk(client, family_id, name={"given": "Bob", "family": "Smith"}, birthday={"month": 5, "day": 1})
     mk(client, family_id, fn="Jonathan Appleseed", emails=[{"value": "jon@apple.example"}])
     mk(client, family_id, fn="Jonathon Appleseed")
-    # spouses sharing the home number: at most "possible"
-    mk(client, family_id, name={"given": "Mary", "family": "Ray"}, phones=[{"value": "+32 9 123 45 67"}])
-    mk(client, family_id, name={"given": "Tom", "family": "Ray"}, phones=[{"value": "09 123 45 67"}])
+    # one household: a last name, an address, the home phone and a family email shared, other first names: not duplicates
+    home = {"addresses": [{"street": "Kerkstraat 1", "city": "Gent", "label": "home"}], "emails": [{"value": "fam@vdp.example"}]}
+    for given in ("Jan", "Jef", "Mary", "Mark", "Anna", "Hanne", "Lies", "Lien", "Elise", "Eline"):
+        mk(client, family_id, name={"given": given, "family": "Vandeputte"}, phones=[{"value": "+32 9 123 45 67" if given < "K" else "09 123 45 67"}], **home)
+    # a father and son with one name
+    mk(client, family_id, name={"given": "Paul", "family": "Maes", "suffix": "Sr."}, phones=[{"value": "+32 3 111 22 33"}])
+    mk(client, family_id, name={"given": "Paul", "family": "Maes", "suffix": "Jr."}, phones=[{"value": "+32 3 111 22 33"}])
     # same name, other birthdays: two people
     mk(client, family_id, fn="Jan Peeters", birthday={"year": 1950, "month": 1, "day": 2})
     mk(client, family_id, fn="Jan Peeters", birthday={"year": 1985, "month": 8, "day": 9})
@@ -29,13 +33,13 @@ def test_duplicates_scored_with_reasons(client, family_id):
     bob = gs[("Bob Smith", "Robert Smith")]
     assert bob["level"] == "very likely" and any("short for" in r for r in bob["pairs"][0]["reasons"])
     assert gs[("Jonathan Appleseed", "Jonathon Appleseed")]["level"] in ("possible", "likely")
-    ray = gs[("Mary Ray", "Tom Ray")]
-    assert ray["level"] == "possible" and any("other first names" in r for r in ray["pairs"][0]["reasons"])
+    assert not any("Vandeputte" in n for key in gs for n in key), list(gs)
+    assert not any("Maes" in n for key in gs for n in key)
     assert ("Jan Peeters", "Jan Peeters") not in gs
     # not duplicates: never offered again
-    ids = [c["id"] for c in ray["contacts"]]
+    ids = [c["id"] for c in bob["contacts"]]
     assert client.post("/api/duplicates/dismiss", json={"ids": ids}).json()["pairs"] == 1
-    assert ("Mary Ray", "Tom Ray") not in {tuple(names(g)) for g in groups(client)}
+    assert ("Bob Smith", "Robert Smith") not in {tuple(names(g)) for g in groups(client)}
 
 
 def test_merge_with_choices_and_undo(client, family_id):

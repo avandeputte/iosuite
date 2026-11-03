@@ -75,7 +75,7 @@ def _load(book_ids: list[int]) -> dict:
     if not book_ids:
         return {}
     marks = ",".join(["%s"] * len(book_ids))
-    rows = db.q(f"SELECT id, book_id, fn, given, family, nickname, maiden, org, gender, bday_year, bday_month, bday_day, "
+    rows = db.q(f"SELECT id, book_id, fn, given, family, suffix, nickname, maiden, org, gender, bday_year, bday_month, bday_day, "
                 f"photo IS NOT NULL AS has_photo, iopix_person_id FROM contacts WHERE deleted = 0 AND book_id IN ({marks})", book_ids)
     cs = {r["id"]: {**r, "emails": set(), "phones": set(), "rel": set()} for r in rows}
     for r in db.q(f"SELECT e.contact_id, lower(e.value) AS v FROM contact_emails e JOIN contacts c ON c.id = e.contact_id "
@@ -90,6 +90,17 @@ def _load(book_ids: list[int]) -> dict:
                   f"WHERE r.related_id IS NOT NULL AND c.book_id IN ({marks})", book_ids):
         if r["contact_id"] in cs:
             cs[r["contact_id"]]["rel"].add(r["related_id"])
+    # an email or number on three or more contacts is a household's (a home phone, a family address): it says nothing
+    # about whether two of them are one person
+    held: dict = {}
+    for c in cs.values():
+        for v in c["emails"]:
+            held[("e", v)] = held.get(("e", v), 0) + 1
+        for v in c["phones"]:
+            held[("p", v)] = held.get(("p", v), 0) + 1
+    for c in cs.values():
+        c["emails"] = {v for v in c["emails"] if held[("e", v)] < 3}
+        c["phones"] = {v for v in c["phones"] if held[("p", v)] < 3}
     for c in cs.values():
         given, family = norm(c["given"]), norm(c["family"])
         if not given and not family:  # only fn
@@ -98,65 +109,96 @@ def _load(book_ids: list[int]) -> dict:
         c["n_given"], c["n_family"], c["n_full"] = given, family, norm(c["fn"])
         c["canon"] = canon_given(given) | canon_given(c.get("nickname") or "")
         c["families"] = {f for f in (family, norm(c.get("maiden"))) if f}
+        c["suffix"] = norm(c.get("suffix")).replace(" ", "")
     return cs
 
 
+def _name_match(a: dict, b: dict) -> tuple[str | None, str]:
+    """How the two names agree: ('exact' | 'nickname' | 'initial' | 'typo', why), or (None, why) when they are other
+    names. People in one household share a last name, an address and often a phone or an email, so only the first
+    name tells them apart: without a first name that fits, two contacts are never offered as duplicates."""
+    ga, gb = a["n_given"], b["n_given"]
+    fa, fb = a["n_family"], b["n_family"]
+    same_family = bool(a["families"] & b["families"]) or (not fa and not fb)
+    if ga and ga == fb and fa == gb:
+        return "exact", "same name (first and last swapped)"
+    if ga and ga == gb and same_family:
+        return "exact", "same name"
+    if not ga or not gb:
+        return (None, "") if ga or gb else ("unnamed", "")
+    if same_family and a["canon"] & b["canon"]:
+        short, long = sorted([ga, gb], key=len)
+        return "nickname", f"{short.title()} can be short for {long.title()}"
+    if same_family and ga[0] == gb[0] and (len(ga.rstrip(".")) == 1 or len(gb.rstrip(".")) == 1):
+        return "initial", "same last name, and an initial that fits"
+    # a misspelling: long enough names that differ by a letter or two (Jonathan / Jonathon, Smith / Smyth), never
+    # two short names (Mary / Mark, Ann / Anna are usually two people)
+    if min(len(ga), len(gb)) >= 5 and difflib.SequenceMatcher(None, ga, gb).ratio() >= 0.85 and (same_family or (
+            fa and fb and difflib.SequenceMatcher(None, fa, fb).ratio() >= 0.85)):
+        return "typo", f"very similar names ({a['fn']} / {b['fn']})"
+    if ga == gb and fa and fb and min(len(fa), len(fb)) >= 4 and difflib.SequenceMatcher(None, fa, fb).ratio() >= 0.8:
+        return "typo", f"very similar names ({a['fn']} / {b['fn']})"
+    if ga == gb and fa and fb:
+        return "firstname", "same first name, another last name (married?)"
+    return None, "other first names"
+
+
 def score_pair(a: dict, b: dict) -> tuple[int, list[str]]:
-    """How likely two contacts are one person (0-100) and why."""
+    """How likely two contacts are one person (0-100) and why. The first name has to fit: a shared last name, address,
+    home phone or family email alone never makes two people duplicates."""
     if b["id"] in a["rel"] or a["id"] in b["rel"]:
         return 0, ["related to each other"]
-    s, why, name_signal = 0, [], False
-    em = a["emails"] & b["emails"]
-    if em:
-        s += 45
-        why.append(f"same email {sorted(em)[0]}")
-    ph = a["phones"] & b["phones"]
-    if ph:
-        s += 35
-        why.append("same phone number")
-    same_family = bool(a["families"] & b["families"])
-    swapped = a["n_given"] and a["n_given"] == b["n_family"] and a["n_family"] == b["n_given"]
-    if a["n_full"] and (a["n_full"] == b["n_full"] or swapped or (a["n_given"] == b["n_given"] and a["n_family"] == b["n_family"] and a["n_family"])):
+    match, why_name = _name_match(a, b)
+    if match is None:
+        return 0, [why_name] if why_name else []
+    s, why = 0, []
+    if match == "exact":
         s += 55
-        why.append("same name" + (" (first and last swapped)" if swapped else ""))
-        name_signal = True
-    elif same_family and a["canon"] & b["canon"] and a["n_given"] != b["n_given"]:
+    elif match == "nickname":
         s += 45
-        short, long = sorted([a["n_given"], b["n_given"]], key=len)
-        why.append(f"{short.title()} can be short for {long.title()}")
-        name_signal = True
-    elif same_family and a["n_given"] and b["n_given"] and a["n_given"][0] == b["n_given"][0] and (len(a["n_given"]) <= 2 or len(b["n_given"]) <= 2):
-        s += 30
-        why.append("same last name, and an initial that fits")
-        name_signal = True
-    elif a["n_full"] and b["n_full"] and min(len(a["n_full"]), len(b["n_full"])) >= 5:
-        r = difflib.SequenceMatcher(None, a["n_full"], b["n_full"]).ratio()
-        if r >= 0.86:
-            s += 35
-            why.append(f"very similar names ({b['fn']} / {a['fn']})")
-            name_signal = True
-        elif same_family and r >= 0.75:
-            s += 15
-            why.append("same last name, similar first names")
-            name_signal = True
+    elif match == "firstname":
+        s += 20
+    elif match == "initial":
+        s += 25
+    elif match == "typo":
+        s += 35
+    if why_name:
+        why.append(why_name)
+    if a["suffix"] != b["suffix"] and (a["suffix"] or b["suffix"]):
+        s -= 50  # John Smith Sr. and John Smith Jr.
+        why.append("different suffixes (Sr./Jr.)")
+    em = a["emails"] & b["emails"]
+    ph = a["phones"] & b["phones"]
+    # in a household these are shared, so they confirm a name that fits but count for little on their own
+    if em:
+        s += 25
+        why.append(f"same email {sorted(em)[0]}")
+    if ph:
+        s += 15
+        why.append("same phone number")
+    if match == "unnamed" and not em and not ph:
+        return 0, []
+    if match == "unnamed":
+        s += 20  # two contacts with no names at all (an email or a number only) that share it
     if a["bday_month"] and b["bday_month"]:
         same_day = (a["bday_month"], a["bday_day"]) == (b["bday_month"], b["bday_day"])
         years_ok = not (a["bday_year"] and b["bday_year"] and a["bday_year"] != b["bday_year"])
         if same_day and years_ok:
-            s += 35 if name_signal else 20 if em or ph else 0
+            s += 35
             why.append("same birthday")
         else:
-            s -= 40
+            s -= 60
             why.append("different birthdays")
-    if a["org"] and b["org"] and norm(a["org"]) == norm(b["org"]) and (name_signal or em or ph):
+    if a["org"] and b["org"] and norm(a["org"]) == norm(b["org"]):
         s += 10
         why.append("same company")
     if a["gender"] and b["gender"] and a["gender"] != b["gender"] and "UO" not in a["gender"] + b["gender"]:
-        s -= 30
+        s -= 50
         why.append("different genders")
-    if not name_signal and (em or ph) and a["n_given"] and b["n_given"] and not (a["canon"] & b["canon"]):
-        s = min(s, 40)  # a shared home number or family email, with other first names: probably two people
-        why.append("other first names (a shared home number or address?)")
+    if match == "firstname" and not (em or "same birthday" in why):
+        return 0, []
+    if match in ("initial", "typo") and not (em or "same birthday" in why):
+        s = min(s, 40)  # only a similar name (and maybe the household's phone): worth a look, no more
     return max(0, min(100, s)), why
 
 

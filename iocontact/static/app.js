@@ -635,7 +635,7 @@ async function showMaint(page, r) {
 
 async function maintDups(el) {
   const r = await api('/api/duplicates');
-  el.replaceChildren(h('p', { class: 'muted' }, 'Contacts that are probably the same person: the same email or phone, the same or a similar name, a nickname (Bob for Robert), the same birthday or company. Other birthdays or genders count against. Merging keeps everything (you choose where they disagree) and can be undone.'));
+  el.replaceChildren(h('p', { class: 'muted' }, 'Contacts that are probably the same person: the same email or phone, the same or a similar name, a nickname (Bob for Robert), the same birthday or company. Other birthdays, genders or a Sr./Jr. count against. The first name has to fit: people who only share a last name, an address, a home phone or a family email are never offered. Merging keeps everything (you choose where they disagree) and can be undone.'));
   if (!r.groups.length) { el.append(h('div', { class: 'empty' }, icon('check'), h('p', null, 'No duplicates found.'))); return; }
   for (const g of r.groups) {
     const reasons = g.pairs.length === 1 ? g.pairs[0].reasons : g.pairs.map((p) => `${g.contacts.find((c) => c.id === p.a).fn} / ${g.contacts.find((c) => c.id === p.b).fn}: ${p.reasons.join(', ')}`);

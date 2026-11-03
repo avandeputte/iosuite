@@ -76,8 +76,9 @@ The tools: `overview`, `list_address_books`, `search_contacts`, `get_contact`, `
 - **Duplicates.** Contacts that are probably one person, scored, with the reasons: the same email or phone (written with
   or without the country code), the same name (accents, case and swapped first and last names do not matter), a
   nickname (Bob for Robert, Liesbeth for Elisabeth…), a similar spelling, the same birthday or company. Other
-  birthdays, other genders or a relation between the two count against; a shared home number with other first names
-  stays "possible". **Compare and merge** shows them side by side: which to keep, and for every field where they
+  birthdays, other genders, a Sr./Jr. or a relation between the two count against. The first name has to fit: people
+  in one household who share a last name, an address, a home phone or a family email are never offered as
+  duplicates, and an email or number on three or more contacts is treated as the household's. **Compare and merge** shows them side by side: which to keep, and for every field where they
   disagree (name, birthday, company, photo…) which value; phones, emails, addresses, profiles, labels and relations
   are combined, each with a box to leave one out. **Not duplicates** keeps two people apart for good.
 - **Data quality.** Contacts without a name, email addresses and phone numbers that do not look right, impossible
