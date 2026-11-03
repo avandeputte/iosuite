@@ -205,6 +205,16 @@ table.t th { font-size: var(--fs-s); color: var(--fg2); font-weight: 600; }
 .signin { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: var(--bg2); z-index: 80; padding: 16px; }
 .signin .dialog { max-width: 380px; }
 .signin .brand { width: auto; justify-content: center; margin-bottom: 12px; }
+.signin .dialog h2 { text-align: center; }
+.signin-form { display: grid; gap: 10px; margin-top: 10px; }
+.signin [hidden] { display: none !important; }
+.accounts { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; margin: 6px 0 4px; }
+.account { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 6px; border-radius: var(--r-m); background: var(--bg2); color: var(--fg); cursor: pointer; border: 0; font: inherit; }
+.account:hover, .account.on { background: var(--bg3); }
+.account .nm { font-size: var(--fs-m); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.av.big { width: 48px; height: 48px; font-size: 18px; position: relative; overflow: hidden; }
+.av.big img { position: absolute; inset: 0; }
+.av.other { background: var(--bg3); color: var(--fg2); }
 .err { color: var(--danger); font-size: var(--fs-m); min-height: 18px; margin-top: 6px; }
 .back { display: none; }
 

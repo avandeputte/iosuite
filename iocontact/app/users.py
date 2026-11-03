@@ -38,6 +38,21 @@ def all_users() -> list[dict]:
     return sorted((row_of(u) for u in shared.list_users(APP)), key=lambda u: u["name"].lower())
 
 
+def passwordless(u: dict | None) -> bool:
+    return bool(u) and not u.get("pw_hash")
+
+
+def accounts() -> list[dict]:
+    """The sign-in picker, as in iopix: the listed accounts with a role here, whether a password is asked for, and
+    whether there is a face to show (the photo of the account's "me" contact)."""
+    out = []
+    for a in shared.accounts(APP):
+        me_id = shared.get_value(a["id"], APP, "me_contact_id")
+        out.append({"id": a["id"], "name": a["name"], "displayName": a["displayName"] or a["name"],
+                    "passwordless": a["passwordless"], "photo": bool(me_id)})
+    return out
+
+
 def any_users() -> bool:
     return shared.any_users()
 
@@ -66,8 +81,8 @@ def update(uid: int, **fields) -> dict:
         kw["email"] = fields["email"] or ""
     if fields.get("role") is not None:
         kw["role"], kw["app"] = fields["role"], APP
-    if fields.get("password"):
-        kw["password"] = fields["password"]
+    if fields.get("password") is not None:
+        kw["password"] = fields["password"]  # "" removes it: one-click sign-in, viewers only
     if kw:
         shared.update(uid, **kw)
     return get(uid)

@@ -130,3 +130,32 @@ def test_apple_profile(client):
     assert "Alex iPhone (profile)" in labels
     ask = plistlib.loads(client.post("/api/apple-profile", data={"password": "ask", "calendar": "none"}, auth=("alex", dav["CardDAVPassword"])).content)
     assert len(ask["PayloadContent"]) == 1 and "CardDAVPassword" not in ask["PayloadContent"][0]
+
+
+def test_account_picker_and_one_click(client, family_id):
+    """Like ioPix: the sign-in screen lists the accounts; a viewer without a password signs in with one click,
+    but never from outside (through Cloudflare)."""
+    client.post("/api/users", json={"name": "gran", "password": "granpass1", "role": "viewer"})
+    client.post("/api/users", json={"name": "ed", "password": "edpass123", "role": "editor"})
+    gran = next(u for u in client.get("/api/users").json()["items"] if u["name"] == "gran")
+    ed = next(u for u in client.get("/api/users").json()["items"] if u["name"] == "ed")
+    assert client.patch(f"/api/users/{ed['id']}", json={"password": ""}).status_code == 400  # only viewers
+    assert client.patch(f"/api/users/{gran['id']}", json={"password": ""}).status_code == 200
+    from fastapi.testclient import TestClient
+    from app.main import app
+    with TestClient(app) as anon:
+        acc = {a["name"]: a for a in anon.get("/api/auth/accounts").json()["accounts"]}
+        assert acc["gran"]["passwordless"] and not acc["ed"]["passwordless"] and "pw_hash" not in acc["gran"]
+        out = {"cf-connecting-ip": "1.2.3.4"}
+        assert "gran" not in [a["name"] for a in anon.get("/api/auth/accounts", headers=out).json()["accounts"]]
+        assert anon.post("/api/auth/login", json={"name": "ed"}).status_code == 401
+        assert anon.post("/api/auth/login", json={"name": "gran"}, headers=out).status_code == 403
+        assert anon.get("/api/auth/accounts/%d/photo" % gran["id"]).status_code == 404
+        assert anon.post("/api/auth/login", json={"name": "gran"}).status_code == 200
+        assert anon.get("/api/status").json()["user"]["name"] == "gran"
+        assert anon.get("/api/status", headers=out).json()["user"] is None  # the session does not work from outside
+    # an empty password never works for HTTP Basic (CardDAV, LDAP)
+    import base64
+    with TestClient(app) as dav:
+        r = dav.get("/api/books", headers={"Authorization": "Basic " + base64.b64encode(b"gran:").decode()})
+        assert r.status_code == 401

@@ -962,6 +962,7 @@ async function setUsers(el) {
         rs.onchange = async () => { try { await api(`/api/users/${u.id}`, { method: 'PATCH', json: { role: rs.value } }); toast('Saved'); } catch (e) { fail(e); onRoute(); } };
         return h('tr', null, h('td', null, u.name), h('td', null, u.displayName), h('td', null, rs), h('td', { style: { whiteSpace: 'nowrap' } },
           h('button', { class: 'pillbtn noic', onclick: async () => { const p = h('input', { class: 't', type: 'password' }); const v = await dialog(`New password for ${u.name}`, p, [{ label: 'Cancel', value: null }, { label: 'Set', value: () => p.value, primary: true }]); if (v) { try { await api(`/api/users/${u.id}`, { method: 'PATCH', json: { password: v } }); toast('Password set'); } catch (e) { fail(e); } } } }, 'Password'), ' ',
+          u.role === 'viewer' && u.hasPassword ? [h('button', { class: 'pillbtn noic', title: 'One-click sign-in from the account picker', onclick: async () => { if (await confirmDialog('Remove password', `Remove ${u.name}’s password? Anyone on your home network can then sign in as ${u.name} with one click (from outside, never).`, 'Remove')) { try { await api(`/api/users/${u.id}`, { method: 'PATCH', json: { password: '' } }); toast('Password removed'); onRoute(); } catch (e) { fail(e); } } } }, 'No password'), ' '] : null,
           u.id !== S.user.id ? h('button', { class: 'pillbtn noic danger', onclick: async () => { if (await confirmDialog('Delete account', `Delete ${u.name} and their private address book?`, 'Delete', true)) { await api(`/api/users/${u.id}`, { method: 'DELETE' }); onRoute(); } } }, 'Delete') : null));
       })),
     h('h2', { style: { marginTop: '16px' } }, 'Add someone'), h('div', { class: 'multi' }, name, pw, role,
@@ -1057,20 +1058,45 @@ function updateBanner() {
 }
 
 function showSignIn() {
+  // like ioPix: a tile per account; one click for a passwordless viewer, a password for the others
   if (document.querySelector('.signin')) return;
   const first = !S.status.usersExist;
   const name = h('input', { class: 't', placeholder: 'User name', autocomplete: 'username', autocapitalize: 'none' });
-  const pw = h('input', { class: 't', type: 'password', placeholder: first ? 'Password (8 or more)' : 'Password', autocomplete: first ? 'new-password' : 'current-password', style: 'margin-top:10px' });
+  const pw = h('input', { class: 't', type: 'password', placeholder: first ? 'Password (8 or more)' : 'Password', autocomplete: first ? 'new-password' : 'current-password' });
   const err = h('div', { class: 'err' });
-  const go = async (e) => {
-    e.preventDefault(); err.textContent = '';
-    try { await api(first ? '/api/auth/setup' : '/api/auth/login', { method: 'POST', json: { name: name.value.trim(), password: pw.value } }); location.reload(); } catch (x) { err.textContent = x.message; }
+  const form = h('div', { class: 'signin-form' }, name, pw);
+  const tiles = h('div', { class: 'accounts' });
+  const btn = h('button', { class: 'pillbtn primary noic', type: 'submit' }, first ? 'Create the admin account' : 'Sign in');
+  const login = async (n, p) => {
+    err.textContent = '';
+    try { await api(first ? '/api/auth/setup' : '/api/auth/login', { method: 'POST', json: { name: n, password: p } }); location.reload(); } catch (x) { err.textContent = x.message; }
   };
+  const go = (e) => { e.preventDefault(); login(name.value.trim(), pw.value); };
   document.body.append(h('div', { class: 'signin' }, h('form', { class: 'dialog', onsubmit: go },
     h('div', { class: 'brand' }, h('img', { src: 'static/icons/mark.svg', alt: '', class: 'brand-mark' }), h('span', { class: 'brand-name', style: { display: 'inline' } }, h('span', { class: 'io' }, 'io'), h('span', { class: 'nm' }, 'Contacts'))),
-    first ? h('p', { class: 'muted' }, 'Welcome. Make the first account: it is the admin, who adds the rest of the family in Settings.') : null,
-    name, pw, err, h('div', { class: 'btns' }, h('button', { class: 'pillbtn primary noic', type: 'submit' }, first ? 'Create the admin account' : 'Sign in')))));
-  name.focus();
+    first ? h('p', { class: 'muted' }, 'Welcome. Make the first account: it is the admin, who adds the rest of the family in Settings.') : h('h2', null, 'Sign in'),
+    tiles, form, err, h('div', { class: 'btns' }, btn))));
+  if (first) { name.focus(); return; }
+  const pick = (t) => tiles.querySelectorAll('.account').forEach((x) => x.classList.toggle('on', x === t));
+  api('/api/auth/accounts').then((d) => {
+    if (!d.accounts.length) { name.focus(); return; }
+    form.hidden = true; btn.hidden = true;
+    const face = (a) => {
+      const el = h('span', { class: 'av big', style: { '--h': hue(a.displayName || a.name) } }, initials(a.displayName || a.name));
+      if (a.photo) { const img = h('img', { src: `/api/auth/accounts/${a.id}/photo`, alt: '', onerror: () => img.remove() }); el.append(img); }
+      return el;
+    };
+    tiles.append(...d.accounts.map((a) => {
+      const t = h('button', { type: 'button', class: 'account', title: a.passwordless ? `Sign in as ${a.name}` : `${a.name} (password)`, onclick: () => {
+        pick(t);
+        if (a.passwordless) { login(a.name, ''); return; }
+        name.value = a.name; name.hidden = true; form.hidden = false; btn.hidden = false; pw.value = ''; pw.focus();
+      } }, face(a), h('span', { class: 'nm' }, a.displayName || a.name), a.passwordless ? null : h('span', { class: 'muted small' }, 'password'));
+      return t;
+    }), h('button', { type: 'button', class: 'account', title: 'Type a user name', onclick: (e) => {
+      pick(e.currentTarget); name.value = ''; name.hidden = false; form.hidden = false; btn.hidden = false; name.focus();
+    } }, h('span', { class: 'av big other' }, '…'), h('span', { class: 'nm' }, 'Other')));
+  }).catch(() => name.focus());
 }
 
 // ------------------------------------------------------------------ start

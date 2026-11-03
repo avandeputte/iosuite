@@ -61,7 +61,7 @@ async def who(request: Request, call_next):
                                            "'Authorization: Bearer <app password>'. Make one in Settings › Apps and devices."},
                                 status_code=401, headers={"WWW-Authenticate": 'Basic realm="ioContacts", Bearer realm="ioContacts"'})
         mcp.current_user.set(user)  # every tool acts as this account
-    if path.startswith("/api/") and not user and path not in OPEN:
+    if path.startswith("/api/") and not user and path not in OPEN and not path.startswith("/api/auth/accounts"):
         return JSONResponse({"detail": "Sign in first"}, status_code=401,
                             headers={"WWW-Authenticate": 'Basic realm="ioContacts"'} if "authorization" in request.headers else {})
     # a page on another site cannot drive this one with the browser's cookie

@@ -197,10 +197,51 @@ async def setup(request: Request):
     return resp
 
 
+def outside(request: Request) -> bool:
+    """From outside the home network (through Cloudflare, or a public address)? One-click sign-in is not offered then."""
+    from iothing_auth.fastapi import peer_of
+    return auth.proxy.external(request.headers, peer_of(request))
+
+
+@router.get("/api/auth/accounts")
+def accounts(request: Request):
+    """The accounts the sign-in screen shows as tiles (as in iopix). One-click accounts are left out from outside."""
+    out = users.accounts() if users.any_users() else []
+    if outside(request):
+        out = [a for a in out if not a["passwordless"]]
+    return {"accounts": out}
+
+
+@router.get("/api/auth/accounts/{uid}/photo")
+async def account_photo(uid: int):
+    """The face on an account's tile: the photo of the account's "me" contact, or that contact's ioPix face."""
+    u = await run_in_threadpool(users.get, uid)
+    cid = u.get("me_contact_id") if u and u["role"] != "none" else None
+    p = await run_in_threadpool(model.photo, cid) if cid else None
+    if not p and cid:
+        r = await run_in_threadpool(db.one, "SELECT iopix_person_id FROM contacts WHERE id = %s", (cid,))
+        if r and r["iopix_person_id"] and iopix.settings()["url"]:
+            try:
+                p = await run_in_threadpool(iopix.face, r["iopix_person_id"])
+            except Exception:  # noqa: BLE001 - no face, then the initial
+                p = None
+    if not p:
+        raise HTTPException(404)
+    return Response(p[0], media_type=p[1], headers={"Cache-Control": "private, max-age=300"})
+
+
 @router.post("/api/auth/login")
 async def login(request: Request):
     b = await request.json()
-    u = await run_in_threadpool(users.authenticate, (b.get("name") or "").strip(), b.get("password") or "")
+    name, pw = (b.get("name") or "").strip(), b.get("password") or ""
+    if pw:
+        u = await run_in_threadpool(users.authenticate, name, pw)
+    else:  # one click: an account with no password (a viewer), and only from home
+        u = await run_in_threadpool(users.find, name)
+        if u and not users.passwordless(u):
+            u = None
+        if u and outside(request):
+            raise HTTPException(403, "From outside your network, sign in with an account that has a password")
     if not u:
         raise HTTPException(401, "Wrong name or password")
     if u["role"] == "none":
