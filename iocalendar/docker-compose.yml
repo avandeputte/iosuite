@@ -1,0 +1,30 @@
+# ioCalendar with Docker: `docker compose up -d` pulls the published image; `docker compose up -d --build` builds it
+# from this checkout. Works as a stack in Dockge / Portainer. Edit the CHANGE ME spots.
+services:
+  iocalendar:
+    image: ghcr.io/avandeputte/iocalendar:latest
+    build: .
+    container_name: iocalendar
+    restart: unless-stopped
+    ports:
+      - "8620:8620"     # web app, CalDAV (/dav/), REST API (/api/), subscription links (/ics/), MCP (/mcp)
+    environment:
+      TZ: America/New_York
+      TIMEZONE: America/New_York      # the family's time zone, for times written without one
+      DB_HOST: 192.168.1.89           # CHANGE ME: your MariaDB host
+      DB_PORT: "3306"
+      DB_NAME: calendar
+      DB_USER: calendar
+      DB_PASSWORD: calendar           # CHANGE ME
+      # the accounts shared by the io apps (the same database ioPix, ioNotes and ioContacts use)
+      IOTHING_AUTH_DB_HOST: 192.168.1.89   # CHANGE ME
+      IOTHING_AUTH_DB_PORT: "3306"
+      IOTHING_AUTH_DB_NAME: auth
+      IOTHING_AUTH_DB_USER: auth
+      IOTHING_AUTH_DB_PASSWORD: change-me  # CHANGE ME
+      # ADMIN_USER: admin             # a first admin, made on the first start when there is no account yet
+      # ADMIN_PASSWORD: change-me-please
+      # PUBLIC_URL: https://calendar.example.com   # behind a reverse proxy: the links in Settings and the Apple profile
+      # IOTHING_COOKIE_DOMAIN: example.com         # one sign-in for every io app under this domain
+      # AUTH_PROXY: cloudflare        # sign-in at the proxy, as in the other io apps (see README)
+      # IOCONTACTS_URL: http://192.168.1.10:8610   # or Settings › ioContacts

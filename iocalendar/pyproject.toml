@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "iocalendar"
+version = "0.1.0"
+description = "Self-hosted calendars for the family: web app, CalDAV, iCalendar feeds, REST/jCal, MCP"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+  "iothing-auth @ git+https://github.com/avandeputte/iothing-auth.git@v0.2.0",   # the ioThing suite's shared accounts and sessions (pinned: bump to pick up a new one)
+  "fastapi<1",
+  "uvicorn<1",
+  "pymysql<2",
+  "python-multipart<1",
+  "pyjwt[crypto]<3",              # Cloudflare Access tokens (proxy sign-in)
+  "mcp>=2,<3",                    # the MCP server at /mcp
+  "icalendar>=6,<8",              # iCalendar (RFC 5545) reading and writing
+  "recurring-ical-events>=3,<4",  # repeating events: RRULE, RDATE, EXDATE and changed occurrences
+  "python-dateutil>=2.8,<3",
+  "tzdata",                       # time zones on systems without /usr/share/zoneinfo
+]
+
+[project.optional-dependencies]
+test = ["pytest<10", "httpx<1"]
+
+[project.urls]
+Homepage = "https://github.com/avandeputte/iocalendar"
+
+[tool.setuptools.packages.find]
+include = ["app*"]

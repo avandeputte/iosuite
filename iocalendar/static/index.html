@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; base-uri 'self'; form-action 'self'">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>ioCalendar</title>
+<link rel="icon" href="static/icons/mark.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="static/icons/apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#963522">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="stylesheet" href="static/app.css">
+</head>
+<body>
+<header id="topbar">
+  <button id="menubtn" class="iconbtn" title="Show the sidebar" aria-label="Show the sidebar"><span class="ic" data-ic="menu"></span></button>
+  <div id="search">
+    <span class="ic" data-ic="search"></span>
+    <input id="q" type="search" placeholder="Search events, places, people, notes…" autocomplete="off" spellcheck="false" aria-label="Search">
+  </div>
+  <button id="newbtn" class="pillbtn primary" title="New event (n)"><span class="ic" data-ic="add"></span><span>New</span></button>
+  <span id="usermenu"></span>
+</header>
+<nav id="nav"></nav>
+<div id="navscrim" hidden></div>
+<main id="main"></main>
+<div id="toast" hidden role="status" aria-live="polite"></div>
+<script type="module" src="static/app.js"></script>
+</body>
+</html>

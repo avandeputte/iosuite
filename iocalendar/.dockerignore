@@ -1,0 +1,6 @@
+.git
+.venv
+tests
+proxmox
+iocalendar.env
+__pycache__
