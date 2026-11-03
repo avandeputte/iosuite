@@ -1,12 +1,38 @@
 /** Start-up and routing: #/notes (the list and the open note), #/note/<id>, #/settings, #/changes. Pasting or
  *  dropping a picture makes a note of it; N makes a new note; / goes to the search box. */
-import { $, h, api, state, paintIcons, toast, fail, canWrite, debounce } from './core.js';
+import { $, h, api, state, icon, paintIcons, toast, fail, canWrite, confirmIt, debounce } from './core.js';
+import { runUpdate } from './update.js';
 import { loadMe, renderUserMenu, signIn } from './auth.js';
 import { view, viewFromHash, go, loadMeta, renderNav, loadList, setOpenHandler, refresh, markSelected } from './notes.js';
 import { openNote, flush, uploadPicture, currentNote } from './editor.js';
 import { render as renderSettings, renderChanges } from './settings.js';
 
 let lastList = '';
+
+/** The "a newer version is out" card, for admins, when the daily check found one (as iopix shows it): Update now runs
+ *  update.sh from here and the page reloads with the new version; dismissed per version in this browser. */
+const DISMISSED = 'ionotes.updateDismissed';
+function updateBanner(u) {
+  let b = $('#updbanner');
+  let gone = ''; try { gone = localStorage.getItem(DISMISSED) || ''; } catch (e) { /* private mode */ }
+  if (!u || gone === u.remote) { if (b) b.remove(); return; }
+  if (b && b.dataset.remote === u.remote) return;
+  if (b) b.remove();
+  const text = h('div', h('b', u.version ? `Version ${u.version} is available` : 'A newer build is available'),
+    h('div.muted', `You have v${state.version || '?'}. ${(u.message || '').replace(/^v\d+\.\d+\.\d+:\s*/, '').slice(0, 140)}`));
+  const more = h('a.pillbtn', { href: '#/settings', onclick: () => b.remove() }, 'Details');
+  const run = u.canRun ? h('button.pillbtn.primary', { onclick: async () => {
+    if (!await confirmIt('Update ionotes', `Fetch ${u.version ? 'version ' + u.version : 'the latest version'}, refresh the packages and restart ionotes? The page reloads when the new version is up.`, 'Update')) return;
+    runUpdate((msg, failed) => {
+      run.hidden = more.hidden = true;
+      text.textContent = '';
+      text.append(h('b', failed ? 'The update did not finish' : 'Updating…'), h('div.muted', msg));
+    });
+  } }, 'Update now') : null;
+  b = h('div#updbanner', { 'data-remote': u.remote }, h('span.icwrap', icon('spark')), text, run, more,
+    h('button.iconbtn', { title: 'Not now (hidden until the next version)', onclick: () => { try { localStorage.setItem(DISMISSED, u.remote); } catch (e) {} b.remove(); } }, icon('close')));
+  document.body.append(b);
+}
 
 function notesLayout() {
   const main = $('#main');
@@ -88,9 +114,11 @@ function wire() {
   // other devices' changes show up: the list reloads when the server's rev moves on
   let rev = null;
   setInterval(async () => {
-    if (document.hidden || !$('#list')) return;
+    if (document.hidden) return;
     try {
       const s = await api('/api/status');
+      updateBanner(s.update);
+      if (!$('#list')) return;
       if (rev !== null && s.rev !== undefined && s.rev !== rev && !document.activeElement.closest('.editor')) { lastList = ''; await loadMeta(); renderNav(); await loadList(); markSelected(); }
       rev = s.rev;
     } catch (e) { /* offline: try again later */ }
@@ -114,6 +142,7 @@ async function start() {
   if (state.settings.app_name && state.settings.app_name !== 'ionotes') document.title = state.settings.app_name;
   await loadMeta();
   wire();
+  api('/api/status').then((s) => { state.version = s.version; updateBanner(s.update); }).catch(() => {});
   if (!location.hash) history.replaceState(null, '', '#/notes');
   await route();
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});

@@ -171,7 +171,7 @@ Settings › Import): records keep their ids, and a newer copy on the server win
 - **Standalone:** `./update.sh` fetches the latest code (git, or the GitHub tarball), installs the packages the new
   version asks for and only then moves the code in, then restarts the service. `--check` only reports. Settings ›
   ionotes version › Update now runs the same script; a daily check (on by default; `UPDATE_CHECK=0` locks it off)
-  shows admins when a newer version exists.
+  shows admins a card when a newer version exists, with Update now right on it (as in iopix; dismissed per version).
 - **Proxmox:** `update` inside the container (the framework's command) runs the same script.
 - **Docker:** `docker compose pull && docker compose up -d`.
 - **From an MCP client:** `check_for_update` and `update_ionotes` (with the admin token).

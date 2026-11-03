@@ -71,3 +71,20 @@ def test_a_header_proxy_signs_in_only_from_a_trusted_address(client, admin):
     client.post("/api/auth/logout")
     r = client.get("/api/auth/me", headers={"Remote-User": "alex@example.com"})
     assert r.json()["user"] is None  # the test client is not 10.9.9.9
+
+
+def test_status_tells_admins_of_a_newer_version_while_the_daily_check_is_on(client, admin, monkeypatch):
+    from app import config, updates
+    monkeypatch.setattr(config, "UPDATE_CHECK", True)  # the tests never start the daily check itself
+    updates._checked.clear()
+    updates._checked.update(status="update", remote="abc1234", remoteVersion="9.9.9", remoteMessage="v9.9.9: new", remoteDate="2026-11-03")
+    try:
+        s = client.get("/api/status").json()
+        assert s["update"]["version"] == "9.9.9" and "canRun" in s["update"] and s["commit"]
+        client.post("/api/settings", json={"update_check": False})
+        assert client.get("/api/status").json()["update"] is None
+        client.post("/api/settings", json={"update_check": True})
+        client.post("/api/auth/logout")
+        assert "update" not in client.get("/api/status").json()
+    finally:
+        updates._checked.clear()

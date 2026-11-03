@@ -21,8 +21,13 @@ def api_status(request: Request):
            "appName": db.get_setting("app_name", "") or "ionotes", "readOnly": db.read_only()}
     if users.is_signed_in(request.state.user):
         out["rev"] = db.current_rev()
+        out["commit"] = updates.local_commit()[:7]
         if users.is_admin(request.state.user):
-            out["update"] = updates.available()
+            u = updates.available() if updates.auto_check_enabled() else None
+            if u:
+                st = updates.status()
+                u.update(canRun=st["canRun"], docker=st["docker"])
+            out["update"] = u
     return out
 
 

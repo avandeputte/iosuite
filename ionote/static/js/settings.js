@@ -1,6 +1,7 @@
 /** Settings (appearance for everyone; accounts, sign-in, proxy, database, MCP, export and import, updates and the
  *  log for admins) and the change log. Laid out like iopix's Settings and Maintenance. */
 import { $, h, api, state, icon, toast, fail, isAdmin, canWrite, dialog, confirmIt, fmtDate } from './core.js';
+import { runUpdate } from './update.js';
 
 function box(title, intro, ...kids) { return h('div.box', h('h2', title), intro ? h('p', intro) : null, ...kids); }
 function sw(label, checked, onchange, disabled = false, hint = '') {
@@ -164,14 +165,10 @@ async function updateBox(s) {
     h('div.row', h('button.pillbtn', { onclick: async () => { out.textContent = 'Checking…'; show(await api('/api/update/check', { method: 'POST' }).catch((e) => ({ status: 'error', error: e.message }))); } }, 'Check for updates'),
       u.canRun ? h('button.pillbtn.primary', { onclick: async () => {
         if (!await confirmIt('Update ionotes', 'Install the latest version and restart? It takes about a minute.', 'Update')) return;
-        try { await api('/api/update/run', { method: 'POST', body: {} }); toast('Updating; the page reloads when ionotes is back', 8000); waitBack(); } catch (e) { fail(e); }
+        await runUpdate((msg, failed) => { out.className = 'small' + (failed ? ' err' : ''); out.textContent = msg; });
       } }, 'Update now') : null), out);
 }
 
-function waitBack() {
-  let n = 0;
-  const t = setInterval(async () => { n++; try { await api('/api/status'); if (n > 3) { clearInterval(t); location.reload(); } } catch (e) { /* still restarting */ } if (n > 120) clearInterval(t); }, 2000);
-}
 
 function logBox() {
   const pre = h('pre.log', 'Loading…');
