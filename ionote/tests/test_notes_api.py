@@ -148,3 +148,14 @@ def test_the_change_log_records_who_did_what(client, admin):
     client.put(f"/api/notes/{NID}", json={"title": "logged", "updatedAt": time.time()})
     ch = client.get("/api/changes").json()["changes"]
     assert ch[0]["user"] == "alex" and ch[0]["action"] == "create" and ch[0]["summary"] == "logged"
+
+
+def test_import_takes_a_device_notes_json_without_the_format_line(client, admin):
+    import base64, json
+    doc = {"notes": [{"id": NID, "title": "From the Mac", "body": "b", "createdAt": 1, "updatedAt": 2, "tags": ["t"],
+                      "imageData": base64.b64encode(png()).decode()}], "tags": [{"name": "t", "color": "red", "updatedAt": 2}]}
+    r = client.post("/api/import", files={"file": ("notes.json", json.dumps(doc).encode(), "application/json")}).json()
+    assert r["notes"] == 1 and r["pictures"] == 1 and r["tags"] == 1
+    assert client.get(f"/api/notes/{NID}").json()["hasImage"]
+    bad = client.post("/api/import", files={"file": ("x.json", b'{"format": "something-else", "notes": []}', "application/json")})
+    assert bad.status_code == 400

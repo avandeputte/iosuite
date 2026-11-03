@@ -82,7 +82,8 @@ def import_zip(data: bytes, user: str) -> dict:
         names = z.namelist()
     else:
         z, doc, names = None, json.loads(data), []
-    if doc.get("format") != "ionotes-export":
+    # an export says what it is; a notes.json written by hand or by a device may leave that out
+    if not isinstance(doc, dict) or doc.get("format", "ionotes-export") != "ionotes-export" or not isinstance(doc.get("notes", []), list):
         raise ValueError("That is not an ionotes export")
     out = {"folders": 0, "notes": 0, "tags": 0, "pictures": 0, "skipped": 0}
     for f in doc.get("folders") or []:
