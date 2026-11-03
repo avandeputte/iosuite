@@ -1,0 +1,6 @@
+.git
+.venv
+tests
+proxmox
+iosuite.env
+__pycache__
