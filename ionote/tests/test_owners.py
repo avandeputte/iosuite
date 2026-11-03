@@ -97,3 +97,26 @@ def test_export_and_import_are_per_account(client, admin):
     doc = {"notes": [{"id": OTHER, "title": "sam imports", "createdAt": 1, "updatedAt": 2}]}
     assert client.post("/api/import", files={"file": ("n.json", json.dumps(doc).encode(), "application/json")}).json()["notes"] == 1
     assert [n["title"] for n in client.get("/api/notes").json()["notes"]] == ["sam imports"]
+
+
+def test_an_admin_gives_one_accounts_notes_to_another(client, admin):
+    """Maintenance › Who owns the notes: when the old notes went to the wrong account, an admin moves them all."""
+    _two(client, admin)
+    _as(client, "sam", "secretpw2")
+    client.put(f"/api/notes/{OTHER}", json={"title": "old note", "tags": ["work"], "updatedAt": 1})
+    client.post("/api/folders", json={"name": "Old folder"})
+    client.put("/api/tags/work/color", json={"color": "blue"})
+    sam = client.get("/api/auth/me").json()["user"]["id"]
+    assert client.get("/api/owners").status_code == 403
+    _as(client, "alex", "secretpw1")
+    me = client.get("/api/auth/me").json()["user"]["id"]
+    rev = client.get("/api/sync").json()["rev"]
+    owners = {o["id"]: o for o in client.get("/api/owners").json()["owners"]}
+    assert owners[sam]["notes"] == 1 and owners[sam]["name"] == "sam"
+    assert client.post("/api/owners/move", json={"from": sam, "to": me}).json()["moved"] == 1
+    assert [n["title"] for n in client.get("/api/notes").json()["notes"]] == ["old note"]
+    s = client.get(f"/api/sync?since={rev}").json()   # the devices of the new owner sync them in
+    assert [n["title"] for n in s["notes"]] == ["old note"] and [f["name"] for f in s["folders"]] == ["Old folder"]
+    assert client.get("/api/meta").json()["tags"][0]["color"] == "blue"
+    _as(client, "sam", "secretpw2")
+    assert client.get("/api/notes").json()["total"] == 0

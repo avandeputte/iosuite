@@ -1,5 +1,6 @@
 """Settings, maintenance and status: the switches admins set, sign-in at a proxy, the database, the server log,
 the change log, export and import, and updating ionotes."""
+import logging
 import time
 
 from fastapi import APIRouter, HTTPException, Request, UploadFile, File
@@ -146,6 +147,31 @@ async def api_import(request: Request, file: UploadFile = File(...)):
         return await run_in_threadpool(backup.import_zip, data, user_name(request))
     except (ValueError, KeyError) as e:
         raise HTTPException(400, f"Could not import: {e}")
+
+
+@router.get("/api/owners", dependencies=[access.admin])
+def note_owners():
+    """Maintenance › Who owns the notes: each owner id with its note count and account name (if the id is an account
+    of ionotes), and the accounts notes can be given to."""
+    accounts = {u["id"]: u["name"] for u in users.list_users()}
+    counts = notes.owner_counts()
+    return {"owners": [{"id": o, "name": accounts.get(o), "notes": n} for o, n in sorted(counts.items())],
+            "accounts": [{"id": i, "name": n} for i, n in accounts.items()]}
+
+
+@router.post("/api/owners/move", dependencies=[access.admin])
+async def move_notes(request: Request):
+    """Give all of one owner's notes (with their folders and tag colours) to an account."""
+    body = await json_body(request)
+    try:
+        src, dst = int(body.get("from")), int(body.get("to"))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "from and to are account ids")
+    if not users.get(dst):
+        raise HTTPException(400, "No such account")
+    moved = await run_in_threadpool(notes.reassign, src, dst)
+    logging.getLogger("app").info("%s gave the notes of owner %s to account %s (%d notes)", user_name(request), src, dst, moved)
+    return {"moved": moved}
 
 
 @router.get("/api/update", dependencies=[access.admin])

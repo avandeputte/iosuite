@@ -112,6 +112,11 @@ Sessions are random tokens in an HttpOnly cookie (`iothing_session`, shared by t
 30 days and renewed while in use; passwords are scrypt-hashed; wrong passwords cost a growing wait. **Read-only** (Settings, or `READ_ONLY=1`) refuses every
 change, for everyone. Write requests from another site are refused.
 
+
+If the notes from before accounts went to another admin than intended, Maintenance › Storage and backups › Who owns
+the notes gives all of one account's notes (with folders and tag colours) to another; that account's devices sync
+them in.
+
 ## Reverse proxy, HTTPS and Cloudflare Access
 
 ionotes speaks plain HTTP on port 8610. Run it behind a reverse proxy that terminates HTTPS (Caddy, Nginx Proxy

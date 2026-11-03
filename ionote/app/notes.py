@@ -121,6 +121,35 @@ def claim_unowned(first_admin_id) -> int:
     return int(n)
 
 
+def owner_counts() -> dict:
+    """How many notes (the trash included) each owner id has, for Maintenance › Who owns the notes."""
+    with db.connect() as con:
+        return {int(r[0]): int(r[1]) for r in con.execute("SELECT owner, count(*) FROM notes GROUP BY owner").fetchall()}
+
+
+def reassign(from_owner: int, to_owner: int) -> int:
+    """Give every note, folder, tag colour and change-log line of one owner to another (an admin fixing who got the
+    notes from before accounts existed). Each record gets a new rev, so the new owner's devices sync them in. A tag
+    colour the new owner already has stays theirs. Returns how many notes moved."""
+    from_owner, to_owner = int(from_owner), int(to_owner)
+    if from_owner == to_owner or to_owner <= 0:
+        return 0
+    with db.tx() as con:
+        ids = [r[0] for r in con.execute("SELECT uuid FROM notes WHERE owner = ?", (from_owner,)).fetchall()]
+        for uid in ids:
+            con.execute("UPDATE notes SET owner = ?, rev = ? WHERE uuid = ?", (to_owner, db.next_rev(con), uid))
+        for (fid,) in con.execute("SELECT uuid FROM folders WHERE owner = ?", (from_owner,)).fetchall():
+            con.execute("UPDATE folders SET owner = ?, rev = ? WHERE uuid = ?", (to_owner, db.next_rev(con), fid))
+        theirs = {r[0] for r in con.execute("SELECT tag_key FROM tag_colors WHERE owner = ?", (to_owner,)).fetchall()}
+        for (key,) in con.execute("SELECT tag_key FROM tag_colors WHERE owner = ?", (from_owner,)).fetchall():
+            if key in theirs:
+                con.execute("DELETE FROM tag_colors WHERE owner = ? AND tag_key = ?", (from_owner, key))
+            else:
+                con.execute("UPDATE tag_colors SET owner = ?, rev = ? WHERE owner = ? AND tag_key = ?", (to_owner, db.next_rev(con), from_owner, key))
+        con.execute("UPDATE change_log SET owner = ? WHERE owner = ?", (to_owner, from_owner))
+    return len(ids)
+
+
 def display_title(n: dict) -> str:
     """What the apps show as a note's title (Note.displayTitle)."""
     for text in (n.get("title"), n.get("body"), n.get("ocrText")):

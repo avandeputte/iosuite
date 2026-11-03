@@ -145,6 +145,27 @@ function ocrBox(s) {
     o.error ? h('p.small.err', 'Last failure: ' + o.error) : null);
 }
 
+/** Who owns the notes: each account (or id with no account any more) and its notes, and a way to give them all to
+ *  another account, e.g. when the notes from before accounts existed went to another admin. */
+async function ownersBox() {
+  const d = await api('/api/owners');
+  const tbody = h('tbody');
+  for (const o of d.owners) {
+    const label = o.name || (o.id === 0 ? 'From before accounts existed' : o.id < 0 ? 'Nobody' : `No account here (id ${o.id})`);
+    const to = h('select', { 'aria-label': 'Give to' }, d.accounts.filter((a) => a.id !== o.id).map((a) => h('option', { value: a.id, selected: state.me.user && a.id === state.me.user.id }, a.name)));
+    const give = h('button.pillbtn', { onclick: async () => {
+      const name = to.selectedOptions[0] ? to.selectedOptions[0].textContent : '';
+      if (!await confirmIt('Give the notes', `Give all ${o.notes} notes of ${label}, with their folders and tag colours, to ${name}? Only ${name} will see them.`, 'Give')) return;
+      try { const r = await api('/api/owners/move', { method: 'POST', body: { from: o.id, to: Number(to.value) } }); toast(`${r.moved} notes moved to ${name}`); location.reload(); } catch (e) { fail(e); }
+    } }, 'Give');
+    tbody.append(h('tr', h('td', label, state.me.user && o.id === state.me.user.id ? h('span.muted', ' (you)') : null), h('td', String(o.notes)),
+      h('td', d.accounts.length > (o.name ? 1 : 0) ? h('div.row', to, give) : null)));
+  }
+  if (!d.owners.length) tbody.append(h('tr', h('td', { colspan: 3 }, 'No notes yet.')));
+  return box('Who owns the notes', 'Notes are private to each account. When accounts were turned on, the notes made before went to the first admin; if they went to the wrong account, give them to the right one here.',
+    h('table.grid', h('thead', h('tr', h('th', 'Owner'), h('th', 'Notes'), h('th', 'Give them to'))), tbody));
+}
+
 function exportBox() {
   const file = h('input', { type: 'file', accept: '.zip,.json', hidden: true, onchange: async (e) => {
     const f = e.target.files[0]; if (!f) return;
@@ -211,7 +232,7 @@ export function renderMaintenance(tab) {
   if (!isAdmin()) { const main = $('#main'); main.textContent = ''; main.append(h('div.page', h('div.pagein', pageTitle('Maintenance', 'wrench', 'var(--c-orange)'), h('p.muted', 'For admins only.')))); return null; }
   const s = () => api('/api/settings');
   return tabbedPage('maintenance', 'Maintenance', 'wrench', 'var(--c-orange)', [
-    ['storage', 'Storage and backups', async () => { const x = await s(); return [databaseBox(x), exportBox()]; }],
+    ['storage', 'Storage and backups', async () => { const x = await s(); return [databaseBox(x), await ownersBox(), exportBox()]; }],
     ['mcp', 'MCP and text in pictures', async () => { const x = await s(); return [await mcpBox(x), ocrBox(x)]; }],
     ['ionotes', 'ionotes', async () => { const x = await s(); return [await updateBox(x), logBox()]; }],
   ], tab);
