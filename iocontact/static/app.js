@@ -4,6 +4,9 @@
 // ------------------------------------------------------------------ helpers
 const $ = (s, el = document) => el.querySelector(s);
 const ICONS = {
+  menuOpen: 'M3 18h13v-2H3v2zm0-5h10v-2H3v2zm0-7v2h13V6H3zm18 9.59L17.42 12 21 8.41 19.59 7l-5 5 5 5L21 15.59z',
+  pin: 'M16 9V4h1c.55 0 1-.45 1-1s-.45-1-1-1H7c-.55 0-1 .45-1 1s.45 1 1 1h1v5c0 1.66-1.34 3-3 3v2h5.97v7l1 1 1-1v-7H19v-2c-1.66 0-3-1.34-3-3z',
+  wrench: 'M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z',
   menu: 'M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z',
   search: 'M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z',
   add: 'M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z',
@@ -195,33 +198,77 @@ function applyTheme() {
   if (t === 'system') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t;
 }
 
+/* The sidebar, as in ioPix: the name on top, the destinations in groups, Settings and Maintenance at the foot. It docks
+   beside the page on a wide screen unless its button put it away (remembered); otherwise it slides over the page from the
+   menu button. Phones get a bottom bar instead: four destinations and More. */
+const DOCK_MIN = 1100;
 function drawNav() {
   const nav = $('#nav'); const r = route();
-  const item = (href, ic, label, n, on, hueVar) => h('a', { class: `item ${on ? 'on' : ''}`, href, style: hueVar ? { '--hue': `var(${hueVar})` } : null, onclick: closeNav },
-    icon(ic), h('span', null, label), n != null ? h('span', { class: 'n' }, n) : null);
-  const total = S.books.reduce((a, b) => a + (b.count || 0), 0);
   const listView = ['list', 'contact', 'edit', 'new'].includes(r.view);
-  const kids = [
-    item('#/', 'people', 'All contacts', total, listView && S.scope.kind === 'all', '--c-purple'),
-    item('#/fav', 'star', 'Favorites', null, listView && S.scope.kind === 'fav', '--c-amber'),
-    item('#/upcoming', 'cake', 'Birthdays', null, r.view === 'upcoming', '--c-rose'),
-    item('#/maint', 'tune', 'Maintenance', S.status.suggestions || null, r.view === 'maint', '--c-teal'),
-    S.status.iopix ? item('#/iopix', 'image', 'ioPix people', null, r.view === 'iopix', '--c-indigo') : null,
-    item('#/import', 'upload', 'Import and export', null, r.view === 'import', '--c-green'),
-    h('div', { class: 'sec' }, 'Address books', h('button', { class: 'iconbtn', title: 'New address book', style: { width: '28px', height: '28px' }, onclick: newBook }, icon('add', 's'))),
-    S.books.map((b) => h('a', { class: `item ${listView && S.scope.kind === 'book' && +S.scope.id === b.id ? 'on' : ''}`, href: `#/book/${b.id}`, onclick: closeNav },
-      h('span', { class: 'dot', style: { '--c': b.color || (b.shared ? 'var(--c-purple)' : 'var(--c-teal)') } }), h('span', null, b.name),
-      h('span', { class: 'n' }, b.count))),
-  ];
-  if (S.tags.length) {
-    kids.push(h('div', { class: 'sec' }, 'Labels'));
-    kids.push(S.tags.map((t) => h('a', { class: `item ${listView && S.scope.kind === 'tag' && S.scope.name === t.tag ? 'on' : ''}`, href: `#/tag/${encodeURIComponent(t.tag)}`, onclick: closeNav },
-      icon('tag', 's'), h('span', null, t.tag), h('span', { class: 'n' }, t.n))));
-  }
-  kids.push(h('div', { class: 'sec' }, ''), item('#/settings', 'settings', 'Settings', null, r.view === 'settings'));
-  nav.replaceChildren(...kids.flat().filter(Boolean));
+  const link = (v, href, ic, label, n, on, hue) => h('a', { href, 'data-v': v, class: on ? 'on' : null, style: hue ? { '--hue': `var(${hue})` } : null },
+    icon(ic), h('span', { class: 'nl' }, label), n ? h('span', { class: 'n' }, n) : null);
+  const sec = (label, btn) => h('div', { class: 'navsec' }, h('span', null, label), btn || null);
+  const total = S.books.reduce((a, b) => a + (b.count || 0), 0);
+  nav.replaceChildren(...[
+    h('div', { class: 'navhead' },
+      h('a', { class: 'brand', href: '#/', title: 'All contacts' }, h('img', { src: 'static/icons/mark.svg', alt: '', class: 'brand-mark' }),
+        h('span', { class: 'brand-name' }, h('span', { class: 'io' }, 'io'), h('span', { class: 'nm' }, 'Contacts'))),
+      h('button', { id: 'sidebtn', class: 'iconbtn', onclick: sidebarButton })),
+    link('all', '#/', 'people', 'All contacts', total, listView && S.scope.kind === 'all', '--c-purple'),
+    link('fav', '#/fav', 'star', 'Favorites', null, listView && S.scope.kind === 'fav', '--c-amber'),
+    link('upcoming', '#/upcoming', 'cake', 'Birthdays', null, r.view === 'upcoming', '--c-rose'),
+    S.status.iopix ? link('iopix', '#/iopix', 'image', 'ioPix people', null, r.view === 'iopix', '--c-indigo') : null,
+    h('button', { class: 'navmore', 'data-v': 'more', title: 'More', onclick: moreSheet }, icon('more'), h('span', { class: 'nl' }, 'More')),
+    h('div', { class: 'navgap' }),
+    sec('Address books', h('button', { class: 'iconbtn', title: 'New address book', onclick: newBook }, icon('add', 's'))),
+    S.books.map((b) => h('a', { href: `#/book/${b.id}`, 'data-v': 'book', class: listView && S.scope.kind === 'book' && +S.scope.id === b.id ? 'on' : null,
+      style: { '--hue': b.color || (b.shared ? 'var(--c-purple)' : 'var(--c-teal)') } },
+      h('span', { class: 'ic dotic' }, h('span', { class: 'dot' })), h('span', { class: 'nl' }, b.name), h('span', { class: 'n' }, b.count))),
+    S.tags.length ? [h('div', { class: 'navgap' }), sec('Labels'),
+      S.tags.map((t) => h('a', { href: `#/tag/${encodeURIComponent(t.tag)}`, 'data-v': 'tag', class: listView && S.scope.kind === 'tag' && S.scope.name === t.tag ? 'on' : null, style: { '--hue': 'var(--c-orange)' } },
+        icon('tag'), h('span', { class: 'nl' }, t.tag), h('span', { class: 'n' }, t.n)))] : null,
+    h('div', { class: 'navgap' }), sec('Manage'),
+    link('import', '#/import', 'upload', 'Import and export', null, r.view === 'import', '--c-green'),
+    h('div', { class: 'navfoot' },
+      link('settings', '#/settings', 'settings', 'Settings', null, r.view === 'settings'),
+      link('maint', '#/maint', 'wrench', 'Maintenance', S.status.suggestions || null, r.view === 'maint')),
+  ].flat(3).filter(Boolean));
+  applySidebar();
+  $('.navmore')?.classList.toggle('on', ['book', 'tag', 'import', 'settings', 'maint', 'iopix'].some((v) => (v === 'book' || v === 'tag') ? listView && S.scope.kind === v : r.view === v));
 }
-function closeNav() { document.body.classList.remove('navopen'); $('#navscrim').hidden = true; }
+function sideDockedPref() { try { return localStorage.getItem('ioc.sidebar') !== '0'; } catch { return true; } }
+function applySidebar() {
+  const body = document.body, btn = $('#sidebtn');
+  const docked = innerWidth >= DOCK_MIN && sideDockedPref();
+  body.classList.toggle('side-docked', docked);
+  if (docked) closeNav();
+  if (!btn) return;
+  const [ic, title] = docked ? ['menuOpen', 'Hide the sidebar'] : innerWidth >= DOCK_MIN ? ['pin', 'Keep the sidebar open'] : ['close', 'Close the sidebar'];
+  btn.replaceChildren(icon(ic)); btn.title = title; btn.setAttribute('aria-label', title);
+}
+function sidebarButton() {
+  if (document.body.classList.contains('side-docked')) { try { localStorage.setItem('ioc.sidebar', '0'); } catch { /* */ } }
+  else if (innerWidth >= DOCK_MIN) { try { localStorage.setItem('ioc.sidebar', '1'); } catch { /* */ } }
+  else { closeNav(); return; }
+  applySidebar();
+}
+function openNav() { document.body.classList.add('side-open'); $('#navscrim').hidden = false; }
+function closeNav() { document.body.classList.remove('side-open'); $('#navscrim').hidden = true; }
+/** Phones: what the bottom bar has no room for. */
+function moreSheet() {
+  const r = route(); const listView = ['list', 'contact', 'edit', 'new'].includes(r.view);
+  const tile = (href, ic, label, hue, on) => h('a', { href, class: on ? 'on' : null, style: { '--hue': hue } }, h('span', { class: 'sic' }, icon(ic)), h('span', null, label));
+  const grid = h('div', { class: 'sheetgrid' },
+    S.books.map((b) => tile(`#/book/${b.id}`, 'book', b.name, b.color || (b.shared ? 'var(--c-purple)' : 'var(--c-teal)'), listView && S.scope.kind === 'book' && +S.scope.id === b.id)),
+    S.tags.map((t) => tile(`#/tag/${encodeURIComponent(t.tag)}`, 'tag', t.tag, 'var(--c-orange)', listView && S.scope.kind === 'tag' && S.scope.name === t.tag)),
+    S.status.iopix ? tile('#/iopix', 'image', 'ioPix people', 'var(--c-indigo)', r.view === 'iopix') : null,
+    tile('#/import', 'upload', 'Import and export', 'var(--c-green)', r.view === 'import'),
+    tile('#/settings', 'settings', 'Settings', 'var(--c-slate)', r.view === 'settings'),
+    tile('#/maint', 'wrench', 'Maintenance', 'var(--c-slate)', r.view === 'maint'));
+  const p = dialog('More', grid, [{ label: 'Close', value: null }]);
+  grid.addEventListener('click', (e) => { if (e.target.closest('a')) document.querySelector('.dialog-back')?.remove(); });
+  return p;
+}
 
 async function newBook() {
   const name = h('input', { class: 't', placeholder: 'Name, e.g. Work or School friends' });
@@ -1109,8 +1156,11 @@ async function start() {
   drawUser();
   await loadMeta();
   $('#newbtn').onclick = () => { location.hash = '#/new'; };
-  $('#menubtn').onclick = () => { document.body.classList.add('navopen'); $('#navscrim').hidden = false; };
+  $('#menubtn').onclick = openNav;
   $('#navscrim').onclick = closeNav;
+  $('#nav').addEventListener('click', (e) => { if (e.target.closest('a') && !document.body.classList.contains('side-docked')) closeNav(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && document.body.classList.contains('side-open')) closeNav(); });
+  addEventListener('resize', applySidebar);
   let t;
   $('#q').addEventListener('input', (e) => {
     clearTimeout(t);
