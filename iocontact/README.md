@@ -24,6 +24,7 @@ A self-hosted contact manager: a web app for the whole family, and the standard 
 | Mail apps, desk phones, printers | **LDAP v3** (RFC 4511), read-only, inetOrgPerson plus Thunderbird's mozillaAbPersonAlpha attributes | port 3890 (389 in the Proxmox container) |
 | Calendars: Apple Calendar, Google Calendar, Outlook, Thunderbird | **iCalendar** (RFC 5545) subscription of birthdays and anniversaries, yearly events | `/cal/<private token>/family.ics` |
 | Moving in and out | vCard files, jCard, and **CSV in Google Contacts' and Outlook's layouts** | Import and export page, `/api/import`, `/api/export` |
+| AI assistants: Claude and anything else that speaks MCP | **Model Context Protocol** (streamable HTTP, and stdio) | `https://host/mcp` (switched on in Settings › Server) |
 
 Settings › Apps and devices shows the exact addresses to type, and makes **app passwords**: one per phone or app, revocable on its own, used with your user name for CardDAV, LDAP and the REST API (HTTP Basic, or `Authorization: Bearer <app password>`).
 
@@ -32,6 +33,43 @@ curl -u alex:ioc-xxxxxxxx-… -H 'Accept: application/vcard+json' https://contac
 curl -u alex:ioc-xxxxxxxx-… https://contacts.example.com/api/contacts/12?format=vcard4
 curl -u alex:ioc-xxxxxxxx-… -X POST -H 'Content-Type: text/vcard' --data-binary @card.vcf 'https://contacts.example.com/api/contacts?book=1'
 ```
+
+## MCP server
+
+ioContacts is also an MCP server, as iopix is, so an assistant such as Claude can work with the contacts: look people up,
+read everything about one, add and correct contacts, link relatives and walk the family tree, list birthdays, find and
+merge duplicates, import and export vCard and CSV, link contacts to ioPix people, and, for admins, check the server's
+health, look for a new version and install it.
+
+It is off until an admin turns it on in **Settings › Server** (or `MCP=1` in the environment); off, `/mcp` does not answer
+at all. Every assistant signs in with an **app password** (Settings › Apps and devices), as HTTP Basic or
+`Authorization: Bearer <app password>`, and acts as that account: it sees the shared books and that account's private
+ones, and may change what the account may change in the web app. The server tools need an admin.
+
+```sh
+claude mcp add --transport http iocontacts https://contacts.example.com/mcp --header "Authorization: Bearer ioc-xxxxxxxx-…"
+```
+
+Apps that take a JSON configuration and only start local processes (Claude Desktop, for example) can reach it through
+`mcp-remote`: `{"mcpServers": {"iocontacts": {"command": "npx", "args": ["-y", "mcp-remote", "https://contacts.example.com/mcp", "--header", "Authorization: Bearer ioc-…"]}}}`.
+On the server itself, `.venv/bin/python -m app.mcp --user NAME` serves the same tools over stdio.
+
+The tools: `overview`, `list_address_books`, `search_contacts`, `get_contact`, `get_contacts`, `get_vcard`, `view_photo`,
+`get_relatives`, `family_tree`, `upcoming_dates`, `birthdays_in_month`, `list_labels`, `relation_types`, `social_services`,
+`find_duplicates`, `export_contacts`, `connection_details`, `list_iopix_people`; `create_contact`, `update_contact`,
+`delete_contact`, `add_relation`, `remove_relation`, `set_labels`, `set_favorite`, `move_contacts`, `merge_contacts`,
+`import_contacts`, `link_iopix_person`, `auto_link_iopix`, `remove_photo`, `create_address_book`, `create_app_password`;
+and for admins `diagnostics`, `test_iopix`, `list_accounts`, `check_for_update`, `update_server`.
+
+## Updates
+
+As iopix does, ioContacts asks GitHub once a day whether the main branch has a newer version (only the public commit
+list is read; nothing about the server is sent; Settings › Server switches it off, `UPDATE_CHECK=0` locks it off).
+Admins then see a note with **Update now**, and Settings › Server has the version, **Check for updates** and **Update
+now**. Updating runs the app's own `update.sh`: the new version's Python packages first, then the code (a failed step
+leaves the running version as it was), the database is brought up to date, and the service restarts; the page reloads
+when the new version answers. The MCP tools `check_for_update` and `update_server` do the same. In Docker, pull the image
+instead. From a shell: `./update.sh` (`--check` only looks, `IOCONTACTS_REF=<sha>` installs a given commit).
 
 ## Run
 
@@ -87,6 +125,10 @@ git clone https://github.com/avandeputte/iocontacts && cd iocontacts
 | `ADMIN_USER`, `ADMIN_PASSWORD` | the first admin, made on the first start when there are no accounts |
 | `AUTH_PROXY`, `AUTH_PROXY_HEADER`, `AUTH_PROXY_TRUSTED`, `CF_ACCESS_TEAM`, `CF_ACCESS_AUD` | sign-in at a reverse proxy, exactly as in iopix: Cloudflare Access (with token checking), Authelia, Authentik, oauth2-proxy… matched to accounts by email, then name |
 | `IOPIX_URL`, `IOPIX_USER`, `IOPIX_PASSWORD`, `IOPIX_CF_CLIENT_ID`, `IOPIX_CF_CLIENT_SECRET` | ioPix (or Settings › ioPix) |
+| `MCP` | `1` keeps the MCP server on, whatever the setting says |
+| `IOCONTACTS_MCP_USER` | the account `python -m app.mcp` (stdio) acts as |
+| `UPDATE_CHECK` | `0` turns the daily version check off for good |
+| `IOCONTACTS_REPO`, `IOCONTACTS_BRANCH` | what the version check and `update.sh` follow (`avandeputte/iocontacts`, `main`) |
 
 ### ioPix
 
@@ -103,7 +145,7 @@ pip install -e '.[test]'
 DB_HOST=127.0.0.1 python -m pytest tests     # against a scratch database contacts_test (TEST_DB_NAME), dropped per test
 ```
 
-Covered: vCard 2.1/3.0/4.0 and jCard reading and writing (an Apple Contacts card round-trips with relations, dates, social profiles, custom labels, photo and unknown properties), relations and their inverse side, search, content negotiation, Google and Outlook CSV import and every export format, roles and private books, app passwords over Basic and Bearer, the birthday calendar, duplicates and merging, CardDAV discovery, PUT with preconditions and UID conflicts, multiget, addressbook-query, sync-collection with deletions, and LDAP bind and search with substring, phone and size-limit cases. CI runs them against MariaDB.
+Covered: vCard 2.1/3.0/4.0 and jCard reading and writing (an Apple Contacts card round-trips with relations, dates, social profiles, custom labels, photo and unknown properties), relations and their inverse side, search, content negotiation, Google and Outlook CSV import and every export format, roles and private books, app passwords over Basic and Bearer, the birthday calendar, duplicates and merging, CardDAV discovery, PUT with preconditions and UID conflicts, multiget, addressbook-query, sync-collection with deletions, LDAP bind and search with substring, phone and size-limit cases, and the MCP server (switch, sign-in, reading, changing, relations, a viewer's limits). CI runs them against MariaDB.
 
 ## Layout
 
@@ -118,6 +160,8 @@ app/model.py       address books and contacts in MariaDB, relations, duplicates,
 app/relations.py   relation types, inverses and labels
 app/calendar.py    the iCalendar birthday feed
 app/iopix.py       the ioPix client
+app/mcp/           the MCP server: base (who is asking, finding contacts), read, write and admin tools
+app/updates.py     the version check and running update.sh from the web app
 app/users.py       accounts, sessions, app passwords      app/proxyauth.py  sign-in at a reverse proxy
 static/            the web app (index.html, app.js, app.css, icons)
 proxmox/           the community-scripts LXC installer      setup.sh, run.sh, update.sh, Dockerfile

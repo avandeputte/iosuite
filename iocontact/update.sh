@@ -91,7 +91,7 @@ except ImportError:  # Python 3.10
     deps = re.findall(r'"([^"]+)"', m.group(1)) if m else []
 print("\n".join(deps))
 PYEOF
-"$VPY" -m pip install -q -r "$TMP/requirements.txt" || { [ -n "$STAGE" ] && rm -rf "${STAGE:?}"; die "installing the Python packages failed; the installed version is unchanged"; }
+"$VPY" -m pip install -q --disable-pip-version-check -r "$TMP/requirements.txt" || { [ -n "$STAGE" ] && rm -rf "${STAGE:?}"; die "installing the Python packages failed; the installed version is unchanged"; }
 
 say "Installing the new code"
 if [ -d .git ]; then
@@ -111,7 +111,7 @@ else
   echo "$R" > COMMIT
 fi
 chmod 755 setup.sh update.sh run.sh 2>/dev/null || true
-"$VPY" -m pip install -q --no-deps -e . 2>/dev/null || echo "  note: the package metadata could not be refreshed; ioContacts runs regardless"
+"$VPY" -m pip install -q --disable-pip-version-check --no-deps -e . 2>/dev/null || echo "  note: the package metadata could not be refreshed; ioContacts runs regardless"
 "$VPY" -m app.cli migrate >/dev/null 2>&1 || echo "  note: the database could not be updated now; ioContacts does it when it starts"
 
 NEWV="$(sed -n 's/^APP_VERSION = "\([^"]*\)".*/\1/p' app/__init__.py)"
