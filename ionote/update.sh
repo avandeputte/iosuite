@@ -156,7 +156,7 @@ if [ -n "$SVC" ]; then
     note "ok: updated to v$NEWV; the service could not be restarted from here: sudo systemctl restart $SVC"
   fi
 elif [ "$(uname -s)" = Darwin ]; then
-  L="$(launchctl list 2>/dev/null | grep -o 'com\.[a-z.]*ionotes' | head -1)"
+  L="$(launchctl list 2>/dev/null | grep -o 'net\.iothing\.ionotes\.server' | head -1)"
   if [ -n "$L" ]; then launchctl kickstart -k "gui/$(id -u)/$L" && echo "  launchd: restarted $L"; else echo "  no service found; restart ionotes yourself"; fi
 else
   echo "  no service found; restart ionotes yourself"

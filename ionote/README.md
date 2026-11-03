@@ -57,6 +57,29 @@ the named volume `ionotes-data` at `/data` only holds the session secret and the
 the database. The image includes RapidOCR (build argument `OCR=0` leaves it out). The health check polls
 `/api/status`, which stays open when sign-in is required.
 
+## Proxmox VE (LXC)
+
+`proxmox/ct/ionotes.sh` and `proxmox/install/ionotes-install.sh` follow the community-scripts (ProxmoxVE) framework
+layout, the same as iopix's, so they can be submitted upstream as they are. Until then the ct script points the
+framework at this repository for the install script (`COMMUNITY_SCRIPTS_URL`), while the engine itself comes from
+community-scripts. On the Proxmox host, as root:
+
+```sh
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/ionotes/main/proxmox/ct/ionotes.sh)"
+```
+
+It asks about the app first: whether the notes live in MariaDB/MySQL (host, port, database, user, password; the
+defaults are 192.168.1.89, 3306, `notes`, `notes`) or in a SQLite file in the container, whether pictures added in
+the web app get their text read (RapidOCR), and the admin account; then the framework's own questions (resources,
+network). It creates an unprivileged Debian 13 container (2 CPU, 2 GB, 8 GB disk by default) and runs the app's own
+`setup.sh` inside with those answers: packages, settings, tables, admin, and the `ionotes` service on port 8610.
+For unattended runs set `IONOTES_DB` (`sqlite` or `host:port/db:user:pass`), `IONOTES_FEATURES` (`ocr` or `none`)
+and `IONOTES_ADMIN` (`name:password`, or empty for none yet) in the environment. The passwords reach `setup.sh`
+inside the container through its environment (a root-only file pushed in and removed again), not on a command line.
+The setup's output is kept in `/opt/ionotes/setup.log`; on failure its last lines are shown and the command to rerun
+it is printed. The container's `update` command runs `update.sh`, which keeps the settings and data. The scripts are
+checked for syntax in CI and drive the tested `setup.sh`; they have not been run on a Proxmox host yet.
+
 ## Users and permissions
 
 The same model as iopix, down to the database tables (`user_accounts`, `app_settings`), so the two can later share
@@ -149,6 +172,7 @@ Settings › Import): records keep their ids, and a newer copy on the server win
   version asks for and only then moves the code in, then restarts the service. `--check` only reports. Settings ›
   ionotes version › Update now runs the same script; a daily check (on by default; `UPDATE_CHECK=0` locks it off)
   shows admins when a newer version exists.
+- **Proxmox:** `update` inside the container (the framework's command) runs the same script.
 - **Docker:** `docker compose pull && docker compose up -d`.
 - **From an MCP client:** `check_for_update` and `update_ionotes` (with the admin token).
 
@@ -183,6 +207,7 @@ app/
   updates.py       the version check, update.sh, the MCP admin token
   routes/          the HTTP API
   mcp/             the MCP server: read, write and operator tools
+proxmox/           Proxmox VE LXC scripts in the community-scripts layout
 static/            the web app (index.html, app.css, js/*.js modules, service worker, icons)
 tests/             pytest; IONOTES_TEST_DB=mysql runs them on MariaDB
 ```
