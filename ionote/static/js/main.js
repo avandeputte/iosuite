@@ -131,7 +131,8 @@ async function start() {
   try { state.settings = await api('/api/settings'); } catch (e) { state.settings = {}; }
   await loadMe();
   renderUserMenu();
-  if (state.me.requireLogin && !state.me.user) { document.body.classList.add('locked'); signIn(true); return; }
+  // notes are private to each account: once accounts exist, nothing shows until someone signs in
+  if (!state.me.user && (state.me.requireLogin || state.me.usersExist)) { document.body.classList.add('locked'); signIn(true); return; }
   if (state.me.user && state.me.settings && state.me.settings.theme) {
     try { if (!localStorage.getItem('ionotes.theme')) { localStorage.setItem('ionotes.theme', state.me.settings.theme); location.reload(); return; } } catch (e) {}
   }

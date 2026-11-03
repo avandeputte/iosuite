@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import config, db, mcp, proxyauth, updates, users
+from app import notes as notes_mod, owners
 from app.auth import auth as auth_shared
 
 proxyauth.remember_peer()  # before uvicorn's forwarded-header rewrite runs: proxy sign-in trusts the real peer
@@ -79,10 +80,22 @@ def _mcp_token_ok(request: Request) -> bool:
     return auth_h.lower().startswith("bearer ") and updates.token_ok(auth_h[7:].strip())
 
 
+def _owner_of(request: Request) -> int:
+    """Whose notes this request sees: the signed-in account's; before any account exists, the open install's (0);
+    a visitor once accounts exist sees none."""
+    u = request.state.user
+    if u:
+        return int(u["id"])
+    return 0 if not users.any_users() else notes_mod.NOBODY
+
+
 def _gate(request: Request):
-    """Once the user is known (app/auth.py's middleware): the MCP endpoint's own gates (the switch; with sign-in
-    required, the admin token on every request)."""
+    """Once the user is known (app/auth.py's middleware): whose notes the request works on, and the MCP endpoint's
+    own gates (the switch; with sign-in required, the admin token on every request)."""
     path = request.url.path
+    if not notes_mod._claimed and users.any_users():
+        notes_mod.claim_unowned(owners.first_admin_id())
+    notes_mod.current_owner.set(owners.mcp_owner() if path.startswith("/mcp") else _owner_of(request))
     if path.startswith("/mcp"):
         if not mcp_enabled():
             return JSONResponse({"detail": "The MCP server is switched off (Settings › MCP server)."}, status_code=404)
@@ -115,6 +128,12 @@ async def _limits(request: Request, call_next):
     if "cache-control" not in response.headers:
         response.headers["Cache-Control"] = "no-cache"
     return response
+
+
+@app.exception_handler(notes_mod.NotFound)
+async def _not_found(request: Request, e: Exception):
+    """Another account's note or folder, or none at all: the same 404 either way."""
+    return JSONResponse({"detail": str(e) or "Not found"}, status_code=404)
 
 
 @app.exception_handler(ValueError)

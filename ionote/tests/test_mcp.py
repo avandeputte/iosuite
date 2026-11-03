@@ -72,3 +72,19 @@ def test_with_sign_in_required_the_endpoint_wants_the_bearer_token(client, on):
     r = client.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, headers=HEADERS)
     assert r.status_code == 401
     assert _rpc(client, "tools/list", headers={"authorization": f"Bearer {on}"})["result"]["tools"]
+
+
+def test_mcp_works_on_the_chosen_accounts_notes(client, on):
+    client.put(f"/api/notes/{NID}", json={"title": "alex's note", "updatedAt": 1})
+    sam = client.post("/api/users", json={"name": "sam", "password": "secretpw2", "role": "editor"}).json()
+    ov = _call(client, "notes_overview", {})["structuredContent"]
+    assert ov["notes"] == 1 and ov["account"] == "alex"  # the first admin by default
+    assert client.post("/api/settings", json={"mcp_user": sam["id"]}).status_code == 200
+    assert client.get("/api/settings").json()["mcp_user"] == sam["id"]
+    ov = _call(client, "notes_overview", {})["structuredContent"]
+    assert ov["notes"] == 0 and ov["account"] == "sam"
+    assert _call(client, "get_note", {"note_id": NID})["isError"]
+    made = _call(client, "create_note", {"token": on, "title": "for sam"})["structuredContent"]
+    client.cookies.clear()
+    client.post("/api/auth/login", json={"name": "sam", "password": "secretpw2"})
+    assert [n["id"] for n in client.get("/api/notes").json()["notes"]] == [made["id"]]

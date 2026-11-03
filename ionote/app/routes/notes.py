@@ -89,7 +89,16 @@ def api_trash(request: Request):
 
 
 # ---- pictures
+def _mine(uid: str):
+    """The note, when it is this account's; 404 otherwise (another account's note is never acknowledged)."""
+    n = notes.get_note(uid)
+    if not n:
+        raise HTTPException(404, "No such note")
+    return n
+
+
 def _image_resp(request: Request, uid: str, thumb: bool):
+    _mine(uid)
     got = images.get(uid, thumb)
     if not got:
         raise HTTPException(404, "This note has no picture")
@@ -118,6 +127,8 @@ def api_thumb(uid: str, request: Request):
 
 
 def _store(uid: str, data: bytes, request: Request):
+    if not notes.get_note(uid):
+        raise HTTPException(404, "No such note (create the note first)")
     try:
         n = images.put(uid, data, user_name(request))
     except images.BadImage as e:
@@ -146,6 +157,7 @@ async def api_image_upload(uid: str, request: Request, file: UploadFile = File(.
 
 @router.delete("/api/notes/{uid}/image", dependencies=[access.editor_write])
 def api_image_delete(uid: str, request: Request):
+    _mine(uid)
     try:
         return images.remove(uid, user_name(request))
     except KeyError:
@@ -243,5 +255,7 @@ def _one(fn):
         return {"status": "ok", "item": fn()}
     except notes.Stale as e:
         return {"status": "stale", "item": e.current}
+    except notes.NotFound as e:
+        return {"status": "error", "error": str(e)}
     except (ValueError, TypeError) as e:
         return {"status": "error", "error": str(e)[:200]}

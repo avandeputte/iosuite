@@ -18,13 +18,22 @@ def notes_overview() -> dict:
     from, the newest and oldest note, and the web app's address."""
     m = notes.meta()
     with notes.db.connect() as con:
-        sources = {r[0]: r[1] for r in con.execute("SELECT source, count(*) FROM notes WHERE deleted = 0 GROUP BY source ORDER BY 2 DESC")}
-        apps = {r[0]: r[1] for r in con.execute("SELECT source_app, count(*) FROM notes WHERE deleted = 0 AND source_app IS NOT NULL "
-                                                 "GROUP BY source_app ORDER BY 2 DESC LIMIT 15")}
-        first, last = con.execute("SELECT min(created_at), max(created_at) FROM notes WHERE deleted = 0").fetchone()
+        o = (notes.owner(),)
+        sources = {r[0]: r[1] for r in con.execute("SELECT source, count(*) FROM notes WHERE owner = ? AND deleted = 0 GROUP BY source ORDER BY 2 DESC", o)}
+        apps = {r[0]: r[1] for r in con.execute("SELECT source_app, count(*) FROM notes WHERE owner = ? AND deleted = 0 AND source_app IS NOT NULL "
+                                                 "GROUP BY source_app ORDER BY 2 DESC LIMIT 15", o)}
+        first, last = con.execute("SELECT min(created_at), max(created_at) FROM notes WHERE owner = ? AND deleted = 0", o).fetchone()
     return {"notes": m["total"], "pinned": m["pinned"], "with_picture": m["images"], "in_no_folder": m["noFolder"], "in_trash": m["trash"],
             "folders": {f["name"]: f["count"] for f in m["folders"]}, "tags": {t["name"]: t["count"] for t in m["tags"]},
-            "sources": sources, "source_apps": apps, "oldest": iso(first), "newest": iso(last), "web_app": APP}
+            "sources": sources, "source_apps": apps, "oldest": iso(first), "newest": iso(last), "web_app": APP,
+            "account": _account()}
+
+
+def _account():
+    """Whose notes these are (Settings › MCP server › Notes of)."""
+    from app import users
+    u = users.get(notes.owner()) if notes.owner() > 0 else None
+    return u["name"] if u else None
 
 
 @server.tool(annotations=READ_ONLY)

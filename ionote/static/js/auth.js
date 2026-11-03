@@ -33,7 +33,7 @@ export async function signIn(required = false) {
   const submit = () => login({ name: name.value.trim(), password: pw.value });
   [name, pw].forEach((i) => i.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') submit(); }));
   const p = dialog('Sign in', h('div', tiles, form,
-    h('p.muted.small', required ? `Sign in to use ${(state.settings && state.settings.app_name) || 'ionotes'}.` : 'Without signing in you can read the notes; signing in lets editors change them and keeps your settings on the server.')),
+    h('p.muted.small', `Sign in to see your notes. Notes are private to each account.`)),
   [required ? null : { label: 'Cancel', value: null }, { label: 'Sign in', primary: true, action: submit }].filter(Boolean),
   { required, head: signinBrand() });
   api('/api/auth/accounts').then((d) => {
@@ -55,7 +55,7 @@ async function firstAdmin() {
   const name = h('input.einput', { type: 'text', placeholder: 'Admin user name', autocomplete: 'username' });
   const pw = h('input.einput', { type: 'password', placeholder: 'Password (8 characters or more)', autocomplete: 'new-password' });
   const msg = h('p.err.small');
-  return dialog('Create the admin account', h('div', h('p.muted', 'Right now ionotes is open to anyone who can reach it. Once an admin exists, visitors read the notes, signed-in users keep their settings on the server, and only editors and admins can change the notes or the settings.'), h('div.signin-form', name, pw), msg), [
+  return dialog('Create the admin account', h('div', h('p.muted', 'Right now ionotes is open to anyone who can reach it. Once an admin exists, every account has notes of its own, visible to nobody else; the notes made so far become the admin\'s.'), h('div.signin-form', name, pw), msg), [
     { label: 'Cancel', value: null },
     { label: 'Create', primary: true, action: async () => { try { await api('/api/auth/setup', { method: 'POST', body: { name: name.value, password: pw.value } }); location.reload(); } catch (e) { msg.textContent = e.message; return false; } } },
   ]);

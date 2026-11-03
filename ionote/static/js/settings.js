@@ -127,8 +127,11 @@ async function mcpBox(s) {
     if (!await confirmIt('New token', 'Make a new token? MCP clients using the old one stop working.', 'New token', true)) return;
     const r = await api('/api/mcp/token', { method: 'POST' }); tok.token = r.token; tokEl.textContent = r.token;
   } }, 'New token');
-  return box('MCP server', 'Lets an assistant such as Claude search and read the notes and look at their pictures; with the admin token it can also create, edit, file, tag and delete them, and run diagnostics. The same as iopix\'s MCP server.',
+  const who = h('select', (s.accounts || []).map((a) => h('option', { value: a.id, selected: a.id === s.mcp_user }, a.name)));
+  who.addEventListener('change', () => setSetting('mcp_user', Number(who.value)));
+  return box('MCP server', 'Lets an assistant such as Claude search and read the notes and look at their pictures; with the admin token it can also create, edit, file, tag and delete them, and run diagnostics. The same as iopix\'s MCP server. Notes are private to each account, so it works on the notes of one account.',
     sw('MCP server at /mcp', s.mcp_enabled || s.mcp_forced, (v) => setSetting('mcp_enabled', v), s.mcp_forced, s.mcp_forced ? '(MCP=1 in ionotes.env)' : ''),
+    (s.accounts || []).length ? h('div.row', h('label', 'Notes of'), who) : null,
     h('div.row', h('label', 'Address'), h('span.code', tok.url)),
     h('div.row', h('label', 'Admin token'), tokEl, show, regen),
     h('p.small', 'Claude Desktop: "args": ["mcp-remote", "' + tok.url + '", "--header", "Authorization: Bearer <token>"]. Treat the token like the admin password.'));
@@ -151,7 +154,7 @@ function exportBox() {
   } });
   return box('Export and import', 'Every note as Markdown with its picture, in folders, plus notes.json with everything; a zip made here imports again on any ionotes server (records keep their ids; newer copies on the server win).',
     h('div.row', h('a.pillbtn', { href: '/api/export.zip' }, icon('download'), 'Export all notes'), h('a.pillbtn', { href: '/api/export.zip?trash=1' }, 'With the trash'),
-      isAdmin() ? h('button.pillbtn', { onclick: () => file.click() }, icon('upload'), 'Import…') : null, file));
+      canWrite() ? h('button.pillbtn', { onclick: () => file.click() }, icon('upload'), 'Import…') : null, file));
 }
 
 async function updateBox(s) {

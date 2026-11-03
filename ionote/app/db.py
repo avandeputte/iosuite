@@ -24,7 +24,7 @@ log = logging.getLogger("app.db")
 CONF = config.DATA_DIR / "db.json"
 SQLITE_FILE = config.DATA_DIR / "ionotes.db"
 KEYS = ("type", "host", "port", "database", "user", "password")
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2  # 2: notes, folders, tag colours and the change log belong to an account (owner)
 _cfg = None
 _lock = threading.Lock()
 _ready = False
@@ -311,6 +311,7 @@ def init():
             if not con.mysql:
                 for s in SQLITE_INDEXES:
                     con.execute(s)
+            _add_owner(con)
             r = con.execute("SELECT value FROM app_settings WHERE key = 'schema_version'").fetchone()
             if not r:
                 con.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('schema_version', ?)", (str(SCHEMA_VERSION),))
@@ -319,6 +320,40 @@ def init():
             con.close()
         error = None
         _ready = True
+
+
+def _has_column(con, table: str, col: str) -> bool:
+    if con.mysql:
+        return bool(con.execute("SELECT count(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?",
+                                (table, col)).fetchone()[0])
+    return any(r[1] == col for r in con.execute(f"PRAGMA table_info({table})").fetchall())
+
+
+def _add_owner(con):
+    """Schema 2: every note, folder, tag colour and change-log line belongs to an account (owner: its id in the
+    suite's auth database; 0 until the first admin claims the records made before accounts, see notes.claim_unowned).
+    Idempotent; existing records get owner 0."""
+    big = "BIGINT" if con.mysql else "INTEGER"
+    for table in ("notes", "folders", "change_log"):
+        if not _has_column(con, table, "owner"):
+            con.execute(f"ALTER TABLE {table} ADD COLUMN owner {big} NOT NULL DEFAULT 0")
+            con.execute(f"CREATE INDEX {table}_owner ON {table} (owner{', rev' if table != 'change_log' else ', id'})")
+    if not _has_column(con, "tag_colors", "owner"):
+        # the key becomes (owner, tag name): two accounts may colour the same tag differently
+        if con.mysql:
+            con.execute("CREATE TABLE tag_colors_new (owner BIGINT NOT NULL DEFAULT 0, tag_key VARCHAR(191) NOT NULL, name VARCHAR(191) NOT NULL, "
+                        "color VARCHAR(16), updated_at DOUBLE NOT NULL, deleted INT NOT NULL DEFAULT 0, rev BIGINT NOT NULL DEFAULT 0, "
+                        "PRIMARY KEY (owner, tag_key), INDEX tag_colors_rev (rev)) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
+        else:
+            con.execute("CREATE TABLE tag_colors_new (owner INTEGER NOT NULL DEFAULT 0, tag_key TEXT NOT NULL, name TEXT NOT NULL, color TEXT, "
+                        "updated_at REAL NOT NULL, deleted INTEGER NOT NULL DEFAULT 0, rev INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (owner, tag_key))")
+        con.execute("INSERT INTO tag_colors_new (owner, tag_key, name, color, updated_at, deleted, rev) "
+                    "SELECT 0, tag_key, name, color, updated_at, deleted, rev FROM tag_colors")
+        con.execute("DROP TABLE tag_colors")
+        con.execute("ALTER TABLE tag_colors_new RENAME TO tag_colors")
+        if not con.mysql:
+            con.execute("CREATE INDEX IF NOT EXISTS tag_colors_rev ON tag_colors (rev)")
+    con.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('schema_version', ?)", (str(SCHEMA_VERSION),))
 
 
 def reset_for_tests():

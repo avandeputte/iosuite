@@ -92,15 +92,20 @@ folds a 1.0 install's `user_accounts` table into it). Out of the box ionotes is 
 `setup.sh` (or `ADMIN_USER` / `ADMIN_PASSWORD`, or the person icon in the web app) creates the admin. Once an
 account exists:
 
+**Notes are private to each account.** Every note, folder, tag colour and change-log line belongs to the account
+that made it; nobody else sees, searches, syncs, exports or changes it, admins included (their extra rights are
+about the server, not other people's notes). The notes made while the install was still open (before the first
+account) become the first admin's. A note id that belongs to another account is answered as if it did not exist.
+
 | Who | Can |
 | --- | --- |
-| Not signed in | read and search the notes |
-| **viewer** | the same, plus their own settings kept on the server |
+| Not signed in | nothing but the sign-in screen (there are no shared notes to read) |
+| **viewer** | read and search their own notes; their own settings kept on the server |
 | **viewer without a password** | the same; signs in with one click from the account picker, on the home network only |
-| **editor** | plus every change to notes, folders and tags (the Mac and iPhone apps sign in as an editor) |
-| **admin** | plus settings, accounts, export/import, the MCP token, updates and the server log |
+| **editor** | plus every change to their own notes, folders and tags, and export/import of them (the Mac and iPhone apps sign in as an editor) |
+| **admin** | plus settings, accounts, the MCP token, updates and the server log |
 
-**Require sign-in** (Settings › Sign-in) turns the open reading off: visitors get the sign-in screen and nothing else.
+**Require sign-in** (Settings › Sign-in) also closes `/api/status`-style open routes and the MCP endpoint to visitors.
 Sessions are random tokens in an HttpOnly cookie (`iothing_session`, shared by the apps on the domain) valid for
 30 days and renewed while in use; passwords are scrypt-hashed; wrong passwords cost a growing wait. **Read-only** (Settings, or `READ_ONLY=1`) refuses every
 change, for everyone. Write requests from another site are refused.
@@ -155,6 +160,9 @@ server has is answered with 409 (or `stale` in a push) and the server's copy, wh
 
 Settings › MCP server turns on an MCP endpoint at `/mcp` (off by default), in the same shape as iopix's. An assistant
 such as Claude can then:
+
+Notes are private to each account, so the tools work on the notes of one account: the first admin's, or the one
+chosen under Settings › MCP server › Notes of (`notes_overview` names it).
 
 - read: `notes_overview`, `search_notes` (words, folder, tag, pinned, picture, source, dates, sort), `get_note`,
   `view_note_image` (the picture itself, small or large), `list_folders`, `list_tags`, `recent_changes`, `list_trash`

@@ -19,7 +19,8 @@ server = MCPServer(
     instructions=(
         "A personal notes library (text, clipboard snippets, screenshots with the text read from them). Start with "
         "notes_overview, use list_folders / list_tags to find exact names, then search_notes and get_note. "
-        "view_note_image shows a note's picture. Changing anything needs the admin token "
+        "view_note_image shows a note's picture. Notes are private to each account: these tools work on the notes of "
+        "one account (notes_overview names it; an admin chooses it in Settings › MCP server). Changing anything needs the admin token "
         "(the web app's Settings › MCP server shows it to an admin)."
     ),
 )

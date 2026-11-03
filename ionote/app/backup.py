@@ -48,7 +48,8 @@ def export_zip(include_trash: bool = False, pictures: bool = True) -> bytes:
     folders = notes.list_folders()
     fname = {f["id"]: _safe(f["name"], "Folder") for f in folders}
     with db.connect() as con:
-        rows = con.execute(f"SELECT {notes.NOTE_COLS} FROM notes {'' if include_trash else 'WHERE deleted = 0'} ORDER BY created_at").fetchall()
+        rows = con.execute(f"SELECT {notes.NOTE_COLS} FROM notes WHERE owner = ? {'' if include_trash else 'AND deleted = 0'} ORDER BY created_at",
+                           (notes.owner(),)).fetchall()
     all_notes = [notes.note_dict(r) for r in rows]
     buf = io.BytesIO()
     used = set()
@@ -90,7 +91,7 @@ def import_zip(data: bytes, user: str) -> dict:
         try:
             notes.save_folder(f["id"], f, user)
             out["folders"] += 1
-        except notes.Stale:
+        except (notes.Stale, notes.NotFound):
             out["skipped"] += 1
     for t in doc.get("tags") or []:
         try:
@@ -112,7 +113,7 @@ def import_zip(data: bytes, user: str) -> dict:
         try:
             notes.save_note(n["id"], {k: v for k, v in n.items() if k not in ("hasImage", "imageSHA", "rev", "imageData")}, user)
             out["notes"] += 1
-        except notes.Stale:
+        except (notes.Stale, notes.NotFound):  # newer here, or the id is another account's
             out["skipped"] += 1
             continue
         blob = base64.b64decode(img) if img else (z.read(pics[n["id"]]) if z and n["id"] in pics else None)

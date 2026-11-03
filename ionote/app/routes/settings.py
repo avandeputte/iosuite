@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Request, UploadFile, File
 from fastapi.responses import Response
 from starlette.concurrency import run_in_threadpool
 
-from app import __version__, access, backup, config, db, images, logs, notes, ocr, proxyauth, updates, users
+from app import __version__, access, owners, backup, config, db, images, logs, notes, ocr, proxyauth, updates, users
 from app.http import json_body, user_name
 
 router = APIRouter()
@@ -43,6 +43,8 @@ def api_settings(request: Request):
         out["ocr"] = ocr.status()
         out["images"] = images.stats()
         out["appUrl"] = config.APP_URL
+        out["mcp_user"] = owners.mcp_owner()
+        out["accounts"] = [{"id": u["id"], "name": u["name"], "role": u.get("role")} for u in users.list_users()]
     return out
 
 
@@ -59,6 +61,10 @@ async def api_settings_set(request: Request):
             db.set_setting(k, "1" if v else "0")
         elif k in TEXTS:
             db.set_setting(k, str(v or "").strip()[:40])
+        elif k == "mcp_user":  # whose notes the MCP tools work on
+            if v and not users.get(int(v)):
+                raise HTTPException(400, "No such account")
+            db.set_setting("mcp_user", str(int(v or 0)))
     users.invalidate()
     return {"ok": True}
 
@@ -133,7 +139,7 @@ async def api_export(trash: int = 0, pictures: int = 1):
     return Response(data, media_type="application/zip", headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
 
-@router.post("/api/import", dependencies=[access.admin_write])
+@router.post("/api/import", dependencies=[access.editor_write])
 async def api_import(request: Request, file: UploadFile = File(...)):
     data = await file.read()
     try:

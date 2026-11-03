@@ -48,6 +48,8 @@ def clean():
     users.invalidate()
     users._attempts.clear()
     proxyauth.forget_identities()
+    from app import notes
+    notes._claimed = False  # each test starts before any account claimed the open install's notes
     yield
 
 
