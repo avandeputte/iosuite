@@ -112,3 +112,21 @@ def test_calendar_and_duplicates(client, family_id):
     keep, other = groups[0]["contacts"][0]["id"], groups[0]["contacts"][1]["id"]
     merged = client.post("/api/contacts/merge", json={"keep": keep, "others": [other]}).json()
     assert len(merged["emails"]) == 1 and client.get(f"/api/contacts/{other}").status_code == 404
+
+
+def test_apple_profile(client):
+    import plistlib
+    r = client.post("/api/apple-profile", data={"label": "Alex iPhone", "password": "new", "calendar": "family"})
+    assert r.status_code == 200 and r.headers["content-type"].startswith("application/x-apple-aspen-config")
+    p = plistlib.loads(r.content)
+    dav, cal = p["PayloadContent"]
+    assert dav["PayloadType"] == "com.apple.carddav.account" and dav["CardDAVUsername"] == "alex"
+    assert dav["CardDAVPrincipalURL"] == "/dav/principals/alex/" and dav["CardDAVPassword"].startswith("ioc-")
+    assert cal["PayloadType"] == "com.apple.subscribedcalendar.account" and cal["SubCalAccountHostName"].endswith("/family.ics")
+    # the app password in the profile works for CardDAV
+    client.cookies.clear()
+    assert client.request("PROPFIND", "/dav/", auth=("alex", dav["CardDAVPassword"]), headers={"Depth": "0"}).status_code == 207
+    labels = [x["label"] for x in client.get("/api/app-passwords", auth=("alex", dav["CardDAVPassword"])).json()["items"]]
+    assert "Alex iPhone (profile)" in labels
+    ask = plistlib.loads(client.post("/api/apple-profile", data={"password": "ask", "calendar": "none"}, auth=("alex", dav["CardDAVPassword"])).content)
+    assert len(ask["PayloadContent"]) == 1 and "CardDAVPassword" not in ask["PayloadContent"][0]

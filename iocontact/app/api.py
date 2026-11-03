@@ -844,6 +844,59 @@ def connect_info(request: Request):
             "api": f"{base}/api/docs"}
 
 
+@router.post("/api/apple-profile")
+def apple_profile(request: Request, label: str = Form("iPhone"), password: str = Form("new"), calendar: str = Form("family"),
+                  ldap: bool = Form(False)):
+    """A configuration profile (.mobileconfig) that sets an iPhone, iPad or Mac up in one go: the CardDAV account for the
+    contacts and, if asked, the birthday calendar subscription (and the LDAP directory). password: "new" puts a new app
+    password (named after label) in the profile; "ask" leaves it out, and the device asks for it while installing."""
+    import plistlib
+    import uuid
+    from urllib.parse import urlsplit
+    u = me(request)
+    base = _base(request)
+    parts = urlsplit(base)
+    ssl = parts.scheme == "https"
+    host = parts.hostname or "localhost"
+    port = parts.port or (443 if ssl else 80)
+    label = (label or "iPhone").strip()[:48] or "iPhone"
+    secret = users.create_app_password(u["id"], f"{label} (profile)") if password == "new" else None
+    ident = "net.iothing.iocontacts." + re.sub(r"[^A-Za-z0-9.-]", "-", host) + "." + re.sub(r"[^A-Za-z0-9-]", "-", u["name"])
+    who = u.get("display_name") or u["name"]
+    carddav = {"PayloadType": "com.apple.carddav.account", "PayloadVersion": 1, "PayloadIdentifier": ident + ".carddav",
+               "PayloadUUID": str(uuid.uuid4()).upper(), "PayloadDisplayName": "Contacts (CardDAV)",
+               "CardDAVAccountDescription": "ioContacts", "CardDAVHostName": host, "CardDAVPort": port, "CardDAVUseSSL": ssl,
+               "CardDAVPrincipalURL": f"{parts.path.rstrip('/')}/dav/principals/{u['name']}/", "CardDAVUsername": u["name"]}
+    if secret:
+        carddav["CardDAVPassword"] = secret
+    content = [carddav]
+    if calendar in ("family", "all"):
+        tok = users.calendar_token(u["id"])
+        content.append({"PayloadType": "com.apple.subscribedcalendar.account", "PayloadVersion": 1,
+                        "PayloadIdentifier": ident + ".birthdays", "PayloadUUID": str(uuid.uuid4()).upper(),
+                        "PayloadDisplayName": "Birthday calendar",
+                        "SubCalAccountDescription": "Family birthdays" if calendar == "family" else "Birthdays",
+                        "SubCalAccountHostName": f"{base}/cal/{tok}/{calendar}.ics", "SubCalAccountUseSSL": ssl})
+    if ldap and config.LDAP_PORT:
+        lp = {"PayloadType": "com.apple.ldap.account", "PayloadVersion": 1, "PayloadIdentifier": ident + ".ldap",
+              "PayloadUUID": str(uuid.uuid4()).upper(), "PayloadDisplayName": "Directory (LDAP)",
+              "LDAPAccountDescription": "ioContacts directory", "LDAPAccountHostName": f"{host}:{config.LDAP_PORT}",
+              "LDAPAccountUseSSL": False, "LDAPAccountUserName": f"cn={u['name']},ou=users,{config.LDAP_BASE}",
+              "LDAPSearchSettings": [{"LDAPSearchSettingDescription": "Contacts", "LDAPSearchSettingSearchBase": config.LDAP_BASE,
+                                      "LDAPSearchSettingScope": "LDAPSearchSettingScopeSubtree"}]}
+        if secret:
+            lp["LDAPAccountPassword"] = secret
+        content.append(lp)
+    profile = {"PayloadType": "Configuration", "PayloadVersion": 1, "PayloadIdentifier": ident,
+               "PayloadUUID": str(uuid.uuid4()).upper(), "PayloadDisplayName": f"ioContacts for {who}",
+               "PayloadDescription": f"Sets up {who}'s ioContacts contacts" + (" and the birthday calendar" if len(content) > 1 else "")
+                                     + f" from {host}." + ("" if secret else " The device asks for an app password while installing."),
+               "PayloadOrganization": "ioContacts", "PayloadRemovalDisallowed": False, "PayloadContent": content}
+    return Response(plistlib.dumps(profile), media_type="application/x-apple-aspen-config",
+                    headers={"Content-Disposition": f'attachment; filename="iocontacts-{re.sub(r"[^A-Za-z0-9-]", "-", u["name"])}.mobileconfig"',
+                             "Cache-Control": "no-store"})
+
+
 @router.post("/api/calendar/reset")
 def calendar_reset(request: Request):
     users.reset_calendar_token(me(request)["id"])

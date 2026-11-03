@@ -265,3 +265,5 @@ label.check input { margin-top: 3px; accent-color: var(--brand); }
 .mergedlg .mk { width: 120px; flex: none; color: var(--fg2); font-size: var(--fs-s); padding-top: 3px; }
 .mergedlg .mv { flex: 1 1 280px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .mergedlg .mrow > p { flex-basis: 100%; margin: 0; }
+
+.pform { display: grid; gap: 10px; max-width: 520px; }

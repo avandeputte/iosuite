@@ -26,6 +26,11 @@ A self-hosted contact manager: a web app for the whole family, and the standard 
 | Moving in and out | vCard files, jCard, and **CSV in Google Contacts' and Outlook's layouts** | Import and export page, `/api/import`, `/api/export` |
 | AI assistants: Claude and anything else that speaks MCP | **Model Context Protocol** (streamable HTTP, and stdio) | `https://host/mcp` (switched on in Settings › Server) |
 
+**iPhone, iPad and Mac in one step:** Settings › Apps and devices › *Download the profile* gives a configuration profile
+(`.mobileconfig`) with the CardDAV account and, if you like, the birthday calendar subscription (and the LDAP
+directory for Mail on a Mac), with a new app password for that device inside (or none, and the device asks). Open the
+page in Safari on the iPhone, tap Download, then Settings › Profile Downloaded › Install.
+
 Settings › Apps and devices shows the exact addresses to type, and makes **app passwords**: one per phone or app, revocable on its own, used with your user name for CardDAV, LDAP and the REST API (HTTP Basic, or `Authorization: Bearer <app password>`).
 
 ```sh

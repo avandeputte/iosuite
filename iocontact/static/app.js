@@ -874,7 +874,21 @@ async function setDevices(el) {
   const pw = await api('/api/app-passwords');
   const label = h('input', { class: 't', placeholder: 'e.g. Alex’s iPhone', style: 'max-width:280px' });
   const shown = h('div');
+  const isApple = /iPhone|iPad|Macintosh/.test(navigator.userAgent);
+  const plabel = h('input', { class: 't', name: 'label', value: /iPad/.test(navigator.userAgent) ? 'iPad' : /iPhone/.test(navigator.userAgent) ? 'iPhone' : 'iPhone', style: 'max-width:200px' });
   el.append(...[
+    h('div', { class: 'box' }, h('h2', null, icon('devices'), 'iPhone, iPad and Mac: set up in one step'),
+      h('p', null, 'Download a configuration profile that adds your contacts (CardDAV) and, if you like, the family birthday calendar. ',
+        isApple ? 'Tap Download here in Safari, then open Settings › Profile Downloaded › Install.' : 'Open this page on the iPhone or iPad in Safari and tap Download, then Settings › Profile Downloaded › Install. On a Mac, open the file, then System Settings › Privacy & Security › Profiles.'),
+      h('form', { method: 'POST', action: '/api/apple-profile', class: 'pform', onsubmit: () => { setTimeout(async () => drawPw((await api('/api/app-passwords')).items), 1500); } },
+        h('label', { class: 'field' }, h('span', null, 'Device name'), plabel),
+        h('label', { class: 'field' }, h('span', null, 'Password'), h('select', { class: 't', name: 'password' },
+          h('option', { value: 'new' }, 'Include a new app password for this device'), h('option', { value: 'ask' }, 'Leave it out (the device asks while installing)'))),
+        h('label', { class: 'field' }, h('span', null, 'Birthday calendar'), h('select', { class: 't', name: 'calendar' },
+          h('option', { value: 'family' }, 'Family birthdays'), h('option', { value: 'all' }, 'Birthdays from all my books'), h('option', { value: 'none' }, 'No calendar'))),
+        info.ldap.enabled ? h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'ldap', value: 'true' }), ' Also the LDAP directory (for Mail on a Mac; plain LDAP, home network only)') : null,
+        h('p', null, h('button', { class: 'pillbtn primary', type: 'submit' }, icon('download', 's'), 'Download the profile'))),
+      h('p', { class: 'muted small' }, 'The profile holds the app password: install it and delete the file, and revoke that password below if the device is lost. The profile is not signed, so iOS shows it as “Not Verified”; that is expected.')),
     h('div', { class: 'box' }, h('h2', null, icon('key'), 'App passwords'),
       h('p', { class: 'muted' }, 'Give every app or device its own password instead of yours; you can revoke one without touching the others. Use your user name with it.'),
       h('div', { class: 'multi' }, label, h('button', { class: 'pillbtn primary', onclick: async () => {
