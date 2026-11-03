@@ -76,6 +76,10 @@ def _remote_app_version(sha: str) -> str | None:
     return m.group(1) if m else None
 
 
+def _ver(v: str) -> tuple:
+    return tuple(int(x) if x.isdigit() else 0 for x in re.split(r"[.+-]", v or "0")[:3])
+
+
 def check() -> dict:
     """{installed, version, remote, remoteDate, remoteMessage, remoteVersion, status: current | update | error, checked}"""
     mine = local_commit()
@@ -92,7 +96,9 @@ def check() -> dict:
             except Exception:  # noqa: BLE001
                 rv = None
             out["remoteVersion"] = rv
-            out["status"] = "current" if rv == APP_VERSION else "update"
+            # a newer build is one with a higher app version; the same version under another commit (docs, the
+            # workflow) is nothing to install, and an older one means this install is ahead of main
+            out["status"] = "update" if rv is None or _ver(rv) > _ver(APP_VERSION) else "current"
     except Exception as e:  # noqa: BLE001
         out.update(status="error", error=str(e)[:160])
     _checked.clear()
