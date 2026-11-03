@@ -4,7 +4,10 @@ WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY app ./app
 COPY static ./static
-RUN pip install --no-cache-dir -e . \
+# git only while installing: iothing-auth (the suite's shared accounts) comes from its GitHub repository
+RUN apt-get update && apt-get install -y --no-install-recommends git \
+    && pip install --no-cache-dir -e . \
+    && apt-get purge -y --auto-remove git && rm -rf /var/lib/apt/lists/* \
     && useradd --uid 1000 --user-group --no-create-home --shell /usr/sbin/nologin iocontacts && chown -R iocontacts:iocontacts /app
 ENV DB_HOST=db DB_PORT=3306 DB_NAME=contacts DB_USER=contacts DB_PASSWORD=contacts LDAP_PORT=3890 PYTHONUNBUFFERED=1
 EXPOSE 8610 3890
