@@ -159,3 +159,9 @@ def test_account_picker_and_one_click(client, family_id):
     with TestClient(app) as dav:
         r = dav.get("/api/books", headers={"Authorization": "Basic " + base64.b64encode(b"gran:").decode()})
         assert r.status_code == 401
+
+
+def test_page_stamps_the_version(client):
+    from app import APP_VERSION
+    html = client.get("/").text
+    assert f'static/app.js?v={APP_VERSION}"' in html and f'static/app.css?v={APP_VERSION}"' in html

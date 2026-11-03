@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import APP_VERSION, api, carddav, config, db, ldapd, mcp, updates, users
@@ -89,7 +89,12 @@ app.router.routes[:0] = list(_mcp_asgi.routes)  # the exact path /mcp, ahead of 
 
 @app.get("/", include_in_schema=False)
 def index():
-    return FileResponse(config.STATIC_DIR / "index.html", headers={"Cache-Control": "no-cache"})
+    """The page, with the version stamped on the script and stylesheet: after an update the browser (and Cloudflare,
+    which caches .js and .css at the edge) fetches the new ones instead of serving what it kept."""
+    html = (config.STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    for f in ("static/app.js", "static/app.css"):
+        html = html.replace(f'"{f}"', f'"{f}?v={APP_VERSION}"')
+    return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/manifest.webmanifest", include_in_schema=False)
