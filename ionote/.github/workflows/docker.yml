@@ -1,0 +1,90 @@
+# Tests on SQLite and on MariaDB, then builds the container image and pushes it to GitHub's registry (ghcr.io) on
+# every push to main and on version tags; pull requests only build. The same layout as iopix's workflow.
+name: Docker image
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/avandeputte/ionotes
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: notes_test
+          MARIADB_USER: notes
+          MARIADB_PASSWORD: notes
+        ports: ["3306:3306"]
+        options: --health-cmd="healthcheck.sh --connect --innodb_initialized" --health-interval=5s --health-timeout=5s --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Syntax and import checks
+        run: |
+          python -m pip install -q -e ".[test]"
+          python -m pyflakes app tests
+          python -c "import app.main"
+          for f in static/app.js static/js/*.js; do node --input-type=module --check < "$f" || exit 1; done; node --check static/sw.js
+          for f in *.sh; do sh -n "$f"; done
+      - name: Tests on SQLite
+        run: python -m pytest -q -p no:cacheprovider tests
+      - name: Tests on MariaDB
+        env:
+          IONOTES_TEST_DB: mysql
+        run: python -m pytest -q -p no:cacheprovider tests
+
+  image:
+    needs: tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - name: Log in to ghcr.io
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ env.IMAGE }}
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            OCR=1
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

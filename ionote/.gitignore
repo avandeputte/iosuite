@@ -1,0 +1,13 @@
+# ionotes' own data: the session secret, the log, the database settings (and a SQLite file when not on MariaDB)
+data/
+# virtual environment and Python caches
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+# the settings setup.sh writes (they hold the database password)
+ionotes.env
+# macOS
+.DS_Store
+*.egg-info/
+COMMIT

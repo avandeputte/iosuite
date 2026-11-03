@@ -1,0 +1,41 @@
+# ionotes with Docker: `docker compose up -d` pulls the published image; `docker compose up -d --build` builds it
+# from this checkout instead. Works as a stack in Dockge / Portainer. Edit the "CHANGE ME" spots (the database and
+# the admin password). Everything ionotes keeps (notes, pictures, accounts, settings) is in the MariaDB database;
+# the named volume only holds the session secret and the log.
+#
+# The image is public on GitHub's registry: no login is needed to pull it.
+services:
+  ionotes:
+    image: ghcr.io/avandeputte/ionotes:latest
+    build:
+      context: .
+      # args: { OCR: "1" }
+    container_name: ionotes
+    restart: unless-stopped
+    ports:
+      - "8610:8610"
+    volumes:
+      - ionotes-data:/data
+    environment:
+      TZ: America/New_York
+      DB_TYPE: mysql
+      DB_HOST: 192.168.1.89                         # CHANGE ME: your MariaDB host or IP
+      DB_PORT: "3306"
+      DB_DATABASE: notes
+      DB_USER: notes
+      DB_PASSWORD: change-me                        # CHANGE ME
+      # the first admin account, created on the first start (remove both lines to start open and create it in the web app)
+      ADMIN_USER: admin
+      ADMIN_PASSWORD: change-me-please              # CHANGE ME (8 characters or more)
+      # the address ionotes is reached at, for links in MCP answers
+      # APP_URL: https://notes.example.com
+      # sign-in at Cloudflare Access (see README): AUTH_PROXY: cloudflare, CF_ACCESS_TEAM, CF_ACCESS_AUD
+      # READ_ONLY: "1"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8610/api/status', timeout=4)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+
+volumes:
+  ionotes-data:
