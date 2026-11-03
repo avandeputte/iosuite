@@ -131,11 +131,7 @@ async function start() {
   try { state.settings = await api('/api/settings'); } catch (e) { state.settings = {}; }
   await loadMe();
   renderUserMenu();
-  if (state.me.requireLogin && !state.me.user) {
-    $('#main').append(h('div.noteempty', h('div', 'Sign in to see the notes.'), h('button.pillbtn.primary', { onclick: signIn }, 'Sign in')));
-    signIn();
-    return;
-  }
+  if (state.me.requireLogin && !state.me.user) { document.body.classList.add('locked'); signIn(true); return; }
   if (state.me.user && state.me.settings && state.me.settings.theme) {
     try { if (!localStorage.getItem('ionotes.theme')) { localStorage.setItem('ionotes.theme', state.me.settings.theme); location.reload(); return; } } catch (e) {}
   }

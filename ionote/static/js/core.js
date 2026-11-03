@@ -113,15 +113,17 @@ export function toast(msg, ms = 2600) {
 }
 export function fail(e) { toast(e && e.message ? e.message : String(e), 4500); }
 
-export function dialog(title, content, buttons = []) {
+/** opts.required: it must be answered (sign-in required): no closing, and nothing of the app shows behind it.
+ *  opts.head: shown above the title (the sign-in's logo and name). */
+export function dialog(title, content, buttons = [], opts = {}) {
   return new Promise((resolve) => {
     const close = (v) => { scrim.remove(); document.removeEventListener('keydown', key); resolve(v); };
-    const key = (e) => { if (e.key === 'Escape') close(null); };
-    const box = h('div.dialog', { role: 'dialog', 'aria-modal': 'true' }, h('h2', title), content,
+    const key = (e) => { if (e.key === 'Escape' && !opts.required) close(null); };
+    const box = h('div.dialog', { role: 'dialog', 'aria-modal': 'true' }, opts.head || null, h('h2', title), content,
       h('div.acts', buttons.map((b) => h('button.pillbtn' + (b.primary ? '.primary' : '') + (b.danger ? '.danger' : ''), {
         onclick: async () => { if (b.action) { const v = await b.action(); if (v === false) return; close(v === undefined ? b.value : v); } else close(b.value); },
       }, b.label))));
-    const scrim = h('div.scrim', { onclick: (e) => { if (e.target === scrim) close(null); } }, box);
+    const scrim = h('div.scrim' + (opts.required ? '.required' : ''), { onclick: (e) => { if (e.target === scrim && !opts.required) close(null); } }, box);
     document.body.append(scrim);
     document.addEventListener('keydown', key);
     const first = box.querySelector('input, textarea, select');
