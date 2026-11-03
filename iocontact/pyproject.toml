@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 dependencies = [
-  "iothing-auth @ git+https://github.com/avandeputte/iothing-auth.git",   # the ioThing suite\'s shared accounts and sessions
+  "iothing-auth @ git+https://github.com/avandeputte/iothing-auth.git",   # the ioThing suite's shared accounts and sessions
   "fastapi<1",
   "uvicorn<1",
   "pymysql<2",
