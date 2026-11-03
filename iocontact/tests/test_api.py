@@ -108,7 +108,7 @@ def test_calendar_and_duplicates(client, family_id):
     assert r.status_code == 200 and "RRULE:FREQ=YEARLY" in r.text and "Gran Ma's birthday" in r.text and "DTSTART;VALUE=DATE:19400229" in r.text
     assert client.get("/cal/bogus/family.ics").status_code == 404
     groups = client.get("/api/duplicates").json()["groups"]
-    assert len(groups) == 1 and len(groups[0]) == 2
-    keep, other = groups[0][0]["id"], groups[0][1]["id"]
+    assert len(groups) == 1 and len(groups[0]["contacts"]) == 2 and "same email same@x.org" in groups[0]["pairs"][0]["reasons"]
+    keep, other = groups[0]["contacts"][0]["id"], groups[0]["contacts"][1]["id"]
     merged = client.post("/api/contacts/merge", json={"keep": keep, "others": [other]}).json()
     assert len(merged["emails"]) == 1 and client.get(f"/api/contacts/{other}").status_code == 404

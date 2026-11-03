@@ -22,7 +22,10 @@ server = MCPServer(
         "including relations. Contacts are named by id or by name; a name has to match one contact. Relations are "
         "gender-neutral types (sibling, parent, child, cousin, spouse...; see relation_types) and the other side is kept "
         "by itself: making Tim Mary's child makes Mary Tim's parent. Birthdays have a year only when it is known. "
-        "Ask before deleting or merging contacts."
+        "For upkeep: find_duplicates (scored, with reasons), preview_merge and merge_contacts (undo_merge can take a merge "
+        "back), data_quality_report and fix_data_quality. To enrich a contact, research the person (LinkedIn, company "
+        "sites, social networks...) and file what you find with suggest_contact_update: it only proposes, and a person "
+        "accepts or dismisses each suggestion in the web app. Ask before deleting or merging contacts."
     ),
 )
 

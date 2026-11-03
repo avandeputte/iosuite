@@ -11,7 +11,7 @@ from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
 
-from app import APP_VERSION, calendar, config, csvio, db, iopix, model, relations as rel, updates, users, vcard
+from app import APP_VERSION, calendar, config, csvio, db, enrich, iopix, model, quality, relations as rel, updates, users, vcard
 
 router = APIRouter()
 
@@ -125,6 +125,7 @@ def status(request: Request):
             "usersExist": users.any_users(), "user": users.public(u),
             "iopix": bool(iopix.settings()["url"]), "viaProxy": getattr(request.state, "via_proxy", False),
             "mcp": mcp_enabled() if u else None,
+            "suggestions": enrich.pending_count(book_ids(u)) if u else None,
             "updateAvailable": updates.available() if adm and updates.auto_check_enabled() else None}
 
 
@@ -522,19 +523,164 @@ async def photo_from_iopix(cid: int, request: Request):
 
 @router.post("/api/contacts/merge")
 async def merge(request: Request):
+    """{keep, others, result?, photoFrom?}: fold the others into keep. result is the contact as it should end up (fields
+    chosen one by one, as /api/merge/preview offers them); without it, everything is combined. Undo: /api/merges."""
     u = writer(request)
     b = await request.json()
-    keep, others = int(b["keep"]), [int(x) for x in b.get("others") or []]
+    keep, others = int(b["keep"]), [int(x) for x in b.get("others") or [] if int(x) != int(b["keep"])]
+    if not others:
+        raise HTTPException(400, "Name the contacts to merge into the kept one")
     for cid in [keep, *others]:
         r = readable_contact(u, cid)
         writable_book(u, r["book_id"])
-    await run_in_threadpool(model.merge, keep, others)
-    return contact_out(model.full(keep))
+    result = b.get("result") if isinstance(b.get("result"), dict) else None
+    pf = b.get("photoFrom")
+    mid = await run_in_threadpool(quality.merge, u, keep, others, result, int(pf) if pf not in (None, "") else None)
+    return {**contact_out(model.full(keep)), "mergeId": mid}
+
+
+@router.get("/api/merge/preview")
+def merge_preview(request: Request, ids: str, keep: int | None = None):
+    """What merging these contacts gives, and the fields where they disagree (to choose from)."""
+    u = me(request)
+    want = [int(x) for x in ids.split(",") if x.strip().isdigit()]
+    if len(want) < 2:
+        raise HTTPException(400, "At least two contacts")
+    for cid in want:
+        readable_contact(u, cid)
+    keep = keep if keep in want else want[0]
+    out = quality.preview(want, keep)
+    out["contacts"] = [contact_out(c) for c in out["contacts"]]
+    if len(want) == 2:
+        out["compare"] = quality.compare(want[0], want[1])
+    return out
 
 
 @router.get("/api/duplicates")
-def duplicates(request: Request, book: str | None = None):
-    return {"groups": model.find_duplicates(book_ids(me(request), book))}
+def duplicates(request: Request, book: str | None = None, min_score: int = 35):
+    """Probable duplicates, grouped, most certain first, each pair with a score and the reasons."""
+    return {"groups": quality.find(book_ids(me(request), book), max(10, min(min_score, 100)))}
+
+
+@router.post("/api/duplicates/dismiss")
+async def duplicates_dismiss(request: Request):
+    """{ids: [...]}: these contacts are different people; they are not offered as duplicates again."""
+    u = writer(request)
+    ids = [int(x) for x in (await request.json()).get("ids") or []]
+    for cid in ids:
+        readable_contact(u, cid)
+    return {"ok": True, "pairs": quality.not_duplicates(ids, u["id"])}
+
+
+@router.delete("/api/duplicates/dismissed")
+def duplicates_forget(request: Request):
+    """Admins: offer every pair marked "not duplicates" again."""
+    admin(request)
+    return {"ok": True, "forgotten": quality.forget_not_duplicates()}
+
+
+@router.get("/api/merges")
+def merges(request: Request, limit: int = 50):
+    """Recent merges, newest first, with whether each can still be undone."""
+    return {"items": quality.history(book_ids(me(request)), max(1, min(limit, 200)))}
+
+
+@router.post("/api/merges/{mid}/undo")
+async def merge_undo(mid: int, request: Request):
+    u = writer(request)
+    m = db.one("SELECT keep_id FROM merges WHERE id = %s", (mid,))
+    if not m:
+        raise HTTPException(404, "No such merge")
+    r = readable_contact(u, m["keep_id"])
+    writable_book(u, r["book_id"])
+    try:
+        return await run_in_threadpool(quality.undo, mid)
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+
+
+# ------------------------------------------------------------------ enrichment (suggestions that wait for a person)
+
+@router.post("/api/contacts/{cid}/lookup")
+async def contact_lookup(cid: int, request: Request):
+    """Look this contact up (Gravatar by email, and its GitHub, Mastodon and Bluesky profiles); what is found waits as
+    suggestions."""
+    u = me(request)
+    readable_contact(u, cid)
+    return await run_in_threadpool(enrich.lookup, cid, u["id"])
+
+
+@router.post("/api/lookup")
+async def lookup_many(request: Request):
+    """{ids?: [...], book?, offset?, limit?}: look several contacts up (25 at a time; call again with the next offset)."""
+    u = me(request)
+    b = await request.json()
+    if b.get("ids"):
+        ids = [int(x) for x in b["ids"]]
+        for cid in ids:
+            readable_contact(u, cid)
+        total = len(ids)
+    else:
+        items, total = model.search(book_ids(u, b.get("book")), limit=max(1, min(int(b.get("limit") or 25), 50)), offset=max(0, int(b.get("offset") or 0)))
+        ids = [x["id"] for x in items]
+
+    def run():
+        return [enrich.lookup(cid, u["id"]) for cid in ids]
+    res = await run_in_threadpool(run)
+    return {"total": total, "done": len(res), "added": sum(r["added"] for r in res), "results": res}
+
+
+@router.get("/api/suggestions")
+def suggestions(request: Request, status: str = "pending", contact: int | None = None, book: str | None = None):
+    u = me(request)
+    if status not in ("pending", "accepted", "dismissed"):
+        raise HTTPException(400, "status: pending, accepted or dismissed")
+    return {"items": enrich.listing(book_ids(u, book), status, contact)}
+
+
+@router.post("/api/suggestions/{sid}/accept")
+async def suggestion_accept(sid: int, request: Request):
+    """Apply a suggestion to its contact. Body (optional): {value} to apply an edited version."""
+    u = writer(request)
+    s = enrich.suggestion(sid)
+    if not s:
+        raise HTTPException(404, "No such suggestion")
+    writable_book(u, readable_contact(u, s["contact_id"])["book_id"])
+    raw = await request.body()
+    b = json.loads(raw) if raw else {}
+    try:
+        return await run_in_threadpool(enrich.accept, sid, u["id"], book_ids(u), b.get("value"))
+    except (ValueError, KeyError, TypeError) as e:
+        raise HTTPException(400, str(e))
+
+
+@router.post("/api/suggestions/{sid}/dismiss")
+def suggestion_dismiss(sid: int, request: Request):
+    u = me(request)
+    s = enrich.suggestion(sid)
+    if not s:
+        raise HTTPException(404, "No such suggestion")
+    readable_contact(u, s["contact_id"])
+    enrich.dismiss(sid, u["id"])
+    return {"ok": True}
+
+
+@router.get("/api/quality")
+def data_quality(request: Request, book: str | None = None, check: str | None = None):
+    """The data quality checks: [{check, title, severity: problem | tidy | info, fix, count, items}]."""
+    return {"checks": quality.run_checks(book_ids(me(request), book), check)}
+
+
+@router.post("/api/quality/fix")
+async def data_quality_fix(request: Request):
+    """{check, ids?, countryCode?, book?}: fix a check's findings (all, or these contacts) where you may change them."""
+    u = writer(request)
+    b = await request.json()
+    ids = [int(x) for x in b["ids"]] if b.get("ids") else None
+    try:
+        return await run_in_threadpool(quality.fix, u, str(b.get("check")), ids, book_ids(u, b.get("book")), b.get("countryCode"))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 @router.get("/api/tags")

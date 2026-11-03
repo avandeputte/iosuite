@@ -4,8 +4,8 @@ from typing import Literal, Optional
 
 from mcp.server.mcpserver.exceptions import ToolError
 
-from app import db, iopix, model, relations as rel, users
-from app.mcp.base import ADDS, DELETES, WRITES, book_ids, contact_out, default_book, find_book, find_contact, server, who
+from app import db, enrich, iopix, model, relations as rel, users
+from app.mcp.base import ADDS, DELETES, READ_ONLY, WRITES, book_ids, contact_out, default_book, find_book, find_contact, server, who
 
 CONTACT_SHAPE = """
     A contact is a JSON object; every field is optional, but give at least a name:
@@ -224,16 +224,134 @@ def move_contacts(contacts: list[str], book: str) -> dict:
 
 
 @server.tool(annotations=DELETES)
-def merge_contacts(keep: str, others: list[str]) -> dict:
+def merge_contacts(keep: str, others: list[str], choices: Optional[dict] = None, photo_from: Optional[str] = None) -> dict:
     """Fold duplicates into one contact: the others' phones, emails, addresses, dates, profiles, labels and relations are
-    added to `keep`, its empty fields are filled from them, then the others are deleted. Ask first."""
+    added to `keep`, its empty fields are filled from them, relations pointing at the others move to it, and the
+    others are deleted. choices: {field: contact} to take a field (name, nickname, birthday, org, title, notes, gender...)
+    from a given contact instead (preview_merge lists where they disagree); photo_from: whose photo to keep.
+    It can be undone with undo_merge. Ask first."""
+    from app import quality
     u = who()
     k = find_contact(u, keep, writable=True)
     rows = [find_contact(u, ref, writable=True) for ref in others]
     if any(r["id"] == k["id"] for r in rows):
         raise ToolError("`keep` is also among `others`")
-    model.merge(k["id"], [r["id"] for r in rows])
-    return {"merged": [r["fn"] for r in rows], "into": contact_out(u, k["id"])}
+    ids = [k["id"], *[r["id"] for r in rows]]
+    result = None
+    if choices:
+        full = {i: model.full(i) for i in ids}
+        result = model.combine(model.full(k["id"], with_photo=True), [model.full(i, with_photo=True) for i in ids[1:]])
+        result.pop("photoData", None)
+        for field, who_ref in choices.items():
+            src = find_contact(u, who_ref)["id"]
+            if src not in full:
+                raise ToolError(f"{who_ref} is not one of the contacts being merged")
+            if field == "name":
+                result["name"], result["fn"] = dict(full[src]["name"]), full[src]["fn"]
+            elif field in full[src]:
+                result[field] = full[src][field]
+            else:
+                raise ToolError(f"'{field}' is not a field to choose")
+    pf = find_contact(u, photo_from)["id"] if photo_from else None
+    mid = quality.merge(u, k["id"], ids[1:], result, pf)
+    return {"merged": [r["fn"] for r in rows], "mergeId": mid, "into": contact_out(u, k["id"])}
+
+
+@server.tool(annotations=WRITES)
+def mark_not_duplicates(contacts: list[str]) -> dict:
+    """These contacts are different people (twins, a father and son with one name...): find_duplicates stops offering them."""
+    from app import quality
+    u = who()
+    rows = [find_contact(u, c) for c in contacts]
+    quality.not_duplicates([r["id"] for r in rows], u["id"])
+    return {"keptApart": [r["fn"] for r in rows]}
+
+
+@server.tool(annotations=READ_ONLY)
+def list_merges(limit: int = 20) -> list:
+    """Recent merges, newest first, and whether each can still be undone."""
+    from app import quality
+    u = who()
+    return quality.history(book_ids(u), max(1, min(int(limit), 100)))
+
+
+@server.tool(annotations=DELETES)
+def undo_merge(merge_id: int) -> dict:
+    """Put the contacts of a merge back as they were before it (changes made since to the kept contact are lost)."""
+    from app import quality
+    u = who()
+    m = db.one("SELECT keep_id FROM merges WHERE id = %s", (int(merge_id),))
+    if not m:
+        raise ToolError("No such merge")
+    find_contact(u, str(m["keep_id"]), writable=True)
+    try:
+        return quality.undo(int(merge_id))
+    except ValueError as e:
+        raise ToolError(str(e))
+
+
+@server.tool(annotations=WRITES)
+def fix_data_quality(check: Literal["name_case", "repeats", "unlinked_relation", "national_phone", "iopix_photo"],
+                     contacts: Optional[list[str]] = None, country_code: Optional[str] = None) -> dict:
+    """Repair what a data quality check found, for all its findings or only these contacts: capitalise names, remove a
+    repeated email or phone, link relations to the contact of that name, add the country code (country_code, such as
+    +32) to numbers written without it, use the ioPix face as the photo."""
+    from app import quality
+    u = who()
+    ids = [find_contact(u, c)["id"] for c in contacts] if contacts else None
+    try:
+        return quality.fix(u, check, ids, book_ids(u), country_code)
+    except ValueError as e:
+        raise ToolError(str(e))
+
+
+# ---- enrichment: suggestions a person accepts in the web app
+
+@server.tool(annotations=ADDS)
+def suggest_contact_update(contact: str, suggestions: list[dict], source: str) -> dict:
+    """File what you found about a contact as suggestions. Nothing changes: they wait in the web app (Maintenance ›
+    Suggestions and the contact's page) until a person accepts or dismisses each one. Use it after researching a
+    person on LinkedIn, a company site, a news article, Facebook, Instagram, X...; give where you found it.
+    suggestions: [{field, value, evidence (the page's address), note (optional: why you think it is this person)}].
+    field and value: name {given, family} or {fn}; nickname, org, department, title, notes, gender: text; birthday
+    "YYYY-MM-DD" or "MM-DD"; emails / phones / urls {value, label}; addresses {street, city, region, postcode, country,
+    label}; social {service: linkedin | facebook | instagram | x | ..., value: the profile's address}; tags: a label.
+    source: who found it (e.g. "Claude, web search")."""
+    u = who()
+    r = find_contact(u, contact)
+    out = {"added": 0, "known": 0, "dismissedBefore": 0, "pending": 0, "errors": []}
+    for s in suggestions[:50]:
+        try:
+            res = enrich.add(r["id"], str(s.get("field")), s.get("value"), (source or "assistant")[:64], s.get("evidence"), s.get("note"), u["id"])
+        except (ValueError, KeyError, TypeError) as e:
+            out["errors"].append(f"{s.get('field')}: {e}")
+            continue
+        out[{"added": "added", "known": "known", "dismissed": "dismissedBefore", "pending": "pending"}[res]] += 1
+    out["contact"] = r["fn"]
+    out["note"] = "Waiting for a person to accept them in the web app."
+    return out
+
+
+@server.tool(annotations=ADDS)
+def lookup_contact(contact: str) -> dict:
+    """Look a contact up with the built-in public lookups (Gravatar by email; its GitHub, Mastodon and Bluesky
+    profiles) and file what they find as suggestions for a person to accept."""
+    u = who()
+    r = find_contact(u, contact)
+    return enrich.lookup(r["id"], u["id"])
+
+
+@server.tool(annotations=READ_ONLY)
+def list_suggestions(contact: Optional[str] = None, status: Literal["pending", "accepted", "dismissed"] = "pending") -> list:
+    """The suggestions waiting for a person (or those accepted or dismissed), with their source and evidence. Photos are
+    left out of the answer. Accepting happens in the web app only."""
+    u = who()
+    cid = find_contact(u, contact)["id"] if contact else None
+    items = enrich.listing(book_ids(u), status, cid)
+    for x in items:
+        if x["field"] == "photo":
+            x["value"] = "(a photo)"
+    return items
 
 
 @server.tool(annotations=ADDS)
@@ -335,12 +453,3 @@ def create_address_book(name: str, shared: bool = False, description: Optional[s
     bid = model.create_book(None if shared else u["id"], name.strip()[:128] or "Contacts", description)
     b = model.book(bid)
     return {"id": bid, "name": b["name"], "shared": shared}
-
-
-@server.tool(annotations=ADDS)
-def create_app_password(label: str) -> dict:
-    """A new app password for your account, for one phone or app (CardDAV, LDAP, the REST API or MCP). It is shown
-    once; it can be revoked on its own in Settings › Apps and devices."""
-    u = who()
-    secret = users.create_app_password(u["id"], (label or "MCP").strip()[:64])
-    return {"user": u["name"], "appPassword": secret, "label": label}

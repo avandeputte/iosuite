@@ -174,11 +174,44 @@ def social_services() -> list:
 
 
 @server.tool(annotations=READ_ONLY)
-def find_duplicates(book: Optional[str] = None) -> list:
-    """Groups of contacts that look like the same person: the same name, email or phone number. merge_contacts folds
-    a group into one."""
+def find_duplicates(book: Optional[str] = None, min_score: int = 35) -> list:
+    """Groups of contacts that are probably the same person, most certain first. Each pair has a score (0-100), a level
+    (very likely, likely, possible) and the reasons: the same email or phone, the same or a similar name, a nickname
+    (Bob for Robert), the same birthday or company; other birthdays or genders count against. Pairs someone marked
+    as different people are left out. merge_contacts folds a group into one; mark_not_duplicates keeps them apart."""
+    from app import quality
     u = who()
-    return [[brief(u, x) for x in g] for g in model.find_duplicates(book_ids(u, book))]
+    out = []
+    for g in quality.find(book_ids(u, book), clamp(min_score, 10, 100)):
+        out.append({"score": g["score"], "level": g["level"], "contacts": [brief(u, x) for x in g["contacts"]],
+                    "pairs": [{"a": p["a"], "b": p["b"], "score": p["score"], "reasons": p["reasons"]} for p in g["pairs"]]})
+    return out
+
+
+@server.tool(annotations=READ_ONLY)
+def preview_merge(contacts: list[str], keep: Optional[str] = None) -> dict:
+    """What merging these contacts would give, before doing it: the combined contact, and `choices`, the fields where
+    they disagree (name, birthday, company, photo...) with each contact's value. Pass your picks to merge_contacts."""
+    from app import quality
+    u = who()
+    rows = [find_contact(u, c) for c in contacts]
+    if len(rows) < 2:
+        raise ToolError("Name at least two contacts")
+    k = find_contact(u, keep)["id"] if keep else rows[0]["id"]
+    pv = quality.preview([r["id"] for r in rows], k)
+    return {"keep": k, "merged": {kk: v for kk, v in pv["merged"].items() if v not in (None, "", [], {}) and kk not in ("extra", "etag", "href", "uid")},
+            "choices": pv["choices"]}
+
+
+@server.tool(annotations=READ_ONLY)
+def data_quality_report(book: Optional[str] = None, check: Optional[str] = None) -> list:
+    """Data quality checks: contacts without a name, email addresses and phone numbers that do not look right,
+    impossible birthdays, names in ALL CAPITALS, the same email or phone twice on one contact, relations to a name that
+    is now a contact, phone numbers without the country code, ioPix links without a photo, contacts with no way to reach
+    them. Each check has its findings; `fix` says whether fix_data_quality can repair them."""
+    from app import quality
+    u = who()
+    return [{**x, "items": x["items"][:200]} for x in quality.run_checks(book_ids(u, book), check) if x["count"]]
 
 
 @server.tool(annotations=READ_ONLY)
@@ -201,7 +234,7 @@ def export_contacts(format: Literal["vcf", "vcf4", "jcard", "csv-google", "csv-o
 @server.tool(annotations=READ_ONLY)
 def connection_details() -> dict:
     """The addresses to type into a phone, a mail app or a calendar: CardDAV, LDAP, the birthday calendar feeds and the
-    REST API. Phones and apps sign in with your user name and an app password (create_app_password)."""
+    REST API. Phones and apps sign in with your user name and an app password (Settings › Apps and devices)."""
     u = who()
     base = config.PUBLIC_URL or "(this server's address)"
     tok = users.calendar_token(u["id"])

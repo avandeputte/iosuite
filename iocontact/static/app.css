@@ -241,3 +241,27 @@ table.t th { font-size: var(--fs-s); color: var(--fg2); font-weight: 600; }
 label.check { display: inline-flex; align-items: flex-start; gap: 6px; cursor: pointer; }
 label.check input { margin-top: 3px; accent-color: var(--brand); }
 .warn { color: var(--warn); }
+
+/* maintenance */
+.dup .duphead { display: flex; align-items: center; gap: 10px; }
+.lvl { display: inline-flex; align-items: center; height: 22px; padding: 0 10px; border-radius: var(--r-pill); font-size: var(--fs-s); font-weight: 600;
+  color: var(--hue); background: color-mix(in srgb, var(--hue) 14%, transparent); }
+.reasons { margin: 6px 0 4px; padding-left: 20px; color: var(--fg2); font-size: var(--fs-s); }
+.duprow { display: flex; align-items: center; gap: 8px 12px; padding: 6px 0; min-width: 0; flex-wrap: wrap; }
+.dup .btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.qcheck { border: 1px solid var(--line); border-radius: var(--r-l); margin-bottom: 10px; }
+.qcheck summary { display: flex; align-items: center; gap: 10px; padding: 12px 16px; cursor: pointer; list-style: none; }
+.qcheck summary::-webkit-details-marker { display: none; }
+.qcheck .qbody { padding: 0 16px 12px; overflow-x: auto; }
+.slist { display: flex; flex-direction: column; }
+.srow { display: flex; gap: 12px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.srow .sk { width: 110px; flex: none; color: var(--fg2); font-size: var(--fs-s); }
+.srow .sv { flex: 1 1 200px; min-width: 0; overflow-wrap: anywhere; }
+.srow .sb { display: flex; gap: 6px; }
+.sphoto { width: 56px; height: 56px; border-radius: 50%; object-fit: cover; vertical-align: middle; }
+.card.sugg { grid-column: 1 / -1; }
+.dialog.wide { width: min(760px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow-y: auto; }
+.mergedlg .mrow { display: flex; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.mergedlg .mk { width: 120px; flex: none; color: var(--fg2); font-size: var(--fs-s); padding-top: 3px; }
+.mergedlg .mv { flex: 1 1 280px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.mergedlg .mrow > p { flex-basis: 100%; margin: 0; }

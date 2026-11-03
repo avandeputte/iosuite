@@ -58,8 +58,34 @@ The tools: `overview`, `list_address_books`, `search_contacts`, `get_contact`, `
 `get_relatives`, `family_tree`, `upcoming_dates`, `birthdays_in_month`, `list_labels`, `relation_types`, `social_services`,
 `find_duplicates`, `export_contacts`, `connection_details`, `list_iopix_people`; `create_contact`, `update_contact`,
 `delete_contact`, `add_relation`, `remove_relation`, `set_labels`, `set_favorite`, `move_contacts`, `merge_contacts`,
-`import_contacts`, `link_iopix_person`, `auto_link_iopix`, `remove_photo`, `create_address_book`, `create_app_password`;
-and for admins `diagnostics`, `test_iopix`, `list_accounts`, `check_for_update`, `update_server`.
+`import_contacts`, `link_iopix_person`, `auto_link_iopix`, `remove_photo`, `create_address_book`; upkeep:
+`find_duplicates`, `preview_merge`, `merge_contacts`, `mark_not_duplicates`, `list_merges`, `undo_merge`,
+`data_quality_report`, `fix_data_quality`; enrichment: `lookup_contact`, `suggest_contact_update`, `list_suggestions`
+(an assistant proposes; only a person accepts, in the web app); and for admins `diagnostics`, `test_iopix`,
+`list_accounts`, `check_for_update`, `update_server`. An app password cannot make more app passwords over MCP.
+
+## Maintenance and enrichment
+
+**Maintenance** in the web app has four tabs:
+
+- **Duplicates.** Contacts that are probably one person, scored, with the reasons: the same email or phone (written with
+  or without the country code), the same name (accents, case and swapped first and last names do not matter), a
+  nickname (Bob for Robert, Liesbeth for Elisabeth…), a similar spelling, the same birthday or company. Other
+  birthdays, other genders or a relation between the two count against; a shared home number with other first names
+  stays "possible". **Compare and merge** shows them side by side: which to keep, and for every field where they
+  disagree (name, birthday, company, photo…) which value; phones, emails, addresses, profiles, labels and relations
+  are combined, each with a box to leave one out. **Not duplicates** keeps two people apart for good.
+- **Data quality.** Contacts without a name, email addresses and phone numbers that do not look right, impossible
+  birthdays, NAMES IN CAPITALS, the same email or phone twice on a contact, relations to a name that is now a
+  contact, numbers without the country code, ioPix links without a photo, contacts with no way to reach them; with
+  one-click fixes where a fix is safe (capitalising, removing repeats, linking, adding the country code you give).
+- **Suggestions.** Enrichment that waits for you: nothing changes a contact until you accept it (one by one, or all for
+  a contact), and what you dismiss is not offered again. **Look up** on a contact (or *Look up all contacts*) asks the
+  public interfaces that allow it: Gravatar by email (sent as a hash) for a photo, name, job, company, place and the
+  profiles the person verified there, and the contact's GitHub, Mastodon and Bluesky profiles. LinkedIn, Facebook,
+  Instagram and X have no lookup apps may use; an assistant connected over MCP can research people there and file
+  what it finds with `suggest_contact_update`, with the page it found it on.
+- **Merge history.** Every merge keeps the contacts as they were, so **Undo** brings them back, relations included.
 
 ## Updates
 
@@ -145,7 +171,7 @@ pip install -e '.[test]'
 DB_HOST=127.0.0.1 python -m pytest tests     # against a scratch database contacts_test (TEST_DB_NAME), dropped per test
 ```
 
-Covered: vCard 2.1/3.0/4.0 and jCard reading and writing (an Apple Contacts card round-trips with relations, dates, social profiles, custom labels, photo and unknown properties), relations and their inverse side, search, content negotiation, Google and Outlook CSV import and every export format, roles and private books, app passwords over Basic and Bearer, the birthday calendar, duplicates and merging, CardDAV discovery, PUT with preconditions and UID conflicts, multiget, addressbook-query, sync-collection with deletions, LDAP bind and search with substring, phone and size-limit cases, and the MCP server (switch, sign-in, reading, changing, relations, a viewer's limits). CI runs them against MariaDB.
+Covered: vCard 2.1/3.0/4.0 and jCard reading and writing (an Apple Contacts card round-trips with relations, dates, social profiles, custom labels, photo and unknown properties), relations and their inverse side, search, content negotiation, Google and Outlook CSV import and every export format, roles and private books, app passwords over Basic and Bearer, the birthday calendar, duplicates and merging, CardDAV discovery, PUT with preconditions and UID conflicts, multiget, addressbook-query, sync-collection with deletions, LDAP bind and search with substring, phone and size-limit cases, the MCP server (switch, sign-in, reading, changing, relations, a viewer's limits), duplicate scoring (nicknames, shared home numbers, other birthdays), merging with choices and undo, the data quality checks and fixes, and enrichment (lookups, suggestions that wait, accepting and dismissing, over MCP too). CI runs them against MariaDB.
 
 ## Layout
 
@@ -160,6 +186,8 @@ app/model.py       address books and contacts in MariaDB, relations, duplicates,
 app/relations.py   relation types, inverses and labels
 app/calendar.py    the iCalendar birthday feed
 app/iopix.py       the ioPix client
+app/quality.py     duplicates (scored), merging with choices and undo, data quality checks and fixes
+app/enrich.py      enrichment: the public lookups and the suggestions queue
 app/mcp/           the MCP server: base (who is asking, finding contacts), read, write and admin tools
 app/updates.py     the version check and running update.sh from the web app
 app/users.py       accounts, sessions, app passwords      app/proxyauth.py  sign-in at a reverse proxy

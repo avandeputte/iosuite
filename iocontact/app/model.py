@@ -511,19 +511,21 @@ def find_duplicates(book_ids: list[int]) -> list[list[dict]]:
     return out
 
 
-def merge(keep_id: int, other_ids: list[int]) -> None:
-    """Fold other contacts into one: their emails, phones, addresses, urls, social, dates, tags and relations are added
-    when missing, empty fields are filled, then the others are deleted (relations pointing at them move to the kept one)."""
-    keep = full(keep_id, with_photo=True)
-    for oid in other_ids:
-        o = full(oid, with_photo=True)
-        if not o or oid == keep_id:
-            continue
+def combine(keep: dict, others: list[dict]) -> dict:
+    """What merging gives, without saving: `keep` (a full() dict, with photo) with the others' emails, phones,
+    addresses, urls, social profiles, dates, labels and relations added when missing, and its empty fields filled."""
+    keep = {**keep, "name": dict(keep["name"]), "tags": list(keep["tags"]), "relations": list(keep["relations"]),
+            **{k: list(keep[k]) for k in CHILD}}
+    ids = {keep["id"], *(o["id"] for o in others)}
+    keep["relations"] = [r for r in keep["relations"] if r.get("relatedId") not in ids]
+    for o in others:
         for key, (_t, cols) in CHILD.items():
-            have = {tuple(str(x.get(k) or "").lower() for k in cols if k not in ("pref", "label")) for x in keep[key]}
+            have = {_child_key(key, x, cols) for x in keep[key]}
             for x in o[key]:
-                if tuple(str(x.get(k) or "").lower() for k in cols if k not in ("pref", "label")) not in have:
+                k = _child_key(key, x, cols)
+                if k not in have:
                     keep[key].append(x)
+                    have.add(k)
         keep["tags"] = sorted(set(keep["tags"]) | set(o["tags"]))
         for f in ("nickname", "maiden", "gender", "org", "department", "title", "role", "birthday", "phoneticGiven", "phoneticFamily"):
             if not keep.get(f) and o.get(f):
@@ -536,13 +538,40 @@ def merge(keep_id: int, other_ids: list[int]) -> None:
         if not keep.get("iopix") and o.get("iopix"):
             keep["iopix"] = o["iopix"]
         if not keep.get("photoData") and o.get("photoData"):
-            keep["photo"] = o["photoData"]
-        keep["relations"] += [r for r in o["relations"] if r.get("relatedId") != keep_id]
+            keep["photoData"] = o["photoData"]
+        seen = {(r["type"], r.get("relatedId") or (r.get("relatedName") or "").lower()) for r in keep["relations"]}
+        for r in o["relations"]:
+            k = (r["type"], r.get("relatedId") or (r.get("relatedName") or "").lower())
+            if r.get("relatedId") not in ids and k not in seen:
+                keep["relations"].append(r)
+                seen.add(k)
         keep["favorite"] = keep["favorite"] or o["favorite"]
-        # relations from elsewhere that point at the other contact now point at the kept one
-        db.ex("UPDATE relations SET related_id = %s WHERE related_id = %s AND contact_id <> %s", (keep_id, oid, keep_id))
-    save(keep["bookId"], {**keep, "photo": keep.get("photo")}, cid=keep_id)
-    for oid in other_ids:
-        if oid != keep_id:
-            db.ex("DELETE FROM relations WHERE contact_id = %s AND related_id = %s", (oid, keep_id))
-            delete(oid)
+    return keep
+
+
+def _child_key(key: str, x: dict, cols: list) -> tuple:
+    if key == "phones":
+        return (re.sub(r"\D", "", x.get("value") or "")[-8:],)
+    return tuple(str(x.get(k) or "").strip().lower() for k in cols if k not in ("pref", "label"))
+
+
+def merge(keep_id: int, other_ids: list[int], result: dict | None = None, photo_from: int | None = None) -> None:
+    """Fold other contacts into one: `result` (the contact as it should end up, e.g. chosen field by field) or what
+    combine() gives. Relations from elsewhere that point at the others move to the kept one; then the others are deleted."""
+    keep = full(keep_id, with_photo=True)
+    others = [o for o in (full(x, with_photo=True) for x in other_ids if x != keep_id) if o]
+    data = result if result is not None else combine(keep, others)
+    photo = None
+    if photo_from is not None:
+        src = next((c for c in [keep, *others] if c["id"] == photo_from), None)
+        photo = src.get("photoData") if src else None
+    elif data.get("photoData"):
+        photo = data["photoData"]
+    with db.tx():
+        for o in others:
+            db.ex("UPDATE relations SET related_id = %s WHERE related_id = %s AND contact_id NOT IN (%s, %s)", (keep_id, o["id"], keep_id, o["id"]))
+        save(keep["bookId"], {**data, "photo": photo}, cid=keep_id, keep_photo=photo is None and photo_from is None)
+        for o in others:
+            db.ex("DELETE FROM relations WHERE (contact_id = %s AND related_id = %s) OR (contact_id = %s AND related_id = %s)",
+                  (o["id"], keep_id, keep_id, o["id"]))
+            delete(o["id"])

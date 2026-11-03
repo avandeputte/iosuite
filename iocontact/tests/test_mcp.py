@@ -24,7 +24,12 @@ def call(client, auth, name, **args):
     if res.get("structuredContent") is not None:
         sc = res["structuredContent"]
         return sc.get("result", sc) if isinstance(sc, dict) and set(sc) == {"result"} else sc
-    return json.loads(res["content"][0]["text"]) if res["content"][0]["type"] == "text" else res["content"][0]
+    content = res["content"]
+    if not content:
+        return []
+    if len(content) > 1:  # a list comes back one item per content block
+        return [json.loads(x["text"]) for x in content]
+    return json.loads(content[0]["text"]) if content[0]["type"] == "text" else content[0]
 
 
 def app_password(client, name="alex"):

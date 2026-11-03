@@ -40,6 +40,8 @@ const ICONS = {
   more: 'M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z',
   check: 'M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z',
   update: 'M21 10.12h-6.78l2.74-2.82c-2.73-2.7-7.15-2.8-9.88-.1a6.875 6.875 0 0 0 0 9.79 7.02 7.02 0 0 0 9.88 0C18.32 15.65 19 14.08 19 12.1h2c0 1.98-.88 4.55-2.64 6.29-3.51 3.48-9.21 3.48-12.72 0-3.5-3.47-3.53-9.11-.02-12.58a8.987 8.987 0 0 1 12.65 0L21 3v7.12z',
+  tune: 'M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z',
+  bulb: 'M9 21c0 .55.45 1 1 1h4c.55 0 1-.45 1-1v-1H9v1zm3-19C8.14 2 5 5.14 5 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26c1.81-1.27 3-3.36 3-5.74 0-3.86-3.14-7-7-7z',
   ai: 'M19 9l1.25-2.75L23 5l-2.75-1.25L19 1l-1.25 2.75L15 5l2.75 1.25L19 9zm-7.5.5L9 4 6.5 9.5 1 12l5.5 2.5L9 20l2.5-5.5L17 12l-5.5-2.5zM19 15l-1.25 2.75L15 19l2.75 1.25L19 23l1.25-2.75L23 19l-2.75-1.25L19 15z',
   server: 'M20 13H4c-.55 0-1 .45-1 1v6c0 .55.45 1 1 1h16c.55 0 1-.45 1-1v-6c0-.55-.45-1-1-1zM7 19c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zM20 3H4c-.55 0-1 .45-1 1v6c0 .55.45 1 1 1h16c.55 0 1-.45 1-1V4c0-.55-.45-1-1-1zM7 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z',
   theme: 'M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 0 1-4.4 2.26 5.403 5.403 0 0 1-3.14-9.8c-.44-.06-.9-.1-1.36-.1z',
@@ -203,7 +205,7 @@ function drawNav() {
     item('#/', 'people', 'All contacts', total, listView && S.scope.kind === 'all', '--c-purple'),
     item('#/fav', 'star', 'Favorites', null, listView && S.scope.kind === 'fav', '--c-amber'),
     item('#/upcoming', 'cake', 'Birthdays', null, r.view === 'upcoming', '--c-rose'),
-    item('#/dups', 'merge', 'Duplicates', null, r.view === 'dups', '--c-teal'),
+    item('#/maint', 'tune', 'Maintenance', S.status.suggestions || null, r.view === 'maint', '--c-teal'),
     S.status.iopix ? item('#/iopix', 'image', 'ioPix people', null, r.view === 'iopix', '--c-indigo') : null,
     item('#/import', 'upload', 'Import and export', null, r.view === 'import', '--c-green'),
     h('div', { class: 'sec' }, 'Address books', h('button', { class: 'iconbtn', title: 'New address book', style: { width: '28px', height: '28px' }, onclick: newBook }, icon('add', 's'))),
@@ -240,7 +242,9 @@ function route() {
   if (a === 'book') return { view: 'list', scope: { kind: 'book', id: +b } };
   if (a === 'tag') return { view: 'list', scope: { kind: 'tag', name: b } };
   if (a === 'tree' && b) return { view: 'tree', id: +b };
-  if (['upcoming', 'dups', 'import', 'iopix'].includes(a)) return { view: a };
+  if (a === 'dups') return { view: 'maint', tab: 'dups' };
+  if (a === 'maint') return { view: 'maint', tab: b || 'dups' };
+  if (['upcoming', 'import', 'iopix'].includes(a)) return { view: a };
   if (a === 'settings') return { view: 'settings', tab: b || 'account' };
   return { view: 'list' };
 }
@@ -265,7 +269,7 @@ async function onRoute() {
       main.classList.remove('showdetail');
       const page = h('div', { class: 'page' });
       main.replaceChildren(page);
-      await ({ upcoming: showUpcoming, dups: showDups, import: showImport, iopix: showIopix, settings: showSettings, tree: showTree })[r.view](page, r);
+      await ({ upcoming: showUpcoming, maint: showMaint, import: showImport, iopix: showIopix, settings: showSettings, tree: showTree })[r.view](page, r);
     }
   } catch (e) { fail(e); }
   drawNav();
@@ -389,12 +393,20 @@ async function showContact(id, pane) {
     canEdit ? h('a', { class: 'pillbtn primary', href: `#/c/${id}/edit` }, icon('edit', 's'), 'Edit') : null,
     h('a', { class: 'pillbtn', href: `/api/contacts/${id}?format=vcard` }, icon('download', 's'), 'vCard'),
     S.status.iopix && !c.iopix && canEdit ? h('button', { class: 'pillbtn', onclick: () => pickIopix(c, true) }, icon('image', 's'), 'Link to ioPix') : null,
+    h('button', { class: 'pillbtn', title: 'Look this person up (Gravatar by email, and their GitHub, Mastodon and Bluesky profiles). What is found waits for you to accept it.', onclick: async (e) => {
+      e.currentTarget.disabled = true;
+      try { const r = await api(`/api/contacts/${id}/lookup`, { method: 'POST' }); toast(r.added ? `${r.added} suggestion${r.added === 1 ? '' : 's'} found` : r.errors.length ? `Nothing new (${r.errors[0]})` : 'Nothing new found'); await refreshStatus(); onRoute(); } catch (err) { fail(err); }
+    } }, icon('bulb', 's'), 'Look up'),
     h('button', { class: 'pillbtn', title: 'Tell CardDAV apps that this card is you', onclick: async () => { await api('/api/auth/me', { method: 'PATCH', json: { meContactId: meCard ? null : c.id } }); S.user = (await api('/api/auth/me')).user; toast(meCard ? 'Not you any more' : 'This is now your own card'); onRoute(); } },
       icon('person', 's'), meCard ? 'This is me ✓' : 'This is me'),
     canEdit ? h('button', { class: 'pillbtn danger', onclick: async () => {
       if (!await confirmDialog('Delete contact', `Delete ${c.fn}? Apps synced over CardDAV will delete it too.`, 'Delete', true)) return;
       try { await api(`/api/contacts/${id}`, { method: 'DELETE' }); S.all = null; await loadMeta(); location.hash = scopeHash(); } catch (e) { fail(e); }
     } }, icon('delete', 's'), 'Delete') : null);
+  let sugg = [];
+  try { sugg = (await api(`/api/suggestions?contact=${id}`)).items; } catch { /* none */ }
+  if (sugg.length) cards.unshift(h('div', { class: 'card sugg', style: { '--hue': 'var(--c-amber)' } }, h('h3', null, icon('bulb'), `Suggestions (${sugg.length})`),
+    h('p', { class: 'muted small' }, 'Found by a lookup or an assistant. Nothing changes until you accept.'), suggList(sugg, canEdit, () => onRoute())));
   pane.replaceChildren(h('div', { class: 'detail' },
     h('div', { class: 'dhead' }, back, avatar(c, 'xl'), h('div', { style: { flex: 1, minWidth: '200px' } },
       h('h1', null, c.fn), sub ? h('div', { class: 'sub' }, sub) : null, c.maiden ? h('div', { class: 'sub' }, `née ${c.maiden}`) : null, h('div', { class: 'chips' }, headChips)), fav),
@@ -607,20 +619,183 @@ async function showTree(page, r) {
       : h('div', { class: 'empty' }, h('p', null, 'No family relations to other contacts yet. Edit the contact and add parents, siblings, children…')));
 }
 
-async function showDups(page) {
+// ------------------------------------------------------------------ maintenance: duplicates, data quality, suggestions, merges
+async function refreshStatus() { try { S.status = await api('/api/status'); drawNav(); } catch { /* */ } }
+const bookName = (id) => (S.books.find((b) => b.id === id) || {}).name;
+const LEVEL_HUE = { 'very likely': '--c-rose', likely: '--c-amber', possible: '--c-slate' };
+
+async function showMaint(page, r) {
+  const tabs = [['dups', 'Duplicates'], ['quality', 'Data quality'], ['suggest', `Suggestions${S.status.suggestions ? ` (${S.status.suggestions})` : ''}`], ['merges', 'Merge history']];
+  page.append(h('div', { class: 'pagehead' }, h('h1', null, 'Maintenance')),
+    h('div', { class: 'tabs' }, tabs.map(([k, l]) => h('button', { class: r.tab === k ? 'on' : '', onclick: () => { location.hash = `#/maint/${k}`; } }, l))));
+  const body = h('div'); page.append(body);
+  body.append(h('div', { class: 'muted' }, 'Loading…'));
+  await ({ dups: maintDups, quality: maintQuality, suggest: maintSuggest, merges: maintMerges }[r.tab] || maintDups)(body);
+}
+
+async function maintDups(el) {
   const r = await api('/api/duplicates');
-  page.append(h('div', { class: 'pagehead' }, h('h1', null, 'Duplicates')),
-    h('p', { class: 'muted' }, 'Contacts that share a name, an email address or a phone number. Merging keeps the one you pick and adds everything the others have that it lacks (emails, phones, addresses, relations, labels…); the others are deleted.'));
-  if (!r.groups.length) { page.append(h('div', { class: 'empty' }, icon('check'), h('p', null, 'No duplicates found.'))); return; }
-  for (const grp of r.groups) {
-    let keep = grp[0].id;
-    const nameFor = `keep${grp[0].id}`;
-    page.append(h('div', { class: 'dup' }, grp.map((c) => h('label', null, h('input', { type: 'radio', name: nameFor, checked: c.id === keep, onchange: () => { keep = c.id; } }), avatar(c),
-      h('div', null, h('a', { class: 'lnk', href: `#/c/${c.id}` }, c.fn), h('div', { class: 'muted small' }, [c.email, c.phone, (S.books.find((b) => b.id === c.bookId) || {}).name].filter(Boolean).join(' · '))))),
-    h('button', { class: 'pillbtn', onclick: async () => {
-      try { await api('/api/contacts/merge', { method: 'POST', json: { keep, others: grp.map((c) => c.id).filter((x) => x !== keep) } }); S.all = null; await loadMeta(); toast('Merged'); onRoute(); } catch (e) { fail(e); }
-    } }, icon('merge', 's'), 'Merge into the selected one')));
+  el.replaceChildren(h('p', { class: 'muted' }, 'Contacts that are probably the same person: the same email or phone, the same or a similar name, a nickname (Bob for Robert), the same birthday or company. Other birthdays or genders count against. Merging keeps everything (you choose where they disagree) and can be undone.'));
+  if (!r.groups.length) { el.append(h('div', { class: 'empty' }, icon('check'), h('p', null, 'No duplicates found.'))); return; }
+  for (const g of r.groups) {
+    const reasons = g.pairs.length === 1 ? g.pairs[0].reasons : g.pairs.map((p) => `${g.contacts.find((c) => c.id === p.a).fn} / ${g.contacts.find((c) => c.id === p.b).fn}: ${p.reasons.join(', ')}`);
+    const box = h('div', { class: 'dup' },
+      h('div', { class: 'duphead' }, h('span', { class: 'lvl', style: { '--hue': `var(${LEVEL_HUE[g.level]})` } }, g.level), h('span', { class: 'muted small' }, `score ${g.score}`)),
+      h('ul', { class: 'reasons' }, reasons.map((x) => h('li', null, x))),
+      g.contacts.map((c) => h('div', { class: 'duprow' }, avatar(c), h('div', { style: { minWidth: 0 } }, h('a', { class: 'lnk', href: `#/c/${c.id}` }, c.fn),
+        h('div', { class: 'muted small' }, [c.org, c.email, c.phone, c.birthday ? fmtDate(c.birthday) : null, bookName(c.bookId)].filter(Boolean).join(' · '))))),
+      h('div', { class: 'btns' },
+        h('button', { class: 'pillbtn primary', onclick: () => mergeDialog(g.contacts.map((c) => c.id), () => onRoute()) }, icon('merge', 's'), 'Compare and merge…'),
+        h('button', { class: 'pillbtn noic', title: 'They are different people: do not offer them again', onclick: async () => {
+          await api('/api/duplicates/dismiss', { method: 'POST', json: { ids: g.contacts.map((c) => c.id) } }); box.remove(); toast('Kept apart');
+        } }, 'Not duplicates')));
+    el.append(box);
   }
+}
+
+function fmtValue(field, v) {
+  if (v == null) return '';
+  if (field === 'photo') return h('img', { class: 'sphoto', src: `data:${v.type};base64,${v.data}`, alt: '' });
+  if (field === 'name') return v.fn || [v.prefix, v.given, v.additional, v.family, v.suffix].filter(Boolean).join(' ');
+  if (field === 'birthday') return fmtDate(v);
+  if (field === 'iopix') return v.name || `ioPix person ${v.personId}`;
+  if (field === 'gender') return ({ M: 'Male', F: 'Female', O: 'Other', N: 'None', U: 'Unknown' })[v] || v;
+  if (field === 'addresses') return [v.street, [v.postcode, v.city].filter(Boolean).join(' '), v.region, v.country].filter(Boolean).join(', ') + (v.label ? ` (${v.label})` : '');
+  if (field === 'social') return `${(S.social.find((x) => x.service === v.service) || {}).name || v.service}: ${v.value}`;
+  if (field === 'relations') return `${v.typeLabel || v.type}: ${v.relatedFn || v.relatedName}`;
+  if (field === 'dates') return `${v.label}: ${fmtDate(v)}`;
+  if (typeof v === 'object') return `${v.value}${v.label ? ` (${v.label})` : ''}`;
+  return String(v);
+}
+
+const FIELD_LABEL = { name: 'Name', nickname: 'Nickname', maiden: 'Maiden name', gender: 'Gender', birthday: 'Birthday', org: 'Company', department: 'Department',
+  title: 'Job title', role: 'Role', notes: 'Notes', iopix: 'ioPix person', phoneticGiven: 'Phonetic first name', phoneticFamily: 'Phonetic last name', photo: 'Photo',
+  emails: 'Emails', phones: 'Phones', addresses: 'Addresses', urls: 'Websites', social: 'Social profiles', dates: 'Dates', tags: 'Labels', relations: 'Relations' };
+
+async function mergeDialog(ids, done, keepId) {
+  let pv; try { pv = await api(`/api/merge/preview?ids=${ids.join(',')}&keep=${keepId || ids[0]}`); } catch (e) { fail(e); return; }
+  const byId = Object.fromEntries(pv.contacts.map((c) => [c.id, c]));
+  const pick = {}; const keepLists = {};
+  const body = h('div', { class: 'mergedlg' });
+  body.append(h('div', { class: 'mrow' }, h('div', { class: 'mk' }, 'Keep'), h('div', { class: 'mv' }, pv.contacts.map((c) => h('label', { class: 'check' },
+    h('input', { type: 'radio', name: 'mkeep', checked: c.id === pv.keep, onchange: () => { back.remove(); mergeDialog(ids, done, c.id); } }),
+    `${c.fn} (${bookName(c.bookId) || 'book'})`))), h('p', { class: 'muted small' }, 'The kept contact stays in its address book and keeps its link in phones; the others are deleted.')));
+  for (const [field, opts] of Object.entries(pv.choices)) {
+    const name = `mf-${field}`;
+    const current = field === 'photo' ? pv.photoFrom : (opts.find((o) => JSON.stringify(field === 'name' ? Object.fromEntries(Object.entries(pv.merged.name).filter(([, x]) => x)) : pv.merged[field]) === JSON.stringify(o.value)) || opts[0]).contactId;
+    pick[field] = current;
+    body.append(h('div', { class: 'mrow' }, h('div', { class: 'mk' }, FIELD_LABEL[field] || field), h('div', { class: 'mv' }, opts.map((o) => h('label', { class: 'check' },
+      h('input', { type: 'radio', name, checked: o.contactId === current, onchange: () => { pick[field] = o.contactId; } }),
+      field === 'photo' ? h('img', { class: 'sphoto', src: `/api/contacts/${o.contactId}/photo`, alt: '' }) : h('span', null, fmtValue(field, o.value)),
+      h('span', { class: 'muted small' }, ` · ${byId[o.contactId].fn}`))))));
+  }
+  for (const field of ['phones', 'emails', 'addresses', 'urls', 'social', 'dates', 'tags', 'relations']) {
+    const list = pv.merged[field] || [];
+    if (!list.length) continue;
+    keepLists[field] = list.map(() => true);
+    body.append(h('div', { class: 'mrow' }, h('div', { class: 'mk' }, FIELD_LABEL[field]), h('div', { class: 'mv' }, list.map((x, i) => h('label', { class: 'check' },
+      h('input', { type: 'checkbox', checked: true, onchange: (e) => { keepLists[field][i] = e.target.checked; } }), field === 'tags' ? x : fmtValue(field, x))))));
+  }
+  const back = h('div', { class: 'dialog-back' });
+  const close = () => back.remove();
+  back.addEventListener('click', (e) => { if (e.target === back) close(); });
+  back.append(h('div', { class: 'dialog wide', role: 'dialog' }, h('h2', null, `Merge ${pv.contacts.length} contacts`), body,
+    h('div', { class: 'btns' }, h('button', { class: 'pillbtn noic', onclick: close }, 'Cancel'),
+      h('button', { class: 'pillbtn primary noic', onclick: async () => {
+        const res = JSON.parse(JSON.stringify(pv.merged));
+        for (const [field, cid] of Object.entries(pick)) {
+          if (field === 'photo') continue;
+          const src = byId[cid];
+          if (field === 'name') { res.name = { ...src.name }; res.fn = src.fn; } else res[field] = src[field];
+        }
+        for (const [field, flags] of Object.entries(keepLists)) res[field] = (pv.merged[field] || []).filter((_, i) => flags[i]);
+        try {
+          await api('/api/contacts/merge', { method: 'POST', json: { keep: pv.keep, others: ids.filter((x) => x !== pv.keep), result: res, photoFrom: pick.photo ?? null } });
+          close(); S.all = null; await loadMeta(); toast('Merged. Maintenance › Merge history can undo it.'); done && done(pv.keep);
+        } catch (e) { fail(e); }
+      } }, 'Merge'))));
+  document.body.append(back);
+}
+
+async function maintQuality(el) {
+  const r = await api('/api/quality');
+  const found = r.checks.filter((c) => c.count), clear = r.checks.filter((c) => !c.count);
+  el.replaceChildren(h('p', { class: 'muted' }, 'Checks for untidy or doubtful data. Where a fix is offered it changes only contacts you may change; everything else links to the contact to correct by hand.'));
+  if (!found.length) el.append(h('div', { class: 'empty' }, icon('check'), h('p', null, 'Everything looks tidy.')));
+  const SEV = { problem: '--c-rose', tidy: '--c-amber', info: '--c-slate' };
+  for (const c of found) {
+    const cc = h('input', { class: 't', placeholder: '+32', style: { width: '80px' }, value: (() => { try { return localStorage.getItem('ioc.cc') || ''; } catch { return ''; } })() });
+    const fixBtn = c.fix ? h('button', { class: 'pillbtn', onclick: async () => {
+      const json = { check: c.check };
+      if (c.check === 'national_phone') { if (!cc.value.trim()) { toast('Type the country code first, such as +32'); cc.focus(); return; } json.countryCode = cc.value; try { localStorage.setItem('ioc.cc', cc.value); } catch { /* */ } }
+      try { const res = await api('/api/quality/fix', { method: 'POST', json }); toast(`Fixed ${res.fixed.length}${res.skipped.length ? `, ${res.skipped.length} left (not yours to change, or nothing found)` : ''}`); S.all = null; onRoute(); } catch (e) { fail(e); }
+    } }, icon('check', 's'), c.fix) : null;
+    el.append(h('details', { class: 'qcheck' }, h('summary', null, h('span', { class: 'lvl', style: { '--hue': `var(${SEV[c.severity]})` } }, c.count), h('b', null, c.title)),
+      h('div', { class: 'qbody' }, c.fix ? h('p', null, c.check === 'national_phone' ? [h('span', { class: 'muted' }, 'Country code to add: '), cc, ' '] : null, fixBtn) : null,
+        h('table', { class: 't' }, c.items.slice(0, 300).map((x) => h('tr', null, h('td', null, h('a', { class: 'lnk', href: `#/c/${x.contactId}` }, x.fn)), h('td', { class: 'muted' }, x.detail || ''), h('td', { class: 'muted small' }, bookName(x.bookId) || '')))),
+        c.items.length > 300 ? h('p', { class: 'muted small' }, `and ${c.items.length - 300} more`) : null)));
+  }
+  if (clear.length) el.append(h('p', { class: 'muted small', style: { marginTop: '16px' } }, icon('check', 's'), ' No findings: ', clear.map((c) => c.title.toLowerCase()).join('; '), '.'));
+}
+
+function suggList(items, canEdit, after) {
+  const wrap = h('div', { class: 'slist' });
+  for (const x of items) {
+    const row = h('div', { class: 'srow' },
+      h('div', { class: 'sk' }, x.fieldLabel),
+      h('div', { class: 'sv' }, fmtValue(x.field, x.value),
+        h('div', { class: 'muted small' }, x.source, x.by ? ` · via ${x.by}` : '', x.evidence && /^https?:\/\//i.test(x.evidence) ? [' · ', h('a', { class: 'lnk', href: x.evidence, target: '_blank', rel: 'noopener noreferrer' }, 'source ', icon('open', 's'))] : null, x.note ? ` · ${x.note}` : '')),
+      h('div', { class: 'sb' },
+        canEdit ? h('button', { class: 'pillbtn noic primary', onclick: async () => { try { await api(`/api/suggestions/${x.id}/accept`, { method: 'POST' }); row.remove(); await refreshStatus(); after && after(x); } catch (e) { fail(e); } } }, 'Accept') : null,
+        h('button', { class: 'pillbtn noic', onclick: async () => { await api(`/api/suggestions/${x.id}/dismiss`, { method: 'POST' }); row.remove(); await refreshStatus(); } }, 'Dismiss')));
+    wrap.append(row);
+  }
+  return wrap;
+}
+
+async function maintSuggest(el) {
+  const r = await api('/api/suggestions');
+  const prog = h('span', { class: 'muted' });
+  const run = h('button', { class: 'pillbtn', onclick: async () => {
+    run.disabled = true; let offset = 0, total = 1, added = 0;
+    while (offset < total) {
+      prog.textContent = `Looking up… ${offset} of ${total === 1 ? '?' : total}`;
+      try { const res = await api('/api/lookup', { method: 'POST', json: { offset, limit: 20 } }); total = res.total; offset += Math.max(res.done, 1); added += res.added; } catch (e) { fail(e); break; }
+    }
+    prog.textContent = `${added} new suggestion${added === 1 ? '' : 's'}`; await refreshStatus(); setTimeout(onRoute, 800);
+  } }, icon('bulb', 's'), 'Look up all contacts');
+  el.replaceChildren(h('div', { class: 'box' }, h('h2', null, icon('bulb'), 'Enrichment'),
+    h('p', null, 'Suggestions for your contacts, from public sources: Gravatar (looked up by email address, sent as a hash), and the GitHub, Mastodon and Bluesky profiles on a contact. LinkedIn, Facebook, Instagram and X offer no lookup that apps may use; an AI assistant connected over MCP can research people there and file what it finds here. Nothing changes until you accept it, and what you dismiss is not offered again.'),
+    h('p', null, run, ' ', prog)));
+  if (!r.items.length) { el.append(h('div', { class: 'empty' }, icon('check'), h('p', null, 'No suggestions waiting.'))); return; }
+  const by = new Map();
+  for (const x of r.items) { if (!by.has(x.contactId)) by.set(x.contactId, []); by.get(x.contactId).push(x); }
+  for (const [cid, list] of by) {
+    const book = S.books.find((b) => b.id === list[0].bookId); const canEdit = book && book.writable;
+    const box = h('div', { class: 'dup' }, h('div', { class: 'duprow' }, avatar({ id: cid, fn: list[0].fn }), h('a', { class: 'lnk', href: `#/c/${cid}` }, h('b', null, list[0].fn)),
+      h('span', { style: { flex: 1 } }),
+      canEdit ? h('button', { class: 'pillbtn noic', onclick: async () => {
+        for (const x of list) { try { await api(`/api/suggestions/${x.id}/accept`, { method: 'POST' }); } catch { /* a rival value already taken */ } }
+        await refreshStatus(); onRoute();
+      } }, 'Accept all') : null,
+      h('button', { class: 'pillbtn noic', onclick: async () => { for (const x of list) await api(`/api/suggestions/${x.id}/dismiss`, { method: 'POST' }); await refreshStatus(); box.remove(); } }, 'Dismiss all')),
+    suggList(list, canEdit, () => {}));
+    el.append(box);
+  }
+}
+
+async function maintMerges(el) {
+  const r = await api('/api/merges');
+  el.replaceChildren(h('p', { class: 'muted' }, 'Every merge is kept with the contacts as they were before it, so it can be undone: the merged contacts come back as they were, with their relations.'));
+  if (!r.items.length) { el.append(h('div', { class: 'empty' }, h('p', null, 'No merges yet.'))); return; }
+  el.append(h('table', { class: 't' }, h('tr', null, h('th', null, 'When'), h('th', null, 'Contacts'), h('th', null, 'By'), h('th')),
+    r.items.map((m) => h('tr', null, h('td', null, new Date(m.at).toLocaleString()),
+      h('td', null, m.names, m.keepName ? [h('br'), h('a', { class: 'lnk small', href: `#/c/${m.keepId}` }, `now ${m.keepName}`)] : null),
+      h('td', null, m.by || ''),
+      h('td', null, m.undone ? h('span', { class: 'muted' }, 'undone') : m.canUndo ? h('button', { class: 'pillbtn noic', onclick: async () => {
+        if (!await confirmDialog('Undo merge', `Put ${m.names} back as they were before the merge?${m.changedSince ? ' Changes made to the merged contact since then are lost.' : ''}`, 'Undo merge')) return;
+        try { await api(`/api/merges/${m.id}/undo`, { method: 'POST' }); S.all = null; await loadMeta(); toast('Merge undone'); onRoute(); } catch (e) { fail(e); }
+      } }, 'Undo') : null)))));
 }
 
 async function showImport(page) {

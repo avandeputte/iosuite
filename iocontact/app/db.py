@@ -7,7 +7,7 @@ from pymysql.cursors import DictCursor
 
 from app import config
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 3
 
 # Every table is InnoDB/utf8mb4. Child rows (emails, phones...) are replaced as a whole when a contact is saved.
 SCHEMA = [
@@ -128,6 +128,23 @@ SCHEMA = [
         KEY (related_id),
         FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE,
         FOREIGN KEY (related_id) REFERENCES contacts(id) ON DELETE CASCADE)""",
+    # two contacts someone said are different people: never offered as duplicates again (a < b)
+    """CREATE TABLE IF NOT EXISTS not_duplicates (
+        a INT NOT NULL, b INT NOT NULL, user_id INT NULL, created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (a, b))""",
+    # every merge, with the rows of the contacts as they were before, so it can be undone
+    """CREATE TABLE IF NOT EXISTS merges (
+        id INT AUTO_INCREMENT PRIMARY KEY, user_id INT NULL, keep_id INT NOT NULL, other_ids VARCHAR(512) NOT NULL,
+        names VARCHAR(1024) NULL, snapshot LONGTEXT NOT NULL, keep_etag VARCHAR(64) NULL,
+        created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, undone TIMESTAMP NULL, KEY (keep_id))""",
+    # enrichment: what a lookup (Gravatar, GitHub...) or an assistant over MCP found, waiting for a person to accept it
+    """CREATE TABLE IF NOT EXISTS suggestions (
+        id INT AUTO_INCREMENT PRIMARY KEY, contact_id INT NOT NULL, field VARCHAR(32) NOT NULL, value MEDIUMTEXT NOT NULL,
+        vkey VARCHAR(255) NOT NULL, source VARCHAR(64) NOT NULL, evidence VARCHAR(1024) NULL, note VARCHAR(1024) NULL,
+        status ENUM('pending','accepted','dismissed') NOT NULL DEFAULT 'pending', by_user_id INT NULL, decided_by INT NULL,
+        created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, decided TIMESTAMP NULL,
+        KEY (contact_id, status), UNIQUE KEY one_value (contact_id, field, vkey),
+        FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE)""",
     """CREATE TABLE IF NOT EXISTS calendar_tokens (
         id INT AUTO_INCREMENT PRIMARY KEY, user_id INT NOT NULL, token CHAR(40) NOT NULL UNIQUE,
         created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
