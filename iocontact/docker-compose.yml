@@ -1,0 +1,23 @@
+# ioContacts with Docker: `docker compose up -d` pulls the published image; `docker compose up -d --build` builds it
+# from this checkout. Works as a stack in Dockge / Portainer. Edit the CHANGE ME spots.
+services:
+  iocontacts:
+    image: ghcr.io/avandeputte/iocontacts:latest
+    build: .
+    container_name: iocontacts
+    restart: unless-stopped
+    ports:
+      - "8610:8610"     # web app, CardDAV (/dav/), REST API (/api/), birthday calendar (/cal/)
+      - "389:3890"      # LDAP directory for mail apps (read-only)
+    environment:
+      TZ: America/New_York
+      DB_HOST: 192.168.1.89          # CHANGE ME: your MariaDB host
+      DB_PORT: "3306"
+      DB_NAME: contacts
+      DB_USER: contacts
+      DB_PASSWORD: change-me          # CHANGE ME
+      ADMIN_USER: admin               # the first admin, made on the first start (or remove both and make it in the browser)
+      ADMIN_PASSWORD: change-me-please  # CHANGE ME (8 characters or more)
+      # PUBLIC_URL: https://contacts.example.com   # behind a reverse proxy: links in the calendar feed and Settings
+      # AUTH_PROXY: cloudflare        # sign-in at the proxy, as in iopix (see README)
+      # IOPIX_URL: http://192.168.1.10:8600        # or Settings > ioPix

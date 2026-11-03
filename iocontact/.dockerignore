@@ -1,0 +1,6 @@
+.git
+.venv
+tests
+proxmox
+iocontacts.env
+__pycache__

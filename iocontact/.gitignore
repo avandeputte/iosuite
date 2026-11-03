@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.venv/
+data/
+iocontacts.env
+.pytest_cache/
+*.egg-info/
