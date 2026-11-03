@@ -12,6 +12,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
 
 from app import APP_VERSION, calendar, config, csvio, db, enrich, iopix, model, quality, relations as rel, updates, users, vcard
+from app.auth import auth
 
 router = APIRouter()
 
@@ -175,10 +176,9 @@ async def server_action(request: Request):
     return server_info(request)
 
 
-def _cookie(resp: Response, request: Request, uid: int) -> None:
-    secure = request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https"
-    resp.set_cookie(users.COOKIE, users.make_session(uid), max_age=users.SESSION_DAYS * 86400, httponly=True,
-                    samesite="lax", secure=secure, path="/")
+def _cookie(resp: Response, request: Request, u: dict) -> None:
+    """The suite's session cookie (iothing-auth): shared by every ioThing app on the domain."""
+    auth.sign_in(resp, request, u, "oneclick" if not u.get("pw_hash") else "password")
 
 
 @router.post("/api/auth/setup")
@@ -193,7 +193,7 @@ async def setup(request: Request):
     except ValueError as e:
         raise HTTPException(400, str(e))
     resp = JSONResponse({"user": users.public(u)})
-    _cookie(resp, request, u["id"])
+    _cookie(resp, request, u)
     return resp
 
 
@@ -203,15 +203,19 @@ async def login(request: Request):
     u = await run_in_threadpool(users.authenticate, (b.get("name") or "").strip(), b.get("password") or "")
     if not u:
         raise HTTPException(401, "Wrong name or password")
+    if u["role"] == "none":
+        raise HTTPException(403, "Your account has no access to ioContacts")
     resp = JSONResponse({"user": users.public(u)})
-    _cookie(resp, request, u["id"])
+    _cookie(resp, request, u)
     return resp
 
 
 @router.post("/api/auth/logout")
-def logout():
+def logout(request: Request):
+    from iothing_auth import sessions
+    sessions.end(request.cookies.get(users.COOKIE))
     resp = JSONResponse({"ok": True})
-    resp.delete_cookie(users.COOKIE, path="/")
+    sessions.clear_cookie(resp, sessions.host_of(request))
     return resp
 
 
@@ -241,7 +245,7 @@ async def patch_me(request: Request):
 async def change_password(request: Request):
     u = me(request)
     b = await request.json()
-    if u.get("pw_hash") and not users.check_pw(b.get("old") or "", u["pw_hash"]):
+    if u.get("pw_hash") and not await run_in_threadpool(users.authenticate, u["name"], b.get("old") or ""):
         raise HTTPException(403, "The current password is wrong")
     try:
         users.update(u["id"], password=b.get("new") or "")

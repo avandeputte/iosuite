@@ -15,27 +15,8 @@ SCHEMA = [
         k VARCHAR(64) PRIMARY KEY,
         v MEDIUMTEXT
     )""",
-    """CREATE TABLE IF NOT EXISTS users (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        name VARCHAR(64) NOT NULL UNIQUE,
-        display_name VARCHAR(128) NULL,
-        email VARCHAR(255) NULL,
-        role ENUM('viewer','editor','admin') NOT NULL DEFAULT 'editor',
-        pw_hash VARCHAR(255) NULL,
-        me_contact_id INT NULL,
-        created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )""",
-    """CREATE TABLE IF NOT EXISTS app_passwords (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        user_id INT NOT NULL,
-        label VARCHAR(128) NOT NULL,
-        prefix CHAR(8) NOT NULL,
-        pw_hash VARCHAR(255) NOT NULL,
-        created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        last_used TIMESTAMP NULL,
-        INDEX (prefix),
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-    )""",
+    # accounts and app passwords live in the suite's shared auth database (iothing-auth, app/auth.py); the users and
+    # app_passwords tables of ioContacts 0.3 are folded into it by `iothing-auth migrate` and renamed *_migrated
     """CREATE TABLE IF NOT EXISTS addressbooks (
         id INT AUTO_INCREMENT PRIMARY KEY,
         owner_id INT NULL,
@@ -45,8 +26,7 @@ SCHEMA = [
         color VARCHAR(16) NULL,
         sync_token BIGINT NOT NULL DEFAULT 1,
         created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE KEY (owner_id, slug),
-        FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
+        UNIQUE KEY (owner_id, slug)
     )""",
     """CREATE TABLE IF NOT EXISTS contacts (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -147,8 +127,7 @@ SCHEMA = [
         FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE)""",
     """CREATE TABLE IF NOT EXISTS calendar_tokens (
         id INT AUTO_INCREMENT PRIMARY KEY, user_id INT NOT NULL, token CHAR(40) NOT NULL UNIQUE,
-        created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE)""",
+        created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP)""",
 ]
 
 

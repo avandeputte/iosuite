@@ -423,7 +423,8 @@ def delete(cid: int) -> None:
         tok = _bump(row["book_id"])
         db.ex("UPDATE contacts SET deleted = 1, photo = NULL, notes = NULL, extra = NULL, etag = %s, changed_token = %s, "
               "iopix_person_id = NULL WHERE id = %s", (_etag(cid), tok, cid))
-        db.ex("UPDATE users SET me_contact_id = NULL WHERE me_contact_id = %s", (cid,))
+        from app import users
+        users.forget_me_contact(cid)  # whoever had this card as "me"
         for o in others:
             _touch(o)
 

@@ -359,12 +359,15 @@ def merge(u: dict, keep_id: int, other_ids: list[int], result: dict | None = Non
 
 def history(book_ids: list[int], limit: int = 50) -> list[dict]:
     out = []
-    for r in db.q("SELECT m.id, m.keep_id, m.other_ids, m.names, m.keep_etag, m.created, m.undone, u.name AS who, c.etag, c.book_id, c.deleted, c.fn "
-                  "FROM merges m LEFT JOIN users u ON u.id = m.user_id LEFT JOIN contacts c ON c.id = m.keep_id ORDER BY m.id DESC LIMIT %s", (limit * 3,)):
+    from app import users
+    rows = db.q("SELECT m.id, m.keep_id, m.other_ids, m.names, m.keep_etag, m.created, m.undone, m.user_id, c.etag, c.book_id, c.deleted, c.fn "
+                "FROM merges m LEFT JOIN contacts c ON c.id = m.keep_id ORDER BY m.id DESC LIMIT %s", (limit * 3,))
+    who = users.names_of({r["user_id"] for r in rows if r["user_id"]})  # the accounts live in the shared auth database
+    for r in rows:
         if r["book_id"] not in book_ids:
             continue
         out.append({"id": r["id"], "keepId": r["keep_id"], "keepName": r["fn"], "otherIds": [int(x) for x in r["other_ids"].split(",") if x],
-                    "names": r["names"], "by": r["who"], "at": r["created"].isoformat() if r["created"] else None,
+                    "names": r["names"], "by": who.get(r["user_id"]), "at": r["created"].isoformat() if r["created"] else None,
                     "undone": r["undone"].isoformat() if r["undone"] else None,
                     "changedSince": bool(r["etag"] != r["keep_etag"]), "canUndo": not r["undone"] and not r["deleted"]})
         if len(out) >= limit:

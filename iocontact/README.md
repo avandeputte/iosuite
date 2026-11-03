@@ -34,9 +34,9 @@ page in Safari on the iPhone, tap Download, then Settings › Profile Downloaded
 Settings › Apps and devices shows the exact addresses to type, and makes **app passwords**: one per phone or app, revocable on its own, used with your user name for CardDAV, LDAP and the REST API (HTTP Basic, or `Authorization: Bearer <app password>`).
 
 ```sh
-curl -u alex:ioc-xxxxxxxx-… -H 'Accept: application/vcard+json' https://contacts.example.com/api/contacts?q=smith
-curl -u alex:ioc-xxxxxxxx-… https://contacts.example.com/api/contacts/12?format=vcard4
-curl -u alex:ioc-xxxxxxxx-… -X POST -H 'Content-Type: text/vcard' --data-binary @card.vcf 'https://contacts.example.com/api/contacts?book=1'
+curl -u alex:iocontacts-xxxxxxxx-… -H 'Accept: application/vcard+json' https://contacts.example.com/api/contacts?q=smith
+curl -u alex:iocontacts-xxxxxxxx-… https://contacts.example.com/api/contacts/12?format=vcard4
+curl -u alex:iocontacts-xxxxxxxx-… -X POST -H 'Content-Type: text/vcard' --data-binary @card.vcf 'https://contacts.example.com/api/contacts?book=1'
 ```
 
 ## MCP server
@@ -52,7 +52,7 @@ at all. Every assistant signs in with an **app password** (Settings › Apps and
 ones, and may change what the account may change in the web app. The server tools need an admin.
 
 ```sh
-claude mcp add --transport http iocontacts https://contacts.example.com/mcp --header "Authorization: Bearer ioc-xxxxxxxx-…"
+claude mcp add --transport http iocontacts https://contacts.example.com/mcp --header "Authorization: Bearer iocontacts-xxxxxxxx-…"
 ```
 
 Apps that take a JSON configuration and only start local processes (Claude Desktop, for example) can reach it through
@@ -155,6 +155,8 @@ git clone https://github.com/avandeputte/iocontacts && cd iocontacts
 | `LDAP_PORT`, `LDAP_HOST`, `LDAP_BASE` | the LDAP directory (3890, all addresses, `dc=iocontacts`); `LDAP_PORT=0` turns it off |
 | `PUBLIC_URL` | the address people use (behind a proxy), for links in the calendar feed and Settings |
 | `ADMIN_USER`, `ADMIN_PASSWORD` | the first admin, made on the first start when there are no accounts |
+| `IOTHING_AUTH_DB_HOST`, `_PORT`, `_NAME`, `_USER`, `_PASSWORD` | the ioThing suite's shared account database (MariaDB, `auth`): accounts, passwords, sessions, app passwords and roles are shared with ioPix and ioNotes (the `iothing-auth` library); only the role an account holds here and its "me" contact are ioContacts' own. `iothing-auth migrate --iocontacts` folds a 0.3 install's `users` table into it |
+| `IOTHING_COOKIE_DOMAIN` | the domain the session cookie is shared on (`example.com`): signed in at `photo.example.com`, signed in at `contacts.example.com` too |
 | `AUTH_PROXY`, `AUTH_PROXY_HEADER`, `AUTH_PROXY_TRUSTED`, `CF_ACCESS_TEAM`, `CF_ACCESS_AUD` | sign-in at a reverse proxy, exactly as in iopix: Cloudflare Access (with token checking), Authelia, Authentik, oauth2-proxy… matched to accounts by email, then name |
 | `IOPIX_URL`, `IOPIX_USER`, `IOPIX_PASSWORD`, `IOPIX_CF_CLIENT_ID`, `IOPIX_CF_CLIENT_SECRET` | ioPix (or Settings › ioPix) |
 | `MCP` | `1` keeps the MCP server on, whatever the setting says |
@@ -196,7 +198,7 @@ app/quality.py     duplicates (scored), merging with choices and undo, data qual
 app/enrich.py      enrichment: the public lookups and the suggestions queue
 app/mcp/           the MCP server: base (who is asking, finding contacts), read, write and admin tools
 app/updates.py     the version check and running update.sh from the web app
-app/users.py       accounts, sessions, app passwords      app/proxyauth.py  sign-in at a reverse proxy
+app/users.py       accounts, sessions, app passwords (the suite's, through iothing-auth)   app/proxyauth.py  sign-in at a reverse proxy
 static/            the web app (index.html, app.js, app.css, icons)
 proxmox/           the community-scripts LXC installer      setup.sh, run.sh, update.sh, Dockerfile
 ```

@@ -22,7 +22,7 @@ def main(argv: list[str]) -> int:
         print("ok: tables ready")
     elif cmd == "check":
         n = db.one("SELECT count(*) AS n FROM contacts WHERE deleted = 0")["n"]
-        u = db.one("SELECT count(*) AS n FROM users")["n"]
+        u = len(users.all_users())
         print(f"ok: {u} account(s), {n} contact(s)")
     elif cmd in ("create-user", "set-password"):
         if not args:

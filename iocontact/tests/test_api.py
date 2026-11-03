@@ -121,7 +121,7 @@ def test_apple_profile(client):
     p = plistlib.loads(r.content)
     dav, cal = p["PayloadContent"]
     assert dav["PayloadType"] == "com.apple.carddav.account" and dav["CardDAVUsername"] == "alex"
-    assert dav["CardDAVPrincipalURL"] == "/dav/principals/alex/" and dav["CardDAVPassword"].startswith("ioc-")
+    assert dav["CardDAVPrincipalURL"] == "/dav/principals/alex/" and dav["CardDAVPassword"].startswith("iocontacts-")
     assert cal["PayloadType"] == "com.apple.subscribedcalendar.account" and cal["SubCalAccountHostName"].endswith("/family.ics")
     # the app password in the profile works for CardDAV
     client.cookies.clear()

@@ -294,12 +294,14 @@ def listing(book_ids: list[int], status: str = "pending", contact_id: int | None
     if contact_id:
         extra = " AND s.contact_id = %s"
         args.append(contact_id)
-    rows = db.q(f"SELECT s.*, c.fn, c.book_id, u.name AS by_name FROM suggestions s JOIN contacts c ON c.id = s.contact_id "
-                f"LEFT JOIN users u ON u.id = s.by_user_id WHERE s.status = %s AND c.deleted = 0 AND c.book_id IN ({marks}){extra} "
+    rows = db.q(f"SELECT s.*, c.fn, c.book_id FROM suggestions s JOIN contacts c ON c.id = s.contact_id "
+                f"WHERE s.status = %s AND c.deleted = 0 AND c.book_id IN ({marks}){extra} "
                 f"ORDER BY c.fn, s.contact_id, s.field, s.id LIMIT %s", (*args, limit))
+    from app import users
+    names = users.names_of({r["by_user_id"] for r in rows if r["by_user_id"]})  # the accounts live in the shared auth database
     return [{"id": r["id"], "contactId": r["contact_id"], "fn": r["fn"], "bookId": r["book_id"], "field": r["field"],
              "fieldLabel": FIELDS.get(r["field"], (r["field"],))[0], "value": json.loads(r["value"]), "source": r["source"],
-             "evidence": r["evidence"], "note": r["note"], "by": r["by_name"], "status": r["status"],
+             "evidence": r["evidence"], "note": r["note"], "by": names.get(r["by_user_id"]), "status": r["status"],
              "created": r["created"].isoformat() if r["created"] else None} for r in rows]
 
 
