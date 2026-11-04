@@ -79,9 +79,10 @@ def _zone(tz: str):
 # ------------------------------------------------------------------ ioPix: On this day, else Rediscover
 
 def iopix(request: Request, tz: str = "", n: int = 4, kind: str = "") -> dict:
-    """{kind: onthisday | rediscover, items: [{id, year, yearsAgo}]}: photos taken on this day in earlier years, one
-    per year (the most recent years first) up to n; on a day without any, n photos picked at random from the library.
-    kind asks for one of the two (onthisday still falls back to rediscover on a day without photos)."""
+    """{kind: onthisday | rediscover, items: [{id, year, yearsAgo}], count}: up to n photos taken on this day in
+    earlier years, one from each year first (the most recent years first), then the rest of those years; count is
+    how many there are in all. On a day without any, n photos picked at random from the library. kind asks for one
+    of the two (onthisday still falls back to rediscover on a day without photos)."""
     today = dt.datetime.now(_zone(tz)).date()
     by_year: dict[int, list[int]] = {}
     if kind != "rediscover":
@@ -93,8 +94,13 @@ def iopix(request: Request, tz: str = "", n: int = 4, kind: str = "") -> dict:
             if y < today.year:
                 by_year.setdefault(y, []).append(pid)
     if by_year:
-        items = [{"id": random.choice(by_year[y]), "year": y, "yearsAgo": today.year - y} for y in sorted(by_year, reverse=True)[:n]]
-        return {"kind": "onthisday", "items": items, "count": sum(len(v) for v in by_year.values())}
+        years = sorted(by_year, reverse=True)
+        for y in years:
+            random.shuffle(by_year[y])
+        items: list[dict] = []
+        for i in range(max(len(v) for v in by_year.values())):  # round i: the i-th photo of each year
+            items += [{"id": by_year[y][i], "year": y, "yearsAgo": today.year - y} for y in years if i < len(by_year[y])]
+        return {"kind": "onthisday", "items": items[:n], "count": sum(len(v) for v in by_year.values())}
     got = fetch(request, "iopix", "/api/random", {"n": n})
     items = [{"id": pid, "year": dt.datetime.fromtimestamp(ts, dt.timezone.utc).year if ts else None}
              for pid, ts in zip(got.get("id") or [], got.get("ts") or [])]
