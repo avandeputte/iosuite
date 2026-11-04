@@ -10,7 +10,7 @@
 # Until the scripts are merged upstream, the framework is pointed at this repository for the install script
 # (COMMUNITY_SCRIPTS_URL below; the core engine still comes from community-scripts). Run on the Proxmox host as root:
 #   bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/proxmox/ct/iosuite.sh)"
-# Unattended: IOSUITE_DB=host:port/db:user:password IOSUITE_AUTH_DB=host:port/db:user:password
+# Unattended: IOSUITE_DB=host:port/db:user:password IOSUITE_SHARED_DB=host:port/db:user:password
 #   IOSUITE_ADMIN=name:password IOSUITE_PORT=8630
 #   IOSUITE_PUBLIC_URL=https://home.example.com in the environment skip the questions.
 export COMMUNITY_SCRIPTS_URL="${COMMUNITY_SCRIPTS_URL:-https://raw.githubusercontent.com/avandeputte/iosuite/main/proxmox}"
@@ -47,14 +47,15 @@ ask_app_settings() {
     w=$(whiptail --backtitle "$bt" --passwordbox "Password" 9 60 3>&1 1>&2 2>&3) || exit 1
     IOSUITE_DB="$h:$p/$d:$u:$w"
   fi
-  if [[ -z "${IOSUITE_AUTH_DB:-}" ]]; then
+  IOSUITE_SHARED_DB="${IOSUITE_SHARED_DB:-${IOSUITE_AUTH_DB:-}}"  # IOSUITE_AUTH_DB: its name before 0.3.1
+  if [[ -z "${IOSUITE_SHARED_DB:-}" ]]; then
     local ah ap ad au aw2
-    ah=$(whiptail --backtitle "$bt" --inputbox "Accounts database shared by the io apps: host" 9 70 "${IOSUITE_DB%%:*}" 3>&1 1>&2 2>&3) || exit 1
+    ah=$(whiptail --backtitle "$bt" --inputbox "Shared ioSuite database (accounts and suite-wide settings of the io apps): host" 9 70 "${IOSUITE_DB%%:*}" 3>&1 1>&2 2>&3) || exit 1
     ap=$(whiptail --backtitle "$bt" --inputbox "Port" 9 60 "3306" 3>&1 1>&2 2>&3) || exit 1
-    ad=$(whiptail --backtitle "$bt" --inputbox "Database (the same one the other io apps use)" 9 70 "auth" 3>&1 1>&2 2>&3) || exit 1
-    au=$(whiptail --backtitle "$bt" --inputbox "User" 9 60 "auth" 3>&1 1>&2 2>&3) || exit 1
+    ad=$(whiptail --backtitle "$bt" --inputbox "Database (the same one the other io apps use)" 9 70 "iosuite" 3>&1 1>&2 2>&3) || exit 1
+    au=$(whiptail --backtitle "$bt" --inputbox "User" 9 60 "iosuite" 3>&1 1>&2 2>&3) || exit 1
     aw2=$(whiptail --backtitle "$bt" --passwordbox "Password" 9 60 3>&1 1>&2 2>&3) || exit 1
-    IOSUITE_AUTH_DB="$ah:$ap/$ad:$au:$aw2"
+    IOSUITE_SHARED_DB="$ah:$ap/$ad:$au:$aw2"
   fi
   IOSUITE_PORT="${IOSUITE_PORT:-$(whiptail --backtitle "$bt" --inputbox "Web port" 9 70 "8630" 3>&1 1>&2 2>&3)}" || exit 1
   if [[ -z "${IOSUITE_PUBLIC_URL+x}" ]]; then
@@ -89,7 +90,7 @@ description
 
 msg_info "Running the app's setup inside the container (packages, settings, tables, admin, service)"
 # the answers with passwords go in as a root-only file (pushed, read into setup.sh's environment, removed), never as arguments
-SECRETS="IOSUITE_DB=$(printf '%q' "$IOSUITE_DB")"$'\n'"IOSUITE_AUTH_DB=$(printf '%q' "$IOSUITE_AUTH_DB")"$'\n'
+SECRETS="IOSUITE_DB=$(printf '%q' "$IOSUITE_DB")"$'\n'"IOSUITE_SHARED_DB=$(printf '%q' "$IOSUITE_SHARED_DB")"$'\n'
 [[ -n "${IOSUITE_ADMIN:-}" ]] && SECRETS+="IOSUITE_ADMIN=$(printf '%q' "$IOSUITE_ADMIN")"$'\n'
 SECF="$(mktemp)"; chmod 600 "$SECF"; printf '%s' "$SECRETS" > "$SECF"
 pct push "$CTID" "$SECF" /opt/iosuite/setup.env --perms 0600 --user 0 --group 0
@@ -99,7 +100,7 @@ WRAPPED="set -a; . /opt/iosuite/setup.env; set +a; rm -f /opt/iosuite/setup.env;
 if ! pct exec "$CTID" -- bash -c "$WRAPPED"; then
   msg_error "setup.sh failed inside the container; last lines of /opt/iosuite/setup.log:"
   pct exec "$CTID" -- tail -n 40 /opt/iosuite/setup.log || true
-  msg_error "Fix the cause (often: the MariaDB user may not connect from the container's address), then run it again inside the container with IOSUITE_DB=host:port/db:user:password (IOSUITE_AUTH_DB likewise, and IOSUITE_ADMIN=name:password) in the environment: pct exec $CTID -- bash -c \"$SETUP_CMD\""
+  msg_error "Fix the cause (often: the MariaDB user may not connect from the container's address), then run it again inside the container with IOSUITE_DB=host:port/db:user:password (IOSUITE_SHARED_DB likewise, and IOSUITE_ADMIN=name:password) in the environment: pct exec $CTID -- bash -c \"$SETUP_CMD\""
   exit 1
 fi
 msg_ok "Setup finished"

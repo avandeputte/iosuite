@@ -78,8 +78,10 @@ CREATE USER 'suite'@'%' IDENTIFIED BY 'suite';
 GRANT ALL ON suite.* TO 'suite'@'%';
 ```
 
-The accounts live in the suite's shared `auth` database (the one the other io apps use); a new install of the suite
-creates it the same way. The tables are created on the first start and updated by later versions by themselves.
+The accounts, and the settings the whole suite shares (such as the list of apps and where each one is), live in the
+**Shared ioSuite database**, the one every io app uses (`iosuite`, user `iosuite`, by default); a new install of the
+suite creates it the same way. It was called the `auth` database before: an install that has one keeps it (the
+`IOTHING_AUTH_DB_*` variables still work, and `setup.sh` rewrites them under the new names). The tables are created on the first start and updated by later versions by themselves.
 
 ### Proxmox VE (LXC)
 
@@ -90,12 +92,12 @@ layout, as the other io apps do. On the Proxmox host, as root:
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/proxmox/ct/iosuite.sh)"
 ```
 
-It asks for the ioSuite database (host, port, database, user, password), the shared accounts database, the web port
+It asks for the ioSuite database (host, port, database, user, password), the Shared ioSuite database, the web port
 (8630), the public address behind your reverse proxy (optional) and the admin account; then the framework's own
 questions (resources, network). It creates a small Debian 13 container and runs the app's own `setup.sh` inside with
 those answers. The passwords reach `setup.sh` through its environment (a root-only file pushed in and removed again),
 never on a command line; the output is kept in `/opt/iosuite/setup.log`. The container's `update` command pulls the
-latest code and keeps the settings. For unattended runs set `IOSUITE_DB` and `IOSUITE_AUTH_DB`
+latest code and keeps the settings. For unattended runs set `IOSUITE_DB` and `IOSUITE_SHARED_DB`
 (`host:port/db:user:password`), `IOSUITE_ADMIN` (`name:password`), `IOSUITE_PORT` and `IOSUITE_PUBLIC_URL`.
 
 ### Docker
@@ -126,7 +128,7 @@ git clone https://github.com/avandeputte/iosuite && cd iosuite
 | Setting | Meaning |
 | --- | --- |
 | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | the MariaDB / MySQL database (`suite`) |
-| `IOTHING_AUTH_DB_HOST`, `_PORT`, `_NAME`, `_USER`, `_PASSWORD` | the suite's shared account database (`auth`): accounts, passwords, sessions, app passwords and roles, shared with every io app |
+| `IOSUITE_SHARED_DB_HOST`, `_PORT`, `_NAME`, `_USER`, `_PASSWORD` | the Shared ioSuite database (`iosuite`): accounts, passwords, sessions, app passwords and roles, the suite-wide settings and the list of apps, shared with every io app (the older `IOTHING_AUTH_DB_*` names still work) |
 | `IOTHING_COOKIE_DOMAIN` | the domain the session cookie is shared on (`example.com`): signed in at `home.example.com`, signed in at `photos.example.com` too |
 | `PORT` | web port for `run.sh` and the service (8630) |
 | `PUBLIC_URL` | the address people use (behind a proxy); also what ioSuite registers in the suite's list of apps |

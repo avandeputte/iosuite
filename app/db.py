@@ -12,7 +12,7 @@ from app import config
 
 SCHEMA_VERSION = 3
 
-# Every table is InnoDB/utf8mb4. Accounts and app passwords live in the suite's shared auth database (iothing-auth,
+# Every table is InnoDB/utf8mb4. Accounts and app passwords live in the Shared ioSuite database (iothing-auth,
 # app/auth.py), not here.
 SCHEMA = [
     """CREATE TABLE IF NOT EXISTS meta (
