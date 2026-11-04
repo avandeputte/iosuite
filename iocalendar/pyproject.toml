@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "iocalendar"
-version = "0.2.4"
+version = "0.2.5"
 description = "Self-hosted calendars for the family: web app, CalDAV, iCalendar feeds, REST/jCal, MCP"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 dependencies = [
-  "iothing-auth @ git+https://github.com/avandeputte/iothing-auth.git@f2e08ebc35f229fe9f65f6f3db1101278e85ff41",   # the ioThing suite's shared accounts and sessions (pinned: bump to pick up a new one)
+  "iothing-auth @ git+https://github.com/avandeputte/iosuite-shared.git@bab095b492b534af6f718fa2f17c7c0c2d6f199a",   # the suite's shared library, repo iosuite-shared (pinned: bump to pick up a new one)
   "fastapi<1",
   "uvicorn<1",
   "pymysql<2",
