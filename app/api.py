@@ -199,6 +199,33 @@ def delete_link(lid: int, request: Request):
     return {"ok": True}
 
 
+@router.get("/api/bookmarks/links/{lid}/icon.svg")
+def link_icon(lid: int, request: Request):
+    """The SVG uploaded for a link, for everyone signed in. Cached by the browser for good: the address carries a
+    version (?v=etag) that changes with the file."""
+    me(request)
+    ic = bookmarks.icon(lid)
+    if not ic:
+        raise HTTPException(404, "No icon")
+    return Response(ic["svg"], media_type="image/svg+xml",
+                    headers={"Cache-Control": "private, max-age=31536000, immutable", "ETag": f'"{ic["etag"]}"',
+                             "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'", "X-Content-Type-Options": "nosniff"})
+
+
+@router.put("/api/bookmarks/links/{lid}/icon")
+async def upload_link_icon(lid: int, request: Request):
+    """Editors. The body is the SVG file itself (up to 256 KB); the stored one is replaced. Returns the link."""
+    editor(request)
+    data = await request.body()
+    return _bm(bookmarks.set_icon, lid, data)
+
+
+@router.delete("/api/bookmarks/links/{lid}/icon")
+def delete_link_icon(lid: int, request: Request):
+    editor(request)
+    return _bm(bookmarks.clear_icon, lid)
+
+
 @router.post("/api/bookmarks/import")
 async def import_bookmarks(request: Request):
     """Editors. {yaml, replace?}: a homepage bookmarks.yaml."""

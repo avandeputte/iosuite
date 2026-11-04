@@ -1,9 +1,12 @@
 """Bookmarks on the start page, as homepage (gethomepage.dev) lays them out: groups of links, each link with a name, a
 two-letter abbreviation or an icon, the address and a line under it (the host name unless a description is given).
 One set for the whole family; editors and admins change it, in Settings › Bookmarks, or by importing a homepage
-bookmarks.yaml.
+bookmarks.yaml. An icon is an address or a dashboard-icons name in the link's icon field, or an SVG uploaded for the
+link and kept in the database (bookmark_icons), which the page serves itself.
 """
+import hashlib
 import re
+import xml.etree.ElementTree as ET
 from urllib.parse import urlsplit
 
 from app import db
@@ -35,13 +38,16 @@ def _href(href: str) -> str:
 def _public(r: dict) -> dict:
     return {"id": r["id"], "groupId": r["group_id"], "name": r["name"], "abbr": r["abbr"], "href": r["href"],
             "description": r["description"] or (urlsplit(r["href"]).hostname or ""), "customDescription": r["description"] or "",
-            "icon": r["icon"] or ""}
+            "icon": r["icon"] or "", "iconUrl": f"api/bookmarks/links/{r['id']}/icon.svg?v={r['etag']}" if r.get("etag") else ""}
+
+
+_LINK = "SELECT b.*, i.etag FROM bookmarks b LEFT JOIN bookmark_icons i ON i.link_id = b.id"
 
 
 def groups() -> list[dict]:
     """Every group with its links, in order."""
     gs = db.q("SELECT * FROM bookmark_groups ORDER BY sort, id")
-    links = db.q("SELECT * FROM bookmarks ORDER BY group_id, sort, id")
+    links = db.q(_LINK + " ORDER BY b.group_id, b.sort, b.id")
     by: dict[int, list] = {}
     for r in links:
         by.setdefault(r["group_id"], []).append(_public(r))
@@ -96,7 +102,7 @@ def add_link(gid: int, name: str, href: str, abbr: str | None = None, descriptio
     sort = (db.one("SELECT COALESCE(MAX(sort), -1) + 1 AS n FROM bookmarks WHERE group_id = %s", (gid,)) or {}).get("n", 0)
     lid = db.ex("INSERT INTO bookmarks (group_id, name, abbr, href, description, icon, sort) VALUES (%s, %s, %s, %s, %s, %s, %s)",
                 (gid, name, _abbr(name, abbr), href, (description or "").strip()[:512] or None, (icon or "").strip()[:1024] or None, sort))
-    return _public(db.one("SELECT * FROM bookmarks WHERE id = %s", (lid,)))
+    return _public(db.one(_LINK + " WHERE b.id = %s", (lid,)))
 
 
 def update_link(lid: int, changes: dict) -> dict:
@@ -116,7 +122,7 @@ def update_link(lid: int, changes: dict) -> dict:
         _group(gid)
     db.ex("UPDATE bookmarks SET name = %s, href = %s, abbr = %s, description = %s, icon = %s, group_id = %s WHERE id = %s",
           (name, href, abbr, desc, icon, gid, lid))
-    return _public(db.one("SELECT * FROM bookmarks WHERE id = %s", (lid,)))
+    return _public(db.one(_LINK + " WHERE b.id = %s", (lid,)))
 
 
 def delete_link(lid: int) -> None:
@@ -172,3 +178,56 @@ def import_yaml(text: str, replace: bool = False) -> dict:
                 except BadBookmark:
                     continue
     return {"groups": ng, "links": nl}
+
+
+# ------------------------------------------------------------------ uploaded icons
+
+ICON_MAX = 256 * 1024
+_SVG_NS = "{http://www.w3.org/2000/svg}svg"
+_UNSAFE = re.compile(r"<\s*(script|foreignObject|iframe|embed|object)\b|\bon[a-z]+\s*=|javascript:|<!ENTITY", re.I)
+
+
+def clean_svg(data: bytes) -> str:
+    """The SVG as it will be stored, or BadBookmark: well-formed XML with an <svg> root, no script, event handlers,
+    external entities or embedded documents (it is shown in an <img>, which runs none of these, but the file is
+    served from this origin, so a stray script never gets a chance)."""
+    if not data:
+        raise BadBookmark("Choose an .svg file")
+    if len(data) > ICON_MAX:
+        raise BadBookmark(f"The icon is over {ICON_MAX // 1024} KB")
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        raise BadBookmark("Not an SVG file (not UTF-8 text)")
+    if _UNSAFE.search(text):
+        raise BadBookmark("The SVG contains a script, an event handler or an entity: those are not allowed")
+    try:
+        root = ET.fromstring(text)
+    except ET.ParseError as e:
+        raise BadBookmark(f"Not a valid SVG: {str(e)[:120]}")
+    if root.tag not in (_SVG_NS, "svg"):
+        raise BadBookmark("Not an SVG file (the root element is not <svg>)")
+    return text.strip()
+
+
+def set_icon(lid: int, data: bytes) -> dict:
+    """Store the uploaded SVG for a link; returns the link."""
+    if not db.one("SELECT id FROM bookmarks WHERE id = %s", (lid,)):
+        raise BadBookmark("No such link")
+    svg = clean_svg(data)
+    etag = hashlib.sha256(svg.encode("utf-8")).hexdigest()[:16]
+    db.ex("INSERT INTO bookmark_icons (link_id, svg, etag) VALUES (%s, %s, %s) ON DUPLICATE KEY UPDATE svg = VALUES(svg), etag = VALUES(etag)",
+          (lid, svg, etag))
+    return _public(db.one(_LINK + " WHERE b.id = %s", (lid,)))
+
+
+def clear_icon(lid: int) -> dict:
+    if not db.one("SELECT id FROM bookmarks WHERE id = %s", (lid,)):
+        raise BadBookmark("No such link")
+    db.ex("DELETE FROM bookmark_icons WHERE link_id = %s", (lid,))
+    return _public(db.one(_LINK + " WHERE b.id = %s", (lid,)))
+
+
+def icon(lid: int) -> dict | None:
+    """{svg, etag} of the uploaded icon, or None."""
+    return db.one("SELECT svg, etag FROM bookmark_icons WHERE link_id = %s", (lid,))

@@ -111,3 +111,43 @@ def test_viewer_reads_bookmarks_editor_changes_them(client):
     client.post("/api/auth/logout")
     client.post("/api/auth/login", json={"name": "sam", "password": "secret123"})
     assert client.post("/api/bookmarks/groups", json={"name": "X"}).status_code == 200
+
+
+SVG = b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><circle cx="5" cy="5" r="4" fill="#c33"/></svg>'
+
+
+def test_uploaded_svg_icon(client):
+    g = client.post("/api/bookmarks/groups", json={"name": "Dev"}).json()
+    l = client.post(f"/api/bookmarks/groups/{g['id']}/links", json={"name": "Forge", "href": "https://forge.example", "icon": "github.png"}).json()
+    assert l["iconUrl"] == ""
+    r = client.put(f"/api/bookmarks/links/{l['id']}/icon", content=SVG, headers={"Content-Type": "image/svg+xml"})
+    assert r.status_code == 200, r.text
+    url = r.json()["iconUrl"]
+    assert url.startswith(f"api/bookmarks/links/{l['id']}/icon.svg?v=") and r.json()["icon"] == "github.png"
+    got = client.get("/" + url)
+    assert got.status_code == 200 and got.headers["content-type"].startswith("image/svg+xml") and got.content == SVG
+    assert "immutable" in got.headers["cache-control"]
+    assert client.get("/api/bookmarks").json()["groups"][0]["links"][0]["iconUrl"] == url
+    # replacing changes the address; the list follows
+    r2 = client.put(f"/api/bookmarks/links/{l['id']}/icon", content=SVG.replace(b"#c33", b"#3c3"))
+    assert r2.json()["iconUrl"] != url
+    # what is refused
+    for bad, why in [(b"<svg onload='alert(1)'/>", "handler"), (b"<svg xmlns='http://www.w3.org/2000/svg'><script>1</script></svg>", "script"),
+                     (b"<html/>", "root"), (b"not xml <", "parse"), (b"", "empty"), (b"<svg/>" + b" " * (256 * 1024), "size")]:
+        assert client.put(f"/api/bookmarks/links/{l['id']}/icon", content=bad).status_code == 400, why
+    assert client.put("/api/bookmarks/links/9999/icon", content=SVG).status_code == 400
+    # removing, and the icon goes with its link
+    assert client.delete(f"/api/bookmarks/links/{l['id']}/icon").json()["iconUrl"] == ""
+    assert client.get(f"/api/bookmarks/links/{l['id']}/icon.svg").status_code == 404
+    client.put(f"/api/bookmarks/links/{l['id']}/icon", content=SVG)
+    client.delete(f"/api/bookmarks/links/{l['id']}")
+    from app import db
+    assert db.q("SELECT * FROM bookmark_icons") == []
+    # a viewer sees the icon but cannot change it
+    l2 = client.post(f"/api/bookmarks/groups/{g['id']}/links", json={"name": "Wiki", "href": "https://wiki.example"}).json()
+    client.put(f"/api/bookmarks/links/{l2['id']}/icon", content=SVG)
+    client.post("/api/users", json={"name": "kid", "password": "secret123", "role": "viewer"})
+    client.post("/api/auth/logout")
+    client.post("/api/auth/login", json={"name": "kid", "password": "secret123"})
+    assert client.get(f"/api/bookmarks/links/{l2['id']}/icon.svg").status_code == 200
+    assert client.put(f"/api/bookmarks/links/{l2['id']}/icon", content=SVG).status_code == 403
