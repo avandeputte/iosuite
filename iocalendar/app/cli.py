@@ -6,6 +6,7 @@
   set-password NAME               the same
   import CALENDAR-ID FILE.ics     events from an .ics file into a calendar
   sync-birthdays                  bring the Birthdays calendar up to date from ioContacts
+  sync-holidays                   bring the Holidays calendar up to date (Settings › Holidays)
 """
 import getpass
 import os
@@ -64,6 +65,9 @@ def main(argv: list[str]) -> int:
     elif cmd == "sync-birthdays":
         from app import contacts
         print(contacts.sync_birthdays())
+    elif cmd == "sync-holidays":
+        from app import holiday
+        print(holiday.sync())
     else:
         print(__doc__)
         return 2

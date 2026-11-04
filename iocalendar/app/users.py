@@ -85,6 +85,8 @@ def create_app_password(uid: int, label: str) -> str:
 def forget_cached_auth() -> None:
     apppasswords.forget()
     shared.invalidate()
+    from app import members
+    members.forget()
 
 
 # ---------------------------------------------------------------- subscription links (ioCalendar's own)

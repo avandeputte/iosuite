@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "iocalendar"
-version = "0.1.0"
+version = "0.2.0"
 description = "Self-hosted calendars for the family: web app, CalDAV, iCalendar feeds, REST/jCal, MCP"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -20,6 +20,7 @@ dependencies = [
   "icalendar>=6,<8",              # iCalendar (RFC 5545) reading and writing
   "recurring-ical-events>=3,<4",  # repeating events: RRULE, RDATE, EXDATE and changed occurrences
   "python-dateutil>=2.8,<3",
+  "holidays>=0.60,<1",            # public holidays by country and region, worked out offline
   "tzdata",                       # time zones on systems without /usr/share/zoneinfo
 ]
 

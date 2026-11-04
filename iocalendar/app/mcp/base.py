@@ -6,7 +6,7 @@ from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
 
-from app import APP_VERSION, config, ical, model, users
+from app import APP_VERSION, config, ical, members, model, users
 
 READ_ONLY = ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False)
 WRITES = ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=False)
@@ -26,7 +26,9 @@ server = MCPServer(
         "event the end date is the day after the last day. A repeating event has one id; its occurrences are named by "
         "their recurrenceId (from agenda). To change or delete one occurrence give occurrence=<recurrenceId> and "
         "scope='this', or scope='following' for it and the ones after. People on an event are noted, never invited: "
-        "nothing is sent to them. Ask before deleting events or calendars."
+        "nothing is sent to them. Events can be tagged with the family members they are for (members: names from "
+        "overview's family); agenda and search_events filter by member. The shared Holidays calendar holds the public "
+        "holidays and cannot be changed. Ask before deleting events or calendars."
     ),
 )
 
@@ -91,7 +93,7 @@ def find_calendar(u: dict, ref, writable: bool = False) -> dict:
         raise ToolError(f"'{ref}' names more than one calendar: " + ", ".join(f"{c['name']} (id {c['id']})" for c in hit))
     c = hit[0]
     if writable and not model.can_write(u, c):
-        raise ToolError(f"You can read '{c['name']}' but not change it" + (" (it comes from ioContacts)" if c["kind"] == "birthdays"
+        raise ToolError(f"You can read '{c['name']}' but not change it" + (f" ({model.read_only_reason(c)})" if model.read_only_reason(c)
                                                                             else " (viewers change only their own private calendars)"))
     return c
 
@@ -138,6 +140,7 @@ def event_out(u: dict, r: dict, recurrence_id: str | None = None) -> dict:
     for k in ("href", "etag", "sequence"):
         j.pop(k, None)
     j["calendar"] = calendar_names(u).get(r["calendar_id"])
+    j["members"] = [m["displayName"] for m in j.get("members") or []]
     if r["rrule"]:
         j["next"] = model.next_occurrence(r)
     link = event_link(r["id"])
@@ -146,9 +149,25 @@ def event_out(u: dict, r: dict, recurrence_id: str | None = None) -> dict:
     return {k: v for k, v in j.items() if v not in (None, "", [], {})}
 
 
+def member_names(ids) -> list[str]:
+    by_id = {m["id"]: m["displayName"] for m in members.family()}
+    return [by_id[i] for i in ids or [] if i in by_id]
+
+
+def member_ids(refs) -> set[int] | None:
+    """A member argument (a name, or a list of names or ids) as member ids; None when not given."""
+    if refs in (None, "", []):
+        return None
+    try:
+        return {m["id"] for m in members.resolve(refs)}
+    except ValueError as e:
+        raise ToolError(str(e))
+
+
 def occurrence_out(u: dict, o: dict) -> dict:
     out = {"id": o["id"], "title": o["title"], "start": o["start"], "end": o["end"], "allDay": o["allDay"] or None,
            "calendar": calendar_names(u).get(o["calendarId"]), "location": o["location"], "people": o["people"],
+           "members": member_names(o.get("members")),
            "recurrenceId": o["recurrenceId"] if o["recurring"] else None, "status": o["status"],
            "free": (not o["busy"]) or None}
     return {k: v for k, v in out.items() if v not in (None, "", [], {})}

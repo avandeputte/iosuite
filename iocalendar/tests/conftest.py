@@ -16,6 +16,7 @@ _authtest.fresh_database("calendar_test")
 os.environ.update(_authtest.auth_env("calendar_test_auth"))
 os.environ.setdefault("TIMEZONE", "America/New_York")
 os.environ.setdefault("UPDATE_CHECK", "0")
+os.environ.setdefault("HOLIDAYS_COUNTRY", "off")  # the tests that want holidays choose a country
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from fastapi.testclient import TestClient  # noqa: E402

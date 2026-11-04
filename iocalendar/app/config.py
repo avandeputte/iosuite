@@ -34,6 +34,12 @@ PUBLIC_URL = env("PUBLIC_URL", "").rstrip("/")   # e.g. https://calendar.example
 # the time zone new events and all-day feeds default to (the server's own when empty)
 TIMEZONE = env("TIMEZONE", env("TZ", "")).strip()
 
+# public holidays (Settings › Holidays wins once an admin has chosen): a two-letter country code (off: none), and
+# optionally its region (a state or province code) and the language of the names; no country: the time zone's
+HOLIDAYS_COUNTRY = env("HOLIDAYS_COUNTRY").strip()
+HOLIDAYS_REGION = env("HOLIDAYS_REGION").strip().upper()
+HOLIDAYS_LANGUAGE = env("HOLIDAYS_LANGUAGE").strip()
+
 # ioContacts (can also be set in Settings › ioContacts; the environment wins)
 IOCONTACTS_URL = env("IOCONTACTS_URL")
 IOCONTACTS_USER = env("IOCONTACTS_USER")

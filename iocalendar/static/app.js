@@ -1,6 +1,7 @@
 /* ioCalendar web app: one module, no build step. Views: month, week, day and agenda, with the calendars to show in the
    sidebar; the event form (repeating events, people from ioContacts, reminders), search, import/export and settings
-   (account, apps and devices, calendars, users, ioContacts, server). */
+   (account, apps and devices, calendars, users, ioContacts, holidays, server). Events can be tagged with the family
+   members they are for, and the sidebar filters the calendar by member. */
 
 // ------------------------------------------------------------------ helpers
 const $ = (s, el = document) => el.querySelector(s);
@@ -192,14 +193,33 @@ function whenText(o) {
 }
 
 // ------------------------------------------------------------------ state
-const S = { status: {}, user: null, settings: {}, cals: [], hidden: new Set(), view: 'month', date: dayStart(new Date()), occ: [], q: '', mini: null, editing: null };
+const S = { status: {}, user: null, settings: {}, cals: [], hidden: new Set(), members: [], who: new Set(), view: 'month', date: dayStart(new Date()), occ: [], q: '', mini: null, editing: null };
 const calOf = (id) => S.cals.find((c) => c.id === id) || {};
 const colorOf = (id) => calOf(id).color || 'var(--brand)';
 const writable = () => S.cals.filter((c) => c.writable);
 const shownCals = () => S.cals.filter((c) => !S.hidden.has(c.id));
+/** Filled by the server (Birthdays from ioContacts, public Holidays): nobody changes them here. */
+const AUTO_KINDS = ['birthdays', 'holidays'];
+const isAuto = (c) => AUTO_KINDS.includes(c.kind);
+const memberOf = (id) => S.members.find((m) => m.id === id);
+const MEMBER_COLORS = ['#1e8e3e', '#e0426a', '#1a73e8', '#e8710a', '#8e44d6', '#0b8a9e', '#b5452f', '#4b53c7', '#e8a100', '#5f6b7a'];
+/** Each family member gets a colour of their own (by their place in the family list, so two never look alike). */
+const memberColor = (m) => MEMBER_COLORS[Math.max(0, S.members.findIndex((x) => x.id === m.id)) % MEMBER_COLORS.length];
+const memberBadge = (m) => h('span', { class: 'mem', title: m.displayName, style: { '--mc': memberColor(m) } }, initials(m.displayName));
+/** With family members picked in the sidebar: only the events tagged with one of them (holidays and birthdays stay). */
+const passesWho = (o) => !S.who.size || isAuto(calOf(o.calendarId)) || (o.members || []).some((id) => S.who.has(id));
+function toggleWho(id) {
+  if (id == null) S.who.clear(); else if (S.who.has(id)) S.who.delete(id); else S.who.add(id);
+  saveSettings({ memberFilter: [...S.who].join(',') });
+  drawNav();
+  if (['month', 'week', 'day', 'agenda'].includes(route().view)) drawView();
+}
 
 async function loadCals() {
-  S.cals = (await api('/api/calendars')).items;
+  const [cals, fam] = await Promise.all([api('/api/calendars'), api('/api/members').catch(() => ({ items: S.members }))]);
+  S.cals = cals.items;
+  S.members = fam.items || [];
+  for (const id of [...S.who]) if (!memberOf(id)) S.who.delete(id);
   drawNav();
 }
 async function saveSettings(changes) {
@@ -272,8 +292,11 @@ function drawNav() {
     const ck = h('span', { class: 'ck' }); ck.innerHTML = check;
     return h('a', { href: '#', 'data-v': 'cal', class: `cal ${S.hidden.has(c.id) ? '' : 'shown'}`, title: `${S.hidden.has(c.id) ? 'Show' : 'Hide'} ${c.name}`,
       style: { '--hue': c.color }, onclick: (e) => { e.preventDefault(); toggleCal(c.id); } },
-      ck, h('span', { class: 'nl' }, c.name), h('span', { class: 'n' }, c.kind === 'birthdays' ? '' : c.count || ''));
+      ck, h('span', { class: 'nl' }, c.name), h('span', { class: 'n' }, isAuto(c) ? '' : c.count || ''));
   };
+  const whoRow = (m) => h('a', { href: '#', 'data-v': 'who', class: `who ${S.who.has(m.id) ? 'picked' : ''}`, style: { '--mc': memberColor(m) },
+    title: S.who.has(m.id) ? `Stop showing only ${m.displayName}'s events` : `Show only ${m.displayName}'s events`,
+    onclick: (e) => { e.preventDefault(); toggleWho(m.id); } }, memberBadge(m), h('span', { class: 'nl' }, m.displayName));
   const shared = S.cals.filter((c) => c.shared), mine = S.cals.filter((c) => !c.shared);
   nav.replaceChildren(...[
     h('div', { class: 'navhead' },
@@ -286,6 +309,9 @@ function drawNav() {
     miniMonth(),
     sec('Shared', S.user.role !== 'viewer' ? h('button', { class: 'iconbtn', title: 'New shared calendar', onclick: () => newCalendar(true) }, icon('add', 's')) : null),
     shared.map(calRow),
+    S.members.length > 1 ? [h('div', { class: 'navgap' }),
+      sec('Family', S.who.size ? h('button', { class: 'pillbtn noic tiny', title: 'Show everyone again', onclick: () => toggleWho(null) }, 'Everyone') : null),
+      S.members.map(whoRow)] : null,
     h('div', { class: 'navgap' }),
     sec('Mine', h('button', { class: 'iconbtn', title: 'New private calendar', onclick: () => newCalendar(false) }, icon('add', 's'))),
     mine.map(calRow),
@@ -320,6 +346,8 @@ function moreSheet() {
   const tile = (href, ic, label, hue, on, click) => h('a', { href, class: on ? 'on' : null, style: { '--hue': hue }, onclick: click || null }, h('span', { class: 'sic' }, icon(ic)), h('span', null, label));
   const grid = h('div', { class: 'sheetgrid' },
     S.cals.map((c) => tile('#', S.hidden.has(c.id) ? 'close' : 'check', c.name, c.color, !S.hidden.has(c.id), (e) => { e.preventDefault(); e.stopPropagation(); toggleCal(c.id); document.querySelector('.dialog-back')?.remove(); moreSheet(); })),
+    S.members.length > 1 ? S.members.map((m) => tile('#', 'person', S.who.has(m.id) ? `Only ${m.displayName}` : m.displayName, memberColor(m), S.who.has(m.id),
+      (e) => { e.preventDefault(); e.stopPropagation(); toggleWho(m.id); document.querySelector('.dialog-back')?.remove(); moreSheet(); })) : null,
     tile('#/import', 'upload', 'Import and export', 'var(--c-green)', r.view === 'import'),
     tile('#/settings', 'settings', 'Settings', 'var(--c-slate)', r.view === 'settings'));
   const p = dialog('More', grid, [{ label: 'Close', value: null }]);
@@ -446,7 +474,7 @@ async function drawView() {
   let items = [];
   if (ids.length) items = (await api(`/api/occurrences?start=${encodeURIComponent(s.toISOString())}&end=${encodeURIComponent(e.toISOString())}&calendars=${ids.join(',')}`)).items;
   if (seq !== drawSeq) return;
-  S.occ = items;
+  S.occ = items.filter(passesWho);
   const body = h('div', { class: 'calbody' });
   const key = `${S.view}|${ymd(s)}`;
   const keep = S.drawn === key ? main.querySelector('.calbody')?.scrollTop : undefined;
@@ -463,7 +491,8 @@ function chip(o, day) {
     style: { '--c': colorOf(o.calendarId) }, title: `${o.title || '(no title)'}\n${whenText(o)}${o.location ? '\n' + o.location : ''}`,
     draggable: canChange(o) ? 'true' : null,
     onclick: (ev) => { ev.stopPropagation(); openEvent(o); } },
-  long ? null : h('span', { class: 'dot' }), !long && sameDay(a, day) ? h('span', { class: 't' }, fmtTime(a)) : null, h('span', { class: 'nm' }, o.title || '(no title)'));
+  long ? null : h('span', { class: 'dot' }), !long && sameDay(a, day) ? h('span', { class: 't' }, fmtTime(a)) : null, h('span', { class: 'nm' }, o.title || '(no title)'),
+  (o.members || []).map(memberOf).filter(Boolean).map(memberBadge));
   el.addEventListener('dragstart', (ev) => { S.drag = { o, from: day, grabMin: 0 }; ev.dataTransfer.effectAllowed = 'move'; ev.dataTransfer.setData('text/plain', o.title || ''); });
   return el;
 }
@@ -643,7 +672,8 @@ function agendaRow(o, d) {
   return h('div', { class: 'arow', style: { '--c': colorOf(o.calendarId) }, onclick: () => openEvent(o) },
     h('span', { class: 'dot' }), h('span', { class: 'tm' }, tm),
     h('div', { style: { minWidth: 0 } }, h('div', { class: 'nm', style: o.status === 'CANCELLED' ? { textDecoration: 'line-through' } : null }, o.title || '(no title)'),
-      o.location || (o.people || []).length ? h('div', { class: 'sub' }, [o.location, (o.people || []).map((p) => p.name || p.email).join(', ')].filter(Boolean).join(' · ')) : null));
+      o.location || (o.people || []).length || (o.members || []).length ? h('div', { class: 'sub' }, [(o.members || []).map(memberOf).filter(Boolean).map((m) => m.displayName).join(', '),
+        o.location, (o.people || []).map((p) => p.name || p.email).join(', ')].filter(Boolean).join(' · ')) : null));
 }
 
 // ------------------------------------------------------------------ one event
@@ -673,6 +703,7 @@ function eventCard(j, inDialog) {
       j.status === 'CANCELLED' ? h('span', { class: 'chip', style: { marginLeft: '8px' } }, 'Cancelled') : j.status === 'TENTATIVE' ? h('span', { class: 'chip', style: { marginLeft: '8px' } }, 'Tentative') : null)),
     line('clock', whenText(j), j.timezone && j.timezone !== LOCAL_TZ && !j.allDay ? h('div', { class: 'muted small' }, `Time zone ${j.timezone.replace(/_/g, ' ')}`) : null),
     j.rrule ? line('repeat', describeRule(j.rrule, j.allDay ? parseDay(j.start) : new Date(j.start))) : null,
+    (j.members || []).length ? line('person', h('div', { class: 'chiprow' }, j.members.map((m) => h('span', { class: 'chip mchip' }, memberBadge(m), `For ${m.displayName}`)))) : null,
     j.location ? line('place', h('a', { class: 'lnk', href: mapsLink(j.location), target: '_blank', rel: 'noopener' }, j.location)) : null,
     people.length ? line('people', h('div', { class: 'chiprow' }, people.map((p) => {
       const label = p.name || p.email;
@@ -683,7 +714,8 @@ function eventCard(j, inDialog) {
     j.notes ? line('note', h('div', { style: { whiteSpace: 'pre-wrap' } }, j.notes)) : null,
     j.url ? line('link', h('a', { class: 'lnk', href: j.url, target: '_blank', rel: 'noopener' }, j.url)) : null,
     line('today', c.name || '', j.busy === false ? h('span', { class: 'muted' }, ' · shown as free') : null,
-      c.kind === 'birthdays' ? h('div', { class: 'muted small' }, 'From ioContacts; change the birthday there.') : null));
+      c.kind === 'birthdays' ? h('div', { class: 'muted small' }, 'From ioContacts; change the birthday there.') : null,
+      c.kind === 'holidays' ? h('div', { class: 'muted small' }, 'A public holiday (Settings › Holidays).') : null));
 }
 function closeDialogs() { document.querySelectorAll('.dialog-back').forEach((d) => d.remove()); }
 async function openEvent(o) {
@@ -776,7 +808,7 @@ function makeRule(st, d, allDay) {
 
 async function showEdit(page, r) {
   const editing = r.view === 'edit';
-  const cals = writable().filter((c) => c.kind !== 'birthdays');
+  const cals = writable().filter((c) => !isAuto(c));
   if (!cals.length) { page.append(h('div', { class: 'empty' }, icon('today'), h('p', null, 'You cannot add events to any calendar.'))); return; }
   let j;
   if (editing) {
@@ -888,6 +920,17 @@ async function showEdit(page, r) {
   pin.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addPerson(typed()); } if (e.key === 'Escape') drop.hidden = true; });
   pin.addEventListener('blur', () => setTimeout(() => { drop.hidden = true; }, 150));
   drawPeople();
+  // the family members it is for (shared calendars)
+  const forWho = new Set((j.members || []).map((m) => m.id));
+  const mchips = h('div', { class: 'chiprow' });
+  const drawMembers = () => fill(mchips, S.members.map((m) => h('button', { type: 'button', class: `chip mchip toggle ${forWho.has(m.id) ? 'on' : ''}`, 'aria-pressed': forWho.has(m.id) ? 'true' : 'false',
+    onclick: () => { if (forWho.has(m.id)) forWho.delete(m.id); else forWho.add(m.id); drawMembers(); } }, memberBadge(m), m.displayName)));
+  drawMembers();
+  const forSec = h('div', null, h('div', { class: 'fsec' }, icon('person'), 'For'), mchips,
+    h('p', { class: 'muted small', style: { margin: '4px 0 0' } }, 'Who in the family this is for. Calendar apps show it as a category.'));
+  const showFor = () => { forSec.hidden = !S.members.length || !calOf(+calSel.value).shared; };
+  calSel.addEventListener('change', showFor);
+  showFor();
   // reminders
   const reminders = [...(j.reminders || [])];
   const rchips = h('div', { class: 'chiprow' });
@@ -910,6 +953,7 @@ async function showEdit(page, r) {
     const data = { title: title.value.trim(), calendarId: +calSel.value, allDay: allDay.checked, location: place.value.trim() || null, notes: notes.value.trim() ? notes.value : null,
       people, reminders, url: url.value.trim() || null, status: status.value || null, busy: busy.value === '1' };
     if (pin.value.trim()) people.push(typed());
+    if (!forSec.hidden) data.members = [...forWho];
     if (allDay.checked) { data.start = sd.value; data.end = ymd(addDays(parseDay(ed.value), 1)); }
     else { data.start = `${sd.value}T${st.value}`; data.end = `${ed.value}T${et.value}`; data.timezone = tz.value; }
     const rule = makeRule(rs, startAt(), allDay.checked);
@@ -942,6 +986,7 @@ async function showEdit(page, r) {
   h('div', { class: 'when-row' }, sd, st, '–', ed, et, h('label', { class: 'check' }, allDay, ' All day'), tzWrap),
   h('div', { class: 'fsec' }, icon('repeat'), 'Repeat'), h('div', null, repSel, repMore),
   h('div', { class: 'fsec' }, icon('today'), 'Calendar'), h('div', { class: 'grid' }, fld('Calendar', calSel), fld('Show me as', busy), fld('Status', status)),
+  forSec,
   h('div', { class: 'fsec' }, icon('place'), 'Where'), place,
   h('div', { class: 'fsec' }, icon('people'), 'Who'), pchips, h('div', { class: 'picker', style: { marginTop: '6px' } }, pin, drop),
   h('div', { class: 'fsec' }, icon('bell'), 'Reminders'), rchips,
@@ -982,7 +1027,7 @@ async function showSearch(page, r) {
 
 // ------------------------------------------------------------------ import and export
 async function showImport(page) {
-  const w = writable().filter((c) => c.kind !== 'birthdays');
+  const w = writable().filter((c) => !isAuto(c));
   const sel = h('select', { class: 't', style: { maxWidth: '320px' } }, w.map((c) => h('option', { value: c.id }, `${c.name}${c.shared ? ' (shared)' : ''}`)));
   const file = h('input', { type: 'file', accept: '.ics,.ical,.ifb,text/calendar', multiple: true });
   const replace = h('input', { type: 'checkbox', checked: true });
@@ -1018,11 +1063,11 @@ async function showImport(page) {
 // ------------------------------------------------------------------ settings
 async function showSettings(page, r) {
   const adm = S.user.role === 'admin';
-  const tabs = [['account', 'Account'], ['devices', 'Apps and devices'], ['calendars', 'Calendars'], ...(adm ? [['users', 'Users'], ['iocontacts', 'ioContacts'], ['server', 'Server']] : [])];
+  const tabs = [['account', 'Account'], ['devices', 'Apps and devices'], ['calendars', 'Calendars'], ['holidays', 'Holidays'], ...(adm ? [['users', 'Users'], ['iocontacts', 'ioContacts'], ['server', 'Server']] : [])];
   page.append(h('div', { class: 'pagehead' }, h('h1', null, 'Settings')),
     h('div', { class: 'tabs' }, tabs.map(([k, l]) => h('button', { class: r.tab === k ? 'on' : '', onclick: () => { location.hash = `#/settings/${k}`; } }, l))));
   const body = h('div'); page.append(body);
-  await ({ account: setAccount, devices: setDevices, calendars: setCalendars, users: setUsers, iocontacts: setContacts, server: setServer }[r.tab] || setAccount)(body);
+  await ({ account: setAccount, devices: setDevices, calendars: setCalendars, holidays: setHolidays, users: setUsers, iocontacts: setContacts, server: setServer }[r.tab] || setAccount)(body);
 }
 const fld = (l, e) => h('label', { class: 'field' }, h('span', null, l), e);
 const kv = (k, v) => h('div', { class: 'kv' }, h('div', { class: 'k' }, k), h('div', { class: 'v', style: { flex: 1 } }, typeof v === 'string' ? copyRow(v) : v));
@@ -1107,25 +1152,25 @@ async function setCalendars(el) {
   el.append(h('p', null, S.user.role !== 'viewer' ? h('button', { class: 'pillbtn', onclick: async () => { await newCalendar(true); onRoute(); } }, icon('add', 's'), 'New shared calendar') : null, ' ',
     h('button', { class: 'pillbtn', onclick: async () => { await newCalendar(false); onRoute(); } }, icon('add', 's'), 'New private calendar')),
   ...S.cals.map((c) => {
-    const ro = !c.writable || c.kind === 'birthdays';
-    const name = h('input', { class: 't', value: c.name, disabled: ro && c.kind !== 'birthdays' ? true : null });
+    const auto = isAuto(c);
+    const name = h('input', { class: 't', value: c.name });
     const col = colorPicker(c.color);
     const tz = h('select', { class: 't' }, h('option', { value: '' }, `Server default (${S.status.timezone})`), tzs.map((z) => h('option', { value: z, selected: z === c.timezone ? true : null }, z.replace(/_/g, ' '))));
     const desc = h('input', { class: 't', value: c.description || '', placeholder: 'What it is for' });
-    const canEdit = c.writable || (c.kind === 'birthdays' && S.user.role === 'admin');
+    const canEdit = c.writable || (auto && S.user.role === 'admin');
     return h('div', { class: 'box', style: { '--c': c.color } },
       h('h2', null, h('span', { class: 'chip-ev allday', style: { '--c': c.color, display: 'inline-flex', width: '14px', height: '14px', padding: 0 } }), c.name,
-        h('span', { class: 'muted small', style: { fontWeight: 400 } }, c.kind === 'birthdays' ? 'from ioContacts, read-only' : c.shared ? 'shared with everyone' : 'only you')),
-      canEdit ? [h('div', { class: 'grid' }, fld('Name', name), fld('Description', desc), c.kind === 'birthdays' ? null : fld('Time zone for floating times', tz)), h('div', { style: { margin: '10px 0' } }, col),
+        h('span', { class: 'muted small', style: { fontWeight: 400 } }, c.kind === 'birthdays' ? 'from ioContacts, read-only' : c.kind === 'holidays' ? 'public holidays, read-only' : c.shared ? 'shared with everyone' : 'only you')),
+      canEdit ? [h('div', { class: 'grid' }, fld('Name', name), fld('Description', desc), auto ? null : fld('Time zone for floating times', tz)), h('div', { style: { margin: '10px 0' } }, col),
         h('p', null, h('button', { class: 'pillbtn primary', onclick: async () => {
           const body = { name: name.value, color: col.get(), description: desc.value };
-          if (c.kind !== 'birthdays') body.timezone = tz.value || null;
+          if (!auto) body.timezone = tz.value || null;
           try { await api(`/api/calendars/${c.id}`, { method: 'PATCH', json: body }); await loadCals(); toast('Saved'); } catch (e) { fail(e); }
         } }, icon('check', 's'), 'Save'), ' ',
-        c.kind !== 'birthdays' && (!c.shared || S.user.role === 'admin') ? h('button', { class: 'pillbtn noic danger', onclick: async () => {
+        !auto && (!c.shared || S.user.role === 'admin') ? h('button', { class: 'pillbtn noic danger', onclick: async () => {
           if (!await confirmDialog('Delete calendar', `Delete ${c.name} and its ${c.count || 0} events? Apps that sync it lose it too.`, 'Delete', true)) return;
           try { await api(`/api/calendars/${c.id}`, { method: 'DELETE' }); await loadCals(); onRoute(); } catch (e) { fail(e); }
-        } }, 'Delete') : null)] : h('p', { class: 'muted' }, `${c.count || 0} events. Editors and admins change shared calendars.`));
+        } }, 'Delete') : null)] : h('p', { class: 'muted' }, auto ? (c.kind === 'holidays' ? 'Filled from Settings › Holidays.' : 'Filled from ioContacts.') : `${c.count || 0} events. Editors and admins change shared calendars.`));
   }));
 }
 
@@ -1177,6 +1222,46 @@ async function setContacts(el) {
       } catch (e) { fill(out, ); fail(e); }
     } }, icon('check', 's'), 'Save and test'), ' ',
     s.enabled ? h('button', { class: 'pillbtn noic', onclick: async () => { try { const r = await api('/api/iocontacts/sync', { method: 'POST' }); await loadCals(); toast(r.ok ? `Birthdays: ${r.count} dates` : r.error); } catch (e) { fail(e); } } }, 'Bring birthdays up to date now') : null), out));
+}
+
+async function setHolidays(el) {
+  const s = await api('/api/holidays/settings');
+  const adm = S.user.role === 'admin';
+  const where = s.country ? [s.countryName, s.regionName].filter(Boolean).join(', ') : null;
+  const last = (x) => (x && x.synced ? `Last filled ${new Date(x.synced * 1000).toLocaleString()} (${x.count} holidays, last year to three years ahead).` : x && x.error ? `The last fill failed: ${x.error}` : '');
+  const box = h('div', { class: 'box' }, h('h2', null, icon('star'), 'Public holidays'),
+    h('p', { class: 'muted' }, 'A shared, read-only Holidays calendar shows the public holidays of your country (and region), worked out on the server and kept up to date every day. Phones and apps get it like any other calendar; anyone can hide it in the sidebar.'),
+    h('p', null, where ? `Showing the holidays of ${where}${s.guessed ? ' (from the time zone; pick another below)' : ''}.` : 'Off: no country picked.'));
+  el.append(box);
+  if (!adm) { box.append(h('p', { class: 'muted small' }, 'An admin picks the country.')); return; }
+  const countries = (await api('/api/holidays/countries')).items;
+  const country = h('select', { class: 't' }, h('option', { value: '' }, 'None (no Holidays calendar)'),
+    countries.map((c) => h('option', { value: c.code, selected: c.code === s.country ? true : null }, c.name)));
+  const region = h('select', { class: 't' });
+  const lang = h('select', { class: 't' });
+  const LANG = (code) => { try { return new Intl.DisplayNames([], { type: 'language' }).of(code.replace('_', '-')) || code; } catch { return code; } };
+  const drawCountry = async (keep) => {
+    const code = country.value;
+    if (!code) { fill(region, h('option', { value: '' }, '—')); fill(lang, h('option', { value: '' }, '—')); region.disabled = lang.disabled = true; return; }
+    const info = await api(`/api/holidays/countries/${code}`);
+    fill(region, h('option', { value: '' }, info.regions.length ? 'The whole country' : 'No regions'),
+      info.regions.map((r) => h('option', { value: r.code, selected: keep && r.code === s.region ? true : null }, r.name === r.code ? r.code : `${r.name} (${r.code})`)));
+    fill(lang, h('option', { value: '' }, info.defaultLanguage ? `${LANG(info.defaultLanguage)} (default)` : 'Default'),
+      info.languages.map((l) => h('option', { value: l, selected: keep && l === s.language ? true : null }, LANG(l))));
+    region.disabled = !info.regions.length; lang.disabled = !info.languages.length;
+  };
+  country.onchange = () => drawCountry(false);
+  await drawCountry(true);
+  const out = h('div', null, h('p', { class: 'muted small' }, last(s.lastSync)));
+  box.append(h('div', { class: 'grid' }, fld('Country', country), fld('Region (state, province…)', region), fld('Names in', lang)),
+    h('p', null, h('button', { class: 'pillbtn primary', onclick: async () => {
+      try {
+        const r = await api('/api/holidays/settings', { method: 'POST', json: { country: country.value, region: region.value, language: lang.value } });
+        await loadCals();
+        fill(out, h('p', { class: r.sync && !r.sync.ok ? 'warn' : 'muted small' }, !r.country ? 'The Holidays calendar is off.' : r.sync.ok ? `Holidays of ${[r.countryName, r.regionName].filter(Boolean).join(', ')}: ${r.sync.count} dates.` : r.sync.error));
+        toast('Saved');
+      } catch (e) { fail(e); }
+    } }, icon('check', 's'), 'Save')), out);
 }
 
 async function setServer(el) {
@@ -1293,10 +1378,11 @@ async function start() {
   S.user = S.status.user;
   try { S.settings = (await api('/api/auth/me')).settings || {}; } catch { S.settings = {}; }
   S.hidden = new Set(String(S.settings.hiddenCalendars || '').split(',').filter(Boolean).map(Number));
+  S.who = new Set(String(S.settings.memberFilter || '').split(',').filter(Boolean).map(Number));
   drawUser();
   await loadCals();
   $('#newbtn').onclick = () => { const v = route(); newAt(['month', 'week', 'day', 'agenda'].includes(v.view) && !sameDay(S.date, new Date()) ? S.date : new Date()); };
-  if (!writable().some((c) => c.kind !== 'birthdays')) $('#newbtn').hidden = true;
+  if (!writable().some((c) => !isAuto(c))) $('#newbtn').hidden = true;
   $('#menubtn').onclick = openNav;
   $('#navscrim').onclick = closeNav;
   $('#nav').addEventListener('click', (e) => { if (e.target.closest('a:not(.cal)') && !document.body.classList.contains('side-docked')) closeNav(); });

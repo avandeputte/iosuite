@@ -4,8 +4,8 @@ from typing import Optional
 
 from mcp.server.mcpserver.exceptions import ToolError
 
-from app import APP_VERSION, config, contacts, ical, model
-from app.mcp.base import READ_ONLY, calendars, clamp, event_out, find_calendar, find_event, occurrence_out, server, when, who
+from app import APP_VERSION, config, contacts, holiday, ical, members, model
+from app.mcp.base import READ_ONLY, calendars, clamp, event_out, find_calendar, find_event, member_ids, occurrence_out, server, when, who
 
 
 def _pick(u: dict, names: Optional[list[str]]) -> list[dict]:
@@ -16,8 +16,9 @@ def _pick(u: dict, names: Optional[list[str]]) -> list[dict]:
 
 @server.tool(annotations=READ_ONLY)
 def overview() -> dict:
-    """Who you are signed in as, the calendars you can see (with counts and whether you may change them), the server's
-    time zone and today's date there, and what is on today and in the next seven days. Start here."""
+    """Who you are signed in as, the calendars you can see (with counts and whether you may change them), the family
+    members events can be tagged with, the server's time zone and today's date there, the public holidays shown, and
+    what is on today and in the next seven days. Start here."""
     u = who()
     tz = ical.default_tz()
     now = dt.datetime.now(ical.zone(tz))
@@ -29,14 +30,31 @@ def overview() -> dict:
                        "youCanChange": model.can_write(u, c), "kind": c["kind"], "timezone": c.get("timezone")} for c in calendars(u)],
         "timezone": tz, "now": now.isoformat(timespec="minutes"), "today": now.date().isoformat(), "weekday": now.strftime("%A"),
         "nextSevenDays": [occurrence_out(u, o) for o in occ][:200],
+        "family": [m["displayName"] for m in members.family()],
+        "holidays": _holidays(),
         "iocontactsConnected": contacts.enabled(), "version": APP_VERSION, "webApp": config.PUBLIC_URL or None,
     }
 
 
+def _holidays():
+    s = holiday.settings()
+    if not s["country"]:
+        return None
+    p = holiday.public_settings()
+    return {"country": p.get("countryName") or s["country"], "region": p.get("regionName") or s["region"]}
+
+
+@server.tool(annotations=READ_ONLY)
+def list_family_members() -> list:
+    """The family members an event can be tagged with (the accounts that use ioCalendar)."""
+    who()
+    return members.public(members.family())
+
+
 @server.tool(annotations=READ_ONLY)
 def list_calendars() -> list:
-    """The calendars you can see: the shared Family calendar (and other shared ones, Birthdays from ioContacts among
-    them) and your private ones."""
+    """The calendars you can see: the shared Family calendar (and other shared ones, Birthdays from ioContacts and the
+    public Holidays among them) and your private ones."""
     u = who()
     return [{"id": c["id"], "name": c["name"], "description": c.get("description"), "color": c.get("color"), "shared": c["owner_id"] is None,
              "events": c.get("n"), "youCanChange": model.can_write(u, c), "kind": c["kind"]} for c in calendars(u)]
@@ -44,10 +62,11 @@ def list_calendars() -> list:
 
 @server.tool(annotations=READ_ONLY)
 def agenda(start: str, end: Optional[str] = None, calendars: Optional[list[str]] = None, text: Optional[str] = None,
-           limit: int = 300) -> dict:
+           member: Optional[list[str]] = None, limit: int = 300) -> dict:
     """What happens between start and end (ISO dates or date-times; end defaults to a week after start), soonest
     first, with repeating events expanded into their occurrences. calendars: names or ids (all when left out). text:
-    only events whose title, place, notes or people match. Each item has the event id and, for a repeating event, the
+    only events whose title, place, notes or people match. member: only events tagged with these family members
+    (names). Each item has the event id and, for a repeating event, the
     recurrenceId that names that occurrence."""
     u = who()
     s = when(start)
@@ -56,17 +75,21 @@ def agenda(start: str, end: Optional[str] = None, calendars: Optional[list[str]]
         raise ToolError("end is before start")
     if e - s > dt.timedelta(days=800):
         raise ToolError("At most about two years at a time")
-    occ = model.occurrences(_pick(u, calendars), s, e, text or "")
+    occ = model.occurrences(_pick(u, calendars), s, e, text or "", member_ids(member))
     n = clamp(limit, 1, 2000)
     return {"from": s.isoformat(), "to": e.isoformat(), "total": len(occ), "items": [occurrence_out(u, o) for o in occ[:n]]}
 
 
 @server.tool(annotations=READ_ONLY)
-def search_events(text: str, calendars: Optional[list[str]] = None, limit: int = 50) -> list:
+def search_events(text: str = "", calendars: Optional[list[str]] = None, member: Optional[list[str]] = None, limit: int = 50) -> list:
     """Events (not occurrences) whose title, place, notes or people match every word of text, the most recent first,
-    with the next occurrence of repeating ones."""
+    with the next occurrence of repeating ones. member: only events tagged with these family members (names)."""
     u = who()
-    rows = model.search_rows([c["id"] for c in _pick(u, calendars)], text, clamp(limit, 1, 500))
+    mids = member_ids(member)
+    n = clamp(limit, 1, 500)
+    rows = model.search_rows([c["id"] for c in _pick(u, calendars)], text, n if mids is None else 100000)
+    if mids is not None:
+        rows = [r for r in rows if model.tagged(r, mids)][:n]
     names = {c["id"]: c["name"] for c in _pick(u, None)}
     out = []
     for r in rows:

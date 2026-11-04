@@ -6,7 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 
-from app import APP_VERSION, api, caldav, config, contacts, db, mcp, model, updates, users
+from app import APP_VERSION, api, caldav, config, contacts, db, holiday, mcp, model, updates, users
 from app.auth import auth as auth_shared
 from iothing_auth import sessions
 
@@ -20,6 +20,7 @@ async def lifespan(app: FastAPI):
     await run_in_threadpool(users.ensure_admin_from_env)
     updates.start_daily()   # the daily "is there a newer version" check, while the setting allows it
     contacts.start_sync()   # the Birthdays calendar from ioContacts, every few hours
+    holiday.start_sync()    # the Holidays calendar, every day
     sm = mcp.server.session_manager
     sm._has_started = False  # a second start in the same process (the tests start the app once per test) is allowed
     async with sm.run():  # the MCP endpoint (/mcp) lives in this process

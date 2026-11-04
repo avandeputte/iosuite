@@ -4,16 +4,23 @@ the app searches and draws from), occurrences in a time range, search, import, a
 Calendars: the shared ones (owner_id NULL, Family first) that everyone sees, and each account's own private ones
 (Personal, made the first time the account uses ioCalendar). Viewers read the shared calendars and change only their
 own; editors change the shared ones too; admins also manage settings and users. A calendar of kind 'birthdays' is
-filled from ioContacts and nobody changes it here.
+filled from ioContacts, one of kind 'holidays' from the holiday rules (app/holiday.py); nobody changes either here.
 """
 import datetime as dt
 import re
 import threading
 from collections import OrderedDict
 
-from app import db, ical
+from app import db, ical, members
 
 PALETTE = ["#8e44d6", "#0b8a9e", "#1a73e8", "#e0426a", "#1e8e3e", "#e8710a", "#4b53c7", "#e8a100", "#5f6b7a", "#1294b8"]
+
+
+READ_ONLY_KINDS = ("birthdays", "holidays")  # filled by the server, never changed by hand
+
+
+def read_only_reason(c: dict) -> str | None:
+    return {"birthdays": "it comes from ioContacts", "holidays": "it is filled from the holiday settings"}.get((c or {}).get("kind"))
 
 
 class NotFound(Exception):
@@ -39,7 +46,7 @@ def can_read(u: dict | None, c: dict | None) -> bool:
 
 
 def can_write(u: dict | None, c: dict | None) -> bool:
-    if not can_read(u, c) or c.get("kind") == "birthdays":
+    if not can_read(u, c) or c.get("kind") in READ_ONLY_KINDS:
         return False
     if c["owner_id"] is None:
         return u.get("role") in ("editor", "admin")
@@ -63,7 +70,7 @@ def calendars_for(u: dict | None) -> list[dict]:
     ensure_personal(u)
     rows = db.q("SELECT c.*, (SELECT count(*) FROM events e WHERE e.calendar_id = c.id AND e.deleted = 0) AS n FROM calendars c "
                 "WHERE c.owner_id IS NULL OR c.owner_id = %s "
-                "ORDER BY c.owner_id IS NOT NULL, c.kind = 'birthdays', c.sort, c.slug <> 'family', c.slug <> 'personal', lower(c.name)",
+                "ORDER BY c.owner_id IS NOT NULL, c.kind IN ('birthdays', 'holidays'), c.kind = 'holidays', c.sort, c.slug <> 'family', c.slug <> 'personal', lower(c.name)",
                 (u["id"],))
     return rows
 
@@ -261,9 +268,11 @@ def rows_in_range(cids: list[int], start: dt.datetime | None, end: dt.datetime |
     return db.q(f"SELECT * FROM events WHERE {' AND '.join(where)} ORDER BY range_start", args)
 
 
-def occurrences(cals: list[dict], start: dt.datetime, end: dt.datetime, q: str = "") -> list[dict]:
-    """Every occurrence in [start, end) of the events in these calendars, soonest first."""
+def occurrences(cals: list[dict], start: dt.datetime, end: dt.datetime, q: str = "", member_ids: set[int] | None = None) -> list[dict]:
+    """Every occurrence in [start, end) of the events in these calendars, soonest first (member_ids: only those tagged
+    with one of these family members)."""
     by_id = {c["id"]: c for c in cals}
+    fam = members.family()
     out = []
     rows_ = rows_in_range(list(by_id), start, end)
     if q:
@@ -277,11 +286,14 @@ def occurrences(cals: list[dict], start: dt.datetime, end: dt.datetime, q: str =
         except Exception:  # noqa: BLE001 - one broken object does not hide the rest
             continue
         for o in occ:
+            mids = members.ids_of(o["categories"], fam)
+            if member_ids is not None and not member_ids.intersection(mids):
+                continue
             out.append({"id": r["id"], "uid": r["uid"], "calendarId": r["calendar_id"], "title": o["title"], "location": o["location"],
                         "start": ical.iso(o["start"]), "end": ical.iso(o["end"]), "allDay": o["allDay"],
                         "recurrenceId": o["recurrenceId"], "recurring": bool(r["rrule"]) or bool(o["recurrenceId"]),
                         "status": o["status"], "busy": not o["transparent"], "people": o["people"],
-                        "_sort": ical.to_utc(o["start"], by_id[r["calendar_id"]].get("timezone"))})
+                        "categories": o["categories"], "members": mids, "_sort": ical.to_utc(o["start"], by_id[r["calendar_id"]].get("timezone"))})
     out.sort(key=lambda x: (x["_sort"], not x["allDay"], x["title"].lower()))
     for x in out:
         x.pop("_sort")
@@ -305,7 +317,7 @@ def event_out(r: dict, cal_row: dict | None = None, recurrence_id: str | None = 
     """An event as the REST API and the web app see it."""
     c = parsed(r)
     j = ical.event_json(c, recurrence_id)
-    j.update(id=r["id"], calendarId=r["calendar_id"], href=r["href"], etag=r["etag"],
+    j.update(id=r["id"], calendarId=r["calendar_id"], href=r["href"], etag=r["etag"], members=members.public(members.of(j["categories"])),
              updated=r["updated"].isoformat() if r.get("updated") else None,
              created=r["created"].isoformat() if r.get("created") else None)
     return j
@@ -350,10 +362,21 @@ def import_text(cid: int, text: str, user_id: int | None = None, replace: bool =
     return out
 
 
-def export_text(cals: list[dict], name: str) -> str:
+def tagged(r: dict, member_ids: set[int] | None) -> bool:
+    """Whether an event (its series or any changed occurrence) is tagged with one of these members (None: any event)."""
+    if member_ids is None:
+        return True
+    try:
+        fam = members.family()
+        return any(member_ids.intersection(members.ids_of(ical._categories(ev), fam)) for ev in ical.events_of(parsed(r)))
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def export_text(cals: list[dict], name: str, member_ids: set[int] | None = None) -> str:
     objs = []
     for c in cals:
-        objs += [r["ics"] for r in rows(c["id"])]
+        objs += [r["ics"] for r in rows(c["id"]) if tagged(r, member_ids)]
     tz = cals[0].get("timezone") if len(cals) == 1 else None
     return ical.feed(objs, name, color=cals[0].get("color") if len(cals) == 1 else None, tzname=tz or ical.default_tz())
 

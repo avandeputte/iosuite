@@ -11,6 +11,8 @@ A self-hosted calendar: a web app for the whole family, and the standard protoco
 - **Calendars**: a shared **Family** calendar, a private **Personal** one for each account, and as many more as you like (shared or private), each with its colour. The calendars in the sidebar are check boxes: tick to show, untick to hide (remembered per account).
 - **Views**: month, week, day and agenda, with a small month to jump around, drag and drop to move an event (to another day, or another time in the week and day views), a line at the current time, search across titles, places, people and notes, and keyboard shortcuts (`t` today, `n` new, `d`/`w`/`m`/`a` the views, ←/→ earlier and later, `/` search, `e` change the open event).
 - **ioContacts (optional)**: the people on an event come from your contacts (picked as you type, with a link back to each), and a shared, read-only **Birthdays** calendar shows the birthdays and anniversaries kept in ioContacts, brought up to date every six hours.
+- **Public holidays**: a shared, read-only **Holidays** calendar with the public holidays of your country and, if you like, your state or province (Settings › Holidays; it starts with the country of the family's time zone, else the United States). Worked out on the server with the `holidays` package (nothing is fetched), last year to three years ahead, renewed daily; anyone can hide it in the sidebar.
+- **Family members on events**: tag an event with the people of the family it is for ("For Emma"). The tags show as coloured initials on the calendar, the sidebar's Family list shows only one person's (or a few people's) events, and the tag is kept as an iCalendar `CATEGORIES` value with the member's name, so phones and calendar apps show it and a category typed there tags the event here too. The REST API, the subscription links (`?member=emma`) and MCP filter by member as well.
 - **Roles as in the other io apps**: viewers read the shared calendars (and change only their own), editors change shared events, admins also manage users and settings. The same accounts, passwords and app passwords as ioPix, ioNotes and ioContacts; one sign-in for all of them with a shared cookie domain.
 - Light and dark, phone-sized screens, installable as an app.
 
@@ -136,6 +138,7 @@ git clone https://github.com/avandeputte/iocalendar && cd iocalendar
 | `ADMIN_USER`, `ADMIN_PASSWORD` | the first admin, made on the first start when there are no accounts |
 | `AUTH_PROXY`, `AUTH_PROXY_HEADER`, `AUTH_PROXY_TRUSTED`, `CF_ACCESS_TEAM`, `CF_ACCESS_AUD` | sign-in at a reverse proxy, as in the other io apps (Cloudflare Access, Authelia, Authentik, oauth2-proxy…) |
 | `IOCONTACTS_URL`, `IOCONTACTS_USER`, `IOCONTACTS_PASSWORD`, `IOCONTACTS_CF_CLIENT_ID`, `IOCONTACTS_CF_CLIENT_SECRET` | ioContacts (or Settings › ioContacts) |
+| `HOLIDAYS_COUNTRY`, `HOLIDAYS_REGION`, `HOLIDAYS_LANGUAGE` | the first choice for Settings › Holidays: a two-letter country code (`off`: no Holidays calendar), a region code, the language of the names; until set, the country of `TIMEZONE`, else US |
 | `MCP` | `1` keeps the MCP server on, whatever the setting says |
 | `IOCALENDAR_MCP_USER` | the account `python -m app.mcp` (stdio) acts as |
 | `UPDATE_CHECK` | `0` turns the daily version check off for good |
@@ -177,6 +180,8 @@ app/caldav.py      CalDAV / WebDAV
 app/ical.py        iCalendar and jCal: reading, indexing, expanding repeating events, editing, writing
 app/model.py       calendars and events in MariaDB, sync tokens and tombstones for CalDAV
 app/contacts.py    the ioContacts client: people and the Birthdays calendar
+app/holiday.py     the Holidays calendar (country, region, language; filled daily)
+app/members.py     family members on events (kept as CATEGORIES), and the member filter
 app/mcp/           the MCP server: base (who is asking, finding events), read, write and admin tools
 app/updates.py     the version check and running update.sh from the web app
 app/users.py       accounts, app passwords and subscription tokens (the suite's, through iothing-auth)

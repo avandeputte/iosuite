@@ -14,7 +14,7 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
 
-from app import APP_VERSION, config, contacts, db, ical, model, updates, users
+from app import APP_VERSION, config, contacts, db, holiday, ical, members, model, updates, users
 
 router = APIRouter()
 
@@ -48,7 +48,8 @@ def readable_calendar(u: dict, cid) -> dict:
 def writable_calendar(u: dict, cid) -> dict:
     c = readable_calendar(u, cid)
     if not model.can_write(u, c):
-        raise HTTPException(403, "The Birthdays calendar comes from ioContacts" if c.get("kind") == "birthdays"
+        why = model.read_only_reason(c)
+        raise HTTPException(403, f"You cannot change '{c['name']}': {why}" if why
                             else "Viewers can only change their own private calendars")
     return c
 
@@ -74,6 +75,16 @@ def visible(u: dict, ids: str | None = None) -> list[dict]:
         want = {int(x) for x in re.split(r"[,\s]+", ids) if x.strip().isdigit()}
         cals = [c for c in cals if c["id"] in want]
     return cals
+
+
+def member_filter(member: str | None) -> set[int] | None:
+    """?member= (ids or names, comma-separated) as member ids; None when not asked."""
+    if not member or not member.strip():
+        return None
+    try:
+        return {m["id"] for m in members.resolve(member)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 def wants(request: Request, fmt: str | None) -> str:
@@ -253,7 +264,9 @@ async def add_calendar(request: Request):
 @router.patch("/api/calendars/{cid}")
 async def edit_calendar(cid: int, request: Request):
     u = me(request)
-    writable_calendar(u, cid)
+    c = readable_calendar(u, cid)
+    if not (model.is_shared(c) and c.get("kind") in model.READ_ONLY_KINDS and users.is_admin(u)):  # admins name and color those
+        writable_calendar(u, cid)
     b = await request.json()
     model.update_calendar(cid, **{k: b[k] for k in ("name", "description", "color", "timezone", "sort") if k in b})
     return {"calendar": model.calendar_public(model.calendar(cid), u)}
@@ -308,38 +321,48 @@ async def import_calendar(cid: int, request: Request, replace: bool = True):
 # ------------------------------------------------------------------ occurrences, events
 
 @router.get("/api/occurrences")
-def occurrences(request: Request, start: str, end: str, calendars: str | None = None, q: str = ""):
+def occurrences(request: Request, start: str, end: str, calendars: str | None = None, q: str = "", member: str | None = None):
     """Every occurrence between start and end (ISO dates or date-times; repeating events expanded, changed occurrences
-    and left-out dates applied), from the calendars named (ids, comma-separated) or all you see."""
+    and left-out dates applied), from the calendars named (ids, comma-separated) or all you see. member: only those
+    tagged with these family members (ids or names, comma-separated). Each has `members`: the ids it is tagged with."""
     u = me(request)
     s, e = _when(start, "start"), _when(end, "end")
     if e <= s:
         raise HTTPException(400, "end is before start")
     if e - s > dt.timedelta(days=800):
         raise HTTPException(400, "At most about two years at a time")
-    return {"items": model.occurrences(visible(u, calendars), s, e, q)}
+    return {"items": model.occurrences(visible(u, calendars), s, e, q, member_filter(member))}
 
 
 @router.get("/api/events")
-def list_events(request: Request, q: str = "", calendar: str | None = None, limit: int = 100, format: str | None = None):
+def list_events(request: Request, q: str = "", calendar: str | None = None, limit: int = 100, format: str | None = None,
+                member: str | None = None):
     """Events (not their occurrences) matching q in their title, place, notes or people, newest first, with the next
-    occurrence of each; with Accept: text/calendar (or ?format=ics) one .ics with all of them."""
+    occurrence of each; with Accept: text/calendar (or ?format=ics) one .ics with all of them. member: only events
+    tagged with these family members (ids or names, comma-separated)."""
     u = me(request)
     cals = visible(u, calendar)
-    rows = model.search_rows([c["id"] for c in cals], q, max(1, min(limit, 5000)))
+    mids = member_filter(member)
+    n = max(1, min(limit, 5000))
+    rows = model.search_rows([c["id"] for c in cals], q, n if mids is None else 100000)
+    if mids is not None:
+        rows = [r for r in rows if model.tagged(r, mids)][:n]
     if wants(request, format) == "ics":
         return Response(ical.feed([r["ics"] for r in rows], "ioCalendar"), media_type="text/calendar; charset=utf-8")
     out = []
+    fam = members.family()
     for r in rows:
         out.append({"id": r["id"], "calendarId": r["calendar_id"], "title": r["summary"], "location": r["location"],
-                    "allDay": bool(r["all_day"]), "recurring": bool(r["rrule"]), "next": model.next_occurrence(r)})
+                    "allDay": bool(r["all_day"]), "recurring": bool(r["rrule"]), "next": model.next_occurrence(r),
+                    "members": members.ids_of(ical._categories(ical.master_of(ical.events_of(model.parsed(r)))), fam)})
     return {"items": out}
 
 
 @router.post("/api/events")
 async def create_event(request: Request, calendar: str | None = None):
     """A new event in ?calendar= (or the calendarId field; else your first calendar you may change), from JSON fields
-    (title, start, end, allDay, timezone, location, notes, people, reminders, rrule...), iCalendar or jCal."""
+    (title, start, end, allDay, timezone, location, notes, people, members, reminders, rrule...), iCalendar or jCal.
+    members: the family members it is for (account ids or names), kept as CATEGORIES."""
     u = me(request)
     data, cal = await body_object(request)
     cid = calendar or (data or {}).get("calendarId")
@@ -351,7 +374,7 @@ async def create_event(request: Request, calendar: str | None = None):
     c = writable_calendar(u, cid)
     try:
         if cal is None:
-            cal = ical.build(data, c.get("timezone"))
+            cal = ical.build(members.fold(data), c.get("timezone"))
         else:
             ical.finish(cal)
         uid = ical.index(cal, c.get("timezone"))["uid"]
@@ -425,8 +448,11 @@ def change(u: dict, r: dict, c: dict, data: dict, partial: bool = True, scope: s
         r = model.move(r["id"], target["id"])
         c = target
         tzname = c.get("timezone")
-    data = {k: v for k, v in data.items() if k in ical.EDITABLE}
     cal = copy.deepcopy(model.parsed(r))
+    if "members" in data:
+        cur = ical.event_json(cal, recurrence_id if scope == "this" else None)["categories"]
+        data = members.fold(data, cur)
+    data = {k: v for k, v in data.items() if k in ical.EDITABLE}
     if not partial:  # a full replacement: fields left out are cleared
         for k in ("location", "notes", "url", "people", "reminders", "rrule", "categories"):
             data.setdefault(k, None)
@@ -530,7 +556,15 @@ def delete_event(eid: int, request: Request, scope: str = "all", recurrenceId: s
     return {"ok": True}
 
 
-# ------------------------------------------------------------------ people, free/busy
+# ------------------------------------------------------------------ family members, people, free/busy
+
+@router.get("/api/members")
+def family_members(request: Request):
+    """The family members an event can be tagged with (the accounts that use ioCalendar): [{id, name, displayName}].
+    Filter with ?member= on /api/occurrences, /api/events and the subscription links."""
+    me(request)
+    return {"items": members.public(members.family())}
+
 
 @router.get("/api/people")
 async def people(request: Request, q: str = "", limit: int = 12):
@@ -615,9 +649,10 @@ def feeds_reset(request: Request):
 
 
 @router.get("/ics/{token}/{name}")
-def feed(token: str, name: str, request: Request):
+def feed(token: str, name: str, request: Request, member: str | None = None):
     """The subscription links (no sign-in: the token in the link is the secret): one calendar (<slug>.ics), every
-    calendar you see (all.ics) or when you are busy (freebusy.vfb / .ifb)."""
+    calendar you see (all.ics) or when you are busy (freebusy.vfb / .ifb). ?member=<name>: only the events tagged
+    with that family member (one person's own subscription)."""
     u = users.user_from_feed_token(token)
     if not u:
         raise HTTPException(404)
@@ -634,7 +669,10 @@ def feed(token: str, name: str, request: Request):
         if not pick:
             raise HTTPException(404)
         title = pick[0]["name"]
-    return Response(model.export_text(pick, title), media_type="text/calendar; charset=utf-8",
+    mids = member_filter(member)
+    if mids is not None:
+        title += " · " + ", ".join(m["displayName"] for m in members.family() if m["id"] in mids)
+    return Response(model.export_text(pick, title, mids), media_type="text/calendar; charset=utf-8",
                     headers={"Cache-Control": "private, max-age=300"})
 
 
@@ -697,3 +735,49 @@ async def iocontacts_save(request: Request):
 async def iocontacts_sync(request: Request):
     admin(request)
     return await run_in_threadpool(contacts.sync_birthdays)
+
+
+# ------------------------------------------------------------------ public holidays
+
+@router.get("/api/holidays/settings")
+def holidays_settings(request: Request):
+    """The Holidays calendar's country, region and language (anyone may read them), with the regions and languages
+    that country has."""
+    me(request)
+    return holiday.public_settings()
+
+
+@router.get("/api/holidays/countries")
+def holidays_countries(request: Request):
+    """Every country the holiday rules know: [{code, name}]."""
+    me(request)
+    return {"items": holiday.countries()}
+
+
+@router.get("/api/holidays/countries/{code}")
+def holidays_country(code: str, request: Request):
+    """One country's regions and the languages of its holiday names."""
+    me(request)
+    try:
+        return holiday.country_info(code)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+
+
+@router.post("/api/holidays/settings")
+async def holidays_save(request: Request):
+    """Admins: {country, region?, language?}. country "" switches the Holidays calendar off. Saving fills it again."""
+    admin(request)
+    b = await request.json()
+    try:
+        holiday.save_settings(b.get("country"), b.get("region"), b.get("language"))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    sync = await run_in_threadpool(holiday.sync)
+    return {**holiday.public_settings(), "sync": sync}
+
+
+@router.post("/api/holidays/sync")
+async def holidays_sync(request: Request):
+    admin(request)
+    return await run_in_threadpool(holiday.sync)

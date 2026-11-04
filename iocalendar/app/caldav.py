@@ -238,7 +238,7 @@ def props_calendar(ctx: Ctx, c: dict, names: list[str]):
         elif n == q(C, "max-date-time"):
             _sub(ok, C, "max-date-time", "21991231T235959Z")
         elif n == q(C, "schedule-calendar-transp"):
-            _sub(_sub(ok, C, "schedule-calendar-transp"), C, "transparent" if c.get("kind") == "birthdays" else "opaque")
+            _sub(_sub(ok, C, "schedule-calendar-transp"), C, "transparent" if c.get("kind") in model.READ_ONLY_KINDS else "opaque")
         elif n == q(CS, "getctag"):
             _sub(ok, CS, "getctag", str(c["sync_token"]))
         elif n == q(D, "sync-token"):

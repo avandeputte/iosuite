@@ -242,7 +242,7 @@ table.t th { font-size: var(--fs-s); color: var(--fg2); font-weight: 600; }
 @media (max-width: 1100px) { .listpane { width: 320px; } }
 @media (max-width: 860px) {
   /* phones: a bottom bar with four destinations and More, as in iopix */
-  #menubtn, #navscrim, .navhead, .navgap, .navsec, .navfoot, #nav a[data-v="book"], #nav a[data-v="tag"], #nav a[data-v="import"], #nav a[data-v="iopix"] { display: none !important; }
+  #menubtn, #navscrim, .navhead, .navgap, .navsec, .navfoot, #nav a[data-v="book"], #nav a[data-v="tag"], #nav a[data-v="import"], #nav a[data-v="iopix"], #nav a[data-v="who"] { display: none !important; }
   #topbar { gap: 6px; padding: 0 8px; left: 0; padding-top: env(safe-area-inset-top); height: calc(var(--topbar) + env(safe-area-inset-top)); }
   #nav { top: auto; bottom: 0; left: 0; right: 0; width: auto; height: calc(56px + env(safe-area-inset-bottom)); flex-direction: row; justify-content: space-around;
     overflow: hidden; padding: 0 0 env(safe-area-inset-bottom); gap: 0; border-top: 1px solid var(--line); background: var(--bg);
@@ -442,3 +442,19 @@ label.check input { margin-top: 3px; accent-color: var(--brand); }
   .arow .tm { width: auto; }
   .agenda { padding: 4px 12px 60px; }
 }
+
+/* family members: a round badge with initials (on event chips, in the sidebar filter and the event form) */
+.mem { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%;
+  font-size: 9px; font-weight: 700; letter-spacing: 0; color: #fff; background: var(--mc, #5f6b7a); }
+.chip-ev .mem { width: 16px; height: 16px; font-size: 8px; margin-left: auto; }
+.chip-ev .mem + .mem { margin-left: -4px; box-shadow: 0 0 0 1.5px var(--bg); }
+.chip-ev.allday .mem { box-shadow: 0 0 0 1.5px rgba(255,255,255,.7); }
+#nav a.who .mem { width: 20px; height: 20px; font-size: 9px; opacity: .55; }
+#nav a.who.picked { background: color-mix(in srgb, var(--mc) var(--mix), transparent); font-weight: 600; }
+#nav a.who.picked .mem, #nav a.who:hover .mem { opacity: 1; }
+.navsec .pillbtn.tiny { margin-left: auto; height: 22px; padding: 0 8px; font-size: 11px; text-transform: none; letter-spacing: 0; }
+.chip.mchip { padding-left: 4px; }
+button.chip.toggle { border: 1px solid var(--line, transparent); cursor: pointer; font: inherit; color: var(--fg); }
+button.chip.toggle .mem { opacity: .5; }
+button.chip.toggle.on { background: var(--accent-bg); color: var(--accent); border-color: var(--accent); font-weight: 600; }
+button.chip.toggle.on .mem { opacity: 1; }

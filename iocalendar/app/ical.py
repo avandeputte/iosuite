@@ -349,7 +349,7 @@ def occurrences(cal: Calendar, start: dt.datetime, end: dt.datetime, tzname: str
                     "title": str(occ.get("SUMMARY") or ""), "location": str(occ.get("LOCATION") or "") or None,
                     "status": str(occ.get("STATUS") or "").upper() or None,
                     "transparent": str(occ.get("TRANSP") or "").upper() == "TRANSPARENT",
-                    "people": [p["name"] or p["email"] for p in people_of(occ)]})
+                    "people": [p["name"] or p["email"] for p in people_of(occ)], "categories": _categories(occ)})
     return out
 
 

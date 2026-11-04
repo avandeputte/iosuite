@@ -4,7 +4,7 @@ from typing import Literal, Optional
 
 from mcp.server.mcpserver.exceptions import ToolError
 
-from app import ical, model
+from app import ical, members, model
 from app.mcp.base import ADDS, DELETES, WRITES, default_calendar, event_out, find_calendar, find_event, server, who
 
 EVENT_FIELDS = """
@@ -12,6 +12,8 @@ EVENT_FIELDS = """
     event end is the day after the last day ('2026-12-24' to '2026-12-27' is three days); left out, an all-day event
     is one day and a timed one an hour.
     people: names on the event, each a name or {name, email}: noted on the event, never invited.
+    members: the family members the event is for (names from overview's family, or list_family_members); kept as
+    iCalendar categories so calendar apps show them; [] removes the tags.
     reminders: minutes before the start, e.g. [15, 1440] (15 minutes and a day before); [] removes them.
     repeat: an RFC 5545 RRULE such as 'FREQ=WEEKLY;BYDAY=MO,WE', 'FREQ=MONTHLY;BYMONTHDAY=1;COUNT=12',
     'FREQ=YEARLY' or 'FREQ=DAILY;UNTIL=20261231'; '' stops the repeating.
@@ -24,8 +26,13 @@ def fields(fn):
 
 
 def _data(title=None, start=None, end=None, all_day=None, timezone=None, location=None, notes=None, people=None,
-          reminders=None, repeat=None, url=None, free=None, status=None) -> dict:
+          reminders=None, repeat=None, url=None, free=None, status=None, members_=None) -> dict:
     d = {}
+    if members_ is not None:
+        try:
+            d["members"] = [m["id"] for m in members.resolve(members_)]
+        except ValueError as e:
+            raise ToolError(str(e))
     for k, v in (("title", title), ("start", start), ("end", end), ("allDay", all_day), ("timezone", timezone), ("location", location),
                  ("notes", notes), ("people", people), ("reminders", reminders), ("rrule", repeat), ("url", url), ("status", status)):
         if v is not None:
@@ -37,18 +44,24 @@ def _data(title=None, start=None, end=None, all_day=None, timezone=None, locatio
     return d
 
 
+def _fold(d: dict) -> dict:
+    from app import members as m
+    return m.fold(d)
+
+
 @server.tool(annotations=ADDS)
 @fields
 def create_event(title: str, start: str, end: Optional[str] = None, all_day: bool = False, calendar: Optional[str] = None,
                  timezone: Optional[str] = None, location: Optional[str] = None, notes: Optional[str] = None,
                  people: Optional[list] = None, reminders: Optional[list[int]] = None, repeat: Optional[str] = None,
-                 url: Optional[str] = None, free: bool = False) -> dict:
+                 url: Optional[str] = None, free: bool = False, members: Optional[list[str]] = None) -> dict:
     """Add an event. calendar: a name or id (else the Family calendar, or your own when you may not change it)."""
     u = who()
     c = find_calendar(u, calendar, writable=True) if calendar else default_calendar(u)
-    d = _data(title, start, end, all_day, timezone or c.get("timezone"), location, notes, people, reminders, repeat, url, free)
+    d = _data(title, start, end, all_day, timezone or c.get("timezone"), location, notes, people, reminders, repeat, url, free,
+              members_=members)
     try:
-        cal = ical.build(d, c.get("timezone"))
+        cal = ical.build(_fold(d), c.get("timezone"))
     except ValueError as e:
         raise ToolError(str(e))
     r = model.save(c["id"], cal, None, None, u["id"])
@@ -62,7 +75,8 @@ def update_event(event: str, title: Optional[str] = None, start: Optional[str] =
                  notes: Optional[str] = None, people: Optional[list] = None, reminders: Optional[list[int]] = None,
                  repeat: Optional[str] = None, url: Optional[str] = None, free: Optional[bool] = None,
                  status: Optional[Literal["confirmed", "tentative", "cancelled", ""]] = None,
-                 occurrence: Optional[str] = None, scope: Literal["all", "this", "following"] = "all") -> dict:
+                 occurrence: Optional[str] = None, scope: Literal["all", "this", "following"] = "all",
+                 members: Optional[list[str]] = None) -> dict:
     """Change an event (by id or title); only the fields given change ('' clears a text field). For a repeating event,
     occurrence (a recurrenceId from agenda) with scope 'this' changes that occurrence only, 'following' it and the ones
     after (the series is split: a new event is returned), 'all' the series (a new start then moves every occurrence by
@@ -70,7 +84,7 @@ def update_event(event: str, title: Optional[str] = None, start: Optional[str] =
     from app.api import change
     u = who()
     r, c = find_event(u, event, writable=True)
-    d = _data(title, start, end, all_day, timezone, location, notes, people, reminders, repeat, url, free, status)
+    d = _data(title, start, end, all_day, timezone, location, notes, people, reminders, repeat, url, free, status, members_=members)
     if not d:
         raise ToolError("Nothing to change")
     try:

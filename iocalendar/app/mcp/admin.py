@@ -1,5 +1,5 @@
 """The server itself, for admins: health, the version check and the update (update.sh, as in the rest of the suite),
-and the Birthdays calendar from ioContacts."""
+the Birthdays calendar from ioContacts and the Holidays calendar."""
 import platform
 import sys
 from typing import Optional
@@ -7,8 +7,8 @@ from typing import Optional
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
 
-from app import APP_VERSION, config, contacts, db, ical, updates, users
-from app.mcp.base import READ_ONLY, need_admin, server
+from app import APP_VERSION, config, contacts, db, holiday, ical, updates, users
+from app.mcp.base import READ_ONLY, WRITES, need_admin, server
 
 UPDATES = ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=True)  # reaches GitHub
 
@@ -34,6 +34,8 @@ def diagnostics() -> dict:
     out["mcp"] = {"enabled": mcp_enabled(), "forcedByEnv": config.MCP_FORCED}
     s = contacts.public_settings()
     out["iocontacts"] = {"url": s.get("url") or None, "user": s.get("user") or None, "birthdays": s["birthdays"], "lastSync": s["lastSync"]}
+    h = holiday.settings()
+    out["holidays"] = {"country": h["country"], "region": h["region"], "language": h["language"], "lastSync": holiday.public_settings()["lastSync"]}
     out["accounts"] = [{"name": u["name"], "role": u.get("role")} for u in users.all_users()]
     return out
 
@@ -45,6 +47,30 @@ def sync_birthdays() -> dict:
     if not contacts.enabled():
         raise ToolError("ioContacts is not set up (Settings › ioContacts in the web app)")
     return contacts.sync_birthdays()
+
+
+@server.tool(annotations=WRITES)
+def set_holidays(country: str, region: Optional[str] = None, language: Optional[str] = None) -> dict:
+    """Admins: which public holidays the shared Holidays calendar shows. country: a two-letter code (US, BE, NL, GB...)
+    or "" to switch the calendar off; region: a state or province code of that country (US: NY, CA...; BE: none);
+    language: of the holiday names (e.g. nl, fr), else the country's own. Use holiday_regions to see the choices."""
+    need_admin()
+    try:
+        holiday.save_settings(country, region if region is not None else "", language if language is not None else "")
+    except ValueError as e:
+        raise ToolError(str(e))
+    s = holiday.public_settings()
+    return {"country": s["country"], "countryName": s.get("countryName"), "region": s["region"], "language": s["language"],
+            "sync": holiday.sync()}
+
+
+@server.tool(annotations=READ_ONLY)
+def holiday_regions(country: str) -> dict:
+    """The regions (states, provinces...) of a country and the languages its holiday names come in."""
+    try:
+        return holiday.country_info(country)
+    except ValueError as e:
+        raise ToolError(str(e))
 
 
 @server.tool(annotations=UPDATES)
