@@ -25,7 +25,9 @@ what the app will show on the start page later (today's events, the newest photo
   tiles, and pick your own photo strip. Saved per account, on top of what the admin set in Settings › Apps.
 - **The week ahead** under the tiles: a Birthdays card from ioContacts (birthdays and anniversaries in the next 30
   days, with the contact's photo; a row opens the contact) and a This week card from ioCalendar (the coming seven
-  days' events, day by day; a day opens in ioCalendar). A card that its app cannot fill is left out.
+  days' events, day by day; a day opens in ioCalendar). Each stands no taller than the row of tiles, with "Show all"
+  when there is more. With the Birthdays card on the page, the calendar's own "X's birthday" and anniversary events
+  are left to it (the tile's Today and This week skip them). A card that its app cannot fill is left out.
 - **A strip of photos** the width of the page under the tiles: ioPix's Rediscover (photos at random), or
   On this day; an admin picks which, or turns it off, in Settings › Apps.
 - **A glimpse of each app on its tile**: ioPix shows photos taken on this day in earlier years (one per year, "3 years
