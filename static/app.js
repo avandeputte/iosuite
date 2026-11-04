@@ -605,13 +605,17 @@ async function setApps(el) {
   const got = await api('/api/apps/settings'), items = got.items;
   const strip = h('select', { class: 't' }, [['rediscover', 'Rediscover: photos at random'], ['onthisday', 'On this day (at random when there are none)'], ['off', 'Off']].map(([v, t]) => h('option', { value: v, selected: v === got.photoStrip ? true : null }, t)));
   const rows = items.map((a) => {
-    const url = h('input', { class: 't', value: a.envUrl || a.url, placeholder: `empty: this host, port ${a.port}`, disabled: a.envUrl ? true : null });
+    const fallback = a.suiteUrl ? `empty: ${a.suiteUrl}` : a.port ? `empty: this host, port ${a.port}` : 'empty: not on the page';
+    const url = h('input', { class: 't', value: a.envUrl || a.url, placeholder: fallback, disabled: a.envUrl ? true : null });
     const shown = h('input', { type: 'checkbox', checked: !a.hidden });
-    return { a, url, shown, el: h('div', { class: 'approw' }, h('img', { src: `static/icons/apps/${a.key}.svg`, alt: '' }), h('span', { class: 'nm' }, a.name), url,
-      h('label', { class: 'check' }, shown, ' On the page'), a.envUrl ? h('span', { class: 'muted small' }, `${a.key.toUpperCase()}_URL in the environment`) : null) };
+    const where = a.envUrl ? `${a.key.toUpperCase()}_URL in the environment`
+      : a.suiteUrl ? `${a.url ? 'Overrides' : 'Found'} ${a.suiteUrl}, registered by ${a.name}${a.version ? ` ${a.version}` : ''}`
+      : `${a.name} has not registered itself yet`;
+    return { a, url, shown, el: h('div', { class: 'approw' }, h('img', { src: a.icon, alt: '' }), h('span', { class: 'nm' }, a.name), url,
+      h('label', { class: 'check' }, shown, ' On the page'), h('span', { class: 'muted small' }, where)) };
   });
   el.append(h('div', { class: 'box' }, h('h2', null, icon('apps'), 'The apps on the start page'),
-    h('p', { class: 'muted' }, 'Where each app is reached, as the family opens it: its public address behind the reverse proxy, or its LAN address. Empty: the host this page was opened on, with the app’s usual port (the one-box install). An address set in the environment (IOPIX_URL and friends) wins over this.'),
+    h('p', { class: 'muted' }, 'Each app registers itself, with its address, in the suite’s shared list (the accounts database), so there is nothing to fill in here. Type an address only to override what an app registered; empty: what it registered, else the host this page was opened on with the app’s usual port. An address set in the environment (IOPIX_URL and friends) wins over both.'),
     rows.map((r) => r.el),
     h('div', { class: 'grid' }, fld('Photo strip under the tiles (ioPix)', strip)),
     h('p', null, h('button', { class: 'pillbtn primary', onclick: async () => {
