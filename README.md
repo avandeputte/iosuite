@@ -21,7 +21,7 @@ what the app will show on the start page later (today's events, the newest photo
 - **A dot by each app's name**: green when the app answers its `/api/status`, red when it does not, and an "update"
   badge when the app tells the viewer (an admin there) that a newer version is out. Bookmarks the server cannot
   reach get a red dot too. The server asks each app once a minute and pings each bookmark every five.
-- **Your own page** (the gear › Customize the page): untick the tiles and cards you do not need, put the tiles and
+- **Your own page** (the gear next to the date › Customize the page): untick the tiles and cards you do not need, put the tiles and
   the cards (Birthdays, This week, the photo strip, the bookmarks) in your order, and pick your own photo strip
   ("Default" is the admin's choice). Saved per account, on top of what the admin set in Settings › Apps.
 - **The week ahead** under the tiles: a Birthdays card from ioContacts (birthdays and anniversaries in the next 30
