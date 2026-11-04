@@ -33,7 +33,7 @@ OPEN = ("/api/status", "/api/docs", "/api/openapi.json")
 
 @app.middleware("http")
 async def who(request: Request, call_next):
-    """Who is asking (iothing-auth: the shared session cookie, the proxy's sign-in, HTTP Basic or a bearer app
+    """Who is asking (iosuite-shared: the shared session cookie, the proxy's sign-in, HTTP Basic or a bearer app
     password). Everything but the web app's files and sign-in needs one."""
     path = request.url.path
     refused = await auth_shared.resolve(request)

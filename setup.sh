@@ -38,7 +38,7 @@ asksecret() { _v="$1"; _q="$2"
   if [ "$YES" = 1 ] || [ ! -t 0 ]; then eval "$_v=''"; return; fi
   printf '%s: ' "$_q"; stty -echo 2>/dev/null; read -r _a || _a=""; stty echo 2>/dev/null; printf '\n'; eval "$_v=\"\$_a\""; }
 getenv() { [ -f iosuite.env ] && sed -n "s/^$1=//p" iosuite.env | tail -n 1; true; }
-sharedenv() { _x="$(getenv "IOSUITE_SHARED_DB_$1")"; [ -n "$_x" ] || _x="$(getenv "IOTHING_AUTH_DB_$1")"; printf '%s' "$_x"; }  # the old names, before 0.3.1
+sharedenv() { _x="$(getenv "IOSUITE_DB_$1")"; [ -n "$_x" ] || _x="$(getenv "IOSUITE_SHARED_DB_$1")"; [ -n "$_x" ] || _x="$(getenv "IOTHING_AUTH_DB_$1")"; printf '%s' "$_x"; }  # with the older names
 split() { # HOST:PORT/DATABASE:USER:PASSWORD into $1_HOST, $1_PORT, $1_NAME, $1_USER, $1_PASSWORD
   _p="$1"; _s="$2"; _h="${_s%%:*}"; _r="${_s#*:}"; _o="${_r%%/*}"; _r="${_r#*/}"; _n="${_r%%:*}"; _r="${_r#*:}"; _u="${_r%%:*}"; _w="${_r#*:}"
   eval "${_p}_HOST=\"\$_h\"; ${_p}_PORT=\"\$_o\"; ${_p}_NAME=\"\$_n\"; ${_p}_USER=\"\$_u\"; ${_p}_PASSWORD=\"\$_w\""; }
@@ -51,7 +51,7 @@ if [ "$SYSDEPS" != 0 ] && ! python3 -c 'import sys, venv, ensurepip; assert sys.
   elif command -v brew >/dev/null; then brew install python
   else die "install Python 3.10 or newer with venv, then run this again"; fi
 fi
-command -v git >/dev/null || die "git is needed to install the shared accounts library (iothing-auth): install git, then run this again"
+command -v git >/dev/null || die "git is needed to install the suite's shared library (avandeputte/iosuite-shared): install git, then run this again"
 PY="${PY:-python3}"
 
 # ---- the answers
@@ -89,9 +89,9 @@ say "Writing iosuite.env"
 touch iosuite.env; chmod 600 iosuite.env
 setenv() { grep -v "^$1=" iosuite.env > iosuite.env.tmp || true; printf '%s=%s\n' "$1" "$2" >> iosuite.env.tmp; mv iosuite.env.tmp iosuite.env; chmod 600 iosuite.env; }
 setenv DB_HOST "$DB_HOST"; setenv DB_PORT "$DB_PORT"; setenv DB_NAME "$DB_NAME"; setenv DB_USER "$DB_USER"; setenv DB_PASSWORD "$DB_PASSWORD"
-setenv IOSUITE_SHARED_DB_HOST "$SHARED_HOST"; setenv IOSUITE_SHARED_DB_PORT "$SHARED_PORT"; setenv IOSUITE_SHARED_DB_NAME "$SHARED_NAME"
-setenv IOSUITE_SHARED_DB_USER "$SHARED_USER"; setenv IOSUITE_SHARED_DB_PASSWORD "$SHARED_PASSWORD"
-for k in HOST PORT NAME USER PASSWORD; do grep -v "^IOTHING_AUTH_DB_$k=" iosuite.env > iosuite.env.tmp || true; mv iosuite.env.tmp iosuite.env; done; chmod 600 iosuite.env
+setenv IOSUITE_DB_HOST "$SHARED_HOST"; setenv IOSUITE_DB_PORT "$SHARED_PORT"; setenv IOSUITE_DB_NAME "$SHARED_NAME"
+setenv IOSUITE_DB_USER "$SHARED_USER"; setenv IOSUITE_DB_PASSWORD "$SHARED_PASSWORD"
+for k in HOST PORT NAME USER PASSWORD; do grep -v -e "^IOTHING_AUTH_DB_$k=" -e "^IOSUITE_SHARED_DB_$k=" iosuite.env > iosuite.env.tmp || true; mv iosuite.env.tmp iosuite.env; done; chmod 600 iosuite.env
 setenv PORT "$PORT"
 [ -n "$PUBURL" ] && setenv PUBLIC_URL "$PUBURL"
 

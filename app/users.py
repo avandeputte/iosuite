@@ -1,4 +1,4 @@
-"""Accounts, roles and sessions: the shared ioThing accounts (iothing-auth), seen from ioSuite.
+"""Accounts, roles and sessions: the shared ioThing accounts (iosuite-shared), seen from ioSuite.
 
 Roles as in the rest of the suite: viewer (sees the page), editor (the same, for now), admin (also sets the apps'
 addresses and manages accounts); an account holds a role per app, a suite admin is admin everywhere. Web sessions are
