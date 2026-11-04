@@ -193,7 +193,10 @@ async function drawStrip(el, kind) {
   if (!d || !d.items || !d.items.length || !el.isConnected) { el.remove(); return; }
   const otd = d.kind === 'onthisday';
   const cap = (it) => (otd ? (it.yearsAgo === 1 ? '1 year ago' : `${it.yearsAgo} years ago`) : (it.year || ''));
-  el.replaceChildren(h('div', { class: 'wghead' }, h('span', null, otd ? 'On this day' : 'Rediscover'),
+  // Shuffle, as ioPix has: a fresh row, picked again at random (On this day is the day's photos: nothing to shuffle)
+  const shuffle = otd ? null : h('button', { class: 'lnk shuffle', title: 'Another row of photos', onclick: (e) => { e.preventDefault(); el.classList.add('busy'); drawStrip(el, kind); } }, icon('update', 's'), 'Shuffle');
+  el.classList.remove('busy');
+  el.replaceChildren(h('div', { class: 'wghead' }, h('span', null, otd ? 'On this day' : 'Rediscover'), shuffle,
     h('a', { class: 'muted', href: pix.url, title: pix.url }, otd && d.count > d.items.length ? `${d.count} photos · ioPix` : 'ioPix')),
     h('div', { class: 'row' }, d.items.map((it) => h('a', { class: 'wgph', href: pix.url, title: String(cap(it)) },
       h('img', { src: `/api/widgets/iopix/thumb/${it.id}`, alt: '', loading: 'lazy', onerror: (e) => e.target.parentNode.remove() }),
