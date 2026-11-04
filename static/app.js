@@ -114,10 +114,14 @@ const appName = (name, color) => h('span', { class: 'nm', style: { '--c': color 
 // ------------------------------------------------------------------ state
 const S = { status: {}, user: null, settings: {}, apps: [] };
 
+/* The account menu lives in the top bar, or in the start page's first row (showHome moves it there). It is held by
+   reference: when the page is drawn again the old page, and the menu inside it, are gone from the document, and
+   looking it up by id would find nothing (the menu then vanished until a reload). */
+const userMenu = () => (S.userMenu = S.userMenu || $('#usermenu'));
 function drawUser() {
-  const m = $('#usermenu'); m.replaceChildren();
+  const m = userMenu(); m.replaceChildren();
   if (!S.user) return;
-  const btn = h('button', { class: 'avatarbtn', title: S.user.displayName, style: { background: `hsl(${hue(S.user.name)} 45% 45%)` } }, initials(S.user.displayName));
+  const btn = h('button', { class: 'iconbtn gear', title: `${S.user.displayName} · settings` }, icon('settings'));
   let menu = null;
   const closeMenu = () => { if (menu) { menu.remove(); menu = null; document.removeEventListener('click', outside); } };
   const outside = (e) => { if (menu && !menu.contains(e.target) && e.target !== btn) closeMenu(); };
@@ -154,7 +158,7 @@ async function onRoute() {
   const page = h('div', { class: 'page' });
   // the start page has no top bar: the account menu sits in its first row instead (showHome moves it there)
   document.body.classList.toggle('home', r.view === 'home');
-  if (r.view !== 'home') $('#topbar').append($('#usermenu'));
+  $('#topbar').append(userMenu());  // out of the old page before it goes; showHome takes it into the new one
   $('#main').replaceChildren(page);
   try { await ({ home: showHome, settings: showSettings })[r.view](page, r); } catch (e) { fail(e); }
 }
@@ -173,7 +177,7 @@ async function showHome(page) {
   const first = (S.user.displayName || S.user.name).split(/\s+/)[0];
   const wx = h('div', { class: 'weather' });
   page.append(h('div', { class: 'top' }, h('div', { class: 'hello' }, h('h1', null, `${greeting()}, ${first}`),
-    h('div', { class: 'muted' }, new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' }))), searchBox(), wx, $('#usermenu')));
+    h('div', { class: 'muted' }, new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' }))), searchBox(), wx, userMenu()));
   drawWeather(wx);  // fills in when AccuWeather (or the server's copy) answers
   // the tiles: an app with something to show gets a column of its own; the others go two to a column, half the height
   const tile = (a, small) => h('a', { class: `app${small ? ' small' : ''}`, href: a.url, 'data-app': a.key, title: a.url },
@@ -312,8 +316,9 @@ function capAgenda(apps, agenda) {
     for (const card of agenda.querySelectorAll('.card')) {
       const rows = card.querySelector('.rows'), btn = card.querySelector('.showall');
       if (!rows || !btn) continue;
-      const over = card.classList.contains('capped') ? rows.scrollHeight > rows.clientHeight + 1 : true;
-      btn.hidden = !over && card.classList.contains('capped');
+      const capped = card.classList.contains('capped'), over = capped ? rows.scrollHeight > rows.clientHeight + 1 : true;
+      card.classList.toggle('over', capped && over);  // the fade at the bottom, only when something is cut off
+      btn.hidden = capped && !over;
     }
   };
   new ResizeObserver(fit).observe(apps);
@@ -478,9 +483,9 @@ function drawHealthWidget(d) {
   const week = d.week && d.week.filter((x) => x.steps != null).length > 1 ? d.week : null;
   const when = (iso) => { const t = new Date(iso); return isNaN(t) ? '' : t.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); };
   const total = week ? week.reduce((a, x) => a + (x.steps || 0), 0) : 0;
-  return [wgHead('Today'), h('div', { class: 'wghealth' }, r ? rings(r) : null,
-    h('div', null, d.steps != null ? h('div', { class: 'wgsteps' }, h('b', null, n(d.steps)), ' steps', week ? h('span', { class: 'wgtrend', title: `${n(total)} steps in the last 7 days` }, sparkline(week)) : null) : null,
-      line('move', 'Move', 'kcal'), line('exercise', 'Exercise', 'min'), line('stand', 'Stand', 'h'))),
+  // the rings with their three lines beside them; under that, a row of their own for the steps with the week's bars
+  return [wgHead('Today'), r ? h('div', { class: 'wghealth' }, rings(r), h('div', null, line('move', 'Move', 'kcal'), line('exercise', 'Exercise', 'min'), line('stand', 'Stand', 'h'))) : null,
+    d.steps != null ? h('div', { class: `wgsteps${r ? ' under' : ''}` }, h('b', null, n(d.steps)), ' steps', week ? h('span', { class: 'wgtrend', title: `${n(total)} steps in the last 7 days` }, sparkline(week)) : null) : null,
     d.sleep ? h('div', { class: 'wgsleep', title: d.sleep.start && d.sleep.end ? `Asleep ${when(d.sleep.start)} – ${when(d.sleep.end)}${d.sleep.inBed ? `, ${hm(d.sleep.inBed)} in bed` : ''}` : '' },
       h('span', { class: 'dot', style: { background: 'var(--sleep)' } }), 'Sleep', h('span', { class: 'muted' }, `${hm(d.sleep.asleep)} asleep`)) : null];
 }
