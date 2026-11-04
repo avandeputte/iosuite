@@ -168,6 +168,9 @@ async function allContacts() {
   if (!S.all) S.all = (await api('/api/contacts?limit=20000')).items;
   return S.all;
 }
+// Case- and accent-insensitive matching ("celia" finds "Célia"), like the server's search.
+const FOLD_EXTRA = { ø: 'o', đ: 'd', ð: 'd', ł: 'l', ħ: 'h', ŧ: 't', ı: 'i', æ: 'ae', œ: 'oe', þ: 'th', ß: 'ss' };
+const fold = (s) => (s || '').toLowerCase().normalize('NFKD').replace(/\p{M}/gu, '').replace(/[øđðłħŧıæœþß]/g, (ch) => FOLD_EXTRA[ch]);
 const writableBooks = () => S.books.filter((b) => b.writable);
 
 // ------------------------------------------------------------------ chrome
@@ -527,8 +530,8 @@ async function showEdit(id, pane) {
     const drop = h('div', { class: 'drop', hidden: true });
     box.oninput = () => {
       x.relatedId = null; x.relatedName = box.value; x.relatedFn = null;
-      const q = box.value.toLowerCase().trim();
-      const hits = q ? everyone.filter((p) => p.id !== f.id && p.fn.toLowerCase().includes(q)).slice(0, 12) : [];
+      const q = fold(box.value).trim();
+      const hits = q ? everyone.filter((p) => p.id !== f.id && q.split(/\s+/).every((w) => fold(p.fn).includes(w))).slice(0, 12) : [];
       drop.replaceChildren(...hits.map((p) => h('div', { class: 'row', onmousedown: (e) => { e.preventDefault(); x.relatedId = p.id; x.relatedFn = p.fn; x.relatedName = null; box.value = p.fn; drop.hidden = true; } }, avatar(p, 's'), h('div', { class: 'who' }, h('div', { class: 'nm' }, p.fn)))));
       drop.hidden = !hits.length;
     };
@@ -604,8 +607,8 @@ async function pickIopix(c, saveNow) {
   const list = h('div', { style: { maxHeight: '50vh', overflowY: 'auto', marginTop: '10px' } });
   let chosen = null, resolveFn;
   const draw = () => {
-    const s = q.value.toLowerCase().trim();
-    const hits = ppl.filter((p) => !s || p.name.toLowerCase().includes(s) || s.split(' ').every((w) => p.name.toLowerCase().includes(w))).slice(0, 80);
+    const s = fold(q.value).trim();
+    const hits = ppl.filter((p) => !s || s.split(/\s+/).every((w) => fold(p.name).includes(w))).slice(0, 80);
     list.replaceChildren(...hits.map((p) => h('div', { class: 'row', onclick: () => { chosen = p; resolveFn(); } },
       h('span', { class: 'av' }, h('img', { src: `/api/iopix/face/${p.id}`, alt: '', loading: 'lazy', onerror: (e) => { e.target.remove(); } })),
       h('div', { class: 'who' }, h('div', { class: 'nm' }, p.name), h('div', { class: 'sub' }, `${p.count} photos${p.contact ? ` · linked to ${p.contact.fn}` : ''}`)))));
@@ -878,8 +881,8 @@ async function showIopix(page) {
   const q = h('input', { class: 't', placeholder: 'Search', style: 'max-width:280px' });
   const grid = h('div', { class: 'ppl' });
   const draw = () => {
-    const s = q.value.toLowerCase();
-    grid.replaceChildren(...r.items.filter((p) => !s || p.name.toLowerCase().includes(s)).map((p) => h('div', { class: 'pcard' },
+    const s = fold(q.value).trim();
+    grid.replaceChildren(...r.items.filter((p) => !s || fold(p.name).includes(s)).map((p) => h('div', { class: 'pcard' },
       h('img', { src: `/api/iopix/face/${p.id}`, alt: '', loading: 'lazy', onerror: (e) => { e.target.style.visibility = 'hidden'; } }), h('div', { class: 'nm' }, p.name), h('div', { class: 'muted small' }, `${p.count} photos`),
       p.contact ? h('a', { class: 'lnk small', href: `#/c/${p.contact.id}` }, p.contact.fn)
         : h('button', { class: 'pillbtn noic', onclick: async () => {

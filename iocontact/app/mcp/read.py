@@ -5,6 +5,7 @@ from mcp.server.mcpserver import Image
 from mcp.server.mcpserver.exceptions import ToolError
 
 from app import APP_VERSION, config, db, iopix, model, relations as rel, users, vcard
+from app.fold import fold
 from app.mcp.base import READ_ONLY, book_ids, brief, clamp, contact_out, find_contact, readable_books, server, who
 
 EXPORT_MAX_CHARS = 400_000  # an export bigger than this is a download for the web app, not an answer
@@ -262,10 +263,10 @@ def list_iopix_people(text: str = "", unlinked_only: bool = False) -> list:
     marks = ",".join(["%s"] * len(ids)) or "0"
     linked = {r["iopix_person_id"]: {"id": r["id"], "name": r["fn"]} for r in db.q(
         f"SELECT id, fn, iopix_person_id FROM contacts WHERE iopix_person_id IS NOT NULL AND deleted = 0 AND book_id IN ({marks})", ids or [0])}
-    t = (text or "").lower().strip()
+    t = fold(text).strip()
     out = []
     for p in ppl:
-        if t and t not in p["name"].lower():
+        if t and t not in fold(p["name"]):
             continue
         c = linked.get(p["id"])
         if unlinked_only and c:

@@ -112,7 +112,7 @@ def find_contact(u: dict, ref, writable: bool = False) -> dict:
             raise ToolError(f"No contact with id {s}")
     else:
         marks = ",".join(["%s"] * len(ids)) or "0"
-        rows = db.q(f"SELECT id FROM contacts WHERE deleted = 0 AND book_id IN ({marks}) AND lower(fn) = lower(%s) LIMIT 6",
+        rows = db.q(f"SELECT id FROM contacts WHERE deleted = 0 AND book_id IN ({marks}) AND fn = %s COLLATE {db.search_collation()} LIMIT 6",
                     (*ids, s)) if ids else []
         if not rows:
             found, _ = model.search(ids, s, limit=6)

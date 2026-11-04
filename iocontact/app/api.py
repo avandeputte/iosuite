@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse, Response
 
 from app import APP_VERSION, calendar, config, csvio, db, enrich, iopix, model, quality, relations as rel, updates, users, vcard
 from app.auth import auth
+from app.fold import fold
 
 router = APIRouter()
 
@@ -993,8 +994,8 @@ async def iopix_people(request: Request, q: str = "", refresh: bool = False):
     linked = {r["iopix_person_id"]: {"id": r["id"], "fn": r["fn"]} for r in db.q(
         f"SELECT id, fn, iopix_person_id FROM contacts WHERE iopix_person_id IS NOT NULL AND deleted = 0 "
         f"AND book_id IN ({','.join(['%s'] * max(1, len(book_ids(u))))})", book_ids(u) or [0])}
-    ql = q.lower().strip()
-    return {"items": [{**p, "contact": linked.get(p["id"])} for p in ppl if not ql or ql in p["name"].lower()]}
+    ql = fold(q).strip()
+    return {"items": [{**p, "contact": linked.get(p["id"])} for p in ppl if not ql or ql in fold(p["name"])]}
 
 
 @router.get("/api/iopix/face/{pid}")

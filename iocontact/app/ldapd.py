@@ -15,6 +15,7 @@ import logging
 import re
 
 from app import config, model, users
+from app.fold import fold
 
 log = logging.getLogger("iocontacts.ldap")
 
@@ -200,7 +201,7 @@ def _s(v) -> str:
 
 
 def _fold(s: str) -> str:
-    return re.sub(r"\s+", " ", s).strip().lower()
+    return re.sub(r"\s+", " ", fold(s)).strip()
 
 
 def match(f, entry: dict) -> bool:

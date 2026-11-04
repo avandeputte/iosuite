@@ -18,6 +18,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import RedirectResponse, Response
 
 from app import model, users, vcard
+from app.fold import fold
 
 router = APIRouter()
 
@@ -662,11 +663,11 @@ def _matches(row: dict, flt: ET.Element) -> bool:
         pf_all = pf.get("test", "anyof") == "allof"
         sub = []
         for tm in tms:
-            needle = (tm.text or "").lower()
+            needle = fold(tm.text)
             how = tm.get("match-type", "contains")
             neg = tm.get("negate-condition") == "yes"
-            hit = any((needle in v.lower()) if how == "contains" else (v.lower() == needle) if how == "equals" else
-                      v.lower().startswith(needle) if how == "starts-with" else v.lower().endswith(needle) for v in values)
+            hit = any((needle in v) if how == "contains" else (v == needle) if how == "equals" else
+                      v.startswith(needle) if how == "starts-with" else v.endswith(needle) for v in map(fold, values))
             sub.append(hit != neg)
         results.append(all(sub) if pf_all else any(sub))
     return all(results) if test_all else any(results)

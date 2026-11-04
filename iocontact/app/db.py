@@ -185,6 +185,22 @@ def many(sql: str, rows: list) -> None:
             cur.executemany(sql, rows)
 
 
+_collation: str | None = None
+
+
+def search_collation() -> str:
+    """The most forgiving utf8mb4 collation the server has, for searches: case- and accent-insensitive, so "celia"
+    matches "Célia" whatever collation the tables were created with (uca1400 on MariaDB 10.10+, which also folds
+    ø, ł and đ; unicode_520 before it)."""
+    global _collation
+    if _collation is None:
+        have = {r["Collation"] for r in q("SHOW COLLATION WHERE Collation IN "
+                                           "('utf8mb4_uca1400_ai_ci', 'utf8mb4_unicode_520_ci')")}
+        _collation = next((c for c in ("utf8mb4_uca1400_ai_ci", "utf8mb4_unicode_520_ci") if c in have),
+                          "utf8mb4_unicode_ci")
+    return _collation
+
+
 def get_setting(k: str, default: str | None = None) -> str | None:
     r = one("SELECT v FROM meta WHERE k = %s", (f"setting:{k}",))
     return r["v"] if r else default

@@ -123,14 +123,15 @@ def search(book_ids: list[int], q: str = "", tag: str | None = None, favorite: b
         return [], 0
     where = [f"c.book_id IN ({','.join(['%s'] * len(book_ids))})", "c.deleted = 0"]
     args: list = list(book_ids)
+    like_ = f"LIKE %s COLLATE {db.search_collation()}"  # case- and accent-insensitive: "celia" finds "Célia"
     for word in (q or "").split():
         like = f"%{word}%"
         digits = re.sub(r"\D", "", word)
-        where.append("(c.fn LIKE %s OR c.nickname LIKE %s OR c.org LIKE %s OR c.title LIKE %s OR c.notes LIKE %s "
-                     "OR c.maiden LIKE %s "
-                     "OR EXISTS (SELECT 1 FROM contact_emails e WHERE e.contact_id = c.id AND e.value LIKE %s) "
-                     "OR EXISTS (SELECT 1 FROM contact_tags t WHERE t.contact_id = c.id AND t.tag LIKE %s) "
-                     "OR EXISTS (SELECT 1 FROM contact_addresses a WHERE a.contact_id = c.id AND concat_ws(' ', a.street, a.city, a.region, a.postcode, a.country) LIKE %s)"
+        where.append((f"(c.fn {like_} OR c.nickname {like_} OR c.org {like_} OR c.title {like_} OR c.notes {like_} "
+                      f"OR c.maiden {like_} "
+                      f"OR EXISTS (SELECT 1 FROM contact_emails e WHERE e.contact_id = c.id AND e.value {like_}) "
+                      f"OR EXISTS (SELECT 1 FROM contact_tags t WHERE t.contact_id = c.id AND t.tag {like_}) "
+                      f"OR EXISTS (SELECT 1 FROM contact_addresses a WHERE a.contact_id = c.id AND concat_ws(' ', a.street, a.city, a.region, a.postcode, a.country) {like_})")
                      + (" OR EXISTS (SELECT 1 FROM contact_phones p WHERE p.contact_id = c.id AND "
                         "regexp_replace(p.value, '[^0-9]', '') LIKE %s)" if len(digits) >= 3 else "") + ")")
         args += [like] * 9 + ([f"%{digits}%"] if len(digits) >= 3 else [])

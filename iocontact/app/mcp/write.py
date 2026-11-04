@@ -5,6 +5,7 @@ from typing import Literal, Optional
 from mcp.server.mcpserver.exceptions import ToolError
 
 from app import db, enrich, iopix, model, relations as rel, users
+from app.fold import fold
 from app.mcp.base import ADDS, DELETES, READ_ONLY, WRITES, book_ids, contact_out, default_book, find_book, find_contact, server, who
 
 CONTACT_SHAPE = """
@@ -388,8 +389,8 @@ def link_iopix_person(contact: str, person: Optional[str] = None, use_face_as_ph
     except Exception as e:  # noqa: BLE001
         raise ToolError(f"ioPix did not answer: {e}")
     s = str(person).strip()
-    hit = [p for p in ppl if str(p["id"]) == s] or [p for p in ppl if p["name"].lower() == s.lower()] or \
-        [p for p in ppl if s.lower() in p["name"].lower()]
+    hit = [p for p in ppl if str(p["id"]) == s] or [p for p in ppl if fold(p["name"]) == fold(s)] or \
+        [p for p in ppl if fold(s) in fold(p["name"])]
     if not hit:
         raise ToolError(f"No ioPix person '{s}'; see list_iopix_people")
     if len(hit) > 1:
