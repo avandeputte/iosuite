@@ -16,11 +16,11 @@ services:
       DB_NAME: calendar
       DB_USER: calendar
       DB_PASSWORD: calendar           # CHANGE ME
-      # the accounts shared by the io apps (the same database ioPix, ioNotes and ioContacts use)
+      # the Shared ioSuite database: accounts and suite-wide settings (the same one ioPix, ioNotes and ioContacts use)
       IOTHING_AUTH_DB_HOST: 192.168.1.89   # CHANGE ME
       IOTHING_AUTH_DB_PORT: "3306"
-      IOTHING_AUTH_DB_NAME: auth
-      IOTHING_AUTH_DB_USER: auth
+      IOTHING_AUTH_DB_NAME: iosuite
+      IOTHING_AUTH_DB_USER: iosuite
       IOTHING_AUTH_DB_PASSWORD: change-me  # CHANGE ME
       # ADMIN_USER: admin             # a first admin, made on the first start when there is no account yet
       # ADMIN_PASSWORD: change-me-please

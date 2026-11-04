@@ -93,8 +93,9 @@ CREATE USER 'calendar'@'%' IDENTIFIED BY 'calendar';
 GRANT ALL ON calendar.* TO 'calendar'@'%';
 ```
 
-The accounts live in the suite's shared `auth` database (the one ioPix, ioNotes and ioContacts use); a new install of
-the suite creates it the same way. The tables are created on the first start and updated by later versions by themselves.
+The accounts and the suite-wide settings live in the Shared ioSuite database (`iosuite`, user `iosuite`; the one ioPix,
+ioNotes and ioContacts use); a new install of the suite creates it the same way. An install that already has the older
+`auth` database keeps using it: its settings are kept, nothing needs renaming. The tables are created on the first start and updated by later versions by themselves.
 
 ### Proxmox VE (LXC)
 
@@ -104,7 +105,7 @@ the suite creates it the same way. The tables are created on the first start and
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iocalendar/main/proxmox/ct/iocalendar.sh)"
 ```
 
-It asks for the calendar database (host, port, database, user, password), the shared accounts database, the web port (8620), the family's time zone, the public address behind your reverse proxy (optional) and the admin account; then the framework's own questions (resources, network). It creates a small Debian 13 container and runs the app's own `setup.sh` inside with those answers. The passwords reach `setup.sh` through its environment (a root-only file pushed in and removed again), never on a command line; the output is kept in `/opt/iocalendar/setup.log`. The container's `update` command pulls the latest code and keeps the settings. For unattended runs set `IOCALENDAR_DB` and `IOCALENDAR_AUTH_DB` (`host:port/db:user:password`), `IOCALENDAR_ADMIN` (`name:password`), `IOCALENDAR_PORT`, `IOCALENDAR_TIMEZONE` and `IOCALENDAR_PUBLIC_URL`.
+It asks for the calendar database (host, port, database, user, password), the Shared ioSuite database, the web port (8620), the family's time zone, the public address behind your reverse proxy (optional) and the admin account; then the framework's own questions (resources, network). It creates a small Debian 13 container and runs the app's own `setup.sh` inside with those answers. The passwords reach `setup.sh` through its environment (a root-only file pushed in and removed again), never on a command line; the output is kept in `/opt/iocalendar/setup.log`. The container's `update` command pulls the latest code and keeps the settings. For unattended runs set `IOCALENDAR_DB` and `IOCALENDAR_IOSUITE_DB` (`host:port/db:user:password`; the older `IOCALENDAR_AUTH_DB` still works), `IOCALENDAR_ADMIN` (`name:password`), `IOCALENDAR_PORT`, `IOCALENDAR_TIMEZONE` and `IOCALENDAR_PUBLIC_URL`.
 
 ### Docker
 
@@ -134,7 +135,7 @@ git clone https://github.com/avandeputte/iocalendar && cd iocalendar
 | Setting | Meaning |
 | --- | --- |
 | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | the MariaDB / MySQL database (`calendar`) |
-| `IOTHING_AUTH_DB_HOST`, `_PORT`, `_NAME`, `_USER`, `_PASSWORD` | the suite's shared account database (`auth`): accounts, passwords, sessions, app passwords and roles, shared with ioPix, ioNotes and ioContacts |
+| `IOTHING_AUTH_DB_HOST`, `_PORT`, `_NAME`, `_USER`, `_PASSWORD` | the Shared ioSuite database (`iosuite`; older installs: `auth`): accounts, passwords, sessions, app passwords, roles and suite-wide settings, shared with ioPix, ioNotes and ioContacts. The names are the ones `iothing-auth` reads |
 | `IOTHING_COOKIE_DOMAIN` | the domain the session cookie is shared on (`example.com`): signed in at `contacts.example.com`, signed in at `calendar.example.com` too |
 | `PORT` | web port for `run.sh` and the service (8620) |
 | `TIMEZONE` | the family's time zone (default: `TZ`, else the server's), for times written without one and all-day events |

@@ -17,7 +17,7 @@ SCHEMA = [
         k VARCHAR(64) PRIMARY KEY,
         v MEDIUMTEXT
     )""",
-    # accounts and app passwords live in the suite's shared auth database (iothing-auth, app/auth.py)
+    # accounts and app passwords live in the Shared ioSuite database (iothing-auth, app/auth.py)
     # owner_id NULL: a shared calendar (everyone sees it); kind 'birthdays' is filled from ioContacts and read-only
     """CREATE TABLE IF NOT EXISTS calendars (
         id INT AUTO_INCREMENT PRIMARY KEY,

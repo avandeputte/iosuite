@@ -1,7 +1,7 @@
 """The shared ioThing accounts (iothing-auth), as ioCalendar uses them.
 
-Accounts, passwords, sessions, app passwords and roles live in the suite's auth database (IOTHING_AUTH_DB_* in
-iocalendar.env), shared with ioPix, ioNotes and ioContacts: one sign-in serves every app on the domain
+Accounts, passwords, sessions, app passwords and roles live in the Shared ioSuite database (IOTHING_AUTH_DB_* in
+iocalendar.env, the names iothing-auth reads), with the suite-wide settings,, shared with ioPix, ioNotes and ioContacts: one sign-in serves every app on the domain
 (IOTHING_COOKIE_DOMAIN). What is ioCalendar's own stays per app: the role an account holds here and its settings
 (first day of the week, default view, time zone).
 """

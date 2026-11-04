@@ -3,14 +3,14 @@
 # this is the ct/ script; proxmox/install/iocalendar-install.sh runs inside the container.
 #
 # After the framework's own questions (resources, network) it asks about the app: the MariaDB server, database, user
-# and password (the database is created when the user may), the shared accounts database, the web port, the time zone,
+# and password (the database is created when the user may), the Shared ioSuite database, the web port, the time zone,
 # the public address and the admin account. It creates the container, then runs the app's own setup.sh inside with those answers, which installs the
 # packages, writes the settings, creates the tables and the admin and starts the service.
 #
 # Until the scripts are merged upstream, the framework is pointed at this repository for the install script
 # (COMMUNITY_SCRIPTS_URL below; the core engine still comes from community-scripts). Run on the Proxmox host as root:
 #   bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iocalendar/main/proxmox/ct/iocalendar.sh)"
-# Unattended: IOCALENDAR_DB=host:port/db:user:password IOCALENDAR_AUTH_DB=host:port/db:user:password
+# Unattended: IOCALENDAR_DB=host:port/db:user:password IOCALENDAR_IOSUITE_DB=host:port/db:user:password (IOCALENDAR_AUTH_DB still works)
 #   IOCALENDAR_ADMIN=name:password IOCALENDAR_PORT=8620 IOCALENDAR_TIMEZONE=America/New_York
 #   IOCALENDAR_PUBLIC_URL=https://calendar.example.com in the environment skip the questions.
 export COMMUNITY_SCRIPTS_URL="${COMMUNITY_SCRIPTS_URL:-https://raw.githubusercontent.com/avandeputte/iocalendar/main/proxmox}"
@@ -47,14 +47,15 @@ ask_app_settings() {
     w=$(whiptail --backtitle "$bt" --passwordbox "Password" 9 60 3>&1 1>&2 2>&3) || exit 1
     IOCALENDAR_DB="$h:$p/$d:$u:$w"
   fi
-  if [[ -z "${IOCALENDAR_AUTH_DB:-}" ]]; then
+  IOCALENDAR_IOSUITE_DB="${IOCALENDAR_IOSUITE_DB:-${IOCALENDAR_AUTH_DB:-}}"
+  if [[ -z "${IOCALENDAR_IOSUITE_DB:-}" ]]; then
     local ah ap ad au aw2
-    ah=$(whiptail --backtitle "$bt" --inputbox "Accounts database shared by the io apps: host" 9 70 "${IOCALENDAR_DB%%:*}" 3>&1 1>&2 2>&3) || exit 1
+    ah=$(whiptail --backtitle "$bt" --inputbox "Shared ioSuite database (accounts and suite-wide settings): host" 9 70 "${IOCALENDAR_DB%%:*}" 3>&1 1>&2 2>&3) || exit 1
     ap=$(whiptail --backtitle "$bt" --inputbox "Port" 9 60 "3306" 3>&1 1>&2 2>&3) || exit 1
-    ad=$(whiptail --backtitle "$bt" --inputbox "Database (the same one ioPix, ioNotes and ioContacts use)" 9 70 "auth" 3>&1 1>&2 2>&3) || exit 1
-    au=$(whiptail --backtitle "$bt" --inputbox "User" 9 60 "auth" 3>&1 1>&2 2>&3) || exit 1
+    ad=$(whiptail --backtitle "$bt" --inputbox "Database (the same one ioPix, ioNotes and ioContacts use)" 9 70 "iosuite" 3>&1 1>&2 2>&3) || exit 1
+    au=$(whiptail --backtitle "$bt" --inputbox "User" 9 60 "iosuite" 3>&1 1>&2 2>&3) || exit 1
     aw2=$(whiptail --backtitle "$bt" --passwordbox "Password" 9 60 3>&1 1>&2 2>&3) || exit 1
-    IOCALENDAR_AUTH_DB="$ah:$ap/$ad:$au:$aw2"
+    IOCALENDAR_IOSUITE_DB="$ah:$ap/$ad:$au:$aw2"
   fi
   IOCALENDAR_PORT="${IOCALENDAR_PORT:-$(whiptail --backtitle "$bt" --inputbox "Web port (web app, CalDAV, REST API, subscription links)" 9 70 "8620" 3>&1 1>&2 2>&3)}" || exit 1
   IOCALENDAR_TIMEZONE="${IOCALENDAR_TIMEZONE:-$(whiptail --backtitle "$bt" --inputbox "Time zone of the family" 9 70 "$(cat /etc/timezone 2>/dev/null || echo America/New_York)" 3>&1 1>&2 2>&3)}" || exit 1
@@ -90,7 +91,7 @@ description
 
 msg_info "Running the app's setup inside the container (packages, settings, tables, admin, service)"
 # the answers with passwords go in as a root-only file (pushed, read into setup.sh's environment, removed), never as arguments
-SECRETS="IOCALENDAR_DB=$(printf '%q' "$IOCALENDAR_DB")"$'\n'"IOCALENDAR_AUTH_DB=$(printf '%q' "$IOCALENDAR_AUTH_DB")"$'\n'
+SECRETS="IOCALENDAR_DB=$(printf '%q' "$IOCALENDAR_DB")"$'\n'"IOCALENDAR_IOSUITE_DB=$(printf '%q' "$IOCALENDAR_IOSUITE_DB")"$'\n'
 [[ -n "${IOCALENDAR_ADMIN:-}" ]] && SECRETS+="IOCALENDAR_ADMIN=$(printf '%q' "$IOCALENDAR_ADMIN")"$'\n'
 SECF="$(mktemp)"; chmod 600 "$SECF"; printf '%s' "$SECRETS" > "$SECF"
 pct push "$CTID" "$SECF" /opt/iocalendar/setup.env --perms 0600 --user 0 --group 0
@@ -100,7 +101,7 @@ WRAPPED="set -a; . /opt/iocalendar/setup.env; set +a; rm -f /opt/iocalendar/setu
 if ! pct exec "$CTID" -- bash -c "$WRAPPED"; then
   msg_error "setup.sh failed inside the container; last lines of /opt/iocalendar/setup.log:"
   pct exec "$CTID" -- tail -n 40 /opt/iocalendar/setup.log || true
-  msg_error "Fix the cause (often: the MariaDB user may not connect from the container's address), then run it again inside the container with IOCALENDAR_DB=host:port/db:user:password (IOCALENDAR_AUTH_DB likewise, and IOCALENDAR_ADMIN=name:password) in the environment: pct exec $CTID -- bash -c \"$SETUP_CMD\""
+  msg_error "Fix the cause (often: the MariaDB user may not connect from the container's address), then run it again inside the container with IOCALENDAR_DB=host:port/db:user:password (IOCALENDAR_IOSUITE_DB likewise, and IOCALENDAR_ADMIN=name:password) in the environment: pct exec $CTID -- bash -c \"$SETUP_CMD\""
   exit 1
 fi
 msg_ok "Setup finished"
