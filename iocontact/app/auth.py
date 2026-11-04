@@ -9,9 +9,14 @@ What is ioContacts' own stays per app: the role an account holds here, and which
 from iothing_auth.fastapi import Auth
 from iothing_auth import users as shared
 
+from . import APP_VERSION, config
+
 APP = "iocontacts"
 
-auth = Auth(APP, app_label="ioContacts", basic_realm="ioContacts")
+# the version, address, description, colour and icon also go into the suite's list of apps (suite_apps), which the
+# start page and the other apps read: written on the first request
+auth = Auth(APP, app_label="ioContacts", basic_realm="ioContacts", version=APP_VERSION, public_url=config.PUBLIC_URL or None,
+            description="Contacts", color="#4f2f7d", icon="/static/icons/mark.svg")
 
 
 def row_of(u):

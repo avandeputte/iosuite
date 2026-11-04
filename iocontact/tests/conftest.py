@@ -30,6 +30,11 @@ def client():
     authdb.ex("DELETE FROM users")
     authdb.ex("ALTER TABLE users AUTO_INCREMENT = 1")
     authdb.ex("DELETE FROM settings")
+    authdb.ex("DELETE FROM suite_apps")  # the suite's list of apps: registered again on the first request
+    from iothing_auth import suite
+    from app.auth import auth
+    suite.invalidate()
+    auth._registered = False
     users.forget_cached_auth()
     from app.main import app
     with TestClient(app) as c:

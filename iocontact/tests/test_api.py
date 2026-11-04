@@ -165,3 +165,14 @@ def test_page_stamps_the_version(client):
     from app import APP_VERSION
     html = client.get("/").text
     assert f'static/app.js?v={APP_VERSION}"' in html and f'static/app.css?v={APP_VERSION}"' in html
+
+
+def test_registers_in_the_suite(client):
+    """The first request writes ioContacts' row in the suite's list of apps (iothing-auth suite_apps)."""
+    from iothing_auth import suite
+    from app import APP_VERSION
+    client.get("/api/books")
+    me = suite.get("iocontacts")
+    assert me is not None
+    assert me["name"] == "ioContacts" and me["version"] == APP_VERSION
+    assert me["description"] == "Contacts" and me["color"] == "#4f2f7d"
