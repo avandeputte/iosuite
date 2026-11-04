@@ -50,7 +50,7 @@ def update(uid: int, **f) -> dict:
 
 
 def ensure_admin_from_env() -> None:
-    """The auth tables (and the ADMIN_USER / ADMIN_PASSWORD account on a first start), as in the other io apps."""
+    """The Shared ioSuite database's tables (and the ADMIN_USER / ADMIN_PASSWORD account on a first start), as in the other io apps."""
     shared.init()
 
 

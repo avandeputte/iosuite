@@ -1,7 +1,7 @@
 """The apps of the suite: what the start page shows a tile for, and where each one is.
 
 Where an app lives comes, in this order, from the environment (IOPIX_URL and friends: wins, and Settings shows it as
-read-only), from what an admin saved in Settings › Apps, from the suite's list of apps in the shared auth database
+read-only), from what an admin saved in Settings › Apps, from the suite's list of apps in the Shared ioSuite database
 (each app registers itself there with its address: iothing_auth.suite), or, failing all three, from the host the page
 was reached on with the app's usual port (the Proxmox and standalone installs on one box).
 
@@ -34,12 +34,12 @@ KEYS = [a["key"] for a in CATALOGUE]
 
 def registered() -> dict:
     """{app key: entry} from the suite's list (iothing_auth.suite.apps()), kept REGISTRY_TTL seconds; the last list
-    known when the auth database does not answer."""
+    known when the Shared ioSuite database does not answer."""
     now = time.time()
     if now - _registry["at"] > REGISTRY_TTL:
         try:
             _registry["items"] = {a["app"]: a for a in suite.apps()}
-        except Exception as e:  # noqa: BLE001 - an older auth database (no suite_apps yet), or down
+        except Exception as e:  # noqa: BLE001 - an older Shared ioSuite database (no suite_apps yet), or down
             log.debug("the suite's list of apps: %s", e)
         _registry["at"] = now
     return _registry["items"]

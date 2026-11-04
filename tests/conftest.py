@@ -1,5 +1,5 @@
 """Tests run against a test MariaDB of their own (iothing_auth.testing: a Docker container, or the server named by
-IOTHING_TEST_DB=host:port:user:password): two scratch databases, suite_test and suite_test_auth, dropped and
+IOTHING_TEST_DB=host:port:user:password): two scratch databases, suite_test and suite_test_shared, dropped and
 recreated per session, never a live one. Without a test server the suite is skipped."""
 import os
 import sys
@@ -13,7 +13,7 @@ if _authtest.server() is None:
 _s = _authtest.server()
 os.environ.update(DB_HOST=_s["host"], DB_PORT=str(_s["port"]), DB_USER=_s["user"], DB_PASSWORD=_s["password"], DB_NAME="suite_test")
 _authtest.fresh_database("suite_test")
-os.environ.update(_authtest.auth_env("suite_test_auth"))
+os.environ.update(_authtest.auth_env("suite_test_shared"))
 os.environ.setdefault("UPDATE_CHECK", "0")
 for k in ("IOPIX_URL", "IOHEALTH_URL", "IOCALENDAR_URL", "IOCONTACTS_URL", "IONOTES_URL"):
     os.environ.pop(k, None)

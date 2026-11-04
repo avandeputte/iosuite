@@ -16,11 +16,11 @@ services:
       DB_USER: suite
       DB_PASSWORD: suite              # CHANGE ME
       # the accounts shared by the io apps (the same database ioPix, ioNotes, ioContacts, ioCalendar and ioHealth use)
-      IOTHING_AUTH_DB_HOST: 192.168.1.89   # CHANGE ME
-      IOTHING_AUTH_DB_PORT: "3306"
-      IOTHING_AUTH_DB_NAME: auth
-      IOTHING_AUTH_DB_USER: auth
-      IOTHING_AUTH_DB_PASSWORD: change-me  # CHANGE ME
+      IOSUITE_SHARED_DB_HOST: 192.168.1.89   # CHANGE ME
+      IOSUITE_SHARED_DB_PORT: "3306"
+      IOSUITE_SHARED_DB_NAME: iosuite
+      IOSUITE_SHARED_DB_USER: iosuite
+      IOSUITE_SHARED_DB_PASSWORD: change-me  # CHANGE ME
       # ADMIN_USER: admin             # a first admin, made on the first start when there is no account yet
       # ADMIN_PASSWORD: change-me-please
       # PUBLIC_URL: https://home.example.com       # behind a reverse proxy
