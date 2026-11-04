@@ -1,5 +1,5 @@
-"""Settings from the environment (or iosuite.env next to the app). What the page keeps (the apps' addresses set in
-Settings, the update switch) lives in MariaDB; the environment wins over Settings where both name the same thing."""
+"""Settings from the environment (or iosuite.env next to the app). What the page keeps (the weather and
+home page settings, the update switch) lives in MariaDB; the environment wins over Settings where both name the same thing."""
 import os
 from pathlib import Path
 
@@ -32,11 +32,9 @@ DB_PASSWORD = env("DB_PASSWORD", "suite")
 STATIC_DIR = ROOT / "static"
 PUBLIC_URL = env("PUBLIC_URL", "").rstrip("/")   # e.g. https://home.example.com (behind a reverse proxy)
 
-# where the apps are: IOPIX_URL, IOHEALTH_URL, IOCALENDAR_URL, IOCONTACTS_URL, IONOTES_URL (see app/apps.py). Empty: what
-# an admin saved in Settings › Apps, else this host with the app's usual port.
-APP_URLS = {k: env(f"{k.upper()}_URL").rstrip("/") for k in ("iopix", "iohealth", "iocalendar", "iocontacts", "ionotes")}
+# where the apps are: each registers itself in the suite's list in the Shared ioSuite database (see app/apps.py)
 
-# the weather (AccuWeather; Settings › Weather does the same, the environment wins): an API key from developer.accuweather.com
+# the weather (AccuWeather; Settings › Home page does the same, the environment wins): an API key from developer.accuweather.com
 ACCUWEATHER_API_KEY = env("ACCUWEATHER_API_KEY").strip()
 ACCUWEATHER_LOCATION = env("ACCUWEATHER_LOCATION").strip()   # a location key (Settings finds it from a city name)
 

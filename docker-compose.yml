@@ -26,12 +26,6 @@ services:
       # PUBLIC_URL: https://home.example.com       # behind a reverse proxy
       # IOTHING_COOKIE_DOMAIN: example.com         # one sign-in for every io app under this domain
       # AUTH_PROXY: cloudflare        # sign-in at the proxy, as in the other io apps (see README)
-      # where the apps are (or Settings › Apps in the web app; empty: this host, each app's usual port)
-      # IOPIX_URL: https://photos.example.com
-      # IOHEALTH_URL: https://health.example.com
-      # IOCALENDAR_URL: https://calendar.example.com
-      # IOCONTACTS_URL: https://contacts.example.com
-      # IONOTES_URL: https://notes.example.com
-      # the weather (or Settings › Weather): a key from developer.accuweather.com and a location key Settings finds
+      # the weather (or Settings › Home page): a key from developer.accuweather.com and a location key Settings finds
       # ACCUWEATHER_API_KEY: change-me
       # ACCUWEATHER_LOCATION: "349727"

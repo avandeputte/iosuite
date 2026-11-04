@@ -133,7 +133,7 @@ function drawUser() {
       h('a', { class: 'mi', href: '#/settings/account', onclick: closeMenu }, icon('person', 's'), 'Account'),
       ['editor', 'admin'].includes(S.user.role) ? h('a', { class: 'mi', href: '#/settings/bookmarks', onclick: closeMenu }, icon('link', 's'), 'Bookmarks') : null,
       h('button', { class: 'mi', onclick: () => { closeMenu(); customize(); } }, icon('tune', 's'), 'Customize the page'),
-      S.user.role === 'admin' ? h('a', { class: 'mi', href: '#/settings/apps', onclick: closeMenu }, icon('settings', 's'), 'Settings') : null,
+      S.user.role === 'admin' ? h('a', { class: 'mi', href: '#/settings/weather', onclick: closeMenu }, icon('settings', 's'), 'Settings') : null,
       h('button', { class: 'mi', onclick: () => { const n = { system: 'light', light: 'dark', dark: 'system' }[theme]; localStorage.setItem('iosuite.theme', n); applyTheme(); closeMenu(); toast(`Appearance: ${n}`); } },
         icon('theme', 's'), `Appearance: ${theme}`),
       h('button', { class: 'mi', onclick: async () => { const r = await api('/api/auth/logout', { method: 'POST' }); if (r && r.cloudflareLogout) location.href = r.cloudflareLogout; else location.reload(); } }, icon('logout', 's'), 'Sign out'));
@@ -186,8 +186,8 @@ async function showHome(page) {
     h('div', { class: 'more' }));  // what the app shows here: drawWidgets
   const big = S.apps.filter((a) => WIDGETS[a.key]), rest = S.apps.filter((a) => !WIDGETS[a.key]);
   const stacks = []; for (let i = 0; i < rest.length; i += 2) stacks.push(h('div', { class: 'stack' }, rest.slice(i, i + 2).map((a) => tile(a, true))));
-  if (!S.apps.length) page.append(h('div', { class: 'empty' }, got.items.length ? 'Every tile is hidden. ' : 'No apps to show. ',
-    got.items.length ? h('button', { class: 'lnk', onclick: customize }, 'Customize the page') : S.user.role === 'admin' ? h('a', { class: 'lnk', href: '#/settings/apps' }, 'Settings › Apps') : null));
+  if (!S.apps.length) page.append(h('div', { class: 'empty' }, got.items.length ? 'Every tile is hidden. ' : 'No io app has registered itself in the Shared ioSuite database yet: each one appears here once it has started.',
+    got.items.length ? h('button', { class: 'lnk', onclick: customize }, 'Customize the page') : null));
   else page.append(h('div', { class: 'apps', style: { '--cols': big.length + stacks.length } }, big.map((a) => tile(a, false)), stacks));
   drawWidgets(page);
   drawAppStatus(page);
@@ -578,12 +578,12 @@ function packBookmarks(el, groups) {
 async function showSettings(page, r) {
   const adm = S.user.role === 'admin';
   const canEdit = ['editor', 'admin'].includes(S.user.role);
-  const tabs = [['account', 'Account'], ...(adm ? [['apps', 'Apps'], ['weather', 'Weather']] : []), ...(canEdit ? [['bookmarks', 'Bookmarks']] : []), ...(adm ? [['users', 'Users'], ['server', 'Server']] : [])];
+  const tabs = [['account', 'Account'], ...(adm ? [['weather', 'Home page']] : []), ...(canEdit ? [['bookmarks', 'Bookmarks']] : []), ...(adm ? [['users', 'Users'], ['server', 'Server']] : [])];
   if (!tabs.some(([k]) => k === r.tab)) r.tab = 'account';
   page.append(h('div', { class: 'pagehead' }, h('h1', null, 'Settings')),
     h('div', { class: 'tabs' }, tabs.map(([k, l]) => h('button', { class: r.tab === k ? 'on' : '', onclick: () => { location.hash = `#/settings/${k}`; } }, l))));
   const body = h('div'); page.append(body);
-  await ({ account: setAccount, apps: setApps, weather: setWeather, bookmarks: setBookmarks, users: setUsers, server: setServer }[r.tab] || setAccount)(body);
+  await ({ account: setAccount, apps: setHome, weather: setHome, bookmarks: setBookmarks, users: setUsers, server: setServer }[r.tab] || setAccount)(body);
 }
 const fld = (l, e) => h('label', { class: 'field' }, h('span', null, l), e);
 const kv = (k, v) => h('div', { class: 'kv' }, h('div', { class: 'k' }, k), h('div', { class: 'v', style: { flex: 1 } }, typeof v === 'string' ? copyRow(v) : v));
@@ -601,27 +601,16 @@ async function setAccount(el) {
       h('button', { class: 'pillbtn noic', onclick: async () => { if (await confirmDialog('Sign out everywhere', 'Sign out on every other browser and device, in every io app? (Apps with an app password keep working.)', 'Sign out the others')) { try { await api('/api/auth/logout_all', { method: 'POST' }); toast('Signed out elsewhere'); } catch (e) { fail(e); } } } }, 'Sign out everywhere else'))) : null);
 }
 
-async function setApps(el) {
-  const got = await api('/api/apps/settings'), items = got.items;
+async function setHome(el) {
+  const got = await api('/api/home/settings');
   const strip = h('select', { class: 't' }, [['rediscover', 'Rediscover: photos at random'], ['onthisday', 'On this day (at random when there are none)'], ['off', 'Off']].map(([v, t]) => h('option', { value: v, selected: v === got.photoStrip ? true : null }, t)));
-  const rows = items.map((a) => {
-    const fallback = a.suiteUrl ? `empty: ${a.suiteUrl}` : a.port ? `empty: this host, port ${a.port}` : 'empty: not on the page';
-    const url = h('input', { class: 't', value: a.envUrl || a.url, placeholder: fallback, disabled: a.envUrl ? true : null });
-    const shown = h('input', { type: 'checkbox', checked: !a.hidden });
-    const where = a.envUrl ? `${a.key.toUpperCase()}_URL in the environment`
-      : a.suiteUrl ? `${a.url ? 'Overrides' : 'Found'} ${a.suiteUrl}, registered by ${a.name}${a.version ? ` ${a.version}` : ''}`
-      : `${a.name} has not registered itself yet`;
-    return { a, url, shown, el: h('div', { class: 'approw' }, h('img', { src: a.icon, alt: '' }), h('span', { class: 'nm' }, a.name), url,
-      h('label', { class: 'check' }, shown, ' On the page'), h('span', { class: 'muted small' }, where)) };
-  });
-  el.append(h('div', { class: 'box' }, h('h2', null, icon('apps'), 'The apps on the start page'),
-    h('p', { class: 'muted' }, 'Each app registers itself, with its address, in the suite’s shared list (the accounts database), so there is nothing to fill in here. Type an address only to override what an app registered; empty: what it registered, else the host this page was opened on with the app’s usual port. An address set in the environment (IOPIX_URL and friends) wins over both.'),
-    rows.map((r) => r.el),
+  el.append(h('div', { class: 'box' }, h('h2', null, icon('apps'), 'Home page'),
+    h('p', { class: 'muted' }, 'Every io app registers itself, with its address, in the Shared ioSuite database, and shows up on the page by itself. Each person can hide, reorder and pick their own photo strip in Customize; this is what everyone gets by default.'),
     h('div', { class: 'grid' }, fld('Photo strip under the tiles (ioPix)', strip)),
     h('p', null, h('button', { class: 'pillbtn primary', onclick: async () => {
-      const body = { ...Object.fromEntries(rows.map((r) => [r.a.key, { ...(r.a.envUrl ? {} : { url: r.url.value.trim() }), hidden: !r.shown.checked }])), photoStrip: strip.value };
-      try { await api('/api/apps/settings', { method: 'POST', json: body }); toast('Saved'); } catch (e) { fail(e); }
+      try { await api('/api/home/settings', { method: 'POST', json: { photoStrip: strip.value } }); toast('Saved'); } catch (e) { fail(e); }
     } }, icon('check', 's'), 'Save'))));
+  await setWeather(el);
 }
 
 async function setWeather(el) {
