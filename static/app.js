@@ -1,6 +1,6 @@
 /* ioSuite web app: one module, no build step, as in the other io apps. The start page (the weather, a tile per app,
-   the bookmarks as homepage lays them out) and the settings (account, apps, weather, bookmarks, users, server). Each tile keeps a `.more` block under its name, empty for now: the place for
-   what an app will show on the start page later (today's events, the newest photos…), filled from /api/apps. */
+   the bookmarks as homepage lays them out) and the settings (account, apps, weather, bookmarks, users, server). Each tile keeps a `.more` block under its name, where the app shows a glimpse of
+   itself (photos from this day, the rest of today, steps and rings), filled from /api/widgets/<app>. */
 
 // ------------------------------------------------------------------ helpers
 const $ = (s, el = document) => el.querySelector(s);
@@ -165,10 +165,92 @@ async function showHome(page) {
   else page.append(h('div', { class: 'apps' }, S.apps.map((a) =>
     h('a', { class: 'app', href: a.url, 'data-app': a.key, title: a.url },
       h('img', { src: a.icon, alt: '' }), appName(a.name, a.color), h('span', { class: 'tag' }, a.tagline),
-      h('div', { class: 'more' })))));  // room for what the app shows here later
+      h('div', { class: 'more' })))));  // what the app shows here: drawWidgets
+  drawWidgets(page);
   const bm = h('div', { class: 'bookmarks' });
   page.append(bm);
   drawBookmarks(bm);
+}
+
+// ------------------------------------------------------------------ what the tiles show (/api/widgets/<app>)
+/* Under an app's name, a glimpse of it: ioPix's photos from this day in earlier years (else a few at random),
+   ioCalendar's rest of today (else what's next), ioHealth's steps and rings. The server asks each app with the
+   viewer's own sign-in; an app that is down or not open to this account leaves its tile as it was. */
+const WIDGETS = { iopix: drawPixWidget, iocalendar: drawCalendarWidget, iohealth: drawHealthWidget };
+const viewerTz = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch { return ''; } };
+
+function drawWidgets(page) {
+  const tz = viewerTz();
+  for (const tile of page.querySelectorAll('.app[data-app]')) {
+    const draw = WIDGETS[tile.dataset.app], box = tile.querySelector('.more');
+    if (!draw || !box) continue;
+    fetch(`/api/widgets/${tile.dataset.app}?tz=${encodeURIComponent(tz)}`, { credentials: 'same-origin' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d && box.isConnected) { const kids = draw(d); if (kids) box.replaceChildren(h('div', { class: 'wg' }, kids)); } })
+      .catch(() => { /* the tile stays as it was */ });
+  }
+}
+
+const wgHead = (t, extra) => h('div', { class: 'wghead' }, h('span', null, t), extra ? h('span', { class: 'muted' }, extra) : null);
+
+function drawPixWidget(d) {
+  if (!d.items || !d.items.length) return null;
+  const otd = d.kind === 'onthisday';
+  const cap = (it) => (otd ? (it.yearsAgo === 1 ? '1 year ago' : `${it.yearsAgo} years ago`) : (it.year || ''));
+  return [wgHead(otd ? 'On this day' : 'Rediscover', otd && d.count > d.items.length ? `${d.count} photos` : null),
+    h('div', { class: 'wgpix' }, d.items.slice(0, 4).map((it) => h('div', { class: 'wgph', title: String(cap(it)) },
+      h('img', { src: `/api/widgets/iopix/thumb/${it.id}`, alt: '', loading: 'lazy', onerror: (e) => e.target.parentNode.remove() }),
+      cap(it) ? h('span', null, cap(it)) : null)))];
+}
+
+function evTime(o) {
+  if (o.allDay) return 'All day';
+  const s = new Date(o.start);
+  return isNaN(s) ? '' : s.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+function evDay(o) {
+  const s = new Date(o.allDay ? `${o.start}T12:00:00` : o.start);
+  if (isNaN(s)) return '';
+  const t = new Date(); t.setHours(0, 0, 0, 0);
+  const days = Math.round((new Date(s.getFullYear(), s.getMonth(), s.getDate()) - t) / 86400000);
+  return days === 1 ? 'Tomorrow' : s.toLocaleDateString([], days < 7 ? { weekday: 'long' } : { weekday: 'short', month: 'short', day: 'numeric' });
+}
+const evRow = (o, when) => h('div', { class: 'wgev', title: [o.title, o.location].filter(Boolean).join(' · ') },
+  h('span', { class: 'dot', style: { background: o.color || 'var(--fg2)' } }), h('span', { class: 'wgwhen muted' }, when), h('span', { class: 'wgtitle' }, o.title));
+
+function drawCalendarWidget(d) {
+  if (d.today && d.today.length) {
+    return [wgHead('Today', d.more ? `+${d.more} more` : null), d.today.map((o) => evRow(o, evTime(o)))];
+  }
+  if (d.next) return [wgHead('Next', evDay(d.next)), evRow(d.next, evTime(d.next))];
+  return [wgHead('Today'), h('div', { class: 'muted small' }, 'Nothing planned')];
+}
+
+/** Three rings, outside in: move, exercise, stand; each full at its goal (and past it, a second lap is not drawn). */
+function rings(r) {
+  const ns = 'http://www.w3.org/2000/svg', svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', '0 0 64 64'); svg.setAttribute('class', 'wgrings');
+  [['move', 27, 'var(--ring-move)'], ['exercise', 19, 'var(--ring-exercise)'], ['stand', 11, 'var(--ring-stand)']].forEach(([k, rad, col]) => {
+    const goal = r[`${k}Goal`], v = r[k], frac = goal > 0 && v != null ? Math.min(1, v / goal) : 0, len = 2 * Math.PI * rad;
+    for (const [op, dash] of [[0.22, null], [1, frac]]) {
+      if (dash === 0) continue;
+      const c = document.createElementNS(ns, 'circle');
+      c.setAttribute('cx', 32); c.setAttribute('cy', 32); c.setAttribute('r', rad); c.setAttribute('fill', 'none');
+      c.setAttribute('stroke', col); c.setAttribute('stroke-width', 7); c.setAttribute('stroke-opacity', op);
+      if (dash != null) { c.setAttribute('stroke-linecap', 'round'); c.setAttribute('stroke-dasharray', `${dash * len} ${len}`); c.setAttribute('transform', 'rotate(-90 32 32)'); }
+      svg.append(c);
+    }
+  });
+  return svg;
+}
+function drawHealthWidget(d) {
+  if (d.steps == null && !d.rings) return null;
+  const r = d.rings, n = (v) => (v == null ? '–' : Math.round(v).toLocaleString());
+  const line = (k, label, unit) => (r && r[`${k}Goal`] ? h('div', { class: 'wgring', title: `${label}: ${n(r[k])} of ${n(r[`${k}Goal`])} ${unit}` },
+    h('span', { class: 'dot', style: { background: `var(--ring-${k})` } }), label, h('span', { class: 'muted' }, `${n(r[k])}/${n(r[`${k}Goal`])}`)) : null);
+  return [wgHead('Today'), h('div', { class: 'wghealth' }, r ? rings(r) : null,
+    h('div', null, d.steps != null ? h('div', { class: 'wgsteps' }, h('b', null, n(d.steps)), ' steps') : null,
+      line('move', 'Move', 'kcal'), line('exercise', 'Exercise', 'min'), line('stand', 'Stand', 'h')))];
 }
 
 /** The weather widget: the conditions now, a line of details, and the days ahead. Hidden until an admin sets it up. */
