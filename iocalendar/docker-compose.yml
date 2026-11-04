@@ -17,11 +17,11 @@ services:
       DB_USER: calendar
       DB_PASSWORD: calendar           # CHANGE ME
       # the Shared ioSuite database: accounts and suite-wide settings (the same one ioPix, ioNotes and ioContacts use)
-      IOTHING_AUTH_DB_HOST: 192.168.1.89   # CHANGE ME
-      IOTHING_AUTH_DB_PORT: "3306"
-      IOTHING_AUTH_DB_NAME: iosuite
-      IOTHING_AUTH_DB_USER: iosuite
-      IOTHING_AUTH_DB_PASSWORD: change-me  # CHANGE ME
+      IOSUITE_SHARED_DB_HOST: 192.168.1.89   # CHANGE ME
+      IOSUITE_SHARED_DB_PORT: "3306"
+      IOSUITE_SHARED_DB_NAME: iosuite
+      IOSUITE_SHARED_DB_USER: iosuite
+      IOSUITE_SHARED_DB_PASSWORD: change-me  # CHANGE ME
       # ADMIN_USER: admin             # a first admin, made on the first start when there is no account yet
       # ADMIN_PASSWORD: change-me-please
       # PUBLIC_URL: https://calendar.example.com   # behind a reverse proxy: the links in Settings and the Apple profile

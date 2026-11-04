@@ -135,7 +135,7 @@ git clone https://github.com/avandeputte/iocalendar && cd iocalendar
 | Setting | Meaning |
 | --- | --- |
 | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | the MariaDB / MySQL database (`calendar`) |
-| `IOTHING_AUTH_DB_HOST`, `_PORT`, `_NAME`, `_USER`, `_PASSWORD` | the Shared ioSuite database (`iosuite`; older installs: `auth`): accounts, passwords, sessions, app passwords, roles and suite-wide settings, shared with ioPix, ioNotes and ioContacts. The names are the ones `iothing-auth` reads |
+| `IOSUITE_SHARED_DB_HOST`, `_PORT`, `_NAME`, `_USER`, `_PASSWORD` | the Shared ioSuite database (`iosuite`; older installs: `auth`): accounts, passwords, sessions, app passwords, roles and suite-wide settings, shared with ioPix, ioNotes and ioContacts. The older names `IOTHING_AUTH_DB_*` still work |
 | `IOTHING_COOKIE_DOMAIN` | the domain the session cookie is shared on (`example.com`): signed in at `contacts.example.com`, signed in at `calendar.example.com` too |
 | `PORT` | web port for `run.sh` and the service (8620) |
 | `TIMEZONE` | the family's time zone (default: `TZ`, else the server's), for times written without one and all-day events |

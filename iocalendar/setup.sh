@@ -38,6 +38,7 @@ asksecret() { _v="$1"; _q="$2"
   if [ "$YES" = 1 ] || [ ! -t 0 ]; then eval "$_v=''"; return; fi
   printf '%s: ' "$_q"; stty -echo 2>/dev/null; read -r _a || _a=""; stty echo 2>/dev/null; printf '\n'; eval "$_v=\"\$_a\""; }
 getenv() { [ -f iocalendar.env ] && sed -n "s/^$1=//p" iocalendar.env | tail -n 1; true; }
+getsuite() { _g="$(getenv "IOSUITE_SHARED_DB_$1")"; [ -n "$_g" ] || _g="$(getenv "IOTHING_AUTH_DB_$1")"; printf '%s' "$_g"; }  # new name, else the one before
 split() { # HOST:PORT/DATABASE:USER:PASSWORD into $1_HOST, $1_PORT, $1_NAME, $1_USER, $1_PASSWORD
   _p="$1"; _s="$2"; _h="${_s%%:*}"; _r="${_s#*:}"; _o="${_r%%/*}"; _r="${_r#*/}"; _n="${_r%%:*}"; _r="${_r#*:}"; _u="${_r%%:*}"; _w="${_r#*:}"
   eval "${_p}_HOST=\"\$_h\"; ${_p}_PORT=\"\$_o\"; ${_p}_NAME=\"\$_n\"; ${_p}_USER=\"\$_u\"; ${_p}_PASSWORD=\"\$_w\""; }
@@ -64,9 +65,9 @@ fi
 split DB "$DBS"
 if [ -z "$ADBS" ]; then
   say "The Shared ioSuite database: accounts and suite-wide settings, shared by the io apps (ioPix, ioNotes, ioContacts, ioCalendar)"
-  H="$(getenv IOTHING_AUTH_DB_HOST)"; P="$(getenv IOTHING_AUTH_DB_PORT)"; D="$(getenv IOTHING_AUTH_DB_NAME)"; U="$(getenv IOTHING_AUTH_DB_USER)"
+  H="$(getsuite HOST)"; P="$(getsuite PORT)"; D="$(getsuite NAME)"; U="$(getsuite USER)"
   ask H "Host" "${H:-$DB_HOST}"; ask P "Port" "${P:-$DB_PORT}"; ask D "Database" "${D:-iosuite}"; ask U "User" "${U:-iosuite}"
-  asksecret W "Password (empty: keep the current one, or 'iosuite')"; [ -n "$W" ] || W="$(getenv IOTHING_AUTH_DB_PASSWORD)"; [ -n "$W" ] || W=iosuite
+  asksecret W "Password (empty: keep the current one, or 'iosuite')"; [ -n "$W" ] || W="$(getsuite PASSWORD)"; [ -n "$W" ] || W=iosuite
   ADBS="$H:$P/$D:$U:$W"
 fi
 split SUITE "$ADBS"
@@ -92,9 +93,10 @@ say "Writing iocalendar.env"
 touch iocalendar.env; chmod 600 iocalendar.env
 setenv() { grep -v "^$1=" iocalendar.env > iocalendar.env.tmp || true; printf '%s=%s\n' "$1" "$2" >> iocalendar.env.tmp; mv iocalendar.env.tmp iocalendar.env; chmod 600 iocalendar.env; }
 setenv DB_HOST "$DB_HOST"; setenv DB_PORT "$DB_PORT"; setenv DB_NAME "$DB_NAME"; setenv DB_USER "$DB_USER"; setenv DB_PASSWORD "$DB_PASSWORD"
-# the Shared ioSuite database keeps the variable names iothing-auth reads (IOTHING_AUTH_DB_*)
-setenv IOTHING_AUTH_DB_HOST "$SUITE_HOST"; setenv IOTHING_AUTH_DB_PORT "$SUITE_PORT"; setenv IOTHING_AUTH_DB_NAME "$SUITE_NAME"
-setenv IOTHING_AUTH_DB_USER "$SUITE_USER"; setenv IOTHING_AUTH_DB_PASSWORD "$SUITE_PASSWORD"
+# the Shared ioSuite database (iothing-auth 0.4+ reads IOSUITE_SHARED_DB_*; the older IOTHING_AUTH_DB_* lines are moved over)
+for _k in HOST PORT NAME USER PASSWORD; do grep -v "^IOTHING_AUTH_DB_$_k=" iocalendar.env > iocalendar.env.tmp || true; mv iocalendar.env.tmp iocalendar.env; done; chmod 600 iocalendar.env
+setenv IOSUITE_SHARED_DB_HOST "$SUITE_HOST"; setenv IOSUITE_SHARED_DB_PORT "$SUITE_PORT"; setenv IOSUITE_SHARED_DB_NAME "$SUITE_NAME"
+setenv IOSUITE_SHARED_DB_USER "$SUITE_USER"; setenv IOSUITE_SHARED_DB_PASSWORD "$SUITE_PASSWORD"
 setenv PORT "$PORT"; setenv TIMEZONE "$TZONE"
 [ -n "$PUBURL" ] && setenv PUBLIC_URL "$PUBURL"
 
