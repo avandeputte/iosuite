@@ -12,12 +12,10 @@ what the app will show on the start page later (today's events, the newest photo
 ## What it does
 
 - **A tile per app**, with the app's own icon and colours, that opens it. Each app registers itself, with its address,
-  in the suite's list of apps in the shared accounts database (`suite_apps`, iothing-auth 0.3), and the page reads it
-  there: nothing to type. ioSuite registers itself the same way. The address of each app comes from the environment
-  (`IOPIX_URL` and friends), from **Settings › Apps** (admins, to override), from what the app registered, or, failing
-  all three, from the host the page was opened on with the app's usual port (the one-box install):
-  `http://<this host>:8600` for ioPix, `47800` ioHealth, `8620` ioCalendar, `8610` ioContacts and ioNotes. An app the
-  page has no widgets for that registered itself gets a plain tile too. An app can be taken off the page in Settings.
+  in the suite's list of apps in the Shared ioSuite database (`suite_apps`, iothing-auth 0.3 and later), and the page
+  reads it there and only there: nothing to type, nothing to override. ioSuite registers itself the same way. An app
+  that has not registered (not installed, or not started yet) has no tile; one the page has no widgets for gets a plain
+  tile. Each person can hide tiles in Customize.
 - **A search box** at the top (⌘K / Ctrl-K): as you type it lists the bookmarks that match, the people ioContacts
   finds, and a row per app that searches itself (ioPix, ioCalendar and ioNotes open on their own results). Arrows
   pick a row, Enter opens it.
@@ -26,14 +24,14 @@ what the app will show on the start page later (today's events, the newest photo
   reach get a red dot too. The server asks each app once a minute and pings each bookmark every five.
 - **Your own page** (the gear next to the date › Customize the page): untick the tiles and cards you do not need, put the tiles and
   the cards (Birthdays, This week, the photo strip, the bookmarks) in your order, and pick your own photo strip
-  ("Default" is the admin's choice). Saved per account, on top of what the admin set in Settings › Apps.
+  ("Default" is the admin's choice). Saved per account, on top of the default the admin set in Settings › Home page.
 - **The week ahead** under the tiles: a Birthdays card from ioContacts (birthdays and anniversaries in the next 30
   days, with the contact's photo; a row opens the contact) and a This week card from ioCalendar (the coming seven
   days' events, day by day; a day opens in ioCalendar). Each stands no taller than the row of tiles, with "Show all"
   when there is more. With the Birthdays card on the page, the calendar's own "X's birthday" and anniversary events
   are left to it (the tile's Today and This week skip them). A card that its app cannot fill is left out.
 - **A strip of photos** the width of the page under the tiles: ioPix's Rediscover (photos at random), or
-  On this day; an admin picks which, or turns it off, in Settings › Apps.
+  On this day; an admin picks which, or turns it off, in Settings › Home page.
 - **A glimpse of each app on its tile**: ioPix shows photos taken on this day in earlier years (one per year, "3 years
   ago"), or a few picked at random (Rediscover) on a day without any; ioCalendar the rest of today (else the next event
   in the coming 60 days), in each calendar's colour; ioHealth today's steps with the last seven days as bars, the
@@ -132,8 +130,7 @@ git clone https://github.com/avandeputte/iosuite && cd iosuite
 | `IOTHING_COOKIE_DOMAIN` | the domain the session cookie is shared on (`example.com`): signed in at `home.example.com`, signed in at `photos.example.com` too |
 | `PORT` | web port for `run.sh` and the service (8630) |
 | `PUBLIC_URL` | the address people use (behind a proxy); also what ioSuite registers in the suite's list of apps |
-| `IOPIX_URL`, `IOHEALTH_URL`, `IOCALENDAR_URL`, `IOCONTACTS_URL`, `IONOTES_URL` | where each app is, as the family's browsers reach it, overriding what the app registered (or Settings › Apps; empty: what it registered, else this host with the app's usual port) |
-| `ACCUWEATHER_API_KEY`, `ACCUWEATHER_LOCATION` | the weather: an AccuWeather key and a location key (or Settings › Weather, which finds the location from a city name) |
+| `ACCUWEATHER_API_KEY`, `ACCUWEATHER_LOCATION` | the weather: an AccuWeather key and a location key (or Settings › Home page, which finds the location from a city name) |
 | `ADMIN_USER`, `ADMIN_PASSWORD` | the first admin, made on the first start when there are no accounts |
 | `AUTH_PROXY`, `AUTH_PROXY_HEADER`, `AUTH_PROXY_TRUSTED`, `CF_ACCESS_TEAM`, `CF_ACCESS_AUD` | sign-in at a reverse proxy, as in the other io apps (Cloudflare Access, Authelia, Authentik, oauth2-proxy…) |
 | `UPDATE_CHECK` | `0` turns the daily version check off for good |

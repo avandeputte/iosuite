@@ -15,8 +15,6 @@ os.environ.update(DB_HOST=_s["host"], DB_PORT=str(_s["port"]), DB_USER=_s["user"
 _authtest.fresh_database("suite_test")
 os.environ.update(_authtest.auth_env("suite_test_shared"))
 os.environ.setdefault("UPDATE_CHECK", "0")
-for k in ("IOPIX_URL", "IOHEALTH_URL", "IOCALENDAR_URL", "IOCONTACTS_URL", "IONOTES_URL"):
-    os.environ.pop(k, None)
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from fastapi.testclient import TestClient  # noqa: E402
@@ -39,6 +37,8 @@ def client():
     from iothing_auth import suite
     from app import apps
     suite.invalidate()
+    for a in apps.CATALOGUE:  # every io app registered (each does so itself when it starts)
+        suite.register(a["key"], a["name"], url=f"https://{a['key'][2:]}.example.com", version="1.0")
     apps.forget_registry()
     from app.auth import auth
     auth._registered = False  # the row was just deleted: registered again at the next request

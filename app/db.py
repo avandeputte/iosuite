@@ -1,6 +1,6 @@
 """MariaDB access: one short connection per unit of work, and the schema (created and migrated at start).
 
-The start page keeps a `meta` table of settings (the apps' addresses, the weather settings and its cached answers, the
+The start page keeps a `meta` table of settings (the default photo strip, the weather settings and its cached answers, the
 update switch, the schema version) and the bookmarks. What the page grows later gets its tables here too."""
 import threading
 from contextlib import contextmanager

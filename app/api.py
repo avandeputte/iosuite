@@ -56,7 +56,7 @@ def list_apps(request: Request):
     me(request)
     host = request.headers.get("x-forwarded-host") or request.headers.get("host") or request.url.netloc
     u = me(request)
-    return {"items": [t for t in apps.tiles(host) if not t["hidden"]], "photoStrip": apps.photo_strip(), "layout": layout.get(u["id"])}
+    return {"items": apps.tiles(host), "photoStrip": apps.photo_strip(), "layout": layout.get(u["id"])}
 
 
 @router.get("/api/apps/status")
@@ -84,26 +84,26 @@ async def my_layout_save(request: Request):
         raise HTTPException(400, str(e))
 
 
-@router.get("/api/apps/settings")
-def apps_settings(request: Request):
+@router.get("/api/home/settings")
+def home_settings(request: Request):
+    """Admins: what the home page shows everyone by default (the photo strip under the tiles)."""
     admin(request)
-    return {"items": apps.settings(), "photoStrip": apps.photo_strip()}
+    return {"photoStrip": apps.photo_strip()}
 
 
-@router.post("/api/apps/settings")
-async def apps_save(request: Request):
-    """Admins. Body: {iopix: {url?: str, hidden?: bool}, iohealth: {...}, ..., photoStrip?: rediscover | onthisday | off}."""
+@router.post("/api/home/settings")
+async def home_save(request: Request):
+    """Admins. Body: {photoStrip: rediscover | onthisday | off}."""
     admin(request)
     b = await request.json()
     if not isinstance(b, dict):
-        raise HTTPException(400, "An object of apps, please")
+        raise HTTPException(400, "An object, please")
     try:
         if "photoStrip" in b:
-            apps.set_photo_strip(b.pop("photoStrip"))
-        apps.save(b)
+            apps.set_photo_strip(b["photoStrip"])
     except ValueError as e:
         raise HTTPException(400, str(e))
-    return {"items": apps.settings(), "photoStrip": apps.photo_strip()}
+    return {"photoStrip": apps.photo_strip()}
 
 
 # ------------------------------------------------------------------ the weather

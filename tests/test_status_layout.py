@@ -68,7 +68,7 @@ def test_my_layout(client):
     assert client.put("/api/me/layout", json={"cards": ["strip", "strip"]}).status_code == 400
     assert client.put("/api/me/layout", json={"cards": ["iopix"]}).status_code == 400
     assert client.get("/api/apps").json()["layout"]["order"] == ["iocalendar", "iopix"]
-    assert client.put("/api/me/layout", json={"hidden": ["nope"]}).status_code == 400
+    assert client.put("/api/me/layout", json={"hidden": ["Not an app!"]}).status_code == 400
     assert client.put("/api/me/layout", json={"order": ["iopix", "iopix"]}).status_code == 400
     assert client.put("/api/me/layout", json={"strip": "all"}).status_code == 400
     assert client.put("/api/me/layout", json=[]).status_code == 400

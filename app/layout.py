@@ -1,8 +1,8 @@
 """Each person's own start page: which tiles and cards they see, in what order, and which photo strip.
 
-Saved per account in the meta table ("user:<id>:layout", JSON), on top of what the admin set in Settings › Apps:
-an app the admin hid is not on anyone's page; one the admin shows, a person may hide for themselves. Empty: the page
-as the admin laid it out."""
+Saved per account in the meta table ("user:<id>:layout", JSON). Every app registered in the suite's list is on the
+page unless the person hides it; the photo strip is the admin's choice (Settings › Home page) unless they pick another.
+Empty: the page as it comes."""
 import json
 
 from app import apps, db
@@ -25,8 +25,8 @@ def get(user_id: int) -> dict:
         v = json.loads(raw)
     except ValueError:
         return dict(EMPTY)
-    return {"hidden": [k for k in v.get("hidden", []) if k in apps.KEYS or k in SECTIONS],
-            "order": [k for k in v.get("order", []) if k in apps.KEYS],
+    return {"hidden": [k for k in v.get("hidden", []) if apps.is_key(k) or k in SECTIONS],
+            "order": [k for k in v.get("order", []) if apps.is_key(k)],
             "cards": [k for k in v.get("cards", []) if k in SECTIONS],
             "strip": v.get("strip") if v.get("strip") in apps.STRIPS else None}
 
@@ -39,10 +39,10 @@ def save(user_id: int, body: dict) -> dict:
     order = body.get("order") or []
     cards = body.get("cards") or []
     strip = body.get("strip") or None
-    if not isinstance(hidden, list) or not all(isinstance(k, str) and (k in apps.KEYS or k in SECTIONS) for k in hidden):
-        raise ValueError(f"hidden: a list of {', '.join(apps.KEYS + list(SECTIONS))}")
-    if not isinstance(order, list) or not all(isinstance(k, str) and k in apps.KEYS for k in order) or len(set(order)) != len(order):
-        raise ValueError(f"order: a list of {', '.join(apps.KEYS)}, each once")
+    if not isinstance(hidden, list) or not all(apps.is_key(k) or k in SECTIONS for k in hidden):
+        raise ValueError(f"hidden: a list of app keys and {', '.join(SECTIONS)}")
+    if not isinstance(order, list) or not all(apps.is_key(k) for k in order) or len(set(order)) != len(order):
+        raise ValueError("order: a list of app keys, each once")
     if not isinstance(cards, list) or not all(isinstance(k, str) and k in SECTIONS for k in cards) or len(set(cards)) != len(cards):
         raise ValueError(f"cards: a list of {', '.join(SECTIONS)}, each once")
     if strip is not None and strip not in apps.STRIPS:
