@@ -1,5 +1,6 @@
 """What the tiles show (app/widgets.py), with the apps' answers mocked: no app is asked over the network."""
 import datetime as dt
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -143,8 +144,9 @@ def test_iocalendar_yesterdays_all_day_event_is_not_today(client, apps_answer):
 def test_iocalendar_week_ahead(client, apps_answer):
     table, asked = apps_answer
     table[("iocalendar", "/api/calendars")] = {"items": [{"id": 1, "color": "#963522"}]}
-    tomorrow = dt.date.today() + dt.timedelta(days=1)
-    day3 = dt.date.today() + dt.timedelta(days=3)
+    today = dt.datetime.now(ZoneInfo("Europe/Brussels")).date()  # the viewer's day, not the runner's (UTC 23:00 is Brussels' next day)
+    tomorrow = today + dt.timedelta(days=1)
+    day3 = today + dt.timedelta(days=3)
     table[("iocalendar", "/api/occurrences")] = {"items": [
         {"calendarId": 1, "title": "Dentist", "start": f"{day3}T10:00:00", "end": f"{day3}T11:00:00", "location": "Town"},
         {"calendarId": 2, "title": "Off", "start": tomorrow.isoformat(), "end": tomorrow.isoformat(), "allDay": True},

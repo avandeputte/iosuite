@@ -218,6 +218,9 @@ const cardOrder = (L) => [...(L.cards || []), ...CARDS.filter((k) => !(L.cards |
 // ------------------------------------------------------------------ the search box (⌘K / Ctrl-K)
 /* Type, and the box lists the bookmarks that match, the contacts ioContacts finds, and a row per app that searches
    itself (ioPix, ioCalendar, ioNotes open on their own results). Arrows pick a row, Enter opens it, Escape clears. */
+// Lower case without accents, so "celia" finds "Célia" (and "Celia" finds "célia"); a few letters NFD does not split.
+const FOLD = { ß: 'ss', æ: 'ae', œ: 'oe', ø: 'o', ł: 'l', đ: 'd', ð: 'd', þ: 'th', ı: 'i' };
+const fold = (s) => String(s || '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[ßæœøłđðþı]/g, (c) => FOLD[c]);
 const APP_SEARCH = { iopix: (q) => `#/photos?q=${encodeURIComponent(q)}`, iocalendar: (q) => `#/search/${encodeURIComponent(q)}`, ionotes: (q) => `#/notes?q=${encodeURIComponent(q)}` };
 function searchBox() {
   const inp = h('input', { class: 'q', type: 'search', placeholder: 'Search', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Search bookmarks, contacts and the apps' });
@@ -230,7 +233,7 @@ function searchBox() {
     const q = inp.value.trim(), ql = q.toLowerCase();
     rows = [];
     if (!q) return hide();
-    const links = (S.bookmarks || []).filter((l) => `${l.name} ${l.description || ''} ${l.href}`.toLowerCase().includes(ql)).slice(0, 6);
+    const links = (S.bookmarks || []).filter((l) => fold(`${l.name} ${l.description || ''} ${l.href}`).includes(fold(q))).slice(0, 6);
     const contacts = S.apps.find((a) => a.key === 'iocontacts');
     const kids = [
       links.length ? h('div', { class: 'qhead' }, 'Bookmarks') : null,
