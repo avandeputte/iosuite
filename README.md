@@ -15,11 +15,15 @@ what the app will show on the start page later (today's events, the newest photo
   environment (`IOPIX_URL` and friends), from **Settings › Apps** (admins), or, failing both, from the host the page was
   opened on with the app's usual port (the one-box install): `http://<this host>:8600` for ioPix, `47800` ioHealth,
   `8620` ioCalendar, `8610` ioContacts and ioNotes. An app can be taken off the page in Settings.
+- **The week ahead** under the tiles: a Birthdays card from ioContacts (birthdays and anniversaries in the next 30
+  days, with the contact's photo; a row opens the contact) and a This week card from ioCalendar (the coming seven
+  days' events, day by day; a day opens in ioCalendar). A card that its app cannot fill is left out.
 - **A strip of photos** the width of the page under the tiles: ioPix's Rediscover (photos at random), or
   On this day; an admin picks which, or turns it off, in Settings › Apps.
 - **A glimpse of each app on its tile**: ioPix shows photos taken on this day in earlier years (one per year, "3 years
   ago"), or a few picked at random (Rediscover) on a day without any; ioCalendar the rest of today (else the next event
-  in the coming 60 days), in each calendar's colour; ioHealth today's steps and the move, exercise and stand rings. The
+  in the coming 60 days), in each calendar's colour; ioHealth today's steps with the last seven days as bars, the
+  move, exercise and stand rings, and last night's sleep. The
   server asks each app over its own API with the viewer's sign-in (the suite's session cookie, or the Basic / bearer
   credentials they came with), so everyone sees only what that app shows them; ioPix's thumbnails come through the
   start page too. An app that is down, or not open to that account, leaves its tile as it was. Nothing is kept.
@@ -142,7 +146,7 @@ what a viewer may not change. CI runs them against MariaDB.
 app/main.py        the application: start-up (tables, first admin, the update check), who is asking, routes
 app/api.py         the REST API: status, the apps and their settings, the server (version, updates)
 app/apps.py        the catalogue of the suite's apps and where each one is (environment, Settings, this host)
-app/widgets.py     what the tiles show: ioPix, ioCalendar and ioHealth asked over their APIs with the viewer's sign-in
+app/widgets.py     what the tiles and cards show: ioPix, ioCalendar, ioHealth and ioContacts asked over their APIs with the viewer's sign-in
 app/weather.py     AccuWeather: the settings, the place search, the cached conditions and forecast
 app/bookmarks.py   the bookmark groups and links, and the homepage bookmarks.yaml import
 app/auth.py        the shared accounts (iothing-auth), as ioSuite uses them
