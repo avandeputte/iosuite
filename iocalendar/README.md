@@ -78,6 +78,10 @@ version as it was), the database is brought up to date, and the service restarts
 answers. In Docker, pull the image instead. From a shell: `./update.sh` (`--check` only looks,
 `IOCALENDAR_REF=<sha>` installs a given commit).
 
+## Releases
+
+Every version merged into main is released by itself: when `APP_VERSION` (app/__init__.py) has no GitHub release yet, CI tags it `v<version>`, publishes the image as `ghcr.io/avandeputte/iocalendar:v<version>` (and `latest`) and makes the release with the merge's message as notes. Bump the version in a change to release it.
+
 ## Run
 
 ioCalendar needs Python 3.10+, git (to install `iothing-auth`) and a MariaDB or MySQL database. Give it its own database

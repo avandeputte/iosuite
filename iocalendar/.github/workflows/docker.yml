@@ -1,5 +1,6 @@
 # Tests against a MariaDB service, then builds the container image and pushes it to ghcr.io on pushes to main and
-# version tags (pull requests only build).
+# version tags (pull requests only build). A push to main whose APP_VERSION (app/__init__.py) has no release yet is
+# released: the image also gets the v<version> tag, and a GitHub release v<version> is made with the merge's message.
 name: Tests and image
 
 on:
@@ -53,6 +54,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - id: version
+        run: echo "version=$(python3 -c 'import re;print(re.search(r"APP_VERSION = \"([^\"]+)\"", open("app/__init__.py").read()).group(1))')" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
       - name: Log in to ghcr.io
@@ -68,6 +71,7 @@ jobs:
           images: ${{ env.IMAGE }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=v${{ steps.version.outputs.version }},enable=${{ github.ref == 'refs/heads/main' }}
             type=ref,event=tag
             type=sha,prefix=
       - uses: docker/build-push-action@v6
@@ -77,3 +81,22 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+  release:
+    # every new version on main becomes a release (tag v<version>), with no one having to click anything
+    needs: image
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Release the version when it is new
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          v="v$(python3 -c 'import re;print(re.search(r"APP_VERSION = \"([^\"]+)\"", open("app/__init__.py").read()).group(1))')"
+          if gh release view "$v" >/dev/null 2>&1; then echo "$v is released already"; exit 0; fi
+          git log -1 --format=%B > notes.md
+          printf '\n\nImage: `ghcr.io/avandeputte/iocalendar:%s` (also `latest`).\n' "$v" >> notes.md
+          gh release create "$v" --target "$GITHUB_SHA" --title "$v: $(git log -1 --format=%s | sed -E 's/^v[0-9.]+: //; s/ \(#[0-9]+\)$//')" --notes-file notes.md
