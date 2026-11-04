@@ -519,15 +519,40 @@ async function drawBookmarks(el) {
   const canEdit = ['editor', 'admin'].includes(S.user.role);
   S.bookmarks = gs.flatMap((g) => g.links);  // the search box looks through them
   if (!gs.length) { el.replaceChildren(canEdit ? h('a', { class: 'lnk small', href: '#/settings/bookmarks' }, 'Add bookmarks') : null); return; }
-  el.replaceChildren(...gs.filter((g) => g.links.length || canEdit).map((g) => h('div', { class: 'bmgroup' }, h('h2', null, g.name),
+  const groups = gs.filter((g) => g.links.length || canEdit).map((g) => h('div', { class: 'bmgroup' }, h('h2', null, g.name),
     g.links.map((l) => {
       const src = bmIcon(l);
       return h('a', { class: 'bm', href: l.href, title: l.href, target: '_blank', rel: 'noreferrer', 'data-id': l.id },
         h('span', { class: 'bmic' }, src ? h('img', { src, alt: '', onerror: (e) => { e.target.replaceWith(l.abbr); } }) : l.abbr),
         h('span', { class: 'bmname' }, l.name), h('span', { class: 'bmdesc muted small' }, l.description));
     }),
-    canEdit && !g.links.length ? h('a', { class: 'lnk small', href: '#/settings/bookmarks' }, 'Empty: add a link') : null)));
+    canEdit && !g.links.length ? h('a', { class: 'lnk small', href: '#/settings/bookmarks' }, 'Empty: add a link') : null));
+  packBookmarks(el, groups);
   drawBookmarkStatus(el);
+}
+
+/** The groups packed into columns: each goes, in order, under the shortest column so far, so a short group fills the
+    room under a short column instead of starting a new row under the longest one. Packed again when the width changes
+    (the number of columns follows it: as many 250 px columns as fit, one on a phone). */
+function packBookmarks(el, groups) {
+  const GAP = 20, MIN = 250;
+  let cols = 0;
+  const pack = () => {
+    const width = el.clientWidth || el.getBoundingClientRect().width;
+    const n = Math.max(1, Math.min(groups.length, Math.floor((width + GAP) / (MIN + GAP))));
+    if (n === cols) return;
+    cols = n;
+    const heights = new Array(n).fill(0), columns = Array.from({ length: n }, () => h('div', { class: 'bmcol' }));
+    for (const g of groups) {
+      const i = heights.indexOf(Math.min(...heights));
+      columns[i].append(g);
+      heights[i] += 36 + g.querySelectorAll('.bm, .lnk').length * 48 + 20;  // the heading, the rows, the gap under
+    }
+    el.style.setProperty('--bmcols', n);
+    el.replaceChildren(...columns);
+  };
+  pack();
+  new ResizeObserver(pack).observe(el);
 }
 
 // ------------------------------------------------------------------ settings

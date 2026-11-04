@@ -44,8 +44,9 @@ what the app will show on the start page later (today's events, the newest photo
 - **Bookmarks**, as [homepage](https://gethomepage.dev/configs/bookmarks/) lays them out: groups of links under the
   apps, each with a two-letter badge (or an icon: an image address, a file name from the dashboard-icons
   collection, `github.png`, or an SVG of your own uploaded for the link and kept in the database), the name and the
-  site. Editors and admins add, change, reorder and move them in Settings › Bookmarks, or paste a homepage
-  `bookmarks.yaml` to import it.
+  site. The groups pack into columns (as many 250 px columns as fit): each goes, in order, under the shortest column
+  so far, so a short group fills the room under another instead of starting a new row. Editors and admins add,
+  change, reorder and move them in Settings › Bookmarks, or paste a homepage `bookmarks.yaml` to import it.
 - **The suite's accounts**: the same sign-in as every io app (the account tiles, one click for a passwordless viewer),
   the account page (display name, email, password, sign out everywhere) and, for admins, the family's accounts and their
   role here. Sign-in at a reverse proxy (Cloudflare Access…) works as in the other apps.
