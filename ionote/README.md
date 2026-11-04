@@ -114,6 +114,11 @@ not, web or which app): `GET /api/auth/sessions` for your own, `GET /api/users/<
 are scrypt-hashed; wrong passwords cost a growing wait. **Read-only** (Settings, or `READ_ONLY=1`) refuses every
 change, for everyone. Write requests from another site are refused.
 
+ionotes writes its row in the **suite's list of apps** (iothing-auth's `suite_apps` table: name, version, colour,
+icon, address) on its first request, so ioSuite's start page and the other apps find it without anyone typing an
+address. The address is `APP_URL` when set, otherwise the best one ionotes is reached at (a host under
+`IOTHING_COOKIE_DOMAIN` over HTTPS beats a LAN name, which beats an IP address).
+
 
 If the notes from before accounts went to another admin than intended, Maintenance › Storage and backups › Who owns
 the notes gives all of one account's notes (with folders and tag colours) to another; that account's devices sync
@@ -209,7 +214,7 @@ Maintenance › Import): records keep their ids, and a newer copy on the server 
 | `DB_HOST` / `DB_PORT` / `DB_DATABASE` / `DB_USER` / `DB_PASSWORD` | | the database |
 | `PORT` | `8610` | |
 | `DATA_DIR` | `./data` | the log (`ionotes.log`) and the database settings saved from the web app |
-| `APP_URL` | `http://localhost:8610` | the address ionotes is reached at, for links in MCP answers |
+| `APP_URL` | `http://localhost:8610` | the address ionotes is reached at, for links in MCP answers and the suite's list of apps |
 | `ADMIN_USER` / `ADMIN_PASSWORD` | | the first admin, created on a first start with no accounts |
 | `IOTHING_AUTH_DB_HOST` / `_PORT` / `_NAME` / `_USER` / `_PASSWORD` | `127.0.0.1` / `3306` / `auth` / `auth` / `auth` | the suite's shared account database (MariaDB) |
 | `IOTHING_COOKIE_DOMAIN` | | the domain the session cookie is shared on (e.g. `example.com`); a LAN address outside it gets a cookie of its own |

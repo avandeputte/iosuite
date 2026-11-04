@@ -80,3 +80,12 @@ def test_status_tells_admins_of_a_newer_version_while_the_daily_check_is_on(clie
         assert "update" not in client.get("/api/status").json()
     finally:
         updates._checked.clear()
+
+
+def test_ionotes_registers_in_the_suites_list_of_apps(client):
+    from iothing_auth import suite
+    from app import __version__
+    client.get("/api/notes")
+    row = suite.get("ionotes")
+    assert row["name"] == "ioNotes" and row["version"] == __version__
+    assert row["description"] == "Notes" and row["color"] == "#1c5a5e" and row["icon"] == "/icons/icon-192.png"

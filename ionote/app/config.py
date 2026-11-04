@@ -28,6 +28,9 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 PORT = int(os.environ.get("PORT", 8610))
 # the address the web app is reached at (for links in MCP results), e.g. https://notes.example.com
 APP_URL = os.environ.get("APP_URL", "").rstrip("/") or f"http://localhost:{PORT}"
+# the address the suite's other apps link to (iothing-auth's list of apps): APP_URL as configured; empty: the address
+# ionotes is reached at, noted by iothing-auth
+PUBLIC_URL = os.environ.get("APP_URL", "").strip().rstrip("/")
 
 # the first admin account, created on a first start with no accounts (containers, installers)
 ADMIN_USER = os.environ.get("ADMIN_USER", "").strip()

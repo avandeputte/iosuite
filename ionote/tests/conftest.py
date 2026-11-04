@@ -51,6 +51,9 @@ def clean():
     authdb.ex("DELETE FROM users")
     authdb.ex("ALTER TABLE users AUTO_INCREMENT = 1")  # the tests count on the first account being #1
     authdb.ex("DELETE FROM settings")
+    authdb.ex("DELETE FROM suite_apps")
+    from app.auth import auth
+    auth._registered = False  # each test registers ionotes in the suite's list again
     users.invalidate()
     users._attempts.clear()
     proxyauth.forget_identities()
