@@ -6,27 +6,30 @@
 #   ./setup.sh --yes ...       no questions: defaults and the flags below
 #
 # Flags: --db HOST:PORT/DATABASE:USER:PASSWORD   (MariaDB / MySQL; default 127.0.0.1:3306/contacts:contacts:contacts)
+#        --suite-db HOST:PORT/DATABASE:USER:PASSWORD   (the Shared ioSuite database: the suite's accounts and
+#                                     settings; default: the same server, iosuite:iosuite:iosuite)
 #        --admin NAME:PASSWORD | --no-admin   --port N (8610)   --ldap-port N (3890; 0 turns LDAP off)
 #        --public-url URL   --service | --no-service   --system-deps | --no-system-deps   --python PATH
-# Secrets can stay off the command line: IOCONTACTS_DB and IOCONTACTS_ADMIN in the environment do what --db and
-# --admin do. Run it again at any time: it keeps iocontacts.env and only changes what you answer.
+# Secrets can stay off the command line: IOCONTACTS_DB, IOCONTACTS_SUITE_DB and IOCONTACTS_ADMIN in the environment
+# do what --db, --suite-db and --admin do. Run it again at any time: it keeps iocontacts.env and only changes what you answer.
 set -e
 cd "$(dirname "$0")"
 APP="$(pwd)"
 say() { printf '\n\033[1;34m==>\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
-YES=0; DBS=""; ADMIN=""; NO_ADMIN=0; PORT=""; LDAP=""; PUBURL=""; SERVICE=""; SYSDEPS=""; PY=""
+YES=0; DBS=""; SDBS=""; ADMIN=""; NO_ADMIN=0; PORT=""; LDAP=""; PUBURL=""; SERVICE=""; SYSDEPS=""; PY=""
 while [ $# -gt 0 ]; do
   case "$1" in
-    --yes) YES=1; shift;; --db) DBS="$2"; shift 2;; --admin) ADMIN="$2"; shift 2;; --no-admin) NO_ADMIN=1; shift;;
+    --yes) YES=1; shift;; --db) DBS="$2"; shift 2;; --suite-db) SDBS="$2"; shift 2;; --admin) ADMIN="$2"; shift 2;; --no-admin) NO_ADMIN=1; shift;;
     --port) PORT="$2"; shift 2;; --ldap-port) LDAP="$2"; shift 2;; --public-url) PUBURL="$2"; shift 2;;
     --service) SERVICE=1; shift;; --no-service) SERVICE=0; shift;; --system-deps) SYSDEPS=1; shift;; --no-system-deps) SYSDEPS=0; shift;;
     --python) PY="$2"; shift 2;;
-    -h|--help) sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 0;;
+    -h|--help) sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 0;;
     *) die "unknown option $1 (try --help)";;
   esac
 done
 [ -n "$DBS" ] || DBS="${IOCONTACTS_DB:-}"
+[ -n "$SDBS" ] || SDBS="${IOCONTACTS_SUITE_DB:-}"
 [ -n "$ADMIN" ] || ADMIN="${IOCONTACTS_ADMIN:-}"
 ask() { _v="$1"; _q="$2"; _d="$3"
   if [ "$YES" = 1 ] || [ ! -t 0 ]; then eval "$_v=\"\$_d\""; return; fi
@@ -54,6 +57,18 @@ if [ -z "$DBS" ]; then
   DBS="$H:$P/$D:$U:$W"
 fi
 DB_HOST="${DBS%%:*}"; r="${DBS#*:}"; DB_PORT="${r%%/*}"; r="${r#*/}"; DB_NAME="${r%%:*}"; r="${r#*:}"; DB_USER="${r%%:*}"; DB_PASSWORD="${r#*:}"
+# the Shared ioSuite database (accounts, sessions and settings shared by the ioThing apps); an install from before
+# 0.4.7 kept it as IOTHING_AUTH_DB_* (database and user `auth`): its values are the defaults, then written as IOSUITE_DB_*
+suiteenv() { v="$(getenv "IOSUITE_DB_$1")"; [ -n "$v" ] || v="$(getenv "IOTHING_AUTH_DB_$1")"; printf '%s' "$v"; }
+if [ -z "$SDBS" ]; then
+  if [ -n "$(getenv IOTHING_AUTH_DB_HOST)$(getenv IOTHING_AUTH_DB_NAME)$(getenv IOTHING_AUTH_DB_USER)" ] && [ -z "$(getenv IOSUITE_DB_NAME)" ]; then
+    SD0=auth; SU0=auth; else SD0=iosuite; SU0=iosuite; fi
+  H="$(suiteenv HOST)"; P="$(suiteenv PORT)"; D="$(suiteenv NAME)"; U="$(suiteenv USER)"
+  ask H "Shared ioSuite database: host" "${H:-$DB_HOST}"; ask P "Port" "${P:-$DB_PORT}"; ask D "Database" "${D:-$SD0}"; ask U "User" "${U:-$SU0}"
+  asksecret W "Password (empty: keep the current one, or '$SU0')"; [ -n "$W" ] || W="$(suiteenv PASSWORD)"; [ -n "$W" ] || W="$SU0"
+  SDBS="$H:$P/$D:$U:$W"
+fi
+SUITE_HOST="${SDBS%%:*}"; r="${SDBS#*:}"; SUITE_PORT="${r%%/*}"; r="${r#*/}"; SUITE_NAME="${r%%:*}"; r="${r#*:}"; SUITE_USER="${r%%:*}"; SUITE_PASSWORD="${r#*:}"
 [ -n "$PORT" ] || { P="$(getenv PORT)"; ask PORT "Web port" "${P:-8610}"; }
 [ -n "$LDAP" ] || { L="$(getenv LDAP_PORT)"; ask LDAP "LDAP directory port (0: off)" "${L:-3890}"; }
 [ -n "$PUBURL" ] || { U2="$(getenv PUBLIC_URL)"; ask PUBURL "Public address, e.g. https://contacts.example.com (empty: as reached)" "$U2"; }
@@ -73,6 +88,9 @@ say "Writing iocontacts.env"
 touch iocontacts.env; chmod 600 iocontacts.env
 setenv() { grep -v "^$1=" iocontacts.env > iocontacts.env.tmp || true; printf '%s=%s\n' "$1" "$2" >> iocontacts.env.tmp; mv iocontacts.env.tmp iocontacts.env; chmod 600 iocontacts.env; }
 setenv DB_HOST "$DB_HOST"; setenv DB_PORT "$DB_PORT"; setenv DB_NAME "$DB_NAME"; setenv DB_USER "$DB_USER"; setenv DB_PASSWORD "$DB_PASSWORD"
+setenv IOSUITE_DB_HOST "$SUITE_HOST"; setenv IOSUITE_DB_PORT "$SUITE_PORT"; setenv IOSUITE_DB_NAME "$SUITE_NAME"
+setenv IOSUITE_DB_USER "$SUITE_USER"; setenv IOSUITE_DB_PASSWORD "$SUITE_PASSWORD"
+grep -v '^IOTHING_AUTH_DB_' iocontacts.env > iocontacts.env.tmp || true; mv iocontacts.env.tmp iocontacts.env; chmod 600 iocontacts.env
 setenv PORT "$PORT"; setenv LDAP_PORT "$LDAP"
 [ -n "$PUBURL" ] && setenv PUBLIC_URL "$PUBURL"
 

@@ -298,7 +298,7 @@ def listing(book_ids: list[int], status: str = "pending", contact_id: int | None
                 f"WHERE s.status = %s AND c.deleted = 0 AND c.book_id IN ({marks}){extra} "
                 f"ORDER BY c.fn, s.contact_id, s.field, s.id LIMIT %s", (*args, limit))
     from app import users
-    names = users.names_of({r["by_user_id"] for r in rows if r["by_user_id"]})  # the accounts live in the shared auth database
+    names = users.names_of({r["by_user_id"] for r in rows if r["by_user_id"]})  # the accounts live in the Shared ioSuite database
     return [{"id": r["id"], "contactId": r["contact_id"], "fn": r["fn"], "bookId": r["book_id"], "field": r["field"],
              "fieldLabel": FIELDS.get(r["field"], (r["field"],))[0], "value": json.loads(r["value"]), "source": r["source"],
              "evidence": r["evidence"], "note": r["note"], "by": names.get(r["by_user_id"]), "status": r["status"],

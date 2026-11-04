@@ -362,7 +362,7 @@ def history(book_ids: list[int], limit: int = 50) -> list[dict]:
     from app import users
     rows = db.q("SELECT m.id, m.keep_id, m.other_ids, m.names, m.keep_etag, m.created, m.undone, m.user_id, c.etag, c.book_id, c.deleted, c.fn "
                 "FROM merges m LEFT JOIN contacts c ON c.id = m.keep_id ORDER BY m.id DESC LIMIT %s", (limit * 3,))
-    who = users.names_of({r["user_id"] for r in rows if r["user_id"]})  # the accounts live in the shared auth database
+    who = users.names_of({r["user_id"] for r in rows if r["user_id"]})  # the accounts live in the Shared ioSuite database
     for r in rows:
         if r["book_id"] not in book_ids:
             continue

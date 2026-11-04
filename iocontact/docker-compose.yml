@@ -16,6 +16,10 @@ services:
       DB_NAME: contacts
       DB_USER: contacts
       DB_PASSWORD: change-me          # CHANGE ME
+      # the Shared ioSuite database (accounts, sessions and settings shared by the ioThing apps); by default on DB_HOST
+      IOSUITE_DB_NAME: iosuite
+      IOSUITE_DB_USER: iosuite
+      IOSUITE_DB_PASSWORD: change-me  # CHANGE ME
       ADMIN_USER: admin               # the first admin, made on the first start (or remove both and make it in the browser)
       ADMIN_PASSWORD: change-me-please  # CHANGE ME (8 characters or more)
       # PUBLIC_URL: https://contacts.example.com   # behind a reverse proxy: links in the calendar feed and Settings

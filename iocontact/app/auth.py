@@ -1,7 +1,7 @@
 """The shared ioThing accounts (iothing-auth), as ioContacts uses them.
 
-Accounts, passwords, sessions, app passwords and roles live in the suite's auth database (IOTHING_AUTH_DB_* in
-iocontacts.env), shared with ioPix and ioNotes: one sign-in serves every app on the domain (IOTHING_COOKIE_DOMAIN).
+Accounts, passwords, sessions, app passwords and roles live in the Shared ioSuite database (IOSUITE_DB_* in
+iocontacts.env, see app/config.py), shared with ioPix and ioNotes: one sign-in serves every app on the domain (IOTHING_COOKIE_DOMAIN).
 What is ioContacts' own stays per app: the role an account holds here, and which contact is "me" (the account's
 `me_contact_id` value in its iocontacts data). The rest of the app sees an account as the row dict it always did
 (id, name, display_name, email, role, pw_hash, me_contact_id); `row_of` makes one from a shared account.

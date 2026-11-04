@@ -156,7 +156,7 @@ git clone https://github.com/avandeputte/iocontacts && cd iocontacts
 | `LDAP_PORT`, `LDAP_HOST`, `LDAP_BASE` | the LDAP directory (3890, all addresses, `dc=iocontacts`); `LDAP_PORT=0` turns it off |
 | `PUBLIC_URL` | the address people use (behind a proxy), for links in the calendar feed and Settings |
 | `ADMIN_USER`, `ADMIN_PASSWORD` | the first admin, made on the first start when there are no accounts |
-| `IOTHING_AUTH_DB_HOST`, `_PORT`, `_NAME`, `_USER`, `_PASSWORD` | the ioThing suite's shared account database (MariaDB, `auth`): accounts, passwords, sessions, app passwords and roles are shared with ioPix and ioNotes (the `iothing-auth` library); only the role an account holds here and its "me" contact are ioContacts' own. `iothing-auth migrate --iocontacts` folds a 0.3 install's `users` table into it |
+| `IOSUITE_DB_HOST`, `_PORT`, `_NAME`, `_USER`, `_PASSWORD` | the Shared ioSuite database (MariaDB; by default on the contacts' server, database, user and password `iosuite`): accounts, passwords, sessions, app passwords, roles and the suite-wide settings, shared with ioPix and ioNotes (the `iothing-auth` library); only the role an account holds here and its "me" contact are ioContacts' own. Installs from before 0.4.7 used `IOTHING_AUTH_DB_*` (database and user `auth`): those still work as they were, and running `setup.sh` again rewrites them as `IOSUITE_DB_*`. `iothing-auth migrate --iocontacts` folds a 0.3 install's `users` table into it |
 | `IOTHING_COOKIE_DOMAIN` | the domain the session cookie is shared on (`example.com`): signed in at `photo.example.com`, signed in at `contacts.example.com` too |
 | `AUTH_PROXY`, `AUTH_PROXY_HEADER`, `AUTH_PROXY_TRUSTED`, `CF_ACCESS_TEAM`, `CF_ACCESS_AUD` | sign-in at a reverse proxy, exactly as in iopix: Cloudflare Access (with token checking), Authelia, Authentik, oauth2-proxy… matched to accounts by email, then name |
 | `IOPIX_URL`, `IOPIX_USER`, `IOPIX_PASSWORD`, `IOPIX_CF_CLIENT_ID`, `IOPIX_CF_CLIENT_SECRET` | ioPix (or Settings › ioPix) |
@@ -199,7 +199,7 @@ app/quality.py     duplicates (scored), merging with choices and undo, data qual
 app/enrich.py      enrichment: the public lookups and the suggestions queue
 app/mcp/           the MCP server: base (who is asking, finding contacts), read, write and admin tools
 app/updates.py     the version check and running update.sh from the web app
-app/users.py       accounts, sessions, app passwords (the suite's, through iothing-auth)   app/proxyauth.py  sign-in at a reverse proxy
+app/users.py       accounts, sessions, app passwords (the Shared ioSuite database's, through iothing-auth)   app/proxyauth.py  sign-in at a reverse proxy
 static/            the web app (index.html, app.js, app.css, icons)
 proxmox/           the community-scripts LXC installer      setup.sh, run.sh, update.sh, Dockerfile
 ```

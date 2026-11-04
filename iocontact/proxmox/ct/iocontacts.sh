@@ -3,14 +3,16 @@
 # this is the ct/ script; proxmox/install/iocontacts-install.sh runs inside the container.
 #
 # After the framework's own questions (resources, network) it asks about the app: the MariaDB server, database, user
-# and password (the database is created when the user may), the web and LDAP ports, the public address and the admin
+# and password (the database is created when the user may), the Shared ioSuite database (the suite's accounts and
+# settings, `iosuite` by default), the web and LDAP ports, the public address and the admin
 # account. It creates the container, then runs the app's own setup.sh inside with those answers, which installs the
 # packages, writes the settings, creates the tables and the admin and starts the service.
 #
 # Until the scripts are merged upstream, the framework is pointed at this repository for the install script
 # (COMMUNITY_SCRIPTS_URL below; the core engine still comes from community-scripts). Run on the Proxmox host as root:
 #   bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iocontacts/main/proxmox/ct/iocontacts.sh)"
-# Unattended: IOCONTACTS_DB=host:port/db:user:password IOCONTACTS_ADMIN=name:password IOCONTACTS_PORT=8610
+# Unattended: IOCONTACTS_DB=host:port/db:user:password IOCONTACTS_SUITE_DB=host:port/iosuite:iosuite:password
+#   IOCONTACTS_ADMIN=name:password IOCONTACTS_PORT=8610
 #   IOCONTACTS_LDAP_PORT=3890 IOCONTACTS_PUBLIC_URL=https://contacts.example.com in the environment skip the questions.
 export COMMUNITY_SCRIPTS_URL="${COMMUNITY_SCRIPTS_URL:-https://raw.githubusercontent.com/avandeputte/iocontacts/main/proxmox}"
 _cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
@@ -45,6 +47,15 @@ ask_app_settings() {
     u=$(whiptail --backtitle "$bt" --inputbox "User" 9 60 "contacts" 3>&1 1>&2 2>&3) || exit 1
     w=$(whiptail --backtitle "$bt" --passwordbox "Password" 9 60 3>&1 1>&2 2>&3) || exit 1
     IOCONTACTS_DB="$h:$p/$d:$u:$w"
+  fi
+  if [[ -z "${IOCONTACTS_SUITE_DB:-}" ]]; then
+    local sh sp sd su sw
+    sh=$(whiptail --backtitle "$bt" --inputbox "Shared ioSuite database (accounts and settings shared by the ioThing apps): host or IP" 9 76 "${IOCONTACTS_DB%%:*}" 3>&1 1>&2 2>&3) || exit 1
+    sp=$(whiptail --backtitle "$bt" --inputbox "Port" 9 60 "3306" 3>&1 1>&2 2>&3) || exit 1
+    sd=$(whiptail --backtitle "$bt" --inputbox "Shared ioSuite database name" 9 60 "iosuite" 3>&1 1>&2 2>&3) || exit 1
+    su=$(whiptail --backtitle "$bt" --inputbox "User" 9 60 "iosuite" 3>&1 1>&2 2>&3) || exit 1
+    sw=$(whiptail --backtitle "$bt" --passwordbox "Password" 9 60 3>&1 1>&2 2>&3) || exit 1
+    IOCONTACTS_SUITE_DB="$sh:$sp/$sd:$su:$sw"
   fi
   IOCONTACTS_PORT="${IOCONTACTS_PORT:-$(whiptail --backtitle "$bt" --inputbox "Web port (web app, CardDAV, REST API, calendar feed)" 9 70 "8610" 3>&1 1>&2 2>&3)}" || exit 1
   IOCONTACTS_LDAP_PORT="${IOCONTACTS_LDAP_PORT:-$(whiptail --backtitle "$bt" --inputbox "LDAP directory port for mail apps (389 is the standard one; 0 turns LDAP off)" 9 76 "389" 3>&1 1>&2 2>&3)}" || exit 1
@@ -81,6 +92,7 @@ description
 msg_info "Running the app's setup inside the container (packages, settings, tables, admin, service)"
 # the answers with passwords go in as a root-only file (pushed, read into setup.sh's environment, removed), never as arguments
 SECRETS="IOCONTACTS_DB=$(printf '%q' "$IOCONTACTS_DB")"$'\n'
+[[ -n "${IOCONTACTS_SUITE_DB:-}" ]] && SECRETS+="IOCONTACTS_SUITE_DB=$(printf '%q' "$IOCONTACTS_SUITE_DB")"$'\n'
 [[ -n "${IOCONTACTS_ADMIN:-}" ]] && SECRETS+="IOCONTACTS_ADMIN=$(printf '%q' "$IOCONTACTS_ADMIN")"$'\n'
 SECF="$(mktemp)"; chmod 600 "$SECF"; printf '%s' "$SECRETS" > "$SECF"
 pct push "$CTID" "$SECF" /opt/iocontacts/setup.env --perms 0600 --user 0 --group 0
