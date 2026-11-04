@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 from fastapi.concurrency import run_in_threadpool
 
-from app import APP_VERSION, apps, bookmarks, config, db, updates, users, weather, widgets
+from app import APP_VERSION, apps, bookmarks, config, db, layout, status as appstatus, updates, users, weather, widgets
 
 router = APIRouter()
 
@@ -55,7 +55,32 @@ def list_apps(request: Request):
     """The tiles: every app with its name, icon, colour and address. Hidden ones are left out (Settings lists them)."""
     me(request)
     host = request.headers.get("x-forwarded-host") or request.headers.get("host") or request.url.netloc
-    return {"items": [t for t in apps.tiles(host) if not t["hidden"]], "photoStrip": apps.photo_strip()}
+    u = me(request)
+    return {"items": [t for t in apps.tiles(host) if not t["hidden"]], "photoStrip": apps.photo_strip(), "layout": layout.get(u["id"])}
+
+
+@router.get("/api/apps/status")
+async def apps_status(request: Request):
+    """Each app's /api/status, asked with the viewer's sign-in: {items: {key: {ok, version, update, why}}}. `update` is
+    set when the app says one is waiting (it tells admins only). Cached a minute."""
+    me(request)
+    return {"items": await run_in_threadpool(appstatus.of_apps, request)}
+
+
+@router.get("/api/me/layout")
+def my_layout(request: Request):
+    """The viewer's own start page: {hidden, order, strip} (see app/layout.py)."""
+    return layout.get(me(request)["id"])
+
+
+@router.put("/api/me/layout")
+async def my_layout_save(request: Request):
+    """Body: {hidden?: [keys], order?: [app keys], strip?: rediscover | onthisday | off | null}. {} puts it back."""
+    u = me(request)
+    try:
+        return layout.save(u["id"], await request.json())
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 @router.get("/api/apps/settings")
@@ -128,6 +153,14 @@ async def weather_search(request: Request, q: str = "", key: str = ""):
 def list_bookmarks(request: Request):
     me(request)
     return {"groups": bookmarks.groups()}
+
+
+@router.get("/api/bookmarks/status")
+async def bookmarks_status(request: Request):
+    """Each bookmark pinged from this server: {items: {link id: {ok, status}}}; ok is null for an address that cannot
+    be pinged (mailto:…). Cached five minutes."""
+    me(request)
+    return {"items": await run_in_threadpool(appstatus.of_bookmarks)}
 
 
 def _bm(fn, *a, **kw):
@@ -238,15 +271,16 @@ async def import_bookmarks(request: Request):
 # ------------------------------------------------------------------ what the tiles show (app/widgets.py)
 
 @router.get("/api/widgets/{key}")
-def widget(key: str, request: Request, tz: str = "", kind: str = "", n: int = 0):
+def widget(key: str, request: Request, tz: str = "", kind: str = "", n: int = 0, q: str = ""):
     """A glimpse of one app for its tile, asked of the app with the viewer's own sign-in. tz: the viewer's time zone
     (IANA, e.g. Europe/Brussels), for what "today" is. For iopix, kind (onthisday | rediscover; empty: on this day
     when there are photos, else rediscover) and n (how many, up to 24) pick what the photo strip shows; for iocalendar,
-    kind=week gives the coming week instead of today. 404 for an app without one; 401/403 when the app refuses this account; 502 when it does not answer. The page leaves the
+    kind=week gives the coming week instead of today; for iocontacts, q searches the contacts (the search box) instead
+    of listing the birthdays ahead. 404 for an app without one; 401/403 when the app refuses this account; 502 when it does not answer. The page leaves the
     tile as it is on any of these."""
     me(request)
     try:
-        return widgets.get(request, key, tz, kind, n)
+        return widgets.get(request, key, tz, kind, n, q)
     except widgets.Unavailable as e:
         raise HTTPException(e.status, str(e))
 

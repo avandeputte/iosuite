@@ -186,6 +186,13 @@ def iocontacts(request: Request, days: int = 30, n: int = 8) -> dict:
     return {"items": items[:n], "more": max(0, len(items) - n)}
 
 
+def iocontacts_search(request: Request, q: str, n: int = 5) -> dict:
+    """{items: [{id, name, hasPhoto, org}]}: the contacts whose name, email, phone, address… match q (the search box)."""
+    got = fetch(request, "iocontacts", "/api/contacts", {"q": q[:80], "limit": n})
+    return {"items": [{"id": x.get("id"), "name": x.get("fn"), "hasPhoto": bool(x.get("hasPhoto")), "org": x.get("org")} for x in got.get("items", [])],
+            "total": got.get("total")}
+
+
 def iocontacts_photo(request: Request, contact_id: int) -> tuple[bytes, str]:
     return fetch(request, "iocontacts", f"/api/contacts/{int(contact_id)}/photo", raw=True)
 
@@ -237,7 +244,7 @@ def iohealth(request: Request, tz: str = "") -> dict:
     return {"steps": steps, "rings": rings, "sleep": sleep, "week": week}
 
 
-def get(request: Request, key: str, tz: str = "", kind: str = "", n: int = 0) -> dict:
+def get(request: Request, key: str, tz: str = "", kind: str = "", n: int = 0, q: str = "") -> dict:
     if key not in WIDGETS:
         raise Unavailable(404, f"{key} has nothing to show here")
     if tz and not re.fullmatch(r"[A-Za-z0-9_+\-/]{1,64}", tz):
@@ -247,5 +254,5 @@ def get(request: Request, key: str, tz: str = "", kind: str = "", n: int = 0) ->
     if key == "iocalendar" and kind == "week":
         return iocalendar_week(request, tz)
     if key == "iocontacts":
-        return iocontacts(request)
+        return iocontacts_search(request, q.strip()) if q.strip() else iocontacts(request)
     return {"iocalendar": iocalendar, "iohealth": iohealth}[key](request, tz)

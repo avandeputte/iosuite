@@ -19,6 +19,8 @@ const ICONS = {
   theme: 'M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 0 1-4.4 2.26 5.403 5.403 0 0 1-3.14-9.8c-.44-.06-.9-.1-1.36-.1z',
   link: 'M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z',
   cloud: 'M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z',
+  search: 'M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z',
+  tune: 'M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z',
   up: 'M7.41 15.41 12 10.83l4.59 4.58L18 14l-6-6-6 6z',
   down: 'M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z',
   edit: 'M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 0 0 0-1.41l-2.34-2.34a.996.996 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z',
@@ -126,6 +128,7 @@ function drawUser() {
       h('div', { class: 'who' }, h('b', null, S.user.displayName), h('div', { class: 'muted small' }, `${S.user.name} · ${S.user.role}`)),
       h('a', { class: 'mi', href: '#/settings/account', onclick: closeMenu }, icon('person', 's'), 'Account'),
       ['editor', 'admin'].includes(S.user.role) ? h('a', { class: 'mi', href: '#/settings/bookmarks', onclick: closeMenu }, icon('link', 's'), 'Bookmarks') : null,
+      h('button', { class: 'mi', onclick: () => { closeMenu(); customize(); } }, icon('tune', 's'), 'Customize the page'),
       S.user.role === 'admin' ? h('a', { class: 'mi', href: '#/settings/apps', onclick: closeMenu }, icon('settings', 's'), 'Settings') : null,
       h('button', { class: 'mi', onclick: () => { const n = { system: 'light', light: 'dark', dark: 'system' }[theme]; localStorage.setItem('iosuite.theme', n); applyTheme(); closeMenu(); toast(`Appearance: ${n}`); } },
         icon('theme', 's'), `Appearance: ${theme}`),
@@ -161,30 +164,134 @@ const greeting = () => { const hr = new Date().getHours(); return hr < 5 ? 'Good
 
 async function showHome(page) {
   const got = await api('/api/apps');
-  S.apps = got.items;
+  // the viewer's own layout (Customize the page) on top of the admin's: tiles and cards hidden, tiles in their order
+  const L = S.layout = got.layout || { hidden: [], order: [], strip: null };
+  S.allApps = got.items;
+  const rank = (a) => { const i = L.order.indexOf(a.key); return i < 0 ? 100 + got.items.indexOf(a) : i; };
+  S.apps = got.items.filter((a) => !L.hidden.includes(a.key)).sort((a, b) => rank(a) - rank(b));
+  const shows = (k) => !L.hidden.includes(k);
   const first = (S.user.displayName || S.user.name).split(/\s+/)[0];
   const wx = h('div', { class: 'weather' });
   page.append(h('div', { class: 'top' }, h('div', { class: 'hello' }, h('h1', null, `${greeting()}, ${first}`),
-    h('div', { class: 'muted' }, new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' }))), wx, $('#usermenu')));
+    h('div', { class: 'muted' }, new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' }))), searchBox(), wx, $('#usermenu')));
   drawWeather(wx);  // fills in when AccuWeather (or the server's copy) answers
   // the tiles: an app with something to show gets a column of its own; the others go two to a column, half the height
   const tile = (a, small) => h('a', { class: `app${small ? ' small' : ''}`, href: a.url, 'data-app': a.key, title: a.url },
-    h('img', { src: a.icon, alt: '' }), h('span', { class: 'who' }, appName(a.name, a.color), h('span', { class: 'tag' }, a.tagline)),
+    h('img', { src: a.icon, alt: '' }), h('span', { class: 'who' }, h('span', { class: 'nmrow' }, appName(a.name, a.color), h('span', { class: 'st' })), h('span', { class: 'tag' }, a.tagline)),
     h('div', { class: 'more' }));  // what the app shows here: drawWidgets
   const big = S.apps.filter((a) => WIDGETS[a.key]), rest = S.apps.filter((a) => !WIDGETS[a.key]);
   const stacks = []; for (let i = 0; i < rest.length; i += 2) stacks.push(h('div', { class: 'stack' }, rest.slice(i, i + 2).map((a) => tile(a, true))));
-  if (!S.apps.length) page.append(h('div', { class: 'empty' }, 'No apps to show. ', S.user.role === 'admin' ? h('a', { class: 'lnk', href: '#/settings/apps' }, 'Settings › Apps') : null));
+  if (!S.apps.length) page.append(h('div', { class: 'empty' }, got.items.length ? 'Every tile is hidden. ' : 'No apps to show. ',
+    got.items.length ? h('button', { class: 'lnk', onclick: customize }, 'Customize the page') : S.user.role === 'admin' ? h('a', { class: 'lnk', href: '#/settings/apps' }, 'Settings › Apps') : null));
   else page.append(h('div', { class: 'apps', style: { '--cols': big.length + stacks.length } }, big.map((a) => tile(a, false)), stacks));
   drawWidgets(page);
+  drawAppStatus(page);
   // the week ahead: birthdays from ioContacts and the coming days' events from ioCalendar, a card each
   const agenda = h('div', { class: 'agenda' });
-  if (S.apps.some((a) => a.key === 'iocontacts')) { const c = h('div', { class: 'card birthdays' }); agenda.append(c); drawBirthdays(c); }
-  if (S.apps.some((a) => a.key === 'iocalendar')) { const c = h('div', { class: 'card week' }); agenda.append(c); drawWeek(c); }
+  if (shows('birthdays') && S.apps.some((a) => a.key === 'iocontacts')) { const c = h('div', { class: 'card birthdays' }); agenda.append(c); drawBirthdays(c); }
+  if (shows('week') && S.apps.some((a) => a.key === 'iocalendar')) { const c = h('div', { class: 'card week' }); agenda.append(c); drawWeek(c); }
   if (agenda.childElementCount) page.append(agenda);
-  if (got.photoStrip !== 'off' && S.apps.some((a) => a.key === 'iopix')) { const strip = h('div', { class: 'strip' }); page.append(strip); drawStrip(strip, got.photoStrip); }
-  const bm = h('div', { class: 'bookmarks' });
-  page.append(bm);
-  drawBookmarks(bm);
+  const stripKind = L.strip || got.photoStrip;
+  if (shows('strip') && stripKind !== 'off' && S.apps.some((a) => a.key === 'iopix')) { const strip = h('div', { class: 'strip' }); page.append(strip); drawStrip(strip, stripKind); }
+  if (shows('bookmarks')) { const bm = h('div', { class: 'bookmarks' }); page.append(bm); drawBookmarks(bm); }
+}
+
+// ------------------------------------------------------------------ the search box (⌘K / Ctrl-K)
+/* Type, and the box lists the bookmarks that match, the contacts ioContacts finds, and a row per app that searches
+   itself (ioPix, ioCalendar, ioNotes open on their own results). Arrows pick a row, Enter opens it, Escape clears. */
+const APP_SEARCH = { iopix: (q) => `#/photos?q=${encodeURIComponent(q)}`, iocalendar: (q) => `#/search/${encodeURIComponent(q)}`, ionotes: (q) => `#/notes?q=${encodeURIComponent(q)}` };
+function searchBox() {
+  const inp = h('input', { class: 'q', type: 'search', placeholder: 'Search', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Search bookmarks, contacts and the apps' });
+  const list = h('div', { class: 'qlist', hidden: true });
+  const box = h('div', { class: 'search' }, icon('search', 's'), inp, h('kbd', null, /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘K' : 'Ctrl K'), list);
+  let rows = [], sel = 0, timer = null, people = { q: '', items: [] };
+  const hide = () => { list.hidden = true; list.replaceChildren(); rows = []; };
+  const row = (href, kids, ext) => { const a = h('a', { class: 'qrow', href, ...(ext ? { target: '_blank', rel: 'noreferrer' } : {}), onmousedown: (e) => e.preventDefault() }, kids); rows.push(a); return a; };
+  const build = () => {
+    const q = inp.value.trim(), ql = q.toLowerCase();
+    rows = [];
+    if (!q) return hide();
+    const links = (S.bookmarks || []).filter((l) => `${l.name} ${l.description || ''} ${l.href}`.toLowerCase().includes(ql)).slice(0, 6);
+    const contacts = S.apps.find((a) => a.key === 'iocontacts');
+    const kids = [
+      links.length ? h('div', { class: 'qhead' }, 'Bookmarks') : null,
+      links.map((l) => { const src = bmIcon(l); return row(l.href, [h('span', { class: 'bmic' }, src ? h('img', { src, alt: '' }) : l.abbr), h('span', { class: 'qname' }, l.name), h('span', { class: 'muted small' }, l.description || l.href)], true); }),
+      contacts && people.q === ql && people.items.length ? h('div', { class: 'qhead' }, 'People') : null,
+      contacts && people.q === ql ? people.items.map((c) => row(`${contacts.url}/#/c/${c.id}`, [h('span', { class: 'face' }, c.hasPhoto ? h('img', { src: `/api/widgets/iocontacts/photo/${c.id}`, alt: '' }) : initials(c.name)), h('span', { class: 'qname' }, c.name), h('span', { class: 'muted small' }, c.org || '')])) : null,
+      h('div', { class: 'qhead' }, 'Search in'),
+      S.allApps.filter((a) => APP_SEARCH[a.key]).map((a) => row(`${a.url}/${APP_SEARCH[a.key](q)}`, [h('img', { class: 'qapp', src: a.icon, alt: '' }), h('span', { class: 'qname' }, appName(a.name, a.color)), h('span', { class: 'muted small' }, `“${q}”`)])),
+    ];
+    sel = Math.min(sel, rows.length - 1);
+    rows.forEach((r, i) => r.classList.toggle('on', i === sel));
+    list.replaceChildren(...kids.flat().filter(Boolean)); list.hidden = false;
+  };
+  const askPeople = async () => {
+    const q = inp.value.trim(), ql = q.toLowerCase();
+    if (q.length < 2 || !S.apps.some((a) => a.key === 'iocontacts')) return;
+    const d = await widget('iocontacts', { q });
+    if (inp.value.trim().toLowerCase() !== ql) return;
+    people = { q: ql, items: (d && d.items) || [] }; build();
+  };
+  inp.oninput = () => { sel = 0; build(); clearTimeout(timer); timer = setTimeout(askPeople, 250); };
+  inp.onfocus = () => { if (inp.value.trim()) build(); };
+  inp.onblur = () => setTimeout(hide, 150);
+  inp.onkeydown = (e) => {
+    if (e.key === 'Escape') { if (inp.value) { inp.value = ''; hide(); } else inp.blur(); e.preventDefault(); }
+    else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { if (!rows.length) return; sel = (sel + (e.key === 'ArrowDown' ? 1 : rows.length - 1)) % rows.length; rows.forEach((r, i) => r.classList.toggle('on', i === sel)); rows[sel].scrollIntoView({ block: 'nearest' }); e.preventDefault(); }
+    else if (e.key === 'Enter') { if (rows[sel]) { rows[sel].click(); e.preventDefault(); } }
+  };
+  S.focusSearch = () => { inp.focus(); inp.select(); };
+  return box;
+}
+
+// ------------------------------------------------------------------ is each app up? does one have an update?
+/** A dot by each app's name (green: it answers; red: it does not), and "update" when the app says one is waiting. */
+async function drawAppStatus(page) {
+  let d;
+  try { d = await api('/api/apps/status'); } catch { return; }
+  if (!page.isConnected) return;
+  for (const [key, s] of Object.entries(d.items || {})) {
+    const st = page.querySelector(`.app[data-app="${key}"] .st`);
+    if (!st) continue;
+    st.replaceChildren(h('span', { class: `dot ${s.ok ? 'ok' : 'down'}`, title: s.ok ? `Up${s.version ? ` · v${s.version}` : ''}` : `Not reachable${s.why ? `: ${s.why}` : ''}` }));
+    if (s.update) st.append(h('span', { class: 'upd', title: typeof s.update === 'string' ? `v${s.update} is out (now v${s.version || '?'})` : 'An update is waiting' }, 'update'));
+  }
+}
+/** The bookmarks the server could not reach get a red dot and a tooltip. */
+async function drawBookmarkStatus(el) {
+  let d;
+  try { d = await api('/api/bookmarks/status'); } catch { return; }
+  if (!el.isConnected) return;
+  for (const a of el.querySelectorAll('.bm[data-id]')) {
+    const s = d.items[a.dataset.id];
+    if (!s) continue;
+    a.classList.toggle('down', s.ok === false);
+    if (s.ok === false) a.title = `${a.title}\nNot reachable${s.status ? ` (${s.status})` : ''}`;
+  }
+}
+
+// ------------------------------------------------------------------ customize the page (per account)
+async function customize() {
+  const L = S.layout || { hidden: [], order: [], strip: null };
+  const apps = S.allApps || [];
+  const rank = (a) => { const i = L.order.indexOf(a.key); return i < 0 ? 100 + apps.indexOf(a) : i; };
+  const tiles = apps.slice().sort((a, b) => rank(a) - rank(b)).map((a) => ({ key: a.key, name: a.name, color: a.color, icon: a.icon, on: !L.hidden.includes(a.key) }));
+  const list = h('div', { class: 'lay' });
+  const draw = () => list.replaceChildren(...tiles.map((t, i) => h('div', { class: 'layrow' },
+    h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: t.on, onchange: (e) => { t.on = e.target.checked; } }), h('img', { src: t.icon, alt: '' }), appName(t.name, t.color)),
+    h('span', { class: 'bmtools' }, h('button', { class: 'iconbtn', title: 'Up', disabled: i === 0 ? true : null, onclick: () => { [tiles[i - 1], tiles[i]] = [tiles[i], tiles[i - 1]]; draw(); } }, icon('up', 's')),
+      h('button', { class: 'iconbtn', title: 'Down', disabled: i === tiles.length - 1 ? true : null, onclick: () => { [tiles[i + 1], tiles[i]] = [tiles[i], tiles[i + 1]]; draw(); } }, icon('down', 's'))))));
+  draw();
+  const sections = [['birthdays', 'Birthdays (ioContacts)'], ['week', 'This week (ioCalendar)'], ['strip', 'The photo strip (ioPix)'], ['bookmarks', 'Bookmarks']]
+    .map(([k, l]) => ({ k, box: h('input', { type: 'checkbox', checked: !L.hidden.includes(k) }), l }));
+  const strip = h('select', { class: 't' }, [[null, 'As set up'], ['rediscover', 'Rediscover: photos at random'], ['onthisday', 'On this day'], ['off', 'Off']].map(([v, t]) => h('option', { value: v || '', selected: (v || '') === (L.strip || '') ? true : null }, t)));
+  const body = h('div', null, h('p', { class: 'muted small' }, 'Your own start page, on this account only: untick what you do not need, and order the tiles.'),
+    h('h3', null, 'Tiles'), list, h('h3', null, 'Cards'), sections.map((s) => h('label', { class: 'check layrow' }, s.box, s.l)),
+    h('div', { class: 'grid' }, fld('Photo strip', strip)));
+  const v = await dialog('Customize the page', body, [{ label: 'Back to the default', value: 'reset' }, { label: 'Cancel', value: null }, { label: 'Save', value: 'save', primary: true }]);
+  if (!v) return;
+  const json = v === 'reset' ? {} : { hidden: [...tiles.filter((t) => !t.on).map((t) => t.key), ...sections.filter((s) => !s.box.checked).map((s) => s.k)], order: tiles.map((t) => t.key), strip: strip.value || null };
+  try { await api('/api/me/layout', { method: 'PUT', json }); toast(v === 'reset' ? 'Back to the default' : 'Saved'); if (route().view === 'home') onRoute(); } catch (e) { fail(e); }
 }
 
 /** /api/widgets/<key>?... as JSON, or null when the app is down, not open to this account, or the answer is not JSON. */
@@ -378,15 +485,17 @@ async function drawBookmarks(el) {
   try { gs = (await api('/api/bookmarks')).groups; } catch (e) { el.replaceChildren(h('div', { class: 'muted small' }, e.message)); return; }
   if (!el.isConnected) return;
   const canEdit = ['editor', 'admin'].includes(S.user.role);
+  S.bookmarks = gs.flatMap((g) => g.links);  // the search box looks through them
   if (!gs.length) { el.replaceChildren(canEdit ? h('a', { class: 'lnk small', href: '#/settings/bookmarks' }, 'Add bookmarks') : null); return; }
   el.replaceChildren(...gs.filter((g) => g.links.length || canEdit).map((g) => h('div', { class: 'bmgroup' }, h('h2', null, g.name),
     g.links.map((l) => {
       const src = bmIcon(l);
-      return h('a', { class: 'bm', href: l.href, title: l.href, target: '_blank', rel: 'noreferrer' },
+      return h('a', { class: 'bm', href: l.href, title: l.href, target: '_blank', rel: 'noreferrer', 'data-id': l.id },
         h('span', { class: 'bmic' }, src ? h('img', { src, alt: '', onerror: (e) => { e.target.replaceWith(l.abbr); } }) : l.abbr),
         h('span', { class: 'bmname' }, l.name), h('span', { class: 'bmdesc muted small' }, l.description));
     }),
     canEdit && !g.links.length ? h('a', { class: 'lnk small', href: '#/settings/bookmarks' }, 'Empty: add a link') : null)));
+  drawBookmarkStatus(el);
 }
 
 // ------------------------------------------------------------------ settings
@@ -658,6 +767,13 @@ async function start() {
   await onRoute();
   updateBanner();
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && document.querySelector('.dialog-back')) document.querySelector('.dialog-back').remove(); });
+  // ⌘K / Ctrl-K: the search box on the start page (from another view: go there first)
+  document.addEventListener('keydown', (e) => {
+    if (e.key.toLowerCase() === 'k' && (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey) {
+      e.preventDefault();
+      if (route().view !== 'home') { location.hash = '#/'; setTimeout(() => S.focusSearch && S.focusSearch(), 300); } else if (S.focusSearch) S.focusSearch();
+    }
+  });
   // back from an app: the tiles again as they are now
   document.addEventListener('visibilitychange', () => { if (!document.hidden && route().view === 'home' && !document.querySelector('.dialog-back')) onRoute(); });
   setInterval(async () => { try { S.status = await api('/api/status'); updateBanner(); } catch { /* restarting */ } }, 15 * 60 * 1000);
