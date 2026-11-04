@@ -346,11 +346,11 @@ async function setWeather(el) {
   const search = async () => {
     found.replaceChildren(h('span', { class: 'muted small' }, 'Looking…'));
     try {
-      const r = await api(`/api/weather/search?${new URLSearchParams({ q: q.value.trim(), key: key.value.trim() })}`);
-      found.replaceChildren(r.items.length ? r.items.map((p) => h('button', { class: 'pillbtn noic', onclick: async () => {
+      const r = await api(`/api/weather/search?${new URLSearchParams({ q: q.value.trim(), ...(key.value.trim() ? { key: key.value.trim() } : {}) })}`);
+      found.replaceChildren(...(r.items.length ? r.items.map((p) => h('button', { class: 'pillbtn noic', onclick: async () => {
         const name = [p.name, p.region, p.country].filter(Boolean).join(', ');
         if (await save({ ...(key.value.trim() ? { key: key.value.trim() } : {}), locationKey: p.key, locationName: name })) { where.textContent = `Place: ${name}`; key.value = ''; key.placeholder = '(kept)'; found.replaceChildren(); }
-      } }, [p.name, p.region, p.country].filter(Boolean).join(', '))) : h('span', { class: 'muted small' }, 'Nothing found'));
+      } }, [p.name, p.region, p.country].filter(Boolean).join(', '))) : [h('span', { class: 'muted small' }, 'Nothing found')]));
     } catch (e) { found.replaceChildren(h('span', { class: 'err' }, e.message)); }
   };
   q.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); search(); } };
