@@ -105,3 +105,34 @@ def test_mcp_members(client, family_id):
     assert "error" in call(client, auth, "create_event", title="x", start="2026-11-20", members=["ghost"])
     r = call(client, auth, "set_holidays", country="US", region="CA")
     assert r["country"] == "US" and r["sync"]["ok"]
+
+
+def test_leave_accounts_out_of_the_family(client, family_id):
+    members.TTL = 0
+    client.post("/api/users", json={"name": "admin2", "password": "adminpass99", "role": "admin"})
+    client.post("/api/users", json={"name": "emma", "password": "emmapass99", "role": "viewer", "displayName": "Emma"})
+    fam = client.get("/api/members").json()
+    admin2 = next(m for m in fam["items"] if m["name"] == "admin2")
+    assert fam["leftOut"] == []
+    # signing in makes a Personal calendar; leaving the family removes it while it is empty
+    client.cookies.clear()
+    assert client.post("/api/auth/login", json={"name": "admin2", "password": "adminpass99"}).status_code == 200
+    assert [c["name"] for c in client.get("/api/calendars").json()["items"] if not c["shared"]] == ["Personal"]
+    r = client.put(f"/api/members/{admin2['id']}", json={"inFamily": False})
+    assert r.status_code == 200 and r.json()["inFamily"] is False
+    assert "admin2" not in [m["name"] for m in r.json()["items"]]
+    assert [c for c in client.get("/api/calendars").json()["items"] if not c["shared"]] == []  # and none is made again
+    assert client.get("/api/members").json()["leftOut"] == [admin2["id"]]
+    # it can no longer be a tag or a filter
+    r = client.post(f"/api/events?calendar={family_id}", json={"title": "x", "start": "2026-11-20T10:00", "members": ["admin2"]})
+    assert r.status_code == 400
+    assert client.get("/api/occurrences", params={"start": "2026-11-01", "end": "2026-12-01", "member": "admin2"}).status_code == 400
+    # viewers may not change the family; back in, it gets its calendar again
+    client.cookies.clear()
+    client.post("/api/auth/login", json={"name": "emma", "password": "emmapass99"})
+    assert client.put(f"/api/members/{admin2['id']}", json={"inFamily": True}).status_code == 403
+    assert "leftOut" not in client.get("/api/members").json()
+    client.cookies.clear()
+    client.post("/api/auth/login", json={"name": "admin2", "password": "adminpass99"})
+    assert client.put(f"/api/members/{admin2['id']}", json={"inFamily": True}).json()["inFamily"] is True
+    assert [c["name"] for c in client.get("/api/calendars").json()["items"] if not c["shared"]] == ["Personal"]

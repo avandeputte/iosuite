@@ -237,7 +237,7 @@ function toggleCal(id) {
 function drawUser() {
   const m = $('#usermenu'); m.replaceChildren();
   if (!S.user) return;
-  const btn = h('button', { class: 'avatarbtn', title: S.user.displayName, style: { background: `hsl(${hue(S.user.name)} 45% 45%)` } }, initials(S.user.displayName));
+  const btn = h('button', { class: 'iconbtn gear', title: `${S.user.displayName} · settings` }, icon('settings'));
   let menu = null;
   const closeMenu = () => { if (menu) { menu.remove(); menu = null; document.removeEventListener('click', outside); } };
   const outside = (e) => { if (menu && !menu.contains(e.target) && e.target !== btn) closeMenu(); };
@@ -1175,18 +1175,24 @@ async function setCalendars(el) {
 }
 
 async function setUsers(el) {
-  const r = await api('/api/users');
+  const [r, fam] = await Promise.all([api('/api/users'), api('/api/members')]);
+  const leftOut = new Set(fam.leftOut || []);
   const roles = r.roles || ['viewer', 'editor', 'admin'];
   const name = h('input', { class: 't', placeholder: 'User name' }), pw = h('input', { class: 't', type: 'password', placeholder: 'Password (8 or more)' });
   const role = h('select', { class: 't' }, roles.map((x) => h('option', { value: x, selected: x === 'editor' ? true : null }, x)));
   const patch = async (u, body, msg) => { try { await api(`/api/users/${u.id}`, { method: 'PATCH', json: body }); toast(msg); return true; } catch (e) { fail(e); return false; } };
   el.append(h('div', { class: 'box' }, h('h2', null, icon('people'), 'Family members'),
     h('p', { class: 'muted' }, 'The accounts are the same as in the other io apps; the role here is for ioCalendar. Everyone sees the shared calendars and has a private one of their own. Viewers read the shared calendars and change only their own; editors change shared events too; admins also manage users and settings.'),
-    h('table', { class: 't' }, h('tr', null, h('th', null, 'Name'), h('th', null, 'Display name'), h('th', null, 'Role'), h('th')),
+    h('p', { class: 'muted' }, 'In the family: the people events can be tagged with, each with a private calendar of their own. Leave out accounts that are not a person, such as admin.'),
+    h('table', { class: 't' }, h('tr', null, h('th', null, 'Name'), h('th', null, 'Display name'), h('th', null, 'Role'), h('th', null, 'In the family'), h('th')),
       r.users.map((u) => {
         const rs = h('select', { class: 't', style: 'width:auto' }, [...new Set([...roles, u.role])].map((x) => h('option', { value: x, selected: x === u.role ? true : null }, x)));
         rs.onchange = async () => { if (!await patch(u, { role: rs.value }, 'Saved')) onRoute(); };
-        return h('tr', null, h('td', null, u.name, u.suiteAdmin ? h('span', { class: 'muted small' }, ' · suite admin') : null), h('td', null, u.displayName), h('td', null, rs), h('td', { style: { whiteSpace: 'nowrap' } },
+        const fk = h('input', { type: 'checkbox', checked: !leftOut.has(u.id), title: `${u.displayName} is someone events can be for` });
+        fk.onchange = async () => {
+          try { await api(`/api/members/${u.id}`, { method: 'PUT', json: { inFamily: fk.checked } }); await loadCals(); toast(fk.checked ? `${u.displayName} is in the family` : `${u.displayName} is left out of the family`); } catch (e) { fk.checked = !fk.checked; fail(e); }
+        };
+        return h('tr', null, h('td', null, u.name, u.suiteAdmin ? h('span', { class: 'muted small' }, ' · suite admin') : null), h('td', null, u.displayName), h('td', null, rs), h('td', null, h('label', { class: 'check' }, fk)), h('td', { style: { whiteSpace: 'nowrap' } },
           h('button', { class: 'pillbtn noic', onclick: async () => { const p = h('input', { class: 't', type: 'password' }); const v = await dialog(`New password for ${u.name}`, p, [{ label: 'Cancel', value: null }, { label: 'Set', value: () => p.value, primary: true }]); if (v) patch(u, { password: v }, 'Password set'); } }, 'Password'), ' ',
           u.role === 'viewer' && !u.passwordless ? [h('button', { class: 'pillbtn noic', title: 'One-click sign-in from the account picker', onclick: async () => { if (await confirmDialog('Remove password', `Remove ${u.name}’s password? Anyone on your home network can then sign in as ${u.name} with one click (from outside, never).`, 'Remove')) { if (await patch(u, { password: '' }, 'Password removed')) onRoute(); } } }, 'No password'), ' '] : null,
           u.id !== S.user.id ? h('button', { class: 'pillbtn noic danger', onclick: async () => { if (await confirmDialog('Delete account', `Delete ${u.name}? This removes the account from every io app, with their private calendars.`, 'Delete', true)) { try { await api(`/api/users/${u.id}`, { method: 'DELETE' }); onRoute(); } catch (e) { fail(e); } } } }, 'Delete') : null));

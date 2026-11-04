@@ -280,7 +280,7 @@ def del_calendar(cid: int, request: Request):
         raise HTTPException(403, "Only an admin deletes a shared calendar")
     if model.is_shared(c) and len([x for x in model.calendars_for(u) if x["owner_id"] is None and x["kind"] == "events"]) <= 1:
         raise HTTPException(400, "The last shared calendar stays")
-    if not model.is_shared(c) and len([x for x in model.calendars_for(u) if x["owner_id"] == u["id"]]) <= 1:
+    if not model.is_shared(c) and members.in_family(u["id"]) and len([x for x in model.calendars_for(u) if x["owner_id"] == u["id"]]) <= 1:
         raise HTTPException(400, "Your last private calendar stays")
     model.delete_calendar(cid)
     return {"ok": True}
@@ -560,10 +560,26 @@ def delete_event(eid: int, request: Request, scope: str = "all", recurrenceId: s
 
 @router.get("/api/members")
 def family_members(request: Request):
-    """The family members an event can be tagged with (the accounts that use ioCalendar): [{id, name, displayName}].
-    Filter with ?member= on /api/occurrences, /api/events and the subscription links."""
-    me(request)
-    return {"items": members.public(members.family())}
+    """The family members an event can be tagged with (the accounts that use ioCalendar, less the ones taken out of the
+    family): [{id, name, displayName}]. Filter with ?member= on /api/occurrences, /api/events and the subscription links.
+    Admins also get leftOut: the ids of the accounts taken out."""
+    u = me(request)
+    out = {"items": members.public(members.family())}
+    if users.is_admin(u):
+        out["leftOut"] = sorted(members.left_out())
+    return out
+
+
+@router.put("/api/members/{uid}")
+async def set_family_member(uid: int, request: Request):
+    """Admins: {inFamily: bool}. An account out of the family (an admin or service account, not a person) is not
+    offered as a tag and gets no private calendar here; its tags on events stay as plain categories."""
+    admin(request)
+    b = await request.json()
+    if not users.get(uid):
+        raise HTTPException(404, "No such account")
+    members.set_in_family(uid, bool(b.get("inFamily", True)))
+    return {"id": uid, "inFamily": members.in_family(uid), "items": members.public(members.family())}
 
 
 @router.get("/api/people")

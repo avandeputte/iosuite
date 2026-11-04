@@ -56,7 +56,7 @@ def can_write(u: dict | None, c: dict | None) -> bool:
 def ensure_personal(u: dict) -> None:
     """Every account gets its private Personal calendar the first time it uses ioCalendar (accounts are made in any
     app of the suite, so not necessarily here)."""
-    if not u or not u.get("id"):
+    if not u or not u.get("id") or not members.in_family(u["id"]):  # not a person (Settings › Users): no calendar of its own
         return
     if not db.one("SELECT id FROM calendars WHERE owner_id = %s LIMIT 1", (u["id"],)):
         who = u.get("displayName") or u.get("display_name") or u.get("name")
