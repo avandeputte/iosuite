@@ -26,9 +26,10 @@ what the app will show on the start page later (today's events, the newest photo
   keeps a copy and asks AccuWeather at most every 45 minutes (conditions) and 6 hours (forecast), and only while
   someone opens the page, so a free key's 50 calls a day are enough; browsers never talk to AccuWeather.
 - **Bookmarks**, as [homepage](https://gethomepage.dev/configs/bookmarks/) lays them out: groups of links under the
-  apps, each with a two-letter badge (or an icon: an image address, or a file name from the dashboard-icons
-  collection, `github.png`), the name and the site. Editors and admins add, change, reorder and move them in
-  Settings › Bookmarks, or paste a homepage `bookmarks.yaml` to import it.
+  apps, each with a two-letter badge (or an icon: an image address, a file name from the dashboard-icons
+  collection, `github.png`, or an SVG of your own uploaded for the link and kept in the database), the name and the
+  site. Editors and admins add, change, reorder and move them in Settings › Bookmarks, or paste a homepage
+  `bookmarks.yaml` to import it.
 - **The suite's accounts**: the same sign-in as every io app (the account tiles, one click for a passwordless viewer),
   the account page (display name, email, password, sign out everywhere) and, for admins, the family's accounts and their
   role here. Sign-in at a reverse proxy (Cloudflare Access…) works as in the other apps.

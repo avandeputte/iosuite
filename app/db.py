@@ -10,7 +10,7 @@ from pymysql.cursors import DictCursor
 
 from app import config
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 # Every table is InnoDB/utf8mb4. Accounts and app passwords live in the suite's shared auth database (iothing-auth,
 # app/auth.py), not here.
@@ -37,6 +37,13 @@ SCHEMA = [
         sort INT NOT NULL DEFAULT 0,
         KEY (group_id, sort),
         FOREIGN KEY (group_id) REFERENCES bookmark_groups(id) ON DELETE CASCADE
+    )""",
+    # an SVG uploaded for a bookmark (Settings › Bookmarks), served by the page itself: it wins over the icon field
+    """CREATE TABLE IF NOT EXISTS bookmark_icons (
+        link_id INT PRIMARY KEY,
+        svg MEDIUMTEXT NOT NULL,
+        etag CHAR(16) NOT NULL,
+        FOREIGN KEY (link_id) REFERENCES bookmarks(id) ON DELETE CASCADE
     )""",
 ]
 

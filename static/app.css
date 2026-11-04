@@ -129,6 +129,9 @@ input, select, textarea { font: inherit; color: inherit; }
 .bm:hover { background: var(--bg3); }
 .bmic { flex: none; width: 44px; height: 100%; display: inline-flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--fg) 7%, transparent); font-size: var(--fs-s); font-weight: 600; }
 .bmic img { width: 20px; height: 20px; object-fit: contain; }
+.upload { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.upload input[type=file] { flex: 1; min-width: 0; }
+.bmprev { width: 28px; height: 28px; object-fit: contain; border-radius: 6px; background: color-mix(in srgb, var(--fg) 7%, transparent); padding: 3px; }
 .bmname { padding: 0 10px; font-size: var(--fs-m); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
 .bmdesc { padding-right: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 45%; }
 .bmedit { padding: 8px 0 4px; border-bottom: 1px solid var(--line); }

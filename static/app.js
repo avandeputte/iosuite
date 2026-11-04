@@ -104,6 +104,8 @@ const degF = (c) => (c == null ? null : c * 9 / 5 + 32);
 const fmtTemp = (v) => (v == null ? '–' : `${Math.round(v)}°`);
 /** A bookmark's icon as homepage reads it: a full address, or a file name from the dashboard-icons collection. */
 const bmIconUrl = (icon) => { if (!icon) return ''; if (/^https?:\/\//.test(icon)) return icon; const m = icon.match(/^([\w.-]+)\.(png|svg|webp)$/); return m ? `https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/${m[2]}/${m[1]}.${m[2]}` : ''; };
+/** What to show for a link: the SVG uploaded for it (served by this page) wins over the icon field. */
+const bmIcon = (l) => l.iconUrl || bmIconUrl(l.icon);
 
 const appName = (name, color) => h('span', { class: 'nm', style: { '--c': color } }, h('span', { class: 'io' }, 'io'), h('span', { class: 'ap' }, name.replace(/^io/, '')));
 
@@ -283,7 +285,7 @@ async function drawBookmarks(el) {
   if (!gs.length) { el.replaceChildren(canEdit ? h('a', { class: 'lnk small', href: '#/settings/bookmarks' }, 'Add bookmarks') : null); return; }
   el.replaceChildren(...gs.filter((g) => g.links.length || canEdit).map((g) => h('div', { class: 'bmgroup' }, h('h2', null, g.name),
     g.links.map((l) => {
-      const src = bmIconUrl(l.icon);
+      const src = bmIcon(l);
       return h('a', { class: 'bm', href: l.href, title: l.href, target: '_blank', rel: 'noreferrer' },
         h('span', { class: 'bmic' }, src ? h('img', { src, alt: '', onerror: (e) => { e.target.replaceWith(l.abbr); } }) : l.abbr),
         h('span', { class: 'bmname' }, l.name), h('span', { class: 'bmdesc muted small' }, l.description));
@@ -376,14 +378,25 @@ async function setBookmarks(el) {
       const desc = h('input', { class: 't', value: l ? l.customDescription : '', placeholder: 'Line under the name (the host name when empty)' });
       const ic = h('input', { class: 't', value: l ? l.icon : '', placeholder: 'Icon: an image address, or a name from dashboard-icons (github.png)' });
       const grp = h('select', { class: 't' }, gs.map((x) => h('option', { value: x.id, selected: x.id === g.id ? true : null }, x.name)));
-      return { body: h('div', { class: 'grid' }, fld('Name', name), fld('Address', href), fld('Abbreviation', abbr), fld('Description', desc), fld('Icon', ic), fld('Group', grp)),
-        value: () => ({ name: name.value, href: href.value, abbr: abbr.value, description: desc.value, icon: ic.value, groupId: +grp.value }) };
+      // an SVG of your own, kept in the database: it wins over the icon field
+      const file = h('input', { type: 'file', accept: '.svg,image/svg+xml', class: 't' });
+      const drop = h('input', { type: 'checkbox' });
+      const upload = h('div', { class: 'upload' }, l && l.iconUrl ? h('img', { src: l.iconUrl, alt: '', class: 'bmprev' }) : null, file,
+        l && l.iconUrl ? h('label', { class: 'small' }, drop, ' Remove the uploaded icon') : null);
+      return { body: h('div', { class: 'grid' }, fld('Name', name), fld('Address', href), fld('Abbreviation', abbr), fld('Description', desc), fld('Icon', ic), h('div', { class: 'field' }, h('span', null, 'Upload an SVG icon'), upload), fld('Group', grp)),
+        value: () => ({ name: name.value, href: href.value, abbr: abbr.value, description: desc.value, icon: ic.value, groupId: +grp.value }), file: () => file.files[0], drop: () => drop.checked };
     };
     const editLink = async (g, l) => {
       const f = linkForm(g, l);
-      const v = await dialog(l ? 'Change the link' : 'New link', f.body, [{ label: 'Cancel', value: null }, { label: l ? 'Save' : 'Add', value: f.value, primary: true }]);
+      const v = await dialog(l ? 'Change the link' : 'New link', f.body, [{ label: 'Cancel', value: null }, { label: l ? 'Save' : 'Add', value: () => ({ link: f.value(), file: f.file(), drop: f.drop() }), primary: true }]);
       if (!v) return;
-      await call(l ? `/api/bookmarks/links/${l.id}` : `/api/bookmarks/groups/${g.id}/links`, { method: l ? 'PATCH' : 'POST', json: v }, 'Saved');
+      try {
+        const saved = await api(l ? `/api/bookmarks/links/${l.id}` : `/api/bookmarks/groups/${g.id}/links`, { method: l ? 'PATCH' : 'POST', json: v.link });
+        if (v.file) await api(`/api/bookmarks/links/${saved.id}/icon`, { method: 'PUT', body: v.file, headers: { 'Content-Type': 'image/svg+xml' } });
+        else if (v.drop) await api(`/api/bookmarks/links/${saved.id}/icon`, { method: 'DELETE' });
+        toast('Saved');
+      } catch (e) { fail(e); }
+      await draw();
     };
     const move = (list, i, d) => { const ids = list.map((x) => x.id); const [x] = ids.splice(i, 1); ids.splice(i + d, 0, x); return ids; };
     const newGroup = h('input', { class: 't', placeholder: 'New group, e.g. Developer', style: 'max-width:280px' });
@@ -399,7 +412,7 @@ async function setBookmarks(el) {
             h('button', { class: 'iconbtn', title: 'Rename', onclick: async () => { const i = h('input', { class: 't', value: g.name }); const v = await dialog('Rename the group', i, [{ label: 'Cancel', value: null }, { label: 'Save', value: () => i.value, primary: true }]); if (v) call(`/api/bookmarks/groups/${g.id}`, { method: 'PATCH', json: { name: v } }, 'Saved'); } }, icon('edit', 's')),
             h('button', { class: 'iconbtn', title: 'Delete the group', onclick: async () => { if (await confirmDialog('Delete the group', `Delete "${g.name}" and its ${g.links.length} link(s)?`, 'Delete', true)) call(`/api/bookmarks/groups/${g.id}`, { method: 'DELETE' }, 'Deleted'); } }, icon('delete', 's')),
             h('button', { class: 'pillbtn', style: 'margin-left:auto', onclick: () => editLink(g, null) }, icon('add', 's'), 'Link')),
-          g.links.map((l, li) => h('div', { class: 'bmrow' }, h('span', { class: 'bmic' }, bmIconUrl(l.icon) ? h('img', { src: bmIconUrl(l.icon), alt: '', onerror: (e) => { e.target.replaceWith(l.abbr); } }) : l.abbr), h('span', { class: 'bmname' }, l.name), h('span', { class: 'muted small bmdesc' }, l.description),
+          g.links.map((l, li) => h('div', { class: 'bmrow' }, h('span', { class: 'bmic' }, bmIcon(l) ? h('img', { src: bmIcon(l), alt: '', onerror: (e) => { e.target.replaceWith(l.abbr); } }) : l.abbr), h('span', { class: 'bmname' }, l.name), h('span', { class: 'muted small bmdesc' }, l.description),
             h('span', { class: 'bmtools' },
               h('button', { class: 'iconbtn', title: 'Up', disabled: li === 0 ? true : null, onclick: () => call(`/api/bookmarks/groups/${g.id}/order`, { method: 'POST', json: { ids: move(g.links, li, -1) } }) }, icon('up', 's')),
               h('button', { class: 'iconbtn', title: 'Down', disabled: li === g.links.length - 1 ? true : null, onclick: () => call(`/api/bookmarks/groups/${g.id}/order`, { method: 'POST', json: { ids: move(g.links, li, 1) } }) }, icon('down', 's')),
