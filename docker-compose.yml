@@ -32,3 +32,6 @@ services:
       # IOCALENDAR_URL: https://calendar.example.com
       # IOCONTACTS_URL: https://contacts.example.com
       # IONOTES_URL: https://notes.example.com
+      # the weather (or Settings › Weather): a key from developer.accuweather.com and a location key Settings finds
+      # ACCUWEATHER_API_KEY: change-me
+      # ACCUWEATHER_LOCATION: "349727"

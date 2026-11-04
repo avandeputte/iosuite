@@ -70,7 +70,8 @@ input, select, textarea { font: inherit; color: inherit; }
 
 /* ---- the start page: a tile per app. Each tile has room under its name for what the app will show later (today's
    events, the newest photos…): the `.more` block, empty for now. */
-.hello { margin: 8px 0 24px; }
+.top { display: flex; gap: 24px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; margin: 8px 0 24px; }
+.hello { min-width: 0; }
 .hello h1 { font-size: 28px; font-weight: 500; margin: 0 0 4px; }
 .apps { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 16px; }
 .app { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 22px 14px 18px; border-radius: var(--r-l); border: 1px solid var(--line);
@@ -84,6 +85,43 @@ input, select, textarea { font: inherit; color: inherit; }
 .app .more { width: 100%; min-height: 0; }
 .app .more:empty { display: none; }
 .empty { padding: 48px 24px; text-align: center; color: var(--fg2); }
+
+/* ---- the weather (AccuWeather): now on the left, the days ahead on the right */
+.weather { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; min-height: 40px; }
+.wx { display: inline-flex; width: 28px; height: 28px; flex: none; color: var(--name-io); }
+.wx svg { width: 100%; height: 100%; fill: currentColor; }
+.wx.big { width: 56px; height: 56px; }
+.wxnow { display: flex; gap: 12px; align-items: center; }
+.wxnow:hover .wxtext { text-decoration: underline; }
+.wxtemp { font-size: 30px; font-weight: 500; line-height: 1.1; }
+.wxtext { color: var(--fg2); }
+.wxdays { display: flex; gap: 4px; }
+.wxday { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 8px; border-radius: var(--r-m); min-width: 54px; }
+.wxday:hover { background: var(--bg2); }
+.wxday .wx { width: 24px; height: 24px; }
+.wxerr { display: flex; gap: 12px; align-items: center; color: var(--fg2); }
+.wxerr .wx { color: var(--fg2); }
+.found { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+
+/* ---- bookmarks, as homepage: a column per group, a row per link */
+.bookmarks { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 8px 20px; margin-top: 28px; }
+.bmgroup h2 { font-size: var(--fs-l); font-weight: 500; margin: 0 0 8px; color: var(--fg2); }
+.bm { display: flex; align-items: center; height: 40px; margin-bottom: 8px; border-radius: var(--r-s); background: var(--bg2); overflow: hidden; min-width: 0; }
+.bm:hover { background: var(--bg3); }
+.bmic { flex: none; width: 44px; height: 100%; display: inline-flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--fg) 7%, transparent); font-size: var(--fs-s); font-weight: 600; }
+.bmic img { width: 20px; height: 20px; object-fit: contain; }
+.bmname { padding: 0 10px; font-size: var(--fs-m); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
+.bmdesc { padding-right: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 45%; }
+.bmedit { padding: 8px 0 4px; border-bottom: 1px solid var(--line); }
+.bmhead { display: flex; align-items: center; gap: 2px; }
+.bmhead b { margin-right: 8px; }
+.bmrow { display: flex; align-items: center; gap: 8px; height: 40px; margin: 4px 0; border-radius: var(--r-s); background: var(--bg2); overflow: hidden; }
+.bmrow .bmname { flex: 0 1 auto; }
+.bmrow .bmdesc { flex: 1; max-width: none; }
+.bmtools { margin-left: auto; display: flex; flex: none; }
+.bmtools .iconbtn, .bmhead .iconbtn { width: 32px; height: 32px; }
+.iconbtn:disabled { opacity: .3; pointer-events: none; }
+textarea.t { height: auto; min-height: 120px; padding: 10px 12px; resize: vertical; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: var(--fs-m); }
 
 /* ---- forms, boxes, tables (as in the other io apps) */
 .field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
@@ -153,4 +191,8 @@ table.t th { font-size: var(--fs-s); color: var(--fg2); font-weight: 600; }
   .app .nm { font-size: var(--fs-l); }
   .hello h1 { font-size: 22px; }
   .approw .nm { width: auto; }
+  .top { gap: 12px; }
+  .wxdays { gap: 0; }
+  .wxday { min-width: 46px; padding: 6px 4px; }
+  .bookmarks { grid-template-columns: 1fr; }
 }

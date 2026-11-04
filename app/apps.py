@@ -16,7 +16,7 @@ CATALOGUE = [
     {"key": "iohealth", "name": "ioHealth", "tagline": "Health and fitness", "port": 47800, "color": "#e8445a", "icon": "static/icons/apps/iohealth.svg"},
     {"key": "iocalendar", "name": "ioCalendar", "tagline": "Calendar", "port": 8620, "color": "#963522", "icon": "static/icons/apps/iocalendar.svg"},
     {"key": "iocontacts", "name": "ioContacts", "tagline": "Contacts", "port": 8610, "color": "#4f2f7d", "icon": "static/icons/apps/iocontacts.svg"},
-    {"key": "ionotes", "name": "ioNotes", "tagline": "Notes", "port": 8610, "color": "#1c5a5e", "icon": "static/icons/apps/ionotes.png"},
+    {"key": "ionotes", "name": "ioNotes", "tagline": "Notes", "port": 8610, "color": "#1c5a5e", "icon": "static/icons/apps/ionotes.svg"},
 ]
 KEYS = [a["key"] for a in CATALOGUE]
 

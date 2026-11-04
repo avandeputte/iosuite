@@ -5,7 +5,7 @@ Clients authenticate with the web session cookie (the suite's, shared by every i
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 
-from app import APP_VERSION, apps, config, db, updates, users
+from app import APP_VERSION, apps, bookmarks, config, db, updates, users, weather
 
 router = APIRouter()
 
@@ -21,6 +21,13 @@ def admin(request: Request) -> dict:
     u = me(request)
     if not users.is_admin(u):
         raise HTTPException(403, "Admins only")
+    return u
+
+
+def editor(request: Request) -> dict:
+    u = me(request)
+    if u.get("role") not in ("editor", "admin"):
+        raise HTTPException(403, "Editors and admins only")
     return u
 
 
@@ -68,6 +75,135 @@ async def apps_save(request: Request):
     except ValueError as e:
         raise HTTPException(400, str(e))
     return {"items": apps.settings()}
+
+
+# ------------------------------------------------------------------ the weather
+
+@router.get("/api/weather")
+async def get_weather(request: Request):
+    """The widget: current conditions and the 5-day forecast, from the server's copy (refreshed from AccuWeather when
+    it is older than 45 minutes / 6 hours). {enabled: false} until an admin sets it up."""
+    me(request)
+    try:
+        return await run_in_threadpool(weather.current)
+    except weather.WeatherError as e:
+        return {"enabled": True, "error": str(e), "current": None, "forecast": None, "units": weather.settings()["units"],
+                "location": weather.settings()["locationName"]}
+
+
+@router.get("/api/weather/settings")
+def weather_settings(request: Request):
+    admin(request)
+    return weather.settings()
+
+
+@router.post("/api/weather/settings")
+async def weather_save(request: Request):
+    """Admins. Body: {key?, locationKey?, locationName?, units?}."""
+    admin(request)
+    b = await request.json()
+    try:
+        weather.save(b if isinstance(b, dict) else {})
+    except weather.WeatherError as e:
+        raise HTTPException(400, str(e))
+    return weather.settings()
+
+
+@router.get("/api/weather/search")
+async def weather_search(request: Request, q: str = "", key: str = ""):
+    """Admins: places matching a city name, to pick the location in Settings. `key` tries a key before it is saved."""
+    admin(request)
+    try:
+        return {"items": await run_in_threadpool(weather.search, q, key)}
+    except weather.WeatherError as e:
+        raise HTTPException(400, str(e))
+
+
+# ------------------------------------------------------------------ bookmarks
+
+@router.get("/api/bookmarks")
+def list_bookmarks(request: Request):
+    me(request)
+    return {"groups": bookmarks.groups()}
+
+
+def _bm(fn, *a, **kw):
+    try:
+        return fn(*a, **kw)
+    except bookmarks.BadBookmark as e:
+        raise HTTPException(400, str(e))
+
+
+@router.post("/api/bookmarks/groups")
+async def add_group(request: Request):
+    """Editors. {name}"""
+    editor(request)
+    b = await request.json()
+    return _bm(bookmarks.add_group, b.get("name"))
+
+
+@router.patch("/api/bookmarks/groups/{gid}")
+async def rename_group(gid: int, request: Request):
+    editor(request)
+    b = await request.json()
+    _bm(bookmarks.rename_group, gid, b.get("name"))
+    return {"ok": True}
+
+
+@router.delete("/api/bookmarks/groups/{gid}")
+def delete_group(gid: int, request: Request):
+    editor(request)
+    _bm(bookmarks.delete_group, gid)
+    return {"ok": True}
+
+
+@router.post("/api/bookmarks/groups/order")
+async def order_groups(request: Request):
+    """Editors. {ids: [group id, ...]} in the order wanted."""
+    editor(request)
+    b = await request.json()
+    _bm(bookmarks.order_groups, [int(x) for x in b.get("ids") or []])
+    return {"ok": True}
+
+
+@router.post("/api/bookmarks/groups/{gid}/links")
+async def add_link(gid: int, request: Request):
+    """Editors. {name, href, abbr?, description?, icon?}"""
+    editor(request)
+    b = await request.json()
+    return _bm(bookmarks.add_link, gid, b.get("name"), b.get("href"), b.get("abbr"), b.get("description"), b.get("icon"))
+
+
+@router.post("/api/bookmarks/groups/{gid}/order")
+async def order_links(gid: int, request: Request):
+    """Editors. {ids: [link id, ...]} in the order wanted; a link from another group moves into this one."""
+    editor(request)
+    b = await request.json()
+    _bm(bookmarks.order_links, gid, [int(x) for x in b.get("ids") or []])
+    return {"ok": True}
+
+
+@router.patch("/api/bookmarks/links/{lid}")
+async def update_link(lid: int, request: Request):
+    """Editors. Any of {name, href, abbr, description, icon, groupId}."""
+    editor(request)
+    b = await request.json()
+    return _bm(bookmarks.update_link, lid, b if isinstance(b, dict) else {})
+
+
+@router.delete("/api/bookmarks/links/{lid}")
+def delete_link(lid: int, request: Request):
+    editor(request)
+    _bm(bookmarks.delete_link, lid)
+    return {"ok": True}
+
+
+@router.post("/api/bookmarks/import")
+async def import_bookmarks(request: Request):
+    """Editors. {yaml, replace?}: a homepage bookmarks.yaml."""
+    editor(request)
+    b = await request.json()
+    return _bm(bookmarks.import_yaml, b.get("yaml") or "", bool(b.get("replace")))
 
 
 # ------------------------------------------------------------------ the server: version, updates

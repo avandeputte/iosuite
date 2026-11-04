@@ -1,7 +1,7 @@
 """MariaDB access: one short connection per unit of work, and the schema (created and migrated at start).
 
-The start page keeps little: a `meta` table of settings (the apps' addresses, the update switch, the schema version).
-The dynamic content the page grows later gets its tables here, in the same way as in the other io apps."""
+The start page keeps a `meta` table of settings (the apps' addresses, the weather settings and its cached answers, the
+update switch, the schema version) and the bookmarks. What the page grows later gets its tables here too."""
 import threading
 from contextlib import contextmanager
 
@@ -10,7 +10,7 @@ from pymysql.cursors import DictCursor
 
 from app import config
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 # Every table is InnoDB/utf8mb4. Accounts and app passwords live in the suite's shared auth database (iothing-auth,
 # app/auth.py), not here.
@@ -18,6 +18,25 @@ SCHEMA = [
     """CREATE TABLE IF NOT EXISTS meta (
         k VARCHAR(64) PRIMARY KEY,
         v MEDIUMTEXT
+    )""",
+    # bookmarks, as homepage lays them out: groups of links, each with a name, an abbreviation (or an icon), the link and a
+    # line under it (the host name when empty). Shared by the family; editors and admins change them.
+    """CREATE TABLE IF NOT EXISTS bookmark_groups (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(128) NOT NULL,
+        sort INT NOT NULL DEFAULT 0
+    )""",
+    """CREATE TABLE IF NOT EXISTS bookmarks (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        group_id INT NOT NULL,
+        name VARCHAR(128) NOT NULL,
+        abbr VARCHAR(8) NULL,
+        href VARCHAR(2048) NOT NULL,
+        description VARCHAR(512) NULL,
+        icon VARCHAR(1024) NULL,
+        sort INT NOT NULL DEFAULT 0,
+        KEY (group_id, sort),
+        FOREIGN KEY (group_id) REFERENCES bookmark_groups(id) ON DELETE CASCADE
     )""",
 ]
 

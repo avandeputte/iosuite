@@ -36,6 +36,10 @@ PUBLIC_URL = env("PUBLIC_URL", "").rstrip("/")   # e.g. https://home.example.com
 # an admin saved in Settings › Apps, else this host with the app's usual port.
 APP_URLS = {k: env(f"{k.upper()}_URL").rstrip("/") for k in ("iopix", "iohealth", "iocalendar", "iocontacts", "ionotes")}
 
+# the weather (AccuWeather; Settings › Weather does the same, the environment wins): an API key from developer.accuweather.com
+ACCUWEATHER_API_KEY = env("ACCUWEATHER_API_KEY").strip()
+ACCUWEATHER_LOCATION = env("ACCUWEATHER_LOCATION").strip()   # a location key (Settings finds it from a city name)
+
 # updates: the GitHub repository and branch followed by the version check and update.sh
 REPO = env("IOSUITE_REPO", "avandeputte/iosuite")
 BRANCH = env("IOSUITE_BRANCH", "main")
