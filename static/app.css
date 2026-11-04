@@ -71,17 +71,21 @@ input, select, textarea { font: inherit; color: inherit; }
 
 /* ---- the start page: a tile per app. Each tile has room under its name for what the app will show later (today's
    events, the newest photos…): the `.more` block, filled by drawWidgets. */
-.top { display: flex; gap: 24px; align-items: flex-start; justify-content: space-between; margin: 8px 0 24px; }
+.top { display: flex; gap: 20px; align-items: center; margin: 0 0 18px; }
+.top .weather { margin-left: auto; }
+/* the start page has no top bar (no title): the account menu sits at the end of the first row */
+body.home #topbar { display: none; }
+body.home #main { top: env(safe-area-inset-top); }
 .hello { min-width: 0; flex: none; }
-.hello h1 { font-size: 28px; font-weight: 500; margin: 0 0 4px; }
+.hello h1 { font-size: 28px; font-weight: 500; margin: 0 0 2px; }
 /* the tiles: a column per app with a widget, and a column of two half-height tiles for the apps without (--cols is set by the page) */
 .apps { display: grid; grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr)); gap: 16px; }
 .stack { display: grid; grid-template-rows: 1fr 1fr; gap: 16px; min-width: 0; }
-.app { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 22px 14px 18px; border-radius: var(--r-l); border: 1px solid var(--line);
+.app { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 14px 12px; border-radius: var(--r-l); border: 1px solid var(--line);
   text-align: center; min-width: 0; transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease; }
-.app .who { display: flex; flex-direction: column; align-items: center; gap: 10px; min-width: 0; }
-.app.small { flex-direction: row; justify-content: center; gap: 14px; padding: 16px 14px; text-align: left; }
-.app.small img { width: 56px; height: 56px; flex: none; }
+.app .who { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; }
+.app.small { flex-direction: row; justify-content: center; gap: 12px; padding: 12px 14px; text-align: left; }
+.app.small img { width: 48px; height: 48px; flex: none; }
 .app.small .who { align-items: flex-start; gap: 4px; }
 .app.small .tag { margin-top: 0; }
 .app.small .more { display: none; }
@@ -93,20 +97,20 @@ input, select, textarea { font: inherit; color: inherit; }
 .strip .wgph img { transition: transform .15s ease; }
 .app:hover { transform: translateY(-2px); box-shadow: var(--shadow); border-color: transparent; }
 .app:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.app img { width: 84px; height: 84px; border-radius: 22%; }
+.app img { width: 60px; height: 60px; border-radius: 22%; }
 .app .nm { font-size: var(--fs-xl); font-weight: 700; letter-spacing: -.02em; }
 .app .nm .io { color: var(--name-io); } .app .nm .ap { color: color-mix(in srgb, var(--c, var(--fg)) calc(100% - var(--app-lift)), white var(--app-lift)); }
-.app .tag { color: var(--fg2); font-size: var(--fs-m); margin-top: -6px; }
+.app .tag { color: var(--fg2); font-size: var(--fs-m); margin-top: -4px; }
 .app .more { width: 100%; min-height: 0; }
 .app .more:empty { display: none; }
 /* what a tile shows (drawWidgets): left-aligned under the name, small */
-.wg { text-align: left; border-top: 1px solid var(--line); padding-top: 10px; margin-top: 2px; font-size: var(--fs-m); display: flex; flex-direction: column; gap: 6px; }
+.wg { text-align: left; border-top: 1px solid var(--line); padding-top: 8px; margin-top: 4px; font-size: var(--fs-m); display: flex; flex-direction: column; gap: 6px; }
 .wghead { display: flex; justify-content: space-between; gap: 8px; font-size: var(--fs-s); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--fg2); }
 .wghead .muted { font-weight: 400; text-transform: none; letter-spacing: 0; }
-.wgpix { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; }
+.wgpix { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }  /* one row of four */
 .wgph { position: relative; aspect-ratio: 1; border-radius: var(--r-s); overflow: hidden; background: var(--bg2); }
 .wgph img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
-.wgph span { position: absolute; left: 0; right: 0; bottom: 0; padding: 10px 6px 4px; font-size: var(--fs-xs); color: #fff; background: linear-gradient(transparent, rgba(0,0,0,.6)); }
+.wgph span { position: absolute; left: 0; right: 0; bottom: 0; padding: 8px 4px 3px; font-size: var(--fs-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #fff; background: linear-gradient(transparent, rgba(0,0,0,.6)); }
 .wgev, .wgring { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .wg .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
 .wgwhen { flex: none; font-size: var(--fs-s); }
@@ -119,19 +123,19 @@ input, select, textarea { font: inherit; color: inherit; }
 .wghealth > div { flex: 1 1 92px; min-width: 0; }  /* beside the rings, or under them on a narrow tile */
 .empty { padding: 48px 24px; text-align: center; color: var(--fg2); }
 
-/* ---- the weather (AccuWeather), to the right of the greeting: now above, the days ahead under it */
-.weather { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; min-height: 40px; min-width: 0; }
+/* ---- the weather (AccuWeather), to the right of the greeting, in one row: now, then the days ahead; the details are a tooltip */
+.weather { display: flex; gap: 16px; align-items: center; min-height: 40px; min-width: 0; }
 .wx { display: inline-flex; width: 28px; height: 28px; flex: none; color: var(--name-io); }
 .wx svg { width: 100%; height: 100%; fill: currentColor; }
-.wx.big { width: 56px; height: 56px; }
-.wxnow { display: flex; gap: 12px; align-items: center; }
+.wx.big { width: 44px; height: 44px; }
+.wxnow { display: flex; gap: 10px; align-items: center; padding-right: 8px; border-right: 1px solid var(--line); }
 .wxnow:hover .wxtext { text-decoration: underline; }
-.wxtemp { font-size: 30px; font-weight: 500; line-height: 1.1; }
+.wxtemp { font-size: 26px; font-weight: 500; line-height: 1.1; }
 .wxtext { color: var(--fg2); }
-.wxdays { display: flex; gap: 4px; }
-.wxday { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 8px; border-radius: var(--r-m); min-width: 54px; }
+.wxdays { display: flex; gap: 2px; }
+.wxday { display: flex; flex-direction: column; align-items: center; gap: 0; padding: 2px 6px; border-radius: var(--r-m); min-width: 50px; line-height: 1.3; }
 .wxday:hover { background: var(--bg2); }
-.wxday .wx { width: 24px; height: 24px; }
+.wxday .wx { width: 22px; height: 22px; }
 .wxerr { display: flex; gap: 12px; align-items: center; color: var(--fg2); }
 .wxerr .wx { color: var(--fg2); }
 .found { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
@@ -220,7 +224,9 @@ table.t th { font-size: var(--fs-s); color: var(--fg2); font-weight: 600; }
 /* ---- tablets: the weather under the greeting, the tiles two to a row */
 @media (max-width: 900px) {
   .top { flex-wrap: wrap; }
-  .weather { align-items: flex-start; }
+  .top .hello { flex: 1; }
+  .top #usermenu { order: 1; }
+  .top .weather { order: 2; flex: 1 1 100%; flex-wrap: wrap; margin-left: 0; }
   .apps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 /* ---- phones */
@@ -228,7 +234,7 @@ table.t th { font-size: var(--fs-s); color: var(--fg2); font-weight: 600; }
   #topbar { gap: 6px; padding-left: 12px; padding-right: 8px; }
   .page { padding: 16px 16px 60px; }
   .app { padding: 16px 8px 14px; }
-  .app img { width: 64px; height: 64px; }
+  .app img { width: 52px; height: 52px; }
   .app .nm { font-size: var(--fs-l); }
   .hello h1 { font-size: 22px; }
   .approw .nm { width: auto; }
@@ -239,6 +245,6 @@ table.t th { font-size: var(--fs-s); color: var(--fg2); font-weight: 600; }
   .app.small .who { align-items: center; }
   .strip .row { grid-auto-columns: 104px; }
   .wxdays { gap: 0; }
-  .wxday { min-width: 46px; padding: 6px 4px; }
+  .wxday { min-width: 44px; padding: 2px 3px; }
   .bookmarks { grid-template-columns: 1fr; }
 }

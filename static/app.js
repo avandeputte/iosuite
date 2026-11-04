@@ -149,6 +149,9 @@ function route() {
 async function onRoute() {
   const r = route();
   const page = h('div', { class: 'page' });
+  // the start page has no top bar: the account menu sits in its first row instead (showHome moves it there)
+  document.body.classList.toggle('home', r.view === 'home');
+  if (r.view !== 'home') $('#topbar').append($('#usermenu'));
   $('#main').replaceChildren(page);
   try { await ({ home: showHome, settings: showSettings })[r.view](page, r); } catch (e) { fail(e); }
 }
@@ -162,7 +165,7 @@ async function showHome(page) {
   const first = (S.user.displayName || S.user.name).split(/\s+/)[0];
   const wx = h('div', { class: 'weather' });
   page.append(h('div', { class: 'top' }, h('div', { class: 'hello' }, h('h1', null, `${greeting()}, ${first}`),
-    h('div', { class: 'muted' }, new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' }))), wx));
+    h('div', { class: 'muted' }, new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' }))), wx, $('#usermenu')));
   drawWeather(wx);  // fills in when AccuWeather (or the server's copy) answers
   // the tiles: an app with something to show gets a column of its own; the others go two to a column, half the height
   const tile = (a, small) => h('a', { class: `app${small ? ' small' : ''}`, href: a.url, 'data-app': a.key, title: a.url },
@@ -222,10 +225,11 @@ function drawPixWidget(d) {
   if (!d.items || !d.items.length) return null;
   const otd = d.kind === 'onthisday';
   const cap = (it) => (otd ? (it.yearsAgo === 1 ? '1 year ago' : `${it.yearsAgo} years ago`) : (it.year || ''));
+  // four small squares in a row: the year fits under each, "14 years ago" is the tooltip
   return [wgHead(otd ? 'On this day' : 'Rediscover', otd && d.count > d.items.length ? `${d.count} photos` : null),
     h('div', { class: 'wgpix' }, d.items.slice(0, 4).map((it) => h('div', { class: 'wgph', title: String(cap(it)) },
       h('img', { src: `/api/widgets/iopix/thumb/${it.id}`, alt: '', loading: 'lazy', onerror: (e) => e.target.parentNode.remove() }),
-      cap(it) ? h('span', null, cap(it)) : null)))];
+      it.year ? h('span', null, it.year) : null)))];
 }
 
 function evTime(o) {
@@ -289,14 +293,14 @@ async function drawWeather(el) {
   const day = (d) => new Date(`${d.date}T12:00:00`).toLocaleDateString([], { weekday: 'short' });
   const t = (v) => fmtTemp(imp ? degF(v) : v);  // the forecast comes in °C
   el.replaceChildren(
-    h('a', { class: 'wxnow', href: c.link || '#', target: c.link ? '_blank' : null, rel: 'noreferrer', title: w.location },
+    h('a', { class: 'wxnow', href: c.link || '#', target: c.link ? '_blank' : null, rel: 'noreferrer',
+      title: [w.location, c.feels[u] != null ? `feels ${fmtTemp(c.feels[u])}` : null, c.humidity != null ? `${c.humidity}% humidity` : null,
+        c.wind[u] != null ? `wind ${Math.round(c.wind[u])} ${imp ? 'mph' : 'km/h'}` : null].filter(Boolean).join(' · ') },
       wxIcon(c.icon, 'big'),
-      h('div', null, h('div', { class: 'wxtemp' }, fmtTemp(c.temp[u])), h('div', { class: 'wxtext' }, c.text),
-        h('div', { class: 'muted small' }, [w.location, c.feels[u] != null ? `feels ${fmtTemp(c.feels[u])}` : null, c.humidity != null ? `${c.humidity}% humidity` : null,
-          c.wind[u] != null ? `wind ${Math.round(c.wind[u])} ${imp ? 'mph' : 'km/h'}` : null].filter(Boolean).join(' · ')))),
+      h('div', null, h('div', { class: 'wxtemp' }, fmtTemp(c.temp[u])), h('div', { class: 'wxtext small' }, c.text))),
     w.forecast && w.forecast.days && w.forecast.days.length ? h('div', { class: 'wxdays' }, w.forecast.days.map((d) =>
       h('div', { class: 'wxday', title: `${d.text || ''}${d.rain != null ? ` · ${d.rain}% chance of rain` : ''}` }, h('span', { class: 'muted small' }, day(d)), wxIcon(d.icon), h('span', { class: 'small' }, `${t(d.max)} `, h('span', { class: 'muted' }, t(d.min)))))) : null,
-    w.stale ? h('div', { class: 'muted small' }, `Older reading (${w.error || 'AccuWeather did not answer'})`) : h('span'));
+    w.stale ? h('span', { class: 'muted small', title: w.error || 'AccuWeather did not answer' }, 'older') : h('span'));
 }
 
 /** The bookmarks, as homepage lays them out: a column per group, a row per link with its abbreviation (or icon), name and host. */

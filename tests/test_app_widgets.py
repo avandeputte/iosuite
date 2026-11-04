@@ -41,8 +41,11 @@ def test_iopix_on_this_day_one_per_year(client, apps_answer):
     table[("iopix", "/api/photos")] = {"id": [1, 2, 3, 4], "ts": [_ts(year, 1, 1), _ts(year - 1, 1, 1), _ts(year - 1, 1, 1), _ts(year - 5, 1, 1)]}
     d = client.get("/api/widgets/iopix?tz=Europe/Brussels").json()
     assert d["kind"] == "onthisday" and d["count"] == 3
-    assert [i["yearsAgo"] for i in d["items"]] == [1, 5]       # this year's photos left out, one per year
-    assert d["items"][0]["id"] in (2, 3) and d["items"][1]["id"] == 4
+    assert [i["yearsAgo"] for i in d["items"]] == [1, 5, 1]    # this year's photos left out; one from each year, then the rest
+    assert {d["items"][0]["id"], d["items"][2]["id"]} == {2, 3} and d["items"][1]["id"] == 4
+    table[("iopix", "/api/photos")] = {"id": [1, 2, 3, 4, 5], "ts": [_ts(year - 14, 1, 1)] * 5}
+    d = client.get("/api/widgets/iopix").json()
+    assert d["count"] == 5 and len(d["items"]) == 4 and all(i["yearsAgo"] == 14 for i in d["items"])  # four of one year's five
     key, path, params, cookie = asked[0]
     assert params["md"] == dt.datetime.now(widgets._zone("Europe/Brussels")).strftime("%m-%d") and cookie  # the viewer's own session goes along
 
