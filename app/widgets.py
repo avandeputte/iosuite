@@ -25,7 +25,7 @@ from app import apps
 
 TIMEOUT = 4  # seconds, per request to an app
 UA = "ioSuite start page"
-WIDGETS = ("iopix", "iocalendar", "iohealth")
+WIDGETS = ("iopix", "iocalendar", "iohealth", "iocontacts")
 
 
 class Unavailable(Exception):
@@ -150,21 +150,81 @@ def iocalendar(request: Request, tz: str = "", n: int = 3) -> dict:
     return out
 
 
+def iocalendar_week(request: Request, tz: str = "", days: int = 7, n: int = 12) -> dict:
+    """{days: [{date, items: [occurrence]}]}: the coming `days` days after today, each with its events (cancelled ones
+    left out), up to n events in all; days without any are left out."""
+    zone = _zone(tz)
+    start = (dt.datetime.now(zone) + dt.timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    end = start + dt.timedelta(days=days)
+    colors = {c["id"]: c.get("color") for c in fetch(request, "iocalendar", "/api/calendars").get("items", [])}
+    occ = fetch(request, "iocalendar", "/api/occurrences", {"start": start.isoformat(timespec="seconds"), "end": end.isoformat(timespec="seconds")})
+    by_day: dict[str, list] = {}
+    total = 0
+    for o in occ.get("items", []):
+        if (o.get("status") or "").upper() == "CANCELLED":
+            continue
+        day = str(o.get("start") or "")[:10]
+        if not day:
+            continue
+        if total < n:
+            by_day.setdefault(day, []).append({"title": o.get("title") or "(no title)", "start": o.get("start"), "end": o.get("end"),
+                                               "allDay": bool(o.get("allDay")), "location": o.get("location"), "color": colors.get(o.get("calendarId"))})
+        total += 1
+    return {"days": [{"date": d, "items": by_day[d]} for d in sorted(by_day)], "more": max(0, total - n)}
+
+
+# ------------------------------------------------------------------ ioContacts: birthdays and anniversaries ahead
+
+def iocontacts(request: Request, days: int = 30, n: int = 8) -> dict:
+    """{items: [{id, name, hasPhoto, label, turns, in, date}]}: the family's birthdays and other dates in the next
+    `days` days, soonest first, up to n."""
+    got = fetch(request, "iocontacts", "/api/upcoming", {"days": max(1, min(days, 366))})
+    items = []
+    for x in got.get("items", []):
+        items.append({"id": x.get("contactId"), "name": x.get("fn"), "hasPhoto": bool(x.get("hasPhoto")), "label": x.get("label") or "birthday",
+                      "turns": x.get("turns"), "in": x.get("inDays"), "date": x.get("date")})
+    return {"items": items[:n], "more": max(0, len(items) - n)}
+
+
+def iocontacts_photo(request: Request, contact_id: int) -> tuple[bytes, str]:
+    return fetch(request, "iocontacts", f"/api/contacts/{int(contact_id)}/photo", raw=True)
+
+
 # ------------------------------------------------------------------ ioHealth: today's steps and activity rings
 
 def iohealth(request: Request, tz: str = "") -> dict:
-    """{steps, rings: {move, moveGoal, exercise, exerciseGoal, stand, standGoal} | null} for the viewer's today."""
+    """{steps, rings: {move, moveGoal, exercise, exerciseGoal, stand, standGoal} | null, sleep: {date, asleep, inBed, start,
+    end} | null, week: [{date, steps}]} for the viewer: today's steps and rings, last night's sleep (minutes), and the
+    steps of the last seven days."""
     day = dt.datetime.now(_zone(tz)).date().isoformat()
     q = {"from": day, "to": day}
     if tz:
         q["tz"] = tz
-    steps = rings = None
+    steps = rings = sleep = None
+    week: list = []
     failed = []
     try:
-        pts = fetch(request, "iohealth", "/api/series", {**q, "type": "step_count", "bucket": "day"}).get("points") or []
-        steps = round(pts[-1]["v"]) if pts else None
+        # a day per point, the last seven days: today's number, and the trend behind it
+        since = (dt.datetime.now(_zone(tz)).date() - dt.timedelta(days=6)).isoformat()
+        pts = fetch(request, "iohealth", "/api/series", {**q, "from": since, "type": "step_count", "bucket": "day"}).get("points") or []
+        by_day = {dt.datetime.fromtimestamp(p["t"], _zone(tz)).date().isoformat(): p.get("v") for p in pts if p.get("t") is not None}
+        week = [{"date": d, "steps": round(by_day[d]) if by_day.get(d) is not None else None}
+                for d in (( dt.date.fromisoformat(since) + dt.timedelta(days=i)).isoformat() for i in range(7))]
+        steps = week[-1]["steps"] if week and week[-1]["date"] == day else None
+        if steps is None and by_day.get(day) is not None:
+            steps = round(by_day[day])
     except Unavailable as e:
         failed.append(e)
+    try:
+        # last night: the night that ended this morning (ioHealth names a night by the day it ends on)
+        nights = fetch(request, "iohealth", "/api/sleep", {**q, "from": (dt.date.fromisoformat(day) - dt.timedelta(days=1)).isoformat()})
+        nights = nights if isinstance(nights, list) else nights.get("items", [])
+        last = next((x for x in reversed(nights) if x.get("asleep")), None)
+        if last:
+            sleep = {"date": last.get("date"), "asleep": round(last["asleep"]), "inBed": round(last.get("inBed") or 0),
+                     "start": last.get("start"), "end": last.get("end")}
+    except Unavailable:
+        pass  # sleep is a bonus: the tile shows without it
     try:
         a = fetch(request, "iohealth", "/api/activity", q)
         rows = a if isinstance(a, list) else a.get("items", [])
@@ -174,7 +234,7 @@ def iohealth(request: Request, tz: str = "") -> dict:
         failed.append(e)
     if len(failed) == 2:  # one of the two missing still shows the other
         raise failed[0]
-    return {"steps": steps, "rings": rings}
+    return {"steps": steps, "rings": rings, "sleep": sleep, "week": week}
 
 
 def get(request: Request, key: str, tz: str = "", kind: str = "", n: int = 0) -> dict:
@@ -184,4 +244,8 @@ def get(request: Request, key: str, tz: str = "", kind: str = "", n: int = 0) ->
         tz = ""
     if key == "iopix":
         return iopix(request, tz, min(max(int(n or 0), 1), 24) if n else 4, kind if kind in ("onthisday", "rediscover") else "")
+    if key == "iocalendar" and kind == "week":
+        return iocalendar_week(request, tz)
+    if key == "iocontacts":
+        return iocontacts(request)
     return {"iocalendar": iocalendar, "iohealth": iohealth}[key](request, tz)

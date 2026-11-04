@@ -31,7 +31,7 @@ def test_needs_sign_in(client):
 
 
 def test_unknown_app_and_unreachable(client, apps_answer):
-    assert client.get("/api/widgets/iocontacts").status_code == 404
+    assert client.get("/api/widgets/ionotes").status_code == 404
     assert client.get("/api/widgets/iopix").status_code == 502
 
 
@@ -93,17 +93,65 @@ def test_iocalendar_rest_of_today_then_next(client, apps_answer):
     assert d["today"] == [] and d["next"]["title"] == "Trip"
 
 
-def test_iohealth_steps_and_rings(client, apps_answer):
+def test_iohealth_steps_rings_sleep_and_week(client, apps_answer):
     table, asked = apps_answer
-    table[("iohealth", "/api/series")] = {"points": [{"t": 0, "v": 8421.4, "n": 30}]}
+    zone = widgets._zone("Europe/Brussels")
+    today = dt.datetime.now(zone).date()
+    at = lambda d: int(dt.datetime.combine(d, dt.time(12), zone).timestamp())  # noqa: E731
+    table[("iohealth", "/api/series")] = {"points": [{"t": at(today), "v": 8421.4, "n": 30}, {"t": at(today - dt.timedelta(days=2)), "v": 12000, "n": 40}]}
     table[("iohealth", "/api/activity")] = [{"date": "x", "move": 300, "moveGoal": 500, "exercise": 20, "exerciseGoal": 30, "stand": 8, "standGoal": 12}]
+    table[("iohealth", "/api/sleep")] = [{"date": (today - dt.timedelta(days=1)).isoformat(), "asleep": 400, "inBed": 450, "start": "a", "end": "b"},
+                                        {"date": today.isoformat(), "asleep": 441.6, "inBed": 480.2, "start": "2026-11-03T23:10:00+01:00", "end": "2026-11-04T07:30:00+01:00"}]
     d = client.get("/api/widgets/iohealth?tz=Europe/Brussels").json()
     assert d["steps"] == 8421 and d["rings"]["moveGoal"] == 500
-    assert all(p["tz"] == "Europe/Brussels" and p["from"] == p["to"] for _, _, p, _ in asked)
+    assert d["sleep"] == {"date": today.isoformat(), "asleep": 442, "inBed": 480, "start": "2026-11-03T23:10:00+01:00", "end": "2026-11-04T07:30:00+01:00"}
+    assert len(d["week"]) == 7 and d["week"][-1] == {"date": today.isoformat(), "steps": 8421} and d["week"][4]["steps"] == 12000
+    assert d["week"][0]["date"] == (today - dt.timedelta(days=6)).isoformat() and d["week"][0]["steps"] is None
+    assert all(p["tz"] == "Europe/Brussels" and p["to"] == today.isoformat() for _, _, p, _ in asked)
+    series = next(p for _, path, p, _ in asked if path == "/api/series")
+    assert series["from"] == (today - dt.timedelta(days=6)).isoformat()  # seven days, today included
 
     table[("iohealth", "/api/series")] = {"points": []}
     table[("iohealth", "/api/activity")] = []
-    assert client.get("/api/widgets/iohealth").json() == {"steps": None, "rings": None}
+    del table[("iohealth", "/api/sleep")]  # sleep is a bonus: without it the tile still shows
+    assert client.get("/api/widgets/iohealth").json() == {"steps": None, "rings": None, "sleep": None, "week": [{"date": (dt.date.today() - dt.timedelta(days=6 - i)).isoformat(), "steps": None} for i in range(7)]}
+
+
+def test_iocalendar_week_ahead(client, apps_answer):
+    table, asked = apps_answer
+    table[("iocalendar", "/api/calendars")] = {"items": [{"id": 1, "color": "#963522"}]}
+    tomorrow = dt.date.today() + dt.timedelta(days=1)
+    day3 = dt.date.today() + dt.timedelta(days=3)
+    table[("iocalendar", "/api/occurrences")] = {"items": [
+        {"calendarId": 1, "title": "Dentist", "start": f"{day3}T10:00:00", "end": f"{day3}T11:00:00", "location": "Town"},
+        {"calendarId": 2, "title": "Off", "start": tomorrow.isoformat(), "end": tomorrow.isoformat(), "allDay": True},
+        {"calendarId": 1, "title": "Gone", "start": f"{tomorrow}T09:00:00", "end": f"{tomorrow}T10:00:00", "status": "CANCELLED"},
+    ]}
+    d = client.get("/api/widgets/iocalendar?kind=week&tz=Europe/Brussels").json()
+    assert [x["date"] for x in d["days"]] == [tomorrow.isoformat(), day3.isoformat()] and d["more"] == 0
+    assert d["days"][0]["items"] == [{"title": "Off", "start": tomorrow.isoformat(), "end": tomorrow.isoformat(), "allDay": True, "location": None, "color": None}]
+    assert d["days"][1]["items"][0]["color"] == "#963522" and d["days"][1]["items"][0]["location"] == "Town"
+    params = next(p for _, path, p, _ in asked if path == "/api/occurrences")
+    assert params["start"].startswith(f"{tomorrow}T00:00:00") and params["end"].startswith((tomorrow + dt.timedelta(days=7)).isoformat())
+    # without kind=week the tile's own view, as before
+    assert "today" in client.get("/api/widgets/iocalendar").json()
+
+
+def test_iocontacts_birthdays_and_photo(client, apps_answer):
+    table, asked = apps_answer
+    table[("iocontacts", "/api/upcoming")] = {"items": [
+        {"contactId": 5, "fn": "Ada Lovelace", "hasPhoto": True, "label": "birthday", "turns": 41, "inDays": 0, "date": "2026-11-04"},
+        {"contactId": 9, "fn": "Bob", "hasPhoto": False, "label": "anniversary", "turns": 10, "inDays": 12, "date": "2026-11-16"},
+    ] + [{"contactId": i, "fn": f"P{i}", "inDays": 20} for i in range(10, 20)]}
+    d = client.get("/api/widgets/iocontacts").json()
+    assert len(d["items"]) == 8 and d["more"] == 4
+    assert d["items"][0] == {"id": 5, "name": "Ada Lovelace", "hasPhoto": True, "label": "birthday", "turns": 41, "in": 0, "date": "2026-11-04"}
+    assert d["items"][1]["label"] == "anniversary" and d["items"][2]["label"] == "birthday"
+    assert asked[-1][2] == {"days": 30}
+    table[("iocontacts", "/api/contacts/5/photo")] = (b"\xff\xd8jpeg", "image/jpeg")
+    r = client.get("/api/widgets/iocontacts/photo/5")
+    assert r.status_code == 200 and r.content == b"\xff\xd8jpeg" and r.headers["content-type"] == "image/jpeg"
+    assert client.get("/api/widgets/iocontacts/photo/6").status_code == 502
 
 
 def test_app_refusal_is_not_a_sign_out(client, monkeypatch):

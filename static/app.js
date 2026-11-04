@@ -176,10 +176,51 @@ async function showHome(page) {
   if (!S.apps.length) page.append(h('div', { class: 'empty' }, 'No apps to show. ', S.user.role === 'admin' ? h('a', { class: 'lnk', href: '#/settings/apps' }, 'Settings › Apps') : null));
   else page.append(h('div', { class: 'apps', style: { '--cols': big.length + stacks.length } }, big.map((a) => tile(a, false)), stacks));
   drawWidgets(page);
+  // the week ahead: birthdays from ioContacts and the coming days' events from ioCalendar, a card each
+  const agenda = h('div', { class: 'agenda' });
+  if (S.apps.some((a) => a.key === 'iocontacts')) { const c = h('div', { class: 'card birthdays' }); agenda.append(c); drawBirthdays(c); }
+  if (S.apps.some((a) => a.key === 'iocalendar')) { const c = h('div', { class: 'card week' }); agenda.append(c); drawWeek(c); }
+  if (agenda.childElementCount) page.append(agenda);
   if (got.photoStrip !== 'off' && S.apps.some((a) => a.key === 'iopix')) { const strip = h('div', { class: 'strip' }); page.append(strip); drawStrip(strip, got.photoStrip); }
   const bm = h('div', { class: 'bookmarks' });
   page.append(bm);
   drawBookmarks(bm);
+}
+
+/** /api/widgets/<key>?... as JSON, or null when the app is down, not open to this account, or the answer is not JSON. */
+async function widget(key, params = {}) {
+  try {
+    const r = await fetch(`/api/widgets/${key}?${new URLSearchParams({ tz: viewerTz(), ...params })}`, { credentials: 'same-origin' });
+    return r.ok ? await r.json() : null;
+  } catch { return null; }
+}
+const inDays = (n) => (n === 0 ? 'Today' : n === 1 ? 'Tomorrow' : `In ${n} days`);
+
+/** Birthdays (and the other dates ioContacts keeps) in the next 30 days; each row opens the contact. */
+async function drawBirthdays(el) {
+  const app = S.apps.find((a) => a.key === 'iocontacts'), d = await widget('iocontacts');
+  if (!d || !d.items || !el.isConnected) { el.remove(); return; }
+  const who = (it) => h('span', { class: 'face' }, it.hasPhoto ? h('img', { src: `/api/widgets/iocontacts/photo/${it.id}`, alt: '', loading: 'lazy', onerror: (e) => e.target.replaceWith(initials(it.name)) }) : initials(it.name));
+  const what = (it) => [it.label === 'birthday' ? (it.turns ? `Turns ${it.turns}` : 'Birthday') : it.label + (it.turns ? ` · ${it.turns} years` : '')].join('');
+  el.replaceChildren(h('div', { class: 'wghead' }, h('span', null, 'Birthdays'), h('a', { class: 'muted', href: app.url, title: app.url }, d.more ? `+${d.more} more · ioContacts` : 'ioContacts')),
+    d.items.length ? h('div', { class: 'rows' }, d.items.map((it) => h('a', { class: 'bday', href: `${app.url}/#/c/${it.id}` }, who(it),
+      h('span', { class: 'bdwho' }, h('span', { class: 'bdname' }, it.name), h('span', { class: 'muted small' }, what(it))),
+      h('span', { class: `bdwhen${it.in === 0 ? ' today' : ''}` }, inDays(it.in)))))
+      : h('div', { class: 'muted small' }, 'No birthdays in the next 30 days'));
+}
+
+/** The coming week from ioCalendar, day by day (today lives on the ioCalendar tile); a day opens in ioCalendar. */
+async function drawWeek(el) {
+  const app = S.apps.find((a) => a.key === 'iocalendar'), d = await widget('iocalendar', { kind: 'week' });
+  if (!d || !d.days || !el.isConnected) { el.remove(); return; }
+  const head = (date) => { const s = new Date(`${date}T12:00:00`); const days = Math.round((s - new Date().setHours(12, 0, 0, 0)) / 86400000);
+    return days === 1 ? 'Tomorrow' : s.toLocaleDateString([], { weekday: 'long' }); };
+  el.replaceChildren(h('div', { class: 'wghead' }, h('span', null, 'This week'), h('a', { class: 'muted', href: app.url, title: app.url }, d.more ? `+${d.more} more · ioCalendar` : 'ioCalendar')),
+    d.days.length ? h('div', { class: 'rows' }, d.days.map((day) => h('div', { class: 'wkday' },
+      h('a', { class: 'wkhead', href: `${app.url}/#/day/${day.date}`, title: new Date(`${day.date}T12:00:00`).toLocaleDateString([], { month: 'long', day: 'numeric' }) },
+        head(day.date), h('span', { class: 'muted small' }, new Date(`${day.date}T12:00:00`).toLocaleDateString([], { month: 'short', day: 'numeric' }))),
+      day.items.map((o) => evRow(o, evTime(o))))))
+      : h('div', { class: 'muted small' }, 'Nothing planned in the next 7 days'));
 }
 
 /** A card the width of the page with a row of ioPix photos: at random (Rediscover) or from this day in earlier years. */
@@ -279,14 +320,35 @@ function rings(r) {
   });
   return svg;
 }
+/** Seven bars, a day each, the last one today: the week's steps at a glance. */
+function sparkline(week) {
+  const ns = 'http://www.w3.org/2000/svg', svg = document.createElementNS(ns, 'svg'), W = 7, G = 3, H = 22;
+  svg.setAttribute('viewBox', `0 0 ${week.length * (W + G) - G} ${H}`); svg.setAttribute('class', 'wgspark');
+  const top = Math.max(1, ...week.map((x) => x.steps || 0));
+  week.forEach((x, i) => {
+    const r = document.createElementNS(ns, 'rect'), hgt = x.steps ? Math.max(2, (x.steps / top) * H) : 2;
+    r.setAttribute('x', i * (W + G)); r.setAttribute('y', H - hgt); r.setAttribute('width', W); r.setAttribute('height', hgt); r.setAttribute('rx', 1.5);
+    r.setAttribute('class', i === week.length - 1 ? 'today' : x.steps ? '' : 'none');
+    const t = document.createElementNS(ns, 'title');
+    t.textContent = `${new Date(`${x.date}T12:00:00`).toLocaleDateString([], { weekday: 'short' })}: ${x.steps == null ? 'no data' : `${x.steps.toLocaleString()} steps`}`;
+    r.append(t); svg.append(r);
+  });
+  return svg;
+}
+const hm = (min) => (min >= 60 ? `${Math.floor(min / 60)} h ${String(min % 60).padStart(2, '0')}` : `${min} min`);
 function drawHealthWidget(d) {
-  if (d.steps == null && !d.rings) return null;
+  if (d.steps == null && !d.rings && !d.sleep) return null;
   const r = d.rings, n = (v) => (v == null ? '–' : Math.round(v).toLocaleString());
   const line = (k, label, unit) => (r && r[`${k}Goal`] ? h('div', { class: 'wgring', title: `${label}: ${n(r[k])} of ${n(r[`${k}Goal`])} ${unit}` },
     h('span', { class: 'dot', style: { background: `var(--ring-${k})` } }), label, h('span', { class: 'muted' }, `${n(r[k])}/${n(r[`${k}Goal`])}`)) : null);
+  const week = d.week && d.week.filter((x) => x.steps != null).length > 1 ? d.week : null;
+  const when = (iso) => { const t = new Date(iso); return isNaN(t) ? '' : t.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); };
+  const total = week ? week.reduce((a, x) => a + (x.steps || 0), 0) : 0;
   return [wgHead('Today'), h('div', { class: 'wghealth' }, r ? rings(r) : null,
-    h('div', null, d.steps != null ? h('div', { class: 'wgsteps' }, h('b', null, n(d.steps)), ' steps') : null,
-      line('move', 'Move', 'kcal'), line('exercise', 'Exercise', 'min'), line('stand', 'Stand', 'h')))];
+    h('div', null, d.steps != null ? h('div', { class: 'wgsteps' }, h('b', null, n(d.steps)), ' steps', week ? h('span', { class: 'wgtrend', title: `${n(total)} steps in the last 7 days` }, sparkline(week)) : null) : null,
+      line('move', 'Move', 'kcal'), line('exercise', 'Exercise', 'min'), line('stand', 'Stand', 'h'))),
+    d.sleep ? h('div', { class: 'wgsleep', title: d.sleep.start && d.sleep.end ? `Asleep ${when(d.sleep.start)} – ${when(d.sleep.end)}${d.sleep.inBed ? `, ${hm(d.sleep.inBed)} in bed` : ''}` : '' },
+      h('span', { class: 'dot', style: { background: 'var(--sleep)' } }), 'Sleep', h('span', { class: 'muted' }, `${hm(d.sleep.asleep)} asleep`)) : null];
 }
 
 /** The weather widget: the conditions now, a line of details, and the days ahead. Hidden until an admin sets it up. */
