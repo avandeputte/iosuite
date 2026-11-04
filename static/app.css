@@ -71,12 +71,26 @@ input, select, textarea { font: inherit; color: inherit; }
 
 /* ---- the start page: a tile per app. Each tile has room under its name for what the app will show later (today's
    events, the newest photos…): the `.more` block, filled by drawWidgets. */
-.top { display: flex; gap: 24px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; margin: 8px 0 24px; }
-.hello { min-width: 0; }
+.top { display: flex; gap: 24px; align-items: flex-start; justify-content: space-between; margin: 8px 0 24px; }
+.hello { min-width: 0; flex: none; }
 .hello h1 { font-size: 28px; font-weight: 500; margin: 0 0 4px; }
-.apps { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 16px; }
+/* the tiles: a column per app with a widget, and a column of two half-height tiles for the apps without (--cols is set by the page) */
+.apps { display: grid; grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr)); gap: 16px; }
+.stack { display: grid; grid-template-rows: 1fr 1fr; gap: 16px; min-width: 0; }
 .app { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 22px 14px 18px; border-radius: var(--r-l); border: 1px solid var(--line);
   text-align: center; min-width: 0; transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease; }
+.app .who { display: flex; flex-direction: column; align-items: center; gap: 10px; min-width: 0; }
+.app.small { flex-direction: row; justify-content: center; gap: 14px; padding: 16px 14px; text-align: left; }
+.app.small img { width: 56px; height: 56px; flex: none; }
+.app.small .who { align-items: flex-start; gap: 4px; }
+.app.small .tag { margin-top: 0; }
+.app.small .more { display: none; }
+/* a card the width of the page with a row of ioPix photos (drawStrip), scrolling sideways when there are more */
+.strip { margin-top: 16px; padding: 14px 16px 16px; border-radius: var(--r-l); border: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; }
+.strip .row { display: grid; grid-auto-flow: column; grid-auto-columns: 128px; gap: 8px; overflow-x: auto; padding-bottom: 4px; scroll-snap-type: x proximity; scrollbar-width: thin; }
+.strip .wgph { scroll-snap-align: start; display: block; }
+.strip .wgph:hover img { transform: scale(1.04); }
+.strip .wgph img { transition: transform .15s ease; }
 .app:hover { transform: translateY(-2px); box-shadow: var(--shadow); border-color: transparent; }
 .app:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .app img { width: 84px; height: 84px; border-radius: 22%; }
@@ -105,8 +119,8 @@ input, select, textarea { font: inherit; color: inherit; }
 .wghealth > div { flex: 1 1 92px; min-width: 0; }  /* beside the rings, or under them on a narrow tile */
 .empty { padding: 48px 24px; text-align: center; color: var(--fg2); }
 
-/* ---- the weather (AccuWeather): now on the left, the days ahead on the right */
-.weather { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; min-height: 40px; }
+/* ---- the weather (AccuWeather), to the right of the greeting: now above, the days ahead under it */
+.weather { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; min-height: 40px; min-width: 0; }
 .wx { display: inline-flex; width: 28px; height: 28px; flex: none; color: var(--name-io); }
 .wx svg { width: 100%; height: 100%; fill: currentColor; }
 .wx.big { width: 56px; height: 56px; }
@@ -203,17 +217,27 @@ table.t th { font-size: var(--fs-s); color: var(--fg2); font-weight: 600; }
 #updbanner > .ic { color: var(--brand); }
 #updbanner > span:not(.ic) { flex: 1 1 200px; }
 
+/* ---- tablets: the weather under the greeting, the tiles two to a row */
+@media (max-width: 900px) {
+  .top { flex-wrap: wrap; }
+  .weather { align-items: flex-start; }
+  .apps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 /* ---- phones */
 @media (max-width: 600px) {
   #topbar { gap: 6px; padding-left: 12px; padding-right: 8px; }
   .page { padding: 16px 16px 60px; }
-  .apps { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
   .app { padding: 16px 8px 14px; }
   .app img { width: 64px; height: 64px; }
   .app .nm { font-size: var(--fs-l); }
   .hello h1 { font-size: 22px; }
   .approw .nm { width: auto; }
   .top { gap: 12px; }
+  .apps { gap: 12px; }
+  .stack { grid-template-rows: none; grid-auto-rows: auto; }
+  .app.small { flex-direction: column; text-align: center; }
+  .app.small .who { align-items: center; }
+  .strip .row { grid-auto-columns: 104px; }
   .wxdays { gap: 0; }
   .wxday { min-width: 46px; padding: 6px 4px; }
   .bookmarks { grid-template-columns: 1fr; }

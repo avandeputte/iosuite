@@ -157,21 +157,44 @@ async function onRoute() {
 const greeting = () => { const hr = new Date().getHours(); return hr < 5 ? 'Good night' : hr < 12 ? 'Good morning' : hr < 18 ? 'Good afternoon' : 'Good evening'; };
 
 async function showHome(page) {
-  S.apps = (await api('/api/apps')).items;
+  const got = await api('/api/apps');
+  S.apps = got.items;
   const first = (S.user.displayName || S.user.name).split(/\s+/)[0];
   const wx = h('div', { class: 'weather' });
   page.append(h('div', { class: 'top' }, h('div', { class: 'hello' }, h('h1', null, `${greeting()}, ${first}`),
     h('div', { class: 'muted' }, new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' }))), wx));
   drawWeather(wx);  // fills in when AccuWeather (or the server's copy) answers
+  // the tiles: an app with something to show gets a column of its own; the others go two to a column, half the height
+  const tile = (a, small) => h('a', { class: `app${small ? ' small' : ''}`, href: a.url, 'data-app': a.key, title: a.url },
+    h('img', { src: a.icon, alt: '' }), h('span', { class: 'who' }, appName(a.name, a.color), h('span', { class: 'tag' }, a.tagline)),
+    h('div', { class: 'more' }));  // what the app shows here: drawWidgets
+  const big = S.apps.filter((a) => WIDGETS[a.key]), rest = S.apps.filter((a) => !WIDGETS[a.key]);
+  const stacks = []; for (let i = 0; i < rest.length; i += 2) stacks.push(h('div', { class: 'stack' }, rest.slice(i, i + 2).map((a) => tile(a, true))));
   if (!S.apps.length) page.append(h('div', { class: 'empty' }, 'No apps to show. ', S.user.role === 'admin' ? h('a', { class: 'lnk', href: '#/settings/apps' }, 'Settings › Apps') : null));
-  else page.append(h('div', { class: 'apps' }, S.apps.map((a) =>
-    h('a', { class: 'app', href: a.url, 'data-app': a.key, title: a.url },
-      h('img', { src: a.icon, alt: '' }), appName(a.name, a.color), h('span', { class: 'tag' }, a.tagline),
-      h('div', { class: 'more' })))));  // what the app shows here: drawWidgets
+  else page.append(h('div', { class: 'apps', style: { '--cols': big.length + stacks.length } }, big.map((a) => tile(a, false)), stacks));
   drawWidgets(page);
+  if (got.photoStrip !== 'off' && S.apps.some((a) => a.key === 'iopix')) { const strip = h('div', { class: 'strip' }); page.append(strip); drawStrip(strip, got.photoStrip); }
   const bm = h('div', { class: 'bookmarks' });
   page.append(bm);
   drawBookmarks(bm);
+}
+
+/** A card the width of the page with a row of ioPix photos: at random (Rediscover) or from this day in earlier years. */
+async function drawStrip(el, kind) {
+  const pix = S.apps.find((a) => a.key === 'iopix');
+  let d;
+  try {
+    const r = await fetch(`/api/widgets/iopix?${new URLSearchParams({ tz: viewerTz(), kind, n: 16 })}`, { credentials: 'same-origin' });
+    d = r.ok ? await r.json() : null;
+  } catch { d = null; }
+  if (!d || !d.items || !d.items.length || !el.isConnected) { el.remove(); return; }
+  const otd = d.kind === 'onthisday';
+  const cap = (it) => (otd ? (it.yearsAgo === 1 ? '1 year ago' : `${it.yearsAgo} years ago`) : (it.year || ''));
+  el.replaceChildren(h('div', { class: 'wghead' }, h('span', null, otd ? 'On this day' : 'Rediscover'),
+    h('a', { class: 'muted', href: pix.url, title: pix.url }, otd && d.count > d.items.length ? `${d.count} photos · ioPix` : 'ioPix')),
+    h('div', { class: 'row' }, d.items.map((it) => h('a', { class: 'wgph', href: pix.url, title: String(cap(it)) },
+      h('img', { src: `/api/widgets/iopix/thumb/${it.id}`, alt: '', loading: 'lazy', onerror: (e) => e.target.parentNode.remove() }),
+      cap(it) ? h('span', null, cap(it)) : null))));
 }
 
 // ------------------------------------------------------------------ what the tiles show (/api/widgets/<app>)
@@ -321,7 +344,8 @@ async function setAccount(el) {
 }
 
 async function setApps(el) {
-  const items = (await api('/api/apps/settings')).items;
+  const got = await api('/api/apps/settings'), items = got.items;
+  const strip = h('select', { class: 't' }, [['rediscover', 'Rediscover: photos at random'], ['onthisday', 'On this day (at random when there are none)'], ['off', 'Off']].map(([v, t]) => h('option', { value: v, selected: v === got.photoStrip ? true : null }, t)));
   const rows = items.map((a) => {
     const url = h('input', { class: 't', value: a.envUrl || a.url, placeholder: `empty: this host, port ${a.port}`, disabled: a.envUrl ? true : null });
     const shown = h('input', { type: 'checkbox', checked: !a.hidden });
@@ -331,8 +355,9 @@ async function setApps(el) {
   el.append(h('div', { class: 'box' }, h('h2', null, icon('apps'), 'The apps on the start page'),
     h('p', { class: 'muted' }, 'Where each app is reached, as the family opens it: its public address behind the reverse proxy, or its LAN address. Empty: the host this page was opened on, with the app’s usual port (the one-box install). An address set in the environment (IOPIX_URL and friends) wins over this.'),
     rows.map((r) => r.el),
+    h('div', { class: 'grid' }, fld('Photo strip under the tiles (ioPix)', strip)),
     h('p', null, h('button', { class: 'pillbtn primary', onclick: async () => {
-      const body = Object.fromEntries(rows.map((r) => [r.a.key, { ...(r.a.envUrl ? {} : { url: r.url.value.trim() }), hidden: !r.shown.checked }]));
+      const body = { ...Object.fromEntries(rows.map((r) => [r.a.key, { ...(r.a.envUrl ? {} : { url: r.url.value.trim() }), hidden: !r.shown.checked }])), photoStrip: strip.value };
       try { await api('/api/apps/settings', { method: 'POST', json: body }); toast('Saved'); } catch (e) { fail(e); }
     } }, icon('check', 's'), 'Save'))));
 }

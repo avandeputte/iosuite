@@ -55,27 +55,29 @@ def list_apps(request: Request):
     """The tiles: every app with its name, icon, colour and address. Hidden ones are left out (Settings lists them)."""
     me(request)
     host = request.headers.get("x-forwarded-host") or request.headers.get("host") or request.url.netloc
-    return {"items": [t for t in apps.tiles(host) if not t["hidden"]]}
+    return {"items": [t for t in apps.tiles(host) if not t["hidden"]], "photoStrip": apps.photo_strip()}
 
 
 @router.get("/api/apps/settings")
 def apps_settings(request: Request):
     admin(request)
-    return {"items": apps.settings()}
+    return {"items": apps.settings(), "photoStrip": apps.photo_strip()}
 
 
 @router.post("/api/apps/settings")
 async def apps_save(request: Request):
-    """Admins. Body: {iopix: {url?: str, hidden?: bool}, iohealth: {...}, ...}."""
+    """Admins. Body: {iopix: {url?: str, hidden?: bool}, iohealth: {...}, ..., photoStrip?: rediscover | onthisday | off}."""
     admin(request)
     b = await request.json()
     if not isinstance(b, dict):
         raise HTTPException(400, "An object of apps, please")
     try:
+        if "photoStrip" in b:
+            apps.set_photo_strip(b.pop("photoStrip"))
         apps.save(b)
     except ValueError as e:
         raise HTTPException(400, str(e))
-    return {"items": apps.settings()}
+    return {"items": apps.settings(), "photoStrip": apps.photo_strip()}
 
 
 # ------------------------------------------------------------------ the weather
@@ -236,13 +238,15 @@ async def import_bookmarks(request: Request):
 # ------------------------------------------------------------------ what the tiles show (app/widgets.py)
 
 @router.get("/api/widgets/{key}")
-def widget(key: str, request: Request, tz: str = ""):
+def widget(key: str, request: Request, tz: str = "", kind: str = "", n: int = 0):
     """A glimpse of one app for its tile, asked of the app with the viewer's own sign-in. tz: the viewer's time zone
-    (IANA, e.g. Europe/Brussels), for what "today" is. 404 for an app without one; 401/403 when the app refuses this
-    account; 502 when it does not answer. The page leaves the tile as it is on any of these."""
+    (IANA, e.g. Europe/Brussels), for what "today" is. For iopix, kind (onthisday | rediscover; empty: on this day
+    when there are photos, else rediscover) and n (how many, up to 24) pick what the photo strip shows. 404 for an
+    app without one; 401/403 when the app refuses this account; 502 when it does not answer. The page leaves the
+    tile as it is on any of these."""
     me(request)
     try:
-        return widgets.get(request, key, tz)
+        return widgets.get(request, key, tz, kind, n)
     except widgets.Unavailable as e:
         raise HTTPException(e.status, str(e))
 

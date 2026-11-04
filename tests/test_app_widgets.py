@@ -55,6 +55,19 @@ def test_iopix_rediscover_when_nothing_today(client, apps_answer):
     assert d == {"kind": "rediscover", "items": [{"id": 7, "year": 2019}, {"id": 8, "year": 2020}]}
 
 
+def test_iopix_strip_asks_for_a_kind_and_a_count(client, apps_answer):
+    table, asked = apps_answer
+    year = dt.date.today().year
+    table[("iopix", "/api/photos")] = {"id": [2], "ts": [_ts(year - 1, 1, 1)]}
+    table[("iopix", "/api/random")] = lambda p: {"id": list(range(int(p["n"]))), "ts": [None] * int(p["n"])}
+    d = client.get("/api/widgets/iopix?kind=rediscover&n=16").json()
+    assert d["kind"] == "rediscover" and len(d["items"]) == 16 and asked[-1][1] == "/api/random"
+    assert len(client.get("/api/widgets/iopix?kind=rediscover&n=99").json()["items"]) == 24  # capped
+    d = client.get("/api/widgets/iopix?kind=onthisday&n=16").json()
+    assert d["kind"] == "onthisday" and [i["id"] for i in d["items"]] == [2]
+    assert client.get("/api/widgets/iopix?kind=whatever").json()["kind"] == "onthisday"  # an unknown kind: as the tile asks
+
+
 def test_iocalendar_rest_of_today_then_next(client, apps_answer):
     table, _ = apps_answer
     table[("iocalendar", "/api/calendars")] = {"items": [{"id": 1, "color": "#963522"}]}

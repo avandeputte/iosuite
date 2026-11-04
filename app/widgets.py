@@ -78,18 +78,20 @@ def _zone(tz: str):
 
 # ------------------------------------------------------------------ ioPix: On this day, else Rediscover
 
-def iopix(request: Request, tz: str = "", n: int = 4) -> dict:
+def iopix(request: Request, tz: str = "", n: int = 4, kind: str = "") -> dict:
     """{kind: onthisday | rediscover, items: [{id, year, yearsAgo}]}: photos taken on this day in earlier years, one
-    per year (the most recent years first) up to n; on a day without any, n photos picked at random from the library."""
+    per year (the most recent years first) up to n; on a day without any, n photos picked at random from the library.
+    kind asks for one of the two (onthisday still falls back to rediscover on a day without photos)."""
     today = dt.datetime.now(_zone(tz)).date()
-    got = fetch(request, "iopix", "/api/photos", {"md": today.strftime("%m-%d"), "type": "photo"})
     by_year: dict[int, list[int]] = {}
-    for pid, ts in zip(got.get("id") or [], got.get("ts") or []):
-        if ts is None:
-            continue
-        y = dt.datetime.fromtimestamp(ts, dt.timezone.utc).year  # ioPix keeps the camera's wall time as if it were UTC
-        if y < today.year:
-            by_year.setdefault(y, []).append(pid)
+    if kind != "rediscover":
+        got = fetch(request, "iopix", "/api/photos", {"md": today.strftime("%m-%d"), "type": "photo"})
+        for pid, ts in zip(got.get("id") or [], got.get("ts") or []):
+            if ts is None:
+                continue
+            y = dt.datetime.fromtimestamp(ts, dt.timezone.utc).year  # ioPix keeps the camera's wall time as if it were UTC
+            if y < today.year:
+                by_year.setdefault(y, []).append(pid)
     if by_year:
         items = [{"id": random.choice(by_year[y]), "year": y, "yearsAgo": today.year - y} for y in sorted(by_year, reverse=True)[:n]]
         return {"kind": "onthisday", "items": items, "count": sum(len(v) for v in by_year.values())}
@@ -169,9 +171,11 @@ def iohealth(request: Request, tz: str = "") -> dict:
     return {"steps": steps, "rings": rings}
 
 
-def get(request: Request, key: str, tz: str = "") -> dict:
+def get(request: Request, key: str, tz: str = "", kind: str = "", n: int = 0) -> dict:
     if key not in WIDGETS:
         raise Unavailable(404, f"{key} has nothing to show here")
     if tz and not re.fullmatch(r"[A-Za-z0-9_+\-/]{1,64}", tz):
         tz = ""
-    return {"iopix": iopix, "iocalendar": iocalendar, "iohealth": iohealth}[key](request, tz)
+    if key == "iopix":
+        return iopix(request, tz, min(max(int(n or 0), 1), 24) if n else 4, kind if kind in ("onthisday", "rediscover") else "")
+    return {"iocalendar": iocalendar, "iohealth": iohealth}[key](request, tz)
