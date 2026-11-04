@@ -64,9 +64,14 @@ def fetch(request: Request, key: str, path: str, params: dict | None = None, raw
                 return body, r.headers.get("Content-Type", "application/octet-stream")
             return json.loads(body)
     except urllib.error.HTTPError as e:
-        raise Unavailable(403 if e.code in (401, 403) else 404 if e.code == 404 else 502, f"{key} answered {e.code}")
+        name = apps.name_of(key)
+        if e.code in (401, 403):
+            raise Unavailable(403, f"{name} does not let this account in ({e.code}); open it once and sign in there")
+        if e.code == 404:
+            raise Unavailable(404, f"{name} has no {path} (an older version, or the address is not {name}'s)")
+        raise Unavailable(502, f"{name} answered {e.code}")
     except (urllib.error.URLError, OSError, ValueError) as e:
-        raise Unavailable(502, f"{key} is not reachable ({type(e).__name__})")
+        raise Unavailable(502, f"{apps.name_of(key)} is not reachable at {base} ({type(e).__name__})")
 
 
 def _zone(tz: str):
@@ -113,6 +118,18 @@ def iopix_thumb(request: Request, photo_id: int) -> tuple[bytes, str]:
 
 # ------------------------------------------------------------------ ioCalendar: the rest of today, else what's next
 
+def _covers(o: dict, day: dt.date) -> bool:
+    """Whether an all-day occurrence (dates, end exclusive) falls on `day`. ioCalendar answers a window with the all-day
+    events of the days around it too (it pads by 14 hours for other time zones), so yesterday's birthday comes back
+    for today's window: this keeps only what is on the day."""
+    try:
+        s = dt.date.fromisoformat(str(o.get("start"))[:10])
+        e = dt.date.fromisoformat(str(o.get("end") or o.get("start"))[:10])
+    except ValueError:
+        return True
+    return s <= day < max(e, s + dt.timedelta(days=1))
+
+
 def iocalendar(request: Request, tz: str = "", n: int = 3) -> dict:
     """{today: [occurrence], next: occurrence | null}: today's events that have not ended yet (all-day ones first, as
     ioCalendar sorts them), up to n; when there are none left, the next one in the coming 60 days. Each with its
@@ -140,12 +157,12 @@ def iocalendar(request: Request, tz: str = "", n: int = 3) -> dict:
         return (o.get("status") or "").upper() == "CANCELLED"
 
     occ = fetch(request, "iocalendar", "/api/occurrences", {"start": start.isoformat(timespec="seconds"), "end": end.isoformat(timespec="seconds")})
-    today = [pick(o) for o in occ.get("items", []) if not cancelled(o) and ends_after(o, now)]
+    today = [pick(o) for o in occ.get("items", []) if not cancelled(o) and ends_after(o, now) and (not o.get("allDay") or _covers(o, now.date()))]
     out = {"today": today[:n], "more": max(0, len(today) - n), "next": None}
     if not today:
         later = fetch(request, "iocalendar", "/api/occurrences", {"start": end.isoformat(timespec="seconds"),
                                                                   "end": (end + dt.timedelta(days=60)).isoformat(timespec="seconds")})
-        nxt = next((o for o in later.get("items", []) if not cancelled(o)), None)
+        nxt = next((o for o in later.get("items", []) if not cancelled(o) and (not o.get("allDay") or _covers(o, end.date()) or dt.date.fromisoformat(str(o["start"])[:10]) >= end.date())), None)
         out["next"] = pick(nxt) if nxt else None
     return out
 
@@ -160,12 +177,19 @@ def iocalendar_week(request: Request, tz: str = "", days: int = 7, n: int = 12) 
     occ = fetch(request, "iocalendar", "/api/occurrences", {"start": start.isoformat(timespec="seconds"), "end": end.isoformat(timespec="seconds")})
     by_day: dict[str, list] = {}
     total = 0
+    first, last = start.date(), (end - dt.timedelta(days=1)).date()
     for o in occ.get("items", []):
         if (o.get("status") or "").upper() == "CANCELLED":
             continue
         day = str(o.get("start") or "")[:10]
         if not day:
             continue
+        if o.get("allDay"):
+            # an all-day event from before the window (ioCalendar pads its answer) goes on its first day in the window, or out
+            if day < first.isoformat():
+                day = first.isoformat() if _covers(o, first) else ""
+            if not day or day > last.isoformat():
+                continue
         if total < n:
             by_day.setdefault(day, []).append({"title": o.get("title") or "(no title)", "start": o.get("start"), "end": o.get("end"),
                                                "allDay": bool(o.get("allDay")), "location": o.get("location"), "color": colors.get(o.get("calendarId"))})

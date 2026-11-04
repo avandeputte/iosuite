@@ -21,6 +21,10 @@ CATALOGUE = [
 KEYS = [a["key"] for a in CATALOGUE]
 
 
+def name_of(key: str) -> str:
+    return next((a["name"] for a in CATALOGUE if a["key"] == key), key)
+
+
 def saved_url(key: str) -> str:
     return (db.get_setting(f"{key}_url") or "").strip().rstrip("/")
 

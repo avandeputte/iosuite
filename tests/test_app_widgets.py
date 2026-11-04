@@ -117,6 +117,29 @@ def test_iohealth_steps_rings_sleep_and_week(client, apps_answer):
     assert client.get("/api/widgets/iohealth").json() == {"steps": None, "rings": None, "sleep": None, "week": [{"date": (dt.date.today() - dt.timedelta(days=6 - i)).isoformat(), "steps": None} for i in range(7)]}
 
 
+def test_iocalendar_yesterdays_all_day_event_is_not_today(client, apps_answer):
+    """ioCalendar answers a window with the all-day events of the days around it (it pads by 14 h): yesterday's birthday
+    must not show under Today, and a multi-day all-day event that is still on does."""
+    table, _ = apps_answer
+    table[("iocalendar", "/api/calendars")] = {"items": []}
+    today = dt.date.today()
+    yday, tmrw = today - dt.timedelta(days=1), today + dt.timedelta(days=1)
+    later = {"calendarId": 1, "title": "Later", "start": (today + dt.timedelta(days=5)).isoformat(), "end": (today + dt.timedelta(days=6)).isoformat(), "allDay": True}
+    table[("iocalendar", "/api/occurrences")] = {"items": [
+        {"calendarId": 1, "title": "Ed's birthday", "start": yday.isoformat(), "end": today.isoformat(), "allDay": True},
+        {"calendarId": 1, "title": "Holiday week", "start": yday.isoformat(), "end": (today + dt.timedelta(days=3)).isoformat(), "allDay": True},
+        {"calendarId": 1, "title": "Tomorrow's thing", "start": tmrw.isoformat(), "end": (tmrw + dt.timedelta(days=1)).isoformat(), "allDay": True},
+        later]}
+    d = client.get("/api/widgets/iocalendar").json()
+    assert [o["title"] for o in d["today"]] == ["Holiday week"]
+    d = client.get("/api/widgets/iocalendar?kind=week").json()
+    assert [(x["date"], [o["title"] for o in x["items"]]) for x in d["days"]] == [(tmrw.isoformat(), ["Holiday week", "Tomorrow's thing"]), ((today + dt.timedelta(days=5)).isoformat(), ["Later"])]
+    table[("iocalendar", "/api/occurrences")] = {"items": [
+        {"calendarId": 1, "title": "Ed's birthday", "start": yday.isoformat(), "end": today.isoformat(), "allDay": True}, later]}
+    d = client.get("/api/widgets/iocalendar").json()
+    assert d["today"] == [] and d["next"]["title"] == "Later"
+
+
 def test_iocalendar_week_ahead(client, apps_answer):
     table, asked = apps_answer
     table[("iocalendar", "/api/calendars")] = {"items": [{"id": 1, "color": "#963522"}]}

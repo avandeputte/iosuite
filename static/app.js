@@ -188,9 +188,10 @@ async function showHome(page) {
   drawAppStatus(page);
   // the week ahead: birthdays from ioContacts and the coming days' events from ioCalendar, a card each
   const agenda = h('div', { class: 'agenda' });
-  if (shows('birthdays') && S.apps.some((a) => a.key === 'iocontacts')) { const c = h('div', { class: 'card birthdays' }); agenda.append(c); drawBirthdays(c); }
-  if (shows('week') && S.apps.some((a) => a.key === 'iocalendar')) { const c = h('div', { class: 'card week' }); agenda.append(c); drawWeek(c); }
-  if (agenda.childElementCount) page.append(agenda);
+  S.birthdaysCard = shows('birthdays') && S.apps.some((a) => a.key === 'iocontacts');  // then the calendar leaves birthdays to it
+  if (S.birthdaysCard) { const c = h('div', { class: 'card capped birthdays' }); agenda.append(c); drawBirthdays(c); }
+  if (shows('week') && S.apps.some((a) => a.key === 'iocalendar')) { const c = h('div', { class: 'card capped week' }); agenda.append(c); drawWeek(c); }
+  if (agenda.childElementCount) { page.append(agenda); capAgenda(page.querySelector('.apps'), agenda); }
   const stripKind = L.strip || got.photoStrip;
   if (shows('strip') && stripKind !== 'off' && S.apps.some((a) => a.key === 'iopix')) { const strip = h('div', { class: 'strip' }); page.append(strip); drawStrip(strip, stripKind); }
   if (shows('bookmarks')) { const bm = h('div', { class: 'bookmarks' }); page.append(bm); drawBookmarks(bm); }
@@ -303,15 +304,37 @@ async function widget(key, params = {}) {
 }
 const inDays = (n) => (n === 0 ? 'Today' : n === 1 ? 'Tomorrow' : `In ${n} days`);
 
-/** Birthdays (and the other dates ioContacts keeps) in the next 30 days; each row opens the contact. */
+/** The two cards stand no taller than the row of tiles above them; one with more gets a "Show all" in its header. */
+function capAgenda(apps, agenda) {
+  if (!apps) return;
+  const fit = () => {
+    agenda.style.setProperty('--cap', `${apps.offsetHeight}px`);
+    for (const card of agenda.querySelectorAll('.card')) {
+      const rows = card.querySelector('.rows'), btn = card.querySelector('.showall');
+      if (!rows || !btn) continue;
+      const over = card.classList.contains('capped') ? rows.scrollHeight > rows.clientHeight + 1 : true;
+      btn.hidden = !over && card.classList.contains('capped');
+    }
+  };
+  new ResizeObserver(fit).observe(apps);
+  new MutationObserver(fit).observe(agenda, { childList: true, subtree: true });
+  fit();
+}
+const showAll = (card) => h('button', { class: 'lnk showall', hidden: true, onclick: () => { card.classList.toggle('capped'); card.querySelector('.showall').textContent = card.classList.contains('capped') ? 'Show all' : 'Show less'; } }, 'Show all');
+/** ioCalendar carries the family's birthdays too (its birthdays calendar): with the Birthdays card on the page, the
+    calendar's "X's birthday" / anniversary all-day events are left to that card. */
+const isBirthdayEvent = (o) => o.allDay && /\b(birthday|anniversary)\b/i.test(o.title || '');
+const withoutBirthdays = (items) => (S.birthdaysCard ? items.filter((o) => !isBirthdayEvent(o)) : items);
+
+/** Birthdays (and the other dates ioContacts keeps) in the next 30 days, a line each; a row opens the contact. */
 async function drawBirthdays(el) {
   const app = S.apps.find((a) => a.key === 'iocontacts'), d = await widget('iocontacts');
   if (!d || !d.items || !el.isConnected) { el.remove(); return; }
   const who = (it) => h('span', { class: 'face' }, it.hasPhoto ? h('img', { src: `/api/widgets/iocontacts/photo/${it.id}`, alt: '', loading: 'lazy', onerror: (e) => e.target.replaceWith(initials(it.name)) }) : initials(it.name));
-  const what = (it) => [it.label === 'birthday' ? (it.turns ? `Turns ${it.turns}` : 'Birthday') : it.label + (it.turns ? ` · ${it.turns} years` : '')].join('');
-  el.replaceChildren(h('div', { class: 'wghead' }, h('span', null, 'Birthdays'), h('a', { class: 'muted', href: app.url, title: app.url }, d.more ? `+${d.more} more · ioContacts` : 'ioContacts')),
+  const what = (it) => (it.label === 'birthday' ? (it.turns ? `turns ${it.turns}` : '') : it.label + (it.turns ? ` · ${it.turns} years` : ''));
+  el.replaceChildren(h('div', { class: 'wghead' }, h('span', null, 'Birthdays'), showAll(el), h('a', { class: 'muted', href: app.url, title: app.url }, d.more ? `+${d.more} more · ioContacts` : 'ioContacts')),
     d.items.length ? h('div', { class: 'rows' }, d.items.map((it) => h('a', { class: 'bday', href: `${app.url}/#/c/${it.id}` }, who(it),
-      h('span', { class: 'bdwho' }, h('span', { class: 'bdname' }, it.name), h('span', { class: 'muted small' }, what(it))),
+      h('span', { class: 'bdname' }, it.name), h('span', { class: 'muted small bdwhat' }, what(it)),
       h('span', { class: `bdwhen${it.in === 0 ? ' today' : ''}` }, inDays(it.in)))))
       : h('div', { class: 'muted small' }, 'No birthdays in the next 30 days'));
 }
@@ -322,8 +345,9 @@ async function drawWeek(el) {
   if (!d || !d.days || !el.isConnected) { el.remove(); return; }
   const head = (date) => { const s = new Date(`${date}T12:00:00`); const days = Math.round((s - new Date().setHours(12, 0, 0, 0)) / 86400000);
     return days === 1 ? 'Tomorrow' : s.toLocaleDateString([], { weekday: 'long' }); };
-  el.replaceChildren(h('div', { class: 'wghead' }, h('span', null, 'This week'), h('a', { class: 'muted', href: app.url, title: app.url }, d.more ? `+${d.more} more · ioCalendar` : 'ioCalendar')),
-    d.days.length ? h('div', { class: 'rows' }, d.days.map((day) => h('div', { class: 'wkday' },
+  const days = d.days.map((day) => ({ ...day, items: withoutBirthdays(day.items) })).filter((day) => day.items.length);
+  el.replaceChildren(h('div', { class: 'wghead' }, h('span', null, 'This week'), showAll(el), h('a', { class: 'muted', href: app.url, title: app.url }, d.more ? `+${d.more} more · ioCalendar` : 'ioCalendar')),
+    days.length ? h('div', { class: 'rows' }, days.map((day) => h('div', { class: 'wkday' },
       h('a', { class: 'wkhead', href: `${app.url}/#/day/${day.date}`, title: new Date(`${day.date}T12:00:00`).toLocaleDateString([], { month: 'long', day: 'numeric' }) },
         head(day.date), h('span', { class: 'muted small' }, new Date(`${day.date}T12:00:00`).toLocaleDateString([], { month: 'short', day: 'numeric' }))),
       day.items.map((o) => evRow(o, evTime(o))))))
@@ -365,13 +389,15 @@ function drawWidgets(page) {
   for (const tile of page.querySelectorAll('.app[data-app]')) {
     const draw = WIDGETS[tile.dataset.app], box = tile.querySelector('.more');
     if (!draw || !box) continue;
+    const why = (text) => { if (box.isConnected) box.replaceChildren(h('div', { class: 'wg' }, h('div', { class: 'muted small wgwhy' }, text))); };
     fetch(`/api/widgets/${tile.dataset.app}?tz=${encodeURIComponent(tz)}`, { credentials: 'same-origin' })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (d && box.isConnected) { const kids = draw(d); if (kids) box.replaceChildren(h('div', { class: 'wg' }, kids)); } })
-      .catch(() => { /* the tile stays as it was */ });
+      .then(async (r) => { if (r.ok) return r.json(); let detail = ''; try { detail = (await r.json()).detail || ''; } catch { /* no body */ } throw new Error(detail || `${r.status}`); })
+      .then((d) => { if (!box.isConnected) return; const kids = draw(d); if (kids) box.replaceChildren(h('div', { class: 'wg' }, kids)); else why(EMPTY[tile.dataset.app] || 'Nothing to show'); })
+      .catch((e) => why(e.message));  // the app is down, or not open to this account: the tile says so
   }
 }
 
+const EMPTY = { iopix: 'No photos yet', iocalendar: 'Nothing planned', iohealth: 'No steps, rings or sleep for today yet' };
 const wgHead = (t, extra) => h('div', { class: 'wghead' }, h('span', null, t), extra ? h('span', { class: 'muted' }, extra) : null);
 
 function drawPixWidget(d) {
@@ -403,8 +429,9 @@ const evRow = (o, when) => h('div', { class: 'wgev', title: [o.title, o.location
   h('span', { class: 'dot', style: { background: o.color || 'var(--fg2)' } }), h('span', { class: 'wgwhen muted' }, when), h('span', { class: 'wgtitle' }, o.title));
 
 function drawCalendarWidget(d) {
-  if (d.today && d.today.length) {
-    return [wgHead('Today', d.more ? `+${d.more} more` : null), d.today.map((o) => evRow(o, evTime(o)))];
+  const today = withoutBirthdays(d.today || []);
+  if (today.length) {
+    return [wgHead('Today', d.more ? `+${d.more} more` : null), today.map((o) => evRow(o, evTime(o)))];
   }
   if (d.next) return [wgHead('Next', evDay(d.next)), evRow(d.next, evTime(d.next))];
   return [wgHead('Today'), h('div', { class: 'muted small' }, 'Nothing planned')];
