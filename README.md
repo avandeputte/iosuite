@@ -4,7 +4,7 @@
 [ioHealth](https://github.com/avandeputte/ioHealth), [ioCalendar](https://github.com/avandeputte/iocalendar),
 [ioContacts](https://github.com/avandeputte/iocontacts), [ioNotes](https://github.com/avandeputte/ionotes)).*
 
-A self-hosted home page for the family: a tile per app, signed in with the suite's shared accounts (`iothing-auth`), so
+A self-hosted home page for the family: a tile per app, signed in with the suite's shared accounts ([`iosuite-shared`](https://github.com/avandeputte/iosuite-shared)), so
 one sign-in here is a sign-in everywhere the page links to. FastAPI and a single-page vanilla JS app, built the same
 way as the other io apps, with its few settings in MariaDB / MySQL. For now the tiles are links; each one keeps room for
 what the app will show on the start page later (today's events, the newest photos, last night's sleep…).
@@ -12,7 +12,7 @@ what the app will show on the start page later (today's events, the newest photo
 ## What it does
 
 - **A tile per app**, with the app's own icon and colours, that opens it. Each app registers itself, with its address,
-  in the suite's list of apps in the Shared ioSuite database (`suite_apps`, iothing-auth 0.3 and later), and the page
+  in the suite's list of apps in the Shared ioSuite database (`suite_apps`, iosuite-shared 0.3 and later), and the page
   reads it there and only there: nothing to type, nothing to override. ioSuite registers itself the same way. An app
   that has not registered (not installed, or not started yet) has no tile; one the page has no widgets for gets a plain
   tile. Each person can hide tiles in Customize.
@@ -67,7 +67,7 @@ answers. In Docker, pull the image instead. From a shell: `./update.sh` (`--chec
 
 ## Run
 
-ioSuite needs Python 3.10+, git (to install `iothing-auth`) and a MariaDB or MySQL database. Give it its own database
+ioSuite needs Python 3.10+, git (to install the shared library, `avandeputte/iosuite-shared`) and a MariaDB or MySQL database. Give it its own database
 and user, for example:
 
 ```sql
@@ -126,7 +126,7 @@ git clone https://github.com/avandeputte/iosuite && cd iosuite
 | Setting | Meaning |
 | --- | --- |
 | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | the MariaDB / MySQL database (`suite`) |
-| `IOSUITE_SHARED_DB_HOST`, `_PORT`, `_NAME`, `_USER`, `_PASSWORD` | the Shared ioSuite database (`iosuite`): accounts, passwords, sessions, app passwords and roles, the suite-wide settings and the list of apps, shared with every io app (the older `IOTHING_AUTH_DB_*` names still work) |
+| `IOSUITE_DB_HOST`, `_PORT`, `_NAME`, `_USER`, `_PASSWORD` | the Shared ioSuite database (`iosuite`): accounts, passwords, sessions, app passwords and roles, the suite-wide settings and the list of apps, shared with every io app (the older `IOSUITE_SHARED_DB_*` and `IOTHING_AUTH_DB_*` names still work) |
 | `IOTHING_COOKIE_DOMAIN` | the domain the session cookie is shared on (`example.com`): signed in at `home.example.com`, signed in at `photos.example.com` too |
 | `PORT` | web port for `run.sh` and the service (8630) |
 | `PUBLIC_URL` | the address people use (behind a proxy); also what ioSuite registers in the suite's list of apps |
@@ -165,7 +165,7 @@ app/layout.py      each account's own layout: hidden tiles and cards, the tiles'
 app/widgets.py     what the tiles and cards show: ioPix, ioCalendar, ioHealth and ioContacts asked over their APIs with the viewer's sign-in
 app/weather.py     AccuWeather: the settings, the place search, the cached conditions and forecast
 app/bookmarks.py   the bookmark groups and links, and the homepage bookmarks.yaml import
-app/auth.py        the shared accounts (iothing-auth), as ioSuite uses them
+app/auth.py        the shared accounts (iosuite-shared), as ioSuite uses them
 app/users.py       accounts and roles, seen from ioSuite
 app/db.py          MariaDB access and the schema (the meta settings table, the bookmarks)
 app/config.py      settings from iosuite.env / the environment
