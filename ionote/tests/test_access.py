@@ -88,4 +88,11 @@ def test_ionotes_registers_in_the_suites_list_of_apps(client):
     client.get("/api/notes")
     row = suite.get("ionotes")
     assert row["name"] == "ioNotes" and row["version"] == __version__
-    assert row["description"] == "Notes" and row["color"] == "#1c5a5e" and row["icon"] == "/icons/icon-192.png"
+    assert row["description"] == "Notes" and row["color"] == "#1c5a5e" and row["icon"] == "/static/icons/mark.svg"
+
+
+def test_the_suite_icon_is_served_to_visitors_even_with_sign_in_required(client, admin):
+    assert client.post("/api/settings", json={"require_login": True}).status_code == 200
+    client.post("/api/auth/logout")
+    r = client.get("/static/icons/mark.svg")
+    assert r.status_code == 200 and r.headers["content-type"].startswith("image/svg")

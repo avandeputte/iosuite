@@ -26,7 +26,7 @@ MAX_IMAGE_BODY = (config.MAX_IMAGE_MB + 1) << 20
 
 # what a visitor may still fetch when sign-in is required: the app shell and the sign-in endpoints
 OPEN_PATHS = ("/", "/index.html", "/app.js", "/app.css", "/sw.js", "/manifest.webmanifest", "/api/status")
-OPEN_PREFIXES = ("/icons/", "/js/", "/api/auth/")
+OPEN_PREFIXES = ("/icons/", "/static/icons/", "/js/", "/api/auth/")
 
 
 def setup_file_log():
@@ -157,4 +157,6 @@ from mcp.server.transport_security import TransportSecuritySettings  # noqa: E40
 _mcp_asgi = mcp.server.streamable_http_app(streamable_http_path="/mcp", stateless_http=True,
                                            transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False))
 app.router.routes[:0] = list(_mcp_asgi.routes)
+# /static/...: the same files at the path the suite's apps share (the icon in iothing-auth's list: /static/icons/mark.svg)
+app.mount("/static", StaticFiles(directory=config.STATIC_DIR), name="static-suite")
 app.mount("/", StaticFiles(directory=config.STATIC_DIR, html=True), name="static")
