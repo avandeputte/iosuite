@@ -112,7 +112,7 @@ body.home #main { top: env(safe-area-inset-top); }
 .wghead { display: flex; justify-content: space-between; gap: 8px; font-size: var(--fs-s); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--fg2); }
 .wghead .muted { font-weight: 400; text-transform: none; letter-spacing: 0; }
 .wgpix { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }  /* one row of four */
-.wgph { position: relative; aspect-ratio: 1; border-radius: var(--r-s); overflow: hidden; background: var(--bg2); }
+.wgph { display: block; cursor: pointer; position: relative; aspect-ratio: 1; border-radius: var(--r-s); overflow: hidden; background: var(--bg2); }
 .wgph img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
 .wgph span { position: absolute; left: 0; right: 0; bottom: 0; padding: 8px 4px 3px; font-size: var(--fs-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #fff; background: linear-gradient(transparent, rgba(0,0,0,.6)); }
 .wgev, .wgring { display: flex; align-items: center; gap: 6px; min-width: 0; }

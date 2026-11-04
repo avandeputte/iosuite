@@ -198,7 +198,7 @@ async function drawStrip(el, kind) {
   el.classList.remove('busy');
   el.replaceChildren(h('div', { class: 'wghead' }, h('span', null, otd ? 'On this day' : 'Rediscover'), shuffle,
     h('a', { class: 'muted', href: pix.url, title: pix.url }, otd && d.count > d.items.length ? `${d.count} photos · ioPix` : 'ioPix')),
-    h('div', { class: 'row' }, d.items.map((it) => h('a', { class: 'wgph', href: pix.url, title: String(cap(it)) },
+    h('div', { class: 'row' }, d.items.map((it) => h('a', { class: 'wgph', href: pixPhotoUrl(pix, it.id), title: String(cap(it)) },
       h('img', { src: `/api/widgets/iopix/thumb/${it.id}`, alt: '', loading: 'lazy', onerror: (e) => e.target.parentNode.remove() }),
       cap(it) ? h('span', null, cap(it)) : null))));
 }
@@ -208,6 +208,8 @@ async function drawStrip(el, kind) {
    ioCalendar's rest of today (else what's next), ioHealth's steps and rings. The server asks each app with the
    viewer's own sign-in; an app that is down or not open to this account leaves its tile as it was. */
 const WIDGETS = { iopix: drawPixWidget, iocalendar: drawCalendarWidget, iohealth: drawHealthWidget };
+/** ioPix opens one photo in its lightbox at #/photos?p=<id>. */
+const pixPhotoUrl = (pix, id) => `${pix.url}/#/photos?p=${id}`;
 const viewerTz = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch { return ''; } };
 
 function drawWidgets(page) {
@@ -230,7 +232,9 @@ function drawPixWidget(d) {
   const cap = (it) => (otd ? (it.yearsAgo === 1 ? '1 year ago' : `${it.yearsAgo} years ago`) : (it.year || ''));
   // four small squares in a row: the year fits under each, "14 years ago" is the tooltip
   return [wgHead(otd ? 'On this day' : 'Rediscover', otd && d.count > d.items.length ? `${d.count} photos` : null),
-    h('div', { class: 'wgpix' }, d.items.slice(0, 4).map((it) => h('div', { class: 'wgph', title: String(cap(it)) },
+    h('div', { class: 'wgpix' }, d.items.slice(0, 4).map((it) => h('span', { class: 'wgph', title: String(cap(it)), role: 'link', tabindex: '0',
+      onclick: (e) => { e.preventDefault(); e.stopPropagation(); location.href = pixPhotoUrl(S.apps.find((a) => a.key === 'iopix'), it.id); },
+      onkeydown: (e) => { if (e.key === 'Enter') e.target.click(); } },
       h('img', { src: `/api/widgets/iopix/thumb/${it.id}`, alt: '', loading: 'lazy', onerror: (e) => e.target.parentNode.remove() }),
       it.year ? h('span', null, it.year) : null)))];
 }
