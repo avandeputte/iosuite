@@ -11,10 +11,13 @@ what the app will show on the start page later (today's events, the newest photo
 
 ## What it does
 
-- **A tile per app**, with the app's own icon and colours, that opens it. The address of each app comes from the
-  environment (`IOPIX_URL` and friends), from **Settings › Apps** (admins), or, failing both, from the host the page was
-  opened on with the app's usual port (the one-box install): `http://<this host>:8600` for ioPix, `47800` ioHealth,
-  `8620` ioCalendar, `8610` ioContacts and ioNotes. An app can be taken off the page in Settings.
+- **A tile per app**, with the app's own icon and colours, that opens it. Each app registers itself, with its address,
+  in the suite's list of apps in the shared accounts database (`suite_apps`, iothing-auth 0.3), and the page reads it
+  there: nothing to type. ioSuite registers itself the same way. The address of each app comes from the environment
+  (`IOPIX_URL` and friends), from **Settings › Apps** (admins, to override), from what the app registered, or, failing
+  all three, from the host the page was opened on with the app's usual port (the one-box install):
+  `http://<this host>:8600` for ioPix, `47800` ioHealth, `8620` ioCalendar, `8610` ioContacts and ioNotes. An app the
+  page has no widgets for that registered itself gets a plain tile too. An app can be taken off the page in Settings.
 - **A search box** at the top (⌘K / Ctrl-K): as you type it lists the bookmarks that match, the people ioContacts
   finds, and a row per app that searches itself (ioPix, ioCalendar and ioNotes open on their own results). Arrows
   pick a row, Enter opens it.
@@ -126,8 +129,8 @@ git clone https://github.com/avandeputte/iosuite && cd iosuite
 | `IOTHING_AUTH_DB_HOST`, `_PORT`, `_NAME`, `_USER`, `_PASSWORD` | the suite's shared account database (`auth`): accounts, passwords, sessions, app passwords and roles, shared with every io app |
 | `IOTHING_COOKIE_DOMAIN` | the domain the session cookie is shared on (`example.com`): signed in at `home.example.com`, signed in at `photos.example.com` too |
 | `PORT` | web port for `run.sh` and the service (8630) |
-| `PUBLIC_URL` | the address people use (behind a proxy) |
-| `IOPIX_URL`, `IOHEALTH_URL`, `IOCALENDAR_URL`, `IOCONTACTS_URL`, `IONOTES_URL` | where each app is, as the family's browsers reach it (or Settings › Apps; empty: this host with the app's usual port) |
+| `PUBLIC_URL` | the address people use (behind a proxy); also what ioSuite registers in the suite's list of apps |
+| `IOPIX_URL`, `IOHEALTH_URL`, `IOCALENDAR_URL`, `IOCONTACTS_URL`, `IONOTES_URL` | where each app is, as the family's browsers reach it, overriding what the app registered (or Settings › Apps; empty: what it registered, else this host with the app's usual port) |
 | `ACCUWEATHER_API_KEY`, `ACCUWEATHER_LOCATION` | the weather: an AccuWeather key and a location key (or Settings › Weather, which finds the location from a city name) |
 | `ADMIN_USER`, `ADMIN_PASSWORD` | the first admin, made on the first start when there are no accounts |
 | `AUTH_PROXY`, `AUTH_PROXY_HEADER`, `AUTH_PROXY_TRUSTED`, `CF_ACCESS_TEAM`, `CF_ACCESS_AUD` | sign-in at a reverse proxy, as in the other io apps (Cloudflare Access, Authelia, Authentik, oauth2-proxy…) |

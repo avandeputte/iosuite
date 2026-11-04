@@ -29,13 +29,19 @@ def client():
     db.reset_all()
     from iothing_auth import db as authdb
     users.ensure_admin_from_env()  # the auth tables
-    for t in ("user_roles", "user_data", "app_passwords", "sessions", "users", "settings"):
+    for t in ("user_roles", "user_data", "app_passwords", "sessions", "users", "settings", "suite_apps"):
         try:
             authdb.ex(f"DELETE FROM {t}")
         except Exception:  # noqa: BLE001 - a table this version does not have
             pass
     authdb.ex("ALTER TABLE users AUTO_INCREMENT = 1")
     users.forget_cached_auth()
+    from iothing_auth import suite
+    from app import apps
+    suite.invalidate()
+    apps.forget_registry()
+    from app.auth import auth
+    auth._registered = False  # the row was just deleted: registered again at the next request
     from app.main import app
     with TestClient(app) as c:
         r = c.post("/api/auth/setup", json={"name": "alex", "password": "secret123"})
