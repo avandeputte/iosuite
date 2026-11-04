@@ -15,6 +15,8 @@ what the app will show on the start page later (today's events, the newest photo
   environment (`IOPIX_URL` and friends), from **Settings › Apps** (admins), or, failing both, from the host the page was
   opened on with the app's usual port (the one-box install): `http://<this host>:8600` for ioPix, `47800` ioHealth,
   `8620` ioCalendar, `8610` ioContacts and ioNotes. An app can be taken off the page in Settings.
+- **A strip of photos** the width of the page under the tiles: ioPix's Rediscover (photos at random), or
+  On this day; an admin picks which, or turns it off, in Settings › Apps.
 - **A glimpse of each app on its tile**: ioPix shows photos taken on this day in earlier years (one per year, "3 years
   ago"), or a few picked at random (Rediscover) on a day without any; ioCalendar the rest of today (else the next event
   in the coming 60 days), in each calendar's colour; ioHealth today's steps and the move, exercise and stand rings. The

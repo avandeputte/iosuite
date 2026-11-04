@@ -48,6 +48,21 @@ def tiles(host: str = "") -> list[dict]:
     return out
 
 
+STRIPS = ("rediscover", "onthisday", "off")
+
+
+def photo_strip() -> str:
+    """The photo strip under the tiles (Settings › Apps): rediscover (a row of photos at random), onthisday, or off."""
+    v = db.get_setting("photo_strip") or "rediscover"
+    return v if v in STRIPS else "rediscover"
+
+
+def set_photo_strip(v: str) -> None:
+    if v not in STRIPS:
+        raise ValueError("The photo strip is rediscover, onthisday or off")
+    db.set_setting("photo_strip", None if v == "rediscover" else v)
+
+
 def settings() -> list[dict]:
     """Settings › Apps: per app, the saved address (if any), whether the environment overrides it, and visibility."""
     return [{"key": a["key"], "name": a["name"], "url": saved_url(a["key"]), "envUrl": config.APP_URLS.get(a["key"]) or None,

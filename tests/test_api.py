@@ -39,6 +39,12 @@ def test_admin_sets_addresses_and_hides(client):
     # a bad address and an unknown app are refused
     assert client.post("/api/apps/settings", json={"iopix": {"url": "photos.example.com"}}).status_code == 400
     assert client.post("/api/apps/settings", json={"iomail": {"url": "https://x"}}).status_code == 400
+    # the photo strip under the tiles: rediscover unless set otherwise
+    assert client.get("/api/apps").json()["photoStrip"] == "rediscover"
+    assert client.post("/api/apps/settings", json={"photoStrip": "off"}).json()["photoStrip"] == "off"
+    assert client.get("/api/apps").json()["photoStrip"] == "off"
+    assert client.post("/api/apps/settings", json={"photoStrip": "sideways"}).status_code == 400
+    assert client.post("/api/apps/settings", json={"photoStrip": "rediscover"}).json()["photoStrip"] == "rediscover"
 
 
 def test_viewer_cannot_change_settings(client):
