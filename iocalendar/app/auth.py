@@ -7,7 +7,11 @@ iocalendar.env), shared with ioPix, ioNotes and ioContacts: one sign-in serves e
 """
 from iothing_auth.fastapi import Auth
 
+from app import APP_VERSION, config
+
 APP = "iocalendar"
 
-auth = Auth(APP, app_label="ioCalendar", basic_realm="ioCalendar")
+# version, address, description, color and icon go into the suite's list of apps (iothing_auth.suite, read by ioSuite)
+auth = Auth(APP, app_label="ioCalendar", basic_realm="ioCalendar", version=APP_VERSION, public_url=config.PUBLIC_URL or None,
+            description="Calendar", color="#963522", icon="/static/icons/mark.svg")
 auth.deny_exempt = ("/mcp", "/dav", "/.well-known/")  # apps sign in with app passwords, whatever got them through a proxy

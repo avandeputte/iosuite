@@ -179,3 +179,12 @@ def test_status_and_app_passwords(client):
     assert client.get("/api/calendars", headers={"Authorization": f"Bearer {pw}"}).status_code == 200
     assert client.get("/api/calendars", auth=("alex", pw)).status_code == 200
     assert client.get("/api/calendars", auth=("alex", "wrong")).status_code == 401
+
+
+def test_registers_in_the_suite_list(client):
+    from iothing_auth import suite
+    from app import APP_VERSION
+    client.get("/api/calendars")
+    row = suite.get("iocalendar")
+    assert row and row["name"] == "ioCalendar" and row["version"] == APP_VERSION
+    assert row["description"] == "Calendar" and row["color"] == "#963522"
