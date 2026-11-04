@@ -169,7 +169,8 @@ const greeting = () => { const hr = new Date().getHours(); return hr < 5 ? 'Good
 async function showHome(page) {
   const got = await api('/api/apps');
   // the viewer's own layout (Customize the page) on top of the admin's: tiles and cards hidden, tiles in their order
-  const L = S.layout = got.layout || { hidden: [], order: [], strip: null };
+  const L = S.layout = got.layout || { hidden: [], order: [], cards: [], strip: null };
+  S.photoStrip = got.photoStrip;  // the admin's choice, what Customize calls "as the admin set it"
   S.allApps = got.items;
   const rank = (a) => { const i = L.order.indexOf(a.key); return i < 0 ? 100 + got.items.indexOf(a) : i; };
   S.apps = got.items.filter((a) => !L.hidden.includes(a.key)).sort((a, b) => rank(a) - rank(b));
@@ -191,15 +192,28 @@ async function showHome(page) {
   drawWidgets(page);
   drawAppStatus(page);
   // the week ahead: birthdays from ioContacts and the coming days' events from ioCalendar, a card each
-  const agenda = h('div', { class: 'agenda' });
+  // the cards under the tiles, in the viewer's order (Customize); Birthdays and This week share a row when they follow
+  // each other, else each stands on its own
   S.birthdaysCard = shows('birthdays') && S.apps.some((a) => a.key === 'iocontacts');  // then the calendar leaves birthdays to it
-  if (S.birthdaysCard) { const c = h('div', { class: 'card capped birthdays' }); agenda.append(c); drawBirthdays(c); }
-  if (shows('week') && S.apps.some((a) => a.key === 'iocalendar')) { const c = h('div', { class: 'card capped week' }); agenda.append(c); drawWeek(c); }
-  if (agenda.childElementCount) { page.append(agenda); capAgenda(page.querySelector('.apps'), agenda); }
   const stripKind = L.strip || got.photoStrip;
-  if (shows('strip') && stripKind !== 'off' && S.apps.some((a) => a.key === 'iopix')) { const strip = h('div', { class: 'strip' }); page.append(strip); drawStrip(strip, stripKind); }
-  if (shows('bookmarks')) { const bm = h('div', { class: 'bookmarks' }); page.append(bm); drawBookmarks(bm); }
+  const cards = {
+    birthdays: S.birthdaysCard ? () => { const c = h('div', { class: 'card capped birthdays' }); drawBirthdays(c); return c; } : null,
+    week: shows('week') && S.apps.some((a) => a.key === 'iocalendar') ? () => { const c = h('div', { class: 'card capped week' }); drawWeek(c); return c; } : null,
+    strip: shows('strip') && stripKind !== 'off' && S.apps.some((a) => a.key === 'iopix') ? () => { const c = h('div', { class: 'strip' }); drawStrip(c, stripKind); return c; } : null,
+    bookmarks: shows('bookmarks') ? () => { const c = h('div', { class: 'bookmarks' }); drawBookmarks(c); return c; } : null,
+  };
+  let agenda = null;
+  for (const k of cardOrder(L)) {
+    if (!cards[k]) continue;
+    if (k === 'birthdays' || k === 'week') {
+      if (!agenda || !agenda.isConnected || agenda !== page.lastElementChild) { agenda = h('div', { class: 'agenda' }); page.append(agenda); capAgenda(page.querySelector('.apps'), agenda); }
+      agenda.append(cards[k]());
+    } else page.append(cards[k]());
+  }
 }
+const CARDS = ['birthdays', 'week', 'strip', 'bookmarks'];
+/** The cards' order: the viewer's, then any the viewer's list does not name, in the usual order. */
+const cardOrder = (L) => [...(L.cards || []), ...CARDS.filter((k) => !(L.cards || []).includes(k))];
 
 // ------------------------------------------------------------------ the search box (⌘K / Ctrl-K)
 /* Type, and the box lists the bookmarks that match, the contacts ioContacts finds, and a row per app that searches
@@ -277,25 +291,30 @@ async function drawBookmarkStatus(el) {
 
 // ------------------------------------------------------------------ customize the page (per account)
 async function customize() {
-  const L = S.layout || { hidden: [], order: [], strip: null };
+  const L = S.layout || { hidden: [], order: [], cards: [], strip: null };
   const apps = S.allApps || [];
   const rank = (a) => { const i = L.order.indexOf(a.key); return i < 0 ? 100 + apps.indexOf(a) : i; };
-  const tiles = apps.slice().sort((a, b) => rank(a) - rank(b)).map((a) => ({ key: a.key, name: a.name, color: a.color, icon: a.icon, on: !L.hidden.includes(a.key) }));
-  const list = h('div', { class: 'lay' });
-  const draw = () => list.replaceChildren(...tiles.map((t, i) => h('div', { class: 'layrow' },
-    h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: t.on, onchange: (e) => { t.on = e.target.checked; } }), h('img', { src: t.icon, alt: '' }), appName(t.name, t.color)),
-    h('span', { class: 'bmtools' }, h('button', { class: 'iconbtn', title: 'Up', disabled: i === 0 ? true : null, onclick: () => { [tiles[i - 1], tiles[i]] = [tiles[i], tiles[i - 1]]; draw(); } }, icon('up', 's')),
-      h('button', { class: 'iconbtn', title: 'Down', disabled: i === tiles.length - 1 ? true : null, onclick: () => { [tiles[i + 1], tiles[i]] = [tiles[i], tiles[i + 1]]; draw(); } }, icon('down', 's'))))));
-  draw();
-  const sections = [['birthdays', 'Birthdays (ioContacts)'], ['week', 'This week (ioCalendar)'], ['strip', 'The photo strip (ioPix)'], ['bookmarks', 'Bookmarks']]
-    .map(([k, l]) => ({ k, box: h('input', { type: 'checkbox', checked: !L.hidden.includes(k) }), l }));
-  const strip = h('select', { class: 't' }, [[null, 'As set up'], ['rediscover', 'Rediscover: photos at random'], ['onthisday', 'On this day'], ['off', 'Off']].map(([v, t]) => h('option', { value: v || '', selected: (v || '') === (L.strip || '') ? true : null }, t)));
-  const body = h('div', null, h('p', { class: 'muted small' }, 'Your own start page, on this account only: untick what you do not need, and order the tiles.'),
-    h('h3', null, 'Tiles'), list, h('h3', null, 'Cards'), sections.map((s) => h('label', { class: 'check layrow' }, s.box, s.l)),
+  const tiles = apps.slice().sort((a, b) => rank(a) - rank(b)).map((a) => ({ key: a.key, on: !L.hidden.includes(a.key), label: [h('img', { src: a.icon, alt: '' }), appName(a.name, a.color)] }));
+  const NAMES = { birthdays: 'Birthdays (ioContacts)', week: 'This week (ioCalendar)', strip: 'The photo strip (ioPix)', bookmarks: 'Bookmarks' };
+  const cards = cardOrder(L).map((k) => ({ key: k, on: !L.hidden.includes(k), label: [NAMES[k]] }));
+  // a list of rows with a tick box and up / down buttons, for the tiles and for the cards alike
+  const sortable = (items) => {
+    const list = h('div', { class: 'lay' });
+    const draw = () => list.replaceChildren(...items.map((t, i) => h('div', { class: 'layrow' },
+      h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: t.on, onchange: (e) => { t.on = e.target.checked; } }), t.label),
+      h('span', { class: 'bmtools' }, h('button', { class: 'iconbtn', title: 'Up', disabled: i === 0 ? true : null, onclick: () => { [items[i - 1], items[i]] = [items[i], items[i - 1]]; draw(); } }, icon('up', 's')),
+        h('button', { class: 'iconbtn', title: 'Down', disabled: i === items.length - 1 ? true : null, onclick: () => { [items[i + 1], items[i]] = [items[i], items[i + 1]]; draw(); } }, icon('down', 's'))))));
+    draw();
+    return list;
+  };
+  const adminStrip = { rediscover: 'Rediscover', onthisday: 'On this day', off: 'Off' }[S.photoStrip] || 'Rediscover';
+  const strip = h('select', { class: 't' }, [[null, `Default (${adminStrip})`], ['rediscover', 'Rediscover: photos at random'], ['onthisday', 'On this day'], ['off', 'Off']].map(([v, t]) => h('option', { value: v || '', selected: (v || '') === (L.strip || '') ? true : null }, t)));
+  const body = h('div', null, h('p', { class: 'muted small' }, 'Your own start page, on this account only: untick what you do not need, and put the tiles and the cards in your order. Birthdays and This week share a row when they follow each other.'),
+    h('h3', null, 'Tiles'), sortable(tiles), h('h3', null, 'Cards under the tiles'), sortable(cards),
     h('div', { class: 'grid' }, fld('Photo strip', strip)));
   const v = await dialog('Customize the page', body, [{ label: 'Back to the default', value: 'reset' }, { label: 'Cancel', value: null }, { label: 'Save', value: 'save', primary: true }]);
   if (!v) return;
-  const json = v === 'reset' ? {} : { hidden: [...tiles.filter((t) => !t.on).map((t) => t.key), ...sections.filter((s) => !s.box.checked).map((s) => s.k)], order: tiles.map((t) => t.key), strip: strip.value || null };
+  const json = v === 'reset' ? {} : { hidden: [...tiles, ...cards].filter((t) => !t.on).map((t) => t.key), order: tiles.map((t) => t.key), cards: cards.map((c) => c.key), strip: strip.value || null };
   try { await api('/api/me/layout', { method: 'PUT', json }); toast(v === 'reset' ? 'Back to the default' : 'Saved'); if (route().view === 'home') onRoute(); } catch (e) { fail(e); }
 }
 

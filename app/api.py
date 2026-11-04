@@ -75,7 +75,8 @@ def my_layout(request: Request):
 
 @router.put("/api/me/layout")
 async def my_layout_save(request: Request):
-    """Body: {hidden?: [keys], order?: [app keys], strip?: rediscover | onthisday | off | null}. {} puts it back."""
+    """Body: {hidden?: [keys], order?: [app keys], cards?: [birthdays | week | strip | bookmarks], strip?: rediscover |
+    onthisday | off | null}. {} puts it back."""
     u = me(request)
     try:
         return layout.save(u["id"], await request.json())
