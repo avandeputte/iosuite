@@ -15,6 +15,14 @@ what the app will show on the start page later (today's events, the newest photo
   environment (`IOPIX_URL` and friends), from **Settings › Apps** (admins), or, failing both, from the host the page was
   opened on with the app's usual port (the one-box install): `http://<this host>:8600` for ioPix, `47800` ioHealth,
   `8620` ioCalendar, `8610` ioContacts and ioNotes. An app can be taken off the page in Settings.
+- **A search box** at the top (⌘K / Ctrl-K): as you type it lists the bookmarks that match, the people ioContacts
+  finds, and a row per app that searches itself (ioPix, ioCalendar and ioNotes open on their own results). Arrows
+  pick a row, Enter opens it.
+- **A dot by each app's name**: green when the app answers its `/api/status`, red when it does not, and an "update"
+  badge when the app tells the viewer (an admin there) that a newer version is out. Bookmarks the server cannot
+  reach get a red dot too. The server asks each app once a minute and pings each bookmark every five.
+- **Your own page** (the account menu › Customize the page): untick the tiles and cards you do not need, order the
+  tiles, and pick your own photo strip. Saved per account, on top of what the admin set in Settings › Apps.
 - **The week ahead** under the tiles: a Birthdays card from ioContacts (birthdays and anniversaries in the next 30
   days, with the contact's photo; a row opens the contact) and a This week card from ioCalendar (the coming seven
   days' events, day by day; a day opens in ioCalendar). A card that its app cannot fill is left out.
@@ -146,6 +154,8 @@ what a viewer may not change. CI runs them against MariaDB.
 app/main.py        the application: start-up (tables, first admin, the update check), who is asking, routes
 app/api.py         the REST API: status, the apps and their settings, the server (version, updates)
 app/apps.py        the catalogue of the suite's apps and where each one is (environment, Settings, this host)
+app/status.py      is each app up (its /api/status) and does it have an update; is each bookmark reachable
+app/layout.py      each account's own layout: hidden tiles and cards, the tiles' order, the photo strip
 app/widgets.py     what the tiles and cards show: ioPix, ioCalendar, ioHealth and ioContacts asked over their APIs with the viewer's sign-in
 app/weather.py     AccuWeather: the settings, the place search, the cached conditions and forecast
 app/bookmarks.py   the bookmark groups and links, and the homepage bookmarks.yaml import
