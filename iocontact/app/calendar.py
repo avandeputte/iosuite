@@ -32,7 +32,7 @@ def feed(book_ids: list[int], title: str = "Family birthdays", base_url: str = "
         marks = ",".join(["%s"] * len(book_ids))
         rows = db.q(f"SELECT c.id, c.uid, c.fn, c.bday_year AS y, c.bday_month AS m, c.bday_day AS d, 'birthday' AS label, c.updated "
                     f"FROM contacts c WHERE c.book_id IN ({marks}) AND c.deleted = 0 AND c.bday_month IS NOT NULL "
-                    f"UNION ALL SELECT c.id, c.uid, c.fn, x.year, x.month, x.day, x.label, c.updated FROM contact_dates x "
+                    f"AND c.bday_remind = 1 UNION ALL SELECT c.id, c.uid, c.fn, x.year, x.month, x.day, x.label, c.updated FROM contact_dates x "
                     f"JOIN contacts c ON c.id = x.contact_id WHERE c.book_id IN ({marks}) AND c.deleted = 0",
                     (*book_ids, *book_ids))
     else:

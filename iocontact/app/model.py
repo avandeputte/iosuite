@@ -166,7 +166,8 @@ def full(cid: int | dict, with_photo: bool = False) -> dict | None:
     c = {"id": r["id"], "bookId": r["book_id"], "uid": r["uid"], "href": r["href"], "kind": r["kind"], "fn": r["fn"],
          "name": {k: r[k] or "" for k in ("prefix", "given", "additional", "family", "suffix")},
          "nickname": r["nickname"], "maiden": r["maiden"], "phoneticGiven": r["phonetic_given"],
-         "phoneticFamily": r["phonetic_family"], "gender": r["gender"], "birthday": _bday(r), "org": r["org"],
+         "phoneticFamily": r["phonetic_family"], "gender": r["gender"], "birthday": _bday(r),
+         "birthdayRemind": bool(r.get("bday_remind", 1)), "org": r["org"],
          "department": r["department"], "title": r["title"], "role": r["role"], "notes": r["notes"],
          "favorite": bool(r["favorite"]), "hasPhoto": r["photo"] is not None, "etag": r["etag"],
          "iopix": {"personId": r["iopix_person_id"], "name": r["iopix_person_name"]} if r["iopix_person_id"] else None,
@@ -245,6 +246,9 @@ def validate(c: dict) -> dict:
         out["birthday"] = {"year": _int(b.get("year"), 1, 9999), "month": int(b["month"]), "day": int(b["day"])}
     else:
         out["birthday"] = None
+    # remind: whether the birthday goes into the birthday feeds; None (not given, as from a vCard) keeps what was there
+    rem = c.get("birthdayRemind")
+    out["birthdayRemind"] = None if rem is None else rem not in (False, 0, "0", "false", "no", "off")
     out["dates"] = [{"label": _clean(d.get("label"), 64) or "other", "year": _int(d.get("year"), 1, 9999),
                      "month": int(d["month"]), "day": int(d["day"])}
                     for d in c.get("dates") or [] if _int(d.get("month"), 1, 12) and _int(d.get("day"), 1, 31)]
@@ -294,6 +298,8 @@ def save(book_id: int, data: dict, cid: int | None = None, href: str | None = No
                 "bday_month": b.get("month"), "bday_day": b.get("day"), "org": c["org"], "department": c["department"],
                 "title": c["title"], "role": c["role"], "notes": c["notes"], "favorite": 1 if c.get("favorite") else 0,
                 "extra": json.dumps(c.get("extra") or []) if c.get("extra") else None}
+        if c["birthdayRemind"] is not None or not prev:
+            cols["bday_remind"] = 0 if c["birthdayRemind"] is False else 1
         if "iopix" in data:
             ip = data.get("iopix") or {}
             cols["iopix_person_id"] = _int(ip.get("personId"), 1, 2 ** 31 - 1)
@@ -465,7 +471,7 @@ def upcoming(book_ids: list[int], days: int = 30) -> list[dict]:
     out = []
     rows = db.q(f"SELECT c.id, c.fn, c.bday_year AS year, c.bday_month AS month, c.bday_day AS day, 'birthday' AS label, "
                 f"c.photo IS NOT NULL AS has_photo FROM contacts c WHERE c.book_id IN ({marks}) AND c.deleted = 0 AND c.bday_month IS NOT NULL "
-                f"UNION ALL SELECT c.id, c.fn, d.year, d.month, d.day, d.label, c.photo IS NOT NULL FROM contact_dates d "
+                f"AND c.bday_remind = 1 UNION ALL SELECT c.id, c.fn, d.year, d.month, d.day, d.label, c.photo IS NOT NULL FROM contact_dates d "
                 f"JOIN contacts c ON c.id = d.contact_id WHERE c.book_id IN ({marks}) AND c.deleted = 0", (*book_ids, *book_ids))
     for r in rows:
         for yr in (today.year, today.year + 1):
@@ -531,6 +537,8 @@ def combine(keep: dict, others: list[dict]) -> dict:
         for f in ("nickname", "maiden", "gender", "org", "department", "title", "role", "birthday", "phoneticGiven", "phoneticFamily"):
             if not keep.get(f) and o.get(f):
                 keep[f] = o[f]
+                if f == "birthday":
+                    keep["birthdayRemind"] = o.get("birthdayRemind", True)
         for k in ("prefix", "given", "additional", "family", "suffix"):
             if not keep["name"].get(k) and o["name"].get(k):
                 keep["name"][k] = o["name"][k]

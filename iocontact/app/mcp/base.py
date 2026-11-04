@@ -139,6 +139,8 @@ def contact_out(u: dict, cid: int) -> dict:
     c.pop("extra", None)
     c.pop("etag", None)
     c.pop("href", None)
+    if not c.get("birthday"):
+        c.pop("birthdayRemind", None)
     c["book"] = book_names(u).get(c["bookId"])
     for s in c.get("social") or []:
         s["url"] = vcard.social_url(s["service"], s["value"])

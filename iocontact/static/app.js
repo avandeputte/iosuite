@@ -409,7 +409,8 @@ async function showContact(id, pane) {
     return kv(ad.label, h('div', null, lines.map((l) => h('div', null, l)), h('a', { class: 'lnk small', href: `https://www.openstreetmap.org/search?query=${q}`, target: '_blank', rel: 'noopener' }, 'Map')));
   })));
   if (c.birthday || c.dates.length) cards.push(card('cake', 'Dates', '--c-amber',
-    c.birthday ? kv('birthday', h('span', null, fmtDate(c.birthday), a != null ? h('span', { class: 'muted' }, ` · ${a} years old`) : null)) : null,
+    c.birthday ? kv('birthday', h('span', null, fmtDate(c.birthday), a != null ? h('span', { class: 'muted' }, ` · ${a} years old`) : null,
+      c.birthdayRemind === false ? h('span', { class: 'muted', title: 'Left out of the birthday calendar, the start page and other apps' }, ' · no reminder') : null)) : null,
     c.dates.map((d) => kv(d.label, h('span', null, fmtDate(d), d.year ? h('span', { class: 'muted' }, ` · ${age(d)} years`) : null)))));
   if (c.relations.length) {
     const fam = new Set(S.rel.groups[0].types.map((t) => t.type));
@@ -582,7 +583,9 @@ async function showEdit(id, pane) {
       fld('Kind', kindSel), fld('Phonetic first', inp(f, 'phoneticGiven')), fld('Phonetic last', inp(f, 'phoneticFamily'))),
     h('div', { class: 'fsec' }, icon('work'), 'Work'),
     h('div', { class: 'grid' }, fld('Company', inp(f, 'org')), fld('Department', inp(f, 'department')), fld('Job title', inp(f, 'title')), fld('Role', inp(f, 'role'))),
-    h('div', { class: 'fsec' }, icon('cake'), 'Birthday'), h('div', { class: 'multi' }, ...dateInputs(f.birthday)),
+    h('div', { class: 'fsec' }, icon('cake'), 'Birthday'), h('div', { class: 'multi' }, ...dateInputs(f.birthday),
+      h('label', { class: 'check', title: 'Unchecked: the birthday stays on the contact but is left out of the birthday calendar, the start page and other apps' },
+        h('input', { type: 'checkbox', checked: f.birthdayRemind !== false, onchange: (e) => { f.birthdayRemind = e.target.checked; } }), ' Remind me')),
     ...phones, ...emails, ...addrs, ...social, ...urls, ...dates, ...rels,
     S.status.iopix ? [h('div', { class: 'fsec' }, icon('image'), 'ioPix person'), iopixBox] : null,
     h('div', { class: 'fsec' }, icon('tag'), 'Labels and address book'),

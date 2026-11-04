@@ -135,21 +135,22 @@ def family_tree(contact: str, depth: int = 3) -> dict:
 @server.tool(annotations=READ_ONLY)
 def upcoming_dates(days: int = 30, book: Optional[str] = None) -> list:
     """Birthdays, anniversaries and other dates in the next `days` days (up to 366), soonest first, with the age or
-    number of years when the year is known."""
+    number of years when the year is known. Birthdays someone asked not to be reminded of are left out."""
     u = who()
     return model.upcoming(book_ids(u, book), clamp(days, 1, 366))
 
 
 @server.tool(annotations=READ_ONLY)
 def birthdays_in_month(month: int, book: Optional[str] = None) -> list:
-    """Everyone whose birthday falls in a month (1-12), by day."""
+    """Everyone whose birthday falls in a month (1-12), by day. Birthdays someone asked not to be reminded of are
+    left out (as in upcoming_dates and the birthday calendar)."""
     u = who()
     if not 1 <= int(month) <= 12:
         raise ToolError("month is 1-12")
     ids = book_ids(u, book)
     marks = ",".join(["%s"] * len(ids)) or "0"
     rows = db.q(f"SELECT id, fn, bday_year, bday_month, bday_day FROM contacts WHERE deleted = 0 AND book_id IN ({marks}) "
-                f"AND bday_month = %s ORDER BY bday_day, fn", (*ids, int(month))) if ids else []
+                f"AND bday_month = %s AND bday_remind = 1 ORDER BY bday_day, fn", (*ids, int(month))) if ids else []
     return [{"id": r["id"], "name": r["fn"], "day": r["bday_day"], "year": r["bday_year"]} for r in rows]
 
 

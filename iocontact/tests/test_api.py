@@ -176,3 +176,26 @@ def test_registers_in_the_suite(client):
     assert me is not None
     assert me["name"] == "ioContacts" and me["version"] == APP_VERSION
     assert me["description"] == "Contacts" and me["color"] == "#4f2f7d"
+
+
+def test_birthday_without_reminder(client, family_id):
+    """An unchecked "Remind me" keeps the birthday on the contact (and in vCard) but out of every birthdays feed."""
+    import datetime as dt
+    soon = dt.date.today() + dt.timedelta(days=3)
+    on = mk(client, family_id, fn="Remind Yes", birthday={"year": 1980, "month": soon.month, "day": soon.day})
+    off = mk(client, family_id, fn="Remind No", birthday={"year": 1981, "month": soon.month, "day": soon.day}, birthdayRemind=False)
+    assert on["birthdayRemind"] is True and off["birthdayRemind"] is False and off["birthday"]["year"] == 1981
+    names = {x["fn"] for x in client.get("/api/upcoming?days=10").json()["items"]}
+    assert "Remind Yes" in names and "Remind No" not in names
+    info = client.get("/api/connect").json()
+    ics = client.get(info["calendar"]["family"].split("testserver")[1]).text
+    assert "Remind Yes's birthday" in ics and "Remind No" not in ics
+    assert "BDAY" in client.get(f"/api/contacts/{off['id']}", headers={"Accept": "text/vcard"}).text
+    # a CardDAV client (or anything else that does not know the flag) writing the card back keeps it off
+    r = client.put(f"/dav/addressbooks/alex/family/{off['href']}", content=client.get(f"/dav/addressbooks/alex/family/{off['href']}", auth=("alex", "secret123")).text,
+                   headers={"Content-Type": "text/vcard"}, auth=("alex", "secret123"))
+    assert r.status_code in (201, 204), r.text
+    assert client.get(f"/api/contacts/{off['id']}").json()["birthdayRemind"] is False
+    back = client.put(f"/api/contacts/{off['id']}", json={**client.get(f"/api/contacts/{off['id']}").json(), "birthdayRemind": True}).json()
+    assert back["birthdayRemind"] is True
+    assert "Remind No" in {x["fn"] for x in client.get("/api/upcoming?days=10").json()["items"]}

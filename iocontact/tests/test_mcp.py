@@ -57,6 +57,10 @@ def test_mcp_contacts_relations_and_permissions(client, family_id):
     mary = call(client, auth, "create_contact", contact={"fn": "Mary Ray", "gender": "F", "birthday": "1960-03-04",
                                                          "emails": ["mary@example.com"], "phones": [{"value": "+1 555 0100", "label": "mobile"}]})
     assert mary["name"]["family"] == "Ray" and mary["birthday"] == {"year": 1960, "month": 3, "day": 4} and mary["book"] == "Family"
+    assert mary["birthdayRemind"] is True and "Mary Ray" in str(call(client, auth, "birthdays_in_month", month=3))
+    assert call(client, auth, "update_contact", contact="Mary", changes={"birthdayRemind": False})["birthdayRemind"] is False
+    assert "Mary Ray" not in str(call(client, auth, "birthdays_in_month", month=3)) and call(client, auth, "get_contact", contact="Mary")["birthday"]["day"] == 4
+    call(client, auth, "update_contact", contact="Mary", changes={"birthdayRemind": True})
     tim = call(client, auth, "create_contact", contact={"name": {"given": "Tim", "family": "Ray"}, "gender": "M"})
     out = call(client, auth, "add_relation", contact="Mary Ray", related="Tim Ray", relation="son")
     assert out["relations"][0]["typeLabel"] == "Son"

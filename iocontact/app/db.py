@@ -7,7 +7,7 @@ from pymysql.cursors import DictCursor
 
 from app import config
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 # Every table is InnoDB/utf8mb4. Child rows (emails, phones...) are replaced as a whole when a contact is saved.
 SCHEMA = [
@@ -48,6 +48,7 @@ SCHEMA = [
         bday_year SMALLINT NULL,
         bday_month TINYINT NULL,
         bday_day TINYINT NULL,
+        bday_remind TINYINT NOT NULL DEFAULT 1,
         org VARCHAR(255) NULL,
         department VARCHAR(255) NULL,
         title VARCHAR(255) NULL,
@@ -212,11 +213,20 @@ def ensure_database() -> None:
         con.close()
 
 
+# schema 4: whether a birthday goes into the birthday feeds (calendar, upcoming, the suite); existing birthdays stay on
+UPGRADES = [
+    "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS bday_remind TINYINT NOT NULL DEFAULT 1 AFTER bday_day",
+]
+
+
 def migrate() -> None:
     ensure_database()
     with tx() as con, con.cursor() as cur:
         for stmt in SCHEMA:
             cur.execute(stmt + " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci")
+        # columns added after a table was first made (MariaDB: ADD COLUMN IF NOT EXISTS)
+        for stmt in UPGRADES:
+            cur.execute(stmt)
         cur.execute("INSERT INTO meta (k, v) VALUES ('schema', %s) ON DUPLICATE KEY UPDATE v = GREATEST(v, VALUES(v))",
                     (str(SCHEMA_VERSION),))
         # the family address book everyone shares
