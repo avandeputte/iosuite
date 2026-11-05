@@ -89,17 +89,14 @@ checked for syntax in CI and drive the tested `setup.sh`; they have not been run
 ## Users and permissions
 
 Accounts are the **ioThing suite's shared accounts**, kept in the **Shared ioSuite database** (a MariaDB database
-shared with iopix and ioContacts, used through the ioSuite shared library, [`iosuite-shared`](https://github.com/avandeputte/iosuite-shared) (package and module still `iothing-auth` / `iothing_auth`); besides the accounts it holds sessions,
+shared with iopix and ioContacts, used through the ioSuite shared library, [`iosuite-shared`](https://github.com/avandeputte/iosuite-shared); besides the accounts it holds sessions,
 roles, the suite's list of apps and the suite-wide settings), so one name, password and session serve every app, and
 someone signed in at `photo.example.com` is signed in at `notes.example.com` too when the apps share a domain
 (`IOTHING_COOKIE_DOMAIN`). What is ionotes' own is kept per app: the role an account holds here and its settings. A
 *suite admin* is admin in every app. Point ionotes at that database with `IOSUITE_DB_HOST`, `IOSUITE_DB_PORT`,
 `IOSUITE_DB_NAME`, `IOSUITE_DB_USER` and `IOSUITE_DB_PASSWORD` in `ionotes.env` (database and user `iosuite` by
-default; the tables are created at start; `iothing-auth migrate --ionotes`
-folds a 1.0 install's `user_accounts` table into it). Installs from before 1.4 keep working as they are: the older
-names `IOTHING_AUTH_DB_*` are still read (`IOSUITE_DB_*` wins when both are set), and an install that never named the
-database and used the old default `auth` (user `auth`) keeps using it, with a line in the log; nothing is renamed in
-MariaDB. Settings › Storage and backups shows which database it is. Out of the box ionotes is open to anyone who can reach it;
+default; the tables are created at start; `iosuite-shared migrate --ionotes`
+folds a 1.0 install's `user_accounts` table into it). Settings › Storage and backups shows which database it is. Out of the box ionotes is open to anyone who can reach it;
 `setup.sh` (or `ADMIN_USER` / `ADMIN_PASSWORD`, or the person icon in the web app) creates the admin. Once an
 account exists:
 
@@ -123,7 +120,7 @@ not, web or which app): `GET /api/auth/sessions` for your own, `GET /api/users/<
 are scrypt-hashed; wrong passwords cost a growing wait. **Read-only** (Settings, or `READ_ONLY=1`) refuses every
 change, for everyone. Write requests from another site are refused.
 
-ionotes writes its row in the **suite's list of apps** (iothing-auth's `suite_apps` table: name, version, colour,
+ionotes writes its row in the **suite's list of apps** (iosuite-shared's `suite_apps` table: name, version, colour,
 icon, address) on its first request, so ioSuite's start page and the other apps find it without anyone typing an
 address. The address is `APP_URL` when set, otherwise the best one ionotes is reached at (a host under
 `IOTHING_COOKIE_DOMAIN` over HTTPS beats a LAN name, which beats an IP address).
@@ -211,7 +208,7 @@ Maintenance › Import): records keep their ids, and a newer copy on the server 
 - **Standalone:** `./update.sh` fetches the latest code (git, or the GitHub tarball), installs the packages the new
   version asks for and only then moves the code in, then restarts the service. `--check` only reports. Maintenance ›
   Updates and logs › Update now runs the same script; the page (the same in every ioThing app: it comes from
-  `iothing_auth.updates` in iosuite-shared, at `/api/server` and `/api/log`) also has the tail of the server log
+  `iosuite_shared.updates` in iosuite-shared, at `/api/server` and `/api/log`) also has the tail of the server log
   (`data/ionotes.log`) and Restart. A daily check (on by default; `UPDATE_CHECK=0` locks it off, the page switches it
   off) shows admins a card when a newer version exists, with Update now right on it (dismissed per version).
 - **Proxmox:** `update` inside the container (the framework's command) runs the same script.
@@ -228,7 +225,7 @@ Maintenance › Import): records keep their ids, and a newer copy on the server 
 | `DATA_DIR` | `./data` | the log (`ionotes.log`) and the database settings saved from the web app |
 | `APP_URL` | `http://localhost:8610` | the address ionotes is reached at, for links in MCP answers and the suite's list of apps |
 | `ADMIN_USER` / `ADMIN_PASSWORD` | | the first admin, created on a first start with no accounts |
-| `IOSUITE_DB_HOST` / `_PORT` / `_NAME` / `_USER` / `_PASSWORD` | `127.0.0.1` / `3306` / `iosuite` / `iosuite` / `iosuite` | the Shared ioSuite database (MariaDB): accounts, sessions, suite-wide settings. `IOTHING_AUTH_DB_*` (the names before 1.4) still work |
+| `IOSUITE_DB_HOST` / `_PORT` / `_NAME` / `_USER` / `_PASSWORD` | `127.0.0.1` / `3306` / `iosuite` / `iosuite` / `iosuite` | the Shared ioSuite database (MariaDB): accounts, sessions, suite-wide settings |
 | `IOTHING_COOKIE_DOMAIN` | | the domain the session cookie is shared on (e.g. `example.com`); a LAN address outside it gets a cookie of its own |
 | `READ_ONLY` | `0` | nothing can be changed, by anyone |
 | `OCR` | `1` | `0`: the server never reads text in pictures (the apps still do) |
@@ -258,5 +255,5 @@ tests/             pytest; IONOTES_TEST_DB=mysql runs them on MariaDB
 Tests: `pip install -e '.[test]' && pytest tests` (SQLite for the notes), and `IONOTES_TEST_DB=mysql pytest tests` with a
 MariaDB database `notes_test` for the user `notes`/`notes` on 127.0.0.1 (`IONOTES_TEST_DB_HOST` and friends change that).
 The Shared ioSuite database always goes to a test MariaDB of its own: a Docker container the suite starts
-(`iothing-test-mariadb`), or `IOTHING_TEST_DB=host:port:user:password`; never a live `iosuite` (or older `auth`) database.
+(`iothing-test-mariadb`), or `IOTHING_TEST_DB=host:port:user:password`; never a live `iosuite` database.
 CI runs both.

@@ -8,7 +8,7 @@ from mcp.types import ToolAnnotations
 
 from app import __version__, config, db, images, ocr, proxyauth, users
 from app.auth import updater
-from iothing_auth.updates import tail
+from iosuite_shared.updates import tail
 from app.mcp.base import READ_ONLY, WRITES, need_token, server
 
 LOG_LINES_MAX = 2000

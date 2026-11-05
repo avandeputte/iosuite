@@ -1,4 +1,4 @@
-"""Users, sessions and permissions: the shared ioThing accounts (iothing-auth), seen from ionotes.
+"""Users, sessions and permissions: the shared ioThing accounts (iosuite-shared), seen from ionotes.
 
 Three roles here: viewer (reads and searches the notes; own settings kept on the server), editor (viewer plus
 every change to notes, folders and tags: the Mac and iPhone apps sign in as an editor) and admin (editor plus
@@ -9,9 +9,9 @@ account exists ionotes stays open, so a fresh install is not locked out.
 
 Passwords are scrypt-hashed and sessions are random tokens in an HttpOnly cookie (30 days, renewed in use), both
 in the Shared ioSuite database, so a session begun in another ioThing app is a session here too. This module keeps ionotes'
-old names for the rest of the code; the work is done by iothing_auth.
+old names for the rest of the code; the work is done by iosuite_shared.
 """
-from iothing_auth import db as authdb, sessions, users as shared
+from iosuite_shared import db as authdb, sessions, users as shared
 
 from app.auth import APP
 

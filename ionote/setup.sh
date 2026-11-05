@@ -95,7 +95,7 @@ fi
 say "Shared ioSuite database"
 echo "Accounts, sessions and the suite-wide settings live in the Shared ioSuite database (MariaDB), shared with"
 echo "the other ioThing apps (ioPix, ioContacts), so one sign-in serves them all."
-SUITE_SET=0; [ -f "$APP/ionotes.env" ] && grep -qE '^(IOSUITE_DB_|IOTHING_AUTH_DB_)' "$APP/ionotes.env" && SUITE_SET=1
+SUITE_SET=0; [ -f "$APP/ionotes.env" ] && grep -qE '^IOSUITE_DB_' "$APP/ionotes.env" && SUITE_SET=1
 if [ -z "$SUITE" ]; then
   if [ "$SUITE_SET" = 1 ] && ! yesno "ionotes.env already names the Shared ioSuite database; change it?" n; then
     SUITE="keep"
@@ -139,7 +139,7 @@ OLD=""; [ -f "$ENVF" ] && OLD="$(grep -E '^(DB_|AUTH_PROXY|CF_ACCESS|APP_URL|MCP
   echo "DATA_DIR=$DATA"
   echo "PORT=$PORT"
   echo "OCR=$([ "$FEATURES" = ocr ] && echo 1 || echo 0)"
-  KEEP="$OLD"; [ "$SUITE" != keep ] && [ -n "$SUITE" ] && KEEP="$(echo "$OLD" | grep -vE '^(IOSUITE_DB_|IOTHING_AUTH_DB_)' || true)"
+  KEEP="$OLD"; [ "$SUITE" != keep ] && [ -n "$SUITE" ] && KEEP="$(echo "$OLD" | grep -vE '^IOSUITE_DB_' || true)"
   if [ "$MYSQL" = keep ]; then
     echo "$KEEP"
   else
@@ -152,7 +152,7 @@ OLD=""; [ -f "$ENVF" ] && OLD="$(grep -E '^(DB_|AUTH_PROXY|CF_ACCESS|APP_URL|MCP
     fi
   fi
   if [ "$SUITE" != keep ] && [ -n "$SUITE" ]; then
-    # the Shared ioSuite database, under its own names (the old IOTHING_AUTH_DB_* lines are replaced)
+    # the Shared ioSuite database
     hp=${SUITE%%/*}; rest=${SUITE#*/}; db=${rest%%:*}; rest=${rest#*:}; us=${rest%%:*}; pw=${rest#*:}
     echo "IOSUITE_DB_HOST=${hp%%:*}"; echo "IOSUITE_DB_PORT=${hp##*:}"; echo "IOSUITE_DB_NAME=$db"; echo "IOSUITE_DB_USER=$us"; echo "IOSUITE_DB_PASSWORD=$pw"
   fi
@@ -193,10 +193,9 @@ echo "testing the Shared ioSuite database, creating it if needed"
 "$VPY" - <<'PYEOF' || printf '\033[1;33mwarning:\033[0m could not use the Shared ioSuite database (see above); ionotes needs it for sign-in. Run setup.sh again with --suite-db HOST:PORT/DB:USER:PASSWORD\n' >&2
 import os
 import pymysql
-from app import suitedb  # importing app settles the Shared ioSuite database's settings (IOSUITE_DB_*, or the old names)
-e = lambda k: os.environ["IOTHING_AUTH_DB_" + k]
-c = dict(host=e("HOST"), port=int(e("PORT")), user=e("USER"), password=e("PASSWORD"), connect_timeout=8)
-name = e("NAME")
+from iosuite_shared import config as sc  # the Shared ioSuite database's settings (IOSUITE_DB_*, or the defaults)
+c = dict(host=sc.DB_HOST, port=sc.DB_PORT, user=sc.DB_USER, password=sc.DB_PASSWORD, connect_timeout=8)
+name = sc.DB_NAME
 try:
     pymysql.connect(database=name, **c).close()
 except pymysql.err.OperationalError as x:
@@ -210,7 +209,7 @@ except pymysql.err.OperationalError as x:
         raise SystemExit(f"  the database {name} does not exist and {c['user']} may not create it ({x2}); create it, then run setup.sh again")
     finally:
         con.close()
-print(f"  OK: {c['user']}@{c['host']}:{c['port']}/{name}" + (f" ({suitedb.note})" if suitedb.note else ""))
+print(f"  OK: {c['user']}@{c['host']}:{c['port']}/{name}")
 PYEOF
 
 if [ -n "$ADMIN" ]; then

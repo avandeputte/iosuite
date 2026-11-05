@@ -28,8 +28,8 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 PORT = int(os.environ.get("PORT", 8610))
 # the address the web app is reached at (for links in MCP results), e.g. https://notes.example.com
 APP_URL = os.environ.get("APP_URL", "").rstrip("/") or f"http://localhost:{PORT}"
-# the address the suite's other apps link to (iothing-auth's list of apps): APP_URL as configured; empty: the address
-# ionotes is reached at, noted by iothing-auth
+# the address the suite's other apps link to (iosuite-shared's list of apps): APP_URL as configured; empty: the address
+# ionotes is reached at, noted by iosuite-shared
 PUBLIC_URL = os.environ.get("APP_URL", "").strip().rstrip("/")
 
 # the first admin account, created on a first start with no accounts (containers, installers)
@@ -39,7 +39,7 @@ ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 # READ_ONLY=1: browsing and searching only, for everyone
 READ_ONLY = _flag("READ_ONLY")
 # MCP=1 turns the MCP endpoint on whatever Settings says (MCP_ADMIN_TOKEN, which fixes its token, and UPDATE_CHECK=0,
-# which locks the daily version check off, are read by iothing_auth.updates: app.auth.updater)
+# which locks the daily version check off, are read by iosuite_shared.updates: app.auth.updater)
 MCP_FORCED = _flag("MCP")
 # OCR=0 keeps the server from reading text in images itself (the apps read it on the device and send it along)
 OCR = _flag("OCR", "1")

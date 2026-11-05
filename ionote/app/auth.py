@@ -1,11 +1,11 @@
-"""The shared ioThing accounts (iothing-auth), as ionotes uses them.
+"""The shared ioThing accounts (iosuite-shared), as ionotes uses them.
 
 Accounts, passwords, sessions and roles live in the Shared ioSuite database (IOSUITE_DB_* in ionotes.env, app/suitedb.py),
 shared with ioPix and ioContacts: one sign-in serves every app on the domain (IOTHING_COOKIE_DOMAIN). What is
 ionotes' own stays per app: the role an account holds here and its display settings.
 """
-from iothing_auth.fastapi import Auth
-from iothing_auth.updates import Updater
+from iosuite_shared.fastapi import Auth
+from iosuite_shared.updates import Updater
 
 from app import __version__, config, db
 
@@ -24,6 +24,6 @@ auth = Auth(APP, read_only=_read_only, read_only_message="ionotes is in read-onl
 auth.deny_exempt = ("/mcp",)  # MCP clients sign in with the admin token, whatever Cloudflare service token got them through
 
 # updates (the daily check, update.sh, restart), the MCP admin token and the server log, as in every app of the suite
-# (iothing_auth.updates); the daily-check switch and the token are kept with ionotes' own settings
+# (iosuite_shared.updates); the daily-check switch and the token are kept with ionotes' own settings
 updater = Updater(APP, __version__, config.APP_DIR, settings=(db.get_setting, db.set_setting), result_file=config.DATA_DIR / ".update-result",
                   user_agent="ionotes")

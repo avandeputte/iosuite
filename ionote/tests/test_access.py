@@ -83,7 +83,7 @@ def test_status_tells_admins_of_a_newer_version_while_the_daily_check_is_on(clie
 
 
 def test_ionotes_registers_in_the_suites_list_of_apps(client):
-    from iothing_auth import suite
+    from iosuite_shared import suite
     from app import __version__
     client.get("/api/notes")
     row = suite.get("ionotes")
@@ -101,7 +101,7 @@ def test_the_suite_icon_is_served_to_visitors_even_with_sign_in_required(client,
 def test_suite_apps_for_the_app_switcher(client):
     """The app mark becomes a menu of the suite's other apps (as ioContacts'): the page has the phone's button, may show
     their icons (other origins), and /api/auth/suite lists them with an address and an absolute icon."""
-    from iothing_auth import suite
+    from iosuite_shared import suite
     html = client.get("/").text
     assert 'id="suitebtn"' in html and "img-src 'self' data: blob: https:" in html
     assert client.get("/js/suite.js").status_code == 200

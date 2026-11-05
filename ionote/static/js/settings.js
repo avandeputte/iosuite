@@ -188,7 +188,7 @@ function exportBox() {
       canWrite() ? h('button.pillbtn', { onclick: () => file.click() }, icon('upload'), 'Import…') : null, file));
 }
 
-/** Maintenance › Updates and logs: the version card, the server log and Restart, from iothing-auth's /api/server and
+/** Maintenance › Updates and logs: the version card, the server log and Restart, from iosuite-shared's /api/server and
  *  /api/log, so the page is the same in every ioThing app. */
 async function updateBox() {
   const u = await api('/api/server');

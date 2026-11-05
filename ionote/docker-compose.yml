@@ -25,7 +25,7 @@ services:
       DB_USER: notes
       DB_PASSWORD: change-me                        # CHANGE ME
       # the Shared ioSuite database (MariaDB): accounts, sessions and suite-wide settings, shared with the other
-      # ioThing apps (an install from before 1.4 may still name it with IOTHING_AUTH_DB_*; both work)
+      # ioThing apps
       IOSUITE_DB_HOST: 192.168.1.89                 # CHANGE ME
       IOSUITE_DB_PORT: "3306"
       IOSUITE_DB_NAME: iosuite
