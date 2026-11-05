@@ -128,10 +128,10 @@ def test_caldav_matches_categories_and_overrides_and_bumps_once(client, dav):
 
 def test_shared_slugs_are_unique(client):
     import pymysql
-    db.ex("INSERT INTO calendars (owner_id, slug, name) VALUES (NULL, 'twice', 'One')")
+    db.ex("INSERT INTO cal_calendars (owner_id, slug, name) VALUES (NULL, 'twice', 'One')")
     with pytest.raises(pymysql.err.IntegrityError):
-        db.ex("INSERT INTO calendars (owner_id, slug, name) VALUES (NULL, 'twice', 'Two')")
-    db.ex("INSERT INTO calendars (owner_id, slug, name) VALUES (1, 'twice', 'Mine')")
+        db.ex("INSERT INTO cal_calendars (owner_id, slug, name) VALUES (NULL, 'twice', 'Two')")
+    db.ex("INSERT INTO cal_calendars (owner_id, slug, name) VALUES (1, 'twice', 'Mine')")
 
 
 def test_iocontacts_url_is_http(client):

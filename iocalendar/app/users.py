@@ -92,21 +92,21 @@ def forget_cached_auth() -> None:
 # ---------------------------------------------------------------- subscription links (ioCalendar's own)
 
 def feed_token(uid: int) -> str:
-    r = db.one("SELECT token FROM feed_tokens WHERE user_id = %s ORDER BY id LIMIT 1", (uid,))
+    r = db.one("SELECT token FROM cal_feed_tokens WHERE user_id = %s ORDER BY id LIMIT 1", (uid,))
     if r:
         return r["token"]
     tok = secrets.token_hex(20)
-    db.ex("INSERT INTO feed_tokens (user_id, token) VALUES (%s, %s)", (uid, tok))
+    db.ex("INSERT INTO cal_feed_tokens (user_id, token) VALUES (%s, %s)", (uid, tok))
     return tok
 
 
 def reset_feed_token(uid: int) -> str:
-    db.ex("DELETE FROM feed_tokens WHERE user_id = %s", (uid,))
+    db.ex("DELETE FROM cal_feed_tokens WHERE user_id = %s", (uid,))
     return feed_token(uid)
 
 
 def user_from_feed_token(tok: str) -> dict | None:
-    r = db.one("SELECT user_id FROM feed_tokens WHERE token = %s", (tok,))
+    r = db.one("SELECT user_id FROM cal_feed_tokens WHERE token = %s", (tok,))
     if not r:
         return None
     u = get(r["user_id"])

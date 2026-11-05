@@ -157,7 +157,7 @@ def save_settings(country=None, region=None, language=None) -> None:
 # ------------------------------------------------------------------ the Holidays calendar
 
 def holiday_calendar() -> dict | None:
-    return db.one("SELECT * FROM calendars WHERE kind = 'holidays' AND owner_id IS NULL LIMIT 1")
+    return db.one("SELECT * FROM cal_calendars WHERE kind = 'holidays' AND owner_id IS NULL LIMIT 1")
 
 
 def dates(country: str, region: str | None = None, language: str | None = None, years=None) -> list[tuple[dt.date, str]]:

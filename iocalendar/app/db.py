@@ -1,4 +1,5 @@
 """MariaDB access: one short connection per unit of work, and the schema (created and migrated at start)."""
+import logging
 import threading
 from contextlib import contextmanager
 
@@ -7,21 +8,26 @@ from pymysql.cursors import DictCursor
 
 from app import config
 
-SCHEMA_VERSION = 1
+from iosuite_shared import schema
 
-# Every table is InnoDB/utf8mb4. An event is kept as the iCalendar object a client sent (or the web app made), so
-# whatever a calendar app puts in it (alarms, attachments, its own X- properties, changed occurrences) comes back
-# unchanged; the columns beside it are what the app searches and draws from, filled in whenever the object is saved.
+SCHEMA_VERSION = 2  # 2: the suite naming convention (cal_ tables, *_at times, cal_settings, named indexes)
+PREFIX = "cal"
+
+# Every table is cal_<name> (the suite's naming convention: the apps can share one database) and InnoDB/utf8mb4. An
+# event is kept as the iCalendar object a client sent (or the web app made), so whatever a calendar app puts in it
+# (alarms, attachments, its own X- properties, changed occurrences) comes back unchanged; the columns beside it are
+# what the app searches and draws from, filled in whenever the object is saved.
 SCHEMA = [
-    """CREATE TABLE IF NOT EXISTS meta (
-        k VARCHAR(64) PRIMARY KEY,
-        v MEDIUMTEXT
+    """CREATE TABLE IF NOT EXISTS cal_settings (
+        name VARCHAR(191) PRIMARY KEY,
+        value MEDIUMTEXT NOT NULL,
+        updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3)
     )""",
     # accounts and app passwords live in the Shared ioSuite database (iosuite-shared, app/auth.py)
     # owner_id NULL: a shared calendar (everyone sees it); kind 'birthdays' is filled from ioContacts and read-only.
     # owner_key stands in for owner_id in the unique key: NULLs never clash in a unique key, so (owner_id, slug) alone
     # would let two shared calendars share a slug
-    """CREATE TABLE IF NOT EXISTS calendars (
+    """CREATE TABLE IF NOT EXISTS cal_calendars (
         id INT AUTO_INCREMENT PRIMARY KEY,
         owner_id INT NULL,
         slug VARCHAR(64) NOT NULL,
@@ -30,15 +36,15 @@ SCHEMA = [
         color VARCHAR(16) NULL,
         timezone VARCHAR(64) NULL,
         kind VARCHAR(16) NOT NULL DEFAULT 'events',
-        sort INT NOT NULL DEFAULT 0,
+        position INT NOT NULL DEFAULT 0,
         sync_token BIGINT NOT NULL DEFAULT 1,
-        created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         owner_key INT AS (COALESCE(owner_id, 0)) PERSISTENT,
-        UNIQUE KEY (owner_key, slug)
+        UNIQUE KEY uq_cal_calendars_owner_slug (owner_key, slug)
     )""",
     # dtstart / dtend / range_* are UTC (an all-day event: its dates at midnight UTC, all_day = 1). range_start is the
     # first occurrence's start, range_end the last one's end (NULL: repeats for ever): what a time-range query needs.
-    """CREATE TABLE IF NOT EXISTS events (
+    """CREATE TABLE IF NOT EXISTS cal_events (
         id INT AUTO_INCREMENT PRIMARY KEY,
         calendar_id INT NOT NULL,
         uid VARCHAR(255) NOT NULL,
@@ -59,26 +65,44 @@ SCHEMA = [
         changed_token BIGINT NOT NULL DEFAULT 0,
         deleted TINYINT NOT NULL DEFAULT 0,
         created_by INT NULL,
-        created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        UNIQUE KEY (calendar_id, href),
-        KEY (calendar_id, uid),
-        KEY (calendar_id, deleted, changed_token),
-        KEY (calendar_id, deleted, range_start),
-        FOREIGN KEY (calendar_id) REFERENCES calendars(id) ON DELETE CASCADE
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_cal_events_calendar_href (calendar_id, href),
+        KEY idx_cal_events_calendar_uid (calendar_id, uid),
+        KEY idx_cal_events_calendar_changes (calendar_id, deleted, changed_token),
+        KEY idx_cal_events_calendar_range (calendar_id, deleted, range_start),
+        FOREIGN KEY (calendar_id) REFERENCES cal_calendars(id) ON DELETE CASCADE
     )""",
     # the people on an event (ATTENDEE, and ORGANIZER with role 'organizer'), for search and "what is X doing";
     # contact_id is the ioContacts contact the web app picked them from
-    """CREATE TABLE IF NOT EXISTS event_people (
-        id INT AUTO_INCREMENT PRIMARY KEY, event_id INT NOT NULL, pos SMALLINT NOT NULL DEFAULT 0,
+    """CREATE TABLE IF NOT EXISTS cal_event_people (
+        id INT AUTO_INCREMENT PRIMARY KEY, event_id INT NOT NULL, position SMALLINT NOT NULL DEFAULT 0,
         name VARCHAR(255) NULL, email VARCHAR(255) NULL, contact_id INT NULL, role VARCHAR(16) NULL,
-        KEY (email), KEY (contact_id),
-        FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE)""",
+        KEY idx_cal_event_people_event (event_id), KEY idx_cal_event_people_email (email), KEY idx_cal_event_people_contact (contact_id),
+        FOREIGN KEY (event_id) REFERENCES cal_events(id) ON DELETE CASCADE)""",
     # the private links of the iCalendar subscriptions (/ics/<token>/...), one per account
-    """CREATE TABLE IF NOT EXISTS feed_tokens (
-        id INT AUTO_INCREMENT PRIMARY KEY, user_id INT NOT NULL, token CHAR(40) NOT NULL UNIQUE,
-        created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP)""",
+    """CREATE TABLE IF NOT EXISTS cal_feed_tokens (
+        id INT AUTO_INCREMENT PRIMARY KEY, user_id INT NOT NULL, token CHAR(40) NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_cal_feed_tokens_token (token), KEY idx_cal_feed_tokens_user (user_id))""",
 ]
+
+# 0.6.0: the names from before the suite naming convention, renamed once at start (every row kept). Remove once every
+# server has run 0.6.0.
+RENAME_TABLES = {"calendars": "cal_calendars", "events": "cal_events", "event_people": "cal_event_people", "feed_tokens": "cal_feed_tokens"}
+RENAME_COLUMNS = {
+    "cal_calendars": {"sort": "position", "created": "created_at"},
+    "cal_events": {"created": "created_at", "updated": "updated_at"},
+    "cal_event_people": {"pos": "position"},
+    "cal_feed_tokens": {"created": "created_at"},
+}
+RENAME_INDEXES = {
+    "cal_calendars": {"owner_key": "uq_cal_calendars_owner_slug"},
+    "cal_events": {"calendar_id": "uq_cal_events_calendar_href", "calendar_id_2": "idx_cal_events_calendar_uid",
+                   "calendar_id_3": "idx_cal_events_calendar_changes", "calendar_id_4": "idx_cal_events_calendar_range"},
+    "cal_event_people": {"event_id": "idx_cal_event_people_event", "email": "idx_cal_event_people_email", "contact_id": "idx_cal_event_people_contact"},
+    "cal_feed_tokens": {"token": "uq_cal_feed_tokens_token"},
+}
 
 
 def connect(database: str | None = None):
@@ -139,15 +163,20 @@ def marks(n: int) -> str:
 
 
 def get_setting(k: str, default: str | None = None) -> str | None:
-    r = one("SELECT v FROM meta WHERE k = %s", (f"setting:{k}",))
-    return r["v"] if r else default
+    r = one("SELECT value FROM cal_settings WHERE name = %s", (k,))
+    return r["value"] if r else default
 
 
 def set_setting(k: str, v: str | None) -> None:
     if v is None:
-        ex("DELETE FROM meta WHERE k = %s", (f"setting:{k}",))
+        ex("DELETE FROM cal_settings WHERE name = %s", (k,))
     else:
-        ex("INSERT INTO meta (k, v) VALUES (%s, %s) ON DUPLICATE KEY UPDATE v = VALUES(v)", (f"setting:{k}", v))
+        ex("INSERT INTO cal_settings (name, value) VALUES (%s, %s) ON DUPLICATE KEY UPDATE value = VALUES(value)", (k, v))
+
+
+def schema_version() -> int:
+    with tx() as con, con.cursor() as cur:
+        return schema.current_version(cur, PREFIX)
 
 
 def ensure_database() -> None:
@@ -166,28 +195,42 @@ def ensure_database() -> None:
         con.close()
 
 
+def _meta_to_settings(cur) -> None:
+    """0.6.0: the meta table's settings rows (setting:<name>) move to cal_settings; its schema row is replaced by
+    cal_schema_version."""
+    if "meta" in schema.tables(cur):
+        cur.execute("INSERT IGNORE INTO cal_settings (name, value) "
+                    "SELECT SUBSTRING(k, 9), COALESCE(v, '') FROM meta WHERE k LIKE 'setting:%'")
+        cur.execute("DROP TABLE meta")
+
+
 def migrate() -> None:
     ensure_database()
     with tx() as con, con.cursor() as cur:
+        done = schema.rename(cur, RENAME_TABLES, RENAME_COLUMNS)
         for stmt in SCHEMA:
             cur.execute(stmt + " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci")
+        done += schema.rename(cur, None, None, RENAME_INDEXES)
         # calendars made before 0.2.7 have the unique key on (owner_id, slug), which NULL owner_ids slip past
-        cur.execute("ALTER TABLE calendars ADD COLUMN IF NOT EXISTS owner_key INT AS (COALESCE(owner_id, 0)) PERSISTENT")
-        cur.execute("ALTER TABLE calendars ADD UNIQUE INDEX IF NOT EXISTS owner_key (owner_key, slug)")
-        cur.execute("INSERT INTO meta (k, v) VALUES ('schema', %s) ON DUPLICATE KEY UPDATE v = GREATEST(v, VALUES(v))",
-                    (str(SCHEMA_VERSION),))
+        cur.execute("ALTER TABLE cal_calendars ADD COLUMN IF NOT EXISTS owner_key INT AS (COALESCE(owner_id, 0)) PERSISTENT")
+        cur.execute("ALTER TABLE cal_calendars ADD UNIQUE INDEX IF NOT EXISTS uq_cal_calendars_owner_slug (owner_key, slug)")
+        _meta_to_settings(cur)
+        schema.ensure_version_table(cur, PREFIX)
+        schema.record_version(cur, PREFIX, SCHEMA_VERSION)
+        if done:
+            logging.getLogger("app.db").info("renamed to the suite naming convention: %s", ", ".join(done))
         # the family calendar everyone shares
-        cur.execute("SELECT id FROM calendars WHERE owner_id IS NULL AND kind = 'events' LIMIT 1")
+        cur.execute("SELECT id FROM cal_calendars WHERE owner_id IS NULL AND kind = 'events' LIMIT 1")
         if not cur.fetchone():
-            cur.execute("INSERT INTO calendars (owner_id, slug, name, description, color) VALUES "
+            cur.execute("INSERT INTO cal_calendars (owner_id, slug, name, description, color) VALUES "
                         "(NULL, 'family', 'Family', 'Shared with everyone in the family', '#8e44d6')")
 
 
 def reset_all() -> None:
-    """Tests only: drop every table."""
+    """Tests only: drop every table of this app (cal_*; the database may hold the other apps' too)."""
     with tx() as con, con.cursor() as cur:
         cur.execute("SET FOREIGN_KEY_CHECKS = 0")
-        cur.execute("SHOW TABLES")
-        for r in cur.fetchall():
-            cur.execute(f"DROP TABLE `{list(r.values())[0]}`")
+        for t in schema.tables(cur):
+            if t.startswith(PREFIX + "_") or t == "meta" or t in RENAME_TABLES:
+                cur.execute(f"DROP TABLE `{t}`")
         cur.execute("SET FOREIGN_KEY_CHECKS = 1")
