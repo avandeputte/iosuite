@@ -1,6 +1,6 @@
 {
   "name": "ioCalendar",
-  "short_name": "Calendar",
+  "short_name": "ioCalendar",
   "description": "Calendars for the family",
   "start_url": "./#/",
   "scope": "./",
