@@ -4,7 +4,7 @@ Settings › Weather (admins) takes an API key and a place: the city is looked u
 key kept (ACCUWEATHER_API_KEY and ACCUWEATHER_LOCATION in the environment do the same and win). The page asks this
 server, never AccuWeather, and the server asks AccuWeather only when its copy is older than the refresh interval, so a
 free key (50 calls a day) lasts: the current conditions every 45 minutes at most, the 5-day forecast every 6 hours,
-and nothing at all while nobody opens the page. What was last fetched is kept in the database (meta), so a restart does
+and nothing at all while nobody opens the page. What was last fetched is kept in the database (prt_settings), so a restart does
 not spend a call either.
 """
 import json

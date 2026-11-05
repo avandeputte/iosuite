@@ -1,4 +1,4 @@
-"""The suite's list of apps (the Shared ioSuite database's suite_apps): ioSuite registers itself and finds the others there."""
+"""The suite's list of apps (the Shared ioSuite database's ios_apps): ioSuite registers itself and finds the others there."""
 from iosuite_shared import suite
 
 from app import apps

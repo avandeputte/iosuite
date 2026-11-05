@@ -2,7 +2,7 @@
 two-letter abbreviation or an icon, the address and a line under it (the host name unless a description is given).
 One set for the whole family; editors and admins change it, in Settings › Bookmarks, or by importing a homepage
 bookmarks.yaml. An icon is an address or a dashboard-icons name in the link's icon field, or an SVG uploaded for the
-link and kept in the database (bookmark_icons), which the page serves itself.
+link and kept in the database (prt_bookmark_icons), which the page serves itself.
 """
 import hashlib
 import re
@@ -36,18 +36,18 @@ def _href(href: str) -> str:
 
 
 def _public(r: dict) -> dict:
-    return {"id": r["id"], "groupId": r["group_id"], "name": r["name"], "abbr": r["abbr"], "href": r["href"],
-            "description": r["description"] or (urlsplit(r["href"]).hostname or ""), "customDescription": r["description"] or "",
+    return {"id": r["id"], "groupId": r["group_id"], "name": r["name"], "abbr": r["abbr"], "href": r["url"],
+            "description": r["description"] or (urlsplit(r["url"]).hostname or ""), "customDescription": r["description"] or "",
             "icon": r["icon"] or "", "iconUrl": f"api/bookmarks/links/{r['id']}/icon.svg?v={r['etag']}" if r.get("etag") else ""}
 
 
-_LINK = "SELECT b.*, i.etag FROM bookmarks b LEFT JOIN bookmark_icons i ON i.link_id = b.id"
+_LINK = "SELECT b.*, i.etag FROM prt_bookmarks b LEFT JOIN prt_bookmark_icons i ON i.bookmark_id = b.id"
 
 
 def groups() -> list[dict]:
     """Every group with its links, in order."""
-    gs = db.q("SELECT * FROM bookmark_groups ORDER BY sort, id")
-    links = db.q(_LINK + " ORDER BY b.group_id, b.sort, b.id")
+    gs = db.q("SELECT * FROM prt_bookmark_groups ORDER BY position, id")
+    links = db.q(_LINK + " ORDER BY b.group_id, b.position, b.id")
     by: dict[int, list] = {}
     for r in links:
         by.setdefault(r["group_id"], []).append(_public(r))
@@ -55,7 +55,7 @@ def groups() -> list[dict]:
 
 
 def _group(gid: int) -> dict:
-    g = db.one("SELECT * FROM bookmark_groups WHERE id = %s", (gid,))
+    g = db.one("SELECT * FROM prt_bookmark_groups WHERE id = %s", (gid,))
     if not g:
         raise BadBookmark("No such group")
     return g
@@ -65,8 +65,8 @@ def add_group(name: str) -> dict:
     name = (name or "").strip()[:128]
     if not name:
         raise BadBookmark("A name for the group, please")
-    sort = (db.one("SELECT COALESCE(MAX(sort), -1) + 1 AS n FROM bookmark_groups") or {}).get("n", 0)
-    gid = db.ex("INSERT INTO bookmark_groups (name, sort) VALUES (%s, %s)", (name, sort))
+    sort = (db.one("SELECT COALESCE(MAX(position), -1) + 1 AS n FROM prt_bookmark_groups") or {}).get("n", 0)
+    gid = db.ex("INSERT INTO prt_bookmark_groups (name, position) VALUES (%s, %s)", (name, sort))
     return {"id": gid, "name": name, "links": []}
 
 
@@ -75,22 +75,22 @@ def rename_group(gid: int, name: str) -> None:
     name = (name or "").strip()[:128]
     if not name:
         raise BadBookmark("A name for the group, please")
-    db.ex("UPDATE bookmark_groups SET name = %s WHERE id = %s", (name, gid))
+    db.ex("UPDATE prt_bookmark_groups SET name = %s WHERE id = %s", (name, gid))
 
 
 def delete_group(gid: int) -> None:
     _group(gid)
-    db.ex("DELETE FROM bookmark_groups WHERE id = %s", (gid,))
+    db.ex("DELETE FROM prt_bookmark_groups WHERE id = %s", (gid,))
 
 
 def order_groups(ids: list[int]) -> None:
     """The groups in this order (ids left out keep their place after these)."""
     with db.tx():
         for i, gid in enumerate(ids):
-            db.ex("UPDATE bookmark_groups SET sort = %s WHERE id = %s", (i, int(gid)))
-        rest = [g["id"] for g in db.q("SELECT id FROM bookmark_groups ORDER BY sort, id") if g["id"] not in [int(x) for x in ids]]
+            db.ex("UPDATE prt_bookmark_groups SET position = %s WHERE id = %s", (i, int(gid)))
+        rest = [g["id"] for g in db.q("SELECT id FROM prt_bookmark_groups ORDER BY position, id") if g["id"] not in [int(x) for x in ids]]
         for i, gid in enumerate(rest, start=len(ids)):
-            db.ex("UPDATE bookmark_groups SET sort = %s WHERE id = %s", (i, gid))
+            db.ex("UPDATE prt_bookmark_groups SET position = %s WHERE id = %s", (i, gid))
 
 
 def add_link(gid: int, name: str, href: str, abbr: str | None = None, description: str | None = None, icon: str | None = None) -> dict:
@@ -99,34 +99,34 @@ def add_link(gid: int, name: str, href: str, abbr: str | None = None, descriptio
     if not name:
         raise BadBookmark("A name for the link, please")
     href = _href(href)
-    sort = (db.one("SELECT COALESCE(MAX(sort), -1) + 1 AS n FROM bookmarks WHERE group_id = %s", (gid,)) or {}).get("n", 0)
-    lid = db.ex("INSERT INTO bookmarks (group_id, name, abbr, href, description, icon, sort) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+    sort = (db.one("SELECT COALESCE(MAX(position), -1) + 1 AS n FROM prt_bookmarks WHERE group_id = %s", (gid,)) or {}).get("n", 0)
+    lid = db.ex("INSERT INTO prt_bookmarks (group_id, name, abbr, url, description, icon, position) VALUES (%s, %s, %s, %s, %s, %s, %s)",
                 (gid, name, _abbr(name, abbr), href, (description or "").strip()[:512] or None, (icon or "").strip()[:1024] or None, sort))
     return _public(db.one(_LINK + " WHERE b.id = %s", (lid,)))
 
 
 def update_link(lid: int, changes: dict) -> dict:
-    r = db.one("SELECT * FROM bookmarks WHERE id = %s", (lid,))
+    r = db.one("SELECT * FROM prt_bookmarks WHERE id = %s", (lid,))
     if not r:
         raise BadBookmark("No such link")
     name = (changes.get("name") if "name" in changes else r["name"]) or ""
     name = name.strip()[:128]
     if not name:
         raise BadBookmark("A name for the link, please")
-    href = _href(changes["href"]) if "href" in changes else r["href"]
+    href = _href(changes["href"]) if "href" in changes else r["url"]
     abbr = _abbr(name, changes.get("abbr")) if ("abbr" in changes or "name" in changes) else r["abbr"]
     desc = ((changes.get("description") or "").strip()[:512] or None) if "description" in changes else r["description"]
     icon = ((changes.get("icon") or "").strip()[:1024] or None) if "icon" in changes else r["icon"]
     gid = int(changes["groupId"]) if changes.get("groupId") else r["group_id"]
     if gid != r["group_id"]:
         _group(gid)
-    db.ex("UPDATE bookmarks SET name = %s, href = %s, abbr = %s, description = %s, icon = %s, group_id = %s WHERE id = %s",
+    db.ex("UPDATE prt_bookmarks SET name = %s, url = %s, abbr = %s, description = %s, icon = %s, group_id = %s WHERE id = %s",
           (name, href, abbr, desc, icon, gid, lid))
     return _public(db.one(_LINK + " WHERE b.id = %s", (lid,)))
 
 
 def delete_link(lid: int) -> None:
-    if not db.ex("DELETE FROM bookmarks WHERE id = %s", (lid,)):
+    if not db.ex("DELETE FROM prt_bookmarks WHERE id = %s", (lid,)):
         raise BadBookmark("No such link")
 
 
@@ -135,10 +135,10 @@ def order_links(gid: int, ids: list[int]) -> None:
     _group(gid)
     with db.tx():
         for i, lid in enumerate(ids):
-            db.ex("UPDATE bookmarks SET sort = %s, group_id = %s WHERE id = %s", (i, gid, int(lid)))
-        rest = [r["id"] for r in db.q("SELECT id FROM bookmarks WHERE group_id = %s ORDER BY sort, id", (gid,)) if r["id"] not in [int(x) for x in ids]]
+            db.ex("UPDATE prt_bookmarks SET position = %s, group_id = %s WHERE id = %s", (i, gid, int(lid)))
+        rest = [r["id"] for r in db.q("SELECT id FROM prt_bookmarks WHERE group_id = %s ORDER BY position, id", (gid,)) if r["id"] not in [int(x) for x in ids]]
         for i, lid in enumerate(rest, start=len(ids)):
-            db.ex("UPDATE bookmarks SET sort = %s WHERE id = %s", (i, lid))
+            db.ex("UPDATE prt_bookmarks SET position = %s WHERE id = %s", (i, lid))
 
 
 def import_yaml(text: str, replace: bool = False) -> dict:
@@ -154,8 +154,8 @@ def import_yaml(text: str, replace: bool = False) -> dict:
     ng = nl = 0
     with db.tx():
         if replace:
-            db.ex("DELETE FROM bookmark_groups")
-        existing = {g["name"].lower(): g["id"] for g in db.q("SELECT id, name FROM bookmark_groups")}
+            db.ex("DELETE FROM prt_bookmark_groups")
+        existing = {g["name"].lower(): g["id"] for g in db.q("SELECT id, name FROM prt_bookmark_groups")}
         for group in doc:
             if not isinstance(group, dict) or len(group) != 1:
                 continue
@@ -212,22 +212,22 @@ def clean_svg(data: bytes) -> str:
 
 def set_icon(lid: int, data: bytes) -> dict:
     """Store the uploaded SVG for a link; returns the link."""
-    if not db.one("SELECT id FROM bookmarks WHERE id = %s", (lid,)):
+    if not db.one("SELECT id FROM prt_bookmarks WHERE id = %s", (lid,)):
         raise BadBookmark("No such link")
     svg = clean_svg(data)
     etag = hashlib.sha256(svg.encode("utf-8")).hexdigest()[:16]
-    db.ex("INSERT INTO bookmark_icons (link_id, svg, etag) VALUES (%s, %s, %s) ON DUPLICATE KEY UPDATE svg = VALUES(svg), etag = VALUES(etag)",
+    db.ex("INSERT INTO prt_bookmark_icons (bookmark_id, svg, etag) VALUES (%s, %s, %s) ON DUPLICATE KEY UPDATE svg = VALUES(svg), etag = VALUES(etag)",
           (lid, svg, etag))
     return _public(db.one(_LINK + " WHERE b.id = %s", (lid,)))
 
 
 def clear_icon(lid: int) -> dict:
-    if not db.one("SELECT id FROM bookmarks WHERE id = %s", (lid,)):
+    if not db.one("SELECT id FROM prt_bookmarks WHERE id = %s", (lid,)):
         raise BadBookmark("No such link")
-    db.ex("DELETE FROM bookmark_icons WHERE link_id = %s", (lid,))
+    db.ex("DELETE FROM prt_bookmark_icons WHERE bookmark_id = %s", (lid,))
     return _public(db.one(_LINK + " WHERE b.id = %s", (lid,)))
 
 
 def icon(lid: int) -> dict | None:
     """{svg, etag} of the uploaded icon, or None."""
-    return db.one("SELECT svg, etag FROM bookmark_icons WHERE link_id = %s", (lid,))
+    return db.one("SELECT svg, etag FROM prt_bookmark_icons WHERE bookmark_id = %s", (lid,))

@@ -1,6 +1,6 @@
 """Each person's own start page: which tiles and cards they see, in what order, and which photo strip.
 
-Saved per account in the meta table ("user:<id>:layout", JSON). Every app registered in the suite's list is on the
+Saved per account in the prt_settings table ("user:<id>:layout", JSON). Every app registered in the suite's list is on the
 page unless the person hides it; the photo strip is the admin's choice (Settings › Home page) unless they pick another.
 Empty: the page as it comes."""
 import json
