@@ -7,7 +7,7 @@ from fastapi import FastAPI, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 
-from app import APP_VERSION, api, caldav, config, contacts, db, holiday, ical, mcp, model, users
+from app import __version__, api, caldav, config, contacts, db, holiday, ical, mcp, model, users
 from app.auth import auth as auth_shared, updater
 from iosuite_shared import sessions
 
@@ -35,7 +35,7 @@ async def lifespan(app: FastAPI):
         yield
 
 
-app = FastAPI(title="ioCalendar", version=APP_VERSION, lifespan=lifespan, docs_url="/api/docs", redoc_url=None,
+app = FastAPI(title="ioCalendar", version=__version__, lifespan=lifespan, docs_url="/api/docs", redoc_url=None,
               openapi_url="/api/openapi.json",
               description="Calendars for the family. Also served over CalDAV at /dav/ (iCalendar), as subscription links "
                           "(/ics/<private token>/<calendar>.ics) and to AI assistants over MCP (/mcp). JSON by default; ask "
@@ -119,7 +119,7 @@ def index():
     which caches .js and .css at the edge) fetches the new ones instead of serving what it kept."""
     html = (config.STATIC_DIR / "index.html").read_text(encoding="utf-8")
     for f in ("static/app.js", "static/app.css"):
-        html = html.replace(f'"{f}"', f'"{f}?v={APP_VERSION}"')
+        html = html.replace(f'"{f}"', f'"{f}?v={__version__}"')
     return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
 
 

@@ -6,7 +6,7 @@ from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
 
-from app import APP_VERSION, config, ical, members, model, users
+from app import __version__, config, ical, members, model, users
 
 READ_ONLY = ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False)
 WRITES = ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=False)
@@ -16,7 +16,7 @@ DELETES = ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHi
 server = MCPServer(
     "iocalendar",
     title="ioCalendar",
-    version=APP_VERSION,
+    version=__version__,
     instructions=(
         "The family's calendars (ioCalendar). Start with overview: it says who you are, the calendars you can see and "
         "change, the time zone, and what is on today and in the coming week. agenda lists what happens between two dates "

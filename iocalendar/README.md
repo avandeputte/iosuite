@@ -88,7 +88,7 @@ the sidebar and the avatar menu.
 
 ## Releases
 
-Every version merged into main is released by itself: when `APP_VERSION` (app/__init__.py) has no GitHub release yet, CI tags it `v<version>`, publishes the image as `ghcr.io/avandeputte/iocalendar:v<version>` (and `latest`) and makes the release with the merge's message as notes. Bump the version in a change to release it.
+Every version merged into main is released by itself: when `__version__` (app/__init__.py) has no GitHub release yet, CI tags it `v<version>`, publishes the image as `ghcr.io/avandeputte/iocalendar:v<version>` (and `latest`) and makes the release with the merge's message as notes. Bump the version in a change to release it.
 
 ## Run
 
@@ -101,8 +101,8 @@ CREATE USER 'calendar'@'%' IDENTIFIED BY 'calendar';
 GRANT ALL ON calendar.* TO 'calendar'@'%';
 ```
 
-The accounts and the suite-wide settings live in the Shared ioSuite database (`iosuite`, user `iosuite`; the one ioPix,
-ioNotes and ioContacts use); a new install of the suite creates it the same way. The tables are created on the first start and updated by later versions by themselves.
+The accounts and the suite-wide settings live in the Shared ioSuite database (`iosuite`, user `iosuite`; the one every
+app of the suite uses); a new install of the suite creates it the same way. The tables are created on the first start and updated by later versions by themselves.
 
 ### Proxmox VE (LXC)
 
@@ -112,7 +112,7 @@ ioNotes and ioContacts use); a new install of the suite creates it the same way.
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iocalendar/main/proxmox/ct/iocalendar.sh)"
 ```
 
-It asks for the calendar database (host, port, database, user, password), the Shared ioSuite database, the web port (8620), the family's time zone, the public address behind your reverse proxy (optional) and the admin account; then the framework's own questions (resources, network). It creates a small Debian 13 container and runs the app's own `setup.sh` inside with those answers. The passwords reach `setup.sh` through its environment (a root-only file pushed in and removed again), never on a command line; the output is kept in `/opt/iocalendar/setup.log`. The container's `update` command pulls the latest code and keeps the settings. For unattended runs set `IOCALENDAR_DB` and `IOCALENDAR_IOSUITE_DB` (`host:port/db:user:password`), `IOCALENDAR_ADMIN` (`name:password`), `IOCALENDAR_PORT`, `IOCALENDAR_TIMEZONE` and `IOCALENDAR_PUBLIC_URL`.
+It asks for the calendar database (host, port, database, user, password), the Shared ioSuite database, the web port (8620), the family's time zone, the public address behind your reverse proxy (optional), the domain the sign-in is shared on (optional) and the admin account; then the framework's own questions (resources, network). It creates a small Debian 13 container and runs the app's own `setup.sh` inside with those answers. The passwords reach `setup.sh` through its environment (a root-only file pushed in and removed again), never on a command line; the output is kept in `/opt/iocalendar/setup.log`. The container's `update` command pulls the latest code and keeps the settings. For unattended runs set `IOCALENDAR_DB` and `IOCALENDAR_SUITE_DB` (`host:port/db:user:password`), `IOCALENDAR_ADMIN` (`name:password`), `IOCALENDAR_PORT`, `IOCALENDAR_TIMEZONE`, `IOCALENDAR_PUBLIC_URL` and `IOCALENDAR_COOKIE_DOMAIN`.
 
 ### Docker
 
@@ -131,31 +131,35 @@ git clone https://github.com/avandeputte/iocalendar && cd iocalendar
 ./update.sh         # later: the latest code, same settings
 ```
 
-`setup.sh` offers 192.168.1.89, database `calendar`, user `calendar`, password `calendar` as the defaults.
-`python -m app.cli create-user NAME [viewer|editor|admin]`, `set-password NAME`, `import CALENDAR-ID FILE.ics` and
-`sync-birthdays` work from a shell (the password from `IOCALENDAR_PASSWORD` or asked for).
+`setup.sh` offers 127.0.0.1, database `calendar`, user `calendar`, password `calendar` as the defaults; its flags
+(`--db`, `--suite-db`, `--admin`, `--port`, `--public-url`, `--cookie-domain`, `--service`, `--yes`) are the same in
+every app of the suite. `python -m app.cli import CALENDAR-ID FILE.ics`, `sync-birthdays` and `check` work from a shell;
+accounts are the suite's: `.venv/bin/iosuite-shared --config . admin NAME --app iocalendar` (password from
+`ADMIN_PASSWORD`, or asked for) and `.venv/bin/iosuite-shared --config . password NAME`.
 
 ## Configuration
 
-`iocalendar.env` next to the app (written by `setup.sh`), or the environment:
+`config.env` in the app folder (written by `setup.sh`; `config.env.example` lists every setting), or the environment, which wins:
 
 | Setting | Meaning |
 | --- | --- |
 | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | the MariaDB / MySQL database (`calendar`) |
-| `IOSUITE_DB_HOST`, `_PORT`, `_NAME`, `_USER`, `_PASSWORD` | the Shared ioSuite database (`iosuite`): accounts, passwords, sessions, app passwords, roles and suite-wide settings, shared with ioPix, ioNotes and ioContacts |
-| `IOTHING_COOKIE_DOMAIN` | the domain the session cookie is shared on (`example.com`): signed in at `contacts.example.com`, signed in at `calendar.example.com` too |
-| `PORT` | web port for `run.sh` and the service (8620) |
-| `TIMEZONE` | the family's time zone (default: `TZ`, else the server's), for times written without one and all-day events |
+| `IOSUITE_DB_HOST`, `_PORT`, `_NAME`, `_USER`, `_PASSWORD` | the Shared ioSuite database (`iosuite`, on `DB_HOST` unless set): accounts, passwords, sessions, app passwords, roles and suite-wide settings, shared by every app of the suite |
+| `COOKIE_DOMAIN` | the domain the session cookie is shared on (`example.com`): signed in at `contacts.example.com`, signed in at `calendar.example.com` too |
+| `HOST`, `PORT` | where the server listens (`0.0.0.0`, 8620; every app of the suite has its own port) |
+| `FORWARDED_ALLOW_IPS` | the addresses that may pass on the visitor's address (`*`, or your reverse proxy's) |
+| `TLS_CERT_FILE`, `TLS_KEY_FILE` | serve HTTPS directly instead of behind a reverse proxy |
+| `TZ` | the family's time zone (default: the server's), for times written without one and all-day events |
 | `PUBLIC_URL` | the address people use (behind a proxy), for links in Settings, the Apple profile and the MCP tools |
 | `ADMIN_USER`, `ADMIN_PASSWORD` | the first admin, made on the first start when there are no accounts |
 | `AUTH_PROXY`, `AUTH_PROXY_HEADER`, `AUTH_PROXY_TRUSTED`, `CF_ACCESS_TEAM`, `CF_ACCESS_AUD` | sign-in at a reverse proxy, as in the other io apps (Cloudflare Access, Authelia, Authentik, oauth2-proxy…) |
 | `IOCONTACTS_URL`, `IOCONTACTS_USER`, `IOCONTACTS_PASSWORD`, `IOCONTACTS_CF_CLIENT_ID`, `IOCONTACTS_CF_CLIENT_SECRET` | ioContacts (or Settings › ioContacts) |
-| `HOLIDAYS_COUNTRY`, `HOLIDAYS_REGION`, `HOLIDAYS_LANGUAGE` | the first choice for Settings › Holidays: a two-letter country code (`off`: no Holidays calendar), a region code, the language of the names; until set, the country of `TIMEZONE`, else US |
+| `HOLIDAYS_COUNTRY`, `HOLIDAYS_REGION`, `HOLIDAYS_LANGUAGE` | the first choice for Settings › Holidays: a two-letter country code (`off`: no Holidays calendar), a region code, the language of the names; until set, the country of `TZ`, else US |
 | `MCP` | `1` keeps the MCP server on, whatever the setting says |
-| `IOCALENDAR_MCP_USER` | the account `python -m app.mcp` (stdio) acts as |
+| `MCP_USER` | the account `python -m app.mcp` (stdio) acts as |
 | `UPDATE_CHECK` | `0` turns the daily version check off for good |
 | `IOCALENDAR_REPO`, `IOCALENDAR_BRANCH` | what the version check and `update.sh` follow (`avandeputte/iocalendar`, `main`) |
-| `LOG_FILE` | the server log shown at Maintenance › Updates and logs (`iocalendar.log` in the app folder; empty: no file) |
+| `LOG_FILE` | the server log shown at Maintenance › Updates and logs (`iocalendar.log` in the app folder; `LOG_FILE=` with nothing after it: no file) |
 
 ### ioContacts
 
@@ -175,7 +179,7 @@ macOS want HTTPS for CalDAV accounts outside the home network, and passwords tra
 
 ```sh
 pip install -e '.[test]'
-python -m pytest tests     # on a test MariaDB of its own: a Docker container it starts, or IOTHING_TEST_DB=host:port:user:password
+python -m pytest tests     # on a test MariaDB of its own: a Docker container it starts, or IOSUITE_TEST_DB=host:port:user:password
 ```
 
 Covered: calendars and roles, every event field round-tripping through JSON, iCalendar and jCal, all-day events,

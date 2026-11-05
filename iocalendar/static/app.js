@@ -1296,7 +1296,7 @@ async function proxyCard() {
 
 async function setSuite(el) {
   const s = await api('/api/iocontacts/settings');
-  const url = h('input', { class: 't', value: s.url, placeholder: 'https://contacts.example.com or http://192.168.1.10:8610', disabled: s.fromEnv ? true : null });
+  const url = h('input', { class: 't', value: s.url, placeholder: 'https://contacts.example.com or http://contacts.example.lan:8640', disabled: s.fromEnv ? true : null });
   const user = h('input', { class: 't', value: s.user, placeholder: 'An ioContacts user name' });
   const pw = h('input', { class: 't', type: 'password', placeholder: s.hasPassword ? '(kept)' : 'An app password made in ioContacts' });
   const cfId = h('input', { class: 't', value: s.cfId, placeholder: 'Only behind Cloudflare Access' });

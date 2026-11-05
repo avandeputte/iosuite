@@ -18,9 +18,9 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import recurring_ical_events
 from icalendar import Alarm, Calendar, Event, vCalAddress, vRecur, vText
 
-from app import APP_VERSION, config
+from app import __version__, config
 
-PRODID = f"-//iothing//ioCalendar {APP_VERSION}//EN"
+PRODID = f"-//iothing//ioCalendar {__version__}//EN"
 UTC = dt.timezone.utc
 FAR = dt.datetime(2200, 1, 1, tzinfo=UTC)
 MAX_LAST = 20000  # occurrences counted to find where a bounded series ends; beyond that it counts as endless
@@ -47,7 +47,7 @@ def _system_tz() -> str:
 
 def default_tz() -> str:
     """The server's time zone: floating times (no zone) and new events without one are read in it."""
-    name = config.TIMEZONE or _system_tz()
+    name = config.TZ or _system_tz()
     return name if valid_tz(name) else "UTC"
 
 

@@ -1,6 +1,6 @@
 #!/bin/sh
 # Update an installed ioCalendar in place (a git checkout, /opt/iocalendar/app, or the Proxmox container; Docker users
-# pull the image instead). Keeps iocalendar.env and .venv; the database is migrated by the app as it starts.
+# pull the image instead). Keeps config.env and .venv; the database is migrated by the app as it starts.
 #
 #   ./update.sh            fetch the latest code, refresh the packages, restart the service
 #   ./update.sh --check    only say whether something newer exists
@@ -71,7 +71,7 @@ else
   tar xzf "$TMP/src.tgz" -C "$TMP"
   SRC="$(ls -d "$TMP"/*/ | head -1)"
   STAGE="$APP/.update-stage"; rm -rf "${STAGE:?}"; mkdir -p "$STAGE"
-  for item in app static proxmox pyproject.toml README.md LICENSE setup.sh run.sh update.sh Dockerfile docker-compose.yml; do
+  for item in app static proxmox pyproject.toml README.md LICENSE setup.sh run.sh update.sh Dockerfile docker-compose.yml config.env.example; do
     [ -e "$SRC/$item" ] && cp -R "$SRC/$item" "$STAGE/$item"
   done
   [ -d "$STAGE/app" ] && [ -d "$STAGE/static" ] && [ -f "$STAGE/pyproject.toml" ] || { rm -rf "${STAGE:?}"; die "the downloaded archive looks incomplete"; }
@@ -99,7 +99,7 @@ if [ -d .git ]; then
 else
   MOVED=""
   swap_back() { for item in $MOVED; do rm -rf "${APP:?}/${item:?}"; [ -e "$APP/$item.old" ] && mv "$APP/$item.old" "$APP/$item"; done; rm -rf "${STAGE:?}"; }
-  for item in app static proxmox pyproject.toml README.md LICENSE setup.sh run.sh update.sh Dockerfile docker-compose.yml; do
+  for item in app static proxmox pyproject.toml README.md LICENSE setup.sh run.sh update.sh Dockerfile docker-compose.yml config.env.example; do
     [ -e "$STAGE/$item" ] || continue
     rm -rf "${APP:?}/${item:?}.old"
     if [ -e "$APP/$item" ]; then mv "$APP/$item" "$APP/$item.old" || { swap_back; die "could not set $item aside; the previous files are back"; }; fi
@@ -114,7 +114,7 @@ chmod 755 setup.sh update.sh run.sh 2>/dev/null || true
 "$VPY" -m pip install -q --disable-pip-version-check --no-deps -e . 2>/dev/null || echo "  note: the package metadata could not be refreshed; ioCalendar runs regardless"
 "$VPY" -m app.cli migrate >/dev/null 2>&1 || echo "  note: the database could not be updated now; ioCalendar does it when it starts"
 
-NEWV="$(sed -n 's/^APP_VERSION = "\([^"]*\)".*/\1/p' app/__init__.py)"
+NEWV="$(sed -n 's/^__version__ = "\([^"]*\)".*/\1/p' app/__init__.py)"
 # the outcome goes to the result file now: the restart below also ends this script when the web app started it
 note "ok: updated to v$NEWV on $(date '+%Y-%m-%d %H:%M')"
 

@@ -9,22 +9,21 @@ services:
     ports:
       - "8620:8620"     # web app, CalDAV (/dav/), REST API (/api/), subscription links (/ics/), MCP (/mcp)
     environment:
-      TZ: America/New_York
-      TIMEZONE: America/New_York      # the family's time zone, for times written without one
-      DB_HOST: 192.168.1.89           # CHANGE ME: your MariaDB host
+      TZ: America/New_York            # the family's time zone, for times written without one
+      DB_HOST: db.example.lan         # CHANGE ME: your MariaDB host
       DB_PORT: "3306"
       DB_NAME: calendar
       DB_USER: calendar
       DB_PASSWORD: calendar           # CHANGE ME
-      # the Shared ioSuite database: accounts and suite-wide settings (the same one ioPix, ioNotes and ioContacts use)
-      IOSUITE_DB_HOST: 192.168.1.89   # CHANGE ME
-      IOSUITE_DB_PORT: "3306"
+      # the Shared ioSuite database: accounts and suite-wide settings (the same one every app of the suite uses)
+      # IOSUITE_DB_HOST: db.example.lan   # default: DB_HOST
+      # IOSUITE_DB_PORT: "3306"            # default: DB_PORT
       IOSUITE_DB_NAME: iosuite
       IOSUITE_DB_USER: iosuite
       IOSUITE_DB_PASSWORD: change-me  # CHANGE ME
       # ADMIN_USER: admin             # a first admin, made on the first start when there is no account yet
       # ADMIN_PASSWORD: change-me-please
       # PUBLIC_URL: https://calendar.example.com   # behind a reverse proxy: the links in Settings and the Apple profile
-      # IOTHING_COOKIE_DOMAIN: example.com         # one sign-in for every io app under this domain
+      # COOKIE_DOMAIN: example.com                 # one sign-in for every app of the suite under this domain
       # AUTH_PROXY: cloudflare        # sign-in at the proxy, as in the other io apps (see README)
-      # IOCONTACTS_URL: http://192.168.1.10:8610   # or Settings › ioContacts
+      # IOCONTACTS_URL: http://contacts.example.lan:8640   # or Settings › ioContacts

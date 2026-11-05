@@ -2,5 +2,5 @@
 .venv
 tests
 proxmox
-iocalendar.env
+config.env
 __pycache__
