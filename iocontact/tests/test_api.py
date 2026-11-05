@@ -225,3 +225,19 @@ def test_the_shell_its_files_and_the_icon_are_public(client):
     assert paths and all(p.startswith("static/") for p in paths)
     for p in ["/" + p for p in paths] + [suite.ICON, "/static/icons/apple-touch-icon.png"]:
         assert client.get(p).status_code == 200, p
+
+
+def test_iopix_face_reaches_birthdays_and_family(client, family_id):
+    """A contact without its own photo but linked to an ioPix person shows that face on the birthdays page,
+    in the family tree and on relation chips, as in the contact list."""
+    import datetime as dt
+    soon = dt.date.today() + dt.timedelta(days=2)
+    kid = mk(client, family_id, fn="Face Kid", birthday={"year": 2010, "month": soon.month, "day": soon.day},
+             iopix={"personId": 4242, "name": "Face Kid"})
+    mom = mk(client, family_id, fn="Face Mom", relations=[{"type": "child", "relatedId": kid["id"]}])
+    up = {x["fn"]: x for x in client.get("/api/upcoming?days=10").json()["items"]}
+    assert up["Face Kid"]["iopixPersonId"] == 4242 and up["Face Kid"]["hasPhoto"] is False
+    rel = client.get(f"/api/contacts/{mom['id']}").json()["relations"]
+    assert rel[0]["relatedIopixPersonId"] == 4242
+    nodes = {n["fn"]: n for n in client.get(f"/api/contacts/{mom['id']}/family").json()["nodes"]}
+    assert nodes["Face Kid"]["iopixPersonId"] == 4242

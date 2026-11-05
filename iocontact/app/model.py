@@ -182,11 +182,12 @@ def full(cid: int | dict, with_photo: bool = False) -> dict | None:
             if "pref" in x:
                 x["pref"] = int(x["pref"] or 0)
     c["tags"] = [x["tag"] for x in db.q("SELECT tag FROM con_contact_tags WHERE contact_id = %s ORDER BY tag", (r["id"],))]
-    rels = db.q("SELECT r.*, o.fn AS o_fn, o.uid AS o_uid, o.gender AS o_gender, o.address_book_id AS o_book, o.deleted AS o_del, o.photo IS NOT NULL AS o_photo "
+    rels = db.q("SELECT r.*, o.fn AS o_fn, o.uid AS o_uid, o.gender AS o_gender, o.address_book_id AS o_book, o.deleted AS o_del, o.photo IS NOT NULL AS o_photo, o.iopix_person_id AS o_iopix "
                 "FROM con_contact_relations r LEFT JOIN con_contacts o ON o.id = r.related_id WHERE r.contact_id = %s ORDER BY r.position, r.id", (r["id"],))
     c["relations"] = [{"type": x["type"], "relatedId": x["related_id"] if x["related_id"] and not x["o_del"] else None,
                        "relatedName": x["related_name"], "relatedFn": x["o_fn"], "relatedUid": x["o_uid"],
-                       "relatedGender": x["o_gender"], "relatedBookId": x["o_book"], "relatedHasPhoto": bool(x["o_photo"]), "label": x["label"],
+                       "relatedGender": x["o_gender"], "relatedBookId": x["o_book"], "relatedHasPhoto": bool(x["o_photo"]),
+                       "relatedIopixPersonId": x["o_iopix"] if not x["o_del"] else None, "label": x["label"],
                        "typeLabel": x["label"] or rel.label(x["type"], x["o_gender"])} for x in rels]
     if with_photo and r["photo"] is not None:
         c["photoData"] = {"type": r["photo_type"] or "image/jpeg", "data": r["photo"]}
@@ -472,8 +473,8 @@ def upcoming(book_ids: list[int], days: int = 30) -> list[dict]:
     today = dt.date.today()
     out = []
     rows = db.q(f"SELECT c.id, c.fn, c.bday_year AS year, c.bday_month AS month, c.bday_day AS day, 'birthday' AS label, "
-                f"c.photo IS NOT NULL AS has_photo FROM con_contacts c WHERE c.address_book_id IN ({marks}) AND c.deleted = 0 AND c.bday_month IS NOT NULL "
-                f"AND c.bday_remind = 1 UNION ALL SELECT c.id, c.fn, d.year, d.month, d.day, d.label, c.photo IS NOT NULL FROM con_contact_dates d "
+                f"c.photo IS NOT NULL AS has_photo, c.iopix_person_id FROM con_contacts c WHERE c.address_book_id IN ({marks}) AND c.deleted = 0 AND c.bday_month IS NOT NULL "
+                f"AND c.bday_remind = 1 UNION ALL SELECT c.id, c.fn, d.year, d.month, d.day, d.label, c.photo IS NOT NULL, c.iopix_person_id FROM con_contact_dates d "
                 f"JOIN con_contacts c ON c.id = d.contact_id WHERE c.address_book_id IN ({marks}) AND c.deleted = 0", (*book_ids, *book_ids))
     for r in rows:
         for yr in (today.year, today.year + 1):
@@ -486,7 +487,8 @@ def upcoming(book_ids: list[int], days: int = 30) -> list[dict]:
         delta = (d - today).days
         if delta <= days:
             out.append({"contactId": r["id"], "fn": r["fn"], "label": r["label"], "date": d.isoformat(), "inDays": delta,
-                        "turns": (d.year - r["year"]) if r["year"] else None, "hasPhoto": bool(r["has_photo"])})
+                        "turns": (d.year - r["year"]) if r["year"] else None, "hasPhoto": bool(r["has_photo"]),
+                        "iopixPersonId": r["iopix_person_id"]})
     return sorted(out, key=lambda x: (x["inDays"], x["fn"]))
 
 

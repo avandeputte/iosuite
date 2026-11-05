@@ -465,7 +465,7 @@ async function showContact(id, pane) {
     c.dates.map((d) => kv(d.label, h('span', null, fmtDate(d), d.year ? h('span', { class: 'muted' }, ` · ${age(d)} years`) : null)))));
   if (c.relations.length) {
     const fam = new Set(S.rel.groups[0].types.map((t) => t.type));
-    const chip = (r) => r.relatedId ? h('a', { class: 'chip rel', href: `#/c/${r.relatedId}` }, avatar({ id: r.relatedId, fn: r.relatedFn, hasPhoto: r.relatedHasPhoto }, 's'), r.relatedFn, h('span', { class: 'lab' }, r.typeLabel))
+    const chip = (r) => r.relatedId ? h('a', { class: 'chip rel', href: `#/c/${r.relatedId}` }, avatar({ id: r.relatedId, fn: r.relatedFn, hasPhoto: r.relatedHasPhoto, iopixPersonId: r.relatedIopixPersonId }, 's'), r.relatedFn, h('span', { class: 'lab' }, r.typeLabel))
       : h('span', { class: 'chip rel' }, avatar({ fn: r.relatedName }, 's'), r.relatedName, h('span', { class: 'lab' }, r.typeLabel));
     const famRels = c.relations.filter((r) => fam.has(r.type)), others = c.relations.filter((r) => !fam.has(r.type));
     cards.push(card('tree', 'Relations', '--c-purple',
@@ -683,7 +683,7 @@ async function showUpcoming(page) {
   const when = (x) => x.inDays === 0 ? 'Today' : x.inDays === 1 ? 'Tomorrow' : `In ${x.inDays} days`;
   page.append(h('div', { class: 'pagehead' }, h('h1', null, 'Birthdays and anniversaries'), range,
     h('a', { class: 'pillbtn', href: '#/settings/devices' }, icon('event', 's'), 'Subscribe in your calendar')),
-  r.items.length ? h('div', null, r.items.map((x) => h('a', { class: 'upc', href: `#/c/${x.contactId}` }, avatar({ id: x.contactId, fn: x.fn, hasPhoto: x.hasPhoto }, 'm'),
+  r.items.length ? h('div', null, r.items.map((x) => h('a', { class: 'upc', href: `#/c/${x.contactId}` }, avatar({ id: x.contactId, fn: x.fn, hasPhoto: x.hasPhoto, iopixPersonId: x.iopixPersonId }, 'm'),
     h('div', null, h('div', null, h('b', null, x.fn)), h('div', { class: 'muted' }, `${x.label === 'birthday' ? 'Birthday' : x.label.charAt(0).toUpperCase() + x.label.slice(1)}${x.turns != null ? (x.label === 'birthday' ? ` · turns ${x.turns}` : ` · ${x.turns} years`) : ''}`)),
     h('div', { class: 'when' }, h('div', { class: 'days' }, when(x)), h('div', { class: 'muted small' }, new Date(x.date + 'T12:00').toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }))))))
     : h('div', { class: 'empty' }, icon('cake'), h('p', null, 'No birthdays or anniversaries in that time.')));
@@ -715,7 +715,7 @@ async function showTree(page, r) {
   const root = byId.get(g.root);
   page.append(h('div', { class: 'pagehead' }, h('a', { class: 'iconbtn', href: `#/c/${g.root}` }, icon('back')), h('h1', null, `${root.fn}'s family`)),
     gen.size > 1 ? h('div', { class: 'tree' }, [...rows.keys()].sort((a, b) => b - a).map((lvl) => [h('div', { class: 'gen' }, names[lvl] || (lvl > 0 ? `${lvl} generations up` : `${-lvl} generations down`)),
-      h('div', { class: 'genrow' }, rows.get(lvl).map((id) => { const n = byId.get(id); return h('a', { class: `tcard ${id === g.root ? 'root' : ''}`, href: id === g.root ? `#/c/${id}` : `#/tree/${id}`, title: id === g.root ? 'Open the contact' : 'Their family' }, avatar({ id, fn: n.fn, hasPhoto: n.hasPhoto }, 'm'),
+      h('div', { class: 'genrow' }, rows.get(lvl).map((id) => { const n = byId.get(id); return h('a', { class: `tcard ${id === g.root ? 'root' : ''}`, href: id === g.root ? `#/c/${id}` : `#/tree/${id}`, title: id === g.root ? 'Open the contact' : 'Their family' }, avatar({ id, fn: n.fn, hasPhoto: n.hasPhoto, iopixPersonId: n.iopixPersonId }, 'm'),
         h('div', null, h('b', null, n.fn), h('div', { class: 'muted small' }, id === g.root ? 'This contact' : how.get(id)), n.birthday && n.birthday.year ? h('div', { class: 'muted small' }, `born ${n.birthday.year}`) : null)); }))]))
       : h('div', { class: 'empty' }, h('p', null, 'No family relations to other contacts yet. Edit the contact and add parents, siblings, children…')));
 }
