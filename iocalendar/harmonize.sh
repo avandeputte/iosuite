@@ -145,6 +145,8 @@ rename_all "$W/config.env"
 if [ "$HAS_UNIT" = 1 ]; then
   UPORT="$(sed -nE 's/^ExecStart=.*--port[ =]+([0-9]+).*/\1/p' "$UNIT" | head -n 1)"
   if [ -n "$UPORT" ] && ! has "$W/config.env" PORT; then setkey "$W/config.env" PORT "$UPORT"; note "PORT=$UPORT (from the service's command line)"; fi
+  UHOST="$(sed -nE 's/^ExecStart=.*--host[ =]+([^ ]+).*/\1/p' "$UNIT" | head -n 1)"
+  if [ -n "$UHOST" ] && [ "$UHOST" != 0.0.0.0 ] && ! has "$W/config.env" HOST; then setkey "$W/config.env" HOST "$UHOST"; note "HOST=$UHOST (from the service's command line)"; fi
 fi
 if [ "$OLD_PORT" != "$NEW_PORT" ]; then
   P="$(value "$W/config.env" PORT)"
@@ -197,7 +199,14 @@ fi
 if [ "$UPDATE" = 0 ]; then say "Done. Now run ./update.sh (the service needs the new version for config.env)"; exit 0; fi
 [ -f update.sh ] || die "no update.sh here; install the new version yourself"
 say "Installing the new version (update.sh)"
-sh ./update.sh || die "update.sh failed (see above). The settings are already converted; sh harmonize.sh --undo puts them back."
+# in a git checkout this downloaded copy would block the merge (the new version has a harmonize.sh of its own)
+ASIDE=0
+if [ -d .git ] && [ -f harmonize.sh ] && ! git ls-files --error-unmatch harmonize.sh >/dev/null 2>&1; then mv harmonize.sh .harmonize.sh; ASIDE=1; fi
+if ! sh ./update.sh; then
+  [ "$ASIDE" = 1 ] && [ ! -f harmonize.sh ] && mv .harmonize.sh harmonize.sh
+  die "update.sh failed (see above). The settings are already converted; sh harmonize.sh --undo puts them back."
+fi
+[ "$ASIDE" = 1 ] && rm -f .harmonize.sh
 if [ "$HAS_UNIT" = 1 ] && command -v systemctl >/dev/null 2>&1; then systemctl restart "$NAME" || true; fi
 P="$(value config.env PORT)"; P="${P:-$NEW_PORT}"
 PY="$APP/.venv/bin/python"; [ -x "$PY" ] || PY=python3
