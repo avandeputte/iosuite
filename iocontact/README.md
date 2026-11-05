@@ -132,7 +132,7 @@ The tables are created on the first start and updated by later versions by thems
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iocontacts/main/proxmox/ct/iocontacts.sh)"
 ```
 
-It asks for the MariaDB host, port, database, user and password, the web port (8610), the LDAP port (389), the public address behind your reverse proxy (optional) and the admin account; then the framework's own questions (resources, network). It creates a small Debian 13 container (1 CPU, 512 MB, 4 GB disk by default) and runs the app's own `setup.sh` inside with those answers: packages, settings, tables, admin and the `iocontacts` service. The passwords reach `setup.sh` through its environment (a root-only file pushed in and removed again), never on a command line. The setup's output is kept in `/opt/iocontacts/setup.log`; on failure its last lines are shown with the command to run it again. The container's `update` command pulls the latest code and keeps the settings. For unattended runs set `IOCONTACTS_DB` (`host:port/db:user:password`), `IOCONTACTS_ADMIN` (`name:password`), `IOCONTACTS_PORT`, `IOCONTACTS_LDAP_PORT` and `IOCONTACTS_PUBLIC_URL`. The MariaDB user must be allowed to connect from the container's address.
+It asks for the MariaDB host, port, database, user and password, the Shared ioSuite database, the web port (8640), the LDAP port (389), the public address behind your reverse proxy (optional), the domain the sign-in is shared on (optional) and the admin account; then the framework's own questions (resources, network). It creates a small Debian 13 container (1 CPU, 512 MB, 4 GB disk by default) and runs the app's own `setup.sh` inside with those answers: packages, settings, tables, admin and the `iocontacts` service. The passwords reach `setup.sh` through its environment (a root-only file pushed in and removed again), never on a command line. The setup's output is kept in `/opt/iocontacts/setup.log`; on failure its last lines are shown with the command to run it again. The container's `update` command pulls the latest code and keeps the settings. For unattended runs set `IOCONTACTS_DB` and `IOCONTACTS_SUITE_DB` (`host:port/db:user:password`), `IOCONTACTS_ADMIN` (`name:password`), `IOCONTACTS_PORT`, `IOCONTACTS_LDAP_PORT`, `IOCONTACTS_PUBLIC_URL` and `IOCONTACTS_COOKIE_DOMAIN`. The MariaDB user must be allowed to connect from the container's address.
 
 ### Docker
 
@@ -151,28 +151,30 @@ git clone https://github.com/avandeputte/iocontacts && cd iocontacts
 ./update.sh         # later: the latest code, same settings
 ```
 
-`python -m app.cli create-user NAME [viewer|editor|admin]` and `set-password NAME` manage accounts from a shell (the password from `IOCONTACTS_PASSWORD` or asked for).
+`setup.sh`'s flags (`--db`, `--suite-db`, `--admin`, `--port`, `--public-url`, `--cookie-domain`, `--service`, `--yes`) are the same in every app of the suite, plus `--ldap-port`. Accounts are the suite's: `.venv/bin/iosuite-shared --config . admin NAME --app iocontacts` (password from `ADMIN_PASSWORD`, or asked for) and `.venv/bin/iosuite-shared --config . password NAME`.
 
 ## Configuration
 
-`iocontacts.env` next to the app (written by `setup.sh`), or the environment:
+`config.env` in the app folder (written by `setup.sh`; `config.env.example` lists every setting), or the environment, which wins:
 
 | Setting | Meaning |
 | --- | --- |
 | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | the MariaDB / MySQL database |
-| `PORT` | web port for `run.sh` and the service (8610) |
+| `HOST`, `PORT` | where the server listens (`0.0.0.0`, 8640; every app of the suite has its own port) |
+| `FORWARDED_ALLOW_IPS` | the addresses that may pass on the visitor's address (`*`, or your reverse proxy's) |
+| `TLS_CERT_FILE`, `TLS_KEY_FILE` | serve HTTPS directly instead of behind a reverse proxy |
 | `LDAP_PORT`, `LDAP_HOST`, `LDAP_BASE` | the LDAP directory (3890, all addresses, `dc=iocontacts`); `LDAP_PORT=0` turns it off |
 | `PUBLIC_URL` | the address people use (behind a proxy), for links in the calendar feed and Settings |
 | `ADMIN_USER`, `ADMIN_PASSWORD` | the first admin, made on the first start when there are no accounts |
-| `IOSUITE_DB_HOST`, `_PORT`, `_NAME`, `_USER`, `_PASSWORD` | the Shared ioSuite database (MariaDB; by default on the contacts' server, database, user and password `iosuite`): accounts, passwords, sessions, app passwords, roles and the suite-wide settings, shared with ioPix and ioNotes (the `iosuite-shared` library, from [iosuite-shared](https://github.com/avandeputte/iosuite-shared)); only the role an account holds here and its "me" contact are ioContacts' own. `iosuite-shared migrate --iocontacts` folds a 0.3 install's `users` table into it |
-| `IOTHING_COOKIE_DOMAIN` | the domain the session cookie is shared on (`example.com`): signed in at `photo.example.com`, signed in at `contacts.example.com` too |
+| `IOSUITE_DB_HOST`, `_PORT`, `_NAME`, `_USER`, `_PASSWORD` | the Shared ioSuite database (MariaDB; by default on the contacts' server, database, user and password `iosuite`): accounts, passwords, sessions, app passwords, roles and the suite-wide settings, shared by every app of the suite (the `iosuite-shared` library, from [iosuite-shared](https://github.com/avandeputte/iosuite-shared)); only the role an account holds here and its "me" contact are ioContacts' own. `iosuite-shared migrate --iocontacts` folds a 0.3 install's `users` table into it |
+| `COOKIE_DOMAIN` | the domain the session cookie is shared on (`example.com`): signed in at `photo.example.com`, signed in at `contacts.example.com` too |
 | `AUTH_PROXY`, `AUTH_PROXY_HEADER`, `AUTH_PROXY_TRUSTED`, `CF_ACCESS_TEAM`, `CF_ACCESS_AUD` | sign-in at a reverse proxy, exactly as in iopix: Cloudflare Access (with token checking), Authelia, Authentik, oauth2-proxy… matched to accounts by email, then name |
 | `IOPIX_URL`, `IOPIX_USER`, `IOPIX_PASSWORD`, `IOPIX_CF_CLIENT_ID`, `IOPIX_CF_CLIENT_SECRET` | ioPix (or Settings › ioPix) |
 | `MCP` | `1` keeps the MCP server on, whatever the setting says |
-| `IOCONTACTS_MCP_USER` | the account `python -m app.mcp` (stdio) acts as |
+| `MCP_USER` | the account `python -m app.mcp` (stdio) acts as |
 | `UPDATE_CHECK` | `0` turns the daily version check off for good |
 | `IOCONTACTS_REPO`, `IOCONTACTS_BRANCH` | what the version check and `update.sh` follow (`avandeputte/iocontacts`, `main`) |
-| `LOG_FILE` | the server log shown at Maintenance › Updates and logs (`iocontacts.log` in the app folder; empty: no file) |
+| `LOG_FILE` | the server log shown at Maintenance › Updates and logs (`iocontacts.log` in the app folder; `LOG_FILE=` with nothing after it: no file) |
 
 ### ioPix
 
@@ -186,7 +188,7 @@ Run it behind a reverse proxy that terminates HTTPS (Caddy, Nginx Proxy Manager,
 
 ```sh
 pip install -e '.[test]'
-python -m pytest tests     # on a test MariaDB of its own: a Docker container it starts, or IOTHING_TEST_DB=host:port:user:password
+python -m pytest tests     # on a test MariaDB of its own: a Docker container it starts, or IOSUITE_TEST_DB=host:port:user:password
 ```
 
 Covered: vCard 2.1/3.0/4.0 and jCard reading and writing (an Apple Contacts card round-trips with relations, dates, social profiles, custom labels, photo and unknown properties), relations and their inverse side, search, content negotiation, Google and Outlook CSV import and every export format, roles and private books, app passwords over Basic and Bearer, the birthday calendar, duplicates and merging, CardDAV discovery, PUT with preconditions and UID conflicts, multiget, addressbook-query, sync-collection with deletions, LDAP bind and search with substring, phone and size-limit cases, the MCP server (switch, sign-in, reading, changing, relations, a viewer's limits), duplicate scoring (nicknames, shared home numbers, other birthdays), merging with choices and undo, the data quality checks and fixes, and enrichment (lookups, suggestions that wait, accepting and dismissing, over MCP too). CI runs them against MariaDB.

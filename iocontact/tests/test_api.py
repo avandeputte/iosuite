@@ -162,19 +162,19 @@ def test_account_picker_and_one_click(client, family_id):
 
 
 def test_page_stamps_the_version(client):
-    from app import APP_VERSION
+    from app import __version__
     html = client.get("/").text
-    assert f'static/app.js?v={APP_VERSION}"' in html and f'static/app.css?v={APP_VERSION}"' in html
+    assert f'static/app.js?v={__version__}"' in html and f'static/app.css?v={__version__}"' in html
 
 
 def test_registers_in_the_suite(client):
     """The first request writes ioContacts' row in the suite's list of apps (iosuite-shared suite_apps)."""
     from iosuite_shared import suite
-    from app import APP_VERSION
+    from app import __version__
     client.get("/api/books")
     me = suite.get("iocontacts")
     assert me is not None
-    assert me["name"] == "ioContacts" and me["version"] == APP_VERSION
+    assert me["name"] == "ioContacts" and me["version"] == __version__
     assert me["description"] == "Contacts" and me["color"] == "#4f2f7d"
 
 

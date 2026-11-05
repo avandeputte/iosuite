@@ -6,8 +6,8 @@ from typing import Optional
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
 
-from app import APP_VERSION, config, db, iopix, users
-from app.auth import updater
+from app import __version__, config, db, iopix, users
+from app.auth import auth, updater
 from app.mcp.base import READ_ONLY, need_admin, server
 
 UPDATES = ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=True)  # reaches GitHub
@@ -18,11 +18,11 @@ def diagnostics() -> dict:
     """Admins: the server's health: version and commit, Python and platform, the database (server version, tables,
     rows), the LDAP directory, ioPix, the MCP switch, the last update check and update, and the accounts."""
     need_admin()
-    out = {"version": APP_VERSION, "commit": updater.local_commit()[:7], "docker": updater.in_docker(),
+    out = {"version": __version__, "commit": updater.local_commit()[:7], "docker": updater.in_docker(),
            "python": sys.version.split()[0], "platform": platform.platform(), "appDir": str(config.ROOT),
            "publicUrl": config.PUBLIC_URL or None,
            "ldap": {"port": config.LDAP_PORT, "base": config.LDAP_BASE} if config.LDAP_PORT else "off",
-           "proxySignIn": config.AUTH_PROXY, "update": updater.status()}
+           "proxySignIn": auth.proxy.mode(), "update": updater.status()}
     try:
         out["database"] = {"host": f"{config.DB_HOST}:{config.DB_PORT}", "name": config.DB_NAME,
                            "server": db.one("SELECT version() AS v")["v"],
