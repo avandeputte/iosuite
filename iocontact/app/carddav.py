@@ -151,7 +151,7 @@ def props_principal(ctx: Ctx, names: list[str]):
         elif n == q(C, "principal-address"):
             if ctx.user.get("me_contact_id"):
                 r = model.get_row(ctx.user["me_contact_id"])
-                b = model.book(r["book_id"]) if r else None
+                b = model.book(r["address_book_id"]) if r else None
                 if r and not r["deleted"] and model.can_read_book(ctx.user, b):
                     _sub(_sub(ok, C, "principal-address"), D, "href", ctx.book_href(b) + quote(r["href"]))
                     continue
@@ -238,7 +238,7 @@ def props_card(ctx: Ctx, row: dict, names: list[str], data_version: str | None =
         elif n == q(D, "resourcetype"):
             _sub(ok, D, "resourcetype")
         elif n == q(D, "getlastmodified"):
-            _sub(ok, D, "getlastmodified", _http_date(row["updated"]))
+            _sub(ok, D, "getlastmodified", _http_date(row["updated_at"]))
         elif n == q(D, "displayname"):
             _sub(ok, D, "displayname", row["fn"])
         elif n == q(C, "address-data"):
@@ -246,7 +246,7 @@ def props_card(ctx: Ctx, row: dict, names: list[str], data_version: str | None =
         elif n == q(D, "getcontentlength"):
             _sub(ok, D, "getcontentlength", len(model.vcard_text(row, data_version or "3.0").encode()))
         elif n == q(D, "current-user-privilege-set"):
-            _privs(ok, model.can_write_book(ctx.user, model.book(row["book_id"])))
+            _privs(ok, model.can_write_book(ctx.user, model.book(row["address_book_id"])))
         elif n == q(D, "owner"):
             _sub(_sub(ok, D, "owner"), D, "href", ctx.principal)
         else:
@@ -405,8 +405,8 @@ def _propfind(ctx: Ctx, parts, body, depth) -> Response:
 def _rows(book_id: int, since: int | None = None) -> list[dict]:
     from app import db
     if since is None:
-        return db.q("SELECT * FROM contacts WHERE book_id = %s AND deleted = 0 ORDER BY id", (book_id,))
-    return db.q("SELECT * FROM contacts WHERE book_id = %s AND changed_token > %s ORDER BY changed_token", (book_id, since))
+        return db.q("SELECT * FROM con_contacts WHERE address_book_id = %s AND deleted = 0 ORDER BY id", (book_id,))
+    return db.q("SELECT * FROM con_contacts WHERE address_book_id = %s AND changed_token > %s ORDER BY changed_token", (book_id, since))
 
 
 def _proppatch(ctx: Ctx, parts, body) -> Response:
@@ -462,7 +462,7 @@ def _get(ctx: Ctx, parts, head: bool, headers) -> Response:
     v = "4.0" if re.search(r"version\s*=\s*\"?4", acc) else "3.0"
     text = model.vcard_text(row, v).encode()
     return Response(b"" if head else text, media_type="text/vcard; charset=utf-8",
-                    headers={"ETag": f'"{row["etag"]}"', "Last-Modified": _http_date(row["updated"])})
+                    headers={"ETag": f'"{row["etag"]}"', "Last-Modified": _http_date(row["updated_at"])})
 
 
 def _etag_match(header: str | None, etag: str | None) -> bool:
@@ -558,7 +558,7 @@ def _mkcol(ctx: Ctx, parts, body) -> Response:
         pass
     from app import db
     bid = model.create_book(ctx.user["id"], name)
-    db.ex("UPDATE addressbooks SET slug = %s WHERE id = %s", (parts[2][:64], bid))
+    db.ex("UPDATE con_address_books SET slug = %s WHERE id = %s", (parts[2][:64], bid))
     return Response(status_code=201)
 
 

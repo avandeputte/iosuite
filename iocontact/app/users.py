@@ -65,7 +65,7 @@ def names_of(ids: set) -> dict:
 def create(name: str, password: str | None, role: str = "editor", display_name: str | None = None, email: str | None = None) -> dict:
     """A new account with this role here, and its private address book. ValueError with the message to show."""
     u = shared.create(name, password or "", role, APP, email=email or "", display_name=display_name or "")
-    db.ex("INSERT INTO addressbooks (owner_id, slug, name, description) VALUES (%s, 'personal', 'Personal', %s)",
+    db.ex("INSERT INTO con_address_books (owner_id, slug, name, description) VALUES (%s, 'personal', 'Personal', %s)",
           (u["id"], f"{display_name or name}'s private contacts"))
     return get(u["id"])
 
@@ -91,12 +91,12 @@ def update(uid: int, **fields) -> dict:
 def forget_me_contact(cid: int) -> None:
     """A deleted contact is nobody's "me" any more."""
     import json
-    authdb.ex("DELETE FROM user_data WHERE app = %s AND k = 'me_contact_id' AND v = %s", (APP, json.dumps(int(cid))))
+    authdb.ex("DELETE FROM ios_user_data WHERE app = %s AND name = 'me_contact_id' AND value = %s", (APP, json.dumps(int(cid))))
 
 
 def delete(uid: int) -> None:
-    db.ex("DELETE FROM addressbooks WHERE owner_id = %s", (uid,))
-    db.ex("DELETE FROM calendar_tokens WHERE user_id = %s", (uid,))
+    db.ex("DELETE FROM con_address_books WHERE owner_id = %s", (uid,))
+    db.ex("DELETE FROM con_feed_tokens WHERE user_id = %s", (uid,))
     shared.delete(uid)
 
 
@@ -144,20 +144,20 @@ def forget_cached_auth() -> None:
 # ---------------------------------------------------------------- calendar feed tokens (ioContacts' own)
 
 def calendar_token(uid: int) -> str:
-    r = db.one("SELECT token FROM calendar_tokens WHERE user_id = %s ORDER BY id LIMIT 1", (uid,))
+    r = db.one("SELECT token FROM con_feed_tokens WHERE user_id = %s ORDER BY id LIMIT 1", (uid,))
     if r:
         return r["token"]
     tok = secrets.token_hex(20)
-    db.ex("INSERT INTO calendar_tokens (user_id, token) VALUES (%s, %s)", (uid, tok))
+    db.ex("INSERT INTO con_feed_tokens (user_id, token) VALUES (%s, %s)", (uid, tok))
     return tok
 
 
 def reset_calendar_token(uid: int) -> str:
-    db.ex("DELETE FROM calendar_tokens WHERE user_id = %s", (uid,))
+    db.ex("DELETE FROM con_feed_tokens WHERE user_id = %s", (uid,))
     return calendar_token(uid)
 
 
 def user_from_calendar_token(tok: str) -> dict | None:
-    r = db.one("SELECT user_id FROM calendar_tokens WHERE token = %s", (tok,))
+    r = db.one("SELECT user_id FROM con_feed_tokens WHERE token = %s", (tok,))
     u = get(r["user_id"]) if r else None
     return u if u and u["role"] != "none" else None  # an account whose access here was taken away loses the feed too

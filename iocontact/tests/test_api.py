@@ -168,7 +168,7 @@ def test_page_stamps_the_version(client):
 
 
 def test_registers_in_the_suite(client):
-    """The first request writes ioContacts' row in the suite's list of apps (iosuite-shared suite_apps)."""
+    """The first request writes ioContacts' row in the suite's list of apps (iosuite-shared ios_apps)."""
     from iosuite_shared import suite
     from app import __version__
     client.get("/api/books")

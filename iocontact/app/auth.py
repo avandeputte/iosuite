@@ -14,7 +14,7 @@ from . import __version__, config, db
 
 APP = "iocontacts"
 
-# the version, address, description, colour and icon also go into the suite's list of apps (suite_apps), which the
+# the version, address, description, colour and icon also go into the suite's list of apps (ios_apps), which the
 # start page and the other apps read: written on the first request
 auth = Auth(APP, app_label="ioContacts", basic_realm="ioContacts", version=__version__, public_url=config.PUBLIC_URL or None,
             description="Contacts", color="#4f2f7d", icon="/static/icons/mark.svg")

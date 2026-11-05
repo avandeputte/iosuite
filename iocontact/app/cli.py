@@ -20,7 +20,7 @@ def main(argv: list[str]) -> int:
     if cmd == "migrate":
         print("ok: tables ready")
     elif cmd == "check":
-        n = db.one("SELECT count(*) AS n FROM contacts WHERE deleted = 0")["n"]
+        n = db.one("SELECT count(*) AS n FROM con_contacts WHERE deleted = 0")["n"]
         users.ensure_admin_from_env()  # the Shared ioSuite database's tables (created when missing), as ioCalendar does
         u = len(users.all_users())
         print(f"ok: {u} account(s), {n} contact(s)")
