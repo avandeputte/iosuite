@@ -81,8 +81,8 @@ body.side-docked #menubtn { display: none; }
 #search:focus-within { background: var(--bg); box-shadow: var(--shadow); }
 #search input { flex: 1; border: 0; outline: 0; background: none; min-width: 0; color: var(--fg); }
 #usermenu { margin-left: auto; position: relative; }
-.iconbtn.gear { color: var(--fg2); }
-.iconbtn.gear:hover { color: var(--fg); }
+.avatarbtn { width: 36px; height: 36px; border-radius: 50%; background: var(--brand); color: #fff; font-weight: 600; font-size: var(--fs-s); display: inline-flex; align-items: center; justify-content: center; }
+.avatarbtn:hover { filter: brightness(1.1); }
 
 /* ---- sidebar (as in iopix): the name on top, the destinations in groups, Settings and Maintenance at the foot.
    Docked (body.side-docked) on a wide screen; otherwise hidden off the left edge and slid over the page (body.side-open). */
@@ -206,6 +206,7 @@ table.t th { font-size: var(--fs-s); color: var(--fg2); font-weight: 600; }
 .box h2 { margin: 0 0 6px; font-size: var(--fs-l); font-weight: 600; display: flex; align-items: center; gap: 8px; }
 .box h2 .ic { color: var(--brand); }
 .box p { margin: 6px 0; }
+pre.log { background: var(--bg2); border: 1px solid var(--line); border-radius: var(--r-s); padding: 10px 12px; margin: 10px 0 4px; max-height: 420px; overflow: auto; font-size: var(--fs-xs); line-height: 1.45; white-space: pre; }
 .copy { display: flex; gap: 6px; align-items: center; margin: 6px 0; }
 .copy code { flex: 1; background: var(--bg2); padding: 8px 10px; border-radius: var(--r-s); overflow-x: auto; white-space: nowrap; font-size: var(--fs-m); }
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 16px; overflow-x: auto; }

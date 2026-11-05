@@ -5,3 +5,5 @@ data/
 iocalendar.env
 .pytest_cache/
 *.egg-info/
+.update-result
+*.log
