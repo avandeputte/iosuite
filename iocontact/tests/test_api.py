@@ -185,11 +185,11 @@ def test_suite_apps_for_the_app_switcher(client):
     html = client.get("/").text
     assert 'id="suitebtn"' in html and "img-src 'self' data: blob: https:" in html
     client.get("/api/books")
-    suite.register("iopix", name="ioPix", url="https://photo.example.net", color="#123456", icon="/static/icon.svg")
+    suite.register("iopix", name="ioPix", url="https://photo.example.net", color="#123456")
     r = client.get("/api/auth/suite").json()
     assert r["app"] == "iocontacts"
     other = [a for a in r["items"] if a["app"] != r["app"]]
-    assert [(a["name"], a["url"], a["icon"]) for a in other] == [("ioPix", "https://photo.example.net", "https://photo.example.net/static/icon.svg")]
+    assert [(a["name"], a["url"], a["icon"]) for a in other] == [("ioPix", "https://photo.example.net", "https://photo.example.net/static/icons/mark.svg")]
 
 
 def test_birthday_without_reminder(client, family_id):
@@ -213,3 +213,15 @@ def test_birthday_without_reminder(client, family_id):
     back = client.put(f"/api/contacts/{off['id']}", json={**client.get(f"/api/contacts/{off['id']}").json(), "birthdayRemind": True}).json()
     assert back["birthdayRemind"] is True
     assert "Remind No" in {x["fn"] for x in client.get("/api/upcoming?days=10").json()["items"]}
+
+
+def test_the_shell_its_files_and_the_icon_are_public(client):
+    """The suite's layout: the page at /, every file it names under /static/, the mark at suite.ICON."""
+    import re
+    from iosuite_shared import suite
+    html = client.get("/").text
+    paths = re.findall(r'(?:src|href)="(static/[^"?]+)', html)
+    paths += [i["src"] for i in client.get("/manifest.webmanifest").json()["icons"]]
+    assert paths and all(p.startswith("static/") for p in paths)
+    for p in ["/" + p for p in paths] + [suite.ICON, "/static/icons/apple-touch-icon.png"]:
+        assert client.get(p).status_code == 200, p
