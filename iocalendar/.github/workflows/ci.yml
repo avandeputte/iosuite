@@ -1,5 +1,5 @@
 # Tests against a MariaDB service, then builds the container image and pushes it to ghcr.io on pushes to main and
-# version tags (pull requests only build). A push to main whose APP_VERSION (app/__init__.py) has no release yet is
+# version tags (pull requests only build). A push to main whose __version__ (app/__init__.py) has no release yet is
 # released: the image also gets the v<version> tag, and a GitHub release v<version> is made with the merge's message.
 name: Tests and image
 
@@ -46,7 +46,7 @@ jobs:
       - name: Tests
         # scratch databases calendar_test and calendar_test_auth on the service (iosuite_shared.testing)
         env:
-          IOTHING_TEST_DB: 127.0.0.1:3306:root:root
+          IOSUITE_TEST_DB: 127.0.0.1:3306:root:root
         run: python -m pytest -q -p no:cacheprovider tests
 
   image:
@@ -55,7 +55,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - id: version
-        run: echo "version=$(python3 -c 'import re;print(re.search(r"APP_VERSION = \"([^\"]+)\"", open("app/__init__.py").read()).group(1))')" >> "$GITHUB_OUTPUT"
+        run: echo "version=$(python3 -c 'import re;print(re.search(r"__version__ = \"([^\"]+)\"", open("app/__init__.py").read()).group(1))')" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
       - name: Log in to ghcr.io
@@ -81,6 +81,7 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: COMMIT=${{ github.sha }}
 
   release:
     # every new version on main becomes a release (tag v<version>), with no one having to click anything
@@ -95,7 +96,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          v="v$(python3 -c 'import re;print(re.search(r"APP_VERSION = \"([^\"]+)\"", open("app/__init__.py").read()).group(1))')"
+          v="v$(python3 -c 'import re;print(re.search(r"__version__ = \"([^\"]+)\"", open("app/__init__.py").read()).group(1))')"
           if gh release view "$v" >/dev/null 2>&1; then echo "$v is released already"; exit 0; fi
           git log -1 --format=%B > notes.md
           printf '\n\nImage: `ghcr.io/avandeputte/iocalendar:%s` (also `latest`).\n' "$v" >> notes.md

@@ -4,7 +4,7 @@ from typing import Optional
 
 from mcp.server.mcpserver.exceptions import ToolError
 
-from app import APP_VERSION, config, contacts, holiday, ical, members, model
+from app import __version__, config, contacts, holiday, ical, members, model
 from app.mcp.base import READ_ONLY, calendars, clamp, event_out, find_calendar, find_event, member_ids, occurrence_out, server, when, who
 
 
@@ -32,7 +32,7 @@ def overview() -> dict:
         "nextSevenDays": [occurrence_out(u, o) for o in occ][:200],
         "family": [m["displayName"] for m in members.family()],
         "holidays": _holidays(),
-        "iocontactsConnected": contacts.enabled(), "version": APP_VERSION, "webApp": config.PUBLIC_URL or None,
+        "iocontactsConnected": contacts.enabled(), "version": __version__, "webApp": config.PUBLIC_URL or None,
     }
 
 

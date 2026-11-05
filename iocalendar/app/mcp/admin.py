@@ -7,7 +7,7 @@ from typing import Optional
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
 
-from app import APP_VERSION, config, contacts, db, holiday, ical, users
+from app import __version__, config, contacts, db, holiday, ical, users
 from app.auth import updater
 from app.mcp.base import READ_ONLY, WRITES, need_admin, server
 
@@ -19,7 +19,7 @@ def diagnostics() -> dict:
     """Admins: the server's health: version and commit, Python and platform, the time zone, the database (server
     version, tables, rows), ioContacts, the MCP switch, the last update check and update, and the accounts."""
     need_admin()
-    out = {"version": APP_VERSION, "commit": updater.local_commit()[:7], "docker": updater.in_docker(),
+    out = {"version": __version__, "commit": updater.local_commit()[:7], "docker": updater.in_docker(),
            "python": sys.version.split()[0], "platform": platform.platform(), "appDir": str(config.ROOT),
            "publicUrl": config.PUBLIC_URL or None, "timezone": ical.default_tz(), "update": updater.status()}
     try:

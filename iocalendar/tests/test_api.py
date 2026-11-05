@@ -183,10 +183,10 @@ def test_status_and_app_passwords(client):
 
 def test_registers_in_the_suite_list(client):
     from iosuite_shared import suite
-    from app import APP_VERSION
+    from app import __version__
     client.get("/api/calendars")
     row = suite.get("iocalendar")
-    assert row and row["name"] == "ioCalendar" and row["version"] == APP_VERSION
+    assert row and row["name"] == "ioCalendar" and row["version"] == __version__
     assert row["description"] == "Calendar" and row["color"] == "#963522"
 
 

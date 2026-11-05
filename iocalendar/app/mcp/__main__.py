@@ -1,5 +1,5 @@
 """`python -m app.mcp [--user NAME]`: the MCP server over stdio, for clients that start a local process.
-It acts as the account named by --user or IOCALENDAR_MCP_USER (or the only admin, when there is just one)."""
+It acts as the account named by --user or MCP_USER (or the only admin, when there is just one)."""
 import sys
 
 from app import config, db, users
@@ -19,7 +19,7 @@ def _pick_user():
     admins = [u for u in users.all_users() if u["role"] == "admin"]
     if len(admins) == 1:
         return admins[0]
-    sys.exit("name the account: python -m app.mcp --user NAME (or IOCALENDAR_MCP_USER=NAME)")
+    sys.exit("name the account: python -m app.mcp --user NAME (or MCP_USER=NAME)")
 
 
 db.migrate()

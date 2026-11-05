@@ -14,7 +14,7 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
 
-from app import APP_VERSION, config, contacts, db, holiday, ical, members, model, users
+from app import __version__, config, contacts, db, holiday, ical, members, model, users
 from app.auth import updater
 
 router = APIRouter()
@@ -175,7 +175,7 @@ def _check_match(request: Request, r: dict) -> None:
 def status(request: Request):
     u = request.state.user
     adm = users.is_admin(u)
-    return {"app": "ioCalendar", "version": APP_VERSION, "commit": updater.local_commit()[:7] if u else None,
+    return {"app": "ioCalendar", "version": __version__, "commit": updater.local_commit()[:7] if u else None,
             "usersExist": users.any_users(), "user": users.public(u), "timezone": ical.default_tz(),
             "iocontacts": contacts.enabled() if u else None, "viaProxy": getattr(request.state, "via_proxy", False),
             "mcp": mcp_enabled() if u else None,
