@@ -63,6 +63,21 @@ body.side-docked #menubtn { display: none; }
 .brand-name { font-weight: 700; font-size: var(--fs-xl); letter-spacing: -.2px; white-space: nowrap; }
 .navhead .brand-name { font-size: 26px; letter-spacing: -.03em; }  /* the name, bold and tight, as on the icon (iopix's) */
 .brand-name .io { color: var(--name-io); } .brand-name .nm { color: var(--name-nm); }
+.brand-mark { width: 30px; height: 30px; flex: none; }
+.brand-home { color: inherit; min-width: 0; }
+#nav .navhead a.brand, #nav .navhead a.brand-home { gap: 8px; height: auto; padding: 0; border-radius: 0; }
+/* the suite's app switcher (as ioContacts'): the mark opens a menu of the other ioThing apps */
+.suitebtn { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; margin: 0 -4px; padding: 0; border: 0; border-radius: var(--r-m); background: transparent; cursor: pointer; }
+.suitebtn:hover, .suitebtn:focus-visible { background: color-mix(in srgb, var(--fg) 8%, transparent); }
+.suitebtn img { width: 30px; height: 30px; }
+#suitebtn { display: none; }
+.suitepop { position: fixed; z-index: var(--z-menu); display: grid; grid-template-columns: repeat(var(--cols, 3), 92px); gap: 4px; padding: 8px; max-width: calc(100vw - 16px);
+  background: var(--bg); border: 1px solid var(--line); border-radius: var(--r-m); box-shadow: var(--shadow); }
+.apptile { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 4px 8px; border-radius: var(--r-m); color: var(--fg); text-align: center; min-width: 0; }
+.apptile:hover, .apptile:focus-visible { background: var(--bg2); }
+.appic { width: 44px; height: 44px; border-radius: 12px; object-fit: contain; }
+.appic.fb { display: inline-flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 18px; }
+.appnm { font-size: var(--fs-s); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #search { flex: 1 1 0; min-width: 0; display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 14px;
   background: var(--bg2); border-radius: var(--r-pill); color: var(--fg2); }
 #search:focus-within { background: var(--bg); box-shadow: var(--shadow); }
@@ -274,6 +289,7 @@ body.locked #main, body.locked #nav, body.locked #topbar { visibility: hidden; }
 @media (max-width: 800px) {
   :root { --topbar: 52px; --nav: 0px; }
   #menubtn, #navscrim, .navhead, .navgap, .navsec, .navfoot, #nav > a:not(.bar) { display: none !important; }
+  #suitebtn:not([hidden]) { display: inline-flex; margin: 0; }
   #topbar { gap: 8px; padding: env(safe-area-inset-top) max(8px, env(safe-area-inset-right)) 0 max(8px, env(safe-area-inset-left)); left: 0; }
   #nav { top: auto; bottom: 0; left: 0; right: 0; width: auto; height: calc(56px + env(safe-area-inset-bottom)); flex-direction: row; overflow: hidden; padding: 0 0 env(safe-area-inset-bottom); gap: 0;
     border-top: 1px solid var(--line); background: var(--bg); transform: none; visibility: visible; transition: none; box-shadow: none; z-index: 10; }
