@@ -281,10 +281,10 @@ def add(cid: int, field: str, value, source: str, evidence: str | None = None, n
     if _already_has(c, field, value):
         return "known"
     key = _vkey(field, value)
-    old = db.one("SELECT status FROM suggestions WHERE contact_id = %s AND field = %s AND vkey = %s", (cid, field, key))
+    old = db.one("SELECT status FROM con_contact_suggestions WHERE contact_id = %s AND field = %s AND vkey = %s", (cid, field, key))
     if old:
         return old["status"] if old["status"] != "accepted" else "known"
-    db.ex("INSERT INTO suggestions (contact_id, field, value, vkey, source, evidence, note, by_user_id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+    db.ex("INSERT INTO con_contact_suggestions (contact_id, field, value, vkey, source, evidence, note, created_by) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
           (cid, field, json.dumps(value), key, source[:64], (evidence or "")[:1024] or None, (note or "")[:1024] or None, user_id))
     return "added"
 
@@ -322,28 +322,28 @@ def listing(book_ids: list[int], status: str = "pending", contact_id: int | None
     if contact_id:
         extra = " AND s.contact_id = %s"
         args.append(contact_id)
-    rows = db.q(f"SELECT s.*, c.fn, c.book_id FROM suggestions s JOIN contacts c ON c.id = s.contact_id "
-                f"WHERE s.status = %s AND c.deleted = 0 AND c.book_id IN ({marks}){extra} "
+    rows = db.q(f"SELECT s.*, c.fn, c.address_book_id FROM con_contact_suggestions s JOIN con_contacts c ON c.id = s.contact_id "
+                f"WHERE s.status = %s AND c.deleted = 0 AND c.address_book_id IN ({marks}){extra} "
                 f"ORDER BY c.fn, s.contact_id, s.field, s.id LIMIT %s", (*args, limit))
     from app import users
-    names = users.names_of({r["by_user_id"] for r in rows if r["by_user_id"]})  # the accounts live in the Shared ioSuite database
-    return [{"id": r["id"], "contactId": r["contact_id"], "fn": r["fn"], "bookId": r["book_id"], "field": r["field"],
+    names = users.names_of({r["created_by"] for r in rows if r["created_by"]})  # the accounts live in the Shared ioSuite database
+    return [{"id": r["id"], "contactId": r["contact_id"], "fn": r["fn"], "bookId": r["address_book_id"], "field": r["field"],
              "fieldLabel": FIELDS.get(r["field"], (r["field"],))[0], "value": json.loads(r["value"]), "source": r["source"],
-             "evidence": r["evidence"], "note": r["note"], "by": names.get(r["by_user_id"]), "status": r["status"],
-             "created": r["created"].isoformat() if r["created"] else None} for r in rows]
+             "evidence": r["evidence"], "note": r["note"], "by": names.get(r["created_by"]), "status": r["status"],
+             "created": r["created_at"].isoformat() if r["created_at"] else None} for r in rows]
 
 
 def pending_count(book_ids: list[int]) -> int:
     if not book_ids:
         return 0
     marks = ",".join(["%s"] * len(book_ids))
-    return db.one(f"SELECT count(*) AS n FROM suggestions s JOIN contacts c ON c.id = s.contact_id WHERE s.status = 'pending' "
-                  f"AND c.deleted = 0 AND c.book_id IN ({marks})", book_ids)["n"]
+    return db.one(f"SELECT count(*) AS n FROM con_contact_suggestions s JOIN con_contacts c ON c.id = s.contact_id WHERE s.status = 'pending' "
+                  f"AND c.deleted = 0 AND c.address_book_id IN ({marks})", book_ids)["n"]
 
 
 def accept(sid: int, user_id: int | None, book_ids: list[int], value=None) -> dict:
     """Apply one suggestion to its contact (value: an edited version of it) and mark it accepted."""
-    s = db.one("SELECT * FROM suggestions WHERE id = %s", (sid,))
+    s = db.one("SELECT * FROM con_contact_suggestions WHERE id = %s", (sid,))
     if not s or s["status"] != "pending":
         raise ValueError("No such suggestion waiting")
     field = s["field"]
@@ -368,16 +368,16 @@ def accept(sid: int, user_id: int | None, book_ids: list[int], value=None) -> di
         else:
             c[field] = (c.get(field) or []) + [v]
         model.save(c["bookId"], c, cid, None, True, book_ids)
-    db.ex("UPDATE suggestions SET status = 'accepted', decided_by = %s, decided = NOW() WHERE id = %s", (user_id, sid))
+    db.ex("UPDATE con_contact_suggestions SET status = 'accepted', decided_by = %s, decided_at = NOW() WHERE id = %s", (user_id, sid))
     if field in ("photo", "name", "org", "title", "birthday", "gender", "nickname", "department"):  # one value: the rival ones are moot
-        db.ex("UPDATE suggestions SET status = 'dismissed', decided_by = %s, decided = NOW() WHERE contact_id = %s AND field = %s AND status = 'pending'",
+        db.ex("UPDATE con_contact_suggestions SET status = 'dismissed', decided_by = %s, decided_at = NOW() WHERE contact_id = %s AND field = %s AND status = 'pending'",
               (user_id, cid, field))
     return {"accepted": sid, "contactId": cid, "field": field}
 
 
 def dismiss(sid: int, user_id: int | None) -> None:
-    db.ex("UPDATE suggestions SET status = 'dismissed', decided_by = %s, decided = NOW() WHERE id = %s AND status = 'pending'", (user_id, sid))
+    db.ex("UPDATE con_contact_suggestions SET status = 'dismissed', decided_by = %s, decided_at = NOW() WHERE id = %s AND status = 'pending'", (user_id, sid))
 
 
 def suggestion(sid: int) -> dict | None:
-    return db.one("SELECT s.id, s.contact_id, c.book_id FROM suggestions s JOIN contacts c ON c.id = s.contact_id WHERE s.id = %s", (sid,))
+    return db.one("SELECT s.id, s.contact_id, c.address_book_id FROM con_contact_suggestions s JOIN con_contacts c ON c.id = s.contact_id WHERE s.id = %s", (sid,))

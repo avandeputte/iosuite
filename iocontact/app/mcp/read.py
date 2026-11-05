@@ -19,8 +19,8 @@ def overview() -> dict:
     ids = book_ids(u)
     marks = ",".join(["%s"] * len(ids)) or "0"
     t = db.one(f"SELECT count(*) AS n, sum(favorite) AS fav, sum(bday_month IS NOT NULL) AS bday, sum(iopix_person_id IS NOT NULL) AS ip, "
-               f"sum(photo IS NOT NULL) AS ph FROM contacts WHERE deleted = 0 AND book_id IN ({marks})", ids) if ids else {}
-    nrel = db.one(f"SELECT count(*) AS n FROM relations r JOIN contacts c ON c.id = r.contact_id WHERE c.deleted = 0 AND c.book_id IN ({marks})", ids)["n"] if ids else 0
+               f"sum(photo IS NOT NULL) AS ph FROM con_contacts WHERE deleted = 0 AND address_book_id IN ({marks})", ids) if ids else {}
+    nrel = db.one(f"SELECT count(*) AS n FROM con_contact_relations r JOIN con_contacts c ON c.id = r.contact_id WHERE c.deleted = 0 AND c.address_book_id IN ({marks})", ids)["n"] if ids else 0
     return {
         "you": {"name": u["name"], "displayName": u.get("display_name"), "role": u["role"]},
         "addressBooks": [{"id": b["id"], "name": b["name"], "shared": b["owner_id"] is None, "contacts": b.get("n"),
@@ -150,7 +150,7 @@ def birthdays_in_month(month: int, book: Optional[str] = None) -> list:
         raise ToolError("month is 1-12")
     ids = book_ids(u, book)
     marks = ",".join(["%s"] * len(ids)) or "0"
-    rows = db.q(f"SELECT id, fn, bday_year, bday_month, bday_day FROM contacts WHERE deleted = 0 AND book_id IN ({marks}) "
+    rows = db.q(f"SELECT id, fn, bday_year, bday_month, bday_day FROM con_contacts WHERE deleted = 0 AND address_book_id IN ({marks}) "
                 f"AND bday_month = %s AND bday_remind = 1 ORDER BY bday_day, fn", (*ids, int(month))) if ids else []
     return [{"id": r["id"], "name": r["fn"], "day": r["bday_day"], "year": r["bday_year"]} for r in rows]
 
@@ -262,7 +262,7 @@ def list_iopix_people(text: str = "", unlinked_only: bool = False) -> list:
     ids = book_ids(u)
     marks = ",".join(["%s"] * len(ids)) or "0"
     linked = {r["iopix_person_id"]: {"id": r["id"], "name": r["fn"]} for r in db.q(
-        f"SELECT id, fn, iopix_person_id FROM contacts WHERE iopix_person_id IS NOT NULL AND deleted = 0 AND book_id IN ({marks})", ids or [0])}
+        f"SELECT id, fn, iopix_person_id FROM con_contacts WHERE iopix_person_id IS NOT NULL AND deleted = 0 AND address_book_id IN ({marks})", ids or [0])}
     t = fold(text).strip()
     out = []
     for p in ppl:

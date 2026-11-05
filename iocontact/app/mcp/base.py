@@ -108,11 +108,11 @@ def find_contact(u: dict, ref, writable: bool = False) -> dict:
     row = None
     if s.isdigit():
         row = model.get_row(int(s))
-        if not row or row["deleted"] or row["book_id"] not in ids:
+        if not row or row["deleted"] or row["address_book_id"] not in ids:
             raise ToolError(f"No contact with id {s}")
     else:
         marks = ",".join(["%s"] * len(ids)) or "0"
-        rows = db.q(f"SELECT id FROM contacts WHERE deleted = 0 AND book_id IN ({marks}) AND fn = %s COLLATE {db.search_collation()} LIMIT 6",
+        rows = db.q(f"SELECT id FROM con_contacts WHERE deleted = 0 AND address_book_id IN ({marks}) AND fn = %s COLLATE {db.search_collation()} LIMIT 6",
                     (*ids, s)) if ids else []
         if not rows:
             found, _ = model.search(ids, s, limit=6)
@@ -120,10 +120,10 @@ def find_contact(u: dict, ref, writable: bool = False) -> dict:
         if not rows:
             raise ToolError(f"No contact matches '{s}'. Try search_contacts.")
         if len(rows) > 1:
-            names = db.q(f"SELECT id, fn FROM contacts WHERE id IN ({','.join(['%s'] * len(rows))})", [r["id"] for r in rows])
+            names = db.q(f"SELECT id, fn FROM con_contacts WHERE id IN ({','.join(['%s'] * len(rows))})", [r["id"] for r in rows])
             raise ToolError(f"'{s}' matches several contacts; give the id: " + "; ".join(f"{r['fn']} (id {r['id']})" for r in names))
         row = model.get_row(rows[0]["id"])
-    if writable and not model.can_write_book(u, model.book(row["book_id"])):
+    if writable and not model.can_write_book(u, model.book(row["address_book_id"])):
         raise ToolError(f"You can read {row['fn']} but not change them (viewers change only their own private book)")
     return row
 

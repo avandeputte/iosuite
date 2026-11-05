@@ -122,7 +122,7 @@ def update_contact(contact: str, changes: dict, lists: Literal["add", "replace"]
                 c[k] = have + [x for x in v if keyf(x) not in seen]
         else:
             c[k] = v
-    _save(u, r["book_id"], c, r["id"])
+    _save(u, r["address_book_id"], c, r["id"])
     return contact_out(u, r["id"])
 
 
@@ -156,7 +156,7 @@ def add_relation(contact: str, related: str, relation: str, related_is_contact: 
         c["relations"].append({"type": t, "relatedId": o["id"], "relatedName": o["fn"]})
     else:
         c["relations"].append({"type": t, "relatedName": related.strip()})
-    _save(u, r["book_id"], c, r["id"])
+    _save(u, r["address_book_id"], c, r["id"])
     return {"contact": c["fn"], "relations": contact_out(u, r["id"]).get("relations")}
 
 
@@ -177,7 +177,7 @@ def remove_relation(contact: str, related: str, relation: Optional[str] = None) 
     if len(keep) == len(c["relations"]):
         raise ToolError(f"{c['fn']} has no such relation with {related}")
     c["relations"] = keep
-    _save(u, r["book_id"], c, r["id"])
+    _save(u, r["address_book_id"], c, r["id"])
     if oid:  # the other side, kept for a relation added from there
         o = model.full(oid)
         inv = rel.inverse(t) if t else None
@@ -198,7 +198,7 @@ def set_labels(contacts: list[str], add: Optional[list[str]] = None, remove: Opt
         c = model.full(r["id"])
         tags = (set(c["tags"]) | {t.strip() for t in add or [] if t.strip()}) - {t.strip() for t in remove or []}
         if tags != set(c["tags"]):
-            _save(u, r["book_id"], {**c, "tags": sorted(tags)}, r["id"])
+            _save(u, r["address_book_id"], {**c, "tags": sorted(tags)}, r["id"])
         done.append({"id": r["id"], "name": r["fn"], "labels": sorted(tags)})
     return {"contacts": done}
 
@@ -282,10 +282,10 @@ def undo_merge(merge_id: int) -> dict:
     """Put the contacts of a merge back as they were before it (changes made since to the kept contact are lost)."""
     from app import quality
     u = who()
-    m = db.one("SELECT keep_id FROM merges WHERE id = %s", (int(merge_id),))
+    m = db.one("SELECT kept_contact_id FROM con_contact_merges WHERE id = %s", (int(merge_id),))
     if not m:
         raise ToolError("No such merge")
-    find_contact(u, str(m["keep_id"]), writable=True)
+    find_contact(u, str(m["kept_contact_id"]), writable=True)
     try:
         return quality.undo(int(merge_id))
     except ValueError as e:
@@ -382,7 +382,7 @@ def link_iopix_person(contact: str, person: Optional[str] = None, use_face_as_ph
     c = model.full(r["id"])
     if not person:
         c["iopix"] = None
-        _save(u, r["book_id"], c, r["id"])
+        _save(u, r["address_book_id"], c, r["id"])
         return {"contact": r["fn"], "iopix": None}
     try:
         ppl = iopix.people()
@@ -397,7 +397,7 @@ def link_iopix_person(contact: str, person: Optional[str] = None, use_face_as_ph
         raise ToolError(f"'{s}' matches several ioPix people: " + "; ".join(f"{p['name']} (id {p['id']})" for p in hit[:8]))
     p = hit[0]
     c["iopix"] = {"personId": p["id"], "name": p["name"]}
-    _save(u, r["book_id"], c, r["id"])
+    _save(u, r["address_book_id"], c, r["id"])
     out = {"contact": r["fn"], "iopix": {"personId": p["id"], "name": p["name"], "url": iopix.person_url(p["id"], p["name"])}}
     if use_face_as_photo:
         got = iopix.face(p["id"])
@@ -421,7 +421,7 @@ def auto_link_iopix(book: Optional[str] = None, dry_run: bool = True) -> dict:
     by_name: dict = {}
     for p in ppl:
         by_name.setdefault(p["name"].strip().lower(), []).append(p)
-    taken = {r["iopix_person_id"] for r in db.q("SELECT iopix_person_id FROM contacts WHERE iopix_person_id IS NOT NULL AND deleted = 0")}
+    taken = {r["iopix_person_id"] for r in db.q("SELECT iopix_person_id FROM con_contacts WHERE iopix_person_id IS NOT NULL AND deleted = 0")}
     out = []
     for s in model.search(book_ids(u, book), limit=100000)[0]:
         if s["iopixPersonId"]:

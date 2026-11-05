@@ -27,10 +27,10 @@ def client():
     db.reset_all()
     from iosuite_shared import db as authdb
     users.ensure_admin_from_env()  # the auth tables
-    authdb.ex("DELETE FROM users")
-    authdb.ex("ALTER TABLE users AUTO_INCREMENT = 1")
-    authdb.ex("DELETE FROM settings")
-    authdb.ex("DELETE FROM suite_apps")  # the suite's list of apps: registered again on the first request
+    authdb.ex("DELETE FROM ios_users")
+    authdb.ex("ALTER TABLE ios_users AUTO_INCREMENT = 1")
+    authdb.ex("DELETE FROM ios_settings")
+    authdb.ex("DELETE FROM ios_apps")  # the suite's list of apps: registered again on the first request
     from iosuite_shared import suite
     from app.auth import auth
     suite.invalidate()

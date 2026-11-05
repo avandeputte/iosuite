@@ -57,7 +57,7 @@ def writable_book(u: dict, bid) -> dict:
 
 def readable_contact(u: dict, cid: int) -> dict:
     r = model.get_row(cid)
-    if not r or r["deleted"] or not model.can_read_book(u, model.book(r["book_id"])):
+    if not r or r["deleted"] or not model.can_read_book(u, model.book(r["address_book_id"])):
         raise HTTPException(404, "No such contact")
     return r
 
@@ -184,7 +184,7 @@ async def account_photo(uid: int):
     cid = u.get("me_contact_id") if u and u["role"] != "none" else None
     p = await run_in_threadpool(model.photo, cid) if cid else None
     if not p and cid:
-        r = await run_in_threadpool(db.one, "SELECT iopix_person_id FROM contacts WHERE id = %s", (cid,))
+        r = await run_in_threadpool(db.one, "SELECT iopix_person_id FROM con_contacts WHERE id = %s", (cid,))
         if r and r["iopix_person_id"] and iopix.settings()["url"]:
             try:
                 p = await run_in_threadpool(iopix.face, r["iopix_person_id"])
@@ -232,7 +232,7 @@ def get_me(request: Request):
 
 @router.get("/api/auth/suite")
 def get_suite(request: Request):
-    """The suite's registered apps (iosuite-shared suite_apps), this one among them, for the app switcher: when there are
+    """The suite's registered apps (iosuite-shared ios_apps), this one among them, for the app switcher: when there are
     others, the app mark top left opens a menu of them. Signed in only."""
     me(request)
     from iosuite_shared import suite
@@ -431,13 +431,13 @@ async def create_contact(request: Request, book: str | None = None):
 async def update_contact(cid: int, request: Request):
     u = writer(request)
     r = readable_contact(u, cid)
-    writable_book(u, r["book_id"])
+    writable_book(u, r["address_book_id"])
     data = await body_contact(request)
     inm = request.headers.get("if-match")
     if inm and inm.strip('"') != r["etag"]:
         raise HTTPException(412, "The contact changed since you loaded it")
-    target = data.get("bookId") or r["book_id"]
-    if int(target) != r["book_id"]:
+    target = data.get("bookId") or r["address_book_id"]
+    if int(target) != r["address_book_id"]:
         writable_book(u, target)
     photo = data.pop("photo", None) if isinstance(data.get("photo"), dict) and data["photo"].get("data") else None
     await run_in_threadpool(model.save, int(target), {**data, **({"photo": photo} if photo else {})}, cid, None, True, book_ids(u))
@@ -449,12 +449,12 @@ async def patch_contact(cid: int, request: Request):
     """Only some fields, e.g. {"favorite": true} or {"iopix": {"personId": 12, "name": "Ann"}}."""
     u = writer(request)
     r = readable_contact(u, cid)
-    writable_book(u, r["book_id"])
+    writable_book(u, r["address_book_id"])
     b = await request.json()
     c = model.full(cid)
     c.update({k: v for k, v in b.items() if k not in ("id", "uid", "href", "etag", "photo")})
-    dest = int(c.get("bookId") or r["book_id"])
-    if dest != r["book_id"]:
+    dest = int(c.get("bookId") or r["address_book_id"])
+    if dest != r["address_book_id"]:
         writable_book(u, dest)  # moving it needs the right to change the other book too
     await run_in_threadpool(model.save, dest, c, cid, None, True, book_ids(u))
     return contact_out(model.full(cid))
@@ -464,7 +464,7 @@ async def patch_contact(cid: int, request: Request):
 def delete_contact(cid: int, request: Request):
     u = writer(request)
     r = readable_contact(u, cid)
-    writable_book(u, r["book_id"])
+    writable_book(u, r["address_book_id"])
     model.delete(cid)
     return {"ok": True}
 
@@ -477,7 +477,7 @@ async def bulk(request: Request):
     ids, action = [int(x) for x in b.get("ids") or []], b.get("action")
     for cid in ids:
         r = readable_contact(u, cid)
-        writable_book(u, r["book_id"])
+        writable_book(u, r["address_book_id"])
     if action == "move":
         writable_book(u, b.get("book"))
 
@@ -511,7 +511,7 @@ def get_photo(cid: int, request: Request):
 async def put_photo(cid: int, request: Request, file: UploadFile = File(...)):
     u = writer(request)
     r = readable_contact(u, cid)
-    writable_book(u, r["book_id"])
+    writable_book(u, r["address_book_id"])
     data = await file.read()
     if len(data) > config.MAX_PHOTO_BYTES:
         raise HTTPException(413, "Photos up to 2 MB")
@@ -526,7 +526,7 @@ async def put_photo(cid: int, request: Request, file: UploadFile = File(...)):
 def del_photo(cid: int, request: Request):
     u = writer(request)
     r = readable_contact(u, cid)
-    writable_book(u, r["book_id"])
+    writable_book(u, r["address_book_id"])
     model.set_photo(cid, None, None)
     return {"ok": True}
 
@@ -535,7 +535,7 @@ def del_photo(cid: int, request: Request):
 async def photo_from_iopix(cid: int, request: Request):
     u = writer(request)
     r = readable_contact(u, cid)
-    writable_book(u, r["book_id"])
+    writable_book(u, r["address_book_id"])
     if not r["iopix_person_id"]:
         raise HTTPException(400, "Link the contact to an ioPix person first")
     try:
@@ -559,7 +559,7 @@ async def merge(request: Request):
         raise HTTPException(400, "Name the contacts to merge into the kept one")
     for cid in [keep, *others]:
         r = readable_contact(u, cid)
-        writable_book(u, r["book_id"])
+        writable_book(u, r["address_book_id"])
     result = b.get("result") if isinstance(b.get("result"), dict) else None
     pf = b.get("photoFrom")
     mid = await run_in_threadpool(quality.merge, u, keep, others, result, int(pf) if pf not in (None, "") else None)
@@ -595,7 +595,7 @@ async def duplicates_dismiss(request: Request):
     u = writer(request)
     ids = [int(x) for x in (await request.json()).get("ids") or []]
     for cid in ids:
-        writable_book(u, readable_contact(u, cid)["book_id"])
+        writable_book(u, readable_contact(u, cid)["address_book_id"])
     return {"ok": True, "pairs": quality.not_duplicates(ids, u["id"])}
 
 
@@ -615,11 +615,11 @@ def merges(request: Request, limit: int = 50):
 @router.post("/api/merges/{mid}/undo")
 async def merge_undo(mid: int, request: Request):
     u = writer(request)
-    m = db.one("SELECT keep_id FROM merges WHERE id = %s", (mid,))
+    m = db.one("SELECT kept_contact_id FROM con_contact_merges WHERE id = %s", (mid,))
     if not m:
         raise HTTPException(404, "No such merge")
-    r = readable_contact(u, m["keep_id"])
-    writable_book(u, r["book_id"])
+    r = readable_contact(u, m["kept_contact_id"])
+    writable_book(u, r["address_book_id"])
     try:
         return await run_in_threadpool(quality.undo, mid)
     except ValueError as e:
@@ -633,7 +633,7 @@ async def contact_lookup(cid: int, request: Request):
     """Look this contact up (Gravatar by email, and its GitHub, Mastodon and Bluesky profiles); what is found waits as
     suggestions."""
     u = me(request)
-    writable_book(u, readable_contact(u, cid)["book_id"])
+    writable_book(u, readable_contact(u, cid)["address_book_id"])
     return await run_in_threadpool(enrich.lookup, cid, u["id"])
 
 
@@ -645,7 +645,7 @@ async def lookup_many(request: Request):
     if b.get("ids"):
         ids = [int(x) for x in b["ids"]]
         for cid in ids:
-            writable_book(u, readable_contact(u, cid)["book_id"])
+            writable_book(u, readable_contact(u, cid)["address_book_id"])
         total = len(ids)
     else:
         mine = [x for x in book_ids(u, b.get("book")) if model.can_write_book(u, model.book(x))]
@@ -673,7 +673,7 @@ async def suggestion_accept(sid: int, request: Request):
     s = enrich.suggestion(sid)
     if not s:
         raise HTTPException(404, "No such suggestion")
-    writable_book(u, readable_contact(u, s["contact_id"])["book_id"])
+    writable_book(u, readable_contact(u, s["contact_id"])["address_book_id"])
     raw = await request.body()
     b = json.loads(raw) if raw else {}
     try:
@@ -688,7 +688,7 @@ def suggestion_dismiss(sid: int, request: Request):
     s = enrich.suggestion(sid)
     if not s:
         raise HTTPException(404, "No such suggestion")
-    writable_book(u, readable_contact(u, s["contact_id"])["book_id"])
+    writable_book(u, readable_contact(u, s["contact_id"])["address_book_id"])
     enrich.dismiss(sid, u["id"])
     return {"ok": True}
 
@@ -746,11 +746,11 @@ def family_graph(cid: int, allowed_ids: list[int], depth: int = 3) -> dict:
         if not frontier:
             break
         marks = ",".join(["%s"] * len(frontier))
-        rows = db.q(f"SELECT r.contact_id, r.related_id, r.type, o.book_id FROM relations r JOIN contacts o ON o.id = r.related_id "
+        rows = db.q(f"SELECT r.contact_id, r.related_id, r.type, o.address_book_id FROM con_contact_relations r JOIN con_contacts o ON o.id = r.related_id "
                     f"WHERE r.contact_id IN ({marks}) AND o.deleted = 0", frontier)
         nxt = []
         for r in rows:
-            if r["book_id"] not in allowed:
+            if r["address_book_id"] not in allowed:
                 continue
             edges.append({"from": r["contact_id"], "to": r["related_id"], "type": r["type"]})
             if r["related_id"] not in seen:
@@ -759,7 +759,7 @@ def family_graph(cid: int, allowed_ids: list[int], depth: int = 3) -> dict:
         frontier = nxt
     marks = ",".join(["%s"] * len(seen))
     nodes = [{"id": r["id"], "fn": r["fn"], "gender": r["gender"], "hasPhoto": bool(r["hp"]), "birthday": model._bday(r)}
-             for r in db.q(f"SELECT id, fn, gender, photo IS NOT NULL AS hp, bday_year, bday_month, bday_day FROM contacts WHERE id IN ({marks})", list(seen))]
+             for r in db.q(f"SELECT id, fn, gender, photo IS NOT NULL AS hp, bday_year, bday_month, bday_day FROM con_contacts WHERE id IN ({marks})", list(seen))]
     uniq = {(e["from"], e["to"], e["type"]): e for e in edges}
     return {"root": cid, "nodes": nodes, "edges": list(uniq.values())}
 
@@ -804,7 +804,7 @@ def import_cards(u: dict, b: dict, cards: list[dict], mode: str = "update") -> d
         if not existing and not c.get("uid"):
             em = next((e["value"] for e in c.get("emails") or []), None)
             if em:
-                existing = db.one("SELECT c.* FROM contacts c JOIN contact_emails e ON e.contact_id = c.id WHERE c.book_id = %s "
+                existing = db.one("SELECT c.* FROM con_contacts c JOIN con_contact_emails e ON e.contact_id = c.id WHERE c.address_book_id = %s "
                                   "AND c.deleted = 0 AND e.value = %s AND c.fn = %s LIMIT 1", (b["id"], em, model.display_name(c)))
         if existing and mode == "skip":
             skipped += 1
@@ -825,7 +825,7 @@ def export(request: Request, book: str | None = None, format: str = "vcf", ids: 
     bids = book_ids(u, book)
     if ids:
         want = [int(x) for x in ids.split(",") if x.strip().isdigit()]
-        sel = [x for x in want if model.get_row(x) and model.get_row(x)["book_id"] in bids]
+        sel = [x for x in want if model.get_row(x) and model.get_row(x)["address_book_id"] in bids]
     else:
         sel = [x["id"] for x in model.search(bids, limit=100000)[0]]
     stamp = dt.date.today().isoformat()
@@ -980,8 +980,8 @@ async def iopix_people(request: Request, q: str = "", refresh: bool = False):
     except Exception as e:  # noqa: BLE001
         raise HTTPException(502, f"ioPix did not answer: {type(e).__name__}: {e}")
     linked = {r["iopix_person_id"]: {"id": r["id"], "fn": r["fn"]} for r in db.q(
-        f"SELECT id, fn, iopix_person_id FROM contacts WHERE iopix_person_id IS NOT NULL AND deleted = 0 "
-        f"AND book_id IN ({','.join(['%s'] * max(1, len(book_ids(u))))})", book_ids(u) or [0])}
+        f"SELECT id, fn, iopix_person_id FROM con_contacts WHERE iopix_person_id IS NOT NULL AND deleted = 0 "
+        f"AND address_book_id IN ({','.join(['%s'] * max(1, len(book_ids(u))))})", book_ids(u) or [0])}
     ql = fold(q).strip()
     return {"items": [{**p, "contact": linked.get(p["id"])} for p in ppl if not ql or ql in fold(p["name"])]}
 
@@ -1006,7 +1006,7 @@ async def iopix_autolink(request: Request, book: str | None = None, dry: bool = 
     by_name: dict = {}
     for p in ppl:
         by_name.setdefault(p["name"].strip().lower(), []).append(p)
-    taken = {r["iopix_person_id"] for r in db.q("SELECT iopix_person_id FROM contacts WHERE iopix_person_id IS NOT NULL AND deleted = 0")}
+    taken = {r["iopix_person_id"] for r in db.q("SELECT iopix_person_id FROM con_contacts WHERE iopix_person_id IS NOT NULL AND deleted = 0")}
     out = []
     for c in model.search(book_ids(u, book), limit=100000)[0]:
         if c["iopixPersonId"]:
@@ -1014,7 +1014,7 @@ async def iopix_autolink(request: Request, book: str | None = None, dry: bool = 
         m = by_name.get(c["fn"].strip().lower()) or []
         if len(m) == 1 and m[0]["id"] not in taken:
             r = model.get_row(c["id"])
-            if model.can_write_book(u, model.book(r["book_id"])):
+            if model.can_write_book(u, model.book(r["address_book_id"])):
                 out.append({"contactId": c["id"], "fn": c["fn"], "personId": m[0]["id"], "personName": m[0]["name"]})
     if not dry:
         for x in out:

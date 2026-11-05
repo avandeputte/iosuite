@@ -75,19 +75,19 @@ def _load(book_ids: list[int]) -> dict:
     if not book_ids:
         return {}
     marks = ",".join(["%s"] * len(book_ids))
-    rows = db.q(f"SELECT id, book_id, fn, given, family, suffix, nickname, maiden, org, gender, bday_year, bday_month, bday_day, "
-                f"photo IS NOT NULL AS has_photo, iopix_person_id FROM contacts WHERE deleted = 0 AND book_id IN ({marks})", book_ids)
+    rows = db.q(f"SELECT id, address_book_id, fn, given, family, suffix, nickname, maiden, org, gender, bday_year, bday_month, bday_day, "
+                f"photo IS NOT NULL AS has_photo, iopix_person_id FROM con_contacts WHERE deleted = 0 AND address_book_id IN ({marks})", book_ids)
     cs = {r["id"]: {**r, "emails": set(), "phones": set(), "rel": set()} for r in rows}
-    for r in db.q(f"SELECT e.contact_id, lower(e.value) AS v FROM contact_emails e JOIN contacts c ON c.id = e.contact_id "
-                  f"WHERE c.deleted = 0 AND c.book_id IN ({marks})", book_ids):
+    for r in db.q(f"SELECT e.contact_id, lower(e.value) AS v FROM con_contact_emails e JOIN con_contacts c ON c.id = e.contact_id "
+                  f"WHERE c.deleted = 0 AND c.address_book_id IN ({marks})", book_ids):
         cs[r["contact_id"]]["emails"].add(r["v"].strip())
-    for r in db.q(f"SELECT p.contact_id, p.value FROM contact_phones p JOIN contacts c ON c.id = p.contact_id "
-                  f"WHERE c.deleted = 0 AND c.book_id IN ({marks})", book_ids):
+    for r in db.q(f"SELECT p.contact_id, p.value FROM con_contact_phones p JOIN con_contacts c ON c.id = p.contact_id "
+                  f"WHERE c.deleted = 0 AND c.address_book_id IN ({marks})", book_ids):
         d = digits9(r["value"])
         if d:
             cs[r["contact_id"]]["phones"].add(d)
-    for r in db.q(f"SELECT r.contact_id, r.related_id FROM relations r JOIN contacts c ON c.id = r.contact_id "
-                  f"WHERE r.related_id IS NOT NULL AND c.book_id IN ({marks})", book_ids):
+    for r in db.q(f"SELECT r.contact_id, r.related_id FROM con_contact_relations r JOIN con_contacts c ON c.id = r.contact_id "
+                  f"WHERE r.related_id IS NOT NULL AND c.address_book_id IN ({marks})", book_ids):
         if r["contact_id"] in cs:
             cs[r["contact_id"]]["rel"].add(r["related_id"])
     # an email or number on three or more contacts is a household's (a home phone, a family address): it says nothing
@@ -218,7 +218,7 @@ def _blocks(cs: dict) -> dict:
 
 
 def dismissed_pairs() -> set:
-    return {(r["a"], r["b"]) for r in db.q("SELECT a, b FROM not_duplicates")}
+    return {(r["contact_id"], r["other_contact_id"]) for r in db.q("SELECT contact_id, other_contact_id FROM con_contact_non_duplicates")}
 
 
 def find(book_ids: list[int], min_score: int = 35) -> list[dict]:
@@ -262,7 +262,7 @@ def find(book_ids: list[int], min_score: int = 35) -> list[dict]:
 
 
 def compare(a_id: int, b_id: int) -> dict:
-    cs = _load([model.get_row(a_id)["book_id"], model.get_row(b_id)["book_id"]])
+    cs = _load([model.get_row(a_id)["address_book_id"], model.get_row(b_id)["address_book_id"]])
     sc, why = score_pair(cs[a_id], cs[b_id])
     return {"score": sc, "level": level(sc), "reasons": why}
 
@@ -273,19 +273,19 @@ def not_duplicates(ids: list[int], user_id: int | None) -> int:
     ids = sorted(set(ids))
     for i, a in enumerate(ids):
         for b in ids[i + 1:]:
-            n += db.ex("INSERT IGNORE INTO not_duplicates (a, b, user_id) VALUES (%s, %s, %s)", (a, b, user_id))
+            n += db.ex("INSERT IGNORE INTO con_contact_non_duplicates (contact_id, other_contact_id, user_id) VALUES (%s, %s, %s)", (a, b, user_id))
     return n
 
 
 def forget_not_duplicates() -> int:
-    return db.ex("DELETE FROM not_duplicates")
+    return db.ex("DELETE FROM con_contact_non_duplicates")
 
 
 # ------------------------------------------------------------------ merging (with a way back)
 
 SINGLE = ["name", "nickname", "maiden", "gender", "birthday", "org", "department", "title", "role", "notes", "iopix",
           "phoneticGiven", "phoneticFamily"]
-TABLES = ["contact_emails", "contact_phones", "contact_addresses", "contact_urls", "contact_social", "contact_dates", "contact_tags"]
+TABLES = ["con_contact_emails", "con_contact_phones", "con_contact_addresses", "con_contact_urls", "con_contact_social_profiles", "con_contact_dates", "con_contact_tags"]
 
 
 def preview(ids: list[int], keep_id: int) -> dict:
@@ -340,8 +340,8 @@ def _dec(v):
 def snapshot(ids: list[int]) -> dict:
     """The database rows of these contacts and of every relation to or from them."""
     marks = ",".join(["%s"] * len(ids))
-    snap = {"contacts": _rows("contacts", "id", ids), **{t: _rows(t, "contact_id", ids) for t in TABLES},
-            "relations": db.q(f"SELECT * FROM relations WHERE contact_id IN ({marks}) OR related_id IN ({marks})", (*ids, *ids))}
+    snap = {"contacts": _rows("con_contacts", "id", ids), **{t: _rows(t, "contact_id", ids) for t in TABLES},
+            "relations": db.q(f"SELECT * FROM con_contact_relations WHERE contact_id IN ({marks}) OR related_id IN ({marks})", (*ids, *ids))}
     return {k: [{c: _enc(v) for c, v in r.items()} for r in rows] for k, rows in snap.items()}
 
 
@@ -353,57 +353,68 @@ def merge(u: dict, keep_id: int, other_ids: list[int], result: dict | None = Non
     if result is not None:
         result = {k: v for k, v in result.items() if k not in ("photo", "photoData", "id", "uid", "href", "etag", "bookId")}
     model.merge(keep_id, other_ids, result, photo_from)
-    return db.ex("INSERT INTO merges (user_id, keep_id, other_ids, names, snapshot, keep_etag) VALUES (%s, %s, %s, %s, %s, %s)",
+    return db.ex("INSERT INTO con_contact_merges (user_id, kept_contact_id, other_ids, names, snapshot, keep_etag) VALUES (%s, %s, %s, %s, %s, %s)",
                  (u["id"] if u else None, keep_id, ",".join(map(str, other_ids)), names[:1024], snap, model.get_row(keep_id)["etag"]))
 
 
 def history(book_ids: list[int], limit: int = 50) -> list[dict]:
     out = []
     from app import users
-    rows = db.q("SELECT m.id, m.keep_id, m.other_ids, m.names, m.keep_etag, m.created, m.undone, m.user_id, c.etag, c.book_id, c.deleted, c.fn "
-                "FROM merges m LEFT JOIN contacts c ON c.id = m.keep_id ORDER BY m.id DESC LIMIT %s", (limit * 3,))
+    rows = db.q("SELECT m.id, m.kept_contact_id, m.other_ids, m.names, m.keep_etag, m.created_at, m.undone_at, m.user_id, c.etag, c.address_book_id, c.deleted, c.fn "
+                "FROM con_contact_merges m LEFT JOIN con_contacts c ON c.id = m.kept_contact_id ORDER BY m.id DESC LIMIT %s", (limit * 3,))
     who = users.names_of({r["user_id"] for r in rows if r["user_id"]})  # the accounts live in the Shared ioSuite database
     for r in rows:
-        if r["book_id"] not in book_ids:
+        if r["address_book_id"] not in book_ids:
             continue
-        out.append({"id": r["id"], "keepId": r["keep_id"], "keepName": r["fn"], "otherIds": [int(x) for x in r["other_ids"].split(",") if x],
-                    "names": r["names"], "by": who.get(r["user_id"]), "at": r["created"].isoformat() if r["created"] else None,
-                    "undone": r["undone"].isoformat() if r["undone"] else None,
-                    "changedSince": bool(r["etag"] != r["keep_etag"]), "canUndo": not r["undone"] and not r["deleted"]})
+        out.append({"id": r["id"], "keepId": r["kept_contact_id"], "keepName": r["fn"], "otherIds": [int(x) for x in r["other_ids"].split(",") if x],
+                    "names": r["names"], "by": who.get(r["user_id"]), "at": r["created_at"].isoformat() if r["created_at"] else None,
+                    "undone": r["undone_at"].isoformat() if r["undone_at"] else None,
+                    "changedSince": bool(r["etag"] != r["keep_etag"]), "canUndo": not r["undone_at"] and not r["deleted"]})
         if len(out) >= limit:
             break
     return out
 
 
+# a merge made before 0.9.0 kept its rows under the old table and column names
+_OLD_KEYS = {"contact_social": "con_contact_social_profiles", **{f"contact_{t}": f"con_contact_{t}" for t in
+             ("emails", "phones", "addresses", "urls", "dates", "tags")}}
+_OLD_COLUMNS = {"pos": "position", "book_id": "address_book_id", "created": "created_at", "updated": "updated_at"}
+
+
+def _named(snap: dict) -> dict:
+    """A snapshot under today's table and column names (remove with the 0.9.0 renames in db.py)."""
+    return {_OLD_KEYS.get(k, k): [{_OLD_COLUMNS.get(c, c): v for c, v in r.items()} for r in rows] for k, rows in snap.items()}
+
+
 def undo(merge_id: int) -> dict:
     """Put the contacts of a merge back as they were (the kept one loses changes made to it since)."""
-    m = db.one("SELECT * FROM merges WHERE id = %s", (merge_id,))
-    if not m or m["undone"]:
+    m = db.one("SELECT * FROM con_contact_merges WHERE id = %s", (merge_id,))
+    if not m or m["undone_at"]:
         raise ValueError("No such merge, or it was undone already")
-    snap = {k: [{c: _dec(v) for c, v in r.items()} for r in rows] for k, rows in json.loads(m["snapshot"]).items()}
+    snap = _named({k: [{c: _dec(v) for c, v in r.items()} for r in rows] for k, rows in json.loads(m["snapshot"]).items()})
     ids = [r["id"] for r in snap["contacts"]]
     marks = ",".join(["%s"] * len(ids))
-    live = {r["id"] for r in db.q("SELECT id FROM contacts WHERE deleted = 0")}
+    live = {r["id"] for r in db.q("SELECT id FROM con_contacts WHERE deleted = 0")}
     with db.tx():
-        touched = {r["contact_id"] for r in db.q(f"SELECT contact_id FROM relations WHERE related_id IN ({marks})", ids)}
+        touched = {r["contact_id"] for r in db.q(f"SELECT contact_id FROM con_contact_relations WHERE related_id IN ({marks})", ids)}
         for r in snap["contacts"]:
-            cols = {k: v for k, v in r.items() if k not in ("id", "created", "updated")}
-            db.ex("UPDATE contacts SET " + ", ".join(f"`{k}` = %s" for k in cols) + " WHERE id = %s", (*cols.values(), r["id"]))
+            cols = {k: v for k, v in r.items() if k not in ("id", "created_at", "updated_at")}
+            db.ex("UPDATE con_contacts SET " + ", ".join(f"`{k}` = %s" for k in cols) + " WHERE id = %s", (*cols.values(), r["id"]))
         for t in TABLES:
             db.ex(f"DELETE FROM {t} WHERE contact_id IN ({marks})", ids)
             for r in snap[t]:
                 cols = {k: v for k, v in r.items() if k != "id"}
                 db.ex(f"INSERT INTO {t} (" + ", ".join(f"`{k}`" for k in cols) + ") VALUES (" + ", ".join(["%s"] * len(cols)) + ")", tuple(cols.values()))
-        db.ex(f"DELETE FROM relations WHERE contact_id IN ({marks}) OR related_id IN ({marks})", (*ids, *ids))
+        db.ex(f"DELETE FROM con_contact_relations WHERE contact_id IN ({marks}) OR related_id IN ({marks})", (*ids, *ids))
         for r in snap["relations"]:
             if r["contact_id"] not in live and r["contact_id"] not in ids or (r["related_id"] and r["related_id"] not in live and r["related_id"] not in ids):
                 continue
             cols = {k: v for k, v in r.items() if k != "id"}
-            db.ex("INSERT INTO relations (" + ", ".join(f"`{k}`" for k in cols) + ") VALUES (" + ", ".join(["%s"] * len(cols)) + ")", tuple(cols.values()))
+            db.ex("INSERT INTO con_contact_relations (" + ", ".join(f"`{k}`" for k in cols) + ") VALUES (" + ", ".join(["%s"] * len(cols)) + ")", tuple(cols.values()))
             touched.add(r["contact_id"])
         for cid in set(ids) | touched:
             model._touch(cid)  # new etag and sync token: phones pick the contacts up again
-        db.ex("UPDATE merges SET undone = NOW() WHERE id = %s", (merge_id,))
+        db.ex("UPDATE con_contact_merges SET undone_at = NOW() WHERE id = %s", (merge_id,))
     return {"restored": [model.get_row(i)["fn"] for i in ids]}
 
 
@@ -451,14 +462,14 @@ def run_checks(book_ids: list[int], only: str | None = None) -> list[dict]:
         return []
     marks = ",".join(["%s"] * len(book_ids))
     found: dict = {k: [] for k in CHECKS}
-    cs = {r["id"]: r for r in db.q(f"SELECT id, book_id, fn, given, family, org, bday_year, bday_month, bday_day, photo IS NOT NULL AS hp, "
-                                   f"iopix_person_id FROM contacts WHERE deleted = 0 AND book_id IN ({marks})", book_ids)}
+    cs = {r["id"]: r for r in db.q(f"SELECT id, address_book_id, fn, given, family, org, bday_year, bday_month, bday_day, photo IS NOT NULL AS hp, "
+                                   f"iopix_person_id FROM con_contacts WHERE deleted = 0 AND address_book_id IN ({marks})", book_ids)}
 
     def add(check, cid, detail=""):
-        found[check].append({"contactId": cid, "fn": cs[cid]["fn"], "bookId": cs[cid]["book_id"], "detail": detail})
+        found[check].append({"contactId": cid, "fn": cs[cid]["fn"], "bookId": cs[cid]["address_book_id"], "detail": detail})
     child = {}
-    for t, key in (("contact_emails", "emails"), ("contact_phones", "phones"), ("contact_addresses", "addresses")):
-        for r in db.q(f"SELECT x.* FROM {t} x JOIN contacts c ON c.id = x.contact_id WHERE c.deleted = 0 AND c.book_id IN ({marks})", book_ids):
+    for t, key in (("con_contact_emails", "emails"), ("con_contact_phones", "phones"), ("con_contact_addresses", "addresses")):
+        for r in db.q(f"SELECT x.* FROM {t} x JOIN con_contacts c ON c.id = x.contact_id WHERE c.deleted = 0 AND c.address_book_id IN ({marks})", book_ids):
             child.setdefault(r["contact_id"], {}).setdefault(key, []).append(r)
     this_year = dt.date.today().year
     for cid, c in cs.items():
@@ -495,8 +506,8 @@ def run_checks(book_ids: list[int], only: str | None = None) -> list[dict]:
     names: dict = {}
     for cid, c in cs.items():
         names.setdefault(c["fn"].strip().lower(), []).append(cid)
-    for r in db.q(f"SELECT r.contact_id, r.related_name, r.type FROM relations r JOIN contacts c ON c.id = r.contact_id "
-                  f"WHERE r.related_id IS NULL AND r.related_name IS NOT NULL AND c.deleted = 0 AND c.book_id IN ({marks})", book_ids):
+    for r in db.q(f"SELECT r.contact_id, r.related_name, r.type FROM con_contact_relations r JOIN con_contacts c ON c.id = r.contact_id "
+                  f"WHERE r.related_id IS NULL AND r.related_name IS NOT NULL AND c.deleted = 0 AND c.address_book_id IN ({marks})", book_ids):
         m = names.get(r["related_name"].strip().lower()) or []
         if len(m) == 1 and m[0] != r["contact_id"]:
             add("unlinked_relation", r["contact_id"], f"{r['type']}: {r['related_name']}")
@@ -521,7 +532,7 @@ def fix(u: dict, check: str, contact_ids: list[int] | None, book_ids: list[int],
     done, skipped = [], []
     for cid in ids:
         r = model.get_row(cid)
-        if not model.can_write_book(u, model.book(r["book_id"])):
+        if not model.can_write_book(u, model.book(r["address_book_id"])):
             skipped.append(r["fn"])
             continue
         if check == "iopix_photo":
@@ -537,7 +548,7 @@ def fix(u: dict, check: str, contact_ids: list[int] | None, book_ids: list[int],
                 skipped.append(r["fn"])
             continue
         if check == "unlinked_relation":
-            model.save(r["book_id"], model.full(cid), cid, None, True, book_ids)  # saving links names that match one contact
+            model.save(r["address_book_id"], model.full(cid), cid, None, True, book_ids)  # saving links names that match one contact
             done.append(r["fn"])
             continue
         c = model.full(cid)
@@ -569,7 +580,7 @@ def fix(u: dict, check: str, contact_ids: list[int] | None, book_ids: list[int],
                     p["value"] = country_code + " " + re.sub(r"^\s*0\s*", "", v)
                 elif country_code == "+1" and len(d) == 10:
                     p["value"] = "+1 " + v
-        model.save(r["book_id"], c, cid, None, True, book_ids)
+        model.save(r["address_book_id"], c, cid, None, True, book_ids)
         done.append(r["fn"])
     return {"check": check, "fixed": done, "skipped": skipped}
 
