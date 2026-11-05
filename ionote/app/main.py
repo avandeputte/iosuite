@@ -62,8 +62,6 @@ async def lifespan(_app):
              "accounts exist" if users.any_users() else "no accounts yet: open to everyone until one is made")
     sd = suitedb.public()
     log.info("Shared ioSuite database (accounts, suite settings): %s@%s:%s/%s", sd["user"], sd["host"], sd["port"], sd["database"])
-    if suitedb.note:
-        log.warning(suitedb.note)
     async with mcp.server.session_manager.run():
         yield
 
@@ -123,7 +121,7 @@ def _gate(request: Request):
 
 
 # who is asking (the shared session cookie, the proxy's identity), whether sign-in is required at all, and the
-# cross-site check on writes: iothing-auth's middleware. What each route needs beyond that is declared on the
+# cross-site check on writes: iosuite-shared's middleware. What each route needs beyond that is declared on the
 # route (app/access.py).
 app.middleware("http")(auth_shared.middleware(is_open=_open_to_visitors, open_prefixes=("/mcp",), before=_gate))
 
@@ -232,6 +230,6 @@ from mcp.server.transport_security import TransportSecuritySettings  # noqa: E40
 _mcp_asgi = mcp.server.streamable_http_app(streamable_http_path="/mcp", stateless_http=True,
                                            transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False))
 app.router.routes[:0] = list(_mcp_asgi.routes)
-# /static/...: the same files at the path the suite's apps share (the icon in iothing-auth's list: /static/icons/mark.svg)
+# /static/...: the same files at the path the suite's apps share (the icon in iosuite-shared's list: /static/icons/mark.svg)
 app.mount("/static", StaticFiles(directory=config.STATIC_DIR), name="static-suite")
 app.mount("/", StaticFiles(directory=config.STATIC_DIR, html=True), name="static")

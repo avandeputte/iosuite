@@ -1,5 +1,5 @@
 """Settings, maintenance and status: the switches admins set, sign-in at a proxy, the database, the change log, export
-and import. The version, updates, restart, the MCP admin token and the server log are iothing_auth's server_router
+and import. The version, updates, restart, the MCP admin token and the server log are iosuite_shared's server_router
 (/api/server, /api/log), mounted in app/main.py."""
 import logging
 import time

@@ -39,8 +39,8 @@ except ImportError:  # pragma: no cover
 
 # ---- schema: one definition per table, the SQLite and the MySQL spelling
 TABLES = {
-    # accounts live in the Shared ioSuite database (iothing-auth, app/auth.py); the user_accounts table of
-    # ionotes 1.0 is folded into it by `iothing-auth migrate` and renamed user_accounts_migrated
+    # accounts live in the Shared ioSuite database (iosuite-shared, app/auth.py); the user_accounts table of
+    # ionotes 1.0 is folded into it by `iosuite-shared migrate` and renamed user_accounts_migrated
     "app_settings": (
         "CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT)",
         "CREATE TABLE IF NOT EXISTS app_settings (`key` VARCHAR(191) PRIMARY KEY, value MEDIUMTEXT)"),
