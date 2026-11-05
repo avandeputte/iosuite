@@ -34,7 +34,7 @@ FAM = ["parent", "child", "sibling", "half_sibling", "spouse", "partner", "ex_sp
        "child_in_law", "sibling_in_law", "step_parent", "step_child", "step_sibling", "godparent", "godchild", "relative"]
 
 
-def run(root: int, extra=()) -> dict:
+def run(root: int, extra=(), hidden=()) -> dict:
     edges = [{"from": a, "to": b, "type": t} for a, b, t in STORED] + [{"from": b, "to": a, "type": INV[t]} for a, b, t in STORED]
     edges += list(extra)
     g = {"root": root, "nodes": [{"id": i, "fn": n, "gender": s, "birthday": {"year": y}} for i, (n, s, y) in PEOPLE.items()],
@@ -43,12 +43,12 @@ def run(root: int, extra=()) -> dict:
 const WORDS = { godparent: ['Godfather', 'Godmother', 'Godparent'], godchild: ['Godson', 'Goddaughter', 'Godchild'],
   ex_spouse: ['Former husband', 'Former wife', 'Former spouse'], spouse: ['Husband', 'Wife', 'Spouse'], partner: ['Partner', 'Partner', 'Partner'] };
 const typeWord = (t, g) => { const w = WORDS[t] || [t, t, t]; return g === 'M' ? w[0] : g === 'F' ? w[1] : w[2]; };
-const [g, fam] = JSON.parse(require('fs').readFileSync(0, 'utf8'));
-const L = familyLayout(g, new Set(fam), typeWord);
+const [g, fam, hidden] = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+const L = familyLayout(g, new Set(fam), typeWord, new Set(hidden));
 const o = (m) => Object.fromEntries([...m]);
-console.log(JSON.stringify({ label: o(L.label), gen: o(L.gen), x: o(L.x), y: o(L.y), couples: L.couples, families: L.families }));
+console.log(JSON.stringify({ far: [...L.far], from: o(L.from), label: o(L.label), gen: o(L.gen), x: o(L.x), y: o(L.y), couples: L.couples, families: L.families }));
 """
-    out = subprocess.run([NODE, "-e", script], input=json.dumps([g, FAM]), capture_output=True, text=True, check=True)
+    out = subprocess.run([NODE, "-e", script], input=json.dumps([g, FAM, list(hidden)]), capture_output=True, text=True, check=True)
     r = json.loads(out.stdout)
     r["name"] = {PEOPLE[int(k)][0]: v for k, v in r["label"].items()}
     r["g"] = {PEOPLE[int(k)][0]: v for k, v in r["gen"].items()}
@@ -110,3 +110,13 @@ def test_implied_edges_label_but_do_not_draw():
     r = run(1, [{"from": 1, "to": 14, "type": "niece_nephew", "implied": True}])
     assert r["name"]["Laurent"] == "Nephew"
     assert all(14 not in f["children"] or f["parents"] == [13] for f in r["families"])
+
+
+def test_folding_hides_a_branch_but_keeps_labels():
+    r = run(1)
+    assert len(r["x"]) == len(PEOPLE)
+    # Carissa married into the family: her father and brother were reached through her, so her branch starts folded
+    assert 10 in r["far"] and r["from"]["12"] == 10 and r["from"]["11"] == 10
+    r = run(1, hidden=[11, 12])
+    assert set(map(int, r["x"])) == set(PEOPLE) - {11, 12}
+    assert r["name"]["Wei"] == "Nephew's brother-in-law"  # still labeled

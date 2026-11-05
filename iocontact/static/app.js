@@ -747,9 +747,11 @@ function bloodStep(type, u, d) {
   }
 }
 
-// g: {root, nodes, edges} from /api/contacts/{id}/family; famTypes: the family relation types; typeWord(type, gender).
-// Returns {gen, label, units, x, links, couples, sibGroups, order} for drawing.
-function familyLayout(g, famTypes, typeWord) {
+// g: {root, nodes, edges} from /api/contacts/{id}/family; famTypes: the family relation types; typeWord(type, gender);
+// hidden: people left out of the drawing (a collapsed branch). Labels always cover everyone.
+// Returns {gen, label, from, x, y, width, height, couples, sibGroups, families, order} for drawing; `from` says through whom
+// each person was reached (a tree rooted at the viewed contact, which is what collapsing follows).
+function familyLayout(g, famTypes, typeWord, hidden = new Set()) {
   const byId = new Map(g.nodes.map((n) => [n.id, n]));
   const adj = new Map(g.nodes.map((n) => [n.id, []]));
   const seenEdge = new Set();
@@ -837,7 +839,14 @@ function familyLayout(g, famTypes, typeWord) {
     }
     label.set(id, id === g.root ? 'This contact' : words.map((w, i) => (i ? w.charAt(0).toLowerCase() + w.slice(1) : w)).join("'s "));
   }
-  const gen = new Map([...lab].map(([id, v]) => [id, v.gen]));
+  const from = new Map([...lab].map(([id, v]) => [id, v.from]));
+  // whose branch starts folded: people who married into a relative's family (a nephew's wife: her own family), and
+  // cousins and anyone further out (their spouses and children)
+  const far = new Set([...lab].filter(([, v]) => {
+    const t = v.segs[v.segs.length - 1];
+    return t && ((v.segs.length >= 2 && t.kind !== 'blood') || (t.kind === 'blood' && t.u >= 2 && t.d >= 2));
+  }).map(([id]) => id));
+  const gen = new Map([...lab].filter(([id]) => id === g.root || !hidden.has(id)).map(([id, v]) => [id, v.gen]));
 
   // --- structure to draw: parent-child links (stored, plus siblings sharing a parent), couples, sibling groups
   const parents = new Map([...gen.keys()].map((id) => [id, new Set()]));
@@ -1027,65 +1036,147 @@ function familyLayout(g, famTypes, typeWord) {
     used.push({ lane, lo, hi }); f.lane = lane;
   }
   for (const f of fams) f.lanes = lanes.get(Math.max(...f.parents.map((p) => gen.get(p)))).reduce((m, o) => Math.max(m, o.lane + 1), 0);
-  return { gen, label, x, y, width, height, gens, couples, sibGroups, families: fams, order: order.filter((id) => gen.has(id)) };
+  return { gen, label, from, far, x, y, width, height, gens, couples, sibGroups, families: fams, order: order.filter((id) => gen.has(id)) };
 }
 // </kin>
+
+const treeFolds = new Map();  // root id -> the people whose branch is folded (kept while the app is open)
 
 async function showTree(page, r) {
   const g = await api(`/api/contacts/${r.id}/family?depth=4`);
   const types = S.rel.groups[0].types;
+  const famTypes = new Set(types.map((t) => t.type));
   const typeWord = (t, gender) => { const x = types.find((y) => y.type === t); return x ? (gender === 'M' ? x.male : gender === 'F' ? x.female : x.label) : t; };
-  const L = familyLayout(g, new Set(types.map((t) => t.type)), typeWord);
   const byId = new Map(g.nodes.map((n) => [n.id, n]));
   const root = byId.get(g.root);
+  page.classList.add('treepage');
   const head = h('div', { class: 'pagehead' }, h('a', { class: 'iconbtn', href: `#/c/${g.root}` }, icon('back')), h('h1', null, `${root.fn}'s family`));
+  let L = familyLayout(g, famTypes, typeWord);
   if (L.gen.size < 2) {
     page.append(head, h('div', { class: 'empty' }, h('p', null, 'No family relations to other contacts yet. Edit the contact and add parents, siblings, children…')));
     return;
   }
+  // the branches: who was reached through whom
+  const kids = new Map();
+  for (const [id, f] of L.from) if (f != null) { if (!kids.has(f)) kids.set(f, []); kids.get(f).push(id); }
+  const below = (id, out = []) => { for (const k of kids.get(id) || []) { out.push(k); below(k, out); } return out; };
+  if (!treeFolds.has(g.root)) treeFolds.set(g.root, new Set([...L.far].filter((id) => kids.has(id))));
+  const folds = treeFolds.get(g.root);
+  const hiddenNow = () => { const hd = new Set(); for (const f of folds) if (!hd.has(f)) below(f).forEach((k) => hd.add(k)); return hd; };
+
   const { W, H } = TREE;
   const NS = 'http://www.w3.org/2000/svg';
-  const svg = document.createElementNS(NS, 'svg');
-  svg.setAttribute('width', L.width); svg.setAttribute('height', L.height); svg.setAttribute('class', 'ftree-lines');
-  const line = (pts, cls = '') => { const p = document.createElementNS(NS, 'polyline'); p.setAttribute('points', pts.map((q) => q.join(',')).join(' ')); if (cls) p.setAttribute('class', cls); svg.append(p); };
-  const X = (id) => L.x.get(id), Y = (id) => L.y.get(id);
-  const coupleOf = new Map(); L.couples.forEach((c) => { coupleOf.set(c.a, c); coupleOf.set(c.b, c); });
-  for (const c of L.couples) {
-    const [a, b] = X(c.a) < X(c.b) ? [c.a, c.b] : [c.b, c.a];
-    line([[X(a) + W, Y(a) + H / 2], [X(b), Y(b) + H / 2]], c.ex ? 'ex' : '');
-  }
-  L.families.forEach((f) => {
-    const c = f.parents.length === 2 && coupleOf.get(f.parents[0]) === coupleOf.get(f.parents[1]) ? coupleOf.get(f.parents[0]) : null;
-    const pBottom = Math.max(...f.parents.map((p) => Y(p) + H));
-    const cTop = Math.min(...f.children.map(Y));
-    const step = Math.min(16, (cTop - pBottom - 16) / Math.max(1, f.lanes));
-    const bus = Math.max(pBottom + 8, (pBottom + cTop) / 2 + (f.lane - (f.lanes - 1) / 2) * step);
-    const xs = [];
-    if (c) { const ox = (Math.min(X(c.a), X(c.b)) + W + Math.max(X(c.a), X(c.b))) / 2; xs.push(ox); line([[ox, Y(c.a) + H / 2], [ox, bus]]); }
-    else for (const p of f.parents) { const ox = X(p) + W / 2; xs.push(ox); line([[ox, Y(p) + H], [ox, bus]]); }
-    for (const ch of f.children) { const ox = X(ch) + W / 2; xs.push(ox); line([[ox, bus], [ox, Y(ch)]]); }
-    line([[Math.min(...xs), bus], [Math.max(...xs), bus]]);
-  });
-  for (const s of L.sibGroups) {
-    const top = Y(s[0]) - 14, xs = s.map((id) => X(id) + W / 2);
-    line([[Math.min(...xs), top], [Math.max(...xs), top]], 'sib');
-    xs.forEach((ox, i) => line([[ox, top], [ox, Y(s[i])]], 'sib'));
-  }
-  const canvas = h('div', { class: 'ftree-canvas', style: { width: `${L.width}px`, height: `${L.height}px` } }, svg,
-    L.order.map((id) => {
-      const n = byId.get(id), isRoot = id === g.root;
-      return h('a', { class: `fcard ${isRoot ? 'root' : ''}`, style: { left: `${X(id)}px`, top: `${Y(id)}px`, width: `${W}px`, height: `${H}px` },
+  const canvas = h('div', { class: 'ftree-canvas' });
+  const view = h('div', { class: 'ftree' }, canvas);
+  const zoomLbl = h('span', { class: 'zl' });
+  let s = 1, tx = 0, ty = 0;
+  const apply = () => { canvas.style.transform = `translate(${tx}px, ${ty}px) scale(${s})`; zoomLbl.textContent = `${Math.round(s * 100)}%`; };
+  const zoomAt = (k, px, py) => {
+    const ns = Math.min(2, Math.max(0.1, s * k));
+    tx = px - (px - tx) * (ns / s); ty = py - (py - ty) * (ns / s); s = ns; apply();
+  };
+  const center = () => {
+    const vw = view.clientWidth, vh = view.clientHeight;
+    tx = vw / 2 - (L.x.get(g.root) + W / 2) * s; ty = vh / 2 - (L.y.get(g.root) + H / 2) * s; apply();
+  };
+  const fit = () => {
+    const vw = view.clientWidth, vh = view.clientHeight;
+    s = Math.min(1, Math.max(0.1, Math.min(vw / L.width, vh / L.height)));
+    tx = (vw - L.width * s) / 2; ty = (vh - L.height * s) / 2; apply();
+  };
+
+  const draw = () => {
+    const svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('width', L.width); svg.setAttribute('height', L.height); svg.setAttribute('class', 'ftree-lines');
+    const line = (pts, cls = '') => { const p = document.createElementNS(NS, 'polyline'); p.setAttribute('points', pts.map((q) => q.join(',')).join(' ')); if (cls) p.setAttribute('class', cls); svg.append(p); };
+    const X = (id) => L.x.get(id), Y = (id) => L.y.get(id);
+    const coupleOf = new Map(); L.couples.forEach((c) => { coupleOf.set(c.a, c); coupleOf.set(c.b, c); });
+    for (const c of L.couples) {
+      const [a, b] = X(c.a) < X(c.b) ? [c.a, c.b] : [c.b, c.a];
+      line([[X(a) + W, Y(a) + H / 2], [X(b), Y(b) + H / 2]], c.ex ? 'ex' : '');
+    }
+    for (const f of L.families) {
+      const c = f.parents.length === 2 && coupleOf.get(f.parents[0]) === coupleOf.get(f.parents[1]) ? coupleOf.get(f.parents[0]) : null;
+      const pBottom = Math.max(...f.parents.map((p) => Y(p) + H));
+      const cTop = Math.min(...f.children.map(Y));
+      const step = Math.min(16, (cTop - pBottom - 16) / Math.max(1, f.lanes));
+      const bus = Math.max(pBottom + 8, (pBottom + cTop) / 2 + (f.lane - (f.lanes - 1) / 2) * step);
+      const xs = [];
+      if (c) { const ox = (Math.min(X(c.a), X(c.b)) + W + Math.max(X(c.a), X(c.b))) / 2; xs.push(ox); line([[ox, Y(c.a) + H / 2], [ox, bus]]); }
+      else for (const p of f.parents) { const ox = X(p) + W / 2; xs.push(ox); line([[ox, Y(p) + H], [ox, bus]]); }
+      for (const ch of f.children) { const ox = X(ch) + W / 2; xs.push(ox); line([[ox, bus], [ox, Y(ch)]]); }
+      line([[Math.min(...xs), bus], [Math.max(...xs), bus]]);
+    }
+    for (const sg of L.sibGroups) {
+      const top = Y(sg[0]) - 14, xs = sg.map((id) => X(id) + W / 2);
+      line([[Math.min(...xs), top], [Math.max(...xs), top]], 'sib');
+      xs.forEach((ox, i) => line([[ox, top], [ox, Y(sg[i])]], 'sib'));
+    }
+    canvas.style.width = `${L.width}px`; canvas.style.height = `${L.height}px`;
+    canvas.replaceChildren(svg, ...L.order.map((id) => {
+      const n = byId.get(id), isRoot = id === g.root, folded = folds.has(id), n2 = kids.has(id) ? below(id).length : 0;
+      return h('a', { class: `fcard ${isRoot ? 'root' : ''}`, draggable: 'false', style: { left: `${X(id)}px`, top: `${Y(id)}px`, width: `${W}px`, height: `${H}px` },
         href: isRoot ? `#/c/${id}` : `#/tree/${id}`, title: isRoot ? 'Open the contact' : `${n.fn}: ${L.label.get(id)}. Show the tree from their side` },
       avatar({ id, fn: n.fn, hasPhoto: n.hasPhoto, iopixPersonId: n.iopixPersonId }),
       h('div', { class: 'fbody' }, h('b', null, n.fn), h('div', { class: 'muted small rel' }, L.label.get(id)),
-        n.birthday && n.birthday.year ? h('div', { class: 'muted small' }, `born ${n.birthday.year}`) : null));
+        n.birthday && n.birthday.year ? h('div', { class: 'muted small' }, `born ${n.birthday.year}`) : null),
+      n2 && !isRoot ? h('button', { class: `fold ${folded ? 'on' : ''}`, title: folded ? `Show the ${n2} relatives reached through ${n.fn}` : `Hide the ${n2} relatives reached through ${n.fn}`,
+        onclick: (e) => { e.preventDefault(); e.stopPropagation(); toggle(id); } }, folded ? `+${n2}` : '−') : null);
     }));
-  const wrap = h('div', { class: 'ftree' }, canvas);
-  page.append(head, h('p', { class: 'muted small ftree-hint' }, `Everyone is labeled by how they are related to ${root.fn}. Click or tap someone to see the tree from their side.`), wrap);
-  requestAnimationFrame(() => {
-    wrap.scrollLeft = X(g.root) + W / 2 - wrap.clientWidth / 2;
-    wrap.scrollTop = Y(g.root) + H / 2 - wrap.clientHeight / 2;
+  };
+  const relayout = (keep) => {
+    // keep the card that was clicked (or the contact) where it is on screen
+    const ox = L.x.get(keep), oy = L.y.get(keep);
+    L = familyLayout(g, famTypes, typeWord, hiddenNow());
+    draw();
+    tx += (ox - L.x.get(keep)) * s; ty += (oy - L.y.get(keep)) * s; apply();
+  };
+  const toggle = (id) => { if (folds.has(id)) folds.delete(id); else folds.add(id); relayout(id); };
+
+  // pan with a drag or two-finger scroll, zoom with a pinch, ctrl/⌘ + wheel or the buttons
+  const pts = new Map();
+  let dragged = false, pinch = null;
+  view.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('button')) return;
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY });
+    if (pts.size === 1) dragged = false;
+    if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = Math.hypot(a.x - b.x, a.y - b.y); }
   });
+  view.addEventListener('pointermove', (e) => {
+    const p = pts.get(e.pointerId);
+    if (!p) return;
+    if (pts.size === 2 && pinch) {
+      p.x = e.clientX; p.y = e.clientY;
+      const [a, b] = [...pts.values()], d = Math.hypot(a.x - b.x, a.y - b.y), rc = view.getBoundingClientRect();
+      zoomAt(d / pinch, (a.x + b.x) / 2 - rc.left, (a.y + b.y) / 2 - rc.top); pinch = d; dragged = true;
+      return;
+    }
+    if (!dragged && Math.hypot(e.clientX - p.x0, e.clientY - p.y0) < 5) return;
+    if (!dragged) { dragged = true; view.setPointerCapture(e.pointerId); view.classList.add('grabbing'); }
+    tx += e.clientX - p.x; ty += e.clientY - p.y; p.x = e.clientX; p.y = e.clientY; apply();
+  });
+  const up = (e) => { pts.delete(e.pointerId); if (pts.size < 2) pinch = null; if (!pts.size) view.classList.remove('grabbing'); };
+  view.addEventListener('pointerup', up); view.addEventListener('pointercancel', up);
+  view.addEventListener('click', (e) => { if (dragged) { e.preventDefault(); e.stopPropagation(); dragged = false; } }, true);
+  view.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const rc = view.getBoundingClientRect();
+    if (e.ctrlKey || e.metaKey) zoomAt(Math.exp(-Math.max(-60, Math.min(60, e.deltaY)) * 0.01), e.clientX - rc.left, e.clientY - rc.top);
+    else if (e.deltaMode === 1) zoomAt(Math.exp(-Math.max(-6, Math.min(6, e.deltaY)) * 0.1), e.clientX - rc.left, e.clientY - rc.top);  // a mouse wheel that scrolls by lines
+    else { tx -= e.deltaX; ty -= e.deltaY; apply(); }
+  }, { passive: false });
+  const mid = (k) => zoomAt(k, view.clientWidth / 2, view.clientHeight / 2);
+  const tb = (label, title, fn) => h('button', { class: 'pillbtn', title, onclick: fn }, label);
+  const bar = h('div', { class: 'ftree-bar' },
+    tb('−', 'Zoom out', () => mid(1 / 1.25)), zoomLbl, tb('+', 'Zoom in', () => mid(1.25)),
+    tb('Fit', 'Show the whole tree', fit), tb(`Center`, `Back to ${root.fn}`, center),
+    tb('Expand all', 'Show everyone', () => { folds.clear(); relayout(g.root); }),
+    tb('Collapse', 'Fold away cousins\' families and the families of people who married in', () => { folds.clear(); L.far.forEach((id) => kids.has(id) && folds.add(id)); relayout(g.root); }));
+  page.append(head, h('div', { class: 'ftree-top' }, h('p', { class: 'muted small' },
+    `Labels say how everyone is related to ${root.fn}. Drag to move, pinch or ctrl/⌘ + scroll to zoom, click someone to see the tree from their side; + and − on a card show or hide the relatives reached through them.`), bar), view);
+  L = familyLayout(g, famTypes, typeWord, hiddenNow());
+  draw();
+  requestAnimationFrame(() => { s = Math.min(1, Math.max(0.85, Math.min(view.clientWidth / L.width, view.clientHeight / L.height))); center(); });
 }
 
 // ------------------------------------------------------------------ maintenance: duplicates, data quality, suggestions, merges
