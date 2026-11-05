@@ -224,11 +224,20 @@ pre.log { background: var(--bg2); border: 1px solid var(--line); border-radius: 
 .upc .days { font-weight: 600; color: var(--accent); }
 .dup { border: 1px solid var(--line); border-radius: var(--r-l); padding: 12px 16px; margin-bottom: 12px; }
 .dup label { display: flex; align-items: center; gap: 12px; padding: 6px 0; cursor: pointer; }
-.tree .gen { margin: 12px 0 4px; font-size: var(--fs-s); color: var(--fg2); font-weight: 600; }
-.tree .genrow { display: flex; gap: 12px; flex-wrap: wrap; padding: 8px 0 16px; border-bottom: 1px dashed var(--line); }
-.tree .tcard { display: flex; align-items: center; gap: 10px; padding: 8px 14px 8px 8px; border-radius: var(--r-l); border: 1px solid var(--line); min-width: 180px; }
-.tree .tcard.root { border-color: var(--accent); background: var(--accent-bg); }
-.tree .tcard:hover { border-color: var(--accent); }
+.ftree-hint { margin: -8px 0 12px; }
+.ftree { overflow: auto; max-height: calc(100vh - 170px); max-height: calc(100dvh - 170px); border: 1px solid var(--line); border-radius: var(--r-l); background: var(--bg2); }
+.ftree-canvas { position: relative; }
+.ftree-lines { position: absolute; inset: 0; pointer-events: none; }
+.ftree-lines polyline { fill: none; stroke: var(--fg2); stroke-width: 1.5; opacity: .7; }
+.ftree-lines polyline.ex { stroke-dasharray: 5 4; }
+.ftree-lines polyline.sib { stroke-dasharray: 2 3; }
+.fcard { position: absolute; box-sizing: border-box; display: flex; align-items: center; gap: 10px; padding: 8px 10px 8px 8px; border-radius: var(--r-l);
+  border: 1px solid var(--line); background: var(--bg); color: inherit; text-decoration: none; overflow: hidden; }
+.fcard .fbody { min-width: 0; line-height: 1.25; }
+.fcard .fbody > * { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fcard .rel { color: var(--fg); opacity: .8; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.2; }
+.fcard.root { border: 2px solid var(--accent); background: var(--accent-bg); }
+.fcard:hover { border-color: var(--accent); }
 .menu { position: absolute; right: 0; top: 44px; background: var(--bg); border: 1px solid var(--line); border-radius: var(--r-m); box-shadow: var(--shadow); min-width: 220px; padding: 6px; z-index: 50; }
 .menu .mi { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--r-s); width: 100%; text-align: left; }
 .menu .mi:hover { background: var(--bg2); }
