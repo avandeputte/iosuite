@@ -48,7 +48,8 @@ what the app will show on the start page later (today's events, the newest photo
   collection, `github.png`, or an SVG of your own uploaded for the link and kept in the database), the name and the
   site. The groups pack into columns (as many 250 px columns as fit): each goes, in order, under the shortest column
   so far, so a short group fills the room under another instead of starting a new row. Editors and admins add,
-  change, reorder and move them in Settings › Bookmarks, or paste a homepage `bookmarks.yaml` to import it.
+  change, reorder and move them in Settings › Bookmarks (drag a group or a link by its handle, with a mouse or a
+  finger; a link can go into another group). `POST /api/bookmarks/import` still takes a homepage `bookmarks.yaml`.
 - **The suite's accounts**: the same sign-in as every io app (the account tiles, one click for a passwordless viewer),
   the account page (display name, email, password, sign out everywhere) and, for admins, the family's accounts and their
   role here. Sign-in at a reverse proxy (Cloudflare Access…) works as in the other apps.
