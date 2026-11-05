@@ -93,12 +93,14 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main
 ```
 
 It asks for the ioSuite database (host, port, database, user, password), the Shared ioSuite database, the web port
-(8630), the public address behind your reverse proxy (optional) and the admin account; then the framework's own
+(8630), the public address behind your reverse proxy (optional), the domain the sign-in is shared on (optional) and the
+admin account; then the framework's own
 questions (resources, network). It creates a small Debian 13 container and runs the app's own `setup.sh` inside with
 those answers. The passwords reach `setup.sh` through its environment (a root-only file pushed in and removed again),
 never on a command line; the output is kept in `/opt/iosuite/setup.log`. The container's `update` command pulls the
-latest code and keeps the settings. For unattended runs set `IOSUITE_DB` and `IOSUITE_SHARED_DB`
-(`host:port/db:user:password`), `IOSUITE_ADMIN` (`name:password`), `IOSUITE_PORT` and `IOSUITE_PUBLIC_URL`.
+latest code and keeps the settings. For unattended runs set `IOSUITE_DB` and `IOSUITE_SUITE_DB`
+(`host:port/db:user:password`), `IOSUITE_ADMIN` (`name:password`), `IOSUITE_PORT`, `IOSUITE_PUBLIC_URL` and
+`IOSUITE_COOKIE_DOMAIN`.
 
 ### Docker
 
@@ -117,38 +119,41 @@ git clone https://github.com/avandeputte/iosuite && cd iosuite
 ./update.sh         # later: the latest code, same settings
 ```
 
-`setup.sh` offers 192.168.1.89, database `suite`, user `suite`, password `suite` as the defaults.
-`python -m app.cli create-user NAME [viewer|editor|admin]` and `set-password NAME` work from a shell (the password from
-`IOSUITE_PASSWORD` or asked for).
+`setup.sh` offers 127.0.0.1, database `suite`, user `suite`, password `suite` as the defaults; its flags (`--db`,
+`--suite-db`, `--admin`, `--port`, `--public-url`, `--cookie-domain`, `--service`, `--yes`) are the same in every app of
+the suite. Accounts are the suite's: `.venv/bin/iosuite-shared --config . admin NAME --app iosuite` (password from
+`ADMIN_PASSWORD`, or asked for) and `.venv/bin/iosuite-shared --config . password NAME`.
 
 ## Configuration
 
-`iosuite.env` next to the app (written by `setup.sh`), or the environment:
+`config.env` in the app folder (written by `setup.sh`; `config.env.example` lists every setting), or the environment, which wins:
 
 | Setting | Meaning |
 | --- | --- |
 | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | the MariaDB / MySQL database (`suite`) |
-| `IOSUITE_DB_HOST`, `_PORT`, `_NAME`, `_USER`, `_PASSWORD` | the Shared ioSuite database (`iosuite`): accounts, passwords, sessions, app passwords and roles, the suite-wide settings and the list of apps, shared with every io app |
-| `IOTHING_COOKIE_DOMAIN` | the domain the session cookie is shared on (`example.com`): signed in at `home.example.com`, signed in at `photos.example.com` too |
-| `PORT` | web port for `run.sh` and the service (8630) |
+| `IOSUITE_DB_HOST`, `_PORT`, `_NAME`, `_USER`, `_PASSWORD` | the Shared ioSuite database (`iosuite`, on `DB_HOST` unless set): accounts, passwords, sessions, app passwords and roles, the suite-wide settings and the list of apps, shared with every io app |
+| `COOKIE_DOMAIN` | the domain the session cookie is shared on (`example.com`): signed in at `home.example.com`, signed in at `photos.example.com` too |
+| `HOST`, `PORT` | where the server listens (`0.0.0.0`, 8630; every app of the suite has its own port) |
+| `FORWARDED_ALLOW_IPS` | the addresses that may pass on the visitor's address (`*`, or your reverse proxy's) |
+| `TLS_CERT_FILE`, `TLS_KEY_FILE` | serve HTTPS directly instead of behind a reverse proxy |
 | `PUBLIC_URL` | the address people use (behind a proxy); also what ioSuite registers in the suite's list of apps |
 | `ACCUWEATHER_API_KEY`, `ACCUWEATHER_LOCATION` | the weather: an AccuWeather key and a location key (or Settings › Home page, which finds the location from a city name) |
 | `ADMIN_USER`, `ADMIN_PASSWORD` | the first admin, made on the first start when there are no accounts |
 | `AUTH_PROXY`, `AUTH_PROXY_HEADER`, `AUTH_PROXY_TRUSTED`, `CF_ACCESS_TEAM`, `CF_ACCESS_AUD` | sign-in at a reverse proxy, as in the other io apps (Cloudflare Access, Authelia, Authentik, oauth2-proxy…) |
 | `UPDATE_CHECK` | `0` turns the daily version check off for good |
 | `IOSUITE_REPO`, `IOSUITE_BRANCH` | what the version check and `update.sh` follow (`avandeputte/iosuite`, `main`) |
-| `LOG_FILE` | the server log shown at Maintenance › Updates and logs (`iosuite.log` in the app folder; empty: no file) |
+| `LOG_FILE` | the server log shown at Maintenance › Updates and logs (`iosuite.log` in the app folder; `LOG_FILE=` with nothing after it: no file) |
 
 ### HTTPS
 
 Run it behind a reverse proxy that terminates HTTPS (Caddy, Nginx Proxy Manager, HAProxy, Cloudflare Tunnel), on a
-host under the same `IOTHING_COOKIE_DOMAIN` as the apps, so the sign-in carries over.
+host under the same `COOKIE_DOMAIN` as the apps, so the sign-in carries over.
 
 ## Tests
 
 ```sh
 pip install -e '.[test]'
-python -m pytest tests     # on a test MariaDB of its own: a Docker container it starts, or IOTHING_TEST_DB=host:port:user:password
+python -m pytest tests     # on a test MariaDB of its own: a Docker container it starts, or IOSUITE_TEST_DB=host:port:user:password
 ```
 
 Covered: status and sign-in, the tiles and where they point (this host, the forwarded host behind a proxy, Settings,
@@ -171,8 +176,9 @@ app/bookmarks.py   the bookmark groups and links, and the homepage bookmarks.yam
 app/auth.py        the shared accounts and the updater (iosuite-shared), as ioSuite uses them
 app/users.py       accounts and roles, seen from ioSuite
 app/db.py          MariaDB access and the schema (the meta settings table, the bookmarks)
-app/config.py      settings from iosuite.env / the environment
-app/cli.py         python -m app.cli: migrate, check, create-user, set-password
+app/config.py      settings from config.env / the environment
+app/cli.py         python -m app.cli: migrate, check
+app/__main__.py    python -m app: the server (HOST, PORT)
 static/            the web app: index.html, app.js (one module, no build step), app.css, the icons (the apps' own under icons/apps/)
 tests/             pytest, against a MariaDB of its own
 setup.sh run.sh update.sh   install, start, update (Linux, Mac)

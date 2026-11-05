@@ -10,7 +10,7 @@
 # Until the scripts are merged upstream, the framework is pointed at this repository for the install script
 # (COMMUNITY_SCRIPTS_URL below; the core engine still comes from community-scripts). Run on the Proxmox host as root:
 #   bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/proxmox/ct/iosuite.sh)"
-# Unattended: IOSUITE_DB=host:port/db:user:password IOSUITE_SHARED_DB=host:port/db:user:password
+# Unattended: IOSUITE_DB=host:port/db:user:password IOSUITE_SUITE_DB=host:port/db:user:password
 #   IOSUITE_ADMIN=name:password IOSUITE_PORT=8630
 #   IOSUITE_PUBLIC_URL=https://home.example.com in the environment skip the questions.
 export COMMUNITY_SCRIPTS_URL="${COMMUNITY_SCRIPTS_URL:-https://raw.githubusercontent.com/avandeputte/iosuite/main/proxmox}"
@@ -40,25 +40,28 @@ ask_app_settings() {
   local bt="ioSuite"
   if [[ -z "${IOSUITE_DB:-}" ]]; then
     local h p d u w
-    h=$(whiptail --backtitle "$bt" --inputbox "MariaDB / MySQL host or IP (the start page keeps its settings there)" 9 70 "192.168.1.89" 3>&1 1>&2 2>&3) || exit 1
+    h=$(whiptail --backtitle "$bt" --inputbox "MariaDB / MySQL host or IP (the start page keeps its settings there)" 9 70 "" 3>&1 1>&2 2>&3) || exit 1
     p=$(whiptail --backtitle "$bt" --inputbox "Port" 9 60 "3306" 3>&1 1>&2 2>&3) || exit 1
     d=$(whiptail --backtitle "$bt" --inputbox "Database (created if the user may)" 9 60 "suite" 3>&1 1>&2 2>&3) || exit 1
     u=$(whiptail --backtitle "$bt" --inputbox "User" 9 60 "suite" 3>&1 1>&2 2>&3) || exit 1
     w=$(whiptail --backtitle "$bt" --passwordbox "Password" 9 60 3>&1 1>&2 2>&3) || exit 1
     IOSUITE_DB="$h:$p/$d:$u:$w"
   fi
-  if [[ -z "${IOSUITE_SHARED_DB:-}" ]]; then
+  if [[ -z "${IOSUITE_SUITE_DB:-}" ]]; then
     local ah ap ad au aw2
-    ah=$(whiptail --backtitle "$bt" --inputbox "Shared ioSuite database (accounts and suite-wide settings of the io apps): host" 9 70 "${IOSUITE_DB%%:*}" 3>&1 1>&2 2>&3) || exit 1
+    ah=$(whiptail --backtitle "$bt" --inputbox "Shared ioSuite database (accounts and suite-wide settings of every app of the suite): host" 9 70 "${IOSUITE_DB%%:*}" 3>&1 1>&2 2>&3) || exit 1
     ap=$(whiptail --backtitle "$bt" --inputbox "Port" 9 60 "3306" 3>&1 1>&2 2>&3) || exit 1
     ad=$(whiptail --backtitle "$bt" --inputbox "Database (the same one the other io apps use)" 9 70 "iosuite" 3>&1 1>&2 2>&3) || exit 1
     au=$(whiptail --backtitle "$bt" --inputbox "User" 9 60 "iosuite" 3>&1 1>&2 2>&3) || exit 1
     aw2=$(whiptail --backtitle "$bt" --passwordbox "Password" 9 60 3>&1 1>&2 2>&3) || exit 1
-    IOSUITE_SHARED_DB="$ah:$ap/$ad:$au:$aw2"
+    IOSUITE_SUITE_DB="$ah:$ap/$ad:$au:$aw2"
   fi
   IOSUITE_PORT="${IOSUITE_PORT:-$(whiptail --backtitle "$bt" --inputbox "Web port" 9 70 "8630" 3>&1 1>&2 2>&3)}" || exit 1
   if [[ -z "${IOSUITE_PUBLIC_URL+x}" ]]; then
     IOSUITE_PUBLIC_URL=$(whiptail --backtitle "$bt" --inputbox "Public address behind your reverse proxy, e.g. https://home.example.com (empty: the address it is reached at)" 10 76 "" 3>&1 1>&2 2>&3) || exit 1
+  fi
+  if [[ -z "${IOSUITE_COOKIE_DOMAIN+x}" ]]; then
+    IOSUITE_COOKIE_DOMAIN=$(whiptail --backtitle "$bt" --inputbox "Domain the sign-in is shared on by every app, e.g. example.com (empty: this host only)" 10 76 "" 3>&1 1>&2 2>&3) || exit 1
   fi
   if [[ -z "${IOSUITE_ADMIN+x}" ]]; then
     local an aw
@@ -89,17 +92,17 @@ description
 
 msg_info "Running the app's setup inside the container (packages, settings, tables, admin, service)"
 # the answers with passwords go in as a root-only file (pushed, read into setup.sh's environment, removed), never as arguments
-SECRETS="IOSUITE_DB=$(printf '%q' "$IOSUITE_DB")"$'\n'"IOSUITE_SHARED_DB=$(printf '%q' "$IOSUITE_SHARED_DB")"$'\n'
+SECRETS="IOSUITE_DB=$(printf '%q' "$IOSUITE_DB")"$'\n'"IOSUITE_SUITE_DB=$(printf '%q' "$IOSUITE_SUITE_DB")"$'\n'
 [[ -n "${IOSUITE_ADMIN:-}" ]] && SECRETS+="IOSUITE_ADMIN=$(printf '%q' "$IOSUITE_ADMIN")"$'\n'
 SECF="$(mktemp)"; chmod 600 "$SECF"; printf '%s' "$SECRETS" > "$SECF"
 pct push "$CTID" "$SECF" /opt/iosuite/setup.env --perms 0600 --user 0 --group 0
 rm -f "$SECF"
-SETUP_CMD="cd /opt/iosuite/app && sh ./setup.sh --yes --no-system-deps --service --port '${IOSUITE_PORT:-8630}' --public-url '${IOSUITE_PUBLIC_URL:-}'"
+SETUP_CMD="cd /opt/iosuite/app && sh ./setup.sh --yes --no-system-deps --service --port '${IOSUITE_PORT:-8630}' --public-url '${IOSUITE_PUBLIC_URL:-}' --cookie-domain '${IOSUITE_COOKIE_DOMAIN:-}'"
 WRAPPED="set -a; . /opt/iosuite/setup.env; set +a; rm -f /opt/iosuite/setup.env; $SETUP_CMD > /opt/iosuite/setup.log 2>&1"
 if ! pct exec "$CTID" -- bash -c "$WRAPPED"; then
   msg_error "setup.sh failed inside the container; last lines of /opt/iosuite/setup.log:"
   pct exec "$CTID" -- tail -n 40 /opt/iosuite/setup.log || true
-  msg_error "Fix the cause (often: the MariaDB user may not connect from the container's address), then run it again inside the container with IOSUITE_DB=host:port/db:user:password (IOSUITE_SHARED_DB likewise, and IOSUITE_ADMIN=name:password) in the environment: pct exec $CTID -- bash -c \"$SETUP_CMD\""
+  msg_error "Fix the cause (often: the MariaDB user may not connect from the container's address), then run it again inside the container with IOSUITE_DB=host:port/db:user:password (IOSUITE_SUITE_DB likewise, and IOSUITE_ADMIN=name:password) in the environment: pct exec $CTID -- bash -c \"$SETUP_CMD\""
   exit 1
 fi
 msg_ok "Setup finished"
