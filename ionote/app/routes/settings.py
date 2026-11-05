@@ -1,5 +1,6 @@
-"""Settings, maintenance and status: the switches admins set, sign-in at a proxy, the database, the server log,
-the change log, export and import, and updating ionotes."""
+"""Settings, maintenance and status: the switches admins set, sign-in at a proxy, the database, the change log, export
+and import. The version, updates, restart, the MCP admin token and the server log are iothing_auth's server_router
+(/api/server, /api/log), mounted in app/main.py."""
 import logging
 import time
 
@@ -7,11 +8,12 @@ from fastapi import APIRouter, HTTPException, Request, UploadFile, File
 from fastapi.responses import Response
 from starlette.concurrency import run_in_threadpool
 
-from app import __version__, access, owners, backup, config, db, images, logs, notes, ocr, proxyauth, suitedb, updates, users
+from app import __version__, access, owners, backup, config, db, images, notes, ocr, proxyauth, suitedb, users
+from app.auth import updater
 from app.http import json_body, user_name
 
 router = APIRouter()
-SWITCHES = ("require_login", "read_only", "mcp_enabled", "update_check")
+SWITCHES = ("require_login", "read_only", "mcp_enabled")
 TEXTS = ("app_name",)
 
 
@@ -22,12 +24,11 @@ def api_status(request: Request):
            "appName": db.get_setting("app_name", "") or "ionotes", "readOnly": db.read_only()}
     if users.is_signed_in(request.state.user):
         out["rev"] = notes.owner_rev()
-        out["commit"] = updates.local_commit()[:7]
+        out["commit"] = updater.local_commit()[:7]
         if users.is_admin(request.state.user):
-            u = updates.available() if updates.auto_check_enabled() else None
+            u = updater.available() if updater.auto_check_enabled() else None
             if u:
-                st = updates.status()
-                u.update(canRun=st["canRun"], docker=st["docker"])
+                u.update(canRun=updater.can_run(), docker=updater.in_docker())
             out["update"] = u
     return out
 
@@ -37,7 +38,7 @@ def api_settings(request: Request):
     out = {"app_name": db.get_setting("app_name", "") or "ionotes", "read_only": db.read_only(), "require_login": users.require_login(),
            "colors": list(notes.COLORS)}
     if users.is_admin(request.state.user):
-        out.update({k: db.get_setting(k, "1" if k == "update_check" else "0") == "1" for k in SWITCHES})
+        out.update({k: db.get_setting(k, "0") == "1" for k in SWITCHES})
         out["read_only_env"] = config.READ_ONLY
         out["mcp_forced"] = config.MCP_FORCED
         out["database"] = db.public_settings()
@@ -128,11 +129,6 @@ async def api_db_save(request: Request):
 
 
 # ---- maintenance
-@router.get("/api/log", dependencies=[access.admin])
-def api_log(lines: int = 300, contains: str = "", level: str = "any", requests: int = 0):
-    return logs.tail(lines, contains, level, bool(requests))
-
-
 @router.get("/api/changes", dependencies=[access.editor])
 def api_changes(limit: int = 200, before: int = None):
     """The change log: who created, edited, deleted or recoloured what, newest first."""
@@ -177,35 +173,3 @@ async def move_notes(request: Request):
     moved = await run_in_threadpool(notes.reassign, src, dst)
     logging.getLogger("app").info("%s gave the notes of owner %s to account %s (%d notes)", user_name(request), src, dst, moved)
     return {"moved": moved}
-
-
-@router.get("/api/update", dependencies=[access.admin])
-def api_update_status():
-    return updates.status()
-
-
-@router.post("/api/update/check", dependencies=[access.admin])
-def api_update_check():
-    return updates.check()
-
-
-@router.post("/api/update/run", dependencies=[access.admin])
-async def api_update_run(request: Request):
-    body = await json_body(request)
-    try:
-        updates.run(str(body.get("ref") or ""))
-    except RuntimeError as e:
-        raise HTTPException(409, str(e))
-    return {"ok": True}
-
-
-@router.get("/api/mcp/token", dependencies=[access.admin])
-def api_mcp_token():
-    return {"token": updates.admin_token(), "fromEnv": bool(config.MCP_ADMIN_TOKEN), "url": config.APP_URL + "/mcp"}
-
-
-@router.post("/api/mcp/token", dependencies=[access.admin])
-def api_mcp_token_new():
-    if config.MCP_ADMIN_TOKEN:
-        raise HTTPException(400, "MCP_ADMIN_TOKEN is set in ionotes.env; change it there")
-    return {"token": updates.regenerate_token()}

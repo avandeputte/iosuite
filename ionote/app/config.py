@@ -38,13 +38,11 @@ ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 
 # READ_ONLY=1: browsing and searching only, for everyone
 READ_ONLY = _flag("READ_ONLY")
-# MCP=1 turns the MCP endpoint on whatever Settings says; MCP_ADMIN_TOKEN fixes its token
+# MCP=1 turns the MCP endpoint on whatever Settings says (MCP_ADMIN_TOKEN, which fixes its token, and UPDATE_CHECK=0,
+# which locks the daily version check off, are read by iothing_auth.updates: app.auth.updater)
 MCP_FORCED = _flag("MCP")
-MCP_ADMIN_TOKEN = os.environ.get("MCP_ADMIN_TOKEN", "").strip()
 # OCR=0 keeps the server from reading text in images itself (the apps read it on the device and send it along)
 OCR = _flag("OCR", "1")
-# UPDATE_CHECK=0: never ask GitHub whether a newer version exists
-UPDATE_CHECK = _flag("UPDATE_CHECK", "1")
 
 # the largest image a note may carry; MariaDB's max_allowed_packet (16 MB by default) must be larger
 MAX_IMAGE_MB = int(os.environ.get("MAX_IMAGE_MB", 15))

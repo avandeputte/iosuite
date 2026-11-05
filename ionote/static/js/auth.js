@@ -1,6 +1,6 @@
 /** Signing in: the account picker (one click for an account without a password), the password dialog, the first
  *  admin, the account menu. The same flow as iopix. */
-import { $, h, api, state, dialog, toast, fail, initials, icon } from './core.js';
+import { $, h, api, state, dialog, toast, fail, initials, icon, menu, isAdmin } from './core.js';
 
 export async function loadMe() {
   state.me = await api('/api/auth/me');
@@ -96,8 +96,18 @@ function accountDialog() {
     viaProxy || u.passwordless ? null : [h('h4', 'Change password'), h('div.signin-form', cur, pw), h('div.row', change)]), buttons);
 }
 
-/** The top right, as in iopix: the account's initial in a small amber circle, which opens the account panel; signed out,
- *  a person icon that signs in (or creates the admin account). */
+function cycleTheme() {
+  let cur = 'light'; try { cur = localStorage.getItem('ionotes.theme') || 'light'; } catch (e) {}
+  const next = { light: 'dark', dark: 'system', system: 'light' }[cur] || 'light';
+  try { localStorage.setItem('ionotes.theme', next); } catch (e) {}
+  if (next === 'system') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = next;
+  if (state.me.user) api('/api/auth/settings', { method: 'POST', body: { theme: next } }).catch(() => {});
+  toast(`Appearance: ${next}`);
+}
+
+/** The top right, as in every ioThing app: the account's initial in a small amber circle, which opens the avatar menu
+ *  (the account panel, appearance, Settings, Maintenance, sign out); signed out, a person icon that signs in (or creates
+ *  the admin account). */
 export function renderUserMenu() {
   const el = $('#usermenu');
   el.textContent = '';
@@ -106,5 +116,16 @@ export function renderUserMenu() {
     el.append(h('button.iconbtn.tool', { title: me.usersExist ? 'Sign in' : 'Create the admin account', 'aria-label': 'Sign in', onclick: () => signIn() }, icon('person')));
     return;
   }
-  el.append(h('button.iconbtn.tool', { title: `${me.user.name} (${me.user.role}) · account`, 'aria-label': 'Account', onclick: accountDialog }, h('span.avatar', initials(me.user.name))));
+  let theme = 'light'; try { theme = localStorage.getItem('ionotes.theme') || 'light'; } catch (e) {}
+  const btn = h('button.iconbtn.tool', { title: `${me.user.name} (${me.user.role})`, 'aria-label': 'Account', onclick: () => menu(btn, [
+    { head: `${me.user.name} · ${me.user.role}` },
+    { label: 'Account', icon: 'person', action: accountDialog },
+    { label: `Appearance: ${theme}`, icon: 'palette', action: cycleTheme },
+    { label: 'Settings', icon: 'gear', action: () => { location.hash = '#/settings'; } },
+    isAdmin() ? { label: 'Maintenance', icon: 'wrench', action: () => { location.hash = '#/maintenance'; } } : null,
+    '-',
+    me.signedInBy === 'proxy' ? null : { label: 'Sign out everywhere else', icon: 'logout', action: async () => { try { await api('/api/auth/logout_all', { method: 'POST' }); toast('Signed out everywhere else'); } catch (e) { fail(e); } } },
+    me.signedInBy === 'proxy' ? null : { label: me.signedInBy === 'cloudflare' && me.throughCloudflare ? 'Sign out (of Cloudflare too)' : 'Sign out', action: signOut },
+  ]) }, h('span.avatar', initials(me.user.name)));
+  el.append(btn);
 }

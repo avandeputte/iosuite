@@ -13,9 +13,9 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app import config, db, mcp, proxyauth, suitedb, updates, users
+from app import config, db, mcp, proxyauth, suitedb, users
 from app import notes as notes_mod, owners
-from app.auth import auth as auth_shared
+from app.auth import auth as auth_shared, updater
 
 proxyauth.remember_peer()  # before uvicorn's forwarded-header rewrite runs: proxy sign-in trusts the real peer
 from app.routes import auth, notes as notes_routes, settings, users as users_routes  # noqa: E402
@@ -31,7 +31,7 @@ OPEN_PREFIXES = ("/icons/", "/static/icons/", "/js/", "/api/auth/")
 
 
 def setup_file_log():
-    """ionotes' own log in data/ionotes.log (5 MB, 3 old copies), for Settings › Server log and the MCP tool."""
+    """ionotes' own log in data/ionotes.log (5 MB, 3 old copies), for Maintenance › Updates and logs and the MCP tool."""
     root = logging.getLogger()
     if any(isinstance(h, logging.handlers.RotatingFileHandler) for h in root.handlers):
         return
@@ -56,7 +56,7 @@ async def lifespan(_app):
     users.init()
     if db.get_setting("mcp_enabled", "") == "":
         db.set_setting("mcp_enabled", "0")
-    updates.start_daily()
+    updater.start_daily()
     c = db.settings()
     log.info("ionotes started on %s (%s)", "MariaDB/MySQL " + f"{c['host']}:{c['port']}/{c['database']}" if c["type"] == "mysql" else "SQLite " + str(db.SQLITE_FILE),
              "accounts exist" if users.any_users() else "no accounts yet: open to everyone until one is made")
@@ -82,7 +82,7 @@ def mcp_enabled() -> bool:
 
 def _mcp_token_ok(request: Request) -> bool:
     auth_h = request.headers.get("authorization", "")
-    return auth_h.lower().startswith("bearer ") and updates.token_ok(auth_h[7:].strip())
+    return auth_h.lower().startswith("bearer ") and updater.token_ok(auth_h[7:].strip())
 
 
 def _owner_of(request: Request) -> int:
@@ -223,6 +223,7 @@ app.include_router(auth.router)
 app.include_router(users_routes.router)
 app.include_router(notes_routes.router)
 app.include_router(settings.router)
+app.include_router(auth_shared.server_router(updater, log_file=config.LOG_FILE, info=lambda: {"appUrl": config.APP_URL}))  # /api/server, /api/log: admins
 
 # MCP over HTTP on the same port: an assistant connects to http://host:8610/mcp.
 # DNS-rebinding protection is off because ionotes is reached by LAN name or IP, not localhost only.

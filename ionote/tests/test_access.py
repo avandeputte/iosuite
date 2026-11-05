@@ -66,20 +66,20 @@ def test_a_header_proxy_signs_in_only_from_a_trusted_address(client, admin):
 
 
 def test_status_tells_admins_of_a_newer_version_while_the_daily_check_is_on(client, admin, monkeypatch):
-    from app import config, updates
-    monkeypatch.setattr(config, "UPDATE_CHECK", True)  # the tests never start the daily check itself
-    updates._checked.clear()
-    updates._checked.update(status="update", remote="abc1234", remoteVersion="9.9.9", remoteMessage="v9.9.9: new", remoteDate="2026-11-03")
+    from app.auth import updater
+    monkeypatch.setattr(updater, "check_locked", False)  # UPDATE_CHECK=0 in the tests' environment: never start the daily check itself
+    updater._checked.clear()
+    updater._checked.update(status="update", remote="abc1234", remoteVersion="9.9.9", remoteMessage="v9.9.9: new", remoteDate="2026-11-03")
     try:
         s = client.get("/api/status").json()
         assert s["update"]["version"] == "9.9.9" and "canRun" in s["update"] and s["commit"]
-        client.post("/api/settings", json={"update_check": False})
+        client.post("/api/server", json={"autoCheck": False})
         assert client.get("/api/status").json()["update"] is None
-        client.post("/api/settings", json={"update_check": True})
+        client.post("/api/server", json={"autoCheck": True})
         client.post("/api/auth/logout")
         assert "update" not in client.get("/api/status").json()
     finally:
-        updates._checked.clear()
+        updater._checked.clear()
 
 
 def test_ionotes_registers_in_the_suites_list_of_apps(client):

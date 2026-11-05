@@ -210,8 +210,10 @@ Maintenance › Import): records keep their ids, and a newer copy on the server 
 
 - **Standalone:** `./update.sh` fetches the latest code (git, or the GitHub tarball), installs the packages the new
   version asks for and only then moves the code in, then restarts the service. `--check` only reports. Maintenance ›
-  ionotes › Update now runs the same script; a daily check (on by default; `UPDATE_CHECK=0` locks it off)
-  shows admins a card when a newer version exists, with Update now right on it (as in iopix; dismissed per version).
+  Updates and logs › Update now runs the same script; the page (the same in every ioThing app: it comes from
+  `iothing_auth.updates` in iosuite-shared, at `/api/server` and `/api/log`) also has the tail of the server log
+  (`data/ionotes.log`) and Restart. A daily check (on by default; `UPDATE_CHECK=0` locks it off, the page switches it
+  off) shows admins a card when a newer version exists, with Update now right on it (dismissed per version).
 - **Proxmox:** `update` inside the container (the framework's command) runs the same script.
 - **Docker:** `docker compose pull && docker compose up -d`.
 - **From an MCP client:** `check_for_update` and `update_ionotes` (with the admin token).
@@ -232,7 +234,7 @@ Maintenance › Import): records keep their ids, and a newer copy on the server 
 | `OCR` | `1` | `0`: the server never reads text in pictures (the apps still do) |
 | `MAX_IMAGE_MB` | `15` | the largest picture a note may carry |
 | `MCP` / `MCP_ADMIN_TOKEN` | | `MCP=1` keeps the endpoint on whatever Settings says; the token, instead of a generated one |
-| `UPDATE_CHECK` | `1` | `0`: never ask GitHub for a newer version |
+| `UPDATE_CHECK` | `1` | `0`: never ask GitHub for a newer version (Maintenance › Updates and logs) |
 | `AUTH_PROXY`... | `off` | sign-in at a reverse proxy, above |
 
 ## How it is put together
@@ -246,7 +248,6 @@ app/
   ocr.py           RapidOCR for pictures added in the web app
   backup.py        export and import
   users.py, proxyauth.py, access.py   accounts, sessions, roles and proxy sign-in (from iopix)
-  updates.py       the version check, update.sh, the MCP admin token
   routes/          the HTTP API
   mcp/             the MCP server: read, write and operator tools
 proxmox/           Proxmox VE LXC scripts in the community-scripts layout

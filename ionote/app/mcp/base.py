@@ -5,7 +5,8 @@ from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
 
-from app import config, db, notes, updates
+from app import config, db, notes
+from app.auth import updater
 
 APP = config.APP_URL  # for the links in results
 READ_ONLY = ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False)
@@ -20,8 +21,8 @@ server = MCPServer(
         "A personal notes library (text, clipboard snippets, screenshots with the text read from them). Start with "
         "notes_overview, use list_folders / list_tags to find exact names, then search_notes and get_note. "
         "view_note_image shows a note's picture. Notes are private to each account: these tools work on the notes of "
-        "one account (notes_overview names it; an admin chooses it in Settings › MCP server). Changing anything needs the admin token "
-        "(the web app's Settings › MCP server shows it to an admin)."
+        "one account (notes_overview names it; an admin chooses it in Maintenance › MCP server). Changing anything needs the admin token "
+        "(the web app's Maintenance › MCP server shows it to an admin)."
     ),
 )
 
@@ -35,8 +36,8 @@ def clamp_limit(limit, cap: int) -> int:
 
 def need_token(token: str, writes: bool = False):
     """Changes and diagnostics take the admin token; writes are refused in read-only mode as in the web app."""
-    if not updates.token_ok(token):
-        raise ToolError("This tool needs the admin token (the web app's Settings › MCP server shows it to an admin)")
+    if not updater.token_ok(token):
+        raise ToolError("This tool needs the admin token (the web app's Maintenance › MCP server shows it to an admin)")
     if writes and db.read_only():
         raise ToolError("ionotes is in read-only mode; nothing can be changed")
 
