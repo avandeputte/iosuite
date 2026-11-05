@@ -413,7 +413,7 @@ def get_contact(cid: int, request: Request, format: str | None = None):
         return vcard_response(model.vcard_text(cid, v), v, f"{re.sub(r'[^A-Za-z0-9 _-]', '', c['fn']) or 'contact'}.vcf")
     if fmt == "jcard":
         return JSONResponse(vcard.to_jcard(model.full(cid, with_photo=True)), media_type=JCARD_TYPE)
-    return contact_out(model.full(cid))
+    return {**contact_out(model.full(cid)), "impliedRelations": model.implied_relations(cid, book_ids(u))}
 
 
 @router.post("/api/contacts")
@@ -757,6 +757,10 @@ def family_graph(cid: int, allowed_ids: list[int], depth: int = 3) -> dict:
                 seen.add(r["related_id"])
                 nxt.append(r["related_id"])
         frontier = nxt
+    # what the family implies for the root (parent's sibling: aunt) is drawn too, so the tree reads "Aunt", not "Sister of Mom"
+    for x in model.implied_relations(cid, allowed_ids):
+        edges.append({"from": cid, "to": x["relatedId"], "type": x["type"], "implied": True})
+        seen.add(x["relatedId"])
     marks = ",".join(["%s"] * len(seen))
     nodes = [{"id": r["id"], "fn": r["fn"], "gender": r["gender"], "hasPhoto": bool(r["hp"]), "iopixPersonId": r["iopix_person_id"],
               "birthday": model._bday(r)}

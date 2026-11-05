@@ -463,14 +463,28 @@ async function showContact(id, pane) {
     c.birthday ? kv('birthday', h('span', null, fmtDate(c.birthday), a != null ? h('span', { class: 'muted' }, ` · ${a} years old`) : null,
       c.birthdayRemind === false ? h('span', { class: 'muted', title: 'Left out of the birthday calendar, the start page and other apps' }, ' · no reminder') : null)) : null,
     c.dates.map((d) => kv(d.label, h('span', null, fmtDate(d), d.year ? h('span', { class: 'muted' }, ` · ${age(d)} years`) : null)))));
-  if (c.relations.length) {
+  const implied = c.impliedRelations || [];
+  if (c.relations.length || implied.length) {
     const fam = new Set(S.rel.groups[0].types.map((t) => t.type));
+    // implied by the family (her parent's sister is her aunt): worked out live, saved only when asked
+    const keep = async (r) => {
+      const rels = c.relations.map((x) => ({ type: x.type, relatedId: x.relatedId || null, relatedName: x.relatedId ? null : x.relatedName, label: x.label || null }));
+      const payload = { ...c, relations: [...rels, { type: r.type, relatedId: r.relatedId }] };
+      delete payload.hasPhoto; delete payload.etag; delete payload.impliedRelations;
+      try { await api(`/api/contacts/${id}`, { method: 'PUT', json: payload }); toast(`${r.relatedFn} saved as ${r.typeLabel.toLowerCase()}`); onRoute(); } catch (e) { fail(e); }
+    };
+    const ichip = (r) => h('span', { class: 'chip rel implied', title: `Implied: ${r.viaLabel.toLowerCase()} ${r.viaFn}` },
+      h('a', { href: `#/c/${r.relatedId}` }, avatar({ id: r.relatedId, fn: r.relatedFn, hasPhoto: r.relatedHasPhoto, iopixPersonId: r.relatedIopixPersonId }, 's')),
+      h('a', { href: `#/c/${r.relatedId}` }, r.relatedFn), h('span', { class: 'lab' }, `${r.typeLabel} · via ${r.viaFn}`),
+      canEdit ? h('button', { class: 'keep', title: `Save as ${r.typeLabel.toLowerCase()}, so it also goes to phones and other apps`, onclick: () => keep(r) }, '+') : null);
     const chip = (r) => r.relatedId ? h('a', { class: 'chip rel', href: `#/c/${r.relatedId}` }, avatar({ id: r.relatedId, fn: r.relatedFn, hasPhoto: r.relatedHasPhoto, iopixPersonId: r.relatedIopixPersonId }, 's'), r.relatedFn, h('span', { class: 'lab' }, r.typeLabel))
       : h('span', { class: 'chip rel' }, avatar({ fn: r.relatedName }, 's'), r.relatedName, h('span', { class: 'lab' }, r.typeLabel));
     const famRels = c.relations.filter((r) => fam.has(r.type)), others = c.relations.filter((r) => !fam.has(r.type));
     cards.push(card('tree', 'Relations', '--c-purple',
-      famRels.length ? h('div', null, famRels.map(chip)) : null, others.length ? h('div', null, others.map(chip)) : null,
-      famRels.some((r) => r.relatedId) ? h('a', { class: 'lnk small', href: `#/tree/${c.id}` }, 'Family tree') : null));
+      famRels.length ? h('div', null, famRels.map(chip)) : null,
+      implied.length ? h('div', null, h('div', { class: 'muted small', style: { margin: '2px 0 6px' } }, 'Implied by the family'), implied.map(ichip)) : null,
+      others.length ? h('div', null, others.map(chip)) : null,
+      famRels.some((r) => r.relatedId) || implied.length ? h('a', { class: 'lnk small', href: `#/tree/${c.id}` }, 'Family tree') : null));
   }
   if (c.social.length) cards.push(card('people', 'Social', '--c-indigo', h('div', null, c.social.map((s) => {
     const [col, ab] = SOCIAL_COLORS[s.service] || SOCIAL_COLORS.other;

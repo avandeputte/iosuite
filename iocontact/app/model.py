@@ -588,3 +588,51 @@ def merge(keep_id: int, other_ids: list[int], result: dict | None = None, photo_
             db.ex("DELETE FROM con_contact_relations WHERE (contact_id = %s AND related_id = %s) OR (contact_id = %s AND related_id = %s)",
                   (o["id"], keep_id, keep_id, o["id"]))
             delete(o["id"])
+
+
+# ------------------------------------------------------------------ implied relations
+
+_KIN = sorted({t for pair in rel.COMPOSE for t in pair} | {rel.inverse(t) for pair in rel.COMPOSE for t in pair} - {None})
+
+
+def implied_relations(cid: int, book_ids: list[int], depth: int = 4) -> list[dict]:
+    """Relations the contact's family implies (her sibling's parent is her parent, her parent's sibling her aunt...)
+    but nobody entered, worked out from the stated ones among contacts in `book_ids`. Never stored."""
+    allowed = set(book_ids)
+    seen, frontier, edges = {cid}, [cid], []
+    kin = ",".join(["%s"] * len(_KIN))
+    for _ in range(depth):
+        if not frontier:
+            break
+        marks = ",".join(["%s"] * len(frontier))
+        rows = db.q(f"SELECT r.contact_id, r.related_id, r.type, o.address_book_id FROM con_contact_relations r JOIN con_contacts o ON o.id = r.related_id "
+                    f"WHERE r.contact_id IN ({marks}) AND o.deleted = 0 AND r.type IN ({kin})", frontier + _KIN)
+        nxt = []
+        for r in rows:
+            if r["address_book_id"] not in allowed:
+                continue
+            edges.append((r["contact_id"], r["type"], r["related_id"]))
+            if r["related_id"] not in seen:
+                seen.add(r["related_id"])
+                nxt.append(r["related_id"])
+        frontier = nxt
+    # every relation of the root counts, also non-family ones: a stated "friend" is not overridden by a guess
+    edges += [(cid, x["type"], x["related_id"]) for x in db.q("SELECT type, related_id FROM con_contact_relations WHERE contact_id = %s AND related_id IS NOT NULL", (cid,))]
+    edges += [(x["contact_id"], x["type"], cid) for x in db.q("SELECT type, contact_id FROM con_contact_relations WHERE related_id = %s", (cid,))]
+    found = rel.infer(edges, cid)
+    if not found:
+        return []
+    ids = list({f["relatedId"] for f in found} | {f["viaId"] for f in found})
+    marks = ",".join(["%s"] * len(ids))
+    info = {r["id"]: r for r in db.q(f"SELECT id, fn, gender, photo IS NOT NULL AS hp, iopix_person_id FROM con_contacts WHERE id IN ({marks}) AND deleted = 0", ids)}
+    order = {t: i for i, t in enumerate(rel.TYPES)}
+    out = []
+    for f in sorted(found, key=lambda f: (order.get(f["type"], 99), (info.get(f["relatedId"]) or {}).get("fn") or "")):
+        o, v = info.get(f["relatedId"]), info.get(f["viaId"])
+        if not o or not v:
+            continue
+        out.append({"type": f["type"], "relatedId": o["id"], "relatedFn": o["fn"], "relatedGender": o["gender"],
+                    "relatedHasPhoto": bool(o["hp"]), "relatedIopixPersonId": o["iopix_person_id"],
+                    "typeLabel": rel.label(f["type"], o["gender"]), "implied": True,
+                    "viaId": v["id"], "viaFn": v["fn"], "viaLabel": rel.label(f["viaType"], v["gender"])})
+    return out
