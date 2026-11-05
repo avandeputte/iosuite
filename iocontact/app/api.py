@@ -733,7 +733,7 @@ def upcoming(request: Request, days: int = 30, book: str | None = None):
 
 @router.get("/api/contacts/{cid}/family")
 def family(cid: int, request: Request, depth: int = 3):
-    """The relation graph around a contact: {nodes: [{id, fn, gender, hasPhoto, iopixPersonId}], edges: [{from, to, type}]}."""
+    """The relation graph around a contact: {nodes: [{id, fn, given, family, gender, hasPhoto, iopixPersonId, birthday}], edges: [{from, to, type}]}."""
     u = me(request)
     readable_contact(u, cid)
     return family_graph(cid, book_ids(u), depth)
@@ -762,9 +762,10 @@ def family_graph(cid: int, allowed_ids: list[int], depth: int = 3) -> dict:
         edges.append({"from": cid, "to": x["relatedId"], "type": x["type"], "implied": True})
         seen.add(x["relatedId"])
     marks = ",".join(["%s"] * len(seen))
-    nodes = [{"id": r["id"], "fn": r["fn"], "gender": r["gender"], "hasPhoto": bool(r["hp"]), "iopixPersonId": r["iopix_person_id"],
-              "birthday": model._bday(r)}
-             for r in db.q(f"SELECT id, fn, gender, photo IS NOT NULL AS hp, iopix_person_id, bday_year, bday_month, bday_day FROM con_contacts WHERE id IN ({marks})", list(seen))]
+    nodes = [{"id": r["id"], "fn": r["fn"], "given": r["given"], "family": r["family"], "gender": r["gender"], "hasPhoto": bool(r["hp"]),
+              "iopixPersonId": r["iopix_person_id"], "birthday": model._bday(r)}
+             for r in db.q(f"SELECT id, fn, given, family, gender, photo IS NOT NULL AS hp, iopix_person_id, bday_year, bday_month, bday_day "
+                           f"FROM con_contacts WHERE id IN ({marks})", list(seen))]
     uniq = {(e["from"], e["to"], e["type"]): e for e in edges}
     return {"root": cid, "nodes": nodes, "edges": list(uniq.values())}
 
