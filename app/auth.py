@@ -5,7 +5,7 @@ config.env), shared with ioPix, ioNotes, ioContacts, ioCalendar and ioHealth: on
 domain (COOKIE_DOMAIN). Signed in on the start page, a person is signed in everywhere it links to.
 What is ioSuite's own stays per app: the role an account holds here (admins set the weather and the home page) and its settings.
 
-ioSuite registers itself in the suite's list of apps (the `suite_apps` table of the Shared ioSuite database) like every app, and
+ioSuite registers itself in the suite's list of apps (the `ios_apps` table of the Shared ioSuite database) like every app, and
 reads the others' addresses from it (app/apps.py).
 """
 from iosuite_shared.fastapi import Auth

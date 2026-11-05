@@ -27,12 +27,12 @@ def client():
     db.reset_all()
     from iosuite_shared import db as authdb
     users.ensure_admin_from_env()  # the auth tables
-    for t in ("user_roles", "user_data", "app_passwords", "sessions", "users", "settings", "suite_apps"):
+    for t in ("ios_user_roles", "ios_user_data", "ios_app_passwords", "ios_sessions", "ios_users", "ios_settings", "ios_apps"):
         try:
             authdb.ex(f"DELETE FROM {t}")
         except Exception:  # noqa: BLE001 - a table this version does not have
             pass
-    authdb.ex("ALTER TABLE users AUTO_INCREMENT = 1")
+    authdb.ex("ALTER TABLE ios_users AUTO_INCREMENT = 1")
     users.forget_cached_auth()
     from iosuite_shared import suite
     from app import apps

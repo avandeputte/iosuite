@@ -1,7 +1,7 @@
 """The apps of the suite: what the start page shows a tile for, and where each one is.
 
 Every io app registers itself, with its address, in the suite's list of apps in the Shared ioSuite database
-(iosuite_shared.suite, table `suite_apps`); the page reads that list and nothing else. An app that has not registered
+(iosuite_shared.suite, table `ios_apps`); the page reads that list and nothing else. An app that has not registered
 (not installed, or never started) has no tile. Nobody types an address.
 
 The catalogue below knows the apps the page has widgets for (their icon, colour and line, the page's own); an app it

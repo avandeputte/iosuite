@@ -142,7 +142,7 @@ def test_uploaded_svg_icon(client):
     client.put(f"/api/bookmarks/links/{l['id']}/icon", content=SVG)
     client.delete(f"/api/bookmarks/links/{l['id']}")
     from app import db
-    assert db.q("SELECT * FROM bookmark_icons") == []
+    assert db.q("SELECT * FROM prt_bookmark_icons") == []
     # a viewer sees the icon but cannot change it
     l2 = client.post(f"/api/bookmarks/groups/{g['id']}/links", json={"name": "Wiki", "href": "https://wiki.example"}).json()
     client.put(f"/api/bookmarks/links/{l2['id']}/icon", content=SVG)
