@@ -11,7 +11,7 @@ from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
 
-from app import APP_VERSION, calendar, config, csvio, db, enrich, iopix, limits, model, quality, relations as rel, users, vcard
+from app import __version__, calendar, config, csvio, db, enrich, iopix, limits, model, quality, relations as rel, users, vcard
 from app.auth import auth, updater
 from app.fold import fold
 
@@ -123,7 +123,7 @@ async def body_contact(request: Request) -> dict:
 def status(request: Request):
     u = request.state.user
     adm = users.is_admin(u)
-    return {"app": "ioContacts", "version": APP_VERSION, "commit": updater.local_commit()[:7] if u else None,
+    return {"app": "ioContacts", "version": __version__, "commit": updater.local_commit()[:7] if u else None,
             "usersExist": users.any_users(), "user": users.public(u),
             "iopix": bool(iopix.settings()["url"]), "viaProxy": getattr(request.state, "via_proxy", False),
             "mcp": mcp_enabled() if u else None,

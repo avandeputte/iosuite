@@ -5,26 +5,28 @@
 #   ./setup.sh                 ask the questions
 #   ./setup.sh --yes ...       no questions: defaults and the flags below
 #
-# Flags: --db HOST:PORT/DATABASE:USER:PASSWORD   (MariaDB / MySQL; default 127.0.0.1:3306/contacts:contacts:contacts)
-#        --suite-db HOST:PORT/DATABASE:USER:PASSWORD   (the Shared ioSuite database: the suite's accounts and
-#                                     settings; default: the same server, iosuite:iosuite:iosuite)
-#        --admin NAME:PASSWORD | --no-admin   --port N (8610)   --ldap-port N (3890; 0 turns LDAP off)
-#        --public-url URL   --service | --no-service   --system-deps | --no-system-deps   --python PATH
-# Secrets can stay off the command line: IOCONTACTS_DB, IOCONTACTS_SUITE_DB and IOCONTACTS_ADMIN in the environment
-# do what --db, --suite-db and --admin do. Run it again at any time: it keeps iocontacts.env and only changes what you answer.
+# Flags (the same in every app of the suite):
+#        --db HOST:PORT/DATABASE:USER:PASSWORD        (MariaDB / MySQL; default 127.0.0.1:3306/contacts:contacts:contacts)
+#        --suite-db HOST:PORT/DATABASE:USER:PASSWORD  (the Shared ioSuite database: accounts and suite-wide settings;
+#                                                      default: the same server, iosuite:iosuite)
+#        --admin NAME:PASSWORD | --no-admin   --port N (8640)   --public-url URL   --cookie-domain DOMAIN
+#        --service | --no-service   --system-deps | --no-system-deps   --python PATH
+#        ioContacts' own: --ldap-port N (3890; 0 turns LDAP off)
+# Secrets can stay off the command line: IOCONTACTS_DB, IOCONTACTS_SUITE_DB and IOCONTACTS_ADMIN in the environment do
+# what --db, --suite-db and --admin do. Run it again at any time: it keeps config.env and only changes what you answer.
 set -e
 cd "$(dirname "$0")"
 APP="$(pwd)"
 say() { printf '\n\033[1;34m==>\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
-YES=0; DBS=""; SDBS=""; ADMIN=""; NO_ADMIN=0; PORT=""; LDAP=""; PUBURL=""; SERVICE=""; SYSDEPS=""; PY=""
+YES=0; DBS=""; SDBS=""; ADMIN=""; NO_ADMIN=0; PORT=""; LDAP=""; PUBURL=""; COOKIE=""; SERVICE=""; SYSDEPS=""; PY=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --yes) YES=1; shift;; --db) DBS="$2"; shift 2;; --suite-db) SDBS="$2"; shift 2;; --admin) ADMIN="$2"; shift 2;; --no-admin) NO_ADMIN=1; shift;;
-    --port) PORT="$2"; shift 2;; --ldap-port) LDAP="$2"; shift 2;; --public-url) PUBURL="$2"; shift 2;;
+    --port) PORT="$2"; shift 2;; --ldap-port) LDAP="$2"; shift 2;; --public-url) PUBURL="$2"; shift 2;; --cookie-domain) COOKIE="$2"; shift 2;;
     --service) SERVICE=1; shift;; --no-service) SERVICE=0; shift;; --system-deps) SYSDEPS=1; shift;; --no-system-deps) SYSDEPS=0; shift;;
     --python) PY="$2"; shift 2;;
-    -h|--help) sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 0;;
+    -h|--help) sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'; exit 0;;
     *) die "unknown option $1 (try --help)";;
   esac
 done
@@ -37,16 +39,17 @@ ask() { _v="$1"; _q="$2"; _d="$3"
 asksecret() { _v="$1"; _q="$2"
   if [ "$YES" = 1 ] || [ ! -t 0 ]; then eval "$_v=''"; return; fi
   printf '%s: ' "$_q"; stty -echo 2>/dev/null; read -r _a || _a=""; stty echo 2>/dev/null; printf '\n'; eval "$_v=\"\$_a\""; }
-getenv() { [ -f iocontacts.env ] && sed -n "s/^$1=//p" iocontacts.env | tail -n 1; true; }
+getenv() { [ -f config.env ] && sed -n "s/^$1=//p" config.env | tail -n 1; true; }
 
 # ---- system packages (Python 3.10+ and venv)
 if [ "$SYSDEPS" != 0 ] && ! python3 -c 'import sys, venv, ensurepip; assert sys.version_info >= (3, 10)' 2>/dev/null; then
   say "Installing Python"
-  if command -v apt-get >/dev/null; then apt-get update -qq && apt-get install -y -qq python3 python3-venv python3-pip >/dev/null
-  elif command -v dnf >/dev/null; then dnf install -y -q python3 python3-pip
+  if command -v apt-get >/dev/null; then apt-get update -qq && apt-get install -y -qq python3 python3-venv python3-pip git >/dev/null
+  elif command -v dnf >/dev/null; then dnf install -y -q python3 python3-pip git
   elif command -v brew >/dev/null; then brew install python
   else die "install Python 3.10 or newer with venv, then run this again"; fi
 fi
+command -v git >/dev/null || die "git is needed to install the suite's shared library (iosuite-shared, from the iosuite-shared repository): install git, then run this again"
 PY="${PY:-python3}"
 
 # ---- the answers
@@ -57,7 +60,7 @@ if [ -z "$DBS" ]; then
   DBS="$H:$P/$D:$U:$W"
 fi
 DB_HOST="${DBS%%:*}"; r="${DBS#*:}"; DB_PORT="${r%%/*}"; r="${r#*/}"; DB_NAME="${r%%:*}"; r="${r#*:}"; DB_USER="${r%%:*}"; DB_PASSWORD="${r#*:}"
-# the Shared ioSuite database (accounts, sessions and settings shared by the ioThing apps)
+# the Shared ioSuite database (accounts, sessions and settings shared by every app of the suite)
 suiteenv() { getenv "IOSUITE_DB_$1"; }
 if [ -z "$SDBS" ]; then
   SD0=iosuite; SU0=iosuite
@@ -67,9 +70,10 @@ if [ -z "$SDBS" ]; then
   SDBS="$H:$P/$D:$U:$W"
 fi
 SUITE_HOST="${SDBS%%:*}"; r="${SDBS#*:}"; SUITE_PORT="${r%%/*}"; r="${r#*/}"; SUITE_NAME="${r%%:*}"; r="${r#*:}"; SUITE_USER="${r%%:*}"; SUITE_PASSWORD="${r#*:}"
-[ -n "$PORT" ] || { P="$(getenv PORT)"; ask PORT "Web port" "${P:-8610}"; }
+[ -n "$PORT" ] || { P="$(getenv PORT)"; ask PORT "Web port" "${P:-8640}"; }
 [ -n "$LDAP" ] || { L="$(getenv LDAP_PORT)"; ask LDAP "LDAP directory port (0: off)" "${L:-3890}"; }
 [ -n "$PUBURL" ] || { U2="$(getenv PUBLIC_URL)"; ask PUBURL "Public address, e.g. https://contacts.example.com (empty: as reached)" "$U2"; }
+[ -n "$COOKIE" ] || { C2="$(getenv COOKIE_DOMAIN)"; ask COOKIE "Domain the sign-in is shared on, e.g. example.com (empty: this host only)" "$C2"; }
 if [ -z "$ADMIN" ] && [ "$NO_ADMIN" = 0 ] && [ "$YES" = 0 ] && [ -t 0 ]; then
   ask AN "Admin user name (empty: make it in the browser on the first visit)" "admin"
   if [ -n "$AN" ]; then asksecret AW "Admin password (8 or more)"; [ -n "$AW" ] && ADMIN="$AN:$AW"; fi
@@ -82,19 +86,18 @@ say "Installing the Python packages"
 .venv/bin/python -m pip install -q -e .
 
 # ---- settings (kept between runs; passwords readable by the owner only)
-say "Writing iocontacts.env"
-touch iocontacts.env; chmod 600 iocontacts.env
-setenv() { grep -v "^$1=" iocontacts.env > iocontacts.env.tmp || true; printf '%s=%s\n' "$1" "$2" >> iocontacts.env.tmp; mv iocontacts.env.tmp iocontacts.env; chmod 600 iocontacts.env; }
+say "Writing config.env"
+touch config.env; chmod 600 config.env
+setenv() { grep -v "^$1=" config.env > config.env.tmp || true; printf '%s=%s\n' "$1" "$2" >> config.env.tmp; mv config.env.tmp config.env; chmod 600 config.env; }
 setenv DB_HOST "$DB_HOST"; setenv DB_PORT "$DB_PORT"; setenv DB_NAME "$DB_NAME"; setenv DB_USER "$DB_USER"; setenv DB_PASSWORD "$DB_PASSWORD"
 setenv IOSUITE_DB_HOST "$SUITE_HOST"; setenv IOSUITE_DB_PORT "$SUITE_PORT"; setenv IOSUITE_DB_NAME "$SUITE_NAME"
 setenv IOSUITE_DB_USER "$SUITE_USER"; setenv IOSUITE_DB_PASSWORD "$SUITE_PASSWORD"
-setenv PORT "$PORT"; setenv LDAP_PORT "$LDAP"
-[ -n "$PUBURL" ] && setenv PUBLIC_URL "$PUBURL"
+setenv PORT "$PORT"; setenv LDAP_PORT "$LDAP"; setenv PUBLIC_URL "$PUBURL"; setenv COOKIE_DOMAIN "$COOKIE"
 
-say "Checking the database at $DB_HOST:$DB_PORT/$DB_NAME"
-.venv/bin/python -m app.cli check || die "could not reach the database: check the host, port, user and password (and that the user may connect from this machine)"
+say "Checking the databases ($DB_HOST:$DB_PORT/$DB_NAME and $SUITE_HOST:$SUITE_PORT/$SUITE_NAME)"
+.venv/bin/python -m app.cli check || die "could not reach a database: check the host, port, user and password (and that the user may connect from this machine)"
 if [ -n "$ADMIN" ]; then
-  IOCONTACTS_PASSWORD="${ADMIN#*:}" .venv/bin/python -m app.cli create-user "${ADMIN%%:*}" admin
+  ADMIN_PASSWORD="${ADMIN#*:}" .venv/bin/iosuite-shared --config . admin "${ADMIN%%:*}" --app iocontacts
 fi
 
 # ---- the service
@@ -113,9 +116,9 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=$OWNER
-EnvironmentFile=$APP/iocontacts.env
+EnvironmentFile=$APP/config.env
 WorkingDirectory=$APP
-ExecStart=$APP/.venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips=*
+ExecStart=$APP/.venv/bin/python -m app
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 Restart=always
 RestartSec=5

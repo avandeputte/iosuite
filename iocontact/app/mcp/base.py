@@ -5,7 +5,7 @@ from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
 
-from app import APP_VERSION, config, db, model, users
+from app import __version__, config, db, model, users
 
 READ_ONLY = ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False)
 WRITES = ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=False)
@@ -15,7 +15,7 @@ DELETES = ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHi
 server = MCPServer(
     "iocontacts",
     title="ioContacts",
-    version=APP_VERSION,
+    version=__version__,
     instructions=(
         "The family's address book (ioContacts). Start with overview. Find people with search_contacts (names, emails, "
         "phone digits, companies, addresses, labels and notes all match), then get_contact for everything about one, "

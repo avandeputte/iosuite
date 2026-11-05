@@ -1,5 +1,5 @@
 # Tests against a MariaDB service, then builds the container image and pushes it to ghcr.io on pushes to main and
-# version tags (pull requests only build).
+# version tags (pull requests only build). The image of a push to main is also tagged v<__version__ in app/__init__.py>.
 name: Tests and image
 
 on:
@@ -24,9 +24,6 @@ jobs:
         image: mariadb:11
         env:
           MARIADB_ROOT_PASSWORD: root
-          MARIADB_DATABASE: contacts_test
-          MARIADB_USER: contacts
-          MARIADB_PASSWORD: contacts
         ports: ["3306:3306"]
         options: >-
           --health-cmd="healthcheck.sh --connect --innodb_initialized" --health-interval=5s --health-timeout=5s --health-retries=20
@@ -35,6 +32,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
       - name: Syntax checks
         run: |
           python -m pip install -q -e ".[test]" pyflakes
@@ -42,21 +42,10 @@ jobs:
           node --input-type=module --check < static/app.js
           for f in *.sh; do sh -n "$f"; done
           bash -n proxmox/ct/iocontacts.sh proxmox/install/iocontacts-install.sh
-      - name: Shared ioSuite test database
-        # the Shared ioSuite database (iosuite-shared: accounts and suite settings) is a database of its own; the test user gets it too
-        run: |
-          python - <<'PY'
-          import pymysql
-          c = pymysql.connect(host="127.0.0.1", user="root", password="root", autocommit=True)
-          c.cursor().execute("CREATE DATABASE IF NOT EXISTS iosuite_test_iocontacts")
-          c.cursor().execute("GRANT ALL ON iosuite_test_iocontacts.* TO 'contacts'@'%'")
-          PY
       - name: Tests
+        # scratch databases on the service (iosuite_shared.testing)
         env:
-          DB_HOST: 127.0.0.1
-          IOSUITE_DB_HOST: 127.0.0.1
-          IOSUITE_DB_USER: contacts
-          IOSUITE_DB_PASSWORD: contacts
+          IOSUITE_TEST_DB: 127.0.0.1:3306:root:root
         run: python -m pytest -q -p no:cacheprovider tests
 
   image:
@@ -64,6 +53,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - id: version
+        run: echo "version=$(python3 -c 'import re;print(re.search(r"__version__ = \"([^\"]+)\"", open("app/__init__.py").read()).group(1))')" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
       - name: Log in to ghcr.io
@@ -79,6 +70,7 @@ jobs:
           images: ${{ env.IMAGE }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=v${{ steps.version.outputs.version }},enable=${{ github.ref == 'refs/heads/main' }}
             type=ref,event=tag
             type=sha,prefix=
       - uses: docker/build-push-action@v6
@@ -88,3 +80,5 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: COMMIT=${{ github.sha }}
+

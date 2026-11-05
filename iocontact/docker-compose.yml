@@ -7,21 +7,22 @@ services:
     container_name: iocontacts
     restart: unless-stopped
     ports:
-      - "8610:8610"     # web app, CardDAV (/dav/), REST API (/api/), birthday calendar (/cal/)
+      - "8640:8640"     # web app, CardDAV (/dav/), REST API (/api/), birthday calendar (/cal/)
       - "389:3890"      # LDAP directory for mail apps (read-only)
     environment:
       TZ: America/New_York
-      DB_HOST: 192.168.1.89          # CHANGE ME: your MariaDB host
+      DB_HOST: db.example.lan         # CHANGE ME: your MariaDB host
       DB_PORT: "3306"
       DB_NAME: contacts
       DB_USER: contacts
       DB_PASSWORD: change-me          # CHANGE ME
-      # the Shared ioSuite database (accounts, sessions and settings shared by the ioThing apps); by default on DB_HOST
+      # the Shared ioSuite database (accounts, sessions and settings shared by every app of the suite); by default on DB_HOST
       IOSUITE_DB_NAME: iosuite
       IOSUITE_DB_USER: iosuite
       IOSUITE_DB_PASSWORD: change-me  # CHANGE ME
       ADMIN_USER: admin               # the first admin, made on the first start (or remove both and make it in the browser)
       ADMIN_PASSWORD: change-me-please  # CHANGE ME (8 characters or more)
       # PUBLIC_URL: https://contacts.example.com   # behind a reverse proxy: links in the calendar feed and Settings
+      # COOKIE_DOMAIN: example.com                 # one sign-in for every app of the suite under this domain
       # AUTH_PROXY: cloudflare        # sign-in at the proxy, as in iopix (see README)
-      # IOPIX_URL: http://192.168.1.10:8600        # or Settings > ioPix
+      # IOPIX_URL: http://photo.example.lan:8600        # or Settings > ioPix

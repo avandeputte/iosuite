@@ -4,7 +4,7 @@ from typing import Literal, Optional
 from mcp.server.mcpserver import Image
 from mcp.server.mcpserver.exceptions import ToolError
 
-from app import APP_VERSION, config, db, iopix, model, relations as rel, users, vcard
+from app import __version__, config, db, iopix, model, relations as rel, users, vcard
 from app.fold import fold
 from app.mcp.base import READ_ONLY, book_ids, brief, clamp, contact_out, find_contact, readable_books, server, who
 
@@ -30,7 +30,7 @@ def overview() -> dict:
         "labels": [f"{x['tag']} ({x['n']})" for x in model.all_tags(ids)],
         "next14Days": model.upcoming(ids, 14),
         "iopixConnected": bool(iopix.settings()["url"]),
-        "version": APP_VERSION, "webApp": config.PUBLIC_URL or None,
+        "version": __version__, "webApp": config.PUBLIC_URL or None,
     }
 
 
