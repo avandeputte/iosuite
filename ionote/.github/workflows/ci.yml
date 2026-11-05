@@ -1,6 +1,7 @@
 # Tests on SQLite and on MariaDB, then builds the container image and pushes it to GitHub's registry (ghcr.io) on
-# every push to main and on version tags; pull requests only build. The same layout as iopix's workflow.
-name: Docker image
+# every push to main and on version tags; pull requests only build. The shared accounts go in scratch databases
+# on the same MariaDB (iosuite_shared.testing, IOSUITE_TEST_DB).
+name: Tests and image
 
 on:
   push:
@@ -42,15 +43,14 @@ jobs:
           for f in static/app.js static/js/*.js; do node --input-type=module --check < "$f" || exit 1; done; node --check static/sw.js
           for f in *.sh; do sh -n "$f"; done
           bash -n proxmox/ct/ionotes.sh proxmox/install/ionotes-install.sh
-      - name: The Shared ioSuite database (iosuite-shared) on the same server
-        run: |
-          sudo apt-get install -y -qq mariadb-client >/dev/null
-          mariadb -h 127.0.0.1 -uroot -proot -e "CREATE USER IF NOT EXISTS 'iosuite'@'%' IDENTIFIED BY 'iosuite'; CREATE DATABASE IF NOT EXISTS iosuite_test_ionotes; GRANT ALL ON iosuite_test_ionotes.* TO 'iosuite'@'%'; FLUSH PRIVILEGES;"
       - name: Tests on SQLite
+        env:
+          IOSUITE_TEST_DB: 127.0.0.1:3306:root:root
         run: python -m pytest -q -p no:cacheprovider tests
       - name: Tests on MariaDB
         env:
           IONOTES_TEST_DB: mysql
+          IOSUITE_TEST_DB: 127.0.0.1:3306:root:root
         run: python -m pytest -q -p no:cacheprovider tests
 
   image:
@@ -91,5 +91,6 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             OCR=1
+            COMMIT=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

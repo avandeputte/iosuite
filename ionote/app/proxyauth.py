@@ -1,6 +1,6 @@
 """Sign-in done by a reverse proxy in front of ionotes (Cloudflare Access, HAProxy, nginx, Caddy or Traefik with
 an authentication step): iosuite_shared.proxyauth does the work, with the settings stored once for the whole suite
-(or per app) in the Shared ioSuite database; the environment (ionotes.env) still wins. This module keeps ionotes' old names:
+(or per app) in the Shared ioSuite database; the environment (config.env) still wins. This module keeps ionotes' old names:
 
   AUTH_PROXY          off (default) | cloudflare | haproxy | nginx | caddy | traefik | header
   AUTH_PROXY_HEADER   the header(s) holding the user, comma-separated

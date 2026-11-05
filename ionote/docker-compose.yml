@@ -19,23 +19,23 @@ services:
     environment:
       TZ: America/New_York
       DB_TYPE: mysql
-      DB_HOST: 192.168.1.89                         # CHANGE ME: your MariaDB host or IP
+      DB_HOST: db.example.lan                       # CHANGE ME: your MariaDB host or IP
       DB_PORT: "3306"
-      DB_DATABASE: notes
+      DB_NAME: notes
       DB_USER: notes
       DB_PASSWORD: change-me                        # CHANGE ME
       # the Shared ioSuite database (MariaDB): accounts, sessions and suite-wide settings, shared with the other
       # ioThing apps
-      IOSUITE_DB_HOST: 192.168.1.89                 # CHANGE ME
-      IOSUITE_DB_PORT: "3306"
+      # (same server as DB_HOST / DB_PORT unless IOSUITE_DB_HOST / IOSUITE_DB_PORT are set)
       IOSUITE_DB_NAME: iosuite
       IOSUITE_DB_USER: iosuite
       IOSUITE_DB_PASSWORD: change-me                # CHANGE ME
       # the first admin account, created on the first start (remove both lines to start open and create it in the web app)
       ADMIN_USER: admin
       ADMIN_PASSWORD: change-me-please              # CHANGE ME (8 characters or more)
-      # the address ionotes is reached at, for links in MCP answers
-      # APP_URL: https://notes.example.com
+      # the address people and the other apps reach ionotes at, and the domain the sign-in is shared on
+      # PUBLIC_URL: https://notes.example.com
+      # COOKIE_DOMAIN: example.com
       # sign-in at Cloudflare Access (see README): AUTH_PROXY: cloudflare, CF_ACCESS_TEAM, CF_ACCESS_AUD
       # READ_ONLY: "1"
     healthcheck:

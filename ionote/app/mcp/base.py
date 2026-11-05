@@ -8,7 +8,7 @@ from mcp.types import ToolAnnotations
 from app import config, db, notes
 from app.auth import updater
 
-APP = config.APP_URL  # for the links in results
+APP = config.BASE_URL  # for the links in results
 READ_ONLY = ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False)
 # a tool that changes notes but can be repeated with the same outcome (an edit, a colour, a move)
 WRITES = ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=False)
