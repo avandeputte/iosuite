@@ -1,5 +1,7 @@
 /* ioContacts web app: one module, no build step. Pages: the contact list with a detail pane, the edit form, upcoming
-   birthdays, the family tree, duplicates, ioPix people, import/export and settings (account, devices, books, users, ioPix). */
+   birthdays, the family tree, ioPix people, import/export, settings (account, display, apps and devices, address books,
+   connected apps, users and sign-in, server) and maintenance (duplicates, data quality, suggestions, merge history, and for
+   admins storage and backups, updates and logs), laid out as in the other ioThing apps. */
 
 // ------------------------------------------------------------------ helpers
 const $ = (s, el = document) => el.querySelector(s);
@@ -190,6 +192,9 @@ function drawUser() {
       h('a', { class: 'mi', href: '#/settings/devices', onclick: closeMenu }, icon('devices', 's'), 'Connect apps and devices'),
       h('button', { class: 'mi', onclick: () => { const n = { system: 'light', light: 'dark', dark: 'system' }[theme]; localStorage.setItem('ioc.theme', n); applyTheme(); closeMenu(); toast(`Appearance: ${n}`); } },
         icon('theme', 's'), `Appearance: ${theme}`),
+      h('a', { class: 'mi', href: '#/settings', onclick: closeMenu }, icon('settings', 's'), 'Settings'),
+      h('a', { class: 'mi', href: '#/maintenance', onclick: closeMenu }, icon('wrench', 's'), 'Maintenance'),
+      h('button', { class: 'mi', onclick: async () => { closeMenu(); if (await signOutElsewhere()) toast('Signed out elsewhere'); } }, icon('devices', 's'), 'Sign out everywhere else'),
       h('button', { class: 'mi', onclick: async () => { await api('/api/auth/logout', { method: 'POST' }); location.reload(); } }, icon('logout', 's'), 'Sign out'));
     m.append(menu);
     setTimeout(() => document.addEventListener('click', outside), 0);
@@ -278,7 +283,7 @@ function drawNav() {
     link('import', '#/import', 'upload', 'Import and export', null, r.view === 'import', '--c-green'),
     h('div', { class: 'navfoot' },
       link('settings', '#/settings', 'settings', 'Settings', null, r.view === 'settings'),
-      link('maint', '#/maint', 'wrench', 'Maintenance', S.status.suggestions || null, r.view === 'maint')),
+      link('maint', '#/maintenance', 'wrench', 'Maintenance', S.status.suggestions || null, r.view === 'maint')),
   ].flat(3).filter(Boolean));
   applySidebar();
   $('.navmore')?.classList.toggle('on', ['book', 'tag', 'import', 'settings', 'maint', 'iopix'].some((v) => (v === 'book' || v === 'tag') ? listView && S.scope.kind === v : r.view === v));
@@ -311,7 +316,7 @@ function moreSheet() {
     S.status.iopix ? tile('#/iopix', 'image', 'ioPix people', 'var(--c-indigo)', r.view === 'iopix') : null,
     tile('#/import', 'upload', 'Import and export', 'var(--c-green)', r.view === 'import'),
     tile('#/settings', 'settings', 'Settings', 'var(--c-slate)', r.view === 'settings'),
-    tile('#/maint', 'wrench', 'Maintenance', 'var(--c-slate)', r.view === 'maint'));
+    tile('#/maintenance', 'wrench', 'Maintenance', 'var(--c-slate)', r.view === 'maint'));
   const p = dialog('More', grid, [{ label: 'Close', value: null }]);
   grid.addEventListener('click', (e) => { if (e.target.closest('a')) document.querySelector('.dialog-back')?.remove(); });
   return p;
@@ -336,8 +341,7 @@ function route() {
   if (a === 'book') return { view: 'list', scope: { kind: 'book', id: +b } };
   if (a === 'tag') return { view: 'list', scope: { kind: 'tag', name: b } };
   if (a === 'tree' && b) return { view: 'tree', id: +b };
-  if (a === 'dups') return { view: 'maint', tab: 'dups' };
-  if (a === 'maint') return { view: 'maint', tab: b || 'dups' };
+  if (a === 'maintenance') return { view: 'maint', tab: b || 'dups' };
   if (['upcoming', 'import', 'iopix'].includes(a)) return { view: a };
   if (a === 'settings') return { view: 'settings', tab: b || 'account' };
   return { view: 'list' };
@@ -722,12 +726,95 @@ const bookName = (id) => (S.books.find((b) => b.id === id) || {}).name;
 const LEVEL_HUE = { 'very likely': '--c-rose', likely: '--c-amber', possible: '--c-slate' };
 
 async function showMaint(page, r) {
-  const tabs = [['dups', 'Duplicates'], ['quality', 'Data quality'], ['suggest', `Suggestions${S.status.suggestions ? ` (${S.status.suggestions})` : ''}`], ['merges', 'Merge history']];
+  const adm = S.user.role === 'admin';
+  const tabs = [['dups', 'Duplicates'], ['quality', 'Data quality'], ['suggest', `Suggestions${S.status.suggestions ? ` (${S.status.suggestions})` : ''}`], ['merges', 'Merge history'],
+    ...(adm ? [['storage', 'Storage and backups'], ['updates', 'Updates and logs']] : [])];
   page.append(h('div', { class: 'pagehead' }, h('h1', null, 'Maintenance')),
-    h('div', { class: 'tabs' }, tabs.map(([k, l]) => h('button', { class: r.tab === k ? 'on' : '', onclick: () => { location.hash = `#/maint/${k}`; } }, l))));
+    h('div', { class: 'tabs' }, tabs.map(([k, l]) => h('button', { class: r.tab === k ? 'on' : '', onclick: () => { location.hash = `#/maintenance/${k}`; } }, l))));
   const body = h('div'); page.append(body);
   body.append(h('div', { class: 'muted' }, 'Loading…'));
-  await ({ dups: maintDups, quality: maintQuality, suggest: maintSuggest, merges: maintMerges }[r.tab] || maintDups)(body);
+  const views = { dups: maintDups, quality: maintQuality, suggest: maintSuggest, merges: maintMerges, ...(adm ? { storage: maintStorage, updates: maintUpdates } : {}) };
+  await (views[r.tab] || maintDups)(body);
+}
+
+async function maintStorage(el) {
+  let s; try { s = await api('/api/server'); } catch (e) { el.replaceChildren(h('p', null, e.message)); return; }
+  const n = S.books.reduce((t, b) => t + (b.count || 0), 0);
+  el.replaceChildren(h('div', { class: 'box' }, h('h2', null, icon('server'), 'Database'),
+    kv('MariaDB', h('span', null, s.database)), kv('Address books', h('span', null, `${S.books.length}${n ? `, ${n} contacts` : ''}`)),
+    h('p', { class: 'muted small' }, 'Contacts, photos and the merge history are in the database: back it up with mysqldump (or the container’s backup) and nothing else is needed. The Shared ioSuite database (accounts, sessions) is backed up with the suite.')),
+  h('div', { class: 'box' }, h('h2', null, icon('download'), 'Export'),
+    h('p', null, 'Every address book can be downloaded as vCard or CSV and imported again later: ', h('a', { class: 'lnk', href: '#/import' }, 'Import and export'), '.')));
+}
+
+async function maintUpdates(el) {
+  const draw = async () => {
+    let s; try { s = await api('/api/server'); } catch (e) { el.replaceChildren(h('p', null, e.message)); return; }
+    if (!el.isConnected) return;
+    const c = s.check, p = s.progress, last = s.lastUpdate;
+    const state = p.running ? 'Updating… ioContacts restarts when it is done, and this page reloads.'
+      : p.error ? `The last update failed: ${p.error}`
+      : !c ? `You have v${s.version}${s.installed !== 'unknown' ? ` (${s.installed.slice(0, 7)})` : ''}.`
+      : c.status === 'current' ? `v${s.version} is the latest version.`
+      : c.status === 'update' ? `You have v${s.version}; ${c.remoteVersion ? `v${c.remoteVersion}` : 'a newer build'} is available${c.remoteDate ? ` (${c.remoteDate})` : ''}${c.remoteMessage ? `: ${c.remoteMessage.replace(/^v\d+\.\d+\.\d+:\s*/, '')}` : ''}.`
+      : `Could not check: ${c.error}`;
+    const auto = h('input', { type: 'checkbox', checked: s.autoCheck, disabled: s.autoCheckLocked, onchange: async (e) => {
+      try { await api('/api/server', { method: 'POST', json: { autoCheck: e.target.checked } }); S.status = await api('/api/status'); toast('Saved'); draw(); } catch (err) { e.target.checked = !e.target.checked; fail(err); }
+    } });
+    el.replaceChildren(
+      h('div', { class: 'box' }, h('h2', null, icon('update'), 'ioContacts version'),
+        h('p', null, state),
+        !p.running && !p.error && last ? h('p', { class: last.ok ? 'muted small' : 'warn small' }, `Last update: ${last.text}`) : null,
+        h('p', null,
+          h('button', { class: 'pillbtn', onclick: async () => { el.querySelector('.box p').textContent = 'Checking…'; try { await api('/api/server', { method: 'POST', json: { action: 'check' } }); } catch (e) { fail(e); } draw(); } }, icon('update', 's'), 'Check for updates'), ' ',
+          s.docker ? h('span', { class: 'muted' }, 'Docker: update by pulling the image (docker compose pull && docker compose up -d).')
+            : s.canRun ? h('button', { class: `pillbtn ${c && c.status === 'update' ? 'primary' : ''}`, disabled: p.running, onclick: async () => {
+              if (!await confirmDialog('Update ioContacts', 'Fetch the newest version, refresh its packages and restart ioContacts? Settings and contacts stay; the page reloads when the new version is up.', 'Update now')) return;
+              if (await runUpdate()) setTimeout(draw, 2500);
+            } }, icon('check', 's'), 'Update now')
+            : h('span', { class: 'muted' }, 'This install cannot update itself from here (run ./update.sh in the app folder).')),
+        h('p', null, h('label', { class: 'check' }, auto, ' Check for a new version once a day (only GitHub’s public list of changes is asked; nothing about this server is sent)')),
+        s.autoCheckLocked ? h('p', { class: 'muted small' }, 'UPDATE_CHECK=0 in the environment keeps it off.') : null,
+        h('p', { class: 'muted small' }, `Follows ${s.repo} (${s.branch}). `, h('a', { class: 'lnk', href: `https://github.com/${s.repo}/commits/${s.branch}`, target: '_blank', rel: 'noopener' }, 'Change log'), '.')),
+      logCard(),
+      h('div', { class: 'box' }, h('h2', null, icon('update'), 'Restart'),
+        h('p', null, 'Stops ioContacts; the service manager (systemd, launchd or Docker) starts it again within seconds. Nothing is lost; the page reloads when it is back.'),
+        h('p', null, h('button', { class: 'pillbtn', onclick: async () => {
+          if (!await confirmDialog('Restart ioContacts', 'Restart the server now? Everyone is disconnected for a few seconds.', 'Restart')) return;
+          try { await api('/api/server', { method: 'POST', json: { action: 'restart' } }); } catch (e) { fail(e); return; }
+          toast('Restarting…');
+          const until = Date.now() + 90000, gone = Date.now() + 3000;
+          const look = async () => {
+            try { const r = await fetch('/api/status', { credentials: 'same-origin' }); if (r.ok && Date.now() > gone) { location.reload(); return; } } catch { /* down */ }
+            if (Date.now() < until) setTimeout(look, 2000); else toast('ioContacts did not come back; check the service.');
+          };
+          setTimeout(look, 3000);
+        } }, 'Restart ioContacts'))));
+    if (p.running) setTimeout(() => { if (el.isConnected) draw(); }, 4000);
+  };
+  await draw();
+}
+
+/** The tail of the server log (GET /api/log from iothing-auth): a level filter, a search, Reload and Download. */
+function logCard() {
+  const level = h('select', { class: 't', style: 'width:auto' }, [['any', 'Everything'], ['warning', 'Warnings and errors'], ['error', 'Errors'], ['auth', 'Sign-ins']].map(([v, l]) => h('option', { value: v }, l)));
+  const contains = h('input', { class: 't', placeholder: 'Contains…', style: 'max-width:220px' });
+  const requests = h('input', { type: 'checkbox' });
+  const out = h('pre', { class: 'log' }, 'Loading…'), note = h('p', { class: 'muted small' });
+  const load = async () => {
+    try {
+      const r = await api(`/api/log?lines=300&level=${level.value}&contains=${encodeURIComponent(contains.value)}&requests=${requests.checked ? 1 : 0}`);
+      out.textContent = r.lines.length ? r.lines.join('\n') : (r.note || 'Nothing matches.');
+      note.textContent = r.note ? '' : `${r.file}: ${(r.size_bytes / 1024).toFixed(0)} kB, the last ${r.returned} lines.`;
+      out.scrollTop = out.scrollHeight;
+    } catch (e) { out.textContent = e.message; }
+  };
+  level.onchange = load; requests.onchange = load; contains.onchange = load;
+  setTimeout(load, 0);
+  return h('div', { class: 'box' }, h('h2', null, icon('note'), 'Server log'),
+    h('div', { class: 'multi' }, level, contains, h('label', { class: 'check' }, requests, ' Requests too'),
+      h('button', { class: 'pillbtn noic', onclick: load }, 'Reload'), h('a', { class: 'pillbtn', href: '/api/log/download' }, icon('download', 's'), 'Download')),
+    out, note);
 }
 
 async function maintDups(el) {
@@ -948,11 +1035,18 @@ async function showIopix(page) {
 
 // ------------------------------------------------------------------ settings
 async function showSettings(page, r) {
-  const tabs = [['account', 'Account'], ['devices', 'Apps and devices'], ['books', 'Address books'], ...(S.user.role === 'admin' ? [['users', 'Users'], ['iopix', 'ioPix'], ['server', 'Server']] : [])];
+  const tabs = [['account', 'Account'], ['display', 'Display'], ['devices', 'Apps and devices'], ['books', 'Address books'],
+    ...(S.user.role === 'admin' ? [['suite', 'Connected apps'], ['users', 'Users and sign-in'], ['server', 'Server']] : [])];
   page.append(h('div', { class: 'pagehead' }, h('h1', null, 'Settings')),
     h('div', { class: 'tabs' }, tabs.map(([k, l]) => h('button', { class: r.tab === k ? 'on' : '', onclick: () => { location.hash = `#/settings/${k}`; } }, l))));
   const body = h('div'); page.append(body);
-  await ({ account: setAccount, devices: setDevices, books: setBooks, users: setUsers, iopix: setIopix, server: setServer }[r.tab] || setAccount)(body);
+  await ({ account: setAccount, display: setDisplay, devices: setDevices, books: setBooks, suite: setIopix, users: setUsers, server: setServer }[r.tab] || setAccount)(body);
+}
+const fld = (l, e) => h('label', { class: 'field' }, h('span', null, l), e);
+const kv = (k, v) => h('div', { class: 'kv' }, h('div', { class: 'k' }, k), h('div', { class: 'v', style: { flex: 1 } }, typeof v === 'string' ? copyRow(v) : v));
+async function signOutElsewhere() {
+  if (!await confirmDialog('Sign out everywhere', 'Sign out on every other browser and device? (Apps with an app password keep working.)', 'Sign out the others')) return false;
+  try { await api('/api/auth/logout_all', { method: 'POST' }); return true; } catch (e) { fail(e); return false; }
 }
 
 async function setAccount(el) {
@@ -963,7 +1057,18 @@ async function setAccount(el) {
   el.append(h('div', { class: 'box' }, h('h2', null, icon('person'), 'You'), h('div', { class: 'grid' }, fld('Display name', dn), fld('Email (for sign-in at a proxy)', em)),
     h('p', null, h('button', { class: 'pillbtn primary', onclick: async () => { try { S.user = (await api('/api/auth/me', { method: 'PATCH', json: { displayName: dn.value, email: em.value } })).user; drawUser(); toast('Saved'); } catch (e) { fail(e); } } }, icon('check', 's'), 'Save'))),
   h('div', { class: 'box' }, h('h2', null, icon('key'), 'Password'), h('div', { class: 'grid' }, u.hasPassword ? fld('Current password', old) : null, fld('New password (8 or more)', nw)),
-    h('p', null, h('button', { class: 'pillbtn', onclick: async () => { try { await api('/api/auth/password', { method: 'POST', json: { old: old.value, new: nw.value } }); old.value = nw.value = ''; toast('Password changed'); } catch (e) { fail(e); } } }, 'Change password'))));
+    h('p', null, h('button', { class: 'pillbtn', onclick: async () => { try { await api('/api/auth/password', { method: 'POST', json: { old: old.value, new: nw.value } }); old.value = nw.value = ''; toast('Password changed'); } catch (e) { fail(e); } } }, 'Change password'))),
+  h('div', { class: 'box' }, h('h2', null, icon('devices'), 'Sessions'),
+    h('p', { class: 'muted' }, 'You are signed in to every ioThing app at once. Signing out elsewhere ends your session on every other browser and device; apps with an app password keep working.'),
+    h('p', null, h('button', { class: 'pillbtn noic', onclick: async () => { if (await signOutElsewhere()) toast('Signed out elsewhere'); } }, 'Sign out everywhere else'))));
+}
+
+async function setDisplay(el) {
+  const theme = localStorage.getItem('ioc.theme') || 'system';
+  const th = h('select', { class: 't' }, [['system', 'Same as the device'], ['light', 'Light'], ['dark', 'Dark']].map(([v, l]) => h('option', { value: v, selected: v === theme ? true : null }, l)));
+  th.onchange = () => { localStorage.setItem('ioc.theme', th.value); applyTheme(); toast(`Appearance: ${th.value}`); };
+  el.append(h('div', { class: 'box' }, h('h2', null, icon('theme'), 'Appearance'), h('div', { class: 'grid' }, fld('Light or dark', th)),
+    h('p', { class: 'muted small' }, 'Kept in this browser. The sort order and the fields shown are set at the top of the contact list.')));
 }
 
 async function setDevices(el) {
@@ -1064,6 +1169,32 @@ async function setUsers(el) {
       })),
     h('h2', { style: { marginTop: '16px' } }, 'Add someone'), h('div', { class: 'multi' }, name, pw, role,
       h('button', { class: 'pillbtn primary', onclick: async () => { try { await api('/api/users', { method: 'POST', json: { name: name.value, password: pw.value, role: role.value } }); toast('Account made'); onRoute(); } catch (e) { fail(e); } } }, icon('add', 's'), 'Add'))));
+  el.append(await proxyCard());
+}
+
+/** Sign-in at the proxy (Cloudflare Access, Authelia…), saved for the whole suite through iothing-auth; the same card in every app. */
+async function proxyCard() {
+  let st;
+  try { st = await api('/api/auth/proxy'); } catch (e) { return h('div', { class: 'box' }, h('h2', null, icon('key'), 'Sign-in at the proxy'), h('p', { class: 'warn' }, e.message)); }
+  const v = st.values || {}, fixed = new Set(st.fromEnv || []);
+  const field = (k, ph) => h('input', { class: 't', value: v[k] || '', placeholder: ph, disabled: fixed.has(k) ? true : null, 'data-k': k });
+  const sel = (k, opts) => h('select', { class: 't', 'data-k': k, disabled: fixed.has(k) ? true : null }, opts.map(([val, l]) => h('option', { value: val, selected: (v[k] || '') === val ? true : null }, l)));
+  const fields = [sel('AUTH_PROXY', [['off', 'Off'], ['cloudflare', 'Cloudflare Access'], ['haproxy', 'HAProxy'], ['nginx', 'nginx'], ['caddy', 'Caddy'], ['traefik', 'Traefik'], ['header', 'Another proxy']]),
+    field('CF_ACCESS_TEAM', 'myteam.cloudflareaccess.com'), field('CF_ACCESS_AUD', 'the Access application’s AUD tag'),
+    field('AUTH_PROXY_HEADER', 'header(s) with the user (other proxies)'), field('AUTH_PROXY_TRUSTED', '127.0.0.1, ::1 (the proxy’s address)'),
+    sel('AUTH_PROXY_CREATE', [['', 'show the sign-in screen'], ['deny', 'refuse them'], ['viewer', 'make them a viewer account'], ['editor', 'make them an editor account']])];
+  if (!v.AUTH_PROXY) fields[0].value = 'off';
+  const labels = ['Proxy', 'Cloudflare team', 'Cloudflare AUD', 'User header', 'Proxy address', 'Someone with no account'];
+  const seen = st.seen && st.seen.aud ? h('p', { class: 'muted small' }, `Last Cloudflare Access request: team ${st.seen.iss || '?'}, AUD ${Array.isArray(st.seen.aud) ? st.seen.aud.join(', ') : st.seen.aud}, ${st.seen.email || ''}`) : null;
+  return h('div', { class: 'box' }, h('h2', null, icon('key'), 'Sign-in at the proxy'),
+    h('p', { class: 'muted' }, 'With Cloudflare Access (a Cloudflare Tunnel with an Access policy) or a proxy with Authelia, Authentik or oauth2-proxy in front, ioContacts takes that sign-in: the person is matched to an account by email, then by name. Saved for the whole suite, so every app follows. Settings in the server’s environment win.'),
+    h('div', { class: 'grid' }, fields.map((f, i) => fld(labels[i], f))),
+    seen, fixed.size ? h('p', { class: 'muted small' }, `Fixed in the environment: ${[...fixed].join(', ')}`) : null,
+    h('p', null, h('button', { class: 'pillbtn primary', onclick: async () => {
+      const body = {};
+      for (const f of fields) if (!f.disabled) body[f.dataset.k] = f.value;
+      try { await api('/api/auth/proxy', { method: 'POST', json: body }); toast('Saved'); } catch (e) { fail(e); }
+    } }, icon('check', 's'), 'Save')));
 }
 
 async function setIopix(el) {
@@ -1086,47 +1217,25 @@ async function setIopix(el) {
     } }, icon('check', 's'), 'Save and test')), out));
 }
 
-// ------------------------------------------------------------------ sign-in
 async function setServer(el) {
-  const draw = async () => {
-    let s; try { s = await api('/api/server'); } catch (e) { el.replaceChildren(h('p', null, e.message)); return; }
-    if (!el.isConnected) return;
-    const c = s.check, p = s.progress, last = s.lastUpdate;
-    const state = p.running ? 'Updating… ioContacts restarts when it is done, and this page reloads.'
-      : p.error ? `The last update failed: ${p.error}`
-      : !c ? `You have v${s.version}${s.installed !== 'unknown' ? ` (${s.installed})` : ''}.`
-      : c.status === 'current' ? `v${s.version} is the latest version.`
-      : c.status === 'update' ? `You have v${s.version}; ${c.remoteVersion ? `v${c.remoteVersion}` : 'a newer build'} is available${c.remoteDate ? ` (${c.remoteDate})` : ''}${c.remoteMessage ? `: ${c.remoteMessage.replace(/^v\d+\.\d+\.\d+:\s*/, '')}` : ''}.`
-      : `Could not check: ${c.error}`;
-    const sw = (on, label, key, locked) => h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: on, disabled: locked, onchange: async (e) => {
-      try { await api('/api/server', { method: 'POST', json: { [key]: e.target.checked } }); S.status = await api('/api/status'); toast('Saved'); draw(); } catch (err) { e.target.checked = !e.target.checked; fail(err); }
-    } }), ' ', label);
-    el.replaceChildren(
-      h('div', { class: 'box' }, h('h2', null, icon('update'), 'ioContacts version'),
-        h('p', null, state),
-        !p.running && !p.error && last ? h('p', { class: last.ok ? 'muted small' : 'warn small' }, `Last update: ${last.text}`) : null,
-        h('p', null,
-          h('button', { class: 'pillbtn', onclick: async () => { el.querySelector('.box p').textContent = 'Checking…'; try { await api('/api/server', { method: 'POST', json: { action: 'check' } }); } catch (e) { fail(e); } draw(); } }, icon('update', 's'), 'Check for updates'), ' ',
-          s.docker ? h('span', { class: 'muted' }, 'Docker: update by pulling the image (docker compose pull && docker compose up -d).')
-            : s.canRun ? h('button', { class: `pillbtn ${c && c.status === 'update' ? 'primary' : ''}`, disabled: p.running, onclick: async () => {
-              if (!await confirmDialog('Update ioContacts', 'Fetch the newest version, refresh its packages and restart ioContacts? Settings and contacts stay; the page reloads when the new version is up.', 'Update now')) return;
-              if (await runUpdate()) setTimeout(draw, 2500);
-            } }, icon('check', 's'), 'Update now')
-            : h('span', { class: 'muted' }, 'This install cannot update itself from here (run ./update.sh in the app folder).')),
-        h('p', null, sw(s.autoCheck, 'Check for a new version once a day (only GitHub’s public list of changes is asked; nothing about this server is sent)', 'autoCheck', s.autoCheckLocked)),
-        s.autoCheckLocked ? h('p', { class: 'muted small' }, 'UPDATE_CHECK=0 in the environment keeps it off.') : null,
-        h('p', { class: 'muted small' }, `Follows ${s.repo} (${s.branch}).`)),
-      h('div', { class: 'box' }, h('h2', null, icon('ai'), 'MCP server'),
-        h('p', null, 'The address /mcp that lets an AI assistant (Claude, for example) search, read and keep the contacts: look people up, add and correct contacts, link relatives, list birthdays, import and export, and for admins check for and install updates. Each assistant signs in with an app password and acts as that account, with its rights. Off: /mcp does not answer at all.'),
-        h('p', null, sw(s.mcpEnabled, 'The MCP server is on', 'mcpEnabled', s.mcpLocked)),
-        s.mcpLocked ? h('p', { class: 'muted small' }, 'MCP=1 in the environment keeps it on.') : null,
-        s.mcpEnabled ? [h('div', { class: 'kv' }, h('div', { class: 'k' }, 'Address'), h('div', { class: 'v', style: { flex: 1 } }, copyRow(s.mcpUrl))),
-          h('p', { class: 'muted small' }, 'How to connect an assistant: ', h('a', { class: 'lnk', href: '#/settings/devices' }, 'Settings › Apps and devices'), '. On the server itself, `python -m app.mcp --user NAME` serves it over stdio.')] : null));
-    if (p.running) setTimeout(() => { if (el.isConnected) draw(); }, 4000);
-  };
-  await draw();
+  let s; try { s = await api('/api/server'); } catch (e) { el.replaceChildren(h('p', null, e.message)); return; }
+  const mcp = h('input', { type: 'checkbox', checked: s.mcpEnabled, disabled: s.mcpLocked, onchange: async (e) => {
+    try { await api('/api/server', { method: 'POST', json: { mcpEnabled: e.target.checked } }); S.status = await api('/api/status'); toast('Saved'); setServer(el); } catch (err) { e.target.checked = !e.target.checked; fail(err); }
+  } });
+  el.replaceChildren(
+    h('div', { class: 'box' }, h('h2', null, icon('ai'), 'MCP server'),
+      h('p', null, 'The address /mcp that lets an AI assistant (Claude, for example) search, read and keep the contacts: look people up, add and correct contacts, link relatives, list birthdays, import and export, and for admins check for and install updates. Each assistant signs in with an app password and acts as that account, with its rights. Off: /mcp does not answer at all.'),
+      h('p', null, h('label', { class: 'check' }, mcp, ' The MCP server is on')),
+      s.mcpLocked ? h('p', { class: 'muted small' }, 'MCP=1 in the environment keeps it on.') : null,
+      s.mcpEnabled ? [kv('Address', `${location.origin}/mcp`),
+        h('p', { class: 'muted small' }, 'How to connect an assistant: ', h('a', { class: 'lnk', href: '#/settings/devices' }, 'Settings › Apps and devices'), '. On the server itself, `python -m app.mcp --user NAME` serves it over stdio.')] : null),
+    h('div', { class: 'box' }, h('h2', null, icon('server'), 'This server'),
+      kv('Version', h('span', null, `v${s.version}${s.installed !== 'unknown' ? ` (${s.installed.slice(0, 7)})` : ''}`, ' · ', h('a', { class: 'lnk', href: '#/maintenance/updates' }, 'Updates and logs'))),
+      kv('Database', h('span', null, s.database)), kv('LDAP', h('span', null, s.ldap || 'off')),
+      h('p', { class: 'muted small' }, 'The database, the LDAP directory, the public address and the ports are set in the server’s .env file, not here.')));
 }
 
+// ------------------------------------------------------------------ sign-in
 /** Start update.sh on the server, then watch /api/status until another version or commit answers, and reload. */
 async function runUpdate() {
   try { await api('/api/server', { method: 'POST', json: { action: 'update' } }); } catch (e) { fail(e); return false; }
@@ -1134,7 +1243,7 @@ async function runUpdate() {
   const was = `${S.status.version}|${S.status.commit || ''}`, until = Date.now() + 240000;
   const look = async () => {
     try { const s = await fetch('/api/status', { credentials: 'same-origin' }).then((r) => r.json()); if (s.version && `${s.version}|${s.commit || ''}` !== was) { location.reload(); return; } } catch { /* restarting */ }
-    if (Date.now() < until) setTimeout(look, 4000); else toast('The update did not finish; see Settings › Server.');
+    if (Date.now() < until) setTimeout(look, 4000); else toast('The update did not finish; see Maintenance › Updates and logs.');
   };
   setTimeout(look, 4000);
   return true;
@@ -1149,7 +1258,7 @@ function updateBanner() {
   const b = h('div', { id: 'updbanner', role: 'status' }, icon('update'),
     h('span', null, `ioContacts ${u.version ? `v${u.version}` : 'update'} is available${u.message ? `: ${u.message.replace(/^v\d+\.\d+\.\d+:\s*/, '')}` : ''}`),
     h('button', { class: 'pillbtn primary noic', onclick: async () => { if (await confirmDialog('Update ioContacts', 'Install the new version and restart? The page reloads when it is back.', 'Update now')) { b.remove(); runUpdate(); } } }, 'Update now'),
-    h('a', { class: 'pillbtn noic', href: '#/settings/server', onclick: () => b.remove() }, 'Details'),
+    h('a', { class: 'pillbtn noic', href: '#/maintenance/updates', onclick: () => b.remove() }, 'Details'),
     h('button', { class: 'iconbtn', title: 'Not now (hidden until the next version)', onclick: () => { try { localStorage.setItem('ioc.updateDismissed', u.remote); } catch { /* */ } b.remove(); } }, icon('close', 's')));
   document.body.append(b);
 }

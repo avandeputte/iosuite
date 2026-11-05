@@ -6,7 +6,8 @@ from typing import Optional
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
 
-from app import APP_VERSION, config, db, iopix, updates, users
+from app import APP_VERSION, config, db, iopix, users
+from app.auth import updater
 from app.mcp.base import READ_ONLY, need_admin, server
 
 UPDATES = ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=True)  # reaches GitHub
@@ -17,11 +18,11 @@ def diagnostics() -> dict:
     """Admins: the server's health: version and commit, Python and platform, the database (server version, tables,
     rows), the LDAP directory, ioPix, the MCP switch, the last update check and update, and the accounts."""
     need_admin()
-    out = {"version": APP_VERSION, "commit": updates.local_commit()[:7], "docker": updates.in_docker(),
+    out = {"version": APP_VERSION, "commit": updater.local_commit()[:7], "docker": updater.in_docker(),
            "python": sys.version.split()[0], "platform": platform.platform(), "appDir": str(config.ROOT),
            "publicUrl": config.PUBLIC_URL or None,
            "ldap": {"port": config.LDAP_PORT, "base": config.LDAP_BASE} if config.LDAP_PORT else "off",
-           "proxySignIn": config.AUTH_PROXY, "update": updates.status()}
+           "proxySignIn": config.AUTH_PROXY, "update": updater.status()}
     try:
         out["database"] = {"host": f"{config.DB_HOST}:{config.DB_PORT}", "name": config.DB_NAME,
                            "server": db.one("SELECT version() AS v")["v"],
@@ -54,7 +55,7 @@ def check_for_update() -> dict:
     """Admins: the installed version and commit against GitHub's main branch (status: current, update or error), and
     the outcome of the last update (lastUpdate: ok, text, at)."""
     need_admin()
-    return {**updates.check(), "lastUpdate": updates.last_result(), "canUpdateHere": updates.can_run(), "docker": updates.in_docker()}
+    return {**updater.check(), "lastUpdate": updater.last_result(), "canUpdateHere": updater.can_run(), "docker": updater.in_docker()}
 
 
 @server.tool(annotations=UPDATES)
@@ -66,10 +67,10 @@ def update_server(ref: Optional[str] = None) -> dict:
     happened. Not in Docker (pull the image there)."""
     need_admin()
     try:
-        updates.run(ref or "")
+        updater.run(ref or "")
     except RuntimeError as e:
         raise ToolError(str(e))
-    return {"started": True, "installed": updates.local_commit()[:7], "ref": ref or config.BRANCH,
+    return {"started": True, "installed": updater.local_commit()[:7], "ref": ref or updater.branch,
             "note": "update.sh is running; ioContacts restarts when it finishes. Then call check_for_update."}
 
 
