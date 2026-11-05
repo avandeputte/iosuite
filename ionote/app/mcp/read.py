@@ -19,10 +19,10 @@ def notes_overview() -> dict:
     m = notes.meta()
     with notes.db.connect() as con:
         o = (notes.owner(),)
-        sources = {r[0]: r[1] for r in con.execute("SELECT source, count(*) FROM notes WHERE owner = ? AND deleted = 0 GROUP BY source ORDER BY 2 DESC", o)}
-        apps = {r[0]: r[1] for r in con.execute("SELECT source_app, count(*) FROM notes WHERE owner = ? AND deleted = 0 AND source_app IS NOT NULL "
+        sources = {r[0]: r[1] for r in con.execute("SELECT source, count(*) FROM nts_notes WHERE user_id = ? AND deleted = 0 GROUP BY source ORDER BY 2 DESC", o)}
+        apps = {r[0]: r[1] for r in con.execute("SELECT source_app, count(*) FROM nts_notes WHERE user_id = ? AND deleted = 0 AND source_app IS NOT NULL "
                                                  "GROUP BY source_app ORDER BY 2 DESC LIMIT 15", o)}
-        first, last = con.execute("SELECT min(created_at), max(created_at) FROM notes WHERE owner = ? AND deleted = 0", o).fetchone()
+        first, last = con.execute("SELECT min(created_at), max(created_at) FROM nts_notes WHERE user_id = ? AND deleted = 0", o).fetchone()
     return {"notes": m["total"], "pinned": m["pinned"], "with_picture": m["images"], "in_no_folder": m["noFolder"], "in_trash": m["trash"],
             "folders": {f["name"]: f["count"] for f in m["folders"]}, "tags": {t["name"]: t["count"] for t in m["tags"]},
             "sources": sources, "source_apps": apps, "oldest": iso(first), "newest": iso(last), "web_app": APP,

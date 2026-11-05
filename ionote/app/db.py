@@ -17,6 +17,7 @@ import re
 import sqlite3
 import threading
 from contextlib import contextmanager
+from datetime import datetime, timezone
 
 from app import config
 
@@ -24,7 +25,8 @@ log = logging.getLogger("app.db")
 CONF = config.DATA_DIR / "db.json"
 SQLITE_FILE = config.DATA_DIR / "ionotes.db"
 KEYS = ("type", "host", "port", "database", "user", "password")
-SCHEMA_VERSION = 2  # 2: notes, folders, tag colours and the change log belong to an account (owner)
+SCHEMA_VERSION = 3  # 2: notes, folders, tag colours and the change log belong to an account; 3: the suite naming convention (nts_ tables)
+PREFIX = "nts"
 _cfg = None
 _lock = threading.Lock()
 _ready = False
@@ -37,64 +39,103 @@ except ImportError:  # pragma: no cover
     pymysql = None
     Error = (sqlite3.Error,)
 
-# ---- schema: one definition per table, the SQLite and the MySQL spelling
+# ---- schema: one definition per table, the SQLite and the MySQL spelling. Every table is nts_<name>, the suite's
+# naming convention (the apps can share one database)
 TABLES = {
     # accounts live in the Shared ioSuite database (iosuite-shared, app/auth.py); the user_accounts table of
     # ionotes 1.0 is folded into it by `iosuite-shared migrate` and renamed user_accounts_migrated
-    "app_settings": (
-        "CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT)",
-        "CREATE TABLE IF NOT EXISTS app_settings (`key` VARCHAR(191) PRIMARY KEY, value MEDIUMTEXT)"),
+    "nts_settings": (
+        "CREATE TABLE IF NOT EXISTS nts_settings (name TEXT PRIMARY KEY, value TEXT, updated_at TEXT)",
+        "CREATE TABLE IF NOT EXISTS nts_settings (name VARCHAR(191) PRIMARY KEY, value MEDIUMTEXT, updated_at DATETIME(3) NULL) "
+        "ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"),
+    "nts_schema_version": (
+        "CREATE TABLE IF NOT EXISTS nts_schema_version (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)",
+        "CREATE TABLE IF NOT EXISTS nts_schema_version (version INT PRIMARY KEY, applied_at DATETIME(3) NOT NULL) "
+        "ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"),
     # one row per change: its id is the rev stamped on what changed
-    "change_counter": (
-        "CREATE TABLE IF NOT EXISTS change_counter (rev INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER)",
-        "CREATE TABLE IF NOT EXISTS change_counter (rev BIGINT AUTO_INCREMENT PRIMARY KEY, ts BIGINT)"),
-    # times are seconds since 1970 (UTC) as the apps send them; tags is a JSON list of names
-    "notes": (
-        "CREATE TABLE IF NOT EXISTS notes (uuid TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT '', body TEXT NOT NULL DEFAULT '', "
+    "nts_change_counter": (
+        "CREATE TABLE IF NOT EXISTS nts_change_counter (rev INTEGER PRIMARY KEY AUTOINCREMENT, created_at INTEGER)",
+        "CREATE TABLE IF NOT EXISTS nts_change_counter (rev BIGINT AUTO_INCREMENT PRIMARY KEY, created_at BIGINT) "
+        "ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"),
+    # times are seconds since 1970 (UTC) as the apps send them; tags is a JSON list of names; user_id: the account's
+    # id in the Shared ioSuite database (0 until the first admin claims the records made before accounts)
+    "nts_notes": (
+        "CREATE TABLE IF NOT EXISTS nts_notes (uuid TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT '', body TEXT NOT NULL DEFAULT '', "
         "ocr_text TEXT NOT NULL DEFAULT '', source TEXT NOT NULL DEFAULT 'manual', source_app TEXT, created_at REAL NOT NULL, updated_at REAL NOT NULL, "
         "tags TEXT NOT NULL DEFAULT '[]', pinned INTEGER NOT NULL DEFAULT 0, folder_id TEXT, has_image INTEGER NOT NULL DEFAULT 0, image_sha TEXT, "
-        "deleted INTEGER NOT NULL DEFAULT 0, rev INTEGER NOT NULL DEFAULT 0, changed_by TEXT)",
-        "CREATE TABLE IF NOT EXISTS notes (uuid VARCHAR(64) PRIMARY KEY, title TEXT NOT NULL, body MEDIUMTEXT NOT NULL, "
+        "deleted INTEGER NOT NULL DEFAULT 0, rev INTEGER NOT NULL DEFAULT 0, changed_by TEXT, user_id INTEGER NOT NULL DEFAULT 0)",
+        "CREATE TABLE IF NOT EXISTS nts_notes (uuid VARCHAR(64) PRIMARY KEY, title TEXT NOT NULL, body MEDIUMTEXT NOT NULL, "
         "ocr_text MEDIUMTEXT NOT NULL, source VARCHAR(32) NOT NULL DEFAULT 'manual', source_app VARCHAR(191), created_at DOUBLE NOT NULL, updated_at DOUBLE NOT NULL, "
         "tags TEXT NOT NULL, pinned INT NOT NULL DEFAULT 0, folder_id VARCHAR(64), has_image INT NOT NULL DEFAULT 0, image_sha VARCHAR(64), "
-        "deleted INT NOT NULL DEFAULT 0, rev BIGINT NOT NULL DEFAULT 0, changed_by VARCHAR(191), "
-        "INDEX notes_rev (rev), INDEX notes_folder (folder_id), INDEX notes_updated (updated_at), "
-        "FULLTEXT INDEX notes_text (title, body, ocr_text, tags)) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"),
+        "deleted INT NOT NULL DEFAULT 0, rev BIGINT NOT NULL DEFAULT 0, changed_by VARCHAR(191), user_id BIGINT NOT NULL DEFAULT 0, "
+        "INDEX idx_nts_notes_rev (rev), INDEX idx_nts_notes_folder (folder_id), INDEX idx_nts_notes_updated (updated_at), "
+        "INDEX idx_nts_notes_user (user_id, rev), "
+        "FULLTEXT INDEX idx_nts_notes_text (title, body, ocr_text, tags)) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"),
     # the picture of a note: the bytes as sent, and a small JPEG for lists
-    "note_images": (
-        "CREATE TABLE IF NOT EXISTS note_images (uuid TEXT PRIMARY KEY, mime TEXT NOT NULL, data BLOB NOT NULL, thumb BLOB, width INTEGER, height INTEGER, "
-        "bytes INTEGER, sha TEXT, updated_at REAL)",
-        "CREATE TABLE IF NOT EXISTS note_images (uuid VARCHAR(64) PRIMARY KEY, mime VARCHAR(64) NOT NULL, data LONGBLOB NOT NULL, thumb MEDIUMBLOB, "
-        "width INT, height INT, bytes BIGINT, sha VARCHAR(64), updated_at DOUBLE) ENGINE=InnoDB"),
-    "folders": (
-        "CREATE TABLE IF NOT EXISTS folders (uuid TEXT PRIMARY KEY, name TEXT NOT NULL DEFAULT '', color TEXT, created_at REAL NOT NULL, updated_at REAL NOT NULL, "
-        "deleted INTEGER NOT NULL DEFAULT 0, rev INTEGER NOT NULL DEFAULT 0)",
-        "CREATE TABLE IF NOT EXISTS folders (uuid VARCHAR(64) PRIMARY KEY, name VARCHAR(255) NOT NULL DEFAULT '', color VARCHAR(16), created_at DOUBLE NOT NULL, "
-        "updated_at DOUBLE NOT NULL, deleted INT NOT NULL DEFAULT 0, rev BIGINT NOT NULL DEFAULT 0, INDEX folders_rev (rev)) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"),
-    # a tag's colour; tags themselves are names on notes. key: the name in lower case
-    "tag_colors": (
-        "CREATE TABLE IF NOT EXISTS tag_colors (tag_key TEXT PRIMARY KEY, name TEXT NOT NULL, color TEXT, updated_at REAL NOT NULL, "
-        "deleted INTEGER NOT NULL DEFAULT 0, rev INTEGER NOT NULL DEFAULT 0)",
-        "CREATE TABLE IF NOT EXISTS tag_colors (tag_key VARCHAR(191) PRIMARY KEY, name VARCHAR(191) NOT NULL, color VARCHAR(16), updated_at DOUBLE NOT NULL, "
-        "deleted INT NOT NULL DEFAULT 0, rev BIGINT NOT NULL DEFAULT 0, INDEX tag_colors_rev (rev)) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"),
+    "nts_note_images": (
+        "CREATE TABLE IF NOT EXISTS nts_note_images (uuid TEXT PRIMARY KEY, mime TEXT NOT NULL, data BLOB NOT NULL, thumb BLOB, width INTEGER, height INTEGER, "
+        "size_bytes INTEGER, sha TEXT, updated_at REAL)",
+        "CREATE TABLE IF NOT EXISTS nts_note_images (uuid VARCHAR(64) PRIMARY KEY, mime VARCHAR(64) NOT NULL, data LONGBLOB NOT NULL, thumb MEDIUMBLOB, "
+        "width INT, height INT, size_bytes BIGINT, sha VARCHAR(64), updated_at DOUBLE) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"),
+    "nts_folders": (
+        "CREATE TABLE IF NOT EXISTS nts_folders (uuid TEXT PRIMARY KEY, name TEXT NOT NULL DEFAULT '', color TEXT, created_at REAL NOT NULL, updated_at REAL NOT NULL, "
+        "deleted INTEGER NOT NULL DEFAULT 0, rev INTEGER NOT NULL DEFAULT 0, user_id INTEGER NOT NULL DEFAULT 0)",
+        "CREATE TABLE IF NOT EXISTS nts_folders (uuid VARCHAR(64) PRIMARY KEY, name VARCHAR(255) NOT NULL DEFAULT '', color VARCHAR(16), created_at DOUBLE NOT NULL, "
+        "updated_at DOUBLE NOT NULL, deleted INT NOT NULL DEFAULT 0, rev BIGINT NOT NULL DEFAULT 0, user_id BIGINT NOT NULL DEFAULT 0, "
+        "INDEX idx_nts_folders_rev (rev), INDEX idx_nts_folders_user (user_id, rev)) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"),
+    # a tag's colour; tags themselves are names on notes. tag_key: the name in lower case; two accounts may colour
+    # the same tag differently
+    "nts_tag_colors": (
+        "CREATE TABLE IF NOT EXISTS nts_tag_colors (user_id INTEGER NOT NULL DEFAULT 0, tag_key TEXT NOT NULL, name TEXT NOT NULL, color TEXT, "
+        "updated_at REAL NOT NULL, deleted INTEGER NOT NULL DEFAULT 0, rev INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (user_id, tag_key))",
+        "CREATE TABLE IF NOT EXISTS nts_tag_colors (user_id BIGINT NOT NULL DEFAULT 0, tag_key VARCHAR(191) NOT NULL, name VARCHAR(191) NOT NULL, "
+        "color VARCHAR(16), updated_at DOUBLE NOT NULL, deleted INT NOT NULL DEFAULT 0, rev BIGINT NOT NULL DEFAULT 0, "
+        "PRIMARY KEY (user_id, tag_key), INDEX idx_nts_tag_colors_rev (rev)) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"),
     # what changed and who changed it, for Maintenance › Change log
-    "change_log": (
-        "CREATE TABLE IF NOT EXISTS change_log (id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER, user_name TEXT, action TEXT, kind TEXT, uuid TEXT, summary TEXT)",
-        "CREATE TABLE IF NOT EXISTS change_log (id BIGINT AUTO_INCREMENT PRIMARY KEY, ts BIGINT, user_name VARCHAR(191), action VARCHAR(32), kind VARCHAR(16), "
-        "uuid VARCHAR(64), summary TEXT, INDEX change_log_ts (ts)) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"),
+    "nts_change_log": (
+        "CREATE TABLE IF NOT EXISTS nts_change_log (id INTEGER PRIMARY KEY AUTOINCREMENT, created_at INTEGER, user_name TEXT, action TEXT, kind TEXT, "
+        "uuid TEXT, summary TEXT, user_id INTEGER NOT NULL DEFAULT 0)",
+        "CREATE TABLE IF NOT EXISTS nts_change_log (id BIGINT AUTO_INCREMENT PRIMARY KEY, created_at BIGINT, user_name VARCHAR(191), action VARCHAR(32), "
+        "kind VARCHAR(16), uuid VARCHAR(64), summary TEXT, user_id BIGINT NOT NULL DEFAULT 0, INDEX idx_nts_change_log_created (created_at), "
+        "INDEX idx_nts_change_log_user (user_id, id)) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"),
 }
-SQLITE_INDEXES = [
-    "CREATE INDEX IF NOT EXISTS notes_rev ON notes (rev)",
-    "CREATE INDEX IF NOT EXISTS notes_folder ON notes (folder_id)",
-    "CREATE INDEX IF NOT EXISTS notes_updated ON notes (updated_at)",
-    "CREATE INDEX IF NOT EXISTS folders_rev ON folders (rev)",
-    "CREATE INDEX IF NOT EXISTS tag_colors_rev ON tag_colors (rev)",
-    "CREATE INDEX IF NOT EXISTS change_log_ts ON change_log (ts)",
-]
+SQLITE_INDEXES = {  # SQLite's index names are database-wide: named after the table like MySQL's
+    "idx_nts_notes_rev": "nts_notes (rev)",
+    "idx_nts_notes_folder": "nts_notes (folder_id)",
+    "idx_nts_notes_updated": "nts_notes (updated_at)",
+    "idx_nts_notes_user": "nts_notes (user_id, rev)",
+    "idx_nts_folders_rev": "nts_folders (rev)",
+    "idx_nts_folders_user": "nts_folders (user_id, rev)",
+    "idx_nts_tag_colors_rev": "nts_tag_colors (rev)",
+    "idx_nts_change_log_created": "nts_change_log (created_at)",
+    "idx_nts_change_log_user": "nts_change_log (user_id, id)",
+}
+
+# 1.9.0: the names from before the suite naming convention, renamed once at start (every row kept). Remove once every
+# server has run 1.9.0.
+RENAME_TABLES = {"app_settings": "nts_settings", "change_counter": "nts_change_counter", "notes": "nts_notes",
+                 "note_images": "nts_note_images", "folders": "nts_folders", "tag_colors": "nts_tag_colors", "change_log": "nts_change_log"}
+RENAME_COLUMNS = {
+    "nts_settings": {"key": "name"},
+    "nts_change_counter": {"ts": "created_at"},
+    "nts_notes": {"owner": "user_id"},
+    "nts_note_images": {"bytes": "size_bytes"},
+    "nts_folders": {"owner": "user_id"},
+    "nts_tag_colors": {"owner": "user_id"},
+    "nts_change_log": {"ts": "created_at", "owner": "user_id"},
+}
+RENAME_INDEXES = {  # MySQL; on SQLite the old indexes are dropped and SQLITE_INDEXES made
+    "nts_notes": {"notes_rev": "idx_nts_notes_rev", "notes_folder": "idx_nts_notes_folder", "notes_updated": "idx_nts_notes_updated",
+                  "notes_owner": "idx_nts_notes_user", "notes_text": "idx_nts_notes_text"},
+    "nts_folders": {"folders_rev": "idx_nts_folders_rev", "folders_owner": "idx_nts_folders_user"},
+    "nts_tag_colors": {"tag_colors_rev": "idx_nts_tag_colors_rev"},
+    "nts_change_log": {"change_log_ts": "idx_nts_change_log_created", "change_log_owner": "idx_nts_change_log_user"},
+}
+OLD_SQLITE_INDEXES = ("notes_rev", "notes_folder", "notes_updated", "notes_owner", "folders_rev", "folders_owner", "tag_colors_rev",
+                      "change_log_ts", "change_log_owner")
 
 _INSERT_IGNORE = re.compile(r"\bINSERT\s+OR\s+IGNORE\b", re.I)
 _INSERT_REPLACE = re.compile(r"\bINSERT\s+OR\s+REPLACE\b", re.I)
-_KEY_COL = re.compile(r"(?<![\w`.])key(?![\w`(])")  # the settings column, a reserved word on MySQL
 
 
 class Row(tuple):
@@ -150,7 +191,6 @@ class Conn:
             return sql
         sql = _INSERT_IGNORE.sub("INSERT IGNORE", sql)
         sql = _INSERT_REPLACE.sub("REPLACE", sql)
-        sql = _KEY_COL.sub("`key`", sql)
         return sql.replace("%", "%%").replace("?", "%s")
 
     def execute(self, sql: str, params=()):
@@ -175,9 +215,9 @@ class Conn:
             self.execute("BEGIN IMMEDIATE")
             return
         self.execute("START TRANSACTION")
-        if not self.execute("SELECT value FROM app_settings WHERE key = 'write_lock' FOR UPDATE").fetchone():
-            self.execute("INSERT IGNORE INTO app_settings (key, value) VALUES ('write_lock', '')")
-            self.execute("SELECT value FROM app_settings WHERE key = 'write_lock' FOR UPDATE")
+        if not self.execute("SELECT value FROM nts_settings WHERE name = 'write_lock' FOR UPDATE").fetchone():
+            self.execute("INSERT IGNORE INTO nts_settings (name, value) VALUES ('write_lock', '')")
+            self.execute("SELECT value FROM nts_settings WHERE name = 'write_lock' FOR UPDATE")
 
     def commit(self):
         self.raw.commit()
@@ -317,28 +357,76 @@ def test(values: dict) -> dict:
 
 
 def init():
-    """Create the tables that are missing (idempotent). Called at start and by the first connect()."""
+    """Create the tables that are missing and bring older ones up to date (idempotent). Called at start and by the
+    first connect()."""
     global _ready, error
     with _lock:
         if _ready:
             return
         con = _raw_connect()
         try:
+            done = _rename_to_convention(con)
+            if done:
+                log.info("renamed to the suite naming convention: %s", ", ".join(done))
             for name, (lite, my) in TABLES.items():
                 con.execute(my if con.mysql else lite)
-            if not con.mysql:
-                for s in SQLITE_INDEXES:
-                    con.execute(s)
-            _add_owner(con)
-            con.execute("INSERT OR IGNORE INTO app_settings (key, value) VALUES ('write_lock', '')")  # Conn.begin
-            r = con.execute("SELECT value FROM app_settings WHERE key = 'schema_version'").fetchone()
-            if not r:
-                con.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('schema_version', ?)", (str(SCHEMA_VERSION),))
+            _add_user_id(con)
+            if not _has_column(con, "nts_settings", "updated_at"):  # app_settings had none
+                con.execute("ALTER TABLE nts_settings ADD COLUMN updated_at " + ("DATETIME(3) NULL" if con.mysql else "TEXT"))
+            if con.mysql:
+                _rename_mysql(con, None, None, RENAME_INDEXES)
+            else:
+                for idx in OLD_SQLITE_INDEXES:
+                    con.execute(f"DROP INDEX IF EXISTS {idx}")
+                for idx, on in SQLITE_INDEXES.items():
+                    con.execute(f"CREATE INDEX IF NOT EXISTS {idx} ON {on}")
+            con.execute("DELETE FROM nts_settings WHERE name = 'schema_version'")  # before 1.9.0 the version was a setting
+            con.execute("INSERT OR IGNORE INTO nts_settings (name, value) VALUES ('write_lock', '')")  # Conn.begin
+            con.execute("INSERT OR IGNORE INTO nts_schema_version (version, applied_at) VALUES (?, ?)",
+                        (SCHEMA_VERSION, datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S.%f")[:23]))
             con.commit()
         finally:
             con.close()
         error = None
         _ready = True
+
+
+def _rename_mysql(con, tables, columns, indexes) -> list:
+    from iosuite_shared import schema
+    cur = con.raw.cursor()
+    try:
+        return schema.rename(cur, tables, columns, indexes)
+    finally:
+        cur.close()
+
+
+def _table_names(con) -> set:
+    if con.mysql:
+        return {r[0] for r in con.execute("SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE()")}
+    return {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+
+
+def _rename_to_convention(con) -> list:
+    """1.9.0: tables and columns from before the suite naming convention get their new names (every row kept).
+    MariaDB: RENAME TABLE / COLUMN, instant. SQLite: ALTER TABLE ... RENAME TO / RENAME COLUMN (SQLite 3.25+)."""
+    if con.mysql:
+        return _rename_mysql(con, RENAME_TABLES, RENAME_COLUMNS, None)
+    done = []
+    have = _table_names(con)
+    for old, new in RENAME_TABLES.items():
+        if old in have and new not in have:
+            con.execute(f'ALTER TABLE "{old}" RENAME TO "{new}"')
+            have |= {new}
+            done.append(f"{old} -> {new}")
+    for table, pairs in RENAME_COLUMNS.items():
+        if table not in have:
+            continue
+        cols = {r[1] for r in con.execute(f"PRAGMA table_info({table})").fetchall()}
+        for old, new in pairs.items():
+            if old in cols and new not in cols:
+                con.execute(f'ALTER TABLE {table} RENAME COLUMN "{old}" TO "{new}"')
+                done.append(f"{table}.{old} -> {new}")
+    return done
 
 
 def _has_column(con, table: str, col: str) -> bool:
@@ -348,31 +436,32 @@ def _has_column(con, table: str, col: str) -> bool:
     return any(r[1] == col for r in con.execute(f"PRAGMA table_info({table})").fetchall())
 
 
-def _add_owner(con):
-    """Schema 2: every note, folder, tag colour and change-log line belongs to an account (owner: its id in the
+def _add_user_id(con):
+    """Schema 2: every note, folder, tag colour and change-log line belongs to an account (user_id: its id in the
     Shared ioSuite database; 0 until the first admin claims the records made before accounts, see notes.claim_unowned).
-    Idempotent; existing records get owner 0."""
+    Idempotent; existing records get 0."""
     big = "BIGINT" if con.mysql else "INTEGER"
-    for table in ("notes", "folders", "change_log"):
-        if not _has_column(con, table, "owner"):
-            con.execute(f"ALTER TABLE {table} ADD COLUMN owner {big} NOT NULL DEFAULT 0")
-            con.execute(f"CREATE INDEX {table}_owner ON {table} (owner{', rev' if table != 'change_log' else ', id'})")
-    if not _has_column(con, "tag_colors", "owner"):
-        # the key becomes (owner, tag name): two accounts may colour the same tag differently
+    for table in ("nts_notes", "nts_folders", "nts_change_log"):
+        if not _has_column(con, table, "user_id"):
+            con.execute(f"ALTER TABLE {table} ADD COLUMN user_id {big} NOT NULL DEFAULT 0")
+            if con.mysql:
+                con.execute(f"CREATE INDEX idx_{table}_user ON {table} (user_id{', rev' if table != 'nts_change_log' else ', id'})")
+    if not _has_column(con, "nts_tag_colors", "user_id"):
+        # the key becomes (user_id, tag name): two accounts may colour the same tag differently
+        lite, my = TABLES["nts_tag_colors"]
+        con.execute((my if con.mysql else lite).replace("nts_tag_colors", "nts_tag_colors_new", 1).replace("idx_nts_tag_colors_rev", "idx_nts_tag_colors_new_rev"))
+        con.execute("INSERT INTO nts_tag_colors_new (user_id, tag_key, name, color, updated_at, deleted, rev) "
+                    "SELECT 0, tag_key, name, color, updated_at, deleted, rev FROM nts_tag_colors")
+        con.execute("DROP TABLE nts_tag_colors")
+        con.execute("ALTER TABLE nts_tag_colors_new RENAME TO nts_tag_colors")
         if con.mysql:
-            con.execute("CREATE TABLE tag_colors_new (owner BIGINT NOT NULL DEFAULT 0, tag_key VARCHAR(191) NOT NULL, name VARCHAR(191) NOT NULL, "
-                        "color VARCHAR(16), updated_at DOUBLE NOT NULL, deleted INT NOT NULL DEFAULT 0, rev BIGINT NOT NULL DEFAULT 0, "
-                        "PRIMARY KEY (owner, tag_key), INDEX tag_colors_rev (rev)) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
-        else:
-            con.execute("CREATE TABLE tag_colors_new (owner INTEGER NOT NULL DEFAULT 0, tag_key TEXT NOT NULL, name TEXT NOT NULL, color TEXT, "
-                        "updated_at REAL NOT NULL, deleted INTEGER NOT NULL DEFAULT 0, rev INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (owner, tag_key))")
-        con.execute("INSERT INTO tag_colors_new (owner, tag_key, name, color, updated_at, deleted, rev) "
-                    "SELECT 0, tag_key, name, color, updated_at, deleted, rev FROM tag_colors")
-        con.execute("DROP TABLE tag_colors")
-        con.execute("ALTER TABLE tag_colors_new RENAME TO tag_colors")
-        if not con.mysql:
-            con.execute("CREATE INDEX IF NOT EXISTS tag_colors_rev ON tag_colors (rev)")
-    con.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('schema_version', ?)", (str(SCHEMA_VERSION),))
+            con.execute("ALTER TABLE nts_tag_colors RENAME INDEX idx_nts_tag_colors_new_rev TO idx_nts_tag_colors_rev")
+
+
+def schema_version() -> int:
+    with connect() as con:
+        r = con.execute("SELECT max(version) FROM nts_schema_version").fetchone()
+    return int(r[0] or 0)
 
 
 def reset_for_tests():
@@ -384,13 +473,14 @@ def reset_for_tests():
 # ---- settings table
 def get_setting(key: str, default: str = None):
     with connect() as con:
-        r = con.execute("SELECT value FROM app_settings WHERE key = ?", (key,)).fetchone()
+        r = con.execute("SELECT value FROM nts_settings WHERE name = ?", (key,)).fetchone()
     return r[0] if r else default
 
 
 def set_setting(key: str, value):
     with tx() as con:
-        con.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)", (key, None if value is None else str(value)))
+        con.execute("INSERT OR REPLACE INTO nts_settings (name, value, updated_at) VALUES (?, ?, ?)",
+                    (key, None if value is None else str(value), datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S.%f")[:23]))
 
 
 def read_only() -> bool:
@@ -400,10 +490,10 @@ def read_only() -> bool:
 def next_rev(con: Conn) -> int:
     """A new change number, inside the caller's transaction."""
     import time
-    return con.execute("INSERT INTO change_counter (ts) VALUES (?)", (int(time.time()),)).lastrowid
+    return con.execute("INSERT INTO nts_change_counter (created_at) VALUES (?)", (int(time.time()),)).lastrowid
 
 
 def current_rev() -> int:
     with connect() as con:
-        r = con.execute("SELECT max(rev) FROM change_counter").fetchone()
+        r = con.execute("SELECT max(rev) FROM nts_change_counter").fetchone()
     return int(r[0] or 0)

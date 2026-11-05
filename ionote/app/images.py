@@ -1,4 +1,4 @@
-"""A note's picture, kept in the database as a BLOB (note_images), with a small JPEG for lists.
+"""A note's picture, kept in the database as a BLOB (nts_note_images), with a small JPEG for lists.
 
 The bytes are stored as sent (PNG from a screenshot, JPEG from a phone, HEIC is converted to JPEG so every
 browser can show it). imageSHA on the note changes whenever the picture does, which is how a device knows to
@@ -82,16 +82,16 @@ def put(uid: str, data: bytes, user: str) -> dict:
             raise KeyError(uid)
         if sha == n["imageSHA"]:  # the same picture again (a device retrying): nothing changed
             return n
-        con.execute("INSERT OR REPLACE INTO note_images (uuid, mime, data, thumb, width, height, bytes, sha, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
+        con.execute("INSERT OR REPLACE INTO nts_note_images (uuid, mime, data, thumb, width, height, size_bytes, sha, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
                     (uid, mime, blob, thumb, w, h, len(blob), sha, time.time()))
         if n["source"] == "web":
             # a new picture on a note made in the web app: the text read from the old one goes, so the server reads
             # the new one (routes/notes.py _store), and the note counts as edited now. A device sends the text of
             # its picture and the edit time itself (its clock decides conflicts, so the server's is left out).
-            con.execute("UPDATE notes SET has_image = 1, image_sha = ?, ocr_text = '', updated_at = ?, rev = ?, changed_by = ? WHERE uuid = ?",
+            con.execute("UPDATE nts_notes SET has_image = 1, image_sha = ?, ocr_text = '', updated_at = ?, rev = ?, changed_by = ? WHERE uuid = ?",
                         (sha, max(n["updatedAt"], time.time()), db.next_rev(con), user, uid))
         else:
-            con.execute("UPDATE notes SET has_image = 1, image_sha = ?, rev = ?, changed_by = ? WHERE uuid = ?", (sha, db.next_rev(con), user, uid))
+            con.execute("UPDATE nts_notes SET has_image = 1, image_sha = ?, rev = ?, changed_by = ? WHERE uuid = ?", (sha, db.next_rev(con), user, uid))
         log_change(con, user, "image", "note", uid, f"{display_title(n)} ({w}×{h}, {len(blob) // 1024} KB)")
         return get_note(uid, con)
 
@@ -102,9 +102,9 @@ def remove(uid: str, user: str) -> dict:
         n = get_note(uid, con)
         if not n:
             raise KeyError(uid)
-        con.execute("DELETE FROM note_images WHERE uuid = ?", (uid,))
+        con.execute("DELETE FROM nts_note_images WHERE uuid = ?", (uid,))
         # the text read from the picture goes with it (it would still be found by searches otherwise)
-        con.execute("UPDATE notes SET has_image = 0, image_sha = NULL, ocr_text = '', updated_at = ?, rev = ?, changed_by = ? WHERE uuid = ?",
+        con.execute("UPDATE nts_notes SET has_image = 0, image_sha = NULL, ocr_text = '', updated_at = ?, rev = ?, changed_by = ? WHERE uuid = ?",
                     (max(n["updatedAt"], time.time()), db.next_rev(con), user, uid))
         log_change(con, user, "image-removed", "note", uid, display_title(n))
         return get_note(uid, con)
@@ -113,7 +113,7 @@ def remove(uid: str, user: str) -> dict:
 def get(uid: str, thumb: bool = False):
     """(bytes, mime, sha) or None."""
     with db.connect() as con:
-        r = con.execute(f"SELECT {'thumb' if thumb else 'data'}, mime, sha FROM note_images WHERE uuid = ?", (check_uuid(uid),)).fetchone()
+        r = con.execute(f"SELECT {'thumb' if thumb else 'data'}, mime, sha FROM nts_note_images WHERE uuid = ?", (check_uuid(uid),)).fetchone()
     if not r or r[0] is None:
         return None
     return bytes(r[0]), ("image/jpeg" if thumb else r[1]), r[2]
@@ -121,11 +121,11 @@ def get(uid: str, thumb: bool = False):
 
 def info(uid: str):
     with db.connect() as con:
-        r = con.execute("SELECT mime, width, height, bytes, sha FROM note_images WHERE uuid = ?", (check_uuid(uid),)).fetchone()
+        r = con.execute("SELECT mime, width, height, size_bytes, sha FROM nts_note_images WHERE uuid = ?", (check_uuid(uid),)).fetchone()
     return {"mime": r[0], "width": r[1], "height": r[2], "bytes": r[3], "sha": r[4]} if r else None
 
 
 def stats() -> dict:
     with db.connect() as con:
-        n, size = con.execute("SELECT count(*), coalesce(sum(bytes), 0) FROM note_images").fetchone()
+        n, size = con.execute("SELECT count(*), coalesce(sum(size_bytes), 0) FROM nts_note_images").fetchone()
     return {"images": int(n), "bytes": int(size)}
