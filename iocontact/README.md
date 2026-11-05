@@ -209,7 +209,7 @@ app/iopix.py       the ioPix client
 app/quality.py     duplicates (scored), merging with choices and undo, data quality checks and fixes
 app/enrich.py      enrichment: the public lookups and the suggestions queue
 app/mcp/           the MCP server: base (who is asking, finding contacts), read, write and admin tools
-app/users.py       accounts, sessions, app passwords (the Shared ioSuite database's, through iosuite-shared)   app/proxyauth.py  sign-in at a reverse proxy
+app/users.py       accounts, sessions, app passwords (the Shared ioSuite database's, through iosuite-shared)   (sign-in at a reverse proxy: iosuite_shared.proxyauth, through auth.proxy)
 static/            the web app (index.html, app.js, app.css, icons)
 proxmox/           the community-scripts LXC installer      setup.sh, run.sh, update.sh, Dockerfile
 ```
