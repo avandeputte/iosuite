@@ -23,7 +23,7 @@ function updateBanner(u) {
     h('div.muted', `You have v${state.version || '?'}. ${(u.message || '').replace(/^v\d+\.\d+\.\d+:\s*/, '').slice(0, 140)}`));
   const more = h('a.pillbtn', { href: '#/maintenance/updates', onclick: () => b.remove() }, 'Details');
   const run = u.canRun ? h('button.pillbtn.primary', { onclick: async () => {
-    if (!await confirmIt('Update ionotes', `Fetch ${u.version ? 'version ' + u.version : 'the latest version'}, refresh the packages and restart ionotes? The page reloads when the new version is up.`, 'Update')) return;
+    if (!await confirmIt('Update ioNotes', `Fetch ${u.version ? 'version ' + u.version : 'the latest version'}, refresh the packages and restart ioNotes? The page reloads when the new version is up.`, 'Update')) return;
     runUpdate((msg, failed) => {
       run.hidden = more.hidden = true;
       text.textContent = '';
@@ -175,7 +175,7 @@ async function start() {
   await loadMeta();
   loadSuite();
   wire();
-  api('/api/status').then((s) => { state.version = s.version; setStatus(`ionotes ${s.version}`); updateBanner(s.update); }).catch(() => {});
+  api('/api/status').then((s) => { state.version = s.version; setStatus(`ioNotes ${s.version}`); updateBanner(s.update); }).catch(() => {});
   if (!location.hash) history.replaceState(null, '', '#/notes');
   await route();
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});

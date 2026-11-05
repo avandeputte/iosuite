@@ -17,10 +17,9 @@ def _read_only() -> bool:
     return db.read_only()
 
 
-# app_label, version, public_url, description, color and icon: ionotes' row in the suite's list of apps (ioSuite's start page)
-auth = Auth(APP, read_only=_read_only, read_only_message="ionotes is in read-only mode; nothing can be changed.", app_label="ioNotes",
-            version=__version__, public_url=config.PUBLIC_URL or None, description="Notes", color="#1c5a5e",
-            icon="/static/icons/mark.svg")
+# app_label, version, public_url, description and color: ionotes' row in the suite's list of apps (ioSuite's start page)
+auth = Auth(APP, read_only=_read_only, read_only_message="ioNotes is in read-only mode; nothing can be changed.", app_label="ioNotes",
+            version=__version__, public_url=config.PUBLIC_URL or None, description="Notes", color="#1c5a5e")
 auth.deny_exempt = ("/mcp",)  # MCP clients sign in with the admin token, whatever Cloudflare service token got them through
 
 # updates (the daily check, update.sh, restart), the MCP admin token and the server log, as in every app of the suite

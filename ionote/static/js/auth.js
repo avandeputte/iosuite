@@ -11,7 +11,7 @@ export async function loadMe() {
 function signinBrand() {
   const n = (state.settings && state.settings.app_name) || 'ionotes';
   const name = n.toLowerCase() === 'ionotes' ? h('span.brand-name', h('span.io', n.slice(0, 2)), h('span.nm', n.toLowerCase() === 'ionotes' ? 'Notes' : n.slice(2))) : h('span.brand-name', n);
-  return h('div.signin-brand', h('img.logo', { src: 'icons/mark-64.png', alt: '' }), name);
+  return h('div.signin-brand', h('img.logo', { src: 'static/icons/mark.svg', alt: '' }), name);
 }
 const avatar = (a) => h('span.avatar.big', (a.name || '?')[0].toUpperCase());
 
@@ -55,7 +55,7 @@ async function firstAdmin() {
   const name = h('input.einput', { type: 'text', placeholder: 'Admin user name', autocomplete: 'username' });
   const pw = h('input.einput', { type: 'password', placeholder: 'Password (8 characters or more)', autocomplete: 'new-password' });
   const msg = h('p.err.small');
-  return dialog('Create the admin account', h('div', h('p.muted', 'Right now ionotes is open to anyone who can reach it. Once an admin exists, every account has notes of its own, visible to nobody else; the notes made so far become the admin\'s.'), h('div.signin-form', name, pw), msg), [
+  return dialog('Create the admin account', h('div', h('p.muted', 'Right now ioNotes is open to anyone who can reach it. Once an admin exists, every account has notes of its own, visible to nobody else; the notes made so far become the admin\'s.'), h('div.signin-form', name, pw), msg), [
     { label: 'Cancel', value: null },
     { label: 'Create', primary: true, action: async () => { try { await api('/api/auth/setup', { method: 'POST', body: { name: name.value, password: pw.value } }); location.reload(); } catch (e) { msg.textContent = e.message; return false; } } },
   ]);

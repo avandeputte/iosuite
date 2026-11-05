@@ -52,13 +52,13 @@ def prepare(data: bytes):
     try:
         img = Image.open(io.BytesIO(data))  # reads the header only
     except Exception:
-        raise BadImage("That is not an image ionotes can read")
+        raise BadImage("That is not an image ioNotes can read")
     if img.width * img.height > MAX_PIXELS:  # a small file can unpack to gigabytes (a decompression bomb)
         raise BadImage(f"Images up to {MAX_PIXELS // 1_000_000} megapixels")
     try:
         img.load()
     except Exception:
-        raise BadImage("That is not an image ionotes can read")
+        raise BadImage("That is not an image ioNotes can read")
     fmt = img.format or ""
     if fmt not in KINDS:  # HEIC and the like: stored as JPEG
         rgb = ImageOps.exif_transpose(img).convert("RGB")
