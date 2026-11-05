@@ -269,7 +269,7 @@ def in_scope(dn: str, base_dn: str, scope: int) -> bool:
     d, b = norm_dn(dn), norm_dn(base_dn)
     if scope == 0:
         return d == b
-    if b and not d.endswith(b):
+    if b and d != b and not d.endswith("," + b):
         return False
     if d == b:
         return scope == 2
@@ -376,7 +376,7 @@ class Session:
         if m:
             ident = m.group(1).strip()
         u = await asyncio.get_running_loop().run_in_executor(None, users.authenticate, ident, pw)
-        if not u:
+        if not u or u["role"] == "none":  # no access to ioContacts: no directory either
             log.info("LDAP bind refused for %r from %s", name, self.peer)
             await self.send(result(msgid, 0x61, INVALID_CREDENTIALS, "Wrong name or password"))
             return
@@ -399,7 +399,8 @@ class Session:
         if not self.user:
             await self.send(result(msgid, 0x65, INSUFFICIENT_ACCESS, "Bind with your ioContacts account first"))
             return
-        if base_dn and not norm_dn(base_dn).endswith(norm_dn(base())) and norm_dn(base()) not in norm_dn(base_dn):
+        bd, root = norm_dn(base_dn), norm_dn(base())
+        if base_dn and not (bd == root or bd.endswith("," + root) or root.endswith("," + bd)):
             await self.send(result(msgid, 0x65, NO_SUCH_OBJECT, "", base()))
             return
         want_photo = any(w.lower() == "jpegphoto" for w in wanted)

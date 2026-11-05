@@ -15,6 +15,8 @@ def _pick_user():
         u = users.find(name)
         if not u:
             sys.exit(f"no ioContacts account named {name!r}")
+        if u["role"] == "none":
+            sys.exit(f"the account {name!r} has no access to ioContacts")
         return u
     admins = [u for u in users.all_users() if u["role"] == "admin"]
     if len(admins) == 1:

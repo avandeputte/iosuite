@@ -34,6 +34,8 @@ def public_settings() -> dict:
 
 
 def save_settings(url=None, user=None, password=None, cf_id=None, cf_secret=None) -> None:
+    if url and url.strip() and not url.strip().lower().startswith(("http://", "https://")):
+        raise ValueError("The ioPix address starts with http:// or https://")
     for k, v in (("iopix_url", url), ("iopix_user", user), ("iopix_password", password), ("iopix_cf_id", cf_id),
                  ("iopix_cf_secret", cf_secret)):
         if v is not None:
@@ -50,6 +52,8 @@ def _req(path: str, data: dict | None = None, timeout: float = 10):
     s = settings()
     if not s["url"]:
         raise RuntimeError("ioPix is not set up (Settings > ioPix)")
+    if not s["url"].lower().startswith(("http://", "https://")):
+        raise RuntimeError("The ioPix address must start with http:// or https://")
     headers = {"Accept": "application/json", "User-Agent": "ioContacts"}
     if s["cfId"] and s["cfSecret"]:
         headers.update({"CF-Access-Client-Id": s["cfId"], "CF-Access-Client-Secret": s["cfSecret"]})

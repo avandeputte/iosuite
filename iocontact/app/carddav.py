@@ -13,11 +13,11 @@ import xml.etree.ElementTree as ET
 from email.utils import format_datetime
 from urllib.parse import quote, unquote
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import RedirectResponse, Response
 
-from app import model, users, vcard
+from app import limits, model, users, vcard
 from app.fold import fold
 
 router = APIRouter()
@@ -321,7 +321,10 @@ async def dav(request: Request, path: str = ""):
         return _unauth()
     ctx = Ctx(request, user)
     parts = _parse(request.url.path)
-    body = await request.body()
+    try:
+        body = await limits.body(request)
+    except HTTPException:
+        return Response("Too large", status_code=413)
     m = request.method
     return await run_in_threadpool(_dispatch, ctx, m, parts, body, request.headers)
 
@@ -417,21 +420,26 @@ def _proppatch(ctx: Ctx, parts, body) -> Response:
     _sub(r, D, "href", "/dav/" + "/".join(quote(p) for p in parts) + "/")
     ps = _sub(r, D, "propstat")
     p = _sub(ps, D, "prop")
+    changes = {}
     for s in root.iter(q(D, "set")):
         for prop in s.iter(q(D, "prop")):
             for c in prop:
                 ET.SubElement(p, c.tag)
-                if b and model.can_write_book(ctx.user, b):
-                    if c.tag == q(D, "displayname") and (c.text or "").strip():
-                        model.update_book(b["id"], name=c.text.strip()[:128])
-                    elif c.tag == q(C, "addressbook-description"):
-                        model.update_book(b["id"], description=(c.text or "").strip()[:512])
-                    elif c.tag == q(AP, "calendar-color"):
-                        model.update_book(b["id"], color=(c.text or "").strip()[:16])
+                if c.tag == q(D, "displayname") and (c.text or "").strip():
+                    changes["name"] = c.text.strip()[:128]
+                elif c.tag == q(C, "addressbook-description"):
+                    changes["description"] = (c.text or "").strip()[:512]
+                elif c.tag == q(AP, "calendar-color"):
+                    changes["color"] = (c.text or "").strip()[:16]
     for s in root.iter(q(D, "remove")):
         for prop in s.iter(q(D, "prop")):
             for c in prop:
                 ET.SubElement(p, c.tag)
+    if b and not model.can_write_book(ctx.user, b):
+        _sub(ps, D, "status", "HTTP/1.1 403 Forbidden")  # a viewer cannot rename or recolour a shared book
+        return _xml(ms)
+    if b and changes:
+        model.update_book(b["id"], **changes)  # one change, one new sync token
     _sub(ps, D, "status", "HTTP/1.1 200 OK")
     return _xml(ms)
 

@@ -159,4 +159,5 @@ def reset_calendar_token(uid: int) -> str:
 
 def user_from_calendar_token(tok: str) -> dict | None:
     r = db.one("SELECT user_id FROM calendar_tokens WHERE token = %s", (tok,))
-    return get(r["user_id"]) if r else None
+    u = get(r["user_id"]) if r else None
+    return u if u and u["role"] != "none" else None  # an account whose access here was taken away loses the feed too

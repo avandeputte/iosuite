@@ -1,6 +1,7 @@
 """The family calendar: birthdays and anniversaries as an iCalendar feed (RFC 5545) that Apple Calendar, Google Calendar,
 Outlook and Thunderbird subscribe to. Every event recurs yearly, so the feed stays valid for years."""
 import datetime as dt
+import re
 
 from app import db
 
@@ -8,7 +9,12 @@ NAMES = {"birthday": "Birthday", "anniversary": "Anniversary"}
 
 
 def _esc(s: str) -> str:
-    return (s or "").replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\n", "\\n")
+    return (s or "").replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\r\n", "\n").replace("\r", "\n").replace("\n", "\\n")
+
+
+def _uid(s: str) -> str:
+    """A UID part: spaces and line breaks become dashes (so a UID cannot end the line and start a property)."""
+    return re.sub(r"\s+", "-", s or "")
 
 
 def _fold(line: str) -> str:
@@ -46,7 +52,7 @@ def feed(book_ids: list[int], title: str = "Family birthdays", base_url: str = "
             continue
         kind = NAMES.get(r["label"], r["label"].title())
         summary = f"{r['fn']}'s {kind.lower()}" if r["label"] == "birthday" else f"{r['fn']}: {kind}"
-        lines += ["BEGIN:VEVENT", f"UID:{r['uid']}-{r['label'].replace(' ', '-')}@iocontacts", f"DTSTAMP:{stamp}",
+        lines += ["BEGIN:VEVENT", f"UID:{_uid(r['uid'])}-{_uid(r['label'])}@iocontacts", f"DTSTAMP:{stamp}",
                   f"DTSTART;VALUE=DATE:{start:%Y%m%d}", f"DTEND;VALUE=DATE:{start + dt.timedelta(days=1):%Y%m%d}",
                   "RRULE:FREQ=YEARLY", f"SUMMARY:{_esc(summary)}", "TRANSP:TRANSPARENT",
                   f"CATEGORIES:{'BIRTHDAY' if r['label'] == 'birthday' else 'ANNIVERSARY'}"]

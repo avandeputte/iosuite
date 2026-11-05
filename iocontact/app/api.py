@@ -11,7 +11,7 @@ from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
 
-from app import APP_VERSION, calendar, config, csvio, db, enrich, iopix, model, quality, relations as rel, updates, users, vcard
+from app import APP_VERSION, calendar, config, csvio, db, enrich, iopix, limits, model, quality, relations as rel, updates, users, vcard
 from app.auth import auth
 from app.fold import fold
 
@@ -96,7 +96,7 @@ def contact_out(c: dict) -> dict:
 
 async def body_contact(request: Request) -> dict:
     ct = request.headers.get("content-type", "").split(";")[0].strip().lower()
-    raw = await request.body()
+    raw = await limits.body(request)
     if ct in VCARD_TYPES:
         cards = vcard.parse(raw.decode("utf-8", "replace"))
         if not cards:
@@ -489,7 +489,10 @@ async def patch_contact(cid: int, request: Request):
     b = await request.json()
     c = model.full(cid)
     c.update({k: v for k, v in b.items() if k not in ("id", "uid", "href", "etag", "photo")})
-    await run_in_threadpool(model.save, int(c.get("bookId") or r["book_id"]), c, cid, None, True, book_ids(u))
+    dest = int(c.get("bookId") or r["book_id"])
+    if dest != r["book_id"]:
+        writable_book(u, dest)  # moving it needs the right to change the other book too
+    await run_in_threadpool(model.save, dest, c, cid, None, True, book_ids(u))
     return contact_out(model.full(cid))
 
 
@@ -628,7 +631,7 @@ async def duplicates_dismiss(request: Request):
     u = writer(request)
     ids = [int(x) for x in (await request.json()).get("ids") or []]
     for cid in ids:
-        readable_contact(u, cid)
+        writable_book(u, readable_contact(u, cid)["book_id"])
     return {"ok": True, "pairs": quality.not_duplicates(ids, u["id"])}
 
 
@@ -666,7 +669,7 @@ async def contact_lookup(cid: int, request: Request):
     """Look this contact up (Gravatar by email, and its GitHub, Mastodon and Bluesky profiles); what is found waits as
     suggestions."""
     u = me(request)
-    readable_contact(u, cid)
+    writable_book(u, readable_contact(u, cid)["book_id"])
     return await run_in_threadpool(enrich.lookup, cid, u["id"])
 
 
@@ -678,10 +681,11 @@ async def lookup_many(request: Request):
     if b.get("ids"):
         ids = [int(x) for x in b["ids"]]
         for cid in ids:
-            readable_contact(u, cid)
+            writable_book(u, readable_contact(u, cid)["book_id"])
         total = len(ids)
     else:
-        items, total = model.search(book_ids(u, b.get("book")), limit=max(1, min(int(b.get("limit") or 25), 50)), offset=max(0, int(b.get("offset") or 0)))
+        mine = [x for x in book_ids(u, b.get("book")) if model.can_write_book(u, model.book(x))]
+        items, total = model.search(mine, limit=max(1, min(int(b.get("limit") or 25), 50)), offset=max(0, int(b.get("offset") or 0)))
         ids = [x["id"] for x in items]
 
     def run():
@@ -720,7 +724,7 @@ def suggestion_dismiss(sid: int, request: Request):
     s = enrich.suggestion(sid)
     if not s:
         raise HTTPException(404, "No such suggestion")
-    readable_contact(u, s["contact_id"])
+    writable_book(u, readable_contact(u, s["contact_id"])["book_id"])
     enrich.dismiss(sid, u["id"])
     return {"ok": True}
 
@@ -804,7 +808,10 @@ async def import_file(request: Request, file: UploadFile = File(...), book: str 
     mode: update (a card whose UID is already in the book replaces it) or skip (keeps the existing one)."""
     u = writer(request)
     b = writable_book(u, book)
-    raw = (await file.read()).decode("utf-8-sig", "replace")
+    data = await file.read(limits.MAX_IMPORT + 1)
+    if len(data) > limits.MAX_IMPORT:
+        raise limits.too_big(limits.MAX_IMPORT)
+    raw = data.decode("utf-8-sig", "replace")
     try:
         cards = parse_cards(raw, file.filename or "")
     except (ValueError, KeyError, IndexError) as e:
@@ -988,7 +995,10 @@ def iopix_settings(request: Request):
 async def iopix_save(request: Request):
     admin(request)
     b = await request.json()
-    iopix.save_settings(b.get("url"), b.get("user"), b.get("password"), b.get("cfId"), b.get("cfSecret"))
+    try:
+        iopix.save_settings(b.get("url"), b.get("user"), b.get("password"), b.get("cfId"), b.get("cfSecret"))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     return {**iopix.public_settings(), "test": await run_in_threadpool(iopix.test) if iopix.settings()["url"] else None}
 
 

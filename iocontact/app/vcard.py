@@ -105,7 +105,7 @@ def unescape(s: str) -> str:
 
 
 def escape(s: str) -> str:
-    return (s or "").replace("\\", "\\\\").replace(",", "\\,").replace(";", "\\;").replace("\r\n", "\\n").replace("\n", "\\n")
+    return (s or "").replace("\\", "\\\\").replace(",", "\\,").replace(";", "\\;").replace("\r\n", "\\n").replace("\n", "\\n").replace("\r", "\\n")
 
 
 def _parse_line(line: str) -> Prop | None:
@@ -190,6 +190,14 @@ def _date(s: str):
     return None
 
 
+def _omitted(p, year) -> bool:
+    """Apple's X-APPLE-OMIT-YEAR=1604 marks the year that stands for "no year"; a real year next to it stays."""
+    if "x-apple-omit-year" not in p.params or year is None:
+        return False
+    omit = (p.params["x-apple-omit-year"] or ["1604"])[0].strip()
+    return not omit.isdigit() or int(omit) == year
+
+
 def social_from_url(url: str) -> str | None:
     host = re.sub(r"^https?://", "", (url or "").lower()).split("/")[0]
     host = host[4:] if host.startswith("www.") else host
@@ -263,7 +271,7 @@ def to_contact(props: list[Prop]) -> dict:
             d = _date(raw)
             if d:
                 y, m, dd = d
-                if "x-apple-omit-year" in p.params:
+                if _omitted(p, y):
                     y = None
                 c["birthday"] = {"year": y, "month": m, "day": dd}
         elif n in ("ANNIVERSARY", "X-ANNIVERSARY", "X-MS-ANNIVERSARY", "X-EVOLUTION-ANNIVERSARY", "X-KADDRESSBOOK-X-ANNIVERSARY"):
@@ -274,7 +282,7 @@ def to_contact(props: list[Prop]) -> dict:
             d = _date(raw)
             if d:
                 lab = _label_from(p, labels) or "other"
-                y = None if "x-apple-omit-year" in p.params else d[0]
+                y = None if _omitted(p, d[0]) else d[0]
                 if not (lab == "anniversary" and any(x["label"] == "anniversary" for x in c["dates"])):
                     c["dates"].append({"label": lab, "year": y, "month": d[1], "day": d[2]})
         elif n in ("GENDER", "X-GENDER"):
@@ -590,6 +598,7 @@ def _props(c: dict, version: str) -> list[Prop]:
 def _param_str(params: dict) -> str:
     s = ""
     for k, vals in params.items():
+        vals = [re.sub(r'[\r\n"]+', " ", v) for v in vals]  # a parameter value holds no line break or quote (RFC 6350 3.3)
         vv = ",".join(f'"{v}"' if re.search(r'[:;,]', v) else v for v in vals)
         s += f";{k.upper()}={vv}"
     return s
@@ -609,6 +618,8 @@ def _line(p: Prop, version: str) -> str:
         val = sep.join(escape(x) for x in p.value)
     else:
         val = escape(str(p.value)) if p.vtype == "text" else str(p.value)
+    # what is not escaped (a URL, a UID, a profile...) cannot break the line and start a property of its own
+    val = re.sub(r"[\r\n]+", " ", val)
     return f"{name}{_param_str(p.params)}:{val}"
 
 

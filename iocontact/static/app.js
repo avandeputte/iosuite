@@ -488,7 +488,7 @@ async function showContact(id, pane) {
     canEdit ? h('a', { class: 'pillbtn primary', href: `#/c/${id}/edit` }, icon('edit', 's'), 'Edit') : null,
     h('a', { class: 'pillbtn', href: `/api/contacts/${id}?format=vcard` }, icon('download', 's'), 'vCard'),
     S.status.iopix && !c.iopix && canEdit ? h('button', { class: 'pillbtn', onclick: () => pickIopix(c, true) }, icon('image', 's'), 'Link to ioPix') : null,
-    h('button', { class: 'pillbtn', title: 'Look this person up (Gravatar by email, and their GitHub, Mastodon and Bluesky profiles). What is found waits for you to accept it.', onclick: async (e) => {
+    !canEdit ? null : h('button', { class: 'pillbtn', title: 'Look this person up (Gravatar by email, and their GitHub, Mastodon and Bluesky profiles). What is found waits for you to accept it.', onclick: async (e) => {
       e.currentTarget.disabled = true;
       try { const r = await api(`/api/contacts/${id}/lookup`, { method: 'POST' }); toast(r.added ? `${r.added} suggestion${r.added === 1 ? '' : 's'} found` : r.errors.length ? `Nothing new (${r.errors[0]})` : 'Nothing new found'); await refreshStatus(); onRoute(); } catch (err) { fail(err); }
     } }, icon('bulb', 's'), 'Look up'),
@@ -513,7 +513,7 @@ async function showContact(id, pane) {
 // ------------------------------------------------------------------ the edit form
 async function showEdit(id, pane) {
   const c = id ? await api(`/api/contacts/${id}`) : { name: {}, phones: [{ label: 'mobile', value: '' }], emails: [{ label: 'home', value: '' }], addresses: [], urls: [], social: [], dates: [], relations: [], tags: [],
-    bookId: S.scope.kind === 'book' ? +S.scope.id : (writableBooks().find((b) => b.shared) || writableBooks()[0] || {}).id, kind: 'individual' };
+    bookId: ((S.scope.kind === 'book' && writableBooks().find((b) => b.id === +S.scope.id)) || writableBooks().find((b) => b.shared) || writableBooks()[0] || {}).id, kind: 'individual' };
   const f = JSON.parse(JSON.stringify(c));
   f.name = f.name || {};
   let photoFile = null, dropPhoto = false;
@@ -548,7 +548,7 @@ async function showEdit(id, pane) {
   const emails = multi('Email addresses', 'mail', f.emails, 'email', (x, d) => h('div', { class: 'multi' }, labelSel(x, 'email'), inp(x, 'value', 'Email', { type: 'email' }), prefBox(x), rm(f.emails, x, d)), () => ({ label: 'home', value: '' }));
   const addrs = multi('Addresses', 'place', f.addresses, 'address', (x, d) => h('div', { class: 'multi' }, labelSel(x, 'address'),
     h('div', { class: 'addr' }, inp(x, 'street', 'Street', { style: 'grid-column: 1 / -1' }), inp(x, 'ext', 'Apartment, suite…'), inp(x, 'city', 'City'), inp(x, 'region', 'State / region'),
-      inp(x, 'postcode', 'Postal code'), inp(x, 'country', 'Country'), inp(x, 'pobox', 'PO Box')), rm(f.addresses, x, d)), () => ({ label: 'home' }));
+      inp(x, 'postcode', 'Postal code'), inp(x, 'country', 'Country'), inp(x, 'pobox', 'PO Box')), prefBox(x), rm(f.addresses, x, d)), () => ({ label: 'home' }));
   const social = multi('Social profiles', 'people', f.social, 'profile', (x, d) => h('div', { class: 'multi' },
     sel(x, 'service', S.social.map((s) => [s.service, s.name])), inp(x, 'value', 'Profile address or user name'), rm(f.social, x, d)), () => ({ service: 'linkedin', value: '' }));
   const urls = multi('Websites', 'link', f.urls, 'website', (x, d) => h('div', { class: 'multi' }, labelSel(x, 'url'), inp(x, 'value', 'https://…', { type: 'url' }), rm(f.urls, x, d)), () => ({ label: 'homepage', value: '' }));
@@ -593,7 +593,7 @@ async function showEdit(id, pane) {
 
   // photo
   const prev = h('span');
-  const drawPhoto = () => prev.replaceChildren(photoFile ? h('span', { class: 'av xl' }, h('img', { src: URL.createObjectURL(photoFile), alt: '' })) : dropPhoto ? avatar({ fn: f.fn || f.name.given || '?' }, 'xl') : avatar(c.id ? c : { fn: '?' }, 'xl'));
+  const drawPhoto = () => prev.replaceChildren(photoFile ? h('span', { class: 'av xl' }, h('img', { src: URL.createObjectURL(photoFile), alt: '', onload: (e) => URL.revokeObjectURL(e.target.src) })) : dropPhoto ? avatar({ fn: f.fn || f.name.given || '?' }, 'xl') : avatar(c.id ? c : { fn: '?' }, 'xl'));
   drawPhoto();
   const file = h('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp,image/gif', hidden: true, onchange: (e) => { photoFile = e.target.files[0] || null; dropPhoto = false; drawPhoto(); } });
 
@@ -711,7 +711,7 @@ async function showTree(page, r) {
   const root = byId.get(g.root);
   page.append(h('div', { class: 'pagehead' }, h('a', { class: 'iconbtn', href: `#/c/${g.root}` }, icon('back')), h('h1', null, `${root.fn}'s family`)),
     gen.size > 1 ? h('div', { class: 'tree' }, [...rows.keys()].sort((a, b) => b - a).map((lvl) => [h('div', { class: 'gen' }, names[lvl] || (lvl > 0 ? `${lvl} generations up` : `${-lvl} generations down`)),
-      h('div', { class: 'genrow' }, rows.get(lvl).map((id) => { const n = byId.get(id); return h('a', { class: `tcard ${id === g.root ? 'root' : ''}`, href: `#/tree/${id}` }, avatar({ id, fn: n.fn, hasPhoto: n.hasPhoto }, 'm'),
+      h('div', { class: 'genrow' }, rows.get(lvl).map((id) => { const n = byId.get(id); return h('a', { class: `tcard ${id === g.root ? 'root' : ''}`, href: id === g.root ? `#/c/${id}` : `#/tree/${id}`, title: id === g.root ? 'Open the contact' : 'Their family' }, avatar({ id, fn: n.fn, hasPhoto: n.hasPhoto }, 'm'),
         h('div', null, h('b', null, n.fn), h('div', { class: 'muted small' }, id === g.root ? 'This contact' : how.get(id)), n.birthday && n.birthday.year ? h('div', { class: 'muted small' }, `born ${n.birthday.year}`) : null)); }))]))
       : h('div', { class: 'empty' }, h('p', null, 'No family relations to other contacts yet. Edit the contact and add parents, siblings, children…')));
 }
@@ -741,7 +741,7 @@ async function maintDups(el) {
       h('ul', { class: 'reasons' }, reasons.map((x) => h('li', null, x))),
       g.contacts.map((c) => h('div', { class: 'duprow' }, avatar(c), h('div', { style: { minWidth: 0 } }, h('a', { class: 'lnk', href: `#/c/${c.id}` }, c.fn),
         h('div', { class: 'muted small' }, [c.org, c.email, c.phone, c.birthday ? fmtDate(c.birthday) : null, bookName(c.bookId)].filter(Boolean).join(' · '))))),
-      h('div', { class: 'btns' },
+      !g.contacts.every((c) => (S.books.find((b) => b.id === c.bookId) || {}).writable) ? null : h('div', { class: 'btns' },
         h('button', { class: 'pillbtn primary', onclick: () => mergeDialog(g.contacts.map((c) => c.id), () => onRoute()) }, icon('merge', 's'), 'Compare and merge…'),
         h('button', { class: 'pillbtn noic', title: 'They are different people: do not offer them again', onclick: async () => {
           await api('/api/duplicates/dismiss', { method: 'POST', json: { ids: g.contacts.map((c) => c.id) } }); box.remove(); toast('Kept apart');
@@ -844,7 +844,7 @@ function suggList(items, canEdit, after) {
         h('div', { class: 'muted small' }, x.source, x.by ? ` · via ${x.by}` : '', x.evidence && /^https?:\/\//i.test(x.evidence) ? [' · ', h('a', { class: 'lnk', href: x.evidence, target: '_blank', rel: 'noopener noreferrer' }, 'source ', icon('open', 's'))] : null, x.note ? ` · ${x.note}` : '')),
       h('div', { class: 'sb' },
         canEdit ? h('button', { class: 'pillbtn noic primary', onclick: async () => { try { await api(`/api/suggestions/${x.id}/accept`, { method: 'POST' }); row.remove(); await refreshStatus(); after && after(x); } catch (e) { fail(e); } } }, 'Accept') : null,
-        h('button', { class: 'pillbtn noic', onclick: async () => { await api(`/api/suggestions/${x.id}/dismiss`, { method: 'POST' }); row.remove(); await refreshStatus(); } }, 'Dismiss')));
+        canEdit ? h('button', { class: 'pillbtn noic', onclick: async () => { await api(`/api/suggestions/${x.id}/dismiss`, { method: 'POST' }); row.remove(); await refreshStatus(); } }, 'Dismiss') : null));
     wrap.append(row);
   }
   return wrap;
@@ -875,7 +875,7 @@ async function maintSuggest(el) {
         for (const x of list) { try { await api(`/api/suggestions/${x.id}/accept`, { method: 'POST' }); } catch { /* a rival value already taken */ } }
         await refreshStatus(); onRoute();
       } }, 'Accept all') : null,
-      h('button', { class: 'pillbtn noic', onclick: async () => { for (const x of list) await api(`/api/suggestions/${x.id}/dismiss`, { method: 'POST' }); await refreshStatus(); box.remove(); } }, 'Dismiss all')),
+      canEdit ? h('button', { class: 'pillbtn noic', onclick: async () => { for (const x of list) await api(`/api/suggestions/${x.id}/dismiss`, { method: 'POST' }); await refreshStatus(); box.remove(); } }, 'Dismiss all') : null),
     suggList(list, canEdit, () => {}));
     el.append(box);
   }

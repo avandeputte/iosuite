@@ -264,7 +264,7 @@ def mark_not_duplicates(contacts: list[str]) -> dict:
     """These contacts are different people (twins, a father and son with one name...): find_duplicates stops offering them."""
     from app import quality
     u = who()
-    rows = [find_contact(u, c) for c in contacts]
+    rows = [find_contact(u, c, writable=True) for c in contacts]
     quality.not_duplicates([r["id"] for r in rows], u["id"])
     return {"keptApart": [r["fn"] for r in rows]}
 
@@ -320,7 +320,7 @@ def suggest_contact_update(contact: str, suggestions: list[dict], source: str) -
     label}; social {service: linkedin | facebook | instagram | x | ..., value: the profile's address}; tags: a label.
     source: who found it (e.g. "Claude, web search")."""
     u = who()
-    r = find_contact(u, contact)
+    r = find_contact(u, contact, writable=True)
     out = {"added": 0, "known": 0, "dismissedBefore": 0, "pending": 0, "errors": []}
     for s in suggestions[:50]:
         try:
@@ -339,7 +339,7 @@ def lookup_contact(contact: str) -> dict:
     """Look a contact up with the built-in public lookups (Gravatar by email; its GitHub, Mastodon and Bluesky
     profiles) and file what they find as suggestions for a person to accept."""
     u = who()
-    r = find_contact(u, contact)
+    r = find_contact(u, contact, writable=True)
     return enrich.lookup(r["id"], u["id"])
 
 

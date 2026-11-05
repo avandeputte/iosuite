@@ -17,6 +17,9 @@ APP = "iocontacts"
 # start page and the other apps read: written on the first request
 auth = Auth(APP, app_label="ioContacts", basic_realm="ioContacts", version=APP_VERSION, public_url=config.PUBLIC_URL or None,
             description="Contacts", color="#4f2f7d", icon="/static/icons/mark.svg")
+# a proxy identity with no account here is refused, except where clients sign in themselves (CardDAV and MCP with an
+# app password, their discovery, and the calendar feed's secret link)
+auth.deny_exempt = ("/mcp", "/dav", "/.well-known/", "/cal/")
 
 
 def row_of(u):

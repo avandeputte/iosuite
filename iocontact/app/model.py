@@ -125,7 +125,8 @@ def search(book_ids: list[int], q: str = "", tag: str | None = None, favorite: b
     args: list = list(book_ids)
     like_ = f"LIKE %s COLLATE {db.search_collation()}"  # case- and accent-insensitive: "celia" finds "Célia"
     for word in (q or "").split():
-        like = f"%{word}%"
+        lit = word.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")  # "50%" or "a_b" mean themselves
+        like = f"%{lit}%"
         digits = re.sub(r"\D", "", word)
         where.append((f"(c.fn {like_} OR c.nickname {like_} OR c.org {like_} OR c.title {like_} OR c.notes {like_} "
                       f"OR c.maiden {like_} "
