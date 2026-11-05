@@ -10,21 +10,21 @@ services:
       - "8630:8630"     # the start page and its REST API (/api/)
     environment:
       TZ: America/New_York
-      DB_HOST: 192.168.1.89           # CHANGE ME: your MariaDB host
+      DB_HOST: db.example.lan         # CHANGE ME: your MariaDB host
       DB_PORT: "3306"
       DB_NAME: suite
       DB_USER: suite
       DB_PASSWORD: suite              # CHANGE ME
       # the accounts shared by the io apps (the same database ioPix, ioNotes, ioContacts, ioCalendar and ioHealth use)
-      IOSUITE_DB_HOST: 192.168.1.89   # CHANGE ME
-      IOSUITE_DB_PORT: "3306"
+      # IOSUITE_DB_HOST: db.example.lan   # default: DB_HOST
+      # IOSUITE_DB_PORT: "3306"            # default: DB_PORT
       IOSUITE_DB_NAME: iosuite
       IOSUITE_DB_USER: iosuite
       IOSUITE_DB_PASSWORD: change-me  # CHANGE ME
       # ADMIN_USER: admin             # a first admin, made on the first start when there is no account yet
       # ADMIN_PASSWORD: change-me-please
       # PUBLIC_URL: https://home.example.com       # behind a reverse proxy
-      # IOTHING_COOKIE_DOMAIN: example.com         # one sign-in for every io app under this domain
+      # COOKIE_DOMAIN: example.com                 # one sign-in for every app of the suite under this domain
       # AUTH_PROXY: cloudflare        # sign-in at the proxy, as in the other io apps (see README)
       # the weather (or Settings › Home page): a key from developer.accuweather.com and a location key Settings finds
       # ACCUWEATHER_API_KEY: change-me

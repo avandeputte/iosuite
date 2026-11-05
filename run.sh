@@ -1,6 +1,15 @@
 #!/bin/sh
-# Start ioSuite in the foreground with the settings in iosuite.env. ./setup.sh first.
+# Start ioSuite in the foreground, with the settings in config.env (HOST and PORT there say where it listens; the
+# default port is 8630). The first run creates .venv (with uv when available, else python3 -m venv) and installs the
+# app; ./setup.sh does that too and also writes config.env. The service setup.sh installs and the container run the
+# same `python -m app`.
+set -e
 cd "$(dirname "$0")"
-[ -x .venv/bin/python ] || { echo "run ./setup.sh first" >&2; exit 1; }
-PORT="$(sed -n 's/^PORT=//p' iosuite.env 2>/dev/null | tail -n 1)"
-exec .venv/bin/python -m uvicorn app.main:app --host "${HOST:-0.0.0.0}" --port "${PORT:-8630}" --proxy-headers "$@"
+if [ ! -x .venv/bin/python ]; then
+  if command -v uv >/dev/null 2>&1; then
+    uv venv .venv && uv pip install -p .venv/bin/python -e .
+  else
+    python3 -m venv .venv && .venv/bin/python -m pip install -e .
+  fi
+fi
+exec .venv/bin/python -m app "$@"

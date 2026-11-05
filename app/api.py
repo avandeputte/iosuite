@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 from fastapi.concurrency import run_in_threadpool
 
-from app import APP_VERSION, apps, bookmarks, config, layout, status as appstatus, users, weather, widgets
+from app import __version__, apps, bookmarks, config, layout, status as appstatus, users, weather, widgets
 from app.auth import updater
 
 router = APIRouter()
@@ -44,7 +44,7 @@ def _base(request: Request) -> str:
 def status(request: Request):
     u = request.state.user
     adm = users.is_admin(u)
-    return {"app": "ioSuite", "version": APP_VERSION, "commit": updater.local_commit()[:7] if u else None,
+    return {"app": "ioSuite", "version": __version__, "commit": updater.local_commit()[:7] if u else None,
             "usersExist": users.any_users(), "user": users.public(u), "viaProxy": getattr(request.state, "via_proxy", False),
             "updateAvailable": updater.available() if adm and updater.auto_check_enabled() else None}
 

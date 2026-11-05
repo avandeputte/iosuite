@@ -13,8 +13,8 @@ def _registered(**kw):
 def test_iosuite_registers_itself(client):
     client.get("/api/apps")
     me = suite.get("iosuite")
-    from app import APP_VERSION
-    assert me["name"] == "ioSuite" and me["version"] == APP_VERSION and me["description"] == "Start page"
+    from app import __version__
+    assert me["name"] == "ioSuite" and me["version"] == __version__ and me["description"] == "Start page"
 
 
 def test_only_registered_apps_have_a_tile(client):

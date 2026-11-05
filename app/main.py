@@ -8,7 +8,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app import APP_VERSION, api, config, db, users
+from app import __version__, api, config, db, users
 from app.auth import auth as auth_shared, updater
 from iosuite_shared import sessions
 
@@ -31,7 +31,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="ioSuite", version=APP_VERSION, lifespan=lifespan, docs_url="/api/docs", redoc_url=None,
+app = FastAPI(title="ioSuite", version=__version__, lifespan=lifespan, docs_url="/api/docs", redoc_url=None,
               openapi_url="/api/openapi.json",
               description="The start page of the iothing suite: one place with every io app, and the accounts they share.")
 
@@ -81,7 +81,7 @@ def index():
     which caches .js and .css at the edge) fetches the new ones instead of serving what it kept."""
     html = (config.STATIC_DIR / "index.html").read_text(encoding="utf-8")
     for f in ("static/app.js", "static/app.css"):
-        html = html.replace(f'"{f}"', f'"{f}?v={APP_VERSION}"')
+        html = html.replace(f'"{f}"', f'"{f}?v={__version__}"')
     return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
 
 

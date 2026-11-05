@@ -1,5 +1,5 @@
 """Tests run against a test MariaDB of their own (iosuite_shared.testing: a Docker container, or the server named by
-IOTHING_TEST_DB=host:port:user:password): two scratch databases, suite_test and suite_test_shared, dropped and
+IOSUITE_TEST_DB=host:port:user:password): two scratch databases, suite_test and suite_test_shared, dropped and
 recreated per session, never a live one. Without a test server the suite is skipped."""
 import os
 import sys
@@ -9,7 +9,7 @@ import pytest  # noqa: E402
 from iosuite_shared import testing as _authtest  # noqa: E402
 
 if _authtest.server() is None:
-    pytest.skip(f"{_authtest.server.reason}: the tests need a MariaDB (Docker, or IOTHING_TEST_DB=host:port:user:password)", allow_module_level=True)
+    pytest.skip(f"{_authtest.server.reason}: the tests need a MariaDB (Docker, or IOSUITE_TEST_DB=host:port:user:password)", allow_module_level=True)
 _s = _authtest.server()
 os.environ.update(DB_HOST=_s["host"], DB_PORT=str(_s["port"]), DB_USER=_s["user"], DB_PASSWORD=_s["password"], DB_NAME="suite_test")
 _authtest.fresh_database("suite_test")
