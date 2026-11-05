@@ -194,7 +194,7 @@ def mcp_enabled() -> bool:
 
 @router.get("/api/auth/suite")
 def get_suite(request: Request):
-    """The suite's registered apps (iosuite-shared suite_apps), this one among them, for the app switcher: when there are
+    """The suite's registered apps (iosuite-shared ios_apps), this one among them, for the app switcher: when there are
     others, the app mark top left opens a menu of them. Signed in only."""
     me(request)
     from iosuite_shared import suite

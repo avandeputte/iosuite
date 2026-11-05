@@ -34,7 +34,7 @@ class Forbidden(Exception):
 # ------------------------------------------------------------------ calendars
 
 def calendar(cid: int) -> dict | None:
-    return db.one("SELECT * FROM calendars WHERE id = %s", (cid,))
+    return db.one("SELECT * FROM cal_calendars WHERE id = %s", (cid,))
 
 
 def is_shared(c: dict) -> bool:
@@ -58,7 +58,7 @@ def ensure_personal(u: dict) -> None:
     app of the suite, so not necessarily here)."""
     if not u or not u.get("id") or not members.in_family(u["id"]):  # not a person (Settings › Users): no calendar of its own
         return
-    if not db.one("SELECT id FROM calendars WHERE owner_id = %s LIMIT 1", (u["id"],)):
+    if not db.one("SELECT id FROM cal_calendars WHERE owner_id = %s LIMIT 1", (u["id"],)):
         who = u.get("displayName") or u.get("display_name") or u.get("name")
         create_calendar(u["id"], "Personal", f"{who}'s private calendar", "#0b8a9e")
 
@@ -68,9 +68,9 @@ def calendars_for(u: dict | None) -> list[dict]:
     if not u:
         return []
     ensure_personal(u)
-    rows = db.q("SELECT c.*, (SELECT count(*) FROM events e WHERE e.calendar_id = c.id AND e.deleted = 0) AS n FROM calendars c "
+    rows = db.q("SELECT c.*, (SELECT count(*) FROM cal_events e WHERE e.calendar_id = c.id AND e.deleted = 0) AS n FROM cal_calendars c "
                 "WHERE c.owner_id IS NULL OR c.owner_id = %s "
-                "ORDER BY c.owner_id IS NOT NULL, c.kind IN ('birthdays', 'holidays'), c.kind = 'holidays', c.sort, c.slug <> 'family', c.slug <> 'personal', lower(c.name)",
+                "ORDER BY c.owner_id IS NOT NULL, c.kind IN ('birthdays', 'holidays'), c.kind = 'holidays', c.position, c.slug <> 'family', c.slug <> 'personal', lower(c.name)",
                 (u["id"],))
     return rows
 
@@ -97,17 +97,17 @@ def create_calendar(owner_id: int | None, name: str, description: str | None = N
                     kind: str = "events", slug: str | None = None, timezone: str | None = None) -> int:
     name = (name or "").strip()[:128] or "Calendar"
     base = (slug or _slug(name))[:56]
-    taken = {r["slug"] for r in db.q("SELECT slug FROM calendars WHERE " + ("owner_id IS NULL" if owner_id is None else "owner_id = %s"),
+    taken = {r["slug"] for r in db.q("SELECT slug FROM cal_calendars WHERE " + ("owner_id IS NULL" if owner_id is None else "owner_id = %s"),
                                      () if owner_id is None else (owner_id,))}
     # a private calendar's address must not hide a shared one's (CalDAV lists both under the same home)
-    taken |= {r["slug"] for r in db.q("SELECT slug FROM calendars WHERE owner_id IS NULL")}
+    taken |= {r["slug"] for r in db.q("SELECT slug FROM cal_calendars WHERE owner_id IS NULL")}
     s, i = base, 2
     while s in taken:
         s, i = f"{base}-{i}", i + 1
     if not color:
-        n = db.one("SELECT count(*) AS n FROM calendars")["n"]
+        n = db.one("SELECT count(*) AS n FROM cal_calendars")["n"]
         color = PALETTE[n % len(PALETTE)]
-    return db.ex("INSERT INTO calendars (owner_id, slug, name, description, color, kind, timezone) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+    return db.ex("INSERT INTO cal_calendars (owner_id, slug, name, description, color, kind, timezone) VALUES (%s, %s, %s, %s, %s, %s, %s)",
                  (owner_id, s, name, (description or "").strip()[:512] or None, _color(color), kind,
                   timezone if ical.valid_tz(timezone) else None))
 
@@ -129,21 +129,21 @@ def update_calendar(cid: int, **f) -> None:
     if "timezone" in f:
         sets.append("timezone = %s"); args.append(f["timezone"] if ical.valid_tz(f["timezone"]) else None)
     if f.get("sort") is not None:
-        sets.append("sort = %s"); args.append(int(f["sort"]))
+        sets.append("position = %s"); args.append(int(f["sort"]))
     if sets:
-        db.ex(f"UPDATE calendars SET {', '.join(sets)}, sync_token = sync_token + 1 WHERE id = %s", (*args, cid))
+        db.ex(f"UPDATE cal_calendars SET {', '.join(sets)}, sync_token = sync_token + 1 WHERE id = %s", (*args, cid))
 
 
 def delete_calendar(cid: int) -> None:
-    db.ex("DELETE FROM calendars WHERE id = %s", (cid,))
+    db.ex("DELETE FROM cal_calendars WHERE id = %s", (cid,))
     _cache_clear()
 
 
 def bump(cid: int) -> int:
     """The calendar's next sync token (every change gets one; CalDAV's sync-collection and getctag follow it)."""
     with db.tx() as con, con.cursor() as cur:
-        cur.execute("UPDATE calendars SET sync_token = sync_token + 1 WHERE id = %s", (cid,))
-        cur.execute("SELECT sync_token FROM calendars WHERE id = %s", (cid,))
+        cur.execute("UPDATE cal_calendars SET sync_token = sync_token + 1 WHERE id = %s", (cid,))
+        cur.execute("SELECT sync_token FROM cal_calendars WHERE id = %s", (cid,))
         return cur.fetchone()["sync_token"]
 
 
@@ -175,15 +175,15 @@ def parsed(row: dict):
 
 
 def get_row(eid: int) -> dict | None:
-    return db.one("SELECT * FROM events WHERE id = %s", (eid,))
+    return db.one("SELECT * FROM cal_events WHERE id = %s", (eid,))
 
 
 def by_href(cid: int, href: str) -> dict | None:
-    return db.one("SELECT * FROM events WHERE calendar_id = %s AND href = %s", (cid, href))
+    return db.one("SELECT * FROM cal_events WHERE calendar_id = %s AND href = %s", (cid, href))
 
 
 def by_uid(cid: int, uid: str) -> dict | None:
-    return db.one("SELECT * FROM events WHERE calendar_id = %s AND uid = %s AND deleted = 0", (cid, uid))
+    return db.one("SELECT * FROM cal_events WHERE calendar_id = %s AND uid = %s AND deleted = 0", (cid, uid))
 
 
 def href_for(uid: str) -> str:
@@ -212,12 +212,12 @@ def save(cid: int, cal, event_id: int | None = None, href: str | None = None, us
         event_id = old["id"] if old else None
     with db.tx():
         if event_id:
-            db.ex(f"UPDATE events SET {', '.join(f'{k} = %s' for k in cols)}, calendar_id = %s WHERE id = %s", (*cols.values(), cid, event_id))
+            db.ex(f"UPDATE cal_events SET {', '.join(f'{k} = %s' for k in cols)}, calendar_id = %s WHERE id = %s", (*cols.values(), cid, event_id))
         else:
-            event_id = db.ex(f"INSERT INTO events ({', '.join(cols)}, calendar_id, href, created_by) VALUES "
+            event_id = db.ex(f"INSERT INTO cal_events ({', '.join(cols)}, calendar_id, href, created_by) VALUES "
                              f"({', '.join(['%s'] * len(cols))}, %s, %s, %s)", (*cols.values(), cid, href, user_id))
-        db.ex("DELETE FROM event_people WHERE event_id = %s", (event_id,))
-        db.many("INSERT INTO event_people (event_id, pos, name, email, contact_id, role) VALUES (%s, %s, %s, %s, %s, %s)",
+        db.ex("DELETE FROM cal_event_people WHERE event_id = %s", (event_id,))
+        db.many("INSERT INTO cal_event_people (event_id, position, name, email, contact_id, role) VALUES (%s, %s, %s, %s, %s, %s)",
                 [(event_id, i, (p["name"] or None) and p["name"][:255], (p["email"] or None) and p["email"][:255], p.get("contactId"), p["role"])
                  for i, p in enumerate(ix["people"][:200])])
     return get_row(event_id)
@@ -229,8 +229,8 @@ def delete(eid: int) -> None:
     if not r or r["deleted"]:
         return
     tok = bump(r["calendar_id"])
-    db.ex("UPDATE events SET deleted = 1, ics = '', changed_token = %s WHERE id = %s", (tok, eid))
-    db.ex("DELETE FROM event_people WHERE event_id = %s", (eid,))
+    db.ex("UPDATE cal_events SET deleted = 1, ics = '', changed_token = %s WHERE id = %s", (tok, eid))
+    db.ex("DELETE FROM cal_event_people WHERE event_id = %s", (eid,))
 
 
 def move(eid: int, to_cid: int) -> dict:
@@ -248,8 +248,8 @@ def move(eid: int, to_cid: int) -> dict:
 
 def rows(cid: int, since: int | None = None) -> list[dict]:
     if since is None:
-        return db.q("SELECT * FROM events WHERE calendar_id = %s AND deleted = 0 ORDER BY id", (cid,))
-    return db.q("SELECT * FROM events WHERE calendar_id = %s AND changed_token > %s ORDER BY changed_token", (cid, since))
+        return db.q("SELECT * FROM cal_events WHERE calendar_id = %s AND deleted = 0 ORDER BY id", (cid,))
+    return db.q("SELECT * FROM cal_events WHERE calendar_id = %s AND changed_token > %s ORDER BY changed_token", (cid, since))
 
 
 PAD = dt.timedelta(hours=14)  # all-day events are kept at UTC midnight; a day elsewhere is up to 14 hours off
@@ -265,7 +265,7 @@ def rows_in_range(cids: list[int], start: dt.datetime | None, end: dt.datetime |
     if start is not None:
         where.append("(range_end IS NULL OR range_end > %s)")
         args.append((start - PAD).astimezone(dt.timezone.utc).replace(tzinfo=None))
-    return db.q(f"SELECT * FROM events WHERE {' AND '.join(where)} ORDER BY range_start", args)
+    return db.q(f"SELECT * FROM cal_events WHERE {' AND '.join(where)} ORDER BY range_start", args)
 
 
 def occurrences(cals: list[dict], start: dt.datetime, end: dt.datetime, q: str = "", member_ids: set[int] | None = None) -> list[dict]:
@@ -312,10 +312,10 @@ def search_rows(cids: list[int], q: str, limit: int = 100) -> list[dict]:
     where, args = [f"e.calendar_id IN ({db.marks(len(cids))})", "e.deleted = 0"], list(cids)
     for w in (q or "").split()[:8]:
         like = _like(w)
-        where.append("(e.summary LIKE %s OR e.location LIKE %s OR e.description LIKE %s OR EXISTS (SELECT 1 FROM event_people p "
+        where.append("(e.summary LIKE %s OR e.location LIKE %s OR e.description LIKE %s OR EXISTS (SELECT 1 FROM cal_event_people p "
                      "WHERE p.event_id = e.id AND (p.name LIKE %s OR p.email LIKE %s)))")
         args += [like] * 5
-    return db.q(f"SELECT e.* FROM events e WHERE {' AND '.join(where)} ORDER BY e.range_start DESC LIMIT %s", (*args, int(limit)))
+    return db.q(f"SELECT e.* FROM cal_events e WHERE {' AND '.join(where)} ORDER BY e.range_start DESC LIMIT %s", (*args, int(limit)))
 
 
 def event_out(r: dict, cal_row: dict | None = None, recurrence_id: str | None = None) -> dict:
@@ -323,8 +323,8 @@ def event_out(r: dict, cal_row: dict | None = None, recurrence_id: str | None = 
     c = parsed(r)
     j = ical.event_json(c, recurrence_id)
     j.update(id=r["id"], calendarId=r["calendar_id"], href=r["href"], etag=r["etag"], members=members.public(members.of(j["categories"])),
-             updated=r["updated"].isoformat() if r.get("updated") else None,
-             created=r["created"].isoformat() if r.get("created") else None)
+             updated=r["updated_at"].isoformat() if r.get("updated_at") else None,
+             created=r["created_at"].isoformat() if r.get("created_at") else None)
     return j
 
 
@@ -391,6 +391,6 @@ def people_seen(cids: list[int], q: str = "", limit: int = 20) -> list[dict]:
     if not cids:
         return []
     like = _like(q)
-    return db.q(f"SELECT p.name, p.email, max(p.contact_id) AS contactId, count(*) AS n FROM event_people p JOIN events e ON e.id = p.event_id "
+    return db.q(f"SELECT p.name, p.email, max(p.contact_id) AS contactId, count(*) AS n FROM cal_event_people p JOIN cal_events e ON e.id = p.event_id "
                 f"WHERE e.deleted = 0 AND e.calendar_id IN ({db.marks(len(cids))}) AND (p.name LIKE %s OR p.email LIKE %s) "
                 f"GROUP BY p.name, p.email ORDER BY n DESC LIMIT %s", (*cids, like, like, int(limit)))

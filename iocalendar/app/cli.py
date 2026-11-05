@@ -23,8 +23,8 @@ def main(argv: list[str]) -> int:
     if cmd == "migrate":
         print("ok: tables ready")
     elif cmd == "check":
-        n = db.one("SELECT count(*) AS n FROM events WHERE deleted = 0")["n"]
-        c = db.one("SELECT count(*) AS n FROM calendars")["n"]
+        n = db.one("SELECT count(*) AS n FROM cal_events WHERE deleted = 0")["n"]
+        c = db.one("SELECT count(*) AS n FROM cal_calendars")["n"]
         users.ensure_admin_from_env()
         u = len(users.all_users())
         print(f"ok: {u} account(s), {c} calendar(s), {n} event(s)")

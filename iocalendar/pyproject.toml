@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "iocalendar"
-version = "0.5.0"
+version = "0.6.0"
 description = "Self-hosted calendars for the family: web app, CalDAV, iCalendar feeds, REST/jCal, MCP"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 dependencies = [
-  "iosuite-shared @ git+https://github.com/avandeputte/iosuite-shared.git@305c5a457d42c1989b0c29681df8dabd803abd0a",   # the suite's shared library, repo iosuite-shared (pinned: bump to pick up a new one)
+  "iosuite-shared @ git+https://github.com/avandeputte/iosuite-shared.git@cf4755f9efcaead7f0653b57048f437b606863c4",   # the suite's shared library, repo iosuite-shared (pinned: bump to pick up a new one)
   "fastapi<1",
   "uvicorn<1",
   "pymysql<2",

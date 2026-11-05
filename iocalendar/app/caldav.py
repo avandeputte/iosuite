@@ -250,7 +250,7 @@ def props_calendar(ctx: Ctx, c: dict, names: list[str]):
         elif n == q(AP, "calendar-color"):
             _sub(ok, AP, "calendar-color", (c.get("color") or model.PALETTE[0]).upper() + "FF")
         elif n == q(AP, "calendar-order"):
-            _sub(ok, AP, "calendar-order", c.get("sort") or c["id"])
+            _sub(ok, AP, "calendar-order", c.get("position") or c["id"])
         elif n == q(D, "getcontenttype"):
             _sub(ok, D, "getcontenttype", "httpd/unix-directory")
         else:
@@ -268,7 +268,7 @@ def props_object(ctx: Ctx, row: dict, c: dict, names: list[str], data_el: ET.Ele
         elif n == q(D, "resourcetype"):
             _sub(ok, D, "resourcetype")
         elif n == q(D, "getlastmodified"):
-            _sub(ok, D, "getlastmodified", _http_date(row["updated"]))
+            _sub(ok, D, "getlastmodified", _http_date(row["updated_at"]))
         elif n == q(D, "displayname"):
             _sub(ok, D, "displayname", row["summary"])
         elif n == q(C, "calendar-data"):
@@ -522,7 +522,7 @@ def _get(ctx: Ctx, parts, head: bool) -> Response:
     if not row or row["deleted"]:
         return Response(status_code=404)
     return Response(b"" if head else row["ics"].encode(), media_type="text/calendar; charset=utf-8",
-                    headers={"ETag": f'"{row["etag"]}"', "Last-Modified": _http_date(row["updated"])})
+                    headers={"ETag": f'"{row["etag"]}"', "Last-Modified": _http_date(row["updated_at"])})
 
 
 def _etag_match(header: str | None, etag: str | None) -> bool:

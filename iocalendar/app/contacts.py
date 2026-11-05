@@ -116,7 +116,7 @@ def test() -> dict:
 # ------------------------------------------------------------------ the Birthdays calendar
 
 def birthday_calendar() -> dict | None:
-    return db.one("SELECT * FROM calendars WHERE kind = 'birthdays' AND owner_id IS NULL LIMIT 1")
+    return db.one("SELECT * FROM cal_calendars WHERE kind = 'birthdays' AND owner_id IS NULL LIMIT 1")
 
 
 def sync_birthdays() -> dict:

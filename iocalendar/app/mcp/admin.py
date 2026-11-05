@@ -25,10 +25,10 @@ def diagnostics() -> dict:
     try:
         out["database"] = {"host": f"{config.DB_HOST}:{config.DB_PORT}", "name": config.DB_NAME,
                            "server": db.one("SELECT version() AS v")["v"],
-                           "schema": (db.one("SELECT v FROM meta WHERE k = 'schema'") or {}).get("v"),
-                           "calendars": db.one("SELECT count(*) AS n FROM calendars")["n"],
-                           "events": db.one("SELECT count(*) AS n FROM events WHERE deleted = 0")["n"],
-                           "tombstones": db.one("SELECT count(*) AS n FROM events WHERE deleted = 1")["n"]}
+                           "schema": db.schema_version(),
+                           "calendars": db.one("SELECT count(*) AS n FROM cal_calendars")["n"],
+                           "events": db.one("SELECT count(*) AS n FROM cal_events WHERE deleted = 0")["n"],
+                           "tombstones": db.one("SELECT count(*) AS n FROM cal_events WHERE deleted = 1")["n"]}
     except Exception as e:  # noqa: BLE001
         out["database"] = {"error": str(e)[:200]}
     from app.api import mcp_enabled

@@ -33,7 +33,7 @@ def set_in_family(uid: int, yes: bool) -> None:
     ids.discard(int(uid)) if yes else ids.add(int(uid))
     db.set_setting("family_left_out", ",".join(str(i) for i in sorted(ids)) or None)
     if not yes:  # its empty private calendars go (one with events stays: nothing is lost)
-        db.ex("DELETE FROM calendars WHERE owner_id = %s AND NOT EXISTS (SELECT 1 FROM events e WHERE e.calendar_id = calendars.id AND e.deleted = 0)",
+        db.ex("DELETE FROM cal_calendars WHERE owner_id = %s AND NOT EXISTS (SELECT 1 FROM cal_events e WHERE e.calendar_id = cal_calendars.id AND e.deleted = 0)",
               (int(uid),))
     forget()
 
