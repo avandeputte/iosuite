@@ -178,6 +178,20 @@ def test_registers_in_the_suite(client):
     assert me["description"] == "Contacts" and me["color"] == "#4f2f7d"
 
 
+def test_suite_apps_for_the_app_switcher(client):
+    """The app mark becomes a menu of the suite's other apps: the page has the phone's button, may show their icons
+    (other origins), and /api/auth/suite lists them with an address and an absolute icon."""
+    from iothing_auth import suite
+    html = client.get("/").text
+    assert 'id="suitebtn"' in html and "img-src 'self' data: blob: https:" in html
+    client.get("/api/books")
+    suite.register("iopix", name="ioPix", url="https://photo.example.net", color="#123456", icon="/static/icon.svg")
+    r = client.get("/api/auth/suite").json()
+    assert r["app"] == "iocontacts"
+    other = [a for a in r["items"] if a["app"] != r["app"]]
+    assert [(a["name"], a["url"], a["icon"]) for a in other] == [("ioPix", "https://photo.example.net", "https://photo.example.net/static/icon.svg")]
+
+
 def test_birthday_without_reminder(client, family_id):
     """An unchecked "Remind me" keeps the birthday on the contact (and in vCard) but out of every birthdays feed."""
     import datetime as dt

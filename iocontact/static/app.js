@@ -137,7 +137,7 @@ const LABELS = { phone: ['mobile', 'home', 'work', 'main', 'iPhone', 'home fax',
   address: ['home', 'work', 'school', 'other'], url: ['homepage', 'blog', 'work', 'home', 'other'], date: ['anniversary', 'wedding', 'graduation', 'memorial', 'other'] };
 
 // ------------------------------------------------------------------ state
-const S = { status: {}, user: null, books: [], tags: [], rel: null, social: [], list: [], total: 0, scope: { kind: 'all' }, q: '', current: null,
+const S = { status: {}, user: null, suite: [], books: [], tags: [], rel: null, social: [], list: [], total: 0, scope: { kind: 'all' }, q: '', current: null,
   selecting: false, sel: new Set(), all: null };
 
 function scopeParams() {
@@ -196,6 +196,45 @@ function drawUser() {
   };
   m.append(btn);
 }
+/* The suite (iothing-auth's suite_apps): when other ioThing apps are registered, the app mark top left (in the sidebar; in
+   the top bar on a phone) opens a menu of them, each a link to that app. Alone, the mark stays the link to All contacts. */
+async function loadSuite() {
+  try {
+    const r = await api('/api/auth/suite');
+    S.suite = (r.items || []).filter((a) => a.app !== r.app && a.url);
+  } catch { S.suite = []; }
+  const b = $('#suitebtn');
+  if (b) { b.hidden = !S.suite.length; b.onclick = () => toggleSuite(b); }
+  if (!S.suite.length) closeSuite();
+  drawNav();
+}
+let suitePop = null;
+function closeSuite() {
+  if (!suitePop) return;
+  suitePop.remove(); suitePop = null;
+  document.removeEventListener('click', suiteOutside, true);
+  document.removeEventListener('keydown', suiteKey);
+  removeEventListener('resize', closeSuite);
+}
+function suiteOutside(e) { if (suitePop && !suitePop.contains(e.target) && !e.target.closest('.suitebtn')) closeSuite(); }
+function suiteKey(e) { if (e.key === 'Escape') closeSuite(); }
+function appTile(a) {
+  const mark = (a.name || a.app).replace(/^io(?=[A-Z])/, '').slice(0, 1).toUpperCase();
+  const fallback = () => h('span', { class: 'appic fb', style: { background: a.color || 'var(--brand)' } }, mark);
+  const ic = a.icon ? h('img', { class: 'appic', src: a.icon, alt: '', onerror: (e) => e.currentTarget.replaceWith(fallback()) }) : fallback();
+  return h('a', { class: 'apptile', href: a.url, role: 'menuitem', title: a.description || a.name, onclick: closeSuite },
+    ic, h('span', { class: 'appnm' }, a.name || a.app));
+}
+function toggleSuite(btn) {
+  if (suitePop) { closeSuite(); return; }
+  if (!S.suite.length) return;
+  suitePop = h('div', { class: 'suitepop', role: 'menu', 'aria-label': 'ioThing apps', style: { '--cols': String(Math.min(3, S.suite.length)) } }, S.suite.map(appTile));
+  document.body.append(suitePop);
+  const r = btn.getBoundingClientRect();
+  suitePop.style.top = `${Math.round(r.bottom + 6)}px`;
+  suitePop.style.left = `${Math.round(Math.max(8, Math.min(r.left - 6, innerWidth - suitePop.offsetWidth - 8)))}px`;
+  setTimeout(() => { document.addEventListener('click', suiteOutside, true); document.addEventListener('keydown', suiteKey); addEventListener('resize', closeSuite); }, 0);
+}
 function applyTheme() {
   const t = localStorage.getItem('ioc.theme') || 'system';
   if (t === 'system') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t;
@@ -214,8 +253,13 @@ function drawNav() {
   const total = S.books.reduce((a, b) => a + (b.count || 0), 0);
   nav.replaceChildren(...[
     h('div', { class: 'navhead' },
-      h('a', { class: 'brand', href: '#/', title: 'All contacts' }, h('img', { src: 'static/icons/mark.svg', alt: '', class: 'brand-mark' }),
-        h('span', { class: 'brand-name' }, h('span', { class: 'io' }, 'io'), h('span', { class: 'nm' }, 'Contacts'))),
+      S.suite.length
+        ? h('div', { class: 'brand' },
+          h('button', { class: 'suitebtn', title: 'ioThing apps', 'aria-label': 'ioThing apps', 'aria-haspopup': 'menu', onclick: (e) => toggleSuite(e.currentTarget) },
+            h('img', { src: 'static/icons/mark.svg', alt: '', class: 'brand-mark' })),
+          h('a', { class: 'brand-name', href: '#/', title: 'All contacts' }, h('span', { class: 'io' }, 'io'), h('span', { class: 'nm' }, 'Contacts')))
+        : h('a', { class: 'brand', href: '#/', title: 'All contacts' }, h('img', { src: 'static/icons/mark.svg', alt: '', class: 'brand-mark' }),
+          h('span', { class: 'brand-name' }, h('span', { class: 'io' }, 'io'), h('span', { class: 'nm' }, 'Contacts'))),
       h('button', { id: 'sidebtn', class: 'iconbtn', onclick: sidebarButton })),
     link('all', '#/', 'people', 'All contacts', total, listView && S.scope.kind === 'all', '--c-purple'),
     link('fav', '#/fav', 'star', 'Favorites', null, listView && S.scope.kind === 'fav', '--c-amber'),
@@ -1182,6 +1226,7 @@ async function start() {
   });
   window.addEventListener('hashchange', onRoute);
   onRoute();
+  loadSuite();
   updateBanner();
   setInterval(async () => { try { S.status = await api('/api/status'); updateBanner(); } catch { /* restarting */ } }, 15 * 60 * 1000);
 }
