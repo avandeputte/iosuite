@@ -46,3 +46,13 @@ def test_viewer_cannot_change_settings(client):
 def test_server_info(client):
     s = client.get("/api/server").json()
     assert s["version"] and "canRun" in s and s["autoCheck"] is False and s["autoCheckLocked"] is True
+    assert s["database"] and "progress" in s and s["repo"] and s["branch"]
+    assert client.get("/api/log").status_code in (200, 404)  # the server log, when there is one
+
+
+def test_the_server_log_is_for_admins_only(client):
+    client.post("/api/users", json={"name": "kid2", "password": "secret123", "role": "viewer"})
+    client.post("/api/auth/logout")
+    assert client.post("/api/auth/login", json={"name": "kid2", "password": "secret123"}).status_code == 200
+    assert client.get("/api/log").status_code == 403
+    assert client.post("/api/server", json={"action": "check"}).status_code == 403

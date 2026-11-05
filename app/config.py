@@ -1,5 +1,5 @@
 """Settings from the environment (or iosuite.env next to the app). What the page keeps (the weather and
-home page settings, the update switch) lives in MariaDB; the environment wins over Settings where both name the same thing."""
+home page settings, the daily update check) lives in MariaDB; the environment wins over Settings where both name the same thing."""
 import os
 from pathlib import Path
 
@@ -38,8 +38,6 @@ PUBLIC_URL = env("PUBLIC_URL", "").rstrip("/")   # e.g. https://home.example.com
 ACCUWEATHER_API_KEY = env("ACCUWEATHER_API_KEY").strip()
 ACCUWEATHER_LOCATION = env("ACCUWEATHER_LOCATION").strip()   # a location key (Settings finds it from a city name)
 
-# updates: the GitHub repository and branch followed by the version check and update.sh
-REPO = env("IOSUITE_REPO", "avandeputte/iosuite")
-BRANCH = env("IOSUITE_BRANCH", "main")
-# UPDATE_CHECK=0 turns the daily "is there a newer version" check off for good (the setting cannot turn it back on)
-UPDATE_CHECK_LOCKED = env("UPDATE_CHECK", "").strip().lower() in ("0", "off", "false", "no")
+# updates: IOSUITE_REPO, IOSUITE_BRANCH and UPDATE_CHECK are read by iothing_auth.updates (app.auth.updater)
+# the server log that Maintenance › Updates and logs shows (LOG_FILE= switches it off)
+LOG_FILE = Path(env("LOG_FILE", str(ROOT / "iosuite.log"))) if env("LOG_FILE", "x") else None

@@ -1,5 +1,5 @@
 /* ioSuite web app: one module, no build step, as in the other io apps. The start page (the weather, a tile per app,
-   the bookmarks as homepage lays them out) and the settings (account, apps, weather, bookmarks, users, server). Each tile keeps a `.more` block under its name, where the app shows a glimpse of
+   the bookmarks as homepage lays them out) and the settings (account, apps, weather, bookmarks, users, server) and Maintenance (updates and logs). Each tile keeps a `.more` block under its name, where the app shows a glimpse of
    itself (photos from this day, the rest of today, steps and rings), filled from /api/widgets/<app>. */
 
 // ------------------------------------------------------------------ helpers
@@ -20,6 +20,8 @@ const ICONS = {
   link: 'M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z',
   cloud: 'M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z',
   search: 'M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z',
+  download: 'M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z',
+  note: 'M3 18h12v-2H3v2zM3 6v2h18V6H3zm0 7h18v-2H3v2z',
   tune: 'M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z',
   up: 'M7.41 15.41 12 10.83l4.59 4.58L18 14l-6-6-6 6z',
   down: 'M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z',
@@ -133,9 +135,11 @@ function drawUser() {
       h('a', { class: 'mi', href: '#/settings/account', onclick: closeMenu }, icon('person', 's'), 'Account'),
       ['editor', 'admin'].includes(S.user.role) ? h('a', { class: 'mi', href: '#/settings/bookmarks', onclick: closeMenu }, icon('link', 's'), 'Bookmarks') : null,
       h('button', { class: 'mi', onclick: () => { closeMenu(); customize(); } }, icon('tune', 's'), 'Customize the page'),
-      S.user.role === 'admin' ? h('a', { class: 'mi', href: '#/settings/weather', onclick: closeMenu }, icon('settings', 's'), 'Settings') : null,
       h('button', { class: 'mi', onclick: () => { const n = { system: 'light', light: 'dark', dark: 'system' }[theme]; localStorage.setItem('iosuite.theme', n); applyTheme(); closeMenu(); toast(`Appearance: ${n}`); } },
         icon('theme', 's'), `Appearance: ${theme}`),
+      h('a', { class: 'mi', href: '#/settings', onclick: closeMenu }, icon('settings', 's'), 'Settings'),
+      S.user.role === 'admin' ? h('a', { class: 'mi', href: '#/maintenance', onclick: closeMenu }, icon('server', 's'), 'Maintenance') : null,
+      h('button', { class: 'mi', onclick: async () => { closeMenu(); if (await signOutElsewhere()) toast('Signed out elsewhere'); } }, icon('logout', 's'), 'Sign out everywhere else'),
       h('button', { class: 'mi', onclick: async () => { const r = await api('/api/auth/logout', { method: 'POST' }); if (r && r.cloudflareLogout) location.href = r.cloudflareLogout; else location.reload(); } }, icon('logout', 's'), 'Sign out'));
     m.append(menu);
     setTimeout(() => document.addEventListener('click', outside), 0);
@@ -151,6 +155,7 @@ function applyTheme() {
 function route() {
   const [a, b] = location.hash.replace(/^#\/?/, '').split('/').map(decodeURIComponent);
   if (a === 'settings') return { view: 'settings', tab: b || 'account' };
+  if (a === 'maintenance') return { view: 'maintenance', tab: b || 'updates' };
   return { view: 'home' };
 }
 async function onRoute() {
@@ -160,7 +165,7 @@ async function onRoute() {
   document.body.classList.toggle('home', r.view === 'home');
   $('#topbar').append(userMenu());  // out of the old page before it goes; showHome takes it into the new one
   $('#main').replaceChildren(page);
-  try { await ({ home: showHome, settings: showSettings })[r.view](page, r); } catch (e) { fail(e); }
+  try { await ({ home: showHome, settings: showSettings, maintenance: showMaintenance })[r.view](page, r); } catch (e) { fail(e); }
 }
 
 // ------------------------------------------------------------------ the start page
@@ -601,7 +606,11 @@ async function setAccount(el) {
     h('p', null, h('button', { class: 'pillbtn primary', onclick: async () => { try { S.user = (await api('/api/auth/me', { method: 'PATCH', json: { displayName: dn.value, email: em.value } })).user; drawUser(); toast('Saved'); } catch (e) { fail(e); } } }, icon('check', 's'), 'Save'))),
   u.hasPassword ? h('div', { class: 'box' }, h('h2', null, icon('key'), 'Password'), h('div', { class: 'grid' }, fld('Current password', old), fld('New password (8 or more)', nw)),
     h('p', null, h('button', { class: 'pillbtn', onclick: async () => { try { await api('/api/auth/password', { method: 'POST', json: { current: old.value, password: nw.value } }); old.value = nw.value = ''; toast('Password changed'); } catch (e) { fail(e); } } }, 'Change password'), ' ',
-      h('button', { class: 'pillbtn noic', onclick: async () => { if (await confirmDialog('Sign out everywhere', 'Sign out on every other browser and device, in every io app? (Apps with an app password keep working.)', 'Sign out the others')) { try { await api('/api/auth/logout_all', { method: 'POST' }); toast('Signed out elsewhere'); } catch (e) { fail(e); } } } }, 'Sign out everywhere else'))) : null);
+      h('button', { class: 'pillbtn noic', onclick: async () => { if (await signOutElsewhere()) toast('Signed out elsewhere'); } }, 'Sign out everywhere else'))) : null);
+}
+async function signOutElsewhere() {
+  if (!await confirmDialog('Sign out everywhere', 'Sign out on every other browser and device, in every io app? (Apps with an app password keep working.)', 'Sign out the others')) return false;
+  try { await api('/api/auth/logout_all', { method: 'POST' }); return true; } catch (e) { fail(e); return false; }
 }
 
 async function setHome(el) {
@@ -727,19 +736,38 @@ async function setUsers(el) {
 }
 
 async function setServer(el) {
+  let s; try { s = await api('/api/server'); } catch (e) { el.replaceChildren(h('p', null, e.message)); return; }
+  el.replaceChildren(
+    h('div', { class: 'box' }, h('h2', null, icon('server'), 'This page'),
+      kv('Address', s.url || location.origin), kv('Version', h('span', null, `v${s.version}${s.installed !== 'unknown' ? ` (${s.installed.slice(0, 7)})` : ''} · `, h('a', { class: 'lnk', href: '#/maintenance/updates' }, 'Updates and logs'))),
+      kv('Database', h('span', null, s.database)),
+      h('p', { class: 'muted small' }, 'Set PUBLIC_URL when the address above is not the one the family uses (behind a reverse proxy).')));
+}
+
+// ------------------------------------------------------------------ maintenance
+async function showMaintenance(page, r) {
+  if (S.user.role !== 'admin') { page.append(h('p', { class: 'muted' }, 'Admins only.')); return; }
+  const tabs = [['updates', 'Updates and logs']];
+  page.append(h('div', { class: 'pagehead' }, h('h1', null, 'Maintenance')),
+    h('div', { class: 'tabs' }, tabs.map(([k, l]) => h('button', { class: r.tab === k ? 'on' : '', onclick: () => { location.hash = `#/maintenance/${k}`; } }, l))));
+  const body = h('div'); page.append(body);
+  await ({ updates: maintUpdates }[r.tab] || maintUpdates)(body);
+}
+
+async function maintUpdates(el) {
   const draw = async () => {
     let s; try { s = await api('/api/server'); } catch (e) { el.replaceChildren(h('p', null, e.message)); return; }
     if (!el.isConnected) return;
     const c = s.check, p = s.progress, last = s.lastUpdate;
     const state = p.running ? 'Updating… ioSuite restarts when it is done, and this page reloads.'
       : p.error ? `The last update failed: ${p.error}`
-        : !c ? `You have v${s.version}${s.installed !== 'unknown' ? ` (${s.installed})` : ''}.`
+        : !c ? `You have v${s.version}${s.installed !== 'unknown' ? ` (${s.installed.slice(0, 7)})` : ''}.`
           : c.status === 'current' ? `v${s.version} is the latest version.`
             : c.status === 'update' ? `You have v${s.version}; ${c.remoteVersion ? `v${c.remoteVersion}` : 'a newer build'} is available${c.remoteDate ? ` (${c.remoteDate})` : ''}${c.remoteMessage ? `: ${c.remoteMessage.replace(/^v\d+\.\d+\.\d+:\s*/, '')}` : ''}.`
               : `Could not check: ${c.error}`;
-    const sw = (on, label, key, locked) => h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: on, disabled: locked ? true : null, onchange: async (e) => {
-      try { await api('/api/server', { method: 'POST', json: { [key]: e.target.checked } }); S.status = await api('/api/status'); toast('Saved'); draw(); } catch (err) { e.target.checked = !e.target.checked; fail(err); }
-    } }), ' ', label);
+    const auto = h('input', { type: 'checkbox', checked: s.autoCheck, disabled: s.autoCheckLocked ? true : null, onchange: async (e) => {
+      try { await api('/api/server', { method: 'POST', json: { autoCheck: e.target.checked } }); S.status = await api('/api/status'); toast('Saved'); draw(); } catch (err) { e.target.checked = !e.target.checked; fail(err); }
+    } });
     el.replaceChildren(
       h('div', { class: 'box' }, h('h2', null, icon('update'), 'ioSuite version'),
         h('p', null, state),
@@ -752,14 +780,48 @@ async function setServer(el) {
               if (await runUpdate()) setTimeout(draw, 2500);
             } }, icon('check', 's'), 'Update now')
               : h('span', { class: 'muted' }, 'This install cannot update itself from here (run ./update.sh in the app folder).')),
-        h('p', null, sw(s.autoCheck, 'Check for a new version once a day (only GitHub’s public list of changes is asked; nothing about this server is sent)', 'autoCheck', s.autoCheckLocked)),
+        h('p', null, h('label', { class: 'check' }, auto, ' Check for a new version once a day (only GitHub’s public list of changes is asked; nothing about this server is sent)')),
         s.autoCheckLocked ? h('p', { class: 'muted small' }, 'UPDATE_CHECK=0 in the environment keeps it off.') : null,
-        h('p', { class: 'muted small' }, `Follows ${s.repo} (${s.branch}). Database ${s.database}.`)),
-      h('div', { class: 'box' }, h('h2', null, icon('server'), 'This page'), kv('Address', s.url),
-        h('p', { class: 'muted small' }, 'Set PUBLIC_URL when the address above is not the one the family uses (behind a reverse proxy).')));
+        h('p', { class: 'muted small' }, `Follows ${s.repo} (${s.branch}). `, h('a', { class: 'lnk', href: `https://github.com/${s.repo}/commits/${s.branch}`, target: '_blank', rel: 'noopener' }, 'Change log'), '.')),
+      logCard(),
+      h('div', { class: 'box' }, h('h2', null, icon('update'), 'Restart'),
+        h('p', null, 'Stops ioSuite; the service manager (systemd, launchd or Docker) starts it again within seconds. Nothing is lost; the page reloads when it is back.'),
+        h('p', null, h('button', { class: 'pillbtn', onclick: async () => {
+          if (!await confirmDialog('Restart ioSuite', 'Restart the server now? Everyone is disconnected for a few seconds.', 'Restart')) return;
+          try { await api('/api/server', { method: 'POST', json: { action: 'restart' } }); } catch (e) { fail(e); return; }
+          toast('Restarting…');
+          const until = Date.now() + 90000, gone = Date.now() + 3000;
+          const look = async () => {
+            try { const r = await fetch('/api/status', { credentials: 'same-origin' }); if (r.ok && Date.now() > gone) { location.reload(); return; } } catch { /* down */ }
+            if (Date.now() < until) setTimeout(look, 2000); else toast('ioSuite did not come back; check the service.');
+          };
+          setTimeout(look, 3000);
+        } }, 'Restart ioSuite'))));
     if (p.running) setTimeout(() => { if (el.isConnected) draw(); }, 4000);
   };
   await draw();
+}
+
+/** The tail of the server log (GET /api/log from iothing-auth): a level filter, a search, Reload and Download. */
+function logCard() {
+  const level = h('select', { class: 't', style: 'width:auto' }, [['any', 'Everything'], ['warning', 'Warnings and errors'], ['error', 'Errors'], ['auth', 'Sign-ins']].map(([v, l]) => h('option', { value: v }, l)));
+  const contains = h('input', { class: 't', placeholder: 'Contains…', style: 'max-width:220px' });
+  const requests = h('input', { type: 'checkbox' });
+  const out = h('pre', { class: 'log' }, 'Loading…'), note = h('p', { class: 'muted small' });
+  const load = async () => {
+    try {
+      const r = await api(`/api/log?lines=300&level=${level.value}&contains=${encodeURIComponent(contains.value)}&requests=${requests.checked ? 1 : 0}`);
+      out.textContent = r.lines.length ? r.lines.join('\n') : (r.note || 'Nothing matches.');
+      note.textContent = r.note ? '' : `${r.file}: ${(r.size_bytes / 1024).toFixed(0)} kB, the last ${r.returned} lines.`;
+      out.scrollTop = out.scrollHeight;
+    } catch (e) { out.textContent = e.message; }
+  };
+  level.onchange = load; requests.onchange = load; contains.onchange = load;
+  setTimeout(load, 0);
+  return h('div', { class: 'box' }, h('h2', null, icon('note'), 'Server log'),
+    h('div', { class: 'multi' }, level, contains, h('label', { class: 'check' }, requests, ' Requests too'),
+      h('button', { class: 'pillbtn noic', onclick: load }, 'Reload'), h('a', { class: 'pillbtn', href: '/api/log/download' }, icon('download', 's'), 'Download')),
+    out, note);
 }
 
 /** Start update.sh on the server, then watch /api/status until another version or commit answers, and reload. */
@@ -769,7 +831,7 @@ async function runUpdate() {
   const was = `${S.status.version}|${S.status.commit || ''}`, until = Date.now() + 240000;
   const look = async () => {
     try { const s = await fetch('/api/status', { credentials: 'same-origin' }).then((r) => r.json()); if (s.version && `${s.version}|${s.commit || ''}` !== was) { location.reload(); return; } } catch { /* restarting */ }
-    if (Date.now() < until) setTimeout(look, 4000); else toast('The update did not finish; see Settings › Server.');
+    if (Date.now() < until) setTimeout(look, 4000); else toast('The update did not finish; see Maintenance › Updates and logs.');
   };
   setTimeout(look, 4000);
   return true;
@@ -784,7 +846,7 @@ function updateBanner() {
   const b = h('div', { id: 'updbanner', role: 'status' }, icon('update'),
     h('span', null, `ioSuite ${u.version ? `v${u.version}` : 'update'} is available${u.message ? `: ${u.message.replace(/^v\d+\.\d+\.\d+:\s*/, '')}` : ''}`),
     h('button', { class: 'pillbtn primary noic', onclick: async () => { if (await confirmDialog('Update ioSuite', 'Install the new version and restart? The page reloads when it is back.', 'Update now')) { b.remove(); runUpdate(); } } }, 'Update now'),
-    h('a', { class: 'pillbtn noic', href: '#/settings/server', onclick: () => b.remove() }, 'Details'),
+    h('a', { class: 'pillbtn noic', href: '#/maintenance/updates', onclick: () => b.remove() }, 'Details'),
     h('button', { class: 'iconbtn', title: 'Not now (hidden until the next version)', onclick: () => { try { localStorage.setItem('iosuite.updateDismissed', u.remote); } catch { /* */ } b.remove(); } }, icon('close', 's')));
   document.body.append(b);
 }

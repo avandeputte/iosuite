@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "iosuite"
-version = "0.3.4"
+version = "0.4.0"
 description = "The start page of the iothing suite: one place with every io app (ioPix, ioHealth, ioCalendar, ioContacts, ioNotes)"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 dependencies = [
-  "iothing-auth @ git+https://github.com/avandeputte/iosuite-shared.git@5cc971b3cee5b7db402d2a8461f26e52bb2d697e",   # iosuite-shared 0.4.2 (package iothing-auth): the Shared ioSuite database, accounts and sessions (pinned: bump to pick up a new one)
+  "iothing-auth @ git+https://github.com/avandeputte/iosuite-shared.git@edfff44b9913077655754cda0ce47ade27f7f245",   # iosuite-shared 0.5.0 (package iothing-auth): the Shared ioSuite database, accounts and sessions (pinned: bump to pick up a new one)
   "fastapi<1",
   "uvicorn<1",
   "pymysql<2",

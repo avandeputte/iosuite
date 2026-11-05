@@ -7,7 +7,7 @@
 #   ./update.sh --force    reinstall and restart even when the installed commit is already the latest
 #   IOSUITE_REF=<sha|branch> ./update.sh    install that commit instead of the tip of main
 #   IOSUITE_RESULT=<file>   write the outcome ("ok: ..." or "error: ...") there before the restart, so the web app
-#                              can show it afterwards (Settings › Server runs this same script)
+#                              can show it afterwards (Maintenance › Updates and logs runs this same script)
 #
 # The order protects the install: the Python packages the new version asks for are installed first, and the code moves
 # only once that succeeded, so a failed package install leaves the installed version running as it was; a failed swap

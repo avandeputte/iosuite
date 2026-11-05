@@ -249,6 +249,7 @@ textarea.t { height: auto; min-height: 120px; padding: 10px 12px; resize: vertic
 input.t, select.t, textarea.t { width: 100%; height: 40px; padding: 0 12px; border-radius: var(--r-s); border: 1px solid var(--line); background: var(--bg); outline: 0; min-width: 0; }
 input.t:focus, select.t:focus, textarea.t:focus { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent); }
 input.t:disabled { background: var(--bg2); color: var(--fg2); }
+pre.log { background: var(--bg2); border: 1px solid var(--line); border-radius: var(--r-s); padding: 10px 12px; margin: 10px 0 4px; max-height: 420px; overflow: auto; font-size: var(--fs-xs); line-height: 1.45; white-space: pre; }
 .multi { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
 .multi select.t { width: 150px; flex: none; }
 .multi input.t { flex: 1; min-width: 160px; width: auto; }
