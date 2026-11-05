@@ -24,7 +24,7 @@ dependencies = [
   "python-multipart<1",
   "mcp<3",
   "pyjwt[crypto]<3",   # Cloudflare Access tokens (proxy sign-in)
-  "iosuite-shared @ git+https://github.com/avandeputte/iosuite-shared.git@45c964382036c9f1e409c50b1967392be0ce02f5",   # the ioSuite shared library (avandeputte/iosuite-shared): accounts, sessions, the Shared ioSuite database (pinned: bump to pick up a new one)
+  "iosuite-shared @ git+https://github.com/avandeputte/iosuite-shared.git@f4bbc010cdb9aac1e8ed38e671d56ce4b07bd622",   # the ioSuite shared library (avandeputte/iosuite-shared): accounts, sessions, the Shared ioSuite database (pinned: bump to pick up a new one)
 ]
 
 [project.optional-dependencies]
