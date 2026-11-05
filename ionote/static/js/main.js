@@ -3,6 +3,7 @@
 import { $, h, api, state, icon, paintIcons, toast, fail, canWrite, confirmIt, debounce } from './core.js';
 import { runUpdate } from './update.js';
 import { loadMe, renderUserMenu, signIn } from './auth.js';
+import { loadSuite } from './suite.js';
 import { view, viewFromHash, go, loadMeta, renderNav, loadList, setOpenHandler, refresh, markSelected, setStatus } from './notes.js';
 import { openNote, flush, uploadPicture, currentNote } from './editor.js';
 import { renderSettings, renderMaintenance, renderChanges } from './settings.js';
@@ -172,6 +173,7 @@ async function start() {
   }
   if (state.settings.app_name && state.settings.app_name !== 'ionotes') document.title = state.settings.app_name;
   await loadMeta();
+  loadSuite();
   wire();
   api('/api/status').then((s) => { state.version = s.version; setStatus(`ionotes ${s.version}`); updateBanner(s.update); }).catch(() => {});
   if (!location.hash) history.replaceState(null, '', '#/notes');

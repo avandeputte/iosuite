@@ -96,3 +96,18 @@ def test_the_suite_icon_is_served_to_visitors_even_with_sign_in_required(client,
     client.post("/api/auth/logout")
     r = client.get("/static/icons/mark.svg")
     assert r.status_code == 200 and r.headers["content-type"].startswith("image/svg")
+
+
+def test_suite_apps_for_the_app_switcher(client):
+    """The app mark becomes a menu of the suite's other apps (as ioContacts'): the page has the phone's button, may show
+    their icons (other origins), and /api/auth/suite lists them with an address and an absolute icon."""
+    from iothing_auth import suite
+    html = client.get("/").text
+    assert 'id="suitebtn"' in html and "img-src 'self' data: blob: https:" in html
+    assert client.get("/js/suite.js").status_code == 200
+    client.get("/api/notes")
+    suite.register("iopix", name="ioPix", url="https://photo.example.net", color="#123456", icon="/static/icon.svg")
+    r = client.get("/api/auth/suite").json()
+    assert r["app"] == "ionotes"
+    other = [a for a in r["items"] if a["app"] != r["app"]]
+    assert [(a["name"], a["url"], a["icon"]) for a in other] == [("ioPix", "https://photo.example.net", "https://photo.example.net/static/icon.svg")]
