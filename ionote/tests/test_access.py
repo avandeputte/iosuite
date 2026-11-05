@@ -1,5 +1,7 @@
 """Who may do what: the same rules as iopix (open until an account exists, then roles; require sign-in; read-only;
 cross-site writes refused; every API route declares its access)."""
+import json
+
 from helpers import NID
 
 
@@ -98,16 +100,30 @@ def test_the_suite_icon_is_served_to_visitors_even_with_sign_in_required(client,
     assert r.status_code == 200 and r.headers["content-type"].startswith("image/svg")
 
 
+def test_the_shell_its_files_and_the_icon_are_public(client, admin):
+    """The suite's layout: the page at /, every file it names under /static/, the mark at suite.ICON."""
+    import re
+    from iosuite_shared import suite
+    assert client.post("/api/settings", json={"require_login": True}).status_code == 200
+    client.post("/api/auth/logout")
+    html = client.get("/").text
+    paths = re.findall(r'(?:src|href)="(static/[^"?]+)', html)
+    paths += [i["src"] for i in json.loads(client.get("/manifest.webmanifest").content)["icons"]]
+    assert paths and all(p.startswith("static/") for p in paths)
+    for p in ["/" + p for p in paths] + [suite.ICON, "/static/icons/apple-touch-icon.png", "/sw.js"]:
+        assert client.get(p).status_code == 200, p
+
+
 def test_suite_apps_for_the_app_switcher(client):
     """The app mark becomes a menu of the suite's other apps (as ioContacts'): the page has the phone's button, may show
     their icons (other origins), and /api/auth/suite lists them with an address and an absolute icon."""
     from iosuite_shared import suite
     html = client.get("/").text
     assert 'id="suitebtn"' in html and "img-src 'self' data: blob: https:" in html
-    assert client.get("/js/suite.js").status_code == 200
+    assert client.get("/static/js/suite.js").status_code == 200
     client.get("/api/notes")
-    suite.register("iopix", name="ioPix", url="https://photo.example.net", color="#123456", icon="/static/icon.svg")
+    suite.register("iopix", name="ioPix", url="https://photo.example.net", color="#123456")
     r = client.get("/api/auth/suite").json()
     assert r["app"] == "ionotes"
     other = [a for a in r["items"] if a["app"] != r["app"]]
-    assert [(a["name"], a["url"], a["icon"]) for a in other] == [("ioPix", "https://photo.example.net", "https://photo.example.net/static/icon.svg")]
+    assert [(a["name"], a["url"], a["icon"]) for a in other] == [("ioPix", "https://photo.example.net", "https://photo.example.net/static/icons/mark.svg")]

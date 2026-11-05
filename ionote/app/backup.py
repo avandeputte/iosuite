@@ -99,7 +99,7 @@ def import_zip(src, user: str) -> dict:
         try:
             z = zipfile.ZipFile(f)
         except zipfile.BadZipFile:
-            raise ValueError("That is not a zip ionotes can read")
+            raise ValueError("That is not a zip ioNotes can read")
         doc = json.loads(_member(z, "notes.json", MAX_JSON))
         names = z.namelist()
     else:
@@ -110,7 +110,7 @@ def import_zip(src, user: str) -> dict:
         z, doc, names = None, json.loads(data), []
     # an export says what it is; a notes.json written by hand or by a device may leave that out
     if not isinstance(doc, dict) or doc.get("format", "ionotes-export") != "ionotes-export" or not isinstance(doc.get("notes", []), list):
-        raise ValueError("That is not an ionotes export")
+        raise ValueError("That is not an ioNotes export")
     out = {"folders": 0, "notes": 0, "tags": 0, "pictures": 0, "skipped": 0}
     fmap = {}  # a folder id another account has -> the new id it gets here
     for fo in doc.get("folders") or []:

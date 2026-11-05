@@ -10,10 +10,10 @@ import logging.handlers
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app import config, db, mcp, proxyauth, suitedb, users
+from app import __version__, config, db, mcp, proxyauth, suitedb, users
 from app import notes as notes_mod, owners
 from app.auth import auth as auth_shared, updater
 
@@ -26,8 +26,8 @@ MAX_IMAGE_BODY = (config.MAX_IMAGE_MB + 1) << 20
 MAX_IMPORT_BODY = 4 << 30  # an export with every picture; spooled to disk as it arrives, never held in memory
 
 # what a visitor may still fetch when sign-in is required: the app shell and the sign-in endpoints
-OPEN_PATHS = ("/", "/index.html", "/app.js", "/app.css", "/sw.js", "/manifest.webmanifest", "/api/status")
-OPEN_PREFIXES = ("/icons/", "/static/icons/", "/js/", "/api/auth/")
+OPEN_PATHS = ("/", "/sw.js", "/manifest.webmanifest", "/api/status")
+OPEN_PREFIXES = ("/static/", "/api/auth/")
 
 
 def setup_file_log():
@@ -67,7 +67,7 @@ async def lifespan(_app):
         yield
 
 
-app = FastAPI(title="ionotes", lifespan=lifespan, docs_url="/api/docs", redoc_url=None, openapi_url="/api/openapi.json")
+app = FastAPI(title="ioNotes", lifespan=lifespan, docs_url="/api/docs", redoc_url=None, openapi_url="/api/openapi.json")
 
 
 def _open_to_visitors(path: str) -> bool:
@@ -231,6 +231,27 @@ from mcp.server.transport_security import TransportSecuritySettings  # noqa: E40
 _mcp_asgi = mcp.server.streamable_http_app(streamable_http_path="/mcp", stateless_http=True,
                                            transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False))
 app.router.routes[:0] = list(_mcp_asgi.routes)
-# /static/...: the same files at the path the suite's apps share (the icon in iosuite-shared's list: /static/icons/mark.svg)
-app.mount("/static", StaticFiles(directory=config.STATIC_DIR), name="static-suite")
-app.mount("/", StaticFiles(directory=config.STATIC_DIR, html=True), name="static")
+
+
+@app.get("/", include_in_schema=False)
+def index():
+    """The page, with the version stamped on the script and stylesheet: after an update the browser (and Cloudflare,
+    which caches .js and .css at the edge) fetches the new ones instead of serving what it kept."""
+    html = (config.STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    for f in ("static/app.js", "static/app.css"):
+        html = html.replace(f'"{f}"', f'"{f}?v={__version__}"')
+    return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/manifest.webmanifest", include_in_schema=False)
+def manifest():
+    return FileResponse(config.STATIC_DIR / "manifest.webmanifest", media_type="application/manifest+json")
+
+
+@app.get("/sw.js", include_in_schema=False)
+def service_worker():
+    """At the root, so the service worker's scope is the whole app."""
+    return FileResponse(config.STATIC_DIR / "sw.js", media_type="text/javascript")
+
+
+app.mount("/static", StaticFiles(directory=config.STATIC_DIR), name="static")

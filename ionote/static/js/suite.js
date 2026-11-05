@@ -20,7 +20,7 @@ export async function loadSuite() {
 function drawBrand() {
   const old = $('#nav .navhead .brand');
   if (!old) return;
-  const mark = () => h('img.brand-mark', { src: 'icons/mark.svg', alt: '' });
+  const mark = () => h('img.brand-mark', { src: 'static/icons/mark.svg', alt: '' });
   const name = () => h('span.brand-name', h('span.io', 'io'), h('span.nm', 'Notes'));
   old.replaceWith(apps.length
     ? h('div.brand',

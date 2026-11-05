@@ -94,7 +94,7 @@ async function proxyBox() {
     try { await api('/api/settings/proxy', { method: 'POST', body }); toast('Saved'); } catch (e) { fail(e); }
   } }, 'Save');
   const seen = st.seen && st.seen.aud ? h('p.small', `Last Cloudflare Access request: team ${st.seen.iss || '?'}, AUD ${Array.isArray(st.seen.aud) ? st.seen.aud.join(', ') : st.seen.aud}, ${st.seen.email || ''}`) : null;
-  return box('Sign-in at the proxy', 'With Cloudflare Access (a Cloudflare Tunnel with an Access policy) or a proxy with Authelia, Authentik or oauth2-proxy in front, ionotes takes that sign-in: the person is matched to an account by email, then by name. For Cloudflare, set the team domain and the AUD tag so the signed token is checked. Settings in config.env win.',
+  return box('Sign-in at the proxy', 'With Cloudflare Access (a Cloudflare Tunnel with an Access policy) or a proxy with Authelia, Authentik or oauth2-proxy in front, ioNotes takes that sign-in: the person is matched to an account by email, then by name. For Cloudflare, set the team domain and the AUD tag so the signed token is checked. Settings in config.env win.',
     h('div.row', h('label', 'Proxy'), mode), h('div.row', h('label', 'Cloudflare team'), fields[1]), h('div.row', h('label', 'Cloudflare AUD'), fields[2]),
     h('div.row', h('label', 'User header'), fields[3]), h('div.row', h('label', 'Proxy address'), fields[4]), h('div.row', h('label', 'Someone with no account'), create),
     seen, fixed.size ? h('p.small', 'Fixed in config.env: ' + [...fixed].join(', ')) : null, h('div.row', save));
@@ -115,11 +115,11 @@ function databaseBox(s) {
     out.textContent = r.ok ? `Connected: ${r.version}${r.warning ? '. ' + r.warning : ''}` : r.error;
   } }, 'Test');
   const saveb = h('button.pillbtn.primary', { onclick: async () => {
-    try { await api('/api/db/save', { method: 'POST', body: vals() }); out.className = 'small okc'; out.textContent = 'Saved. Restart ionotes to use it (the notes are not copied across; export and import them).'; } catch (e) { out.className = 'small err'; out.textContent = e.message; }
+    try { await api('/api/db/save', { method: 'POST', body: vals() }); out.className = 'small okc'; out.textContent = 'Saved. Restart ioNotes to use it (the notes are not copied across; export and import them).'; } catch (e) { out.className = 'small err'; out.textContent = e.message; }
   } }, 'Save');
   const env = d.fromEnv && d.fromEnv.length;
   const sd = s.suite_database || {};
-  return box('Database', null, h('p', 'Notes, pictures and ionotes\' settings are in: ', h('span.code', where), d.error ? h('span.err', ' ' + d.error) : null),
+  return box('Database', null, h('p', 'Notes, pictures and ioNotes\' settings are in: ', h('span.code', where), d.error ? h('span.err', ' ' + d.error) : null),
     h('p.small', 'Accounts, sessions and the suite-wide settings are in the Shared ioSuite database: ', h('span.code', `${sd.user}@${sd.host}:${sd.port}/${sd.database}`),
       sd.fromEnv && sd.fromEnv.length ? ` (set in config.env: ${sd.fromEnv.join(', ')})` : ' (the defaults; set IOSUITE_DB_* in config.env)', '.'),
     h('p.small', `${s.images.images} pictures, ${(s.images.bytes / 1048576).toFixed(1)} MB, stored in the database.`),
@@ -183,7 +183,7 @@ function exportBox() {
     toast('Importing…', 60000);
     try { const r = await api('/api/import', { method: 'POST', body: fd }); toast(`Imported ${r.notes} notes, ${r.pictures} pictures, ${r.folders} folders${r.skipped ? `; ${r.skipped} were newer here` : ''}`, 6000); } catch (err) { fail(err); }
   } });
-  return box('Export and import', 'Your notes (each account has its own) as Markdown with their pictures, in folders, plus notes.json with everything; a zip made here imports again on any ionotes server (records keep their ids; newer copies on the server win).',
+  return box('Export and import', 'Your notes (each account has its own) as Markdown with their pictures, in folders, plus notes.json with everything; a zip made here imports again on any ioNotes server (records keep their ids; newer copies on the server win).',
     h('div.row', h('a.pillbtn', { href: '/api/export.zip' }, icon('download'), 'Export all notes'), h('a.pillbtn', { href: '/api/export.zip?trash=1' }, 'With the trash'),
       canWrite() ? h('button.pillbtn', { onclick: () => file.click() }, icon('upload'), 'Import…') : null, file));
 }
@@ -201,7 +201,7 @@ async function updateBox() {
     sw('Check for updates daily', u.autoCheck, async (v) => { try { await post({ autoCheck: v }); toast('Saved'); } catch (e) { fail(e); } }, u.autoCheckLocked, u.autoCheckLocked ? '(UPDATE_CHECK=0 in config.env)' : '(only GitHub’s public list of changes is asked; nothing about this server is sent)'),
     h('div.row', h('button.pillbtn', { onclick: async () => { out.textContent = 'Checking…'; show(await post({ action: 'check' }).catch((e) => ({ status: 'error', error: e.message }))); } }, 'Check for updates'),
       u.canRun ? h('button.pillbtn.primary', { onclick: async () => {
-        if (!await confirmIt('Update ionotes', 'Install the latest version and restart? It takes about a minute.', 'Update')) return;
+        if (!await confirmIt('Update ioNotes', 'Install the latest version and restart? It takes about a minute.', 'Update')) return;
         await runUpdate((msg, failed) => { out.className = 'small' + (failed ? ' err' : ''); out.textContent = msg; });
       } }, 'Update now') : null,
       h('a.pillbtn', { href: `https://github.com/${u.repo}/commits/${u.branch}`, target: '_blank', rel: 'noopener' }, 'Change log')), out,
@@ -209,9 +209,9 @@ async function updateBox() {
 }
 
 function restartBox() {
-  return box('Restart', 'Stops ionotes; the service manager (systemd, launchd or Docker) starts it again within seconds. Nothing is lost; the page reloads when it is back.',
+  return box('Restart', 'Stops ioNotes; the service manager (systemd, launchd or Docker) starts it again within seconds. Nothing is lost; the page reloads when it is back.',
     h('div.row', h('button.pillbtn', { onclick: async () => {
-      if (!await confirmIt('Restart ionotes', 'Restart the server now? Everyone is disconnected for a few seconds.', 'Restart')) return;
+      if (!await confirmIt('Restart ioNotes', 'Restart the server now? Everyone is disconnected for a few seconds.', 'Restart')) return;
       try { await api('/api/server', { method: 'POST', body: { action: 'restart' } }); } catch (e) { fail(e); return; }
       toast('Restarting…');
       const until = Date.now() + 90000, gone = Date.now() + 3000;
@@ -220,7 +220,7 @@ function restartBox() {
         if (Date.now() < until) setTimeout(look, 2000); else toast('ionotes did not come back; check the service.');
       };
       setTimeout(look, 3000);
-    } }, 'Restart ionotes')));
+    } }, 'Restart ioNotes')));
 }
 
 function logBox() {
@@ -249,7 +249,7 @@ async function tabbedPage(base, title, ic, hue, tabs, tab) {
   const main = $('#main');
   main.textContent = '';
   const cur = tabs.find((t) => t[0] === tab) || tabs[0];
-  const inner = h('div.pagein', pageTitle(title, ic, hue, state.version ? `ionotes v${state.version}` : ''),
+  const inner = h('div.pagein', pageTitle(title, ic, hue, state.version ? `ioNotes v${state.version}` : ''),
     tabs.length > 1 ? h('div.stabs', { role: 'tablist' }, tabs.map(([k, label]) => h('a.pillbtn' + (k === cur[0] ? '.on' : ''), { href: `#/${base}/${k}`, role: 'tab', 'aria-selected': String(k === cur[0]) }, label))) : null);
   main.append(h('div.page', inner));
   again = () => tabbedPage(base, title, ic, hue, tabs, cur[0]);
@@ -259,7 +259,7 @@ const render = () => again();
 
 /** Settings: Display for everyone, Export and import of one's own notes, Users and sign-in for admins (as iopix's Settings). */
 export function renderSettings(tab) {
-  const tabs = [['display', 'Display', async () => [appearance(), state.me.user ? null : box('Account', state.me.usersExist ? 'Sign in to see your notes.' : 'No accounts yet: anyone who can reach ionotes can read and change the notes. Create the admin account from the person icon at the top right.')]]];
+  const tabs = [['display', 'Display', async () => [appearance(), state.me.user ? null : box('Account', state.me.usersExist ? 'Sign in to see your notes.' : 'No accounts yet: anyone who can reach ioNotes can read and change the notes. Create the admin account from the person icon at the top right.')]]];
   if (state.me.user || !state.me.usersExist) tabs.push(['export', 'Export and import', async () => [exportBox()]]);  // anyone's own notes
   if (isAdmin()) tabs.push(['users', 'Users and sign-in', async () => { const s = await api('/api/settings'); return [state.me.usersExist ? await usersBox() : null, signInBox(s), await proxyBox()]; }]);
   return tabbedPage('settings', 'Settings', 'gear', 'var(--c-gray)', tabs, tab);

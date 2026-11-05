@@ -6,19 +6,19 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
 <title>ioNotes</title>
-<link rel="icon" href="icons/favicon-32.png" type="image/png">
-<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="static/icons/mark.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="static/icons/apple-touch-icon.png">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#1c5a5e">
-<script src="js/theme.js"></script>
+<script src="static/js/theme.js"></script>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="stylesheet" href="app.css">
+<link rel="stylesheet" href="static/app.css">
 </head>
 <body>
 <header id="topbar">
-  <button id="suitebtn" class="suitebtn" title="ioThing apps" aria-label="ioThing apps" aria-haspopup="menu" hidden><img src="icons/mark.svg" alt=""></button>
+  <button id="suitebtn" class="suitebtn" title="ioThing apps" aria-label="ioThing apps" aria-haspopup="menu" hidden><img src="static/icons/mark.svg" alt=""></button>
   <button id="menubtn" class="iconbtn" title="Show the sidebar" aria-label="Show the sidebar"><span class="ic" data-ic="menu"></span></button>
   <div id="search">
     <span class="ic" data-ic="search"></span>
@@ -29,7 +29,7 @@
 </header>
 <nav id="nav" aria-label="Notes, folders and tags">
   <div class="navhead">
-    <a class="brand" href="#/notes" title="All notes"><img class="brand-mark" src="icons/mark.svg" alt=""><span class="brand-name"><span class="io">io</span><span class="nm">Notes</span></span></a>
+    <a class="brand" href="#/notes" title="All notes"><img class="brand-mark" src="static/icons/mark.svg" alt=""><span class="brand-name"><span class="io">io</span><span class="nm">Notes</span></span></a>
     <button id="sidebtn" class="iconbtn"><span class="ic" data-ic="menuOpen"></span></button>
   </div>
 </nav>
@@ -37,6 +37,6 @@
 <main id="main"></main>
 <div id="toast" hidden role="status" aria-live="polite"></div>
 <div id="drop" hidden><div>Drop a picture to make it a note</div></div>
-<script type="module" src="app.js"></script>
+<script type="module" src="static/app.js"></script>
 </body>
 </html>

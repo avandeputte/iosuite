@@ -83,4 +83,4 @@ def update_ionotes(token: str, ref: str = "") -> dict:
     except RuntimeError as e:
         raise ToolError(str(e))
     return {"started": True, "installed": updater.local_commit()[:7], "ref": ref or "main",
-            "note": "update.sh is running; ionotes restarts when it finishes. Then call check_for_update."}
+            "note": "update.sh is running; ioNotes restarts when it finishes. Then call check_for_update."}
