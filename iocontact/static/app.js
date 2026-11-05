@@ -893,9 +893,10 @@ function familyLayout(g, famTypes, typeWord, hidden = new Set()) {
     if (parents.get(id).size) continue;
     for (const e of stored(id, (x) => (x.type === 'sibling' || x.type === 'half_sibling') && gen.get(x.to) === gen.get(id) && !parents.get(x.to).size)) sibRoot.set(find(id), find(e.to));
   }
-  const sibOf = new Map();
-  for (const id of gen.keys()) { const r = find(id); if (!sibOf.has(r)) sibOf.set(r, []); sibOf.get(r).push(id); }
-  for (const [r, g2] of sibOf) { if (g2.length > 1) g2.forEach((id) => sibOf.set(id, g2)); if (r !== g2[0] || g2.length < 2) sibOf.delete(r); }
+  const groups = new Map();
+  for (const id of gen.keys()) { const r = find(id); if (!groups.has(r)) groups.set(r, []); groups.get(r).push(id); }
+  const sibOf = new Map();  // person -> their group (only groups of two or more)
+  for (const g2 of groups.values()) if (g2.length > 1) g2.forEach((id) => sibOf.set(id, g2));
   const sibGroups = [];
 
   // --- blocks: cards with x positions relative to the block, and per-row extents so blocks nest closely
