@@ -50,11 +50,9 @@ IOCONTACTS_CF_CLIENT_SECRET = env("IOCONTACTS_CF_CLIENT_SECRET")
 MAX_EVENT_BYTES = 2 * 1024 * 1024     # one calendar object (CalDAV PUT, REST)
 MAX_IMPORT_BYTES = 32 * 1024 * 1024   # an .ics file to import
 
-# updates: the GitHub repository and branch followed by the version check and update.sh
-REPO = env("IOCALENDAR_REPO", "avandeputte/iocalendar")
-BRANCH = env("IOCALENDAR_BRANCH", "main")
-# UPDATE_CHECK=0 turns the daily "is there a newer version" check off for good (the setting cannot turn it back on)
-UPDATE_CHECK_LOCKED = env("UPDATE_CHECK", "").strip().lower() in ("0", "off", "false", "no")
+# the server log, for Maintenance › Updates and logs (empty: none). Updates: IOCALENDAR_REPO, IOCALENDAR_BRANCH and
+# UPDATE_CHECK are read by iothing_auth.updates (app.auth.updater)
+LOG_FILE = Path(env("LOG_FILE", str(ROOT / "iocalendar.log"))) if env("LOG_FILE", "x") else None
 
 # the MCP server at /mcp: off until an admin turns it on in Settings, or MCP=1 here
 MCP_FORCED = env("MCP", "").strip().lower() in ("1", "on", "true", "yes")

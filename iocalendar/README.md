@@ -72,12 +72,19 @@ The tools: `overview`, `list_calendars`, `list_family_members`, `agenda`, `searc
 ## Updates
 
 ioCalendar asks GitHub once a day whether the main branch has a newer version (only the public commit list is read;
-nothing about the server is sent; Settings › Server switches it off, `UPDATE_CHECK=0` locks it off). Admins then see a
-note with **Update now**, and Settings › Server has the version, **Check for updates** and **Update now**. Updating runs
-the app's own `update.sh`: the new version's Python packages first, then the code (a failed step leaves the running
-version as it was), the database is brought up to date, and the service restarts; the page reloads when the new version
-answers. In Docker, pull the image instead. From a shell: `./update.sh` (`--check` only looks,
-`IOCALENDAR_REF=<sha>` installs a given commit).
+nothing about the server is sent; Maintenance › Updates and logs switches it off, `UPDATE_CHECK=0` locks it off). Admins
+then see a note with **Update now**, and **Maintenance › Updates and logs** has the version, **Check for updates**,
+**Update now**, the tail of the server log (`iocalendar.log` in the app folder; `LOG_FILE` moves it, empty switches it
+off) and **Restart**. The page is the same in every ioThing app: the version check, `update.sh`, the restart and the log
+come from `iothing_auth.updates` in iosuite-shared, served at `/api/server` and `/api/log`. Updating runs the app's own
+`update.sh`: the new version's Python packages first, then the code (a failed step leaves the running version as it
+was), the database is brought up to date, and the service restarts; the page reloads when the new version answers. In
+Docker, pull the image instead. From a shell: `./update.sh` (`--check` only looks, `IOCALENDAR_REF=<sha>` installs a
+given commit).
+
+Settings is for what is configured (account, display, apps and devices, calendars, holidays, connected apps, users and
+sign-in, server); Maintenance for what is run or checked (storage and backups, updates and logs). Admins reach both from
+the sidebar and the avatar menu.
 
 ## Releases
 
@@ -149,6 +156,7 @@ git clone https://github.com/avandeputte/iocalendar && cd iocalendar
 | `IOCALENDAR_MCP_USER` | the account `python -m app.mcp` (stdio) acts as |
 | `UPDATE_CHECK` | `0` turns the daily version check off for good |
 | `IOCALENDAR_REPO`, `IOCALENDAR_BRANCH` | what the version check and `update.sh` follow (`avandeputte/iocalendar`, `main`) |
+| `LOG_FILE` | the server log shown at Maintenance › Updates and logs (`iocalendar.log` in the app folder; empty: no file) |
 
 ### ioContacts
 
@@ -189,7 +197,6 @@ app/contacts.py    the ioContacts client: people and the Birthdays calendar
 app/holiday.py     the Holidays calendar (country, region, language; filled daily)
 app/members.py     family members on events (kept as CATEGORIES), and the member filter
 app/mcp/           the MCP server: base (who is asking, finding events), read, write and admin tools
-app/updates.py     the version check and running update.sh from the web app
 app/users.py       accounts, app passwords and subscription tokens (the suite's, through iothing-auth)
 static/            the web app (index.html, app.js, app.css, icons)
 proxmox/           the community-scripts LXC installer      setup.sh, run.sh, update.sh, Dockerfile

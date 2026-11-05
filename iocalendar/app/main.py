@@ -1,24 +1,32 @@
 """ioCalendar: the application (start-up, who is asking, the routes and the web app)."""
 import logging
+import logging.handlers
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 
-from app import APP_VERSION, api, caldav, config, contacts, db, holiday, mcp, model, updates, users
-from app.auth import auth as auth_shared
+from app import APP_VERSION, api, caldav, config, contacts, db, holiday, ical, mcp, model, users
+from app.auth import auth as auth_shared, updater
 from iothing_auth import sessions
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("iocalendar")
+if config.LOG_FILE:  # the server log that Maintenance › Updates and logs shows; the app runs without it
+    try:
+        _fh = logging.handlers.RotatingFileHandler(config.LOG_FILE, maxBytes=2_000_000, backupCount=3, encoding="utf-8")
+        _fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+        logging.getLogger().addHandler(_fh)
+    except OSError as e:
+        log.warning("no server log at %s: %s", config.LOG_FILE, e)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await run_in_threadpool(db.migrate)
     await run_in_threadpool(users.ensure_admin_from_env)
-    updates.start_daily()   # the daily "is there a newer version" check, while the setting allows it
+    updater.start_daily()   # the daily "is there a newer version" check, while the setting allows it
     contacts.start_sync()   # the Birthdays calendar from ioContacts, every few hours
     holiday.start_sync()    # the Holidays calendar, every day
     sm = mcp.server.session_manager
@@ -75,6 +83,23 @@ async def _not_found(request: Request, e: Exception):
 
 app.include_router(auth_shared.router())        # /api/auth/*: sign-in, accounts, me, settings, password, sessions, app passwords
 app.include_router(auth_shared.users_router())  # /api/users: accounts and their role here (admins)
+
+
+def _server_info() -> dict:
+    """What Maintenance › Updates and logs and Settings › Server show beside the updater's own fields."""
+    return {"mcpEnabled": api.mcp_enabled(), "mcpLocked": config.MCP_FORCED, "timezone": ical.default_tz(),
+            "database": f"{config.DB_HOST}:{config.DB_PORT}/{config.DB_NAME}"}
+
+
+def _server_apply(body: dict) -> None:
+    """The MCP switch, sent to POST /api/server as {mcpEnabled: bool}."""
+    if "mcpEnabled" in body:
+        if config.MCP_FORCED and not body["mcpEnabled"]:
+            raise ValueError("MCP=1 in the environment keeps the MCP server on")
+        db.set_setting("mcp_enabled", "1" if body["mcpEnabled"] else "0")
+
+
+app.include_router(auth_shared.server_router(updater, log_file=config.LOG_FILE, info=_server_info, apply=_server_apply))  # /api/server, /api/log (admins)
 app.include_router(api.router)
 app.include_router(caldav.router)
 

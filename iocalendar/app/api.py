@@ -14,7 +14,8 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
 
-from app import APP_VERSION, config, contacts, db, holiday, ical, members, model, updates, users
+from app import APP_VERSION, config, contacts, db, holiday, ical, members, model, users
+from app.auth import updater
 
 router = APIRouter()
 
@@ -174,11 +175,11 @@ def _check_match(request: Request, r: dict) -> None:
 def status(request: Request):
     u = request.state.user
     adm = users.is_admin(u)
-    return {"app": "ioCalendar", "version": APP_VERSION, "commit": updates.local_commit()[:7] if u else None,
+    return {"app": "ioCalendar", "version": APP_VERSION, "commit": updater.local_commit()[:7] if u else None,
             "usersExist": users.any_users(), "user": users.public(u), "timezone": ical.default_tz(),
             "iocontacts": contacts.enabled() if u else None, "viaProxy": getattr(request.state, "via_proxy", False),
             "mcp": mcp_enabled() if u else None,
-            "updateAvailable": updates.available() if adm and updates.auto_check_enabled() else None}
+            "updateAvailable": updater.available() if adm and updater.auto_check_enabled() else None}
 
 
 def mcp_enabled() -> bool:
@@ -221,47 +222,6 @@ async def patch_me(request: Request):
         raise HTTPException(400, str(e))
     users.forget_cached_auth()
     return {"user": users.public(nu)}
-
-
-# ------------------------------------------------------------------ the server: version, updates, MCP
-
-@router.get("/api/server")
-def server_info(request: Request):
-    """Admins: the installed version, the last update check, whether update.sh can run here, and the switches."""
-    admin(request)
-    return {**updates.status(), "mcpEnabled": mcp_enabled(), "mcpLocked": config.MCP_FORCED, "mcpUrl": f"{_base(request)}/mcp",
-            "timezone": ical.default_tz(), "database": f"{config.DB_HOST}:{config.DB_PORT}/{config.DB_NAME}"}
-
-
-@router.post("/api/server")
-async def server_action(request: Request):
-    """Admins. Body: {action: check | update, ref?} or {mcpEnabled: bool} / {autoCheck: bool}."""
-    admin(request)
-    b = await request.json()
-    return await run_in_threadpool(_server_action, request, b)
-
-
-def _server_action(request: Request, b: dict):
-    if "mcpEnabled" in b:
-        if config.MCP_FORCED and not b["mcpEnabled"]:
-            raise HTTPException(400, "MCP=1 in the environment keeps the MCP server on")
-        db.set_setting("mcp_enabled", "1" if b["mcpEnabled"] else "0")
-    if "autoCheck" in b:
-        if config.UPDATE_CHECK_LOCKED and b["autoCheck"]:
-            raise HTTPException(400, "UPDATE_CHECK=0 in the environment keeps the daily check off")
-        db.set_setting("update_check", "1" if b["autoCheck"] else "0")
-        if not b["autoCheck"]:
-            updates.forget_check()
-    action = b.get("action")
-    if action == "check":
-        return updates.check()
-    if action == "update":
-        try:
-            updates.run(str(b.get("ref") or ""))
-        except RuntimeError as e:
-            raise HTTPException(409, str(e))
-        return {"started": True}
-    return server_info(request)
 
 
 # ------------------------------------------------------------------ calendars
