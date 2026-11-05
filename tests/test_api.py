@@ -56,3 +56,15 @@ def test_the_server_log_is_for_admins_only(client):
     assert client.post("/api/auth/login", json={"name": "kid2", "password": "secret123"}).status_code == 200
     assert client.get("/api/log").status_code == 403
     assert client.post("/api/server", json={"action": "check"}).status_code == 403
+
+
+def test_the_shell_its_files_and_the_icon_are_public(client):
+    """The suite's layout: the page at /, every file it names under /static/, the mark at suite.ICON."""
+    import re
+    from iosuite_shared import suite
+    html = client.get("/").text
+    paths = re.findall(r'(?:src|href)="(static/[^"?]+)', html)
+    paths += [i["src"] for i in client.get("/manifest.webmanifest").json()["icons"]]
+    assert paths and all(p.startswith("static/") for p in paths)
+    for p in ["/" + p for p in paths] + [suite.ICON, "/static/icons/apple-touch-icon.png"]:
+        assert client.get(p).status_code == 200, p
