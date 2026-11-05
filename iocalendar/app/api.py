@@ -182,6 +182,20 @@ def mcp_enabled() -> bool:
         return False
 
 
+@router.get("/api/auth/suite")
+def get_suite(request: Request):
+    """The suite's registered apps (iothing-auth suite_apps), this one among them, for the app switcher: when there are
+    others, the app mark top left opens a menu of them. Signed in only."""
+    me(request)
+    from iothing_auth import suite
+    from app.auth import APP
+    try:
+        items = suite.apps()
+    except Exception:  # noqa: BLE001 - the switcher is a convenience: no menu rather than an error
+        items = []
+    return {"items": items, "app": APP}
+
+
 @router.patch("/api/auth/me")
 async def patch_me(request: Request):
     """Your display name and email (sign-in at a proxy matches the email)."""

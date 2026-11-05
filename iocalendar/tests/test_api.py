@@ -188,3 +188,17 @@ def test_registers_in_the_suite_list(client):
     row = suite.get("iocalendar")
     assert row and row["name"] == "ioCalendar" and row["version"] == APP_VERSION
     assert row["description"] == "Calendar" and row["color"] == "#963522"
+
+
+def test_suite_apps_for_the_app_switcher(client):
+    """The app mark becomes a menu of the suite's other apps: the page has the phone's button, may show their icons
+    (other origins), and /api/auth/suite lists them with an address and an absolute icon."""
+    from iothing_auth import suite
+    html = client.get("/").text
+    assert 'id="suitebtn"' in html and "img-src 'self' data: blob: https:" in html
+    client.get("/api/calendars")
+    suite.register("iocontacts", name="ioContacts", url="https://contacts.example.net", color="#4f2f7d", icon="/static/icon.svg")
+    r = client.get("/api/auth/suite").json()
+    assert r["app"] == "iocalendar"
+    other = [a for a in r["items"] if a["app"] != r["app"]]
+    assert [(a["name"], a["url"], a["icon"]) for a in other] == [("ioContacts", "https://contacts.example.net", "https://contacts.example.net/static/icon.svg")]

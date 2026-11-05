@@ -64,6 +64,18 @@ body.side-docked #menubtn { display: none; }
 .brand-mark { width: 30px; height: 30px; }
 .brand-name { font-size: 24px; font-weight: 700; letter-spacing: -.03em; white-space: nowrap; }
 .brand-name .io { color: var(--name-io); } .brand-name .nm { color: var(--name-nm); }
+.suitebtn { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; margin: 0 -4px; border-radius: var(--r-m); }
+.suitebtn:hover, .suitebtn:focus-visible { background: color-mix(in srgb, var(--fg) 8%, transparent); }
+.suitebtn img { width: 30px; height: 30px; }
+#suitebtn { display: none; }
+#nav .navhead a.brand-name { display: inline; height: auto; padding: 0 4px; border-radius: 0; }
+.suitepop { position: fixed; z-index: 60; display: grid; grid-template-columns: repeat(var(--cols, 3), 92px); gap: 4px; padding: 8px; max-width: calc(100vw - 16px);
+  background: var(--bg); border: 1px solid var(--line); border-radius: var(--r-m); box-shadow: var(--shadow); }
+.apptile { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 4px 8px; border-radius: var(--r-m); color: var(--fg); text-align: center; min-width: 0; }
+.apptile:hover, .apptile:focus-visible { background: var(--bg2); }
+.appic { width: 44px; height: 44px; border-radius: 12px; object-fit: contain; }
+.appic.fb { display: inline-flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 18px; }
+.appnm { font-size: var(--fs-s); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #search { flex: 1 1 auto; min-width: 0; max-width: 720px; display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 14px; border-radius: var(--r-pill);
   background: var(--bg2); color: var(--fg2); }
 #search:focus-within { background: var(--bg); box-shadow: var(--shadow); }
@@ -244,6 +256,7 @@ table.t th { font-size: var(--fs-s); color: var(--fg2); font-weight: 600; }
 @media (max-width: 860px) {
   /* phones: a bottom bar with four destinations and More, as in iopix */
   #menubtn, #navscrim, .navhead, .navgap, .navsec, .navfoot, #nav a[data-v="book"], #nav a[data-v="tag"], #nav a[data-v="import"], #nav a[data-v="iopix"], #nav a[data-v="who"] { display: none !important; }
+  #suitebtn:not([hidden]) { display: inline-flex; margin: 0; }
   #topbar { gap: 6px; padding: 0 8px; left: 0; padding-top: env(safe-area-inset-top); height: calc(var(--topbar) + env(safe-area-inset-top)); }
   #nav { top: auto; bottom: 0; left: 0; right: 0; width: auto; height: calc(56px + env(safe-area-inset-bottom)); flex-direction: row; justify-content: space-around;
     overflow: hidden; padding: 0 0 env(safe-area-inset-bottom); gap: 0; border-top: 1px solid var(--line); background: var(--bg);
