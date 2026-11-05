@@ -106,17 +106,20 @@ def view_photo(contact: str) -> Image:
 @server.tool(annotations=READ_ONLY)
 def get_relatives(contact: str, relation: Optional[str] = None) -> dict:
     """A contact's relations, each with how they are related ("Sister", "Father-in-law"...). relation: only one kind,
-    as a type (sibling, parent, cousin...) or a word (brother, mother, aunt...)."""
+    as a type (sibling, parent, cousin...) or a word (brother, mother, aunt...). `implied` lists the relations the family
+    implies but nobody entered (a sibling's parent is a parent, a parent's sibling an aunt...), each with who it goes via."""
     u = who()
     r = find_contact(u, contact)
     c = contact_out(u, r["id"])
     rels = c.get("relations") or []
+    implied = [{k: x[k] for k in ("type", "typeLabel", "relatedId", "relatedFn", "viaFn", "viaLabel")} for x in model.implied_relations(r["id"], book_ids(u))]
     if relation:
         t = relation.strip().lower().replace(" ", "_").replace("-", "_")
         if t not in rel.TYPES:
             t = rel.from_label(relation)[0]
         rels = [x for x in rels if x["type"] == t]
-    return {"contact": c["fn"], "id": r["id"], "relations": rels}
+        implied = [x for x in implied if x["type"] == t]
+    return {"contact": c["fn"], "id": r["id"], "relations": rels, "implied": implied}
 
 
 @server.tool(annotations=READ_ONLY)

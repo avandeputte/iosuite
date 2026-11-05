@@ -241,3 +241,24 @@ def test_iopix_face_reaches_birthdays_and_family(client, family_id):
     assert rel[0]["relatedIopixPersonId"] == 4242
     nodes = {n["fn"]: n for n in client.get(f"/api/contacts/{mom['id']}/family").json()["nodes"]}
     assert nodes["Face Kid"]["iopixPersonId"] == 4242
+
+
+def test_implied_relations_show_and_can_be_saved(client, family_id):
+    mom = mk(client, family_id, fn="Imp Mom", gender="F")
+    aunt = mk(client, family_id, fn="Imp Aunt", gender="F", relations=[{"type": "sibling", "relatedId": mom["id"]}])
+    bob = mk(client, family_id, fn="Imp Bob", gender="M", relations=[{"type": "parent", "relatedId": mom["id"]}])
+    ann = mk(client, family_id, fn="Imp Ann", gender="F", relations=[{"type": "sibling", "relatedId": bob["id"]}])
+    a = client.get(f"/api/contacts/{ann['id']}").json()
+    got = {(r["typeLabel"], r["relatedFn"], r["viaFn"]) for r in a["impliedRelations"]}
+    assert got == {("Mother", "Imp Mom", "Imp Bob"), ("Aunt", "Imp Aunt", "Imp Mom")}
+    assert [r["type"] for r in a["relations"]] == ["sibling"]  # nothing stored
+    fam = client.get(f"/api/contacts/{ann['id']}/family").json()
+    assert {(e["to"], e["type"]) for e in fam["edges"] if e.get("implied")} == {(mom["id"], "parent"), (aunt["id"], "aunt_uncle")}
+    assert aunt["id"] in {n["id"] for n in fam["nodes"]}
+    # saved, it is stated (with its inverse) and no longer implied
+    payload = {**a, "relations": [{"type": r["type"], "relatedId": r["relatedId"]} for r in a["relations"]] + [{"type": "parent", "relatedId": mom["id"]}]}
+    client.put(f"/api/contacts/{ann['id']}", json=payload)
+    a = client.get(f"/api/contacts/{ann['id']}").json()
+    assert {r["typeLabel"] for r in a["relations"]} == {"Brother", "Mother"}
+    assert [r["relatedFn"] for r in a["impliedRelations"]] == ["Imp Aunt"]
+    assert "Imp Ann" in {r["relatedFn"] for r in client.get(f"/api/contacts/{mom['id']}").json()["relations"]}

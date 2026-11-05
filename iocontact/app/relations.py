@@ -99,3 +99,68 @@ def from_label(text: str) -> tuple[str, str | None]:
 def catalog() -> dict:
     return {"groups": [{"name": g, "types": [{"type": t, "label": TYPES[t][1], "male": TYPES[t][2], "female": TYPES[t][3],
                                               "inverse": TYPES[t][0]} for t in ts]} for g, ts in GROUPS]}
+
+
+
+# ------------------------------------------------------------------ implied relations
+# "A's X is B" and "B's Y is C" imply "A's Z is C". Only safe rules: a spouse's child may or may not be a step-child,
+# and a grandparent's child may be a parent nobody entered, so neither is guessed. A parent's child is taken for a
+# sibling: a half-sibling or step-sibling entered as such is never overridden, since a stated relation always wins.
+COMPOSE = {
+    ("sibling", "sibling"): "sibling",
+    ("sibling", "parent"): "parent",
+    ("parent", "child"): "sibling",
+    ("parent", "parent"): "grandparent",
+    ("child", "child"): "grandchild",
+    ("grandparent", "parent"): "great_grandparent",
+    ("parent", "grandparent"): "great_grandparent",
+    ("grandchild", "child"): "great_grandchild",
+    ("child", "grandchild"): "great_grandchild",
+    ("parent", "sibling"): "aunt_uncle",
+    ("aunt_uncle", "spouse"): "aunt_uncle",
+    ("sibling", "child"): "niece_nephew",
+    ("spouse", "niece_nephew"): "niece_nephew",
+    ("aunt_uncle", "child"): "cousin",
+    ("spouse", "parent"): "parent_in_law",
+    ("child", "spouse"): "child_in_law",
+    ("spouse", "sibling"): "sibling_in_law",
+    ("sibling", "spouse"): "sibling_in_law",
+}
+
+
+def infer(edges, root: int, rounds: int = 6) -> list[dict]:
+    """Relations of `root` implied by `edges` ((a, type, b): a's type is b) that are not stated (nor the inverse of a
+    stated one). [{"type", "relatedId", "viaId", "viaType"}]: root's viaType is viaId, and so on to relatedId."""
+    known: dict[tuple[int, int], str] = {}
+    for a, t, b in edges:
+        if a == b or t not in TYPES:
+            continue
+        known.setdefault((a, b), t)
+        inv = inverse(t)
+        if inv:
+            known.setdefault((b, a), inv)
+    stated = set(known)
+    why: dict[tuple[int, int], tuple[int, str]] = {}
+    for _ in range(rounds):
+        out: dict[int, list[int]] = {}
+        for a, b in known:
+            out.setdefault(a, []).append(b)
+        found = {}
+        for (a, b), t1 in known.items():
+            for c in out.get(b, ()):
+                if c == a or (a, c) in known or (a, c) in found:
+                    continue
+                t3 = COMPOSE.get((t1, known[(b, c)]))
+                if t3:
+                    found[(a, c)] = (t3, b, t1)
+        if not found:
+            break
+        for (a, c), (t3, b, t1) in found.items():
+            if (a, c) in known:
+                continue
+            known[(a, c)], why[(a, c)] = t3, (b, t1)
+            inv = inverse(t3)
+            if inv and (c, a) not in known:
+                known[(c, a)], why[(c, a)] = inv, (b, inverse(known[(b, c)]) or "")
+    return [{"type": t, "relatedId": c, "viaId": why[(a, c)][0], "viaType": why[(a, c)][1]}
+            for (a, c), t in known.items() if a == root and (a, c) not in stated]
