@@ -10,7 +10,7 @@ export async function loadMe() {
 /** The brand above the sign-in's title, as in iopix: the logo and the two-tone name. */
 function signinBrand() {
   const n = (state.settings && state.settings.app_name) || 'ionotes';
-  const name = n.toLowerCase() === 'ionotes' ? h('span.brand-name', h('span.io', n.slice(0, 2)), h('span.nm', n.slice(2))) : h('span.brand-name', n);
+  const name = n.toLowerCase() === 'ionotes' ? h('span.brand-name', h('span.io', n.slice(0, 2)), h('span.nm', n.toLowerCase() === 'ionotes' ? 'Notes' : n.slice(2))) : h('span.brand-name', n);
   return h('div.signin-brand', h('img.logo', { src: 'icons/mark-64.png', alt: '' }), name);
 }
 const avatar = (a) => h('span.avatar.big', (a.name || '?')[0].toUpperCase());
