@@ -31,9 +31,10 @@ OPEN_PREFIXES = ("/icons/", "/static/icons/", "/js/", "/api/auth/")
 
 
 def setup_file_log():
-    """ionotes' own log in data/ionotes.log (5 MB, 3 old copies), for Maintenance › Updates and logs and the MCP tool."""
+    """ionotes' own log (LOG_FILE, data/ionotes.log by default; 5 MB, 3 old copies), for Maintenance › Updates and logs
+    and the MCP tool."""
     root = logging.getLogger()
-    if any(isinstance(h, logging.handlers.RotatingFileHandler) for h in root.handlers):
+    if not config.LOG_FILE or any(isinstance(h, logging.handlers.RotatingFileHandler) for h in root.handlers):
         return
     h = logging.handlers.RotatingFileHandler(config.LOG_FILE, maxBytes=5 << 20, backupCount=3, encoding="utf-8")
     h.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
@@ -221,7 +222,7 @@ app.include_router(auth.router)
 app.include_router(users_routes.router)
 app.include_router(notes_routes.router)
 app.include_router(settings.router)
-app.include_router(auth_shared.server_router(updater, log_file=config.LOG_FILE, info=lambda: {"appUrl": config.APP_URL}))  # /api/server, /api/log: admins
+app.include_router(auth_shared.server_router(updater, log_file=config.LOG_FILE, info=lambda: {"appUrl": config.BASE_URL}))  # /api/server, /api/log: admins
 
 # MCP over HTTP on the same port: an assistant connects to http://host:8610/mcp.
 # DNS-rebinding protection is off because ionotes is reached by LAN name or IP, not localhost only.

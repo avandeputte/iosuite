@@ -23,7 +23,7 @@ def diagnostics(token: str) -> dict:
     out = {"version": __version__, "commit": updater.local_commit()[:7], "python": sys.version.split()[0], "platform": platform.platform(),
            "docker": updater.in_docker(), "database": {k: s[k] for k in ("type", "host", "port", "database", "user") if k in s},
            "pictures": images.stats(), "ocr": ocr.status(), "accounts": len(users.list_users()), "rev": db.current_rev(),
-           "read_only": db.read_only(), "require_login": users.require_login(), "data_dir": str(config.DATA_DIR), "app_url": config.APP_URL}
+           "read_only": db.read_only(), "require_login": users.require_login(), "data_dir": str(config.DATA_DIR), "app_url": config.BASE_URL}
     if s["type"] == "mysql":
         t = db.test({})
         out["database"].update({"reachable": t["ok"], "server": t.get("version"), "max_allowed_packet": t.get("maxAllowedPacket"),
@@ -36,6 +36,8 @@ def server_log(token: str, lines: int = 200, contains: str = "", level: Literal[
     """The last lines of ionotes' own log (data/ionotes.log, rotating). `contains` keeps only lines with that text;
     `level` keeps only WARNING+ or ERROR+ lines, or the sign-ins (auth)."""
     need_token(token)
+    if not config.LOG_FILE:
+        raise ToolError("no server log: LOG_FILE is empty in config.env")
     try:
         return tail(config.LOG_FILE, min(int(lines), LOG_LINES_MAX), contains, level)
     except OSError as e:
@@ -47,7 +49,7 @@ def proxy_signin(token: str, mode: Optional[str] = None, cf_access_team: Optiona
                  trusted: Optional[str] = None, create_role: Optional[str] = None) -> dict:
     """Sign-in at a reverse proxy (Cloudflare Access, Authelia behind HAProxy/nginx/Caddy/Traefik): with no settings
     given, how it is set up and the Cloudflare Access team and application last seen in requests; with settings, saves
-    them (mode: off|cloudflare|haproxy|nginx|caddy|traefik|header; an empty string clears one; ionotes.env still wins)."""
+    them (mode: off|cloudflare|haproxy|nginx|caddy|traefik|header; an empty string clears one; config.env still wins)."""
     need_token(token)
     changes = {k: v for k, v in (("AUTH_PROXY", mode), ("CF_ACCESS_TEAM", cf_access_team), ("CF_ACCESS_AUD", cf_access_aud),
                                  ("AUTH_PROXY_TRUSTED", trusted), ("AUTH_PROXY_CREATE", create_role)) if v is not None}

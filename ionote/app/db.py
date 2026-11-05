@@ -3,7 +3,7 @@
 The code is written in one SQL dialect (? placeholders, INSERT OR REPLACE / OR IGNORE) and the wrapper translates
 it for MySQL, the same way iopix's viewer database does. Rows answer to an index and to a column name.
 
-Where the database is comes from the environment (DB_TYPE, DB_HOST, DB_PORT, DB_DATABASE, DB_USER, DB_PASSWORD),
+Where the database is comes from the environment (DB_TYPE, DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD),
 else from data/db.json (written by setup.sh or Settings › Database), else SQLite in data/ionotes.db. The settings
 live outside the database since everything else is inside it.
 

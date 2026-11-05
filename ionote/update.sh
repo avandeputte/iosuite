@@ -9,7 +9,7 @@
 #   IONOTES_RESULT=<file>  write the outcome ("ok: ..." or "error: ...") there before the
 #     restart, so ionotes can show it afterwards (its own child process dies in the restart)
 #
-# Keeps ionotes.env, the data folder and the Python environment. A git checkout is
+# Keeps config.env, the data folder and the Python environment. A git checkout is
 # pulled; an installed copy (no .git) is replaced from the GitHub tarball of the main branch.
 # The order protects the install: the Python packages the new version asks for (its pyproject.toml) are
 # installed first, and the code moves only once that succeeded, so a failed package install leaves the
@@ -80,7 +80,7 @@ else
   # stage everything first; the swap comes after the packages are in. Settings, data and the
   # environment live outside these items and are never touched
   STAGE="$APP/.update-stage"; rm -rf "${STAGE:?}"; mkdir -p "$STAGE"
-  for item in app static pyproject.toml README.md setup.sh run.sh update.sh; do
+  for item in app static proxmox pyproject.toml README.md LICENSE setup.sh run.sh update.sh Dockerfile docker-compose.yml config.env.example; do
     [ -e "$SRC/$item" ] && { mkdir -p "$STAGE/$(dirname "$item")"; cp -R "$SRC/$item" "$STAGE/$item"; }
   done
   [ -d "$STAGE/app" ] && [ -d "$STAGE/static" ] && [ -f "$STAGE/pyproject.toml" ] || { rm -rf "${STAGE:?}"; die "the downloaded tarball looks incomplete"; }
@@ -125,7 +125,7 @@ if [ -d .git ]; then
 else
   MOVED=""
   swap_back() { for item in $MOVED; do rm -rf "${APP:?}/${item:?}"; [ -e "$APP/$item.old" ] && mv "$APP/$item.old" "$APP/$item"; done; rm -rf "${STAGE:?}"; }
-  for item in app static pyproject.toml README.md setup.sh run.sh update.sh; do
+  for item in app static proxmox pyproject.toml README.md LICENSE setup.sh run.sh update.sh Dockerfile docker-compose.yml config.env.example; do
     [ -e "$STAGE/$item" ] || continue
     rm -rf "${APP:?}/${item:?}.old"
     if [ -e "$APP/$item" ]; then mv "$APP/$item" "$APP/$item.old" || { swap_back; die "could not set $item aside; the previous files are back in place"; }; fi

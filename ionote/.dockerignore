@@ -11,5 +11,5 @@ docs
 tests
 *.egg-info
 *.log
-ionotes.env
+config.env
 .DS_Store

@@ -76,7 +76,7 @@ function signInBox(s) {
   return box('Sign-in', null,
     sw('Require sign-in', s.require_login, (v, el) => setSetting('require_login', v).then(() => { s.require_login = v; }).catch(() => { el.checked = !v; }), !state.me.usersExist,
       'Visitors get the sign-in screen and nothing else; the MCP endpoint then needs the admin token as a Bearer header.'),
-    sw('Read-only', s.read_only, (v) => setSetting('read_only', v), s.read_only_env, s.read_only_env ? '(READ_ONLY=1 in ionotes.env)' : 'Nothing can be changed, by anyone.'));
+    sw('Read-only', s.read_only, (v) => setSetting('read_only', v), s.read_only_env, s.read_only_env ? '(READ_ONLY=1 in config.env)' : 'Nothing can be changed, by anyone.'));
 }
 
 async function proxyBox() {
@@ -94,10 +94,10 @@ async function proxyBox() {
     try { await api('/api/settings/proxy', { method: 'POST', body }); toast('Saved'); } catch (e) { fail(e); }
   } }, 'Save');
   const seen = st.seen && st.seen.aud ? h('p.small', `Last Cloudflare Access request: team ${st.seen.iss || '?'}, AUD ${Array.isArray(st.seen.aud) ? st.seen.aud.join(', ') : st.seen.aud}, ${st.seen.email || ''}`) : null;
-  return box('Sign-in at the proxy', 'With Cloudflare Access (a Cloudflare Tunnel with an Access policy) or a proxy with Authelia, Authentik or oauth2-proxy in front, ionotes takes that sign-in: the person is matched to an account by email, then by name. For Cloudflare, set the team domain and the AUD tag so the signed token is checked. Settings in ionotes.env win.',
+  return box('Sign-in at the proxy', 'With Cloudflare Access (a Cloudflare Tunnel with an Access policy) or a proxy with Authelia, Authentik or oauth2-proxy in front, ionotes takes that sign-in: the person is matched to an account by email, then by name. For Cloudflare, set the team domain and the AUD tag so the signed token is checked. Settings in config.env win.',
     h('div.row', h('label', 'Proxy'), mode), h('div.row', h('label', 'Cloudflare team'), fields[1]), h('div.row', h('label', 'Cloudflare AUD'), fields[2]),
     h('div.row', h('label', 'User header'), fields[3]), h('div.row', h('label', 'Proxy address'), fields[4]), h('div.row', h('label', 'Someone with no account'), create),
-    seen, fixed.size ? h('p.small', 'Fixed in ionotes.env: ' + [...fixed].join(', ')) : null, h('div.row', save));
+    seen, fixed.size ? h('p.small', 'Fixed in config.env: ' + [...fixed].join(', ')) : null, h('div.row', save));
 }
 
 function databaseBox(s) {
@@ -105,7 +105,7 @@ function databaseBox(s) {
   const where = d.type === 'mysql' ? `MariaDB/MySQL ${d.user}@${d.host}:${d.port}/${d.database}` : `SQLite file ${d.sqlite_file}`;
   const out = h('p.small');
   const f = {};
-  for (const [k, ph] of [['host', '192.168.1.89'], ['port', '3306'], ['database', 'notes'], ['user', 'notes']]) f[k] = h('input', { type: 'text', value: d[k] || '', placeholder: ph });
+  for (const [k, ph] of [['host', 'db.example.lan'], ['port', '3306'], ['database', 'notes'], ['user', 'notes']]) f[k] = h('input', { type: 'text', value: d[k] || '', placeholder: ph });
   f.password = h('input', { type: 'password', placeholder: d.password_set ? '(unchanged)' : 'password', autocomplete: 'new-password' });
   const vals = () => ({ type: 'mysql', host: f.host.value, port: f.port.value || 3306, database: f.database.value, user: f.user.value, password: f.password.value, keep_password: !f.password.value });
   const test = h('button.pillbtn', { onclick: async () => {
@@ -121,9 +121,9 @@ function databaseBox(s) {
   const sd = s.suite_database || {};
   return box('Database', null, h('p', 'Notes, pictures and ionotes\' settings are in: ', h('span.code', where), d.error ? h('span.err', ' ' + d.error) : null),
     h('p.small', 'Accounts, sessions and the suite-wide settings are in the Shared ioSuite database: ', h('span.code', `${sd.user}@${sd.host}:${sd.port}/${sd.database}`),
-      sd.fromEnv && sd.fromEnv.length ? ` (set in ionotes.env: ${sd.fromEnv.join(', ')})` : ' (the defaults; set IOSUITE_DB_* in ionotes.env)', '.'),
+      sd.fromEnv && sd.fromEnv.length ? ` (set in config.env: ${sd.fromEnv.join(', ')})` : ' (the defaults; set IOSUITE_DB_* in config.env)', '.'),
     h('p.small', `${s.images.images} pictures, ${(s.images.bytes / 1048576).toFixed(1)} MB, stored in the database.`),
-    env ? h('p.small', 'Set in ionotes.env (DB_*): ' + d.fromEnv.join(', ') + '. Change it there.') :
+    env ? h('p.small', 'Set in config.env (DB_*): ' + d.fromEnv.join(', ') + '. Change it there.') :
       h('div', ...Object.entries({ Host: f.host, Port: f.port, Database: f.database, User: f.user, Password: f.password }).map(([l, e]) => h('div.row', h('label', l), e)), h('div.row', test, saveb)),
     out);
 }
@@ -140,7 +140,7 @@ async function mcpBox(s) {
   const who = h('select', (s.accounts || []).map((a) => h('option', { value: a.id, selected: a.id === s.mcp_user }, a.name)));
   who.addEventListener('change', () => setSetting('mcp_user', Number(who.value)));
   return box('MCP server', 'Lets an assistant such as Claude search and read the notes and look at their pictures; with the admin token it can also create, edit, file, tag and delete them, and run diagnostics. The same as iopix\'s MCP server. Notes are private to each account, so it works on the notes of one account.',
-    sw('MCP server at /mcp', s.mcp_enabled || s.mcp_forced, (v) => setSetting('mcp_enabled', v), s.mcp_forced, s.mcp_forced ? '(MCP=1 in ionotes.env)' : ''),
+    sw('MCP server at /mcp', s.mcp_enabled || s.mcp_forced, (v) => setSetting('mcp_enabled', v), s.mcp_forced, s.mcp_forced ? '(MCP=1 in config.env)' : ''),
     (s.accounts || []).length ? h('div.row', h('label', 'Notes of'), who) : null,
     h('div.row', h('label', 'Address'), h('span.code', tok.url)),
     h('div.row', h('label', 'Admin token'), tokEl, show, regen),
@@ -150,7 +150,7 @@ async function mcpBox(s) {
 function ocrBox(s) {
   const o = s.ocr;
   return box('Text in pictures', 'The Mac and iPhone apps read the text in screenshots and photos themselves and send it along. For pictures added in the web app, the server reads it with RapidOCR.',
-    h('p.small', !o.enabled ? 'Off (OCR=0 in ionotes.env).' : o.installed ? `RapidOCR is installed${o.queued ? `; ${o.queued} pictures waiting` : ''}.` :
+    h('p.small', !o.enabled ? 'Off (OCR=0 in config.env).' : o.installed ? `RapidOCR is installed${o.queued ? `; ${o.queued} pictures waiting` : ''}.` :
       'RapidOCR is not installed: pictures added in the web app are kept without their text. Install it with ./setup.sh --features ocr (or pip install -e \'.[ocr]\').'),
     o.error ? h('p.small.err', 'Last failure: ' + o.error) : null);
 }
@@ -198,7 +198,7 @@ async function updateBox() {
   const post = (body) => api('/api/server', { method: 'POST', body });
   return box('ionotes version', null, h('p', `Version ${u.version}, commit `, h('span.code', u.installed), u.docker ? ' (Docker: update by pulling the image)' : ''),
     u.lastUpdate ? h('p.small' + (u.lastUpdate.ok ? '.okc' : '.err'), 'Last update: ' + u.lastUpdate.text) : null,
-    sw('Check for updates daily', u.autoCheck, async (v) => { try { await post({ autoCheck: v }); toast('Saved'); } catch (e) { fail(e); } }, u.autoCheckLocked, u.autoCheckLocked ? '(UPDATE_CHECK=0 in ionotes.env)' : '(only GitHub’s public list of changes is asked; nothing about this server is sent)'),
+    sw('Check for updates daily', u.autoCheck, async (v) => { try { await post({ autoCheck: v }); toast('Saved'); } catch (e) { fail(e); } }, u.autoCheckLocked, u.autoCheckLocked ? '(UPDATE_CHECK=0 in config.env)' : '(only GitHub’s public list of changes is asked; nothing about this server is sent)'),
     h('div.row', h('button.pillbtn', { onclick: async () => { out.textContent = 'Checking…'; show(await post({ action: 'check' }).catch((e) => ({ status: 'error', error: e.message }))); } }, 'Check for updates'),
       u.canRun ? h('button.pillbtn.primary', { onclick: async () => {
         if (!await confirmIt('Update ionotes', 'Install the latest version and restart? It takes about a minute.', 'Update')) return;

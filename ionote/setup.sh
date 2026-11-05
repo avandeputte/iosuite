@@ -2,37 +2,38 @@
 # ionotes setup: asks where the MariaDB/MySQL database is (and tests it), where the Shared ioSuite database is
 # (the accounts and suite-wide settings shared by the ioThing apps), the port, an admin account, whether
 # pictures added in the web app should have their text read (RapidOCR), and whether to start ionotes at login;
-# then creates the Python environment, installs the packages, writes ionotes.env, creates the tables and the
+# then creates the Python environment, installs the packages, writes config.env, creates the tables and the
 # admin, and starts the service (launchd on macOS, systemd on Linux). Run it again at any time; it keeps what
-# is there. The same installer as iopix's, for ionotes.
+# is there.
 #
 #   ./setup.sh                       ask everything
-#   ./setup.sh --yes --mysql 192.168.1.89:3306/notes:notes:secret --admin alex:secret
-#   --mysql HOST:PORT/DB:USER:PASSWORD   the database (IONOTES_MYSQL in the environment does the same, off the command line)
-#   --sqlite                         a SQLite file in the data folder instead (a quick try)
-#   --suite-db HOST:PORT/DB:USER:PASSWORD   the Shared ioSuite database (IONOTES_SUITE_DB does the same; default
-#                                    database and user: iosuite); kept as it is in ionotes.env when not given
-#   --port 8610   --data DIR   --admin NAME:PASS (or IONOTES_ADMIN)   --no-admin
-#   --features ocr|none   --service | --no-service   --python PATH   --no-system-deps
+#   ./setup.sh --yes --db db.example.lan:3306/notes:notes:secret --admin alex:secret
+# Flags (the same in every app of the suite):
+#   --db HOST:PORT/DB:USER:PASSWORD        the database (IONOTES_DB in the environment does the same, off the command line)
+#   --suite-db HOST:PORT/DB:USER:PASSWORD  the Shared ioSuite database (IONOTES_SUITE_DB does the same; default
+#                                          database and user: iosuite); kept as it is in config.env when not given
+#   --admin NAME:PASS (or IONOTES_ADMIN) | --no-admin   --port 8610   --public-url URL   --cookie-domain DOMAIN
+#   --service | --no-service   --python PATH   --system-deps | --no-system-deps   --yes
+# ioNotes' own: --sqlite (a SQLite file in the data folder instead, a quick try)   --data DIR   --features ocr|none
 set -e
 cd "$(dirname "$0")"
 APP="$(pwd)"
 OS="$(uname -s)"
 say() { printf '\n\033[1;34m==>\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
-YES=0; MYSQL=""; SUITE=""; SQLITE=0; FEATURES=""; PORT=""; ADMIN=""; NO_ADMIN=0; SERVICE=""; DATA=""; PY=""; SYSDEPS=""
+YES=0; MYSQL=""; SUITE=""; SQLITE=0; FEATURES=""; PORT=""; PUBURL=""; COOKIE=""; ADMIN=""; NO_ADMIN=0; SERVICE=""; DATA=""; PY=""; SYSDEPS=""
 while [ $# -gt 0 ]; do
   case "$1" in
-    --yes) YES=1; shift;; --mysql) MYSQL="$2"; shift 2;; --suite-db) SUITE="$2"; shift 2;; --sqlite) SQLITE=1; shift;;
-    --features) FEATURES="$2"; shift 2;; --port) PORT="$2"; shift 2;;
+    --yes) YES=1; shift;; --db) MYSQL="$2"; shift 2;; --suite-db) SUITE="$2"; shift 2;; --sqlite) SQLITE=1; shift;;
+    --features) FEATURES="$2"; shift 2;; --port) PORT="$2"; shift 2;; --public-url) PUBURL="$2"; shift 2;; --cookie-domain) COOKIE="$2"; shift 2;;
     --admin) ADMIN="$2"; shift 2;; --no-admin) NO_ADMIN=1; shift;; --service) SERVICE=1; shift;; --no-service) SERVICE=0; shift;;
     --data) DATA="$2"; shift 2;; --python) PY="$2"; shift 2;; --system-deps) SYSDEPS=1; shift;; --no-system-deps) SYSDEPS=0; shift;;
-    -h|--help) sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; exit 0;;
+    -h|--help) sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit 0;;
     *) die "unknown option $1 (try --help)";;
   esac
 done
 [ -n "$ADMIN" ] || ADMIN="${IONOTES_ADMIN:-}"
-[ -n "$MYSQL" ] || MYSQL="${IONOTES_MYSQL:-}"
+[ -n "$MYSQL" ] || MYSQL="${IONOTES_DB:-}"
 [ -n "$SUITE" ] || SUITE="${IONOTES_SUITE_DB:-}"
 if [ "$YES" = 1 ]; then TTY=""; else TTY=/dev/stdin; fi
 ask() {  # ask VAR "question" "default"
@@ -83,10 +84,10 @@ pyok "$PY" || die "python3 (3.10 or newer) is needed (found ${PY:-none})"
 say "Database"
 ask DATA "Folder for ionotes' own files (session secret, log)" "${DATA:-$APP/data}"
 if [ -z "$MYSQL" ] && [ "$SQLITE" = 0 ]; then
-  if [ -f "$APP/ionotes.env" ] && grep -q '^DB_TYPE=mysql' "$APP/ionotes.env" && ! yesno "ionotes.env already names a database; change it?" n; then
+  if [ -f "$APP/config.env" ] && grep -q '^DB_TYPE=mysql' "$APP/config.env" && ! yesno "config.env already names a database; change it?" n; then
     MYSQL="keep"
   elif yesno "Keep the notes in MariaDB/MySQL (no: a SQLite file in the data folder, for a quick try)?" y; then
-    ask MH "MariaDB host" "192.168.1.89"; ask MP "port" "3306"; ask MD "database (created if the user may)" "notes"; ask MU "user" "notes"; secret MW "password"
+    ask MH "MariaDB host" "127.0.0.1"; ask MP "port" "3306"; ask MD "database (created if the user may)" "notes"; ask MU "user" "notes"; secret MW "password"
     MYSQL="$MH:$MP/$MD:$MU:$MW"
   else
     SQLITE=1
@@ -94,20 +95,23 @@ if [ -z "$MYSQL" ] && [ "$SQLITE" = 0 ]; then
 fi
 say "Shared ioSuite database"
 echo "Accounts, sessions and the suite-wide settings live in the Shared ioSuite database (MariaDB), shared with"
-echo "the other ioThing apps (ioPix, ioContacts), so one sign-in serves them all."
-SUITE_SET=0; [ -f "$APP/ionotes.env" ] && grep -qE '^IOSUITE_DB_' "$APP/ionotes.env" && SUITE_SET=1
+echo "every app of the suite, so one sign-in serves them all."
+SUITE_SET=0; [ -f "$APP/config.env" ] && grep -qE '^IOSUITE_DB_' "$APP/config.env" && SUITE_SET=1
 if [ -z "$SUITE" ]; then
-  if [ "$SUITE_SET" = 1 ] && ! yesno "ionotes.env already names the Shared ioSuite database; change it?" n; then
+  if [ "$SUITE_SET" = 1 ] && ! yesno "config.env already names the Shared ioSuite database; change it?" n; then
     SUITE="keep"
   elif [ "$YES" = 1 ] || [ -z "$TTY" ]; then
-    SUITE="keep"; [ "$SUITE_SET" = 1 ] || echo "not named: ionotes uses the defaults (127.0.0.1:3306, database and user iosuite); set IOSUITE_DB_* in ionotes.env"
+    SUITE="keep"; [ "$SUITE_SET" = 1 ] || echo "not named: ionotes uses the defaults (the notes' server, database and user iosuite); set IOSUITE_DB_* in config.env"
   else
-    case "$MYSQL" in ''|keep) SH="$(grep -E '^DB_HOST=' "$APP/ionotes.env" 2>/dev/null | head -1 | cut -d= -f2-)"; SH="${SH:-127.0.0.1}";; *) SH="${MYSQL%%:*}"; SH="${SH%%/*}";; esac
+    case "$MYSQL" in ''|keep) SH="$(grep -E '^DB_HOST=' "$APP/config.env" 2>/dev/null | head -1 | cut -d= -f2-)"; SH="${SH:-127.0.0.1}";; *) SH="${MYSQL%%:*}"; SH="${SH%%/*}";; esac
     ask SH "Shared ioSuite database host" "$SH"; ask SP "port" "3306"; ask SD "database (created if the user may)" "iosuite"; ask SU "user" "iosuite"; secret SW "password"
     SUITE="$SH:$SP/$SD:$SU:$SW"
   fi
 fi
-ask PORT "Port" "${PORT:-8610}"
+getenv() { [ -f "$APP/config.env" ] && sed -n "s/^$1=//p" "$APP/config.env" | tail -n 1; true; }
+ask PORT "Port" "${PORT:-$(getenv PORT | grep . || echo 8610)}"
+[ -n "$PUBURL" ] || ask PUBURL "Public address, e.g. https://notes.example.com (empty: as reached)" "$(getenv PUBLIC_URL)"
+[ -n "$COOKIE" ] || ask COOKIE "Domain the sign-in is shared on, e.g. example.com (empty: this host only)" "$(getenv COOKIE_DOMAIN)"
 if [ -z "$FEATURES" ]; then
   yesno "Read the text in pictures added in the web app (RapidOCR, ~60 MB; the Mac and iPhone apps read it themselves)?" y && FEATURES=ocr || FEATURES=none
 fi
@@ -131,13 +135,15 @@ pipi() { if command -v uv >/dev/null 2>&1; then uv pip install -q -p "$VPY" "$@"
 if [ "$FEATURES" = ocr ]; then echo "installing the packages (with RapidOCR)"; pipi -e ".[ocr]"; else echo "installing the packages"; pipi -e .; fi
 
 say "Settings"
-ENVF="$APP/ionotes.env"
+ENVF="$APP/config.env"
 umask 077  # the settings file holds the database password: private from the first byte
-OLD=""; [ -f "$ENVF" ] && OLD="$(grep -E '^(DB_|AUTH_PROXY|CF_ACCESS|APP_URL|MCP|IOSUITE_|IOTHING_)' "$ENVF" || true)"
+OLD=""; [ -f "$ENVF" ] && OLD="$(grep -vE '^(#|DATA_DIR=|PORT=|OCR=|PUBLIC_URL=|COOKIE_DOMAIN=|$)' "$ENVF" || true)"
 {
-  echo "# ionotes settings, written by setup.sh (variable names as in the README). Edit and restart the service."
+  echo "# ionotes settings, written by setup.sh (config.env.example lists them all). Edit and restart the service."
   echo "DATA_DIR=$DATA"
   echo "PORT=$PORT"
+  echo "PUBLIC_URL=$PUBURL"
+  echo "COOKIE_DOMAIN=$COOKIE"
   echo "OCR=$([ "$FEATURES" = ocr ] && echo 1 || echo 0)"
   KEEP="$OLD"; [ "$SUITE" != keep ] && [ -n "$SUITE" ] && KEEP="$(echo "$OLD" | grep -vE '^IOSUITE_DB_' || true)"
   if [ "$MYSQL" = keep ]; then
@@ -146,7 +152,7 @@ OLD=""; [ -f "$ENVF" ] && OLD="$(grep -E '^(DB_|AUTH_PROXY|CF_ACCESS|APP_URL|MCP
     echo "$KEEP" | grep -vE '^DB_' | grep -v '^$' || true
     if [ -n "$MYSQL" ]; then
       hp=${MYSQL%%/*}; rest=${MYSQL#*/}; db=${rest%%:*}; rest=${rest#*:}; us=${rest%%:*}; pw=${rest#*:}
-      echo "DB_TYPE=mysql"; echo "DB_HOST=${hp%%:*}"; echo "DB_PORT=${hp##*:}"; echo "DB_DATABASE=$db"; echo "DB_USER=$us"; echo "DB_PASSWORD=$pw"
+      echo "DB_TYPE=mysql"; echo "DB_HOST=${hp%%:*}"; echo "DB_PORT=${hp##*:}"; echo "DB_NAME=$db"; echo "DB_USER=$us"; echo "DB_PASSWORD=$pw"
     else
       echo "DB_TYPE=sqlite"
     fi
@@ -214,31 +220,22 @@ PYEOF
 
 if [ -n "$ADMIN" ]; then
   say "Admin account"
-  IONOTES_ADMIN_ACCOUNT="$ADMIN" "$VPY" -c "
-import os; from app import db, users
-db.init()
-name, pw = os.environ['IONOTES_ADMIN_ACCOUNT'].split(':', 1)  # from the environment: the password is not in the process list
-print('  created', users.create(name, pw, 'admin')['name']) if not users.any_users() else print('  accounts already exist; not touched')
-"
+  ADMIN_PASSWORD="${ADMIN#*:}" "$VENV/bin/iosuite-shared" --config "$APP" admin "${ADMIN%%:*}" --app ionotes
 fi
 
 say "Service"
 if [ "$SERVICE" = 1 ] && [ "$OS" = Darwin ]; then
   PL="$HOME/Library/LaunchAgents/net.iothing.ionotes.server.plist"
-  "$VPY" - "$PL" "$APP" "$VPY" "$PORT" "$ENVF" <<'PYEOF'
+  "$VPY" - "$PL" "$APP" "$VPY" "$DATA" <<'PYEOF'
 import plistlib, sys, os
-pl, app, vpy, port, envf = sys.argv[1:6]
-env = {"PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"}
-for line in open(envf):
-    line = line.strip()
-    if line and not line.startswith("#") and "=" in line:
-        k, v = line.split("=", 1); env[k] = v
-d = {"Label": "net.iothing.ionotes.server", "ProgramArguments": [vpy, "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", str(port), "--proxy-headers"],
-     "WorkingDirectory": app, "RunAtLoad": True, "KeepAlive": True, "ThrottleInterval": 10, "EnvironmentVariables": env,
-     "StandardOutPath": os.path.join(env["DATA_DIR"], "server.log"), "StandardErrorPath": os.path.join(env["DATA_DIR"], "server.log")}
+pl, app, vpy, data = sys.argv[1:5]
+# the settings stay in config.env, which the app reads itself: the login item only starts `python -m app`
+d = {"Label": "net.iothing.ionotes.server", "ProgramArguments": [vpy, "-m", "app"],
+     "WorkingDirectory": app, "RunAtLoad": True, "KeepAlive": True, "ThrottleInterval": 10,
+     "EnvironmentVariables": {"PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"},
+     "StandardOutPath": os.path.join(data, "server.log"), "StandardErrorPath": os.path.join(data, "server.log")}
 os.makedirs(os.path.dirname(pl), exist_ok=True)
 with open(pl, "wb") as f: plistlib.dump(d, f)
-os.chmod(pl, 0o600)  # it carries the settings, database password included
 print("  wrote", pl)
 PYEOF
   launchctl bootout "gui/$(id -u)/net.iothing.ionotes.server" 2>/dev/null || true
@@ -257,7 +254,7 @@ Type=simple
 User=$(id -un)
 EnvironmentFile=$ENVF
 WorkingDirectory=$APP
-ExecStart="$VPY" -m uvicorn app.main:app --host 0.0.0.0 --port $PORT --proxy-headers
+ExecStart="$VPY" -m app
 Restart=always
 RestartSec=5
 
@@ -269,6 +266,6 @@ UEOF
   echo "  started (systemd)"
 else
   echo "  not installed as a service. Start ionotes with:"
-  echo "    cd \"$APP\" && ./run.sh --host 0.0.0.0 --port $PORT"
+  echo "    cd \"$APP\" && ./run.sh"
 fi
 say "Done: http://localhost:$PORT   settings: $ENVF"

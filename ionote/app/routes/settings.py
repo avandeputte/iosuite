@@ -45,7 +45,7 @@ def api_settings(request: Request):
         out["suite_database"] = suitedb.public()
         out["ocr"] = ocr.status()
         out["images"] = images.stats()
-        out["appUrl"] = config.APP_URL
+        out["appUrl"] = config.BASE_URL
         out["mcp_user"] = owners.mcp_owner()
         out["accounts"] = [{"id": u["id"], "name": u["name"], "role": u.get("role")} for u in users.list_users()]
     return out
@@ -74,19 +74,19 @@ async def api_settings_set(request: Request):
 
 @router.get("/api/settings/proxy", dependencies=[access.admin])
 def api_proxy_get():
-    """Sign-in at a reverse proxy (Cloudflare Access...): its settings, which of them ionotes.env fixes, and the
+    """Sign-in at a reverse proxy (Cloudflare Access...): its settings, which of them config.env fixes, and the
     Cloudflare Access team and application last seen in requests. Admins only."""
     return proxyauth.status()
 
 
 @router.post("/api/settings/proxy", dependencies=[access.admin])
 async def api_proxy_set(request: Request):
-    """Body: any of proxyauth.KEYS (an empty string clears one). Settings in ionotes.env cannot be changed here."""
+    """Body: any of proxyauth.KEYS (an empty string clears one). Settings in config.env cannot be changed here."""
     body = await json_body(request)
     changes = {k: str(v or "").strip() for k, v in body.items() if k in proxyauth.KEYS}
     fixed = [k for k in changes if config.proxy_env(k) is not None]
     if fixed:
-        raise HTTPException(400, f"Set in ionotes.env, change it there: {', '.join(fixed)}")
+        raise HTTPException(400, f"Set in config.env, change it there: {', '.join(fixed)}")
     m = changes.get("AUTH_PROXY")
     if m is not None and m.lower() not in ("", "off", *proxyauth.PRESETS):
         raise HTTPException(400, "Unknown proxy")
@@ -114,7 +114,7 @@ async def api_db_save(request: Request):
     body = await json_body(request)
     fixed = db.public_settings()["fromEnv"]
     if fixed:
-        raise HTTPException(400, f"Set in ionotes.env, change it there: {', '.join('DB_' + k.upper() for k in fixed)}")
+        raise HTTPException(400, f"Set in config.env, change it there: {', '.join(config.DB_ENV[k] for k in fixed)}")
     c = {**db.settings(), **{k: body[k] for k in db.KEYS if k in body}}
     if not body.get("password"):
         if c.get("type") == "mysql" and not db.same_server(c):

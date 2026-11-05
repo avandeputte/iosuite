@@ -40,12 +40,14 @@ catch_errors
 #   IONOTES_SUITE_DB  host:port/db:user:pass (the Shared ioSuite database, MariaDB)
 #   IONOTES_FEATURES  ocr or none
 #   IONOTES_ADMIN     name:password (empty: create the admin later in the web app)
+#   IONOTES_PUBLIC_URL     e.g. https://notes.example.com (empty: the address it is reached at)
+#   IONOTES_COOKIE_DOMAIN  e.g. example.com (empty: this host only)
 ask_app_settings() {
   local bt="ionotes"
   if [[ -z "${IONOTES_DB:-}" ]]; then
     if whiptail --backtitle "$bt" --yesno "Keep the notes in MySQL/MariaDB?\n\nIt holds the notes, their pictures (as BLOBs), folders, tags, users and settings.\n\nNo: a SQLite file in the container's data folder (a quick try; the apps' sync works the same)." 14 76 3>&1 1>&2 2>&3; then
       local h p d u w
-      h=$(whiptail --backtitle "$bt" --inputbox "MariaDB host or IP" 9 60 "192.168.1.89" 3>&1 1>&2 2>&3) || exit 1
+      h=$(whiptail --backtitle "$bt" --inputbox "MariaDB host or IP" 9 60 "127.0.0.1" 3>&1 1>&2 2>&3) || exit 1
       p=$(whiptail --backtitle "$bt" --inputbox "Port" 9 60 "3306" 3>&1 1>&2 2>&3) || exit 1
       d=$(whiptail --backtitle "$bt" --inputbox "Database (created if the user may)" 9 60 "notes" 3>&1 1>&2 2>&3) || exit 1
       u=$(whiptail --backtitle "$bt" --inputbox "User" 9 60 "notes" 3>&1 1>&2 2>&3) || exit 1
@@ -57,7 +59,7 @@ ask_app_settings() {
   fi
   if [[ -z "${IONOTES_SUITE_DB:-}" ]]; then
     local sh sp sd su sw
-    sh="${IONOTES_DB%%/*}"; sh="${sh%%:*}"; [[ "$IONOTES_DB" == sqlite ]] && sh="192.168.1.89"
+    sh="${IONOTES_DB%%/*}"; sh="${sh%%:*}"; [[ "$IONOTES_DB" == sqlite ]] && sh="127.0.0.1"
     sh=$(whiptail --backtitle "$bt" --inputbox "Shared ioSuite database: MariaDB host or IP\n\nAccounts, sessions and suite-wide settings, shared with the other ioThing apps (one sign-in for all)." 12 76 "$sh" 3>&1 1>&2 2>&3) || exit 1
     sp=$(whiptail --backtitle "$bt" --inputbox "Shared ioSuite database: port" 9 60 "3306" 3>&1 1>&2 2>&3) || exit 1
     sd=$(whiptail --backtitle "$bt" --inputbox "Shared ioSuite database: database (created if the user may)" 9 72 "iosuite" 3>&1 1>&2 2>&3) || exit 1
@@ -73,6 +75,12 @@ ask_app_settings() {
     an=$(whiptail --backtitle "$bt" --inputbox "Admin user name" 9 72 "admin" 3>&1 1>&2 2>&3) || exit 1
     aw=$(whiptail --backtitle "$bt" --passwordbox "Admin password (8 characters or more; empty: create it later in the web app)" 9 72 3>&1 1>&2 2>&3) || exit 1
     [[ -n "$aw" ]] && IONOTES_ADMIN="$an:$aw" || IONOTES_ADMIN=""
+  fi
+  if [[ -z "${IONOTES_PUBLIC_URL+x}" ]]; then
+    IONOTES_PUBLIC_URL=$(whiptail --backtitle "$bt" --inputbox "Public address behind your reverse proxy, e.g. https://notes.example.com (empty: the address it is reached at)" 10 76 "" 3>&1 1>&2 2>&3) || exit 1
+  fi
+  if [[ -z "${IONOTES_COOKIE_DOMAIN+x}" ]]; then
+    IONOTES_COOKIE_DOMAIN=$(whiptail --backtitle "$bt" --inputbox "Domain the sign-in is shared on by every app, e.g. example.com (empty: this host only)" 10 76 "" 3>&1 1>&2 2>&3) || exit 1
   fi
 }
 
@@ -97,11 +105,11 @@ description
 
 # ---- the app's own setup with the answers
 msg_info "Running the app's setup inside the container (packages, settings, tables, admin, service)"
-SECRETS=""  # setup.sh reads IONOTES_MYSQL, IONOTES_SUITE_DB and IONOTES_ADMIN from its environment: the passwords stay off every command line
+SECRETS=""  # setup.sh reads IONOTES_DB, IONOTES_SUITE_DB and IONOTES_ADMIN from its environment: the passwords stay off every command line
 if [[ "${IONOTES_DB:-sqlite}" == sqlite ]]; then
   DBARG="--sqlite"
 else
-  DBARG=""; SECRETS+="IONOTES_MYSQL=$(printf '%q' "$IONOTES_DB")"$'\n'
+  DBARG=""; SECRETS+="IONOTES_DB=$(printf '%q' "$IONOTES_DB")"$'\n'
 fi
 if [[ -n "${IONOTES_SUITE_DB:-}" ]]; then SECRETS+="IONOTES_SUITE_DB=$(printf '%q' "$IONOTES_SUITE_DB")"$'\n'; fi
 if [[ -n "${IONOTES_ADMIN:-}" ]]; then SECRETS+="IONOTES_ADMIN=$(printf '%q' "$IONOTES_ADMIN")"$'\n'; ADMINARG=""; else ADMINARG="--no-admin"; fi
@@ -109,13 +117,13 @@ if [[ -n "${IONOTES_ADMIN:-}" ]]; then SECRETS+="IONOTES_ADMIN=$(printf '%q' "$I
 SECF="$(mktemp)"; chmod 600 "$SECF"; printf '%s' "$SECRETS" > "$SECF"
 pct push "$CTID" "$SECF" /opt/ionotes/setup.env --perms 0600 --user 0 --group 0
 rm -f "$SECF"
-SETUP_CMD="cd /opt/ionotes/app && sh ./setup.sh --yes $DBARG $ADMINARG --data /opt/ionotes/data --features '${IONOTES_FEATURES:-none}' --service --no-system-deps --port 8610"
+SETUP_CMD="cd /opt/ionotes/app && sh ./setup.sh --yes $DBARG $ADMINARG --data /opt/ionotes/data --features '${IONOTES_FEATURES:-none}' --service --no-system-deps --port 8610 --public-url '${IONOTES_PUBLIC_URL:-}' --cookie-domain '${IONOTES_COOKIE_DOMAIN:-}'"
 WRAPPED="set -a; . /opt/ionotes/setup.env; set +a; rm -f /opt/ionotes/setup.env; $SETUP_CMD > /opt/ionotes/setup.log 2>&1"
 # the setup's output is kept in the container; on failure the last lines are shown here
 if ! pct exec "$CTID" -- bash -c "$WRAPPED"; then
   msg_error "setup.sh failed inside the container; last lines of /opt/ionotes/setup.log:"
   pct exec "$CTID" -- tail -n 40 /opt/ionotes/setup.log || true
-  msg_error "Fix the cause, then run it again inside the container with IONOTES_ADMIN=name:password (and IONOTES_MYSQL=host:port/db:user:password for MariaDB, IONOTES_SUITE_DB=host:port/db:user:password for the Shared ioSuite database) in the environment: pct exec $CTID -- bash -c \"$SETUP_CMD\""
+  msg_error "Fix the cause, then run it again inside the container with IONOTES_ADMIN=name:password (and IONOTES_DB=host:port/db:user:password for MariaDB, IONOTES_SUITE_DB=host:port/db:user:password for the Shared ioSuite database) in the environment: pct exec $CTID -- bash -c \"$SETUP_CMD\""
   exit 1
 fi
 msg_ok "Setup finished"
