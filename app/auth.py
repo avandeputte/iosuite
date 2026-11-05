@@ -16,7 +16,7 @@ from app import __version__, config, db
 APP = "iosuite"
 
 auth = Auth(APP, app_label="ioSuite", basic_realm="ioSuite", version=__version__, public_url=config.PUBLIC_URL or None,
-            description="Start page", color="#2f3a5a", icon="/static/icons/mark.svg")
+            description="Start page", color="#2f3a5a")
 
 # the version check and the self-update (update.sh), shared with the suite: Maintenance › Updates and logs,
 # GET/POST /api/server and GET /api/log (main.py mounts the router)

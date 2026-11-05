@@ -27,12 +27,12 @@ def test_only_registered_apps_have_a_tile(client):
 
 def test_an_app_the_page_does_not_know_gets_a_tile(client):
     _registered(iorecipes={"name": "ioRecipes", "url": "https://recipes.iothing.net", "description": "Recipes",
-                           "color": "#aa5500", "icon": "/static/icon.svg"},
+                           "color": "#aa5500"},
                 ioblank={"name": "ioBlank"})  # no address: no tile
     items = client.get("/api/apps").json()["items"]
     assert [t["key"] for t in items][-1] == "iorecipes" and "ioblank" not in [t["key"] for t in items]
     t = items[-1]
-    assert t["url"] == "https://recipes.iothing.net" and t["tagline"] == "Recipes" and t["icon"] == "https://recipes.iothing.net/static/icon.svg"
+    assert t["url"] == "https://recipes.iothing.net" and t["tagline"] == "Recipes" and t["icon"] == "https://recipes.iothing.net/static/icons/mark.svg"
     assert "iosuite" not in [t["key"] for t in items]
     r = client.put("/api/me/layout", json={"hidden": ["iorecipes"]})  # a person hides it for themselves
     assert r.status_code == 200 and r.json()["hidden"] == ["iorecipes"]
