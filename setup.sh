@@ -7,10 +7,10 @@
 #
 # Flags: --db HOST:PORT/DATABASE:USER:PASSWORD        (MariaDB / MySQL; default 192.168.1.89:3306/suite:suite:suite)
 #        --shared-db HOST:PORT/DATABASE:USER:PASSWORD (the Shared ioSuite database: the io apps' accounts and suite-wide
-#                                                      settings; default: the same server, iosuite:iosuite; --auth-db is the old name)
+#                                                      settings; default: the same server, iosuite:iosuite)
 #        --admin NAME:PASSWORD | --no-admin   --port N (8630)   --public-url URL
 #        --service | --no-service   --system-deps | --no-system-deps   --python PATH
-# Secrets can stay off the command line: IOSUITE_DB, IOSUITE_SHARED_DB (or IOSUITE_AUTH_DB) and IOSUITE_ADMIN in the
+# Secrets can stay off the command line: IOSUITE_DB, IOSUITE_SHARED_DB and IOSUITE_ADMIN in the
 # environment do what --db, --shared-db and --admin do. Run it again at any time: it keeps iosuite.env and only changes what you answer.
 set -e
 cd "$(dirname "$0")"
@@ -20,7 +20,7 @@ die() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 YES=0; DBS=""; ADBS=""; ADMIN=""; NO_ADMIN=0; PORT=""; PUBURL=""; SERVICE=""; SYSDEPS=""; PY=""
 while [ $# -gt 0 ]; do
   case "$1" in
-    --yes) YES=1; shift;; --db) DBS="$2"; shift 2;; --shared-db|--auth-db) ADBS="$2"; shift 2;; --admin) ADMIN="$2"; shift 2;; --no-admin) NO_ADMIN=1; shift;;
+    --yes) YES=1; shift;; --db) DBS="$2"; shift 2;; --shared-db) ADBS="$2"; shift 2;; --admin) ADMIN="$2"; shift 2;; --no-admin) NO_ADMIN=1; shift;;
     --port) PORT="$2"; shift 2;; --public-url) PUBURL="$2"; shift 2;;
     --service) SERVICE=1; shift;; --no-service) SERVICE=0; shift;; --system-deps) SYSDEPS=1; shift;; --no-system-deps) SYSDEPS=0; shift;;
     --python) PY="$2"; shift 2;;
@@ -29,7 +29,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 [ -n "$DBS" ] || DBS="${IOSUITE_DB:-}"
-[ -n "$ADBS" ] || ADBS="${IOSUITE_SHARED_DB:-${IOSUITE_AUTH_DB:-}}"
+[ -n "$ADBS" ] || ADBS="${IOSUITE_SHARED_DB:-}"
 [ -n "$ADMIN" ] || ADMIN="${IOSUITE_ADMIN:-}"
 ask() { _v="$1"; _q="$2"; _d="$3"
   if [ "$YES" = 1 ] || [ ! -t 0 ]; then eval "$_v=\"\$_d\""; return; fi
@@ -38,7 +38,7 @@ asksecret() { _v="$1"; _q="$2"
   if [ "$YES" = 1 ] || [ ! -t 0 ]; then eval "$_v=''"; return; fi
   printf '%s: ' "$_q"; stty -echo 2>/dev/null; read -r _a || _a=""; stty echo 2>/dev/null; printf '\n'; eval "$_v=\"\$_a\""; }
 getenv() { [ -f iosuite.env ] && sed -n "s/^$1=//p" iosuite.env | tail -n 1; true; }
-sharedenv() { _x="$(getenv "IOSUITE_DB_$1")"; [ -n "$_x" ] || _x="$(getenv "IOSUITE_SHARED_DB_$1")"; [ -n "$_x" ] || _x="$(getenv "IOTHING_AUTH_DB_$1")"; printf '%s' "$_x"; }  # with the older names
+sharedenv() { getenv "IOSUITE_DB_$1"; }
 split() { # HOST:PORT/DATABASE:USER:PASSWORD into $1_HOST, $1_PORT, $1_NAME, $1_USER, $1_PASSWORD
   _p="$1"; _s="$2"; _h="${_s%%:*}"; _r="${_s#*:}"; _o="${_r%%/*}"; _r="${_r#*/}"; _n="${_r%%:*}"; _r="${_r#*:}"; _u="${_r%%:*}"; _w="${_r#*:}"
   eval "${_p}_HOST=\"\$_h\"; ${_p}_PORT=\"\$_o\"; ${_p}_NAME=\"\$_n\"; ${_p}_USER=\"\$_u\"; ${_p}_PASSWORD=\"\$_w\""; }
@@ -91,7 +91,6 @@ setenv() { grep -v "^$1=" iosuite.env > iosuite.env.tmp || true; printf '%s=%s\n
 setenv DB_HOST "$DB_HOST"; setenv DB_PORT "$DB_PORT"; setenv DB_NAME "$DB_NAME"; setenv DB_USER "$DB_USER"; setenv DB_PASSWORD "$DB_PASSWORD"
 setenv IOSUITE_DB_HOST "$SHARED_HOST"; setenv IOSUITE_DB_PORT "$SHARED_PORT"; setenv IOSUITE_DB_NAME "$SHARED_NAME"
 setenv IOSUITE_DB_USER "$SHARED_USER"; setenv IOSUITE_DB_PASSWORD "$SHARED_PASSWORD"
-for k in HOST PORT NAME USER PASSWORD; do grep -v -e "^IOTHING_AUTH_DB_$k=" -e "^IOSUITE_SHARED_DB_$k=" iosuite.env > iosuite.env.tmp || true; mv iosuite.env.tmp iosuite.env; done; chmod 600 iosuite.env
 setenv PORT "$PORT"
 [ -n "$PUBURL" ] && setenv PUBLIC_URL "$PUBURL"
 

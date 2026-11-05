@@ -38,6 +38,6 @@ PUBLIC_URL = env("PUBLIC_URL", "").rstrip("/")   # e.g. https://home.example.com
 ACCUWEATHER_API_KEY = env("ACCUWEATHER_API_KEY").strip()
 ACCUWEATHER_LOCATION = env("ACCUWEATHER_LOCATION").strip()   # a location key (Settings finds it from a city name)
 
-# updates: IOSUITE_REPO, IOSUITE_BRANCH and UPDATE_CHECK are read by iothing_auth.updates (app.auth.updater)
+# updates: IOSUITE_REPO, IOSUITE_BRANCH and UPDATE_CHECK are read by iosuite_shared.updates (app.auth.updater)
 # the server log that Maintenance › Updates and logs shows (LOG_FILE= switches it off)
 LOG_FILE = Path(env("LOG_FILE", str(ROOT / "iosuite.log"))) if env("LOG_FILE", "x") else None

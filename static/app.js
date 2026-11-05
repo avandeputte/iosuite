@@ -802,7 +802,7 @@ async function maintUpdates(el) {
   await draw();
 }
 
-/** The tail of the server log (GET /api/log from iothing-auth): a level filter, a search, Reload and Download. */
+/** The tail of the server log (GET /api/log from iosuite-shared): a level filter, a search, Reload and Download. */
 function logCard() {
   const level = h('select', { class: 't', style: 'width:auto' }, [['any', 'Everything'], ['warning', 'Warnings and errors'], ['error', 'Errors'], ['auth', 'Sign-ins']].map(([v, l]) => h('option', { value: v }, l)));
   const contains = h('input', { class: 't', placeholder: 'Contains…', style: 'max-width:220px' });

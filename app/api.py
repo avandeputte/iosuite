@@ -311,4 +311,4 @@ def widget_thumb(photo_id: int, request: Request):
                     headers={"Cache-Control": "private, max-age=86400"})
 
 
-# the server (version, updates, the log, restart): iothing_auth's server_router, mounted in main.py
+# the server (version, updates, the log, restart): iosuite_shared's server_router, mounted in main.py

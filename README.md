@@ -62,7 +62,7 @@ nothing about the server is sent; Maintenance › Updates and logs switches it o
 then see a note with **Update now**, and **Maintenance › Updates and logs** has the version, **Check for updates**,
 **Update now**, the tail of the server log (`iosuite.log` in the app folder; `LOG_FILE` moves it, empty switches it
 off) and **Restart**. The page is the same in every ioThing app: the version check, `update.sh`, the restart and the log
-come from `iothing_auth.updates` in iosuite-shared, served at `/api/server` and `/api/log`. Updating runs the app's own
+come from `iosuite_shared.updates` in iosuite-shared, served at `/api/server` and `/api/log`. Updating runs the app's own
 `update.sh`: the new version's Python packages first, then the code (a failed step leaves the running
 version as it was), the database is brought up to date, and the service restarts; the page reloads when the new version
 answers. In Docker, pull the image instead. From a shell: `./update.sh` (`--check` only looks,
@@ -81,8 +81,7 @@ GRANT ALL ON suite.* TO 'suite'@'%';
 
 The accounts, and the settings the whole suite shares (such as the list of apps and where each one is), live in the
 **Shared ioSuite database**, the one every io app uses (`iosuite`, user `iosuite`, by default); a new install of the
-suite creates it the same way. It was called the `auth` database before: an install that has one keeps it (the
-`IOTHING_AUTH_DB_*` variables still work, and `setup.sh` rewrites them under the new names). The tables are created on the first start and updated by later versions by themselves.
+suite creates it the same way. The tables are created on the first start and updated by later versions by themselves.
 
 ### Proxmox VE (LXC)
 
@@ -129,7 +128,7 @@ git clone https://github.com/avandeputte/iosuite && cd iosuite
 | Setting | Meaning |
 | --- | --- |
 | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | the MariaDB / MySQL database (`suite`) |
-| `IOSUITE_DB_HOST`, `_PORT`, `_NAME`, `_USER`, `_PASSWORD` | the Shared ioSuite database (`iosuite`): accounts, passwords, sessions, app passwords and roles, the suite-wide settings and the list of apps, shared with every io app (the older `IOSUITE_SHARED_DB_*` and `IOTHING_AUTH_DB_*` names still work) |
+| `IOSUITE_DB_HOST`, `_PORT`, `_NAME`, `_USER`, `_PASSWORD` | the Shared ioSuite database (`iosuite`): accounts, passwords, sessions, app passwords and roles, the suite-wide settings and the list of apps, shared with every io app |
 | `IOTHING_COOKIE_DOMAIN` | the domain the session cookie is shared on (`example.com`): signed in at `home.example.com`, signed in at `photos.example.com` too |
 | `PORT` | web port for `run.sh` and the service (8630) |
 | `PUBLIC_URL` | the address people use (behind a proxy); also what ioSuite registers in the suite's list of apps |
@@ -162,7 +161,7 @@ what a viewer may not change. CI runs them against MariaDB.
 
 ```
 app/main.py        the application: start-up (tables, first admin, the update check), who is asking, routes
-app/api.py         the REST API: status, the apps and their settings (the server, updates and the log: iothing_auth's server_router)
+app/api.py         the REST API: status, the apps and their settings (the server, updates and the log: iosuite_shared's server_router)
 app/apps.py        the catalogue of the suite's apps and where each one is (environment, Settings, this host)
 app/status.py      is each app up (its /api/status) and does it have an update; is each bookmark reachable
 app/layout.py      each account's own layout: hidden tiles and cards, the tiles' order, the photo strip

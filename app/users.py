@@ -4,7 +4,7 @@ Roles as in the rest of the suite: viewer (sees the page), editor (the same, for
 addresses and manages accounts); an account holds a role per app, a suite admin is admin everywhere. Web sessions are
 the suite's cookie (shared by the apps on the domain), so signing in here signs in everywhere the page links to.
 """
-from iothing_auth import apppasswords, users as shared
+from iosuite_shared import apppasswords, users as shared
 
 from app.auth import APP
 

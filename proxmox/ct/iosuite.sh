@@ -47,7 +47,6 @@ ask_app_settings() {
     w=$(whiptail --backtitle "$bt" --passwordbox "Password" 9 60 3>&1 1>&2 2>&3) || exit 1
     IOSUITE_DB="$h:$p/$d:$u:$w"
   fi
-  IOSUITE_SHARED_DB="${IOSUITE_SHARED_DB:-${IOSUITE_AUTH_DB:-}}"  # IOSUITE_AUTH_DB: its name before 0.3.1
   if [[ -z "${IOSUITE_SHARED_DB:-}" ]]; then
     local ah ap ad au aw2
     ah=$(whiptail --backtitle "$bt" --inputbox "Shared ioSuite database (accounts and suite-wide settings of the io apps): host" 9 70 "${IOSUITE_DB%%:*}" 3>&1 1>&2 2>&3) || exit 1
