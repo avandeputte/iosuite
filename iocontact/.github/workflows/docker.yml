@@ -43,7 +43,7 @@ jobs:
           for f in *.sh; do sh -n "$f"; done
           bash -n proxmox/ct/iocontacts.sh proxmox/install/iocontacts-install.sh
       - name: Shared ioSuite test database
-        # the Shared ioSuite database (iothing-auth: accounts and suite settings) is a database of its own; the test user gets it too
+        # the Shared ioSuite database (iosuite-shared: accounts and suite settings) is a database of its own; the test user gets it too
         run: |
           python - <<'PY'
           import pymysql
@@ -54,9 +54,9 @@ jobs:
       - name: Tests
         env:
           DB_HOST: 127.0.0.1
-          IOTHING_AUTH_DB_HOST: 127.0.0.1
-          IOTHING_AUTH_DB_USER: contacts
-          IOTHING_AUTH_DB_PASSWORD: contacts
+          IOSUITE_DB_HOST: 127.0.0.1
+          IOSUITE_DB_USER: contacts
+          IOSUITE_DB_PASSWORD: contacts
         run: python -m pytest -q -p no:cacheprovider tests
 
   image:

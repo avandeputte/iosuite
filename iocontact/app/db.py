@@ -15,8 +15,8 @@ SCHEMA = [
         k VARCHAR(64) PRIMARY KEY,
         v MEDIUMTEXT
     )""",
-    # accounts and app passwords live in the Shared ioSuite database (iothing-auth, app/auth.py); the users and
-    # app_passwords tables of ioContacts 0.3 are folded into it by `iothing-auth migrate` and renamed *_migrated
+    # accounts and app passwords live in the Shared ioSuite database (iosuite-shared, app/auth.py); the users and
+    # app_passwords tables of ioContacts 0.3 are folded into it by `iosuite-shared migrate` and renamed *_migrated
     """CREATE TABLE IF NOT EXISTS addressbooks (
         id INT AUTO_INCREMENT PRIMARY KEY,
         owner_id INT NULL,

@@ -1,15 +1,15 @@
-"""Accounts, roles, sessions and app passwords: the shared ioThing accounts (iothing-auth), seen from ioContacts.
+"""Accounts, roles, sessions and app passwords: the shared ioThing accounts (iosuite-shared), seen from ioContacts.
 
 Roles as in iopix: viewer (reads), editor (changes contacts), admin (also settings and users); an account holds a
 role per app, a suite admin is admin everywhere. Each account gets its own private address book; the Family book is
 shared by everyone. Web sessions are the suite's cookie (shared by the apps on the domain). CardDAV / LDAP clients
 use HTTP Basic or an LDAP bind with either the account password or an app password (one per device, revocable,
-shown once). This module keeps ioContacts' old names; the work is done by iothing_auth.
+shown once). This module keeps ioContacts' old names; the work is done by iosuite_shared.
 """
 import datetime as dt
 import secrets
 
-from iothing_auth import apppasswords, db as authdb, sessions, users as shared
+from iosuite_shared import apppasswords, db as authdb, sessions, users as shared
 
 from app import db
 from app.auth import APP, row_of

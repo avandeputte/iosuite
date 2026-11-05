@@ -57,12 +57,10 @@ if [ -z "$DBS" ]; then
   DBS="$H:$P/$D:$U:$W"
 fi
 DB_HOST="${DBS%%:*}"; r="${DBS#*:}"; DB_PORT="${r%%/*}"; r="${r#*/}"; DB_NAME="${r%%:*}"; r="${r#*:}"; DB_USER="${r%%:*}"; DB_PASSWORD="${r#*:}"
-# the Shared ioSuite database (accounts, sessions and settings shared by the ioThing apps); an install from before
-# 0.4.7 kept it as IOTHING_AUTH_DB_* (database and user `auth`): its values are the defaults, then written as IOSUITE_DB_*
-suiteenv() { v="$(getenv "IOSUITE_DB_$1")"; [ -n "$v" ] || v="$(getenv "IOTHING_AUTH_DB_$1")"; printf '%s' "$v"; }
+# the Shared ioSuite database (accounts, sessions and settings shared by the ioThing apps)
+suiteenv() { getenv "IOSUITE_DB_$1"; }
 if [ -z "$SDBS" ]; then
-  if [ -n "$(getenv IOTHING_AUTH_DB_HOST)$(getenv IOTHING_AUTH_DB_NAME)$(getenv IOTHING_AUTH_DB_USER)" ] && [ -z "$(getenv IOSUITE_DB_NAME)" ]; then
-    SD0=auth; SU0=auth; else SD0=iosuite; SU0=iosuite; fi
+  SD0=iosuite; SU0=iosuite
   H="$(suiteenv HOST)"; P="$(suiteenv PORT)"; D="$(suiteenv NAME)"; U="$(suiteenv USER)"
   ask H "Shared ioSuite database: host" "${H:-$DB_HOST}"; ask P "Port" "${P:-$DB_PORT}"; ask D "Database" "${D:-$SD0}"; ask U "User" "${U:-$SU0}"
   asksecret W "Password (empty: keep the current one, or '$SU0')"; [ -n "$W" ] || W="$(suiteenv PASSWORD)"; [ -n "$W" ] || W="$SU0"
@@ -90,7 +88,6 @@ setenv() { grep -v "^$1=" iocontacts.env > iocontacts.env.tmp || true; printf '%
 setenv DB_HOST "$DB_HOST"; setenv DB_PORT "$DB_PORT"; setenv DB_NAME "$DB_NAME"; setenv DB_USER "$DB_USER"; setenv DB_PASSWORD "$DB_PASSWORD"
 setenv IOSUITE_DB_HOST "$SUITE_HOST"; setenv IOSUITE_DB_PORT "$SUITE_PORT"; setenv IOSUITE_DB_NAME "$SUITE_NAME"
 setenv IOSUITE_DB_USER "$SUITE_USER"; setenv IOSUITE_DB_PASSWORD "$SUITE_PASSWORD"
-grep -v '^IOTHING_AUTH_DB_' iocontacts.env > iocontacts.env.tmp || true; mv iocontacts.env.tmp iocontacts.env; chmod 600 iocontacts.env
 setenv PORT "$PORT"; setenv LDAP_PORT "$LDAP"
 [ -n "$PUBURL" ] && setenv PUBLIC_URL "$PUBURL"
 

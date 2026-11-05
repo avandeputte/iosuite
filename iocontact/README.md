@@ -102,7 +102,7 @@ nothing about the server is sent; Maintenance › Updates and logs switches it o
 then see a note with **Update now**, and **Maintenance › Updates and logs** has the version, **Check for updates**,
 **Update now**, the tail of the server log (`iocontacts.log` in the app folder; `LOG_FILE` moves it, empty switches it
 off) and **Restart**. The page is the same in every ioThing app: the version check, `update.sh`, the restart and the log
-come from `iothing_auth.updates` in iosuite-shared, served at `/api/server` and `/api/log`. Updating runs the app's own
+come from `iosuite_shared.updates` in iosuite-shared, served at `/api/server` and `/api/log`. Updating runs the app's own
 `update.sh`: the new version's Python packages first, then the code (a failed step leaves the running version as it
 was), the database is brought up to date, and the service restarts; the page reloads when the new version answers. The
 MCP tools `check_for_update` and `update_server` do the same. In Docker, pull the image instead. From a shell:
@@ -164,7 +164,7 @@ git clone https://github.com/avandeputte/iocontacts && cd iocontacts
 | `LDAP_PORT`, `LDAP_HOST`, `LDAP_BASE` | the LDAP directory (3890, all addresses, `dc=iocontacts`); `LDAP_PORT=0` turns it off |
 | `PUBLIC_URL` | the address people use (behind a proxy), for links in the calendar feed and Settings |
 | `ADMIN_USER`, `ADMIN_PASSWORD` | the first admin, made on the first start when there are no accounts |
-| `IOSUITE_DB_HOST`, `_PORT`, `_NAME`, `_USER`, `_PASSWORD` | the Shared ioSuite database (MariaDB; by default on the contacts' server, database, user and password `iosuite`): accounts, passwords, sessions, app passwords, roles and the suite-wide settings, shared with ioPix and ioNotes (the `iothing-auth` library, from [iosuite-shared](https://github.com/avandeputte/iosuite-shared)); only the role an account holds here and its "me" contact are ioContacts' own. Installs from before 0.4.7 used `IOTHING_AUTH_DB_*` (database and user `auth`): those still work as they were, and running `setup.sh` again rewrites them as `IOSUITE_DB_*`. `iothing-auth migrate --iocontacts` folds a 0.3 install's `users` table into it |
+| `IOSUITE_DB_HOST`, `_PORT`, `_NAME`, `_USER`, `_PASSWORD` | the Shared ioSuite database (MariaDB; by default on the contacts' server, database, user and password `iosuite`): accounts, passwords, sessions, app passwords, roles and the suite-wide settings, shared with ioPix and ioNotes (the `iosuite-shared` library, from [iosuite-shared](https://github.com/avandeputte/iosuite-shared)); only the role an account holds here and its "me" contact are ioContacts' own. `iosuite-shared migrate --iocontacts` folds a 0.3 install's `users` table into it |
 | `IOTHING_COOKIE_DOMAIN` | the domain the session cookie is shared on (`example.com`): signed in at `photo.example.com`, signed in at `contacts.example.com` too |
 | `AUTH_PROXY`, `AUTH_PROXY_HEADER`, `AUTH_PROXY_TRUSTED`, `CF_ACCESS_TEAM`, `CF_ACCESS_AUD` | sign-in at a reverse proxy, exactly as in iopix: Cloudflare Access (with token checking), Authelia, Authentik, oauth2-proxy… matched to accounts by email, then name |
 | `IOPIX_URL`, `IOPIX_USER`, `IOPIX_PASSWORD`, `IOPIX_CF_CLIENT_ID`, `IOPIX_CF_CLIENT_SECRET` | ioPix (or Settings › ioPix) |
@@ -207,7 +207,7 @@ app/iopix.py       the ioPix client
 app/quality.py     duplicates (scored), merging with choices and undo, data quality checks and fixes
 app/enrich.py      enrichment: the public lookups and the suggestions queue
 app/mcp/           the MCP server: base (who is asking, finding contacts), read, write and admin tools
-app/users.py       accounts, sessions, app passwords (the Shared ioSuite database's, through iothing-auth)   app/proxyauth.py  sign-in at a reverse proxy
+app/users.py       accounts, sessions, app passwords (the Shared ioSuite database's, through iosuite-shared)   app/proxyauth.py  sign-in at a reverse proxy
 static/            the web app (index.html, app.js, app.css, icons)
 proxmox/           the community-scripts LXC installer      setup.sh, run.sh, update.sh, Dockerfile
 ```
