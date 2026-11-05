@@ -1,5 +1,6 @@
 #!/bin/sh
-# ionotes setup: asks where the MariaDB/MySQL database is (and tests it), the port, an admin account, whether
+# ionotes setup: asks where the MariaDB/MySQL database is (and tests it), where the Shared ioSuite database is
+# (the accounts and suite-wide settings shared by the ioThing apps), the port, an admin account, whether
 # pictures added in the web app should have their text read (RapidOCR), and whether to start ionotes at login;
 # then creates the Python environment, installs the packages, writes ionotes.env, creates the tables and the
 # admin, and starts the service (launchd on macOS, systemd on Linux). Run it again at any time; it keeps what
@@ -9,6 +10,8 @@
 #   ./setup.sh --yes --mysql 192.168.1.89:3306/notes:notes:secret --admin alex:secret
 #   --mysql HOST:PORT/DB:USER:PASSWORD   the database (IONOTES_MYSQL in the environment does the same, off the command line)
 #   --sqlite                         a SQLite file in the data folder instead (a quick try)
+#   --suite-db HOST:PORT/DB:USER:PASSWORD   the Shared ioSuite database (IONOTES_SUITE_DB does the same; default
+#                                    database and user: iosuite); kept as it is in ionotes.env when not given
 #   --port 8610   --data DIR   --admin NAME:PASS (or IONOTES_ADMIN)   --no-admin
 #   --features ocr|none   --service | --no-service   --python PATH   --no-system-deps
 set -e
@@ -17,19 +20,20 @@ APP="$(pwd)"
 OS="$(uname -s)"
 say() { printf '\n\033[1;34m==>\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
-YES=0; MYSQL=""; SQLITE=0; FEATURES=""; PORT=""; ADMIN=""; NO_ADMIN=0; SERVICE=""; DATA=""; PY=""; SYSDEPS=""
+YES=0; MYSQL=""; SUITE=""; SQLITE=0; FEATURES=""; PORT=""; ADMIN=""; NO_ADMIN=0; SERVICE=""; DATA=""; PY=""; SYSDEPS=""
 while [ $# -gt 0 ]; do
   case "$1" in
-    --yes) YES=1; shift;; --mysql) MYSQL="$2"; shift 2;; --sqlite) SQLITE=1; shift;;
+    --yes) YES=1; shift;; --mysql) MYSQL="$2"; shift 2;; --suite-db) SUITE="$2"; shift 2;; --sqlite) SQLITE=1; shift;;
     --features) FEATURES="$2"; shift 2;; --port) PORT="$2"; shift 2;;
     --admin) ADMIN="$2"; shift 2;; --no-admin) NO_ADMIN=1; shift;; --service) SERVICE=1; shift;; --no-service) SERVICE=0; shift;;
     --data) DATA="$2"; shift 2;; --python) PY="$2"; shift 2;; --system-deps) SYSDEPS=1; shift;; --no-system-deps) SYSDEPS=0; shift;;
-    -h|--help) sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'; exit 0;;
+    -h|--help) sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; exit 0;;
     *) die "unknown option $1 (try --help)";;
   esac
 done
 [ -n "$ADMIN" ] || ADMIN="${IONOTES_ADMIN:-}"
 [ -n "$MYSQL" ] || MYSQL="${IONOTES_MYSQL:-}"
+[ -n "$SUITE" ] || SUITE="${IONOTES_SUITE_DB:-}"
 if [ "$YES" = 1 ]; then TTY=""; else TTY=/dev/stdin; fi
 ask() {  # ask VAR "question" "default"
   _v="$1"; _q="$2"; _d="$3"
@@ -88,6 +92,21 @@ if [ -z "$MYSQL" ] && [ "$SQLITE" = 0 ]; then
     SQLITE=1
   fi
 fi
+say "Shared ioSuite database"
+echo "Accounts, sessions and the suite-wide settings live in the Shared ioSuite database (MariaDB), shared with"
+echo "the other ioThing apps (ioPix, ioContacts), so one sign-in serves them all."
+SUITE_SET=0; [ -f "$APP/ionotes.env" ] && grep -qE '^(IOSUITE_DB_|IOTHING_AUTH_DB_)' "$APP/ionotes.env" && SUITE_SET=1
+if [ -z "$SUITE" ]; then
+  if [ "$SUITE_SET" = 1 ] && ! yesno "ionotes.env already names the Shared ioSuite database; change it?" n; then
+    SUITE="keep"
+  elif [ "$YES" = 1 ] || [ -z "$TTY" ]; then
+    SUITE="keep"; [ "$SUITE_SET" = 1 ] || echo "not named: ionotes uses the defaults (127.0.0.1:3306, database and user iosuite); set IOSUITE_DB_* in ionotes.env"
+  else
+    case "$MYSQL" in ''|keep) SH="$(grep -E '^DB_HOST=' "$APP/ionotes.env" 2>/dev/null | head -1 | cut -d= -f2-)"; SH="${SH:-127.0.0.1}";; *) SH="${MYSQL%%:*}"; SH="${SH%%/*}";; esac
+    ask SH "Shared ioSuite database host" "$SH"; ask SP "port" "3306"; ask SD "database (created if the user may)" "iosuite"; ask SU "user" "iosuite"; secret SW "password"
+    SUITE="$SH:$SP/$SD:$SU:$SW"
+  fi
+fi
 ask PORT "Port" "${PORT:-8610}"
 if [ -z "$FEATURES" ]; then
   yesno "Read the text in pictures added in the web app (RapidOCR, ~60 MB; the Mac and iPhone apps read it themselves)?" y && FEATURES=ocr || FEATURES=none
@@ -114,22 +133,28 @@ if [ "$FEATURES" = ocr ]; then echo "installing the packages (with RapidOCR)"; p
 say "Settings"
 ENVF="$APP/ionotes.env"
 umask 077  # the settings file holds the database password: private from the first byte
-OLD=""; [ -f "$ENVF" ] && OLD="$(grep -E '^(DB_|AUTH_PROXY|CF_ACCESS|APP_URL|MCP)' "$ENVF" || true)"
+OLD=""; [ -f "$ENVF" ] && OLD="$(grep -E '^(DB_|AUTH_PROXY|CF_ACCESS|APP_URL|MCP|IOSUITE_|IOTHING_)' "$ENVF" || true)"
 {
   echo "# ionotes settings, written by setup.sh (variable names as in the README). Edit and restart the service."
   echo "DATA_DIR=$DATA"
   echo "PORT=$PORT"
   echo "OCR=$([ "$FEATURES" = ocr ] && echo 1 || echo 0)"
+  KEEP="$OLD"; [ "$SUITE" != keep ] && [ -n "$SUITE" ] && KEEP="$(echo "$OLD" | grep -vE '^(IOSUITE_DB_|IOTHING_AUTH_DB_)' || true)"
   if [ "$MYSQL" = keep ]; then
-    echo "$OLD"
+    echo "$KEEP"
   else
-    echo "$OLD" | grep -vE '^DB_' | grep -v '^$' || true
+    echo "$KEEP" | grep -vE '^DB_' | grep -v '^$' || true
     if [ -n "$MYSQL" ]; then
       hp=${MYSQL%%/*}; rest=${MYSQL#*/}; db=${rest%%:*}; rest=${rest#*:}; us=${rest%%:*}; pw=${rest#*:}
       echo "DB_TYPE=mysql"; echo "DB_HOST=${hp%%:*}"; echo "DB_PORT=${hp##*:}"; echo "DB_DATABASE=$db"; echo "DB_USER=$us"; echo "DB_PASSWORD=$pw"
     else
       echo "DB_TYPE=sqlite"
     fi
+  fi
+  if [ "$SUITE" != keep ] && [ -n "$SUITE" ]; then
+    # the Shared ioSuite database, under its own names (the old IOTHING_AUTH_DB_* lines are replaced)
+    hp=${SUITE%%/*}; rest=${SUITE#*/}; db=${rest%%:*}; rest=${rest#*:}; us=${rest%%:*}; pw=${rest#*:}
+    echo "IOSUITE_DB_HOST=${hp%%:*}"; echo "IOSUITE_DB_PORT=${hp##*:}"; echo "IOSUITE_DB_NAME=$db"; echo "IOSUITE_DB_USER=$us"; echo "IOSUITE_DB_PASSWORD=$pw"
   fi
 } > "$ENVF"
 chmod 600 "$ENVF"
@@ -163,6 +188,30 @@ if r.get("warning"):
     print("  note: " + r["warning"])
 PYEOF
 fi
+
+echo "testing the Shared ioSuite database, creating it if needed"
+"$VPY" - <<'PYEOF' || printf '\033[1;33mwarning:\033[0m could not use the Shared ioSuite database (see above); ionotes needs it for sign-in. Run setup.sh again with --suite-db HOST:PORT/DB:USER:PASSWORD\n' >&2
+import os
+import pymysql
+from app import suitedb  # importing app settles the Shared ioSuite database's settings (IOSUITE_DB_*, or the old names)
+e = lambda k: os.environ["IOTHING_AUTH_DB_" + k]
+c = dict(host=e("HOST"), port=int(e("PORT")), user=e("USER"), password=e("PASSWORD"), connect_timeout=8)
+name = e("NAME")
+try:
+    pymysql.connect(database=name, **c).close()
+except pymysql.err.OperationalError as x:
+    if x.args[0] != 1049:
+        raise SystemExit(f"  {c['user']}@{c['host']}:{c['port']}/{name}: {x}")
+    con = pymysql.connect(**c)  # the database is not there yet: create it, if this user may
+    try:
+        con.cursor().execute(f"CREATE DATABASE IF NOT EXISTS `{name}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
+        print(f"  created the database {name}")
+    except Exception as x2:
+        raise SystemExit(f"  the database {name} does not exist and {c['user']} may not create it ({x2}); create it, then run setup.sh again")
+    finally:
+        con.close()
+print(f"  OK: {c['user']}@{c['host']}:{c['port']}/{name}" + (f" ({suitedb.note})" if suitedb.note else ""))
+PYEOF
 
 if [ -n "$ADMIN" ]; then
   say "Admin account"

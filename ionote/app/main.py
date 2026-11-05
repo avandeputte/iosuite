@@ -13,7 +13,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app import config, db, mcp, proxyauth, updates, users
+from app import config, db, mcp, proxyauth, suitedb, updates, users
 from app import notes as notes_mod, owners
 from app.auth import auth as auth_shared
 
@@ -59,6 +59,10 @@ async def lifespan(_app):
     c = db.settings()
     log.info("ionotes started on %s (%s)", "MariaDB/MySQL " + f"{c['host']}:{c['port']}/{c['database']}" if c["type"] == "mysql" else "SQLite " + str(db.SQLITE_FILE),
              "accounts exist" if users.any_users() else "no accounts yet: open to everyone until one is made")
+    sd = suitedb.public()
+    log.info("Shared ioSuite database (accounts, suite settings): %s@%s:%s/%s", sd["user"], sd["host"], sd["port"], sd["database"])
+    if suitedb.note:
+        log.warning(suitedb.note)
     async with mcp.server.session_manager.run():
         yield
 

@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, Request, UploadFile, File
 from fastapi.responses import Response
 from starlette.concurrency import run_in_threadpool
 
-from app import __version__, access, owners, backup, config, db, images, logs, notes, ocr, proxyauth, updates, users
+from app import __version__, access, owners, backup, config, db, images, logs, notes, ocr, proxyauth, suitedb, updates, users
 from app.http import json_body, user_name
 
 router = APIRouter()
@@ -41,6 +41,7 @@ def api_settings(request: Request):
         out["read_only_env"] = config.READ_ONLY
         out["mcp_forced"] = config.MCP_FORCED
         out["database"] = db.public_settings()
+        out["suite_database"] = suitedb.public()
         out["ocr"] = ocr.status()
         out["images"] = images.stats()
         out["appUrl"] = config.APP_URL
@@ -57,7 +58,7 @@ async def api_settings_set(request: Request):
             if k == "require_login":
                 if v and not users.any_users():
                     raise HTTPException(400, "Create an account first, or nobody could sign in")
-                users.set_require_login(bool(v))  # in the auth database, per app
+                users.set_require_login(bool(v))  # in the Shared ioSuite database, per app
                 continue
             db.set_setting(k, "1" if v else "0")
         elif k in TEXTS:

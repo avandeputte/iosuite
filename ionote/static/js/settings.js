@@ -117,7 +117,10 @@ function databaseBox(s) {
     try { await api('/api/db/save', { method: 'POST', body: vals() }); out.className = 'small okc'; out.textContent = 'Saved. Restart ionotes to use it (the notes are not copied across; export and import them).'; } catch (e) { out.className = 'small err'; out.textContent = e.message; }
   } }, 'Save');
   const env = d.fromEnv && d.fromEnv.length;
-  return box('Database', null, h('p', 'Notes, pictures, accounts and settings are all in: ', h('span.code', where), d.error ? h('span.err', ' ' + d.error) : null),
+  const sd = s.suite_database || {};
+  return box('Database', null, h('p', 'Notes, pictures and ionotes\' settings are in: ', h('span.code', where), d.error ? h('span.err', ' ' + d.error) : null),
+    h('p.small', 'Accounts, sessions and the suite-wide settings are in the Shared ioSuite database: ', h('span.code', `${sd.user}@${sd.host}:${sd.port}/${sd.database}`),
+      sd.fromEnv && sd.fromEnv.length ? ` (set in ionotes.env: ${sd.fromEnv.join(', ')})` : ' (the defaults; set IOSUITE_DB_* in ionotes.env)', '.'),
     h('p.small', `${s.images.images} pictures, ${(s.images.bytes / 1048576).toFixed(1)} MB, stored in the database.`),
     env ? h('p.small', 'Set in ionotes.env (DB_*): ' + d.fromEnv.join(', ') + '. Change it there.') :
       h('div', ...Object.entries({ Host: f.host, Port: f.port, Database: f.database, User: f.user, Password: f.password }).map(([l, e]) => h('div.row', h('label', l), e)), h('div.row', test, saveb)),

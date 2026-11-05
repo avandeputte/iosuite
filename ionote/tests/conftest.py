@@ -1,4 +1,4 @@
-"""Test set-up: a scratch DATA_DIR and a scratch database, emptied before every test; the shared accounts on a
+"""Test set-up: a scratch DATA_DIR and a scratch database, emptied before every test; the Shared ioSuite database on a
 test MariaDB of their own (iothing_auth.testing: Docker, or IOTHING_TEST_DB).
 
 SQLite by default. With IONOTES_TEST_DB=mysql the same tests run on MySQL/MariaDB, on the database named by
@@ -21,12 +21,14 @@ if os.environ.get("IONOTES_TEST_DB") == "mysql":
 else:
     os.environ["DB_TYPE"] = "sqlite"
 # the shared accounts (iothing-auth): a fresh database on the test MariaDB (a Docker container, or
-# IOTHING_TEST_DB=host:port:user:password), never the suite's live `auth`
+# IOTHING_TEST_DB=host:port:user:password), never the suite's live `iosuite` (or older `auth`)
 from iothing_auth import testing as _authtest  # noqa: E402
 
 if _authtest.server() is None:
     pytest.skip(f"{_authtest.server.reason}: the shared accounts need a MariaDB (Docker, or IOTHING_TEST_DB=host:port:user:password)", allow_module_level=True)
 os.environ.update(_authtest.auth_env("ionotes_test_auth"))
+for _k in ("HOST", "PORT", "NAME", "USER", "PASSWORD"):
+    os.environ.pop("IOSUITE_DB_" + _k, None)  # the test database above, never one named in the shell
 
 from app import db, users, proxyauth  # noqa: E402
 

@@ -7,7 +7,7 @@
 FROM python:3.12-slim
 ARG OCR=1
 # libheif1: HEIC pictures from iPhones (pillow-heif). libglib2.0-0: RapidOCR's headless OpenCV.
-# git: pip fetches the shared accounts package (iothing-auth) from GitHub.
+# git: pip fetches the ioSuite shared library (package iothing-auth, repository avandeputte/iosuite-shared) from GitHub.
 RUN apt-get update && apt-get install -y --no-install-recommends libheif1 libglib2.0-0 git \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app

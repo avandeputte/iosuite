@@ -1,5 +1,5 @@
 # ionotes with Docker: `docker compose up -d` pulls the published image; `docker compose up -d --build` builds it
-# from this checkout instead. Works as a stack in Dockge / Portainer. Edit the "CHANGE ME" spots (the database and
+# from this checkout instead. Works as a stack in Dockge / Portainer. Edit the "CHANGE ME" spots (the databases and
 # the admin password). Everything ionotes keeps (notes, pictures, accounts, settings) is in the MariaDB database;
 # the named volume only holds the session secret and the log.
 #
@@ -24,6 +24,13 @@ services:
       DB_DATABASE: notes
       DB_USER: notes
       DB_PASSWORD: change-me                        # CHANGE ME
+      # the Shared ioSuite database (MariaDB): accounts, sessions and suite-wide settings, shared with the other
+      # ioThing apps (an install from before 1.4 may still name it with IOTHING_AUTH_DB_*; both work)
+      IOSUITE_DB_HOST: 192.168.1.89                 # CHANGE ME
+      IOSUITE_DB_PORT: "3306"
+      IOSUITE_DB_NAME: iosuite
+      IOSUITE_DB_USER: iosuite
+      IOSUITE_DB_PASSWORD: change-me                # CHANGE ME
       # the first admin account, created on the first start (remove both lines to start open and create it in the web app)
       ADMIN_USER: admin
       ADMIN_PASSWORD: change-me-please              # CHANGE ME (8 characters or more)
