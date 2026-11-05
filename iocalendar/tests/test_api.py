@@ -197,8 +197,20 @@ def test_suite_apps_for_the_app_switcher(client):
     html = client.get("/").text
     assert 'id="suitebtn"' in html and "img-src 'self' data: blob: https:" in html
     client.get("/api/calendars")
-    suite.register("iocontacts", name="ioContacts", url="https://contacts.example.net", color="#4f2f7d", icon="/static/icon.svg")
+    suite.register("iocontacts", name="ioContacts", url="https://contacts.example.net", color="#4f2f7d")
     r = client.get("/api/auth/suite").json()
     assert r["app"] == "iocalendar"
     other = [a for a in r["items"] if a["app"] != r["app"]]
-    assert [(a["name"], a["url"], a["icon"]) for a in other] == [("ioContacts", "https://contacts.example.net", "https://contacts.example.net/static/icon.svg")]
+    assert [(a["name"], a["url"], a["icon"]) for a in other] == [("ioContacts", "https://contacts.example.net", "https://contacts.example.net/static/icons/mark.svg")]
+
+
+def test_the_shell_its_files_and_the_icon_are_public(client):
+    """The suite's layout: the page at /, every file it names under /static/, the mark at suite.ICON."""
+    import re
+    from iosuite_shared import suite
+    html = client.get("/").text
+    paths = re.findall(r'(?:src|href)="(static/[^"?]+)', html)
+    paths += [i["src"] for i in client.get("/manifest.webmanifest").json()["icons"]]
+    assert paths and all(p.startswith("static/") for p in paths)
+    for p in ["/" + p for p in paths] + [suite.ICON, "/static/icons/apple-touch-icon.png"]:
+        assert client.get(p).status_code == 200, p
