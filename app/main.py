@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app import APP_VERSION, api, config, db, users
 from app.auth import auth as auth_shared, updater
-from iothing_auth import sessions
+from iosuite_shared import sessions
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("iosuite")

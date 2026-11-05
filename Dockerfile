@@ -4,7 +4,7 @@ WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY app ./app
 COPY static ./static
-# git only while installing: the suite's shared library (avandeputte/iosuite-shared, package iothing-auth) comes from GitHub
+# git only while installing: the suite's shared library (avandeputte/iosuite-shared) comes from GitHub
 RUN apt-get update && apt-get install -y --no-install-recommends git \
     && pip install --no-cache-dir -e . \
     && apt-get purge -y --auto-remove git && rm -rf /var/lib/apt/lists/* \

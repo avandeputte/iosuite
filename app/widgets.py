@@ -19,7 +19,7 @@ import urllib.request
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import Request
-from iothing_auth import sessions
+from iosuite_shared import sessions
 
 from app import apps
 

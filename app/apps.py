@@ -1,7 +1,7 @@
 """The apps of the suite: what the start page shows a tile for, and where each one is.
 
 Every io app registers itself, with its address, in the suite's list of apps in the Shared ioSuite database
-(iothing_auth.suite, table `suite_apps`); the page reads that list and nothing else. An app that has not registered
+(iosuite_shared.suite, table `suite_apps`); the page reads that list and nothing else. An app that has not registered
 (not installed, or never started) has no tile. Nobody types an address.
 
 The catalogue below knows the apps the page has widgets for (their icon, colour and line, the page's own); an app it
@@ -11,7 +11,7 @@ import logging
 import re
 import time
 
-from iothing_auth import suite
+from iosuite_shared import suite
 
 from app import db
 
@@ -38,7 +38,7 @@ def is_key(k) -> bool:
 
 
 def registered() -> dict:
-    """{app key: entry} from the suite's list (iothing_auth.suite.apps()), kept REGISTRY_TTL seconds; the last list
+    """{app key: entry} from the suite's list (iosuite_shared.suite.apps()), kept REGISTRY_TTL seconds; the last list
     known when the Shared ioSuite database does not answer."""
     now = time.time()
     if now - _registry["at"] > REGISTRY_TTL:
