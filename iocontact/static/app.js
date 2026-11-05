@@ -703,35 +703,389 @@ async function showUpcoming(page) {
     : h('div', { class: 'empty' }, icon('cake'), h('p', null, 'No birthdays or anniversaries in that time.')));
 }
 
-async function showTree(page, r) {
-  const g = await api(`/api/contacts/${r.id}/family?depth=4`);
+// ------------------------------------------------------------------ the family tree
+// <kin> pure functions (no DOM): who is how related to the viewed contact, which generation they are in, and where
+// their card goes. tests/test_tree.py runs this block under node.
+const TREE = { W: 220, H: 84, GAP: 24, CGAP: 16, ROW: 164, PAD: 24 };
+const UP_STEP = { parent: 1, step_parent: 1, parent_in_law: 1, grandparent: 2, great_grandparent: 3, aunt_uncle: 1, godparent: 1,
+  child: -1, step_child: -1, child_in_law: -1, grandchild: -2, great_grandchild: -3, niece_nephew: -1, godchild: -1 };
+const SPOUSE_TYPES = new Set(['spouse', 'partner', 'ex_spouse']);
+const PC_INV = { parent: 'child', child: 'parent', step_parent: 'step_child', step_child: 'step_parent' };
+
+// The relation a blood path "u generations up, then d down" reads as, for someone of `gender`.
+function kinWord(u, d, gender, flags = {}) {
+  const g = (m, f, n) => (gender === 'M' ? m : gender === 'F' ? f : n);
+  const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+  const greats = (k) => 'great-'.repeat(Math.max(0, k));
+  const step = (w) => (flags.step ? `step${w.length > 6 ? '-' : ''}${w}` : w);
+  if (u === 0 && d === 0) return 'This contact';
+  if (d === 0) return cap(step(u === 1 ? g('father', 'mother', 'parent') : `${greats(u - 2)}grand${g('father', 'mother', 'parent')}`));
+  if (u === 0) return cap(step(d === 1 ? g('son', 'daughter', 'child') : `${greats(d - 2)}grand${g('son', 'daughter', 'child')}`));
+  if (u === 1 && d === 1) return cap(flags.half ? `half-${g('brother', 'sister', 'sibling')}` : step(g('brother', 'sister', 'sibling')));
+  if (d === 1) return cap(`${greats(u - 2)}${g('uncle', 'aunt', 'aunt or uncle')}`);
+  if (u === 1) return cap(`${d > 2 ? `${greats(d - 3)}grand` : ''}${g('nephew', 'niece', 'niece or nephew')}`);
+  const deg = Math.min(u, d) - 1, rem = Math.abs(u - d);
+  const ord = ['', 'first', 'second', 'third', 'fourth', 'fifth', 'sixth'][deg] || `${deg}th`;
+  const times = rem === 0 ? '' : [' once removed', ' twice removed', ' three times removed'][rem - 1] || ` ${rem} times removed`;
+  return cap(`${deg === 1 ? '' : `${ord} `}cousin${times}`);
+}
+
+// One step of a blood path: from "u up, d down" over an edge of `type`, or null when the step says nothing certain.
+function bloodStep(type, u, d) {
+  switch (type) {
+    case 'parent': case 'step_parent': return d ? null : [u + 1, 0];
+    case 'grandparent': return d ? null : [u + 2, 0];
+    case 'great_grandparent': return d ? null : [u + 3, 0];
+    case 'child': case 'step_child': return [u, d + 1];
+    case 'grandchild': return [u, d + 2];
+    case 'great_grandchild': return [u, d + 3];
+    case 'sibling': case 'half_sibling': case 'step_sibling': return d ? [u, d] : [u + 1, 1];
+    case 'aunt_uncle': return d ? null : [u + 2, 1];
+    case 'niece_nephew': return d ? null : [u + 1, 2];
+    case 'cousin': return d ? null : [u + 2, 2];
+    default: return null;
+  }
+}
+
+// g: {root, nodes, edges} from /api/contacts/{id}/family; famTypes: the family relation types; typeWord(type, gender).
+// Returns {gen, label, units, x, links, couples, sibGroups, order} for drawing.
+function familyLayout(g, famTypes, typeWord) {
   const byId = new Map(g.nodes.map((n) => [n.id, n]));
-  const UP = { parent: 1, step_parent: 1, parent_in_law: 1, grandparent: 2, great_grandparent: 3, aunt_uncle: 1, godparent: 1,
-    child: -1, step_child: -1, child_in_law: -1, grandchild: -2, great_grandchild: -3, niece_nephew: -1, godchild: -1 };
-  const famTypes = new Set(S.rel.groups[0].types.map((t) => t.type));
-  const gen = new Map([[g.root, 0]]), how = new Map([[g.root, null]]);
-  const queue = [g.root];
-  while (queue.length) {
-    const cur = queue.shift();
-    for (const e of g.edges.filter((x) => x.from === cur && famTypes.has(x.type))) {
-      if (gen.has(e.to)) continue;
-      gen.set(e.to, gen.get(cur) + (UP[e.type] || 0));
-      const lab = S.rel.groups[0].types.find((t) => t.type === e.type);
-      const node = byId.get(e.to) || {};
-      const word = lab ? (node.gender === 'M' ? lab.male : node.gender === 'F' ? lab.female : lab.label) : e.type;
-      how.set(e.to, cur === g.root ? word : `${word} of ${(byId.get(cur) || {}).fn}`);
-      queue.push(e.to);
+  const adj = new Map(g.nodes.map((n) => [n.id, []]));
+  const seenEdge = new Set();
+  const addEdge = (from, to, type, implied) => {
+    const k = `${from}|${to}|${type}`;
+    if (seenEdge.has(k) || !adj.has(from) || !adj.has(to) || from === to) return;
+    seenEdge.add(k); adj.get(from).push({ to, type, implied });
+  };
+  const INV = { parent: 'child', child: 'parent', sibling: 'sibling', half_sibling: 'half_sibling', spouse: 'spouse', partner: 'partner',
+    ex_spouse: 'ex_spouse', grandparent: 'grandchild', grandchild: 'grandparent', great_grandparent: 'great_grandchild',
+    great_grandchild: 'great_grandparent', aunt_uncle: 'niece_nephew', niece_nephew: 'aunt_uncle', cousin: 'cousin',
+    parent_in_law: 'child_in_law', child_in_law: 'parent_in_law', sibling_in_law: 'sibling_in_law', step_parent: 'step_child',
+    step_child: 'step_parent', step_sibling: 'step_sibling', godparent: 'godchild', godchild: 'godparent', relative: 'relative' };
+  const fam = g.edges.filter((e) => famTypes.has(e.type));
+  // stored relations first (they come with their inverse), then what the server inferred for the root
+  for (const e of fam.filter((x) => !x.implied)) { addEdge(e.from, e.to, e.type, false); if (INV[e.type]) addEdge(e.to, e.from, INV[e.type], false); }
+  for (const e of fam.filter((x) => x.implied)) addEdge(e.from, e.to, e.type, true);
+
+  // --- labels relative to the root: blood paths, then spouses, then the spouses' blood relatives, then anything else
+  const lab = new Map([[g.root, { segs: [], gen: 0, from: null }]]);
+  const order = [g.root];
+  const put = (id, v) => { lab.set(id, v); order.push(id); };
+  const bloodFrom = (seed) => {
+    const base = lab.get(seed), found = [];
+    const st = new Map([[seed, { u: 0, d: 0, step: false, half: false }]]);
+    const q = [seed];
+    while (q.length) {
+      const cur = q.shift(), s = st.get(cur);
+      for (const e of adj.get(cur)) {
+        if (st.has(e.to) || lab.has(e.to)) continue;
+        const nx = bloodStep(e.type, s.u, s.d);
+        if (!nx) continue;
+        const ns = { u: nx[0], d: nx[1], step: s.step || e.type.startsWith('step_'), half: s.half || e.type === 'half_sibling' };
+        st.set(e.to, ns); q.push(e.to);
+        if (ns.u === 0 && ns.d === 0) continue;
+        put(e.to, { segs: [...base.segs, { kind: 'blood', u: ns.u, d: ns.d, step: ns.step, half: ns.half, id: e.to }], gen: base.gen + ns.u - ns.d, from: cur });
+        found.push(e.to);
+      }
+    }
+    return found;
+  };
+  let fresh = [g.root, ...bloodFrom(g.root)];
+  for (let guard = 0; guard < 8 && fresh.length; guard++) {
+    const next = [];
+    for (const id of fresh) {
+      for (const e of adj.get(id)) {
+        if (!SPOUSE_TYPES.has(e.type) || lab.has(e.to)) continue;
+        const b = lab.get(id);
+        put(e.to, { segs: [...b.segs, { kind: 'spouse', type: e.type, id: e.to }], gen: b.gen, from: id });
+        next.push(e.to, ...bloodFrom(e.to));
+      }
+    }
+    if (!next.length) {
+      // nothing left over a spouse: one step over any other family relation (godparents, in-laws, "relative"…)
+      for (const id of [...order]) {
+        for (const e of adj.get(id)) {
+          if (lab.has(e.to)) continue;
+          const b = lab.get(id);
+          put(e.to, { segs: [...b.segs, { kind: 'type', type: e.type, id: e.to }], gen: b.gen + (UP_STEP[e.type] || 0), from: id });
+          next.push(e.to, ...bloodFrom(e.to));
+        }
+      }
+    }
+    fresh = next;
+  }
+
+  const gender = (id) => (byId.get(id) || {}).gender;
+  const segWord = (s) => (s.kind === 'blood' ? kinWord(s.u, s.d, gender(s.id), s) : typeWord(s.type, gender(s.id)));
+  const label = new Map();
+  for (const [id, v] of lab) {
+    const segs = v.segs, words = [];
+    for (let i = 0; i < segs.length; i++) {
+      const a = segs[i], b = segs[i + 1], gw = (m, f, n) => (gender(b && b.id) === 'M' ? m : gender(b && b.id) === 'F' ? f : n);
+      const isB = (s, u, d) => s && s.kind === 'blood' && s.u === u && s.d === d && !s.step;
+      const isSp = (s) => s && s.kind === 'spouse' && s.type !== 'ex_spouse';
+      let w = null;
+      if (isB(a, 1, 1) && isSp(b)) w = gw('Brother-in-law', 'Sister-in-law', 'Sibling-in-law');
+      else if (isB(a, 0, 1) && isSp(b)) w = gw('Son-in-law', 'Daughter-in-law', 'Child-in-law');
+      else if (isB(a, 1, 0) && isSp(b)) w = gw('Stepfather', 'Stepmother', 'Step-parent');
+      else if (a.kind === 'blood' && a.d === 1 && a.u >= 2 && isSp(b)) w = `${kinWord(a.u, 1, gender(b.id))} by marriage`;
+      else if (isSp(a) && isB(b, 1, 0)) w = gw('Father-in-law', 'Mother-in-law', 'Parent-in-law');
+      else if (isSp(a) && isB(b, 1, 1)) w = gw('Brother-in-law', 'Sister-in-law', 'Sibling-in-law');
+      else if (isSp(a) && isB(b, 0, 1)) w = gw('Stepson', 'Stepdaughter', 'Stepchild');
+      if (w) { words.push(w); i++; } else words.push(segWord(a));
+    }
+    label.set(id, id === g.root ? 'This contact' : words.map((w, i) => (i ? w.charAt(0).toLowerCase() + w.slice(1) : w)).join("'s "));
+  }
+  const gen = new Map([...lab].map(([id, v]) => [id, v.gen]));
+
+  // --- structure to draw: parent-child links (stored, plus siblings sharing a parent), couples, sibling groups
+  const parents = new Map([...gen.keys()].map((id) => [id, new Set()]));
+  for (const [id, list] of adj) {
+    if (!gen.has(id)) continue;
+    for (const e of list) {
+      if (e.implied || !gen.has(e.to)) continue;
+      if (e.type === 'child' || e.type === 'step_child') parents.get(e.to).add(id);
+      if (e.type === 'parent' || e.type === 'step_parent') parents.get(id).add(e.to);
     }
   }
-  const rows = new Map();
-  for (const [id, lvl] of gen) { if (!rows.has(lvl)) rows.set(lvl, []); rows.get(lvl).push(id); }
-  const names = { 3: 'Great-grandparents', 2: 'Grandparents', 1: 'Parents, aunts and uncles', 0: 'Same generation', '-1': 'Children, nieces and nephews', '-2': 'Grandchildren', '-3': 'Great-grandchildren' };
+  for (let pass = 0; pass < 2; pass++) {
+    for (const [id, list] of adj) {
+      if (!gen.has(id)) continue;
+      for (const e of list) if (!e.implied && e.type === 'sibling' && gen.has(e.to)) for (const p of parents.get(id)) parents.get(e.to).add(p);
+    }
+  }
+  const children = new Map([...gen.keys()].map((id) => [id, new Set()]));
+  for (const [c, ps] of parents) for (const p of ps) children.get(p).add(c);
+
+  const rowsOf = new Map();
+  for (const id of order) { if (!gen.has(id)) continue; const r = gen.get(id); if (!rowsOf.has(r)) rowsOf.set(r, []); rowsOf.get(r).push(id); }
+  const gens = [...rowsOf.keys()].sort((a, b) => b - a);
+  const unitOf = new Map(), units = [];
+  const couples = [];
+  for (const r of gens) {
+    for (const id of rowsOf.get(r)) {
+      if (unitOf.has(id)) continue;
+      const sp = adj.get(id).find((e) => !e.implied && SPOUSE_TYPES.has(e.type) && e.type !== 'ex_spouse' && gen.get(e.to) === r && !unitOf.has(e.to))
+        || adj.get(id).find((e) => !e.implied && e.type === 'ex_spouse' && gen.get(e.to) === r && !unitOf.has(e.to));
+      const u = { ids: sp ? [id, sp.to] : [id], gen: r };
+      if (sp) couples.push({ a: id, b: sp.to, ex: sp.type === 'ex_spouse' });
+      u.w = u.ids.length * TREE.W + (u.ids.length - 1) * TREE.CGAP;
+      u.ids.forEach((m) => unitOf.set(m, u)); units.push(u);
+    }
+  }
+  // siblings with no parent in the tree: kept together and drawn with a bracket
+  const sibRoot = new Map();
+  const find = (a) => { while (sibRoot.get(a) !== a) a = sibRoot.get(a); return a; };
+  for (const id of gen.keys()) sibRoot.set(id, id);
+  for (const [id, list] of adj) {
+    if (!gen.has(id) || parents.get(id).size) continue;
+    for (const e of list) if (!e.implied && (e.type === 'sibling' || e.type === 'half_sibling') && gen.get(e.to) === gen.get(id) && !parents.get(e.to).size) sibRoot.set(find(id), find(e.to));
+  }
+  const sibMap = new Map();
+  for (const id of gen.keys()) { const r = find(id); if (!sibMap.has(r)) sibMap.set(r, []); sibMap.get(r).push(id); }
+  const sibGroups = [...sibMap.values()].filter((s) => s.length > 1);
+  const sibOf = new Map(); sibGroups.forEach((s) => s.forEach((id) => sibOf.set(id, s)));
+
+  // --- x positions: rows packed in label order, then sweeps that pull each family under its parents / over its children
+  const x = new Map();
+  const cx = (id) => x.get(id) + TREE.W / 2;
+  const place = (u, left) => { u.ids.forEach((m, i) => x.set(m, left + i * (TREE.W + TREE.CGAP))); u.x = left; };
+  const rowUnits = new Map(gens.map((r) => [r, units.filter((u) => u.gen === r)]));
+  for (const r of gens) { let left = 0; for (const u of rowUnits.get(r)) { place(u, left); left += u.w + TREE.GAP; } }
+  const born = (id) => ((byId.get(id) || {}).birthday || {}).year || 9999;
+  const want = (u, dir) => {
+    const xs = [];
+    for (const m of u.ids) {
+      const ns = dir > 0 ? [...parents.get(m)] : dir < 0 ? [...children.get(m)] : [...parents.get(m), ...children.get(m)];
+      for (const n of ns) if (gen.get(n) !== u.gen) xs.push(cx(n));
+      // brothers and sisters (same parents, or a bracketed group) pull together, also when one of them married in
+      const sibs = new Set(sibOf.get(m) || []);
+      for (const p of parents.get(m)) for (const s of children.get(p)) sibs.add(s);
+      for (const s of sibs) if (s !== m && unitOf.get(s) !== u && gen.get(s) === u.gen) xs.push(cx(s));
+      if (!xs.length && !parents.get(m).size && !children.get(m).size) { const f = lab.get(m).from; if (f != null && unitOf.get(f) !== u) xs.push(cx(f)); }
+    }
+    return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : u.x + u.w / 2;
+  };
+  const pack = (us, wants) => {
+    const L = [], R = [];
+    us.forEach((u, i) => { L[i] = Math.max(wants[i] - u.w / 2, i ? L[i - 1] + us[i - 1].w + TREE.GAP : -Infinity); });
+    for (let i = us.length - 1; i >= 0; i--) R[i] = Math.min(wants[i] - us[i].w / 2, i < us.length - 1 ? R[i + 1] - us[i].w - TREE.GAP : Infinity);
+    us.forEach((u, i) => place(u, (L[i] + R[i]) / 2));
+  };
+  for (let it = 0; it < 24; it++) {
+    const down = it % 2 === 0;
+    const seq = down ? gens : [...gens].reverse();
+    for (const r of seq) {
+      const us = rowUnits.get(r);
+      const w = new Map(us.map((u) => [u, want(u, it >= 20 ? 0 : down ? 1 : -1)]));
+      us.sort((a, b) => w.get(a) - w.get(b) || born(a.ids[0]) - born(b.ids[0]));
+      for (const u of us) if (u.ids.length === 2) {
+        // each partner sits on the side of their own parents and brothers and sisters
+        const side = (m) => {
+          const ns = [...parents.get(m)];
+          for (const p of parents.get(m)) for (const s of children.get(p)) if (s !== m && !u.ids.includes(s)) ns.push(s);
+          return ns.length ? ns.reduce((t, n) => t + cx(n), 0) / ns.length : null;
+        };
+        const [a, b] = u.ids, sa = side(a), sb = side(b), mid = u.x + u.w / 2;
+        if (sa != null && sb != null ? sa > sb : sa != null ? sa > mid : sb != null ? sb < mid : false) { u.ids.reverse(); place(u, u.x); }
+      }
+      pack(us, us.map((u) => w.get(u)));
+    }
+  }
+  // then fewer crossing lines (and, among equals, shorter ones): move units in a row (or turn a couple around) while that untangles parent-child lines
+  const pcLinks = [];
+  for (const [c, ps] of parents) for (const p of ps) if (gen.get(p) === gen.get(c) + 1) pcLinks.push([p, c]);
+  const linksByRow = new Map();
+  for (const l of pcLinks) { const k = gen.get(l[0]); if (!linksByRow.has(k)) linksByRow.set(k, []); linksByRow.get(k).push(l); }
+  const crossings = () => {
+    const rank = new Map();
+    for (const r of gens) { let i = 0; for (const u of rowUnits.get(r)) for (const m of u.ids) rank.set(m, i++); }
+    const pr = (p) => { const u = unitOf.get(p); return u.ids.reduce((t, m) => t + rank.get(m), 0) / u.ids.length; };
+    let n = 0;
+    for (const links of linksByRow.values()) {
+      const ls = links.map(([a, b]) => [pr(a), rank.get(b)]);
+      for (const [a, b] of ls) n += Math.abs(a - b) / 1000;  // shorter lines break ties
+      for (let i = 0; i < ls.length; i++) for (let j = i + 1; j < ls.length; j++) if ((ls[i][0] - ls[j][0]) * (ls[i][1] - ls[j][1]) < 0) n++;
+    }
+    return n;
+  };
+  // sifting: each unit tries every place in its row (and a couple both ways round); the rows above and below then follow
+  // it (sorted under their parents / over their children) and the arrangement with the fewest crossings wins
+  const rankNow = () => {
+    const rank = new Map();
+    for (const r of gens) { let i = 0; for (const u of rowUnits.get(r)) for (const m of u.ids) rank.set(m, i++); }
+    return rank;
+  };
+  const follow = (r0) => {
+    const i0 = gens.indexOf(r0);
+    for (const [seq, rel] of [[gens.slice(i0 + 1), parents], [gens.slice(0, i0).reverse(), children]]) {
+      for (const r of seq) {
+        const rank = rankNow(), us = rowUnits.get(r);
+        const key = new Map(us.map((u, i) => {
+          const xs = u.ids.flatMap((m) => [...rel.get(m)].filter((n) => gen.get(n) !== r).map((n) => rank.get(n)));
+          return [u, xs.length ? xs.reduce((t, v) => t + v, 0) / xs.length : null];
+        }));
+        // units without links keep their place relative to their neighbours
+        let last = -1;
+        const k2 = new Map(us.map((u) => { const k = key.get(u); if (k != null) last = k; return [u, k != null ? k : last + 0.001]; }));
+        us.sort((a, b) => k2.get(a) - k2.get(b));
+      }
+    }
+  };
+  const snap = () => new Map(gens.map((r) => [r, rowUnits.get(r).map((u) => [u, [...u.ids]])]));
+  const restore = (sn) => { for (const [r, list] of sn) { rowUnits.set(r, list.map(([u]) => u)); list.forEach(([u, ids]) => { u.ids = [...ids]; }); } };
+  let best = crossings();
+  const until = Date.now() + 300;  // big families: stop untangling after 0.3 s and draw what we have
+  for (let pass = 0; pass < 4 && best >= 1 && Date.now() < until; pass++) {
+    const before = best;
+    for (const r of gens) {
+      for (const u of [...rowUnits.get(r)]) {
+        if (Date.now() > until) break;
+        let keep = snap();
+        const n0 = rowUnits.get(r).length;
+        for (let i = 0; i < n0; i++) {
+          for (const f of u.ids.length === 2 ? [false, true] : [false]) {
+            const base = snap();
+            const us = rowUnits.get(r);
+            us.splice(us.indexOf(u), 1); us.splice(i, 0, u); if (f) u.ids.reverse();
+            follow(r);
+            const n = crossings();
+            if (n < best - 1e-9) { best = n; keep = snap(); }
+            restore(base);
+          }
+        }
+        restore(keep);
+      }
+    }
+    if (best >= before - 1e-9) break;
+  }
+  // and last, positions for that order: each family centred on its links, without reordering
+  for (let it = 0; it < 12; it++) {
+    for (const r of it % 2 ? [...gens].reverse() : gens) {
+      const us = rowUnits.get(r);
+      for (const u of us) place(u, u.x);
+      pack(us, us.map((u) => want(u, 0)));
+    }
+  }
+  const minX = Math.min(...x.values());
+  for (const [id, v] of x) x.set(id, Math.round(v - minX + TREE.PAD));
+  const y = new Map([...gen].map(([id, r]) => [id, TREE.PAD + gens.indexOf(r) * TREE.ROW]));
+  const width = Math.max(...x.values()) + TREE.W + TREE.PAD, height = TREE.PAD * 2 + (gens.length - 1) * TREE.ROW + TREE.H;
+  const families = new Map();
+  for (const [c, ps] of parents) { if (!ps.size) continue; const k = [...ps].sort((a, b) => a - b).join(','); if (!families.has(k)) families.set(k, { parents: [...ps], children: [] }); families.get(k).children.push(c); }
+  // each family's horizontal line gets its own lane between the two rows, so lines of different families never run together
+  const fams = [...families.values()];
+  const span = (f) => { const xs = [...f.parents, ...f.children].map(cx); return [Math.min(...xs), Math.max(...xs)]; };
+  const lanes = new Map();
+  for (const f of fams.sort((a, b) => span(a)[0] - span(b)[0])) {
+    const k = Math.max(...f.parents.map((p) => gen.get(p)));
+    if (!lanes.has(k)) lanes.set(k, []);
+    const used = lanes.get(k), [lo, hi] = span(f);
+    let lane = 0;
+    while (used.some((o) => o.lane === lane && o.lo - 12 < hi && lo < o.hi + 12)) lane++;
+    used.push({ lane, lo, hi }); f.lane = lane;
+  }
+  for (const f of fams) f.lanes = lanes.get(Math.max(...f.parents.map((p) => gen.get(p)))).reduce((m, o) => Math.max(m, o.lane + 1), 0);
+  return { gen, label, x, y, width, height, gens, couples, sibGroups, families: fams, order: order.filter((id) => gen.has(id)) };
+}
+// </kin>
+
+async function showTree(page, r) {
+  const g = await api(`/api/contacts/${r.id}/family?depth=4`);
+  const types = S.rel.groups[0].types;
+  const typeWord = (t, gender) => { const x = types.find((y) => y.type === t); return x ? (gender === 'M' ? x.male : gender === 'F' ? x.female : x.label) : t; };
+  const L = familyLayout(g, new Set(types.map((t) => t.type)), typeWord);
+  const byId = new Map(g.nodes.map((n) => [n.id, n]));
   const root = byId.get(g.root);
-  page.append(h('div', { class: 'pagehead' }, h('a', { class: 'iconbtn', href: `#/c/${g.root}` }, icon('back')), h('h1', null, `${root.fn}'s family`)),
-    gen.size > 1 ? h('div', { class: 'tree' }, [...rows.keys()].sort((a, b) => b - a).map((lvl) => [h('div', { class: 'gen' }, names[lvl] || (lvl > 0 ? `${lvl} generations up` : `${-lvl} generations down`)),
-      h('div', { class: 'genrow' }, rows.get(lvl).map((id) => { const n = byId.get(id); return h('a', { class: `tcard ${id === g.root ? 'root' : ''}`, href: id === g.root ? `#/c/${id}` : `#/tree/${id}`, title: id === g.root ? 'Open the contact' : 'Their family' }, avatar({ id, fn: n.fn, hasPhoto: n.hasPhoto, iopixPersonId: n.iopixPersonId }, 'm'),
-        h('div', null, h('b', null, n.fn), h('div', { class: 'muted small' }, id === g.root ? 'This contact' : how.get(id)), n.birthday && n.birthday.year ? h('div', { class: 'muted small' }, `born ${n.birthday.year}`) : null)); }))]))
-      : h('div', { class: 'empty' }, h('p', null, 'No family relations to other contacts yet. Edit the contact and add parents, siblings, children…')));
+  const head = h('div', { class: 'pagehead' }, h('a', { class: 'iconbtn', href: `#/c/${g.root}` }, icon('back')), h('h1', null, `${root.fn}'s family`));
+  if (L.gen.size < 2) {
+    page.append(head, h('div', { class: 'empty' }, h('p', null, 'No family relations to other contacts yet. Edit the contact and add parents, siblings, children…')));
+    return;
+  }
+  const { W, H } = TREE;
+  const NS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('width', L.width); svg.setAttribute('height', L.height); svg.setAttribute('class', 'ftree-lines');
+  const line = (pts, cls = '') => { const p = document.createElementNS(NS, 'polyline'); p.setAttribute('points', pts.map((q) => q.join(',')).join(' ')); if (cls) p.setAttribute('class', cls); svg.append(p); };
+  const X = (id) => L.x.get(id), Y = (id) => L.y.get(id);
+  const coupleOf = new Map(); L.couples.forEach((c) => { coupleOf.set(c.a, c); coupleOf.set(c.b, c); });
+  for (const c of L.couples) {
+    const [a, b] = X(c.a) < X(c.b) ? [c.a, c.b] : [c.b, c.a];
+    line([[X(a) + W, Y(a) + H / 2], [X(b), Y(b) + H / 2]], c.ex ? 'ex' : '');
+  }
+  L.families.forEach((f) => {
+    const c = f.parents.length === 2 && coupleOf.get(f.parents[0]) === coupleOf.get(f.parents[1]) ? coupleOf.get(f.parents[0]) : null;
+    const pBottom = Math.max(...f.parents.map((p) => Y(p) + H));
+    const cTop = Math.min(...f.children.map(Y));
+    const step = Math.min(16, (cTop - pBottom - 16) / Math.max(1, f.lanes));
+    const bus = Math.max(pBottom + 8, (pBottom + cTop) / 2 + (f.lane - (f.lanes - 1) / 2) * step);
+    const xs = [];
+    if (c) { const ox = (Math.min(X(c.a), X(c.b)) + W + Math.max(X(c.a), X(c.b))) / 2; xs.push(ox); line([[ox, Y(c.a) + H / 2], [ox, bus]]); }
+    else for (const p of f.parents) { const ox = X(p) + W / 2; xs.push(ox); line([[ox, Y(p) + H], [ox, bus]]); }
+    for (const ch of f.children) { const ox = X(ch) + W / 2; xs.push(ox); line([[ox, bus], [ox, Y(ch)]]); }
+    line([[Math.min(...xs), bus], [Math.max(...xs), bus]]);
+  });
+  for (const s of L.sibGroups) {
+    const top = Y(s[0]) - 14, xs = s.map((id) => X(id) + W / 2);
+    line([[Math.min(...xs), top], [Math.max(...xs), top]], 'sib');
+    xs.forEach((ox, i) => line([[ox, top], [ox, Y(s[i])]], 'sib'));
+  }
+  const canvas = h('div', { class: 'ftree-canvas', style: { width: `${L.width}px`, height: `${L.height}px` } }, svg,
+    L.order.map((id) => {
+      const n = byId.get(id), isRoot = id === g.root;
+      return h('a', { class: `fcard ${isRoot ? 'root' : ''}`, style: { left: `${X(id)}px`, top: `${Y(id)}px`, width: `${W}px`, height: `${H}px` },
+        href: isRoot ? `#/c/${id}` : `#/tree/${id}`, title: isRoot ? 'Open the contact' : `${n.fn}: ${L.label.get(id)}. Show the tree from their side` },
+      avatar({ id, fn: n.fn, hasPhoto: n.hasPhoto, iopixPersonId: n.iopixPersonId }),
+      h('div', { class: 'fbody' }, h('b', null, n.fn), h('div', { class: 'muted small rel' }, L.label.get(id)),
+        n.birthday && n.birthday.year ? h('div', { class: 'muted small' }, `born ${n.birthday.year}`) : null));
+    }));
+  const wrap = h('div', { class: 'ftree' }, canvas);
+  page.append(head, h('p', { class: 'muted small ftree-hint' }, `Everyone is labeled by how they are related to ${root.fn}. Click or tap someone to see the tree from their side.`), wrap);
+  requestAnimationFrame(() => {
+    wrap.scrollLeft = X(g.root) + W / 2 - wrap.clientWidth / 2;
+    wrap.scrollTop = Y(g.root) + H / 2 - wrap.clientHeight / 2;
+  });
 }
 
 // ------------------------------------------------------------------ maintenance: duplicates, data quality, suggestions, merges
