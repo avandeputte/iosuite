@@ -6,10 +6,10 @@ with the record as the server has it, so the device takes that instead. Every ch
 GET /api/sync?since=<rev> hands a device everything that changed after the last rev it saw, tombstones of
 deleted records included.
 
-Every note, folder, tag colour and change-log line belongs to one account (owner: its id in the suite's auth
+Every note, folder, tag colour and change-log line belongs to one account (user_id: its id in the suite's auth
 database); nobody sees or changes another account's notes. Who is asking is set per request (current_owner, by
 app/main.py from the signed-in user, or the MCP server's account); every function here works on that account's
-records only. Records made before any account existed (owner 0) go to the first admin (claim_unowned).
+records only. Records made before any account existed (user_id 0) go to the first admin (claim_unowned).
 
 Text read from an image (OCR) is done on the device where it can be (Apple's Vision on the Mac and the iPhone)
 and sent along as ocr_text; the server reads it itself (RapidOCR, app/ocr.py) only for notes made in the web app.
@@ -100,7 +100,7 @@ def tag_dict(r) -> dict:
 
 
 def log_change(con, user: str, action: str, kind: str, uid: str, summary: str):
-    con.execute("INSERT INTO change_log (ts, user_name, action, kind, uuid, summary, owner) VALUES (?,?,?,?,?,?,?)",
+    con.execute("INSERT INTO nts_change_log (created_at, user_name, action, kind, uuid, summary, user_id) VALUES (?,?,?,?,?,?,?)",
                 (int(time.time()), user, action, kind, uid, summary[:300], owner()))
 
 
@@ -121,7 +121,7 @@ def claim_unowned(first_admin_id) -> int:
 def owner_counts() -> dict:
     """How many notes (the trash included) each owner id has, for Maintenance › Who owns the notes."""
     with db.connect() as con:
-        return {int(r[0]): int(r[1]) for r in con.execute("SELECT owner, count(*) FROM notes GROUP BY owner").fetchall()}
+        return {int(r[0]): int(r[1]) for r in con.execute("SELECT user_id, count(*) FROM nts_notes GROUP BY user_id").fetchall()}
 
 
 def reassign(from_owner: int, to_owner: int) -> int:
@@ -132,18 +132,18 @@ def reassign(from_owner: int, to_owner: int) -> int:
     if from_owner == to_owner or to_owner <= 0:
         return 0
     with db.tx() as con:
-        ids = [r[0] for r in con.execute("SELECT uuid FROM notes WHERE owner = ?", (from_owner,)).fetchall()]
+        ids = [r[0] for r in con.execute("SELECT uuid FROM nts_notes WHERE user_id = ?", (from_owner,)).fetchall()]
         for uid in ids:
-            con.execute("UPDATE notes SET owner = ?, rev = ? WHERE uuid = ?", (to_owner, db.next_rev(con), uid))
-        for (fid,) in con.execute("SELECT uuid FROM folders WHERE owner = ?", (from_owner,)).fetchall():
-            con.execute("UPDATE folders SET owner = ?, rev = ? WHERE uuid = ?", (to_owner, db.next_rev(con), fid))
-        theirs = {r[0] for r in con.execute("SELECT tag_key FROM tag_colors WHERE owner = ?", (to_owner,)).fetchall()}
-        for (key,) in con.execute("SELECT tag_key FROM tag_colors WHERE owner = ?", (from_owner,)).fetchall():
+            con.execute("UPDATE nts_notes SET user_id = ?, rev = ? WHERE uuid = ?", (to_owner, db.next_rev(con), uid))
+        for (fid,) in con.execute("SELECT uuid FROM nts_folders WHERE user_id = ?", (from_owner,)).fetchall():
+            con.execute("UPDATE nts_folders SET user_id = ?, rev = ? WHERE uuid = ?", (to_owner, db.next_rev(con), fid))
+        theirs = {r[0] for r in con.execute("SELECT tag_key FROM nts_tag_colors WHERE user_id = ?", (to_owner,)).fetchall()}
+        for (key,) in con.execute("SELECT tag_key FROM nts_tag_colors WHERE user_id = ?", (from_owner,)).fetchall():
             if key in theirs:
-                con.execute("DELETE FROM tag_colors WHERE owner = ? AND tag_key = ?", (from_owner, key))
+                con.execute("DELETE FROM nts_tag_colors WHERE user_id = ? AND tag_key = ?", (from_owner, key))
             else:
-                con.execute("UPDATE tag_colors SET owner = ?, rev = ? WHERE owner = ? AND tag_key = ?", (to_owner, db.next_rev(con), from_owner, key))
-        con.execute("UPDATE change_log SET owner = ? WHERE owner = ?", (to_owner, from_owner))
+                con.execute("UPDATE nts_tag_colors SET user_id = ?, rev = ? WHERE user_id = ? AND tag_key = ?", (to_owner, db.next_rev(con), from_owner, key))
+        con.execute("UPDATE nts_change_log SET user_id = ? WHERE user_id = ?", (to_owner, from_owner))
     return len(ids)
 
 
@@ -161,7 +161,7 @@ def get_note(uid: str, con=None):
     own = con is None
     con = con or db.connect()
     try:
-        r = con.execute(f"SELECT {NOTE_COLS} FROM notes WHERE uuid = ? AND owner = ?", (check_uuid(uid), owner())).fetchone()
+        r = con.execute(f"SELECT {NOTE_COLS} FROM nts_notes WHERE uuid = ? AND user_id = ?", (check_uuid(uid), owner())).fetchone()
         return note_dict(r) if r else None
     finally:
         if own:
@@ -208,7 +208,7 @@ def list_notes(q: str = "", folder: str = None, tag: str = None, pinned: bool = 
                created_from: float = None, created_before: float = None) -> dict:
     """A page of notes, pinned first, then by sort. folder: an id, or "none" for notes in no folder;
     created_from / created_before: a range of creation times (seconds; the end left out)."""
-    where, params = ["owner = ?", "deleted = 0"], [owner()]
+    where, params = ["user_id = ?", "deleted = 0"], [owner()]
     with db.connect() as con:
         if q and q.strip():
             s, p = _search_clause(con, q)
@@ -240,9 +240,9 @@ def list_notes(q: str = "", folder: str = None, tag: str = None, pinned: bool = 
             where.append("created_at < ?")
             params.append(float(created_before))
         w = " AND ".join(where)
-        total = con.execute(f"SELECT count(*) FROM notes WHERE {w}", params).fetchone()[0]
+        total = con.execute(f"SELECT count(*) FROM nts_notes WHERE {w}", params).fetchone()[0]
         order = SORTS.get(sort, SORTS["updated"])
-        rows = con.execute(f"SELECT {NOTE_COLS} FROM notes WHERE {w} ORDER BY pinned DESC, {order} LIMIT ? OFFSET ?",
+        rows = con.execute(f"SELECT {NOTE_COLS} FROM nts_notes WHERE {w} ORDER BY pinned DESC, {order} LIMIT ? OFFSET ?",
                            params + [max(1, min(int(limit), 1000)), max(0, int(offset))]).fetchall()
     out = [note_dict(r) for r in rows]
     if tag:  # the LIKE above is a prefilter; exact (case-insensitive) membership here
@@ -257,8 +257,8 @@ def save_note(uid: str, data: dict, user: str, force: bool = False) -> dict:
     uid = check_uuid(uid) if uid else new_uuid()
     now = time.time()
     with db.tx() as con:
-        cur = con.execute(f"SELECT {NOTE_COLS}, owner FROM notes WHERE uuid = ?", (uid,)).fetchone()
-        if cur and cur["owner"] != owner():
+        cur = con.execute(f"SELECT {NOTE_COLS}, user_id FROM nts_notes WHERE uuid = ?", (uid,)).fetchone()
+        if cur and cur["user_id"] != owner():
             raise NotFound("No such note")  # another account's id: refused without saying so
         old = note_dict(cur) if cur else None
         ts = float(data.get("updatedAt") or now)
@@ -282,10 +282,10 @@ def save_note(uid: str, data: dict, user: str, force: bool = False) -> dict:
             n["pinned"] = bool(data["pinned"])
         if "folderID" in data:
             n["folderID"] = check_uuid(data["folderID"]) if data["folderID"] else None
-            if n["folderID"] and not con.execute("SELECT 1 FROM folders WHERE uuid = ? AND owner = ?", (n["folderID"], owner())).fetchone():
+            if n["folderID"] and not con.execute("SELECT 1 FROM nts_folders WHERE uuid = ? AND user_id = ?", (n["folderID"], owner())).fetchone():
                 # a folder this account doesn't have (yet: a device may send the note before its folder) stays as sent
                 # only when no other account owns that id
-                if con.execute("SELECT 1 FROM folders WHERE uuid = ?", (n["folderID"],)).fetchone():
+                if con.execute("SELECT 1 FROM nts_folders WHERE uuid = ?", (n["folderID"],)).fetchone():
                     n["folderID"] = None
         if "deleted" in data:
             n["deleted"] = bool(data["deleted"])
@@ -293,13 +293,13 @@ def save_note(uid: str, data: dict, user: str, force: bool = False) -> dict:
         vals = (n["title"], n["body"], n["ocrText"], n["source"], n["sourceApp"], n["createdAt"], ts, json.dumps(n["tags"], ensure_ascii=False),
                 1 if n["pinned"] else 0, n["folderID"], 1 if n["hasImage"] else 0, n["imageSHA"], 1 if n["deleted"] else 0, rev, user)
         if old:
-            con.execute("UPDATE notes SET title=?, body=?, ocr_text=?, source=?, source_app=?, created_at=?, updated_at=?, tags=?, pinned=?, "
+            con.execute("UPDATE nts_notes SET title=?, body=?, ocr_text=?, source=?, source_app=?, created_at=?, updated_at=?, tags=?, pinned=?, "
                         "folder_id=?, has_image=?, image_sha=?, deleted=?, rev=?, changed_by=? WHERE uuid=?", vals + (uid,))
         else:
-            con.execute(f"INSERT INTO notes ({NOTE_COLS}, owner) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", (uid,) + vals + (owner(),))
+            con.execute(f"INSERT INTO nts_notes ({NOTE_COLS}, user_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", (uid,) + vals + (owner(),))
         if n["deleted"] and n["hasImage"]:
-            con.execute("DELETE FROM note_images WHERE uuid = ?", (uid,))
-            con.execute("UPDATE notes SET has_image = 0, image_sha = NULL WHERE uuid = ?", (uid,))
+            con.execute("DELETE FROM nts_note_images WHERE uuid = ?", (uid,))
+            con.execute("UPDATE nts_notes SET has_image = 0, image_sha = NULL WHERE uuid = ?", (uid,))
         action = "delete" if n["deleted"] and not (old and old["deleted"]) else ("create" if not old or old["deleted"] else "edit")
         log_change(con, user, action, "note", uid, display_title(n))
         return get_note(uid, con)
@@ -316,7 +316,7 @@ def restore_note(uid: str, user: str) -> dict:
 def trash(limit: int = 200) -> list:
     """Notes deleted in the last 30 days (their text is kept; an image goes with the delete)."""
     with db.connect() as con:
-        rows = con.execute(f"SELECT {NOTE_COLS} FROM notes WHERE owner = ? AND deleted = 1 AND updated_at > ? ORDER BY updated_at DESC LIMIT ?",
+        rows = con.execute(f"SELECT {NOTE_COLS} FROM nts_notes WHERE user_id = ? AND deleted = 1 AND updated_at > ? ORDER BY updated_at DESC LIMIT ?",
                            (owner(), time.time() - 30 * 86400, limit)).fetchall()
     return [note_dict(r) for r in rows]
 
@@ -325,16 +325,16 @@ def set_ocr_text(uid: str, text: str, sha: str):
     """Text the server read from a web note's picture (the one with this sha: not one replaced since), stored with
     a new rev and the note's edit time unchanged. Runs on the OCR thread, for whichever account owns the note."""
     with db.tx() as con:
-        if con.execute("SELECT 1 FROM notes WHERE uuid = ? AND image_sha = ? AND (ocr_text = '' OR ocr_text IS NULL)", (uid, sha)).fetchone():
-            con.execute("UPDATE notes SET ocr_text = ?, rev = ? WHERE uuid = ?", (_text(text), db.next_rev(con), uid))
+        if con.execute("SELECT 1 FROM nts_notes WHERE uuid = ? AND image_sha = ? AND (ocr_text = '' OR ocr_text IS NULL)", (uid, sha)).fetchone():
+            con.execute("UPDATE nts_notes SET ocr_text = ?, rev = ? WHERE uuid = ?", (_text(text), db.next_rev(con), uid))
 
 
 # ---- folders
 def list_folders(include_deleted: bool = False) -> list:
     with db.connect() as con:
         rows = con.execute("SELECT f.uuid, f.name, f.color, f.created_at, f.updated_at, f.deleted, f.rev, "
-                           "(SELECT count(*) FROM notes n WHERE n.folder_id = f.uuid AND n.deleted = 0 AND n.owner = f.owner) AS count "
-                           f"FROM folders f WHERE f.owner = ? {'' if include_deleted else 'AND f.deleted = 0'} ORDER BY lower(f.name)", (owner(),)).fetchall()
+                           "(SELECT count(*) FROM nts_notes n WHERE n.folder_id = f.uuid AND n.deleted = 0 AND n.user_id = f.user_id) AS count "
+                           f"FROM nts_folders f WHERE f.user_id = ? {'' if include_deleted else 'AND f.deleted = 0'} ORDER BY lower(f.name)", (owner(),)).fetchall()
     return [{**folder_dict(r), "count": r["count"]} for r in rows]
 
 
@@ -342,8 +342,8 @@ def save_folder(uid: str, data: dict, user: str, force: bool = False) -> dict:
     uid = check_uuid(uid) if uid else new_uuid()
     now = time.time()
     with db.tx() as con:
-        r = con.execute("SELECT uuid, name, color, created_at, updated_at, deleted, rev, owner FROM folders WHERE uuid = ?", (uid,)).fetchone()
-        if r and r["owner"] != owner():
+        r = con.execute("SELECT uuid, name, color, created_at, updated_at, deleted, rev, user_id FROM nts_folders WHERE uuid = ?", (uid,)).fetchone()
+        if r and r["user_id"] != owner():
             raise NotFound("No such folder")
         old = folder_dict(r) if r else None
         ts = float(data.get("updatedAt") or now)
@@ -362,17 +362,17 @@ def save_folder(uid: str, data: dict, user: str, force: bool = False) -> dict:
             raise ValueError("A folder needs a name")
         rev = db.next_rev(con)
         if old:
-            con.execute("UPDATE folders SET name=?, color=?, created_at=?, updated_at=?, deleted=?, rev=? WHERE uuid=?",
+            con.execute("UPDATE nts_folders SET name=?, color=?, created_at=?, updated_at=?, deleted=?, rev=? WHERE uuid=?",
                         (f["name"], f["color"], f["createdAt"], ts, 1 if f["deleted"] else 0, rev, uid))
         else:
-            con.execute("INSERT INTO folders (uuid, name, color, created_at, updated_at, deleted, rev, owner) VALUES (?,?,?,?,?,?,?,?)",
+            con.execute("INSERT INTO nts_folders (uuid, name, color, created_at, updated_at, deleted, rev, user_id) VALUES (?,?,?,?,?,?,?,?)",
                         (uid, f["name"], f["color"], f["createdAt"], ts, 1 if f["deleted"] else 0, rev, owner()))
         if f["deleted"] and not (old and old["deleted"]):
             # its notes stay, in no folder (what the apps do when a folder is deleted)
-            for (nid,) in con.execute("SELECT uuid FROM notes WHERE folder_id = ? AND owner = ?", (uid, owner())).fetchall():
-                con.execute("UPDATE notes SET folder_id = NULL, rev = ?, updated_at = ? WHERE uuid = ?", (db.next_rev(con), max(ts, now), nid))
+            for (nid,) in con.execute("SELECT uuid FROM nts_notes WHERE folder_id = ? AND user_id = ?", (uid, owner())).fetchall():
+                con.execute("UPDATE nts_notes SET folder_id = NULL, rev = ?, updated_at = ? WHERE uuid = ?", (db.next_rev(con), max(ts, now), nid))
         log_change(con, user, "delete" if f["deleted"] else ("create" if not old else "edit"), "folder", uid, f["name"])
-        r = con.execute("SELECT uuid, name, color, created_at, updated_at, deleted, rev FROM folders WHERE uuid = ?", (uid,)).fetchone()
+        r = con.execute("SELECT uuid, name, color, created_at, updated_at, deleted, rev FROM nts_folders WHERE uuid = ?", (uid,)).fetchone()
         return folder_dict(r)
 
 
@@ -385,19 +385,19 @@ def list_tags() -> list:
     """Every tag on a note, with its count and colour, by name."""
     counts, names = {}, {}
     with db.connect() as con:
-        for (tags,) in con.execute("SELECT tags FROM notes WHERE owner = ? AND deleted = 0 AND tags != '[]'", (owner(),)).fetchall():
+        for (tags,) in con.execute("SELECT tags FROM nts_notes WHERE user_id = ? AND deleted = 0 AND tags != '[]'", (owner(),)).fetchall():
             for t in json.loads(tags or "[]"):
                 k = tag_key(t)
                 counts[k] = counts.get(k, 0) + 1
                 names.setdefault(k, t)
-        colors = {r["tag_key"]: r for r in con.execute("SELECT tag_key, name, color FROM tag_colors WHERE owner = ? AND deleted = 0", (owner(),)).fetchall()}
+        colors = {r["tag_key"]: r for r in con.execute("SELECT tag_key, name, color FROM nts_tag_colors WHERE user_id = ? AND deleted = 0", (owner(),)).fetchall()}
     return sorted([{"name": names[k], "count": c, "color": colors[k]["color"] if k in colors else None} for k, c in counts.items()],
                   key=lambda t: t["name"].lower())
 
 
 def tag_colors(include_deleted: bool = False) -> list:
     with db.connect() as con:
-        rows = con.execute(f"SELECT tag_key, name, color, updated_at, deleted, rev FROM tag_colors WHERE owner = ? {'' if include_deleted else 'AND deleted = 0'}",
+        rows = con.execute(f"SELECT tag_key, name, color, updated_at, deleted, rev FROM nts_tag_colors WHERE user_id = ? {'' if include_deleted else 'AND deleted = 0'}",
                            (owner(),)).fetchall()
     return [tag_dict(r) for r in rows]
 
@@ -410,14 +410,14 @@ def set_tag_color(name: str, color, user: str, ts: float = None, force: bool = F
     ts = float(ts or time.time())
     color = color if color in COLORS else None
     with db.tx() as con:
-        r = con.execute("SELECT tag_key, name, color, updated_at, deleted, rev FROM tag_colors WHERE owner = ? AND tag_key = ?", (owner(), k)).fetchone()
+        r = con.execute("SELECT tag_key, name, color, updated_at, deleted, rev FROM nts_tag_colors WHERE user_id = ? AND tag_key = ?", (owner(), k)).fetchone()
         if r and not force and ts < r["updated_at"]:
             raise Stale(tag_dict(r))
         rev = db.next_rev(con)
-        con.execute("INSERT OR REPLACE INTO tag_colors (owner, tag_key, name, color, updated_at, deleted, rev) VALUES (?,?,?,?,?,?,?)",
+        con.execute("INSERT OR REPLACE INTO nts_tag_colors (user_id, tag_key, name, color, updated_at, deleted, rev) VALUES (?,?,?,?,?,?,?)",
                     (owner(), k, name, color, ts, 0 if color else 1, rev))
         log_change(con, user, "color", "tag", k, f"{name}: {color or 'no colour'}")
-        r = con.execute("SELECT tag_key, name, color, updated_at, deleted, rev FROM tag_colors WHERE owner = ? AND tag_key = ?", (owner(), k)).fetchone()
+        r = con.execute("SELECT tag_key, name, color, updated_at, deleted, rev FROM nts_tag_colors WHERE user_id = ? AND tag_key = ?", (owner(), k)).fetchone()
         return tag_dict(r)
 
 
@@ -430,20 +430,20 @@ def rename_tag(old: str, new: str, user: str) -> int:
     now, changed = time.time(), 0
     with db.tx() as con:
         c, p = _tag_clause(con, ok)
-        for r in con.execute(f"SELECT uuid, tags FROM notes WHERE owner = ? AND deleted = 0 AND {c}", (owner(), p)).fetchall():
+        for r in con.execute(f"SELECT uuid, tags FROM nts_notes WHERE user_id = ? AND deleted = 0 AND {c}", (owner(), p)).fetchall():
             tags = json.loads(r["tags"] or "[]")
             if not any(tag_key(t) == ok for t in tags):
                 continue
             tags = clean_tags([new if tag_key(t) == ok else t for t in tags])
-            con.execute("UPDATE notes SET tags = ?, updated_at = ?, rev = ?, changed_by = ? WHERE uuid = ?",
+            con.execute("UPDATE nts_notes SET tags = ?, updated_at = ?, rev = ?, changed_by = ? WHERE uuid = ?",
                         (json.dumps(tags, ensure_ascii=False), now, db.next_rev(con), user, r["uuid"]))
             changed += 1
         nk = tag_key(new)
         if nk != ok:  # the colour goes with the name, unless the tag it merges into has one of its own
-            mine = con.execute("SELECT color FROM tag_colors WHERE owner = ? AND tag_key = ? AND deleted = 0", (owner(), ok)).fetchone()
+            mine = con.execute("SELECT color FROM nts_tag_colors WHERE user_id = ? AND tag_key = ? AND deleted = 0", (owner(), ok)).fetchone()
             if mine:
-                if not con.execute("SELECT 1 FROM tag_colors WHERE owner = ? AND tag_key = ? AND deleted = 0", (owner(), nk)).fetchone():
-                    con.execute("INSERT OR REPLACE INTO tag_colors (owner, tag_key, name, color, updated_at, deleted, rev) VALUES (?,?,?,?,?,0,?)",
+                if not con.execute("SELECT 1 FROM nts_tag_colors WHERE user_id = ? AND tag_key = ? AND deleted = 0", (owner(), nk)).fetchone():
+                    con.execute("INSERT OR REPLACE INTO nts_tag_colors (user_id, tag_key, name, color, updated_at, deleted, rev) VALUES (?,?,?,?,?,0,?)",
                                 (owner(), nk, new, mine["color"], now, db.next_rev(con)))
                 _drop_tag_color(con, ok, now)
         log_change(con, user, "rename", "tag", ok, f"{old} → {new} ({changed} notes)")
@@ -452,7 +452,7 @@ def rename_tag(old: str, new: str, user: str) -> int:
 
 def _drop_tag_color(con, k: str, now: float):
     """A tag colour as a tombstone (the devices sync that too)."""
-    con.execute("UPDATE tag_colors SET color = NULL, deleted = 1, updated_at = ?, rev = ? WHERE owner = ? AND tag_key = ? AND deleted = 0",
+    con.execute("UPDATE nts_tag_colors SET color = NULL, deleted = 1, updated_at = ?, rev = ? WHERE user_id = ? AND tag_key = ? AND deleted = 0",
                 (now, db.next_rev(con), owner(), k))
 
 
@@ -461,12 +461,12 @@ def remove_tag(name: str, user: str) -> int:
     k, now, changed = tag_key(name), time.time(), 0
     with db.tx() as con:
         c, p = _tag_clause(con, k)
-        for r in con.execute(f"SELECT uuid, tags FROM notes WHERE owner = ? AND deleted = 0 AND {c}", (owner(), p)).fetchall():
+        for r in con.execute(f"SELECT uuid, tags FROM nts_notes WHERE user_id = ? AND deleted = 0 AND {c}", (owner(), p)).fetchall():
             tags = json.loads(r["tags"] or "[]")
             keep = [t for t in tags if tag_key(t) != k]
             if len(keep) == len(tags):
                 continue
-            con.execute("UPDATE notes SET tags = ?, updated_at = ?, rev = ?, changed_by = ? WHERE uuid = ?",
+            con.execute("UPDATE nts_notes SET tags = ?, updated_at = ?, rev = ?, changed_by = ? WHERE uuid = ?",
                         (json.dumps(keep, ensure_ascii=False), now, db.next_rev(con), user, r["uuid"]))
             changed += 1
         _drop_tag_color(con, k, now)
@@ -479,9 +479,9 @@ def meta() -> dict:
     """What the sidebar shows: counts, folders, tags, and the current rev."""
     with db.connect() as con:
         o = owner()
-        total, pinned, images = con.execute("SELECT count(*), coalesce(sum(pinned), 0), coalesce(sum(has_image), 0) FROM notes WHERE owner = ? AND deleted = 0", (o,)).fetchone()
-        nofolder = con.execute("SELECT count(*) FROM notes WHERE owner = ? AND deleted = 0 AND folder_id IS NULL", (o,)).fetchone()[0]
-        trashed = con.execute("SELECT count(*) FROM notes WHERE owner = ? AND deleted = 1 AND updated_at > ?", (o, time.time() - 30 * 86400)).fetchone()[0]
+        total, pinned, images = con.execute("SELECT count(*), coalesce(sum(pinned), 0), coalesce(sum(has_image), 0) FROM nts_notes WHERE user_id = ? AND deleted = 0", (o,)).fetchone()
+        nofolder = con.execute("SELECT count(*) FROM nts_notes WHERE user_id = ? AND deleted = 0 AND folder_id IS NULL", (o,)).fetchone()[0]
+        trashed = con.execute("SELECT count(*) FROM nts_notes WHERE user_id = ? AND deleted = 1 AND updated_at > ?", (o, time.time() - 30 * 86400)).fetchone()[0]
     return {"total": int(total), "pinned": int(pinned), "images": int(images), "noFolder": int(nofolder), "trash": int(trashed),
             "folders": list_folders(), "tags": list_tags(), "rev": owner_rev()}
 
@@ -490,8 +490,8 @@ def owner_rev() -> int:
     """The latest rev among this account's notes, folders and tag colours: it moves when (and only when) something
     this account sees changes; the server-wide counter would also tell of other accounts' edits."""
     with db.connect() as con:
-        return max(int(con.execute(f"SELECT coalesce(max(rev), 0) FROM {t} WHERE owner = ?", (owner(),)).fetchone()[0])
-                   for t in ("notes", "folders", "tag_colors"))
+        return max(int(con.execute(f"SELECT coalesce(max(rev), 0) FROM {t} WHERE user_id = ?", (owner(),)).fetchone()[0])
+                   for t in ("nts_notes", "nts_folders", "nts_tag_colors"))
 
 
 def changes(since: int, limit: int = 500) -> dict:
@@ -503,24 +503,24 @@ def changes(since: int, limit: int = 500) -> dict:
         o = owner()
         # the head first, and nothing past it: a change committed while this runs is left for the next call, not
         # skipped (each statement may see a newer database than the one before; writers commit in rev order)
-        head = int(con.execute("SELECT max(rev) FROM change_counter").fetchone()[0] or 0)
-        rows = con.execute(f"SELECT {NOTE_COLS} FROM notes WHERE owner = ? AND rev > ? AND rev <= ? ORDER BY rev LIMIT ?",
+        head = int(con.execute("SELECT max(rev) FROM nts_change_counter").fetchone()[0] or 0)
+        rows = con.execute(f"SELECT {NOTE_COLS} FROM nts_notes WHERE user_id = ? AND rev > ? AND rev <= ? ORDER BY rev LIMIT ?",
                            (o, since, head, limit + 1)).fetchall()
         more = len(rows) > limit
         rows = rows[:limit]
         upto = rows[-1]["rev"] if more else head
         p = (o, since, upto)
-        folders = [folder_dict(r) for r in con.execute("SELECT uuid, name, color, created_at, updated_at, deleted, rev FROM folders "
-                                                       "WHERE owner = ? AND rev > ? AND rev <= ? ORDER BY rev", p).fetchall()]
-        tags = [tag_dict(r) for r in con.execute("SELECT tag_key, name, color, updated_at, deleted, rev FROM tag_colors "
-                                                 "WHERE owner = ? AND rev > ? AND rev <= ? ORDER BY rev", p).fetchall()]
+        folders = [folder_dict(r) for r in con.execute("SELECT uuid, name, color, created_at, updated_at, deleted, rev FROM nts_folders "
+                                                       "WHERE user_id = ? AND rev > ? AND rev <= ? ORDER BY rev", p).fetchall()]
+        tags = [tag_dict(r) for r in con.execute("SELECT tag_key, name, color, updated_at, deleted, rev FROM nts_tag_colors "
+                                                 "WHERE user_id = ? AND rev > ? AND rev <= ? ORDER BY rev", p).fetchall()]
         rev = upto
     return {"rev": rev, "more": more, "notes": [note_dict(r) for r in rows], "folders": folders, "tags": tags, "serverTime": time.time()}
 
 
 def change_log(limit: int = 200, before: int = None) -> list:
     with db.connect() as con:
-        q, p = "SELECT id, ts, user_name, action, kind, uuid, summary FROM change_log WHERE owner = ?", [owner()]
+        q, p = "SELECT id, created_at, user_name, action, kind, uuid, summary FROM nts_change_log WHERE user_id = ?", [owner()]
         if before:
             q += " AND id < ?"
             p.append(int(before))

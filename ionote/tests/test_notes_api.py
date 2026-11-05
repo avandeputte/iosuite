@@ -135,7 +135,7 @@ def test_export_then_import_keeps_ids_pictures_and_folders(client, admin):
     z = client.get("/api/export.zip").content
     from app import db
     with db.connect() as con:
-        for t in ("notes", "note_images", "folders"):
+        for t in ("nts_notes", "nts_note_images", "nts_folders"):
             con.execute(f"DELETE FROM {t}")
         con.commit()
     r = client.post("/api/import", files={"file": ("x.zip", z, "application/zip")}).json()

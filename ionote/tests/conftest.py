@@ -30,7 +30,7 @@ os.environ.update(_authtest.auth_env("ionotes_test_auth"))  # IOSUITE_DB_*: the 
 
 from app import db, users, proxyauth  # noqa: E402
 
-TABLES = ["notes", "note_images", "folders", "tag_colors", "change_log", "change_counter", "app_settings"]
+TABLES = ["nts_notes", "nts_note_images", "nts_folders", "nts_tag_colors", "nts_change_log", "nts_change_counter", "nts_settings"]
 
 
 @pytest.fixture(scope="session")
@@ -48,10 +48,10 @@ def clean():
         con.commit()
     from iosuite_shared import db as authdb
     users.init()
-    authdb.ex("DELETE FROM users")
-    authdb.ex("ALTER TABLE users AUTO_INCREMENT = 1")  # the tests count on the first account being #1
-    authdb.ex("DELETE FROM settings")
-    authdb.ex("DELETE FROM suite_apps")
+    authdb.ex("DELETE FROM ios_users")
+    authdb.ex("ALTER TABLE ios_users AUTO_INCREMENT = 1")  # the tests count on the first account being #1
+    authdb.ex("DELETE FROM ios_settings")
+    authdb.ex("DELETE FROM ios_apps")
     from app.auth import auth
     auth._registered = False  # each test registers ionotes in the suite's list again
     users.invalidate()

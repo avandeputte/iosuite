@@ -48,7 +48,7 @@ def export_zip(include_trash: bool = False, pictures: bool = True) -> bytes:
     folders = notes.list_folders()
     fname = {f["id"]: _safe(f["name"], "Folder") for f in folders}
     with db.connect() as con:
-        rows = con.execute(f"SELECT {notes.NOTE_COLS} FROM notes WHERE owner = ? {'' if include_trash else 'AND deleted = 0'} ORDER BY created_at",
+        rows = con.execute(f"SELECT {notes.NOTE_COLS} FROM nts_notes WHERE user_id = ? {'' if include_trash else 'AND deleted = 0'} ORDER BY created_at",
                            (notes.owner(),)).fetchall()
     all_notes = [notes.note_dict(r) for r in rows]
     buf = io.BytesIO()
