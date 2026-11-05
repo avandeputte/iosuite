@@ -52,15 +52,18 @@ what the app will show on the start page later (today's events, the newest photo
 - **The suite's accounts**: the same sign-in as every io app (the account tiles, one click for a passwordless viewer),
   the account page (display name, email, password, sign out everywhere) and, for admins, the family's accounts and their
   role here. Sign-in at a reverse proxy (Cloudflare Access…) works as in the other apps.
-- **Updates**: the daily version check, the note for admins and **Update now** in Settings › Server, as in ioCalendar.
+- **Updates**: the daily version check, the note for admins and **Update now**, the server log and Restart under Maintenance › Updates and logs, as in every ioThing app.
 - Light and dark, a phone layout, installable as a web app (manifest and icons).
 
 ## Updates
 
 ioSuite asks GitHub once a day whether the main branch has a newer version (only the public commit list is read;
-nothing about the server is sent; Settings › Server switches it off, `UPDATE_CHECK=0` locks it off). Admins then see a
-note with **Update now**, and Settings › Server has the version, **Check for updates** and **Update now**. Updating runs
-the app's own `update.sh`: the new version's Python packages first, then the code (a failed step leaves the running
+nothing about the server is sent; Maintenance › Updates and logs switches it off, `UPDATE_CHECK=0` locks it off). Admins
+then see a note with **Update now**, and **Maintenance › Updates and logs** has the version, **Check for updates**,
+**Update now**, the tail of the server log (`iosuite.log` in the app folder; `LOG_FILE` moves it, empty switches it
+off) and **Restart**. The page is the same in every ioThing app: the version check, `update.sh`, the restart and the log
+come from `iothing_auth.updates` in iosuite-shared, served at `/api/server` and `/api/log`. Updating runs the app's own
+`update.sh`: the new version's Python packages first, then the code (a failed step leaves the running
 version as it was), the database is brought up to date, and the service restarts; the page reloads when the new version
 answers. In Docker, pull the image instead. From a shell: `./update.sh` (`--check` only looks,
 `IOSUITE_REF=<sha>` installs a given commit).
@@ -135,6 +138,7 @@ git clone https://github.com/avandeputte/iosuite && cd iosuite
 | `AUTH_PROXY`, `AUTH_PROXY_HEADER`, `AUTH_PROXY_TRUSTED`, `CF_ACCESS_TEAM`, `CF_ACCESS_AUD` | sign-in at a reverse proxy, as in the other io apps (Cloudflare Access, Authelia, Authentik, oauth2-proxy…) |
 | `UPDATE_CHECK` | `0` turns the daily version check off for good |
 | `IOSUITE_REPO`, `IOSUITE_BRANCH` | what the version check and `update.sh` follow (`avandeputte/iosuite`, `main`) |
+| `LOG_FILE` | the server log shown at Maintenance › Updates and logs (`iosuite.log` in the app folder; empty: no file) |
 
 ### HTTPS
 
@@ -158,18 +162,17 @@ what a viewer may not change. CI runs them against MariaDB.
 
 ```
 app/main.py        the application: start-up (tables, first admin, the update check), who is asking, routes
-app/api.py         the REST API: status, the apps and their settings, the server (version, updates)
+app/api.py         the REST API: status, the apps and their settings (the server, updates and the log: iothing_auth's server_router)
 app/apps.py        the catalogue of the suite's apps and where each one is (environment, Settings, this host)
 app/status.py      is each app up (its /api/status) and does it have an update; is each bookmark reachable
 app/layout.py      each account's own layout: hidden tiles and cards, the tiles' order, the photo strip
 app/widgets.py     what the tiles and cards show: ioPix, ioCalendar, ioHealth and ioContacts asked over their APIs with the viewer's sign-in
 app/weather.py     AccuWeather: the settings, the place search, the cached conditions and forecast
 app/bookmarks.py   the bookmark groups and links, and the homepage bookmarks.yaml import
-app/auth.py        the shared accounts (iosuite-shared), as ioSuite uses them
+app/auth.py        the shared accounts and the updater (iosuite-shared), as ioSuite uses them
 app/users.py       accounts and roles, seen from ioSuite
 app/db.py          MariaDB access and the schema (the meta settings table, the bookmarks)
 app/config.py      settings from iosuite.env / the environment
-app/updates.py     the version check and the self-update (update.sh)
 app/cli.py         python -m app.cli: migrate, check, create-user, set-password
 static/            the web app: index.html, app.js (one module, no build step), app.css, the icons (the apps' own under icons/apps/)
 tests/             pytest, against a MariaDB of its own

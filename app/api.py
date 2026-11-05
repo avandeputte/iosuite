@@ -6,7 +6,8 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 from fastapi.concurrency import run_in_threadpool
 
-from app import APP_VERSION, apps, bookmarks, config, db, layout, status as appstatus, updates, users, weather, widgets
+from app import APP_VERSION, apps, bookmarks, config, layout, status as appstatus, users, weather, widgets
+from app.auth import updater
 
 router = APIRouter()
 
@@ -43,9 +44,9 @@ def _base(request: Request) -> str:
 def status(request: Request):
     u = request.state.user
     adm = users.is_admin(u)
-    return {"app": "ioSuite", "version": APP_VERSION, "commit": updates.local_commit()[:7] if u else None,
+    return {"app": "ioSuite", "version": APP_VERSION, "commit": updater.local_commit()[:7] if u else None,
             "usersExist": users.any_users(), "user": users.public(u), "viaProxy": getattr(request.state, "via_proxy", False),
-            "updateAvailable": updates.available() if adm and updates.auto_check_enabled() else None}
+            "updateAvailable": updater.available() if adm and updater.auto_check_enabled() else None}
 
 
 # ------------------------------------------------------------------ the apps
@@ -310,33 +311,4 @@ def widget_thumb(photo_id: int, request: Request):
                     headers={"Cache-Control": "private, max-age=86400"})
 
 
-# ------------------------------------------------------------------ the server: version, updates
-
-@router.get("/api/server")
-def server_info(request: Request):
-    """Admins: the installed version, the last update check, whether update.sh can run here, and the switches."""
-    admin(request)
-    return {**updates.status(), "url": _base(request), "database": f"{config.DB_HOST}:{config.DB_PORT}/{config.DB_NAME}"}
-
-
-@router.post("/api/server")
-async def server_action(request: Request):
-    """Admins. Body: {action: check | update, ref?} or {autoCheck: bool}."""
-    admin(request)
-    b = await request.json()
-    if "autoCheck" in b:
-        if config.UPDATE_CHECK_LOCKED and b["autoCheck"]:
-            raise HTTPException(400, "UPDATE_CHECK=0 in the environment keeps the daily check off")
-        db.set_setting("update_check", "1" if b["autoCheck"] else "0")
-        if not b["autoCheck"]:
-            updates.forget_check()
-    action = b.get("action")
-    if action == "check":
-        return await run_in_threadpool(updates.check)
-    if action == "update":
-        try:
-            updates.run(str(b.get("ref") or ""))
-        except RuntimeError as e:
-            raise HTTPException(409, str(e))
-        return {"started": True}
-    return server_info(request)
+# the server (version, updates, the log, restart): iothing_auth's server_router, mounted in main.py
