@@ -1,4 +1,4 @@
-"""Tests run against a test MariaDB of their own (iothing_auth.testing: a Docker container, or the server named by
+"""Tests run against a test MariaDB of their own (iosuite_shared.testing: a Docker container, or the server named by
 IOTHING_TEST_DB=host:port:user:password): two scratch databases, calendar_test and calendar_test_auth, dropped and
 recreated per session, never a live one. Without a test server the suite is skipped."""
 import os
@@ -6,7 +6,7 @@ import sys
 
 import pytest  # noqa: E402
 
-from iothing_auth import testing as _authtest  # noqa: E402
+from iosuite_shared import testing as _authtest  # noqa: E402
 
 if _authtest.server() is None:
     pytest.skip(f"{_authtest.server.reason}: the tests need a MariaDB (Docker, or IOTHING_TEST_DB=host:port:user:password)", allow_module_level=True)
@@ -27,7 +27,7 @@ from app import db, users  # noqa: E402
 @pytest.fixture()
 def client():
     db.reset_all()
-    from iothing_auth import db as authdb
+    from iosuite_shared import db as authdb
     users.ensure_admin_from_env()  # the auth tables
     for t in ("user_roles", "user_data", "app_passwords", "sessions", "users", "settings", "suite_apps"):
         try:

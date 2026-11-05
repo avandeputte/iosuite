@@ -1,4 +1,4 @@
-"""Accounts, roles, sessions and app passwords: the shared ioThing accounts (iothing-auth), seen from ioCalendar.
+"""Accounts, roles, sessions and app passwords: the shared ioThing accounts (iosuite-shared), seen from ioCalendar.
 
 Roles as in the rest of the suite: viewer (reads the shared calendars and keeps their own), editor (changes the shared
 calendars too), admin (also settings and users); an account holds a role per app, a suite admin is admin everywhere.
@@ -8,7 +8,7 @@ private token per account instead, since calendar apps cannot sign in to a subsc
 """
 import secrets
 
-from iothing_auth import apppasswords, users as shared
+from iosuite_shared import apppasswords, users as shared
 
 from app import db
 from app.auth import APP

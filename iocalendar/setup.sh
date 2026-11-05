@@ -7,10 +7,10 @@
 #
 # Flags: --db HOST:PORT/DATABASE:USER:PASSWORD        (MariaDB / MySQL; default 192.168.1.89:3306/calendar:calendar:calendar)
 #        --iosuite-db HOST:PORT/DATABASE:USER:PASSWORD (the Shared ioSuite database: accounts and suite-wide settings;
-#                                                       default: the same server, iosuite:iosuite; --auth-db still works)
+#                                                       default: the same server, iosuite:iosuite)
 #        --admin NAME:PASSWORD | --no-admin   --port N (8620)   --timezone ZONE   --public-url URL
 #        --service | --no-service   --system-deps | --no-system-deps   --python PATH
-# Secrets can stay off the command line: IOCALENDAR_DB, IOCALENDAR_IOSUITE_DB (or the older IOCALENDAR_AUTH_DB) and
+# Secrets can stay off the command line: IOCALENDAR_DB, IOCALENDAR_IOSUITE_DB and
 # IOCALENDAR_ADMIN in the environment do what --db, --iosuite-db and --admin do. Run it again at any time: it keeps iocalendar.env and only changes what you answer.
 set -e
 cd "$(dirname "$0")"
@@ -20,7 +20,7 @@ die() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 YES=0; DBS=""; ADBS=""; ADMIN=""; NO_ADMIN=0; PORT=""; TZONE=""; PUBURL=""; SERVICE=""; SYSDEPS=""; PY=""
 while [ $# -gt 0 ]; do
   case "$1" in
-    --yes) YES=1; shift;; --db) DBS="$2"; shift 2;; --iosuite-db|--auth-db) ADBS="$2"; shift 2;; --admin) ADMIN="$2"; shift 2;; --no-admin) NO_ADMIN=1; shift;;
+    --yes) YES=1; shift;; --db) DBS="$2"; shift 2;; --iosuite-db) ADBS="$2"; shift 2;; --admin) ADMIN="$2"; shift 2;; --no-admin) NO_ADMIN=1; shift;;
     --port) PORT="$2"; shift 2;; --timezone) TZONE="$2"; shift 2;; --public-url) PUBURL="$2"; shift 2;;
     --service) SERVICE=1; shift;; --no-service) SERVICE=0; shift;; --system-deps) SYSDEPS=1; shift;; --no-system-deps) SYSDEPS=0; shift;;
     --python) PY="$2"; shift 2;;
@@ -29,7 +29,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 [ -n "$DBS" ] || DBS="${IOCALENDAR_DB:-}"
-[ -n "$ADBS" ] || ADBS="${IOCALENDAR_IOSUITE_DB:-${IOCALENDAR_AUTH_DB:-}}"
+[ -n "$ADBS" ] || ADBS="${IOCALENDAR_IOSUITE_DB:-}"
 [ -n "$ADMIN" ] || ADMIN="${IOCALENDAR_ADMIN:-}"
 ask() { _v="$1"; _q="$2"; _d="$3"
   if [ "$YES" = 1 ] || [ ! -t 0 ]; then eval "$_v=\"\$_d\""; return; fi
@@ -38,7 +38,7 @@ asksecret() { _v="$1"; _q="$2"
   if [ "$YES" = 1 ] || [ ! -t 0 ]; then eval "$_v=''"; return; fi
   printf '%s: ' "$_q"; stty -echo 2>/dev/null; read -r _a || _a=""; stty echo 2>/dev/null; printf '\n'; eval "$_v=\"\$_a\""; }
 getenv() { [ -f iocalendar.env ] && sed -n "s/^$1=//p" iocalendar.env | tail -n 1; true; }
-getsuite() { for _p in IOSUITE_DB_ IOSUITE_SHARED_DB_ IOTHING_AUTH_DB_; do _g="$(getenv "$_p$1")"; [ -n "$_g" ] && break; done; printf '%s' "$_g"; }  # new name, else an older one
+getsuite() { getenv "IOSUITE_DB_$1"; }
 split() { # HOST:PORT/DATABASE:USER:PASSWORD into $1_HOST, $1_PORT, $1_NAME, $1_USER, $1_PASSWORD
   _p="$1"; _s="$2"; _h="${_s%%:*}"; _r="${_s#*:}"; _o="${_r%%/*}"; _r="${_r#*/}"; _n="${_r%%:*}"; _r="${_r#*:}"; _u="${_r%%:*}"; _w="${_r#*:}"
   eval "${_p}_HOST=\"\$_h\"; ${_p}_PORT=\"\$_o\"; ${_p}_NAME=\"\$_n\"; ${_p}_USER=\"\$_u\"; ${_p}_PASSWORD=\"\$_w\""; }
@@ -51,7 +51,7 @@ if [ "$SYSDEPS" != 0 ] && ! python3 -c 'import sys, venv, ensurepip; assert sys.
   elif command -v brew >/dev/null; then brew install python
   else die "install Python 3.10 or newer with venv, then run this again"; fi
 fi
-command -v git >/dev/null || die "git is needed to install the suite's shared library (iothing-auth, from the iosuite-shared repository): install git, then run this again"
+command -v git >/dev/null || die "git is needed to install the suite's shared library (iosuite-shared, from the iosuite-shared repository): install git, then run this again"
 PY="${PY:-python3}"
 
 # ---- the answers
@@ -93,8 +93,7 @@ say "Writing iocalendar.env"
 touch iocalendar.env; chmod 600 iocalendar.env
 setenv() { grep -v "^$1=" iocalendar.env > iocalendar.env.tmp || true; printf '%s=%s\n' "$1" "$2" >> iocalendar.env.tmp; mv iocalendar.env.tmp iocalendar.env; chmod 600 iocalendar.env; }
 setenv DB_HOST "$DB_HOST"; setenv DB_PORT "$DB_PORT"; setenv DB_NAME "$DB_NAME"; setenv DB_USER "$DB_USER"; setenv DB_PASSWORD "$DB_PASSWORD"
-# the Shared ioSuite database (iothing-auth 0.4.1+ reads IOSUITE_DB_*; older IOSUITE_SHARED_DB_* / IOTHING_AUTH_DB_* lines are moved over)
-for _k in HOST PORT NAME USER PASSWORD; do grep -v -e "^IOTHING_AUTH_DB_$_k=" -e "^IOSUITE_SHARED_DB_$_k=" iocalendar.env > iocalendar.env.tmp || true; mv iocalendar.env.tmp iocalendar.env; done; chmod 600 iocalendar.env
+# the Shared ioSuite database
 setenv IOSUITE_DB_HOST "$SUITE_HOST"; setenv IOSUITE_DB_PORT "$SUITE_PORT"; setenv IOSUITE_DB_NAME "$SUITE_NAME"
 setenv IOSUITE_DB_USER "$SUITE_USER"; setenv IOSUITE_DB_PASSWORD "$SUITE_PASSWORD"
 setenv PORT "$PORT"; setenv TIMEZONE "$TZONE"

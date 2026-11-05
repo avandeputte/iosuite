@@ -17,7 +17,7 @@ SCHEMA = [
         k VARCHAR(64) PRIMARY KEY,
         v MEDIUMTEXT
     )""",
-    # accounts and app passwords live in the Shared ioSuite database (iothing-auth, app/auth.py)
+    # accounts and app passwords live in the Shared ioSuite database (iosuite-shared, app/auth.py)
     # owner_id NULL: a shared calendar (everyone sees it); kind 'birthdays' is filled from ioContacts and read-only.
     # owner_key stands in for owner_id in the unique key: NULLs never clash in a unique key, so (owner_id, slug) alone
     # would let two shared calendars share a slug

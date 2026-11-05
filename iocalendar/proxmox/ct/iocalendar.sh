@@ -10,7 +10,7 @@
 # Until the scripts are merged upstream, the framework is pointed at this repository for the install script
 # (COMMUNITY_SCRIPTS_URL below; the core engine still comes from community-scripts). Run on the Proxmox host as root:
 #   bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iocalendar/main/proxmox/ct/iocalendar.sh)"
-# Unattended: IOCALENDAR_DB=host:port/db:user:password IOCALENDAR_IOSUITE_DB=host:port/db:user:password (IOCALENDAR_AUTH_DB still works)
+# Unattended: IOCALENDAR_DB=host:port/db:user:password IOCALENDAR_IOSUITE_DB=host:port/db:user:password
 #   IOCALENDAR_ADMIN=name:password IOCALENDAR_PORT=8620 IOCALENDAR_TIMEZONE=America/New_York
 #   IOCALENDAR_PUBLIC_URL=https://calendar.example.com in the environment skip the questions.
 export COMMUNITY_SCRIPTS_URL="${COMMUNITY_SCRIPTS_URL:-https://raw.githubusercontent.com/avandeputte/iocalendar/main/proxmox}"
@@ -47,7 +47,6 @@ ask_app_settings() {
     w=$(whiptail --backtitle "$bt" --passwordbox "Password" 9 60 3>&1 1>&2 2>&3) || exit 1
     IOCALENDAR_DB="$h:$p/$d:$u:$w"
   fi
-  IOCALENDAR_IOSUITE_DB="${IOCALENDAR_IOSUITE_DB:-${IOCALENDAR_AUTH_DB:-}}"
   if [[ -z "${IOCALENDAR_IOSUITE_DB:-}" ]]; then
     local ah ap ad au aw2
     ah=$(whiptail --backtitle "$bt" --inputbox "Shared ioSuite database (accounts and suite-wide settings): host" 9 70 "${IOCALENDAR_DB%%:*}" 3>&1 1>&2 2>&3) || exit 1

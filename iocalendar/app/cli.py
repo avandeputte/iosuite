@@ -42,7 +42,7 @@ def main(argv: list[str]) -> int:
                     users.update(u["id"], password=pw, role=args[1] if len(args) > 1 else None)
                     print(f"ok: {args[0]} exists; password set")
                 else:
-                    from iothing_auth import users as shared
+                    from iosuite_shared import users as shared
                     first = not users.any_users()
                     shared.create(args[0], pw, args[1] if len(args) > 1 else "admin", "iocalendar", suite_admin=first)
                     print(f"ok: created {args[0]}" + (" (suite admin)" if first else ""))
