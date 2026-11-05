@@ -1,5 +1,5 @@
 /* ioSuite web app: one module, no build step, as in the other io apps. The start page (the weather, a tile per app,
-   the bookmarks as homepage lays them out) and the settings (account, apps, weather, bookmarks, users, server) and Maintenance (updates and logs). Each tile keeps a `.more` block under its name, where the app shows a glimpse of
+   the bookmarks in groups) and the settings (account, apps, weather, bookmarks, users) and Maintenance (updates and logs). Each tile keeps a `.more` block under its name, where the app shows a glimpse of
    itself (photos from this day, the rest of today, steps and rings), filled from /api/widgets/<app>. */
 
 // ------------------------------------------------------------------ helpers
@@ -25,6 +25,7 @@ const ICONS = {
   tune: 'M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z',
   up: 'M7.41 15.41 12 10.83l4.59 4.58L18 14l-6-6-6 6z',
   down: 'M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z',
+  grip: 'M11 18c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2zm-2-8c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0-6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm6 4c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z',
   edit: 'M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 0 0 0-1.41l-2.34-2.34a.996.996 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z',
   delete: 'M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z',
   server: 'M20 13H4c-.55 0-1 .45-1 1v6c0 .55.45 1 1 1h16c.55 0 1-.45 1-1v-6c0-.55-.45-1-1-1zM7 19c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zM20 3H4c-.55 0-1 .45-1 1v6c0 .55.45 1 1 1h16c.55 0 1-.45 1-1V4c0-.55-.45-1-1-1zM7 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z',
@@ -83,8 +84,6 @@ const confirmDialog = (title, text, ok = 'OK', danger = false) => dialog(title, 
 
 const hue = (s) => { let x = 0; for (const c of s || '') x = (x * 31 + c.charCodeAt(0)) % 360; return x; };
 const initials = (fn) => { const p = (fn || '?').trim().split(/\s+/); return ((p[0] || '?')[0] + (p.length > 1 ? p[p.length - 1][0] : '')).toUpperCase(); };
-async function copyText(t) { try { await navigator.clipboard.writeText(t); toast('Copied'); } catch { toast(t); } }
-const copyRow = (v) => h('div', { class: 'copy' }, h('code', null, v), h('button', { class: 'iconbtn', title: 'Copy', onclick: () => copyText(v) }, icon('copy', 's')));
 /** An app's name as the apps write it: "io" in gold, the rest in the app's colour. */
 /* The weather: AccuWeather's icon numbers (1-44) drawn with a handful of glyphs. */
 const WX = {
@@ -586,15 +585,14 @@ function packBookmarks(el, groups) {
 async function showSettings(page, r) {
   const adm = S.user.role === 'admin';
   const canEdit = ['editor', 'admin'].includes(S.user.role);
-  const tabs = [['account', 'Account'], ...(adm ? [['weather', 'Home page']] : []), ...(canEdit ? [['bookmarks', 'Bookmarks']] : []), ...(adm ? [['users', 'Users'], ['server', 'Server']] : [])];
+  const tabs = [['account', 'Account'], ...(adm ? [['weather', 'Home page']] : []), ...(canEdit ? [['bookmarks', 'Bookmarks']] : []), ...(adm ? [['users', 'Users']] : [])];
   if (!tabs.some(([k]) => k === r.tab)) r.tab = 'account';
   page.append(h('div', { class: 'pagehead' }, h('h1', null, 'Settings')),
     h('div', { class: 'tabs' }, tabs.map(([k, l]) => h('button', { class: r.tab === k ? 'on' : '', onclick: () => { location.hash = `#/settings/${k}`; } }, l))));
   const body = h('div'); page.append(body);
-  await ({ account: setAccount, apps: setHome, weather: setHome, bookmarks: setBookmarks, users: setUsers, server: setServer }[r.tab] || setAccount)(body);
+  await ({ account: setAccount, apps: setHome, weather: setHome, bookmarks: setBookmarks, users: setUsers }[r.tab] || setAccount)(body);
 }
 const fld = (l, e) => h('label', { class: 'field' }, h('span', null, l), e);
-const kv = (k, v) => h('div', { class: 'kv' }, h('div', { class: 'k' }, k), h('div', { class: 'v', style: { flex: 1 } }, typeof v === 'string' ? copyRow(v) : v));
 
 async function setAccount(el) {
   const u = S.user;
@@ -686,33 +684,104 @@ async function setBookmarks(el) {
       } catch (e) { fail(e); }
       await draw();
     };
-    const move = (list, i, d) => { const ids = list.map((x) => x.id); const [x] = ids.splice(i, 1); ids.splice(i + d, 0, x); return ids; };
     const newGroup = h('input', { class: 't', placeholder: 'New group, e.g. Developer', style: 'max-width:280px' });
-    const yaml = h('textarea', { class: 't', placeholder: '- Developer:\n    - Github:\n        - abbr: GH\n          href: https://github.com/', spellcheck: 'false' });
-    const replace = h('input', { type: 'checkbox' });
+    // drag the grip (mouse, pen or finger) to reorder; links can also be dropped into another group
+    const saveGroups = () => call('/api/bookmarks/groups/order', { method: 'POST', json: { ids: [...el.querySelectorAll('.bmedit')].map((x) => +x.dataset.id) } });
+    const saveLinks = (list) => call(`/api/bookmarks/groups/${list.dataset.gid}/order`, { method: 'POST', json: { ids: [...list.querySelectorAll('.bmrow')].map((x) => +x.dataset.id) } });
+    const grip = (title, kind) => h('button', { class: 'iconbtn grip', title, 'aria-label': title, 'data-kind': kind }, icon('grip', 's'));
     el.replaceChildren(
       h('div', { class: 'box' }, h('h2', null, icon('link'), 'Bookmarks'),
-        h('p', { class: 'muted' }, 'Groups of links under the apps, as homepage shows them: a two-letter badge (or an icon), the name and the site. Everyone in the family sees the same bookmarks; editors and admins change them.'),
-        gs.length ? gs.map((g, gi) => h('div', { class: 'bmedit' },
-          h('div', { class: 'bmhead' }, h('b', null, g.name),
-            h('button', { class: 'iconbtn', title: 'Up', disabled: gi === 0 ? true : null, onclick: () => call('/api/bookmarks/groups/order', { method: 'POST', json: { ids: move(gs, gi, -1) } }) }, icon('up', 's')),
-            h('button', { class: 'iconbtn', title: 'Down', disabled: gi === gs.length - 1 ? true : null, onclick: () => call('/api/bookmarks/groups/order', { method: 'POST', json: { ids: move(gs, gi, 1) } }) }, icon('down', 's')),
+        h('p', { class: 'muted' }, 'Groups of links under the apps: a two-letter badge (or an icon), the name and the site. Drag a group or a link by its handle to put it elsewhere; a link can go into another group too. Everyone in the family sees the same bookmarks; editors and admins change them.'),
+        gs.length ? h('div', { class: 'bmgroups' }, gs.map((g) => h('div', { class: 'bmedit', 'data-id': g.id },
+          h('div', { class: 'bmhead' }, grip('Drag to move the group', 'group'), h('b', null, g.name),
             h('button', { class: 'iconbtn', title: 'Rename', onclick: async () => { const i = h('input', { class: 't', value: g.name }); const v = await dialog('Rename the group', i, [{ label: 'Cancel', value: null }, { label: 'Save', value: () => i.value, primary: true }]); if (v) call(`/api/bookmarks/groups/${g.id}`, { method: 'PATCH', json: { name: v } }, 'Saved'); } }, icon('edit', 's')),
             h('button', { class: 'iconbtn', title: 'Delete the group', onclick: async () => { if (await confirmDialog('Delete the group', `Delete "${g.name}" and its ${g.links.length} link(s)?`, 'Delete', true)) call(`/api/bookmarks/groups/${g.id}`, { method: 'DELETE' }, 'Deleted'); } }, icon('delete', 's')),
             h('button', { class: 'pillbtn', style: 'margin-left:auto', onclick: () => editLink(g, null) }, icon('add', 's'), 'Link')),
-          g.links.map((l, li) => h('div', { class: 'bmrow' }, h('span', { class: 'bmic' }, bmIcon(l) ? h('img', { src: bmIcon(l), alt: '', onerror: (e) => { e.target.replaceWith(l.abbr); } }) : l.abbr), h('span', { class: 'bmname' }, l.name), h('span', { class: 'muted small bmdesc' }, l.description),
+          h('div', { class: 'bmlinks', 'data-gid': g.id }, g.links.map((l) => h('div', { class: 'bmrow', 'data-id': l.id }, grip('Drag to move the link', 'link'), h('span', { class: 'bmic' }, bmIcon(l) ? h('img', { src: bmIcon(l), alt: '', onerror: (e) => { e.target.replaceWith(l.abbr); } }) : l.abbr), h('span', { class: 'bmname' }, l.name), h('span', { class: 'muted small bmdesc' }, l.description),
             h('span', { class: 'bmtools' },
-              h('button', { class: 'iconbtn', title: 'Up', disabled: li === 0 ? true : null, onclick: () => call(`/api/bookmarks/groups/${g.id}/order`, { method: 'POST', json: { ids: move(g.links, li, -1) } }) }, icon('up', 's')),
-              h('button', { class: 'iconbtn', title: 'Down', disabled: li === g.links.length - 1 ? true : null, onclick: () => call(`/api/bookmarks/groups/${g.id}/order`, { method: 'POST', json: { ids: move(g.links, li, 1) } }) }, icon('down', 's')),
               h('button', { class: 'iconbtn', title: 'Change', onclick: () => editLink(g, l) }, icon('edit', 's')),
-              h('button', { class: 'iconbtn', title: 'Delete', onclick: async () => { if (await confirmDialog('Delete the link', `Delete "${l.name}"?`, 'Delete', true)) call(`/api/bookmarks/links/${l.id}`, { method: 'DELETE' }, 'Deleted'); } }, icon('delete', 's'))))))) : h('p', { class: 'muted' }, 'No bookmarks yet.'),
-        h('div', { class: 'multi', style: 'margin-top:12px' }, newGroup, h('button', { class: 'pillbtn primary', onclick: () => { if (newGroup.value.trim()) call('/api/bookmarks/groups', { method: 'POST', json: { name: newGroup.value } }, 'Group made'); } }, icon('add', 's'), 'Group'))),
-      h('div', { class: 'box' }, h('h2', null, icon('link'), 'Import from homepage'),
-        h('p', { class: 'muted' }, 'Paste a homepage bookmarks.yaml: its groups and links are added here (a group with the same name gets the links).'),
-        yaml, h('p', null, h('label', { class: 'check' }, replace, ' Replace everything that is here first')),
-        h('p', null, h('button', { class: 'pillbtn primary', onclick: async () => { try { const r = await api('/api/bookmarks/import', { method: 'POST', json: { yaml: yaml.value, replace: replace.checked } }); toast(`${r.groups} group(s) and ${r.links} link(s) added`); yaml.value = ''; draw(); } catch (e) { fail(e); } } }, icon('check', 's'), 'Import'))));
+              h('button', { class: 'iconbtn', title: 'Delete', onclick: async () => { if (await confirmDialog('Delete the link', `Delete "${l.name}"?`, 'Delete', true)) call(`/api/bookmarks/links/${l.id}`, { method: 'DELETE' }, 'Deleted'); } }, icon('delete', 's'))))))))) : h('p', { class: 'muted' }, 'No bookmarks yet.'),
+        h('div', { class: 'multi', style: 'margin-top:12px' }, newGroup, h('button', { class: 'pillbtn primary', onclick: () => { if (newGroup.value.trim()) call('/api/bookmarks/groups', { method: 'POST', json: { name: newGroup.value } }, 'Group made'); } }, icon('add', 's'), 'Group'))));
+    const root = el.querySelector('.bmgroups');
+    if (!root) return;
+    for (const g of root.querySelectorAll('.grip')) {
+      const group = g.dataset.kind === 'group';
+      dragSort(g, g.closest(group ? '.bmedit' : '.bmrow'), {
+        root, lists: () => group ? [root] : [...root.querySelectorAll('.bmlinks')], items: group ? '.bmedit' : '.bmrow', sorting: group ? 'sorting-groups' : 'sorting-links',
+        done: (from, to) => { if (group) saveGroups(); else saveLinks(to); },
+      });
+    }
   };
   await draw();
+}
+
+/** Reorder by dragging `handle` (mouse, pen or touch, through pointer events): `item` follows the pointer and the
+    others make room; it can land in any of `lists()` (direct children matching `items`). `done(fromList, toList)` runs
+    when the order changed. The handle also answers ArrowUp/ArrowDown from the keyboard, within its list. */
+function dragSort(handle, item, o) {
+  handle.style.touchAction = 'none';
+  const kids = (list) => [...list.children].filter((x) => x.matches(o.items));
+  handle.addEventListener('keydown', (e) => {
+    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+    e.preventDefault();
+    const list = item.parentNode, sib = e.key === 'ArrowUp' ? item.previousElementSibling : item.nextElementSibling;
+    if (!sib || !sib.matches(o.items)) return;
+    list.insertBefore(item, e.key === 'ArrowUp' ? sib : sib.nextSibling);
+    o.done(list, list);
+  });
+  handle.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const from = item.parentNode, before = item.nextSibling;
+    o.root.classList.add(o.sorting);  // groups fold to their headers while one is dragged
+    item.classList.add('dragging');
+    const top0 = item.getBoundingClientRect().top;
+    const off = Math.min(e.clientY - top0, item.offsetHeight / 2);
+    let y = e.clientY, scroll = 0;
+    const place = () => {
+      item.style.transform = '';
+      const lists = o.lists();
+      // the list under the pointer, else the nearest one
+      let best = lists[0], dist = Infinity;
+      for (const l of lists) {
+        const r = l.getBoundingClientRect();
+        const d = y < r.top ? r.top - y : y > r.bottom ? y - r.bottom : 0;
+        if (d < dist) { dist = d; best = l; }
+      }
+      if (best) {
+        const next = kids(best).find((k) => k !== item && y < k.getBoundingClientRect().top + k.offsetHeight / 2);
+        if (next) { if (next !== item.nextElementSibling || item.parentNode !== best) best.insertBefore(item, next); }
+        else if (item.parentNode !== best || kids(best).at(-1) !== item) best.append(item);
+      }
+      item.style.transform = `translateY(${y - off - item.getBoundingClientRect().top}px)`;
+    };
+    const tick = setInterval(() => { if (scroll) { window.scrollBy(0, scroll); place(); } }, 16);
+    const still = (ev) => ev.preventDefault();
+    const move = (ev) => {
+      if (ev.pointerId !== e.pointerId) return;
+      y = ev.clientY;
+      scroll = y < 60 ? -12 : y > window.innerHeight - 60 ? 12 : 0;
+      place();
+    };
+    const end = (ev) => {
+      if (ev.pointerId !== e.pointerId) return;
+      clearInterval(tick);
+      removeEventListener('pointermove', move);
+      removeEventListener('pointerup', end);
+      removeEventListener('pointercancel', end);
+      removeEventListener('touchmove', still);
+      item.classList.remove('dragging');
+      item.style.transform = '';
+      o.root.classList.remove(o.sorting);
+      if (ev.type === 'pointercancel') { from.insertBefore(item, before); return; }
+      if (item.parentNode !== from || item.nextSibling !== before) o.done(from, item.parentNode);
+    };
+    // on the window, not the handle: moving the item in the page drops a pointer capture
+    addEventListener('pointermove', move);
+    addEventListener('pointerup', end);
+    addEventListener('pointercancel', end);
+    addEventListener('touchmove', still, { passive: false });  // no page scroll under the finger (iOS)
+  });
 }
 
 async function setUsers(el) {
@@ -733,15 +802,6 @@ async function setUsers(el) {
       })),
     h('h2', { style: { marginTop: '16px' } }, 'Add someone'), h('div', { class: 'multi' }, name, pw, role,
       h('button', { class: 'pillbtn primary', onclick: async () => { try { await api('/api/users', { method: 'POST', json: { name: name.value, password: pw.value, role: role.value } }); toast('Account made'); onRoute(); } catch (e) { fail(e); } } }, icon('add', 's'), 'Add'))));
-}
-
-async function setServer(el) {
-  let s; try { s = await api('/api/server'); } catch (e) { el.replaceChildren(h('p', null, e.message)); return; }
-  el.replaceChildren(
-    h('div', { class: 'box' }, h('h2', null, icon('server'), 'This page'),
-      kv('Address', s.url || location.origin), kv('Version', h('span', null, `v${s.version}${s.installed !== 'unknown' ? ` (${s.installed.slice(0, 7)})` : ''} · `, h('a', { class: 'lnk', href: '#/maintenance/updates' }, 'Updates and logs'))),
-      kv('Database', h('span', null, s.database)),
-      h('p', { class: 'muted small' }, 'Set PUBLIC_URL when the address above is not the one the family uses (behind a reverse proxy).')));
 }
 
 // ------------------------------------------------------------------ maintenance

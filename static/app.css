@@ -143,7 +143,15 @@ body.home #main { top: env(safe-area-inset-top); }
 .layrow .check { display: flex; align-items: center; gap: 8px; flex: 1; }
 .layrow img { width: 22px; height: 22px; border-radius: 22%; }
 .layrow .nm .io { color: var(--name-io); } .layrow .nm .ap { color: color-mix(in srgb, var(--c, var(--fg)) calc(100% - var(--app-lift)), white var(--app-lift)); font-weight: 600; }
-.layrow .iconbtn:disabled { opacity: .3; pointer-events: none; }
+.layrow .bmlinks { min-height: 8px; }
+.grip { cursor: grab; flex: none; color: var(--fg2); }
+.bmrow .grip { margin-left: 2px; }
+.bmgroups.sorting-groups .bmlinks { display: none; }
+.bmgroups.sorting-groups, .bmgroups.sorting-links { user-select: none; -webkit-user-select: none; cursor: grabbing; }
+.bmgroups.sorting-links .bmlinks { min-height: 40px; }
+.dragging { position: relative; z-index: 5; box-shadow: 0 6px 20px rgba(0,0,0,.25); background: var(--bg3); border-radius: var(--r-s); opacity: .95; }
+.dragging .grip { cursor: grabbing; }
+.iconbtn:disabled { opacity: .3; pointer-events: none; }
 .app .more { width: 100%; min-height: 0; }
 .app .more:empty { display: none; }
 /* what a tile shows (drawWidgets): left-aligned under the name, small */
@@ -262,10 +270,6 @@ table.t th { font-size: var(--fs-s); color: var(--fg2); font-weight: 600; }
 .box h2 { margin: 0 0 6px; font-size: var(--fs-l); font-weight: 600; display: flex; align-items: center; gap: 8px; }
 .box h2 .ic { color: var(--brand); }
 .box p { margin: 6px 0; }
-.copy { display: flex; gap: 6px; align-items: center; margin: 6px 0; }
-.copy code { flex: 1; background: var(--bg2); padding: 8px 10px; border-radius: var(--r-s); overflow-x: auto; white-space: nowrap; font-size: var(--fs-m); }
-.kv { display: flex; gap: 12px; padding: 5px 0; align-items: baseline; min-width: 0; }
-.kv .k { width: 90px; flex: none; color: var(--fg2); font-size: var(--fs-s); }
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 16px; overflow-x: auto; }
 .tabs button { padding: 10px 14px; border-bottom: 2px solid transparent; color: var(--fg2); white-space: nowrap; }
 .tabs button.on { color: var(--accent); border-color: var(--accent); font-weight: 600; }
