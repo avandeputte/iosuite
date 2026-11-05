@@ -39,7 +39,7 @@ except ImportError:  # pragma: no cover
 
 # ---- schema: one definition per table, the SQLite and the MySQL spelling
 TABLES = {
-    # accounts live in the suite's shared auth database (iothing-auth, app/auth.py); the user_accounts table of
+    # accounts live in the Shared ioSuite database (iothing-auth, app/auth.py); the user_accounts table of
     # ionotes 1.0 is folded into it by `iothing-auth migrate` and renamed user_accounts_migrated
     "app_settings": (
         "CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT)",
@@ -331,7 +331,7 @@ def _has_column(con, table: str, col: str) -> bool:
 
 def _add_owner(con):
     """Schema 2: every note, folder, tag colour and change-log line belongs to an account (owner: its id in the
-    suite's auth database; 0 until the first admin claims the records made before accounts, see notes.claim_unowned).
+    Shared ioSuite database; 0 until the first admin claims the records made before accounts, see notes.claim_unowned).
     Idempotent; existing records get owner 0."""
     big = "BIGINT" if con.mysql else "INTEGER"
     for table in ("notes", "folders", "change_log"):

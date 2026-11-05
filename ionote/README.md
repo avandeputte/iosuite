@@ -33,14 +33,16 @@ git clone https://github.com/avandeputte/ionotes && cd ionotes
 ```
 
 `setup.sh` is the installer: it asks where the MariaDB/MySQL database is (host, port, database, user, password;
-it tests the connection and creates the database when the user may), the port (8610), whether pictures added in the
+it tests the connection and creates the database when the user may), where the **Shared ioSuite database** is
+(below; database and user `iosuite` by default, tested and created the same way), the port (8610), whether pictures added in the
 web app should have their text read (RapidOCR, ~60 MB), an admin account, and whether to start ionotes at login
 (launchd on macOS, systemd on Linux). Then it creates the Python environment, installs the packages, writes
 `ionotes.env`, creates the tables and the admin, and starts the service. Run it again at any time. Flags skip the
 questions (`./setup.sh --help`), e.g.
 
 ```sh
-IONOTES_MYSQL=192.168.1.89:3306/notes:notes:secret IONOTES_ADMIN=alex:secret ./setup.sh --yes --features ocr
+IONOTES_MYSQL=192.168.1.89:3306/notes:notes:secret IONOTES_SUITE_DB=192.168.1.89:3306/iosuite:iosuite:secret \
+  IONOTES_ADMIN=alex:secret ./setup.sh --yes --features ocr
 ```
 
 (the passwords in the environment stay off the command line). Without the service, `./run.sh` starts it in the
@@ -71,11 +73,13 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/ionotes/main
 ```
 
 It asks about the app first: whether the notes live in MariaDB/MySQL (host, port, database, user, password; the
-defaults are 192.168.1.89, 3306, `notes`, `notes`) or in a SQLite file in the container, whether pictures added in
+defaults are 192.168.1.89, 3306, `notes`, `notes`) or in a SQLite file in the container, where the Shared ioSuite
+database is (host, port, database, user, password; database and user `iosuite` by default), whether pictures added in
 the web app get their text read (RapidOCR), and the admin account; then the framework's own questions (resources,
 network). It creates an unprivileged Debian 13 container (2 CPU, 2 GB, 8 GB disk by default) and runs the app's own
 `setup.sh` inside with those answers: packages, settings, tables, admin, and the `ionotes` service on port 8610.
-For unattended runs set `IONOTES_DB` (`sqlite` or `host:port/db:user:pass`), `IONOTES_FEATURES` (`ocr` or `none`)
+For unattended runs set `IONOTES_DB` (`sqlite` or `host:port/db:user:pass`), `IONOTES_SUITE_DB`
+(`host:port/db:user:pass`), `IONOTES_FEATURES` (`ocr` or `none`)
 and `IONOTES_ADMIN` (`name:password`, or empty for none yet) in the environment. The passwords reach `setup.sh`
 inside the container through its environment (a root-only file pushed in and removed again), not on a command line.
 The setup's output is kept in `/opt/ionotes/setup.log`; on failure its last lines are shown and the command to rerun
@@ -84,13 +88,18 @@ checked for syntax in CI and drive the tested `setup.sh`; they have not been run
 
 ## Users and permissions
 
-Accounts are the **ioThing suite's shared accounts** (the `iothing-auth` library: a MariaDB database shared with
-iopix and ioContacts), so one name, password and session serve every app, and someone signed in at
-`photo.example.com` is signed in at `notes.example.com` too when the apps share a domain (`IOTHING_COOKIE_DOMAIN`).
-What is ionotes' own is kept per app: the role an account holds here and its settings. A *suite admin* is admin in
-every app. Point ionotes at that database with `IOTHING_AUTH_DB_HOST`, `IOTHING_AUTH_DB_NAME`, `IOTHING_AUTH_DB_USER`
-and `IOTHING_AUTH_DB_PASSWORD` in `ionotes.env` (the tables are created at start; `iothing-auth migrate --ionotes`
-folds a 1.0 install's `user_accounts` table into it). Out of the box ionotes is open to anyone who can reach it;
+Accounts are the **ioThing suite's shared accounts**, kept in the **Shared ioSuite database** (a MariaDB database
+shared with iopix and ioContacts, used through the ioSuite shared library, [`iosuite-shared`](https://github.com/avandeputte/iosuite-shared) (package and module still `iothing-auth` / `iothing_auth`); besides the accounts it holds sessions,
+roles, the suite's list of apps and the suite-wide settings), so one name, password and session serve every app, and
+someone signed in at `photo.example.com` is signed in at `notes.example.com` too when the apps share a domain
+(`IOTHING_COOKIE_DOMAIN`). What is ionotes' own is kept per app: the role an account holds here and its settings. A
+*suite admin* is admin in every app. Point ionotes at that database with `IOSUITE_DB_HOST`, `IOSUITE_DB_PORT`,
+`IOSUITE_DB_NAME`, `IOSUITE_DB_USER` and `IOSUITE_DB_PASSWORD` in `ionotes.env` (database and user `iosuite` by
+default; the tables are created at start; `iothing-auth migrate --ionotes`
+folds a 1.0 install's `user_accounts` table into it). Installs from before 1.4 keep working as they are: the older
+names `IOTHING_AUTH_DB_*` are still read (`IOSUITE_DB_*` wins when both are set), and an install that never named the
+database and used the old default `auth` (user `auth`) keeps using it, with a line in the log; nothing is renamed in
+MariaDB. Settings › Storage and backups shows which database it is. Out of the box ionotes is open to anyone who can reach it;
 `setup.sh` (or `ADMIN_USER` / `ADMIN_PASSWORD`, or the person icon in the web app) creates the admin. Once an
 account exists:
 
@@ -133,7 +142,7 @@ buffer that path.
 When the proxy already makes people sign in, ionotes takes that sign-in, exactly as iopix does: the proxy passes who
 signed in in a header, and ionotes treats that person as signed in when an account exists for them (matched on the
 account's email address, then its name). Settings › Users and sign-in › Sign-in at the proxy (saved there, the settings are kept in the
-shared auth database for the whole suite: one Cloudflare Access application covering every app, set up once), or
+Shared ioSuite database for the whole suite: one Cloudflare Access application covering every app, set up once), or
 in `ionotes.env`, which wins:
 
 | Variable | |
@@ -216,7 +225,7 @@ Maintenance › Import): records keep their ids, and a newer copy on the server 
 | `DATA_DIR` | `./data` | the log (`ionotes.log`) and the database settings saved from the web app |
 | `APP_URL` | `http://localhost:8610` | the address ionotes is reached at, for links in MCP answers and the suite's list of apps |
 | `ADMIN_USER` / `ADMIN_PASSWORD` | | the first admin, created on a first start with no accounts |
-| `IOTHING_AUTH_DB_HOST` / `_PORT` / `_NAME` / `_USER` / `_PASSWORD` | `127.0.0.1` / `3306` / `auth` / `auth` / `auth` | the suite's shared account database (MariaDB) |
+| `IOSUITE_DB_HOST` / `_PORT` / `_NAME` / `_USER` / `_PASSWORD` | `127.0.0.1` / `3306` / `iosuite` / `iosuite` / `iosuite` | the Shared ioSuite database (MariaDB): accounts, sessions, suite-wide settings. `IOTHING_AUTH_DB_*` (the names before 1.4) still work |
 | `IOTHING_COOKIE_DOMAIN` | | the domain the session cookie is shared on (e.g. `example.com`); a LAN address outside it gets a cookie of its own |
 | `READ_ONLY` | `0` | nothing can be changed, by anyone |
 | `OCR` | `1` | `0`: the server never reads text in pictures (the apps still do) |
@@ -246,6 +255,6 @@ tests/             pytest; IONOTES_TEST_DB=mysql runs them on MariaDB
 
 Tests: `pip install -e '.[test]' && pytest tests` (SQLite for the notes), and `IONOTES_TEST_DB=mysql pytest tests` with a
 MariaDB database `notes_test` for the user `notes`/`notes` on 127.0.0.1 (`IONOTES_TEST_DB_HOST` and friends change that).
-The shared accounts always go to a test MariaDB of their own: a Docker container the suite starts
-(`iothing-test-mariadb`), or `IOTHING_TEST_DB=host:port:user:password`; never a live `auth` database.
+The Shared ioSuite database always goes to a test MariaDB of its own: a Docker container the suite starts
+(`iothing-test-mariadb`), or `IOTHING_TEST_DB=host:port:user:password`; never a live `iosuite` (or older `auth`) database.
 CI runs both.

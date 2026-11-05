@@ -3,7 +3,8 @@
 # this is the ct/ script; proxmox/install/ionotes-install.sh runs inside the container.
 #
 # It asks about the app first: where the notes are kept (MariaDB/MySQL host, port, database, user, password, or a
-# SQLite file in the container), whether pictures added in the web app get their text read (RapidOCR), and the
+# SQLite file in the container), where the Shared ioSuite database is (accounts and suite-wide settings, shared by
+# the ioThing apps; database and user `iosuite` by default), whether pictures added in the web app get their text read (RapidOCR), and the
 # admin account; then the framework's own questions (resources, network). It then creates the container and runs
 # the app's own setup.sh inside with those answers, which installs the packages, writes the settings, creates the
 # tables and the admin and starts the service on port 8610.
@@ -36,6 +37,7 @@ catch_errors
 
 # ---- the app's own questions (whiptail on the host; env vars IONOTES_* skip them for unattended runs)
 #   IONOTES_DB        sqlite, or host:port/db:user:pass (MariaDB/MySQL)
+#   IONOTES_SUITE_DB  host:port/db:user:pass (the Shared ioSuite database, MariaDB)
 #   IONOTES_FEATURES  ocr or none
 #   IONOTES_ADMIN     name:password (empty: create the admin later in the web app)
 ask_app_settings() {
@@ -52,6 +54,16 @@ ask_app_settings() {
     else
       IONOTES_DB="sqlite"
     fi
+  fi
+  if [[ -z "${IONOTES_SUITE_DB:-}" ]]; then
+    local sh sp sd su sw
+    sh="${IONOTES_DB%%/*}"; sh="${sh%%:*}"; [[ "$IONOTES_DB" == sqlite ]] && sh="192.168.1.89"
+    sh=$(whiptail --backtitle "$bt" --inputbox "Shared ioSuite database: MariaDB host or IP\n\nAccounts, sessions and suite-wide settings, shared with the other ioThing apps (one sign-in for all)." 12 76 "$sh" 3>&1 1>&2 2>&3) || exit 1
+    sp=$(whiptail --backtitle "$bt" --inputbox "Shared ioSuite database: port" 9 60 "3306" 3>&1 1>&2 2>&3) || exit 1
+    sd=$(whiptail --backtitle "$bt" --inputbox "Shared ioSuite database: database (created if the user may)" 9 72 "iosuite" 3>&1 1>&2 2>&3) || exit 1
+    su=$(whiptail --backtitle "$bt" --inputbox "Shared ioSuite database: user" 9 60 "iosuite" 3>&1 1>&2 2>&3) || exit 1
+    sw=$(whiptail --backtitle "$bt" --passwordbox "Shared ioSuite database: password" 9 60 3>&1 1>&2 2>&3) || exit 1
+    IONOTES_SUITE_DB="$sh:$sp/$sd:$su:$sw"
   fi
   if [[ -z "${IONOTES_FEATURES:-}" ]]; then
     if whiptail --backtitle "$bt" --yesno "Read the text in pictures added in the web app (RapidOCR, ~60 MB)?\n\nThe Mac and iPhone apps read text on the device; this is only for pictures uploaded in the browser." 12 76 3>&1 1>&2 2>&3; then IONOTES_FEATURES=ocr; else IONOTES_FEATURES=none; fi
@@ -85,12 +97,13 @@ description
 
 # ---- the app's own setup with the answers
 msg_info "Running the app's setup inside the container (packages, settings, tables, admin, service)"
-SECRETS=""  # setup.sh reads IONOTES_MYSQL and IONOTES_ADMIN from its environment: the passwords stay off every command line
+SECRETS=""  # setup.sh reads IONOTES_MYSQL, IONOTES_SUITE_DB and IONOTES_ADMIN from its environment: the passwords stay off every command line
 if [[ "${IONOTES_DB:-sqlite}" == sqlite ]]; then
   DBARG="--sqlite"
 else
   DBARG=""; SECRETS+="IONOTES_MYSQL=$(printf '%q' "$IONOTES_DB")"$'\n'
 fi
+if [[ -n "${IONOTES_SUITE_DB:-}" ]]; then SECRETS+="IONOTES_SUITE_DB=$(printf '%q' "$IONOTES_SUITE_DB")"$'\n'; fi
 if [[ -n "${IONOTES_ADMIN:-}" ]]; then SECRETS+="IONOTES_ADMIN=$(printf '%q' "$IONOTES_ADMIN")"$'\n'; ADMINARG=""; else ADMINARG="--no-admin"; fi
 # the answers with passwords go in as a root-only file (pushed, read into setup.sh's environment, removed), never as arguments
 SECF="$(mktemp)"; chmod 600 "$SECF"; printf '%s' "$SECRETS" > "$SECF"
@@ -102,7 +115,7 @@ WRAPPED="set -a; . /opt/ionotes/setup.env; set +a; rm -f /opt/ionotes/setup.env;
 if ! pct exec "$CTID" -- bash -c "$WRAPPED"; then
   msg_error "setup.sh failed inside the container; last lines of /opt/ionotes/setup.log:"
   pct exec "$CTID" -- tail -n 40 /opt/ionotes/setup.log || true
-  msg_error "Fix the cause, then run it again inside the container with IONOTES_ADMIN=name:password (and IONOTES_MYSQL=host:port/db:user:password for MariaDB) in the environment: pct exec $CTID -- bash -c \"$SETUP_CMD\""
+  msg_error "Fix the cause, then run it again inside the container with IONOTES_ADMIN=name:password (and IONOTES_MYSQL=host:port/db:user:password for MariaDB, IONOTES_SUITE_DB=host:port/db:user:password for the Shared ioSuite database) in the environment: pct exec $CTID -- bash -c \"$SETUP_CMD\""
   exit 1
 fi
 msg_ok "Setup finished"

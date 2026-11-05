@@ -1,6 +1,6 @@
 """The shared ioThing accounts (iothing-auth), as ionotes uses them.
 
-Accounts, passwords, sessions and roles live in the suite's auth database (IOTHING_AUTH_DB_* in ionotes.env),
+Accounts, passwords, sessions and roles live in the Shared ioSuite database (IOSUITE_DB_* in ionotes.env, app/suitedb.py),
 shared with ioPix and ioContacts: one sign-in serves every app on the domain (IOTHING_COOKIE_DOMAIN). What is
 ionotes' own stays per app: the role an account holds here and its display settings.
 """

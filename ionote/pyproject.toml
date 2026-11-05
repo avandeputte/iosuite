@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ionotes"
-version = "1.3.6"
+version = "1.4.1"
 description = "Notes from the clipboard, screenshots and the share sheet, kept in MariaDB, with a web app and the API the Mac and iPhone apps use"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -24,7 +24,7 @@ dependencies = [
   "python-multipart<1",
   "mcp<3",
   "pyjwt[crypto]<3",   # Cloudflare Access tokens (proxy sign-in)
-  "iothing-auth @ git+https://github.com/avandeputte/iothing-auth.git@8f66960c4e46a56f3b030732092c8af0f1876fbf",   # the ioThing suite's shared accounts and sessions (pinned: bump to pick up a new one)
+  "iothing-auth @ git+https://github.com/avandeputte/iosuite-shared.git@8f66960c4e46a56f3b030732092c8af0f1876fbf",   # the ioSuite shared library (avandeputte/iosuite-shared, formerly iothing-auth; package iothing-auth): accounts, sessions, the Shared ioSuite database (pinned: bump to pick up a new one)
 ]
 
 [project.optional-dependencies]

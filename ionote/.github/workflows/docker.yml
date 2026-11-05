@@ -42,10 +42,10 @@ jobs:
           for f in static/app.js static/js/*.js; do node --input-type=module --check < "$f" || exit 1; done; node --check static/sw.js
           for f in *.sh; do sh -n "$f"; done
           bash -n proxmox/ct/ionotes.sh proxmox/install/ionotes-install.sh
-      - name: The shared accounts' database (iothing-auth) on the same server
+      - name: The Shared ioSuite database (iothing-auth) on the same server
         run: |
           sudo apt-get install -y -qq mariadb-client >/dev/null
-          mariadb -h 127.0.0.1 -uroot -proot -e "CREATE USER IF NOT EXISTS 'auth'@'%' IDENTIFIED BY 'auth'; CREATE DATABASE IF NOT EXISTS auth_test_ionotes; GRANT ALL ON auth_test_ionotes.* TO 'auth'@'%'; FLUSH PRIVILEGES;"
+          mariadb -h 127.0.0.1 -uroot -proot -e "CREATE USER IF NOT EXISTS 'iosuite'@'%' IDENTIFIED BY 'iosuite'; CREATE DATABASE IF NOT EXISTS iosuite_test_ionotes; GRANT ALL ON iosuite_test_ionotes.* TO 'iosuite'@'%'; FLUSH PRIVILEGES;"
       - name: Tests on SQLite
         run: python -m pytest -q -p no:cacheprovider tests
       - name: Tests on MariaDB
