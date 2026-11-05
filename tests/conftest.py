@@ -37,8 +37,9 @@ def client():
     from iosuite_shared import suite
     from app import apps
     suite.invalidate()
-    for a in apps.CATALOGUE:  # every io app registered (each does so itself when it starts)
-        suite.register(a["key"], a["name"], url=f"https://{a['key'][2:]}.example.com", version="1.0")
+    for key in apps.ORDER:  # every io app registered (each does so itself when it starts)
+        suite.register(key, "io" + key[2:].capitalize(), url=f"https://{key[2:]}.example.com", version="1.0",
+                       description=key[2:].capitalize(), color="#123456")
     apps.forget_registry()
     from app.auth import auth
     auth._registered = False  # the row was just deleted: registered again at the next request

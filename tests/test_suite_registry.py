@@ -36,3 +36,10 @@ def test_an_app_the_page_does_not_know_gets_a_tile(client):
     assert "iosuite" not in [t["key"] for t in items]
     r = client.put("/api/me/layout", json={"hidden": ["iorecipes"]})  # a person hides it for themselves
     assert r.status_code == 200 and r.json()["hidden"] == ["iorecipes"]
+
+
+def test_a_known_app_tile_is_what_it_registered(client):
+    """No copy of the apps' icons or colours here: the tile is the app's own row, its icon served by the app."""
+    _registered(iopix={"name": "ioPix", "url": "http://nas.lan:8600", "description": "Photos", "color": "#3b4a8c"})
+    t = next(t for t in client.get("/api/apps").json()["items"] if t["key"] == "iopix")
+    assert (t["name"], t["tagline"], t["color"], t["icon"]) == ("ioPix", "Photos", "#3b4a8c", "http://nas.lan:8600/static/icons/mark.svg")
