@@ -274,3 +274,47 @@ def test_nothing_overlaps_in_a_big_generated_family():
     r = scenario(people, stored, root)
     list(check_layout(r, people))
     assert len(people) > 40
+
+
+def test_messy_relations_never_hang():
+    """Every relation type, missing inverses, implied edges, folded people, cycles: the layout must always finish.
+    (0.11.3 froze the browser on real data: a map changed while it was being iterated.)"""
+    import random
+    types = FAM
+    inv = dict(zip(types, ["child", "parent", "sibling", "half_sibling", "spouse", "partner", "ex_spouse", "grandchild", "grandparent",
+                           "great_grandchild", "great_grandparent", "niece_nephew", "aunt_uncle", "cousin", "child_in_law", "parent_in_law",
+                           "sibling_in_law", "step_child", "step_parent", "step_sibling", "godchild", "godparent", "relative"]))
+    script = KIN + """
+const typeWord = (t) => t;
+const cases = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+const out = [];
+for (const c of cases) {
+  const t0 = Date.now();
+  const L = familyLayout(c.g, new Set(c.fam), typeWord, new Set(c.hidden));
+  const bad = [...L.gen.keys()].filter((id) => !Number.isFinite(L.x.get(id)) || !Number.isFinite(L.y.get(id)));
+  out.push({ ms: Date.now() - t0, bad, drawn: L.gen.size, width: L.width });
+}
+console.log(JSON.stringify(out));
+"""
+    cases = []
+    for seed in range(300):
+        rnd = random.Random(seed)
+        n = rnd.randint(2, 30)
+        nodes = [{"id": i, "fn": f"P{i}", "gender": rnd.choice(["M", "F", None]), "birthday": {"year": rnd.randint(1900, 2020)} if rnd.random() < .7 else None}
+                 for i in range(1, n + 1)]
+        edges = []
+        for _ in range(rnd.randint(0, n * 3)):
+            a, b, t = rnd.randint(1, n), rnd.randint(1, n), rnd.choice(types)
+            edges.append({"from": a, "to": b, "type": t})
+            if rnd.random() < .8:
+                edges.append({"from": b, "to": a, "type": inv[t]})
+            if rnd.random() < .1:
+                edges.append({"from": 1, "to": b, "type": rnd.choice(types), "implied": True})
+        hidden = [x["id"] for x in nodes if rnd.random() < .15]
+        cases.append({"g": {"root": 1, "nodes": nodes, "edges": edges}, "fam": types, "hidden": hidden})
+    out = subprocess.run([NODE, "-e", script], input=json.dumps(cases), capture_output=True, text=True, check=True, timeout=60)
+    results = json.loads(out.stdout)
+    assert len(results) == 300
+    for i, r in enumerate(results):
+        assert not r["bad"], f"case {i}: no position for {r['bad']}"
+        assert r["ms"] < 1000, f"case {i} took {r['ms']} ms"
