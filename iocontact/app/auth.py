@@ -8,8 +8,9 @@ What is ioContacts' own stays per app: the role an account holds here, and which
 """
 from iothing_auth.fastapi import Auth
 from iothing_auth import users as shared
+from iothing_auth.updates import Updater
 
-from . import APP_VERSION, config
+from . import APP_VERSION, config, db
 
 APP = "iocontacts"
 
@@ -32,3 +33,7 @@ def row_of(u):
 
 
 auth.decorate = row_of
+
+# updates (the daily check, update.sh, restart), the MCP token and the server log, as in every app of the suite
+# (iothing_auth.updates); the daily-check switch is kept with ioContacts' own settings
+updater = Updater(APP, APP_VERSION, config.ROOT, settings=(db.get_setting, db.set_setting), user_agent="iocontacts")

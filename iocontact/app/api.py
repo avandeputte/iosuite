@@ -11,8 +11,8 @@ from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
 
-from app import APP_VERSION, calendar, config, csvio, db, enrich, iopix, limits, model, quality, relations as rel, updates, users, vcard
-from app.auth import auth
+from app import APP_VERSION, calendar, config, csvio, db, enrich, iopix, limits, model, quality, relations as rel, users, vcard
+from app.auth import auth, updater
 from app.fold import fold
 
 router = APIRouter()
@@ -123,12 +123,12 @@ async def body_contact(request: Request) -> dict:
 def status(request: Request):
     u = request.state.user
     adm = users.is_admin(u)
-    return {"app": "ioContacts", "version": APP_VERSION, "commit": updates.local_commit()[:7] if u else None,
+    return {"app": "ioContacts", "version": APP_VERSION, "commit": updater.local_commit()[:7] if u else None,
             "usersExist": users.any_users(), "user": users.public(u),
             "iopix": bool(iopix.settings()["url"]), "viaProxy": getattr(request.state, "via_proxy", False),
             "mcp": mcp_enabled() if u else None,
             "suggestions": enrich.pending_count(book_ids(u)) if u else None,
-            "updateAvailable": updates.available() if adm and updates.auto_check_enabled() else None}
+            "updateAvailable": updater.available() if adm and updater.auto_check_enabled() else None}
 
 
 def mcp_enabled() -> bool:
@@ -139,42 +139,6 @@ def mcp_enabled() -> bool:
         return db.get_setting("mcp_enabled", "0") == "1"
     except Exception:  # noqa: BLE001
         return False
-
-
-# ------------------------------------------------------------------ the server: version, updates, MCP
-
-@router.get("/api/server")
-def server_info(request: Request):
-    """Admins: the installed version, the last update check, whether update.sh can run here, and the switches."""
-    admin(request)
-    return {**updates.status(), "mcpEnabled": mcp_enabled(), "mcpLocked": config.MCP_FORCED, "mcpUrl": f"{_base(request)}/mcp"}
-
-
-@router.post("/api/server")
-async def server_action(request: Request):
-    """Admins. Body: {action: check | update, ref?} or {mcpEnabled: bool} / {autoCheck: bool}."""
-    admin(request)
-    b = await request.json()
-    if "mcpEnabled" in b:
-        if config.MCP_FORCED and not b["mcpEnabled"]:
-            raise HTTPException(400, "MCP=1 in the environment keeps the MCP server on")
-        db.set_setting("mcp_enabled", "1" if b["mcpEnabled"] else "0")
-    if "autoCheck" in b:
-        if config.UPDATE_CHECK_LOCKED and b["autoCheck"]:
-            raise HTTPException(400, "UPDATE_CHECK=0 in the environment keeps the daily check off")
-        db.set_setting("update_check", "1" if b["autoCheck"] else "0")
-        if not b["autoCheck"]:
-            updates.forget_check()
-    action = b.get("action")
-    if action == "check":
-        return await run_in_threadpool(updates.check)
-    if action == "update":
-        try:
-            updates.run(str(b.get("ref") or ""))
-        except RuntimeError as e:
-            raise HTTPException(409, str(e))
-        return {"started": True}
-    return server_info(request)
 
 
 def _cookie(resp: Response, request: Request, u: dict) -> None:

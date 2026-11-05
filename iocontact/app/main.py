@@ -1,5 +1,6 @@
 """ioContacts: the application (start-up, who is asking, the routes and the web app)."""
 import logging
+import logging.handlers
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -7,11 +8,18 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app import APP_VERSION, api, carddav, config, db, ldapd, mcp, updates, users
-from app.auth import auth as auth_shared
+from app import APP_VERSION, api, carddav, config, db, ldapd, mcp, users
+from app.auth import auth as auth_shared, updater
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("iocontacts")
+if config.LOG_FILE:  # the server log that Maintenance › Updates and logs shows; the app runs without it
+    try:
+        _fh = logging.handlers.RotatingFileHandler(config.LOG_FILE, maxBytes=2_000_000, backupCount=3, encoding="utf-8")
+        _fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+        logging.getLogger().addHandler(_fh)
+    except OSError as e:
+        log.warning("no server log at %s: %s", config.LOG_FILE, e)
 
 
 @asynccontextmanager
@@ -24,7 +32,7 @@ async def lifespan(app: FastAPI):
             server = await ldapd.serve(config.LDAP_HOST, config.LDAP_PORT)
         except OSError as e:
             log.warning("LDAP directory not started on port %s: %s", config.LDAP_PORT, e)
-    updates.start_daily()  # the daily "is there a newer version" check, while the setting allows it
+    updater.start_daily()  # the daily "is there a newer version" check, while the setting allows it
     sm = mcp.server.session_manager
     sm._has_started = False  # a second start in the same process (the tests start the app once per test) is allowed
     async with sm.run():  # the MCP endpoint (/mcp) lives in this process
@@ -74,6 +82,24 @@ async def who(request: Request, call_next):
     return resp
 
 
+
+
+def _server_info() -> dict:
+    """What Maintenance › Updates and logs and Settings › Server show beside the updater's own fields."""
+    return {"mcpEnabled": api.mcp_enabled(), "mcpLocked": config.MCP_FORCED,
+            "database": f"{config.DB_HOST}:{config.DB_PORT}/{config.DB_NAME}",
+            "ldap": f"{config.LDAP_HOST or '0.0.0.0'}:{config.LDAP_PORT}" if config.LDAP_PORT else None}
+
+
+def _server_apply(body: dict) -> None:
+    """The MCP switch, sent to POST /api/server as {mcpEnabled: bool}."""
+    if "mcpEnabled" in body:
+        if config.MCP_FORCED and not body["mcpEnabled"]:
+            raise ValueError("MCP=1 in the environment keeps the MCP server on")
+        db.set_setting("mcp_enabled", "1" if body["mcpEnabled"] else "0")
+
+
+app.include_router(auth_shared.server_router(updater, log_file=config.LOG_FILE, info=_server_info, apply=_server_apply))  # /api/server, /api/log (admins)
 app.include_router(api.router)
 app.include_router(carddav.router)
 
