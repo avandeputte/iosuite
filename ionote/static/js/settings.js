@@ -1,5 +1,6 @@
 /** Settings (Display for everyone; Users and sign-in for admins), Maintenance (admins: storage and backups, MCP and
- *  OCR, version and log) and the change log. Laid out like iopix's Settings and Maintenance pages. */
+ *  OCR, updates and logs) and the change log. Laid out as in every ioThing app: Settings is what is configured,
+ *  Maintenance what is run or checked. */
 import { $, h, api, state, icon, toast, fail, isAdmin, canWrite, dialog, confirmIt, fmtDate } from './core.js';
 import { runUpdate } from './update.js';
 
@@ -128,12 +129,13 @@ function databaseBox(s) {
 }
 
 async function mcpBox(s) {
-  const tok = await api('/api/mcp/token');
+  const tok = await api('/api/server', { method: 'POST', body: { action: 'token' } });
+  tok.url = (s.appUrl || location.origin) + '/mcp';
   const tokEl = h('span.code', '••••••••');
   const show = h('button.pillbtn', { onclick: () => { tokEl.textContent = tok.token; show.remove(); } }, 'Show');
   const regen = h('button.pillbtn', { disabled: tok.fromEnv, onclick: async () => {
     if (!await confirmIt('New token', 'Make a new token? MCP clients using the old one stop working.', 'New token', true)) return;
-    const r = await api('/api/mcp/token', { method: 'POST' }); tok.token = r.token; tokEl.textContent = r.token;
+    try { const r = await api('/api/server', { method: 'POST', body: { action: 'regenerate_token' } }); tok.token = r.token; tokEl.textContent = r.token; } catch (e) { fail(e); }
   } }, 'New token');
   const who = h('select', (s.accounts || []).map((a) => h('option', { value: a.id, selected: a.id === s.mcp_user }, a.name)));
   who.addEventListener('change', () => setSetting('mcp_user', Number(who.value)));
@@ -186,29 +188,56 @@ function exportBox() {
       canWrite() ? h('button.pillbtn', { onclick: () => file.click() }, icon('upload'), 'Import…') : null, file));
 }
 
-async function updateBox(s) {
-  const u = await api('/api/update');
+/** Maintenance › Updates and logs: the version card, the server log and Restart, from iothing-auth's /api/server and
+ *  /api/log, so the page is the same in every ioThing app. */
+async function updateBox() {
+  const u = await api('/api/server');
   const out = h('p.small');
   const show = (c) => { out.className = 'small'; out.textContent = !c ? '' : c.status === 'current' ? `Up to date (${c.installed}).` : c.status === 'update' ? `A newer version is out: ${c.remoteVersion || c.remote} (${c.remoteDate}): ${c.remoteMessage}` : `Could not check: ${c.error}`; };
   show(u.check);
+  const post = (body) => api('/api/server', { method: 'POST', body });
   return box('ionotes version', null, h('p', `Version ${u.version}, commit `, h('span.code', u.installed), u.docker ? ' (Docker: update by pulling the image)' : ''),
     u.lastUpdate ? h('p.small' + (u.lastUpdate.ok ? '.okc' : '.err'), 'Last update: ' + u.lastUpdate.text) : null,
-    sw('Check for updates daily', s.update_check, (v) => setSetting('update_check', v)),
-    h('div.row', h('button.pillbtn', { onclick: async () => { out.textContent = 'Checking…'; show(await api('/api/update/check', { method: 'POST' }).catch((e) => ({ status: 'error', error: e.message }))); } }, 'Check for updates'),
+    sw('Check for updates daily', u.autoCheck, async (v) => { try { await post({ autoCheck: v }); toast('Saved'); } catch (e) { fail(e); } }, u.autoCheckLocked, u.autoCheckLocked ? '(UPDATE_CHECK=0 in ionotes.env)' : '(only GitHub’s public list of changes is asked; nothing about this server is sent)'),
+    h('div.row', h('button.pillbtn', { onclick: async () => { out.textContent = 'Checking…'; show(await post({ action: 'check' }).catch((e) => ({ status: 'error', error: e.message }))); } }, 'Check for updates'),
       u.canRun ? h('button.pillbtn.primary', { onclick: async () => {
         if (!await confirmIt('Update ionotes', 'Install the latest version and restart? It takes about a minute.', 'Update')) return;
         await runUpdate((msg, failed) => { out.className = 'small' + (failed ? ' err' : ''); out.textContent = msg; });
-      } }, 'Update now') : null), out);
+      } }, 'Update now') : null,
+      h('a.pillbtn', { href: `https://github.com/${u.repo}/commits/${u.branch}`, target: '_blank', rel: 'noopener' }, 'Change log')), out,
+    h('p.small.muted', `Follows ${u.repo} (${u.branch}).`));
 }
 
+function restartBox() {
+  return box('Restart', 'Stops ionotes; the service manager (systemd, launchd or Docker) starts it again within seconds. Nothing is lost; the page reloads when it is back.',
+    h('div.row', h('button.pillbtn', { onclick: async () => {
+      if (!await confirmIt('Restart ionotes', 'Restart the server now? Everyone is disconnected for a few seconds.', 'Restart')) return;
+      try { await api('/api/server', { method: 'POST', body: { action: 'restart' } }); } catch (e) { fail(e); return; }
+      toast('Restarting…');
+      const until = Date.now() + 90000, gone = Date.now() + 3000;
+      const look = async () => {
+        try { const r = await fetch('/api/status', { credentials: 'same-origin' }); if (r.ok && Date.now() > gone) { location.reload(); return; } } catch (e) { /* down */ }
+        if (Date.now() < until) setTimeout(look, 2000); else toast('ionotes did not come back; check the service.');
+      };
+      setTimeout(look, 3000);
+    } }, 'Restart ionotes')));
+}
 
 function logBox() {
-  const pre = h('pre.log', 'Loading…');
-  const level = h('select', ['any', 'warning', 'error', 'auth'].map((l) => h('option', { value: l }, l)));
-  const load = async () => { const r = await api(`/api/log?lines=300&level=${level.value}`).catch((e) => ({ lines: [e.message] })); pre.textContent = (r.lines || []).join('\n') || r.note || '(empty)'; pre.scrollTop = pre.scrollHeight; };
-  level.addEventListener('change', load);
+  const pre = h('pre.log', 'Loading…'), note = h('p.small.muted');
+  const level = h('select', [['any', 'Everything'], ['warning', 'Warnings and errors'], ['error', 'Errors'], ['auth', 'Sign-ins']].map(([v, l]) => h('option', { value: v }, l)));
+  const contains = h('input', { type: 'text', placeholder: 'Contains…' });
+  const requests = h('input', { type: 'checkbox' });
+  const load = async () => {
+    const r = await api(`/api/log?lines=300&level=${level.value}&contains=${encodeURIComponent(contains.value)}&requests=${requests.checked ? 1 : 0}`).catch((e) => ({ lines: [e.message] }));
+    pre.textContent = (r.lines || []).join('\n') || r.note || 'Nothing matches.';
+    note.textContent = r.file && !r.note ? `${r.file}: ${(r.size_bytes / 1024).toFixed(0)} kB, the last ${r.returned} lines.` : '';
+    pre.scrollTop = pre.scrollHeight;
+  };
+  level.addEventListener('change', load); contains.addEventListener('change', load); requests.addEventListener('change', load);
   load();
-  return box('Server log', null, h('div.row', h('label', 'Show'), level, h('button.pillbtn', { onclick: load }, 'Reload')), pre);
+  return box('Server log', null, h('div.row', h('label', 'Show'), level, contains, h('label', requests, ' Requests too'), h('button.pillbtn', { onclick: load }, 'Reload'),
+    h('a.pillbtn', { href: '/api/log/download' }, icon('download'), 'Download')), pre, note);
 }
 
 /** A page as iopix lays one out: the title with its icon tile, the tabs under it (the tab is in the address:
@@ -236,15 +265,15 @@ export function renderSettings(tab) {
   return tabbedPage('settings', 'Settings', 'gear', 'var(--c-gray)', tabs, tab);
 }
 
-/** Maintenance (admins): where the notes are kept and their backups, MCP and the text in pictures, and ionotes itself
- *  (version, updates, the server log). Laid out like iopix's Maintenance. */
+/** Maintenance (admins): where the notes are kept and their backups, MCP and the text in pictures, and Updates and
+ *  logs (the version, the server log, restart), as in every ioThing app. */
 export function renderMaintenance(tab) {
   if (!isAdmin()) { const main = $('#main'); main.textContent = ''; main.append(h('div.page', h('div.pagein', pageTitle('Maintenance', 'wrench', 'var(--c-orange)'), h('p.muted', 'For admins only.')))); return null; }
   const s = () => api('/api/settings');
   return tabbedPage('maintenance', 'Maintenance', 'wrench', 'var(--c-orange)', [
     ['storage', 'Storage and backups', async () => { const x = await s(); return [databaseBox(x), await ownersBox(), exportBox()]; }],
     ['mcp', 'MCP and text in pictures', async () => { const x = await s(); return [await mcpBox(x), ocrBox(x)]; }],
-    ['ionotes', 'ionotes', async () => { const x = await s(); return [await updateBox(x), logBox()]; }],
+    ['updates', 'Updates and logs', async () => [await updateBox(), logBox(), restartBox()]],
   ], tab);
 }
 

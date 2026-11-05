@@ -31,7 +31,7 @@ def _call(client, name, args, headers=None):
 @pytest.fixture
 def on(client, admin):
     client.post("/api/settings", json={"mcp_enabled": True})
-    return client.get("/api/mcp/token").json()["token"]
+    return client.post("/api/server", json={"action": "token"}).json()["token"]
 
 
 def test_off_until_switched_on(client, admin):

@@ -1,4 +1,4 @@
-__version__ = "1.5.0"
+__version__ = "1.6.0"
 
 from app import suitedb as _suitedb  # noqa: E402
 

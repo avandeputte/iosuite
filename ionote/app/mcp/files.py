@@ -6,7 +6,9 @@ from typing import Literal, Optional
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
 
-from app import __version__, config, db, images, logs, ocr, proxyauth, updates, users
+from app import __version__, config, db, images, ocr, proxyauth, users
+from app.auth import updater
+from iothing_auth.updates import tail
 from app.mcp.base import READ_ONLY, WRITES, need_token, server
 
 LOG_LINES_MAX = 2000
@@ -18,8 +20,8 @@ def diagnostics(token: str) -> dict:
     reachable), the stored pictures, text recognition, accounts, and the switches that are on."""
     need_token(token)
     s = db.public_settings()
-    out = {"version": __version__, "commit": updates.local_commit()[:7], "python": sys.version.split()[0], "platform": platform.platform(),
-           "docker": updates.in_docker(), "database": {k: s[k] for k in ("type", "host", "port", "database", "user") if k in s},
+    out = {"version": __version__, "commit": updater.local_commit()[:7], "python": sys.version.split()[0], "platform": platform.platform(),
+           "docker": updater.in_docker(), "database": {k: s[k] for k in ("type", "host", "port", "database", "user") if k in s},
            "pictures": images.stats(), "ocr": ocr.status(), "accounts": len(users.list_users()), "rev": db.current_rev(),
            "read_only": db.read_only(), "require_login": users.require_login(), "data_dir": str(config.DATA_DIR), "app_url": config.APP_URL}
     if s["type"] == "mysql":
@@ -35,7 +37,7 @@ def server_log(token: str, lines: int = 200, contains: str = "", level: Literal[
     `level` keeps only WARNING+ or ERROR+ lines, or the sign-ins (auth)."""
     need_token(token)
     try:
-        return logs.tail(min(int(lines), LOG_LINES_MAX), contains, level)
+        return tail(config.LOG_FILE, min(int(lines), LOG_LINES_MAX), contains, level)
     except OSError as e:
         raise ToolError(f"cannot read the log: {e}")
 
@@ -64,7 +66,7 @@ def proxy_signin(token: str, mode: Optional[str] = None, cf_access_team: Optiona
 @server.tool(annotations=READ_ONLY)
 def check_for_update() -> dict:
     """Installed version and commit versus GitHub's main branch (network), and the outcome of the last update run."""
-    return {"version": __version__, **updates.check(), "lastUpdate": updates.last_result()}
+    return {"version": __version__, **updater.check(), "lastUpdate": updater.last_result()}
 
 
 @server.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=True))
@@ -72,11 +74,11 @@ def update_ionotes(token: str, ref: str = "") -> dict:
     """Update ionotes to the latest commit on GitHub and restart it (update.sh: code, packages, service; settings and
     data are kept). ref: the commit sha (or branch) to install. The connection drops when ionotes restarts; call
     check_for_update afterwards. Not available in Docker (pull the image)."""
-    if not updates.token_ok(token):
-        raise ToolError("Wrong or missing admin token (the web app's Settings › MCP server shows it to an admin)")
+    if not updater.token_ok(token):
+        raise ToolError("Wrong or missing admin token (the web app's Maintenance › MCP server shows it to an admin)")
     try:
-        updates.run(ref)
+        updater.run(ref)
     except RuntimeError as e:
         raise ToolError(str(e))
-    return {"started": True, "installed": updates.local_commit()[:7], "ref": ref or "main",
+    return {"started": True, "installed": updater.local_commit()[:7], "ref": ref or "main",
             "note": "update.sh is running; ionotes restarts when it finishes. Then call check_for_update."}

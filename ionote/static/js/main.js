@@ -21,7 +21,7 @@ function updateBanner(u) {
   if (b) b.remove();
   const text = h('div', h('b', u.version ? `Version ${u.version} is available` : 'A newer build is available'),
     h('div.muted', `You have v${state.version || '?'}. ${(u.message || '').replace(/^v\d+\.\d+\.\d+:\s*/, '').slice(0, 140)}`));
-  const more = h('a.pillbtn', { href: '#/maintenance/ionotes', onclick: () => b.remove() }, 'Details');
+  const more = h('a.pillbtn', { href: '#/maintenance/updates', onclick: () => b.remove() }, 'Details');
   const run = u.canRun ? h('button.pillbtn.primary', { onclick: async () => {
     if (!await confirmIt('Update ionotes', `Fetch ${u.version ? 'version ' + u.version : 'the latest version'}, refresh the packages and restart ionotes? The page reloads when the new version is up.`, 'Update')) return;
     runUpdate((msg, failed) => {
