@@ -2,7 +2,7 @@
 
 *The family calendar, in the iothing suite (with [iopix](https://github.com/avandeputte/iopix), ionotes and [iocontacts](https://github.com/avandeputte/iocontacts)).*
 
-A self-hosted calendar: a web app for the whole family, and the standard protocols every calendar app already speaks, so the same events show up on phones, in Apple Calendar, Google Calendar, Outlook, Thunderbird and anywhere else. FastAPI and a single-page vanilla JS app, with everything stored in MariaDB / MySQL, and the suite's shared library (`iothing-auth`, in [iosuite-shared](https://github.com/avandeputte/iosuite-shared)).
+A self-hosted calendar: a web app for the whole family, and the standard protocols every calendar app already speaks, so the same events show up on phones, in Apple Calendar, Google Calendar, Outlook, Thunderbird and anywhere else. FastAPI and a single-page vanilla JS app, with everything stored in MariaDB / MySQL, and the suite's shared library (`iosuite-shared`, in [iosuite-shared](https://github.com/avandeputte/iosuite-shared)).
 
 ## What it does
 
@@ -76,7 +76,7 @@ nothing about the server is sent; Maintenance › Updates and logs switches it o
 then see a note with **Update now**, and **Maintenance › Updates and logs** has the version, **Check for updates**,
 **Update now**, the tail of the server log (`iocalendar.log` in the app folder; `LOG_FILE` moves it, empty switches it
 off) and **Restart**. The page is the same in every ioThing app: the version check, `update.sh`, the restart and the log
-come from `iothing_auth.updates` in iosuite-shared, served at `/api/server` and `/api/log`. Updating runs the app's own
+come from `iosuite_shared.updates` in iosuite-shared, served at `/api/server` and `/api/log`. Updating runs the app's own
 `update.sh`: the new version's Python packages first, then the code (a failed step leaves the running version as it
 was), the database is brought up to date, and the service restarts; the page reloads when the new version answers. In
 Docker, pull the image instead. From a shell: `./update.sh` (`--check` only looks, `IOCALENDAR_REF=<sha>` installs a
@@ -92,7 +92,7 @@ Every version merged into main is released by itself: when `APP_VERSION` (app/__
 
 ## Run
 
-ioCalendar needs Python 3.10+, git (to install `iothing-auth` from the [iosuite-shared](https://github.com/avandeputte/iosuite-shared) repository) and a MariaDB or MySQL database. Give it its own database
+ioCalendar needs Python 3.10+, git (to install `iosuite-shared` from the [iosuite-shared](https://github.com/avandeputte/iosuite-shared) repository) and a MariaDB or MySQL database. Give it its own database
 and user, for example:
 
 ```sql
@@ -102,8 +102,7 @@ GRANT ALL ON calendar.* TO 'calendar'@'%';
 ```
 
 The accounts and the suite-wide settings live in the Shared ioSuite database (`iosuite`, user `iosuite`; the one ioPix,
-ioNotes and ioContacts use); a new install of the suite creates it the same way. An install that already has the older
-`auth` database keeps using it: its settings are kept, nothing needs renaming. The tables are created on the first start and updated by later versions by themselves.
+ioNotes and ioContacts use); a new install of the suite creates it the same way. The tables are created on the first start and updated by later versions by themselves.
 
 ### Proxmox VE (LXC)
 
@@ -113,7 +112,7 @@ ioNotes and ioContacts use); a new install of the suite creates it the same way.
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iocalendar/main/proxmox/ct/iocalendar.sh)"
 ```
 
-It asks for the calendar database (host, port, database, user, password), the Shared ioSuite database, the web port (8620), the family's time zone, the public address behind your reverse proxy (optional) and the admin account; then the framework's own questions (resources, network). It creates a small Debian 13 container and runs the app's own `setup.sh` inside with those answers. The passwords reach `setup.sh` through its environment (a root-only file pushed in and removed again), never on a command line; the output is kept in `/opt/iocalendar/setup.log`. The container's `update` command pulls the latest code and keeps the settings. For unattended runs set `IOCALENDAR_DB` and `IOCALENDAR_IOSUITE_DB` (`host:port/db:user:password`; the older `IOCALENDAR_AUTH_DB` still works), `IOCALENDAR_ADMIN` (`name:password`), `IOCALENDAR_PORT`, `IOCALENDAR_TIMEZONE` and `IOCALENDAR_PUBLIC_URL`.
+It asks for the calendar database (host, port, database, user, password), the Shared ioSuite database, the web port (8620), the family's time zone, the public address behind your reverse proxy (optional) and the admin account; then the framework's own questions (resources, network). It creates a small Debian 13 container and runs the app's own `setup.sh` inside with those answers. The passwords reach `setup.sh` through its environment (a root-only file pushed in and removed again), never on a command line; the output is kept in `/opt/iocalendar/setup.log`. The container's `update` command pulls the latest code and keeps the settings. For unattended runs set `IOCALENDAR_DB` and `IOCALENDAR_IOSUITE_DB` (`host:port/db:user:password`), `IOCALENDAR_ADMIN` (`name:password`), `IOCALENDAR_PORT`, `IOCALENDAR_TIMEZONE` and `IOCALENDAR_PUBLIC_URL`.
 
 ### Docker
 
@@ -143,7 +142,7 @@ git clone https://github.com/avandeputte/iocalendar && cd iocalendar
 | Setting | Meaning |
 | --- | --- |
 | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | the MariaDB / MySQL database (`calendar`) |
-| `IOSUITE_DB_HOST`, `_PORT`, `_NAME`, `_USER`, `_PASSWORD` | the Shared ioSuite database (`iosuite`; older installs: `auth`): accounts, passwords, sessions, app passwords, roles and suite-wide settings, shared with ioPix, ioNotes and ioContacts. The older names `IOTHING_AUTH_DB_*` and `IOSUITE_SHARED_DB_*` still work |
+| `IOSUITE_DB_HOST`, `_PORT`, `_NAME`, `_USER`, `_PASSWORD` | the Shared ioSuite database (`iosuite`): accounts, passwords, sessions, app passwords, roles and suite-wide settings, shared with ioPix, ioNotes and ioContacts |
 | `IOTHING_COOKIE_DOMAIN` | the domain the session cookie is shared on (`example.com`): signed in at `contacts.example.com`, signed in at `calendar.example.com` too |
 | `PORT` | web port for `run.sh` and the service (8620) |
 | `TIMEZONE` | the family's time zone (default: `TZ`, else the server's), for times written without one and all-day events |
@@ -197,7 +196,7 @@ app/contacts.py    the ioContacts client: people and the Birthdays calendar
 app/holiday.py     the Holidays calendar (country, region, language; filled daily)
 app/members.py     family members on events (kept as CATEGORIES), and the member filter
 app/mcp/           the MCP server: base (who is asking, finding events), read, write and admin tools
-app/users.py       accounts, app passwords and subscription tokens (the suite's, through iothing-auth)
+app/users.py       accounts, app passwords and subscription tokens (the suite's, through iosuite-shared)
 static/            the web app (index.html, app.js, app.css, icons)
 proxmox/           the community-scripts LXC installer      setup.sh, run.sh, update.sh, Dockerfile
 ```

@@ -260,7 +260,7 @@ function drawUser() {
   };
   m.append(btn);
 }
-/* The suite (iothing-auth's suite_apps): when other ioThing apps are registered, the app mark top left (in the sidebar; in
+/* The suite (iosuite-shared's suite_apps): when other ioThing apps are registered, the app mark top left (in the sidebar; in
    the top bar on a phone) opens a menu of them, each a link to that app. Alone, the mark stays the link to the calendar. */
 async function loadSuite() {
   try {
@@ -1269,7 +1269,7 @@ async function setUsers(el) {
   el.append(await proxyCard());
 }
 
-/** Sign-in at the proxy (Cloudflare Access, Authelia…), saved for the whole suite through iothing-auth; the same card in every app. */
+/** Sign-in at the proxy (Cloudflare Access, Authelia…), saved for the whole suite through iosuite-shared; the same card in every app. */
 async function proxyCard() {
   let st;
   try { st = await api('/api/auth/proxy'); } catch (e) { return h('div', { class: 'box' }, h('h2', null, icon('key'), 'Sign-in at the proxy'), h('p', { class: 'warn' }, e.message)); }
@@ -1452,7 +1452,7 @@ async function maintUpdates(el) {
   await draw();
 }
 
-/** The tail of the server log (GET /api/log from iothing-auth): a level filter, a search, Reload and Download. */
+/** The tail of the server log (GET /api/log from iosuite-shared): a level filter, a search, Reload and Download. */
 function logCard() {
   const level = h('select', { class: 't', style: 'width:auto' }, [['any', 'Everything'], ['warning', 'Warnings and errors'], ['error', 'Errors'], ['auth', 'Sign-ins']].map(([v, l]) => h('option', { value: v }, l)));
   const contains = h('input', { class: 't', placeholder: 'Contains…', style: 'max-width:220px' });

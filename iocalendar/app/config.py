@@ -51,7 +51,7 @@ MAX_EVENT_BYTES = 2 * 1024 * 1024     # one calendar object (CalDAV PUT, REST)
 MAX_IMPORT_BYTES = 32 * 1024 * 1024   # an .ics file to import
 
 # the server log, for Maintenance › Updates and logs (empty: none). Updates: IOCALENDAR_REPO, IOCALENDAR_BRANCH and
-# UPDATE_CHECK are read by iothing_auth.updates (app.auth.updater)
+# UPDATE_CHECK are read by iosuite_shared.updates (app.auth.updater)
 LOG_FILE = Path(env("LOG_FILE", str(ROOT / "iocalendar.log"))) if env("LOG_FILE", "x") else None
 
 # the MCP server at /mcp: off until an admin turns it on in Settings, or MCP=1 here

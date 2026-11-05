@@ -44,7 +44,7 @@ jobs:
           for f in *.sh; do sh -n "$f"; done
           bash -n proxmox/ct/iocalendar.sh proxmox/install/iocalendar-install.sh
       - name: Tests
-        # scratch databases calendar_test and calendar_test_auth on the service (iothing_auth.testing)
+        # scratch databases calendar_test and calendar_test_auth on the service (iosuite_shared.testing)
         env:
           IOTHING_TEST_DB: 127.0.0.1:3306:root:root
         run: python -m pytest -q -p no:cacheprovider tests

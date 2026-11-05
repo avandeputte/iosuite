@@ -182,7 +182,7 @@ def test_status_and_app_passwords(client):
 
 
 def test_registers_in_the_suite_list(client):
-    from iothing_auth import suite
+    from iosuite_shared import suite
     from app import APP_VERSION
     client.get("/api/calendars")
     row = suite.get("iocalendar")
@@ -193,7 +193,7 @@ def test_registers_in_the_suite_list(client):
 def test_suite_apps_for_the_app_switcher(client):
     """The app mark becomes a menu of the suite's other apps: the page has the phone's button, may show their icons
     (other origins), and /api/auth/suite lists them with an address and an absolute icon."""
-    from iothing_auth import suite
+    from iosuite_shared import suite
     html = client.get("/").text
     assert 'id="suitebtn"' in html and "img-src 'self' data: blob: https:" in html
     client.get("/api/calendars")

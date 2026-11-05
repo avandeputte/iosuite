@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 
 from app import APP_VERSION, api, caldav, config, contacts, db, holiday, ical, mcp, model, users
 from app.auth import auth as auth_shared, updater
-from iothing_auth import sessions
+from iosuite_shared import sessions
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("iocalendar")
@@ -47,7 +47,7 @@ OPEN = ("/api/status", "/api/docs", "/api/openapi.json")
 
 @app.middleware("http")
 async def who(request: Request, call_next):
-    """Who is asking (iothing-auth: the shared session cookie, the proxy's sign-in, HTTP Basic or a bearer app
+    """Who is asking (iosuite-shared: the shared session cookie, the proxy's sign-in, HTTP Basic or a bearer app
     password). Everything but the web app's files, sign-in and the subscription links (their own secret) needs one."""
     path = request.url.path
     refused = await auth_shared.resolve(request)
