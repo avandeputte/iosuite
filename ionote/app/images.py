@@ -22,6 +22,10 @@ except ImportError:  # pragma: no cover
 KINDS = {"PNG": "image/png", "JPEG": "image/jpeg", "GIF": "image/gif", "WEBP": "image/webp", "TIFF": "image/tiff", "BMP": "image/bmp"}
 
 
+MAX_PIXELS = 100_000_000  # a long scrolling screenshot fits; ~400 MB once unpacked
+Image.MAX_IMAGE_PIXELS = MAX_PIXELS
+
+
 class BadImage(ValueError):
     pass
 
@@ -46,7 +50,12 @@ def prepare(data: bytes):
     if len(data) > config.MAX_IMAGE_MB << 20:
         raise BadImage(f"Images up to {config.MAX_IMAGE_MB} MB")
     try:
-        img = Image.open(io.BytesIO(data))
+        img = Image.open(io.BytesIO(data))  # reads the header only
+    except Exception:
+        raise BadImage("That is not an image ionotes can read")
+    if img.width * img.height > MAX_PIXELS:  # a small file can unpack to gigabytes (a decompression bomb)
+        raise BadImage(f"Images up to {MAX_PIXELS // 1_000_000} megapixels")
+    try:
         img.load()
     except Exception:
         raise BadImage("That is not an image ionotes can read")
@@ -71,9 +80,18 @@ def put(uid: str, data: bytes, user: str) -> dict:
         n = get_note(uid, con)
         if not n or n["deleted"]:
             raise KeyError(uid)
+        if sha == n["imageSHA"]:  # the same picture again (a device retrying): nothing changed
+            return n
         con.execute("INSERT OR REPLACE INTO note_images (uuid, mime, data, thumb, width, height, bytes, sha, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
                     (uid, mime, blob, thumb, w, h, len(blob), sha, time.time()))
-        con.execute("UPDATE notes SET has_image = 1, image_sha = ?, rev = ?, changed_by = ? WHERE uuid = ?", (sha, db.next_rev(con), user, uid))
+        if n["source"] == "web":
+            # a new picture on a note made in the web app: the text read from the old one goes, so the server reads
+            # the new one (routes/notes.py _store), and the note counts as edited now. A device sends the text of
+            # its picture and the edit time itself (its clock decides conflicts, so the server's is left out).
+            con.execute("UPDATE notes SET has_image = 1, image_sha = ?, ocr_text = '', updated_at = ?, rev = ?, changed_by = ? WHERE uuid = ?",
+                        (sha, max(n["updatedAt"], time.time()), db.next_rev(con), user, uid))
+        else:
+            con.execute("UPDATE notes SET has_image = 1, image_sha = ?, rev = ?, changed_by = ? WHERE uuid = ?", (sha, db.next_rev(con), user, uid))
         log_change(con, user, "image", "note", uid, f"{display_title(n)} ({w}×{h}, {len(blob) // 1024} KB)")
         return get_note(uid, con)
 
@@ -85,7 +103,9 @@ def remove(uid: str, user: str) -> dict:
         if not n:
             raise KeyError(uid)
         con.execute("DELETE FROM note_images WHERE uuid = ?", (uid,))
-        con.execute("UPDATE notes SET has_image = 0, image_sha = NULL, rev = ?, changed_by = ? WHERE uuid = ?", (db.next_rev(con), user, uid))
+        # the text read from the picture goes with it (it would still be found by searches otherwise)
+        con.execute("UPDATE notes SET has_image = 0, image_sha = NULL, ocr_text = '', updated_at = ?, rev = ?, changed_by = ? WHERE uuid = ?",
+                    (max(n["updatedAt"], time.time()), db.next_rev(con), user, uid))
         log_change(con, user, "image-removed", "note", uid, display_title(n))
         return get_note(uid, con)
 

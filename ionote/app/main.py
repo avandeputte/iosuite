@@ -23,6 +23,7 @@ from app.routes import auth, notes as notes_routes, settings, users as users_rou
 log = logging.getLogger("app")
 MAX_JSON_BODY = 8 << 20  # a JSON request larger than this is refused before it is read (pictures go as their own body)
 MAX_IMAGE_BODY = (config.MAX_IMAGE_MB + 1) << 20
+MAX_IMPORT_BODY = 4 << 30  # an export with every picture; spooled to disk as it arrives, never held in memory
 
 # what a visitor may still fetch when sign-in is required: the app shell and the sign-in endpoints
 OPEN_PATHS = ("/", "/index.html", "/app.js", "/app.css", "/sw.js", "/manifest.webmanifest", "/api/status")
@@ -95,17 +96,29 @@ def _owner_of(request: Request) -> int:
 
 def _gate(request: Request):
     """Once the user is known (app/auth.py's middleware): whose notes the request works on, and the MCP endpoint's
-    own gates (the switch; with sign-in required, the admin token on every request)."""
+    own gates (the switch, and who may read through it)."""
     path = request.url.path
     if not notes_mod._claimed and users.any_users():
         notes_mod.claim_unowned(owners.first_admin_id())
-    notes_mod.current_owner.set(owners.mcp_owner() if path.startswith("/mcp") else _owner_of(request))
-    if path.startswith("/mcp"):
-        if not mcp_enabled():
-            return JSONResponse({"detail": "The MCP server is switched off (Settings › MCP server)."}, status_code=404)
-        mcp.token_given.set(_mcp_token_ok(request))
-        if request.state.user is None and users.require_login() and not _mcp_token_ok(request):
-            return JSONResponse({"detail": "Sign-in is required; MCP clients send the admin token as 'Authorization: Bearer <token>'"}, status_code=401)
+    if not path.startswith("/mcp"):
+        notes_mod.current_owner.set(_owner_of(request))
+        return None
+    if not mcp_enabled():
+        return JSONResponse({"detail": "The MCP server is switched off (Settings › MCP server)."}, status_code=404)
+    # Notes are private to each account (unlike iopix's shared library), so the MCP endpoint is too: with the admin
+    # token it works on the notes of Settings › MCP server › Notes of; a signed-in account without the token sees
+    # only its own notes; once accounts exist, anyone else is refused, whether or not sign-in is required.
+    tok = _mcp_token_ok(request)
+    mcp.token_given.set(tok)
+    if tok:
+        notes_mod.current_owner.set(owners.mcp_owner())
+    elif request.state.user:
+        notes_mod.current_owner.set(int(request.state.user["id"]))
+    elif users.any_users():
+        return JSONResponse({"detail": "MCP clients send the admin token as 'Authorization: Bearer <token>' "
+                                       "(Settings › MCP server shows it to an admin)"}, status_code=401)
+    else:
+        notes_mod.current_owner.set(0)  # no accounts yet: the open install's notes, as in the web app
     return None
 
 
@@ -113,6 +126,63 @@ def _gate(request: Request):
 # cross-site check on writes: iothing-auth's middleware. What each route needs beyond that is declared on the
 # route (app/access.py).
 app.middleware("http")(auth_shared.middleware(is_open=_open_to_visitors, open_prefixes=("/mcp",), before=_gate))
+
+
+class _TooLarge(Exception):
+    pass
+
+
+def _has_too_large(e: BaseException) -> bool:
+    if isinstance(e, _TooLarge):
+        return True
+    return any(_has_too_large(x) for x in getattr(e, "exceptions", ()))  # inside an ExceptionGroup (task groups)
+
+
+class _BodyCap:
+    """The size limits below, for a body that comes without a Content-Length (chunked) or longer than it said:
+    counted as it is read, refused (413) once past the limit, so nothing large is ever held in memory. The
+    outermost layer, so the refusal reaches it through every middleware."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or scope["method"] in ("GET", "HEAD", "OPTIONS"):
+            return await self.app(scope, receive, send)
+        headers = dict(scope.get("headers") or [])
+        ctype = headers.get(b"content-type", b"").decode("latin-1").split(";")[0].strip().lower()
+        limit = _limit_for(scope["path"], ctype)
+        seen, started = 0, False
+
+        async def capped():
+            nonlocal seen
+            msg = await receive()
+            if msg["type"] == "http.request":
+                seen += len(msg.get("body") or b"")
+                if seen > limit:
+                    raise _TooLarge()
+            return msg
+
+        async def sending(msg):
+            nonlocal started
+            started = started or msg["type"] == "http.response.start"
+            await send(msg)
+
+        try:
+            await self.app(scope, capped, sending)
+        except BaseException as e:
+            if not _has_too_large(e) or started:
+                raise
+            await JSONResponse({"detail": "That request is too large"}, status_code=413)(scope, receive, send)
+
+
+def _limit_for(path: str, ctype: str) -> int:
+    if "/api/import" in path:
+        return MAX_IMPORT_BODY
+    if ctype.startswith("image/") or ctype in ("multipart/form-data", "application/octet-stream", "application/zip"):
+        return MAX_IMAGE_BODY
+    return MAX_JSON_BODY
+
 
 
 @app.middleware("http")
@@ -123,15 +193,15 @@ async def _limits(request: Request, call_next):
             size = int(request.headers.get("content-length") or 0)
         except ValueError:
             return JSONResponse({"detail": "Bad Content-Length"}, status_code=400)
-        limit = MAX_IMAGE_BODY if (ctype.startswith("image/") or ctype in ("multipart/form-data", "application/octet-stream", "application/zip")) else MAX_JSON_BODY
-        if "/api/import" in request.url.path:
-            limit = 4 << 30
-        if size > limit:
+        if size > _limit_for(request.url.path, ctype):
             return JSONResponse({"detail": "That request is too large"}, status_code=413)
     response = await call_next(request)
     if "cache-control" not in response.headers:
         response.headers["Cache-Control"] = "no-cache"
     return response
+
+
+app.add_middleware(_BodyCap)  # added last: the outermost layer
 
 
 @app.exception_handler(notes_mod.NotFound)

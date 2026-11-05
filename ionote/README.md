@@ -113,10 +113,10 @@ account) become the first admin's. A note id that belongs to another account is 
 | Not signed in | nothing but the sign-in screen (there are no shared notes to read) |
 | **viewer** | read and search their own notes; their own settings kept on the server |
 | **viewer without a password** | the same; signs in with one click from the account picker, on the home network only |
-| **editor** | plus every change to their own notes, folders and tags, and export/import of them (the Mac and iPhone apps sign in as an editor) |
+| **editor** | plus every change to their own notes, folders and tags, and export/import of them (Settings › Export and import; the Mac and iPhone apps sign in as an editor) |
 | **admin** | plus settings, accounts, the MCP token, updates and the server log |
 
-**Require sign-in** (Settings › Users and sign-in) also closes `/api/status`-style open routes and the MCP endpoint to visitors.
+**Require sign-in** (Settings › Users and sign-in) also closes `/api/status`-style open routes to visitors (the MCP endpoint wants the admin token either way).
 Sessions are random tokens in an HttpOnly cookie (`iothing_session`, shared by the apps on the domain) valid for
 30 days and renewed while in use; each records where it began and was last seen (address, through Cloudflare or
 not, web or which app): `GET /api/auth/sessions` for your own, `GET /api/users/<id>/sessions` for admins. Passwords
@@ -193,16 +193,17 @@ chosen under Maintenance › MCP server › Notes of (`notes_overview` names it)
   folder, pin), `organize_notes` (many notes at once), `delete_note`, `restore_note`, `manage_folder`, `manage_tag`
 - operate, with the admin token: `diagnostics`, `server_log`, `proxy_signin`, `check_for_update`, `update_ionotes`
 
-The admin token is shown to admins under Maintenance › MCP server (or set `MCP_ADMIN_TOKEN`). With Require sign-in on,
-every `/mcp` request needs it as `Authorization: Bearer <token>` (Claude Desktop with `mcp-remote`:
-`"args": ["mcp-remote", "https://notes.example.com/mcp", "--header", "Authorization: Bearer <token>"]`).
-`python -m app.mcp` serves the same tools on stdio. Treat the token like the admin password.
+The admin token is shown to admins under Maintenance › MCP server (or set `MCP_ADMIN_TOKEN`). Once any account
+exists, every `/mcp` request needs it as `Authorization: Bearer <token>`, whether or not sign-in is required (Claude
+Desktop with `mcp-remote`: `"args": ["mcp-remote", "https://notes.example.com/mcp", "--header", "Authorization: Bearer <token>"]`);
+a browser signed in to ionotes without the token reaches only its own account's notes. `python -m app.mcp` serves
+the same tools on stdio, on the chosen account's notes. Treat the token like the admin password.
 
 ## Export, import and backups
 
 Maintenance › Storage and backups › Export downloads every note as Markdown (with front matter: id, dates, tags, source) next to its picture,
 in a directory per folder, plus `notes.json` with everything. Such a zip imports again on any ionotes server (admins,
-Maintenance › Import): records keep their ids, and a newer copy on the server wins. For backups, back the database up
+Maintenance › Import): records keep their ids, and a newer copy on the server wins (a zip from another account on the same server comes in as new notes). For backups, back the database up
 (`mariadb-dump --single-transaction notes`): notes, pictures, accounts and settings are all in it.
 
 ## Updating

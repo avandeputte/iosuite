@@ -21,7 +21,7 @@ def api_status(request: Request):
     out = {"ok": True, "app": "ionotes", "version": __version__, "requireLogin": users.require_login(), "usersExist": users.any_users(),
            "appName": db.get_setting("app_name", "") or "ionotes", "readOnly": db.read_only()}
     if users.is_signed_in(request.state.user):
-        out["rev"] = db.current_rev()
+        out["rev"] = notes.owner_rev()
         out["commit"] = updates.local_commit()[:7]
         if users.is_admin(request.state.user):
             u = updates.available() if updates.auto_check_enabled() else None
@@ -111,8 +111,13 @@ async def api_db_test(request: Request):
 async def api_db_save(request: Request):
     """Write data/db.json; ionotes uses it from its next start (restart the service)."""
     body = await json_body(request)
+    fixed = db.public_settings()["fromEnv"]
+    if fixed:
+        raise HTTPException(400, f"Set in ionotes.env, change it there: {', '.join('DB_' + k.upper() for k in fixed)}")
     c = {**db.settings(), **{k: body[k] for k in db.KEYS if k in body}}
     if not body.get("password"):
+        if c.get("type") == "mysql" and not db.same_server(c):
+            raise HTTPException(400, "Enter the password: the saved one is only used for the server and user it belongs to")
         c["password"] = db.settings()["password"]
     if c.get("type") == "mysql":
         t = await run_in_threadpool(db.test, c)
@@ -143,9 +148,8 @@ async def api_export(trash: int = 0, pictures: int = 1):
 
 @router.post("/api/import", dependencies=[access.editor_write])
 async def api_import(request: Request, file: UploadFile = File(...)):
-    data = await file.read()
-    try:
-        return await run_in_threadpool(backup.import_zip, data, user_name(request))
+    try:  # the upload is a temporary file (on disk once large): read from there, not into memory
+        return await run_in_threadpool(backup.import_zip, file.file, user_name(request))
     except (ValueError, KeyError) as e:
         raise HTTPException(400, f"Could not import: {e}")
 

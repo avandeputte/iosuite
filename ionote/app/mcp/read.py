@@ -52,13 +52,8 @@ def search_notes(text: str = "", folder: Optional[str] = None, tag: Optional[str
     lo = parse_date(created_from) if created_from else None
     hi = parse_date(created_to, end=True) if created_to else None
     folders = {f["id"]: f["name"] for f in notes.list_folders()}
-    if lo is None and hi is None:
-        res = notes.list_notes(text, fid, tag, pinned, has_picture, sort, limit, offset, source)
-        found, total = res["notes"], res["total"]
-    else:  # the date range filters a larger page here (notes.list_notes has no date filter)
-        res = notes.list_notes(text, fid, tag, pinned, has_picture, sort, 1000, 0, source)
-        hits = [n for n in res["notes"] if (lo is None or n["createdAt"] >= lo) and (hi is None or n["createdAt"] < hi)]
-        found, total = hits[offset:offset + limit], len(hits)
+    res = notes.list_notes(text, fid, tag, pinned, has_picture, sort, limit, offset, source, created_from=lo, created_before=hi)
+    found, total = res["notes"], res["total"]
     return {"total": total, "offset": offset, "returned": len(found), "notes": [summary(n, folders) for n in found]}
 
 

@@ -7,7 +7,7 @@ It is served at /mcp by the web app (main.py) and can also run on its own with `
 on the same database.
 
   base.py   the MCPServer instance, the admin-token gate and the helpers the tool modules share
-  read.py   the read-only tools anyone the sign-in rule lets in may call
+  read.py   the read-only tools (the admin token, or a signed-in account on its own notes)
   write.py  the tools that change notes, folders and tags (admin token)
   files.py  the operator's diagnostics and the updater (admin token)
 """

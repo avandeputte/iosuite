@@ -104,7 +104,7 @@ def _image_resp(request: Request, uid: str, thumb: bool):
         raise HTTPException(404, "This note has no picture")
     data, mime, sha = got
     etag = f'"{sha[:24]}{"t" if thumb else ""}"'
-    headers = {"ETag": etag, "Cache-Control": "private, max-age=86400"}
+    headers = {"ETag": etag, "Cache-Control": "private, max-age=86400", "Vary": "Cookie"}
     if etag in request.headers.get("if-none-match", ""):
         return Response(status_code=304, headers=headers)
     return Response(data, media_type=mime, headers=headers)
@@ -188,6 +188,8 @@ async def api_folder_put(uid: str, request: Request):
 
 @router.delete("/api/folders/{uid}", dependencies=[access.editor_write])
 def api_folder_delete(uid: str, request: Request, ts: float = None):
+    if not any(f["id"] == notes.check_uuid(uid) for f in notes.list_folders(include_deleted=True)):
+        raise HTTPException(404, "No such folder")
     try:
         return notes.save_folder(uid, {"deleted": True, "updatedAt": ts or time.time()}, user_name(request), force=ts is None)
     except notes.Stale as e:

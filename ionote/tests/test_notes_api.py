@@ -159,3 +159,86 @@ def test_import_takes_a_device_notes_json_without_the_format_line(client, admin)
     assert client.get(f"/api/notes/{NID}").json()["hasImage"]
     bad = client.post("/api/import", files={"file": ("x.json", b'{"format": "something-else", "notes": []}', "application/json")})
     assert bad.status_code == 400
+
+
+def test_a_tag_with_an_underscore_counts_only_its_own_notes(client, admin):
+    """_ and % are LIKE wildcards: escaped, the count matches the notes listed (no endless "Show more")."""
+    client.put(f"/api/notes/{NID}", json={"title": "a", "tags": ["project_a"], "updatedAt": 1})
+    client.put(f"/api/notes/{NID2}", json={"title": "b", "tags": ["projectXa"], "updatedAt": 1})
+    r = client.get("/api/notes", params={"tag": "project_a"}).json()
+    assert r["total"] == 1 and [n["id"] for n in r["notes"]] == [NID]
+    client.put(f"/api/notes/{NID}", json={"tags": ["café"], "updatedAt": 2})
+    assert client.get("/api/notes", params={"tag": "Café"}).json()["total"] == 1
+
+
+def test_a_tags_colour_follows_a_rename_and_goes_with_remove(client, admin):
+    client.put(f"/api/notes/{NID}", json={"title": "a", "tags": ["old"], "updatedAt": 1})
+    client.put("/api/tags/old/color", json={"color": "red"})
+    client.post("/api/tags/rename", json={"from": "old", "to": "new"})
+    assert {t["name"]: t["color"] for t in client.get("/api/tags").json()["tags"]} == {"new": "red"}
+    assert {t["name"] for t in client.get("/api/sync").json()["tags"] if t["deleted"]} == {"old"}
+    client.post("/api/tags/remove", json={"name": "new"})
+    client.put(f"/api/notes/{NID}", json={"tags": ["new"], "updatedAt": time.time() + 5})
+    assert {t["name"]: t["color"] for t in client.get("/api/tags").json()["tags"]} == {"new": None}
+
+
+def test_deleting_a_folder_that_does_not_exist_is_a_404(client, admin):
+    assert client.delete(f"/api/folders/{NID}").status_code == 404
+    assert client.get("/api/sync").json()["folders"] == []
+
+
+def test_removing_a_picture_takes_its_text_and_a_new_web_picture_is_read_again(client, admin):
+    client.put(f"/api/notes/{NID}", json={"title": "shot", "ocrText": "old words", "source": "web", "updatedAt": 1})
+    client.put(f"/api/notes/{NID}/image", content=png(), headers={"content-type": "image/png"})
+    n = client.get(f"/api/notes/{NID}").json()
+    assert n["ocrText"] == "" and n["updatedAt"] > 1  # a new picture on a web note: its old text goes
+    client.put(f"/api/notes/{NID}", json={"ocrText": "read from it", "updatedAt": time.time() + 5})
+    n = client.delete(f"/api/notes/{NID}/image").json()
+    assert not n["hasImage"] and n["ocrText"] == ""
+    assert client.get("/api/notes", params={"q": "read"}).json()["total"] == 0
+    # a device's picture keeps the text the device read and its edit time
+    client.put(f"/api/notes/{NID2}", json={"title": "mac", "ocrText": "from vision", "source": "screenshot", "updatedAt": 7})
+    n = client.put(f"/api/notes/{NID2}/image", content=png(), headers={"content-type": "image/png"}).json()
+    assert n["ocrText"] == "from vision" and n["updatedAt"] == 7
+
+
+def test_status_rev_moves_only_with_this_accounts_changes(client, admin):
+    client.put(f"/api/notes/{NID}", json={"title": "a", "updatedAt": 1})
+    rev = client.get("/api/status").json()["rev"]
+    client.post("/api/users", json={"name": "sam", "password": "secretpw2", "role": "editor"})
+    client.cookies.clear()
+    client.post("/api/auth/login", json={"name": "sam", "password": "secretpw2"})
+    client.put(f"/api/notes/{NID2}", json={"title": "sam's", "updatedAt": 1})
+    client.cookies.clear()
+    client.post("/api/auth/login", json={"name": "alex", "password": "secretpw1"})
+    assert client.get("/api/status").json()["rev"] == rev
+
+
+def test_a_chunked_body_is_held_to_the_size_limit(client, admin):
+    def chunks():
+        for _ in range(10):
+            yield b"x" * (1 << 20)
+    r = client.put(f"/api/notes/{NID}", content=chunks(), headers={"content-type": "application/json"})
+    assert r.status_code == 413
+
+
+def test_the_saved_database_password_only_goes_to_its_own_server(client, admin):
+    r = client.post("/api/db/test", json={"type": "mysql", "host": "203.0.113.9", "port": 3306, "user": "x", "keep_password": True}).json()
+    assert not r["ok"] and "password" in r["error"]
+    assert client.post("/api/db/save", json={"type": "mysql", "host": "203.0.113.9"}).status_code == 400
+
+
+def test_an_import_does_not_take_a_neighbours_picture(client, admin):
+    """Work/Meeting.md has no picture; Work/Meeting.v2.png belongs to Meeting.v2."""
+    import io as _io
+    import json as _json
+    import zipfile as _zip
+    buf = _io.BytesIO()
+    with _zip.ZipFile(buf, "w") as z:
+        z.writestr("notes.json", _json.dumps({"notes": [{"id": NID, "title": "Meeting", "updatedAt": 1}, {"id": NID2, "title": "Meeting.v2", "updatedAt": 1}]}))
+        z.writestr("Meeting.md", f"---\nid: {NID}\n---\n")
+        z.writestr("Meeting.v2.md", f"---\nid: {NID2}\n---\n")
+        z.writestr("Meeting.v2.png", png())
+    r = client.post("/api/import", files={"file": ("x.zip", buf.getvalue(), "application/zip")}).json()
+    assert r["pictures"] == 1
+    assert not client.get(f"/api/notes/{NID}").json()["hasImage"] and client.get(f"/api/notes/{NID2}").json()["hasImage"]

@@ -26,12 +26,12 @@ function renderEmpty(msg) {
 
 const save = debounce(() => { flush(); }, 700);
 
-export async function flush() {
+export async function flush(keepalive = false) {
   if (!note || !Object.keys(pending).length) return saving;
   const body = { ...pending, updatedAt: Date.now() / 1000 };
   pending = {};
   status('Saving…');
-  saving = api(`/api/notes/${note.id}`, { method: 'PUT', body }).then((n) => {
+  saving = api(`/api/notes/${note.id}`, { method: 'PUT', body, keepalive }).then((n) => {
     const image = note.image;
     note = { ...n, image };
     updateCard(note);
@@ -199,5 +199,6 @@ function render() {
 function grow(t) { t.style.height = 'auto'; t.style.height = Math.max(t.scrollHeight, window.innerHeight * 0.4) + 'px'; }
 
 export const currentNote = () => note;
-window.addEventListener('beforeunload', () => { if (note && Object.keys(pending).length) navigator.sendBeacon && flush(); });
+// an edit not saved yet goes as the tab closes (keepalive: the browser finishes the request after the page is gone)
+window.addEventListener('pagehide', () => { if (note && Object.keys(pending).length) flush(true); });
 export { markSelected };

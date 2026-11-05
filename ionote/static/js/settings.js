@@ -181,7 +181,7 @@ function exportBox() {
     toast('Importing…', 60000);
     try { const r = await api('/api/import', { method: 'POST', body: fd }); toast(`Imported ${r.notes} notes, ${r.pictures} pictures, ${r.folders} folders${r.skipped ? `; ${r.skipped} were newer here` : ''}`, 6000); } catch (err) { fail(err); }
   } });
-  return box('Export and import', 'Every note as Markdown with its picture, in folders, plus notes.json with everything; a zip made here imports again on any ionotes server (records keep their ids; newer copies on the server win).',
+  return box('Export and import', 'Your notes (each account has its own) as Markdown with their pictures, in folders, plus notes.json with everything; a zip made here imports again on any ionotes server (records keep their ids; newer copies on the server win).',
     h('div.row', h('a.pillbtn', { href: '/api/export.zip' }, icon('download'), 'Export all notes'), h('a.pillbtn', { href: '/api/export.zip?trash=1' }, 'With the trash'),
       canWrite() ? h('button.pillbtn', { onclick: () => file.click() }, icon('upload'), 'Import…') : null, file));
 }
@@ -228,9 +228,10 @@ async function tabbedPage(base, title, ic, hue, tabs, tab) {
 }
 const render = () => again();
 
-/** Settings: Display for everyone; Users and sign-in for admins (as iopix's Settings). */
+/** Settings: Display for everyone, Export and import of one's own notes, Users and sign-in for admins (as iopix's Settings). */
 export function renderSettings(tab) {
   const tabs = [['display', 'Display', async () => [appearance(), state.me.user ? null : box('Account', state.me.usersExist ? 'Sign in to see your notes.' : 'No accounts yet: anyone who can reach ionotes can read and change the notes. Create the admin account from the person icon at the top right.')]]];
+  if (state.me.user || !state.me.usersExist) tabs.push(['export', 'Export and import', async () => [exportBox()]]);  // anyone's own notes
   if (isAdmin()) tabs.push(['users', 'Users and sign-in', async () => { const s = await api('/api/settings'); return [state.me.usersExist ? await usersBox() : null, signInBox(s), await proxyBox()]; }]);
   return tabbedPage('settings', 'Settings', 'gear', 'var(--c-gray)', tabs, tab);
 }

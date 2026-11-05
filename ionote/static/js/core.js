@@ -85,10 +85,12 @@ export function fmtDate(sec, long = false) {
 
 // ---- the API
 export class ApiError extends Error { constructor(status, msg, body) { super(msg); this.status = status; this.body = body; } }
-export async function api(path, { method = 'GET', body, raw, headers } = {}) {
+export async function api(path, { method = 'GET', body, raw, headers, keepalive } = {}) {
   const opt = { method, headers: { ...(headers || {}) }, credentials: 'same-origin' };
   if (body instanceof FormData || raw) opt.body = body;
   else if (body !== undefined) { opt.body = JSON.stringify(body); opt.headers['Content-Type'] = 'application/json'; }
+  // keepalive: the request outlives the page (a save as the tab closes); browsers take up to 64 KB that way
+  if (keepalive && typeof opt.body === 'string' && opt.body.length < 60000) opt.keepalive = true;
   const r = await fetch(path, opt);
   const ct = r.headers.get('content-type') || '';
   const data = ct.includes('json') ? await r.json().catch(() => null) : null;

@@ -1,6 +1,9 @@
-"""The MCP endpoint at /mcp: off until switched on, read tools for anyone the sign-in rule lets in, writes with
-the admin token (as in iopix)."""
+"""The MCP endpoint at /mcp: off until switched on; with the admin token it works on the notes of the chosen account,
+a signed-in account without it sees only its own notes, anyone else is refused once accounts exist. Writes take the
+admin token as an argument (as in iopix)."""
+import calendar
 import json
+import time
 
 import pytest
 
@@ -77,14 +80,43 @@ def test_with_sign_in_required_the_endpoint_wants_the_bearer_token(client, on):
 def test_mcp_works_on_the_chosen_accounts_notes(client, on):
     client.put(f"/api/notes/{NID}", json={"title": "alex's note", "updatedAt": 1})
     sam = client.post("/api/users", json={"name": "sam", "password": "secretpw2", "role": "editor"}).json()
-    ov = _call(client, "notes_overview", {})["structuredContent"]
+    bearer = {"authorization": f"Bearer {on}"}
+    ov = _call(client, "notes_overview", {}, headers=bearer)["structuredContent"]
     assert ov["notes"] == 1 and ov["account"] == "alex"  # the first admin by default
     assert client.post("/api/settings", json={"mcp_user": sam["id"]}).status_code == 200
     assert client.get("/api/settings").json()["mcp_user"] == sam["id"]
-    ov = _call(client, "notes_overview", {})["structuredContent"]
+    ov = _call(client, "notes_overview", {}, headers=bearer)["structuredContent"]
     assert ov["notes"] == 0 and ov["account"] == "sam"
-    assert _call(client, "get_note", {"note_id": NID})["isError"]
-    made = _call(client, "create_note", {"token": on, "title": "for sam"})["structuredContent"]
+    assert _call(client, "get_note", {"note_id": NID}, headers=bearer)["isError"]
+    made = _call(client, "create_note", {"token": on, "title": "for sam"}, headers=bearer)["structuredContent"]
     client.cookies.clear()
     client.post("/api/auth/login", json={"name": "sam", "password": "secretpw2"})
     assert [n["id"] for n in client.get("/api/notes").json()["notes"]] == [made["id"]]
+
+
+def test_nobody_reads_another_accounts_notes_through_mcp(client, on):
+    """Notes are private: without the admin token, /mcp shows a visitor nothing (even with sign-in not required)
+    and a signed-in account only its own notes, whatever account Settings › MCP server names."""
+    client.put(f"/api/notes/{NID}", json={"title": "alex's secret", "updatedAt": 1})
+    client.post("/api/users", json={"name": "sam", "password": "secretpw2", "role": "editor"})
+    client.cookies.clear()
+    r = client.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                                  "params": {"name": "search_notes", "arguments": {"text": "secret"}}}, headers=HEADERS)
+    assert r.status_code == 401
+    client.post("/api/auth/login", json={"name": "sam", "password": "secretpw2"})
+    ov = _call(client, "notes_overview", {})["structuredContent"]
+    assert ov["notes"] == 0 and ov["account"] == "sam"
+    assert _call(client, "get_note", {"note_id": NID})["isError"]
+    # the token is what reaches the chosen account's notes (alex's, the first admin's)
+    found = _call(client, "search_notes", {"text": "secret"}, headers={"authorization": f"Bearer {on}"})["structuredContent"]
+    assert [n["id"] for n in found["notes"]] == [NID]
+
+
+def test_search_by_date_filters_in_the_database(client, on):
+    for i, (uid, day) in enumerate([(NID, "2026-01-05"), ("0F8C6F1E-1D2B-4F3A-9C1A-1234567890AC", "2026-02-05")]):
+        ts = calendar.timegm(time.strptime(day, "%Y-%m-%d"))
+        client.put(f"/api/notes/{uid}", json={"title": f"n{i}", "createdAt": ts, "updatedAt": ts})
+    res = _call(client, "search_notes", {"created_from": "2026-02-01", "created_to": "2026-02-28"})["structuredContent"]
+    assert res["total"] == 1 and res["notes"][0]["title"] == "n1"
+    res = _call(client, "search_notes", {"created_to": "2026-01-05"})["structuredContent"]
+    assert res["total"] == 1 and res["notes"][0]["title"] == "n0"

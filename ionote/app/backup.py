@@ -14,7 +14,7 @@ import re
 import time
 import zipfile
 
-from app import db, images, notes
+from app import config, db, images, notes
 
 EXT = {"image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp", "image/tiff": "tiff", "image/bmp": "bmp"}
 
@@ -74,25 +74,54 @@ def export_zip(include_trash: bool = False, pictures: bool = True) -> bytes:
     return buf.getvalue()
 
 
-def import_zip(data: bytes, user: str) -> dict:
-    """Import an export (zip, or its notes.json alone). Records keep their ids; newer server copies win."""
+MAX_JSON = 256 << 20  # notes.json (a device's can carry its pictures inline)
+MAX_MD = 16 << 20  # one note as Markdown: its text and the text in its picture
+
+
+def _member(z: zipfile.ZipFile, name: str, limit: int) -> bytes:
+    """One file of the zip, refused when it would unpack to more than limit bytes (a zip bomb)."""
+    if z.getinfo(name).file_size > limit:
+        raise ValueError(f"{name} is too large")
+    with z.open(name) as f:
+        data = f.read(limit + 1)
+    if len(data) > limit:
+        raise ValueError(f"{name} is too large")
+    return data
+
+
+def import_zip(src, user: str) -> dict:
+    """Import an export (zip, or its notes.json alone), from bytes or a file. Records keep their ids; newer
+    server copies win. An id another account on this server has (its export, imported here) gets a new one."""
+    f = io.BytesIO(src) if isinstance(src, (bytes, bytearray)) else src
     pics = {}
-    if data[:2] == b"PK":
-        z = zipfile.ZipFile(io.BytesIO(data))
-        doc = json.loads(z.read("notes.json"))
+    if f.read(2) == b"PK":
+        f.seek(0)
+        try:
+            z = zipfile.ZipFile(f)
+        except zipfile.BadZipFile:
+            raise ValueError("That is not a zip ionotes can read")
+        doc = json.loads(_member(z, "notes.json", MAX_JSON))
         names = z.namelist()
     else:
+        f.seek(0)
+        data = f.read(MAX_JSON + 1)
+        if len(data) > MAX_JSON:
+            raise ValueError("notes.json is too large")
         z, doc, names = None, json.loads(data), []
     # an export says what it is; a notes.json written by hand or by a device may leave that out
     if not isinstance(doc, dict) or doc.get("format", "ionotes-export") != "ionotes-export" or not isinstance(doc.get("notes", []), list):
         raise ValueError("That is not an ionotes export")
     out = {"folders": 0, "notes": 0, "tags": 0, "pictures": 0, "skipped": 0}
-    for f in doc.get("folders") or []:
+    fmap = {}  # a folder id another account has -> the new id it gets here
+    for fo in doc.get("folders") or []:
         try:
-            notes.save_folder(f["id"], f, user)
+            notes.save_folder(fo["id"], fo, user)
             out["folders"] += 1
-        except (notes.Stale, notes.NotFound):
+        except notes.Stale:
             out["skipped"] += 1
+        except notes.NotFound:  # another account's id: imported as a new folder
+            fmap[fo["id"]] = notes.save_folder(None, {k: v for k, v in fo.items() if k != "id"}, user)["id"]
+            out["folders"] += 1
     for t in doc.get("tags") or []:
         try:
             notes.set_tag_color(t["name"], t.get("color"), user, t.get("updatedAt"))
@@ -102,25 +131,34 @@ def import_zip(data: bytes, user: str) -> dict:
     if z:  # pictures by the note's id, from the Markdown that points at them
         for name in names:
             if name.endswith(".md"):
-                m = re.search(r"^id: (\S+)$", z.read(name).decode("utf-8", "replace"), re.M)
+                m = re.search(r"^id: (\S+)$", _member(z, name, MAX_MD).decode("utf-8", "replace"), re.M)
                 if m:
                     stem = name[:-3]
-                    pic = next((x for x in names if x.startswith(stem + ".") and not x.endswith(".md")), None)
+                    # exactly <stem>.<ext>: "Meeting.png" is not the picture of "Meeting.v2"'s neighbour "Meeting"
+                    pic = next((x for x in names if x != name and x.rpartition(".")[0] == stem and x.rpartition(".")[2] in EXT.values()), None)
                     if pic:
                         pics[m.group(1)] = pic
     for n in doc.get("notes") or []:
         img = n.get("imageData")  # a notes.json from a device can carry the picture inline (base64)
+        fields = {k: v for k, v in n.items() if k not in ("hasImage", "imageSHA", "rev", "imageData")}
+        if fields.get("folderID") in fmap:
+            fields["folderID"] = fmap[fields["folderID"]]
         try:
-            notes.save_note(n["id"], {k: v for k, v in n.items() if k not in ("hasImage", "imageSHA", "rev", "imageData")}, user)
+            uid = notes.save_note(n["id"], fields, user)["id"]
             out["notes"] += 1
-        except (notes.Stale, notes.NotFound):  # newer here, or the id is another account's
+        except notes.Stale:  # newer here
             out["skipped"] += 1
             continue
-        blob = base64.b64decode(img) if img else (z.read(pics[n["id"]]) if z and n["id"] in pics else None)
-        if blob and not n.get("deleted"):
-            try:
-                images.put(n["id"], blob, user)
+        except notes.NotFound:  # the id is another account's: imported as a new note
+            uid = notes.save_note(None, fields, user)["id"]
+            out["notes"] += 1
+        if n.get("deleted"):
+            continue
+        try:
+            blob = base64.b64decode(img) if img else (_member(z, pics[n["id"]], config.MAX_IMAGE_MB << 20) if z and n["id"] in pics else None)
+            if blob:
+                images.put(uid, blob, user)
                 out["pictures"] += 1
-            except (images.BadImage, KeyError):
-                pass
+        except (images.BadImage, KeyError, ValueError):  # not a picture ionotes can read, or too large: the note without it
+            pass
     return out

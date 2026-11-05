@@ -168,7 +168,16 @@ class Conn:
         return Cursor(self.raw.executemany(sql, rows))
 
     def begin(self):
-        self.execute("START TRANSACTION" if self.mysql else "BEGIN IMMEDIATE")
+        """A write transaction. SQLite's BEGIN IMMEDIATE lets one writer in at a time; on MySQL the lock row does the
+        same. That keeps commits in rev order: a reader never sees rev 101 committed while rev 100 is still on its
+        way, which would let a device's sync cursor (GET /api/sync) pass it by for good."""
+        if not self.mysql:
+            self.execute("BEGIN IMMEDIATE")
+            return
+        self.execute("START TRANSACTION")
+        if not self.execute("SELECT value FROM app_settings WHERE key = 'write_lock' FOR UPDATE").fetchone():
+            self.execute("INSERT IGNORE INTO app_settings (key, value) VALUES ('write_lock', '')")
+            self.execute("SELECT value FROM app_settings WHERE key = 'write_lock' FOR UPDATE")
 
     def commit(self):
         self.raw.commit()
@@ -273,10 +282,19 @@ def tx():
         con.close()
 
 
+def same_server(c: dict) -> bool:
+    """Whether c names the configured MySQL server and user, the only place the saved password may be sent."""
+    cur = settings()
+    return (str(c.get("host") or "").strip().lower() == str(cur["host"] or "").strip().lower()
+            and int(c.get("port") or 3306) == int(cur["port"] or 3306) and str(c.get("user") or "") == str(cur["user"] or ""))
+
+
 def test(values: dict) -> dict:
     """Try a MySQL/MariaDB connection (Settings › Database, setup.sh): {ok, version} or {ok: False, error}."""
     c = {**settings(), **{k: v for k, v in values.items() if k in KEYS}}
-    if not c.get("password") and values.get("keep_password"):
+    if not values.get("password"):  # the saved password, only ever for the server and user it belongs to
+        if not same_server(c):
+            return {"ok": False, "error": "Enter the password: the saved one is only used for the server and user it belongs to"}
         c["password"] = settings()["password"]
     try:
         raw = _open_mysql(c)
@@ -312,6 +330,7 @@ def init():
                 for s in SQLITE_INDEXES:
                     con.execute(s)
             _add_owner(con)
+            con.execute("INSERT OR IGNORE INTO app_settings (key, value) VALUES ('write_lock', '')")  # Conn.begin
             r = con.execute("SELECT value FROM app_settings WHERE key = 'schema_version'").fetchone()
             if not r:
                 con.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('schema_version', ?)", (str(SCHEMA_VERSION),))

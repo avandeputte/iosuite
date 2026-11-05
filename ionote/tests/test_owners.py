@@ -91,12 +91,16 @@ def test_export_and_import_are_per_account(client, admin):
     assert [n["title"] for n in json.loads(zipfile.ZipFile(io.BytesIO(z)).read("notes.json"))["notes"]] == ["alex's"]
     _as(client, "sam", "secretpw2")
     assert json.loads(zipfile.ZipFile(io.BytesIO(client.get("/api/export.zip").content)).read("notes.json"))["notes"] == []
-    # importing alex's export as sam takes nothing of alex's (the id is alex's)
+    # importing alex's export as sam gives sam a copy under a new id; alex's note stays alex's, untouched
     r = client.post("/api/import", files={"file": ("x.zip", z, "application/zip")}).json()
-    assert r["notes"] == 0 and r["skipped"] == 1
+    assert r["notes"] == 1 and r["skipped"] == 0
+    mine = client.get("/api/notes").json()["notes"]
+    assert [n["title"] for n in mine] == ["alex's"] and mine[0]["id"] != NID
     doc = {"notes": [{"id": OTHER, "title": "sam imports", "createdAt": 1, "updatedAt": 2}]}
     assert client.post("/api/import", files={"file": ("n.json", json.dumps(doc).encode(), "application/json")}).json()["notes"] == 1
-    assert [n["title"] for n in client.get("/api/notes").json()["notes"]] == ["sam imports"]
+    assert sorted(n["title"] for n in client.get("/api/notes").json()["notes"]) == ["alex's", "sam imports"]
+    _as(client, "alex", "secretpw1")
+    assert [(n["id"], n["title"]) for n in client.get("/api/notes").json()["notes"]] == [(NID, "alex's")]
 
 
 def test_an_admin_gives_one_accounts_notes_to_another(client, admin):
