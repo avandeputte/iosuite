@@ -12,9 +12,9 @@ from app import __version__, config, db
 
 APP = "iocalendar"
 
-# version, address, description, color and icon go into the suite's list of apps (iosuite_shared.suite, read by ioSuite)
+# version, address, description and color go into the suite's list of apps (iosuite_shared.suite, read by ioSuite)
 auth = Auth(APP, app_label="ioCalendar", basic_realm="ioCalendar", version=__version__, public_url=config.PUBLIC_URL or None,
-            description="Calendar", color="#963522", icon="/static/icons/mark.svg")
+            description="Calendar", color="#963522")
 auth.deny_exempt = ("/mcp", "/dav", "/.well-known/")  # apps sign in with app passwords, whatever got them through a proxy
 
 # updates (the daily check, update.sh, restart), the MCP token and the server log, as in every app of the suite
