@@ -336,12 +336,12 @@ if [ -n "$DBADMIN" ]; then
   DB_ADMIN_PASSWORD="${DBADMIN#*:}" "$VENV/bin"/iosuite-shared --config "$APP" provision --admin "${DBADMIN%%:*}" || die "could not create the databases and users (see above): check the administrator's name and password"
 fi
 VDB_OK=0  # whether iopix's own database answers: the search-model setting and the admin account below need it
-if [ -n "${DB_HOST:-}" ] || [ -f "$DATA/viewer-db.json" ]; then
+if [ -n "${DB_HOST:-}" ]; then
   echo "iopix's own database on MySQL/MariaDB: testing, creating it if needed"
   "$VPY" - <<'PYEOF' && VDB_OK=1 || echo "  could not use that MySQL/MariaDB database for iopix (see above); run setup.sh again, or fix it later on the viewer's set-up page"
 import sys
 from app.data import vdb
-c = vdb.settings()  # DB_* from config.env (exported above; the password is not in the process list), else viewer-db.json
+c = vdb.settings()  # DB_* from config.env (exported above; the password is not in the process list)
 try:
     vdb.test_connection(c)
 except Exception as e:
@@ -425,7 +425,7 @@ else
   echo "    cd \"$APP\" && ./run.sh"
 fi
 if [ -n "${DB_HOST:-}" ]; then VDBWHERE="MySQL/MariaDB ${DB_USER}@${DB_HOST}:${DB_PORT:-3306}/${DB_NAME} (in $ENVF)"
-elif [ -f "$DATA/viewer-db.json" ]; then VDBWHERE="as in $DATA/viewer-db.json"; else VDBWHERE="not set up yet: the viewer asks on its first page"; fi
+else VDBWHERE="not set up yet: the viewer asks on its first page"; fi
 say "Done: http://localhost:$PORT   settings: $ENVF   data: $DATA   iopix database: $VDBWHERE"
 
 # ---- the other apps of the suite, beside this one (iosuite-shared install: the shared answers from config.env)

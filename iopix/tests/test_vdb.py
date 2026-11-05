@@ -103,9 +103,39 @@ def test_a_column_added_to_the_schema_reaches_an_existing_table(client):
         c.close()
 
 
-def test_switch_refuses_the_database_in_use(client):
-    with pytest.raises(ValueError):
+def test_switch_refuses_the_database_in_use(client, monkeypatch):
+    monkeypatch.setattr(vdb.config, "_PROCESS_ENV", {})
+    with pytest.raises(ValueError, match="already uses"):
         vdb.switch(vdb.settings(), copy=False)
+
+
+def test_the_set_up_page_writes_config_env(tmp_path, other_db, monkeypatch):
+    """Use this database on a fresh install: the DB_* lines go into config.env (a commented example filled in,
+    the rest kept), and the viewer reads them from there."""
+    conf = tmp_path / "config.env"
+    conf.write_text("# iopix settings\nPORT=8600\n# DB_HOST=\n")
+    monkeypatch.setattr(vdb.config, "CONFIG_FILE", conf)
+    monkeypatch.setattr(vdb.config, "_PROCESS_ENV", {})  # as a service that reads config.env: nothing fixed outside it
+    for n in vdb.config.DB_ENV.values():
+        monkeypatch.delenv(n, raising=False)  # the test session's DB_* must not count as "configured" (and come back afterwards)
+    monkeypatch.setattr(vdb, "_cfg", None)
+    assert not vdb.configured()
+    with pytest.raises(ValueError):
+        vdb.switch({"host": other_db["host"]}, copy=True)  # a database and a user are needed too
+    vdb.switch(other_db, copy=True)
+    saved = vdb.config.file_values(conf)
+    assert saved["DB_NAME"] == other_db["database"] and saved["DB_HOST"] == other_db["host"] and saved["PORT"] == "8600"
+    assert conf.read_text().startswith("# iopix settings\n") and "# DB_HOST=" not in conf.read_text(), "the commented line is filled in"
+    assert vdb.settings()["database"] == other_db["database"]
+
+
+def test_switch_refuses_a_database_the_environment_fixes(other_db, tmp_path, monkeypatch):
+    """docker-compose's environment wins over config.env: a switch from Settings would be undone by the restart."""
+    monkeypatch.setattr(vdb.config, "CONFIG_FILE", tmp_path / "config.env")
+    assert "DB_HOST" in vdb.public_settings()["fromEnv"]
+    with pytest.raises(ValueError, match="environment"):
+        vdb.switch(other_db, copy=False)
+    assert not (tmp_path / "config.env").exists()
 
 
 def test_dump_is_the_backup_form(client, fresh, tmp_path):
@@ -119,7 +149,6 @@ def test_dump_is_the_backup_form(client, fresh, tmp_path):
 
 
 def test_without_a_configuration_the_viewer_waits(monkeypatch):
-    monkeypatch.setattr(vdb, "CONF", vdb.config.DATA_DIR / "nowhere.json")
     monkeypatch.setattr(vdb, "_cfg", None)
     monkeypatch.setattr(vdb.config, "db_env", lambda k: None)
     monkeypatch.setattr(vdb, "error", None)
