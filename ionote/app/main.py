@@ -13,7 +13,8 @@ from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app import __version__, config, db, mcp, proxyauth, suitedb, users
+from app import __version__, config, db, mcp, suitedb, users
+from iosuite_shared import proxyauth
 from app import notes as notes_mod, owners
 from app.auth import auth as auth_shared, updater
 
