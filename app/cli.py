@@ -22,7 +22,7 @@ def main(argv: list[str]) -> int:
     elif cmd == "check":
         users.ensure_admin_from_env()
         u = len(users.all_users())
-        print(f"ok: {u} account(s), {len(apps.CATALOGUE)} app(s) on the page")
+        print(f"ok: {u} account(s), {len(apps.tiles())} app(s) on the page")
     else:
         print(__doc__)
         return 2

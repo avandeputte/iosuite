@@ -4,8 +4,8 @@ Every io app registers itself, with its address, in the suite's list of apps in 
 (iosuite_shared.suite, table `ios_apps`); the page reads that list and nothing else. An app that has not registered
 (not installed, or never started) has no tile. Nobody types an address.
 
-The catalogue below knows the apps the page has widgets for (their icon, colour and line, the page's own); an app it
-does not know that registered itself gets a plain tile too, with the name, line, colour and icon it registered.
+Each tile shows what the app registered: its name, line, colour and icon (served by the app itself, at
+/static/icons/mark.svg). ORDER is only where the apps the page has widgets for come; any other app follows by name.
 """
 import logging
 import re
@@ -20,15 +20,8 @@ SELF = "iosuite"
 REGISTRY_TTL = 30  # seconds the suite's list is kept here (asked on every tile, widget and status call)
 _registry = {"at": 0.0, "items": {}}
 
-# key, name (as the app writes it), what it is, and the colour of its name on the page (the app's own)
-CATALOGUE = [
-    {"key": "iopix", "name": "ioPix", "tagline": "Photos", "color": "#3b4a8c", "icon": "static/icons/apps/iopix.svg"},
-    {"key": "iohealth", "name": "ioHealth", "tagline": "Health and fitness", "color": "#e8445a", "icon": "static/icons/apps/iohealth.svg"},
-    {"key": "iocalendar", "name": "ioCalendar", "tagline": "Calendar", "color": "#963522", "icon": "static/icons/apps/iocalendar.svg"},
-    {"key": "iocontacts", "name": "ioContacts", "tagline": "Contacts", "color": "#4f2f7d", "icon": "static/icons/apps/iocontacts.svg"},
-    {"key": "ionotes", "name": "ioNotes", "tagline": "Notes", "color": "#1c5a5e", "icon": "static/icons/apps/ionotes.svg"},
-]
-KEYS = [a["key"] for a in CATALOGUE]
+# the apps the page has widgets for, in the order their tiles come; any other registered app follows by name
+ORDER = ["iopix", "iohealth", "iocalendar", "iocontacts", "ionotes"]
 _KEY_RE = re.compile(r"[a-z0-9_-]{1,32}")
 
 
@@ -61,30 +54,18 @@ def url_for(key: str, host: str = "") -> str:
 
 
 def name_of(key: str) -> str:
-    known = next((a for a in CATALOGUE if a["key"] == key), None)
-    if known:
-        return known["name"]
     e = registered().get(key)
     return (e or {}).get("name") or key
 
 
 def tiles(host: str = "") -> list[dict]:
-    """What the page draws: the registered apps with an address, those the page knows first (in its order), then the
-    others by name. {key, name, tagline, color, icon, url, version}."""
-    reg = registered()
-    out = []
-    for a in CATALOGUE:
-        e = reg.get(a["key"])
-        if e and e.get("url"):
-            out.append({**a, "url": url_for(a["key"]), "version": e.get("version")})
-    for key, e in sorted(reg.items(), key=lambda kv: (kv[1].get("name") or kv[0]).lower()):
-        if key in KEYS or key == SELF or not e.get("url"):
-            continue
-        icon = e.get("icon") or ""
-        out.append({"key": key, "name": e.get("name") or key, "tagline": e.get("description") or "",
-                    "color": e.get("color") or "#2f3a5a", "icon": icon if icon.startswith("https://") else "static/icons/mark.svg",
-                    "url": url_for(key), "version": e.get("version")})
-    return out
+    """What the page draws: the registered apps with an address, those in ORDER first, then the others by name.
+    {key, name, tagline, color, icon, url, version}, all as the app registered them."""
+    reg = {k: e for k, e in registered().items() if k != SELF and e.get("url")}
+    keys = [k for k in ORDER if k in reg] + sorted((k for k in reg if k not in ORDER), key=lambda k: (reg[k].get("name") or k).lower())
+    return [{"key": k, "name": reg[k].get("name") or k, "tagline": reg[k].get("description") or "",
+             "color": reg[k].get("color") or "#2f3a5a", "icon": reg[k].get("icon") or "static/icons/mark.svg",
+             "url": url_for(k), "version": reg[k].get("version")} for k in keys]
 
 
 STRIPS = ("rediscover", "onthisday", "off")
