@@ -251,7 +251,7 @@ app/
   images.py        pictures as BLOBs with a thumbnail
   ocr.py           RapidOCR for pictures added in the web app
   backup.py        export and import
-  users.py, proxyauth.py, access.py   accounts, sessions, roles and proxy sign-in (from iopix)
+  users.py, access.py   accounts, sessions and roles (proxy sign-in: iosuite_shared.proxyauth through auth.proxy)
   routes/          the HTTP API
   mcp/             the MCP server: read, write and operator tools
 proxmox/           Proxmox VE LXC scripts in the community-scripts layout

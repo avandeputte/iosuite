@@ -8,8 +8,9 @@ from fastapi import APIRouter, HTTPException, Request, UploadFile, File
 from fastapi.responses import Response
 from starlette.concurrency import run_in_threadpool
 
-from app import __version__, access, owners, backup, config, db, images, notes, ocr, proxyauth, suitedb, users
-from app.auth import updater
+from app import __version__, access, owners, backup, config, db, images, notes, ocr, suitedb, users
+from iosuite_shared import proxyauth
+from app.auth import auth as auth_shared, updater
 from app.http import json_body, user_name
 
 router = APIRouter()
@@ -76,7 +77,7 @@ async def api_settings_set(request: Request):
 def api_proxy_get():
     """Sign-in at a reverse proxy (Cloudflare Access...): its settings, which of them config.env fixes, and the
     Cloudflare Access team and application last seen in requests. Admins only."""
-    return proxyauth.status()
+    return auth_shared.proxy.status()
 
 
 @router.post("/api/settings/proxy", dependencies=[access.admin])
@@ -92,13 +93,13 @@ async def api_proxy_set(request: Request):
         raise HTTPException(400, "Unknown proxy")
     if changes.get("AUTH_PROXY_CREATE", "").lower() not in ("", "viewer", "editor", "deny"):
         raise HTTPException(400, "Someone with no account: the sign-in screen, deny, or a viewer or editor account")
-    if (m or proxyauth.mode()).lower() == "cloudflare" and ("CF_ACCESS_TEAM" in changes or "CF_ACCESS_AUD" in changes or m):
-        team = changes.get("CF_ACCESS_TEAM", proxyauth.opt("CF_ACCESS_TEAM") or "")
-        aud = changes.get("CF_ACCESS_AUD", proxyauth.opt("CF_ACCESS_AUD") or "")
+    if (m or auth_shared.proxy.mode()).lower() == "cloudflare" and ("CF_ACCESS_TEAM" in changes or "CF_ACCESS_AUD" in changes or m):
+        team = changes.get("CF_ACCESS_TEAM", auth_shared.proxy.opt("CF_ACCESS_TEAM") or "")
+        aud = changes.get("CF_ACCESS_AUD", auth_shared.proxy.opt("CF_ACCESS_AUD") or "")
         if bool(team) != bool(aud):
             raise HTTPException(400, "Cloudflare needs both the team domain and the AUD tag (or neither)")
-    proxyauth.save(changes)
-    return proxyauth.status()
+    auth_shared.proxy.save(changes)
+    return auth_shared.proxy.status()
 
 
 @router.post("/api/db/test", dependencies=[access.admin])

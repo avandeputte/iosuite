@@ -28,7 +28,8 @@ if _authtest.server() is None:
     pytest.skip(f"{_authtest.server.reason}: the shared accounts need a MariaDB (Docker, or IOSUITE_TEST_DB=host:port:user:password)", allow_module_level=True)
 os.environ.update(_authtest.auth_env("ionotes_test_auth"))  # IOSUITE_DB_*: the test database, never one named in the shell
 
-from app import db, users, proxyauth  # noqa: E402
+from app import db, users  # noqa: E402
+from iosuite_shared import proxyauth  # noqa: E402
 
 TABLES = ["nts_notes", "nts_note_images", "nts_folders", "nts_tag_colors", "nts_change_log", "nts_change_counter", "nts_settings"]
 
