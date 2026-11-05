@@ -1,6 +1,6 @@
 {
   "name": "ioContacts",
-  "short_name": "Contacts",
+  "short_name": "ioContacts",
   "description": "Contacts for the family",
   "start_url": "./#/",
   "scope": "./",
