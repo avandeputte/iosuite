@@ -167,7 +167,7 @@ what a viewer may not change. CI runs them against MariaDB.
 ```
 app/main.py        the application: start-up (tables, first admin, the update check), who is asking, routes
 app/api.py         the REST API: status, the apps and their settings (the server, updates and the log: iosuite_shared's server_router)
-app/apps.py        the catalogue of the suite's apps and where each one is (environment, Settings, this host)
+app/apps.py        the suite's apps as they registered (iosuite_shared.suite) and the order of their tiles
 app/status.py      is each app up (its /api/status) and does it have an update; is each bookmark reachable
 app/layout.py      each account's own layout: hidden tiles and cards, the tiles' order, the photo strip
 app/widgets.py     what the tiles and cards show: ioPix, ioCalendar, ioHealth and ioContacts asked over their APIs with the viewer's sign-in
@@ -179,7 +179,7 @@ app/db.py          MariaDB access and the schema (the meta settings table, the b
 app/config.py      settings from config.env / the environment
 app/cli.py         python -m app.cli: migrate, check
 app/__main__.py    python -m app: the server (HOST, PORT)
-static/            the web app: index.html, app.js (one module, no build step), app.css, the icons (the apps' own under icons/apps/)
+static/            the web app: index.html, app.js (one module, no build step), app.css, the icons (each app's tile shows the icon it registered, served by that app)
 tests/             pytest, against a MariaDB of its own
 setup.sh run.sh update.sh   install, start, update (Linux, Mac)
 Dockerfile docker-compose.yml   the container
