@@ -1,13 +1,12 @@
-"""The Shared ioSuite database settings: IOSUITE_DB_* with `iosuite` defaults, and the IOTHING_AUTH_DB_* of installs
-from before 0.4.7 still honoured as they were."""
+"""The Shared ioSuite database settings: IOSUITE_DB_* with `iosuite` defaults, on the contacts' server unless set."""
 import json
 import os
 import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PROBE = ("import json, os; from app import config; "
-         "print(json.dumps({k: os.environ['IOTHING_AUTH_DB_' + k] for k in ('HOST', 'PORT', 'NAME', 'USER', 'PASSWORD')}))")
+PROBE = ("import json; from app import config; from iosuite_shared import config as sc; "
+         "print(json.dumps({'HOST': sc.DB_HOST, 'PORT': str(sc.DB_PORT), 'NAME': sc.DB_NAME, 'USER': sc.DB_USER, 'PASSWORD': sc.DB_PASSWORD}))")
 
 
 def _suite(**env):
@@ -27,6 +26,6 @@ def test_iosuite_settings_are_passed_to_the_library():
     assert (s["HOST"], s["NAME"], s["USER"], s["PASSWORD"]) == ("h", "n", "u", "p")
 
 
-def test_an_older_install_keeps_its_auth_database():
-    s = _suite(IOTHING_AUTH_DB_HOST="192.168.1.89", IOTHING_AUTH_DB_USER="contacts", IOTHING_AUTH_DB_PASSWORD="x")
-    assert s == {"HOST": "192.168.1.89", "PORT": "3306", "NAME": "auth", "USER": "contacts", "PASSWORD": "x"}
+def test_the_old_names_are_not_read():
+    s = _suite(IOTHING_AUTH_DB_HOST="192.168.1.89", IOTHING_AUTH_DB_NAME="auth", IOTHING_AUTH_DB_USER="auth")
+    assert (s["HOST"], s["NAME"], s["USER"]) == ("127.0.0.1", "iosuite", "iosuite")

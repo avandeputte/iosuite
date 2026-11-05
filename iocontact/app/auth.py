@@ -1,4 +1,4 @@
-"""The shared ioThing accounts (iothing-auth), as ioContacts uses them.
+"""The shared ioThing accounts (iosuite-shared), as ioContacts uses them.
 
 Accounts, passwords, sessions, app passwords and roles live in the Shared ioSuite database (IOSUITE_DB_* in
 iocontacts.env, see app/config.py), shared with ioPix and ioNotes: one sign-in serves every app on the domain (IOTHING_COOKIE_DOMAIN).
@@ -6,9 +6,9 @@ What is ioContacts' own stays per app: the role an account holds here, and which
 `me_contact_id` value in its iocontacts data). The rest of the app sees an account as the row dict it always did
 (id, name, display_name, email, role, pw_hash, me_contact_id); `row_of` makes one from a shared account.
 """
-from iothing_auth.fastapi import Auth
-from iothing_auth import users as shared
-from iothing_auth.updates import Updater
+from iosuite_shared.fastapi import Auth
+from iosuite_shared import users as shared
+from iosuite_shared.updates import Updater
 
 from . import APP_VERSION, config, db
 
@@ -35,5 +35,5 @@ def row_of(u):
 auth.decorate = row_of
 
 # updates (the daily check, update.sh, restart), the MCP token and the server log, as in every app of the suite
-# (iothing_auth.updates); the daily-check switch is kept with ioContacts' own settings
+# (iosuite_shared.updates); the daily-check switch is kept with ioContacts' own settings
 updater = Updater(APP, APP_VERSION, config.ROOT, settings=(db.get_setting, db.set_setting), user_agent="iocontacts")

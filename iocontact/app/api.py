@@ -142,7 +142,7 @@ def mcp_enabled() -> bool:
 
 
 def _cookie(resp: Response, request: Request, u: dict) -> None:
-    """The suite's session cookie (iothing-auth): shared by every ioThing app on the domain."""
+    """The suite's session cookie (iosuite-shared): shared by every ioThing app on the domain."""
     auth.sign_in(resp, request, u, "oneclick" if not u.get("pw_hash") else "password")
 
 
@@ -164,7 +164,7 @@ async def setup(request: Request):
 
 def outside(request: Request) -> bool:
     """From outside the home network (through Cloudflare, or a public address)? One-click sign-in is not offered then."""
-    from iothing_auth.fastapi import peer_of
+    from iosuite_shared.fastapi import peer_of
     return auth.proxy.external(request.headers, peer_of(request))
 
 
@@ -218,7 +218,7 @@ async def login(request: Request):
 
 @router.post("/api/auth/logout")
 def logout(request: Request):
-    from iothing_auth import sessions
+    from iosuite_shared import sessions
     sessions.end(request.cookies.get(users.COOKIE))
     resp = JSONResponse({"ok": True})
     sessions.clear_cookie(resp, sessions.host_of(request))
@@ -232,10 +232,10 @@ def get_me(request: Request):
 
 @router.get("/api/auth/suite")
 def get_suite(request: Request):
-    """The suite's registered apps (iothing-auth suite_apps), this one among them, for the app switcher: when there are
+    """The suite's registered apps (iosuite-shared suite_apps), this one among them, for the app switcher: when there are
     others, the app mark top left opens a menu of them. Signed in only."""
     me(request)
-    from iothing_auth import suite
+    from iosuite_shared import suite
     from app.auth import APP
     try:
         items = suite.apps()

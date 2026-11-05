@@ -29,19 +29,15 @@ DB_USER = env("DB_USER", "contacts")
 DB_PASSWORD = env("DB_PASSWORD", "contacts")
 
 # The Shared ioSuite database (MariaDB, `iosuite`): the suite's accounts, passwords, sessions, app passwords and roles
-# (the iothing-auth library) and the settings shared by every ioThing app. IOSUITE_DB_* set it; by default it is on the
-# same server as the contacts. Installs from before 0.4.7 set IOTHING_AUTH_DB_* (the library's own names, database and
-# user `auth`): those still work and keep their old defaults, so an update changes nothing for them.
-_LEGACY_SUITE = any(k.startswith("IOTHING_AUTH_DB_") for k in os.environ)
-_SUITE_DEFAULTS = ({"HOST": "127.0.0.1", "PORT": "3306", "NAME": "auth", "USER": "auth", "PASSWORD": "auth"} if _LEGACY_SUITE
-                   else {"HOST": DB_HOST, "PORT": str(DB_PORT), "NAME": "iosuite", "USER": "iosuite", "PASSWORD": "iosuite"})
-for _k, _d in _SUITE_DEFAULTS.items():
-    # the library reads IOTHING_AUTH_DB_* when it is imported, so they are filled in here, before any app module uses it
-    os.environ["IOTHING_AUTH_DB_" + _k] = env("IOSUITE_DB_" + _k, env("IOTHING_AUTH_DB_" + _k, _d))
-SUITE_DB_HOST = os.environ["IOTHING_AUTH_DB_HOST"]
-SUITE_DB_PORT = int(os.environ["IOTHING_AUTH_DB_PORT"])
-SUITE_DB_NAME = os.environ["IOTHING_AUTH_DB_NAME"]
-SUITE_DB_USER = os.environ["IOTHING_AUTH_DB_USER"]
+# (the iosuite-shared library) and the settings shared by every ioThing app. IOSUITE_DB_* set it; by default it is on the
+# same server as the contacts. The library reads IOSUITE_DB_* when it is imported, so the defaults are filled in here,
+# before any app module uses it.
+os.environ.setdefault("IOSUITE_DB_HOST", DB_HOST)
+os.environ.setdefault("IOSUITE_DB_PORT", str(DB_PORT))
+SUITE_DB_HOST = os.environ["IOSUITE_DB_HOST"]
+SUITE_DB_PORT = int(os.environ["IOSUITE_DB_PORT"])
+SUITE_DB_NAME = env("IOSUITE_DB_NAME", "iosuite")
+SUITE_DB_USER = env("IOSUITE_DB_USER", "iosuite")
 
 STATIC_DIR = ROOT / "static"
 PUBLIC_URL = env("PUBLIC_URL", "").rstrip("/")   # e.g. https://contacts.example.com (links in feeds and LDAP)
@@ -71,7 +67,7 @@ IOPIX_CF_CLIENT_SECRET = env("IOPIX_CF_CLIENT_SECRET")
 MAX_PHOTO_BYTES = 2 * 1024 * 1024
 
 # the server log, for Maintenance › Updates and logs (empty: none). Updates: IOCONTACTS_REPO, IOCONTACTS_BRANCH and
-# UPDATE_CHECK are read by iothing_auth.updates (app.auth.updater)
+# UPDATE_CHECK are read by iosuite_shared.updates (app.auth.updater)
 LOG_FILE = Path(env("LOG_FILE", str(ROOT / "iocontacts.log"))) if env("LOG_FILE", "x") else None
 
 # the MCP server at /mcp: off until an admin turns it on in Settings, or MCP=1 here
