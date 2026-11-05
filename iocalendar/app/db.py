@@ -18,7 +18,9 @@ SCHEMA = [
         v MEDIUMTEXT
     )""",
     # accounts and app passwords live in the Shared ioSuite database (iothing-auth, app/auth.py)
-    # owner_id NULL: a shared calendar (everyone sees it); kind 'birthdays' is filled from ioContacts and read-only
+    # owner_id NULL: a shared calendar (everyone sees it); kind 'birthdays' is filled from ioContacts and read-only.
+    # owner_key stands in for owner_id in the unique key: NULLs never clash in a unique key, so (owner_id, slug) alone
+    # would let two shared calendars share a slug
     """CREATE TABLE IF NOT EXISTS calendars (
         id INT AUTO_INCREMENT PRIMARY KEY,
         owner_id INT NULL,
@@ -31,7 +33,8 @@ SCHEMA = [
         sort INT NOT NULL DEFAULT 0,
         sync_token BIGINT NOT NULL DEFAULT 1,
         created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE KEY (owner_id, slug)
+        owner_key INT AS (COALESCE(owner_id, 0)) PERSISTENT,
+        UNIQUE KEY (owner_key, slug)
     )""",
     # dtstart / dtend / range_* are UTC (an all-day event: its dates at midnight UTC, all_day = 1). range_start is the
     # first occurrence's start, range_end the last one's end (NULL: repeats for ever): what a time-range query needs.
@@ -168,6 +171,9 @@ def migrate() -> None:
     with tx() as con, con.cursor() as cur:
         for stmt in SCHEMA:
             cur.execute(stmt + " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci")
+        # calendars made before 0.2.7 have the unique key on (owner_id, slug), which NULL owner_ids slip past
+        cur.execute("ALTER TABLE calendars ADD COLUMN IF NOT EXISTS owner_key INT AS (COALESCE(owner_id, 0)) PERSISTENT")
+        cur.execute("ALTER TABLE calendars ADD UNIQUE INDEX IF NOT EXISTS owner_key (owner_key, slug)")
         cur.execute("INSERT INTO meta (k, v) VALUES ('schema', %s) ON DUPLICATE KEY UPDATE v = GREATEST(v, VALUES(v))",
                     (str(SCHEMA_VERSION),))
         # the family calendar everyone shares

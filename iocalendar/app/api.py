@@ -99,20 +99,29 @@ def wants(request: Request, fmt: str | None) -> str:
 
 
 def _base(request: Request) -> str:
+    """The address links are made with: PUBLIC_URL, else what the proxy (or the client) says, kept to a scheme and a
+    host[:port] (a forged header only changes the links in that client's own answer, but it stays an address)."""
     if config.PUBLIC_URL:
         return config.PUBLIC_URL
-    proto = request.headers.get("x-forwarded-proto") or request.url.scheme
-    host = request.headers.get("x-forwarded-host") or request.headers.get("host") or request.url.netloc
+    proto = (request.headers.get("x-forwarded-proto") or request.url.scheme or "").split(",")[0].strip().lower()
+    proto = proto if proto in ("http", "https") else "http"
+    host = (request.headers.get("x-forwarded-host") or request.headers.get("host") or request.url.netloc or "").split(",")[0].strip()
+    if not re.fullmatch(r"[A-Za-z0-9.\-]+(:\d{1,5})?|\[[0-9A-Fa-f:.]+\](:\d{1,5})?", host):
+        host = request.url.netloc if re.fullmatch(r"[A-Za-z0-9.\-:\[\]]+", request.url.netloc or "") else "localhost"
     return f"{proto}://{host}"
 
 
 def _when(s: str | None, name: str) -> dt.datetime:
+    """?start= and ?end=: an ISO date-time (without an offset: UTC), or a date, which is its midnight in the server's
+    time zone (as the MCP tools read one), so that two dates name whole local days."""
     if not s:
         raise HTTPException(400, f"{name} is missing (an ISO date or date-time)")
     try:
         d = ical.parse_when(s, "UTC")
     except ValueError:
         raise HTTPException(400, f"{name} is not an ISO date or date-time: {s}")
+    if not isinstance(d, dt.datetime):
+        d = dt.datetime.combine(d, dt.time(), ical.zone(None))
     return ical.to_utc(d)
 
 
@@ -229,6 +238,10 @@ async def server_action(request: Request):
     """Admins. Body: {action: check | update, ref?} or {mcpEnabled: bool} / {autoCheck: bool}."""
     admin(request)
     b = await request.json()
+    return await run_in_threadpool(_server_action, request, b)
+
+
+def _server_action(request: Request, b: dict):
     if "mcpEnabled" in b:
         if config.MCP_FORCED and not b["mcpEnabled"]:
             raise HTTPException(400, "MCP=1 in the environment keeps the MCP server on")
@@ -241,7 +254,7 @@ async def server_action(request: Request):
             updates.forget_check()
     action = b.get("action")
     if action == "check":
-        return await run_in_threadpool(updates.check)
+        return updates.check()
     if action == "update":
         try:
             updates.run(str(b.get("ref") or ""))
@@ -269,21 +282,28 @@ async def add_calendar(request: Request):
         raise HTTPException(403, "Only editors make shared calendars")
     if not (b.get("name") or "").strip():
         raise HTTPException(400, "A name, please")
-    cid = model.create_calendar(None if shared else u["id"], b["name"], b.get("description"), b.get("color"), timezone=b.get("timezone"))
-    c = model.calendar(cid)
-    c["n"] = 0
+
+    def make():
+        cid = model.create_calendar(None if shared else u["id"], b["name"], b.get("description"), b.get("color"), timezone=b.get("timezone"))
+        c = model.calendar(cid)
+        c["n"] = 0
+        return c
+    c = await run_in_threadpool(make)
     return JSONResponse({"calendar": model.calendar_public(c, u)}, status_code=201)
 
 
 @router.patch("/api/calendars/{cid}")
 async def edit_calendar(cid: int, request: Request):
     u = me(request)
-    c = readable_calendar(u, cid)
-    if not (model.is_shared(c) and c.get("kind") in model.READ_ONLY_KINDS and users.is_admin(u)):  # admins name and color those
-        writable_calendar(u, cid)
     b = await request.json()
-    model.update_calendar(cid, **{k: b[k] for k in ("name", "description", "color", "timezone", "sort") if k in b})
-    return {"calendar": model.calendar_public(model.calendar(cid), u)}
+
+    def edit():
+        c = readable_calendar(u, cid)
+        if not (model.is_shared(c) and c.get("kind") in model.READ_ONLY_KINDS and users.is_admin(u)):  # admins name and color those
+            writable_calendar(u, cid)
+        model.update_calendar(cid, **{k: b[k] for k in ("name", "description", "color", "timezone", "sort") if k in b})
+        return model.calendar(cid)
+    return {"calendar": model.calendar_public(await run_in_threadpool(edit), u)}
 
 
 @router.delete("/api/calendars/{cid}")
@@ -314,7 +334,7 @@ async def import_calendar(cid: int, request: Request, replace: bool = True):
     """An .ics file (multipart field `file`, or a text/calendar body) into this calendar. Events whose UID the calendar
     has already are updated (replace=false: skipped)."""
     u = me(request)
-    writable_calendar(u, cid)
+    await run_in_threadpool(writable_calendar, u, cid)
     ct = request.headers.get("content-type", "")
     if ct.startswith("multipart/"):
         form = await request.form()
@@ -379,6 +399,11 @@ async def create_event(request: Request, calendar: str | None = None):
     members: the family members it is for (account ids or names), kept as CATEGORIES."""
     u = me(request)
     data, cal = await body_object(request)
+    r = await run_in_threadpool(_create_event, u, data, cal, calendar)
+    return event_response(request, r, None, 201)
+
+
+def _create_event(u: dict, data: dict | None, cal, calendar: str | None) -> dict:
     cid = calendar or (data or {}).get("calendarId")
     if not cid:
         mine = [c for c in model.calendars_for(u) if model.can_write(u, c)]
@@ -396,8 +421,7 @@ async def create_event(request: Request, calendar: str | None = None):
         raise HTTPException(400, str(e))
     if model.by_uid(c["id"], uid):
         raise HTTPException(409, "That calendar already has an event with this UID")
-    r = await run_in_threadpool(model.save, c["id"], cal, None, None, u["id"])
-    return event_response(request, r, None, 201)
+    return model.save(c["id"], cal, None, None, u["id"])
 
 
 @router.get("/api/events/{eid}")
@@ -495,6 +519,8 @@ def change(u: dict, r: dict, c: dict, data: dict, partial: bool = True, scope: s
         fresh["rrule"] = re.sub(r"COUNT=\d+", f"COUNT={left}", fresh["rrule"])
     fresh.update(data)
     newc = ical.build(fresh, tzname)
+    if not any(k in data for k in ("start", "end", "allDay", "timezone", "rrule")):  # the same schedule: what was changed
+        ical.carry_over(cal, newc, recurrence_id, data, tzname)                      # or left out after the split stays so
     ical.end_series_before(cal, recurrence_id)
     model.save(r["calendar_id"], cal, r["id"], None, u["id"])
     return model.save(r["calendar_id"], newc, None, None, u["id"]), None, True
@@ -522,9 +548,14 @@ def remove(u: dict, r: dict, c: dict, scope: str = "all", recurrence_id: str | N
 
 async def _change(request: Request, eid: int, partial: bool, scope: str, recurrence_id: str | None):
     u = me(request)
+    data, newcal = await body_object(request)
+    r2, rid, made = await run_in_threadpool(_change_sync, request, u, eid, data, newcal, partial, scope, recurrence_id)
+    return event_response(request, r2, status=201 if made else 200, recurrence_id=rid)
+
+
+def _change_sync(request: Request, u: dict, eid: int, data, newcal, partial: bool, scope: str, recurrence_id: str | None):
     r, c = writable_event(u, eid)
     _check_match(request, r)
-    data, newcal = await body_object(request)
     if newcal is not None:  # a whole new object for the event
         try:
             uid = ical.index(newcal, c.get("timezone"))["uid"]
@@ -532,15 +563,13 @@ async def _change(request: Request, eid: int, partial: bool, scope: str, recurre
             raise HTTPException(400, str(e))
         if uid != r["uid"]:
             raise HTTPException(400, "The UID of an event cannot change")
-        r2 = await run_in_threadpool(model.save, r["calendar_id"], ical.finish(newcal), r["id"], None, u["id"])
-        return event_response(request, r2)
+        return model.save(r["calendar_id"], ical.finish(newcal), r["id"], None, u["id"]), None, False
     try:
-        r2, rid, made = await run_in_threadpool(change, u, r, c, data, partial, scope, recurrence_id)
+        return change(u, r, c, data, partial, scope, recurrence_id)
     except PermissionError as e:
         raise HTTPException(403, str(e))
     except ValueError as e:
         raise HTTPException(400, str(e))
-    return event_response(request, r2, status=201 if made else 200, recurrence_id=rid)
 
 
 @router.put("/api/events/{eid}")
@@ -590,10 +619,13 @@ async def set_family_member(uid: int, request: Request):
     offered as a tag and gets no private calendar here; its tags on events stay as plain categories."""
     admin(request)
     b = await request.json()
-    if not users.get(uid):
-        raise HTTPException(404, "No such account")
-    members.set_in_family(uid, bool(b.get("inFamily", True)))
-    return {"id": uid, "inFamily": members.in_family(uid), "items": members.public(members.family())}
+
+    def set_():
+        if not users.get(uid):
+            raise HTTPException(404, "No such account")
+        members.set_in_family(uid, bool(b.get("inFamily", True)))
+        return {"id": uid, "inFamily": members.in_family(uid), "items": members.public(members.family())}
+    return await run_in_threadpool(set_)
 
 
 @router.get("/api/people")
@@ -608,7 +640,7 @@ async def people(request: Request, q: str = "", limit: int = 12):
         except Exception as e:  # noqa: BLE001
             err = f"ioContacts did not answer: {type(e).__name__}"
     seen = {(p.get("email") or "", p["name"]) for p in out}
-    for p in model.people_seen([c["id"] for c in model.calendars_for(u)], q, limit):
+    for p in await run_in_threadpool(lambda: model.people_seen([c["id"] for c in model.calendars_for(u)], q, limit)):
         if (p["email"] or "", p["name"]) not in seen and len(out) < limit:
             out.append({"contactId": p["contactId"], "name": p["name"], "email": p["email"], "url": contacts.contact_url(p["contactId"])})
     return {"items": out, "error": err}
@@ -648,7 +680,7 @@ def vfreebusy(cals: list[dict], who: dict, days_back: int = 7, days_ahead: int =
     lines = ["BEGIN:VCALENDAR", "VERSION:2.0", f"PRODID:{ical.PRODID}", "METHOD:PUBLISH", "BEGIN:VFREEBUSY",
              f"UID:freebusy-{who['id']}@iocalendar", f"DTSTAMP:{now:%Y%m%dT%H%M%SZ}", f"DTSTART:{s:%Y%m%dT%H%M%SZ}", f"DTEND:{e:%Y%m%dT%H%M%SZ}"]
     if who.get("email"):
-        lines.append(f"ORGANIZER;CN={who.get('displayName') or who['name']}:mailto:{who['email']}")
+        lines.append(f"ORGANIZER;CN={ical._param(who.get('displayName') or who['name'])}:mailto:{ical._param(who['email'])}")
     for a, b in busy_periods(cals, s, e):
         lines.append(f"FREEBUSY;FBTYPE=BUSY:{a:%Y%m%dT%H%M%SZ}/{b:%Y%m%dT%H%M%SZ}")
     lines += ["END:VFREEBUSY", "END:VCALENDAR"]
@@ -754,8 +786,11 @@ async def iocontacts_save(request: Request):
     calendar up to date."""
     admin(request)
     b = await request.json()
-    contacts.save_settings(b.get("url"), b.get("user"), b.get("password"), b.get("cfId"), b.get("cfSecret"),
-                           b.get("birthdays") if "birthdays" in b else None)
+    try:
+        await run_in_threadpool(contacts.save_settings, b.get("url"), b.get("user"), b.get("password"), b.get("cfId"), b.get("cfSecret"),
+                                b.get("birthdays") if "birthdays" in b else None)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     test = await run_in_threadpool(contacts.test) if contacts.enabled() else None
     sync = await run_in_threadpool(contacts.sync_birthdays) if (not test or test.get("ok")) else None
     return {**contacts.public_settings(), "test": test, "sync": sync}
@@ -800,7 +835,7 @@ async def holidays_save(request: Request):
     admin(request)
     b = await request.json()
     try:
-        holiday.save_settings(b.get("country"), b.get("region"), b.get("language"))
+        await run_in_threadpool(holiday.save_settings, b.get("country"), b.get("region"), b.get("language"))
     except ValueError as e:
         raise HTTPException(400, str(e))
     sync = await run_in_threadpool(holiday.sync)

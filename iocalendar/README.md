@@ -64,9 +64,10 @@ claude mcp add --transport http iocalendar https://calendar.example.com/mcp --he
 
 On the server itself, `.venv/bin/python -m app.mcp --user NAME` serves the same tools over stdio.
 
-The tools: `overview`, `list_calendars`, `agenda`, `search_events`, `get_event`, `get_ics`, `free_busy`,
-`connection_details`; `create_event`, `update_event`, `delete_event`, `move_event`, `create_calendar`, `import_ics`; and
-for admins `diagnostics`, `sync_birthdays`, `list_accounts`, `check_for_update`, `update_server`.
+The tools: `overview`, `list_calendars`, `list_family_members`, `agenda`, `search_events`, `get_event`, `get_ics`,
+`free_busy`, `connection_details`; `create_event`, `update_event`, `delete_event`, `move_event`, `create_calendar`,
+`import_ics`; and for admins `diagnostics`, `sync_birthdays`, `set_holidays`, `holiday_regions`, `list_accounts`,
+`check_for_update`, `update_server`.
 
 ## Updates
 

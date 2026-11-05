@@ -300,13 +300,18 @@ def occurrences(cals: list[dict], start: dt.datetime, end: dt.datetime, q: str =
     return out
 
 
+def _like(w: str) -> str:
+    """A word as a LIKE pattern that matches it anywhere, with its own % and _ taken literally."""
+    return "%" + re.sub(r"([\\%_])", r"\\\1", w) + "%"
+
+
 def search_rows(cids: list[int], q: str, limit: int = 100) -> list[dict]:
     """Events whose title, place, notes or people match every word of q."""
     if not cids:
         return []
     where, args = [f"e.calendar_id IN ({db.marks(len(cids))})", "e.deleted = 0"], list(cids)
     for w in (q or "").split()[:8]:
-        like = f"%{w}%"
+        like = _like(w)
         where.append("(e.summary LIKE %s OR e.location LIKE %s OR e.description LIKE %s OR EXISTS (SELECT 1 FROM event_people p "
                      "WHERE p.event_id = e.id AND (p.name LIKE %s OR p.email LIKE %s)))")
         args += [like] * 5
@@ -385,7 +390,7 @@ def people_seen(cids: list[int], q: str = "", limit: int = 20) -> list[dict]:
     """People who were on events before (for the picker when ioContacts is not connected)."""
     if not cids:
         return []
-    like = f"%{q}%"
+    like = _like(q)
     return db.q(f"SELECT p.name, p.email, max(p.contact_id) AS contactId, count(*) AS n FROM event_people p JOIN events e ON e.id = p.event_id "
                 f"WHERE e.deleted = 0 AND e.calendar_id IN ({db.marks(len(cids))}) AND (p.name LIKE %s OR p.email LIKE %s) "
                 f"GROUP BY p.name, p.email ORDER BY n DESC LIMIT %s", (*cids, like, like, int(limit)))

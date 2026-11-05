@@ -384,6 +384,8 @@ async def dav(request: Request, path: str = ""):
     ctx = Ctx(request, user)
     parts = _parse(request.url.path)
     body = await request.body()
+    if len(body) > config.MAX_EVENT_BYTES:  # a PUT larger than that is refused anyway; no request body needs more
+        return _precondition(C, "max-resource-size", 403) if request.method == "PUT" else Response(status_code=413)
     return await run_in_threadpool(_dispatch, ctx, request.method, parts, body, request.headers)
 
 
@@ -475,6 +477,7 @@ def _proppatch(ctx: Ctx, parts, body) -> Response:
     _sub(r, D, "href", "/dav/" + "/".join(quote(p) for p in parts) + "/")
     ps = _sub(r, D, "propstat")
     p = _sub(ps, D, "prop")
+    changes: dict = {}  # all the properties in one update (one sync token for the request)
     for s in root.iter(q(D, "set")):
         for prop in s.iter(q(D, "prop")):
             for el in prop:
@@ -483,17 +486,19 @@ def _proppatch(ctx: Ctx, parts, body) -> Response:
                     continue
                 v = (el.text or "").strip()
                 if el.tag == q(D, "displayname") and v:
-                    model.update_calendar(c["id"], name=v[:128])
+                    changes["name"] = v[:128]
                 elif el.tag == q(C, "calendar-description"):
-                    model.update_calendar(c["id"], description=v[:512])
+                    changes["description"] = v[:512]
                 elif el.tag == q(AP, "calendar-color"):
-                    model.update_calendar(c["id"], color=v[:9])
+                    changes["color"] = v[:9]
                 elif el.tag == q(AP, "calendar-order") and v.lstrip("-").isdigit():
-                    model.update_calendar(c["id"], sort=int(v))
+                    changes["sort"] = int(v)
                 elif el.tag == q(C, "calendar-timezone"):
                     m = re.search(r"^TZID:(.+)$", v, re.M)
                     if m and ical.valid_tz(m.group(1).strip()):
-                        model.update_calendar(c["id"], timezone=m.group(1).strip())
+                        changes["timezone"] = m.group(1).strip()
+    if changes:
+        model.update_calendar(c["id"], **changes)
     for s in root.iter(q(D, "remove")):
         for prop in s.iter(q(D, "prop")):
             for el in prop:
@@ -757,8 +762,19 @@ def _props_match(row: dict, vf: ET.Element) -> bool:
     pfs = vf.findall(q(C, "prop-filter"))
     if not pfs:
         return True
-    cal = model.parsed(row)
-    ev = ical.master_of(ical.events_of(cal))
+    comps = ical.events_of(model.parsed(row))
+    return any(_props_match_one(ev, pfs) for ev in comps)  # the series, or any of its changed occurrences
+
+
+def _text_of(v) -> str:
+    """A property's text as written (CATEGORIES and the like are objects whose str() is not their text)."""
+    if isinstance(v, list):
+        return ",".join(_text_of(x) for x in v)
+    raw = v.to_ical() if hasattr(v, "to_ical") else v
+    return raw.decode("utf-8", "replace") if isinstance(raw, bytes) else str(raw)
+
+
+def _props_match_one(ev, pfs) -> bool:
     for pf in pfs:
         name = (pf.get("name") or "").upper()
         v = ev.get(name)
@@ -771,8 +787,10 @@ def _props_match(row: dict, vf: ET.Element) -> bool:
         tm = pf.find(q(C, "text-match"))
         if tm is not None:
             needle = (tm.text or "").lower()
-            hay = (str(v[0]) if isinstance(v, list) else str(v)).lower()
-            hit = needle in hay if tm.get("match-type", "contains") == "contains" else hay == needle
+            hay = _text_of(v).lower()
+            kind = tm.get("match-type", "contains")
+            hit = (hay == needle if kind == "equals" else hay.startswith(needle) if kind == "starts-with"
+                   else hay.endswith(needle) if kind == "ends-with" else needle in hay)
             if (tm.get("negate-condition") == "yes") == hit:
                 return False
     return True

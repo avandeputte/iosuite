@@ -50,7 +50,15 @@ def public_settings() -> dict:
             "fromEnv": bool(config.IOCONTACTS_URL), "lastSync": dict(_state)}
 
 
+def _check_url(url: str | None) -> None:
+    """ValueError unless the address is http(s) (the server fetches it: nothing else may be reached through it)."""
+    u = urllib.parse.urlsplit((url or "").strip())
+    if url and (u.scheme not in ("http", "https") or not u.netloc):
+        raise ValueError("The ioContacts address has to start with http:// or https://")
+
+
 def save_settings(url=None, user=None, password=None, cf_id=None, cf_secret=None, birthdays=None) -> None:
+    _check_url(url)
     for k, v in (("iocontacts_url", url), ("iocontacts_user", user), ("iocontacts_password", password), ("iocontacts_cf_id", cf_id),
                  ("iocontacts_cf_secret", cf_secret)):
         if v is not None:
@@ -63,6 +71,7 @@ def _req(path: str, timeout: float = 15, accept: str = "application/json"):
     s = settings()
     if not s["url"]:
         raise RuntimeError("ioContacts is not set up (Settings › ioContacts)")
+    _check_url(s["url"])
     headers = {"Accept": accept, "User-Agent": "ioCalendar"}
     if s["user"] and s["password"]:
         headers["Authorization"] = "Basic " + base64.b64encode(f"{s['user']}:{s['password']}".encode()).decode()

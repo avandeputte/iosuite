@@ -721,6 +721,7 @@ function agendaRow(o, d) {
 }
 
 // ------------------------------------------------------------------ one event
+const safeUrl = (u) => /^(https?:\/\/|mailto:)/i.test(u || '');  // a link that is a link (never javascript:)
 const ridQ = (rid) => (rid ? `?recurrenceId=${encodeURIComponent(rid)}` : '');
 /** The event as shown for one occurrence (an occurrence that was not changed has the series' times moved to its date). */
 function forOccurrence(j, rid) {
@@ -756,7 +757,7 @@ function eventCard(j, inDialog) {
     }))) : null,
     (j.reminders || []).length ? line('bell', (j.reminders || []).map((m) => describeReminder(m, j.allDay)).join(', ')) : null,
     j.notes ? line('note', h('div', { style: { whiteSpace: 'pre-wrap' } }, j.notes)) : null,
-    j.url ? line('link', h('a', { class: 'lnk', href: j.url, target: '_blank', rel: 'noopener' }, j.url)) : null,
+    j.url ? line('link', safeUrl(j.url) ? h('a', { class: 'lnk', href: j.url, target: '_blank', rel: 'noopener' }, j.url) : h('span', null, j.url)) : null,
     line('today', c.name || '', j.busy === false ? h('span', { class: 'muted' }, ' · shown as free') : null,
       c.kind === 'birthdays' ? h('div', { class: 'muted small' }, 'From ioContacts; change the birthday there.') : null,
       c.kind === 'holidays' ? h('div', { class: 'muted small' }, 'A public holiday (Settings › Holidays).') : null));
@@ -1269,7 +1270,7 @@ async function setContacts(el) {
         S.status = await api('/api/status'); await loadCals();
         fill(out, h('p', { class: r.test && !r.test.ok ? 'warn' : null }, !r.enabled ? 'Saved (ioContacts link off).' : r.test.ok ? `Connected as ${r.test.user}: ${r.test.contacts ?? 'some'} contacts.` : `Saved, but ioContacts did not answer: ${r.test.error}`),
           r.sync ? h('p', { class: 'muted small' }, r.sync.ok ? (r.sync.count ? `Birthdays: ${r.sync.count} dates.` : 'The Birthdays calendar is off.') : `Birthdays: ${r.sync.error}`) : null);
-      } catch (e) { fill(out, ); fail(e); }
+      } catch (e) { fill(out); fail(e); }
     } }, icon('check', 's'), 'Save and test'), ' ',
     s.enabled ? h('button', { class: 'pillbtn noic', onclick: async () => { try { const r = await api('/api/iocontacts/sync', { method: 'POST' }); await loadCals(); toast(r.ok ? `Birthdays: ${r.count} dates` : r.error); } catch (e) { fail(e); } } }, 'Bring birthdays up to date now') : null), out));
 }

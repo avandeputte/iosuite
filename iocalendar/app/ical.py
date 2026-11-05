@@ -5,6 +5,7 @@ An event is kept as its whole iCalendar object (VCALENDAR with one or more VEVEN
 the occurrences that were changed, each with a RECURRENCE-ID). The web app edits a few fields of it; everything else a
 calendar app put there (alarms it acknowledged, attachments, X- properties) stays as it was.
 """
+import copy
 import datetime as dt
 import hashlib
 import json
@@ -176,7 +177,7 @@ def split_by_uid(cal: Calendar) -> list[Calendar]:
         for t in sorted(used):
             if t in tzs:
                 c.add_component(tzs[t])
-        for ev in comps:
+        for ev in sorted(comps, key=lambda e: "RECURRENCE-ID" in e):  # the series first, then its changed occurrences
             c.add_component(ev)
         out.append(c)
     return out
@@ -527,6 +528,12 @@ def _alarm(minutes: int, title: str) -> Alarm:
     return a
 
 
+def safe_url(u) -> str | None:
+    """A link on an event: http(s) or mailto only (never javascript: or the like), else none."""
+    u = (u or "").strip()[:2000]
+    return u if re.match(r"^(https?://|mailto:)", u, re.I) else None
+
+
 def apply(ev: Event, data: dict, tzname: str | None = None, series: bool = True) -> Event:
     """Change the fields named in data on this VEVENT (others stay as they are)."""
     if any(k in data for k in ("start", "end", "allDay", "timezone")) or "DTSTART" not in ev:
@@ -544,7 +551,7 @@ def apply(ev: Event, data: dict, tzname: str | None = None, series: bool = True)
     if "notes" in data:
         _set(ev, "DESCRIPTION", (data.get("notes") or "").rstrip() or None)
     if "url" in data:
-        _set(ev, "URL", (data.get("url") or "").strip() or None)
+        _set(ev, "URL", safe_url(data.get("url")))
     if "status" in data:
         st = str(data.get("status") or "").upper()
         _set(ev, "STATUS", st if st in ("CONFIRMED", "TENTATIVE", "CANCELLED") else None)
@@ -650,8 +657,8 @@ def edit(cal: Calendar, data: dict, tzname: str | None = None, recurrence_id: st
             if k in ("BEGIN", "END", "RRULE", "RDATE", "EXDATE", "DTSTART", "DTEND", "DURATION", "RECURRENCE-ID"):
                 continue
             ov.add(k, v, encode=False)
-        for sub in m.subcomponents:
-            ov.add_component(sub)
+        for sub in m.subcomponents:  # its own copies: an alarm changed on the occurrence must not change the series'
+            ov.add_component(copy.deepcopy(sub))
         rid = _rid_value(m, parse_rid(recurrence_id))
         ov.add("RECURRENCE-ID", rid)
         s0, e0 = _start_end(m)
@@ -689,7 +696,7 @@ def remove_occurrence(cal: Calendar, recurrence_id: str) -> Calendar:
     comps = events_of(cal)
     m = master_of(comps)
     rid = parse_rid(recurrence_id)
-    cal.subcomponents[:] = [c for c in cal.subcomponents if not (c.name == "VEVENT" and "RECURRENCE-ID" in c and _same_instant(c["RECURRENCE-ID"].dt, _rid_value(m, rid)))]
+    cal.subcomponents[:] = [c for c in cal.subcomponents if c is m or not (c.name == "VEVENT" and "RECURRENCE-ID" in c and _same_instant(c["RECURRENCE-ID"].dt, _rid_value(m, rid)))]
     if _repeats(m):
         add_exdate(m, _rid_value(m, rid))
     stamp(m)
@@ -720,7 +727,7 @@ def end_series_before(cal: Calendar, recurrence_id: str) -> Calendar:
         a = a.date() if isinstance(a, dt.datetime) else a
         b = b.date() if isinstance(b, dt.datetime) else b
         return a >= b
-    cal.subcomponents[:] = [c for c in cal.subcomponents if not (c.name == "VEVENT" and "RECURRENCE-ID" in c and later(c["RECURRENCE-ID"].dt))]
+    cal.subcomponents[:] = [c for c in cal.subcomponents if c is m or not (c.name == "VEVENT" and "RECURRENCE-ID" in c and later(c["RECURRENCE-ID"].dt))]
     ex = m.get("EXDATE")
     if ex is not None:
         keep = [d.dt for x in (ex if isinstance(ex, list) else [ex]) for d in x.dts if not later(d.dt)]
@@ -735,6 +742,39 @@ def end_series_before(cal: Calendar, recurrence_id: str) -> Calendar:
             m.add("RDATE", d)
     stamp(m)
     return finish(cal)
+
+
+def carry_over(old: Calendar, new: Calendar, recurrence_id: str, data: dict, tzname: str | None = None) -> None:
+    """When a series is split at an occurrence into a new one with the same schedule: the dates left out and the changed
+    occurrences from that one on belong to the new series (the edit is made on those occurrences too)."""
+    comps = events_of(old)
+    m = master_of(comps)
+    rid = _rid_value(m, parse_rid(recurrence_id))
+    nm = master_of(events_of(new))
+
+    def later(v) -> bool:
+        a, b = v, rid
+        if isinstance(a, dt.datetime) and isinstance(b, dt.datetime):
+            return (a if a.tzinfo or not b.tzinfo else a.replace(tzinfo=b.tzinfo)) >= (b if b.tzinfo or not a.tzinfo else b.replace(tzinfo=a.tzinfo))
+        a = a.date() if isinstance(a, dt.datetime) else a
+        b = b.date() if isinstance(b, dt.datetime) else b
+        return a >= b
+    ex = m.get("EXDATE")
+    carried = [d.dt for x in (ex if isinstance(ex, list) else [ex] if ex is not None else []) for d in x.dts if later(d.dt)]
+    for d in carried:
+        add_exdate(nm, d)
+    r = nm.get("RRULE")
+    r = r[0] if isinstance(r, list) else r
+    if carried and r is not None and r.get("COUNT"):  # a left-out date still takes one of the COUNT slots
+        r = vRecur(dict(r))
+        r["COUNT"] = [int(r["COUNT"][0]) + len(carried)]
+        _set(nm, "RRULE", r)
+    for c in comps:
+        if c is not m and "RECURRENCE-ID" in c and later(c["RECURRENCE-ID"].dt):
+            ov = copy.deepcopy(c)
+            _set(ov, "UID", nm["UID"])
+            apply(ov, data, tzname, series=False)
+            new.add_component(ov)
 
 
 def remaining_count(cal: Calendar, recurrence_id: str, tzname: str | None = None) -> int | None:
@@ -838,7 +878,7 @@ def _ical_value(t: str, v) -> str:
 
 
 def _param(v) -> str:
-    v = str(v)
+    v = re.sub(r'["\x00-\x1f\x7f]', "", str(v))  # RFC 5545: no quotes or control characters in a parameter value
     return f'"{v}"' if re.search(r'[;:,]', v) else v
 
 
