@@ -733,7 +733,7 @@ def upcoming(request: Request, days: int = 30, book: str | None = None):
 
 @router.get("/api/contacts/{cid}/family")
 def family(cid: int, request: Request, depth: int = 3):
-    """The relation graph around a contact: {nodes: [{id, fn, gender, hasPhoto}], edges: [{from, to, type}]}."""
+    """The relation graph around a contact: {nodes: [{id, fn, gender, hasPhoto, iopixPersonId}], edges: [{from, to, type}]}."""
     u = me(request)
     readable_contact(u, cid)
     return family_graph(cid, book_ids(u), depth)
@@ -758,8 +758,9 @@ def family_graph(cid: int, allowed_ids: list[int], depth: int = 3) -> dict:
                 nxt.append(r["related_id"])
         frontier = nxt
     marks = ",".join(["%s"] * len(seen))
-    nodes = [{"id": r["id"], "fn": r["fn"], "gender": r["gender"], "hasPhoto": bool(r["hp"]), "birthday": model._bday(r)}
-             for r in db.q(f"SELECT id, fn, gender, photo IS NOT NULL AS hp, bday_year, bday_month, bday_day FROM con_contacts WHERE id IN ({marks})", list(seen))]
+    nodes = [{"id": r["id"], "fn": r["fn"], "gender": r["gender"], "hasPhoto": bool(r["hp"]), "iopixPersonId": r["iopix_person_id"],
+              "birthday": model._bday(r)}
+             for r in db.q(f"SELECT id, fn, gender, photo IS NOT NULL AS hp, iopix_person_id, bday_year, bday_month, bday_day FROM con_contacts WHERE id IN ({marks})", list(seen))]
     uniq = {(e["from"], e["to"], e["type"]): e for e in edges}
     return {"root": cid, "nodes": nodes, "edges": list(uniq.values())}
 
