@@ -29,7 +29,14 @@ def test_duplicates_scored_with_reasons(client, family_id):
     # same name, other birthdays: two people
     mk(client, family_id, fn="Jan Peeters", birthday={"year": 1950, "month": 1, "day": 2})
     mk(client, family_id, fn="Jan Peeters", birthday={"year": 1985, "month": 8, "day": 9})
+    # the same name, one birthday a year only: the other year says two people; the same year still says one
+    mk(client, family_id, fn="Piet Claes", birthday={"year": 1950})
+    mk(client, family_id, fn="Piet Claes", birthday={"year": 1985, "month": 8, "day": 9})
+    mk(client, family_id, fn="Lotte Claes", birthday={"year": 1990})
+    mk(client, family_id, fn="Lotte Claes", birthday={"year": 1990, "month": 2, "day": 3})
     gs = {tuple(names(g)): g for g in groups(client)}
+    assert ("Piet Claes", "Piet Claes") not in gs
+    assert "same birth year" in gs[("Lotte Claes", "Lotte Claes")]["pairs"][0]["reasons"]
     bob = gs[("Bob Smith", "Robert Smith")]
     assert bob["level"] == "very likely" and any("short for" in r for r in bob["pairs"][0]["reasons"])
     assert gs[("Jonathan Appleseed", "Jonathon Appleseed")]["level"] in ("possible", "likely")

@@ -15,9 +15,9 @@ def _parse_date(s: str):
     s = (s or "").strip()
     if not s:
         return None
-    m = re.match(r"^(\d{4})-(\d{1,2})-(\d{1,2})", s)
+    m = re.match(r"^(\d{4})(?:-(\d{1,2})(?:-(\d{1,2}))?)?$", s)  # 1980-04-15, 1980-04 or 1980
     if m:
-        return int(m.group(1)), int(m.group(2)), int(m.group(3))
+        return int(m.group(1)), int(m.group(2)) if m.group(2) else None, int(m.group(3)) if m.group(3) else None
     m = re.match(r"^\s*-{1,2}\s*(\d{1,2})-(\d{1,2})$", s)  # Google's yearless " --04-15"
     if m:
         return None, int(m.group(1)), int(m.group(2))
@@ -29,9 +29,13 @@ def _parse_date(s: str):
 
 
 def _date_out(y, m, d, style: str) -> str:
+    """A date with unknown parts: Google reads 1980-04-15, 1980-04, 1980 and --04-15; Outlook only takes a full date
+    (1604 stands for no year), so a date without a month and day is left out there."""
     if style == "outlook":
-        return f"{m}/{d}/{y or 1604}"
-    return f"{y:04d}-{m:02d}-{d:02d}" if y else f"--{m:02d}-{d:02d}"
+        return f"{m}/{d}/{y or 1604}" if m and d else ""
+    if not y:
+        return f"--{m:02d}-{d:02d}"
+    return f"{y:04d}" + (f"-{m:02d}" if m else "") + (f"-{d:02d}" if d else "")
 
 
 def _blank_contact() -> dict:

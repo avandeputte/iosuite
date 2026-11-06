@@ -47,7 +47,7 @@ SOCIAL_BASE = {"linkedin": "https://www.linkedin.com/in/", "facebook": "https://
                "snapchat": "https://www.snapchat.com/add/", "flickr": "https://www.flickr.com/people/", "telegram": "https://t.me/"}
 
 STRUCTURED = {"N", "ADR", "ORG", "GENDER", "CLIENTPIDMAP"}
-KEEP_OUT = {"BEGIN", "END", "VERSION", "PRODID", "REV", "UID", "FN", "N", "NICKNAME", "BDAY", "ANNIVERSARY", "GENDER",
+KEEP_OUT = {"BEGIN", "END", "VERSION", "PRODID", "REV", "UID", "FN", "N", "NICKNAME", "BDAY", "X-IOCONTACTS-BDAY", "ANNIVERSARY", "GENDER",
             "X-GENDER", "ORG", "TITLE", "ROLE", "NOTE", "EMAIL", "TEL", "ADR", "URL", "PHOTO", "CATEGORIES", "RELATED",
             "X-ABRELATEDNAMES", "X-ABDATE", "X-ABLABEL", "X-SOCIALPROFILE", "SOCIALPROFILE", "KIND", "X-ADDRESSBOOKSERVER-KIND",
             "X-MAIDENNAME", "X-PHONETIC-FIRST-NAME", "X-PHONETIC-LAST-NAME", "X-IOPIX-PERSON", "X-IOCONTACTS-FAVORITE",
@@ -179,7 +179,8 @@ def _types(p: Prop) -> list[str]:
 
 
 def _date(s: str):
-    """vCard dates: 19800415, 1980-04-15, --0415, --04-15, 1604-04-15 with Apple's omit-year -> (y, m, d) or None."""
+    """vCard dates: 19800415, 1980-04-15, --0415, --04-15, 1604-04-15 with Apple's omit-year, and the partial forms of
+    vCard 4 (1980, 1980-04) -> (y, m, d) with None for the unknown parts, or None."""
     s = (s or "").strip().split("T")[0]
     m = re.match(r"^(\d{4})-?(\d{2})-?(\d{2})$", s)
     if m:
@@ -187,6 +188,9 @@ def _date(s: str):
     m = re.match(r"^--(\d{2})-?(\d{2})$", s)
     if m:
         return None, int(m.group(1)), int(m.group(2))
+    m = re.match(r"^(\d{4})(?:-(\d{2}))?$", s)  # 198004 would be ambiguous, so RFC 6350 wants the dash
+    if m:
+        return int(m.group(1)), int(m.group(2)) if m.group(2) else None, None
     return None
 
 
@@ -267,20 +271,23 @@ def to_contact(props: list[Prop]) -> dict:
             c["kind"] = "org" if k == "org" else "group" if k == "group" else "individual"
         elif n == "X-ABSHOWAS" and raw.strip().upper() == "COMPANY":
             c["kind"] = "org"
-        elif n == "BDAY":
+        elif n in ("BDAY", "X-IOCONTACTS-BDAY"):
+            # X-IOCONTACTS-BDAY carries a birthday vCard 3 cannot (a year, or a year and month) next to no BDAY; a
+            # real BDAY wins over it
             d = _date(raw)
-            if d:
+            if d and not (n == "X-IOCONTACTS-BDAY" and c.get("birthday")):
                 y, m, dd = d
                 if _omitted(p, y):
                     y = None
-                c["birthday"] = {"year": y, "month": m, "day": dd}
+                if y or m:
+                    c["birthday"] = {"year": y, "month": m, "day": dd}
         elif n in ("ANNIVERSARY", "X-ANNIVERSARY", "X-MS-ANNIVERSARY", "X-EVOLUTION-ANNIVERSARY", "X-KADDRESSBOOK-X-ANNIVERSARY"):
             d = _date(raw)
-            if d and not any(x["label"] == "anniversary" for x in c["dates"]):
+            if d and d[1] and d[2] and not any(x["label"] == "anniversary" for x in c["dates"]):
                 c["dates"].append({"label": "anniversary", "year": d[0], "month": d[1], "day": d[2]})
         elif n == "X-ABDATE":
             d = _date(raw)
-            if d:
+            if d and d[1] and d[2]:
                 lab = _label_from(p, labels) or "other"
                 y = None if _omitted(p, d[0]) else d[0]
                 if not (lab == "anniversary" and any(x["label"] == "anniversary" for x in c["dates"])):
@@ -431,8 +438,12 @@ def parse(text: str) -> list[dict]:
 # ------------------------------------------------------------------ writing
 
 def _date_str(y, m, d, version: str) -> tuple[str, dict]:
-    if version == "4.0":
-        return (f"{y:04d}{m:02d}{d:02d}" if y else f"--{m:02d}{d:02d}"), {}
+    """vCard 4: 19800415, --0415, 1980-04 or 1980. vCard 3 takes a full date only (1604 with Apple's omit-year stands
+    for no year); for a date without a day the vCard 4 form is returned, for X-IOCONTACTS-BDAY."""
+    if version == "4.0" or not (m and d):
+        if not y:
+            return f"--{m:02d}{d:02d}", {}
+        return (f"{y:04d}{m:02d}{d:02d}" if d else f"{y:04d}-{m:02d}" if m else f"{y:04d}"), {}
     if y:
         return f"{y:04d}-{m:02d}-{d:02d}", {}
     return f"1604-{m:02d}-{d:02d}", {"x-apple-omit-year": ["1604"]}
@@ -520,9 +531,12 @@ def _props(c: dict, version: str) -> list[Prop]:
     if c.get("gender"):
         out.append(Prop("GENDER" if v4 else "X-GENDER", [c["gender"]] if v4 else {"M": "Male", "F": "Female"}.get(c["gender"], "Other")))
     b = c.get("birthday")
-    if b and b.get("month") and b.get("day"):
-        s, params = _date_str(b.get("year"), b["month"], b["day"], version)
-        out.append(Prop("BDAY", s, params, None, "date-and-or-time" if v4 else "date"))
+    if b and (b.get("year") or b.get("month")):
+        s, params = _date_str(b.get("year"), b.get("month"), b.get("day"), version)
+        if v4 or (b.get("month") and b.get("day")):
+            out.append(Prop("BDAY", s, params, None, "date-and-or-time" if v4 else "date"))
+        else:  # vCard 3 has no partial dates: the year (and month) ride along in a property clients keep
+            out.append(Prop("X-IOCONTACTS-BDAY", s))
     for d in c.get("dates") or []:
         s, params = _date_str(d.get("year"), d["month"], d["day"], version)
         if v4 and d.get("label") == "anniversary":
@@ -660,8 +674,8 @@ def to_jcard(c: dict) -> list:
             props.append(["version", {}, "text", "4.0"])
             continue
         if p.name == "BDAY" or p.name == "ANNIVERSARY":
-            s = p.value
-            val = f"{s[:4]}-{s[4:6]}-{s[6:8]}" if len(s) == 8 and s.isdigit() else s
+            s = p.value  # jCard writes dates with dashes: 1980-04-15, --04-15, 1980-04, 1980
+            val = f"{s[:4]}-{s[4:6]}-{s[6:8]}" if len(s) == 8 and s.isdigit() else f"--{s[2:4]}-{s[4:6]}" if re.match(r"^--\d{4}$", s) else s
             props.append([p.name.lower(), params, "date", val])
             continue
         if isinstance(p.value, list):
@@ -695,7 +709,7 @@ def from_jcard(j) -> dict:
         group = params.pop("group", None) if isinstance(params, dict) else None
         ps = {k: (v if isinstance(v, list) else [str(v)]) for k, v in (params or {}).items()}
         if name.lower() in ("bday", "anniversary") and vals and isinstance(vals[0], str):
-            vals = [vals[0].replace("-", "") if re.match(r"^\d{4}-\d{2}-\d{2}$", vals[0]) else vals[0]]
+            vals = [vals[0].replace("-", "") if re.match(r"^\d{4}-\d{2}-\d{2}$", vals[0]) else "--" + vals[0][2:].replace("-", "") if re.match(r"^--\d{2}-\d{2}$", vals[0]) else vals[0]]
         if len(vals) == 1 and isinstance(vals[0], list):
             val = ";".join(escape(str(x)) if not isinstance(x, list) else ",".join(escape(str(y)) for y in x) for x in vals[0])
         elif name.lower() == "categories":

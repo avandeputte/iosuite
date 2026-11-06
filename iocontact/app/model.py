@@ -91,8 +91,37 @@ CHILD = {
 
 
 def _bday(r) -> dict | None:
-    if r.get("bday_month") and r.get("bday_day"):
-        return {"year": r.get("bday_year"), "month": r["bday_month"], "day": r["bday_day"]}
+    """The stored birthday, which can be any part of a date: a year, a year and month, a month and day, or all three."""
+    if r.get("bday_year") or r.get("bday_month"):
+        return {"year": r.get("bday_year"), "month": r.get("bday_month"), "day": r.get("bday_day")}
+    return None
+
+
+def partial_date(b) -> dict | None:
+    """A date with any part unknown, as {year, month, day} with None for what is not known. Allowed: a year, a year and
+    a month, a month and a day, or all three. A day without a month, or a month alone, is not a date and is dropped."""
+    if not isinstance(b, dict):
+        return None
+    y, m, d = _int(b.get("year"), 1, 9999), _int(b.get("month"), 1, 12), _int(b.get("day"), 1, 31)
+    if not m:
+        d = None
+    if m and not (d or y):
+        m = None
+    if not (y or m):
+        return None
+    return {"year": y, "month": m, "day": d}
+
+
+def parse_date(s) -> dict | None:
+    """Text to a partial date: 1980-05-17, 1980-05, 1980, --05-17 or 05-17 (and the same without dashes: 19800517,
+    --0517). None when it is not a date."""
+    s = str(s or "").strip().split("T")[0]
+    m = re.match(r"^(\d{4})(?:-?(\d{2})(?:-?(\d{2}))?)?$", s)
+    if m and not (m.group(2) and not m.group(3) and "-" not in s and len(s) == 6):
+        return partial_date({"year": m.group(1), "month": m.group(2), "day": m.group(3)})
+    m = re.match(r"^(?:--)?(\d{1,2})-(\d{1,2})$", s) or re.match(r"^--(\d{2})(\d{2})$", s)
+    if m:
+        return partial_date({"month": m.group(1), "day": m.group(2)})
     return None
 
 
@@ -244,11 +273,7 @@ def validate(c: dict) -> dict:
     out["gender"] = (c.get("gender") or "").upper()[:1] or None
     if out["gender"] not in (None, "M", "F", "O", "N", "U"):
         out["gender"] = None
-    b = c.get("birthday")
-    if b and _int(b.get("month"), 1, 12) and _int(b.get("day"), 1, 31):
-        out["birthday"] = {"year": _int(b.get("year"), 1, 9999), "month": int(b["month"]), "day": int(b["day"])}
-    else:
-        out["birthday"] = None
+    out["birthday"] = partial_date(c.get("birthday"))
     # remind: whether the birthday goes into the birthday feeds; None (not given, as from a vCard) keeps what was there
     rem = c.get("birthdayRemind")
     out["birthdayRemind"] = None if rem is None else rem not in (False, 0, "0", "false", "no", "off")
@@ -473,7 +498,7 @@ def upcoming(book_ids: list[int], days: int = 30) -> list[dict]:
     today = dt.date.today()
     out = []
     rows = db.q(f"SELECT c.id, c.fn, c.bday_year AS year, c.bday_month AS month, c.bday_day AS day, 'birthday' AS label, "
-                f"c.photo IS NOT NULL AS has_photo, c.iopix_person_id FROM con_contacts c WHERE c.address_book_id IN ({marks}) AND c.deleted = 0 AND c.bday_month IS NOT NULL "
+                f"c.photo IS NOT NULL AS has_photo, c.iopix_person_id FROM con_contacts c WHERE c.address_book_id IN ({marks}) AND c.deleted = 0 AND c.bday_day IS NOT NULL "
                 f"AND c.bday_remind = 1 UNION ALL SELECT c.id, c.fn, d.year, d.month, d.day, d.label, c.photo IS NOT NULL, c.iopix_person_id FROM con_contact_dates d "
                 f"JOIN con_contacts c ON c.id = d.contact_id WHERE c.address_book_id IN ({marks}) AND c.deleted = 0", (*book_ids, *book_ids))
     for r in rows:

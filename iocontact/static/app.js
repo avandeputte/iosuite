@@ -106,17 +106,25 @@ function dialog(title, body, buttons) {
 const confirmDialog = (title, text, ok = 'OK', danger = false) => dialog(title, h('p', null, text), [{ label: 'Cancel', value: false }, { label: ok, value: true, primary: !danger, danger }]);
 
 const MONTHS = Array.from({ length: 12 }, (_, i) => new Date(2000, i, 1).toLocaleString(undefined, { month: 'long' }));
+// a date can be partial: a year, a year and month, a month and day, or all three
 function fmtDate(d) {
-  if (!d) return '';
-  const dt = new Date(d.year || 2000, d.month - 1, d.day);
-  return d.year ? dt.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) : dt.toLocaleDateString(undefined, { month: 'long', day: 'numeric' });
+  if (!d || !(d.year || d.month)) return '';
+  const dt = new Date(d.year || 2000, (d.month || 1) - 1, d.day || 1);
+  const opt = {};
+  if (d.year) opt.year = 'numeric';
+  if (d.month) opt.month = 'long';
+  if (d.day) opt.day = 'numeric';
+  return dt.toLocaleDateString(undefined, opt);
 }
+// the age from a birthday with a year; without the month and day it is the age reached this year
 function age(b) {
   if (!b || !b.year) return null;
   const t = new Date(); let a = t.getFullYear() - b.year;
-  if (t.getMonth() + 1 < b.month || (t.getMonth() + 1 === b.month && t.getDate() < b.day)) a -= 1;
+  if (b.month && b.day && (t.getMonth() + 1 < b.month || (t.getMonth() + 1 === b.month && t.getDate() < b.day))) a -= 1;
+  else if (b.month && !b.day && t.getMonth() + 1 < b.month) a -= 1;
   return a;
 }
+const ageWord = (b) => { const a = age(b); return a == null ? null : (b.month && b.day) || (b.month && new Date().getMonth() + 1 !== b.month) ? `${a} years old` : `${a - 1} or ${a} years old`; };
 const hue = (s) => { let x = 0; for (const c of s || '') x = (x * 31 + c.charCodeAt(0)) % 360; return x; };
 const initials = (fn) => { const p = (fn || '?').trim().split(/\s+/); return ((p[0] || '?')[0] + (p.length > 1 ? p[p.length - 1][0] : '')).toUpperCase(); };
 function avatar(c, size = '') {
@@ -460,7 +468,7 @@ async function showContact(id, pane) {
     return kv(ad.label, h('div', null, lines.map((l) => h('div', null, l)), h('a', { class: 'lnk small', href: `https://www.openstreetmap.org/search?query=${q}`, target: '_blank', rel: 'noopener' }, 'Map')));
   })));
   if (c.birthday || c.dates.length) cards.push(card('cake', 'Dates', '--c-amber',
-    c.birthday ? kv('birthday', h('span', null, fmtDate(c.birthday), a != null ? h('span', { class: 'muted' }, ` · ${a} years old`) : null,
+    c.birthday ? kv('birthday', h('span', null, fmtDate(c.birthday), a != null ? h('span', { class: 'muted' }, ` · ${ageWord(c.birthday)}`) : null,
       c.birthdayRemind === false ? h('span', { class: 'muted', title: 'Left out of the birthday calendar, the start page and other apps' }, ' · no reminder') : null)) : null,
     c.dates.map((d) => kv(d.label, h('span', null, fmtDate(d), d.year ? h('span', { class: 'muted' }, ` · ${age(d)} years`) : null)))));
   const implied = c.impliedRelations || [];
@@ -623,7 +631,8 @@ async function showEdit(id, pane) {
   const save = async (e) => {
     e && e.preventDefault();
     f.tags = tagIn.value.split(',').map((t) => t.trim()).filter(Boolean);
-    if (!(f.birthday && f.birthday.month && f.birthday.day)) f.birthday = null;
+    // a birthday can be any part of a date: a year, a year and month, a month and day, or all three
+    if (!(f.birthday && (f.birthday.year || (f.birthday.month && f.birthday.day)))) f.birthday = null;
     f.relations = f.relations.map((r) => ({ type: r.type, relatedId: r.relatedId || null, relatedName: r.relatedId ? null : r.relatedName, gender: r.gender || null, label: r.label || null }));
     const payload = { ...f };
     delete payload.hasPhoto; delete payload.etag;
@@ -648,7 +657,7 @@ async function showEdit(id, pane) {
       fld('Kind', kindSel), fld('Phonetic first', inp(f, 'phoneticGiven')), fld('Phonetic last', inp(f, 'phoneticFamily'))),
     h('div', { class: 'fsec' }, icon('work'), 'Work'),
     h('div', { class: 'grid' }, fld('Company', inp(f, 'org')), fld('Department', inp(f, 'department')), fld('Job title', inp(f, 'title')), fld('Role', inp(f, 'role'))),
-    h('div', { class: 'fsec' }, icon('cake'), 'Birthday'), h('div', { class: 'multi' }, ...dateInputs(f.birthday),
+    h('div', { class: 'fsec' }, icon('cake'), 'Birthday', h('span', { class: 'muted small' }, ' · fill in what you know: the year, month and year, day and month, or all three')), h('div', { class: 'multi' }, ...dateInputs(f.birthday),
       h('label', { class: 'check', title: 'Unchecked: the birthday stays on the contact but is left out of the birthday calendar, the start page and other apps' },
         h('input', { type: 'checkbox', checked: f.birthdayRemind !== false, onchange: (e) => { f.birthdayRemind = e.target.checked; } }), ' Remind me')),
     ...phones, ...emails, ...addrs, ...social, ...urls, ...dates, ...rels,

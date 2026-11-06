@@ -18,7 +18,7 @@ def overview() -> dict:
     u = who()
     ids = book_ids(u)
     marks = ",".join(["%s"] * len(ids)) or "0"
-    t = db.one(f"SELECT count(*) AS n, sum(favorite) AS fav, sum(bday_month IS NOT NULL) AS bday, sum(iopix_person_id IS NOT NULL) AS ip, "
+    t = db.one(f"SELECT count(*) AS n, sum(favorite) AS fav, sum(bday_year IS NOT NULL OR bday_month IS NOT NULL) AS bday, sum(iopix_person_id IS NOT NULL) AS ip, "
                f"sum(photo IS NOT NULL) AS ph FROM con_contacts WHERE deleted = 0 AND address_book_id IN ({marks})", ids) if ids else {}
     nrel = db.one(f"SELECT count(*) AS n FROM con_contact_relations r JOIN con_contacts c ON c.id = r.contact_id WHERE c.deleted = 0 AND c.address_book_id IN ({marks})", ids)["n"] if ids else 0
     return {
@@ -154,7 +154,7 @@ def birthdays_in_month(month: int, book: Optional[str] = None) -> list:
     ids = book_ids(u, book)
     marks = ",".join(["%s"] * len(ids)) or "0"
     rows = db.q(f"SELECT id, fn, bday_year, bday_month, bday_day FROM con_contacts WHERE deleted = 0 AND address_book_id IN ({marks}) "
-                f"AND bday_month = %s AND bday_remind = 1 ORDER BY bday_day, fn", (*ids, int(month))) if ids else []
+                f"AND bday_month = %s AND bday_day IS NOT NULL AND bday_remind = 1 ORDER BY bday_day, fn", (*ids, int(month))) if ids else []
     return [{"id": r["id"], "name": r["fn"], "day": r["bday_day"], "year": r["bday_year"]} for r in rows]
 
 

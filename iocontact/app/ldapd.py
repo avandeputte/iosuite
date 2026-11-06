@@ -169,10 +169,10 @@ def contact_entry(c: dict) -> tuple[str, dict]:
         from app.vcard import social_url
         put("labeledURI", f"{social_url(s['service'], s['value'])} {s['service']}")
     b = c.get("birthday")
-    if b:
+    if b:  # any part can be unknown
         put("birthyear", b.get("year"))
-        put("birthmonth", f"{b['month']:02d}")
-        put("birthday", f"{b['day']:02d}")
+        put("birthmonth", f"{b['month']:02d}" if b.get("month") else None)
+        put("birthday", f"{b['day']:02d}" if b.get("day") else None)
     if c.get("photoData"):
         a["jpegPhoto"] = [c["photoData"]["data"]]
     return f"uid={_esc_dn(c['uid'])},ou=contacts,{base()}", a
