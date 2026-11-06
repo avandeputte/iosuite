@@ -157,6 +157,12 @@ shared questions again: the same database server (each app gets its own database
 admin. Each app keeps its usual port and updates itself as always. Accounts are the suite's: `.venv/bin/iosuite-shared --config . admin NAME --app iosuite` (password from
 `ADMIN_PASSWORD`, or asked for) and `.venv/bin/iosuite-shared --config . password NAME`.
 
+The databases and users need not exist beforehand: give a MariaDB / MySQL administrator (the question after the
+databases; flag `--db-admin USER:PASSWORD`, or `IOSUITE_DB_ADMIN`, also in the Proxmox installer) and `setup.sh` creates
+the app's database and user, the Shared ioSuite database and user and, with other apps installed alongside, their
+databases too, with the passwords you answered (`iosuite-shared provision`). Nothing is dropped, and the administrator's
+password is used once and not written anywhere.
+
 ## Configuration
 
 `config.env` in the app folder (written by `setup.sh`; `config.env.example` lists every setting), or the environment, which wins:
