@@ -12,7 +12,7 @@
 # (COMMUNITY_SCRIPTS_URL below; the core engine still comes from community-scripts). Run on the Proxmox host as root:
 #   bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/proxmox/ct/iosuite.sh)"
 # Unattended: IOSUITE_DB=host:port/db:user:password IOSUITE_SUITE_DB=host:port/db:user:password
-#   IOSUITE_ADMIN=name:password IOSUITE_PORT=8630 IOSUITE_ALSO=iocalendar,iocontacts (or none)
+#   IOSUITE_ADMIN=name:password IOSUITE_PORT=8630 IOSUITE_DB_ADMIN=root:password (the databases and users are created) IOSUITE_ALSO=iocalendar,iocontacts (or none)
 #   IOSUITE_PUBLIC_URL=https://home.example.com in the environment skip the questions.
 export COMMUNITY_SCRIPTS_URL="${COMMUNITY_SCRIPTS_URL:-https://raw.githubusercontent.com/avandeputte/iosuite/main/proxmox}"
 _cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
@@ -70,6 +70,16 @@ ask_app_settings() {
     aw=$(whiptail --backtitle "$bt" --passwordbox "Admin password (8 characters or more; empty: make the admin in the browser on the first visit)" 10 72 3>&1 1>&2 2>&3) || exit 1
     [[ -n "$aw" ]] && IOSUITE_ADMIN="$an:$aw" || IOSUITE_ADMIN=""
   fi
+  if [[ -z "${IOSUITE_DB_ADMIN+x}" ]]; then  # a MariaDB administrator: the databases and users above are created for you (empty: they exist)
+    local dau daw
+    dau=$(whiptail --backtitle "$bt" --inputbox "MariaDB administrator who may create the databases and users above, e.g. root (empty: they exist already)" 10 76 "" 3>&1 1>&2 2>&3) || exit 1
+    if [[ -n "$dau" ]]; then
+      daw=$(whiptail --backtitle "$bt" --passwordbox "Password of $dau" 9 60 3>&1 1>&2 2>&3) || exit 1
+      IOSUITE_DB_ADMIN="$dau:$daw"
+    else
+      IOSUITE_DB_ADMIN=""
+    fi
+  fi
   if [[ -z "${IOSUITE_ALSO+x}" ]]; then  # the other apps of the suite in the same container (ioPix has its own script: photo mounts)
     IOSUITE_ALSO=$(whiptail --backtitle "$bt" --checklist "Also install in this container (same database server, each app its own database; same accounts and admin; each on its usual port):" 14 78 4 \
       iocalendar "ioCalendar  (8620)" OFF \
@@ -106,6 +116,7 @@ msg_info "Running the app's setup inside the container (packages, settings, tabl
 # the answers with passwords go in as a root-only file (pushed, read into setup.sh's environment, removed), never as arguments
 SECRETS="IOSUITE_DB=$(printf '%q' "$IOSUITE_DB")"$'\n'"IOSUITE_SUITE_DB=$(printf '%q' "$IOSUITE_SUITE_DB")"$'\n'
 [[ -n "${IOSUITE_ADMIN:-}" ]] && SECRETS+="IOSUITE_ADMIN=$(printf '%q' "$IOSUITE_ADMIN")"$'\n'
+[[ -n "${IOSUITE_DB_ADMIN:-}" ]] && SECRETS+="IOSUITE_DB_ADMIN=$(printf '%q' "$IOSUITE_DB_ADMIN")"$'\n'
 SECF="$(mktemp)"; chmod 600 "$SECF"; printf '%s' "$SECRETS" > "$SECF"
 pct push "$CTID" "$SECF" /opt/iosuite/setup.env --perms 0600 --user 0 --group 0
 rm -f "$SECF"
