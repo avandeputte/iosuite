@@ -234,7 +234,7 @@ def test_the_shell_its_files_and_the_icon_are_public(client):
 
 
 def test_iopix_face_reaches_birthdays_and_family(client, family_id):
-    """A contact without its own photo but linked to an ioPix person shows that face on the birthdays page,
+    """A contact linked to an ioPix person shows that face on the birthdays page,
     in the family tree and on relation chips, as in the contact list."""
     import datetime as dt
     soon = dt.date.today() + dt.timedelta(days=2)
@@ -242,7 +242,7 @@ def test_iopix_face_reaches_birthdays_and_family(client, family_id):
              iopix={"personId": 4242, "name": "Face Kid"})
     mom = mk(client, family_id, fn="Face Mom", relations=[{"type": "child", "relatedId": kid["id"]}])
     up = {x["fn"]: x for x in client.get("/api/upcoming?days=10").json()["items"]}
-    assert up["Face Kid"]["iopixPersonId"] == 4242 and up["Face Kid"]["hasPhoto"] is False
+    assert up["Face Kid"]["iopixPersonId"] == 4242 and up["Face Kid"]["hasPhoto"] is True
     rel = client.get(f"/api/contacts/{mom['id']}").json()["relations"]
     assert rel[0]["relatedIopixPersonId"] == 4242
     nodes = {n["fn"]: n for n in client.get(f"/api/contacts/{mom['id']}/family").json()["nodes"]}
@@ -317,3 +317,27 @@ def test_partial_birthdays(client, family_id):
     y2 = client.put(f"/api/contacts/{y['id']}", json={**y, "birthday": {"month": 3, "day": 4}}).json()
     assert y2["birthday"] == {"year": None, "month": 3, "day": 4}
     assert client.put(f"/api/contacts/{y['id']}", json={**y2, "birthday": None}).json()["birthday"] is None
+
+
+def test_iopix_is_the_only_photo_source(client, family_id, monkeypatch):
+    """Contacts keep no photo of their own: uploads are gone, a vCard's PHOTO is dropped, and the linked ioPix face
+    is served as the photo everywhere (the photo endpoint, vCard export, the account tile)."""
+    from app import iopix
+    face = b"\xff\xd8\xff\xe0fakejpeg"
+    monkeypatch.setattr(iopix, "settings", lambda: {"url": "https://iopix.example", "user": "", "password": "", "cfId": "", "cfSecret": ""})
+    monkeypatch.setattr(iopix, "face", lambda pid: (face, "image/jpeg") if pid == 77 else None)
+    card = "BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Pic Person\r\nN:Person;Pic;;;\r\nPHOTO;ENCODING=b;TYPE=JPEG:/9j/4AAQ\r\nEND:VCARD\r\n"
+    r = client.post(f"/api/contacts?book={family_id}", content=card, headers={"Content-Type": "text/vcard"})
+    assert r.status_code == 201 and r.json()["hasPhoto"] is False
+    cid = r.json()["id"]
+    assert client.get(f"/api/contacts/{cid}/photo").status_code == 404
+    assert client.put(f"/api/contacts/{cid}/photo", files={"file": ("a.jpg", face, "image/jpeg")}).status_code in (404, 405)
+    assert client.post(f"/api/contacts/{cid}/photo/from-iopix").status_code in (404, 405)
+    assert "PHOTO" not in client.get(f"/api/contacts/{cid}", headers={"Accept": "text/vcard"}).text
+    linked = client.patch(f"/api/contacts/{cid}", json={"iopix": {"personId": 77, "name": "Pic Person"}}).json()
+    assert linked["hasPhoto"] is True
+    got = client.get(f"/api/contacts/{cid}/photo")
+    assert got.status_code == 200 and got.content == face
+    assert "PHOTO" in client.get(f"/api/contacts/{cid}", headers={"Accept": "text/vcard"}).text
+    from app import db
+    assert db.one("SELECT photo FROM con_contacts WHERE id = %s", (cid,))["photo"] is None

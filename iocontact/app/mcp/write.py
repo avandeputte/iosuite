@@ -37,7 +37,7 @@ LISTS = ("emails", "phones", "addresses", "urls", "social", "dates", "tags", "re
 
 def _save(u: dict, book_id: int, data: dict, cid: Optional[int] = None) -> int:
     try:
-        return model.save(book_id, data, cid, None, True, book_ids(u))
+        return model.save(book_id, data, cid, None, book_ids(u))
     except (ValueError, TypeError, KeyError) as e:
         raise ToolError(f"That contact does not look right: {e}")
 
@@ -221,11 +221,11 @@ def move_contacts(contacts: list[str], book: str) -> dict:
 
 
 @server.tool(annotations=DELETES)
-def merge_contacts(keep: str, others: list[str], choices: Optional[dict] = None, photo_from: Optional[str] = None) -> dict:
+def merge_contacts(keep: str, others: list[str], choices: Optional[dict] = None) -> dict:
     """Fold duplicates into one contact: the others' phones, emails, addresses, dates, profiles, labels and relations are
     added to `keep`, its empty fields are filled from them, relations pointing at the others move to it, and the
     others are deleted. choices: {field: contact} to take a field (name, nickname, birthday, org, title, notes, gender...)
-    from a given contact instead (preview_merge lists where they disagree); photo_from: whose photo to keep.
+    from a given contact instead (preview_merge lists where they disagree).
     It can be undone with undo_merge. Ask first."""
     from app import quality
     u = who()
@@ -237,8 +237,7 @@ def merge_contacts(keep: str, others: list[str], choices: Optional[dict] = None,
     result = None
     if choices:
         full = {i: model.full(i) for i in ids}
-        result = model.combine(model.full(k["id"], with_photo=True), [model.full(i, with_photo=True) for i in ids[1:]])
-        result.pop("photoData", None)
+        result = model.combine(full[k["id"]], [full[i] for i in ids[1:]])
         for field, who_ref in choices.items():
             src = find_contact(u, who_ref)["id"]
             if src not in full:
@@ -249,8 +248,7 @@ def merge_contacts(keep: str, others: list[str], choices: Optional[dict] = None,
                 result[field] = full[src][field]
             else:
                 raise ToolError(f"'{field}' is not a field to choose")
-    pf = find_contact(u, photo_from)["id"] if photo_from else None
-    mid = quality.merge(u, k["id"], ids[1:], result, pf)
+    mid = quality.merge(u, k["id"], ids[1:], result)
     return {"merged": [r["fn"] for r in rows], "mergeId": mid, "into": contact_out(u, k["id"])}
 
 
@@ -288,11 +286,11 @@ def undo_merge(merge_id: int) -> dict:
 
 
 @server.tool(annotations=WRITES)
-def fix_data_quality(check: Literal["name_case", "repeats", "unlinked_relation", "national_phone", "iopix_photo"],
+def fix_data_quality(check: Literal["name_case", "repeats", "unlinked_relation", "national_phone"],
                      contacts: Optional[list[str]] = None, country_code: Optional[str] = None) -> dict:
     """Repair what a data quality check found, for all its findings or only these contacts: capitalise names, remove a
     repeated email or phone, link relations to the contact of that name, add the country code (country_code, such as
-    +32) to numbers written without it, use the ioPix face as the photo."""
+    +32) to numbers written without it."""
     from app import quality
     u = who()
     ids = [find_contact(u, c)["id"] for c in contacts] if contacts else None
@@ -340,15 +338,10 @@ def lookup_contact(contact: str) -> dict:
 
 @server.tool(annotations=READ_ONLY)
 def list_suggestions(contact: Optional[str] = None, status: Literal["pending", "accepted", "dismissed"] = "pending") -> list:
-    """The suggestions waiting for a person (or those accepted or dismissed), with their source and evidence. Photos are
-    left out of the answer. Accepting happens in the web app only."""
+    """The suggestions waiting for a person (or those accepted or dismissed), with their source and evidence. Accepting happens in the web app only."""
     u = who()
     cid = find_contact(u, contact)["id"] if contact else None
-    items = enrich.listing(book_ids(u), status, cid)
-    for x in items:
-        if x["field"] == "photo":
-            x["value"] = "(a photo)"
-    return items
+    return enrich.listing(book_ids(u), status, cid)
 
 
 @server.tool(annotations=ADDS)
@@ -368,10 +361,10 @@ def import_contacts(data: str, book: Optional[str] = None, mode: Literal["update
 
 
 @server.tool(annotations=WRITES)
-def link_iopix_person(contact: str, person: Optional[str] = None, use_face_as_photo: bool = False) -> dict:
+def link_iopix_person(contact: str, person: Optional[str] = None) -> dict:
     """Link a contact to a person in ioPix (the family photo library), by the person's id or exact name
-    (list_iopix_people); leave person out to unlink. The ioPix face shows as the contact's picture, and with
-    use_face_as_photo it becomes the contact's photo, which phones then show too."""
+    (list_iopix_people); leave person out to unlink. The ioPix face is the contact's only photo: the web app, phones
+    (CardDAV), vCard exports and the LDAP directory all show it."""
     u = who()
     r = find_contact(u, contact, writable=True)
     c = model.full(r["id"])
@@ -394,13 +387,6 @@ def link_iopix_person(contact: str, person: Optional[str] = None, use_face_as_ph
     c["iopix"] = {"personId": p["id"], "name": p["name"]}
     _save(u, r["address_book_id"], c, r["id"])
     out = {"contact": r["fn"], "iopix": {"personId": p["id"], "name": p["name"], "url": iopix.person_url(p["id"], p["name"])}}
-    if use_face_as_photo:
-        got = iopix.face(p["id"])
-        if got:
-            model.set_photo(r["id"], got[0], got[1].split(";")[0])
-            out["photo"] = "set from ioPix"
-        else:
-            out["photo"] = "ioPix has no face for this person yet"
     return out
 
 
@@ -430,15 +416,6 @@ def auto_link_iopix(book: Optional[str] = None, dry_run: bool = True) -> dict:
             c["iopix"] = {"personId": x["personId"], "name": x["name"]}
             _save(u, c["bookId"], c, x["contactId"])
     return {"linked" if not dry_run else "wouldLink": out}
-
-
-@server.tool(annotations=DELETES)
-def remove_photo(contact: str) -> dict:
-    """Take a contact's photo away (an ioPix face, when linked, still shows in the web app)."""
-    u = who()
-    r = find_contact(u, contact, writable=True)
-    model.set_photo(r["id"], None, None)
-    return {"contact": r["fn"], "photo": None}
 
 
 @server.tool(annotations=ADDS)

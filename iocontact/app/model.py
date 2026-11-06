@@ -10,7 +10,7 @@ import re
 import time
 import uuid as uuidlib
 
-from app import db, relations as rel, vcard
+from app import db, iopix, relations as rel, vcard
 
 # ------------------------------------------------------------------ address books
 
@@ -134,7 +134,7 @@ def summary(r: dict) -> dict:
 
 
 SUMMARY_SQL = ("SELECT c.id, c.address_book_id, c.uid, c.kind, c.fn, c.given, c.family, c.nickname, c.org, c.title, c.favorite, "
-               "c.photo IS NOT NULL AS has_photo, c.bday_year, c.bday_month, c.bday_day, c.gender, c.iopix_person_id, c.updated_at, "
+               "c.iopix_person_id IS NOT NULL AS has_photo, c.bday_year, c.bday_month, c.bday_day, c.gender, c.iopix_person_id, c.updated_at, "
                "(SELECT e.value FROM con_contact_emails e WHERE e.contact_id = c.id ORDER BY e.pref DESC, e.position LIMIT 1) AS email, "
                "(SELECT p.value FROM con_contact_phones p WHERE p.contact_id = c.id ORDER BY p.pref DESC, p.position LIMIT 1) AS phone "
                "FROM con_contacts c ")
@@ -200,7 +200,7 @@ def full(cid: int | dict, with_photo: bool = False) -> dict | None:
          "phoneticFamily": r["phonetic_family"], "gender": r["gender"], "birthday": _bday(r),
          "birthdayRemind": bool(r.get("bday_remind", 1)), "org": r["org"],
          "department": r["department"], "title": r["title"], "role": r["role"], "notes": r["notes"],
-         "favorite": bool(r["favorite"]), "hasPhoto": r["photo"] is not None, "etag": r["etag"],
+         "favorite": bool(r["favorite"]), "hasPhoto": r["iopix_person_id"] is not None, "etag": r["etag"],
          "iopix": {"personId": r["iopix_person_id"], "name": r["iopix_person_name"]} if r["iopix_person_id"] else None,
          "extra": json.loads(r["extra"]) if r["extra"] else [],
          "created": r["created_at"].isoformat() if r["created_at"] else None,
@@ -211,21 +211,24 @@ def full(cid: int | dict, with_photo: bool = False) -> dict | None:
             if "pref" in x:
                 x["pref"] = int(x["pref"] or 0)
     c["tags"] = [x["tag"] for x in db.q("SELECT tag FROM con_contact_tags WHERE contact_id = %s ORDER BY tag", (r["id"],))]
-    rels = db.q("SELECT r.*, o.fn AS o_fn, o.uid AS o_uid, o.gender AS o_gender, o.address_book_id AS o_book, o.deleted AS o_del, o.photo IS NOT NULL AS o_photo, o.iopix_person_id AS o_iopix "
+    rels = db.q("SELECT r.*, o.fn AS o_fn, o.uid AS o_uid, o.gender AS o_gender, o.address_book_id AS o_book, o.deleted AS o_del, o.iopix_person_id IS NOT NULL AS o_photo, o.iopix_person_id AS o_iopix "
                 "FROM con_contact_relations r LEFT JOIN con_contacts o ON o.id = r.related_id WHERE r.contact_id = %s ORDER BY r.position, r.id", (r["id"],))
     c["relations"] = [{"type": x["type"], "relatedId": x["related_id"] if x["related_id"] and not x["o_del"] else None,
                        "relatedName": x["related_name"], "relatedFn": x["o_fn"], "relatedUid": x["o_uid"],
                        "relatedGender": x["o_gender"], "relatedBookId": x["o_book"], "relatedHasPhoto": bool(x["o_photo"]),
                        "relatedIopixPersonId": x["o_iopix"] if not x["o_del"] else None, "label": x["label"],
                        "typeLabel": x["label"] or rel.label(x["type"], x["o_gender"])} for x in rels]
-    if with_photo and r["photo"] is not None:
-        c["photoData"] = {"type": r["photo_type"] or "image/jpeg", "data": r["photo"]}
+    if with_photo and r["iopix_person_id"]:
+        got = iopix.photo(r["iopix_person_id"])
+        if got:
+            c["photoData"] = {"type": got[1], "data": got[0]}
     return c
 
 
 def photo(cid: int) -> tuple[bytes, str] | None:
-    r = db.one("SELECT photo, photo_type FROM con_contacts WHERE id = %s AND deleted = 0", (cid,))
-    return (r["photo"], r["photo_type"] or "image/jpeg") if r and r["photo"] is not None else None
+    """A contact's photo: the face of the ioPix person it is linked to. Contacts keep no photo of their own."""
+    r = db.one("SELECT iopix_person_id FROM con_contacts WHERE id = %s AND deleted = 0", (cid,))
+    return iopix.photo(r["iopix_person_id"]) if r else None
 
 
 def vcard_text(cid: int | dict, version: str = "3.0") -> str:
@@ -304,10 +307,11 @@ def _etag(cid: int) -> str:
     return hashlib.sha1(f"{cid}-{time.time_ns()}-{uuidlib.uuid4()}".encode()).hexdigest()[:20]
 
 
-def save(book_id: int, data: dict, cid: int | None = None, href: str | None = None, keep_photo: bool = True,
+def save(book_id: int, data: dict, cid: int | None = None, href: str | None = None,
          resolve_book_ids: list[int] | None = None) -> int:
     """Create or replace a contact. `data` is a contact dict (API, vCard or CSV); relations may name the other contact by
-    relatedId, relatedUid or relatedName (looked up by name in `resolve_book_ids`). Returns the id."""
+    relatedId, relatedUid or relatedName (looked up by name in `resolve_book_ids`). Returns the id. A photo in `data`
+    (a vCard's PHOTO, say) is not kept: the linked ioPix person is a contact's only photo."""
     c = validate(data)
     with db.tx():
         prev = get_row(cid) if cid else None
@@ -332,10 +336,6 @@ def save(book_id: int, data: dict, cid: int | None = None, href: str | None = No
             ip = data.get("iopix") or {}
             cols["iopix_person_id"] = _int(ip.get("personId"), 1, 2 ** 31 - 1)
             cols["iopix_person_name"] = _clean(ip.get("name")) if cols["iopix_person_id"] else None
-        if data.get("photo") is not None or not keep_photo:
-            ph = data.get("photo")
-            cols["photo"] = ph["data"] if ph else None
-            cols["photo_type"] = ph.get("type") if ph else None
         if prev:
             cols.update({"etag": _etag(prev["id"]), "changed_token": token, "uid": uid})
             db.ex("UPDATE con_contacts SET " + ", ".join(f"{k} = %s" for k in cols) + " WHERE id = %s", (*cols.values(), prev["id"]))
@@ -430,13 +430,6 @@ def _save_relations(cid: int, rels: list[dict], book_ids: list[int]) -> None:
         _touch(rid)
 
 
-def set_photo(cid: int, data: bytes | None, ctype: str | None) -> None:
-    row = get_row(cid)
-    tok = _bump(row["address_book_id"])
-    db.ex("UPDATE con_contacts SET photo = %s, photo_type = %s, etag = %s, changed_token = %s WHERE id = %s",
-          (data, ctype if data else None, _etag(cid), tok, cid))
-
-
 def set_fields(cid: int, **cols) -> None:
     row = get_row(cid)
     tok = _bump(row["address_book_id"])
@@ -499,8 +492,8 @@ def upcoming(book_ids: list[int], days: int = 30) -> list[dict]:
     today = dt.date.today()
     out = []
     rows = db.q(f"SELECT c.id, c.fn, c.bday_year AS year, c.bday_month AS month, c.bday_day AS day, 'birthday' AS label, "
-                f"c.photo IS NOT NULL AS has_photo, c.iopix_person_id, c.bday_remind AS remind FROM con_contacts c WHERE c.address_book_id IN ({marks}) AND c.deleted = 0 "
-                f"AND c.bday_day IS NOT NULL UNION ALL SELECT c.id, c.fn, d.year, d.month, d.day, d.label, c.photo IS NOT NULL, c.iopix_person_id, NULL FROM con_contact_dates d "
+                f"c.iopix_person_id IS NOT NULL AS has_photo, c.iopix_person_id, c.bday_remind AS remind FROM con_contacts c WHERE c.address_book_id IN ({marks}) AND c.deleted = 0 "
+                f"AND c.bday_day IS NOT NULL UNION ALL SELECT c.id, c.fn, d.year, d.month, d.day, d.label, c.iopix_person_id IS NOT NULL, c.iopix_person_id, NULL FROM con_contact_dates d "
                 f"JOIN con_contacts c ON c.id = d.contact_id WHERE c.address_book_id IN ({marks}) AND c.deleted = 0", (*book_ids, *book_ids))
     for r in rows:
         for yr in (today.year, today.year + 1):
@@ -549,7 +542,7 @@ def find_duplicates(book_ids: list[int]) -> list[list[dict]]:
 
 
 def combine(keep: dict, others: list[dict]) -> dict:
-    """What merging gives, without saving: `keep` (a full() dict, with photo) with the others' emails, phones,
+    """What merging gives, without saving: `keep` (a full() dict) with the others' emails, phones,
     addresses, urls, social profiles, dates, labels and relations added when missing, and its empty fields filled."""
     keep = {**keep, "name": dict(keep["name"]), "tags": list(keep["tags"]), "relations": list(keep["relations"]),
             **{k: list(keep[k]) for k in CHILD}}
@@ -576,8 +569,6 @@ def combine(keep: dict, others: list[dict]) -> dict:
             keep["notes"] = ((keep.get("notes") or "") + "\n\n" + o["notes"]).strip()
         if not keep.get("iopix") and o.get("iopix"):
             keep["iopix"] = o["iopix"]
-        if not keep.get("photoData") and o.get("photoData"):
-            keep["photoData"] = o["photoData"]
         seen = {(r["type"], r.get("relatedId") or (r.get("relatedName") or "").lower()) for r in keep["relations"]}
         for r in o["relations"]:
             k = (r["type"], r.get("relatedId") or (r.get("relatedName") or "").lower())
@@ -594,22 +585,16 @@ def _child_key(key: str, x: dict, cols: list) -> tuple:
     return tuple(str(x.get(k) or "").strip().lower() for k in cols if k not in ("pref", "label"))
 
 
-def merge(keep_id: int, other_ids: list[int], result: dict | None = None, photo_from: int | None = None) -> None:
+def merge(keep_id: int, other_ids: list[int], result: dict | None = None) -> None:
     """Fold other contacts into one: `result` (the contact as it should end up, e.g. chosen field by field) or what
     combine() gives. Relations from elsewhere that point at the others move to the kept one; then the others are deleted."""
-    keep = full(keep_id, with_photo=True)
-    others = [o for o in (full(x, with_photo=True) for x in other_ids if x != keep_id) if o]
+    keep = full(keep_id)
+    others = [o for o in (full(x) for x in other_ids if x != keep_id) if o]
     data = result if result is not None else combine(keep, others)
-    photo = None
-    if photo_from is not None:
-        src = next((c for c in [keep, *others] if c["id"] == photo_from), None)
-        photo = src.get("photoData") if src else None
-    elif data.get("photoData"):
-        photo = data["photoData"]
     with db.tx():
         for o in others:
             db.ex("UPDATE con_contact_relations SET related_id = %s WHERE related_id = %s AND contact_id NOT IN (%s, %s)", (keep_id, o["id"], keep_id, o["id"]))
-        save(keep["bookId"], {**data, "photo": photo}, cid=keep_id, keep_photo=photo is None and photo_from is None)
+        save(keep["bookId"], data, cid=keep_id)
         for o in others:
             db.ex("DELETE FROM con_contact_relations WHERE (contact_id = %s AND related_id = %s) OR (contact_id = %s AND related_id = %s)",
                   (o["id"], keep_id, keep_id, o["id"]))
@@ -650,7 +635,7 @@ def implied_relations(cid: int, book_ids: list[int], depth: int = 4) -> list[dic
         return []
     ids = list({f["relatedId"] for f in found} | {f["viaId"] for f in found})
     marks = ",".join(["%s"] * len(ids))
-    info = {r["id"]: r for r in db.q(f"SELECT id, fn, gender, photo IS NOT NULL AS hp, iopix_person_id FROM con_contacts WHERE id IN ({marks}) AND deleted = 0", ids)}
+    info = {r["id"]: r for r in db.q(f"SELECT id, fn, gender, iopix_person_id IS NOT NULL AS hp, iopix_person_id FROM con_contacts WHERE id IN ({marks}) AND deleted = 0", ids)}
     order = {t: i for i, t in enumerate(rel.TYPES)}
     out = []
     for f in sorted(found, key=lambda f: (order.get(f["type"], 99), (info.get(f["relatedId"]) or {}).get("fn") or "")):

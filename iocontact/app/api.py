@@ -114,7 +114,7 @@ async def body_contact(request: Request) -> dict:
             raise HTTPException(400, f"Bad jCard: {e}")
     if not isinstance(data, dict):
         raise HTTPException(400, "Expected a contact object")
-    data.pop("photo", None)  # photos go through /photo
+    data.pop("photo", None)  # contacts keep no photo: the linked ioPix person is the photo
     return data
 
 
@@ -158,17 +158,10 @@ def accounts(request: Request):
 
 @router.get("/api/auth/accounts/{uid}/photo", dependencies=[access.public])
 async def account_photo(uid: int):
-    """The face on an account's tile: the photo of the account's "me" contact, or that contact's ioPix face."""
+    """The face on an account's tile: the ioPix face of the account's "me" contact."""
     u = await run_in_threadpool(users.get, uid)
     cid = u.get("me_contact_id") if u and u["role"] != "none" else None
     p = await run_in_threadpool(model.photo, cid) if cid else None
-    if not p and cid:
-        r = await run_in_threadpool(db.one, "SELECT iopix_person_id FROM con_contacts WHERE id = %s", (cid,))
-        if r and r["iopix_person_id"] and iopix.settings()["url"]:
-            try:
-                p = await run_in_threadpool(iopix.face, r["iopix_person_id"])
-            except Exception:  # noqa: BLE001 - no face, then the initial
-                p = None
     if not p:
         raise HTTPException(404)
     return Response(p[0], media_type=p[1], headers={"Cache-Control": "private, max-age=300"})
@@ -401,8 +394,7 @@ async def create_contact(request: Request, book: str | None = None):
     data = await body_contact(request)
     bid = book or data.get("bookId") or next((b["id"] for b in model.books_for(u) if model.can_write_book(u, b)), None)
     b = writable_book(u, bid)
-    photo = data.pop("photo", None) if isinstance(data.get("photo"), dict) and data["photo"].get("data") else None
-    cid = await run_in_threadpool(model.save, b["id"], {**data, **({"photo": photo} if photo else {})}, None, None, True, book_ids(u))
+    cid = await run_in_threadpool(model.save, b["id"], data, None, None, book_ids(u))
     return JSONResponse(contact_out(model.full(cid)), status_code=201, headers={"Location": f"/api/contacts/{cid}"})
 
 
@@ -418,8 +410,7 @@ async def update_contact(cid: int, request: Request):
     target = data.get("bookId") or r["address_book_id"]
     if int(target) != r["address_book_id"]:
         writable_book(u, target)
-    photo = data.pop("photo", None) if isinstance(data.get("photo"), dict) and data["photo"].get("data") else None
-    await run_in_threadpool(model.save, int(target), {**data, **({"photo": photo} if photo else {})}, cid, None, True, book_ids(u))
+    await run_in_threadpool(model.save, int(target), data, cid, None, book_ids(u))
     return contact_out(model.full(cid))
 
 
@@ -435,7 +426,7 @@ async def patch_contact(cid: int, request: Request):
     dest = int(c.get("bookId") or r["address_book_id"])
     if dest != r["address_book_id"]:
         writable_book(u, dest)  # moving it needs the right to change the other book too
-    await run_in_threadpool(model.save, dest, c, cid, None, True, book_ids(u))
+    await run_in_threadpool(model.save, dest, c, cid, None, book_ids(u))
     return contact_out(model.full(cid))
 
 
@@ -472,13 +463,14 @@ async def bulk(request: Request):
                 c = model.full(cid)
                 tags = set(c["tags"])
                 (tags.add if action == "tag" else tags.discard)(b["tag"].strip())
-                model.save(c["bookId"], {**c, "tags": sorted(tags)}, cid, None, True, book_ids(u))
+                model.save(c["bookId"], {**c, "tags": sorted(tags)}, cid, None, book_ids(u))
     await run_in_threadpool(run)
     return {"ok": True, "n": len(ids)}
 
 
 @router.get("/api/contacts/{cid}/photo", dependencies=[access.signed_in])
 def get_photo(cid: int, request: Request):
+    """The contact's photo: the face of the ioPix person it is linked to (contacts keep no photo of their own)."""
     readable_contact(me(request), cid)
     p = model.photo(cid)
     if not p:
@@ -486,50 +478,9 @@ def get_photo(cid: int, request: Request):
     return Response(p[0], media_type=p[1], headers={"Cache-Control": "private, max-age=60"})
 
 
-@router.put("/api/contacts/{cid}/photo", dependencies=[access.signed_in])
-async def put_photo(cid: int, request: Request, file: UploadFile = File(...)):
-    u = writer(request)
-    r = readable_contact(u, cid)
-    writable_book(u, r["address_book_id"])
-    data = await file.read()
-    if len(data) > config.MAX_PHOTO_BYTES:
-        raise HTTPException(413, "Photos up to 2 MB")
-    if not (data[:3] == b"\xff\xd8\xff" or data[:8] == b"\x89PNG\r\n\x1a\n" or data[:4] == b"RIFF" or data[:6] in (b"GIF87a", b"GIF89a")):
-        raise HTTPException(400, "A JPEG, PNG, GIF or WebP image")
-    ctype = "image/jpeg" if data[:3] == b"\xff\xd8\xff" else "image/png" if data[:4] == b"\x89PNG" else "image/webp" if data[:4] == b"RIFF" else "image/gif"
-    model.set_photo(cid, data, ctype)
-    return {"ok": True}
-
-
-@router.delete("/api/contacts/{cid}/photo", dependencies=[access.signed_in])
-def del_photo(cid: int, request: Request):
-    u = writer(request)
-    r = readable_contact(u, cid)
-    writable_book(u, r["address_book_id"])
-    model.set_photo(cid, None, None)
-    return {"ok": True}
-
-
-@router.post("/api/contacts/{cid}/photo/from-iopix", dependencies=[access.signed_in])
-async def photo_from_iopix(cid: int, request: Request):
-    u = writer(request)
-    r = readable_contact(u, cid)
-    writable_book(u, r["address_book_id"])
-    if not r["iopix_person_id"]:
-        raise HTTPException(400, "Link the contact to an ioPix person first")
-    try:
-        got = await run_in_threadpool(iopix.face, r["iopix_person_id"])
-    except Exception as e:  # noqa: BLE001
-        raise HTTPException(502, f"ioPix did not answer: {e}")
-    if not got:
-        raise HTTPException(404, "ioPix has no face for this person yet")
-    model.set_photo(cid, got[0], got[1].split(";")[0])
-    return {"ok": True}
-
-
 @router.post("/api/contacts/merge", dependencies=[access.signed_in])
 async def merge(request: Request):
-    """{keep, others, result?, photoFrom?}: fold the others into keep. result is the contact as it should end up (fields
+    """{keep, others, result?}: fold the others into keep. result is the contact as it should end up (fields
     chosen one by one, as /api/merge/preview offers them); without it, everything is combined. Undo: /api/merges."""
     u = writer(request)
     b = await request.json()
@@ -540,8 +491,7 @@ async def merge(request: Request):
         r = readable_contact(u, cid)
         writable_book(u, r["address_book_id"])
     result = b.get("result") if isinstance(b.get("result"), dict) else None
-    pf = b.get("photoFrom")
-    mid = await run_in_threadpool(quality.merge, u, keep, others, result, int(pf) if pf not in (None, "") else None)
+    mid = await run_in_threadpool(quality.merge, u, keep, others, result)
     return {**contact_out(model.full(keep)), "mergeId": mid}
 
 
@@ -743,7 +693,7 @@ def family_graph(cid: int, allowed_ids: list[int], depth: int = 3) -> dict:
     marks = ",".join(["%s"] * len(seen))
     nodes = [{"id": r["id"], "fn": r["fn"], "given": r["given"], "family": r["family"], "gender": r["gender"], "hasPhoto": bool(r["hp"]),
               "iopixPersonId": r["iopix_person_id"], "birthday": model._bday(r)}
-             for r in db.q(f"SELECT id, fn, given, family, gender, photo IS NOT NULL AS hp, iopix_person_id, bday_year, bday_month, bday_day "
+             for r in db.q(f"SELECT id, fn, given, family, gender, iopix_person_id IS NOT NULL AS hp, iopix_person_id, bday_year, bday_month, bday_day "
                            f"FROM con_contacts WHERE id IN ({marks})", list(seen))]
     uniq = {(e["from"], e["to"], e["type"]): e for e in edges}
     return {"root": cid, "nodes": nodes, "edges": list(uniq.values())}
@@ -796,7 +746,7 @@ def import_cards(u: dict, b: dict, cards: list[dict], mode: str = "update") -> d
             continue
         if c.get("iopix") is None:
             c.pop("iopix", None)
-        model.save(b["id"], c, existing["id"] if existing else None, None, True, ids)
+        model.save(b["id"], c, existing["id"] if existing else None, None, ids)
         if existing:
             updated += 1
         else:
