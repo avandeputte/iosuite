@@ -41,6 +41,7 @@ ACCUWEATHER_LOCATION = env("ACCUWEATHER_LOCATION").strip()   # a location key (S
 # Home Assistant (Settings › Home Assistant does the same, the environment wins): its address and a long-lived access token
 HA_URL = env("HA_URL").strip().rstrip("/")
 HA_TOKEN = os.environ.get("HA_TOKEN", "").strip()
+HA_FEED = env_flag("HA_FEED", True)   # HA_FEED=0: no websocket to Home Assistant, the page polls instead
 
 # updates: IOSUITE_REPO, IOSUITE_BRANCH and UPDATE_CHECK are read by iosuite_shared.updates (app.auth.updater)
 # the server log that Maintenance › Updates and logs shows (LOG_FILE= with nothing after it: none)

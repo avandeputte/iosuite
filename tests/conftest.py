@@ -15,6 +15,7 @@ os.environ.update(DB_HOST=_s["host"], DB_PORT=str(_s["port"]), DB_USER=_s["user"
 _authtest.fresh_database("suite_test")
 os.environ.update(_authtest.auth_env("suite_test_shared"))
 os.environ.setdefault("UPDATE_CHECK", "0")
+os.environ.setdefault("HA_FEED", "0")  # no websocket thread toward a mocked Home Assistant
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from fastapi.testclient import TestClient  # noqa: E402

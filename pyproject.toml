@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "iosuite"
-version = "0.11.9"
+version = "0.11.11"
 description = "The start page of the ioThing suite: one place with every io app (ioPix, ioHealth, ioCalendar, ioContacts, ioNotes)"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -17,6 +17,7 @@ dependencies = [
   "python-multipart<1",
   "pyjwt[crypto]<3",              # Cloudflare Access tokens (proxy sign-in)
   "pyyaml<7",                     # importing a homepage bookmarks.yaml
+  "websockets<16",                # Home Assistant's live feed (app/ha_feed.py)
 ]
 
 [project.optional-dependencies]

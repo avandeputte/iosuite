@@ -3,8 +3,10 @@
 Clients authenticate with the web session cookie (the suite's, shared by every io app on the domain), HTTP Basic or
 `Authorization: Bearer <app password>`, as in the other io apps."""
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 from fastapi.concurrency import run_in_threadpool
+import asyncio
+import json
 
 from app import __version__, apps, bookmarks, config, homeassistant as ha, layout, status as appstatus, users, weather, widgets
 from app.auth import updater
@@ -164,6 +166,39 @@ async def get_home(request: Request):
     old at most), which of them go on the wall, and what needs attention. {enabled: false} until an admin sets it up."""
     me(request)
     return await run_in_threadpool(ha.home)
+
+
+@router.get("/api/ha/events")
+async def ha_events(request: Request, once: bool = False):
+    """The Home card as server-sent events: the same JSON as /api/ha, sent when something in it changes (within a
+    second while the live feed is up, else as the REST copy refreshes) and a comment every 20 seconds to keep the
+    connection. The page's EventSource reconnects by itself. once=1: the card as it stands, then the end (a check)."""
+    me(request)
+
+    async def gen():
+        last, seen = None, ha.feed.version
+        beat = 0.0
+        while True:
+            if await request.is_disconnected():
+                return
+            d = await run_in_threadpool(ha.home)
+            raw = json.dumps(d, separators=(",", ":"))
+            now = asyncio.get_running_loop().time()
+            if raw != last:
+                last = raw
+                beat = now
+                yield f"data: {raw}\n\n"
+                if once:
+                    return
+            elif now - beat > 20:
+                beat = now
+                yield ": keep\n\n"
+            if d.get("live"):  # wait for the feed to move (or a few seconds, to notice a disconnect)
+                seen = await run_in_threadpool(ha.feed.wait, seen, 5.0)
+            else:
+                await asyncio.sleep(ha.STATES_TTL)
+    return StreamingResponse(gen(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 @router.post("/api/ha/{entity_id}/set")

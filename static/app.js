@@ -189,6 +189,7 @@ async function onRoute() {
   document.body.classList.toggle('wall', r.view === 'wall');
   S.refresh = null; S.shownDay = null;  // the view drawn next says how it refreshes itself (liveRefresh)
   if (S.wallStop) { S.wallStop(); S.wallStop = null; }
+  haStreamStop();  // the view opens its own stream of Home Assistant changes when it needs one
   $('#topbar').append(userMenu());  // out of the old page before it goes; showHome takes it into the new one
   $('#main').replaceChildren(page);
   try { await ({ home: showHome, settings: showSettings, maintenance: showMaintenance, wall: showWall })[r.view](page, r); } catch (e) { fail(e); }
@@ -890,21 +891,48 @@ function haPopup(t, onChange) {
     body.replaceChildren(...kids);
   };
   draw();
-  // the thing moves while the popup is open (a cover closing, a device reporting back): ask again every few seconds
-  const timer = setInterval(async () => {
+  // the thing moves while the popup is open (a cover closing, a device reporting back): the stream brings it, else a poll
+  const take = (d) => {
+    const fresh = (d.items || []).find((x) => x.id === cur.id);
+    if (fresh && body.isConnected && !busy && JSON.stringify({ a: fresh.state, b: fresh.climate, c: fresh.cover }) !== JSON.stringify({ a: cur.state, b: cur.climate, c: cur.cover })) { cur = { ...cur, ...fresh }; onChange(fresh); draw(); }
+  };
+  const off = haSubscribe(take);
+  const timer = S.haStream ? 0 : setInterval(async () => {
     if (!body.isConnected) { clearInterval(timer); return; }
     if (busy || document.hidden) return;
     let d; try { d = await api('/api/ha'); } catch { return; }
-    const fresh = (d.items || []).find((x) => x.id === cur.id);
-    if (fresh && body.isConnected && !busy && JSON.stringify({ a: fresh.state, b: fresh.climate, c: fresh.cover }) !== JSON.stringify({ a: cur.state, b: cur.climate, c: cur.cover })) { cur = { ...cur, ...fresh }; onChange(fresh); draw(); }
+    take(d);
   }, 3000);
-  dialog(cur.name, body, [{ label: 'Done', value: true, primary: true }]).then(() => clearInterval(timer));
+  dialog(cur.name, body, [{ label: 'Done', value: true, primary: true }]).then(() => { off(); if (timer) clearInterval(timer); });
 }
 
+/* Changes from Home Assistant as they happen: one EventSource per view on /api/ha/events (the server holds the
+   websocket to Home Assistant and sends the Home card anew when something in it changes); whoever draws from it
+   (the card, the wall's sensors, an open popup) subscribes here. The browser reconnects it by itself. */
+const haListeners = new Set();
+function haSubscribe(fn) {
+  haListeners.add(fn);
+  if (!S.haStream && window.EventSource) {
+    S.haStream = new EventSource('/api/ha/events');
+    S.haStream.onmessage = (e) => { let d; try { d = JSON.parse(e.data); } catch { return; } S.ha = d.enabled ? d : false; for (const f of [...haListeners]) { try { f(d); } catch { /* one listener's problem */ } } };
+  }
+  return () => { haListeners.delete(fn); };
+}
+function haStreamStop() {
+  haListeners.clear();
+  if (S.haStream) { S.haStream.close(); S.haStream = null; }
+}
 async function drawHomeCard(el, alertsEl, again = false) {
+  if (!el.haLive) {  // the first draw: from here on the stream redraws the card as Home Assistant changes
+    el.haLive = true;
+    const off = haSubscribe((d) => { if (!el.isConnected) { off(); return; } renderHomeCard(el, alertsEl, d); });
+  }
   let d;
   try { d = await api('/api/ha'); } catch (e) { if (!again) { el.hidden = false; el.replaceChildren(h('div', { class: 'muted small' }, e.message)); } return; }
   if (!el.isConnected) return;
+  renderHomeCard(el, alertsEl, d);
+}
+function renderHomeCard(el, alertsEl, d) {
   S.ha = d.enabled ? d : false;
   if (!d.enabled) { el.hidden = S.user.role !== 'admin'; if (!el.hidden) el.replaceChildren(wgHead('Home'), h('a', { class: 'lnk small', href: '#/settings/ha' }, 'Add Home Assistant')); return; }
   el.hidden = false;
@@ -920,9 +948,9 @@ async function drawHomeCard(el, alertsEl, again = false) {
     alertsEl.hidden = !al.length;
     alertsEl.replaceChildren(...al.map((a) => h('a', { class: 'alert', href: haLink(a), target: '_blank', rel: 'noreferrer', title: a.id }, icon('warn', 's'), h('b', null, a.name), ' ', a.text)));
   }
-  // its own minute: a light switched elsewhere shows here soon, without the whole page refreshing
+  // without the stream (an old browser), its own minute: a light switched elsewhere shows here soon
   clearTimeout(el.haTimer);
-  el.haTimer = setTimeout(() => { if (el.isConnected && !document.hidden) drawHomeCard(el, alertsEl, true); }, 60 * 1000);
+  if (!S.haStream) el.haTimer = setTimeout(() => { if (el.isConnected && !document.hidden) drawHomeCard(el, alertsEl, true); }, 60 * 1000);
 }
 
 async function drawWeather(el, again = false) {
@@ -1074,13 +1102,17 @@ async function showWall(page) {
   if (has('iopix')) timers.push(wallSlideshow(photos, caption, got.layout && got.layout.strip ? got.layout.strip : got.photoStrip));
   const draw = () => { wallWeather(wx, hours); wallAgenda(agenda, has); wallSensors(sensors); };
   draw();
-  timers.push(setInterval(() => { if (!document.hidden) wallSensors(sensors); }, 60 * 1000));  // the house changes faster than the weather
+  haSubscribe((d) => renderWallSensors(sensors, d));  // the house changes faster than the weather: as it happens
+  timers.push(setInterval(() => { if (!document.hidden && !S.haStream) wallSensors(sensors); }, 60 * 1000));
   S.shownDay = dayKey(); S.refreshedAt = Date.now(); S.refresh = draw;
 }
 /** The Home Assistant entities ticked "wall" (Settings › Home Assistant), name and state each; what needs attention first. */
 async function wallSensors(el) {
   let d;
   try { d = await api('/api/ha'); } catch { return; }
+  renderWallSensors(el, d);
+}
+function renderWallSensors(el, d) {
   if (!el.isConnected) return;
   if (!d.enabled) { el.replaceChildren(); return; }
   const on = new Set(d.wall || []);
