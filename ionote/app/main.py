@@ -14,12 +14,9 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import __version__, config, db, mcp, suitedb, users
-from iosuite_shared import proxyauth
 from app import notes as notes_mod, owners
 from app.auth import auth as auth_shared, updater
-
-proxyauth.remember_peer()  # before uvicorn's forwarded-header rewrite runs: proxy sign-in trusts the real peer
-from app.routes import auth, notes as notes_routes, settings, users as users_routes  # noqa: E402
+from app.routes import auth, notes as notes_routes, settings, users as users_routes
 
 log = logging.getLogger("app")
 MAX_JSON_BODY = 8 << 20  # a JSON request larger than this is refused before it is read (pictures go as their own body)
