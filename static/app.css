@@ -387,3 +387,45 @@ table.t th { font-size: var(--fs-s); color: var(--fg2); font-weight: 600; }
   .wxdays { gap: 0; }
   .wxday { min-width: 44px; padding: 2px 3px; }
 }
+
+/* ---- Home Assistant: what needs attention (above the tiles), the Home card, the wall's sensors, Settings */
+.alerts { display: flex; flex-wrap: wrap; gap: 8px; margin: -6px 0 14px; }
+.alert { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px 6px 10px; border-radius: var(--r-pill); font-size: var(--fs-s); color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 14%, transparent); border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent); }
+.alert .ic { width: 16px; height: 16px; }
+.homecard { margin-top: 16px; }
+.homecard .wghead > a { margin-left: auto; }
+.hatiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); gap: 8px; }
+.hatile { display: flex; align-items: center; gap: 8px; min-width: 0; height: 44px; padding: 0 10px; border-radius: var(--r-s); background: var(--bg2); color: var(--fg); text-align: left;
+  border: 1px solid transparent; font: inherit; cursor: default; }
+.hatile .ic { width: 20px; height: 20px; flex: none; color: var(--fg2); }
+.hatile .hname { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hatile .hstate { color: var(--fg2); white-space: nowrap; flex: none; max-width: 45%; overflow: hidden; text-overflow: ellipsis; }
+.hatile.on .ic { color: var(--star); }
+.hatile.ctl { cursor: pointer; }
+.hatile.ctl:hover { background: var(--bg3); }
+.hatile.ctl.on { background: color-mix(in srgb, var(--star) 16%, var(--bg2)); border-color: color-mix(in srgb, var(--star) 40%, transparent); }
+.hatile.ctl.on .hstate { color: var(--fg); }
+.hatile.busy { opacity: .5; pointer-events: none; }
+.hatile.off { opacity: .55; }
+a.hatile:hover { background: var(--bg3); }
+.qrow .bmic.ha .ic { width: 18px; height: 18px; color: var(--fg2); }
+.qrow .bmic.ha.on .ic { color: var(--star); }
+.qrow .tap { color: var(--accent); }
+.ok { color: var(--ok); }
+.halist { display: flex; flex-direction: column; gap: 4px; margin: 8px 0 12px; overflow-x: auto; }
+.harow { display: grid; grid-template-columns: minmax(140px, 1.2fr) minmax(120px, 1fr) 60px 48px minmax(90px, .7fr) 100px; gap: 8px; align-items: center; min-width: 620px; }
+.harow.head { font-size: var(--fs-xs); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--fg2); }
+.harow .haid { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: var(--fs-s); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.harow input.t { height: 32px; }
+.harow input[type=checkbox] { justify-self: center; width: 18px; height: 18px; }
+.found .pillbtn { margin: 0 6px 6px 0; }
+.wallsensors { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .4em .9em; max-width: 46vw; font-size: 1.1em; }
+.wallsensors:empty { display: none; }
+.wallsensor { display: inline-flex; align-items: center; gap: .4em; white-space: nowrap; opacity: .9; }
+.wallsensor .ic { width: 1.1em; height: 1.1em; opacity: .8; }
+.wallsensor.on .ic { color: #ffd36b; opacity: 1; }
+.wallsensor .hname { opacity: .8; }
+.wallsensor .hstate { font-weight: 500; font-variant-numeric: tabular-nums; }
+.wallsensor.alert { color: #ffb86b; background: none; border: 0; padding: 0; font-size: inherit; border-radius: 0; }
+.wallsensor.alert .ic { width: 1.1em; height: 1.1em; }

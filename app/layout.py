@@ -7,7 +7,7 @@ import json
 
 from app import apps, db
 
-SECTIONS = ("birthdays", "week", "strip", "bookmarks")  # the cards under the tiles, hideable like a tile
+SECTIONS = ("home", "birthdays", "week", "strip", "bookmarks")  # the cards under the tiles, hideable like a tile (home: Home Assistant)
 ENGINES = ("duckduckgo", "google", "bing", "startpage", "ecosia", "kagi")  # the search box's web search (null: DuckDuckGo)
 EMPTY = {"hidden": [], "order": [], "cards": [], "strip": None, "search": None}
 

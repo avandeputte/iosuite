@@ -56,6 +56,13 @@ what the app will show on the start page later (today's events, the newest photo
   keeps a copy and asks AccuWeather at most every hour (conditions), 90 minutes (the next 12 hours) and 6 hours
   (forecast), and only while someone opens the page: 44 calls on a day the page stays open from morning to night, so
   a free key's 50 a day are enough; browsers never talk to AccuWeather.
+- **Home Assistant**: a Home card with the entities an admin picks (lights, switches, locks, covers, scenes, sensors,
+  people), each with its state; a tap toggles the ones the admin ticked "control". Sensors ticked "wall" show on the
+  wall display; the search box finds any entity by name and toggles the controllable ones; a line above the tiles
+  points out what needs attention (an entity in the state the admin named, and built in: a leak, smoke, gas or CO
+  sensor that is on, a problem or safety sensor, a battery at 15% or under). Settings › Home Assistant (admins) takes
+  the address and a long-lived access token; the server makes every call with it, and browsers never see the token
+  nor talk to Home Assistant. All states come in one call, kept five seconds, so a houseful of open pages costs one.
 - **Bookmarks**, as [homepage](https://gethomepage.dev/configs/bookmarks/) lays them out: groups of links under the
   apps, each with a two-letter badge (or an icon: an image address, a file name from the dashboard-icons
   collection, `github.png`, or an SVG of your own uploaded for the link and kept in the database), the name and the
@@ -152,6 +159,7 @@ the suite. Accounts are the suite's: `.venv/bin/iosuite-shared --config . admin 
 | `TLS_CERT_FILE`, `TLS_KEY_FILE` | serve HTTPS directly instead of behind a reverse proxy |
 | `PUBLIC_URL` | the address people use (behind a proxy); also what ioSuite registers in the suite's list of apps |
 | `ACCUWEATHER_API_KEY`, `ACCUWEATHER_LOCATION` | the weather: an AccuWeather key and a location key (or Settings › Home page, which finds the location from a city name) |
+| `HA_URL`, `HA_TOKEN` | Home Assistant: its address (`http://homeassistant.local:8123`) and a long-lived access token (or Settings › Home Assistant) |
 | `ADMIN_USER`, `ADMIN_PASSWORD` | the first admin, made on the first start when there are no accounts |
 | `AUTH_PROXY`, `AUTH_PROXY_HEADER`, `AUTH_PROXY_TRUSTED`, `CF_ACCESS_TEAM`, `CF_ACCESS_AUD` | sign-in at a reverse proxy, as in the other io apps (Cloudflare Access, Authelia, Authentik, oauth2-proxy…) |
 | `UPDATE_CHECK` | `0` turns the daily version check off for good |
@@ -172,7 +180,8 @@ python -m pytest tests     # on a test MariaDB of its own: a Docker container it
 
 Covered: status and sign-in, the tiles and where they point (this host, the forwarded host behind a proxy, Settings,
 the environment), hiding an app, the weather (AccuWeather mocked: set-up, the place search, the server's copy and its
-age, a stale reading when AccuWeather is down), the tiles' glimpses (the apps' answers mocked: On this day and
+age, a stale reading when AccuWeather is down), Home Assistant (its API mocked: set-up, the card's entities and
+their wording, the allowlist for switching, the search, the alerts), the tiles' glimpses (the apps' answers mocked: On this day and
 Rediscover, the rest of today and what's next, steps and rings, an app that refuses or is down), the bookmarks (groups, links, order, moves, the homepage import) and
 what a viewer may not change. CI runs them against MariaDB.
 
@@ -186,6 +195,7 @@ app/status.py      is each app up (its /api/status) and does it have an update; 
 app/layout.py      each account's own layout: hidden tiles and cards, the tiles' order, the photo strip
 app/widgets.py     what the tiles and cards show: ioPix, ioCalendar, ioHealth and ioContacts asked over their APIs with the viewer's sign-in
 app/weather.py     AccuWeather: the settings, the place search, the cached conditions and forecast
+app/homeassistant.py  Home Assistant: the settings, the chosen entities and their state, switching them, the search, the alerts
 app/bookmarks.py   the bookmark groups and links, and the homepage bookmarks.yaml import
 app/auth.py        the shared accounts and the updater (iosuite-shared), as ioSuite uses them
 app/users.py       accounts and roles, seen from ioSuite
