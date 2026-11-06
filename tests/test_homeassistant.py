@@ -115,3 +115,30 @@ def test_search(client, monkeypatch):
 def test_layout_has_the_home_card(client):
     L = client.put("/api/me/layout", json={"hidden": ["home"], "cards": ["home", "bookmarks"]}).json()
     assert L["hidden"] == ["home"] and L["cards"] == ["home", "bookmarks"]
+
+
+def test_switching_waits_for_a_slow_device(client, monkeypatch):
+    """A Zigbee bulb reports its new state a moment after the service call: the answer is the new state, not the old."""
+    calls = []
+    state = {"v": "off", "reads": 0}
+
+    def call(method, path, body=None, base="", tok=""):
+        calls.append((method, path))
+        if path == "/api/states":
+            return [{"entity_id": "light.slow", "state": state["v"], "attributes": {"friendly_name": "Slow"}, "last_updated": "t0"}]
+        if path == "/api/states/light.slow":
+            state["reads"] += 1
+            if state["reads"] >= 3:   # the device answers on the third read only
+                state["v"] = "on"
+            return {"entity_id": "light.slow", "state": state["v"], "attributes": {"friendly_name": "Slow"}, "last_updated": "t0" if state["v"] == "off" else "t1"}
+        if path.startswith("/api/services/"):
+            return []   # nothing changed yet, as far as Home Assistant knows
+        raise AssertionError(path)
+    monkeypatch.setattr(ha, "_call", call)
+    monkeypatch.setattr(ha.time, "sleep", lambda s: None)
+    ha.forget()
+    client.post("/api/ha/settings", json={"url": "http://ha.lan:8123", "token": "s3cret-token", "entities": [{"id": "light.slow", "control": True}]})
+    assert client.get("/api/ha").json()["items"][0]["text"] == "Off"
+    r = client.post("/api/ha/light.slow/toggle").json()
+    assert r["state"] == "on" and r["text"] == "On", r
+    assert state["reads"] == 3
