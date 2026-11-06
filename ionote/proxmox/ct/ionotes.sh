@@ -82,6 +82,16 @@ ask_app_settings() {
   if [[ -z "${IONOTES_COOKIE_DOMAIN+x}" ]]; then
     IONOTES_COOKIE_DOMAIN=$(whiptail --backtitle "$bt" --inputbox "Domain the sign-in is shared on by every app, e.g. example.com (empty: this host only)" 10 76 "" 3>&1 1>&2 2>&3) || exit 1
   fi
+  if [[ -z "${IONOTES_DB_ADMIN+x}" ]]; then  # a MariaDB administrator: the databases and users above are created for you (empty: they exist)
+    local dau daw
+    dau=$(whiptail --backtitle "$bt" --inputbox "MariaDB administrator who may create the databases and users above, e.g. root (empty: they exist already)" 10 76 "" 3>&1 1>&2 2>&3) || exit 1
+    if [[ -n "$dau" ]]; then
+      daw=$(whiptail --backtitle "$bt" --passwordbox "Password of $dau" 9 60 3>&1 1>&2 2>&3) || exit 1
+      IONOTES_DB_ADMIN="$dau:$daw"
+    else
+      IONOTES_DB_ADMIN=""
+    fi
+  fi
   if [[ -z "${IONOTES_ALSO+x}" ]]; then  # the other apps of the suite in the same container (ioPix has its own script: photo mounts)
     IONOTES_ALSO=$(whiptail --backtitle "$bt" --checklist "Also install in this container (same database server, each app its own database; same accounts and admin; each on its usual port):" 14 78 4 \
       iosuite "ioSuite (the start page)  (8630)" OFF \
@@ -125,6 +135,7 @@ fi
 if [[ -n "${IONOTES_SUITE_DB:-}" ]]; then SECRETS+="IONOTES_SUITE_DB=$(printf '%q' "$IONOTES_SUITE_DB")"$'\n'; fi
 if [[ -n "${IONOTES_ADMIN:-}" ]]; then SECRETS+="IONOTES_ADMIN=$(printf '%q' "$IONOTES_ADMIN")"$'\n'; ADMINARG=""; else ADMINARG="--no-admin"; fi
 # the answers with passwords go in as a root-only file (pushed, read into setup.sh's environment, removed), never as arguments
+[[ -n "${IONOTES_DB_ADMIN:-}" ]] && SECRETS+="IONOTES_DB_ADMIN=$(printf '%q' "$IONOTES_DB_ADMIN")"$'\n'
 SECF="$(mktemp)"; chmod 600 "$SECF"; printf '%s' "$SECRETS" > "$SECF"
 pct push "$CTID" "$SECF" /opt/ionotes/setup.env --perms 0600 --user 0 --group 0
 rm -f "$SECF"
