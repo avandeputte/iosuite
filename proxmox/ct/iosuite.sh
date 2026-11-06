@@ -4,14 +4,15 @@
 #
 # After the framework's own questions (resources, network) it asks about the app: the MariaDB server, database, user
 # and password (the database is created when the user may), the shared accounts database, the web port,
-# the public address and the admin account. It creates the container, then runs the app's own setup.sh inside with those answers, which installs the
+# the public address, the admin account, and which other apps of the suite to put in the same container (they reuse
+# those answers: the same database server, each with its own database, the same accounts and admin). It creates the container, then runs the app's own setup.sh inside with those answers, which installs the
 # packages, writes the settings, creates the tables and the admin and starts the service.
 #
 # Until the scripts are merged upstream, the framework is pointed at this repository for the install script
 # (COMMUNITY_SCRIPTS_URL below; the core engine still comes from community-scripts). Run on the Proxmox host as root:
 #   bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/proxmox/ct/iosuite.sh)"
 # Unattended: IOSUITE_DB=host:port/db:user:password IOSUITE_SUITE_DB=host:port/db:user:password
-#   IOSUITE_ADMIN=name:password IOSUITE_PORT=8630
+#   IOSUITE_ADMIN=name:password IOSUITE_PORT=8630 IOSUITE_ALSO=iocalendar,iocontacts (or none)
 #   IOSUITE_PUBLIC_URL=https://home.example.com in the environment skip the questions.
 export COMMUNITY_SCRIPTS_URL="${COMMUNITY_SCRIPTS_URL:-https://raw.githubusercontent.com/avandeputte/iosuite/main/proxmox}"
 _cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
@@ -69,6 +70,17 @@ ask_app_settings() {
     aw=$(whiptail --backtitle "$bt" --passwordbox "Admin password (8 characters or more; empty: make the admin in the browser on the first visit)" 10 72 3>&1 1>&2 2>&3) || exit 1
     [[ -n "$aw" ]] && IOSUITE_ADMIN="$an:$aw" || IOSUITE_ADMIN=""
   fi
+  if [[ -z "${IOSUITE_ALSO+x}" ]]; then  # the other apps of the suite in the same container (ioPix has its own script: photo mounts)
+    IOSUITE_ALSO=$(whiptail --backtitle "$bt" --checklist "Also install in this container (same database server, each app its own database; same accounts and admin; each on its usual port):" 14 78 4 \
+      iocalendar "ioCalendar  (8620)" OFF \
+      iocontacts "ioContacts  (8640, LDAP 3890)" OFF \
+      ionotes "ioNotes  (8610)" OFF \
+      iohealth "ioHealth  (47800)" OFF 3>&1 1>&2 2>&3) || exit 1
+    IOSUITE_ALSO=$(echo "$IOSUITE_ALSO" | tr -d '"' | tr ' ' ',')
+  fi
+  if [[ -n "$IOSUITE_ALSO" ]]; then  # room for more than one app
+    (( var_ram < 2048 )) && var_ram=2048; (( var_disk < 8 )) && var_disk=8
+  fi
 }
 
 function update_script() {
@@ -97,7 +109,7 @@ SECRETS="IOSUITE_DB=$(printf '%q' "$IOSUITE_DB")"$'\n'"IOSUITE_SUITE_DB=$(printf
 SECF="$(mktemp)"; chmod 600 "$SECF"; printf '%s' "$SECRETS" > "$SECF"
 pct push "$CTID" "$SECF" /opt/iosuite/setup.env --perms 0600 --user 0 --group 0
 rm -f "$SECF"
-SETUP_CMD="cd /opt/iosuite/app && sh ./setup.sh --yes --no-system-deps --service --port '${IOSUITE_PORT:-8630}' --public-url '${IOSUITE_PUBLIC_URL:-}' --cookie-domain '${IOSUITE_COOKIE_DOMAIN:-}'"
+SETUP_CMD="cd /opt/iosuite/app && sh ./setup.sh --yes --no-system-deps --service --port '${IOSUITE_PORT:-8630}' --public-url '${IOSUITE_PUBLIC_URL:-}' --cookie-domain '${IOSUITE_COOKIE_DOMAIN:-}' --also '${IOSUITE_ALSO:-none}'"
 WRAPPED="set -a; . /opt/iosuite/setup.env; set +a; rm -f /opt/iosuite/setup.env; $SETUP_CMD > /opt/iosuite/setup.log 2>&1"
 if ! pct exec "$CTID" -- bash -c "$WRAPPED"; then
   msg_error "setup.sh failed inside the container; last lines of /opt/iosuite/setup.log:"
@@ -111,3 +123,7 @@ msg_ok "Completed successfully!\n"
 echo -e "${CREATING}${GN}${APP} setup has been successfully initialized!${CL}"
 echo -e "${INFO}${YW}Access it using the following URL:${CL}"
 echo -e "${GATEWAY}${BGN}http://${IP}:${IOSUITE_PORT:-8630}${CL}"
+for a in ${IOSUITE_ALSO//,/ }; do
+  case "$a" in iocalendar) p=8620;; iocontacts) p=8640;; ionotes) p=8610;; iohealth) p=47800;; iopix) p=8600;; *) p="";; esac
+  [[ -n "$p" ]] && echo -e "${INFO}${YW}$a:${CL} ${BGN}http://${IP}:$p${CL}"
+done

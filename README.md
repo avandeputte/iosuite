@@ -117,13 +117,14 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main
 
 It asks for the ioSuite database (host, port, database, user, password), the Shared ioSuite database, the web port
 (8630), the public address behind your reverse proxy (optional), the domain the sign-in is shared on (optional) and the
-admin account; then the framework's own
-questions (resources, network). It creates a small Debian 13 container and runs the app's own `setup.sh` inside with
+admin account, and which other apps of the suite go in the same container (ioCalendar, ioContacts, ioNotes, ioHealth:
+they reuse those answers, each app with its own database on the same server, the same accounts and admin, each on its
+usual port); then the framework's own questions (resources, network). It creates a small Debian 13 container and runs the app's own `setup.sh` inside with
 those answers. The passwords reach `setup.sh` through its environment (a root-only file pushed in and removed again),
 never on a command line; the output is kept in `/opt/iosuite/setup.log`. The container's `update` command pulls the
 latest code and keeps the settings. For unattended runs set `IOSUITE_DB` and `IOSUITE_SUITE_DB`
 (`host:port/db:user:password`), `IOSUITE_ADMIN` (`name:password`), `IOSUITE_PORT`, `IOSUITE_PUBLIC_URL` and
-`IOSUITE_COOKIE_DOMAIN`.
+`IOSUITE_COOKIE_DOMAIN`, and `IOSUITE_ALSO=iocalendar,iocontacts` (or `none`).
 
 ### Docker
 
@@ -132,6 +133,11 @@ docker compose up -d     # edit the CHANGE ME spots in docker-compose.yml first
 ```
 
 The image (`ghcr.io/avandeputte/iosuite`) holds no data: everything is in the database.
+
+The whole suite in one stack, MariaDB included: [`docker/suite/docker-compose.yml`](docker/suite/docker-compose.yml)
+starts a MariaDB with a database per app, ioSuite, ioCalendar, ioContacts, ioNotes, ioHealth and ioPix (without
+digiKam), with one Shared ioSuite database and one admin. Edit the passwords, the photos path and the time zone at
+the top, then `docker compose -f docker/suite/docker-compose.yml up -d` (or paste it as a stack in Dockge / Portainer).
 
 ### Any Linux or Mac
 
@@ -144,7 +150,11 @@ git clone https://github.com/avandeputte/iosuite && cd iosuite
 
 `setup.sh` offers 127.0.0.1, database `suite`, user `suite`, password `suite` as the defaults; its flags (`--db`,
 `--suite-db`, `--admin`, `--port`, `--public-url`, `--cookie-domain`, `--service`, `--yes`) are the same in every app of
-the suite. Accounts are the suite's: `.venv/bin/iosuite-shared --config . admin NAME --app iosuite` (password from
+the suite. Its last question, "Also install …?" (flag `--also iopix,ionotes`, `--also all`), puts other apps of the
+suite in this same machine, beside ioSuite (`/opt/iocalendar/app` next to `/opt/iosuite/app`), without asking the
+shared questions again: the same database server (each app gets its own database: `calendar`, `contacts`, `notes`,
+`health`, `iopix`; the user needs rights on those names too), the same Shared ioSuite database, sign-in domain and
+admin. Each app keeps its usual port and updates itself as always. Accounts are the suite's: `.venv/bin/iosuite-shared --config . admin NAME --app iosuite` (password from
 `ADMIN_PASSWORD`, or asked for) and `.venv/bin/iosuite-shared --config . password NAME`.
 
 ## Configuration
