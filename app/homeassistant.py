@@ -139,11 +139,13 @@ def save(changes: dict) -> None:
         db.set_setting("ha_entities", json.dumps(out))
     if "builtinAlerts" in changes:
         db.set_setting("ha_builtin_alerts", "1" if changes["builtinAlerts"] else "0")
-    forget()
+    forget(devices=True)
 
 
-def forget() -> None:
+def forget(devices: bool = False) -> None:
     _cache.update(at=0.0, items=None)
+    if devices:
+        _devices.clear()
 
 
 # ------------------------------------------------------------------ Home Assistant's REST API
@@ -199,6 +201,28 @@ def all_states() -> list[dict]:
         items = _call("GET", "/api/states")
         _cache.update(at=time.time(), items=items if isinstance(items, list) else [])
         return _cache["items"]
+
+
+_devices: dict[str, str] = {}   # entity id → device id ("" when it has none), asked once per entity
+
+
+def device_ids(entity_ids: list[str]) -> dict[str, str]:
+    """{entity id: device id} for the ones that belong to a device, by way of the template API (the REST API does not
+    list the device registry). A link to the device page lets a person change what a tile cannot (a thermostat)."""
+    missing = [e for e in dict.fromkeys(entity_ids) if e not in _devices and _ENTITY_RE.match(e)]
+    if missing:
+        try:
+            got = _call("POST", "/api/template", {"template": "{{ " + json.dumps(missing) + " | map('device_id') | list | to_json }}"})
+        except HAError:
+            got = None
+        if isinstance(got, str):
+            try:
+                got = json.loads(got)
+            except ValueError:
+                got = None
+        for e, d in zip(missing, got if isinstance(got, list) and len(got) == len(missing) else [None] * len(missing)):
+            _devices[e] = d if isinstance(d, str) else ""
+    return {e: _devices[e] for e in entity_ids if _devices.get(e)}
 
 
 # ------------------------------------------------------------------ what the page shows
@@ -288,6 +312,10 @@ def home() -> dict:
         st = by.get(c["id"])
         items.append(describe(st, c) if st else {"id": c["id"], "domain": _domain(c["id"]), "name": c["name"] or _title(c["id"].split(".", 1)[-1]),
                                                    "state": "missing", "text": "Not in Home Assistant", "on": None, "control": False, "unit": "", "class": "", "icon": ""})
+    devs = device_ids([c["id"] for c in chosen])
+    for it in items:
+        if devs.get(it["id"]):
+            it["device"] = devs[it["id"]]
     return {"enabled": True, "name": db.get_setting("ha_name") or "Home", "url": url(), "items": items,
             "wall": [c["id"] for c in chosen if c["wall"]], "alerts": alerts(states, chosen, by)}
 
@@ -345,7 +373,12 @@ def search(q: str, limit: int = 8) -> list[dict]:
             out.append(d)
     # the ones on the card first, then by name
     out.sort(key=lambda d: (not d["chosen"], d["name"].lower()))
-    return out[:limit]
+    out = out[:limit]
+    devs = device_ids([d["id"] for d in out])
+    for d in out:
+        if devs.get(d["id"]):
+            d["device"] = devs[d["id"]]
+    return out
 
 
 def act(entity_id: str, action: str) -> dict:
