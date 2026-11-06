@@ -9,7 +9,9 @@ from app import apps, db
 
 SECTIONS = ("home", "birthdays", "week", "strip", "bookmarks")  # the cards under the tiles, hideable like a tile (home: Home Assistant)
 ENGINES = ("duckduckgo", "google", "bing", "startpage", "ecosia", "kagi")  # the search box's web search (null: DuckDuckGo)
-EMPTY = {"hidden": [], "order": [], "cards": [], "strip": None, "search": None}
+STRIP_MOVES = ("shuffle", "page", "off")  # how the photo strip changes by itself (null: shuffle)
+STRIP_EVERY = (30, 60, 120, 300, 600, 1800)  # how often, in seconds (null: 60)
+EMPTY = {"hidden": [], "order": [], "cards": [], "strip": None, "search": None, "stripMove": None, "stripEvery": None}
 
 
 def _key(user_id: int) -> str:
@@ -18,7 +20,8 @@ def _key(user_id: int) -> str:
 
 def get(user_id: int) -> dict:
     """{hidden: [tile or section keys], order: [tile keys, the first ones first], cards: [section keys, top first],
-    strip: rediscover|onthisday|off|null, search: a web search engine (ENGINES) | null}."""
+    strip: rediscover|onthisday|off|null, search: a web search engine (ENGINES) | null,
+    stripMove: shuffle|page|off|null, stripEvery: seconds (STRIP_EVERY) | null}."""
     raw = db.get_setting(_key(user_id))
     if not raw:
         return dict(EMPTY)
@@ -30,7 +33,9 @@ def get(user_id: int) -> dict:
             "order": [k for k in v.get("order", []) if apps.is_key(k)],
             "cards": [k for k in v.get("cards", []) if k in SECTIONS],
             "strip": v.get("strip") if v.get("strip") in apps.STRIPS else None,
-            "search": v.get("search") if v.get("search") in ENGINES else None}
+            "search": v.get("search") if v.get("search") in ENGINES else None,
+            "stripMove": v.get("stripMove") if v.get("stripMove") in STRIP_MOVES else None,
+            "stripEvery": v.get("stripEvery") if v.get("stripEvery") in STRIP_EVERY else None}
 
 
 def save(user_id: int, body: dict) -> dict:
@@ -42,6 +47,8 @@ def save(user_id: int, body: dict) -> dict:
     cards = body.get("cards") or []
     strip = body.get("strip") or None
     search = body.get("search") or None
+    move = body.get("stripMove") or None
+    every = body.get("stripEvery") or None
     if not isinstance(hidden, list) or not all(apps.is_key(k) or k in SECTIONS for k in hidden):
         raise ValueError(f"hidden: a list of app keys and {', '.join(SECTIONS)}")
     if not isinstance(order, list) or not all(apps.is_key(k) for k in order) or len(set(order)) != len(order):
@@ -52,6 +59,10 @@ def save(user_id: int, body: dict) -> dict:
         raise ValueError("strip: rediscover, onthisday, off, or nothing (the admin's choice)")
     if search is not None and search not in ENGINES:
         raise ValueError(f"search: {', '.join(ENGINES)}, or nothing (DuckDuckGo)")
-    v = {"hidden": list(dict.fromkeys(hidden)), "order": order, "cards": cards, "strip": strip, "search": search}
+    if move is not None and move not in STRIP_MOVES:
+        raise ValueError(f"stripMove: {', '.join(STRIP_MOVES)}, or nothing (shuffle)")
+    if every is not None and (isinstance(every, bool) or every not in STRIP_EVERY):
+        raise ValueError(f"stripEvery: {', '.join(map(str, STRIP_EVERY))} seconds, or nothing (60)")
+    v = {"hidden": list(dict.fromkeys(hidden)), "order": order, "cards": cards, "strip": strip, "search": search, "stripMove": move, "stripEvery": every}
     db.set_setting(_key(user_id), None if v == EMPTY else json.dumps(v))
     return get(user_id)
