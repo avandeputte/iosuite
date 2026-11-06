@@ -61,6 +61,12 @@ def test_mcp_contacts_relations_and_permissions(client, family_id):
     assert call(client, auth, "update_contact", contact="Mary", changes={"birthdayRemind": False})["birthdayRemind"] is False
     assert "Mary Ray" not in str(call(client, auth, "birthdays_in_month", month=3)) and call(client, auth, "get_contact", contact="Mary")["birthday"]["day"] == 4
     call(client, auth, "update_contact", contact="Mary", changes={"birthdayRemind": True})
+    # a partial birthday: the year, the year and month, or the month and day
+    assert call(client, auth, "update_contact", contact="Mary", changes={"birthday": "1960"})["birthday"] == {"year": 1960, "month": None, "day": None}
+    assert "Mary Ray" not in str(call(client, auth, "birthdays_in_month", month=3))  # no day to list her by
+    assert call(client, auth, "update_contact", contact="Mary", changes={"birthday": "1960-03"})["birthday"] == {"year": 1960, "month": 3, "day": None}
+    assert call(client, auth, "update_contact", contact="Mary", changes={"birthday": {"month": 3, "day": 4}})["birthday"] == {"year": None, "month": 3, "day": 4}
+    assert call(client, auth, "update_contact", contact="Mary", changes={"birthday": "1960-03-04"})["birthday"] == {"year": 1960, "month": 3, "day": 4}
     tim = call(client, auth, "create_contact", contact={"name": {"given": "Tim", "family": "Ray"}, "gender": "M"})
     out = call(client, auth, "add_relation", contact="Mary Ray", related="Tim Ray", relation="son")
     assert out["relations"][0]["typeLabel"] == "Son"

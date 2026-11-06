@@ -262,3 +262,52 @@ def test_implied_relations_show_and_can_be_saved(client, family_id):
     assert {r["typeLabel"] for r in a["relations"]} == {"Brother", "Mother"}
     assert [r["relatedFn"] for r in a["impliedRelations"]] == ["Imp Aunt"]
     assert "Imp Ann" in {r["relatedFn"] for r in client.get(f"/api/contacts/{mom['id']}").json()["relations"]}
+
+
+def test_partial_birthdays(client, family_id):
+    """Alex: a birthday can be saved as just the year, month and year, day and month, or the full date. Only
+    birthdays with a month and day go into the feeds (upcoming, calendar); every form survives export and import."""
+    import datetime as dt
+    soon = dt.date.today() + dt.timedelta(days=3)
+    y = mk(client, family_id, fn="Year Only", birthday={"year": 1950})
+    ym = mk(client, family_id, fn="Year Month", birthday={"year": 1960, "month": soon.month})
+    md = mk(client, family_id, fn="Month Day", birthday={"month": soon.month, "day": soon.day})
+    full = mk(client, family_id, fn="Full Date", birthday={"year": 1970, "month": soon.month, "day": soon.day})
+    assert y["birthday"] == {"year": 1950, "month": None, "day": None}
+    assert ym["birthday"] == {"year": 1960, "month": soon.month, "day": None}
+    assert md["birthday"] == {"year": None, "month": soon.month, "day": soon.day}
+    assert full["birthday"] == {"year": 1970, "month": soon.month, "day": soon.day}
+    # a day without a month, or a month alone, is not a date
+    assert mk(client, family_id, fn="No Date", birthday={"day": 4})["birthday"] is None
+    assert mk(client, family_id, fn="No Date 2", birthday={"month": 4})["birthday"] is None
+    assert mk(client, family_id, fn="Day Dropped", birthday={"year": 1980, "day": 4})["birthday"] == {"year": 1980, "month": None, "day": None}
+    # the list carries them too, and the family graph
+    byname = {c["fn"]: c["birthday"] for c in client.get("/api/contacts").json()["items"]}
+    assert byname["Year Only"] == {"year": 1950, "month": None, "day": None} and byname["Month Day"]["day"] == soon.day
+    # feeds: only a month and day make a date to remind of
+    up = {x["fn"] for x in client.get("/api/upcoming?days=10").json()["items"]}
+    assert {"Month Day", "Full Date"} <= up and not {"Year Only", "Year Month"} & up
+    ics = client.get(client.get("/api/connect").json()["calendar"]["family"].split("testserver")[1]).text
+    assert "Full Date's birthday" in ics and "Month Day's birthday" in ics and "Year Only" not in ics and "Year Month" not in ics
+    # exports keep every form, and importing them back changes nothing
+    for fmt in ("vcf", "vcf4", "jcard", "csv-google"):
+        r = client.get(f"/api/export?format={fmt}")
+        assert r.status_code == 200
+        body = r.content
+        name = "x.vcf" if fmt in ("vcf", "vcf4") else "x.json" if fmt == "jcard" else "x.csv"
+        r = client.post("/api/import", data={"book": str(family_id)}, files={"file": (name, io.BytesIO(body), "text/plain")})
+        assert r.status_code == 200, r.text
+        after = {c["fn"]: c["birthday"] for c in client.get("/api/contacts").json()["items"]}
+        assert after == byname, (fmt, after)
+    vcf3 = client.get("/api/export?format=vcf").text
+    assert "X-IOCONTACTS-BDAY:1950" in vcf3 and f"X-IOCONTACTS-BDAY:1960-{soon.month:02d}" in vcf3
+    assert f"BDAY;X-APPLE-OMIT-YEAR=1604:1604-{soon.month:02d}-{soon.day:02d}" in vcf3
+    csvg = client.get("/api/export?format=csv-google").text
+    assert "1950" in csvg and f"1960-{soon.month:02d}" in csvg and f"--{soon.month:02d}-{soon.day:02d}" in csvg
+    # Outlook's CSV only has room for a full date
+    csvo = client.get("/api/export?format=csv-outlook").text
+    assert f"{soon.month}/{soon.day}/1970" in csvo and "1950" not in csvo
+    # editing to another partial form, and clearing
+    y2 = client.put(f"/api/contacts/{y['id']}", json={**y, "birthday": {"month": 3, "day": 4}}).json()
+    assert y2["birthday"] == {"year": None, "month": 3, "day": 4}
+    assert client.put(f"/api/contacts/{y['id']}", json={**y2, "birthday": None}).json()["birthday"] is None

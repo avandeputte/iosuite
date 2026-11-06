@@ -11,7 +11,7 @@ def test_ldap_search(client, family_id):
     client.post(f"/api/contacts?book={family_id}", json={"fn": "Ann Lee", "name": {"given": "Ann", "family": "Lee"},
                 "emails": [{"value": "ann@lee.org"}], "phones": [{"label": "mobile", "value": "+1 555 1234"}],
                 "org": "Lee Co", "addresses": [{"label": "home", "street": "1 Elm", "city": "Paris", "country": "FR"}]})
-    client.post(f"/api/contacts?book={family_id}", json={"fn": "Bob Ray", "emails": [{"value": "bob@ray.org"}]})
+    client.post(f"/api/contacts?book={family_id}", json={"fn": "Bob Ray", "emails": [{"value": "bob@ray.org"}], "birthday": {"year": 1975}})
     from app import ldapd
     loop = asyncio.new_event_loop()
     srv = loop.run_until_complete(ldapd.serve("127.0.0.1", 0))
@@ -32,6 +32,7 @@ def test_ldap_search(client, family_id):
         assert e.mozillaHomeLocalityName.value == "Paris" and e.c.value == "FR"
         c.search("ou=contacts,dc=iocontacts", "(&(objectClass=inetOrgPerson)(mail=bob@ray.org))", attributes=["*"])
         assert len(c.entries) == 1 and c.entries[0].sn.value == "Ray"
+        assert c.entries[0].birthyear.value == "1975" and "birthmonth" not in c.entries[0]  # a year-only birthday
         c.search("dc=iocontacts", "(objectClass=*)", size_limit=1)
         assert len(c.entries) == 1
         c.search("dc=iocontacts", "(mobile=15551234)", attributes=["cn"])

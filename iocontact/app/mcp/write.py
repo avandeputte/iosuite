@@ -12,9 +12,9 @@ CONTACT_SHAPE = """
     A contact is a JSON object; every field is optional, but give at least a name:
       name: {prefix, given, additional, family, suffix}   (or fn: "Ann Smith", split by itself)
       nickname, maiden, gender: M | F | O | N | U, kind: individual | org
-      birthday: {year?, month, day}   (leave the year out when it is not known)
+      birthday: {year?, month?, day?} or "1980-05-17"   (any part can be left out: a year, a year and month, a month and day)
       birthdayRemind: false keeps the birthday out of reminders (calendar, upcoming dates, the start page); true by default
-      dates: [{label: "anniversary" | any word, year?, month, day}]
+      dates: [{label: "anniversary" | any word, year?, month, day}]   (other dates need a month and day)
       org (company), department, title (job title), role
       emails: [{value, label: home | work | other..., pref: true for the main one}]
       phones: [{value, label: mobile | home | work | main | fax..., pref}]
@@ -67,16 +67,11 @@ def _clean_input(d: dict) -> dict:
 
 
 def _date(s: str) -> dict | None:
-    """"1980-05-17", "--05-17" or "05-17" to {year, month, day}."""
-    parts = [p for p in s.strip().lstrip("-").split("-") if p]
-    try:
-        if len(parts) == 3:
-            return {"year": int(parts[0]), "month": int(parts[1]), "day": int(parts[2])}
-        if len(parts) == 2:
-            return {"year": None, "month": int(parts[0]), "day": int(parts[1])}
-    except ValueError:
-        pass
-    raise ToolError(f"A date is YYYY-MM-DD or MM-DD (no year), not '{s}'")
+    """"1980-05-17", "1980-05", "1980", "--05-17" or "05-17" to {year, month, day} (None for the unknown parts)."""
+    d = model.parse_date(s)
+    if d is None:
+        raise ToolError(f"A date is YYYY-MM-DD, YYYY-MM, YYYY or MM-DD (no year), not '{s}'")
+    return d
 
 
 @server.tool(annotations=ADDS)
@@ -316,7 +311,7 @@ def suggest_contact_update(contact: str, suggestions: list[dict], source: str) -
     person on LinkedIn, a company site, a news article, Facebook, Instagram, X...; give where you found it.
     suggestions: [{field, value, evidence (the page's address), note (optional: why you think it is this person)}].
     field and value: name {given, family} or {fn}; nickname, org, department, title, notes, gender: text; birthday
-    "YYYY-MM-DD" or "MM-DD"; emails / phones / urls {value, label}; addresses {street, city, region, postcode, country,
+    "YYYY-MM-DD", "YYYY-MM", "YYYY" or "MM-DD"; emails / phones / urls {value, label}; addresses {street, city, region, postcode, country,
     label}; social {service: linkedin | facebook | instagram | x | ..., value: the profile's address}; tags: a label.
     source: who found it (e.g. "Claude, web search")."""
     u = who()

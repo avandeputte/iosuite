@@ -207,7 +207,8 @@ def _already_has(c: dict, field: str, value) -> bool:
     if field == "notes":
         return str(value).strip().lower() in (c.get("notes") or "").lower()
     if field == "birthday":
-        return bool(c.get("birthday")) and (c["birthday"].get("month"), c["birthday"].get("day")) == (value.get("month"), value.get("day"))
+        b = c.get("birthday") or {}
+        return bool(b) and all(b.get(k) == value.get(k) for k in ("year", "month", "day"))
     if FIELDS.get(field, ("", ""))[1] == "single":
         return (c.get(field) or "").strip().lower() == str(value).strip().lower()
     if field == "tags":
@@ -254,10 +255,10 @@ def normalise(field: str, value):
             value = {"fn": value}
         return {k: str(v).strip() for k, v in value.items() if k in ("fn", "prefix", "given", "additional", "family", "suffix") and v}
     if field == "birthday":
-        if isinstance(value, str):
-            parts = [p for p in value.strip().lstrip("-").split("-") if p]
-            value = {"year": int(parts[0]), "month": int(parts[1]), "day": int(parts[2])} if len(parts) == 3 else {"month": int(parts[0]), "day": int(parts[1])}
-        return {"year": value.get("year"), "month": int(value["month"]), "day": int(value["day"])}
+        d = model.parse_date(value) if isinstance(value, str) else model.partial_date(value)
+        if d is None:
+            raise ValueError("a birthday is YYYY-MM-DD, YYYY-MM, YYYY or MM-DD")
+        return d
     if FIELDS[field][1] == "single" or field == "tags":
         v = str(value).strip()
         if not v:

@@ -93,3 +93,31 @@ def test_many_cards_and_folding():
     text = vcard.from_contact(c) * 3
     cards = vcard.parse(text)
     assert len(cards) == 3 and cards[0]["fn"] == long
+
+
+def test_partial_birthdays():
+    """A birthday can be a year, a year and month, a month and day, or all three. vCard 4 writes each form as RFC 6350
+    has it; vCard 3 has no partial dates, so a year (and month) travels in X-IOCONTACTS-BDAY, which a full BDAY beats."""
+    def card(bday, version="4.0"):
+        return f"BEGIN:VCARD\r\nVERSION:{version}\r\nFN:Pat\r\n{bday}\r\nEND:VCARD\r\n"
+    assert vcard.parse(card("BDAY:1980"))[0]["birthday"] == {"year": 1980, "month": None, "day": None}
+    assert vcard.parse(card("BDAY:1980-05"))[0]["birthday"] == {"year": 1980, "month": 5, "day": None}
+    assert vcard.parse(card("BDAY:--0517"))[0]["birthday"] == {"year": None, "month": 5, "day": 17}
+    assert vcard.parse(card("BDAY:19800517"))[0]["birthday"] == {"year": 1980, "month": 5, "day": 17}
+    assert vcard.parse(card("X-IOCONTACTS-BDAY:1980", "3.0"))[0]["birthday"] == {"year": 1980, "month": None, "day": None}
+    both = card("X-IOCONTACTS-BDAY:1980\r\nBDAY:1981-05-17", "3.0")
+    assert vcard.parse(both)[0]["birthday"] == {"year": 1981, "month": 5, "day": 17}
+    for b, v4, v3 in (({"year": 1980, "month": None, "day": None}, "BDAY:1980", "X-IOCONTACTS-BDAY:1980"),
+                      ({"year": 1980, "month": 5, "day": None}, "BDAY:1980-05", "X-IOCONTACTS-BDAY:1980-05"),
+                      ({"year": None, "month": 5, "day": 17}, "BDAY:--0517", "BDAY;X-APPLE-OMIT-YEAR=1604:1604-05-17"),
+                      ({"year": 1980, "month": 5, "day": 17}, "BDAY:19800517", "BDAY:1980-05-17")):
+        c = {"fn": "Pat", "name": {"given": "Pat"}, "birthday": b}
+        t4, t3 = vcard.from_contact(c, "4.0"), vcard.from_contact(c, "3.0")
+        assert v4 in t4 and v3 in t3, (b, t4, t3)
+        assert vcard.parse(t4)[0]["birthday"] == b and vcard.parse(t3)[0]["birthday"] == b
+        if "X-IOCONTACTS" in v3:
+            assert "BDAY" not in t3.replace("X-IOCONTACTS-BDAY", "")
+        j = vcard.to_jcard(vcard.parse(t4)[0])
+        assert vcard.from_jcard(j)["birthday"] == b
+        jd = [p for p in j[1] if p[0] == "bday"][0][3]
+        assert jd in ("1980", "1980-05", "--05-17", "1980-05-17"), jd

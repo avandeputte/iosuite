@@ -180,12 +180,12 @@ def score_pair(a: dict, b: dict) -> tuple[int, list[str]]:
         return 0, []
     if match == "unnamed":
         s += 20  # two contacts with no names at all (an email or a number only) that share it
-    if a["bday_month"] and b["bday_month"]:
-        same_day = (a["bday_month"], a["bday_day"]) == (b["bday_month"], b["bday_day"])
-        years_ok = not (a["bday_year"] and b["bday_year"] and a["bday_year"] != b["bday_year"])
-        if same_day and years_ok:
-            s += 35
-            why.append("same birthday")
+    # birthdays can be partial: only the parts both have are compared, and a lone year that agrees is weak evidence
+    parts = [k for k in ("bday_year", "bday_month", "bday_day") if a[k] and b[k]]
+    if parts:
+        if all(a[k] == b[k] for k in parts):
+            s += 35 if "bday_day" in parts else 10
+            why.append("same birthday" if "bday_day" in parts else "same birth year")
         else:
             s -= 60
             why.append("different birthdays")
@@ -485,9 +485,9 @@ def run_checks(book_ids: list[int], only: str | None = None) -> list[dict]:
                 add("bad_phone", cid, p["value"])
             elif not p["value"].strip().startswith("+") and not p["value"].strip().startswith("00") and len(d) >= 8:
                 add("national_phone", cid, p["value"])
-        y = c["bday_year"]
-        if y and (y > this_year or y < 1900 or (y == this_year and (c["bday_month"], c["bday_day"]) > (dt.date.today().month, dt.date.today().day))):
-            add("bad_birthday", cid, f"{y}-{c['bday_month']:02d}-{c['bday_day']:02d}")
+        y, m, d = c["bday_year"], c["bday_month"], c["bday_day"]
+        if y and (y > this_year or y < 1900 or (y == this_year and (m or 0, d or 0) > (dt.date.today().month, dt.date.today().day))):
+            add("bad_birthday", cid, f"{y}" + (f"-{m:02d}" if m else "") + (f"-{d:02d}" if d else ""))
         bad = [x for x in (c["given"], c["family"]) if _badcase(x)] or ([c["fn"]] if not (c["given"] or c["family"]) and _badcase(c["fn"]) and not c["org"] else [])
         if bad:
             add("name_case", cid, f"{c['fn']} → {proper(c['fn'])}")
