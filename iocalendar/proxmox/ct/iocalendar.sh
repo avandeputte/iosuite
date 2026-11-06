@@ -70,6 +70,16 @@ ask_app_settings() {
     aw=$(whiptail --backtitle "$bt" --passwordbox "Admin password (8 characters or more; empty: make the admin in the browser on the first visit)" 10 72 3>&1 1>&2 2>&3) || exit 1
     [[ -n "$aw" ]] && IOCALENDAR_ADMIN="$an:$aw" || IOCALENDAR_ADMIN=""
   fi
+  if [[ -z "${IOCALENDAR_DB_ADMIN+x}" ]]; then  # a MariaDB administrator: the databases and users above are created for you (empty: they exist)
+    local dau daw
+    dau=$(whiptail --backtitle "$bt" --inputbox "MariaDB administrator who may create the databases and users above, e.g. root (empty: they exist already)" 10 76 "" 3>&1 1>&2 2>&3) || exit 1
+    if [[ -n "$dau" ]]; then
+      daw=$(whiptail --backtitle "$bt" --passwordbox "Password of $dau" 9 60 3>&1 1>&2 2>&3) || exit 1
+      IOCALENDAR_DB_ADMIN="$dau:$daw"
+    else
+      IOCALENDAR_DB_ADMIN=""
+    fi
+  fi
   if [[ -z "${IOCALENDAR_ALSO+x}" ]]; then  # the other apps of the suite in the same container (ioPix has its own script: photo mounts)
     IOCALENDAR_ALSO=$(whiptail --backtitle "$bt" --checklist "Also install in this container (same database server, each app its own database; same accounts and admin; each on its usual port):" 14 78 4 \
       iosuite "ioSuite (the start page)  (8630)" OFF \
@@ -106,6 +116,7 @@ msg_info "Running the app's setup inside the container (packages, settings, tabl
 # the answers with passwords go in as a root-only file (pushed, read into setup.sh's environment, removed), never as arguments
 SECRETS="IOCALENDAR_DB=$(printf '%q' "$IOCALENDAR_DB")"$'\n'"IOCALENDAR_SUITE_DB=$(printf '%q' "$IOCALENDAR_SUITE_DB")"$'\n'
 [[ -n "${IOCALENDAR_ADMIN:-}" ]] && SECRETS+="IOCALENDAR_ADMIN=$(printf '%q' "$IOCALENDAR_ADMIN")"$'\n'
+[[ -n "${IOCALENDAR_DB_ADMIN:-}" ]] && SECRETS+="IOCALENDAR_DB_ADMIN=$(printf '%q' "$IOCALENDAR_DB_ADMIN")"$'\n'
 SECF="$(mktemp)"; chmod 600 "$SECF"; printf '%s' "$SECRETS" > "$SECF"
 pct push "$CTID" "$SECF" /opt/iocalendar/setup.env --perms 0600 --user 0 --group 0
 rm -f "$SECF"

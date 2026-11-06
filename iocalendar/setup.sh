@@ -11,6 +11,8 @@
 #                                                      default: the same server, iosuite:iosuite)
 #        --admin NAME:PASSWORD | --no-admin   --port N (8620)   --public-url URL   --cookie-domain DOMAIN
 #        --service | --no-service   --system-deps | --no-system-deps   --python PATH
+#   --db-admin USER:PASSWORD      a MariaDB / MySQL administrator (root...): the databases and users above are created
+#                                 for you, with the passwords you answered (IOCALENDAR_DB_ADMIN does the same; empty: they exist)
 #   --also APP,APP | all | none   also install other apps of the suite here (iosuite, iocontacts, ionotes, iohealth, iopix), beside this one,
 #                                 with the same database server (each app its own database), Shared ioSuite database,
 #                                 sign-in domain and admin: those questions are asked once (IOCALENDAR_ALSO does the same)
@@ -22,14 +24,14 @@ cd "$(dirname "$0")"
 APP="$(pwd)"
 say() { printf '\n\033[1;34m==>\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
-YES=0; DBS=""; ADBS=""; ADMIN=""; NO_ADMIN=0; PORT=""; TZONE=""; PUBURL=""; COOKIE=""; SERVICE=""; SYSDEPS=""; PY=""; ALSO=""
+YES=0; DBS=""; ADBS=""; ADMIN=""; NO_ADMIN=0; PORT=""; TZONE=""; PUBURL=""; COOKIE=""; SERVICE=""; SYSDEPS=""; PY=""; ALSO=""; DBADMIN=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --yes) YES=1; shift;; --db) DBS="$2"; shift 2;; --suite-db) ADBS="$2"; shift 2;; --admin) ADMIN="$2"; shift 2;; --no-admin) NO_ADMIN=1; shift;;
     --port) PORT="$2"; shift 2;; --timezone) TZONE="$2"; shift 2;; --public-url) PUBURL="$2"; shift 2;; --cookie-domain) COOKIE="$2"; shift 2;;
     --service) SERVICE=1; shift;; --no-service) SERVICE=0; shift;; --system-deps) SYSDEPS=1; shift;; --no-system-deps) SYSDEPS=0; shift;;
-    --python) PY="$2"; shift 2;; --also) ALSO="$2"; shift 2;;
-    -h|--help) sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; exit 0;;
+    --python) PY="$2"; shift 2;; --also) ALSO="$2"; shift 2;; --db-admin) DBADMIN="$2"; shift 2;;
+    -h|--help) sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'; exit 0;;
     *) die "unknown option $1 (try --help)";;
   esac
 done
@@ -37,6 +39,7 @@ done
 [ -n "$ADBS" ] || ADBS="${IOCALENDAR_SUITE_DB:-}"
 [ -n "$ADMIN" ] || ADMIN="${IOCALENDAR_ADMIN:-}"
 [ -n "$ALSO" ] || ALSO="${IOCALENDAR_ALSO:-}"
+[ -n "$DBADMIN" ] || DBADMIN="${IOCALENDAR_DB_ADMIN:-}"
 ask() { _v="$1"; _q="$2"; _d="$3"
   if [ "$YES" = 1 ] || [ ! -t 0 ]; then eval "$_v=\"\$_d\""; return; fi
   printf '%s [%s]: ' "$_q" "$_d"; read -r _a || _a=""; [ -n "$_a" ] && eval "$_v=\"\$_a\"" || eval "$_v=\"\$_d\""; }
@@ -88,6 +91,10 @@ if [ -z "$ADMIN" ] && [ "$NO_ADMIN" = 0 ] && [ "$YES" = 0 ] && [ -t 0 ]; then
   ask AN "Admin user name (empty: an account from another io app, or make it in the browser on the first visit)" "admin"
   if [ -n "$AN" ]; then asksecret AW "Admin password (8 or more; empty for an existing account)"; [ -n "$AW" ] && ADMIN="$AN:$AW"; fi
 fi
+if [ -z "$DBADMIN" ] && [ "$YES" = 0 ]; then
+  ask DAU "MariaDB administrator who may create the databases and users above, e.g. root (empty: they exist already)" ""
+  if [ -n "$DAU" ]; then asksecret DAW "Password of $DAU"; DBADMIN="$DAU:$DAW"; fi
+fi
 if [ -z "$ALSO" ]; then
   say "The other apps of the suite can be installed here too, beside ioCalendar, with the same database server (each app gets its own database), the same Shared ioSuite database, sign-in domain and admin"
   ask ALSO "Also install (iosuite, iocontacts, ionotes, iohealth, iopix; comma-separated, 'all', or 'none')" "none"
@@ -110,6 +117,10 @@ setenv IOSUITE_DB_USER "$SUITE_USER"; setenv IOSUITE_DB_PASSWORD "$SUITE_PASSWOR
 setenv PORT "$PORT"; setenv TZ "$TZONE"; setenv PUBLIC_URL "$PUBURL"; setenv COOKIE_DOMAIN "$COOKIE"
 
 say "Checking the databases ($DB_HOST:$DB_PORT/$DB_NAME and $SUITE_HOST:$SUITE_PORT/$SUITE_NAME)"
+if [ -n "$DBADMIN" ]; then
+  say "Creating the databases and users as ${DBADMIN%%:*}"
+  DB_ADMIN_PASSWORD="${DBADMIN#*:}" .venv/bin/iosuite-shared --config "$APP" provision --admin "${DBADMIN%%:*}" || die "could not create the databases and users (see above): check the administrator's name and password"
+fi
 .venv/bin/python -m app.cli check || die "could not reach a database: check the host, port, user and password (and that the user may connect from this machine)"
 if [ -n "$ADMIN" ]; then
   ADMIN_PASSWORD="${ADMIN#*:}" .venv/bin/iosuite-shared --config . admin "${ADMIN%%:*}" --app iocalendar
@@ -154,9 +165,10 @@ fi
 case "$ALSO" in ''|none|no) ;;
   *) say "Installing the other apps: $ALSO"
      if [ "$SERVICE" = 1 ]; then SVC="--service"; else SVC="--no-service"; fi
+     DBA=""; [ -z "$DBADMIN" ] || { DBA="--db-admin ${DBADMIN%%:*}"; DB_ADMIN_PASSWORD="${DBADMIN#*:}"; export DB_ADMIN_PASSWORD; }
      if [ -n "$ADMIN" ]; then
-       ADMIN_PASSWORD="${ADMIN#*:}" .venv/bin/iosuite-shared --config "$APP" install "$ALSO" --admin "${ADMIN%%:*}" --from iocalendar $SVC
+       ADMIN_PASSWORD="${ADMIN#*:}" .venv/bin/iosuite-shared --config "$APP" install "$ALSO" --admin "${ADMIN%%:*}" --from iocalendar $SVC $DBA
      else
-       .venv/bin/iosuite-shared --config "$APP" install "$ALSO" --from iocalendar $SVC
+       .venv/bin/iosuite-shared --config "$APP" install "$ALSO" --from iocalendar $SVC $DBA
      fi || die "not every app could be installed; see the lines above (each one can be set up again with its own setup.sh)";;
 esac
