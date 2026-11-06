@@ -211,6 +211,10 @@ async function showHome(page) {
   const wx = h('div', { class: 'weather' });
   page.append(h('div', { class: 'top' }, h('div', { class: 'hello' }, h('h1', { class: 'greet' }, `${greeting()}, ${first}`),
     h('div', { class: 'dateline' }, h('span', { class: 'muted' }, new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })), userMenu())), searchBox(), wx));
+  // under the greeting: a column for the tiles and the cards and, on a wide screen, the bookmarks in a column of their
+  // own on the right (when they come last, as by default); narrower, the side column simply follows the main one
+  const col = h('div', { class: 'homecol' }), side = h('div', { class: 'homeside' });
+  page.append(h('div', { class: 'homegrid' }, col, side));
   drawWeather(wx);  // fills in when AccuWeather (or the server's copy) answers
   // the tiles: an app with something to show gets a column of its own; the others go two to a column, half the height
   const tile = (a, small) => h('a', { class: `app${small ? ' small' : ''}`, href: a.url, 'data-app': a.key, title: a.url },
@@ -218,9 +222,9 @@ async function showHome(page) {
     h('div', { class: 'more' }));  // what the app shows here: drawWidgets
   const big = S.apps.filter((a) => WIDGETS[a.key]), rest = S.apps.filter((a) => !WIDGETS[a.key]);
   const stacks = []; for (let i = 0; i < rest.length; i += 2) stacks.push(h('div', { class: 'stack' }, rest.slice(i, i + 2).map((a) => tile(a, true))));
-  if (!S.apps.length) page.append(h('div', { class: 'empty' }, got.items.length ? 'Every tile is hidden. ' : 'No io app has registered itself in the Shared ioSuite database yet: each one appears here once it has started.',
+  if (!S.apps.length) col.append(h('div', { class: 'empty' }, got.items.length ? 'Every tile is hidden. ' : 'No io app has registered itself in the Shared ioSuite database yet: each one appears here once it has started.',
     got.items.length ? h('button', { class: 'lnk', onclick: customize }, 'Customize the page') : null));
-  else page.append(h('div', { class: 'apps', style: { '--cols': big.length + stacks.length } }, big.map((a) => tile(a, false)), stacks));
+  else col.append(h('div', { class: 'apps', style: { '--cols': big.length + stacks.length } }, big.map((a) => tile(a, false)), stacks));
   drawWidgets(page);
   drawAppStatus(page);
   // the week ahead: birthdays from ioContacts and the coming days' events from ioCalendar, a card each
@@ -229,7 +233,7 @@ async function showHome(page) {
   S.birthdaysCard = shows('birthdays') && S.apps.some((a) => a.key === 'iocontacts');  // then the calendar leaves birthdays to it
   const stripKind = L.strip || got.photoStrip;
   const alerts = h('div', { class: 'alerts', hidden: true });  // what Home Assistant says needs attention (drawHomeCard fills it)
-  page.append(alerts);
+  col.append(alerts);
   const cards = {
     home: shows('home') ? () => { const c = h('div', { class: 'card homecard', hidden: true }); drawHomeCard(c, alerts); return c; } : null,
     birthdays: S.birthdaysCard ? () => { const c = h('div', { class: 'card capped birthdays' }); drawBirthdays(c); return c; } : null,
@@ -238,12 +242,13 @@ async function showHome(page) {
     bookmarks: shows('bookmarks') ? () => { const c = h('div', { class: 'bookmarks' }); drawBookmarks(c); return c; } : null,
   };
   let agenda = null;
-  for (const k of cardOrder(L)) {
-    if (!cards[k]) continue;
+  const order = cardOrder(L).filter((k) => cards[k]);
+  for (const k of order) {
+    if (k === 'bookmarks' && k === order[order.length - 1]) { side.append(cards[k]()); continue; }
     if (k === 'birthdays' || k === 'week') {
-      if (!agenda || !agenda.isConnected || agenda !== page.lastElementChild) { agenda = h('div', { class: 'agenda' }); page.append(agenda); capAgenda(page.querySelector('.apps'), agenda); }
+      if (!agenda || !agenda.isConnected || agenda !== col.lastElementChild) { agenda = h('div', { class: 'agenda' }); col.append(agenda); capAgenda(page.querySelector('.apps'), agenda); }
       agenda.append(cards[k]());
-    } else page.append(cards[k]());
+    } else col.append(cards[k]());
   }
   // live refresh: every few minutes, and on coming back to the tab, the page brings itself up to date in place
   S.shownDay = dayKey(); S.refreshedAt = Date.now();
