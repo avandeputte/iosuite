@@ -14,6 +14,9 @@
 #                                          database and user: iosuite); kept as it is in config.env when not given
 #   --admin NAME:PASS (or IONOTES_ADMIN) | --no-admin   --port 8610   --public-url URL   --cookie-domain DOMAIN
 #   --service | --no-service   --python PATH   --system-deps | --no-system-deps   --yes
+#   --also APP,APP | all | none   also install other apps of the suite here (iosuite, iocalendar, iocontacts, iohealth, iopix), beside this one,
+#                                 with the same database server (each app its own database), Shared ioSuite database,
+#                                 sign-in domain and admin: those questions are asked once (IONOTES_ALSO does the same)
 # ioNotes' own: --sqlite (a SQLite file in the data folder instead, a quick try)   --data DIR   --features ocr|none
 set -e
 cd "$(dirname "$0")"
@@ -21,18 +24,19 @@ APP="$(pwd)"
 OS="$(uname -s)"
 say() { printf '\n\033[1;34m==>\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
-YES=0; MYSQL=""; SUITE=""; SQLITE=0; FEATURES=""; PORT=""; PUBURL=""; COOKIE=""; ADMIN=""; NO_ADMIN=0; SERVICE=""; DATA=""; PY=""; SYSDEPS=""
+YES=0; MYSQL=""; SUITE=""; SQLITE=0; FEATURES=""; PORT=""; PUBURL=""; COOKIE=""; ADMIN=""; NO_ADMIN=0; SERVICE=""; DATA=""; PY=""; SYSDEPS=""; ALSO=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --yes) YES=1; shift;; --db) MYSQL="$2"; shift 2;; --suite-db) SUITE="$2"; shift 2;; --sqlite) SQLITE=1; shift;;
     --features) FEATURES="$2"; shift 2;; --port) PORT="$2"; shift 2;; --public-url) PUBURL="$2"; shift 2;; --cookie-domain) COOKIE="$2"; shift 2;;
     --admin) ADMIN="$2"; shift 2;; --no-admin) NO_ADMIN=1; shift;; --service) SERVICE=1; shift;; --no-service) SERVICE=0; shift;;
-    --data) DATA="$2"; shift 2;; --python) PY="$2"; shift 2;; --system-deps) SYSDEPS=1; shift;; --no-system-deps) SYSDEPS=0; shift;;
-    -h|--help) sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit 0;;
+    --data) DATA="$2"; shift 2;; --python) PY="$2"; shift 2;; --also) ALSO="$2"; shift 2;; --system-deps) SYSDEPS=1; shift;; --no-system-deps) SYSDEPS=0; shift;;
+    -h|--help) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0;;
     *) die "unknown option $1 (try --help)";;
   esac
 done
 [ -n "$ADMIN" ] || ADMIN="${IONOTES_ADMIN:-}"
+[ -n "$ALSO" ] || ALSO="${IONOTES_ALSO:-}"
 [ -n "$MYSQL" ] || MYSQL="${IONOTES_DB:-}"
 [ -n "$SUITE" ] || SUITE="${IONOTES_SUITE_DB:-}"
 if [ "$YES" = 1 ]; then TTY=""; else TTY=/dev/stdin; fi
@@ -120,6 +124,10 @@ if [ -z "$ADMIN" ] && [ "$NO_ADMIN" = 0 ]; then
     ask AN "Admin user name" "admin"; secret AW "Admin password (8 characters or more)"
     [ -n "$AW" ] && ADMIN="$AN:$AW" || echo "no password given; skipping the admin account (the web app can create it later)"
   fi
+fi
+if [ -z "$ALSO" ]; then
+  say "The other apps of the suite can be installed here too, beside ionotes, with the same database server (each app gets its own database), the same Shared ioSuite database, sign-in domain and admin"
+  ask ALSO "Also install (iosuite, iocalendar, iocontacts, iohealth, iopix; comma-separated, 'all', or 'none')" "none"
 fi
 if [ -z "$SERVICE" ]; then
   case "$OS" in Darwin) SVC="a launchd login item";; *) SVC="a systemd service";; esac
@@ -269,3 +277,14 @@ else
   echo "    cd \"$APP\" && ./run.sh"
 fi
 say "Done: http://localhost:$PORT   settings: $ENVF"
+
+# ---- the other apps of the suite, beside this one (iosuite-shared install: the shared answers from config.env)
+case "$ALSO" in ''|none|no) ;;
+  *) say "Installing the other apps: $ALSO"
+     if [ "$SERVICE" = 1 ]; then SVC="--service"; else SVC="--no-service"; fi
+     if [ -n "$ADMIN" ]; then
+       ADMIN_PASSWORD="${ADMIN#*:}" "$VENV/bin"/iosuite-shared --config "$APP" install "$ALSO" --admin "${ADMIN%%:*}" --from ionotes $SVC
+     else
+       "$VENV/bin"/iosuite-shared --config "$APP" install "$ALSO" --from ionotes $SVC
+     fi || die "not every app could be installed; see the lines above (each one can be set up again with its own setup.sh)";;
+esac

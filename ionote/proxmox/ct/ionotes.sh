@@ -82,6 +82,17 @@ ask_app_settings() {
   if [[ -z "${IONOTES_COOKIE_DOMAIN+x}" ]]; then
     IONOTES_COOKIE_DOMAIN=$(whiptail --backtitle "$bt" --inputbox "Domain the sign-in is shared on by every app, e.g. example.com (empty: this host only)" 10 76 "" 3>&1 1>&2 2>&3) || exit 1
   fi
+  if [[ -z "${IONOTES_ALSO+x}" ]]; then  # the other apps of the suite in the same container (ioPix has its own script: photo mounts)
+    IONOTES_ALSO=$(whiptail --backtitle "$bt" --checklist "Also install in this container (same database server, each app its own database; same accounts and admin; each on its usual port):" 14 78 4 \
+      iosuite "ioSuite (the start page)  (8630)" OFF \
+      iocalendar "ioCalendar  (8620)" OFF \
+      iocontacts "ioContacts  (8640, LDAP 3890)" OFF \
+      iohealth "ioHealth  (47800)" OFF 3>&1 1>&2 2>&3) || exit 1
+    IONOTES_ALSO=$(echo "$IONOTES_ALSO" | tr -d '"' | tr ' ' ',')
+  fi
+  if [[ -n "$IONOTES_ALSO" ]]; then  # room for more than one app
+    (( var_ram < 2048 )) && var_ram=2048; (( var_disk < 8 )) && var_disk=8
+  fi
 }
 
 function update_script() {
@@ -117,7 +128,7 @@ if [[ -n "${IONOTES_ADMIN:-}" ]]; then SECRETS+="IONOTES_ADMIN=$(printf '%q' "$I
 SECF="$(mktemp)"; chmod 600 "$SECF"; printf '%s' "$SECRETS" > "$SECF"
 pct push "$CTID" "$SECF" /opt/ionotes/setup.env --perms 0600 --user 0 --group 0
 rm -f "$SECF"
-SETUP_CMD="cd /opt/ionotes/app && sh ./setup.sh --yes $DBARG $ADMINARG --data /opt/ionotes/data --features '${IONOTES_FEATURES:-none}' --service --no-system-deps --port 8610 --public-url '${IONOTES_PUBLIC_URL:-}' --cookie-domain '${IONOTES_COOKIE_DOMAIN:-}'"
+SETUP_CMD="cd /opt/ionotes/app && sh ./setup.sh --yes $DBARG $ADMINARG --data /opt/ionotes/data --features '${IONOTES_FEATURES:-none}' --service --no-system-deps --port 8610 --public-url '${IONOTES_PUBLIC_URL:-}' --cookie-domain '${IONOTES_COOKIE_DOMAIN:-}' --also '${IONOTES_ALSO:-none}'"
 WRAPPED="set -a; . /opt/ionotes/setup.env; set +a; rm -f /opt/ionotes/setup.env; $SETUP_CMD > /opt/ionotes/setup.log 2>&1"
 # the setup's output is kept in the container; on failure the last lines are shown here
 if ! pct exec "$CTID" -- bash -c "$WRAPPED"; then
@@ -132,5 +143,9 @@ msg_ok "Completed successfully!\n"
 echo -e "${CREATING}${GN}${APP} setup has been successfully initialized!${CL}"
 echo -e "${INFO}${YW}Access it using the following URL:${CL}"
 echo -e "${GATEWAY}${BGN}http://${IP}:8610${CL}"
+for a in ${IONOTES_ALSO//,/ }; do
+  case "$a" in iosuite) p=8630;; iocalendar) p=8620;; iocontacts) p=8640;; ionotes) p=8610;; iohealth) p=47800;; iopix) p=8600;; *) p="";; esac
+  [[ -n "$p" ]] && echo -e "${INFO}${YW}$a:${CL} ${BGN}http://${IP}:$p${CL}"
+done
 [[ -z "${IONOTES_ADMIN:-}" ]] && echo -e "${INFO}${YW}No admin yet: open the URL and choose Settings › Create the admin account.${CL}"
 echo -e "${INFO}${YW}Put it behind an HTTPS reverse proxy (Caddy, Nginx Proxy Manager, a Cloudflare tunnel) before the apps use it from outside your network.${CL}"
