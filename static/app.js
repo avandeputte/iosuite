@@ -305,7 +305,8 @@ function searchBox() {
       // Home Assistant: an entity's state, and a tap switches the ones the admin lets the page control
       things.q === ql && things.items.length ? h('div', { class: 'qhead' }, 'Home') : null,
       things.q === ql ? things.items.map((t) => { const a = row(t.control ? '#' : haLink(t), [h('span', { class: `bmic ha${t.on ? ' on' : ''}` }, icon(haIcon(t), 's')), h('span', { class: 'qname' }, t.name), h('span', { class: `muted small${t.control ? ' tap' : ''}` }, t.control ? `${t.text || t.state} · tap` : t.text || t.state)]);
-        if (t.control) a.onclick = async (e) => { e.preventDefault(); const r = await haAct(t.id, 'toggle'); if (r) { Object.assign(t, r); build(); } const card = document.querySelector('.homecard'); if (card) setTimeout(() => drawHomeCard(card, document.querySelector('.alerts'), true), 4000); }; return a; }) : null,
+        if (t.control && HA_POPUPS[t.domain]) a.onclick = (e) => { e.preventDefault(); inp.blur(); haPopup(t, (r) => Object.assign(t, r)); };
+        else if (t.control) a.onclick = async (e) => { e.preventDefault(); const r = await haAct(t.id, 'toggle'); if (r) { Object.assign(t, r); build(); } const card = document.querySelector('.homecard'); if (card) setTimeout(() => drawHomeCard(card, document.querySelector('.alerts'), true), 4000); }; return a; }) : null,
       // "dinner fri 19:00": a new event in ioCalendar (a dialog to check it first)
       cal ? [h('div', { class: 'qhead' }, 'Add to the calendar'), (() => { const a = row('#', [h('span', { class: 'bmic' }, icon('event', 's')), h('span', { class: 'qname' }, cal.title || '(no title)'), h('span', { class: 'muted small' }, eventWhen(cal))]);
         a.onclick = (e) => { e.preventDefault(); inp.blur(); quickAdd(cal); }; return a; })()] : null,
@@ -784,6 +785,11 @@ async function haAct(id, action) {
 const haTile = (t) => {
   const kids = [icon(haIcon(t), 's'), h('span', { class: 'hbody' }, h('span', { class: 'hname' }, t.name), h('span', { class: 'hstate small' }, t.text || t.state))];
   if (!t.control) return h('a', { class: `hatile${t.on ? ' on' : ''}${t.state === 'unavailable' || t.state === 'missing' ? ' off' : ''}`, href: haLink(t), title: `${t.id} · ${t.device ? 'its device' : 'its history'} in Home Assistant`, target: '_blank', rel: 'noreferrer' }, kids);
+  if (HA_POPUPS[t.domain]) {  // a thermostat, a cover: a popup with its controls instead of a toggle
+    const b = h('button', { class: `hatile ctl${t.on ? ' on' : ''}`, title: `${t.id} · tap for its controls` }, kids);
+    b.onclick = () => haPopup(t, (r) => { if (b.isConnected) b.replaceWith(haTile({ ...t, ...r, control: t.control })); });
+    return b;
+  }
   const b = h('button', { class: `hatile ctl${t.on ? ' on' : ''}`, title: `${t.id} · tap to ${{ scene: 'run', script: 'run', button: 'press', input_button: 'press', automation: 'run' }[t.domain] || (t.on ? 'turn off' : 'turn on')}`, 'aria-pressed': t.on == null ? null : String(!!t.on) }, kids);
   b.onclick = async () => {
     b.classList.add('busy');
@@ -795,6 +801,67 @@ const haTile = (t) => {
   };
   return b;
 };
+/* The popups: a thermostat (target temperature, mode, fan, preset) and a cover (open, stop, close, a position). Each
+   change goes to /api/ha/<entity>/set and the popup redraws from the answer; `onChange` gets it too, for the tile. */
+const HA_POPUPS = { climate: true, cover: true };
+const haWord = (m) => ({ heat_cool: 'Heat · cool', fan_only: 'Fan', not_home: 'Away' })[m] || (m ? m.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase()) : '');
+async function haSet(id, body) {
+  try { return await api(`/api/ha/${encodeURIComponent(id)}/set`, { method: 'POST', json: body }); } catch (e) { fail(e); return null; }
+}
+function haPopup(t, onChange) {
+  const body = h('div', { class: 'hapop' });
+  let cur = t, busy = false;
+  const send = async (payload) => {
+    if (busy) return;
+    busy = true; body.classList.add('busy');
+    const r = await haSet(cur.id, payload);
+    busy = false; body.classList.remove('busy');
+    if (r && r.id) { cur = { ...cur, ...r }; onChange(r); draw(); }
+  };
+  const seg = (options, value, pick, label) => h('div', { class: 'seg', role: 'group', 'aria-label': label }, options.map((o) => h('button', { class: o === value ? 'on' : '', onclick: () => pick(o) }, label(o))));
+  const draw = () => {
+    const kids = [];
+    if (cur.domain === 'climate' && cur.climate) {
+      const c = cur.climate, step = c.step || 0.5, dec = step < 1 ? 1 : 0;
+      const fmt = (v) => (v == null ? '–' : `${v.toFixed(dec)}${c.unit || '°'}`);
+      const off = c.mode === 'off';
+      const targetRow = (label, key, value, low, high) => h('div', { class: 'hatarget' }, label ? h('span', { class: 'muted small' }, label) : null,
+        h('button', { class: 'iconbtn round', title: 'Lower', disabled: off || value == null || value - step < c.min ? true : null, onclick: () => send(key === 'temperature' ? { temperature: +(value - step).toFixed(2) } : { low: key === 'low' ? +(value - step).toFixed(2) : low, high: key === 'high' ? +(value - step).toFixed(2) : high }) }, '−'),
+        h('span', { class: 'hatemp' }, fmt(value)),
+        h('button', { class: 'iconbtn round', title: 'Raise', disabled: off || value == null || value + step > c.max ? true : null, onclick: () => send(key === 'temperature' ? { temperature: +(value + step).toFixed(2) } : { low: key === 'low' ? +(value + step).toFixed(2) : low, high: key === 'high' ? +(value + step).toFixed(2) : high }) }, '+'));
+      kids.push(h('div', { class: 'hanow' }, h('span', { class: 'hacur' }, fmt(c.current)), h('span', { class: 'muted small' }, [c.action ? haWord(c.action) : haWord(c.mode), c.humidity != null ? `${c.humidity}% humidity` : null].filter(Boolean).join(' · '))));
+      if (c.low != null && c.high != null && c.target == null) kids.push(targetRow('Low', 'low', c.low, c.low, c.high), targetRow('High', 'high', c.high, c.low, c.high));
+      else kids.push(targetRow('', 'temperature', c.target));
+      if (c.modes.length) kids.push(h('h3', null, 'Mode'), seg(c.modes, c.mode, (m) => send({ mode: m }), haWord));
+      if (c.fans.length) kids.push(h('h3', null, 'Fan'), seg(c.fans, c.fan, (m) => send({ fan: m }), haWord));
+      if (c.presets.length) kids.push(h('h3', null, 'Preset'), seg(c.presets, c.preset, (m) => send({ preset: m }), haWord));
+    } else if (cur.domain === 'cover' && cur.cover) {
+      const c = cur.cover;
+      kids.push(h('div', { class: 'hanow' }, h('span', { class: 'hacur' }, cur.text || cur.state), c.position != null ? h('span', { class: 'muted small' }, `${c.position}% open`) : null),
+        h('div', { class: 'habtns' },
+          c.canOpen ? h('button', { class: 'pillbtn', disabled: !c.moving && cur.state === 'open' ? true : null, onclick: () => send({ action: 'open' }) }, icon('up', 's'), 'Open') : null,
+          c.canStop ? h('button', { class: 'pillbtn noic', onclick: () => send({ action: 'stop' }) }, 'Stop') : null,
+          c.canClose ? h('button', { class: 'pillbtn', disabled: !c.moving && cur.state === 'closed' ? true : null, onclick: () => send({ action: 'close' }) }, icon('down', 's'), 'Close') : null));
+      if (c.canPosition) {
+        const range = h('input', { type: 'range', min: 0, max: 100, step: 5, value: c.position == null ? 50 : c.position, 'aria-label': 'Position', onchange: (e) => send({ position: +e.target.value }) });
+        kids.push(h('h3', null, 'Position'), h('div', { class: 'harange' }, h('span', { class: 'muted small' }, 'Closed'), range, h('span', { class: 'muted small' }, 'Open')));
+      }
+    } else kids.push(h('p', { class: 'muted' }, cur.text || cur.state));
+    kids.push(h('p', { class: 'small' }, h('a', { class: 'lnk', href: haLink(cur), target: '_blank', rel: 'noreferrer' }, 'More in Home Assistant')));
+    body.replaceChildren(...kids);
+  };
+  draw();
+  // the thing moves while the popup is open (a cover closing, a device reporting back): ask again every few seconds
+  const timer = setInterval(async () => {
+    if (!body.isConnected) { clearInterval(timer); return; }
+    if (busy || document.hidden) return;
+    let d; try { d = await api('/api/ha'); } catch { return; }
+    const fresh = (d.items || []).find((x) => x.id === cur.id);
+    if (fresh && body.isConnected && !busy && JSON.stringify({ a: fresh.state, b: fresh.climate, c: fresh.cover }) !== JSON.stringify({ a: cur.state, b: cur.climate, c: cur.cover })) { cur = { ...cur, ...fresh }; onChange(fresh); draw(); }
+  }, 3000);
+  dialog(cur.name, body, [{ label: 'Done', value: true, primary: true }]).then(() => clearInterval(timer));
+}
+
 async function drawHomeCard(el, alertsEl, again = false) {
   let d;
   try { d = await api('/api/ha'); } catch (e) { if (!again) { el.hidden = false; el.replaceChildren(h('div', { class: 'muted small' }, e.message)); } return; }

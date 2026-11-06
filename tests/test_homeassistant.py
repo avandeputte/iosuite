@@ -153,3 +153,70 @@ def test_switching_waits_for_a_slow_device(client, monkeypatch):
     r = client.post("/api/ha/light.slow/toggle").json()
     assert r["state"] == "on" and r["text"] == "On", r
     assert state["reads"] == 3
+
+
+def test_climate_and_cover_popups(client, monkeypatch):
+    """The popups' /set: a thermostat's temperature, mode, fan and preset, a cover's open / close / stop / position,
+    each checked against what the entity offers and against the admin's control tick."""
+    calls = []
+    states = {
+        "climate.living": {"entity_id": "climate.living", "state": "heat", "attributes": {"friendly_name": "Thermostat", "current_temperature": 20.5, "temperature": 21.0, "min_temp": 7, "max_temp": 30,
+                                                                                          "hvac_modes": ["off", "heat", "cool", "auto"], "hvac_action": "heating", "fan_modes": ["auto", "low", "high"], "fan_mode": "auto", "preset_modes": ["home", "away"], "preset_mode": "home"}},
+        "cover.garage": {"entity_id": "cover.garage", "state": "closed", "attributes": {"friendly_name": "Garage", "supported_features": 11}},   # open, close, stop; no position
+        "cover.blind": {"entity_id": "cover.blind", "state": "open", "attributes": {"friendly_name": "Blind", "supported_features": 15, "current_position": 60}},
+    }
+
+    def call(method, path, body=None, base="", tok=""):
+        calls.append((method, path, body))
+        if path == "/api/config":
+            return {"location_name": "Casa", "version": "2026.11.1", "unit_system": {"temperature": "°F"}}
+        if path == "/api/states":
+            return list(states.values())
+        if path.startswith("/api/states/"):
+            return states.get(path.split("/api/states/", 1)[1])
+        if path == "/api/template":
+            return "[null, null, null]"
+        if path.startswith("/api/services/climate/"):
+            a = states["climate.living"]["attributes"]
+            a.update({k: v for k, v in body.items() if k != "entity_id"} if "temperature" in body else {})
+            if "hvac_mode" in body:
+                states["climate.living"]["state"] = body["hvac_mode"]
+            if "fan_mode" in body:
+                a["fan_mode"] = body["fan_mode"]
+            return [states["climate.living"]]
+        if path.startswith("/api/services/cover/"):
+            st = states[body["entity_id"]]
+            svc = path.rsplit("/", 1)[1]
+            st["state"] = {"open_cover": "opening", "close_cover": "closing", "stop_cover": st["state"], "set_cover_position": "open"}[svc]
+            if svc == "set_cover_position":
+                st["attributes"]["current_position"] = body["position"]
+            return [st]
+        raise AssertionError(path)
+    monkeypatch.setattr(ha, "_call", call)
+    monkeypatch.setattr(ha.time, "sleep", lambda s: None)
+    ha.forget(devices=True)
+    ha._unit["v"] = ""
+    client.post("/api/ha/settings", json={"url": "http://ha.lan:8123", "token": "s3cret-token",
+                                           "entities": [{"id": "climate.living", "control": True}, {"id": "cover.garage", "control": True}, {"id": "cover.blind"}]})
+    by = {i["id"]: i for i in client.get("/api/ha").json()["items"]}
+    assert by["climate.living"]["climate"] == {"mode": "heat", "modes": ["off", "heat", "cool", "auto"], "action": "heating", "current": 20.5, "target": 21.0, "low": None, "high": None,
+                                               "min": 7, "max": 30, "step": 0.5, "humidity": None, "fan": "auto", "fans": ["auto", "low", "high"], "preset": "home", "presets": ["home", "away"], "unit": "°F"}
+    assert by["cover.garage"]["cover"] == {"position": None, "canOpen": True, "canClose": True, "canPosition": False, "canStop": True, "moving": False}
+    assert by["cover.blind"]["cover"]["canPosition"] is True and by["cover.blind"]["cover"]["position"] == 60
+    # the thermostat
+    r = client.post("/api/ha/climate.living/set", json={"temperature": 22.5}).json()
+    assert r["climate"]["target"] == 22.5 and ("POST", "/api/services/climate/set_temperature", {"entity_id": "climate.living", "temperature": 22.5}) in calls
+    assert client.post("/api/ha/climate.living/set", json={"temperature": 40}).status_code == 400
+    assert client.post("/api/ha/climate.living/set", json={"mode": "dry"}).status_code == 400
+    assert client.post("/api/ha/climate.living/set", json={"mode": "cool"}).json()["climate"]["mode"] == "cool"
+    assert client.post("/api/ha/climate.living/set", json={"fan": "high"}).json()["climate"]["fan"] == "high"
+    assert client.post("/api/ha/climate.living/set", json={"low": 18}).status_code == 400          # low and high together
+    assert client.post("/api/ha/climate.living/set", json={}).status_code == 400
+    # the covers
+    assert client.post("/api/ha/cover.garage/set", json={"action": "open"}).json()["state"] == "opening"
+    assert client.post("/api/ha/cover.garage/set", json={"action": "stop"}).status_code == 200
+    assert client.post("/api/ha/cover.garage/set", json={"position": 50}).status_code == 400       # it takes none
+    assert client.post("/api/ha/cover.blind/set", json={"action": "close"}).status_code == 403      # not ticked
+    client.post("/api/ha/settings", json={"entities": [{"id": "climate.living", "control": True}, {"id": "cover.garage", "control": True}, {"id": "cover.blind", "control": True}]})
+    assert client.post("/api/ha/cover.blind/set", json={"position": 25}).json()["cover"]["position"] == 25
+    assert client.post("/api/ha/light.kitchen/set", json={"action": "open"}).status_code == 400    # not a popup entity
