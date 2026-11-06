@@ -1,45 +1,34 @@
-"""The MCP server instance and what every tool module shares: the admin-token gate, name resolution, limits."""
-import contextvars
-
-from mcp.server.mcpserver import MCPServer
+"""The MCP server instance and what every tool module shares: who is asking (iosuite-shared), name resolution, limits."""
+from iosuite_shared import mcp as shared_mcp
+from iosuite_shared.mcp import ADDS, DELETES, READ_ONLY, UPDATES, WRITES, clamp, current_user, need_admin, who
 from mcp.server.mcpserver.exceptions import ToolError
-from mcp.types import ToolAnnotations
 
-from app import config, db, notes
-from app.auth import updater
+from app import __version__, config, db, notes
+
+__all__ = ["ADDS", "DELETES", "READ_ONLY", "UPDATES", "WRITES", "clamp", "current_user", "need_admin", "who", "need_writer",
+           "server", "APP", "MCP_USER", "clamp_limit", "resolve_folder", "note_or_fail", "summary", "iso", "parse_date"]
 
 APP = config.BASE_URL  # for the links in results
-READ_ONLY = ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False)
-# a tool that changes notes but can be repeated with the same outcome (an edit, a colour, a move)
-WRITES = ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=False)
-CREATES = ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False)
-DESTRUCTIVE = ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=True, openWorldHint=False)
+MCP_USER = "MCP"       # the name the change log shows for a change made through MCP
 
-server = MCPServer(
-    "ionotes",
-    instructions=(
-        "A personal notes library (text, clipboard snippets, screenshots with the text read from them). Start with "
-        "notes_overview, use list_folders / list_tags to find exact names, then search_notes and get_note. "
-        "view_note_image shows a note's picture. Notes are private to each account: these tools work on the notes of "
-        "one account (notes_overview names it; an admin chooses it in Maintenance › MCP server). Changing anything needs the admin token "
-        "(the web app's Maintenance › MCP server shows it to an admin)."
-    ),
-)
+server = shared_mcp.make_server("ionotes", "ioNotes", __version__, instructions=(
+    "A personal notes library (text, clipboard snippets, screenshots with the text read from them). Start with "
+    "notes_overview, use list_folders / list_tags to find exact names, then search_notes and get_note. "
+    "view_note_image shows a note's picture. Notes are private to each account: these tools work on the notes of the "
+    "account you signed in as (notes_overview names it). Changing anything takes an editor's account; the server tools "
+    "an admin's."))
 
-token_given = contextvars.ContextVar("mcp_token_given", default=False)  # set per request by the HTTP layer
-MCP_USER = "MCP"
+
+def need_writer() -> dict:
+    """Changes take an editor or admin, and are refused in read-only mode as in the web app."""
+    u = shared_mcp.need_writer()
+    if db.read_only():
+        raise ToolError("ioNotes is in read-only mode; nothing can be changed")
+    return u
 
 
 def clamp_limit(limit, cap: int) -> int:
-    return max(1, min(int(limit), cap))
-
-
-def need_token(token: str, writes: bool = False):
-    """Changes and diagnostics take the admin token; writes are refused in read-only mode as in the web app."""
-    if not updater.token_ok(token):
-        raise ToolError("This tool needs the admin token (the web app's Maintenance › MCP server shows it to an admin)")
-    if writes and db.read_only():
-        raise ToolError("ionotes is in read-only mode; nothing can be changed")
+    return clamp(limit, 1, cap)
 
 
 def resolve_folder(name) -> str:

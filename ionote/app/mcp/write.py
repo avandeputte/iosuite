@@ -1,5 +1,5 @@
-"""The tools that change notes, folders and tags. Each takes the admin token (as iopix's editing tools do) and
-is refused in read-only mode. Changes are logged under the name "MCP" and reach the apps with their next sync."""
+"""The tools that change notes, folders and tags. Each takes an editor's or admin's account (the one the client signed
+in as) and is refused in read-only mode. Changes are logged under the name "MCP" and reach the apps with their next sync."""
 import base64
 import time
 from typing import Literal, Optional
@@ -7,7 +7,7 @@ from typing import Literal, Optional
 from mcp.server.mcpserver.exceptions import ToolError
 
 from app import images, notes
-from app.mcp.base import CREATES, DESTRUCTIVE, MCP_USER, WRITES, need_token, note_or_fail, resolve_folder, server, summary
+from app.mcp.base import ADDS, DELETES, MCP_USER, WRITES, need_writer, note_or_fail, resolve_folder, server, summary
 
 
 def _save(uid, data):
@@ -17,11 +17,11 @@ def _save(uid, data):
         raise ToolError(str(e))
 
 
-@server.tool(annotations=CREATES)
-def create_note(token: str, text: str = "", title: str = "", tags: Optional[list[str]] = None, folder: Optional[str] = None,
+@server.tool(annotations=ADDS)
+def create_note(text: str = "", title: str = "", tags: Optional[list[str]] = None, folder: Optional[str] = None,
                 pinned: bool = False, picture_base64: Optional[str] = None) -> dict:
     """Create a note. folder: a name or id. picture_base64: an optional PNG/JPEG for the note (base64)."""
-    need_token(token, writes=True)
+    need_writer()
     if not (text.strip() or title.strip() or picture_base64):
         raise ToolError("A note needs a title, text or a picture")
     n = _save(None, {"title": title, "body": text, "tags": tags or [], "folderID": resolve_folder(folder), "pinned": pinned, "source": "mcp"})
@@ -34,12 +34,12 @@ def create_note(token: str, text: str = "", title: str = "", tags: Optional[list
 
 
 @server.tool(annotations=WRITES)
-def update_note(token: str, note_id: str, title: Optional[str] = None, text: Optional[str] = None, append_text: Optional[str] = None,
+def update_note(note_id: str, title: Optional[str] = None, text: Optional[str] = None, append_text: Optional[str] = None,
                 tags: Optional[list[str]] = None, add_tags: Optional[list[str]] = None, remove_tags: Optional[list[str]] = None,
                 folder: Optional[str] = None, pinned: Optional[bool] = None) -> dict:
     """Change a note: any of title, text (replaces it), append_text (adds a paragraph at the end), tags (replaces
     them), add_tags / remove_tags, folder (a name or id; "none" takes it out of its folder), pinned."""
-    need_token(token, writes=True)
+    need_writer()
     n = note_or_fail(note_id)
     d = {}
     if title is not None:
@@ -66,10 +66,10 @@ def update_note(token: str, note_id: str, title: Optional[str] = None, text: Opt
 
 
 @server.tool(annotations=WRITES)
-def organize_notes(token: str, note_ids: list[str], folder: Optional[str] = None, add_tags: Optional[list[str]] = None,
+def organize_notes(note_ids: list[str], folder: Optional[str] = None, add_tags: Optional[list[str]] = None,
                    remove_tags: Optional[list[str]] = None, pinned: Optional[bool] = None) -> dict:
     """The same change for many notes at once: move to a folder ("none": out of any folder), add or remove tags, pin."""
-    need_token(token, writes=True)
+    need_writer()
     if len(note_ids) > 500:
         raise ToolError("At most 500 notes at a time")
     fid = None if folder in (None, "", "none") else resolve_folder(folder)
@@ -90,29 +90,29 @@ def organize_notes(token: str, note_ids: list[str], folder: Optional[str] = None
     return {"changed": len(changed)}
 
 
-@server.tool(annotations=DESTRUCTIVE)
-def delete_note(token: str, note_id: str) -> dict:
+@server.tool(annotations=DELETES)
+def delete_note(note_id: str) -> dict:
     """Move a note to the trash (restore_note brings it back for 30 days; its picture is removed)."""
-    need_token(token, writes=True)
+    need_writer()
     n = note_or_fail(note_id)
     notes.delete_note(n["id"], MCP_USER)
     return {"deleted": n["id"], "title": notes.display_title(n)}
 
 
 @server.tool(annotations=WRITES)
-def restore_note(token: str, note_id: str) -> dict:
+def restore_note(note_id: str) -> dict:
     """Take a note out of the trash."""
-    need_token(token, writes=True)
+    need_writer()
     n = note_or_fail(note_id)
     return summary(notes.restore_note(n["id"], MCP_USER))
 
 
 @server.tool(annotations=WRITES)
-def manage_folder(token: str, action: Literal["create", "rename", "color", "delete"], name: str, new_name: Optional[str] = None,
+def manage_folder(action: Literal["create", "rename", "color", "delete"], name: str, new_name: Optional[str] = None,
                   color: Optional[str] = None) -> dict:
     """Folders: create (name, optional color), rename (name → new_name), color (name, color or "" for none), delete
     (the notes in it stay, in no folder). Colours: red orange yellow green mint teal blue indigo purple pink brown gray."""
-    need_token(token, writes=True)
+    need_writer()
     if color and color not in notes.COLORS:
         raise ToolError("Colours: " + ", ".join(notes.COLORS))
     try:
@@ -131,11 +131,11 @@ def manage_folder(token: str, action: Literal["create", "rename", "color", "dele
 
 
 @server.tool(annotations=WRITES)
-def manage_tag(token: str, action: Literal["rename", "color", "remove"], name: str, new_name: Optional[str] = None,
+def manage_tag(action: Literal["rename", "color", "remove"], name: str, new_name: Optional[str] = None,
                color: Optional[str] = None) -> dict:
     """Tags: rename (on every note; merges into an existing tag of that name), color (or "" for none), remove (from
     every note)."""
-    need_token(token, writes=True)
+    need_writer()
     try:
         if action == "rename":
             if not new_name:

@@ -1,5 +1,5 @@
 """Paths and tunables: config.env in the app folder (setup.sh writes it; config.env.example lists them all), or the
-environment, which wins.
+environment, which wins. The settings every app of the suite shares come from iosuite_shared.config.standard.
 
 Everything ionotes keeps lives in its database: MySQL/MariaDB (DB_TYPE=mysql and DB_HOST, DB_PORT, DB_NAME,
 DB_USER, DB_PASSWORD), or a SQLite file in DATA_DIR for a quick try or the tests. The notes' images are stored in
@@ -11,53 +11,29 @@ from pathlib import Path
 
 from iosuite_shared import config as shared
 
+APP = "ionotes"
 APP_DIR = Path(__file__).resolve().parent.parent
 shared.load_file(APP_DIR)  # first: iosuite_shared reads its settings (the Shared ioSuite database, COOKIE_DOMAIN) from it too
 env, env_flag, env_int = shared.env, shared.env_flag, shared.env_int
-
-
-def _path(name: str, default: Path) -> Path:
-    return Path(env(name, str(default))).expanduser().resolve()
-
-
-DATA_DIR = _path("DATA_DIR", APP_DIR / "data")
-STATIC_DIR = APP_DIR / "static"
-# the server log, for Maintenance › Updates and logs and the MCP tool (LOG_FILE= with nothing after it: none)
-LOG_FILE = _path("LOG_FILE", DATA_DIR / "ionotes.log") if os.environ.get("LOG_FILE", "x") else None
-DATA_DIR.mkdir(parents=True, exist_ok=True)
-
-# the address people and the other apps reach ionotes at, e.g. https://notes.example.com (the suite's list of apps);
-# empty: the address it is reached at, noted by iosuite-shared
-PUBLIC_URL = env("PUBLIC_URL").rstrip("/")
-
-# where the server listens (python -m app); every app of the suite has its own default port (iosuite_shared.suite.PORTS)
-HOST = env("HOST", "0.0.0.0")
-PORT = env_int("PORT", 8610)
-# the addresses that may tell the server the visitor's address and scheme (X-Forwarded-For / -Proto): * (any), or a
-# comma-separated list such as the reverse proxy's
-FORWARDED_ALLOW_IPS = env("FORWARDED_ALLOW_IPS", "*")
-# HTTPS served directly instead of behind a reverse proxy: both files
-TLS_CERT_FILE = env("TLS_CERT_FILE")
-TLS_KEY_FILE = env("TLS_KEY_FILE")
-# the address links in MCP results point at
-BASE_URL = PUBLIC_URL or f"http://localhost:{PORT}"
-
-# the first admin account, created on a first start with no accounts (containers, installers)
-ADMIN_USER = env("ADMIN_USER")
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
+# APP_DIR, DATA_DIR, STATIC_DIR, LOG_FILE, HOST, PORT, PUBLIC_URL, BASE_URL, FORWARDED_ALLOW_IPS, TLS_CERT_FILE, TLS_KEY_FILE,
+# MCP_FORCED, ADMIN_USER, ADMIN_PASSWORD: the same names in every app (iosuite_shared.config.standard says what each is)
+globals().update(shared.standard(APP, APP_DIR))
 
 # READ_ONLY=1: browsing and searching only, for everyone
 READ_ONLY = env_flag("READ_ONLY")
-# MCP=1 turns the MCP endpoint on whatever Settings says (MCP_ADMIN_TOKEN, which fixes its token, and UPDATE_CHECK=0,
-# which locks the daily version check off, are read by iosuite_shared.updates: app.auth.updater)
-MCP_FORCED = env_flag("MCP")
 # OCR=0 keeps the server from reading text in images itself (the apps read it on the device and send it along)
 OCR = env_flag("OCR", True)
+# the account `python -m app.mcp` (stdio) acts as. Updates: IONOTES_REPO, IONOTES_BRANCH and UPDATE_CHECK are read by
+# iosuite_shared.updates (app.auth.updater)
+MCP_USER = env("MCP_USER")
 
 # the largest image a note may carry; MariaDB's max_allowed_packet (16 MB by default) must be larger
 MAX_IMAGE_MB = env_int("MAX_IMAGE_MB", 15)
 THUMB_SIZE = env_int("THUMB_SIZE", 480)
 THUMB_QUALITY = env_int("THUMB_QUALITY", 80)
+MAX_JSON_BYTES = 8 << 20                  # a JSON request larger than this is refused before it is read (pictures go as their own body)
+MAX_IMAGE_BYTES = (MAX_IMAGE_MB + 1) << 20
+MAX_IMPORT_BYTES = 4 << 30                # an export with every picture; spooled to disk as it arrives, never held in memory
 
 
 # the names of the database settings in config.env, by db.KEYS

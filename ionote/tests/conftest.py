@@ -14,6 +14,7 @@ os.environ["DATA_DIR"] = _tmp
 os.environ.pop("ADMIN_USER", None)
 os.environ.pop("ADMIN_PASSWORD", None)
 os.environ["UPDATE_CHECK"] = "0"
+os.environ["LOG_FILE"] = ""  # no server log from the tests
 if os.environ.get("IONOTES_TEST_DB") == "mysql":
     os.environ.update(DB_TYPE="mysql", DB_HOST=os.environ.get("IONOTES_TEST_DB_HOST", "127.0.0.1"),
                       DB_PORT=os.environ.get("IONOTES_TEST_DB_PORT", "3306"), DB_NAME=os.environ.get("IONOTES_TEST_DB_NAME", "notes_test"),
@@ -28,7 +29,7 @@ if _authtest.server() is None:
     pytest.skip(f"{_authtest.server.reason}: the shared accounts need a MariaDB (Docker, or IOSUITE_TEST_DB=host:port:user:password)", allow_module_level=True)
 os.environ.update(_authtest.auth_env("ionotes_test_auth"))  # IOSUITE_DB_*: the test database, never one named in the shell
 
-from app import db, users  # noqa: E402
+from app import db  # noqa: E402
 from iosuite_shared import proxyauth  # noqa: E402
 
 TABLES = ["nts_notes", "nts_note_images", "nts_folders", "nts_tag_colors", "nts_change_log", "nts_change_counter", "nts_settings"]
@@ -47,16 +48,8 @@ def clean():
         for t in TABLES:
             con.execute(f"DELETE FROM {t}")
         con.commit()
-    from iosuite_shared import db as authdb
-    users.init()
-    authdb.ex("DELETE FROM ios_users")
-    authdb.ex("ALTER TABLE ios_users AUTO_INCREMENT = 1")  # the tests count on the first account being #1
-    authdb.ex("DELETE FROM ios_settings")
-    authdb.ex("DELETE FROM ios_apps")
     from app.auth import auth
-    auth._registered = False  # each test registers ionotes in the suite's list again
-    users.invalidate()
-    users._attempts.clear()
+    _authtest.clean_shared_tables(auth)  # accounts, sessions, app passwords, settings, the list of apps; the first account is #1 again
     proxyauth.forget_identities()
     from app import notes
     notes._claimed = False  # each test starts before any account claimed the open install's notes

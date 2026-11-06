@@ -30,7 +30,7 @@ def notes_overview() -> dict:
 
 
 def _account():
-    """Whose notes these are (Settings › MCP server › Notes of)."""
+    """Whose notes these are: the account the client signed in as."""
     from app import users
     u = users.get(notes.owner()) if notes.owner() > 0 else None
     return u["name"] if u else None

@@ -1,6 +1,6 @@
-"""Settings, maintenance and status: the switches admins set, sign-in at a proxy, the database, the change log, export
-and import. The version, updates, restart, the MCP admin token and the server log are iosuite_shared's server_router
-(/api/server, /api/log), mounted in app/main.py."""
+"""Settings and maintenance: the switches admins set, sign-in at a proxy, the database, the change log, export and
+import. The status, the version, updates, restart and the server log are iosuite_shared's routers (/api/status,
+/api/server, /api/log), mounted in app/main.py."""
 import logging
 import time
 
@@ -8,30 +8,14 @@ from fastapi import APIRouter, HTTPException, Request, UploadFile, File
 from fastapi.responses import Response
 from starlette.concurrency import run_in_threadpool
 
-from app import __version__, access, owners, backup, config, db, images, notes, ocr, suitedb, users
+from app import access, backup, config, db, images, notes, ocr, suitedb, users
 from iosuite_shared import proxyauth
-from app.auth import auth as auth_shared, updater
+from app.auth import auth as auth_shared
 from app.http import json_body, user_name
 
 router = APIRouter()
 SWITCHES = ("require_login", "read_only", "mcp_enabled")
 TEXTS = ("app_name",)
-
-
-@router.get("/api/status", dependencies=[access.public])
-def api_status(request: Request):
-    """Open even when sign-in is required (the container's health check and the apps' first look use it)."""
-    out = {"ok": True, "app": "ionotes", "version": __version__, "requireLogin": users.require_login(), "usersExist": users.any_users(),
-           "appName": db.get_setting("app_name", "") or "ionotes", "readOnly": db.read_only()}
-    if users.is_signed_in(request.state.user):
-        out["rev"] = notes.owner_rev()
-        out["commit"] = updater.local_commit()[:7]
-        if users.is_admin(request.state.user):
-            u = updater.available() if updater.auto_check_enabled() else None
-            if u:
-                u.update(canRun=updater.can_run(), docker=updater.in_docker())
-            out["update"] = u
-    return out
 
 
 @router.get("/api/settings", dependencies=[access.public])
@@ -47,8 +31,6 @@ def api_settings(request: Request):
         out["ocr"] = ocr.status()
         out["images"] = images.stats()
         out["appUrl"] = config.BASE_URL
-        out["mcp_user"] = owners.mcp_owner()
-        out["accounts"] = [{"id": u["id"], "name": u["name"], "role": u.get("role")} for u in users.list_users()]
     return out
 
 
@@ -65,10 +47,6 @@ async def api_settings_set(request: Request):
             db.set_setting(k, "1" if v else "0")
         elif k in TEXTS:
             db.set_setting(k, str(v or "").strip()[:40])
-        elif k == "mcp_user":  # whose notes the MCP tools work on
-            if v and not users.get(int(v)):
-                raise HTTPException(400, "No such account")
-            db.set_setting("mcp_user", str(int(v or 0)))
     users.invalidate()
     return {"ok": True}
 

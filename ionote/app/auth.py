@@ -9,7 +9,7 @@ from iosuite_shared.updates import Updater
 
 from app import __version__, config, db
 
-APP = "ionotes"
+APP = config.APP
 
 
 def _read_only() -> bool:
@@ -20,9 +20,9 @@ def _read_only() -> bool:
 # app_label, version, public_url, description and color: ionotes' row in the suite's list of apps (ioSuite's start page)
 auth = Auth(APP, read_only=_read_only, read_only_message="ioNotes is in read-only mode; nothing can be changed.", app_label="ioNotes",
             version=__version__, public_url=config.PUBLIC_URL or None, description="Notes", color="#1c5a5e")
-auth.deny_exempt = ("/mcp",)  # MCP clients sign in with the admin token, whatever Cloudflare service token got them through
+auth.deny_exempt = ("/mcp",)  # MCP clients sign in with an app password, whatever Cloudflare service token got them through
 
-# updates (the daily check, update.sh, restart), the MCP admin token and the server log, as in every app of the suite
-# (iosuite_shared.updates); the daily-check switch and the token are kept with ionotes' own settings
+# updates (the daily check, update.sh, restart) and the server log, as in every app of the suite (iosuite_shared.updates);
+# the daily-check switch is kept with ionotes' own settings
 updater = Updater(APP, __version__, config.APP_DIR, settings=(db.get_setting, db.set_setting), result_file=config.DATA_DIR / ".update-result",
                   user_agent="ionotes")
