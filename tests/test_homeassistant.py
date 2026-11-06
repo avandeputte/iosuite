@@ -1,5 +1,7 @@
 """Home Assistant (its REST API mocked: no network): the settings, the Home card's entities and their wording, the
 allowlist for switching, the search, and what needs attention."""
+import json
+
 from app import homeassistant as ha
 
 STATES = [
@@ -28,6 +30,9 @@ def _fake_ha(calls):
             return {**st, "state": "off" if st["state"] == "on" else "on"} if st else None
         if path.startswith("/api/services/"):
             return []
+        if path == "/api/template":
+            ids = json.loads(body["template"].split("{{ ", 1)[1].split(" | map", 1)[0])
+            return json.dumps([("dev_" + e.split(".")[1]) if e in ("lock.front_door", "sensor.living_temp", "light.kitchen") else None for e in ids])
         raise AssertionError(path)
     return call
 
@@ -67,6 +72,9 @@ def test_test_and_card(client, monkeypatch):
     assert by["binary_sensor.garage"]["text"] == "Open" and by["binary_sensor.garage"]["control"] is False
     assert by["sensor.living_temp"]["text"] == "21.5°C" and by["scene.movie"]["text"] == "Tap to run" and by["person.alex"]["text"] == "Away"
     assert by["light.gone"]["state"] == "missing" and by["light.gone"]["control"] is False
+    # the device each belongs to (for the link to its page), asked once through the template API
+    assert by["lock.front_door"]["device"] == "dev_front_door" and "device" not in by["person.alex"]
+    assert sum(1 for c in calls if c[1] == "/api/template") == 1
     # what needs attention: the garage (its "alert when"), and built in: the leak and the low battery
     assert [(a["id"], a["text"]) for a in d["alerts"]] == [("binary_sensor.garage", "Open"), ("binary_sensor.sink_leak", "Leak"), ("sensor.remote_battery", "Battery 9%")]
     client.post("/api/ha/settings", json={"builtinAlerts": False})
@@ -108,6 +116,7 @@ def test_search(client, monkeypatch):
     found = client.get("/api/ha/search?q=door").json()["items"]
     assert [f["id"] for f in found] == ["lock.front_door", "binary_sensor.garage"]  # the card's first, then by name
     assert found[0]["control"] is True and found[0]["chosen"] is True and found[1]["control"] is False
+    assert found[0]["device"] == "dev_front_door" and "device" not in found[1]
     assert [f["id"] for f in client.get("/api/ha/search?q=living temp").json()["items"]] == ["sensor.living_temp"]
     assert client.get("/api/ha/search?q=").json()["items"] == []
 
@@ -133,6 +142,8 @@ def test_switching_waits_for_a_slow_device(client, monkeypatch):
             return {"entity_id": "light.slow", "state": state["v"], "attributes": {"friendly_name": "Slow"}, "last_updated": "t0" if state["v"] == "off" else "t1"}
         if path.startswith("/api/services/"):
             return []   # nothing changed yet, as far as Home Assistant knows
+        if path == "/api/template":
+            return "[null]"
         raise AssertionError(path)
     monkeypatch.setattr(ha, "_call", call)
     monkeypatch.setattr(ha.time, "sleep", lambda s: None)

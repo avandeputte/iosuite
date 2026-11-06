@@ -771,15 +771,16 @@ function haIcon(t) {
   if (t.domain === 'lock') return t.on ? 'unlock' : 'lock';
   return HA_CLASS_ICONS[t.class] || HA_ICONS[t.domain] || (t.domain === 'binary_sensor' ? 'check' : 'home');
 }
-/** Home Assistant's own page for an entity (its history), for the ones a tap does not switch. */
-const haLink = (t) => `${(S.ha && S.ha.url) || ''}/history?entity_id=${encodeURIComponent(t.id)}`;
+/** Home Assistant's own page for an entity: its device (where a thermostat's settings are), or its history when it
+    belongs to no device. */
+const haLink = (t) => `${(S.ha && S.ha.url) || ''}${t.device ? `/config/devices/device/${encodeURIComponent(t.device)}` : `/history?entity_id=${encodeURIComponent(t.id)}`}`;
 /** toggle | on | off, by way of the server; the entity's new state, or null (a toast says why). */
 async function haAct(id, action) {
   try { return await api(`/api/ha/${encodeURIComponent(id)}/${action}`, { method: 'POST' }); } catch (e) { fail(e); return null; }
 }
 const haTile = (t) => {
   const kids = [icon(haIcon(t), 's'), h('span', { class: 'hbody' }, h('span', { class: 'hname' }, t.name), h('span', { class: 'hstate small' }, t.text || t.state))];
-  if (!t.control) return h('a', { class: `hatile${t.on ? ' on' : ''}${t.state === 'unavailable' || t.state === 'missing' ? ' off' : ''}`, href: haLink(t), title: `${t.id} · in Home Assistant`, target: '_blank', rel: 'noreferrer' }, kids);
+  if (!t.control) return h('a', { class: `hatile${t.on ? ' on' : ''}${t.state === 'unavailable' || t.state === 'missing' ? ' off' : ''}`, href: haLink(t), title: `${t.id} · ${t.device ? 'its device' : 'its history'} in Home Assistant`, target: '_blank', rel: 'noreferrer' }, kids);
   const b = h('button', { class: `hatile ctl${t.on ? ' on' : ''}`, title: `${t.id} · tap to ${{ scene: 'run', script: 'run', button: 'press', input_button: 'press', automation: 'run' }[t.domain] || (t.on ? 'turn off' : 'turn on')}`, 'aria-pressed': t.on == null ? null : String(!!t.on) }, kids);
   b.onclick = async () => {
     b.classList.add('busy');
