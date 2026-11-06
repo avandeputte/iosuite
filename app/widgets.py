@@ -52,19 +52,29 @@ def _host(request: Request) -> str:
     return request.headers.get("x-forwarded-host") or request.headers.get("host") or request.url.netloc
 
 
-def fetch(request: Request, key: str, path: str, params: dict | None = None, raw: bool = False):
-    """GET path from the app (JSON, or (bytes, content type) with raw)."""
+def fetch(request: Request, key: str, path: str, params: dict | None = None, raw: bool = False, body: dict | None = None, timeout: float = TIMEOUT):
+    """GET path from the app (JSON, or (bytes, content type) with raw); with body, POST that JSON instead."""
     base = apps.url_for(key, _host(request))
     url = base + path + ("?" + urllib.parse.urlencode(params) if params else "")
-    req = urllib.request.Request(url, headers=_headers(request) if not raw else {**_headers(request), "Accept": "image/*"})
+    headers = _headers(request) if not raw else {**_headers(request), "Accept": "image/*"}
+    data = None
+    if body is not None:
+        data, headers = json.dumps(body).encode(), {**headers, "Content-Type": "application/json"}
+    req = urllib.request.Request(url, data=data, headers=headers, method="POST" if body is not None else "GET")
     try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT) as r:  # noqa: S310 - an http(s) address an admin set
-            body = r.read()
+        with urllib.request.urlopen(req, timeout=timeout) as r:  # noqa: S310 - an http(s) address an admin set
+            got = r.read()
             if raw:
-                return body, r.headers.get("Content-Type", "application/octet-stream")
-            return json.loads(body)
+                return got, r.headers.get("Content-Type", "application/octet-stream")
+            return json.loads(got)
     except urllib.error.HTTPError as e:
         name = apps.name_of(key)
+        if body is not None and e.code in (400, 403, 409):  # ioCalendar's own word on what it would not take
+            try:
+                why = json.loads(e.read()).get("detail")
+            except (ValueError, AttributeError):
+                why = None
+            raise Unavailable(400, why if isinstance(why, str) else f"{name} would not take it ({e.code})")
         if e.code in (401, 403):
             raise Unavailable(403, f"{name} does not let this account in ({e.code}); open it once and sign in there")
         if e.code == 404:
@@ -107,13 +117,20 @@ def iopix(request: Request, tz: str = "", n: int = 4, kind: str = "") -> dict:
             items += [{"id": by_year[y][i], "year": y, "yearsAgo": today.year - y} for y in years if i < len(by_year[y])]
         return {"kind": "onthisday", "items": items[:n], "count": sum(len(v) for v in by_year.values())}
     got = fetch(request, "iopix", "/api/random", {"n": n})
-    items = [{"id": pid, "year": dt.datetime.fromtimestamp(ts, dt.timezone.utc).year if ts else None}
-             for pid, ts in zip(got.get("id") or [], got.get("ts") or [])]
+    ws, hs = got.get("w") or [], got.get("h") or []
+    items = [{"id": pid, "year": dt.datetime.fromtimestamp(ts, dt.timezone.utc).year if ts else None,
+              **({"w": ws[i], "h": hs[i]} if i < len(ws) and i < len(hs) and ws[i] and hs[i] else {})}  # the wall display prefers landscape ones
+             for i, (pid, ts) in enumerate(zip(got.get("id") or [], got.get("ts") or []))]
     return {"kind": "rediscover", "items": items}
 
 
 def iopix_thumb(request: Request, photo_id: int) -> tuple[bytes, str]:
     return fetch(request, "iopix", f"/thumb/{int(photo_id)}", {"fit": "square"}, raw=True)
+
+
+def iopix_preview(request: Request, photo_id: int) -> tuple[bytes, str]:
+    """ioPix's screen-size copy (the wall display's slideshow); ioPix may have to make it first, so a longer wait."""
+    return fetch(request, "iopix", f"/preview/{int(photo_id)}", raw=True, timeout=20)
 
 
 # ------------------------------------------------------------------ ioCalendar: the rest of today, else what's next
@@ -195,6 +212,48 @@ def iocalendar_week(request: Request, tz: str = "", days: int = 7, n: int = 12) 
                                                "allDay": bool(o.get("allDay")), "location": o.get("location"), "color": colors.get(o.get("calendarId"))})
         total += 1
     return {"days": [{"date": d, "items": by_day[d]} for d in sorted(by_day)], "more": max(0, total - n)}
+
+
+# ------------------------------------------------------------------ ioCalendar: a new event from the search box
+
+def iocalendar_calendars(request: Request) -> dict:
+    """{items: [{id, name, color}]}: the calendars this viewer may add events to, as ioCalendar lists them (its own
+    order, so the first is where ioCalendar itself would put a new event)."""
+    got = fetch(request, "iocalendar", "/api/calendars")
+    return {"items": [{"id": c.get("id"), "name": c.get("name"), "color": c.get("color")} for c in got.get("items", []) if c.get("writable")]}
+
+
+def iocalendar_add(request: Request, b: dict) -> dict:
+    """A new event in ioCalendar, from {title, start, end?, allDay, timezone?, calendarId?}: start / end are ISO
+    (a date for an all-day event, a date and time with its offset otherwise); no end is an hour (or the day).
+    {id, url}: the event and where it opens in ioCalendar."""
+    if not isinstance(b, dict):
+        raise Unavailable(400, "An object, please")
+    title = str(b.get("title") or "").strip()[:500]
+    start = str(b.get("start") or "").strip()
+    if not title or not start:
+        raise Unavailable(400, "A title and a start, please")
+    all_day = bool(b.get("allDay"))
+    try:
+        if all_day:
+            dt.date.fromisoformat(start[:10])
+        else:
+            dt.datetime.fromisoformat(start)
+        if b.get("end"):
+            (dt.date.fromisoformat if all_day else dt.datetime.fromisoformat)(str(b["end"])[:10] if all_day else str(b["end"]))
+    except ValueError:
+        raise Unavailable(400, "start / end: ISO dates (and times)")
+    ev = {"title": title, "start": start[:10] if all_day else start, "allDay": all_day}
+    if b.get("end"):
+        ev["end"] = str(b["end"])[:10] if all_day else str(b["end"])
+    tz = str(b.get("timezone") or "")
+    if tz and re.fullmatch(r"[A-Za-z0-9_+\-/]{1,64}", tz):
+        ev["timezone"] = tz
+    if b.get("calendarId") not in (None, ""):
+        ev["calendarId"] = b["calendarId"]
+    got = fetch(request, "iocalendar", "/api/events", body=ev)
+    eid = got.get("id") if isinstance(got, dict) else None
+    return {"id": eid, "url": f"{apps.url_for('iocalendar', _host(request))}/#/event/{eid}" if eid is not None else None}
 
 
 # ------------------------------------------------------------------ ioContacts: birthdays and anniversaries ahead
@@ -279,4 +338,6 @@ def get(request: Request, key: str, tz: str = "", kind: str = "", n: int = 0, q:
         return iocalendar_week(request, tz)
     if key == "iocontacts":
         return iocontacts_search(request, q.strip()) if q.strip() else iocontacts(request)
-    return {"iocalendar": iocalendar, "iohealth": iohealth}[key](request, tz)
+    if key == "iocalendar":
+        return iocalendar(request, tz, min(max(int(n or 0), 1), 12) if n else 3)
+    return iohealth(request, tz)

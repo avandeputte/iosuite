@@ -287,6 +287,31 @@ def widget(key: str, request: Request, tz: str = "", kind: str = "", n: int = 0,
         raise HTTPException(e.status, str(e))
 
 
+@router.get("/api/widgets/iocalendar/calendars")
+def widget_calendars(request: Request):
+    """The ioCalendar calendars this viewer may add events to (quick add in the search box)."""
+    me(request)
+    try:
+        return widgets.iocalendar_calendars(request)
+    except widgets.Unavailable as e:
+        raise HTTPException(e.status, str(e))
+
+
+@router.post("/api/widgets/iocalendar/events")
+async def widget_add_event(request: Request):
+    """Quick add: a new event in ioCalendar, made with the viewer's own sign-in. {title, start, end?, allDay,
+    timezone?, calendarId?} → {id, url}."""
+    me(request)
+    try:
+        b = await request.json()
+    except ValueError:
+        raise HTTPException(400, "JSON, please")
+    try:
+        return await run_in_threadpool(widgets.iocalendar_add, request, b)
+    except widgets.Unavailable as e:
+        raise HTTPException(e.status, str(e))
+
+
 @router.get("/api/widgets/iocontacts/photo/{contact_id}")
 def widget_contact_photo(contact_id: int, request: Request):
     """A contact's photo from ioContacts, passed through (for the birthdays card)."""
@@ -305,6 +330,18 @@ def widget_thumb(photo_id: int, request: Request):
     me(request)
     try:
         body, ctype = widgets.iopix_thumb(request, photo_id)
+    except widgets.Unavailable as e:
+        raise HTTPException(e.status, str(e))
+    return Response(body, media_type=ctype if ctype.startswith("image/") else "image/jpeg",
+                    headers={"Cache-Control": "private, max-age=86400"})
+
+
+@router.get("/api/widgets/iopix/preview/{photo_id}")
+def widget_preview(photo_id: int, request: Request):
+    """An ioPix photo at screen size, passed through (the wall display's slideshow)."""
+    me(request)
+    try:
+        body, ctype = widgets.iopix_preview(request, photo_id)
     except widgets.Unavailable as e:
         raise HTTPException(e.status, str(e))
     return Response(body, media_type=ctype if ctype.startswith("image/") else "image/jpeg",

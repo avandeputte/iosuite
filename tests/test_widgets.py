@@ -28,6 +28,9 @@ def _fake_accuweather(calls):
         if path.startswith("/forecasts/v1/daily/5day/"):
             return {"Headline": {"Text": "Sunny week"}, "DailyForecasts": [
                 {"Date": "2026-11-04T07:00:00-05:00", "Temperature": {"Minimum": {"Value": 10.0}, "Maximum": {"Value": 18.0}}, "Day": {"Icon": 2, "IconPhrase": "Mostly sunny", "PrecipitationProbability": 5}}]}
+        if path.startswith("/forecasts/v1/hourly/12hour/"):
+            return [{"DateTime": "2026-11-04T15:00:00-05:00", "WeatherIcon": 12, "IconPhrase": "Showers", "Temperature": {"Value": 14.0},
+                     "PrecipitationProbability": 70, "HasPrecipitation": True, "PrecipitationType": "Rain"}]
         raise AssertionError(path)
     return get
 
@@ -51,6 +54,7 @@ def test_weather_setup_and_cache(client, monkeypatch):
     w = client.get("/api/weather").json()
     assert w["enabled"] and w["units"] == "imperial" and w["current"]["text"] == "Sunny" and w["current"]["temp"] == {"metric": 20.0, "imperial": 68.0}
     assert w["forecast"]["days"][0] == {"date": "2026-11-04", "min": 10.0, "max": 18.0, "icon": 2, "text": "Mostly sunny", "rain": 5}
+    assert w["hourly"] == [{"t": "2026-11-04T15:00:00-05:00", "icon": 12, "text": "Showers", "temp": 14.0, "rain": 70, "wet": True, "kind": "Rain"}]
     n = len(calls)
     assert client.get("/api/weather").json()["current"]["text"] == "Sunny"
     assert len(calls) == n, "the second visit comes from the server's copy, not from AccuWeather"
@@ -151,3 +155,17 @@ def test_uploaded_svg_icon(client):
     client.post("/api/auth/login", json={"name": "kid", "password": "secret123"})
     assert client.get(f"/api/bookmarks/links/{l2['id']}/icon.svg").status_code == 200
     assert client.put(f"/api/bookmarks/links/{l2['id']}/icon", content=SVG).status_code == 403
+
+
+def test_weather_without_hourly(client, monkeypatch):
+    """A key or plan without the hourly forecast still shows the conditions and the days ahead."""
+    fake = _fake_accuweather([])
+
+    def get(path, **params):
+        if "hourly" in path:
+            raise weather.WeatherError("AccuWeather answered 403")
+        return fake(path, **params)
+    monkeypatch.setattr(weather, "_get", get)
+    client.post("/api/weather/settings", json={"key": "abc", "locationKey": "349727", "locationName": "New York"})
+    w = client.get("/api/weather").json()
+    assert w["current"]["text"] == "Sunny" and w["hourly"] == [] and not w["stale"]
