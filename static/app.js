@@ -756,11 +756,14 @@ function drawHealthWidget(d) {
   const week = d.week && d.week.filter((x) => x.steps != null).length > 1 ? d.week : null;
   const when = (iso) => { const t = new Date(iso); return isNaN(t) ? '' : t.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); };
   const total = week ? week.reduce((a, x) => a + (x.steps || 0), 0) : 0;
-  // the rings with their three lines beside them; under that, a row of their own for the steps with the week's bars
-  return [wgHead('Today'), r ? h('div', { class: 'wghealth' }, rings(r), h('div', null, line('move', 'Move', 'kcal'), line('exercise', 'Exercise', 'min'), line('stand', 'Stand', 'h'))) : null,
-    d.steps != null ? h('div', { class: `wgsteps${r ? ' under' : ''}` }, h('b', null, n(d.steps)), ' steps', week ? h('span', { class: 'wgtrend', title: `${n(total)} steps in the last 7 days` }, sparkline(week)) : null) : null,
-    d.sleep ? h('div', { class: 'wgsleep', title: d.sleep.start && d.sleep.end ? `Asleep ${when(d.sleep.start)} – ${when(d.sleep.end)}${d.sleep.inBed ? `, ${hm(d.sleep.inBed)} in bed` : ''}` : '' },
-      h('span', { class: 'dot', style: { background: 'var(--sleep)' } }), 'Sleep', h('span', { class: 'muted' }, `${hm(d.sleep.asleep)} asleep`)) : null];
+  // the head: "Today", and on its right the steps with the week's bars; under it the rings with their three lines
+  // beside them, and the night's sleep as a fourth line (kept short so the row of tiles stays low)
+  const steps = d.steps != null ? h('span', { class: 'wgsteps' }, h('span', null, h('b', null, n(d.steps)), ' steps'),
+    week ? h('span', { class: 'wgtrend', title: `${n(total)} steps in the last 7 days` }, sparkline(week)) : null) : null;
+  const sleep = d.sleep ? h('div', { class: 'wgsleep', title: d.sleep.start && d.sleep.end ? `Asleep ${when(d.sleep.start)} – ${when(d.sleep.end)}${d.sleep.inBed ? `, ${hm(d.sleep.inBed)} in bed` : ''}` : '' },
+    h('span', { class: 'dot', style: { background: 'var(--sleep)' } }), 'Sleep', h('span', { class: 'muted' }, hm(d.sleep.asleep), h('span', { class: 'wgunit' }, ' asleep'))) : null;
+  return [h('div', { class: 'wghead' }, h('span', null, 'Today'), steps),
+    r ? h('div', { class: 'wghealth' }, rings(r), h('div', null, line('move', 'Move', 'kcal'), line('exercise', 'Exercise', 'min'), line('stand', 'Stand', 'h'), sleep)) : sleep];
 }
 
 /** The weather widget: the conditions now (with "Rain from 15:00" when the next hours bring some), and the days
