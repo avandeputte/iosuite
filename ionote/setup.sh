@@ -14,6 +14,8 @@
 #                                          database and user: iosuite); kept as it is in config.env when not given
 #   --admin NAME:PASS (or IONOTES_ADMIN) | --no-admin   --port 8610   --public-url URL   --cookie-domain DOMAIN
 #   --service | --no-service   --python PATH   --system-deps | --no-system-deps   --yes
+#   --db-admin USER:PASSWORD      a MariaDB / MySQL administrator (root...): the databases and users above are created
+#                                 for you, with the passwords you answered (IONOTES_DB_ADMIN does the same; empty: they exist)
 #   --also APP,APP | all | none   also install other apps of the suite here (iosuite, iocalendar, iocontacts, iohealth, iopix), beside this one,
 #                                 with the same database server (each app its own database), Shared ioSuite database,
 #                                 sign-in domain and admin: those questions are asked once (IONOTES_ALSO does the same)
@@ -24,19 +26,20 @@ APP="$(pwd)"
 OS="$(uname -s)"
 say() { printf '\n\033[1;34m==>\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
-YES=0; MYSQL=""; SUITE=""; SQLITE=0; FEATURES=""; PORT=""; PUBURL=""; COOKIE=""; ADMIN=""; NO_ADMIN=0; SERVICE=""; DATA=""; PY=""; SYSDEPS=""; ALSO=""
+YES=0; MYSQL=""; SUITE=""; SQLITE=0; FEATURES=""; PORT=""; PUBURL=""; COOKIE=""; ADMIN=""; NO_ADMIN=0; SERVICE=""; DATA=""; PY=""; SYSDEPS=""; ALSO=""; DBADMIN=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --yes) YES=1; shift;; --db) MYSQL="$2"; shift 2;; --suite-db) SUITE="$2"; shift 2;; --sqlite) SQLITE=1; shift;;
     --features) FEATURES="$2"; shift 2;; --port) PORT="$2"; shift 2;; --public-url) PUBURL="$2"; shift 2;; --cookie-domain) COOKIE="$2"; shift 2;;
     --admin) ADMIN="$2"; shift 2;; --no-admin) NO_ADMIN=1; shift;; --service) SERVICE=1; shift;; --no-service) SERVICE=0; shift;;
-    --data) DATA="$2"; shift 2;; --python) PY="$2"; shift 2;; --also) ALSO="$2"; shift 2;; --system-deps) SYSDEPS=1; shift;; --no-system-deps) SYSDEPS=0; shift;;
-    -h|--help) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0;;
+    --data) DATA="$2"; shift 2;; --python) PY="$2"; shift 2;; --also) ALSO="$2"; shift 2;; --db-admin) DBADMIN="$2"; shift 2;; --system-deps) SYSDEPS=1; shift;; --no-system-deps) SYSDEPS=0; shift;;
+    -h|--help) sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; exit 0;;
     *) die "unknown option $1 (try --help)";;
   esac
 done
 [ -n "$ADMIN" ] || ADMIN="${IONOTES_ADMIN:-}"
 [ -n "$ALSO" ] || ALSO="${IONOTES_ALSO:-}"
+[ -n "$DBADMIN" ] || DBADMIN="${IONOTES_DB_ADMIN:-}"
 [ -n "$MYSQL" ] || MYSQL="${IONOTES_DB:-}"
 [ -n "$SUITE" ] || SUITE="${IONOTES_SUITE_DB:-}"
 if [ "$YES" = 1 ]; then TTY=""; else TTY=/dev/stdin; fi
@@ -125,6 +128,10 @@ if [ -z "$ADMIN" ] && [ "$NO_ADMIN" = 0 ]; then
     [ -n "$AW" ] && ADMIN="$AN:$AW" || echo "no password given; skipping the admin account (the web app can create it later)"
   fi
 fi
+if [ -z "$DBADMIN" ] && [ "$YES" = 0 ]; then
+  ask DAU "MariaDB administrator who may create the databases and users above, e.g. root (empty: they exist already)" ""
+  if [ -n "$DAU" ]; then secret DAW "Password of $DAU"; DBADMIN="$DAU:$DAW"; fi
+fi
 if [ -z "$ALSO" ]; then
   say "The other apps of the suite can be installed here too, beside ionotes, with the same database server (each app gets its own database), the same Shared ioSuite database, sign-in domain and admin"
   ask ALSO "Also install (iosuite, iocalendar, iocontacts, iohealth, iopix; comma-separated, 'all', or 'none')" "none"
@@ -176,6 +183,10 @@ mkdir -p "$DATA"
 while IFS= read -r line; do k="${line%%=*}"; case "$line" in ''|'#'*) ;; *=*) case "$k" in ''|*[!A-Za-z0-9_]*) ;; *) export "$line";; esac;; esac; done < "$ENVF"
 echo "wrote $ENVF"
 
+if [ -n "$DBADMIN" ]; then
+  say "Creating the databases and users as ${DBADMIN%%:*}"
+  DB_ADMIN_PASSWORD="${DBADMIN#*:}" "$VENV/bin"/iosuite-shared --config "$APP" provision --admin "${DBADMIN%%:*}" || die "could not create the databases and users (see above): check the administrator's name and password"
+fi
 if [ "${DB_TYPE:-}" = mysql ]; then
   echo "testing the database, creating it if needed"
   "$VPY" - <<'PYEOF' || die "could not use that MariaDB/MySQL database (see above); run setup.sh again"
@@ -282,9 +293,10 @@ say "Done: http://localhost:$PORT   settings: $ENVF"
 case "$ALSO" in ''|none|no) ;;
   *) say "Installing the other apps: $ALSO"
      if [ "$SERVICE" = 1 ]; then SVC="--service"; else SVC="--no-service"; fi
+     DBA=""; [ -z "$DBADMIN" ] || { DBA="--db-admin ${DBADMIN%%:*}"; DB_ADMIN_PASSWORD="${DBADMIN#*:}"; export DB_ADMIN_PASSWORD; }
      if [ -n "$ADMIN" ]; then
-       ADMIN_PASSWORD="${ADMIN#*:}" "$VENV/bin"/iosuite-shared --config "$APP" install "$ALSO" --admin "${ADMIN%%:*}" --from ionotes $SVC
+       ADMIN_PASSWORD="${ADMIN#*:}" "$VENV/bin"/iosuite-shared --config "$APP" install "$ALSO" --admin "${ADMIN%%:*}" --from ionotes $SVC $DBA
      else
-       "$VENV/bin"/iosuite-shared --config "$APP" install "$ALSO" --from ionotes $SVC
+       "$VENV/bin"/iosuite-shared --config "$APP" install "$ALSO" --from ionotes $SVC $DBA
      fi || die "not every app could be installed; see the lines above (each one can be set up again with its own setup.sh)";;
 esac

@@ -39,6 +39,12 @@ without asking the shared questions again: the same database server (each app ge
 database, sign-in domain and admin (`iosuite-shared install`, from the shared library). Each app keeps its usual port
 and updates itself as always. The Proxmox installer offers the same as a checklist, for one container with several apps.
 
+The databases and users need not exist beforehand: give a MariaDB / MySQL administrator (the question after the
+databases; flag `--db-admin USER:PASSWORD`, or `IONOTES_DB_ADMIN`, also in the Proxmox installer) and `setup.sh` creates
+the app's database and user, the Shared ioSuite database and user and, with other apps installed alongside, their
+databases too, with the passwords you answered (`iosuite-shared provision`). Nothing is dropped, and the administrator's
+password is used once and not written anywhere.
+
 `setup.sh` is the installer: it asks where the MariaDB/MySQL database is (host, port, database, user, password;
 it tests the connection and creates the database when the user may), where the **Shared ioSuite database** is
 (below; database and user `iosuite` by default, tested and created the same way), the port (8610), whether pictures added in the
