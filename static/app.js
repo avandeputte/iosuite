@@ -646,13 +646,43 @@ async function drawStrip(el, kind) {
   const otd = d.kind === 'onthisday';
   const cap = (it) => (otd ? (it.yearsAgo === 1 ? '1 year ago' : `${it.yearsAgo} years ago`) : (it.year || ''));
   // Shuffle, as ioPix has: a fresh row, picked again at random (On this day is the day's photos: nothing to shuffle)
-  const shuffle = otd ? null : h('button', { class: 'lnk shuffle', title: 'Another row of photos', onclick: (e) => { e.preventDefault(); el.classList.add('busy'); drawStrip(el, kind); } }, icon('update', 's'), 'Shuffle');
+  const reshuffle = () => { el.classList.add('busy'); drawStrip(el, kind); };
+  const shuffle = otd ? null : h('button', { class: 'lnk shuffle', title: 'Another row of photos', onclick: (e) => { e.preventDefault(); reshuffle(); } }, icon('update', 's'), 'Shuffle');
   el.classList.remove('busy');
+  const row = h('div', { class: 'row' }, d.items.map((it) => h('a', { class: 'wgph', href: pixPhotoUrl(pix, it.id), title: String(cap(it)) },
+    h('img', { src: `/api/widgets/iopix/thumb/${it.id}`, alt: '', loading: 'lazy', onerror: (e) => e.target.parentNode.remove() }),
+    cap(it) ? h('span', null, cap(it)) : null)));
   el.replaceChildren(h('div', { class: 'wghead' }, h('span', null, otd ? 'On this day' : 'Rediscover'), shuffle,
-    h('a', { class: 'muted', href: pix.url, title: pix.url }, otd && d.count > d.items.length ? `${d.count} photos · ioPix` : 'ioPix')),
-    h('div', { class: 'row' }, d.items.map((it) => h('a', { class: 'wgph', href: pixPhotoUrl(pix, it.id), title: String(cap(it)) },
-      h('img', { src: `/api/widgets/iopix/thumb/${it.id}`, alt: '', loading: 'lazy', onerror: (e) => e.target.parentNode.remove() }),
-      cap(it) ? h('span', null, cap(it)) : null))));
+    h('a', { class: 'muted', href: pix.url, title: pix.url }, otd && d.count > d.items.length ? `${d.count} photos · ioPix` : 'ioPix')), row);
+  autoStrip(el, row, otd ? null : reshuffle);
+}
+
+/* The strip moves on by itself: one photo along every few seconds (back to the start at the end of the row), and
+   Rediscover deals a fresh row every couple of minutes. It holds still while the pointer is over it, while it is
+   touched, dragged, wheeled or has the keyboard focus (and a little while after), while the tab is hidden, and it
+   does not glide at all for people who asked their system for reduced motion (the row is still dealt afresh). */
+const STRIP_STEP = 4000, STRIP_SHUFFLE = 2 * 60 * 1000, STRIP_REST = 8000;
+function autoStrip(el, row, reshuffle) {
+  if (el.stopAuto) el.stopAuto();
+  const still = () => window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let hover = false, touchedAt = 0, dealtAt = Date.now();
+  const busy = () => hover || el.contains(document.activeElement) || Date.now() - touchedAt < STRIP_REST;
+  const touched = () => { touchedAt = Date.now(); };
+  row.addEventListener('mouseenter', () => { hover = true; });
+  row.addEventListener('mouseleave', () => { hover = false; touched(); });
+  for (const ev of ['pointerdown', 'touchstart', 'touchmove', 'wheel', 'keydown']) row.addEventListener(ev, touched, { passive: true });
+  const step = () => {
+    if (!el.isConnected) { el.stopAuto(); return; }
+    if (document.hidden || busy() || document.querySelector('.dialog-back')) return;
+    if (reshuffle && Date.now() - dealtAt >= STRIP_SHUFFLE) { el.stopAuto(); reshuffle(); return; }
+    if (still() || row.scrollWidth <= row.clientWidth + 1) return;
+    const first = row.firstElementChild;
+    const by = first ? first.getBoundingClientRect().width + (parseFloat(getComputedStyle(row).columnGap) || 0) : row.clientWidth / 2;
+    const atEnd = row.scrollLeft + row.clientWidth >= row.scrollWidth - 2;
+    row.scrollTo({ left: atEnd ? 0 : row.scrollLeft + by, behavior: 'smooth' });
+  };
+  const t = setInterval(step, STRIP_STEP);
+  el.stopAuto = () => { clearInterval(t); el.stopAuto = null; };
 }
 
 // ------------------------------------------------------------------ what the tiles show (/api/widgets/<app>)
