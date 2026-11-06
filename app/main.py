@@ -1,70 +1,53 @@
-"""ioSuite: the application (start-up, who is asking, the routes and the web app)."""
+"""ioSuite: the application (start-up, who is asking, the routes and the web app).
+
+Who may call a route is declared on the route (app/access.py); iosuite-shared's middleware works out who is asking
+(the shared session cookie, the identity a reverse proxy such as Cloudflare Access vouches for, HTTP Basic or a bearer
+app password), whether sign-in is required at all, and refuses cross-site writes. The same scheme as every app of the
+suite.
+"""
 import logging
-import logging.handlers
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
+from iosuite_shared.updates import setup_log
 
 from app import __version__, api, config, db, users
-from app.auth import auth as auth_shared, updater
-from iosuite_shared import sessions
+from app.auth import auth, updater
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+setup_log(config.LOG_FILE)  # the server log that Maintenance › Updates and logs shows; the app runs without it
 log = logging.getLogger("iosuite")
-if config.LOG_FILE:  # the server log that Maintenance › Updates and logs shows; the app runs without it
-    try:
-        _fh = logging.handlers.RotatingFileHandler(config.LOG_FILE, maxBytes=2_000_000, backupCount=3, encoding="utf-8")
-        _fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
-        logging.getLogger().addHandler(_fh)
-    except OSError as e:
-        log.warning("no server log at %s: %s", config.LOG_FILE, e)
+
+# what a visitor may still fetch when sign-in is required: the app shell and its files, and the API docs
+OPEN_PATHS = ("/", "/manifest.webmanifest", "/api/docs", "/api/openapi.json")
+OPEN_PREFIXES = ("/static/",)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await run_in_threadpool(db.migrate)
-    await run_in_threadpool(users.ensure_admin_from_env)
+    await run_in_threadpool(users.init)
     updater.start_daily()   # the daily "is there a newer version" check, while the setting allows it
+    log.info("ioSuite %s started, database %s:%s/%s", __version__, config.DB_HOST, config.DB_PORT, config.DB_NAME)
     yield
 
 
 app = FastAPI(title="ioSuite", version=__version__, lifespan=lifespan, docs_url="/api/docs", redoc_url=None,
               openapi_url="/api/openapi.json",
-              description="The start page of the iothing suite: one place with every io app, and the accounts they share.")
+              description="The start page of the ioThing suite: one place with every io app, and the accounts they share.")
+
+# who is asking, whether sign-in is required at all, and the cross-site check on writes: iosuite-shared's middleware
+app.middleware("http")(auth.middleware(open_paths=OPEN_PATHS, open_prefixes=OPEN_PREFIXES))
 
 
-OPEN = ("/api/status", "/api/docs", "/api/openapi.json")
+def _limit_for(path: str, ctype: str) -> int:
+    return config.MAX_IMPORT_BYTES if "/import" in path else config.MAX_JSON_BYTES
 
 
-@app.middleware("http")
-async def who(request: Request, call_next):
-    """Who is asking (iosuite-shared: the shared session cookie, the proxy's sign-in, HTTP Basic or a bearer app
-    password). Everything but the web app's files and sign-in needs one."""
-    path = request.url.path
-    refused = await auth_shared.resolve(request)
-    if refused is not None:
-        return refused
-    user = request.state.user
-    tok = request.cookies.get(sessions.COOKIE)
-    if path.startswith("/api/") and not user and path not in OPEN and not path.startswith("/api/auth/"):
-        return JSONResponse({"detail": "Sign in first"}, status_code=401,
-                            headers={"WWW-Authenticate": 'Basic realm="ioSuite"'} if "authorization" in request.headers else {})
-    # a page on another site cannot drive this one with the browser's cookie
-    if request.method in ("POST", "PUT", "PATCH", "DELETE") and tok and path.startswith("/api/") and auth_shared.cross_site(request):
-        return JSONResponse({"detail": "Cross-site request refused"}, status_code=403)
-    resp = await call_next(request)
-    auth_shared.finish(request, resp)  # a proxy sign-in gets a session cookie here too
-    if path.startswith("/api/"):
-        resp.headers.setdefault("Cache-Control", "no-store")
-    return resp
-
-
-app.include_router(auth_shared.router())        # /api/auth/*: sign-in, accounts, me, settings, password, sessions, app passwords
-app.include_router(auth_shared.users_router())  # /api/users: accounts and their role here (admins)
-app.include_router(api.router)
+# 400 for bad input, the headers, no-store on the API, the body cap: the same in every app of the suite
+auth.install(app, limit_for=_limit_for)
 
 
 def _server_info() -> dict:
@@ -72,7 +55,11 @@ def _server_info() -> dict:
     return {"url": config.PUBLIC_URL or None, "database": f"{config.DB_HOST}:{config.DB_PORT}/{config.DB_NAME}"}
 
 
-app.include_router(auth_shared.server_router(updater, log_file=config.LOG_FILE, info=_server_info))  # /api/server, /api/log (admins)
+app.include_router(auth.router())        # /api/auth/*: sign-in, accounts, me, settings, password, sessions, app passwords, suite
+app.include_router(auth.users_router())  # /api/users: accounts and their role here (admins)
+app.include_router(auth.status_router(updater))  # /api/status: public, the same shape in every app
+app.include_router(auth.server_router(updater, log_file=config.LOG_FILE, info=_server_info))  # /api/server, /api/log (admins)
+app.include_router(api.router)
 
 
 @app.get("/", include_in_schema=False)
@@ -80,7 +67,7 @@ def index():
     """The page, with the version stamped on the script and stylesheet: after an update the browser (and Cloudflare,
     which caches .js and .css at the edge) fetches the new ones instead of serving what it kept."""
     html = (config.STATIC_DIR / "index.html").read_text(encoding="utf-8")
-    for f in ("static/app.js", "static/app.css"):
+    for f in ("static/app.js", "static/app.css", "static/js/theme.js"):
         html = html.replace(f'"{f}"', f'"{f}?v={__version__}"')
     return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
 

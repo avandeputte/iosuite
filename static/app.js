@@ -1229,7 +1229,7 @@ async function setAccount(el) {
     h('p', { class: 'muted' }, 'The same account as in every io app: a change here shows up everywhere.'),
     h('div', { class: 'grid' }, fld('Display name', dn), fld('Email (for sign-in at a proxy)', em)),
     h('p', null, h('button', { class: 'pillbtn primary', onclick: async () => { try { S.user = (await api('/api/auth/me', { method: 'PATCH', json: { displayName: dn.value, email: em.value } })).user; drawUser(); toast('Saved'); } catch (e) { fail(e); } } }, icon('check', 's'), 'Save'))),
-  u.hasPassword ? h('div', { class: 'box' }, h('h2', null, icon('key'), 'Password'), h('div', { class: 'grid' }, fld('Current password', old), fld('New password (8 or more)', nw)),
+  !u.passwordless ? h('div', { class: 'box' }, h('h2', null, icon('key'), 'Password'), h('div', { class: 'grid' }, fld('Current password', old), fld('New password (8 or more)', nw)),
     h('p', null, h('button', { class: 'pillbtn', onclick: async () => { try { await api('/api/auth/password', { method: 'POST', json: { current: old.value, password: nw.value } }); old.value = nw.value = ''; toast('Password changed'); } catch (e) { fail(e); } } }, 'Change password'), ' ',
       h('button', { class: 'pillbtn noic', onclick: async () => { if (await signOutElsewhere()) toast('Signed out elsewhere'); } }, 'Sign out everywhere else'))) : null);
 }
@@ -1590,7 +1590,7 @@ async function runUpdate() {
 /** Admins: a note when the daily check found a newer version, with Update now. Hidden until the next version when dismissed. */
 function updateBanner() {
   $('#updbanner')?.remove();
-  const u = S.status && S.status.updateAvailable;
+  const u = S.status && S.status.update;
   let dismissed = null; try { dismissed = localStorage.getItem('iosuite.updateDismissed'); } catch { /* private mode */ }
   if (!u || dismissed === u.remote) return;
   const b = h('div', { id: 'updbanner', role: 'status' }, icon('update'),

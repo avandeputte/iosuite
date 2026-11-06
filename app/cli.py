@@ -20,7 +20,7 @@ def main(argv: list[str]) -> int:
     if cmd == "migrate":
         print("ok: tables ready")
     elif cmd == "check":
-        users.ensure_admin_from_env()
+        users.init()
         u = len(users.all_users())
         print(f"ok: {u} account(s), {len(apps.tiles())} app(s) on the page")
     else:
