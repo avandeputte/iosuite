@@ -173,7 +173,8 @@ def test_free_busy(client, family_id):
 
 def test_status_and_app_passwords(client):
     s = client.get("/api/status").json()
-    assert s["app"] == "ioCalendar" and s["user"]["name"] == "alex" and s["user"]["role"] == "admin"
+    assert s["app"] == "iocalendar" and s["name"] == "ioCalendar" and s["user"]["name"] == "alex" and s["user"]["role"] == "admin"
+    assert s["ok"] and s["version"] and s["commit"] and s["mcp"] is False and "update" in s
     pw = client.post("/api/auth/app-passwords", json={"label": "phone"}).json()["password"]
     client.cookies.clear()
     assert client.get("/api/calendars", headers={"Authorization": f"Bearer {pw}"}).status_code == 200

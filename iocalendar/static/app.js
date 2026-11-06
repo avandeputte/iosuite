@@ -244,12 +244,12 @@ function drawUser() {
   const outside = (e) => { if (menu && !menu.contains(e.target) && e.target !== btn) closeMenu(); };
   btn.onclick = () => {
     if (menu) return closeMenu();
-    const theme = localStorage.getItem('iocal.theme') || 'system';
+    const theme = localStorage.getItem('iocalendar.theme') || 'system';
     menu = h('div', { class: 'menu' },
       h('div', { class: 'who' }, h('b', null, S.user.displayName), h('div', { class: 'muted small' }, `${S.user.name} · ${S.user.role}`)),
       h('a', { class: 'mi', href: '#/settings/account', onclick: closeMenu }, icon('person', 's'), 'Account'),
       h('a', { class: 'mi', href: '#/settings/devices', onclick: closeMenu }, icon('devices', 's'), 'Connect apps and devices'),
-      h('button', { class: 'mi', onclick: () => { const n = { system: 'light', light: 'dark', dark: 'system' }[theme]; localStorage.setItem('iocal.theme', n); applyTheme(); closeMenu(); toast(`Appearance: ${n}`); } },
+      h('button', { class: 'mi', onclick: () => { const n = { system: 'light', light: 'dark', dark: 'system' }[theme]; localStorage.setItem('iocalendar.theme', n); applyTheme(); closeMenu(); toast(`Appearance: ${n}`); } },
         icon('theme', 's'), `Appearance: ${theme}`),
       h('a', { class: 'mi', href: '#/settings', onclick: closeMenu }, icon('settings', 's'), 'Settings'),
       S.user.role === 'admin' ? h('a', { class: 'mi', href: '#/maintenance', onclick: closeMenu }, icon('wrench', 's'), 'Maintenance') : null,
@@ -300,7 +300,7 @@ function toggleSuite(btn) {
   setTimeout(() => { document.addEventListener('click', suiteOutside, true); document.addEventListener('keydown', suiteKey); addEventListener('resize', closeSuite); }, 0);
 }
 function applyTheme() {
-  const t = localStorage.getItem('iocal.theme') || 'system';
+  const t = localStorage.getItem('iocalendar.theme') || 'system';
   if (t === 'system') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t;
 }
 
@@ -371,7 +371,7 @@ function drawNav() {
   applySidebar();
   $('.navmore')?.classList.toggle('on', ['import', 'settings', 'maintenance', 'search'].includes(r.view));
 }
-function sideDockedPref() { try { return localStorage.getItem('iocal.sidebar') !== '0'; } catch { return true; } }
+function sideDockedPref() { try { return localStorage.getItem('iocalendar.sidebar') !== '0'; } catch { return true; } }
 function applySidebar() {
   const body = document.body, btn = $('#sidebtn');
   const docked = innerWidth >= DOCK_MIN && sideDockedPref();
@@ -382,8 +382,8 @@ function applySidebar() {
   btn.replaceChildren(icon(ic)); btn.title = title; btn.setAttribute('aria-label', title);
 }
 function sidebarButton() {
-  if (document.body.classList.contains('side-docked')) { try { localStorage.setItem('iocal.sidebar', '0'); } catch { /* */ } }
-  else if (innerWidth >= DOCK_MIN) { try { localStorage.setItem('iocal.sidebar', '1'); } catch { /* */ } }
+  if (document.body.classList.contains('side-docked')) { try { localStorage.setItem('iocalendar.sidebar', '0'); } catch { /* */ } }
+  else if (innerWidth >= DOCK_MIN) { try { localStorage.setItem('iocalendar.sidebar', '1'); } catch { /* */ } }
   else { closeNav(); return; }
   applySidebar();
 }
@@ -453,7 +453,7 @@ async function onRoute() {
     if (['month', 'week', 'day', 'agenda'].includes(r.view)) {
       S.view = r.view;
       if (r.date) S.date = r.date;
-      if (r.view !== 'agenda') { try { localStorage.setItem('iocal.view', r.view); } catch { /* */ } }
+      if (r.view !== 'agenda') { try { localStorage.setItem('iocalendar.view', r.view); } catch { /* */ } }
       S.mini = null;
       await drawView();
     } else {
@@ -1135,7 +1135,7 @@ async function setAccount(el) {
   const old = h('input', { class: 't', type: 'password', autocomplete: 'current-password' }), nw = h('input', { class: 't', type: 'password', autocomplete: 'new-password' });
   el.append(h('div', { class: 'box' }, h('h2', null, icon('person'), 'You'), h('div', { class: 'grid' }, fld('Display name', dn), fld('Email (for sign-in at a proxy)', em)),
     h('p', null, h('button', { class: 'pillbtn primary', onclick: async () => { try { S.user = (await api('/api/auth/me', { method: 'PATCH', json: { displayName: dn.value, email: em.value } })).user; drawUser(); toast('Saved'); } catch (e) { fail(e); } } }, icon('check', 's'), 'Save'))),
-  u.hasPassword ? h('div', { class: 'box' }, h('h2', null, icon('key'), 'Password'), h('div', { class: 'grid' }, fld('Current password', old), fld('New password (8 or more)', nw)),
+  !u.passwordless ? h('div', { class: 'box' }, h('h2', null, icon('key'), 'Password'), h('div', { class: 'grid' }, fld('Current password', old), fld('New password (8 or more)', nw)),
     h('p', null, h('button', { class: 'pillbtn', onclick: async () => { try { await api('/api/auth/password', { method: 'POST', json: { current: old.value, password: nw.value } }); old.value = nw.value = ''; toast('Password changed'); } catch (e) { fail(e); } } }, 'Change password'))) : null,
   h('div', { class: 'box' }, h('h2', null, icon('devices'), 'Sessions'),
     h('p', { class: 'muted' }, 'You are signed in to every ioThing app at once. Signing out elsewhere ends your session on every other browser and device; apps with an app password keep working.'),
@@ -1143,9 +1143,9 @@ async function setAccount(el) {
 }
 
 async function setDisplay(el) {
-  const theme = localStorage.getItem('iocal.theme') || 'system';
+  const theme = localStorage.getItem('iocalendar.theme') || 'system';
   const th = h('select', { class: 't' }, [['system', 'Same as the device'], ['light', 'Light'], ['dark', 'Dark']].map(([v, l]) => h('option', { value: v, selected: v === theme ? true : null }, l)));
-  th.onchange = () => { localStorage.setItem('iocal.theme', th.value); applyTheme(); toast(`Appearance: ${th.value}`); };
+  th.onchange = () => { localStorage.setItem('iocalendar.theme', th.value); applyTheme(); toast(`Appearance: ${th.value}`); };
   const ws = h('select', { class: 't' }, [[1, 'Monday'], [0, 'Sunday'], [6, 'Saturday']].map(([v, l]) => h('option', { value: v, selected: v === weekStart() ? true : null }, l)));
   const dv = h('select', { class: 't' }, [['month', 'Month'], ['week', 'Week'], ['day', 'Day'], ['agenda', 'Agenda']].map(([v, l]) => h('option', { value: v, selected: v === (S.settings.defaultView || 'month') ? true : null }, l)));
   const cur = S.settings.defaultReminder ?? '';
@@ -1158,7 +1158,7 @@ async function setDisplay(el) {
 
 async function setDevices(el) {
   const info = await api('/api/connect');
-  const canPw = S.user.hasPassword;
+  const canPw = !S.user.passwordless;
   const label = h('input', { class: 't', placeholder: 'e.g. Alex’s iPhone', style: 'max-width:280px' });
   const shown = h('div'), pwlist = h('div');
   const isApple = /iPhone|iPad|Macintosh/.test(navigator.userAgent);
@@ -1490,14 +1490,14 @@ async function runUpdate() {
 /** Admins: a note when the daily check found a newer version, with Update now. Hidden until the next version when dismissed. */
 function updateBanner() {
   $('#updbanner')?.remove();
-  const u = S.status && S.status.updateAvailable;
-  let dismissed = null; try { dismissed = localStorage.getItem('iocal.updateDismissed'); } catch { /* private mode */ }
+  const u = S.status && S.status.update;
+  let dismissed = null; try { dismissed = localStorage.getItem('iocalendar.updateDismissed'); } catch { /* private mode */ }
   if (!u || dismissed === u.remote) return;
   const b = h('div', { id: 'updbanner', role: 'status' }, icon('update'),
     h('span', null, `ioCalendar ${u.version ? `v${u.version}` : 'update'} is available${u.message ? `: ${u.message.replace(/^v\d+\.\d+\.\d+:\s*/, '')}` : ''}`),
     h('button', { class: 'pillbtn primary noic', onclick: async () => { if (await confirmDialog('Update ioCalendar', 'Install the new version and restart? The page reloads when it is back.', 'Update now')) { b.remove(); runUpdate(); } } }, 'Update now'),
     h('a', { class: 'pillbtn noic', href: '#/maintenance/updates', onclick: () => b.remove() }, 'Details'),
-    h('button', { class: 'iconbtn', title: 'Not now (hidden until the next version)', onclick: () => { try { localStorage.setItem('iocal.updateDismissed', u.remote); } catch { /* */ } b.remove(); } }, icon('close', 's')));
+    h('button', { class: 'iconbtn', title: 'Not now (hidden until the next version)', onclick: () => { try { localStorage.setItem('iocalendar.updateDismissed', u.remote); } catch { /* */ } b.remove(); } }, icon('close', 's')));
   document.body.append(b);
 }
 

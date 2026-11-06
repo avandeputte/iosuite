@@ -1,22 +1,20 @@
-"""The MCP server instance and what every tool module shares: who is asking, and finding calendars and events."""
-import contextvars
+"""The MCP server instance (iosuite_shared.mcp: who is asking, the annotations, the limits) and what every tool module
+shares: finding calendars and events."""
 import datetime as dt
 
-from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
-from mcp.types import ToolAnnotations
 
-from app import __version__, config, ical, members, model, users
+from iosuite_shared import mcp as shared_mcp
+from iosuite_shared.mcp import ADDS, DELETES, READ_ONLY, UPDATES, WRITES, clamp, current_user, need_admin, who
 
-READ_ONLY = ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False)
-WRITES = ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=False)
-ADDS = ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False)
-DELETES = ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=True, openWorldHint=False)
+from app import __version__, config, ical, members, model
 
-server = MCPServer(
-    "iocalendar",
-    title="ioCalendar",
-    version=__version__,
+# what the tool modules take from here: the suite's pieces (iosuite_shared.mcp) and ioCalendar's own helpers
+__all__ = ["server", "ADDS", "DELETES", "READ_ONLY", "UPDATES", "WRITES", "clamp", "current_user", "need_admin", "who", "event_link", "when",
+           "calendars", "find_calendar", "default_calendar", "calendar_names", "find_event", "event_out", "member_names", "member_ids", "occurrence_out"]
+
+server = shared_mcp.make_server(
+    config.APP, "ioCalendar", __version__,
     instructions=(
         "The family's calendars (ioCalendar). Start with overview: it says who you are, the calendars you can see and "
         "change, the time zone, and what is on today and in the coming week. agenda lists what happens between two dates "
@@ -32,33 +30,8 @@ server = MCPServer(
     ),
 )
 
-current_user: contextvars.ContextVar = contextvars.ContextVar("iocalendar_mcp_user", default=None)  # set per request
-
-
-def who() -> dict:
-    u = current_user.get()
-    if not u:
-        raise ToolError("Not signed in: connect with an ioCalendar app password (Settings › Apps and devices)")
-    return u
-
-
-def need_admin() -> dict:
-    u = who()
-    if not users.is_admin(u):
-        raise ToolError("Only an admin can do this")
-    return u
-
-
 def event_link(eid: int) -> str | None:
     return f"{config.PUBLIC_URL}/#/event/{eid}" if config.PUBLIC_URL else None
-
-
-def clamp(n, lo: int, hi: int) -> int:
-    try:
-        n = int(n)
-    except (TypeError, ValueError):
-        n = lo
-    return max(lo, min(n, hi))
 
 
 def when(s: str | None, default: dt.datetime | None = None, tz: str | None = None) -> dt.datetime:

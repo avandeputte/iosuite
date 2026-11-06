@@ -9,6 +9,7 @@ private token per account instead, since calendar apps cannot sign in to a subsc
 import secrets
 
 from iosuite_shared import apppasswords, users as shared
+from iosuite_shared.fastapi import public_user
 
 from app import db
 from app.auth import APP
@@ -17,10 +18,8 @@ ROLES = shared.APP_ROLES
 
 
 def public(u: dict | None) -> dict | None:
-    if not u:
-        return None
-    return {"id": u["id"], "name": u["name"], "displayName": u.get("displayName") or u["name"], "email": u.get("email") or None,
-            "role": u.get("role", "viewer"), "hasPassword": not u.get("passwordless"), "suiteAdmin": bool(u.get("suiteAdmin"))}
+    """The account as the web app sees it: the same fields /api/status carries in every app of the suite."""
+    return public_user(u)
 
 
 def get(uid: int) -> dict | None:
@@ -58,7 +57,8 @@ def update(uid: int, **f) -> dict:
     return get(uid)
 
 
-def ensure_admin_from_env() -> None:
+def init() -> None:
+    """The Shared ioSuite database's tables, and the ADMIN_USER / ADMIN_PASSWORD account on a first start with no accounts."""
     shared.init()
 
 

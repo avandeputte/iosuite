@@ -1,6 +1,6 @@
 # ioCalendar
 
-*The family calendar, in the iothing suite (with [iopix](https://github.com/avandeputte/iopix), ionotes and [iocontacts](https://github.com/avandeputte/iocontacts)).*
+*The family calendar, in the ioThing suite (with [ioPix](https://github.com/avandeputte/iopix), [ioNotes](https://github.com/avandeputte/ionotes), [ioContacts](https://github.com/avandeputte/iocontacts), [ioHealth](https://github.com/avandeputte/ioHealth) and the [ioSuite](https://github.com/avandeputte/iosuite) start page).*
 
 A self-hosted calendar: a web app for the whole family, and the standard protocols every calendar app already speaks, so the same events show up on phones, in Apple Calendar, Google Calendar, Outlook, Thunderbird and anywhere else. FastAPI and a single-page vanilla JS app, with everything stored in MariaDB / MySQL, and the suite's shared library (`iosuite-shared`, in [iosuite-shared](https://github.com/avandeputte/iosuite-shared)).
 
@@ -74,7 +74,7 @@ The tools: `overview`, `list_calendars`, `list_family_members`, `agenda`, `searc
 ioCalendar asks GitHub once a day whether the main branch has a newer version (only the public commit list is read;
 nothing about the server is sent; Maintenance › Updates and logs switches it off, `UPDATE_CHECK=0` locks it off). Admins
 then see a note with **Update now**, and **Maintenance › Updates and logs** has the version, **Check for updates**,
-**Update now**, the tail of the server log (`iocalendar.log` in the app folder; `LOG_FILE` moves it, empty switches it
+**Update now**, the tail of the server log (`data/iocalendar.log`; `LOG_FILE` moves it, empty switches it
 off) and **Restart**. The page is the same in every ioThing app: the version check, `update.sh`, the restart and the log
 come from `iosuite_shared.updates` in iosuite-shared, served at `/api/server` and `/api/log`. Updating runs the app's own
 `update.sh`: the new version's Python packages first, then the code (a failed step leaves the running version as it
@@ -166,7 +166,8 @@ accounts are the suite's: `.venv/bin/iosuite-shared --config . admin NAME --app 
 | `MCP_USER` | the account `python -m app.mcp` (stdio) acts as |
 | `UPDATE_CHECK` | `0` turns the daily version check off for good |
 | `IOCALENDAR_REPO`, `IOCALENDAR_BRANCH` | what the version check and `update.sh` follow (`avandeputte/iocalendar`, `main`) |
-| `LOG_FILE` | the server log shown at Maintenance › Updates and logs (`iocalendar.log` in the app folder; `LOG_FILE=` with nothing after it: no file) |
+| `DATA_DIR` | where the app writes on its own: the log and the update result (`data/` in the app folder) |
+| `LOG_FILE` | the server log shown at Maintenance › Updates and logs (`DATA_DIR/iocalendar.log`; `LOG_FILE=` with nothing after it: no file) |
 
 ### ioContacts
 
@@ -206,7 +207,8 @@ app/model.py       calendars and events in MariaDB, sync tokens and tombstones f
 app/contacts.py    the ioContacts client: people and the Birthdays calendar
 app/holiday.py     the Holidays calendar (country, region, language; filled daily)
 app/members.py     family members on events (kept as CATEGORIES), and the member filter
-app/mcp/           the MCP server: base (who is asking, finding events), read, write and admin tools
+app/mcp/           the MCP server: base (the server, finding events; who is asking comes from iosuite_shared.mcp), read, write and admin tools
+app/access.py      who may call a route (the markers come from iosuite-shared)
 app/users.py       accounts, app passwords and subscription tokens (the suite's, through iosuite-shared)
 static/            the web app (index.html, app.js, app.css, icons)
 proxmox/           the community-scripts LXC installer      setup.sh, run.sh, update.sh, Dockerfile

@@ -1,5 +1,6 @@
 """The REST API (JSON; iCalendar and jCal by content negotiation), the subscription links and the settings the web app
-uses. OpenAPI docs at /api/docs.
+uses. OpenAPI docs at /api/docs. Who may call a route is declared on it (app/access.py); what an account may change is
+a calendar's business (app/model.py), checked in the route.
 
 Clients authenticate with the web session cookie, HTTP Basic (name + password or app password) or
 `Authorization: Bearer <app password>`. Events are JSON by default; ask for text/calendar or application/calendar+json
@@ -14,8 +15,7 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
 
-from app import __version__, config, contacts, db, holiday, ical, members, model, users
-from app.auth import updater
+from app import access, config, contacts, holiday, ical, members, model, users
 
 router = APIRouter()
 
@@ -169,44 +169,9 @@ def _check_match(request: Request, r: dict) -> None:
         raise HTTPException(412, "The event was changed meanwhile (If-Match does not match its ETag); load it again")
 
 
-# ------------------------------------------------------------------ status and the account
+# ------------------------------------------------------------------ the account
 
-@router.get("/api/status")
-def status(request: Request):
-    u = request.state.user
-    adm = users.is_admin(u)
-    return {"app": "ioCalendar", "version": __version__, "commit": updater.local_commit()[:7] if u else None,
-            "usersExist": users.any_users(), "user": users.public(u), "timezone": ical.default_tz(),
-            "iocontacts": contacts.enabled() if u else None, "viaProxy": getattr(request.state, "via_proxy", False),
-            "mcp": mcp_enabled() if u else None,
-            "updateAvailable": updater.available() if adm and updater.auto_check_enabled() else None}
-
-
-def mcp_enabled() -> bool:
-    """Settings › Server › MCP server: off until an admin turns it on (or MCP=1 in the environment)."""
-    if config.MCP_FORCED:
-        return True
-    try:
-        return db.get_setting("mcp_enabled", "0") == "1"
-    except Exception:  # noqa: BLE001
-        return False
-
-
-@router.get("/api/auth/suite")
-def get_suite(request: Request):
-    """The suite's registered apps (iosuite-shared ios_apps), this one among them, for the app switcher: when there are
-    others, the app mark top left opens a menu of them. Signed in only."""
-    me(request)
-    from iosuite_shared import suite
-    from app.auth import APP
-    try:
-        items = suite.apps()
-    except Exception:  # noqa: BLE001 - the switcher is a convenience: no menu rather than an error
-        items = []
-    return {"items": items, "app": APP}
-
-
-@router.patch("/api/auth/me")
+@router.patch("/api/auth/me", dependencies=[access.signed_in])
 async def patch_me(request: Request):
     """Your display name and email (sign-in at a proxy matches the email)."""
     u = me(request)
@@ -226,13 +191,13 @@ async def patch_me(request: Request):
 
 # ------------------------------------------------------------------ calendars
 
-@router.get("/api/calendars")
+@router.get("/api/calendars", dependencies=[access.signed_in])
 def list_calendars(request: Request):
     u = me(request)
     return {"items": [model.calendar_public(c, u) for c in model.calendars_for(u)]}
 
 
-@router.post("/api/calendars")
+@router.post("/api/calendars", dependencies=[access.signed_in])
 async def add_calendar(request: Request):
     """{name, color?, description?, timezone?, shared?}: shared calendars are made by editors and admins."""
     u = me(request)
@@ -252,7 +217,7 @@ async def add_calendar(request: Request):
     return JSONResponse({"calendar": model.calendar_public(c, u)}, status_code=201)
 
 
-@router.patch("/api/calendars/{cid}")
+@router.patch("/api/calendars/{cid}", dependencies=[access.signed_in])
 async def edit_calendar(cid: int, request: Request):
     u = me(request)
     b = await request.json()
@@ -266,7 +231,7 @@ async def edit_calendar(cid: int, request: Request):
     return {"calendar": model.calendar_public(await run_in_threadpool(edit), u)}
 
 
-@router.delete("/api/calendars/{cid}")
+@router.delete("/api/calendars/{cid}", dependencies=[access.signed_in])
 def del_calendar(cid: int, request: Request):
     u = me(request)
     c = writable_calendar(u, cid)
@@ -280,7 +245,7 @@ def del_calendar(cid: int, request: Request):
     return {"ok": True}
 
 
-@router.get("/api/calendars/{cid}/export")
+@router.get("/api/calendars/{cid}/export", dependencies=[access.signed_in])
 def export_calendar(cid: int, request: Request):
     """The whole calendar as one .ics file."""
     c = readable_calendar(me(request), cid)
@@ -289,7 +254,7 @@ def export_calendar(cid: int, request: Request):
                     headers={"Content-Disposition": f'attachment; filename="{name}-{dt.date.today().isoformat()}.ics"'})
 
 
-@router.post("/api/calendars/{cid}/import")
+@router.post("/api/calendars/{cid}/import", dependencies=[access.signed_in])
 async def import_calendar(cid: int, request: Request, replace: bool = True):
     """An .ics file (multipart field `file`, or a text/calendar body) into this calendar. Events whose UID the calendar
     has already are updated (replace=false: skipped)."""
@@ -314,7 +279,7 @@ async def import_calendar(cid: int, request: Request, replace: bool = True):
 
 # ------------------------------------------------------------------ occurrences, events
 
-@router.get("/api/occurrences")
+@router.get("/api/occurrences", dependencies=[access.signed_in])
 def occurrences(request: Request, start: str, end: str, calendars: str | None = None, q: str = "", member: str | None = None):
     """Every occurrence between start and end (ISO dates or date-times; repeating events expanded, changed occurrences
     and left-out dates applied), from the calendars named (ids, comma-separated) or all you see. member: only those
@@ -328,7 +293,7 @@ def occurrences(request: Request, start: str, end: str, calendars: str | None = 
     return {"items": model.occurrences(visible(u, calendars), s, e, q, member_filter(member))}
 
 
-@router.get("/api/events")
+@router.get("/api/events", dependencies=[access.signed_in])
 def list_events(request: Request, q: str = "", calendar: str | None = None, limit: int = 100, format: str | None = None,
                 member: str | None = None):
     """Events (not their occurrences) matching q in their title, place, notes or people, newest first, with the next
@@ -352,7 +317,7 @@ def list_events(request: Request, q: str = "", calendar: str | None = None, limi
     return {"items": out}
 
 
-@router.post("/api/events")
+@router.post("/api/events", dependencies=[access.signed_in])
 async def create_event(request: Request, calendar: str | None = None):
     """A new event in ?calendar= (or the calendarId field; else your first calendar you may change), from JSON fields
     (title, start, end, allDay, timezone, location, notes, people, members, reminders, rrule...), iCalendar or jCal.
@@ -384,7 +349,7 @@ def _create_event(u: dict, data: dict | None, cal, calendar: str | None) -> dict
     return model.save(c["id"], cal, None, None, u["id"])
 
 
-@router.get("/api/events/{eid}")
+@router.get("/api/events/{eid}", dependencies=[access.signed_in])
 def get_event(eid: int, request: Request, format: str | None = None, recurrenceId: str | None = None):
     r, _ = readable_event(me(request), eid)
     return event_response(request, r, format, recurrence_id=recurrenceId)
@@ -532,7 +497,7 @@ def _change_sync(request: Request, u: dict, eid: int, data, newcal, partial: boo
         raise HTTPException(400, str(e))
 
 
-@router.put("/api/events/{eid}")
+@router.put("/api/events/{eid}", dependencies=[access.signed_in])
 async def replace_event(eid: int, request: Request, scope: str = "all", recurrenceId: str | None = None):
     """Replace an event: JSON fields (those left out are cleared), iCalendar or jCal. With recurrenceId, scope says
     what the change is for: all (the series), this (that occurrence only) or following (it and the ones after: the
@@ -540,13 +505,13 @@ async def replace_event(eid: int, request: Request, scope: str = "all", recurren
     return await _change(request, eid, False, scope, recurrenceId)
 
 
-@router.patch("/api/events/{eid}")
+@router.patch("/api/events/{eid}", dependencies=[access.signed_in])
 async def patch_event(eid: int, request: Request, scope: str = "all", recurrenceId: str | None = None):
     """Change some fields of an event (the others stay), with the same scope and recurrenceId as PUT. calendarId moves it."""
     return await _change(request, eid, True, scope, recurrenceId)
 
 
-@router.delete("/api/events/{eid}")
+@router.delete("/api/events/{eid}", dependencies=[access.signed_in])
 def delete_event(eid: int, request: Request, scope: str = "all", recurrenceId: str | None = None):
     """Delete an event, or with recurrenceId one occurrence (scope=this) or it and the ones after (scope=following)."""
     u = me(request)
@@ -561,7 +526,7 @@ def delete_event(eid: int, request: Request, scope: str = "all", recurrenceId: s
 
 # ------------------------------------------------------------------ family members, people, free/busy
 
-@router.get("/api/members")
+@router.get("/api/members", dependencies=[access.signed_in])
 def family_members(request: Request):
     """The family members an event can be tagged with (the accounts that use ioCalendar, less the ones taken out of the
     family): [{id, name, displayName}]. Filter with ?member= on /api/occurrences, /api/events and the subscription links.
@@ -573,7 +538,7 @@ def family_members(request: Request):
     return out
 
 
-@router.put("/api/members/{uid}")
+@router.put("/api/members/{uid}", dependencies=[access.admin])
 async def set_family_member(uid: int, request: Request):
     """Admins: {inFamily: bool}. An account out of the family (an admin or service account, not a person) is not
     offered as a tag and gets no private calendar here; its tags on events stay as plain categories."""
@@ -588,7 +553,7 @@ async def set_family_member(uid: int, request: Request):
     return await run_in_threadpool(set_)
 
 
-@router.get("/api/people")
+@router.get("/api/people", dependencies=[access.signed_in])
 async def people(request: Request, q: str = "", limit: int = 12):
     """Names for the people on an event: from ioContacts when it is connected, and the people on earlier events."""
     u = me(request)
@@ -624,7 +589,7 @@ def busy_periods(cals: list[dict], s: dt.datetime, e: dt.datetime) -> list[tuple
     return merged
 
 
-@router.get("/api/free-busy")
+@router.get("/api/free-busy", dependencies=[access.signed_in])
 def free_busy(request: Request, start: str, end: str, calendars: str | None = None):
     """When you are busy between start and end (timed events that are not marked free or cancelled), merged."""
     u = me(request)
@@ -649,7 +614,7 @@ def vfreebusy(cals: list[dict], who: dict, days_back: int = 7, days_ahead: int =
 
 # ------------------------------------------------------------------ connection details, subscription links
 
-@router.get("/api/connect")
+@router.get("/api/connect", dependencies=[access.signed_in])
 def connect_info(request: Request):
     """What to type into a calendar app: CalDAV, the subscription links, free/busy, the API."""
     u = me(request)
@@ -663,14 +628,14 @@ def connect_info(request: Request):
             "freebusy": f"{base}/ics/{tok}/freebusy.vfb", "api": f"{base}/api/docs", "mcp": f"{base}/mcp"}
 
 
-@router.post("/api/feeds/reset")
+@router.post("/api/feeds/reset", dependencies=[access.signed_in])
 def feeds_reset(request: Request):
     """A new private link for your subscriptions (the old ones stop working)."""
     users.reset_feed_token(me(request)["id"])
     return {"ok": True}
 
 
-@router.get("/ics/{token}/{name}")
+@router.get("/ics/{token}/{name}", dependencies=[access.public])
 def feed(token: str, name: str, request: Request, member: str | None = None):
     """The subscription links (no sign-in: the token in the link is the secret): one calendar (<slug>.ics), every
     calendar you see (all.ics) or when you are busy (freebusy.vfb / .ifb). ?member=<name>: only the events tagged
@@ -698,7 +663,7 @@ def feed(token: str, name: str, request: Request, member: str | None = None):
                     headers={"Cache-Control": "private, max-age=300"})
 
 
-@router.post("/api/apple-profile")
+@router.post("/api/apple-profile", dependencies=[access.signed_in])
 def apple_profile(request: Request, label: str = Form("iPhone"), password: str = Form("new")):
     """A configuration profile (.mobileconfig) that adds the CalDAV account to an iPhone, iPad or Mac in one go.
     password: "new" puts a new app password (named after label) in the profile; "ask" leaves it out."""
@@ -734,13 +699,13 @@ def apple_profile(request: Request, label: str = Form("iPhone"), password: str =
 
 # ------------------------------------------------------------------ ioContacts
 
-@router.get("/api/iocontacts/settings")
+@router.get("/api/iocontacts/settings", dependencies=[access.admin])
 def iocontacts_settings(request: Request):
     admin(request)
     return contacts.public_settings()
 
 
-@router.post("/api/iocontacts/settings")
+@router.post("/api/iocontacts/settings", dependencies=[access.admin])
 async def iocontacts_save(request: Request):
     """Admins: {url, user, password, cfId, cfSecret, birthdays}. Saving tests the connection and brings the Birthdays
     calendar up to date."""
@@ -756,7 +721,7 @@ async def iocontacts_save(request: Request):
     return {**contacts.public_settings(), "test": test, "sync": sync}
 
 
-@router.post("/api/iocontacts/sync")
+@router.post("/api/iocontacts/sync", dependencies=[access.admin])
 async def iocontacts_sync(request: Request):
     admin(request)
     return await run_in_threadpool(contacts.sync_birthdays)
@@ -764,7 +729,7 @@ async def iocontacts_sync(request: Request):
 
 # ------------------------------------------------------------------ public holidays
 
-@router.get("/api/holidays/settings")
+@router.get("/api/holidays/settings", dependencies=[access.signed_in])
 def holidays_settings(request: Request):
     """The Holidays calendar's country, region and language (anyone may read them), with the regions and languages
     that country has."""
@@ -772,14 +737,14 @@ def holidays_settings(request: Request):
     return holiday.public_settings()
 
 
-@router.get("/api/holidays/countries")
+@router.get("/api/holidays/countries", dependencies=[access.signed_in])
 def holidays_countries(request: Request):
     """Every country the holiday rules know: [{code, name}]."""
     me(request)
     return {"items": holiday.countries()}
 
 
-@router.get("/api/holidays/countries/{code}")
+@router.get("/api/holidays/countries/{code}", dependencies=[access.signed_in])
 def holidays_country(code: str, request: Request):
     """One country's regions and the languages of its holiday names."""
     me(request)
@@ -789,7 +754,7 @@ def holidays_country(code: str, request: Request):
         raise HTTPException(404, str(e))
 
 
-@router.post("/api/holidays/settings")
+@router.post("/api/holidays/settings", dependencies=[access.admin])
 async def holidays_save(request: Request):
     """Admins: {country, region?, language?}. country "" switches the Holidays calendar off. Saving fills it again."""
     admin(request)
@@ -802,7 +767,7 @@ async def holidays_save(request: Request):
     return {**holiday.public_settings(), "sync": sync}
 
 
-@router.post("/api/holidays/sync")
+@router.post("/api/holidays/sync", dependencies=[access.admin])
 async def holidays_sync(request: Request):
     admin(request)
     return await run_in_threadpool(holiday.sync)

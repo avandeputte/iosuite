@@ -5,13 +5,10 @@ import sys
 from typing import Optional
 
 from mcp.server.mcpserver.exceptions import ToolError
-from mcp.types import ToolAnnotations
 
 from app import __version__, config, contacts, db, holiday, ical, users
 from app.auth import updater
-from app.mcp.base import READ_ONLY, WRITES, need_admin, server
-
-UPDATES = ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=True)  # reaches GitHub
+from app.mcp.base import READ_ONLY, UPDATES, WRITES, need_admin, server
 
 
 @server.tool(annotations=READ_ONLY)
@@ -20,7 +17,7 @@ def diagnostics() -> dict:
     version, tables, rows), ioContacts, the MCP switch, the last update check and update, and the accounts."""
     need_admin()
     out = {"version": __version__, "commit": updater.local_commit()[:7], "docker": updater.in_docker(),
-           "python": sys.version.split()[0], "platform": platform.platform(), "appDir": str(config.ROOT),
+           "python": sys.version.split()[0], "platform": platform.platform(), "appDir": str(config.APP_DIR),
            "publicUrl": config.PUBLIC_URL or None, "timezone": ical.default_tz(), "update": updater.status()}
     try:
         out["database"] = {"host": f"{config.DB_HOST}:{config.DB_PORT}", "name": config.DB_NAME,
@@ -31,7 +28,7 @@ def diagnostics() -> dict:
                            "tombstones": db.one("SELECT count(*) AS n FROM cal_events WHERE deleted = 1")["n"]}
     except Exception as e:  # noqa: BLE001
         out["database"] = {"error": str(e)[:200]}
-    from app.api import mcp_enabled
+    from app.main import mcp_enabled
     out["mcp"] = {"enabled": mcp_enabled(), "forcedByEnv": config.MCP_FORCED}
     s = contacts.public_settings()
     out["iocontacts"] = {"url": s.get("url") or None, "user": s.get("user") or None, "birthdays": s["birthdays"], "lastSync": s["lastSync"]}

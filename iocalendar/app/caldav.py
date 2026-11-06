@@ -22,7 +22,7 @@ from icalendar import vDDDTypes
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import RedirectResponse, Response
 
-from app import config, ical, model
+from app import access, config, ical, model
 
 router = APIRouter()
 
@@ -368,13 +368,13 @@ def _utc(s: str | None) -> dt.datetime | None:
 
 # ------------------------------------------------------------------ the handler
 
-@router.api_route("/.well-known/caldav", methods=["GET", "PROPFIND", "OPTIONS", "HEAD"], include_in_schema=False)
+@router.api_route("/.well-known/caldav", methods=["GET", "PROPFIND", "OPTIONS", "HEAD"], include_in_schema=False, dependencies=[access.public])
 def well_known():
     return RedirectResponse("/dav/", status_code=301)
 
 
-@router.api_route("/dav", methods=METHODS, include_in_schema=False)
-@router.api_route("/dav/{path:path}", methods=METHODS, include_in_schema=False)
+@router.api_route("/dav", methods=METHODS, include_in_schema=False, dependencies=[access.public])
+@router.api_route("/dav/{path:path}", methods=METHODS, include_in_schema=False, dependencies=[access.public])
 async def dav(request: Request, path: str = ""):
     if request.method == "OPTIONS":
         return Response(status_code=200, headers=_opts_headers())
