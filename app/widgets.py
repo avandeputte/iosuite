@@ -259,25 +259,34 @@ def iocalendar_add(request: Request, b: dict) -> dict:
 # ------------------------------------------------------------------ ioContacts: birthdays and anniversaries ahead
 
 def iocontacts(request: Request, days: int = 30, n: int = 8) -> dict:
-    """{items: [{id, name, hasPhoto, label, turns, in, date}]}: the family's birthdays and other dates in the next
-    `days` days, soonest first, up to n."""
+    """{items: [{id, name, hasPhoto, iopixPersonId, label, turns, in, date}]}: the family's birthdays and other dates in
+    the next `days` days, soonest first, up to n. A contact without a photo of its own may still have a face in ioPix
+    (iopixPersonId), which ioContacts shows in its place; so does the card."""
     got = fetch(request, "iocontacts", "/api/upcoming", {"days": max(1, min(days, 366))})
     items = []
     for x in got.get("items", []):
-        items.append({"id": x.get("contactId"), "name": x.get("fn"), "hasPhoto": bool(x.get("hasPhoto")), "label": x.get("label") or "birthday",
+        items.append({"id": x.get("contactId"), "name": x.get("fn"), "hasPhoto": bool(x.get("hasPhoto")),
+                      "iopixPersonId": x.get("iopixPersonId"), "label": x.get("label") or "birthday",
                       "turns": x.get("turns"), "in": x.get("inDays"), "date": x.get("date")})
     return {"items": items[:n], "more": max(0, len(items) - n)}
 
 
 def iocontacts_search(request: Request, q: str, n: int = 5) -> dict:
-    """{items: [{id, name, hasPhoto, org}]}: the contacts whose name, email, phone, address… match q (the search box)."""
+    """{items: [{id, name, hasPhoto, iopixPersonId, org}]}: the contacts whose name, email, phone, address… match q (the
+    search box)."""
     got = fetch(request, "iocontacts", "/api/contacts", {"q": q[:80], "limit": n})
-    return {"items": [{"id": x.get("id"), "name": x.get("fn"), "hasPhoto": bool(x.get("hasPhoto")), "org": x.get("org")} for x in got.get("items", [])],
+    return {"items": [{"id": x.get("id"), "name": x.get("fn"), "hasPhoto": bool(x.get("hasPhoto")),
+                       "iopixPersonId": x.get("iopixPersonId"), "org": x.get("org")} for x in got.get("items", [])],
             "total": got.get("total")}
 
 
 def iocontacts_photo(request: Request, contact_id: int) -> tuple[bytes, str]:
     return fetch(request, "iocontacts", f"/api/contacts/{int(contact_id)}/photo", raw=True)
+
+
+def iocontacts_face(request: Request, person_id: int) -> tuple[bytes, str]:
+    """A person's face from ioPix, as ioContacts hands it out (for contacts linked to an ioPix person, no photo of their own)."""
+    return fetch(request, "iocontacts", f"/api/iopix/face/{int(person_id)}", raw=True)
 
 
 # ------------------------------------------------------------------ ioHealth: today's steps and activity rings

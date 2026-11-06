@@ -101,6 +101,11 @@ const confirmDialog = (title, text, ok = 'OK', danger = false) => dialog(title, 
 
 const hue = (s) => { let x = 0; for (const c of s || '') x = (x * 31 + c.charCodeAt(0)) % 360; return x; };
 const initials = (fn) => { const p = (fn || '?').trim().split(/\s+/); return ((p[0] || '?')[0] + (p.length > 1 ? p[p.length - 1][0] : '')).toUpperCase(); };
+/** A contact's face as ioContacts shows it: its own photo, else its face in ioPix (when linked), else its initials. */
+function contactFace(c, lazy = true) {
+  const src = c.hasPhoto ? `/api/widgets/iocontacts/photo/${c.id}` : c.iopixPersonId ? `/api/widgets/iocontacts/face/${c.iopixPersonId}` : null;
+  return h('span', { class: 'face' }, src ? h('img', { src, alt: '', loading: lazy ? 'lazy' : undefined, onerror: (e) => e.target.replaceWith(initials(c.name)) }) : initials(c.name));
+}
 /** An app's name as the apps write it: "io" in gold, the rest in the app's colour. */
 /* The weather: AccuWeather's icon numbers (1-44) drawn with a handful of glyphs. */
 const WX = {
@@ -301,7 +306,7 @@ function searchBox() {
       links.length ? h('div', { class: 'qhead' }, 'Bookmarks') : null,
       links.map((l) => { const src = bmIcon(l); return row(l.href, [h('span', { class: 'bmic' }, src ? h('img', { src, alt: '' }) : l.abbr), h('span', { class: 'qname' }, l.name), h('span', { class: 'muted small' }, l.description || l.href)], true); }),
       contacts && people.q === ql && people.items.length ? h('div', { class: 'qhead' }, 'People') : null,
-      contacts && people.q === ql ? people.items.map((c) => row(`${contacts.url}/#/c/${c.id}`, [h('span', { class: 'face' }, c.hasPhoto ? h('img', { src: `/api/widgets/iocontacts/photo/${c.id}`, alt: '' }) : initials(c.name)), h('span', { class: 'qname' }, c.name), h('span', { class: 'muted small' }, c.org || '')])) : null,
+      contacts && people.q === ql ? people.items.map((c) => row(`${contacts.url}/#/c/${c.id}`, [contactFace(c, false), h('span', { class: 'qname' }, c.name), h('span', { class: 'muted small' }, c.org || '')])) : null,
       // Home Assistant: an entity's state, and a tap switches the ones the admin lets the page control
       things.q === ql && things.items.length ? h('div', { class: 'qhead' }, 'Home') : null,
       things.q === ql ? things.items.map((t) => { const a = row(t.control ? '#' : haLink(t), [h('span', { class: `bmic ha${t.on ? ' on' : ''}` }, icon(haIcon(t), 's')), h('span', { class: 'qname' }, t.name), h('span', { class: `muted small${t.control ? ' tap' : ''}` }, t.control ? `${t.text || t.state} · tap` : t.text || t.state)]);
@@ -604,10 +609,9 @@ const withoutBirthdays = (items) => (S.birthdaysCard ? items.filter((o) => !isBi
 async function drawBirthdays(el, again = false) {
   const app = S.apps.find((a) => a.key === 'iocontacts'), d = await widget('iocontacts');
   if (!d || !d.items || !el.isConnected) { if (!again) el.remove(); return; }
-  const who = (it) => h('span', { class: 'face' }, it.hasPhoto ? h('img', { src: `/api/widgets/iocontacts/photo/${it.id}`, alt: '', loading: 'lazy', onerror: (e) => e.target.replaceWith(initials(it.name)) }) : initials(it.name));
   const what = (it) => (it.label === 'birthday' ? (it.turns ? `turns ${it.turns}` : '') : it.label + (it.turns ? ` · ${it.turns} years` : ''));
   el.replaceChildren(h('div', { class: 'wghead' }, h('span', null, 'Birthdays'), showAll(el), h('a', { class: 'muted', href: app.url, title: app.url }, d.more ? `+${d.more} more · ioContacts` : 'ioContacts')),
-    d.items.length ? h('div', { class: 'rows' }, d.items.map((it) => h('a', { class: 'bday', href: `${app.url}/#/c/${it.id}` }, who(it),
+    d.items.length ? h('div', { class: 'rows' }, d.items.map((it) => h('a', { class: 'bday', href: `${app.url}/#/c/${it.id}` }, contactFace(it),
       h('span', { class: 'bdname' }, it.name), h('span', { class: 'muted small bdwhat' }, what(it)),
       h('span', { class: `bdwhen${it.in === 0 ? ' today' : ''}` }, inDays(it.in)))))
       : h('div', { class: 'muted small' }, 'No birthdays in the next 30 days'));

@@ -392,6 +392,18 @@ def widget_contact_photo(contact_id: int, request: Request):
                     headers={"Cache-Control": "private, max-age=86400"})
 
 
+@router.get("/api/widgets/iocontacts/face/{person_id}")
+def widget_contact_face(person_id: int, request: Request):
+    """A contact's ioPix face, through ioContacts (a contact linked to an ioPix person, without a photo of its own)."""
+    me(request)
+    try:
+        body, ctype = widgets.iocontacts_face(request, person_id)
+    except widgets.Unavailable as e:
+        raise HTTPException(e.status, str(e))
+    return Response(body, media_type=ctype if ctype.startswith("image/") else "image/jpeg",
+                    headers={"Cache-Control": "private, max-age=86400"})
+
+
 @router.get("/api/widgets/iopix/thumb/{photo_id}")
 def widget_thumb(photo_id: int, request: Request):
     """An ioPix thumbnail (square, cropped around its subject), passed through: the page shows images from here only."""

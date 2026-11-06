@@ -166,17 +166,22 @@ def test_iocontacts_birthdays_and_photo(client, apps_answer):
     table, asked = apps_answer
     table[("iocontacts", "/api/upcoming")] = {"items": [
         {"contactId": 5, "fn": "Ada Lovelace", "hasPhoto": True, "label": "birthday", "turns": 41, "inDays": 0, "date": "2026-11-04"},
-        {"contactId": 9, "fn": "Bob", "hasPhoto": False, "label": "anniversary", "turns": 10, "inDays": 12, "date": "2026-11-16"},
+        {"contactId": 9, "fn": "Bob", "hasPhoto": False, "iopixPersonId": 77, "label": "anniversary", "turns": 10, "inDays": 12, "date": "2026-11-16"},
     ] + [{"contactId": i, "fn": f"P{i}", "inDays": 20} for i in range(10, 20)]}
     d = client.get("/api/widgets/iocontacts").json()
     assert len(d["items"]) == 8 and d["more"] == 4
-    assert d["items"][0] == {"id": 5, "name": "Ada Lovelace", "hasPhoto": True, "label": "birthday", "turns": 41, "in": 0, "date": "2026-11-04"}
+    assert d["items"][0] == {"id": 5, "name": "Ada Lovelace", "hasPhoto": True, "iopixPersonId": None, "label": "birthday",
+                           "turns": 41, "in": 0, "date": "2026-11-04"}
+    assert d["items"][1]["iopixPersonId"] == 77  # no photo of its own, but a face in ioPix, which the card shows
     assert d["items"][1]["label"] == "anniversary" and d["items"][2]["label"] == "birthday"
     assert asked[-1][2] == {"days": 30}
     table[("iocontacts", "/api/contacts/5/photo")] = (b"\xff\xd8jpeg", "image/jpeg")
     r = client.get("/api/widgets/iocontacts/photo/5")
     assert r.status_code == 200 and r.content == b"\xff\xd8jpeg" and r.headers["content-type"] == "image/jpeg"
     assert client.get("/api/widgets/iocontacts/photo/6").status_code == 502
+    table[("iocontacts", "/api/iopix/face/77")] = (b"\xff\xd8face", "image/jpeg")
+    r = client.get("/api/widgets/iocontacts/face/77")
+    assert r.status_code == 200 and r.content == b"\xff\xd8face" and r.headers["content-type"] == "image/jpeg"
 
 
 def test_app_refusal_is_not_a_sign_out(client, monkeypatch):

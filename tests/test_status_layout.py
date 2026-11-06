@@ -91,5 +91,5 @@ def test_contacts_search_for_the_search_box(client, monkeypatch):
         return {"total": 1, "items": [{"id": 3, "fn": "Ada Lovelace", "hasPhoto": True, "org": "Analytical Engines"}]}
     monkeypatch.setattr(widgets, "fetch", fake)
     d = client.get("/api/widgets/iocontacts?q=ada").json()
-    assert d == {"items": [{"id": 3, "name": "Ada Lovelace", "hasPhoto": True, "org": "Analytical Engines"}], "total": 1}
+    assert d == {"items": [{"id": 3, "name": "Ada Lovelace", "hasPhoto": True, "iopixPersonId": None, "org": "Analytical Engines"}], "total": 1}
     assert asked == [("iocontacts", "/api/contacts", {"q": "ada", "limit": 5})]
