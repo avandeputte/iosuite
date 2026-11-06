@@ -15,6 +15,7 @@ here, so a houseful of open pages refreshing at once costs one call.
 """
 import json
 import re
+import sys
 import threading
 import time
 import urllib.error
@@ -22,13 +23,15 @@ import urllib.parse
 import urllib.request
 
 from app import config, db
+from app.ha_feed import Feed
 
 STATES_TTL = 5          # seconds the states are kept (the card redraws every minute, the search box types faster)
 TIMEOUT = 6
 MAX_ENTITIES = 40       # on the card
 LOW_BATTERY = 15        # percent
 _lock = threading.Lock()
-_cache = {"at": 0.0, "items": None, "key": ""}
+_cache = {"at": 0.0, "items": None, "live": False}   # live: fed by the websocket (app/ha_feed.py), never stale
+feed = Feed(sys.modules[__name__])
 _ENTITY_RE = re.compile(r"^[a-z_0-9]+\.[a-z0-9_]+$")
 
 # what a tap does per domain: the service called for toggle / on / off (None: the domain cannot be switched)
@@ -112,7 +115,7 @@ def settings() -> dict:
     """What Settings › Home Assistant shows (the token never leaves the server)."""
     return {"enabled": enabled(), "url": url(), "urlFromEnv": bool(config.HA_URL), "hasToken": bool(token()),
             "tokenFromEnv": bool(config.HA_TOKEN), "entities": entities(), "builtinAlerts": builtin_alerts(),
-            "name": db.get_setting("ha_name") or ""}
+            "name": db.get_setting("ha_name") or "", "live": feed.live, "liveError": feed.error}
 
 
 def save(changes: dict) -> None:
@@ -140,13 +143,51 @@ def save(changes: dict) -> None:
         db.set_setting("ha_entities", json.dumps(out))
     if "builtinAlerts" in changes:
         db.set_setting("ha_builtin_alerts", "1" if changes["builtinAlerts"] else "0")
+    if "url" in changes or "token" in changes:
+        feed.restart()
+        feed_down()
     forget(devices=True)
 
 
 def forget(devices: bool = False) -> None:
-    _cache.update(at=0.0, items=None)
+    """The REST copy is dropped (the live one stays: the feed keeps it right)."""
+    if not _cache["live"]:
+        _cache.update(at=0.0, items=None)
     if devices:
         _devices.clear()
+
+
+def prime(states: list[dict]) -> None:
+    """The feed connected: its full list becomes the copy, and the copy is live from now on."""
+    with _lock:
+        _cache.update(at=time.time(), items=list(states), live=True)
+
+
+def apply(entity_id: str, new_state: dict | None) -> bool:
+    """One state_changed from the feed folded into the copy; True when the copy changed."""
+    with _lock:
+        items = _cache["items"]
+        if items is None or not _cache["live"]:
+            return False
+        for i, st in enumerate(items):
+            if st.get("entity_id") == entity_id:
+                if new_state is None:
+                    del items[i]
+                else:
+                    items[i] = new_state
+                _cache["at"] = time.time()
+                return True
+        if new_state is not None:
+            items.append(new_state)
+            _cache["at"] = time.time()
+            return True
+        return False
+
+
+def feed_down() -> None:
+    """The feed lost its connection: back to the REST copy, fetched afresh."""
+    with _lock:
+        _cache.update(at=0.0, items=None, live=False)
 
 
 # ------------------------------------------------------------------ Home Assistant's REST API
@@ -206,9 +247,9 @@ def temp_unit() -> str:
 
 
 def all_states() -> list[dict]:
-    """Every entity, as Home Assistant lists them, from the copy kept STATES_TTL seconds."""
+    """Every entity, as Home Assistant lists them: the live copy the feed keeps, else the REST copy kept STATES_TTL seconds."""
     now = time.time()
-    if _cache["items"] is not None and now - _cache["at"] < STATES_TTL:
+    if _cache["items"] is not None and (_cache["live"] or now - _cache["at"] < STATES_TTL):
         return _cache["items"]
     with _lock:
         if _cache["items"] is not None and time.time() - _cache["at"] < STATES_TTL:
@@ -329,6 +370,7 @@ def home() -> dict:
     """The Home card and the wall: {enabled, name, url, items: [describe…], wall: [ids], alerts: [{id, name, text, why}]}."""
     if not enabled():
         return {"enabled": False}
+    feed.ensure()
     chosen = entities()
     try:
         states = all_states()
@@ -344,7 +386,7 @@ def home() -> dict:
     for it in items:
         if devs.get(it["id"]):
             it["device"] = devs[it["id"]]
-    return {"enabled": True, "name": db.get_setting("ha_name") or "Home", "url": url(), "items": items,
+    return {"enabled": True, "name": db.get_setting("ha_name") or "Home", "url": url(), "items": items, "live": feed.live,
             "wall": [c["id"] for c in chosen if c["wall"]], "alerts": alerts(states, chosen, by)}
 
 

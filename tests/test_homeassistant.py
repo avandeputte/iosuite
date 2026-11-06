@@ -220,3 +220,41 @@ def test_climate_and_cover_popups(client, monkeypatch):
     client.post("/api/ha/settings", json={"entities": [{"id": "climate.living", "control": True}, {"id": "cover.garage", "control": True}, {"id": "cover.blind", "control": True}]})
     assert client.post("/api/ha/cover.blind/set", json={"position": 25}).json()["cover"]["position"] == 25
     assert client.post("/api/ha/light.kitchen/set", json={"action": "open"}).status_code == 400    # not a popup entity
+
+
+def test_live_feed_keeps_the_copy_and_streams_the_card(client, monkeypatch):
+    """The websocket feed (app/ha_feed.py) primes the copy and folds each state_changed into it; while it is live the
+    REST copy is never refetched; /api/ha/events sends the card as server-sent events."""
+    calls = []
+    monkeypatch.setattr(ha, "_call", _fake_ha(calls))
+    ha.feed_down(); ha.forget(devices=True)
+    client.post("/api/ha/settings", json={"url": "http://ha.lan:8123", "token": "s3cret-token", "entities": [{"id": "light.kitchen", "control": True}]})
+    assert client.get("/api/ha").json()["items"][0]["text"] == "On · 50%" and not client.get("/api/ha").json()["live"]
+    n = sum(1 for c in calls if c[1] == "/api/states")
+    # the feed connects: its list is the copy from now on, and its events change it
+    ha.prime([dict(s) for s in STATES])
+    ha.feed.live = True
+    assert ha.apply("light.kitchen", {"entity_id": "light.kitchen", "state": "off", "attributes": {"friendly_name": "Kitchen"}}) is True
+    assert ha.apply("light.new", {"entity_id": "light.new", "state": "on", "attributes": {}}) is True    # a new entity
+    assert ha.apply("light.nothere", None) is False
+    monkeypatch.setattr(ha, "STATES_TTL", 0)   # even a stale-by-the-clock copy is not refetched while live
+    d = client.get("/api/ha").json()
+    assert d["live"] and d["items"][0]["text"] == "Off"
+    assert sum(1 for c in calls if c[1] == "/api/states") == n, "no REST fetch while the feed is live"
+    assert client.get("/api/ha/settings").json()["live"] is True
+    # the event stream: the first message is the card as it stands
+    with client.stream("GET", "/api/ha/events?once=1") as r:
+        assert r.status_code == 200 and r.headers["content-type"].startswith("text/event-stream")
+        for line in r.iter_lines():
+            if line.startswith("data: "):
+                assert json.loads(line[6:])["items"][0]["text"] == "Off"
+                break
+    # the feed drops: back to REST
+    ha.feed.live = False
+    ha.feed_down()
+    assert client.get("/api/ha").json()["live"] is False
+    assert sum(1 for c in calls if c[1] == "/api/states") == n + 1
+    # a new address retires the feed's connection
+    ha.feed.live = True
+    client.post("/api/ha/settings", json={"url": "http://other.lan:8123"})
+    assert ha.feed.live is False
