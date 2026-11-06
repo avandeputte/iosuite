@@ -45,7 +45,7 @@ def passwordless(u: dict | None) -> bool:
 
 def accounts() -> list[dict]:
     """The sign-in picker, as in iopix: the listed accounts with a role here, whether a password is asked for, and
-    whether there is a face to show (the photo of the account's "me" contact)."""
+    whether there is a face to show (the ioPix face of the account's "me" contact)."""
     out = []
     for a in shared.accounts(APP):
         me_id = shared.get_value(a["id"], APP, "me_contact_id")

@@ -33,9 +33,7 @@ def test_lookup_suggest_accept_dismiss(client, family_id, monkeypatch):
     title = next(x for x in items if x["field"] == "title")
     client.post(f"/api/suggestions/{title['id']}/accept")
     assert client.get(f"/api/contacts/{c['id']}").json()["title"] == "Engineer"
-    photos = [x for x in items if x["field"] == "photo"]
-    client.post(f"/api/suggestions/{photos[0]['id']}/accept")
-    assert client.get(f"/api/contacts/{c['id']}").json()["hasPhoto"]
+    assert not any(x["field"] == "photo" for x in items)  # photos come from ioPix only, never from a lookup
     li = next(x for x in items if x["field"] == "social" and "linkedin" in json.dumps(x["value"]))
     client.post(f"/api/suggestions/{li['id']}/dismiss")
     client.post(f"/api/contacts/{c['id']}/lookup")  # again: what was dismissed or accepted is not offered again

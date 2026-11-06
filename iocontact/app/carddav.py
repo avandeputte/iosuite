@@ -507,7 +507,7 @@ def _put(ctx: Ctx, parts, body: bytes, headers) -> Response:
     if row:  # favorites are ioContacts' own: a client that drops the mark does not unfavorite
         c["favorite"] = c.get("favorite") or bool(row["favorite"])
     ids = [x["id"] for x in model.books_for(ctx.user)]
-    model.save(b["id"], c, row["id"] if row else None, parts[3], keep_photo=False, resolve_book_ids=ids)
+    model.save(b["id"], c, row["id"] if row else None, parts[3], resolve_book_ids=ids)
     new = model.by_href(b["id"], parts[3])
     return Response(status_code=204 if row else 201, headers={"ETag": f'"{new["etag"]}"'} if new else {})
 

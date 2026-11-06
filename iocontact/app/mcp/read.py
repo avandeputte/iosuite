@@ -19,7 +19,7 @@ def overview() -> dict:
     ids = book_ids(u)
     marks = ",".join(["%s"] * len(ids)) or "0"
     t = db.one(f"SELECT count(*) AS n, sum(favorite) AS fav, sum(bday_year IS NOT NULL OR bday_month IS NOT NULL) AS bday, sum(iopix_person_id IS NOT NULL) AS ip, "
-               f"sum(photo IS NOT NULL) AS ph FROM con_contacts WHERE deleted = 0 AND address_book_id IN ({marks})", ids) if ids else {}
+               f"sum(iopix_person_id IS NOT NULL) AS ph FROM con_contacts WHERE deleted = 0 AND address_book_id IN ({marks})", ids) if ids else {}
     nrel = db.one(f"SELECT count(*) AS n FROM con_contact_relations r JOIN con_contacts c ON c.id = r.contact_id WHERE c.deleted = 0 AND c.address_book_id IN ({marks})", ids)["n"] if ids else 0
     return {
         "you": {"name": u["name"], "displayName": u.get("display_name"), "role": u["role"]},
@@ -88,17 +88,17 @@ def get_vcard(contact: str, version: Literal["3.0", "4.0", "jcard"] = "3.0") -> 
 
 @server.tool(annotations=READ_ONLY)
 def view_photo(contact: str) -> Image:
-    """Look at a contact's photo (or, when it has none and is linked to ioPix, the person's face from ioPix)."""
+    """Look at a contact's photo: the face of the ioPix person it is linked to (contacts keep no photo of their own)."""
     u = who()
     r = find_contact(u, contact)
-    got = model.photo(r["id"])
-    if not got and r["iopix_person_id"]:
-        try:
-            got = iopix.face(r["iopix_person_id"])
-        except Exception as e:  # noqa: BLE001
-            raise ToolError(f"ioPix did not answer: {e}")
+    if not r["iopix_person_id"]:
+        raise ToolError(f"{r['fn']} has no photo: link them to an ioPix person (link_iopix_person)")
+    try:
+        got = iopix.face(r["iopix_person_id"])
+    except Exception as e:  # noqa: BLE001
+        raise ToolError(f"ioPix did not answer: {e}")
     if not got:
-        raise ToolError(f"{r['fn']} has no photo")
+        raise ToolError(f"ioPix has no face for {r['fn']} yet")
     fmt = got[1].split(";")[0].split("/")[-1].replace("jpg", "jpeg")
     return Image(data=got[0], format=fmt)
 
@@ -197,7 +197,7 @@ def find_duplicates(book: Optional[str] = None, min_score: int = 35) -> list:
 @server.tool(annotations=READ_ONLY)
 def preview_merge(contacts: list[str], keep: Optional[str] = None) -> dict:
     """What merging these contacts would give, before doing it: the combined contact, and `choices`, the fields where
-    they disagree (name, birthday, company, photo...) with each contact's value. Pass your picks to merge_contacts."""
+    they disagree (name, birthday, company, ioPix person...) with each contact's value. Pass your picks to merge_contacts."""
     from app import quality
     u = who()
     rows = [find_contact(u, c) for c in contacts]
@@ -213,7 +213,7 @@ def preview_merge(contacts: list[str], keep: Optional[str] = None) -> dict:
 def data_quality_report(book: Optional[str] = None, check: Optional[str] = None) -> list:
     """Data quality checks: contacts without a name, email addresses and phone numbers that do not look right,
     impossible birthdays, names in ALL CAPITALS, the same email or phone twice on one contact, relations to a name that
-    is now a contact, phone numbers without the country code, ioPix links without a photo, contacts with no way to reach
+    is now a contact, phone numbers without the country code, contacts with no way to reach
     them. Each check has its findings; `fix` says whether fix_data_quality can repair them."""
     from app import quality
     u = who()

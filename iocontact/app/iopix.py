@@ -1,5 +1,8 @@
 """ioPix: the People list (people tags with their face), to link a contact to a person.
 
+A linked person's face is the contact's only photo: ioContacts stores none of its own, and serves the ioPix face
+wherever a photo goes (the web app, vCards, CardDAV, LDAP jpegPhoto, the account tiles).
+
 The server talks to ioPix, never the browser, so ioPix's sign-in stays on the server: optionally an ioPix account
 (when Require sign-in is on there) and a Cloudflare Access service token (when ioPix sits behind Cloudflare Access).
 Settings > ioPix stores them; IOPIX_* in the environment wins.
@@ -15,6 +18,8 @@ from app import config, db
 
 _lock = threading.Lock()
 _cache: dict = {"at": 0, "people": None}
+_faces: dict = {}  # person id -> (when, (bytes, type) or None): ioPix is the only source of contact photos, so they are asked often
+FACE_TTL, FACE_MISS_TTL, FACE_ERROR_TTL, FACE_MAX = 3600, 600, 60, 4000
 _jar = CookieJar()
 
 
@@ -41,6 +46,7 @@ def save_settings(url=None, user=None, password=None, cf_id=None, cf_secret=None
         if v is not None:
             db.set_setting(k, v.strip() or None)
     _cache.update(at=0, people=None)
+    _faces.clear()
     _jar.clear()
 
 
@@ -100,13 +106,45 @@ def people(force: bool = False) -> list[dict]:
 
 
 def face(person_id: int) -> tuple[bytes, str] | None:
+    """The person's face from ioPix (bytes, content type), or None when ioPix has none. Kept an hour (a miss ten
+    minutes, a failure a minute), so address book syncs and exports do not ask ioPix for every contact every time."""
+    hit = _faces.get(person_id)
+    if hit:
+        ttl = FACE_TTL if hit[1] else FACE_ERROR_TTL if hit[2] else FACE_MISS_TTL
+        if time.time() - hit[0] < ttl:
+            if hit[2]:
+                raise hit[2]
+            return hit[1]
     try:
         r = _get(f"/face/{person_id}", timeout=20)
-        return r.read(), r.headers.get("Content-Type", "image/jpeg")
+        got = (r.read(), r.headers.get("Content-Type", "image/jpeg").split(";")[0].strip() or "image/jpeg")
+        err = None
     except urllib.error.HTTPError as e:
-        if e.code == 404:
-            return None
+        if e.code != 404:
+            _remember(person_id, None, e)
+            raise
+        got, err = None, None
+    except Exception as e:  # noqa: BLE001 - remembered briefly, then raised as is
+        _remember(person_id, None, e)
         raise
+    _remember(person_id, got, err)
+    return got
+
+
+def _remember(person_id: int, got, err) -> None:
+    if len(_faces) >= FACE_MAX:
+        _faces.clear()
+    _faces[person_id] = (time.time(), got, err)
+
+
+def photo(person_id: int | None) -> tuple[bytes, str] | None:
+    """A linked contact's photo: the ioPix face, or None (not linked, ioPix not set up, no face, or ioPix not answering)."""
+    if not person_id or not settings()["url"]:
+        return None
+    try:
+        return face(person_id)
+    except Exception:  # noqa: BLE001 - then the contact shows its initials
+        return None
 
 
 def person_url(person_id: int, name: str | None = None) -> str | None:
