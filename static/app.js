@@ -213,7 +213,7 @@ async function showHome(page) {
   drawWeather(wx);  // fills in when AccuWeather (or the server's copy) answers
   // the tiles: an app with something to show gets a column of its own; the others go two to a column, half the height
   const tile = (a, small) => h('a', { class: `app${small ? ' small' : ''}`, href: a.url, 'data-app': a.key, title: a.url },
-    h('img', { src: a.icon, alt: '' }), h('span', { class: 'who' }, h('span', { class: 'nmrow' }, appName(a.name, a.color), h('span', { class: 'st' })), h('span', { class: 'tag' }, a.tagline)),
+    h('img', { src: a.icon, alt: '' }), h('span', { class: 'who' }, h('span', { class: 'nmrow' }, appName(a.name, a.color), h('span', { class: 'st' }))),
     h('div', { class: 'more' }));  // what the app shows here: drawWidgets
   const big = S.apps.filter((a) => WIDGETS[a.key]), rest = S.apps.filter((a) => !WIDGETS[a.key]);
   const stacks = []; for (let i = 0; i < rest.length; i += 2) stacks.push(h('div', { class: 'stack' }, rest.slice(i, i + 2).map((a) => tile(a, true))));
