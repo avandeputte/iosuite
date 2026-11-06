@@ -64,7 +64,7 @@ def test_my_layout(client):
     assert client.get("/api/me/layout").json() == {"hidden": [], "order": [], "cards": [], "strip": None, "search": None, "stripMove": None, "stripEvery": None}
     assert client.get("/api/apps").json()["layout"] == {"hidden": [], "order": [], "cards": [], "strip": None, "search": None, "stripMove": None, "stripEvery": None}
     r = client.put("/api/me/layout", json={"hidden": ["ionotes", "week", "ionotes"], "order": ["iocalendar", "iopix"], "cards": ["strip", "birthdays"], "strip": "onthisday"})
-    assert r.status_code == 200 and r.json() == {"hidden": ["ionotes", "week"], "order": ["iocalendar", "iopix"], "cards": ["strip", "birthdays"], "strip": "onthisday", "search": None}
+    assert r.status_code == 200 and r.json() == {"hidden": ["ionotes", "week"], "order": ["iocalendar", "iopix"], "cards": ["strip", "birthdays"], "strip": "onthisday", "search": None, "stripMove": None, "stripEvery": None}
     assert client.put("/api/me/layout", json={"cards": ["strip", "strip"]}).status_code == 400
     assert client.put("/api/me/layout", json={"cards": ["iopix"]}).status_code == 400
     assert client.get("/api/apps").json()["layout"]["order"] == ["iocalendar", "iopix"]
