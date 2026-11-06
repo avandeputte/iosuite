@@ -1,4 +1,4 @@
-# ionotes
+# ioNotes
 
 *Your notes, clipboard snippets and screenshots, searchable everywhere.*
 
@@ -118,9 +118,9 @@ account) become the first admin's. A note id that belongs to another account is 
 | **viewer** | read and search their own notes; their own settings kept on the server |
 | **viewer without a password** | the same; signs in with one click from the account picker, on the home network only |
 | **editor** | plus every change to their own notes, folders and tags, and export/import of them (Settings › Export and import; the Mac and iPhone apps sign in as an editor) |
-| **admin** | plus settings, accounts, the MCP token, updates and the server log |
+| **admin** | plus settings, accounts, updates and the server log |
 
-**Require sign-in** (Settings › Users and sign-in) also closes `/api/status`-style open routes to visitors (the MCP endpoint wants the admin token either way).
+**Require sign-in** (Settings › Users and sign-in) also closes the open routes to visitors, but for the app shell, `/api/status` and the sign-in routes (the MCP endpoint wants an app password either way).
 Sessions are random tokens in an HttpOnly cookie (`iothing_session`, shared by the apps on the domain) valid for
 30 days and renewed while in use; each records where it began and was last seen (address, through Cloudflare or
 not, web or which app): `GET /api/auth/sessions` for your own, `GET /api/users/<id>/sessions` for admins. Passwords
@@ -185,23 +185,26 @@ server has is answered with 409 (or `stale` in a push) and the server's copy, wh
 
 ## MCP server
 
-Maintenance › MCP and text in pictures turns on an MCP endpoint at `/mcp` (off by default), in the same shape as iopix's. An assistant
-such as Claude can then:
-
-Notes are private to each account, so the tools work on the notes of one account: the first admin's, or the one
-chosen under Maintenance › MCP server › Notes of (`notes_overview` names it).
+Maintenance › MCP and text in pictures turns on an MCP endpoint at `/mcp` (off by default), the same in every app of the
+suite. An assistant such as Claude can then:
 
 - read: `notes_overview`, `search_notes` (words, folder, tag, pinned, picture, source, dates, sort), `get_note`,
   `view_note_image` (the picture itself, small or large), `list_folders`, `list_tags`, `recent_changes`, `list_trash`
-- write, with the admin token: `create_note` (optionally with a picture), `update_note` (replace or append text, tags,
+- write, as an editor: `create_note` (optionally with a picture), `update_note` (replace or append text, tags,
   folder, pin), `organize_notes` (many notes at once), `delete_note`, `restore_note`, `manage_folder`, `manage_tag`
-- operate, with the admin token: `diagnostics`, `server_log`, `proxy_signin`, `check_for_update`, `update_ionotes`
+- operate, as an admin: `diagnostics`, `server_log`, `proxy_signin`, `check_for_update`, `update_ionotes`
 
-The admin token is shown to admins under Maintenance › MCP server (or set `MCP_ADMIN_TOKEN`). Once any account
-exists, every `/mcp` request needs it as `Authorization: Bearer <token>`, whether or not sign-in is required (Claude
-Desktop with `mcp-remote`: `"args": ["mcp-remote", "https://notes.example.com/mcp", "--header", "Authorization: Bearer <token>"]`);
-a browser signed in to ionotes without the token reaches only its own account's notes. `python -m app.mcp` serves
-the same tools on stdio, on the chosen account's notes. Treat the token like the admin password.
+Every assistant signs in with an **app password** (Settings › Apps and devices), as HTTP Basic or
+`Authorization: Bearer <app password>`, and acts as that account: notes are private to each account, so it sees and
+changes that account's notes and nothing else (`notes_overview` names the account). Off, `/mcp` does not answer at all.
+
+```sh
+claude mcp add --transport http ionotes https://notes.example.com/mcp --header "Authorization: Bearer ionotes-xxxxxxxx-…"
+```
+
+Apps that take a JSON configuration and only start local processes (Claude Desktop, for example) can reach it through
+`mcp-remote`: `{"mcpServers": {"ionotes": {"command": "npx", "args": ["-y", "mcp-remote", "https://notes.example.com/mcp", "--header", "Authorization: Bearer ionotes-…"]}}}`.
+`python -m app.mcp --user NAME` (or `MCP_USER`) serves the same tools on stdio, as that account.
 
 ## Export, import and backups
 
@@ -220,7 +223,7 @@ Maintenance › Import): records keep their ids, and a newer copy on the server 
   off) shows admins a card when a newer version exists, with Update now right on it (dismissed per version).
 - **Proxmox:** `update` inside the container (the framework's command) runs the same script.
 - **Docker:** `docker compose pull && docker compose up -d`.
-- **From an MCP client:** `check_for_update` and `update_ionotes` (with the admin token).
+- **From an MCP client:** `check_for_update` and `update_ionotes` (as an admin).
 
 ## Settings
 
@@ -234,7 +237,7 @@ name and the same names), or in the environment, which wins. `config.env.example
 | `HOST` / `PORT` | `0.0.0.0` / `8610` | where the server listens (every app of the suite has its own port) |
 | `FORWARDED_ALLOW_IPS` | `*` | the addresses allowed to pass on the visitor's address (your reverse proxy's) |
 | `TLS_CERT_FILE` / `TLS_KEY_FILE` | | HTTPS served directly instead of behind a reverse proxy |
-| `DATA_DIR` | `./data` | the session secret and the database settings saved from the web app |
+| `DATA_DIR` | `./data` | what the app writes on its own: the log, the update result, the database settings saved from the web app (and the SQLite file) |
 | `LOG_FILE` | `DATA_DIR/ionotes.log` | the server log (empty: none) |
 | `PUBLIC_URL` | | the address ionotes is reached at, for links in MCP answers and the suite's list of apps |
 | `COOKIE_DOMAIN` | | the domain the sign-in is shared on (e.g. `example.com`); a LAN address outside it gets a cookie of its own |
@@ -244,7 +247,7 @@ name and the same names), or in the environment, which wins. `config.env.example
 | `READ_ONLY` | `0` | nothing can be changed, by anyone |
 | `OCR` | `1` | `0`: the server never reads text in pictures (the apps still do) |
 | `MAX_IMAGE_MB` | `15` | the largest picture a note may carry |
-| `MCP` / `MCP_ADMIN_TOKEN` | | `MCP=1` keeps the endpoint on whatever Settings says; the token, instead of a generated one |
+| `MCP` / `MCP_USER` | | `MCP=1` keeps the endpoint on whatever Settings says; the account `python -m app.mcp` (stdio) acts as |
 | `UPDATE_CHECK` | `1` | `0`: never ask GitHub for a newer version (Maintenance › Updates and logs) |
 | `AUTH_PROXY`... | `off` | sign-in at a reverse proxy, above |
 
@@ -252,13 +255,15 @@ name and the same names), or in the environment, which wins. `config.env.example
 
 ```
 app/
-  main.py          the FastAPI app: who is asking (cookie or proxy), require sign-in, cross-site writes, /mcp, static files
+  main.py          the FastAPI app: the suite's middleware (who is asking, require sign-in, cross-site writes), whose notes, status, /mcp, static files
+  access.py        who may call a route: the markers every /api route carries
+  config.py        the settings: the suite's standard names (iosuite_shared.config) and ioNotes' own
   db.py            the database (MariaDB/MySQL or SQLite), its tables, the rev counter
   notes.py         notes, folders, tag colours, search, sync and conflicts
   images.py        pictures as BLOBs with a thumbnail
   ocr.py           RapidOCR for pictures added in the web app
   backup.py        export and import
-  users.py, access.py   accounts, sessions and roles (proxy sign-in: iosuite_shared.proxyauth through auth.proxy)
+  users.py, auth.py   accounts, sessions and roles, the updater (iosuite-shared; proxy sign-in: iosuite_shared.proxyauth through auth.proxy)
   routes/          the HTTP API
   mcp/             the MCP server: read, write and operator tools
 proxmox/           Proxmox VE LXC scripts in the community-scripts layout

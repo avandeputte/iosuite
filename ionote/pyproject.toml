@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ionotes"
-version = "1.12.1"
+version = "1.13.0"
 description = "Notes from the clipboard, screenshots and the share sheet, kept in MariaDB, with a web app and the API the Mac and iPhone apps use"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -24,12 +24,12 @@ dependencies = [
   "python-multipart<1",
   "mcp<3",
   "pyjwt[crypto]<3",   # Cloudflare Access tokens (proxy sign-in)
-  "iosuite-shared @ git+https://github.com/avandeputte/iosuite-shared.git@98abba420051914d02376fdd8a67ff287cc70e59",   # iosuite-shared 0.10.1, the suite's shared library: accounts, sessions, the Shared ioSuite database (pinned: bump to pick up a new one)
+  "iosuite-shared @ git+https://github.com/avandeputte/iosuite-shared.git@c68e257be27c10b064aa22a1c4fcf86112e3de28",   # iosuite-shared 0.11.0, the suite's shared library: accounts, sessions, the Shared ioSuite database (pinned: bump to pick up a new one)
 ]
 
 [project.optional-dependencies]
 ocr = ["rapidocr<4", "onnxruntime<2", "numpy<3"]   # text in pictures added in the web app
-test = ["pytest<10", "httpx<1", "pyflakes<5"]
+test = ["pytest<10", "httpx<1", "pyflakes<4"]
 
 [project.urls]
 Homepage = "https://github.com/avandeputte/ionotes"

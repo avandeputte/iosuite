@@ -1,51 +1,35 @@
-"""ionotes: the web app, the API the Mac and iPhone apps use, and the MCP endpoint, on one port (8610).
+"""ioNotes: the web app, the API the Mac and iPhone apps use, and the MCP endpoint, on one port (8610).
 
-Who may call a route is declared on the route (app/access.py); the middleware here works out who is asking
-(the session cookie, or the identity a reverse proxy such as Cloudflare Access vouches for), whether sign-in is
-required at all, and refuses cross-site writes. The same scheme as iopix.
+Who may call a route is declared on the route (app/access.py); iosuite-shared's middleware works out who is asking
+(the shared session cookie, the identity a reverse proxy such as Cloudflare Access vouches for, HTTP Basic or a bearer
+app password), whether sign-in is required at all, and refuses cross-site writes. The same scheme as every app of the
+suite. What is ioNotes' own: whose notes a request works on (notes are private to each account).
 """
-import json
 import logging
-import logging.handlers
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
+from iosuite_shared import mcp as shared_mcp
+from iosuite_shared.updates import setup_log
 
 from app import __version__, config, db, mcp, suitedb, users
 from app import notes as notes_mod, owners
-from app.auth import auth as auth_shared, updater
-from app.routes import auth, notes as notes_routes, settings, users as users_routes
+from app.auth import auth, updater
+from app.routes import auth as auth_routes, notes as notes_routes, settings, users as users_routes
 
+setup_log(config.LOG_FILE)  # the server log that Maintenance › Updates and logs shows; the app runs without it
 log = logging.getLogger("app")
-MAX_JSON_BODY = 8 << 20  # a JSON request larger than this is refused before it is read (pictures go as their own body)
-MAX_IMAGE_BODY = (config.MAX_IMAGE_MB + 1) << 20
-MAX_IMPORT_BODY = 4 << 30  # an export with every picture; spooled to disk as it arrives, never held in memory
 
-# what a visitor may still fetch when sign-in is required: the app shell and the sign-in endpoints
-OPEN_PATHS = ("/", "/sw.js", "/manifest.webmanifest", "/api/status")
-OPEN_PREFIXES = ("/static/", "/api/auth/")
-
-
-def setup_file_log():
-    """ionotes' own log (LOG_FILE, data/ionotes.log by default; 5 MB, 3 old copies), for Maintenance › Updates and logs
-    and the MCP tool."""
-    root = logging.getLogger()
-    if not config.LOG_FILE or any(isinstance(h, logging.handlers.RotatingFileHandler) for h in root.handlers):
-        return
-    h = logging.handlers.RotatingFileHandler(config.LOG_FILE, maxBytes=5 << 20, backupCount=3, encoding="utf-8")
-    h.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
-    root.addHandler(h)
-    if root.level > logging.INFO or root.level == logging.NOTSET:
-        root.setLevel(logging.INFO)
-    for name in ("uvicorn.access", "uvicorn.error"):
-        logging.getLogger(name).addHandler(h)
+# what a visitor may still fetch when sign-in is required: the app shell and its files, the API docs, and the MCP
+# endpoint (its gate below)
+OPEN_PATHS = ("/", "/sw.js", "/manifest.webmanifest", "/api/docs", "/api/openapi.json")
+OPEN_PREFIXES = ("/static/", "/mcp")
 
 
 @asynccontextmanager
 async def lifespan(_app):
-    setup_file_log()
     try:
         db.init()
     except Exception as e:
@@ -53,33 +37,26 @@ async def lifespan(_app):
         log.error("the database could not be opened: %s", e)
         raise
     users.init()
-    if db.get_setting("mcp_enabled", "") == "":
-        db.set_setting("mcp_enabled", "0")
     updater.start_daily()
     c = db.settings()
-    log.info("ionotes started on %s (%s)", "MariaDB/MySQL " + f"{c['host']}:{c['port']}/{c['database']}" if c["type"] == "mysql" else "SQLite " + str(db.SQLITE_FILE),
+    log.info("ioNotes %s started on %s (%s)", __version__,
+             "MariaDB/MySQL " + f"{c['host']}:{c['port']}/{c['database']}" if c["type"] == "mysql" else "SQLite " + str(db.SQLITE_FILE),
              "accounts exist" if users.any_users() else "no accounts yet: open to everyone until one is made")
     sd = suitedb.public()
     log.info("Shared ioSuite database (accounts, suite settings): %s@%s:%s/%s", sd["user"], sd["host"], sd["port"], sd["database"])
-    async with mcp.server.session_manager.run():
+    async with shared_mcp.running(mcp.server):  # the MCP endpoint (/mcp) lives in this process
         yield
 
 
-app = FastAPI(title="ioNotes", lifespan=lifespan, docs_url="/api/docs", redoc_url=None, openapi_url="/api/openapi.json")
-
-
-def _open_to_visitors(path: str) -> bool:
-    return path in OPEN_PATHS or path.startswith(OPEN_PREFIXES)
+app = FastAPI(title="ioNotes", version=__version__, lifespan=lifespan, docs_url="/api/docs", redoc_url=None,
+              openapi_url="/api/openapi.json",
+              description="Notes for the family, private to each account. The API the Mac and iPhone apps use, and an MCP "
+                          "endpoint (/mcp) for AI assistants.")
 
 
 def mcp_enabled() -> bool:
-    """Settings › MCP server: off unless an admin turns it on (or MCP=1 in the environment)."""
-    return config.MCP_FORCED or db.get_setting("mcp_enabled", "0") == "1"
-
-
-def _mcp_token_ok(request: Request) -> bool:
-    auth_h = request.headers.get("authorization", "")
-    return auth_h.lower().startswith("bearer ") and updater.token_ok(auth_h[7:].strip())
+    """Maintenance › MCP server: off until an admin turns it on (or MCP=1 in the environment)."""
+    return shared_mcp.enabled(db.get_setting, config.MCP_FORCED)
 
 
 def _owner_of(request: Request) -> int:
@@ -91,144 +68,62 @@ def _owner_of(request: Request) -> int:
     return 0 if not users.any_users() else notes_mod.NOBODY
 
 
-def _gate(request: Request):
-    """Once the user is known (app/auth.py's middleware): whose notes the request works on, and the MCP endpoint's
-    own gates (the switch, and who may read through it)."""
-    path = request.url.path
+def _mcp_user(u: dict) -> None:
+    """The MCP endpoint, once its gate let the request through: every tool acts as this account, on its own notes."""
+    mcp.current_user.set(u)
+    notes_mod.current_owner.set(int(u["id"]))
+
+
+_mcp_gate = auth.mcp_gate(mcp_enabled, on_user=_mcp_user, settings_page="Maintenance › MCP server")
+
+
+def _before(request: Request):
+    """Once the user is known: whose notes the request works on, and the MCP endpoint's gate (the switch; an app
+    password or session, as in every app of the suite)."""
     if not notes_mod._claimed and users.any_users():
         notes_mod.claim_unowned(owners.first_admin_id())
-    if not path.startswith("/mcp"):
+    refused = _mcp_gate(request)
+    if refused is not None:
+        return refused
+    if not request.url.path.startswith("/mcp"):
         notes_mod.current_owner.set(_owner_of(request))
-        return None
-    if not mcp_enabled():
-        return JSONResponse({"detail": "The MCP server is switched off (Settings › MCP server)."}, status_code=404)
-    # Notes are private to each account (unlike iopix's shared library), so the MCP endpoint is too: with the admin
-    # token it works on the notes of Settings › MCP server › Notes of; a signed-in account without the token sees
-    # only its own notes; once accounts exist, anyone else is refused, whether or not sign-in is required.
-    tok = _mcp_token_ok(request)
-    mcp.token_given.set(tok)
-    if tok:
-        notes_mod.current_owner.set(owners.mcp_owner())
-    elif request.state.user:
-        notes_mod.current_owner.set(int(request.state.user["id"]))
-    elif users.any_users():
-        return JSONResponse({"detail": "MCP clients send the admin token as 'Authorization: Bearer <token>' "
-                                       "(Settings › MCP server shows it to an admin)"}, status_code=401)
-    else:
-        notes_mod.current_owner.set(0)  # no accounts yet: the open install's notes, as in the web app
     return None
 
 
-# who is asking (the shared session cookie, the proxy's identity), whether sign-in is required at all, and the
-# cross-site check on writes: iosuite-shared's middleware. What each route needs beyond that is declared on the
-# route (app/access.py).
-app.middleware("http")(auth_shared.middleware(is_open=_open_to_visitors, open_prefixes=("/mcp",), before=_gate))
-
-
-class _TooLarge(Exception):
-    pass
-
-
-def _has_too_large(e: BaseException) -> bool:
-    if isinstance(e, _TooLarge):
-        return True
-    return any(_has_too_large(x) for x in getattr(e, "exceptions", ()))  # inside an ExceptionGroup (task groups)
-
-
-class _BodyCap:
-    """The size limits below, for a body that comes without a Content-Length (chunked) or longer than it said:
-    counted as it is read, refused (413) once past the limit, so nothing large is ever held in memory. The
-    outermost layer, so the refusal reaches it through every middleware."""
-
-    def __init__(self, app):
-        self.app = app
-
-    async def __call__(self, scope, receive, send):
-        if scope["type"] != "http" or scope["method"] in ("GET", "HEAD", "OPTIONS"):
-            return await self.app(scope, receive, send)
-        headers = dict(scope.get("headers") or [])
-        ctype = headers.get(b"content-type", b"").decode("latin-1").split(";")[0].strip().lower()
-        limit = _limit_for(scope["path"], ctype)
-        seen, started = 0, False
-
-        async def capped():
-            nonlocal seen
-            msg = await receive()
-            if msg["type"] == "http.request":
-                seen += len(msg.get("body") or b"")
-                if seen > limit:
-                    raise _TooLarge()
-            return msg
-
-        async def sending(msg):
-            nonlocal started
-            started = started or msg["type"] == "http.response.start"
-            await send(msg)
-
-        try:
-            await self.app(scope, capped, sending)
-        except BaseException as e:
-            if not _has_too_large(e) or started:
-                raise
-            await JSONResponse({"detail": "That request is too large"}, status_code=413)(scope, receive, send)
+# who is asking, whether sign-in is required at all, the cross-site check on writes, and whose notes: iosuite-shared's
+# middleware. What each route needs beyond that is declared on the route (app/access.py).
+app.middleware("http")(auth.middleware(open_paths=OPEN_PATHS, open_prefixes=OPEN_PREFIXES, before=_before))
 
 
 def _limit_for(path: str, ctype: str) -> int:
     if "/api/import" in path:
-        return MAX_IMPORT_BODY
+        return config.MAX_IMPORT_BYTES
     if ctype.startswith("image/") or ctype in ("multipart/form-data", "application/octet-stream", "application/zip"):
-        return MAX_IMAGE_BODY
-    return MAX_JSON_BODY
+        return config.MAX_IMAGE_BYTES
+    return config.MAX_JSON_BYTES
 
 
-
-@app.middleware("http")
-async def _limits(request: Request, call_next):
-    ctype = (request.headers.get("content-type") or "").split(";")[0].strip().lower()
-    if request.method not in ("GET", "HEAD", "OPTIONS"):
-        try:
-            size = int(request.headers.get("content-length") or 0)
-        except ValueError:
-            return JSONResponse({"detail": "Bad Content-Length"}, status_code=400)
-        if size > _limit_for(request.url.path, ctype):
-            return JSONResponse({"detail": "That request is too large"}, status_code=413)
-    response = await call_next(request)
-    if "cache-control" not in response.headers:
-        response.headers["Cache-Control"] = "no-cache"
-    return response
+# 400 for bad input, the headers, no-store on the API, the body cap (counted as the body arrives, so nothing large is
+# ever held in memory), and the same 404 for another account's note as for none at all: iosuite-shared
+auth.install(app, limit_for=_limit_for, not_found=(notes_mod.NotFound,))
 
 
-app.add_middleware(_BodyCap)  # added last: the outermost layer
+def _status_extra(request: Request) -> dict:
+    """ioNotes' own fields of GET /api/status, beside the suite's: the name an admin gave the app, read-only mode and,
+    signed in, the account's change counter (the page polls it to learn of changes made elsewhere)."""
+    out = {"appName": db.get_setting("app_name", "") or "ionotes", "readOnly": db.read_only()}
+    if users.is_signed_in(request.state.user):
+        out["rev"] = notes_mod.owner_rev()
+    return out
 
 
-@app.exception_handler(notes_mod.NotFound)
-async def _not_found(request: Request, e: Exception):
-    """Another account's note or folder, or none at all: the same 404 either way."""
-    return JSONResponse({"detail": str(e) or "Not found"}, status_code=404)
-
-
-@app.exception_handler(ValueError)
-@app.exception_handler(TypeError)
-@app.exception_handler(json.JSONDecodeError)
-async def _bad_input(request: Request, e: Exception):
-    """A body or parameter that is not what a route expects is the client's mistake: a 400 that says so."""
-    log.warning("bad input on %s %s: %s: %s", request.method, request.url.path, type(e).__name__, str(e)[:200])
-    return JSONResponse({"detail": f"Bad request: {str(e)[:200] or type(e).__name__}"}, status_code=400)
-
-
-app.include_router(auth.router)
-app.include_router(users_routes.router)
+app.include_router(auth_routes.router)   # /api/auth/*: sign-in, accounts, me, settings, password, sessions, app passwords, suite
+app.include_router(users_routes.router)  # /api/users: accounts and their role here (admins)
+app.include_router(auth.status_router(updater, extra=_status_extra))  # /api/status: public, the same shape in every app
+app.include_router(auth.server_router(updater, log_file=config.LOG_FILE, info=lambda: {"appUrl": config.BASE_URL}))  # /api/server, /api/log (admins)
 app.include_router(notes_routes.router)
 app.include_router(settings.router)
-app.include_router(auth_shared.server_router(updater, log_file=config.LOG_FILE, info=lambda: {"appUrl": config.BASE_URL}))  # /api/server, /api/log: admins
-
-# MCP over HTTP on the same port: an assistant connects to http://host:8610/mcp.
-# DNS-rebinding protection is off because ionotes is reached by LAN name or IP, not localhost only.
-from mcp.server.transport_security import TransportSecuritySettings  # noqa: E402
-
-_mcp_asgi = mcp.server.streamable_http_app(streamable_http_path="/mcp", stateless_http=True,
-                                           transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False))
-app.router.routes[:0] = list(_mcp_asgi.routes)
+shared_mcp.mount(app, mcp.server)  # MCP over streamable HTTP at /mcp, ahead of everything else
 
 
 @app.get("/", include_in_schema=False)
@@ -236,7 +131,7 @@ def index():
     """The page, with the version stamped on the script and stylesheet: after an update the browser (and Cloudflare,
     which caches .js and .css at the edge) fetches the new ones instead of serving what it kept."""
     html = (config.STATIC_DIR / "index.html").read_text(encoding="utf-8")
-    for f in ("static/app.js", "static/app.css"):
+    for f in ("static/app.js", "static/app.css", "static/js/theme.js"):
         html = html.replace(f'"{f}"', f'"{f}?v={__version__}"')
     return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
 

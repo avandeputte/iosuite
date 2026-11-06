@@ -1,4 +1,4 @@
-/** Settings (Display for everyone; Users and sign-in for admins), Maintenance (admins: storage and backups, MCP and
+/** Settings (Display for everyone; Apps and devices for accounts; Users and sign-in for admins), Maintenance (admins: storage and backups, MCP and
  *  OCR, updates and logs) and the change log. Laid out as in every ioThing app: Settings is what is configured,
  *  Maintenance what is run or checked. */
 import { $, h, api, state, icon, toast, fail, isAdmin, canWrite, dialog, confirmIt, fmtDate } from './core.js';
@@ -75,7 +75,7 @@ async function editUser(u) {
 function signInBox(s) {
   return box('Sign-in', null,
     sw('Require sign-in', s.require_login, (v, el) => setSetting('require_login', v).then(() => { s.require_login = v; }).catch(() => { el.checked = !v; }), !state.me.usersExist,
-      'Visitors get the sign-in screen and nothing else; the MCP endpoint then needs the admin token as a Bearer header.'),
+      'Visitors get the sign-in screen and nothing else (the MCP endpoint always wants an app password).'),
     sw('Read-only', s.read_only, (v) => setSetting('read_only', v), s.read_only_env, s.read_only_env ? '(READ_ONLY=1 in config.env)' : 'Nothing can be changed, by anyone.'));
 }
 
@@ -129,22 +129,35 @@ function databaseBox(s) {
 }
 
 async function mcpBox(s) {
-  const tok = await api('/api/server', { method: 'POST', body: { action: 'token' } });
-  tok.url = (s.appUrl || location.origin) + '/mcp';
-  const tokEl = h('span.code', '••••••••');
-  const show = h('button.pillbtn', { onclick: () => { tokEl.textContent = tok.token; show.remove(); } }, 'Show');
-  const regen = h('button.pillbtn', { disabled: tok.fromEnv, onclick: async () => {
-    if (!await confirmIt('New token', 'Make a new token? MCP clients using the old one stop working.', 'New token', true)) return;
-    try { const r = await api('/api/server', { method: 'POST', body: { action: 'regenerate_token' } }); tok.token = r.token; tokEl.textContent = r.token; } catch (e) { fail(e); }
-  } }, 'New token');
-  const who = h('select', (s.accounts || []).map((a) => h('option', { value: a.id, selected: a.id === s.mcp_user }, a.name)));
-  who.addEventListener('change', () => setSetting('mcp_user', Number(who.value)));
-  return box('MCP server', 'Lets an assistant such as Claude search and read the notes and look at their pictures; with the admin token it can also create, edit, file, tag and delete them, and run diagnostics. The same as iopix\'s MCP server. Notes are private to each account, so it works on the notes of one account.',
+  const url = (s.appUrl || location.origin) + '/mcp';
+  return box('MCP server', 'Lets an assistant such as Claude search and read notes and look at their pictures and, as an editor, create, edit, file, tag and delete them; admins also get diagnostics and the updater. The same in every ioThing app: every assistant signs in with an app password (Settings › Apps and devices) and works on that account\'s own notes.',
     sw('MCP server at /mcp', s.mcp_enabled || s.mcp_forced, (v) => setSetting('mcp_enabled', v), s.mcp_forced, s.mcp_forced ? '(MCP=1 in config.env)' : ''),
-    (s.accounts || []).length ? h('div.row', h('label', 'Notes of'), who) : null,
-    h('div.row', h('label', 'Address'), h('span.code', tok.url)),
-    h('div.row', h('label', 'Admin token'), tokEl, show, regen),
-    h('p.small', 'Claude Desktop: "args": ["mcp-remote", "' + tok.url + '", "--header", "Authorization: Bearer <token>"]. Treat the token like the admin password.'));
+    h('div.row', h('label', 'Address'), h('span.code', url)),
+    h('p.small', 'Claude Code: claude mcp add --transport http ionotes ' + url + ' --header "Authorization: Bearer <app password>". Claude Desktop: "args": ["mcp-remote", "' + url + '", "--header", "Authorization: Bearer <app password>"].'));
+}
+
+/** Settings › Apps and devices: the signed-in account's app passwords (one per app or device, revocable one by one),
+ *  for the Mac and iPhone apps, MCP clients and anything else that signs in with HTTP Basic or a bearer token. */
+async function devicesBox() {
+  if (state.me.user.passwordless) return box('Apps and devices', 'A one-click account (no password) cannot have app passwords. Ask an admin to set a password on your account first.');
+  const label = h('input', { placeholder: 'e.g. Claude on my Mac', 'aria-label': 'Name' });
+  const shown = h('div'), list = h('div');
+  const draw = async () => {
+    const items = (await api('/api/auth/app-passwords')).items;
+    list.replaceChildren(items.length ? h('table.t', h('tr', h('th', 'Name'), h('th', 'Made'), h('th', 'Last used'), h('th')),
+      ...items.map((p) => h('tr', h('td', p.label), h('td', p.created ? new Date(p.created).toLocaleDateString() : ''), h('td', p.lastUsed ? new Date(p.lastUsed).toLocaleString() : 'never'),
+        h('td', h('button.pillbtn', { onclick: async () => { try { await api(`/api/auth/app-passwords/${p.id}`, { method: 'DELETE' }); draw(); } catch (e) { fail(e); } } }, 'Revoke'))))) : h('p.small', 'No app passwords yet.'));
+  };
+  await draw();
+  return box('Apps and devices', 'Give every app, device or assistant its own password instead of yours; revoke one without touching the others. Use your user name with it (HTTP Basic), or send it as "Authorization: Bearer <app password>".',
+    h('div.row', h('label', 'New app password'), label, h('button.pillbtn', { onclick: async () => {
+      try {
+        const r = await api('/api/auth/app-passwords', { method: 'POST', body: { label: label.value || 'Device' } });
+        shown.replaceChildren(h('p', h('b', 'Copy it now: '), 'it is shown only once. ', h('span.code', r.password)));
+        label.value = ''; draw();
+      } catch (e) { fail(e); }
+    } }, 'Make')),
+    shown, list);
 }
 
 function ocrBox(s) {
@@ -261,6 +274,7 @@ const render = () => again();
 export function renderSettings(tab) {
   const tabs = [['display', 'Display', async () => [appearance(), state.me.user ? null : box('Account', state.me.usersExist ? 'Sign in to see your notes.' : 'No accounts yet: anyone who can reach ioNotes can read and change the notes. Create the admin account from the person icon at the top right.')]]];
   if (state.me.user || !state.me.usersExist) tabs.push(['export', 'Export and import', async () => [exportBox()]]);  // anyone's own notes
+  if (state.me.user) tabs.push(['devices', 'Apps and devices', async () => [await devicesBox()]]);
   if (isAdmin()) tabs.push(['users', 'Users and sign-in', async () => { const s = await api('/api/settings'); return [state.me.usersExist ? await usersBox() : null, signInBox(s), await proxyBox()]; }]);
   return tabbedPage('settings', 'Settings', 'gear', 'var(--c-gray)', tabs, tab);
 }
