@@ -11,13 +11,6 @@ from app.auth import APP
 ROLES = shared.APP_ROLES
 
 
-def public(u: dict | None) -> dict | None:
-    if not u:
-        return None
-    return {"id": u["id"], "name": u["name"], "displayName": u.get("displayName") or u["name"], "email": u.get("email") or None,
-            "role": u.get("role", "viewer"), "hasPassword": not u.get("passwordless"), "suiteAdmin": bool(u.get("suiteAdmin"))}
-
-
 def get(uid: int) -> dict | None:
     return shared.get(uid, APP)
 
@@ -49,8 +42,8 @@ def update(uid: int, **f) -> dict:
     return get(uid)
 
 
-def ensure_admin_from_env() -> None:
-    """The Shared ioSuite database's tables (and the ADMIN_USER / ADMIN_PASSWORD account on a first start), as in the other io apps."""
+def init() -> None:
+    """The Shared ioSuite database's tables, and the ADMIN_USER / ADMIN_PASSWORD account on a first start with no accounts."""
     shared.init()
 
 

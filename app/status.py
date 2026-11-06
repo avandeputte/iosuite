@@ -50,7 +50,7 @@ def _app(request: Request, key: str) -> dict:
         return {"ok": e.status in (403, 404), "version": None, "update": None, "why": str(e)}
     if not isinstance(s, dict):
         return {"ok": False, "version": None, "update": None, "why": f"{key} did not answer with its status"}
-    upd = s.get("updateAvailable") if "updateAvailable" in s else s.get("update")  # ioPix, ioCalendar, ioContacts, ioSuite / ioHealth, ioNotes
+    upd = s.get("update")  # the suite's status shape: {version, remote, message, date} for an admin there, else null
     if isinstance(upd, dict):
         upd = upd.get("version") or upd.get("remote") or True
     elif upd is not None and not isinstance(upd, (str, bool)):

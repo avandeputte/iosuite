@@ -12,9 +12,9 @@ def fresh():
 
 
 def test_apps_status_from_each_apps_status(client, monkeypatch):
-    answers = {"iopix": {"app": "ioPix", "version": "1.4.0", "updateAvailable": {"version": "1.5.0", "remote": "1.5.0"}},
+    answers = {"iopix": {"app": "ioPix", "version": "1.4.0", "update": {"version": "1.5.0", "remote": "1.5.0"}},
                "iohealth": {"app": "ioHealth", "version": "2.0", "update": None},
-               "iocalendar": {"app": "ioCalendar", "version": "0.9", "updateAvailable": None}}
+               "iocalendar": {"app": "ioCalendar", "version": "0.9", "update": None}}
     asked = []
 
     def fake(request, key, path, params=None, raw=False):

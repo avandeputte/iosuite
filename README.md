@@ -1,6 +1,6 @@
 # ioSuite
 
-*The start page of the iothing suite: one place with every io app ([ioPix](https://github.com/avandeputte/iopix),
+*The start page of the ioThing suite: one place with every io app ([ioPix](https://github.com/avandeputte/iopix),
 [ioHealth](https://github.com/avandeputte/ioHealth), [ioCalendar](https://github.com/avandeputte/iocalendar),
 [ioContacts](https://github.com/avandeputte/iocontacts), [ioNotes](https://github.com/avandeputte/ionotes)).*
 
@@ -83,7 +83,7 @@ what the app will show on the start page later (today's events, the newest photo
 ioSuite asks GitHub once a day whether the main branch has a newer version (only the public commit list is read;
 nothing about the server is sent; Maintenance › Updates and logs switches it off, `UPDATE_CHECK=0` locks it off). Admins
 then see a note with **Update now**, and **Maintenance › Updates and logs** has the version, **Check for updates**,
-**Update now**, the tail of the server log (`iosuite.log` in the app folder; `LOG_FILE` moves it, empty switches it
+**Update now**, the tail of the server log (`data/iosuite.log` in the app folder; `LOG_FILE` moves it, empty switches it
 off) and **Restart**. The page is the same in every ioThing app: the version check, `update.sh`, the restart and the log
 come from `iosuite_shared.updates` in iosuite-shared, served at `/api/server` and `/api/log`. Updating runs the app's own
 `update.sh`: the new version's Python packages first, then the code (a failed step leaves the running
@@ -177,7 +177,8 @@ admin. Each app keeps its usual port and updates itself as always. Accounts are 
 | `AUTH_PROXY`, `AUTH_PROXY_HEADER`, `AUTH_PROXY_TRUSTED`, `CF_ACCESS_TEAM`, `CF_ACCESS_AUD` | sign-in at a reverse proxy, as in the other io apps (Cloudflare Access, Authelia, Authentik, oauth2-proxy…) |
 | `UPDATE_CHECK` | `0` turns the daily version check off for good |
 | `IOSUITE_REPO`, `IOSUITE_BRANCH` | what the version check and `update.sh` follow (`avandeputte/iosuite`, `main`) |
-| `LOG_FILE` | the server log shown at Maintenance › Updates and logs (`iosuite.log` in the app folder; `LOG_FILE=` with nothing after it: no file) |
+| `DATA_DIR` | where the app writes on its own: the log and the update result (`data/` in the app folder) |
+| `LOG_FILE` | the server log shown at Maintenance › Updates and logs (`DATA_DIR/iosuite.log`; `LOG_FILE=` with nothing after it: no file) |
 
 ### HTTPS
 
@@ -201,8 +202,9 @@ what a viewer may not change. CI runs them against MariaDB.
 ## Layout
 
 ```
-app/main.py        the application: start-up (tables, first admin, the update check), who is asking, routes
-app/api.py         the REST API: status, the apps and their settings (the server, updates and the log: iosuite_shared's server_router)
+app/main.py        the application: start-up (tables, first admin, the update check), the suite's middleware, status and routes
+app/access.py      who may call a route: the markers every /api route carries (public, signed_in, editor, admin)
+app/api.py         the REST API: the apps and their settings (sign-in, accounts, status, the server, updates and the log: iosuite_shared's routers)
 app/apps.py        the suite's apps as they registered (iosuite_shared.suite) and the order of their tiles
 app/status.py      is each app up (its /api/status) and does it have an update; is each bookmark reachable
 app/layout.py      each account's own layout: hidden tiles and cards, the tiles' order, the photo strip
@@ -214,7 +216,7 @@ app/bookmarks.py   the bookmark groups and links, and the homepage bookmarks.yam
 app/auth.py        the shared accounts and the updater (iosuite-shared), as ioSuite uses them
 app/users.py       accounts and roles, seen from ioSuite
 app/db.py          MariaDB access and the schema (the meta settings table, the bookmarks)
-app/config.py      settings from config.env / the environment
+app/config.py      the settings: the suite's standard names (iosuite_shared.config) and ioSuite's own
 app/cli.py         python -m app.cli: migrate, check
 app/__main__.py    python -m app: the server (HOST, PORT)
 static/            the web app: index.html, app.js (one module, no build step), app.css, the icons (each app's tile shows the icon it registered, served by that app)
