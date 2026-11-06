@@ -202,12 +202,12 @@ body.home #main { top: env(safe-area-inset-top); }
 .face { width: 24px; height: 24px; border-radius: 50%; background: var(--bg3); color: var(--fg2); font-size: 9px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; overflow: hidden; flex: none; }
 .face img { width: 100%; height: 100%; object-fit: cover; }
 .bdname { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 0 1 auto; min-width: 0; }
-.bdwhat { white-space: nowrap; flex: 0 1000 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }  /* "turns 9" gives way before the name does */
-.bdwhen { margin-left: auto; flex: none; font-size: var(--fs-s); color: var(--fg2); }
+.bdwhat { white-space: nowrap; flex: none; }  /* the age alone ("59"); "turns 59" is the row's tooltip */
+.bdwhen { margin-left: auto; flex: none; font-size: var(--fs-xs); color: var(--fg2); }
 .bdwhen.today { color: var(--accent); font-weight: 600; }
 .wkday { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 /* the cards use their width: birthdays in as many columns as fit, the coming days side by side (a column each) */
-.card .rows.bdrows { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 4px 24px; align-content: start; }
+.card .rows.bdrows { font-size: var(--fs-s); display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 4px 24px; align-content: start; }
 .card .rows.wkrows { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 8px 18px; align-content: start; }
 .wkrows .wkday .wgev { padding-left: 0; }
 .wkhead { display: flex; align-items: baseline; gap: 6px; font-weight: 600; font-size: var(--fs-s); }
