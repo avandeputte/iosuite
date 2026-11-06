@@ -139,7 +139,8 @@ body.home #main { top: env(safe-area-inset-top); }
 .bm.down .bmname::after { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--danger); margin-left: 6px; vertical-align: middle; }
 /* Customize the page */
 .dialog h3 { font-size: var(--fs-s); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--fg2); margin: 14px 0 4px; }
-.layrow { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+.layrow { display: flex; align-items: center; gap: 8px; padding: 2px 0; }
+.layrow.dragging { background: var(--bg3); }
 .layrow .check { display: flex; align-items: center; gap: 8px; flex: 1; }
 .layrow img { width: 22px; height: 22px; border-radius: 22%; }
 .layrow .nm .io { color: var(--name-io); } .layrow .nm .ap { color: color-mix(in srgb, var(--c, var(--fg)) calc(100% - var(--app-lift)), white var(--app-lift)); font-weight: 600; }

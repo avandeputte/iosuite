@@ -541,13 +541,16 @@ async function customize() {
   const tiles = apps.slice().sort((a, b) => rank(a) - rank(b)).map((a) => ({ key: a.key, on: !L.hidden.includes(a.key), label: [h('img', { src: a.icon, alt: '' }), appName(a.name, a.color)] }));
   const NAMES = { home: 'Home (Home Assistant)', birthdays: 'Birthdays (ioContacts)', week: 'This week (ioCalendar)', strip: 'The photo strip (ioPix)', bookmarks: 'Bookmarks' };
   const cards = cardOrder(L).map((k) => ({ key: k, on: !L.hidden.includes(k), label: [NAMES[k]] }));
-  // a list of rows with a tick box and up / down buttons, for the tiles and for the cards alike
+  // a list of rows with a drag handle and a tick box, for the tiles and for the cards alike (dragSort, as the bookmarks)
   const sortable = (items) => {
     const list = h('div', { class: 'lay' });
-    const draw = () => list.replaceChildren(...items.map((t, i) => h('div', { class: 'layrow' },
-      h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: t.on, onchange: (e) => { t.on = e.target.checked; } }), t.label),
-      h('span', { class: 'bmtools' }, h('button', { class: 'iconbtn', title: 'Up', disabled: i === 0 ? true : null, onclick: () => { [items[i - 1], items[i]] = [items[i], items[i - 1]]; draw(); } }, icon('up', 's')),
-        h('button', { class: 'iconbtn', title: 'Down', disabled: i === items.length - 1 ? true : null, onclick: () => { [items[i + 1], items[i]] = [items[i], items[i + 1]]; draw(); } }, icon('down', 's'))))));
+    const draw = () => {
+      list.replaceChildren(...items.map((t) => h('div', { class: 'layrow', 'data-key': t.key },
+        h('button', { class: 'iconbtn grip', title: 'Drag to reorder', 'aria-label': 'Drag to reorder' }, icon('grip', 's')),
+        h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: t.on, onchange: (e) => { t.on = e.target.checked; } }), t.label))));
+      for (const g of list.querySelectorAll('.grip')) dragSort(g, g.closest('.layrow'), { root: list, lists: () => [list], items: '.layrow', sorting: 'sorting-rows',
+        done: () => { const by = Object.fromEntries(items.map((t) => [t.key, t])); items.splice(0, items.length, ...[...list.querySelectorAll('.layrow[data-key]')].map((r) => by[r.dataset.key]).filter(Boolean)); draw(); } });
+    };
     draw();
     return list;
   };
