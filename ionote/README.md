@@ -32,6 +32,13 @@ git clone https://github.com/avandeputte/ionotes && cd ionotes
 ./setup.sh
 ```
 
+Its last question, "Also install …?" (flag `--also iocalendar,ionotes`, `--also all`; `IONOTES_ALSO` in the environment), puts
+other apps of the suite in this same machine, beside ionotes (`/opt/iocalendar/app` next to `/opt/ionotes/app`),
+without asking the shared questions again: the same database server (each app gets its own database: `suite`,
+`calendar`, `contacts`, `notes`, `health`, `iopix`; the user needs rights on those names too), the same Shared ioSuite
+database, sign-in domain and admin (`iosuite-shared install`, from the shared library). Each app keeps its usual port
+and updates itself as always. The Proxmox installer offers the same as a checklist, for one container with several apps.
+
 `setup.sh` is the installer: it asks where the MariaDB/MySQL database is (host, port, database, user, password;
 it tests the connection and creates the database when the user may), where the **Shared ioSuite database** is
 (below; database and user `iosuite` by default, tested and created the same way), the port (8610), whether pictures added in the
