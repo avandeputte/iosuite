@@ -61,8 +61,8 @@ def test_ping_without_a_server():
 
 
 def test_my_layout(client):
-    assert client.get("/api/me/layout").json() == {"hidden": [], "order": [], "cards": [], "strip": None, "search": None}
-    assert client.get("/api/apps").json()["layout"] == {"hidden": [], "order": [], "cards": [], "strip": None, "search": None}
+    assert client.get("/api/me/layout").json() == {"hidden": [], "order": [], "cards": [], "strip": None, "search": None, "stripMove": None, "stripEvery": None}
+    assert client.get("/api/apps").json()["layout"] == {"hidden": [], "order": [], "cards": [], "strip": None, "search": None, "stripMove": None, "stripEvery": None}
     r = client.put("/api/me/layout", json={"hidden": ["ionotes", "week", "ionotes"], "order": ["iocalendar", "iopix"], "cards": ["strip", "birthdays"], "strip": "onthisday"})
     assert r.status_code == 200 and r.json() == {"hidden": ["ionotes", "week"], "order": ["iocalendar", "iopix"], "cards": ["strip", "birthdays"], "strip": "onthisday", "search": None}
     assert client.put("/api/me/layout", json={"cards": ["strip", "strip"]}).status_code == 400
@@ -73,8 +73,12 @@ def test_my_layout(client):
     assert client.put("/api/me/layout", json={"strip": "all"}).status_code == 400
     assert client.put("/api/me/layout", json={"search": "altavista"}).status_code == 400
     assert client.put("/api/me/layout", json={"search": "google"}).json()["search"] == "google"
+    assert client.put("/api/me/layout", json={"stripMove": "spin"}).status_code == 400
+    assert client.put("/api/me/layout", json={"stripEvery": 7}).status_code == 400
+    r = client.put("/api/me/layout", json={"stripMove": "page", "stripEvery": 300}).json()
+    assert (r["stripMove"], r["stripEvery"]) == ("page", 300)
     assert client.put("/api/me/layout", json=[]).status_code == 400
-    assert client.put("/api/me/layout", json={}).json() == {"hidden": [], "order": [], "cards": [], "strip": None, "search": None}
+    assert client.put("/api/me/layout", json={}).json() == {"hidden": [], "order": [], "cards": [], "strip": None, "search": None, "stripMove": None, "stripEvery": None}
     # another account has its own
     client.post("/api/users", json={"name": "kid", "password": "secret123", "role": "viewer"})
     client.put("/api/me/layout", json={"hidden": ["iohealth"]})

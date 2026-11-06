@@ -562,14 +562,18 @@ async function customize() {
   };
   const adminStrip = { rediscover: 'Rediscover', onthisday: 'On this day', off: 'Off' }[S.photoStrip] || 'Rediscover';
   const strip = h('select', { class: 't' }, [[null, `Default (${adminStrip})`], ['rediscover', 'Rediscover: photos at random'], ['onthisday', 'On this day'], ['off', 'Off']].map(([v, t]) => h('option', { value: v || '', selected: (v || '') === (L.strip || '') ? true : null }, t)));
+  const moves = h('select', { class: 't' }, Object.entries(STRIP_MOVES).map(([k, t]) => h('option', { value: k, selected: k === (L.stripMove || STRIP_DEFAULT.move) ? true : null }, t)));
+  const everies = h('select', { class: 't' }, STRIP_EVERY.map((s) => h('option', { value: s, selected: s === (L.stripEvery || STRIP_DEFAULT.every) ? true : null }, `Every ${everyText(s)}`)));
   const engines = h('select', { class: 't' }, Object.entries(ENGINES).map(([k, e]) => h('option', { value: k === 'duckduckgo' ? '' : k, selected: (k === 'duckduckgo' ? '' : k) === (L.search || '') ? true : null }, e.name)));
   const body = h('div', null, h('p', { class: 'muted small' }, 'Your own start page, on this account only: untick what you do not need, and put the tiles and the cards in your order. Birthdays and This week share a row when they follow each other.'),
     h('h3', null, 'Tiles'), sortable(tiles), h('h3', null, 'Cards under the tiles'), sortable(cards),
     h('div', { class: 'grid' }, fld('Photo strip', strip), fld('Web search', engines)),
+    h('div', { class: 'grid' }, fld('The photo strip changes to', moves), fld('How often', everies)),
     h('p', { class: 'muted small' }, `In the search box, a prefix picks a site: ${BANG_HELP}.`));
   const v = await dialog('Customize the page', body, [{ label: 'Back to the default', value: 'reset' }, { label: 'Cancel', value: null }, { label: 'Save', value: 'save', primary: true }]);
   if (!v) return;
-  const json = v === 'reset' ? {} : { hidden: [...tiles, ...cards].filter((t) => !t.on).map((t) => t.key), order: tiles.map((t) => t.key), cards: cards.map((c) => c.key), strip: strip.value || null, search: engines.value || null };
+  const json = v === 'reset' ? {} : { hidden: [...tiles, ...cards].filter((t) => !t.on).map((t) => t.key), order: tiles.map((t) => t.key), cards: cards.map((c) => c.key), strip: strip.value || null, search: engines.value || null,
+    stripMove: moves.value === STRIP_DEFAULT.move ? null : moves.value, stripEvery: +everies.value === STRIP_DEFAULT.every ? null : +everies.value };
   try { await api('/api/me/layout', { method: 'PUT', json }); toast(v === 'reset' ? 'Back to the default' : 'Saved'); if (route().view === 'home') onRoute(); } catch (e) { fail(e); }
 }
 
@@ -657,31 +661,38 @@ async function drawStrip(el, kind) {
   autoStrip(el, row, otd ? null : reshuffle);
 }
 
-/* The strip moves on by itself: one photo along every few seconds (back to the start at the end of the row), and
-   Rediscover deals a fresh row every couple of minutes. It holds still while the pointer is over it, while it is
-   touched, dragged, wheeled or has the keyboard focus (and a little while after), while the tab is hidden, and it
-   does not glide at all for people who asked their system for reduced motion (the row is still dealt afresh). */
-const STRIP_STEP = 4000, STRIP_SHUFFLE = 2 * 60 * 1000, STRIP_REST = 8000;
+/* The strip changes by itself, as each person picks in Customize (layout stripMove, stripEvery): a fresh row of photos
+   (Rediscover; On this day has no other photos, so it turns the page instead), the next screenful of the row, or
+   nothing. It waits while the pointer is over it, while it is touched, dragged, wheeled or has the keyboard focus (and a
+   little while after), while the tab is hidden or a dialog is open. For reduced motion, the page turns without gliding. */
+const STRIP_MOVES = { shuffle: 'A fresh row of photos', page: 'The next photos in the row', off: 'Stays as it is' };
+const STRIP_EVERY = [30, 60, 120, 300, 600, 1800];  // seconds
+const STRIP_DEFAULT = { move: 'shuffle', every: 60 }, STRIP_REST = 8000;
+const everyText = (s) => (s < 60 ? `${s} seconds` : s === 60 ? '1 minute' : `${s / 60} minutes`);
 function autoStrip(el, row, reshuffle) {
   if (el.stopAuto) el.stopAuto();
+  const L = S.layout || {};
+  let move = L.stripMove || STRIP_DEFAULT.move;
+  const every = (STRIP_EVERY.includes(L.stripEvery) ? L.stripEvery : STRIP_DEFAULT.every) * 1000;
+  if (move === 'shuffle' && !reshuffle) move = 'page';
+  if (move === 'off') return;
   const still = () => window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
-  let hover = false, touchedAt = 0, dealtAt = Date.now();
+  let hover = false, touchedAt = 0, changedAt = Date.now();
   const busy = () => hover || el.contains(document.activeElement) || Date.now() - touchedAt < STRIP_REST;
   const touched = () => { touchedAt = Date.now(); };
   row.addEventListener('mouseenter', () => { hover = true; });
   row.addEventListener('mouseleave', () => { hover = false; touched(); });
   for (const ev of ['pointerdown', 'touchstart', 'touchmove', 'wheel', 'keydown']) row.addEventListener(ev, touched, { passive: true });
-  const step = () => {
+  const tick = () => {
     if (!el.isConnected) { el.stopAuto(); return; }
-    if (document.hidden || busy() || document.querySelector('.dialog-back')) return;
-    if (reshuffle && Date.now() - dealtAt >= STRIP_SHUFFLE) { el.stopAuto(); reshuffle(); return; }
-    if (still() || row.scrollWidth <= row.clientWidth + 1) return;
-    const first = row.firstElementChild;
-    const by = first ? first.getBoundingClientRect().width + (parseFloat(getComputedStyle(row).columnGap) || 0) : row.clientWidth / 2;
+    if (Date.now() - changedAt < every || document.hidden || busy() || document.querySelector('.dialog-back')) return;
+    changedAt = Date.now();
+    if (move === 'shuffle') { el.stopAuto(); reshuffle(); return; }
+    if (row.scrollWidth <= row.clientWidth + 1) return;
     const atEnd = row.scrollLeft + row.clientWidth >= row.scrollWidth - 2;
-    row.scrollTo({ left: atEnd ? 0 : row.scrollLeft + by, behavior: 'smooth' });
+    row.scrollTo({ left: atEnd ? 0 : row.scrollLeft + row.clientWidth, behavior: still() ? 'auto' : 'smooth' });
   };
-  const t = setInterval(step, STRIP_STEP);
+  const t = setInterval(tick, 1000);
   el.stopAuto = () => { clearInterval(t); el.stopAuto = null; };
 }
 
