@@ -131,6 +131,13 @@ git clone https://github.com/avandeputte/iocalendar && cd iocalendar
 ./update.sh         # later: the latest code, same settings
 ```
 
+Its last question, "Also install …?" (flag `--also iocalendar,ionotes`, `--also all`; `IOCALENDAR_ALSO` in the environment), puts
+other apps of the suite in this same machine, beside ioCalendar (`/opt/iocalendar/app` next to `/opt/iocalendar/app`),
+without asking the shared questions again: the same database server (each app gets its own database: `suite`,
+`calendar`, `contacts`, `notes`, `health`, `iopix`; the user needs rights on those names too), the same Shared ioSuite
+database, sign-in domain and admin (`iosuite-shared install`, from the shared library). Each app keeps its usual port
+and updates itself as always. The Proxmox installer offers the same as a checklist, for one container with several apps.
+
 `setup.sh` offers 127.0.0.1, database `calendar`, user `calendar`, password `calendar` as the defaults; its flags
 (`--db`, `--suite-db`, `--admin`, `--port`, `--public-url`, `--cookie-domain`, `--service`, `--yes`) are the same in
 every app of the suite. `python -m app.cli import CALENDAR-ID FILE.ics`, `sync-birthdays` and `check` work from a shell;
