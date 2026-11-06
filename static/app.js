@@ -305,7 +305,7 @@ function searchBox() {
       // Home Assistant: an entity's state, and a tap switches the ones the admin lets the page control
       things.q === ql && things.items.length ? h('div', { class: 'qhead' }, 'Home') : null,
       things.q === ql ? things.items.map((t) => { const a = row(t.control ? '#' : haLink(t), [h('span', { class: `bmic ha${t.on ? ' on' : ''}` }, icon(haIcon(t), 's')), h('span', { class: 'qname' }, t.name), h('span', { class: `muted small${t.control ? ' tap' : ''}` }, t.control ? `${t.text || t.state} · tap` : t.text || t.state)]);
-        if (t.control) a.onclick = async (e) => { e.preventDefault(); const r = await haAct(t.id, 'toggle'); if (r) { Object.assign(t, r); build(); } }; return a; }) : null,
+        if (t.control) a.onclick = async (e) => { e.preventDefault(); const r = await haAct(t.id, 'toggle'); if (r) { Object.assign(t, r); build(); } const card = document.querySelector('.homecard'); if (card) setTimeout(() => drawHomeCard(card, document.querySelector('.alerts'), true), 4000); }; return a; }) : null,
       // "dinner fri 19:00": a new event in ioCalendar (a dialog to check it first)
       cal ? [h('div', { class: 'qhead' }, 'Add to the calendar'), (() => { const a = row('#', [h('span', { class: 'bmic' }, icon('event', 's')), h('span', { class: 'qname' }, cal.title || '(no title)'), h('span', { class: 'muted small' }, eventWhen(cal))]);
         a.onclick = (e) => { e.preventDefault(); inp.blur(); quickAdd(cal); }; return a; })()] : null,
@@ -778,13 +778,16 @@ async function haAct(id, action) {
   try { return await api(`/api/ha/${encodeURIComponent(id)}/${action}`, { method: 'POST' }); } catch (e) { fail(e); return null; }
 }
 const haTile = (t) => {
-  const kids = [icon(haIcon(t), 's'), h('span', { class: 'hname' }, t.name), h('span', { class: 'hstate small' }, t.text || t.state)];
+  const kids = [icon(haIcon(t), 's'), h('span', { class: 'hbody' }, h('span', { class: 'hname' }, t.name), h('span', { class: 'hstate small' }, t.text || t.state))];
   if (!t.control) return h('a', { class: `hatile${t.on ? ' on' : ''}${t.state === 'unavailable' || t.state === 'missing' ? ' off' : ''}`, href: haLink(t), title: `${t.id} · in Home Assistant`, target: '_blank', rel: 'noreferrer' }, kids);
   const b = h('button', { class: `hatile ctl${t.on ? ' on' : ''}`, title: `${t.id} · tap to ${{ scene: 'run', script: 'run', button: 'press', input_button: 'press', automation: 'run' }[t.domain] || (t.on ? 'turn off' : 'turn on')}`, 'aria-pressed': t.on == null ? null : String(!!t.on) }, kids);
   b.onclick = async () => {
     b.classList.add('busy');
+    const card = b.closest('.homecard');
     const r = await haAct(t.id, 'toggle');
     if (r && b.isConnected) b.replaceWith(haTile({ ...t, ...r, control: t.control })); else b.classList.remove('busy');
+    // a device that reports back late (Zigbee, Z-Wave, a cloud bulb): the card asks again in a few seconds
+    if (card) setTimeout(() => { if (card.isConnected && !document.hidden) drawHomeCard(card, document.querySelector('.alerts'), true); }, 4000);
   };
   return b;
 };

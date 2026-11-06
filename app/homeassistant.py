@@ -362,10 +362,29 @@ def act(entity_id: str, action: str) -> dict:
     if not service:
         raise HAError(f"{_domain(entity_id)}: no '{action}'", 400)
     dom, svc = service.split(".", 1)
-    _call("POST", f"/api/services/{dom}/{svc}", {"entity_id": entity_id})
+    before = next((s for s in (_cache["items"] or []) if s.get("entity_id") == entity_id), None)
+    changed = _call("POST", f"/api/services/{dom}/{svc}", {"entity_id": entity_id})
     forget()
-    try:
-        st = _call("GET", f"/api/states/{urllib.parse.quote(entity_id)}")
-    except HAError:
-        st = None
+    # Home Assistant answers with the states the call changed; a device that reports back later (Zigbee, Z-Wave, a
+    # cloud bulb) is not among them yet, and reading its state straight away gives the old one, which would make the
+    # tile say the opposite of what just happened. So: the answer when it names the entity, else a few short reads
+    # until the state differs from before (a scene or button changes nothing: one read).
+    st = next((s for s in changed if isinstance(s, dict) and s.get("entity_id") == entity_id), None) if isinstance(changed, list) else None
+    expects_change = _domain(entity_id) not in ("scene", "script", "button", "input_button", "automation")
+    for i in range(6 if expects_change and before else 1):
+        if st is not None:
+            break
+        if i:
+            time.sleep(0.35)
+        try:
+            got = _call("GET", f"/api/states/{urllib.parse.quote(entity_id)}")
+        except HAError:
+            got = None
+        if isinstance(got, dict) and (not expects_change or not before or got.get("state") != before.get("state") or got.get("last_updated") != before.get("last_updated")):
+            st = got
+    if st is None:
+        try:
+            st = _call("GET", f"/api/states/{urllib.parse.quote(entity_id)}")
+        except HAError:
+            st = None
     return describe(st, c) if isinstance(st, dict) else {"id": entity_id, "ok": True}
