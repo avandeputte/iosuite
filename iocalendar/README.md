@@ -138,6 +138,12 @@ without asking the shared questions again: the same database server (each app ge
 database, sign-in domain and admin (`iosuite-shared install`, from the shared library). Each app keeps its usual port
 and updates itself as always. The Proxmox installer offers the same as a checklist, for one container with several apps.
 
+The databases and users need not exist beforehand: give a MariaDB / MySQL administrator (the question after the
+databases; flag `--db-admin USER:PASSWORD`, or `IOCALENDAR_DB_ADMIN`, also in the Proxmox installer) and `setup.sh` creates
+the app's database and user, the Shared ioSuite database and user and, with other apps installed alongside, their
+databases too, with the passwords you answered (`iosuite-shared provision`). Nothing is dropped, and the administrator's
+password is used once and not written anywhere.
+
 `setup.sh` offers 127.0.0.1, database `calendar`, user `calendar`, password `calendar` as the defaults; its flags
 (`--db`, `--suite-db`, `--admin`, `--port`, `--public-url`, `--cookie-domain`, `--service`, `--yes`) are the same in
 every app of the suite. `python -m app.cli import CALENDAR-ID FILE.ics`, `sync-birthdays` and `check` work from a shell;
