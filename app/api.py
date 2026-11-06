@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 from fastapi.concurrency import run_in_threadpool
 
-from app import __version__, apps, bookmarks, config, layout, status as appstatus, users, weather, widgets
+from app import __version__, apps, bookmarks, config, homeassistant as ha, layout, status as appstatus, users, weather, widgets
 from app.auth import updater
 
 router = APIRouter()
@@ -76,7 +76,7 @@ def my_layout(request: Request):
 
 @router.put("/api/me/layout")
 async def my_layout_save(request: Request):
-    """Body: {hidden?: [keys], order?: [app keys], cards?: [birthdays | week | strip | bookmarks], strip?: rediscover |
+    """Body: {hidden?: [keys], order?: [app keys], cards?: [home | birthdays | week | strip | bookmarks], strip?: rediscover |
     onthisday | off | null}. {} puts it back."""
     u = me(request)
     try:
@@ -147,6 +147,62 @@ async def weather_search(request: Request, q: str = "", key: str = ""):
         return {"items": await run_in_threadpool(weather.search, q, key)}
     except weather.WeatherError as e:
         raise HTTPException(400, str(e))
+
+
+# ------------------------------------------------------------------ Home Assistant (app/homeassistant.py)
+
+def _ha(fn, *a, **kw):
+    try:
+        return fn(*a, **kw)
+    except ha.HAError as e:
+        raise HTTPException(e.status, str(e))
+
+
+@router.get("/api/ha")
+async def get_home(request: Request):
+    """The Home card and the wall's sensors: the chosen entities with their state (from the server's copy, a few seconds
+    old at most), which of them go on the wall, and what needs attention. {enabled: false} until an admin sets it up."""
+    me(request)
+    return await run_in_threadpool(ha.home)
+
+
+@router.post("/api/ha/{entity_id}/{action}")
+async def ha_act(entity_id: str, action: str, request: Request):
+    """toggle | on | off: switch an entity the admin lets the page control (Settings › Home Assistant). Returns the
+    entity's state right after. 403 for any other entity."""
+    me(request)
+    return await run_in_threadpool(_ha, ha.act, entity_id, action)
+
+
+@router.get("/api/ha/search")
+async def ha_search(request: Request, q: str = "", n: int = 8):
+    """Entities whose name or id contains every word of q (the search box; up to 50)."""
+    me(request)
+    return {"items": await run_in_threadpool(_ha, ha.search, q, max(1, min(int(n or 8), 50)))}
+
+
+@router.get("/api/ha/settings")
+def ha_settings(request: Request):
+    admin(request)
+    return ha.settings()
+
+
+@router.post("/api/ha/settings")
+async def ha_save(request: Request):
+    """Admins. Body: {url?, token?, entities?: [{id, name?, control?, wall?, alert?}], builtinAlerts?}."""
+    admin(request)
+    b = await request.json()
+    _ha(ha.save, b if isinstance(b, dict) else {})
+    return ha.settings()
+
+
+@router.post("/api/ha/test")
+async def ha_test(request: Request):
+    """Admins. Body: {url?, token?}: tries them (the saved ones when empty) → {ok, name, version, entities}."""
+    admin(request)
+    b = await request.json()
+    b = b if isinstance(b, dict) else {}
+    return await run_in_threadpool(_ha, ha.test, str(b.get("url") or ""), str(b.get("token") or ""))
 
 
 # ------------------------------------------------------------------ bookmarks

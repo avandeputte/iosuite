@@ -38,6 +38,10 @@ TLS_KEY_FILE = env("TLS_KEY_FILE")
 ACCUWEATHER_API_KEY = env("ACCUWEATHER_API_KEY").strip()
 ACCUWEATHER_LOCATION = env("ACCUWEATHER_LOCATION").strip()   # a location key (Settings finds it from a city name)
 
+# Home Assistant (Settings › Home Assistant does the same, the environment wins): its address and a long-lived access token
+HA_URL = env("HA_URL").strip().rstrip("/")
+HA_TOKEN = os.environ.get("HA_TOKEN", "").strip()
+
 # updates: IOSUITE_REPO, IOSUITE_BRANCH and UPDATE_CHECK are read by iosuite_shared.updates (app.auth.updater)
 # the server log that Maintenance › Updates and logs shows (LOG_FILE= with nothing after it: none)
 LOG_FILE = Path(os.environ.get("LOG_FILE", str(ROOT / "iosuite.log"))) if os.environ.get("LOG_FILE", "x") else None

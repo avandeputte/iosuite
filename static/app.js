@@ -32,6 +32,19 @@ const ICONS = {
   fullscreen: 'M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z',
   event: 'M17 12h-5v5h5v-5zM16 1v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2h-1V1h-2zm3 18H5V8h14v11z',
   web: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z',
+  home: 'M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z',
+  bulb: 'M9 21c0 .55.45 1 1 1h4c.55 0 1-.45 1-1v-1H9v1zm3-19C8.14 2 5 5.14 5 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26c1.81-1.27 3-3.36 3-5.74 0-3.86-3.14-7-7-7z',
+  power: 'M13 3h-2v10h2V3zm4.83 2.17-1.42 1.42A6.92 6.92 0 0 1 19 12c0 3.87-3.13 7-7 7A6.995 6.995 0 0 1 7.58 6.58L6.17 5.17A8.932 8.932 0 0 0 3 12a9 9 0 0 0 18 0c0-2.74-1.23-5.18-3.17-6.83z',
+  lock: 'M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zM9 8V6c0-1.66 1.34-3 3-3s3 1.34 3 3v2H9z',
+  unlock: 'M12 17c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm6-9h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6h1.9c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm0 12H6V10h12v10z',
+  door: 'M19 19V4c0-1.1-.9-2-2-2H7c-1.1 0-2 .9-2 2v15H3v2h18v-2h-2zm-4-6h-2v-2h2v2z',
+  thermo: 'M15 13V5c0-1.66-1.34-3-3-3S9 3.34 9 5v8c-1.21.91-2 2.37-2 4 0 2.76 2.24 5 5 5s5-2.24 5-5c0-1.63-.79-3.09-2-4zm-4-8c0-.55.45-1 1-1s1 .45 1 1h-1v1h1v2h-1v1h1v2h-2V5z',
+  warn: 'M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z',
+  play: 'M8 5v14l11-7z',
+  blind: 'M20 19V3H4v16H2v2h20v-2h-2zM6 5h12v2H6V5zm0 4h12v2H6V9zm0 4h12v2H6v-2zm0 6v-2h12v2H6z',
+  fan: 'M12 11a1 1 0 1 0 0 2 1 1 0 0 0 0-2zm0-9c-1.5 0-3 .9-3 3 0 1.7.9 3.4 2 5.3-1.9-1-3.6-1.3-5.3-1.3-2.1 0-3.7 1.5-3.7 3s1.6 3 3.7 3c1.7 0 3.4-.3 5.3-1.3-1.1 1.9-2 3.6-2 5.3 0 2.1 1.5 3 3 3s3-.9 3-3c0-1.7-.9-3.4-2-5.3 1.9 1 3.6 1.3 5.3 1.3 2.1 0 3.7-1.5 3.7-3s-1.6-3-3.7-3c-1.7 0-3.4.3-5.3 1.3 1.1-1.9 2-3.6 2-5.3 0-2.1-1.5-3-3-3z',
+  bolt: 'M7 2v11h3v9l7-12h-4l4-8z',
+  battery: 'M15.67 4H14V2h-4v2H8.33C7.6 4 7 4.6 7 5.33v15.33C7 21.4 7.6 22 8.33 22h7.33c.74 0 1.34-.6 1.34-1.33V5.33C17 4.6 16.4 4 15.67 4zM15 18H9v-6h6v6z',
   server: 'M20 13H4c-.55 0-1 .45-1 1v6c0 .55.45 1 1 1h16c.55 0 1-.45 1-1v-6c0-.55-.45-1-1-1zM7 19c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zM20 3H4c-.55 0-1 .45-1 1v6c0 .55.45 1 1 1h16c.55 0 1-.45 1-1V4c0-.55-.45-1-1-1zM7 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z',
 };
 const icon = (n, cls = '') => { const s = document.createElement('span'); s.className = 'ic ' + cls; s.innerHTML = `<svg viewBox="0 0 24 24"><path d="${ICONS[n] || ''}"/></svg>`; return s; };
@@ -209,7 +222,10 @@ async function showHome(page) {
   // each other, else each stands on its own
   S.birthdaysCard = shows('birthdays') && S.apps.some((a) => a.key === 'iocontacts');  // then the calendar leaves birthdays to it
   const stripKind = L.strip || got.photoStrip;
+  const alerts = h('div', { class: 'alerts', hidden: true });  // what Home Assistant says needs attention (drawHomeCard fills it)
+  page.append(alerts);
   const cards = {
+    home: shows('home') ? () => { const c = h('div', { class: 'card homecard', hidden: true }); drawHomeCard(c, alerts); return c; } : null,
     birthdays: S.birthdaysCard ? () => { const c = h('div', { class: 'card capped birthdays' }); drawBirthdays(c); return c; } : null,
     week: shows('week') && S.apps.some((a) => a.key === 'iocalendar') ? () => { const c = h('div', { class: 'card capped week' }); drawWeek(c); return c; } : null,
     strip: shows('strip') && stripKind !== 'off' && S.apps.some((a) => a.key === 'iopix') ? () => { const c = h('div', { class: 'strip' }); drawStrip(c, stripKind); return c; } : null,
@@ -230,6 +246,7 @@ async function showHome(page) {
     drawWidgets(page, true); drawAppStatus(page); drawWeather(wx, true);
     for (const c of page.querySelectorAll('.card.birthdays.capped')) drawBirthdays(c, true);
     for (const c of page.querySelectorAll('.card.week.capped')) drawWeek(c, true);
+    const hc = page.querySelector('.homecard'); if (hc) drawHomeCard(hc, alerts, true);
     const bm = page.querySelector('.bookmarks'); if (bm) drawBookmarkStatus(bm);
   };
 }
@@ -249,7 +266,7 @@ function liveRefresh(force = false) {
   S.refreshedAt = Date.now();
   try { S.refresh(); } catch { /* the next round */ }
 }
-const CARDS = ['birthdays', 'week', 'strip', 'bookmarks'];
+const CARDS = ['home', 'birthdays', 'week', 'strip', 'bookmarks'];
 /** The cards' order: the viewer's, then any the viewer's list does not name, in the usual order. */
 const cardOrder = (L) => [...(L.cards || []), ...CARDS.filter((k) => !(L.cards || []).includes(k))];
 
@@ -264,7 +281,7 @@ function searchBox() {
   const inp = h('input', { class: 'q', type: 'search', placeholder: 'Search, or add an event', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Search bookmarks, contacts, the apps and the web, or add an event' });
   const list = h('div', { class: 'qlist', hidden: true });
   const box = h('div', { class: 'search' }, icon('search', 's'), inp, h('kbd', null, /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘K' : 'Ctrl K'), list);
-  let rows = [], sel = 0, timer = null, people = { q: '', items: [] };
+  let rows = [], sel = 0, timer = null, people = { q: '', items: [] }, things = { q: '', items: [] };
   const hide = () => { list.hidden = true; list.replaceChildren(); rows = []; };
   const row = (href, kids, ext) => { const a = h('a', { class: 'qrow', href, ...(ext ? { target: '_blank', rel: 'noreferrer' } : {}), onmousedown: (e) => e.preventDefault() }, kids); rows.push(a); return a; };
   const build = () => {
@@ -276,7 +293,7 @@ function searchBox() {
     const bang = webBang(q), site = bang ? null : looksLikeSite(q), cal = !bang && S.apps.find((a) => a.key === 'iocalendar') && parseEvent(q);
     const eng = bang ? bang.engine : webEngine(), wq = bang ? bang.q : q;
     const webRow = () => row(eng.url(wq), [h('span', { class: 'bmic' }, icon('web', 's')), h('span', { class: 'qname' }, `“${wq}”`), h('span', { class: 'muted small' }, eng.name)], true);
-    const found = links.length || (contacts && people.q === ql && people.items.length);
+    const found = links.length || (contacts && people.q === ql && people.items.length) || (things.q === ql && things.items.length);
     const kids = [
       // a site typed in full, or a prefix (g, w, yt…): that first, Enter goes there
       site ? [h('div', { class: 'qhead' }, 'Open'), row(site, [h('span', { class: 'bmic' }, icon('link', 's')), h('span', { class: 'qname' }, site.replace(/^https?:\/\//, '')), h('span', { class: 'muted small' }, 'New tab')], true)] : null,
@@ -285,6 +302,10 @@ function searchBox() {
       links.map((l) => { const src = bmIcon(l); return row(l.href, [h('span', { class: 'bmic' }, src ? h('img', { src, alt: '' }) : l.abbr), h('span', { class: 'qname' }, l.name), h('span', { class: 'muted small' }, l.description || l.href)], true); }),
       contacts && people.q === ql && people.items.length ? h('div', { class: 'qhead' }, 'People') : null,
       contacts && people.q === ql ? people.items.map((c) => row(`${contacts.url}/#/c/${c.id}`, [h('span', { class: 'face' }, c.hasPhoto ? h('img', { src: `/api/widgets/iocontacts/photo/${c.id}`, alt: '' }) : initials(c.name)), h('span', { class: 'qname' }, c.name), h('span', { class: 'muted small' }, c.org || '')])) : null,
+      // Home Assistant: an entity's state, and a tap switches the ones the admin lets the page control
+      things.q === ql && things.items.length ? h('div', { class: 'qhead' }, 'Home') : null,
+      things.q === ql ? things.items.map((t) => { const a = row(t.control ? '#' : haLink(t), [h('span', { class: `bmic ha${t.on ? ' on' : ''}` }, icon(haIcon(t), 's')), h('span', { class: 'qname' }, t.name), h('span', { class: `muted small${t.control ? ' tap' : ''}` }, t.control ? `${t.text || t.state} · tap` : t.text || t.state)]);
+        if (t.control) a.onclick = async (e) => { e.preventDefault(); const r = await haAct(t.id, 'toggle'); if (r) { Object.assign(t, r); build(); } }; return a; }) : null,
       // "dinner fri 19:00": a new event in ioCalendar (a dialog to check it first)
       cal ? [h('div', { class: 'qhead' }, 'Add to the calendar'), (() => { const a = row('#', [h('span', { class: 'bmic' }, icon('event', 's')), h('span', { class: 'qname' }, cal.title || '(no title)'), h('span', { class: 'muted small' }, eventWhen(cal))]);
         a.onclick = (e) => { e.preventDefault(); inp.blur(); quickAdd(cal); }; return a; })()] : null,
@@ -305,7 +326,15 @@ function searchBox() {
     if (inp.value.trim().toLowerCase() !== ql) return;
     people = { q: ql, items: (d && d.items) || [] }; build();
   };
-  inp.oninput = () => { sel = 0; build(); clearTimeout(timer); timer = setTimeout(askPeople, 250); };
+  const askThings = async () => {
+    const q = inp.value.trim(), ql = q.toLowerCase();
+    if (q.length < 2 || S.ha === false) return;
+    let d = null;
+    try { d = await api(`/api/ha/search?${new URLSearchParams({ q, n: 5 })}`); } catch { d = null; }
+    if (inp.value.trim().toLowerCase() !== ql) return;
+    things = { q: ql, items: (d && d.items) || [] }; build();
+  };
+  inp.oninput = () => { sel = 0; build(); clearTimeout(timer); timer = setTimeout(() => { askPeople(); askThings(); }, 250); };
   inp.onfocus = () => { if (inp.value.trim()) build(); };
   inp.onblur = () => setTimeout(hide, 150);
   inp.onkeydown = (e) => {
@@ -510,7 +539,7 @@ async function customize() {
   const apps = S.allApps || [];
   const rank = (a) => { const i = L.order.indexOf(a.key); return i < 0 ? 100 + apps.indexOf(a) : i; };
   const tiles = apps.slice().sort((a, b) => rank(a) - rank(b)).map((a) => ({ key: a.key, on: !L.hidden.includes(a.key), label: [h('img', { src: a.icon, alt: '' }), appName(a.name, a.color)] }));
-  const NAMES = { birthdays: 'Birthdays (ioContacts)', week: 'This week (ioCalendar)', strip: 'The photo strip (ioPix)', bookmarks: 'Bookmarks' };
+  const NAMES = { home: 'Home (Home Assistant)', birthdays: 'Birthdays (ioContacts)', week: 'This week (ioCalendar)', strip: 'The photo strip (ioPix)', bookmarks: 'Bookmarks' };
   const cards = cardOrder(L).map((k) => ({ key: k, on: !L.hidden.includes(k), label: [NAMES[k]] }));
   // a list of rows with a tick box and up / down buttons, for the tiles and for the cards alike
   const sortable = (items) => {
@@ -729,6 +758,60 @@ function drawHealthWidget(d) {
 /** The weather widget: the conditions now (with "Rain from 15:00" when the next hours bring some), and the days
     ahead. A click on the conditions opens the next 12 hours. Hidden until an admin sets it up. again: a refresh, which
     keeps what it shows when the server does not answer. */
+// ------------------------------------------------------------------ Home Assistant: the Home card, the alerts
+/* The entities an admin picked (Settings › Home Assistant), each with its state; a tap on one the admin lets the page
+   control toggles it (a light, a switch, a lock, a cover, a scene…). Above the tiles, a line for what needs attention
+   (a leak, smoke, a low battery, a door that should be closed). The server asks Home Assistant; the browser never does.
+   The card redraws every minute on its own, on top of the page's live refresh. */
+const HA_ICONS = { light: 'bulb', switch: 'power', input_boolean: 'power', fan: 'fan', lock: 'lock', cover: 'blind', scene: 'play', script: 'play', automation: 'play', button: 'play', input_button: 'play',
+  climate: 'thermo', media_player: 'play', person: 'person', device_tracker: 'person', vacuum: 'home', weather: 'cloud', camera: 'wall', siren: 'warn' };
+const HA_CLASS_ICONS = { door: 'door', garage_door: 'door', window: 'door', opening: 'door', temperature: 'thermo', humidity: 'cloud', battery: 'battery', power: 'bolt', energy: 'bolt', voltage: 'bolt', current: 'bolt',
+  motion: 'person', occupancy: 'person', presence: 'person', moisture: 'warn', smoke: 'warn', gas: 'warn', carbon_monoxide: 'warn', problem: 'warn', safety: 'warn', lock: 'lock', illuminance: 'bulb' };
+function haIcon(t) {
+  if (t.domain === 'lock') return t.on ? 'unlock' : 'lock';
+  return HA_CLASS_ICONS[t.class] || HA_ICONS[t.domain] || (t.domain === 'binary_sensor' ? 'check' : 'home');
+}
+/** Home Assistant's own page for an entity (its history), for the ones a tap does not switch. */
+const haLink = (t) => `${(S.ha && S.ha.url) || ''}/history?entity_id=${encodeURIComponent(t.id)}`;
+/** toggle | on | off, by way of the server; the entity's new state, or null (a toast says why). */
+async function haAct(id, action) {
+  try { return await api(`/api/ha/${encodeURIComponent(id)}/${action}`, { method: 'POST' }); } catch (e) { fail(e); return null; }
+}
+const haTile = (t) => {
+  const kids = [icon(haIcon(t), 's'), h('span', { class: 'hname' }, t.name), h('span', { class: 'hstate small' }, t.text || t.state)];
+  if (!t.control) return h('a', { class: `hatile${t.on ? ' on' : ''}${t.state === 'unavailable' || t.state === 'missing' ? ' off' : ''}`, href: haLink(t), title: `${t.id} · in Home Assistant`, target: '_blank', rel: 'noreferrer' }, kids);
+  const b = h('button', { class: `hatile ctl${t.on ? ' on' : ''}`, title: `${t.id} · tap to ${{ scene: 'run', script: 'run', button: 'press', input_button: 'press', automation: 'run' }[t.domain] || (t.on ? 'turn off' : 'turn on')}`, 'aria-pressed': t.on == null ? null : String(!!t.on) }, kids);
+  b.onclick = async () => {
+    b.classList.add('busy');
+    const r = await haAct(t.id, 'toggle');
+    if (r && b.isConnected) b.replaceWith(haTile({ ...t, ...r, control: t.control })); else b.classList.remove('busy');
+  };
+  return b;
+};
+async function drawHomeCard(el, alertsEl, again = false) {
+  let d;
+  try { d = await api('/api/ha'); } catch (e) { if (!again) { el.hidden = false; el.replaceChildren(h('div', { class: 'muted small' }, e.message)); } return; }
+  if (!el.isConnected) return;
+  S.ha = d.enabled ? d : false;
+  if (!d.enabled) { el.hidden = S.user.role !== 'admin'; if (!el.hidden) el.replaceChildren(wgHead('Home'), h('a', { class: 'lnk small', href: '#/settings/ha' }, 'Add Home Assistant')); return; }
+  el.hidden = false;
+  const title = wgHead(d.name || 'Home', null);
+  title.append(h('a', { class: 'muted', href: d.url, title: d.url, target: '_blank', rel: 'noreferrer' }, 'Home Assistant'));
+  if (d.error) { el.replaceChildren(title, h('div', { class: 'muted small' }, d.error)); return; }
+  el.replaceChildren(title,
+    d.items.length ? h('div', { class: 'hatiles' }, d.items.map(haTile))
+      : h('div', { class: 'muted small' }, S.user.role === 'admin' ? ['No entities picked yet: ', h('a', { class: 'lnk', href: '#/settings/ha' }, 'choose some')] : 'No entities picked yet.'));
+  // what needs attention, above the tiles
+  if (alertsEl) {
+    const al = d.alerts || [];
+    alertsEl.hidden = !al.length;
+    alertsEl.replaceChildren(...al.map((a) => h('a', { class: 'alert', href: haLink(a), target: '_blank', rel: 'noreferrer', title: a.id }, icon('warn', 's'), h('b', null, a.name), ' ', a.text)));
+  }
+  // its own minute: a light switched elsewhere shows here soon, without the whole page refreshing
+  clearTimeout(el.haTimer);
+  el.haTimer = setTimeout(() => { if (el.isConnected && !document.hidden) drawHomeCard(el, alertsEl, true); }, 60 * 1000);
+}
+
 async function drawWeather(el, again = false) {
   let w;
   try { w = await api('/api/weather'); } catch (e) { if (!again) el.replaceChildren(h('div', { class: 'muted small' }, e.message)); return; }
@@ -848,14 +931,14 @@ async function showWall(page) {
   page.className = 'wallpage';
   const photos = h('div', { class: 'wallphotos' });
   const clock = h('div', { class: 'wallclock' }), date = h('div', { class: 'walldate' });
-  const wx = h('div', { class: 'wallwx' }), hours = h('div', { class: 'wallhours' });
+  const wx = h('div', { class: 'wallwx' }), hours = h('div', { class: 'wallhours' }), sensors = h('div', { class: 'wallsensors' });
   const agenda = h('div', { class: 'wallagenda' }), caption = h('div', { class: 'wallcap' });
   const bar = h('div', { class: 'wallbar' },
     h('button', { class: 'iconbtn', title: 'Full screen', onclick: () => { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen && document.documentElement.requestFullscreen().catch(() => {}); } }, icon('fullscreen')),
     h('a', { class: 'iconbtn', title: 'Back to the start page (Esc)', href: '#/' }, icon('close')));
   page.append(photos, h('div', { class: 'wallshade' }),
     h('div', { class: 'walltop' }, h('div', null, clock, date), wx),
-    h('div', { class: 'wallbottom' }, agenda, h('div', { class: 'wallright' }, hours, caption)), bar);
+    h('div', { class: 'wallbottom' }, agenda, h('div', { class: 'wallright' }, sensors, hours, caption)), bar);
   // the controls show on a touch or a move of the mouse, and fade after a few seconds
   let hideT;
   const wake = () => { bar.classList.add('on'); clearTimeout(hideT); hideT = setTimeout(() => bar.classList.remove('on'), 4000); };
@@ -876,9 +959,21 @@ async function showWall(page) {
   document.addEventListener('keydown', onKey);
   S.wallStop = () => { timers.forEach(clearInterval); clearTimeout(hideT); document.removeEventListener('visibilitychange', onVis); document.removeEventListener('keydown', onKey); if (lock) lock.release().catch(() => {}); if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); };
   if (has('iopix')) timers.push(wallSlideshow(photos, caption, got.layout && got.layout.strip ? got.layout.strip : got.photoStrip));
-  const draw = () => { wallWeather(wx, hours); wallAgenda(agenda, has); };
+  const draw = () => { wallWeather(wx, hours); wallAgenda(agenda, has); wallSensors(sensors); };
   draw();
+  timers.push(setInterval(() => { if (!document.hidden) wallSensors(sensors); }, 60 * 1000));  // the house changes faster than the weather
   S.shownDay = dayKey(); S.refreshedAt = Date.now(); S.refresh = draw;
+}
+/** The Home Assistant entities ticked "wall" (Settings › Home Assistant), name and state each; what needs attention first. */
+async function wallSensors(el) {
+  let d;
+  try { d = await api('/api/ha'); } catch { return; }
+  if (!el.isConnected) return;
+  if (!d.enabled) { el.replaceChildren(); return; }
+  const on = new Set(d.wall || []);
+  const items = (d.items || []).filter((t) => on.has(t.id));
+  el.replaceChildren(...(d.alerts || []).slice(0, 3).map((a) => h('div', { class: 'wallsensor alert' }, icon('warn', 's'), h('span', { class: 'hname' }, a.name), h('span', { class: 'hstate' }, a.text))),
+    ...items.map((t) => h('div', { class: `wallsensor${t.on ? ' on' : ''}` }, icon(haIcon(t), 's'), h('span', { class: 'hname' }, t.name), h('span', { class: 'hstate' }, t.text || t.state))));
 }
 /** A photo every 20 seconds, fading into the next; landscape ones first on a landscape screen. A fresh batch when the
     row is used up. Returns the interval, for showWall to stop. */
@@ -956,12 +1051,12 @@ async function wallAgenda(el, has) {
 async function showSettings(page, r) {
   const adm = S.user.role === 'admin';
   const canEdit = ['editor', 'admin'].includes(S.user.role);
-  const tabs = [['account', 'Account'], ...(adm ? [['weather', 'Home page']] : []), ...(canEdit ? [['bookmarks', 'Bookmarks']] : []), ...(adm ? [['users', 'Users']] : [])];
+  const tabs = [['account', 'Account'], ...(adm ? [['weather', 'Home page'], ['ha', 'Home Assistant']] : []), ...(canEdit ? [['bookmarks', 'Bookmarks']] : []), ...(adm ? [['users', 'Users']] : [])];
   if (!tabs.some(([k]) => k === r.tab)) r.tab = 'account';
   page.append(h('div', { class: 'pagehead' }, h('h1', null, 'Settings')),
     h('div', { class: 'tabs' }, tabs.map(([k, l]) => h('button', { class: r.tab === k ? 'on' : '', onclick: () => { location.hash = `#/settings/${k}`; } }, l))));
   const body = h('div'); page.append(body);
-  await ({ account: setAccount, apps: setHome, weather: setHome, bookmarks: setBookmarks, users: setUsers }[r.tab] || setAccount)(body);
+  await ({ account: setAccount, apps: setHome, weather: setHome, ha: setHomeAssistant, bookmarks: setBookmarks, users: setUsers }[r.tab] || setAccount)(body);
 }
 const fld = (l, e) => h('label', { class: 'field' }, h('span', null, l), e);
 
@@ -1022,6 +1117,66 @@ async function setWeather(el) {
   h('div', { class: 'box' }, h('h2', null, icon('cloud'), 'Place'), where,
     s.locationFromEnv ? null : [h('div', { class: 'multi' }, q, h('button', { class: 'pillbtn noic', onclick: search }, 'Find')), found,
       h('p', { class: 'muted small' }, 'Type a city and pick it from the list (one AccuWeather call per search).')]));
+}
+
+/** Settings › Home Assistant: the address and token, a test, and the entities the page shows, each with its name, whether
+    a tap may switch it, whether it goes on the wall, and the state that needs attention. */
+async function setHomeAssistant(el) {
+  const s = await api('/api/ha/settings');
+  const url = h('input', { class: 't', type: 'url', value: s.url || '', placeholder: 'http://homeassistant.local:8123', disabled: s.urlFromEnv ? true : null, autocomplete: 'off' });
+  const tok = h('input', { class: 't', type: 'password', placeholder: s.hasToken ? '(kept)' : 'Long-lived access token', disabled: s.tokenFromEnv ? true : null, autocomplete: 'off' });
+  const result = h('span', { class: 'muted small' });
+  const conn = () => ({ ...(s.urlFromEnv ? {} : { url: url.value.trim() }), ...(tok.value.trim() ? { token: tok.value.trim() } : {}) });
+  const save = async (body) => { try { const r = await api('/api/ha/settings', { method: 'POST', json: body }); toast('Saved'); return r; } catch (e) { fail(e); return null; } };
+  const test = async () => {
+    result.className = 'muted small'; result.textContent = 'Asking…';
+    try { const r = await api('/api/ha/test', { method: 'POST', json: conn() }); result.className = 'small ok'; result.textContent = `${r.name} · Home Assistant ${r.version || ''} · ${r.entities} entities`; } catch (e) { result.className = 'small err'; result.textContent = e.message; }
+  };
+  // the entities picked, as rows
+  let items = (s.entities || []).map((e) => ({ ...e }));
+  const list = h('div', { class: 'halist' });
+  const persist = async () => { const r = await save({ entities: items }); if (r) { items = r.entities.map((e) => ({ ...e })); drawList(); } };
+  const drawList = () => list.replaceChildren(h('div', { class: 'harow head' }, h('span', null, 'Entity'), h('span', null, 'Shown as'), h('span', { title: 'A tap on the card switches it (anyone signed in)' }, 'Control'), h('span', { title: 'On the wall display' }, 'Wall'), h('span', { title: 'Needs attention when its state is this (on, open, unlocked…); empty: never' }, 'Alert when'), h('span')),
+    ...items.map((e, i) => h('div', { class: 'harow' },
+      h('span', { class: 'haid', title: e.id }, e.id),
+      h('input', { class: 't', value: e.name || '', placeholder: 'Its own name', onchange: (ev) => { e.name = ev.target.value.trim(); } }),
+      h('input', { type: 'checkbox', checked: e.control, onchange: (ev) => { e.control = ev.target.checked; } }),
+      h('input', { type: 'checkbox', checked: e.wall, onchange: (ev) => { e.wall = ev.target.checked; } }),
+      h('input', { class: 't', value: e.alert || '', placeholder: '–', onchange: (ev) => { e.alert = ev.target.value.trim().toLowerCase(); } }),
+      h('span', { class: 'bmtools' }, h('button', { class: 'iconbtn', title: 'Up', disabled: i === 0 ? true : null, onclick: () => { [items[i - 1], items[i]] = [items[i], items[i - 1]]; drawList(); } }, icon('up', 's')),
+        h('button', { class: 'iconbtn', title: 'Down', disabled: i === items.length - 1 ? true : null, onclick: () => { [items[i + 1], items[i]] = [items[i], items[i + 1]]; drawList(); } }, icon('down', 's')),
+        h('button', { class: 'iconbtn', title: 'Remove', onclick: () => { items.splice(i, 1); drawList(); } }, icon('close', 's'))))),
+    ...(items.length ? [] : [h('p', { class: 'muted small' }, 'Nothing picked yet: find entities below and add them.')]));
+  drawList();
+  // the picker: a search among every entity Home Assistant has
+  const q = h('input', { class: 't', placeholder: 'Find an entity: kitchen, garage, temperature…' });
+  const found = h('div', { class: 'found' });
+  const find = async () => {
+    if (!q.value.trim()) { found.replaceChildren(); return; }
+    found.replaceChildren(h('span', { class: 'muted small' }, 'Looking…'));
+    try {
+      const r = await api(`/api/ha/search?${new URLSearchParams({ q: q.value.trim(), n: 30 })}`);
+      const have = new Set(items.map((e) => e.id));
+      found.replaceChildren(...(r.items.length ? r.items.map((t) => h('button', { class: 'pillbtn', disabled: have.has(t.id) ? true : null, title: t.id, onclick: () => { items.push({ id: t.id, name: '', control: !!HA_ICONS[t.domain] && !['climate', 'media_player', 'person', 'device_tracker', 'weather', 'camera'].includes(t.domain), wall: false, alert: '' }); drawList(); find(); } },
+        icon(haIcon(t), 's'), `${t.name}`, h('span', { class: 'muted small' }, ` ${t.text || t.state}`))) : [h('span', { class: 'muted small' }, 'Nothing found')]));
+    } catch (e) { found.replaceChildren(h('span', { class: 'err' }, e.message)); }
+  };
+  q.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); find(); } };
+  const builtin = h('input', { type: 'checkbox', checked: s.builtinAlerts, onchange: async (e) => { await save({ builtinAlerts: e.target.checked }); } });
+  el.append(h('div', { class: 'box' }, h('h2', null, icon('home'), 'Home Assistant'),
+    h('p', { class: 'muted' }, 'The Home card, sensors on the wall display and your things in the search box come from Home Assistant. This server talks to it with one long-lived access token (in Home Assistant: your profile › Security › Long-lived access tokens); browsers never see the token, and the page switches only the entities you tick below.'),
+    h('div', { class: 'grid' }, fld('Address', url), fld('Access token', tok)),
+    s.urlFromEnv || s.tokenFromEnv ? h('p', { class: 'muted small' }, `${[s.urlFromEnv ? 'HA_URL' : null, s.tokenFromEnv ? 'HA_TOKEN' : null].filter(Boolean).join(' and ')} in the environment set${s.urlFromEnv && s.tokenFromEnv ? '' : 's'} this.`) : null,
+    h('p', { class: 'multi' }, h('button', { class: 'pillbtn primary', onclick: async () => { if (await save(conn())) { tok.value = ''; tok.placeholder = '(kept)'; s.hasToken = true; test(); } } }, icon('check', 's'), 'Save'),
+      h('button', { class: 'pillbtn noic', onclick: test }, 'Test'),
+      s.hasToken && !s.tokenFromEnv ? h('button', { class: 'pillbtn noic', onclick: async () => { if (await confirmDialog('Remove the token', 'Remove the Home Assistant token? The Home card disappears from the page.', 'Remove', true)) { await save({ token: '' }); onRoute(); } } }, 'Remove the token') : null,
+      result)),
+  h('div', { class: 'box' }, h('h2', null, icon('tune'), 'On the page'),
+    h('p', { class: 'muted' }, 'The entities on the Home card, in this order. Control: a tap on the card (or in the search box) toggles it, for anyone signed in. Wall: on the wall display too. Alert when: its state that the page should point out, as Home Assistant writes it (on, open, unlocked, not_home…).'),
+    list,
+    h('div', { class: 'multi' }, q, h('button', { class: 'pillbtn noic', onclick: find }, 'Find')), found,
+    h('p', null, h('button', { class: 'pillbtn primary', onclick: persist }, icon('check', 's'), 'Save the list')),
+    h('label', { class: 'check' }, builtin, 'Point out a leak, smoke, gas or CO sensor that is on, a problem or safety sensor, and a battery at 15% or under, wherever it is in Home Assistant')));
 }
 
 async function setBookmarks(el) {
