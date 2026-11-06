@@ -151,6 +151,13 @@ git clone https://github.com/avandeputte/iocontacts && cd iocontacts
 ./update.sh         # later: the latest code, same settings
 ```
 
+Its last question, "Also install …?" (flag `--also iocalendar,ionotes`, `--also all`; `IOCONTACTS_ALSO` in the environment), puts
+other apps of the suite in this same machine, beside ioContacts (`/opt/iocalendar/app` next to `/opt/iocontacts/app`),
+without asking the shared questions again: the same database server (each app gets its own database: `suite`,
+`calendar`, `contacts`, `notes`, `health`, `iopix`; the user needs rights on those names too), the same Shared ioSuite
+database, sign-in domain and admin (`iosuite-shared install`, from the shared library). Each app keeps its usual port
+and updates itself as always. The Proxmox installer offers the same as a checklist, for one container with several apps.
+
 `setup.sh`'s flags (`--db`, `--suite-db`, `--admin`, `--port`, `--public-url`, `--cookie-domain`, `--service`, `--yes`) are the same in every app of the suite, plus `--ldap-port`. Accounts are the suite's: `.venv/bin/iosuite-shared --config . admin NAME --app iocontacts` (password from `ADMIN_PASSWORD`, or asked for) and `.venv/bin/iosuite-shared --config . password NAME`.
 
 ## Configuration

@@ -72,6 +72,17 @@ ask_app_settings() {
     aw=$(whiptail --backtitle "$bt" --passwordbox "Admin password (8 characters or more; empty: make the admin in the browser on the first visit)" 10 72 3>&1 1>&2 2>&3) || exit 1
     [[ -n "$aw" ]] && IOCONTACTS_ADMIN="$an:$aw" || IOCONTACTS_ADMIN=""
   fi
+  if [[ -z "${IOCONTACTS_ALSO+x}" ]]; then  # the other apps of the suite in the same container (ioPix has its own script: photo mounts)
+    IOCONTACTS_ALSO=$(whiptail --backtitle "$bt" --checklist "Also install in this container (same database server, each app its own database; same accounts and admin; each on its usual port):" 14 78 4 \
+      iosuite "ioSuite (the start page)  (8630)" OFF \
+      iocalendar "ioCalendar  (8620)" OFF \
+      ionotes "ionotes  (8610)" OFF \
+      iohealth "ioHealth  (47800)" OFF 3>&1 1>&2 2>&3) || exit 1
+    IOCONTACTS_ALSO=$(echo "$IOCONTACTS_ALSO" | tr -d '"' | tr ' ' ',')
+  fi
+  if [[ -n "$IOCONTACTS_ALSO" ]]; then  # room for more than one app
+    (( var_ram < 2048 )) && var_ram=2048; (( var_disk < 8 )) && var_disk=8
+  fi
 }
 
 function update_script() {
@@ -101,7 +112,7 @@ SECRETS="IOCONTACTS_DB=$(printf '%q' "$IOCONTACTS_DB")"$'\n'
 SECF="$(mktemp)"; chmod 600 "$SECF"; printf '%s' "$SECRETS" > "$SECF"
 pct push "$CTID" "$SECF" /opt/iocontacts/setup.env --perms 0600 --user 0 --group 0
 rm -f "$SECF"
-SETUP_CMD="cd /opt/iocontacts/app && sh ./setup.sh --yes --no-system-deps --service --port '${IOCONTACTS_PORT:-8640}' --ldap-port '${IOCONTACTS_LDAP_PORT:-389}' --public-url '${IOCONTACTS_PUBLIC_URL:-}' --cookie-domain '${IOCONTACTS_COOKIE_DOMAIN:-}'"
+SETUP_CMD="cd /opt/iocontacts/app && sh ./setup.sh --yes --no-system-deps --service --port '${IOCONTACTS_PORT:-8640}' --ldap-port '${IOCONTACTS_LDAP_PORT:-389}' --public-url '${IOCONTACTS_PUBLIC_URL:-}' --cookie-domain '${IOCONTACTS_COOKIE_DOMAIN:-}' --also '${IOCONTACTS_ALSO:-none}'"
 WRAPPED="set -a; . /opt/iocontacts/setup.env; set +a; rm -f /opt/iocontacts/setup.env; $SETUP_CMD > /opt/iocontacts/setup.log 2>&1"
 if ! pct exec "$CTID" -- bash -c "$WRAPPED"; then
   msg_error "setup.sh failed inside the container; last lines of /opt/iocontacts/setup.log:"
@@ -115,4 +126,8 @@ msg_ok "Completed successfully!\n"
 echo -e "${CREATING}${GN}${APP} setup has been successfully initialized!${CL}"
 echo -e "${INFO}${YW}Access it using the following URL:${CL}"
 echo -e "${GATEWAY}${BGN}http://${IP}:${IOCONTACTS_PORT:-8640}${CL}"
+for a in ${IOCONTACTS_ALSO//,/ }; do
+  case "$a" in iosuite) p=8630;; iocalendar) p=8620;; iocontacts) p=8640;; ionotes) p=8610;; iohealth) p=47800;; iopix) p=8600;; *) p="";; esac
+  [[ -n "$p" ]] && echo -e "${INFO}${YW}$a:${CL} ${BGN}http://${IP}:$p${CL}"
+done
 echo -e "${INFO}${YW}CardDAV: http://${IP}:${IOCONTACTS_PORT:-8640}/dav/   LDAP: ${IP}:${IOCONTACTS_LDAP_PORT:-389} (base dc=iocontacts)${CL}"
