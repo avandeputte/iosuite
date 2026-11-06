@@ -193,14 +193,15 @@ def test_suite_apps_for_the_app_switcher(client):
 
 
 def test_birthday_without_reminder(client, family_id):
-    """An unchecked "Remind me" keeps the birthday on the contact (and in vCard) but out of every birthdays feed."""
+    """An unchecked "Remind me" keeps the birthday on the contact, in vCard and on the Birthdays page; only the
+    calendar feed leaves it out."""
     import datetime as dt
     soon = dt.date.today() + dt.timedelta(days=3)
     on = mk(client, family_id, fn="Remind Yes", birthday={"year": 1980, "month": soon.month, "day": soon.day})
     off = mk(client, family_id, fn="Remind No", birthday={"year": 1981, "month": soon.month, "day": soon.day}, birthdayRemind=False)
     assert on["birthdayRemind"] is True and off["birthdayRemind"] is False and off["birthday"]["year"] == 1981
-    names = {x["fn"] for x in client.get("/api/upcoming?days=10").json()["items"]}
-    assert "Remind Yes" in names and "Remind No" not in names
+    flags = {x["fn"]: x["remind"] for x in client.get("/api/upcoming?days=10").json()["items"]}
+    assert flags["Remind Yes"] is True and flags["Remind No"] is False
     info = client.get("/api/connect").json()
     ics = client.get(info["calendar"]["family"].split("testserver")[1]).text
     assert "Remind Yes's birthday" in ics and "Remind No" not in ics
@@ -212,7 +213,12 @@ def test_birthday_without_reminder(client, family_id):
     assert client.get(f"/api/contacts/{off['id']}").json()["birthdayRemind"] is False
     back = client.put(f"/api/contacts/{off['id']}", json={**client.get(f"/api/contacts/{off['id']}").json(), "birthdayRemind": True}).json()
     assert back["birthdayRemind"] is True
-    assert "Remind No" in {x["fn"] for x in client.get("/api/upcoming?days=10").json()["items"]}
+    # the Birthdays page toggles it with a PATCH of only the flag
+    assert client.patch(f"/api/contacts/{off['id']}", json={"birthdayRemind": False}).json()["birthdayRemind"] is False
+    ics = client.get(info["calendar"]["family"].split("testserver")[1]).text
+    assert "Remind No" not in ics and client.get(f"/api/contacts/{off['id']}").json()["birthday"]["year"] == 1981
+    assert client.patch(f"/api/contacts/{off['id']}", json={"birthdayRemind": True}).json()["birthdayRemind"] is True
+    assert "Remind No's birthday" in client.get(info["calendar"]["family"].split("testserver")[1]).text
 
 
 def test_the_shell_its_files_and_the_icon_are_public(client):
