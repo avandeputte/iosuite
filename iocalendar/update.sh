@@ -165,7 +165,9 @@ chmod 755 setup.sh update.sh run.sh 2>/dev/null || true
 # the editable install's metadata follows the new pyproject.toml (its import path already points here, and the packages
 # are in place, so this is bookkeeping: the app runs either way)
 pipi --no-deps -e . 2>/dev/null || echo "  note: the package metadata could not be refreshed (pip install -e .); $LABEL runs regardless"
-"$VPY" -m app.cli migrate >/dev/null 2>&1 || echo "  note: the database could not be updated now; $LABEL does it when it starts"
+# the database is brought up to date now when the app has a command line for it (app/cli.py); otherwise the app does it as it starts
+CLI=app.cli
+[ ! -f app/cli.py ] || "$VPY" -m "$CLI" migrate >/dev/null 2>&1 || echo "  note: the database could not be updated now; $LABEL does it when it starts"
 after_install
 
 NEWV="$(sed -n 's/^__version__ = "\([^"]*\)".*/\1/p' app/__init__.py)"
