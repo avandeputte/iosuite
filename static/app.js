@@ -28,6 +28,10 @@ const ICONS = {
   grip: 'M11 18c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2zm-2-8c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0-6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm6 4c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z',
   edit: 'M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 0 0 0-1.41l-2.34-2.34a.996.996 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z',
   delete: 'M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z',
+  wall: 'M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h5v2h8v-2h5c1.1 0 1.99-.9 1.99-2L23 5c0-1.1-.9-2-2-2zm0 14H3V5h18v12z',
+  fullscreen: 'M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z',
+  event: 'M17 12h-5v5h5v-5zM16 1v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2h-1V1h-2zm3 18H5V8h14v11z',
+  web: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z',
   server: 'M20 13H4c-.55 0-1 .45-1 1v6c0 .55.45 1 1 1h16c.55 0 1-.45 1-1v-6c0-.55-.45-1-1-1zM7 19c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zM20 3H4c-.55 0-1 .45-1 1v6c0 .55.45 1 1 1h16c.55 0 1-.45 1-1V4c0-.55-.45-1-1-1zM7 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z',
 };
 const icon = (n, cls = '') => { const s = document.createElement('span'); s.className = 'ic ' + cls; s.innerHTML = `<svg viewBox="0 0 24 24"><path d="${ICONS[n] || ''}"/></svg>`; return s; };
@@ -134,6 +138,7 @@ function drawUser() {
       h('a', { class: 'mi', href: '#/settings/account', onclick: closeMenu }, icon('person', 's'), 'Account'),
       ['editor', 'admin'].includes(S.user.role) ? h('a', { class: 'mi', href: '#/settings/bookmarks', onclick: closeMenu }, icon('link', 's'), 'Bookmarks') : null,
       h('button', { class: 'mi', onclick: () => { closeMenu(); customize(); } }, icon('tune', 's'), 'Customize the page'),
+      h('button', { class: 'mi', onclick: () => { closeMenu(); enterWall(); } }, icon('wall', 's'), 'Wall display'),
       h('button', { class: 'mi', onclick: () => { const n = { system: 'light', light: 'dark', dark: 'system' }[theme]; localStorage.setItem('iosuite.theme', n); applyTheme(); closeMenu(); toast(`Appearance: ${n}`); } },
         icon('theme', 's'), `Appearance: ${theme}`),
       h('a', { class: 'mi', href: '#/settings', onclick: closeMenu }, icon('settings', 's'), 'Settings'),
@@ -155,6 +160,7 @@ function route() {
   const [a, b] = location.hash.replace(/^#\/?/, '').split('/').map(decodeURIComponent);
   if (a === 'settings') return { view: 'settings', tab: b || 'account' };
   if (a === 'maintenance') return { view: 'maintenance', tab: b || 'updates' };
+  if (a === 'wall') return { view: 'wall' };
   return { view: 'home' };
 }
 async function onRoute() {
@@ -162,9 +168,12 @@ async function onRoute() {
   const page = h('div', { class: 'page' });
   // the start page has no top bar: the account menu sits in its first row instead (showHome moves it there)
   document.body.classList.toggle('home', r.view === 'home');
+  document.body.classList.toggle('wall', r.view === 'wall');
+  S.refresh = null; S.shownDay = null;  // the view drawn next says how it refreshes itself (liveRefresh)
+  if (S.wallStop) { S.wallStop(); S.wallStop = null; }
   $('#topbar').append(userMenu());  // out of the old page before it goes; showHome takes it into the new one
   $('#main').replaceChildren(page);
-  try { await ({ home: showHome, settings: showSettings, maintenance: showMaintenance })[r.view](page, r); } catch (e) { fail(e); }
+  try { await ({ home: showHome, settings: showSettings, maintenance: showMaintenance, wall: showWall })[r.view](page, r); } catch (e) { fail(e); }
 }
 
 // ------------------------------------------------------------------ the start page
@@ -181,7 +190,7 @@ async function showHome(page) {
   const shows = (k) => !L.hidden.includes(k);
   const first = (S.user.displayName || S.user.name).split(/\s+/)[0];
   const wx = h('div', { class: 'weather' });
-  page.append(h('div', { class: 'top' }, h('div', { class: 'hello' }, h('h1', null, `${greeting()}, ${first}`),
+  page.append(h('div', { class: 'top' }, h('div', { class: 'hello' }, h('h1', { class: 'greet' }, `${greeting()}, ${first}`),
     h('div', { class: 'dateline' }, h('span', { class: 'muted' }, new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })), userMenu())), searchBox(), wx));
   drawWeather(wx);  // fills in when AccuWeather (or the server's copy) answers
   // the tiles: an app with something to show gets a column of its own; the others go two to a column, half the height
@@ -214,6 +223,31 @@ async function showHome(page) {
       agenda.append(cards[k]());
     } else page.append(cards[k]());
   }
+  // live refresh: every few minutes, and on coming back to the tab, the page brings itself up to date in place
+  S.shownDay = dayKey(); S.refreshedAt = Date.now();
+  S.refresh = () => {
+    const g = page.querySelector('.greet'); if (g) g.textContent = `${greeting()}, ${first}`;
+    drawWidgets(page, true); drawAppStatus(page); drawWeather(wx, true);
+    for (const c of page.querySelectorAll('.card.birthdays.capped')) drawBirthdays(c, true);
+    for (const c of page.querySelectorAll('.card.week.capped')) drawWeek(c, true);
+    const bm = page.querySelector('.bookmarks'); if (bm) drawBookmarkStatus(bm);
+  };
+}
+
+// ------------------------------------------------------------------ live refresh
+/* A start page stays open all day: every five minutes (and when the tab is shown again) the view on screen brings
+   itself up to date in place (S.refresh: the tiles' widgets, the weather, the cards, the dots), without a flicker; at
+   midnight the whole page is drawn anew, for the new day's greeting, date, On this day and birthdays. Nothing runs
+   while the tab is hidden, a dialog is open, or someone is typing in the search box. */
+const REFRESH_EVERY = 5 * 60 * 1000;
+const dayKey = () => new Date().toDateString();
+function liveRefresh(force = false) {
+  if (document.hidden || !S.refresh || document.querySelector('.dialog-back')) return;
+  if (S.shownDay && S.shownDay !== dayKey()) { onRoute(); return; }
+  const typing = document.activeElement && document.activeElement.matches('input, textarea, select');
+  if (typing || (!force && Date.now() - (S.refreshedAt || 0) < REFRESH_EVERY)) return;
+  S.refreshedAt = Date.now();
+  try { S.refresh(); } catch { /* the next round */ }
 }
 const CARDS = ['birthdays', 'week', 'strip', 'bookmarks'];
 /** The cards' order: the viewer's, then any the viewer's list does not name, in the usual order. */
@@ -227,7 +261,7 @@ const FOLD = { ß: 'ss', æ: 'ae', œ: 'oe', ø: 'o', ł: 'l', đ: 'd', ð: 'd',
 const fold = (s) => String(s || '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[ßæœøłđðþı]/g, (c) => FOLD[c]);
 const APP_SEARCH = { iopix: (q) => `#/photos?q=${encodeURIComponent(q)}`, iocalendar: (q) => `#/search/${encodeURIComponent(q)}`, ionotes: (q) => `#/notes?q=${encodeURIComponent(q)}` };
 function searchBox() {
-  const inp = h('input', { class: 'q', type: 'search', placeholder: 'Search', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Search bookmarks, contacts and the apps' });
+  const inp = h('input', { class: 'q', type: 'search', placeholder: 'Search, or add an event', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Search bookmarks, contacts, the apps and the web, or add an event' });
   const list = h('div', { class: 'qlist', hidden: true });
   const box = h('div', { class: 'search' }, icon('search', 's'), inp, h('kbd', null, /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘K' : 'Ctrl K'), list);
   let rows = [], sel = 0, timer = null, people = { q: '', items: [] };
@@ -239,13 +273,26 @@ function searchBox() {
     if (!q) return hide();
     const links = (S.bookmarks || []).filter((l) => fold(`${l.name} ${l.description || ''} ${l.href}`).includes(fold(q))).slice(0, 6);
     const contacts = S.apps.find((a) => a.key === 'iocontacts');
+    const bang = webBang(q), site = bang ? null : looksLikeSite(q), cal = !bang && S.apps.find((a) => a.key === 'iocalendar') && parseEvent(q);
+    const eng = bang ? bang.engine : webEngine(), wq = bang ? bang.q : q;
+    const webRow = () => row(eng.url(wq), [h('span', { class: 'bmic' }, icon('web', 's')), h('span', { class: 'qname' }, `“${wq}”`), h('span', { class: 'muted small' }, eng.name)], true);
+    const found = links.length || (contacts && people.q === ql && people.items.length);
     const kids = [
+      // a site typed in full, or a prefix (g, w, yt…): that first, Enter goes there
+      site ? [h('div', { class: 'qhead' }, 'Open'), row(site, [h('span', { class: 'bmic' }, icon('link', 's')), h('span', { class: 'qname' }, site.replace(/^https?:\/\//, '')), h('span', { class: 'muted small' }, 'New tab')], true)] : null,
+      bang ? [h('div', { class: 'qhead' }, eng.name), webRow()] : null,
       links.length ? h('div', { class: 'qhead' }, 'Bookmarks') : null,
       links.map((l) => { const src = bmIcon(l); return row(l.href, [h('span', { class: 'bmic' }, src ? h('img', { src, alt: '' }) : l.abbr), h('span', { class: 'qname' }, l.name), h('span', { class: 'muted small' }, l.description || l.href)], true); }),
       contacts && people.q === ql && people.items.length ? h('div', { class: 'qhead' }, 'People') : null,
       contacts && people.q === ql ? people.items.map((c) => row(`${contacts.url}/#/c/${c.id}`, [h('span', { class: 'face' }, c.hasPhoto ? h('img', { src: `/api/widgets/iocontacts/photo/${c.id}`, alt: '' }) : initials(c.name)), h('span', { class: 'qname' }, c.name), h('span', { class: 'muted small' }, c.org || '')])) : null,
+      // "dinner fri 19:00": a new event in ioCalendar (a dialog to check it first)
+      cal ? [h('div', { class: 'qhead' }, 'Add to the calendar'), (() => { const a = row('#', [h('span', { class: 'bmic' }, icon('event', 's')), h('span', { class: 'qname' }, cal.title || '(no title)'), h('span', { class: 'muted small' }, eventWhen(cal))]);
+        a.onclick = (e) => { e.preventDefault(); inp.blur(); quickAdd(cal); }; return a; })()] : null,
+      // nothing here matches: the web first, so Enter searches it
+      !bang && !site && !found ? [h('div', { class: 'qhead' }, 'Web'), webRow()] : null,
       h('div', { class: 'qhead' }, 'Search in'),
       S.allApps.filter((a) => APP_SEARCH[a.key]).map((a) => row(`${a.url}/${APP_SEARCH[a.key](q)}`, [h('img', { class: 'qapp', src: a.icon, alt: '' }), h('span', { class: 'qname' }, appName(a.name, a.color)), h('span', { class: 'muted small' }, `“${q}”`)])),
+      !bang && !site && found ? webRow() : null,
     ];
     sel = Math.min(sel, rows.length - 1);
     rows.forEach((r, i) => r.classList.toggle('on', i === sel));
@@ -264,10 +311,171 @@ function searchBox() {
   inp.onkeydown = (e) => {
     if (e.key === 'Escape') { if (inp.value) { inp.value = ''; hide(); } else inp.blur(); e.preventDefault(); }
     else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { if (!rows.length) return; sel = (sel + (e.key === 'ArrowDown' ? 1 : rows.length - 1)) % rows.length; rows.forEach((r, i) => r.classList.toggle('on', i === sel)); rows[sel].scrollIntoView({ block: 'nearest' }); e.preventDefault(); }
-    else if (e.key === 'Enter') { if (rows[sel]) { rows[sel].click(); e.preventDefault(); } }
+    else if (e.key === 'Enter') { if (rows[sel]) { rows[sel].click(); e.preventDefault(); if (rows[sel] && rows[sel].target === '_blank') { inp.value = ''; hide(); } } }
   };
   S.focusSearch = () => { inp.focus(); inp.select(); };
   return box;
+}
+
+// ------------------------------------------------------------------ the web from the search box
+/* Enter with nothing of the suite matching searches the web with the viewer's engine (Customize the page); a prefix
+   picks a site instead: "g …" Google, "w …" Wikipedia, "yt …" YouTube… (also as "!g …"). A typed address opens. */
+const engine = (name, base) => ({ name, url: (q) => base + encodeURIComponent(q) });
+const ENGINES = {
+  duckduckgo: engine('DuckDuckGo', 'https://duckduckgo.com/?q='), google: engine('Google', 'https://www.google.com/search?q='),
+  bing: engine('Bing', 'https://www.bing.com/search?q='), startpage: engine('Startpage', 'https://www.startpage.com/do/search?q='),
+  ecosia: engine('Ecosia', 'https://www.ecosia.org/search?q='), kagi: engine('Kagi', 'https://kagi.com/search?q='),
+};
+const wikiLang = () => ((navigator.language || 'en').slice(0, 2).toLowerCase().match(/^[a-z]{2}$/) || ['en'])[0];
+const BANGS = {
+  g: () => ENGINES.google, d: () => ENGINES.duckduckgo, ddg: () => ENGINES.duckduckgo, b: () => ENGINES.bing, sp: () => ENGINES.startpage, k: () => ENGINES.kagi,
+  w: () => engine('Wikipedia', `https://${wikiLang()}.wikipedia.org/w/index.php?search=`), yt: () => engine('YouTube', 'https://www.youtube.com/results?search_query='),
+  m: () => engine('Google Maps', 'https://www.google.com/maps/search/'), maps: () => engine('Google Maps', 'https://www.google.com/maps/search/'),
+  gh: () => engine('GitHub', 'https://github.com/search?q='), r: () => engine('Reddit', 'https://www.reddit.com/search/?q='),
+  i: () => engine('Google Images', 'https://www.google.com/search?tbm=isch&q='), tr: () => engine('Google Translate', 'https://translate.google.com/?sl=auto&op=translate&text='),
+};
+const BANG_HELP = 'g Google · d DuckDuckGo · b Bing · w Wikipedia · yt YouTube · m Maps · gh GitHub · r Reddit · i Images · tr Translate';
+const webEngine = () => ENGINES[(S.layout && S.layout.search) || 'duckduckgo'] || ENGINES.duckduckgo;
+/** {engine, q} for "g cats" or "!g cats", else null. */
+function webBang(q) {
+  const m = q.match(/^!?([a-z]{1,4})\s+(\S.*)$/i);
+  return m && BANGS[m[1].toLowerCase()] ? { engine: BANGS[m[1].toLowerCase()](), q: m[2].trim() } : null;
+}
+/** An address typed in full ("github.com", "nas.local:5000/x", "https://…"): the address to open, else null. */
+function looksLikeSite(q) {
+  if (/\s/.test(q)) return null;
+  if (/^https?:\/\/\S+$/i.test(q)) return q;
+  return /^[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}(:\d+)?(\/\S*)?$/i.test(q) || /^[a-z0-9-]+\.local(:\d+)?(\/\S*)?$/i.test(q) ? `https://${q}` : null;
+}
+
+// ------------------------------------------------------------------ quick add: a new ioCalendar event from the search box
+/* "dinner fri 19:00", "dentist tomorrow 9am", "trip 24 dec", "call mum 14:30-15:00": the words that say when (today,
+   tomorrow, a weekday, "in 3 days", a date, a time or two) are taken out, the rest is the title. Nothing said about
+   when: not an event. A time without a day: today, or tomorrow when that time has passed. A day without a time: all
+   day. The dialog shows what was understood, to change before it is saved. */
+const WEEKDAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+const weekdayOf = (w) => { const m = w.match(/^(sun|mon|tue|wed|thu|fri|sat)(day|s|sday|nesday|rs|rsday|urday|t)?$/); return m ? WEEKDAYS.indexOf(m[1]) : -1; };
+const monthOf = (w) => { const m = w.match(/^(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?$/); return m ? MONTHS.indexOf(m[1].slice(0, 3)) : -1; };
+const ordinal = (w) => { const m = w.match(/^(\d{1,2})(st|nd|rd|th)?,?$/); return m && +m[1] >= 1 && +m[1] <= 31 ? +m[1] : 0; };
+/** A time word: "19:00", "19h", "19h30", "7.30", "7pm", "7:30am", "noon", "midnight"; [h, m] or null. pm: the next word. */
+function timeOf(w, next) {
+  if (w === 'noon') return [12, 0];
+  if (w === 'midnight') return [0, 0];
+  let m = w.match(/^(\d{1,2})(?:[:.h](\d{2}))?\s*(am|pm|a|p)$/);
+  if (!m && /^(am|pm)$/.test(next || '')) { m = w.match(/^(\d{1,2})(?:[:.h](\d{2}))?$/); if (m) m[3] = next; }
+  if (m) { let hr = +m[1] % 12; if (m[3][0] === 'p') hr += 12; return +m[1] <= 12 && +(m[2] || 0) < 60 ? [hr, +(m[2] || 0)] : null; }
+  m = w.match(/^(\d{1,2})(?::(\d{2})|h(\d{2})?)$/) || w.match(/^(\d{1,2})\.(\d{2})$/);
+  if (m) { const hr = +m[1], mi = +(m[2] || m[3] || 0); return hr < 24 && mi < 60 ? [hr, mi] : null; }
+  return null;
+}
+function parseEvent(text, now = new Date()) {
+  const words = text.trim().split(/\s+/), lw = words.map((w) => w.toLowerCase());
+  const used = new Array(words.length).fill(false);
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const plus = (n) => new Date(today.getFullYear(), today.getMonth(), today.getDate() + n);
+  let date = null, start = null, end = null;
+  const take = (...ix) => ix.forEach((i) => { used[i] = true; });
+  const usOrder = /^en-us/i.test(navigator.language || '');
+  for (let i = 0; i < lw.length; i++) {
+    const w = lw[i].replace(/,$/, ''), nx = lw[i + 1], nx2 = lw[i + 2];
+    if (used[i]) continue;
+    if (!date && (w === 'today' || w === 'tonight')) { date = today; take(i); continue; }
+    if (!date && /^(tomorrow|tmrw|tmr|tomorow)$/.test(w)) { date = plus(1); take(i); continue; }
+    if (!date && w === 'in' && /^\d{1,3}$/.test(nx || '') && /^(day|days|week|weeks)$/.test(nx2 || '')) { date = plus(+nx * (nx2[0] === 'w' ? 7 : 1)); take(i, i + 1, i + 2); continue; }
+    if (!date && weekdayOf(w) >= 0) {
+      let n = (weekdayOf(w) - today.getDay() + 7) % 7;
+      if (i > 0 && /^(next|on)$/.test(lw[i - 1]) && !used[i - 1]) { if (lw[i - 1] === 'next' && n === 0) n = 7; take(i - 1); }
+      date = plus(n); take(i); continue;
+    }
+    let m = w.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!date && m) { date = new Date(+m[1], +m[2] - 1, +m[3]); take(i); continue; }
+    m = w.match(/^(\d{1,2})[/.](\d{1,2})(?:[/.](\d{2,4}))?$/);
+    if (!date && m && !(w.includes('.') && !m[3] && timeOf(w))) {  // 7.30 is a time; 24.12 and 24/12 are dates
+      const [d, mo] = usOrder ? [+m[2], +m[1]] : [+m[1], +m[2]];
+      if (mo >= 1 && mo <= 12 && d >= 1 && d <= 31) {
+        let y = m[3] ? (+m[3] < 100 ? 2000 + +m[3] : +m[3]) : today.getFullYear();
+        if (!m[3] && new Date(y, mo - 1, d) < today) y += 1;
+        date = new Date(y, mo - 1, d); take(i); continue;
+      }
+    }
+    if (!date && monthOf(w) >= 0) {  // "dec 24", "24 dec", "december 24th"
+      let d = 0, j = -1;
+      if (nx && ordinal(nx)) { d = ordinal(nx); j = i + 1; } else if (i > 0 && !used[i - 1] && ordinal(lw[i - 1])) { d = ordinal(lw[i - 1]); j = i - 1; }
+      if (d) {
+        const mo = monthOf(w);
+        let y = today.getFullYear();
+        if (new Date(y, mo, d) < today) y += 1;
+        date = new Date(y, mo, d); take(i, j);
+        if (i > 0 && lw[i - 1] === 'on' && !used[i - 1]) take(i - 1);
+        if (j === i - 1 && i > 1 && lw[i - 2] === 'on' && !used[i - 2]) take(i - 2);
+        continue;
+      }
+    }
+    // a time, or a range: "19:00-21:00", "7-9pm", "19:00 - 21:00", "19:00 to 21:00"
+    const rng = w.match(/^([^-–]+)[-–]([^-–]+)$/);
+    if (!start && rng) {
+      const b = timeOf(rng[2], nx), pm = /(pm|p)$/.test(rng[2]) && !/(am|pm|a|p)$/.test(rng[1]);
+      const a = timeOf(rng[1] + (pm ? 'pm' : ''), null) || timeOf(rng[1], null);
+      if (a && b) { start = a; end = b; take(i); if (/^(am|pm)$/.test(nx || '') && !/(am|pm|a|p)$/.test(rng[2])) take(i + 1); if (i > 0 && /^(at|@|from)$/.test(lw[i - 1])) take(i - 1); continue; }
+    }
+    const t = timeOf(w, nx) || (i > 0 && /^(at|@)$/.test(lw[i - 1]) && /^\d{1,2}$/.test(w) && +w < 24 ? [+w, 0] : null);
+    if (t) {
+      if (!start) start = t; else if (!end && i > 0 && /^(to|until|till|-|–)$/.test(lw[i - 1])) { end = t; take(i - 1); } else continue;
+      take(i); if (/^(am|pm)$/.test(nx || '') && !/(am|pm|a|p)$/.test(w)) take(i + 1);
+      if (i > 0 && /^(at|@|from)$/.test(lw[i - 1]) && !used[i - 1]) take(i - 1);
+    }
+  }
+  if (!date && !start) return null;
+  if (!date) date = start && (start[0] * 60 + start[1]) <= now.getHours() * 60 + now.getMinutes() ? plus(1) : today;
+  const title = words.filter((_, i) => !used[i]).join(' ').replace(/\s+(on|at|@)$/i, '').trim();
+  if (!title) return null;
+  return { title: title[0].toUpperCase() + title.slice(1), date, start, end };
+}
+const pad2 = (n) => String(n).padStart(2, '0');
+const ymdOf = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+/** A local date and time as ISO with its offset, as ioCalendar takes it: 2026-11-07T19:00:00+01:00. */
+function isoLocal(d) {
+  const off = -d.getTimezoneOffset(), sign = off >= 0 ? '+' : '-', a = Math.abs(off);
+  return `${ymdOf(d)}T${pad2(d.getHours())}:${pad2(d.getMinutes())}:00${sign}${pad2(Math.floor(a / 60))}:${pad2(a % 60)}`;
+}
+function eventWhen(ev) {
+  const day = (() => { const n = Math.round((ev.date - new Date(new Date().setHours(0, 0, 0, 0))) / 86400000);
+    return n === 0 ? 'Today' : n === 1 ? 'Tomorrow' : ev.date.toLocaleDateString([], n < 7 ? { weekday: 'long' } : { weekday: 'short', month: 'short', day: 'numeric' }); })();
+  const tm = (t) => new Date(2000, 0, 1, t[0], t[1]).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  return ev.start ? `${day} ${tm(ev.start)}${ev.end ? `–${tm(ev.end)}` : ''}` : `${day}, all day`;
+}
+async function quickAdd(ev) {
+  const cal = S.apps.find((a) => a.key === 'iocalendar');
+  let cals = [];
+  try { cals = (await api('/api/widgets/iocalendar/calendars')).items || []; } catch (e) { fail(e); return; }
+  if (!cals.length) { toast('ioCalendar has no calendar you may add events to'); return; }
+  const title = h('input', { class: 't', value: ev.title });
+  const date = h('input', { class: 't', type: 'date', value: ymdOf(ev.date) });
+  const tm = (t) => (t ? `${pad2(t[0])}:${pad2(t[1])}` : '');
+  const from = h('input', { class: 't', type: 'time', value: tm(ev.start) }), to = h('input', { class: 't', type: 'time', value: tm(ev.end) });
+  const last = localStorage.getItem('iosuite.quickadd.calendar');
+  const which = h('select', { class: 't' }, cals.map((c) => h('option', { value: c.id, selected: String(c.id) === last ? true : null }, c.name)));
+  const body = h('div', null, h('div', { class: 'grid' }, fld('Title', title)), h('div', { class: 'qawhen' }, fld('Day', date), fld('From', from), fld('Until', to)),
+    h('p', { class: 'muted small' }, 'No time: all day.'), h('div', { class: 'grid' }, fld('Calendar', which)));
+  const ok = await dialog('Add to ioCalendar', body, [{ label: 'Cancel', value: false }, { label: 'Add', value: true, primary: true }]);
+  if (!ok) return;
+  const [y, mo, d] = date.value.split('-').map(Number);
+  if (!title.value.trim() || !y) { toast('A title and a day, please'); return; }
+  const at = (v) => { const [hh, mm] = v.split(':').map(Number); return new Date(y, mo - 1, d, hh, mm); };
+  const json = { title: title.value.trim(), calendarId: which.value, timezone: viewerTz() };
+  if (from.value) {
+    const s = at(from.value); let e = to.value ? at(to.value) : null;
+    if (e && e <= s) e = new Date(+e + 86400000);  // 22:00 until 01:00: the next night
+    Object.assign(json, { allDay: false, start: isoLocal(s), ...(e ? { end: isoLocal(e) } : {}) });
+  } else Object.assign(json, { allDay: true, start: date.value });
+  try {
+    await api('/api/widgets/iocalendar/events', { method: 'POST', json });
+    localStorage.setItem('iosuite.quickadd.calendar', which.value);
+    toast(`Added to ${cal ? cal.name : 'ioCalendar'}: ${json.title}`);
+    $('.search .q') && ($('.search .q').value = '');
+    S.refreshedAt = 0; liveRefresh(true);  // the tile and This week show it
+  } catch (e) { fail(e); }
 }
 
 // ------------------------------------------------------------------ is each app up? does one have an update?
@@ -316,12 +524,14 @@ async function customize() {
   };
   const adminStrip = { rediscover: 'Rediscover', onthisday: 'On this day', off: 'Off' }[S.photoStrip] || 'Rediscover';
   const strip = h('select', { class: 't' }, [[null, `Default (${adminStrip})`], ['rediscover', 'Rediscover: photos at random'], ['onthisday', 'On this day'], ['off', 'Off']].map(([v, t]) => h('option', { value: v || '', selected: (v || '') === (L.strip || '') ? true : null }, t)));
+  const engines = h('select', { class: 't' }, Object.entries(ENGINES).map(([k, e]) => h('option', { value: k === 'duckduckgo' ? '' : k, selected: (k === 'duckduckgo' ? '' : k) === (L.search || '') ? true : null }, e.name)));
   const body = h('div', null, h('p', { class: 'muted small' }, 'Your own start page, on this account only: untick what you do not need, and put the tiles and the cards in your order. Birthdays and This week share a row when they follow each other.'),
     h('h3', null, 'Tiles'), sortable(tiles), h('h3', null, 'Cards under the tiles'), sortable(cards),
-    h('div', { class: 'grid' }, fld('Photo strip', strip)));
+    h('div', { class: 'grid' }, fld('Photo strip', strip), fld('Web search', engines)),
+    h('p', { class: 'muted small' }, `In the search box, a prefix picks a site: ${BANG_HELP}.`));
   const v = await dialog('Customize the page', body, [{ label: 'Back to the default', value: 'reset' }, { label: 'Cancel', value: null }, { label: 'Save', value: 'save', primary: true }]);
   if (!v) return;
-  const json = v === 'reset' ? {} : { hidden: [...tiles, ...cards].filter((t) => !t.on).map((t) => t.key), order: tiles.map((t) => t.key), cards: cards.map((c) => c.key), strip: strip.value || null };
+  const json = v === 'reset' ? {} : { hidden: [...tiles, ...cards].filter((t) => !t.on).map((t) => t.key), order: tiles.map((t) => t.key), cards: cards.map((c) => c.key), strip: strip.value || null, search: engines.value || null };
   try { await api('/api/me/layout', { method: 'PUT', json }); toast(v === 'reset' ? 'Back to the default' : 'Saved'); if (route().view === 'home') onRoute(); } catch (e) { fail(e); }
 }
 
@@ -358,9 +568,9 @@ const isBirthdayEvent = (o) => o.allDay && /\b(birthday|anniversary)\b/i.test(o.
 const withoutBirthdays = (items) => (S.birthdaysCard ? items.filter((o) => !isBirthdayEvent(o)) : items);
 
 /** Birthdays (and the other dates ioContacts keeps) in the next 30 days, a line each; a row opens the contact. */
-async function drawBirthdays(el) {
+async function drawBirthdays(el, again = false) {
   const app = S.apps.find((a) => a.key === 'iocontacts'), d = await widget('iocontacts');
-  if (!d || !d.items || !el.isConnected) { el.remove(); return; }
+  if (!d || !d.items || !el.isConnected) { if (!again) el.remove(); return; }
   const who = (it) => h('span', { class: 'face' }, it.hasPhoto ? h('img', { src: `/api/widgets/iocontacts/photo/${it.id}`, alt: '', loading: 'lazy', onerror: (e) => e.target.replaceWith(initials(it.name)) }) : initials(it.name));
   const what = (it) => (it.label === 'birthday' ? (it.turns ? `turns ${it.turns}` : '') : it.label + (it.turns ? ` · ${it.turns} years` : ''));
   el.replaceChildren(h('div', { class: 'wghead' }, h('span', null, 'Birthdays'), showAll(el), h('a', { class: 'muted', href: app.url, title: app.url }, d.more ? `+${d.more} more · ioContacts` : 'ioContacts')),
@@ -371,9 +581,9 @@ async function drawBirthdays(el) {
 }
 
 /** The coming week from ioCalendar, day by day (today lives on the ioCalendar tile); a day opens in ioCalendar. */
-async function drawWeek(el) {
+async function drawWeek(el, again = false) {
   const app = S.apps.find((a) => a.key === 'iocalendar'), d = await widget('iocalendar', { kind: 'week' });
-  if (!d || !d.days || !el.isConnected) { el.remove(); return; }
+  if (!d || !d.days || !el.isConnected) { if (!again) el.remove(); return; }
   const head = (date) => { const s = new Date(`${date}T12:00:00`); const days = Math.round((s - new Date().setHours(12, 0, 0, 0)) / 86400000);
     return days === 1 ? 'Tomorrow' : s.toLocaleDateString([], { weekday: 'long' }); };
   const days = d.days.map((day) => ({ ...day, items: withoutBirthdays(day.items) })).filter((day) => day.items.length);
@@ -415,7 +625,7 @@ const WIDGETS = { iopix: drawPixWidget, iocalendar: drawCalendarWidget, iohealth
 const pixPhotoUrl = (pix, id) => `${pix.url}/#/photos?p=${id}`;
 const viewerTz = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch { return ''; } };
 
-function drawWidgets(page) {
+function drawWidgets(page, again = false) {
   const tz = viewerTz();
   for (const tile of page.querySelectorAll('.app[data-app]')) {
     const draw = WIDGETS[tile.dataset.app], box = tile.querySelector('.more');
@@ -424,7 +634,7 @@ function drawWidgets(page) {
     fetch(`/api/widgets/${tile.dataset.app}?tz=${encodeURIComponent(tz)}`, { credentials: 'same-origin' })
       .then(async (r) => { if (r.ok) return r.json(); let detail = ''; try { detail = (await r.json()).detail || ''; } catch { /* no body */ } throw new Error(detail || `${r.status}`); })
       .then((d) => { if (!box.isConnected) return; const kids = draw(d); if (kids) box.replaceChildren(h('div', { class: 'wg' }, kids)); else why(EMPTY[tile.dataset.app] || 'Nothing to show'); })
-      .catch((e) => why(e.message));  // the app is down, or not open to this account: the tile says so
+      .catch((e) => { if (!again || !box.querySelector('.wg .wghead')) why(e.message); });  // the app is down, or not open to this account: the tile says so (a refresh that fails keeps what it showed)
   }
 }
 
@@ -516,25 +726,64 @@ function drawHealthWidget(d) {
       h('span', { class: 'dot', style: { background: 'var(--sleep)' } }), 'Sleep', h('span', { class: 'muted' }, `${hm(d.sleep.asleep)} asleep`)) : null];
 }
 
-/** The weather widget: the conditions now, a line of details, and the days ahead. Hidden until an admin sets it up. */
-async function drawWeather(el) {
+/** The weather widget: the conditions now (with "Rain from 15:00" when the next hours bring some), and the days
+    ahead. A click on the conditions opens the next 12 hours. Hidden until an admin sets it up. again: a refresh, which
+    keeps what it shows when the server does not answer. */
+async function drawWeather(el, again = false) {
   let w;
-  try { w = await api('/api/weather'); } catch (e) { el.replaceChildren(h('div', { class: 'muted small' }, e.message)); return; }
+  try { w = await api('/api/weather'); } catch (e) { if (!again) el.replaceChildren(h('div', { class: 'muted small' }, e.message)); return; }
   if (!el.isConnected) return;
   if (!w.enabled) { el.replaceChildren(S.user.role === 'admin' ? h('a', { class: 'lnk small', href: '#/settings/weather' }, 'Add the weather') : null); return; }
   if (!w.current) { el.replaceChildren(h('div', { class: 'wxerr' }, wxIcon(7, 'big'), h('div', null, h('div', null, 'No weather right now'), h('div', { class: 'muted small' }, w.error || '')))); return; }
   const c = w.current, imp = w.units === 'imperial', u = imp ? 'imperial' : 'metric';
   const day = (d) => new Date(`${d.date}T12:00:00`).toLocaleDateString([], { weekday: 'short' });
-  const t = (v) => fmtTemp(imp ? degF(v) : v);  // the forecast comes in °C
-  el.replaceChildren(
-    h('a', { class: 'wxnow', href: c.link || '#', target: c.link ? '_blank' : null, rel: 'noreferrer',
-      title: [w.location, c.feels[u] != null ? `feels ${fmtTemp(c.feels[u])}` : null, c.humidity != null ? `${c.humidity}% humidity` : null,
-        c.wind[u] != null ? `wind ${Math.round(c.wind[u])} ${imp ? 'mph' : 'km/h'}` : null].filter(Boolean).join(' · ') },
-      wxIcon(c.icon, 'big'),
-      h('div', null, h('div', { class: 'wxtemp' }, fmtTemp(c.temp[u])), h('div', { class: 'wxtext small' }, c.text))),
+  const t = (v) => fmtTemp(imp ? degF(v) : v);  // the forecasts come in °C
+  const rain = rainNote(w);
+  const hours = nextHours(w);
+  let pop = null;
+  const closePop = () => { if (pop) { pop.remove(); pop = null; document.removeEventListener('click', outside); } };
+  const outside = (e) => { if (pop && !pop.contains(e.target) && !now.contains(e.target)) closePop(); };
+  const now = h('button', { class: 'wxnow', 'aria-expanded': 'false',
+    title: [w.location, c.feels[u] != null ? `feels ${fmtTemp(c.feels[u])}` : null, c.humidity != null ? `${c.humidity}% humidity` : null,
+      c.wind[u] != null ? `wind ${Math.round(c.wind[u])} ${imp ? 'mph' : 'km/h'}` : null].filter(Boolean).join(' · '),
+    onclick: () => {
+      if (pop) return closePop();
+      pop = h('div', { class: 'wxpop' }, h('div', { class: 'wghead' }, h('span', null, 'Next hours'), w.location ? h('span', { class: 'muted' }, w.location) : null),
+        hours.length ? hourRow(w, hours) : h('div', { class: 'muted small' }, 'No hourly forecast from AccuWeather'),
+        c.link ? h('a', { class: 'lnk small', href: c.link, target: '_blank', rel: 'noreferrer' }, 'More at AccuWeather') : null);
+      el.append(pop);
+      setTimeout(() => document.addEventListener('click', outside), 0);
+    } },
+    wxIcon(c.icon, 'big'),
+    h('div', null, h('div', { class: 'wxtemp' }, fmtTemp(c.temp[u])), h('div', { class: 'wxtext small' }, c.text),
+      rain ? h('div', { class: 'wxrain small' }, rain) : null));
+  el.replaceChildren(now,
     w.forecast && w.forecast.days && w.forecast.days.length ? h('div', { class: 'wxdays' }, w.forecast.days.map((d) =>
       h('div', { class: 'wxday', title: `${d.text || ''}${d.rain != null ? ` · ${d.rain}% chance of rain` : ''}` }, h('span', { class: 'muted small' }, day(d)), wxIcon(d.icon), h('span', { class: 'small wxhi' }, t(d.max)), h('span', { class: 'muted small' }, t(d.min))))) : null,
     w.stale ? h('span', { class: 'muted small', title: w.error || 'AccuWeather did not answer' }, 'older') : h('span'));
+}
+/** The hours still ahead in AccuWeather's 12-hour forecast (the server's copy can be up to 90 minutes old). */
+const nextHours = (w) => (w.hourly || []).filter((x) => new Date(x.t) > Date.now() - 30 * 60 * 1000);
+const hourLabel = (x) => new Date(x.t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+const isWet = (x) => x.wet || (x.rain != null && x.rain >= 50);
+/** "Rain from 15:00", "Rain until 16:00", or nothing when the next hours stay dry. */
+function rainNote(w) {
+  const hs = nextHours(w);
+  if (!hs.length) return '';
+  const what = (x) => ({ Rain: 'Rain', Snow: 'Snow', Ice: 'Ice', Mixed: 'Sleet' })[x.kind] || 'Rain';
+  if (isWet(hs[0])) {
+    const dry = hs.find((x) => !isWet(x));
+    return dry ? `${what(hs[0])} until ${hourLabel(dry)}` : `${what(hs[0])} for hours`;
+  }
+  const wet = hs.find(isWet);
+  return wet ? `${what(wet)} from ${hourLabel(wet)}` : '';
+}
+/** The next hours in a row: the hour, the sky, the temperature, and the chance of rain when there is one. */
+function hourRow(w, hours) {
+  const imp = w.units === 'imperial', t = (v) => fmtTemp(imp ? degF(v) : v);
+  return h('div', { class: 'wxhours' }, hours.map((x) => h('div', { class: `wxhour${isWet(x) ? ' wet' : ''}`, title: `${x.text || ''}${x.rain != null ? ` · ${x.rain}% chance of rain` : ''}` },
+    h('span', { class: 'muted small' }, new Date(x.t).toLocaleTimeString([], { hour: 'numeric' })), wxIcon(x.icon), h('span', { class: 'small' }, t(x.temp)),
+    h('span', { class: 'small wxpct' }, x.rain ? `${x.rain}%` : ''))));
 }
 
 /** The bookmarks, as homepage lays them out: a column per group, a row per link with its abbreviation (or icon), name and host. */
@@ -579,6 +828,128 @@ function packBookmarks(el, groups) {
   };
   pack();
   new ResizeObserver(pack).observe(el);
+}
+
+// ------------------------------------------------------------------ the wall display (#/wall)
+/* For a tablet on the wall or a TV: the full screen, ioPix photos one after another behind a big clock, the date, the
+   weather and its next hours, and what is planned today and in the coming days (and birthdays). It keeps the screen
+   on where the browser allows it, refreshes itself (liveRefresh), and goes back to the start page with Escape or the
+   button that shows on a touch. #/wall can be the tablet's home address. */
+function enterWall() {
+  location.hash = '#/wall';
+  const el = document.documentElement;
+  if (el.requestFullscreen && !document.fullscreenElement) el.requestFullscreen().catch(() => { /* not allowed here: the page still fills the window */ });
+}
+async function showWall(page) {
+  const got = await api('/api/apps');
+  S.allApps = got.items; S.layout = got.layout || { hidden: [], order: [], cards: [], strip: null };
+  S.apps = got.items;
+  const has = (k) => S.apps.some((a) => a.key === k);
+  page.className = 'wallpage';
+  const photos = h('div', { class: 'wallphotos' });
+  const clock = h('div', { class: 'wallclock' }), date = h('div', { class: 'walldate' });
+  const wx = h('div', { class: 'wallwx' }), hours = h('div', { class: 'wallhours' });
+  const agenda = h('div', { class: 'wallagenda' }), caption = h('div', { class: 'wallcap' });
+  const bar = h('div', { class: 'wallbar' },
+    h('button', { class: 'iconbtn', title: 'Full screen', onclick: () => { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen && document.documentElement.requestFullscreen().catch(() => {}); } }, icon('fullscreen')),
+    h('a', { class: 'iconbtn', title: 'Back to the start page (Esc)', href: '#/' }, icon('close')));
+  page.append(photos, h('div', { class: 'wallshade' }),
+    h('div', { class: 'walltop' }, h('div', null, clock, date), wx),
+    h('div', { class: 'wallbottom' }, agenda, h('div', { class: 'wallright' }, hours, caption)), bar);
+  // the controls show on a touch or a move of the mouse, and fade after a few seconds
+  let hideT;
+  const wake = () => { bar.classList.add('on'); clearTimeout(hideT); hideT = setTimeout(() => bar.classList.remove('on'), 4000); };
+  page.addEventListener('pointermove', wake); page.addEventListener('pointerdown', wake);
+  const tick = () => {
+    const n = new Date();
+    clock.textContent = n.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    date.textContent = n.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+  };
+  tick();
+  const timers = [setInterval(tick, 1000)];
+  // keep the screen on (Screen Wake Lock: Chrome, Safari 16.4+), asked again when the tab comes back
+  let lock = null;
+  const keepOn = async () => { try { if (navigator.wakeLock && !document.hidden) lock = await navigator.wakeLock.request('screen'); } catch { lock = null; } };
+  const onVis = () => { if (!document.hidden) keepOn(); };
+  document.addEventListener('visibilitychange', onVis); keepOn();
+  const onKey = (e) => { if (e.key === 'Escape' && !document.fullscreenElement) location.hash = '#/'; };
+  document.addEventListener('keydown', onKey);
+  S.wallStop = () => { timers.forEach(clearInterval); clearTimeout(hideT); document.removeEventListener('visibilitychange', onVis); document.removeEventListener('keydown', onKey); if (lock) lock.release().catch(() => {}); if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); };
+  if (has('iopix')) timers.push(wallSlideshow(photos, caption, got.layout && got.layout.strip ? got.layout.strip : got.photoStrip));
+  const draw = () => { wallWeather(wx, hours); wallAgenda(agenda, has); };
+  draw();
+  S.shownDay = dayKey(); S.refreshedAt = Date.now(); S.refresh = draw;
+}
+/** A photo every 20 seconds, fading into the next; landscape ones first on a landscape screen. A fresh batch when the
+    row is used up. Returns the interval, for showWall to stop. */
+function wallSlideshow(el, caption, kind) {
+  let queue = [], busy = false;
+  const fill = async () => {
+    const d = await widget('iopix', { kind: kind === 'onthisday' ? 'onthisday' : 'rediscover', n: 24 });
+    let items = (d && d.items) || [];
+    const wide = innerWidth >= innerHeight;
+    items = items.slice().sort((a, b) => (a.w && a.h ? ((a.w >= a.h) === wide ? 0 : 1) : 0.5) - (b.w && b.h ? ((b.w >= b.h) === wide ? 0 : 1) : 0.5));
+    queue = items.map((it) => ({ ...it, otd: d.kind === 'onthisday' }));
+  };
+  const next = async () => {
+    if (busy || !el.isConnected || document.hidden) return;
+    busy = true;
+    try {
+      if (!queue.length) await fill();
+      const it = queue.shift();
+      if (!it) return;
+      const img = new Image();
+      img.alt = ''; img.className = 'wallimg';
+      img.src = `/api/widgets/iopix/preview/${it.id}`;
+      await img.decode().catch(() => null);
+      if (!img.naturalWidth || !el.isConnected) return;
+      const old = [...el.children];
+      el.append(img);
+      requestAnimationFrame(() => img.classList.add('on'));
+      setTimeout(() => old.forEach((o) => o.remove()), 2000);
+      caption.textContent = it.otd ? (it.yearsAgo === 1 ? '1 year ago today' : `${it.yearsAgo} years ago today`) : (it.year ? String(it.year) : '');
+    } finally { busy = false; }
+  };
+  next();
+  return setInterval(next, 20000);
+}
+async function wallWeather(el, hoursEl) {
+  let w;
+  try { w = await api('/api/weather'); } catch { return; }
+  if (!el.isConnected || !w.enabled || !w.current) { if (w && !w.enabled) { el.replaceChildren(); hoursEl.replaceChildren(); } return; }
+  const c = w.current, imp = w.units === 'imperial', u = imp ? 'imperial' : 'metric', t = (v) => fmtTemp(imp ? degF(v) : v);
+  const rain = rainNote(w);
+  el.replaceChildren(h('div', { class: 'wallnow' }, wxIcon(c.icon, 'big'), h('div', null, h('div', { class: 'walltemp' }, fmtTemp(c.temp[u])), h('div', null, c.text), rain ? h('div', { class: 'wxrain' }, rain) : null)),
+    w.forecast && w.forecast.days ? h('div', { class: 'wxdays' }, w.forecast.days.slice(1, 5).map((d) => h('div', { class: 'wxday' },
+      h('span', null, new Date(`${d.date}T12:00:00`).toLocaleDateString([], { weekday: 'short' })), wxIcon(d.icon), h('span', null, `${t(d.max)} ${t(d.min)}`)))) : null);
+  const hs = nextHours(w).slice(0, 8);
+  hoursEl.replaceChildren(hs.length ? hourRow(w, hs) : '');
+}
+/** Today (what is left of it) and the coming days, a line per event, with today's and tomorrow's birthdays on top. */
+async function wallAgenda(el, has) {
+  const [today, week, bdays] = await Promise.all([has('iocalendar') ? widget('iocalendar', { n: 6 }) : null, has('iocalendar') ? widget('iocalendar', { kind: 'week' }) : null,
+    has('iocontacts') ? widget('iocontacts') : null]);
+  if (!el.isConnected) return;
+  S.birthdaysCard = !!(bdays && bdays.items);
+  const kids = [];
+  const soon = ((bdays && bdays.items) || []).filter((b) => b.in <= 1);
+  if (soon.length) kids.push(h('div', { class: 'wallsec' }, soon.map((b) => h('div', { class: 'wallev' }, h('span', { class: 'when' }, inDays(b.in)), h('span', null, `🎂 ${b.name}${b.label === 'birthday' ? (b.turns ? ` turns ${b.turns}` : '') : ` · ${b.label}`}`)))));
+  if (today) {
+    const items = withoutBirthdays(today.today || []);
+    kids.push(h('div', { class: 'wallsec' }, h('div', { class: 'wallhead' }, 'Today'),
+      items.length ? items.map((o) => h('div', { class: 'wallev' }, h('span', { class: 'dot', style: { background: o.color || 'var(--fg2)' } }), h('span', { class: 'when' }, evTime(o)), h('span', null, o.title)))
+        : h('div', { class: 'wallev muted' }, today.next ? `Nothing more today · next: ${today.next.title}, ${evDay(today.next)}` : 'Nothing more today'),
+      today.more ? h('div', { class: 'wallev muted' }, `+${today.more} more`) : null));
+  }
+  if (week && week.days) {
+    const days = week.days.map((d) => ({ ...d, items: withoutBirthdays(d.items) })).filter((d) => d.items.length).slice(0, 3);
+    for (const d of days) {
+      const s = new Date(`${d.date}T12:00:00`), n = Math.round((s - new Date().setHours(12, 0, 0, 0)) / 86400000);
+      kids.push(h('div', { class: 'wallsec' }, h('div', { class: 'wallhead' }, n === 1 ? 'Tomorrow' : s.toLocaleDateString([], { weekday: 'long' })),
+        d.items.slice(0, 4).map((o) => h('div', { class: 'wallev' }, h('span', { class: 'dot', style: { background: o.color || 'var(--fg2)' } }), h('span', { class: 'when' }, evTime(o)), h('span', null, o.title)))));
+    }
+  }
+  el.replaceChildren(...kids);
 }
 
 // ------------------------------------------------------------------ settings
@@ -643,7 +1014,7 @@ async function setWeather(el) {
   };
   q.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); search(); } };
   el.append(h('div', { class: 'box' }, h('h2', null, icon('cloud'), 'Weather'),
-    h('p', { class: 'muted' }, 'The weather on the start page comes from AccuWeather. A free key (developer.accuweather.com, "Core Weather", 50 calls a day) is enough: this server asks AccuWeather at most every 45 minutes for the conditions and every 6 hours for the forecast, and only while someone opens the page; browsers never talk to AccuWeather.'),
+    h('p', { class: 'muted' }, 'The weather on the start page comes from AccuWeather. A free key (developer.accuweather.com, "Core Weather", 50 calls a day) is enough: this server asks AccuWeather at most every hour for the conditions, every 90 minutes for the next 12 hours and every 6 hours for the 5-day forecast, and only while someone opens the page; browsers never talk to AccuWeather.'),
     h('div', { class: 'grid' }, fld('API key', key), fld('Units', units)),
     s.keyFromEnv ? h('p', { class: 'muted small' }, 'ACCUWEATHER_API_KEY in the environment sets the key.') : null,
     h('p', null, h('button', { class: 'pillbtn primary', onclick: async () => { if (await save({ ...(key.value.trim() ? { key: key.value.trim() } : {}), units: units.value })) { key.value = ''; key.placeholder = '(kept)'; } } }, icon('check', 's'), 'Save'), ' ',
@@ -968,8 +1339,9 @@ async function start() {
       if (route().view !== 'home') { location.hash = '#/'; setTimeout(() => S.focusSearch && S.focusSearch(), 300); } else if (S.focusSearch) S.focusSearch();
     }
   });
-  // back from an app: the tiles again as they are now
-  document.addEventListener('visibilitychange', () => { if (!document.hidden && route().view === 'home' && !document.querySelector('.dialog-back')) onRoute(); });
+  // back from an app: the page again as it is now (in place); and every few minutes while it stays open (liveRefresh)
+  document.addEventListener('visibilitychange', () => liveRefresh(true));
+  setInterval(() => liveRefresh(), 60 * 1000);
   setInterval(async () => { try { S.status = await api('/api/status'); updateBanner(); } catch { /* restarting */ } }, 15 * 60 * 1000);
 }
 start().catch(fail);

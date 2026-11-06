@@ -188,3 +188,31 @@ def test_app_refusal_is_not_a_sign_out(client, monkeypatch):
     monkeypatch.setattr(widgets.urllib.request, "urlopen", refuse)
     assert client.get("/api/widgets/iohealth").status_code == 403
     assert client.get("/api/widgets/iopix/thumb/5").status_code == 403
+
+
+def test_quick_add_event(client, apps_answer):
+    table, asked = apps_answer
+    table[("iocalendar", "/api/calendars")] = {"items": [{"id": 1, "name": "Family", "color": "#f00", "writable": True},
+                                                         {"id": 2, "name": "Holidays", "color": "#0f0", "writable": False}]}
+    assert client.get("/api/widgets/iocalendar/calendars").json() == {"items": [{"id": 1, "name": "Family", "color": "#f00"}]}
+    sent = []
+    table[("iocalendar", "/api/events")] = lambda p: {"id": 42}
+
+    def fake_post(request, key, path, params=None, raw=False, body=None):
+        sent.append(body)
+        return table[(key, path)](params or {})
+    import app.widgets as w
+    orig = w.fetch
+    w.fetch = fake_post
+    try:
+        r = client.post("/api/widgets/iocalendar/events", json={"title": " Dinner ", "start": "2026-11-07T19:00:00+01:00", "allDay": False,
+                                                                "timezone": "Europe/Brussels", "calendarId": 1})
+        assert r.status_code == 200, r.text
+        assert r.json()["id"] == 42 and r.json()["url"].endswith("/#/event/42")
+        assert sent[-1] == {"title": "Dinner", "start": "2026-11-07T19:00:00+01:00", "allDay": False, "timezone": "Europe/Brussels", "calendarId": 1}
+        r = client.post("/api/widgets/iocalendar/events", json={"title": "Holiday", "start": "2026-12-24", "allDay": True})
+        assert r.status_code == 200 and sent[-1] == {"title": "Holiday", "start": "2026-12-24", "allDay": True}
+        assert client.post("/api/widgets/iocalendar/events", json={"title": "", "start": "2026-12-24"}).status_code == 400
+        assert client.post("/api/widgets/iocalendar/events", json={"title": "x", "start": "friday"}).status_code == 400
+    finally:
+        w.fetch = orig

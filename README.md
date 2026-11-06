@@ -18,7 +18,18 @@ what the app will show on the start page later (today's events, the newest photo
   tile. Each person can hide tiles in Customize.
 - **A search box** at the top (⌘K / Ctrl-K): as you type it lists the bookmarks that match, the people ioContacts
   finds, and a row per app that searches itself (ioPix, ioCalendar and ioNotes open on their own results). Arrows
-  pick a row, Enter opens it.
+  pick a row, Enter opens it. When nothing of the suite matches, Enter searches the web (DuckDuckGo, or the engine
+  picked in Customize the page); a prefix picks a site (`g` Google, `w` Wikipedia, `yt` YouTube, `m` Maps, `gh`
+  GitHub…, also as `!g`), and an address typed in full (`github.com`) opens.
+- **Quick add**: type an event in the search box ("dinner fri 19:00", "dentist tomorrow 9am", "trip 24 dec",
+  "call mum 14:30-15:00") and pick "Add to the calendar": a dialog shows the title, day and times it understood, and
+  the calendar, then makes the event in ioCalendar with the viewer's own sign-in.
+- **Live**: every five minutes, and when the tab is shown again, the page brings the tiles, the cards, the weather
+  and the dots up to date in place; at midnight it is drawn anew for the new day.
+- **A wall display** (the gear › Wall display, or `#/wall` as a tablet's home address): full screen, ioPix photos one
+  after another behind a big clock, the date, the weather and its next hours, and today's and the coming days'
+  events with the birthdays. It keeps the screen on where the browser allows it; Escape or the ✕ (shown on a touch)
+  goes back.
 - **A dot by each app's name**: green when the app answers its `/api/status`, red when it does not, and an "update"
   badge when the app tells the viewer (an admin there) that a newer version is out. Bookmarks the server cannot
   reach get a red dot too. The server asks each app once a minute and pings each bookmark every five.
@@ -39,10 +50,12 @@ what the app will show on the start page later (today's events, the newest photo
   server asks each app over its own API with the viewer's sign-in (the suite's session cookie, or the Basic / bearer
   credentials they came with), so everyone sees only what that app shows them; ioPix's thumbnails come through the
   start page too. An app that is down, or not open to that account, leaves its tile as it was. Nothing is kept.
-- **The weather**, from AccuWeather: the conditions now and the five days ahead, at the top of the page. Settings ›
+- **The weather**, from AccuWeather: the conditions now, "Rain from 15:00" when the next hours bring some, and the
+  five days ahead, at the top of the page; a click on the conditions opens the next 12 hours. Settings ›
   Weather (admins) takes a free API key from developer.accuweather.com and finds the place by its name. The server
-  keeps a copy and asks AccuWeather at most every 45 minutes (conditions) and 6 hours (forecast), and only while
-  someone opens the page, so a free key's 50 calls a day are enough; browsers never talk to AccuWeather.
+  keeps a copy and asks AccuWeather at most every hour (conditions), 90 minutes (the next 12 hours) and 6 hours
+  (forecast), and only while someone opens the page: 44 calls on a day the page stays open from morning to night, so
+  a free key's 50 a day are enough; browsers never talk to AccuWeather.
 - **Bookmarks**, as [homepage](https://gethomepage.dev/configs/bookmarks/) lays them out: groups of links under the
   apps, each with a two-letter badge (or an icon: an image address, a file name from the dashboard-icons
   collection, `github.png`, or an SVG of your own uploaded for the link and kept in the database), the name and the

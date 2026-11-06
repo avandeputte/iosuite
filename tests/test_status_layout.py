@@ -61,18 +61,20 @@ def test_ping_without_a_server():
 
 
 def test_my_layout(client):
-    assert client.get("/api/me/layout").json() == {"hidden": [], "order": [], "cards": [], "strip": None}
-    assert client.get("/api/apps").json()["layout"] == {"hidden": [], "order": [], "cards": [], "strip": None}
+    assert client.get("/api/me/layout").json() == {"hidden": [], "order": [], "cards": [], "strip": None, "search": None}
+    assert client.get("/api/apps").json()["layout"] == {"hidden": [], "order": [], "cards": [], "strip": None, "search": None}
     r = client.put("/api/me/layout", json={"hidden": ["ionotes", "week", "ionotes"], "order": ["iocalendar", "iopix"], "cards": ["strip", "birthdays"], "strip": "onthisday"})
-    assert r.status_code == 200 and r.json() == {"hidden": ["ionotes", "week"], "order": ["iocalendar", "iopix"], "cards": ["strip", "birthdays"], "strip": "onthisday"}
+    assert r.status_code == 200 and r.json() == {"hidden": ["ionotes", "week"], "order": ["iocalendar", "iopix"], "cards": ["strip", "birthdays"], "strip": "onthisday", "search": None}
     assert client.put("/api/me/layout", json={"cards": ["strip", "strip"]}).status_code == 400
     assert client.put("/api/me/layout", json={"cards": ["iopix"]}).status_code == 400
     assert client.get("/api/apps").json()["layout"]["order"] == ["iocalendar", "iopix"]
     assert client.put("/api/me/layout", json={"hidden": ["Not an app!"]}).status_code == 400
     assert client.put("/api/me/layout", json={"order": ["iopix", "iopix"]}).status_code == 400
     assert client.put("/api/me/layout", json={"strip": "all"}).status_code == 400
+    assert client.put("/api/me/layout", json={"search": "altavista"}).status_code == 400
+    assert client.put("/api/me/layout", json={"search": "google"}).json()["search"] == "google"
     assert client.put("/api/me/layout", json=[]).status_code == 400
-    assert client.put("/api/me/layout", json={}).json() == {"hidden": [], "order": [], "cards": [], "strip": None}
+    assert client.put("/api/me/layout", json={}).json() == {"hidden": [], "order": [], "cards": [], "strip": None, "search": None}
     # another account has its own
     client.post("/api/users", json={"name": "kid", "password": "secret123", "role": "viewer"})
     client.put("/api/me/layout", json={"hidden": ["iohealth"]})

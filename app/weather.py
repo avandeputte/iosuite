@@ -3,8 +3,9 @@
 Settings › Weather (admins) takes an API key and a place: the city is looked up with the Locations API and its location
 key kept (ACCUWEATHER_API_KEY and ACCUWEATHER_LOCATION in the environment do the same and win). The page asks this
 server, never AccuWeather, and the server asks AccuWeather only when its copy is older than the refresh interval, so a
-free key (50 calls a day) lasts: the current conditions every 45 minutes at most, the 5-day forecast every 6 hours,
-and nothing at all while nobody opens the page. What was last fetched is kept in the database (prt_settings), so a restart does
+free key (50 calls a day) lasts: the current conditions every hour at most, the next 12 hours every 90 minutes, the
+5-day forecast every 6 hours (44 calls on a day the page stays open from morning to night), and nothing at all while
+nobody opens the page. What was last fetched is kept in the database (prt_settings), so a restart does
 not spend a call either.
 """
 import json
@@ -17,7 +18,8 @@ import urllib.request
 from app import config, db
 
 BASE = "https://dataservice.accuweather.com"
-CURRENT_TTL = 45 * 60
+CURRENT_TTL = 60 * 60
+HOURLY_TTL = 90 * 60
 FORECAST_TTL = 6 * 3600
 _lock = threading.Lock()
 
@@ -59,7 +61,7 @@ def save(changes: dict) -> None:
 
 
 def forget() -> None:
-    for k in ("weather_current", "weather_forecast"):
+    for k in ("weather_current", "weather_forecast", "weather_hourly"):
         db.set_setting(k, None)
 
 
@@ -166,14 +168,29 @@ def _fetch_forecast() -> dict:
             "link": (data.get("Headline") or {}).get("Link") if isinstance(data, dict) else None}
 
 
+def _fetch_hourly() -> dict:
+    data = _get(f"/forecasts/v1/hourly/12hour/{location_key()}", metric="true")
+    hours = []
+    for x in data if isinstance(data, list) else []:
+        hours.append({"t": x.get("DateTime"), "icon": x.get("WeatherIcon"), "text": x.get("IconPhrase"),
+                      "temp": (x.get("Temperature") or {}).get("Value"), "rain": x.get("PrecipitationProbability"),
+                      "wet": bool(x.get("HasPrecipitation")), "kind": x.get("PrecipitationType")})
+    return {"hours": hours}
+
+
 def current() -> dict:
-    """What the widget draws: {enabled, location, units, current, forecast}. The forecast's temperatures come in °C
+    """What the widget draws: {enabled, location, units, current, forecast, hourly}. The forecasts' temperatures come in °C
     (AccuWeather gives one unit per call); the page converts for imperial."""
     s = settings()
     if not s["enabled"]:
         return {"enabled": False}
     cur = _cached("weather_current", CURRENT_TTL, _fetch_current)
     fc = _cached("weather_forecast", FORECAST_TTL, _fetch_forecast)
+    try:  # the next hours are a bonus: a key or plan without them still shows the rest
+        hr = _cached("weather_hourly", HOURLY_TTL, _fetch_hourly)
+    except WeatherError:
+        hr = None
     return {"enabled": True, "location": s["locationName"], "units": s["units"],
             "current": cur["data"], "currentAt": cur["at"], "forecast": fc["data"], "forecastAt": fc["at"],
+            "hourly": hr["data"]["hours"] if hr else [],
             "stale": bool(cur.get("stale") or fc.get("stale")), "error": cur.get("error") or fc.get("error")}
