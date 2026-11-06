@@ -582,11 +582,13 @@ async function widget(key, params = {}) {
 }
 const inDays = (n) => (n === 0 ? 'Today' : n === 1 ? 'Tomorrow' : `In ${n} days`);
 
-/** The two cards stand no taller than the row of tiles above them; one with more gets a "Show all" in its header. */
+/** The two cards stand no taller than one row of tiles above them (the first: on a tablet or phone the tiles take
+    two rows or more), and never under 160px; one with more gets a "Show all" in its header. */
 function capAgenda(apps, agenda) {
   if (!apps) return;
   const fit = () => {
-    agenda.style.setProperty('--cap', `${apps.offsetHeight}px`);
+    const row = apps.firstElementChild ? apps.firstElementChild.offsetHeight : apps.offsetHeight;
+    agenda.style.setProperty('--cap', `${Math.max(160, row)}px`);
     for (const card of agenda.querySelectorAll('.card')) {
       const rows = card.querySelector('.rows'), btn = card.querySelector('.showall');
       if (!rows || !btn) continue;
