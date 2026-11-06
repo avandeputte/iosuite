@@ -1,8 +1,8 @@
 # ioContacts
 
-*Contacts for the family, in the iothing suite (with [iopix](https://github.com/avandeputte/iopix) and ionotes).*
+*Contacts for the family, in the ioThing suite (with [ioPix](https://github.com/avandeputte/iopix), [ioNotes](https://github.com/avandeputte/ionotes), [ioCalendar](https://github.com/avandeputte/iocalendar), [ioHealth](https://github.com/avandeputte/ioHealth) and the [ioSuite](https://github.com/avandeputte/iosuite) start page).*
 
-A self-hosted contact manager: a web app for the whole family, and the standard protocols every mail, contacts and calendar app already speaks, so the same contacts show up on phones, in Apple Contacts, Outlook, Thunderbird and anywhere else. FastAPI and a single-page vanilla JS app, with everything stored in MariaDB / MySQL.
+A self-hosted contact manager: a web app for the whole family, and the standard protocols every mail, contacts and calendar app already speaks, so the same contacts show up on phones, in Apple Contacts, Outlook, Thunderbird and anywhere else. FastAPI and a single-page vanilla JS app, with everything stored in MariaDB / MySQL, and the suite's shared library (`iosuite-shared`, in [iosuite-shared](https://github.com/avandeputte/iosuite-shared)).
 
 ## What it does
 
@@ -100,7 +100,7 @@ The tools: `overview`, `list_address_books`, `search_contacts`, `get_contact`, `
 ioContacts asks GitHub once a day whether the main branch has a newer version (only the public commit list is read;
 nothing about the server is sent; Maintenance › Updates and logs switches it off, `UPDATE_CHECK=0` locks it off). Admins
 then see a note with **Update now**, and **Maintenance › Updates and logs** has the version, **Check for updates**,
-**Update now**, the tail of the server log (`iocontacts.log` in the app folder; `LOG_FILE` moves it, empty switches it
+**Update now**, the tail of the server log (`data/iocontacts.log` in the app folder; `LOG_FILE` moves it, empty switches it
 off) and **Restart**. The page is the same in every ioThing app: the version check, `update.sh`, the restart and the log
 come from `iosuite_shared.updates` in iosuite-shared, served at `/api/server` and `/api/log`. Updating runs the app's own
 `update.sh`: the new version's Python packages first, then the code (a failed step leaves the running version as it
@@ -181,7 +181,8 @@ and updates itself as always. The Proxmox installer offers the same as a checkli
 | `MCP_USER` | the account `python -m app.mcp` (stdio) acts as |
 | `UPDATE_CHECK` | `0` turns the daily version check off for good |
 | `IOCONTACTS_REPO`, `IOCONTACTS_BRANCH` | what the version check and `update.sh` follow (`avandeputte/iocontacts`, `main`) |
-| `LOG_FILE` | the server log shown at Maintenance › Updates and logs (`iocontacts.log` in the app folder; `LOG_FILE=` with nothing after it: no file) |
+| `DATA_DIR` | where the app writes on its own: the log and the update result (`data/` in the app folder) |
+| `LOG_FILE` | the server log shown at Maintenance › Updates and logs (`DATA_DIR/iocontacts.log`; `LOG_FILE=` with nothing after it: no file) |
 
 ### ioPix
 
@@ -203,7 +204,10 @@ Covered: vCard 2.1/3.0/4.0 and jCard reading and writing (an Apple Contacts card
 ## Layout
 
 ```
-app/main.py        the application: start-up (tables, first admin, LDAP), who is asking, routes
+app/main.py        the application: start-up (tables, first admin, LDAP), the suite's middleware, status and routes
+app/access.py      who may call a route: the markers every /api route carries (public, signed_in, admin)
+app/config.py      the settings: the suite's standard names (iosuite_shared.config) and ioContacts' own
+app/auth.py        iosuite-shared's Auth for this app, and the updater
 app/api.py         the REST API, import/export, calendar feed and ioPix routes
 app/carddav.py     CardDAV / WebDAV
 app/ldapd.py       the LDAP directory (asyncio, its own BER)

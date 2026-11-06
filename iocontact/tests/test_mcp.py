@@ -108,4 +108,4 @@ def test_server_status_for_admins(client):
     assert s["version"] and "canRun" in s and s["mcpEnabled"] is False
     client.post("/api/server", json={"autoCheck": False})
     assert client.get("/api/server").json()["autoCheck"] is False
-    assert client.get("/api/status").json()["updateAvailable"] is None
+    assert client.get("/api/status").json()["update"] is None

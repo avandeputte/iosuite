@@ -4,23 +4,23 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "iocontacts"
-version = "0.13.1"
+version = "0.14.0"
 description = "Self-hosted contacts for the family: web app, CardDAV, LDAP, REST/jCard, birthday calendar"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 dependencies = [
-  "iosuite-shared @ git+https://github.com/avandeputte/iosuite-shared.git@98abba420051914d02376fdd8a67ff287cc70e59",   # iosuite-shared 0.10.1, the suite's shared library: accounts, sessions, the Shared ioSuite database (pinned: bump to pick up a new one)
+  "iosuite-shared @ git+https://github.com/avandeputte/iosuite-shared.git@c68e257be27c10b064aa22a1c4fcf86112e3de28",   # iosuite-shared 0.11.0, the suite's shared library: accounts, sessions, the Shared ioSuite database (pinned: bump to pick up a new one)
   "fastapi<1",
   "uvicorn<1",
   "pymysql<2",
   "python-multipart<1",
   "pyjwt[crypto]<3",   # Cloudflare Access tokens (proxy sign-in)
-  "mcp>=2,<3",         # the MCP server at /mcp
+  "mcp<3",             # the MCP server at /mcp
 ]
 
 [project.optional-dependencies]
-test = ["pytest<10", "httpx<1", "ldap3<3"]
+test = ["pytest<10", "httpx<1", "ldap3<3", "pyflakes<4"]
 
 [project.urls]
 Homepage = "https://github.com/avandeputte/iocontacts"

@@ -1,2 +1,2 @@
-"""ioContacts: self-hosted contacts for the iothing suite."""
-__version__ = "0.13.1"
+"""ioContacts: self-hosted contacts for the ioThing suite."""
+__version__ = "0.14.0"

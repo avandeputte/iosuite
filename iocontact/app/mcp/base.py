@@ -1,21 +1,17 @@
-"""The MCP server instance and what every tool module shares: who is asking, and finding contacts and books by name."""
-import contextvars
-
-from mcp.server.mcpserver import MCPServer
+"""The MCP server instance (iosuite_shared.mcp: who is asking, the annotations, the limits) and what every tool module
+shares: finding contacts and books by name."""
 from mcp.server.mcpserver.exceptions import ToolError
-from mcp.types import ToolAnnotations
 
-from app import __version__, config, db, model, users
+from iosuite_shared import mcp as shared_mcp
+from iosuite_shared.mcp import ADDS, DELETES, READ_ONLY, UPDATES, WRITES, clamp, current_user, need_admin, who
 
-READ_ONLY = ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False)
-WRITES = ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=False)
-ADDS = ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False)
-DELETES = ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=True, openWorldHint=False)
+from app import __version__, config, db, model
 
-server = MCPServer(
-    "iocontacts",
-    title="ioContacts",
-    version=__version__,
+# what the tool modules take from here: the suite's pieces (iosuite_shared.mcp) and ioContacts' own helpers
+__all__ = ["ADDS", "DELETES", "READ_ONLY", "UPDATES", "WRITES", "book_ids", "brief", "clamp", "contact_out", "current_user", "default_book", "find_book", "find_contact", "need_admin", "readable_books", "server", "who"]
+
+server = shared_mcp.make_server(
+    config.APP, "ioContacts", __version__,
     instructions=(
         "The family's address book (ioContacts). Start with overview. Find people with search_contacts (names, emails, "
         "phone digits, companies, addresses, labels and notes all match), then get_contact for everything about one, "
@@ -30,37 +26,12 @@ server = MCPServer(
     ),
 )
 
-current_user: contextvars.ContextVar = contextvars.ContextVar("iocontacts_mcp_user", default=None)  # set per request
-
-
-def who() -> dict:
-    u = current_user.get()
-    if not u:
-        raise ToolError("Not signed in: connect with an ioContacts app password (Settings › Apps and devices)")
-    return u
-
-
-def need_admin() -> dict:
-    u = who()
-    if not users.is_admin(u):
-        raise ToolError("Only an admin can do this")
-    return u
-
-
 def public_url() -> str:
     return config.PUBLIC_URL
 
 
 def contact_link(cid: int) -> str | None:
     return f"{config.PUBLIC_URL}/#/c/{cid}" if config.PUBLIC_URL else None
-
-
-def clamp(n, lo: int, hi: int) -> int:
-    try:
-        n = int(n)
-    except (TypeError, ValueError):
-        n = lo
-    return max(lo, min(n, hi))
 
 
 # ---- address books

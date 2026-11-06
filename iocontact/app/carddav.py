@@ -17,7 +17,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import RedirectResponse, Response
 
-from app import limits, model, users, vcard
+from app import access, limits, model, users, vcard
 from app.fold import fold
 
 router = APIRouter()
@@ -306,13 +306,13 @@ def _version(el: ET.Element | None) -> str:
 
 # ------------------------------------------------------------------ the handler
 
-@router.api_route("/.well-known/carddav", methods=["GET", "PROPFIND", "OPTIONS", "HEAD"], include_in_schema=False)
+@router.api_route("/.well-known/carddav", methods=["GET", "PROPFIND", "OPTIONS", "HEAD"], include_in_schema=False, dependencies=[access.public])
 def well_known():
     return RedirectResponse("/dav/", status_code=301)
 
 
-@router.api_route("/dav", methods=METHODS, include_in_schema=False)
-@router.api_route("/dav/{path:path}", methods=METHODS, include_in_schema=False)
+@router.api_route("/dav", methods=METHODS, include_in_schema=False, dependencies=[access.public])
+@router.api_route("/dav/{path:path}", methods=METHODS, include_in_schema=False, dependencies=[access.public])
 async def dav(request: Request, path: str = ""):
     if request.method == "OPTIONS":
         return Response(status_code=200, headers=_opts_headers())

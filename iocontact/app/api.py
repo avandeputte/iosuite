@@ -1,4 +1,5 @@
-"""The REST API (JSON; vCard and jCard by content negotiation). OpenAPI docs at /api/docs.
+"""The REST API (JSON; vCard and jCard by content negotiation). OpenAPI docs at /api/docs. Who may call a route is declared on
+it (app/access.py); what an account may change is an address book's business (app/model.py), checked in the route.
 
 Clients authenticate with the web session cookie, HTTP Basic (name + password or app password) or
 `Authorization: Bearer <app password>`.
@@ -11,8 +12,8 @@ from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
 
-from app import __version__, calendar, config, csvio, db, enrich, iopix, limits, model, quality, relations as rel, users, vcard
-from app.auth import auth, updater
+from app import access, calendar, config, csvio, db, enrich, iopix, limits, model, quality, relations as rel, users, vcard
+from app.auth import auth
 from app.fold import fold
 
 router = APIRouter()
@@ -117,36 +118,14 @@ async def body_contact(request: Request) -> dict:
     return data
 
 
-# ------------------------------------------------------------------ status and sign-in
-
-@router.get("/api/status")
-def status(request: Request):
-    u = request.state.user
-    adm = users.is_admin(u)
-    return {"app": "ioContacts", "version": __version__, "commit": updater.local_commit()[:7] if u else None,
-            "usersExist": users.any_users(), "user": users.public(u),
-            "iopix": bool(iopix.settings()["url"]), "viaProxy": getattr(request.state, "via_proxy", False),
-            "mcp": mcp_enabled() if u else None,
-            "suggestions": enrich.pending_count(book_ids(u)) if u else None,
-            "updateAvailable": updater.available() if adm and updater.auto_check_enabled() else None}
-
-
-def mcp_enabled() -> bool:
-    """Settings › Server › MCP server: off until an admin turns it on (or MCP=1 in the environment)."""
-    if config.MCP_FORCED:
-        return True
-    try:
-        return db.get_setting("mcp_enabled", "0") == "1"
-    except Exception:  # noqa: BLE001
-        return False
-
+# ------------------------------------------------------------------ sign-in
 
 def _cookie(resp: Response, request: Request, u: dict) -> None:
     """The suite's session cookie (iosuite-shared): shared by every ioThing app on the domain."""
     auth.sign_in(resp, request, u, "oneclick" if not u.get("pw_hash") else "password")
 
 
-@router.post("/api/auth/setup")
+@router.post("/api/auth/setup", dependencies=[access.public])
 async def setup(request: Request):
     """The first account (an admin), while there are none."""
     if users.any_users():
@@ -168,7 +147,7 @@ def outside(request: Request) -> bool:
     return auth.proxy.external(request.headers, peer_of(request))
 
 
-@router.get("/api/auth/accounts")
+@router.get("/api/auth/accounts", dependencies=[access.public])
 def accounts(request: Request):
     """The accounts the sign-in screen shows as tiles (as in iopix). One-click accounts are left out from outside."""
     out = users.accounts() if users.any_users() else []
@@ -177,7 +156,7 @@ def accounts(request: Request):
     return {"accounts": out}
 
 
-@router.get("/api/auth/accounts/{uid}/photo")
+@router.get("/api/auth/accounts/{uid}/photo", dependencies=[access.public])
 async def account_photo(uid: int):
     """The face on an account's tile: the photo of the account's "me" contact, or that contact's ioPix face."""
     u = await run_in_threadpool(users.get, uid)
@@ -195,7 +174,7 @@ async def account_photo(uid: int):
     return Response(p[0], media_type=p[1], headers={"Cache-Control": "private, max-age=300"})
 
 
-@router.post("/api/auth/login")
+@router.post("/api/auth/login", dependencies=[access.public])
 async def login(request: Request):
     b = await request.json()
     name, pw = (b.get("name") or "").strip(), b.get("password") or ""
@@ -216,7 +195,7 @@ async def login(request: Request):
     return resp
 
 
-@router.post("/api/auth/logout")
+@router.post("/api/auth/logout", dependencies=[access.public])
 def logout(request: Request):
     from iosuite_shared import sessions
     sessions.end(request.cookies.get(users.COOKIE))
@@ -225,12 +204,12 @@ def logout(request: Request):
     return resp
 
 
-@router.get("/api/auth/me")
+@router.get("/api/auth/me", dependencies=[access.public])
 def get_me(request: Request):
     return {"user": users.public(me(request))}
 
 
-@router.get("/api/auth/suite")
+@router.get("/api/auth/suite", dependencies=[access.public])
 def get_suite(request: Request):
     """The suite's registered apps (iosuite-shared ios_apps), this one among them, for the app switcher: when there are
     others, the app mark top left opens a menu of them. Signed in only."""
@@ -244,7 +223,7 @@ def get_suite(request: Request):
     return {"items": items, "app": APP}
 
 
-@router.patch("/api/auth/me")
+@router.patch("/api/auth/me", dependencies=[access.public])
 async def patch_me(request: Request):
     u = me(request)
     b = await request.json()
@@ -261,7 +240,7 @@ async def patch_me(request: Request):
     return {"user": users.public(users.update(u["id"], **f))}
 
 
-@router.post("/api/auth/password")
+@router.post("/api/auth/password", dependencies=[access.public])
 async def change_password(request: Request):
     u = me(request)
     b = await request.json()
@@ -275,19 +254,19 @@ async def change_password(request: Request):
     return {"ok": True}
 
 
-@router.get("/api/app-passwords")
+@router.get("/api/app-passwords", dependencies=[access.signed_in])
 def app_passwords(request: Request):
     return {"items": users.list_app_passwords(me(request)["id"])}
 
 
-@router.post("/api/app-passwords")
+@router.post("/api/app-passwords", dependencies=[access.signed_in])
 async def new_app_password(request: Request):
     b = await request.json()
     pw = await run_in_threadpool(users.create_app_password, me(request)["id"], (b.get("label") or "Device").strip())
     return {"password": pw, "name": me(request)["name"]}
 
 
-@router.delete("/api/app-passwords/{pid}")
+@router.delete("/api/app-passwords/{pid}", dependencies=[access.admin])
 def del_app_password(pid: int, request: Request):
     users.delete_app_password(me(request)["id"], pid)
     users.forget_cached_auth()
@@ -296,13 +275,13 @@ def del_app_password(pid: int, request: Request):
 
 # ------------------------------------------------------------------ users (admin)
 
-@router.get("/api/users")
+@router.get("/api/users", dependencies=[access.admin])
 def list_users(request: Request):
     admin(request)
     return {"items": [users.public(u) for u in users.all_users()]}
 
 
-@router.post("/api/users")
+@router.post("/api/users", dependencies=[access.admin])
 async def add_user(request: Request):
     admin(request)
     b = await request.json()
@@ -314,7 +293,7 @@ async def add_user(request: Request):
     return {"user": users.public(u)}
 
 
-@router.patch("/api/users/{uid}")
+@router.patch("/api/users/{uid}", dependencies=[access.admin])
 async def edit_user(uid: int, request: Request):
     a = admin(request)
     b = await request.json()
@@ -331,7 +310,7 @@ async def edit_user(uid: int, request: Request):
     return {"user": users.public(u)}
 
 
-@router.delete("/api/users/{uid}")
+@router.delete("/api/users/{uid}", dependencies=[access.admin])
 def del_user(uid: int, request: Request):
     a = admin(request)
     if uid == a["id"]:
@@ -343,13 +322,13 @@ def del_user(uid: int, request: Request):
 
 # ------------------------------------------------------------------ address books
 
-@router.get("/api/books")
+@router.get("/api/books", dependencies=[access.signed_in])
 def list_books(request: Request):
     u = me(request)
     return {"items": [model.book_public(b, u) for b in model.books_for(u)]}
 
 
-@router.post("/api/books")
+@router.post("/api/books", dependencies=[access.signed_in])
 async def add_book(request: Request):
     u = me(request)
     b = await request.json()
@@ -363,7 +342,7 @@ async def add_book(request: Request):
     return {"book": model.book_public(model.book(bid), u)}
 
 
-@router.patch("/api/books/{bid}")
+@router.patch("/api/books/{bid}", dependencies=[access.signed_in])
 async def edit_book(bid: int, request: Request):
     u = me(request)
     writable_book(u, bid)
@@ -372,7 +351,7 @@ async def edit_book(bid: int, request: Request):
     return {"book": model.book_public(model.book(bid), u)}
 
 
-@router.delete("/api/books/{bid}")
+@router.delete("/api/books/{bid}", dependencies=[access.signed_in])
 def del_book(bid: int, request: Request):
     u = me(request)
     b = writable_book(u, bid)
@@ -386,7 +365,7 @@ def del_book(bid: int, request: Request):
 
 # ------------------------------------------------------------------ contacts
 
-@router.get("/api/contacts")
+@router.get("/api/contacts", dependencies=[access.signed_in])
 def list_contacts(request: Request, q: str = "", book: str | None = None, tag: str | None = None, favorite: bool = False,
                   limit: int = 5000, offset: int = 0, order: str = "given", format: str | None = None, iopix_linked: bool = False):
     u = me(request)
@@ -402,7 +381,7 @@ def list_contacts(request: Request, q: str = "", book: str | None = None, tag: s
     return {"total": total, "items": items}
 
 
-@router.get("/api/contacts/{cid}")
+@router.get("/api/contacts/{cid}", dependencies=[access.signed_in])
 def get_contact(cid: int, request: Request, format: str | None = None):
     u = me(request)
     readable_contact(u, cid)
@@ -416,7 +395,7 @@ def get_contact(cid: int, request: Request, format: str | None = None):
     return {**contact_out(model.full(cid)), "impliedRelations": model.implied_relations(cid, book_ids(u))}
 
 
-@router.post("/api/contacts")
+@router.post("/api/contacts", dependencies=[access.signed_in])
 async def create_contact(request: Request, book: str | None = None):
     u = writer(request)
     data = await body_contact(request)
@@ -427,7 +406,7 @@ async def create_contact(request: Request, book: str | None = None):
     return JSONResponse(contact_out(model.full(cid)), status_code=201, headers={"Location": f"/api/contacts/{cid}"})
 
 
-@router.put("/api/contacts/{cid}")
+@router.put("/api/contacts/{cid}", dependencies=[access.signed_in])
 async def update_contact(cid: int, request: Request):
     u = writer(request)
     r = readable_contact(u, cid)
@@ -444,7 +423,7 @@ async def update_contact(cid: int, request: Request):
     return contact_out(model.full(cid))
 
 
-@router.patch("/api/contacts/{cid}")
+@router.patch("/api/contacts/{cid}", dependencies=[access.signed_in])
 async def patch_contact(cid: int, request: Request):
     """Only some fields, e.g. {"favorite": true} or {"iopix": {"personId": 12, "name": "Ann"}}."""
     u = writer(request)
@@ -460,7 +439,7 @@ async def patch_contact(cid: int, request: Request):
     return contact_out(model.full(cid))
 
 
-@router.delete("/api/contacts/{cid}")
+@router.delete("/api/contacts/{cid}", dependencies=[access.signed_in])
 def delete_contact(cid: int, request: Request):
     u = writer(request)
     r = readable_contact(u, cid)
@@ -469,7 +448,7 @@ def delete_contact(cid: int, request: Request):
     return {"ok": True}
 
 
-@router.post("/api/contacts/bulk")
+@router.post("/api/contacts/bulk", dependencies=[access.signed_in])
 async def bulk(request: Request):
     """{ids: [...], action: delete | favorite | unfavorite | move | tag | untag, book?, tag?}"""
     u = writer(request)
@@ -498,7 +477,7 @@ async def bulk(request: Request):
     return {"ok": True, "n": len(ids)}
 
 
-@router.get("/api/contacts/{cid}/photo")
+@router.get("/api/contacts/{cid}/photo", dependencies=[access.signed_in])
 def get_photo(cid: int, request: Request):
     readable_contact(me(request), cid)
     p = model.photo(cid)
@@ -507,7 +486,7 @@ def get_photo(cid: int, request: Request):
     return Response(p[0], media_type=p[1], headers={"Cache-Control": "private, max-age=60"})
 
 
-@router.put("/api/contacts/{cid}/photo")
+@router.put("/api/contacts/{cid}/photo", dependencies=[access.signed_in])
 async def put_photo(cid: int, request: Request, file: UploadFile = File(...)):
     u = writer(request)
     r = readable_contact(u, cid)
@@ -522,7 +501,7 @@ async def put_photo(cid: int, request: Request, file: UploadFile = File(...)):
     return {"ok": True}
 
 
-@router.delete("/api/contacts/{cid}/photo")
+@router.delete("/api/contacts/{cid}/photo", dependencies=[access.signed_in])
 def del_photo(cid: int, request: Request):
     u = writer(request)
     r = readable_contact(u, cid)
@@ -531,7 +510,7 @@ def del_photo(cid: int, request: Request):
     return {"ok": True}
 
 
-@router.post("/api/contacts/{cid}/photo/from-iopix")
+@router.post("/api/contacts/{cid}/photo/from-iopix", dependencies=[access.signed_in])
 async def photo_from_iopix(cid: int, request: Request):
     u = writer(request)
     r = readable_contact(u, cid)
@@ -548,7 +527,7 @@ async def photo_from_iopix(cid: int, request: Request):
     return {"ok": True}
 
 
-@router.post("/api/contacts/merge")
+@router.post("/api/contacts/merge", dependencies=[access.signed_in])
 async def merge(request: Request):
     """{keep, others, result?, photoFrom?}: fold the others into keep. result is the contact as it should end up (fields
     chosen one by one, as /api/merge/preview offers them); without it, everything is combined. Undo: /api/merges."""
@@ -566,7 +545,7 @@ async def merge(request: Request):
     return {**contact_out(model.full(keep)), "mergeId": mid}
 
 
-@router.get("/api/merge/preview")
+@router.get("/api/merge/preview", dependencies=[access.signed_in])
 def merge_preview(request: Request, ids: str, keep: int | None = None):
     """What merging these contacts gives, and the fields where they disagree (to choose from)."""
     u = me(request)
@@ -583,13 +562,13 @@ def merge_preview(request: Request, ids: str, keep: int | None = None):
     return out
 
 
-@router.get("/api/duplicates")
+@router.get("/api/duplicates", dependencies=[access.signed_in])
 def duplicates(request: Request, book: str | None = None, min_score: int = 35):
     """Probable duplicates, grouped, most certain first, each pair with a score and the reasons."""
     return {"groups": quality.find(book_ids(me(request), book), max(10, min(min_score, 100)))}
 
 
-@router.post("/api/duplicates/dismiss")
+@router.post("/api/duplicates/dismiss", dependencies=[access.admin])
 async def duplicates_dismiss(request: Request):
     """{ids: [...]}: these contacts are different people; they are not offered as duplicates again."""
     u = writer(request)
@@ -599,20 +578,20 @@ async def duplicates_dismiss(request: Request):
     return {"ok": True, "pairs": quality.not_duplicates(ids, u["id"])}
 
 
-@router.delete("/api/duplicates/dismissed")
+@router.delete("/api/duplicates/dismissed", dependencies=[access.admin])
 def duplicates_forget(request: Request):
     """Admins: offer every pair marked "not duplicates" again."""
     admin(request)
     return {"ok": True, "forgotten": quality.forget_not_duplicates()}
 
 
-@router.get("/api/merges")
+@router.get("/api/merges", dependencies=[access.signed_in])
 def merges(request: Request, limit: int = 50):
     """Recent merges, newest first, with whether each can still be undone."""
     return {"items": quality.history(book_ids(me(request)), max(1, min(limit, 200)))}
 
 
-@router.post("/api/merges/{mid}/undo")
+@router.post("/api/merges/{mid}/undo", dependencies=[access.signed_in])
 async def merge_undo(mid: int, request: Request):
     u = writer(request)
     m = db.one("SELECT kept_contact_id FROM con_contact_merges WHERE id = %s", (mid,))
@@ -628,7 +607,7 @@ async def merge_undo(mid: int, request: Request):
 
 # ------------------------------------------------------------------ enrichment (suggestions that wait for a person)
 
-@router.post("/api/contacts/{cid}/lookup")
+@router.post("/api/contacts/{cid}/lookup", dependencies=[access.signed_in])
 async def contact_lookup(cid: int, request: Request):
     """Look this contact up (Gravatar by email, and its GitHub, Mastodon and Bluesky profiles); what is found waits as
     suggestions."""
@@ -637,7 +616,7 @@ async def contact_lookup(cid: int, request: Request):
     return await run_in_threadpool(enrich.lookup, cid, u["id"])
 
 
-@router.post("/api/lookup")
+@router.post("/api/lookup", dependencies=[access.signed_in])
 async def lookup_many(request: Request):
     """{ids?: [...], book?, offset?, limit?}: look several contacts up (25 at a time; call again with the next offset)."""
     u = me(request)
@@ -658,7 +637,7 @@ async def lookup_many(request: Request):
     return {"total": total, "done": len(res), "added": sum(r["added"] for r in res), "results": res}
 
 
-@router.get("/api/suggestions")
+@router.get("/api/suggestions", dependencies=[access.signed_in])
 def suggestions(request: Request, status: str = "pending", contact: int | None = None, book: str | None = None):
     u = me(request)
     if status not in ("pending", "accepted", "dismissed"):
@@ -666,7 +645,7 @@ def suggestions(request: Request, status: str = "pending", contact: int | None =
     return {"items": enrich.listing(book_ids(u, book), status, contact)}
 
 
-@router.post("/api/suggestions/{sid}/accept")
+@router.post("/api/suggestions/{sid}/accept", dependencies=[access.signed_in])
 async def suggestion_accept(sid: int, request: Request):
     """Apply a suggestion to its contact. Body (optional): {value} to apply an edited version."""
     u = writer(request)
@@ -682,7 +661,7 @@ async def suggestion_accept(sid: int, request: Request):
         raise HTTPException(400, str(e))
 
 
-@router.post("/api/suggestions/{sid}/dismiss")
+@router.post("/api/suggestions/{sid}/dismiss", dependencies=[access.signed_in])
 def suggestion_dismiss(sid: int, request: Request):
     u = me(request)
     s = enrich.suggestion(sid)
@@ -693,13 +672,13 @@ def suggestion_dismiss(sid: int, request: Request):
     return {"ok": True}
 
 
-@router.get("/api/quality")
+@router.get("/api/quality", dependencies=[access.signed_in])
 def data_quality(request: Request, book: str | None = None, check: str | None = None):
     """The data quality checks: [{check, title, severity: problem | tidy | info, fix, count, items}]."""
     return {"checks": quality.run_checks(book_ids(me(request), book), check)}
 
 
-@router.post("/api/quality/fix")
+@router.post("/api/quality/fix", dependencies=[access.signed_in])
 async def data_quality_fix(request: Request):
     """{check, ids?, countryCode?, book?}: fix a check's findings (all, or these contacts) where you may change them."""
     u = writer(request)
@@ -711,27 +690,27 @@ async def data_quality_fix(request: Request):
         raise HTTPException(400, str(e))
 
 
-@router.get("/api/tags")
+@router.get("/api/tags", dependencies=[access.signed_in])
 def tags(request: Request, book: str | None = None):
     return {"items": model.all_tags(book_ids(me(request), book))}
 
 
-@router.get("/api/relation-types")
+@router.get("/api/relation-types", dependencies=[access.signed_in])
 def relation_types():
     return rel.catalog()
 
 
-@router.get("/api/social-services")
+@router.get("/api/social-services", dependencies=[access.signed_in])
 def social_services():
     return {"items": [{"service": k, "name": v[0], "base": vcard.SOCIAL_BASE.get(k)} for k, v in vcard.SOCIAL_SERVICES.items()]}
 
 
-@router.get("/api/upcoming")
+@router.get("/api/upcoming", dependencies=[access.signed_in])
 def upcoming(request: Request, days: int = 30, book: str | None = None):
     return {"items": model.upcoming(book_ids(me(request), book), max(1, min(days, 366)))}
 
 
-@router.get("/api/contacts/{cid}/family")
+@router.get("/api/contacts/{cid}/family", dependencies=[access.signed_in])
 def family(cid: int, request: Request, depth: int = 3):
     """The relation graph around a contact: {nodes: [{id, fn, given, family, gender, hasPhoto, iopixPersonId, birthday}], edges: [{from, to, type}]}."""
     u = me(request)
@@ -772,7 +751,7 @@ def family_graph(cid: int, allowed_ids: list[int], depth: int = 3) -> dict:
 
 # ------------------------------------------------------------------ import / export
 
-@router.post("/api/import")
+@router.post("/api/import", dependencies=[access.signed_in])
 async def import_file(request: Request, file: UploadFile = File(...), book: str = Form(...), mode: str = Form("update")):
     """A .vcf (any number of cards, vCard 2.1/3.0/4.0), a jCard .json, or a Google / Outlook .csv.
     mode: update (a card whose UID is already in the book replaces it) or skip (keeps the existing one)."""
@@ -825,7 +804,7 @@ def import_cards(u: dict, b: dict, cards: list[dict], mode: str = "update") -> d
     return {"created": made, "updated": updated, "skipped": skipped, "read": len(cards)}
 
 
-@router.get("/api/export")
+@router.get("/api/export", dependencies=[access.signed_in])
 def export(request: Request, book: str | None = None, format: str = "vcf", ids: str = ""):
     u = me(request)
     bids = book_ids(u, book)
@@ -865,7 +844,7 @@ def _base(request: Request) -> str:
     return f"{proto}://{host}"
 
 
-@router.get("/api/connect")
+@router.get("/api/connect", dependencies=[access.signed_in])
 def connect_info(request: Request):
     """What to type into a mail, contacts or calendar app."""
     u = me(request)
@@ -881,7 +860,7 @@ def connect_info(request: Request):
             "api": f"{base}/api/docs"}
 
 
-@router.post("/api/apple-profile")
+@router.post("/api/apple-profile", dependencies=[access.signed_in])
 def apple_profile(request: Request, label: str = Form("iPhone"), password: str = Form("new"), calendar: str = Form("family"),
                   ldap: bool = Form(False)):
     """A configuration profile (.mobileconfig) that sets an iPhone, iPad or Mac up in one go: the CardDAV account for the
@@ -934,13 +913,13 @@ def apple_profile(request: Request, label: str = Form("iPhone"), password: str =
                              "Cache-Control": "no-store"})
 
 
-@router.post("/api/calendar/reset")
+@router.post("/api/calendar/reset", dependencies=[access.signed_in])
 def calendar_reset(request: Request):
     users.reset_calendar_token(me(request)["id"])
     return {"ok": True}
 
 
-@router.get("/cal/{token}/{which}.ics")
+@router.get("/cal/{token}/{which}.ics", dependencies=[access.public])
 def calendar_feed(token: str, which: str, request: Request):
     u = users.user_from_calendar_token(token)
     if not u:
@@ -955,13 +934,13 @@ def calendar_feed(token: str, which: str, request: Request):
 
 # ------------------------------------------------------------------ ioPix
 
-@router.get("/api/iopix/settings")
+@router.get("/api/iopix/settings", dependencies=[access.admin])
 def iopix_settings(request: Request):
     me(request)
     return iopix.public_settings()
 
 
-@router.post("/api/iopix/settings")
+@router.post("/api/iopix/settings", dependencies=[access.admin])
 async def iopix_save(request: Request):
     admin(request)
     b = await request.json()
@@ -972,13 +951,13 @@ async def iopix_save(request: Request):
     return {**iopix.public_settings(), "test": await run_in_threadpool(iopix.test) if iopix.settings()["url"] else None}
 
 
-@router.post("/api/iopix/test")
+@router.post("/api/iopix/test", dependencies=[access.admin])
 async def iopix_test(request: Request):
     admin(request)
     return await run_in_threadpool(iopix.test)
 
 
-@router.get("/api/iopix/people")
+@router.get("/api/iopix/people", dependencies=[access.signed_in])
 async def iopix_people(request: Request, q: str = "", refresh: bool = False):
     u = me(request)
     try:
@@ -992,7 +971,7 @@ async def iopix_people(request: Request, q: str = "", refresh: bool = False):
     return {"items": [{**p, "contact": linked.get(p["id"])} for p in ppl if not ql or ql in fold(p["name"])]}
 
 
-@router.get("/api/iopix/face/{pid}")
+@router.get("/api/iopix/face/{pid}", dependencies=[access.signed_in])
 async def iopix_face(pid: int, request: Request):
     me(request)
     try:
@@ -1004,7 +983,7 @@ async def iopix_face(pid: int, request: Request):
     return Response(got[0], media_type=got[1], headers={"Cache-Control": "private, max-age=86400"})
 
 
-@router.post("/api/iopix/auto-link")
+@router.post("/api/iopix/auto-link", dependencies=[access.signed_in])
 async def iopix_autolink(request: Request, book: str | None = None, dry: bool = True):
     """Contacts whose name matches exactly one ioPix person (and that are not linked yet): listed, or linked with dry=false."""
     u = writer(request)
