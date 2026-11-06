@@ -13,7 +13,7 @@ CONTACT_SHAPE = """
       name: {prefix, given, additional, family, suffix}   (or fn: "Ann Smith", split by itself)
       nickname, maiden, gender: M | F | O | N | U, kind: individual | org
       birthday: {year?, month?, day?} or "1980-05-17"   (any part can be left out: a year, a year and month, a month and day)
-      birthdayRemind: false keeps the birthday out of reminders (calendar, upcoming dates, the start page); true by default
+      birthdayRemind: false keeps the birthday out of the birthday calendar feed; true by default
       dates: [{label: "anniversary" | any word, year?, month, day}]   (other dates need a month and day)
       org (company), department, title (job title), role
       emails: [{value, label: home | work | other..., pref: true for the main one}]

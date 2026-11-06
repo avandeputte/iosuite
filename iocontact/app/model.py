@@ -490,7 +490,8 @@ def all_tags(book_ids: list[int]) -> list[dict]:
 
 
 def upcoming(book_ids: list[int], days: int = 30) -> list[dict]:
-    """Birthdays and other dates in the next `days` days, soonest first."""
+    """Birthdays and other dates in the next `days` days, soonest first. Every birthday is listed; `remind` says
+    whether it goes in the birthday calendar feed (the only thing "Remind me" decides). None for other dates."""
     import datetime as dt
     if not book_ids:
         return []
@@ -498,8 +499,8 @@ def upcoming(book_ids: list[int], days: int = 30) -> list[dict]:
     today = dt.date.today()
     out = []
     rows = db.q(f"SELECT c.id, c.fn, c.bday_year AS year, c.bday_month AS month, c.bday_day AS day, 'birthday' AS label, "
-                f"c.photo IS NOT NULL AS has_photo, c.iopix_person_id FROM con_contacts c WHERE c.address_book_id IN ({marks}) AND c.deleted = 0 AND c.bday_day IS NOT NULL "
-                f"AND c.bday_remind = 1 UNION ALL SELECT c.id, c.fn, d.year, d.month, d.day, d.label, c.photo IS NOT NULL, c.iopix_person_id FROM con_contact_dates d "
+                f"c.photo IS NOT NULL AS has_photo, c.iopix_person_id, c.bday_remind AS remind FROM con_contacts c WHERE c.address_book_id IN ({marks}) AND c.deleted = 0 "
+                f"AND c.bday_day IS NOT NULL UNION ALL SELECT c.id, c.fn, d.year, d.month, d.day, d.label, c.photo IS NOT NULL, c.iopix_person_id, NULL FROM con_contact_dates d "
                 f"JOIN con_contacts c ON c.id = d.contact_id WHERE c.address_book_id IN ({marks}) AND c.deleted = 0", (*book_ids, *book_ids))
     for r in rows:
         for yr in (today.year, today.year + 1):
@@ -513,7 +514,7 @@ def upcoming(book_ids: list[int], days: int = 30) -> list[dict]:
         if delta <= days:
             out.append({"contactId": r["id"], "fn": r["fn"], "label": r["label"], "date": d.isoformat(), "inDays": delta,
                         "turns": (d.year - r["year"]) if r["year"] else None, "hasPhoto": bool(r["has_photo"]),
-                        "iopixPersonId": r["iopix_person_id"]})
+                        "iopixPersonId": r["iopix_person_id"], "remind": None if r["remind"] is None else bool(r["remind"])})
     return sorted(out, key=lambda x: (x["inDays"], x["fn"]))
 
 

@@ -59,7 +59,9 @@ def test_mcp_contacts_relations_and_permissions(client, family_id):
     assert mary["name"]["family"] == "Ray" and mary["birthday"] == {"year": 1960, "month": 3, "day": 4} and mary["book"] == "Family"
     assert mary["birthdayRemind"] is True and "Mary Ray" in str(call(client, auth, "birthdays_in_month", month=3))
     assert call(client, auth, "update_contact", contact="Mary", changes={"birthdayRemind": False})["birthdayRemind"] is False
-    assert "Mary Ray" not in str(call(client, auth, "birthdays_in_month", month=3)) and call(client, auth, "get_contact", contact="Mary")["birthday"]["day"] == 4
+    march = call(client, auth, "birthdays_in_month", month=3)
+    march = {x["name"]: x["remind"] for x in (march if isinstance(march, list) else [march])}
+    assert march["Mary Ray"] is False and call(client, auth, "get_contact", contact="Mary")["birthday"]["day"] == 4
     call(client, auth, "update_contact", contact="Mary", changes={"birthdayRemind": True})
     # a partial birthday: the year, the year and month, or the month and day
     assert call(client, auth, "update_contact", contact="Mary", changes={"birthday": "1960"})["birthday"] == {"year": 1960, "month": None, "day": None}

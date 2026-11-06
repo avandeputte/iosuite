@@ -469,7 +469,7 @@ async function showContact(id, pane) {
   })));
   if (c.birthday || c.dates.length) cards.push(card('cake', 'Dates', '--c-amber',
     c.birthday ? kv('birthday', h('span', null, fmtDate(c.birthday), a != null ? h('span', { class: 'muted' }, ` · ${ageWord(c.birthday)}`) : null,
-      c.birthdayRemind === false ? h('span', { class: 'muted', title: 'Left out of the birthday calendar, the start page and other apps' }, ' · no reminder') : null)) : null,
+      c.birthdayRemind === false ? h('span', { class: 'muted', title: 'Left out of the birthday calendar feed' }, ' · not in the calendar feed') : null)) : null,
     c.dates.map((d) => kv(d.label, h('span', null, fmtDate(d), d.year ? h('span', { class: 'muted' }, ` · ${age(d)} years`) : null)))));
   const implied = c.impliedRelations || [];
   if (c.relations.length || implied.length) {
@@ -658,7 +658,7 @@ async function showEdit(id, pane) {
     h('div', { class: 'fsec' }, icon('work'), 'Work'),
     h('div', { class: 'grid' }, fld('Company', inp(f, 'org')), fld('Department', inp(f, 'department')), fld('Job title', inp(f, 'title')), fld('Role', inp(f, 'role'))),
     h('div', { class: 'fsec' }, icon('cake'), 'Birthday', h('span', { class: 'muted small' }, ' · fill in what you know: the year, month and year, day and month, or all three')), h('div', { class: 'multi' }, ...dateInputs(f.birthday),
-      h('label', { class: 'check', title: 'Unchecked: the birthday stays on the contact but is left out of the birthday calendar, the start page and other apps' },
+      h('label', { class: 'check', title: 'Unchecked: the birthday stays on the contact and on the Birthdays page but is left out of the birthday calendar feed' },
         h('input', { type: 'checkbox', checked: f.birthdayRemind !== false, onchange: (e) => { f.birthdayRemind = e.target.checked; } }), ' Remind me')),
     ...phones, ...emails, ...addrs, ...social, ...urls, ...dates, ...rels,
     S.status.iopix ? [h('div', { class: 'fsec' }, icon('image'), 'ioPix person'), iopixBox] : null,
@@ -706,9 +706,17 @@ async function showUpcoming(page) {
   const when = (x) => x.inDays === 0 ? 'Today' : x.inDays === 1 ? 'Tomorrow' : `In ${x.inDays} days`;
   page.append(h('div', { class: 'pagehead' }, h('h1', null, 'Birthdays and anniversaries'), range,
     h('a', { class: 'pillbtn', href: '#/settings/devices' }, icon('event', 's'), 'Subscribe in your calendar')),
-  r.items.length ? h('div', null, r.items.map((x) => h('a', { class: 'upc', href: `#/c/${x.contactId}` }, avatar({ id: x.contactId, fn: x.fn, hasPhoto: x.hasPhoto, iopixPersonId: x.iopixPersonId }, 'm'),
-    h('div', null, h('div', null, h('b', null, x.fn)), h('div', { class: 'muted' }, `${x.label === 'birthday' ? 'Birthday' : x.label.charAt(0).toUpperCase() + x.label.slice(1)}${x.turns != null ? (x.label === 'birthday' ? ` · turns ${x.turns}` : ` · ${x.turns} years`) : ''}`)),
-    h('div', { class: 'when' }, h('div', { class: 'days' }, when(x)), h('div', { class: 'muted small' }, new Date(x.date + 'T12:00').toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }))))))
+  r.items.length ? h('div', null, r.items.map((x) => h('div', { class: 'upc' },
+    h('a', { class: 'who', href: `#/c/${x.contactId}` }, avatar({ id: x.contactId, fn: x.fn, hasPhoto: x.hasPhoto, iopixPersonId: x.iopixPersonId }, 'm'),
+      h('div', null, h('div', null, h('b', null, x.fn)), h('div', { class: 'muted' }, `${x.label === 'birthday' ? 'Birthday' : x.label.charAt(0).toUpperCase() + x.label.slice(1)}${x.turns != null ? (x.label === 'birthday' ? ` · turns ${x.turns}` : ` · ${x.turns} years`) : ''}`))),
+    h('div', { class: 'when' }, h('div', { class: 'days' }, when(x)), h('div', { class: 'muted small' }, new Date(x.date + 'T12:00').toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }))),
+    // every birthday is listed; "Remind me" only decides whether it goes in the birthday calendar feed
+    x.label === 'birthday' && x.remind != null ? h('label', { class: 'check remind', title: 'Checked: this birthday is in the birthday calendar feed' },
+      h('input', { type: 'checkbox', checked: x.remind, onchange: async (e) => {
+        const box = e.target; box.disabled = true;
+        try { await api(`/api/contacts/${x.contactId}`, { method: 'PATCH', json: { birthdayRemind: box.checked } }); x.remind = box.checked; toast(box.checked ? `${x.fn}'s birthday is in the calendar feed` : `${x.fn}'s birthday is left out of the calendar feed`); }
+        catch (err) { box.checked = !box.checked; fail(err); } finally { box.disabled = false; }
+      } }), ' Remind me') : h('span', { class: 'remind' }))))
     : h('div', { class: 'empty' }, icon('cake'), h('p', null, 'No birthdays or anniversaries in that time.')));
 }
 
