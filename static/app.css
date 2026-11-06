@@ -139,7 +139,8 @@ body.home #main { top: env(safe-area-inset-top); }
 .bm.down .bmname::after { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--danger); margin-left: 6px; vertical-align: middle; }
 /* Customize the page */
 .dialog h3 { font-size: var(--fs-s); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--fg2); margin: 14px 0 4px; }
-.layrow { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+.layrow { display: flex; align-items: center; gap: 8px; padding: 2px 0; }
+.layrow.dragging { background: var(--bg3); }
 .layrow .check { display: flex; align-items: center; gap: 8px; flex: 1; }
 .layrow img { width: 22px; height: 22px; border-radius: 22%; }
 .layrow .nm .io { color: var(--name-io); } .layrow .nm .ap { color: color-mix(in srgb, var(--c, var(--fg)) calc(100% - var(--app-lift)), white var(--app-lift)); font-weight: 600; }
@@ -416,7 +417,8 @@ a.hatile:hover { background: var(--bg3); }
 .qrow .tap { color: var(--accent); }
 .ok { color: var(--ok); }
 .halist { display: flex; flex-direction: column; gap: 4px; margin: 8px 0 12px; overflow-x: auto; }
-.harow { display: grid; grid-template-columns: minmax(140px, 1.2fr) minmax(120px, 1fr) 60px 48px minmax(90px, .7fr) 100px; gap: 8px; align-items: center; min-width: 620px; }
+.harow { display: grid; grid-template-columns: 28px minmax(140px, 1.2fr) minmax(120px, 1fr) 60px 48px minmax(90px, .7fr) 36px; gap: 8px; align-items: center; min-width: 620px; padding: 2px 0; border-radius: var(--r-s); }
+.harow.dragging { background: var(--bg3); }
 .harow.head { font-size: var(--fs-xs); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--fg2); }
 .harow .haid { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: var(--fs-s); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .harow input.t { height: 32px; }
@@ -431,3 +433,21 @@ a.hatile:hover { background: var(--bg3); }
 .wallsensor .hstate { font-weight: 500; font-variant-numeric: tabular-nums; }
 .wallsensor.alert { color: #ffb86b; background: none; border: 0; padding: 0; font-size: inherit; border-radius: 0; }
 .wallsensor.alert .ic { width: 1.1em; height: 1.1em; }
+
+/* ---- Home Assistant popups: a thermostat, a cover */
+.hapop { min-width: 0; }
+.hapop.busy { opacity: .6; pointer-events: none; }
+.hanow { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; }
+.hacur { font-size: 28px; font-weight: 300; }
+.hatarget { display: flex; align-items: center; gap: 12px; margin: 6px 0; }
+.hatarget > .muted { min-width: 36px; }
+.hatemp { font-size: 34px; font-weight: 300; min-width: 110px; text-align: center; font-variant-numeric: tabular-nums; }
+.iconbtn.round { width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line); font-size: 22px; line-height: 1; }
+.iconbtn.round:disabled { opacity: .35; }
+.seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.seg button { height: 32px; padding: 0 12px; border-radius: var(--r-pill); border: 1px solid var(--line); background: var(--bg2); color: var(--fg); font: inherit; font-size: var(--fs-m); cursor: pointer; }
+.seg button:hover { background: var(--bg3); }
+.seg button.on { background: var(--accent-bg); color: var(--accent); border-color: transparent; font-weight: 600; }
+.habtns { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0; }
+.harange { display: flex; align-items: center; gap: 10px; }
+.harange input { flex: 1; }

@@ -48,6 +48,7 @@ CONTROLS = {
     "cover": ("cover.toggle", "cover.open_cover", "cover.close_cover"),
     "vacuum": ("vacuum.toggle", "vacuum.start", "vacuum.return_to_base"),
     "siren": ("siren.toggle", "siren.turn_on", "siren.turn_off"),
+    "climate": ("climate.toggle", "climate.turn_on", "climate.turn_off"),  # the card opens its own popup (set_climate) instead
 }
 ACTIONS = ("toggle", "on", "off")
 # a binary sensor of one of these kinds that is on needs attention wherever it is (the built-in alerts)
@@ -190,6 +191,20 @@ def test(base: str = "", tok: str = "") -> dict:
     return {"ok": True, "name": name, "version": cfg.get("version"), "entities": len(states) if isinstance(states, list) else 0}
 
 
+_unit = {"v": ""}
+
+
+def temp_unit() -> str:
+    """°C or °F, as Home Assistant is set (its /api/config), asked once."""
+    if not _unit["v"]:
+        try:
+            cfg = _call("GET", "/api/config")
+            _unit["v"] = str(((cfg or {}).get("unit_system") or {}).get("temperature") or "°C") if isinstance(cfg, dict) else "°C"
+        except HAError:
+            return "°C"
+    return _unit["v"]
+
+
 def all_states() -> list[dict]:
     """Every entity, as Home Assistant lists them, from the copy kept STATES_TTL seconds."""
     now = time.time()
@@ -294,6 +309,19 @@ def describe(st: dict, chosen: dict | None = None) -> dict:
     bat = a.get("battery_level")
     if isinstance(bat, (int, float)):
         out["battery"] = bat
+    if dom == "cover":  # what the cover popup needs: open / close / stop / a position, as the cover supports them
+        feat = a.get("supported_features") if isinstance(a.get("supported_features"), int) else 0
+        out["cover"] = {"position": a.get("current_position") if isinstance(a.get("current_position"), (int, float)) else None,
+                        "canOpen": bool(feat & 1), "canClose": bool(feat & 2), "canPosition": bool(feat & 4), "canStop": bool(feat & 8), "moving": state in ("opening", "closing")}
+    if dom == "climate":  # what the climate popup needs
+        num = lambda k: a.get(k) if isinstance(a.get(k), (int, float)) else None  # noqa: E731
+        out["climate"] = {"mode": state, "modes": [m for m in (a.get("hvac_modes") or []) if isinstance(m, str)], "action": a.get("hvac_action"),
+                          "current": num("current_temperature"), "target": num("temperature"), "low": num("target_temp_low"), "high": num("target_temp_high"),
+                          "min": num("min_temp") if num("min_temp") is not None else 7, "max": num("max_temp") if num("max_temp") is not None else 35,
+                          "step": num("target_temp_step") or 0.5, "humidity": num("current_humidity"),
+                          "fan": a.get("fan_mode"), "fans": [m for m in (a.get("fan_modes") or []) if isinstance(m, str)],
+                          "preset": a.get("preset_mode"), "presets": [m for m in (a.get("preset_modes") or []) if isinstance(m, str)],
+                          "unit": temp_unit()}
     return out
 
 
@@ -381,29 +409,24 @@ def search(q: str, limit: int = 8) -> list[dict]:
     return out
 
 
-def act(entity_id: str, action: str) -> dict:
-    """toggle | on | off on an entity the admin lets the page control; the entity's state right after."""
-    if action not in ACTIONS:
-        raise HAError("action: toggle, on or off", 400)
+def _allowed(entity_id: str) -> dict:
     c = next((c for c in entities() if c["id"] == entity_id), None)
     if not c or not c["control"]:
         raise HAError("The page may not control that entity (Settings › Home Assistant)", 403)
-    services = CONTROLS.get(_domain(entity_id))
-    if not services:
-        raise HAError("That kind of entity cannot be switched from here", 400)
-    service = services[ACTIONS.index(action)]
-    if not service:
-        raise HAError(f"{_domain(entity_id)}: no '{action}'", 400)
+    return c
+
+
+def _service(entity_id: str, c: dict, service: str, data: dict | None = None, expects_change: bool = True) -> dict:
+    """Calls `service` (domain.name) on the entity and answers with its state after. Home Assistant answers with the
+    states the call changed; a device that reports back later (Zigbee, Z-Wave, a cloud bulb) is not among them yet,
+    and reading its state straight away gives the old one, which would make the tile say the opposite of what just
+    happened. So: the answer when it names the entity, else a few short reads until the state differs from before (a
+    scene or button changes nothing: one read)."""
     dom, svc = service.split(".", 1)
     before = next((s for s in (_cache["items"] or []) if s.get("entity_id") == entity_id), None)
-    changed = _call("POST", f"/api/services/{dom}/{svc}", {"entity_id": entity_id})
+    changed = _call("POST", f"/api/services/{dom}/{svc}", {"entity_id": entity_id, **(data or {})})
     forget()
-    # Home Assistant answers with the states the call changed; a device that reports back later (Zigbee, Z-Wave, a
-    # cloud bulb) is not among them yet, and reading its state straight away gives the old one, which would make the
-    # tile say the opposite of what just happened. So: the answer when it names the entity, else a few short reads
-    # until the state differs from before (a scene or button changes nothing: one read).
     st = next((s for s in changed if isinstance(s, dict) and s.get("entity_id") == entity_id), None) if isinstance(changed, list) else None
-    expects_change = _domain(entity_id) not in ("scene", "script", "button", "input_button", "automation")
     for i in range(6 if expects_change and before else 1):
         if st is not None:
             break
@@ -421,3 +444,76 @@ def act(entity_id: str, action: str) -> dict:
         except HAError:
             st = None
     return describe(st, c) if isinstance(st, dict) else {"id": entity_id, "ok": True}
+
+
+def act(entity_id: str, action: str) -> dict:
+    """toggle | on | off on an entity the admin lets the page control; the entity's state right after."""
+    if action not in ACTIONS:
+        raise HAError("action: toggle, on or off", 400)
+    c = _allowed(entity_id)
+    services = CONTROLS.get(_domain(entity_id))
+    if not services:
+        raise HAError("That kind of entity cannot be switched from here", 400)
+    service = services[ACTIONS.index(action)]
+    if not service:
+        raise HAError(f"{_domain(entity_id)}: no '{action}'", 400)
+    return _service(entity_id, c, service, expects_change=_domain(entity_id) not in ("scene", "script", "button", "input_button", "automation"))
+
+
+def set_entity(entity_id: str, body: dict) -> dict:
+    """The popups. A thermostat: {temperature? | low? + high?, mode?, fan?, preset?}; a cover: {action: open | close |
+    stop} or {position: 0-100}. On an entity the admin lets the page control, each checked against what it offers;
+    its state right after."""
+    dom = _domain(entity_id)
+    if dom not in ("climate", "cover"):
+        raise HAError("A climate or cover entity, please", 400)
+    c = _allowed(entity_id)
+    st = next((s for s in all_states() if s.get("entity_id") == entity_id), None)
+    if not st:
+        raise HAError("Not in Home Assistant", 404)
+    body = body if isinstance(body, dict) else {}
+    if dom == "cover":
+        cv = describe(st, c)["cover"]
+        if body.get("position") is not None:
+            try:
+                pos = int(body["position"])
+            except (TypeError, ValueError):
+                raise HAError("position: 0 to 100", 400)
+            if not cv["canPosition"] or not 0 <= pos <= 100:
+                raise HAError("position: 0 to 100, on a cover that takes one", 400)
+            return _service(entity_id, c, "cover.set_cover_position", {"position": pos})
+        act_ = body.get("action")
+        if act_ not in ("open", "close", "stop") or not cv["can" + act_.capitalize()]:
+            raise HAError(f"action: {', '.join(a for a in ('open', 'close', 'stop') if cv['can' + a.capitalize()])}", 400)
+        return _service(entity_id, c, f"cover.{act_}_cover", expects_change=act_ != "stop")
+    cl = describe(st, c)["climate"]
+    out = None
+    if body.get("mode") is not None:
+        if body["mode"] not in cl["modes"]:
+            raise HAError(f"mode: one of {', '.join(cl['modes']) or 'none'}", 400)
+        out = _service(entity_id, c, "climate.set_hvac_mode", {"hvac_mode": body["mode"]})
+    if body.get("fan") is not None:
+        if body["fan"] not in cl["fans"]:
+            raise HAError(f"fan: one of {', '.join(cl['fans']) or 'none'}", 400)
+        out = _service(entity_id, c, "climate.set_fan_mode", {"fan_mode": body["fan"]})
+    if body.get("preset") is not None:
+        if body["preset"] not in cl["presets"]:
+            raise HAError(f"preset: one of {', '.join(cl['presets']) or 'none'}", 400)
+        out = _service(entity_id, c, "climate.set_preset_mode", {"preset_mode": body["preset"]})
+    temps = {}
+    for k, hk in (("temperature", "temperature"), ("low", "target_temp_low"), ("high", "target_temp_high")):
+        if body.get(k) is not None:
+            try:
+                v = float(body[k])
+            except (TypeError, ValueError):
+                raise HAError(f"{k}: a number", 400)
+            if not cl["min"] <= v <= cl["max"]:
+                raise HAError(f"{k}: between {cl['min']:g} and {cl['max']:g}", 400)
+            temps[hk] = v
+    if temps:
+        if ("target_temp_low" in temps) != ("target_temp_high" in temps):
+            raise HAError("low and high together", 400)
+        out = _service(entity_id, c, "climate.set_temperature", temps)
+    if out is None:
+        raise HAError("Nothing to set: temperature, low + high, mode, fan or preset", 400)
+    return out

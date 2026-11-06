@@ -166,6 +166,18 @@ async def get_home(request: Request):
     return await run_in_threadpool(ha.home)
 
 
+@router.post("/api/ha/{entity_id}/set")
+async def ha_set(entity_id: str, request: Request):
+    """The popups: a thermostat takes {temperature? | low? + high?, mode?, fan?, preset?}, a cover {action: open | close |
+    stop} or {position: 0-100}; on an entity the admin lets the page control. Returns the entity's state right after."""
+    me(request)
+    try:
+        b = await request.json()
+    except ValueError:
+        raise HTTPException(400, "JSON, please")
+    return await run_in_threadpool(_ha, ha.set_entity, entity_id, b)
+
+
 @router.post("/api/ha/{entity_id}/{action}")
 async def ha_act(entity_id: str, action: str, request: Request):
     """toggle | on | off: switch an entity the admin lets the page control (Settings › Home Assistant). Returns the
