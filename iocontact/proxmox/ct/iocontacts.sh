@@ -72,6 +72,16 @@ ask_app_settings() {
     aw=$(whiptail --backtitle "$bt" --passwordbox "Admin password (8 characters or more; empty: make the admin in the browser on the first visit)" 10 72 3>&1 1>&2 2>&3) || exit 1
     [[ -n "$aw" ]] && IOCONTACTS_ADMIN="$an:$aw" || IOCONTACTS_ADMIN=""
   fi
+  if [[ -z "${IOCONTACTS_DB_ADMIN+x}" ]]; then  # a MariaDB administrator: the databases and users above are created for you (empty: they exist)
+    local dau daw
+    dau=$(whiptail --backtitle "$bt" --inputbox "MariaDB administrator who may create the databases and users above, e.g. root (empty: they exist already)" 10 76 "" 3>&1 1>&2 2>&3) || exit 1
+    if [[ -n "$dau" ]]; then
+      daw=$(whiptail --backtitle "$bt" --passwordbox "Password of $dau" 9 60 3>&1 1>&2 2>&3) || exit 1
+      IOCONTACTS_DB_ADMIN="$dau:$daw"
+    else
+      IOCONTACTS_DB_ADMIN=""
+    fi
+  fi
   if [[ -z "${IOCONTACTS_ALSO+x}" ]]; then  # the other apps of the suite in the same container (ioPix has its own script: photo mounts)
     IOCONTACTS_ALSO=$(whiptail --backtitle "$bt" --checklist "Also install in this container (same database server, each app its own database; same accounts and admin; each on its usual port):" 14 78 4 \
       iosuite "ioSuite (the start page)  (8630)" OFF \
@@ -109,6 +119,7 @@ msg_info "Running the app's setup inside the container (packages, settings, tabl
 SECRETS="IOCONTACTS_DB=$(printf '%q' "$IOCONTACTS_DB")"$'\n'
 [[ -n "${IOCONTACTS_SUITE_DB:-}" ]] && SECRETS+="IOCONTACTS_SUITE_DB=$(printf '%q' "$IOCONTACTS_SUITE_DB")"$'\n'
 [[ -n "${IOCONTACTS_ADMIN:-}" ]] && SECRETS+="IOCONTACTS_ADMIN=$(printf '%q' "$IOCONTACTS_ADMIN")"$'\n'
+[[ -n "${IOCONTACTS_DB_ADMIN:-}" ]] && SECRETS+="IOCONTACTS_DB_ADMIN=$(printf '%q' "$IOCONTACTS_DB_ADMIN")"$'\n'
 SECF="$(mktemp)"; chmod 600 "$SECF"; printf '%s' "$SECRETS" > "$SECF"
 pct push "$CTID" "$SECF" /opt/iocontacts/setup.env --perms 0600 --user 0 --group 0
 rm -f "$SECF"
