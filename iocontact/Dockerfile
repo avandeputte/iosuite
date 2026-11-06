@@ -4,7 +4,7 @@ WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY app ./app
 COPY static ./static
-# git only while installing: iosuite-shared (the suite's shared accounts) comes from its GitHub repository, avandeputte/iosuite-shared
+# git only while installing: iosuite-shared (the suite's shared library) comes from its GitHub repository, avandeputte/iosuite-shared
 RUN apt-get update && apt-get install -y --no-install-recommends git \
     && pip install --no-cache-dir -e . \
     && apt-get purge -y --auto-remove git && rm -rf /var/lib/apt/lists/* \
@@ -12,7 +12,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends git \
 # the commit the image was built from, for Maintenance › Updates and logs (the workflow passes it)
 ARG COMMIT=unknown
 RUN echo "$COMMIT" > COMMIT
-ENV DB_HOST=db DB_PORT=3306 DB_NAME=contacts DB_USER=contacts DB_PASSWORD=contacts PORT=8640 LDAP_PORT=3890 PYTHONUNBUFFERED=1
+# the database settings come from the environment (docker-compose.yml): no password is baked into the image
+ENV DB_HOST=db DB_PORT=3306 DB_NAME=contacts DB_USER=contacts PORT=8640 LDAP_PORT=3890 PYTHONUNBUFFERED=1
 EXPOSE 8640 3890
 USER iocontacts
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8640/api/status', timeout=4)" || exit 1

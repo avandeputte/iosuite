@@ -4,13 +4,10 @@ import sys
 from typing import Optional
 
 from mcp.server.mcpserver.exceptions import ToolError
-from mcp.types import ToolAnnotations
 
 from app import __version__, config, db, iopix, users
 from app.auth import auth, updater
-from app.mcp.base import READ_ONLY, need_admin, server
-
-UPDATES = ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=True)  # reaches GitHub
+from app.mcp.base import READ_ONLY, UPDATES, need_admin, server
 
 
 @server.tool(annotations=READ_ONLY)
@@ -19,7 +16,7 @@ def diagnostics() -> dict:
     rows), the LDAP directory, ioPix, the MCP switch, the last update check and update, and the accounts."""
     need_admin()
     out = {"version": __version__, "commit": updater.local_commit()[:7], "docker": updater.in_docker(),
-           "python": sys.version.split()[0], "platform": platform.platform(), "appDir": str(config.ROOT),
+           "python": sys.version.split()[0], "platform": platform.platform(), "appDir": str(config.APP_DIR),
            "publicUrl": config.PUBLIC_URL or None,
            "ldap": {"port": config.LDAP_PORT, "base": config.LDAP_BASE} if config.LDAP_PORT else "off",
            "proxySignIn": auth.proxy.mode(), "update": updater.status()}
@@ -33,7 +30,7 @@ def diagnostics() -> dict:
                            "addressBooks": db.one("SELECT count(*) AS n FROM con_address_books")["n"]}
     except Exception as e:  # noqa: BLE001
         out["database"] = {"error": str(e)[:200]}
-    from app.api import mcp_enabled
+    from app.main import mcp_enabled
     out["mcp"] = {"enabled": mcp_enabled(), "forcedByEnv": config.MCP_FORCED}
     ip = iopix.public_settings()
     out["iopix"] = {"url": ip.get("url") or None, "signIn": bool(ip.get("user")), "serviceToken": bool(ip.get("cfId"))}

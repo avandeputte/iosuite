@@ -1,8 +1,11 @@
-"""Request size limits: a body is read up to its limit, never all of it into memory first."""
+"""Request size limits (app/config.py; iosuite-shared's body cap enforces the same ones on every request): a body is
+read up to its limit, never all of it into memory first."""
 from fastapi import HTTPException, Request
 
-MAX_BODY = 16 * 1024 * 1024    # a contact (JSON or vCard, a photo inline) or a CardDAV request
-MAX_IMPORT = 64 * 1024 * 1024  # an imported .vcf / .csv / .json file
+from app import config
+
+MAX_BODY = config.MAX_JSON_BYTES      # a contact (JSON or vCard, a photo inline) or a CardDAV request
+MAX_IMPORT = config.MAX_IMPORT_BYTES  # an imported .vcf / .csv / .json file
 
 
 def too_big(limit: int) -> HTTPException:

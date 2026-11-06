@@ -81,22 +81,22 @@ def test_roles_and_private_books(client, family_id):
     mk(client, mine["id"], fn="Secret Friend")
     from fastapi.testclient import TestClient
     from app.main import app
-    with TestClient(app) as k:
-        assert k.post("/api/auth/login", json={"name": "kid", "password": "kidpass99"}).status_code == 200
-        books = k.get("/api/books").json()["items"]
-        assert {b["name"] for b in books} == {"Family", "Personal"} and mine["id"] not in [b["id"] for b in books]
-        assert k.get("/api/contacts?q=secret").json()["total"] == 0
-        assert k.post(f"/api/contacts?book={family_id}", json={"fn": "X"}).status_code == 403
-        own = next(b for b in books if not b["shared"])
-        assert k.post(f"/api/contacts?book={own['id']}", json={"fn": "My pal"}).status_code == 201
+    k = TestClient(app)  # no lifespan: the session's app is already running
+    assert k.post("/api/auth/login", json={"name": "kid", "password": "kidpass99"}).status_code == 200
+    books = k.get("/api/books").json()["items"]
+    assert {b["name"] for b in books} == {"Family", "Personal"} and mine["id"] not in [b["id"] for b in books]
+    assert k.get("/api/contacts?q=secret").json()["total"] == 0
+    assert k.post(f"/api/contacts?book={family_id}", json={"fn": "X"}).status_code == 403
+    own = next(b for b in books if not b["shared"])
+    assert k.post(f"/api/contacts?book={own['id']}", json={"fn": "My pal"}).status_code == 201
     # basic auth with an app password, and the bearer form
     pw = client.post("/api/app-passwords", json={"label": "phone"}).json()["password"]
     from fastapi.testclient import TestClient as T2
-    with T2(app) as anon:
-        assert anon.get("/api/books").status_code == 401
-        assert anon.get("/api/books", auth=("alex", pw)).status_code == 200
-        assert anon.get("/api/books", headers={"Authorization": f"Bearer {pw}"}).status_code == 200
-        assert anon.get("/api/books", auth=("alex", "nope")).status_code == 401
+    anon = T2(app)  # no lifespan: the session's app is already running
+    assert anon.get("/api/books").status_code == 401
+    assert anon.get("/api/books", auth=("alex", pw)).status_code == 200
+    assert anon.get("/api/books", headers={"Authorization": f"Bearer {pw}"}).status_code == 200
+    assert anon.get("/api/books", auth=("alex", "nope")).status_code == 401
 
 
 def test_calendar_and_duplicates(client, family_id):
@@ -143,22 +143,22 @@ def test_account_picker_and_one_click(client, family_id):
     assert client.patch(f"/api/users/{gran['id']}", json={"password": ""}).status_code == 200
     from fastapi.testclient import TestClient
     from app.main import app
-    with TestClient(app) as anon:
-        acc = {a["name"]: a for a in anon.get("/api/auth/accounts").json()["accounts"]}
-        assert acc["gran"]["passwordless"] and not acc["ed"]["passwordless"] and "pw_hash" not in acc["gran"]
-        out = {"cf-connecting-ip": "1.2.3.4"}
-        assert "gran" not in [a["name"] for a in anon.get("/api/auth/accounts", headers=out).json()["accounts"]]
-        assert anon.post("/api/auth/login", json={"name": "ed"}).status_code == 401
-        assert anon.post("/api/auth/login", json={"name": "gran"}, headers=out).status_code == 403
-        assert anon.get("/api/auth/accounts/%d/photo" % gran["id"]).status_code == 404
-        assert anon.post("/api/auth/login", json={"name": "gran"}).status_code == 200
-        assert anon.get("/api/status").json()["user"]["name"] == "gran"
-        assert anon.get("/api/status", headers=out).json()["user"] is None  # the session does not work from outside
+    anon = TestClient(app)  # no lifespan: the session's app is already running
+    acc = {a["name"]: a for a in anon.get("/api/auth/accounts").json()["accounts"]}
+    assert acc["gran"]["passwordless"] and not acc["ed"]["passwordless"] and "pw_hash" not in acc["gran"]
+    out = {"cf-connecting-ip": "1.2.3.4"}
+    assert "gran" not in [a["name"] for a in anon.get("/api/auth/accounts", headers=out).json()["accounts"]]
+    assert anon.post("/api/auth/login", json={"name": "ed"}).status_code == 401
+    assert anon.post("/api/auth/login", json={"name": "gran"}, headers=out).status_code == 403
+    assert anon.get("/api/auth/accounts/%d/photo" % gran["id"]).status_code == 404
+    assert anon.post("/api/auth/login", json={"name": "gran"}).status_code == 200
+    assert anon.get("/api/status").json()["user"]["name"] == "gran"
+    assert anon.get("/api/status", headers=out).json()["user"] is None  # the session does not work from outside
     # an empty password never works for HTTP Basic (CardDAV, LDAP)
     import base64
-    with TestClient(app) as dav:
-        r = dav.get("/api/books", headers={"Authorization": "Basic " + base64.b64encode(b"gran:").decode()})
-        assert r.status_code == 401
+    dav = TestClient(app)  # no lifespan: the session's app is already running
+    r = dav.get("/api/books", headers={"Authorization": "Basic " + base64.b64encode(b"gran:").decode()})
+    assert r.status_code == 401
 
 
 def test_page_stamps_the_version(client):

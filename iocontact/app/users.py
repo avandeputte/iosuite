@@ -20,10 +20,11 @@ ROLES = shared.APP_ROLES
 
 
 def public(u: dict | None) -> dict | None:
+    """The account as the web app sees it: the fields /api/status carries in every app of the suite, and the "me" card."""
     if not u:
         return None
     return {"id": u["id"], "name": u["name"], "displayName": u.get("display_name") or u["name"], "email": u.get("email"),
-            "role": u["role"], "hasPassword": bool(u.get("pw_hash")), "meContactId": u.get("me_contact_id")}
+            "role": u["role"], "suiteAdmin": bool(u.get("suite_admin")), "passwordless": not u.get("pw_hash"), "meContactId": u.get("me_contact_id")}
 
 
 def get(uid: int) -> dict | None:
@@ -100,7 +101,8 @@ def delete(uid: int) -> None:
     shared.delete(uid)
 
 
-def ensure_admin_from_env() -> None:
+def init() -> None:
+    """The Shared ioSuite database's tables, and the ADMIN_USER / ADMIN_PASSWORD account on a first start with no accounts."""
     shared.init()
 
 

@@ -12,7 +12,7 @@ from iosuite_shared.updates import Updater
 
 from . import __version__, config, db
 
-APP = "iocontacts"
+APP = config.APP
 
 # the version, address, description and colour also go into the suite's list of apps (ios_apps), which the
 # start page and the other apps read: written on the first request
@@ -34,6 +34,7 @@ def row_of(u):
 
 auth.decorate = row_of
 
-# updates (the daily check, update.sh, restart), the MCP token and the server log, as in every app of the suite
-# (iosuite_shared.updates); the daily-check switch is kept with ioContacts' own settings
-updater = Updater(APP, __version__, config.ROOT, settings=(db.get_setting, db.set_setting), user_agent="iocontacts")
+# updates (the daily check, update.sh, restart) and the server log, as in every app of the suite (iosuite_shared.updates);
+# the daily-check switch is kept with ioContacts' own settings
+updater = Updater(APP, __version__, config.APP_DIR, settings=(db.get_setting, db.set_setting), result_file=config.DATA_DIR / ".update-result",
+                  user_agent=APP)

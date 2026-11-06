@@ -1,31 +1,36 @@
-"""ioContacts: the application (start-up, who is asking, the routes and the web app)."""
+"""ioContacts: the application (start-up, who is asking, the routes and the web app).
+
+Who may call a route is declared on the route (app/access.py); iosuite-shared's middleware works out who is asking
+(the shared session cookie, the identity a reverse proxy such as Cloudflare Access vouches for, HTTP Basic or a bearer
+app password), whether sign-in is required at all, and refuses cross-site writes. The same scheme as every app of the
+suite.
+"""
 import logging
-import logging.handlers
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
+from iosuite_shared import mcp as shared_mcp
+from iosuite_shared.updates import setup_log
 
-from app import __version__, api, carddav, config, db, ldapd, mcp, users
-from app.auth import auth as auth_shared, updater
+from app import __version__, api, carddav, config, db, enrich, iopix, ldapd, mcp, users
+from app.auth import auth, updater
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+setup_log(config.LOG_FILE)  # the server log that Maintenance › Updates and logs shows; the app runs without it
 log = logging.getLogger("iocontacts")
-if config.LOG_FILE:  # the server log that Maintenance › Updates and logs shows; the app runs without it
-    try:
-        _fh = logging.handlers.RotatingFileHandler(config.LOG_FILE, maxBytes=2_000_000, backupCount=3, encoding="utf-8")
-        _fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
-        logging.getLogger().addHandler(_fh)
-    except OSError as e:
-        log.warning("no server log at %s: %s", config.LOG_FILE, e)
+
+# what a visitor may still fetch when sign-in is required: the app shell and its files, the API docs, the birthday
+# calendar links and CardDAV (their own sign-in), and the MCP endpoint (its gate below)
+OPEN_PATHS = ("/", "/manifest.webmanifest", "/api/docs", "/api/openapi.json")
+OPEN_PREFIXES = ("/static/", "/cal/", "/dav", "/.well-known/", "/mcp")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await run_in_threadpool(db.migrate)
-    await run_in_threadpool(users.ensure_admin_from_env)
+    await run_in_threadpool(users.init)
     server = None
     if config.LDAP_PORT:
         try:
@@ -33,9 +38,8 @@ async def lifespan(app: FastAPI):
         except OSError as e:
             log.warning("LDAP directory not started on port %s: %s", config.LDAP_PORT, e)
     updater.start_daily()  # the daily "is there a newer version" check, while the setting allows it
-    sm = mcp.server.session_manager
-    sm._has_started = False  # a second start in the same process (the tests start the app once per test) is allowed
-    async with sm.run():  # the MCP endpoint (/mcp) lives in this process
+    log.info("ioContacts %s started, database %s:%s/%s", __version__, config.DB_HOST, config.DB_PORT, config.DB_NAME)
+    async with shared_mcp.running(mcp.server):  # the MCP endpoint (/mcp) lives in this process
         yield
     if server:
         server.close()
@@ -44,49 +48,41 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="ioContacts", version=__version__, lifespan=lifespan, docs_url="/api/docs", redoc_url=None,
               openapi_url="/api/openapi.json",
               description="Contacts for the family. Also served over CardDAV at /dav/ (vCard 3.0 and 4.0), LDAP "
-                          "(read-only) and as a birthday calendar (iCalendar). JSON by default; ask for text/vcard or "
-                          "application/vcard+json (jCard) with Accept or ?format=vcard|vcard4|jcard.")
+                          "(read-only), as a birthday calendar (iCalendar) and to AI assistants over MCP (/mcp). JSON by "
+                          "default; ask for text/vcard or application/vcard+json (jCard) with Accept or ?format=vcard|vcard4|jcard.")
 
 
-OPEN = ("/api/status", "/api/auth/login", "/api/auth/setup", "/api/auth/logout", "/api/docs", "/api/openapi.json")
+def mcp_enabled() -> bool:
+    """Settings › Server › MCP server: off until an admin turns it on (or MCP=1 in the environment)."""
+    return shared_mcp.enabled(db.get_setting, config.MCP_FORCED)
 
 
-@app.middleware("http")
-async def who(request: Request, call_next):
-    """Who is asking (iosuite-shared: the shared session cookie, the proxy's sign-in, HTTP Basic or a bearer app
-    password). Everything but the web app's files, sign-in and the calendar feed (its own secret link) needs one of them."""
-    path = request.url.path
-    refused = await auth_shared.resolve(request)
-    if refused is not None:
-        return refused
-    user = request.state.user
-    tok = request.cookies.get(users.COOKIE)
-    if path == "/mcp" or path.startswith("/mcp/"):
-        if not await run_in_threadpool(api.mcp_enabled):
-            return JSONResponse({"detail": "The MCP server is switched off (Settings › Server in the web app)."}, status_code=404)
-        if not user:
-            return JSONResponse({"detail": "Sign in with your user name and an app password (HTTP Basic), or send "
-                                           "'Authorization: Bearer <app password>'. Make one in Settings › Apps and devices."},
-                                status_code=401, headers={"WWW-Authenticate": 'Basic realm="ioContacts", Bearer realm="ioContacts"'})
-        mcp.current_user.set(user)  # every tool acts as this account
-    if path.startswith("/api/") and not user and path not in OPEN and not path.startswith("/api/auth/accounts"):
-        return JSONResponse({"detail": "Sign in first"}, status_code=401,
-                            headers={"WWW-Authenticate": 'Basic realm="ioContacts"'} if "authorization" in request.headers else {})
-    # a page on another site cannot drive this one with the browser's cookie
-    if request.method in ("POST", "PUT", "PATCH", "DELETE") and tok and path.startswith("/api/") and auth_shared.cross_site(request):
-        return JSONResponse({"detail": "Cross-site request refused"}, status_code=403)
-    resp = await call_next(request)
-    auth_shared.finish(request, resp)  # a proxy sign-in gets a session cookie here too
-    if path.startswith("/api/"):
-        resp.headers.setdefault("Cache-Control", "no-store")
-    return resp
+# who is asking, whether sign-in is required at all, the cross-site check on writes, and the MCP endpoint's gate (the
+# switch; an app password or session; every tool acts as that account): iosuite-shared's middleware
+app.middleware("http")(auth.middleware(open_paths=OPEN_PATHS, open_prefixes=OPEN_PREFIXES,
+                                       before=auth.mcp_gate(mcp_enabled, on_user=mcp.current_user.set)))
 
 
+def _limit_for(path: str, ctype: str) -> int:
+    if "/import" in path or path.startswith("/dav"):  # a vCard or CSV file to import; CardDAV checks its own PUTs
+        return config.MAX_IMPORT_BYTES
+    return config.MAX_JSON_BYTES
+
+
+# 400 for bad input, the headers, no-store on the API, the body cap: the same in every app of the suite
+auth.install(app, limit_for=_limit_for)
+
+
+def _status_extra(request) -> dict:
+    """ioContacts' own fields of GET /api/status, beside the suite's (its `user` also names the account's own contact)."""
+    u = request.state.user
+    return {"user": users.public(u), "iopix": bool(iopix.settings()["url"]) if u else None, "mcp": mcp_enabled() if u else None,
+            "suggestions": enrich.pending_count(api.book_ids(u)) if u else None}
 
 
 def _server_info() -> dict:
     """What Maintenance › Updates and logs and Settings › Server show beside the updater's own fields."""
-    return {"mcpEnabled": api.mcp_enabled(), "mcpLocked": config.MCP_FORCED,
+    return {"mcpEnabled": mcp_enabled(), "mcpLocked": config.MCP_FORCED,
             "database": f"{config.DB_HOST}:{config.DB_PORT}/{config.DB_NAME}",
             "ldap": f"{config.LDAP_HOST or '0.0.0.0'}:{config.LDAP_PORT}" if config.LDAP_PORT else None}
 
@@ -94,23 +90,14 @@ def _server_info() -> dict:
 def _server_apply(body: dict) -> None:
     """The MCP switch, sent to POST /api/server as {mcpEnabled: bool}."""
     if "mcpEnabled" in body:
-        if config.MCP_FORCED and not body["mcpEnabled"]:
-            raise ValueError("MCP=1 in the environment keeps the MCP server on")
-        db.set_setting("mcp_enabled", "1" if body["mcpEnabled"] else "0")
+        shared_mcp.set_enabled(db.set_setting, bool(body["mcpEnabled"]), config.MCP_FORCED)
 
 
-app.include_router(auth_shared.server_router(updater, log_file=config.LOG_FILE, info=_server_info, apply=_server_apply))  # /api/server, /api/log (admins)
-app.include_router(api.router)
+app.include_router(auth.status_router(updater, extra=_status_extra))  # /api/status: public, the same shape in every app
+app.include_router(auth.server_router(updater, log_file=config.LOG_FILE, info=_server_info, apply=_server_apply))  # /api/server, /api/log (admins)
+app.include_router(api.router)      # /api/auth/* and /api/users are ioContacts' own (an account also names its own contact)
 app.include_router(carddav.router)
-
-# MCP over streamable HTTP on the same port: an assistant connects to https://host/mcp with an app password.
-# DNS-rebinding protection is off because the server is reached by LAN name, IP or a public name, not localhost only;
-# every request is signed in anyway.
-from mcp.server.transport_security import TransportSecuritySettings  # noqa: E402
-
-_mcp_asgi = mcp.server.streamable_http_app(streamable_http_path="/mcp", stateless_http=True,
-                                           transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False))
-app.router.routes[:0] = list(_mcp_asgi.routes)  # the exact path /mcp, ahead of everything else
+shared_mcp.mount(app, mcp.server)  # MCP over streamable HTTP at /mcp, ahead of everything else
 
 
 @app.get("/", include_in_schema=False)
@@ -118,7 +105,7 @@ def index():
     """The page, with the version stamped on the script and stylesheet: after an update the browser (and Cloudflare,
     which caches .js and .css at the edge) fetches the new ones instead of serving what it kept."""
     html = (config.STATIC_DIR / "index.html").read_text(encoding="utf-8")
-    for f in ("static/app.js", "static/app.css"):
+    for f in ("static/app.js", "static/app.css", "static/js/theme.js"):
         html = html.replace(f'"{f}"', f'"{f}?v={__version__}"')
     return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
 

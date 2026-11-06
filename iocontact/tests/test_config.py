@@ -1,8 +1,12 @@
-"""The Shared ioSuite database settings: IOSUITE_DB_* with `iosuite` defaults, on the contacts' server unless set."""
+"""The conventions every app of the suite follows (iosuite_shared.testing): the port, one version, config.env, and an
+access marker on every API route. And the Shared ioSuite database settings: IOSUITE_DB_* with `iosuite` defaults, on the
+contacts' server unless set."""
 import json
 import os
 import subprocess
 import sys
+
+from iosuite_shared import testing
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PROBE = ("import json; from app import config; from iosuite_shared import config as sc; "
@@ -31,20 +35,19 @@ def test_the_old_names_are_not_read():
     assert (s["HOST"], s["NAME"], s["USER"]) == ("127.0.0.1", "iosuite", "iosuite")
 
 
-def test_default_port_is_the_suites():
+def test_suite_conventions():
+    from app import __version__, config
+    testing.check_conventions(ROOT, "iocontacts", __version__, config)
+
+
+def test_every_api_route_declares_who_may_call_it(app):
+    from app import access
+    testing.check_access_declared(app, access.declared)
+
+
+def test_standard_paths():
     from pathlib import Path
-    from iosuite_shared import suite
     from app import config
-    assert config.PORT == suite.PORTS["iocontacts"] == 8640
-    for f in ("Dockerfile", "docker-compose.yml", "config.env.example", "run.sh", "setup.sh"):
-        assert "8640" in (Path(ROOT) / f).read_text(), f
-
-
-def test_one_version_and_settings_file():
-    from pathlib import Path
-    from app import __version__
     root = Path(ROOT)
-    assert f'version = "{__version__}"' in (root / "pyproject.toml").read_text()
-    assert "config.env" in (root / ".gitignore").read_text().split()
-    for f in ("setup.sh", "update.sh", "README.md"):
-        assert "iocontacts.env" not in (root / f).read_text(), f
+    assert config.APP_DIR == root and config.STATIC_DIR == root / "static" and config.DATA_DIR == root / "data"
+    assert config.LOG_FILE is None  # LOG_FILE= in the tests' environment
