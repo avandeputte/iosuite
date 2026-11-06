@@ -14,7 +14,7 @@ services:
       DB_PORT: "3306"
       DB_NAME: calendar
       DB_USER: calendar
-      DB_PASSWORD: calendar           # CHANGE ME
+      DB_PASSWORD: change-me          # CHANGE ME
       # the Shared ioSuite database: accounts and suite-wide settings (the same one every app of the suite uses)
       # IOSUITE_DB_HOST: db.example.lan   # default: DB_HOST
       # IOSUITE_DB_PORT: "3306"            # default: DB_PORT

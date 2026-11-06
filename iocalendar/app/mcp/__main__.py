@@ -23,6 +23,6 @@ def _pick_user():
 
 
 db.migrate()
-users.ensure_admin_from_env()
+users.init()
 current_user.set(_pick_user())
 server.run()
