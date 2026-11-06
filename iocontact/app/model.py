@@ -635,7 +635,7 @@ def implied_relations(cid: int, book_ids: list[int], depth: int = 4) -> list[dic
         return []
     ids = list({f["relatedId"] for f in found} | {f["viaId"] for f in found})
     marks = ",".join(["%s"] * len(ids))
-    info = {r["id"]: r for r in db.q(f"SELECT id, fn, gender, photo IS NOT NULL AS hp, iopix_person_id FROM con_contacts WHERE id IN ({marks}) AND deleted = 0", ids)}
+    info = {r["id"]: r for r in db.q(f"SELECT id, fn, gender, iopix_person_id IS NOT NULL AS hp, iopix_person_id FROM con_contacts WHERE id IN ({marks}) AND deleted = 0", ids)}
     order = {t: i for i, t in enumerate(rel.TYPES)}
     out = []
     for f in sorted(found, key=lambda f: (order.get(f["type"], 99), (info.get(f["relatedId"]) or {}).get("fn") or "")):
