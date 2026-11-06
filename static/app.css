@@ -416,7 +416,8 @@ a.hatile:hover { background: var(--bg3); }
 .qrow .tap { color: var(--accent); }
 .ok { color: var(--ok); }
 .halist { display: flex; flex-direction: column; gap: 4px; margin: 8px 0 12px; overflow-x: auto; }
-.harow { display: grid; grid-template-columns: minmax(140px, 1.2fr) minmax(120px, 1fr) 60px 48px minmax(90px, .7fr) 100px; gap: 8px; align-items: center; min-width: 620px; }
+.harow { display: grid; grid-template-columns: 28px minmax(140px, 1.2fr) minmax(120px, 1fr) 60px 48px minmax(90px, .7fr) 36px; gap: 8px; align-items: center; min-width: 620px; padding: 2px 0; border-radius: var(--r-s); }
+.harow.dragging { background: var(--bg3); }
 .harow.head { font-size: var(--fs-xs); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--fg2); }
 .harow .haid { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: var(--fs-s); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .harow input.t { height: 32px; }

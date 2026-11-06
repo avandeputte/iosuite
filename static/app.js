@@ -1140,17 +1140,20 @@ async function setHomeAssistant(el) {
   let items = (s.entities || []).map((e) => ({ ...e }));
   const list = h('div', { class: 'halist' });
   const persist = async () => { const r = await save({ entities: items }); if (r) { items = r.entities.map((e) => ({ ...e })); drawList(); } };
-  const drawList = () => list.replaceChildren(h('div', { class: 'harow head' }, h('span', null, 'Entity'), h('span', null, 'Shown as'), h('span', { title: 'A tap on the card switches it (anyone signed in)' }, 'Control'), h('span', { title: 'On the wall display' }, 'Wall'), h('span', { title: 'Needs attention when its state is this (on, open, unlocked…); empty: never' }, 'Alert when'), h('span')),
-    ...items.map((e, i) => h('div', { class: 'harow' },
+  const drawList = () => { list.replaceChildren(h('div', { class: 'harow head' }, h('span'), h('span', null, 'Entity'), h('span', null, 'Shown as'), h('span', { title: 'A tap on the card switches it (anyone signed in)' }, 'Control'), h('span', { title: 'On the wall display' }, 'Wall'), h('span', { title: 'Needs attention when its state is this (on, open, unlocked…); empty: never' }, 'Alert when'), h('span')),
+    ...items.map((e, i) => h('div', { class: 'harow', 'data-id': e.id },
+      h('button', { class: 'iconbtn grip', title: 'Drag to reorder', 'aria-label': 'Drag to reorder' }, icon('grip', 's')),
       h('span', { class: 'haid', title: e.id }, e.id),
       h('input', { class: 't', value: e.name || '', placeholder: 'Its own name', onchange: (ev) => { e.name = ev.target.value.trim(); } }),
       h('input', { type: 'checkbox', checked: e.control, onchange: (ev) => { e.control = ev.target.checked; } }),
       h('input', { type: 'checkbox', checked: e.wall, onchange: (ev) => { e.wall = ev.target.checked; } }),
       h('input', { class: 't', value: e.alert || '', placeholder: '–', onchange: (ev) => { e.alert = ev.target.value.trim().toLowerCase(); } }),
-      h('span', { class: 'bmtools' }, h('button', { class: 'iconbtn', title: 'Up', disabled: i === 0 ? true : null, onclick: () => { [items[i - 1], items[i]] = [items[i], items[i - 1]]; drawList(); } }, icon('up', 's')),
-        h('button', { class: 'iconbtn', title: 'Down', disabled: i === items.length - 1 ? true : null, onclick: () => { [items[i + 1], items[i]] = [items[i], items[i + 1]]; drawList(); } }, icon('down', 's')),
-        h('button', { class: 'iconbtn', title: 'Remove', onclick: () => { items.splice(i, 1); drawList(); } }, icon('close', 's'))))),
+      h('span', { class: 'bmtools' }, h('button', { class: 'iconbtn', title: 'Remove', onclick: () => { items.splice(i, 1); drawList(); } }, icon('close', 's'))))),
     ...(items.length ? [] : [h('p', { class: 'muted small' }, 'Nothing picked yet: find entities below and add them.')]));
+    // reorder by dragging the handle (or ArrowUp / ArrowDown on it), as in Settings › Bookmarks
+    for (const g of list.querySelectorAll('.grip')) dragSort(g, g.closest('.harow'), { root: list, lists: () => [list], items: '.harow:not(.head)', sorting: 'sorting-rows',
+      done: () => { const by = Object.fromEntries(items.map((e) => [e.id, e])); items = [...list.querySelectorAll('.harow[data-id]')].map((r) => by[r.dataset.id]).filter(Boolean); drawList(); } });
+  };
   drawList();
   // the picker: a search among every entity Home Assistant has
   const q = h('input', { class: 't', placeholder: 'Find an entity: kitchen, garage, temperature…' });
