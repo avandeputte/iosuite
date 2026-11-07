@@ -76,8 +76,8 @@ what the app will show on the start page later (today's events, the newest photo
   change, reorder and move them in Settings › Bookmarks (drag a group or a link by its handle, with a mouse or a
   finger; a link can go into another group). `POST /api/bookmarks/import` still takes a homepage `bookmarks.yaml`.
 - **The suite's accounts**: the same sign-in as every io app (the account tiles, one click for a passwordless viewer),
-  the account page (display name, email, password, sign out everywhere) and, for admins, the family's accounts and their
-  role here. Sign-in at a reverse proxy (Cloudflare Access…) works as in the other apps.
+  the account page (display name, email, password, sign out everywhere). Accounts and roles are managed under Settings ›
+  Suite (below), the same panel in every io app. Sign-in at a reverse proxy (Cloudflare Access…) works as in the other apps.
 - **Suite administration** (Settings › Suite, suite admins only): everything in the Shared ioSuite database for the
   whole suite. **People**: add, rename and delete accounts, email, sign-in list, suite admin, set or remove a password,
   their role in every app, their sessions (end one or all) and app passwords. **Roles**: a grid of everyone against
@@ -86,7 +86,8 @@ what the app will show on the start page later (today's events, the newest photo
   services outside the suite (this page's Home Assistant token and AccuWeather key, ioPix's Google keys, the suite's
   Cloudflare Access service token), replace or clear, never shown back. The apps' own **service accounts**
   (`iocalendar-app`…, under People), with which apps read from each other without any setup. **Apps**: each app's default role (none makes it
-  invitation-only) and sign-in requirement; forget an uninstalled app. Served by iosuite-shared's `/api/suite-admin`.
+  invitation-only) and sign-in requirement; forget an uninstalled app. **Sign-in at the proxy** for the whole suite. The
+  panel is iosuite-shared's (`/api/suite-admin/ui.js` on `/api/suite-admin`), so every io app shows the same one.
 - **Updates**: the daily version check, the note for admins and **Update now**, the server log and Restart under Maintenance › Updates and logs, as in every ioThing app.
 - Light and dark, a phone layout, installable as a web app (manifest and icons).
 
