@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Copyright (c) 2026 Alex Van de Putte
-# License: MIT
+# License: GPL-3.0-or-later
 # Source: https://github.com/avandeputte/iopix
 # iopix: runs inside the LXC, driven by proxmox/ct/iopix.sh (community-scripts framework).
 # This installs the system packages (MariaDB for iopix's own database among them), creates that database and

@@ -4,7 +4,7 @@ site_url: https://iopix.net/docs/
 repo_url: https://github.com/avandeputte/iopix
 repo_name: avandeputte/iopix
 edit_uri: ""
-copyright: © 2026 Alex Van de Putte · MIT licence
+copyright: © 2026 Alex Van de Putte · GPL-3.0 licence
 docs_dir: docs
 site_dir: ../dist/docs
 
