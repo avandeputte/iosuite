@@ -6,6 +6,11 @@ The start page asks on the viewer's behalf: the request goes out from this serve
 person may see there and nothing more. Nothing is kept here. The browser never talks to the apps itself (the page's
 Content-Security-Policy allows only this origin), so ioPix's thumbnails come through here too.
 
+The app is found in the suite's list of apps and asked the way the apps ask each other (iosuite_shared.links):
+on localhost when it runs on this machine, then at its address inside the network, then at its public one; the
+suite's Cloudflare Access service token goes with every request when one is set (Settings › Suite › Keys and
+tokens). Only the address and the Cloudflare headers come from there: the credentials stay the viewer's own.
+
 Every app is asked with a short timeout: an app that is down, or that this account has no access to, leaves its tile
 as it was (the page hides the block) instead of holding up the others.
 """
@@ -19,7 +24,7 @@ import urllib.request
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import Request
-from iosuite_shared import sessions
+from iosuite_shared import links, sessions
 
 from app import apps
 
@@ -48,25 +53,63 @@ def _headers(request: Request) -> dict:
     return h
 
 
+def _cf_headers() -> dict:
+    """The suite's Cloudflare Access service token, when one is set ({} otherwise, or while the database is away)."""
+    try:
+        return links.headers(apps.SELF, "", sign_in=False)
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def _bases(key: str) -> list[str]:
+    """Where to ask the app, in order: localhost, its LAN address, its public one."""
+    try:
+        got = links.addresses(key)
+    except Exception:  # noqa: BLE001  the shared database is away
+        got = []
+    return got or ([apps.url_for(key)] if apps.url_for(key) else [])
+
+
 def _host(request: Request) -> str:
     return request.headers.get("x-forwarded-host") or request.headers.get("host") or request.url.netloc
 
 
-def fetch(request: Request, key: str, path: str, params: dict | None = None, raw: bool = False, body: dict | None = None, timeout: float = TIMEOUT):
-    """GET path from the app (JSON, or (bytes, content type) with raw); with body, POST that JSON instead."""
-    base = apps.url_for(key, _host(request))
-    url = base + path + ("?" + urllib.parse.urlencode(params) if params else "")
-    headers = _headers(request) if not raw else {**_headers(request), "Accept": "image/*"}
+def _send(request: Request, key: str, path: str, params, raw: bool, body, timeout: float):
+    """Ask each address in turn until one answers (an HTTP error is an answer)."""
+    bases = _bases(key)
+    query = "?" + urllib.parse.urlencode(params) if params else ""
+    headers = {**_headers(request), **_cf_headers()}
+    if raw:
+        headers["Accept"] = "image/*"
     data = None
     if body is not None:
         data, headers = json.dumps(body).encode(), {**headers, "Content-Type": "application/json"}
-    req = urllib.request.Request(url, data=data, headers=headers, method="POST" if body is not None else "GET")
+    for i, base in enumerate(bases):
+        req = urllib.request.Request(base + path + query, data=data, headers=headers, method="POST" if body is not None else "GET")
+        try:
+            return _ask(req, raw, timeout)
+        except urllib.error.HTTPError:
+            raise  # it answered
+        except (urllib.error.URLError, OSError):
+            if i == len(bases) - 1:
+                raise
+    raise urllib.error.URLError("not in the suite's list of apps")
+
+
+def _ask(req, raw: bool, timeout: float):
+    with urllib.request.urlopen(req, timeout=timeout) as r:  # noqa: S310 - an http(s) address from the suite's list
+        got = r.read()
+        if raw:
+            return got, r.headers.get("Content-Type", "application/octet-stream")
+        return json.loads(got)
+
+
+def fetch(request: Request, key: str, path: str, params: dict | None = None, raw: bool = False, body: dict | None = None, timeout: float = TIMEOUT):
+    """GET path from the app (JSON, or (bytes, content type) with raw); with body, POST that JSON instead."""
+    bases = _bases(key)
+    base = bases[0] if bases else "(no address)"
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:  # noqa: S310 - an http(s) address an admin set
-            got = r.read()
-            if raw:
-                return got, r.headers.get("Content-Type", "application/octet-stream")
-            return json.loads(got)
+        return _send(request, key, path, params, raw, body, timeout)
     except urllib.error.HTTPError as e:
         name = apps.name_of(key)
         if body is not None and e.code in (400, 403, 409):  # ioCalendar's own word on what it would not take
