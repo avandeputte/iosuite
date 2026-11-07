@@ -114,12 +114,12 @@ services:
     <<: *app
     image: ghcr.io/avandeputte/iohealth:latest
     container_name: iohealth
-    ports: ["47800:47800"]               # the iPhone app uploads here; the web app is on the same port
+    ports: ["8650:8650"]                 # the iPhone app uploads here; the web app is on the same port
     environment:
       <<: *shared
       DB_NAME: health
       # PUBLIC_URL: https://health.example.com
-      # INTERNAL_URL: http://192.168.1.151:47800   # this host's LAN address and the port, for the suite's list of apps
+      # INTERNAL_URL: http://192.168.1.151:8650   # this host's LAN address and the port, for the suite's list of apps
 
   iopix:                                 # without digiKam: iopix keeps the library itself and scans the folder
     <<: *app
