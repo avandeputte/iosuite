@@ -37,7 +37,8 @@ Settings › Apps and devices shows the exact addresses to type, and makes **app
 revocable on its own, used with your user name for CalDAV and the REST API (HTTP Basic, or
 `Authorization: Bearer <app password>`). An app password can be made **CalDAV only**: it opens `/dav` and nothing
 else, so one lifted from a phone cannot reach the REST API, MCP or the web app (403). The Apple profile's password is
-always CalDAV only; scripts and AI assistants need one without that limit.
+always CalDAV only; scripts and AI assistants need one without that limit. The scope is kept with the password in
+the Shared ioSuite database (`ios_app_passwords.scope`), the same for every app of the suite.
 
 ```sh
 curl -u alex:APP-PASSWORD "https://calendar.example.com/api/occurrences?start=2026-11-01&end=2026-12-01"

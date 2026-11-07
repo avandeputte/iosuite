@@ -1160,13 +1160,13 @@ async function setDevices(el) {
   const info = await api('/api/connect');
   const canPw = !S.user.passwordless;
   const label = h('input', { class: 't', placeholder: 'e.g. Alex’s iPhone', style: 'max-width:280px' });
-  const scope = h('select', { class: 't', style: 'max-width:240px' }, h('option', { value: 'caldav' }, 'CalDAV only (calendar apps)'), h('option', { value: 'all' }, 'CalDAV, API and MCP'));
+  const scope = h('select', { class: 't', style: 'max-width:240px' }, h('option', { value: 'dav' }, 'CalDAV only (calendar apps)'), h('option', { value: 'all' }, 'CalDAV, API and MCP'));
   const shown = h('div'), pwlist = h('div');
   const isApple = /iPhone|iPad|Macintosh/.test(navigator.userAgent);
   const drawPw = async () => {
-    const [items, only] = await Promise.all([api('/api/auth/app-passwords').then((r) => r.items), api('/api/caldav-passwords').then((r) => new Set(r.ids))]);
+    const items = (await api('/api/auth/app-passwords')).items;
     pwlist.replaceChildren(items.length ? h('table', { class: 't' }, h('tr', null, h('th', null, 'Name'), h('th', null, 'Works for'), h('th', null, 'Made'), h('th', null, 'Last used'), h('th')),
-      items.map((p) => h('tr', null, h('td', null, p.label), h('td', null, only.has(p.id) ? 'CalDAV only' : 'CalDAV, API and MCP'), h('td', null, new Date(p.created).toLocaleDateString()), h('td', null, p.lastUsed ? new Date(p.lastUsed).toLocaleString() : 'never'),
+      items.map((p) => h('tr', null, h('td', null, p.label), h('td', null, p.scope === 'dav' ? 'CalDAV only' : 'CalDAV, API and MCP'), h('td', null, new Date(p.created).toLocaleDateString()), h('td', null, p.lastUsed ? new Date(p.lastUsed).toLocaleString() : 'never'),
         h('td', null, h('button', { class: 'pillbtn noic danger', onclick: async () => { await api(`/api/auth/app-passwords/${p.id}`, { method: 'DELETE' }); drawPw(); } }, 'Revoke'))))) : h('p', { class: 'muted' }, 'No app passwords yet.'));
   };
   const plabel = h('input', { class: 't', name: 'label', value: /iPad/.test(navigator.userAgent) ? 'iPad' : /Macintosh/.test(navigator.userAgent) ? 'Mac' : 'iPhone', style: 'max-width:200px' });
@@ -1184,7 +1184,7 @@ async function setDevices(el) {
       h('p', { class: 'muted' }, 'Give every app or device its own password instead of yours; you can revoke one without touching the others. Use your user name with it. A CalDAV-only password works in calendar apps and nothing else, so one lifted from a phone cannot reach the API, MCP or the web app; scripts and AI assistants need one without that limit.'),
       h('div', { class: 'multi' }, label, scope, h('button', { class: 'pillbtn primary', onclick: async () => {
         try {
-          const r = await api(scope.value === 'caldav' ? '/api/caldav-passwords' : '/api/auth/app-passwords', { method: 'POST', json: { label: label.value || 'Device' } });
+          const r = await api('/api/auth/app-passwords', { method: 'POST', json: { label: label.value || 'Device', scope: scope.value === 'dav' ? 'dav' : '' } });
           shown.replaceChildren(h('p', null, h('b', null, 'Copy it now: '), 'it is shown only once.'), copyRow(r.password));
           label.value = ''; drawPw();
         } catch (e) { fail(e); }

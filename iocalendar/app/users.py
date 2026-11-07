@@ -6,12 +6,9 @@ Web sessions are the suite's cookie (shared by the apps on the domain). CalDAV c
 Basic or a bearer app password (one per device, revocable, shown once). The subscription links (/ics/...) carry a
 private token per account instead, since calendar apps cannot sign in to a subscription.
 """
-import base64
-import binascii
-import re
 import secrets
 
-from iosuite_shared import apppasswords, db as shared_db, users as shared
+from iosuite_shared import apppasswords, users as shared
 from iosuite_shared.fastapi import public_user
 
 from app import db
@@ -63,6 +60,7 @@ def update(uid: int, **f) -> dict:
 def init() -> None:
     """The Shared ioSuite database's tables, and the ADMIN_USER / ADMIN_PASSWORD account on a first start with no accounts."""
     shared.init()
+    adopt_old_scopes()
 
 
 def can_write(u: dict | None) -> bool:
@@ -83,43 +81,19 @@ def authenticate(name: str, password: str) -> dict | None:
 
 def create_app_password(uid: int, label: str, caldav_only: bool = False) -> str:
     """A new app password for this account; caldav_only: it works for CalDAV and nothing else (not the REST API, MCP
-    or the web app), the kind the Apple profile puts on a phone."""
-    pw = apppasswords.create(uid, APP, label)
-    if caldav_only:
-        prefix = pw.split("-")[1]
-        row = shared_db.one("SELECT id FROM ios_app_passwords WHERE prefix = %s AND app = %s", (prefix, APP))
-        db.ex("INSERT INTO cal_app_password_scopes (prefix, password_id, scope) VALUES (%s, %s, 'caldav')",
-              (prefix, row["id"] if row else None))
-    return pw
+    or the web app), the kind the Apple profile puts on a phone. The scope is kept with the password in the Shared
+    ioSuite database (ios_app_passwords.scope) and enforced by iosuite-shared's middleware."""
+    return apppasswords.create(uid, APP, label, apppasswords.DAV if caldav_only else "")
 
 
-_PW = re.compile(r"^[a-z0-9]+-([0-9a-f]{8})-")
-
-
-def caldav_only(authorization: str | None) -> bool:
-    """Whether the Authorization header (Basic or Bearer) carries an app password that is for CalDAV only."""
-    if not authorization:
-        return False
-    kind, _, val = authorization.partition(" ")
-    pw = val.strip()
-    if kind.lower() == "basic":
-        try:
-            pw = base64.b64decode(pw).decode("utf-8", "replace").partition(":")[2]
-        except (ValueError, binascii.Error):
-            return False
-    elif kind.lower() != "bearer":
-        return False
-    m = _PW.match(pw)
-    return bool(m) and db.one("SELECT 1 AS x FROM cal_app_password_scopes WHERE prefix = %s AND scope = 'caldav'", (m.group(1),)) is not None
-
-
-def caldav_only_ids(uid: int) -> list[int]:
-    """The ids (as /api/auth/app-passwords lists them) of this account's CalDAV-only app passwords."""
-    ids = [r["password_id"] for r in db.q("SELECT password_id FROM cal_app_password_scopes WHERE password_id IS NOT NULL")]
-    if not ids:
-        return []
-    mine = {r["id"] for r in shared_db.q(f"SELECT id FROM ios_app_passwords WHERE user_id = %s AND id IN ({db.marks(len(ids))})", (uid, *ids))}
-    return [i for i in ids if i in mine]
+def adopt_old_scopes() -> None:
+    """0.13.0: the CalDAV-only marks 0.11.0 kept in ioCalendar's own cal_app_password_scopes move to the shared
+    column, once, and that table goes. Remove once every server has run 0.13.0."""
+    if not db.one("SELECT 1 AS x FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'cal_app_password_scopes'"):
+        return
+    for r in db.q("SELECT prefix FROM cal_app_password_scopes"):
+        apppasswords.set_scope(APP, r["prefix"], apppasswords.DAV)
+    db.ex("DROP TABLE cal_app_password_scopes")
 
 
 def forget_cached_auth() -> None:

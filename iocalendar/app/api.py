@@ -663,23 +663,6 @@ def feed(token: str, name: str, request: Request, member: str | None = None):
                     headers={"Cache-Control": "private, max-age=300"})
 
 
-@router.post("/api/caldav-passwords", dependencies=[access.signed_in])
-async def new_caldav_password(request: Request):
-    """{label}: a new app password that works for CalDAV only (shown once, revoked like any other)."""
-    u = me(request)
-    if u.get("passwordless"):
-        raise HTTPException(403, "A one-click account cannot have app passwords")
-    b = await request.json()
-    label = str(b.get("label") or "Device").strip()[:120] or "Device"
-    return {"password": await run_in_threadpool(users.create_app_password, u["id"], label, True)}
-
-
-@router.get("/api/caldav-passwords", dependencies=[access.signed_in])
-def caldav_passwords(request: Request):
-    """The ids of your app passwords (as /api/auth/app-passwords lists them) that work for CalDAV only."""
-    return {"ids": users.caldav_only_ids(me(request)["id"])}
-
-
 @router.post("/api/apple-profile", dependencies=[access.signed_in])
 def apple_profile(request: Request, label: str = Form("iPhone"), password: str = Form("new")):
     """A configuration profile (.mobileconfig) that adds the CalDAV account to an iPhone, iPad or Mac in one go.

@@ -85,11 +85,6 @@ SCHEMA = [
         id INT AUTO_INCREMENT PRIMARY KEY, user_id INT NOT NULL, token CHAR(40) NOT NULL,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         UNIQUE KEY uq_cal_feed_tokens_token (token), KEY idx_cal_feed_tokens_user (user_id))""",
-    # 0.11.0: app passwords that work for CalDAV only (not the REST API or MCP), by the prefix of the password; the
-    # passwords themselves are the suite's (ios_app_passwords in the Shared ioSuite database)
-    """CREATE TABLE IF NOT EXISTS cal_app_password_scopes (
-        prefix CHAR(8) NOT NULL PRIMARY KEY, password_id INT NULL, scope VARCHAR(16) NOT NULL,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP)""",
 ]
 
 # 0.6.0: the names from before the suite naming convention, renamed once at start (every row kept). Remove once every
