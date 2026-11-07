@@ -1,5 +1,4 @@
 """MariaDB access: one short connection per unit of work, and the schema (created and migrated at start)."""
-import logging
 import threading
 from contextlib import contextmanager
 
@@ -86,24 +85,6 @@ SCHEMA = [
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         UNIQUE KEY uq_cal_feed_tokens_token (token), KEY idx_cal_feed_tokens_user (user_id))""",
 ]
-
-# 0.6.0: the names from before the suite naming convention, renamed once at start (every row kept). Remove once every
-# server has run 0.6.0.
-RENAME_TABLES = {"calendars": "cal_calendars", "events": "cal_events", "event_people": "cal_event_people", "feed_tokens": "cal_feed_tokens"}
-RENAME_COLUMNS = {
-    "cal_calendars": {"sort": "position", "created": "created_at"},
-    "cal_events": {"created": "created_at", "updated": "updated_at"},
-    "cal_event_people": {"pos": "position"},
-    "cal_feed_tokens": {"created": "created_at"},
-}
-RENAME_INDEXES = {
-    "cal_calendars": {"owner_key": "uq_cal_calendars_owner_slug"},
-    "cal_events": {"calendar_id": "uq_cal_events_calendar_href", "calendar_id_2": "idx_cal_events_calendar_uid",
-                   "calendar_id_3": "idx_cal_events_calendar_changes", "calendar_id_4": "idx_cal_events_calendar_range"},
-    "cal_event_people": {"event_id": "idx_cal_event_people_event", "email": "idx_cal_event_people_email", "contact_id": "idx_cal_event_people_contact"},
-    "cal_feed_tokens": {"token": "uq_cal_feed_tokens_token"},
-}
-
 
 def connect(database: str | None = None):
     return pymysql.connect(host=config.DB_HOST, port=config.DB_PORT, user=config.DB_USER, password=config.DB_PASSWORD,
@@ -195,30 +176,13 @@ def ensure_database() -> None:
         con.close()
 
 
-def _meta_to_settings(cur) -> None:
-    """0.6.0: the meta table's settings rows (setting:<name>) move to cal_settings; its schema row is replaced by
-    cal_schema_version."""
-    if "meta" in schema.tables(cur):
-        cur.execute("INSERT IGNORE INTO cal_settings (name, value) "
-                    "SELECT SUBSTRING(k, 9), COALESCE(v, '') FROM meta WHERE k LIKE 'setting:%'")
-        cur.execute("DROP TABLE meta")
-
-
 def migrate() -> None:
     ensure_database()
     with tx() as con, con.cursor() as cur:
-        done = schema.rename(cur, RENAME_TABLES, RENAME_COLUMNS)
         for stmt in SCHEMA:
             cur.execute(stmt + " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci")
-        done += schema.rename(cur, None, None, RENAME_INDEXES)
-        # calendars made before 0.2.7 have the unique key on (owner_id, slug), which NULL owner_ids slip past
-        cur.execute("ALTER TABLE cal_calendars ADD COLUMN IF NOT EXISTS owner_key INT AS (COALESCE(owner_id, 0)) PERSISTENT")
-        cur.execute("ALTER TABLE cal_calendars ADD UNIQUE INDEX IF NOT EXISTS uq_cal_calendars_owner_slug (owner_key, slug)")
-        _meta_to_settings(cur)
         schema.ensure_version_table(cur, PREFIX)
         schema.record_version(cur, PREFIX, SCHEMA_VERSION)
-        if done:
-            logging.getLogger("app.db").info("renamed to the suite naming convention: %s", ", ".join(done))
         # the family calendar everyone shares
         cur.execute("SELECT id FROM cal_calendars WHERE owner_id IS NULL AND kind = 'events' LIMIT 1")
         if not cur.fetchone():
@@ -231,6 +195,6 @@ def reset_all() -> None:
     with tx() as con, con.cursor() as cur:
         cur.execute("SET FOREIGN_KEY_CHECKS = 0")
         for t in schema.tables(cur):
-            if t.startswith(PREFIX + "_") or t == "meta" or t in RENAME_TABLES:
+            if t.startswith(PREFIX + "_"):
                 cur.execute(f"DROP TABLE `{t}`")
         cur.execute("SET FOREIGN_KEY_CHECKS = 1")

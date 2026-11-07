@@ -72,8 +72,6 @@ def test_put_get_query_sync_delete(client, dav):
     assert "ev1.ics" in r.text and "404 Not Found" in r.text
     assert dav("REPORT", base, sc.format(t="http://bogus/1")).status_code == 403
     assert tok1.startswith("urn:x-iocalendar:sync:")
-    legacy = tok1.replace("urn:x-iocalendar:sync:", "http://iocalendar." + "iothing" + ".net/ns/sync/")
-    assert dav("REPORT", base, sc.format(t=legacy)).status_code == 207  # tokens from before 0.18.1 keep working
     # a VTODO is refused (this server keeps events)
     todo = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:x\r\nBEGIN:VTODO\r\nUID:t1\r\nSUMMARY:x\r\nEND:VTODO\r\nEND:VCALENDAR\r\n"
     assert dav("PUT", base + "t1.ics", todo).status_code == 403

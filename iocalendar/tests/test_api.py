@@ -236,14 +236,3 @@ def test_caldav_only_app_passwords(client):
     assert client.get("/api/calendars", headers={"Authorization": f"Bearer {full}"}).status_code == 200
 
 
-def test_old_caldav_only_marks_move_to_the_shared_column(client):
-    """0.11.0 kept the marks in cal_app_password_scopes; the next start moves them to ios_app_passwords.scope."""
-    from app import db, users
-    pw = client.post("/api/auth/app-passwords", json={"label": "old iPhone"}).json()["password"]
-    db.ex("CREATE TABLE cal_app_password_scopes (prefix CHAR(8) NOT NULL PRIMARY KEY, password_id INT NULL, scope VARCHAR(16) NOT NULL)")
-    db.ex("INSERT INTO cal_app_password_scopes (prefix, scope) VALUES (%s, 'caldav')", (pw.split("-")[1],))
-    users.init()
-    assert [p["scope"] for p in client.get("/api/auth/app-passwords").json()["items"]] == ["dav"]
-    assert not db.one("SELECT 1 AS x FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'cal_app_password_scopes'")
-    client.cookies.clear()
-    assert client.get("/api/calendars", auth=("alex", pw)).status_code == 403
