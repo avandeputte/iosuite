@@ -4,19 +4,20 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "iocalendar"
-version = "0.19.0"
+version = "0.20.0"
 description = "Self-hosted calendars for the family: web app, CalDAV, iCalendar feeds, REST/jCal, MCP"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 dependencies = [
-  "iosuite-shared @ git+https://github.com/avandeputte/iosuite-shared.git@2b4b5774ed1827b7d60a41e472ec824303c5e5c7",   # iosuite-shared 0.22.0, the suite's shared library: accounts, sessions, the Shared ioSuite database (pinned: bump to pick up a new one)
+  "iosuite-shared @ git+https://github.com/avandeputte/iosuite-shared.git@2152453f04c6824d9ad520321d220123b5815574",   # iosuite-shared 0.23.1, the suite's shared library: accounts, sessions, the Shared ioSuite database (pinned: bump to pick up a new one)
   "fastapi<1",
   "uvicorn<1",
   "pymysql<2",
   "python-multipart<1",
   "pyjwt[crypto]<3",              # Cloudflare Access tokens (proxy sign-in)
   "mcp<3",                        # the MCP server at /mcp
+  "defusedxml<1",                 # CalDAV request bodies
   "icalendar>=6,<8",              # iCalendar (RFC 5545) reading and writing
   "recurring-ical-events>=3,<4",  # repeating events: RRULE, RDATE, EXDATE and changed occurrences
   "python-dateutil>=2.8,<3",

@@ -164,7 +164,7 @@ accounts are the suite's: `.venv/bin/iosuite-shared --config . admin NAME --app 
 | `IOSUITE_DB_HOST`, `_PORT`, `_NAME`, `_USER`, `_PASSWORD` | the Shared ioSuite database (`iosuite`, on `DB_HOST` unless set): accounts, passwords, sessions, app passwords, roles and suite-wide settings, shared by every app of the suite |
 | `COOKIE_DOMAIN` | the domain the session cookie is shared on (`example.com`): signed in at `contacts.example.com`, signed in at `calendar.example.com` too |
 | `HOST`, `PORT` | where the server listens (`0.0.0.0`, 8620; every app of the suite has its own port) |
-| `FORWARDED_ALLOW_IPS` | the addresses that may pass on the visitor's address (`*`, or your reverse proxy's) |
+| `FORWARDED_ALLOW_IPS` | the addresses that may pass on the visitor's address and scheme (`X-Forwarded-For` / `-Proto`): `*`, or your reverse proxy's; read by the app itself (iosuite-shared), not by uvicorn |
 | `TLS_CERT_FILE`, `TLS_KEY_FILE` | serve HTTPS directly instead of behind a reverse proxy |
 | `TZ` | the family's time zone (default: the server's), for times written without one and all-day events |
 | `PUBLIC_URL` | the address people use (behind a proxy), for links in Settings, the Apple profile and the MCP tools |

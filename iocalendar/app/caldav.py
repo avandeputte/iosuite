@@ -14,6 +14,9 @@ Scheduling (RFC 6638: invitations sent by the server) is not offered: the people
 import datetime as dt
 import re
 import xml.etree.ElementTree as ET
+
+from defusedxml import DefusedXmlException
+from defusedxml.ElementTree import fromstring as parse_xml  # a client's XML: no entity expansion or external entities
 from email.utils import format_datetime
 from urllib.parse import quote, unquote
 
@@ -67,8 +70,8 @@ def _requested(body: bytes) -> tuple[str, list[str]]:
     if not body or not body.strip():
         return "allprop", []
     try:
-        root = ET.fromstring(body)
-    except ET.ParseError:
+        root = parse_xml(body)
+    except (ET.ParseError, DefusedXmlException):
         return "allprop", []
     if root.find(q(D, "propname")) is not None:
         return "propname", []
@@ -468,8 +471,8 @@ def _propfind(ctx: Ctx, parts, body, depth) -> Response:
 def _proppatch(ctx: Ctx, parts, body) -> Response:
     ms = ET.Element(q(D, "multistatus"))
     try:
-        root = ET.fromstring(body or b"<x/>")
-    except ET.ParseError:
+        root = parse_xml(body or b"<x/>")
+    except (ET.ParseError, DefusedXmlException):
         return Response(status_code=400)
     c = _cal(ctx, parts[2]) if len(parts) == 3 and parts[0] == "calendars" else None
     w = bool(c) and model.can_write(ctx.user, c)
@@ -608,8 +611,8 @@ def _mkcalendar(ctx: Ctx, parts, body) -> Response:
         return Response(status_code=405)
     name, color, desc, tz = parts[2], None, None, None
     try:
-        root = ET.fromstring(body) if body else None
-    except ET.ParseError:
+        root = parse_xml(body) if body else None
+    except (ET.ParseError, DefusedXmlException):
         root = None
     if root is not None:
         rt = root.find(f".//{q(D, 'resourcetype')}")
@@ -637,8 +640,8 @@ def _mkcalendar(ctx: Ctx, parts, body) -> Response:
 
 def _report(ctx: Ctx, parts, body) -> Response:
     try:
-        root = ET.fromstring(body)
-    except ET.ParseError:
+        root = parse_xml(body)
+    except (ET.ParseError, DefusedXmlException):
         return Response(status_code=400)
     tag = root.tag
     if tag in (q(D, "principal-property-search"), q(D, "principal-search-property-set")):

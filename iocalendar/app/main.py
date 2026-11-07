@@ -64,7 +64,7 @@ def _limit_for(path: str, ctype: str) -> int:
 
 
 # 400 for bad input, the headers, no-store on the API, the body cap: the same in every app of the suite
-auth.install(app, limit_for=_limit_for, not_found=(model.NotFound,))
+auth.install(app, limit_for=_limit_for, not_found=(model.NotFound,), forwarded_allow_ips=config.FORWARDED_ALLOW_IPS)  # also X-Forwarded-* from those proxies
 
 
 def _status_extra(request) -> dict:

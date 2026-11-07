@@ -25,20 +25,6 @@ JCAL_TYPE = "application/calendar+json"
 
 # ------------------------------------------------------------------ helpers
 
-def me(request: Request) -> dict:
-    u = request.state.user
-    if not u:
-        raise HTTPException(401, "Sign in first")
-    return u
-
-
-def admin(request: Request) -> dict:
-    u = me(request)
-    if not users.is_admin(u):
-        raise HTTPException(403, "Admins only")
-    return u
-
-
 def readable_calendar(u: dict, cid) -> dict:
     c = model.calendar(int(cid)) if str(cid).isdigit() else None
     if not model.can_read(u, c):
@@ -174,7 +160,7 @@ def _check_match(request: Request, r: dict) -> None:
 @router.patch("/api/auth/me", dependencies=[access.signed_in])
 async def patch_me(request: Request):
     """Your display name and email (sign-in at a proxy matches the email)."""
-    u = me(request)
+    u = request.state.user
     b = await request.json()
     f = {}
     if "displayName" in b:
@@ -193,14 +179,14 @@ async def patch_me(request: Request):
 
 @router.get("/api/calendars", dependencies=[access.signed_in])
 def list_calendars(request: Request):
-    u = me(request)
+    u = request.state.user
     return {"items": [model.calendar_public(c, u) for c in model.calendars_for(u)]}
 
 
 @router.post("/api/calendars", dependencies=[access.signed_in])
 async def add_calendar(request: Request):
     """{name, color?, description?, timezone?, shared?}: shared calendars are made by editors and admins."""
-    u = me(request)
+    u = request.state.user
     b = await request.json()
     shared = bool(b.get("shared"))
     if shared and not users.can_write(u):
@@ -219,7 +205,7 @@ async def add_calendar(request: Request):
 
 @router.patch("/api/calendars/{cid}", dependencies=[access.signed_in])
 async def edit_calendar(cid: int, request: Request):
-    u = me(request)
+    u = request.state.user
     b = await request.json()
 
     def edit():
@@ -233,7 +219,7 @@ async def edit_calendar(cid: int, request: Request):
 
 @router.delete("/api/calendars/{cid}", dependencies=[access.signed_in])
 def del_calendar(cid: int, request: Request):
-    u = me(request)
+    u = request.state.user
     c = writable_calendar(u, cid)
     if model.is_shared(c) and not users.is_admin(u):
         raise HTTPException(403, "Only an admin deletes a shared calendar")
@@ -248,7 +234,7 @@ def del_calendar(cid: int, request: Request):
 @router.get("/api/calendars/{cid}/export", dependencies=[access.signed_in])
 def export_calendar(cid: int, request: Request):
     """The whole calendar as one .ics file."""
-    c = readable_calendar(me(request), cid)
+    c = readable_calendar(request.state.user, cid)
     name = re.sub(r"[^A-Za-z0-9 _-]", "", c["name"]).strip() or "calendar"
     return Response(model.export_text([c], c["name"]), media_type="text/calendar; charset=utf-8",
                     headers={"Content-Disposition": f'attachment; filename="{name}-{dt.date.today().isoformat()}.ics"'})
@@ -258,7 +244,7 @@ def export_calendar(cid: int, request: Request):
 async def import_calendar(cid: int, request: Request, replace: bool = True):
     """An .ics file (multipart field `file`, or a text/calendar body) into this calendar. Events whose UID the calendar
     has already are updated (replace=false: skipped)."""
-    u = me(request)
+    u = request.state.user
     await run_in_threadpool(writable_calendar, u, cid)
     ct = request.headers.get("content-type", "")
     if ct.startswith("multipart/"):
@@ -284,7 +270,7 @@ def occurrences(request: Request, start: str, end: str, calendars: str | None = 
     """Every occurrence between start and end (ISO dates or date-times; repeating events expanded, changed occurrences
     and left-out dates applied), from the calendars named (ids, comma-separated) or all you see. member: only those
     tagged with these family members (ids or names, comma-separated). Each has `members`: the ids it is tagged with."""
-    u = me(request)
+    u = request.state.user
     s, e = _when(start, "start"), _when(end, "end")
     if e <= s:
         raise HTTPException(400, "end is before start")
@@ -299,7 +285,7 @@ def list_events(request: Request, q: str = "", calendar: str | None = None, limi
     """Events (not their occurrences) matching q in their title, place, notes or people, newest first, with the next
     occurrence of each; with Accept: text/calendar (or ?format=ics) one .ics with all of them. member: only events
     tagged with these family members (ids or names, comma-separated)."""
-    u = me(request)
+    u = request.state.user
     cals = visible(u, calendar)
     mids = member_filter(member)
     n = max(1, min(limit, 5000))
@@ -322,7 +308,7 @@ async def create_event(request: Request, calendar: str | None = None):
     """A new event in ?calendar= (or the calendarId field; else your first calendar you may change), from JSON fields
     (title, start, end, allDay, timezone, location, notes, people, members, reminders, rrule...), iCalendar or jCal.
     members: the family members it is for (account ids or names), kept as CATEGORIES."""
-    u = me(request)
+    u = request.state.user
     data, cal = await body_object(request)
     r = await run_in_threadpool(_create_event, u, data, cal, calendar)
     return event_response(request, r, None, 201)
@@ -351,7 +337,7 @@ def _create_event(u: dict, data: dict | None, cal, calendar: str | None) -> dict
 
 @router.get("/api/events/{eid}", dependencies=[access.signed_in])
 def get_event(eid: int, request: Request, format: str | None = None, recurrenceId: str | None = None):
-    r, _ = readable_event(me(request), eid)
+    r, _ = readable_event(request.state.user, eid)
     return event_response(request, r, format, recurrence_id=recurrenceId)
 
 
@@ -472,7 +458,7 @@ def remove(u: dict, r: dict, c: dict, scope: str = "all", recurrence_id: str | N
 
 
 async def _change(request: Request, eid: int, partial: bool, scope: str, recurrence_id: str | None):
-    u = me(request)
+    u = request.state.user
     data, newcal = await body_object(request)
     r2, rid, made = await run_in_threadpool(_change_sync, request, u, eid, data, newcal, partial, scope, recurrence_id)
     return event_response(request, r2, status=201 if made else 200, recurrence_id=rid)
@@ -514,7 +500,7 @@ async def patch_event(eid: int, request: Request, scope: str = "all", recurrence
 @router.delete("/api/events/{eid}", dependencies=[access.signed_in])
 def delete_event(eid: int, request: Request, scope: str = "all", recurrenceId: str | None = None):
     """Delete an event, or with recurrenceId one occurrence (scope=this) or it and the ones after (scope=following)."""
-    u = me(request)
+    u = request.state.user
     r, c = writable_event(u, eid)
     _check_match(request, r)
     try:
@@ -531,7 +517,7 @@ def family_members(request: Request):
     """The family members an event can be tagged with (the accounts that use ioCalendar, less the ones taken out of the
     family): [{id, name, displayName}]. Filter with ?member= on /api/occurrences, /api/events and the subscription links.
     Admins also get leftOut: the ids of the accounts taken out."""
-    u = me(request)
+    u = request.state.user
     out = {"items": members.public(members.family())}
     if users.is_admin(u):
         out["leftOut"] = sorted(members.left_out())
@@ -542,7 +528,6 @@ def family_members(request: Request):
 async def set_family_member(uid: int, request: Request):
     """Admins: {inFamily: bool}. An account out of the family (an admin or service account, not a person) is not
     offered as a tag and gets no private calendar here; its tags on events stay as plain categories."""
-    admin(request)
     b = await request.json()
 
     def set_():
@@ -556,7 +541,7 @@ async def set_family_member(uid: int, request: Request):
 @router.get("/api/people", dependencies=[access.signed_in])
 async def people(request: Request, q: str = "", limit: int = 12):
     """Names for the people on an event: from ioContacts when it is connected, and the people on earlier events."""
-    u = me(request)
+    u = request.state.user
     out, err = [], None
     q = q.strip()
     if q and contacts.enabled():
@@ -592,7 +577,7 @@ def busy_periods(cals: list[dict], s: dt.datetime, e: dt.datetime) -> list[tuple
 @router.get("/api/free-busy", dependencies=[access.signed_in])
 def free_busy(request: Request, start: str, end: str, calendars: str | None = None):
     """When you are busy between start and end (timed events that are not marked free or cancelled), merged."""
-    u = me(request)
+    u = request.state.user
     s, e = _when(start, "start"), _when(end, "end")
     if e - s > dt.timedelta(days=400):
         raise HTTPException(400, "At most a year at a time")
@@ -617,7 +602,7 @@ def vfreebusy(cals: list[dict], who: dict, days_back: int = 7, days_ahead: int =
 @router.get("/api/connect", dependencies=[access.signed_in])
 def connect_info(request: Request):
     """What to type into a calendar app: CalDAV, the subscription links, free/busy, the API."""
-    u = me(request)
+    u = request.state.user
     base = _base(request)
     tok = users.feed_token(u["id"])
     cals = model.calendars_for(u)
@@ -631,7 +616,7 @@ def connect_info(request: Request):
 @router.post("/api/feeds/reset", dependencies=[access.signed_in])
 def feeds_reset(request: Request):
     """A new private link for your subscriptions (the old ones stop working)."""
-    users.reset_feed_token(me(request)["id"])
+    users.reset_feed_token(request.state.user["id"])
     return {"ok": True}
 
 
@@ -670,7 +655,7 @@ def apple_profile(request: Request, label: str = Form("iPhone"), password: str =
     import plistlib
     import uuid
     from urllib.parse import urlsplit
-    u = me(request)
+    u = request.state.user
     if u.get("passwordless"):
         raise HTTPException(403, "A one-click account cannot have app passwords")
     base = _base(request)
@@ -703,7 +688,6 @@ def apple_profile(request: Request, label: str = Form("iPhone"), password: str =
 async def iocontacts_settings(request: Request, test: int = 0):
     """Whether ioContacts is part of the suite (found and signed in to by itself), the Birthdays switch, the last sync;
     ?test=1 also asks ioContacts."""
-    admin(request)
     out = contacts.public_settings()
     if test and out["enabled"]:
         out["test"] = await run_in_threadpool(contacts.test)
@@ -713,7 +697,6 @@ async def iocontacts_settings(request: Request, test: int = 0):
 @router.post("/api/iocontacts/settings", dependencies=[access.admin])
 async def iocontacts_save(request: Request):
     """Admins: {birthdays}. Saving brings the Birthdays calendar up to date."""
-    admin(request)
     b = await request.json()
     await run_in_threadpool(contacts.save_settings, bool(b["birthdays"]) if "birthdays" in b else None)
     sync = await run_in_threadpool(contacts.sync_birthdays) if contacts.enabled() or not contacts.settings()["birthdays"] else None
@@ -722,7 +705,6 @@ async def iocontacts_save(request: Request):
 
 @router.post("/api/iocontacts/sync", dependencies=[access.admin])
 async def iocontacts_sync(request: Request):
-    admin(request)
     return await run_in_threadpool(contacts.sync_birthdays)
 
 
@@ -732,21 +714,18 @@ async def iocontacts_sync(request: Request):
 def holidays_settings(request: Request):
     """The Holidays calendar's country, region and language (anyone may read them), with the regions and languages
     that country has."""
-    me(request)
     return holiday.public_settings()
 
 
 @router.get("/api/holidays/countries", dependencies=[access.signed_in])
 def holidays_countries(request: Request):
     """Every country the holiday rules know: [{code, name}]."""
-    me(request)
     return {"items": holiday.countries()}
 
 
 @router.get("/api/holidays/countries/{code}", dependencies=[access.signed_in])
 def holidays_country(code: str, request: Request):
     """One country's regions and the languages of its holiday names."""
-    me(request)
     try:
         return holiday.country_info(code)
     except ValueError as e:
@@ -756,7 +735,6 @@ def holidays_country(code: str, request: Request):
 @router.post("/api/holidays/settings", dependencies=[access.admin])
 async def holidays_save(request: Request):
     """Admins: {country, region?, language?}. country "" switches the Holidays calendar off. Saving fills it again."""
-    admin(request)
     b = await request.json()
     try:
         await run_in_threadpool(holiday.save_settings, b.get("country"), b.get("region"), b.get("language"))
@@ -768,5 +746,4 @@ async def holidays_save(request: Request):
 
 @router.post("/api/holidays/sync", dependencies=[access.admin])
 async def holidays_sync(request: Request):
-    admin(request)
     return await run_in_threadpool(holiday.sync)

@@ -98,3 +98,15 @@ def test_mkcalendar_proppatch_and_free_busy(client, dav):
     r = dav("REPORT", "/dav/calendars/alex/work-1/", q, Depth="1")
     assert r.text.count("BEGIN:VEVENT") == 3 and "DTSTART:20261110T090000Z" in r.text
     assert dav("DELETE", "/dav/calendars/alex/work-1/").status_code == 204
+
+
+def test_caldav_refuses_xml_entities(client, dav):
+    """A report body with entity expansion (a billion laughs) or an external entity is refused (400), not parsed."""
+    base = "/dav/calendars/alex/family/"
+    bomb = ('<?xml version="1.0"?><!DOCTYPE x [<!ENTITY a "aaaaaaaaaa"><!ENTITY b "&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;">]>'
+            '<C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:prop><D:getetag>&b;</D:getetag></D:prop></C:calendar-query>')
+    assert dav("REPORT", base, bomb, Depth="1").status_code == 400
+    ext = ('<?xml version="1.0"?><!DOCTYPE x [<!ENTITY e SYSTEM "file:///etc/passwd">]>'
+           '<C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:prop>&e;</D:prop></C:calendar-query>')
+    r = dav("REPORT", base, ext, Depth="1")
+    assert r.status_code == 400 and "root:" not in r.text
