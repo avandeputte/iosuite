@@ -24,6 +24,7 @@ services:
       # ADMIN_USER: admin             # a first admin, made on the first start when there is no account yet
       # ADMIN_PASSWORD: change-me-please
       # PUBLIC_URL: https://calendar.example.com   # behind a reverse proxy: the links in Settings and the Apple profile
+      # INTERNAL_URL: http://192.168.1.151:8620   # the host's LAN address and port, kept in the suite's list of apps (a container cannot tell)
       # COOKIE_DOMAIN: example.com                 # one sign-in for every app of the suite under this domain
       # AUTH_PROXY: cloudflare        # sign-in at the proxy, as in the other io apps (see README)
       # IOCONTACTS_URL: http://contacts.example.lan:8640   # or Settings › ioContacts
