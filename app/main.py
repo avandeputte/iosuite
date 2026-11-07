@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from iosuite_shared.updates import setup_log
 
-from app import __version__, api, config, db, users
+from app import __version__, api, config, db, keys, users
 from app.auth import auth, updater
 
 setup_log(config.LOG_FILE)  # the server log that Maintenance › Updates and logs shows; the app runs without it
@@ -29,6 +29,7 @@ OPEN_PREFIXES = ("/static/",)
 async def lifespan(app: FastAPI):
     await run_in_threadpool(db.migrate)
     await run_in_threadpool(users.init)
+    await run_in_threadpool(keys.declare)  # the Home Assistant token and AccuWeather key live with the suite's keys and tokens
     updater.start_daily()   # the daily "is there a newer version" check, while the setting allows it
     log.info("ioSuite %s started, database %s:%s/%s", __version__, config.DB_HOST, config.DB_PORT, config.DB_NAME)
     yield

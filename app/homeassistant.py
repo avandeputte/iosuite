@@ -22,7 +22,11 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+from iosuite_shared import credentials
+
 from app import config, db
+
+APP = config.APP
 from app.ha_feed import Feed
 
 STATES_TTL = 5          # seconds the states are kept (the card redraws every minute, the search box types faster)
@@ -83,7 +87,13 @@ def url() -> str:
 
 
 def token() -> str:
-    return (config.HA_TOKEN or (db.get_setting("ha_token") or "")).strip()
+    """HA_TOKEN in the environment, else the token kept with the suite's keys and tokens (the Shared ioSuite database)."""
+    if config.HA_TOKEN:
+        return config.HA_TOKEN
+    try:
+        return credentials.get(APP, "ha_token").strip()
+    except Exception:  # noqa: BLE001 - the shared database is away
+        return ""
 
 
 def enabled() -> bool:
@@ -118,15 +128,15 @@ def settings() -> dict:
             "name": db.get_setting("ha_name") or "", "live": feed.live, "liveError": feed.error}
 
 
-def save(changes: dict) -> None:
-    """{url?, token?, entities?, builtinAlerts?}: an empty url or token clears it."""
+def save(changes: dict, by: str = None) -> None:
+    """{url?, token?, entities?, builtinAlerts?}: an empty url or token clears it. `by`: who changed the token."""
     if "url" in changes and not config.HA_URL:
         u = str(changes["url"] or "").strip().rstrip("/")
         if u and not re.match(r"^https?://[^\s/]+", u):
             raise HAError("The address starts with http:// or https://", 400)
         db.set_setting("ha_url", u or None)
     if "token" in changes and not config.HA_TOKEN:
-        db.set_setting("ha_token", str(changes["token"] or "").strip() or None)
+        credentials.put(APP, "ha_token", str(changes["token"] or "").strip(), by=by)
     if "entities" in changes:
         items = changes["entities"]
         if not isinstance(items, list) or len(items) > MAX_ENTITIES:
