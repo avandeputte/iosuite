@@ -35,6 +35,7 @@ services:
       ADMIN_PASSWORD: change-me-please              # CHANGE ME (8 characters or more)
       # the address people and the other apps reach ionotes at, and the domain the sign-in is shared on
       # PUBLIC_URL: https://notes.example.com
+      # INTERNAL_URL: http://192.168.1.151:8610   # the host's LAN address and port, kept in the suite's list of apps (a container cannot tell)
       # COOKIE_DOMAIN: example.com
       # sign-in at Cloudflare Access (see README): AUTH_PROXY: cloudflare, CF_ACCESS_TEAM, CF_ACCESS_AUD
       # READ_ONLY: "1"
