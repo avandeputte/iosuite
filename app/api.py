@@ -122,10 +122,10 @@ def weather_settings(request: Request):
 @router.post("/api/weather/settings", dependencies=[access.admin])
 async def weather_save(request: Request):
     """Admins. Body: {key?, locationKey?, locationName?, units?}."""
-    admin(request)
+    u = admin(request)
     b = await request.json()
     try:
-        weather.save(b if isinstance(b, dict) else {})
+        weather.save(b if isinstance(b, dict) else {}, by=u.get("name"))
     except weather.WeatherError as e:
         raise HTTPException(400, str(e))
     return weather.settings()
@@ -227,9 +227,9 @@ def ha_settings(request: Request):
 @router.post("/api/ha/settings", dependencies=[access.admin])
 async def ha_save(request: Request):
     """Admins. Body: {url?, token?, entities?: [{id, name?, control?, wall?, alert?}], builtinAlerts?}."""
-    admin(request)
+    u = admin(request)
     b = await request.json()
-    _ha(ha.save, b if isinstance(b, dict) else {})
+    _ha(ha.save, b if isinstance(b, dict) else {}, by=u.get("name"))
     return ha.settings()
 
 

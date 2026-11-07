@@ -79,7 +79,10 @@ what the app will show on the start page later (today's events, the newest photo
   whole suite. **People**: add, rename and delete accounts, email, sign-in list, suite admin, set or remove a password,
   their role in every app, their sessions (end one or all) and app passwords. **Roles**: a grid of everyone against
   every app (or "default", the app's default role). **App passwords**: everyone's, in every app, with their scope
-  (everything, or sync only), revoke one or make one for someone. **Apps**: each app's default role (none makes it
+  (everything, sync only, or read only), revoke one or make one for someone. **Keys and tokens**: every app's keys for
+  services outside the suite (this page's Home Assistant token and AccuWeather key, ioPix's Google keys, the suite's
+  Cloudflare Access service token), replace or clear, never shown back. The apps' own **service accounts**
+  (`iocalendar-app`…, under People), with which apps read from each other without any setup. **Apps**: each app's default role (none makes it
   invitation-only) and sign-in requirement; forget an uninstalled app. Served by iosuite-shared's `/api/suite-admin`.
 - **Updates**: the daily version check, the note for admins and **Update now**, the server log and Restart under Maintenance › Updates and logs, as in every ioThing app.
 - Light and dark, a phone layout, installable as a web app (manifest and icons).

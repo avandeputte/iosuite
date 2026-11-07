@@ -15,7 +15,11 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+from iosuite_shared import credentials
+
 from app import config, db
+
+APP = config.APP
 
 BASE = "https://dataservice.accuweather.com"
 CURRENT_TTL = 60 * 60
@@ -31,7 +35,13 @@ class WeatherError(Exception):
 # ------------------------------------------------------------------ settings
 
 def api_key() -> str:
-    return config.ACCUWEATHER_API_KEY or (db.get_setting("accuweather_key") or "").strip()
+    """ACCUWEATHER_API_KEY in the environment, else the key kept with the suite's keys and tokens."""
+    if config.ACCUWEATHER_API_KEY:
+        return config.ACCUWEATHER_API_KEY
+    try:
+        return credentials.get(APP, "accuweather_key").strip()
+    except Exception:  # noqa: BLE001 - the shared database is away
+        return ""
 
 
 def location_key() -> str:
@@ -46,10 +56,11 @@ def settings() -> dict:
             "units": db.get_setting("weather_units") or "metric", "enabled": bool(api_key() and location_key())}
 
 
-def save(changes: dict) -> None:
-    """{key?, locationKey?, locationName?, units?}: an empty key or location clears it; a change empties the cache."""
+def save(changes: dict, by: str = None) -> None:
+    """{key?, locationKey?, locationName?, units?}: an empty key or location clears it; a change empties the cache.
+    `by`: who changed the key."""
     if "key" in changes and not config.ACCUWEATHER_API_KEY:
-        db.set_setting("accuweather_key", (changes["key"] or "").strip() or None)
+        credentials.put(APP, "accuweather_key", (changes["key"] or "").strip(), by=by)
     if "locationKey" in changes and not config.ACCUWEATHER_LOCATION:
         db.set_setting("accuweather_location", str(changes["locationKey"] or "").strip() or None)
         db.set_setting("accuweather_location_name", (changes.get("locationName") or "").strip() or None)

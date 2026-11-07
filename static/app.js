@@ -1499,7 +1499,7 @@ async function setUsers(el) {
 /* Everything in the Shared ioSuite database, for the whole suite: accounts and their role in every app, every app
    password (with its scope), sessions, and the apps with their default role and sign-in requirement. Served by
    iosuite-shared's /api/suite-admin (suite admins only). */
-const SCOPE_LABEL = { '': 'Everything', dav: 'Sync only (CalDAV, CardDAV, LDAP)' };
+const SCOPE_LABEL = { '': 'Everything', dav: 'Sync only (CalDAV, CardDAV, LDAP)', read: 'Read only (an app reading another)' };
 const ROLE_HELP = { none: 'no access', viewer: 'sees', editor: 'changes', admin: 'manages' };
 function sinceText(ts) {
   if (!ts) return 'never';
@@ -1513,14 +1513,15 @@ function sinceText(ts) {
 const appLabel = (o, key) => (o.apps.find((a) => a.app === key) || {}).name || key;
 
 async function setSuite(el, r) {
-  const subs = [['people', 'People'], ['roles', 'Roles'], ['passwords', 'App passwords'], ['apps', 'Apps'], ['signin', 'Sign-in at the proxy']];
+  const subs = [['people', 'People'], ['roles', 'Roles'], ['passwords', 'App passwords'], ['keys', 'Keys and tokens'], ['apps', 'Apps'], ['signin', 'Sign-in at the proxy']];
   const sub = subs.some(([k]) => k === r.sub) ? r.sub : 'people';
   let o;
   try { o = await api('/api/suite-admin'); } catch (e) { el.append(h('p', { class: 'err' }, e.message)); return; }
   el.append(h('p', { class: 'muted' }, 'The whole suite at once: the accounts, passwords and roles every io app shares (the Shared ioSuite database). Changes apply in every app within a few seconds. Suite admins are admin everywhere.'),
     h('div', { class: 'segs' }, subs.map(([k, l]) => h('button', { class: sub === k ? 'on' : '', onclick: () => { location.hash = `#/settings/suite/${k}`; } }, l))));
   const body = h('div'); el.append(body);
-  ({ people: suitePeople, roles: suiteRoles, passwords: suitePasswords, apps: suiteApps, signin: suiteSignin })[sub](body, o);
+  o.people = o.users.filter((u) => !u.service);
+  ({ people: suitePeople, roles: suiteRoles, passwords: suitePasswords, keys: suiteKeys, apps: suiteApps, signin: suiteSignin })[sub](body, o);
 }
 
 /** A role picker for one account in one app: "default (…)" removes the row, so the app's default applies. */
@@ -1536,7 +1537,7 @@ function roleSelect(o, u, a) {
 function suitePeople(el, o) {
   el.append(h('div', { class: 'box' }, h('h2', null, icon('people'), 'People'),
     h('div', { class: 'scrollx' }, h('table', { class: 't' }, h('tr', null, h('th', null, 'Account'), h('th', null, 'Email'), h('th', null, 'Sign-in'), h('th', null, 'Last seen'), h('th')),
-      o.users.map((u) => h('tr', null,
+      o.people.map((u) => h('tr', null,
         h('td', null, h('b', null, u.displayName), h('div', { class: 'muted small' }, u.name,
           u.suiteAdmin ? ' · suite admin' : '', u.listed ? '' : ' · not on the sign-in list', u.id === o.me ? ' · you' : '')),
         h('td', { class: 'small' }, u.email || h('span', { class: 'muted' }, '–')),
@@ -1545,6 +1546,13 @@ function suitePeople(el, o) {
         h('td', { class: 'small' }, sinceText(u.lastSeen || u.last_login), h('div', { class: 'muted' }, `${u.sessions} session${u.sessions === 1 ? '' : 's'}`)),
         h('td', { style: { textAlign: 'right' } }, h('button', { class: 'pillbtn noic', onclick: () => editAccount(o, u) }, 'Manage')))))),
     h('p', null, h('button', { class: 'pillbtn primary', onclick: () => editAccount(o, null) }, icon('add', 's'), 'Add someone'))));
+  const svc = o.users.filter((u) => u.service);
+  if (svc.length) el.append(h('div', { class: 'box' }, h('h2', null, icon('apps'), 'Apps reading from each other'),
+    h('p', { class: 'muted' }, 'Each app that reads from another (ioCalendar and ioPix from ioContacts, ioContacts from ioPix) signs in as its own account here, with a read-only app password it made by itself. Nobody signs in with these. Revoking one of their app passwords is safe: the app makes a new one the next time it needs it.'),
+    h('div', { class: 'scrollx' }, h('table', { class: 't' }, h('tr', null, h('th', null, 'Account'), h('th', null, 'For'), h('th', null, 'App passwords'), h('th', null, 'Last used'), h('th')),
+      svc.map((u) => h('tr', null, h('td', null, h('b', null, u.name)), h('td', null, appLabel(o, u.service)),
+        h('td', { class: 'small' }, `${u.appPasswords}`), h('td', { class: 'small' }, sinceText(u.lastSeen || u.last_login)),
+        h('td', { style: { textAlign: 'right' } }, h('button', { class: 'pillbtn noic', onclick: () => { location.hash = '#/settings/suite/passwords'; } }, 'App passwords'))))))));
 }
 
 /** The account dialog: who they are, how they sign in, their role in every app, and (existing accounts) their
@@ -1623,7 +1631,7 @@ function suiteRoles(el, o) {
     h('p', { class: 'muted' }, 'Each person’s role in each app: none (no access), viewer, editor or admin (the app’s settings and its people). “default” follows the app’s default role (set under Apps). One-click accounts are viewers at most; suite admins are admin everywhere.'),
     h('div', { class: 'scrollx' }, h('table', { class: 't grid-roles' },
       h('tr', null, h('th', null, 'Person'), o.apps.map((a) => h('th', null, a.name, h('div', { class: 'muted small' }, `default: ${a.defaultRole}`)))),
-      o.users.map((u) => h('tr', null, h('td', null, h('b', null, u.displayName), h('div', { class: 'muted small' }, u.name)),
+      o.people.map((u) => h('tr', null, h('td', null, h('b', null, u.displayName), h('div', { class: 'muted small' }, u.name)),
         o.apps.map((a) => {
           if (u.suiteAdmin) return h('td', { class: 'muted small' }, 'admin (suite)');
           const s = roleSelect(o, u, a);
@@ -1650,7 +1658,7 @@ async function suitePasswords(el, o) {
       })) : h('p', { class: 'muted' }, 'No app passwords here.'));
   };
   fu.onchange = fa.onchange = draw;
-  const who = h('select', { class: 't sm' }, o.users.filter((u) => !u.passwordless).map((u) => h('option', { value: u.id }, u.displayName)));
+  const who = h('select', { class: 't sm' }, o.people.filter((u) => !u.passwordless).map((u) => h('option', { value: u.id }, u.displayName)));
   const app = h('select', { class: 't sm' }, o.apps.map((a) => h('option', { value: a.app }, a.name)));
   const label = h('input', { class: 't', placeholder: 'Device, e.g. Alex’s iPhone' });
   const scope = h('select', { class: 't sm' }, (o.scopes || ['', 'dav']).map((s) => h('option', { value: s }, SCOPE_LABEL[s] || s)));
@@ -1670,6 +1678,35 @@ async function suitePasswords(el, o) {
       } catch (e) { fail(e); }
     } }, 'Make'))));
   draw();
+}
+
+/** Every app's keys and tokens for things outside the suite (Home Assistant, AccuWeather, Google Maps...), kept in the
+    Shared ioSuite database. Write-only: a value is never shown back, only whether one is set. */
+async function suiteKeys(el, o) {
+  let r;
+  try { r = await api('/api/suite-admin/keys'); } catch (e) { el.append(h('p', { class: 'err' }, e.message)); return; }
+  const groups = {};
+  for (const k of r.items) (groups[k.app] = groups[k.app] || []).push(k);
+  const order = Object.keys(groups).sort((a, b) => (a === '' ? 1 : b === '' ? -1 : appLabel(o, a).localeCompare(appLabel(o, b))));
+  const row = (k) => {
+    const inp = h('input', { class: 't', type: 'password', autocomplete: 'off', placeholder: k.set ? 'set; paste a new one to replace it' : 'not set' });
+    const where = k.app === '' ? '_suite' : k.app;
+    const save = async (value) => {
+      try { const n = await api(`/api/suite-admin/keys/${encodeURIComponent(where)}/${encodeURIComponent(k.name)}`, { method: 'PUT', json: { value } }); Object.assign(k, n); toast(n.set ? 'Saved' : 'Cleared'); el.replaceChildren(); suiteKeys(el, o); } catch (e) { fail(e); }
+    };
+    return h('div', { style: { padding: '10px 0', borderTop: '1px solid var(--line, rgba(127,127,127,.25))' } },
+      h('div', null, h('b', null, k.label), ' ', h('span', { class: 'small' }, k.set ? '· set' : h('span', { class: 'muted' }, '· not set'),
+        k.updated ? h('span', { class: 'muted' }, ` ${sinceText(k.updated)}${k.updatedBy ? ` by ${k.updatedBy}` : ''}`) : null)),
+      k.hint ? h('div', { class: 'muted small' }, k.hint) : null,
+      k.envSet ? h('div', { class: 'muted small' }, `${k.env} in the app's environment wins over this one.`) : null,
+      h('div', { style: { marginTop: '6px' } }, h('div', { class: 'multi' }, inp,
+        h('button', { class: 'pillbtn noic', onclick: () => { if (inp.value.trim()) save(inp.value.trim()); else toast('Paste the new value first'); } }, 'Replace'),
+        k.set ? h('button', { class: 'pillbtn noic danger', onclick: async () => { if (await confirmDialog('Clear key', `Clear ${k.label}? What uses it stops working until a new one is set.`, 'Clear', true)) save(''); } }, 'Clear') : null)));
+  };
+  el.append(h('div', { class: 'box' }, h('h2', null, icon('key'), 'Keys and tokens'),
+    h('p', { class: 'muted' }, 'The keys each app keeps for services outside the suite, all in the Shared ioSuite database. Values are never shown again once saved. The apps’ own settings pages set the same keys. How the apps sign in to each other is automatic: see the app passwords of the apps’ own accounts under People.'),
+    order.length ? order.map((a) => [h('h3', null, a === '' ? 'Whole suite' : appLabel(o, a)),
+      h('div', null, groups[a].map(row))]) : h('p', { class: 'muted' }, 'No app keeps any yet.')));
 }
 
 function suiteApps(el, o) {
