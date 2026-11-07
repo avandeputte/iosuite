@@ -15,7 +15,10 @@ what the app will show on the start page later (today's events, the newest photo
   in the suite's list of apps in the Shared ioSuite database (`suite_apps`, iosuite-shared 0.3 and later), and the page
   reads it there and only there: nothing to type, nothing to override. ioSuite registers itself the same way. An app
   that has not registered (not installed, or not started yet) has no tile; one the page has no widgets for gets a plain
-  tile. Each person can hide tiles in Customize.
+  tile. Each person can hide tiles in Customize. What the tiles and cards show is asked of each app by this server
+  with the viewer's own sign-in (so each person sees only what they may see there), on localhost when the app runs on
+  the same machine, else at its LAN address, else its public one, with the suite's Cloudflare Access service token
+  (Settings › Suite › Keys and tokens) when one is set.
 - **A search box** at the top (⌘K / Ctrl-K): as you type it lists the bookmarks that match, the people ioContacts
   finds, and a row per app that searches itself (ioPix, ioCalendar and ioNotes open on their own results). Arrows
   pick a row, Enter opens it. When nothing of the suite matches, Enter searches the web (DuckDuckGo, or the engine
