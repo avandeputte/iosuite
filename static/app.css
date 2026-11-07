@@ -357,23 +357,8 @@ table.t th { font-size: var(--fs-s); color: var(--fg2); font-weight: 600; }
 .approw label.check { flex: none; align-items: center; }
 
 /* ---- settings › suite */
-.segs { display: inline-flex; gap: 2px; padding: 3px; border-radius: var(--r-pill); background: var(--bg2); margin: 4px 0 14px; flex-wrap: wrap; }
-.segs button { padding: 6px 14px; border-radius: var(--r-pill); color: var(--fg2); }
-.segs button.on { background: var(--bg); color: var(--accent); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.12); }
-.scrollx { overflow-x: auto; max-width: 100%; }
 select.t.sm { height: 34px; width: auto; padding: 0 8px; }
 table.t td .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: middle; }
-table.grid-roles th, table.grid-roles td { white-space: nowrap; }
-.dialog:has(.acct) { max-width: 620px; }
-.acct h3 { margin: 18px 0 6px; font-size: var(--fs-m); font-weight: 600; display: flex; align-items: center; gap: 10px; }
-.acct label.check { margin: 6px 0; }
-.roles { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 6px 16px; }
-.rolerow { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.rolerow select.t.sm { width: 150px; flex: none; }
-.minirow { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: var(--fs-m); }
-.minirow > span { min-width: 0; overflow-wrap: anywhere; }
-.linkbtn { color: var(--accent); font-size: var(--fs-s); font-weight: 500; flex: none; }
-.linkbtn:hover { text-decoration: underline; }
 
 /* ---- toast, dialogs, sign-in, the update banner */
 #toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: #323232; color: #fff; padding: 12px 18px; border-radius: var(--r-s); z-index: 100;
