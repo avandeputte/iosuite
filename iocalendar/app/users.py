@@ -60,7 +60,6 @@ def update(uid: int, **f) -> dict:
 def init() -> None:
     """The Shared ioSuite database's tables, and the ADMIN_USER / ADMIN_PASSWORD account on a first start with no accounts."""
     shared.init()
-    adopt_old_scopes()
 
 
 def can_write(u: dict | None) -> bool:
@@ -84,16 +83,6 @@ def create_app_password(uid: int, label: str, caldav_only: bool = False) -> str:
     or the web app), the kind the Apple profile puts on a phone. The scope is kept with the password in the Shared
     ioSuite database (ios_app_passwords.scope) and enforced by iosuite-shared's middleware."""
     return apppasswords.create(uid, APP, label, apppasswords.DAV if caldav_only else "")
-
-
-def adopt_old_scopes() -> None:
-    """0.13.0: the CalDAV-only marks 0.11.0 kept in ioCalendar's own cal_app_password_scopes move to the shared
-    column, once, and that table goes. Remove once every server has run 0.13.0."""
-    if not db.one("SELECT 1 AS x FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'cal_app_password_scopes'"):
-        return
-    for r in db.q("SELECT prefix FROM cal_app_password_scopes"):
-        apppasswords.set_scope(APP, r["prefix"], apppasswords.DAV)
-    db.ex("DROP TABLE cal_app_password_scopes")
 
 
 def forget_cached_auth() -> None:

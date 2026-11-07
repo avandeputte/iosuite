@@ -136,11 +136,7 @@ def test_shared_slugs_are_unique(client):
 
 def test_iocontacts_is_found_in_the_suite(client, monkeypatch):
     from iosuite_shared import links, suite
-    from app import contacts, db
-    db.set_setting("iocontacts_url", "https://old.example.org")
-    db.set_setting("iocontacts_password", "old")
-    contacts.forget_old_settings()
-    assert db.get_setting("iocontacts_url") is None and db.get_setting("iocontacts_password") is None
+    from app import contacts
     assert client.get("/api/iocontacts/settings").json()["enabled"] is False
     suite.register("iocontacts", name="ioContacts", url="https://contacts.example.org", version="1")
     s = client.get("/api/iocontacts/settings").json()

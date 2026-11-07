@@ -25,19 +25,6 @@ APP, PROVIDER = "iocalendar", "iocontacts"
 SYNC_EVERY = 6 * 3600
 _lock = threading.Lock()
 _state: dict = {"synced": None, "error": None, "count": None}
-# what Settings › ioContacts used to keep before the suite found ioContacts by itself (removed at start)
-OLD_SETTINGS = ("iocontacts_url", "iocontacts_user", "iocontacts_password", "iocontacts_cf_id", "iocontacts_cf_secret")
-
-
-def forget_old_settings() -> None:
-    try:
-        for k in OLD_SETTINGS:
-            if db.get_setting(k) is not None:
-                db.set_setting(k, None)
-    except Exception as e:  # noqa: BLE001 - tried again next start
-        log.debug("old ioContacts settings: %s", e)
-
-
 def settings() -> dict:
     return {"url": links.url(PROVIDER) or "", "birthdays": (db.get_setting("iocontacts_birthdays") or "1") == "1"}
 
