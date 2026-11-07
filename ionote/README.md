@@ -8,6 +8,8 @@ in one MariaDB/MySQL database, pictures included. It is built the same way as it
 [iopix](https://github.com/avandeputte/iopix): FastAPI with a single-page vanilla JS app, the same accounts, roles
 and sign-in (Cloudflare Access too), the same installer, updater, Docker image and MCP server.
 
+## What it does
+
 - **Notes**: a title, text, tags, a folder, a pin, and optionally a picture (a screenshot, a photo) with the text
   read from it. Notes come from the Mac (clipboard, screenshots, right-click › Save to ionotes), the iPhone (paste,
   photos, the share sheet), the web app, or an assistant through MCP.
@@ -66,16 +68,7 @@ The database user needs to create tables in its database (`GRANT ALL ON notes.* 
 stored in the database: MariaDB's `max_allowed_packet` (16 MB by default) must be larger than the largest picture
 (`MAX_IMAGE_MB`, 15 MB); Maintenance › Storage and backups warns when it is not.
 
-## Running in Docker
-
-`docker-compose.yml` pulls the published image (`ghcr.io/avandeputte/ionotes:latest`, built by the GitHub workflow
-for amd64 and arm64) and works as a stack in Dockge or Portainer: set the database and the admin password and start
-it; `docker compose up -d --build` builds from the checkout instead. The container runs as its own user (uid 1000);
-the named volume `ionotes-data` at `/data` only holds the session secret and the log, since everything else is in
-the database. The image includes RapidOCR (build argument `OCR=0` leaves it out). The health check polls
-`/api/status`, which stays open when sign-in is required.
-
-## Proxmox VE (LXC)
+### Proxmox VE (LXC)
 
 `proxmox/ct/ionotes.sh` and `proxmox/install/ionotes-install.sh` follow the community-scripts (ProxmoxVE) framework
 layout, the same as iopix's, so they can be submitted upstream as they are. Until then the ct script points the
@@ -99,6 +92,78 @@ inside the container through its environment (a root-only file pushed in and rem
 The setup's output is kept in `/opt/ionotes/setup.log`; on failure its last lines are shown and the command to rerun
 it is printed. The container's `update` command runs `update.sh`, which keeps the settings and data. The scripts are
 checked for syntax in CI and drive the tested `setup.sh`; they have not been run on a Proxmox host yet.
+
+### Docker
+
+`docker-compose.yml` pulls the published image (`ghcr.io/avandeputte/ionotes:latest`, built by the GitHub workflow
+for amd64 and arm64) and works as a stack in Dockge or Portainer: set the database and the admin password and start
+it; `docker compose up -d --build` builds from the checkout instead. The container runs as its own user (uid 1000);
+the named volume `ionotes-data` at `/data` only holds the session secret and the log, since everything else is in
+the database. The image includes RapidOCR (build argument `OCR=0` leaves it out). The health check polls
+`/api/status`, which stays open when sign-in is required.
+
+## Configuration
+
+The settings are in `config.env` in the app folder (`setup.sh` writes it; every app of the suite uses the same file
+name and the same names), or in the environment, which wins. `config.env.example` lists them all.
+
+| Variable | Default | |
+| --- | --- | --- |
+| `DB_TYPE` | `sqlite` | `mysql` for MariaDB/MySQL (setup.sh writes it) |
+| `DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USER` / `DB_PASSWORD` | | the database |
+| `HOST` / `PORT` | `0.0.0.0` / `8610` | where the server listens (every app of the suite has its own port) |
+| `FORWARDED_ALLOW_IPS` | `*` | the addresses allowed to pass on the visitor's address and scheme (`X-Forwarded-For` / `-Proto`: your reverse proxy's); read by the app itself (iosuite-shared), not by uvicorn |
+| `TLS_CERT_FILE` / `TLS_KEY_FILE` | | HTTPS served directly instead of behind a reverse proxy |
+| `DATA_DIR` | `./data` | what the app writes on its own: the log, the update result, the database settings saved from the web app (and the SQLite file) |
+| `LOG_FILE` | `DATA_DIR/ionotes.log` | the server log (empty: none) |
+| `PUBLIC_URL` | | the address ionotes is reached at, for links in MCP answers and the suite's list of apps |
+| `COOKIE_DOMAIN` | | the domain the sign-in is shared on (e.g. `example.com`); a LAN address outside it gets a cookie of its own |
+| `ADMIN_USER` / `ADMIN_PASSWORD` | | the first admin, created on a first start with no accounts |
+| `IOSUITE_DB_HOST` / `_PORT` / `_NAME` / `_USER` / `_PASSWORD` | `DB_HOST` / `DB_PORT` / `iosuite` / `iosuite` / `iosuite` | the Shared ioSuite database (MariaDB): accounts, sessions, suite-wide settings |
+| `TZ` | | the time zone |
+| `READ_ONLY` | `0` | nothing can be changed, by anyone |
+| `OCR` | `1` | `0`: the server never reads text in pictures (the apps still do) |
+| `MAX_IMAGE_MB` | `15` | the largest picture a note may carry |
+| `MCP` / `MCP_USER` | | `MCP=1` keeps the endpoint on whatever Settings says; the account `python -m app.mcp` (stdio) acts as |
+| `UPDATE_CHECK` | `1` | `0`: never ask GitHub for a newer version (Maintenance › Updates and logs) |
+| `AUTH_PROXY`... | `off` | sign-in at a reverse proxy, above |
+
+## Updates
+
+- **Standalone:** `./update.sh` fetches the latest code (git, or the GitHub tarball), installs the packages the new
+  version asks for and only then moves the code in, then restarts the service. `--check` only reports. Maintenance ›
+  Updates and logs › Update now runs the same script; the page (the same in every ioThing app: it comes from
+  `iosuite_shared.updates` in iosuite-shared, at `/api/server` and `/api/log`) also has the tail of the server log
+  (`data/ionotes.log`) and Restart. A daily check (on by default; `UPDATE_CHECK=0` locks it off, the page switches it
+  off) shows admins a card when a newer version exists, with Update now right on it (dismissed per version).
+- **Proxmox:** `update` inside the container (the framework's command) runs the same script.
+- **Docker:** `docker compose pull && docker compose up -d`.
+- **From an MCP client:** `check_for_update` and `update_ionotes` (as an admin).
+
+## Reverse proxy and HTTPS
+
+ionotes speaks plain HTTP on port 8610. Run it behind a reverse proxy that terminates HTTPS (Caddy, Nginx Proxy
+Manager, HAProxy, a Cloudflare Tunnel) and reach it only through that; `/mcp` streams responses, so the proxy must not
+buffer that path.
+
+When the proxy already makes people sign in, ionotes takes that sign-in, exactly as iopix does: the proxy passes who
+signed in in a header, and ionotes treats that person as signed in when an account exists for them (matched on the
+account's email address, then its name). Settings › Suite › Sign-in at the proxy (saved there, the settings are kept in the
+Shared ioSuite database for the whole suite: one Cloudflare Access application covering every app, set up once), or
+in `config.env`, which wins:
+
+| Variable | |
+| --- | --- |
+| `AUTH_PROXY` | `cloudflare`, `haproxy`, `nginx`, `caddy`, `traefik` or `header`; `off` by default |
+| `AUTH_PROXY_HEADER` | the header(s) with the user; default for `cloudflare`: `Cf-Access-Authenticated-User-Email`; for the others: `Remote-User`, `X-Forwarded-User`, `X-Auth-Request-User`, `X-Auth-Request-Email`, `X-Forwarded-Email` |
+| `AUTH_PROXY_TRUSTED` | addresses or networks the proxy connects from; default `127.0.0.1,::1` |
+| `AUTH_PROXY_CREATE` | `viewer` or `editor`: create an account for someone the proxy lets in who has none; `deny`: a "No access" page; empty: the sign-in screen |
+| `CF_ACCESS_TEAM` / `CF_ACCESS_AUD` | your Cloudflare Access team domain and the application's AUD tag: the signed token Cloudflare adds to every request (`Cf-Access-Jwt-Assertion`) is checked against your team's keys, and the email is taken from it. The recommended setup for a Cloudflare Tunnel |
+
+The header is believed only from the proxy: a request that reaches ionotes any other way is ignored, whatever headers
+it carries. From outside (through Cloudflare), one-click accounts without a password do not work. The Mac and iPhone
+apps sign in through the same page; for unattended use through Cloudflare they take a Cloudflare Access **service
+token** (client ID and secret, kept in the Keychain), as the iopix apps do.
 
 ## Users and permissions
 
@@ -139,37 +204,11 @@ icon, address) on its first request, so ioSuite's start page and the other apps 
 address. The address is `PUBLIC_URL` when set, otherwise the best one ionotes is reached at (a host under
 `COOKIE_DOMAIN` over HTTPS beats a LAN name, which beats an IP address).
 
-
 If the notes from before accounts went to another admin than intended, Maintenance › Storage and backups › Who owns
 the notes gives all of one account's notes (with folders and tag colours) to another; that account's devices sync
 them in.
 
-## Reverse proxy, HTTPS and Cloudflare Access
-
-ionotes speaks plain HTTP on port 8610. Run it behind a reverse proxy that terminates HTTPS (Caddy, Nginx Proxy
-Manager, HAProxy, a Cloudflare Tunnel) and reach it only through that; `/mcp` streams responses, so the proxy must not
-buffer that path.
-
-When the proxy already makes people sign in, ionotes takes that sign-in, exactly as iopix does: the proxy passes who
-signed in in a header, and ionotes treats that person as signed in when an account exists for them (matched on the
-account's email address, then its name). Settings › Suite › Sign-in at the proxy (saved there, the settings are kept in the
-Shared ioSuite database for the whole suite: one Cloudflare Access application covering every app, set up once), or
-in `config.env`, which wins:
-
-| Variable | |
-| --- | --- |
-| `AUTH_PROXY` | `cloudflare`, `haproxy`, `nginx`, `caddy`, `traefik` or `header`; `off` by default |
-| `AUTH_PROXY_HEADER` | the header(s) with the user; default for `cloudflare`: `Cf-Access-Authenticated-User-Email`; for the others: `Remote-User`, `X-Forwarded-User`, `X-Auth-Request-User`, `X-Auth-Request-Email`, `X-Forwarded-Email` |
-| `AUTH_PROXY_TRUSTED` | addresses or networks the proxy connects from; default `127.0.0.1,::1` |
-| `AUTH_PROXY_CREATE` | `viewer` or `editor`: create an account for someone the proxy lets in who has none; `deny`: a "No access" page; empty: the sign-in screen |
-| `CF_ACCESS_TEAM` / `CF_ACCESS_AUD` | your Cloudflare Access team domain and the application's AUD tag: the signed token Cloudflare adds to every request (`Cf-Access-Jwt-Assertion`) is checked against your team's keys, and the email is taken from it. The recommended setup for a Cloudflare Tunnel |
-
-The header is believed only from the proxy: a request that reaches ionotes any other way is ignored, whatever headers
-it carries. From outside (through Cloudflare), one-click accounts without a password do not work. The Mac and iPhone
-apps sign in through the same page; for unattended use through Cloudflare they take a Cloudflare Access **service
-token** (client ID and secret, kept in the Keychain), as the iopix apps do.
-
-## The API (for the apps)
+## API
 
 Every route is under `/api`; `GET /api/docs` lists them. JSON in and out; times are seconds since 1970 (UTC); ids are
 UUID strings the device chooses (`UUID().uuidString`).
@@ -220,45 +259,7 @@ in a directory per folder, plus `notes.json` with everything. Such a zip imports
 Maintenance › Import): records keep their ids, and a newer copy on the server wins (a zip from another account on the same server comes in as new notes). For backups, back the database up
 (`mariadb-dump --single-transaction notes`): notes, pictures, accounts and settings are all in it.
 
-## Updating
-
-- **Standalone:** `./update.sh` fetches the latest code (git, or the GitHub tarball), installs the packages the new
-  version asks for and only then moves the code in, then restarts the service. `--check` only reports. Maintenance ›
-  Updates and logs › Update now runs the same script; the page (the same in every ioThing app: it comes from
-  `iosuite_shared.updates` in iosuite-shared, at `/api/server` and `/api/log`) also has the tail of the server log
-  (`data/ionotes.log`) and Restart. A daily check (on by default; `UPDATE_CHECK=0` locks it off, the page switches it
-  off) shows admins a card when a newer version exists, with Update now right on it (dismissed per version).
-- **Proxmox:** `update` inside the container (the framework's command) runs the same script.
-- **Docker:** `docker compose pull && docker compose up -d`.
-- **From an MCP client:** `check_for_update` and `update_ionotes` (as an admin).
-
-## Settings
-
-The settings are in `config.env` in the app folder (`setup.sh` writes it; every app of the suite uses the same file
-name and the same names), or in the environment, which wins. `config.env.example` lists them all.
-
-| Variable | Default | |
-| --- | --- | --- |
-| `DB_TYPE` | `sqlite` | `mysql` for MariaDB/MySQL (setup.sh writes it) |
-| `DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USER` / `DB_PASSWORD` | | the database |
-| `HOST` / `PORT` | `0.0.0.0` / `8610` | where the server listens (every app of the suite has its own port) |
-| `FORWARDED_ALLOW_IPS` | `*` | the addresses allowed to pass on the visitor's address and scheme (`X-Forwarded-For` / `-Proto`: your reverse proxy's); read by the app itself (iosuite-shared), not by uvicorn |
-| `TLS_CERT_FILE` / `TLS_KEY_FILE` | | HTTPS served directly instead of behind a reverse proxy |
-| `DATA_DIR` | `./data` | what the app writes on its own: the log, the update result, the database settings saved from the web app (and the SQLite file) |
-| `LOG_FILE` | `DATA_DIR/ionotes.log` | the server log (empty: none) |
-| `PUBLIC_URL` | | the address ionotes is reached at, for links in MCP answers and the suite's list of apps |
-| `COOKIE_DOMAIN` | | the domain the sign-in is shared on (e.g. `example.com`); a LAN address outside it gets a cookie of its own |
-| `ADMIN_USER` / `ADMIN_PASSWORD` | | the first admin, created on a first start with no accounts |
-| `IOSUITE_DB_HOST` / `_PORT` / `_NAME` / `_USER` / `_PASSWORD` | `DB_HOST` / `DB_PORT` / `iosuite` / `iosuite` / `iosuite` | the Shared ioSuite database (MariaDB): accounts, sessions, suite-wide settings |
-| `TZ` | | the time zone |
-| `READ_ONLY` | `0` | nothing can be changed, by anyone |
-| `OCR` | `1` | `0`: the server never reads text in pictures (the apps still do) |
-| `MAX_IMAGE_MB` | `15` | the largest picture a note may carry |
-| `MCP` / `MCP_USER` | | `MCP=1` keeps the endpoint on whatever Settings says; the account `python -m app.mcp` (stdio) acts as |
-| `UPDATE_CHECK` | `1` | `0`: never ask GitHub for a newer version (Maintenance › Updates and logs) |
-| `AUTH_PROXY`... | `off` | sign-in at a reverse proxy, above |
-
-## How it is put together
+## Layout
 
 ```
 app/
@@ -283,3 +284,7 @@ MariaDB database `notes_test` for the user `notes`/`notes` on 127.0.0.1 (`IONOTE
 The Shared ioSuite database always goes to a test MariaDB of its own: a Docker container the suite starts
 (`iosuite-test-mariadb`), or `IOSUITE_TEST_DB=host:port:user:password`; never a live `iosuite` database.
 CI runs both.
+
+## License
+
+GPL-3.0-or-later (the GNU General Public License, version 3 or later), see [LICENSE](LICENSE).

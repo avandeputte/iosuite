@@ -17,7 +17,7 @@ export COMMUNITY_SCRIPTS_URL="${COMMUNITY_SCRIPTS_URL:-https://raw.githubusercon
 _cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
 source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/build.func")
 # Copyright (c) 2026 Alex Van de Putte
-# License: MIT
+# License: GPL-3.0-or-later
 # Source: https://github.com/avandeputte/ionotes
 
 APP="ionotes"
@@ -97,7 +97,7 @@ ask_app_settings() {
       iosuite "ioSuite (the start page)  (8630)" OFF \
       iocalendar "ioCalendar  (8620)" OFF \
       iocontacts "ioContacts  (8640, LDAP 3890)" OFF \
-      iohealth "ioHealth  (47800)" OFF 3>&1 1>&2 2>&3) || exit 1
+      iohealth "ioHealth  (8650)" OFF 3>&1 1>&2 2>&3) || exit 1
     IONOTES_ALSO=$(echo "$IONOTES_ALSO" | tr -d '"' | tr ' ' ',')
   fi
   if [[ -n "$IONOTES_ALSO" ]]; then  # room for more than one app
@@ -155,7 +155,7 @@ echo -e "${CREATING}${GN}${APP} setup has been successfully initialized!${CL}"
 echo -e "${INFO}${YW}Access it using the following URL:${CL}"
 echo -e "${GATEWAY}${BGN}http://${IP}:8610${CL}"
 for a in ${IONOTES_ALSO//,/ }; do
-  case "$a" in iosuite) p=8630;; iocalendar) p=8620;; iocontacts) p=8640;; ionotes) p=8610;; iohealth) p=47800;; iopix) p=8600;; *) p="";; esac
+  case "$a" in iosuite) p=8630;; iocalendar) p=8620;; iocontacts) p=8640;; ionotes) p=8610;; iohealth) p=8650;; iopix) p=8600;; *) p="";; esac
   [[ -n "$p" ]] && echo -e "${INFO}${YW}$a:${CL} ${BGN}http://${IP}:$p${CL}"
 done
 [[ -z "${IONOTES_ADMIN:-}" ]] && echo -e "${INFO}${YW}No admin yet: open the URL and choose Settings › Create the admin account.${CL}"
