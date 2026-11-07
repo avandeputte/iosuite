@@ -57,6 +57,7 @@ def _server_info() -> dict:
 
 app.include_router(auth.router())        # /api/auth/*: sign-in, accounts, me, settings, password, sessions, app passwords, suite
 app.include_router(auth.users_router())  # /api/users: accounts and their role here (admins)
+app.include_router(auth.admin_router())  # /api/suite-admin: every account, role, app password, session and app of the suite (suite admins; Settings › Suite)
 app.include_router(auth.status_router(updater))  # /api/status: public, the same shape in every app
 app.include_router(auth.server_router(updater, log_file=config.LOG_FILE, info=_server_info))  # /api/server, /api/log (admins)
 app.include_router(api.router)

@@ -68,3 +68,23 @@ def test_the_shell_its_files_and_the_icon_are_public(client):
     assert paths and all(p.startswith("static/") for p in paths)
     for p in ["/" + p for p in paths] + [suite.ICON, "/static/icons/apple-touch-icon.png"]:
         assert client.get(p).status_code == 200, p
+
+
+def test_suite_admin_screen(client):
+    """Settings › Suite: every account, its role in every app, app passwords with their scope, the apps' access."""
+    o = client.get("/api/suite-admin").json()
+    assert {a["app"] for a in o["apps"]} >= {"iopix", "iocalendar", "iocontacts"} and [u["name"] for u in o["users"]] == ["alex"]
+    r = client.post("/api/suite-admin/users", json={"name": "ann", "password": "secret123", "roles": {"iopix": "editor", "iosuite": "admin"}})
+    assert r.status_code == 200, r.text
+    ann = r.json()["id"]
+    pw = client.post("/api/suite-admin/app-passwords", json={"userId": ann, "app": "iocontacts", "label": "Phone", "scope": "dav"}).json()
+    assert pw["scope"] == "dav"
+    items = client.get("/api/suite-admin/app-passwords").json()["items"]
+    assert [(i["userName"], i["scope"]) for i in items] == [("ann", "dav")]
+    assert client.patch("/api/suite-admin/apps/iocalendar", json={"defaultRole": "none"}).json()["defaultRole"] == "none"
+    # ann administers ioSuite, but not the suite: Settings › Suite is not hers
+    client.post("/api/auth/logout")
+    assert client.post("/api/auth/login", json={"name": "ann", "password": "secret123"}).status_code == 200
+    assert client.get("/api/users").status_code == 200
+    assert client.get("/api/suite-admin").status_code == 403
+    assert client.post("/api/suite-admin/users", json={"name": "x", "password": "secret123"}).status_code == 403
