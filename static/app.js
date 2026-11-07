@@ -160,6 +160,7 @@ function drawUser() {
       h('button', { class: 'mi', onclick: () => { const n = { system: 'light', light: 'dark', dark: 'system' }[theme]; localStorage.setItem('iosuite.theme', n); applyTheme(); closeMenu(); toast(`Appearance: ${n}`); } },
         icon('theme', 's'), `Appearance: ${theme}`),
       h('a', { class: 'mi', href: '#/settings', onclick: closeMenu }, icon('settings', 's'), 'Settings'),
+      S.user.suiteAdmin ? h('a', { class: 'mi', href: '#/settings/suite', onclick: closeMenu }, icon('lock', 's'), 'Suite users and access') : null,
       S.user.role === 'admin' ? h('a', { class: 'mi', href: '#/maintenance', onclick: closeMenu }, icon('server', 's'), 'Maintenance') : null,
       h('button', { class: 'mi', onclick: async () => { closeMenu(); if (await signOutElsewhere()) toast('Signed out elsewhere'); } }, icon('logout', 's'), 'Sign out everywhere else'),
       h('button', { class: 'mi', onclick: async () => { const r = await api('/api/auth/logout', { method: 'POST' }); if (r && r.cloudflareLogout) location.href = r.cloudflareLogout; else location.reload(); } }, icon('logout', 's'), 'Sign out'));
@@ -175,8 +176,8 @@ function applyTheme() {
 
 // ------------------------------------------------------------------ routes
 function route() {
-  const [a, b] = location.hash.replace(/^#\/?/, '').split('/').map(decodeURIComponent);
-  if (a === 'settings') return { view: 'settings', tab: b || 'account' };
+  const [a, b, c] = location.hash.replace(/^#\/?/, '').split('/').map(decodeURIComponent);
+  if (a === 'settings') return { view: 'settings', tab: b || 'account', sub: c };
   if (a === 'maintenance') return { view: 'maintenance', tab: b || 'updates' };
   if (a === 'wall') return { view: 'wall' };
   return { view: 'home' };
@@ -1212,12 +1213,12 @@ async function wallAgenda(el, has) {
 async function showSettings(page, r) {
   const adm = S.user.role === 'admin';
   const canEdit = ['editor', 'admin'].includes(S.user.role);
-  const tabs = [['account', 'Account'], ...(adm ? [['weather', 'Home page'], ['ha', 'Home Assistant']] : []), ...(canEdit ? [['bookmarks', 'Bookmarks']] : []), ...(adm ? [['users', 'Users']] : [])];
+  const tabs = [['account', 'Account'], ...(adm ? [['weather', 'Home page'], ['ha', 'Home Assistant']] : []), ...(canEdit ? [['bookmarks', 'Bookmarks']] : []), ...(adm ? [['users', 'Users']] : []), ...(S.user.suiteAdmin ? [['suite', 'Suite']] : [])];
   if (!tabs.some(([k]) => k === r.tab)) r.tab = 'account';
   page.append(h('div', { class: 'pagehead' }, h('h1', null, 'Settings')),
     h('div', { class: 'tabs' }, tabs.map(([k, l]) => h('button', { class: r.tab === k ? 'on' : '', onclick: () => { location.hash = `#/settings/${k}`; } }, l))));
   const body = h('div'); page.append(body);
-  await ({ account: setAccount, apps: setHome, weather: setHome, ha: setHomeAssistant, bookmarks: setBookmarks, users: setUsers }[r.tab] || setAccount)(body);
+  await ({ account: setAccount, apps: setHome, weather: setHome, ha: setHomeAssistant, bookmarks: setBookmarks, users: setUsers, suite: setSuite }[r.tab] || setAccount)(body, r);
 }
 const fld = (l, e) => h('label', { class: 'field' }, h('span', null, l), e);
 
@@ -1481,7 +1482,7 @@ async function setUsers(el) {
   const role = h('select', { class: 't' }, roles.map((x) => h('option', { value: x, selected: x === 'viewer' ? true : null }, x)));
   const patch = async (u, body, msg) => { try { await api(`/api/users/${u.id}`, { method: 'PATCH', json: body }); toast(msg); return true; } catch (e) { fail(e); return false; } };
   el.append(h('div', { class: 'box' }, h('h2', null, icon('people'), 'Family members'),
-    h('p', { class: 'muted' }, 'The accounts are the same as in the other io apps; the role here is for the start page. Everyone sees the page; admins also set the apps’ addresses and manage accounts. The role in each app is set in that app.'),
+    h('p', { class: 'muted' }, 'The accounts are the same as in the other io apps; the role here is for the start page. Everyone sees the page; admins also set up the home page and manage accounts.', S.user.suiteAdmin ? [' Every app’s roles, app passwords and access are under ', h('a', { href: '#/settings/suite' }, 'Settings › Suite'), '.'] : ' A suite admin manages every app’s roles under Settings › Suite.'),
     h('table', { class: 't' }, h('tr', null, h('th', null, 'Name'), h('th', null, 'Display name'), h('th', null, 'Role'), h('th')),
       r.users.map((u) => {
         const rs = h('select', { class: 't', style: 'width:auto' }, [...new Set([...roles, u.role])].map((x) => h('option', { value: x, selected: x === u.role ? true : null }, x)));
@@ -1492,6 +1493,208 @@ async function setUsers(el) {
       })),
     h('h2', { style: { marginTop: '16px' } }, 'Add someone'), h('div', { class: 'multi' }, name, pw, role,
       h('button', { class: 'pillbtn primary', onclick: async () => { try { await api('/api/users', { method: 'POST', json: { name: name.value, password: pw.value, role: role.value } }); toast('Account made'); onRoute(); } catch (e) { fail(e); } } }, icon('add', 's'), 'Add'))));
+}
+
+// ------------------------------------------------------------------ settings › suite (suite admins)
+/* Everything in the Shared ioSuite database, for the whole suite: accounts and their role in every app, every app
+   password (with its scope), sessions, and the apps with their default role and sign-in requirement. Served by
+   iosuite-shared's /api/suite-admin (suite admins only). */
+const SCOPE_LABEL = { '': 'Everything', dav: 'Sync only (CalDAV, CardDAV, LDAP)' };
+const ROLE_HELP = { none: 'no access', viewer: 'sees', editor: 'changes', admin: 'manages' };
+function sinceText(ts) {
+  if (!ts) return 'never';
+  const s = Date.now() / 1000 - ts;
+  if (s < 90) return 'just now';
+  if (s < 3600) return `${Math.round(s / 60)} min ago`;
+  if (s < 86400) return `${Math.round(s / 3600)} h ago`;
+  if (s < 86400 * 45) return `${Math.round(s / 86400)} d ago`;
+  return new Date(ts * 1000).toLocaleDateString();
+}
+const appLabel = (o, key) => (o.apps.find((a) => a.app === key) || {}).name || key;
+
+async function setSuite(el, r) {
+  const subs = [['people', 'People'], ['roles', 'Roles'], ['passwords', 'App passwords'], ['apps', 'Apps']];
+  const sub = subs.some(([k]) => k === r.sub) ? r.sub : 'people';
+  let o;
+  try { o = await api('/api/suite-admin'); } catch (e) { el.append(h('p', { class: 'err' }, e.message)); return; }
+  el.append(h('p', { class: 'muted' }, 'The whole suite at once: the accounts, passwords and roles every io app shares (the Shared ioSuite database). Changes apply in every app within a few seconds. Suite admins are admin everywhere.'),
+    h('div', { class: 'segs' }, subs.map(([k, l]) => h('button', { class: sub === k ? 'on' : '', onclick: () => { location.hash = `#/settings/suite/${k}`; } }, l))));
+  const body = h('div'); el.append(body);
+  ({ people: suitePeople, roles: suiteRoles, passwords: suitePasswords, apps: suiteApps })[sub](body, o);
+}
+
+/** A role picker for one account in one app: "default (…)" removes the row, so the app's default applies. */
+function roleSelect(o, u, a) {
+  const cur = u.roles[a.app] || '';
+  const allowed = u.passwordless ? ['none', 'viewer'] : ['none', 'viewer', 'editor', 'admin'];
+  const s = h('select', { class: 't sm', title: `${u.displayName} in ${a.name}` },
+    h('option', { value: '' }, `default (${u.passwordless && ['editor', 'admin'].includes(a.defaultRole) ? 'viewer' : a.defaultRole})`),
+    [...new Set([...allowed, ...(cur ? [cur] : [])])].map((x) => h('option', { value: x, selected: x === cur ? true : null }, x)));
+  return s;
+}
+
+function suitePeople(el, o) {
+  el.append(h('div', { class: 'box' }, h('h2', null, icon('people'), 'People'),
+    h('div', { class: 'scrollx' }, h('table', { class: 't' }, h('tr', null, h('th', null, 'Account'), h('th', null, 'Email'), h('th', null, 'Sign-in'), h('th', null, 'Last seen'), h('th')),
+      o.users.map((u) => h('tr', null,
+        h('td', null, h('b', null, u.displayName), h('div', { class: 'muted small' }, u.name,
+          u.suiteAdmin ? ' · suite admin' : '', u.listed ? '' : ' · not on the sign-in list', u.id === o.me ? ' · you' : '')),
+        h('td', { class: 'small' }, u.email || h('span', { class: 'muted' }, '–')),
+        h('td', { class: 'small' }, u.passwordless ? 'One click (LAN, viewer)' : 'Password',
+          u.appPasswords ? h('div', { class: 'muted' }, `${u.appPasswords} app password${u.appPasswords > 1 ? 's' : ''}`) : null),
+        h('td', { class: 'small' }, sinceText(u.lastSeen || u.last_login), h('div', { class: 'muted' }, `${u.sessions} session${u.sessions === 1 ? '' : 's'}`)),
+        h('td', { style: { textAlign: 'right' } }, h('button', { class: 'pillbtn noic', onclick: () => editAccount(o, u) }, 'Manage')))))),
+    h('p', null, h('button', { class: 'pillbtn primary', onclick: () => editAccount(o, null) }, icon('add', 's'), 'Add someone'))));
+}
+
+/** The account dialog: who they are, how they sign in, their role in every app, and (existing accounts) their
+    sessions and app passwords. */
+async function editAccount(o, u) {
+  const isNew = !u, me = u && u.id === o.me;
+  u = u || { name: '', displayName: '', email: '', listed: true, suiteAdmin: false, passwordless: false, roles: {} };
+  const name = h('input', { class: 't', value: u.name, autocomplete: 'off' });
+  const dn = h('input', { class: 't', value: isNew ? '' : u.displayName, autocomplete: 'off' });
+  const em = h('input', { class: 't', type: 'email', value: u.email, autocomplete: 'off' });
+  const listed = h('input', { type: 'checkbox', checked: u.listed });
+  const sa = h('input', { type: 'checkbox', checked: u.suiteAdmin, disabled: me ? true : null });
+  const pw = h('input', { class: 't', type: 'password', autocomplete: 'new-password', placeholder: isNew ? '8 or more; empty: one click on the LAN, viewer only' : (u.passwordless ? 'none yet (one click on the LAN)' : 'unchanged') });
+  const nopw = h('input', { type: 'checkbox', checked: !isNew && u.passwordless });
+  const sels = {};
+  const roleRows = o.apps.map((a) => { sels[a.app] = roleSelect(o, u, a); return h('div', { class: 'rolerow' }, h('span', null, a.name, a.registered ? '' : h('span', { class: 'muted small' }, ' (not running)')), sels[a.app]); });
+  const extra = h('div');
+  const box = h('div', { class: 'acct' },
+    h('div', { class: 'grid' }, fld('User name', name), fld('Display name', dn), fld('Email', em), fld(isNew ? 'Password' : 'New password', pw)),
+    !isNew && !me ? h('label', { class: 'check' }, nopw, h('span', null, 'No password: one-click sign-in on the LAN only, viewer everywhere, no app passwords')) : null,
+    h('label', { class: 'check' }, listed, h('span', null, 'On the sign-in list')),
+    h('label', { class: 'check' }, sa, h('span', null, 'Suite admin: admin in every app, manages this screen', me ? h('span', { class: 'muted small' }, ' (another suite admin can change yours)') : '')),
+    h('h3', null, 'Role in each app'), h('div', { class: 'roles' }, roleRows), extra);
+  if (!isNew) loadAccountExtra(extra, o, u);
+  const save = async () => {
+    const roles = {};
+    for (const [k, s] of Object.entries(sels)) if ((s.value || '') !== (u.roles[k] || '')) roles[k] = s.value || null;
+    const body = { name: name.value.trim(), displayName: dn.value.trim(), email: em.value.trim(), listed: listed.checked, suiteAdmin: sa.checked, roles };
+    if (isNew) body.password = pw.value;
+    else if (nopw.checked && !u.passwordless) body.password = '';
+    else if (pw.value) body.password = pw.value;
+    if (me) delete body.suiteAdmin;
+    try {
+      await api(isNew ? '/api/suite-admin/users' : `/api/suite-admin/users/${u.id}`, { method: isNew ? 'POST' : 'PATCH', json: body });
+      toast(isNew ? 'Account made' : 'Saved'); return true;
+    } catch (e) { fail(e); return false; }
+  };
+  const buttons = [{ label: 'Cancel', value: null }];
+  if (!isNew && !me) buttons.unshift({ label: 'Delete', value: 'delete', danger: true });
+  buttons.push({ label: isNew ? 'Add' : 'Save', value: 'save', primary: true });
+  // the dialog closes on any button; keep it open on a failed save by asking again
+  for (;;) {
+    const v = await dialog(isNew ? 'Add someone' : u.displayName, box, buttons);
+    if (v === 'save') { if (await save()) break; continue; }
+    if (v === 'delete') {
+      if (await confirmDialog('Delete account', `Delete ${u.name}? The account, its roles, sessions and app passwords go from every io app.`, 'Delete', true)) {
+        try { await api(`/api/suite-admin/users/${u.id}`, { method: 'DELETE' }); toast('Deleted'); break; } catch (e) { fail(e); }
+      }
+      continue;
+    }
+    break;
+  }
+  onRoute();
+}
+async function loadAccountExtra(el, o, u) {
+  let ses, pws;
+  try { [ses, pws] = await Promise.all([api(`/api/suite-admin/users/${u.id}/sessions`), api(`/api/suite-admin/app-passwords?user=${u.id}`)]); } catch (e) { el.replaceChildren(h('p', { class: 'err' }, e.message)); return; }
+  const draw = () => el.replaceChildren(...[
+    h('h3', null, 'Sessions', ses.sessions.length ? h('button', { class: 'linkbtn', onclick: async () => {
+      try { await api(`/api/suite-admin/users/${u.id}/sessions`, { method: 'DELETE' }); ses.sessions = ses.sessions.filter((s) => s.current); toast('Signed out everywhere'); draw(); } catch (e) { fail(e); }
+    } }, 'End all') : null),
+    ses.sessions.length ? ses.sessions.map((s) => h('div', { class: 'minirow' }, h('span', null, `${appLabel(o, s.app)} · ${s.client}${s.cloudflare ? ' · via Cloudflare' : ''}`, h('span', { class: 'muted small' }, ` ${s.lastIp || s.ip || ''} · ${sinceText(s.lastSeen)}${s.current ? ' · this browser' : ''}`)),
+      s.current ? null : h('button', { class: 'linkbtn', onclick: async () => { try { await api(`/api/suite-admin/users/${u.id}/sessions?session=${encodeURIComponent(s.id)}`, { method: 'DELETE' }); ses.sessions = ses.sessions.filter((x) => x !== s); draw(); } catch (e) { fail(e); } } }, 'End'))) : h('p', { class: 'muted small' }, 'Not signed in anywhere.'),
+    h('h3', null, 'App passwords'),
+    pws.items.length ? pws.items.map((p) => h('div', { class: 'minirow' }, h('span', null, `${p.appName} · ${p.label}`, h('span', { class: 'muted small' }, ` ${SCOPE_LABEL[p.scope] || p.scope} · used ${sinceText(p.lastUsed)}`)),
+      h('button', { class: 'linkbtn', onclick: async () => { if (await revokeAppPassword(p)) { pws.items = pws.items.filter((x) => x !== p); draw(); } } }, 'Revoke'))) : h('p', { class: 'muted small' }, 'None. Make one under App passwords.')].flat());
+  draw();
+}
+async function revokeAppPassword(p) {
+  if (!await confirmDialog('Revoke app password', `Revoke "${p.label}" (${p.displayName}, ${p.appName})? The device using it stops working.`, 'Revoke', true)) return false;
+  try { await api(`/api/suite-admin/app-passwords/${p.id}`, { method: 'DELETE' }); toast('Revoked'); return true; } catch (e) { fail(e); return false; }
+}
+
+function suiteRoles(el, o) {
+  el.append(h('div', { class: 'box' }, h('h2', null, icon('lock'), 'Roles'),
+    h('p', { class: 'muted' }, 'Each person’s role in each app: none (no access), viewer, editor or admin (the app’s settings and its people). “default” follows the app’s default role (set under Apps). One-click accounts are viewers at most; suite admins are admin everywhere.'),
+    h('div', { class: 'scrollx' }, h('table', { class: 't grid-roles' },
+      h('tr', null, h('th', null, 'Person'), o.apps.map((a) => h('th', null, a.name, h('div', { class: 'muted small' }, `default: ${a.defaultRole}`)))),
+      o.users.map((u) => h('tr', null, h('td', null, h('b', null, u.displayName), h('div', { class: 'muted small' }, u.name)),
+        o.apps.map((a) => {
+          if (u.suiteAdmin) return h('td', { class: 'muted small' }, 'admin (suite)');
+          const s = roleSelect(o, u, a);
+          s.onchange = async () => {
+            try { await api(`/api/suite-admin/users/${u.id}`, { method: 'PATCH', json: { roles: { [a.app]: s.value || null } } }); u.roles[a.app] = s.value || undefined; toast(`${u.displayName}: ${s.value || 'default'} in ${a.name}`); } catch (e) { fail(e); onRoute(); }
+          };
+          return h('td', null, s);
+        })))))));
+}
+
+async function suitePasswords(el, o) {
+  const fu = h('select', { class: 't sm' }, h('option', { value: '' }, 'Everyone'), o.users.map((u) => h('option', { value: u.id }, u.displayName)));
+  const fa = h('select', { class: 't sm' }, h('option', { value: '' }, 'Every app'), o.apps.map((a) => h('option', { value: a.app }, a.name)));
+  const list = h('div', { class: 'scrollx' });
+  const draw = async () => {
+    let r; try { r = await api(`/api/suite-admin/app-passwords?${new URLSearchParams({ ...(fu.value ? { user: fu.value } : {}), ...(fa.value ? { app: fa.value } : {}) })}`); } catch (e) { list.replaceChildren(h('p', { class: 'err' }, e.message)); return; }
+    list.replaceChildren(r.items.length ? h('table', { class: 't' }, h('tr', null, h('th', null, 'Person'), h('th', null, 'App'), h('th', null, 'Device'), h('th', null, 'Reaches'), h('th', null, 'Made'), h('th', null, 'Last used'), h('th')),
+      r.items.map((p) => {
+        const sc = h('select', { class: 't sm' }, [...new Set([...(o.scopes || ['', 'dav']), p.scope])].map((s) => h('option', { value: s, selected: s === p.scope ? true : null }, SCOPE_LABEL[s] || s)));
+        sc.onchange = async () => { try { await api(`/api/suite-admin/app-passwords/${p.id}`, { method: 'PATCH', json: { scope: sc.value } }); p.scope = sc.value; toast('Saved'); } catch (e) { fail(e); sc.value = p.scope; } };
+        return h('tr', null, h('td', null, p.displayName), h('td', null, p.appName), h('td', null, p.label), h('td', null, sc),
+          h('td', { class: 'small' }, new Date(p.created * 1000).toLocaleDateString()), h('td', { class: 'small' }, sinceText(p.lastUsed)),
+          h('td', { style: { textAlign: 'right' } }, h('button', { class: 'pillbtn noic danger', onclick: async () => { if (await revokeAppPassword(p)) draw(); } }, 'Revoke')));
+      })) : h('p', { class: 'muted' }, 'No app passwords here.'));
+  };
+  fu.onchange = fa.onchange = draw;
+  const who = h('select', { class: 't sm' }, o.users.filter((u) => !u.passwordless).map((u) => h('option', { value: u.id }, u.displayName)));
+  const app = h('select', { class: 't sm' }, o.apps.map((a) => h('option', { value: a.app }, a.name)));
+  const label = h('input', { class: 't', placeholder: 'Device, e.g. Alex’s iPhone' });
+  const scope = h('select', { class: 't sm' }, (o.scopes || ['', 'dav']).map((s) => h('option', { value: s }, SCOPE_LABEL[s] || s)));
+  el.append(h('div', { class: 'box' }, h('h2', null, icon('key'), 'App passwords'),
+    h('p', { class: 'muted' }, 'One per device and app, for clients that cannot sign in on the web page (CalDAV and CardDAV, LDAP, MCP assistants…). “Sync only” works for the app’s sync protocols and nothing else, so a password lifted from a phone cannot reach the web app or its API.'),
+    h('div', { class: 'multi' }, fu, fa), list),
+  h('div', { class: 'box' }, h('h2', null, icon('add'), 'Make one for someone'),
+    h('div', { class: 'multi' }, who, app, scope, label, h('button', { class: 'pillbtn primary', onclick: async () => {
+      try {
+        const r = await api('/api/suite-admin/app-passwords', { method: 'POST', json: { userId: Number(who.value), app: app.value, label: label.value.trim(), scope: scope.value } });
+        label.value = '';
+        await dialog('App password', h('div', null, h('p', null, `For ${r.name} in ${appLabel(o, r.app)}. Copy it now: it is not shown again.`),
+          h('div', { class: 'multi' }, h('input', { class: 't', value: r.password, readonly: true, onfocus: (e) => e.target.select() }),
+            h('button', { class: 'pillbtn noic', onclick: async () => { try { await navigator.clipboard.writeText(r.password); toast('Copied'); } catch { toast('Select it and copy'); } } }, 'Copy')),
+          h('p', { class: 'muted small' }, `User name: ${r.name}`)), [{ label: 'Done', value: true, primary: true }]);
+        draw();
+      } catch (e) { fail(e); }
+    } }, 'Make'))));
+  draw();
+}
+
+function suiteApps(el, o) {
+  el.append(h('div', { class: 'box' }, h('h2', null, icon('apps'), 'Apps'),
+    h('p', { class: 'muted' }, 'Every app registers itself when it starts. The default role is what someone without a role in the app gets: “none” makes the app invitation-only. “Sign-in required” shows visitors nothing but the sign-in screen.'),
+    h('div', { class: 'scrollx' }, h('table', { class: 't' }, h('tr', null, h('th', null, 'App'), h('th', null, 'Version'), h('th', null, 'Default role'), h('th', null, 'Sign-in required'), h('th', null, 'In use'), h('th')),
+      o.apps.map((a) => {
+        const dr = h('select', { class: 't sm' }, (o.defaultRoles || ['none', 'viewer', 'editor']).map((x) => h('option', { value: x, selected: x === a.defaultRole ? true : null }, `${x} (${ROLE_HELP[x]})`)));
+        dr.onchange = async () => { try { await api(`/api/suite-admin/apps/${a.app}`, { method: 'PATCH', json: { defaultRole: dr.value } }); toast(`${a.name}: ${dr.value} by default`); } catch (e) { fail(e); dr.value = a.defaultRole; } };
+        const rl = h('input', { type: 'checkbox', checked: a.requireLogin, onchange: async (e) => { try { await api(`/api/suite-admin/apps/${a.app}`, { method: 'PATCH', json: { requireLogin: e.target.checked } }); toast('Saved'); } catch (err) { e.target.checked = !e.target.checked; fail(err); } } });
+        return h('tr', null,
+          h('td', null, h('span', { style: { whiteSpace: 'nowrap' } }, h('span', { class: 'dot', style: { background: a.color || 'var(--fg2)' } }), ' ', a.url ? h('a', { href: a.url, target: '_blank', rel: 'noopener' }, a.name) : h('b', null, a.name)),
+            h('div', { class: 'muted small' }, a.registered ? `${a.app} · seen ${sinceText(a.lastSeen)}` : `${a.app} · not registered (only in the data)`)),
+          h('td', { class: 'small' }, a.version || '–'), h('td', null, dr), h('td', null, rl),
+          h('td', { class: 'small' }, `${a.roles} role${a.roles === 1 ? '' : 's'}, ${a.appPasswords} app password${a.appPasswords === 1 ? '' : 's'}`),
+          h('td', { style: { textAlign: 'right' } }, h('button', { class: 'pillbtn noic danger', onclick: () => forgetApp(a) }, 'Forget')));
+      })))));
+}
+async function forgetApp(a) {
+  const data = h('input', { type: 'checkbox' });
+  const v = await dialog(`Forget ${a.name}`, h('div', null, h('p', null, `Take ${a.name} off the list of apps? If it is still installed, it comes back the next time it starts.`),
+    h('label', { class: 'check' }, data, h('span', null, `Also remove its roles, settings and app passwords (${a.roles} roles, ${a.appPasswords} app passwords): it was uninstalled for good`))),
+  [{ label: 'Cancel', value: null }, { label: 'Forget', value: () => (data.checked ? 'data' : 'list'), danger: true }]);
+  if (!v) return;
+  try { await api(`/api/suite-admin/apps/${a.app}${v === 'data' ? '?data=1' : ''}`, { method: 'DELETE' }); toast(`${a.name} forgotten`); onRoute(); } catch (e) { fail(e); }
 }
 
 // ------------------------------------------------------------------ maintenance

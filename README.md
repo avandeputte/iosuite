@@ -75,6 +75,12 @@ what the app will show on the start page later (today's events, the newest photo
 - **The suite's accounts**: the same sign-in as every io app (the account tiles, one click for a passwordless viewer),
   the account page (display name, email, password, sign out everywhere) and, for admins, the family's accounts and their
   role here. Sign-in at a reverse proxy (Cloudflare Access…) works as in the other apps.
+- **Suite administration** (Settings › Suite, suite admins only): everything in the Shared ioSuite database for the
+  whole suite. **People**: add, rename and delete accounts, email, sign-in list, suite admin, set or remove a password,
+  their role in every app, their sessions (end one or all) and app passwords. **Roles**: a grid of everyone against
+  every app (or "default", the app's default role). **App passwords**: everyone's, in every app, with their scope
+  (everything, or sync only), revoke one or make one for someone. **Apps**: each app's default role (none makes it
+  invitation-only) and sign-in requirement; forget an uninstalled app. Served by iosuite-shared's `/api/suite-admin`.
 - **Updates**: the daily version check, the note for admins and **Update now**, the server log and Restart under Maintenance › Updates and logs, as in every ioThing app.
 - Light and dark, a phone layout, installable as a web app (manifest and icons).
 
