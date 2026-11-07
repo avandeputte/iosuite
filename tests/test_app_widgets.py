@@ -221,3 +221,43 @@ def test_quick_add_event(client, apps_answer):
         assert client.post("/api/widgets/iocalendar/events", json={"title": "x", "start": "friday"}).status_code == 400
     finally:
         w.fetch = orig
+
+
+def test_apps_asked_like_the_apps_ask_each_other(client, monkeypatch):
+    """localhost / LAN / public in turn (iosuite_shared.links), the suite's Cloudflare Access token with every request,
+    and still the viewer's own session cookie."""
+    import io
+    import json
+    import urllib.error
+
+    from iosuite_shared import credentials
+
+    credentials.put("", "cf_access_client_id", "cid.access")
+    credentials.put("", "cf_access_client_secret", "s3cret")
+    monkeypatch.setattr(widgets.links, "addresses", lambda key: ["http://127.0.0.1:8031", "http://10.0.0.5:8031", "https://pix.example"])
+    tried = []
+
+    class Answer(io.BytesIO):
+        headers = {"Content-Type": "application/json"}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    def urlopen(req, timeout=None):
+        tried.append((req.full_url, {k.lower(): v for k, v in req.header_items()}))
+        if "127.0.0.1" in req.full_url:
+            raise urllib.error.URLError("refused")
+        return Answer(json.dumps({"id": [], "ts": []}).encode())
+    monkeypatch.setattr(widgets.urllib.request, "urlopen", urlopen)
+    try:
+        assert client.get("/api/widgets/iopix?kind=rediscover").status_code == 200
+        assert [u.split("/api")[0] for u, _ in tried] == ["http://127.0.0.1:8031", "http://10.0.0.5:8031"]
+        h = tried[-1][1]
+        assert h["cf-access-client-id"] == "cid.access" and h["cf-access-client-secret"] == "s3cret"
+        assert "iothing_session=" in h["cookie"] and "authorization" not in h  # the viewer's own sign-in, no app password
+    finally:
+        credentials.put("", "cf_access_client_id", "")
+        credentials.put("", "cf_access_client_secret", "")
