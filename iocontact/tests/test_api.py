@@ -389,11 +389,7 @@ def test_scopes_move_from_0_17(client, app):
 
 def test_iopix_is_found_in_the_suite(client, monkeypatch):
     from iosuite_shared import links, suite
-    from app import db, iopix
-    db.set_setting("iopix_url", "https://old.example")
-    db.set_setting("iopix_password", "old")
-    iopix.forget_old_settings()
-    assert db.get_setting("iopix_url") is None and db.get_setting("iopix_password") is None
+    from app import iopix
     assert client.get("/api/iopix/settings").json()["enabled"] is False
     suite.register("iopix", name="ioPix", url="https://photo.example.net", version="1")
     assert client.get("/api/iopix/settings").json() == {"url": "https://photo.example.net", "enabled": True}

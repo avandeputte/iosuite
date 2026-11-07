@@ -61,8 +61,6 @@ def test_discovery_and_sync(client, family_id):
     r = dav(c, "REPORT", "/dav/addressbooks/alex/family/", sync.replace(tok0, tok1))
     assert "abc-123.vcf" in r.text and "404 Not Found" in r.text
     assert tok1.startswith("urn:x-iocontacts:sync:")
-    legacy = tok1.replace("urn:x-iocontacts:sync:", "http://iocontacts." + "iothing" + ".net/ns/sync/")
-    assert dav(c, "REPORT", "/dav/addressbooks/alex/family/", sync.replace(tok0, legacy)).status_code == 207  # tokens from before 0.24.1
     r = dav(c, "REPORT", "/dav/addressbooks/alex/family/", sync.replace(tok0, "http://bogus/1"))
     assert r.status_code == 403 and "valid-sync-token" in r.text
 

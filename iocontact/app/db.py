@@ -1,5 +1,4 @@
 """MariaDB access: one short connection per unit of work, and the schema (created and migrated at start)."""
-import logging
 import threading
 from contextlib import contextmanager
 
@@ -20,8 +19,7 @@ SCHEMA = [
         value MEDIUMTEXT NOT NULL,
         updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3)
     )""",
-    # accounts and app passwords live in the Shared ioSuite database (iosuite-shared, app/auth.py); the users and
-    # app_passwords tables of ioContacts 0.3 are folded into it by `iosuite-shared migrate` and renamed *_migrated.
+    # accounts and app passwords live in the Shared ioSuite database (iosuite-shared, app/auth.py)
     # owner_id NULL: a shared address book. owner_key stands in for owner_id in the unique key: NULLs never clash in a
     # unique key, so (owner_id, slug) alone would let two shared address books share a slug
     """CREATE TABLE IF NOT EXISTS con_address_books (
@@ -142,41 +140,6 @@ SCHEMA = [
 ]
 
 
-# 0.9.0: the names from before the suite naming convention, renamed once at start (every row kept). Remove once every
-# server has run 0.9.0.
-RENAME_TABLES = {"addressbooks": "con_address_books", "contacts": "con_contacts", "contact_emails": "con_contact_emails",
-                 "contact_phones": "con_contact_phones", "contact_addresses": "con_contact_addresses", "contact_urls": "con_contact_urls",
-                 "contact_social": "con_contact_social_profiles", "contact_dates": "con_contact_dates", "contact_tags": "con_contact_tags",
-                 "relations": "con_contact_relations", "not_duplicates": "con_contact_non_duplicates", "merges": "con_contact_merges",
-                 "suggestions": "con_contact_suggestions", "calendar_tokens": "con_feed_tokens"}
-_CHILDREN = ("con_contact_emails", "con_contact_phones", "con_contact_addresses", "con_contact_urls", "con_contact_social_profiles",
-             "con_contact_dates", "con_contact_relations")
-RENAME_COLUMNS = {
-    "con_address_books": {"created": "created_at"},
-    "con_contacts": {"book_id": "address_book_id", "created": "created_at", "updated": "updated_at"},
-    **{t: {"pos": "position"} for t in _CHILDREN},
-    "con_contact_non_duplicates": {"a": "contact_id", "b": "other_contact_id", "created": "created_at"},
-    "con_contact_merges": {"keep_id": "kept_contact_id", "created": "created_at", "undone": "undone_at"},
-    "con_contact_suggestions": {"by_user_id": "created_by", "created": "created_at", "decided": "decided_at"},
-    "con_feed_tokens": {"created": "created_at"},
-}
-RENAME_INDEXES = {
-    "con_contacts": {"book_id": "uq_con_contacts_book_href", "book_id_2": "idx_con_contacts_book_uid",
-                     "book_id_3": "idx_con_contacts_book_changes", "fn": "idx_con_contacts_fn", "iopix_person_id": "idx_con_contacts_iopix_person"},
-    "con_contact_emails": {"contact_id": "idx_con_contact_emails_contact", "value": "idx_con_contact_emails_value"},
-    "con_contact_phones": {"contact_id": "idx_con_contact_phones_contact", "value": "idx_con_contact_phones_value"},
-    "con_contact_addresses": {"contact_id": "idx_con_contact_addresses_contact"},
-    "con_contact_urls": {"contact_id": "idx_con_contact_urls_contact"},
-    "con_contact_social_profiles": {"contact_id": "idx_con_contact_social_profiles_contact"},
-    "con_contact_dates": {"contact_id": "idx_con_contact_dates_contact"},
-    "con_contact_tags": {"tag": "idx_con_contact_tags_tag"},
-    "con_contact_relations": {"contact_id": "idx_con_contact_relations_contact", "related_id": "idx_con_contact_relations_related"},
-    "con_contact_merges": {"keep_id": "idx_con_contact_merges_kept"},
-    "con_contact_suggestions": {"contact_id": "idx_con_contact_suggestions_contact_status", "one_value": "uq_con_contact_suggestions_value"},
-    "con_feed_tokens": {"token": "uq_con_feed_tokens_token"},
-}
-
-
 def connect(database: str | None = None):
     return pymysql.connect(host=config.DB_HOST, port=config.DB_PORT, user=config.DB_USER, password=config.DB_PASSWORD,
                            database=database if database is not None else config.DB_NAME, charset="utf8mb4",
@@ -279,50 +242,13 @@ def ensure_database() -> None:
         con.close()
 
 
-# columns added after a table was first made (MariaDB: ADD COLUMN IF NOT EXISTS). Schema 4: whether a birthday goes
-# into the birthday feeds (calendar, upcoming, the suite); existing birthdays stay on
-UPGRADES = [
-    "ALTER TABLE con_contacts ADD COLUMN IF NOT EXISTS bday_remind TINYINT NOT NULL DEFAULT 1 AFTER bday_day",
-]
-
-
-def _address_book_owner_key(cur) -> None:
-    """0.9.0: the unique slug of an address book takes owner_key (shared ones too: NULL owner_ids never clashed), as
-    ioCalendar's calendars do. A shared slug that is already there twice gets its id appended first."""
-    if "owner_key" in schema.columns(cur, "con_address_books"):
-        return
-    cur.execute("UPDATE con_address_books b JOIN (SELECT slug, MIN(id) AS keep FROM con_address_books WHERE owner_id IS NULL "
-                "GROUP BY slug HAVING COUNT(*) > 1) d ON d.slug = b.slug AND b.owner_id IS NULL AND b.id <> d.keep "
-                "SET b.slug = CONCAT(b.slug, '-', b.id)")
-    cur.execute("ALTER TABLE con_address_books ADD COLUMN owner_key INT AS (COALESCE(owner_id, 0)) PERSISTENT, "
-                "DROP INDEX owner_id, ADD UNIQUE INDEX uq_con_address_books_owner_slug (owner_key, slug)")
-
-
-def _meta_to_settings(cur) -> None:
-    """0.9.0: the meta table's settings rows (setting:<name>) move to con_settings; its schema row is replaced by
-    con_schema_version."""
-    if "meta" in schema.tables(cur):
-        cur.execute("INSERT IGNORE INTO con_settings (name, value) "
-                    "SELECT SUBSTRING(k, 9), COALESCE(v, '') FROM meta WHERE k LIKE 'setting:%'")
-        cur.execute("DROP TABLE meta")
-
-
 def migrate() -> None:
     ensure_database()
     with tx() as con, con.cursor() as cur:
-        done = schema.rename(cur, RENAME_TABLES, RENAME_COLUMNS)
-        if "con_address_books" in schema.tables(cur):
-            _address_book_owner_key(cur)
         for stmt in SCHEMA:
             cur.execute(stmt + " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci")
-        for stmt in UPGRADES:
-            cur.execute(stmt)
-        done += schema.rename(cur, None, None, RENAME_INDEXES)
-        _meta_to_settings(cur)
         schema.ensure_version_table(cur, PREFIX)
         schema.record_version(cur, PREFIX, SCHEMA_VERSION)
-        if done:
-            logging.getLogger("app.db").info("renamed to the suite naming convention: %s", ", ".join(done))
         # the family address book everyone shares
         cur.execute("SELECT id FROM con_address_books WHERE owner_id IS NULL LIMIT 1")
         if not cur.fetchone():
@@ -335,6 +261,6 @@ def reset_all() -> None:
     with tx() as con, con.cursor() as cur:
         cur.execute("SET FOREIGN_KEY_CHECKS = 0")
         for t in schema.tables(cur):
-            if t.startswith(PREFIX + "_") or t == "meta" or t in RENAME_TABLES:
+            if t.startswith(PREFIX + "_"):
                 cur.execute(f"DROP TABLE `{t}`")
         cur.execute("SET FOREIGN_KEY_CHECKS = 1")

@@ -15,27 +15,12 @@ import urllib.error
 
 from iosuite_shared import links
 
-from app import db
-
 log = logging.getLogger("iocontacts.iopix")
 APP, PROVIDER = "iocontacts", "iopix"
 _lock = threading.Lock()
 _cache: dict = {"at": 0, "people": None}
 _faces: dict = {}  # person id -> (when, (bytes, type) or None): ioPix is the only source of contact photos, so they are asked often
 FACE_TTL, FACE_MISS_TTL, FACE_ERROR_TTL, FACE_MAX = 3600, 600, 60, 4000
-# what Settings › ioPix used to keep before the suite found ioPix by itself (removed at start)
-OLD_SETTINGS = ("iopix_url", "iopix_user", "iopix_password", "iopix_cf_id", "iopix_cf_secret")
-
-
-def forget_old_settings() -> None:
-    try:
-        for k in OLD_SETTINGS:
-            if db.get_setting(k) is not None:
-                db.set_setting(k, None)
-    except Exception as e:  # noqa: BLE001 - tried again next start
-        log.debug("old ioPix settings: %s", e)
-
-
 def settings() -> dict:
     try:
         return {"url": links.url(PROVIDER) or ""}

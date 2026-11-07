@@ -372,23 +372,12 @@ def history(book_ids: list[int], limit: int = 50) -> list[dict]:
     return out
 
 
-# a merge made before 0.9.0 kept its rows under the old table and column names
-_OLD_KEYS = {"contact_social": "con_contact_social_profiles", **{f"contact_{t}": f"con_contact_{t}" for t in
-             ("emails", "phones", "addresses", "urls", "dates", "tags")}}
-_OLD_COLUMNS = {"pos": "position", "book_id": "address_book_id", "created": "created_at", "updated": "updated_at"}
-
-
-def _named(snap: dict) -> dict:
-    """A snapshot under today's table and column names (remove with the 0.9.0 renames in db.py)."""
-    return {_OLD_KEYS.get(k, k): [{_OLD_COLUMNS.get(c, c): v for c, v in r.items()} for r in rows] for k, rows in snap.items()}
-
-
 def undo(merge_id: int) -> dict:
     """Put the contacts of a merge back as they were (the kept one loses changes made to it since)."""
     m = db.one("SELECT * FROM con_contact_merges WHERE id = %s", (merge_id,))
     if not m or m["undone_at"]:
         raise ValueError("No such merge, or it was undone already")
-    snap = _named({k: [{c: _dec(v) for c, v in r.items()} for r in rows] for k, rows in json.loads(m["snapshot"]).items()})
+    snap = {k: [{c: _dec(v) for c, v in r.items()} for r in rows] for k, rows in json.loads(m["snapshot"]).items()}
     ids = [r["id"] for r in snap["contacts"]]
     marks = ",".join(["%s"] * len(ids))
     live = {r["id"] for r in db.q("SELECT id FROM con_contacts WHERE deleted = 0")}

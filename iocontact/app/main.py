@@ -31,7 +31,6 @@ OPEN_PREFIXES = ("/static/", "/cal/", "/dav", "/.well-known/", "/mcp")
 async def lifespan(app: FastAPI):
     await run_in_threadpool(db.migrate)
     await run_in_threadpool(users.init)
-    await run_in_threadpool(iopix.forget_old_settings)  # the ioPix address and sign-in from before the suite found it by itself
     server = None
     if config.LDAP_PORT:
         try:
