@@ -71,6 +71,7 @@ services:
       <<: *shared
       DB_NAME: suite
       # PUBLIC_URL: https://home.example.com
+      # INTERNAL_URL: http://192.168.1.151:8630   # this host's LAN address and the port, for the suite's list of apps
 
   iocalendar:
     <<: *app
@@ -81,6 +82,7 @@ services:
       <<: *shared
       DB_NAME: calendar
       # PUBLIC_URL: https://calendar.example.com
+      # INTERNAL_URL: http://192.168.1.151:8620   # this host's LAN address and the port, for the suite's list of apps
 
   iocontacts:
     <<: *app
@@ -93,6 +95,7 @@ services:
       <<: *shared
       DB_NAME: contacts
       # PUBLIC_URL: https://contacts.example.com
+      # INTERNAL_URL: http://192.168.1.151:8640   # this host's LAN address and the port, for the suite's list of apps
 
   ionotes:
     <<: *app
@@ -105,6 +108,7 @@ services:
       <<: *shared
       DB_NAME: notes
       # PUBLIC_URL: https://notes.example.com
+      # INTERNAL_URL: http://192.168.1.151:8610   # this host's LAN address and the port, for the suite's list of apps
 
   iohealth:
     <<: *app
@@ -115,6 +119,7 @@ services:
       <<: *shared
       DB_NAME: health
       # PUBLIC_URL: https://health.example.com
+      # INTERNAL_URL: http://192.168.1.151:47800   # this host's LAN address and the port, for the suite's list of apps
 
   iopix:                                 # without digiKam: iopix keeps the library itself and scans the folder
     <<: *app
@@ -132,6 +137,7 @@ services:
       PHOTOS_ROOT: /library/photos
       AUTO_MODELS: ""                    # e.g. siglip2,yolox,geonames: content search, objects, places (about 1.6 GB, fetched on the first start)
       # PUBLIC_URL: https://photo.example.com
+      # INTERNAL_URL: http://192.168.1.151:8600   # this host's LAN address and the port, for the suite's list of apps
 
 configs:
   init:                                  # runs once, when the `suite-db` volume is new: a database per app, the two users
