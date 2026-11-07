@@ -3,7 +3,6 @@
 The start page keeps prt_settings (the default photo strip, the weather settings and its cached answers, the update
 switch, each account's layout), prt_schema_version and the bookmarks. What the page grows later gets its tables here
 too. Every table is prt_<name>, the suite's naming convention (the apps can share one database)."""
-import logging
 import threading
 from contextlib import contextmanager
 
@@ -52,17 +51,6 @@ SCHEMA = [
         FOREIGN KEY (bookmark_id) REFERENCES prt_bookmarks(id) ON DELETE CASCADE
     )""",
 ]
-
-# 0.7.0: the names from before the suite naming convention, renamed once at start (every row kept). Remove once every
-# server has run 0.7.0.
-RENAME_TABLES = {"bookmark_groups": "prt_bookmark_groups", "bookmarks": "prt_bookmarks", "bookmark_icons": "prt_bookmark_icons"}
-RENAME_COLUMNS = {
-    "prt_bookmark_groups": {"sort": "position"},
-    "prt_bookmarks": {"href": "url", "sort": "position"},
-    "prt_bookmark_icons": {"link_id": "bookmark_id"},
-}
-RENAME_INDEXES = {"prt_bookmarks": {"group_id": "idx_prt_bookmarks_group_position"}}
-
 
 def connect(database: str | None = None):
     return pymysql.connect(host=config.DB_HOST, port=config.DB_PORT, user=config.DB_USER, password=config.DB_PASSWORD,
@@ -139,27 +127,13 @@ def ensure_database() -> None:
         con.close()
 
 
-def _meta_to_settings(cur) -> None:
-    """0.7.0: the meta table's settings rows (setting:<name>) move to prt_settings; its schema row is replaced by
-    prt_schema_version."""
-    if "meta" in schema.tables(cur):
-        cur.execute("INSERT IGNORE INTO prt_settings (name, value) "
-                    "SELECT SUBSTRING(k, 9), COALESCE(v, '') FROM meta WHERE k LIKE 'setting:%'")
-        cur.execute("DROP TABLE meta")
-
-
 def migrate() -> None:
     ensure_database()
     with tx() as con, con.cursor() as cur:
-        done = schema.rename(cur, RENAME_TABLES, RENAME_COLUMNS)
         for stmt in SCHEMA:
             cur.execute(stmt + " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci")
-        done += schema.rename(cur, None, None, RENAME_INDEXES)
-        _meta_to_settings(cur)
         schema.ensure_version_table(cur, PREFIX)
         schema.record_version(cur, PREFIX, SCHEMA_VERSION)
-        if done:
-            logging.getLogger("app.db").info("renamed to the suite naming convention: %s", ", ".join(done))
 
 
 def reset_all() -> None:
@@ -167,6 +141,6 @@ def reset_all() -> None:
     with tx() as con, con.cursor() as cur:
         cur.execute("SET FOREIGN_KEY_CHECKS = 0")
         for t in schema.tables(cur):
-            if t.startswith(PREFIX + "_") or t == "meta" or t in RENAME_TABLES:
+            if t.startswith(PREFIX + "_"):
                 cur.execute(f"DROP TABLE `{t}`")
         cur.execute("SET FOREIGN_KEY_CHECKS = 1")
