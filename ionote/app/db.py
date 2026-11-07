@@ -42,8 +42,7 @@ except ImportError:  # pragma: no cover
 # ---- schema: one definition per table, the SQLite and the MySQL spelling. Every table is nts_<name>, the suite's
 # naming convention (the apps can share one database)
 TABLES = {
-    # accounts live in the Shared ioSuite database (iosuite-shared, app/auth.py); the user_accounts table of
-    # ionotes 1.0 is folded into it by `iosuite-shared migrate` and renamed user_accounts_migrated
+    # accounts live in the Shared ioSuite database (iosuite-shared, app/auth.py)
     "nts_settings": (
         "CREATE TABLE IF NOT EXISTS nts_settings (name TEXT PRIMARY KEY, value TEXT, updated_at TEXT)",
         "CREATE TABLE IF NOT EXISTS nts_settings (name VARCHAR(191) PRIMARY KEY, value MEDIUMTEXT, updated_at DATETIME(3) NULL) "
@@ -110,29 +109,6 @@ SQLITE_INDEXES = {  # SQLite's index names are database-wide: named after the ta
     "idx_nts_change_log_created": "nts_change_log (created_at)",
     "idx_nts_change_log_user": "nts_change_log (user_id, id)",
 }
-
-# 1.9.0: the names from before the suite naming convention, renamed once at start (every row kept). Remove once every
-# server has run 1.9.0.
-RENAME_TABLES = {"app_settings": "nts_settings", "change_counter": "nts_change_counter", "notes": "nts_notes",
-                 "note_images": "nts_note_images", "folders": "nts_folders", "tag_colors": "nts_tag_colors", "change_log": "nts_change_log"}
-RENAME_COLUMNS = {
-    "nts_settings": {"key": "name"},
-    "nts_change_counter": {"ts": "created_at"},
-    "nts_notes": {"owner": "user_id"},
-    "nts_note_images": {"bytes": "size_bytes"},
-    "nts_folders": {"owner": "user_id"},
-    "nts_tag_colors": {"owner": "user_id"},
-    "nts_change_log": {"ts": "created_at", "owner": "user_id"},
-}
-RENAME_INDEXES = {  # MySQL; on SQLite the old indexes are dropped and SQLITE_INDEXES made
-    "nts_notes": {"notes_rev": "idx_nts_notes_rev", "notes_folder": "idx_nts_notes_folder", "notes_updated": "idx_nts_notes_updated",
-                  "notes_owner": "idx_nts_notes_user", "notes_text": "idx_nts_notes_text"},
-    "nts_folders": {"folders_rev": "idx_nts_folders_rev", "folders_owner": "idx_nts_folders_user"},
-    "nts_tag_colors": {"tag_colors_rev": "idx_nts_tag_colors_rev"},
-    "nts_change_log": {"change_log_ts": "idx_nts_change_log_created", "change_log_owner": "idx_nts_change_log_user"},
-}
-OLD_SQLITE_INDEXES = ("notes_rev", "notes_folder", "notes_updated", "notes_owner", "folders_rev", "folders_owner", "tag_colors_rev",
-                      "change_log_ts", "change_log_owner")
 
 _INSERT_IGNORE = re.compile(r"\bINSERT\s+OR\s+IGNORE\b", re.I)
 _INSERT_REPLACE = re.compile(r"\bINSERT\s+OR\s+REPLACE\b", re.I)
@@ -357,30 +333,18 @@ def test(values: dict) -> dict:
 
 
 def init():
-    """Create the tables that are missing and bring older ones up to date (idempotent). Called at start and by the
-    first connect()."""
+    """Create the tables that are missing (idempotent). Called at start and by the first connect()."""
     global _ready, error
     with _lock:
         if _ready:
             return
         con = _raw_connect()
         try:
-            done = _rename_to_convention(con)
-            if done:
-                log.info("renamed to the suite naming convention: %s", ", ".join(done))
             for name, (lite, my) in TABLES.items():
                 con.execute(my if con.mysql else lite)
-            _add_user_id(con)
-            if not _has_column(con, "nts_settings", "updated_at"):  # app_settings had none
-                con.execute("ALTER TABLE nts_settings ADD COLUMN updated_at " + ("DATETIME(3) NULL" if con.mysql else "TEXT"))
-            if con.mysql:
-                _rename_mysql(con, None, None, RENAME_INDEXES)
-            else:
-                for idx in OLD_SQLITE_INDEXES:
-                    con.execute(f"DROP INDEX IF EXISTS {idx}")
+            if not con.mysql:
                 for idx, on in SQLITE_INDEXES.items():
                     con.execute(f"CREATE INDEX IF NOT EXISTS {idx} ON {on}")
-            con.execute("DELETE FROM nts_settings WHERE name = 'schema_version'")  # before 1.9.0 the version was a setting
             con.execute("INSERT OR IGNORE INTO nts_settings (name, value) VALUES ('write_lock', '')")  # Conn.begin
             con.execute("INSERT OR IGNORE INTO nts_schema_version (version, applied_at) VALUES (?, ?)",
                         (SCHEMA_VERSION, datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S.%f")[:23]))
@@ -389,73 +353,6 @@ def init():
             con.close()
         error = None
         _ready = True
-
-
-def _rename_mysql(con, tables, columns, indexes) -> list:
-    from iosuite_shared import schema
-    cur = con.raw.cursor()
-    try:
-        return schema.rename(cur, tables, columns, indexes)
-    finally:
-        cur.close()
-
-
-def _table_names(con) -> set:
-    if con.mysql:
-        return {r[0] for r in con.execute("SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE()")}
-    return {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
-
-
-def _rename_to_convention(con) -> list:
-    """1.9.0: tables and columns from before the suite naming convention get their new names (every row kept).
-    MariaDB: RENAME TABLE / COLUMN, instant. SQLite: ALTER TABLE ... RENAME TO / RENAME COLUMN (SQLite 3.25+)."""
-    if con.mysql:
-        return _rename_mysql(con, RENAME_TABLES, RENAME_COLUMNS, None)
-    done = []
-    have = _table_names(con)
-    for old, new in RENAME_TABLES.items():
-        if old in have and new not in have:
-            con.execute(f'ALTER TABLE "{old}" RENAME TO "{new}"')
-            have |= {new}
-            done.append(f"{old} -> {new}")
-    for table, pairs in RENAME_COLUMNS.items():
-        if table not in have:
-            continue
-        cols = {r[1] for r in con.execute(f"PRAGMA table_info({table})").fetchall()}
-        for old, new in pairs.items():
-            if old in cols and new not in cols:
-                con.execute(f'ALTER TABLE {table} RENAME COLUMN "{old}" TO "{new}"')
-                done.append(f"{table}.{old} -> {new}")
-    return done
-
-
-def _has_column(con, table: str, col: str) -> bool:
-    if con.mysql:
-        return bool(con.execute("SELECT count(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?",
-                                (table, col)).fetchone()[0])
-    return any(r[1] == col for r in con.execute(f"PRAGMA table_info({table})").fetchall())
-
-
-def _add_user_id(con):
-    """Schema 2: every note, folder, tag colour and change-log line belongs to an account (user_id: its id in the
-    Shared ioSuite database; 0 until the first admin claims the records made before accounts, see notes.claim_unowned).
-    Idempotent; existing records get 0."""
-    big = "BIGINT" if con.mysql else "INTEGER"
-    for table in ("nts_notes", "nts_folders", "nts_change_log"):
-        if not _has_column(con, table, "user_id"):
-            con.execute(f"ALTER TABLE {table} ADD COLUMN user_id {big} NOT NULL DEFAULT 0")
-            if con.mysql:
-                con.execute(f"CREATE INDEX idx_{table}_user ON {table} (user_id{', rev' if table != 'nts_change_log' else ', id'})")
-    if not _has_column(con, "nts_tag_colors", "user_id"):
-        # the key becomes (user_id, tag name): two accounts may colour the same tag differently
-        lite, my = TABLES["nts_tag_colors"]
-        con.execute((my if con.mysql else lite).replace("nts_tag_colors", "nts_tag_colors_new", 1).replace("idx_nts_tag_colors_rev", "idx_nts_tag_colors_new_rev"))
-        con.execute("INSERT INTO nts_tag_colors_new (user_id, tag_key, name, color, updated_at, deleted, rev) "
-                    "SELECT 0, tag_key, name, color, updated_at, deleted, rev FROM nts_tag_colors")
-        con.execute("DROP TABLE nts_tag_colors")
-        con.execute("ALTER TABLE nts_tag_colors_new RENAME TO nts_tag_colors")
-        if con.mysql:
-            con.execute("ALTER TABLE nts_tag_colors RENAME INDEX idx_nts_tag_colors_new_rev TO idx_nts_tag_colors_rev")
 
 
 def schema_version() -> int:
