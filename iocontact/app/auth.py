@@ -29,7 +29,8 @@ def row_of(u):
         return None
     return {"id": u["id"], "name": u["name"], "display_name": u["displayName"] if u["displayName"] != u["name"] else None,
             "email": u["email"] or None, "role": u.get("role", "viewer"), "pw_hash": None if u["passwordless"] else "set",
-            "me_contact_id": shared.get_value(u["id"], APP, "me_contact_id"), "suite_admin": u["suiteAdmin"], "listed": u["listed"]}
+            "me_contact_id": shared.get_value(u["id"], APP, "me_contact_id"), "suite_admin": u["suiteAdmin"],
+            "suiteAdmin": u["suiteAdmin"], "listed": u["listed"]}  # suiteAdmin: what iosuite-shared checks (Settings › Suite)
 
 
 auth.decorate = row_of

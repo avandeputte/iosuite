@@ -350,7 +350,7 @@ function route() {
   if (a === 'tree' && b) return { view: 'tree', id: +b };
   if (a === 'maintenance') return { view: 'maint', tab: b || 'dups' };
   if (['upcoming', 'import', 'iopix'].includes(a)) return { view: a };
-  if (a === 'settings') return { view: 'settings', tab: b || 'account' };
+  if (a === 'settings') return { view: 'settings', tab: b || 'account', sub: p[2] };
   return { view: 'list' };
 }
 
@@ -1491,11 +1491,11 @@ async function showIopix(page) {
 // ------------------------------------------------------------------ settings
 async function showSettings(page, r) {
   const tabs = [['account', 'Account'], ['display', 'Display'], ['devices', 'Apps and devices'], ['books', 'Address books'],
-    ...(S.user.role === 'admin' ? [['suite', 'Connected apps'], ['users', 'Users and sign-in'], ['server', 'Server']] : [])];
+    ...(S.user.role === 'admin' ? [['connected', 'Connected apps'], ['server', 'Server']] : []), ...(S.user.suiteAdmin ? [['suite', 'Suite']] : [])];
   page.append(h('div', { class: 'pagehead' }, h('h1', null, 'Settings')),
     h('div', { class: 'tabs' }, tabs.map(([k, l]) => h('button', { class: r.tab === k ? 'on' : '', onclick: () => { location.hash = `#/settings/${k}`; } }, l))));
   const body = h('div'); page.append(body);
-  await ({ account: setAccount, display: setDisplay, devices: setDevices, books: setBooks, suite: setIopix, users: setUsers, server: setServer }[r.tab] || setAccount)(body);
+  await ({ account: setAccount, display: setDisplay, devices: setDevices, books: setBooks, connected: setIopix, suite: setSuite, server: setServer }[r.tab] || setAccount)(body, r);
 }
 const fld = (l, e) => h('label', { class: 'field' }, h('span', null, l), e);
 const kv = (k, v) => h('div', { class: 'kv' }, h('div', { class: 'k' }, k), h('div', { class: 'v', style: { flex: 1 } }, typeof v === 'string' ? copyRow(v) : v));
@@ -1610,49 +1610,12 @@ async function setBooks(el) {
       })));
 }
 
-async function setUsers(el) {
-  const r = await api('/api/users');
-  const name = h('input', { class: 't', placeholder: 'User name' }), pw = h('input', { class: 't', type: 'password', placeholder: 'Password (8 or more)' });
-  const role = h('select', { class: 't' }, ['viewer', 'editor', 'admin'].map((x) => h('option', { value: x, selected: x === 'editor' ? true : null }, x)));
-  el.append(h('div', { class: 'box' }, h('h2', null, icon('people'), 'Family members'),
-    h('p', { class: 'muted' }, 'Everyone shares the Family address book; each account also has a private Personal book that only they see. Viewers can read the shared books and change only their own; editors change shared contacts too; admins also manage users and settings.'),
-    h('table', { class: 't' }, h('tr', null, h('th', null, 'Name'), h('th', null, 'Display name'), h('th', null, 'Role'), h('th')),
-      r.items.map((u) => {
-        const rs = h('select', { class: 't', style: 'width:auto' }, ['viewer', 'editor', 'admin'].map((x) => h('option', { value: x, selected: x === u.role ? true : null }, x)));
-        rs.onchange = async () => { try { await api(`/api/users/${u.id}`, { method: 'PATCH', json: { role: rs.value } }); toast('Saved'); } catch (e) { fail(e); onRoute(); } };
-        return h('tr', null, h('td', null, u.name), h('td', null, u.displayName), h('td', null, rs), h('td', { style: { whiteSpace: 'nowrap' } },
-          h('button', { class: 'pillbtn noic', onclick: async () => { const p = h('input', { class: 't', type: 'password' }); const v = await dialog(`New password for ${u.name}`, p, [{ label: 'Cancel', value: null }, { label: 'Set', value: () => p.value, primary: true }]); if (v) { try { await api(`/api/users/${u.id}`, { method: 'PATCH', json: { password: v } }); toast('Password set'); } catch (e) { fail(e); } } } }, 'Password'), ' ',
-          u.role === 'viewer' && !u.passwordless ? [h('button', { class: 'pillbtn noic', title: 'One-click sign-in from the account picker', onclick: async () => { if (await confirmDialog('Remove password', `Remove ${u.name}’s password? Anyone on your home network can then sign in as ${u.name} with one click (from outside, never).`, 'Remove')) { try { await api(`/api/users/${u.id}`, { method: 'PATCH', json: { password: '' } }); toast('Password removed'); onRoute(); } catch (e) { fail(e); } } } }, 'No password'), ' '] : null,
-          u.id !== S.user.id ? h('button', { class: 'pillbtn noic danger', onclick: async () => { if (await confirmDialog('Delete account', `Delete ${u.name} and their private address book?`, 'Delete', true)) { await api(`/api/users/${u.id}`, { method: 'DELETE' }); onRoute(); } } }, 'Delete') : null));
-      })),
-    h('h2', { style: { marginTop: '16px' } }, 'Add someone'), h('div', { class: 'multi' }, name, pw, role,
-      h('button', { class: 'pillbtn primary', onclick: async () => { try { await api('/api/users', { method: 'POST', json: { name: name.value, password: pw.value, role: role.value } }); toast('Account made'); onRoute(); } catch (e) { fail(e); } } }, icon('add', 's'), 'Add'))));
-  el.append(await proxyCard());
-}
-
-/** Sign-in at the proxy (Cloudflare Access, Authelia…), saved for the whole suite through iosuite-shared; the same card in every app. */
-async function proxyCard() {
-  let st;
-  try { st = await api('/api/auth/proxy'); } catch (e) { return h('div', { class: 'box' }, h('h2', null, icon('key'), 'Sign-in at the proxy'), h('p', { class: 'warn' }, e.message)); }
-  const v = st.values || {}, fixed = new Set(st.fromEnv || []);
-  const field = (k, ph) => h('input', { class: 't', value: v[k] || '', placeholder: ph, disabled: fixed.has(k) ? true : null, 'data-k': k });
-  const sel = (k, opts) => h('select', { class: 't', 'data-k': k, disabled: fixed.has(k) ? true : null }, opts.map(([val, l]) => h('option', { value: val, selected: (v[k] || '') === val ? true : null }, l)));
-  const fields = [sel('AUTH_PROXY', [['off', 'Off'], ['cloudflare', 'Cloudflare Access'], ['haproxy', 'HAProxy'], ['nginx', 'nginx'], ['caddy', 'Caddy'], ['traefik', 'Traefik'], ['header', 'Another proxy']]),
-    field('CF_ACCESS_TEAM', 'myteam.cloudflareaccess.com'), field('CF_ACCESS_AUD', 'the Access application’s AUD tag'),
-    field('AUTH_PROXY_HEADER', 'header(s) with the user (other proxies)'), field('AUTH_PROXY_TRUSTED', '127.0.0.1, ::1 (the proxy’s address)'),
-    sel('AUTH_PROXY_CREATE', [['', 'show the sign-in screen'], ['deny', 'refuse them'], ['viewer', 'make them a viewer account'], ['editor', 'make them an editor account']])];
-  if (!v.AUTH_PROXY) fields[0].value = 'off';
-  const labels = ['Proxy', 'Cloudflare team', 'Cloudflare AUD', 'User header', 'Proxy address', 'Someone with no account'];
-  const seen = st.seen && st.seen.aud ? h('p', { class: 'muted small' }, `Last Cloudflare Access request: team ${st.seen.iss || '?'}, AUD ${Array.isArray(st.seen.aud) ? st.seen.aud.join(', ') : st.seen.aud}, ${st.seen.email || ''}`) : null;
-  return h('div', { class: 'box' }, h('h2', null, icon('key'), 'Sign-in at the proxy'),
-    h('p', { class: 'muted' }, 'With Cloudflare Access (a Cloudflare Tunnel with an Access policy) or a proxy with Authelia, Authentik or oauth2-proxy in front, ioContacts takes that sign-in: the person is matched to an account by email, then by name. One setting for every io app, kept in the Shared ioSuite database (also under Settings › Suite on the start page); the AUD field takes several tags, comma-separated. Proxy settings in config.env or the environment are ignored.'),
-    h('div', { class: 'grid' }, fields.map((f, i) => fld(labels[i], f))),
-    seen, fixed.size ? h('p', { class: 'muted small' }, `Fixed in the environment: ${[...fixed].join(', ')}`) : null,
-    h('p', null, h('button', { class: 'pillbtn primary', onclick: async () => {
-      const body = {};
-      for (const f of fields) if (!f.disabled) body[f.dataset.k] = f.value;
-      try { await api('/api/auth/proxy', { method: 'POST', json: body }); toast('Saved'); } catch (e) { fail(e); }
-    } }, icon('check', 's'), 'Save')));
+/** Settings › Suite (suite admins): the people and their role in every app (here too), app passwords, keys and tokens,
+    the apps and sign-in at the proxy, for the whole suite. The same panel in every io app, served by iosuite-shared. */
+async function setSuite(el, r) {
+  let ui;
+  try { ui = await import(new URL('api/suite-admin/ui.js', document.baseURI).href); } catch (e) { el.append(h('p', { class: 'warn' }, `The Suite panel did not load: ${e.message}`)); return; }
+  await ui.mount(el, { sub: r.sub, toast, onSub: (x) => history.replaceState(null, '', `#/settings/suite/${x}`) });
 }
 
 async function setIopix(el) {

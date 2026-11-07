@@ -404,3 +404,20 @@ def test_iopix_is_found_in_the_suite(client, monkeypatch):
             return b'{"tags": [{"id": 5, "name": "Ann", "person": true, "n": 3}]}'
     monkeypatch.setattr(links, "get", lambda app, provider, path, **kw: seen.append((app, provider, path)) or R())
     assert [p["name"] for p in iopix.people(force=True)] == ["Ann"] and seen == [("iocontacts", "iopix", "/api/meta")]
+
+
+def test_suite_admin_panel(client):
+    """Settings › Suite: iosuite-shared's panel and API answer a suite admin, not an app admin."""
+    from iosuite_shared import users as shared
+    assert client.get("/api/suite-admin/ui.js").status_code == 403  # alex is an admin here, not yet of the suite
+    shared.update(shared.find("alex")["id"], suite_admin=True)
+    shared.invalidate()
+    client.cookies.clear()
+    assert client.post("/api/auth/login", json={"name": "alex", "password": "secret123"}).status_code == 200
+    r = client.get("/api/suite-admin/ui.js")
+    assert r.status_code == 200 and "export async function mount" in r.text
+    assert any(u["name"] == "alex" for u in client.get("/api/suite-admin").json()["users"])
+    assert client.post("/api/users", json={"name": "ann", "password": "secret123", "role": "admin"}).status_code == 200
+    client.cookies.clear()
+    assert client.post("/api/auth/login", json={"name": "ann", "password": "secret123"}).status_code == 200
+    assert client.get("/api/suite-admin/ui.js").status_code == 403
