@@ -23,6 +23,7 @@ services:
       ADMIN_USER: admin               # the first admin, made on the first start (or remove both and make it in the browser)
       ADMIN_PASSWORD: change-me-please  # CHANGE ME (8 characters or more)
       # PUBLIC_URL: https://contacts.example.com   # behind a reverse proxy: links in the calendar feed and Settings
+      # INTERNAL_URL: http://192.168.1.151:8640   # the host's LAN address and port, kept in the suite's list of apps (a container cannot tell)
       # COOKIE_DOMAIN: example.com                 # one sign-in for every app of the suite under this domain
       # AUTH_PROXY: cloudflare        # sign-in at the proxy, as in iopix (see README)
       # IOPIX_URL: http://photo.example.lan:8600        # or Settings > ioPix
