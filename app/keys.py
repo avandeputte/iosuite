@@ -5,7 +5,7 @@ import logging
 
 from iosuite_shared import credentials
 
-from app import config, db
+from app import config
 
 log = logging.getLogger("iosuite.keys")
 KEYS = [
@@ -17,8 +17,8 @@ KEYS = [
 
 
 def declare() -> None:
-    """At start: say which keys the start page keeps, and move them out of its own settings (before 0.18)."""
+    """At start: say which keys the start page keeps."""
     try:
-        credentials.declare(config.APP, KEYS, adopt=(lambda k, d="": db.get_setting(k) or d, db.set_setting))
+        credentials.declare(config.APP, KEYS)
     except Exception as e:  # noqa: BLE001 - the shared database is away: tried again next start
         log.warning("keys and tokens: %s", e)
