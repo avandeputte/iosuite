@@ -1513,14 +1513,14 @@ function sinceText(ts) {
 const appLabel = (o, key) => (o.apps.find((a) => a.app === key) || {}).name || key;
 
 async function setSuite(el, r) {
-  const subs = [['people', 'People'], ['roles', 'Roles'], ['passwords', 'App passwords'], ['apps', 'Apps']];
+  const subs = [['people', 'People'], ['roles', 'Roles'], ['passwords', 'App passwords'], ['apps', 'Apps'], ['signin', 'Sign-in at the proxy']];
   const sub = subs.some(([k]) => k === r.sub) ? r.sub : 'people';
   let o;
   try { o = await api('/api/suite-admin'); } catch (e) { el.append(h('p', { class: 'err' }, e.message)); return; }
   el.append(h('p', { class: 'muted' }, 'The whole suite at once: the accounts, passwords and roles every io app shares (the Shared ioSuite database). Changes apply in every app within a few seconds. Suite admins are admin everywhere.'),
     h('div', { class: 'segs' }, subs.map(([k, l]) => h('button', { class: sub === k ? 'on' : '', onclick: () => { location.hash = `#/settings/suite/${k}`; } }, l))));
   const body = h('div'); el.append(body);
-  ({ people: suitePeople, roles: suiteRoles, passwords: suitePasswords, apps: suiteApps })[sub](body, o);
+  ({ people: suitePeople, roles: suiteRoles, passwords: suitePasswords, apps: suiteApps, signin: suiteSignin })[sub](body, o);
 }
 
 /** A role picker for one account in one app: "default (…)" removes the row, so the app's default applies. */
@@ -1687,6 +1687,59 @@ function suiteApps(el, o) {
           h('td', { class: 'small' }, `${a.roles} role${a.roles === 1 ? '' : 's'}, ${a.appPasswords} app password${a.appPasswords === 1 ? '' : 's'}`),
           h('td', { style: { textAlign: 'right' } }, h('button', { class: 'pillbtn noic danger', onclick: () => forgetApp(a) }, 'Forget')));
       })))));
+}
+/* Sign-in at a reverse proxy (Cloudflare Access on a tunnel, or Authelia & co. behind nginx...), once for every app:
+   iosuite-shared keeps it suite-wide and moves what an app's config.env still sets into it when the app starts. */
+const PROXIES = [['off', 'Off'], ['cloudflare', 'Cloudflare Access'], ['haproxy', 'HAProxy'], ['nginx', 'nginx'], ['caddy', 'Caddy'], ['traefik', 'Traefik'], ['header', 'Another proxy']];
+const NO_ACCOUNT = [['', 'Gets the sign-in screen'], ['deny', 'Is denied access'], ['viewer', 'Gets a viewer account'], ['editor', 'Gets an editor account']];
+async function suiteSignin(el, o) {
+  let d;
+  try { d = await api('/api/suite-admin/proxy'); } catch (e) { el.append(h('p', { class: 'err' }, e.message)); return; }
+  const draw = () => {
+    const v = d.values;
+    const opt = (list, cur) => list.map(([k, l]) => h('option', { value: k, selected: k === (cur || '') ? true : null }, l));
+    const mode = h('select', { class: 't' }, opt(PROXIES, (v.AUTH_PROXY || 'off').toLowerCase()));
+    const team = h('input', { class: 't', value: v.CF_ACCESS_TEAM, placeholder: 'myteam.cloudflareaccess.com', autocomplete: 'off' });
+    const aud = h('textarea', { class: 't', rows: 2, placeholder: 'Application Audience (AUD) tag; several: one per line', style: { fontFamily: 'monospace', fontSize: '12px' } }, (d.auds || []).join('\n'));
+    const header = h('input', { class: 't', value: v.AUTH_PROXY_HEADER, placeholder: 'default: Cf-Access-Authenticated-User-Email / Remote-User, X-Forwarded-User…', autocomplete: 'off' });
+    const trusted = h('input', { class: 't', value: v.AUTH_PROXY_TRUSTED, placeholder: 'default: 127.0.0.1, ::1', autocomplete: 'off' });
+    const create = h('select', { class: 't' }, opt(NO_ACCOUNT, (v.AUTH_PROXY_CREATE || '').toLowerCase()));
+    const cf = h('div', { class: 'grid' }, fld('Cloudflare team domain', team), fld('AUD tag(s)', aud));
+    const other = h('div', { class: 'grid' }, fld('User header', header), fld('Proxy addresses', trusted));
+    const rest = h('div', { class: 'grid' }, fld('Someone with no account', create));
+    const show = () => { cf.style.display = mode.value === 'cloudflare' ? '' : 'none'; other.style.display = rest.style.display = mode.value === 'off' ? 'none' : ''; };
+    mode.onchange = show;
+    const seen = d.seen && d.seen.iss ? h('p', { class: 'muted small' }, `Last request through Cloudflare (unverified): team ${String(d.seen.iss).replace(/^https:\/\//, '')}, AUD ${[].concat(d.seen.aud || []).join(', ')}${d.seen.email ? ', ' + d.seen.email : ''}. `,
+      h('button', { class: 'linkbtn', onclick: () => {
+        mode.value = 'cloudflare'; show(); team.value = String(d.seen.iss).replace(/^https:\/\//, '');
+        const tags = aud.value.split(/[\s,]+/).filter(Boolean); [].concat(d.seen.aud || []).forEach((t) => { if (!tags.includes(t)) tags.push(t); }); aud.value = tags.join('\n');
+      } }, 'Use these')) : null;
+    const here = d.here || {};
+    const state = here.mode === 'off' || !here.mode ? 'Off: everyone uses the suite’s own sign-in.' : here.mode === 'cloudflare'
+      ? (here.cloudflareVerified ? `On: Cloudflare Access tokens are verified (${(here.auds || []).length} AUD tag${(here.auds || []).length === 1 ? '' : 's'}).` : 'On, but without the team domain and AUD tag: nobody is signed in through Cloudflare.')
+      : `On (${here.mode}): the user header is believed from ${(here.trusted || []).join(', ')}.`;
+    const name = (k) => appLabel(o, k);
+    const overrides = Object.entries(d.overrides || {});
+    const left = Object.entries(d.left || {});
+    const save = async () => {
+      const body = { AUTH_PROXY: mode.value === 'off' ? '' : mode.value, CF_ACCESS_TEAM: team.value.trim(), CF_ACCESS_AUD: aud.value.split(/[\s,]+/).filter(Boolean).join(', '),
+        AUTH_PROXY_HEADER: header.value.trim(), AUTH_PROXY_TRUSTED: trusted.value.trim(), AUTH_PROXY_CREATE: create.value };
+      try { d = await api('/api/suite-admin/proxy', { method: 'PUT', json: body }); toast('Saved for every app'); draw(); } catch (e) { fail(e); }
+    };
+    el.replaceChildren(h('div', { class: 'box' }, h('h2', null, icon('key'), 'Sign-in at the proxy'),
+      h('p', { class: 'muted' }, 'Someone signed in at your reverse proxy (Cloudflare Access on a tunnel, or Authelia, Authentik or oauth2-proxy behind HAProxy, nginx, Caddy or Traefik) is signed in to every io app, matched to an account by email, then name. One setting for the whole suite, kept in the Shared ioSuite database. An app moves what its config.env still sets here when it starts, and comments those lines out.'),
+      h('p', null, h('b', null, state), here.fromEnv && here.fromEnv.length ? h('span', { class: 'muted small' }, ` On this server, the environment sets ${here.fromEnv.join(', ')} (it wins here).`) : null),
+      h('div', { class: 'grid' }, fld('Proxy', mode)), cf, seen,
+      h('p', { class: 'muted small' }, 'Team domain: Zero Trust › Settings › Team name and domain. AUD tag: Zero Trust › Access › Applications › the application › Overview. One application covering every app’s host has one tag; with one application per app, list each one’s tag.'),
+      other, rest,
+      h('div', { class: 'btns' }, h('button', { class: 'pillbtn', onclick: save }, 'Save for every app'))),
+    left.length || overrides.length ? h('div', { class: 'box' }, h('h2', null, icon('lock'), 'Apps that differ'),
+      left.map(([a, keys]) => h('p', null, h('b', null, name(a)), `: ${Object.entries(keys).map(([k, w]) => `${k} (in its ${w})`).join(', ')} differs from the value above and still applies there. Change it there to match, or remove it, and restart ${name(a)}.`)),
+      overrides.map(([a, vals]) => h('p', null, h('b', null, name(a)), `: its own ${Object.keys(vals).join(', ')} `,
+        h('button', { class: 'linkbtn', onclick: async () => { try { d = await api(`/api/suite-admin/proxy/overrides/${a}`, { method: 'DELETE' }); toast(`${name(a)} uses the suite’s settings`); draw(); } catch (e) { fail(e); } } }, 'Use the suite’s settings')))) : null);
+    show();
+  };
+  draw();
 }
 async function forgetApp(a) {
   const data = h('input', { type: 'checkbox' });
