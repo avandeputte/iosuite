@@ -74,9 +74,9 @@ function notesLayout() {
 
 async function route() {
   const path = location.hash.replace(/^#/, '').split('?')[0] || '/notes';
-  const [, page, tab] = path.split('/');
+  const [, page, tab, sub] = path.split('/');
   document.body.classList.remove('reading');
-  if (page === 'settings') { await flush(); renderNav(); return renderSettings(tab); }
+  if (page === 'settings') { await flush(); renderNav(); return renderSettings(tab, sub); }
   if (page === 'maintenance') { await flush(); renderNav(); return renderMaintenance(tab); }
   if (page === 'changes') { await flush(); renderNav(); return renderChanges(); }
   viewFromHash();

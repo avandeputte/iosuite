@@ -21,6 +21,7 @@ and sign-in (Cloudflare Access too), the same installer, updater, Docker image a
   through MariaDB's full-text index.
 - **Text in pictures**: read on the device where the picture was taken (Apple's Vision framework, on the Mac and
   iPhone), and sent along; for pictures added in the web app the server reads it itself with RapidOCR.
+- **Settings › Suite** (suite admins): the whole suite's people and their role in every app, app passwords, keys and tokens, the apps (default role, sign-in required) and sign-in at the proxy; the same panel as on the start page and in every io app (iosuite-shared's `/api/suite-admin/ui.js`). Read-only mode stays ioNotes' own (Settings › Read-only).
 - **Offline**: the apps keep a full copy and send their changes when the server can be reached; the API settles
   conflicts per note by the time of the edit (below).
 - **The clipboard Inbox stays on each device.** Only notes you save go to the server.
@@ -126,7 +127,7 @@ account) become the first admin's. A note id that belongs to another account is 
 | **editor** | plus every change to their own notes, folders and tags, and export/import of them (Settings › Export and import; the Mac and iPhone apps sign in as an editor) |
 | **admin** | plus settings, accounts, updates and the server log |
 
-**Require sign-in** (Settings › Users and sign-in) also closes the open routes to visitors, but for the app shell, `/api/status` and the sign-in routes (the MCP endpoint wants an app password either way).
+**Sign-in required** (Settings › Suite › Apps) also closes the open routes to visitors, but for the app shell, `/api/status` and the sign-in routes (the MCP endpoint wants an app password either way).
 Sessions are random tokens in an HttpOnly cookie (`iothing_session`, shared by the apps on the domain) valid for
 30 days and renewed while in use; each records where it began and was last seen (address, through Cloudflare or
 not, web or which app): `GET /api/auth/sessions` for your own, `GET /api/users/<id>/sessions` for admins. Passwords
@@ -151,7 +152,7 @@ buffer that path.
 
 When the proxy already makes people sign in, ionotes takes that sign-in, exactly as iopix does: the proxy passes who
 signed in in a header, and ionotes treats that person as signed in when an account exists for them (matched on the
-account's email address, then its name). Settings › Users and sign-in › Sign-in at the proxy (saved there, the settings are kept in the
+account's email address, then its name). Settings › Suite › Sign-in at the proxy (saved there, the settings are kept in the
 Shared ioSuite database for the whole suite: one Cloudflare Access application covering every app, set up once), or
 in `config.env`, which wins:
 

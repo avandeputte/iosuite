@@ -119,6 +119,7 @@ def _status_extra(request: Request) -> dict:
 
 app.include_router(auth_routes.router)   # /api/auth/*: sign-in, accounts, me, settings, password, sessions, app passwords, suite
 app.include_router(users_routes.router)  # /api/users: accounts and their role here (admins)
+app.include_router(auth.admin_router())  # /api/suite-admin (+ ui.js, the Settings › Suite panel): the whole suite (suite admins)
 app.include_router(auth.status_router(updater, extra=_status_extra))  # /api/status: public, the same shape in every app
 app.include_router(auth.server_router(updater, log_file=config.LOG_FILE, info=lambda: {"appUrl": config.BASE_URL}))  # /api/server, /api/log (admins)
 app.include_router(notes_routes.router)

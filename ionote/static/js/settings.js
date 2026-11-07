@@ -1,7 +1,7 @@
-/** Settings (Display for everyone; Apps and devices for accounts; Users and sign-in for admins), Maintenance (admins: storage and backups, MCP and
+/** Settings (Display for everyone; Apps and devices for accounts; Read-only for admins; Suite for suite admins), Maintenance (admins: storage and backups, MCP and
  *  OCR, updates and logs) and the change log. Laid out as in every ioThing app: Settings is what is configured,
  *  Maintenance what is run or checked. */
-import { $, h, api, state, icon, toast, fail, isAdmin, canWrite, dialog, confirmIt, fmtDate } from './core.js';
+import { $, h, api, state, icon, toast, fail, isAdmin, canWrite, confirmIt, fmtDate } from './core.js';
 import { runUpdate } from './update.js';
 
 /** A section of a settings page, as iopix draws one: the heading with its coloured marker and a line under it, an
@@ -25,79 +25,21 @@ function appearance() {
   return box('Display', null, h('div.srow', h('div', h('b', 'Appearance'), h('div.muted.small', `Light (the default) or dark colors, or follow the device's setting. ${state.me.user ? 'Saved with your account, so it follows you to other devices.' : 'Remembered in this browser.'}`)), seg));
 }
 
-async function usersBox() {
-  const { users, roles } = await api('/api/users');
-  const tbody = h('tbody');
-  const draw = (list) => {
-    tbody.textContent = '';
-    for (const u of list) {
-      const role = h('select', { onchange: async (e) => { try { await api(`/api/users/${u.id}`, { method: 'POST', body: { role: e.target.value } }); toast('Saved'); } catch (err) { fail(err); e.target.value = u.role; } } },
-        roles.map((r) => h('option', { value: r, selected: r === u.role }, r)));
-      tbody.append(h('tr', h('td', h('span.ucell', h('span.avatar', (u.name || '?')[0].toUpperCase()), h('span', u.name, state.me.user && u.id === state.me.user.id ? h('span.muted', ' (you)') : null, u.passwordless ? h('span.muted.small', ' (one click)') : null))), h('td', role), h('td.small', u.email || ''),
-        h('td.small.muted', u.last_login ? fmtDate(u.last_login) : 'never'),
-        h('td', h('button.iconbtn', { title: 'Change', onclick: () => editUser(u) }, icon('edit')))));
-    }
-  };
-  draw(users);
-  const add = h('button.pillbtn', { onclick: () => editUser(null) }, icon('add'), 'Add an account');
-  return box('Accounts', 'Viewers read and search; editors also change notes (the Mac and iPhone apps sign in as an editor); admins also change these settings. The same roles as iopix.',
-    h('table.grid.utable', h('thead', h('tr', h('th', 'Name'), h('th', 'Role'), h('th', 'Email'), h('th', 'Last sign-in'), h('th', ''))), tbody), h('div.row', add));
-}
-
-async function editUser(u) {
-  const name = h('input', { type: 'text', value: u ? u.name : '', placeholder: 'User name' });
-  const pw = h('input', { type: 'password', placeholder: u ? 'New password (leave empty to keep it)' : 'Password (8 characters or more; empty: one-click viewer)', autocomplete: 'new-password' });
-  const email = h('input', { type: 'text', value: u ? u.email : '', placeholder: 'Email (optional; Cloudflare Access matches on it)' });
-  const role = h('select', ['viewer', 'editor', 'admin'].map((r) => h('option', { value: r, selected: (u ? u.role : 'editor') === r }, r)));
-  const listed = h('input', { type: 'checkbox', checked: u ? u.listed : true });
-  const msg = h('p.err.small');
-  const buttons = [{ label: 'Cancel' }];
-  if (u) buttons.push({ label: 'Delete', danger: true, action: async () => {
-    if (!await confirmIt('Delete account', `Delete ${u.name}?`, 'Delete', true)) return false;
-    try { await api(`/api/users/${u.id}`, { method: 'POST', body: { delete: true } }); render(); } catch (e) { msg.textContent = e.message; return false; }
-  } });
-  buttons.push({ label: u ? 'Save' : 'Create', primary: true, action: async () => {
-    try {
-      if (u) {
-        const body = { name: name.value, email: email.value, role: role.value, listed: listed.checked };
-        if (pw.value) body.password = pw.value;
-        await api(`/api/users/${u.id}`, { method: 'POST', body });
-      } else {
-        const nu = await api('/api/users', { method: 'POST', body: { name: name.value, password: pw.value, role: role.value, email: email.value } });
-        if (!listed.checked) await api(`/api/users/${nu.id}`, { method: 'POST', body: { listed: false } });
-      }
-      render();
-    } catch (e) { msg.textContent = e.message; return false; }
-  } });
-  await dialog(u ? `Account ${u.name}` : 'New account', h('div', name, pw, email, h('div.row', h('span', 'Role'), role), h('label.switch', listed, h('span', 'On the sign-in screen\'s account list')), msg), buttons);
-}
-
-function signInBox(s) {
-  return box('Sign-in', null,
-    sw('Require sign-in', s.require_login, (v, el) => setSetting('require_login', v).then(() => { s.require_login = v; }).catch(() => { el.checked = !v; }), !state.me.usersExist,
-      'Visitors get the sign-in screen and nothing else (the MCP endpoint always wants an app password).'),
+/** What only ioNotes has: read-only mode. Accounts, roles, the sign-in requirement and sign-in at the proxy are the
+ *  suite's (Settings › Suite). */
+function accessBox(s) {
+  return box('Read-only', state.me.isSuiteAdmin ? h('span', 'People, their role here, whether sign-in is required and sign-in at the proxy are under ', h('a', { href: '#/settings/suite' }, 'Settings › Suite'), ', for every io app at once.') : 'People, roles and sign-in are managed by a suite admin under Settings › Suite.',
     sw('Read-only', s.read_only, (v) => setSetting('read_only', v), s.read_only_env, s.read_only_env ? '(READ_ONLY=1 in config.env)' : 'Nothing can be changed, by anyone.'));
 }
 
-async function proxyBox() {
-  const st = await api('/api/settings/proxy');
-  const v = st.values, fixed = new Set(st.fromEnv);
-  const field = (k, ph) => h('input', { type: 'text', value: v[k] || '', placeholder: ph, disabled: fixed.has(k), 'data-k': k });
-  const mode = h('select', { 'data-k': 'AUTH_PROXY', disabled: fixed.has('AUTH_PROXY') }, ['off', 'cloudflare', 'haproxy', 'nginx', 'caddy', 'traefik', 'header'].map((m) => h('option', { value: m, selected: (v.AUTH_PROXY || 'off') === m }, m)));
-  const create = h('select', { 'data-k': 'AUTH_PROXY_CREATE', disabled: fixed.has('AUTH_PROXY_CREATE') },
-    [['', 'show the sign-in screen'], ['deny', 'refuse them'], ['viewer', 'make them a viewer account'], ['editor', 'make them an editor account']].map(([k, l]) => h('option', { value: k, selected: (v.AUTH_PROXY_CREATE || '') === k }, l)));
-  const fields = [mode, field('CF_ACCESS_TEAM', 'myteam.cloudflareaccess.com'), field('CF_ACCESS_AUD', 'the Access application\'s AUD tag'),
-    field('AUTH_PROXY_HEADER', 'header(s) with the user (other proxies)'), field('AUTH_PROXY_TRUSTED', '127.0.0.1, ::1 (the proxy\'s address)'), create];
-  const save = h('button.pillbtn.primary', { onclick: async () => {
-    const body = {};
-    for (const f of fields) if (!f.disabled) body[f.dataset.k] = f.value;
-    try { await api('/api/settings/proxy', { method: 'POST', body }); toast('Saved'); } catch (e) { fail(e); }
-  } }, 'Save');
-  const seen = st.seen && st.seen.aud ? h('p.small', `Last Cloudflare Access request: team ${st.seen.iss || '?'}, AUD ${Array.isArray(st.seen.aud) ? st.seen.aud.join(', ') : st.seen.aud}, ${st.seen.email || ''}`) : null;
-  return box('Sign-in at the proxy', 'With Cloudflare Access (a Cloudflare Tunnel with an Access policy) or a proxy with Authelia, Authentik or oauth2-proxy in front, ioNotes takes that sign-in: the person is matched to an account by email, then by name. For Cloudflare, set the team domain and the AUD tag so the signed token is checked. One setting for every io app, kept in the Shared ioSuite database (also under Settings › Suite on the start page); the AUD field takes several tags, comma-separated. Proxy settings in config.env or the environment are ignored.',
-    h('div.row', h('label', 'Proxy'), mode), h('div.row', h('label', 'Cloudflare team'), fields[1]), h('div.row', h('label', 'Cloudflare AUD'), fields[2]),
-    h('div.row', h('label', 'User header'), fields[3]), h('div.row', h('label', 'Proxy address'), fields[4]), h('div.row', h('label', 'Someone with no account'), create),
-    seen, fixed.size ? h('p.small', 'Fixed in config.env: ' + [...fixed].join(', ')) : null, h('div.row', save));
+/** Settings › Suite (suite admins): the people and their role in every app (here too), app passwords, keys and tokens,
+ *  the apps and sign-in at the proxy, for the whole suite. The same panel in every io app, served by iosuite-shared. */
+async function suitePanel(sub) {
+  const el = h('div');
+  let ui;
+  try { ui = await import(new URL('api/suite-admin/ui.js', document.baseURI).href); } catch (e) { return h('p.err', `The Suite panel did not load: ${e.message}`); }
+  await ui.mount(el, { sub, toast, onSub: (x) => history.replaceState(null, '', `#/settings/suite/${x}`) });
+  return el;
 }
 
 function databaseBox(s) {
@@ -254,7 +196,7 @@ function logBox() {
 }
 
 /** A page as iopix lays one out: the title with its icon tile, the tabs under it (the tab is in the address:
- *  #/settings/users), then the tab's boxes. */
+ *  #/settings/devices), then the tab's boxes. */
 let again = () => {};
 function pageTitle(text, ic, hue, sub = '') { return h('h1.ptitle', h('span.pic', { style: `--hue:${hue}` }, icon(ic)), text, sub ? h('span.muted', sub) : null); }
 async function tabbedPage(base, title, ic, hue, tabs, tab) {
@@ -270,12 +212,13 @@ async function tabbedPage(base, title, ic, hue, tabs, tab) {
 }
 const render = () => again();
 
-/** Settings: Display for everyone, Export and import of one's own notes, Users and sign-in for admins (as iopix's Settings). */
-export function renderSettings(tab) {
+/** Settings: Display for everyone, Export and import of one's own notes, Read-only for admins, Suite for suite admins. */
+export function renderSettings(tab, sub) {
   const tabs = [['display', 'Display', async () => [appearance(), state.me.user ? null : box('Account', state.me.usersExist ? 'Sign in to see your notes.' : 'No accounts yet: anyone who can reach ioNotes can read and change the notes. Create the admin account from the person icon at the top right.')]]];
   if (state.me.user || !state.me.usersExist) tabs.push(['export', 'Export and import', async () => [exportBox()]]);  // anyone's own notes
   if (state.me.user) tabs.push(['devices', 'Apps and devices', async () => [await devicesBox()]]);
-  if (isAdmin()) tabs.push(['users', 'Users and sign-in', async () => { const s = await api('/api/settings'); return [state.me.usersExist ? await usersBox() : null, signInBox(s), await proxyBox()]; }]);
+  if (isAdmin()) tabs.push(['access', 'Read-only', async () => [accessBox(await api('/api/settings'))]]);
+  if (state.me.isSuiteAdmin) tabs.push(['suite', 'Suite', async () => [await suitePanel(sub)]]);
   return tabbedPage('settings', 'Settings', 'gear', 'var(--c-gray)', tabs, tab);
 }
 
