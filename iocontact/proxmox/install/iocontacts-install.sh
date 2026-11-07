@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Copyright (c) 2026 Alex Van de Putte
-# License: MIT
+# License: GPL-3.0-or-later
 # Source: https://github.com/avandeputte/iocontacts
 # ioContacts: runs inside the LXC, driven by proxmox/ct/iocontacts.sh (community-scripts framework).
 # This only installs the system packages and fetches the code; the ct script then runs the app's own

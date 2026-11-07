@@ -1,6 +1,6 @@
 # ioContacts
 
-*Contacts for the family, in the ioThing suite (with [ioPix](https://github.com/avandeputte/iopix), [ioNotes](https://github.com/avandeputte/ionotes), [ioCalendar](https://github.com/avandeputte/iocalendar), [ioHealth](https://github.com/avandeputte/ioHealth) and the [ioSuite](https://github.com/avandeputte/iosuite) start page).*
+*Contacts for the family, in the ioThing suite (with [ioPix](https://github.com/avandeputte/iopix), [ioNotes](https://github.com/avandeputte/ionotes), [ioCalendar](https://github.com/avandeputte/iocalendar), [ioHealth](https://github.com/avandeputte/iohealth) and the [ioSuite](https://github.com/avandeputte/iosuite) start page).*
 
 A self-hosted contact manager: a web app for the whole family, and the standard protocols every mail, contacts and calendar app already speaks, so the same contacts show up on phones, in Apple Contacts, Outlook, Thunderbird and anywhere else. FastAPI and a single-page vanilla JS app, with everything stored in MariaDB / MySQL, and the suite's shared library (`iosuite-shared`, in [iosuite-shared](https://github.com/avandeputte/iosuite-shared)).
 
@@ -15,104 +15,6 @@ A self-hosted contact manager: a web app for the whole family, and the standard 
 - **Duplicates** (same name, email or phone) and merging, **bulk** favorite, label, move, export and delete, search across names, emails, phone digits, companies, addresses, labels and notes.
 - **Settings › Suite** (suite admins): the whole suite's people and their role in every app, app passwords, keys and tokens, the apps and sign-in at the proxy; the same panel as on the start page and in every io app (iosuite-shared's `/api/suite-admin/ui.js`).
 - Light and dark, phone-sized screens, installable as an app.
-
-## Standards and APIs
-
-| For | Standard | Where |
-| --- | --- | --- |
-| Contacts apps: Apple Contacts (Mac, iPhone, iPad), DAVx⁵ on Android, Thunderbird, Evolution, GNOME Contacts, KDE | **CardDAV** (RFC 6352) with sync-collection (RFC 6578), ctag, discovery via `/.well-known/carddav` (RFC 6764) and current-user-principal | `https://host/dav/` |
-| Any app that reads contact files | **vCard 3.0** (RFC 2426) and **4.0** (RFC 6350), with Apple's extensions (relations, dates, social profiles and custom labels survive in Apple Contacts); vCard 2.1 is read | CardDAV, `/api/…?format=vcard`, import/export |
-| Web and JSON clients | **REST/JSON** with **jCard** (RFC 7095) by content negotiation (`Accept: application/vcard+json` or `text/vcard; version=4.0`) | `/api/`, OpenAPI docs at `/api/docs` |
-| Mail apps, desk phones, printers | **LDAP v3** (RFC 4511), read-only, inetOrgPerson plus Thunderbird's mozillaAbPersonAlpha attributes | port 3890 (389 in the Proxmox container) |
-| Calendars: Apple Calendar, Google Calendar, Outlook, Thunderbird | **iCalendar** (RFC 5545) subscription of birthdays and anniversaries, yearly events | `/cal/<private token>/family.ics` |
-| Moving in and out | vCard files, jCard, and **CSV in Google Contacts' and Outlook's layouts** | Import and export page, `/api/import`, `/api/export` |
-| AI assistants: Claude and anything else that speaks MCP | **Model Context Protocol** (streamable HTTP, and stdio) | `https://host/mcp` (switched on in Settings › Server) |
-
-**iPhone, iPad and Mac in one step:** Settings › Apps and devices › *Download the profile* gives a configuration profile
-(`.mobileconfig`) with the CardDAV account and, if you like, the birthday calendar subscription (and the LDAP
-directory for Mail on a Mac), with a new app password for that device inside (or none, and the device asks). That password works for CardDAV and LDAP
-only, so a lost phone or a leaked profile file does not reach the web app, the REST API or MCP. Open the
-page in Safari on the iPhone, tap Download, then Settings › Profile Downloaded › Install.
-
-Settings › Apps and devices shows the exact addresses to type, and makes **app passwords**: one per phone or app, revocable on its own, used with your user name for CardDAV, LDAP and the REST API (HTTP Basic, or `Authorization: Bearer <app password>`). *Contacts apps only* (ticked by default) limits a password to CardDAV and LDAP: the web sign-in, the REST API and MCP answer it with 403. Untick it for a script or an AI assistant.
-
-```sh
-curl -u alex:iocontacts-xxxxxxxx-… -H 'Accept: application/vcard+json' https://contacts.example.com/api/contacts?q=smith
-curl -u alex:iocontacts-xxxxxxxx-… https://contacts.example.com/api/contacts/12?format=vcard4
-curl -u alex:iocontacts-xxxxxxxx-… -X POST -H 'Content-Type: text/vcard' --data-binary @card.vcf 'https://contacts.example.com/api/contacts?book=1'
-```
-
-## MCP server
-
-ioContacts is also an MCP server, as iopix is, so an assistant such as Claude can work with the contacts: look people up,
-read everything about one, add and correct contacts, link relatives and walk the family tree, list birthdays, find and
-merge duplicates, import and export vCard and CSV, link contacts to ioPix people, and, for admins, check the server's
-health, look for a new version and install it.
-
-It is off until an admin turns it on in **Settings › Server** (or `MCP=1` in the environment); off, `/mcp` does not answer
-at all. Every assistant signs in with an **app password** (Settings › Apps and devices), as HTTP Basic or
-`Authorization: Bearer <app password>`, and acts as that account: it sees the shared books and that account's private
-ones, and may change what the account may change in the web app. The server tools need an admin.
-
-```sh
-claude mcp add --transport http iocontacts https://contacts.example.com/mcp --header "Authorization: Bearer iocontacts-xxxxxxxx-…"
-```
-
-Apps that take a JSON configuration and only start local processes (Claude Desktop, for example) can reach it through
-`mcp-remote`: `{"mcpServers": {"iocontacts": {"command": "npx", "args": ["-y", "mcp-remote", "https://contacts.example.com/mcp", "--header", "Authorization: Bearer ioc-…"]}}}`.
-On the server itself, `.venv/bin/python -m app.mcp --user NAME` serves the same tools over stdio.
-
-The tools: `overview`, `list_address_books`, `search_contacts`, `get_contact`, `get_contacts`, `get_vcard`, `view_photo`,
-`get_relatives`, `family_tree`, `upcoming_dates`, `birthdays_in_month`, `list_labels`, `relation_types`, `social_services`,
-`find_duplicates`, `export_contacts`, `connection_details`, `list_iopix_people`; `create_contact`, `update_contact`,
-`delete_contact`, `add_relation`, `remove_relation`, `set_labels`, `set_favorite`, `move_contacts`, `merge_contacts`,
-`import_contacts`, `link_iopix_person`, `auto_link_iopix`, `create_address_book`; upkeep:
-`find_duplicates`, `preview_merge`, `merge_contacts`, `mark_not_duplicates`, `list_merges`, `undo_merge`,
-`data_quality_report`, `fix_data_quality`; enrichment: `lookup_contact`, `suggest_contact_update`, `list_suggestions`
-(an assistant proposes; only a person accepts, in the web app); and for admins `diagnostics`, `test_iopix`,
-`list_accounts`, `check_for_update`, `update_server`. An app password cannot make more app passwords over MCP.
-
-## Maintenance and enrichment
-
-**Maintenance** in the web app has four tabs for the data (and, for admins, **Storage and backups** and
-**Updates and logs**, see below):
-
-- **Duplicates.** Contacts that are probably one person, scored, with the reasons: the same email or phone (written with
-  or without the country code), the same name (accents, case and swapped first and last names do not matter), a
-  nickname (Bob for Robert, Liesbeth for Elisabeth…), a similar spelling, the same birthday or company. Other
-  birthdays, other genders, a Sr./Jr. or a relation between the two count against. The first name has to fit: people
-  in one household who share a last name, an address, a home phone or a family email are never offered as
-  duplicates, and an email or number on three or more contacts is treated as the household's. **Compare and merge** shows them side by side: which to keep, and for every field where they
-  disagree (name, birthday, company, ioPix person…) which value; phones, emails, addresses, profiles, labels and relations
-  are combined, each with a box to leave one out. **Not duplicates** keeps two people apart for good.
-- **Data quality.** Contacts without a name, email addresses and phone numbers that do not look right, impossible
-  birthdays, NAMES IN CAPITALS, the same email or phone twice on a contact, relations to a name that is now a
-  contact, numbers without the country code, contacts with no way to reach them; with
-  one-click fixes where a fix is safe (capitalising, removing repeats, linking, adding the country code you give).
-- **Suggestions.** Enrichment that waits for you: nothing changes a contact until you accept it (one by one, or all for
-  a contact), and what you dismiss is not offered again. **Look up** on a contact (or *Look up all contacts*) asks the
-  public interfaces that allow it: Gravatar by email (sent as a hash) for the name, job, company, place and the
-  profiles the person verified there, and the contact's GitHub, Mastodon and Bluesky profiles. LinkedIn, Facebook,
-  Instagram and X have no lookup apps may use; an assistant connected over MCP can research people there and file
-  what it finds with `suggest_contact_update`, with the page it found it on.
-- **Merge history.** Every merge keeps the contacts as they were, so **Undo** brings them back, relations included.
-
-## Updates
-
-ioContacts asks GitHub once a day whether the main branch has a newer version (only the public commit list is read;
-nothing about the server is sent; Maintenance › Updates and logs switches it off, `UPDATE_CHECK=0` locks it off). Admins
-then see a note with **Update now**, and **Maintenance › Updates and logs** has the version, **Check for updates**,
-**Update now**, the tail of the server log (`data/iocontacts.log` in the app folder; `LOG_FILE` moves it, empty switches it
-off) and **Restart**. The page is the same in every ioThing app: the version check, `update.sh`, the restart and the log
-come from `iosuite_shared.updates` in iosuite-shared, served at `/api/server` and `/api/log`. Updating runs the app's own
-`update.sh`: the new version's Python packages first, then the code (a failed step leaves the running version as it
-was), the database is brought up to date, and the service restarts; the page reloads when the new version answers. The
-MCP tools `check_for_update` and `update_server` do the same. In Docker, pull the image instead. From a shell:
-`./update.sh` (`--check` only looks, `IOCONTACTS_REF=<sha>` installs a given commit).
-
-Settings is for what is configured (account, display, apps and devices, address books, connected apps, users and
-sign-in, server); Maintenance for what is run or checked (duplicates, data quality, suggestions, merge history, storage
-and backups, updates and logs). Both are in the sidebar and the avatar menu.
 
 ## Run
 
@@ -196,7 +98,24 @@ password is used once and not written anywhere.
 
 Nothing to set up: ioContacts finds ioPix in the suite's list of apps (the Shared ioSuite database) and reads from it from the server as its own service account (`iocontacts-app`) with a read-only app password, both made by itself on first use and listed on the start page's Settings › Suite, where a suite admin can revoke them (a new one is made the next time). Behind Cloudflare Access, the suite's Cloudflare Access service token (Settings › Suite › Keys and tokens) goes along. The people list comes from ioPix's People (the named people with photos) and the faces from ioPix's face crops.
 
-### HTTPS
+## Updates
+
+ioContacts asks GitHub once a day whether the main branch has a newer version (only the public commit list is read;
+nothing about the server is sent; Maintenance › Updates and logs switches it off, `UPDATE_CHECK=0` locks it off). Admins
+then see a note with **Update now**, and **Maintenance › Updates and logs** has the version, **Check for updates**,
+**Update now**, the tail of the server log (`data/iocontacts.log` in the app folder; `LOG_FILE` moves it, empty switches it
+off) and **Restart**. The page is the same in every ioThing app: the version check, `update.sh`, the restart and the log
+come from `iosuite_shared.updates` in iosuite-shared, served at `/api/server` and `/api/log`. Updating runs the app's own
+`update.sh`: the new version's Python packages first, then the code (a failed step leaves the running version as it
+was), the database is brought up to date, and the service restarts; the page reloads when the new version answers. The
+MCP tools `check_for_update` and `update_server` do the same. In Docker, pull the image instead. From a shell:
+`./update.sh` (`--check` only looks, `IOCONTACTS_REF=<sha>` installs a given commit).
+
+Settings is for what is configured (account, display, apps and devices, address books, connected apps, users and
+sign-in, server); Maintenance for what is run or checked (duplicates, data quality, suggestions, merge history, storage
+and backups, updates and logs). Both are in the sidebar and the avatar menu.
+
+## Reverse proxy and HTTPS
 
 Run it behind a reverse proxy that terminates HTTPS (Caddy, Nginx Proxy Manager, HAProxy, Cloudflare Tunnel), as iopix: iOS and macOS want HTTPS for CardDAV accounts outside the home network, and passwords travel with every CardDAV request. The LDAP directory speaks plain LDAP; keep it on the home network, or put a TLS proxy (stunnel, HAProxy, nginx stream) in front for `ldaps://`.
 
@@ -208,6 +127,87 @@ settings stored for the whole suite (Settings › Suite › Keys and tokens), th
 password). The Worker, the rollout (monitor first, then enforce) and a WAF rate-limit rule for `/dav*` are in
 [iosuite-shared's cloudflare/edge-auth](https://github.com/avandeputte/iosuite-shared/blob/main/cloudflare/edge-auth/README.md). Once it enforces, DAV clients must sign in with an app password, not the
 account password.
+
+## API
+
+| For | Standard | Where |
+| --- | --- | --- |
+| Contacts apps: Apple Contacts (Mac, iPhone, iPad), DAVx⁵ on Android, Thunderbird, Evolution, GNOME Contacts, KDE | **CardDAV** (RFC 6352) with sync-collection (RFC 6578), ctag, discovery via `/.well-known/carddav` (RFC 6764) and current-user-principal | `https://host/dav/` |
+| Any app that reads contact files | **vCard 3.0** (RFC 2426) and **4.0** (RFC 6350), with Apple's extensions (relations, dates, social profiles and custom labels survive in Apple Contacts); vCard 2.1 is read | CardDAV, `/api/…?format=vcard`, import/export |
+| Web and JSON clients | **REST/JSON** with **jCard** (RFC 7095) by content negotiation (`Accept: application/vcard+json` or `text/vcard; version=4.0`) | `/api/`, OpenAPI docs at `/api/docs` |
+| Mail apps, desk phones, printers | **LDAP v3** (RFC 4511), read-only, inetOrgPerson plus Thunderbird's mozillaAbPersonAlpha attributes | port 3890 (389 in the Proxmox container) |
+| Calendars: Apple Calendar, Google Calendar, Outlook, Thunderbird | **iCalendar** (RFC 5545) subscription of birthdays and anniversaries, yearly events | `/cal/<private token>/family.ics` |
+| Moving in and out | vCard files, jCard, and **CSV in Google Contacts' and Outlook's layouts** | Import and export page, `/api/import`, `/api/export` |
+| AI assistants: Claude and anything else that speaks MCP | **Model Context Protocol** (streamable HTTP, and stdio) | `https://host/mcp` (switched on in Settings › Server) |
+
+**iPhone, iPad and Mac in one step:** Settings › Apps and devices › *Download the profile* gives a configuration profile
+(`.mobileconfig`) with the CardDAV account and, if you like, the birthday calendar subscription (and the LDAP
+directory for Mail on a Mac), with a new app password for that device inside (or none, and the device asks). That password works for CardDAV and LDAP
+only, so a lost phone or a leaked profile file does not reach the web app, the REST API or MCP. Open the
+page in Safari on the iPhone, tap Download, then Settings › Profile Downloaded › Install.
+
+Settings › Apps and devices shows the exact addresses to type, and makes **app passwords**: one per phone or app, revocable on its own, used with your user name for CardDAV, LDAP and the REST API (HTTP Basic, or `Authorization: Bearer <app password>`). *Contacts apps only* (ticked by default) limits a password to CardDAV and LDAP: the web sign-in, the REST API and MCP answer it with 403. Untick it for a script or an AI assistant.
+
+```sh
+curl -u alex:iocontacts-xxxxxxxx-… -H 'Accept: application/vcard+json' https://contacts.example.com/api/contacts?q=smith
+curl -u alex:iocontacts-xxxxxxxx-… https://contacts.example.com/api/contacts/12?format=vcard4
+curl -u alex:iocontacts-xxxxxxxx-… -X POST -H 'Content-Type: text/vcard' --data-binary @card.vcf 'https://contacts.example.com/api/contacts?book=1'
+```
+
+## MCP server
+
+ioContacts is also an MCP server, as iopix is, so an assistant such as Claude can work with the contacts: look people up,
+read everything about one, add and correct contacts, link relatives and walk the family tree, list birthdays, find and
+merge duplicates, import and export vCard and CSV, link contacts to ioPix people, and, for admins, check the server's
+health, look for a new version and install it.
+
+It is off until an admin turns it on in **Settings › Server** (or `MCP=1` in the environment); off, `/mcp` does not answer
+at all. Every assistant signs in with an **app password** (Settings › Apps and devices), as HTTP Basic or
+`Authorization: Bearer <app password>`, and acts as that account: it sees the shared books and that account's private
+ones, and may change what the account may change in the web app. The server tools need an admin.
+
+```sh
+claude mcp add --transport http iocontacts https://contacts.example.com/mcp --header "Authorization: Bearer iocontacts-xxxxxxxx-…"
+```
+
+Apps that take a JSON configuration and only start local processes (Claude Desktop, for example) can reach it through
+`mcp-remote`: `{"mcpServers": {"iocontacts": {"command": "npx", "args": ["-y", "mcp-remote", "https://contacts.example.com/mcp", "--header", "Authorization: Bearer ioc-…"]}}}`.
+On the server itself, `.venv/bin/python -m app.mcp --user NAME` serves the same tools over stdio.
+
+The tools: `overview`, `list_address_books`, `search_contacts`, `get_contact`, `get_contacts`, `get_vcard`, `view_photo`,
+`get_relatives`, `family_tree`, `upcoming_dates`, `birthdays_in_month`, `list_labels`, `relation_types`, `social_services`,
+`find_duplicates`, `export_contacts`, `connection_details`, `list_iopix_people`; `create_contact`, `update_contact`,
+`delete_contact`, `add_relation`, `remove_relation`, `set_labels`, `set_favorite`, `move_contacts`, `merge_contacts`,
+`import_contacts`, `link_iopix_person`, `auto_link_iopix`, `create_address_book`; upkeep:
+`find_duplicates`, `preview_merge`, `merge_contacts`, `mark_not_duplicates`, `list_merges`, `undo_merge`,
+`data_quality_report`, `fix_data_quality`; enrichment: `lookup_contact`, `suggest_contact_update`, `list_suggestions`
+(an assistant proposes; only a person accepts, in the web app); and for admins `diagnostics`, `test_iopix`,
+`list_accounts`, `check_for_update`, `update_server`. An app password cannot make more app passwords over MCP.
+
+## Maintenance and enrichment
+
+**Maintenance** in the web app has four tabs for the data (and, for admins, **Storage and backups** and
+**Updates and logs**, see below):
+
+- **Duplicates.** Contacts that are probably one person, scored, with the reasons: the same email or phone (written with
+  or without the country code), the same name (accents, case and swapped first and last names do not matter), a
+  nickname (Bob for Robert, Liesbeth for Elisabeth…), a similar spelling, the same birthday or company. Other
+  birthdays, other genders, a Sr./Jr. or a relation between the two count against. The first name has to fit: people
+  in one household who share a last name, an address, a home phone or a family email are never offered as
+  duplicates, and an email or number on three or more contacts is treated as the household's. **Compare and merge** shows them side by side: which to keep, and for every field where they
+  disagree (name, birthday, company, ioPix person…) which value; phones, emails, addresses, profiles, labels and relations
+  are combined, each with a box to leave one out. **Not duplicates** keeps two people apart for good.
+- **Data quality.** Contacts without a name, email addresses and phone numbers that do not look right, impossible
+  birthdays, NAMES IN CAPITALS, the same email or phone twice on a contact, relations to a name that is now a
+  contact, numbers without the country code, contacts with no way to reach them; with
+  one-click fixes where a fix is safe (capitalising, removing repeats, linking, adding the country code you give).
+- **Suggestions.** Enrichment that waits for you: nothing changes a contact until you accept it (one by one, or all for
+  a contact), and what you dismiss is not offered again. **Look up** on a contact (or *Look up all contacts*) asks the
+  public interfaces that allow it: Gravatar by email (sent as a hash) for the name, job, company, place and the
+  profiles the person verified there, and the contact's GitHub, Mastodon and Bluesky profiles. LinkedIn, Facebook,
+  Instagram and X have no lookup apps may use; an assistant connected over MCP can research people there and file
+  what it finds with `suggest_contact_update`, with the page it found it on.
+- **Merge history.** Every merge keeps the contacts as they were, so **Undo** brings them back, relations included.
 
 ## Tests
 
@@ -242,4 +242,6 @@ static/            the web app (index.html, app.js, app.css, icons)
 proxmox/           the community-scripts LXC installer      setup.sh, run.sh, update.sh, Dockerfile
 ```
 
-MIT licence.
+## License
+
+GPL-3.0-or-later (the GNU General Public License, version 3 or later), see [LICENSE](LICENSE).
