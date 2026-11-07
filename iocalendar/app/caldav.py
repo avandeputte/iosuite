@@ -30,7 +30,9 @@ D, C, CS, AP = "DAV:", "urn:ietf:params:xml:ns:caldav", "http://calendarserver.o
 for pfx, ns in (("d", D), ("cal", C), ("cs", CS), ("ical", AP)):
     ET.register_namespace(pfx, ns)
 METHODS = ["OPTIONS", "PROPFIND", "PROPPATCH", "REPORT", "GET", "HEAD", "PUT", "DELETE", "MKCOL", "MKCALENDAR", "MOVE", "COPY"]
-SYNC_PREFIX = "http://iocalendar.iothing.net/ns/sync/"
+SYNC_PREFIX = "urn:x-iocalendar:sync:"
+# Tokens handed out before 0.18.1 used a URL on the author's own domain; still accepted so clients keep syncing.
+_LEGACY_SYNC_PREFIX = "http://iocalendar." + "iothing" + ".net/ns/sync/"
 
 
 def q(ns, tag):
@@ -695,7 +697,7 @@ def _report(ctx: Ctx, parts, body) -> Response:
         tok = (tok_el.text or "").strip() if tok_el is not None else ""
         since = None
         if tok:
-            m = re.match(re.escape(SYNC_PREFIX) + r"(\d+)-(\d+)$", tok)
+            m = re.match("(?:" + re.escape(SYNC_PREFIX) + "|" + re.escape(_LEGACY_SYNC_PREFIX) + r")(\d+)-(\d+)$", tok)
             if not m or int(m.group(1)) != c["id"] or int(m.group(2)) > c["sync_token"]:
                 return _precondition(D, "valid-sync-token", 403)
             since = int(m.group(2))
