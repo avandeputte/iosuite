@@ -242,7 +242,7 @@ name and the same names), or in the environment, which wins. `config.env.example
 | `DB_TYPE` | `sqlite` | `mysql` for MariaDB/MySQL (setup.sh writes it) |
 | `DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USER` / `DB_PASSWORD` | | the database |
 | `HOST` / `PORT` | `0.0.0.0` / `8610` | where the server listens (every app of the suite has its own port) |
-| `FORWARDED_ALLOW_IPS` | `*` | the addresses allowed to pass on the visitor's address (your reverse proxy's) |
+| `FORWARDED_ALLOW_IPS` | `*` | the addresses allowed to pass on the visitor's address and scheme (`X-Forwarded-For` / `-Proto`: your reverse proxy's); read by the app itself (iosuite-shared), not by uvicorn |
 | `TLS_CERT_FILE` / `TLS_KEY_FILE` | | HTTPS served directly instead of behind a reverse proxy |
 | `DATA_DIR` | `./data` | what the app writes on its own: the log, the update result, the database settings saved from the web app (and the SQLite file) |
 | `LOG_FILE` | `DATA_DIR/ionotes.log` | the server log (empty: none) |

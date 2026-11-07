@@ -274,7 +274,8 @@ def _raw_connect() -> Conn:
     c = settings()
     if c["type"] == "mysql":
         return Conn(_open_mysql(c), True)
-    raw = sqlite3.connect(str(SQLITE_FILE), timeout=30, isolation_level=None if False else "")
+    # isolation_level "": the module opens deferred transactions by itself; Conn.begin issues BEGIN IMMEDIATE for writes
+    raw = sqlite3.connect(str(SQLITE_FILE), timeout=30, isolation_level="")
     raw.execute("PRAGMA foreign_keys = OFF")
     raw.execute("PRAGMA busy_timeout = 30000")
     return Conn(raw, False)

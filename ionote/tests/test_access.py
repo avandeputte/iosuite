@@ -46,10 +46,8 @@ def test_wrong_passwords_cost_a_growing_wait(client, admin):
 
 def test_every_api_route_declares_who_may_call_it(app):
     from app import access
-    from fastapi.routing import APIRoute
-    missing = [r.path for r in app.routes if isinstance(r, APIRoute) and r.path.startswith("/api/") and not access.declared(r)
-               and r.path not in ("/api/openapi.json", "/api/docs")]
-    assert not missing, missing
+    from iosuite_shared import testing
+    testing.check_access_declared(app, access.declared)  # through the included routers (FastAPI 0.162 hides them in app.routes)
 
 
 def test_cloudflare_access_needs_the_team_and_aud_before_any_header_is_believed(client, admin):

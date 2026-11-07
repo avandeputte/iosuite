@@ -105,7 +105,7 @@ def _limit_for(path: str, ctype: str) -> int:
 
 # 400 for bad input, the headers, no-store on the API, the body cap (counted as the body arrives, so nothing large is
 # ever held in memory), and the same 404 for another account's note as for none at all: iosuite-shared
-auth.install(app, limit_for=_limit_for, not_found=(notes_mod.NotFound,))
+auth.install(app, limit_for=_limit_for, not_found=(notes_mod.NotFound,), forwarded_allow_ips=config.FORWARDED_ALLOW_IPS)  # also X-Forwarded-* from those proxies
 
 
 def _status_extra(request: Request) -> dict:
