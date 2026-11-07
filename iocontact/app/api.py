@@ -255,8 +255,9 @@ def app_passwords(request: Request):
 @router.post("/api/app-passwords", dependencies=[access.signed_in])
 async def new_app_password(request: Request):
     b = await request.json()
-    pw = await run_in_threadpool(users.create_app_password, me(request)["id"], (b.get("label") or "Device").strip())
-    return {"password": pw, "name": me(request)["name"]}
+    pw = await run_in_threadpool(users.create_app_password, me(request)["id"], (b.get("label") or "Device").strip(),
+                                 bool(b.get("protocolsOnly")))
+    return {"password": pw, "name": me(request)["name"], "protocolsOnly": bool(b.get("protocolsOnly"))}
 
 
 @router.delete("/api/app-passwords/{pid}", dependencies=[access.admin])
@@ -826,7 +827,8 @@ def apple_profile(request: Request, label: str = Form("iPhone"), password: str =
     host = parts.hostname or "localhost"
     port = parts.port or (443 if ssl else 80)
     label = (label or "iPhone").strip()[:48] or "iPhone"
-    secret = users.create_app_password(u["id"], f"{label} (profile)") if password == "new" else None
+    # the profile's password is for CardDAV and LDAP only: a lost phone or a leaked profile file does not reach the web app, API or MCP
+    secret = users.create_app_password(u["id"], f"{label} (profile)", protocols_only=True) if password == "new" else None
     ident = "net.iothing.iocontacts." + re.sub(r"[^A-Za-z0-9.-]", "-", host) + "." + re.sub(r"[^A-Za-z0-9-]", "-", u["name"])
     who = u.get("display_name") or u["name"]
     carddav = {"PayloadType": "com.apple.carddav.account", "PayloadVersion": 1, "PayloadIdentifier": ident + ".carddav",

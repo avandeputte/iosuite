@@ -1531,6 +1531,7 @@ async function setDevices(el) {
   const pw = await api('/api/app-passwords');
   const label = h('input', { class: 't', placeholder: 'e.g. Alex’s iPhone', style: 'max-width:280px' });
   const shown = h('div');
+  const limit = h('input', { type: 'checkbox', checked: true });
   const isApple = /iPhone|iPad|Macintosh/.test(navigator.userAgent);
   const plabel = h('input', { class: 't', name: 'label', value: /iPad/.test(navigator.userAgent) ? 'iPad' : /iPhone/.test(navigator.userAgent) ? 'iPhone' : 'iPhone', style: 'max-width:200px' });
   el.append(...[
@@ -1545,14 +1546,16 @@ async function setDevices(el) {
           h('option', { value: 'family' }, 'Family birthdays'), h('option', { value: 'all' }, 'Birthdays from all my books'), h('option', { value: 'none' }, 'No calendar'))),
         info.ldap.enabled ? h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'ldap', value: 'true' }), ' Also the LDAP directory (for Mail on a Mac; plain LDAP, home network only)') : null,
         h('p', null, h('button', { class: 'pillbtn primary', type: 'submit' }, icon('download', 's'), 'Download the profile'))),
-      h('p', { class: 'muted small' }, 'The profile holds the app password: install it and delete the file, and revoke that password below if the device is lost. The profile is not signed, so iOS shows it as “Not Verified”; that is expected.')),
+      h('p', { class: 'muted small' }, 'The profile holds an app password that works for contacts apps only (CardDAV and LDAP), not for signing in here, the API or MCP. Install it and delete the file, and revoke that password below if the device is lost. The profile is not signed, so iOS shows it as “Not Verified”; that is expected.')),
     h('div', { class: 'box' }, h('h2', null, icon('key'), 'App passwords'),
       h('p', { class: 'muted' }, 'Give every app or device its own password instead of yours; you can revoke one without touching the others. Use your user name with it.'),
       h('div', { class: 'multi' }, label, h('button', { class: 'pillbtn primary', onclick: async () => {
-        const r = await api('/api/app-passwords', { method: 'POST', json: { label: label.value || 'Device' } });
+        const r = await api('/api/app-passwords', { method: 'POST', json: { label: label.value || 'Device', protocolsOnly: limit.checked } });
         shown.replaceChildren(h('p', null, h('b', null, 'Copy it now: '), 'it is shown only once.'), copyRow(r.password));
         label.value = ''; const list = await api('/api/app-passwords'); drawPw(list.items);
-      } }, icon('add', 's'), 'New app password')), shown, h('div', { id: 'pwlist' })),
+      } }, icon('add', 's'), 'New app password')),
+      h('label', { class: 'check' }, limit, ' Contacts apps only (CardDAV and LDAP). Untick for the REST API or an AI assistant (MCP).'),
+      shown, h('div', { id: 'pwlist' })),
     h('div', { class: 'box' }, h('h2', null, icon('book'), 'Contacts apps (CardDAV)'),
       h('p', null, 'Apple Contacts (Mac, iPhone, iPad: Settings › Contacts › Accounts › Add Account › Other › Add CardDAV Account), DAVx⁵ on Android, Thunderbird, Evolution, GNOME Contacts, KDE: give the server, your user name and an app password.'),
       h('div', { class: 'kv' }, h('div', { class: 'k' }, 'Server'), h('div', { class: 'v', style: { flex: 1 } }, copyRow(info.server))),
@@ -1573,7 +1576,7 @@ async function setDevices(el) {
       h('div', { class: 'kv' }, h('div', { class: 'k' }, 'Bind DN'), h('div', { class: 'v', style: { flex: 1 } }, copyRow(info.ldap.bindDn))),
       h('p', { class: 'muted small' }, 'Sign in with an app password. The directory speaks plain LDAP: keep it on your own network, or put a TLS proxy in front for ldaps://.')) : null,
     S.status.mcp ? h('div', { class: 'box' }, h('h2', null, icon('ai'), 'AI assistants (MCP)'),
-      h('p', null, 'Claude and other assistants that speak the Model Context Protocol can search, read and update the contacts you can see, as you. Give the assistant its own app password (above), sent as a Bearer token.'),
+      h('p', null, 'Claude and other assistants that speak the Model Context Protocol can search, read and update the contacts you can see, as you. Give the assistant its own app password (above, without “Contacts apps only”), sent as a Bearer token.'),
       h('div', { class: 'kv' }, h('div', { class: 'k' }, 'MCP address'), h('div', { class: 'v', style: { flex: 1 } }, copyRow(`${info.server}/mcp`))),
       h('p', { class: 'muted small' }, 'Claude Code:'),
       copyRow(`claude mcp add --transport http iocontacts ${info.server}/mcp --header "Authorization: Bearer APP-PASSWORD"`),
@@ -1581,12 +1584,12 @@ async function setDevices(el) {
       copyRow(JSON.stringify({ mcpServers: { iocontacts: { command: 'npx', args: ['-y', 'mcp-remote', `${info.server}/mcp`, '--header', 'Authorization: Bearer APP-PASSWORD'] } } })))
       : (S.user.role === 'admin' ? h('div', { class: 'box' }, h('h2', null, icon('ai'), 'AI assistants (MCP)'), h('p', { class: 'muted' }, 'The MCP server is off. Turn it on in ', h('a', { class: 'lnk', href: '#/settings/server' }, 'Settings › Server'), ' to let Claude and other assistants work with the contacts.')) : null),
     h('div', { class: 'box' }, h('h2', null, icon('link'), 'Other apps (REST API)'),
-      h('p', null, 'JSON, vCard or jCard over HTTPS, with your user name and an app password (HTTP Basic) or the app password as a Bearer token. ', h('a', { class: 'lnk', href: '/api/docs', target: '_blank' }, 'API documentation')),
+      h('p', null, 'JSON, vCard or jCard over HTTPS, with your user name and an app password made without “Contacts apps only” (HTTP Basic), or that password as a Bearer token. ', h('a', { class: 'lnk', href: '/api/docs', target: '_blank' }, 'API documentation')),
       copyRow(`curl -u ${info.user}:APP-PASSWORD -H 'Accept: application/vcard+json' ${info.server}/api/contacts?q=smith`))].filter(Boolean));
   const drawPw = (items) => {
     const box = el.querySelector('#pwlist');
-    box.replaceChildren(items.length ? h('table', { class: 't' }, h('tr', null, h('th', null, 'Name'), h('th', null, 'Made'), h('th', null, 'Last used'), h('th')),
-      items.map((p) => h('tr', null, h('td', null, p.label), h('td', null, new Date(p.created).toLocaleDateString()), h('td', null, p.lastUsed ? new Date(p.lastUsed).toLocaleString() : 'never'),
+    box.replaceChildren(items.length ? h('table', { class: 't' }, h('tr', null, h('th', null, 'Name'), h('th', null, 'Works for'), h('th', null, 'Made'), h('th', null, 'Last used'), h('th')),
+      items.map((p) => h('tr', null, h('td', null, p.label), h('td', null, p.protocolsOnly ? 'Contacts apps (CardDAV, LDAP)' : 'Everything'), h('td', null, new Date(p.created).toLocaleDateString()), h('td', null, p.lastUsed ? new Date(p.lastUsed).toLocaleString() : 'never'),
         h('td', null, h('button', { class: 'pillbtn noic danger', onclick: async () => { await api(`/api/app-passwords/${p.id}`, { method: 'DELETE' }); drawPw((await api('/api/app-passwords')).items); } }, 'Revoke'))))) : h('p', { class: 'muted' }, 'No app passwords yet.'));
   };
   drawPw(pw.items);

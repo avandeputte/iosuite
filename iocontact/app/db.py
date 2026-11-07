@@ -24,6 +24,12 @@ SCHEMA = [
     # app_passwords tables of ioContacts 0.3 are folded into it by `iosuite-shared migrate` and renamed *_migrated.
     # owner_id NULL: a shared address book. owner_key stands in for owner_id in the unique key: NULLs never clash in a
     # unique key, so (owner_id, slug) alone would let two shared address books share a slug
+    # which app passwords (by their 8-hex prefix, in ios_app_passwords) are limited to CardDAV and LDAP
+    """CREATE TABLE IF NOT EXISTS con_app_password_scopes (
+        prefix CHAR(8) PRIMARY KEY,
+        scope VARCHAR(16) NOT NULL,
+        created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
+    )""",
     """CREATE TABLE IF NOT EXISTS con_address_books (
         id INT AUTO_INCREMENT PRIMARY KEY,
         owner_id INT NULL,

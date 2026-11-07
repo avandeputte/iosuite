@@ -375,7 +375,7 @@ class Session:
         m = re.match(r"^\s*(?:cn|uid|mail)\s*=\s*([^,]+)", name, re.I)
         if m:
             ident = m.group(1).strip()
-        u = await asyncio.get_running_loop().run_in_executor(None, users.authenticate, ident, pw)
+        u = await asyncio.get_running_loop().run_in_executor(None, lambda: users.authenticate(ident, pw, protocol=True))
         if not u or u["role"] == "none":  # no access to ioContacts: no directory either
             log.info("LDAP bind refused for %r from %s", name, self.peer)
             await self.send(result(msgid, 0x61, INVALID_CREDENTIALS, "Wrong name or password"))

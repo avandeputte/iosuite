@@ -126,9 +126,13 @@ def test_apple_profile(client):
     # the app password in the profile works for CardDAV
     client.cookies.clear()
     assert client.request("PROPFIND", "/dav/", auth=("alex", dav["CardDAVPassword"]), headers={"Depth": "0"}).status_code == 207
-    labels = [x["label"] for x in client.get("/api/app-passwords", auth=("alex", dav["CardDAVPassword"])).json()["items"]]
-    assert "Alex iPhone (profile)" in labels
-    ask = plistlib.loads(client.post("/api/apple-profile", data={"password": "ask", "calendar": "none"}, auth=("alex", dav["CardDAVPassword"])).content)
+    # ...and nothing else: not the API, MCP or the sign-in form
+    assert client.get("/api/app-passwords", auth=("alex", dav["CardDAVPassword"])).status_code == 403
+    assert client.post("/api/auth/login", json={"name": "alex", "password": dav["CardDAVPassword"]}).status_code == 401
+    assert client.post("/api/auth/login", json={"name": "alex", "password": "secret123"}).status_code == 200
+    items = client.get("/api/app-passwords").json()["items"]
+    assert [x["protocolsOnly"] for x in items if x["label"] == "Alex iPhone (profile)"] == [True]
+    ask = plistlib.loads(client.post("/api/apple-profile", data={"password": "ask", "calendar": "none"}).content)
     assert len(ask["PayloadContent"]) == 1 and "CardDAVPassword" not in ask["PayloadContent"][0]
 
 
@@ -341,3 +345,31 @@ def test_iopix_is_the_only_photo_source(client, family_id, monkeypatch):
     assert "PHOTO" in client.get(f"/api/contacts/{cid}", headers={"Accept": "text/vcard"}).text
     from app import db
     assert db.one("SELECT photo FROM con_contacts WHERE id = %s", (cid,))["photo"] is None
+
+
+def test_protocols_only_app_password(client, app):
+    from fastapi.testclient import TestClient as T2
+    from app import users
+    limited = client.post("/api/app-passwords", json={"label": "phone", "protocolsOnly": True}).json()["password"]
+    full = client.post("/api/app-passwords", json={"label": "script"}).json()["password"]
+    anon = T2(app)
+    # CardDAV and its discovery work
+    assert anon.request("PROPFIND", "/dav/", auth=("alex", limited), headers={"Depth": "0"}).status_code == 207
+    assert anon.get("/.well-known/carddav", auth=("alex", limited), follow_redirects=False).status_code in (301, 302, 307, 308)
+    # the REST API (Basic or Bearer), the account routes and MCP do not
+    assert anon.get("/api/books", auth=("alex", limited)).status_code == 403
+    assert anon.get("/api/books", headers={"Authorization": f"Bearer {limited}"}).status_code == 403
+    assert anon.get("/api/auth/me", auth=("alex", limited)).status_code == 403
+    assert anon.post("/mcp", headers={"Authorization": f"Bearer {limited}"}, json={}).status_code == 403
+    assert anon.post("/api/auth/login", json={"name": "alex", "password": limited}).status_code == 401
+    # LDAP binds take it
+    assert users.authenticate("alex", limited, protocol=True)["name"] == "alex"
+    assert users.authenticate("alex", limited) is None
+    # an app password without the limit still works everywhere
+    assert anon.get("/api/books", auth=("alex", full)).status_code == 200
+    assert anon.get("/api/books", auth=("alex", "nope")).status_code == 401
+    # revoking it forgets the limit too
+    pid = next(p["id"] for p in client.get("/api/app-passwords").json()["items"] if p["protocolsOnly"])
+    client.delete(f"/api/app-passwords/{pid}")
+    from app import db
+    assert db.q("SELECT * FROM con_app_password_scopes") == []
