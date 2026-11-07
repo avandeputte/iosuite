@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from iosuite_shared import mcp as shared_mcp
 from iosuite_shared.updates import setup_log
@@ -59,25 +59,9 @@ def mcp_enabled() -> bool:
 
 # who is asking, whether sign-in is required at all, the cross-site check on writes, and the MCP endpoint's gate (the
 # switch; an app password or session; every tool acts as that account): iosuite-shared's middleware
-_mcp_gate = auth.mcp_gate(mcp_enabled, on_user=mcp.current_user.set)
-
-
-async def _gates(request):
-    """A protocol-only app password (HTTP Basic or Bearer) reaches CardDAV and nothing else (LDAP checks its own binds);
-    then the MCP gate."""
-    if request.state.user is not None and not request.state.via_proxy and not request.state.cookie_uid \
-            and not request.url.path.startswith(users.PROTOCOL_PATHS):
-        pw = users.authorization_password(request.headers.get("authorization"))
-        if pw and await run_in_threadpool(users.protocols_only, pw):
-            return JSONResponse({"detail": "This app password is for contacts apps (CardDAV and LDAP) only. Make one without that limit "
-                                           "in Settings › Apps and devices for the API or MCP."}, status_code=403)
-    r = _mcp_gate(request)
-    if hasattr(r, "__await__"):
-        r = await r
-    return r
-
-
-app.middleware("http")(auth.middleware(open_paths=OPEN_PATHS, open_prefixes=OPEN_PREFIXES, before=_gates))
+# (an app password with a scope, such as an Apple profile's CardDAV/LDAP-only one, is kept to its paths by the same middleware)
+app.middleware("http")(auth.middleware(open_paths=OPEN_PATHS, open_prefixes=OPEN_PREFIXES,
+                                       before=auth.mcp_gate(mcp_enabled, on_user=mcp.current_user.set)))
 
 
 def _limit_for(path: str, ctype: str) -> int:

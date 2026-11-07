@@ -368,8 +368,20 @@ def test_protocols_only_app_password(client, app):
     # an app password without the limit still works everywhere
     assert anon.get("/api/books", auth=("alex", full)).status_code == 200
     assert anon.get("/api/books", auth=("alex", "nope")).status_code == 401
-    # revoking it forgets the limit too
-    pid = next(p["id"] for p in client.get("/api/app-passwords").json()["items"] if p["protocolsOnly"])
-    client.delete(f"/api/app-passwords/{pid}")
-    from app import db
-    assert db.q("SELECT * FROM con_app_password_scopes") == []
+    assert {p["label"]: p["scope"] for p in client.get("/api/app-passwords").json()["items"]} == {"phone": "dav", "script": ""}
+    assert client.post("/api/app-passwords", json={"label": "x", "scope": "bogus"}).status_code == 400
+
+
+def test_scopes_move_from_0_17(client, app):
+    """0.17's con_app_password_scopes rows become the shared 'dav' scope, and the table goes."""
+    from fastapi.testclient import TestClient as T2
+    from app import db, users
+    pw = client.post("/api/app-passwords", json={"label": "old phone"}).json()["password"]
+    db.ex("CREATE TABLE con_app_password_scopes (prefix CHAR(8) PRIMARY KEY, scope VARCHAR(16) NOT NULL)")
+    db.ex("INSERT INTO con_app_password_scopes VALUES (%s, 'protocols')", (pw.split("-")[1],))
+    users._move_scopes_to_shared()
+    users.forget_cached_auth()
+    assert not db.q("SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'con_app_password_scopes'")
+    anon = T2(app)
+    assert anon.get("/api/books", auth=("alex", pw)).status_code == 403
+    assert anon.request("PROPFIND", "/dav/", auth=("alex", pw), headers={"Depth": "0"}).status_code == 207

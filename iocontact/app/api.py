@@ -255,9 +255,11 @@ def app_passwords(request: Request):
 @router.post("/api/app-passwords", dependencies=[access.signed_in])
 async def new_app_password(request: Request):
     b = await request.json()
-    pw = await run_in_threadpool(users.create_app_password, me(request)["id"], (b.get("label") or "Device").strip(),
-                                 bool(b.get("protocolsOnly")))
-    return {"password": pw, "name": me(request)["name"], "protocolsOnly": bool(b.get("protocolsOnly"))}
+    scope = str(b.get("scope") or ("dav" if b.get("protocolsOnly") else ""))  # scope as in iosuite-shared ('' or 'dav'); protocolsOnly: the same as 'dav'
+    if scope not in ("", "dav"):
+        raise HTTPException(400, f"Unknown scope: {scope}")
+    pw = await run_in_threadpool(users.create_app_password, me(request)["id"], (b.get("label") or "Device").strip(), scope == "dav")
+    return {"password": pw, "name": me(request)["name"], "scope": scope, "protocolsOnly": scope == "dav"}
 
 
 @router.delete("/api/app-passwords/{pid}", dependencies=[access.admin])

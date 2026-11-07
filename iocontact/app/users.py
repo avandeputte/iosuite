@@ -7,9 +7,7 @@ use HTTP Basic or an LDAP bind with either the account password or an app passwo
 shown once). This module keeps ioContacts' old names; the work is done by iosuite_shared.
 """
 import datetime as dt
-import re
 import secrets
-import time
 
 from iosuite_shared import apppasswords, db as authdb, sessions, users as shared
 
@@ -106,6 +104,7 @@ def delete(uid: int) -> None:
 def init() -> None:
     """The Shared ioSuite database's tables, and the ADMIN_USER / ADMIN_PASSWORD account on a first start with no accounts."""
     shared.init()
+    _move_scopes_to_shared()
 
 
 def can_write(u: dict | None) -> bool:
@@ -119,13 +118,10 @@ def is_admin(u: dict | None) -> bool:
 # ---------------------------------------------------------------- app passwords
 
 def create_app_password(uid: int, label: str, protocols_only: bool = False) -> str:
-    """Returns the password (shown once): iocontacts-XXXXXXXX-<secret>. protocols_only: it works for CardDAV and LDAP
-    only, not for the web app, the REST API or MCP (what a phone or a configuration profile needs, and no more)."""
-    pw = apppasswords.create(uid, APP, label)
-    if protocols_only:
-        db.ex("INSERT IGNORE INTO con_app_password_scopes (prefix, scope) VALUES (%s, 'protocols')", (_prefix(pw),))
-        _limited_cache.clear()
-    return pw
+    """Returns the password (shown once): iocontacts-XXXXXXXX-<secret>. protocols_only: scope 'dav', it works for CardDAV
+    and LDAP only, not for the web app, the REST API or MCP (what a phone or a configuration profile needs, and no more).
+    The scope lives with the password in the Shared ioSuite database; iosuite-shared's middleware enforces it by path."""
+    return apppasswords.create(uid, APP, label, apppasswords.DAV if protocols_only else "")
 
 
 def _iso(ts):
@@ -133,75 +129,36 @@ def _iso(ts):
 
 
 def list_app_passwords(uid: int) -> list[dict]:
-    prefixes = {r["id"]: r["prefix"] for r in authdb.q("SELECT id, prefix FROM ios_app_passwords WHERE user_id = %s AND app = %s", (uid, APP))}
-    limited = _limited_prefixes()
     return [{"id": r["id"], "label": r["label"], "created": _iso(r["created"]), "lastUsed": _iso(r["lastUsed"]),
-             "protocolsOnly": prefixes.get(r["id"]) in limited} for r in apppasswords.list_for(uid, APP)]
+             "scope": r["scope"], "protocolsOnly": r["scope"] == apppasswords.DAV} for r in apppasswords.list_for(uid, APP)]
 
 
 def delete_app_password(uid: int, pid: int) -> None:
-    r = authdb.one("SELECT prefix FROM ios_app_passwords WHERE id = %s AND user_id = %s", (pid, uid))
     apppasswords.delete(uid, pid)
-    if r:
-        db.ex("DELETE FROM con_app_password_scopes WHERE prefix = %s", (r["prefix"],))
-        _limited_cache.clear()
 
 
-# ---------------------------------------------------------------- protocol-only app passwords (ioContacts' own)
-# The scope is kept here, by the password's 8-hex prefix (con_app_password_scopes), as ioCalendar does: a limited
-# password signs CardDAV and LDAP in, and nothing else (no web sign-in, REST API or MCP), so a password leaked from a
-# phone or a profile file reaches the contacts over the protocols only.
-
-PROTOCOL_PATHS = ("/dav", "/.well-known/carddav")
-_limited_cache: dict = {}
-
-
-def _prefix(password: str | None) -> str | None:
-    m = re.match(r"^[a-z0-9]+-([0-9a-f]{8})-", password or "")
-    return m.group(1) if m else None
-
-
-def _limited_prefixes() -> set:
-    hit = _limited_cache.get("set")
-    if hit and hit[0] > time.time():
-        return hit[1]
-    found = {r["prefix"] for r in db.q("SELECT prefix FROM con_app_password_scopes WHERE scope = 'protocols'")}
-    _limited_cache["set"] = (time.time() + 30, found)
-    return found
-
-
-def protocols_only(password: str | None) -> bool:
-    """Whether this is a protocol-only app password (by its prefix: the secret is checked by authenticate)."""
-    p = _prefix(password)
-    return bool(p) and p in _limited_prefixes()
-
-
-def authorization_password(header: str | None) -> str | None:
-    """The password of an HTTP Basic or Bearer Authorization header."""
-    import base64
-    h = header or ""
-    if h.lower().startswith("basic "):
-        try:
-            return base64.b64decode(h[6:].strip()).decode("utf-8").partition(":")[2]
-        except (ValueError, UnicodeDecodeError):
-            return None
-    if h.lower().startswith("bearer "):
-        return h[7:].strip()
-    return None
+def _move_scopes_to_shared() -> None:
+    """ioContacts 0.17 kept its protocol-only passwords in con_app_password_scopes (by prefix): give those passwords the
+    shared 'dav' scope and drop the table. Once, at start."""
+    if not db.one("SELECT 1 AS x FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'con_app_password_scopes'"):
+        return
+    for r in db.q("SELECT prefix FROM con_app_password_scopes"):
+        apppasswords.set_scope(APP, r["prefix"], apppasswords.DAV)
+    db.ex("DROP TABLE con_app_password_scopes")
 
 
 def authenticate(name: str, password: str, protocol: bool = False) -> dict | None:
-    """Account password or app password; for LDAP binds (protocol=True) and the sign-in form. A protocol-only app
-    password is refused unless protocol is set. (CardDAV's HTTP Basic goes through iosuite-shared's middleware, and
-    app.main's gate keeps such passwords to /dav.)"""
-    if not protocol and protocols_only(password):
+    """Account password or app password; for LDAP binds (protocol=True) and the sign-in form. A protocol-only ('dav')
+    app password is refused unless protocol is set. (HTTP Basic and Bearer go through iosuite-shared's middleware,
+    which keeps such passwords to /dav.)"""
+    user, scope = apppasswords.authenticate_scoped(name, password, APP)
+    if user and scope and not (protocol and scope == apppasswords.DAV):
         return None
-    return row_of(apppasswords.authenticate(name, password, APP))
+    return row_of(user)
 
 
 def forget_cached_auth() -> None:
     apppasswords.forget()
-    _limited_cache.clear()
     shared.invalidate()
 
 
