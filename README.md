@@ -1,7 +1,7 @@
 # ioSuite
 
 *The start page of the ioThing suite: one place with every io app ([ioPix](https://github.com/avandeputte/iopix),
-[ioHealth](https://github.com/avandeputte/ioHealth), [ioCalendar](https://github.com/avandeputte/iocalendar),
+[ioHealth](https://github.com/avandeputte/iohealth), [ioCalendar](https://github.com/avandeputte/iocalendar),
 [ioContacts](https://github.com/avandeputte/iocontacts), [ioNotes](https://github.com/avandeputte/ionotes)).*
 
 A self-hosted home page for the family: a tile per app, signed in with the suite's shared accounts ([`iosuite-shared`](https://github.com/avandeputte/iosuite-shared)), so
@@ -90,19 +90,6 @@ what the app will show on the start page later (today's events, the newest photo
   panel is iosuite-shared's (`/api/suite-admin/ui.js` on `/api/suite-admin`), so every io app shows the same one.
 - **Updates**: the daily version check, the note for admins and **Update now**, the server log and Restart under Maintenance › Updates and logs, as in every ioThing app.
 - Light and dark, a phone layout, installable as a web app (manifest and icons).
-
-## Updates
-
-ioSuite asks GitHub once a day whether the main branch has a newer version (only the public commit list is read;
-nothing about the server is sent; Maintenance › Updates and logs switches it off, `UPDATE_CHECK=0` locks it off). Admins
-then see a note with **Update now**, and **Maintenance › Updates and logs** has the version, **Check for updates**,
-**Update now**, the tail of the server log (`data/iosuite.log` in the app folder; `LOG_FILE` moves it, empty switches it
-off) and **Restart**. The page is the same in every ioThing app: the version check, `update.sh`, the restart and the log
-come from `iosuite_shared.updates` in iosuite-shared, served at `/api/server` and `/api/log`. Updating runs the app's own
-`update.sh`: the new version's Python packages first, then the code (a failed step leaves the running
-version as it was), the database is brought up to date, and the service restarts; the page reloads when the new version
-answers. In Docker, pull the image instead. From a shell: `./update.sh` (`--check` only looks,
-`IOSUITE_REF=<sha>` installs a given commit).
 
 ## Run
 
@@ -199,7 +186,20 @@ password is used once and not written anywhere.
 | `DATA_DIR` | where the app writes on its own: the log and the update result (`data/` in the app folder) |
 | `LOG_FILE` | the server log shown at Maintenance › Updates and logs (`DATA_DIR/iosuite.log`; `LOG_FILE=` with nothing after it: no file) |
 
-### HTTPS
+## Updates
+
+ioSuite asks GitHub once a day whether the main branch has a newer version (only the public commit list is read;
+nothing about the server is sent; Maintenance › Updates and logs switches it off, `UPDATE_CHECK=0` locks it off). Admins
+then see a note with **Update now**, and **Maintenance › Updates and logs** has the version, **Check for updates**,
+**Update now**, the tail of the server log (`data/iosuite.log` in the app folder; `LOG_FILE` moves it, empty switches it
+off) and **Restart**. The page is the same in every ioThing app: the version check, `update.sh`, the restart and the log
+come from `iosuite_shared.updates` in iosuite-shared, served at `/api/server` and `/api/log`. Updating runs the app's own
+`update.sh`: the new version's Python packages first, then the code (a failed step leaves the running
+version as it was), the database is brought up to date, and the service restarts; the page reloads when the new version
+answers. In Docker, pull the image instead. From a shell: `./update.sh` (`--check` only looks,
+`IOSUITE_REF=<sha>` installs a given commit).
+
+## Reverse proxy and HTTPS
 
 Run it behind a reverse proxy that terminates HTTPS (Caddy, Nginx Proxy Manager, HAProxy, Cloudflare Tunnel), on a
 host under the same `COOKIE_DOMAIN` as the apps, so the sign-in carries over.
@@ -255,4 +255,4 @@ start page (its Content-Security-Policy allows only its own origin), as `/api/wi
 
 ## License
 
-MIT.
+GPL-3.0-or-later (the GNU General Public License, version 3 or later), see [LICENSE](LICENSE).
