@@ -215,3 +215,22 @@ def test_the_shell_its_files_and_the_icon_are_public(client):
     assert paths and all(p.startswith("static/") for p in paths)
     for p in ["/" + p for p in paths] + [suite.ICON, "/static/icons/apple-touch-icon.png"]:
         assert client.get(p).status_code == 200, p
+
+
+def test_caldav_only_app_passwords(client):
+    """The Apple profile's app password, and one made as "CalDAV only", open CalDAV and nothing else."""
+    import plistlib
+    prof = plistlib.loads(client.post("/api/apple-profile", data={"label": "iPad", "password": "new"}).content)
+    pw = prof["PayloadContent"][0]["CalDAVPassword"]
+    own = client.post("/api/caldav-passwords", json={"label": "Mac"}).json()["password"]
+    full = client.post("/api/auth/app-passwords", json={"label": "script"}).json()["password"]
+    listed = {p["label"]: p["id"] for p in client.get("/api/auth/app-passwords").json()["items"]}
+    assert set(client.get("/api/caldav-passwords").json()["ids"]) == {listed["iPad (profile)"], listed["Mac"]}
+    client.cookies.clear()
+    for p in (pw, own):
+        assert client.request("PROPFIND", "/dav/", auth=("alex", p), headers={"Depth": "0"}).status_code == 207
+        assert client.get("/api/calendars", auth=("alex", p)).status_code == 403
+        assert client.get("/api/calendars", headers={"Authorization": f"Bearer {p}"}).status_code == 403
+        assert client.post("/mcp", headers={"Authorization": f"Bearer {p}"}, json={}).status_code == 403
+    assert client.get("/api/calendars", auth=("alex", full)).status_code == 200
+    assert client.get("/api/calendars", headers={"Authorization": f"Bearer {full}"}).status_code == 200

@@ -1160,12 +1160,13 @@ async function setDevices(el) {
   const info = await api('/api/connect');
   const canPw = !S.user.passwordless;
   const label = h('input', { class: 't', placeholder: 'e.g. Alex’s iPhone', style: 'max-width:280px' });
+  const scope = h('select', { class: 't', style: 'max-width:240px' }, h('option', { value: 'caldav' }, 'CalDAV only (calendar apps)'), h('option', { value: 'all' }, 'CalDAV, API and MCP'));
   const shown = h('div'), pwlist = h('div');
   const isApple = /iPhone|iPad|Macintosh/.test(navigator.userAgent);
   const drawPw = async () => {
-    const items = (await api('/api/auth/app-passwords')).items;
-    pwlist.replaceChildren(items.length ? h('table', { class: 't' }, h('tr', null, h('th', null, 'Name'), h('th', null, 'Made'), h('th', null, 'Last used'), h('th')),
-      items.map((p) => h('tr', null, h('td', null, p.label), h('td', null, new Date(p.created).toLocaleDateString()), h('td', null, p.lastUsed ? new Date(p.lastUsed).toLocaleString() : 'never'),
+    const [items, only] = await Promise.all([api('/api/auth/app-passwords').then((r) => r.items), api('/api/caldav-passwords').then((r) => new Set(r.ids))]);
+    pwlist.replaceChildren(items.length ? h('table', { class: 't' }, h('tr', null, h('th', null, 'Name'), h('th', null, 'Works for'), h('th', null, 'Made'), h('th', null, 'Last used'), h('th')),
+      items.map((p) => h('tr', null, h('td', null, p.label), h('td', null, only.has(p.id) ? 'CalDAV only' : 'CalDAV, API and MCP'), h('td', null, new Date(p.created).toLocaleDateString()), h('td', null, p.lastUsed ? new Date(p.lastUsed).toLocaleString() : 'never'),
         h('td', null, h('button', { class: 'pillbtn noic danger', onclick: async () => { await api(`/api/auth/app-passwords/${p.id}`, { method: 'DELETE' }); drawPw(); } }, 'Revoke'))))) : h('p', { class: 'muted' }, 'No app passwords yet.'));
   };
   const plabel = h('input', { class: 't', name: 'label', value: /iPad/.test(navigator.userAgent) ? 'iPad' : /Macintosh/.test(navigator.userAgent) ? 'Mac' : 'iPhone', style: 'max-width:200px' });
@@ -1177,13 +1178,13 @@ async function setDevices(el) {
         fld('Device name', plabel),
         fld('Password', h('select', { class: 't', name: 'password' }, h('option', { value: 'new' }, 'Include a new app password for this device'), h('option', { value: 'ask' }, 'Leave it out (the device asks while installing)'))),
         h('p', null, h('button', { class: 'pillbtn primary', type: 'submit' }, icon('download', 's'), 'Download the profile'))),
-      h('p', { class: 'muted small' }, 'The profile holds the app password: install it and delete the file, and revoke that password below if the device is lost. The profile is not signed, so iOS shows it as “Not Verified”; that is expected.'),
+      h('p', { class: 'muted small' }, 'The profile holds a CalDAV-only app password: install it and delete the file, and revoke that password below if the device is lost. The profile is not signed, so iOS shows it as “Not Verified”; that is expected.'),
       h('p', { class: 'muted small' }, 'Behind Cloudflare Access: calendar apps cannot sign in at Access, so add a Bypass policy for /dav/*, /.well-known/caldav and /ics/* (and /mcp if you use it). Those stay protected by the app password and the private link token; the web app stays behind Access.')) : null,
     canPw ? h('div', { class: 'box' }, h('h2', null, icon('key'), 'App passwords'),
-      h('p', { class: 'muted' }, 'Give every app or device its own password instead of yours; you can revoke one without touching the others. Use your user name with it.'),
-      h('div', { class: 'multi' }, label, h('button', { class: 'pillbtn primary', onclick: async () => {
+      h('p', { class: 'muted' }, 'Give every app or device its own password instead of yours; you can revoke one without touching the others. Use your user name with it. A CalDAV-only password works in calendar apps and nothing else, so one lifted from a phone cannot reach the API, MCP or the web app; scripts and AI assistants need one without that limit.'),
+      h('div', { class: 'multi' }, label, scope, h('button', { class: 'pillbtn primary', onclick: async () => {
         try {
-          const r = await api('/api/auth/app-passwords', { method: 'POST', json: { label: label.value || 'Device' } });
+          const r = await api(scope.value === 'caldav' ? '/api/caldav-passwords' : '/api/auth/app-passwords', { method: 'POST', json: { label: label.value || 'Device' } });
           shown.replaceChildren(h('p', null, h('b', null, 'Copy it now: '), 'it is shown only once.'), copyRow(r.password));
           label.value = ''; drawPw();
         } catch (e) { fail(e); }
@@ -1201,7 +1202,7 @@ async function setDevices(el) {
       h('p', null, h('a', { class: 'pillbtn', href: info.webcal }, icon('today', 's'), 'Open in my calendar app'), ' ',
         h('button', { class: 'pillbtn noic', onclick: async () => { if (await confirmDialog('New subscription links', 'The old links stop working; subscribed calendars need the new ones.', 'Make new links')) { await api('/api/feeds/reset', { method: 'POST' }); onRoute(); } } }, 'New links'))),
     S.status.mcp ? h('div', { class: 'box' }, h('h2', null, icon('ai'), 'AI assistants (MCP)'),
-      h('p', null, 'Claude and other assistants that speak the Model Context Protocol can read your agenda, find free time and add or change events, as you. Give the assistant its own app password (above), sent as a Bearer token.'),
+      h('p', null, 'Claude and other assistants that speak the Model Context Protocol can read your agenda, find free time and add or change events, as you. Give the assistant its own app password (above, “CalDAV, API and MCP”), sent as a Bearer token.'),
       kv('MCP address', info.mcp),
       h('p', { class: 'muted small' }, 'Claude Code:'),
       copyRow(`claude mcp add --transport http iocalendar ${info.mcp} --header "Authorization: Bearer APP-PASSWORD"`),

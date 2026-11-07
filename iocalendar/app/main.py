@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from iosuite_shared import mcp as shared_mcp
 from iosuite_shared.updates import setup_log
@@ -55,6 +55,21 @@ def mcp_enabled() -> bool:
 # switch; an app password or session; every tool acts as that account): iosuite-shared's middleware
 app.middleware("http")(auth.middleware(open_paths=OPEN_PATHS, open_prefixes=OPEN_PREFIXES,
                                        before=auth.mcp_gate(mcp_enabled, on_user=mcp.current_user.set)))
+
+
+# an app password made for CalDAV only (the Apple profile's, or "CalDAV only" in Settings › Apps and devices) opens
+# CalDAV and nothing else: a password lifted from a phone cannot reach the REST API, MCP or the web app. Added after
+# the suite's middleware, so it runs first.
+CALDAV_PREFIXES = ("/dav", "/.well-known/")
+
+
+@app.middleware("http")
+async def caldav_only_passwords(request, call_next):
+    authz = request.headers.get("authorization")
+    if authz and not request.url.path.startswith(CALDAV_PREFIXES) and await run_in_threadpool(users.caldav_only, authz):
+        return JSONResponse({"detail": "This app password is for CalDAV only. Make one without that limit in Settings › Apps and devices."},
+                            status_code=403)
+    return await call_next(request)
 
 
 def _limit_for(path: str, ctype: str) -> int:

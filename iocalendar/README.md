@@ -30,12 +30,14 @@ No tasks or to-dos: those belong in their own app.
 | AI assistants: Claude and anything else that speaks MCP | **Model Context Protocol** (streamable HTTP, and stdio) | `https://host/mcp` (switched on in Settings › Server) |
 
 **iPhone, iPad and Mac in one step:** Settings › Apps and devices › *Download the profile* gives a configuration profile
-(`.mobileconfig`) with the CalDAV account and a new app password for that device inside (or none, and the device asks).
+(`.mobileconfig`) with the CalDAV account and a new CalDAV-only app password for that device inside (or none, and the device asks).
 Open the page in Safari on the iPhone, tap Download, then Settings › Profile Downloaded › Install.
 
 Settings › Apps and devices shows the exact addresses to type, and makes **app passwords**: one per phone or app,
 revocable on its own, used with your user name for CalDAV and the REST API (HTTP Basic, or
-`Authorization: Bearer <app password>`).
+`Authorization: Bearer <app password>`). An app password can be made **CalDAV only**: it opens `/dav` and nothing
+else, so one lifted from a phone cannot reach the REST API, MCP or the web app (403). The Apple profile's password is
+always CalDAV only; scripts and AI assistants need one without that limit.
 
 ```sh
 curl -u alex:APP-PASSWORD "https://calendar.example.com/api/occurrences?start=2026-11-01&end=2026-12-01"
