@@ -7,6 +7,7 @@ event stream (GET /api/ha/events) sends the Home card anew when it sees the vers
 copy never goes stale, so the REST polling stops; when it is down (Home Assistant restarting, no websockets package),
 the page falls back to the REST copy, a few seconds old at most.
 """
+import asyncio
 import json
 import logging
 import threading
@@ -32,6 +33,7 @@ class Feed:
         self._thread = None
         self._gen = 0                  # a restart retires the thread of the previous generation
         self._lock = threading.Lock()
+        self._waiters: set = set()     # (loop, asyncio.Event) of the event streams waiting for a change
 
     # ------------------------------------------------------------------ control
 
@@ -57,6 +59,29 @@ class Feed:
         with self.cond:
             self.version += 1
             self.cond.notify_all()
+            waiters = list(self._waiters)
+        for loop, ev in waiters:
+            try:
+                loop.call_soon_threadsafe(ev.set)
+            except RuntimeError:  # the loop is closed: the stream is gone
+                pass
+
+    async def wait_async(self, seen: int, timeout: float) -> int:
+        """`wait` for the event streams: no thread is held while a page waits for the next change (a hundred open
+        pages are a hundred events, not a hundred threads)."""
+        with self.cond:
+            if self.version != seen:
+                return self.version
+            key = (asyncio.get_running_loop(), asyncio.Event())
+            self._waiters.add(key)
+        try:
+            await asyncio.wait_for(key[1].wait(), timeout)
+        except asyncio.TimeoutError:
+            pass
+        finally:
+            with self.cond:
+                self._waiters.discard(key)
+        return self.version
 
     def wait(self, seen: int, timeout: float) -> int:
         """Blocks until the version moves past `seen` (or the timeout); returns the version."""

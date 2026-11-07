@@ -11,7 +11,7 @@ from pymysql.cursors import DictCursor
 
 from app import config
 
-from iosuite_shared import schema
+from iosuite_shared import db as shared_db, schema
 
 SCHEMA_VERSION = 4  # 4: the suite naming convention (prt_ tables, prt_settings, position, url, named indexes)
 PREFIX = "prt"
@@ -59,26 +59,30 @@ def connect(database: str | None = None):
 
 
 _local = threading.local()
+pool = shared_db.Pool(connect)  # a few open connections, reused: no new handshake and sign-in for every query
 
 
 @contextmanager
 def tx():
-    """A connection inside one transaction: committed on success, rolled back on error. Nested calls share it."""
+    """A pooled connection inside one transaction: committed on success, rolled back on error. Nested calls share it."""
     con = getattr(_local, "con", None)
     if con is not None:
         yield con
         return
-    con = connect()
+    con = pool.borrow()
     _local.con = con
+    broken = False
     try:
         yield con
         con.commit()
-    except BaseException:
-        con.rollback()
+    except BaseException as e:
+        broken = isinstance(e, (pymysql.err.OperationalError, pymysql.err.InterfaceError))
+        if not broken:
+            con.rollback()
         raise
     finally:
         _local.con = None
-        con.close()
+        pool.give_back(con, broken)
 
 
 def q(sql: str, args=None) -> list[dict]:
