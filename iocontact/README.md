@@ -177,7 +177,7 @@ and updates itself as always. The Proxmox installer offers the same as a checkli
 | `IOSUITE_DB_HOST`, `_PORT`, `_NAME`, `_USER`, `_PASSWORD` | the Shared ioSuite database (MariaDB; by default on the contacts' server, database, user and password `iosuite`): accounts, passwords, sessions, app passwords, roles and the suite-wide settings, shared by every app of the suite (the `iosuite-shared` library, from [iosuite-shared](https://github.com/avandeputte/iosuite-shared)); only the role an account holds here and its "me" contact are ioContacts' own. `iosuite-shared migrate --iocontacts` folds a 0.3 install's `users` table into it |
 | `COOKIE_DOMAIN` | the domain the session cookie is shared on (`example.com`): signed in at `photo.example.com`, signed in at `contacts.example.com` too |
 | `AUTH_PROXY`, `AUTH_PROXY_HEADER`, `AUTH_PROXY_TRUSTED`, `CF_ACCESS_TEAM`, `CF_ACCESS_AUD` | sign-in at a reverse proxy, exactly as in iopix: Cloudflare Access (with token checking), Authelia, Authentik, oauth2-proxy… matched to accounts by email, then name |
-| `CF_KV_ACCOUNT_ID`, `CF_KV_NAMESPACE_ID`, `CF_KV_API_TOKEN` | optional edge check of app passwords: the Workers KV namespace a Cloudflare Worker on `/dav*` reads ([setup](https://github.com/avandeputte/iosuite-shared/blob/main/cloudflare/edge-auth/README.md)) |
+| `CF_KV_ACCOUNT_ID`, `CF_KV_NAMESPACE_ID`, `CF_KV_API_TOKEN` | optional edge check of app passwords: the Workers KV namespace a Cloudflare Worker on `/dav*` reads; normally stored once for the whole suite in Settings › Suite › Keys and tokens, these override it ([setup](https://github.com/avandeputte/iosuite-shared/blob/main/cloudflare/edge-auth/README.md)) |
 | `IOPIX_URL`, `IOPIX_USER`, `IOPIX_PASSWORD`, `IOPIX_CF_CLIENT_ID`, `IOPIX_CF_CLIENT_SECRET` | ioPix (or Settings › ioPix) |
 | `MCP` | `1` keeps the MCP server on, whatever the setting says |
 | `MCP_USER` | the account `python -m app.mcp` (stdio) acts as |
@@ -197,8 +197,8 @@ Run it behind a reverse proxy that terminates HTTPS (Caddy, Nginx Proxy Manager,
 ### Checking app passwords at Cloudflare (optional)
 
 Cloudflare Access can't check what DAV clients send, so `/dav*` bypasses it. A small Cloudflare Worker on `/dav*` can
-check the app password there instead and turn wrong ones away before they reach the server. With the three `CF_KV_*`
-settings, the app keeps the Worker's KV namespace up to date with a SHA-256 of each app password (never the account
+check the app password there instead and turn wrong ones away before they reach the server. With the edge check's three
+settings stored for the whole suite (Settings › Suite › Keys and tokens), the app keeps the Worker's KV namespace up to date with a SHA-256 of each app password (never the account
 password). The Worker, the rollout (monitor first, then enforce) and a WAF rate-limit rule for `/dav*` are in
 [iosuite-shared's cloudflare/edge-auth](https://github.com/avandeputte/iosuite-shared/blob/main/cloudflare/edge-auth/README.md). Once it enforces, DAV clients must sign in with an app password, not the
 account password.
