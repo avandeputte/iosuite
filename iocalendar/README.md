@@ -1,6 +1,6 @@
 # ioCalendar
 
-*The family calendar, in the ioThing suite (with [ioPix](https://github.com/avandeputte/iopix), [ioNotes](https://github.com/avandeputte/ionotes), [ioContacts](https://github.com/avandeputte/iocontacts), [ioHealth](https://github.com/avandeputte/ioHealth) and the [ioSuite](https://github.com/avandeputte/iosuite) start page).*
+*The family calendar, in the ioThing suite (with [ioPix](https://github.com/avandeputte/iopix), [ioNotes](https://github.com/avandeputte/ionotes), [ioContacts](https://github.com/avandeputte/iocontacts), [ioHealth](https://github.com/avandeputte/iohealth) and the [ioSuite](https://github.com/avandeputte/iosuite) start page).*
 
 A self-hosted calendar: a web app for the whole family, and the standard protocols every calendar app already speaks, so the same events show up on phones, in Apple Calendar, Google Calendar, Outlook, Thunderbird and anywhere else. FastAPI and a single-page vanilla JS app, with everything stored in MariaDB / MySQL, and the suite's shared library (`iosuite-shared`, in [iosuite-shared](https://github.com/avandeputte/iosuite-shared)).
 
@@ -18,81 +18,6 @@ A self-hosted calendar: a web app for the whole family, and the standard protoco
 - Light and dark, phone-sized screens, installable as an app.
 
 No tasks or to-dos: those belong in their own app.
-
-## Standards and APIs
-
-| For | Standard | Where |
-| --- | --- | --- |
-| Calendar apps, two-way: Apple Calendar (Mac, iPhone, iPad), DAVx⁵ on Android, Thunderbird, Evolution, GNOME Calendar, KDE, Outlook with a CalDAV add-in | **CalDAV** (RFC 4791) with sync-collection (RFC 6578), getctag, MKCALENDAR and extended MKCOL, PROPPATCH (name, colour, description, time zone), calendar-query with time ranges and `expand`, calendar-multiget, free-busy-query, If-Match / If-None-Match, discovery via `/.well-known/caldav` (RFC 6764) and current-user-principal | `https://host/dav/` |
-| Any app that reads calendar files | **iCalendar** (RFC 5545): every event is kept as the iCalendar object it came in as, so properties ioCalendar does not edit (attachments, other apps' X- properties) survive a round trip; VTIMEZONE, RRULE / RDATE / EXDATE, RECURRENCE-ID overrides and VALARM included | CalDAV, `/api/events/<id>?format=ics`, import/export |
-| Calendars that cannot sign in: Google Calendar, Outlook, Apple Calendar subscriptions | **iCalendar subscriptions** (`webcal://`) with a private token, one calendar or all of them, and **free/busy** (VFREEBUSY) | `/ics/<token>/<calendar>.ics`, `/ics/<token>/all.ics`, `/ics/<token>/freebusy.vfb` |
-| Web and JSON clients | **REST/JSON** with **jCal** (RFC 7265) and iCalendar by content negotiation (`Accept: application/calendar+json` or `text/calendar`): occurrences in a range (repeating events expanded), events, calendars, free/busy, import/export | `/api/`, OpenAPI docs at `/api/docs` |
-| iPhone, iPad and Mac in one step | **Apple configuration profile** (`com.apple.caldav.account`) | Settings › Apps and devices |
-| AI assistants: Claude and anything else that speaks MCP | **Model Context Protocol** (streamable HTTP, and stdio) | `https://host/mcp` (switched on in Settings › Server) |
-
-**iPhone, iPad and Mac in one step:** Settings › Apps and devices › *Download the profile* gives a configuration profile
-(`.mobileconfig`) with the CalDAV account and a new CalDAV-only app password for that device inside (or none, and the device asks).
-Open the page in Safari on the iPhone, tap Download, then Settings › Profile Downloaded › Install.
-
-Settings › Apps and devices shows the exact addresses to type, and makes **app passwords**: one per phone or app,
-revocable on its own, used with your user name for CalDAV and the REST API (HTTP Basic, or
-`Authorization: Bearer <app password>`). An app password can be made **CalDAV only**: it opens `/dav` and nothing
-else, so one lifted from a phone cannot reach the REST API, MCP or the web app (403). The Apple profile's password is
-always CalDAV only; scripts and AI assistants need one without that limit. The scope is kept with the password in
-the Shared ioSuite database (`ios_app_passwords.scope`), the same for every app of the suite.
-
-```sh
-curl -u alex:APP-PASSWORD "https://calendar.example.com/api/occurrences?start=2026-11-01&end=2026-12-01"
-curl -u alex:APP-PASSWORD -H 'Accept: text/calendar' https://calendar.example.com/api/events/12
-curl -u alex:APP-PASSWORD -X POST -H 'Content-Type: application/json' \
-  -d '{"title": "Dentist", "start": "2026-11-12T09:00", "end": "2026-11-12T10:00", "location": "12 Oak Street", "reminders": [60]}' \
-  https://calendar.example.com/api/events
-curl -u alex:APP-PASSWORD -X PATCH -H 'Content-Type: application/json' -d '{"title": "Soccer (at the school)"}' \
-  "https://calendar.example.com/api/events/7?scope=this&recurrenceId=2026-11-19T17:30:00-05:00"
-```
-
-## MCP server
-
-ioCalendar is also an MCP server, as the other io apps are, so an assistant such as Claude can work with the calendars:
-read the agenda, search events, find when people are free, add, change, move and delete events (one occurrence, the
-ones after it, or the whole series), make calendars, import iCalendar files, and, for admins, check the server's health,
-bring the birthdays up to date, look for a new version and install it.
-
-It is off until an admin turns it on in **Settings › Server** (or `MCP=1` in the environment); off, `/mcp` does not answer
-at all. Every assistant signs in with an **app password** (Settings › Apps and devices), as HTTP Basic or
-`Authorization: Bearer <app password>`, and acts as that account, with its rights.
-
-```sh
-claude mcp add --transport http iocalendar https://calendar.example.com/mcp --header "Authorization: Bearer APP-PASSWORD"
-```
-
-On the server itself, `.venv/bin/python -m app.mcp --user NAME` serves the same tools over stdio.
-
-The tools: `overview`, `list_calendars`, `list_family_members`, `agenda`, `search_events`, `get_event`, `get_ics`,
-`free_busy`, `connection_details`; `create_event`, `update_event`, `delete_event`, `move_event`, `create_calendar`,
-`import_ics`; and for admins `diagnostics`, `sync_birthdays`, `set_holidays`, `holiday_regions`, `list_accounts`,
-`check_for_update`, `update_server`.
-
-## Updates
-
-ioCalendar asks GitHub once a day whether the main branch has a newer version (only the public commit list is read;
-nothing about the server is sent; Maintenance › Updates and logs switches it off, `UPDATE_CHECK=0` locks it off). Admins
-then see a note with **Update now**, and **Maintenance › Updates and logs** has the version, **Check for updates**,
-**Update now**, the tail of the server log (`data/iocalendar.log`; `LOG_FILE` moves it, empty switches it
-off) and **Restart**. The page is the same in every ioThing app: the version check, `update.sh`, the restart and the log
-come from `iosuite_shared.updates` in iosuite-shared, served at `/api/server` and `/api/log`. Updating runs the app's own
-`update.sh`: the new version's Python packages first, then the code (a failed step leaves the running version as it
-was), the database is brought up to date, and the service restarts; the page reloads when the new version answers. In
-Docker, pull the image instead. From a shell: `./update.sh` (`--check` only looks, `IOCALENDAR_REF=<sha>` installs a
-given commit).
-
-Settings is for what is configured (account, display, apps and devices, calendars, holidays, connected apps, users and
-sign-in, server); Maintenance for what is run or checked (storage and backups, updates and logs). Admins reach both from
-the sidebar and the avatar menu.
-
-## Releases
-
-Every version merged into main is released by itself: when `__version__` (app/__init__.py) has no GitHub release yet, CI tags it `v<version>`, publishes the image as `ghcr.io/avandeputte/iocalendar:v<version>` (and `latest`) and makes the release with the merge's message as notes. Bump the version in a change to release it.
 
 ## Run
 
@@ -188,7 +113,28 @@ next time). Behind Cloudflare Access, the suite's Cloudflare Access service toke
 goes along. The Birthdays calendar is filled from ioContacts' birthday feed and brought up to date every six hours
 (and from Settings › ioContacts, which only has the Birthdays switch, or `python -m app.cli sync-birthdays`).
 
-### HTTPS
+## Updates
+
+ioCalendar asks GitHub once a day whether the main branch has a newer version (only the public commit list is read;
+nothing about the server is sent; Maintenance › Updates and logs switches it off, `UPDATE_CHECK=0` locks it off). Admins
+then see a note with **Update now**, and **Maintenance › Updates and logs** has the version, **Check for updates**,
+**Update now**, the tail of the server log (`data/iocalendar.log`; `LOG_FILE` moves it, empty switches it
+off) and **Restart**. The page is the same in every ioThing app: the version check, `update.sh`, the restart and the log
+come from `iosuite_shared.updates` in iosuite-shared, served at `/api/server` and `/api/log`. Updating runs the app's own
+`update.sh`: the new version's Python packages first, then the code (a failed step leaves the running version as it
+was), the database is brought up to date, and the service restarts; the page reloads when the new version answers. In
+Docker, pull the image instead. From a shell: `./update.sh` (`--check` only looks, `IOCALENDAR_REF=<sha>` installs a
+given commit).
+
+Settings is for what is configured (account, display, apps and devices, calendars, holidays, connected apps, users and
+sign-in, server); Maintenance for what is run or checked (storage and backups, updates and logs). Admins reach both from
+the sidebar and the avatar menu.
+
+### Releases
+
+Every version merged into main is released by itself: when `__version__` (app/__init__.py) has no GitHub release yet, CI tags it `v<version>`, publishes the image as `ghcr.io/avandeputte/iocalendar:v<version>` (and `latest`) and makes the release with the merge's message as notes. Bump the version in a change to release it.
+
+## Reverse proxy and HTTPS
 
 Run it behind a reverse proxy that terminates HTTPS (Caddy, Nginx Proxy Manager, HAProxy, Cloudflare Tunnel): iOS and
 macOS want HTTPS for CalDAV accounts outside the home network, and passwords travel with every CalDAV request.
@@ -225,6 +171,60 @@ password). The Worker, the rollout (monitor first, then enforce) and a WAF rate-
 [iosuite-shared's cloudflare/edge-auth](https://github.com/avandeputte/iosuite-shared/blob/main/cloudflare/edge-auth/README.md). Once it enforces, DAV clients must sign in with an app password, not the
 account password.
 
+## API
+
+| For | Standard | Where |
+| --- | --- | --- |
+| Calendar apps, two-way: Apple Calendar (Mac, iPhone, iPad), DAVx⁵ on Android, Thunderbird, Evolution, GNOME Calendar, KDE, Outlook with a CalDAV add-in | **CalDAV** (RFC 4791) with sync-collection (RFC 6578), getctag, MKCALENDAR and extended MKCOL, PROPPATCH (name, colour, description, time zone), calendar-query with time ranges and `expand`, calendar-multiget, free-busy-query, If-Match / If-None-Match, discovery via `/.well-known/caldav` (RFC 6764) and current-user-principal | `https://host/dav/` |
+| Any app that reads calendar files | **iCalendar** (RFC 5545): every event is kept as the iCalendar object it came in as, so properties ioCalendar does not edit (attachments, other apps' X- properties) survive a round trip; VTIMEZONE, RRULE / RDATE / EXDATE, RECURRENCE-ID overrides and VALARM included | CalDAV, `/api/events/<id>?format=ics`, import/export |
+| Calendars that cannot sign in: Google Calendar, Outlook, Apple Calendar subscriptions | **iCalendar subscriptions** (`webcal://`) with a private token, one calendar or all of them, and **free/busy** (VFREEBUSY) | `/ics/<token>/<calendar>.ics`, `/ics/<token>/all.ics`, `/ics/<token>/freebusy.vfb` |
+| Web and JSON clients | **REST/JSON** with **jCal** (RFC 7265) and iCalendar by content negotiation (`Accept: application/calendar+json` or `text/calendar`): occurrences in a range (repeating events expanded), events, calendars, free/busy, import/export | `/api/`, OpenAPI docs at `/api/docs` |
+| iPhone, iPad and Mac in one step | **Apple configuration profile** (`com.apple.caldav.account`) | Settings › Apps and devices |
+| AI assistants: Claude and anything else that speaks MCP | **Model Context Protocol** (streamable HTTP, and stdio) | `https://host/mcp` (switched on in Settings › Server) |
+
+**iPhone, iPad and Mac in one step:** Settings › Apps and devices › *Download the profile* gives a configuration profile
+(`.mobileconfig`) with the CalDAV account and a new CalDAV-only app password for that device inside (or none, and the device asks).
+Open the page in Safari on the iPhone, tap Download, then Settings › Profile Downloaded › Install.
+
+Settings › Apps and devices shows the exact addresses to type, and makes **app passwords**: one per phone or app,
+revocable on its own, used with your user name for CalDAV and the REST API (HTTP Basic, or
+`Authorization: Bearer <app password>`). An app password can be made **CalDAV only**: it opens `/dav` and nothing
+else, so one lifted from a phone cannot reach the REST API, MCP or the web app (403). The Apple profile's password is
+always CalDAV only; scripts and AI assistants need one without that limit. The scope is kept with the password in
+the Shared ioSuite database (`ios_app_passwords.scope`), the same for every app of the suite.
+
+```sh
+curl -u alex:APP-PASSWORD "https://calendar.example.com/api/occurrences?start=2026-11-01&end=2026-12-01"
+curl -u alex:APP-PASSWORD -H 'Accept: text/calendar' https://calendar.example.com/api/events/12
+curl -u alex:APP-PASSWORD -X POST -H 'Content-Type: application/json' \
+  -d '{"title": "Dentist", "start": "2026-11-12T09:00", "end": "2026-11-12T10:00", "location": "12 Oak Street", "reminders": [60]}' \
+  https://calendar.example.com/api/events
+curl -u alex:APP-PASSWORD -X PATCH -H 'Content-Type: application/json' -d '{"title": "Soccer (at the school)"}' \
+  "https://calendar.example.com/api/events/7?scope=this&recurrenceId=2026-11-19T17:30:00-05:00"
+```
+
+## MCP server
+
+ioCalendar is also an MCP server, as the other io apps are, so an assistant such as Claude can work with the calendars:
+read the agenda, search events, find when people are free, add, change, move and delete events (one occurrence, the
+ones after it, or the whole series), make calendars, import iCalendar files, and, for admins, check the server's health,
+bring the birthdays up to date, look for a new version and install it.
+
+It is off until an admin turns it on in **Settings › Server** (or `MCP=1` in the environment); off, `/mcp` does not answer
+at all. Every assistant signs in with an **app password** (Settings › Apps and devices), as HTTP Basic or
+`Authorization: Bearer <app password>`, and acts as that account, with its rights.
+
+```sh
+claude mcp add --transport http iocalendar https://calendar.example.com/mcp --header "Authorization: Bearer APP-PASSWORD"
+```
+
+On the server itself, `.venv/bin/python -m app.mcp --user NAME` serves the same tools over stdio.
+
+The tools: `overview`, `list_calendars`, `list_family_members`, `agenda`, `search_events`, `get_event`, `get_ics`,
+`free_busy`, `connection_details`; `create_event`, `update_event`, `delete_event`, `move_event`, `create_calendar`,
+`import_ics`; and for admins `diagnostics`, `sync_birthdays`, `set_holidays`, `holiday_regions`, `list_accounts`,
+`check_for_update`, `update_server`.
+
 ## Tests
 
 ```sh
@@ -256,4 +256,6 @@ static/            the web app (index.html, app.js, app.css, icons)
 proxmox/           the community-scripts LXC installer      setup.sh, run.sh, update.sh, Dockerfile
 ```
 
-MIT licence.
+## License
+
+GPL-3.0-or-later (the GNU General Public License, version 3 or later), see [LICENSE](LICENSE).
