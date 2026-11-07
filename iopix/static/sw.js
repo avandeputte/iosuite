@@ -2,7 +2,7 @@
 // icons) available. Shell files are fetched network-first so updates land at once, with the cache
 // as the fallback. Photos, thumbnails and the API are never cached here: the library changes and
 // the page reloads itself when the server reports a new version.
-const SHELL = 'iopix-shell-v5';  // bump when the shell files change in a way the network-first fetch would not refresh (new icons)
+const SHELL = 'iopix-shell-v6';  // bump when the shell files change in a way the network-first fetch would not refresh (new icons)
 const JS = ['core', 'state', 'search', 'grid', 'actions', 'editing', 'download', 'pages', 'suite', 'users', 'admin', 'settings', 'map', 'filters', 'lightbox', 'faces', 'info', 'main'].map((m) => `./static/js/${m}.js`);
 // the map's library, served with the app (static/vendor)
 const VENDOR = ['leaflet/leaflet.js', 'leaflet/leaflet.css', 'leaflet/images/marker-icon.png', 'leaflet/images/marker-icon-2x.png', 'leaflet/images/marker-shadow.png', 'leaflet/images/layers.png', 'leaflet/images/layers-2x.png',
