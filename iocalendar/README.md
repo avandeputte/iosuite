@@ -170,7 +170,6 @@ accounts are the suite's: `.venv/bin/iosuite-shared --config . admin NAME --app 
 | `ADMIN_USER`, `ADMIN_PASSWORD` | the first admin, made on the first start when there are no accounts |
 | `AUTH_PROXY`, `AUTH_PROXY_HEADER`, `AUTH_PROXY_TRUSTED`, `CF_ACCESS_TEAM`, `CF_ACCESS_AUD` | sign-in at a reverse proxy, as in the other io apps (Cloudflare Access, Authelia, Authentik, oauth2-proxy…) |
 | `CF_KV_ACCOUNT_ID`, `CF_KV_NAMESPACE_ID`, `CF_KV_API_TOKEN` | optional edge check of app passwords: the Workers KV namespace a Cloudflare Worker on `/dav*` reads; normally stored once for the whole suite in Settings › Suite › Keys and tokens, these override it ([setup](https://github.com/avandeputte/iosuite-shared/blob/main/cloudflare/edge-auth/README.md)) |
-| `IOCONTACTS_URL`, `IOCONTACTS_USER`, `IOCONTACTS_PASSWORD`, `IOCONTACTS_CF_CLIENT_ID`, `IOCONTACTS_CF_CLIENT_SECRET` | ioContacts (or Settings › ioContacts) |
 | `HOLIDAYS_COUNTRY`, `HOLIDAYS_REGION`, `HOLIDAYS_LANGUAGE` | the first choice for Settings › Holidays: a two-letter country code (`off`: no Holidays calendar), a region code, the language of the names; until set, the country of `TZ`, else US |
 | `MCP` | `1` keeps the MCP server on, whatever the setting says |
 | `MCP_USER` | the account `python -m app.mcp` (stdio) acts as |
@@ -181,12 +180,12 @@ accounts are the suite's: `.venv/bin/iosuite-shared --config . admin NAME --app 
 
 ### ioContacts
 
-Settings › ioContacts (admins) takes ioContacts' address, a user name and an **app password made in ioContacts**
-(Settings › Apps and devices there). ioCalendar talks to ioContacts from the server; browsers never need to reach it, so
-the LAN address is the simplest choice. Behind Cloudflare Access, create a service token (Zero Trust › Access › Service
-auth), allow it in the ioContacts application's policy, and enter its client ID and secret. Saving tests the connection
-and fills the Birthdays calendar from ioContacts' birthday feed; it is brought up to date every six hours after that
-(and from Settings › ioContacts or `python -m app.cli sync-birthdays`).
+Nothing to set up. ioCalendar finds ioContacts in the suite's list of apps (the Shared ioSuite database) and reads from
+it from the server as its own service account (`iocalendar-app`) with a read-only app password, both made by itself on
+first use and listed on the start page's Settings › Suite, where a suite admin can revoke them (a new one is made the
+next time). Behind Cloudflare Access, the suite's Cloudflare Access service token (Settings › Suite › Keys and tokens)
+goes along. The Birthdays calendar is filled from ioContacts' birthday feed and brought up to date every six hours
+(and from Settings › ioContacts, which only has the Birthdays switch, or `python -m app.cli sync-birthdays`).
 
 ### HTTPS
 

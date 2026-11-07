@@ -1298,30 +1298,23 @@ async function proxyCard() {
 
 async function setSuite(el) {
   const s = await api('/api/iocontacts/settings');
-  const url = h('input', { class: 't', value: s.url, placeholder: 'https://contacts.example.com or http://contacts.example.lan:8640', disabled: s.fromEnv ? true : null });
-  const user = h('input', { class: 't', value: s.user, placeholder: 'An ioContacts user name' });
-  const pw = h('input', { class: 't', type: 'password', placeholder: s.hasPassword ? '(kept)' : 'An app password made in ioContacts' });
-  const cfId = h('input', { class: 't', value: s.cfId, placeholder: 'Only behind Cloudflare Access' });
-  const cfSecret = h('input', { class: 't', type: 'password', placeholder: s.hasCfSecret ? '(kept)' : '' });
   const bdays = h('input', { type: 'checkbox', checked: s.birthdays });
   const out = h('div');
   const last = (x) => (x && x.synced ? `Birthdays last brought up to date ${new Date(x.synced * 1000).toLocaleString()} (${x.count} dates).` : x && x.error ? `The last sync failed: ${x.error}` : '');
   out.append(h('p', { class: 'muted small' }, last(s.lastSync)));
   el.append(h('div', { class: 'box' }, h('h2', null, icon('contacts'), 'ioContacts'),
-    h('p', { class: 'muted' }, 'Optional. With ioContacts connected, the people on an event come from your contacts (with a link back to each), and a shared Birthdays calendar shows the birthdays and anniversaries kept there, brought up to date every six hours. ioCalendar talks to ioContacts from the server; make an app password for it in ioContacts (Settings › Apps and devices). Through Cloudflare Access, add a service token too.'),
-    h('div', { class: 'grid' }, fld('ioContacts address', url), fld('User name', user), fld('App password', pw), fld('Cloudflare client ID', cfId), fld('Cloudflare client secret', cfSecret)),
+    h('p', { class: 'muted' }, s.enabled
+      ? ['Connected by itself: ioCalendar finds ', h('a', { href: s.url, target: '_blank', rel: 'noopener' }, 'ioContacts'), ' in the suite and reads from it with its own read-only app password (Settings › Suite on the start page lists it). The people on an event come from the shared contacts, and a shared Birthdays calendar shows their birthdays and anniversaries, brought up to date every six hours.']
+      : 'ioContacts is not part of this suite yet. Once it runs on the same Shared ioSuite database, ioCalendar connects to it by itself: people on events come from the contacts, and a Birthdays calendar shows their birthdays.'),
     h('p', null, h('label', { class: 'check' }, bdays, ' Show the Birthdays calendar')),
     h('p', null, h('button', { class: 'pillbtn primary', onclick: async () => {
-      const body = { url: url.value, user: user.value, cfId: cfId.value, birthdays: bdays.checked };
-      if (pw.value) body.password = pw.value; if (cfSecret.value) body.cfSecret = cfSecret.value;
-      fill(out, h('p', null, 'Testing…'));
+      fill(out, h('p', null, 'Saving…'));
       try {
-        const r = await api('/api/iocontacts/settings', { method: 'POST', json: body });
+        const r = await api('/api/iocontacts/settings', { method: 'POST', json: { birthdays: bdays.checked } });
         S.status = await api('/api/status'); await loadCals();
-        fill(out, h('p', { class: r.test && !r.test.ok ? 'warn' : null }, !r.enabled ? 'Saved (ioContacts link off).' : r.test.ok ? `Connected as ${r.test.user}: ${r.test.contacts ?? 'some'} contacts.` : `Saved, but ioContacts did not answer: ${r.test.error}`),
-          r.sync ? h('p', { class: 'muted small' }, r.sync.ok ? (r.sync.count ? `Birthdays: ${r.sync.count} dates.` : 'The Birthdays calendar is off.') : `Birthdays: ${r.sync.error}`) : null);
+        fill(out, r.sync ? h('p', { class: r.sync.ok ? 'muted small' : 'warn' }, r.sync.ok ? (r.sync.count ? `Birthdays: ${r.sync.count} dates.` : 'The Birthdays calendar is off.') : `Birthdays: ${r.sync.error}`) : h('p', { class: 'muted small' }, 'Saved.'));
       } catch (e) { fill(out); fail(e); }
-    } }, icon('check', 's'), 'Save and test'), ' ',
+    } }, icon('check', 's'), 'Save'), ' ',
     s.enabled ? h('button', { class: 'pillbtn noic', onclick: async () => { try { const r = await api('/api/iocontacts/sync', { method: 'POST' }); await loadCals(); toast(r.ok ? `Birthdays: ${r.count} dates` : r.error); } catch (e) { fail(e); } } }, 'Bring birthdays up to date now') : null), out));
 }
 

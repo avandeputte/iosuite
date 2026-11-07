@@ -134,13 +134,39 @@ def test_shared_slugs_are_unique(client):
     db.ex("INSERT INTO cal_calendars (owner_id, slug, name) VALUES (1, 'twice', 'Mine')")
 
 
-def test_iocontacts_url_is_http(client):
-    r = client.post("/api/iocontacts/settings", json={"url": "file:///etc/passwd"})
-    assert r.status_code == 400
-    from app import contacts
-    with pytest.raises(ValueError):
-        contacts._check_url("ftp://x")
-    contacts._check_url("https://contacts.example.org")
+def test_iocontacts_is_found_in_the_suite(client, monkeypatch):
+    from iosuite_shared import links, suite
+    from app import contacts, db
+    db.set_setting("iocontacts_url", "https://old.example.org")
+    db.set_setting("iocontacts_password", "old")
+    contacts.forget_old_settings()
+    assert db.get_setting("iocontacts_url") is None and db.get_setting("iocontacts_password") is None
+    assert client.get("/api/iocontacts/settings").json()["enabled"] is False
+    suite.register("iocontacts", name="ioContacts", url="https://contacts.example.org", version="1")
+    s = client.get("/api/iocontacts/settings").json()
+    assert s["enabled"] and s["url"] == "https://contacts.example.org"
+    seen = []
+
+    class R:
+        def __init__(self, b):
+            self.b = b
+
+        def read(self):
+            return self.b
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    def fake(app, provider, path, **kw):
+        seen.append((app, provider, path, kw.get("sign_in", True)))
+        return R(b'{"items": [{"id": 3, "fn": "Ann", "email": "a@x.org"}]}')
+    monkeypatch.setattr(links, "get", fake)
+    assert contacts.search("ann")[0] == {"contactId": 3, "name": "Ann", "email": "a@x.org", "url": "https://contacts.example.org/#/c/3"}
+    assert seen[0][:2] == ("iocalendar", "iocontacts")
+    assert client.post("/api/iocontacts/settings", json={"birthdays": False}).json()["birthdays"] is False
 
 
 def test_base_url_is_an_address(client):

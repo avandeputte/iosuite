@@ -32,6 +32,7 @@ async def lifespan(app: FastAPI):
     await run_in_threadpool(db.migrate)
     await run_in_threadpool(users.init)
     updater.start_daily()   # the daily "is there a newer version" check, while the setting allows it
+    contacts.forget_old_settings()  # the ioContacts address and sign-in from before the suite found it by itself
     contacts.start_sync()   # the Birthdays calendar from ioContacts, every few hours
     holiday.start_sync()    # the Holidays calendar, every day
     log.info("ioCalendar %s started, database %s:%s/%s", __version__, config.DB_HOST, config.DB_PORT, config.DB_NAME)

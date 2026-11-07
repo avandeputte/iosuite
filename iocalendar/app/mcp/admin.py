@@ -31,7 +31,7 @@ def diagnostics() -> dict:
     from app.main import mcp_enabled
     out["mcp"] = {"enabled": mcp_enabled(), "forcedByEnv": config.MCP_FORCED}
     s = contacts.public_settings()
-    out["iocontacts"] = {"url": s.get("url") or None, "user": s.get("user") or None, "birthdays": s["birthdays"], "lastSync": s["lastSync"]}
+    out["iocontacts"] = {"url": s.get("url") or None, "connected": s["enabled"], "birthdays": s["birthdays"], "lastSync": s["lastSync"]}
     h = holiday.settings()
     out["holidays"] = {"country": h["country"], "region": h["region"], "language": h["language"], "lastSync": holiday.public_settings()["lastSync"]}
     out["accounts"] = [{"name": u["name"], "role": u.get("role")} for u in users.all_users()]
@@ -43,7 +43,7 @@ def sync_birthdays() -> dict:
     """Admins: bring the Birthdays calendar up to date from ioContacts now (it also happens every few hours)."""
     need_admin()
     if not contacts.enabled():
-        raise ToolError("ioContacts is not set up (Settings › ioContacts in the web app)")
+        raise ToolError("ioContacts is not part of the suite (it connects by itself once it runs on the same Shared ioSuite database)")
     return contacts.sync_birthdays()
 
 

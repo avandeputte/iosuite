@@ -1,87 +1,73 @@
-"""ioContacts, optionally: names (and email addresses) for the people on an event, and a Birthdays calendar with the
-birthdays and anniversaries of the contacts.
+"""ioContacts, when it is part of the suite: names (and email addresses) for the people on an event, and a Birthdays
+calendar with the birthdays and anniversaries of the contacts.
 
-The server talks to ioContacts, never the browser: with an ioContacts account and an app password made there
-(Settings › Apps and devices in ioContacts), as HTTP Basic, and a Cloudflare Access service token when ioContacts sits
-behind Cloudflare Access. Settings › ioContacts stores them; IOCONTACTS_* in the environment wins. The contacts the
-account sees there (the shared books and its own) are the ones offered here.
+Nothing to set up: ioContacts is found in the suite's list of apps, and the server reads from it as ioCalendar's own
+service account with a read-only app password, both made by itself the first time (iosuite_shared.links). The contacts
+that account sees there (the shared books) are the ones offered here.
 
 The Birthdays calendar is a shared, read-only calendar here (kind 'birthdays'), so the web app, CalDAV and the
 subscription links all show it. It is filled from ioContacts' own birthday feed (yearly events), again every few hours
 and when an admin asks.
 """
-import base64
 import json
 import logging
 import threading
 import time
 import urllib.error
 import urllib.parse
-import urllib.request
 
-from app import config, db, ical, model
+from iosuite_shared import links
+
+from app import db, ical, model
 
 log = logging.getLogger("iocalendar.contacts")
+APP, PROVIDER = "iocalendar", "iocontacts"
 SYNC_EVERY = 6 * 3600
 _lock = threading.Lock()
 _state: dict = {"synced": None, "error": None, "count": None}
+# what Settings › ioContacts used to keep before the suite found ioContacts by itself (removed at start)
+OLD_SETTINGS = ("iocontacts_url", "iocontacts_user", "iocontacts_password", "iocontacts_cf_id", "iocontacts_cf_secret")
+
+
+def forget_old_settings() -> None:
+    try:
+        for k in OLD_SETTINGS:
+            if db.get_setting(k) is not None:
+                db.set_setting(k, None)
+    except Exception as e:  # noqa: BLE001 - tried again next start
+        log.debug("old ioContacts settings: %s", e)
 
 
 def settings() -> dict:
-    return {"url": (config.IOCONTACTS_URL or db.get_setting("iocontacts_url") or "").rstrip("/"),
-            "user": config.IOCONTACTS_USER or db.get_setting("iocontacts_user") or "",
-            "password": config.IOCONTACTS_PASSWORD or db.get_setting("iocontacts_password") or "",
-            "cfId": config.IOCONTACTS_CF_CLIENT_ID or db.get_setting("iocontacts_cf_id") or "",
-            "cfSecret": config.IOCONTACTS_CF_CLIENT_SECRET or db.get_setting("iocontacts_cf_secret") or "",
-            "birthdays": (db.get_setting("iocontacts_birthdays") or "1") == "1"}
+    return {"url": links.url(PROVIDER) or "", "birthdays": (db.get_setting("iocontacts_birthdays") or "1") == "1"}
 
 
 def enabled() -> bool:
     try:
-        return bool(settings()["url"])
+        return links.available(PROVIDER)
     except Exception:  # noqa: BLE001 - no database yet
         return False
 
 
 def public_settings() -> dict:
     s = settings()
-    return {"url": s["url"], "user": s["user"], "hasPassword": bool(s["password"]), "cfId": s["cfId"],
-            "hasCfSecret": bool(s["cfSecret"]), "enabled": bool(s["url"]), "birthdays": s["birthdays"],
-            "fromEnv": bool(config.IOCONTACTS_URL), "lastSync": dict(_state)}
+    return {"url": s["url"], "enabled": bool(s["url"]), "birthdays": s["birthdays"], "lastSync": dict(_state)}
 
 
-def _check_url(url: str | None) -> None:
-    """ValueError unless the address is http(s) (the server fetches it: nothing else may be reached through it)."""
-    u = urllib.parse.urlsplit((url or "").strip())
-    if url and (u.scheme not in ("http", "https") or not u.netloc):
-        raise ValueError("The ioContacts address has to start with http:// or https://")
-
-
-def save_settings(url=None, user=None, password=None, cf_id=None, cf_secret=None, birthdays=None) -> None:
-    _check_url(url)
-    for k, v in (("iocontacts_url", url), ("iocontacts_user", user), ("iocontacts_password", password), ("iocontacts_cf_id", cf_id),
-                 ("iocontacts_cf_secret", cf_secret)):
-        if v is not None:
-            db.set_setting(k, v.strip() or None)
+def save_settings(birthdays=None) -> None:
     if birthdays is not None:
         db.set_setting("iocontacts_birthdays", "1" if birthdays else "0")
 
 
-def _req(path: str, timeout: float = 15, accept: str = "application/json"):
-    s = settings()
-    if not s["url"]:
-        raise RuntimeError("ioContacts is not set up (Settings › ioContacts)")
-    _check_url(s["url"])
-    headers = {"Accept": accept, "User-Agent": "ioCalendar"}
-    if s["user"] and s["password"]:
-        headers["Authorization"] = "Basic " + base64.b64encode(f"{s['user']}:{s['password']}".encode()).decode()
-    if s["cfId"] and s["cfSecret"]:
-        headers.update({"CF-Access-Client-Id": s["cfId"], "CF-Access-Client-Secret": s["cfSecret"]})
-    return urllib.request.urlopen(urllib.request.Request(s["url"] + path, headers=headers), timeout=timeout)
+def _req(path: str, timeout: float = 15, accept: str = "application/json", sign_in: bool = True):
+    if not enabled():
+        raise RuntimeError("ioContacts is not part of the suite (it has not started on this Shared ioSuite database)")
+    return links.get(APP, PROVIDER, path, timeout=timeout, accept=accept, user_agent="ioCalendar", sign_in=sign_in)
 
 
 def _json(path: str, timeout: float = 15):
-    return json.loads(_req(path, timeout).read())
+    with _req(path, timeout) as r:
+        return json.loads(r.read())
 
 
 def search(q: str, limit: int = 12) -> list[dict]:
@@ -104,7 +90,7 @@ def test() -> dict:
     try:
         st = _json("/api/status")
         if not st.get("user"):
-            return {"ok": False, "error": "ioContacts answered, but did not accept the user name and app password"}
+            return {"ok": False, "error": "ioContacts answered, but did not accept ioCalendar's app password"}
         n = _json("/api/contacts?limit=1").get("total")
         return {"ok": True, "user": st["user"].get("name"), "contacts": n, "version": st.get("version")}
     except urllib.error.HTTPError as e:
@@ -132,7 +118,8 @@ def sync_birthdays() -> dict:
         try:
             info = _json("/api/connect")
             path = urllib.parse.urlsplit(info["calendar"]["all"]).path
-            text = _req(path, timeout=60, accept="text/calendar").read().decode("utf-8", "replace")
+            with _req(path, timeout=60, accept="text/calendar", sign_in=False) as r:  # the feed's address carries its own token
+                text = r.read().decode("utf-8", "replace")
             feed = ical.parse(text)
         except Exception as e:  # noqa: BLE001
             _state.update(error=f"{type(e).__name__}: {e}"[:300])

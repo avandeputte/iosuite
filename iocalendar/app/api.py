@@ -700,25 +700,24 @@ def apple_profile(request: Request, label: str = Form("iPhone"), password: str =
 # ------------------------------------------------------------------ ioContacts
 
 @router.get("/api/iocontacts/settings", dependencies=[access.admin])
-def iocontacts_settings(request: Request):
+async def iocontacts_settings(request: Request, test: int = 0):
+    """Whether ioContacts is part of the suite (found and signed in to by itself), the Birthdays switch, the last sync;
+    ?test=1 also asks ioContacts."""
     admin(request)
-    return contacts.public_settings()
+    out = contacts.public_settings()
+    if test and out["enabled"]:
+        out["test"] = await run_in_threadpool(contacts.test)
+    return out
 
 
 @router.post("/api/iocontacts/settings", dependencies=[access.admin])
 async def iocontacts_save(request: Request):
-    """Admins: {url, user, password, cfId, cfSecret, birthdays}. Saving tests the connection and brings the Birthdays
-    calendar up to date."""
+    """Admins: {birthdays}. Saving brings the Birthdays calendar up to date."""
     admin(request)
     b = await request.json()
-    try:
-        await run_in_threadpool(contacts.save_settings, b.get("url"), b.get("user"), b.get("password"), b.get("cfId"), b.get("cfSecret"),
-                                b.get("birthdays") if "birthdays" in b else None)
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-    test = await run_in_threadpool(contacts.test) if contacts.enabled() else None
-    sync = await run_in_threadpool(contacts.sync_birthdays) if (not test or test.get("ok")) else None
-    return {**contacts.public_settings(), "test": test, "sync": sync}
+    await run_in_threadpool(contacts.save_settings, bool(b["birthdays"]) if "birthdays" in b else None)
+    sync = await run_in_threadpool(contacts.sync_birthdays) if contacts.enabled() or not contacts.settings()["birthdays"] else None
+    return {**contacts.public_settings(), "sync": sync}
 
 
 @router.post("/api/iocontacts/sync", dependencies=[access.admin])

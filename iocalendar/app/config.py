@@ -25,12 +25,7 @@ HOLIDAYS_COUNTRY = env("HOLIDAYS_COUNTRY").strip()
 HOLIDAYS_REGION = env("HOLIDAYS_REGION").strip().upper()
 HOLIDAYS_LANGUAGE = env("HOLIDAYS_LANGUAGE").strip()
 
-# ioContacts (can also be set in Settings › ioContacts; the environment wins)
-IOCONTACTS_URL = env("IOCONTACTS_URL")
-IOCONTACTS_USER = env("IOCONTACTS_USER")
-IOCONTACTS_PASSWORD = env("IOCONTACTS_PASSWORD")
-IOCONTACTS_CF_CLIENT_ID = env("IOCONTACTS_CF_CLIENT_ID")
-IOCONTACTS_CF_CLIENT_SECRET = env("IOCONTACTS_CF_CLIENT_SECRET")
+# ioContacts is found in the suite's list of apps and signed in to by itself (app/contacts.py): nothing to set
 
 MAX_EVENT_BYTES = 2 * 1024 * 1024     # one calendar object (CalDAV PUT, REST)
 MAX_IMPORT_BYTES = 32 * 1024 * 1024   # an .ics file to import
