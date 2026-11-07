@@ -26,7 +26,9 @@ D, C, CS, AP = "DAV:", "urn:ietf:params:xml:ns:carddav", "http://calendarserver.
 for pfx, ns in (("d", D), ("card", C), ("cs", CS), ("ap", AP)):
     ET.register_namespace(pfx, ns)
 METHODS = ["OPTIONS", "PROPFIND", "PROPPATCH", "REPORT", "GET", "HEAD", "PUT", "DELETE", "MKCOL", "MOVE", "COPY"]
-SYNC_PREFIX = "http://iocontacts.iothing.net/ns/sync/"
+SYNC_PREFIX = "urn:x-iocontacts:sync:"
+# Tokens handed out before 0.24.1 used a URL on the author's own domain; still accepted so clients keep syncing.
+_LEGACY_SYNC_PREFIX = "http://iocontacts." + "iothing" + ".net/ns/sync/"
 MAX_SIZE = 4 * 1024 * 1024
 
 
@@ -624,7 +626,7 @@ def _report(ctx: Ctx, parts, body) -> Response:
         tok = (tok_el.text or "").strip() if tok_el is not None else ""
         since = None
         if tok:
-            m = re.match(re.escape(SYNC_PREFIX) + r"(\d+)-(\d+)$", tok)
+            m = re.match("(?:" + re.escape(SYNC_PREFIX) + "|" + re.escape(_LEGACY_SYNC_PREFIX) + r")(\d+)-(\d+)$", tok)
             if not m or int(m.group(1)) != b["id"] or int(m.group(2)) > b["sync_token"]:
                 return _precondition_dav("valid-sync-token")
             since = int(m.group(2))
