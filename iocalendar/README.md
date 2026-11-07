@@ -12,8 +12,9 @@ A self-hosted calendar: a web app for the whole family, and the standard protoco
 - **Views**: month, week, day and agenda, with a small month to jump around, drag and drop to move an event (to another day, or another time in the week and day views), a line at the current time, search across titles, places, people and notes, and keyboard shortcuts (`t` today, `n` new, `d`/`w`/`m`/`a` the views, ←/→ earlier and later, `/` search, `e` change the open event).
 - **ioContacts (optional)**: the people on an event come from your contacts (picked as you type, with a link back to each), and a shared, read-only **Birthdays** calendar shows the birthdays and anniversaries kept in ioContacts, brought up to date every six hours.
 - **Public holidays**: a shared, read-only **Holidays** calendar with the public holidays of your country and, if you like, your state or province (Settings › Holidays; it starts with the country of the family's time zone, else the United States). Worked out on the server with the `holidays` package (nothing is fetched), last year to three years ahead, renewed daily; anyone can hide it in the sidebar.
-- **Family members on events**: tag an event with the people of the family it is for ("For Emma"). The tags show as coloured initials on the calendar, the sidebar's Family list shows only one person's (or a few people's) events, and the tag is kept as an iCalendar `CATEGORIES` value with the member's name, so phones and calendar apps show it and a category typed there tags the event here too. The REST API, the subscription links (`?member=emma`) and MCP filter by member as well. Accounts that are not a person (an admin or service account) can be left out of the family in Settings › Users: they are not offered as a tag and get no private calendar.
+- **Family members on events**: tag an event with the people of the family it is for ("For Emma"). The tags show as coloured initials on the calendar, the sidebar's Family list shows only one person's (or a few people's) events, and the tag is kept as an iCalendar `CATEGORIES` value with the member's name, so phones and calendar apps show it and a category typed there tags the event here too. The REST API, the subscription links (`?member=emma`) and MCP filter by member as well. Accounts that are not a person (an admin or service account) can be left out of the family in Settings › Family: they are not offered as a tag and get no private calendar.
 - **Roles as in the other io apps**: viewers read the shared calendars (and change only their own), editors change shared events, admins also manage users and settings. The same accounts, passwords and app passwords as ioPix, ioNotes and ioContacts; one sign-in for all of them with a shared cookie domain.
+- **Settings › Suite** (suite admins): the whole suite's people and their role in every app, app passwords, keys and tokens, the apps and sign-in at the proxy; the same panel as on the start page and in every io app (iosuite-shared's `/api/suite-admin/ui.js`).
 - Light and dark, phone-sized screens, installable as an app.
 
 No tasks or to-dos: those belong in their own app.
@@ -195,9 +196,9 @@ macOS want HTTPS for CalDAV accounts outside the home network, and passwords tra
 ### Cloudflare Tunnel and Cloudflare Access
 
 With a `cloudflared` tunnel in front, set `PUBLIC_URL` to the public address. To make people sign in at Cloudflare
-Access first, add a self-hosted Access application for that hostname, then turn on Settings › Users and sign-in ›
+Access first, add a self-hosted Access application for that hostname, then turn on Settings › Suite ›
 *Sign-in at the proxy* › Cloudflare Access with your team (`myteam.cloudflareaccess.com`) and the application's AUD tag
-(or `AUTH_PROXY=cloudflare`, `CF_ACCESS_TEAM`, `CF_ACCESS_AUD`). ioCalendar checks Cloudflare's signed token and signs
+(one setting for the whole suite, kept in the Shared ioSuite database). ioCalendar checks Cloudflare's signed token and signs
 the person in to the matching account (by email, then by name). This is saved for the whole suite.
 
 Calendar apps cannot get through Access: Apple Calendar, DAVx⁵, Thunderbird and Google or Outlook subscriptions cannot

@@ -440,7 +440,7 @@ function route() {
   if (a === 'edit' && b) return { view: 'edit', id: +b, rid: qs.get('rid') };
   if (a === 'new') return { view: 'new', date: qs.get('date'), time: qs.get('time'), allDay: qs.get('allday') === '1', copy: qs.get('copy') };
   if (a === 'import') return { view: 'import' };
-  if (a === 'settings') return { view: 'settings', tab: b || 'account' };
+  if (a === 'settings') return { view: 'settings', tab: b || 'account', sub: p[2] };
   if (a === 'maintenance') return { view: 'maintenance', tab: b || 'storage' };
   return { view: 'month' };
 }
@@ -1116,11 +1116,11 @@ async function showImport(page) {
 async function showSettings(page, r) {
   const adm = S.user.role === 'admin';
   const tabs = [['account', 'Account'], ['display', 'Display'], ['devices', 'Apps and devices'], ['calendars', 'Calendars'], ['holidays', 'Holidays'],
-    ...(adm ? [['suite', 'Connected apps'], ['users', 'Users and sign-in'], ['server', 'Server']] : [])];
+    ...(adm ? [['connected', 'Connected apps'], ['family', 'Family'], ['server', 'Server']] : []), ...(S.user.suiteAdmin ? [['suite', 'Suite']] : [])];
   page.append(h('div', { class: 'pagehead' }, h('h1', null, 'Settings')),
     h('div', { class: 'tabs' }, tabs.map(([k, l]) => h('button', { class: r.tab === k ? 'on' : '', onclick: () => { location.hash = `#/settings/${k}`; } }, l))));
   const body = h('div'); page.append(body);
-  await ({ account: setAccount, display: setDisplay, devices: setDevices, calendars: setCalendars, holidays: setHolidays, suite: setSuite, users: setUsers, server: setServer }[r.tab] || setAccount)(body);
+  await ({ account: setAccount, display: setDisplay, devices: setDevices, calendars: setCalendars, holidays: setHolidays, connected: setConnected, family: setFamily, suite: setSuite, server: setServer }[r.tab] || setAccount)(body, r);
 }
 async function signOutElsewhere() {
   if (!await confirmDialog('Sign out everywhere', 'Sign out on every other browser and device? (Apps with an app password keep working.)', 'Sign out the others')) return false;
@@ -1243,60 +1243,33 @@ async function setCalendars(el) {
   }));
 }
 
-async function setUsers(el) {
+/** Who is in the family: the people events can be tagged with, each with a private calendar of their own. Accounts,
+    passwords and roles are the suite's (Settings › Suite, suite admins). */
+async function setFamily(el) {
   const [r, fam] = await Promise.all([api('/api/users'), api('/api/members')]);
   const leftOut = new Set(fam.leftOut || []);
-  const roles = r.roles || ['viewer', 'editor', 'admin'];
-  const name = h('input', { class: 't', placeholder: 'User name' }), pw = h('input', { class: 't', type: 'password', placeholder: 'Password (8 or more)' });
-  const role = h('select', { class: 't' }, roles.map((x) => h('option', { value: x, selected: x === 'editor' ? true : null }, x)));
-  const patch = async (u, body, msg) => { try { await api(`/api/users/${u.id}`, { method: 'PATCH', json: body }); toast(msg); return true; } catch (e) { fail(e); return false; } };
   el.append(h('div', { class: 'box' }, h('h2', null, icon('people'), 'Family members'),
-    h('p', { class: 'muted' }, 'The accounts are the same as in the other io apps; the role here is for ioCalendar. Everyone sees the shared calendars and has a private one of their own. Viewers read the shared calendars and change only their own; editors change shared events too; admins also manage users and settings.'),
     h('p', { class: 'muted' }, 'In the family: the people events can be tagged with, each with a private calendar of their own. Leave out accounts that are not a person, such as admin.'),
-    h('table', { class: 't' }, h('tr', null, h('th', null, 'Name'), h('th', null, 'Display name'), h('th', null, 'Role'), h('th', null, 'In the family'), h('th')),
+    h('p', { class: 'muted' }, 'The accounts are the suite’s: ', S.user.suiteAdmin ? ['add people, set passwords and choose each one’s role here and in every io app under ', h('a', { class: 'lnk', href: '#/settings/suite' }, 'Settings › Suite'), '.'] : 'a suite admin adds people and sets their role under Settings › Suite.'),
+    h('table', { class: 't' }, h('tr', null, h('th', null, 'Name'), h('th', null, 'Display name'), h('th', null, 'Role here'), h('th', null, 'In the family')),
       r.users.map((u) => {
-        const rs = h('select', { class: 't', style: 'width:auto' }, [...new Set([...roles, u.role])].map((x) => h('option', { value: x, selected: x === u.role ? true : null }, x)));
-        rs.onchange = async () => { if (!await patch(u, { role: rs.value }, 'Saved')) onRoute(); };
         const fk = h('input', { type: 'checkbox', checked: !leftOut.has(u.id), title: `${u.displayName} is someone events can be for` });
         fk.onchange = async () => {
           try { await api(`/api/members/${u.id}`, { method: 'PUT', json: { inFamily: fk.checked } }); await loadCals(); toast(fk.checked ? `${u.displayName} is in the family` : `${u.displayName} is left out of the family`); } catch (e) { fk.checked = !fk.checked; fail(e); }
         };
-        return h('tr', null, h('td', null, u.name, u.suiteAdmin ? h('span', { class: 'muted small' }, ' · suite admin') : null), h('td', null, u.displayName), h('td', null, rs), h('td', null, h('label', { class: 'check' }, fk)), h('td', { style: { whiteSpace: 'nowrap' } },
-          h('button', { class: 'pillbtn noic', onclick: async () => { const p = h('input', { class: 't', type: 'password' }); const v = await dialog(`New password for ${u.name}`, p, [{ label: 'Cancel', value: null }, { label: 'Set', value: () => p.value, primary: true }]); if (v) patch(u, { password: v }, 'Password set'); } }, 'Password'), ' ',
-          u.role === 'viewer' && !u.passwordless ? [h('button', { class: 'pillbtn noic', title: 'One-click sign-in from the account picker', onclick: async () => { if (await confirmDialog('Remove password', `Remove ${u.name}’s password? Anyone on your home network can then sign in as ${u.name} with one click (from outside, never).`, 'Remove')) { if (await patch(u, { password: '' }, 'Password removed')) onRoute(); } } }, 'No password'), ' '] : null,
-          u.id !== S.user.id ? h('button', { class: 'pillbtn noic danger', onclick: async () => { if (await confirmDialog('Delete account', `Delete ${u.name}? This removes the account from every io app, with their private calendars.`, 'Delete', true)) { try { await api(`/api/users/${u.id}`, { method: 'DELETE' }); onRoute(); } catch (e) { fail(e); } } } }, 'Delete') : null));
-      })),
-    h('h2', { style: { marginTop: '16px' } }, 'Add someone'), h('div', { class: 'multi' }, name, pw, role,
-      h('button', { class: 'pillbtn primary', onclick: async () => { try { await api('/api/users', { method: 'POST', json: { name: name.value, password: pw.value, role: role.value } }); toast('Account made'); onRoute(); } catch (e) { fail(e); } } }, icon('add', 's'), 'Add'))));
-  el.append(await proxyCard());
+        return h('tr', null, h('td', null, u.name, u.suiteAdmin ? h('span', { class: 'muted small' }, ' · suite admin') : null), h('td', null, u.displayName), h('td', { class: 'muted' }, u.role), h('td', null, h('label', { class: 'check' }, fk)));
+      }))));
 }
 
-/** Sign-in at the proxy (Cloudflare Access, Authelia…), saved for the whole suite through iosuite-shared; the same card in every app. */
-async function proxyCard() {
-  let st;
-  try { st = await api('/api/auth/proxy'); } catch (e) { return h('div', { class: 'box' }, h('h2', null, icon('key'), 'Sign-in at the proxy'), h('p', { class: 'warn' }, e.message)); }
-  const v = st.values || {}, fixed = new Set(st.fromEnv || []);
-  const field = (k, ph) => h('input', { class: 't', value: v[k] || '', placeholder: ph, disabled: fixed.has(k) ? true : null, 'data-k': k });
-  const sel = (k, opts) => h('select', { class: 't', 'data-k': k, disabled: fixed.has(k) ? true : null }, opts.map(([val, l]) => h('option', { value: val, selected: (v[k] || '') === val ? true : null }, l)));
-  const fields = [sel('AUTH_PROXY', [['off', 'Off'], ['cloudflare', 'Cloudflare Access'], ['haproxy', 'HAProxy'], ['nginx', 'nginx'], ['caddy', 'Caddy'], ['traefik', 'Traefik'], ['header', 'Another proxy']]),
-    field('CF_ACCESS_TEAM', 'myteam.cloudflareaccess.com'), field('CF_ACCESS_AUD', 'the Access application’s AUD tag'),
-    field('AUTH_PROXY_HEADER', 'header(s) with the user (other proxies)'), field('AUTH_PROXY_TRUSTED', '127.0.0.1, ::1 (the proxy’s address)'),
-    sel('AUTH_PROXY_CREATE', [['', 'show the sign-in screen'], ['deny', 'refuse them'], ['viewer', 'make them a viewer account'], ['editor', 'make them an editor account']])];
-  if (!v.AUTH_PROXY) fields[0].value = 'off';
-  const labels = ['Proxy', 'Cloudflare team', 'Cloudflare AUD', 'User header', 'Proxy address', 'Someone with no account'];
-  const seen = st.seen && st.seen.aud ? h('p', { class: 'muted small' }, `Last Cloudflare Access request: team ${st.seen.iss || '?'}, AUD ${Array.isArray(st.seen.aud) ? st.seen.aud.join(', ') : st.seen.aud}, ${st.seen.email || ''}`) : null;
-  return h('div', { class: 'box' }, h('h2', null, icon('key'), 'Sign-in at the proxy'),
-    h('p', { class: 'muted' }, 'With Cloudflare Access (a Cloudflare Tunnel with an Access policy) or a proxy with Authelia, Authentik or oauth2-proxy in front, ioCalendar takes that sign-in: the person is matched to an account by email, then by name. One setting for every io app, kept in the Shared ioSuite database (also under Settings › Suite on the start page); the AUD field takes several tags, comma-separated. Proxy settings in config.env or the environment are ignored.'),
-    h('div', { class: 'grid' }, fields.map((f, i) => fld(labels[i], f))),
-    seen, fixed.size ? h('p', { class: 'muted small' }, `Fixed in the environment: ${[...fixed].join(', ')}`) : null,
-    h('p', null, h('button', { class: 'pillbtn primary', onclick: async () => {
-      const body = {};
-      for (const f of fields) if (!f.disabled) body[f.dataset.k] = f.value;
-      try { await api('/api/auth/proxy', { method: 'POST', json: body }); toast('Saved'); } catch (e) { fail(e); }
-    } }, icon('check', 's'), 'Save')));
+/** Settings › Suite (suite admins): the people, their role in every app, app passwords, keys and tokens, the apps and
+    sign-in at the proxy, for the whole suite. The same panel in every io app, served by iosuite-shared. */
+async function setSuite(el, r) {
+  let ui;
+  try { ui = await import(new URL('api/suite-admin/ui.js', document.baseURI).href); } catch (e) { el.append(h('p', { class: 'warn' }, `The Suite panel did not load: ${e.message}`)); return; }
+  await ui.mount(el, { sub: r.sub, toast, onSub: (x) => history.replaceState(null, '', `#/settings/suite/${x}`) });
 }
 
-async function setSuite(el) {
+async function setConnected(el) {
   const s = await api('/api/iocontacts/settings');
   const bdays = h('input', { type: 'checkbox', checked: s.birthdays });
   const out = h('div');
