@@ -90,7 +90,7 @@ def test_roles_and_private_books(client, family_id):
     own = next(b for b in books if not b["shared"])
     assert k.post(f"/api/contacts?book={own['id']}", json={"fn": "My pal"}).status_code == 201
     # basic auth with an app password, and the bearer form
-    pw = client.post("/api/app-passwords", json={"label": "phone"}).json()["password"]
+    pw = client.post("/api/auth/app-passwords", json={"label": "phone"}).json()["password"]
     from fastapi.testclient import TestClient as T2
     anon = T2(app)  # no lifespan: the session's app is already running
     assert anon.get("/api/books").status_code == 401
@@ -127,11 +127,11 @@ def test_apple_profile(client):
     client.cookies.clear()
     assert client.request("PROPFIND", "/dav/", auth=("alex", dav["CardDAVPassword"]), headers={"Depth": "0"}).status_code == 207
     # ...and nothing else: not the API, MCP or the sign-in form
-    assert client.get("/api/app-passwords", auth=("alex", dav["CardDAVPassword"])).status_code == 403
+    assert client.get("/api/auth/app-passwords", auth=("alex", dav["CardDAVPassword"])).status_code == 403
     assert client.post("/api/auth/login", json={"name": "alex", "password": dav["CardDAVPassword"]}).status_code == 401
     assert client.post("/api/auth/login", json={"name": "alex", "password": "secret123"}).status_code == 200
-    items = client.get("/api/app-passwords").json()["items"]
-    assert [x["protocolsOnly"] for x in items if x["label"] == "Alex iPhone (profile)"] == [True]
+    items = client.get("/api/auth/app-passwords").json()["items"]
+    assert [x["scope"] for x in items if x["label"] == "Alex iPhone (profile)"] == ["dav"]
     ask = plistlib.loads(client.post("/api/apple-profile", data={"password": "ask", "calendar": "none"}).content)
     assert len(ask["PayloadContent"]) == 1 and "CardDAVPassword" not in ask["PayloadContent"][0]
 
@@ -141,8 +141,8 @@ def test_account_picker_and_one_click(client, family_id):
     but never from outside (through Cloudflare)."""
     client.post("/api/users", json={"name": "gran", "password": "granpass1", "role": "viewer"})
     client.post("/api/users", json={"name": "ed", "password": "edpass123", "role": "editor"})
-    gran = next(u for u in client.get("/api/users").json()["items"] if u["name"] == "gran")
-    ed = next(u for u in client.get("/api/users").json()["items"] if u["name"] == "ed")
+    gran = next(u for u in client.get("/api/users").json()["users"] if u["name"] == "gran")
+    ed = next(u for u in client.get("/api/users").json()["users"] if u["name"] == "ed")
     assert client.patch(f"/api/users/{ed['id']}", json={"password": ""}).status_code == 400  # only viewers
     assert client.patch(f"/api/users/{gran['id']}", json={"password": ""}).status_code == 200
     from fastapi.testclient import TestClient
@@ -350,8 +350,8 @@ def test_iopix_is_the_only_photo_source(client, family_id, monkeypatch):
 def test_protocols_only_app_password(client, app):
     from fastapi.testclient import TestClient as T2
     from app import users
-    limited = client.post("/api/app-passwords", json={"label": "phone", "protocolsOnly": True}).json()["password"]
-    full = client.post("/api/app-passwords", json={"label": "script"}).json()["password"]
+    limited = client.post("/api/auth/app-passwords", json={"label": "phone", "scope": "dav"}).json()["password"]
+    full = client.post("/api/auth/app-passwords", json={"label": "script"}).json()["password"]
     anon = T2(app)
     # CardDAV and its discovery work
     assert anon.request("PROPFIND", "/dav/", auth=("alex", limited), headers={"Depth": "0"}).status_code == 207
@@ -368,23 +368,8 @@ def test_protocols_only_app_password(client, app):
     # an app password without the limit still works everywhere
     assert anon.get("/api/books", auth=("alex", full)).status_code == 200
     assert anon.get("/api/books", auth=("alex", "nope")).status_code == 401
-    assert {p["label"]: p["scope"] for p in client.get("/api/app-passwords").json()["items"]} == {"phone": "dav", "script": ""}
-    assert client.post("/api/app-passwords", json={"label": "x", "scope": "bogus"}).status_code == 400
-
-
-def test_scopes_move_from_0_17(client, app):
-    """0.17's con_app_password_scopes rows become the shared 'dav' scope, and the table goes."""
-    from fastapi.testclient import TestClient as T2
-    from app import db, users
-    pw = client.post("/api/app-passwords", json={"label": "old phone"}).json()["password"]
-    db.ex("CREATE TABLE con_app_password_scopes (prefix CHAR(8) PRIMARY KEY, scope VARCHAR(16) NOT NULL)")
-    db.ex("INSERT INTO con_app_password_scopes VALUES (%s, 'protocols')", (pw.split("-")[1],))
-    users._move_scopes_to_shared()
-    users.forget_cached_auth()
-    assert not db.q("SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'con_app_password_scopes'")
-    anon = T2(app)
-    assert anon.get("/api/books", auth=("alex", pw)).status_code == 403
-    assert anon.request("PROPFIND", "/dav/", auth=("alex", pw), headers={"Depth": "0"}).status_code == 207
+    assert {p["label"]: p["scope"] for p in client.get("/api/auth/app-passwords").json()["items"]} == {"phone": "dav", "script": ""}
+    assert client.post("/api/auth/app-passwords", json={"label": "x", "scope": "bogus"}).status_code == 400
 
 
 def test_iopix_is_found_in_the_suite(client, monkeypatch):
@@ -404,13 +389,7 @@ def test_iopix_is_found_in_the_suite(client, monkeypatch):
 
 def test_suite_admin_panel(client):
     """Settings › Suite: iosuite-shared's panel and API answer a suite admin, not an app admin."""
-    from iosuite_shared import users as shared
-    assert client.get("/api/suite-admin/ui.js").status_code == 403  # alex is an admin here, not yet of the suite
-    shared.update(shared.find("alex")["id"], suite_admin=True)
-    shared.invalidate()
-    client.cookies.clear()
-    assert client.post("/api/auth/login", json={"name": "alex", "password": "secret123"}).status_code == 200
-    r = client.get("/api/suite-admin/ui.js")
+    r = client.get("/api/suite-admin/ui.js")  # the first account (alex) is a suite admin
     assert r.status_code == 200 and "export async function mount" in r.text
     assert any(u["name"] == "alex" for u in client.get("/api/suite-admin").json()["users"])
     assert client.post("/api/users", json={"name": "ann", "password": "secret123", "role": "admin"}).status_code == 200

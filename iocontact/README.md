@@ -9,7 +9,7 @@ A self-hosted contact manager: a web app for the whole family, and the standard 
 - **Contacts** with names (prefix, first, middle, last, suffix, nickname, maiden name, phonetic names), any number of phone numbers, emails and addresses (with labels and a preferred one), birthday (with or without the year), anniversaries and other dates, company, department, job title, social profiles (LinkedIn, Facebook, Instagram, X, Threads, Bluesky, Mastodon, TikTok, YouTube, GitHub, WhatsApp, Telegram, Signal and more), websites, labels, notes and a photo.
 - **Relations** between contacts: parents, children, siblings, spouses and partners, grandparents, aunts and uncles, cousins, in-laws, step-family, godparents, friends, colleagues, managers… The other side is kept automatically (make Tim Mary's son and Mary becomes Tim's mother), labels follow the other person's gender (Brother, Sister, Sibling), and a **family tree** page lays the family out by generation. A relation can also name someone who is not a contact.
 - **The family and private books**: everyone shares the Family address book; each account also has a private Personal one, and anyone can make more (shared or private). Roles as in iopix: viewers read the shared books (and change only their own), editors change shared contacts, admins also manage users and settings.
-- **Sign-in as in iopix**: the sign-in screen is a pick list of the accounts (each with the face of the contact it is linked to as *me*). A viewer whose password an admin removed (Settings › Suite › People › No password) signs in with one click, but only at home: from outside those accounts are not offered and their sessions do not work. *Other* types a user name.
+- **Sign-in as in iopix**: the sign-in screen is a pick list of the accounts (each with the face of the contact it is linked to as *me*). Sign-in, passwords, sessions, app passwords and the users admin are iosuite-shared's routes (`/api/auth/*`, `/api/users`), the same in every app; repeated wrong passwords are slowed down per visitor and name, at the web sign-in, over HTTP Basic / Bearer and at the LDAP bind. A viewer whose password an admin removed (Settings › Suite › People › No password) signs in with one click, but only at home: from outside those accounts are not offered and their sessions do not work. *Other* types a user name.
 - **Birthdays**: the upcoming birthdays and anniversaries, with ages, and a **family birthday calendar** to subscribe to.
 - **ioPix**: link a contact to a person named in ioPix. The face from ioPix is the contact's photo, and the only one: ioContacts stores no photos of its own, and serves the ioPix face to the web app, phones (CardDAV), vCard exports and the LDAP directory (`jpegPhoto`). A photo in an imported or synced vCard is not kept. The contact links to that person's photos, and *Link by name* links every contact whose name matches exactly one ioPix person. The ioPix people page lists everyone in ioPix and makes a contact from any of them.
 - **Duplicates** (same name, email or phone) and merging, **bulk** favorite, label, move, export and delete, search across names, emails, phone digits, companies, addresses, labels and notes.
@@ -176,7 +176,7 @@ password is used once and not written anywhere.
 | --- | --- |
 | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | the MariaDB / MySQL database |
 | `HOST`, `PORT` | where the server listens (`0.0.0.0`, 8640; every app of the suite has its own port) |
-| `FORWARDED_ALLOW_IPS` | the addresses that may pass on the visitor's address (`*`, or your reverse proxy's) |
+| `FORWARDED_ALLOW_IPS` | the addresses that may pass on the visitor's address and scheme (`X-Forwarded-For` / `-Proto`): `*`, or your reverse proxy's; read by the app itself (iosuite-shared), not by uvicorn |
 | `TLS_CERT_FILE`, `TLS_KEY_FILE` | serve HTTPS directly instead of behind a reverse proxy |
 | `LDAP_PORT`, `LDAP_HOST`, `LDAP_BASE` | the LDAP directory (3890, all addresses, `dc=iocontacts`); `LDAP_PORT=0` turns it off |
 | `PUBLIC_URL` | the address people use (behind a proxy), for links in the calendar feed and Settings |
@@ -216,7 +216,7 @@ pip install -e '.[test]'
 python -m pytest tests     # on a test MariaDB of its own: a Docker container it starts, or IOSUITE_TEST_DB=host:port:user:password
 ```
 
-Covered: vCard 2.1/3.0/4.0 and jCard reading and writing (an Apple Contacts card round-trips with relations, dates, social profiles, custom labels and unknown properties), relations and their inverse side, search, content negotiation, Google and Outlook CSV import and every export format, roles and private books, app passwords over Basic and Bearer and the CardDAV/LDAP-only limit, the birthday calendar, duplicates and merging, CardDAV discovery, PUT with preconditions and UID conflicts, multiget, addressbook-query, sync-collection with deletions, LDAP bind and search with substring, phone and size-limit cases, the MCP server (switch, sign-in, reading, changing, relations, a viewer's limits), duplicate scoring (nicknames, shared home numbers, other birthdays), merging with choices and undo, the data quality checks and fixes, and enrichment (lookups, suggestions that wait, accepting and dismissing, over MCP too). CI runs them against MariaDB.
+Covered: vCard 2.1/3.0/4.0 and jCard reading and writing (an Apple Contacts card round-trips with relations, dates, social profiles, custom labels and unknown properties), relations and their inverse side, search, content negotiation, Google and Outlook CSV import and every export format, roles and private books, app passwords over Basic and Bearer and the CardDAV/LDAP-only limit, the birthday calendar, duplicates and merging, CardDAV discovery, PUT with preconditions and UID conflicts, multiget, addressbook-query, sync-collection with deletions, LDAP bind (and its throttle) and search with substring, phone and size-limit cases, CardDAV bodies with XML entities (refused), the MCP server (switch, sign-in, reading, changing, relations, a viewer's limits), duplicate scoring (nicknames, shared home numbers, other birthdays), merging with choices and undo, the data quality checks and fixes, and enrichment (lookups, suggestions that wait, accepting and dismissing, over MCP too). CI runs them against MariaDB.
 
 ## Layout
 
@@ -225,7 +225,7 @@ app/main.py        the application: start-up (tables, first admin, LDAP), the su
 app/access.py      who may call a route: the markers every /api route carries (public, signed_in, admin)
 app/config.py      the settings: the suite's standard names (iosuite_shared.config) and ioContacts' own
 app/auth.py        iosuite-shared's Auth for this app, and the updater
-app/api.py         the REST API, import/export, calendar feed and ioPix routes
+app/api.py         the REST API, import/export, calendar feed and ioPix routes (sign-in and accounts: iosuite-shared's routers)
 app/carddav.py     CardDAV / WebDAV
 app/ldapd.py       the LDAP directory (asyncio, its own BER)
 app/vcard.py       vCard 2.1/3.0/4.0 and jCard
@@ -237,7 +237,7 @@ app/iopix.py       the ioPix client
 app/quality.py     duplicates (scored), merging with choices and undo, data quality checks and fixes
 app/enrich.py      enrichment: the public lookups and the suggestions queue
 app/mcp/           the MCP server: base (who is asking, finding contacts), read, write and admin tools
-app/users.py       accounts, sessions, app passwords (the Shared ioSuite database's, through iosuite-shared)   (sign-in at a reverse proxy: iosuite_shared.proxyauth, through auth.proxy)
+app/users.py       accounts as ioContacts sees them (the Shared ioSuite database's, through iosuite-shared): roles, the "me" contact, every account's private book, the calendar links
 static/            the web app (index.html, app.js, app.css, icons)
 proxmox/           the community-scripts LXC installer      setup.sh, run.sh, update.sh, Dockerfile
 ```

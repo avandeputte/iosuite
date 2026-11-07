@@ -1512,7 +1512,7 @@ async function setAccount(el) {
   el.append(h('div', { class: 'box' }, h('h2', null, icon('person'), 'You'), h('div', { class: 'grid' }, fld('Display name', dn), fld('Email (for sign-in at a proxy)', em)),
     h('p', null, h('button', { class: 'pillbtn primary', onclick: async () => { try { S.user = (await api('/api/auth/me', { method: 'PATCH', json: { displayName: dn.value, email: em.value } })).user; drawUser(); toast('Saved'); } catch (e) { fail(e); } } }, icon('check', 's'), 'Save'))),
   h('div', { class: 'box' }, h('h2', null, icon('key'), 'Password'), h('div', { class: 'grid' }, !u.passwordless ? fld('Current password', old) : null, fld('New password (8 or more)', nw)),
-    h('p', null, h('button', { class: 'pillbtn', onclick: async () => { try { await api('/api/auth/password', { method: 'POST', json: { old: old.value, new: nw.value } }); old.value = nw.value = ''; toast('Password changed'); } catch (e) { fail(e); } } }, 'Change password'))),
+    h('p', null, h('button', { class: 'pillbtn', onclick: async () => { try { await api('/api/auth/password', { method: 'POST', json: { current: old.value, password: nw.value } }); old.value = nw.value = ''; toast('Password changed'); } catch (e) { fail(e); } } }, 'Change password'))),
   h('div', { class: 'box' }, h('h2', null, icon('devices'), 'Sessions'),
     h('p', { class: 'muted' }, 'You are signed in to every ioThing app at once. Signing out elsewhere ends your session on every other browser and device; apps with an app password keep working.'),
     h('p', null, h('button', { class: 'pillbtn noic', onclick: async () => { if (await signOutElsewhere()) toast('Signed out elsewhere'); } }, 'Sign out everywhere else'))));
@@ -1528,7 +1528,7 @@ async function setDisplay(el) {
 
 async function setDevices(el) {
   const info = await api('/api/connect');
-  const pw = await api('/api/app-passwords');
+  const pw = await api('/api/auth/app-passwords');
   const label = h('input', { class: 't', placeholder: 'e.g. Alex’s iPhone', style: 'max-width:280px' });
   const shown = h('div');
   const limit = h('input', { type: 'checkbox', checked: true });
@@ -1538,7 +1538,7 @@ async function setDevices(el) {
     h('div', { class: 'box' }, h('h2', null, icon('devices'), 'iPhone, iPad and Mac: set up in one step'),
       h('p', null, 'Download a configuration profile that adds your contacts (CardDAV) and, if you like, the family birthday calendar. ',
         isApple ? 'Tap Download here in Safari, then open Settings › Profile Downloaded › Install.' : 'Open this page on the iPhone or iPad in Safari and tap Download, then Settings › Profile Downloaded › Install. On a Mac, open the file, then System Settings › Privacy & Security › Profiles.'),
-      h('form', { method: 'POST', action: '/api/apple-profile', class: 'pform', onsubmit: () => { setTimeout(async () => drawPw((await api('/api/app-passwords')).items), 1500); } },
+      h('form', { method: 'POST', action: '/api/apple-profile', class: 'pform', onsubmit: () => { setTimeout(async () => drawPw((await api('/api/auth/app-passwords')).items), 1500); } },
         h('label', { class: 'field' }, h('span', null, 'Device name'), plabel),
         h('label', { class: 'field' }, h('span', null, 'Password'), h('select', { class: 't', name: 'password' },
           h('option', { value: 'new' }, 'Include a new app password for this device'), h('option', { value: 'ask' }, 'Leave it out (the device asks while installing)'))),
@@ -1550,9 +1550,9 @@ async function setDevices(el) {
     h('div', { class: 'box' }, h('h2', null, icon('key'), 'App passwords'),
       h('p', { class: 'muted' }, 'Give every app or device its own password instead of yours; you can revoke one without touching the others. Use your user name with it.'),
       h('div', { class: 'multi' }, label, h('button', { class: 'pillbtn primary', onclick: async () => {
-        const r = await api('/api/app-passwords', { method: 'POST', json: { label: label.value || 'Device', protocolsOnly: limit.checked } });
+        const r = await api('/api/auth/app-passwords', { method: 'POST', json: { label: label.value || 'Device', scope: limit.checked ? 'dav' : '' } });
         shown.replaceChildren(h('p', null, h('b', null, 'Copy it now: '), 'it is shown only once.'), copyRow(r.password));
-        label.value = ''; const list = await api('/api/app-passwords'); drawPw(list.items);
+        label.value = ''; const list = await api('/api/auth/app-passwords'); drawPw(list.items);
       } }, icon('add', 's'), 'New app password')),
       h('label', { class: 'check' }, limit, ' Contacts apps only (CardDAV and LDAP). Untick for the REST API or an AI assistant (MCP).'),
       shown, h('div', { id: 'pwlist' })),
@@ -1589,8 +1589,8 @@ async function setDevices(el) {
   const drawPw = (items) => {
     const box = el.querySelector('#pwlist');
     box.replaceChildren(items.length ? h('table', { class: 't' }, h('tr', null, h('th', null, 'Name'), h('th', null, 'Works for'), h('th', null, 'Made'), h('th', null, 'Last used'), h('th')),
-      items.map((p) => h('tr', null, h('td', null, p.label), h('td', null, p.protocolsOnly ? 'Contacts apps (CardDAV, LDAP)' : 'Everything'), h('td', null, new Date(p.created).toLocaleDateString()), h('td', null, p.lastUsed ? new Date(p.lastUsed).toLocaleString() : 'never'),
-        h('td', null, h('button', { class: 'pillbtn noic danger', onclick: async () => { await api(`/api/app-passwords/${p.id}`, { method: 'DELETE' }); drawPw((await api('/api/app-passwords')).items); } }, 'Revoke'))))) : h('p', { class: 'muted' }, 'No app passwords yet.'));
+      items.map((p) => h('tr', null, h('td', null, p.label), h('td', null, p.scope === 'dav' ? 'Contacts apps (CardDAV, LDAP)' : 'Everything'), h('td', null, new Date(p.created * 1000).toLocaleDateString()), h('td', null, p.lastUsed ? new Date(p.lastUsed * 1000).toLocaleString() : 'never'),
+        h('td', null, h('button', { class: 'pillbtn noic danger', onclick: async () => { await api(`/api/auth/app-passwords/${p.id}`, { method: 'DELETE' }); drawPw((await api('/api/auth/app-passwords')).items); } }, 'Revoke'))))) : h('p', { class: 'muted' }, 'No app passwords yet.'));
   };
   drawPw(pw.items);
 }
@@ -1704,7 +1704,7 @@ function showSignIn() {
     form.hidden = true; btn.hidden = true;
     const face = (a) => {
       const el = h('span', { class: 'av big', style: { '--h': hue(a.displayName || a.name) } }, initials(a.displayName || a.name));
-      if (a.photo) { const img = h('img', { src: `/api/auth/accounts/${a.id}/photo`, alt: '', onerror: () => img.remove() }); el.append(img); }
+      if (a.meContactId) { const img = h('img', { src: `/api/auth/accounts/${a.id}/photo`, alt: '', onerror: () => img.remove() }); el.append(img); }
       return el;
     };
     tiles.append(...d.accounts.map((a) => {

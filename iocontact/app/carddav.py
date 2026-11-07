@@ -10,6 +10,9 @@ others find the address books from just the server address, a user name and a pa
 """
 import re
 import xml.etree.ElementTree as ET
+
+from defusedxml import DefusedXmlException
+from defusedxml.ElementTree import fromstring as parse_xml  # a client's XML: no entity expansion or external entities
 from email.utils import format_datetime
 from urllib.parse import quote, unquote
 
@@ -66,8 +69,8 @@ def _requested(body: bytes) -> tuple[str, list[str]]:
     if not body or not body.strip():
         return "allprop", []
     try:
-        root = ET.fromstring(body)
-    except ET.ParseError:
+        root = parse_xml(body)
+    except (ET.ParseError, DefusedXmlException):
         return "allprop", []
     if root.find(q(D, "propname")) is not None:
         return "propname", []
@@ -412,8 +415,8 @@ def _rows(book_id: int, since: int | None = None) -> list[dict]:
 def _proppatch(ctx: Ctx, parts, body) -> Response:
     ms = ET.Element(q(D, "multistatus"))
     try:
-        root = ET.fromstring(body or b"<x/>")
-    except ET.ParseError:
+        root = parse_xml(body or b"<x/>")
+    except (ET.ParseError, DefusedXmlException):
         return Response(status_code=400)
     b = _book(ctx, parts[2]) if len(parts) == 3 and parts[0] == "addressbooks" else None
     r = _sub(ms, D, "response")
@@ -550,11 +553,11 @@ def _mkcol(ctx: Ctx, parts, body) -> Response:
         return Response(status_code=405)
     name = parts[2]
     try:
-        root = ET.fromstring(body) if body else None
+        root = parse_xml(body) if body else None
         dn = root.find(f".//{q(D, 'displayname')}") if root is not None else None
         if dn is not None and (dn.text or "").strip():
             name = dn.text.strip()
-    except ET.ParseError:
+    except (ET.ParseError, DefusedXmlException):
         pass
     from app import db
     bid = model.create_book(ctx.user["id"], name)
@@ -566,8 +569,8 @@ def _mkcol(ctx: Ctx, parts, body) -> Response:
 
 def _report(ctx: Ctx, parts, body) -> Response:
     try:
-        root = ET.fromstring(body)
-    except ET.ParseError:
+        root = parse_xml(body)
+    except (ET.ParseError, DefusedXmlException):
         return Response(status_code=400)
     tag = root.tag
     if tag in (q(D, "principal-property-search"), q(D, "principal-search-property-set")):

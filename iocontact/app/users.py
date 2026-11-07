@@ -6,7 +6,6 @@ shared by everyone. Web sessions are the suite's cookie (shared by the apps on t
 use HTTP Basic or an LDAP bind with either the account password or an app password (one per device, revocable,
 shown once). This module keeps ioContacts' old names; the work is done by iosuite_shared.
 """
-import datetime as dt
 import secrets
 
 from iosuite_shared import apppasswords, db as authdb, sessions, users as shared
@@ -24,7 +23,8 @@ def public(u: dict | None) -> dict | None:
     if not u:
         return None
     return {"id": u["id"], "name": u["name"], "displayName": u.get("display_name") or u["name"], "email": u.get("email"),
-            "role": u["role"], "suiteAdmin": bool(u.get("suite_admin")), "passwordless": not u.get("pw_hash"), "meContactId": u.get("me_contact_id")}
+            "role": u["role"], "suiteAdmin": bool(u.get("suite_admin")), "passwordless": bool(u.get("passwordless")),
+            "meContactId": u.get("me_contact_id")}
 
 
 def get(uid: int) -> dict | None:
@@ -40,18 +40,7 @@ def all_users() -> list[dict]:
 
 
 def passwordless(u: dict | None) -> bool:
-    return bool(u) and not u.get("pw_hash")
-
-
-def accounts() -> list[dict]:
-    """The sign-in picker, as in iopix: the listed accounts with a role here, whether a password is asked for, and
-    whether there is a face to show (the ioPix face of the account's "me" contact)."""
-    out = []
-    for a in shared.accounts(APP):
-        me_id = shared.get_value(a["id"], APP, "me_contact_id")
-        out.append({"id": a["id"], "name": a["name"], "displayName": a["displayName"] or a["name"],
-                    "passwordless": a["passwordless"], "photo": bool(me_id)})
-    return out
+    return bool(u) and bool(u.get("passwordless"))
 
 
 def any_users() -> bool:
@@ -66,9 +55,16 @@ def names_of(ids: set) -> dict:
 def create(name: str, password: str | None, role: str = "editor", display_name: str | None = None, email: str | None = None) -> dict:
     """A new account with this role here, and its private address book. ValueError with the message to show."""
     u = shared.create(name, password or "", role, APP, email=email or "", display_name=display_name or "")
-    db.ex("INSERT INTO con_address_books (owner_id, slug, name, description) VALUES (%s, 'personal', 'Personal', %s)",
-          (u["id"], f"{display_name or name}'s private contacts"))
+    personal_book(get(u["id"]))
     return get(u["id"])
+
+
+def personal_book(u: dict) -> None:
+    """Every account gets its own private address book, whichever way the account was made (here, Settings › Suite,
+    the shared setup or the command line): made the first time the account's books are listed (one small query)."""
+    if not db.one("SELECT 1 AS x FROM con_address_books WHERE owner_id = %s LIMIT 1", (u["id"],)):
+        db.ex("INSERT INTO con_address_books (owner_id, slug, name, description) VALUES (%s, 'personal', 'Personal', %s)",
+              (u["id"], f"{u.get('display_name') or u['name']}'s private contacts"))
 
 
 def update(uid: int, **fields) -> dict:
@@ -96,15 +92,26 @@ def forget_me_contact(cid: int) -> None:
 
 
 def delete(uid: int) -> None:
-    db.ex("DELETE FROM con_address_books WHERE owner_id = %s", (uid,))
-    db.ex("DELETE FROM con_feed_tokens WHERE user_id = %s", (uid,))
     shared.delete(uid)
+    forget_gone(uid)
+
+
+def forget_gone(*uids: int) -> None:
+    """The private address book (with its contacts) and the calendar link of accounts that are gone."""
+    for uid in uids:
+        for b in db.q("SELECT id FROM con_address_books WHERE owner_id = %s", (uid,)):
+            db.ex("DELETE FROM con_contacts WHERE address_book_id = %s", (b["id"],))
+        db.ex("DELETE FROM con_address_books WHERE owner_id = %s", (uid,))
+        db.ex("DELETE FROM con_feed_tokens WHERE user_id = %s", (uid,))
 
 
 def init() -> None:
-    """The Shared ioSuite database's tables, and the ADMIN_USER / ADMIN_PASSWORD account on a first start with no accounts."""
+    """The Shared ioSuite database's tables, and the ADMIN_USER / ADMIN_PASSWORD account on a first start with no accounts.
+    Accounts deleted elsewhere (Settings › Suite in any app, the command line) leave their books here: swept at start."""
     shared.init()
-    _move_scopes_to_shared()
+    alive = {u["id"] for u in shared.list_users()}
+    owners = {r["owner_id"] for r in db.q("SELECT DISTINCT owner_id FROM con_address_books WHERE owner_id IS NOT NULL")}
+    forget_gone(*(owners - alive))
 
 
 def can_write(u: dict | None) -> bool:
@@ -124,29 +131,6 @@ def create_app_password(uid: int, label: str, protocols_only: bool = False) -> s
     return apppasswords.create(uid, APP, label, apppasswords.DAV if protocols_only else "")
 
 
-def _iso(ts):
-    return dt.datetime.fromtimestamp(ts, dt.timezone.utc).isoformat() if ts else None
-
-
-def list_app_passwords(uid: int) -> list[dict]:
-    return [{"id": r["id"], "label": r["label"], "created": _iso(r["created"]), "lastUsed": _iso(r["lastUsed"]),
-             "scope": r["scope"], "protocolsOnly": r["scope"] == apppasswords.DAV} for r in apppasswords.list_for(uid, APP)]
-
-
-def delete_app_password(uid: int, pid: int) -> None:
-    apppasswords.delete(uid, pid)
-
-
-def _move_scopes_to_shared() -> None:
-    """ioContacts 0.17 kept its protocol-only passwords in con_app_password_scopes (by prefix): give those passwords the
-    shared 'dav' scope and drop the table. Once, at start."""
-    if not db.one("SELECT 1 AS x FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'con_app_password_scopes'"):
-        return
-    for r in db.q("SELECT prefix FROM con_app_password_scopes"):
-        apppasswords.set_scope(APP, r["prefix"], apppasswords.DAV)
-    db.ex("DROP TABLE con_app_password_scopes")
-
-
 def authenticate(name: str, password: str, protocol: bool = False) -> dict | None:
     """Account password or app password; for LDAP binds (protocol=True) and the sign-in form. A protocol-only ('dav')
     app password is refused unless protocol is set. (HTTP Basic and Bearer go through iosuite-shared's middleware,
@@ -160,6 +144,10 @@ def authenticate(name: str, password: str, protocol: bool = False) -> dict | Non
 def forget_cached_auth() -> None:
     apppasswords.forget()
     shared.invalidate()
+
+
+# repeated wrong passwords are slowed down, per visitor and name, as the shared sign-in routes do (the LDAP bind uses these)
+attempt_wait, attempt_failed, attempt_succeeded = shared.attempt_wait, shared.attempt_failed, shared.attempt_succeeded
 
 
 # ---------------------------------------------------------------- calendar feed tokens (ioContacts' own)

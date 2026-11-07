@@ -375,11 +375,19 @@ class Session:
         m = re.match(r"^\s*(?:cn|uid|mail)\s*=\s*([^,]+)", name, re.I)
         if m:
             ident = m.group(1).strip()
+        visitor = str(self.peer[0] if isinstance(self.peer, tuple) else self.peer)
+        wait = users.attempt_wait(visitor, ident)  # repeated wrong passwords are slowed down, as at the web sign-in
+        if wait:
+            log.warning("LDAP bind as %r from %s refused: %d s to wait after repeated failures", name, visitor, wait)
+            await self.send(result(msgid, 0x61, INVALID_CREDENTIALS, f"Too many attempts; try again in {wait} seconds"))
+            return
         u = await asyncio.get_running_loop().run_in_executor(None, lambda: users.authenticate(ident, pw, protocol=True))
         if not u or u["role"] == "none":  # no access to ioContacts: no directory either
+            users.attempt_failed(visitor, ident)
             log.info("LDAP bind refused for %r from %s", name, self.peer)
             await self.send(result(msgid, 0x61, INVALID_CREDENTIALS, "Wrong name or password"))
             return
+        users.attempt_succeeded(visitor, ident)
         self.user = u
         await self.send(result(msgid, 0x61, SUCCESS))
 

@@ -10,7 +10,7 @@ import re
 import time
 import uuid as uuidlib
 
-from app import db, iopix, relations as rel, vcard
+from app import db, iopix, relations as rel, users, vcard
 
 # ------------------------------------------------------------------ address books
 
@@ -25,6 +25,7 @@ def book_public(b: dict, user: dict | None = None) -> dict:
 def books_for(user: dict | None) -> list[dict]:
     if not user:
         return []
+    users.personal_book(user)
     return db.q("SELECT b.*, (SELECT count(*) FROM con_contacts c WHERE c.address_book_id = b.id AND c.deleted = 0) AS n "
                 "FROM con_address_books b WHERE b.owner_id IS NULL OR b.owner_id = %s ORDER BY b.owner_id IS NOT NULL, b.name", (user["id"],))
 
@@ -450,7 +451,6 @@ def delete(cid: int) -> None:
         tok = _bump(row["address_book_id"])
         db.ex("UPDATE con_contacts SET deleted = 1, photo = NULL, notes = NULL, extra = NULL, etag = %s, changed_token = %s, "
               "iopix_person_id = NULL WHERE id = %s", (_etag(cid), tok, cid))
-        from app import users
         users.forget_me_contact(cid)  # whoever had this card as "me"
         for o in others:
             _touch(o)

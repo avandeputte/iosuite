@@ -71,7 +71,7 @@ def _limit_for(path: str, ctype: str) -> int:
 
 
 # 400 for bad input, the headers, no-store on the API, the body cap: the same in every app of the suite
-auth.install(app, limit_for=_limit_for)
+auth.install(app, limit_for=_limit_for, forwarded_allow_ips=config.FORWARDED_ALLOW_IPS)  # also X-Forwarded-* from those proxies
 
 
 def _status_extra(request) -> dict:
@@ -96,7 +96,9 @@ def _server_apply(body: dict) -> None:
 
 app.include_router(auth.status_router(updater, extra=_status_extra))  # /api/status: public, the same shape in every app
 app.include_router(auth.server_router(updater, log_file=config.LOG_FILE, info=_server_info, apply=_server_apply))  # /api/server, /api/log (admins)
-app.include_router(api.router)      # /api/auth/* and /api/users are ioContacts' own (an account also names its own contact)
+app.include_router(auth.router())   # /api/auth/*: sign-in, accounts, me, password, sessions, app passwords, suite (the same in every app)
+app.include_router(auth.users_router())  # /api/users: accounts and their role here (admins)
+app.include_router(api.router)      # the contacts; also an account's own fields (its "me" contact, the face on its tile)
 app.include_router(auth.admin_router())  # /api/suite-admin (+ ui.js, the Settings › Suite panel): the whole suite (suite admins)
 app.include_router(carddav.router)
 shared_mcp.mount(app, mcp.server)  # MCP over streamable HTTP at /mcp, ahead of everything else

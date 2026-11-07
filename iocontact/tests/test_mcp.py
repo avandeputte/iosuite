@@ -33,7 +33,7 @@ def call(client, auth, name, **args):
 
 
 def app_password(client, name="alex"):
-    secret = client.post("/api/app-passwords", json={"label": "claude"}).json()["password"]
+    secret = client.post("/api/auth/app-passwords", json={"label": "claude"}).json()["password"]
     return {"Authorization": f"Bearer {secret}"}, secret
 
 
