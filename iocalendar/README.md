@@ -189,6 +189,29 @@ and fills the Birthdays calendar from ioContacts' birthday feed; it is brought u
 Run it behind a reverse proxy that terminates HTTPS (Caddy, Nginx Proxy Manager, HAProxy, Cloudflare Tunnel): iOS and
 macOS want HTTPS for CalDAV accounts outside the home network, and passwords travel with every CalDAV request.
 
+### Cloudflare Tunnel and Cloudflare Access
+
+With a `cloudflared` tunnel in front, set `PUBLIC_URL` to the public address. To make people sign in at Cloudflare
+Access first, add a self-hosted Access application for that hostname, then turn on Settings › Users and sign-in ›
+*Sign-in at the proxy* › Cloudflare Access with your team (`myteam.cloudflareaccess.com`) and the application's AUD tag
+(or `AUTH_PROXY=cloudflare`, `CF_ACCESS_TEAM`, `CF_ACCESS_AUD`). ioCalendar checks Cloudflare's signed token and signs
+the person in to the matching account (by email, then by name). This is saved for the whole suite.
+
+Calendar apps cannot get through Access: Apple Calendar, DAVx⁵, Thunderbird and Google or Outlook subscriptions cannot
+open the Access sign-in page or send a service token (so neither can the Apple profile). In the Access application, add
+a policy with the action **Bypass** (Include: Everyone) for these paths, or a second Access application covering only
+them with a Bypass policy:
+
+| Path | Used by | Still protected by |
+|---|---|---|
+| `/dav/*` and `/.well-known/caldav` | CalDAV (Apple Calendar, the Apple profile, DAVx⁵, Thunderbird) | your user name and an app password |
+| `/ics/*` | subscription links and free/busy | the private token in the link |
+| `/mcp` | AI assistants (only if MCP is on) | an app password as a Bearer token |
+
+Everything else, the web app and `/api/`, stays behind Access. A script that calls `/api/` from outside needs a
+Cloudflare service token (`CF-Access-Client-Id` and `CF-Access-Client-Secret` headers) allowed in the policy, as well
+as an app password.
+
 ## Tests
 
 ```sh

@@ -1177,7 +1177,8 @@ async function setDevices(el) {
         fld('Device name', plabel),
         fld('Password', h('select', { class: 't', name: 'password' }, h('option', { value: 'new' }, 'Include a new app password for this device'), h('option', { value: 'ask' }, 'Leave it out (the device asks while installing)'))),
         h('p', null, h('button', { class: 'pillbtn primary', type: 'submit' }, icon('download', 's'), 'Download the profile'))),
-      h('p', { class: 'muted small' }, 'The profile holds the app password: install it and delete the file, and revoke that password below if the device is lost. The profile is not signed, so iOS shows it as “Not Verified”; that is expected.')) : null,
+      h('p', { class: 'muted small' }, 'The profile holds the app password: install it and delete the file, and revoke that password below if the device is lost. The profile is not signed, so iOS shows it as “Not Verified”; that is expected.'),
+      h('p', { class: 'muted small' }, 'Behind Cloudflare Access: calendar apps cannot sign in at Access, so add a Bypass policy for /dav/*, /.well-known/caldav and /ics/* (and /mcp if you use it). Those stay protected by the app password and the private link token; the web app stays behind Access.')) : null,
     canPw ? h('div', { class: 'box' }, h('h2', null, icon('key'), 'App passwords'),
       h('p', { class: 'muted' }, 'Give every app or device its own password instead of yours; you can revoke one without touching the others. Use your user name with it.'),
       h('div', { class: 'multi' }, label, h('button', { class: 'pillbtn primary', onclick: async () => {
