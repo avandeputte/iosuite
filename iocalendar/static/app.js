@@ -1286,7 +1286,7 @@ async function proxyCard() {
   const labels = ['Proxy', 'Cloudflare team', 'Cloudflare AUD', 'User header', 'Proxy address', 'Someone with no account'];
   const seen = st.seen && st.seen.aud ? h('p', { class: 'muted small' }, `Last Cloudflare Access request: team ${st.seen.iss || '?'}, AUD ${Array.isArray(st.seen.aud) ? st.seen.aud.join(', ') : st.seen.aud}, ${st.seen.email || ''}`) : null;
   return h('div', { class: 'box' }, h('h2', null, icon('key'), 'Sign-in at the proxy'),
-    h('p', { class: 'muted' }, 'With Cloudflare Access (a Cloudflare Tunnel with an Access policy) or a proxy with Authelia, Authentik or oauth2-proxy in front, ioCalendar takes that sign-in: the person is matched to an account by email, then by name. One setting for every io app, kept in the Shared ioSuite database (also under Settings › Suite on the start page); the AUD field takes several tags, comma-separated. A value in this server’s environment wins here.'),
+    h('p', { class: 'muted' }, 'With Cloudflare Access (a Cloudflare Tunnel with an Access policy) or a proxy with Authelia, Authentik or oauth2-proxy in front, ioCalendar takes that sign-in: the person is matched to an account by email, then by name. One setting for every io app, kept in the Shared ioSuite database (also under Settings › Suite on the start page); the AUD field takes several tags, comma-separated. Proxy settings in config.env or the environment are ignored.'),
     h('div', { class: 'grid' }, fields.map((f, i) => fld(labels[i], f))),
     seen, fixed.size ? h('p', { class: 'muted small' }, `Fixed in the environment: ${[...fixed].join(', ')}`) : null,
     h('p', null, h('button', { class: 'pillbtn primary', onclick: async () => {
