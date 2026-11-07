@@ -258,3 +258,22 @@ def test_live_feed_keeps_the_copy_and_streams_the_card(client, monkeypatch):
     ha.feed.live = True
     client.post("/api/ha/settings", json={"url": "http://other.lan:8123"})
     assert ha.feed.live is False
+
+
+def test_event_stream_waits_without_a_thread():
+    """The event streams wait on an asyncio event the feed sets from its thread (loop.call_soon_threadsafe), so a
+    hundred open pages hold no threads of the pool; the wait ends on a change or the timeout."""
+    import asyncio
+    import threading
+    import time
+
+    async def run():
+        v = ha.feed.version
+        t0 = time.monotonic()
+        assert await ha.feed.wait_async(v, 0.2) == v and time.monotonic() - t0 >= 0.15   # nothing moved: the timeout
+        threading.Timer(0.05, ha.feed.bump).start()
+        t0 = time.monotonic()
+        assert await ha.feed.wait_async(v, 5) == v + 1 and time.monotonic() - t0 < 2     # woken by the feed's thread
+        assert await ha.feed.wait_async(v, 5) == v + 1                                    # already moved: at once
+        assert not ha.feed._waiters
+    asyncio.run(run())

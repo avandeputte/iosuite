@@ -57,7 +57,40 @@ def test_bookmarks_status_pings_each_link(client, monkeypatch):
 
 def test_ping_without_a_server():
     assert status._ping("mailto:x@y") == {"ok": None, "status": None}
-    assert status._ping("http://127.0.0.1:9") == {"ok": False, "status": None}  # nothing listens
+    assert status.pingable("http://192.168.1.1/") and status.pingable("https://nas.lan:5001")  # bookmarks are for the home network
+
+
+def test_ping_never_reaches_this_server_or_metadata_and_never_follows_a_redirect():
+    """A bookmark editor cannot make the server probe itself or a cloud metadata service, and a redirect is an
+    answer (up), not a request to another address."""
+    import http.server
+    import threading
+    for href in ("http://127.0.0.1:9/", "http://localhost/", "http://[::1]/", "http://169.254.169.254/latest/", "http://0.0.0.0/", "ftp://x/"):
+        assert not status.pingable(href), href
+        assert status._ping(href) in ({"ok": None, "status": None},)
+    seen = []
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def do_HEAD(self):
+            seen.append(self.path)
+            self.send_response(302)
+            self.send_header("Location", "http://127.0.0.1:9/secret")
+            self.end_headers()
+
+        def log_message(self, *a):
+            pass
+    srv = http.server.HTTPServer(("127.0.0.1", 0), H)
+    t = threading.Thread(target=srv.serve_forever, daemon=True)
+    t.start()
+    try:
+        # the server is reached through its own address only when it is not loopback: pretend with the check off
+        href = f"http://127.0.0.1:{srv.server_port}/x"
+        import unittest.mock as um
+        with um.patch.object(status, "pingable", lambda h: True):
+            assert status._ping(href) == {"ok": True, "status": 302}
+        assert seen == ["/x"]  # the redirect was not followed
+    finally:
+        srv.shutdown()
 
 
 def test_my_layout(client):

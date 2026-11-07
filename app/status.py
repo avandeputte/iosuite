@@ -4,10 +4,13 @@ The start page asks every app its /api/status with the viewer's own sign-in (as 
 glimpses) and pings each bookmark's address from the server, a few at a time, and remembers the answers for a while:
 a page opened ten times in a minute asks each app once. The tiles and bookmarks show a dot from it.
 """
+import ipaddress
+import socket
 import threading
 import time
 import urllib.error
 import urllib.request
+from urllib.parse import urlsplit
 from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import Request
@@ -71,14 +74,45 @@ def of_apps(request: Request) -> dict:
 
 # ------------------------------------------------------------------ the bookmarks
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None  # a 3xx is an answer: the server is up; never follow it (not to a host the editor did not name)
+
+
+_opener = urllib.request.build_opener(_NoRedirect)
+
+
+def pingable(href: str) -> bool:
+    """A bookmark the server may ping: http(s), to a named host that is not this server itself or a link-local address
+    (the cloud metadata services live there). Home-network addresses are what bookmarks are for, so they are fine."""
+    try:
+        u = urlsplit(href)
+        host = u.hostname
+    except ValueError:
+        return False
+    if u.scheme not in ("http", "https") or not host:
+        return False
+    try:
+        addrs = [ipaddress.ip_address(host)]
+    except ValueError:
+        try:
+            addrs = [ipaddress.ip_address(a[4][0]) for a in socket.getaddrinfo(host, u.port or 0, proto=socket.IPPROTO_TCP)]
+        except (socket.gaierror, OSError, ValueError):
+            return True  # unknown name: the ping fails on its own
+    return not any(a.is_loopback or a.is_link_local or a.is_unspecified for a in addrs)
+
+
 def _ping(href: str) -> dict:
-    """{ok, status}: HEAD (GET when the server dislikes HEAD); a 4xx is "up" (it answered), a 5xx or no answer is not."""
+    """{ok, status}: HEAD (GET when the server dislikes HEAD); a 3xx or 4xx is "up" (it answered), a 5xx or no answer is
+    not. Redirects are not followed, and nothing of the answer but its status is read."""
     if not href.startswith(("http://", "https://")):
         return {"ok": None, "status": None}  # nothing to ping (a mailto:, a file share…)
+    if not pingable(href):
+        return {"ok": None, "status": None}
     for method in ("HEAD", "GET"):
         req = urllib.request.Request(href, method=method, headers={"User-Agent": widgets.UA, "Accept": "*/*"})
         try:
-            with urllib.request.urlopen(req, timeout=TIMEOUT) as r:  # noqa: S310 - an address a bookmark editor saved
+            with _opener.open(req, timeout=TIMEOUT) as r:  # noqa: S310 - an address a bookmark editor saved, checked above
                 return {"ok": True, "status": r.status}
         except urllib.error.HTTPError as e:
             if e.code in (405, 501) and method == "HEAD":
