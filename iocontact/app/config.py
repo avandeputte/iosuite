@@ -23,12 +23,7 @@ LDAP_PORT = env_int("LDAP_PORT", 3890)
 LDAP_HOST = env("LDAP_HOST", "0.0.0.0")
 LDAP_BASE = env("LDAP_BASE", "dc=iocontacts")
 
-# ioPix (can also be set in Settings; the environment wins)
-IOPIX_URL = env("IOPIX_URL")
-IOPIX_USER = env("IOPIX_USER")
-IOPIX_PASSWORD = env("IOPIX_PASSWORD")
-IOPIX_CF_CLIENT_ID = env("IOPIX_CF_CLIENT_ID")
-IOPIX_CF_CLIENT_SECRET = env("IOPIX_CF_CLIENT_SECRET")
+# ioPix is found in the suite's list of apps and signed in to by itself (app/iopix.py): nothing to set
 
 MAX_PHOTO_BYTES = 2 * 1024 * 1024
 MAX_IMPORT_BYTES = 64 * 1024 * 1024   # a vCard, CSV or JSON file to import

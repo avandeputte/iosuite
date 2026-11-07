@@ -328,7 +328,7 @@ def test_iopix_is_the_only_photo_source(client, family_id, monkeypatch):
     is served as the photo everywhere (the photo endpoint, vCard export, the account tile)."""
     from app import iopix
     face = b"\xff\xd8\xff\xe0fakejpeg"
-    monkeypatch.setattr(iopix, "settings", lambda: {"url": "https://iopix.example", "user": "", "password": "", "cfId": "", "cfSecret": ""})
+    monkeypatch.setattr(iopix, "settings", lambda: {"url": "https://iopix.example"})
     monkeypatch.setattr(iopix, "face", lambda pid: (face, "image/jpeg") if pid == 77 else None)
     card = "BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Pic Person\r\nN:Person;Pic;;;\r\nPHOTO;ENCODING=b;TYPE=JPEG:/9j/4AAQ\r\nEND:VCARD\r\n"
     r = client.post(f"/api/contacts?book={family_id}", content=card, headers={"Content-Type": "text/vcard"})
@@ -385,3 +385,22 @@ def test_scopes_move_from_0_17(client, app):
     anon = T2(app)
     assert anon.get("/api/books", auth=("alex", pw)).status_code == 403
     assert anon.request("PROPFIND", "/dav/", auth=("alex", pw), headers={"Depth": "0"}).status_code == 207
+
+
+def test_iopix_is_found_in_the_suite(client, monkeypatch):
+    from iosuite_shared import links, suite
+    from app import db, iopix
+    db.set_setting("iopix_url", "https://old.example")
+    db.set_setting("iopix_password", "old")
+    iopix.forget_old_settings()
+    assert db.get_setting("iopix_url") is None and db.get_setting("iopix_password") is None
+    assert client.get("/api/iopix/settings").json()["enabled"] is False
+    suite.register("iopix", name="ioPix", url="https://photo.example.net", version="1")
+    assert client.get("/api/iopix/settings").json() == {"url": "https://photo.example.net", "enabled": True}
+    seen = []
+
+    class R:
+        def read(self):
+            return b'{"tags": [{"id": 5, "name": "Ann", "person": true, "n": 3}]}'
+    monkeypatch.setattr(links, "get", lambda app, provider, path, **kw: seen.append((app, provider, path)) or R())
+    assert [p["name"] for p in iopix.people(force=True)] == ["Ann"] and seen == [("iocontacts", "iopix", "/api/meta")]

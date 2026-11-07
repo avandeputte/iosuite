@@ -33,17 +33,17 @@ def diagnostics() -> dict:
     from app.main import mcp_enabled
     out["mcp"] = {"enabled": mcp_enabled(), "forcedByEnv": config.MCP_FORCED}
     ip = iopix.public_settings()
-    out["iopix"] = {"url": ip.get("url") or None, "signIn": bool(ip.get("user")), "serviceToken": bool(ip.get("cfId"))}
+    out["iopix"] = {"url": ip.get("url") or None, "connected": ip["enabled"]}
     out["accounts"] = [{"name": u["name"], "role": u["role"]} for u in users.all_users()]
     return out
 
 
 @server.tool(annotations=READ_ONLY)
 def test_iopix() -> dict:
-    """Admins: whether ioPix answers with the address and sign-in in Settings › ioPix, and how many people it has."""
+    """Admins: whether ioPix (found in the suite by itself) answers, and how many people it has."""
     need_admin()
     if not iopix.settings()["url"]:
-        raise ToolError("ioPix is not set up (Settings › ioPix in the web app)")
+        raise ToolError("ioPix is not part of the suite (it connects by itself once it runs on the same Shared ioSuite database)")
     return iopix.test()
 
 
