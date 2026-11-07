@@ -1657,22 +1657,16 @@ async function proxyCard() {
 
 async function setIopix(el) {
   const s = await api('/api/iopix/settings');
-  const url = h('input', { class: 't', value: s.url, placeholder: 'https://iopix.example.com or http://192.168.1.10:8600', disabled: s.fromEnv });
-  const user = h('input', { class: 't', value: s.user, placeholder: 'Only when Require sign-in is on in ioPix' });
-  const pw = h('input', { class: 't', type: 'password', placeholder: s.hasPassword ? '(kept)' : '' });
-  const cfId = h('input', { class: 't', value: s.cfId, placeholder: 'Only behind Cloudflare Access' });
-  const cfSecret = h('input', { class: 't', type: 'password', placeholder: s.hasCfSecret ? '(kept)' : '' });
   const out = h('p');
-  const fld = (l, e) => h('label', { class: 'field' }, h('span', null, l), e);
   el.append(h('div', { class: 'box' }, h('h2', null, icon('image'), 'ioPix'),
-    h('p', { class: 'muted' }, 'Link contacts to people named in ioPix: their face becomes the contact’s photo (the only one: contacts keep no photos of their own, and phones, exports and the LDAP directory get the ioPix face too) and the contact links to their photos. ioContacts talks to ioPix from the server; your browser never needs to reach it. On the home network, ioPix\'s LAN address is simplest. Through Cloudflare Access, create a service token (Zero Trust › Access › Service auth) and allow it in the ioPix application\'s policy.'),
-    h('div', { class: 'grid' }, fld('ioPix address', url), fld('ioPix user', user), fld('ioPix password', pw), fld('Cloudflare client ID', cfId), fld('Cloudflare client secret', cfSecret)),
-    h('p', null, h('button', { class: 'pillbtn primary', onclick: async () => {
-      const body = { url: url.value, user: user.value, cfId: cfId.value };
-      if (pw.value) body.password = pw.value; if (cfSecret.value) body.cfSecret = cfSecret.value;
-      try { const r = await api('/api/iopix/settings', { method: 'POST', json: body }); S.status = await api('/api/status'); drawNav();
-        out.textContent = r.test ? (r.test.ok ? `Connected: ${r.test.people} people in ioPix.` : `Saved, but ioPix did not answer: ${r.test.error}`) : 'Saved (ioPix link off).'; } catch (e) { fail(e); }
-    } }, icon('check', 's'), 'Save and test')), out));
+    h('p', { class: 'muted' }, 'Link contacts to people named in ioPix: their face becomes the contact’s photo (the only one: contacts keep no photos of their own, and phones, exports and the LDAP directory get the ioPix face too) and the contact links to their photos.'),
+    h('p', null, s.enabled
+      ? ['Connected by itself: ioContacts finds ', h('a', { href: s.url, target: '_blank', rel: 'noopener' }, 'ioPix'), ' in the suite and reads from it from the server with its own read-only app password (Settings › Suite on the start page lists it). Nothing to set up.']
+      : 'ioPix is not part of this suite yet. Once it runs on the same Shared ioSuite database, ioContacts connects to it by itself.'),
+    s.enabled ? h('p', null, h('button', { class: 'pillbtn noic', onclick: async () => {
+      out.textContent = 'Testing…';
+      try { const r = await api('/api/iopix/test', { method: 'POST' }); out.textContent = r.ok ? `Connected: ${r.people} people in ioPix.` : `ioPix did not answer: ${r.error}`; } catch (e) { out.textContent = ''; fail(e); }
+    } }, 'Test the connection')) : null, out));
 }
 
 async function setServer(el) {

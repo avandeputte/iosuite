@@ -178,7 +178,6 @@ and updates itself as always. The Proxmox installer offers the same as a checkli
 | `COOKIE_DOMAIN` | the domain the session cookie is shared on (`example.com`): signed in at `photo.example.com`, signed in at `contacts.example.com` too |
 | `AUTH_PROXY`, `AUTH_PROXY_HEADER`, `AUTH_PROXY_TRUSTED`, `CF_ACCESS_TEAM`, `CF_ACCESS_AUD` | sign-in at a reverse proxy, exactly as in iopix: Cloudflare Access (with token checking), Authelia, Authentik, oauth2-proxy… matched to accounts by email, then name |
 | `CF_KV_ACCOUNT_ID`, `CF_KV_NAMESPACE_ID`, `CF_KV_API_TOKEN` | optional edge check of app passwords: the Workers KV namespace a Cloudflare Worker on `/dav*` reads; normally stored once for the whole suite in Settings › Suite › Keys and tokens, these override it ([setup](https://github.com/avandeputte/iosuite-shared/blob/main/cloudflare/edge-auth/README.md)) |
-| `IOPIX_URL`, `IOPIX_USER`, `IOPIX_PASSWORD`, `IOPIX_CF_CLIENT_ID`, `IOPIX_CF_CLIENT_SECRET` | ioPix (or Settings › ioPix) |
 | `MCP` | `1` keeps the MCP server on, whatever the setting says |
 | `MCP_USER` | the account `python -m app.mcp` (stdio) acts as |
 | `UPDATE_CHECK` | `0` turns the daily version check off for good |
@@ -188,7 +187,7 @@ and updates itself as always. The Proxmox installer offers the same as a checkli
 
 ### ioPix
 
-Settings › ioPix (admins) takes ioPix's address. ioContacts talks to ioPix from the server; browsers never need to reach it, so ioPix's LAN address is the simplest choice when both are at home. If ioPix has Require sign-in on, give an ioPix account (a viewer is enough). If the address goes through Cloudflare Access, create a service token (Zero Trust › Access › Service auth), allow it in the ioPix application's policy with a *Service Auth* rule, and enter its client ID and secret. The people list comes from ioPix's People (the named people with photos) and the faces from ioPix's face crops.
+Nothing to set up: ioContacts finds ioPix in the suite's list of apps (the Shared ioSuite database) and reads from it from the server as its own service account (`iocontacts-app`) with a read-only app password, both made by itself on first use and listed on the start page's Settings › Suite, where a suite admin can revoke them (a new one is made the next time). Behind Cloudflare Access, the suite's Cloudflare Access service token (Settings › Suite › Keys and tokens) goes along. The people list comes from ioPix's People (the named people with photos) and the faces from ioPix's face crops.
 
 ### HTTPS
 

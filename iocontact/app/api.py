@@ -890,19 +890,9 @@ def calendar_feed(token: str, which: str, request: Request):
 
 @router.get("/api/iopix/settings", dependencies=[access.admin])
 def iopix_settings(request: Request):
+    """Whether ioPix is part of the suite: it is found and signed in to by itself (app/iopix.py)."""
     me(request)
     return iopix.public_settings()
-
-
-@router.post("/api/iopix/settings", dependencies=[access.admin])
-async def iopix_save(request: Request):
-    admin(request)
-    b = await request.json()
-    try:
-        iopix.save_settings(b.get("url"), b.get("user"), b.get("password"), b.get("cfId"), b.get("cfSecret"))
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-    return {**iopix.public_settings(), "test": await run_in_threadpool(iopix.test) if iopix.settings()["url"] else None}
 
 
 @router.post("/api/iopix/test", dependencies=[access.admin])

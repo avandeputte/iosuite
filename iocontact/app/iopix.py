@@ -3,89 +3,55 @@
 A linked person's face is the contact's only photo: ioContacts stores none of its own, and serves the ioPix face
 wherever a photo goes (the web app, vCards, CardDAV, LDAP jpegPhoto, the account tiles).
 
-The server talks to ioPix, never the browser, so ioPix's sign-in stays on the server: optionally an ioPix account
-(when Require sign-in is on there) and a Cloudflare Access service token (when ioPix sits behind Cloudflare Access).
-Settings > ioPix stores them; IOPIX_* in the environment wins.
+Nothing to set up: ioPix is found in the suite's list of apps, and the server reads from it (never the browser) as
+ioContacts' own service account with a read-only app password, both made by itself the first time
+(iosuite_shared.links).
 """
 import json
+import logging
 import threading
 import time
 import urllib.error
-import urllib.request
-from http.cookiejar import CookieJar
 
-from app import config, db
+from iosuite_shared import links
 
+from app import db
+
+log = logging.getLogger("iocontacts.iopix")
+APP, PROVIDER = "iocontacts", "iopix"
 _lock = threading.Lock()
 _cache: dict = {"at": 0, "people": None}
 _faces: dict = {}  # person id -> (when, (bytes, type) or None): ioPix is the only source of contact photos, so they are asked often
 FACE_TTL, FACE_MISS_TTL, FACE_ERROR_TTL, FACE_MAX = 3600, 600, 60, 4000
-_jar = CookieJar()
+# what Settings › ioPix used to keep before the suite found ioPix by itself (removed at start)
+OLD_SETTINGS = ("iopix_url", "iopix_user", "iopix_password", "iopix_cf_id", "iopix_cf_secret")
+
+
+def forget_old_settings() -> None:
+    try:
+        for k in OLD_SETTINGS:
+            if db.get_setting(k) is not None:
+                db.set_setting(k, None)
+    except Exception as e:  # noqa: BLE001 - tried again next start
+        log.debug("old ioPix settings: %s", e)
 
 
 def settings() -> dict:
-    return {"url": (config.IOPIX_URL or db.get_setting("iopix_url") or "").rstrip("/"),
-            "user": config.IOPIX_USER or db.get_setting("iopix_user") or "",
-            "password": config.IOPIX_PASSWORD or db.get_setting("iopix_password") or "",
-            "cfId": config.IOPIX_CF_CLIENT_ID or db.get_setting("iopix_cf_id") or "",
-            "cfSecret": config.IOPIX_CF_CLIENT_SECRET or db.get_setting("iopix_cf_secret") or ""}
+    try:
+        return {"url": links.url(PROVIDER) or ""}
+    except Exception:  # noqa: BLE001 - no database yet
+        return {"url": ""}
 
 
 def public_settings() -> dict:
     s = settings()
-    return {"url": s["url"], "user": s["user"], "hasPassword": bool(s["password"]), "cfId": s["cfId"],
-            "hasCfSecret": bool(s["cfSecret"]), "enabled": bool(s["url"]),
-            "fromEnv": bool(config.IOPIX_URL)}
-
-
-def save_settings(url=None, user=None, password=None, cf_id=None, cf_secret=None) -> None:
-    if url and url.strip() and not url.strip().lower().startswith(("http://", "https://")):
-        raise ValueError("The ioPix address starts with http:// or https://")
-    for k, v in (("iopix_url", url), ("iopix_user", user), ("iopix_password", password), ("iopix_cf_id", cf_id),
-                 ("iopix_cf_secret", cf_secret)):
-        if v is not None:
-            db.set_setting(k, v.strip() or None)
-    _cache.update(at=0, people=None)
-    _faces.clear()
-    _jar.clear()
-
-
-def _opener():
-    return urllib.request.build_opener(urllib.request.HTTPCookieProcessor(_jar))
-
-
-def _req(path: str, data: dict | None = None, timeout: float = 10):
-    s = settings()
-    if not s["url"]:
-        raise RuntimeError("ioPix is not set up (Settings > ioPix)")
-    if not s["url"].lower().startswith(("http://", "https://")):
-        raise RuntimeError("The ioPix address must start with http:// or https://")
-    headers = {"Accept": "application/json", "User-Agent": "ioContacts"}
-    if s["cfId"] and s["cfSecret"]:
-        headers.update({"CF-Access-Client-Id": s["cfId"], "CF-Access-Client-Secret": s["cfSecret"]})
-    body = None
-    if data is not None:
-        body = json.dumps(data).encode()
-        headers["Content-Type"] = "application/json"
-        headers["Origin"] = s["url"]
-    req = urllib.request.Request(s["url"] + path, data=body, headers=headers, method="POST" if body else "GET")
-    return _opener().open(req, timeout=timeout)
-
-
-def _login() -> None:
-    s = settings()
-    if s["user"] and s["password"]:
-        _req("/api/auth/login", {"name": s["user"], "password": s["password"]}).read()
+    return {"url": s["url"], "enabled": bool(s["url"])}
 
 
 def _get(path: str, timeout: float = 10):
-    try:
-        return _req(path, timeout=timeout)
-    except urllib.error.HTTPError as e:
-        if e.code in (401, 403) and settings()["user"]:
-            _login()
-            return _req(path, timeout=timeout)
-        raise
+    if not settings()["url"]:
+        raise RuntimeError("ioPix is not part of the suite (it has not started on this Shared ioSuite database)")
+    return links.get(APP, PROVIDER, path, timeout=timeout, user_agent="ioContacts")
 
 
 def people(force: bool = False) -> list[dict]:

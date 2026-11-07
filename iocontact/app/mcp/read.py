@@ -258,7 +258,7 @@ def list_iopix_people(text: str = "", unlinked_only: bool = False) -> list:
     text: part of a name. link_iopix_person links one to a contact."""
     u = who()
     if not iopix.settings()["url"]:
-        raise ToolError("ioPix is not connected (Settings › ioPix in the web app)")
+        raise ToolError("ioPix is not part of the suite (it connects by itself once it runs on the same Shared ioSuite database)")
     try:
         ppl = iopix.people()
     except Exception as e:  # noqa: BLE001
