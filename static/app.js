@@ -1689,10 +1689,10 @@ function suiteApps(el, o) {
       })))));
 }
 /* Sign-in at a reverse proxy (Cloudflare Access on a tunnel, or Authelia & co. behind nginx...), once for every app:
-   iosuite-shared keeps it suite-wide and moves what an app's config.env still sets into it when the app starts. */
+   iosuite-shared keeps it suite-wide and reads it from nowhere else (config.env and the environment are ignored). */
 const PROXIES = [['off', 'Off'], ['cloudflare', 'Cloudflare Access'], ['haproxy', 'HAProxy'], ['nginx', 'nginx'], ['caddy', 'Caddy'], ['traefik', 'Traefik'], ['header', 'Another proxy']];
 const NO_ACCOUNT = [['', 'Gets the sign-in screen'], ['deny', 'Is denied access'], ['viewer', 'Gets a viewer account'], ['editor', 'Gets an editor account']];
-async function suiteSignin(el, o) {
+async function suiteSignin(el) {
   let d;
   try { d = await api('/api/suite-admin/proxy'); } catch (e) { el.append(h('p', { class: 'err' }, e.message)); return; }
   const draw = () => {
@@ -1718,25 +1718,18 @@ async function suiteSignin(el, o) {
     const state = here.mode === 'off' || !here.mode ? 'Off: everyone uses the suite’s own sign-in.' : here.mode === 'cloudflare'
       ? (here.cloudflareVerified ? `On: Cloudflare Access tokens are verified (${(here.auds || []).length} AUD tag${(here.auds || []).length === 1 ? '' : 's'}).` : 'On, but without the team domain and AUD tag: nobody is signed in through Cloudflare.')
       : `On (${here.mode}): the user header is believed from ${(here.trusted || []).join(', ')}.`;
-    const name = (k) => appLabel(o, k);
-    const overrides = Object.entries(d.overrides || {});
-    const left = Object.entries(d.left || {});
     const save = async () => {
       const body = { AUTH_PROXY: mode.value === 'off' ? '' : mode.value, CF_ACCESS_TEAM: team.value.trim(), CF_ACCESS_AUD: aud.value.split(/[\s,]+/).filter(Boolean).join(', '),
         AUTH_PROXY_HEADER: header.value.trim(), AUTH_PROXY_TRUSTED: trusted.value.trim(), AUTH_PROXY_CREATE: create.value };
       try { d = await api('/api/suite-admin/proxy', { method: 'PUT', json: body }); toast('Saved for every app'); draw(); } catch (e) { fail(e); }
     };
     el.replaceChildren(h('div', { class: 'box' }, h('h2', null, icon('key'), 'Sign-in at the proxy'),
-      h('p', { class: 'muted' }, 'Someone signed in at your reverse proxy (Cloudflare Access on a tunnel, or Authelia, Authentik or oauth2-proxy behind HAProxy, nginx, Caddy or Traefik) is signed in to every io app, matched to an account by email, then name. One setting for the whole suite, kept in the Shared ioSuite database. An app moves what its config.env still sets here when it starts, and comments those lines out.'),
-      h('p', null, h('b', null, state), here.fromEnv && here.fromEnv.length ? h('span', { class: 'muted small' }, ` On this server, the environment sets ${here.fromEnv.join(', ')} (it wins here).`) : null),
+      h('p', { class: 'muted' }, 'Someone signed in at your reverse proxy (Cloudflare Access on a tunnel, or Authelia, Authentik or oauth2-proxy behind HAProxy, nginx, Caddy or Traefik) is signed in to every io app, matched to an account by email, then name. One setting for the whole suite, kept in the Shared ioSuite database and read only from there: proxy settings in an app’s config.env or environment are ignored.'),
+      h('p', null, h('b', null, state)),
       h('div', { class: 'grid' }, fld('Proxy', mode)), cf, seen,
       h('p', { class: 'muted small' }, 'Team domain: Zero Trust › Settings › Team name and domain. AUD tag: Zero Trust › Access › Applications › the application › Overview. One application covering every app’s host has one tag; with one application per app, list each one’s tag.'),
       other, rest,
-      h('div', { class: 'btns' }, h('button', { class: 'pillbtn', onclick: save }, 'Save for every app'))),
-    left.length || overrides.length ? h('div', { class: 'box' }, h('h2', null, icon('lock'), 'Apps that differ'),
-      left.map(([a, keys]) => h('p', null, h('b', null, name(a)), `: ${Object.entries(keys).map(([k, w]) => `${k} (in its ${w})`).join(', ')} differs from the value above and still applies there. Change it there to match, or remove it, and restart ${name(a)}.`)),
-      overrides.map(([a, vals]) => h('p', null, h('b', null, name(a)), `: its own ${Object.keys(vals).join(', ')} `,
-        h('button', { class: 'linkbtn', onclick: async () => { try { d = await api(`/api/suite-admin/proxy/overrides/${a}`, { method: 'DELETE' }); toast(`${name(a)} uses the suite’s settings`); draw(); } catch (e) { fail(e); } } }, 'Use the suite’s settings')))) : null);
+      h('div', { class: 'btns' }, h('button', { class: 'pillbtn', onclick: save }, 'Save for every app'))));
     show();
   };
   draw();
