@@ -142,6 +142,7 @@ WorkingDirectory=$APP
 ExecStart=$APP/.venv/bin/python -m app
 Restart=always
 RestartSec=5
+TimeoutStopSec=20
 
 [Install]
 WantedBy=multi-user.target
