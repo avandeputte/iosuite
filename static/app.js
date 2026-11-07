@@ -1694,18 +1694,19 @@ async function suiteKeys(el, o) {
     const save = async (value) => {
       try { const n = await api(`/api/suite-admin/keys/${encodeURIComponent(where)}/${encodeURIComponent(k.name)}`, { method: 'PUT', json: { value } }); Object.assign(k, n); toast(n.set ? 'Saved' : 'Cleared'); el.replaceChildren(); suiteKeys(el, o); } catch (e) { fail(e); }
     };
-    return h('tr', null,
-      h('td', null, h('b', null, k.label), k.hint ? h('div', { class: 'muted small' }, k.hint) : null,
-        k.envSet ? h('div', { class: 'muted small' }, `${k.env} in the app's environment wins over this one.`) : null),
-      h('td', { class: 'small' }, k.set ? 'set' : h('span', { class: 'muted' }, 'not set'), k.updated ? h('div', { class: 'muted' }, `${sinceText(k.updated)}${k.updatedBy ? ` by ${k.updatedBy}` : ''}`) : null),
-      h('td', null, h('div', { class: 'multi' }, inp,
+    return h('div', { style: { padding: '10px 0', borderTop: '1px solid var(--line, rgba(127,127,127,.25))' } },
+      h('div', null, h('b', null, k.label), ' ', h('span', { class: 'small' }, k.set ? '· set' : h('span', { class: 'muted' }, '· not set'),
+        k.updated ? h('span', { class: 'muted' }, ` ${sinceText(k.updated)}${k.updatedBy ? ` by ${k.updatedBy}` : ''}`) : null)),
+      k.hint ? h('div', { class: 'muted small' }, k.hint) : null,
+      k.envSet ? h('div', { class: 'muted small' }, `${k.env} in the app's environment wins over this one.`) : null,
+      h('div', { style: { marginTop: '6px' } }, h('div', { class: 'multi' }, inp,
         h('button', { class: 'pillbtn noic', onclick: () => { if (inp.value.trim()) save(inp.value.trim()); else toast('Paste the new value first'); } }, 'Replace'),
         k.set ? h('button', { class: 'pillbtn noic danger', onclick: async () => { if (await confirmDialog('Clear key', `Clear ${k.label}? What uses it stops working until a new one is set.`, 'Clear', true)) save(''); } }, 'Clear') : null)));
   };
   el.append(h('div', { class: 'box' }, h('h2', null, icon('key'), 'Keys and tokens'),
     h('p', { class: 'muted' }, 'The keys each app keeps for services outside the suite, all in the Shared ioSuite database. Values are never shown again once saved. The apps’ own settings pages set the same keys. How the apps sign in to each other is automatic: see the app passwords of the apps’ own accounts under People.'),
     order.length ? order.map((a) => [h('h3', null, a === '' ? 'Whole suite' : appLabel(o, a)),
-      h('div', { class: 'scrollx' }, h('table', { class: 't' }, groups[a].map(row)))]) : h('p', { class: 'muted' }, 'No app keeps any yet.')));
+      h('div', null, groups[a].map(row))]) : h('p', { class: 'muted' }, 'No app keeps any yet.')));
 }
 
 function suiteApps(el, o) {
