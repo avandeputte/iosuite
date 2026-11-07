@@ -126,9 +126,13 @@ def test_apple_profile(client):
     # the app password in the profile works for CardDAV
     client.cookies.clear()
     assert client.request("PROPFIND", "/dav/", auth=("alex", dav["CardDAVPassword"]), headers={"Depth": "0"}).status_code == 207
-    labels = [x["label"] for x in client.get("/api/app-passwords", auth=("alex", dav["CardDAVPassword"])).json()["items"]]
-    assert "Alex iPhone (profile)" in labels
-    ask = plistlib.loads(client.post("/api/apple-profile", data={"password": "ask", "calendar": "none"}, auth=("alex", dav["CardDAVPassword"])).content)
+    # ...and nothing else: not the API, MCP or the sign-in form
+    assert client.get("/api/app-passwords", auth=("alex", dav["CardDAVPassword"])).status_code == 403
+    assert client.post("/api/auth/login", json={"name": "alex", "password": dav["CardDAVPassword"]}).status_code == 401
+    assert client.post("/api/auth/login", json={"name": "alex", "password": "secret123"}).status_code == 200
+    items = client.get("/api/app-passwords").json()["items"]
+    assert [x["protocolsOnly"] for x in items if x["label"] == "Alex iPhone (profile)"] == [True]
+    ask = plistlib.loads(client.post("/api/apple-profile", data={"password": "ask", "calendar": "none"}).content)
     assert len(ask["PayloadContent"]) == 1 and "CardDAVPassword" not in ask["PayloadContent"][0]
 
 
@@ -193,14 +197,15 @@ def test_suite_apps_for_the_app_switcher(client):
 
 
 def test_birthday_without_reminder(client, family_id):
-    """An unchecked "Remind me" keeps the birthday on the contact (and in vCard) but out of every birthdays feed."""
+    """An unchecked "Remind me" keeps the birthday on the contact, in vCard and on the Birthdays page; only the
+    calendar feed leaves it out."""
     import datetime as dt
     soon = dt.date.today() + dt.timedelta(days=3)
     on = mk(client, family_id, fn="Remind Yes", birthday={"year": 1980, "month": soon.month, "day": soon.day})
     off = mk(client, family_id, fn="Remind No", birthday={"year": 1981, "month": soon.month, "day": soon.day}, birthdayRemind=False)
     assert on["birthdayRemind"] is True and off["birthdayRemind"] is False and off["birthday"]["year"] == 1981
-    names = {x["fn"] for x in client.get("/api/upcoming?days=10").json()["items"]}
-    assert "Remind Yes" in names and "Remind No" not in names
+    flags = {x["fn"]: x["remind"] for x in client.get("/api/upcoming?days=10").json()["items"]}
+    assert flags["Remind Yes"] is True and flags["Remind No"] is False
     info = client.get("/api/connect").json()
     ics = client.get(info["calendar"]["family"].split("testserver")[1]).text
     assert "Remind Yes's birthday" in ics and "Remind No" not in ics
@@ -212,7 +217,12 @@ def test_birthday_without_reminder(client, family_id):
     assert client.get(f"/api/contacts/{off['id']}").json()["birthdayRemind"] is False
     back = client.put(f"/api/contacts/{off['id']}", json={**client.get(f"/api/contacts/{off['id']}").json(), "birthdayRemind": True}).json()
     assert back["birthdayRemind"] is True
-    assert "Remind No" in {x["fn"] for x in client.get("/api/upcoming?days=10").json()["items"]}
+    # the Birthdays page toggles it with a PATCH of only the flag
+    assert client.patch(f"/api/contacts/{off['id']}", json={"birthdayRemind": False}).json()["birthdayRemind"] is False
+    ics = client.get(info["calendar"]["family"].split("testserver")[1]).text
+    assert "Remind No" not in ics and client.get(f"/api/contacts/{off['id']}").json()["birthday"]["year"] == 1981
+    assert client.patch(f"/api/contacts/{off['id']}", json={"birthdayRemind": True}).json()["birthdayRemind"] is True
+    assert "Remind No's birthday" in client.get(info["calendar"]["family"].split("testserver")[1]).text
 
 
 def test_the_shell_its_files_and_the_icon_are_public(client):
@@ -228,7 +238,7 @@ def test_the_shell_its_files_and_the_icon_are_public(client):
 
 
 def test_iopix_face_reaches_birthdays_and_family(client, family_id):
-    """A contact without its own photo but linked to an ioPix person shows that face on the birthdays page,
+    """A contact linked to an ioPix person shows that face on the birthdays page,
     in the family tree and on relation chips, as in the contact list."""
     import datetime as dt
     soon = dt.date.today() + dt.timedelta(days=2)
@@ -236,7 +246,7 @@ def test_iopix_face_reaches_birthdays_and_family(client, family_id):
              iopix={"personId": 4242, "name": "Face Kid"})
     mom = mk(client, family_id, fn="Face Mom", relations=[{"type": "child", "relatedId": kid["id"]}])
     up = {x["fn"]: x for x in client.get("/api/upcoming?days=10").json()["items"]}
-    assert up["Face Kid"]["iopixPersonId"] == 4242 and up["Face Kid"]["hasPhoto"] is False
+    assert up["Face Kid"]["iopixPersonId"] == 4242 and up["Face Kid"]["hasPhoto"] is True
     rel = client.get(f"/api/contacts/{mom['id']}").json()["relations"]
     assert rel[0]["relatedIopixPersonId"] == 4242
     nodes = {n["fn"]: n for n in client.get(f"/api/contacts/{mom['id']}/family").json()["nodes"]}
@@ -311,3 +321,67 @@ def test_partial_birthdays(client, family_id):
     y2 = client.put(f"/api/contacts/{y['id']}", json={**y, "birthday": {"month": 3, "day": 4}}).json()
     assert y2["birthday"] == {"year": None, "month": 3, "day": 4}
     assert client.put(f"/api/contacts/{y['id']}", json={**y2, "birthday": None}).json()["birthday"] is None
+
+
+def test_iopix_is_the_only_photo_source(client, family_id, monkeypatch):
+    """Contacts keep no photo of their own: uploads are gone, a vCard's PHOTO is dropped, and the linked ioPix face
+    is served as the photo everywhere (the photo endpoint, vCard export, the account tile)."""
+    from app import iopix
+    face = b"\xff\xd8\xff\xe0fakejpeg"
+    monkeypatch.setattr(iopix, "settings", lambda: {"url": "https://iopix.example", "user": "", "password": "", "cfId": "", "cfSecret": ""})
+    monkeypatch.setattr(iopix, "face", lambda pid: (face, "image/jpeg") if pid == 77 else None)
+    card = "BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Pic Person\r\nN:Person;Pic;;;\r\nPHOTO;ENCODING=b;TYPE=JPEG:/9j/4AAQ\r\nEND:VCARD\r\n"
+    r = client.post(f"/api/contacts?book={family_id}", content=card, headers={"Content-Type": "text/vcard"})
+    assert r.status_code == 201 and r.json()["hasPhoto"] is False
+    cid = r.json()["id"]
+    assert client.get(f"/api/contacts/{cid}/photo").status_code == 404
+    assert client.put(f"/api/contacts/{cid}/photo", files={"file": ("a.jpg", face, "image/jpeg")}).status_code in (404, 405)
+    assert client.post(f"/api/contacts/{cid}/photo/from-iopix").status_code in (404, 405)
+    assert "PHOTO" not in client.get(f"/api/contacts/{cid}", headers={"Accept": "text/vcard"}).text
+    linked = client.patch(f"/api/contacts/{cid}", json={"iopix": {"personId": 77, "name": "Pic Person"}}).json()
+    assert linked["hasPhoto"] is True
+    got = client.get(f"/api/contacts/{cid}/photo")
+    assert got.status_code == 200 and got.content == face
+    assert "PHOTO" in client.get(f"/api/contacts/{cid}", headers={"Accept": "text/vcard"}).text
+    from app import db
+    assert db.one("SELECT photo FROM con_contacts WHERE id = %s", (cid,))["photo"] is None
+
+
+def test_protocols_only_app_password(client, app):
+    from fastapi.testclient import TestClient as T2
+    from app import users
+    limited = client.post("/api/app-passwords", json={"label": "phone", "protocolsOnly": True}).json()["password"]
+    full = client.post("/api/app-passwords", json={"label": "script"}).json()["password"]
+    anon = T2(app)
+    # CardDAV and its discovery work
+    assert anon.request("PROPFIND", "/dav/", auth=("alex", limited), headers={"Depth": "0"}).status_code == 207
+    assert anon.get("/.well-known/carddav", auth=("alex", limited), follow_redirects=False).status_code in (301, 302, 307, 308)
+    # the REST API (Basic or Bearer), the account routes and MCP do not
+    assert anon.get("/api/books", auth=("alex", limited)).status_code == 403
+    assert anon.get("/api/books", headers={"Authorization": f"Bearer {limited}"}).status_code == 403
+    assert anon.get("/api/auth/me", auth=("alex", limited)).status_code == 403
+    assert anon.post("/mcp", headers={"Authorization": f"Bearer {limited}"}, json={}).status_code == 403
+    assert anon.post("/api/auth/login", json={"name": "alex", "password": limited}).status_code == 401
+    # LDAP binds take it
+    assert users.authenticate("alex", limited, protocol=True)["name"] == "alex"
+    assert users.authenticate("alex", limited) is None
+    # an app password without the limit still works everywhere
+    assert anon.get("/api/books", auth=("alex", full)).status_code == 200
+    assert anon.get("/api/books", auth=("alex", "nope")).status_code == 401
+    assert {p["label"]: p["scope"] for p in client.get("/api/app-passwords").json()["items"]} == {"phone": "dav", "script": ""}
+    assert client.post("/api/app-passwords", json={"label": "x", "scope": "bogus"}).status_code == 400
+
+
+def test_scopes_move_from_0_17(client, app):
+    """0.17's con_app_password_scopes rows become the shared 'dav' scope, and the table goes."""
+    from fastapi.testclient import TestClient as T2
+    from app import db, users
+    pw = client.post("/api/app-passwords", json={"label": "old phone"}).json()["password"]
+    db.ex("CREATE TABLE con_app_password_scopes (prefix CHAR(8) PRIMARY KEY, scope VARCHAR(16) NOT NULL)")
+    db.ex("INSERT INTO con_app_password_scopes VALUES (%s, 'protocols')", (pw.split("-")[1],))
+    users._move_scopes_to_shared()
+    users.forget_cached_auth()
+    assert not db.q("SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'con_app_password_scopes'")
+    anon = T2(app)
+    assert anon.get("/api/books", auth=("alex", pw)).status_code == 403
+    assert anon.request("PROPFIND", "/dav/", auth=("alex", pw), headers={"Depth": "0"}).status_code == 207

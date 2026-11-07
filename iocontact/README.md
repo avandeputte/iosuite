@@ -11,7 +11,7 @@ A self-hosted contact manager: a web app for the whole family, and the standard 
 - **The family and private books**: everyone shares the Family address book; each account also has a private Personal one, and anyone can make more (shared or private). Roles as in iopix: viewers read the shared books (and change only their own), editors change shared contacts, admins also manage users and settings.
 - **Sign-in as in iopix**: the sign-in screen is a pick list of the accounts (each with the face of the contact it is linked to as *me*). A viewer whose password an admin removed (Settings › Users › No password) signs in with one click, but only at home: from outside those accounts are not offered and their sessions do not work. *Other* types a user name.
 - **Birthdays**: the upcoming birthdays and anniversaries, with ages, and a **family birthday calendar** to subscribe to.
-- **ioPix**: link a contact to a person named in ioPix. The face from ioPix becomes the avatar (or, with one click, the contact photo), the contact links to that person's photos, and *Link by name* links every contact whose name matches exactly one ioPix person. The ioPix people page lists everyone in ioPix and makes a contact from any of them.
+- **ioPix**: link a contact to a person named in ioPix. The face from ioPix is the contact's photo, and the only one: ioContacts stores no photos of its own, and serves the ioPix face to the web app, phones (CardDAV), vCard exports and the LDAP directory (`jpegPhoto`). A photo in an imported or synced vCard is not kept. The contact links to that person's photos, and *Link by name* links every contact whose name matches exactly one ioPix person. The ioPix people page lists everyone in ioPix and makes a contact from any of them.
 - **Duplicates** (same name, email or phone) and merging, **bulk** favorite, label, move, export and delete, search across names, emails, phone digits, companies, addresses, labels and notes.
 - Light and dark, phone-sized screens, installable as an app.
 
@@ -29,10 +29,11 @@ A self-hosted contact manager: a web app for the whole family, and the standard 
 
 **iPhone, iPad and Mac in one step:** Settings › Apps and devices › *Download the profile* gives a configuration profile
 (`.mobileconfig`) with the CardDAV account and, if you like, the birthday calendar subscription (and the LDAP
-directory for Mail on a Mac), with a new app password for that device inside (or none, and the device asks). Open the
+directory for Mail on a Mac), with a new app password for that device inside (or none, and the device asks). That password works for CardDAV and LDAP
+only, so a lost phone or a leaked profile file does not reach the web app, the REST API or MCP. Open the
 page in Safari on the iPhone, tap Download, then Settings › Profile Downloaded › Install.
 
-Settings › Apps and devices shows the exact addresses to type, and makes **app passwords**: one per phone or app, revocable on its own, used with your user name for CardDAV, LDAP and the REST API (HTTP Basic, or `Authorization: Bearer <app password>`).
+Settings › Apps and devices shows the exact addresses to type, and makes **app passwords**: one per phone or app, revocable on its own, used with your user name for CardDAV, LDAP and the REST API (HTTP Basic, or `Authorization: Bearer <app password>`). *Contacts apps only* (ticked by default) limits a password to CardDAV and LDAP: the web sign-in, the REST API and MCP answer it with 403. Untick it for a script or an AI assistant.
 
 ```sh
 curl -u alex:iocontacts-xxxxxxxx-… -H 'Accept: application/vcard+json' https://contacts.example.com/api/contacts?q=smith
@@ -64,7 +65,7 @@ The tools: `overview`, `list_address_books`, `search_contacts`, `get_contact`, `
 `get_relatives`, `family_tree`, `upcoming_dates`, `birthdays_in_month`, `list_labels`, `relation_types`, `social_services`,
 `find_duplicates`, `export_contacts`, `connection_details`, `list_iopix_people`; `create_contact`, `update_contact`,
 `delete_contact`, `add_relation`, `remove_relation`, `set_labels`, `set_favorite`, `move_contacts`, `merge_contacts`,
-`import_contacts`, `link_iopix_person`, `auto_link_iopix`, `remove_photo`, `create_address_book`; upkeep:
+`import_contacts`, `link_iopix_person`, `auto_link_iopix`, `create_address_book`; upkeep:
 `find_duplicates`, `preview_merge`, `merge_contacts`, `mark_not_duplicates`, `list_merges`, `undo_merge`,
 `data_quality_report`, `fix_data_quality`; enrichment: `lookup_contact`, `suggest_contact_update`, `list_suggestions`
 (an assistant proposes; only a person accepts, in the web app); and for admins `diagnostics`, `test_iopix`,
@@ -81,15 +82,15 @@ The tools: `overview`, `list_address_books`, `search_contacts`, `get_contact`, `
   birthdays, other genders, a Sr./Jr. or a relation between the two count against. The first name has to fit: people
   in one household who share a last name, an address, a home phone or a family email are never offered as
   duplicates, and an email or number on three or more contacts is treated as the household's. **Compare and merge** shows them side by side: which to keep, and for every field where they
-  disagree (name, birthday, company, photo…) which value; phones, emails, addresses, profiles, labels and relations
+  disagree (name, birthday, company, ioPix person…) which value; phones, emails, addresses, profiles, labels and relations
   are combined, each with a box to leave one out. **Not duplicates** keeps two people apart for good.
 - **Data quality.** Contacts without a name, email addresses and phone numbers that do not look right, impossible
   birthdays, NAMES IN CAPITALS, the same email or phone twice on a contact, relations to a name that is now a
-  contact, numbers without the country code, ioPix links without a photo, contacts with no way to reach them; with
+  contact, numbers without the country code, contacts with no way to reach them; with
   one-click fixes where a fix is safe (capitalising, removing repeats, linking, adding the country code you give).
 - **Suggestions.** Enrichment that waits for you: nothing changes a contact until you accept it (one by one, or all for
   a contact), and what you dismiss is not offered again. **Look up** on a contact (or *Look up all contacts*) asks the
-  public interfaces that allow it: Gravatar by email (sent as a hash) for a photo, name, job, company, place and the
+  public interfaces that allow it: Gravatar by email (sent as a hash) for the name, job, company, place and the
   profiles the person verified there, and the contact's GitHub, Mastodon and Bluesky profiles. LinkedIn, Facebook,
   Instagram and X have no lookup apps may use; an assistant connected over MCP can research people there and file
   what it finds with `suggest_contact_update`, with the page it found it on.
@@ -182,6 +183,7 @@ password is used once and not written anywhere.
 | `IOSUITE_DB_HOST`, `_PORT`, `_NAME`, `_USER`, `_PASSWORD` | the Shared ioSuite database (MariaDB; by default on the contacts' server, database, user and password `iosuite`): accounts, passwords, sessions, app passwords, roles and the suite-wide settings, shared by every app of the suite (the `iosuite-shared` library, from [iosuite-shared](https://github.com/avandeputte/iosuite-shared)); only the role an account holds here and its "me" contact are ioContacts' own. `iosuite-shared migrate --iocontacts` folds a 0.3 install's `users` table into it |
 | `COOKIE_DOMAIN` | the domain the session cookie is shared on (`example.com`): signed in at `photo.example.com`, signed in at `contacts.example.com` too |
 | `AUTH_PROXY`, `AUTH_PROXY_HEADER`, `AUTH_PROXY_TRUSTED`, `CF_ACCESS_TEAM`, `CF_ACCESS_AUD` | sign-in at a reverse proxy, exactly as in iopix: Cloudflare Access (with token checking), Authelia, Authentik, oauth2-proxy… matched to accounts by email, then name |
+| `CF_KV_ACCOUNT_ID`, `CF_KV_NAMESPACE_ID`, `CF_KV_API_TOKEN` | optional edge check of app passwords: the Workers KV namespace a Cloudflare Worker on `/dav*` reads; normally stored once for the whole suite in Settings › Suite › Keys and tokens, these override it ([setup](https://github.com/avandeputte/iosuite-shared/blob/main/cloudflare/edge-auth/README.md)) |
 | `IOPIX_URL`, `IOPIX_USER`, `IOPIX_PASSWORD`, `IOPIX_CF_CLIENT_ID`, `IOPIX_CF_CLIENT_SECRET` | ioPix (or Settings › ioPix) |
 | `MCP` | `1` keeps the MCP server on, whatever the setting says |
 | `MCP_USER` | the account `python -m app.mcp` (stdio) acts as |
@@ -198,6 +200,15 @@ Settings › ioPix (admins) takes ioPix's address. ioContacts talks to ioPix fro
 
 Run it behind a reverse proxy that terminates HTTPS (Caddy, Nginx Proxy Manager, HAProxy, Cloudflare Tunnel), as iopix: iOS and macOS want HTTPS for CardDAV accounts outside the home network, and passwords travel with every CardDAV request. The LDAP directory speaks plain LDAP; keep it on the home network, or put a TLS proxy (stunnel, HAProxy, nginx stream) in front for `ldaps://`.
 
+### Checking app passwords at Cloudflare (optional)
+
+Cloudflare Access can't check what DAV clients send, so `/dav*` bypasses it. A small Cloudflare Worker on `/dav*` can
+check the app password there instead and turn wrong ones away before they reach the server. With the edge check's three
+settings stored for the whole suite (Settings › Suite › Keys and tokens), the app keeps the Worker's KV namespace up to date with a SHA-256 of each app password (never the account
+password). The Worker, the rollout (monitor first, then enforce) and a WAF rate-limit rule for `/dav*` are in
+[iosuite-shared's cloudflare/edge-auth](https://github.com/avandeputte/iosuite-shared/blob/main/cloudflare/edge-auth/README.md). Once it enforces, DAV clients must sign in with an app password, not the
+account password.
+
 ## Tests
 
 ```sh
@@ -205,7 +216,7 @@ pip install -e '.[test]'
 python -m pytest tests     # on a test MariaDB of its own: a Docker container it starts, or IOSUITE_TEST_DB=host:port:user:password
 ```
 
-Covered: vCard 2.1/3.0/4.0 and jCard reading and writing (an Apple Contacts card round-trips with relations, dates, social profiles, custom labels, photo and unknown properties), relations and their inverse side, search, content negotiation, Google and Outlook CSV import and every export format, roles and private books, app passwords over Basic and Bearer, the birthday calendar, duplicates and merging, CardDAV discovery, PUT with preconditions and UID conflicts, multiget, addressbook-query, sync-collection with deletions, LDAP bind and search with substring, phone and size-limit cases, the MCP server (switch, sign-in, reading, changing, relations, a viewer's limits), duplicate scoring (nicknames, shared home numbers, other birthdays), merging with choices and undo, the data quality checks and fixes, and enrichment (lookups, suggestions that wait, accepting and dismissing, over MCP too). CI runs them against MariaDB.
+Covered: vCard 2.1/3.0/4.0 and jCard reading and writing (an Apple Contacts card round-trips with relations, dates, social profiles, custom labels and unknown properties), relations and their inverse side, search, content negotiation, Google and Outlook CSV import and every export format, roles and private books, app passwords over Basic and Bearer and the CardDAV/LDAP-only limit, the birthday calendar, duplicates and merging, CardDAV discovery, PUT with preconditions and UID conflicts, multiget, addressbook-query, sync-collection with deletions, LDAP bind and search with substring, phone and size-limit cases, the MCP server (switch, sign-in, reading, changing, relations, a viewer's limits), duplicate scoring (nicknames, shared home numbers, other birthdays), merging with choices and undo, the data quality checks and fixes, and enrichment (lookups, suggestions that wait, accepting and dismissing, over MCP too). CI runs them against MariaDB.
 
 ## Layout
 

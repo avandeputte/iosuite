@@ -129,9 +129,8 @@ const hue = (s) => { let x = 0; for (const c of s || '') x = (x * 31 + c.charCod
 const initials = (fn) => { const p = (fn || '?').trim().split(/\s+/); return ((p[0] || '?')[0] + (p.length > 1 ? p[p.length - 1][0] : '')).toUpperCase(); };
 function avatar(c, size = '') {
   const el = h('span', { class: `av ${size}`, style: { '--h': hue(c.fn) } });
-  const ver = encodeURIComponent(c.updated || c.etag || '');
-  if (c.hasPhoto) el.append(h('img', { src: `/api/contacts/${c.id}/photo?v=${ver}`, alt: '', loading: 'lazy', onerror: (e) => { e.target.remove(); el.textContent = initials(c.fn); } }));
-  else if ((c.iopixPersonId || (c.iopix && c.iopix.personId)) && S.status.iopix) {
+  // the face of the linked ioPix person is a contact's only photo
+  if ((c.iopixPersonId || (c.iopix && c.iopix.personId)) && S.status.iopix) {
     const pid = c.iopixPersonId || c.iopix.personId;
     el.append(h('img', { src: `/api/iopix/face/${pid}`, alt: '', loading: 'lazy', onerror: (e) => { e.target.remove(); el.textContent = initials(c.fn); } }));
   } else el.textContent = initials(c.fn);
@@ -469,7 +468,7 @@ async function showContact(id, pane) {
   })));
   if (c.birthday || c.dates.length) cards.push(card('cake', 'Dates', '--c-amber',
     c.birthday ? kv('birthday', h('span', null, fmtDate(c.birthday), a != null ? h('span', { class: 'muted' }, ` · ${ageWord(c.birthday)}`) : null,
-      c.birthdayRemind === false ? h('span', { class: 'muted', title: 'Left out of the birthday calendar, the start page and other apps' }, ' · no reminder') : null)) : null,
+      c.birthdayRemind === false ? h('span', { class: 'muted', title: 'Left out of the birthday calendar feed' }, ' · not in the calendar feed') : null)) : null,
     c.dates.map((d) => kv(d.label, h('span', null, fmtDate(d), d.year ? h('span', { class: 'muted' }, ` · ${age(d)} years`) : null)))));
   const implied = c.impliedRelations || [];
   if (c.relations.length || implied.length) {
@@ -506,7 +505,6 @@ async function showContact(id, pane) {
     h('div', null, h('div', null, h('b', null, c.iopix.name || `Person ${c.iopix.personId}`)),
       c.iopix.url ? h('a', { class: 'lnk', href: c.iopix.url, target: '_blank', rel: 'noopener' }, 'Photos in ioPix ', icon('open', 's')) : null,
       canEdit ? h('div', { style: { marginTop: '6px', display: 'flex', gap: '6px', flexWrap: 'wrap' } },
-        h('button', { class: 'pillbtn noic', onclick: async () => { try { await api(`/api/contacts/${id}/photo/from-iopix`, { method: 'POST' }); toast('Photo taken from ioPix'); onRoute(); } catch (e) { fail(e); } } }, 'Use as photo'),
         h('button', { class: 'pillbtn noic', onclick: async () => { await api(`/api/contacts/${id}`, { method: 'PATCH', json: { iopix: null } }); onRoute(); } }, 'Unlink')) : null))));
   if (c.notes) cards.push(card('note', 'Notes', '--c-slate', h('div', { class: 'notes' }, c.notes)));
   const meCard = S.user.meContactId === c.id;
@@ -542,7 +540,6 @@ async function showEdit(id, pane) {
     bookId: ((S.scope.kind === 'book' && writableBooks().find((b) => b.id === +S.scope.id)) || writableBooks().find((b) => b.shared) || writableBooks()[0] || {}).id, kind: 'individual' };
   const f = JSON.parse(JSON.stringify(c));
   f.name = f.name || {};
-  let photoFile = null, dropPhoto = false;
   const inp = (obj, key, ph, attrs = {}) => h('input', { class: 't', value: obj[key] || '', placeholder: ph || '', oninput: (e) => { obj[key] = e.target.value; }, ...attrs });
   const fld = (label, el) => h('label', { class: 'field' }, h('span', null, label), el);
   const sel = (obj, key, opts, extra = {}) => h('select', { class: 't', onchange: (e) => { obj[key] = e.target.value; }, ...extra },
@@ -612,16 +609,15 @@ async function showEdit(id, pane) {
 
   // ioPix
   const iopixBox = h('div');
-  const drawIopix = () => iopixBox.replaceChildren(f.iopix && f.iopix.personId
+  const drawIopixBox = () => iopixBox.replaceChildren(f.iopix && f.iopix.personId
     ? h('div', { class: 'iopixcard' }, h('img', { src: `/api/iopix/face/${f.iopix.personId}`, alt: '' }), h('b', null, f.iopix.name), h('button', { class: 'pillbtn noic', type: 'button', onclick: () => { f.iopix = null; drawIopix(); } }, 'Unlink'))
     : h('button', { class: 'pillbtn', type: 'button', onclick: async () => { const p = await pickIopix(f, false); if (p) { f.iopix = { personId: p.id, name: p.name }; drawIopix(); } } }, icon('image', 's'), 'Link to an ioPix person'));
-  drawIopix();
 
-  // photo
+  // photo: only ever the face of the linked ioPix person
   const prev = h('span');
-  const drawPhoto = () => prev.replaceChildren(photoFile ? h('span', { class: 'av xl' }, h('img', { src: URL.createObjectURL(photoFile), alt: '', onload: (e) => URL.revokeObjectURL(e.target.src) })) : dropPhoto ? avatar({ fn: f.fn || f.name.given || '?' }, 'xl') : avatar(c.id ? c : { fn: '?' }, 'xl'));
-  drawPhoto();
-  const file = h('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp,image/gif', hidden: true, onchange: (e) => { photoFile = e.target.files[0] || null; dropPhoto = false; drawPhoto(); } });
+  const drawPhoto = () => prev.replaceChildren(avatar({ fn: f.fn || f.name.given || c.fn || '?', iopix: f.iopix }, 'xl'));
+  const drawIopix = () => { drawIopixBox(); drawPhoto(); };
+  drawIopix();
 
   const tagIn = h('input', { class: 't', value: (f.tags || []).join(', '), placeholder: 'Family, Book club, Neighbors…', list: 'alltags' });
   const bookSel = h('select', { class: 't', onchange: (e) => { f.bookId = +e.target.value; } }, writableBooks().map((b) => h('option', { value: b.id, selected: b.id === f.bookId ? true : null }, b.name)));
@@ -638,8 +634,6 @@ async function showEdit(id, pane) {
     delete payload.hasPhoto; delete payload.etag;
     try {
       const out = id ? await api(`/api/contacts/${id}`, { method: 'PUT', json: payload }) : await api(`/api/contacts?book=${f.bookId}`, { method: 'POST', json: payload });
-      if (photoFile) { const fd = new FormData(); fd.append('file', photoFile); await api(`/api/contacts/${out.id}/photo`, { method: 'PUT', body: fd }); }
-      else if (dropPhoto) await api(`/api/contacts/${out.id}/photo`, { method: 'DELETE' });
       S.all = null; await loadMeta();
       toast('Saved'); location.hash = `#/c/${out.id}`;
     } catch (err) { fail(err); }
@@ -647,9 +641,9 @@ async function showEdit(id, pane) {
   const nm = f.name;
   const form = h('form', { class: 'form', onsubmit: save },
     h('div', { class: 'pagehead' }, h('button', { class: 'iconbtn back', type: 'button', onclick: () => history.back() }, icon('back')), h('h1', null, id ? `Edit ${c.fn}` : 'New contact')),
-    h('div', { class: 'photoedit' }, prev, h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } }, file,
-      h('button', { class: 'pillbtn', type: 'button', onclick: () => file.click() }, icon('camera', 's'), 'Photo'),
-      (c.hasPhoto || photoFile) ? h('button', { class: 'pillbtn noic', type: 'button', onclick: () => { photoFile = null; dropPhoto = true; drawPhoto(); } }, 'Remove photo') : null)),
+    h('div', { class: 'photoedit' }, prev, h('p', { class: 'muted small' }, S.status.iopix
+      ? 'The photo comes from ioPix: link this contact to an ioPix person (under ioPix below) to show their face.'
+      : 'The photo comes from ioPix: once ioPix is set up, link this contact to a person there to show their face.')),
     h('div', { class: 'fsec' }, icon('person'), 'Name'),
     h('div', { class: 'grid' }, fld('First name', inp(nm, 'given', '', { autofocus: !id })), fld('Middle name', inp(nm, 'additional')), fld('Last name', inp(nm, 'family')),
       fld('Prefix', inp(nm, 'prefix', 'Dr., Mrs.')), fld('Suffix', inp(nm, 'suffix', 'Jr., III')), fld('Nickname', inp(f, 'nickname')), fld('Maiden name', inp(f, 'maiden')),
@@ -658,7 +652,7 @@ async function showEdit(id, pane) {
     h('div', { class: 'fsec' }, icon('work'), 'Work'),
     h('div', { class: 'grid' }, fld('Company', inp(f, 'org')), fld('Department', inp(f, 'department')), fld('Job title', inp(f, 'title')), fld('Role', inp(f, 'role'))),
     h('div', { class: 'fsec' }, icon('cake'), 'Birthday', h('span', { class: 'muted small' }, ' · fill in what you know: the year, month and year, day and month, or all three')), h('div', { class: 'multi' }, ...dateInputs(f.birthday),
-      h('label', { class: 'check', title: 'Unchecked: the birthday stays on the contact but is left out of the birthday calendar, the start page and other apps' },
+      h('label', { class: 'check', title: 'Unchecked: the birthday stays on the contact and on the Birthdays page but is left out of the birthday calendar feed' },
         h('input', { type: 'checkbox', checked: f.birthdayRemind !== false, onchange: (e) => { f.birthdayRemind = e.target.checked; } }), ' Remind me')),
     ...phones, ...emails, ...addrs, ...social, ...urls, ...dates, ...rels,
     S.status.iopix ? [h('div', { class: 'fsec' }, icon('image'), 'ioPix person'), iopixBox] : null,
@@ -706,9 +700,17 @@ async function showUpcoming(page) {
   const when = (x) => x.inDays === 0 ? 'Today' : x.inDays === 1 ? 'Tomorrow' : `In ${x.inDays} days`;
   page.append(h('div', { class: 'pagehead' }, h('h1', null, 'Birthdays and anniversaries'), range,
     h('a', { class: 'pillbtn', href: '#/settings/devices' }, icon('event', 's'), 'Subscribe in your calendar')),
-  r.items.length ? h('div', null, r.items.map((x) => h('a', { class: 'upc', href: `#/c/${x.contactId}` }, avatar({ id: x.contactId, fn: x.fn, hasPhoto: x.hasPhoto, iopixPersonId: x.iopixPersonId }, 'm'),
-    h('div', null, h('div', null, h('b', null, x.fn)), h('div', { class: 'muted' }, `${x.label === 'birthday' ? 'Birthday' : x.label.charAt(0).toUpperCase() + x.label.slice(1)}${x.turns != null ? (x.label === 'birthday' ? ` · turns ${x.turns}` : ` · ${x.turns} years`) : ''}`)),
-    h('div', { class: 'when' }, h('div', { class: 'days' }, when(x)), h('div', { class: 'muted small' }, new Date(x.date + 'T12:00').toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }))))))
+  r.items.length ? h('div', null, r.items.map((x) => h('div', { class: 'upc' },
+    h('a', { class: 'who', href: `#/c/${x.contactId}` }, avatar({ id: x.contactId, fn: x.fn, hasPhoto: x.hasPhoto, iopixPersonId: x.iopixPersonId }, 'm'),
+      h('div', null, h('div', null, h('b', null, x.fn)), h('div', { class: 'muted' }, `${x.label === 'birthday' ? 'Birthday' : x.label.charAt(0).toUpperCase() + x.label.slice(1)}${x.turns != null ? (x.label === 'birthday' ? ` · turns ${x.turns}` : ` · ${x.turns} years`) : ''}`))),
+    h('div', { class: 'when' }, h('div', { class: 'days' }, when(x)), h('div', { class: 'muted small' }, new Date(x.date + 'T12:00').toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }))),
+    // every birthday is listed; "Remind me" only decides whether it goes in the birthday calendar feed
+    x.label === 'birthday' && x.remind != null ? h('label', { class: 'check remind', title: 'Checked: this birthday is in the birthday calendar feed' },
+      h('input', { type: 'checkbox', checked: x.remind, onchange: async (e) => {
+        const box = e.target; box.disabled = true;
+        try { await api(`/api/contacts/${x.contactId}`, { method: 'PATCH', json: { birthdayRemind: box.checked } }); x.remind = box.checked; toast(box.checked ? `${x.fn}'s birthday is in the calendar feed` : `${x.fn}'s birthday is left out of the calendar feed`); }
+        catch (err) { box.checked = !box.checked; fail(err); } finally { box.disabled = false; }
+      } }), ' Remind me') : h('span', { class: 'remind' }))))
     : h('div', { class: 'empty' }, icon('cake'), h('p', null, 'No birthdays or anniversaries in that time.')));
 }
 
@@ -1197,7 +1199,7 @@ async function maintStorage(el) {
   const n = S.books.reduce((t, b) => t + (b.count || 0), 0);
   el.replaceChildren(h('div', { class: 'box' }, h('h2', null, icon('server'), 'Database'),
     kv('MariaDB', h('span', null, s.database)), kv('Address books', h('span', null, `${S.books.length}${n ? `, ${n} contacts` : ''}`)),
-    h('p', { class: 'muted small' }, 'Contacts, photos and the merge history are in the database: back it up with mysqldump (or the container’s backup) and nothing else is needed. The Shared ioSuite database (accounts, sessions) is backed up with the suite.')),
+    h('p', { class: 'muted small' }, 'Contacts and the merge history are in the database: back it up with mysqldump (or the container’s backup) and nothing else is needed. The Shared ioSuite database (accounts, sessions) is backed up with the suite.')),
   h('div', { class: 'box' }, h('h2', null, icon('download'), 'Export'),
     h('p', null, 'Every address book can be downloaded as vCard or CSV and imported again later: ', h('a', { class: 'lnk', href: '#/import' }, 'Import and export'), '.')));
 }
@@ -1294,7 +1296,6 @@ async function maintDups(el) {
 
 function fmtValue(field, v) {
   if (v == null) return '';
-  if (field === 'photo') return h('img', { class: 'sphoto', src: `data:${v.type};base64,${v.data}`, alt: '' });
   if (field === 'name') return v.fn || [v.prefix, v.given, v.additional, v.family, v.suffix].filter(Boolean).join(' ');
   if (field === 'birthday') return fmtDate(v);
   if (field === 'iopix') return v.name || `ioPix person ${v.personId}`;
@@ -1308,7 +1309,7 @@ function fmtValue(field, v) {
 }
 
 const FIELD_LABEL = { name: 'Name', nickname: 'Nickname', maiden: 'Maiden name', gender: 'Gender', birthday: 'Birthday', org: 'Company', department: 'Department',
-  title: 'Job title', role: 'Role', notes: 'Notes', iopix: 'ioPix person', phoneticGiven: 'Phonetic first name', phoneticFamily: 'Phonetic last name', photo: 'Photo',
+  title: 'Job title', role: 'Role', notes: 'Notes', iopix: 'ioPix person', phoneticGiven: 'Phonetic first name', phoneticFamily: 'Phonetic last name',
   emails: 'Emails', phones: 'Phones', addresses: 'Addresses', urls: 'Websites', social: 'Social profiles', dates: 'Dates', tags: 'Labels', relations: 'Relations' };
 
 async function mergeDialog(ids, done, keepId) {
@@ -1321,11 +1322,11 @@ async function mergeDialog(ids, done, keepId) {
     `${c.fn} (${bookName(c.bookId) || 'book'})`))), h('p', { class: 'muted small' }, 'The kept contact stays in its address book and keeps its link in phones; the others are deleted.')));
   for (const [field, opts] of Object.entries(pv.choices)) {
     const name = `mf-${field}`;
-    const current = field === 'photo' ? pv.photoFrom : (opts.find((o) => JSON.stringify(field === 'name' ? Object.fromEntries(Object.entries(pv.merged.name).filter(([, x]) => x)) : pv.merged[field]) === JSON.stringify(o.value)) || opts[0]).contactId;
+    const current = (opts.find((o) => JSON.stringify(field === 'name' ? Object.fromEntries(Object.entries(pv.merged.name).filter(([, x]) => x)) : pv.merged[field]) === JSON.stringify(o.value)) || opts[0]).contactId;
     pick[field] = current;
     body.append(h('div', { class: 'mrow' }, h('div', { class: 'mk' }, FIELD_LABEL[field] || field), h('div', { class: 'mv' }, opts.map((o) => h('label', { class: 'check' },
       h('input', { type: 'radio', name, checked: o.contactId === current, onchange: () => { pick[field] = o.contactId; } }),
-      field === 'photo' ? h('img', { class: 'sphoto', src: `/api/contacts/${o.contactId}/photo`, alt: '' }) : h('span', null, fmtValue(field, o.value)),
+      h('span', null, fmtValue(field, o.value)),
       h('span', { class: 'muted small' }, ` · ${byId[o.contactId].fn}`))))));
   }
   for (const field of ['phones', 'emails', 'addresses', 'urls', 'social', 'dates', 'tags', 'relations']) {
@@ -1343,13 +1344,12 @@ async function mergeDialog(ids, done, keepId) {
       h('button', { class: 'pillbtn primary noic', onclick: async () => {
         const res = JSON.parse(JSON.stringify(pv.merged));
         for (const [field, cid] of Object.entries(pick)) {
-          if (field === 'photo') continue;
           const src = byId[cid];
           if (field === 'name') { res.name = { ...src.name }; res.fn = src.fn; } else res[field] = src[field];
         }
         for (const [field, flags] of Object.entries(keepLists)) res[field] = (pv.merged[field] || []).filter((_, i) => flags[i]);
         try {
-          await api('/api/contacts/merge', { method: 'POST', json: { keep: pv.keep, others: ids.filter((x) => x !== pv.keep), result: res, photoFrom: pick.photo ?? null } });
+          await api('/api/contacts/merge', { method: 'POST', json: { keep: pv.keep, others: ids.filter((x) => x !== pv.keep), result: res } });
           close(); S.all = null; await loadMeta(); toast('Merged. Maintenance › Merge history can undo it.'); done && done(pv.keep);
         } catch (e) { fail(e); }
       } }, 'Merge'))));
@@ -1474,7 +1474,7 @@ async function showIopix(page) {
         : h('button', { class: 'pillbtn noic', onclick: async () => {
           const parts = p.name.split(' ');
           try { const c = await api(`/api/contacts?book=${(writableBooks().find((b) => b.shared) || writableBooks()[0]).id}`, { method: 'POST', json: { name: { given: parts[0], family: parts.slice(1).join(' ') }, iopix: { personId: p.id, name: p.name } } });
-            await api(`/api/contacts/${c.id}/photo/from-iopix`, { method: 'POST' }).catch(() => {}); S.all = null; await loadMeta(); location.hash = `#/c/${c.id}/edit`; } catch (e) { fail(e); }
+            S.all = null; await loadMeta(); location.hash = `#/c/${c.id}/edit`; } catch (e) { fail(e); }
         } }, 'Make a contact'))));
   };
   q.oninput = draw; draw();
@@ -1531,6 +1531,7 @@ async function setDevices(el) {
   const pw = await api('/api/app-passwords');
   const label = h('input', { class: 't', placeholder: 'e.g. Alex’s iPhone', style: 'max-width:280px' });
   const shown = h('div');
+  const limit = h('input', { type: 'checkbox', checked: true });
   const isApple = /iPhone|iPad|Macintosh/.test(navigator.userAgent);
   const plabel = h('input', { class: 't', name: 'label', value: /iPad/.test(navigator.userAgent) ? 'iPad' : /iPhone/.test(navigator.userAgent) ? 'iPhone' : 'iPhone', style: 'max-width:200px' });
   el.append(...[
@@ -1545,14 +1546,16 @@ async function setDevices(el) {
           h('option', { value: 'family' }, 'Family birthdays'), h('option', { value: 'all' }, 'Birthdays from all my books'), h('option', { value: 'none' }, 'No calendar'))),
         info.ldap.enabled ? h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'ldap', value: 'true' }), ' Also the LDAP directory (for Mail on a Mac; plain LDAP, home network only)') : null,
         h('p', null, h('button', { class: 'pillbtn primary', type: 'submit' }, icon('download', 's'), 'Download the profile'))),
-      h('p', { class: 'muted small' }, 'The profile holds the app password: install it and delete the file, and revoke that password below if the device is lost. The profile is not signed, so iOS shows it as “Not Verified”; that is expected.')),
+      h('p', { class: 'muted small' }, 'The profile holds an app password that works for contacts apps only (CardDAV and LDAP), not for signing in here, the API or MCP. Install it and delete the file, and revoke that password below if the device is lost. The profile is not signed, so iOS shows it as “Not Verified”; that is expected.')),
     h('div', { class: 'box' }, h('h2', null, icon('key'), 'App passwords'),
       h('p', { class: 'muted' }, 'Give every app or device its own password instead of yours; you can revoke one without touching the others. Use your user name with it.'),
       h('div', { class: 'multi' }, label, h('button', { class: 'pillbtn primary', onclick: async () => {
-        const r = await api('/api/app-passwords', { method: 'POST', json: { label: label.value || 'Device' } });
+        const r = await api('/api/app-passwords', { method: 'POST', json: { label: label.value || 'Device', protocolsOnly: limit.checked } });
         shown.replaceChildren(h('p', null, h('b', null, 'Copy it now: '), 'it is shown only once.'), copyRow(r.password));
         label.value = ''; const list = await api('/api/app-passwords'); drawPw(list.items);
-      } }, icon('add', 's'), 'New app password')), shown, h('div', { id: 'pwlist' })),
+      } }, icon('add', 's'), 'New app password')),
+      h('label', { class: 'check' }, limit, ' Contacts apps only (CardDAV and LDAP). Untick for the REST API or an AI assistant (MCP).'),
+      shown, h('div', { id: 'pwlist' })),
     h('div', { class: 'box' }, h('h2', null, icon('book'), 'Contacts apps (CardDAV)'),
       h('p', null, 'Apple Contacts (Mac, iPhone, iPad: Settings › Contacts › Accounts › Add Account › Other › Add CardDAV Account), DAVx⁵ on Android, Thunderbird, Evolution, GNOME Contacts, KDE: give the server, your user name and an app password.'),
       h('div', { class: 'kv' }, h('div', { class: 'k' }, 'Server'), h('div', { class: 'v', style: { flex: 1 } }, copyRow(info.server))),
@@ -1573,7 +1576,7 @@ async function setDevices(el) {
       h('div', { class: 'kv' }, h('div', { class: 'k' }, 'Bind DN'), h('div', { class: 'v', style: { flex: 1 } }, copyRow(info.ldap.bindDn))),
       h('p', { class: 'muted small' }, 'Sign in with an app password. The directory speaks plain LDAP: keep it on your own network, or put a TLS proxy in front for ldaps://.')) : null,
     S.status.mcp ? h('div', { class: 'box' }, h('h2', null, icon('ai'), 'AI assistants (MCP)'),
-      h('p', null, 'Claude and other assistants that speak the Model Context Protocol can search, read and update the contacts you can see, as you. Give the assistant its own app password (above), sent as a Bearer token.'),
+      h('p', null, 'Claude and other assistants that speak the Model Context Protocol can search, read and update the contacts you can see, as you. Give the assistant its own app password (above, without “Contacts apps only”), sent as a Bearer token.'),
       h('div', { class: 'kv' }, h('div', { class: 'k' }, 'MCP address'), h('div', { class: 'v', style: { flex: 1 } }, copyRow(`${info.server}/mcp`))),
       h('p', { class: 'muted small' }, 'Claude Code:'),
       copyRow(`claude mcp add --transport http iocontacts ${info.server}/mcp --header "Authorization: Bearer APP-PASSWORD"`),
@@ -1581,12 +1584,12 @@ async function setDevices(el) {
       copyRow(JSON.stringify({ mcpServers: { iocontacts: { command: 'npx', args: ['-y', 'mcp-remote', `${info.server}/mcp`, '--header', 'Authorization: Bearer APP-PASSWORD'] } } })))
       : (S.user.role === 'admin' ? h('div', { class: 'box' }, h('h2', null, icon('ai'), 'AI assistants (MCP)'), h('p', { class: 'muted' }, 'The MCP server is off. Turn it on in ', h('a', { class: 'lnk', href: '#/settings/server' }, 'Settings › Server'), ' to let Claude and other assistants work with the contacts.')) : null),
     h('div', { class: 'box' }, h('h2', null, icon('link'), 'Other apps (REST API)'),
-      h('p', null, 'JSON, vCard or jCard over HTTPS, with your user name and an app password (HTTP Basic) or the app password as a Bearer token. ', h('a', { class: 'lnk', href: '/api/docs', target: '_blank' }, 'API documentation')),
+      h('p', null, 'JSON, vCard or jCard over HTTPS, with your user name and an app password made without “Contacts apps only” (HTTP Basic), or that password as a Bearer token. ', h('a', { class: 'lnk', href: '/api/docs', target: '_blank' }, 'API documentation')),
       copyRow(`curl -u ${info.user}:APP-PASSWORD -H 'Accept: application/vcard+json' ${info.server}/api/contacts?q=smith`))].filter(Boolean));
   const drawPw = (items) => {
     const box = el.querySelector('#pwlist');
-    box.replaceChildren(items.length ? h('table', { class: 't' }, h('tr', null, h('th', null, 'Name'), h('th', null, 'Made'), h('th', null, 'Last used'), h('th')),
-      items.map((p) => h('tr', null, h('td', null, p.label), h('td', null, new Date(p.created).toLocaleDateString()), h('td', null, p.lastUsed ? new Date(p.lastUsed).toLocaleString() : 'never'),
+    box.replaceChildren(items.length ? h('table', { class: 't' }, h('tr', null, h('th', null, 'Name'), h('th', null, 'Works for'), h('th', null, 'Made'), h('th', null, 'Last used'), h('th')),
+      items.map((p) => h('tr', null, h('td', null, p.label), h('td', null, p.protocolsOnly ? 'Contacts apps (CardDAV, LDAP)' : 'Everything'), h('td', null, new Date(p.created).toLocaleDateString()), h('td', null, p.lastUsed ? new Date(p.lastUsed).toLocaleString() : 'never'),
         h('td', null, h('button', { class: 'pillbtn noic danger', onclick: async () => { await api(`/api/app-passwords/${p.id}`, { method: 'DELETE' }); drawPw((await api('/api/app-passwords')).items); } }, 'Revoke'))))) : h('p', { class: 'muted' }, 'No app passwords yet.'));
   };
   drawPw(pw.items);
@@ -1642,7 +1645,7 @@ async function proxyCard() {
   const labels = ['Proxy', 'Cloudflare team', 'Cloudflare AUD', 'User header', 'Proxy address', 'Someone with no account'];
   const seen = st.seen && st.seen.aud ? h('p', { class: 'muted small' }, `Last Cloudflare Access request: team ${st.seen.iss || '?'}, AUD ${Array.isArray(st.seen.aud) ? st.seen.aud.join(', ') : st.seen.aud}, ${st.seen.email || ''}`) : null;
   return h('div', { class: 'box' }, h('h2', null, icon('key'), 'Sign-in at the proxy'),
-    h('p', { class: 'muted' }, 'With Cloudflare Access (a Cloudflare Tunnel with an Access policy) or a proxy with Authelia, Authentik or oauth2-proxy in front, ioContacts takes that sign-in: the person is matched to an account by email, then by name. Saved for the whole suite, so every app follows. Settings in the server’s environment win.'),
+    h('p', { class: 'muted' }, 'With Cloudflare Access (a Cloudflare Tunnel with an Access policy) or a proxy with Authelia, Authentik or oauth2-proxy in front, ioContacts takes that sign-in: the person is matched to an account by email, then by name. One setting for every io app, kept in the Shared ioSuite database (also under Settings › Suite on the start page); the AUD field takes several tags, comma-separated. Proxy settings in config.env or the environment are ignored.'),
     h('div', { class: 'grid' }, fields.map((f, i) => fld(labels[i], f))),
     seen, fixed.size ? h('p', { class: 'muted small' }, `Fixed in the environment: ${[...fixed].join(', ')}`) : null,
     h('p', null, h('button', { class: 'pillbtn primary', onclick: async () => {
@@ -1662,7 +1665,7 @@ async function setIopix(el) {
   const out = h('p');
   const fld = (l, e) => h('label', { class: 'field' }, h('span', null, l), e);
   el.append(h('div', { class: 'box' }, h('h2', null, icon('image'), 'ioPix'),
-    h('p', { class: 'muted' }, 'Link contacts to people named in ioPix: their face becomes the avatar (or the contact photo) and the contact links to their photos. ioContacts talks to ioPix from the server; your browser never needs to reach it. On the home network, ioPix\'s LAN address is simplest. Through Cloudflare Access, create a service token (Zero Trust › Access › Service auth) and allow it in the ioPix application\'s policy.'),
+    h('p', { class: 'muted' }, 'Link contacts to people named in ioPix: their face becomes the contact’s photo (the only one: contacts keep no photos of their own, and phones, exports and the LDAP directory get the ioPix face too) and the contact links to their photos. ioContacts talks to ioPix from the server; your browser never needs to reach it. On the home network, ioPix\'s LAN address is simplest. Through Cloudflare Access, create a service token (Zero Trust › Access › Service auth) and allow it in the ioPix application\'s policy.'),
     h('div', { class: 'grid' }, fld('ioPix address', url), fld('ioPix user', user), fld('ioPix password', pw), fld('Cloudflare client ID', cfId), fld('Cloudflare client secret', cfSecret)),
     h('p', null, h('button', { class: 'pillbtn primary', onclick: async () => {
       const body = { url: url.value, user: user.value, cfId: cfId.value };

@@ -1,16 +1,16 @@
 """Enrichment: suggestions for a contact, which change nothing until a person accepts them.
 
 Built-in lookups use only public interfaces that need no account and allow automated use:
-  Gravatar   by email address (sent as a SHA-256 hash): a photo, and the public profile's name, job, company,
+  Gravatar   by email address (sent as a SHA-256 hash): the public profile's name, job, company,
              location and verified accounts (LinkedIn, X, Instagram... links the person added there themselves)
-  GitHub     a GitHub profile on the contact: name, company, website, location, bio, photo, X handle
-  Mastodon   a Mastodon profile: name, photo, the links on the profile
-  Bluesky    a Bluesky handle: name, photo, bio
+  GitHub     a GitHub profile on the contact: name, company, website, location, bio, X handle
+  Mastodon   a Mastodon profile: name, the links on the profile
+  Bluesky    a Bluesky handle: name, bio
 LinkedIn, Facebook, Instagram and X have no such interface (and forbid automated fetching), so they are not queried;
 an assistant connected over MCP can research a person and file what it finds here with suggest_contact_update.
+Photos are never suggested: the linked ioPix person is a contact's only photo.
 A lookup runs only when someone asks for it. A suggestion someone dismissed is not offered again.
 """
-import base64
 import hashlib
 import ipaddress
 import json
@@ -19,10 +19,10 @@ import socket
 import urllib.parse
 import urllib.request
 
-from app import config, db, model, vcard
+from app import db, model, vcard
 
 FIELDS = {  # field: (label, kind) — single fields replace, list fields add an entry
-    "photo": ("Photo", "single"), "name": ("Name", "single"), "nickname": ("Nickname", "single"),
+    "name": ("Name", "single"), "nickname": ("Nickname", "single"),
     "org": ("Company", "single"), "department": ("Department", "single"), "title": ("Job title", "single"),
     "birthday": ("Birthday", "single"), "gender": ("Gender", "single"), "notes": ("Notes (added)", "single"),
     "emails": ("Email", "list"), "phones": ("Phone", "list"), "addresses": ("Address", "list"), "urls": ("Website", "list"),
@@ -68,17 +68,6 @@ def _json(url: str):
     return json.loads(_get(url)[0])
 
 
-def _image(url: str) -> dict | None:
-    try:
-        data, ctype = _get(url, "image/*", config.MAX_PHOTO_BYTES)
-    except Exception:  # noqa: BLE001
-        return None
-    kind = image_type(data or b"")
-    if not kind:
-        return None
-    return {"type": kind, "data": base64.b64encode(data).decode()}
-
-
 def _text(html: str | None) -> str:
     return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html or "")).strip()
 
@@ -88,9 +77,6 @@ def _text(html: str | None) -> str:
 def gravatar(c: dict):
     for e in c.get("emails") or []:
         h = hashlib.sha256(e["value"].strip().lower().encode()).hexdigest()
-        img = _image(f"https://gravatar.com/avatar/{h}?d=404&s=512")
-        if img:
-            yield "photo", img, f"https://gravatar.com/{h}"
         try:
             p = _json(f"https://api.gravatar.com/v3/profiles/{h}")
         except Exception:  # noqa: BLE001  no public profile
@@ -142,10 +128,6 @@ def github(c: dict):
             yield "social", {"service": "x", "value": p["twitter_username"]}, url
         if p.get("bio"):
             yield "notes", f"GitHub: {p['bio']}", url
-        if p.get("avatar_url"):
-            img = _image(p["avatar_url"] + ("&" if "?" in p["avatar_url"] else "?") + "s=512")
-            if img:
-                yield "photo", img, url
 
 
 def mastodon(c: dict):
@@ -163,10 +145,6 @@ def mastodon(c: dict):
             if link:
                 svc = vcard.social_from_url(link.group(1))
                 yield ("social", {"service": svc, "value": link.group(1)}, url) if svc else ("urls", {"value": link.group(1), "label": _text(f.get("name"))[:64]}, url)
-        if p.get("avatar") and "missing" not in p["avatar"]:
-            img = _image(p["avatar"])
-            if img:
-                yield "photo", img, url
 
 
 def bluesky(c: dict):
@@ -177,10 +155,6 @@ def bluesky(c: dict):
             yield "name", {"fn": p["displayName"]}, url
         if p.get("description"):
             yield "notes", f"Bluesky: {p['description']}", url
-        if p.get("avatar"):
-            img = _image(p["avatar"])
-            if img:
-                yield "photo", img, url
 
 
 PROVIDERS = {"gravatar": gravatar, "github": github, "mastodon": mastodon, "bluesky": bluesky}
@@ -189,8 +163,6 @@ PROVIDERS = {"gravatar": gravatar, "github": github, "mastodon": mastodon, "blue
 # ------------------------------------------------------------------ suggestions
 
 def _vkey(field: str, value) -> str:
-    if field == "photo":
-        return "photo:" + hashlib.sha1(str(value.get("data", "")).encode()).hexdigest()
     if field == "phones":
         return re.sub(r"\D", "", str(value.get("value")))[-8:]
     if isinstance(value, dict):
@@ -200,8 +172,6 @@ def _vkey(field: str, value) -> str:
 
 def _already_has(c: dict, field: str, value) -> bool:
     """Whether the contact holds this already (then it is no suggestion)."""
-    if field == "photo":
-        return False  # a photo is always offered; the person compares
     if field == "name":
         return model.display_name(c).strip().lower() == model.display_name(value).strip().lower()
     if field == "notes":
@@ -223,33 +193,12 @@ def _already_has(c: dict, field: str, value) -> bool:
     return _vkey(field, value) in have
 
 
-def image_type(b: bytes) -> str | None:
-    if b[:3] == b"\xff\xd8\xff":
-        return "image/jpeg"
-    if b[:8] == b"\x89PNG\r\n\x1a\n":
-        return "image/png"
-    if b[:4] == b"RIFF" and b[8:12] == b"WEBP":
-        return "image/webp"
-    if b[:6] in (b"GIF87a", b"GIF89a"):
-        return "image/gif"
-    return None
-
-
 def normalise(field: str, value):
     """A suggestion's value in the shape the contact uses, or ValueError."""
+    if field == "photo":
+        raise ValueError("contacts keep no photo of their own: link the contact to an ioPix person instead")
     if field not in FIELDS:
         raise ValueError(f"'{field}' is not a field; one of: {', '.join(FIELDS)}")
-    if field == "photo":
-        if not (isinstance(value, dict) and value.get("data")):
-            raise ValueError("a photo is {type, data: base64}")
-        try:
-            raw = base64.b64decode(value["data"], validate=True)
-        except (ValueError, TypeError):
-            raise ValueError("the photo is not base64")
-        kind = image_type(raw)
-        if not kind or len(raw) > config.MAX_PHOTO_BYTES:
-            raise ValueError("a photo is a JPEG, PNG, GIF or WebP image of at most 2 MB")
-        return {"type": kind, "data": base64.b64encode(raw).decode()}
     if field == "name":
         if isinstance(value, str):
             value = {"fn": value}
@@ -324,7 +273,7 @@ def listing(book_ids: list[int], status: str = "pending", contact_id: int | None
         extra = " AND s.contact_id = %s"
         args.append(contact_id)
     rows = db.q(f"SELECT s.*, c.fn, c.address_book_id FROM con_contact_suggestions s JOIN con_contacts c ON c.id = s.contact_id "
-                f"WHERE s.status = %s AND c.deleted = 0 AND c.address_book_id IN ({marks}){extra} "
+                f"WHERE s.status = %s AND s.field <> 'photo' AND c.deleted = 0 AND c.address_book_id IN ({marks}){extra} "
                 f"ORDER BY c.fn, s.contact_id, s.field, s.id LIMIT %s", (*args, limit))
     from app import users
     names = users.names_of({r["created_by"] for r in rows if r["created_by"]})  # the accounts live in the Shared ioSuite database
@@ -338,7 +287,7 @@ def pending_count(book_ids: list[int]) -> int:
     if not book_ids:
         return 0
     marks = ",".join(["%s"] * len(book_ids))
-    return db.one(f"SELECT count(*) AS n FROM con_contact_suggestions s JOIN con_contacts c ON c.id = s.contact_id WHERE s.status = 'pending' "
+    return db.one(f"SELECT count(*) AS n FROM con_contact_suggestions s JOIN con_contacts c ON c.id = s.contact_id WHERE s.status = 'pending' AND s.field <> 'photo' "
                   f"AND c.deleted = 0 AND c.address_book_id IN ({marks})", book_ids)["n"]
 
 
@@ -348,29 +297,28 @@ def accept(sid: int, user_id: int | None, book_ids: list[int], value=None) -> di
     if not s or s["status"] != "pending":
         raise ValueError("No such suggestion waiting")
     field = s["field"]
+    if field not in FIELDS:
+        raise ValueError("Photos are not kept on contacts any more: link the contact to an ioPix person instead")
     v = normalise(field, value) if value is not None else json.loads(s["value"])
     cid = s["contact_id"]
-    if field == "photo":
-        model.set_photo(cid, base64.b64decode(v["data"]), v.get("type") or "image/jpeg")
-    else:
-        c = model.full(cid)
-        if field == "name":
-            if any(k in v for k in ("given", "family")):
-                c["name"] = {**{k: "" for k in c["name"]}, **{k: x for k, x in v.items() if k != "fn"}}
-                c["fn"] = v.get("fn") or ""
-            else:
-                c["fn"], c["name"] = v["fn"], {k: "" for k in c["name"]}
-        elif field == "notes":
-            c["notes"] = ((c.get("notes") or "") + "\n\n" + v).strip()
-        elif field == "tags":
-            c["tags"] = sorted(set(c["tags"]) | {v})
-        elif FIELDS[field][1] == "single":
-            c[field] = v
+    c = model.full(cid)
+    if field == "name":
+        if any(k in v for k in ("given", "family")):
+            c["name"] = {**{k: "" for k in c["name"]}, **{k: x for k, x in v.items() if k != "fn"}}
+            c["fn"] = v.get("fn") or ""
         else:
-            c[field] = (c.get(field) or []) + [v]
-        model.save(c["bookId"], c, cid, None, True, book_ids)
+            c["fn"], c["name"] = v["fn"], {k: "" for k in c["name"]}
+    elif field == "notes":
+        c["notes"] = ((c.get("notes") or "") + "\n\n" + v).strip()
+    elif field == "tags":
+        c["tags"] = sorted(set(c["tags"]) | {v})
+    elif FIELDS[field][1] == "single":
+        c[field] = v
+    else:
+        c[field] = (c.get(field) or []) + [v]
+    model.save(c["bookId"], c, cid, None, book_ids)
     db.ex("UPDATE con_contact_suggestions SET status = 'accepted', decided_by = %s, decided_at = NOW() WHERE id = %s", (user_id, sid))
-    if field in ("photo", "name", "org", "title", "birthday", "gender", "nickname", "department"):  # one value: the rival ones are moot
+    if field in ("name", "org", "title", "birthday", "gender", "nickname", "department"):  # one value: the rival ones are moot
         db.ex("UPDATE con_contact_suggestions SET status = 'dismissed', decided_by = %s, decided_at = NOW() WHERE contact_id = %s AND field = %s AND status = 'pending'",
               (user_id, cid, field))
     return {"accepted": sid, "contactId": cid, "field": field}

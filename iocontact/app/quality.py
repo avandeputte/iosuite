@@ -76,7 +76,7 @@ def _load(book_ids: list[int]) -> dict:
         return {}
     marks = ",".join(["%s"] * len(book_ids))
     rows = db.q(f"SELECT id, address_book_id, fn, given, family, suffix, nickname, maiden, org, gender, bday_year, bday_month, bday_day, "
-                f"photo IS NOT NULL AS has_photo, iopix_person_id FROM con_contacts WHERE deleted = 0 AND address_book_id IN ({marks})", book_ids)
+                f"iopix_person_id FROM con_contacts WHERE deleted = 0 AND address_book_id IN ({marks})", book_ids)
     cs = {r["id"]: {**r, "emails": set(), "phones": set(), "rel": set()} for r in rows}
     for r in db.q(f"SELECT e.contact_id, lower(e.value) AS v FROM con_contact_emails e JOIN con_contacts c ON c.id = e.contact_id "
                   f"WHERE c.deleted = 0 AND c.address_book_id IN ({marks})", book_ids):
@@ -292,10 +292,7 @@ def preview(ids: list[int], keep_id: int) -> dict:
     """The contacts, what merging them into keep_id gives by itself, and the fields where they disagree, so a person
     can pick: {contacts, merged, choices: {field: [{contactId, value}]}}."""
     full = {i: model.full(i) for i in ids}
-    keep = model.full(keep_id, with_photo=True)
-    others = [model.full(i, with_photo=True) for i in ids if i != keep_id]
-    merged = model.combine(keep, others)
-    merged.pop("photoData", None)
+    merged = model.combine(full[keep_id], [full[i] for i in ids if i != keep_id])
     choices = {}
     for f in SINGLE:
         vals, seen = [], []
@@ -309,11 +306,7 @@ def preview(ids: list[int], keep_id: int) -> dict:
             vals.append({"contactId": i, "value": v})
         if len(vals) > 1:
             choices[f] = vals
-    photos = [{"contactId": i} for i in ids if full[i]["hasPhoto"]]
-    if len(photos) > 1:
-        choices["photo"] = photos
-    return {"keep": keep_id, "contacts": [full[i] for i in ids], "merged": merged, "choices": choices,
-            "photoFrom": next((p["contactId"] for p in photos if p["contactId"] == keep_id), photos[0]["contactId"] if photos else None)}
+    return {"keep": keep_id, "contacts": [full[i] for i in ids], "merged": merged, "choices": choices}
 
 
 def _rows(table: str, col: str, ids: list[int]) -> list[dict]:
@@ -337,22 +330,26 @@ def _dec(v):
     return v
 
 
+PHOTO_COLUMNS = ("photo", "photo_type")  # no longer used: the linked ioPix person is a contact's only photo
+
+
 def snapshot(ids: list[int]) -> dict:
     """The database rows of these contacts and of every relation to or from them."""
     marks = ",".join(["%s"] * len(ids))
-    snap = {"contacts": _rows("con_contacts", "id", ids), **{t: _rows(t, "contact_id", ids) for t in TABLES},
+    contacts = [{k: v for k, v in r.items() if k not in PHOTO_COLUMNS} for r in _rows("con_contacts", "id", ids)]
+    snap = {"contacts": contacts, **{t: _rows(t, "contact_id", ids) for t in TABLES},
             "relations": db.q(f"SELECT * FROM con_contact_relations WHERE contact_id IN ({marks}) OR related_id IN ({marks})", (*ids, *ids))}
     return {k: [{c: _enc(v) for c, v in r.items()} for r in rows] for k, rows in snap.items()}
 
 
-def merge(u: dict, keep_id: int, other_ids: list[int], result: dict | None = None, photo_from: int | None = None) -> int:
+def merge(u: dict, keep_id: int, other_ids: list[int], result: dict | None = None) -> int:
     """Merge (model.merge) after keeping a snapshot for undo. Returns the merge's id."""
     ids = [keep_id, *[i for i in other_ids if i != keep_id]]
     snap = json.dumps(snapshot(ids))
     names = ", ".join(model.get_row(i)["fn"] for i in ids)
     if result is not None:
         result = {k: v for k, v in result.items() if k not in ("photo", "photoData", "id", "uid", "href", "etag", "bookId")}
-    model.merge(keep_id, other_ids, result, photo_from)
+    model.merge(keep_id, other_ids, result)
     return db.ex("INSERT INTO con_contact_merges (user_id, kept_contact_id, other_ids, names, snapshot, keep_etag) VALUES (%s, %s, %s, %s, %s, %s)",
                  (u["id"] if u else None, keep_id, ",".join(map(str, other_ids)), names[:1024], snap, model.get_row(keep_id)["etag"]))
 
@@ -398,7 +395,7 @@ def undo(merge_id: int) -> dict:
     with db.tx():
         touched = {r["contact_id"] for r in db.q(f"SELECT contact_id FROM con_contact_relations WHERE related_id IN ({marks})", ids)}
         for r in snap["contacts"]:
-            cols = {k: v for k, v in r.items() if k not in ("id", "created_at", "updated_at")}
+            cols = {k: v for k, v in r.items() if k not in ("id", "created_at", "updated_at", *PHOTO_COLUMNS)}
             db.ex("UPDATE con_contacts SET " + ", ".join(f"`{k}` = %s" for k in cols) + " WHERE id = %s", (*cols.values(), r["id"]))
         for t in TABLES:
             db.ex(f"DELETE FROM {t} WHERE contact_id IN ({marks})", ids)
@@ -451,7 +448,6 @@ CHECKS = {
     "repeats": ("The same email, phone or address twice on one contact", "tidy", "Remove the repeats"),
     "unlinked_relation": ("Relations to a name that is now a contact", "tidy", "Link them to the contact"),
     "national_phone": ("Phone numbers without the country code", "tidy", "Add the country code"),
-    "iopix_photo": ("Linked to ioPix but no photo of their own", "info", "Use the ioPix face as the photo"),
     "unreachable": ("No phone, email or address at all", "info", None),
 }
 
@@ -462,7 +458,7 @@ def run_checks(book_ids: list[int], only: str | None = None) -> list[dict]:
         return []
     marks = ",".join(["%s"] * len(book_ids))
     found: dict = {k: [] for k in CHECKS}
-    cs = {r["id"]: r for r in db.q(f"SELECT id, address_book_id, fn, given, family, org, bday_year, bday_month, bday_day, photo IS NOT NULL AS hp, "
+    cs = {r["id"]: r for r in db.q(f"SELECT id, address_book_id, fn, given, family, org, bday_year, bday_month, bday_day, "
                                    f"iopix_person_id FROM con_contacts WHERE deleted = 0 AND address_book_id IN ({marks})", book_ids)}
 
     def add(check, cid, detail=""):
@@ -499,8 +495,6 @@ def run_checks(book_ids: list[int], only: str | None = None) -> list[dict]:
                 rep.append(key)
         if rep:
             add("repeats", cid, ", ".join(rep))
-        if c["iopix_person_id"] and not c["hp"]:
-            add("iopix_photo", cid)
         if not ch:
             add("unreachable", cid)
     names: dict = {}
@@ -535,20 +529,8 @@ def fix(u: dict, check: str, contact_ids: list[int] | None, book_ids: list[int],
         if not model.can_write_book(u, model.book(r["address_book_id"])):
             skipped.append(r["fn"])
             continue
-        if check == "iopix_photo":
-            from app import iopix
-            try:
-                got = iopix.face(r["iopix_person_id"])
-            except Exception:  # noqa: BLE001
-                got = None
-            if got:
-                model.set_photo(cid, got[0], got[1].split(";")[0])
-                done.append(r["fn"])
-            else:
-                skipped.append(r["fn"])
-            continue
         if check == "unlinked_relation":
-            model.save(r["address_book_id"], model.full(cid), cid, None, True, book_ids)  # saving links names that match one contact
+            model.save(r["address_book_id"], model.full(cid), cid, None, book_ids)  # saving links names that match one contact
             done.append(r["fn"])
             continue
         c = model.full(cid)
@@ -580,7 +562,7 @@ def fix(u: dict, check: str, contact_ids: list[int] | None, book_ids: list[int],
                     p["value"] = country_code + " " + re.sub(r"^\s*0\s*", "", v)
                 elif country_code == "+1" and len(d) == 10:
                     p["value"] = "+1 " + v
-        model.save(r["address_book_id"], c, cid, None, True, book_ids)
+        model.save(r["address_book_id"], c, cid, None, book_ids)
         done.append(r["fn"])
     return {"check": check, "fixed": done, "skipped": skipped}
 

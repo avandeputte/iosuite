@@ -59,6 +59,7 @@ def mcp_enabled() -> bool:
 
 # who is asking, whether sign-in is required at all, the cross-site check on writes, and the MCP endpoint's gate (the
 # switch; an app password or session; every tool acts as that account): iosuite-shared's middleware
+# (an app password with a scope, such as an Apple profile's CardDAV/LDAP-only one, is kept to its paths by the same middleware)
 app.middleware("http")(auth.middleware(open_paths=OPEN_PATHS, open_prefixes=OPEN_PREFIXES,
                                        before=auth.mcp_gate(mcp_enabled, on_user=mcp.current_user.set)))
 
