@@ -102,7 +102,7 @@ const CSS = `
 .iosv .sv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px 16px; margin: 8px 0; }
 .iosv label.sv-field { display: flex; flex-direction: column; gap: 4px; }
 .iosv label.sv-field > span { font-size: 12px; color: var(--sv-fg2); }
-.iosv label.sv-field input.sv-in { max-width: none; }
+.iosv label.sv-field input.sv-in { max-width: none; flex: none; }
 .iosv table.sv-t { width: 100%; border-collapse: collapse; margin: 8px 0; }
 .iosv table.sv-t th, .iosv table.sv-t td { text-align: left; padding: 6px 8px 6px 0; border-bottom: 1px solid var(--sv-line); font-size: 13px; }
 .iosv table.sv-t th { color: var(--sv-fg2); font-weight: 500; }
@@ -167,7 +167,7 @@ const saveSetting = (body) => api('auth/settings', { json: body }).then(() => to
 
 // ------------------------------------------------------------------ Settings › Display
 /** Appearance: Light, Dark or System, saved with the account (the app applies it with apply(value)). */
-export const themeRow = (current, apply) => row('Appearance', 'Saved with your account.',
+export const themeRow = (current, apply) => row('Theme', 'Saved with your account.',
   segmented([['light', 'Light'], ['dark', 'Dark'], ['system', 'System']], current || 'system', async (v) => { apply(v); await saveSetting({ theme: v }); }));
 /** Units: Automatic (from the browser's region), Kilometres or Miles, saved with the account. */
 export const unitsRow = (current, apply) => row('Units', 'Automatic follows your region.',
