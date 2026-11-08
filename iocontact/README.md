@@ -112,7 +112,7 @@ MCP tools `check_for_update` and `update_server` do the same. In Docker, pull th
 `./update.sh` (`--check` only looks, `IOCONTACTS_REF=<sha>` installs a given commit).
 
 Everything about the app is under one Settings page (the sidebar and the avatar menu): your own tabs (account, display,
-apps and devices, address books), then for admins connected apps, storage and backups and server, and for suite admins
+apps and devices, address books), then for admins storage and backups and server, and for suite admins
 security and global settings. Tidying the contacts is **Clean up** in the sidebar (below).
 
 ## Reverse proxy and HTTPS

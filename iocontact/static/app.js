@@ -1,6 +1,6 @@
 /* ioContacts web app: one module, no build step. Pages: the contact list with a detail pane, the edit form, upcoming
    birthdays, the family tree, ioPix people, import/export, clean up (duplicates, data quality, suggestions, merge
-   history) and settings (account, display, apps and devices, address books, and for admins connected apps, storage and
+   history) and settings (account, display, apps and devices, address books, and for admins storage and
    backups, server, and for suite admins security and global settings), laid out as in the other ioThing
    apps. */
 
@@ -1419,12 +1419,12 @@ async function showIopix(page) {
 // ------------------------------------------------------------------ settings
 async function showSettings(page, r) {
   const tabs = [['account', 'Account'], ['display', 'Display'], ['devices', 'Apps and devices'], ['books', 'Address books'],
-    ...(S.user.role === 'admin' ? [['connected', 'Connected apps'], ['storage', 'Storage and backups'], ['server', 'Server']] : []),
+    ...(S.user.role === 'admin' ? [['storage', 'Storage and backups'], ['server', 'Server']] : []),
     ...(S.user.suiteAdmin ? [['security', SUITE_TABS.security], ['global', SUITE_TABS.global]] : [])];
   page.append(h('div', { class: 'pagehead' }, h('h1', null, 'Settings')),
     h('div', { class: 'tabs' }, tabs.map(([k, l]) => h('button', { class: r.tab === k ? 'on' : '', onclick: () => { location.hash = `#/settings/${k}`; } }, l))));
   const body = h('div'); page.append(body);
-  await ({ account: setAccount, display: setDisplay, devices: setDevices, books: setBooks, connected: setIopix, storage: setStorage, server: setServer,
+  await ({ account: setAccount, display: setDisplay, devices: setDevices, books: setBooks, storage: setStorage, server: setServer,
     security: setSuite, global: setSuite }[r.tab] || setAccount)(body, r);
 }
 const fld = (l, e) => h('label', { class: 'field' }, h('span', null, l), e);
@@ -1541,20 +1541,6 @@ async function setSuite(el, r) {
   let ui;
   try { ui = await import(new URL('api/suite-admin/ui.js', document.baseURI).href); } catch (e) { el.append(h('p', { class: 'warn' }, `The panel did not load: ${e.message}`)); return; }
   await ui.mount(el, { tab: r.tab, sub: r.sub, toast, onSub: (x) => history.replaceState(null, '', `#/settings/${r.tab}/${x}`) });
-}
-
-async function setIopix(el) {
-  const s = await api('/api/iopix/settings');
-  const out = h('p');
-  el.append(h('div', { class: 'box' }, h('h2', null, icon('image'), 'ioPix'),
-    h('p', { class: 'muted' }, 'Link contacts to people named in ioPix: their face becomes the contact’s photo (the only one: contacts keep no photos of their own, and phones, exports and the LDAP directory get the ioPix face too) and the contact links to their photos.'),
-    h('p', null, s.enabled
-      ? ['Connected by itself: ioContacts finds ', h('a', { href: s.url, target: '_blank', rel: 'noopener' }, 'ioPix'), ' in the suite and reads from it from the server with its own read-only app password (Settings › Security on the start page lists it). Nothing to set up.']
-      : 'ioPix is not part of this suite yet. Once it runs on the same Shared ioSuite database, ioContacts connects to it by itself.'),
-    s.enabled ? h('p', null, h('button', { class: 'pillbtn noic', onclick: async () => {
-      out.textContent = 'Testing…';
-      try { const r = await api('/api/iopix/test', { method: 'POST' }); out.textContent = r.ok ? `Connected: ${r.people} people in ioPix.` : `ioPix did not answer: ${r.error}`; } catch (e) { out.textContent = ''; fail(e); }
-    } }, 'Test the connection')) : null, out));
 }
 
 /** Settings › Server (admins): the MCP switch, the version and its updates, this server, the server log and Restart:

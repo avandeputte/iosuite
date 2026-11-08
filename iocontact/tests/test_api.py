@@ -375,9 +375,9 @@ def test_protocols_only_app_password(client, app):
 def test_iopix_is_found_in_the_suite(client, monkeypatch):
     from iosuite_shared import links, suite
     from app import iopix
-    assert client.get("/api/iopix/settings").json()["enabled"] is False
+    assert iopix.public_settings()["enabled"] is False
     suite.register("iopix", name="ioPix", url="https://photo.example.net", version="1")
-    assert client.get("/api/iopix/settings").json() == {"url": "https://photo.example.net", "enabled": True}
+    assert iopix.public_settings() == {"url": "https://photo.example.net", "enabled": True}
     seen = []
 
     class R:
