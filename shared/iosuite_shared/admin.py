@@ -3,7 +3,7 @@
 Accounts (with their role in every app), app passwords of every account in every app, sessions, the keys and tokens
 every app keeps (iosuite_shared.credentials; never their values), and the suite's apps with the per-app access settings
 (default_role, require_login). `Auth.admin_router()` serves it at /api/suite-admin/*
-(suite admins only); the start page's Settings › Suite is its screen.
+(suite admins only); the start page's Settings › Security and Global settings are its screen.
 
 The apps are the registered ones (ios_apps) plus any app key that only shows up in roles, settings or app passwords
 (an app that is not installed any more, or has not started since the registry came in).

@@ -191,7 +191,11 @@ def test_server_router(tmp_path, monkeypatch):
     app.include_router(auth.server_router(u, log_file=log, info=lambda: {"mcpEnabled": saved.get("mcp", False), "database": "db:3306/x"}, apply=apply))
     c = TestClient(app)
 
+    ui = c.get("/api/server/ui.js")
+    assert ui.status_code == 200 and "javascript" in ui.headers["content-type"] and "export async function mount" in ui.text
+
     s = c.get("/api/server").json()
+    assert s["name"] == auth.label
     assert s["version"] == "1.2.0" and s["installed"] == "abcdef0" and s["repo"] == "someone/iotest" and s["check"] is None
     assert s["autoCheck"] and s["database"] == "db:3306/x" and s["mcpEnabled"] is False and not s["canRun"]
 
@@ -244,5 +248,6 @@ def test_server_router_is_for_admins_only(tmp_path, monkeypatch):
     app.include_router(auth.server_router(u, log_file=tmp_path / "x.log"))
     c = TestClient(app)
     assert c.get("/api/server").status_code == 403
+    assert c.get("/api/server/ui.js").status_code == 403
     assert c.post("/api/server", json={"action": "restart"}).status_code == 403
     assert c.get("/api/log").status_code == 403

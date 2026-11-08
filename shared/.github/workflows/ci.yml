@@ -35,6 +35,7 @@ jobs:
           python -m pip install -q -e ".[test]"
           python -m pyflakes iosuite_shared tests
           node --input-type=module --check < iosuite_shared/static/suite-admin.js
+          node --input-type=module --check < iosuite_shared/static/server-panel.js
           sh -n templates/update.sh
       - name: Tests
         env:

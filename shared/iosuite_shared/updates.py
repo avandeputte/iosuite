@@ -272,7 +272,7 @@ LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
 
 def setup_log(path, level: int = None) -> bool:
     """Logging the same way in every app: INFO to stderr (the service's journal), and when `path` is set a rotating copy
-    (5 MB, 3 old files) of everything, uvicorn's request and error lines included, which Maintenance › Updates and logs
+    (5 MB, 3 old files) of everything, uvicorn's request and error lines included, which Settings › Server
     and `tail()` read. Idempotent: a second call (the tests start the app more than once) adds nothing. False when the
     file could not be opened (the app runs without it)."""
     import logging

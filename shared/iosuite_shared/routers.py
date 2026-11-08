@@ -65,17 +65,6 @@ def auth_router(self) -> APIRouter:
         sessions.clear_cookie(resp, sessions.host_of(request), cloudflare_cookie=not outside)
         return resp
 
-    @r.post("/api/auth/logout_all", dependencies=[access.signed_in])
-    def api_logout_all(request: Request):
-        u = auth.current_user(request)
-        if not u:
-            raise HTTPException(401, "Sign in first")
-        sessions.end_all(u["id"])
-        authlog.info("signed out everywhere: %s from %s", u["name"], proxy.source(request))
-        resp = JSONResponse({"ok": True})
-        auth.sign_in(resp, request, u, request.cookies.get(sessions.VIA_COOKIE) or "password")
-        return resp
-
     @r.get("/api/auth/me", dependencies=[access.public])
     def api_me(request: Request):
         return auth.me(request)
@@ -289,7 +278,7 @@ def admin_router(self) -> APIRouter:
 
     @r.get("/ui.js", dependencies=[access.suite_admin])
     def api_ui():
-        """The panel itself (static/suite-admin.js), one ES module every app mounts under its Settings › Suite:
+        """The panel itself (static/suite-admin.js), one ES module every app mounts in its Settings › Security and Global settings tabs:
         ui = await import(new URL('api/suite-admin/ui.js', document.baseURI).href); ui.mount(el, {sub, toast})."""
         return FileResponse(Path(__file__).with_name("static") / "suite-admin.js", media_type="text/javascript",
                             headers={"Cache-Control": "no-cache"})
@@ -417,14 +406,17 @@ def admin_router(self) -> APIRouter:
     return r
 
 def server_router(self, updater, log_file=None, info=None, apply=None) -> APIRouter:
-    """Maintenance › Updates and logs, the same in every app (admins):
-        GET  /api/server                 the installed version, the last check, whether update.sh can run, the switches
+    """Settings › Server, the same in every app (admins):
+        GET  /api/server/ui.js           the panel itself (static/server-panel.js), mounted by the app's Server tab:
+                                         ui = await import(new URL('api/server/ui.js', document.baseURI).href); ui.mount(el, {toast})
+        GET  /api/server                 the app's name, the installed version, the last check, whether update.sh can run, the switches
         POST /api/server {action, ref?}  action: check | update | restart; {autoCheck: bool}
                                          saves the daily-check switch; anything else goes to apply(body)
         GET  /api/log?lines&level&contains&requests   the tail of the server log (with log_file)
         GET  /api/log/download
-    `info()` returns extra fields for GET /api/server (the app's: mcpEnabled, database...); `apply(body)` saves the
-    app's own switches sent in the POST body and raises ValueError when one cannot be set."""
+    `info()` returns extra fields for GET /api/server that the panel shows: mcpEnabled + mcpLocked (the MCP box) and
+    mcpAbout (what /mcp offers), about: [[label, value], ...] (the This server box). `apply(body)` saves the app's own
+    switches sent in the POST body (mcpEnabled) and raises ValueError when one cannot be set."""
     from fastapi.responses import FileResponse
     from iosuite_shared import updates as upd
     access, label = self.access, self.label
@@ -432,7 +424,12 @@ def server_router(self, updater, log_file=None, info=None, apply=None) -> APIRou
 
     def server_info():
         extra = info() if info else {}
-        return {**updater.status(), **(extra or {})}
+        return {"name": label, **updater.status(), **(extra or {})}
+
+    @r.get("/api/server/ui.js", dependencies=[access.admin])
+    def api_server_ui():
+        return FileResponse(Path(__file__).with_name("static") / "server-panel.js", media_type="text/javascript",
+                            headers={"Cache-Control": "no-cache"})
 
     @r.get("/api/server", dependencies=[access.admin])
     async def api_server_info():
@@ -474,7 +471,6 @@ def server_router(self, updater, log_file=None, info=None, apply=None) -> APIRou
 
         @r.get("/api/log/download", dependencies=[access.admin])
         def api_log_download():
-            from pathlib import Path
             if not Path(log_file).exists():
                 raise HTTPException(404, "No log file yet")
             return FileResponse(str(log_file), media_type="text/plain", filename=f"{self.app}.log", content_disposition_type="attachment")

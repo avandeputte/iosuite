@@ -1,6 +1,6 @@
 """Keys and tokens: every credential an app of the suite keeps (an integration's API key or token, the user name and
 password one app uses to reach another), kept in the Shared ioSuite database so a suite admin sees and changes them
-all from one place (Settings › Suite › Keys and tokens on the start page).
+all from one place (Settings › Global settings › Keys and tokens on the start page).
 
     from iosuite_shared import credentials
     credentials.declare("iosuite", [

@@ -2,13 +2,15 @@
    app (suite admins only). People and their role in every app, sessions, app passwords (with their scope), every app's
    keys and tokens, the apps with their default role and sign-in requirement, and sign-in at a reverse proxy.
 
+   It fills two Settings tabs, Security (people, roles, app passwords, sign-in at the proxy) and Global settings (the
+   apps, keys and tokens): TABS.
    Served by iosuite-shared at <app>/api/suite-admin/ui.js (Auth.admin_router()); it talks to the API next to it, so an
    app served under a sub-path works too. One ES module, no build step, its own styles (scoped under .iosa), using the
    app's colours when it has them (--fg, --fg2, --bg, --line, --accent, --brand, --danger; ioHealth's --text, --muted,
    --card, --link).
 
      const ui = await import(new URL('api/suite-admin/ui.js', document.baseURI).href);
-     ui.mount(el, { sub: 'people', toast, onSub: (s) => history.replaceState(null, '', `#/settings/suite/${s}`) });
+     ui.mount(el, { tab: 'security', sub: 'people', toast, onSub: (s) => history.replaceState(null, '', `#/settings/security/${s}`) });
 */
 const API = new URL('./', import.meta.url);   // .../api/suite-admin/
 
@@ -162,16 +164,26 @@ function sinceText(ts) {
 const appLabel = (o, key) => (o.apps.find((a) => a.app === key) || {}).name || key;
 
 // ------------------------------------------------------------------ the panel
-export const SUBS = [['people', 'People'], ['roles', 'Roles'], ['passwords', 'App passwords'], ['keys', 'Keys and tokens'], ['apps', 'Apps'], ['signin', 'Sign-in at the proxy']];
+export const SUBS = [['people', 'People'], ['roles', 'Roles'], ['passwords', 'App passwords'], ['signin', 'Sign-in at the proxy'], ['apps', 'Apps'], ['keys', 'Keys and tokens']];
+/** The two Settings tabs the panel fills, in every app: #/settings/security/<sub> and #/settings/global/<sub>. */
+export const TABS = {
+  security: { label: 'Security', subs: ['people', 'roles', 'passwords', 'signin'],
+    intro: 'Who can get in, for every io app at once: the accounts, their roles and app passwords, and sign-in at a reverse proxy (the Shared ioSuite database). Changes apply in every app within a few seconds. Suite admins are admin everywhere.' },
+  global: { label: 'Global settings', subs: ['apps', 'keys'],
+    intro: 'Settings that apply to every io app at once: each app’s default role and sign-in requirement, and the keys and tokens the apps use.' },
+};
 
-/** Draw the panel into `el`. Options: sub (the first part shown, one of SUBS), onSub(sub) (called when another part
-    is picked, e.g. to put it in the address), toast(msg) (the app's own toast; else the panel's). */
+/** Draw the panel into `el`. Options: tab (security or global: which parts are shown, see TABS), sub (the first part
+    shown), onSub(sub) (called when another part is picked, e.g. to put it in the address), toast(msg) (the app's own
+    toast; else the panel's). */
 export async function mount(el, opts = {}) {
   styles();
   if (opts.toast) toast = opts.toast;
   const root = h('div', { class: 'iosa' });
   el.replaceChildren(root);
-  let sub = SUBS.some(([k]) => k === opts.sub) ? opts.sub : 'people';
+  const tab = TABS[opts.tab] || TABS.security;
+  const subs = SUBS.filter(([k]) => tab.subs.includes(k));
+  let sub = subs.some(([k]) => k === opts.sub) ? opts.sub : subs[0][0];
   let photo = null;  // ioPix's People (the person in photos), read once, when People is first shown
   const photoPeople = () => (photo = photo || api('photo-people').catch((e) => ({ available: false, people: [], error: e.message })));
   const draw = async () => {
@@ -180,8 +192,8 @@ export async function mount(el, opts = {}) {
     o.people = o.users.filter((u) => !u.service);
     const body = h('div');
     root.replaceChildren(
-      h('p', { class: 'sa-muted sa-intro' }, 'The whole suite at once: the accounts, passwords and roles every io app shares (the Shared ioSuite database). Changes apply in every app within a few seconds. Suite admins are admin everywhere.'),
-      h('div', { class: 'sa-segs' }, SUBS.map(([k, l]) => h('button', { class: sub === k ? 'on' : '', onclick: () => go(k) }, l))),
+      h('p', { class: 'sa-muted sa-intro' }, tab.intro),
+      h('div', { class: 'sa-segs' }, subs.map(([k, l]) => h('button', { class: sub === k ? 'on' : '', onclick: () => go(k) }, l))),
       body);
     const ctx = { o, redraw: draw, go, photoPeople };
     await ({ people: people, roles: roles, passwords: passwords, keys: keys, apps: apps, signin: signin })[sub](body, ctx);
@@ -232,7 +244,7 @@ function people(el, ctx) {
     h('p', null, h('button', { class: 'sa-btn primary', onclick: () => editAccount(ctx, null) }, icon('add'), 'Add someone'))));
   const svc = o.users.filter((u) => u.service);
   if (svc.length) el.append(box('apps', 'Apps reading from each other',
-    h('p', { class: 'sa-muted' }, 'Each app that reads from another (ioCalendar and ioPix from ioContacts, ioContacts from ioPix, every app’s Settings › Suite from ioPix for the person in photos) signs in as its own account here, with a read-only app password it made by itself. Nobody signs in with these. Revoking one of their app passwords is safe: the app makes a new one the next time it needs it.'),
+    h('p', { class: 'sa-muted' }, 'Each app that reads from another (ioCalendar and ioPix from ioContacts, ioContacts from ioPix, every app’s Settings › Security from ioPix for the person in photos) signs in as its own account here, with a read-only app password it made by itself. Nobody signs in with these. Revoking one of their app passwords is safe: the app makes a new one the next time it needs it.'),
     h('div', { class: 'sa-scrollx' }, h('table', { class: 'sa-t' }, h('tr', null, h('th', null, 'Account'), h('th', null, 'For'), h('th', null, 'App passwords'), h('th', null, 'Last used'), h('th')),
       svc.map((u) => h('tr', null, h('td', null, h('b', null, u.name)), h('td', null, appLabel(o, u.service)),
         h('td', { class: 'sa-small' }, `${u.appPasswords}`), h('td', { class: 'sa-small' }, sinceText(u.lastSeen || u.last_login)),
