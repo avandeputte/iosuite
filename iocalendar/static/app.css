@@ -210,6 +210,7 @@ pre.log { background: var(--bg2); border: 1px solid var(--line); border-radius: 
 .copy { display: flex; gap: 6px; align-items: center; margin: 6px 0; }
 .copy code { flex: 1; background: var(--bg2); padding: 8px 10px; border-radius: var(--r-s); overflow-x: auto; white-space: nowrap; font-size: var(--fs-m); }
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 16px; overflow-x: auto; }
+@media (min-width: 700px) { .tabs { flex-wrap: wrap; overflow: visible; } }  /* one Settings page has many tabs: wrap them where there is room */
 .tabs button { padding: 10px 14px; border-bottom: 2px solid transparent; color: var(--fg2); white-space: nowrap; }
 .tabs button.on { color: var(--accent); border-color: var(--accent); font-weight: 600; }
 .ppl { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }

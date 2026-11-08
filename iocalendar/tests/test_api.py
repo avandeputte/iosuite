@@ -236,3 +236,12 @@ def test_caldav_only_app_passwords(client):
     assert client.get("/api/calendars", headers={"Authorization": f"Bearer {full}"}).status_code == 200
 
 
+
+
+def test_settings_server_is_the_shared_panel(client):
+    """Settings › Server is iosuite-shared's panel: its module, the MCP box and This server, once each."""
+    assert "export async function mount" in client.get("/api/server/ui.js").text
+    s = client.get("/api/server").json()
+    assert s["name"] == "ioCalendar" and "mcpEnabled" in s and s["mcpAbout"]
+    assert [k for k, _ in s["about"]] == ["Database", "Time zone"]
+    assert client.post("/api/auth/logout_all").status_code in (404, 405)  # Sign out is the only sign out

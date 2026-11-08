@@ -1,7 +1,7 @@
 /* ioCalendar web app: one module, no build step. Views: month, week, day and agenda, with the calendars to show in the
    sidebar; the event form (repeating events, people from ioContacts, reminders), search, import/export, settings
-   (account, display, apps and devices, calendars, holidays, connected apps, users and sign-in, server) and maintenance
-   (storage and backups, updates and logs), laid out as in the other ioThing apps. Events can be tagged with the family
+   (account, display, apps and devices, calendars, holidays, and for admins connected apps, family, storage and backups,
+   server, and for suite admins security and global settings), laid out as in the other ioThing apps. Events can be tagged with the family
    members they are for, and the sidebar filters the calendar by member. */
 
 // ------------------------------------------------------------------ helpers
@@ -252,8 +252,6 @@ function drawUser() {
       h('button', { class: 'mi', onclick: () => { const n = { system: 'light', light: 'dark', dark: 'system' }[theme]; localStorage.setItem('iocalendar.theme', n); applyTheme(); closeMenu(); toast(`Appearance: ${n}`); } },
         icon('theme', 's'), `Appearance: ${theme}`),
       h('a', { class: 'mi', href: '#/settings', onclick: closeMenu }, icon('settings', 's'), 'Settings'),
-      S.user.role === 'admin' ? h('a', { class: 'mi', href: '#/maintenance', onclick: closeMenu }, icon('wrench', 's'), 'Maintenance') : null,
-      h('button', { class: 'mi', onclick: async () => { closeMenu(); if (await signOutElsewhere()) toast('Signed out elsewhere'); } }, icon('devices', 's'), 'Sign out everywhere else'),
       h('button', { class: 'mi', onclick: async () => { const r = await api('/api/auth/logout', { method: 'POST' }); if (r && r.cloudflareLogout) location.href = r.cloudflareLogout; else location.reload(); } }, icon('logout', 's'), 'Sign out'));
     m.append(menu);
     setTimeout(() => document.addEventListener('click', outside), 0);
@@ -365,11 +363,10 @@ function drawNav() {
     mine.map(calRow),
     h('div', { class: 'navgap' }), sec('Manage'),
     link('import', '#/import', 'upload', 'Import and export', null, r.view === 'import', '--c-green'),
-    h('div', { class: 'navfoot' }, link('settings', '#/settings', 'settings', 'Settings', null, r.view === 'settings'),
-      S.user.role === 'admin' ? link('maintenance', '#/maintenance', 'wrench', 'Maintenance', null, r.view === 'maintenance') : null),
+    h('div', { class: 'navfoot' }, link('settings', '#/settings', 'settings', 'Settings', null, r.view === 'settings')),
   ].flat(3).filter(Boolean));
   applySidebar();
-  $('.navmore')?.classList.toggle('on', ['import', 'settings', 'maintenance', 'search'].includes(r.view));
+  $('.navmore')?.classList.toggle('on', ['import', 'settings', 'search'].includes(r.view));
 }
 function sideDockedPref() { try { return localStorage.getItem('iocalendar.sidebar') !== '0'; } catch { return true; } }
 function applySidebar() {
@@ -389,7 +386,7 @@ function sidebarButton() {
 }
 function openNav() { document.body.classList.add('side-open'); $('#navscrim').hidden = false; }
 function closeNav() { document.body.classList.remove('side-open'); $('#navscrim').hidden = true; }
-/** Phones: what the bottom bar has no room for (the calendars to show, import, settings, maintenance). */
+/** Phones: what the bottom bar has no room for (the calendars to show, import, settings). */
 function moreSheet() {
   const r = route();
   const tile = (href, ic, label, hue, on, click) => h('a', { href, class: on ? 'on' : null, style: { '--hue': hue }, onclick: click || null }, h('span', { class: 'sic' }, icon(ic)), h('span', null, label));
@@ -398,8 +395,7 @@ function moreSheet() {
     S.members.length > 1 ? S.members.map((m) => tile('#', 'person', S.who.has(m.id) ? `Only ${m.displayName}` : m.displayName, memberColor(m), S.who.has(m.id),
       (e) => { e.preventDefault(); e.stopPropagation(); toggleWho(m.id); document.querySelector('.dialog-back')?.remove(); moreSheet(); })) : null,
     tile('#/import', 'upload', 'Import and export', 'var(--c-green)', r.view === 'import'),
-    tile('#/settings', 'settings', 'Settings', 'var(--c-slate)', r.view === 'settings'),
-    S.user.role === 'admin' ? tile('#/maintenance', 'wrench', 'Maintenance', 'var(--c-slate)', r.view === 'maintenance') : null);
+    tile('#/settings', 'settings', 'Settings', 'var(--c-slate)', r.view === 'settings'));
   const p = dialog('More', grid, [{ label: 'Close', value: null }]);
   grid.addEventListener('click', (e) => { const a = e.target.closest('a'); if (a && a.getAttribute('href') !== '#') document.querySelector('.dialog-back')?.remove(); });
   return p;
@@ -441,7 +437,6 @@ function route() {
   if (a === 'new') return { view: 'new', date: qs.get('date'), time: qs.get('time'), allDay: qs.get('allday') === '1', copy: qs.get('copy') };
   if (a === 'import') return { view: 'import' };
   if (a === 'settings') return { view: 'settings', tab: b || 'account', sub: p[2] };
-  if (a === 'maintenance') return { view: 'maintenance', tab: b || 'storage' };
   return { view: 'month' };
 }
 function go(view, date) { location.hash = `#/${view}/${ymd(date || S.date)}`; }
@@ -460,7 +455,7 @@ async function onRoute() {
       main.classList.remove('showdetail');
       const page = h('div', { class: 'page' });
       main.replaceChildren(page);
-      await ({ search: showSearch, event: showEventPage, edit: showEdit, new: showEdit, import: showImport, settings: showSettings, maintenance: showMaintenance })[r.view](page, r);
+      await ({ search: showSearch, event: showEventPage, edit: showEdit, new: showEdit, import: showImport, settings: showSettings })[r.view](page, r);
     }
   } catch (e) { fail(e); }
   drawNav();
@@ -1116,15 +1111,13 @@ async function showImport(page) {
 async function showSettings(page, r) {
   const adm = S.user.role === 'admin';
   const tabs = [['account', 'Account'], ['display', 'Display'], ['devices', 'Apps and devices'], ['calendars', 'Calendars'], ['holidays', 'Holidays'],
-    ...(adm ? [['connected', 'Connected apps'], ['family', 'Family'], ['server', 'Server']] : []), ...(S.user.suiteAdmin ? [['suite', 'Suite']] : [])];
+    ...(adm ? [['connected', 'Connected apps'], ['family', 'Family'], ['storage', 'Storage and backups'], ['server', 'Server']] : []),
+    ...(S.user.suiteAdmin ? [['security', SUITE_TABS.security], ['global', SUITE_TABS.global]] : [])];
   page.append(h('div', { class: 'pagehead' }, h('h1', null, 'Settings')),
     h('div', { class: 'tabs' }, tabs.map(([k, l]) => h('button', { class: r.tab === k ? 'on' : '', onclick: () => { location.hash = `#/settings/${k}`; } }, l))));
   const body = h('div'); page.append(body);
-  await ({ account: setAccount, display: setDisplay, devices: setDevices, calendars: setCalendars, holidays: setHolidays, connected: setConnected, family: setFamily, suite: setSuite, server: setServer }[r.tab] || setAccount)(body, r);
-}
-async function signOutElsewhere() {
-  if (!await confirmDialog('Sign out everywhere', 'Sign out on every other browser and device? (Apps with an app password keep working.)', 'Sign out the others')) return false;
-  try { await api('/api/auth/logout_all', { method: 'POST' }); return true; } catch (e) { fail(e); return false; }
+  await ({ account: setAccount, display: setDisplay, devices: setDevices, calendars: setCalendars, holidays: setHolidays, connected: setConnected, family: setFamily, storage: setStorage, server: setServer,
+    security: setSuite, global: setSuite }[r.tab] || setAccount)(body, r);
 }
 const fld = (l, e) => h('label', { class: 'field' }, h('span', null, l), e);
 const kv = (k, v) => h('div', { class: 'kv' }, h('div', { class: 'k' }, k), h('div', { class: 'v', style: { flex: 1 } }, typeof v === 'string' ? copyRow(v) : v));
@@ -1136,10 +1129,7 @@ async function setAccount(el) {
   el.append(h('div', { class: 'box' }, h('h2', null, icon('person'), 'You'), h('div', { class: 'grid' }, fld('Display name', dn), fld('Email (for sign-in at a proxy)', em)),
     h('p', null, h('button', { class: 'pillbtn primary', onclick: async () => { try { S.user = (await api('/api/auth/me', { method: 'PATCH', json: { displayName: dn.value, email: em.value } })).user; drawUser(); toast('Saved'); } catch (e) { fail(e); } } }, icon('check', 's'), 'Save'))),
   !u.passwordless ? h('div', { class: 'box' }, h('h2', null, icon('key'), 'Password'), h('div', { class: 'grid' }, fld('Current password', old), fld('New password (8 or more)', nw)),
-    h('p', null, h('button', { class: 'pillbtn', onclick: async () => { try { await api('/api/auth/password', { method: 'POST', json: { current: old.value, password: nw.value } }); old.value = nw.value = ''; toast('Password changed'); } catch (e) { fail(e); } } }, 'Change password'))) : null,
-  h('div', { class: 'box' }, h('h2', null, icon('devices'), 'Sessions'),
-    h('p', { class: 'muted' }, 'You are signed in to every ioThing app at once. Signing out elsewhere ends your session on every other browser and device; apps with an app password keep working.'),
-    h('p', null, h('button', { class: 'pillbtn noic', onclick: async () => { if (await signOutElsewhere()) toast('Signed out elsewhere'); } }, 'Sign out everywhere else'))));
+    h('p', null, h('button', { class: 'pillbtn', onclick: async () => { try { await api('/api/auth/password', { method: 'POST', json: { current: old.value, password: nw.value } }); old.value = nw.value = ''; toast('Password changed'); } catch (e) { fail(e); } } }, 'Change password'))) : null);
 }
 
 async function setDisplay(el) {
@@ -1244,13 +1234,13 @@ async function setCalendars(el) {
 }
 
 /** Who is in the family: the people events can be tagged with, each with a private calendar of their own. Accounts,
-    passwords and roles are the suite's (Settings › Suite, suite admins). */
+    passwords and roles are the suite's (Settings › Security, suite admins). */
 async function setFamily(el) {
   const [r, fam] = await Promise.all([api('/api/users'), api('/api/members')]);
   const leftOut = new Set(fam.leftOut || []);
   el.append(h('div', { class: 'box' }, h('h2', null, icon('people'), 'Family members'),
     h('p', { class: 'muted' }, 'In the family: the people events can be tagged with, each with a private calendar of their own. Leave out accounts that are not a person, such as admin.'),
-    h('p', { class: 'muted' }, 'The accounts are the suite’s: ', S.user.suiteAdmin ? ['add people, set passwords and choose each one’s role here and in every io app under ', h('a', { class: 'lnk', href: '#/settings/suite' }, 'Settings › Suite'), '.'] : 'a suite admin adds people and sets their role under Settings › Suite.'),
+    h('p', { class: 'muted' }, 'The accounts are the suite’s: ', S.user.suiteAdmin ? ['add people, set passwords and choose each one’s role here and in every io app under ', h('a', { class: 'lnk', href: '#/settings/security' }, 'Settings › Security'), '.'] : 'a suite admin adds people and sets their role under Settings › Security.'),
     h('table', { class: 't' }, h('tr', null, h('th', null, 'Name'), h('th', null, 'Display name'), h('th', null, 'Role here'), h('th', null, 'In the family')),
       r.users.map((u) => {
         const fk = h('input', { type: 'checkbox', checked: !leftOut.has(u.id), title: `${u.displayName} is someone events can be for` });
@@ -1261,12 +1251,13 @@ async function setFamily(el) {
       }))));
 }
 
-/** Settings › Suite (suite admins): the people, their role in every app, app passwords, keys and tokens, the apps and
-    sign-in at the proxy, for the whole suite. The same panel in every io app, served by iosuite-shared. */
+/** Settings › Security and Global settings (suite admins): the people, their role in every app, app
+    passwords, sign-in at the proxy; the apps, keys and tokens. The same panel in every io app, served by iosuite-shared. */
+const SUITE_TABS = { security: 'Security', global: 'Global settings' };
 async function setSuite(el, r) {
   let ui;
-  try { ui = await import(new URL('api/suite-admin/ui.js', document.baseURI).href); } catch (e) { el.append(h('p', { class: 'warn' }, `The Suite panel did not load: ${e.message}`)); return; }
-  await ui.mount(el, { sub: r.sub, toast, onSub: (x) => history.replaceState(null, '', `#/settings/suite/${x}`) });
+  try { ui = await import(new URL('api/suite-admin/ui.js', document.baseURI).href); } catch (e) { el.append(h('p', { class: 'warn' }, `The panel did not load: ${e.message}`)); return; }
+  await ui.mount(el, { tab: r.tab, sub: r.sub, toast, onSub: (x) => history.replaceState(null, '', `#/settings/${r.tab}/${x}`) });
 }
 
 async function setConnected(el) {
@@ -1277,7 +1268,7 @@ async function setConnected(el) {
   out.append(h('p', { class: 'muted small' }, last(s.lastSync)));
   el.append(h('div', { class: 'box' }, h('h2', null, icon('contacts'), 'ioContacts'),
     h('p', { class: 'muted' }, s.enabled
-      ? ['Connected by itself: ioCalendar finds ', h('a', { href: s.url, target: '_blank', rel: 'noopener' }, 'ioContacts'), ' in the suite and reads from it with its own read-only app password (Settings › Suite on the start page lists it). The people on an event come from the shared contacts, and a shared Birthdays calendar shows their birthdays and anniversaries, brought up to date every six hours.']
+      ? ['Connected by itself: ioCalendar finds ', h('a', { href: s.url, target: '_blank', rel: 'noopener' }, 'ioContacts'), ' in the suite and reads from it with its own read-only app password (Settings › Security on the start page lists it). The people on an event come from the shared contacts, and a shared Birthdays calendar shows their birthdays and anniversaries, brought up to date every six hours.']
       : 'ioContacts is not part of this suite yet. Once it runs on the same Shared ioSuite database, ioCalendar connects to it by itself: people on events come from the contacts, and a Birthdays calendar shows their birthdays.'),
     h('p', null, h('label', { class: 'check' }, bdays, ' Show the Birthdays calendar')),
     h('p', null, h('button', { class: 'pillbtn primary', onclick: async () => {
@@ -1331,128 +1322,24 @@ async function setHolidays(el) {
     } }, icon('check', 's'), 'Save')), out);
 }
 
+/** Settings › Server (admins): the MCP switch, the version and its updates, this server, the server log and Restart:
+    iosuite-shared's panel, the same in every io app. */
 async function setServer(el) {
-  let s; try { s = await api('/api/server'); } catch (e) { el.replaceChildren(h('p', null, e.message)); return; }
-  const mcp = h('input', { type: 'checkbox', checked: s.mcpEnabled, disabled: s.mcpLocked ? true : null, onchange: async (e) => {
-    try { await api('/api/server', { method: 'POST', json: { mcpEnabled: e.target.checked } }); S.status = await api('/api/status'); toast('Saved'); setServer(el); } catch (err) { e.target.checked = !e.target.checked; fail(err); }
-  } });
-  el.replaceChildren(
-    h('div', { class: 'box' }, h('h2', null, icon('ai'), 'MCP server'),
-      h('p', null, 'The address /mcp that lets an AI assistant (Claude, for example) read the agenda, search events, find free time, add, change and move events and import calendars, and for admins check for and install updates. Each assistant signs in with an app password and acts as that account, with its rights. Off: /mcp does not answer at all.'),
-      h('p', null, h('label', { class: 'check' }, mcp, ' The MCP server is on')),
-      s.mcpLocked ? h('p', { class: 'muted small' }, 'MCP=1 in the environment keeps it on.') : null,
-      s.mcpEnabled ? [kv('Address', `${location.origin}/mcp`),
-        h('p', { class: 'muted small' }, 'How to connect an assistant: ', h('a', { class: 'lnk', href: '#/settings/devices' }, 'Settings › Apps and devices'), '. On the server itself, `python -m app.mcp --user NAME` serves it over stdio.')] : null),
-    h('div', { class: 'box' }, h('h2', null, icon('server'), 'This server'),
-      kv('Version', h('span', null, `v${s.version}${s.installed !== 'unknown' ? ` (${s.installed.slice(0, 7)})` : ''}`, ' · ', h('a', { class: 'lnk', href: '#/maintenance/updates' }, 'Updates and logs'))),
-      kv('Database', h('span', null, s.database)), kv('Time zone', h('span', null, s.timezone)),
-      h('p', { class: 'muted small' }, 'The database, the time zone, the public address and the ports are set in the server’s .env file, not here.')));
+  let ui;
+  try { ui = await serverUi(); } catch (e) { el.append(h('p', { class: 'warn' }, `The Server panel did not load: ${e.message}`)); return; }
+  await ui.mount(el, { toast });
 }
+const serverUi = () => import(new URL('api/server/ui.js', document.baseURI).href);
 
-// ------------------------------------------------------------------ maintenance
-/* Admins: what is run or checked rather than configured, as in the other ioThing apps. Storage and backups (the database,
-   export), Updates and logs (the version, the server log, restart). */
-async function showMaintenance(page, r) {
-  if (S.user.role !== 'admin') { page.append(h('p', { class: 'muted' }, 'Admins only.')); return; }
-  const tabs = [['storage', 'Storage and backups'], ['updates', 'Updates and logs']];
-  page.append(h('div', { class: 'pagehead' }, h('h1', null, 'Maintenance')),
-    h('div', { class: 'tabs' }, tabs.map(([k, l]) => h('button', { class: r.tab === k ? 'on' : '', onclick: () => { location.hash = `#/maintenance/${k}`; } }, l))));
-  const body = h('div'); page.append(body);
-  await ({ storage: maintStorage, updates: maintUpdates }[r.tab] || maintStorage)(body);
-}
-
-async function maintStorage(el) {
-  let s; try { s = await api('/api/server'); } catch (e) { el.replaceChildren(h('p', null, e.message)); return; }
+/** Settings › Storage and backups (admins): what is kept where, and how to back it up. */
+async function setStorage(el) {
   await loadCals();
   const events = S.cals.reduce((n, c) => n + (c.count || 0), 0);
   el.append(h('div', { class: 'box' }, h('h2', null, icon('server'), 'Database'),
-    kv('MariaDB', h('span', null, s.database)), kv('Calendars', h('span', null, `${S.cals.length}, ${events} events`)),
-    h('p', { class: 'muted small' }, 'Everything is in the database: back it up with mysqldump (or the container’s backup) and nothing else is needed. The Shared ioSuite database (accounts, sessions) is backed up with the suite.')),
+    kv('Calendars', h('span', null, `${S.cals.length}, ${events} events`)),
+    h('p', { class: 'muted small' }, 'Everything is in the MariaDB database (Settings › Server shows which): back it up with mysqldump (or the container’s backup) and nothing else is needed. The Shared ioSuite database (accounts, sessions) is backed up with the suite.')),
   h('div', { class: 'box' }, h('h2', null, icon('download'), 'Export'),
     h('p', null, 'Each calendar can be downloaded as an .ics file that any calendar app reads, and imported again later: ', h('a', { class: 'lnk', href: '#/import' }, 'Import and export'), '.')));
-}
-
-async function maintUpdates(el) {
-  const draw = async () => {
-    let s; try { s = await api('/api/server'); } catch (e) { el.replaceChildren(h('p', null, e.message)); return; }
-    if (!el.isConnected) return;
-    const c = s.check, p = s.progress, last = s.lastUpdate;
-    const state = p.running ? 'Updating… ioCalendar restarts when it is done, and this page reloads.'
-      : p.error ? `The last update failed: ${p.error}`
-        : !c ? `You have v${s.version}${s.installed !== 'unknown' ? ` (${s.installed.slice(0, 7)})` : ''}.`
-          : c.status === 'current' ? `v${s.version} is the latest version.`
-            : c.status === 'update' ? `You have v${s.version}; ${c.remoteVersion ? `v${c.remoteVersion}` : 'a newer build'} is available${c.remoteDate ? ` (${c.remoteDate})` : ''}${c.remoteMessage ? `: ${c.remoteMessage.replace(/^v\d+\.\d+\.\d+:\s*/, '')}` : ''}.`
-              : `Could not check: ${c.error}`;
-    const auto = h('input', { type: 'checkbox', checked: s.autoCheck, disabled: s.autoCheckLocked ? true : null, onchange: async (e) => {
-      try { await api('/api/server', { method: 'POST', json: { autoCheck: e.target.checked } }); S.status = await api('/api/status'); toast('Saved'); draw(); } catch (err) { e.target.checked = !e.target.checked; fail(err); }
-    } });
-    el.replaceChildren(
-      h('div', { class: 'box' }, h('h2', null, icon('update'), 'ioCalendar version'),
-        h('p', null, state),
-        !p.running && !p.error && last ? h('p', { class: last.ok ? 'muted small' : 'warn small' }, `Last update: ${last.text}`) : null,
-        h('p', null,
-          h('button', { class: 'pillbtn', onclick: async () => { el.querySelector('.box p').textContent = 'Checking…'; try { await api('/api/server', { method: 'POST', json: { action: 'check' } }); } catch (e) { fail(e); } draw(); } }, icon('update', 's'), 'Check for updates'), ' ',
-          s.docker ? h('span', { class: 'muted' }, 'Docker: update by pulling the image (docker compose pull && docker compose up -d).')
-            : s.canRun ? h('button', { class: `pillbtn ${c && c.status === 'update' ? 'primary' : ''}`, disabled: p.running ? true : null, onclick: async () => {
-              if (!await confirmDialog('Update ioCalendar', 'Fetch the newest version, refresh its packages and restart ioCalendar? Settings and events stay; the page reloads when the new version is up.', 'Update now')) return;
-              if (await runUpdate()) setTimeout(draw, 2500);
-            } }, icon('check', 's'), 'Update now')
-              : h('span', { class: 'muted' }, 'This install cannot update itself from here (run ./update.sh in the app folder).')),
-        h('p', null, h('label', { class: 'check' }, auto, ' Check for a new version once a day (only GitHub’s public list of changes is asked; nothing about this server is sent)')),
-        s.autoCheckLocked ? h('p', { class: 'muted small' }, 'UPDATE_CHECK=0 in the environment keeps it off.') : null,
-        h('p', { class: 'muted small' }, `Follows ${s.repo} (${s.branch}). `, h('a', { class: 'lnk', href: `https://github.com/${s.repo}/commits/${s.branch}`, target: '_blank', rel: 'noopener' }, 'Change log'), '.')),
-      logCard(),
-      h('div', { class: 'box' }, h('h2', null, icon('update'), 'Restart'),
-        h('p', null, 'Stops ioCalendar; the service manager (systemd, launchd or Docker) starts it again within seconds. Nothing is lost; the page reloads when it is back.'),
-        h('p', null, h('button', { class: 'pillbtn', onclick: async () => {
-          if (!await confirmDialog('Restart ioCalendar', 'Restart the server now? Everyone is disconnected for a few seconds.', 'Restart')) return;
-          try { await api('/api/server', { method: 'POST', json: { action: 'restart' } }); } catch (e) { fail(e); return; }
-          toast('Restarting…');
-          const until = Date.now() + 90000, gone = Date.now() + 3000;
-          const look = async () => {
-            try { const r = await fetch('/api/status', { credentials: 'same-origin' }); if (r.ok && Date.now() > gone) { location.reload(); return; } } catch { /* down */ }
-            if (Date.now() < until) setTimeout(look, 2000); else toast('ioCalendar did not come back; check the service.');
-          };
-          setTimeout(look, 3000);
-        } }, 'Restart ioCalendar'))));
-    if (p.running) setTimeout(() => { if (el.isConnected) draw(); }, 4000);
-  };
-  await draw();
-}
-
-/** The tail of the server log (GET /api/log from iosuite-shared): a level filter, a search, Reload and Download. */
-function logCard() {
-  const level = h('select', { class: 't', style: 'width:auto' }, [['any', 'Everything'], ['warning', 'Warnings and errors'], ['error', 'Errors'], ['auth', 'Sign-ins']].map(([v, l]) => h('option', { value: v }, l)));
-  const contains = h('input', { class: 't', placeholder: 'Contains…', style: 'max-width:220px' });
-  const requests = h('input', { type: 'checkbox' });
-  const out = h('pre', { class: 'log' }, 'Loading…'), note = h('p', { class: 'muted small' });
-  const load = async () => {
-    try {
-      const r = await api(`/api/log?lines=300&level=${level.value}&contains=${encodeURIComponent(contains.value)}&requests=${requests.checked ? 1 : 0}`);
-      out.textContent = r.lines.length ? r.lines.join('\n') : (r.note || 'Nothing matches.');
-      note.textContent = r.note ? '' : `${r.file}: ${(r.size_bytes / 1024).toFixed(0)} kB, the last ${r.returned} lines.`;
-      out.scrollTop = out.scrollHeight;
-    } catch (e) { out.textContent = e.message; }
-  };
-  level.onchange = load; requests.onchange = load; contains.onchange = load;
-  setTimeout(load, 0);
-  return h('div', { class: 'box' }, h('h2', null, icon('note'), 'Server log'),
-    h('div', { class: 'multi' }, level, contains, h('label', { class: 'check' }, requests, ' Requests too'),
-      h('button', { class: 'pillbtn noic', onclick: load }, 'Reload'), h('a', { class: 'pillbtn', href: '/api/log/download' }, icon('download', 's'), 'Download')),
-    out, note);
-}
-
-/** Start update.sh on the server, then watch /api/status until another version or commit answers, and reload. */
-async function runUpdate() {
-  try { await api('/api/server', { method: 'POST', json: { action: 'update' } }); } catch (e) { fail(e); return false; }
-  toast('Updating; ioCalendar restarts when it is done, and the page reloads.');
-  const was = `${S.status.version}|${S.status.commit || ''}`, until = Date.now() + 240000;
-  const look = async () => {
-    try { const s = await fetch('/api/status', { credentials: 'same-origin' }).then((r) => r.json()); if (s.version && `${s.version}|${s.commit || ''}` !== was) { location.reload(); return; } } catch { /* restarting */ }
-    if (Date.now() < until) setTimeout(look, 4000); else toast('The update did not finish; see Maintenance › Updates and logs.');
-  };
-  setTimeout(look, 4000);
-  return true;
 }
 
 /** Admins: a note when the daily check found a newer version, with Update now. Hidden until the next version when dismissed. */
@@ -1463,8 +1350,8 @@ function updateBanner() {
   if (!u || dismissed === u.remote) return;
   const b = h('div', { id: 'updbanner', role: 'status' }, icon('update'),
     h('span', null, `ioCalendar ${u.version ? `v${u.version}` : 'update'} is available${u.message ? `: ${u.message.replace(/^v\d+\.\d+\.\d+:\s*/, '')}` : ''}`),
-    h('button', { class: 'pillbtn primary noic', onclick: async () => { if (await confirmDialog('Update ioCalendar', 'Install the new version and restart? The page reloads when it is back.', 'Update now')) { b.remove(); runUpdate(); } } }, 'Update now'),
-    h('a', { class: 'pillbtn noic', href: '#/maintenance/updates', onclick: () => b.remove() }, 'Details'),
+    h('button', { class: 'pillbtn primary noic', onclick: async () => { if (await confirmDialog('Update ioCalendar', 'Install the new version and restart? The page reloads when it is back.', 'Update now')) { b.remove(); (await serverUi()).runUpdate({ toast }); } } }, 'Update now'),
+    h('a', { class: 'pillbtn noic', href: '#/settings/server', onclick: () => b.remove() }, 'Details'),
     h('button', { class: 'iconbtn', title: 'Not now (hidden until the next version)', onclick: () => { try { localStorage.setItem('iocalendar.updateDismissed', u.remote); } catch { /* */ } b.remove(); } }, icon('close', 's')));
   document.body.append(b);
 }
