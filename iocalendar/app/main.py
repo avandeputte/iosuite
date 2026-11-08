@@ -76,8 +76,7 @@ def _status_extra(request) -> dict:
 def _server_info() -> dict:
     """What Settings › Server shows beside the updater's own fields: the MCP box and This server."""
     return {"mcpEnabled": mcp_enabled(), "mcpLocked": config.MCP_FORCED,
-            "mcpAbout": "The address /mcp that lets an AI assistant (Claude, for example) read the agenda, search events, find free time, "
-                        "add, change and move events and import calendars, and for admins check for and install updates.",
+            "mcpAbout": "Lets an AI assistant read the agenda, find free time and add or change events, as you.",
             "about": [["Database", f"{config.DB_HOST}:{config.DB_PORT}/{config.DB_NAME}"], ["Time zone", ical.default_tz()]]}
 
 

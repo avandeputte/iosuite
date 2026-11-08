@@ -44,7 +44,11 @@ def client(_client):
     db.migrate()
     from app.auth import auth
     _authtest.clean_shared_tables(auth)
-    users.forget_cached_auth()
+    from iosuite_shared import apppasswords
+    from app import members
+    apppasswords.forget()
+    users.shared.invalidate()
+    members.forget()
     from app import model
     model._cache_clear()
     _client.cookies.clear()

@@ -85,13 +85,6 @@ def create_app_password(uid: int, label: str, caldav_only: bool = False) -> str:
     return apppasswords.create(uid, APP, label, apppasswords.DAV if caldav_only else "")
 
 
-def forget_cached_auth() -> None:
-    apppasswords.forget()
-    shared.invalidate()
-    from app import members
-    members.forget()
-
-
 # ---------------------------------------------------------------- subscription links (ioCalendar's own)
 
 def feed_token(uid: int) -> str:

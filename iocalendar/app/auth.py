@@ -20,6 +20,16 @@ auth.deny_exempt = ("/mcp", "/dav", "/.well-known/")  # apps sign in with app pa
 # nothing else: 403 on the REST API, MCP and the web app (iosuite-shared enforces it)
 auth.scope_paths = {"dav": ("/dav", "/.well-known/caldav")}
 
+
+def _account_changed(user_id, body) -> None:
+    """After someone changed their display name (Settings › Account) or an admin changed an account: the family list
+    shows names, so it is read again."""
+    from app import members
+    members.forget()
+
+
+auth.on_update = _account_changed
+
 # updates (the daily check, update.sh, restart) and the server log, as in every app of the suite (iosuite_shared.updates);
 # the daily-check switch is kept with ioCalendar's own settings
 updater = Updater(APP, __version__, config.APP_DIR, settings=(db.get_setting, db.set_setting), result_file=config.DATA_DIR / ".update-result",
