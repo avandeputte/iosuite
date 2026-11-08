@@ -7,7 +7,7 @@ Anyone not signed in browses read-only. A viewer may have no password at all: su
 click from the account picker (on the home network only) and can never be more than a viewer. Until the first
 account exists ionotes stays open, so a fresh install is not locked out.
 
-Passwords are scrypt-hashed and sessions are random tokens in an HttpOnly cookie (30 days, renewed in use), both
+Passwords are Argon2id-hashed and sessions are random tokens in an HttpOnly cookie (30 days, renewed in use), both
 in the Shared ioSuite database, so a session begun in another ioThing app is a session here too. This module keeps ionotes'
 old names for the rest of the code; the work is done by iosuite_shared.
 """

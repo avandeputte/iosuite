@@ -196,7 +196,7 @@ account) stay with the open install: export them before making the first account
 Sessions are random tokens in an HttpOnly cookie (`iothing_session`, shared by the apps on the domain) valid for
 30 days and renewed while in use; each records where it began and was last seen (address, through Cloudflare or
 not, web or which app): `GET /api/auth/sessions` for your own, `GET /api/users/<id>/sessions` for admins. Passwords
-are scrypt-hashed; wrong passwords cost a growing wait. Write requests from another site are refused.
+are Argon2id-hashed; wrong passwords cost a growing wait. Write requests from another site are refused.
 
 ionotes writes its row in the **suite's list of apps** (iosuite-shared's `suite_apps` table: name, version, colour,
 icon, address) on its first request, so ioSuite's start page and the other apps find it without anyone typing an
