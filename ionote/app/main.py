@@ -14,8 +14,8 @@ from fastapi.staticfiles import StaticFiles
 from iosuite_shared import mcp as shared_mcp
 from iosuite_shared.updates import setup_log
 
-from app import __version__, config, db, mcp, suitedb, users
-from app import notes as notes_mod, owners
+from app import __version__, config, db, images, mcp, suitedb, users
+from app import notes as notes_mod
 from app.auth import auth, updater
 from app.routes import auth as auth_routes, notes as notes_routes, settings, users as users_routes
 
@@ -80,8 +80,6 @@ _mcp_gate = auth.mcp_gate(mcp_enabled, on_user=_mcp_user)
 def _before(request: Request):
     """Once the user is known: whose notes the request works on, and the MCP endpoint's gate (the switch; an app
     password or session, as in every app of the suite)."""
-    if not notes_mod._claimed and users.any_users():
-        notes_mod.claim_unowned(owners.first_admin_id())
     refused = _mcp_gate(request)
     if refused is not None:
         return refused
@@ -109,9 +107,9 @@ auth.install(app, limit_for=_limit_for, not_found=(notes_mod.NotFound,), forward
 
 
 def _status_extra(request: Request) -> dict:
-    """ioNotes' own fields of GET /api/status, beside the suite's: the name an admin gave the app, read-only mode and,
+    """ioNotes' own fields of GET /api/status, beside the suite's: the name an admin gave the app and,
     signed in, the account's change counter (the page polls it to learn of changes made elsewhere)."""
-    out = {"appName": db.get_setting("app_name", "") or "ionotes", "readOnly": db.read_only()}
+    out = {"appName": db.get_setting("app_name", "") or "ionotes"}
     if users.is_signed_in(request.state.user):
         out["rev"] = notes_mod.owner_rev()
     return out
@@ -122,8 +120,13 @@ app.include_router(users_routes.router)  # /api/users: accounts and their role h
 app.include_router(auth.admin_router())  # /api/suite-admin (+ ui.js, the Settings › Security panel): the whole suite (suite admins)
 app.include_router(auth.status_router(updater, extra=_status_extra))  # /api/status: public, the same shape in every app
 def _server_info() -> dict:
-    """What Settings › Server shows beside the updater's own fields: the MCP box."""
-    return {"mcpEnabled": mcp_enabled(), "mcpLocked": config.MCP_FORCED,
+    """What Settings › Server shows beside the updater's own fields: the MCP box, and This server (where the notes and
+    the accounts are, and how many pictures the database holds)."""
+    c, sd, im = db.settings(), suitedb.public(), images.stats()
+    where = (f"MariaDB/MySQL {c['user']}@{c['host']}:{c['port']}/{c['database']}" if c["type"] == "mysql" else f"SQLite {db.SQLITE_FILE}")
+    about = [["Database", where], ["Shared ioSuite database", f"{sd['user']}@{sd['host']}:{sd['port']}/{sd['database']}"],
+             ["Pictures", f"{im['images']}, {im['bytes'] / 1048576:.1f} MB"]]
+    return {"about": about, "mcpEnabled": mcp_enabled(), "mcpLocked": config.MCP_FORCED,
             "mcpAbout": "The address /mcp that lets an assistant such as Claude search and read notes and look at their pictures and, as an "
                         "editor, create, edit, file, tag and delete them; admins also get diagnostics and the updater."}
 

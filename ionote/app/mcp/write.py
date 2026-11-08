@@ -1,5 +1,5 @@
 """The tools that change notes, folders and tags. Each takes an editor's or admin's account (the one the client signed
-in as) and is refused in read-only mode. Changes are logged under the name "MCP" and reach the apps with their next sync."""
+in as). Changes are logged under the name "MCP" and reach the apps with their next sync."""
 import base64
 import time
 from typing import Literal, Optional

@@ -222,12 +222,6 @@ def test_a_chunked_body_is_held_to_the_size_limit(client, admin):
     assert r.status_code == 413
 
 
-def test_the_saved_database_password_only_goes_to_its_own_server(client, admin):
-    r = client.post("/api/db/test", json={"type": "mysql", "host": "203.0.113.9", "port": 3306, "user": "x", "keep_password": True}).json()
-    assert not r["ok"] and "password" in r["error"]
-    assert client.post("/api/db/save", json={"type": "mysql", "host": "203.0.113.9"}).status_code == 400
-
-
 def test_an_import_does_not_take_a_neighbours_picture(client, admin):
     """Work/Meeting.md has no picture; Work/Meeting.v2.png belongs to Meeting.v2."""
     import io as _io

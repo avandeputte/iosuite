@@ -1,34 +1,27 @@
-"""Settings and maintenance: the switches admins set, sign-in at a proxy, the database, the change log, export and
-import. The status, the version, updates, restart and the server log are iosuite_shared's routers (/api/status,
+"""Settings: the switches admins set, sign-in at a proxy, the change log, export and import. The status, the version, updates, restart and the server log are iosuite_shared's routers (/api/status,
 /api/server, /api/log), mounted in app/main.py."""
-import logging
 import time
 
 from fastapi import APIRouter, HTTPException, Request, UploadFile, File
 from fastapi.responses import Response
 from starlette.concurrency import run_in_threadpool
 
-from app import access, backup, config, db, images, notes, ocr, suitedb, users
+from app import access, backup, config, db, notes, users
 from iosuite_shared import proxyauth
 from app.auth import auth as auth_shared
 from app.http import json_body, user_name
 
 router = APIRouter()
-SWITCHES = ("require_login", "read_only")  # the MCP switch is Settings › Server (POST /api/server {mcpEnabled})
+SWITCHES = ("require_login",)  # the MCP switch is Settings › Server (POST /api/server {mcpEnabled})
 TEXTS = ("app_name",)
 
 
 @router.get("/api/settings", dependencies=[access.public])
 def api_settings(request: Request):
-    out = {"app_name": db.get_setting("app_name", "") or "ionotes", "read_only": db.read_only(), "require_login": users.require_login(),
+    out = {"app_name": db.get_setting("app_name", "") or "ionotes", "require_login": users.require_login(),
            "colors": list(notes.COLORS)}
     if users.is_admin(request.state.user):
         out.update({k: db.get_setting(k, "0") == "1" for k in SWITCHES})
-        out["read_only_env"] = config.READ_ONLY
-        out["database"] = db.public_settings()
-        out["suite_database"] = suitedb.public()
-        out["ocr"] = ocr.status()
-        out["images"] = images.stats()
     return out
 
 
@@ -78,34 +71,7 @@ async def api_proxy_set(request: Request):
     return auth_shared.proxy.status()
 
 
-@router.post("/api/db/test", dependencies=[access.admin])
-async def api_db_test(request: Request):
-    """Try a MySQL/MariaDB connection: {host, port, database, user, password}."""
-    body = await json_body(request)
-    return await run_in_threadpool(db.test, body)
-
-
-@router.post("/api/db/save", dependencies=[access.admin])
-async def api_db_save(request: Request):
-    """Write data/db.json; ionotes uses it from its next start (restart the service)."""
-    body = await json_body(request)
-    fixed = db.public_settings()["fromEnv"]
-    if fixed:
-        raise HTTPException(400, f"Set in config.env, change it there: {', '.join(config.DB_ENV[k] for k in fixed)}")
-    c = {**db.settings(), **{k: body[k] for k in db.KEYS if k in body}}
-    if not body.get("password"):
-        if c.get("type") == "mysql" and not db.same_server(c):
-            raise HTTPException(400, "Enter the password: the saved one is only used for the server and user it belongs to")
-        c["password"] = db.settings()["password"]
-    if c.get("type") == "mysql":
-        t = await run_in_threadpool(db.test, c)
-        if not t["ok"]:
-            raise HTTPException(400, t["error"])
-    db.save_settings(c)
-    return {"ok": True, "restartNeeded": True}
-
-
-# ---- storage and backups
+# ---- the change log, export and import
 @router.get("/api/changes", dependencies=[access.editor])
 def api_changes(limit: int = 200, before: int = None):
     """The change log: who created, edited, deleted or recoloured what, newest first."""
@@ -125,28 +91,3 @@ async def api_import(request: Request, file: UploadFile = File(...)):
         return await run_in_threadpool(backup.import_zip, file.file, user_name(request))
     except (ValueError, KeyError) as e:
         raise HTTPException(400, f"Could not import: {e}")
-
-
-@router.get("/api/owners", dependencies=[access.admin])
-def note_owners():
-    """Settings › Storage and backups › Who owns the notes: each owner id with its note count and account name (if the id is an account
-    of ionotes), and the accounts notes can be given to."""
-    accounts = {u["id"]: u["name"] for u in users.list_users()}
-    counts = notes.owner_counts()
-    return {"owners": [{"id": o, "name": accounts.get(o), "notes": n} for o, n in sorted(counts.items())],
-            "accounts": [{"id": i, "name": n} for i, n in accounts.items()]}
-
-
-@router.post("/api/owners/move", dependencies=[access.admin])
-async def move_notes(request: Request):
-    """Give all of one owner's notes (with their folders and tag colours) to an account."""
-    body = await json_body(request)
-    try:
-        src, dst = int(body.get("from")), int(body.get("to"))
-    except (TypeError, ValueError):
-        raise HTTPException(400, "from and to are account ids")
-    if not users.get(dst):
-        raise HTTPException(400, "No such account")
-    moved = await run_in_threadpool(notes.reassign, src, dst)
-    logging.getLogger("app").info("%s gave the notes of owner %s to account %s (%d notes)", user_name(request), src, dst, moved)
-    return {"moved": moved}

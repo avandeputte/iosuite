@@ -3,7 +3,7 @@ database as the web app. It acts as the account named by --user or MCP_USER (or 
 one), on that account's own notes, as the HTTP endpoint does for a client signed in with an app password."""
 import sys
 
-from app import config, db, notes, owners, users
+from app import config, db, notes, users
 from app.mcp import current_user, server
 
 
@@ -27,8 +27,6 @@ def _pick_user():
 if __name__ == "__main__":
     db.init()
     users.init()
-    if users.any_users():
-        notes.claim_unowned(owners.first_admin_id())
     u = _pick_user()
     current_user.set(u)
     notes.current_owner.set(int(u["id"]))

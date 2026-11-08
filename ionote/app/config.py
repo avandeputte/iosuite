@@ -19,8 +19,6 @@ env, env_flag, env_int = shared.env, shared.env_flag, shared.env_int
 # MCP_FORCED, ADMIN_USER, ADMIN_PASSWORD: the same names in every app (iosuite_shared.config.standard says what each is)
 globals().update(shared.standard(APP, APP_DIR))
 
-# READ_ONLY=1: browsing and searching only, for everyone
-READ_ONLY = env_flag("READ_ONLY")
 # OCR=0 keeps the server from reading text in images itself (the apps read it on the device and send it along)
 OCR = env_flag("OCR", True)
 # the account `python -m app.mcp` (stdio) acts as. Updates: IONOTES_REPO, IONOTES_BRANCH and UPDATE_CHECK are read by

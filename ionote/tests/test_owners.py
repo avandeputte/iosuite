@@ -1,5 +1,5 @@
 """Notes are private to each account: every read, search, sync, export and change works on the signed-in
-account's notes only; ids never reach across accounts; notes made before accounts existed become the first admin's."""
+account's notes only; ids never reach across accounts."""
 import io
 import json
 import zipfile
@@ -72,18 +72,6 @@ def test_visitors_see_no_notes_once_accounts_exist(client, admin):
     assert client.get("/api/sync").json()["notes"] == []
 
 
-def test_notes_from_before_accounts_go_to_the_first_admin(client):
-    assert client.put(f"/api/notes/{NID}", json={"title": "made while open", "updatedAt": 1}).status_code == 200
-    client.post("/api/folders", json={"name": "Old"})
-    r = client.post("/api/auth/setup", json={"name": "alex", "password": "secretpw1"})
-    assert r.status_code == 200
-    assert client.get(f"/api/notes/{NID}").json()["title"] == "made while open"
-    assert [f["name"] for f in client.get("/api/folders").json()["folders"]] == ["Old"]
-    client.post("/api/users", json={"name": "sam", "password": "secretpw2", "role": "editor"})
-    _as(client, "sam", "secretpw2")
-    assert client.get("/api/notes").json()["total"] == 0
-
-
 def test_export_and_import_are_per_account(client, admin):
     _two(client, admin)
     client.put(f"/api/notes/{NID}", json={"title": "alex's", "updatedAt": 1})
@@ -101,26 +89,3 @@ def test_export_and_import_are_per_account(client, admin):
     assert sorted(n["title"] for n in client.get("/api/notes").json()["notes"]) == ["alex's", "sam imports"]
     _as(client, "alex", "secretpw1")
     assert [(n["id"], n["title"]) for n in client.get("/api/notes").json()["notes"]] == [(NID, "alex's")]
-
-
-def test_an_admin_gives_one_accounts_notes_to_another(client, admin):
-    """Settings › Storage and backups › Who owns the notes: when the old notes went to the wrong account, an admin moves them all."""
-    _two(client, admin)
-    _as(client, "sam", "secretpw2")
-    client.put(f"/api/notes/{OTHER}", json={"title": "old note", "tags": ["work"], "updatedAt": 1})
-    client.post("/api/folders", json={"name": "Old folder"})
-    client.put("/api/tags/work/color", json={"color": "blue"})
-    sam = client.get("/api/auth/me").json()["user"]["id"]
-    assert client.get("/api/owners").status_code == 403
-    _as(client, "alex", "secretpw1")
-    me = client.get("/api/auth/me").json()["user"]["id"]
-    rev = client.get("/api/sync").json()["rev"]
-    owners = {o["id"]: o for o in client.get("/api/owners").json()["owners"]}
-    assert owners[sam]["notes"] == 1 and owners[sam]["name"] == "sam"
-    assert client.post("/api/owners/move", json={"from": sam, "to": me}).json()["moved"] == 1
-    assert [n["title"] for n in client.get("/api/notes").json()["notes"]] == ["old note"]
-    s = client.get(f"/api/sync?since={rev}").json()   # the devices of the new owner sync them in
-    assert [n["title"] for n in s["notes"]] == ["old note"] and [f["name"] for f in s["folders"]] == ["Old folder"]
-    assert client.get("/api/meta").json()["tags"][0]["color"] == "blue"
-    _as(client, "sam", "secretpw2")
-    assert client.get("/api/notes").json()["total"] == 0

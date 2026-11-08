@@ -23,7 +23,7 @@ def diagnostics() -> dict:
     out = {"version": __version__, "commit": updater.local_commit()[:7], "python": sys.version.split()[0], "platform": platform.platform(),
            "docker": updater.in_docker(), "database": {k: s[k] for k in ("type", "host", "port", "database", "user") if k in s},
            "pictures": images.stats(), "ocr": ocr.status(), "accounts": len(users.list_users()), "rev": db.current_rev(),
-           "read_only": db.read_only(), "require_login": users.require_login(), "data_dir": str(config.DATA_DIR), "app_url": config.BASE_URL}
+           "require_login": users.require_login(), "data_dir": str(config.DATA_DIR), "app_url": config.BASE_URL}
     if s["type"] == "mysql":
         t = db.test({})
         out["database"].update({"reachable": t["ok"], "server": t.get("version"), "max_allowed_packet": t.get("maxAllowedPacket"),

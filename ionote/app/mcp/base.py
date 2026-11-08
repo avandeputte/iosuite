@@ -3,7 +3,7 @@ from iosuite_shared import mcp as shared_mcp
 from iosuite_shared.mcp import ADDS, DELETES, READ_ONLY, UPDATES, WRITES, clamp, current_user, need_admin, who
 from mcp.server.mcpserver.exceptions import ToolError
 
-from app import __version__, config, db, notes
+from app import __version__, config, notes
 
 __all__ = ["ADDS", "DELETES", "READ_ONLY", "UPDATES", "WRITES", "clamp", "current_user", "need_admin", "who", "need_writer",
            "server", "APP", "MCP_USER", "clamp_limit", "resolve_folder", "note_or_fail", "summary", "iso", "parse_date"]
@@ -20,11 +20,8 @@ server = shared_mcp.make_server("ionotes", "ioNotes", __version__, instructions=
 
 
 def need_writer() -> dict:
-    """Changes take an editor or admin, and are refused in read-only mode as in the web app."""
-    u = shared_mcp.need_writer()
-    if db.read_only():
-        raise ToolError("ioNotes is in read-only mode; nothing can be changed")
-    return u
+    """Changes take an editor or admin, as in the web app."""
+    return shared_mcp.need_writer()
 
 
 def clamp_limit(limit, cap: int) -> int:

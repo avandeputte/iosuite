@@ -12,6 +12,6 @@ KEYS = ("HOST", "PORT", "NAME", "USER", "PASSWORD")
 
 
 def public() -> dict:
-    """Where the Shared ioSuite database is (no password), for Settings › Storage and backups."""
+    """Where the Shared ioSuite database is (no password), for Settings › Server › This server."""
     return {"host": config.DB_HOST, "port": config.DB_PORT, "database": config.DB_NAME, "user": config.DB_USER,
             "fromEnv": [config.PREFIX + k for k in KEYS if os.environ.get(config.PREFIX + k)]}
