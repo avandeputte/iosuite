@@ -156,7 +156,7 @@ function drawUser() {
       h('a', { class: 'mi', href: '#/settings/account', onclick: closeMenu }, icon('person', 's'), 'Account'),
       h('button', { class: 'mi', onclick: () => { closeMenu(); customize(); } }, icon('tune', 's'), 'Customize the page'),
       h('button', { class: 'mi', onclick: () => { closeMenu(); enterWall(); } }, icon('wall', 's'), 'Wall display'),
-      h('button', { class: 'mi', onclick: () => { const n = { system: 'light', light: 'dark', dark: 'system' }[theme]; localStorage.setItem('iosuite.theme', n); applyTheme(); closeMenu(); toast(`Appearance: ${n}`); } },
+      h('button', { class: 'mi', onclick: () => { const n = { system: 'light', light: 'dark', dark: 'system' }[theme]; setTheme(n); api('/api/auth/settings', { method: 'POST', json: { theme: n } }).catch(() => {}); closeMenu(); toast(`Appearance: ${n}`); } },
         icon('theme', 's'), `Appearance: ${theme}`),
       h('a', { class: 'mi', href: '#/settings', onclick: closeMenu }, icon('settings', 's'), 'Settings'),
       h('button', { class: 'mi', onclick: async () => { const r = await api('/api/auth/logout', { method: 'POST' }); if (r && r.cloudflareLogout) location.href = r.cloudflareLogout; else location.reload(); } }, icon('logout', 's'), 'Sign out'));
@@ -165,8 +165,14 @@ function drawUser() {
   };
   m.append(btn);
 }
+/** The theme: kept with the account (Settings › Display), and in this browser so the page draws in it at once. */
+function setTheme(t) {
+  try { localStorage.setItem('iosuite.theme', t); } catch { /* private mode */ }
+  if (S.settings) S.settings.theme = t;
+  applyTheme();
+}
 function applyTheme() {
-  const t = localStorage.getItem('iosuite.theme') || 'system';
+  let t = 'system'; try { t = localStorage.getItem('iosuite.theme') || 'system'; } catch { /* private mode */ }
   if (t === 'system') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t;
 }
 
@@ -563,7 +569,7 @@ async function customize() {
     return list;
   };
   const adminStrip = { rediscover: 'Rediscover', onthisday: 'On this day', off: 'Off' }[S.photoStrip] || 'Rediscover';
-  const strip = h('select', { class: 't' }, [[null, `Default (${adminStrip})`], ['rediscover', 'Rediscover: photos at random'], ['onthisday', 'On this day'], ['off', 'Off']].map(([v, t]) => h('option', { value: v || '', selected: (v || '') === (L.strip || '') ? true : null }, t)));
+  const strip = h('select', { class: 't', onchange: async () => { try { await api('/api/home/settings', { method: 'POST', json: { photoStrip: strip.value } }); toast('Saved'); } catch (e) { fail(e); } } }, [[null, `Default (${adminStrip})`], ['rediscover', 'Rediscover: photos at random'], ['onthisday', 'On this day'], ['off', 'Off']].map(([v, t]) => h('option', { value: v || '', selected: (v || '') === (L.strip || '') ? true : null }, t)));
   const moves = h('select', { class: 't' }, Object.entries(STRIP_MOVES).map(([k, t]) => h('option', { value: k, selected: k === (L.stripMove || STRIP_DEFAULT.move) ? true : null }, t)));
   const everies = h('select', { class: 't' }, STRIP_EVERY.map((s) => h('option', { value: s, selected: s === (L.stripEvery || STRIP_DEFAULT.every) ? true : null }, `Every ${everyText(s)}`)));
   const engines = h('select', { class: 't' }, Object.entries(ENGINES).map(([k, e]) => h('option', { value: k === 'duckduckgo' ? '' : k, selected: (k === 'duckduckgo' ? '' : k) === (L.search || '') ? true : null }, e.name)));
@@ -1208,43 +1214,38 @@ async function wallAgenda(el, has) {
 async function showSettings(page, r) {
   const adm = S.user.role === 'admin';
   const canEdit = ['editor', 'admin'].includes(S.user.role);
-  const tabs = [['account', 'Account'], ...(adm ? [['weather', 'Home page'], ['ha', 'Home Assistant']] : []), ...(canEdit ? [['bookmarks', 'Bookmarks']] : []), ...(adm ? [['server', 'Server']] : []),
+  const tabs = [['account', 'Account'], ['display', 'Display'], ...(adm ? [['weather', 'Home page'], ['ha', 'Home Assistant']] : []), ...(canEdit ? [['bookmarks', 'Bookmarks']] : []), ...(adm ? [['server', 'Server']] : []),
     ...(S.user.suiteAdmin ? [['security', 'Security'], ['global', 'Global settings']] : [])];
   if (!tabs.some(([k]) => k === r.tab)) r.tab = 'account';
   page.append(h('div', { class: 'pagehead' }, h('h1', null, 'Settings')),
     h('div', { class: 'tabs' }, tabs.map(([k, l]) => h('button', { class: r.tab === k ? 'on' : '', onclick: () => { location.hash = `#/settings/${k}`; } }, l))));
   const body = h('div'); page.append(body);
-  await ({ account: setAccount, apps: setHome, weather: setHome, ha: setHomeAssistant, bookmarks: setBookmarks, server: setServer, security: setSuite, global: setSuite }[r.tab] || setAccount)(body, r);
+  await ({ account: setAccount, display: setDisplay, apps: setHome, weather: setHome, ha: setHomeAssistant, bookmarks: setBookmarks, server: setServer, security: setSuite, global: setSuite }[r.tab] || setAccount)(body, r);
 }
 const fld = (l, e) => h('label', { class: 'field' }, h('span', null, l), e);
 
+/** Settings › Account and Display: iosuite-shared's panels, the same in every io app. */
+const accountUi = () => import(new URL('api/auth/ui.js', document.baseURI).href);
 async function setAccount(el) {
-  const u = S.user;
-  const dn = h('input', { class: 't', value: u.displayName || '' }), em = h('input', { class: 't', type: 'email', value: u.email || '' });
-  const old = h('input', { class: 't', type: 'password', autocomplete: 'current-password' }), nw = h('input', { class: 't', type: 'password', autocomplete: 'new-password' });
-  el.append(h('div', { class: 'box' }, h('h2', null, icon('person'), 'You'),
-    h('p', { class: 'muted' }, 'The same account as in every io app: a change here shows up everywhere.'),
-    h('div', { class: 'grid' }, fld('Display name', dn), fld('Email (for sign-in at a proxy)', em)),
-    h('p', null, h('button', { class: 'pillbtn primary', onclick: async () => { try { S.user = (await api('/api/auth/me', { method: 'PATCH', json: { displayName: dn.value, email: em.value } })).user; drawUser(); toast('Saved'); } catch (e) { fail(e); } } }, icon('check', 's'), 'Save'))),
-  !u.passwordless ? h('div', { class: 'box' }, h('h2', null, icon('key'), 'Password'), h('div', { class: 'grid' }, fld('Current password', old), fld('New password (8 or more)', nw)),
-    h('p', null, h('button', { class: 'pillbtn', onclick: async () => { try { await api('/api/auth/password', { method: 'POST', json: { current: old.value, password: nw.value } }); old.value = nw.value = ''; toast('Password changed'); } catch (e) { fail(e); } } }, 'Change password'))) : null);
+  await (await accountUi()).mountAccount(el, { toast, onSaved: (u) => { Object.assign(S.user, u); drawUser(); } });
+}
+async function setDisplay(el) {
+  const ui = await accountUi();
+  el.append(ui.box('theme', 'Appearance', ui.themeRow(S.settings?.theme || 'system', setTheme)));
 }
 async function setHome(el) {
   const got = await api('/api/home/settings');
-  const strip = h('select', { class: 't' }, [['rediscover', 'Rediscover: photos at random'], ['onthisday', 'On this day (at random when there are none)'], ['off', 'Off']].map(([v, t]) => h('option', { value: v, selected: v === got.photoStrip ? true : null }, t)));
+  const strip = h('select', { class: 't', onchange: async () => { try { await api('/api/home/settings', { method: 'POST', json: { photoStrip: strip.value } }); toast('Saved'); } catch (e) { fail(e); } } }, [['rediscover', 'Rediscover: photos at random'], ['onthisday', 'On this day (at random when there are none)'], ['off', 'Off']].map(([v, t]) => h('option', { value: v, selected: v === got.photoStrip ? true : null }, t)));
   el.append(h('div', { class: 'box' }, h('h2', null, icon('apps'), 'Home page'),
-    h('p', { class: 'muted' }, 'Every io app registers itself, with its address, in the Shared ioSuite database, and shows up on the page by itself. Each person can hide, reorder and pick their own photo strip in Customize; this is what everyone gets by default.'),
-    h('div', { class: 'grid' }, fld('Photo strip under the tiles (ioPix)', strip)),
-    h('p', null, h('button', { class: 'pillbtn primary', onclick: async () => {
-      try { await api('/api/home/settings', { method: 'POST', json: { photoStrip: strip.value } }); toast('Saved'); } catch (e) { fail(e); }
-    } }, icon('check', 's'), 'Save'))));
+    h('p', { class: 'muted' }, 'The default for everyone. Each person can change it in Customize.'),
+    h('div', { class: 'grid' }, fld('Photo strip under the tiles (ioPix)', strip))));
   await setWeather(el);
 }
 
 async function setWeather(el) {
   const s = await api('/api/weather/settings');
-  const key = h('input', { class: 't', type: 'password', placeholder: s.hasKey ? '(kept)' : 'API key from developer.accuweather.com', disabled: s.keyFromEnv ? true : null, autocomplete: 'off' });
-  const units = h('select', { class: 't', style: 'width:auto' }, [['metric', '°C, km/h'], ['imperial', '°F, mph']].map(([v, l]) => h('option', { value: v, selected: v === s.units ? true : null }, l)));
+  const key = h('input', { class: 't', type: 'password', placeholder: s.hasKey ? '(kept)' : 'API key from developer.accuweather.com', disabled: s.keyFromEnv ? true : null, autocomplete: 'off', onchange: async () => { if (key.value.trim() && await save({ key: key.value.trim() })) { key.value = ''; key.placeholder = '(kept)'; } } });
+  const units = h('select', { class: 't', style: 'width:auto', onchange: () => save({ units: units.value }) }, [['metric', '°C, km/h'], ['imperial', '°F, mph']].map(([v, l]) => h('option', { value: v, selected: v === s.units ? true : null }, l)));
   const q = h('input', { class: 't', placeholder: 'City, e.g. Boston or Antwerp', disabled: s.locationFromEnv ? true : null });
   const found = h('div', { class: 'found' });
   const where = h('p', null, s.locationKey ? `Place: ${s.locationName || s.locationKey}${s.locationFromEnv ? ' (ACCUWEATHER_LOCATION in the environment)' : ''}` : 'No place chosen yet.');
@@ -1261,22 +1262,22 @@ async function setWeather(el) {
   };
   q.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); search(); } };
   el.append(h('div', { class: 'box' }, h('h2', null, icon('cloud'), 'Weather'),
-    h('p', { class: 'muted' }, 'The weather on the start page comes from AccuWeather. A free key (developer.accuweather.com, "Core Weather", 50 calls a day) is enough: this server asks AccuWeather at most every hour for the conditions, every 90 minutes for the next 12 hours and every 6 hours for the 5-day forecast, and only while someone opens the page; browsers never talk to AccuWeather.'),
+    h('p', { class: 'muted' }, 'From AccuWeather. A free key from developer.accuweather.com is enough.'),
     h('div', { class: 'grid' }, fld('API key', key), fld('Units', units)),
     s.keyFromEnv ? h('p', { class: 'muted small' }, 'ACCUWEATHER_API_KEY in the environment sets the key.') : null,
-    h('p', null, h('button', { class: 'pillbtn primary', onclick: async () => { if (await save({ ...(key.value.trim() ? { key: key.value.trim() } : {}), units: units.value })) { key.value = ''; key.placeholder = '(kept)'; } } }, icon('check', 's'), 'Save'), ' ',
-      s.hasKey && !s.keyFromEnv ? h('button', { class: 'pillbtn noic', onclick: async () => { if (await confirmDialog('Remove the key', 'Remove the AccuWeather key? The widget disappears from the page.', 'Remove', true)) { await save({ key: '' }); onRoute(); } } }, 'Remove the key') : null)),
+    s.hasKey && !s.keyFromEnv ? h('p', null, h('button', { class: 'pillbtn noic', onclick: async () => { if (await confirmDialog('Remove the key', 'Remove the AccuWeather key? The widget disappears from the page.', 'Remove', true)) { await save({ key: '' }); onRoute(); } } }, 'Remove the key')) : null),
   h('div', { class: 'box' }, h('h2', null, icon('cloud'), 'Place'), where,
     s.locationFromEnv ? null : [h('div', { class: 'multi' }, q, h('button', { class: 'pillbtn noic', onclick: search }, 'Find')), found,
-      h('p', { class: 'muted small' }, 'Type a city and pick it from the list (one AccuWeather call per search).')]));
+      h('p', { class: 'muted small' }, 'Type a city and pick it from the list.')]));
 }
 
 /** Settings › Home Assistant: the address and token, a test, and the entities the page shows, each with its name, whether
     a tap may switch it, whether it goes on the wall, and the state that needs attention. */
 async function setHomeAssistant(el) {
   const s = await api('/api/ha/settings');
-  const url = h('input', { class: 't', type: 'url', value: s.url || '', placeholder: 'http://homeassistant.local:8123', disabled: s.urlFromEnv ? true : null, autocomplete: 'off' });
-  const tok = h('input', { class: 't', type: 'password', placeholder: s.hasToken ? '(kept)' : 'Long-lived access token', disabled: s.tokenFromEnv ? true : null, autocomplete: 'off' });
+  const saveConn = async () => { if (await save(conn())) { if (tok.value.trim()) s.hasToken = true; tok.value = ''; tok.placeholder = s.hasToken ? '(kept)' : tok.placeholder; if (s.hasToken || s.tokenFromEnv) test(); } };
+  const url = h('input', { class: 't', type: 'url', value: s.url || '', placeholder: 'http://homeassistant.local:8123', disabled: s.urlFromEnv ? true : null, autocomplete: 'off', onchange: () => saveConn() });
+  const tok = h('input', { class: 't', type: 'password', placeholder: s.hasToken ? '(kept)' : 'Long-lived access token', disabled: s.tokenFromEnv ? true : null, autocomplete: 'off', onchange: () => saveConn() });
   const result = h('span', { class: 'muted small' });
   const conn = () => ({ ...(s.urlFromEnv ? {} : { url: url.value.trim() }), ...(tok.value.trim() ? { token: tok.value.trim() } : {}) });
   const save = async (body) => { try { const r = await api('/api/ha/settings', { method: 'POST', json: body }); toast('Saved'); return r; } catch (e) { fail(e); return null; } };
@@ -1292,15 +1293,15 @@ async function setHomeAssistant(el) {
     ...items.map((e, i) => h('div', { class: 'harow', 'data-id': e.id },
       h('button', { class: 'iconbtn grip', title: 'Drag to reorder', 'aria-label': 'Drag to reorder' }, icon('grip', 's')),
       h('span', { class: 'haid', title: e.id }, e.id),
-      h('input', { class: 't', value: e.name || '', placeholder: 'Its own name', onchange: (ev) => { e.name = ev.target.value.trim(); } }),
-      h('input', { type: 'checkbox', checked: e.control, onchange: (ev) => { e.control = ev.target.checked; } }),
-      h('input', { type: 'checkbox', checked: e.wall, onchange: (ev) => { e.wall = ev.target.checked; } }),
-      h('input', { class: 't', value: e.alert || '', placeholder: '–', onchange: (ev) => { e.alert = ev.target.value.trim().toLowerCase(); } }),
-      h('span', { class: 'bmtools' }, h('button', { class: 'iconbtn', title: 'Remove', onclick: () => { items.splice(i, 1); drawList(); } }, icon('close', 's'))))),
+      h('input', { class: 't', value: e.name || '', placeholder: 'Its own name', onchange: (ev) => { e.name = ev.target.value.trim(); persist(); } }),
+      h('input', { type: 'checkbox', checked: e.control, onchange: (ev) => { e.control = ev.target.checked; persist(); } }),
+      h('input', { type: 'checkbox', checked: e.wall, onchange: (ev) => { e.wall = ev.target.checked; persist(); } }),
+      h('input', { class: 't', value: e.alert || '', placeholder: '–', onchange: (ev) => { e.alert = ev.target.value.trim().toLowerCase(); persist(); } }),
+      h('span', { class: 'bmtools' }, h('button', { class: 'iconbtn', title: 'Remove', onclick: () => { items.splice(i, 1); persist(); } }, icon('close', 's'))))),
     ...(items.length ? [] : [h('p', { class: 'muted small' }, 'Nothing picked yet: find entities below and add them.')]));
     // reorder by dragging the handle (or ArrowUp / ArrowDown on it), as in Settings › Bookmarks
     for (const g of list.querySelectorAll('.grip')) dragSort(g, g.closest('.harow'), { root: list, lists: () => [list], items: '.harow:not(.head)', sorting: 'sorting-rows',
-      done: () => { const by = Object.fromEntries(items.map((e) => [e.id, e])); items = [...list.querySelectorAll('.harow[data-id]')].map((r) => by[r.dataset.id]).filter(Boolean); drawList(); } });
+      done: () => { const by = Object.fromEntries(items.map((e) => [e.id, e])); items = [...list.querySelectorAll('.harow[data-id]')].map((r) => by[r.dataset.id]).filter(Boolean); persist(); } });
   };
   drawList();
   // the picker: a search among every entity Home Assistant has
@@ -1312,26 +1313,24 @@ async function setHomeAssistant(el) {
     try {
       const r = await api(`/api/ha/search?${new URLSearchParams({ q: q.value.trim(), n: 30 })}`);
       const have = new Set(items.map((e) => e.id));
-      found.replaceChildren(...(r.items.length ? r.items.map((t) => h('button', { class: 'pillbtn', disabled: have.has(t.id) ? true : null, title: t.id, onclick: () => { items.push({ id: t.id, name: '', control: !!HA_ICONS[t.domain] && !['climate', 'media_player', 'person', 'device_tracker', 'weather', 'camera'].includes(t.domain), wall: false, alert: '' }); drawList(); find(); } },
+      found.replaceChildren(...(r.items.length ? r.items.map((t) => h('button', { class: 'pillbtn', disabled: have.has(t.id) ? true : null, title: t.id, onclick: () => { items.push({ id: t.id, name: '', control: !!HA_ICONS[t.domain] && !['climate', 'media_player', 'person', 'device_tracker', 'weather', 'camera'].includes(t.domain), wall: false, alert: '' }); persist(); find(); } },
         icon(haIcon(t), 's'), `${t.name}`, h('span', { class: 'muted small' }, ` ${t.text || t.state}`))) : [h('span', { class: 'muted small' }, 'Nothing found')]));
     } catch (e) { found.replaceChildren(h('span', { class: 'err' }, e.message)); }
   };
   q.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); find(); } };
   const builtin = h('input', { type: 'checkbox', checked: s.builtinAlerts, onchange: async (e) => { await save({ builtinAlerts: e.target.checked }); } });
   el.append(h('div', { class: 'box' }, h('h2', null, icon('home'), 'Home Assistant'),
-    h('p', { class: 'muted' }, 'The Home card, sensors on the wall display and your things in the search box come from Home Assistant. This server talks to it with one long-lived access token (in Home Assistant: your profile › Security › Long-lived access tokens); browsers never see the token, and the page switches only the entities you tick below.'),
+    h('p', { class: 'muted' }, 'For the Home card, the wall display and the search box. Make a token in Home Assistant under your profile › Security › Long-lived access tokens.'),
     h('div', { class: 'grid' }, fld('Address', url), fld('Access token', tok)),
     s.urlFromEnv || s.tokenFromEnv ? h('p', { class: 'muted small' }, `${[s.urlFromEnv ? 'HA_URL' : null, s.tokenFromEnv ? 'HA_TOKEN' : null].filter(Boolean).join(' and ')} in the environment set${s.urlFromEnv && s.tokenFromEnv ? '' : 's'} this.`) : null,
-    h('p', { class: 'multi' }, h('button', { class: 'pillbtn primary', onclick: async () => { if (await save(conn())) { tok.value = ''; tok.placeholder = '(kept)'; s.hasToken = true; test(); } } }, icon('check', 's'), 'Save'),
-      h('button', { class: 'pillbtn noic', onclick: test }, 'Test'),
+    h('p', { class: 'multi' }, h('button', { class: 'pillbtn noic', onclick: test }, 'Test'),
       s.hasToken && !s.tokenFromEnv ? h('button', { class: 'pillbtn noic', onclick: async () => { if (await confirmDialog('Remove the token', 'Remove the Home Assistant token? The Home card disappears from the page.', 'Remove', true)) { await save({ token: '' }); onRoute(); } } }, 'Remove the token') : null,
       result)),
   h('div', { class: 'box' }, h('h2', null, icon('tune'), 'On the page'),
-    h('p', { class: 'muted' }, 'The entities on the Home card, in this order. Control: a tap on the card (or in the search box) toggles it, for anyone signed in. Wall: on the wall display too. Alert when: its state that the page should point out, as Home Assistant writes it (on, open, unlocked, not_home…).'),
+    h('p', { class: 'muted' }, 'The Home card, in this order. Control: a tap switches it. Wall: on the wall display too. Alert when: the state to point out (on, open, unlocked…).'),
     list,
     h('div', { class: 'multi' }, q, h('button', { class: 'pillbtn noic', onclick: find }, 'Find')), found,
-    h('p', null, h('button', { class: 'pillbtn primary', onclick: persist }, icon('check', 's'), 'Save the list')),
-    h('label', { class: 'check' }, builtin, 'Point out a leak, smoke, gas or CO sensor that is on, a problem or safety sensor, and a battery at 15% or under, wherever it is in Home Assistant')));
+    h('label', { class: 'check' }, builtin, 'Also point out leak, smoke, gas and CO sensors, problems and batteries at 15% or under')));
 }
 
 async function setBookmarks(el) {
@@ -1544,6 +1543,7 @@ async function start() {
   if (!S.status.user) { showSignIn(); return; }
   S.user = S.status.user;
   try { S.settings = (await api('/api/auth/me')).settings || {}; } catch { S.settings = {}; }
+  if (S.settings.theme && S.settings.theme !== (localStorage.getItem('iosuite.theme') || 'system')) setTheme(S.settings.theme);
   drawUser();
   addEventListener('hashchange', onRoute);
   await onRoute();
