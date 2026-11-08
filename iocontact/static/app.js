@@ -246,8 +246,11 @@ function toggleSuite(btn) {
   suitePop.style.left = `${Math.round(Math.max(8, Math.min(r.left - 6, innerWidth - suitePop.offsetWidth - 8)))}px`;
   setTimeout(() => { document.addEventListener('click', suiteOutside, true); document.addEventListener('keydown', suiteKey); addEventListener('resize', closeSuite); }, 0);
 }
-function applyTheme() {
-  const t = localStorage.getItem('iocontacts.theme') || 'system';
+/** The theme: the account's (Settings › Display), remembered in this browser too so the sign-in page has it. */
+function applyTheme(choice) {
+  try { if (choice) localStorage.setItem('iocontacts.theme', choice); } catch { /* private mode */ }
+  let t = choice; try { t = t || localStorage.getItem('iocontacts.theme'); } catch { /* */ }
+  t = t || 'system';
   if (t === 'system') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t;
 }
 
@@ -514,7 +517,7 @@ async function showContact(id, pane) {
       e.currentTarget.disabled = true;
       try { const r = await api(`/api/contacts/${id}/lookup`, { method: 'POST' }); toast(r.added ? `${r.added} suggestion${r.added === 1 ? '' : 's'} found` : r.errors.length ? `Nothing new (${r.errors[0]})` : 'Nothing new found'); await refreshStatus(); onRoute(); } catch (err) { fail(err); }
     } }, icon('bulb', 's'), 'Look up'),
-    h('button', { class: 'pillbtn', title: 'Tell CardDAV apps that this card is you', onclick: async () => { await api('/api/auth/me', { method: 'PATCH', json: { meContactId: meCard ? null : c.id } }); S.user = (await api('/api/auth/me')).user; toast(meCard ? 'Not you any more' : 'This is now your own card'); onRoute(); } },
+    h('button', { class: 'pillbtn', title: 'Tell CardDAV apps that this card is you', onclick: async () => { await api('/api/me-contact', { method: 'PUT', json: { contactId: meCard ? null : c.id } }); S.user = (await api('/api/auth/me')).user; toast(meCard ? 'Not you any more' : 'This is now your own card'); onRoute(); } },
       icon('person', 's'), meCard ? 'This is me ✓' : 'This is me'),
     canEdit ? h('button', { class: 'pillbtn danger', onclick: async () => {
       if (!await confirmDialog('Delete contact', `Delete ${c.fn}? Apps synced over CardDAV will delete it too.`, 'Delete', true)) return;
@@ -1192,16 +1195,6 @@ async function showCleanup(page, r) {
   await (views[r.tab] || maintDups)(body);
 }
 
-/** Settings › Storage and backups (admins): what is kept where, and how to back it up. */
-async function setStorage(el) {
-  const n = S.books.reduce((t, b) => t + (b.count || 0), 0);
-  el.append(h('div', { class: 'box' }, h('h2', null, icon('server'), 'Database'),
-    kv('Address books', h('span', null, `${S.books.length}${n ? `, ${n} contacts` : ''}`)),
-    h('p', { class: 'muted small' }, 'Contacts and the merge history are in the MariaDB database (Settings › Server shows which): back it up with mysqldump (or the container’s backup) and nothing else is needed. The Shared ioSuite database (accounts, sessions) is backed up with the suite.')),
-  h('div', { class: 'box' }, h('h2', null, icon('download'), 'Export'),
-    h('p', null, 'Every address book can be downloaded as vCard or CSV and imported again later: ', h('a', { class: 'lnk', href: '#/import' }, 'Import and export'), '.')));
-}
-
 async function maintDups(el) {
   const r = await api('/api/duplicates');
   el.replaceChildren(h('p', { class: 'muted' }, 'Contacts that are probably the same person: the same email or phone, the same or a similar name, a nickname (Bob for Robert), the same birthday or company. Other birthdays, genders or a Sr./Jr. count against. The first name has to fit: people who only share a last name, an address, a home phone or a family email are never offered. Merging keeps everything (you choose where they disagree) and can be undone.'));
@@ -1419,113 +1412,86 @@ async function showIopix(page) {
 // ------------------------------------------------------------------ settings
 async function showSettings(page, r) {
   const tabs = [['account', 'Account'], ['display', 'Display'], ['devices', 'Apps and devices'], ['books', 'Address books'],
-    ...(S.user.role === 'admin' ? [['storage', 'Storage and backups'], ['server', 'Server']] : []),
+    ...(S.user.role === 'admin' ? [['server', 'Server']] : []),
     ...(S.user.suiteAdmin ? [['security', SUITE_TABS.security], ['global', SUITE_TABS.global]] : [])];
   page.append(h('div', { class: 'pagehead' }, h('h1', null, 'Settings')),
     h('div', { class: 'tabs' }, tabs.map(([k, l]) => h('button', { class: r.tab === k ? 'on' : '', onclick: () => { location.hash = `#/settings/${k}`; } }, l))));
   const body = h('div'); page.append(body);
-  await ({ account: setAccount, display: setDisplay, devices: setDevices, books: setBooks, storage: setStorage, server: setServer,
+  await ({ account: setAccount, display: setDisplay, devices: setDevices, books: setBooks, server: setServer,
     security: setSuite, global: setSuite }[r.tab] || setAccount)(body, r);
 }
 const fld = (l, e) => h('label', { class: 'field' }, h('span', null, l), e);
 const kv = (k, v) => h('div', { class: 'kv' }, h('div', { class: 'k' }, k), h('div', { class: 'v', style: { flex: 1 } }, typeof v === 'string' ? copyRow(v) : v));
 
+const accountUi = () => import(new URL('api/auth/ui.js', document.baseURI).href);
+/** Settings › Account: display name, email and password, iosuite-shared's panel (the same in every io app). */
 async function setAccount(el) {
-  const u = S.user;
-  const dn = h('input', { class: 't', value: u.displayName || '' }), em = h('input', { class: 't', type: 'email', value: u.email || '' });
-  const old = h('input', { class: 't', type: 'password', autocomplete: 'current-password' }), nw = h('input', { class: 't', type: 'password', autocomplete: 'new-password' });
-  const fld = (l, e) => h('label', { class: 'field' }, h('span', null, l), e);
-  el.append(h('div', { class: 'box' }, h('h2', null, icon('person'), 'You'), h('div', { class: 'grid' }, fld('Display name', dn), fld('Email (for sign-in at a proxy)', em)),
-    h('p', null, h('button', { class: 'pillbtn primary', onclick: async () => { try { S.user = (await api('/api/auth/me', { method: 'PATCH', json: { displayName: dn.value, email: em.value } })).user; drawUser(); toast('Saved'); } catch (e) { fail(e); } } }, icon('check', 's'), 'Save'))),
-  h('div', { class: 'box' }, h('h2', null, icon('key'), 'Password'), h('div', { class: 'grid' }, !u.passwordless ? fld('Current password', old) : null, fld('New password (8 or more)', nw)),
-    h('p', null, h('button', { class: 'pillbtn', onclick: async () => { try { await api('/api/auth/password', { method: 'POST', json: { current: old.value, password: nw.value } }); old.value = nw.value = ''; toast('Password changed'); } catch (e) { fail(e); } } }, 'Change password'))));
+  const ui = await accountUi();
+  await ui.mountAccount(el, { toast, onSaved: (u) => { Object.assign(S.user, u); drawUser(); } });
 }
 
+/** Settings › Display: the theme, saved with the account. The sort order and the fields shown are at the top of the list. */
 async function setDisplay(el) {
-  const theme = localStorage.getItem('iocontacts.theme') || 'system';
-  const th = h('select', { class: 't' }, [['system', 'Same as the device'], ['light', 'Light'], ['dark', 'Dark']].map(([v, l]) => h('option', { value: v, selected: v === theme ? true : null }, l)));
-  th.onchange = () => { localStorage.setItem('iocontacts.theme', th.value); applyTheme(); toast(`Appearance: ${th.value}`); };
-  el.append(h('div', { class: 'box' }, h('h2', null, icon('theme'), 'Appearance'), h('div', { class: 'grid' }, fld('Light or dark', th)),
-    h('p', { class: 'muted small' }, 'Kept in this browser. The sort order and the fields shown are set at the top of the contact list.')));
+  const ui = await accountUi();
+  el.append(ui.box('theme', 'Appearance', ui.themeRow((S.settings && S.settings.theme) || localStorage.getItem('iocontacts.theme') || 'system', (t) => { S.settings = { ...S.settings, theme: t }; applyTheme(t); })));
 }
 
+/** Settings › Apps and devices: the account's app passwords (iosuite-shared's list) and how to connect each kind of app. */
 async function setDevices(el) {
   const info = await api('/api/connect');
-  const pw = await api('/api/auth/app-passwords');
-  const label = h('input', { class: 't', placeholder: 'e.g. Alex’s iPhone', style: 'max-width:280px' });
-  const shown = h('div');
-  const limit = h('input', { type: 'checkbox', checked: true });
+  const ui = await accountUi();
+  const pw = h('div');
+  const syncOnly = 'Contacts apps only (CardDAV, LDAP)';
   const isApple = /iPhone|iPad|Macintosh/.test(navigator.userAgent);
-  const plabel = h('input', { class: 't', name: 'label', value: /iPad/.test(navigator.userAgent) ? 'iPad' : /iPhone/.test(navigator.userAgent) ? 'iPhone' : 'iPhone', style: 'max-width:200px' });
+  const plabel = h('input', { class: 't', name: 'label', value: /iPad/.test(navigator.userAgent) ? 'iPad' : /Macintosh/.test(navigator.userAgent) ? 'Mac' : 'iPhone', style: 'max-width:200px' });
+  const how = (summary, ...kids) => h('details', null, h('summary', { class: 'lnk' }, summary), ...kids);
   el.append(...[
-    h('div', { class: 'box' }, h('h2', null, icon('devices'), 'iPhone, iPad and Mac: set up in one step'),
-      h('p', null, 'Download a configuration profile that adds your contacts (CardDAV) and, if you like, the family birthday calendar. ',
-        isApple ? 'Tap Download here in Safari, then open Settings › Profile Downloaded › Install.' : 'Open this page on the iPhone or iPad in Safari and tap Download, then Settings › Profile Downloaded › Install. On a Mac, open the file, then System Settings › Privacy & Security › Profiles.'),
-      h('form', { method: 'POST', action: '/api/apple-profile', class: 'pform', onsubmit: () => { setTimeout(async () => drawPw((await api('/api/auth/app-passwords')).items), 1500); } },
-        h('label', { class: 'field' }, h('span', null, 'Device name'), plabel),
-        h('label', { class: 'field' }, h('span', null, 'Password'), h('select', { class: 't', name: 'password' },
-          h('option', { value: 'new' }, 'Include a new app password for this device'), h('option', { value: 'ask' }, 'Leave it out (the device asks while installing)'))),
-        h('label', { class: 'field' }, h('span', null, 'Birthday calendar'), h('select', { class: 't', name: 'calendar' },
-          h('option', { value: 'family' }, 'Family birthdays'), h('option', { value: 'all' }, 'Birthdays from all my books'), h('option', { value: 'none' }, 'No calendar'))),
-        info.ldap.enabled ? h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'ldap', value: 'true' }), ' Also the LDAP directory (for Mail on a Mac; plain LDAP, home network only)') : null,
+    S.user.passwordless ? null : h('div', { class: 'box' }, h('h2', null, icon('devices'), 'iPhone, iPad and Mac'),
+      h('p', null, 'A profile that adds your contacts and, if you like, a birthday calendar in one step.'),
+      h('form', { method: 'POST', action: '/api/apple-profile', class: 'pform', onsubmit: () => { setTimeout(() => ui.mountAppPasswords(pw, { toast, syncOnly }), 1500); } },
+        fld('Device name', plabel),
+        fld('Password', h('select', { class: 't', name: 'password' }, h('option', { value: 'new' }, 'Include a new app password'), h('option', { value: 'ask' }, 'Ask on the device'))),
+        fld('Birthday calendar', h('select', { class: 't', name: 'calendar' }, h('option', { value: 'family' }, 'Family birthdays'), h('option', { value: 'all' }, 'Birthdays from all my books'), h('option', { value: 'none' }, 'No calendar'))),
+        info.ldap.enabled ? h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'ldap', value: 'true' }), ' Also the LDAP directory (Mail on a Mac)') : null,
         h('p', null, h('button', { class: 'pillbtn primary', type: 'submit' }, icon('download', 's'), 'Download the profile'))),
-      h('p', { class: 'muted small' }, 'The profile holds an app password that works for contacts apps only (CardDAV and LDAP), not for signing in here, the API or MCP. Install it and delete the file, and revoke that password below if the device is lost. The profile is not signed, so iOS shows it as “Not Verified”; that is expected.')),
-    h('div', { class: 'box' }, h('h2', null, icon('key'), 'App passwords'),
-      h('p', { class: 'muted' }, 'Give every app or device its own password instead of yours; you can revoke one without touching the others. Use your user name with it.'),
-      h('div', { class: 'multi' }, label, h('button', { class: 'pillbtn primary', onclick: async () => {
-        const r = await api('/api/auth/app-passwords', { method: 'POST', json: { label: label.value || 'Device', scope: limit.checked ? 'dav' : '' } });
-        shown.replaceChildren(h('p', null, h('b', null, 'Copy it now: '), 'it is shown only once.'), copyRow(r.password));
-        label.value = ''; const list = await api('/api/auth/app-passwords'); drawPw(list.items);
-      } }, icon('add', 's'), 'New app password')),
-      h('label', { class: 'check' }, limit, ' Contacts apps only (CardDAV and LDAP). Untick for the REST API or an AI assistant (MCP).'),
-      shown, h('div', { id: 'pwlist' })),
+      how('How to install', h('p', { class: 'muted small' }, isApple ? 'Open the download, then Settings › Profile Downloaded › Install.' : 'Download it in Safari on the iPhone or iPad, then Settings › Profile Downloaded › Install. On a Mac: open the file, then System Settings › Privacy & Security › Profiles.',
+        ' iOS shows the profile as “Not Verified”: that is expected. Revoke its app password below if the device is lost.'))),
+    pw,
     h('div', { class: 'box' }, h('h2', null, icon('book'), 'Contacts apps (CardDAV)'),
-      h('p', null, 'Apple Contacts (Mac, iPhone, iPad: Settings › Contacts › Accounts › Add Account › Other › Add CardDAV Account), DAVx⁵ on Android, Thunderbird, Evolution, GNOME Contacts, KDE: give the server, your user name and an app password.'),
-      h('div', { class: 'kv' }, h('div', { class: 'k' }, 'Server'), h('div', { class: 'v', style: { flex: 1 } }, copyRow(info.server))),
-      h('div', { class: 'kv' }, h('div', { class: 'k' }, 'User name'), h('div', { class: 'v', style: { flex: 1 } }, copyRow(info.user))),
-      h('div', { class: 'kv' }, h('div', { class: 'k' }, 'CardDAV address'), h('div', { class: 'v', style: { flex: 1 } }, copyRow(info.carddav))),
-      h('details', null, h('summary', { class: 'lnk' }, 'Address of each address book (for apps that want one)'), info.books.map((b) => h('div', { class: 'kv' }, h('div', { class: 'k' }, b.name), h('div', { class: 'v', style: { flex: 1 } }, copyRow(b.url)))))),
+      h('p', null, 'Two-way sync with your user name and an app password.'),
+      kv('Server', info.server), kv('User name', info.user), kv('CardDAV address', info.carddav),
+      how('Address of each address book', info.books.map((b) => kv(b.name, b.url))),
+      how('How to connect', h('p', { class: 'muted small' }, 'Apple Contacts: Settings › Contacts › Accounts › Add Account › Other › Add CardDAV Account. Android: DAVx⁵. Also Thunderbird, Evolution, GNOME, KDE.'))),
     h('div', { class: 'box' }, h('h2', null, icon('event'), 'Family birthday calendar'),
-      h('p', null, 'Subscribe to birthdays and anniversaries in Apple Calendar (File › New Calendar Subscription), Google Calendar (Other calendars › From URL), Outlook (Add calendar › Subscribe from web) or Thunderbird (New Calendar › On the Network). The link is private to you: anyone who has it can read the dates.'),
-      h('div', { class: 'kv' }, h('div', { class: 'k' }, 'Family'), h('div', { class: 'v', style: { flex: 1 } }, copyRow(info.calendar.family))),
-      h('div', { class: 'kv' }, h('div', { class: 'k' }, 'All my books'), h('div', { class: 'v', style: { flex: 1 } }, copyRow(info.calendar.all))),
+      h('p', null, 'A calendar subscription with birthdays and anniversaries. Anyone with the link can read the dates.'),
+      kv('Family', info.calendar.family), kv('All my books', info.calendar.all),
       h('p', null, h('a', { class: 'pillbtn', href: info.calendar.webcalFamily }, icon('event', 's'), 'Open in my calendar app'), ' ',
         h('button', { class: 'pillbtn noic', onclick: async () => { if (await confirmDialog('New calendar link', 'The old link stops working; subscribed calendars need the new one.', 'Make a new link')) { await api('/api/calendar/reset', { method: 'POST' }); onRoute(); } } }, 'New link'))),
     info.ldap.enabled ? h('div', { class: 'box' }, h('h2', null, icon('mail'), 'Mail apps (LDAP directory)'),
-      h('p', null, 'Outlook (Account settings › Address books › LDAP), Thunderbird (Address Book › New › LDAP Directory), Apple Mail/Contacts (Settings › Accounts › LDAP) and many desk phones and printers can look addresses up here. Read-only.'),
-      h('div', { class: 'kv' }, h('div', { class: 'k' }, 'Host'), h('div', { class: 'v', style: { flex: 1 } }, copyRow(info.ldap.host))),
-      h('div', { class: 'kv' }, h('div', { class: 'k' }, 'Port'), h('div', { class: 'v', style: { flex: 1 } }, copyRow(String(info.ldap.port)))),
-      h('div', { class: 'kv' }, h('div', { class: 'k' }, 'Base DN'), h('div', { class: 'v', style: { flex: 1 } }, copyRow(info.ldap.base))),
-      h('div', { class: 'kv' }, h('div', { class: 'k' }, 'Bind DN'), h('div', { class: 'v', style: { flex: 1 } }, copyRow(info.ldap.bindDn))),
-      h('p', { class: 'muted small' }, 'Sign in with an app password. The directory speaks plain LDAP: keep it on your own network, or put a TLS proxy in front for ldaps://.')) : null,
+      h('p', null, 'Read-only address lookup for mail apps, desk phones and printers. Sign in with an app password; plain LDAP, so keep it on your own network.'),
+      kv('Host', info.ldap.host), kv('Port', String(info.ldap.port)), kv('Base DN', info.ldap.base), kv('Bind DN', info.ldap.bindDn)) : null,
     S.status.mcp ? h('div', { class: 'box' }, h('h2', null, icon('ai'), 'AI assistants (MCP)'),
-      h('p', null, 'Claude and other assistants that speak the Model Context Protocol can search, read and update the contacts you can see, as you. Give the assistant its own app password (above, without “Contacts apps only”), sent as a Bearer token.'),
-      h('div', { class: 'kv' }, h('div', { class: 'k' }, 'MCP address'), h('div', { class: 'v', style: { flex: 1 } }, copyRow(`${info.server}/mcp`))),
-      h('p', { class: 'muted small' }, 'Claude Code:'),
-      copyRow(`claude mcp add --transport http iocontacts ${info.server}/mcp --header "Authorization: Bearer APP-PASSWORD"`),
-      h('p', { class: 'muted small' }, 'Apps configured with JSON (Claude Desktop through mcp-remote, Cursor, VS Code…):'),
-      copyRow(JSON.stringify({ mcpServers: { iocontacts: { command: 'npx', args: ['-y', 'mcp-remote', `${info.server}/mcp`, '--header', 'Authorization: Bearer APP-PASSWORD'] } } })))
-      : (S.user.role === 'admin' ? h('div', { class: 'box' }, h('h2', null, icon('ai'), 'AI assistants (MCP)'), h('p', { class: 'muted' }, 'The MCP server is off. Turn it on in ', h('a', { class: 'lnk', href: '#/settings/server' }, 'Settings › Server'), ' to let Claude and other assistants work with the contacts.')) : null),
+      h('p', null, 'Give the assistant its own app password (not “Contacts apps only”), sent as a Bearer token.'),
+      kv('MCP address', `${info.server}/mcp`),
+      how('Setup for Claude Code and JSON-configured apps',
+        copyRow(`claude mcp add --transport http iocontacts ${info.server}/mcp --header "Authorization: Bearer APP-PASSWORD"`),
+        copyRow(JSON.stringify({ mcpServers: { iocontacts: { command: 'npx', args: ['-y', 'mcp-remote', `${info.server}/mcp`, '--header', 'Authorization: Bearer APP-PASSWORD'] } } }))))
+      : (S.user.role === 'admin' ? h('div', { class: 'box' }, h('h2', null, icon('ai'), 'AI assistants (MCP)'), h('p', { class: 'muted' }, 'Off. Turn it on in ', h('a', { class: 'lnk', href: '#/settings/server' }, 'Settings › Server'), '.')) : null),
     h('div', { class: 'box' }, h('h2', null, icon('link'), 'Other apps (REST API)'),
-      h('p', null, 'JSON, vCard or jCard over HTTPS, with your user name and an app password made without “Contacts apps only” (HTTP Basic), or that password as a Bearer token. ', h('a', { class: 'lnk', href: '/api/docs', target: '_blank' }, 'API documentation')),
+      h('p', null, 'JSON, vCard or jCard with your user name and an app password. ', h('a', { class: 'lnk', href: '/api/docs', target: '_blank' }, 'API documentation')),
       copyRow(`curl -u ${info.user}:APP-PASSWORD -H 'Accept: application/vcard+json' ${info.server}/api/contacts?q=smith`))].filter(Boolean));
-  const drawPw = (items) => {
-    const box = el.querySelector('#pwlist');
-    box.replaceChildren(items.length ? h('table', { class: 't' }, h('tr', null, h('th', null, 'Name'), h('th', null, 'Works for'), h('th', null, 'Made'), h('th', null, 'Last used'), h('th')),
-      items.map((p) => h('tr', null, h('td', null, p.label), h('td', null, p.scope === 'dav' ? 'Contacts apps (CardDAV, LDAP)' : 'Everything'), h('td', null, new Date(p.created * 1000).toLocaleDateString()), h('td', null, p.lastUsed ? new Date(p.lastUsed * 1000).toLocaleString() : 'never'),
-        h('td', null, h('button', { class: 'pillbtn noic danger', onclick: async () => { await api(`/api/auth/app-passwords/${p.id}`, { method: 'DELETE' }); drawPw((await api('/api/auth/app-passwords')).items); } }, 'Revoke'))))) : h('p', { class: 'muted' }, 'No app passwords yet.'));
-  };
-  drawPw(pw.items);
+  await ui.mountAppPasswords(pw, { toast, syncOnly });
 }
 
 async function setBooks(el) {
   el.append(h('p', null, h('button', { class: 'pillbtn primary', onclick: newBook }, icon('add', 's'), 'New address book')),
     h('table', { class: 't' }, h('tr', null, h('th', null, 'Name'), h('th', null, 'Who sees it'), h('th', null, 'Contacts'), h('th', null, 'Colour'), h('th')),
       S.books.map((b) => {
-        const name = h('input', { class: 't', value: b.name, disabled: !b.writable });
-        const col = h('input', { type: 'color', value: b.color || (b.shared ? '#8e44d6' : '#0b8a9e'), disabled: !b.writable });
+        const save = async (body) => { try { await api(`/api/books/${b.id}`, { method: 'PATCH', json: body }); await loadMeta(); toast('Saved'); } catch (e) { fail(e); } };
+        const name = h('input', { class: 't', value: b.name, disabled: !b.writable, onchange: (e) => save({ name: e.target.value }) });
+        const col = h('input', { type: 'color', value: b.color || (b.shared ? '#8e44d6' : '#0b8a9e'), disabled: !b.writable, onchange: (e) => save({ color: e.target.value }) });
         return h('tr', null, h('td', null, name), h('td', null, b.shared ? 'Everyone' : 'Only you'), h('td', null, b.count), h('td', null, col),
-          h('td', { style: { whiteSpace: 'nowrap' } }, b.writable ? h('button', { class: 'pillbtn noic', onclick: async () => { await api(`/api/books/${b.id}`, { method: 'PATCH', json: { name: name.value, color: col.value } }); await loadMeta(); toast('Saved'); } }, 'Save') : null, ' ',
+          h('td', { style: { whiteSpace: 'nowrap' } },
             b.writable && (!b.shared || S.user.role === 'admin') ? h('button', { class: 'pillbtn noic danger', onclick: async () => {
               if (!await confirmDialog('Delete address book', `Delete ${b.name} and its ${b.count} contacts?`, 'Delete', true)) return;
               try { await api(`/api/books/${b.id}`, { method: 'DELETE' }); await loadMeta(); onRoute(); } catch (e) { fail(e); }
@@ -1616,6 +1582,8 @@ async function start() {
   S.status = await api('/api/status');
   if (!S.status.user) { showSignIn(); return; }
   S.user = S.status.user;
+  try { S.settings = (await api('/api/auth/me')).settings || {}; } catch { S.settings = {}; }
+  if (S.settings.theme) applyTheme(S.settings.theme);
   drawUser();
   await loadMeta();
   $('#newbtn').onclick = () => { location.hash = '#/new'; };
