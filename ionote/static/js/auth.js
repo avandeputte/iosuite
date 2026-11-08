@@ -1,6 +1,6 @@
 /** Signing in: the account picker (one click for an account without a password), the password dialog, the first
  *  admin, the account menu. The same flow as iopix. */
-import { $, h, api, state, dialog, toast, fail, initials, icon, menu } from './core.js';
+import { $, h, api, state, dialog, fail, initials, icon, menu } from './core.js';
 
 export async function loadMe() {
   state.me = await api('/api/auth/me');
@@ -55,7 +55,7 @@ async function firstAdmin() {
   const name = h('input.einput', { type: 'text', placeholder: 'Admin user name', autocomplete: 'username' });
   const pw = h('input.einput', { type: 'password', placeholder: 'Password (8 characters or more)', autocomplete: 'new-password' });
   const msg = h('p.err.small');
-  return dialog('Create the admin account', h('div', h('p.muted', 'Right now ioNotes is open to anyone who can reach it. Once an admin exists, every account has notes of its own, visible to nobody else; the notes made so far become the admin\'s.'), h('div.signin-form', name, pw), msg), [
+  return dialog('Create the admin account', h('div', h('p.muted', 'Right now ioNotes is open to anyone who can reach it. Once an admin exists, every account has notes of its own, visible to nobody else; notes made so far stay with the open install, so export them first (Import and export) and import them once signed in.'), h('div.signin-form', name, pw), msg), [
     { label: 'Cancel', value: null },
     { label: 'Create', primary: true, action: async () => { try { await api('/api/auth/setup', { method: 'POST', body: { name: name.value, password: pw.value } }); location.reload(); } catch (e) { msg.textContent = e.message; return false; } } },
   ]);
@@ -69,40 +69,8 @@ async function signOut() {
   location.reload();
 }
 
-/** The account panel, as iopix's: who you are and what your role allows, how this browser is signed in, a new
- *  password, and Sign out / Done. */
-function accountDialog() {
-  const me = state.me, u = me.user;
-  const cur = h('input.einput', { type: 'password', placeholder: 'Current password', autocomplete: 'current-password' });
-  const pw = h('input.einput', { type: 'password', placeholder: 'New password (8 characters or more)', autocomplete: 'new-password' });
-  const by = me.signedInBy;
-  const how = h('p.muted.small', h('b', 'Signed in: '), by === 'cloudflare' ? (me.throughCloudflare ? 'through Cloudflare Access, from outside your network.' : 'through Cloudflare Access; this browser stays signed in on your home network too.')
-    : by === 'proxy' ? 'at the sign-in page of your proxy; sign out there.' : by === 'oneclick' || u.passwordless ? 'here, with one click (no password).' : 'here, with a password.');
-  const role = u.role === 'admin' || u.role === 'suiteAdmin' ? 'You can change your notes, the settings and the accounts.' : u.role === 'editor' ? 'You can read and change your notes.' : 'You can read and search your notes.';
-  const viaProxy = by === 'proxy' || me.viaProxy;
-  const change = h('button.pillbtn', { type: 'button', onclick: async () => {
-    try { await api('/api/auth/password', { method: 'POST', body: { current: cur.value, password: pw.value } }); toast('Password changed; your other sessions are signed out'); cur.value = pw.value = ''; } catch (e) { fail(e); }
-  } }, 'Change password');
-  const buttons = [];
-  if (by !== 'proxy') {
-    buttons.push({ label: by === 'cloudflare' && me.throughCloudflare ? 'Sign out (of Cloudflare too)' : 'Sign out', action: signOut });
-  }
-  buttons.push({ label: 'Done', primary: true });
-  return dialog(`${u.name} · ${u.role}`, h('div.acct', h('p.muted', role), how,
-    viaProxy || u.passwordless ? null : [h('h4', 'Change password'), h('div.signin-form', cur, pw), h('div.row', change)]), buttons);
-}
-
-function cycleTheme() {
-  let cur = 'light'; try { cur = localStorage.getItem('ionotes.theme') || 'light'; } catch (e) {}
-  const next = { light: 'dark', dark: 'system', system: 'light' }[cur] || 'light';
-  try { localStorage.setItem('ionotes.theme', next); } catch (e) {}
-  if (next === 'system') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = next;
-  if (state.me.user) api('/api/auth/settings', { method: 'POST', body: { theme: next } }).catch(() => {});
-  toast(`Appearance: ${next}`);
-}
-
 /** The top right, as in every ioThing app: the account's initial in a small amber circle, which opens the avatar menu
- *  (the account panel, appearance, Settings, sign out); signed out, a person icon that signs in (or creates
+ *  (Settings, sign out); signed out, a person icon that signs in (or creates
  *  the admin account). */
 export function renderUserMenu() {
   const el = $('#usermenu');
@@ -112,11 +80,8 @@ export function renderUserMenu() {
     el.append(h('button.iconbtn.tool', { title: me.usersExist ? 'Sign in' : 'Create the admin account', 'aria-label': 'Sign in', onclick: () => signIn() }, icon('person')));
     return;
   }
-  let theme = 'light'; try { theme = localStorage.getItem('ionotes.theme') || 'light'; } catch (e) {}
   const btn = h('button.iconbtn.tool', { title: `${me.user.name} (${me.user.role})`, 'aria-label': 'Account', onclick: () => menu(btn, [
     { head: `${me.user.name} · ${me.user.role}` },
-    { label: 'Account', icon: 'person', action: accountDialog },
-    { label: `Appearance: ${theme}`, icon: 'palette', action: cycleTheme },
     { label: 'Settings', icon: 'gear', action: () => { location.hash = '#/settings'; } },
     '-',
     me.signedInBy === 'proxy' ? null : { label: me.signedInBy === 'cloudflare' && me.throughCloudflare ? 'Sign out (of Cloudflare too)' : 'Sign out', action: signOut },

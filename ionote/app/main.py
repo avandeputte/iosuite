@@ -127,8 +127,7 @@ def _server_info() -> dict:
     about = [["Database", where], ["Shared ioSuite database", f"{sd['user']}@{sd['host']}:{sd['port']}/{sd['database']}"],
              ["Pictures", f"{im['images']}, {im['bytes'] / 1048576:.1f} MB"]]
     return {"about": about, "mcpEnabled": mcp_enabled(), "mcpLocked": config.MCP_FORCED,
-            "mcpAbout": "The address /mcp that lets an assistant such as Claude search and read notes and look at their pictures and, as an "
-                        "editor, create, edit, file, tag and delete them; admins also get diagnostics and the updater."}
+            "mcpAbout": "Lets an AI assistant search, read and write your notes, as you."}
 
 
 def _server_apply(body: dict) -> None:

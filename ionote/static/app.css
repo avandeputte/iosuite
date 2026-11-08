@@ -199,11 +199,10 @@ details.ocr pre { white-space: pre-wrap; word-break: break-word; font: inherit; 
 .chip { padding: 6px 12px; border-radius: var(--r-pill); border: 1px solid var(--line); color: var(--hue, var(--fg)); font-size: var(--fs-m); }
 .chip.on { background: color-mix(in srgb, var(--hue, var(--accent)) var(--mix), transparent); color: var(--hue, var(--accent)); font-weight: 600; }
 .pagein h1 .muted { font-size: var(--fs-m); font-weight: 400; margin-left: 2px; }
-.sec { margin: 0 0 8px; }
-.sec h2 { display: flex; align-items: center; gap: 12px; font-size: var(--fs-xl); font-weight: 600; margin: 34px 0 6px; padding-bottom: 8px;
-  border-bottom: 2px solid color-mix(in srgb, var(--brand) 30%, transparent); }
-.sec h2::before { content: ""; width: 5px; height: 20px; border-radius: var(--r-xs); flex: none; margin-right: -2px; background: var(--brand); }
-.stabs + .sec h2, .stabs + p + .sec h2 { margin-top: 18px; }
+/* a box, as the Settings boxes of every io app draw one (iosuite-shared's .sv-box) */
+.sec { border: 1px solid var(--line); border-radius: 16px; padding: 16px 20px; margin: 0 0 16px; }
+.ptitle + .sec { margin-top: 16px; }
+.sec h2 { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 600; margin: 0 0 6px; }
 .sec .intro { margin: 8px 0 10px; color: var(--fg2); max-width: 900px; }
 .sec > p { color: var(--fg2); margin: 8px 0; }
 .srow, .row { display: flex; gap: 16px; align-items: center; justify-content: space-between; padding: 12px 0; margin: 0; border-top: 1px solid var(--line); flex-wrap: wrap; }

@@ -97,7 +97,8 @@ export function renderNav() {
   out.push(h('div.navgap'), sec('Manage'),
     navItem('Trash', 'trash', m.trash || null, on('trash'), to({ v: 'trash' }), 'var(--c-gray)', '.bar'),
     canWrite() ? navItem('Change log', 'history', null, page === 'changes', '#/changes', 'var(--c-indigo)') : null,
-    h('button.navmore' + (['settings', 'changes'].includes(page) || (notes && ['folder', 'tag', 'nofolder'].includes(view.v)) ? '.on' : ''), { type: 'button', title: 'More', onclick: moreSheet }, icon('more'), h('span.nl', 'More')),
+    navItem('Import and export', 'download', null, page === 'import', '#/import', 'var(--c-green)'),
+    h('button.navmore' + (['settings', 'changes', 'import'].includes(page) || (notes && ['folder', 'tag', 'nofolder'].includes(view.v)) ? '.on' : ''), { type: 'button', title: 'More', onclick: moreSheet }, icon('more'), h('span.nl', 'More')),
     h('div.navfoot',
       navItem('Settings', 'gear', null, page === 'settings', '#/settings', null, '.foot'),
       h('div#status', { role: 'status', 'aria-live': 'polite' }, statusText)));
@@ -120,6 +121,7 @@ function moreSheet() {
   const grid = [
     tile(to({ v: 'nofolder' }), 'No folder', 'folderOff', 'var(--c-gray)', view.v === 'nofolder'),
     canWrite() ? tile('#/changes', 'Change log', 'history', 'var(--c-indigo)', page === 'changes') : null,
+    tile('#/import', 'Import and export', 'download', 'var(--c-green)', page === 'import'),
     tile('#/settings', 'Settings', 'gear', 'var(--c-gray)', page === 'settings'),
   ].filter(Boolean);
   const content = h('div',
