@@ -705,19 +705,6 @@ def calendar_feed(token: str, which: str, request: Request):
 
 # ------------------------------------------------------------------ ioPix
 
-@router.get("/api/iopix/settings", dependencies=[access.admin])
-def iopix_settings(request: Request):
-    """Whether ioPix is part of the suite: it is found and signed in to by itself (app/iopix.py)."""
-    auth.current_user(request)
-    return iopix.public_settings()
-
-
-@router.post("/api/iopix/test", dependencies=[access.admin])
-async def iopix_test(request: Request):
-    auth.current_user(request)
-    return await run_in_threadpool(iopix.test)
-
-
 @router.get("/api/iopix/people", dependencies=[access.signed_in])
 async def iopix_people(request: Request, q: str = "", refresh: bool = False):
     u = auth.current_user(request)
