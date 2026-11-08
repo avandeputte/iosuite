@@ -155,26 +155,6 @@ def _check_match(request: Request, r: dict) -> None:
         raise HTTPException(412, "The event was changed meanwhile (If-Match does not match its ETag); load it again")
 
 
-# ------------------------------------------------------------------ the account
-
-@router.patch("/api/auth/me", dependencies=[access.signed_in])
-async def patch_me(request: Request):
-    """Your display name and email (sign-in at a proxy matches the email)."""
-    u = request.state.user
-    b = await request.json()
-    f = {}
-    if "displayName" in b:
-        f["display_name"] = (b["displayName"] or "").strip() or None
-    if "email" in b:
-        f["email"] = (b["email"] or "").strip() or None
-    try:
-        nu = await run_in_threadpool(lambda: users.update(u["id"], **f))
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-    users.forget_cached_auth()
-    return {"user": users.public(nu)}
-
-
 # ------------------------------------------------------------------ calendars
 
 @router.get("/api/calendars", dependencies=[access.signed_in])

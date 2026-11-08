@@ -297,8 +297,11 @@ function toggleSuite(btn) {
   suitePop.style.left = `${Math.round(Math.max(8, Math.min(r.left - 6, innerWidth - suitePop.offsetWidth - 8)))}px`;
   setTimeout(() => { document.addEventListener('click', suiteOutside, true); document.addEventListener('keydown', suiteKey); addEventListener('resize', closeSuite); }, 0);
 }
-function applyTheme() {
-  const t = localStorage.getItem('iocalendar.theme') || 'system';
+/** The theme: the account's (Settings › Display), remembered in this browser too so the sign-in page has it. */
+function applyTheme(choice) {
+  try { if (choice) localStorage.setItem('iocalendar.theme', choice); } catch { /* private mode */ }
+  let t = choice; try { t = t || localStorage.getItem('iocalendar.theme'); } catch { /* */ }
+  t = t || 'system';
   if (t === 'system') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t;
 }
 
@@ -402,12 +405,13 @@ function moreSheet() {
 }
 
 const SWATCHES = ['#8e44d6', '#0b8a9e', '#1a73e8', '#e0426a', '#1e8e3e', '#e8710a', '#4b53c7', '#e8a100', '#5f6b7a', '#b5452f'];
-function colorPicker(value) {
+function colorPicker(value, onPick) {
   let cur = value || SWATCHES[0];
   const own = h('input', { type: 'color', value: cur, title: 'Another colour' });
   const row = h('div', { class: 'colors' });
-  const draw = () => row.replaceChildren(...SWATCHES.map((c) => h('button', { type: 'button', class: c === cur ? 'on' : '', style: { '--c': c }, title: c, onclick: () => { cur = c; own.value = c; draw(); } })), own);
+  const draw = () => row.replaceChildren(...SWATCHES.map((c) => h('button', { type: 'button', class: c === cur ? 'on' : '', style: { '--c': c }, title: c, onclick: () => { cur = c; own.value = c; draw(); if (onPick) onPick(c); } })), own);
   own.oninput = () => { cur = own.value; draw(); };
+  own.onchange = () => { if (onPick) onPick(cur); };
   draw();
   row.get = () => cur;
   return row;
@@ -1116,87 +1120,68 @@ async function showSettings(page, r) {
 const fld = (l, e) => h('label', { class: 'field' }, h('span', null, l), e);
 const kv = (k, v) => h('div', { class: 'kv' }, h('div', { class: 'k' }, k), h('div', { class: 'v', style: { flex: 1 } }, typeof v === 'string' ? copyRow(v) : v));
 
+const accountUi = () => import(new URL('api/auth/ui.js', document.baseURI).href);
+/** Settings › Account: display name, email and password, iosuite-shared's panel (the same in every io app). */
 async function setAccount(el) {
-  const u = S.user;
-  const dn = h('input', { class: 't', value: u.displayName || '' }), em = h('input', { class: 't', type: 'email', value: u.email || '' });
-  const old = h('input', { class: 't', type: 'password', autocomplete: 'current-password' }), nw = h('input', { class: 't', type: 'password', autocomplete: 'new-password' });
-  el.append(h('div', { class: 'box' }, h('h2', null, icon('person'), 'You'), h('div', { class: 'grid' }, fld('Display name', dn), fld('Email (for sign-in at a proxy)', em)),
-    h('p', null, h('button', { class: 'pillbtn primary', onclick: async () => { try { S.user = (await api('/api/auth/me', { method: 'PATCH', json: { displayName: dn.value, email: em.value } })).user; drawUser(); toast('Saved'); } catch (e) { fail(e); } } }, icon('check', 's'), 'Save'))),
-  !u.passwordless ? h('div', { class: 'box' }, h('h2', null, icon('key'), 'Password'), h('div', { class: 'grid' }, fld('Current password', old), fld('New password (8 or more)', nw)),
-    h('p', null, h('button', { class: 'pillbtn', onclick: async () => { try { await api('/api/auth/password', { method: 'POST', json: { current: old.value, password: nw.value } }); old.value = nw.value = ''; toast('Password changed'); } catch (e) { fail(e); } } }, 'Change password'))) : null);
+  const ui = await accountUi();
+  await ui.mountAccount(el, { toast, onSaved: (u) => { Object.assign(S.user, u); drawUser(); } });
 }
 
+/** Settings › Display: the theme (saved with the account) and the calendar's own choices, each saved when changed. */
 async function setDisplay(el) {
-  const theme = localStorage.getItem('iocalendar.theme') || 'system';
-  const th = h('select', { class: 't' }, [['system', 'Same as the device'], ['light', 'Light'], ['dark', 'Dark']].map(([v, l]) => h('option', { value: v, selected: v === theme ? true : null }, l)));
-  th.onchange = () => { localStorage.setItem('iocalendar.theme', th.value); applyTheme(); toast(`Appearance: ${th.value}`); };
-  const ws = h('select', { class: 't' }, [[1, 'Monday'], [0, 'Sunday'], [6, 'Saturday']].map(([v, l]) => h('option', { value: v, selected: v === weekStart() ? true : null }, l)));
-  const dv = h('select', { class: 't' }, [['month', 'Month'], ['week', 'Week'], ['day', 'Day'], ['agenda', 'Agenda']].map(([v, l]) => h('option', { value: v, selected: v === (S.settings.defaultView || 'month') ? true : null }, l)));
+  const ui = await accountUi();
+  const save = async (changes) => { await saveSettings(changes); drawNav(); toast('Saved'); };
+  const ws = h('select', { class: 't', onchange: (e) => save({ weekStart: +e.target.value }) }, [[1, 'Monday'], [0, 'Sunday'], [6, 'Saturday']].map(([v, l]) => h('option', { value: v, selected: v === weekStart() ? true : null }, l)));
+  const dv = h('select', { class: 't', onchange: (e) => save({ defaultView: e.target.value }) }, [['month', 'Month'], ['week', 'Week'], ['day', 'Day'], ['agenda', 'Agenda']].map(([v, l]) => h('option', { value: v, selected: v === (S.settings.defaultView || 'month') ? true : null }, l)));
   const cur = S.settings.defaultReminder ?? '';
-  const dr = h('select', { class: 't' }, h('option', { value: '' }, 'None'), TIMED_REMINDERS.map((m) => h('option', { value: m, selected: String(m) === String(cur) ? true : null }, describeReminder(m, false))));
-  el.append(h('div', { class: 'box' }, h('h2', null, icon('theme'), 'Appearance'), h('div', { class: 'grid' }, fld('Light or dark', th)),
-    h('p', { class: 'muted small' }, 'Kept in this browser.')),
-  h('div', { class: 'box' }, h('h2', null, icon('tune'), 'Calendar'), h('div', { class: 'grid' }, fld('Weeks start on', ws), fld('Open on', dv), fld('Reminder for new events', dr)),
-    h('p', null, h('button', { class: 'pillbtn primary', onclick: async () => { await saveSettings({ weekStart: +ws.value, defaultView: dv.value, defaultReminder: dr.value }); drawNav(); toast('Saved'); } }, icon('check', 's'), 'Save'))));
+  const dr = h('select', { class: 't', onchange: (e) => save({ defaultReminder: e.target.value }) }, h('option', { value: '' }, 'None'), TIMED_REMINDERS.map((m) => h('option', { value: m, selected: String(m) === String(cur) ? true : null }, describeReminder(m, false))));
+  el.append(ui.box('theme', 'Appearance', ui.themeRow(S.settings.theme || localStorage.getItem('iocalendar.theme') || 'system', (t) => { S.settings.theme = t; applyTheme(t); })),
+    h('div', { class: 'box' }, h('h2', null, icon('tune'), 'Calendar'), h('div', { class: 'grid' }, fld('Weeks start on', ws), fld('Open on', dv), fld('Reminder for new events', dr))));
 }
 
+/** Settings › Apps and devices: the account's app passwords (iosuite-shared's list) and how to connect each kind of app. */
 async function setDevices(el) {
   const info = await api('/api/connect');
   const canPw = !S.user.passwordless;
-  const label = h('input', { class: 't', placeholder: 'e.g. Alex’s iPhone', style: 'max-width:280px' });
-  const scope = h('select', { class: 't', style: 'max-width:240px' }, h('option', { value: 'dav' }, 'CalDAV only (calendar apps)'), h('option', { value: 'all' }, 'CalDAV, API and MCP'));
-  const shown = h('div'), pwlist = h('div');
+  const ui = await accountUi();
+  const pw = h('div');
   const isApple = /iPhone|iPad|Macintosh/.test(navigator.userAgent);
-  const drawPw = async () => {
-    const items = (await api('/api/auth/app-passwords')).items;
-    pwlist.replaceChildren(items.length ? h('table', { class: 't' }, h('tr', null, h('th', null, 'Name'), h('th', null, 'Works for'), h('th', null, 'Made'), h('th', null, 'Last used'), h('th')),
-      items.map((p) => h('tr', null, h('td', null, p.label), h('td', null, p.scope === 'dav' ? 'CalDAV only' : 'CalDAV, API and MCP'), h('td', null, new Date(p.created).toLocaleDateString()), h('td', null, p.lastUsed ? new Date(p.lastUsed).toLocaleString() : 'never'),
-        h('td', null, h('button', { class: 'pillbtn noic danger', onclick: async () => { await api(`/api/auth/app-passwords/${p.id}`, { method: 'DELETE' }); drawPw(); } }, 'Revoke'))))) : h('p', { class: 'muted' }, 'No app passwords yet.'));
-  };
   const plabel = h('input', { class: 't', name: 'label', value: /iPad/.test(navigator.userAgent) ? 'iPad' : /Macintosh/.test(navigator.userAgent) ? 'Mac' : 'iPhone', style: 'max-width:200px' });
+  const how = (summary, ...kids) => h('details', null, h('summary', { class: 'lnk' }, summary), ...kids);
   el.append(...[
-    canPw ? h('div', { class: 'box' }, h('h2', null, icon('devices'), 'iPhone, iPad and Mac: set up in one step'),
-      h('p', null, 'Download a configuration profile that adds your calendars (CalDAV) to Apple Calendar, with reminders and two-way changes. ',
-        isApple ? 'Tap Download here in Safari, then open Settings › Profile Downloaded › Install.' : 'Open this page on the iPhone or iPad in Safari and tap Download, then Settings › Profile Downloaded › Install. On a Mac, open the file, then System Settings › Privacy & Security › Profiles.'),
-      h('form', { method: 'POST', action: '/api/apple-profile', class: 'pform', onsubmit: () => { setTimeout(drawPw, 1500); } },
+    canPw ? h('div', { class: 'box' }, h('h2', null, icon('devices'), 'iPhone, iPad and Mac'),
+      h('p', null, 'A profile that adds your calendars to Apple Calendar in one step.'),
+      h('form', { method: 'POST', action: '/api/apple-profile', class: 'pform', onsubmit: () => { setTimeout(() => ui.mountAppPasswords(pw, { toast, syncOnly: 'Calendar apps only (CalDAV)' }), 1500); } },
         fld('Device name', plabel),
-        fld('Password', h('select', { class: 't', name: 'password' }, h('option', { value: 'new' }, 'Include a new app password for this device'), h('option', { value: 'ask' }, 'Leave it out (the device asks while installing)'))),
+        fld('Password', h('select', { class: 't', name: 'password' }, h('option', { value: 'new' }, 'Include a new app password'), h('option', { value: 'ask' }, 'Ask on the device'))),
         h('p', null, h('button', { class: 'pillbtn primary', type: 'submit' }, icon('download', 's'), 'Download the profile'))),
-      h('p', { class: 'muted small' }, 'The profile holds a CalDAV-only app password: install it and delete the file, and revoke that password below if the device is lost. The profile is not signed, so iOS shows it as “Not Verified”; that is expected.'),
-      h('p', { class: 'muted small' }, 'Behind Cloudflare Access: calendar apps cannot sign in at Access, so add a Bypass policy for /dav/*, /.well-known/caldav and /ics/* (and /mcp if you use it). Those stay protected by the app password and the private link token; the web app stays behind Access.')) : null,
-    canPw ? h('div', { class: 'box' }, h('h2', null, icon('key'), 'App passwords'),
-      h('p', { class: 'muted' }, 'Give every app or device its own password instead of yours; you can revoke one without touching the others. Use your user name with it. A CalDAV-only password works in calendar apps and nothing else, so one lifted from a phone cannot reach the API, MCP or the web app; scripts and AI assistants need one without that limit.'),
-      h('div', { class: 'multi' }, label, scope, h('button', { class: 'pillbtn primary', onclick: async () => {
-        try {
-          const r = await api('/api/auth/app-passwords', { method: 'POST', json: { label: label.value || 'Device', scope: scope.value === 'dav' ? 'dav' : '' } });
-          shown.replaceChildren(h('p', null, h('b', null, 'Copy it now: '), 'it is shown only once.'), copyRow(r.password));
-          label.value = ''; drawPw();
-        } catch (e) { fail(e); }
-      } }, icon('add', 's'), 'New app password')), shown, pwlist)
-      : h('div', { class: 'box' }, h('h2', null, icon('key'), 'App passwords'), h('p', { class: 'muted' }, 'Your account signs in with one click and has no password, so it cannot have app passwords. Ask an admin to give it a password to connect apps.')),
-    h('div', { class: 'box' }, h('h2', null, icon('today'), 'Calendar apps (CalDAV): two-way'),
-      h('p', null, 'Apple Calendar (Mac: Calendar › Settings › Accounts › Add › Other CalDAV Account › Manual; iPhone: Settings › Calendar › Accounts › Add Account › Other › Add CalDAV Account), DAVx⁵ on Android, Thunderbird, Evolution, GNOME Calendar, KDE, Outlook with a CalDAV add-in: give the server, your user name and an app password.'),
+      how('How to install', h('p', { class: 'muted small' }, isApple ? 'Open the download, then Settings › Profile Downloaded › Install.' : 'Download it in Safari on the iPhone or iPad, then Settings › Profile Downloaded › Install. On a Mac: open the file, then System Settings › Privacy & Security › Profiles.',
+        ' iOS shows the profile as “Not Verified”: that is expected. Revoke its app password below if the device is lost.'))) : null,
+    pw,
+    h('div', { class: 'box' }, h('h2', null, icon('today'), 'Calendar apps (CalDAV)'),
+      h('p', null, 'Two-way sync with your user name and an app password.'),
       kv('Server', info.server), kv('User name', info.user), kv('CalDAV', info.caldav),
-      h('details', null, h('summary', { class: 'lnk' }, 'Address of each calendar (for apps that want one, like Thunderbird)'), info.calendars.map((c) => kv(c.name, c.caldav)))),
+      how('Address of each calendar', info.calendars.map((c) => kv(c.name, c.caldav))),
+      how('How to connect', h('p', { class: 'muted small' }, 'Apple Calendar: Settings › Accounts › Add › Other CalDAV Account (iPhone: Settings › Calendar › Accounts). Android: DAVx⁵. Also Thunderbird, Evolution, GNOME, KDE.'),
+        h('p', { class: 'muted small' }, 'Behind Cloudflare Access, add a Bypass policy for /dav/*, /.well-known/caldav and /ics/* (and /mcp).'))),
     h('div', { class: 'box' }, h('h2', null, icon('link'), 'Subscribe (read-only)'),
-      h('p', null, 'For apps that cannot sign in: Google Calendar (Other calendars › From URL), Outlook (Add calendar › Subscribe from web), Apple Calendar (File › New Calendar Subscription). They refresh every few hours. The links are private to you: anyone who has one can read those events.'),
+      h('p', null, 'For apps that cannot sign in. Anyone with a link can read those events.'),
       kv('Everything', info.all),
-      h('details', null, h('summary', { class: 'lnk' }, 'One calendar at a time'), info.calendars.map((c) => kv(c.name, c.ics))),
+      how('One calendar at a time', info.calendars.map((c) => kv(c.name, c.ics))),
       kv('Free/busy', info.freebusy),
       h('p', null, h('a', { class: 'pillbtn', href: info.webcal }, icon('today', 's'), 'Open in my calendar app'), ' ',
         h('button', { class: 'pillbtn noic', onclick: async () => { if (await confirmDialog('New subscription links', 'The old links stop working; subscribed calendars need the new ones.', 'Make new links')) { await api('/api/feeds/reset', { method: 'POST' }); onRoute(); } } }, 'New links'))),
     S.status.mcp ? h('div', { class: 'box' }, h('h2', null, icon('ai'), 'AI assistants (MCP)'),
-      h('p', null, 'Claude and other assistants that speak the Model Context Protocol can read your agenda, find free time and add or change events, as you. Give the assistant its own app password (above, “CalDAV, API and MCP”), sent as a Bearer token.'),
+      h('p', null, 'Give the assistant its own app password (not “Calendar apps only”), sent as a Bearer token.'),
       kv('MCP address', info.mcp),
-      h('p', { class: 'muted small' }, 'Claude Code:'),
-      copyRow(`claude mcp add --transport http iocalendar ${info.mcp} --header "Authorization: Bearer APP-PASSWORD"`),
-      h('p', { class: 'muted small' }, 'Apps configured with JSON (Claude Desktop through mcp-remote, Cursor, VS Code…):'),
-      copyRow(JSON.stringify({ mcpServers: { iocalendar: { command: 'npx', args: ['-y', 'mcp-remote', info.mcp, '--header', 'Authorization: Bearer APP-PASSWORD'] } } })))
-      : (S.user.role === 'admin' ? h('div', { class: 'box' }, h('h2', null, icon('ai'), 'AI assistants (MCP)'), h('p', { class: 'muted' }, 'The MCP server is off. Turn it on in ', h('a', { class: 'lnk', href: '#/settings/server' }, 'Settings › Server'), ' to let Claude and other assistants work with the calendars.')) : null),
+      how('Setup for Claude Code and JSON-configured apps',
+        copyRow(`claude mcp add --transport http iocalendar ${info.mcp} --header "Authorization: Bearer APP-PASSWORD"`),
+        copyRow(JSON.stringify({ mcpServers: { iocalendar: { command: 'npx', args: ['-y', 'mcp-remote', info.mcp, '--header', 'Authorization: Bearer APP-PASSWORD'] } } }))))
+      : (S.user.role === 'admin' ? h('div', { class: 'box' }, h('h2', null, icon('ai'), 'AI assistants (MCP)'), h('p', { class: 'muted' }, 'Off. Turn it on in ', h('a', { class: 'lnk', href: '#/settings/server' }, 'Settings › Server'), '.')) : null),
     h('div', { class: 'box' }, h('h2', null, icon('link'), 'Other apps (REST API)'),
-      h('p', null, 'JSON, iCalendar or jCal (RFC 7265) over HTTPS, with your user name and an app password (HTTP Basic) or the app password as a Bearer token. ', h('a', { class: 'lnk', href: info.api, target: '_blank' }, 'API documentation')),
+      h('p', null, 'JSON, iCalendar or jCal with your user name and an app password. ', h('a', { class: 'lnk', href: info.api, target: '_blank' }, 'API documentation')),
       copyRow(`curl -u ${info.user}:APP-PASSWORD "${info.server}/api/occurrences?start=${ymd(new Date())}&end=${ymd(addDays(new Date(), 7))}"`))].filter(Boolean));
-  if (canPw) drawPw();
+  await ui.mountAppPasswords(pw, { toast, syncOnly: 'Calendar apps only (CalDAV)' });
 }
 
 async function setCalendars(el) {
@@ -1206,20 +1191,17 @@ async function setCalendars(el) {
     h('button', { class: 'pillbtn', onclick: async () => { await newCalendar(false); onRoute(); } }, icon('add', 's'), 'New private calendar')),
   ...S.cals.map((c) => {
     const auto = isAuto(c);
-    const name = h('input', { class: 't', value: c.name });
-    const col = colorPicker(c.color);
-    const tz = h('select', { class: 't' }, h('option', { value: '' }, `Server default (${S.status.timezone})`), tzs.map((z) => h('option', { value: z, selected: z === c.timezone ? true : null }, z.replace(/_/g, ' '))));
-    const desc = h('input', { class: 't', value: c.description || '', placeholder: 'What it is for' });
+    const save = async (body) => { try { await api(`/api/calendars/${c.id}`, { method: 'PATCH', json: body }); await loadCals(); toast('Saved'); } catch (e) { fail(e); } };
+    const name = h('input', { class: 't', value: c.name, onchange: (e) => save({ name: e.target.value }) });
+    const col = colorPicker(c.color, (v) => save({ color: v }));
+    const tz = h('select', { class: 't', onchange: (e) => save({ timezone: e.target.value || null }) }, h('option', { value: '' }, `Server default (${S.status.timezone})`), tzs.map((z) => h('option', { value: z, selected: z === c.timezone ? true : null }, z.replace(/_/g, ' '))));
+    const desc = h('input', { class: 't', value: c.description || '', placeholder: 'What it is for', onchange: (e) => save({ description: e.target.value }) });
     const canEdit = c.writable || (auto && S.user.role === 'admin');
     return h('div', { class: 'box', style: { '--c': c.color } },
       h('h2', null, h('span', { class: 'chip-ev allday', style: { '--c': c.color, display: 'inline-flex', width: '14px', height: '14px', padding: 0 } }), c.name,
         h('span', { class: 'muted small', style: { fontWeight: 400 } }, c.kind === 'birthdays' ? 'from ioContacts, read-only' : c.kind === 'holidays' ? 'public holidays, read-only' : c.shared ? 'shared with everyone' : 'only you')),
       canEdit ? [h('div', { class: 'grid' }, fld('Name', name), fld('Description', desc), auto ? null : fld('Time zone for floating times', tz)), h('div', { style: { margin: '10px 0' } }, col),
-        h('p', null, h('button', { class: 'pillbtn primary', onclick: async () => {
-          const body = { name: name.value, color: col.get(), description: desc.value };
-          if (!auto) body.timezone = tz.value || null;
-          try { await api(`/api/calendars/${c.id}`, { method: 'PATCH', json: body }); await loadCals(); toast('Saved'); } catch (e) { fail(e); }
-        } }, icon('check', 's'), 'Save'), ' ',
+        h('p', null,
         !auto && (!c.shared || S.user.role === 'admin') ? h('button', { class: 'pillbtn noic danger', onclick: async () => {
           if (!await confirmDialog('Delete calendar', `Delete ${c.name} and its ${c.count || 0} events? Apps that sync it lose it too.`, 'Delete', true)) return;
           try { await api(`/api/calendars/${c.id}`, { method: 'DELETE' }); await loadCals(); onRoute(); } catch (e) { fail(e); }
@@ -1233,8 +1215,7 @@ async function setFamily(el) {
   const [r, fam] = await Promise.all([api('/api/users'), api('/api/members')]);
   const leftOut = new Set(fam.leftOut || []);
   el.append(h('div', { class: 'box' }, h('h2', null, icon('people'), 'Family members'),
-    h('p', { class: 'muted' }, 'In the family: the people events can be tagged with, each with a private calendar of their own. Leave out accounts that are not a person, such as admin.'),
-    h('p', { class: 'muted' }, 'The accounts are the suite’s: ', S.user.suiteAdmin ? ['add people, set passwords and choose each one’s role here and in every io app under ', h('a', { class: 'lnk', href: '#/settings/security' }, 'Settings › Security'), '.'] : 'a suite admin adds people and sets their role under Settings › Security.'),
+    h('p', { class: 'muted' }, 'The people events can be for, each with a private calendar. Accounts are added under Settings › Security.'),
     h('table', { class: 't' }, h('tr', null, h('th', null, 'Name'), h('th', null, 'Display name'), h('th', null, 'Role here'), h('th', null, 'In the family')),
       r.users.map((u) => {
         const fk = h('input', { type: 'checkbox', checked: !leftOut.has(u.id), title: `${u.displayName} is someone events can be for` });
@@ -1258,24 +1239,21 @@ async function setSuite(el, r) {
     itself, so there is nothing else to set). */
 async function birthdaysBox(el) {
   const s = await api('/api/iocontacts/settings');
-  const bdays = h('input', { type: 'checkbox', checked: s.birthdays });
-  const out = h('div');
-  const last = (x) => (x && x.synced ? `Birthdays last brought up to date ${new Date(x.synced * 1000).toLocaleString()} (${x.count} dates).` : x && x.error ? `The last sync failed: ${x.error}` : '');
-  out.append(h('p', { class: 'muted small' }, last(s.lastSync)));
+  const out = h('p', { class: 'muted small' }, s.lastSync && s.lastSync.synced ? `Last brought up to date ${new Date(s.lastSync.synced * 1000).toLocaleString()} (${s.lastSync.count} dates).` : s.lastSync && s.lastSync.error ? `The last sync failed: ${s.lastSync.error}` : '');
+  const bdays = h('input', { type: 'checkbox', checked: s.birthdays, onchange: async (e) => {
+    try {
+      const r = await api('/api/iocontacts/settings', { method: 'POST', json: { birthdays: e.target.checked } });
+      S.status = await api('/api/status'); await loadCals();
+      out.className = r.sync && !r.sync.ok ? 'warn' : 'muted small';
+      out.textContent = r.sync ? (r.sync.ok ? (r.sync.count ? `${r.sync.count} dates.` : 'The Birthdays calendar is off.') : r.sync.error) : '';
+      toast('Saved');
+    } catch (err) { e.target.checked = !e.target.checked; fail(err); }
+  } });
   el.append(h('div', { class: 'box' }, h('h2', null, icon('contacts'), 'Birthdays'),
-    h('p', { class: 'muted' }, s.enabled
-      ? ['A shared, read-only Birthdays calendar shows the birthdays and anniversaries in ', h('a', { href: s.url, target: '_blank', rel: 'noopener' }, 'ioContacts'), ', which ioCalendar finds in the suite by itself (the people on events come from there too), brought up to date every six hours.']
-      : 'ioContacts is not part of this suite yet. Once it runs on the same Shared ioSuite database, ioCalendar connects to it by itself: people on events come from the contacts, and a Birthdays calendar shows their birthdays.'),
-    h('p', null, h('label', { class: 'check' }, bdays, ' Show the Birthdays calendar')),
-    h('p', null, h('button', { class: 'pillbtn primary', onclick: async () => {
-      fill(out, h('p', null, 'Saving…'));
-      try {
-        const r = await api('/api/iocontacts/settings', { method: 'POST', json: { birthdays: bdays.checked } });
-        S.status = await api('/api/status'); await loadCals();
-        fill(out, r.sync ? h('p', { class: r.sync.ok ? 'muted small' : 'warn' }, r.sync.ok ? (r.sync.count ? `Birthdays: ${r.sync.count} dates.` : 'The Birthdays calendar is off.') : `Birthdays: ${r.sync.error}`) : h('p', { class: 'muted small' }, 'Saved.'));
-      } catch (e) { fill(out); fail(e); }
-    } }, icon('check', 's'), 'Save'), ' ',
-    s.enabled ? h('button', { class: 'pillbtn noic', onclick: async () => { try { const r = await api('/api/iocontacts/sync', { method: 'POST' }); await loadCals(); toast(r.ok ? `Birthdays: ${r.count} dates` : r.error); } catch (e) { fail(e); } } }, 'Bring birthdays up to date now') : null), out));
+    h('p', { class: 'muted' }, s.enabled ? ['Birthdays and anniversaries from ', h('a', { href: s.url, target: '_blank', rel: 'noopener' }, 'ioContacts'), ', updated every six hours.']
+      : 'Shown once ioContacts runs in the same suite.'),
+    h('p', null, h('label', { class: 'check' }, bdays, ' Show the Birthdays calendar'), ' ',
+      s.enabled ? h('button', { class: 'pillbtn noic', onclick: async () => { try { const r = await api('/api/iocontacts/sync', { method: 'POST' }); await loadCals(); toast(r.ok ? `Birthdays: ${r.count} dates` : r.error); } catch (e) { fail(e); } } }, 'Update now') : null), out));
 }
 
 async function setHolidays(el) {
@@ -1284,7 +1262,7 @@ async function setHolidays(el) {
   const where = s.country ? [s.countryName, s.regionName].filter(Boolean).join(', ') : null;
   const last = (x) => (x && x.synced ? `Last filled ${new Date(x.synced * 1000).toLocaleString()} (${x.count} holidays, last year to three years ahead).` : x && x.error ? `The last fill failed: ${x.error}` : '');
   const box = h('div', { class: 'box' }, h('h2', null, icon('star'), 'Public holidays'),
-    h('p', { class: 'muted' }, 'A shared, read-only Holidays calendar shows the public holidays of your country (and region), worked out on the server and kept up to date every day. Phones and apps get it like any other calendar; anyone can hide it in the sidebar.'),
+    h('p', { class: 'muted' }, 'A shared calendar with the public holidays of your country.'),
     h('p', null, where ? `Showing the holidays of ${where}${s.guessed ? ' (from the time zone; pick another below)' : ''}.` : 'Off: no country picked.'));
   el.append(box);
   if (!adm) { box.append(h('p', { class: 'muted small' }, 'An admin picks the country.')); return; }
@@ -1304,18 +1282,19 @@ async function setHolidays(el) {
       info.languages.map((l) => h('option', { value: l, selected: keep && l === s.language ? true : null }, LANG(l))));
     region.disabled = !info.regions.length; lang.disabled = !info.languages.length;
   };
-  country.onchange = () => drawCountry(false);
   await drawCountry(true);
   const out = h('div', null, h('p', { class: 'muted small' }, last(s.lastSync)));
-  box.append(h('div', { class: 'grid' }, fld('Country', country), fld('Region (state, province…)', region), fld('Names in', lang)),
-    h('p', null, h('button', { class: 'pillbtn primary', onclick: async () => {
-      try {
-        const r = await api('/api/holidays/settings', { method: 'POST', json: { country: country.value, region: region.value, language: lang.value } });
-        await loadCals();
-        fill(out, h('p', { class: r.sync && !r.sync.ok ? 'warn' : 'muted small' }, !r.country ? 'The Holidays calendar is off.' : r.sync.ok ? `Holidays of ${[r.countryName, r.regionName].filter(Boolean).join(', ')}: ${r.sync.count} dates.` : r.sync.error));
-        toast('Saved');
-      } catch (e) { fail(e); }
-    } }, icon('check', 's'), 'Save')), out);
+  const save = async () => {
+    try {
+      const r = await api('/api/holidays/settings', { method: 'POST', json: { country: country.value, region: region.value, language: lang.value } });
+      await loadCals();
+      fill(out, h('p', { class: r.sync && !r.sync.ok ? 'warn' : 'muted small' }, !r.country ? 'The Holidays calendar is off.' : r.sync.ok ? `Holidays of ${[r.countryName, r.regionName].filter(Boolean).join(', ')}: ${r.sync.count} dates.` : r.sync.error));
+      toast('Saved');
+    } catch (e) { fail(e); }
+  };
+  country.onchange = async () => { await drawCountry(false); save(); };
+  region.onchange = save; lang.onchange = save;
+  box.append(h('div', { class: 'grid' }, fld('Country', country), fld('Region (state, province…)', region), fld('Names in', lang)), out);
   await birthdaysBox(el);
 }
 
@@ -1329,11 +1308,11 @@ async function setServer(el) {
   await ui.mount(panel, { toast });
   await loadCals();
   el.append(h('div', { class: 'box' }, h('h2', null, icon('download'), 'Export'),
-      h('p', null, 'Each calendar as one .ics file, which any calendar app can import.'),
+      h('p', null, 'Each calendar as an .ics file.'),
       h('table', { class: 't' }, S.cals.map((c) => h('tr', null, h('td', null, h('span', { class: 'chip-ev', style: { '--c': c.color, display: 'inline-flex' } }, h('span', { class: 'dot' }), h('span', { class: 'nm' }, c.name))),
         h('td', { class: 'muted' }, c.kind === 'birthdays' ? 'from ioContacts' : `${c.count || 0} events`),
         h('td', { style: { textAlign: 'right' } }, h('a', { class: 'pillbtn noic', href: `/api/calendars/${c.id}/export` }, 'Download'))))),
-      h('p', { class: 'muted small' }, 'To keep another app in step instead of copying once, connect it: ', h('a', { class: 'lnk', href: '#/settings/devices' }, 'Settings › Apps and devices'), '.')));
+      ));
 }
 const serverUi = () => import(new URL('api/server/ui.js', document.baseURI).href);
 
@@ -1397,6 +1376,7 @@ async function start() {
   if (!S.status.user) { showSignIn(); return; }
   S.user = S.status.user;
   try { S.settings = (await api('/api/auth/me')).settings || {}; } catch { S.settings = {}; }
+  if (S.settings.theme) applyTheme(S.settings.theme);
   S.hidden = new Set(String(S.settings.hiddenCalendars || '').split(',').filter(Boolean).map(Number));
   S.who = new Set(String(S.settings.memberFilter || '').split(',').filter(Boolean).map(Number));
   drawUser();

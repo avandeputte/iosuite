@@ -126,7 +126,7 @@ was), the database is brought up to date, and the service restarts; the page rel
 Docker, pull the image instead. From a shell: `./update.sh` (`--check` only looks, `IOCALENDAR_REF=<sha>` installs a
 given commit).
 
-Everything is under one Settings page (the sidebar and the avatar menu): your own tabs (account, display, apps and
+Everything is under one Settings page (the sidebar and the avatar menu); a change is saved the moment it is made: your own tabs (account, display, apps and
 devices, calendars, holidays and birthdays), then for admins family and server (with Export: each calendar as an
 .ics file), and for suite admins security and global settings. Import is a page of its own in the sidebar.
 
