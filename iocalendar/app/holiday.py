@@ -1,7 +1,7 @@
 """Public holidays: a shared, read-only Holidays calendar (kind 'holidays') for the family's country and region.
 
 The dates come from the `holidays` package, worked out on the server (nothing is fetched): last year to a few years
-ahead, as all-day events marked free, made again every day so the years move along. Settings › Holidays picks the
+ahead, as all-day events marked free, made again every day so the years move along. Settings › Holidays and birthdays picks the
 country, the region (a state, province...) and the language of the names; HOLIDAYS_COUNTRY / HOLIDAYS_REGION /
 HOLIDAYS_LANGUAGE in the environment give the first ones. Until an admin chooses, the country is the one of the family's
 time zone (Europe/Brussels: Belgium), else the United States. Because it is an ordinary calendar here, the web app, CalDAV, the
