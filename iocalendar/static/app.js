@@ -1,7 +1,7 @@
 /* ioCalendar web app: one module, no build step. Views: month, week, day and agenda, with the calendars to show in the
    sidebar; the event form (repeating events, people from ioContacts, reminders), search, import/export, settings
    (account, display, apps and devices, calendars, holidays, and for admins connected apps, family, storage and backups,
-   server, and for suite admins accounts and access and suite-wide settings), laid out as in the other ioThing apps. Events can be tagged with the family
+   server, and for suite admins security and global settings), laid out as in the other ioThing apps. Events can be tagged with the family
    members they are for, and the sidebar filters the calendar by member. */
 
 // ------------------------------------------------------------------ helpers
@@ -1112,12 +1112,12 @@ async function showSettings(page, r) {
   const adm = S.user.role === 'admin';
   const tabs = [['account', 'Account'], ['display', 'Display'], ['devices', 'Apps and devices'], ['calendars', 'Calendars'], ['holidays', 'Holidays'],
     ...(adm ? [['connected', 'Connected apps'], ['family', 'Family'], ['storage', 'Storage and backups'], ['server', 'Server']] : []),
-    ...(S.user.suiteAdmin ? [['access', SUITE_TABS.access], ['global', SUITE_TABS.global]] : [])];
+    ...(S.user.suiteAdmin ? [['security', SUITE_TABS.security], ['global', SUITE_TABS.global]] : [])];
   page.append(h('div', { class: 'pagehead' }, h('h1', null, 'Settings')),
     h('div', { class: 'tabs' }, tabs.map(([k, l]) => h('button', { class: r.tab === k ? 'on' : '', onclick: () => { location.hash = `#/settings/${k}`; } }, l))));
   const body = h('div'); page.append(body);
   await ({ account: setAccount, display: setDisplay, devices: setDevices, calendars: setCalendars, holidays: setHolidays, connected: setConnected, family: setFamily, storage: setStorage, server: setServer,
-    access: setSuite, global: setSuite }[r.tab] || setAccount)(body, r);
+    security: setSuite, global: setSuite }[r.tab] || setAccount)(body, r);
 }
 const fld = (l, e) => h('label', { class: 'field' }, h('span', null, l), e);
 const kv = (k, v) => h('div', { class: 'kv' }, h('div', { class: 'k' }, k), h('div', { class: 'v', style: { flex: 1 } }, typeof v === 'string' ? copyRow(v) : v));
@@ -1234,13 +1234,13 @@ async function setCalendars(el) {
 }
 
 /** Who is in the family: the people events can be tagged with, each with a private calendar of their own. Accounts,
-    passwords and roles are the suite's (Settings › Accounts and access, suite admins). */
+    passwords and roles are the suite's (Settings › Security, suite admins). */
 async function setFamily(el) {
   const [r, fam] = await Promise.all([api('/api/users'), api('/api/members')]);
   const leftOut = new Set(fam.leftOut || []);
   el.append(h('div', { class: 'box' }, h('h2', null, icon('people'), 'Family members'),
     h('p', { class: 'muted' }, 'In the family: the people events can be tagged with, each with a private calendar of their own. Leave out accounts that are not a person, such as admin.'),
-    h('p', { class: 'muted' }, 'The accounts are the suite’s: ', S.user.suiteAdmin ? ['add people, set passwords and choose each one’s role here and in every io app under ', h('a', { class: 'lnk', href: '#/settings/access' }, 'Settings › Accounts and access'), '.'] : 'a suite admin adds people and sets their role under Settings › Accounts and access.'),
+    h('p', { class: 'muted' }, 'The accounts are the suite’s: ', S.user.suiteAdmin ? ['add people, set passwords and choose each one’s role here and in every io app under ', h('a', { class: 'lnk', href: '#/settings/security' }, 'Settings › Security'), '.'] : 'a suite admin adds people and sets their role under Settings › Security.'),
     h('table', { class: 't' }, h('tr', null, h('th', null, 'Name'), h('th', null, 'Display name'), h('th', null, 'Role here'), h('th', null, 'In the family')),
       r.users.map((u) => {
         const fk = h('input', { type: 'checkbox', checked: !leftOut.has(u.id), title: `${u.displayName} is someone events can be for` });
@@ -1251,9 +1251,9 @@ async function setFamily(el) {
       }))));
 }
 
-/** Settings › Accounts and access and Suite-wide settings (suite admins): the people, their role in every app, app
-    passwords; the apps, sign-in at the proxy, keys and tokens. The same panel in every io app, served by iosuite-shared. */
-const SUITE_TABS = { access: 'Accounts and access', global: 'Suite-wide settings' };
+/** Settings › Security and Global settings (suite admins): the people, their role in every app, app
+    passwords, sign-in at the proxy; the apps, keys and tokens. The same panel in every io app, served by iosuite-shared. */
+const SUITE_TABS = { security: 'Security', global: 'Global settings' };
 async function setSuite(el, r) {
   let ui;
   try { ui = await import(new URL('api/suite-admin/ui.js', document.baseURI).href); } catch (e) { el.append(h('p', { class: 'warn' }, `The panel did not load: ${e.message}`)); return; }
@@ -1268,7 +1268,7 @@ async function setConnected(el) {
   out.append(h('p', { class: 'muted small' }, last(s.lastSync)));
   el.append(h('div', { class: 'box' }, h('h2', null, icon('contacts'), 'ioContacts'),
     h('p', { class: 'muted' }, s.enabled
-      ? ['Connected by itself: ioCalendar finds ', h('a', { href: s.url, target: '_blank', rel: 'noopener' }, 'ioContacts'), ' in the suite and reads from it with its own read-only app password (Settings › Accounts and access on the start page lists it). The people on an event come from the shared contacts, and a shared Birthdays calendar shows their birthdays and anniversaries, brought up to date every six hours.']
+      ? ['Connected by itself: ioCalendar finds ', h('a', { href: s.url, target: '_blank', rel: 'noopener' }, 'ioContacts'), ' in the suite and reads from it with its own read-only app password (Settings › Security on the start page lists it). The people on an event come from the shared contacts, and a shared Birthdays calendar shows their birthdays and anniversaries, brought up to date every six hours.']
       : 'ioContacts is not part of this suite yet. Once it runs on the same Shared ioSuite database, ioCalendar connects to it by itself: people on events come from the contacts, and a Birthdays calendar shows their birthdays.'),
     h('p', null, h('label', { class: 'check' }, bdays, ' Show the Birthdays calendar')),
     h('p', null, h('button', { class: 'pillbtn primary', onclick: async () => {
