@@ -193,3 +193,21 @@ def test_scoped_app_password_reaches_only_its_paths():
     assert apppasswords.set_scope("iocalendar", full.split("-")[1], "dav") == 1
     c.cookies.clear()
     assert c.get("/api/private", headers=basic(full)).status_code == 403
+
+
+def test_settings_account_panel_and_its_own_fields():
+    """Settings › Account, the same in every app: the panel module, and the account's display name and email."""
+    app, auth = make_app()
+    seen = []
+    auth.on_update = lambda uid, body: seen.append((uid, sorted(body)))
+    c = TestClient(app, base_url="http://photo.example.com")
+    c.post("/api/auth/setup", json={"name": "alex", "password": "secret123"})
+    ui = c.get("/api/auth/ui.js")
+    assert ui.status_code == 200 and "javascript" in ui.headers["content-type"]
+    assert "export async function mountAccount" in ui.text and "export async function mountAppPasswords" in ui.text
+    r = c.patch("/api/auth/me", json={"displayName": "Alex V", "email": "Alex@Example.com"})
+    assert r.status_code == 200 and r.json()["user"]["displayName"] == "Alex V" and r.json()["user"]["email"] == "alex@example.com"
+    assert c.get("/api/auth/me").json()["user"]["displayName"] == "Alex V" and seen and seen[-1][1] == ["displayName", "email"]
+    assert c.patch("/api/auth/me", json={"displayName": ""}).json()["user"]["displayName"] in (None, "", "alex")
+    c.post("/api/auth/logout")
+    assert c.patch("/api/auth/me", json={"displayName": "x"}).status_code in (401, 403)

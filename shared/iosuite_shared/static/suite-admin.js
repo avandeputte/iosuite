@@ -168,9 +168,9 @@ export const SUBS = [['people', 'People'], ['roles', 'Roles'], ['passwords', 'Ap
 /** The two Settings tabs the panel fills, in every app: #/settings/security/<sub> and #/settings/global/<sub>. */
 export const TABS = {
   security: { label: 'Security', subs: ['people', 'roles', 'passwords', 'signin'],
-    intro: 'Who can get in, for every io app at once: the accounts, their roles and app passwords, and sign-in at a reverse proxy (the Shared ioSuite database). Changes apply in every app within a few seconds. Suite admins are admin everywhere.' },
+    intro: 'Who can sign in to the io apps, and with which role. Changes apply to every app.' },
   global: { label: 'Global settings', subs: ['apps', 'keys'],
-    intro: 'Settings that apply to every io app at once: each app’s default role and sign-in requirement, and the keys and tokens the apps use.' },
+    intro: 'Settings for every io app: default roles, sign-in, and keys.' },
 };
 
 /** Draw the panel into `el`. Options: tab (security or global: which parts are shown, see TABS), sub (the first part
@@ -244,7 +244,7 @@ function people(el, ctx) {
     h('p', null, h('button', { class: 'sa-btn primary', onclick: () => editAccount(ctx, null) }, icon('add'), 'Add someone'))));
   const svc = o.users.filter((u) => u.service);
   if (svc.length) el.append(box('apps', 'Apps reading from each other',
-    h('p', { class: 'sa-muted' }, 'Each app that reads from another (ioCalendar and ioPix from ioContacts, ioContacts from ioPix, every app’s Settings › Security from ioPix for the person in photos) signs in as its own account here, with a read-only app password it made by itself. Nobody signs in with these. Revoking one of their app passwords is safe: the app makes a new one the next time it needs it.'),
+    h('p', { class: 'sa-muted' }, 'The apps sign in to each other with these accounts and read-only app passwords. Revoking one is safe: the app makes a new one.'),
     h('div', { class: 'sa-scrollx' }, h('table', { class: 'sa-t' }, h('tr', null, h('th', null, 'Account'), h('th', null, 'For'), h('th', null, 'App passwords'), h('th', null, 'Last used'), h('th')),
       svc.map((u) => h('tr', null, h('td', null, h('b', null, u.name)), h('td', null, appLabel(o, u.service)),
         h('td', { class: 'sa-small' }, `${u.appPasswords}`), h('td', { class: 'sa-small' }, sinceText(u.lastSeen || u.last_login)),
@@ -346,7 +346,7 @@ async function revokeAppPassword(p) {
 function roles(el, ctx) {
   const { o } = ctx;
   el.append(box('lock', 'Roles',
-    h('p', { class: 'sa-muted' }, 'Each person’s role in each app: none (no access), viewer, editor or admin (the app’s settings and its people). “default” follows the app’s default role (set under Apps). One-click accounts are viewers at most; suite admins are admin everywhere.'),
+    h('p', { class: 'sa-muted' }, 'none, viewer, editor or admin. “default” follows the app’s default role (under Apps). Suite admins are admin everywhere.'),
     h('div', { class: 'sa-scrollx' }, h('table', { class: 'sa-t sa-roles' },
       h('tr', null, h('th', null, 'Person'), o.apps.map((a) => h('th', null, a.name, h('div', { class: 'sa-muted sa-small' }, `default: ${a.defaultRole}`)))),
       o.people.map((u) => h('tr', null, h('td', null, h('b', null, u.displayName), h('div', { class: 'sa-muted sa-small' }, u.name)),
@@ -382,7 +382,7 @@ async function passwords(el, ctx) {
   const label = h('input', { class: 'sa-in', placeholder: 'Device, e.g. Alex’s iPhone' });
   const scope = h('select', { class: 'sa-in sa-sm' }, (o.scopes || ['', 'dav']).map((s) => h('option', { value: s }, SCOPE_LABEL[s] || s)));
   el.append(box('key', 'App passwords',
-    h('p', { class: 'sa-muted' }, 'One per device and app, for clients that cannot sign in on the web page (CalDAV and CardDAV, LDAP, MCP assistants…). “Sync only” works for the app’s sync protocols and nothing else, so a password lifted from a phone cannot reach the web app or its API.'),
+    h('p', { class: 'sa-muted' }, 'For clients that cannot use the sign-in page (CalDAV, CardDAV, LDAP, MCP). “Sync only” works for sync and nothing else.'),
     h('div', { class: 'sa-multi' }, fu, fa), list),
   box('add', 'Make one for someone',
     h('div', { class: 'sa-multi' }, who, app, scope, label, h('button', { class: 'sa-btn primary', onclick: async () => {
@@ -424,14 +424,14 @@ async function keys(el, ctx) {
         k.set ? h('button', { class: 'sa-btn danger', onclick: async () => { if (await confirmDialog('Clear key', `Clear ${k.label}? What uses it stops working until a new one is set.`, 'Clear', true)) save(''); } }, 'Clear') : null)));
   };
   el.append(box('key', 'Keys and tokens',
-    h('p', { class: 'sa-muted' }, 'The keys each app keeps for services outside the suite, all in the Shared ioSuite database. Values are never shown again once saved. How the apps sign in to each other is automatic: see the app passwords of the apps’ own accounts under People.'),
+    h('p', { class: 'sa-muted' }, 'Keys for services outside the suite. A saved value is never shown again.'),
     order.length ? order.map((a) => [h('h3', null, a === '' ? 'Whole suite' : appLabel(o, a)), h('div', null, groups[a].map(row))]) : h('p', { class: 'sa-muted' }, 'No app keeps any yet.')));
 }
 
 function apps(el, ctx) {
   const { o } = ctx;
   el.append(box('apps', 'Apps',
-    h('p', { class: 'sa-muted' }, 'Every app registers itself when it starts. The default role is what someone without a role in the app gets: “none” makes the app invitation-only. “Sign-in required” shows visitors nothing but the sign-in screen.'),
+    h('p', { class: 'sa-muted' }, 'The default role is what someone without a role in the app gets (“none”: invitation only). “Sign-in required” shows visitors only the sign-in page.'),
     h('div', { class: 'sa-scrollx' }, h('table', { class: 'sa-t' }, h('tr', null, h('th', null, 'App'), h('th', null, 'Version'), h('th', null, 'Default role'), h('th', null, 'Sign-in required'), h('th', null, 'In use'), h('th')),
       o.apps.map((a) => {
         const dr = h('select', { class: 'sa-in sa-sm' }, (o.defaultRoles || ['none', 'viewer', 'editor']).map((x) => h('option', { value: x, selected: x === a.defaultRole ? true : null }, `${x} (${ROLE_HELP[x]})`)));
@@ -490,10 +490,10 @@ async function signin(el) {
       try { d = await api('proxy', { method: 'PUT', json: body }); toast('Saved for every app'); draw(); } catch (e) { fail(e); }
     };
     el.replaceChildren(box('key', 'Sign-in at the proxy',
-      h('p', { class: 'sa-muted' }, 'Someone signed in at your reverse proxy (Cloudflare Access on a tunnel, or Authelia, Authentik or oauth2-proxy behind HAProxy, nginx, Caddy or Traefik) is signed in to every io app, matched to an account by email, then name. One setting for the whole suite, kept in the Shared ioSuite database and read only from there: proxy settings in an app’s config.env or environment are ignored.'),
+      h('p', { class: 'sa-muted' }, 'Someone signed in at your reverse proxy (Cloudflare Access, Authelia, Authentik, oauth2-proxy…) is signed in to every io app, matched by email, then name.'),
       h('p', null, h('b', null, state)),
       h('div', { class: 'sa-grid' }, fld('Proxy', mode)), cf, seen,
-      h('p', { class: 'sa-muted sa-small' }, 'Team domain: Zero Trust › Settings › Team name and domain. AUD tag: Zero Trust › Access › Applications › the application › Overview. One application covering every app’s host has one tag; with one application per app, list each one’s tag.'),
+      h('p', { class: 'sa-muted sa-small' }, 'Team domain: Zero Trust › Settings › Team name and domain. AUD tag: Zero Trust › Access › Applications › Overview (one per application).'),
       other, rest,
       h('div', { class: 'sa-btns' }, h('button', { class: 'sa-btn primary', onclick: save }, 'Save for every app'))));
     show();
