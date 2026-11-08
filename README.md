@@ -76,8 +76,9 @@ what the app will show on the start page later (today's events, the newest photo
   change, reorder and move them in Settings › Bookmarks (drag a group or a link by its handle, with a mouse or a
   finger; a link can go into another group). `POST /api/bookmarks/import` still takes a homepage `bookmarks.yaml`.
 - **The suite's accounts**: the same sign-in as every io app (the account tiles, one click for a passwordless viewer),
-  the account page (display name, email, password, sign out everywhere). Accounts and roles are managed under Settings ›
-  Suite (below), the same panel in every io app. Sign-in at a reverse proxy (Cloudflare Access…) works as in the other apps.
+  Settings › Account (display name, email, password) and Settings › Display (the theme, kept with the account), both
+  iosuite-shared's panels, the same in every io app; every setting saves as soon as you change it. Accounts and roles
+  are managed under Settings › Security (below). Sign-in at a reverse proxy (Cloudflare Access…) works as in the other apps.
 - **Suite administration** (Settings › Security and Settings › Global settings, suite admins only): everything in the Shared ioSuite database for the
   whole suite. **People**: add, rename and delete accounts, email, sign-in list, suite admin, set or remove a password,
   their role in every app, their sessions (end one or all) and app passwords. **Roles**: a grid of everyone against
