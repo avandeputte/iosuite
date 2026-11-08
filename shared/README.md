@@ -114,6 +114,13 @@ After `users.LOCK_AFTER` failures for a (visitor, name) pair the next attempt wa
 hash is computed); the name alone and the address alone have higher limits. A wrong password repeated within a few
 seconds (a client with a stale one) is answered from memory without a hash.
 
+Account passwords are hashed with Argon2id (`argon2-cffi`'s defaults, RFC 9106's low-memory profile: 64 MiB, 3
+passes, 4 lanes; `iosuite_shared.passwords`). A hash with other parameters, or an `scrypt2$` hash from 0.28 and
+before, is replaced at its account's next sign-in. App passwords are random (144 bits), so they are stored as a
+SHA-256 (`passwords.token_hash`), as session tokens are; an `scrypt2$` app password moves over the first time it is
+used. Test suites make hashing cheap with
+`monkeypatch.setattr("iosuite_shared.passwords.HASHER", testing.FAST_HASHER)`.
+
 The code is in three modules: `iosuite_shared.fastapi` (`Auth`: who is asking, the middleware, `install`),
 `iosuite_shared.access` (the markers, the JSON body, the body cap) and `iosuite_shared.routers` (the routers);
 `from iosuite_shared.fastapi import Auth, public_user, json_body, BodyCap` keeps working.

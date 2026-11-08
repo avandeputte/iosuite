@@ -19,7 +19,7 @@ def fresh_db(monkeypatch):
     users.invalidate()
     suite.invalidate()
     sessions.invalidate()
-    monkeypatch.setattr("iosuite_shared.passwords.SCRYPT", (2 ** 12, 8, 1))  # fast hashes for the tests
+    monkeypatch.setattr("iosuite_shared.passwords.HASHER", testing.FAST_HASHER)  # fast hashes for the tests
     monkeypatch.setattr("iosuite_shared.config.ADMIN_USER", "")
     db.init()
     yield

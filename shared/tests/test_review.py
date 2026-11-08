@@ -59,7 +59,7 @@ def test_basic_and_bearer_are_throttled_before_any_hash(monkeypatch):
     assert r.status_code == 429 and r.headers["retry-after"] and "try again" in r.json()["detail"]
     n = len(hashes)
     assert c.get("/api/private", headers=basic("alex", "wrong-again")).status_code == 429
-    assert len(hashes) == n, "a throttled attempt costs no scrypt"
+    assert len(hashes) == n, "a throttled attempt costs no hash"
     # the lock is on (visitor, name) and on the name: a bearer token (no name) from the same visitor still works
     monkeypatch.undo()
     assert c.get("/api/private", headers={"authorization": "Bearer " + pw}).status_code == 200

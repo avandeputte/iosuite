@@ -14,10 +14,12 @@ import secrets
 import time
 
 from iosuite_shared import db, edge, users
-from iosuite_shared.passwords import check_password, hash_password
+from iosuite_shared.passwords import check_password, check_token, token_hash
 
-_cache: dict = {}  # a successful check, for a minute: scrypt is slow on purpose and DAV clients send Basic on every request
-_misses: dict = {}  # a failed check, for a few seconds: a client retrying a stale password does not cost a scrypt each time
+# An app password is random (144 bits), so its row keeps a SHA-256 of it (passwords.token_hash): a slow hash would add
+# latency and no safety. The name + account password route below is Argon2id, hence the caches.
+_cache: dict = {}  # a successful check, for a minute: DAV clients send Basic on every request
+_misses: dict = {}  # a failed check, for a few seconds: a client retrying a stale password does not cost a hash each time
 MISS_S = 10
 
 
@@ -33,7 +35,7 @@ def create(user_id: int, app: str, label: str, scope: str = "") -> str:
     prefix = secrets.token_hex(4)
     pw = f"{app}-{prefix}-{secrets.token_urlsafe(18)}"
     db.ex("INSERT INTO ios_app_passwords (user_id, app, label, prefix, hash, created_at, scope) VALUES (%s, %s, %s, %s, %s, %s, %s)",
-          (user_id, app, (label or "Device")[:128], prefix, hash_password(pw), int(time.time()), scope))
+          (user_id, app, (label or "Device")[:128], prefix, token_hash(pw), int(time.time()), scope))
     edge.publish(app, prefix, pw)
     return pw
 
@@ -93,10 +95,12 @@ def authenticate_scoped(name: str | None, password: str, app: str):
     m = re.match(r"^([a-z0-9]+)-([0-9a-f]{8})-", password)  # the word is a hint only: the row says which app
     if m:
         for r in db.q("SELECT * FROM ios_app_passwords WHERE prefix = %s AND app = %s", (m.group(2), app)):
-            if check_password(password, r["hash"]):
+            scrypt2 = r["hash"].startswith("scrypt2$")  # made before 0.29: moves to token_hash on its next use
+            if check_password(password, r["hash"]) if scrypt2 else check_token(password, r["hash"]):
                 u = users.get(r["user_id"], app)
                 if u and (not name or name.strip().lower() in (u["name"].lower(), u["email"].lower())):
-                    db.ex("UPDATE ios_app_passwords SET last_used_at = %s WHERE id = %s", (int(time.time()), r["id"]))
+                    db.ex("UPDATE ios_app_passwords SET last_used_at = %s, hash = %s WHERE id = %s",
+                          (int(time.time()), token_hash(password), r["id"]))
                     edge.publish(app, r["prefix"], password)  # made before the edge check was on, or since a restart
                     user, scope = u, r.get("scope") or ""
                     break

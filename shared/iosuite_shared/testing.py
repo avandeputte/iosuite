@@ -16,6 +16,11 @@ import socket
 import subprocess
 import time
 
+from argon2 import PasswordHasher
+
+# Cheap Argon2id for test suites: monkeypatch.setattr("iosuite_shared.passwords.HASHER", testing.FAST_HASHER)
+FAST_HASHER = PasswordHasher(time_cost=1, memory_cost=1024, parallelism=1)
+
 CONTAINER = "iosuite-test-mariadb"
 IMAGE = "mariadb:11"
 ROOT_PASSWORD = "iosuite-test"

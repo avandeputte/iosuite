@@ -5,7 +5,7 @@ it reaches the server (cloudflare/edge-auth/). The Worker reads a Workers KV nam
     value {"h": "<sha-256 hex>"}  of the whole password
 
 A SHA-256 is enough here and fast for the Worker: an app password is 144 random bits, nothing anyone can guess from
-its hash. Account passwords are never sent. The server still checks every password itself (scrypt), so a stale key
+its hash. Account passwords are never sent. The server still checks every password itself, so a stale key
 only lets a request reach it, never in.
 
 Off unless all three are set. They are the whole suite's keys in the Shared ioSuite database (Settings › Global settings ›

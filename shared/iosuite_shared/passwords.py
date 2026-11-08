@@ -1,40 +1,58 @@
-"""Password hashing: scrypt, with the parameters stored in the hash (scrypt2$n$r$p$salt$hash) so they can be raised
-later: a hash made with other parameters is replaced the next time the password is seen (needs_rehash).
+"""Account passwords: Argon2id (argon2-cffi, RFC 9106's low-memory profile: 64 MiB, 3 passes, 4 lanes). The parameters
+are stored in the hash ($argon2id$v=19$m=...,t=...,p=...$salt$hash), so they can be raised later: a hash made with
+other parameters, or an scrypt2$ hash from before 0.29, is replaced the next time its password is seen (needs_rehash).
+
+App passwords and other random secrets do not come here: see token_hash.
 """
 import base64
 import hashlib
 import hmac
-import secrets
 
-SCRYPT = (2 ** 16, 8, 1)  # n, r, p: 64 MiB per hash (OWASP's floor is 2^17 x 8 x 1; 2^16 keeps a small container responsive)
+from argon2 import PasswordHasher
+from argon2.exceptions import InvalidHashError, VerificationError
+
+HASHER = PasswordHasher()  # the tests swap in a cheap one
 
 
 def hash_password(pw: str) -> str:
-    n, r, p = SCRYPT
-    salt = secrets.token_bytes(16)
-    h = hashlib.scrypt(pw.encode(), salt=salt, n=n, r=r, p=p, dklen=32, maxmem=256 * 1024 * 1024)
-    return f"scrypt2${n}${r}${p}$" + base64.b64encode(salt).decode() + "$" + base64.b64encode(h).decode()
+    return HASHER.hash(pw)
 
 
 def check_password(pw: str, stored: str) -> bool:
     """Whether pw matches the stored hash; False, never an exception, for a malformed hash."""
+    if (stored or "").startswith("scrypt2$"):
+        return _check_scrypt2(pw, stored)
     try:
-        kind, n, r, p, s, h = stored.split("$")
-        if kind != "scrypt2":
-            return False
-        n, r, p = int(n), int(r), int(p)
-        got = hashlib.scrypt(pw.encode(), salt=base64.b64decode(s), n=n, r=r, p=p, dklen=32, maxmem=256 * 1024 * 1024)
+        return HASHER.verify(stored, pw)
+    except (VerificationError, InvalidHashError, TypeError, ValueError):
+        return False
+
+
+def needs_rehash(stored: str) -> bool:
+    try:
+        return bool(stored) and HASHER.check_needs_rehash(stored)
+    except (InvalidHashError, ValueError):
+        return True
+
+
+def _check_scrypt2(pw: str, stored: str) -> bool:
+    """scrypt2$n$r$p$salt$hash (0.28 and before): read only, so an account moves to Argon2id at its next sign-in."""
+    try:
+        _, n, r, p, s, h = stored.split("$")
+        got = hashlib.scrypt(pw.encode(), salt=base64.b64decode(s), n=int(n), r=int(r), p=int(p), dklen=32,
+                             maxmem=256 * 1024 * 1024)
         return hmac.compare_digest(got, base64.b64decode(h))
     except Exception:
         return False
 
 
-def needs_rehash(stored: str) -> bool:
-    parts = (stored or "").split("$")
-    try:
-        return bool(stored) and (parts[0] != "scrypt2" or tuple(int(x) for x in parts[1:4]) != SCRYPT)
-    except ValueError:
-        return True
+def token_hash(secret: str) -> str:
+    """A random, high-entropy secret (an app password) needs no slow hash: SHA-256, hex."""
+    return hashlib.sha256(secret.encode()).hexdigest()
+
+
+def check_token(secret: str, stored: str) -> bool:
+    return hmac.compare_digest(token_hash(secret), stored or "")
 
 
 _DUMMY = None
