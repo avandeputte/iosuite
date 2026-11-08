@@ -692,8 +692,8 @@ async def iocontacts_sync(request: Request):
 
 @router.get("/api/holidays/settings", dependencies=[access.signed_in])
 def holidays_settings(request: Request):
-    """The Holidays calendar's country, region and language (anyone may read them), with the regions and languages
-    that country has."""
+    """The countries with a Holidays calendar, each with its region and language (anyone may read them):
+    {items: [{country, countryName, region, regionName, language, where, calendar}], guessed, lastSync}."""
     return holiday.public_settings()
 
 
@@ -714,10 +714,11 @@ def holidays_country(code: str, request: Request):
 
 @router.post("/api/holidays/settings", dependencies=[access.admin])
 async def holidays_save(request: Request):
-    """Admins: {country, region?, language?}. country "" switches the Holidays calendar off. Saving fills it again."""
+    """Admins: {items: [{country, region?, language?}]}, one Holidays calendar per country; [] switches them all off.
+    Saving fills them again."""
     b = await request.json()
     try:
-        await run_in_threadpool(holiday.save_settings, b.get("country"), b.get("region"), b.get("language"))
+        await run_in_threadpool(holiday.save_settings, (b or {}).get("items"))
     except ValueError as e:
         raise HTTPException(400, str(e))
     sync = await run_in_threadpool(holiday.sync)

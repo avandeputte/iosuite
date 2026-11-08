@@ -37,11 +37,7 @@ def overview() -> dict:
 
 
 def _holidays():
-    s = holiday.settings()
-    if not s["country"]:
-        return None
-    p = holiday.public_settings()
-    return {"country": p.get("countryName") or s["country"], "region": p.get("regionName") or s["region"]}
+    return [x["where"] for x in holiday.public_settings()["items"]] or None
 
 
 @server.tool(annotations=READ_ONLY)

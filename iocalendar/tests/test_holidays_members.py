@@ -4,39 +4,76 @@ from app import members
 from test_mcp import app_password, call
 
 
-def holidays_cal(client):
-    return next((c for c in client.get("/api/calendars").json()["items"] if c["kind"] == "holidays"), None)
+def holidays_cals(client):
+    return [c for c in client.get("/api/calendars").json()["items"] if c["kind"] == "holidays"]
 
 
-def test_holidays_calendar(client, family_id):
-    assert holidays_cal(client) is None  # HOLIDAYS_COUNTRY=off in the tests
+def titles(client, cal, start, end):
+    return [i["title"] for i in client.get("/api/occurrences", params={"start": start, "end": end, "calendars": cal["id"]}).json()["items"]]
+
+
+def test_holidays_calendars(client, family_id):
+    assert holidays_cals(client) == []  # HOLIDAYS_COUNTRY=off in the tests
     assert any(c["code"] == "BE" for c in client.get("/api/holidays/countries").json()["items"])
     us = client.get("/api/holidays/countries/US").json()
     assert {"code": "NY", "name": "New York"} in us["regions"]
-    r = client.post("/api/holidays/settings", json={"country": "US", "region": "NY"})
-    assert r.status_code == 200 and r.json()["sync"]["ok"] and r.json()["regionName"] == "New York", r.text
-    c = holidays_cal(client)
-    assert c and c["shared"] and not c["writable"] and c["name"] == "Holidays"
+    r = client.post("/api/holidays/settings", json={"items": [{"country": "US", "region": "NY"}]})
+    assert r.status_code == 200 and r.json()["sync"]["ok"] and r.json()["items"][0]["regionName"] == "New York", r.text
+    [c] = holidays_cals(client)
+    assert c["shared"] and not c["writable"] and c["name"] == "Holidays (United States)"
+    assert r.json()["items"][0]["calendar"] == c["id"]
     items = client.get("/api/occurrences", params={"start": "2026-07-01", "end": "2026-07-10", "calendars": c["id"]}).json()["items"]
     assert [(i["title"], i["start"], i["allDay"], i["busy"]) for i in items] == [
         ("Independence Day (observed)", "2026-07-03", True, False), ("Independence Day", "2026-07-04", True, False)]  # a Saturday
     # read-only for everyone, but an admin may rename and recolor it
     assert client.post(f"/api/events?calendar={c['id']}", json={"title": "x", "start": "2026-07-05"}).status_code == 403
     assert client.patch(f"/api/calendars/{c['id']}", json={"color": "#00aa00"}).status_code == 200
-    # syncing again changes nothing; another country replaces the dates
-    assert client.post("/api/holidays/sync").json()["changed"] == 0
-    r = client.post("/api/holidays/settings", json={"country": "BE", "language": "nl"}).json()
-    assert r["country"] == "BE" and r["region"] is None and r["sync"]["changed"] > 0
-    items = client.get("/api/occurrences", params={"start": "2026-07-20", "end": "2026-07-23", "calendars": c["id"]}).json()["items"]
-    assert [i["title"] for i in items] == ["Nationale feestdag"]
-    assert client.post("/api/holidays/settings", json={"country": "XX"}).status_code == 400
+    assert client.post("/api/holidays/sync").json()["changed"] == 0  # syncing again changes nothing
+    # a second country: its own calendar, the first one stays as it was
+    r = client.post("/api/holidays/settings", json={"items": [{"country": "US", "region": "NY"}, {"country": "BE", "language": "nl"}]}).json()
+    assert [x["country"] for x in r["items"]] == ["US", "BE"] and r["sync"]["ok"] and r["sync"]["calendars"] == 2
+    us_cal, be_cal = sorted(holidays_cals(client), key=lambda x: x["id"])
+    assert us_cal["id"] == c["id"] and us_cal["color"] == "#00aa00" and be_cal["name"] == "Holidays (Belgium)"
+    assert titles(client, be_cal, "2026-07-20", "2026-07-23") == ["Nationale feestdag"]
+    assert titles(client, us_cal, "2026-07-20", "2026-07-23") == []
+    # wrong entries are refused as a whole
+    assert client.post("/api/holidays/settings", json={"items": [{"country": "XX"}]}).status_code == 400
+    assert client.post("/api/holidays/settings", json={"items": [{"country": "BE"}, {"country": "be"}]}).status_code == 400
+    assert client.post("/api/holidays/settings", json={"items": [{"country": "BE", "region": "NY"}]}).status_code == 400
+    assert client.post("/api/holidays/settings", json={"country": "BE"}).status_code == 400
+    assert len(holidays_cals(client)) == 2
     # also over CalDAV and the subscription links: an ordinary (read-only) calendar
     feeds = client.get("/api/connect").json()
-    ics = client.get(next(f["ics"] for f in feeds["calendars"] if f["id"] == c["id"]).split("testserver", 1)[1]).text
+    ics = client.get(next(f["ics"] for f in feeds["calendars"] if f["id"] == be_cal["id"]).split("testserver", 1)[1]).text
     assert "Nationale feestdag" in ics and "TRANSP:TRANSPARENT" in ics
-    # switched off: gone
-    client.post("/api/holidays/settings", json={"country": ""})
-    assert holidays_cal(client) is None
+    # a country taken off the list loses its calendar; none left: no Holidays calendars
+    client.post("/api/holidays/settings", json={"items": [{"country": "BE", "language": "nl"}]})
+    assert [x["id"] for x in holidays_cals(client)] == [be_cal["id"]]
+    r = client.post("/api/holidays/settings", json={"items": []}).json()
+    assert r["items"] == [] and holidays_cals(client) == []
+
+
+def test_one_country_settings_carry_over(client, family_id):
+    from app import db, holiday, model
+    db.set_setting("holidays_country", "BE")
+    db.set_setting("holidays_region", "")
+    db.set_setting("holidays_language", "fr")
+    cid = model.create_calendar(None, "Holidays", "Public holidays: Belgium", kind="holidays", slug="holidays")
+    s = holiday.settings()
+    assert s["items"] == [{"country": "BE", "region": None, "language": "fr"}] and not s["guessed"]
+    assert db.get_setting("holidays_country") is None
+    assert model.calendar(cid)["slug"] == "holidays-be"
+    assert holiday.sync()["ok"] and [c["id"] for c in holidays_cals(client)] == [cid]  # the same calendar, kept
+
+
+def test_holidays_from_the_environment(monkeypatch):
+    from app import config, holiday
+    monkeypatch.setattr(config, "HOLIDAYS_COUNTRY", "be, nl")
+    monkeypatch.setattr(config, "HOLIDAYS_REGION", "")
+    monkeypatch.setattr(config, "HOLIDAYS_LANGUAGE", "fr")
+    assert holiday._from_env() == ([{"country": "BE", "region": None, "language": "fr"}, {"country": "NL", "region": None, "language": None}], False)
+    monkeypatch.setattr(config, "HOLIDAYS_COUNTRY", "")
+    assert holiday._from_env()[1] is True
 
 
 def test_country_from_time_zone():
@@ -104,7 +141,15 @@ def test_mcp_members(client, family_id):
     assert call(client, auth, "update_event", event=str(e["id"]), members=[]).get("members") is None
     assert "error" in call(client, auth, "create_event", title="x", start="2026-11-20", members=["ghost"])
     r = call(client, auth, "set_holidays", country="US", region="CA")
-    assert r["country"] == "US" and r["sync"]["ok"]
+    assert [x["country"] for x in r["countries"]] == ["US"] and r["sync"]["ok"]
+    r = call(client, auth, "set_holidays", country="NL")
+    assert [(x["country"], x["region"]) for x in r["countries"]] == [("US", "CA"), ("NL", None)]
+    r = call(client, auth, "set_holidays", country="US")  # the region changes; the order stays
+    assert [(x["country"], x["region"]) for x in r["countries"]] == [("US", None), ("NL", None)]
+    assert call(client, auth, "overview")["holidays"] == ["United States", "Netherlands"]
+    r = call(client, auth, "set_holidays", country="US", remove=True)
+    assert [x["country"] for x in r["countries"]] == ["NL"]
+    assert "error" in call(client, auth, "set_holidays", country="FR", remove=True)
 
 
 def test_leave_accounts_out_of_the_family(client, family_id):

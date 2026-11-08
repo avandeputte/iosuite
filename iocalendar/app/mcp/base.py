@@ -25,7 +25,7 @@ server = shared_mcp.make_server(
         "their recurrenceId (from agenda). To change or delete one occurrence give occurrence=<recurrenceId> and "
         "scope='this', or scope='following' for it and the ones after. People on an event are noted, never invited: "
         "nothing is sent to them. Events can be tagged with the family members they are for (members: names from "
-        "overview's family); agenda and search_events filter by member. The shared Holidays calendar holds the public "
+        "overview's family); agenda and search_events filter by member. The shared Holidays calendars (one per country) hold the public "
         "holidays and cannot be changed. Ask before deleting events or calendars."
     ),
 )
