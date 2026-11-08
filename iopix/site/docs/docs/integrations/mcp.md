@@ -1,6 +1,6 @@
 # MCP server for AI assistants
 
-ioPix is also an [MCP](https://modelcontextprotocol.io) server, so an AI assistant such as Claude can search and look at your library through the running app. It is at `/mcp` on the same port, the same in every app of the suite. Nothing extra is installed. **Every request signs in with an app password** (**Settings › Apps and devices**), sent as `Authorization: Bearer <app password>` or as HTTP Basic with your user name; without one `/mcp` answers 401, whether or not Require sign-in is on. The assistant then acts as that account.
+ioPix is also an [MCP](https://modelcontextprotocol.io) server, so an AI assistant such as Claude can search and look at your library through the running app. It is at `/mcp` on the same port, the same in every app of the suite. Nothing extra is installed. **Every request signs in with an app password** (**Settings › Account › App passwords**), sent as `Authorization: Bearer <app password>` or as HTTP Basic with your user name; without one `/mcp` answers 401, whether or not Require sign-in is on. The assistant then acts as that account.
 
 It is **off by default**: turn it on in **Settings › Server › MCP server** (or set `MCP=1`). While it is off, `/mcp` does not answer.
 
@@ -27,7 +27,7 @@ These take an **admin's account** (the app password of an admin), because they r
 `diagnostics`, `server_log`, `job_queue`, `photo_file`, `date_suggestions` (the year suggestions for undated photos, with their clues), `set_date_hint` (a folder's earliest and latest possible year), `place_suggestions` (where photos without a position were probably taken), `jersey_suggestions` (players for the shirt numbers read on unnamed people), `clothing_suggestions` (people probably present, by their clothes), `rotation_findings` (photos stored on their side or upside down), `run_analysis` (start a background analysis, as Settings › AI does), and `update_viewer`, which installs a new version. `check_for_update` answers any account.
 
 !!! danger "Treat an admin's app password like a root password"
-    `update_viewer` replaces the code ioPix runs. Give the assistant its own app password and revoke it (Settings › Apps and devices) if it was ever shared.
+    `update_viewer` replaces the code ioPix runs. Give the assistant its own app password and revoke it (Settings › Account › App passwords) if it was ever shared.
 
 ## Connecting Claude
 

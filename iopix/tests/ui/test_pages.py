@@ -25,7 +25,7 @@ def test_the_settings_page(page, server):
     page.wait_for_selector("h1:has-text('Settings')", timeout=10000)
     page.wait_for_selector(".stabs", timeout=10000)  # the sections arrive with /api/maintenance
     tabs = page.locator(".stabs button").all_inner_texts()
-    assert [t for t in tabs if t not in ("Account", "Apps and devices")][:5] == ["Display", "Editing", "Library", "AI", "Server"], "the order every io app uses"
+    assert [t for t in tabs if t not in ("Account",)][:5] == ["Display", "Editing", "Library", "AI", "Server"], "the order every io app uses"
     heads = page.locator("h2").evaluate_all("els => els.map((e) => e.textContent)")
     for h in ("Display", "AI analysis and models", "Editing", "Metadata templates", "Library", "Backups"):
         assert any(x.startswith(h) for x in heads), (h, heads)
