@@ -5,7 +5,7 @@ import { loadMe, renderUserMenu, signIn } from './auth.js';
 import { loadSuite } from './suite.js';
 import { view, viewFromHash, go, loadMeta, renderNav, loadList, setOpenHandler, refresh, markSelected, setStatus } from './notes.js';
 import { openNote, flush, uploadPicture, currentNote } from './editor.js';
-import { renderSettings, renderChanges, serverUi } from './settings.js';
+import { renderSettings, renderChanges, renderImport, serverUi, applyTheme } from './settings.js';
 
 let lastList = '';
 
@@ -76,6 +76,7 @@ async function route() {
   document.body.classList.remove('reading');
   if (page === 'settings') { await flush(); renderNav(); return renderSettings(tab, sub); }
   if (page === 'changes') { await flush(); renderNav(); return renderChanges(); }
+  if (page === 'import') { await flush(); renderNav(); return renderImport(); }
   viewFromHash();
   $('#q').value = view.q;
   notesLayout();
@@ -165,9 +166,7 @@ async function start() {
   renderUserMenu();
   // notes are private to each account: once accounts exist, nothing shows until someone signs in
   if (!state.me.user && (state.me.requireLogin || state.me.usersExist)) { document.body.classList.add('locked'); signIn(true); return; }
-  if (state.me.user && state.me.settings && state.me.settings.theme) {
-    try { if (!localStorage.getItem('ionotes.theme')) { localStorage.setItem('ionotes.theme', state.me.settings.theme); location.reload(); return; } } catch (e) {}
-  }
+  if (state.me.user && state.me.settings && state.me.settings.theme) applyTheme(state.me.settings.theme);  // the account's theme (Settings › Display)
   if (state.settings.app_name && state.settings.app_name !== 'ionotes') document.title = state.settings.app_name;
   await loadMeta();
   loadSuite();

@@ -17,12 +17,13 @@ and sign-in (Cloudflare Access too), the same installer, updater, Docker image a
   note onto a folder to file it), all notes / pinned / pictures / no folder / trash, sorting, full-text search,
   editing that saves as you type, pictures pasted (⌘V) or dropped anywhere become notes, copy text or picture,
   download. Installs like an app on a phone (PWA); light, dark or the device's theme. Laid out like iopix: the
-  sidebar (dockable) has the views, Folders, Tags and Manage (trash, change log), with Settings at its
+  sidebar (dockable) has the views, Folders, Tags and Manage (trash, change log, import and export), with Settings at its
   foot; the search, New note and your account are along the top. On a phone the sidebar is a bottom bar with More.
 - **Search**: every word you type must match (prefix) in the title, the text, the text in the picture or the tags,
   through MariaDB's full-text index.
 - **Text in pictures**: read on the device where the picture was taken (Apple's Vision framework, on the Mac and
   iPhone), and sent along; for pictures added in the web app the server reads it itself with RapidOCR.
+- **Settings**: Account, Display and Apps and devices for everyone signed in (the same panels as every io app), Server for admins; a change is saved the moment it is made.
 - **Settings › Security** (suite admins): the whole suite's people and their role in every app, app passwords, keys and tokens, the apps (default role, sign-in required) and sign-in at the proxy; the same panel as on the start page and in every io app (iosuite-shared's `/api/suite-admin/ui.js`).
 - **Offline**: the apps keep a full copy and send their changes when the server can be reached; the API settles
   conflicts per note by the time of the edit (below).
@@ -188,7 +189,7 @@ account) stay with the open install: export them before making the first account
 | Not signed in | nothing but the sign-in screen (there are no shared notes to read) |
 | **viewer** | read and search their own notes; their own settings kept on the server |
 | **viewer without a password** | the same; signs in with one click from the account picker, on the home network only |
-| **editor** | plus every change to their own notes, folders and tags, and export/import of them (Settings › Export and import; the Mac and iPhone apps sign in as an editor) |
+| **editor** | plus every change to their own notes, folders and tags, and export/import of them (Import and export; the Mac and iPhone apps sign in as an editor) |
 | **admin** | plus settings, accounts, updates and the server log |
 
 **Sign-in required** (Settings › Global settings › Apps) also closes the open routes to visitors, but for the app shell, `/api/status` and the sign-in routes (the MCP endpoint wants an app password either way).
@@ -248,9 +249,9 @@ Apps that take a JSON configuration and only start local processes (Claude Deskt
 
 ## Export, import and backups
 
-Settings › Export and import › Export downloads every note as Markdown (with front matter: id, dates, tags, source) next to its picture,
-in a directory per folder, plus `notes.json` with everything. Such a zip imports again on any ionotes server (Settings ›
-Export and import › Import): records keep their ids, and a newer copy on the server wins (a zip from another account on the same server comes in as new notes). For backups, back the database up
+Import and export (the sidebar) › Export downloads every note as Markdown (with front matter: id, dates, tags, source) next to its picture,
+in a directory per folder, plus `notes.json` with everything. Such a zip imports again on any ionotes server (Import
+and export › Import): records keep their ids, and a newer copy on the server wins (a zip from another account on the same server comes in as new notes). For backups, back the database up
 (`mariadb-dump --single-transaction notes`): notes, pictures, accounts and settings are all in it.
 
 ## Layout
