@@ -304,10 +304,13 @@ def iocalendar_add(request: Request, b: dict) -> dict:
 def iocontacts(request: Request, days: int = 30, n: int = 8) -> dict:
     """{items: [{id, name, hasPhoto, iopixPersonId, label, turns, in, date}]}: the family's birthdays and other dates in
     the next `days` days, soonest first, up to n. A contact without a photo of its own may still have a face in ioPix
-    (iopixPersonId), which ioContacts shows in its place; so does the card."""
+    (iopixPersonId), which ioContacts shows in its place; so does the card. A birthday whose "Remind me" box is unchecked
+    in ioContacts (remind false) is left out; other dates carry no such box (remind null) and always show."""
     got = fetch(request, "iocontacts", "/api/upcoming", {"days": max(1, min(days, 366))})
     items = []
     for x in got.get("items", []):
+        if x.get("remind") is False:
+            continue
         items.append({"id": x.get("contactId"), "name": x.get("fn"), "hasPhoto": bool(x.get("hasPhoto")),
                       "iopixPersonId": x.get("iopixPersonId"), "label": x.get("label") or "birthday",
                       "turns": x.get("turns"), "in": x.get("inDays"), "date": x.get("date")})

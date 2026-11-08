@@ -165,7 +165,8 @@ def test_iocalendar_week_ahead(client, apps_answer):
 def test_iocontacts_birthdays_and_photo(client, apps_answer):
     table, asked = apps_answer
     table[("iocontacts", "/api/upcoming")] = {"items": [
-        {"contactId": 5, "fn": "Ada Lovelace", "hasPhoto": True, "label": "birthday", "turns": 41, "inDays": 0, "date": "2026-11-04"},
+        {"contactId": 5, "fn": "Ada Lovelace", "hasPhoto": True, "label": "birthday", "turns": 41, "inDays": 0, "date": "2026-11-04", "remind": True},
+        {"contactId": 6, "fn": "Muted", "hasPhoto": False, "label": "birthday", "turns": 30, "inDays": 1, "date": "2026-11-05", "remind": False},
         {"contactId": 9, "fn": "Bob", "hasPhoto": False, "iopixPersonId": 77, "label": "anniversary", "turns": 10, "inDays": 12, "date": "2026-11-16"},
     ] + [{"contactId": i, "fn": f"P{i}", "inDays": 20} for i in range(10, 20)]}
     d = client.get("/api/widgets/iocontacts").json()
@@ -174,6 +175,7 @@ def test_iocontacts_birthdays_and_photo(client, apps_answer):
                            "turns": 41, "in": 0, "date": "2026-11-04"}
     assert d["items"][1]["iopixPersonId"] == 77  # no photo of its own, but a face in ioPix, which the card shows
     assert d["items"][1]["label"] == "anniversary" and d["items"][2]["label"] == "birthday"
+    assert all(x["id"] != 6 for x in d["items"])  # "Remind me" unchecked in ioContacts: not on the start page
     assert asked[-1][2] == {"days": 30}
     table[("iocontacts", "/api/contacts/5/photo")] = (b"\xff\xd8jpeg", "image/jpeg")
     r = client.get("/api/widgets/iocontacts/photo/5")
