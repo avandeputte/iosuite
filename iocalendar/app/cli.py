@@ -4,7 +4,7 @@
   check                           connect to the databases and say what is there
   import CALENDAR-ID FILE.ics     events from an .ics file into a calendar
   sync-birthdays                  bring the Birthdays calendar up to date from ioContacts
-  sync-holidays                   bring the Holidays calendar up to date (Settings › Holidays)
+  sync-holidays                   bring the Holidays calendar up to date (Settings › Holidays and birthdays)
 
 Accounts are the suite's: `iosuite-shared --config . admin NAME --app iocalendar` makes an admin (setup.sh does),
 `iosuite-shared --config . password NAME` sets a password.

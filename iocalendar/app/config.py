@@ -19,7 +19,7 @@ DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD = _db["host"], _db["port"], _db[
 # the time zone new events and all-day feeds default to (the server's own when empty)
 TZ = env("TZ")
 
-# public holidays (Settings › Holidays wins once an admin has chosen): a two-letter country code (off: none), and
+# public holidays (Settings › Holidays and birthdays wins once an admin has chosen): a two-letter country code (off: none), and
 # optionally its region (a state or province code) and the language of the names; no country: the time zone's
 HOLIDAYS_COUNTRY = env("HOLIDAYS_COUNTRY").strip()
 HOLIDAYS_REGION = env("HOLIDAYS_REGION").strip().upper()

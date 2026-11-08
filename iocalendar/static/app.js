@@ -1,6 +1,6 @@
 /* ioCalendar web app: one module, no build step. Views: month, week, day and agenda, with the calendars to show in the
    sidebar; the event form (repeating events, people from ioContacts, reminders), search, import/export, settings
-   (account, display, apps and devices, calendars, holidays, and for admins connected apps, family, storage and backups,
+   (account, display, apps and devices, calendars, holidays and birthdays, and for admins family, storage and backups,
    server, and for suite admins security and global settings), laid out as in the other ioThing apps. Events can be tagged with the family
    members they are for, and the sidebar filters the calendar by member. */
 
@@ -762,7 +762,7 @@ function eventCard(j, inDialog) {
     j.url ? line('link', safeUrl(j.url) ? h('a', { class: 'lnk', href: j.url, target: '_blank', rel: 'noopener' }, j.url) : h('span', null, j.url)) : null,
     line('today', c.name || '', j.busy === false ? h('span', { class: 'muted' }, ' · shown as free') : null,
       c.kind === 'birthdays' ? h('div', { class: 'muted small' }, 'From ioContacts; change the birthday there.') : null,
-      c.kind === 'holidays' ? h('div', { class: 'muted small' }, 'A public holiday (Settings › Holidays).') : null));
+      c.kind === 'holidays' ? h('div', { class: 'muted small' }, 'A public holiday (Settings › Holidays and birthdays).') : null));
 }
 function closeDialogs() { document.querySelectorAll('.dialog-back').forEach((d) => d.remove()); }
 async function openEvent(o) {
@@ -1110,13 +1110,13 @@ async function showImport(page) {
 // ------------------------------------------------------------------ settings
 async function showSettings(page, r) {
   const adm = S.user.role === 'admin';
-  const tabs = [['account', 'Account'], ['display', 'Display'], ['devices', 'Apps and devices'], ['calendars', 'Calendars'], ['holidays', 'Holidays'],
-    ...(adm ? [['connected', 'Connected apps'], ['family', 'Family'], ['storage', 'Storage and backups'], ['server', 'Server']] : []),
+  const tabs = [['account', 'Account'], ['display', 'Display'], ['devices', 'Apps and devices'], ['calendars', 'Calendars'], ['holidays', 'Holidays and birthdays'],
+    ...(adm ? [['family', 'Family'], ['storage', 'Storage and backups'], ['server', 'Server']] : []),
     ...(S.user.suiteAdmin ? [['security', SUITE_TABS.security], ['global', SUITE_TABS.global]] : [])];
   page.append(h('div', { class: 'pagehead' }, h('h1', null, 'Settings')),
     h('div', { class: 'tabs' }, tabs.map(([k, l]) => h('button', { class: r.tab === k ? 'on' : '', onclick: () => { location.hash = `#/settings/${k}`; } }, l))));
   const body = h('div'); page.append(body);
-  await ({ account: setAccount, display: setDisplay, devices: setDevices, calendars: setCalendars, holidays: setHolidays, connected: setConnected, family: setFamily, storage: setStorage, server: setServer,
+  await ({ account: setAccount, display: setDisplay, devices: setDevices, calendars: setCalendars, holidays: setHolidays, family: setFamily, storage: setStorage, server: setServer,
     security: setSuite, global: setSuite }[r.tab] || setAccount)(body, r);
 }
 const fld = (l, e) => h('label', { class: 'field' }, h('span', null, l), e);
@@ -1229,7 +1229,7 @@ async function setCalendars(el) {
         !auto && (!c.shared || S.user.role === 'admin') ? h('button', { class: 'pillbtn noic danger', onclick: async () => {
           if (!await confirmDialog('Delete calendar', `Delete ${c.name} and its ${c.count || 0} events? Apps that sync it lose it too.`, 'Delete', true)) return;
           try { await api(`/api/calendars/${c.id}`, { method: 'DELETE' }); await loadCals(); onRoute(); } catch (e) { fail(e); }
-        } }, 'Delete') : null)] : h('p', { class: 'muted' }, auto ? (c.kind === 'holidays' ? 'Filled from Settings › Holidays.' : 'Filled from ioContacts.') : `${c.count || 0} events. Editors and admins change shared calendars.`));
+        } }, 'Delete') : null)] : h('p', { class: 'muted' }, auto ? (c.kind === 'holidays' ? 'Filled from Settings › Holidays and birthdays.' : 'Filled from ioContacts (Settings › Holidays and birthdays).') : `${c.count || 0} events. Editors and admins change shared calendars.`));
   }));
 }
 
@@ -1260,15 +1260,17 @@ async function setSuite(el, r) {
   await ui.mount(el, { tab: r.tab, sub: r.sub, toast, onSub: (x) => history.replaceState(null, '', `#/settings/${r.tab}/${x}`) });
 }
 
-async function setConnected(el) {
+/** Settings › Holidays and birthdays and birthdays, for admins: the Birthdays calendar ioContacts fills (the suite connects the two by
+    itself, so there is nothing else to set). */
+async function birthdaysBox(el) {
   const s = await api('/api/iocontacts/settings');
   const bdays = h('input', { type: 'checkbox', checked: s.birthdays });
   const out = h('div');
   const last = (x) => (x && x.synced ? `Birthdays last brought up to date ${new Date(x.synced * 1000).toLocaleString()} (${x.count} dates).` : x && x.error ? `The last sync failed: ${x.error}` : '');
   out.append(h('p', { class: 'muted small' }, last(s.lastSync)));
-  el.append(h('div', { class: 'box' }, h('h2', null, icon('contacts'), 'ioContacts'),
+  el.append(h('div', { class: 'box' }, h('h2', null, icon('contacts'), 'Birthdays'),
     h('p', { class: 'muted' }, s.enabled
-      ? ['Connected by itself: ioCalendar finds ', h('a', { href: s.url, target: '_blank', rel: 'noopener' }, 'ioContacts'), ' in the suite and reads from it with its own read-only app password (Settings › Security on the start page lists it). The people on an event come from the shared contacts, and a shared Birthdays calendar shows their birthdays and anniversaries, brought up to date every six hours.']
+      ? ['A shared, read-only Birthdays calendar shows the birthdays and anniversaries in ', h('a', { href: s.url, target: '_blank', rel: 'noopener' }, 'ioContacts'), ', which ioCalendar finds in the suite by itself (the people on events come from there too), brought up to date every six hours.']
       : 'ioContacts is not part of this suite yet. Once it runs on the same Shared ioSuite database, ioCalendar connects to it by itself: people on events come from the contacts, and a Birthdays calendar shows their birthdays.'),
     h('p', null, h('label', { class: 'check' }, bdays, ' Show the Birthdays calendar')),
     h('p', null, h('button', { class: 'pillbtn primary', onclick: async () => {
@@ -1320,6 +1322,7 @@ async function setHolidays(el) {
         toast('Saved');
       } catch (e) { fail(e); }
     } }, icon('check', 's'), 'Save')), out);
+  await birthdaysBox(el);
 }
 
 /** Settings › Server (admins): the MCP switch, the version and its updates, this server, the server log and Restart:
