@@ -14,7 +14,7 @@ from app.auth import auth as auth_shared
 from app.http import json_body, user_name
 
 router = APIRouter()
-SWITCHES = ("require_login", "read_only", "mcp_enabled")
+SWITCHES = ("require_login", "read_only")  # the MCP switch is Settings › Server (POST /api/server {mcpEnabled})
 TEXTS = ("app_name",)
 
 
@@ -25,12 +25,10 @@ def api_settings(request: Request):
     if users.is_admin(request.state.user):
         out.update({k: db.get_setting(k, "0") == "1" for k in SWITCHES})
         out["read_only_env"] = config.READ_ONLY
-        out["mcp_forced"] = config.MCP_FORCED
         out["database"] = db.public_settings()
         out["suite_database"] = suitedb.public()
         out["ocr"] = ocr.status()
         out["images"] = images.stats()
-        out["appUrl"] = config.BASE_URL
     return out
 
 
@@ -107,7 +105,7 @@ async def api_db_save(request: Request):
     return {"ok": True, "restartNeeded": True}
 
 
-# ---- maintenance
+# ---- storage and backups
 @router.get("/api/changes", dependencies=[access.editor])
 def api_changes(limit: int = 200, before: int = None):
     """The change log: who created, edited, deleted or recoloured what, newest first."""
@@ -131,7 +129,7 @@ async def api_import(request: Request, file: UploadFile = File(...)):
 
 @router.get("/api/owners", dependencies=[access.admin])
 def note_owners():
-    """Maintenance › Who owns the notes: each owner id with its note count and account name (if the id is an account
+    """Settings › Storage and backups › Who owns the notes: each owner id with its note count and account name (if the id is an account
     of ionotes), and the accounts notes can be given to."""
     accounts = {u["id"]: u["name"] for u in users.list_users()}
     counts = notes.owner_counts()

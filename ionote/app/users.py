@@ -2,7 +2,7 @@
 
 Three roles here: viewer (reads and searches the notes; own settings kept on the server), editor (viewer plus
 every change to notes, folders and tags: the Mac and iPhone apps sign in as an editor) and admin (editor plus
-settings, maintenance and user management). An account holds a role per app; a suite admin is admin everywhere.
+settings and user management). An account holds a role per app; a suite admin is admin everywhere.
 Anyone not signed in browses read-only. A viewer may have no password at all: such an account signs in with one
 click from the account picker (on the home network only) and can never be more than a viewer. Until the first
 account exists ionotes stays open, so a fresh install is not locked out.

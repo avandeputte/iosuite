@@ -104,7 +104,7 @@ def test_export_and_import_are_per_account(client, admin):
 
 
 def test_an_admin_gives_one_accounts_notes_to_another(client, admin):
-    """Maintenance › Who owns the notes: when the old notes went to the wrong account, an admin moves them all."""
+    """Settings › Storage and backups › Who owns the notes: when the old notes went to the wrong account, an admin moves them all."""
     _two(client, admin)
     _as(client, "sam", "secretpw2")
     client.put(f"/api/notes/{OTHER}", json={"title": "old note", "tags": ["work"], "updatedAt": 1})

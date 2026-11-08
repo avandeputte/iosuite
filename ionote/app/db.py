@@ -90,7 +90,7 @@ TABLES = {
         "CREATE TABLE IF NOT EXISTS nts_tag_colors (user_id BIGINT NOT NULL DEFAULT 0, tag_key VARCHAR(191) NOT NULL, name VARCHAR(191) NOT NULL, "
         "color VARCHAR(16), updated_at DOUBLE NOT NULL, deleted INT NOT NULL DEFAULT 0, rev BIGINT NOT NULL DEFAULT 0, "
         "PRIMARY KEY (user_id, tag_key), INDEX idx_nts_tag_colors_rev (rev)) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"),
-    # what changed and who changed it, for Maintenance › Change log
+    # what changed and who changed it, for the change log (Manage › Change log)
     "nts_change_log": (
         "CREATE TABLE IF NOT EXISTS nts_change_log (id INTEGER PRIMARY KEY AUTOINCREMENT, created_at INTEGER, user_name TEXT, action TEXT, kind TEXT, "
         "uuid TEXT, summary TEXT, user_id INTEGER NOT NULL DEFAULT 0)",

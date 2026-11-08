@@ -1,8 +1,7 @@
-/** Settings (Display for everyone; Apps and devices for accounts; Read-only for admins; Suite for suite admins), Maintenance (admins: storage and backups, MCP and
- *  OCR, updates and logs) and the change log. Laid out as in every ioThing app: Settings is what is configured,
- *  Maintenance what is run or checked. */
+/** Settings, one page as in every ioThing app (Display for everyone; Apps and devices for accounts; Export and import of
+ *  one's own notes; Notes, Storage and backups and Server for admins; Security and Global settings for
+ *  suite admins), and the change log. */
 import { $, h, api, state, icon, toast, fail, isAdmin, canWrite, confirmIt, fmtDate } from './core.js';
-import { runUpdate } from './update.js';
 
 /** A section of a settings page, as iopix draws one: the heading with its coloured marker and a line under it, an
  *  intro, then rows (title and explanation on the left, the control on the right, a line between rows). */
@@ -26,19 +25,31 @@ function appearance() {
 }
 
 /** What only ioNotes has: read-only mode. Accounts, roles, the sign-in requirement and sign-in at the proxy are the
- *  suite's (Settings › Suite). */
-function accessBox(s) {
-  return box('Read-only', state.me.isSuiteAdmin ? h('span', 'People, their role here, whether sign-in is required and sign-in at the proxy are under ', h('a', { href: '#/settings/suite' }, 'Settings › Suite'), ', for every io app at once.') : 'People, roles and sign-in are managed by a suite admin under Settings › Suite.',
+ *  suite's (Settings › Security, Global settings). */
+function readOnlyBox(s) {
+  return box('Read-only', state.me.isSuiteAdmin ? h('span', 'People, their role here, whether sign-in is required and sign-in at the proxy are under ', h('a', { href: '#/settings/security' }, 'Settings › Security'), ' and ', h('a', { href: '#/settings/global' }, 'Global settings'), ', for every io app at once.') : 'People, roles and sign-in are managed by a suite admin under Settings › Security.',
     sw('Read-only', s.read_only, (v) => setSetting('read_only', v), s.read_only_env, s.read_only_env ? '(READ_ONLY=1 in config.env)' : 'Nothing can be changed, by anyone.'));
 }
 
-/** Settings › Suite (suite admins): the people and their role in every app (here too), app passwords, keys and tokens,
- *  the apps and sign-in at the proxy, for the whole suite. The same panel in every io app, served by iosuite-shared. */
-async function suitePanel(sub) {
+/** Settings › Security and Global settings (suite admins): the people and their role in every app (here
+ *  too), app passwords, sign-in at the proxy; the apps, keys and tokens. The same panel in every io app, served by
+ *  iosuite-shared. */
+async function suitePanel(tab, sub) {
   const el = h('div');
   let ui;
-  try { ui = await import(new URL('api/suite-admin/ui.js', document.baseURI).href); } catch (e) { return h('p.err', `The Suite panel did not load: ${e.message}`); }
-  await ui.mount(el, { sub, toast, onSub: (x) => history.replaceState(null, '', `#/settings/suite/${x}`) });
+  try { ui = await import(new URL('api/suite-admin/ui.js', document.baseURI).href); } catch (e) { return h('p.err', `The panel did not load: ${e.message}`); }
+  await ui.mount(el, { tab, sub, toast, onSub: (x) => history.replaceState(null, '', `#/settings/${tab}/${x}`) });
+  return el;
+}
+
+/** Settings › Server (admins): the MCP switch, the version and its updates, the server log and Restart:
+ *  iosuite-shared's panel, the same in every io app. */
+export const serverUi = () => import(new URL('api/server/ui.js', document.baseURI).href);
+async function serverPanel() {
+  const el = h('div');
+  let ui;
+  try { ui = await serverUi(); } catch (e) { return h('p.err', `The Server panel did not load: ${e.message}`); }
+  await ui.mount(el, { toast });
   return el;
 }
 
@@ -68,14 +79,6 @@ function databaseBox(s) {
     env ? h('p.small', 'Set in config.env (DB_*): ' + d.fromEnv.join(', ') + '. Change it there.') :
       h('div', ...Object.entries({ Host: f.host, Port: f.port, Database: f.database, User: f.user, Password: f.password }).map(([l, e]) => h('div.row', h('label', l), e)), h('div.row', test, saveb)),
     out);
-}
-
-async function mcpBox(s) {
-  const url = (s.appUrl || location.origin) + '/mcp';
-  return box('MCP server', 'Lets an assistant such as Claude search and read notes and look at their pictures and, as an editor, create, edit, file, tag and delete them; admins also get diagnostics and the updater. The same in every ioThing app: every assistant signs in with an app password (Settings › Apps and devices) and works on that account\'s own notes.',
-    sw('MCP server at /mcp', s.mcp_enabled || s.mcp_forced, (v) => setSetting('mcp_enabled', v), s.mcp_forced, s.mcp_forced ? '(MCP=1 in config.env)' : ''),
-    h('div.row', h('label', 'Address'), h('span.code', url)),
-    h('p.small', 'Claude Code: claude mcp add --transport http ionotes ' + url + ' --header "Authorization: Bearer <app password>". Claude Desktop: "args": ["mcp-remote", "' + url + '", "--header", "Authorization: Bearer <app password>"].'));
 }
 
 /** Settings › Apps and devices: the signed-in account's app passwords (one per app or device, revocable one by one),
@@ -143,68 +146,15 @@ function exportBox() {
       canWrite() ? h('button.pillbtn', { onclick: () => file.click() }, icon('upload'), 'Import…') : null, file));
 }
 
-/** Maintenance › Updates and logs: the version card, the server log and Restart, from iosuite-shared's /api/server and
- *  /api/log, so the page is the same in every ioThing app. */
-async function updateBox() {
-  const u = await api('/api/server');
-  const out = h('p.small');
-  const show = (c) => { out.className = 'small'; out.textContent = !c ? '' : c.status === 'current' ? `Up to date (${c.installed}).` : c.status === 'update' ? `A newer version is out: ${c.remoteVersion || c.remote} (${c.remoteDate}): ${c.remoteMessage}` : `Could not check: ${c.error}`; };
-  show(u.check);
-  const post = (body) => api('/api/server', { method: 'POST', body });
-  return box('ionotes version', null, h('p', `Version ${u.version}, commit `, h('span.code', u.installed), u.docker ? ' (Docker: update by pulling the image)' : ''),
-    u.lastUpdate ? h('p.small' + (u.lastUpdate.ok ? '.okc' : '.err'), 'Last update: ' + u.lastUpdate.text) : null,
-    sw('Check for updates daily', u.autoCheck, async (v) => { try { await post({ autoCheck: v }); toast('Saved'); } catch (e) { fail(e); } }, u.autoCheckLocked, u.autoCheckLocked ? '(UPDATE_CHECK=0 in config.env)' : '(only GitHub’s public list of changes is asked; nothing about this server is sent)'),
-    h('div.row', h('button.pillbtn', { onclick: async () => { out.textContent = 'Checking…'; show(await post({ action: 'check' }).catch((e) => ({ status: 'error', error: e.message }))); } }, 'Check for updates'),
-      u.canRun ? h('button.pillbtn.primary', { onclick: async () => {
-        if (!await confirmIt('Update ioNotes', 'Install the latest version and restart? It takes about a minute.', 'Update')) return;
-        await runUpdate((msg, failed) => { out.className = 'small' + (failed ? ' err' : ''); out.textContent = msg; });
-      } }, 'Update now') : null,
-      h('a.pillbtn', { href: `https://github.com/${u.repo}/commits/${u.branch}`, target: '_blank', rel: 'noopener' }, 'Change log')), out,
-    h('p.small.muted', `Follows ${u.repo} (${u.branch}).`));
-}
-
-function restartBox() {
-  return box('Restart', 'Stops ioNotes; the service manager (systemd, launchd or Docker) starts it again within seconds. Nothing is lost; the page reloads when it is back.',
-    h('div.row', h('button.pillbtn', { onclick: async () => {
-      if (!await confirmIt('Restart ioNotes', 'Restart the server now? Everyone is disconnected for a few seconds.', 'Restart')) return;
-      try { await api('/api/server', { method: 'POST', body: { action: 'restart' } }); } catch (e) { fail(e); return; }
-      toast('Restarting…');
-      const until = Date.now() + 90000, gone = Date.now() + 3000;
-      const look = async () => {
-        try { const r = await fetch('/api/status', { credentials: 'same-origin' }); if (r.ok && Date.now() > gone) { location.reload(); return; } } catch (e) { /* down */ }
-        if (Date.now() < until) setTimeout(look, 2000); else toast('ionotes did not come back; check the service.');
-      };
-      setTimeout(look, 3000);
-    } }, 'Restart ioNotes')));
-}
-
-function logBox() {
-  const pre = h('pre.log', 'Loading…'), note = h('p.small.muted');
-  const level = h('select', [['any', 'Everything'], ['warning', 'Warnings and errors'], ['error', 'Errors'], ['auth', 'Sign-ins']].map(([v, l]) => h('option', { value: v }, l)));
-  const contains = h('input', { type: 'text', placeholder: 'Contains…' });
-  const requests = h('input', { type: 'checkbox' });
-  const load = async () => {
-    const r = await api(`/api/log?lines=300&level=${level.value}&contains=${encodeURIComponent(contains.value)}&requests=${requests.checked ? 1 : 0}`).catch((e) => ({ lines: [e.message] }));
-    pre.textContent = (r.lines || []).join('\n') || r.note || 'Nothing matches.';
-    note.textContent = r.file && !r.note ? `${r.file}: ${(r.size_bytes / 1024).toFixed(0)} kB, the last ${r.returned} lines.` : '';
-    pre.scrollTop = pre.scrollHeight;
-  };
-  level.addEventListener('change', load); contains.addEventListener('change', load); requests.addEventListener('change', load);
-  load();
-  return box('Server log', null, h('div.row', h('label', 'Show'), level, contains, h('label', requests, ' Requests too'), h('button.pillbtn', { onclick: load }, 'Reload'),
-    h('a.pillbtn', { href: '/api/log/download' }, icon('download'), 'Download')), pre, note);
-}
-
 /** A page as iopix lays one out: the title with its icon tile, the tabs under it (the tab is in the address:
  *  #/settings/devices), then the tab's boxes. */
 let again = () => {};
 function pageTitle(text, ic, hue, sub = '') { return h('h1.ptitle', h('span.pic', { style: `--hue:${hue}` }, icon(ic)), text, sub ? h('span.muted', sub) : null); }
 async function tabbedPage(base, title, ic, hue, tabs, tab) {
-  if (!state.version) { try { state.version = (await api('/api/status')).version; } catch (e) { /* the title goes without it */ } }
   const main = $('#main');
   main.textContent = '';
   const cur = tabs.find((t) => t[0] === tab) || tabs[0];
-  const inner = h('div.pagein', pageTitle(title, ic, hue, state.version ? `ioNotes v${state.version}` : ''),
+  const inner = h('div.pagein', pageTitle(title, ic, hue),
     tabs.length > 1 ? h('div.stabs', { role: 'tablist' }, tabs.map(([k, label]) => h('a.pillbtn' + (k === cur[0] ? '.on' : ''), { href: `#/${base}/${k}`, role: 'tab', 'aria-selected': String(k === cur[0]) }, label))) : null);
   main.append(h('div.page', inner));
   again = () => tabbedPage(base, title, ic, hue, tabs, cur[0]);
@@ -212,26 +162,21 @@ async function tabbedPage(base, title, ic, hue, tabs, tab) {
 }
 const render = () => again();
 
-/** Settings: Display for everyone, Export and import of one's own notes, Read-only for admins, Suite for suite admins. */
+/** Settings: Display for everyone; Apps and devices for accounts; Export and import of one's own notes; for admins Notes
+ *  (read-only, text in pictures), Storage and backups (the database, who owns the notes) and Server; for suite admins
+ *  Security and Global settings. */
 export function renderSettings(tab, sub) {
   const tabs = [['display', 'Display', async () => [appearance(), state.me.user ? null : box('Account', state.me.usersExist ? 'Sign in to see your notes.' : 'No accounts yet: anyone who can reach ioNotes can read and change the notes. Create the admin account from the person icon at the top right.')]]];
-  if (state.me.user || !state.me.usersExist) tabs.push(['export', 'Export and import', async () => [exportBox()]]);  // anyone's own notes
   if (state.me.user) tabs.push(['devices', 'Apps and devices', async () => [await devicesBox()]]);
-  if (isAdmin()) tabs.push(['access', 'Read-only', async () => [accessBox(await api('/api/settings'))]]);
-  if (state.me.isSuiteAdmin) tabs.push(['suite', 'Suite', async () => [await suitePanel(sub)]]);
+  if (state.me.user || !state.me.usersExist) tabs.push(['export', 'Export and import', async () => [exportBox()]]);  // anyone's own notes
+  if (isAdmin()) {
+    const s = () => api('/api/settings');
+    tabs.push(['notes', 'Notes', async () => { const x = await s(); return [readOnlyBox(x), ocrBox(x)]; }],
+      ['storage', 'Storage and backups', async () => { const x = await s(); return [databaseBox(x), await ownersBox()]; }],
+      ['server', 'Server', async () => [await serverPanel()]]);
+  }
+  if (state.me.isSuiteAdmin) tabs.push(['security', 'Security', async () => [await suitePanel('security', sub)]], ['global', 'Global settings', async () => [await suitePanel('global', sub)]]);
   return tabbedPage('settings', 'Settings', 'gear', 'var(--c-gray)', tabs, tab);
-}
-
-/** Maintenance (admins): where the notes are kept and their backups, MCP and the text in pictures, and Updates and
- *  logs (the version, the server log, restart), as in every ioThing app. */
-export function renderMaintenance(tab) {
-  if (!isAdmin()) { const main = $('#main'); main.textContent = ''; main.append(h('div.page', h('div.pagein', pageTitle('Maintenance', 'wrench', 'var(--c-orange)'), h('p.muted', 'For admins only.')))); return null; }
-  const s = () => api('/api/settings');
-  return tabbedPage('maintenance', 'Maintenance', 'wrench', 'var(--c-orange)', [
-    ['storage', 'Storage and backups', async () => { const x = await s(); return [databaseBox(x), await ownersBox(), exportBox()]; }],
-    ['mcp', 'MCP and text in pictures', async () => { const x = await s(); return [await mcpBox(x), ocrBox(x)]; }],
-    ['updates', 'Updates and logs', async () => [await updateBox(), logBox(), restartBox()]],
-  ], tab);
 }
 
 export async function renderChanges() {

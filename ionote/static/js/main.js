@@ -1,12 +1,11 @@
-/** Start-up and routing: #/notes (the list and the open note), #/note/<id>, #/settings[/tab], #/maintenance[/tab], #/changes. Pasting or
+/** Start-up and routing: #/notes (the list and the open note), #/note/<id>, #/settings[/tab], #/changes. Pasting or
  *  dropping a picture makes a note of it; N makes a new note; / goes to the search box. */
 import { $, h, api, state, icon, paintIcons, toast, fail, canWrite, confirmIt, debounce } from './core.js';
-import { runUpdate } from './update.js';
 import { loadMe, renderUserMenu, signIn } from './auth.js';
 import { loadSuite } from './suite.js';
 import { view, viewFromHash, go, loadMeta, renderNav, loadList, setOpenHandler, refresh, markSelected, setStatus } from './notes.js';
 import { openNote, flush, uploadPicture, currentNote } from './editor.js';
-import { renderSettings, renderMaintenance, renderChanges } from './settings.js';
+import { renderSettings, renderChanges, serverUi } from './settings.js';
 
 let lastList = '';
 
@@ -21,14 +20,13 @@ function updateBanner(u) {
   if (b) b.remove();
   const text = h('div', h('b', u.version ? `Version ${u.version} is available` : 'A newer build is available'),
     h('div.muted', `You have v${state.version || '?'}. ${(u.message || '').replace(/^v\d+\.\d+\.\d+:\s*/, '').slice(0, 140)}`));
-  const more = h('a.pillbtn', { href: '#/maintenance/updates', onclick: () => b.remove() }, 'Details');
+  const more = h('a.pillbtn', { href: '#/settings/server', onclick: () => b.remove() }, 'Details');
   const run = u.canRun ? h('button.pillbtn.primary', { onclick: async () => {
     if (!await confirmIt('Update ioNotes', `Fetch ${u.version ? 'version ' + u.version : 'the latest version'}, refresh the packages and restart ioNotes? The page reloads when the new version is up.`, 'Update')) return;
-    runUpdate((msg, failed) => {
-      run.hidden = more.hidden = true;
-      text.textContent = '';
-      text.append(h('b', failed ? 'The update did not finish' : 'Updating…'), h('div.muted', msg));
-    });
+    run.hidden = more.hidden = true;
+    text.textContent = '';
+    text.append(h('b', 'Updating…'), h('div.muted', 'ioNotes restarts when it is done, and the page reloads.'));
+    if (!await (await serverUi()).runUpdate({ toast })) run.hidden = more.hidden = false;
   } }, 'Update now') : null;
   b = h('div#updbanner', { 'data-remote': u.remote }, h('span.icwrap', icon('spark')), text, run, more,
     h('button.iconbtn', { title: 'Not now (hidden until the next version)', onclick: () => { try { localStorage.setItem(DISMISSED, u.remote); } catch (e) {} b.remove(); } }, icon('close')));
@@ -77,7 +75,6 @@ async function route() {
   const [, page, tab, sub] = path.split('/');
   document.body.classList.remove('reading');
   if (page === 'settings') { await flush(); renderNav(); return renderSettings(tab, sub); }
-  if (page === 'maintenance') { await flush(); renderNav(); return renderMaintenance(tab); }
   if (page === 'changes') { await flush(); renderNav(); return renderChanges(); }
   viewFromHash();
   $('#q').value = view.q;

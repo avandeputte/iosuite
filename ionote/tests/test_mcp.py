@@ -50,7 +50,7 @@ def signed_in(name, password):
 @pytest.fixture
 def on(client, admin):
     """The switch on, and alex's app password as a bearer header (the session cookie works too)."""
-    client.post("/api/settings", json={"mcp_enabled": True})
+    client.post("/api/server", json={"mcpEnabled": True})
     return app_password(client)
 
 
