@@ -254,7 +254,7 @@ its health data. A *suite admin* is admin in every app.
 
 Settings › Account is where you change your name, email and password. Every setting saves as soon as you change it. The iPhone app signs in with this server's address, your user
 name and your password; a script can use an **app password** instead (made by a suite admin under Settings › Security › App passwords). Sessions are random tokens in an HttpOnly cookie (`iothing_session`, shared
-by the apps on the domain) valid for 30 days and renewed while in use; passwords are scrypt-hashed; wrong passwords
+by the apps on the domain) valid for 30 days and renewed while in use; passwords are Argon2id-hashed; wrong passwords
 cost a growing wait.
 
 ## API
