@@ -1282,19 +1282,18 @@ async function setHolidays(el) {
       info.languages.map((l) => h('option', { value: l, selected: keep && l === s.language ? true : null }, LANG(l))));
     region.disabled = !info.regions.length; lang.disabled = !info.languages.length;
   };
+  country.onchange = () => drawCountry(false);
   await drawCountry(true);
   const out = h('div', null, h('p', { class: 'muted small' }, last(s.lastSync)));
-  const save = async () => {
-    try {
-      const r = await api('/api/holidays/settings', { method: 'POST', json: { country: country.value, region: region.value, language: lang.value } });
-      await loadCals();
-      fill(out, h('p', { class: r.sync && !r.sync.ok ? 'warn' : 'muted small' }, !r.country ? 'The Holidays calendar is off.' : r.sync.ok ? `Holidays of ${[r.countryName, r.regionName].filter(Boolean).join(', ')}: ${r.sync.count} dates.` : r.sync.error));
-      toast('Saved');
-    } catch (e) { fail(e); }
-  };
-  country.onchange = async () => { await drawCountry(false); save(); };
-  region.onchange = save; lang.onchange = save;
-  box.append(h('div', { class: 'grid' }, fld('Country', country), fld('Region (state, province…)', region), fld('Names in', lang)), out);
+  box.append(h('div', { class: 'grid' }, fld('Country', country), fld('Region (state, province…)', region), fld('Names in', lang)),
+    h('p', null, h('button', { class: 'pillbtn primary', onclick: async () => {
+      try {
+        const r = await api('/api/holidays/settings', { method: 'POST', json: { country: country.value, region: region.value, language: lang.value } });
+        await loadCals();
+        fill(out, h('p', { class: r.sync && !r.sync.ok ? 'warn' : 'muted small' }, !r.country ? 'The Holidays calendar is off.' : r.sync.ok ? `Holidays of ${[r.countryName, r.regionName].filter(Boolean).join(', ')}: ${r.sync.count} dates.` : r.sync.error));
+        toast('Saved');
+      } catch (e) { fail(e); }
+    } }, icon('check', 's'), 'Save')), out);
   await birthdaysBox(el);
 }
 
