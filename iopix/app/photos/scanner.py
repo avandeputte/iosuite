@@ -17,7 +17,7 @@ scan()
     ratings are left alone, as digiKam does unless "rescan if modified" is set), and files that vanished get
     status 3 with no album (CoreDB::removeItems), so digiKam would treat them exactly the same. A root that is
     missing or looks unmounted, or a pass that would remove most of a folder tree, is skipped and reported
-    rather than applied. Runs every few minutes while on, and on request (Maintenance > File scanner).
+    rather than applied. Runs every few minutes while on, and on request (Settings › Library › File scanner).
 
 The unique hash is digiKam's own (DImg::createUniqueHashV3 for hash version 3, V2 for 2), checked against
 2,000 photos digiKam scanned: identical.

@@ -31,7 +31,7 @@ Tags, faces, folders and some other changes live in digiKam's own tables and go 
 
 ## When digiKam is open
 
-digiKam keeps parts of its database in memory. On the same machine, iopix checks whether digiKam is running before it writes to digiKam's tables, and holds those writes until it is closed; your change is kept in the sidecar and in iopix meanwhile, and appears under **Edits waiting for digiKam** in Maintenance. In a container, where the check is not possible, writes go ahead.
+digiKam keeps parts of its database in memory. On the same machine, iopix checks whether digiKam is running before it writes to digiKam's tables, and holds those writes until it is closed; your change is kept in the sidecar and in iopix meanwhile, and appears under **Edits waiting for digiKam** in Settings › Library. In a container, where the check is not possible, writes go ahead.
 
 ## Undo
 

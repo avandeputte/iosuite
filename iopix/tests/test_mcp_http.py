@@ -21,7 +21,7 @@ def _app_password(client, label="claude") -> str:
 
 @pytest.fixture(autouse=True)
 def _mcp_on(client):
-    """The endpoint is off by default (Settings › MCP server); these tests switch it on, with an admin, alex, whose app
+    """The endpoint is off by default (Settings › Server › MCP server); these tests switch it on, with an admin, alex, whose app
     password the calls carry (the tests run without accounts otherwise, and the endpoint always wants one)."""
     from app import users
     from app.data import state
@@ -54,9 +54,9 @@ def test_the_endpoint_is_off_until_switched_on(client):
     r = client.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, headers=_auth())
     assert r.status_code == 404 and "switched off" in r.json()["detail"]
     _login(client, "alex", "correct horse")
-    assert client.get("/api/settings").json()["mcp_enabled"] is False
-    assert client.post("/api/settings", json={"mcp_enabled": True}).status_code == 200
-    assert client.get("/api/settings").json()["mcp_enabled"] is True
+    assert client.get("/api/server").json()["mcpEnabled"] is False
+    assert client.post("/api/server", json={"mcpEnabled": True}).status_code == 200
+    assert client.get("/api/server").json()["mcpEnabled"] is True
     client.cookies.clear()
     assert _rpc(client, "tools/list")["result"]["tools"]
 

@@ -126,19 +126,6 @@ def test_old_password_hashes_are_upgraded_at_sign_in(client, fresh):
     client.post("/api/auth/logout", json={})
 
 
-def test_sign_out_everywhere_ends_the_other_sessions(client, fresh):
-    from app import users
-    users.create("multi-probe", "longpassword1", "viewer")
-    r = client.post("/api/auth/login", json={"name": "multi-probe", "password": "longpassword1"})
-    phone = r.cookies.get(users.COOKIE)  # the same account on another device
-    assert phone
-    client.post("/api/auth/logout_all", json={})
-    assert client.get("/api/auth/me").json()["user"]["name"] == "multi-probe", "this session was renewed"
-    client.cookies.clear(); client.cookies.set(users.COOKIE, phone)
-    assert client.get("/api/auth/me").json()["user"] is None, "the other device's session is over"
-    client.cookies.clear()
-
-
 def test_sidecar_naming_follows_digikam(tmp_path, monkeypatch):
     from app.photos import edits
     photo = tmp_path / "IMG_1.jpg"; photo.write_bytes(b"x")

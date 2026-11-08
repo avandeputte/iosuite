@@ -1,7 +1,7 @@
 """Map provider: OpenStreetMap tiles (default, no account) or Google Maps through the
 Map Tiles API and the Geocoding API, with the owner's own API key.
 
-The key comes from the suite's keys and tokens (`google_maps_key` of iopix, entered in Settings or Settings › Suite) or the
+The key comes from the suite's keys and tokens (`google_maps_key` of iopix, entered in Settings or Settings › Security) or the
 GOOGLE_MAPS_API_KEY environment variable; the `map_provider` setting picks the provider.
 Google tiles need a session token: the server creates it with the key and hands the
 browser a tile URL template. The key appears in that template, as Google's design
@@ -56,7 +56,7 @@ def provider() -> str:
     return "google" if p == "google" and key() else "osm"
 
 
-KEYS = [  # in the suite's keys and tokens (iosuite_shared.credentials), so Settings › Suite lists them with the others
+KEYS = [  # in the suite's keys and tokens (iosuite_shared.credentials), so Settings › Security lists them with the others
     {"name": "google_maps_key", "label": "Google Maps API key", "env": "GOOGLE_MAPS_API_KEY",
      "hint": "browser-facing (tiles, Street View): restrict it by HTTP referrer to ioPix's address"},
     {"name": "google_server_key", "label": "Google server key", "env": "GOOGLE_SERVER_KEY",

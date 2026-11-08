@@ -18,7 +18,7 @@ iopix needs two things from digiKam: the **database** and the **photo folders**.
 
     Give iopix the same server, database, user and password digiKam uses. See [digiKam on MariaDB or MySQL](mariadb.md).
 
-You can change these later in **Settings › digiKam and server**, with a **Test connection** button.
+You can change these later in **Settings › Library**, with a **Test connection** button.
 
 ## The photo folders
 

@@ -8,11 +8,11 @@ The copy follows digiKam's database. After any change, made in iopix or in digiK
 
 If digiKam's database becomes unreachable (the server is down, the disk is unmounted), iopix keeps running from its copy and tells admins when the copy was taken.
 
-Edits waiting in sidecars are written into digiKam's database automatically when digiKam is closed: a minute after the last edit, and at most every five minutes. **Maintenance › Apply to digiKam database** does the same on request.
+Edits waiting in sidecars are written into digiKam's database automatically when digiKam is closed: a minute after the last edit, and at most every five minutes. **Settings › Library › Apply to digiKam database** does the same on request.
 
 ## Sync with digiKam off
 
-**Settings › digiKam and server › Sync with digiKam** can be turned off. iopix then never opens digiKam's database and everything works on its own copy: edits, tags, folders and uploads, faces, place tags. Ratings, titles, captions, dates, places and tags are still written to the sidecars, where digiKam will find them.
+**Settings › Library › Sync with digiKam** can be turned off. iopix then never opens digiKam's database and everything works on its own copy: edits, tags, folders and uploads, faces, place tags. Ratings, titles, captions, dates, places and tags are still written to the sidecars, where digiKam will find them.
 
 ## Turning sync back on
 

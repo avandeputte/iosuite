@@ -1,8 +1,8 @@
 /** Sign-in and accounts: the session (loadUser sets S.USER and the fields that come with it), the user menu, the sign-in,
  *  setup and account dialogs, and the Accounts and Suite sections of Settings. */
-import { $, SETTINGS, act, api, errorBox, fill, h, icon, post } from './core.js';
+import { $, SETTINGS, api, errorBox, fill, h, icon, post } from './core.js';
 import { S, applyBadgePref, applyTheme, avatarOf, brandName, hashFor, onRoute, photosWith, toast, toastError } from './state.js';
-import { confirmDialog, modal } from './actions.js';
+import { modal } from './actions.js';
 import { personPicker } from './faces.js';
 import { boot, pollStatus } from './main.js';
 import { loadSuite } from './suite.js';
@@ -21,12 +21,7 @@ export function renderUserMenu() {
       ['Account', accountDialog],
       ['Appearance', () => { location.hash = hashFor('settings', new URLSearchParams('tab=display')); }],
       ['Settings', () => { location.hash = hashFor('settings', new URLSearchParams()); }],
-      S.IS_ADMIN ? ['Maintenance', () => { location.hash = hashFor('maintenance', new URLSearchParams()); }] : null,
       'Session',
-      ['Sign out everywhere else', async () => {
-        if (!await confirmDialog('Sign this account out everywhere else? Every other browser and phone will have to sign in again; this one stays.', { ok: 'Sign out everywhere' })) return;
-        await act(() => post('/api/auth/logout_all', {}), { toast: 'Signed out everywhere else.' });
-      }],
       ['Sign out', signOut],
     ])) }, S.USER ? avatarOf(S.USER) : icon('person'));
   el.replaceChildren(btn);
@@ -86,29 +81,26 @@ function accountDialog() {
       : by === 'proxy' ? 'at the sign-in page of your proxy; sign out there.' : by === 'oneclick' ? 'here, with one click (no password).' : 'here, with a password.');
     outBtn.textContent = by === 'cloudflare' && me.throughCloudflare ? 'Sign out (of Cloudflare too)' : 'Sign out';
     outBtn.title = by === 'cloudflare' ? 'Ends the session here and Cloudflare Access’s, so Cloudflare asks for sign-in again next time' : '';
-    if (by === 'proxy') { outBtn.remove(); allBtn.remove(); }
+    if (by === 'proxy') outBtn.remove();
   }).catch(() => {});
-  const allBtn = h('button', { class: 'pillbtn', title: 'Ends this account’s sessions on every other browser and phone; this one stays signed in', onclick: async () => {
-    if (!await confirmDialog('Sign this account out everywhere else? Every other browser and phone will have to sign in again; this one stays.', { ok: 'Sign out everywhere' })) return;
-    await act(() => post('/api/auth/logout_all', {}), { toast: 'Signed out everywhere else.' }); } }, 'Sign out everywhere else');
   const back = modal(`${S.USER.name} · ${S.USER.role}`,
     h('p', { class: 'muted' }, S.USER.role === 'admin' ? 'You can change the library, the settings and the users.' : S.USER.role === 'editor' ? 'You can change the library (edits, tags, faces, places).' : 'You can browse, and keep favorites, albums and display settings.'),
     h('h4', null, 'Who you are in People'),
     h('div', {}, avatarOf(S.USER, true), h('span', null, S.USER.person && S.tagById.get(S.USER.person) ? S.tagById.get(S.USER.person).name : 'not linked'),
       S.IS_ADMIN ? h('button', { class: 'pillbtn', onclick: () => personPicker(async (t) => { try { S.USER = await post('/api/auth/person', { person: t.id }); renderUserMenu(); back.remove(); accountDialog(); } catch (e) { toastError(e); } }) }, S.USER.person ? 'Change' : 'Link to a person')
-        : h('span', { class: 'muted' }, S.USER.person ? '' : '(a suite admin links your account in Settings › Suite › People)'),
+        : h('span', { class: 'muted' }, S.USER.person ? '' : '(a suite admin links your account in Settings › Security › People)'),
       S.USER.person ? h('a', { class: 'lnk', href: hashFor('photos', photosWith({ tag: S.USER.person })), onclick: () => back.remove() }, 'Photos of me') : null),
     how,
     S.VIA_PROXY ? null : [h('h4', null, 'Change password'), h('div', {}, cur, pw)],
     S.VIA_PROXY ? null : h('div', {}, h('button', { class: 'pillbtn', onclick: async () => { try { await post('/api/auth/password', { current: cur.value, password: pw.value }); toast('Password changed.'); cur.value = pw.value = ''; } catch (e) { toastError(e); } } }, 'Change password')),
-    { buttons: [allBtn, outBtn, 'Done'] });
+    { buttons: [outBtn, 'Done'] });
 }
-/** Settings › Suite (suite admins): the people and their role in every app (here too), app passwords, keys and tokens,
- *  the apps and sign-in at the proxy, for the whole suite. The same panel in every io app, served by iosuite-shared. */
-export function suiteSection() {
+/** Settings › Security (people, roles, app passwords, sign-in at the proxy) or Settings › Global settings (the apps, keys
+ *  and tokens), for suite admins and the whole suite. The same panel in every io app, served by iosuite-shared. */
+export function suiteSection(tab) {
   const box = h('div');
   import(new URL('api/suite-admin/ui.js', document.baseURI).href)
-    .then((ui) => ui.mount(box, { sub: S.route.params.get('part'), toast, onSub: (x) => { S.route.params.set('part', x); history.replaceState(null, '', hashFor('settings', S.route.params)); } }))
-    .catch((e) => fill(box, errorBox(new Error(`The Suite panel did not load: ${e.message}`))));
+    .then((ui) => ui.mount(box, { tab, sub: S.route.params.get('part'), toast, onSub: (x) => { S.route.params.set('part', x); history.replaceState(null, '', hashFor('settings', S.route.params)); } }))
+    .catch((e) => fill(box, errorBox(new Error(`The suite panel did not load: ${e.message}`))));
   return box;
 }

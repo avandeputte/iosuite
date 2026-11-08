@@ -32,7 +32,7 @@ from app.routes import auth as auth_routes, backup, browse, images, albums, edit
 from app.runtime import state, kick, refresh, auto, watch, resolve, prewarmer, models_arrived, APP_NAME_DEFAULT, app_name, app_stamp, public_version
 from app import __version__ as APP_VERSION
 
-setup_log(config.LOG_FILE)  # the server log that Maintenance › Updates and logs shows; the app runs without it
+setup_log(config.LOG_FILE)  # the server log that Settings › Server shows; the app runs without it
 __all__ = ["app", "state", "kick", "refresh", "auto", "watch", "resolve", "prewarmer"]  # tests and app.mcp reach these through app.main
 
 @asynccontextmanager
@@ -56,7 +56,7 @@ async def lifespan(_app):
     refresh(initial=True)
     threading.Thread(target=thumbs.prune_previews, daemon=True).start()
     threading.Thread(target=watch, name="reindex", daemon=True).start()
-    scanner.start(events.after_write)  # the file scanner (Maintenance › File scanner): passes only while it is on
+    scanner.start(events.after_write)  # the file scanner (Settings › Library › File scanner): passes only while it is on
     if dkdb.no_digikam() and scanner.enabled():
         scanner.run_soon()  # no digiKam to have found what was added while iopix was stopped: a pass right after start-up
     updater.start_daily()  # the daily "is there a newer version" check, when the setting allows it
@@ -86,11 +86,11 @@ def _open_to_visitors(path: str) -> bool:
 
 
 def mcp_enabled() -> bool:
-    """Settings › Viewer › MCP server: off unless an admin turns it on (or MCP=1 in the environment)."""
+    """Settings › Server › MCP server: off unless an admin turns it on (or MCP=1 in the environment)."""
     return shared_mcp.enabled(appstate.get_setting, config.MCP_FORCED)
 
 
-_mcp_gate = auth.mcp_gate(mcp_enabled, on_user=mcp.current_user.set, settings_page="Settings › Viewer › MCP server")
+_mcp_gate = auth.mcp_gate(mcp_enabled, on_user=mcp.current_user.set)
 
 
 def _before(request: Request):
@@ -185,7 +185,7 @@ def _status_extra(request: Request) -> dict:
     admin, signed, writer = users.is_admin(user), users.is_signed_in(user), users.can_write(user)
     dk = photo_index.status()
     out.update({
-        "error": state["error"] if admin or not state["error"] else "The library could not be read; an admin can see why in Maintenance.", "rev": appstate.rev,
+        "error": state["error"] if admin or not state["error"] else "The library could not be read; an admin can see why in Settings › Library.", "rev": appstate.rev,
         "thumbs": {"running": prewarmer.running, "done": prewarmer.done, "total": prewarmer.total, "since": prewarmer.started, "last": prewarmer.last,
                    "current": list(prewarmer.current.values())[:3] if signed else []},  # file paths: not for anonymous clients
         "semantic": {"enabled": semantic_enabled(), "running": semantic.running, "done": semantic.done,
@@ -207,10 +207,23 @@ app.include_router(editing.router)
 app.include_router(settings.router)
 app.include_router(maintenance.router)
 app.include_router(auth.status_router(updater, extra=_status_extra))  # /api/status: public, the same shape in every app
-app.include_router(auth.server_router(updater, log_file=config.LOG_FILE, info=lambda: {"mcpEnabled": mcp_enabled(), "mcpLocked": config.MCP_FORCED}))  # /api/server, /api/log: admins
+def _server_info() -> dict:
+    """What Settings › Server shows beside the updater's own fields: the MCP box."""
+    return {"mcpEnabled": mcp_enabled(), "mcpLocked": config.MCP_FORCED,
+            "mcpAbout": "The address /mcp that lets an assistant such as Claude search and look at photos and, as an editor, tag, "
+                        "rate, caption and organize them; admins also get diagnostics and the updater."}
+
+
+def _server_apply(body: dict) -> None:
+    """The MCP switch, sent to POST /api/server as {mcpEnabled: bool}."""
+    if "mcpEnabled" in body:
+        shared_mcp.set_enabled(appstate.set_setting, bool(body["mcpEnabled"]), config.MCP_FORCED)
+
+
+app.include_router(auth.server_router(updater, log_file=config.LOG_FILE, info=_server_info, apply=_server_apply))  # /api/server, /api/log: admins
 app.include_router(auth_routes.router)
 app.include_router(users_routes.router)
-app.include_router(auth.admin_router())  # /api/suite-admin (+ ui.js, the Settings › Suite panel): the whole suite (suite admins)
+app.include_router(auth.admin_router())  # /api/suite-admin (+ ui.js, the Settings › Security and Global settings panel): the whole suite (suite admins)
 app.include_router(geo.router)
 app.include_router(backup.router)
 app.include_router(review.router)

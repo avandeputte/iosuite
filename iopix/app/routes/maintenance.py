@@ -1,5 +1,5 @@
 """Maintenance: background analysis and models, the file scanner and the library merge. The version, updates, restart and the
-server log (Maintenance › Updates and logs) are iosuite_shared's server_router (/api/server, /api/log), mounted in app/main.py."""
+server log (Settings › Server) are iosuite_shared's server_router (/api/server, /api/log), mounted in app/main.py."""
 import json
 import os
 import shutil
@@ -73,10 +73,10 @@ def _storage_sizes(refresh: bool = False) -> dict:
 
 @router.get("/api/analysis", dependencies=[access.public])
 def api_analysis(request: Request):
-    """Status of every background analysis, for the AI analysis page."""
+    """Status of every background analysis, for Settings › AI."""
     con = db()
     try:
-        total, stills = con.execute("SELECT count(*), sum(video = 0) FROM photos").fetchone()
+        total, stills = con.execute("SELECT count(*), coalesce(sum(video = 0), 0) FROM photos").fetchone()  # an empty library sums to NULL
     finally:
         con.close()
     act = semantic.active if semantic_enabled() else None
@@ -132,12 +132,10 @@ def api_maintenance(request: Request):
         "paths": {"library": str(config.PHOTOS_ROOT), "digikamDb": dkdb.describe(), "data": str(config.DATA_DIR)},
         "storage": _storage_sizes(request.query_params.get("refresh") == "1") | {
             "index": config.INDEX_DB.stat().st_size if config.INDEX_DB.exists() else 0,
-            "viewerDb": vdb.describe(),  # where the viewer's own data lives (a server, not a file in the data folder)
             "viewerDbError": vdb.error,
             "embeddings": sum(e.file.stat().st_size for e in semantic.engines.values() if e.file.exists()),
             "free": free},
         "writeFiles": edits.writes_files(), "readOnly": appstate.read_only(), "readOnlyLocked": config.READ_ONLY, "digikam": index.status(), "appName": app_name(), "appNameSet": appstate.get_setting("app_name", ""),
-        "mcpEnabled": appstate.get_setting("mcp_enabled", "0") == "1", "mcpLocked": config.MCP_FORCED,
         "database": db_settings_public(), "mapProvider": appstate.get_setting("map_provider", "osm"), "googleMapsKeySet": bool(maps.key()), "googleServerKeySet": maps.server_key_set(), "sidecarCompat": paths.compat_naming(), "searchModel": semantic.chosen(),
         "templates": json.loads(appstate.get_setting("templates", "[]")), "templateFields": list(edits.TEMPLATE_FIELDS),
         "recentTags": json.loads(appstate.get_setting("recent_tags", "[]")),

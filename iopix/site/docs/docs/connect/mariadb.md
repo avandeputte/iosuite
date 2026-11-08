@@ -13,7 +13,7 @@ digiKam can keep its database on a MariaDB or MySQL server, which suits a librar
 | `DIGIKAM_DB_USER` | `digikam` | account |
 | `DIGIKAM_DB_PASSWORD` | empty | password |
 
-The same can be set in **Settings › digiKam and server**, which tests the connection before saving.
+The same can be set in **Settings › Library**, which tests the connection before saving.
 
 The same server can also hold [iopix's own database](iopix-database.md): create a second database on it (for example `iopix`) and point the `DB_*` variables at it. Do not give iopix digiKam's database for its own data.
 

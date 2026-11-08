@@ -270,7 +270,7 @@ def _mysql_raw(c: dict):
     if pymysql is None:
         raise RuntimeError("the viewer database needs the PyMySQL package (pip install pymysql)")
     if not (c.get("host") and c.get("database") and c.get("user")):
-        raise RuntimeError("no viewer database configured (Settings › digiKam and server › iopix database, or DB_* in config.env)")
+        raise RuntimeError("no viewer database configured (Settings › Library › iopix database, or DB_* in config.env)")
     return pymysql.connect(host=c["host"], port=int(c["port"]), database=c["database"], user=c["user"], password=c["password"],
                            charset="utf8mb4", autocommit=False, connect_timeout=8, read_timeout=120, write_timeout=120)
 
@@ -503,7 +503,7 @@ def init():
     error = None
     if not configured():
         error = "no viewer database configured"
-        log.error("viewer database: %s; the viewer waits for one (Settings › digiKam and server › iopix database, or DB_* in config.env)", error)
+        log.error("viewer database: %s; the viewer waits for one (Settings › Library › iopix database, or DB_* in config.env)", error)
         return
     try:
         con = connect(cfg=settings())

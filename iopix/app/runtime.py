@@ -33,7 +33,7 @@ DB_ERRORS = (*vdb.Error, OSError)
 # version: the index build the API answers from; source: digiKam's database as of
 # that build (background jobs restart only when this changes)
 state = {"version": None, "error": None, "source": None}
-prewarmer = thumbs.Prewarmer()  # the thumbnail cache filler; Maintenance and the MCP diagnostics read its progress
+prewarmer = thumbs.Prewarmer()  # the thumbnail cache filler; Settings › Storage and backups and the MCP diagnostics read its progress
 
 
 def db() -> sqlite3.Connection:

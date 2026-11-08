@@ -14,7 +14,7 @@ from app.runtime import DB_ERRORS
 
 def face_detect_allowed():
     if not facedetect.available():
-        raise HTTPException(409, f"Face detection needs the {dlmodels.REGISTRY[dlmodels.chosen('face_detector')]['label']} model: download it in Maintenance › AI analysis and models")
+        raise HTTPException(409, f"Face detection needs the {dlmodels.REGISTRY[dlmodels.chosen('face_detector')]['label']} model: download it in Settings › AI")
     if not config.DB_WRITE or appstate.read_only():
         raise HTTPException(403, "Writing to digiKam's database is turned off")
     if not dkdb.no_digikam() and (not index.sync_enabled() or index.offline["since"]):  # no digiKam: they live in the library tables

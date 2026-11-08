@@ -1,4 +1,4 @@
-"""Accounts and the shell: the sign-in dialog, Settings › Suite (proxy sign-in, the sign-in list), Require sign-in, the Content Security Policy, the
+"""Accounts and the shell: the sign-in dialog, Settings › Security (proxy sign-in, the sign-in list), Require sign-in, the Content Security Policy, the
 service worker and a lost connection."""
 from helpers import make_admin, need_tool
 
@@ -27,10 +27,10 @@ def test_users_flow_in_the_browser(page, server, browser):
     page.locator(".modal input[type=password]").fill("correct horse")
     page.locator(".modal button", has_text="Create").click()
     page.wait_for_selector("#usermenu .avatar", timeout=5000)
-    page.goto(server + "/#/settings?tab=suite"); page.wait_for_selector(".iosa .sa-t", timeout=10000)
-    assert page.locator(".stab[data-tab=users]").count() == 0, "no Accounts tab: the person in photos is in Settings › Suite › People"
-    assert page.locator("#nav a[data-v=maintenance]").is_visible()
-    # a visitor in a fresh context: read-only, no maintenance icon, sign-in dialog
+    page.goto(server + "/#/settings?tab=security"); page.wait_for_selector(".iosa .sa-t", timeout=10000)
+    assert page.locator(".stab[data-tab=users]").count() == 0, "no Accounts tab: the person in photos is in Settings › Security › People"
+    assert page.locator("#nav a[data-v=maintenance]").count() == 0, "one Settings page, no Maintenance"
+    # a visitor in a fresh context: read-only, sign-in dialog
     ctx = browser.new_context(bypass_csp=True, viewport={"width": 1280, "height": 900}); visitor = ctx.new_page()
     pid = _get(server, "/api/photos")["id"][0]
     _open_photo(visitor, server, pid)
@@ -39,7 +39,6 @@ def test_users_flow_in_the_browser(page, server, browser):
     visitor.wait_for_selector(".lb-info h4", timeout=10000)
     assert visitor.locator(".lb-info h4", has_text="People").count() == 1, "the panel is open"
     assert visitor.locator(".lb-info input[placeholder='Title']").count() == 0
-    assert not visitor.locator("#nav a[data-v=maintenance]").is_visible()
     assert not visitor.locator("#nav .navmanage").is_visible() and visitor.locator("#nav a[data-v=events]").is_visible()
     visitor.keyboard.press("Escape"); visitor.wait_for_selector("#lightbox", state="hidden", timeout=5000)  # the lightbox covers the top bar
     visitor.locator("#usermenu button").click()
@@ -68,8 +67,8 @@ def test_users_flow_in_the_browser(page, server, browser):
     _get(server, "/api/status")
 
 def _add_kid(page, server):
-    """Settings › Suite › People › Add someone: kid, no password (a one-click viewer)."""
-    page.goto(server + "/#/settings?tab=suite&part=people"); page.wait_for_selector(".iosa button:has-text('Add someone')", timeout=10000)
+    """Settings › Security › People › Add someone: kid, no password (a one-click viewer)."""
+    page.goto(server + "/#/settings?tab=security&part=people"); page.wait_for_selector(".iosa button:has-text('Add someone')", timeout=10000)
     page.locator(".iosa button", has_text="Add someone").click(); page.wait_for_selector(".iosa-back .sa-dialog", timeout=5000)
     page.locator(".iosa-back label:has-text('User name') input").fill("kid")
     page.locator(".iosa-back button", has_text="Add").click()
@@ -78,13 +77,13 @@ def _add_kid(page, server):
 def test_account_picker_one_click_sign_in(page, server, browser):
     # an admin and a passwordless viewer, made through the API in open mode
     _post(server, "/api/auth/setup", {"name": "alex", "password": "correct horse"})
-    # the admin (a suite admin: setup makes one) adds the passwordless viewer in Settings › Suite › People
+    # the admin (a suite admin: setup makes one) adds the passwordless viewer in Settings › Security › People
     page.goto(server + "/#/settings"); page.wait_for_selector("h1:has-text('Settings')", timeout=10000)
     page.locator("#usermenu button").click(); page.wait_for_selector(".modal h3:has-text('Sign in')", timeout=5000)
     page.locator(".modal .account", has_text="alex").click(); page.locator(".modal input[type=password]").fill("correct horse"); page.locator(".modal button", has_text="Sign in").click()
     page.wait_for_selector("#usermenu .avatar", timeout=5000)
     _add_kid(page, server)
-    page.goto(server + "/#/settings?tab=suite"); page.wait_for_selector(".iosa .sa-t td:has-text('kid')", timeout=10000)
+    page.goto(server + "/#/settings?tab=security"); page.wait_for_selector(".iosa .sa-t td:has-text('kid')", timeout=10000)
     # a visitor: two tiles, one click as kid
     ctx = browser.new_context(bypass_csp=True, viewport={"width": 1280, "height": 900}); v = ctx.new_page()
     v.goto(server + "/#/photos"); v.wait_for_selector(".tile img", timeout=15000)
@@ -116,19 +115,19 @@ def test_require_sign_in_shows_only_the_login_dialog(page, server, browser):
         visitor.locator(".modal button", has_text="Sign in").click()
         visitor.wait_for_selector(".tile img", timeout=15000)
         assert visitor.locator(".modal-back").count() == 0 and visitor.locator("#main").is_visible()
-        # the setting is under Settings › Suite › Apps (Sign-in required), for every app
-        visitor.goto(server + "/#/settings?tab=suite&part=apps"); visitor.wait_for_selector(".iosa h2:has-text('Apps')", timeout=10000)
+        # the setting is under Settings › Global settings › Apps (Sign-in required), for every app
+        visitor.goto(server + "/#/settings?tab=global&part=apps"); visitor.wait_for_selector(".iosa h2:has-text('Apps')", timeout=10000)
         assert visitor.locator(".iosa tr:has-text('iopix') input[type=checkbox]").is_checked()
         ctx.close()
     finally:
         assert page.request.post(server + "/api/settings", data={"require_login": False}).ok
 
 def test_proxy_sign_in_settings(page, server):
-    """Settings › Suite › Sign-in at the proxy: picking Cloudflare shows the team and AUD fields, saving them turns
+    """Settings › Security › Sign-in at the proxy: picking Cloudflare shows the team and AUD fields, saving them turns
     verification on, and Off puts it back."""
     make_admin(page, "alex", "correct horse")
     try:
-        page.goto(server + "/#/settings?tab=suite&part=signin")
+        page.goto(server + "/#/settings?tab=security&part=signin")
         page.wait_for_selector(".iosa h2:has-text('Sign-in at the proxy')", timeout=10000)
         box = page.locator(".iosa .sa-box")
         assert box.locator("input").first.is_hidden(), "Off: nothing else to fill in"
@@ -172,7 +171,7 @@ def test_csp_lets_the_app_and_the_vendored_map_run(browser, server):
         ctx.close()
 
 def test_an_account_can_be_taken_off_the_sign_in_list(page, server, browser):
-    """Settings › Suite › People › On the sign-in list: unticked, the account is not a tile on the sign-in screen; "Other" with the
+    """Settings › Security › People › On the sign-in list: unticked, the account is not a tile on the sign-in screen; "Other" with the
     name and password still signs it in."""
     _post(server, "/api/auth/setup", {"name": "alex", "password": "correct horse"})
     page.goto(server + "/#/settings"); page.wait_for_selector("h1:has-text('Settings')", timeout=10000)

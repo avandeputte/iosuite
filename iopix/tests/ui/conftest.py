@@ -1,6 +1,6 @@
 """Browser tests (Playwright, headless Chromium) for the behaviours a user sees, split by subject:
 test_viewer (the lightbox, faces, the info panel), test_pages (Explore, People, folders, albums, the
-suggestion and quality pages, Settings and Maintenance), test_accounts (users, proxy sign-in, Require
+suggestion and quality pages, Settings), test_accounts (users, proxy sign-in, Require
 sign-in, CSP, PWA, offline) and test_layout (phone, sidebar, breadcrumbs, filters, units, theme).
 
 A real uvicorn serves the scratch library on a free port, started once per session from the same

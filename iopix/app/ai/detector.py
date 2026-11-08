@@ -1,5 +1,5 @@
 """Object detection with YOLOX (Apache-2.0, 80 everyday object types), run locally with
-onnxruntime. Four sizes of the same network (S, M, L, X; chosen in Maintenance, the setting
+onnxruntime. Four sizes of the same network (S, M, L, X; chosen in Settings › AI, the setting
 object_model) share one decoder. load() returns None until the chosen model's file exists in
 data/models, so the app works without it."""
 import logging

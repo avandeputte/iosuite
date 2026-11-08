@@ -115,7 +115,7 @@ body.side-docked #menubtn { display: none; }
 .sg .kind { margin-left: auto; color: var(--fg2); font-size: var(--fs-s); white-space: nowrap; }
 .sg .sub { color: var(--fg2); font-size: var(--fs-s); margin-left: 6px; }
 
-/* ---- sidebar: the name on top, the destinations in groups, Settings and Maintenance at the foot.
+/* ---- sidebar: the name on top, the destinations in groups, Settings at the foot.
    Docked (body.side-docked) on a wide screen; otherwise hidden off the left edge and slid over the page (body.side-open). */
 #nav { position: fixed; top: 0; bottom: 0; left: 0; width: var(--side); display: flex; flex-direction: column; gap: 2px; padding: 0 12px; overflow-y: auto; overscroll-behavior: contain;
   background: var(--side-bg); z-index: var(--z-panel); transform: translateX(-100%); visibility: hidden; transition: transform .2s ease, visibility 0s .2s; }
@@ -176,7 +176,7 @@ body.filters-open #main { right: 340px; }
 .seg { display: inline-flex; border: 1px solid var(--line); border-radius: var(--r-s); overflow: hidden; }
 .seg button { width: 30px; height: 30px; color: var(--fg2); font-size: var(--fs-s); }
 .seg button.on { background: var(--accent-bg); color: var(--accent); font-weight: 600; }
-/* the tabs of Settings and Maintenance: words on a line, the open one underlined (nothing else on the page looks like this; the buttons are pills) */
+/* the tabs of Settings: words on a line, the open one underlined (nothing else on the page looks like this; the buttons are pills) */
 .stabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 14px 0 10px; border-bottom: 1px solid var(--line); }
 .stabs .pillbtn { height: 40px; padding: 0 12px; border: 0; border-radius: 0; background: none; color: var(--fg2); font-weight: 500; position: relative; }
 .stabs .pillbtn:hover { color: var(--fg); background: none; }
@@ -474,7 +474,7 @@ body.filters-open #crumbbar { right: 340px; }
 .facebox.objbox span { top: auto; bottom: 100%; transform: translate(-50%, -4px); }
 
 .ajob { max-width: 820px; padding: 14px 0; border-top: 1px solid var(--line); }
-/* Maintenance › AI analysis and models */
+/* Settings › AI */
 .mwrap { overflow-x: auto; max-width: 1100px; }
 .mtable { border-collapse: collapse; width: 100%; font-size: var(--fs-m); }
 .mtable th { text-align: left; color: var(--fg2); font-weight: 500; padding: 6px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
@@ -604,13 +604,13 @@ body.nobadges .cbadges, body.nobadges .fbadge { display: none; }
 .utable select { height: 28px; }
 .utable .pillbtn { height: 28px; }
 
-/* Settings and Maintenance: every section, row and table shares one column width */
+/* Settings: every section, row and table shares one column width */
 .page.spage { max-width: 1040px; }
 .spage .srow, .spage .ajob, .spage .mwrap, .spage .stable.wide, .spage .utable, .spage [style*="max-width"] { max-width: none !important; }
 .spage .mwrap { width: 100%; }
 .mtable th:first-child, .mtable td:first-child { padding-left: 0; }
 .mtable th:last-child, .mtable td:last-child { padding-right: 0; }
-/* Settings and Maintenance section headings: larger, a coloured marker, a line under them */
+/* Settings section headings: larger, a coloured marker, a line under them */
 .spage h2 { font-size: var(--fs-xl); font-weight: 600; color: var(--fg); margin: 40px 0 6px; padding-bottom: 8px; align-items: center;
   border-bottom: 2px solid color-mix(in srgb, var(--brand) 30%, transparent); }
 .spage h2::before, .page h2.sec::before, .ghead::before { content: ""; width: 5px; height: 20px; border-radius: var(--r-xs); flex: none; margin-right: -2px;
@@ -716,7 +716,7 @@ body.nobadges .cbadges, body.nobadges .fbadge { display: none; }
 .qitems .hrow { transition: opacity .2s, transform .2s; }
 .qitems .hrow.qgone { opacity: 0; transform: scale(.96); }
 
-/* Maintenance › models: what the chosen model is, and how the others compare */
+/* Settings › AI: what the chosen model is, and how the others compare */
 .mtable .mwhat { font-size: var(--fs-s); margin-top: 4px; max-width: 360px; }
 .mtable .mmulti + .mmulti { margin-top: 8px; }
 .mcompare { margin-top: 6px; font-size: var(--fs-s); }
@@ -842,7 +842,7 @@ button.lnk:hover { text-decoration: underline; }
   .cbulk { left: 0; bottom: calc(56px + env(safe-area-inset-bottom)); }
   /* ---- small screens: bottom nav, full-width filters, no hover-only controls */
   :root { --topbar: 48px; --nav: 0px; }
-  #menubtn, #navscrim, .navhead, .navgap, .navsec, .navmanage, .navfoot, #nav a[data-v="settings"], #nav a[data-v="maintenance"] { display: none; }  /* Settings and Maintenance are under More */
+  #menubtn, #navscrim, .navhead, .navgap, .navsec, .navmanage, .navfoot, #nav a[data-v="settings"] { display: none; }  /* Settings is under More */
   #topbar { gap: 8px; padding: 0 8px; left: 0; }
   #suitebtn { display: inline-flex; margin: 0; }  /* the sidebar is the bottom bar here: the logo that opens the other apps is in the top bar */
   #filterbtn span:last-child { display: none; }

@@ -1,6 +1,6 @@
 # Models
 
-Each AI feature runs on a model that is downloaded once into the data folder. Where a feature has more than one model, the default is the small, fast one; **Maintenance › AI analysis and models** shows the sizes and speeds and switches to a larger, more accurate one.
+Each AI feature runs on a model that is downloaded once into the data folder. Where a feature has more than one model, the default is the small, fast one; **Settings › AI** shows the sizes and speeds and switches to a larger, more accurate one.
 
 | Feature | Default model | Alternatives | Download |
 | --- | --- | --- | --- |

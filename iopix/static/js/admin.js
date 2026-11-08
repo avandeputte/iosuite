@@ -1,4 +1,4 @@
-/** The library's management pages: metadata consistency, place tags, the Faces queue, duplicates and the tag tree (Settings and Maintenance are settings.js). */
+/** The library's management pages: metadata consistency, place tags, the Faces queue, duplicates and the tag tree (Settings is settings.js). */
 import { $, PREF, TOAST_LONG, actBtn, api, date, dfDay, dfMonth, errorBox, fill, fmtBytes, fmtWhen, h, icon, main, nf, norm, plural, post, send, store } from './core.js';
 import { S, faceUrl, filterParams, go, hashFor, onRoute, photosWith, pollSoon, toast, toastError } from './state.js';
 import { crumbs } from './search.js';
@@ -140,7 +140,7 @@ export async function showConsistency() {
     wasRunning = true;
     load();
   };
-  main.replaceChildren(h('div', { class: 'page spage cpage' }, crumbs([['Maintenance', '#/maintenance'], ['Metadata consistency', null]]),
+  main.replaceChildren(h('div', { class: 'page spage cpage' }, crumbs([['Settings', '#/settings?tab=library'], ['Metadata consistency', null]]),
     pageTitle('check', 'teal', 'Metadata consistency'),
     h('p', { class: 'muted' }, 'The rating, title, caption and tags of each photo are read from digiKam’s database, its XMP sidecar and the image file, and compared. Fix a photo with its buttons, or tick several and choose the right copy in the bar at the bottom; the other places are made to match. Files that cannot hold metadata (most videos, RAW) show n/a, which is not a disagreement.'),
     h('div', { class: 'ctools' },
@@ -259,7 +259,7 @@ export async function showFaces(vp) {
       const head = h('div', { class: 'muted intro' }, `${nf.format(d.total)} faces digiKam found but could not name. Look-alikes are shown together so one decision covers the group, with ${S.APP_NAME}’s own “looks like” guess when a named person matches; untick a face to leave it out. `,
         h('button', { type: 'button', class: 'lnk', onclick: () => { store.set(PREF.faceGroups, '0'); refresh(); } }, 'Show as a plain grid'));
       const status = g.progress.running ? h('div', { class: 'enote' }, `Grouping… ${nf.format(g.progress.done)} / ${nf.format(g.progress.total)} faces compared.`)
-        : g.missing.length ? h('div', { class: 'enote' }, `${nf.format(g.missing.length)} faces have not been compared yet (the Face grouping job in Maintenance runs in the background).`) : null;
+        : g.missing.length ? h('div', { class: 'enote' }, `${nf.format(g.missing.length)} faces have not been compared yet (the Face grouping job in Settings › AI runs in the background).`) : null;
       body.append(head, status);
       const nameAs = async (faces, s) => { if (!faces.length) return; if (await facesBatch(faces.map((f) => op(f, 'name', { tag: s.tag })), `Named ${s.name}`)) refresh(); };
       const looksLike = (s, faces) => s ? h('span', { class: 'lookslike' }, h('img', { src: faceUrl(s.tag), alt: '' }), `looks like ${s.name} · ${Math.round(s.score * 100)}%`,
@@ -292,7 +292,7 @@ export async function showFaces(vp) {
   // unnamed or ignored faces: a selectable grid, name or ignore many at once
   const sel = new Set();
   const grid = h('div', { class: 'fgrid' });
-  if (tab === 'unknown' && store.get(PREF.faceGroups, '1') === '0') body.append(h('div', { class: 'muted note' }, h('button', { type: 'button', class: 'lnk', onclick: () => { store.set(PREF.faceGroups, '1'); refresh(); } }, 'Group look-alikes'), ' (needs the SFace model from Maintenance › AI analysis and models).'));
+  if (tab === 'unknown' && store.get(PREF.faceGroups, '1') === '0') body.append(h('div', { class: 'muted note' }, h('button', { type: 'button', class: 'lnk', onclick: () => { store.set(PREF.faceGroups, '1'); refresh(); } }, 'Group look-alikes'), ' (needs the SFace model from Settings › AI).'));
   const bar = h('div', { class: 'toolbar my10',});
   const chosen = () => d.faces.filter((f, i) => sel.has(i));
   const drawBar = () => S.CAN_MANAGE && fill(bar,

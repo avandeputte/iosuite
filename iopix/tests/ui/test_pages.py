@@ -1,5 +1,5 @@
 """The pages: the photo grid, Explore, People, Folders and Albums, the quality and suggestion pages, the map, the import page,
-Settings and Maintenance."""
+Settings."""
 import json
 import urllib.error
 import urllib.request
@@ -20,32 +20,22 @@ def test_grid_renders_thumbnails(page, server, lib):
     page.wait_for_selector(".tile img", timeout=15000)
     assert page.locator(".tile").count() > 10
 
-def test_settings_and_maintenance_pages(page, server):
+def test_the_settings_page(page, server):
     page.goto(server + "/#/settings")
     page.wait_for_selector("h1:has-text('Settings')", timeout=10000)
     page.wait_for_selector(".stabs", timeout=10000)  # the sections arrive with /api/maintenance
-    assert page.locator(".stabs button").all_inner_texts()[:4] == ["Display", "digiKam and server", "Editing", "AI and search"]
+    assert page.locator(".stabs button").all_inner_texts()[:6] == ["Display", "Editing", "Library", "AI", "Storage and backups", "Server"], "one page: configure and run"
     heads = page.locator("h2").evaluate_all("els => els.map((e) => e.textContent)")
-    for h in ("Display", "Search and background work", "Editing", "Place tags", "Metadata templates"):
-        assert h in heads, heads
+    for h in ("Display", "AI analysis and models", "Editing", "Place tags", "Metadata templates", "Library", "Storage and backups"):
+        assert any(x.startswith(h) for x in heads), (h, heads)
     page.locator(".stabs button", has_text="Editing").click()
     assert page.locator("h2:has-text('Metadata templates')").is_visible() and page.locator("h2:has-text('Display')").is_hidden()
     assert "tab=editing" in page.url
     page.reload(); page.wait_for_selector(".stabs button.on:has-text('Editing')", timeout=10000)
-    page.locator(".stabs button", has_text="Display").click()
-    assert "Storage" not in heads and "Library" not in heads, "maintenance sections must not be on the Settings page"
-    assert page.locator(".ajob select").count() >= 1, "the core budget selector lives in Settings"
-    page.goto(server + "/#/maintenance")
-    page.wait_for_selector("h1:has-text('Maintenance')", timeout=10000)  # a hash-only navigation re-renders in place
-    page.wait_for_selector(".stabs", timeout=10000)
-    assert page.locator(".stabs button").all_inner_texts() == ["Library", "AI analysis and models", "Storage and backups", "ioPix"], "the app's name, not the retired Viewer"
-    heads = page.locator("h2").evaluate_all("els => els.map((e) => e.textContent)")
-    for h in ("Library", "AI analysis and models", "Storage and backups", "ioPix"):
-        assert any(x.startswith(h) for x in heads), (h, heads)
-    assert "Display" not in heads and "Editing" not in heads
-    page.locator(".stabs button", has_text="AI analysis and models").click()
+    page.locator(".stabs button", has_text="AI").click()
     page.wait_for_selector(".mtable tbody tr", timeout=10000)
-    assert page.locator("b", has_text="Background work").count() == 1
+    assert page.locator("b", has_text="Background work").count() == 1, "said once"
+    assert page.locator("div.muted:has(b:has-text('Background work')) select").count() == 1, "the core budget selector sits with the jobs"
     rows = page.locator(".mtable tbody tr")
     assert rows.count() >= 7, "one row per feature"
     assert page.locator(".mtable tr[data-job=objects][data-model=yolox]").count() == 1, "a job and its model share a row"
@@ -57,14 +47,18 @@ def test_settings_and_maintenance_pages(page, server):
     for key in ("mivolo", "aesthetic", "eyes"):
         assert page.locator(f".mtable tr[data-model~={key}]").count() == 1, f"{key} is listed once"
     assert page.locator(".mtable thead th").all_inner_texts()[:3] == ["Feature", "Model", "Progress"]
-    assert page.locator("b", has_text="Restart ").count() == 1  # "Restart <the app's name>"
     page.locator(".stabs button", has_text="Library").click()
     assert page.locator(".srow b", has_text="Metadata consistency").count() == 1, "consistency sits under Library"
+    assert page.locator(".srow b", has_text="digiKam database").count() == 1, "and where the library is"
+    page.locator(".stabs button", has_text="Storage and backups").click()
     assert page.locator(".stable.wide tr").count() >= 10 and page.locator(".stable.wide button", has_text="Rebuild").count() == 1
-    assert page.locator(".navfoot a[data-v=maintenance]").count() == 1 and page.locator(".navfoot a[data-v=settings]").count() == 1, "at the foot of the sidebar"
+    page.locator(".stabs button", has_text="Server").click()
+    page.wait_for_selector(".iosv h2:has-text('Restart')", timeout=10000)
+    assert page.locator(".iosv h2", has_text="MCP server").count() == 1, "the MCP switch is in one place"
+    assert page.locator(".navfoot a[data-v=maintenance]").count() == 0 and page.locator(".navfoot a[data-v=settings]").count() == 1, "at the foot of the sidebar"
 
 def test_database_row_tests_a_connection(page, server, lib):
-    page.goto(server + "/#/settings?tab=server"); page.wait_for_selector("h1:has-text('Settings')", timeout=10000)
+    page.goto(server + "/#/settings?tab=library"); page.wait_for_selector("h1:has-text('Settings')", timeout=10000)
     row = page.locator(".srow", has=page.locator("b", has_text="digiKam database"))
     assert row.count() == 1
     assert row.locator("select").first.input_value() == "sqlite"
@@ -180,7 +174,7 @@ def test_folders_and_albums_are_separate_pages(page, server, lib):
     assert page.locator("#nav .navsec", has_text="Library").count() == 1
     assert page.locator("#nav .navmanage a[data-v=trash]").count() == 1 and page.locator("#nav a[data-v=events]").count() == 1
     assert page.locator("#nav .navmanage a[data-v=quality]").count() == 0
-    assert page.locator("#nav .navmanage a[data-v=damaged]").count() == 0, "the check pages live under Maintenance › Library, not in the sidebar"
+    assert page.locator("#nav .navmanage a[data-v=damaged]").count() == 0, "the check pages live under Settings › Library, not in the sidebar"
     assert page.locator(".tree .trow").count() >= 1, "a tree of folders"
     assert page.locator(".tree .tact[title^='Upload photos']").count() >= 1, "editors can upload"
     assert page.locator(".tree .tact[title^='New folder']").count() >= 1
@@ -341,17 +335,14 @@ def test_digikam_offline_banner_and_sync_setting(page, server):
     page.locator("#dkbanner button[title^='Hide']").click()
     assert page.locator("#dkbanner").count() == 0
     page.unroute("**/api/status")
-    page.goto(server + "/#/settings?tab=server")
+    page.goto(server + "/#/settings?tab=library")
     page.wait_for_selector(".srow:has-text('Sync with digiKam')", timeout=10000)
     assert page.locator(".srow", has_text="Sync with digiKam").locator("button", has_text="Turn off").count() == 1
 
-def test_server_log_dialog_opens_from_maintenance(page, server):
-    page.goto(server + "/#/maintenance?tab=updates")
-    page.wait_for_selector(".srow:has-text('Server log') button", timeout=10000)
-    page.locator(".srow", has_text="Server log").locator("button").click()
-    page.wait_for_selector(".modal pre.logview", timeout=5000)
-    page.wait_for_function("!document.querySelector('.modal pre.logview').textContent.startsWith('Loading')", timeout=5000)
-    assert page.locator(".modal a", has_text="Download the log").count() == 1
+def test_server_log_shows_in_settings(page, server):
+    page.goto(server + "/#/settings?tab=server")
+    page.wait_for_selector(".iosv pre.sv-log", timeout=10000)
+    page.wait_for_function("!document.querySelector('.iosv pre.sv-log').textContent.startsWith('Loading')", timeout=5000)
 
 def test_grid_header_stays_while_scrolling_and_delete_asks_first(page, server):
     page.set_viewport_size({"width": 1300, "height": 800})
@@ -592,11 +583,11 @@ def test_explore_rediscover_and_no_settings(page, server):
     nxt = order[i + 1] if not order[i + 1].startswith("Then and now") else order[i + 2]  # (shown when someone's faces span years)
     assert nxt.startswith("Places") or nxt.startswith("People"), "right before Places (or People when there are no places)"
     assert page.locator("#main h2", has_text="Editing").count() == 0 and page.locator("#main input[type=checkbox]").count() == 0, "no settings on Explore"
-    assert page.locator("#main a.pill", has_text="Settings").count() == 0 and page.locator("#main a.pill", has_text="Maintenance").count() == 0
+    assert page.locator("#main a.pill", has_text="Settings").count() == 0
     _ = first
 
-def test_maintenance_explains_the_model_choices(page, server):
-    page.goto(server + "/#/maintenance?tab=models")
+def test_settings_explain_the_model_choices(page, server):
+    page.goto(server + "/#/settings?tab=ai")
     page.wait_for_selector(".mtable tr[data-job=facedetect] .mcompare", timeout=15000)
     row = page.locator(".mtable tr[data-job=facedetect]")
     assert "Face detection" in row.locator(".mwhat").inner_text()
@@ -667,8 +658,8 @@ def test_import_page_plans_then_imports_a_dropped_photo(page, server, lib, tmp_p
     finally:
         _cleanup(None, lib, ["/1998"])
 
-def test_maintenance_has_the_file_scanner(page, server):
-    page.goto(server + "/#/maintenance")
+def test_settings_have_the_file_scanner(page, server):
+    page.goto(server + "/#/settings?tab=library")
     page.wait_for_selector(".srow b:has-text('File scanner')", timeout=10000)
     r = page.locator(".srow", has=page.locator("b", has_text="File scanner"))
     assert r.locator("input[type=checkbox]").count() == 1 and r.locator("select option").count() == 5 and r.locator("button", has_text="Scan now").count() == 1

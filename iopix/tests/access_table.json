@@ -82,7 +82,6 @@
   "POST /api/auth/app-passwords": "signed_in",
   "POST /api/auth/login": "public",
   "POST /api/auth/logout": "public",
-  "POST /api/auth/logout_all": "signed_in",
   "POST /api/auth/password": "signed_in",
   "POST /api/auth/person": "admin",
   "POST /api/auth/proxy": "admin",

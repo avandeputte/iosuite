@@ -1,4 +1,4 @@
-"""The maintenance tools, for admins: what the web app's Maintenance and Explore pages
+"""The maintenance tools, for admins: what the web app's Settings and Explore pages
 offer, so an assistant can run the same reports, suggestions, edits and background jobs. Each tool
 calls the module the page calls, with the same checks (read-only mode, digiKam closed, editing on),
 so a change made here is logged and undoable exactly like one made in the browser."""
@@ -33,7 +33,7 @@ TAG_WAIT_SECONDS = 120  # how long tag_op waits for the previous change's sideca
 
 @server.tool(annotations=READ_ONLY)
 def consistency_report(field: str = "", offset: int = 0, limit: int = 500) -> dict:
-    """The metadata consistency report (Maintenance › Metadata consistency): photos whose rating, title,
+    """The metadata consistency report (Settings › Library › Metadata consistency): photos whose rating, title,
     caption or tags differ between digiKam's database, the XMP sidecar and the image file, with each
     source's value. field narrows it to one of rating|title|caption|tags. Admins only."""
     need_admin()
@@ -78,7 +78,7 @@ def edit_photos(photo_ids: list[int], taken: Optional[str] = None, caption: Opti
 
 @server.tool(annotations=STARTS_JOB)
 def consistency_scan(rescan_all: bool = False) -> dict:
-    """Start the metadata consistency check in the background, as Maintenance > Metadata consistency's buttons do:
+    """Start the metadata consistency check in the background, as Settings › Library › Metadata consistency's buttons do:
     every photo (rescan_all) or those changed since they were last checked. consistency_report shows the progress and
     the results. Admins only."""
     need_admin()
@@ -118,7 +118,7 @@ def rewrite_sidecars(photo_ids: list[int]) -> dict:
 
 @server.tool(annotations=STARTS_JOB)
 def face_quality() -> dict:
-    """Face metadata quality (Maintenance > Face quality): regions of one person stored twice a few pixels apart
+    """Face metadata quality (Settings › Library › Face quality): regions of one person stored twice a few pixels apart
     (near), the same person in two separate places (separate), empty or out-of-photo rectangles (invalid), and
     the progress of the last clean-up. Admins only."""
     need_admin()
@@ -225,7 +225,7 @@ def set_date_precision(precision: Literal["exact", "month", "year", "unknown"], 
 
 @server.tool(annotations=READ_ONLY)
 def date_report(detail: bool = False, limit: int = 0) -> dict:
-    """For the photos whose date does not match their folder (Maintenance > Metadata quality): every date stored in
+    """For the photos whose date does not match their folder (Settings › Library › Metadata quality): every date stored in
     each file and its sidecar (EXIF, XMP, IPTC, QuickTime, GPS, the file's own modification time), and which agree
     with the folder. summary counts photos with some embedded date matching the folder, none, and whose embedded
     dates disagree with each other; tags_matching_the_folder says which tags those are. detail: per photo. Read-only.
@@ -283,7 +283,7 @@ def clothing_suggestions(photo_ids: list[int] = None, limit: int = 200, offset: 
 
 @server.tool(annotations=READ_ONLY)
 def rotation_findings(photo_ids: list[int] = None, limit: int = 200, offset: int = 0) -> dict:
-    """Photos that read as stored on their side or upside down (Maintenance > Wrongly rotated): {total, items: [{id, turn
+    """Photos that read as stored on their side or upside down (Settings › Library › Wrongly rotated): {total, items: [{id, turn
     (quarter turns clockwise the file is off by), op (the lossless rotate that rights it: left|180|right), text, score}],
     dismissed, coverage, phase}. Read-only: righting one is the web app's Rotate button (POST /api/photos/transform).
     Admins only."""
@@ -314,7 +314,7 @@ def set_date_hint(folder: str, not_before: Optional[int] = None, not_after: Opti
 
 @server.tool(annotations=WRITES)
 def run_analysis(job: str = "all", reset: bool = False) -> dict:
-    """Start a background analysis as Maintenance > AI analysis does: job is all, embeddings, quality, vision, objects,
+    """Start a background analysis as Settings › AI does: job is all, embeddings, quality, vision, objects,
     captions, looks, faces, ages, jerseys, clothing, rotation, videos or facedetect (facedetect writes faces into digiKam's database). Without reset only
     new or changed photos are looked at; with reset that analysis starts over. Follow it with job_queue. Admins only."""
     need_admin(writes=(job == "facedetect"))
@@ -327,7 +327,7 @@ def run_analysis(job: str = "all", reset: bool = False) -> dict:
 
 @server.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=True, openWorldHint=False))
 def face_cleanup(files: bool = False) -> dict:
-    """Remove the near-duplicate face regions, exactly as Maintenance > Face quality > Remove duplicates: one region
+    """Remove the near-duplicate face regions, exactly as Settings › Library › Face quality > Remove duplicates: one region
     of each group is kept, digiKam's database is backed up first, those photos' sidecars are rewritten (not the
     image files) and each photo gets a change-log entry. files=True, once that has finished: the image files of
     the cleaned photos that still carry the duplicates are rewritten too (each backed up first, pixels checked

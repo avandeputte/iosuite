@@ -56,7 +56,7 @@ msg_info "Fetching iopix"
 REPO="${IOPIX_REPO:-https://github.com/avandeputte/iopix}"
 mkdir -p /opt/iopix /opt/iopix/data /library
 $STD git clone --depth 1 "$REPO" /opt/iopix/app
-git -C /opt/iopix/app rev-parse HEAD > /opt/iopix/app/COMMIT  # the installed commit, shown in Maintenance
+git -C /opt/iopix/app rev-parse HEAD > /opt/iopix/app/COMMIT  # the installed commit, shown in Settings › Server
 rm -rf /opt/iopix/app/.git
 msg_ok "Fetched iopix"
 

@@ -660,8 +660,8 @@ export function showDateSuggest() {
     view: 'datesuggest', loading: 'Working out the years…', endpoint: '/api/datesuggest?limit=500', trail: [['Explore', '#/explore'], ['Date suggestions', null]],
     icon: 'calendar', hue: 'amber', title: 'Date suggestions',
     intro: 'A year for each photo marked “Date unknown”, from every clue the library has about it: how old the named people in it look, the years those people are photographed in (together, when they are), the photos with a date that look most like it, and the camera. Each person’s photos with a known date teach the age model how that person ages; a birth year you enter helps someone with few dated photos. Every suggestion is a range and lists its clues. Nothing is saved until you use a year: it is then saved as a year-only date, with undo in the edit log.',
-    waiting: (d) => !d.ready ? h('div', { class: 'enote' }, 'Install “MiVOLO v2 (age)” or a content-search model under Maintenance › AI analysis and models to get suggestions.')
-      : d.sources && !d.sources.ages ? h('div', { class: 'enote' }, 'Install “MiVOLO v2 (age)” under Maintenance › AI analysis and models for suggestions from how old the people look.')
+    waiting: (d) => !d.ready ? h('div', { class: 'enote' }, 'Install “MiVOLO v2 (age)” or a content-search model under Settings › AI to get suggestions.')
+      : d.sources && !d.sources.ages ? h('div', { class: 'enote' }, 'Install “MiVOLO v2 (age)” under Settings › AI for suggestions from how old the people look.')
       : d.faces[0] < d.faces[1] ? h('div', { class: 'enote' }, `Estimating ages: ${nf.format(d.faces[0])} of ${nf.format(d.faces[1])} faces so far; more suggestions appear as it goes.`) : null,
     extra: async (d) => {
       let hints = { folders: [] };
@@ -685,9 +685,9 @@ export function showDateSuggest() {
   });
 }
 
-// which bar item a view belongs to: Explore's sub-pages light Explore, the Faces page People, Maintenance's pages Maintenance
-const NAV_OF = { duplicates: 'explore', detected: 'explore', events: 'explore', faces: 'people', analysis: 'maintenance', history: 'maintenance', consistency: 'maintenance', quality: 'maintenance', trash: 'folders', import: 'folders' };
-export const MORE_VIEWS = ['favorites', 'folders', 'albums', 'tags', 'map', 'events', 'settings', 'maintenance'];
+// which bar item a view belongs to: Explore's sub-pages light Explore, the Faces page People, the library's check pages Settings
+const NAV_OF = { duplicates: 'explore', detected: 'explore', events: 'explore', faces: 'people', history: 'settings', consistency: 'settings', quality: 'settings', trash: 'folders', import: 'folders' };
+export const MORE_VIEWS = ['favorites', 'folders', 'albums', 'tags', 'map', 'events', 'settings'];
 export function currentNav() {
   const fp = filterParams();
   if (S.route.view === 'photos' && fp.get('fav') === '1' && [...fp.keys()].length === 1) return 'favorites';
@@ -695,16 +695,14 @@ export function currentNav() {
   if ($(`#nav a[data-v="${v}"]`)?.offsetParent) return v;  // a page with its own link in the sidebar (Manage is admins' only)
   return NAV_OF[v] || v;
 }
-/** Phones: the bottom bar shows four destinations; the rest, with Settings and Maintenance, open from "More". */
+/** Phones: the bottom bar shows four destinations; the rest, with Settings, open from "More". */
 export function moreSheet() {
   const rest = NAV.filter(([v]) => ['favorites', 'folders', 'albums', 'tags', 'map', 'events'].includes(v)).map(([v, label, ic, href]) => [href || `#/${v}`, label, ic, v]);  // the ones the phone bar hides
   if (S.CAN_MANAGE) rest.push(['#/import', 'Import', 'add', 'import']);
   rest.push(['#/settings', 'Settings', 'gear', 'settings']);
-  if (S.IS_ADMIN) rest.push(['#/maintenance', 'Maintenance', 'wrench', 'maintenance']);
   const back = modal('More', h('div', { class: 'sheetgrid' }, rest.map(([href, label, ic, v]) => h('a', { href, class: currentNav() === v ? 'on' : '', style: `--hue:var(--c-${{ favorites: 'rose', folders: 'teal', albums: 'indigo', tags: 'orange', map: 'cyan', events: 'green' }[v] || 'slate'})`, onclick: () => back.remove() }, h('span', { class: 'sic' }, icon(ic)), label))),
     { buttons: ['Close'] });
 }
-export function showAnalysis() { go('maintenance', null, true); }  // the old #/analysis page now lives in Maintenance; keep bookmarks working
 
 /** Explore › Place suggestions: where each photo without a position was probably taken, from the photos around it that
  * have one (placeguess.py). Nothing is written until a suggestion is used: it is then a GPS edit with its accuracy. */
@@ -744,7 +742,7 @@ export function showJerseys() {
     view: 'jerseys', loading: 'Reading the numbers…', endpoint: '/api/jerseys?limit=2000', trail: [['Explore', '#/explore'], ['Jersey numbers', null]],
     icon: 'text', hue: 'blue', title: 'Jersey numbers',
     intro: (d) => `The number on each detected person’s shirt is read. Where a named face wears a number, that player is learnt for the folder and the year; a number on someone whose face is not named, seen from behind or too small for a face, then suggests the player. Tagging adds the person to the photo without a face region, with undo in the edit log; nothing is tagged until you do. ${nf.format(d.read)} numbers read, ${nf.format(d.named)} on named people.`,
-    waiting: (d) => !d.ready ? h('div', { class: 'enote' }, 'Install text recognition (RapidOCR) and an object detection model under Maintenance › AI analysis and models to read jersey numbers.')
+    waiting: (d) => !d.ready ? h('div', { class: 'enote' }, 'Install text recognition (RapidOCR) and an object detection model under Settings › AI to read jersey numbers.')
       : d.coverage[0] < d.coverage[1] ? h('div', { class: 'enote' }, `Reading numbers: ${nf.format(d.coverage[0])} of ${nf.format(d.coverage[1])} photos with people so far.`) : null,
     extra: (d) => d.players.length ? [h('h3', null, 'Players and their numbers'), h('div', { class: 'hlist' }, d.players.map((p) => h('div', { class: 'hrow' },
       h('img', { class: 'avatar', src: faceUrl(p.tag), alt: '' }),
@@ -762,7 +760,7 @@ export function showClothing() {
     view: 'clothing', loading: 'Matching clothes…', endpoint: '/api/clothing?limit=2000', trail: [['Explore', '#/explore'], ['Clothing matches', null]],
     icon: 'people', hue: 'purple', title: 'Clothing matches',
     intro: 'At an event everyone wears the same clothes all day. Within the photos of one folder on one day, each detected person whose face is not named (from behind, too far, too small) is compared with the people whose face is named, and a clear match suggests that person is in the photo too. Tagging adds the person to the photo without a face region, with undo in the edit log; nothing is tagged until you do.',
-    waiting: (d) => !d.ready ? h('div', { class: 'enote' }, 'Install a content-search model and an object detection model under Maintenance › AI analysis and models to match people by their clothes.')
+    waiting: (d) => !d.ready ? h('div', { class: 'enote' }, 'Install a content-search model and an object detection model under Settings › AI to match people by their clothes.')
       : d.coverage[0] < d.coverage[1] ? h('div', { class: 'enote' }, `Looking at the people: ${nf.format(d.coverage[0])} of ${nf.format(d.coverage[1])} photos so far.`) : null,
     body: (x) => [h('div', null, h('b', null, x.event), h('span', { class: 'muted' }, ` · ${Math.round(x.score * 100)}%`)), h('div', { class: 'sb' }, x.text)],
     ...personSuggestions('clothing'),
@@ -775,10 +773,10 @@ export function showClothing() {
 export function showRotation() {
   const angle = { left: -90, right: 90, 180: 180 };
   return suggestionPage({
-    view: 'rotation', loading: 'Checking which way up…', endpoint: '/api/rotation?limit=1000', trail: [['Maintenance', '#/maintenance'], ['Wrongly rotated', null]],
+    view: 'rotation', loading: 'Checking which way up…', endpoint: '/api/rotation?limit=1000', trail: [['Settings', '#/settings?tab=library'], ['Wrongly rotated', null]],
     icon: 'rotate', hue: 'amber', title: 'Wrongly rotated',
     intro: (d) => `Photos stored on their side or upside down, usually scans and old files. Your own photos teach the content-search model what upright looks like; every photo whose embedding reads as turned is then checked in all four turns, and only the ones the four readings agree on are listed, each shown the way it would look after the turn. Rotating is the lossless rotate (the file is turned, the metadata kept, undo in the edit log); nothing is changed until you do.${d.dismissed ? ` ${nf.format(d.dismissed)} marked as fine are left out.` : ''}`,
-    waiting: (d) => !d.ready ? h('div', { class: 'enote' }, 'Install a content-search model under Maintenance › AI analysis and models: the check learns what upright looks like from its embeddings of your own photos.')
+    waiting: (d) => !d.ready ? h('div', { class: 'enote' }, 'Install a content-search model under Settings › AI: the check learns what upright looks like from its embeddings of your own photos.')
       : d.phase && d.running ? h('div', { class: 'enote' }, `${d.phase === 'learning' ? 'Learning what upright looks like from your photos' : d.phase === 'checking' ? 'Checking the photos that read as turned' : 'Reading every photo'}: ${nf.format(d.coverage[0])} of ${nf.format(d.coverage[1])} so far.`)
       : !S.LOSSLESS ? h('div', { class: 'enote' }, 'Rotating needs jpegtran on the server (libjpeg-turbo); until then the list is only shown.') : null,
     // the thumbnail already turned the way the fix would leave it

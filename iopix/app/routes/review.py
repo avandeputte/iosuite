@@ -19,7 +19,7 @@ router = APIRouter()
 
 @router.get("/api/quality", dependencies=[access.admin])
 def api_quality():
-    """Maintenance › Metadata quality: face regions stored twice, the same person in two places, broken rectangles."""
+    """Settings › Library › Metadata quality: face regions stored twice, the same person in two places, broken rectangles."""
     try:
         return facequality.summary()
     except (*DB_ERRORS, dbsync.SyncError) as e:
@@ -115,7 +115,7 @@ async def api_quality_fix(request: Request):
 
 @router.get("/api/filecheck", dependencies=[access.admin])
 def api_filecheck():
-    """Maintenance › Damaged files: what the file check found so far, and its progress."""
+    """Settings › Library › Damaged files: what the file check found so far, and its progress."""
     return filecheck.report()
 
 
@@ -159,7 +159,7 @@ async def api_filecheck_keep(request: Request):
 
 @router.get("/api/picklabels", dependencies=[access.admin])
 def api_picklabels():
-    """Maintenance › Pick labels: how many photos carry each of digiKam's pick labels, and the clearing's progress."""
+    """Settings › Library › Pick labels: how many photos carry each of digiKam's pick labels, and the clearing's progress."""
     return {"counts": picklabels.counts(), "progress": dict(picklabels.progress)}
 
 
