@@ -304,7 +304,7 @@ def fix_data_quality(check: Literal["name_case", "repeats", "unlinked_relation",
 
 @server.tool(annotations=ADDS)
 def suggest_contact_update(contact: str, suggestions: list[dict], source: str) -> dict:
-    """File what you found about a contact as suggestions. Nothing changes: they wait in the web app (Maintenance ›
+    """File what you found about a contact as suggestions. Nothing changes: they wait in the web app (Clean up ›
     Suggestions and the contact's page) until a person accepts or dismisses each one. Use it after researching a
     person on LinkedIn, a company site, a news article, Facebook, Instagram, X...; give where you found it.
     suggestions: [{field, value, evidence (the page's address), note (optional: why you think it is this person)}].

@@ -1,4 +1,4 @@
-"""Maintenance and data quality: finding contacts that are probably the same person (with a score and the reasons),
+"""Clean up and data quality: finding contacts that are probably the same person (with a score and the reasons),
 merging them with a choice of what to keep, undoing a merge, and checks that find (and fix) untidy data.
 
 Duplicates are found in pairs. Contacts are first grouped by cheap keys (an email, a phone number's last nine digits,

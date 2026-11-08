@@ -18,7 +18,7 @@ from iosuite_shared.updates import setup_log
 from app import __version__, api, carddav, config, db, enrich, iopix, ldapd, mcp, users
 from app.auth import auth, updater
 
-setup_log(config.LOG_FILE)  # the server log that Maintenance › Updates and logs shows; the app runs without it
+setup_log(config.LOG_FILE)  # the server log that Settings › Server shows; the app runs without it
 log = logging.getLogger("iocontacts")
 
 # what a visitor may still fetch when sign-in is required: the app shell and its files, the API docs, the birthday
@@ -82,10 +82,12 @@ def _status_extra(request) -> dict:
 
 
 def _server_info() -> dict:
-    """What Maintenance › Updates and logs and Settings › Server show beside the updater's own fields."""
+    """What Settings › Server shows beside the updater's own fields: the MCP box and This server."""
     return {"mcpEnabled": mcp_enabled(), "mcpLocked": config.MCP_FORCED,
-            "database": f"{config.DB_HOST}:{config.DB_PORT}/{config.DB_NAME}",
-            "ldap": f"{config.LDAP_HOST or '0.0.0.0'}:{config.LDAP_PORT}" if config.LDAP_PORT else None}
+            "mcpAbout": "The address /mcp that lets an AI assistant (Claude, for example) search, read and keep the contacts: look people up, "
+                        "add and correct contacts, link relatives, list birthdays, import and export, and for admins check for and install updates.",
+            "about": [["Database", f"{config.DB_HOST}:{config.DB_PORT}/{config.DB_NAME}"],
+                      ["LDAP directory", f"{config.LDAP_HOST or '0.0.0.0'}:{config.LDAP_PORT}" if config.LDAP_PORT else "off"]]}
 
 
 def _server_apply(body: dict) -> None:
@@ -99,7 +101,7 @@ app.include_router(auth.server_router(updater, log_file=config.LOG_FILE, info=_s
 app.include_router(auth.router())   # /api/auth/*: sign-in, accounts, me, password, sessions, app passwords, suite (the same in every app)
 app.include_router(auth.users_router())  # /api/users: accounts and their role here (admins)
 app.include_router(api.router)      # the contacts; also an account's own fields (its "me" contact, the face on its tile)
-app.include_router(auth.admin_router())  # /api/suite-admin (+ ui.js, the Settings › Suite panel): the whole suite (suite admins)
+app.include_router(auth.admin_router())  # /api/suite-admin (+ ui.js, the panel of Settings › Security and Global settings): the whole suite (suite admins)
 app.include_router(carddav.router)
 shared_mcp.mount(app, mcp.server)  # MCP over streamable HTTP at /mcp, ahead of everything else
 

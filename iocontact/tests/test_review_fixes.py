@@ -112,7 +112,7 @@ def test_app_passwords_are_the_shared_routes_and_only_the_owner_revokes(client):
 
 
 def test_every_account_gets_a_private_book_however_it_was_made(client):
-    """Accounts made by the suite (Settings › Suite, the shared setup, the command line) never passed through
+    """Accounts made by the suite (Settings › Security, the shared setup, the command line) never passed through
     ioContacts' users.create: their private book appears when their books are first listed."""
     from iosuite_shared import users as shared
     u = shared.create("sue", "suepass123", "editor", "iocontacts")

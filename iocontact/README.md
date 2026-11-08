@@ -9,11 +9,11 @@ A self-hosted contact manager: a web app for the whole family, and the standard 
 - **Contacts** with names (prefix, first, middle, last, suffix, nickname, maiden name, phonetic names), any number of phone numbers, emails and addresses (with labels and a preferred one), birthday (with or without the year), anniversaries and other dates, company, department, job title, social profiles (LinkedIn, Facebook, Instagram, X, Threads, Bluesky, Mastodon, TikTok, YouTube, GitHub, WhatsApp, Telegram, Signal and more), websites, labels, notes and a photo.
 - **Relations** between contacts: parents, children, siblings, spouses and partners, grandparents, aunts and uncles, cousins, in-laws, step-family, godparents, friends, colleagues, managers… The other side is kept automatically (make Tim Mary's son and Mary becomes Tim's mother), labels follow the other person's gender (Brother, Sister, Sibling), and a **family tree** page lays the family out by generation. A relation can also name someone who is not a contact.
 - **The family and private books**: everyone shares the Family address book; each account also has a private Personal one, and anyone can make more (shared or private). Roles as in iopix: viewers read the shared books (and change only their own), editors change shared contacts, admins also manage users and settings.
-- **Sign-in as in iopix**: the sign-in screen is a pick list of the accounts (each with the face of the contact it is linked to as *me*). Sign-in, passwords, sessions, app passwords and the users admin are iosuite-shared's routes (`/api/auth/*`, `/api/users`), the same in every app; repeated wrong passwords are slowed down per visitor and name, at the web sign-in, over HTTP Basic / Bearer and at the LDAP bind. A viewer whose password an admin removed (Settings › Suite › People › No password) signs in with one click, but only at home: from outside those accounts are not offered and their sessions do not work. *Other* types a user name.
+- **Sign-in as in iopix**: the sign-in screen is a pick list of the accounts (each with the face of the contact it is linked to as *me*). Sign-in, passwords, sessions, app passwords and the users admin are iosuite-shared's routes (`/api/auth/*`, `/api/users`), the same in every app; repeated wrong passwords are slowed down per visitor and name, at the web sign-in, over HTTP Basic / Bearer and at the LDAP bind. A viewer whose password an admin removed (Settings › Security › People › No password) signs in with one click, but only at home: from outside those accounts are not offered and their sessions do not work. *Other* types a user name.
 - **Birthdays**: the upcoming birthdays and anniversaries, with ages, and a **family birthday calendar** to subscribe to.
 - **ioPix**: link a contact to a person named in ioPix. The face from ioPix is the contact's photo, and the only one: ioContacts stores no photos of its own, and serves the ioPix face to the web app, phones (CardDAV), vCard exports and the LDAP directory (`jpegPhoto`). A photo in an imported or synced vCard is not kept. The contact links to that person's photos, and *Link by name* links every contact whose name matches exactly one ioPix person. The ioPix people page lists everyone in ioPix and makes a contact from any of them.
 - **Duplicates** (same name, email or phone) and merging, **bulk** favorite, label, move, export and delete, search across names, emails, phone digits, companies, addresses, labels and notes.
-- **Settings › Suite** (suite admins): the whole suite's people and their role in every app, app passwords, keys and tokens, the apps and sign-in at the proxy; the same panel as on the start page and in every io app (iosuite-shared's `/api/suite-admin/ui.js`).
+- **Settings › Security** and **Global settings** (suite admins): the whole suite's people and their role in every app, app passwords and sign-in at the proxy; the apps, keys and tokens; the same panel as on the start page and in every io app (iosuite-shared's `/api/suite-admin/ui.js`).
 - Light and dark, phone-sized screens, installable as an app.
 
 ## Run
@@ -86,23 +86,23 @@ password is used once and not written anywhere.
 | `IOSUITE_DB_HOST`, `_PORT`, `_NAME`, `_USER`, `_PASSWORD` | the Shared ioSuite database (MariaDB; by default on the contacts' server, database, user and password `iosuite`): accounts, passwords, sessions, app passwords, roles and the suite-wide settings, shared by every app of the suite (the `iosuite-shared` library, from [iosuite-shared](https://github.com/avandeputte/iosuite-shared)); only the role an account holds here and its "me" contact are ioContacts' own. `iosuite-shared migrate --iocontacts` folds a 0.3 install's `users` table into it |
 | `COOKIE_DOMAIN` | the domain the session cookie is shared on (`example.com`): signed in at `photo.example.com`, signed in at `contacts.example.com` too |
 | `AUTH_PROXY`, `AUTH_PROXY_HEADER`, `AUTH_PROXY_TRUSTED`, `CF_ACCESS_TEAM`, `CF_ACCESS_AUD` | sign-in at a reverse proxy, exactly as in iopix: Cloudflare Access (with token checking), Authelia, Authentik, oauth2-proxy… matched to accounts by email, then name |
-| `CF_KV_ACCOUNT_ID`, `CF_KV_NAMESPACE_ID`, `CF_KV_API_TOKEN` | optional edge check of app passwords: the Workers KV namespace a Cloudflare Worker on `/dav*` reads; normally stored once for the whole suite in Settings › Suite › Keys and tokens, these override it ([setup](https://github.com/avandeputte/iosuite-shared/blob/main/cloudflare/edge-auth/README.md)) |
+| `CF_KV_ACCOUNT_ID`, `CF_KV_NAMESPACE_ID`, `CF_KV_API_TOKEN` | optional edge check of app passwords: the Workers KV namespace a Cloudflare Worker on `/dav*` reads; normally stored once for the whole suite in Settings › Global settings › Keys and tokens, these override it ([setup](https://github.com/avandeputte/iosuite-shared/blob/main/cloudflare/edge-auth/README.md)) |
 | `MCP` | `1` keeps the MCP server on, whatever the setting says |
 | `MCP_USER` | the account `python -m app.mcp` (stdio) acts as |
 | `UPDATE_CHECK` | `0` turns the daily version check off for good |
 | `IOCONTACTS_REPO`, `IOCONTACTS_BRANCH` | what the version check and `update.sh` follow (`avandeputte/iocontacts`, `main`) |
 | `DATA_DIR` | where the app writes on its own: the log and the update result (`data/` in the app folder) |
-| `LOG_FILE` | the server log shown at Maintenance › Updates and logs (`DATA_DIR/iocontacts.log`; `LOG_FILE=` with nothing after it: no file) |
+| `LOG_FILE` | the server log shown at Settings › Server (`DATA_DIR/iocontacts.log`; `LOG_FILE=` with nothing after it: no file) |
 
 ### ioPix
 
-Nothing to set up: ioContacts finds ioPix in the suite's list of apps (the Shared ioSuite database) and reads from it from the server as its own service account (`iocontacts-app`) with a read-only app password, both made by itself on first use and listed on the start page's Settings › Suite, where a suite admin can revoke them (a new one is made the next time). Behind Cloudflare Access, the suite's Cloudflare Access service token (Settings › Suite › Keys and tokens) goes along. The people list comes from ioPix's People (the named people with photos) and the faces from ioPix's face crops.
+Nothing to set up: ioContacts finds ioPix in the suite's list of apps (the Shared ioSuite database) and reads from it from the server as its own service account (`iocontacts-app`) with a read-only app password, both made by itself on first use and listed on the start page's Settings › Security, where a suite admin can revoke them (a new one is made the next time). Behind Cloudflare Access, the suite's Cloudflare Access service token (Settings › Global settings › Keys and tokens) goes along. The people list comes from ioPix's People (the named people with photos) and the faces from ioPix's face crops.
 
 ## Updates
 
 ioContacts asks GitHub once a day whether the main branch has a newer version (only the public commit list is read;
-nothing about the server is sent; Maintenance › Updates and logs switches it off, `UPDATE_CHECK=0` locks it off). Admins
-then see a note with **Update now**, and **Maintenance › Updates and logs** has the version, **Check for updates**,
+nothing about the server is sent; Settings › Server switches it off, `UPDATE_CHECK=0` locks it off). Admins
+then see a note with **Update now**, and **Settings › Server** has the version, **Check for updates**,
 **Update now**, the tail of the server log (`data/iocontacts.log` in the app folder; `LOG_FILE` moves it, empty switches it
 off) and **Restart**. The page is the same in every ioThing app: the version check, `update.sh`, the restart and the log
 come from `iosuite_shared.updates` in iosuite-shared, served at `/api/server` and `/api/log`. Updating runs the app's own
@@ -111,9 +111,9 @@ was), the database is brought up to date, and the service restarts; the page rel
 MCP tools `check_for_update` and `update_server` do the same. In Docker, pull the image instead. From a shell:
 `./update.sh` (`--check` only looks, `IOCONTACTS_REF=<sha>` installs a given commit).
 
-Settings is for what is configured (account, display, apps and devices, address books, connected apps, users and
-sign-in, server); Maintenance for what is run or checked (duplicates, data quality, suggestions, merge history, storage
-and backups, updates and logs). Both are in the sidebar and the avatar menu.
+Everything about the app is under one Settings page (the sidebar and the avatar menu): your own tabs (account, display,
+apps and devices, address books), then for admins connected apps, storage and backups and server, and for suite admins
+security and global settings. Tidying the contacts is **Clean up** in the sidebar (below).
 
 ## Reverse proxy and HTTPS
 
@@ -123,7 +123,7 @@ Run it behind a reverse proxy that terminates HTTPS (Caddy, Nginx Proxy Manager,
 
 Cloudflare Access can't check what DAV clients send, so `/dav*` bypasses it. A small Cloudflare Worker on `/dav*` can
 check the app password there instead and turn wrong ones away before they reach the server. With the edge check's three
-settings stored for the whole suite (Settings › Suite › Keys and tokens), the app keeps the Worker's KV namespace up to date with a SHA-256 of each app password (never the account
+settings stored for the whole suite (Settings › Global settings › Keys and tokens), the app keeps the Worker's KV namespace up to date with a SHA-256 of each app password (never the account
 password). The Worker, the rollout (monitor first, then enforce) and a WAF rate-limit rule for `/dav*` are in
 [iosuite-shared's cloudflare/edge-auth](https://github.com/avandeputte/iosuite-shared/blob/main/cloudflare/edge-auth/README.md). Once it enforces, DAV clients must sign in with an app password, not the
 account password.
@@ -184,10 +184,9 @@ The tools: `overview`, `list_address_books`, `search_contacts`, `get_contact`, `
 (an assistant proposes; only a person accepts, in the web app); and for admins `diagnostics`, `test_iopix`,
 `list_accounts`, `check_for_update`, `update_server`. An app password cannot make more app passwords over MCP.
 
-## Maintenance and enrichment
+## Clean up and enrichment
 
-**Maintenance** in the web app has four tabs for the data (and, for admins, **Storage and backups** and
-**Updates and logs**, see below):
+**Clean up** in the web app's sidebar has four tabs, for everyone, on the address books they can see:
 
 - **Duplicates.** Contacts that are probably one person, scored, with the reasons: the same email or phone (written with
   or without the country code), the same name (accents, case and swapped first and last names do not matter), a
