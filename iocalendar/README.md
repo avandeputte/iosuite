@@ -14,7 +14,7 @@ A self-hosted calendar: a web app for the whole family, and the standard protoco
 - **Public holidays**: a shared, read-only **Holidays** calendar with the public holidays of your country and, if you like, your state or province (Settings › Holidays; it starts with the country of the family's time zone, else the United States). Worked out on the server with the `holidays` package (nothing is fetched), last year to three years ahead, renewed daily; anyone can hide it in the sidebar.
 - **Family members on events**: tag an event with the people of the family it is for ("For Emma"). The tags show as coloured initials on the calendar, the sidebar's Family list shows only one person's (or a few people's) events, and the tag is kept as an iCalendar `CATEGORIES` value with the member's name, so phones and calendar apps show it and a category typed there tags the event here too. The REST API, the subscription links (`?member=emma`) and MCP filter by member as well. Accounts that are not a person (an admin or service account) can be left out of the family in Settings › Family: they are not offered as a tag and get no private calendar.
 - **Roles as in the other io apps**: viewers read the shared calendars (and change only their own), editors change shared events, admins also manage users and settings. The same accounts, passwords and app passwords as ioPix, ioNotes and ioContacts; one sign-in for all of them with a shared cookie domain.
-- **Settings › Suite** (suite admins): the whole suite's people and their role in every app, app passwords, keys and tokens, the apps and sign-in at the proxy; the same panel as on the start page and in every io app (iosuite-shared's `/api/suite-admin/ui.js`).
+- **Settings › Accounts and access** and **Suite-wide settings** (suite admins): the whole suite's people and their role in every app and app passwords; the apps, sign-in at the proxy, keys and tokens; the same panel as on the start page and in every io app (iosuite-shared's `/api/suite-admin/ui.js`).
 - Light and dark, phone-sized screens, installable as an app.
 
 No tasks or to-dos: those belong in their own app.
@@ -95,40 +95,40 @@ accounts are the suite's: `.venv/bin/iosuite-shared --config . admin NAME --app 
 | `PUBLIC_URL` | the address people use (behind a proxy), for links in Settings, the Apple profile and the MCP tools |
 | `ADMIN_USER`, `ADMIN_PASSWORD` | the first admin, made on the first start when there are no accounts |
 | `AUTH_PROXY`, `AUTH_PROXY_HEADER`, `AUTH_PROXY_TRUSTED`, `CF_ACCESS_TEAM`, `CF_ACCESS_AUD` | sign-in at a reverse proxy, as in the other io apps (Cloudflare Access, Authelia, Authentik, oauth2-proxy…) |
-| `CF_KV_ACCOUNT_ID`, `CF_KV_NAMESPACE_ID`, `CF_KV_API_TOKEN` | optional edge check of app passwords: the Workers KV namespace a Cloudflare Worker on `/dav*` reads; normally stored once for the whole suite in Settings › Suite › Keys and tokens, these override it ([setup](https://github.com/avandeputte/iosuite-shared/blob/main/cloudflare/edge-auth/README.md)) |
+| `CF_KV_ACCOUNT_ID`, `CF_KV_NAMESPACE_ID`, `CF_KV_API_TOKEN` | optional edge check of app passwords: the Workers KV namespace a Cloudflare Worker on `/dav*` reads; normally stored once for the whole suite in Settings › Suite-wide settings › Keys and tokens, these override it ([setup](https://github.com/avandeputte/iosuite-shared/blob/main/cloudflare/edge-auth/README.md)) |
 | `HOLIDAYS_COUNTRY`, `HOLIDAYS_REGION`, `HOLIDAYS_LANGUAGE` | the first choice for Settings › Holidays: a two-letter country code (`off`: no Holidays calendar), a region code, the language of the names; until set, the country of `TZ`, else US |
 | `MCP` | `1` keeps the MCP server on, whatever the setting says |
 | `MCP_USER` | the account `python -m app.mcp` (stdio) acts as |
 | `UPDATE_CHECK` | `0` turns the daily version check off for good |
 | `IOCALENDAR_REPO`, `IOCALENDAR_BRANCH` | what the version check and `update.sh` follow (`avandeputte/iocalendar`, `main`) |
 | `DATA_DIR` | where the app writes on its own: the log and the update result (`data/` in the app folder) |
-| `LOG_FILE` | the server log shown at Maintenance › Updates and logs (`DATA_DIR/iocalendar.log`; `LOG_FILE=` with nothing after it: no file) |
+| `LOG_FILE` | the server log shown at Settings › Server (`DATA_DIR/iocalendar.log`; `LOG_FILE=` with nothing after it: no file) |
 
 ### ioContacts
 
 Nothing to set up. ioCalendar finds ioContacts in the suite's list of apps (the Shared ioSuite database) and reads from
 it from the server as its own service account (`iocalendar-app`) with a read-only app password, both made by itself on
-first use and listed on the start page's Settings › Suite, where a suite admin can revoke them (a new one is made the
-next time). Behind Cloudflare Access, the suite's Cloudflare Access service token (Settings › Suite › Keys and tokens)
+first use and listed on the start page's Settings › Accounts and access, where a suite admin can revoke them (a new one is made the
+next time). Behind Cloudflare Access, the suite's Cloudflare Access service token (Settings › Suite-wide settings › Keys and tokens)
 goes along. The Birthdays calendar is filled from ioContacts' birthday feed and brought up to date every six hours
 (and from Settings › ioContacts, which only has the Birthdays switch, or `python -m app.cli sync-birthdays`).
 
 ## Updates
 
 ioCalendar asks GitHub once a day whether the main branch has a newer version (only the public commit list is read;
-nothing about the server is sent; Maintenance › Updates and logs switches it off, `UPDATE_CHECK=0` locks it off). Admins
-then see a note with **Update now**, and **Maintenance › Updates and logs** has the version, **Check for updates**,
-**Update now**, the tail of the server log (`data/iocalendar.log`; `LOG_FILE` moves it, empty switches it
-off) and **Restart**. The page is the same in every ioThing app: the version check, `update.sh`, the restart and the log
-come from `iosuite_shared.updates` in iosuite-shared, served at `/api/server` and `/api/log`. Updating runs the app's own
+nothing about the server is sent; Settings › Server switches it off, `UPDATE_CHECK=0` locks it off). Admins
+then see a note with **Update now**, and **Settings › Server** has the version, **Check for updates**,
+**Update now**, what the server runs on, the tail of the server log (`data/iocalendar.log`; `LOG_FILE` moves it, empty switches it
+off) and **Restart**. The page is the same in every ioThing app: the panel (`/api/server/ui.js`), the version check, `update.sh`, the
+restart and the log come from iosuite-shared, served at `/api/server` and `/api/log`. Updating runs the app's own
 `update.sh`: the new version's Python packages first, then the code (a failed step leaves the running version as it
 was), the database is brought up to date, and the service restarts; the page reloads when the new version answers. In
 Docker, pull the image instead. From a shell: `./update.sh` (`--check` only looks, `IOCALENDAR_REF=<sha>` installs a
 given commit).
 
-Settings is for what is configured (account, display, apps and devices, calendars, holidays, connected apps, users and
-sign-in, server); Maintenance for what is run or checked (storage and backups, updates and logs). Admins reach both from
-the sidebar and the avatar menu.
+Everything is under one Settings page (the sidebar and the avatar menu): your own tabs (account, display, apps and
+devices, calendars, holidays), then for admins connected apps, family, storage and backups and server, and for suite
+admins accounts and access and suite-wide settings.
 
 ### Releases
 
@@ -142,7 +142,7 @@ macOS want HTTPS for CalDAV accounts outside the home network, and passwords tra
 ### Cloudflare Tunnel and Cloudflare Access
 
 With a `cloudflared` tunnel in front, set `PUBLIC_URL` to the public address. To make people sign in at Cloudflare
-Access first, add a self-hosted Access application for that hostname, then turn on Settings › Suite ›
+Access first, add a self-hosted Access application for that hostname, then turn on Settings › Suite-wide settings ›
 *Sign-in at the proxy* › Cloudflare Access with your team (`myteam.cloudflareaccess.com`) and the application's AUD tag
 (one setting for the whole suite, kept in the Shared ioSuite database). ioCalendar checks Cloudflare's signed token and signs
 the person in to the matching account (by email, then by name). This is saved for the whole suite.
@@ -166,7 +166,7 @@ as an app password.
 
 Cloudflare Access can't check what DAV clients send, so `/dav*` bypasses it. A small Cloudflare Worker on `/dav*` can
 check the app password there instead and turn wrong ones away before they reach the server. With the edge check's three
-settings stored for the whole suite (Settings › Suite › Keys and tokens), the app keeps the Worker's KV namespace up to date with a SHA-256 of each app password (never the account
+settings stored for the whole suite (Settings › Suite-wide settings › Keys and tokens), the app keeps the Worker's KV namespace up to date with a SHA-256 of each app password (never the account
 password). The Worker, the rollout (monitor first, then enforce) and a WAF rate-limit rule for `/dav*` are in
 [iosuite-shared's cloudflare/edge-auth](https://github.com/avandeputte/iosuite-shared/blob/main/cloudflare/edge-auth/README.md). Once it enforces, DAV clients must sign in with an app password, not the
 account password.

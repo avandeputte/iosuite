@@ -18,7 +18,7 @@ from iosuite_shared.updates import setup_log
 from app import __version__, api, caldav, config, contacts, db, holiday, ical, mcp, model, users
 from app.auth import auth, updater
 
-setup_log(config.LOG_FILE)  # the server log that Maintenance › Updates and logs shows; the app runs without it
+setup_log(config.LOG_FILE)  # the server log that Settings › Server shows; the app runs without it
 log = logging.getLogger("iocalendar")
 
 # what a visitor may still fetch when sign-in is required: the app shell and its files, the API docs, the subscription
@@ -74,9 +74,11 @@ def _status_extra(request) -> dict:
 
 
 def _server_info() -> dict:
-    """What Maintenance › Updates and logs and Settings › Server show beside the updater's own fields."""
-    return {"mcpEnabled": mcp_enabled(), "mcpLocked": config.MCP_FORCED, "timezone": ical.default_tz(),
-            "database": f"{config.DB_HOST}:{config.DB_PORT}/{config.DB_NAME}"}
+    """What Settings › Server shows beside the updater's own fields: the MCP box and This server."""
+    return {"mcpEnabled": mcp_enabled(), "mcpLocked": config.MCP_FORCED,
+            "mcpAbout": "The address /mcp that lets an AI assistant (Claude, for example) read the agenda, search events, find free time, "
+                        "add, change and move events and import calendars, and for admins check for and install updates.",
+            "about": [["Database", f"{config.DB_HOST}:{config.DB_PORT}/{config.DB_NAME}"], ["Time zone", ical.default_tz()]]}
 
 
 def _server_apply(body: dict) -> None:
@@ -87,7 +89,7 @@ def _server_apply(body: dict) -> None:
 
 app.include_router(auth.router())        # /api/auth/*: sign-in, accounts, me, settings, password, sessions, app passwords, suite
 app.include_router(auth.users_router())  # /api/users: accounts and their role here (admins)
-app.include_router(auth.admin_router())  # /api/suite-admin (+ ui.js, the Settings › Suite panel): the whole suite (suite admins)
+app.include_router(auth.admin_router())  # /api/suite-admin (+ ui.js, the panel of Settings › Accounts and access and Suite-wide settings): the whole suite (suite admins)
 app.include_router(auth.status_router(updater, extra=_status_extra))  # /api/status: public, the same shape in every app
 app.include_router(auth.server_router(updater, log_file=config.LOG_FILE, info=_server_info, apply=_server_apply))  # /api/server, /api/log (admins)
 app.include_router(api.router)
