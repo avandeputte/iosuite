@@ -1,6 +1,5 @@
 """Settings and viewer state live in the viewer's own database: defaults,
-round trips, the read cache, and the read-only switch."""
-from app import config
+round trips and the read cache."""
 from app.data import state
 
 
@@ -10,16 +9,6 @@ def test_setting_default_and_roundtrip():
     assert state.get_setting("probe") == "1"
     state.set_setting("probe", "2")
     assert state.get_setting("probe") == "2"
-
-
-def test_read_only_follows_setting_unless_locked(monkeypatch):
-    state.set_setting("read_only", "0")
-    assert state.read_only() is False
-    state.set_setting("read_only", "1")
-    assert state.read_only() is True
-    state.set_setting("read_only", "0")
-    monkeypatch.setattr(config, "READ_ONLY", True)
-    assert state.read_only() is True
 
 
 def test_favorites_and_albums_roundtrip():

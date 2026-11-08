@@ -15,7 +15,7 @@ No. It reads them where they are. It only writes when someone with editor rights
 No. Model downloads, the daily update check, OpenStreetMap place search and Google Maps (if chosen) are the only outside requests, and each can be turned off.
 
 **Can I try it without any risk?**
-Yes: mount the library read-only (Docker), or set `READ_ONLY=1`. Every change is then refused.
+Yes: mount the library read-only (Docker), and set `DB_WRITE=0` so nothing is written to digiKam's database.
 
 ## Setup
 
@@ -43,10 +43,10 @@ They are still in `viewer.db` in the data folder. On the database set-up page, l
 ## Editing
 
 **I changed a photo in iopix but digiKam does not show it.**
-If digiKam was open, the change waits in the sidecar and in iopix. Close digiKam, or use **Settings › Library › Edits waiting for digiKam › Apply to digiKam database**.
+If digiKam was open, the change waits in the sidecar and in iopix. Close digiKam, or use **Tools › Edits waiting for digiKam › Apply to digiKam database**.
 
 **A face shows up twice for the same person.**
-That is usually a leftover from older digiKam versions. **Settings › Library › Metadata quality** finds and removes these duplicates.
+That is usually a leftover from older digiKam versions. **Tools › Metadata quality** finds and removes these duplicates.
 
 **How do I undo something?**
 Every change is in the [edit log](../edit/edit-log.md), with Undo. The message after each change also has an Undo button.

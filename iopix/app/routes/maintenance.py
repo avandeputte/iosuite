@@ -1,10 +1,8 @@
 """Maintenance: background analysis and models, the file scanner and the library merge. The version, updates, restart and the
 server log (Settings › Server) are iosuite_shared's server_router (/api/server, /api/log), mounted in app/main.py."""
 import json
-import os
 import shutil
 import threading
-import time
 
 from fastapi import APIRouter
 from fastapi import HTTPException
@@ -16,7 +14,7 @@ from app import access, config, events, jobs as bgjobs, users
 from app.digikam import dbsync, dkdb, merge
 from app.faces import ages, facedetect, facevecs
 from app.photos import edits, paths, scanner
-from app.data import index, state as appstate, vdb
+from app.data import index, state as appstate
 from app.geo import maps
 from app.ai.semantic import ready as semantic_ready, enabled as semantic_enabled, ENGINES, semantic
 from app.guards import face_detect_allowed
@@ -26,49 +24,6 @@ from app.runtime import DB_ERRORS, app_name, compute_tag_covers, db, start_prewa
 from app.routes.settings import db_settings_public
 
 router = APIRouter()
-
-
-def _dir_size(path) -> int:
-    total = 0
-    for root, _dirs, files in os.walk(path):
-        for f in files:
-            try:
-                total += os.stat(os.path.join(root, f)).st_size
-            except OSError:
-                pass
-    return total
-
-
-_sizes = {"at": 0.0, "values": None, "computing": False}  # the storage figures: a walk of the cache folders (100k+ files) is not done per page open
-
-
-_sizes_lock = threading.Lock()
-
-
-SIZES_TTL = 300
-
-
-STORAGE_DIRS = (("thumbnails", "cache/t"), ("previews", "cache/p"), ("faces", "cache/f"), ("models", "models"),
-                ("backups", "sidecar-backups"), ("fileBackups", "file-backups"), ("dbBackups", "db-backups"), ("deletedPhotos", "deleted-photos"))
-
-
-def _storage_sizes(refresh: bool = False) -> dict:
-    """The size of each part of the data folder, remembered for a few minutes. The first call measures; later ones
-    answer at once and start a fresh measurement in the background when the figures are older than SIZES_TTL
-    (or when asked to refresh), so the page shows the last known figures while it runs."""
-    def measure():
-        values = {k: _dir_size(config.DATA_DIR / v) for k, v in STORAGE_DIRS}
-        with _sizes_lock:
-            _sizes.update(at=time.time(), values=values, computing=False)
-        return values
-    with _sizes_lock:
-        values, stale = _sizes["values"], time.time() - _sizes["at"] > SIZES_TTL
-        if values is not None and (stale or refresh) and not _sizes["computing"]:
-            _sizes["computing"] = True
-            threading.Thread(target=measure, name="storage-sizes", daemon=True).start()
-    if values is None:
-        values = measure()
-    return {**values, "measuredAt": int(_sizes["at"])}
 
 
 @router.get("/api/analysis", dependencies=[access.public])
@@ -117,7 +72,7 @@ async def api_models_download(request: Request):
 
 @router.get("/api/maintenance", dependencies=[access.public])
 def api_maintenance(request: Request):
-    """Library and storage facts for the Settings page (paths, databases and storage for admins only)."""
+    """Library facts for Settings and Tools (paths and databases for admins only)."""
     con = db()
     try:
         built = con.execute("SELECT value FROM meta WHERE key = 'built'").fetchone()
@@ -125,24 +80,18 @@ def api_maintenance(request: Request):
     finally:
         con.close()
     dk_mtime = dkdb.last_change_time()
-    free = shutil.disk_usage(str(config.DATA_DIR)).free
     out = {
         "photos": n, "indexBuilt": int(built[0]) if built else None, "digikamSaved": dk_mtime,
         "digikamRunning": dbsync.digikam_running(), "pendingEdits": edits.pending_count(),
         "paths": {"library": str(config.PHOTOS_ROOT), "digikamDb": dkdb.describe(), "data": str(config.DATA_DIR)},
-        "storage": _storage_sizes(request.query_params.get("refresh") == "1") | {
-            "index": config.INDEX_DB.stat().st_size if config.INDEX_DB.exists() else 0,
-            "viewerDbError": vdb.error,
-            "embeddings": sum(e.file.stat().st_size for e in semantic.engines.values() if e.file.exists()),
-            "free": free},
-        "writeFiles": edits.writes_files(), "readOnly": appstate.read_only(), "readOnlyLocked": config.READ_ONLY, "digikam": index.status(), "appName": app_name(), "appNameSet": appstate.get_setting("app_name", ""),
+        "writeFiles": edits.writes_files(), "digikam": index.status(), "appName": app_name(), "appNameSet": appstate.get_setting("app_name", ""),
         "database": db_settings_public(), "mapProvider": appstate.get_setting("map_provider", "osm"), "googleMapsKeySet": bool(maps.key()), "googleServerKeySet": maps.server_key_set(), "sidecarCompat": paths.compat_naming(), "searchModel": semantic.chosen(),
         "templates": json.loads(appstate.get_setting("templates", "[]")), "templateFields": list(edits.TEMPLATE_FIELDS),
         "recentTags": json.loads(appstate.get_setting("recent_tags", "[]")),
         "scanner": _scanner_state(),
     }
     if not users.is_admin(request.state.user):
-        for k in ("paths", "database", "storage", "albumRoots", "album_roots"):
+        for k in ("paths", "database", "albumRoots", "album_roots"):
             out.pop(k, None)
         out["digikam"] = {k: v for k, v in out["digikam"].items() if k != "error"}  # the error names hosts and paths
     if not users.can_write(request.state.user):
@@ -204,7 +153,7 @@ def api_library_merge_plan():
 @router.post("/api/library/merge", dependencies=[access.admin_write])
 async def api_library_merge():
     """Merge the changes made with sync off into digiKam's database (backup first), then copy the library from digiKam again."""
-    if not config.DB_WRITE or appstate.read_only():
+    if not config.DB_WRITE:
         raise HTTPException(403, "Writing to digiKam's database is turned off")
     try:
         r = await run_in_threadpool(merge.apply)

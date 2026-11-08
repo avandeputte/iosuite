@@ -1,9 +1,8 @@
-/** Sign-in and accounts: the session (loadUser sets S.USER and the fields that come with it), the user menu, the sign-in,
- *  setup and account dialogs, and the Accounts and Suite sections of Settings. */
+/** Sign-in and accounts: the session (loadUser sets S.USER and the fields that come with it), the user menu, the sign-in
+ *  and setup dialogs, and the Security and Global settings tabs of Settings. */
 import { $, SETTINGS, api, errorBox, fill, h, icon, post } from './core.js';
-import { S, applyBadgePref, applyTheme, avatarOf, brandName, hashFor, onRoute, photosWith, toast, toastError } from './state.js';
+import { S, applyBadgePref, applyTheme, avatarOf, brandName, hashFor, onRoute, toast, toastError } from './state.js';
 import { modal } from './actions.js';
-import { personPicker } from './faces.js';
 import { boot, pollStatus } from './main.js';
 import { loadSuite } from './suite.js';
 import { popMenu } from './lightbox.js';
@@ -18,10 +17,7 @@ export function renderUserMenu() {
   const el = $('#usermenu'); if (!el) return;
   const btn = h('button', { class: 'iconbtn tool', title: S.USER ? `${S.USER.name} (${S.USER.role})` : S.USERS_EXIST ? 'Sign in' : 'Create the admin account',
     onclick: () => (!S.USER ? (S.USERS_EXIST ? loginDialog() : setupDialog()) : popMenu(btn, [  // the avatar menu, the same in every ioThing app
-      ['Account', accountDialog],
-      ['Appearance', () => { location.hash = hashFor('settings', new URLSearchParams('tab=display')); }],
-      ['Settings', () => { location.hash = hashFor('settings', new URLSearchParams()); }],
-      'Session',
+      ['Settings', () => { location.hash = '#/settings'; }],
       ['Sign out', signOut],
     ])) }, S.USER ? avatarOf(S.USER) : icon('person'));
   el.replaceChildren(btn);
@@ -65,35 +61,12 @@ export function setupDialog() {
     { buttons: ['Cancel', ['Create', submit, 'on']] });
   name.focus();
 }
-function accountDialog() {
-  const cur = h('input', { class: 'einput', type: 'password', placeholder: 'Current password', autocomplete: 'current-password' });
-  const pw = h('input', { class: 'einput', type: 'password', placeholder: 'New password (8 characters or more)', autocomplete: 'new-password' });
-  [cur, pw].forEach((i) => { i.onkeydown = (e) => e.stopPropagation(); });
-  // how this browser is signed in, and so what Sign out does
-  const how = h('p', { class: 'muted small' });
-  const outBtn = h('button', { class: 'pillbtn', onclick: async () => {
-    back.remove(); let r; try { r = await post('/api/auth/logout', {}); } catch (e) { toastError(e); return; }
-    if (r && r.cloudflareLogout) { location.href = r.cloudflareLogout; return; }  // Cloudflare's own sign-out page ends its session too
-    if (S.REQUIRE_LOGIN) { location.reload(); return; } S.USER = null; SETTINGS.user = null; renderUserMenu(); await pollStatus(); applyBadgePref(); applyTheme(); S.viewKey = null; onRoute(); toast('Signed out.'); } }, 'Sign out');
-  api('/api/auth/me').then((me) => {
-    const by = me.signedInBy;
-    fill(how, h('b', null, 'Signed in: '), by === 'cloudflare' ? (me.throughCloudflare ? 'through Cloudflare Access, from outside your network.' : 'through Cloudflare Access; this browser stays signed in on your home network too.')
-      : by === 'proxy' ? 'at the sign-in page of your proxy; sign out there.' : by === 'oneclick' ? 'here, with one click (no password).' : 'here, with a password.');
-    outBtn.textContent = by === 'cloudflare' && me.throughCloudflare ? 'Sign out (of Cloudflare too)' : 'Sign out';
-    outBtn.title = by === 'cloudflare' ? 'Ends the session here and Cloudflare Access’s, so Cloudflare asks for sign-in again next time' : '';
-    if (by === 'proxy') outBtn.remove();
-  }).catch(() => {});
-  const back = modal(`${S.USER.name} · ${S.USER.role}`,
-    h('p', { class: 'muted' }, S.USER.role === 'admin' ? 'You can change the library, the settings and the users.' : S.USER.role === 'editor' ? 'You can change the library (edits, tags, faces, places).' : 'You can browse, and keep favorites, albums and display settings.'),
-    h('h4', null, 'Who you are in People'),
-    h('div', {}, avatarOf(S.USER, true), h('span', null, S.USER.person && S.tagById.get(S.USER.person) ? S.tagById.get(S.USER.person).name : 'not linked'),
-      S.IS_ADMIN ? h('button', { class: 'pillbtn', onclick: () => personPicker(async (t) => { try { S.USER = await post('/api/auth/person', { person: t.id }); renderUserMenu(); back.remove(); accountDialog(); } catch (e) { toastError(e); } }) }, S.USER.person ? 'Change' : 'Link to a person')
-        : h('span', { class: 'muted' }, S.USER.person ? '' : '(a suite admin links your account in Settings › Security › People)'),
-      S.USER.person ? h('a', { class: 'lnk', href: hashFor('photos', photosWith({ tag: S.USER.person })), onclick: () => back.remove() }, 'Photos of me') : null),
-    how,
-    S.VIA_PROXY ? null : [h('h4', null, 'Change password'), h('div', {}, cur, pw)],
-    S.VIA_PROXY ? null : h('div', {}, h('button', { class: 'pillbtn', onclick: async () => { try { await post('/api/auth/password', { current: cur.value, password: pw.value }); toast('Password changed.'); cur.value = pw.value = ''; } catch (e) { toastError(e); } } }, 'Change password')),
-    { buttons: [outBtn, 'Done'] });
+/** Sign out of this browser; through Cloudflare Access, its own sign-out page ends its session too. */
+async function signOut() {
+  let r; try { r = await post('/api/auth/logout', {}); } catch (e) { toastError(e); return; }
+  if (r && r.cloudflareLogout) { location.href = r.cloudflareLogout; return; }
+  if (S.REQUIRE_LOGIN) { location.reload(); return; }
+  S.USER = null; SETTINGS.user = null; renderUserMenu(); await pollStatus(); applyBadgePref(); applyTheme(); S.viewKey = null; onRoute(); toast('Signed out.');
 }
 /** Settings › Security (people, roles, app passwords, sign-in at the proxy) or Settings › Global settings (the apps, keys
  *  and tokens), for suite admins and the whole suite. The same panel in every io app, served by iosuite-shared. */

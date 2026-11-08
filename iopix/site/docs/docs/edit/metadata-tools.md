@@ -11,7 +11,7 @@ Viewer › info panel › File › **All metadata** shows every EXIF, GPS, IPTC 
 
 ## Metadata consistency
 
-**Settings › Library › Metadata consistency** compares rating, title, caption and tags across digiKam's database, the sidecar and the image file, and lists the photos where they disagree.
+**Tools › Metadata consistency** compares rating, title, caption and tags across digiKam's database, the sidecar and the image file, and lists the photos where they disagree.
 
 - **Check new and changed photos**, **Re-check the whole library**, or **Check the current search only**.
 - The summary tiles filter the list: photos that disagree, those that differ in one field, those without a sidecar.
@@ -20,7 +20,7 @@ Viewer › info panel › File › **All metadata** shows every EXIF, GPS, IPTC 
 
 ## Metadata quality
 
-**Settings › Library › Metadata quality** runs a set of checks, each with its own report:
+**Tools › Metadata quality** runs a set of checks, each with its own report:
 
 - photos and videos with **no location**, to place in batches,
 - the **face checks** described in [Naming faces](faces.md),

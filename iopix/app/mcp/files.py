@@ -55,7 +55,6 @@ def diagnostics() -> dict:
         "search": {"enabled": semantic_enabled(), "running": semantic.running, "done": semantic.done, "total": semantic.total, "model": semantic.chosen()},
         "users": {"exist": users.any_users(), "count": len(users.list_users())},
         "proxySignIn": auth_shared.proxy.status(),
-        "read_only": appstate.read_only(),
         "settings": _public_settings(),
         "log_file": str(config.LOG_FILE or ""), "log_file_exists": bool(config.LOG_FILE and config.LOG_FILE.exists()),
     }
@@ -121,7 +120,7 @@ def repair_video(photo_id: int) -> dict:
     """Repair a video that does not play because its wrapper is damaged (inspect_file shows it): the same streams
     rewrapped without re-encoding, checked to play in full before it replaces the file. The original is kept
     (the change log can put it back). Admins only."""
-    need_admin(writes=True)
+    need_admin()
     try:
         return repair.video(int(photo_id))
     except dbsync.SyncError as e:

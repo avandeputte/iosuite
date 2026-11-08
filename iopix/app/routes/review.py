@@ -8,7 +8,6 @@ from starlette.concurrency import run_in_threadpool
 from app import access, config, events
 from app.digikam import dbsync
 from app.photos import filecheck, history, picklabels
-from app.data import state as appstate
 from app.http import json_body
 from app.runtime import DB_ERRORS
 from app.faces import facequality
@@ -74,7 +73,7 @@ def api_quality_accepted(check: str = "unnamed"):
 @router.post("/api/quality/ignore", dependencies=[access.admin_write])
 async def api_quality_ignore(request: Request):
     """Body {photos: [ids]}: every unnamed face on them becomes "not a face to name"."""
-    if not config.DB_WRITE or appstate.read_only():
+    if not config.DB_WRITE:
         raise HTTPException(403, "Writing to digiKam's database is turned off")
     body = await json_body(request)
     try:
@@ -88,7 +87,7 @@ async def api_quality_ignore(request: Request):
 @router.post("/api/quality/fit", dependencies=[access.admin_write])
 async def api_quality_fit(request: Request):
     """Body {photos?: [ids]}: trim face rectangles that stick out of their photo to its edges, remove empty ones."""
-    if not config.DB_WRITE or appstate.read_only():
+    if not config.DB_WRITE:
         raise HTTPException(403, "Writing to digiKam's database is turned off")
     body = await json_body(request) if (await request.body()) else {}
     try:
@@ -103,7 +102,7 @@ async def api_quality_fit(request: Request):
 async def api_quality_fix(request: Request):
     """Body {files: false}: remove the near-duplicate face regions (one kept per group) and rewrite those sidecars;
     {files: true}: then the image files that still carry the duplicates. In the background."""
-    if not config.DB_WRITE or appstate.read_only():
+    if not config.DB_WRITE:
         raise HTTPException(403, "Writing to digiKam's database is turned off")
     files = bool((await json_body(request) if (await request.body()) else {}).get("files"))
     try:
@@ -129,7 +128,7 @@ async def api_filecheck_run(request: Request):
 @router.post("/api/filecheck/repair", dependencies=[access.admin_write])
 async def api_filecheck_repair(request: Request):
     """Body {ids: [...]}: add the missing end marker to those JPEGs (backed up first, undoable from the edit log)."""
-    if not config.DB_WRITE or appstate.read_only():
+    if not config.DB_WRITE:
         raise HTTPException(403, "Writing to the library is turned off")
     body = await json_body(request)
     try:
@@ -145,7 +144,7 @@ async def api_filecheck_repair(request: Request):
 async def api_filecheck_keep(request: Request):
     """Body {ids: [...]}: crop those damaged JPEGs losslessly to the part of the picture that is intact (backed up
     first, undoable from the edit log)."""
-    if not config.DB_WRITE or appstate.read_only():
+    if not config.DB_WRITE:
         raise HTTPException(403, "Writing to the library is turned off")
     body = await json_body(request)
     try:
@@ -167,7 +166,7 @@ def api_picklabels():
 async def api_picklabels_clear(request: Request):
     """Body {levels: [1, 2, 3]}: take those pick labels (Rejected, Pending, Accepted) off every photo, in digiKam's
     database now (after a full backup) and in the sidecars in the background; each photo's change is in the edit log."""
-    if not config.DB_WRITE or appstate.read_only():
+    if not config.DB_WRITE:
         raise HTTPException(403, "Writing to the library is turned off")
     body = await json_body(request)
     try:

@@ -14,14 +14,9 @@ from app import __version__, config
 APP = config.APP
 
 
-def _read_only() -> bool:
-    from app.data import state
-    return state.read_only()
-
-
 # the version, address, colour and icon register iopix in the suite's list of apps (suite_apps, at the first request),
 # where the start page and the other apps find it
-auth = Auth(APP, read_only=_read_only, read_only_message="The viewer is in read-only mode; nothing in the library can be changed.", app_label="ioPix",
+auth = Auth(APP, app_label="ioPix",
             version=__version__, public_url=config.PUBLIC_URL or None, description="Photos", color="#3b4a8c")
 auth.deny_exempt = ("/mcp",)  # MCP clients sign in with an app password, whatever Cloudflare service token got them through
 

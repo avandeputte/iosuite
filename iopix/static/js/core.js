@@ -152,7 +152,7 @@ export function fmtBytes(b) {
 }
 // Distances are kept in metres and shown in the units chosen under Settings › Display: 'auto' (the default) follows the
 // browser's region, miles and feet where roads are signed in miles (the US and its territories, the UK, Liberia, Myanmar)
-export const UNITS = [['auto', 'Automatic'], ['mi', 'Miles'], ['km', 'Kilometres']];
+export const UNITS = [['auto', 'Automatic'], ['km', 'Kilometres'], ['mi', 'Miles']];
 const MILE_REGIONS = ['US', 'PR', 'GU', 'VI', 'AS', 'MP', 'UM', 'GB', 'LR', 'MM'];
 export function regionUsesMiles(lang) {
   try { const l = new Intl.Locale(lang || 'en-US'); return MILE_REGIONS.includes(l.region || l.maximize().region); } catch { return false; }

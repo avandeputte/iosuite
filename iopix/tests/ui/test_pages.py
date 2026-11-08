@@ -24,13 +24,14 @@ def test_the_settings_page(page, server):
     page.goto(server + "/#/settings")
     page.wait_for_selector("h1:has-text('Settings')", timeout=10000)
     page.wait_for_selector(".stabs", timeout=10000)  # the sections arrive with /api/maintenance
-    assert page.locator(".stabs button").all_inner_texts()[:6] == ["Display", "Editing", "Library", "AI", "Storage and backups", "Server"], "one page: configure and run"
+    tabs = page.locator(".stabs button").all_inner_texts()
+    assert [t for t in tabs if t not in ("Account", "Apps and devices")][:5] == ["Display", "Editing", "Library", "AI", "Server"], "the order every io app uses"
     heads = page.locator("h2").evaluate_all("els => els.map((e) => e.textContent)")
-    for h in ("Display", "AI analysis and models", "Editing", "Place tags", "Metadata templates", "Library", "Storage and backups"):
+    for h in ("Display", "AI analysis and models", "Editing", "Metadata templates", "Library", "Backups"):
         assert any(x.startswith(h) for x in heads), (h, heads)
     page.locator(".stabs button", has_text="Editing").click()
     assert page.locator("h2:has-text('Metadata templates')").is_visible() and page.locator("h2:has-text('Display')").is_hidden()
-    assert "tab=editing" in page.url
+    assert page.url.endswith("#/settings/editing")
     page.reload(); page.wait_for_selector(".stabs button.on:has-text('Editing')", timeout=10000)
     page.locator(".stabs button", has_text="AI").click()
     page.wait_for_selector(".mtable tbody tr", timeout=10000)
@@ -48,17 +49,23 @@ def test_the_settings_page(page, server):
         assert page.locator(f".mtable tr[data-model~={key}]").count() == 1, f"{key} is listed once"
     assert page.locator(".mtable thead th").all_inner_texts()[:3] == ["Feature", "Model", "Progress"]
     page.locator(".stabs button", has_text="Library").click()
-    assert page.locator(".srow b", has_text="Metadata consistency").count() == 1, "consistency sits under Library"
-    assert page.locator(".srow b", has_text="digiKam database").count() == 1, "and where the library is"
-    page.locator(".stabs button", has_text="Storage and backups").click()
-    assert page.locator(".stable.wide tr").count() >= 10 and page.locator(".stable.wide button", has_text="Rebuild").count() == 1
+    assert page.locator(".srow b", has_text="digiKam database").count() == 1, "where the library is"
+    assert page.locator(".srow b", has_text="Metadata consistency").count() == 0, "the tools have their own page"
     page.locator(".stabs button", has_text="Server").click()
     page.wait_for_selector(".iosv h2:has-text('Restart')", timeout=10000)
     assert page.locator(".iosv h2", has_text="MCP server").count() == 1, "the MCP switch is in one place"
+    assert page.locator(".srow b", has_text="Download a backup").count() == 1, "the backups sit with the server"
     assert page.locator(".navfoot a[data-v=maintenance]").count() == 0 and page.locator(".navfoot a[data-v=settings]").count() == 1, "at the foot of the sidebar"
 
+def test_the_tools_page(page, server):
+    page.goto(server + "/#/tools")
+    page.wait_for_selector("h1:has-text('Tools')", timeout=10000)
+    for label in ("Metadata consistency", "Metadata quality", "Duplicate files", "Damaged files", "Date suggestions", "Rescan the library"):
+        assert page.locator(".srow b", has_text=label).count() == 1, label
+    assert page.locator(".navmanage a[data-v=tools]").count() == 1, "in the Manage group of the sidebar"
+
 def test_database_row_tests_a_connection(page, server, lib):
-    page.goto(server + "/#/settings?tab=library"); page.wait_for_selector("h1:has-text('Settings')", timeout=10000)
+    page.goto(server + "/#/settings/library"); page.wait_for_selector("h1:has-text('Settings')", timeout=10000)
     row = page.locator(".srow", has=page.locator("b", has_text="digiKam database"))
     assert row.count() == 1
     assert row.locator("select").first.input_value() == "sqlite"
@@ -335,12 +342,12 @@ def test_digikam_offline_banner_and_sync_setting(page, server):
     page.locator("#dkbanner button[title^='Hide']").click()
     assert page.locator("#dkbanner").count() == 0
     page.unroute("**/api/status")
-    page.goto(server + "/#/settings?tab=library")
+    page.goto(server + "/#/settings/library")
     page.wait_for_selector(".srow:has-text('Sync with digiKam')", timeout=10000)
-    assert page.locator(".srow", has_text="Sync with digiKam").locator("button", has_text="Turn off").count() == 1
+    assert page.locator(".srow", has_text="Sync with digiKam").locator("input[type=checkbox]").is_checked()
 
 def test_server_log_shows_in_settings(page, server):
-    page.goto(server + "/#/settings?tab=server")
+    page.goto(server + "/#/settings/server")
     page.wait_for_selector(".iosv pre.sv-log", timeout=10000)
     page.wait_for_function("!document.querySelector('.iosv pre.sv-log').textContent.startsWith('Loading')", timeout=5000)
 
@@ -587,7 +594,7 @@ def test_explore_rediscover_and_no_settings(page, server):
     _ = first
 
 def test_settings_explain_the_model_choices(page, server):
-    page.goto(server + "/#/settings?tab=ai")
+    page.goto(server + "/#/settings/ai")
     page.wait_for_selector(".mtable tr[data-job=facedetect] .mcompare", timeout=15000)
     row = page.locator(".mtable tr[data-job=facedetect]")
     assert "Face detection" in row.locator(".mwhat").inner_text()
@@ -659,7 +666,7 @@ def test_import_page_plans_then_imports_a_dropped_photo(page, server, lib, tmp_p
         _cleanup(None, lib, ["/1998"])
 
 def test_settings_have_the_file_scanner(page, server):
-    page.goto(server + "/#/settings?tab=library")
+    page.goto(server + "/#/settings/library")
     page.wait_for_selector(".srow b:has-text('File scanner')", timeout=10000)
     r = page.locator(".srow", has=page.locator("b", has_text="File scanner"))
     assert r.locator("input[type=checkbox]").count() == 1 and r.locator("select option").count() == 5 and r.locator("button", has_text="Scan now").count() == 1

@@ -11,7 +11,6 @@ import logging
 import threading
 import time
 
-from app import config
 from app.data import vdb
 from app.digikam.dkdb import in_chunks
 
@@ -26,7 +25,6 @@ log = logging.getLogger("app.data.state")
 # error: it is logged once, and the read or write goes ahead (the tests use probe keys on purpose).
 SETTINGS = {
     "app_name": ("", str, "what the viewer calls itself (Settings › Name); empty: the app's own name"),
-    "read_only": ("0", bool, "nothing in the library may be changed (READ_ONLY=1 in the environment locks it on)"),
     "require_login": ("0", bool, "visitors must sign in before they see anything"),
     "write_files": ("0", bool, "metadata edits go into the image files too, not only the sidecars"),
     "sidecar_compat": ("0", bool, "new sidecars are named photo.xmp, digiKam's compatible file name (SIDECAR_COMPAT=1 locks it on)"),
@@ -288,11 +286,6 @@ def get_setting(key: str, default: str = None) -> str:
     return values.get(key, default)
 
 
-def read_only() -> bool:
-    """Nothing in the library may be changed: READ_ONLY=1 in the environment (locked) or the read_only setting."""
-    if not vdb.ready():  # the set-up page before any database: nothing to read the setting from, and nothing to change yet
-        return bool(config.READ_ONLY)
-    return config.READ_ONLY or get_setting("read_only", "0") == "1"
 
 
 def set_setting(key: str, value: str):

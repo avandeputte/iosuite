@@ -28,7 +28,7 @@ digiKam calls each top-level photo folder an **album root**. iopix reads the pat
 
 iopix opens digiKam's database **read-only** unless an editor makes a change that belongs there. Photo files are only opened for reading unless you turn on writing metadata into image files.
 
-To be sure nothing is ever written, start with `READ_ONLY=1` or the **Read-only mode** switch in Settings. Every write is then refused, for everyone.
+To be sure nothing is ever written to digiKam's database, start with `DB_WRITE=0` in config.env.
 
 ## Is digiKam running?
 

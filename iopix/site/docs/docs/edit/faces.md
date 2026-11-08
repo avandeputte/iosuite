@@ -30,7 +30,7 @@ Face detection finds faces nothing has marked yet, on request: one photo, one fo
 
 ## Tidying faces
 
-**Settings › Library › Metadata quality** has face checks:
+**Tools › Metadata quality** has face checks:
 
 - the same person stored twice a few pixels apart (a leftover of older digiKam versions), with **Remove duplicates**,
 - the same person in two separate places on one photo, for review,

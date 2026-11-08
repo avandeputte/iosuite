@@ -178,8 +178,7 @@ def _status_extra(request: Request) -> dict:
     front end's stamp, the jobs, what the viewer may do. On the sign-in screen (sign-in required, nobody signed in):
     only what it needs, nothing about the library or the server."""
     user = request.state.user
-    out = {"index": public_version(), "stamp": app_stamp(), "appName": app_name(), "readOnly": appstate.read_only(),
-           "readOnlyLocked": config.READ_ONLY, "digikamCheck": config.DIGIKAM_CHECK}
+    out = {"index": public_version(), "stamp": app_stamp(), "appName": app_name(), "digikamCheck": config.DIGIKAM_CHECK}
     if user is None and users.require_login():
         return {**out, "editing": False, "dbWrite": False, "pendingEdits": 0}
     admin, signed, writer = users.is_admin(user), users.is_signed_in(user), users.can_write(user)
@@ -191,7 +190,7 @@ def _status_extra(request: Request) -> dict:
         "semantic": {"enabled": semantic_enabled(), "running": semantic.running, "done": semantic.done,
                      "total": semantic.total, "indexed": 0 if semantic.ids is None else int(len(semantic.ids))},
         "places": places.available(), "editing": edits.available() and writer, "pendingEdits": edits.pending_count(),
-        "dbWrite": config.DB_WRITE and not appstate.read_only() and writer, "writeFiles": edits.writes_files(),
+        "dbWrite": config.DB_WRITE and writer, "writeFiles": edits.writes_files(),
         "user": {**public_user(user), "person": user.get("person")} if user else None,  # the suite's shape, plus the linked person
         "digikam": dk if admin else {k: v for k, v in dk.items() if k != "error"}, "faceDetect": facedetect.available(),
         "lossless": lossless.capabilities() if config.DB_WRITE and edits.available() else None,
@@ -210,8 +209,7 @@ app.include_router(auth.status_router(updater, extra=_status_extra))  # /api/sta
 def _server_info() -> dict:
     """What Settings › Server shows beside the updater's own fields: the MCP box."""
     return {"mcpEnabled": mcp_enabled(), "mcpLocked": config.MCP_FORCED,
-            "mcpAbout": "The address /mcp that lets an assistant such as Claude search and look at photos and, as an editor, tag, "
-                        "rate, caption and organize them; admins also get diagnostics and the updater."}
+            "mcpAbout": "Lets an AI assistant search, look at and organize your photos, as you."}
 
 
 def _server_apply(body: dict) -> None:

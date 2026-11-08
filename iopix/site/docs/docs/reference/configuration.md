@@ -42,7 +42,6 @@ iopix's own data lives on a MariaDB or MySQL server (see [iopix's own database](
 | `FORWARDED_ALLOW_IPS` | `*` | the addresses allowed to pass on the visitor's address (your reverse proxy's) |
 | `TLS_CERT_FILE` / `TLS_KEY_FILE` | unset | HTTPS served directly instead of behind a reverse proxy |
 | `LOG_FILE` | `DATA_DIR/iopix.log` | the server's rotating log (empty: none) |
-| `READ_ONLY` | `0` | `1` refuses every change, for everyone |
 | `EDITING` | `1` | `0` removes the editing controls |
 | `DB_WRITE` | `1` | `0` never writes to digiKam's database |
 | `DIGIKAM_CHECK` | `pgrep` | `pgrep` checks whether digiKam runs on this machine before writing; `none` does not check |

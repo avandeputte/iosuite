@@ -24,7 +24,6 @@
 #   --public-url URL    the address people reach iopix at    --cookie-domain DOMAIN  the domain the sign-in is shared on
 #   --models LIST       kept for compatibility: "none" means --features none
 #   --captions          shorthand for all features including captions
-#   --read-only         lock the viewer to browsing (READ_ONLY=1)
 #   --no-service        do not install/start the systemd unit (prints the run command)
 #   --no-system-deps    do not touch the package manager (you install python3-venv, ffmpeg, exiftool, libheif)
 #   --yes               no questions
@@ -39,7 +38,7 @@
 # only ever read unless you edit metadata from the viewer, which backs every file up first.
 set -e
 PREFIX=/opt/iopix; DATA=""; PHOTOS=""; DKDB=""; MYSQL=""; NODK=0; VIEWERDB=""; SUITE=""; PUBURL=""; COOKIE=""; PORT=8600; HOST=0.0.0.0; USER_NAME=iopix
-MODELS=""; FEATURES=""; ADMIN=""; CAPTIONS=0; READ_ONLY=0; SERVICE=1; SYSDEPS=1; YES=0
+MODELS=""; FEATURES=""; ADMIN=""; CAPTIONS=0; SERVICE=1; SYSDEPS=1; YES=0
 say() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 while [ $# -gt 0 ]; do
@@ -48,7 +47,7 @@ while [ $# -gt 0 ]; do
     --suite-db) SUITE="$2"; shift 2;; --public-url) PUBURL="$2"; shift 2;; --cookie-domain) COOKIE="$2"; shift 2;;
     --prefix) PREFIX="$2"; shift 2;; --data) DATA="$2"; shift 2;; --port) PORT="$2"; shift 2;; --host) HOST="$2"; shift 2;;
     --user) USER_NAME="$2"; shift 2;; --models) MODELS="$2"; shift 2;; --features) FEATURES="$2"; shift 2;; --admin) ADMIN="$2"; shift 2;; --captions) CAPTIONS=1; shift;;
-    --read-only) READ_ONLY=1; shift;; --no-service) SERVICE=0; shift;; --no-system-deps) SYSDEPS=0; shift;; --yes) YES=1; shift;;
+    --no-service) SERVICE=0; shift;; --no-system-deps) SYSDEPS=0; shift;; --yes) YES=1; shift;;
     -h|--help) sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'; exit 0;;
     *) die "unknown option $1 (try --help)";;
   esac
@@ -107,8 +106,6 @@ if ! id "$USER_NAME" >/dev/null 2>&1; then
   useradd --system --home-dir "$PREFIX" --shell /usr/sbin/nologin "$USER_NAME" 2>/dev/null || useradd -r -d "$PREFIX" -s /bin/false "$USER_NAME"
 fi
 sh "$PREFIX/app/setup.sh" "$@" --no-service
-# --read-only: lock the viewer to browsing, whatever the settings say (setup.sh does not ask about it)
-[ "$READ_ONLY" = 1 ] && { grep -q '^READ_ONLY=' "$PREFIX/app/config.env" || echo "READ_ONLY=1" >> "$PREFIX/app/config.env"; }
 # --host: where the server listens (0.0.0.0 by default)
 [ "$HOST" = 0.0.0.0 ] || { grep -q '^HOST=' "$PREFIX/app/config.env" || echo "HOST=$HOST" >> "$PREFIX/app/config.env"; }
 # the app folder and its venv belong to the service user: update.sh, run from the web app as that user, replaces

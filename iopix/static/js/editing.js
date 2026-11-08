@@ -493,7 +493,7 @@ export async function templatePicker(ids, after) {
       icon('copyright'), h('div', null, h('b', null, t.name), h('div', { class: 'muted smaller' }, Object.entries(t.fields).filter(([, v]) => v).map(([k, v]) => `${TEMPLATE_LABEL[k]}: ${v}`).join(' · ')))))) 
       : h('p', { class: 'muted' }, 'No templates yet. Define them in Settings > Metadata templates.'),
     h('p', { class: 'muted smaller' }, 'Applying a template sets every template field; fields left empty in the template are cleared on the photo, as in digiKam.'),
-    { buttons: [h('a', { class: 'pillbtn', href: '#/settings', onclick: () => back.remove() }, 'Manage templates'), 'Cancel'] });
+    { buttons: [h('a', { class: 'pillbtn', href: '#/settings/editing', onclick: () => back.remove() }, 'Manage templates'), 'Cancel'] });
 }
 export function templatesSection(m) {
   const list = h('div');

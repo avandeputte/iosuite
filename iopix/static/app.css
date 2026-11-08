@@ -625,6 +625,14 @@ body.nobadges .cbadges, body.nobadges .fbadge { display: none; }
 .page h2.sec .muted, .page h2:has(> .hic) .muted { font-weight: 400; }
 .spage h2 .muted { font-size: var(--fs-m); font-weight: 400; }
 .spage h2 + .srow, .spage h2 + div > .srow:first-child { border-top: 0; }
+/* each Settings and Tools section is a box, as the shared panels (Account, Server, Security) draw theirs */
+.spage .iosv h2, .spage .iosa h2 { font-size: 16px; margin: 0 0 6px; padding-bottom: 0; border-bottom: 0; }
+.spage .iosv h2::before, .spage .iosa h2::before { display: none; }
+.spage .sbox { border: 1px solid var(--line); border-radius: 16px; padding: 16px 20px; margin: 0 0 16px; }
+.spage .stabs + .sbox, .spage .ptitle + .sbox, .spage .stab-mark + .sbox { margin-top: 16px; }
+.spage .sbox > h2 { font-size: 16px; margin: 0 0 6px; padding-bottom: 0; border-bottom: 0; }
+.spage .sbox > h2::before { display: none; }
+.spage .sbox > .srow:last-child { padding-bottom: 0; }
 /* search box details and the filter button */
 #clear { width: 30px; height: 30px; }
 .chip img { width: 20px; height: 20px; }

@@ -6,7 +6,7 @@ import re
 
 def test_status_shape(client):
     s = client.get("/api/status").json()
-    for k in ("version", "app", "editing", "dbWrite", "readOnly", "readOnlyLocked", "analysis", "jobs", "pendingEdits"):
+    for k in ("version", "app", "editing", "dbWrite", "analysis", "jobs", "pendingEdits"):
         assert k in s, k
     assert s["jobs"]["running"] is None or isinstance(s["jobs"]["running"], str)
 
