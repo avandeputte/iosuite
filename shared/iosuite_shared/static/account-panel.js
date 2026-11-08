@@ -166,12 +166,19 @@ export function segmented(choices, current, onPick) {
 const saveSetting = (body) => api('auth/settings', { json: body }).then(() => toast('Saved'));
 
 // ------------------------------------------------------------------ Settings › Display
-/** Appearance: Light, Dark or System, saved with the account (the app applies it with apply(value)). */
-export const themeRow = (current, apply) => row('Theme', 'Saved with your account.',
-  segmented([['light', 'Light'], ['dark', 'Dark'], ['system', 'System']], current || 'system', async (v) => { apply(v); await saveSetting({ theme: v }); }));
-/** Units: Automatic (from the browser's region), Kilometres or Miles, saved with the account. */
-export const unitsRow = (current, apply) => row('Units', 'Automatic follows your region.',
-  segmented([['auto', 'Automatic'], ['metric', 'Kilometres'], ['imperial', 'Miles']], current || 'auto', async (v) => { apply(v); await saveSetting({ units: v }); }));
+/** Appearance: Light, Dark or System, saved with the account (the app applies it with apply(value)). save(value):
+ *  where an app keeps its own settings store (ioHealth); else the account's settings. */
+export const themeRow = (current, apply, save) => row('Theme', 'Saved with your account.',
+  segmented([['light', 'Light'], ['dark', 'Dark'], ['system', 'System']], current || 'system', async (v) => { apply(v); if (save) { await save(v); toast('Saved'); } else await saveSetting({ theme: v }); }));
+/** Units: Automatic (from the browser's region), Kilometres or Miles, saved with the account (or by save(value)). */
+export const unitsRow = (current, apply, save) => row('Units', 'Automatic follows your region.',
+  segmented([['auto', 'Automatic'], ['metric', 'Kilometres'], ['imperial', 'Miles']], current || 'auto', async (v) => { apply(v); if (save) { await save(v); toast('Saved'); } else await saveSetting({ units: v }); }));
+/** Whether the browser's region signs its roads in miles (the US and its territories, the UK, Liberia, Myanmar): what
+ *  units 'auto' means. */
+const MILE_REGIONS = ['US', 'PR', 'GU', 'VI', 'AS', 'MP', 'UM', 'GB', 'LR', 'MM'];
+export function regionUsesMiles(lang = navigator.language) {
+  try { const l = new Intl.Locale(lang || 'en-US'); return MILE_REGIONS.includes(l.region || l.maximize().region); } catch { return false; }
+}
 
 // ------------------------------------------------------------------ Settings › Account
 /** Display name and email (saved when a field is left), and the password. opts: toast, onSaved(user). */
