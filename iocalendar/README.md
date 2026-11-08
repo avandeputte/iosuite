@@ -127,8 +127,8 @@ Docker, pull the image instead. From a shell: `./update.sh` (`--check` only look
 given commit).
 
 Everything is under one Settings page (the sidebar and the avatar menu): your own tabs (account, display, apps and
-devices, calendars, holidays and birthdays), then for admins family, storage and backups and server, and for suite
-admins security and global settings.
+devices, calendars, holidays and birthdays), then for admins family and server (with Export: each calendar as an
+.ics file), and for suite admins security and global settings. Import is a page of its own in the sidebar.
 
 ### Releases
 
