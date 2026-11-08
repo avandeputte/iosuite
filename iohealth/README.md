@@ -27,7 +27,7 @@ without a password signs in with one click, on the home network only). It shows 
 shows new data as soon as a sync finishes.
 
 The menu is laid out as in ioPix: a sidebar with the pages in groups (Dashboard, Day, Metrics, Workouts; Analysis:
-Correlations, Map, Records; Health: Sleep, Glucose), Settings and, for admins, Maintenance at its foot. On a wide
+Correlations, Map, Records; Health: Sleep, Glucose), Settings at its foot. On a wide
 screen it stays docked beside the page, or its button puts it away (remembered) and the menu button slides it over
 the page when needed. On phones the same pages are a bottom bar (Dashboard, Day, Metrics, Workouts) with the rest
 under More.
@@ -44,8 +44,7 @@ under More.
 | **Glucose** | blood glucose from a CGM or meter: average, GMI (estimated A1c), time in/below/above range, variability (CV), low episodes; readings with your target band and optional overlays (heart rate, steps, carbohydrates, insulin, workouts…); the daily pattern (ambulatory glucose profile) and time in range per day; **glucose around workouts and meals**: the average change from an hour before to three hours after, per activity or per meal size (from logged carbohydrates), and each event's numbers. A workout's own page shows its glucose curve too. mg/dL or mmol/L and the target range are set in Settings |
 | **Correlations** | pick two metrics and a period: a scatter plot of the days (click a dot for that day), the correlation, how much one explains the other and the best-fit line, same day or "the day before" (sleep, workouts or carbs, then the next day's glucose). Includes glucose time in range and variability per day and workout minutes. A table ranks what else goes with the second metric |
 | **Records** | fastest running efforts from the GPS routes, best days, health bests, ring streaks, and bests per activity |
-| **Settings** | in tabs, as in ioContacts and ioCalendar (`#/settings/<tab>`; each tab loads only what it shows). *Account*: who you are, password, sign out everywhere. *Apps and devices*: connecting the iPhone app, app passwords, the web app on the home screen. *Display*: km or miles, light/dark theme, and which pages and metrics to show (turn off Sleep, Glucose or any metric you don't use and it disappears from the menu, the dashboard, Metrics and Records). *Health*: glucose unit and target range, maximum heart rate (default 220 − age from your date of birth), your profile. *Goals and alerts*: **goals** (any metric, at least or at most: 10,000 steps a day, weight at most 75 kg, 7.5 h of sleep…) and the thresholds for dashboard alerts. For admins: *Server*: what this server runs on. For suite admins: *Suite*, the suite's admin panel, the same as on the start page and in every io app (iosuite-shared's `/api/suite-admin/ui.js`): people and their role in every app, app passwords, keys and tokens, the apps and sign-in at the proxy |
-| **Maintenance** | admins, in tabs: what is run or checked. *Uploads*: the last upload of every account. *Storage and backups*: the databases, schema version, each table's rows (the database's own estimate, so the page opens at once) and size on disk, how far the hourly rollup has got. *Updates and logs*: the installed version with Check for updates / Update now and the daily check, the server log, Restart |
+| **Settings** | in tabs, as in ioContacts and ioCalendar (`#/settings/<tab>`; each tab loads only what it shows). *Account*: who you are, password, sign out. *Apps and devices*: connecting the iPhone app, app passwords, the web app on the home screen. *Display*: km or miles, light/dark theme, and which pages and metrics to show (turn off Sleep, Glucose or any metric you don't use and it disappears from the menu, the dashboard, Metrics and Records). *Health*: glucose unit and target range, maximum heart rate (default 220 − age from your date of birth), your profile. *Goals and alerts*: **goals** (any metric, at least or at most: 10,000 steps a day, weight at most 75 kg, 7.5 h of sleep…) and the thresholds for dashboard alerts. For admins: *Uploads*: the last upload of every account. *Storage and backups*: each table's rows (the database's own estimate, so the page opens at once) and size on disk, how far the hourly rollup has got. *Server*: iosuite-shared's panel, the same in every io app: the installed version with Check for updates / Update now and the daily check, the database and time zone, the server log, Restart. For suite admins: *Security* (people and their role in every app, app passwords, sign-in at the proxy) and *Global settings* (the apps, keys and tokens), the suite's admin panel, the same as on the start page and in every io app (iosuite-shared's `/api/suite-admin/ui.js`) |
 
 **Export.** The ⤓ CSV buttons download what a chart or table shows (Metrics, Day, glucose readings and responses,
 workouts, sleep, correlations). ⤓ PDF in the header saves the current page through the print dialog, in light colours
@@ -180,7 +179,7 @@ for the important ones, and `config.env.example` lists them all) or in the envir
 | `AUTH_PROXY`… | no | sign-in at a reverse proxy or Cloudflare Access, see [HTTPS](#reverse-proxy-and-https) below |
 | `UPDATE_CHECK` | no | `0`: never ask GitHub whether a newer version exists (the daily check, see [Updates](#updates)) |
 | `DATA_DIR` | no | what ioHealth writes on its own (the server log, the outcome of an update); default `data/` in the app folder |
-| `LOG_FILE` | no | the server log shown at Maintenance › Updates and logs (`data/iohealth.log`; empty: no file) |
+| `LOG_FILE` | no | the server log shown at Settings › Server (`data/iohealth.log`; empty: no file) |
 
 ## Updates
 - **Docker:** `docker compose pull && docker compose up -d`.
@@ -188,7 +187,7 @@ for the important ones, and `config.env.example` lists them all) or in the envir
 - **Standalone:** `./update.sh` fetches the latest code (git, or the GitHub tarball when
   there is no checkout), installs the packages the new version asks for and only then moves the code in, then
   restarts the service. `--check` only reports; `IOHEALTH_REF=<sha>` installs that commit.
-- **From the web app:** Maintenance › Updates and logs (admins), the same page in every ioThing app (it comes from
+- **From the web app:** Settings › Server (admins), the same page in every ioThing app (it comes from
   `iosuite_shared.updates` in iosuite-shared, at `/api/server` and `/api/log`), shows the installed version and commit,
   "Check for updates" compares it with GitHub's `main`, and "Update now" runs `update.sh` (in Docker it says to pull
   instead); below it the tail of the server log (`data/iohealth.log` in the app folder; `LOG_FILE` moves it, empty switches it
@@ -230,7 +229,7 @@ network addresses; anything else must be `https://`.
 When the proxy already makes people sign in (Cloudflare Access, Authelia, oauth2-proxy…), ioHealth takes that sign-in,
 exactly as the other apps in the suite do: the proxy passes who signed in in a header, and ioHealth treats that person
 as signed in when an account exists for them (matched on the account's email address, then its name). Set it up once
-for the whole suite in Settings › Suite › Sign-in at the proxy (it's kept in the shared account database), or in the
+for the whole suite in Settings › Security › Sign-in at the proxy (it's kept in the shared account database), or in the
 environment, which wins: `AUTH_PROXY` (`cloudflare`, `haproxy`, `nginx`, `caddy`, `traefik` or `header`),
 `AUTH_PROXY_HEADER`, `AUTH_PROXY_TRUSTED` (the addresses the proxy connects from), `AUTH_PROXY_CREATE` (`viewer`
 or `editor` to create an account for someone new, `deny` for a "No access" page), and for Cloudflare Access
@@ -251,7 +250,7 @@ its health data. A *suite admin* is admin in every app.
 | not signed in | nothing but the sign-in screen (there is no shared data to look at) |
 | **viewer** | see their own data, and their own settings, goals and app passwords |
 | **editor** | plus upload: the iPhone app signs in as an editor |
-| **admin** | plus the Server settings and Maintenance; accounts, roles and the sign-in settings are for suite admins (Settings › Suite) |
+| **admin** | plus Uploads, Storage and backups and Server in Settings; accounts, roles and the sign-in settings are for suite admins (Settings › Security) |
 
 Settings › Account is where you change your password and sign out everywhere; Settings › Apps and devices shows what
 the iPhone app needs (this server's address and your user name) and makes **app passwords** (a per-device password for

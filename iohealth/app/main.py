@@ -18,7 +18,7 @@ from iosuite_shared.updates import setup_log
 from app import __version__, config, db, maintenance, upload, webapi
 from app.auth import APP, auth, updater
 
-setup_log(config.LOG_FILE)  # the server log that Maintenance › Updates and logs shows; the app runs without it
+setup_log(config.LOG_FILE)  # the server log that Settings › Server shows; the app runs without it
 log = logging.getLogger("app")
 
 # what a visitor may still fetch: the app shell (which shows the sign-in), its files (/static/), the API docs and the
@@ -71,16 +71,16 @@ def _status_extra(request) -> dict:
 
 app.include_router(auth.router())        # /api/auth/*: login, accounts, logout, me, settings, password, setup, sessions, app-passwords, proxy
 app.include_router(auth.users_router())  # /api/users: this app's admins
-app.include_router(auth.admin_router())  # /api/suite-admin (+ ui.js, the Settings › Suite panel): the whole suite (suite admins)
+app.include_router(auth.admin_router())  # /api/suite-admin (+ ui.js, the Settings › Security panel): the whole suite (suite admins)
 app.include_router(auth.status_router(updater, extra=_status_extra))  # /api/status: public, the same shape in every app
 app.include_router(upload.router)
 app.include_router(webapi.router)
 
 
 def _server_info() -> dict:
-    """What Maintenance › Updates and logs and Settings › Server show beside the updater's own fields."""
+    """What Settings › Server shows beside the updater's own fields: This server."""
     p = db.params()
-    return {"timezone": config.TZ, "database": f"{p['host']}:{p['port']}/{p['database']}", "schemaVersion": db.schema_version()}
+    return {"about": [["Database", f"{p['host']}:{p['port']}/{p['database']}, schema version {db.schema_version()}"], ["Time zone", config.TZ]]}
 
 
 app.include_router(auth.server_router(updater, log_file=config.LOG_FILE, info=_server_info))  # /api/server, /api/log: admins

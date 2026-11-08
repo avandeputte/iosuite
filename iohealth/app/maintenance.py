@@ -1,8 +1,8 @@
-"""Admins: Maintenance › Storage and backups and Uploads (the database and its tables, the hourly rollup, the last
+"""Admins: Settings › Storage and backups and Uploads (the database and its tables, the hourly rollup, the last
 upload of every account), laid out as in ioContacts and ioCalendar. The version, updates, restart and the server log
-(Maintenance › Updates and logs) are iosuite_shared's server_router, mounted in app/main.py.
+(Settings › Server) are iosuite_shared's server_router, mounted in app/main.py.
 
-Maintenance answers from the server's own statistics: the row counts are information_schema's estimates, not a
+Storage and backups answers from the server's own statistics: the row counts are information_schema's estimates, not a
 COUNT(*) per table, which on tens of millions of samples and heartbeats took many seconds every time the page opened."""
 from fastapi import APIRouter
 from fastapi.responses import ORJSONResponse

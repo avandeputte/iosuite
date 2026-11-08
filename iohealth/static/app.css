@@ -99,8 +99,7 @@ body.side-docked { --nav: var(--side); }
 #nav a[data-page="dashboard"] { --hue: var(--c-purple); } #nav a[data-page="day"] { --hue: var(--c-amber); } #nav a[data-page="metrics"] { --hue: var(--c-blue); }
 #nav a[data-page="correlations"] { --hue: var(--c-teal); } #nav a[data-page="workouts"] { --hue: var(--c-orange); } #nav a[data-page="map"] { --hue: var(--c-cyan); }
 #nav a[data-page="records"] { --hue: var(--c-green); } #nav a[data-page="sleep"] { --hue: var(--c-indigo); } #nav a[data-page="glucose"] { --hue: var(--c-rose); }
-#nav a[data-page="settings"], #nav a[data-page="maintenance"] { color: var(--muted); }
-body.noadmin #nav a[data-page="maintenance"] { display: none; }
+#nav a[data-page="settings"] { color: var(--muted); }
 .navgap { flex: none; height: 14px; }
 .navsec { flex: none; padding: 0 12px 4px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 #nav .navmore { display: none; }
@@ -311,7 +310,7 @@ table.grid td { padding: 6px 8px 6px 0; border-top: 1px solid var(--line); }
 
 @media (max-width: 800px) {
   :root { --topbar: 48px; --nav: 0px; }
-  #menubtn, #navscrim, .navhead, .navgap, .navsec, .navfoot, #nav a[data-page="settings"], #nav a[data-page="maintenance"] { display: none; }  /* Settings and Maintenance are under More */
+  #menubtn, #navscrim, .navhead, .navgap, .navsec, .navfoot, #nav a[data-page="settings"] { display: none; }  /* Settings and Maintenance are under More */
   #topbar { gap: 6px; padding: env(safe-area-inset-top) 8px 0 12px; height: calc(var(--topbar) + env(safe-area-inset-top)); left: 0; }
   #topbar .topbrand { display: flex; flex: none; }
   .topbrand .brand-name { font-size: 20px; }

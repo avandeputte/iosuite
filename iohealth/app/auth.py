@@ -5,8 +5,8 @@ ioNotes and ioContacts: one sign-in serves every app on the domain (COOKIE_DOMAI
 stays here: the role an account holds in ioHealth, and its health data, which nobody else sees.
 
 Roles: a viewer sees their own data; an editor can also upload it (the iPhone app signs in as an editor, with an
-app password); an admin can also see Server and Maintenance; accounts, roles and the sign-in
-settings are for suite admins (Settings › Suite, the Shared ioSuite database).
+app password); an admin can also see Uploads, Storage and backups and Server; accounts, roles and the sign-in
+settings are for suite admins (Settings › Security, the Shared ioSuite database).
 """
 import logging
 
