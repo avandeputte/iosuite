@@ -1,16 +1,17 @@
-"""Public holidays: a shared, read-only Holidays calendar (kind 'holidays') for the family's country and region.
+"""Public holidays: shared, read-only Holidays calendars (kind 'holidays'), one per country the family follows.
 
 The dates come from the `holidays` package, worked out on the server (nothing is fetched): last year to a few years
 ahead, as all-day events marked free, made again every day so the years move along. Settings › Holidays and birthdays picks the
-country, the region (a state, province...) and the language of the names; HOLIDAYS_COUNTRY / HOLIDAYS_REGION /
-HOLIDAYS_LANGUAGE in the environment give the first ones. Until an admin chooses, the country is the one of the family's
-time zone (Europe/Brussels: Belgium), else the United States. Because it is an ordinary calendar here, the web app, CalDAV, the
-subscription links, the REST API and MCP all show it, and each account can hide it like any other calendar.
+countries and, for each, the region (a state, province...) and the language of the names; HOLIDAYS_COUNTRY (one code or
+several, comma-separated) / HOLIDAYS_REGION / HOLIDAYS_LANGUAGE in the environment give the first ones. Until an admin
+chooses, the country is the one of the family's time zone (Europe/Brussels: Belgium), else the United States. Because each is an ordinary calendar here, the web app, CalDAV, the
+subscription links, the REST API and MCP all show them, and each account can hide any of them like any other calendar.
 """
 import datetime as dt
 import functools
 import hashlib
 import importlib.resources
+import json
 import logging
 import re
 import threading
@@ -24,7 +25,7 @@ from app import config, db, ical, model
 log = logging.getLogger("iocalendar.holidays")
 SYNC_EVERY = 24 * 3600
 YEARS_BACK, YEARS_AHEAD = 1, 3
-COLOR = "#1e8e3e"
+COLORS = ("#1e8e3e", "#c26401", "#7b1fa2", "#00838f", "#ad1457", "#5d4037")  # one per country, in order
 _lock = threading.Lock()
 _state: dict = {"synced": None, "error": None, "count": None}
 
@@ -100,64 +101,135 @@ def country_info(code: str) -> dict:
 
 # ------------------------------------------------------------------ settings
 
+OFF = ("OFF", "NONE", "0", "NO")
+
+
+def _carry_over() -> None:
+    """The one-country settings (holidays_country/region/language) become the first entry of the list, and the old
+    Holidays calendar becomes that country's."""
+    old = db.get_setting("holidays_country")
+    if old is None:
+        return
+    c = old.strip().upper()
+    items = [{"country": c, "region": db.get_setting("holidays_region") or None, "language": db.get_setting("holidays_language") or None}] if c else []
+    db.set_setting("holidays_countries", json.dumps(items))
+    for k in ("holidays_country", "holidays_region", "holidays_language"):
+        db.set_setting(k, None)
+    cal = db.one("SELECT id FROM cal_calendars WHERE kind = 'holidays' AND owner_id IS NULL AND slug = 'holidays'")
+    if cal and c:
+        db.ex("UPDATE cal_calendars SET slug = %s WHERE id = %s", (_slug(c), cal["id"]))
+
+
+def _from_env() -> tuple[list[dict], bool]:
+    """HOLIDAYS_COUNTRY (one code or several, comma-separated; HOLIDAYS_REGION and HOLIDAYS_LANGUAGE go with the first),
+    else the country of the family's time zone, else the United States."""
+    codes = [c.strip().upper() for c in (config.HOLIDAYS_COUNTRY or "").split(",") if c.strip()]
+    if any(c in OFF for c in codes):
+        return [], False
+    if not codes:
+        return [{"country": country_for_tz(ical.default_tz()) or "US", "region": None, "language": None}], True
+    items = [{"country": c, "region": None, "language": None} for c in codes]
+    items[0].update(region=config.HOLIDAYS_REGION or None, language=config.HOLIDAYS_LANGUAGE or None)
+    return items, False
+
+
+def _clean(items) -> list[dict]:
+    """Known countries only, once each; a region or language the country does not have is dropped."""
+    out, seen = [], set()
+    for it in items or []:
+        c = str((it or {}).get("country") or "").upper()
+        if c not in supported() or c in seen:
+            continue
+        seen.add(c)
+        r = (it.get("region") or "").upper() or None
+        out.append({"country": c, "region": r if r in supported()[c] else None, "language": it.get("language") or None})
+    return out
+
+
 def settings() -> dict:
-    """{country, region, language, enabled, guessed}: country None means switched off."""
-    stored = db.get_setting("holidays_country")
+    """{items: [{country, region, language}], guessed}: one Holidays calendar per item; no items, none."""
+    _carry_over()
+    raw = db.get_setting("holidays_countries")
     guessed = False
-    if stored is None:  # never chosen: the environment, else the time zone's country
-        country = (config.HOLIDAYS_COUNTRY or "").upper() or None
-        if country in ("OFF", "NONE", "0", "NO"):
-            country = None
-        elif not country:
-            country, guessed = country_for_tz(ical.default_tz()) or "US", True
+    if raw is None:  # never chosen: the environment, else the time zone's country
+        items, guessed = _from_env()
     else:
-        country = stored.upper() or None
-    region = db.get_setting("holidays_region", config.HOLIDAYS_REGION or "") or None
-    language = db.get_setting("holidays_language", config.HOLIDAYS_LANGUAGE or "") or None
-    if country and country not in supported():
-        country = None
-    if country and region and region not in supported().get(country, []):
-        region = None
-    return {"country": country, "region": region, "language": language, "enabled": bool(country), "guessed": guessed and bool(country)}
+        try:
+            items = json.loads(raw)
+        except ValueError:
+            items = []
+    items = _clean(items)
+    return {"items": items, "guessed": guessed and bool(items)}
+
+
+def _where(it: dict) -> str:
+    info = country_info(it["country"])
+    region = next((r["name"] for r in info["regions"] if r["code"] == it["region"]), it["region"]) if it["region"] else None
+    return info["name"] + (f", {region}" if region else "")
 
 
 def public_settings() -> dict:
     s = settings()
-    out = {**s, "lastSync": dict(_state)}
-    if s["country"]:
-        info = country_info(s["country"])
-        out.update(countryName=info["name"], regions=info["regions"], languages=info["languages"],
-                   regionName=next((r["name"] for r in info["regions"] if r["code"] == s["region"]), None))
-    return out
+    cals = {c["slug"]: c["id"] for c in holiday_calendars()}
+    items = []
+    for it in s["items"]:
+        info = country_info(it["country"])
+        items.append({**it, "countryName": info["name"], "where": _where(it), "calendar": cals.get(_slug(it["country"])),
+                      "regionName": next((r["name"] for r in info["regions"] if r["code"] == it["region"]), None)})
+    return {"items": items, "guessed": s["guessed"], "lastSync": dict(_state)}
 
 
-def save_settings(country=None, region=None, language=None) -> None:
-    """country "" switches the Holidays calendar off; region and language "" go back to the country's own."""
-    if country is not None:
-        c = str(country).strip().upper()
-        if c and c not in supported():
-            raise ValueError(f"No holidays known for country '{country}'")
-        if c != (settings()["country"] or ""):
-            db.set_setting("holidays_region", "")  # another country's regions differ
-            db.set_setting("holidays_language", "")
-        db.set_setting("holidays_country", c)
-    c = settings()["country"]
-    if region is not None:
-        r = str(region).strip().upper()
-        if r and (not c or r not in supported().get(c, [])):
-            raise ValueError(f"'{region}' is not a region of {c}")
-        db.set_setting("holidays_region", r)
-    if language is not None:
-        lang = str(language).strip()
-        if lang and c and lang not in country_info(c)["languages"]:
-            raise ValueError(f"Holiday names for {c} come in: " + ", ".join(country_info(c)["languages"]))
-        db.set_setting("holidays_language", lang)
+def _check(it) -> dict:
+    if not isinstance(it, dict):
+        raise ValueError("Each entry is {country, region?, language?}")
+    c = str(it.get("country") or "").strip().upper()
+    if c not in supported():
+        raise ValueError(f"No holidays known for country '{it.get('country') or ''}'")
+    r = str(it.get("region") or "").strip().upper() or None
+    if r and r not in supported()[c]:
+        raise ValueError(f"'{it.get('region')}' is not a region of {c}")
+    lang = str(it.get("language") or "").strip() or None
+    if lang and lang not in country_info(c)["languages"]:
+        raise ValueError(f"Holiday names for {c} come in: " + ", ".join(country_info(c)["languages"]))
+    return {"country": c, "region": r, "language": lang}
 
 
-# ------------------------------------------------------------------ the Holidays calendar
+def save_settings(items) -> None:
+    """The whole list: [{country, region?, language?}], one Holidays calendar each; [] switches them all off."""
+    if not isinstance(items, list):
+        raise ValueError("items: a list of {country, region?, language?}")
+    out = [_check(it) for it in items]
+    dup = {c for c in (x["country"] for x in out) if [x["country"] for x in out].count(c) > 1}
+    if dup:
+        raise ValueError("Each country once: " + ", ".join(sorted(dup)))
+    db.set_setting("holidays_countries", json.dumps(out))
 
-def holiday_calendar() -> dict | None:
-    return db.one("SELECT * FROM cal_calendars WHERE kind = 'holidays' AND owner_id IS NULL LIMIT 1")
+
+def set_country(country: str, region=None, language=None) -> None:
+    """Add a country, or change the region or language of one already there."""
+    items = [x for x in settings()["items"] if x["country"] != str(country or "").strip().upper()]
+    new = _check({"country": country, "region": region, "language": language})
+    old = [x["country"] for x in settings()["items"]]
+    items.insert(old.index(new["country"]) if new["country"] in old else len(items), new)
+    save_settings(items)
+
+
+def remove_country(country: str) -> None:
+    c = str(country or "").strip().upper()
+    items = settings()["items"]
+    if c not in [x["country"] for x in items]:
+        raise ValueError(f"No Holidays calendar for '{country}'")
+    save_settings([x for x in items if x["country"] != c])
+
+
+# ------------------------------------------------------------------ the Holidays calendars
+
+def _slug(country: str) -> str:
+    return f"holidays-{country.lower()}"
+
+
+def holiday_calendars() -> list[dict]:
+    return db.q("SELECT * FROM cal_calendars WHERE kind = 'holidays' AND owner_id IS NULL ORDER BY id")
 
 
 def dates(country: str, region: str | None = None, language: str | None = None, years=None) -> list[tuple[dt.date, str]]:
@@ -194,50 +266,58 @@ def _event(uid: str, d: dt.date, name: str, where: str):
     return ical.finish(cal)
 
 
-def sync() -> dict:
-    """Bring the Holidays calendar up to date with the settings (made when missing; removed when switched off)."""
-    with _lock:
-        s = settings()
-        cal = holiday_calendar()
-        if not s["country"]:
-            if cal:
-                model.delete_calendar(cal["id"])
-            _state.update(synced=None, error=None, count=None)
-            return {"ok": True, "count": 0, "removed": bool(cal)}
-        try:
-            info = country_info(s["country"])
-            found = dates(s["country"], s["region"], s["language"])
-        except Exception as e:  # noqa: BLE001
-            _state.update(error=f"{type(e).__name__}: {e}"[:300])
-            log.warning("holidays: %s", _state["error"])
-            return {"ok": False, "error": _state["error"]}
-        where = info["name"] + (f", {next((r['name'] for r in info['regions'] if r['code'] == s['region']), s['region'])}" if s["region"] else "")
-        if not cal:
-            cid = model.create_calendar(None, "Holidays", f"Public holidays: {where}", COLOR, kind="holidays", slug="holidays")
-            cal = model.calendar(cid)
-        else:
-            want = f"Public holidays: {where}"
-            if cal.get("description") != want and (cal.get("description") or "").startswith("Public holidays"):
-                model.update_calendar(cal["id"], description=want)
-        have = {r["uid"]: r for r in model.rows(cal["id"])}
-        seen, changed = set(), 0
-        for d, name in found:
-            uid = _uid(s["country"], s["region"], d, name)
-            if uid in seen:
-                continue
-            seen.add(uid)
-            obj = _event(uid, d, name, where)
-            old = have.get(uid)
-            if old and old["etag"] == ical.etag_of(ical.text(obj)):
-                continue
-            model.save(cal["id"], obj, old["id"] if old else None)
+def _fill(it: dict, cal: dict | None, n: int) -> tuple[int, int]:
+    """One country's calendar (made when missing): (holidays, changes)."""
+    found = dates(it["country"], it["region"], it["language"])
+    where = _where(it)
+    want = f"Public holidays: {where}"
+    if not cal:
+        name = f"Holidays ({country_info(it['country'])['name']})"
+        cid = model.create_calendar(None, name, want, COLORS[n % len(COLORS)], kind="holidays", slug=_slug(it["country"]))
+        cal = model.calendar(cid)
+    elif cal.get("description") != want and (cal.get("description") or "").startswith("Public holidays"):
+        model.update_calendar(cal["id"], description=want)
+    have = {r["uid"]: r for r in model.rows(cal["id"])}
+    seen, changed = set(), 0
+    for d, name in found:
+        uid = _uid(it["country"], it["region"], d, name)
+        if uid in seen:
+            continue
+        seen.add(uid)
+        obj = _event(uid, d, name, where)
+        old = have.get(uid)
+        if old and old["etag"] == ical.etag_of(ical.text(obj)):
+            continue
+        model.save(cal["id"], obj, old["id"] if old else None)
+        changed += 1
+    for uid, r in have.items():
+        if uid not in seen:
+            model.delete(r["id"])
             changed += 1
-        for uid, r in have.items():
-            if uid not in seen:
-                model.delete(r["id"])
-                changed += 1
-        _state.update(synced=int(time.time()), error=None, count=len(seen))
-        return {"ok": True, "count": len(seen), "changed": changed}
+    return len(seen), changed
+
+
+def sync() -> dict:
+    """Bring the Holidays calendars up to date with the settings: one per country, made when missing, removed when
+    its country is no longer in the list."""
+    with _lock:
+        items = settings()["items"]
+        cals = {c["slug"]: c for c in holiday_calendars()}
+        count, changed, errors = 0, 0, []
+        for n, it in enumerate(items):
+            try:
+                k, ch = _fill(it, cals.pop(_slug(it["country"]), None), n)
+                count, changed = count + k, changed + ch
+            except Exception as e:  # noqa: BLE001 - the other countries still fill
+                errors.append(f"{it['country']}: {type(e).__name__}: {e}")
+        for cal in cals.values():  # countries taken off the list
+            model.delete_calendar(cal["id"])
+            changed += 1
+        error = "; ".join(errors)[:300] or None
+        if error:
+            log.warning("holidays: %s", error)
+        _state.update(synced=int(time.time()) if items else None, error=error, count=count if items else None)
+        return {"ok": not errors, "count": count, "changed": changed, "calendars": len(items), **({"error": error} if error else {})}
 
 
 def start_sync() -> None:

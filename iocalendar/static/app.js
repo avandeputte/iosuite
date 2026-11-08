@@ -1259,41 +1259,54 @@ async function birthdaysBox(el) {
 async function setHolidays(el) {
   const s = await api('/api/holidays/settings');
   const adm = S.user.role === 'admin';
-  const where = s.country ? [s.countryName, s.regionName].filter(Boolean).join(', ') : null;
   const last = (x) => (x && x.synced ? `Last filled ${new Date(x.synced * 1000).toLocaleString()} (${x.count} holidays, last year to three years ahead).` : x && x.error ? `The last fill failed: ${x.error}` : '');
+  const shown = s.items.map((x) => x.where).join('; ');
   const box = h('div', { class: 'box' }, h('h2', null, icon('star'), 'Public holidays'),
-    h('p', { class: 'muted' }, 'A shared calendar with the public holidays of your country.'),
-    h('p', null, where ? `Showing the holidays of ${where}${s.guessed ? ' (from the time zone; pick another below)' : ''}.` : 'Off: no country picked.'));
+    h('p', { class: 'muted' }, 'A shared calendar with the public holidays of each country you add.'),
+    h('p', null, shown ? `Showing the holidays of ${shown}${s.guessed ? ' (from the time zone; pick another below)' : ''}.` : 'Off: no country picked.'));
   el.append(box);
-  if (!adm) { box.append(h('p', { class: 'muted small' }, 'An admin picks the country.')); return; }
+  if (!adm) { box.append(h('p', { class: 'muted small' }, 'An admin picks the countries.')); return; }
   const countries = (await api('/api/holidays/countries')).items;
-  const country = h('select', { class: 't' }, h('option', { value: '' }, 'None (no Holidays calendar)'),
-    countries.map((c) => h('option', { value: c.code, selected: c.code === s.country ? true : null }, c.name)));
-  const region = h('select', { class: 't' });
-  const lang = h('select', { class: 't' });
   const LANG = (code) => { try { return new Intl.DisplayNames([], { type: 'language' }).of(code.replace('_', '-')) || code; } catch { return code; } };
-  const drawCountry = async (keep) => {
-    const code = country.value;
-    if (!code) { fill(region, h('option', { value: '' }, '—')); fill(lang, h('option', { value: '' }, '—')); region.disabled = lang.disabled = true; return; }
-    const info = await api(`/api/holidays/countries/${code}`);
-    fill(region, h('option', { value: '' }, info.regions.length ? 'The whole country' : 'No regions'),
-      info.regions.map((r) => h('option', { value: r.code, selected: keep && r.code === s.region ? true : null }, r.name === r.code ? r.code : `${r.name} (${r.code})`)));
-    fill(lang, h('option', { value: '' }, info.defaultLanguage ? `${LANG(info.defaultLanguage)} (default)` : 'Default'),
-      info.languages.map((l) => h('option', { value: l, selected: keep && l === s.language ? true : null }, LANG(l))));
-    region.disabled = !info.regions.length; lang.disabled = !info.languages.length;
-  };
-  country.onchange = () => drawCountry(false);
-  await drawCountry(true);
+  const list = h('div');
+  const rows = [];
   const out = h('div', null, h('p', { class: 'muted small' }, last(s.lastSync)));
-  box.append(h('div', { class: 'grid' }, fld('Country', country), fld('Region (state, province…)', region), fld('Names in', lang)),
-    h('p', null, h('button', { class: 'pillbtn primary', onclick: async () => {
-      try {
-        const r = await api('/api/holidays/settings', { method: 'POST', json: { country: country.value, region: region.value, language: lang.value } });
-        await loadCals();
-        fill(out, h('p', { class: r.sync && !r.sync.ok ? 'warn' : 'muted small' }, !r.country ? 'The Holidays calendar is off.' : r.sync.ok ? `Holidays of ${[r.countryName, r.regionName].filter(Boolean).join(', ')}: ${r.sync.count} dates.` : r.sync.error));
-        toast('Saved');
-      } catch (e) { fail(e); }
-    } }, icon('check', 's'), 'Save')), out);
+  // every change saves the whole list (a row without a country is left out until one is picked)
+  const save = async () => {
+    try {
+      const items = rows.filter((r) => r.country.value).map((r) => ({ country: r.country.value, region: r.region.value, language: r.lang.value }));
+      const r = await api('/api/holidays/settings', { method: 'POST', json: { items } });
+      await loadCals();
+      fill(out, h('p', { class: r.sync && !r.sync.ok ? 'warn' : 'muted small' }, !r.items.length ? 'The Holidays calendars are off.' : r.sync.ok ? `Holidays of ${r.items.map((x) => x.where).join('; ')}: ${r.sync.count} dates.` : r.sync.error));
+      toast('Saved');
+    } catch (e) { fail(e); }
+  };
+  // one row per country: country, region, language and Remove
+  const addRow = async (it) => {
+    const country = h('select', { class: 't' }, h('option', { value: '' }, 'Pick a country'),
+      countries.map((c) => h('option', { value: c.code, selected: it && c.code === it.country ? true : null }, c.name)));
+    const region = h('select', { class: 't' });
+    const lang = h('select', { class: 't' });
+    const draw = async (keep) => {
+      const code = country.value;
+      if (!code) { fill(region, h('option', { value: '' }, '—')); fill(lang, h('option', { value: '' }, '—')); region.disabled = lang.disabled = true; return; }
+      const info = await api(`/api/holidays/countries/${code}`);
+      fill(region, h('option', { value: '' }, info.regions.length ? 'The whole country' : 'No regions'),
+        info.regions.map((r) => h('option', { value: r.code, selected: keep && r.code === it.region ? true : null }, r.name === r.code ? r.code : `${r.name} (${r.code})`)));
+      fill(lang, h('option', { value: '' }, info.defaultLanguage ? `${LANG(info.defaultLanguage)} (default)` : 'Default'),
+        info.languages.map((l) => h('option', { value: l, selected: keep && l === it.language ? true : null }, LANG(l))));
+      region.disabled = !info.regions.length; lang.disabled = !info.languages.length;
+    };
+    country.onchange = async () => { await draw(false); await save(); };
+    region.onchange = lang.onchange = save;
+    const row = { country, region, lang };
+    row.el = h('div', { class: 'grid', style: { marginBottom: '8px' } }, fld('Country', country), fld('Region (state, province…)', region), fld('Names in', lang),
+      h('div', { style: { alignSelf: 'end' } }, h('button', { class: 'pillbtn noic', onclick: async () => { row.el.remove(); rows.splice(rows.indexOf(row), 1); if (country.value) await save(); } }, 'Remove')));
+    rows.push(row); list.append(row.el);
+    await draw(!!it);
+  };
+  for (const it of s.items) await addRow(it);
+  box.append(list, h('p', null, h('button', { class: 'pillbtn noic', onclick: () => addRow(null) }, 'Add a country')), out);
   await birthdaysBox(el);
 }
 
