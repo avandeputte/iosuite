@@ -5,7 +5,7 @@ import { G, keepPlace, removeScrubber, showPhotos } from './grid.js';
 import { clearSelection, showDamaged, showHistory, showImport, showQuality, showTrash } from './actions.js';
 import { MORE_VIEWS, currentNav, showAlbums, showClothing, showDateSuggest, showDetected, showEvents, showExplore, showFolders, showJerseys, showPeople, showPlaceSuggest, showPlaces, showRotation } from './pages.js';
 import { showConsistency, showDuplicates, showFaces, showTags } from './admin.js';
-import { showSettings } from './settings.js';
+import { showSettings, showTools } from './settings.js';
 import { M, showMap } from './map.js';
 import { renderFilters, toggleFilters } from './filters.js';
 import { LB, syncLightbox } from './lightbox.js';
@@ -90,14 +90,14 @@ export const NAV_LIBRARY = 'favorites';  // the first link of the sidebar's "Lib
 // the sidebar's "Manage" group: library management, for admins only
 export const NAV_MANAGE = [
   ['import', 'Import', 'add'], ['trash', 'Trash', 'trash'],
-  ['detected', 'Detected content', 'spark'], ['history', 'Edit log', 'edit'],
+  ['detected', 'Detected content', 'spark'], ['history', 'Edit log', 'edit'], ['tools', 'Tools', 'wrench'],
 ];
 // The suggestion and check pages (date and place suggestions, jersey numbers, clothing matches, wrongly rotated, damaged
-// files, duplicate files, metadata quality) are reached from Settings › Library, each summarised there in a line, not from the sidebar: they are
+// files, duplicate files, metadata quality) are reached from Tools, each summarised there in a line, not from the sidebar: they are
 // occasional clean-up work, not browsing.
 // hash S.route name -> page renderer (function declarations are hoisted, so this can sit above them)
 export const VIEW_FNS = { photos: showPhotos, explore: showExplore, people: showPeople, places: showPlaces, folders: showFolders, albums: showAlbums, tags: showTags, map: showMap, duplicates: showDuplicates,
-  detected: showDetected, events: showEvents, history: showHistory, settings: showSettings, consistency: showConsistency, quality: showQuality, trash: showTrash, import: showImport, faces: showFaces, datesuggest: showDateSuggest, placesuggest: showPlaceSuggest, jerseys: showJerseys, clothing: showClothing, rotation: showRotation, damaged: showDamaged };
+  detected: showDetected, events: showEvents, history: showHistory, settings: showSettings, tools: showTools, consistency: showConsistency, quality: showQuality, trash: showTrash, import: showImport, faces: showFaces, datesuggest: showDateSuggest, placesuggest: showPlaceSuggest, jerseys: showJerseys, clothing: showClothing, rotation: showRotation, damaged: showDamaged };
 const VIEWS = Object.keys(VIEW_FNS);
 const PARAM_VIEWS = ['places', 'faces', 'history', 'import'];  // views whose own query parameters (not photo filters) pick what they show
 // favorites and app albums (stored by the app, not in digiKam)
@@ -122,9 +122,9 @@ export function infoPrefsEditor(onchange) {
 }
 /** Appearance: light, dark, or follow the system (the default). Set on <html> so the stylesheet
  *  picks the palette; the browser chrome (theme-color) follows the page background. */
-export const THEMES = [['light', 'Light'], ['dark', 'Dark'], ['system', 'System']];  // light unless chosen otherwise
+export const THEMES = [['light', 'Light'], ['dark', 'Dark'], ['system', 'System']];  // the device's unless chosen otherwise
 export function applyTheme() {
-  const t = store.get(PREF.theme, 'light');
+  const t = store.get(PREF.theme, 'system');
   if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;
   S.applySidebar?.();  // docked or put away is a display preference too: it follows the account
   requestAnimationFrame(() => { const m = document.querySelector('meta[name=theme-color]'); if (m) m.content = getComputedStyle(document.body).backgroundColor; });
@@ -156,12 +156,19 @@ export const ualbumById = (id) => ST.albums.find((a) => a.id === +id);
 export function parseHash() {
   const raw = location.hash.replace(/^#\/?/, '');
   const i = raw.indexOf('?');  // only the first ? starts the query: #/photos?q=why? keeps its question mark
-  const path = i < 0 ? raw : raw.slice(0, i), qs = i < 0 ? '' : raw.slice(i + 1);
-  return { view: VIEWS.includes(path) ? path : 'explore', params: new URLSearchParams(qs) };  // Explore is the home page
+  let path = i < 0 ? raw : raw.slice(0, i);
+  const params = new URLSearchParams(i < 0 ? '' : raw.slice(i + 1));
+  // Settings carries its tab and the part of it in the path, as in every io app: #/settings/security/people
+  const [first, tab, part] = path.split('/');
+  if (first === 'settings') { path = first; if (tab) params.set('tab', tab); if (part) params.set('part', part); }
+  return { view: VIEWS.includes(path) ? path : 'explore', params };  // Explore is the home page
 }
 export function hashFor(view, params) {
-  const qs = params ? params.toString() : '';
-  return `#/${view}${qs ? '?' + qs : ''}`;
+  const p = new URLSearchParams(params || '');
+  let path = view;
+  if (view === 'settings' && p.get('tab')) { path += `/${p.get('tab')}${p.get('part') ? '/' + p.get('part') : ''}`; p.delete('tab'); p.delete('part'); }
+  const qs = p.toString();
+  return `#/${path}${qs ? '?' + qs : ''}`;
 }
 export function go(view, params, replace = false) {
   history[replace ? 'replaceState' : 'pushState'](null, '', hashFor(view, params));

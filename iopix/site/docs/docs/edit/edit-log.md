@@ -9,7 +9,7 @@ Every change iopix makes to a photo is kept for good: **when**, **who**, **what*
 Edits, face changes, tag renames and deletions, syncs, writes into digiKam's database, imports, moves, deletions and restores.
 
 - The **info panel** shows a photo's recent changes, in the section "Change log".
-- **Settings › Library › Edit log** shows the whole library's.
+- **Manage › Edit log** shows the whole library's.
 
 ## Bringing things back
 

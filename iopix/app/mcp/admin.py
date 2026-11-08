@@ -11,7 +11,7 @@ from mcp.types import ToolAnnotations
 
 from app import config, events, jobs
 from app.photos import consistency, datecheck, dateprecision, edits, organize, tagmanager
-from app.data import index, state as appstate
+from app.data import index
 from app.ai.semantic import enabled as semantic_enabled
 from app.digikam.dkdb import chunked, in_chunks
 from app.digikam import dbsync
@@ -47,7 +47,7 @@ def edit_photos(photo_ids: list[int], taken: Optional[str] = None, caption: Opti
     """Change the date taken ("YYYY-MM-DDTHH:MM:SS"), caption, title or rating of these photos exactly as the web app
     does: written to each sidecar (and the file when the viewer writes into files), in the edit log with undo, and with
     apply_to_database written into digiKam's database right away (digiKam closed). Admins only."""
-    need_admin(writes=True)
+    need_admin()
     import re
     ch = {}
     if taken is not None:
@@ -96,7 +96,7 @@ def consistency_sync(photo_ids: list[int], source: str, targets: list[str], fiel
     """Copy the given fields of the given photos from one source (db|sidecar|file) to the targets, exactly
     as the consistency page's Sync does: sidecars and files are backed up first; writing the database needs
     digiKam closed and is backed up too. Returns {synced, skipped}. Admins only."""
-    need_admin(writes=True)
+    need_admin()
     try:
         return consistency.sync([int(i) for i in photo_ids][:MAX_IDS], source, targets, fields)
     except (ValueError, dbsync.SyncError) as e:
@@ -108,7 +108,7 @@ def rewrite_sidecars(photo_ids: list[int]) -> dict:
     """Rewrite these photos' XMP sidecars (tag list and face regions) from digiKam's database, as the viewer does
     after a tag or face change: for when the database was changed outside the viewer. Each sidecar is backed up
     before its first change. Returns {photos, tags_failed, regions}. Admins only."""
-    need_admin(writes=True)
+    need_admin()
     ids = [int(i) for i in photo_ids][:REWRITE_SIDECARS_MAX]
     paths = dict(dbsync.photo_paths(ids))
     failed = edits.rewrite_tags([{"id": i, "path": p} for i, p in paths.items()])
@@ -130,7 +130,7 @@ def rename_folder(folder: str, new_name: str) -> dict:
     """Rename a folder (its last path segment) on disk and in digiKam's database, exactly as the Folders page does:
     subfolders and sidecars follow, backups move with it. folder: its id or path (e.g. "2022/20221008 Soccer").
     digiKam must be closed. Admins only."""
-    need_admin(writes=True)
+    need_admin()
     con = db()
     try:
         aid = resolve_album(con, folder)
@@ -152,7 +152,7 @@ def tag_op(op: Literal["person", "notperson", "merge", "rename", "move", "add"],
     on tag_id (photos, face boxes) to the person or tag `into`, then remove tag_id; rename (name); move (parent, 0 = top
     level); add (name inside parent). Ids are those of list_tags/list_people. digiKam must be closed unless the viewer
     runs without it. Admins only."""
-    need_admin(writes=True)
+    need_admin()
     if not (config.DB_WRITE and edits.available()):
         raise ToolError("Tag management is turned off (needs DB_WRITE and EDITING)")
     body = {"op": op, "id": tag_id, "into": into, "name": name, "parent": parent or None}
@@ -180,7 +180,7 @@ def set_date_precision(precision: Literal["exact", "month", "year", "unknown"], 
     chosen by `ids`, or by the year of their current date (`years`, e.g. [1970, 1974]). dry_run (default) only counts:
     how many photos match, per year, and how many already have this precision; with dry_run=False the change runs in
     the background (call again with dry_run=True to see progress). Admins only."""
-    need_admin(writes=True)
+    need_admin()
     if not (ids or years):
         raise ToolError("Give ids or years")
     con = index.open_index()
@@ -317,7 +317,7 @@ def run_analysis(job: str = "all", reset: bool = False) -> dict:
     """Start a background analysis as Settings › AI does: job is all, embeddings, quality, vision, objects,
     captions, looks, faces, ages, jerseys, clothing, rotation, videos or facedetect (facedetect writes faces into digiKam's database). Without reset only
     new or changed photos are looked at; with reset that analysis starts over. Follow it with job_queue. Admins only."""
-    need_admin(writes=(job == "facedetect"))
+    need_admin()
     from fastapi import HTTPException
     try:
         return start_analysis(job, reset)
@@ -333,7 +333,7 @@ def face_cleanup(files: bool = False) -> dict:
     the cleaned photos that still carry the duplicates are rewritten too (each backed up first, pixels checked
     unchanged). Runs in the background; face_quality shows progress. Admins only."""
     need_admin()
-    if not config.DB_WRITE or appstate.read_only():
+    if not config.DB_WRITE:
         raise ToolError("Writing to digiKam's database is turned off")
     try:
         return {"photos": facequality.fix_files() if files else facequality.fix_near_duplicates()}

@@ -188,7 +188,7 @@ def auto_apply():
     database, what "Apply to digiKam database" does by hand. A minute after the last edit, so a run
     of edits goes in one transaction with one backup, and at most every five minutes."""
     # with no digiKam at all, the library tables are where the edits end up, the same way
-    if not (config.DB_WRITE and (dkdb.no_digikam() or index.sync_enabled() and index.last_source["kind"] == "digikam") and not appstate.read_only()):
+    if not (config.DB_WRITE and (dkdb.no_digikam() or index.sync_enabled() and index.last_source["kind"] == "digikam")):
         return
     if not edits.pending_count():
         return

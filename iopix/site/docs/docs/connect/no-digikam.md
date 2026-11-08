@@ -34,7 +34,7 @@ Each change is saved in iopix's library and in an XMP sidecar file next to the p
 ## What is different
 
 - There is no **Sync with digiKam** setting, and nothing is ever "waiting for digiKam".
-- **Backups:** the iopix data backup (**Settings › Storage and backups**) holds the whole library: folders, tags, people and faces, captions and places. Keep a copy somewhere else.
+- **Backups:** the iopix data backup (**Settings › Server › Download a backup**) holds the whole library: folders, tags, people and faces, captions and places. Keep a copy somewhere else.
 - The library lives in [iopix's own database](iopix-database.md) on your MariaDB or MySQL server, so back that server up (or use the download above).
 
 ## Starting to use digiKam later

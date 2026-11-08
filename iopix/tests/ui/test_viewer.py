@@ -10,7 +10,7 @@ from helpers import need_tool
 need_tool("playwright", module_level=True)
 from playwright.sync_api import TimeoutError as PWTimeout  # noqa: E402
 
-from ui.conftest import _eventually, _get, _open_photo, _post, _set_read_only, _viewer_ready, _wait_flags  # noqa: E402
+from ui.conftest import _eventually, _get, _open_photo, _post, _viewer_ready  # noqa: E402
 
 
 def test_face_boxes_follow_the_toggle(page, server, lib):
@@ -79,27 +79,6 @@ def test_face_menu_from_the_box_works_with_real_clicks(page, server, lib):
     first.click()  # a real pointer click: the stage must not capture it
     page.wait_for_selector(".facemenu", state="detached", timeout=5000)
     assert page.locator(".facemenu").count() == 0, f"menu item {label!r} did not react to the click"
-
-def test_read_only_hides_every_editing_control(page, server, lib):
-    _set_read_only(server, True)
-    try:
-        pid = lib["with_faces"][0]
-        _open_photo(page, server, pid)
-        _wait_flags(page)  # read-only arrived with the status poll
-        page.reload()
-        _viewer_ready(page)
-        _wait_flags(page)
-        assert page.locator(".lb-info input[placeholder='Title']").count() == 0
-        page.wait_for_function("getComputedStyle(document.querySelector('[title^=\"Add a face\"]')).display === 'none'", timeout=5000)
-        assert page.locator(".facerow .muted", has_text="options").count() == 0
-        assert page.locator(".lb-info a", has_text="change").count() == 0
-        page.goto(server + "/#/settings")
-        page.wait_for_selector("h2", timeout=10000)
-        heads = page.locator("h2").all_inner_texts()
-        assert "Editing" not in heads and "Place tags" not in heads
-        assert page.locator("b", has_text="Read-only mode").count() == 1
-    finally:
-        _set_read_only(server, False)
 
 def test_keyboard_navigation(page, server, lib):
     ids = [i for i in lib["ids"] if i not in lib["videos"]]

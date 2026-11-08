@@ -27,7 +27,7 @@ def test_users_flow_in_the_browser(page, server, browser):
     page.locator(".modal input[type=password]").fill("correct horse")
     page.locator(".modal button", has_text="Create").click()
     page.wait_for_selector("#usermenu .avatar", timeout=5000)
-    page.goto(server + "/#/settings?tab=security"); page.wait_for_selector(".iosa .sa-t", timeout=10000)
+    page.goto(server + "/#/settings/security"); page.wait_for_selector(".iosa .sa-t", timeout=10000)
     assert page.locator(".stab[data-tab=users]").count() == 0, "no Accounts tab: the person in photos is in Settings › Security › People"
     assert page.locator("#nav a[data-v=maintenance]").count() == 0, "one Settings page, no Maintenance"
     # a visitor in a fresh context: read-only, sign-in dialog
@@ -68,7 +68,7 @@ def test_users_flow_in_the_browser(page, server, browser):
 
 def _add_kid(page, server):
     """Settings › Security › People › Add someone: kid, no password (a one-click viewer)."""
-    page.goto(server + "/#/settings?tab=security&part=people"); page.wait_for_selector(".iosa button:has-text('Add someone')", timeout=10000)
+    page.goto(server + "/#/settings/security/people"); page.wait_for_selector(".iosa button:has-text('Add someone')", timeout=10000)
     page.locator(".iosa button", has_text="Add someone").click(); page.wait_for_selector(".iosa-back .sa-dialog", timeout=5000)
     page.locator(".iosa-back label:has-text('User name') input").fill("kid")
     page.locator(".iosa-back button", has_text="Add").click()
@@ -83,7 +83,7 @@ def test_account_picker_one_click_sign_in(page, server, browser):
     page.locator(".modal .account", has_text="alex").click(); page.locator(".modal input[type=password]").fill("correct horse"); page.locator(".modal button", has_text="Sign in").click()
     page.wait_for_selector("#usermenu .avatar", timeout=5000)
     _add_kid(page, server)
-    page.goto(server + "/#/settings?tab=security"); page.wait_for_selector(".iosa .sa-t td:has-text('kid')", timeout=10000)
+    page.goto(server + "/#/settings/security"); page.wait_for_selector(".iosa .sa-t td:has-text('kid')", timeout=10000)
     # a visitor: two tiles, one click as kid
     ctx = browser.new_context(bypass_csp=True, viewport={"width": 1280, "height": 900}); v = ctx.new_page()
     v.goto(server + "/#/photos"); v.wait_for_selector(".tile img", timeout=15000)
@@ -116,7 +116,7 @@ def test_require_sign_in_shows_only_the_login_dialog(page, server, browser):
         visitor.wait_for_selector(".tile img", timeout=15000)
         assert visitor.locator(".modal-back").count() == 0 and visitor.locator("#main").is_visible()
         # the setting is under Settings › Global settings › Apps (Sign-in required), for every app
-        visitor.goto(server + "/#/settings?tab=global&part=apps"); visitor.wait_for_selector(".iosa h2:has-text('Apps')", timeout=10000)
+        visitor.goto(server + "/#/settings/global/apps"); visitor.wait_for_selector(".iosa h2:has-text('Apps')", timeout=10000)
         assert visitor.locator(".iosa tr:has-text('iopix') input[type=checkbox]").is_checked()
         ctx.close()
     finally:
@@ -127,7 +127,7 @@ def test_proxy_sign_in_settings(page, server):
     verification on, and Off puts it back."""
     make_admin(page, "alex", "correct horse")
     try:
-        page.goto(server + "/#/settings?tab=security&part=signin")
+        page.goto(server + "/#/settings/security/signin")
         page.wait_for_selector(".iosa h2:has-text('Sign-in at the proxy')", timeout=10000)
         box = page.locator(".iosa .sa-box")
         assert box.locator("input").first.is_hidden(), "Off: nothing else to fill in"

@@ -78,14 +78,10 @@ def anon_paths_ok() -> bool:
     return users.is_admin(current_user.get())
 
 
-def need_admin(writes: bool = False) -> dict:
+def need_admin() -> dict:
     """The operator and maintenance tools take an admin: the account the client signed in as (over HTTP an app
-    password or session; over stdio, `python -m app.mcp --user`). writes: the tool changes the library, so read-only
-    mode (READ_ONLY=1 or the setting) refuses it as it refuses the web app's edits."""
-    u = shared_mcp.need_admin()
-    if writes and appstate.read_only():
-        raise ToolError("The viewer is in read-only mode; nothing in the library can be changed")
-    return u
+    password or session; over stdio, `python -m app.mcp --user`)."""
+    return shared_mcp.need_admin()
 
 
 # ---- names to ids

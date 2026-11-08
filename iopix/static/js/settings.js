@@ -1,10 +1,12 @@
-/** Settings: one page in tabs, as in every ioThing app; the Security and Global settings tabs are users.js. */
-import { $, PREF, UNITS, act, api, dfDayLocal, errorBox, fill, fmtBytes, fmtWhen, h, icon, loadingBox, main, nf, plural, post, regionUsesMiles, store } from './core.js';
-import { S, THEMES, applyBadgePref, applyTheme, hashFor, infoPrefsEditor, pollSoon, toast, toastError } from './state.js';
+/** Settings: one page in tabs, as in every ioThing app (the Security and Global settings tabs are users.js), and the
+ *  Tools page. */
+import { PREF, UNITS, act, api, dfDayLocal, errorBox, fill, fmtBytes, fmtWhen, h, icon, loadingBox, main, nf, plural, post, regionUsesMiles, store } from './core.js';
+import { S, THEMES, applyBadgePref, applyTheme, avatarOf, hashFor, infoPrefsEditor, photosWith, pollSoon, toast, toastError } from './state.js';
 import { confirmDialog } from './actions.js';
 import { dbDialog, templatesSection } from './editing.js';
 import { pageTitle } from './pages.js';
-import { setupDialog, suiteSection } from './users.js';
+import { renderUserMenu, setupDialog, suiteSection } from './users.js';
+import { personPicker } from './faces.js';
 import { placeTagsDialog } from './admin.js';
 
 
@@ -15,8 +17,8 @@ function aiSection(view) {
   const body = h('div');
   let timer = 0;
   const checkBtn = h('button', { class: 'pillbtn', onclick: async () => { checkBtn.disabled = true; checkBtn.textContent = 'Checking…'; await act(() => post('/api/models/check', {})); draw(); } }, icon('spark'), 'Check models for updates');
-  const wrap = h('div', null, h('h2', null, 'AI analysis and models'),
-    h('div', { class: 'muted', style: 'max-width:860px' }, `Everything runs locally and is stored in ${S.APP_NAME}’s data folder; nothing is written to digiKam. New and changed photos are picked up automatically, about 20 seconds after digiKam saves them. Where a feature can run on more than one model, the menu in the Model column picks it: the default is the small, fast one, the others are more accurate and slower, each downloaded once. Models never update on their own; “Check models for updates” asks each source whether the exact files used have changed.`),
+  const wrap = h('div', { class: 'sbox' }, h('h2', null, 'AI analysis and models'),
+    h('div', { class: 'muted', style: 'max-width:860px' }, `Everything runs here; nothing is written to digiKam. New photos are picked up automatically. The default model is the small, fast one; models never update on their own.`),
     h('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;margin:14px 0' },
       h('button', { class: 'pillbtn on', onclick: async () => { await act(() => post('/api/analysis/run', { job: 'all' }), { toast: 'Checking for new and changed photos…' }); draw(); } }, icon('spark'), 'Check new and changed photos'), checkBtn),
     body);
@@ -167,20 +169,32 @@ function scannerRow(c) {
   const last = sc.last;
   const said = last ? `Last pass ${fmtWhen(last.finished)}: ${[last.added && plural(last.added, 'new file'), last.modified && plural(last.modified, 'changed file'), last.removed && plural(last.removed, 'file') + ' gone', last.folders && plural(last.folders, 'new folder')].filter(Boolean).join(', ') || 'nothing new'}.${last.skipped?.length ? ' ' + last.skipped.join(' ') : ''}${last.error ? ' Error: ' + last.error : ''}` : 'No pass yet.';
   const on = switchField('file_scanner', !!sc.enabled, { on: 'File scanner on: a first pass starts now.', off: 'File scanner off.', cls: 'chk' });
-  const every = h('select', { class: 'sharepick', onchange: async (e) => { await act(() => post('/api/settings', { scan_interval: +e.target.value })); } },
+  const every = h('select', { class: 'sharepick', onchange: async (e) => { await act(() => post('/api/settings', { scan_interval: +e.target.value }), { toast: 'Saved' }); } },
     [[5, 'every 5 minutes'], [15, 'every 15 minutes'], [60, 'every hour'], [360, 'every 6 hours'], [1440, 'once a day']].map(([v, l]) => h('option', { value: v, selected: v === sc.interval }, l)));
   return row('File scanner',
-    h('span', null, `Looks in the album folders for photos and videos added, changed or removed outside ${S.APP_NAME} (Finder, a sync tool, a phone backup), as digiKam’s scanner does, and records them the same way: camera, place, keywords, faces, digiKam’s file fingerprint. ${S.NO_DK ? 'With no digiKam it is how photos copied into the folder get into the library, so it is on unless you turn it off.' : 'Leave it off if everything arrives through Upload or Import; those are always read in full.'} A disk that looks unmounted is left alone. `, h('span', { class: 'muted' }, sc.running ? 'Scanning now…' : said)),
-    h('span', { class: 'toolbar',}, on, every,
+    h('span', null, `Finds photos added, changed or removed outside ${S.APP_NAME}. ${S.NO_DK ? 'Without digiKam, this is how copied photos get in.' : 'Not needed if everything comes in through Upload or Import.'} `, h('span', { class: 'muted' }, sc.running ? 'Scanning now…' : said)),
+    h('span', { class: 'toolbar' }, on, every,
       btn('Scan now', async () => { try { await post('/api/scan', {}); toast('Scanning the album folders…'); setTimeout(again, 4000); } catch (e) { toastError(e); } })));
 }
 const OPEN_COMPARE = new Set();  // model groups whose "Compare the models" fold is open on the AI tab
-// Settings is split into tabs: each stab() marks where one begins; what comes before the first is always shown
+// Settings is split into tabs, in the order every io app uses: each stab() marks where one begins; what comes before
+// the first is always shown
 const STABS = {
-  settings: [['display', 'Display'], ['editing', 'Editing'], ['library', 'Library'], ['ai', 'AI'], ['storage', 'Storage and backups'], ['server', 'Server'],
-    ['security', 'Security'], ['global', 'Global settings']],
+  settings: [['account', 'Account'], ['display', 'Display'], ['devices', 'Apps and devices'], ['editing', 'Editing'], ['library', 'Library'], ['ai', 'AI'],
+    ['server', 'Server'], ['security', 'Security'], ['global', 'Global settings']],
 };
 const stab = (k) => h('span', { class: 'stab-mark', 'data-tab': k, hidden: true });
+/** Each heading and the rows under it become one box, as the shared panels draw theirs. */
+function boxed(els) {
+  const out = [];
+  let box = null;
+  for (const el of els) {
+    if (el.tagName === 'H2') { box = h('section', { class: 'sbox' }); el.before(box); out.push(box); }
+    else if (!box || !el.matches('.srow, .intro, .muted, table')) { box = null; out.push(el); continue; }
+    box.append(el);
+  }
+  return out;
+}
 function settingsTabs(page, view) {
   if (!page) return;
   const kids = [...page.children], groups = new Map();
@@ -189,9 +203,10 @@ function settingsTabs(page, view) {
     if (el.classList.contains('stab-mark')) { cur = el.dataset.tab; groups.set(cur, []); continue; }
     if (cur) groups.get(cur).push(el);
   }
+  for (const [k, els] of groups) groups.set(k, boxed(els));
   const tabs = STABS[view].filter(([k]) => groups.has(k));
   if (tabs.length < 2) return;
-  let pick = S.route.params.get('tab');  // #/settings?tab=security links straight to a tab; else the last one opened
+  let pick = S.route.params.get('tab');  // #/settings/security links straight to a tab; else the last one opened
   if (!groups.has(pick)) pick = store.local.get(PREF[`${view}Tab`], null);
   if (!groups.has(pick)) pick = tabs[0][0];
   const bar = h('div', { class: 'stabs', role: 'tablist' });
@@ -200,7 +215,7 @@ function settingsTabs(page, view) {
     for (const [g, els] of groups) els.forEach((el) => { el.style.display = g === k ? '' : 'none'; });
     [...bar.children].forEach((b) => { b.classList.toggle('on', b.dataset.tab === k); b.setAttribute('aria-selected', b.dataset.tab === k); });
     store.local.set(PREF[`${view}Tab`], k);
-    if (S.route.params.get('tab') !== k) { S.route.params.set('tab', k); history.replaceState(null, '', hashFor(view, S.route.params)); }
+    if (S.route.params.get('tab') !== k) { S.route.params.set('tab', k); S.route.params.delete('part'); history.replaceState(null, '', hashFor(view, S.route.params)); }
   };
   tabs.forEach(([k, label]) => bar.append(h('button', { class: 'pillbtn stab', role: 'tab', 'data-tab': k, onclick: () => show(k) }, typeof label === 'function' ? label() : label)));
   bar.show = show;
@@ -208,9 +223,9 @@ function settingsTabs(page, view) {
   show(pick);
 }
 /** What every settings row is built from: the library data `m` (GET /api/maintenance), the page being drawn and the shared helpers
- * (row and button builders, the library action runner `maint`, and the two field kinds that save one setting each). */
+ * (row and button builders, the library action runner `maint`, and the checkbox that saves one setting). */
 function settingsContext(m, view) {
-  const again = () => { if (S.route.view === view) settingsPage(view); };
+  const again = () => { if (S.route.view === view) (view === 'tools' ? showTools() : settingsPage(view)); };
   const when = (t) => (t ? fmtWhen(t) : 'never');
   const maint = async (action, msg, confirmText) => {
     if (confirmText && !await confirmDialog(confirmText)) return;
@@ -223,80 +238,101 @@ function settingsContext(m, view) {
   const switchField = (key, checked, { label = 'On', on, off, disabled = false, after, cls } = {}) => h('label', { class: cls, style: cls ? null : 'display:flex;gap:8px;align-items:center;cursor:pointer;white-space:nowrap' },
     h('input', { type: 'checkbox', checked, disabled, onchange: async (e) => {
       try { await post('/api/settings', { [key]: e.target.checked }); toast(e.target.checked ? on : off); if (after) after(); } catch (err) { e.target.checked = !e.target.checked; toastError(err); } } }), label);
-  /** A Turn on / Turn off button for one setting; the page is drawn again with the new value. */
-  const toggleButton = (key, on, after) => btn(on ? 'Turn off' : 'Turn on', async () => { try { await post('/api/settings', { [key]: !on }); if (after) await after(); } catch (e) { toastError(e); } settingsPage(view); });
-  return { m, view, again, when, maint, row, btn, switchField, toggleButton };
+  /** A setting saved the moment it changes, with a "Saved" toast; the page is drawn again when `redraw`. */
+  const save = async (body, redraw) => { try { await post('/api/settings', body); toast('Saved'); } catch (e) { toastError(e); } if (redraw) again(); };
+  return { m, view, again, when, maint, row, btn, switchField, save };
 }
-/** Settings › Display: the name, appearance, units, badges, the info panel sections and the map provider. */
+/** Settings › Account and Apps and devices: iosuite-shared's panels, the same in every io app, plus who you are in People. */
+const accountUi = () => import(new URL('api/auth/ui.js', document.baseURI).href);
+function panel(fill) {
+  const el = h('div');
+  fill(el).catch((e) => el.replaceChildren(errorBox(new Error(`The panel did not load: ${e.message}`))));
+  return el;
+}
+function accountTab() {
+  return [stab('account'), panel(async (el) => {
+    const ui = await accountUi();
+    await ui.mountAccount(el, { toast, onSaved: (u) => { Object.assign(S.USER, u); renderUserMenu(); } });
+    const who = S.USER.person && S.tagById.get(S.USER.person);
+    el.append(ui.box('person', 'You in People',
+      h('div', { class: 'toolbar' }, avatarOf(S.USER, true), h('span', null, who ? who.name : 'Not linked to a person yet.'),
+        S.IS_ADMIN ? h('button', { class: 'pillbtn', onclick: () => personPicker(async (t) => { try { S.USER = await post('/api/auth/person', { person: t.id }); renderUserMenu(); toast('Saved'); settingsPage('settings'); } catch (e) { toastError(e); } }) }, who ? 'Change' : 'Link to a person') : null,
+        who ? h('a', { class: 'lnk', href: hashFor('photos', photosWith({ tag: S.USER.person })) }, 'Photos of me') : null)));
+  })];
+}
+function devicesTab() {
+  return [stab('devices'), panel(async (el) => { await (await accountUi()).mountAppPasswords(el, { toast }); })];
+}
+/** Settings › Display: the name, theme, units, badges, the info panel sections and the map provider. */
 function displayTab(c) {
-  const { m, view, row, btn } = c;
+  const { m, row, save } = c;
+  const kept = S.USER ? 'Saved with your account.' : 'Kept in this browser.';
+  const seg = (id, attr, choices, cur, pick) => h('div', { class: 'eseg', id }, choices.map(([k, label]) => h('button', { class: cur === k ? 'on' : '', [`data-${attr}`]: k, onclick: (e) => {
+    pick(k); for (const b of e.currentTarget.parentNode.children) b.classList.toggle('on', b === e.currentTarget); } }, label)));
   return [
     stab('display'),
     h('h2', null, 'Display'),
-    S.IS_ADMIN ? (() => {
-      const inp = h('input', { class: 'einput', placeholder: 'ioPix', value: m.appNameSet || '', maxlength: 40, style: 'width:220px', onkeydown: (e) => { if (e.key === 'Enter') e.target.nextSibling.click(); } });
-      return row('Name', `What ${S.APP_NAME} calls itself, for everyone: the top bar, the browser tab and the installed app. Leave it empty for iopix.`,
-        h('span', { style: 'display:flex;gap:6px;align-items:center' }, inp, btn('Save', async () => { try { await post('/api/settings', { app_name: inp.value }); toast('Name saved.'); pollSoon(300); } catch (e) { toastError(e); } })));
-    })() : null,
-    row('Appearance', `Light (the default) or dark colors, or follow the device’s setting. ${S.USER ? 'Saved with your account, so it follows you to other devices.' : 'Remembered in this browser; sign in to keep it with an account.'}`,
-      h('div', { class: 'eseg', id: 'themeseg' }, THEMES.map(([k, label]) => h('button', { class: store.get(PREF.theme, 'light') === k ? 'on' : '', 'data-theme': k, onclick: (e) => {
-        store.set(PREF.theme, k); applyTheme(); for (const b of e.currentTarget.parentNode.children) b.classList.toggle('on', b === e.currentTarget); } }, label)))),
-    row('Units', `How distances and heights read: the size of an approximate location, a day’s trail, altitude. Automatic follows this browser’s language and region, so miles and feet in the US, kilometres and metres in most other places. ${S.USER ? 'Saved with your account, so it follows you to other devices.' : 'Remembered in this browser; sign in to keep it with an account.'}`,
-      h('div', { class: 'eseg', id: 'unitseg' }, UNITS.map(([k, label]) => h('button', { class: store.get(PREF.units, 'auto') === k ? 'on' : '', 'data-units': k, onclick: (e) => {
-        store.set(PREF.units, k); for (const b of e.currentTarget.parentNode.children) b.classList.toggle('on', b === e.currentTarget); } }, k === 'auto' ? `${label} (${regionUsesMiles(navigator.language) ? 'miles' : 'kilometres'} here)` : label)))),
-    row('Thumbnail badges', 'The small marks on thumbnails: face tags, GPS coordinates and favorites. This is remembered per browser.',
+    S.IS_ADMIN ? row('Name', `What ${S.APP_NAME} calls itself, for everyone. Empty: ioPix.`,
+      h('input', { class: 'einput', placeholder: 'ioPix', value: m.appNameSet || '', maxlength: 40, style: 'width:220px', onkeydown: (e) => { e.stopPropagation(); if (e.key === 'Enter') e.target.blur(); },
+        onchange: async (e) => { await save({ app_name: e.target.value }); pollSoon(300); } })) : null,
+    row('Theme', kept, seg('themeseg', 'theme', THEMES, store.get(PREF.theme, 'system'), (k) => { store.set(PREF.theme, k); applyTheme(); toast('Saved'); })),
+    row('Units', `Automatic follows your region (${regionUsesMiles(navigator.language) ? 'miles' : 'kilometres'} here). ${kept}`,
+      seg('unitseg', 'units', UNITS, store.get(PREF.units, 'auto'), (k) => { store.set(PREF.units, k); toast('Saved'); })),
+    row('Thumbnail badges', 'Faces, GPS and favorite marks on thumbnails. Kept in this browser.',
       h('label', { style: 'display:flex;gap:8px;align-items:center;cursor:pointer' }, h('input', { type: 'checkbox', checked: store.get(PREF.badges, '1') !== '0',
         onchange: (e) => { store.set(PREF.badges, e.target.checked ? '1' : '0'); applyBadgePref(); } }), 'Show badges')),
-    row('Info panel', `The sections the photo info panel shows; the gear at the top of the panel opens the same choices. ${S.USER ? 'Saved with your account, so it follows you to other devices.' : 'Remembered in this browser; sign in to keep it with an account.'}`, infoPrefsEditor()),
+    row('Info panel', `The sections the photo info panel shows. ${kept}`, infoPrefsEditor()),
     S.IS_ADMIN ? (() => {
-      const sel = h('select', null, h('option', { value: 'osm', selected: m.mapProvider !== 'google' }, 'OpenStreetMap (no account needed)'), h('option', { value: 'google', selected: m.mapProvider === 'google' }, 'Google Maps (your API key)'));
-      const keyIn = h('input', { class: 'einput', type: 'password', placeholder: m.googleMapsKeySet ? 'key is set; paste a new one to replace it' : 'Google Maps API key', autocomplete: 'off', style: 'width:260px' });
-      const srvIn = h('input', { class: 'einput', type: 'password', placeholder: m.googleServerKeySet ? 'server key is set; paste a new one to replace it' : 'Server key (optional)', title: 'A second key, restricted by API and by this server’s address, for geocoding, places, elevation and Vision; without one the first key is used', autocomplete: 'off', style: 'width:260px' });
-      return row('Map provider', `Maps and place search use ${m.mapProvider === 'google' && m.googleMapsKeySet ? 'Google Maps' : 'OpenStreetMap'}. Google needs an API key from the Google Cloud console with the Map Tiles API and Geocoding API enabled and billing on; restrict that key by HTTP referrer to ${S.APP_NAME}'s address, since browsers see it. An optional second key, restricted by API and by this server's address, is used for what the server calls (geocoding, places, elevation, Vision). Keys are stored with the suite's keys and tokens (Settings › Security) and never shown again.`,
-        h('span', { class: 'toolbar tight' }, sel, keyIn, srvIn, btn('Save', async () => {
-          const body = { map_provider: sel.value }; if (keyIn.value.trim()) body.google_maps_key = keyIn.value.trim(); if (srvIn.value.trim()) body.google_server_key = srvIn.value.trim();
-          if (sel.value === 'google' && !keyIn.value.trim() && !m.googleMapsKeySet) { toast('Enter the Google Maps API key first.'); return; }
-          try { await post('/api/settings', body); S.mapsLoaded = false; toast('Map provider saved.'); } catch (e) { toastError(e); }
-          settingsPage(view);
-        })));
+      const keyIn = h('input', { class: 'einput', type: 'password', placeholder: m.googleMapsKeySet ? 'key is set; paste a new one to replace it' : 'Google Maps API key', autocomplete: 'off', style: 'width:260px',
+        onkeydown: (e) => e.stopPropagation(), onchange: () => { if (keyIn.value.trim()) map({ map_provider: sel.value, google_maps_key: keyIn.value.trim() }); } });
+      const srvIn = h('input', { class: 'einput', type: 'password', placeholder: m.googleServerKeySet ? 'server key is set; paste a new one to replace it' : 'Server key (optional)', autocomplete: 'off', style: 'width:260px',
+        onkeydown: (e) => e.stopPropagation(), onchange: () => { if (srvIn.value.trim()) map({ google_server_key: srvIn.value.trim() }); } });
+      const sel = h('select', { onchange: () => {
+        if (sel.value === 'google' && !m.googleMapsKeySet && !keyIn.value.trim()) { keyIn.focus(); toast('Paste the Google Maps API key: it is saved when you leave the field.'); return; }
+        map({ map_provider: sel.value });
+      } }, h('option', { value: 'osm', selected: m.mapProvider !== 'google' }, 'OpenStreetMap'), h('option', { value: 'google', selected: m.mapProvider === 'google' }, 'Google Maps (your API key)'));
+      const map = async (body) => { S.mapsLoaded = false; await save(body, true); };
+      return row('Map provider', `Google needs a key with the Map Tiles and Geocoding APIs, restricted to ${S.APP_NAME}'s address. The optional server key is for geocoding and Vision.`,
+        h('span', { class: 'toolbar tight' }, sel, keyIn, srvIn));
     })() : null,
   ];
 }
 
-/** Settings › Library, where it lives: the two databases, album roots, read-only mode and sync with digiKam. */
-function whereTab(c) {
-  const { m, view, row, btn, again, switchField, toggleButton } = c;
+/** Settings › Library: the two databases, album roots, sync with digiKam and the file scanner. */
+function libraryTab(c) {
+  const { m, row, btn, again, switchField } = c;
   return [
-    h('h2', null, 'Where the library is'),
-    h('div', { class: 'muted intro' }, m.paths ? `Library: ${m.paths.library} (${nf.format(m.photos)} photos and videos). Everything ${S.APP_NAME} writes lives in ${m.paths.data}.` : `${nf.format(m.photos)} photos in the library.`),
-    S.IS_ADMIN ? (() => {
+    stab('library'),
+    h('h2', null, 'Library'),
+    h('div', { class: 'muted intro' }, m.paths ? `${m.paths.library} (${nf.format(m.photos)} photos and videos). ${S.APP_NAME}'s own files are in ${m.paths.data}.` : `${nf.format(m.photos)} photos in the library.`),
+    (() => {
       const d = m.database || {};
       const inp = (k, ph, type = 'text', w = 160) => h('input', { class: 'einput', type, placeholder: ph, value: type === 'password' ? '' : (d[k] ?? ''), autocomplete: 'off', style: `margin:0;width:${w}px`, onkeydown: (e) => e.stopPropagation() });
       const type = h('select', null, h('option', { value: 'sqlite', selected: d.type === 'sqlite' }, 'SQLite (digikam4.db file)'), h('option', { value: 'mysql', selected: d.type === 'mysql' }, 'MySQL / MariaDB'), h('option', { value: 'none', selected: d.type === 'none' }, 'None: I don’t use digiKam'));
       const f = { sqlite_dir: inp('sqlite_dir', 'folder with digikam4.db', 'text', 320), host: inp('host', 'host'), port: inp('port', 'port', 'text', 70), database: inp('database', 'database'), user: inp('user', 'user'),
         password: inp('password', d.password_set ? 'password (stored; leave empty to keep)' : 'password', 'password', 220) };
       const backup = h('select', null, [['auto', 'full backup only before deleting photos or a tag, or a merge'], ['skip', 'never (the server is backed up elsewhere)']].map(([v, l]) => h('option', { value: v, selected: (d.backup === 'skip' ? 'skip' : 'auto') === v }, l)));
-      const sq = h('div', { class: 'toolbar tight mt6',}, f.sqlite_dir), my = h('div', { class: 'toolbar tight mt6',}, f.host, f.port, f.database, f.user, f.password);
+      const sq = h('div', { class: 'toolbar tight mt6' }, f.sqlite_dir), my = h('div', { class: 'toolbar tight mt6' }, f.host, f.port, f.database, f.user, f.password);
       const show = () => { sq.hidden = type.value !== 'sqlite'; my.hidden = type.value !== 'mysql'; backup.hidden = test.hidden = type.value === 'none'; }; type.onchange = show;
       const payload = () => ({ type: type.value, sqlite_dir: f.sqlite_dir.value, host: f.host.value, port: f.port.value, database: f.database.value, user: f.user.value, password: f.password.value, backup: backup.value });
       const result = h('div', { class: 'muted', style: 'font-size:12.5px;margin-top:6px' });
       const test = btn('Test connection', async () => { fill(result, 'Testing…'); try { const r = await post('/api/db/test', payload()); fill(result, `OK: ${nf.format(r.images)} photos, ${nf.format(r.tags)} tags, DBVersion ${r.dbVersion}, album root ${r.roots.join(', ')}`); } catch (e) { fill(result, e.message); } });
       show();
       return row('digiKam database', d.type === 'none'
-        ? `None: ${S.APP_NAME} keeps the library itself, in its own database, and the file scanner finds the photos in the photo folder. Tags, people and faces, captions, places and dates are saved there and in XMP sidecars beside the photos, which digiKam can read if you ever start using it. If you start using digiKam later, let it read the folder first (it picks up the sidecars), then choose its database here: ${S.APP_NAME} asks before it replaces its own library with digiKam’s.`
-        : `Where digiKam keeps its database. Currently ${d.type === 'mysql' ? `MySQL ${d.user}@${d.host}:${d.port}/${d.database}` : `SQLite in ${d.sqlite_dir}`}. Changing it rebuilds the index from the other database within seconds; ${S.APP_NAME}'s own data (favorites, albums, users, analysis) stays. Test first.`,
-        h('div', null, h('div', { class: 'toolbar tight',}, type, backup), sq, my,
+        ? `None: ${S.APP_NAME} keeps the library itself and the file scanner finds the photos. To start using digiKam later, let it read the folder first, then choose its database here.`
+        : `Currently ${d.type === 'mysql' ? `MySQL ${d.user}@${d.host}:${d.port}/${d.database}` : `SQLite in ${d.sqlite_dir}`}. Changing it rebuilds the index; ${S.APP_NAME}'s own data stays.`,
+        h('div', null, h('div', { class: 'toolbar tight' }, type, backup), sq, my,
           h('div', { style: 'display:flex;gap:6px;margin-top:8px' },
             test,
             btn('Save and switch', async () => { if (!await confirmDialog(type.value === 'none' ? `Stop using digiKam’s database? ${S.APP_NAME} keeps working from its own copy of the library.` : `Switch ${S.APP_NAME} to this digiKam database now?`)) return; try { await post('/api/settings', { database: payload() }); toast('Database settings saved; the index is rebuilding.'); } catch (e) { toastError(e); return; } setTimeout(again, 2500); }, true)),
           result));
-    })() : null,
-    S.IS_ADMIN ? (() => {
+    })(),
+    (() => {
       const body = h('div', { class: 'muted small' }, 'Loading…');
       const draw = async () => {
         let d; try { d = await api('/api/roots'); } catch (e) { fill(body, e.message); return; }
         const inputs = new Map();
-        fill(body, h('div', { class: 'stack',}, d.roots.map((r) => {
+        fill(body, h('div', { class: 'stack' }, d.roots.map((r) => {
           const inp = h('input', { class: 'einput', placeholder: r.localPath, value: r.overridden ? r.localPath : '', style: 'width:340px', onkeydown: (e) => e.stopPropagation() });
           inputs.set(r.digikamPath, inp);
           return h('div', null, h('div', null, h('b', null, r.label || 'Album root'), ' ', h('span', { class: 'muted' }, `digiKam: ${r.digikamPath}`)),
@@ -307,176 +343,128 @@ function whereTab(c) {
           btn('Save', async () => { const m = {}; inputs.forEach((inp, k) => { m[k] = inp.value.trim(); }); try { await post('/api/settings', { album_roots: m }); toast('Album roots saved; the index is rebuilding.'); } catch (e) { toastError(e); return; } setTimeout(draw, 2500); }, true))));
       };
       draw();
-      return row('Album roots', `Where each album root digiKam knows is mounted here. Leave a field empty to use the default (PHOTOS_ROOT for a single-root library, else the path digiKam recorded); enter a path when the folder is mounted elsewhere, e.g. /photos in a container. Changing it rebuilds the index.`, body);
-    })() : null,
-    S.IS_ADMIN ? row(`${S.APP_NAME} database`, `Where ${S.APP_NAME} keeps its own data: users, albums, favorites, settings, pending edits, the AI results and its copy of the library: a MariaDB or MySQL database of its own (not digiKam’s). Moving to another one copies every row across and restarts ${S.APP_NAME}; the connection is kept in data/viewer-db.json, outside the database.`, viewerDbPanel()) : null,
-    S.IS_ADMIN ? row('Read-only mode', m.readOnlyLocked ? `Locked on by READ_ONLY=1 in the environment: nothing in the library can be changed from ${S.APP_NAME}.`
-      : `${m.readOnly ? 'On' : 'Off'}. When on, ${S.APP_NAME} only browses: editing, tagging, face naming, place tags, GPS tracks, metadata sync and database updates are switched off and refused by the server. Favorites and viewer albums keep working; they never touch the library.`,
-      m.readOnlyLocked ? null : toggleButton('read_only', m.readOnly, async () => { const s = await api('/api/status'); S.EDITING = s.editing; S.CAN_MANAGE = s.editing && s.dbWrite; })) : null,
-    S.IS_ADMIN ? (() => {
+      return row('Album roots', 'Where each digiKam album root is on this machine. Empty: the default. Changing it rebuilds the index.', body);
+    })(),
+    row(`${S.APP_NAME} database`, `Where ${S.APP_NAME} keeps its own data (users, albums, settings, AI results). Switching copies every row across and restarts ${S.APP_NAME}.`, viewerDbPanel()),
+    (() => {
       const d = m.digikam || {};
       if (d.none) return null;  // no digiKam at all: nothing to sync with
-      const copy = d.mirror ? `${nf.format(d.mirror.photos)} photos as of ${fmtWhen(d.mirror.taken)}` : 'not taken yet';
       if (d.conflict) {
         const planEl = h('div', { class: 'muted note mt6' }, 'Working out what changed…');
         api('/api/library/merge').then((p) => fill(planEl, p.total ? 'To merge: ' + p.summary.join(', ') + '.' : 'Nothing to merge.')).catch((e) => fill(planEl, e.message));
-        const wrap = row('Sync with digiKam', `On, but ${plural(d.localChanges, 'change')} made while it was off ${d.localChanges === 1 ? 'is' : 'are'} not in digiKam’s database yet, so ${S.APP_NAME} keeps using its own library. Merge writes those changes into digiKam (new tags, folders and uploads get digiKam ids; renames, assignments, faces, ratings, captions and locations are applied; deleted photos are removed), after a backup of digiKam’s database. Replace drops them and copies the library from digiKam again. Sidecar edits are kept either way.`,
+        const wrap = row('Sync with digiKam', `On, but ${plural(d.localChanges, 'change')} made while it was off ${d.localChanges === 1 ? 'is' : 'are'} not in digiKam yet. Merge writes them into digiKam after a backup; Replace drops them and copies digiKam’s library again.`,
           h('span', { style: 'display:flex;gap:6px;flex-wrap:wrap' },
             btn('Merge into digiKam', async () => { if (!await confirmDialog('Write the changes made while sync was off into digiKam’s database? digiKam must be closed; its database is backed up first.')) return; try { const r = await post('/api/library/merge', {}); toast(`Merged: ${Object.entries(r.applied).map(([k, v]) => `${v} ${k.replace('_', ' ')}`).join(', ') || 'nothing to do'}${r.conflicts ? `; ${r.conflicts} rows digiKam had also changed (the viewer’s values won)` : ''}.`, null, null, 12000); } catch (e) { toastError(e, 10000); } setTimeout(again, 2500); }, true),
             btn('Replace with digiKam’s', async () => { if (!await confirmDialog(`Drop the ${plural(d.localChanges, 'change')} made while sync was off and copy the library from digiKam again? Edits in sidecars are kept.`)) return; await act(() => post('/api/settings', { library_replace: true }), { toast: 'Copying the library from digiKam…' }); setTimeout(again, 2500); }),
-            btn('Turn sync off', async () => { await act(() => post('/api/settings', { digikam_sync: false })); settingsPage(view); })));
+            btn('Turn sync off', async () => { await act(() => post('/api/settings', { digikam_sync: false })); again(); })));
         wrap.firstChild.append(planEl);
         return wrap;
       }
-      return row('Sync with digiKam', `Currently ${d.sync ? 'on' : 'off'}. On: ${S.APP_NAME} re-reads digiKam’s database whenever digiKam saves, and writes the edits made here into it whenever digiKam is closed (edits always go to the sidecars first). Off: ${S.APP_NAME} never opens digiKam’s database; the library lives in ${S.APP_NAME}’s own tables (${copy}) and everything works there: edits, tags, folders, uploads, faces and place tags. Turning sync on again does not overwrite what was changed meanwhile; you choose what happens.${d.sync && !d.reachable ? ' digiKam’s database is unreachable right now; the copy is in use.' : ''}`,
-        toggleButton('digikam_sync', d.sync));
-    })() : null,
+      return row('Sync with digiKam', `On: ${S.APP_NAME} reads digiKam’s database when digiKam saves, and writes edits back while digiKam is closed. Off: ${S.APP_NAME} works on its own copy.${d.sync && !d.reachable ? ' digiKam’s database is unreachable right now; the copy is in use.' : ''}`,
+        switchField('digikam_sync', !!d.sync, { on: 'Sync with digiKam on.', off: 'Sync with digiKam off.', after: () => setTimeout(again, 1500) }));
+    })(),
+    scannerRow(c),
   ];
 }
 
-/** Settings › Editing: where metadata is written, sidecar names, place tags and the metadata templates. */
+/** Settings › Editing: where metadata is written, sidecar names and the metadata templates. */
 function editingTab(c) {
-  const { m, view, row, btn, toggleButton } = c;
+  const { m, row, switchField, save } = c;
   return [
     stab('editing'),
     h('h2', null, 'Editing'),
-    row('Write metadata into image files', `Off: edits go to XMP sidecars only. On: also into JPEG, PNG, TIFF and WebP files, like digiKam’s “sidecar and file” mode. Currently ${m.writeFiles ? 'on' : 'off'}.`,
-      toggleButton('write_files', m.writeFiles)),
-    row('Sidecar file names', `New sidecars are written as ${m.sidecarCompat ? 'photo.xmp (digiKam’s “compatible file name” option)' : 'photo.jpg.xmp (digiKam’s default)'}. Existing sidecars are read either way; pick what your digiKam is set to.`,
-      btn(m.sidecarCompat ? 'Use photo.jpg.xmp' : 'Use photo.xmp', async () => { await act(() => post('/api/settings', { sidecar_compat: !m.sidecarCompat })); settingsPage(view); })),
-    h('h2', null, 'Place tags'),
-    row('Tags from GPS positions', 'Turns each geotagged photo’s town into real digiKam tags under “Places/Country/Region/Town”, so places are searchable in digiKam as well. Missing tags are created in digiKam’s database (digiKam closed); assignments go to sidecars like any edit.',
-      h('button', { class: 'pillbtn', onclick: placeTagsDialog }, icon('place'), 'Review and run')),
+    row('Write metadata into image files', 'Off: sidecars only. On: JPEG, PNG, TIFF and WebP files too.',
+      switchField('write_files', !!m.writeFiles, { on: 'Edits go into image files too.', off: 'Edits go into sidecars only.' })),
+    row('Sidecar file names', 'For new sidecars; existing ones are read either way. Pick what your digiKam uses.',
+      h('select', { onchange: (e) => save({ sidecar_compat: e.target.value === '1' }) },
+        h('option', { value: '0', selected: !m.sidecarCompat }, 'photo.jpg.xmp (digiKam’s default)'), h('option', { value: '1', selected: !!m.sidecarCompat }, 'photo.xmp'))),
     templatesSection(m),
   ];
 }
 
-/** Settings › Library: import, the scanner, the trash, the library copy, rescans, and the checks summarised in one line each. */
-function libraryTab(c) {
-  const { m, row, btn, maint, when, again } = c;
-  return [
-    // 1. Library: everything about digiKam's data as the viewer sees it
-    stab('library'),
+/** Tools (#/tools, admins): the checks, suggestions and clean-up pages, each summarised in a line, and the library actions. */
+export async function showTools() {
+  let m;
+  if (!main.querySelector('.tpage')) main.replaceChildren(h('div', { class: 'page spage tpage' }, loadingBox('Loading…')));
+  if (!S.IS_ADMIN) { main.replaceChildren(h('div', { class: 'empty' }, 'Tools are for admins.')); return; }
+  try { m = await api('/api/maintenance'); } catch (e) { if (S.route.view === 'tools') main.replaceChildren(h('div', { class: 'empty' }, 'Could not load the tools: ' + e.message)); return; }
+  if (S.route.view !== 'tools') return;
+  const c = settingsContext(m, 'tools');
+  const { row, btn, maint, when, again } = c;
+  const summary = (url, text, open) => {  // a page summarised in a line from a quick read of it
+    const line = h('span', null, '');
+    api(url).then((d) => fill(line, text(d))).catch(() => fill(line, ''));
+    return [line, open];
+  };
+  const openBtn = (view) => h('a', { class: 'pillbtn on', href: `#/${view}` }, 'Open');
+  const toolRow = (label, url, text, what, view) => { const [line, open] = summary(url, text, openBtn(view)); return row(label, h('span', null, line, what), open); };
+  const page = h('div', { class: 'page spage tpage' },
+    pageTitle('wrench', 'slate', 'Tools'),
+    h('h2', null, 'Checks'),
+    toolRow('Metadata consistency', '/api/consistency?limit=1', (d) => d.progress.running ? `Checking… ${nf.format(d.progress.done)} / ${nf.format(d.progress.total)} photos. `
+      : !d.summary.scanned ? 'Not checked yet. ' : `${d.summary.mismatched ? plural(d.summary.mismatched, 'photo disagrees', 'photos disagree') : 'Everything agrees'}${d.summary.scanned_at ? ` (checked ${fmtWhen(d.summary.scanned_at)})` : ''}. `,
+      'Rating, title, caption and tags in digiKam, the sidecars and the files.', 'consistency'),
+    toolRow('Metadata quality', '/api/quality', (q) => (q.near.extra ? `${plural(q.near.extra, 'face is', 'faces are')} stored twice. ` : '')
+      + (q.separate.count ? `${plural(q.separate.count, 'photo has', 'photos have')} the same person twice. ` : '')
+      + (q.unnamed.count ? `${plural(q.unnamed.count, 'photo has', 'photos have')} faces but no names. ` : '')
+      + (q.invalid.count ? `${plural(q.invalid.count, 'box is', 'boxes are')} outside the photo. ` : ''),
+      'Missing locations, odd dates, duplicate faces and boxes outside the photo.', 'quality'),
+    toolRow('Duplicate files', '/api/duplicates', (d) => d.groups.length ? `${plural(d.groups.length, 'set')} of identical files, ${fmtBytes(d.wasted)} that could be freed. ` : 'No identical copies. ',
+      'From digiKam’s fingerprints; remove the extras in digiKam.', 'duplicates'),
+    toolRow('Damaged files', '/api/filecheck', (d) => d.progress.running ? `Checking… ${nf.format(d.progress.done)} / ${nf.format(d.progress.total)} files. `
+      : !d.checked ? 'Not checked yet. ' : d.found.length ? `${plural(d.found.length, 'damaged file')} (${nf.format(d.found.filter((x) => x.fixable).length)} repairable). ` : 'Nothing damaged. ',
+      'Files that stop early or cannot be decoded, with a safe repair where there is one.', 'damaged'),
+    h('h2', null, 'Suggestions'),
+    ...[['datesuggest', 'Date suggestions', 'A year for photos marked Date unknown.', 'suggestion'],
+      ['placesuggest', 'Place suggestions', 'A position for photos without one, from the photos around them.', 'suggestion'],
+      ['jerseys', 'Jersey numbers', 'Players read from shirt numbers.', 'suggestion'],
+      ['clothing', 'Clothing matches', 'People recognised by what they wear at the same event.', 'suggestion'],
+      ['rotation', 'Wrongly rotated', 'Photos on their side or upside down.', 'photo']].map(([view, label, what, noun]) =>
+      toolRow(label, `/api/${view}?limit=1`, (d) => d.ready === false ? 'Not analysed yet. ' : `${d.total ? plural(d.total, noun) : `No ${noun}s`}. `, what, view)),
+    S.EDITING ? row('Place tags', 'Places/Country/Region/Town tags from each photo’s GPS position.', h('button', { class: 'pillbtn', onclick: placeTagsDialog }, icon('place'), 'Review and run')) : null,
     h('h2', null, 'Library'),
-    row('Import', 'Photos and videos from a phone, a card or a computer, into folders by date, duplicates left out, a sidecar for each. The installed app is a share target on Android.', h('a', { class: 'pillbtn', href: '#/import' }, 'Open Import')),
-    scannerRow(c),
-    row('Lossless JPEG edits', S.LOSSLESS?.jpegtran ? 'jpegtran (libjpeg-turbo) is installed: JPEGs are rotated, flipped and cropped without re-encoding; other files by their orientation flag.'
-      : 'jpegtran (libjpeg-turbo) is not installed on the server, so JPEGs are turned by their orientation flag only and cannot be cropped. Install it there, as root: apt-get install -y libjpeg-turbo-progs (Debian, Ubuntu, Proxmox LXC); dnf install libjpeg-turbo-utils; brew install jpeg-turbo. Nothing needs restarting.',
-      h('span', { class: 'mst ' + (S.LOSSLESS?.jpegtran ? 'ok' : 'warn') }, S.LOSSLESS?.jpegtran ? 'installed' : S.LOSSLESS ? 'missing' : 'editing off')),
-    row('Trash', 'Photos moved to the trash here or in digiKam (each album root’s .dtrash folder), with their sidecars, until restored or deleted for good.', h('a', { class: 'pillbtn', href: '#/trash' }, 'Open the trash')),
-    row('Library copy', (() => { const d = m.digikam || {}; return d.mirror ? `${S.APP_NAME}’s own copy of the library’s metadata: ${nf.format(d.mirror.photos)} photos as of ${fmtWhen(d.mirror.taken)}, refreshed at every read of digiKam and included in the app backup. The index is built from it whenever digiKam’s database is unreachable or Sync with digiKam is off${d.source === 'mirror' ? ' (as it is now)' : ''}.` : 'Not taken yet; it is taken at the next read of digiKam’s database.'; })(), null),
-    row('Rescan the library now', `The index is rebuilt from digiKam’s database whenever digiKam saves (last saved ${when(m.digikamSaved)}; index built ${when(m.indexBuilt)}). Force it here if something looks stale.`,
-      btn('Rescan now', () => maint('reindex', 'Rescanning the library…'), true)),
-    (() => {  // metadata consistency, summarized in one line
-      const line = h('span', null, 'Loading…');
-      api('/api/consistency?limit=1').then((c) => {
-        const s = c.summary, p = c.progress;
-        fill(line, p.running ? `Checking… ${nf.format(p.done)} / ${nf.format(p.total)} photos.`
-          : !s.scanned ? 'Not checked yet.'
-          : `${s.mismatched ? plural(s.mismatched, 'photo disagrees', 'photos disagree') : 'Everything agrees'} across digiKam’s database, the sidecars and the files${s.scanned_at ? ` (last checked ${fmtWhen(s.scanned_at)})` : ''}.`);
-      }).catch(() => fill(line, ''));
-      return row('Metadata consistency', h('span', null, line, ' Rating, title, caption and tags are compared in the three places they live; disagreements can be synced in either direction.'),
-        h('a', { class: 'pillbtn on', href: '#/consistency' }, 'Open'));
-    })(),
-    (() => {  // face quality, summarized in one line; the page has the details and the fixes
-      const line = h('span', null, 'Checking…');
-      api('/api/quality').then((q) => fill(line, (q.near.extra ? `${plural(q.near.extra, 'face is', 'faces are')} stored twice. ` : 'No face is stored twice. ')
-        + (q.separate.count ? `${plural(q.separate.count, 'photo has', 'photos have')} the same person in two places. ` : '')
-        + (q.unnamed.count ? `${plural(q.unnamed.count, 'photo has', 'photos have')} faces but no names. ` : '')
-        + (q.untagged?.count ? `${plural(q.untagged.count, 'photo shows', 'photos show')} people but nobody is tagged. ` : '')
-        + (q.invalid.count ? `${plural(q.invalid.count, 'box is', 'boxes are')} outside the photo or empty.` : ''))).catch(() => fill(line, ''));
-      return row('Metadata quality', h('span', null, line, ' Photos without a location, with an implausible date or in a folder for another date; duplicate faces, the same person twice, and boxes outside the photo.'), h('a', { class: 'pillbtn on', href: '#/quality' }, 'Open'));
-    })(),
-    (() => {  // duplicate files, summarised in one line; the page lists the sets
-      const line = h('span', null, '');
-      api('/api/duplicates').then((d) => fill(line, d.groups.length ? `${plural(d.groups.length, 'set')} of byte-identical files, ${fmtBytes(d.wasted)} that could be freed. ` : 'No byte-identical copies. ')).catch(() => fill(line, ''));
-      return row('Duplicate files', h('span', null, line, `Copies of the same file, from digiKam’s own fingerprints. ${S.APP_NAME} never deletes anything; remove the extras in digiKam.`),
-        h('a', { class: 'pillbtn on', href: '#/duplicates' }, 'Open'));
-    })(),
-    // the suggestion pages, each summarised in a line from a one-item read of its list (the total comes with it)
-    ...[['datesuggest', 'Date suggestions', 'A year for each photo marked Date unknown, from the ages of the people in it, the photos they appear in, the camera and the look of the file; folder hints bound the guesses.', 'suggestion'],
-      ['placesuggest', 'Place suggestions', 'A position for each photo without one, from where the photos around it in time were taken.', 'suggestion'],
-      ['jerseys', 'Jersey numbers', 'Players read from shirt numbers where the face is not named, when one player clearly wears the number in the same folder or year.', 'suggestion'],
-      ['clothing', 'Clothing matches', 'People recognised by what they wear in the same event, where their face is not named or not visible.', 'suggestion'],
-      ['rotation', 'Wrongly rotated', 'Photos that read as on their side or upside down, each shown the way it would look after the turn.', 'photo']].map(([view, label, text, noun]) => {
-      const line = h('span', null, '');
-      api(`/api/${view}?limit=1`).then((d) => fill(line, d.ready === false ? 'Not analysed yet. ' : `${d.total ? plural(d.total, noun) : `No ${noun}s`}${d.coverage && d.coverage[1] ? ` (${nf.format(d.coverage[0])} / ${nf.format(d.coverage[1])} analysed)` : ''}. `)).catch(() => fill(line, ''));
-      return row(label, h('span', null, line, text), h('a', { class: 'pillbtn on', href: `#/${view}` }, 'Open'));
-    }),
-    (() => {  // damaged files, summarized in one line; the page has the list and the repair
-      const line = h('span', null, '');
-      api('/api/filecheck').then((d) => fill(line, d.progress.running ? `Checking… ${nf.format(d.progress.done)} / ${nf.format(d.progress.total)} files. `
-        : !d.checked ? 'Not checked yet. ' : d.found.length ? `${plural(d.found.length, 'damaged file')} found (${nf.format(d.found.filter((x) => x.fixable).length)} repairable). ` : 'Nothing damaged found. ')).catch(() => fill(line, ''));
-      return row('Damaged files', h('span', null, line, 'Every file read and checked: JPEGs that stop early or lack their end marker, damaged PNGs, pictures that cannot be decoded; a safe repair where there is one.'),
-        h('a', { class: 'pillbtn on', href: '#/damaged' }, 'Open'));
-    })(),
+    row('Rescan the library', `The index is rebuilt whenever digiKam saves (last saved ${when(m.digikamSaved)}, index built ${when(m.indexBuilt)}).`, btn('Rescan now', () => maint('reindex', 'Rescanning the library…'), true)),
+    S.EDITING ? row('Edits waiting for digiKam', m.pendingEdits ? `${plural(m.pendingEdits, 'photo has', 'photos have')} edits in sidecars that digiKam’s database does not have yet${m.digikamRunning ? '; close digiKam to apply them' : ''}.` : 'None.',
+      m.pendingEdits ? btn('Apply to digiKam database…', dbDialog, !m.digikamRunning) : null) : null,
     S.CAN_MANAGE ? (() => {  // digiKam's pick labels, which iopix does not use: counted, and cleared on request
       const line = h('span', null, '');
       const boxes = { 1: h('input', { type: 'checkbox', checked: true }), 2: h('input', { type: 'checkbox' }), 3: h('input', { type: 'checkbox' }) };
       const names = { 1: 'Rejected', 2: 'Pending', 3: 'Accepted' };
       const wrap = h('span', { class: 'toolbar' });
       api('/api/picklabels').then((d) => {
-        const c = d.counts, p = d.progress;
-        fill(line, p.running ? `Clearing… sidecars ${nf.format(p.done)} / ${nf.format(p.total)}. ` : `${['Rejected', 'Pending', 'Accepted'].map((n, i) => `${n}: ${nf.format(c[i + 1])}`).join(', ')}. `);
+        const cnt = d.counts, p = d.progress;
+        fill(line, p.running ? `Clearing… sidecars ${nf.format(p.done)} / ${nf.format(p.total)}. ` : `${['Rejected', 'Pending', 'Accepted'].map((n, i) => `${n}: ${nf.format(cnt[i + 1])}`).join(', ')}. `);
         fill(wrap, [1, 2, 3].map((k) => h('label', { class: 'chk' }, boxes[k], names[k])), btn('Clear…', async () => {
-          const ks = [1, 2, 3].filter((k) => boxes[k].checked), n = ks.reduce((a, k) => a + c[k], 0);
+          const ks = [1, 2, 3].filter((k) => boxes[k].checked), n = ks.reduce((a, k) => a + cnt[k], 0);
           if (!ks.length || !n) { toast('No photo carries the chosen labels.'); return; }
           if (!await confirmDialog(`Take the ${ks.map((k) => names[k]).join(', ')} pick label off ${plural(n, 'photo')}? digiKam’s database is backed up first, sidecars that carry the label are cleaned too (each backed up), and every photo’s change is in the edit log with undo.`, { ok: 'Clear', danger: true })) return;
           try { const r = await post('/api/picklabels/clear', { levels: ks }); toast(`Pick label cleared from ${plural(r.cleared, 'photo')}.`); } catch (e) { toastError(e); }
           again();
         }, true));
       }).catch(() => fill(line, ''));
-      return row('Pick labels', h('span', null, line, `digiKam’s pick labels. ${S.APP_NAME} does not use them and never sets them; clear the ones an older tool left behind.`), wrap);
+      return row('Pick labels', h('span', null, line, `digiKam’s pick labels, which ${S.APP_NAME} never sets.`), wrap);
     })() : null,
-    S.EDITING ? row('Edits waiting for digiKam', m.pendingEdits ? `${plural(m.pendingEdits, 'photo has', 'photos have')} edits saved in sidecars that digiKam’s database does not have yet. digiKam is ${m.digikamRunning ? 'running, so they cannot be applied right now' : 'closed, so they can be applied now'}.` : 'None. digiKam’s database and the sidecars agree.',
-      m.pendingEdits ? btn('Apply to digiKam database…', dbDialog, !m.digikamRunning) : null) : null,
-    row('Tag cover photos', 'The photo shown for each tag is chosen by the content model. Pick them again after big tagging changes.', btn('Pick again', () => maint('covers', 'Choosing tag covers in the background.'))),
-  ];
+    row('Tag cover photos', 'Picked by the content model; pick again after big tagging changes.', btn('Pick again', () => maint('covers', 'Choosing tag covers in the background.'))),
+  );
+  main.replaceChildren(page);
+  boxed([...page.children].slice(1));
 }
 
-/** Settings › Storage and backups: what each cache and backup takes on disk, and the backup downloads. */
-function storageTab(c) {
-  const { m, row, maint } = c;
-  const st = m.storage;
-  return [
-    // 3. Storage and backups: each item's size with what can be done about it on the same row
-    stab('storage'),
-    h('h2', null, 'Storage and backups', h('span', { class: 'muted' }, `${fmtBytes(st.free)} free on the disk`)),
-    (() => {
-      const item = (label, size, detail, action) => h('tr', null, h('td', null, label, detail ? h('div', { class: 'muted', style: 'font-size:11.5px;white-space:normal' }, detail) : null),
-        h('td', { class: 'num' }, size === false ? '' : fmtBytes(size) || '0 B'), h('td', { class: 'act' }, action || null));
-      const small = (label, fn) => h('button', { class: 'pillbtn small', onclick: fn }, label);
-      return h('table', { class: 'stable wide' }, h('tbody', null,
-        item('Thumbnails', st.thumbnails, 'grid previews, rebuilt in the background (several minutes)', small('Rebuild', () => maint('thumbs', 'Rebuilding thumbnails in the background.', `Delete all grid thumbnails (${fmtBytes(st.thumbnails)}) and rebuild them?`))),
-        item('Previews', st.previews, `large images for ${S.APP_NAME}, remade on demand`, small('Clear', () => maint('previews', 'Previews cleared; they are remade as you open photos.'))),
-        item('Face crops', st.faces, 'remade on demand', small('Clear', () => maint('faces', 'Face crops cleared; they are remade as needed.'))),
-        item('Search index', st.index, 'rebuilt from digiKam’s database in seconds'),
-        st.viewerDbError ? item(`${S.APP_NAME} database`, false, h('span', { class: 'warn' }, `MySQL/MariaDB is configured but could not be used when ${S.APP_NAME} started (${st.viewerDbError}), so the SQLite file is in use since then: anything saved now is not in the MySQL database. Fix the cause (Settings › Library › ${S.APP_NAME} database) and restart ${S.APP_NAME}.`)) : null,  // where it is: Settings › Library; its size is the database server's
-        item('Content embeddings', st.embeddings, 'the content-search index'),
-        item('AI models', st.models),
-        item('Sidecar backups', st.backups, `each sidecar as it was before ${S.APP_NAME} first changed it`),
-        item('Image file backups', st.fileBackups, 'the original of each file whose metadata was rewritten'),
-        item('Database backups', st.dbBackups, 'digiKam’s database before each write (the last 10)'),
-        item('Deleted photos', st.deletedPhotos, 'copies of deleted photos and their sidecars, kept until you remove them (data/deleted-photos)')));
-    })(),
-    h('div', { class: 'muted', style: 'font-size:12.5px;margin-top:8px;max-width:820px' }, 'Backups are never deleted automatically (apart from keeping the last ten database copies); remove them by hand once you are happy with the corresponding changes.'),
-    row('Download a backup', S.NO_DK ? `${S.APP_NAME}’s data as a zip: its database, which holds the whole library (folders, tags, people and faces, captions, places), plus the content-search index. Keep it somewhere else.` : `digiKam’s database as it is right now (a consistent copy of digikam4.db, or a mysqldump for MariaDB), and ${S.APP_NAME}’s data as a zip (its database plus the content-search index). Keep them somewhere else.`,
-      h('div', { style: 'display:flex;gap:8px;flex-wrap:wrap' }, S.NO_DK ? null : h('a', { class: 'pillbtn', href: '/api/backup/digikam', download: '' }, icon('download'), h('span', null, 'digiKam database')),
-        h('a', { class: 'pillbtn', href: '/api/backup/app', download: '' }, icon('download'), h('span', null, `${S.APP_NAME} data (zip)`)))),
-  ];
-}
-
-/** Settings › Server: the MCP switch, the version and its updates, this server, the server log and Restart:
- *  iosuite-shared's panel, the same in every ioThing app. */
+/** Settings › Server: iosuite-shared's panel, the same in every ioThing app, then the backups to download. */
 export const serverUi = () => import(new URL('api/server/ui.js', document.baseURI).href);
-function serverPanel() {
+function serverTab(c) {
+  const { row } = c;
   const box = h('div');
   serverUi().then((ui) => ui.mount(box, { toast })).catch((e) => fill(box, errorBox(new Error(`The Server panel did not load: ${e.message}`))));
-  return [stab('server'), box];
+  return [stab('server'), box,
+    h('h2', null, 'Backups'),
+    row('Download a backup', S.NO_DK ? `${S.APP_NAME}’s database and search index, as a zip.` : `digiKam’s database as it is now, and ${S.APP_NAME}’s database and search index as a zip.`,
+      h('div', { style: 'display:flex;gap:8px;flex-wrap:wrap' }, S.NO_DK ? null : h('a', { class: 'pillbtn', href: '/api/backup/digikam', download: '' }, icon('download'), h('span', null, 'digiKam database')),
+        h('a', { class: 'pillbtn', href: '/api/backup/app', download: '' }, icon('download'), h('span', null, `${S.APP_NAME} data (zip)`))))];
 }
 async function settingsPage(view) {
   let m;
-  if (!main.querySelector('.spage')) main.replaceChildren(h('div', { class: 'page spage' }, loadingBox('Loading the settings…')));
+  if (!main.querySelector('.spage:not(.tpage)')) main.replaceChildren(h('div', { class: 'page spage' }, loadingBox('Loading the settings…')));
   try { m = await api('/api/maintenance'); } catch (e) { if (S.route.view === view) main.replaceChildren(h('div', { class: 'empty' }, 'Could not load settings: ' + e.message)); return; }
   if (S.route.view !== view) return;
   const c = settingsContext(m, view);
@@ -484,13 +472,14 @@ async function settingsPage(view) {
   const suite = S.USER && S.USER.suiteAdmin;
   main.replaceChildren(h('div', { class: 'page spage' },
     pageTitle('gear', 'slate', 'Settings'),
-    !S.USERS_EXIST ? row('No users yet', `${S.APP_NAME} is open to anyone who can reach it. Create the admin account to switch on sign-in: visitors then browse read-only, and only editors and admins can change the library.`, btn('Create the admin account', setupDialog, true)) : null,
+    !S.USERS_EXIST ? row('No users yet', `${S.APP_NAME} is open to anyone who can reach it. Create the admin account to switch on sign-in.`, btn('Create the admin account', setupDialog, true)) : null,
+    S.USER ? accountTab() : null,
     displayTab(c),
+    S.USER ? devicesTab() : null,
     S.IS_ADMIN && S.EDITING ? editingTab(c) : null,
-    S.IS_ADMIN ? [libraryTab(c), row('Edit log', `Every change made in ${S.APP_NAME}, for every photo, kept for good: who, when, what it was before and after, with Undo and restore of the sidecar or the original file from the backups.`, h('a', { class: 'pillbtn', href: '#/history' }, 'Open the edit log')), whereTab(c)] : null,
+    S.IS_ADMIN ? libraryTab(c) : null,
     S.IS_ADMIN ? [stab('ai'), aiSection(view)] : null,
-    S.IS_ADMIN ? storageTab(c) : null,
-    S.IS_ADMIN ? serverPanel() : null,
+    S.IS_ADMIN ? serverTab(c) : null,
     suite ? [stab('security'), suiteSection('security')] : null,
     suite ? [stab('global'), suiteSection('global')] : null,
   ));

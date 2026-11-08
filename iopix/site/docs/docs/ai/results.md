@@ -36,7 +36,7 @@ The **Photo quality** job adds:
 
 ## Date suggestions
 
-For photos marked **Date unknown**, **Settings › Library › Date suggestions** (also a pill on Explore, for editors) proposes a year from every clue the library has about them:
+For photos marked **Date unknown**, **Tools › Date suggestions** (also a pill on Explore, for editors) proposes a year from every clue the library has about them:
 
 - **how old the named people look**: each person's photos with a known date teach the age model how that person ages; photos dated only to the year or month count too, with less weight. A birth year you enter on the page helps someone with few dated photos, and no suggestion is ever earlier than an entered birth year;
 - **when the same people are photographed**: the years with a date in which the photo's named people appear, together when they are photographed together often enough, else each on their own;
@@ -47,7 +47,7 @@ Each clue gives a year with an uncertainty; the suggestion is their weighted mea
 
 ## Place suggestions
 
-For photos without a position, **Settings › Library › Place suggestions** (also a pill on Explore, for editors) proposes where they were taken, from the photos around them that have one: a camera without GPS shot among phone photos with it. In order of confidence:
+For photos without a position, **Tools › Place suggestions** (also a pill on Explore, for editors) proposes where they were taken, from the photos around them that have one: a camera without GPS shot among phone photos with it. In order of confidence:
 
 - **between** a photo with a position taken shortly before and one shortly after, close to each other: the position is interpolated by time;
 - **near** one photo with a position taken within the hour;

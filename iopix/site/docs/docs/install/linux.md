@@ -41,7 +41,6 @@ A sudoers rule lets the service user run exactly `systemctl restart iopix`, so *
 | `--prefix`, `--data` | where the app and its data go |
 | `--port`, `--host` | where it listens (default 8600, all addresses) |
 | `--user` | the service user |
-| `--read-only` | browsing only |
 | `--no-service` | do not install the systemd service |
 | `--no-system-deps` | do not install system packages |
 | `--yes` | take every default |

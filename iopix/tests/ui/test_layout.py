@@ -7,7 +7,7 @@ from ui.conftest import _get, _open_photo, _post, _wait_flags  # noqa: E402
 
 
 def test_appearance_setting_switches_the_theme(page, server):
-    """Settings > Display > Appearance: Light and Dark fix the palette (data-theme on <html>, the
+    """Settings > Display > Theme: Light and Dark fix the palette (data-theme on <html>, the
     page background follows, the choice is remembered), System follows the device again."""
     page.goto(server + "/#/settings")
     page.wait_for_selector("#themeseg", timeout=10000)
@@ -23,13 +23,13 @@ def test_appearance_setting_switches_the_theme(page, server):
     assert page.evaluate("document.documentElement.dataset.theme") is None
     assert page.evaluate("localStorage.getItem('iopix.theme')") == "system"
 
-def test_light_is_the_default_theme(browser, server):
-    ctx = browser.new_context(bypass_csp=True, color_scheme="dark")  # even on a device set to dark
+def test_the_device_theme_is_the_default(browser, server):
+    ctx = browser.new_context(bypass_csp=True, color_scheme="dark")  # a device set to dark
     pg = ctx.new_page()
     pg.goto(server + "/#/photos")
     pg.wait_for_selector("#topbar", timeout=10000)
-    assert pg.evaluate("document.documentElement.dataset.theme") == "light"
-    assert pg.evaluate("getComputedStyle(document.body).backgroundColor") == "rgb(255, 255, 255)"
+    assert pg.evaluate("document.documentElement.dataset.theme") is None
+    assert pg.evaluate("getComputedStyle(document.body).backgroundColor") == "rgb(23, 24, 27)"
     ctx.close()
 
 def test_breadcrumbs_sit_in_the_same_place_on_every_page(page, server):
@@ -237,7 +237,8 @@ def test_units_follow_the_browser_region_and_the_setting(browser, server):
     Miles or Kilometres fixes it. Distances are kept in metres either way."""
     ctx, pg = _units_page(browser, server, "en-US")
     try:
-        assert pg.locator("#unitseg [data-units=auto]").inner_text() == "Automatic (miles here)"
+        assert pg.locator("#unitseg [data-units=auto]").inner_text() == "Automatic"
+        assert "miles here" in pg.locator(".srow", has=pg.locator("#unitseg")).inner_text()
         assert "on" in pg.locator("#unitseg [data-units=auto]").get_attribute("class"), "Automatic is the default"
         mi = pg.evaluate(_FMT, "auto")
         assert mi[:5] == ["328 ft", "1 mi", "15.5 mi", "984 ft", "ft"], mi

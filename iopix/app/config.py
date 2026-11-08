@@ -5,7 +5,7 @@ Everything this app writes on its own (index, caches, state, models, backups)
 lives under DATA_DIR, inside the app's own folder by default. The library is
 only ever read, except for the explicit edits the owner asks for (sidecars,
 image files when enabled, digiKam's database while digiKam is closed), which
-are backed up first and can be locked out with READ_ONLY=1.
+are backed up first; EDITING=0 and DB_WRITE=0 switch them off.
 """
 import os
 from pathlib import Path
@@ -73,8 +73,6 @@ for _p in (DIGIKAM_DB_DIR, PHOTOS_ROOT):
 # AUTO_MODELS: models to download on first start when missing, e.g. "siglip2,yolox,geonames"
 # (keys as in app/ai/models.py). Containers and installers set it; the Mac service leaves it empty.
 AUTO_MODELS = [k.strip() for k in os.environ.get("AUTO_MODELS", "").split(",") if k.strip()]
-# READ_ONLY=1 locks the viewer to browsing: no edits, tags, faces or database writes, whatever the settings say
-READ_ONLY = env_flag("READ_ONLY")
 # Allow metadata edits (XMP sidecars; image files too when the write_files setting is on).
 EDITING = env_flag("EDITING", True)
 # Allow "Apply to digiKam database" (only ever runs on request, and only while digiKam is closed).

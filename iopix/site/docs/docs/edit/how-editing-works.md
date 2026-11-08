@@ -4,7 +4,7 @@ Editing in iopix is designed so that digiKam always agrees with what you did, an
 
 ## Who can edit
 
-Only **editors** and **admins** (see [Users and sign-in](../admin/users.md)). Visitors and viewers can browse but never change the library. **Read-only mode** (Settings, or `READ_ONLY=1`) refuses every change for everyone; `EDITING=0` removes the editing controls altogether.
+Only **editors** and **admins** (see [Users and sign-in](../admin/users.md)). Visitors and viewers can browse but never change the library. `EDITING=0` removes the editing controls altogether, and `DB_WRITE=0` keeps every write out of digiKam's database.
 
 ## Changes show instantly
 

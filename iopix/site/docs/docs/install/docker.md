@@ -122,7 +122,7 @@ To build the image yourself, `docker compose up -d --build` uses the checkout. T
 docker compose pull && docker compose up -d
 ```
 
-The `iopix-db` volume holds iopix's database and survives updates like the data volume does. **Download a backup** in Settings › Storage and backups includes a dump of it.
+The `iopix-db` volume holds iopix's database and survives updates like the data volume does. **Download a backup** in Settings › Server includes a dump of it.
 
 **Update now** in Settings › Server does not apply in Docker; it tells you to pull instead.
 

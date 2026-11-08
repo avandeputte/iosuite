@@ -134,7 +134,7 @@ export async function showHistory(params) {
   };
   const reload = () => { offset = 0; load(); };
   more.onclick = () => load(true);
-  main.replaceChildren(h('div', { class: 'page spage' }, crumbs([['Settings', '#/settings?tab=library'], ['Edit log', photo ? '#/history' : null], ...(photo ? [['One photo', null]] : [])]),
+  main.replaceChildren(h('div', { class: 'page spage' }, crumbs([['Tools', '#/tools'], ['Edit log', photo ? '#/history' : null], ...(photo ? [['One photo', null]] : [])]),
     pageTitle('calendar', 'indigo', photo ? 'Edit log of one photo' : 'Edit log'),
     h('p', { class: 'muted', style: 'margin:0 0 10px' }, `Every change made in ${S.APP_NAME}, kept for good: who, when, and the values before and after. Undo puts the earlier values back; the restore links use the backups (sidecar copies, original files, the trash).`),
     h('div', { class: 'ctools hfilters' }, q, photo ? null : [person, plist], sel, who, h('span', { class: 'muted' }, 'from'), from, h('span', { class: 'muted' }, 'to'), to, sizes, count), list, more));
@@ -309,7 +309,7 @@ let damagedTimer = 0;
 export async function showDamaged() {
   clearTimeout(damagedTimer);
   const body = h('div', null, h('div', { class: 'muted' }, 'Loading…'));
-  main.replaceChildren(h('div', { class: 'page spage cpage' }, crumbs([['Settings', '#/settings?tab=library'], ['Damaged files', null]]),
+  main.replaceChildren(h('div', { class: 'page spage cpage' }, crumbs([['Tools', '#/tools'], ['Damaged files', null]]),
     pageTitle('photo', 'rose', 'Damaged files'),
     h('p', { class: 'muted intro mt0' }, `Every photo’s file is read and checked: JPEGs that stop early, lack their end marker or hold damaged data, PNGs with damaged data, and pictures that cannot be decoded. Files are only read until you choose a fix. A JPEG whose picture is complete but whose end marker is missing (some phones’ burst photos) can be repaired by adding the marker. A JPEG whose bottom is missing (shown grey) can be cropped, without re-encoding, to the part above the damage. Each file is copied first, and every fix is in the edit log with undo. What was lost cannot be brought back here; a backup or the original device may still have the file whole.`),
     body));
@@ -612,7 +612,7 @@ export async function showQuality() {
   const body = h('div', null, h('div', { class: 'muted' }, 'Checking every face in the library…'));
   // redraw the page a moment later, unless the user has gone elsewhere or the page was drawn again meanwhile
   const refreshQuality = (ms) => { clearTimeout(qualityTimer); qualityTimer = setTimeout(() => { if (S.route.view === 'quality' && body.isConnected) showQuality(); }, ms); };
-  main.replaceChildren(h('div', { class: 'page spage cpage' }, crumbs([['Settings', '#/settings?tab=library'], ['Metadata quality', null]]),
+  main.replaceChildren(h('div', { class: 'page spage cpage' }, crumbs([['Tools', '#/tools'], ['Metadata quality', null]]),
     pageTitle('face', 'amber', 'Metadata quality'),
     h('p', { class: 'muted intro mt0' }, 'Each check is its own report. Every face region in digiKam’s database is checked: the same person stored twice a few pixels apart (shown twice in the people list), the same person in two separate places, and boxes that stick out of the photo or are empty. Fixes go through the normal face changes, so each one is in the edit log with undo.'),
     body));

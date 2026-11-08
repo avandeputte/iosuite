@@ -13,7 +13,7 @@ from starlette.concurrency import run_in_threadpool
 from app import access, config, events, thumbs, users
 from app.digikam import dbsync, dkdb
 from app.photos import deletion, edits, folders, importer, lossless, organize, versions
-from app.data import index, state as appstate
+from app.data import index
 from app.guards import organize_allowed, run_organize
 from app.http import IMG_CACHE, json_body
 from app.runtime import CACHES, DB_ERRORS, db
@@ -333,7 +333,7 @@ def api_folders():
         con.close()
     for r in rows:
         r["n"], r["nAll"] = counts.get(r["id"], (0, 0))
-    return {"folders": rows, "canManage": config.DB_WRITE and edits.available() and not appstate.read_only()}
+    return {"folders": rows, "canManage": config.DB_WRITE and edits.available()}
 
 
 @router.post("/api/folders", dependencies=[access.editor_write])
@@ -482,7 +482,7 @@ async def share_target(request: Request):
     """The installed app as a share target (Android): files shared to it are staged, then the Import page opens."""
     if not users.can_write(request.state.user):  # the share sheet cannot show a JSON error: the page explains
         return RedirectResponse("/#/import?error=signin", status_code=303)
-    if appstate.read_only() or not (config.DB_WRITE and edits.available()):
+    if not (config.DB_WRITE and edits.available()):
         return RedirectResponse("/#/import?error=off", status_code=303)
     form = await request.form()
     ups = [f for f in form.getlist("files") if hasattr(f, "filename")]

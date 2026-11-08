@@ -38,7 +38,6 @@ def _settings_public() -> dict:
         "search_model": semantic.chosen(),
         **{g: dlmodels.chosen(g) for g in ("face_detector", "object_model", "caption_model", "face_vectors")},
         "bg_threads": bgjobs.threads(),
-        "read_only": appstate.read_only(),
         "require_login": users.require_login(),
         "digikam_sync": index.sync_enabled(),
         "app_name": appstate.get_setting("app_name"),
@@ -140,13 +139,6 @@ def _require_login(value, _body):
     users.set_require_login(bool(value))  # in the Shared ioSuite database, per app
 
 
-def _read_only(value, _body):
-    """Browse only: every library-changing endpoint is refused while it is on."""
-    if config.READ_ONLY and not value:
-        raise HTTPException(400, "Read-only mode is locked on by READ_ONLY=1 in the environment")
-    appstate.set_setting("read_only", "1" if value else "0")
-
-
 def _digikam_closed(value, _body):
     """Docker: the owner vouches that digiKam is closed, for 10 minutes."""
     if value:
@@ -238,7 +230,6 @@ SETTINGS = {
     "library_replace": _library_replace,
     "digikam_sync": _digikam_sync,
     "require_login": _require_login,
-    "read_only": _read_only,
     "digikam_closed": _digikam_closed,
     "templates": _templates,
     "database": _database,

@@ -8,14 +8,14 @@ from app import config
 from app.ai import models as dlmodels
 from app.digikam import dbsync, dkdb
 from app.faces import facedetect
-from app.data import index, state as appstate
+from app.data import index
 from app.runtime import DB_ERRORS
 
 
 def face_detect_allowed():
     if not facedetect.available():
         raise HTTPException(409, f"Face detection needs the {dlmodels.REGISTRY[dlmodels.chosen('face_detector')]['label']} model: download it in Settings › AI")
-    if not config.DB_WRITE or appstate.read_only():
+    if not config.DB_WRITE:
         raise HTTPException(403, "Writing to digiKam's database is turned off")
     if not dkdb.no_digikam() and (not index.sync_enabled() or index.offline["since"]):  # no digiKam: they live in the library tables
         raise HTTPException(409, "Face regions live in digiKam's database, which is unreachable (or Sync with digiKam is off)")

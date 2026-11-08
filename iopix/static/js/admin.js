@@ -140,7 +140,7 @@ export async function showConsistency() {
     wasRunning = true;
     load();
   };
-  main.replaceChildren(h('div', { class: 'page spage cpage' }, crumbs([['Settings', '#/settings?tab=library'], ['Metadata consistency', null]]),
+  main.replaceChildren(h('div', { class: 'page spage cpage' }, crumbs([['Tools', '#/tools'], ['Metadata consistency', null]]),
     pageTitle('check', 'teal', 'Metadata consistency'),
     h('p', { class: 'muted' }, 'The rating, title, caption and tags of each photo are read from digiKam’s database, its XMP sidecar and the image file, and compared. Fix a photo with its buttons, or tick several and choose the right copy in the bar at the bottom; the other places are made to match. Files that cannot hold metadata (most videos, RAW) show n/a, which is not a disagreement.'),
     h('div', { class: 'ctools' },

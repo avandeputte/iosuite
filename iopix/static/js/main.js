@@ -92,7 +92,7 @@ export function updateBanner(u) {  // exported for test_ui.py, which calls it th
     if (!await confirmDialog(`Fetch ${u.version ? 'version ' + u.version : 'the latest version'}, refresh the packages and restart ${S.APP_NAME}? The page reloads when the new version is up.`)) return;
     b.remove(); (await serverUi()).runUpdate({ toast });
   } }, 'Update now');
-  const more = h('a', { class: 'pillbtn', href: '#/settings?tab=server', onclick: () => b.remove() }, 'Details');
+  const more = h('a', { class: 'pillbtn', href: '#/settings/server', onclick: () => b.remove() }, 'Details');
   b = h('div', { id: 'updbanner', 'data-remote': u.remote }, h('span', { class: 'ic-wrap' }, icon('spark')), text, run, more,
     h('button', { class: 'iconbtn', title: 'Not now (hidden until the next version)', onclick: () => { store.local.set(PREF.updateDismissed, u.remote); b.remove(); } }, icon('close')));
   banners().prepend(b);

@@ -67,7 +67,7 @@ def exiftool_cmd() -> list:
 
 
 def available() -> bool:
-    return bool(EXIFTOOL) and config.EDITING and not appstate.read_only()
+    return bool(EXIFTOOL) and config.EDITING
 
 
 def init():
@@ -359,7 +359,7 @@ def _keep_exiv2_namespace(sidecar: str):
 
 def writes_files() -> bool:
     """User setting: also write into the image files, like digiKam's 'sidecar and file' mode."""
-    return appstate.get_setting("write_files", "0") == "1" and not appstate.read_only()
+    return appstate.get_setting("write_files", "0") == "1"
 
 
 def can_write_file(path: str) -> bool:

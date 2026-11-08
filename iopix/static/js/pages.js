@@ -699,6 +699,7 @@ export function currentNav() {
 export function moreSheet() {
   const rest = NAV.filter(([v]) => ['favorites', 'folders', 'albums', 'tags', 'map', 'events'].includes(v)).map(([v, label, ic, href]) => [href || `#/${v}`, label, ic, v]);  // the ones the phone bar hides
   if (S.CAN_MANAGE) rest.push(['#/import', 'Import', 'add', 'import']);
+  if (S.IS_ADMIN) rest.push(['#/tools', 'Tools', 'wrench', 'tools']);
   rest.push(['#/settings', 'Settings', 'gear', 'settings']);
   const back = modal('More', h('div', { class: 'sheetgrid' }, rest.map(([href, label, ic, v]) => h('a', { href, class: currentNav() === v ? 'on' : '', style: `--hue:var(--c-${{ favorites: 'rose', folders: 'teal', albums: 'indigo', tags: 'orange', map: 'cyan', events: 'green' }[v] || 'slate'})`, onclick: () => back.remove() }, h('span', { class: 'sic' }, icon(ic)), label))),
     { buttons: ['Close'] });
@@ -773,7 +774,7 @@ export function showClothing() {
 export function showRotation() {
   const angle = { left: -90, right: 90, 180: 180 };
   return suggestionPage({
-    view: 'rotation', loading: 'Checking which way up…', endpoint: '/api/rotation?limit=1000', trail: [['Settings', '#/settings?tab=library'], ['Wrongly rotated', null]],
+    view: 'rotation', loading: 'Checking which way up…', endpoint: '/api/rotation?limit=1000', trail: [['Tools', '#/tools'], ['Wrongly rotated', null]],
     icon: 'rotate', hue: 'amber', title: 'Wrongly rotated',
     intro: (d) => `Photos stored on their side or upside down, usually scans and old files. Your own photos teach the content-search model what upright looks like; every photo whose embedding reads as turned is then checked in all four turns, and only the ones the four readings agree on are listed, each shown the way it would look after the turn. Rotating is the lossless rotate (the file is turned, the metadata kept, undo in the edit log); nothing is changed until you do.${d.dismissed ? ` ${nf.format(d.dismissed)} marked as fine are left out.` : ''}`,
     waiting: (d) => !d.ready ? h('div', { class: 'enote' }, 'Install a content-search model under Settings › AI: the check learns what upright looks like from its embeddings of your own photos.')

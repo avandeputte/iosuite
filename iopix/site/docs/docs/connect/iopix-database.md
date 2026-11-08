@@ -54,7 +54,7 @@ Create the new database as above, then in **Settings › Library › iopix datab
 
 ## Backups
 
-**Settings › Storage and backups › Download a backup › iopix data** gives `viewer.sql`, a `mysqldump` of the iopix database, plus the content-search embeddings files and a README with the restore steps. To restore, create an empty database and load the dump into it:
+**Settings › Server › Download a backup › iopix data** gives `viewer.sql`, a `mysqldump` of the iopix database, plus the content-search embeddings files and a README with the restore steps. To restore, create an empty database and load the dump into it:
 
 ```sh
 mariadb iopix < viewer.sql

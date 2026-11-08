@@ -21,4 +21,4 @@ Videos play in the viewer, with a thumbnail made from the video itself. Formats 
 
 ## Light and dark
 
-**Settings › Display › Appearance** chooses light (the default), dark, or follow the device. Signed in, the choice is saved with your account and follows you to other devices.
+**Settings › Display › Theme** chooses light, dark, or follow the device (the default). Signed in, the choice is saved with your account and follows you to other devices.

@@ -144,10 +144,6 @@ def _post(server, path, body=None, timeout=10):
     return json.loads(raw) if raw else None
 
 
-def _set_read_only(server, on: bool):
-    _post(server, "/api/settings", {"read_only": on}, timeout=5)
-
-
 def _eventually(fn, timeout=10.0, step=0.2):
     """Poll the server (another process, whose index is rebuilt after a write) until fn() is truthy; the last value."""
     end = time.time() + timeout
