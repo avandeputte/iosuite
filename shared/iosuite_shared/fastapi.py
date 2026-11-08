@@ -4,7 +4,7 @@ dependencies that say who may call a route, and the routers with the sign-in and
     auth = Auth("iopix")
     app.middleware("http")(auth.middleware(open_paths=..., open_prefixes=..., before=..., after=...))
     @router.get("/api/x", dependencies=[auth.access.admin])
-    app.include_router(auth.router())        # /api/auth/* : login, accounts, logout, logout_all, me, settings, password, setup
+    app.include_router(auth.router())        # /api/auth/* : login, accounts, logout, me, settings, password, setup
     app.include_router(auth.users_router())  # /api/users  : list, create, change, delete (admins of this app)
     app.include_router(auth.admin_router())  # /api/suite-admin: every account, role, app password, session and app (suite admins)
     app.include_router(auth.status_router(updater, extra=...))   # GET /api/status, public, the same shape in every app
@@ -273,7 +273,7 @@ class Auth:
 
     # ---- the routers (iosuite_shared.routers)
     def router(self) -> APIRouter:
-        """/api/auth/*: login, accounts, logout, logout_all, me, settings, password, setup, sessions, app-passwords, proxy, suite."""
+        """/api/auth/*: login, accounts, logout, me, settings, password, setup, sessions, app-passwords, proxy, suite."""
         return routers.auth_router(self)
 
     def users_router(self) -> APIRouter:
@@ -285,7 +285,7 @@ class Auth:
         return routers.admin_router(self)
 
     def server_router(self, updater, log_file=None, info=None, apply=None) -> APIRouter:
-        """Maintenance › Updates and logs: GET/POST /api/server, GET /api/log (admins)."""
+        """Settings › Server: the panel (GET /api/server/ui.js), GET/POST /api/server, GET /api/log (admins)."""
         return routers.server_router(self, updater, log_file, info, apply)
 
     def status_router(self, updater=None, extra=None) -> APIRouter:
@@ -293,7 +293,7 @@ class Auth:
         return routers.status_router(self, updater, extra)
 
     # ---- the MCP endpoint's gate
-    def mcp_gate(self, enabled, path: str = "/mcp", on_user=None, settings_page: str = "Settings › Server"):
+    def mcp_gate(self, enabled, path: str = "/mcp", on_user=None):
         """A `before` hook for middleware() (or something an app's own hook calls first): a request to the MCP endpoint
         is refused with 404 while the switch is off (`enabled()` is false), with 401 when nobody is signed in (MCP
         clients sign in with an app password: HTTP Basic, or a bearer token), and otherwise `on_user(user)` runs (an app
@@ -305,7 +305,7 @@ class Auth:
             if p != path and not p.startswith(path + "/"):
                 return None
             if not enabled():
-                return JSONResponse({"detail": f"The MCP server is switched off ({settings_page})."}, status_code=404)
+                return JSONResponse({"detail": "The MCP server is switched off (Settings › Server)."}, status_code=404)
             user = auth.current_user(request)
             if not user:
                 return JSONResponse({"detail": "Sign in with your user name and an app password (HTTP Basic), or send 'Authorization: Bearer "

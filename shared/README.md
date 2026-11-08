@@ -69,7 +69,7 @@ settings and list of apps. Its default name and account are `iosuite`; `IOSUITE_
 
 Proxy sign-in (`AUTH_PROXY`, `AUTH_PROXY_HEADER`, `AUTH_PROXY_TRUSTED`, `AUTH_PROXY_CREATE`, `CF_ACCESS_TEAM`,
 `CF_ACCESS_AUD`) is kept once for the whole suite in the Shared ioSuite database and read only from there; it is changed
-in the start page's Settings › Suite (`/api/suite-admin/proxy`) or any app's Settings (`POST /api/auth/proxy`).
+in the start page's Settings › Suite-wide settings › Sign-in at the proxy (`/api/suite-admin/proxy`) or any app's Settings (`POST /api/auth/proxy`).
 `config.env` and the environment are never read for them. A proxy that names the user in a header (every preset but
 Cloudflare) needs its address in `AUTH_PROXY_TRUSTED`: the header is believed from there only, and with several apps on
 one machine "this machine" would let any local process sign in as anyone. For Cloudflare the token is verified, so the
@@ -87,7 +87,7 @@ auth = Auth("iopix", read_only=lambda: appstate.read_only())
 auth.decorate = lambda u: {**u, "person": users.get_value(u["id"], "iopix", "person")}   # optional extra fields
 
 app.middleware("http")(auth.middleware(open_paths=("/", "/index.html"), open_prefixes=("/static/", "/api/auth/"), before=my_gate))
-app.include_router(auth.router())         # /api/auth/login, accounts, logout, logout_all, me, settings, password, setup,
+app.include_router(auth.router())         # /api/auth/login, accounts, logout, me, settings, password, setup,
                                           #           sessions (list, DELETE one), app-passwords, proxy, suite
 app.include_router(auth.users_router())   # /api/users (admins of this app), /api/users/{id}/sessions (list, DELETE all or ?session=)
 app.include_router(auth.status_router(updater, extra=lambda request: {...}))   # GET /api/status (below)
@@ -128,13 +128,13 @@ Per-user data: `users.get_settings(uid, app)`, `users.set_settings(uid, app, cha
 
 `app.include_router(auth.admin_router())` serves everything in the Shared ioSuite database to **suite admins** at
 `/api/suite-admin` (module `iosuite_shared.admin`). Its screen ships here too, so every app shows the same one
-(Settings › Suite, suite admins only): `GET /api/suite-admin/ui.js` is one ES module with its own styles that uses the
+(Settings › Accounts and access and Suite-wide settings, suite admins only): `GET /api/suite-admin/ui.js` is one ES module with its own styles that uses the
 app's colour variables when it has them.
 
 ```js
 const ui = await import(new URL('api/suite-admin/ui.js', document.baseURI).href);
-ui.mount(el, { sub: 'people', toast, onSub: (s) => history.replaceState(null, '', `#/settings/suite/${s}`) });
-// parts: people, roles, passwords, keys, apps, signin
+ui.mount(el, { tab: 'access', sub: 'people', toast, onSub: (s) => history.replaceState(null, '', `#/settings/access/${s}`) });
+// tab access (Accounts and access): people, roles, passwords; tab global (Suite-wide settings): apps, signin, keys
 ```
 
 The routes:
@@ -207,8 +207,15 @@ nobody is signed in; `shared_mcp.set_enabled(db.set_setting, on, forced)` saves 
 
 Every app updates itself the same way, from `iosuite_shared.updates`: the installed commit, a daily check of GitHub
 for a newer version, the app's own `update.sh`, a restart, and the tail of the server log.
-`Auth.server_router` serves it all at the same addresses in every app (admins only), so the Maintenance ›
-Updates and logs page is the same page everywhere.
+`Auth.server_router` serves it all at the same addresses in every app (admins only), with the panel that shows it:
+Settings › Server is one ES module (`static/server-panel.js`, at `GET /api/server/ui.js`) that every app mounts in its
+Server tab, so the page is the same everywhere.
+
+```js
+const ui = await import(new URL('api/server/ui.js', document.baseURI).href);
+ui.mount(el, { toast });          // the MCP switch, the version and updates, This server, the server log, Restart
+ui.runUpdate({ toast });          // the same Update now, for the app's "a new version is out" banner
+```
 
 ```python
 from iosuite_shared.updates import Updater
@@ -216,13 +223,15 @@ from iosuite_shared.updates import Updater
 updater = Updater("iocalendar", version=__version__, root=ROOT)   # repo avandeputte/iocalendar, branch main, update.sh in ROOT
 updater.start_daily()                                             # checks once a day while the setting is on
 app.include_router(auth.server_router(updater, log_file=LOG_FILE,
-    info=lambda: {"mcpEnabled": mcp_enabled()},                   # extra fields of GET /api/server
+    info=lambda: {"mcpEnabled": mcp_enabled(), "mcpLocked": MCP_FORCED,   # extra fields of GET /api/server: the MCP box,
+                  "about": [["Database", "db:3306/iocalendar"]]},          # and the This server box
     apply=save_switches))                                         # the app's own switches in the POST body (raise ValueError to refuse)
 ```
 
 | Route | What |
 |---|---|
-| `GET /api/server` | `{version, installed, docker, canRun, repo, branch, check, progress, lastUpdate, autoCheck, autoCheckLocked}` + `info()` |
+| `GET /api/server/ui.js` | the Settings › Server panel |
+| `GET /api/server` | `{name, version, installed, docker, canRun, repo, branch, check, progress, lastUpdate, autoCheck, autoCheckLocked}` + `info()` |
 | `POST /api/server {action: check}` | asks GitHub; the answer is the check `{status: current / update / error, remoteVersion, ...}` |
 | `POST /api/server {action: update, ref?}` | starts `update.sh` (409 when it cannot run here: Docker, no .venv, not writable) |
 | `POST /api/server {action: restart}` | ends the process; systemd, launchd or Docker starts it again |
@@ -330,7 +339,7 @@ password, app)`, which returns `(user, scope)`, and checks the scope itself.
 ## Keys and tokens
 
 Every credential an app keeps for something outside the suite (the start page's Home Assistant token and AccuWeather
-key, ioPix's Google Maps keys) lives in `ios_credentials`, one row per key the app declares, so Settings › Suite ›
+key, ioPix's Google Maps keys) lives in `ios_credentials`, one row per key the app declares, so Settings › Suite-wide settings ›
 Keys and tokens shows and changes them all. Values never leave the server: the panel says whether one is set.
 
 ```python
@@ -360,7 +369,7 @@ links.url("iocontacts")                                                    # for
 ```
 
 Behind Cloudflare Access, the whole suite's keys `cf_access_client_id` / `cf_access_client_secret` (a Cloudflare
-Access service token, set on Settings › Suite › Keys and tokens) go with every request. Service accounts are not in
+Access service token, set on Settings › Suite-wide settings › Keys and tokens) go with every request. Service accounts are not in
 `users.list_users()` (pass `services=True`), do not count for the first-run setup, and cannot sign in with a password.
 
 ## Edge check of app passwords (Cloudflare Worker, optional)
@@ -368,7 +377,7 @@ Access service token, set on Settings › Suite › Keys and tokens) go with eve
 Behind Cloudflare, a Worker on `/dav*` can turn a wrong app password away before it reaches the server. The apps keep
 a Workers KV namespace up to date with a SHA-256 of each app password (never an account password), when it is made,
 on its first use after each start, and when it or its account is deleted. It is off unless all three are set. They
-are the whole suite's keys in the Shared ioSuite database (Settings › Suite › Keys and tokens), so every app picks
+are the whole suite's keys in the Shared ioSuite database (Settings › Suite-wide settings › Keys and tokens), so every app picks
 them up within seconds, without a restart; a variable in an app's config.env wins:
 
 ```
@@ -412,7 +421,7 @@ installs the packages, writes config.env, creates the tables and the systemd ser
 environment (`IOCALENDAR_DB`, `IOCALENDAR_SUITE_DB`, `IOCALENDAR_ADMIN`, ...), never on a command line. What differs
 per app keeps its default: the usual port, no public address, the machine's time zone; ioPix gets `--no-digikam`,
 `--features none` and the photos folder of `--photos` (default `/library/photos`). An app already set up in its folder
-is left alone. Afterwards each app updates itself as always (its `update.sh`, or Maintenance › Updates in the web app).
+is left alone. Afterwards each app updates itself as always (its `update.sh`, or Settings › Server in the web app).
 
 ### A MariaDB administrator makes the databases and users: `provision`
 

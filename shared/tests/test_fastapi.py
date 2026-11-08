@@ -47,6 +47,8 @@ def test_open_until_first_user_then_setup_and_login():
     r = c2.post("/api/auth/logout")
     assert r.status_code == 200
     assert c2.get("/api/admin").status_code == 401
+    assert c.get("/api/admin").status_code == 200, "Sign out ends this browser's session only"
+    assert c.post("/api/auth/logout_all").status_code in (404, 405), "one kind of sign out: Sign out"
 
 
 def test_session_shared_between_apps_with_their_own_roles():

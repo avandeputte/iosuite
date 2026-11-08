@@ -8,7 +8,7 @@ A SHA-256 is enough here and fast for the Worker: an app password is 144 random 
 its hash. Account passwords are never sent. The server still checks every password itself (scrypt), so a stale key
 only lets a request reach it, never in.
 
-Off unless all three are set. They are the whole suite's keys in the Shared ioSuite database (Settings › Suite ›
+Off unless all three are set. They are the whole suite's keys in the Shared ioSuite database (Settings › Suite-wide settings ›
 Keys and tokens, or `iosuite-shared edge --account-id … --namespace-id … --token-file …`), so every app has them at
 once; a variable in an app's config.env wins over the stored value:
 
