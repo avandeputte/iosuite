@@ -115,22 +115,15 @@ async def account_photo(uid: int):
     return Response(p[0], media_type=p[1], headers={"Cache-Control": "private, max-age=300"})
 
 
-@router.patch("/api/auth/me", dependencies=[access.signed_in])
-async def patch_me(request: Request):
-    """The signed-in account's display name, email and "me" contact ({displayName, email, meContactId}; null clears)."""
+@router.put("/api/me-contact", dependencies=[access.signed_in])
+async def put_me_contact(request: Request):
+    """Which contact is the signed-in account ({contactId}; null: none), for CardDAV apps and the face on its tile.
+    The display name and email are iosuite-shared's (PATCH /api/auth/me, Settings › Account)."""
     u = auth.current_user(request)
-    b = await request.json()
-    f = {}
-    if "displayName" in b:
-        f["display_name"] = (b["displayName"] or "").strip() or None
-    if "email" in b:
-        f["email"] = (b["email"] or "").strip() or None
-    if "meContactId" in b:
-        cid = b["meContactId"]
-        if cid:
-            readable_contact(u, int(cid))
-        f["me_contact_id"] = int(cid) if cid else None
-    return {"user": users.public(users.update(u["id"], **f))}
+    cid = (await request.json()).get("contactId")
+    if cid:
+        readable_contact(u, int(cid))
+    return {"user": users.public(users.update(u["id"], me_contact_id=int(cid) if cid else None))}
 
 
 # ------------------------------------------------------------------ address books

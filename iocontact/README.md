@@ -111,8 +111,8 @@ was), the database is brought up to date, and the service restarts; the page rel
 MCP tools `check_for_update` and `update_server` do the same. In Docker, pull the image instead. From a shell:
 `./update.sh` (`--check` only looks, `IOCONTACTS_REF=<sha>` installs a given commit).
 
-Everything about the app is under one Settings page (the sidebar and the avatar menu): your own tabs (account, display,
-apps and devices, address books), then for admins storage and backups and server, and for suite admins
+Everything about the app is under one Settings page (the sidebar and the avatar menu; a change is saved the moment it
+is made): your own tabs (account, display, apps and devices, address books), then for admins server, and for suite admins
 security and global settings. Tidying the contacts is **Clean up** in the sidebar (below).
 
 ## Reverse proxy and HTTPS

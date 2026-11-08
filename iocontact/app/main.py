@@ -84,8 +84,7 @@ def _status_extra(request) -> dict:
 def _server_info() -> dict:
     """What Settings › Server shows beside the updater's own fields: the MCP box and This server."""
     return {"mcpEnabled": mcp_enabled(), "mcpLocked": config.MCP_FORCED,
-            "mcpAbout": "The address /mcp that lets an AI assistant (Claude, for example) search, read and keep the contacts: look people up, "
-                        "add and correct contacts, link relatives, list birthdays, import and export, and for admins check for and install updates.",
+            "mcpAbout": "Lets an AI assistant look up, add and correct contacts, as you.",
             "about": [["Database", f"{config.DB_HOST}:{config.DB_PORT}/{config.DB_NAME}"],
                       ["LDAP directory", f"{config.LDAP_HOST or '0.0.0.0'}:{config.LDAP_PORT}" if config.LDAP_PORT else "off"]]}
 
