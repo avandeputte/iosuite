@@ -150,7 +150,7 @@ const confirmDialog = (title, text, ok = 'OK', danger = false) => dialog(title, 
 const fld = (l, e) => h('label', { class: 'sa-field' }, h('span', null, l), e);
 const box = (ic, title, ...kids) => h('div', { class: 'sa-box' }, h('h2', null, icon(ic), title), ...kids);
 
-const SCOPE_LABEL = { '': 'Everything', dav: 'Sync only (CalDAV, CardDAV, LDAP)', read: 'Read only (an app reading another)' };
+const SCOPE_LABEL = { '': 'Everything', dav: 'Sync only (CalDAV, CardDAV, LDAP)' };
 const ROLE_HELP = { none: 'no access', viewer: 'sees', editor: 'changes', admin: 'manages' };
 function sinceText(ts) {
   if (!ts) return 'never';
@@ -189,7 +189,6 @@ export async function mount(el, opts = {}) {
   const draw = async () => {
     let o;
     try { o = await api('../suite-admin'); } catch (e) { root.replaceChildren(h('p', { class: 'sa-err' }, e.message)); return; }
-    o.people = o.users.filter((u) => !u.service);
     const body = h('div');
     root.replaceChildren(
       h('p', { class: 'sa-muted sa-intro' }, tab.intro),
@@ -224,7 +223,7 @@ function people(el, ctx) {
     if (!p.available) return;
     const names = new Map(p.people.map((x) => [x.id, x.name]));
     photoTh.style.display = '';
-    for (const u of o.people) {
+    for (const u of o.users) {
       const td = photoTd[u.id];
       td.style.display = '';
       td.replaceChildren(u.photoPerson ? h('span', { class: 'sa-who' }, face(u.photoPerson), names.get(u.photoPerson) || `#${u.photoPerson}`) : h('span', { class: 'sa-muted' }, '–'));
@@ -232,7 +231,7 @@ function people(el, ctx) {
   });
   el.append(box('people', 'People',
     h('div', { class: 'sa-scrollx' }, h('table', { class: 'sa-t' }, h('tr', null, h('th', null, 'Account'), photoTh, h('th', null, 'Email'), h('th', null, 'Sign-in'), h('th', null, 'Last seen'), h('th')),
-      o.people.map((u) => h('tr', null,
+      o.users.map((u) => h('tr', null,
         h('td', null, h('b', null, u.displayName), h('div', { class: 'sa-muted sa-small' }, u.name,
           u.suiteAdmin ? ' · suite admin' : '', u.listed ? '' : ' · not on the sign-in list', u.id === o.me ? ' · you' : '')),
         (photoTd[u.id] = h('td', { class: 'sa-small', style: { display: 'none' } })),
@@ -242,13 +241,6 @@ function people(el, ctx) {
         h('td', { class: 'sa-small' }, sinceText(u.lastSeen || u.last_login), h('div', { class: 'sa-muted' }, `${u.sessions} session${u.sessions === 1 ? '' : 's'}`)),
         h('td', { style: { textAlign: 'right' } }, h('button', { class: 'sa-btn', onclick: () => editAccount(ctx, u) }, 'Manage')))))),
     h('p', null, h('button', { class: 'sa-btn primary', onclick: () => editAccount(ctx, null) }, icon('add'), 'Add someone'))));
-  const svc = o.users.filter((u) => u.service);
-  if (svc.length) el.append(box('apps', 'Apps reading from each other',
-    h('p', { class: 'sa-muted' }, 'The apps sign in to each other with these accounts and read-only app passwords. Revoking one is safe: the app makes a new one.'),
-    h('div', { class: 'sa-scrollx' }, h('table', { class: 'sa-t' }, h('tr', null, h('th', null, 'Account'), h('th', null, 'For'), h('th', null, 'App passwords'), h('th', null, 'Last used'), h('th')),
-      svc.map((u) => h('tr', null, h('td', null, h('b', null, u.name)), h('td', null, appLabel(o, u.service)),
-        h('td', { class: 'sa-small' }, `${u.appPasswords}`), h('td', { class: 'sa-small' }, sinceText(u.lastSeen || u.last_login)),
-        h('td', { style: { textAlign: 'right' } }, h('button', { class: 'sa-btn', onclick: () => ctx.go('passwords') }, 'App passwords'))))))));
 }
 
 /** The account dialog: who they are, how they sign in, their role in every app, and (existing accounts) their
@@ -349,7 +341,7 @@ function roles(el, ctx) {
     h('p', { class: 'sa-muted' }, 'none, viewer, editor or admin. “default” follows the app’s default role (under Apps). Suite admins are admin everywhere.'),
     h('div', { class: 'sa-scrollx' }, h('table', { class: 'sa-t sa-roles' },
       h('tr', null, h('th', null, 'Person'), o.apps.map((a) => h('th', null, a.name, h('div', { class: 'sa-muted sa-small' }, `default: ${a.defaultRole}`)))),
-      o.people.map((u) => h('tr', null, h('td', null, h('b', null, u.displayName), h('div', { class: 'sa-muted sa-small' }, u.name)),
+      o.users.map((u) => h('tr', null, h('td', null, h('b', null, u.displayName), h('div', { class: 'sa-muted sa-small' }, u.name)),
         o.apps.map((a) => {
           if (u.suiteAdmin) return h('td', { class: 'sa-muted sa-small' }, 'admin (suite)');
           const s = roleSelect(u, a);
@@ -377,7 +369,7 @@ async function passwords(el, ctx) {
       })) : h('p', { class: 'sa-muted' }, 'No app passwords here.'));
   };
   fu.onchange = fa.onchange = draw;
-  const who = h('select', { class: 'sa-in sa-sm' }, o.people.filter((u) => !u.passwordless).map((u) => h('option', { value: u.id }, u.displayName)));
+  const who = h('select', { class: 'sa-in sa-sm' }, o.users.filter((u) => !u.passwordless).map((u) => h('option', { value: u.id }, u.displayName)));
   const app = h('select', { class: 'sa-in sa-sm' }, o.apps.map((a) => h('option', { value: a.app }, a.name)));
   const label = h('input', { class: 'sa-in', placeholder: 'Device, e.g. Alex’s iPhone' });
   const scope = h('select', { class: 'sa-in sa-sm' }, (o.scopes || ['', 'dav']).map((s) => h('option', { value: s }, SCOPE_LABEL[s] || s)));

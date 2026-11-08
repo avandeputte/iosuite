@@ -87,7 +87,7 @@ def forget_app(app: str, data: bool = False) -> bool:
 
 # ---- accounts
 def accounts() -> list:
-    """Every account: the shared fields, `roles` (the explicit role per app), `effective` (the role it holds in every
+    """Every account people use (never the apps' own service accounts, which the suite manages itself): the shared fields, `roles` (the explicit role per app), `effective` (the role it holds in every
     known app: the row, else the app's default; suite admin: admin; passwordless: viewer at most), its number of app
     passwords and sessions, and when it was last seen in any session."""
     keys = [a["app"] for a in apps()]
@@ -102,7 +102,7 @@ def accounts() -> list:
     photo = {r["user_id"]: db.json_load(r["value"]) for r in db.q(
         "SELECT user_id, value FROM ios_user_data WHERE app = %s AND name = 'person'", (PHOTO_APP,))}
     out = []
-    for u in users.list_users(services=True):
+    for u in users.list_users():
         mine = roles.get(u["id"], {})
         eff = {}
         for k in keys:
@@ -114,6 +114,13 @@ def accounts() -> list:
         out.append({**u, "roles": mine, "effective": eff, "appPasswords": pw.get(u["id"], 0), "sessions": int(s.get("n") or 0),
                     "lastSeen": s.get("seen"), "photoPerson": photo.get(u["id"])})
     return sorted(out, key=lambda u: u["name"].lower())
+
+
+def person(user_id: int) -> dict | None:
+    """The account, when it is one people use; None for no account or an app's own service account (users.service_account),
+    which the suite makes and looks after itself, so this panel never shows or changes it."""
+    u = users.get(user_id)
+    return u if u and not u.get("service") else None
 
 
 def account(user_id: int) -> dict | None:
@@ -152,8 +159,7 @@ def create(me, body: dict) -> dict:
 def update(me, user_id: int, body: dict) -> dict:
     """Change an account: name, displayName, email, listed, suiteAdmin, password ('' removes it: one-click viewer),
     roles {app: role | None}, photoPerson (the person in ioPix's People, a tag id; None unlinks)."""
-    target = users.get(user_id)
-    if not target:
+    if not person(user_id):
         raise LookupError("No such user")
     own = bool(me) and me.get("id") == user_id
     if own and body.get("suiteAdmin") is False:
@@ -211,7 +217,7 @@ def photo_face(reader: str, person: int) -> bytes:
 
 
 def delete(me, user_id: int):
-    if not users.get(user_id):
+    if not person(user_id):
         raise LookupError("No such user")
     if me and me.get("id") == user_id:
         raise ValueError("You cannot delete your own account while signed in")
@@ -220,25 +226,31 @@ def delete(me, user_id: int):
 
 
 # ---- app passwords
+# What people's app passwords can be: everything, or sync only. READ is the service accounts' own (iosuite_shared.links).
+PERSON_SCOPES = ("", apppasswords.DAV)
+
+
 def app_passwords(user_id: int = None, app: str = None) -> list:
-    """Every app password (never the secret): id, userId, userName, app, appName, label, scope ('' everything, 'dav' sync only), created, lastUsed."""
-    where, args = [], []
+    """Every app password of the accounts people use (never the secret; the service accounts' own are left out): id, userId, userName, app, appName, label, scope ('' everything, 'dav' sync only), created, lastUsed."""
+    where, args = ["u.service IS NULL"], []
     if user_id is not None:
         where.append("p.user_id = %s"); args.append(user_id)
     if app:
         where.append("p.app = %s"); args.append(clean_app(app))
     rows = db.q("SELECT p.id, p.user_id, p.app, p.label, p.scope, p.created_at, p.last_used_at, u.name, u.display_name, a.name AS app_name "
                 "FROM ios_app_passwords p JOIN ios_users u ON u.id = p.user_id LEFT JOIN ios_apps a ON a.app = p.app"
-                + (" WHERE " + " AND ".join(where) if where else "") + " ORDER BY lower(u.name), p.app, p.created_at", tuple(args))
+                + " WHERE " + " AND ".join(where) + " ORDER BY lower(u.name), p.app, p.created_at", tuple(args))
     return [{"id": r["id"], "userId": r["user_id"], "userName": r["name"], "displayName": r["display_name"] or r["name"], "app": r["app"],
              "appName": r["app_name"] or r["app"], "label": r["label"], "scope": r["scope"] or "", "created": r["created_at"], "lastUsed": r["last_used_at"]} for r in rows]
 
 
 def new_app_password(user_id: int, app: str, label: str, scope: str = "") -> dict:
     """A new app password for an account in an app (shown once)."""
-    u = users.get(user_id)
+    u = person(user_id)
     if not u:
         raise LookupError("No such user")
+    if scope not in PERSON_SCOPES:
+        raise ValueError(f"Unknown app password scope: {scope!r}")
     if u["passwordless"]:
         raise ValueError("A one-click account cannot have app passwords; give it a password first")
     app = clean_app(app)
@@ -248,15 +260,17 @@ def new_app_password(user_id: int, app: str, label: str, scope: str = "") -> dic
 
 def set_app_password_scope(pid: int, scope: str):
     """Change what an app password reaches: '' everything, 'dav' the app's sync protocols only."""
-    r = db.one("SELECT app, prefix FROM ios_app_passwords WHERE id = %s", (pid,))
+    r = db.one("SELECT p.app, p.prefix FROM ios_app_passwords p JOIN ios_users u ON u.id = p.user_id WHERE p.id = %s AND u.service IS NULL", (pid,))
     if not r:
         raise LookupError("No such app password")
+    if (scope or "") not in PERSON_SCOPES:
+        raise ValueError(f"Unknown app password scope: {scope!r}")
     apppasswords.set_scope(r["app"], r["prefix"], scope or "")
     apppasswords.forget()
 
 
 def revoke_app_password(pid: int):
-    r = db.one("SELECT user_id FROM ios_app_passwords WHERE id = %s", (pid,))
+    r = db.one("SELECT p.user_id FROM ios_app_passwords p JOIN ios_users u ON u.id = p.user_id WHERE p.id = %s AND u.service IS NULL", (pid,))
     if not r:
         raise LookupError("No such app password")
     apppasswords.delete(r["user_id"], pid)
@@ -296,7 +310,7 @@ def set_key(me, app: str, name: str, value) -> dict:
 
 # ---- sessions
 def end_sessions(user_id: int, session_id: str = None):
-    if not users.get(user_id):
+    if not person(user_id):
         raise LookupError("No such user")
     if session_id:
         sessions.end_one(user_id, session_id)
@@ -306,4 +320,4 @@ def end_sessions(user_id: int, session_id: str = None):
 
 def overview() -> dict:
     return {"apps": apps(), "users": accounts(), "roles": list(users.ROLES), "defaultRoles": list(DEFAULT_ROLES),
-            "scopes": list(apppasswords.SCOPES)}
+            "scopes": list(PERSON_SCOPES)}

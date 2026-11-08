@@ -148,7 +148,7 @@ The routes:
 
 | Route | What |
 |-------|------|
-| `GET /api/suite-admin` | `{apps, users, roles, defaultRoles, me}`: every app the database knows (the registered ones, plus keys only seen in roles, settings or app passwords: `registered: false`) with `defaultRole`, `requireLogin` and counts; every account with `roles` (explicit, per app), `effective` (the role it holds in each app), `appPasswords`, `sessions`, `lastSeen` |
+| `GET /api/suite-admin` | `{apps, users, roles, defaultRoles, me}`: every app the database knows (the registered ones, plus keys only seen in roles, settings or app passwords: `registered: false`) with `defaultRole`, `requireLogin` and counts; every account people use (never a service account) with `roles` (explicit, per app), `effective` (the role it holds in each app), `appPasswords`, `sessions`, `lastSeen` |
 | `POST /api/suite-admin/users` | a new account: `{name, password ('': one-click viewer), email, displayName, suiteAdmin, listed, roles: {app: role}}` |
 | `PATCH /api/suite-admin/users/{id}` | any of those; `roles: {app: null}` removes the row, so the app's default role applies |
 | `DELETE /api/suite-admin/users/{id}` | the account, everywhere |
@@ -385,7 +385,8 @@ its public one, each tried when the one before does not answer;
 `links.url()` is the public one, for links people click), and the reader signs in as its own **service account**
 (`users.service_account(app)`: `<app>-app`, on no sign-in screen, no password anyone knows, viewer in the other app)
 with an app password of the other app with scope `read`. Both are made on first use; the password is kept in
-`ios_credentials` (hidden from the keys list), and made again when the other app answers 401 (revoked on the panel).
+`ios_credentials` (hidden from the keys list), and made again when the other app answers 401. The suite looks after
+them itself: the Security panel and `/api/suite-admin` neither list nor change service accounts or their app passwords.
 
 ```python
 from iosuite_shared import links
