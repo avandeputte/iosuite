@@ -1,10 +1,10 @@
 # Settings
 
-**Settings** is one page in tabs, in the order every ioThing app uses: Account, Display and Apps and devices for every signed-in account; Editing, Library, AI and Server for admins; Security and Global settings for suite admins. Each tab has its own address (`#/settings/display`, `#/settings/security/people`), and every setting saves as soon as you change it. The checks, suggestions and clean-up pages are on [Tools](#tools).
+**Settings** is one page in tabs, in the order every ioThing app uses: Account and Display for every signed-in account; Editing, Library, AI and Server for admins; Security and Global settings for suite admins. Each tab has its own address (`#/settings/display`, `#/settings/security/people`), and every setting saves as soon as you change it. The checks, suggestions and clean-up pages are on [Tools](#tools).
 
 ## Account
 
-Your display name, email and password (the same panel in every io app), and the person from People your account is linked to.
+Your display name, email and password (the same panel in every io app), the person from People your account is linked to, and your app passwords: one per app or device (an MCP client, a script), revoked one at a time.
 
 ## Display
 
@@ -18,10 +18,6 @@ Your display name, email and password (the same panel in every io app), and the 
 | Map provider | OpenStreetMap, or Google Maps with your key |
 
 Display choices are saved with your account when signed in, else in the browser.
-
-## Apps and devices
-
-Your app passwords: one per app or device (an MCP client, a script), revoked one at a time.
 
 ## Editing
 

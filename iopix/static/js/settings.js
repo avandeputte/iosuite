@@ -180,7 +180,7 @@ const OPEN_COMPARE = new Set();  // model groups whose "Compare the models" fold
 // Settings is split into tabs, in the order every io app uses: each stab() marks where one begins; what comes before
 // the first is always shown
 const STABS = {
-  settings: [['account', 'Account'], ['display', 'Display'], ['devices', 'Apps and devices'], ['editing', 'Editing'], ['library', 'Library'], ['ai', 'AI'],
+  settings: [['account', 'Account'], ['display', 'Display'], ['editing', 'Editing'], ['library', 'Library'], ['ai', 'AI'],
     ['server', 'Server'], ['security', 'Security'], ['global', 'Global settings']],
 };
 const stab = (k) => h('span', { class: 'stab-mark', 'data-tab': k, hidden: true });
@@ -242,7 +242,7 @@ function settingsContext(m, view) {
   const save = async (body, redraw) => { try { await post('/api/settings', body); toast('Saved'); } catch (e) { toastError(e); } if (redraw) again(); };
   return { m, view, again, when, maint, row, btn, switchField, save };
 }
-/** Settings › Account and Apps and devices: iosuite-shared's panels, the same in every io app, plus who you are in People. */
+/** Settings › Account: iosuite-shared's panels (the account, then its app passwords), the same in every io app, plus who you are in People. */
 const accountUi = () => import(new URL('api/auth/ui.js', document.baseURI).href);
 function panel(fill) {
   const el = h('div');
@@ -258,10 +258,9 @@ function accountTab() {
       h('div', { class: 'toolbar' }, avatarOf(S.USER, true), h('span', null, who ? who.name : 'Not linked to a person yet.'),
         S.IS_ADMIN ? h('button', { class: 'pillbtn', onclick: () => personPicker(async (t) => { try { S.USER = await post('/api/auth/person', { person: t.id }); renderUserMenu(); toast('Saved'); settingsPage('settings'); } catch (e) { toastError(e); } }) }, who ? 'Change' : 'Link to a person') : null,
         who ? h('a', { class: 'lnk', href: hashFor('photos', photosWith({ tag: S.USER.person })) }, 'Photos of me') : null)));
+    const pw = h('div'); el.append(pw);
+    await ui.mountAppPasswords(pw, { toast });
   })];
-}
-function devicesTab() {
-  return [stab('devices'), panel(async (el) => { await (await accountUi()).mountAppPasswords(el, { toast }); })];
 }
 /** Settings › Display: the name, theme, units, badges, the info panel sections and the map provider. */
 function displayTab(c) {
@@ -475,7 +474,6 @@ async function settingsPage(view) {
     !S.USERS_EXIST ? row('No users yet', `${S.APP_NAME} is open to anyone who can reach it. Create the admin account to switch on sign-in.`, btn('Create the admin account', setupDialog, true)) : null,
     S.USER ? accountTab() : null,
     displayTab(c),
-    S.USER ? devicesTab() : null,
     S.IS_ADMIN && S.EDITING ? editingTab(c) : null,
     S.IS_ADMIN ? libraryTab(c) : null,
     S.IS_ADMIN ? [stab('ai'), aiSection(view)] : null,
