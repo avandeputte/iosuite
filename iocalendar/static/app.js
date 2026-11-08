@@ -362,7 +362,7 @@ function drawNav() {
     sec('Mine', h('button', { class: 'iconbtn', title: 'New private calendar', onclick: () => newCalendar(false) }, icon('add', 's'))),
     mine.map(calRow),
     h('div', { class: 'navgap' }), sec('Manage'),
-    link('import', '#/import', 'upload', 'Import and export', null, r.view === 'import', '--c-green'),
+    writable().some((c) => !isAuto(c)) ? link('import', '#/import', 'upload', 'Import', null, r.view === 'import', '--c-green') : null,
     h('div', { class: 'navfoot' }, link('settings', '#/settings', 'settings', 'Settings', null, r.view === 'settings')),
   ].flat(3).filter(Boolean));
   applySidebar();
@@ -394,7 +394,7 @@ function moreSheet() {
     S.cals.map((c) => tile('#', S.hidden.has(c.id) ? 'close' : 'check', c.name, c.color, !S.hidden.has(c.id), (e) => { e.preventDefault(); e.stopPropagation(); toggleCal(c.id); document.querySelector('.dialog-back')?.remove(); moreSheet(); })),
     S.members.length > 1 ? S.members.map((m) => tile('#', 'person', S.who.has(m.id) ? `Only ${m.displayName}` : m.displayName, memberColor(m), S.who.has(m.id),
       (e) => { e.preventDefault(); e.stopPropagation(); toggleWho(m.id); document.querySelector('.dialog-back')?.remove(); moreSheet(); })) : null,
-    tile('#/import', 'upload', 'Import and export', 'var(--c-green)', r.view === 'import'),
+    writable().some((c) => !isAuto(c)) ? tile('#/import', 'upload', 'Import', 'var(--c-green)', r.view === 'import') : null,
     tile('#/settings', 'settings', 'Settings', 'var(--c-slate)', r.view === 'settings'));
   const p = dialog('More', grid, [{ label: 'Close', value: null }]);
   grid.addEventListener('click', (e) => { const a = e.target.closest('a'); if (a && a.getAttribute('href') !== '#') document.querySelector('.dialog-back')?.remove(); });
@@ -1093,30 +1093,24 @@ async function showImport(page) {
       tot.errors.length ? h('details', null, h('summary', { class: 'lnk' }, `${tot.errors.length} could not be read`), h('ul', null, tot.errors.slice(0, 50).map((x) => h('li', null, x)))) : null);
     await loadCals();
   };
-  page.append(h('div', { class: 'pagehead' }, h('h1', null, 'Import and export')),
+  page.append(h('div', { class: 'pagehead' }, h('h1', null, 'Import')),
     w.length ? h('div', { class: 'box' }, h('h2', null, icon('upload'), 'Import'),
       h('p', null, 'An iCalendar file (.ics) from Google Calendar (Settings › Import & export › Export, then unzip), Apple Calendar (File › Export), Outlook or any other calendar. Repeating events, exceptions, reminders and time zones come along.'),
       h('div', { class: 'pform' }, h('label', { class: 'field' }, h('span', null, 'Into the calendar'), sel), file,
         h('label', { class: 'check' }, replace, ' Update events that are already here (same UID)'),
-        h('p', null, h('button', { class: 'pillbtn primary', onclick: run }, icon('upload', 's'), 'Import'))), out) : null,
-    h('div', { class: 'box' }, h('h2', null, icon('download'), 'Export'),
-      h('p', null, 'Each calendar as one .ics file, which any calendar app can import.'),
-      h('table', { class: 't' }, S.cals.map((c) => h('tr', null, h('td', null, h('span', { class: 'chip-ev', style: { '--c': c.color, display: 'inline-flex' } }, h('span', { class: 'dot' }), h('span', { class: 'nm' }, c.name))),
-        h('td', { class: 'muted' }, c.kind === 'birthdays' ? 'from ioContacts' : `${c.count || 0} events`),
-        h('td', { style: { textAlign: 'right' } }, h('a', { class: 'pillbtn noic', href: `/api/calendars/${c.id}/export` }, 'Download'))))),
-      h('p', { class: 'muted small' }, 'To keep another app in step instead of copying once, connect it: ', h('a', { class: 'lnk', href: '#/settings/devices' }, 'Settings › Apps and devices'), '.')));
+        h('p', null, h('button', { class: 'pillbtn primary', onclick: run }, icon('upload', 's'), 'Import'))), out) : null);
 }
 
 // ------------------------------------------------------------------ settings
 async function showSettings(page, r) {
   const adm = S.user.role === 'admin';
   const tabs = [['account', 'Account'], ['display', 'Display'], ['devices', 'Apps and devices'], ['calendars', 'Calendars'], ['holidays', 'Holidays and birthdays'],
-    ...(adm ? [['family', 'Family'], ['storage', 'Storage and backups'], ['server', 'Server']] : []),
+    ...(adm ? [['family', 'Family'], ['server', 'Server']] : []),
     ...(S.user.suiteAdmin ? [['security', SUITE_TABS.security], ['global', SUITE_TABS.global]] : [])];
   page.append(h('div', { class: 'pagehead' }, h('h1', null, 'Settings')),
     h('div', { class: 'tabs' }, tabs.map(([k, l]) => h('button', { class: r.tab === k ? 'on' : '', onclick: () => { location.hash = `#/settings/${k}`; } }, l))));
   const body = h('div'); page.append(body);
-  await ({ account: setAccount, display: setDisplay, devices: setDevices, calendars: setCalendars, holidays: setHolidays, family: setFamily, storage: setStorage, server: setServer,
+  await ({ account: setAccount, display: setDisplay, devices: setDevices, calendars: setCalendars, holidays: setHolidays, family: setFamily, server: setServer,
     security: setSuite, global: setSuite }[r.tab] || setAccount)(body, r);
 }
 const fld = (l, e) => h('label', { class: 'field' }, h('span', null, l), e);
@@ -1260,7 +1254,7 @@ async function setSuite(el, r) {
   await ui.mount(el, { tab: r.tab, sub: r.sub, toast, onSub: (x) => history.replaceState(null, '', `#/settings/${r.tab}/${x}`) });
 }
 
-/** Settings › Holidays and birthdays and birthdays, for admins: the Birthdays calendar ioContacts fills (the suite connects the two by
+/** Settings › Holidays and birthdays, for admins: the Birthdays calendar ioContacts fills (the suite connects the two by
     itself, so there is nothing else to set). */
 async function birthdaysBox(el) {
   const s = await api('/api/iocontacts/settings');
@@ -1325,25 +1319,23 @@ async function setHolidays(el) {
   await birthdaysBox(el);
 }
 
-/** Settings › Server (admins): the MCP switch, the version and its updates, this server, the server log and Restart:
-    iosuite-shared's panel, the same in every io app. */
+/** Settings › Server (admins): the MCP switch, the version and its updates, this server, the server log and Restart
+    (iosuite-shared's panel, the same in every io app), then Export: each calendar as an .ics file. */
 async function setServer(el) {
   let ui;
-  try { ui = await serverUi(); } catch (e) { el.append(h('p', { class: 'warn' }, `The Server panel did not load: ${e.message}`)); return; }
-  await ui.mount(el, { toast });
+  const panel = h('div');
+  el.append(panel);
+  try { ui = await serverUi(); } catch (e) { panel.append(h('p', { class: 'warn' }, `The Server panel did not load: ${e.message}`)); return; }
+  await ui.mount(panel, { toast });
+  await loadCals();
+  el.append(h('div', { class: 'box' }, h('h2', null, icon('download'), 'Export'),
+      h('p', null, 'Each calendar as one .ics file, which any calendar app can import.'),
+      h('table', { class: 't' }, S.cals.map((c) => h('tr', null, h('td', null, h('span', { class: 'chip-ev', style: { '--c': c.color, display: 'inline-flex' } }, h('span', { class: 'dot' }), h('span', { class: 'nm' }, c.name))),
+        h('td', { class: 'muted' }, c.kind === 'birthdays' ? 'from ioContacts' : `${c.count || 0} events`),
+        h('td', { style: { textAlign: 'right' } }, h('a', { class: 'pillbtn noic', href: `/api/calendars/${c.id}/export` }, 'Download'))))),
+      h('p', { class: 'muted small' }, 'To keep another app in step instead of copying once, connect it: ', h('a', { class: 'lnk', href: '#/settings/devices' }, 'Settings › Apps and devices'), '.')));
 }
 const serverUi = () => import(new URL('api/server/ui.js', document.baseURI).href);
-
-/** Settings › Storage and backups (admins): what is kept where, and how to back it up. */
-async function setStorage(el) {
-  await loadCals();
-  const events = S.cals.reduce((n, c) => n + (c.count || 0), 0);
-  el.append(h('div', { class: 'box' }, h('h2', null, icon('server'), 'Database'),
-    kv('Calendars', h('span', null, `${S.cals.length}, ${events} events`)),
-    h('p', { class: 'muted small' }, 'Everything is in the MariaDB database (Settings › Server shows which): back it up with mysqldump (or the container’s backup) and nothing else is needed. The Shared ioSuite database (accounts, sessions) is backed up with the suite.')),
-  h('div', { class: 'box' }, h('h2', null, icon('download'), 'Export'),
-    h('p', null, 'Each calendar can be downloaded as an .ics file that any calendar app reads, and imported again later: ', h('a', { class: 'lnk', href: '#/import' }, 'Import and export'), '.')));
-}
 
 /** Admins: a note when the daily check found a newer version, with Update now. Hidden until the next version when dismissed. */
 function updateBanner() {
