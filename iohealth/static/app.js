@@ -193,7 +193,7 @@ function setNavOn(page) {
 }
 
 const settings = (() => {
-  const defaults = { units: 'metric', maxHr: '', theme: 'auto', glucoseUnit: '', glucoseLow: '70', glucoseHigh: '180', hiddenSections: [], hiddenTypes: [] };
+  const defaults = { units: 'auto', maxHr: '', theme: 'auto', glucoseUnit: '', glucoseLow: '70', glucoseHigh: '180', hiddenSections: [], hiddenTypes: [] };
   try { return Object.assign(defaults, JSON.parse(localStorage.getItem('iohealth.settings') || '{}')); } catch { return defaults; }
 })();
 // Settings live in the database (hlt_user_settings), shared by every browser; the copy in localStorage only makes the
@@ -308,7 +308,12 @@ function isoDate(d) { // local yyyy-mm-dd
 function daysAgo(n) { const d = new Date(); d.setDate(d.getDate() - n); return isoDate(d); }
 const today = () => isoDate(new Date());
 
-const imperial = () => settings.units === 'imperial';
+// 'auto' (the default) follows the browser's region: miles where roads are signed in miles (the US, the UK, Liberia, Myanmar)
+const MILE_REGIONS = ['US', 'PR', 'GU', 'VI', 'AS', 'MP', 'UM', 'GB', 'LR', 'MM'];
+function regionUsesMiles(lang) {
+  try { const l = new Intl.Locale(lang || 'en-US'); return MILE_REGIONS.includes(l.region || l.maximize().region); } catch { return false; }
+}
+const imperial = () => settings.units === 'imperial' || (settings.units === 'auto' && regionUsesMiles(navigator.language));
 function fmtDist(m, dec) {
   if (m == null) return '—';
   if (imperial()) return fmtNum(m / 1609.344, dec ?? 2) + ' mi';
@@ -2468,46 +2473,40 @@ async function setDisplay() {
       } }), typeLabel(t.type), h('span', { class: 'muted' }, fmtCompact(t.count)))));
   typeFilter.addEventListener('input', drawTypes);
   drawTypes();
+  const ui = await accountUi();
+  const saveNow = async () => { saveSettings(); };
   return [
-    card('Display',
-      h('div', { class: 'toolbar' }, h('span', { style: { width: '160px' } }, 'Units'),
-        seg([['metric', 'Kilometres'], ['imperial', 'Miles']], settings.units, v => { settings.units = v; saveSettings(); })),
-      h('div', { class: 'toolbar' }, h('span', { style: { width: '160px' } }, 'Theme'),
-        seg([['auto', 'System'], ['light', 'Light'], ['dark', 'Dark']], settings.theme, v => { settings.theme = v; saveSettings(); applyTheme(); })),
-      h('p', { class: 'small muted' }, 'Settings are saved with your account, so every browser sees the same ones.')),
-    card('Sections', h('p', { class: 'small muted', style: { marginTop: 0 } }, 'Switch off what you don\'t use; it disappears from the menu, the dashboard and the metric lists.'),
+    ui.box('theme', 'Display',
+      ui.themeRow(settings.theme === 'auto' ? 'system' : settings.theme, v => { settings.theme = v === 'system' ? 'auto' : v; applyTheme(); }, saveNow),
+      ui.unitsRow(settings.units || 'auto', v => { settings.units = v; apiCache.clear(); }, saveNow)),
+    card('Sections', h('p', { class: 'small muted', style: { marginTop: 0 } }, 'Untick what you don\'t use to hide it everywhere.'),
       ...SECTIONS.map(([key, label, what]) => h('label', { class: 'row', style: { gap: '8px', margin: '6px 0' } },
         h('input', { type: 'checkbox', checked: sectionOn(key), onchange: e => {
           const set = new Set(settings.hiddenSections || []);
           e.target.checked ? set.delete(key) : set.add(key);
           settings.hiddenSections = [...set]; saveSettings(); typeListPromise = null; applySections();
         } }), h('b', {}, label), h('span', { class: 'muted small' }, what)))),
-    card('Metrics', h('div', { class: 'row spread' }, h('span', { class: 'small muted' }, 'Untick a metric to hide it everywhere (dashboard cards, Metrics, overlays). The number is how many samples you have.'),
+    card('Metrics', h('div', { class: 'row spread' }, h('span', { class: 'small muted' }, 'Untick a metric to hide it everywhere. The number is how many samples you have.'),
       h('span', { class: 'row' }, typeFilter,
         h('button', { onclick: () => { settings.hiddenTypes = []; saveSettings(); typeListPromise = null; drawTypes(); } }, 'Show all'))), typeRows)];
 }
 
 async function setHealth() {
   const profile = await api('profile').catch(() => ({}));
-  const maxIn = h('input', { type: 'number', min: 120, max: 230, placeholder: String(profile.maxHr || ''), value: settings.maxHr, style: { width: '110px' } });
-  const sexNames = { 1: 'female', 2: 'male', 3: 'other' };
-  const lowIn = h('input', { type: 'number', min: 50, max: 120, value: settings.glucoseLow || 70, style: { width: '90px' } });
-  const highIn = h('input', { type: 'number', min: 100, max: 300, value: settings.glucoseHigh || 180, style: { width: '90px' } });
+  const maxIn = h('input', { type: 'number', min: 120, max: 230, placeholder: String(profile.maxHr || ''), value: settings.maxHr, style: { width: '110px' }, onchange: () => { settings.maxHr = maxIn.value; saveSettings(); apiCache.clear(); } });
+  const saveRange = () => { settings.glucoseLow = lowIn.value || '70'; settings.glucoseHigh = highIn.value || '180'; saveSettings(); apiCache.clear(); };
+  const lowIn = h('input', { type: 'number', min: 50, max: 120, value: settings.glucoseLow || 70, style: { width: '90px' }, onchange: saveRange });
+  const highIn = h('input', { type: 'number', min: 100, max: 300, value: settings.glucoseHigh || 180, style: { width: '90px' }, onchange: saveRange });
   return [
     card('Blood glucose',
       h('div', { class: 'toolbar' }, h('span', { style: { width: '160px' } }, 'Unit'),
         seg([['mg/dL', 'mg/dL'], ['mmol/L', 'mmol/L']], settings.glucoseUnit || 'mg/dL', v => { settings.glucoseUnit = v; saveSettings(); })),
-      h('div', { class: 'toolbar' }, h('span', { style: { width: '160px' } }, 'Target range (mg/dL)'), lowIn, '–', highIn,
-        h('button', { onclick: () => { settings.glucoseLow = lowIn.value || '70'; settings.glucoseHigh = highIn.value || '180'; saveSettings(); apiCache.clear(); } }, 'Save')),
-      h('p', { class: 'small muted' }, 'The usual CGM target is 70–180 mg/dL (3.9–10.0 mmol/L); some use 70–140 (3.9–7.8) for tighter goals. Very low (< 54) and very high (> 250) are fixed.')),
+      h('div', { class: 'toolbar' }, h('span', { style: { width: '160px' } }, 'Target range (mg/dL)'), lowIn, '–', highIn),
+      h('p', { class: 'small muted' }, 'Usually 70–180 mg/dL (3.9–10.0 mmol/L).')),
     card('Heart rate',
       h('div', { class: 'toolbar' }, h('span', { style: { width: '160px' } }, 'Maximum heart rate'), maxIn,
-        h('button', { onclick: () => { settings.maxHr = maxIn.value; saveSettings(); apiCache.clear(); maxIn.blur(); } }, 'Save'),
         h('span', { class: 'muted small' }, profile.maxHr ? `Without a value: ${profile.maxHr} bpm (${profile.maxHrFrom === 'age' ? '220 − age' : 'highest recorded'})` : '')),
-      h('p', { class: 'small muted' }, 'Used for heart rate zones and training load.',
-        profile.restingHr ? ` Resting heart rate, 30-day average: ${profile.restingHr} bpm.` : '')),
-    card('Profile', h('div', { class: 'stats' }, stat('Age', profile.age ?? '—'), stat('Sex', sexNames[profile.characteristics?.biologicalSex] || '—')),
-      h('p', { class: 'small muted' }, 'From the characteristics the iPhone app sends (date of birth, sex). Health data is only read, never changed.'))];
+      h('p', { class: 'small muted' }, 'For heart rate zones and training load.'))];
 }
 
 async function setGoals() {
@@ -2535,9 +2534,9 @@ async function setGoals() {
     h('input', { type: 'number', min: 0, step: 'any', value: settings.alerts?.[k] ?? '', placeholder: String(ALERT_DEFAULTS[k]), style: { width: '90px' },
       onchange: e => { settings.alerts = { ...(settings.alerts || {}), [k]: e.target.value }; saveSettings(); } }), h('span', { class: 'muted small' }, unit));
   return [
-    card('Goals', h('p', { class: 'small muted', style: { marginTop: 0 } }, 'Goals show on the dashboard cards (and as a dashed line in Metrics), with streaks and whether the trend is heading there. Daily totals such as steps count per day; levels such as weight use the latest reading.'),
+    card('Goals', h('p', { class: 'small muted', style: { marginTop: 0 } }, 'Shown on the dashboard cards and in Metrics, with streaks.'),
       goalsEl, h('button', { onclick: addGoal, style: { marginTop: '6px' } }, '+ Add a goal')),
-    card('Alerts on the dashboard', h('p', { class: 'small muted', style: { marginTop: 0 } }, 'Leave a box empty for the default shown in grey; 0 turns that alert off.'),
+    card('Alerts on the dashboard', h('p', { class: 'small muted', style: { marginTop: 0 } }, 'Empty: the default in grey. 0 turns an alert off.'),
       alertIn('tir', 'Glucose time in range under (last 7 days)', '%'), alertIn('lows', 'Glucose lows in the last 7 days, at least', 'lows'),
       alertIn('rhr', 'Resting heart rate above your usual by', 'bpm (7 days against the 4 weeks before)'), alertIn('hrv', 'Heart rate variability below your usual by', '%'),
       alertIn('sync', 'No sync from the iPhone for', 'hours'))];
@@ -2677,16 +2676,6 @@ async function firstAdmin() {
     } }], { required: true, head: signinBrand() });
 }
 
-async function changePassword() {
-  const cur = h('input', { type: 'password', placeholder: 'Current password', autocomplete: 'current-password' });
-  const pw = h('input', { type: 'password', placeholder: 'New password (8 characters or more)', autocomplete: 'new-password' });
-  const msg = h('p', { class: 'error small' });
-  await dialog('Change your password', h('div', {}, cur, pw, msg), [{ label: 'Cancel' }, { label: 'Change', primary: true, action: async () => {
-    try { await authApi('api/auth/password', { method: 'POST', body: { current: cur.value, password: pw.value } }); toast('Password changed; your other sessions are signed out'); }
-    catch (e) { msg.textContent = e.message; return false; }
-  } }]);
-}
-
 async function signOut() {
   try {
     const r = await authApi('api/auth/logout', { method: 'POST' });
@@ -2722,8 +2711,6 @@ function renderUserMenu() {
   }
   const btn = h('button', { class: 'avatar-btn', title: me.user.name, 'aria-label': 'Account', onclick: () => menu(btn, [
     { head: `${me.user.name} · ${me.user.role}${me.signedInBy === 'cloudflare' ? ' · via Cloudflare' : ''}` },
-    { label: 'Account', action: () => { location.hash = '#/settings/account'; } },
-    { label: `Appearance: ${{ auto: 'system', light: 'light', dark: 'dark' }[settings.theme] || 'system'}`, action: () => { settings.theme = { auto: 'light', light: 'dark', dark: 'auto' }[settings.theme] || 'light'; saveSettings(); applyTheme(); toast(`Appearance: ${settings.theme === 'auto' ? 'system' : settings.theme}`); } },
     { label: 'Settings', action: () => { location.hash = '#/settings'; } },
     '-',
     { label: 'Sign out', action: signOut },
@@ -2733,18 +2720,12 @@ function renderUserMenu() {
 
 // ---- Settings › Account
 
-/** Settings › Account: who is signed in, the password and the sessions. */
+const accountUi = () => import(new URL('api/auth/ui.js', document.baseURI).href);
+/** Settings › Account: display name, email and password, iosuite-shared's panel (the same in every io app). */
 async function setAccount() {
-  const u = me.user;
-  return [card('You',
-    h('div', { class: 'toolbar' }, avatar(u, true), h('div', {}, h('b', {}, u.displayName || u.name), h('div', { class: 'small muted' }, `${u.name} · ${u.role}${u.suiteAdmin ? ' · suite admin' : ''}${u.email ? ' · ' + u.email : ''}`))),
-    h('p', { class: 'small muted' }, 'One account for every ioThing app on this domain: the name, password and sessions are the same in ioPix, ioNotes, ioContacts and ioCalendar.')),
-  card('Password and sessions',
-    h('div', { class: 'toolbar' },
-      u.passwordless || me.viaProxy ? null : h('button', { onclick: changePassword }, 'Change password'),
-      h('button', { onclick: signOut }, 'Sign out')),
-    u.passwordless ? h('p', { class: 'small muted' }, 'This account signs in with one click and has no password; a suite admin can give it one under Settings › Security › People.')
-      : me.viaProxy ? h('p', { class: 'small muted' }, 'Signed in through the proxy in front of ioHealth; the password is changed there.') : null)];
+  const el = h('div');
+  await (await accountUi()).mountAccount(el, { toast, onSaved: u => { Object.assign(me.user, u); renderUserMenu(); } });
+  return [el];
 }
 
 // ---- Settings › Security and Global settings (suite admins): the people and their role in every app
