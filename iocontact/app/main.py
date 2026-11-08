@@ -101,7 +101,7 @@ app.include_router(auth.server_router(updater, log_file=config.LOG_FILE, info=_s
 app.include_router(auth.router())   # /api/auth/*: sign-in, accounts, me, password, sessions, app passwords, suite (the same in every app)
 app.include_router(auth.users_router())  # /api/users: accounts and their role here (admins)
 app.include_router(api.router)      # the contacts; also an account's own fields (its "me" contact, the face on its tile)
-app.include_router(auth.admin_router())  # /api/suite-admin (+ ui.js, the panel of Settings › Accounts and access and Suite-wide settings): the whole suite (suite admins)
+app.include_router(auth.admin_router())  # /api/suite-admin (+ ui.js, the panel of Settings › Security and Global settings): the whole suite (suite admins)
 app.include_router(carddav.router)
 shared_mcp.mount(app, mcp.server)  # MCP over streamable HTTP at /mcp, ahead of everything else
 

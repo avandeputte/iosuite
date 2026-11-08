@@ -1,7 +1,7 @@
 /* ioContacts web app: one module, no build step. Pages: the contact list with a detail pane, the edit form, upcoming
    birthdays, the family tree, ioPix people, import/export, clean up (duplicates, data quality, suggestions, merge
    history) and settings (account, display, apps and devices, address books, and for admins connected apps, storage and
-   backups, server, and for suite admins accounts and access and suite-wide settings), laid out as in the other ioThing
+   backups, server, and for suite admins security and global settings), laid out as in the other ioThing
    apps. */
 
 // ------------------------------------------------------------------ helpers
@@ -1420,12 +1420,12 @@ async function showIopix(page) {
 async function showSettings(page, r) {
   const tabs = [['account', 'Account'], ['display', 'Display'], ['devices', 'Apps and devices'], ['books', 'Address books'],
     ...(S.user.role === 'admin' ? [['connected', 'Connected apps'], ['storage', 'Storage and backups'], ['server', 'Server']] : []),
-    ...(S.user.suiteAdmin ? [['access', SUITE_TABS.access], ['global', SUITE_TABS.global]] : [])];
+    ...(S.user.suiteAdmin ? [['security', SUITE_TABS.security], ['global', SUITE_TABS.global]] : [])];
   page.append(h('div', { class: 'pagehead' }, h('h1', null, 'Settings')),
     h('div', { class: 'tabs' }, tabs.map(([k, l]) => h('button', { class: r.tab === k ? 'on' : '', onclick: () => { location.hash = `#/settings/${k}`; } }, l))));
   const body = h('div'); page.append(body);
   await ({ account: setAccount, display: setDisplay, devices: setDevices, books: setBooks, connected: setIopix, storage: setStorage, server: setServer,
-    access: setSuite, global: setSuite }[r.tab] || setAccount)(body, r);
+    security: setSuite, global: setSuite }[r.tab] || setAccount)(body, r);
 }
 const fld = (l, e) => h('label', { class: 'field' }, h('span', null, l), e);
 const kv = (k, v) => h('div', { class: 'kv' }, h('div', { class: 'k' }, k), h('div', { class: 'v', style: { flex: 1 } }, typeof v === 'string' ? copyRow(v) : v));
@@ -1533,10 +1533,10 @@ async function setBooks(el) {
       })));
 }
 
-/** Settings › Accounts and access and Suite-wide settings (suite admins): the people and their role in every app (here
-    too), app passwords; the apps, sign-in at the proxy, keys and tokens. The same panel in every io app, served by
+/** Settings › Security and Global settings (suite admins): the people and their role in every app (here
+    too), app passwords, sign-in at the proxy; the apps, keys and tokens. The same panel in every io app, served by
     iosuite-shared. */
-const SUITE_TABS = { access: 'Accounts and access', global: 'Suite-wide settings' };
+const SUITE_TABS = { security: 'Security', global: 'Global settings' };
 async function setSuite(el, r) {
   let ui;
   try { ui = await import(new URL('api/suite-admin/ui.js', document.baseURI).href); } catch (e) { el.append(h('p', { class: 'warn' }, `The panel did not load: ${e.message}`)); return; }
@@ -1549,7 +1549,7 @@ async function setIopix(el) {
   el.append(h('div', { class: 'box' }, h('h2', null, icon('image'), 'ioPix'),
     h('p', { class: 'muted' }, 'Link contacts to people named in ioPix: their face becomes the contact’s photo (the only one: contacts keep no photos of their own, and phones, exports and the LDAP directory get the ioPix face too) and the contact links to their photos.'),
     h('p', null, s.enabled
-      ? ['Connected by itself: ioContacts finds ', h('a', { href: s.url, target: '_blank', rel: 'noopener' }, 'ioPix'), ' in the suite and reads from it from the server with its own read-only app password (Settings › Accounts and access on the start page lists it). Nothing to set up.']
+      ? ['Connected by itself: ioContacts finds ', h('a', { href: s.url, target: '_blank', rel: 'noopener' }, 'ioPix'), ' in the suite and reads from it from the server with its own read-only app password (Settings › Security on the start page lists it). Nothing to set up.']
       : 'ioPix is not part of this suite yet. Once it runs on the same Shared ioSuite database, ioContacts connects to it by itself.'),
     s.enabled ? h('p', null, h('button', { class: 'pillbtn noic', onclick: async () => {
       out.textContent = 'Testing…';

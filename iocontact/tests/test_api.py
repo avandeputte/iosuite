@@ -388,7 +388,7 @@ def test_iopix_is_found_in_the_suite(client, monkeypatch):
 
 
 def test_suite_admin_panel(client):
-    """Settings › Accounts and access: iosuite-shared's panel and API answer a suite admin, not an app admin."""
+    """Settings › Security: iosuite-shared's panel and API answer a suite admin, not an app admin."""
     r = client.get("/api/suite-admin/ui.js")  # the first account (alex) is a suite admin
     assert r.status_code == 200 and "export async function mount" in r.text
     assert any(u["name"] == "alex" for u in client.get("/api/suite-admin").json()["users"])
