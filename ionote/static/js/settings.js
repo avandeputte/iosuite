@@ -1,17 +1,21 @@
-/** Settings, one page as in every ioThing app (Account, Display and Apps and devices for accounts; Server for admins;
+/** Settings, one page as in every ioThing app (Account and Display for accounts; Server for admins;
  *  Security and Global settings for suite admins), the Import and export page and the change log. */
 import { $, h, api, state, icon, toast, fail, isAdmin, canWrite, fmtDate } from './core.js';
 
-/** Settings › Account and Display, and the app passwords: iosuite-shared's panels, the same in every io app. */
+/** Settings › Account (with the app passwords) and Display: iosuite-shared's panels, the same in every io app. */
 const accountUi = () => import(new URL('api/auth/ui.js', document.baseURI).href);
 export function applyTheme(t) {
   try { localStorage.setItem('ionotes.theme', t); } catch (e) { /* private mode */ }
   if (t === 'system') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t;
 }
 const currentTheme = () => { try { return localStorage.getItem('ionotes.theme') || 'system'; } catch (e) { return 'system'; } };
-async function accountPanel() { const el = h('div'); await (await accountUi()).mountAccount(el, { toast }); return el; }
+async function accountPanel() {
+  const ui = await accountUi(), el = h('div'), pw = h('div');
+  await ui.mountAccount(el, { toast });
+  await ui.mountAppPasswords(pw, { toast });
+  return [el, pw];
+}
 async function displayPanel() { const ui = await accountUi(); return ui.box('theme', 'Appearance', ui.themeRow(currentTheme(), applyTheme)); }
-async function devicesPanel() { const el = h('div'); await (await accountUi()).mountAppPasswords(el, { toast }); return el; }
 
 /** Settings › Security and Global settings (suite admins): the people and their role in every app (here
  *  too), app passwords, sign-in at the proxy; the apps, keys and tokens. The same panel in every io app, served by
@@ -36,7 +40,7 @@ async function serverPanel() {
 }
 
 /** A page as iopix lays one out: the title with its icon tile, the tabs under it (the tab is in the address:
- *  #/settings/devices), then the tab's boxes. */
+ *  #/settings/display), then the tab's boxes. */
 let again = () => {};
 function pageTitle(text, ic, hue, sub = '') { return h('h1.ptitle', h('span.pic', { style: `--hue:${hue}` }, icon(ic)), text, sub ? h('span.muted', sub) : null); }
 async function tabbedPage(base, title, ic, hue, tabs, tab) {
@@ -51,13 +55,12 @@ async function tabbedPage(base, title, ic, hue, tabs, tab) {
 }
 const render = () => again();
 
-/** Settings: Account, Display and Apps and devices for accounts; Server for admins; Security and Global settings for
+/** Settings: Account and Display for accounts; Server for admins; Security and Global settings for
  *  suite admins. Before any account exists, only Display. */
 export function renderSettings(tab, sub) {
   const tabs = [];
-  if (state.me.user) tabs.push(['account', 'Account', async () => [await accountPanel()]]);
+  if (state.me.user) tabs.push(['account', 'Account', accountPanel]);
   tabs.push(['display', 'Display', async () => [await displayPanel()]]);
-  if (state.me.user) tabs.push(['devices', 'Apps and devices', async () => [await devicesPanel()]]);
   if (isAdmin()) tabs.push(['server', 'Server', async () => [await serverPanel()]]);
   if (state.me.isSuiteAdmin) tabs.push(['security', 'Security', async () => [await suitePanel('security', sub)]], ['global', 'Global settings', async () => [await suitePanel('global', sub)]]);
   return tabbedPage('settings', 'Settings', 'gear', 'var(--c-gray)', tabs, tab);
