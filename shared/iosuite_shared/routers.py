@@ -278,7 +278,7 @@ def admin_router(self) -> APIRouter:
 
     @r.get("/ui.js", dependencies=[access.suite_admin])
     def api_ui():
-        """The panel itself (static/suite-admin.js), one ES module every app mounts in its Settings › Accounts and access and Suite-wide settings tabs:
+        """The panel itself (static/suite-admin.js), one ES module every app mounts in its Settings › Security and Global settings tabs:
         ui = await import(new URL('api/suite-admin/ui.js', document.baseURI).href); ui.mount(el, {sub, toast})."""
         return FileResponse(Path(__file__).with_name("static") / "suite-admin.js", media_type="text/javascript",
                             headers={"Cache-Control": "no-cache"})

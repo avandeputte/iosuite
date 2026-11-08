@@ -69,7 +69,7 @@ settings and list of apps. Its default name and account are `iosuite`; `IOSUITE_
 
 Proxy sign-in (`AUTH_PROXY`, `AUTH_PROXY_HEADER`, `AUTH_PROXY_TRUSTED`, `AUTH_PROXY_CREATE`, `CF_ACCESS_TEAM`,
 `CF_ACCESS_AUD`) is kept once for the whole suite in the Shared ioSuite database and read only from there; it is changed
-in the start page's Settings › Suite-wide settings › Sign-in at the proxy (`/api/suite-admin/proxy`) or any app's Settings (`POST /api/auth/proxy`).
+in the start page's Settings › Security › Sign-in at the proxy (`/api/suite-admin/proxy`) or any app's Settings (`POST /api/auth/proxy`).
 `config.env` and the environment are never read for them. A proxy that names the user in a header (every preset but
 Cloudflare) needs its address in `AUTH_PROXY_TRUSTED`: the header is believed from there only, and with several apps on
 one machine "this machine" would let any local process sign in as anyone. For Cloudflare the token is verified, so the
@@ -128,13 +128,13 @@ Per-user data: `users.get_settings(uid, app)`, `users.set_settings(uid, app, cha
 
 `app.include_router(auth.admin_router())` serves everything in the Shared ioSuite database to **suite admins** at
 `/api/suite-admin` (module `iosuite_shared.admin`). Its screen ships here too, so every app shows the same one
-(Settings › Accounts and access and Suite-wide settings, suite admins only): `GET /api/suite-admin/ui.js` is one ES module with its own styles that uses the
+(Settings › Security and Global settings, suite admins only): `GET /api/suite-admin/ui.js` is one ES module with its own styles that uses the
 app's colour variables when it has them.
 
 ```js
 const ui = await import(new URL('api/suite-admin/ui.js', document.baseURI).href);
-ui.mount(el, { tab: 'access', sub: 'people', toast, onSub: (s) => history.replaceState(null, '', `#/settings/access/${s}`) });
-// tab access (Accounts and access): people, roles, passwords; tab global (Suite-wide settings): apps, signin, keys
+ui.mount(el, { tab: 'security', sub: 'people', toast, onSub: (s) => history.replaceState(null, '', `#/settings/security/${s}`) });
+// tab security (Security): people, roles, passwords, signin; tab global (Global settings): apps, keys
 ```
 
 The routes:
@@ -339,7 +339,7 @@ password, app)`, which returns `(user, scope)`, and checks the scope itself.
 ## Keys and tokens
 
 Every credential an app keeps for something outside the suite (the start page's Home Assistant token and AccuWeather
-key, ioPix's Google Maps keys) lives in `ios_credentials`, one row per key the app declares, so Settings › Suite-wide settings ›
+key, ioPix's Google Maps keys) lives in `ios_credentials`, one row per key the app declares, so Settings › Global settings ›
 Keys and tokens shows and changes them all. Values never leave the server: the panel says whether one is set.
 
 ```python
@@ -369,7 +369,7 @@ links.url("iocontacts")                                                    # for
 ```
 
 Behind Cloudflare Access, the whole suite's keys `cf_access_client_id` / `cf_access_client_secret` (a Cloudflare
-Access service token, set on Settings › Suite-wide settings › Keys and tokens) go with every request. Service accounts are not in
+Access service token, set on Settings › Global settings › Keys and tokens) go with every request. Service accounts are not in
 `users.list_users()` (pass `services=True`), do not count for the first-run setup, and cannot sign in with a password.
 
 ## Edge check of app passwords (Cloudflare Worker, optional)
@@ -377,7 +377,7 @@ Access service token, set on Settings › Suite-wide settings › Keys and token
 Behind Cloudflare, a Worker on `/dav*` can turn a wrong app password away before it reaches the server. The apps keep
 a Workers KV namespace up to date with a SHA-256 of each app password (never an account password), when it is made,
 on its first use after each start, and when it or its account is deleted. It is off unless all three are set. They
-are the whole suite's keys in the Shared ioSuite database (Settings › Suite-wide settings › Keys and tokens), so every app picks
+are the whole suite's keys in the Shared ioSuite database (Settings › Global settings › Keys and tokens), so every app picks
 them up within seconds, without a restart; a variable in an app's config.env wins:
 
 ```
