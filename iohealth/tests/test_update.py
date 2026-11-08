@@ -1,4 +1,4 @@
-"""The version check (Settings › Server, iosuite_shared's server_router) and Uploads, Storage and backups: admins only, and the "a newer
+"""The version check (Settings › Server, iosuite_shared's server_router): admins only, and the "a newer
 version is out" banner while the daily check is on."""
 from app import __version__
 from app.auth import updater
@@ -29,20 +29,9 @@ def test_a_viewer_gets_neither_the_banner_nor_maintenance(client, admin):
     client.post("/api/auth/logout")
     client.post("/api/auth/login", json={"name": "bo", "password": "secretpw2"})
     assert "update" not in client.get("/api/status").json()
-    assert client.get("/api/maintenance").status_code == 403
-    assert client.get("/api/maintenance/uploads").status_code == 403
     assert client.get("/api/server").status_code == 403
     assert client.post("/api/server", json={"action": "check"}).status_code == 403
     assert client.post("/api/server", json={"action": "update"}).status_code == 403
-
-
-def test_maintenance(client, admin):
-    m = client.get("/api/maintenance").json()
-    assert m["version"] == __version__ and m["database"]["schemaVersion"] >= 9
-    assert [t["name"] for t in m["database"]["tables"]][0] == "hlt_samples" and all("rows" in t and "bytes" in t for t in m["database"]["tables"])
-    assert "ready" in m["rollup"] and "update" not in m  # the version and updates are under Settings › Server
-    u = client.get("/api/maintenance/uploads").json()
-    assert u["syncs"] == [] and u["total"] == 0
 
 
 def test_server_status_and_update(client, admin, monkeypatch):

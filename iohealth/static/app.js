@@ -2423,12 +2423,12 @@ pages.day = async (main, arg) => {
 
 // ---------- settings: tabs, as in every ioThing app (#/settings/account … #/settings/server) ----------
 // One Settings page for everything, in every ioThing app. Each tab loads only what it shows. The account's own tabs
-// come first, then the admins' (uploads, storage and backups, the server) and the suite admins' (Security:
+// come first, then the admins' (the server) and the suite admins' (Security:
 // people, roles, app passwords, sign-in at the proxy; Global settings: the apps, keys; iosuite-shared's panel).
 
 const SUITE_TABS = { security: 'Security', global: 'Global settings' };
-const SETTINGS_TABS = () => [['account', 'Account'], ['display', 'Display'], ['devices', 'Apps and devices'], ['health', 'Health'], ['goals', 'Goals and alerts'],
-  ...(isAdmin() ? [['uploads', 'Uploads'], ['storage', 'Storage and backups'], ['server', 'Server']] : []),
+const SETTINGS_TABS = () => [['account', 'Account'], ['display', 'Display'], ['health', 'Health'], ['goals', 'Goals and alerts'],
+  ...(isAdmin() ? [['server', 'Server']] : []),
   ...(me.isSuiteAdmin ? [['security', SUITE_TABS.security], ['global', SUITE_TABS.global]] : [])];
 
 /** The page title and a row of tabs linking to #/<view>/<tab>.
@@ -2448,8 +2448,8 @@ function tabbedPage(main, view, ic, title, tabs, arg) {
 pages.settings = async (main, arg, params) => {
   const [t, sub] = (arg || '').split('/');  // #/settings/security/<part>
   const { tab, body } = tabbedPage(main, 'settings', 'gear', 'Settings', SETTINGS_TABS(), t);
-  const els = await ({ account: setAccount, devices: setDevices, display: setDisplay, health: setHealth, goals: setGoals,
-    uploads: setUploads, storage: setStorage, server: setServer, security: () => suitePanel(tab, sub), global: () => suitePanel(tab, sub) }[tab])(body);
+  const els = await ({ account: setAccount, display: setDisplay, health: setHealth, goals: setGoals,
+    server: setServer, security: () => suitePanel(tab, sub), global: () => suitePanel(tab, sub) }[tab])(body);
   if (els) body.replaceChildren(...els.filter(Boolean));
 };
 
@@ -2576,37 +2576,6 @@ function updateBanner(u) {
   b = h('div', { id: 'updbanner', 'data-remote': u.remote }, h('span', { class: 'icwrap' }, icon('spark')), text, run, more,
     h('button', { class: 'iconbtn', title: 'Not now (hidden until the next version)', onclick: () => { try { localStorage.setItem(DISMISSED_UPDATE, u.remote); } catch { /* private mode */ } b.remove(); } }, icon('close')));
   document.body.append(b);
-}
-
-// ---------- Settings › Uploads and Storage and backups (admins) ----------
-
-function fmtBytes(n) {
-  if (!n) return '0 B';
-  const u = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const i = Math.min(u.length - 1, Math.floor(Math.log(n) / Math.log(1024)));
-  return `${(n / 1024 ** i).toFixed(i ? 1 : 0)} ${u[i]}`;
-}
-
-async function setStorage() {
-  const m = await authApi('api/maintenance');
-  const d = m.database, n = Object.fromEntries(d.tables.map(t => [t.name, t.rows]));
-  const row = (label, detail) => h('div', { class: 'srow' }, h('div', {}, h('b', {}, label), h('div', { class: 'note' }, detail)));
-  return [card('Database',
-    row('Health data', `${fmtBytes(d.bytes)} on disk (the database is under Settings › Server). About ${fmtCompact(n.samples)} samples of ${d.types} types; ${fmtCompact(n.workouts)} workouts, ${fmtCompact(n.workout_route_points)} route points, ${fmtCompact(n.heartbeats)} heartbeats, ${fmtCompact(n.activity_summaries)} days of rings.`),
-    row('Shared ioSuite', `Accounts and suite-wide settings, shared with the other ioSuite apps: ${m.suite.host}/${m.suite.name}.`),
-    row('Hourly rollup', `Charts over months or years read sample_hourly instead of every sample. ${m.rollup.ready} of ${m.rollup.total} types are rolled up${m.rollup.ready < m.rollup.total ? '; the rest is being filled in the background, one type and month at a time' : ''}.`),
-    h('div', { class: 'scroll' }, h('table', { class: 'grid' }, h('thead', {}, h('tr', {}, h('th', {}, 'Table'), h('th', { class: 'r' }, 'Rows (about)'), h('th', { class: 'r' }, 'Size'))),
-      h('tbody', {}, d.tables.map(t => h('tr', {}, h('td', {}, t.name), h('td', { class: 'r num' }, fmtCompact(t.rows)), h('td', { class: 'r num' }, fmtBytes(t.bytes))))))),
-    h('p', { class: 'small muted' }, 'Row counts are the database’s own estimates, which it keeps up to date as data arrives; counting every row of the large tables would take many seconds.')),
-  card('Backups', h('p', { class: 'small muted', style: { marginTop: 0 } }, 'Everything is in the database: back it up with mysqldump (or the container’s backup) and nothing else is needed. The iPhone keeps the original data in Apple Health, so a full resync from the app fills an empty server again.'))];
-}
-
-async function setUploads() {
-  const u = await authApi('api/maintenance/uploads');
-  return [card('Uploads', h('p', { class: 'small muted', style: { marginTop: 0 } }, `The last sync of every account (${fmtCompact(u.total)} syncs so far).`),
-    u.syncs.length ? h('div', { class: 'scroll' }, h('table', { class: 'grid' }, h('thead', {}, h('tr', {}, ['Account', 'Device', 'Started', 'Finished', 'Items'].map(c => h('th', {}, c)))),
-      h('tbody', {}, u.syncs.map(x => h('tr', {}, h('td', {}, x.user), h('td', {}, x.device || '—'), h('td', { class: 'small muted' }, fmtAgo(x.started)),
-        h('td', { class: 'small muted' }, x.finished ? fmtAgo(x.finished) : 'not finished'), h('td', { class: 'r num' }, fmtCompact(x.items) + (x.fullResync ? ' (full)' : ''))))))) : h('p', { class: 'muted' }, 'No sync yet.'))];
 }
 
 // ---------- accounts: sign-in, the account menu, Settings › Account (people, roles and proxy sign-in: Settings › Security) ----------
@@ -2754,7 +2723,6 @@ function renderUserMenu() {
   const btn = h('button', { class: 'avatar-btn', title: me.user.name, 'aria-label': 'Account', onclick: () => menu(btn, [
     { head: `${me.user.name} · ${me.user.role}${me.signedInBy === 'cloudflare' ? ' · via Cloudflare' : ''}` },
     { label: 'Account', action: () => { location.hash = '#/settings/account'; } },
-    { label: 'Connect apps and devices', action: () => { location.hash = '#/settings/devices'; } },
     { label: `Appearance: ${{ auto: 'system', light: 'light', dark: 'dark' }[settings.theme] || 'system'}`, action: () => { settings.theme = { auto: 'light', light: 'dark', dark: 'auto' }[settings.theme] || 'light'; saveSettings(); applyTheme(); toast(`Appearance: ${settings.theme === 'auto' ? 'system' : settings.theme}`); } },
     { label: 'Settings', action: () => { location.hash = '#/settings'; } },
     '-',
@@ -2763,14 +2731,7 @@ function renderUserMenu() {
   el.append(btn);
 }
 
-// ---- Settings › Account and Apps and devices
-
-function copyRow(text) {
-  const inp = h('input', { type: 'text', value: text, readonly: true, style: { flex: 1, minWidth: '240px', fontFamily: 'ui-monospace, monospace' }, onclick: e => e.target.select() });
-  return h('div', { class: 'toolbar', style: { marginBottom: '6px' } }, inp, h('button', { onclick: async () => {
-    try { await navigator.clipboard.writeText(text); toast('Copied'); } catch { inp.select(); }
-  } }, 'Copy'));
-}
+// ---- Settings › Account
 
 /** Settings › Account: who is signed in, the password and the sessions. */
 async function setAccount() {
@@ -2784,46 +2745,6 @@ async function setAccount() {
       h('button', { onclick: signOut }, 'Sign out')),
     u.passwordless ? h('p', { class: 'small muted' }, 'This account signs in with one click and has no password; a suite admin can give it one under Settings › Security › People.')
       : me.viaProxy ? h('p', { class: 'small muted' }, 'Signed in through the proxy in front of ioHealth; the password is changed there.') : null)];
-}
-
-/** Settings › Apps and devices: what the iPhone app needs (this server's address, the user name, an app password),
- *  the app passwords themselves, and the web app on the phone's home screen. */
-async function setDevices() {
-  const u = me.user;
-  const server = location.origin + location.pathname.replace(/\/[^/]*$/, '');
-  const list = h('div');
-  const shown = h('div');
-  const label = h('input', { type: 'text', placeholder: 'e.g. Alex’s iPhone', value: /iPhone/.test(navigator.userAgent) ? 'iPhone' : '' });
-  const draw = async () => {
-    const d = await authApi('api/auth/app-passwords').catch(() => ({ items: [] }));
-    list.replaceChildren(d.items.length ? h('table', { class: 'grid', style: { width: '100%' } },
-      h('thead', {}, h('tr', {}, h('th', {}, 'Device'), h('th', {}, 'Made'), h('th', {}, 'Last used'), h('th', {}, ''))),
-      h('tbody', {}, d.items.map(p => h('tr', {}, h('td', {}, p.label), h('td', { class: 'small muted' }, fmtDate(p.created)),
-        h('td', { class: 'small muted' }, p.lastUsed ? fmtAgo(p.lastUsed) : 'never'),
-        h('td', { style: { textAlign: 'right' } }, h('button', { class: 'small-btn', onclick: async () => {
-          if (!await dialog('Revoke app password', h('p', {}, `Revoke “${p.label}”? That device stops syncing until it gets a new one.`), [{ label: 'Cancel', value: null }, { label: 'Revoke', danger: true, value: true }])) return;
-          await authApi(`api/auth/app-passwords/${p.id}`, { method: 'DELETE' }); draw();
-        } }, 'Revoke'))))))
-      : h('p', { class: 'small muted' }, 'No app passwords yet.'));
-  };
-  await draw();
-  const who = u.passwordless ? 'This account signs in with one click, so it cannot have app passwords; a suite admin can give it a password under Settings › Security › People.'
-    : u.role === 'viewer' ? 'This account is a viewer: it can look at its data but not upload any. A suite admin can make it an editor under Settings › Security › People.' : '';
-  const kv = (k, v) => h('div', { class: 'toolbar', style: { margin: '0 0 2px' } }, h('span', { style: { width: '120px' } }, k), copyRow(v));
-  return [
-    card('iPhone app', h('p', { class: 'small', style: { marginTop: 0 } }, 'The ioHealth app on the iPhone sends the Health data here. In the app, fill in this server’s address, your user name and an app password (below), then tap Test connection and Sync now.'),
-      kv('Server address', server), kv('User name', u.name),
-      who ? h('p', { class: 'small error' }, who) : null),
-    card('App passwords', h('p', { class: 'small', style: { marginTop: 0 } }, 'Give every device or script its own password instead of yours; you can revoke one without touching the others. Use it with your user name; what it sends is yours.'),
-      who ? null : h('div', { class: 'toolbar' }, label, h('button', { class: 'primary', onclick: async () => {
-        try {
-          const r = await authApi('api/auth/app-passwords', { method: 'POST', body: { label: label.value || 'iPhone' } });
-          shown.replaceChildren(h('p', { class: 'small' }, h('b', {}, 'Copy it now: '), 'it is shown only once.'), copyRow(r.password));
-          label.value = ''; draw();
-        } catch (e) { toast(e.message); }
-      } }, '+ New app password')),
-      shown, list),
-    card('On your phone', h('p', { class: 'small', style: { marginTop: 0 } }, 'Add the ioHealth web app to the home screen and it opens full-screen like an app: in Safari on the iPhone, tap Share, then Add to Home Screen. On Android, use Chrome’s menu and Install app. Sign in once there; the session lasts 30 days.'))];
 }
 
 // ---- Settings › Security and Global settings (suite admins): the people and their role in every app

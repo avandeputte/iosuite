@@ -44,7 +44,7 @@ under More.
 | **Glucose** | blood glucose from a CGM or meter: average, GMI (estimated A1c), time in/below/above range, variability (CV), low episodes; readings with your target band and optional overlays (heart rate, steps, carbohydrates, insulin, workouts…); the daily pattern (ambulatory glucose profile) and time in range per day; **glucose around workouts and meals**: the average change from an hour before to three hours after, per activity or per meal size (from logged carbohydrates), and each event's numbers. A workout's own page shows its glucose curve too. mg/dL or mmol/L and the target range are set in Settings |
 | **Correlations** | pick two metrics and a period: a scatter plot of the days (click a dot for that day), the correlation, how much one explains the other and the best-fit line, same day or "the day before" (sleep, workouts or carbs, then the next day's glucose). Includes glucose time in range and variability per day and workout minutes. A table ranks what else goes with the second metric |
 | **Records** | fastest running efforts from the GPS routes, best days, health bests, ring streaks, and bests per activity |
-| **Settings** | in tabs, as in ioContacts and ioCalendar (`#/settings/<tab>`; each tab loads only what it shows). *Account*: who you are, password, sign out. *Apps and devices*: connecting the iPhone app, app passwords, the web app on the home screen. *Display*: km or miles, light/dark theme, and which pages and metrics to show (turn off Sleep, Glucose or any metric you don't use and it disappears from the menu, the dashboard, Metrics and Records). *Health*: glucose unit and target range, maximum heart rate (default 220 − age from your date of birth), your profile. *Goals and alerts*: **goals** (any metric, at least or at most: 10,000 steps a day, weight at most 75 kg, 7.5 h of sleep…) and the thresholds for dashboard alerts. For admins: *Uploads*: the last upload of every account. *Storage and backups*: each table's rows (the database's own estimate, so the page opens at once) and size on disk, how far the hourly rollup has got. *Server*: iosuite-shared's panel, the same in every io app: the installed version with Check for updates / Update now and the daily check, the database and time zone, the server log, Restart. For suite admins: *Security* (people and their role in every app, app passwords, sign-in at the proxy) and *Global settings* (the apps, keys and tokens), the suite's admin panel, the same as on the start page and in every io app (iosuite-shared's `/api/suite-admin/ui.js`) |
+| **Settings** | in tabs, as in ioContacts and ioCalendar (`#/settings/<tab>`; each tab loads only what it shows). *Account*: who you are, password, sign out. *Display*: km or miles, light/dark theme, and which pages and metrics to show (turn off Sleep, Glucose or any metric you don't use and it disappears from the menu, the dashboard, Metrics and Records). *Health*: glucose unit and target range, maximum heart rate (default 220 − age from your date of birth), your profile. *Goals and alerts*: **goals** (any metric, at least or at most: 10,000 steps a day, weight at most 75 kg, 7.5 h of sleep…) and the thresholds for dashboard alerts. For admins: *Server*: iosuite-shared's panel, the same in every io app: the installed version with Check for updates / Update now and the daily check, the database and time zone, the server log, Restart. For suite admins: *Security* (people and their role in every app, app passwords, sign-in at the proxy) and *Global settings* (the apps, keys and tokens), the suite's admin panel, the same as on the start page and in every io app (iosuite-shared's `/api/suite-admin/ui.js`) |
 
 **Export.** The ⤓ CSV buttons download what a chart or table shows (Metrics, Day, glucose readings and responses,
 workouts, sleep, correlations). ⤓ PDF in the header saves the current page through the print dialog, in light colours
@@ -59,8 +59,8 @@ together. A night of sleep is everything from 18:00 to 18:00 the next day, taken
 sleep that night. Settings are stored in the database (`hlt_user_settings`, per account), so they follow you to every browser.
 
 The web app's data comes from a JSON API under `/api/` (`types`, `series`, `workouts`, `workouts/{uuid}`, `routes`,
-`sleep`, `glucose`, `activity`, `profile`, `records`, `records/efforts`, `status`, and `settings`, which also takes `PUT`; for admins `maintenance`,
-`maintenance/uploads` and `server`, which also takes `POST` with `{"action": "check"}`, `{"action": "update"}` or `{"autoCheck": false}`), which also accepts an app password as a bearer token, for
+`sleep`, `glucose`, `activity`, `profile`, `records`, `records/efforts`, `status`, and `settings`, which also takes `PUT`; for admins
+`server`, which also takes `POST` with `{"action": "check"}`, `{"action": "update"}` or `{"autoCheck": false}`), which also accepts an app password as a bearer token, for
 scripts (`Authorization: Bearer iohealth-…`); it answers with that account's data. Map tiles load from OpenStreetMap in the browser; everything else (including the chart and map
 libraries, [uPlot](https://github.com/leeoniya/uPlot) and [Leaflet](https://leafletjs.com)) is served by the
 container.
@@ -248,13 +248,12 @@ its health data. A *suite admin* is admin in every app.
 | who | can |
 |---|---|
 | not signed in | nothing but the sign-in screen (there is no shared data to look at) |
-| **viewer** | see their own data, and their own settings, goals and app passwords |
+| **viewer** | see their own data, and their own settings and goals |
 | **editor** | plus upload: the iPhone app signs in as an editor |
-| **admin** | plus Uploads, Storage and backups and Server in Settings; accounts, roles and the sign-in settings are for suite admins (Settings › Security) |
+| **admin** | plus Server in Settings; accounts, roles and the sign-in settings are for suite admins (Settings › Security) |
 
-Settings › Account is where you change your password and sign out everywhere; Settings › Apps and devices shows what
-the iPhone app needs (this server's address and your user name) and makes **app passwords** (a per-device password for
-the iPhone app, the API or a script, shown once, revocable). Sessions are random tokens in an HttpOnly cookie (`iothing_session`, shared
+Settings › Account is where you change your password. The iPhone app signs in with this server's address, your user
+name and your password; a script can use an **app password** instead (made by a suite admin under Settings › Security › App passwords). Sessions are random tokens in an HttpOnly cookie (`iothing_session`, shared
 by the apps on the domain) valid for 30 days and renewed while in use; passwords are scrypt-hashed; wrong passwords
 cost a growing wait.
 

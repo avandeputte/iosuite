@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from iosuite_shared import users as shared
 from iosuite_shared.updates import setup_log
 
-from app import __version__, config, db, maintenance, upload, webapi
+from app import __version__, config, db, upload, webapi
 from app.auth import APP, auth, updater
 
 setup_log(config.LOG_FILE)  # the server log that Settings › Server shows; the app runs without it
@@ -84,7 +84,6 @@ def _server_info() -> dict:
 
 
 app.include_router(auth.server_router(updater, log_file=config.LOG_FILE, info=_server_info))  # /api/server, /api/log: admins
-app.include_router(maintenance.router)  # /api/maintenance: admins
 
 
 @app.get("/", include_in_schema=False)

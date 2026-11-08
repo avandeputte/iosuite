@@ -11,9 +11,8 @@ public = auth.access.public
 signed_in = auth.access.signed_in
 editor = auth.access.editor
 admin = auth.access.admin
-# the phone's uploads (/v1/*): an app password of an account that is an editor or admin here. Enforced by the marker
+# the phone's uploads (/v1/*): the user name and password (or an app password) of an account that is an editor or admin here. Enforced by the marker
 # like the levels above, so the route bodies hold no access logic and check_access_declared counts the routes.
 uploader = auth.access.custom("uploader", lambda u, _r: bool(u) and u.get("role") in ("editor", "admin"), write=True,
-                              message="use an app password from ioHealth's Settings › Apps and devices, for an account that is an "
-                                      "editor or admin here (an admin can make the account an editor)")
+                              message="sign in as an account that is an editor or admin here (an admin can make the account an editor)")
 declared = auth.access.declared

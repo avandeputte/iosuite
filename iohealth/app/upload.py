@@ -5,8 +5,8 @@
   POST /v1/sessions/{id}/items          NDJSON lines (gzip or deflate), X-Batch-Seq: n -> {"applied"}
   POST /v1/sessions/{id}/finish         {"totalSent"} -> {"received"}: the items this session applied
 
-The phone signs in with `Authorization: Bearer <app password>` (an app password of an editor account, made under
-Settings › Apps and devices in the web app). A batch is applied in
+The phone signs in with the account's user name and password (`Authorization: Basic`, of an editor or admin);
+a script can send `Authorization: Bearer <app password>` instead. A batch is applied in
 one transaction together with its sequence number, so a batch resent after a lost reply is acknowledged without
 being applied twice. The line shapes mirror Shared/SyncProtocol.swift.
 """
