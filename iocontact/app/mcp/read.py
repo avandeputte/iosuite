@@ -240,7 +240,7 @@ def export_contacts(format: Literal["vcf", "vcf4", "jcard", "csv-google", "csv-o
 @server.tool(annotations=READ_ONLY)
 def connection_details() -> dict:
     """The addresses to type into a phone, a mail app or a calendar: CardDAV, LDAP, the birthday calendar feeds and the
-    REST API. Phones and apps sign in with your user name and an app password (Settings › Apps and devices)."""
+    REST API. Phones and apps sign in with your user name and an app password (Settings › Account)."""
     u = who()
     base = config.PUBLIC_URL or "(this server's address)"
     tok = users.calendar_token(u["id"])
