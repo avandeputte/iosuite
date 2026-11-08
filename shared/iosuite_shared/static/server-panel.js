@@ -235,7 +235,7 @@ export async function mount(el, opts = {}) {
     let s;
     try { s = await api('server'); } catch (e) { el.replaceChildren(h('p', { class: 'sv-warn' }, e.message)); return; }
     log = log || logBox();
-    el.replaceChildren('mcpEnabled' in s ? mcpBox(s, draw) : null, versionBox(s, draw), aboutBox(s), log, restartBox(s));
+    el.replaceChildren(...['mcpEnabled' in s ? mcpBox(s, draw) : null, versionBox(s, draw), aboutBox(s), log, restartBox(s)].filter(Boolean));
     clearTimeout(timer);
     if (s.progress && s.progress.running) timer = setTimeout(() => { if (el.isConnected) draw(); }, 4000);
   };
