@@ -18,7 +18,7 @@ what the app will show on the start page later (today's events, the newest photo
   tile. Each person can hide tiles in Customize. What the tiles and cards show is asked of each app by this server
   with the viewer's own sign-in (so each person sees only what they may see there), on localhost when the app runs on
   the same machine, else at its LAN address, else its public one, with the suite's Cloudflare Access service token
-  (Settings › Suite › Keys and tokens) when one is set.
+  (Settings › Global settings › Keys and tokens) when one is set.
 - **A search box** at the top (⌘K / Ctrl-K): as you type it lists the bookmarks that match, the people ioContacts
   finds, and a row per app that searches itself (ioPix, ioCalendar and ioNotes open on their own results). Arrows
   pick a row, Enter opens it. When nothing of the suite matches, Enter searches the web (DuckDuckGo, or the engine
@@ -78,7 +78,7 @@ what the app will show on the start page later (today's events, the newest photo
 - **The suite's accounts**: the same sign-in as every io app (the account tiles, one click for a passwordless viewer),
   the account page (display name, email, password, sign out everywhere). Accounts and roles are managed under Settings ›
   Suite (below), the same panel in every io app. Sign-in at a reverse proxy (Cloudflare Access…) works as in the other apps.
-- **Suite administration** (Settings › Suite, suite admins only): everything in the Shared ioSuite database for the
+- **Suite administration** (Settings › Security and Settings › Global settings, suite admins only): everything in the Shared ioSuite database for the
   whole suite. **People**: add, rename and delete accounts, email, sign-in list, suite admin, set or remove a password,
   their role in every app, their sessions (end one or all) and app passwords. **Roles**: a grid of everyone against
   every app (or "default", the app's default role). **App passwords**: everyone's, in every app, with their scope
@@ -88,7 +88,7 @@ what the app will show on the start page later (today's events, the newest photo
   (`iocalendar-app`…, under People), with which apps read from each other without any setup. **Apps**: each app's default role (none makes it
   invitation-only) and sign-in requirement; forget an uninstalled app. **Sign-in at the proxy** for the whole suite. The
   panel is iosuite-shared's (`/api/suite-admin/ui.js` on `/api/suite-admin`), so every io app shows the same one.
-- **Updates**: the daily version check, the note for admins and **Update now**, the server log and Restart under Maintenance › Updates and logs, as in every ioThing app.
+- **Updates**: the daily version check, the note for admins and **Update now**, the server log and Restart under Settings › Server, as in every ioThing app.
 - Light and dark, a phone layout, installable as a web app (manifest and icons).
 
 ## Run
@@ -184,13 +184,13 @@ password is used once and not written anywhere.
 | `UPDATE_CHECK` | `0` turns the daily version check off for good |
 | `IOSUITE_REPO`, `IOSUITE_BRANCH` | what the version check and `update.sh` follow (`avandeputte/iosuite`, `main`) |
 | `DATA_DIR` | where the app writes on its own: the log and the update result (`data/` in the app folder) |
-| `LOG_FILE` | the server log shown at Maintenance › Updates and logs (`DATA_DIR/iosuite.log`; `LOG_FILE=` with nothing after it: no file) |
+| `LOG_FILE` | the server log shown at Settings › Server (`DATA_DIR/iosuite.log`; `LOG_FILE=` with nothing after it: no file) |
 
 ## Updates
 
 ioSuite asks GitHub once a day whether the main branch has a newer version (only the public commit list is read;
-nothing about the server is sent; Maintenance › Updates and logs switches it off, `UPDATE_CHECK=0` locks it off). Admins
-then see a note with **Update now**, and **Maintenance › Updates and logs** has the version, **Check for updates**,
+nothing about the server is sent; Settings › Server switches it off, `UPDATE_CHECK=0` locks it off). Admins
+then see a note with **Update now**, and **Settings › Server** has the version, **Check for updates**,
 **Update now**, the tail of the server log (`data/iosuite.log` in the app folder; `LOG_FILE` moves it, empty switches it
 off) and **Restart**. The page is the same in every ioThing app: the version check, `update.sh`, the restart and the log
 come from `iosuite_shared.updates` in iosuite-shared, served at `/api/server` and `/api/log`. Updating runs the app's own

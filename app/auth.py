@@ -18,7 +18,7 @@ APP = config.APP
 auth = Auth(APP, app_label="ioSuite", basic_realm="ioSuite", version=__version__, public_url=config.PUBLIC_URL or None,
             description="Start page", color="#2f3a5a")
 
-# the version check and the self-update (update.sh), shared with the suite: Maintenance › Updates and logs,
+# the version check and the self-update (update.sh), shared with the suite: Settings › Server,
 # GET/POST /api/server and GET /api/log (main.py mounts the router)
 updater = Updater(APP, __version__, config.APP_DIR, settings=(db.get_setting, db.set_setting), user_agent="iosuite",
                   result_file=config.DATA_DIR / ".update-result")
