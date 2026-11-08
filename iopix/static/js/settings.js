@@ -492,10 +492,10 @@ export function viewerDbPanel({ setup = false } = {}) {
   const btn = (label, fn, primary) => h('button', { class: 'pillbtn' + (primary ? ' on' : ''), onclick: fn }, label);
   (async () => {
     let d; try { d = await api('/api/viewerdb'); } catch (e) { fill(body, e.message); return; }
-    if (d.locked) {  // configured but not answering, and nobody signed in: only Retry (the connection is changed in data/viewer-db.json or DB_* in config.env)
+    if (d.locked) {  // configured but not answering, and nobody signed in: only Retry (the connection is changed in the DB_* settings of config.env)
       const result = h('div', { class: 'muted', style: 'font-size:12.5px;margin-top:6px' });
       fill(body, h('div', null, `${S.APP_NAME}’s database is configured but not answering: `, h('span', { class: 'warn' }, d.error || ''),
-        h('div', { class: 'muted note mt6' }, 'Start the database server (or wait for it) and retry. To use another server, change data/viewer-db.json or the DB_* settings in config.env and restart.')),
+        h('div', { class: 'muted note mt6' }, 'Start the database server (or wait for it) and retry. To use another server, change the DB_* settings in config.env and restart.')),
         h('div', { class: 'btnrow', style: 'margin-top:8px' },
           btn('Retry the configured database', async () => { fill(result, 'Trying…'); try { await post('/api/viewerdb/retry', {}); fill(result, 'It answers now. Restarting…'); setTimeout(() => location.reload(), 4000); } catch (e) { fill(result, e.message); } }, true)), result);
       return;
@@ -515,12 +515,13 @@ export function viewerDbPanel({ setup = false } = {}) {
     const restartThen = (msg) => { fill(result, msg + ' Restarting…'); setTimeout(() => { if (setup) location.reload(); else pollSoon(2000); }, 4000); };
     const current = !d.configured ? `No database yet: ${S.APP_NAME} needs a MariaDB or MySQL database of its own. Create an empty one with a user that owns it, enter its details and press Use this database.`
       : `${d.error ? 'Configured' : 'Currently'}: MySQL ${d.user}@${d.host}:${d.port}/${d.database}`;
+    const fixed = d.fromEnv?.length ? h('div', { class: 'muted note mt6' }, `${d.fromEnv.join(', ')} ${d.fromEnv.length === 1 ? 'is' : 'are'} set in the environment of the service or container, which wins over config.env: switching is done there.`) : null;
     fill(body, h('div', null, current, d.error && d.configured ? h('span', { class: 'warn' }, ` · not answering: ${d.error}`) : null),
-      fields, opts,
+      fixed, fields, opts,
       h('div', { class: 'btnrow', style: 'margin-top:8px' },
         btn('Test connection', async () => { fill(result, 'Testing…'); try { const r = await post('/api/viewerdb/test', payload()); const t = Object.entries(r.tables); fill(result, `OK: ${r.version}. ${t.length ? `${S.APP_NAME} tables already there: ` + t.map(([k, n]) => `${k} ${nf.format(n)}`).join(', ') : 'An empty database.'}`); } catch (e) { fill(result, e.message); } }),
         d.configured && d.error ? btn('Retry the configured database', async () => { fill(result, 'Trying…'); try { await post('/api/viewerdb/retry', {}); restartThen('It answers now.'); } catch (e) { fill(result, e.message); } }) : null,
-        btn(d.configured ? 'Switch' : 'Use this database', async () => {
+        fixed ? null : btn(d.configured ? 'Switch' : 'Use this database', async () => {
           const p = payload();
           if (!await confirmDialog(`${d.configured ? 'Switch' : 'Set up'} ${S.APP_NAME} on MySQL ${p.user}@${p.host}:${p.port}/${p.database}?` + (copyLabel && copy.checked ? `\n\nEvery row is copied there first${drop.checked ? ', after dropping and recreating the tables there' : ''}.` : drop.checked ? '\n\nThe tables there are dropped and created again.' : '') + `\n\n${S.APP_NAME} restarts on the new database.`, { ok: d.configured ? 'Switch' : 'Use it' })) return;
           fill(result, 'Copying… this can take a minute on a large library.');
