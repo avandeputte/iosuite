@@ -1121,10 +1121,13 @@ const fld = (l, e) => h('label', { class: 'field' }, h('span', null, l), e);
 const kv = (k, v) => h('div', { class: 'kv' }, h('div', { class: 'k' }, k), h('div', { class: 'v', style: { flex: 1 } }, typeof v === 'string' ? copyRow(v) : v));
 
 const accountUi = () => import(new URL('api/auth/ui.js', document.baseURI).href);
-/** Settings › Account: display name, email and password, iosuite-shared's panel (the same in every io app). */
+/** Settings › Account: display name, email and password, then the app passwords: iosuite-shared's panels (the same in every io app). */
 async function setAccount(el) {
   const ui = await accountUi();
+  const pw = h('div');
   await ui.mountAccount(el, { toast, onSaved: (u) => { Object.assign(S.user, u); drawUser(); } });
+  el.append(pw);
+  await ui.mountAppPasswords(pw, { toast, syncOnly: 'Calendar apps only (CalDAV)' });
 }
 
 /** Settings › Display: the theme (saved with the account) and the calendar's own choices, each saved when changed. */
@@ -1139,27 +1142,24 @@ async function setDisplay(el) {
     h('div', { class: 'box' }, h('h2', null, icon('tune'), 'Calendar'), h('div', { class: 'grid' }, fld('Weeks start on', ws), fld('Open on', dv), fld('Reminder for new events', dr))));
 }
 
-/** Settings › Apps and devices: the account's app passwords (iosuite-shared's list) and how to connect each kind of app. */
+/** Settings › Apps and devices: how to connect each kind of app (the app passwords themselves are on Settings › Account). */
 async function setDevices(el) {
   const info = await api('/api/connect');
   const canPw = !S.user.passwordless;
-  const ui = await accountUi();
-  const pw = h('div');
   const isApple = /iPhone|iPad|Macintosh/.test(navigator.userAgent);
   const plabel = h('input', { class: 't', name: 'label', value: /iPad/.test(navigator.userAgent) ? 'iPad' : /Macintosh/.test(navigator.userAgent) ? 'Mac' : 'iPhone', style: 'max-width:200px' });
   const how = (summary, ...kids) => h('details', null, h('summary', { class: 'lnk' }, summary), ...kids);
   el.append(...[
     canPw ? h('div', { class: 'box' }, h('h2', null, icon('devices'), 'iPhone, iPad and Mac'),
       h('p', null, 'A profile that adds your calendars to Apple Calendar in one step.'),
-      h('form', { method: 'POST', action: '/api/apple-profile', class: 'pform', onsubmit: () => { setTimeout(() => ui.mountAppPasswords(pw, { toast, syncOnly: 'Calendar apps only (CalDAV)' }), 1500); } },
+      h('form', { method: 'POST', action: '/api/apple-profile', class: 'pform' },
         fld('Device name', plabel),
         fld('Password', h('select', { class: 't', name: 'password' }, h('option', { value: 'new' }, 'Include a new app password'), h('option', { value: 'ask' }, 'Ask on the device'))),
         h('p', null, h('button', { class: 'pillbtn primary', type: 'submit' }, icon('download', 's'), 'Download the profile'))),
       how('How to install', h('p', { class: 'muted small' }, isApple ? 'Open the download, then Settings › Profile Downloaded › Install.' : 'Download it in Safari on the iPhone or iPad, then Settings › Profile Downloaded › Install. On a Mac: open the file, then System Settings › Privacy & Security › Profiles.',
-        ' iOS shows the profile as “Not Verified”: that is expected. Revoke its app password below if the device is lost.'))) : null,
-    pw,
+        ' iOS shows the profile as “Not Verified”: that is expected. Revoke its app password under Settings › Account if the device is lost.'))) : null,
     h('div', { class: 'box' }, h('h2', null, icon('today'), 'Calendar apps (CalDAV)'),
-      h('p', null, 'Two-way sync with your user name and an app password.'),
+      h('p', null, 'Two-way sync with your user name and an app password (Settings › Account).'),
       kv('Server', info.server), kv('User name', info.user), kv('CalDAV', info.caldav),
       how('Address of each calendar', info.calendars.map((c) => kv(c.name, c.caldav))),
       how('How to connect', h('p', { class: 'muted small' }, 'Apple Calendar: Settings › Accounts › Add › Other CalDAV Account (iPhone: Settings › Calendar › Accounts). Android: DAVx⁵. Also Thunderbird, Evolution, GNOME, KDE.'),
@@ -1181,7 +1181,6 @@ async function setDevices(el) {
     h('div', { class: 'box' }, h('h2', null, icon('link'), 'Other apps (REST API)'),
       h('p', null, 'JSON, iCalendar or jCal with your user name and an app password. ', h('a', { class: 'lnk', href: info.api, target: '_blank' }, 'API documentation')),
       copyRow(`curl -u ${info.user}:APP-PASSWORD "${info.server}/api/occurrences?start=${ymd(new Date())}&end=${ymd(addDays(new Date(), 7))}"`))].filter(Boolean));
-  await ui.mountAppPasswords(pw, { toast, syncOnly: 'Calendar apps only (CalDAV)' });
 }
 
 async function setCalendars(el) {
