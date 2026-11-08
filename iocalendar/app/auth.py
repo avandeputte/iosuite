@@ -16,7 +16,7 @@ APP = config.APP
 auth = Auth(APP, app_label="ioCalendar", basic_realm="ioCalendar", version=__version__, public_url=config.PUBLIC_URL or None,
             description="Calendar", color="#963522")
 auth.deny_exempt = ("/mcp", "/dav", "/.well-known/")  # apps sign in with app passwords, whatever got them through a proxy
-# a CalDAV-only app password (the Apple profile's, or "CalDAV only" in Settings › Apps and devices) opens these and
+# a CalDAV-only app password (the Apple profile's, or "Calendar apps only" in Settings › Account) opens these and
 # nothing else: 403 on the REST API, MCP and the web app (iosuite-shared enforces it)
 auth.scope_paths = {"dav": ("/dav", "/.well-known/caldav")}
 

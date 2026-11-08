@@ -142,7 +142,7 @@ def free_busy(start: str, end: Optional[str] = None, calendars: Optional[list[st
 @server.tool(annotations=READ_ONLY)
 def connection_details() -> dict:
     """What to type into a calendar app for your account: the CalDAV address and user name (with an app password from
-    Settings › Apps and devices), and the private subscription links (.ics) of your calendars."""
+    Settings › Account), and the private subscription links (.ics) of your calendars."""
     from app import users
     u = who()
     base = config.PUBLIC_URL or "(this server's address)"

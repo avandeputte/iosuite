@@ -186,7 +186,7 @@ account password.
 (`.mobileconfig`) with the CalDAV account and a new CalDAV-only app password for that device inside (or none, and the device asks).
 Open the page in Safari on the iPhone, tap Download, then Settings › Profile Downloaded › Install.
 
-Settings › Apps and devices shows the exact addresses to type, and makes **app passwords**: one per phone or app,
+Settings › Apps and devices shows the exact addresses to type; Settings › Account makes **app passwords**: one per phone or app,
 revocable on its own, used with your user name for CalDAV and the REST API (HTTP Basic, or
 `Authorization: Bearer <app password>`). An app password can be made **CalDAV only**: it opens `/dav` and nothing
 else, so one lifted from a phone cannot reach the REST API, MCP or the web app (403). The Apple profile's password is
@@ -211,7 +211,7 @@ ones after it, or the whole series), make calendars, import iCalendar files, and
 bring the birthdays up to date, look for a new version and install it.
 
 It is off until an admin turns it on in **Settings › Server** (or `MCP=1` in the environment); off, `/mcp` does not answer
-at all. Every assistant signs in with an **app password** (Settings › Apps and devices), as HTTP Basic or
+at all. Every assistant signs in with an **app password** (Settings › Account › App passwords), as HTTP Basic or
 `Authorization: Bearer <app password>`, and acts as that account, with its rights.
 
 ```sh
