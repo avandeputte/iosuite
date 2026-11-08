@@ -388,7 +388,7 @@ def test_iopix_is_found_in_the_suite(client, monkeypatch):
 
 
 def test_suite_admin_panel(client):
-    """Settings › Suite: iosuite-shared's panel and API answer a suite admin, not an app admin."""
+    """Settings › Accounts and access: iosuite-shared's panel and API answer a suite admin, not an app admin."""
     r = client.get("/api/suite-admin/ui.js")  # the first account (alex) is a suite admin
     assert r.status_code == 200 and "export async function mount" in r.text
     assert any(u["name"] == "alex" for u in client.get("/api/suite-admin").json()["users"])
@@ -396,3 +396,12 @@ def test_suite_admin_panel(client):
     client.cookies.clear()
     assert client.post("/api/auth/login", json={"name": "ann", "password": "secret123"}).status_code == 200
     assert client.get("/api/suite-admin/ui.js").status_code == 403
+
+
+def test_settings_server_is_the_shared_panel(client):
+    """Settings › Server is iosuite-shared's panel: its module, the MCP box and This server, once each."""
+    assert "export async function mount" in client.get("/api/server/ui.js").text
+    s = client.get("/api/server").json()
+    assert s["name"] == "ioContacts" and "mcpEnabled" in s and s["mcpAbout"]
+    assert [k for k, _ in s["about"]] == ["Database", "LDAP directory"]
+    assert client.post("/api/auth/logout_all").status_code in (404, 405)  # Sign out is the only sign out

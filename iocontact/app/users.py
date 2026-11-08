@@ -60,7 +60,7 @@ def create(name: str, password: str | None, role: str = "editor", display_name: 
 
 
 def personal_book(u: dict) -> None:
-    """Every account gets its own private address book, whichever way the account was made (here, Settings › Suite,
+    """Every account gets its own private address book, whichever way the account was made (here, Settings › Accounts and access,
     the shared setup or the command line): made the first time the account's books are listed (one small query)."""
     if not db.one("SELECT 1 AS x FROM con_address_books WHERE owner_id = %s LIMIT 1", (u["id"],)):
         db.ex("INSERT INTO con_address_books (owner_id, slug, name, description) VALUES (%s, 'personal', 'Personal', %s)",
@@ -107,7 +107,7 @@ def forget_gone(*uids: int) -> None:
 
 def init() -> None:
     """The Shared ioSuite database's tables, and the ADMIN_USER / ADMIN_PASSWORD account on a first start with no accounts.
-    Accounts deleted elsewhere (Settings › Suite in any app, the command line) leave their books here: swept at start."""
+    Accounts deleted elsewhere (Settings › Accounts and access in any app, the command line) leave their books here: swept at start."""
     shared.init()
     alive = {u["id"] for u in shared.list_users()}
     owners = {r["owner_id"] for r in db.q("SELECT DISTINCT owner_id FROM con_address_books WHERE owner_id IS NOT NULL")}
