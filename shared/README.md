@@ -184,7 +184,7 @@ The apps start uvicorn with `proxy_headers=False`, so this is the one place the 
 
 Every app's MCP server is the same server over streamable HTTP at `/mcp`, on the app's own port, and an assistant
 signs in like any other client: HTTP Basic with the user name and an app password, or a bearer app password
-(Settings › Apps and devices). Every tool acts as that account. The switch is the app's `mcp_enabled` setting (off
+(Settings › Account › App passwords). Every tool acts as that account. The switch is the app's `mcp_enabled` setting (off
 until an admin turns it on under Settings › Server; `MCP=1` in the environment keeps it on).
 
 ```python
@@ -203,7 +203,7 @@ def overview():
 `auth.mcp_gate` answers 404 while the switch is off ("The MCP server is switched off (Settings › Server).") and 401 when
 nobody is signed in; `shared_mcp.set_enabled(db.set_setting, on, forced)` saves the switch from `POST /api/server`.
 
-## Settings › Account, Display and Apps and devices
+## Settings › Account and Display
 
 The account's own boxes look and work the same in every app: `static/account-panel.js`, at `GET /api/auth/ui.js`
 (the Server panel shares its styles). The display name and email are saved when a field is left (`PATCH
@@ -216,7 +216,8 @@ const ui = await import(new URL('api/auth/ui.js', document.baseURI).href);
 await ui.mountAccount(el, { toast });                                  // You (display name, email) and Password
 el.append(ui.box('theme', 'Appearance', ui.themeRow(theme, applyTheme)));   // Light, Dark, System
 el.append(ui.box('tune', 'Units', ui.unitsRow(units, applyUnits)));    // Automatic, Kilometres, Miles
-await ui.mountAppPasswords(el, { toast, syncOnly: 'Calendar apps only (CalDAV)' });
+const pw = el.appendChild(document.createElement('div'));          // app passwords, below the account on Settings › Account
+await ui.mountAppPasswords(pw, { toast, syncOnly: 'Calendar apps only (CalDAV)' });
 ```
 
 `ui.box(icon, title, ...rows)` and `ui.row(label, hint, control)` draw the app's own Settings boxes in the same look.
