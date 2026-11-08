@@ -1,5 +1,5 @@
 /* ioSuite web app: one module, no build step, as in the other io apps. The start page (the weather, a tile per app,
-   the bookmarks in groups) and the settings (account, apps, weather, bookmarks, users) and Maintenance (updates and logs). Each tile keeps a `.more` block under its name, where the app shows a glimpse of
+   the bookmarks in groups) and the settings (account, home page, Home Assistant, bookmarks, server, security, global settings). Each tile keeps a `.more` block under its name, where the app shows a glimpse of
    itself (photos from this day, the rest of today, steps and rings), filled from /api/widgets/<app>. */
 
 // ------------------------------------------------------------------ helpers
@@ -154,15 +154,11 @@ function drawUser() {
     menu = h('div', { class: 'menu' },
       h('div', { class: 'who' }, h('b', null, S.user.displayName), h('div', { class: 'muted small' }, `${S.user.name} · ${S.user.role}`)),
       h('a', { class: 'mi', href: '#/settings/account', onclick: closeMenu }, icon('person', 's'), 'Account'),
-      ['editor', 'admin'].includes(S.user.role) ? h('a', { class: 'mi', href: '#/settings/bookmarks', onclick: closeMenu }, icon('link', 's'), 'Bookmarks') : null,
       h('button', { class: 'mi', onclick: () => { closeMenu(); customize(); } }, icon('tune', 's'), 'Customize the page'),
       h('button', { class: 'mi', onclick: () => { closeMenu(); enterWall(); } }, icon('wall', 's'), 'Wall display'),
       h('button', { class: 'mi', onclick: () => { const n = { system: 'light', light: 'dark', dark: 'system' }[theme]; localStorage.setItem('iosuite.theme', n); applyTheme(); closeMenu(); toast(`Appearance: ${n}`); } },
         icon('theme', 's'), `Appearance: ${theme}`),
       h('a', { class: 'mi', href: '#/settings', onclick: closeMenu }, icon('settings', 's'), 'Settings'),
-      S.user.suiteAdmin ? h('a', { class: 'mi', href: '#/settings/suite', onclick: closeMenu }, icon('lock', 's'), 'Suite users and access') : null,
-      S.user.role === 'admin' ? h('a', { class: 'mi', href: '#/maintenance', onclick: closeMenu }, icon('server', 's'), 'Maintenance') : null,
-      h('button', { class: 'mi', onclick: async () => { closeMenu(); if (await signOutElsewhere()) toast('Signed out elsewhere'); } }, icon('logout', 's'), 'Sign out everywhere else'),
       h('button', { class: 'mi', onclick: async () => { const r = await api('/api/auth/logout', { method: 'POST' }); if (r && r.cloudflareLogout) location.href = r.cloudflareLogout; else location.reload(); } }, icon('logout', 's'), 'Sign out'));
     m.append(menu);
     setTimeout(() => document.addEventListener('click', outside), 0);
@@ -178,7 +174,6 @@ function applyTheme() {
 function route() {
   const [a, b, c] = location.hash.replace(/^#\/?/, '').split('/').map(decodeURIComponent);
   if (a === 'settings') return { view: 'settings', tab: b || 'account', sub: c };
-  if (a === 'maintenance') return { view: 'maintenance', tab: b || 'updates' };
   if (a === 'wall') return { view: 'wall' };
   return { view: 'home' };
 }
@@ -193,7 +188,7 @@ async function onRoute() {
   haStreamStop();  // the view opens its own stream of Home Assistant changes when it needs one
   $('#topbar').append(userMenu());  // out of the old page before it goes; showHome takes it into the new one
   $('#main').replaceChildren(page);
-  try { await ({ home: showHome, settings: showSettings, maintenance: showMaintenance, wall: showWall })[r.view](page, r); } catch (e) { fail(e); }
+  try { await ({ home: showHome, settings: showSettings, wall: showWall })[r.view](page, r); } catch (e) { fail(e); }
 }
 
 // ------------------------------------------------------------------ the start page
@@ -1213,12 +1208,13 @@ async function wallAgenda(el, has) {
 async function showSettings(page, r) {
   const adm = S.user.role === 'admin';
   const canEdit = ['editor', 'admin'].includes(S.user.role);
-  const tabs = [['account', 'Account'], ...(adm ? [['weather', 'Home page'], ['ha', 'Home Assistant']] : []), ...(canEdit ? [['bookmarks', 'Bookmarks']] : []), ...(S.user.suiteAdmin ? [['suite', 'Suite']] : [])];
+  const tabs = [['account', 'Account'], ...(adm ? [['weather', 'Home page'], ['ha', 'Home Assistant']] : []), ...(canEdit ? [['bookmarks', 'Bookmarks']] : []), ...(adm ? [['server', 'Server']] : []),
+    ...(S.user.suiteAdmin ? [['security', 'Security'], ['global', 'Global settings']] : [])];
   if (!tabs.some(([k]) => k === r.tab)) r.tab = 'account';
   page.append(h('div', { class: 'pagehead' }, h('h1', null, 'Settings')),
     h('div', { class: 'tabs' }, tabs.map(([k, l]) => h('button', { class: r.tab === k ? 'on' : '', onclick: () => { location.hash = `#/settings/${k}`; } }, l))));
   const body = h('div'); page.append(body);
-  await ({ account: setAccount, apps: setHome, weather: setHome, ha: setHomeAssistant, bookmarks: setBookmarks, suite: setSuite }[r.tab] || setAccount)(body, r);
+  await ({ account: setAccount, apps: setHome, weather: setHome, ha: setHomeAssistant, bookmarks: setBookmarks, server: setServer, security: setSuite, global: setSuite }[r.tab] || setAccount)(body, r);
 }
 const fld = (l, e) => h('label', { class: 'field' }, h('span', null, l), e);
 
@@ -1231,14 +1227,8 @@ async function setAccount(el) {
     h('div', { class: 'grid' }, fld('Display name', dn), fld('Email (for sign-in at a proxy)', em)),
     h('p', null, h('button', { class: 'pillbtn primary', onclick: async () => { try { S.user = (await api('/api/auth/me', { method: 'PATCH', json: { displayName: dn.value, email: em.value } })).user; drawUser(); toast('Saved'); } catch (e) { fail(e); } } }, icon('check', 's'), 'Save'))),
   !u.passwordless ? h('div', { class: 'box' }, h('h2', null, icon('key'), 'Password'), h('div', { class: 'grid' }, fld('Current password', old), fld('New password (8 or more)', nw)),
-    h('p', null, h('button', { class: 'pillbtn', onclick: async () => { try { await api('/api/auth/password', { method: 'POST', json: { current: old.value, password: nw.value } }); old.value = nw.value = ''; toast('Password changed'); } catch (e) { fail(e); } } }, 'Change password'), ' ',
-      h('button', { class: 'pillbtn noic', onclick: async () => { if (await signOutElsewhere()) toast('Signed out elsewhere'); } }, 'Sign out everywhere else'))) : null);
+    h('p', null, h('button', { class: 'pillbtn', onclick: async () => { try { await api('/api/auth/password', { method: 'POST', json: { current: old.value, password: nw.value } }); old.value = nw.value = ''; toast('Password changed'); } catch (e) { fail(e); } } }, 'Change password'))) : null);
 }
-async function signOutElsewhere() {
-  if (!await confirmDialog('Sign out everywhere', 'Sign out on every other browser and device, in every io app? (Apps with an app password keep working.)', 'Sign out the others')) return false;
-  try { await api('/api/auth/logout_all', { method: 'POST' }); return true; } catch (e) { fail(e); return false; }
-}
-
 async function setHome(el) {
   const got = await api('/api/home/settings');
   const strip = h('select', { class: 't' }, [['rediscover', 'Rediscover: photos at random'], ['onthisday', 'On this day (at random when there are none)'], ['off', 'Off']].map(([v, t]) => h('option', { value: v, selected: v === got.photoStrip ? true : null }, t)));
@@ -1475,108 +1465,25 @@ function dragSort(handle, item, o) {
   });
 }
 
-// ------------------------------------------------------------------ settings › suite (suite admins)
-/* Everything in the Shared ioSuite database, for the whole suite (people and their role in every app, app passwords,
-   keys and tokens, the apps, sign-in at the proxy): the same panel in every io app, served by iosuite-shared at
-   /api/suite-admin/ui.js. */
+// ------------------------------------------------------------------ settings › security and global settings (suite admins)
+/* Everything in the Shared ioSuite database, for the whole suite: Security (people and their role in every app, roles,
+   app passwords, sign-in at the proxy) and Global settings (the apps, keys and tokens). The same panel in every io app,
+   served by iosuite-shared at /api/suite-admin/ui.js. */
 async function setSuite(el, r) {
   let ui;
-  try { ui = await import(new URL('api/suite-admin/ui.js', document.baseURI).href); } catch (e) { el.append(h('p', { class: 'err' }, `The Suite panel did not load: ${e.message}`)); return; }
-  await ui.mount(el, { sub: r.sub, toast, onSub: (s) => history.replaceState(null, '', `#/settings/suite/${s}`) });
+  try { ui = await import(new URL('api/suite-admin/ui.js', document.baseURI).href); } catch (e) { el.append(h('p', { class: 'err' }, `The panel did not load: ${e.message}`)); return; }
+  await ui.mount(el, { tab: r.tab, sub: r.sub, toast, onSub: (x) => history.replaceState(null, '', `#/settings/${r.tab}/${x}`) });
 }
 
-// ------------------------------------------------------------------ maintenance
-async function showMaintenance(page, r) {
-  if (S.user.role !== 'admin') { page.append(h('p', { class: 'muted' }, 'Admins only.')); return; }
-  const tabs = [['updates', 'Updates and logs']];
-  page.append(h('div', { class: 'pagehead' }, h('h1', null, 'Maintenance')),
-    h('div', { class: 'tabs' }, tabs.map(([k, l]) => h('button', { class: r.tab === k ? 'on' : '', onclick: () => { location.hash = `#/maintenance/${k}`; } }, l))));
-  const body = h('div'); page.append(body);
-  await ({ updates: maintUpdates }[r.tab] || maintUpdates)(body);
+// ------------------------------------------------------------------ settings › server (admins)
+/* The server panel every io app shares (iosuite-shared /api/server/ui.js): version and updates, this server,
+   the server log and Restart. */
+async function setServer(el) {
+  let ui;
+  try { ui = await serverUi(); } catch (e) { el.append(h('p', { class: 'err' }, `The Server panel did not load: ${e.message}`)); return; }
+  await ui.mount(el, { toast });
 }
-
-async function maintUpdates(el) {
-  const draw = async () => {
-    let s; try { s = await api('/api/server'); } catch (e) { el.replaceChildren(h('p', null, e.message)); return; }
-    if (!el.isConnected) return;
-    const c = s.check, p = s.progress, last = s.lastUpdate;
-    const state = p.running ? 'Updating… ioSuite restarts when it is done, and this page reloads.'
-      : p.error ? `The last update failed: ${p.error}`
-        : !c ? `You have v${s.version}${s.installed !== 'unknown' ? ` (${s.installed.slice(0, 7)})` : ''}.`
-          : c.status === 'current' ? `v${s.version} is the latest version.`
-            : c.status === 'update' ? `You have v${s.version}; ${c.remoteVersion ? `v${c.remoteVersion}` : 'a newer build'} is available${c.remoteDate ? ` (${c.remoteDate})` : ''}${c.remoteMessage ? `: ${c.remoteMessage.replace(/^v\d+\.\d+\.\d+:\s*/, '')}` : ''}.`
-              : `Could not check: ${c.error}`;
-    const auto = h('input', { type: 'checkbox', checked: s.autoCheck, disabled: s.autoCheckLocked ? true : null, onchange: async (e) => {
-      try { await api('/api/server', { method: 'POST', json: { autoCheck: e.target.checked } }); S.status = await api('/api/status'); toast('Saved'); draw(); } catch (err) { e.target.checked = !e.target.checked; fail(err); }
-    } });
-    el.replaceChildren(
-      h('div', { class: 'box' }, h('h2', null, icon('update'), 'ioSuite version'),
-        h('p', null, state),
-        !p.running && !p.error && last ? h('p', { class: last.ok ? 'muted small' : 'warn small' }, `Last update: ${last.text}`) : null,
-        h('p', null,
-          h('button', { class: 'pillbtn', onclick: async () => { el.querySelector('.box p').textContent = 'Checking…'; try { await api('/api/server', { method: 'POST', json: { action: 'check' } }); } catch (e) { fail(e); } draw(); } }, icon('update', 's'), 'Check for updates'), ' ',
-          s.docker ? h('span', { class: 'muted' }, 'Docker: update by pulling the image (docker compose pull && docker compose up -d).')
-            : s.canRun ? h('button', { class: `pillbtn ${c && c.status === 'update' ? 'primary' : ''}`, disabled: p.running ? true : null, onclick: async () => {
-              if (!await confirmDialog('Update ioSuite', 'Fetch the newest version, refresh its packages and restart ioSuite? Settings stay; the page reloads when the new version is up.', 'Update now')) return;
-              if (await runUpdate()) setTimeout(draw, 2500);
-            } }, icon('check', 's'), 'Update now')
-              : h('span', { class: 'muted' }, 'This install cannot update itself from here (run ./update.sh in the app folder).')),
-        h('p', null, h('label', { class: 'check' }, auto, ' Check for a new version once a day (only GitHub’s public list of changes is asked; nothing about this server is sent)')),
-        s.autoCheckLocked ? h('p', { class: 'muted small' }, 'UPDATE_CHECK=0 in the environment keeps it off.') : null,
-        h('p', { class: 'muted small' }, `Follows ${s.repo} (${s.branch}). `, h('a', { class: 'lnk', href: `https://github.com/${s.repo}/commits/${s.branch}`, target: '_blank', rel: 'noopener' }, 'Change log'), '.')),
-      logCard(),
-      h('div', { class: 'box' }, h('h2', null, icon('update'), 'Restart'),
-        h('p', null, 'Stops ioSuite; the service manager (systemd, launchd or Docker) starts it again within seconds. Nothing is lost; the page reloads when it is back.'),
-        h('p', null, h('button', { class: 'pillbtn', onclick: async () => {
-          if (!await confirmDialog('Restart ioSuite', 'Restart the server now? Everyone is disconnected for a few seconds.', 'Restart')) return;
-          try { await api('/api/server', { method: 'POST', json: { action: 'restart' } }); } catch (e) { fail(e); return; }
-          toast('Restarting…');
-          const until = Date.now() + 90000, gone = Date.now() + 3000;
-          const look = async () => {
-            try { const r = await fetch('/api/status', { credentials: 'same-origin' }); if (r.ok && Date.now() > gone) { location.reload(); return; } } catch { /* down */ }
-            if (Date.now() < until) setTimeout(look, 2000); else toast('ioSuite did not come back; check the service.');
-          };
-          setTimeout(look, 3000);
-        } }, 'Restart ioSuite'))));
-    if (p.running) setTimeout(() => { if (el.isConnected) draw(); }, 4000);
-  };
-  await draw();
-}
-
-/** The tail of the server log (GET /api/log from iosuite-shared): a level filter, a search, Reload and Download. */
-function logCard() {
-  const level = h('select', { class: 't', style: 'width:auto' }, [['any', 'Everything'], ['warning', 'Warnings and errors'], ['error', 'Errors'], ['auth', 'Sign-ins']].map(([v, l]) => h('option', { value: v }, l)));
-  const contains = h('input', { class: 't', placeholder: 'Contains…', style: 'max-width:220px' });
-  const requests = h('input', { type: 'checkbox' });
-  const out = h('pre', { class: 'log' }, 'Loading…'), note = h('p', { class: 'muted small' });
-  const load = async () => {
-    try {
-      const r = await api(`/api/log?lines=300&level=${level.value}&contains=${encodeURIComponent(contains.value)}&requests=${requests.checked ? 1 : 0}`);
-      out.textContent = r.lines.length ? r.lines.join('\n') : (r.note || 'Nothing matches.');
-      note.textContent = r.note ? '' : `${r.file}: ${(r.size_bytes / 1024).toFixed(0)} kB, the last ${r.returned} lines.`;
-      out.scrollTop = out.scrollHeight;
-    } catch (e) { out.textContent = e.message; }
-  };
-  level.onchange = load; requests.onchange = load; contains.onchange = load;
-  setTimeout(load, 0);
-  return h('div', { class: 'box' }, h('h2', null, icon('note'), 'Server log'),
-    h('div', { class: 'multi' }, level, contains, h('label', { class: 'check' }, requests, ' Requests too'),
-      h('button', { class: 'pillbtn noic', onclick: load }, 'Reload'), h('a', { class: 'pillbtn', href: '/api/log/download' }, icon('download', 's'), 'Download')),
-    out, note);
-}
-
-/** Start update.sh on the server, then watch /api/status until another version or commit answers, and reload. */
-async function runUpdate() {
-  try { await api('/api/server', { method: 'POST', json: { action: 'update' } }); } catch (e) { fail(e); return false; }
-  toast('Updating; ioSuite restarts when it is done, and the page reloads.');
-  const was = `${S.status.version}|${S.status.commit || ''}`, until = Date.now() + 240000;
-  const look = async () => {
-    try { const s = await fetch('/api/status', { credentials: 'same-origin' }).then((r) => r.json()); if (s.version && `${s.version}|${s.commit || ''}` !== was) { location.reload(); return; } } catch { /* restarting */ }
-    if (Date.now() < until) setTimeout(look, 4000); else toast('The update did not finish; see Maintenance › Updates and logs.');
-  };
-  setTimeout(look, 4000);
-  return true;
-}
+const serverUi = () => import(new URL('api/server/ui.js', document.baseURI).href);
 
 /** Admins: a note when the daily check found a newer version, with Update now. Hidden until the next version when dismissed. */
 function updateBanner() {
@@ -1586,8 +1493,8 @@ function updateBanner() {
   if (!u || dismissed === u.remote) return;
   const b = h('div', { id: 'updbanner', role: 'status' }, icon('update'),
     h('span', null, `ioSuite ${u.version ? `v${u.version}` : 'update'} is available${u.message ? `: ${u.message.replace(/^v\d+\.\d+\.\d+:\s*/, '')}` : ''}`),
-    h('button', { class: 'pillbtn primary noic', onclick: async () => { if (await confirmDialog('Update ioSuite', 'Install the new version and restart? The page reloads when it is back.', 'Update now')) { b.remove(); runUpdate(); } } }, 'Update now'),
-    h('a', { class: 'pillbtn noic', href: '#/maintenance/updates', onclick: () => b.remove() }, 'Details'),
+    h('button', { class: 'pillbtn primary noic', onclick: async () => { if (await confirmDialog('Update ioSuite', 'Install the new version and restart? The page reloads when it is back.', 'Update now')) { b.remove(); (await serverUi()).runUpdate({ toast }); } } }, 'Update now'),
+    h('a', { class: 'pillbtn noic', href: '#/settings/server', onclick: () => b.remove() }, 'Details'),
     h('button', { class: 'iconbtn', title: 'Not now (hidden until the next version)', onclick: () => { try { localStorage.setItem('iosuite.updateDismissed', u.remote); } catch { /* */ } b.remove(); } }, icon('close', 's')));
   document.body.append(b);
 }

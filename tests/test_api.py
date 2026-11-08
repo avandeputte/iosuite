@@ -46,7 +46,7 @@ def test_viewer_cannot_change_settings(client):
 def test_server_info(client):
     s = client.get("/api/server").json()
     assert s["version"] and "canRun" in s and s["autoCheck"] is False and s["autoCheckLocked"] is True
-    assert s["database"] and "progress" in s and s["repo"] and s["branch"]
+    assert s["about"][1][0] == "Database" and "progress" in s and s["repo"] and s["branch"]
     assert client.get("/api/log").status_code in (200, 404)  # the server log, when there is one
 
 
@@ -71,7 +71,7 @@ def test_the_shell_its_files_and_the_icon_are_public(client):
 
 
 def test_suite_admin_screen(client):
-    """Settings › Suite: every account, its role in every app, app passwords with their scope, the apps' access."""
+    """Settings › Security: every account, its role in every app, app passwords with their scope, the apps' access."""
     o = client.get("/api/suite-admin").json()
     assert {a["app"] for a in o["apps"]} >= {"iopix", "iocalendar", "iocontacts"} and [u["name"] for u in o["users"]] == ["alex"]
     r = client.post("/api/suite-admin/users", json={"name": "ann", "password": "secret123", "roles": {"iopix": "editor", "iosuite": "admin"}})
@@ -82,7 +82,7 @@ def test_suite_admin_screen(client):
     items = client.get("/api/suite-admin/app-passwords").json()["items"]
     assert [(i["userName"], i["scope"]) for i in items] == [("ann", "dav")]
     assert client.patch("/api/suite-admin/apps/iocalendar", json={"defaultRole": "none"}).json()["defaultRole"] == "none"
-    # ann administers ioSuite, but not the suite: Settings › Suite is not hers
+    # ann administers ioSuite, but not the suite: Settings › Security is not hers
     client.post("/api/auth/logout")
     assert client.post("/api/auth/login", json={"name": "ann", "password": "secret123"}).status_code == 200
     assert client.get("/api/users").status_code == 200

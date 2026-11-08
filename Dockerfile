@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends git \
     && pip install --no-cache-dir -e . \
     && apt-get purge -y --auto-remove git && rm -rf /var/lib/apt/lists/* \
     && useradd --uid 1000 --user-group --no-create-home --shell /usr/sbin/nologin iosuite && chown -R iosuite:iosuite /app
-# the commit the image was built from, for Maintenance › Updates and logs (the workflow passes it)
+# the commit the image was built from, for Settings › Server (the workflow passes it)
 ARG COMMIT=unknown
 RUN echo "$COMMIT" > COMMIT
 # the database settings come from the environment (docker-compose.yml): no password is baked into the image

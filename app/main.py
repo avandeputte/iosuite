@@ -17,7 +17,7 @@ from iosuite_shared.updates import setup_log
 from app import __version__, api, config, db, keys, users
 from app.auth import auth, updater
 
-setup_log(config.LOG_FILE)  # the server log that Maintenance › Updates and logs shows; the app runs without it
+setup_log(config.LOG_FILE)  # the server log that Settings › Server shows; the app runs without it
 log = logging.getLogger("iosuite")
 
 # what a visitor may still fetch when sign-in is required: the app shell and its files, and the API docs
@@ -52,13 +52,13 @@ auth.install(app, limit_for=_limit_for, forwarded_allow_ips=config.FORWARDED_ALL
 
 
 def _server_info() -> dict:
-    """What Maintenance › Updates and logs and Settings › Server show beside the updater's own fields."""
-    return {"url": config.PUBLIC_URL or None, "database": f"{config.DB_HOST}:{config.DB_PORT}/{config.DB_NAME}"}
+    """What Settings › Server shows beside the updater's own fields: this server's address and database."""
+    return {"about": [["Address", config.PUBLIC_URL or None], ["Database", f"{config.DB_HOST}:{config.DB_PORT}/{config.DB_NAME}"]]}
 
 
 app.include_router(auth.router())        # /api/auth/*: sign-in, accounts, me, settings, password, sessions, app passwords, suite
 app.include_router(auth.users_router())  # /api/users: accounts and their role here (admins)
-app.include_router(auth.admin_router())  # /api/suite-admin: every account, role, app password, session and app of the suite (suite admins; Settings › Suite)
+app.include_router(auth.admin_router())  # /api/suite-admin: every account, role, app password, session and app of the suite (suite admins; Settings › Security and Global settings)
 app.include_router(auth.status_router(updater))  # /api/status: public, the same shape in every app
 app.include_router(auth.server_router(updater, log_file=config.LOG_FILE, info=_server_info))  # /api/server, /api/log (admins)
 app.include_router(api.router)

@@ -1,5 +1,5 @@
 """The start page's keys and tokens, kept with every other app's in the Shared ioSuite database
-(iosuite_shared.credentials), so Settings › Suite › Keys and tokens lists them all. Settings › Home Assistant and
+(iosuite_shared.credentials), so Settings › Global settings › Keys and tokens lists them all. Settings › Home Assistant and
 Settings › Weather still set them; HA_TOKEN and ACCUWEATHER_API_KEY in the environment win as before."""
 import logging
 
