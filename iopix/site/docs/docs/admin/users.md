@@ -18,17 +18,17 @@ Create the admin account during install, from **Settings › Create the admin ac
 | **Viewer** | the same, plus settings, favorites and private albums kept with the account, so they follow you to other devices |
 | **Viewer without a password** | the same, and signs in with one tap from the account picker, like a profile on a media server. Can never be more than a viewer |
 | **Editor** | plus every change to the library: edits, tags, faces, places, imports, moves, the trash |
-| **Admin** | plus settings, maintenance, models, backups and updates. Accounts and roles are managed by suite admins (Settings › Suite) |
+| **Admin** | plus settings, maintenance, models, backups and updates. Accounts and roles are managed by suite admins (Settings › Security) |
 
 The server enforces all of this; hiding a button is never the only protection.
 
 ## Sign-in required
 
-**Settings › Suite › Apps › Sign-in required** (for ioPix) turns open browsing off. Visitors get the sign-in screen and nothing else: no thumbnail, photo or search result is served without an account. Turn it on for anything reachable from the internet.
+**Settings › Global settings › Apps › Sign-in required** (for ioPix) turns open browsing off. Visitors get the sign-in screen and nothing else: no thumbnail, photo or search result is served without an account. Turn it on for anything reachable from the internet.
 
 ## Managing accounts
 
-Accounts are shared by every app in the suite and kept in the Shared ioSuite database. A suite admin manages them in **Settings › Suite › People** (the same panel in every io app). For each:
+Accounts are shared by every app in the suite and kept in the Shared ioSuite database. A suite admin manages them in **Settings › Security › People** (the same panel in every io app). For each:
 
 - **role** in ioPix and in every other app, and **password** (or none, for a one-tap viewer),
 - **email address**, used to match sign-ins from a proxy such as Cloudflare Access,

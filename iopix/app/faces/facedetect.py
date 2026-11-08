@@ -1,6 +1,6 @@
 """Face detection on request: a photo, a folder or the whole library.
 
-Three detectors, chosen in Maintenance › AI analysis and models (the setting face_detector), all run with
+Three detectors, chosen in Settings › AI (the setting face_detector), all run with
 onnxruntime on a 640 px letterboxed copy of the picture:
 - YuNet (OpenCV, 230 KB): the default, tiny and fast;
 - SCRFD 10G (InsightFace): clearly better on small, turned and partly hidden faces, about 10x slower;
@@ -15,7 +15,7 @@ alone. Only faces nothing else marked become new regions, written the way digiKa
 found but could not name (an "Unknown" region), so they show up under People › Unnamed faces, get a
 "looks like" suggestion from face grouping, and can be named there or in digiKam.
 
-Nothing runs on its own: the library job starts only from Maintenance, a folder or a photo. Each photo
+Nothing runs on its own: the library job starts only from Settings › AI, a folder or a photo. Each photo
 checked is remembered (pix_ai_scans, job facedetect) so a library run picks up only new and changed photos; a run
 on one photo or one folder always looks again. A face removed after a run is not brought back by the
 next library run, since that photo is not looked at again unless it changes.
@@ -277,7 +277,7 @@ def _scanned() -> dict:
 
 
 def coverage() -> int:
-    """How many photos the detector has looked at (Maintenance › AI analysis); 0 without a viewer database."""
+    """How many photos the detector has looked at (Settings › AI); 0 without a viewer database."""
     if not vdb.ready():
         return 0
     try:

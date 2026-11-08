@@ -16,4 +16,4 @@ iopix uses the links you make in ioContacts: a contact's **ioPix person** (in io
 
 ## Setting it up
 
-Nothing to set up. When ioContacts runs in the same suite (the same Shared ioSuite database), iopix finds it by itself and reads the contacts with its own read-only app password, which Settings › Suite › App passwords lists. Its server reads ioContacts, never your browser, and does so again every ten minutes. When ioContacts can't be reached, pages carry on with the birthdays from the last good read (none just after iopix restarts), and the server log says what went wrong.
+Nothing to set up. When ioContacts runs in the same suite (the same Shared ioSuite database), iopix finds it by itself and reads the contacts with its own read-only app password, which Settings › Security › App passwords lists. Its server reads ioContacts, never your browser, and does so again every ten minutes. When ioContacts can't be reached, pages carry on with the birthdays from the last good read (none just after iopix restarts), and the server log says what went wrong.

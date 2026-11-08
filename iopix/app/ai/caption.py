@@ -1,7 +1,7 @@
 """Descriptions of photos: one sentence with BLIP (Salesforce; base by default, large as an option),
 run locally through PyTorch (Apple GPU when available, else CPU), or a short paragraph with
 Florence-2 base (florence.py, onnxruntime on the CPU). The choice is the setting caption_model
-(Maintenance). The model lives in data/models (downloaded from the AI analysis page or
+(Settings › AI). The model lives in data/models (downloaded from Settings › AI or
 `python -m app.ai.models download blip|blip_large|florence2`) and is loaded offline; nothing leaves
 the machine."""
 import logging

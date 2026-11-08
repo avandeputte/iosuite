@@ -6,7 +6,7 @@ one-click name. The suggestion is the viewer's own and is never written anywhere
 the owner accepts it; accepting goes through the same face operations as naming by hand.
 
 The embeddings come from one of two models (ONNX, run locally with onnxruntime; chosen in
-Maintenance, the setting face_vectors): OpenCV's SFace (the default, 128-d, on the square crops
+Settings › AI, the setting face_vectors): OpenCV's SFace (the default, 128-d, on the square crops
 the face queue already shows) or InsightFace's ArcFace ResNet-50 (512-d, much better at telling
 people apart; each crop is first aligned on its eyes, nose and mouth, found by the chosen face
 detector, the way ArcFace was trained). Vectors live in the viewer database (pix_ai_face_embeddings
@@ -205,7 +205,7 @@ def _have() -> set:
 
 
 def coverage() -> tuple:
-    """(faces with a vector, faces to embed) for the Maintenance row: undecided faces plus the prototypes."""
+    """(faces with a vector, faces to embed) for the Settings › AI row: undecided faces plus the prototypes."""
     try:
         return len(_have()) + len(_have_protos()), len(_faces()) + len(_proto_faces())
     except Exception:

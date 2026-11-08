@@ -73,7 +73,7 @@ class ScanJob:
             con.execute("DELETE FROM pix_ai_scans WHERE job = ?", (self.name,))
 
     def coverage(self) -> tuple:
-        """(done, total) for the Maintenance row; (0, 0) when the database cannot be read (not there yet, locked)."""
+        """(done, total) for the Settings › AI row; (0, 0) when the database cannot be read (not there yet, locked)."""
         try:
             with vdb.reader() as con:
                 done, total = self._counts(con)

@@ -1,5 +1,5 @@
 """The background jobs the AI analysis page lists, one row each: key, label, what it does (detail), progress and
-whether it is enabled and can be run again. The Maintenance page and the MCP server read the same table."""
+whether it is enabled and can be run again. Settings › AI and the MCP server read the same table."""
 from app import config, jobs as bgjobs
 from app.ai import analysis, caption, detector, looks, models as dlmodels
 from app.ai.semantic import enabled as semantic_enabled, ENGINES, semantic
@@ -51,7 +51,7 @@ def rows(total: int, stills: int, signed_in: bool) -> list:
          "done": jerseys.coverage()[0], "total": jerseys.coverage()[1], "running": jerseys.progress["running"], "enabled": config.ANALYSIS and jerseys.available(), "rerun": True},
         {"key": "clothing", "label": "Clothing matches", "detail": f"An embedding of each detected person ({mname('search_model')}, the content-search model) describing what they wear. Within the photos of one folder on one day, a person whose face is not named is matched to the people whose face is, and a clear match suggests them as present (Explore › Clothing matches); nothing is tagged until you accept it. Computed again when the search model changes.",
          "done": clothing.coverage()[0], "total": clothing.coverage()[1], "running": clothing.progress["running"], "enabled": config.ANALYSIS and clothing.available(), "rerun": True},
-        {"key": "rotation", "label": "Wrongly rotated", "detail": f"Finds photos stored on their side or upside down. Your own photos teach a small classifier on the content-search embeddings ({mname('search_model')}) what upright looks like; every photo that reads as turned is then checked in all four turns. The findings are listed under Maintenance › Wrongly rotated with the lossless rotate; nothing is changed until you do. Learnt again when the search model changes.",
+        {"key": "rotation", "label": "Wrongly rotated", "detail": f"Finds photos stored on their side or upside down. Your own photos teach a small classifier on the content-search embeddings ({mname('search_model')}) what upright looks like; every photo that reads as turned is then checked in all four turns. The findings are listed under Settings › Library › Wrongly rotated with the lossless rotate; nothing is changed until you do. Learnt again when the search model changes.",
          "done": rotation.coverage()[0], "total": rotation.coverage()[1], "running": rotation.progress["running"], "enabled": config.ANALYSIS and rotation.available(), "rerun": True},
         {"key": "videos", "label": "Videos", "detail": "For each video: the best of several frames as its cover (sharp, well lit, a face when the face detector is installed), chapter thumbnails at the scene changes (or spread over a single take) to jump to in the viewer, and "
          + (f"a transcript of what is said ({mname('speech_model')}), searchable from the search box and shown in the info panel." if videos.speech_available() else "a transcript of what is said once a speech model is installed."),

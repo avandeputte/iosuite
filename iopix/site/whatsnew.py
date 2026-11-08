@@ -7,7 +7,7 @@ from collections import OrderedDict
 from pathlib import Path
 
 OUT = Path(__file__).parent / 'docs' / 'docs' / 'whats-new.md'
-HEAD = '# What\'s new\n\nWhat changed in iopix, one entry per day, newest first; each entry carries the day\'s last version. Update from **Maintenance › iopix › Update now**, or see [Updating](install/updating.md).\n'
+HEAD = '# What\'s new\n\nWhat changed in iopix, one entry per day, newest first; each entry carries the day\'s last version. Update from **Settings › Server › Update now**, or see [Updating](install/updating.md).\n'
 VERSION = re.compile(r'^v(\d+)\.(\d+)\.(\d+):\s+(.*)$')
 
 

@@ -1,7 +1,7 @@
 """Clearing digiKam's pick labels (Rejected, Pending, Accepted) from the whole library.
 
 iopix does not use pick labels and never sets them. Some libraries carry thousands from an older tool or import;
-this removes the chosen ones, on request (Maintenance › Library), in one go:
+this removes the chosen ones, on request (Settings › Library), in one go:
 
 - digiKam's database: the internal tags "Pick Label Rejected/Pending/Accepted" are taken off those photos (no
   label is digiKam's own "no pick label"), in one guarded transaction after a full database backup;
@@ -59,7 +59,7 @@ def clear(levels: list, require_digikam_closed: bool = True, after=None) -> int:
             con.execute("DELETE FROM ImageTags WHERE tagid = ?", (tid,))
             photos += [(i, lv) for i in ids]
     paths = dict(dbsync.photo_paths([i for i, _lv in photos]))
-    history.record([{"photo_id": i, "action": "edit", "summary": f"Pick label {LEVELS[lv]} cleared (Maintenance › Clear pick labels)",
+    history.record([{"photo_id": i, "action": "edit", "summary": f"Pick label {LEVELS[lv]} cleared (Settings › Library › Clear pick labels)",
                      "path": paths.get(i), "undo": {"pick": lv}} for i, lv in photos])
     progress.start(len(photos), cleared=len(photos), sidecars=0)
     threading.Thread(target=_sidecars, args=([paths[i] for i, _lv in photos if i in paths], after), name="picklabels", daemon=True).start()

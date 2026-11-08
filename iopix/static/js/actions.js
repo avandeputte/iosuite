@@ -134,7 +134,7 @@ export async function showHistory(params) {
   };
   const reload = () => { offset = 0; load(); };
   more.onclick = () => load(true);
-  main.replaceChildren(h('div', { class: 'page spage' }, crumbs([['Maintenance', '#/maintenance'], ['Edit log', photo ? '#/history' : null], ...(photo ? [['One photo', null]] : [])]),
+  main.replaceChildren(h('div', { class: 'page spage' }, crumbs([['Settings', '#/settings?tab=library'], ['Edit log', photo ? '#/history' : null], ...(photo ? [['One photo', null]] : [])]),
     pageTitle('calendar', 'indigo', photo ? 'Edit log of one photo' : 'Edit log'),
     h('p', { class: 'muted', style: 'margin:0 0 10px' }, `Every change made in ${S.APP_NAME}, kept for good: who, when, and the values before and after. Undo puts the earlier values back; the restore links use the backups (sidecar copies, original files, the trash).`),
     h('div', { class: 'ctools hfilters' }, q, photo ? null : [person, plist], sel, who, h('span', { class: 'muted' }, 'from'), from, h('span', { class: 'muted' }, 'to'), to, sizes, count), list, more));
@@ -301,15 +301,15 @@ export function promptDialog(message, opts = {}) {
     setTimeout(() => { input.focus(); if (opts.value) input.select(); }, 0);
   });
 }
-/** Maintenance › Metadata quality: photos without a location, and faces stored twice, the same person in two places, boxes outside the photo or empty.
+/** Settings › Library › Metadata quality: photos without a location, and faces stored twice, the same person in two places, boxes outside the photo or empty.
  *  The check runs every time the page is opened, and again with "Check again". */
 let qualityTimer = 0;  // the one pending redraw of the quality page; a new one replaces it
 let damagedTimer = 0;
-/** Maintenance › Damaged files: the file check's findings, with the safe repair (an end marker added, backed up, undoable). */
+/** Settings › Library › Damaged files: the file check's findings, with the safe repair (an end marker added, backed up, undoable). */
 export async function showDamaged() {
   clearTimeout(damagedTimer);
   const body = h('div', null, h('div', { class: 'muted' }, 'Loading…'));
-  main.replaceChildren(h('div', { class: 'page spage cpage' }, crumbs([['Maintenance', '#/maintenance'], ['Damaged files', null]]),
+  main.replaceChildren(h('div', { class: 'page spage cpage' }, crumbs([['Settings', '#/settings?tab=library'], ['Damaged files', null]]),
     pageTitle('photo', 'rose', 'Damaged files'),
     h('p', { class: 'muted intro mt0' }, `Every photo’s file is read and checked: JPEGs that stop early, lack their end marker or hold damaged data, PNGs with damaged data, and pictures that cannot be decoded. Files are only read until you choose a fix. A JPEG whose picture is complete but whose end marker is missing (some phones’ burst photos) can be repaired by adding the marker. A JPEG whose bottom is missing (shown grey) can be cropped, without re-encoding, to the part above the damage. Each file is copied first, and every fix is in the edit log with undo. What was lost cannot be brought back here; a backup or the original device may still have the file whole.`),
     body));
@@ -352,7 +352,7 @@ export async function showDamaged() {
       p.running ? null : h('button', { class: 'pillbtn on', onclick: run(false) }, icon('spark'), d.checked < d.total ? 'Check the files' : 'Check new files'),
       p.running ? null : h('button', { class: 'pillbtn', onclick: run(true) }, 'Check everything again'),
       fixable.length > 1 && S.EDITING ? h('button', { class: 'pillbtn', onclick: (e) => repair(fixable.map((x) => x.photo), e.currentTarget) }, `Repair all ${nf.format(fixable.length)}`) : null),
-    !d.jpegtran ? h('div', { class: 'enote' }, 'jpegtran is not installed on the server, so a JPEG missing its end marker cannot be checked for completeness or repaired (see Maintenance › Lossless JPEG edits).') : null,
+    !d.jpegtran ? h('div', { class: 'enote' }, 'jpegtran is not installed on the server, so a JPEG missing its end marker cannot be checked for completeness or repaired (see Settings › Library › Lossless JPEG edits).') : null,
     d.found.length ? h('div', { class: 'hlist' }, d.found.map(row)) : null);
   if (p.running) damagedTimer = setTimeout(() => { if (S.route.view === 'damaged' && body.isConnected) showDamaged(); }, 4000);
 }
@@ -612,7 +612,7 @@ export async function showQuality() {
   const body = h('div', null, h('div', { class: 'muted' }, 'Checking every face in the library…'));
   // redraw the page a moment later, unless the user has gone elsewhere or the page was drawn again meanwhile
   const refreshQuality = (ms) => { clearTimeout(qualityTimer); qualityTimer = setTimeout(() => { if (S.route.view === 'quality' && body.isConnected) showQuality(); }, ms); };
-  main.replaceChildren(h('div', { class: 'page spage cpage' }, crumbs([['Maintenance', '#/maintenance'], ['Metadata quality', null]]),
+  main.replaceChildren(h('div', { class: 'page spage cpage' }, crumbs([['Settings', '#/settings?tab=library'], ['Metadata quality', null]]),
     pageTitle('face', 'amber', 'Metadata quality'),
     h('p', { class: 'muted intro mt0' }, 'Each check is its own report. Every face region in digiKam’s database is checked: the same person stored twice a few pixels apart (shown twice in the people list), the same person in two separate places, and boxes that stick out of the photo or are empty. Fixes go through the normal face changes, so each one is in the edit log with undo.'),
     body));
@@ -744,29 +744,6 @@ export async function showTrash() {
     h('div', { class: 'nm' }, t.name), h('div', { class: 'sb' }, `${t.when ? fmtWhen(Math.floor(new Date(t.when).getTime() / 1000)) : ''} · ${t.path.split('/').slice(-2, -1)[0] || ''}`))));
   drawBar(); draw();
   fill(body, bar, grid);
-}
-/** Maintenance › Server log: the end of data/iopix.log, filtered by level and text; page requests hidden unless asked. */
-export function logDialog() {
-  const level = h('select', null, h('option', { value: 'any' }, 'Everything'), h('option', { value: 'warning' }, 'Warnings and errors'), h('option', { value: 'error' }, 'Errors only'), h('option', { value: 'auth' }, 'Sign-ins'));
-  const text = h('input', { class: 'einput', placeholder: 'Filter, e.g. sync or a file name', style: 'flex:1;min-width:140px', onkeydown: (e) => { e.stopPropagation(); if (e.key === 'Enter') load(); } });
-  const reqs = h('input', { type: 'checkbox' });
-  const pre = h('pre', { class: 'logview' }, 'Loading…');
-  const info = h('div', { class: 'muted smaller' });
-  async function load() {
-    let r; try { r = await api(`/api/log?lines=500&level=${level.value}&requests=${reqs.checked ? 1 : 0}&contains=${encodeURIComponent(text.value.trim())}`); } catch (e) { pre.textContent = e.message; return; }
-    pre.textContent = r.lines.length ? r.lines.join('\n') : (r.note || 'Nothing matches.');
-    pre.scrollTop = pre.scrollHeight;
-    fill(info, `${r.file} · ${fmtBytes(r.size_bytes)} · showing the last ${nf.format(r.returned)} lines`);
-  }
-  level.onchange = load; reqs.onchange = load;
-  const back = modal('Server log',
-    h('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px' }, level, text,
-      h('label', { style: 'display:flex;gap:6px;align-items:center;font-size:13px;cursor:pointer' }, reqs, 'Page requests'),
-      h('button', { class: 'pillbtn', onclick: load }, 'Refresh')),
-    pre, info,
-    { buttons: [h('a', { class: 'pillbtn', href: '/api/log/download', download: '' }, 'Download the log'), 'Close'] });
-  back.firstChild.classList.add('wide');
-  load();
 }
 /** Shared (everyone sees it; editors and admins change it) or private (only you): a select when both are allowed. */
 export function sharingPick(def) {

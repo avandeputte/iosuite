@@ -102,7 +102,6 @@ nav:
       - Users and sign-in: admin/users.md
       - Sign-in through a proxy: admin/proxy-signin.md
       - Settings: admin/settings.md
-      - Maintenance: admin/maintenance.md
       - Backups and the data folder: admin/backups.md
   - Connect more:
       - MCP server for AI assistants: integrations/mcp.md

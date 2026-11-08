@@ -13,7 +13,7 @@ Every install offers it:
 | [setup.sh](../install/setup-script.md) | answer **no** to "Do you use digiKam with these photos?" (or `--no-digikam`) |
 | [Docker](../install/docker.md) | `DIGIKAM_DB_TYPE: none`, without the other `DIGIKAM_DB_*` lines |
 
-An install that already runs can switch too: **Settings › digiKam and server › digiKam database › None**.
+An install that already runs can switch too: **Settings › Library › digiKam database › None**.
 
 To edit photos (tags, faces, captions and so on), iopix needs to be allowed to write into the photo folder, the same as with digiKam.
 
@@ -21,7 +21,7 @@ To edit photos (tags, faces, captions and so on), iopix needs to be allowed to w
 
 1. iopix starts an empty library on your photo folder.
 2. Its **file scanner** looks through the folder and adds every photo and video it finds, with what the files already hold: the date taken, the camera, the GPS position, captions, keywords and faces marked by other programs.
-3. From then on the scanner checks the folder every few minutes, and once right after each start, so photos you copy in show up by themselves. **Maintenance › Library › File scanner** sets how often, or scans now.
+3. From then on the scanner checks the folder every few minutes, and once right after each start, so photos you copy in show up by themselves. **Settings › Library › File scanner** sets how often, or scans now.
 
 Photos added with **Import** or by uploading into a folder are added straight away.
 
@@ -34,11 +34,11 @@ Each change is saved in iopix's library and in an XMP sidecar file next to the p
 ## What is different
 
 - There is no **Sync with digiKam** setting, and nothing is ever "waiting for digiKam".
-- **Backups:** the iopix data backup (**Maintenance › Storage and backups**) holds the whole library: folders, tags, people and faces, captions and places. Keep a copy somewhere else.
+- **Backups:** the iopix data backup (**Settings › Storage and backups**) holds the whole library: folders, tags, people and faces, captions and places. Keep a copy somewhere else.
 - The library lives in [iopix's own database](iopix-database.md) on your MariaDB or MySQL server, so back that server up (or use the download above).
 
 ## Starting to use digiKam later
 
 The sidecar files next to your photos hold the tags, people, faces, captions and ratings, in the format digiKam reads, so digiKam picks them up when it first scans the folder.
 
-Once digiKam has scanned the folder, choose its database under **Settings › digiKam and server › digiKam database**. iopix never silently replaces what you made: it keeps using its own library until you pick **Replace with digiKam's** under **Sync with digiKam** (see [Sync and working without digiKam](sync.md#turning-sync-back-on)). Since digiKam has read the sidecars by then, it already holds your tags, people, faces, captions and ratings. **Merge into digiKam** does not work for a library started in iopix (there is no earlier digiKam record to merge against), so it says so instead of guessing.
+Once digiKam has scanned the folder, choose its database under **Settings › Library › digiKam database**. iopix never silently replaces what you made: it keeps using its own library until you pick **Replace with digiKam's** under **Sync with digiKam** (see [Sync and working without digiKam](sync.md#turning-sync-back-on)). Since digiKam has read the sidecars by then, it already holds your tags, people, faces, captions and ratings. **Merge into digiKam** does not work for a library started in iopix (there is no earlier digiKam record to merge against), so it says so instead of guessing.

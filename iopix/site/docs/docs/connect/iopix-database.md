@@ -41,7 +41,7 @@ iopix reads the connection from `viewer-db.json` in the data folder, or from the
 | `DB_USER` | | account |
 | `DB_PASSWORD` | | password |
 
-Without either, iopix starts in a **database needed** state: the web app shows only a set-up page, the same panel as **Settings › digiKam and server › iopix database**, asking for the server details. **Test connection** checks them; **Use this database** saves them to `viewer-db.json` and restarts iopix on the new database. Until then nothing else answers: API calls return 503 with `needsDatabase: true`.
+Without either, iopix starts in a **database needed** state: the web app shows only a set-up page, the same panel as **Settings › Library › iopix database**, asking for the server details. **Test connection** checks them; **Use this database** saves them to `viewer-db.json` and restarts iopix on the new database. Until then nothing else answers: API calls return 503 with `needsDatabase: true`.
 
 If the configured server cannot be reached at start, the same page shows the error and a **Retry** button only. Nobody can sign in without the database, so the page does not let anyone test or switch to another server then; to change the connection, edit `data/viewer-db.json` (or the `DB_*` variables) and restart. iopix waits for the database; it does not fall back to anything else.
 
@@ -50,11 +50,11 @@ If the configured server cannot be reached at start, the same page shows the err
 
 ## Moving to another database
 
-Create the new database as above, then in **Settings › digiKam and server › iopix database** enter its details, press **Test connection** and then **Use this database**. Every row is copied across and iopix restarts on the new database. The old database is left as it was.
+Create the new database as above, then in **Settings › Library › iopix database** enter its details, press **Test connection** and then **Use this database**. Every row is copied across and iopix restarts on the new database. The old database is left as it was.
 
 ## Backups
 
-**Maintenance › Storage and backups › Download a backup › iopix data** gives `viewer.sql`, a `mysqldump` of the iopix database, plus the content-search embeddings files and a README with the restore steps. To restore, create an empty database and load the dump into it:
+**Settings › Storage and backups › Download a backup › iopix data** gives `viewer.sql`, a `mysqldump` of the iopix database, plus the content-search embeddings files and a README with the restore steps. To restore, create an empty database and load the dump into it:
 
 ```sh
 mariadb iopix < viewer.sql

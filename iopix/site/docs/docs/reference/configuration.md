@@ -32,7 +32,7 @@ iopix's own data lives on a MariaDB or MySQL server (see [iopix's own database](
 | `DB_HOST` / `DB_PORT` | / `3306` | server |
 | `DB_NAME` / `DB_USER` / `DB_PASSWORD` | | database and account; its own database, not digiKam's |
 
-## Accounts and access
+## Security
 
 | Variable | Default | Meaning |
 | --- | --- | --- |

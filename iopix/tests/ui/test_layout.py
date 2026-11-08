@@ -115,10 +115,10 @@ def test_filter_pane_steps_aside_on_pages_it_does_not_apply_to(page, server):
     if page.locator("#filters").is_hidden():
         page.locator("#filterbtn").click()
     page.wait_for_selector("#filters:not([hidden])", timeout=5000)
-    page.goto(server + "/#/maintenance")
-    page.wait_for_selector("h1:has-text('Maintenance')", timeout=10000)
+    page.goto(server + "/#/settings")
+    page.wait_for_selector("h1:has-text('Settings')", timeout=10000)
     page.wait_for_selector("#filters", state="hidden", timeout=5000)
-    assert page.locator("#filters").is_hidden(), "no filter pane on Maintenance"
+    assert page.locator("#filters").is_hidden(), "no filter pane on Settings"
     page.goto(server + "/#/photos")
     page.wait_for_selector("#filters:not([hidden])", timeout=5000)
     page.locator("#filterbtn").click()  # leave it closed for the other tests

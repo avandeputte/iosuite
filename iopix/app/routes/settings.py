@@ -40,7 +40,6 @@ def _settings_public() -> dict:
         "bg_threads": bgjobs.threads(),
         "read_only": appstate.read_only(),
         "require_login": users.require_login(),
-        "mcp_enabled": appstate.get_setting("mcp_enabled") == "1",
         "digikam_sync": index.sync_enabled(),
         "app_name": appstate.get_setting("app_name"),
         "database": db_settings_public(),
@@ -238,7 +237,6 @@ SETTINGS = {
     "app_name": _text("app_name", 40),  # how the viewer brands itself; empty puts the default back
     "library_replace": _library_replace,
     "digikam_sync": _digikam_sync,
-    "mcp_enabled": _switch("mcp_enabled"),  # the MCP endpoint at /mcp (off by default)
     "require_login": _require_login,
     "read_only": _read_only,
     "digikam_closed": _digikam_closed,

@@ -1,13 +1,13 @@
 /** Startup: metadata, state, the first route. */
-import { $, DOCK_MIN, NET, NO_CONNECTION, PREF, api, fill, fmtWhen, h, healSoon, icon, main, nf, norm, plural, post, sleep, store } from './core.js';
-import { FILTER_VIEWS, NAV, NAV_LIBRARY, NAV_MANAGE, S, ST, applyAppName, applyBadgePref, applyTheme, loadState, onRoute, parseHash, pollSoon, toastError } from './state.js';
+import { $, DOCK_MIN, NET, NO_CONNECTION, PREF, api, fmtWhen, h, healSoon, icon, main, nf, norm, plural, sleep, store } from './core.js';
+import { FILTER_VIEWS, NAV, NAV_LIBRARY, NAV_MANAGE, S, ST, applyAppName, applyBadgePref, applyTheme, loadState, onRoute, parseHash, pollSoon, toast } from './state.js';
 import { initSearch } from './search.js';
 import { confirmDialog } from './actions.js';
 import { G } from './grid.js';
 import { dbDialog } from './editing.js';
 import { moreSheet, showAlbums } from './pages.js';
 import { loadUser, loginDialog, renderUserMenu } from './users.js';
-import { viewerDbPanel } from './settings.js';
+import { serverUi, viewerDbPanel } from './settings.js';
 import { M } from './map.js';
 import { toggleFilters } from './filters.js';
 import { LB, details } from './lightbox.js';
@@ -87,32 +87,15 @@ export function updateBanner(u) {  // exported for test_ui.py, which calls it th
   b?.remove();
   const text = h('div', null, h('b', null, u.version ? `Version ${u.version} is available` : 'A newer build is available'),
     h('div', { class: 'muted' }, `You have v${S.APP_VERSION || '?'}. ${u.version ? '' : 'Latest change: '}${(u.message || '').replace(/^v\d+\.\d+\.\d+:\s*/, '').slice(0, 140)}`));
-  // the update runs from here; the banner then says so and the page reloads with the new version (details and Docker's way: Maintenance)
+  // the update runs from here; the banner then says so and the page reloads with the new version (details and Docker's way: Settings › Server)
   const run = h('button', { class: 'pillbtn on', onclick: async () => {
     if (!await confirmDialog(`Fetch ${u.version ? 'version ' + u.version : 'the latest version'}, refresh the packages and restart ${S.APP_NAME}? The page reloads when the new version is up.`)) return;
-    runUpdate((msg, failed) => {
-      run.hidden = more.hidden = true;
-      fill(text, h('b', null, failed ? 'The update did not finish' : 'Updating…'), h('div', { class: 'muted' }, msg, failed ? [' ', h('a', { class: 'lnk', href: '#/maintenance?tab=updates', onclick: () => b.remove() }, 'Maintenance › Updates and logs')] : null));
-    });
+    b.remove(); (await serverUi()).runUpdate({ toast });
   } }, 'Update now');
-  const more = h('a', { class: 'pillbtn', href: '#/maintenance?tab=updates', onclick: () => b.remove() }, 'Details');
+  const more = h('a', { class: 'pillbtn', href: '#/settings?tab=server', onclick: () => b.remove() }, 'Details');
   b = h('div', { id: 'updbanner', 'data-remote': u.remote }, h('span', { class: 'ic-wrap' }, icon('spark')), text, run, more,
     h('button', { class: 'iconbtn', title: 'Not now (hidden until the next version)', onclick: () => { store.local.set(PREF.updateDismissed, u.remote); b.remove(); } }, icon('close')));
   banners().prepend(b);
-}
-/** Run update.sh on the server (POST /api/server {action: update}), then watch for the new version: /api/status every 5 s until its
- *  version or commit differs from what runs here, and the page reloads. After 3 minutes without a change the update
- *  is reported as not finished. onState(text, failed) gets the words for the screen. Returns whether the update started. */
-export async function runUpdate(onState) {
-  try { await post('/api/server', { action: 'update' }); } catch (e) { toastError(e, 10000); return false; }
-  onState('Updating… the page reloads when the new version is up.', false);
-  const was = `${S.APP_VERSION}|${S.APP_COMMIT}`, until = Date.now() + 180000;
-  const check = async () => {
-    try { const s = await api('/api/status'); if (s.version && `${s.version}|${s.commit || ''}` !== was) { location.reload(); return; } } catch { /* restarting */ }
-    if (Date.now() < until) setTimeout(check, 5000); else onState('The update did not finish; see Maintenance › Updates and logs.', true);
-  };
-  setTimeout(check, 5000);
-  return true;
 }
 const LIVE_VIEWS = ['photos', 'people', 'places', 'folders', 'albums', 'tags', 'duplicates', 'detected', 'events', 'favorites'];
 /** A list page the library changed under is drawn again in place, keeping what was typed in its filter box. Not while
@@ -217,7 +200,7 @@ async function start() {
   try { st = await api('/api/status'); } catch { /* the poll below says what is wrong */ }
   if (st?.needsDatabase) { setupDatabasePage(st); return; }
   await loadUser();
-  // the sidebar: the destinations in groups (a gap after Favorites, Places and Map), then Settings and Maintenance at
+  // the sidebar: the destinations in groups (a gap after Favorites, Places and Map), then Settings at
   // the foot above the status line. On phones the same links are the bottom bar: four of them and More.
   const link = ([v, label, ic, href]) => h('a', { href: href || `#/${v}`, 'data-v': v }, icon(ic), h('span', { class: 'nl' }, label));
   // three groups: browsing, the Library everyone has, and (admins only) managing the library
@@ -226,7 +209,7 @@ async function start() {
   $('#nav').append(...NAV.map((n) => [n[0] === NAV_LIBRARY ? [h('div', { class: 'navgap' }), sec('Library')] : null, link(n)]).flat(2).filter(Boolean),
     h('div', { class: 'navmanage' }, h('div', { class: 'navgap' }), sec('Manage'), ...NAV_MANAGE.map(link)),
     h('button', { class: 'navmore', 'data-v': 'more', title: 'More', onclick: moreSheet }, icon('more'), 'More'),
-    h('div', { class: 'navfoot' }, link(['settings', 'Settings', 'gear']), link(['maintenance', 'Maintenance', 'wrench']), h('div', { id: 'status', role: 'status', 'aria-live': 'polite' })));
+    h('div', { class: 'navfoot' }, link(['settings', 'Settings', 'gear']), h('div', { id: 'status', role: 'status', 'aria-live': 'polite' })));
   initSidebar();
   initSearch();
   applyBadgePref(); applyTheme();

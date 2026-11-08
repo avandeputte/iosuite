@@ -3,9 +3,9 @@ import { $, DOCK_MIN, PREF, api, fill, h, main, norm, store } from './core.js';
 import { crumbs, renderChips } from './search.js';
 import { G, keepPlace, removeScrubber, showPhotos } from './grid.js';
 import { clearSelection, showDamaged, showHistory, showImport, showQuality, showTrash } from './actions.js';
-import { MORE_VIEWS, currentNav, showAlbums, showAnalysis, showClothing, showDateSuggest, showDetected, showEvents, showExplore, showFolders, showJerseys, showPeople, showPlaceSuggest, showPlaces, showRotation } from './pages.js';
+import { MORE_VIEWS, currentNav, showAlbums, showClothing, showDateSuggest, showDetected, showEvents, showExplore, showFolders, showJerseys, showPeople, showPlaceSuggest, showPlaces, showRotation } from './pages.js';
 import { showConsistency, showDuplicates, showFaces, showTags } from './admin.js';
-import { showMaintenance, showSettings } from './settings.js';
+import { showSettings } from './settings.js';
 import { M, showMap } from './map.js';
 import { renderFilters, toggleFilters } from './filters.js';
 import { LB, syncLightbox } from './lightbox.js';
@@ -93,11 +93,11 @@ export const NAV_MANAGE = [
   ['detected', 'Detected content', 'spark'], ['history', 'Edit log', 'edit'],
 ];
 // The suggestion and check pages (date and place suggestions, jersey numbers, clothing matches, wrongly rotated, damaged
-// files, duplicate files, metadata quality) are reached from Maintenance › Library, each summarised there in a line, not from the sidebar: they are
+// files, duplicate files, metadata quality) are reached from Settings › Library, each summarised there in a line, not from the sidebar: they are
 // occasional clean-up work, not browsing.
 // hash S.route name -> page renderer (function declarations are hoisted, so this can sit above them)
 export const VIEW_FNS = { photos: showPhotos, explore: showExplore, people: showPeople, places: showPlaces, folders: showFolders, albums: showAlbums, tags: showTags, map: showMap, duplicates: showDuplicates,
-  detected: showDetected, events: showEvents, history: showHistory, analysis: showAnalysis, settings: showSettings, maintenance: showMaintenance, consistency: showConsistency, quality: showQuality, trash: showTrash, import: showImport, faces: showFaces, datesuggest: showDateSuggest, placesuggest: showPlaceSuggest, jerseys: showJerseys, clothing: showClothing, rotation: showRotation, damaged: showDamaged };
+  detected: showDetected, events: showEvents, history: showHistory, settings: showSettings, consistency: showConsistency, quality: showQuality, trash: showTrash, import: showImport, faces: showFaces, datesuggest: showDateSuggest, placesuggest: showPlaceSuggest, jerseys: showJerseys, clothing: showClothing, rotation: showRotation, damaged: showDamaged };
 const VIEWS = Object.keys(VIEW_FNS);
 const PARAM_VIEWS = ['places', 'faces', 'history', 'import'];  // views whose own query parameters (not photo filters) pick what they show
 // favorites and app albums (stored by the app, not in digiKam)

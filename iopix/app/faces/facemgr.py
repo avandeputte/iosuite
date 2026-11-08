@@ -267,7 +267,7 @@ def inverse_ops(d: dict) -> list:
 
 def _person_already_there(con, image: int, tag: int, rect) -> bool:
     """Whether this person already has a face region on the photo within a few pixels of rect (the duplicates
-    Maintenance › Metadata quality cleans up must not be made here)."""
+    Settings › Library › Metadata quality cleans up must not be made here)."""
     x, y, w, h = map(int, rect)
     for (val,) in con.execute("SELECT value FROM ImageTagProperties WHERE imageid = ? AND tagid = ? AND property = 'tagRegion'", (image, tag)):
         m = index.RECT_RE.search(val or "")

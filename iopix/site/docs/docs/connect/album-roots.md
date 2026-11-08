@@ -8,7 +8,7 @@ With a single album root, set the photo folder (the installers ask for it; in Do
 
 ## Several roots
 
-**Settings › digiKam and server › Album roots** lists every root digiKam recorded, with a field for where it is mounted here. A saved mapping overrides `PHOTOS_ROOT`. iopix rebuilds its index after a change.
+**Settings › Library › Album roots** lists every root digiKam recorded, with a field for where it is mounted here. A saved mapping overrides `PHOTOS_ROOT`. iopix rebuilds its index after a change.
 
 ## Folders and digiKam's albums
 

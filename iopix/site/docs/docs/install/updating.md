@@ -2,7 +2,7 @@
 
 ## From the app
 
-**Maintenance › iopix** shows the installed version. **Check for updates** compares it with the newest version, and **Update now** installs it and restarts iopix. The page reloads by itself when the new version is up.
+**Settings › Server** shows the installed version. **Check for updates** compares it with the newest version, and **Update now** installs it and restarts iopix. The page reloads by itself when the new version is up.
 
 With **Check for updates daily** on (the default), iopix asks once a day whether a newer version exists and shows admins a note with a link. Only the public list of versions is fetched; nothing about your install is sent. `UPDATE_CHECK=0` turns this off for good.
 

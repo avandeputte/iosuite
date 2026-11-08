@@ -128,7 +128,7 @@ REGISTRY = {
 }
 
 # Where a feature can run on one of several models: the setting that holds the choice, and the default.
-# Switching is a setting; each model is downloaded once from Maintenance. The feature code asks
+# Switching is a setting; each model is downloaded once from Settings › AI. The feature code asks
 # chosen() / path_for() so a switch takes effect at the next use (or the next job).
 CHOICES = {
     "search_model": {"label": "Content search", "default": "clip"},

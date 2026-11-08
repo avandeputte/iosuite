@@ -297,7 +297,7 @@ export async function detectFaces(ids, folder) {
   if (!folder) toast('Looking for faces…', null, null, 30000);
   let r;
   try { r = await post('/api/faces/detect', folder ? { album: folder.id } : { ids }); } catch (e) { toastError(e); return; }
-  if (!r.done) { toast(`Looking for faces in ${plural(r.queued, 'photo')} in the background; progress in Maintenance › AI analysis and models.`, null, null, 9000); return; }
+  if (!r.done) { toast(`Looking for faces in ${plural(r.queued, 'photo')} in the background; progress in Settings › AI.`, null, null, 9000); return; }
   toast(r.added ? `Found ${plural(r.added, 'new face')}; ${r.found - r.added ? `${plural(r.found - r.added, 'face was', 'faces were')} already marked.` : ''} Name ${r.added === 1 ? 'it' : 'them'} under People or here.` : r.found ? `No new faces: the ${plural(r.found, 'face')} found ${r.found === 1 ? 'is' : 'are'} already marked.` : 'No faces found.', null, null, 9000);
   if (r.added && LB.open) { (ids || []).forEach((i) => details.delete(i)); S.keepView = true; setTimeout(() => { pollStatus().then(() => { if (LB.open) showItem(); }); }, 800); }
 }

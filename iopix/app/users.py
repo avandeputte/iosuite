@@ -72,7 +72,7 @@ def linked_persons() -> set:
 
 
 def require_login() -> bool:
-    """Settings › Suite › Apps › Sign-in required: nothing but the sign-in screen for visitors."""
+    """Settings › Global settings › Apps › Sign-in required: nothing but the sign-in screen for visitors."""
     return shared.require_login(APP)
 
 

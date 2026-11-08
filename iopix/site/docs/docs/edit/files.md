@@ -2,7 +2,7 @@
 
 ## Import
 
-**Folders › Import**, **Maintenance › Import**, or **More** on a phone. Drop photos and videos, choose them, or take one with the camera.
+**Folders › Import**, **Settings › Library › Import**, or **More** on a phone. Drop photos and videos, choose them, or take one with the camera.
 
 - Files go into folders **by the date they were taken**, in the layout you choose: `2026/202610` like digiKam, `2026/10`, `2026/2026-10-16`, `202610` or `2026`. Admins can set the default.
 - A file already in the library (same size and contents) is left out, with a link to the photo it duplicates.
@@ -12,7 +12,7 @@ On Android, sharing photos to the installed app opens Import with them ready. On
 
 ## Files added outside iopix
 
-The **file scanner** (Maintenance › Library › File scanner, off by default) looks in the album folders for photos added, changed or removed some other way (a file manager, a sync tool, a phone backup) and records them as digiKam's own scanner would. A disk that looks unmounted is left alone. Leave it off if everything arrives through Import.
+The **file scanner** (Settings › Library › File scanner, off by default) looks in the album folders for photos added, changed or removed some other way (a file manager, a sync tool, a phone backup) and records them as digiKam's own scanner would. A disk that looks unmounted is left alone. Leave it off if everything arrives through Import.
 
 ## Move and rename
 

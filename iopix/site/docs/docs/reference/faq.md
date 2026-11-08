@@ -20,7 +20,7 @@ Yes: mount the library read-only (Docker), or set `READ_ONLY=1`. Every change is
 ## Setup
 
 **iopix starts but shows no photos.**
-Check the album roots: digiKam recorded the folders with the paths on its own machine. Map each to where iopix sees it under **Settings › digiKam and server › Album roots**.
+Check the album roots: digiKam recorded the folders with the paths on its own machine. Map each to where iopix sees it under **Settings › Library › Album roots**.
 
 **Thumbnails are missing for some photos.**
 The files are not where iopix looks, or not readable by its user (uid 1000 in Docker). Check the photo mount and its permissions.
@@ -43,10 +43,10 @@ They are still in `viewer.db` in the data folder. On the database set-up page, l
 ## Editing
 
 **I changed a photo in iopix but digiKam does not show it.**
-If digiKam was open, the change waits in the sidecar and in iopix. Close digiKam, or use **Maintenance › Library › Edits waiting for digiKam › Apply to digiKam database**.
+If digiKam was open, the change waits in the sidecar and in iopix. Close digiKam, or use **Settings › Library › Edits waiting for digiKam › Apply to digiKam database**.
 
 **A face shows up twice for the same person.**
-That is usually a leftover from older digiKam versions. **Maintenance › Library › Metadata quality** finds and removes these duplicates.
+That is usually a leftover from older digiKam versions. **Settings › Library › Metadata quality** finds and removes these duplicates.
 
 **How do I undo something?**
 Every change is in the [edit log](../edit/edit-log.md), with Undo. The message after each change also has an Undo button.
@@ -54,7 +54,7 @@ Every change is in the [edit log](../edit/edit-log.md), with Undo. The message a
 ## AI
 
 **Content search finds nothing.**
-The model may still be indexing; **Maintenance › AI analysis and models** shows progress. Search switches on when the index is complete.
+The model may still be indexing; **Settings › AI** shows progress. Search switches on when the index is complete.
 
 **The server is busy for hours after install.**
-The first pass over a large library takes time. Jobs run one at a time on half the cores by default; lower it in **Settings › AI and search**.
+The first pass over a large library takes time. Jobs run one at a time on half the cores by default; lower it in **Settings › AI**.

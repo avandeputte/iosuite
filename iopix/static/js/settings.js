@@ -1,15 +1,14 @@
-/** Settings and Maintenance: one loader (settingsPage) drawing the tabs of either page; the Suite tab is users.js. */
+/** Settings: one page in tabs, as in every ioThing app; the Security and Global settings tabs are users.js. */
 import { $, PREF, UNITS, act, api, dfDayLocal, errorBox, fill, fmtBytes, fmtWhen, h, icon, loadingBox, main, nf, plural, post, regionUsesMiles, store } from './core.js';
 import { S, THEMES, applyBadgePref, applyTheme, hashFor, infoPrefsEditor, pollSoon, toast, toastError } from './state.js';
-import { confirmDialog, logDialog } from './actions.js';
+import { confirmDialog } from './actions.js';
 import { dbDialog, templatesSection } from './editing.js';
 import { pageTitle } from './pages.js';
 import { setupDialog, suiteSection } from './users.js';
 import { placeTagsDialog } from './admin.js';
-import { runUpdate } from './main.js';
 
 
-/** Maintenance › AI analysis and models: one table, a row per feature, with the model it runs on (download,
+/** Settings › AI: one table, a row per feature, with the model it runs on (download,
  *  update check) and the background job that fills it (progress, run again). Models without a job (places)
  *  and an installed search model that is not in use get rows of their own. */
 function aiSection(view) {
@@ -23,7 +22,7 @@ function aiSection(view) {
     body);
   const fmtDate = (t) => (t ? dfDayLocal.format(new Date(t * 1000)) : '');  // when the model was installed: a real moment, in this browser's zone
   // a job's models: fixed ones (vision: RapidOCR; photo quality: the aesthetic and eye models; ages: MiVOLO) or the one
-  // chosen for the feature (Maintenance offers the alternatives in a menu)
+  // chosen for the feature (the table offers the alternatives in a menu)
   const JOB_MODEL = { vision: ['ocr'], looks: ['aesthetic', 'eyes'], ages: ['mivolo'], jerseys: ['ocr'] };
   const JOB_CHOICE = { embeddings: 'search_model', objects: 'object_model', faces: 'face_vectors', facedetect: 'face_detector', captions: 'caption_model', clothing: 'search_model', rotation: 'search_model', videos: 'speech_model' };
   const modelState = (m, p) => {
@@ -142,7 +141,10 @@ function aiSection(view) {
     }
     fill(body,
       h('div', { class: 'muted', style: 'font-size:13px;margin-bottom:8px' }, h('b', { style: 'color:var(--fg)' }, 'Background work: '), q.running ? `running ${(a.jobs.find((j) => (j.key === 'quality' && q.running === 'pixels') || j.key === q.running) || {}).label || q.running}` : 'idle',
-        `. Jobs run one at a time, in the order below, each with up to ${q.threads} of ${q.cores || '?'} cores (change that in Settings).`, q.queued?.length ? ` Waiting: ${q.queued.length}.` : ''),
+        `. Jobs run one at a time, in the order below, so ${S.APP_NAME} and other apps stay responsive; each may use up to `,
+        h('select', { onchange: async (e) => { await act(() => post('/api/settings', { bg_threads: +e.target.value }), { toast: 'Applies when the next job starts.' }); } },
+          Array.from({ length: Math.max(1, (q.cores || 4) - 1) }, (_, i) => h('option', { value: i + 1, selected: i + 1 === q.threads }, String(i + 1)))),
+        ` of ${q.cores || '?'} cores.`, q.queued?.length ? ` Waiting: ${q.queued.length}.` : ''),
       h('div', { class: 'mwrap' }, h('table', { class: 'mtable' },
         h('thead', null, h('tr', null, ['Feature', 'Model', 'Progress', ''].map((c) => h('th', null, c)))), h('tbody', null, rows))));
     checkBtn.disabled = false; fill(checkBtn, icon('spark'), 'Check models for updates');
@@ -157,66 +159,8 @@ function aiSection(view) {
   drawSafe();
   return wrap;
 }
-function analysisSection(view, part = 'jobs') {
-  // part 'jobs': the job list with progress (Maintenance); 'prefs': the search model and the core budget (Settings)
-  const body = h('div');
-  const wrap = h('div', null,
-    ...(part === 'jobs' ? [h('h2', null, 'AI analysis'),
-    h('div', { class: 'muted intro' }, `Everything here runs locally, wherever ${S.APP_NAME} is running, and is stored in its own data folder. New and changed photos are picked up automatically, about 20 seconds after digiKam saves them; “Check for new photos now” does the same on demand.`),
-    h('div', { class: 'my14',}, h('button', { class: 'pillbtn on', onclick: async () => { await act(() => post('/api/analysis/run', { job: 'all' }), { toast: 'Checking for new and changed photos…' }); draw(); } }, icon('spark'), 'Check for new photos now')),] : [h('h2', null, 'Search and background work')]),
-    body);
-  let timer = 0;  // one poll per section while a job runs; a section drawn again stops polling (body.isConnected)
-  const draw = async () => {
-    let d;
-    try { d = await api('/api/analysis'); } catch (e) { if (body.isConnected) fill(body, errorBox(e)); return; }  // say so, never an empty tab
-    if (S.route.view !== view || !body.isConnected) return;
-    const q = d.queue || {};
-    const sel = h('select', { onchange: async (e) => { await act(() => post('/api/settings', { bg_threads: +e.target.value }), { toast: 'Applies when the next job starts.' }); } },
-      Array.from({ length: Math.max(1, (q.cores || 4) - 1) }, (_, i) => h('option', { value: i + 1, selected: i + 1 === q.threads }, String(i + 1))));
-    fill(body, h('div', { class: 'ajob', style: 'border-top:0;padding-top:0' },
-      h('div', { class: 'ahead' }, h('b', null, 'Background work'), h('span', { class: 'muted' }, q.running ? `running: ${(d.jobs.find((j) => (j.key === 'quality' && q.running === 'pixels') || j.key === q.running) || {}).label || q.running}` : 'idle')),
-      h('div', { class: 'muted note mt6' }, ...(part === 'prefs'
-        ? [`Jobs run one at a time, in a fixed order, so ${S.APP_NAME} and other apps stay responsive. Each job may use up to `, sel, ` of ${q.cores || '?'} cores.`]
-        : [`Jobs run one at a time, in the order below. Each may use up to ${q.threads} of ${q.cores || '?'} cores (change that in Settings).`, q.queued?.length ? ` Waiting: ${q.queued.length}.` : '']))),
-      part === 'jobs' ? d.jobs.map((j) => h('div', { class: 'ajob' },
-      h('div', { class: 'ahead' }, h('b', null, j.label), h('span', { class: 'muted' }, !j.enabled ? 'not installed' : j.running ? 'running…' : j.queued ? 'queued' : j.done >= j.total ? 'up to date' : 'waiting'),
-        h('span', { class: 'sp' }), h('span', null, `${nf.format(Math.min(j.done, j.total))} / ${nf.format(j.total)}`)),
-      h('div', { class: 'bar' }, h('i', { style: `width:${j.total ? Math.min(100, 100 * j.done / j.total).toFixed(1) : 0}%` })),
-      j.running && j.since ? (() => { const now = Date.now() / 1000, idle = j.last ? now - j.last : now - j.since, stuck = idle > 300;
-        return h('div', { class: stuck ? 'warn' : 'muted', style: 'font-size:12px;margin-top:4px' }, `running for ${Math.round((now - j.since) / 60)} min · last progress ${idle < 90 ? Math.round(idle) + ' s' : Math.round(idle / 60) + ' min'} ago`,
-          j.current && j.current.length ? ` · working on ${j.current.map((p) => p.split('/').pop()).join(', ')}` : '',
-          stuck ? ` · no progress for over 5 minutes: probably stuck on that file; see the server log (journalctl -u iopix, docker logs, or data/server.log) and consider restarting ${S.APP_NAME} from Maintenance` : ''); })() : null,
-      h('div', { class: 'muted note mt6' }, j.detail, ' ',
-        j.rerun && j.enabled ? h('button', { type: 'button', class: 'lnk', onclick: async () => {
-          if (!await confirmDialog(`Run “${j.label}” again from scratch for all ${nf.format(j.total)} photos? The current results for it are discarded first. This can take from several minutes to a few hours.`)) return;
-          await act(() => post('/api/analysis/run', { job: j.key, reset: true }), { toast: `Re-running “${j.label}”.` });
-          draw();
-        } }, 'Run again from scratch') : null))) : null);
-    const others = (d.models || []).filter((m) => m.installed && !m.chosen);
-    if (others.length && part === 'prefs') body.append(h('div', { class: 'ajob' },
-      h('div', { class: 'ahead' }, h('b', null, 'Search model'), h('span', { class: 'muted' }, `using ${d.models.find((m) => m.active)?.label || 'none'}`)),
-      h('div', { class: 'muted note mt6' },
-        others.map((other) => h('div', { style: 'margin-bottom:4px' },
-          other.key === 'siglip2'
-            ? 'SigLIP 2 base is also installed: a newer model, generally more accurate than CLIP, though which one finds a given subject better varies; it indexes about 4 times slower. '
-            : other.key === 'jinaclip' ? 'Jina CLIP v1 is also installed: a larger CLIP that understands longer, more natural queries; it indexes about 3 times slower than CLIP. '
-            : `${other.label} is also installed. `,
-          'Switching re-indexes the whole library in the background when that model has no index yet; search stays on the current model until it finishes, and you can switch back at any time. ',
-          h('button', { type: 'button', class: 'lnk', onclick: async () => {
-            if (!await confirmDialog(`Switch content search to ${other.label}?`)) return;
-            await act(() => post('/api/settings', { search_model: other.key }), { toast: `Switching to ${other.label}.` });
-            draw();
-          } }, `Switch to ${other.label}`))))));
-    clearTimeout(timer);
-    if (part === 'jobs' && d.jobs.some((j) => j.running)) timer = setTimeout(() => { if (S.route.view === view && body.isConnected) draw(); }, 4000);
-  };
-  draw();
-  return wrap;
-}
 export async function showSettings() { return settingsPage('settings'); }
-export async function showMaintenance() { if (!S.IS_ADMIN) { main.replaceChildren(h('div', { class: 'empty' }, 'Maintenance is for admins. Sign in as an admin to see it.')); return; } return settingsPage('maintenance'); }
-// Settings: preferences. Maintenance: library actions, job progress, models, storage. One loader, two layouts.
-/** Maintenance › File scanner: on or off, how often, Scan now, and what the last pass found. */
+/** Settings › Library › File scanner: on or off, how often, Scan now, and what the last pass found. */
 function scannerRow(c) {
   const { m, row, btn, again, switchField } = c;
   const sc = m.scanner || {};
@@ -230,11 +174,11 @@ function scannerRow(c) {
     h('span', { class: 'toolbar',}, on, every,
       btn('Scan now', async () => { try { await post('/api/scan', {}); toast('Scanning the album folders…'); setTimeout(again, 4000); } catch (e) { toastError(e); } })));
 }
-const OPEN_COMPARE = new Set();  // model groups whose "Compare the models" fold is open on the Maintenance page
-// Settings and Maintenance are split into tabs: each stab() marks where one begins; what comes before the first is always shown
+const OPEN_COMPARE = new Set();  // model groups whose "Compare the models" fold is open on the AI tab
+// Settings is split into tabs: each stab() marks where one begins; what comes before the first is always shown
 const STABS = {
-  settings: [['display', 'Display'], ['server', 'digiKam and server'], ['editing', 'Editing'], ['ai', 'AI and search'], ['suite', 'Suite']],
-  maintenance: [['library', 'Library'], ['models', 'AI analysis and models'], ['storage', 'Storage and backups'], ['updates', 'Updates and logs']],
+  settings: [['display', 'Display'], ['editing', 'Editing'], ['library', 'Library'], ['ai', 'AI'], ['storage', 'Storage and backups'], ['server', 'Server'],
+    ['security', 'Security'], ['global', 'Global settings']],
 };
 const stab = (k) => h('span', { class: 'stab-mark', 'data-tab': k, hidden: true });
 function settingsTabs(page, view) {
@@ -247,7 +191,7 @@ function settingsTabs(page, view) {
   }
   const tabs = STABS[view].filter(([k]) => groups.has(k));
   if (tabs.length < 2) return;
-  let pick = S.route.params.get('tab');  // #/settings?tab=suite links straight to a tab; else the last one opened
+  let pick = S.route.params.get('tab');  // #/settings?tab=security links straight to a tab; else the last one opened
   if (!groups.has(pick)) pick = store.local.get(PREF[`${view}Tab`], null);
   if (!groups.has(pick)) pick = tabs[0][0];
   const bar = h('div', { class: 'stabs', role: 'tablist' });
@@ -263,8 +207,8 @@ function settingsTabs(page, view) {
   page.querySelector('.stab-mark').before(bar);
   show(pick);
 }
-/** What every settings row is built from: the maintenance data `m`, the page being drawn and the shared helpers
- * (row and button builders, the maintenance action runner `maint`, and the two field kinds that save one setting each). */
+/** What every settings row is built from: the library data `m` (GET /api/maintenance), the page being drawn and the shared helpers
+ * (row and button builders, the library action runner `maint`, and the two field kinds that save one setting each). */
 function settingsContext(m, view) {
   const again = () => { if (S.route.view === view) settingsPage(view); };
   const when = (t) => (t ? fmtWhen(t) : 'never');
@@ -308,7 +252,7 @@ function displayTab(c) {
       const sel = h('select', null, h('option', { value: 'osm', selected: m.mapProvider !== 'google' }, 'OpenStreetMap (no account needed)'), h('option', { value: 'google', selected: m.mapProvider === 'google' }, 'Google Maps (your API key)'));
       const keyIn = h('input', { class: 'einput', type: 'password', placeholder: m.googleMapsKeySet ? 'key is set; paste a new one to replace it' : 'Google Maps API key', autocomplete: 'off', style: 'width:260px' });
       const srvIn = h('input', { class: 'einput', type: 'password', placeholder: m.googleServerKeySet ? 'server key is set; paste a new one to replace it' : 'Server key (optional)', title: 'A second key, restricted by API and by this server’s address, for geocoding, places, elevation and Vision; without one the first key is used', autocomplete: 'off', style: 'width:260px' });
-      return row('Map provider', `Maps and place search use ${m.mapProvider === 'google' && m.googleMapsKeySet ? 'Google Maps' : 'OpenStreetMap'}. Google needs an API key from the Google Cloud console with the Map Tiles API and Geocoding API enabled and billing on; restrict that key by HTTP referrer to ${S.APP_NAME}'s address, since browsers see it. An optional second key, restricted by API and by this server's address, is used for what the server calls (geocoding, places, elevation, Vision). Keys are stored with the suite's keys and tokens (Settings › Suite) and never shown again.`,
+      return row('Map provider', `Maps and place search use ${m.mapProvider === 'google' && m.googleMapsKeySet ? 'Google Maps' : 'OpenStreetMap'}. Google needs an API key from the Google Cloud console with the Map Tiles API and Geocoding API enabled and billing on; restrict that key by HTTP referrer to ${S.APP_NAME}'s address, since browsers see it. An optional second key, restricted by API and by this server's address, is used for what the server calls (geocoding, places, elevation, Vision). Keys are stored with the suite's keys and tokens (Settings › Security) and never shown again.`,
         h('span', { class: 'toolbar tight' }, sel, keyIn, srvIn, btn('Save', async () => {
           const body = { map_provider: sel.value }; if (keyIn.value.trim()) body.google_maps_key = keyIn.value.trim(); if (srvIn.value.trim()) body.google_server_key = srvIn.value.trim();
           if (sel.value === 'google' && !keyIn.value.trim() && !m.googleMapsKeySet) { toast('Enter the Google Maps API key first.'); return; }
@@ -319,11 +263,12 @@ function displayTab(c) {
   ];
 }
 
-/** Settings › digiKam and server: the two databases, album roots, the update check, the MCP server, read-only mode and sync. */
-function serverTab(c) {
+/** Settings › Library, where it lives: the two databases, album roots, read-only mode and sync with digiKam. */
+function whereTab(c) {
   const { m, view, row, btn, again, switchField, toggleButton } = c;
   return [
-    S.IS_ADMIN ? stab('server') : null,
+    h('h2', null, 'Where the library is'),
+    h('div', { class: 'muted intro' }, m.paths ? `Library: ${m.paths.library} (${nf.format(m.photos)} photos and videos). Everything ${S.APP_NAME} writes lives in ${m.paths.data}.` : `${nf.format(m.photos)} photos in the library.`),
     S.IS_ADMIN ? (() => {
       const d = m.database || {};
       const inp = (k, ph, type = 'text', w = 160) => h('input', { class: 'einput', type, placeholder: ph, value: type === 'password' ? '' : (d[k] ?? ''), autocomplete: 'off', style: `margin:0;width:${w}px`, onkeydown: (e) => e.stopPropagation() });
@@ -365,9 +310,6 @@ function serverTab(c) {
       return row('Album roots', `Where each album root digiKam knows is mounted here. Leave a field empty to use the default (PHOTOS_ROOT for a single-root library, else the path digiKam recorded); enter a path when the folder is mounted elsewhere, e.g. /photos in a container. Changing it rebuilds the index.`, body);
     })() : null,
     S.IS_ADMIN ? row(`${S.APP_NAME} database`, `Where ${S.APP_NAME} keeps its own data: users, albums, favorites, settings, pending edits, the AI results and its copy of the library: a MariaDB or MySQL database of its own (not digiKam’s). Moving to another one copies every row across and restarts ${S.APP_NAME}; the connection is kept in data/viewer-db.json, outside the database.`, viewerDbPanel()) : null,
-    S.IS_ADMIN ? row('MCP server', m.mcpLocked ? 'Switched on by MCP=1 in the environment.'
-      : `The endpoint at /mcp that lets an AI assistant (Claude, for example) search and read this library and, as an admin, run diagnostics and maintenance. Off: /mcp does not answer at all. On: every assistant signs in with an app password (Settings › Apps and devices) and acts as that account, the same in every ioThing app.`,
-      m.mcpLocked ? null : switchField('mcp_enabled', !!m.mcpEnabled, { on: 'The MCP server at /mcp is on.', off: 'The MCP server is off: /mcp does not answer.' })) : null,
     S.IS_ADMIN ? row('Read-only mode', m.readOnlyLocked ? `Locked on by READ_ONLY=1 in the environment: nothing in the library can be changed from ${S.APP_NAME}.`
       : `${m.readOnly ? 'On' : 'Off'}. When on, ${S.APP_NAME} only browses: editing, tagging, face naming, place tags, GPS tracks, metadata sync and database updates are switched off and refused by the server. Favorites and viewer albums keep working; they never touch the library.`,
       m.readOnlyLocked ? null : toggleButton('read_only', m.readOnly, async () => { const s = await api('/api/status'); S.EDITING = s.editing; S.CAN_MANAGE = s.editing && s.dbWrite; })) : null,
@@ -409,7 +351,7 @@ function editingTab(c) {
   ];
 }
 
-/** Maintenance › Library: import, the scanner, the trash, the library copy, rescans, and the checks summarised in one line each. */
+/** Settings › Library: import, the scanner, the trash, the library copy, rescans, and the checks summarised in one line each. */
 function libraryTab(c) {
   const { m, row, btn, maint, when, again } = c;
   return [
@@ -492,7 +434,7 @@ function libraryTab(c) {
   ];
 }
 
-/** Maintenance › Storage and backups: what each cache and backup takes on disk, and the backup downloads. */
+/** Settings › Storage and backups: what each cache and backup takes on disk, and the backup downloads. */
 function storageTab(c) {
   const { m, row, maint } = c;
   const st = m.storage;
@@ -502,14 +444,14 @@ function storageTab(c) {
     h('h2', null, 'Storage and backups', h('span', { class: 'muted' }, `${fmtBytes(st.free)} free on the disk`)),
     (() => {
       const item = (label, size, detail, action) => h('tr', null, h('td', null, label, detail ? h('div', { class: 'muted', style: 'font-size:11.5px;white-space:normal' }, detail) : null),
-        h('td', { class: 'num' }, fmtBytes(size) || '0 B'), h('td', { class: 'act' }, action || null));
+        h('td', { class: 'num' }, size === false ? '' : fmtBytes(size) || '0 B'), h('td', { class: 'act' }, action || null));
       const small = (label, fn) => h('button', { class: 'pillbtn small', onclick: fn }, label);
       return h('table', { class: 'stable wide' }, h('tbody', null,
         item('Thumbnails', st.thumbnails, 'grid previews, rebuilt in the background (several minutes)', small('Rebuild', () => maint('thumbs', 'Rebuilding thumbnails in the background.', `Delete all grid thumbnails (${fmtBytes(st.thumbnails)}) and rebuild them?`))),
         item('Previews', st.previews, `large images for ${S.APP_NAME}, remade on demand`, small('Clear', () => maint('previews', 'Previews cleared; they are remade as you open photos.'))),
         item('Face crops', st.faces, 'remade on demand', small('Clear', () => maint('faces', 'Face crops cleared; they are remade as needed.'))),
         item('Search index', st.index, 'rebuilt from digiKam’s database in seconds'),
-        item(`${S.APP_NAME} database`, st.viewerDb, st.viewerDbError ? h('span', { class: 'warn' }, `MySQL/MariaDB is configured but could not be used when ${S.APP_NAME} started (${st.viewerDbError}), so the SQLite file is in use since then: anything saved now is not in the MySQL database. Fix the cause (Settings › ${S.APP_NAME} database) and restart ${S.APP_NAME}.`) : 'users, albums, favorites, settings, AI results'),
+        st.viewerDbError ? item(`${S.APP_NAME} database`, false, h('span', { class: 'warn' }, `MySQL/MariaDB is configured but could not be used when ${S.APP_NAME} started (${st.viewerDbError}), so the SQLite file is in use since then: anything saved now is not in the MySQL database. Fix the cause (Settings › Library › ${S.APP_NAME} database) and restart ${S.APP_NAME}.`)) : null,  // where it is: Settings › Library; its size is the database server's
         item('Content embeddings', st.embeddings, 'the content-search index'),
         item('AI models', st.models),
         item('Sidecar backups', st.backups, `each sidecar as it was before ${S.APP_NAME} first changed it`),
@@ -524,74 +466,34 @@ function storageTab(c) {
   ];
 }
 
-/** Maintenance › the app itself: the edit log, the server log, the version and updates, and restart. */
-/** Maintenance › Updates and logs: the version card, the daily check, the server log and Restart, from
- *  iosuite-shared's /api/server and /api/log, so the page is the same in every ioThing app. */
-function viewerTab(c) {
-  const { view, row, btn } = c;
-  return [
-    // 4. Updates and logs
-    stab('updates'),
-    h('h2', null, 'Updates and logs'),
-    row('Edit log', `Every change made in ${S.APP_NAME}, for every photo, kept for good: who, when, what it was before and after, with Undo and restore of the sidecar or the original file from the backups.`, h('a', { class: 'pillbtn', href: '#/history' }, 'Open the edit log')),
-    row('Server log', `What the server has been doing: edits, database writes, updates, background jobs and any errors, from ${S.APP_NAME}’s own log file in the data folder.`, btn('Show the log', logDialog)),
-    (() => {
-      const body = h('div', { class: 'muted note' }, 'Loading…');
-      let timer = 0;
-      const draw = async () => {
-        let u; try { u = await api('/api/server'); } catch (e) { fill(body, e.message); return; }
-        if (!body.isConnected) return;
-        const c = u.check, p = u.progress, last = u.lastUpdate;
-        const outcome = !p.running && !p.error && last ? h('div', { class: last.ok ? 'muted' : 'warn', style: 'font-size:12px;margin-top:2px' }, `last update: ${last.text}`) : null;
-        const state = p.running ? `updating… ${S.APP_NAME} restarts when it is done` : p.error ? `last update failed: ${p.error}` : !c ? `v${u.version}` : c.status === 'current' ? `v${u.version} is the latest version` : c.status === 'update' ? `You have v${u.version}; ${c.remoteVersion ? `v${c.remoteVersion}` : 'a newer build'} is available${c.remoteDate ? ` (${c.remoteDate})` : ''}${c.remoteMessage ? `: ${c.remoteMessage.replace(/^v\d+\.\d+\.\d+:\s*/, '')}` : ''}` : `could not check: ${c.error}`;
-        fill(body, state, outcome, h('div', { style: 'display:flex;gap:6px;margin-top:6px' },
-          btn('Check for updates', async () => { fill(body, 'Checking…'); await act(() => post('/api/server', { action: 'check' })); draw(); }),
-          u.docker ? h('span', { class: 'muted' }, 'Docker: update by pulling the image (docker compose pull && docker compose up -d).')
-            : u.canRun ? btn('Update now', async () => {
-              if (!await confirmDialog(`Fetch the latest version, refresh the packages and restart ${S.APP_NAME}? The page reloads when the new version is up.`)) return;
-              if (await runUpdate((text, failed) => { if (failed) toast(text, null, null, 15000); })) { toast(`Updating; ${S.APP_NAME} restarts when it is done, and the page reloads.`); setTimeout(draw, 3000); }
-            }, c && c.status === 'update') : null,
-          h('a', { class: 'pillbtn', href: `https://github.com/${u.repo}/commits/${u.branch}`, target: '_blank', rel: 'noopener' }, 'Change log')),
-          h('label', { style: 'display:flex;gap:8px;align-items:center;cursor:pointer;margin-top:8px' }, h('input', { type: 'checkbox', checked: !!u.autoCheck, disabled: !!u.autoCheckLocked, onchange: async (e) => {
-            try { await post('/api/server', { autoCheck: e.target.checked }); toast(e.target.checked ? `${S.APP_NAME} will check for updates once a day.` : `${S.APP_NAME} will not contact GitHub on its own.`); pollSoon(2000); } catch (err) { e.target.checked = !e.target.checked; toastError(err); } } }),
-            u.autoCheckLocked ? 'Check daily (switched off by UPDATE_CHECK=0 in the environment)' : 'Check daily (only GitHub’s public list of changes is asked; nothing about this install is sent)'));
-        clearTimeout(timer);
-        if (p.running) timer = setTimeout(() => { if (S.route.view === view && body.isConnected) draw(); }, 5000);
-      };
-      draw();
-      return row(`${S.APP_NAME} version`, `Which version of ${S.APP_NAME} is running here, and whether a newer one is out. “Update now” installs the newest version, keeps your settings and data, and restarts ${S.APP_NAME}; the page reloads when it is back.`, body);
-    })(),
-    row(`Restart ${S.APP_NAME}`, 'Stops the server; launchd, Docker or systemd starts it again within seconds. Needed after an update of the RapidOCR package (offered in the models table above when “Check models for updates” finds a newer one), and handy when a background job looks stuck.',
-      btn('Restart', async () => { if (!await confirmDialog(`Restart ${S.APP_NAME} now?`)) return; await act(() => post('/api/server', { action: 'restart' }), { toast: 'Restarting…' }); })),
-  ];
+/** Settings › Server: the MCP switch, the version and its updates, this server, the server log and Restart:
+ *  iosuite-shared's panel, the same in every ioThing app. */
+export const serverUi = () => import(new URL('api/server/ui.js', document.baseURI).href);
+function serverPanel() {
+  const box = h('div');
+  serverUi().then((ui) => ui.mount(box, { toast })).catch((e) => fill(box, errorBox(new Error(`The Server panel did not load: ${e.message}`))));
+  return [stab('server'), box];
 }
 async function settingsPage(view) {
   let m;
-  if (!main.querySelector('.spage')) main.replaceChildren(h('div', { class: 'page spage' }, loadingBox(view === 'settings' ? 'Loading the settings…' : 'Loading…')));
+  if (!main.querySelector('.spage')) main.replaceChildren(h('div', { class: 'page spage' }, loadingBox('Loading the settings…')));
   try { m = await api('/api/maintenance'); } catch (e) { if (S.route.view === view) main.replaceChildren(h('div', { class: 'empty' }, 'Could not load settings: ' + e.message)); return; }
   if (S.route.view !== view) return;
   const c = settingsContext(m, view);
   const { row, btn } = c;
+  const suite = S.USER && S.USER.suiteAdmin;
   main.replaceChildren(h('div', { class: 'page spage' },
-    pageTitle(view === 'settings' ? 'gear' : 'wrench', 'slate', view === 'settings' ? 'Settings' : 'Maintenance', h('span', { class: 'muted' }, `${S.APP_NAME} v${S.APP_VERSION || '?'}`)),
-    h('div', { class: 'muted intro' }, m.paths ? `Library: ${m.paths.library} (${nf.format(m.photos)} photos and videos). ${m.paths.digikamDb === 'none' ? `No digiKam: the library lives in ${S.APP_NAME}’s own database` : `digiKam database: ${m.paths.digikamDb}`}. Everything ${S.APP_NAME} writes lives in ${m.paths.data}.` : `${nf.format(m.photos)} photos in the library.`),
+    pageTitle('gear', 'slate', 'Settings'),
     !S.USERS_EXIST ? row('No users yet', `${S.APP_NAME} is open to anyone who can reach it. Create the admin account to switch on sign-in: visitors then browse read-only, and only editors and admins can change the library.`, btn('Create the admin account', setupDialog, true)) : null,
-    ...(view === 'settings' ? [
     displayTab(c),
-    S.IS_ADMIN ? serverTab(c) : null,
-    S.IS_ADMIN ? stab('ai') : null,
-    S.IS_ADMIN ? analysisSection(view, 'prefs') : null,
     S.IS_ADMIN && S.EDITING ? editingTab(c) : null,
-    S.USER && S.USER.suiteAdmin ? stab('suite') : null,
-    S.USER && S.USER.suiteAdmin ? suiteSection() : null,
-    ] : [
-    libraryTab(c),
-    // 2. AI analysis and models
-    stab('models'),
-    aiSection(view),
-    storageTab(c),
-    viewerTab(c),
-    ])));
+    S.IS_ADMIN ? [libraryTab(c), row('Edit log', `Every change made in ${S.APP_NAME}, for every photo, kept for good: who, when, what it was before and after, with Undo and restore of the sidecar or the original file from the backups.`, h('a', { class: 'pillbtn', href: '#/history' }, 'Open the edit log')), whereTab(c)] : null,
+    S.IS_ADMIN ? [stab('ai'), aiSection(view)] : null,
+    S.IS_ADMIN ? storageTab(c) : null,
+    S.IS_ADMIN ? serverPanel() : null,
+    suite ? [stab('security'), suiteSection('security')] : null,
+    suite ? [stab('global'), suiteSection('global')] : null,
+  ));
   settingsTabs(main.querySelector('.spage'), view);
 }
 

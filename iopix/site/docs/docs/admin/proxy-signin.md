@@ -8,8 +8,8 @@ The built-in sign-in keeps working alongside, for example at home where requests
 
 1. In Cloudflare Zero Trust, add an **Access application** for iopix's hostname, with a policy for the people allowed in.
 2. Copy the application's **Audience (AUD) tag** (Access › Applications › your app › Overview).
-3. Give each iopix account the email address it signs in to Cloudflare with (**Settings › Suite › People**).
-4. Set these in **Settings › Suite › Sign-in at the proxy** (they apply to every app in the suite), or in `config.env` before the first start:
+3. Give each iopix account the email address it signs in to Cloudflare with (**Settings › Security › People**).
+4. Set these in **Settings › Security › Sign-in at the proxy** (they apply to every app in the suite), or in `config.env` before the first start:
 
 ```sh
 AUTH_PROXY=cloudflare
@@ -69,6 +69,6 @@ The header is believed **only from the proxy's address**. The proxy must replace
     http-request set-header Remote-User %[var(req.auth_response_header.remote_user)]
     ```
 
-These settings live in the Shared ioSuite database and apply to every app in the suite; change them in **Settings › Suite › Sign-in at the proxy**. A `config.env` value only fills an empty setting on the first start; its line is then commented out and ignored.
+These settings live in the Shared ioSuite database and apply to every app in the suite; change them in **Settings › Security › Sign-in at the proxy**. A `config.env` value only fills an empty setting on the first start; its line is then commented out and ignored.
 
-Turn on **Sign-in required** (Settings › Suite › Apps) as well, so nobody gets in without the proxy's sign-in.
+Turn on **Sign-in required** (Settings › Global settings › Apps) as well, so nobody gets in without the proxy's sign-in.

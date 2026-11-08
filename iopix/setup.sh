@@ -366,7 +366,7 @@ fi
 say "Models"
 for key in $(echo "$AUTO_MODELS" | tr ',' ' '); do
   echo "downloading $key"
-  HF_HUB_OFFLINE=0 "$VPY" -m app.ai.models download "$key" || echo "  download of $key failed; retry later from Maintenance > Models and data"
+  HF_HUB_OFFLINE=0 "$VPY" -m app.ai.models download "$key" || echo "  download of $key failed; retry later from Settings › AI"
 done
 if [ -n "$SEARCH_MODEL" ] && [ "$VDB_OK" = 1 ]; then "$VPY" -c "from app.data import state; state.init(); state.set_setting('search_model', '$SEARCH_MODEL')"
 elif [ -n "$SEARCH_MODEL" ]; then echo "  the search model ($SEARCH_MODEL) is chosen in Settings once the database is set up"; fi

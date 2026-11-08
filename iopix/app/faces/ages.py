@@ -131,7 +131,7 @@ def _have() -> set:
 
 
 def coverage() -> tuple:
-    """(faces with an age, faces wanted) for the Maintenance row."""
+    """(faces with an age, faces wanted) for the Settings › AI row."""
     try:
         con = index.open_index()
         try:

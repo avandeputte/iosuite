@@ -26,11 +26,11 @@ Suggestions are only suggestions until you click them.
 
 ## Finding new faces
 
-Face detection finds faces nothing has marked yet, on request: one photo, one folder (with its subfolders), or the whole library from Maintenance. Every existing face is respected: a detection that overlaps one is treated as the same face and not added.
+Face detection finds faces nothing has marked yet, on request: one photo, one folder (with its subfolders), or the whole library from Settings › AI. Every existing face is respected: a detection that overlaps one is treated as the same face and not added.
 
 ## Tidying faces
 
-**Maintenance › Metadata quality** has face checks:
+**Settings › Library › Metadata quality** has face checks:
 
 - the same person stored twice a few pixels apart (a leftover of older digiKam versions), with **Remove duplicates**,
 - the same person in two separate places on one photo, for review,

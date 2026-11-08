@@ -99,7 +99,7 @@ With MariaDB nothing extra is mounted: the image includes `mariadb-dump`, which 
 
 ## Models
 
-Models are not in the image; they live in the `/data` volume and survive updates. Download more from **Maintenance › AI analysis and models**, or from the command line:
+Models are not in the image; they live in the `/data` volume and survive updates. Download more from **Settings › AI**, or from the command line:
 
 ```sh
 docker compose exec -e HF_HUB_OFFLINE=0 iopix python -m app.ai.models download blip
@@ -122,9 +122,9 @@ To build the image yourself, `docker compose up -d --build` uses the checkout. T
 docker compose pull && docker compose up -d
 ```
 
-The `iopix-db` volume holds iopix's database and survives updates like the data volume does. **Download a backup** in Maintenance includes a dump of it.
+The `iopix-db` volume holds iopix's database and survives updates like the data volume does. **Download a backup** in Settings › Storage and backups includes a dump of it.
 
-**Update now** in Maintenance does not apply in Docker; it tells you to pull instead.
+**Update now** in Settings › Server does not apply in Docker; it tells you to pull instead.
 
 ## Upgrading an old volume
 

@@ -8,7 +8,7 @@
             each with a thumbnail (/video/<id>/frame?t=), shown under the player to jump to.
   speech    a transcript of what is said (onnx-asr: a speech model run with onnxruntime on the CPU), searchable
             from the search box and shown in the info panel with the moments it was said, to jump to. A model is
-            downloaded from Maintenance (models.py, choice "speech_model"); without one this part is skipped.
+            downloaded from Settings › AI (models.py, choice "speech_model"); without one this part is skipped.
 
 One background job ("videos", jobs.py) does the three for every video not yet done, or done with an older file or
 model; the results live in the viewer database (pix_video_info). Nothing is written to any video or to digiKam.
