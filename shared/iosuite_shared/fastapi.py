@@ -171,7 +171,7 @@ class Auth:
         if request.url.path.startswith(tuple(self.scope_paths.get(scope, ())) or ("\0",)):
             return None
         return JSONResponse({"detail": f"This app password is for {self.label}'s sync protocols only (CalDAV / CardDAV). "
-                                       "Make one without that limit in Settings › Apps and devices."}, status_code=403)
+                                       "Make one without that limit in Settings › Account."}, status_code=403)
 
     def finish(self, request: Request, response):
         """After the route: set the session cookie when a proxy sign-in needs one here too (so the same browser stays
@@ -309,7 +309,7 @@ class Auth:
             user = auth.current_user(request)
             if not user:
                 return JSONResponse({"detail": "Sign in with your user name and an app password (HTTP Basic), or send 'Authorization: Bearer "
-                                               "<app password>'. Make one in Settings › Apps and devices."},
+                                               "<app password>'. Make one in Settings › Account."},
                                     status_code=401, headers={"WWW-Authenticate": f'Basic realm="{auth.realm}", Bearer realm="{auth.realm}"'})
             if on_user:
                 on_user(user)

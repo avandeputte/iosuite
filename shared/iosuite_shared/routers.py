@@ -90,8 +90,8 @@ def auth_router(self) -> APIRouter:
 
     @r.get("/api/auth/ui.js", dependencies=[access.public])
     def api_account_ui():
-        """The account panels (static/account-panel.js): Settings › Account, the theme switch and the app passwords of
-        Settings › Apps and devices, the same in every app: ui = await import(new URL('api/auth/ui.js', document.baseURI).href)."""
+        """The account panels (static/account-panel.js): Settings › Account, the theme switch and the app passwords,
+        the same in every app: ui = await import(new URL('api/auth/ui.js', document.baseURI).href)."""
         return FileResponse(Path(__file__).with_name("static") / "account-panel.js", media_type="text/javascript",
                             headers={"Cache-Control": "no-cache"})
 

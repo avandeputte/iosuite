@@ -26,7 +26,7 @@ check on those paths instead.
 - `/.well-known/caldav`, `/.well-known/carddav`, `/ics/*`, `/mcp`, `/api` and the web app are not touched.
 
 What stops working behind the Worker in `enforce` mode: signing a DAV client in with your **account** password. Use
-an app password (Settings › Apps and devices), which the Apple profile download already does.
+an app password (Settings › Account), which the Apple profile download already does.
 
 ## Set it up
 

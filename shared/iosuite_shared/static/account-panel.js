@@ -1,6 +1,6 @@
 /* The account panels, the same in every io app, and the small kit the Server panel shares (h, api, the styles):
    Settings › Account (display name, email, password), the Appearance and Units rows of Settings › Display, and the
-   signed-in account's own app passwords (Settings › Apps and devices). They talk to /api/auth/* next to them.
+   signed-in account's own app passwords (below it on Settings › Account). They talk to /api/auth/* next to them.
 
      const ui = await import(new URL('api/auth/ui.js', document.baseURI).href);
      await ui.mountAccount(el, { toast });                         // Settings › Account
@@ -208,7 +208,7 @@ export async function mountAccount(el, opts = {}) {
             } }, 'Change password'))]));
 }
 
-// ------------------------------------------------------------------ Settings › Apps and devices
+// ------------------------------------------------------------------ Settings › Account: app passwords
 /** The signed-in account's app passwords here: make one (shown once), list, revoke. opts: toast, syncOnly (the label of
  *  the sync-only choice, e.g. 'Calendar apps only (CalDAV)'; offered when the app has sync protocols), onChange(). */
 export async function mountAppPasswords(el, opts = {}) {
