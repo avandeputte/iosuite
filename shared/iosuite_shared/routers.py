@@ -345,7 +345,7 @@ def admin_router(self) -> APIRouter:
 
     @r.get("/users/{user_id}/sessions", dependencies=[access.suite_admin])
     def api_sessions(user_id: int, request: Request):
-        if not users.get(user_id):
+        if not suite_admin.person(user_id):
             raise HTTPException(404, "No such user")
         return {"sessions": sessions.list_sessions(user_id, request.cookies.get(sessions.COOKIE))}
 

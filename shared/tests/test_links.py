@@ -46,8 +46,17 @@ def test_service_account_and_read_only_app_password():
     assert "iocalendar-app" in [u["name"] for u in users.list_users(services=True)]
     assert users.authenticate("iocalendar-app", "anything") is None
     assert credentials.listing() == [] or all(not k["name"].startswith("link_") for k in credentials.listing())
-    pws = admin.app_passwords()
-    assert [(p["userName"], p["app"], p["scope"]) for p in pws] == [("iocalendar-app", "iocontacts", "read")]
+    from iosuite_shared import db
+    assert [(r["app"], r["scope"]) for r in db.q("SELECT app, scope FROM ios_app_passwords WHERE user_id = %s", (svc["id"],))] == [("iocontacts", "read")]
+    # the suite looks after its own accounts: the Security panel neither shows nor changes them
+    assert admin.app_passwords() == [] and [u["name"] for u in admin.accounts()] == ["alex"]
+    pid = db.one("SELECT id FROM ios_app_passwords WHERE user_id = %s", (svc["id"],))["id"]
+    for change in (lambda: admin.revoke_app_password(pid), lambda: admin.set_app_password_scope(pid, ""),
+                   lambda: admin.new_app_password(svc["id"], "iopix", "x"), lambda: admin.update(None, svc["id"], {"email": "a@b.c"}),
+                   lambda: admin.delete(None, svc["id"]), lambda: admin.end_sessions(svc["id"])):
+        with pytest.raises(LookupError):
+            change()
+    assert admin.overview()["scopes"] == ["", "dav"]
     c = TestClient(provider_app(), base_url="http://contacts.example.com")
     auth_h = {"Authorization": h["Authorization"]}
     assert c.get("/api/contacts", headers=auth_h).json() == {"who": "iocalendar-app"}
