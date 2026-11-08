@@ -23,7 +23,7 @@ and sign-in (Cloudflare Access too), the same installer, updater, Docker image a
   through MariaDB's full-text index.
 - **Text in pictures**: read on the device where the picture was taken (Apple's Vision framework, on the Mac and
   iPhone), and sent along; for pictures added in the web app the server reads it itself with RapidOCR.
-- **Settings**: Account, Display and Apps and devices for everyone signed in (the same panels as every io app), Server for admins; a change is saved the moment it is made.
+- **Settings**: Account (with your app passwords) and Display for everyone signed in (the same panels as every io app), Server for admins; a change is saved the moment it is made.
 - **Settings › Security** (suite admins): the whole suite's people and their role in every app, app passwords, keys and tokens, the apps (default role, sign-in required) and sign-in at the proxy; the same panel as on the start page and in every io app (iosuite-shared's `/api/suite-admin/ui.js`).
 - **Offline**: the apps keep a full copy and send their changes when the server can be reached; the API settles
   conflicts per note by the time of the edit (below).
@@ -235,7 +235,7 @@ suite. An assistant such as Claude can then:
   folder, pin), `organize_notes` (many notes at once), `delete_note`, `restore_note`, `manage_folder`, `manage_tag`
 - operate, as an admin: `diagnostics`, `server_log`, `proxy_signin`, `check_for_update`, `update_ionotes`
 
-Every assistant signs in with an **app password** (Settings › Apps and devices), as HTTP Basic or
+Every assistant signs in with an **app password** (Settings › Account › App passwords), as HTTP Basic or
 `Authorization: Bearer <app password>`, and acts as that account: notes are private to each account, so it sees and
 changes that account's notes and nothing else (`notes_overview` names the account). Off, `/mcp` does not answer at all.
 
