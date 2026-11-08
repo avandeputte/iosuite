@@ -1424,10 +1424,13 @@ const fld = (l, e) => h('label', { class: 'field' }, h('span', null, l), e);
 const kv = (k, v) => h('div', { class: 'kv' }, h('div', { class: 'k' }, k), h('div', { class: 'v', style: { flex: 1 } }, typeof v === 'string' ? copyRow(v) : v));
 
 const accountUi = () => import(new URL('api/auth/ui.js', document.baseURI).href);
-/** Settings › Account: display name, email and password, iosuite-shared's panel (the same in every io app). */
+/** Settings › Account: display name, email and password, then the app passwords: iosuite-shared's panels (the same in every io app). */
 async function setAccount(el) {
   const ui = await accountUi();
+  const pw = h('div');
   await ui.mountAccount(el, { toast, onSaved: (u) => { Object.assign(S.user, u); drawUser(); } });
+  el.append(pw);
+  await ui.mountAppPasswords(pw, { toast, syncOnly: 'Contacts apps only (CardDAV, LDAP)' });
 }
 
 /** Settings › Display: the theme, saved with the account. The sort order and the fields shown are at the top of the list. */
@@ -1436,29 +1439,25 @@ async function setDisplay(el) {
   el.append(ui.box('theme', 'Appearance', ui.themeRow((S.settings && S.settings.theme) || localStorage.getItem('iocontacts.theme') || 'system', (t) => { S.settings = { ...S.settings, theme: t }; applyTheme(t); })));
 }
 
-/** Settings › Apps and devices: the account's app passwords (iosuite-shared's list) and how to connect each kind of app. */
+/** Settings › Apps and devices: how to connect each kind of app (the app passwords themselves are on Settings › Account). */
 async function setDevices(el) {
   const info = await api('/api/connect');
-  const ui = await accountUi();
-  const pw = h('div');
-  const syncOnly = 'Contacts apps only (CardDAV, LDAP)';
   const isApple = /iPhone|iPad|Macintosh/.test(navigator.userAgent);
   const plabel = h('input', { class: 't', name: 'label', value: /iPad/.test(navigator.userAgent) ? 'iPad' : /Macintosh/.test(navigator.userAgent) ? 'Mac' : 'iPhone', style: 'max-width:200px' });
   const how = (summary, ...kids) => h('details', null, h('summary', { class: 'lnk' }, summary), ...kids);
   el.append(...[
     S.user.passwordless ? null : h('div', { class: 'box' }, h('h2', null, icon('devices'), 'iPhone, iPad and Mac'),
       h('p', null, 'A profile that adds your contacts and, if you like, a birthday calendar in one step.'),
-      h('form', { method: 'POST', action: '/api/apple-profile', class: 'pform', onsubmit: () => { setTimeout(() => ui.mountAppPasswords(pw, { toast, syncOnly }), 1500); } },
+      h('form', { method: 'POST', action: '/api/apple-profile', class: 'pform' },
         fld('Device name', plabel),
         fld('Password', h('select', { class: 't', name: 'password' }, h('option', { value: 'new' }, 'Include a new app password'), h('option', { value: 'ask' }, 'Ask on the device'))),
         fld('Birthday calendar', h('select', { class: 't', name: 'calendar' }, h('option', { value: 'family' }, 'Family birthdays'), h('option', { value: 'all' }, 'Birthdays from all my books'), h('option', { value: 'none' }, 'No calendar'))),
         info.ldap.enabled ? h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'ldap', value: 'true' }), ' Also the LDAP directory (Mail on a Mac)') : null,
         h('p', null, h('button', { class: 'pillbtn primary', type: 'submit' }, icon('download', 's'), 'Download the profile'))),
       how('How to install', h('p', { class: 'muted small' }, isApple ? 'Open the download, then Settings › Profile Downloaded › Install.' : 'Download it in Safari on the iPhone or iPad, then Settings › Profile Downloaded › Install. On a Mac: open the file, then System Settings › Privacy & Security › Profiles.',
-        ' iOS shows the profile as “Not Verified”: that is expected. Revoke its app password below if the device is lost.'))),
-    pw,
+        ' iOS shows the profile as “Not Verified”: that is expected. Revoke its app password under Settings › Account if the device is lost.'))),
     h('div', { class: 'box' }, h('h2', null, icon('book'), 'Contacts apps (CardDAV)'),
-      h('p', null, 'Two-way sync with your user name and an app password.'),
+      h('p', null, 'Two-way sync with your user name and an app password (Settings › Account).'),
       kv('Server', info.server), kv('User name', info.user), kv('CardDAV address', info.carddav),
       how('Address of each address book', info.books.map((b) => kv(b.name, b.url))),
       how('How to connect', h('p', { class: 'muted small' }, 'Apple Contacts: Settings › Contacts › Accounts › Add Account › Other › Add CardDAV Account. Android: DAVx⁵. Also Thunderbird, Evolution, GNOME, KDE.'))),
@@ -1480,7 +1479,6 @@ async function setDevices(el) {
     h('div', { class: 'box' }, h('h2', null, icon('link'), 'Other apps (REST API)'),
       h('p', null, 'JSON, vCard or jCard with your user name and an app password. ', h('a', { class: 'lnk', href: '/api/docs', target: '_blank' }, 'API documentation')),
       copyRow(`curl -u ${info.user}:APP-PASSWORD -H 'Accept: application/vcard+json' ${info.server}/api/contacts?q=smith`))].filter(Boolean));
-  await ui.mountAppPasswords(pw, { toast, syncOnly });
 }
 
 async function setBooks(el) {

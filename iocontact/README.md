@@ -146,7 +146,7 @@ directory for Mail on a Mac), with a new app password for that device inside (or
 only, so a lost phone or a leaked profile file does not reach the web app, the REST API or MCP. Open the
 page in Safari on the iPhone, tap Download, then Settings › Profile Downloaded › Install.
 
-Settings › Apps and devices shows the exact addresses to type, and makes **app passwords**: one per phone or app, revocable on its own, used with your user name for CardDAV, LDAP and the REST API (HTTP Basic, or `Authorization: Bearer <app password>`). *Contacts apps only* (ticked by default) limits a password to CardDAV and LDAP: the web sign-in, the REST API and MCP answer it with 403. Untick it for a script or an AI assistant.
+Settings › Apps and devices shows the exact addresses to type; Settings › Account makes **app passwords**: one per phone or app, revocable on its own, used with your user name for CardDAV, LDAP and the REST API (HTTP Basic, or `Authorization: Bearer <app password>`). *Contacts apps only* (ticked by default) limits a password to CardDAV and LDAP: the web sign-in, the REST API and MCP answer it with 403. Untick it for a script or an AI assistant.
 
 ```sh
 curl -u alex:iocontacts-xxxxxxxx-… -H 'Accept: application/vcard+json' https://contacts.example.com/api/contacts?q=smith
@@ -162,7 +162,7 @@ merge duplicates, import and export vCard and CSV, link contacts to ioPix people
 health, look for a new version and install it.
 
 It is off until an admin turns it on in **Settings › Server** (or `MCP=1` in the environment); off, `/mcp` does not answer
-at all. Every assistant signs in with an **app password** (Settings › Apps and devices), as HTTP Basic or
+at all. Every assistant signs in with an **app password** (Settings › Account › App passwords), as HTTP Basic or
 `Authorization: Bearer <app password>`, and acts as that account: it sees the shared books and that account's private
 ones, and may change what the account may change in the web app. The server tools need an admin.
 
