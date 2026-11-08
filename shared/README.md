@@ -203,6 +203,24 @@ def overview():
 `auth.mcp_gate` answers 404 while the switch is off ("The MCP server is switched off (Settings › Server).") and 401 when
 nobody is signed in; `shared_mcp.set_enabled(db.set_setting, on, forced)` saves the switch from `POST /api/server`.
 
+## Settings › Account, Display and Apps and devices
+
+The account's own boxes look and work the same in every app: `static/account-panel.js`, at `GET /api/auth/ui.js`
+(the Server panel shares its styles). The display name and email are saved when a field is left (`PATCH
+/api/auth/me {displayName, email}`, then `auth.on_update(user_id, body)` for the app's own caches), the theme and
+units go with the account's settings (`POST /api/auth/settings {theme, units}`), and the app passwords are the
+account's own in this app.
+
+```js
+const ui = await import(new URL('api/auth/ui.js', document.baseURI).href);
+await ui.mountAccount(el, { toast });                                  // You (display name, email) and Password
+el.append(ui.box('theme', 'Appearance', ui.themeRow(theme, applyTheme)));   // Light, Dark, System
+el.append(ui.box('tune', 'Units', ui.unitsRow(units, applyUnits)));    // Automatic, Kilometres, Miles
+await ui.mountAppPasswords(el, { toast, syncOnly: 'Calendar apps only (CalDAV)' });
+```
+
+`ui.box(icon, title, ...rows)` and `ui.row(label, hint, control)` draw the app's own Settings boxes in the same look.
+
 ## Updates, restart and the server log
 
 Every app updates itself the same way, from `iosuite_shared.updates`: the installed commit, a daily check of GitHub
@@ -230,7 +248,7 @@ app.include_router(auth.server_router(updater, log_file=LOG_FILE,
 
 | Route | What |
 |---|---|
-| `GET /api/server/ui.js` | the Settings › Server panel |
+| `GET /api/server/ui.js` | the Settings › Server panel (it imports `GET /api/auth/ui.js`) |
 | `GET /api/server` | `{name, version, installed, docker, canRun, repo, branch, check, progress, lastUpdate, autoCheck, autoCheckLocked}` + `info()` |
 | `POST /api/server {action: check}` | asks GitHub; the answer is the check `{status: current / update / error, remoteVersion, ...}` |
 | `POST /api/server {action: update, ref?}` | starts `update.sh` (409 when it cannot run here: Docker, no .venv, not writable) |

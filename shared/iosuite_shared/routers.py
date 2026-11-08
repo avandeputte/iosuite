@@ -69,6 +69,32 @@ def auth_router(self) -> APIRouter:
     def api_me(request: Request):
         return auth.me(request)
 
+    @r.patch("/api/auth/me", dependencies=[access.signed_in])
+    async def api_patch_me(request: Request):
+        """The signed-in account's display name and email ({displayName, email}; empty clears). Settings › Account."""
+        u = auth.current_user(request)
+        body = await json_body(request)
+        f = {}
+        if "displayName" in body:
+            f["display_name"] = str(body["displayName"] or "")[:128]
+        if "email" in body:
+            f["email"] = str(body["email"] or "")[:254]
+        try:
+            nu = await run_in_threadpool(lambda: users.update(u["id"], **f))
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        apppasswords.forget()
+        if auth.on_update:
+            auth.on_update(u["id"], body)
+        return {"user": public_user(nu)}
+
+    @r.get("/api/auth/ui.js", dependencies=[access.public])
+    def api_account_ui():
+        """The account panels (static/account-panel.js): Settings › Account, the theme switch and the app passwords of
+        Settings › Apps and devices, the same in every app: ui = await import(new URL('api/auth/ui.js', document.baseURI).href)."""
+        return FileResponse(Path(__file__).with_name("static") / "account-panel.js", media_type="text/javascript",
+                            headers={"Cache-Control": "no-cache"})
+
     @r.post("/api/auth/settings", dependencies=[access.signed_in])
     async def api_my_settings(request: Request):
         u = auth.current_user(request)
@@ -83,7 +109,7 @@ def auth_router(self) -> APIRouter:
             raise HTTPException(401, "Sign in first")
         body = await json_body(request)
         if u.get("passwordless"):
-            raise HTTPException(403, "This account signs in with one click; an admin can give it a password under Settings › Users")
+            raise HTTPException(403, "This account signs in with one click; a suite admin can give it a password under Settings › Security")
         pkey = f"pw|{u['id']}"
         wait = users.login_wait(pkey)
         if wait:
