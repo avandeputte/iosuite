@@ -1,7 +1,7 @@
 """Notes, folders, tags, pictures and sync: the API the web app and the Mac and iPhone apps share.
 
 Reads are open to whoever the sign-in rule lets in (as in iopix); every change needs an editor (the apps sign in
-as one) and is refused in read-only mode. A change the device made offline carries its own updatedAt: when the
+as one). A change the device made offline carries its own updatedAt: when the
 server already has a later edit, the answer is 409 with the server's copy under "current".
 """
 import time

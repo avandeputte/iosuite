@@ -4,7 +4,7 @@ The code is written in one SQL dialect (? placeholders, INSERT OR REPLACE / OR I
 it for MySQL, the same way iopix's viewer database does. Rows answer to an index and to a column name.
 
 Where the database is comes from the environment (DB_TYPE, DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD),
-else from data/db.json (written by setup.sh or Settings › Database), else SQLite in data/ionotes.db. The settings
+else from data/db.json, else SQLite in data/ionotes.db. The settings
 live outside the database since everything else is inside it.
 
 Every note, folder and tag colour carries `rev`, a number from one counter that grows with every change. The
@@ -57,7 +57,7 @@ TABLES = {
         "CREATE TABLE IF NOT EXISTS nts_change_counter (rev BIGINT AUTO_INCREMENT PRIMARY KEY, created_at BIGINT) "
         "ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"),
     # times are seconds since 1970 (UTC) as the apps send them; tags is a JSON list of names; user_id: the account's
-    # id in the Shared ioSuite database (0 until the first admin claims the records made before accounts)
+    # id in the Shared ioSuite database (0: made while the install was open, before the first account)
     "nts_notes": (
         "CREATE TABLE IF NOT EXISTS nts_notes (uuid TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT '', body TEXT NOT NULL DEFAULT '', "
         "ocr_text TEXT NOT NULL DEFAULT '', source TEXT NOT NULL DEFAULT 'manual', source_app TEXT, created_at REAL NOT NULL, updated_at REAL NOT NULL, "
@@ -235,20 +235,10 @@ def settings() -> dict:
 
 
 def public_settings() -> dict:
-    """For Settings › Database: the password replaced by whether one is set."""
+    """For the MCP diagnostics: the password replaced by whether one is set."""
     c = settings()
     return {**{k: v for k, v in c.items() if k != "password"}, "password_set": bool(c["password"]), "error": error,
             "sqlite_file": str(SQLITE_FILE), "fromEnv": [k for k in KEYS if config.db_env(k)]}
-
-
-def save_settings(values: dict):
-    """Write data/db.json (setup.sh and Settings › Database); used from the next start."""
-    c = {k: values[k] for k in KEYS if k in values}
-    CONF.write_text(json.dumps(c, indent=2))
-    try:
-        CONF.chmod(0o600)
-    except OSError:
-        pass
 
 
 def is_mysql() -> bool:
@@ -307,7 +297,7 @@ def same_server(c: dict) -> bool:
 
 
 def test(values: dict) -> dict:
-    """Try a MySQL/MariaDB connection (Settings › Database, setup.sh): {ok, version} or {ok: False, error}."""
+    """Try a MySQL/MariaDB connection (setup.sh, the MCP diagnostics): {ok, version} or {ok: False, error}."""
     c = {**settings(), **{k: v for k, v in values.items() if k in KEYS}}
     if not values.get("password"):  # the saved password, only ever for the server and user it belongs to
         if not same_server(c):
@@ -381,8 +371,6 @@ def set_setting(key: str, value):
                     (key, None if value is None else str(value), datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S.%f")[:23]))
 
 
-def read_only() -> bool:
-    return config.READ_ONLY or get_setting("read_only", "0") == "1"
 
 
 def next_rev(con: Conn) -> int:

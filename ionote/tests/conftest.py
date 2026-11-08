@@ -51,8 +51,6 @@ def clean():
     from app.auth import auth
     _authtest.clean_shared_tables(auth)  # accounts, sessions, app passwords, settings, the list of apps; the first account is #1 again
     proxyauth.forget_identities()
-    from app import notes
-    notes._claimed = False  # each test starts before any account claimed the open install's notes
     yield
 
 

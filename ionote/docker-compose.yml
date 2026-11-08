@@ -38,7 +38,6 @@ services:
       # INTERNAL_URL: http://192.168.1.151:8610   # the host's LAN address and port, kept in the suite's list of apps (a container cannot tell)
       # COOKIE_DOMAIN: example.com
       # sign-in at Cloudflare Access (see README): AUTH_PROXY: cloudflare, CF_ACCESS_TEAM, CF_ACCESS_AUD
-      # READ_ONLY: "1"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8610/api/status', timeout=4)"]
       interval: 30s

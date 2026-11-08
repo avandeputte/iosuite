@@ -23,7 +23,7 @@ and sign-in (Cloudflare Access too), the same installer, updater, Docker image a
   through MariaDB's full-text index.
 - **Text in pictures**: read on the device where the picture was taken (Apple's Vision framework, on the Mac and
   iPhone), and sent along; for pictures added in the web app the server reads it itself with RapidOCR.
-- **Settings › Security** (suite admins): the whole suite's people and their role in every app, app passwords, keys and tokens, the apps (default role, sign-in required) and sign-in at the proxy; the same panel as on the start page and in every io app (iosuite-shared's `/api/suite-admin/ui.js`). Read-only mode stays ioNotes' own (Settings › Read-only).
+- **Settings › Security** (suite admins): the whole suite's people and their role in every app, app passwords, keys and tokens, the apps (default role, sign-in required) and sign-in at the proxy; the same panel as on the start page and in every io app (iosuite-shared's `/api/suite-admin/ui.js`).
 - **Offline**: the apps keep a full copy and send their changes when the server can be reached; the API settles
   conflicts per note by the time of the edit (below).
 - **The clipboard Inbox stays on each device.** Only notes you save go to the server.
@@ -66,7 +66,7 @@ foreground. `--sqlite` keeps everything in a SQLite file in the data folder inst
 
 The database user needs to create tables in its database (`GRANT ALL ON notes.* TO 'notes'@'%'`). Pictures are
 stored in the database: MariaDB's `max_allowed_packet` (16 MB by default) must be larger than the largest picture
-(`MAX_IMAGE_MB`, 15 MB); Settings › Storage and backups warns when it is not.
+(`MAX_IMAGE_MB`, 15 MB); `setup.sh` warns when it is not.
 
 ### Proxmox VE (LXC)
 
@@ -121,7 +121,6 @@ name and the same names), or in the environment, which wins. `config.env.example
 | `ADMIN_USER` / `ADMIN_PASSWORD` | | the first admin, created on a first start with no accounts |
 | `IOSUITE_DB_HOST` / `_PORT` / `_NAME` / `_USER` / `_PASSWORD` | `DB_HOST` / `DB_PORT` / `iosuite` / `iosuite` / `iosuite` | the Shared ioSuite database (MariaDB): accounts, sessions, suite-wide settings |
 | `TZ` | | the time zone |
-| `READ_ONLY` | `0` | nothing can be changed, by anyone |
 | `OCR` | `1` | `0`: the server never reads text in pictures (the apps still do) |
 | `MAX_IMAGE_MB` | `15` | the largest picture a note may carry |
 | `MCP` / `MCP_USER` | | `MCP=1` keeps the endpoint on whatever Settings says; the account `python -m app.mcp` (stdio) acts as |
@@ -175,14 +174,14 @@ someone signed in at `photo.example.com` is signed in at `notes.example.com` too
 *suite admin* is admin in every app. Point ionotes at that database with `IOSUITE_DB_HOST`, `IOSUITE_DB_PORT`,
 `IOSUITE_DB_NAME`, `IOSUITE_DB_USER` and `IOSUITE_DB_PASSWORD` in `config.env` (database and user `iosuite` and the notes' server by
 default; the tables are created at start; `iosuite-shared migrate --ionotes`
-folds a 1.0 install's `user_accounts` table into it). Settings › Storage and backups shows which database it is. Out of the box ionotes is open to anyone who can reach it;
+folds a 1.0 install's `user_accounts` table into it). Settings › Server › This server shows which database it is. Out of the box ionotes is open to anyone who can reach it;
 `setup.sh` (or `ADMIN_USER` / `ADMIN_PASSWORD`, or the person icon in the web app) creates the admin. Once an
 account exists:
 
 **Notes are private to each account.** Every note, folder, tag colour and change-log line belongs to the account
 that made it; nobody else sees, searches, syncs, exports or changes it, admins included (their extra rights are
 about the server, not other people's notes). The notes made while the install was still open (before the first
-account) become the first admin's. A note id that belongs to another account is answered as if it did not exist.
+account) stay with the open install: export them before making the first account and import them after. A note id that belongs to another account is answered as if it did not exist.
 
 | Who | Can |
 | --- | --- |
@@ -196,17 +195,12 @@ account) become the first admin's. A note id that belongs to another account is 
 Sessions are random tokens in an HttpOnly cookie (`iothing_session`, shared by the apps on the domain) valid for
 30 days and renewed while in use; each records where it began and was last seen (address, through Cloudflare or
 not, web or which app): `GET /api/auth/sessions` for your own, `GET /api/users/<id>/sessions` for admins. Passwords
-are scrypt-hashed; wrong passwords cost a growing wait. **Read-only** (Settings, or `READ_ONLY=1`) refuses every
-change, for everyone. Write requests from another site are refused.
+are scrypt-hashed; wrong passwords cost a growing wait. Write requests from another site are refused.
 
 ionotes writes its row in the **suite's list of apps** (iosuite-shared's `suite_apps` table: name, version, colour,
 icon, address) on its first request, so ioSuite's start page and the other apps find it without anyone typing an
 address. The address is `PUBLIC_URL` when set, otherwise the best one ionotes is reached at (a host under
 `COOKIE_DOMAIN` over HTTPS beats a LAN name, which beats an IP address).
-
-If the notes from before accounts went to another admin than intended, Settings › Storage and backups › Who owns
-the notes gives all of one account's notes (with folders and tag colours) to another; that account's devices sync
-them in.
 
 ## API
 

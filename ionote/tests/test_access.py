@@ -1,4 +1,4 @@
-"""Who may do what: the same rules as iopix (open until an account exists, then roles; require sign-in; read-only;
+"""Who may do what: the same rules as iopix (open until an account exists, then roles; require sign-in;
 cross-site writes refused; every API route declares its access)."""
 import json
 
@@ -26,11 +26,6 @@ def test_require_sign_in_closes_everything_but_the_shell(client, admin):
     assert client.get("/api/status").status_code == 200
     assert client.get("/api/auth/accounts").json()["accounts"][0]["name"] == "alex"
     assert client.get("/").status_code == 200
-
-
-def test_read_only_refuses_changes_for_everyone(client, admin):
-    client.post("/api/settings", json={"read_only": True})
-    assert client.put(f"/api/notes/{NID}", json={"title": "x"}).status_code == 403
 
 
 def test_cross_site_writes_are_refused(client, admin):

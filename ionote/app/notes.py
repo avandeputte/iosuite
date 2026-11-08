@@ -9,7 +9,7 @@ deleted records included.
 Every note, folder, tag colour and change-log line belongs to one account (user_id: its id in the suite's auth
 database); nobody sees or changes another account's notes. Who is asking is set per request (current_owner, by
 app/main.py from the signed-in user, or the MCP server's account); every function here works on that account's
-records only. Records made before any account existed (user_id 0) go to the first admin (claim_unowned).
+records only. Records made while the install was open, before any account existed, have user_id 0.
 
 Text read from an image (OCR) is done on the device where it can be (Apple's Vision on the Mac and the iPhone)
 and sent along as ocr_text; the server reads it itself (RapidOCR, app/ocr.py) only for notes made in the web app.
@@ -102,49 +102,6 @@ def tag_dict(r) -> dict:
 def log_change(con, user: str, action: str, kind: str, uid: str, summary: str):
     con.execute("INSERT INTO nts_change_log (created_at, user_name, action, kind, uuid, summary, user_id) VALUES (?,?,?,?,?,?,?)",
                 (int(time.time()), user, action, kind, uid, summary[:300], owner()))
-
-
-_claimed = False
-
-
-def claim_unowned(first_admin_id) -> int:
-    """Records made before any account existed (owner 0) become the first admin's; once accounts exist nothing new
-    is made without one. Returns how many notes moved."""
-    global _claimed
-    if _claimed or not first_admin_id:
-        return 0
-    n = reassign(0, int(first_admin_id))  # which keeps a tag colour the admin already has rather than clash with it
-    _claimed = True
-    return n
-
-
-def owner_counts() -> dict:
-    """How many notes (the trash included) each owner id has, for Settings › Storage and backups › Who owns the notes."""
-    with db.connect() as con:
-        return {int(r[0]): int(r[1]) for r in con.execute("SELECT user_id, count(*) FROM nts_notes GROUP BY user_id").fetchall()}
-
-
-def reassign(from_owner: int, to_owner: int) -> int:
-    """Give every note, folder, tag colour and change-log line of one owner to another (an admin fixing who got the
-    notes from before accounts existed). Each record gets a new rev, so the new owner's devices sync them in. A tag
-    colour the new owner already has stays theirs. Returns how many notes moved."""
-    from_owner, to_owner = int(from_owner), int(to_owner)
-    if from_owner == to_owner or to_owner <= 0:
-        return 0
-    with db.tx() as con:
-        ids = [r[0] for r in con.execute("SELECT uuid FROM nts_notes WHERE user_id = ?", (from_owner,)).fetchall()]
-        for uid in ids:
-            con.execute("UPDATE nts_notes SET user_id = ?, rev = ? WHERE uuid = ?", (to_owner, db.next_rev(con), uid))
-        for (fid,) in con.execute("SELECT uuid FROM nts_folders WHERE user_id = ?", (from_owner,)).fetchall():
-            con.execute("UPDATE nts_folders SET user_id = ?, rev = ? WHERE uuid = ?", (to_owner, db.next_rev(con), fid))
-        theirs = {r[0] for r in con.execute("SELECT tag_key FROM nts_tag_colors WHERE user_id = ?", (to_owner,)).fetchall()}
-        for (key,) in con.execute("SELECT tag_key FROM nts_tag_colors WHERE user_id = ?", (from_owner,)).fetchall():
-            if key in theirs:
-                con.execute("DELETE FROM nts_tag_colors WHERE user_id = ? AND tag_key = ?", (from_owner, key))
-            else:
-                con.execute("UPDATE nts_tag_colors SET user_id = ?, rev = ? WHERE user_id = ? AND tag_key = ?", (to_owner, db.next_rev(con), from_owner, key))
-        con.execute("UPDATE nts_change_log SET user_id = ? WHERE user_id = ?", (to_owner, from_owner))
-    return len(ids)
 
 
 def display_title(n: dict) -> str:
