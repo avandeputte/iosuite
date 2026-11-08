@@ -1,6 +1,6 @@
 /** Signing in: the account picker (one click for an account without a password), the password dialog, the first
  *  admin, the account menu. The same flow as iopix. */
-import { $, h, api, state, dialog, toast, fail, initials, icon, menu, isAdmin } from './core.js';
+import { $, h, api, state, dialog, toast, fail, initials, icon, menu } from './core.js';
 
 export async function loadMe() {
   state.me = await api('/api/auth/me');
@@ -70,7 +70,7 @@ async function signOut() {
 }
 
 /** The account panel, as iopix's: who you are and what your role allows, how this browser is signed in, a new
- *  password, and Sign out everywhere else / Sign out / Done. */
+ *  password, and Sign out / Done. */
 function accountDialog() {
   const me = state.me, u = me.user;
   const cur = h('input.einput', { type: 'password', placeholder: 'Current password', autocomplete: 'current-password' });
@@ -85,10 +85,6 @@ function accountDialog() {
   } }, 'Change password');
   const buttons = [];
   if (by !== 'proxy') {
-    buttons.push({ label: 'Sign out everywhere else', action: async () => {
-      try { await api('/api/auth/logout_all', { method: 'POST' }); toast('Signed out everywhere else'); } catch (e) { fail(e); }
-      return false;
-    } });
     buttons.push({ label: by === 'cloudflare' && me.throughCloudflare ? 'Sign out (of Cloudflare too)' : 'Sign out', action: signOut });
   }
   buttons.push({ label: 'Done', primary: true });
@@ -106,7 +102,7 @@ function cycleTheme() {
 }
 
 /** The top right, as in every ioThing app: the account's initial in a small amber circle, which opens the avatar menu
- *  (the account panel, appearance, Settings, Maintenance, sign out); signed out, a person icon that signs in (or creates
+ *  (the account panel, appearance, Settings, sign out); signed out, a person icon that signs in (or creates
  *  the admin account). */
 export function renderUserMenu() {
   const el = $('#usermenu');
@@ -122,9 +118,7 @@ export function renderUserMenu() {
     { label: 'Account', icon: 'person', action: accountDialog },
     { label: `Appearance: ${theme}`, icon: 'palette', action: cycleTheme },
     { label: 'Settings', icon: 'gear', action: () => { location.hash = '#/settings'; } },
-    isAdmin() ? { label: 'Maintenance', icon: 'wrench', action: () => { location.hash = '#/maintenance'; } } : null,
     '-',
-    me.signedInBy === 'proxy' ? null : { label: 'Sign out everywhere else', icon: 'logout', action: async () => { try { await api('/api/auth/logout_all', { method: 'POST' }); toast('Signed out everywhere else'); } catch (e) { fail(e); } } },
     me.signedInBy === 'proxy' ? null : { label: me.signedInBy === 'cloudflare' && me.throughCloudflare ? 'Sign out (of Cloudflare too)' : 'Sign out', action: signOut },
   ]) }, h('span.avatar', initials(me.user.name)));
   el.append(btn);

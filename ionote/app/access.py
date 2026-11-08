@@ -7,7 +7,7 @@ open to everyone by mistake. The markers come from iosuite-shared (app/auth.py),
 - signed_in: an account (its own settings)
 - editor: an editor or admin (reads that are not for everyone: the change log)
 - editor_write: a change to notes, folders or tags (refused for everyone in read-only mode)
-- admin: settings, maintenance, users, logs, backups
+- admin: settings, users, logs, backups
 - admin_write: a change to the notes only admins make (an import that replaces, emptying the trash)
 """
 from app.auth import auth

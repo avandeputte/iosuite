@@ -4,7 +4,7 @@ ionotes-export.zip:
   notes.json            every folder, tag colour and note (live ones; with ?trash=1 the trash too) with its fields
   <Folder>/<title>.md   each note as Markdown (front matter: id, dates, tags, source), in its folder's directory
   <Folder>/<title>.png  its picture, next to it
-A zip made here imports again on any ionotes server (Maintenance › Import), notes and pictures alike: records
+A zip made here imports again on any ionotes server (Settings › Export and import), notes and pictures alike: records
 keep their ids, and a record that is newer on the server is left as it is.
 """
 import base64

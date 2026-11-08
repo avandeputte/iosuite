@@ -99,7 +99,7 @@ body.side-docked #menubtn { display: none; }
 #usermenu .tool .ic { width: 18px; height: 18px; }
 .avatar { width: 22px; height: 22px; border-radius: 50%; background: var(--c-amber-av); color: #1f2730; font-size: var(--fs-s); font-weight: 600; display: inline-flex; align-items: center; justify-content: center; flex: none; }
 
-/* ---- sidebar: the name on top, the views, Folders, Tags and Manage, then Settings and Maintenance at the foot above the
+/* ---- sidebar: the name on top, the views, Folders, Tags and Manage, then Settings at the foot above the
    status line. Docked (body.side-docked) on a wide screen; otherwise hidden off the left edge and slid over the page
    (body.side-open). The same as iopix. */
 #nav { position: fixed; top: 0; bottom: 0; left: 0; width: var(--side); display: flex; flex-direction: column; gap: 2px; padding: env(safe-area-inset-top) 12px 0 max(12px, env(safe-area-inset-left));
@@ -182,7 +182,7 @@ details.ocr pre { white-space: pre-wrap; word-break: break-word; font: inherit; 
   background: color-mix(in srgb, var(--hue) calc(var(--mix) + 8%), transparent); color: var(--hue); }
 .ptitle .pic .ic { width: 22px; height: 22px; }
 .pagein h1 + p { margin-top: 10px; }
-/* tabs under a page's title, as iopix's Settings and Maintenance */
+/* tabs under a page's title, as iopix's Settings */
 .stabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 14px 0 16px; border-bottom: 1px solid var(--line); }
 .stabs .pillbtn { height: 40px; padding: 0 12px; border: 0; border-radius: 0; background: none; color: var(--fg2); font-weight: 500; position: relative; }
 .stabs .pillbtn:hover { color: var(--fg); background: none; }

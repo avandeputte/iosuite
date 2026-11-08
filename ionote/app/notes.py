@@ -119,7 +119,7 @@ def claim_unowned(first_admin_id) -> int:
 
 
 def owner_counts() -> dict:
-    """How many notes (the trash included) each owner id has, for Maintenance › Who owns the notes."""
+    """How many notes (the trash included) each owner id has, for Settings › Storage and backups › Who owns the notes."""
     with db.connect() as con:
         return {int(r[0]): int(r[1]) for r in con.execute("SELECT user_id, count(*) FROM nts_notes GROUP BY user_id").fetchall()}
 

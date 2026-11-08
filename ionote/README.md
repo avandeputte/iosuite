@@ -17,13 +17,13 @@ and sign-in (Cloudflare Access too), the same installer, updater, Docker image a
   note onto a folder to file it), all notes / pinned / pictures / no folder / trash, sorting, full-text search,
   editing that saves as you type, pictures pasted (⌘V) or dropped anywhere become notes, copy text or picture,
   download. Installs like an app on a phone (PWA); light, dark or the device's theme. Laid out like iopix: the
-  sidebar (dockable) has the views, Folders, Tags and Manage (trash, change log), with Settings and Maintenance at its
+  sidebar (dockable) has the views, Folders, Tags and Manage (trash, change log), with Settings at its
   foot; the search, New note and your account are along the top. On a phone the sidebar is a bottom bar with More.
 - **Search**: every word you type must match (prefix) in the title, the text, the text in the picture or the tags,
   through MariaDB's full-text index.
 - **Text in pictures**: read on the device where the picture was taken (Apple's Vision framework, on the Mac and
   iPhone), and sent along; for pictures added in the web app the server reads it itself with RapidOCR.
-- **Settings › Suite** (suite admins): the whole suite's people and their role in every app, app passwords, keys and tokens, the apps (default role, sign-in required) and sign-in at the proxy; the same panel as on the start page and in every io app (iosuite-shared's `/api/suite-admin/ui.js`). Read-only mode stays ioNotes' own (Settings › Read-only).
+- **Settings › Security** (suite admins): the whole suite's people and their role in every app, app passwords, keys and tokens, the apps (default role, sign-in required) and sign-in at the proxy; the same panel as on the start page and in every io app (iosuite-shared's `/api/suite-admin/ui.js`). Read-only mode stays ioNotes' own (Settings › Read-only).
 - **Offline**: the apps keep a full copy and send their changes when the server can be reached; the API settles
   conflicts per note by the time of the edit (below).
 - **The clipboard Inbox stays on each device.** Only notes you save go to the server.
@@ -66,7 +66,7 @@ foreground. `--sqlite` keeps everything in a SQLite file in the data folder inst
 
 The database user needs to create tables in its database (`GRANT ALL ON notes.* TO 'notes'@'%'`). Pictures are
 stored in the database: MariaDB's `max_allowed_packet` (16 MB by default) must be larger than the largest picture
-(`MAX_IMAGE_MB`, 15 MB); Maintenance › Storage and backups warns when it is not.
+(`MAX_IMAGE_MB`, 15 MB); Settings › Storage and backups warns when it is not.
 
 ### Proxmox VE (LXC)
 
@@ -125,15 +125,15 @@ name and the same names), or in the environment, which wins. `config.env.example
 | `OCR` | `1` | `0`: the server never reads text in pictures (the apps still do) |
 | `MAX_IMAGE_MB` | `15` | the largest picture a note may carry |
 | `MCP` / `MCP_USER` | | `MCP=1` keeps the endpoint on whatever Settings says; the account `python -m app.mcp` (stdio) acts as |
-| `UPDATE_CHECK` | `1` | `0`: never ask GitHub for a newer version (Maintenance › Updates and logs) |
+| `UPDATE_CHECK` | `1` | `0`: never ask GitHub for a newer version (Settings › Server) |
 | `AUTH_PROXY`... | `off` | sign-in at a reverse proxy, above |
 
 ## Updates
 
 - **Standalone:** `./update.sh` fetches the latest code (git, or the GitHub tarball), installs the packages the new
-  version asks for and only then moves the code in, then restarts the service. `--check` only reports. Maintenance ›
-  Updates and logs › Update now runs the same script; the page (the same in every ioThing app: it comes from
-  `iosuite_shared.updates` in iosuite-shared, at `/api/server` and `/api/log`) also has the tail of the server log
+  version asks for and only then moves the code in, then restarts the service. `--check` only reports. Settings ›
+  Server › Update now runs the same script; the page (the same in every ioThing app: it comes from
+  iosuite-shared, at `/api/server/ui.js`, `/api/server` and `/api/log`) also has the tail of the server log
   (`data/ionotes.log`) and Restart. A daily check (on by default; `UPDATE_CHECK=0` locks it off, the page switches it
   off) shows admins a card when a newer version exists, with Update now right on it (dismissed per version).
 - **Proxmox:** `update` inside the container (the framework's command) runs the same script.
@@ -148,7 +148,7 @@ buffer that path.
 
 When the proxy already makes people sign in, ionotes takes that sign-in, exactly as iopix does: the proxy passes who
 signed in in a header, and ionotes treats that person as signed in when an account exists for them (matched on the
-account's email address, then its name). Settings › Suite › Sign-in at the proxy (saved there, the settings are kept in the
+account's email address, then its name). Settings › Security › Sign-in at the proxy (saved there, the settings are kept in the
 Shared ioSuite database for the whole suite: one Cloudflare Access application covering every app, set up once), or
 in `config.env`, which wins:
 
@@ -192,7 +192,7 @@ account) become the first admin's. A note id that belongs to another account is 
 | **editor** | plus every change to their own notes, folders and tags, and export/import of them (Settings › Export and import; the Mac and iPhone apps sign in as an editor) |
 | **admin** | plus settings, accounts, updates and the server log |
 
-**Sign-in required** (Settings › Suite › Apps) also closes the open routes to visitors, but for the app shell, `/api/status` and the sign-in routes (the MCP endpoint wants an app password either way).
+**Sign-in required** (Settings › Global settings › Apps) also closes the open routes to visitors, but for the app shell, `/api/status` and the sign-in routes (the MCP endpoint wants an app password either way).
 Sessions are random tokens in an HttpOnly cookie (`iothing_session`, shared by the apps on the domain) valid for
 30 days and renewed while in use; each records where it began and was last seen (address, through Cloudflare or
 not, web or which app): `GET /api/auth/sessions` for your own, `GET /api/users/<id>/sessions` for admins. Passwords
@@ -204,7 +204,7 @@ icon, address) on its first request, so ioSuite's start page and the other apps 
 address. The address is `PUBLIC_URL` when set, otherwise the best one ionotes is reached at (a host under
 `COOKIE_DOMAIN` over HTTPS beats a LAN name, which beats an IP address).
 
-If the notes from before accounts went to another admin than intended, Maintenance › Storage and backups › Who owns
+If the notes from before accounts went to another admin than intended, Settings › Storage and backups › Who owns
 the notes gives all of one account's notes (with folders and tag colours) to another; that account's devices sync
 them in.
 
@@ -231,7 +231,7 @@ server has is answered with 409 (or `stale` in a push) and the server's copy, wh
 
 ## MCP server
 
-Maintenance › MCP and text in pictures turns on an MCP endpoint at `/mcp` (off by default), the same in every app of the
+Settings › Server turns on an MCP endpoint at `/mcp` (off by default), the same in every app of the
 suite. An assistant such as Claude can then:
 
 - read: `notes_overview`, `search_notes` (words, folder, tag, pinned, picture, source, dates, sort), `get_note`,
@@ -254,9 +254,9 @@ Apps that take a JSON configuration and only start local processes (Claude Deskt
 
 ## Export, import and backups
 
-Maintenance › Storage and backups › Export downloads every note as Markdown (with front matter: id, dates, tags, source) next to its picture,
-in a directory per folder, plus `notes.json` with everything. Such a zip imports again on any ionotes server (admins,
-Maintenance › Import): records keep their ids, and a newer copy on the server wins (a zip from another account on the same server comes in as new notes). For backups, back the database up
+Settings › Export and import › Export downloads every note as Markdown (with front matter: id, dates, tags, source) next to its picture,
+in a directory per folder, plus `notes.json` with everything. Such a zip imports again on any ionotes server (Settings ›
+Export and import › Import): records keep their ids, and a newer copy on the server wins (a zip from another account on the same server comes in as new notes). For backups, back the database up
 (`mariadb-dump --single-transaction notes`): notes, pictures, accounts and settings are all in it.
 
 ## Layout

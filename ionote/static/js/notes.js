@@ -62,7 +62,7 @@ function dropTarget(el, folderId) {
 }
 
 /** The sidebar, laid out as iopix's: the name on top (in index.html), the views, Folders, Tags and Manage, then
- *  Settings and Maintenance at the foot above the status line. On phones it is the bottom bar: the four .bar links
+ *  Settings at the foot above the status line. On phones it is the bottom bar: the four .bar links
  *  and More, which opens the rest (moreSheet). */
 export function renderNav() {
   const m = state.meta, nav = $('#nav');
@@ -97,19 +97,18 @@ export function renderNav() {
   out.push(h('div.navgap'), sec('Manage'),
     navItem('Trash', 'trash', m.trash || null, on('trash'), to({ v: 'trash' }), 'var(--c-gray)', '.bar'),
     canWrite() ? navItem('Change log', 'history', null, page === 'changes', '#/changes', 'var(--c-indigo)') : null,
-    h('button.navmore' + (['settings', 'maintenance', 'changes'].includes(page) || (notes && ['folder', 'tag', 'nofolder'].includes(view.v)) ? '.on' : ''), { type: 'button', title: 'More', onclick: moreSheet }, icon('more'), h('span.nl', 'More')),
+    h('button.navmore' + (['settings', 'changes'].includes(page) || (notes && ['folder', 'tag', 'nofolder'].includes(view.v)) ? '.on' : ''), { type: 'button', title: 'More', onclick: moreSheet }, icon('more'), h('span.nl', 'More')),
     h('div.navfoot',
       navItem('Settings', 'gear', null, page === 'settings', '#/settings', null, '.foot'),
-      isAdmin() ? navItem('Maintenance', 'wrench', null, page === 'maintenance', '#/maintenance', null, '.foot') : null,
       h('div#status', { role: 'status', 'aria-live': 'polite' }, statusText)));
   nav.append(...out.filter(Boolean));
 }
 
 let statusText = '';
-/** The line under Settings and Maintenance (as iopix's): the version, or that the server cannot be reached. */
+/** The line under Settings (as iopix's): the version, or that the server cannot be reached. */
 export function setStatus(text) { statusText = text; const s = $('#status'); if (s) s.textContent = text; }
 
-/** Phones: the bottom bar shows four destinations; the rest (folders, tags, the change log, Settings and Maintenance)
+/** Phones: the bottom bar shows four destinations; the rest (folders, tags, the change log, Settings)
  *  open from More, as in iopix. */
 function moreSheet() {
   const m = state.meta;
@@ -122,7 +121,6 @@ function moreSheet() {
     tile(to({ v: 'nofolder' }), 'No folder', 'folderOff', 'var(--c-gray)', view.v === 'nofolder'),
     canWrite() ? tile('#/changes', 'Change log', 'history', 'var(--c-indigo)', page === 'changes') : null,
     tile('#/settings', 'Settings', 'gear', 'var(--c-gray)', page === 'settings'),
-    isAdmin() ? tile('#/maintenance', 'Maintenance', 'wrench', 'var(--c-orange)', page === 'maintenance') : null,
   ].filter(Boolean);
   const content = h('div',
     h('div.sheetgrid', grid),

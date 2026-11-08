@@ -19,7 +19,7 @@ from app import notes as notes_mod, owners
 from app.auth import auth, updater
 from app.routes import auth as auth_routes, notes as notes_routes, settings, users as users_routes
 
-setup_log(config.LOG_FILE)  # the server log that Maintenance › Updates and logs shows; the app runs without it
+setup_log(config.LOG_FILE)  # the server log that Settings › Server shows; the app runs without it
 log = logging.getLogger("app")
 
 # what a visitor may still fetch when sign-in is required: the app shell and its files, the API docs, and the MCP
@@ -55,7 +55,7 @@ app = FastAPI(title="ioNotes", version=__version__, lifespan=lifespan, docs_url=
 
 
 def mcp_enabled() -> bool:
-    """Maintenance › MCP server: off until an admin turns it on (or MCP=1 in the environment)."""
+    """Settings › Server › MCP server: off until an admin turns it on (or MCP=1 in the environment)."""
     return shared_mcp.enabled(db.get_setting, config.MCP_FORCED)
 
 
@@ -74,7 +74,7 @@ def _mcp_user(u: dict) -> None:
     notes_mod.current_owner.set(int(u["id"]))
 
 
-_mcp_gate = auth.mcp_gate(mcp_enabled, on_user=_mcp_user, settings_page="Maintenance › MCP server")
+_mcp_gate = auth.mcp_gate(mcp_enabled, on_user=_mcp_user)
 
 
 def _before(request: Request):
@@ -119,9 +119,22 @@ def _status_extra(request: Request) -> dict:
 
 app.include_router(auth_routes.router)   # /api/auth/*: sign-in, accounts, me, settings, password, sessions, app passwords, suite
 app.include_router(users_routes.router)  # /api/users: accounts and their role here (admins)
-app.include_router(auth.admin_router())  # /api/suite-admin (+ ui.js, the Settings › Suite panel): the whole suite (suite admins)
+app.include_router(auth.admin_router())  # /api/suite-admin (+ ui.js, the Settings › Security panel): the whole suite (suite admins)
 app.include_router(auth.status_router(updater, extra=_status_extra))  # /api/status: public, the same shape in every app
-app.include_router(auth.server_router(updater, log_file=config.LOG_FILE, info=lambda: {"appUrl": config.BASE_URL}))  # /api/server, /api/log (admins)
+def _server_info() -> dict:
+    """What Settings › Server shows beside the updater's own fields: the MCP box."""
+    return {"mcpEnabled": mcp_enabled(), "mcpLocked": config.MCP_FORCED,
+            "mcpAbout": "The address /mcp that lets an assistant such as Claude search and read notes and look at their pictures and, as an "
+                        "editor, create, edit, file, tag and delete them; admins also get diagnostics and the updater."}
+
+
+def _server_apply(body: dict) -> None:
+    """The MCP switch, sent to POST /api/server as {mcpEnabled: bool}."""
+    if "mcpEnabled" in body:
+        shared_mcp.set_enabled(db.set_setting, bool(body["mcpEnabled"]), config.MCP_FORCED)
+
+
+app.include_router(auth.server_router(updater, log_file=config.LOG_FILE, info=_server_info, apply=_server_apply))  # /api/server, /api/log (admins)
 app.include_router(notes_routes.router)
 app.include_router(settings.router)
 shared_mcp.mount(app, mcp.server)  # MCP over streamable HTTP at /mcp, ahead of everything else

@@ -125,3 +125,14 @@ def test_suite_apps_for_the_app_switcher(client):
     assert r["app"] == "ionotes"
     other = [a for a in r["items"] if a["app"] != r["app"]]
     assert [(a["name"], a["url"], a["icon"]) for a in other] == [("ioPix", "https://photo.example.net", "https://photo.example.net/static/icons/mark.svg")]
+
+
+def test_settings_server_is_the_shared_panel(client, admin):
+    """Settings › Server is iosuite-shared's panel, with the MCP switch; /api/settings no longer has a second one."""
+    assert "export async function mount" in client.get("/api/server/ui.js").text
+    s = client.get("/api/server").json()
+    assert s["name"] == "ioNotes" and s["mcpEnabled"] is False and s["mcpAbout"]
+    assert client.post("/api/server", json={"mcpEnabled": True}).json()["mcpEnabled"] is True
+    assert "mcp_enabled" not in client.get("/api/settings").json()
+    client.post("/api/server", json={"mcpEnabled": False})
+    assert client.post("/api/auth/logout_all").status_code in (404, 405)  # Sign out is the only sign out
