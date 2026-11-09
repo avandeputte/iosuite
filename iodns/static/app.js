@@ -430,7 +430,7 @@ async function offerPush(names, done) {
 
 // ------------------------------------------------------------------ compare and push
 const STATE = { same: ['ok', 'In sync'], missing: ['missing', 'Missing'], extra: ['extra', 'Only on the server'], different: ['diff', 'Different'],
-  unreachable: ['unr', 'Unreachable'], outside: ['out', 'Not its zone'], ok: ['ok', 'In sync'] };
+  unreachable: ['unr', 'Unreachable'], outside: ['out', 'Not in its zones'], leftout: ['out', 'Left out'], ok: ['ok', 'In sync'] };
 async function showCompare(page, r) {
   const v = viewOf(r.slug);
   const head = h('div', { class: 'pagehead' }, h('h1', null, `Compare: ${v.name}`));

@@ -154,7 +154,7 @@ def test_a_name_the_server_answers_itself_is_left_out(client):
     assert [r.name for r in fake.SERVERS["http://gw"]] == []  # tv.guest.lan is left out by the setting
     assert next(x for x in client.get("/api/servers").json()["items"] if x["id"] == uni["id"])["options"]["exclude"] == "*.guest.lan, beast.iothing.net"
     rows = {r["name"]: r for r in client.get("/api/sync/internal").json()["rows"]}
-    assert rows["beast.iothing.net"]["state"] == "ok" and rows["beast.iothing.net"]["servers"][str(uni["id"])]["state"] == "outside"
+    assert rows["beast.iothing.net"]["state"] == "ok" and rows["beast.iothing.net"]["servers"][str(uni["id"])]["state"] == "leftout"
     assert ag["id"]
 
 
