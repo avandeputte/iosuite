@@ -19,7 +19,7 @@ from iosuite_shared import config, schema
 
 log = logging.getLogger("iosuite_shared.db")
 
-SCHEMA_VERSION = 4  # 4: the suite naming convention (ios_ tables, *_at times, name/value, named indexes)
+SCHEMA_VERSION = 5  # 4: the suite naming convention (ios_ tables, *_at times, name/value, named indexes); 5: ios_apps.admin_tool
 PREFIX = "ios"
 OPTIONS = " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
 
@@ -130,6 +130,7 @@ SCHEMA = [
         configured_url VARCHAR(512) NULL,
         seen_url VARCHAR(512) NULL,
         internal_url VARCHAR(512) NULL,
+        admin_tool TINYINT NOT NULL DEFAULT 0,
         created_at BIGINT NOT NULL,
         updated_at BIGINT NOT NULL,
         last_seen_at BIGINT NULL
@@ -280,6 +281,8 @@ def init():
             with con.cursor() as cur:
                 for stmt in SCHEMA:
                     cur.execute(stmt + OPTIONS)
+                if "admin_tool" not in schema.columns(cur, "ios_apps"):  # 5: an app may be an admin tool
+                    cur.execute("ALTER TABLE ios_apps ADD COLUMN admin_tool TINYINT NOT NULL DEFAULT 0 AFTER internal_url")
                 schema.ensure_version_table(cur, PREFIX)
                 schema.record_version(cur, PREFIX, SCHEMA_VERSION)
         _ready = True

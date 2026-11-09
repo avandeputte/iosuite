@@ -201,8 +201,9 @@ def auth_router(self) -> APIRouter:
 
     @r.get("/api/auth/suite", dependencies=[access.signed_in])
     def api_suite(request: Request):
-        """The suite's installed apps and where they are, for the start page and app switchers."""
-        return {"items": suite.apps(), "app": app}
+        """The suite's installed apps this account may use and where they are, for the start page and app switchers
+        (suite.visible: the apps it has a role in; an admin tool only where it is an admin)."""
+        return {"items": suite.visible(auth.current_user(request)), "app": app}
 
     @r.delete("/api/auth/suite/{key}", dependencies=[access.suite_admin])
     def api_suite_forget(key: str, request: Request):
@@ -211,7 +212,7 @@ def auth_router(self) -> APIRouter:
             raise HTTPException(404, "No such app")
         if key == app:
             auth._registered = False
-        return {"items": suite.apps(), "app": app}
+        return {"items": suite.visible(auth.current_user(request)), "app": app}
 
     return r
 

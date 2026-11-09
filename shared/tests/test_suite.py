@@ -166,3 +166,30 @@ def test_auth_registers_the_internal_url(monkeypatch):
     TestClient(app, base_url="http://testserver").get("/api/x")
     r = suite.get("iocalendar")
     assert r["internalUrl"] is None and r["url"] == "https://cal.example.com"
+
+
+def test_switcher_shows_only_the_apps_an_account_may_use():
+    from iosuite_shared import db
+    suite.invalidate()
+    app, _ = make_app("iosuite", label="ioSuite")
+    users.create("alex", "secret123", "admin", "iosuite", suite_admin=True)
+    bob = users.create("bob", "secret123", "viewer", "iosuite")
+    carol = users.create("carol", "secret123", "viewer", "iosuite")
+    suite.register("iohealth", "ioHealth", url="https://health.example.com")
+    suite.register("iodns", "ioDNS", url="https://dns.example.com", admin_tool=True)
+    db.set_setting("default_role", "none", "iohealth")  # ioHealth: only the accounts given a role there
+    users.set_role(carol["id"] if isinstance(carol, dict) else carol, "iohealth", "viewer")
+    users.set_role(carol["id"] if isinstance(carol, dict) else carol, "iodns", "editor")
+    c = TestClient(app, base_url="http://home.lan")
+
+    def seen(name):
+        c.post("/api/auth/login", json={"name": name, "password": "secret123"})
+        items = c.get("/api/auth/suite").json()["items"]
+        return {a["app"]: a["adminTool"] for a in items}
+    assert seen("bob") == {"iosuite": False}                                       # no role in ioHealth; ioDNS is an admin tool
+    assert seen("carol") == {"iosuite": False, "iohealth": False}                  # an editor of ioDNS is not its admin
+    assert seen("alex") == {"iosuite": False, "iohealth": False, "iodns": True}    # a suite admin sees everything
+    assert bob is not None
+    # an app that registers again without the flag (an older library) is no admin tool any more only when it says so
+    suite.register("iodns", "ioDNS", url="https://dns.example.com")
+    assert suite.get("iodns")["adminTool"] is False

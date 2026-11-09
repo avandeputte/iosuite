@@ -17,6 +17,11 @@ container, whose own address the network cannot reach: there INTERNAL_URL has to
 (`url` stays PUBLIC_URL or the address the app is reached at); only the apps' own server-to-server calls use it
 (iosuite_shared.links: localhost when it is on the same machine, then it, then the public address).
 
+Who sees which app (`visible(user)`, and `GET /api/auth/suite`): only the apps the account has a role in (not
+"none": its own role there, else that app's default role), so somebody without ioHealth does not see ioHealth. An app
+that registers as an admin tool (`Auth(..., admin_tool=True)`; `adminTool` in what `apps()` answers: ioDNS, things
+behind the scenes) is seen only by its admins and the suite admins, and a switcher shows it apart from the others.
+
 A suite admin may forget an app that was uninstalled (`DELETE /api/auth/suite/{app}`); it comes back the next time it
 starts.
 """
@@ -116,10 +121,10 @@ def local_url(app: str = None, port: int = None, host: str = None, https: bool =
 
 
 def register(app: str, name: str = None, url: str = None, version: str = None, description: str = None,
-             color: str = None, internal_url: str = None) -> dict:
+             color: str = None, internal_url: str = None, admin_tool: bool = False) -> dict:
     """Write (or refresh) this app's row: its display name, the address its configuration names (None: none, the
     address it is reached at is used), its address inside the network (local_url()), its version, a line on what it
-    is and its colour (#rrggbb); the icon is ICON on the app. Called at every start; whatever the app no longer says is
+    is and its colour (#rrggbb), and whether it is an admin tool (seen only by its admins); the icon is ICON on the app. Called at every start; whatever the app no longer says is
     cleared."""
     if not app or len(app) > 32:
         raise ValueError("an app key of 1 to 32 characters")
@@ -127,14 +132,15 @@ def register(app: str, name: str = None, url: str = None, version: str = None, d
         _seen.pop(app, None)
     now = int(time.time())
     row = {"name": _clip(name or app, 64), "description": _clip(description, 255), "version": _clip(version, 32),
-           "color": _clip(color, 16), "icon": ICON, "configured_url": clean_url(url), "internal_url": clean_url(internal_url)}
-    db.ex("""INSERT INTO ios_apps (app, name, description, version, color, icon, configured_url, internal_url, created_at, updated_at, last_seen_at)
-             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+           "color": _clip(color, 16), "icon": ICON, "configured_url": clean_url(url), "internal_url": clean_url(internal_url),
+           "admin_tool": 1 if admin_tool else 0}
+    db.ex("""INSERT INTO ios_apps (app, name, description, version, color, icon, configured_url, internal_url, admin_tool, created_at, updated_at, last_seen_at)
+             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
              ON DUPLICATE KEY UPDATE name = VALUES(name), description = VALUES(description), version = VALUES(version),
                color = VALUES(color), icon = VALUES(icon), configured_url = VALUES(configured_url),
-               internal_url = VALUES(internal_url), updated_at = VALUES(updated_at), last_seen_at = VALUES(last_seen_at)""",
+               internal_url = VALUES(internal_url), admin_tool = VALUES(admin_tool), updated_at = VALUES(updated_at), last_seen_at = VALUES(last_seen_at)""",
           (app, row["name"], row["description"], row["version"], row["color"], row["icon"], row["configured_url"],
-           row["internal_url"], now, now, now))
+           row["internal_url"], row["admin_tool"], now, now, now))
     return get(app)
 
 
@@ -199,13 +205,26 @@ def _out(r: dict) -> dict:
         icon = url + "/" + icon.lstrip("/")
     return {"app": r["app"], "name": r["name"], "description": r["description"], "version": r["version"],
             "color": r["color"], "icon": icon, "url": url, "configuredUrl": r["configured_url"], "seenUrl": r["seen_url"],
-            "internalUrl": r.get("internal_url"), "registered": r["created_at"], "updated": r["updated_at"], "lastSeen": r["last_seen_at"]}
+            "internalUrl": r.get("internal_url"), "adminTool": bool(r.get("admin_tool")), "registered": r["created_at"], "updated": r["updated_at"], "lastSeen": r["last_seen_at"]}
 
 
 def apps() -> list:
     """Every registered app: {app, name, description, version, color, icon (absolute), url, configuredUrl, seenUrl,
-    internalUrl, registered, updated, lastSeen}, by name."""
+    internalUrl, adminTool, registered, updated, lastSeen}, by name. What one account may see: visible()."""
     return [_out(r) for r in db.q("SELECT * FROM ios_apps ORDER BY name, app")]
+
+
+def visible(user) -> list:
+    """The apps this account may use, for the start page and the app switchers: those it has a role in (not "none"),
+    and an admin tool only where it is an admin (a suite admin is admin everywhere)."""
+    from iosuite_shared import users
+    out = []
+    for a in apps():
+        role = users.role_of(user, a["app"])
+        if role == "none" or (a["adminTool"] and role != "admin"):
+            continue
+        out.append(a)
+    return out
 
 
 def get(app: str) -> dict | None:
