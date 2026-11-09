@@ -216,8 +216,11 @@ def apps() -> list:
 
 def visible(user) -> list:
     """The apps this account may use, for the start page and the app switchers: those it has a role in (not "none"),
-    and an admin tool only where it is an admin (a suite admin is admin everywhere)."""
+    and an admin tool only where it is an admin (a suite admin is admin everywhere). Before the first account exists
+    (everything is open then), every app."""
     from iosuite_shared import users
+    if not users.any_users():  # before the first account, everything is open to whoever asks: every app
+        return apps()
     out = []
     for a in apps():
         role = users.role_of(user, a["app"])

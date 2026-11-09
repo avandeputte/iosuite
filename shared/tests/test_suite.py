@@ -193,3 +193,11 @@ def test_switcher_shows_only_the_apps_an_account_may_use():
     # an app that registers again without the flag (an older library) is no admin tool any more only when it says so
     suite.register("iodns", "ioDNS", url="https://dns.example.com")
     assert suite.get("iodns")["adminTool"] is False
+
+
+def test_before_the_first_account_the_switcher_lists_every_app():
+    suite.invalidate()
+    app, _ = make_app("iosuite", label="ioSuite")
+    suite.register("iodns", "ioDNS", url="https://dns.example.com", admin_tool=True)
+    c = TestClient(app, base_url="http://home.lan")
+    assert {a["app"] for a in c.get("/api/auth/suite").json()["items"]} == {"iosuite", "iodns"}
