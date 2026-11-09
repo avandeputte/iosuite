@@ -19,7 +19,8 @@ tools/check-facts.py  holds the pages to the apps' code (links, ports, container
 tools/check-site.py   every local link and image in the built site resolves
 mkdocs.yml          site settings and the nav
 build.sh            check, build into site/, lay the landing page over it, write the sitemap
-CLOUDFLARE.md       hosting on Cloudflare Pages: the project, the domain, the deploy token
+CLOUDFLARE.md       hosting on Cloudflare Workers: the Worker, the domain, the deploy token
+wrangler.jsonc      the Worker: serves site/ as static assets at iosuite.iothing.net
 ```
 
 ## Writing
@@ -48,12 +49,13 @@ port, a Proxmox container size or a Docker image that is not what the app's code
 
 ## Deploying
 
-The site is a Cloudflare Pages project (`iosuite`) with the custom domain `iosuite.iothing.net`. The workflow builds
+The site is a Cloudflare Worker (`iosuite`, in `wrangler.jsonc`) that serves `site/` as static assets, on the custom
+domain `iosuite.iothing.net`. The workflow builds
 every pull request, and deploys on every push to `main`, nightly (so the checks follow the apps) and on demand, with
 `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` from the repository secrets. By hand:
 
 ```bash
-npx wrangler pages deploy site --project-name iosuite
+sh build.sh && npx wrangler deploy
 ```
 
 The one-time setup in Cloudflare is in [CLOUDFLARE.md](CLOUDFLARE.md).

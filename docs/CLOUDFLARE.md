@@ -1,52 +1,36 @@
-# Hosting on Cloudflare Pages
+# Hosting on Cloudflare Workers
 
-iosuite.iothing.net is a Cloudflare Pages project, deployed by this repository's workflow with Wrangler (direct
-upload), the same way as ham.iothing.net. Cloudflare's own Git integration is not used: the build runs in GitHub
-Actions, because it checks the pages against the apps' repositories first.
+iosuite.iothing.net is a Cloudflare Worker named `iosuite` that serves the built site as static assets. No code runs
+in it: every request is answered with a file from `site/`. This repository's workflow builds the site in GitHub
+Actions (it checks the pages against the apps' repositories first) and deploys it with Wrangler. Cloudflare's own Git
+integration is not used.
 
-This is the one-time setup. After it, every push to `main` (and a nightly run) publishes the site.
+Everything about the Worker is in [`wrangler.jsonc`](wrangler.jsonc): its name, the `site/` folder, the 404 page and
+the custom domain. So the one-time setup is only the token and the two secrets; the first deploy creates the Worker
+and attaches the domain.
 
-## 1. Create the Pages project
-
-Either in the dashboard: **Workers & Pages › Create › Pages › Upload assets** (Direct Upload), project name
-**`iosuite`**, and upload the `site/` folder of a local build once.
-
-Or from a shell, after `sh build.sh`:
-
-```bash
-npx wrangler login
-npx wrangler pages project create iosuite --production-branch main
-npx wrangler pages deploy site --project-name iosuite --branch main
-```
-
-The project's production branch must be `main`: the workflow deploys with `--branch main`, so its uploads are
-production deployments. The site is then at `https://iosuite.pages.dev`.
-
-## 2. The custom domain
-
-In the project: **Custom domains › Set up a custom domain** › `iosuite.iothing.net`. Since `iothing.net` is a zone in
-the same Cloudflare account, Cloudflare adds the `CNAME iosuite → iosuite.pages.dev` record itself and issues the
-certificate; it is live within a few minutes.
-
-## 3. The API token
+## 1. The API token
 
 **My Profile › API Tokens › Create Token › Create Custom Token**:
 
 | | |
 | --- | --- |
 | Name | `iosuite-docs deploy` |
-| Permissions | Account › **Cloudflare Pages** › **Edit** |
+| Permissions | Account › **Workers Scripts** › **Edit** |
+| | Zone › **Workers Routes** › **Edit** |
+| | Zone › **DNS** › **Edit** |
 | Account resources | Include › your account |
+| Zone resources | Include › Specific zone › `iothing.net` |
 
-(The token used for ham.iothing.net has the same permission and works here too, if you'd rather reuse it.)
+The two zone permissions are for the custom domain: Wrangler adds the `iosuite` DNS record and the route itself.
 
-## 4. The repository secrets
+## 2. The repository secrets
 
 In GitHub: **avandeputte/iosuite-docs › Settings › Secrets and variables › Actions › New repository secret**:
 
 | Secret | Value |
 | --- | --- |
-| `CLOUDFLARE_API_TOKEN` | the token from step 3 |
+| `CLOUDFLARE_API_TOKEN` | the token from step 1 |
 | `CLOUDFLARE_ACCOUNT_ID` | the account id, on the right of the account's **Workers & Pages** overview |
 
 Or with the GitHub CLI:
@@ -58,19 +42,31 @@ gh secret set CLOUDFLARE_ACCOUNT_ID --repo avandeputte/iosuite-docs
 
 Until both are set, the workflow still builds and checks every push but skips the deploy step.
 
-## 5. Deploy
+## 3. Deploy
 
-**Actions › build › Run workflow** on `main`, or push to `main`. The deploy step prints the deployment's URL.
+**Actions › build › Run workflow** on `main`, or push to `main`. Or by hand, from a clone:
+
+```bash
+sh build.sh
+npx wrangler login
+npx wrangler deploy
+```
+
+The site is then at `https://iosuite.iothing.net` (the certificate can take a few minutes the first time), and also
+at the Worker's `workers.dev` address.
 
 ## What the site sends
 
-`landing/_headers` becomes Cloudflare Pages' headers file: `nosniff` and a referrer policy everywhere, an hour's cache
-for the screenshots and a year's for MkDocs' fingerprinted assets. `landing/404.html` is served for any address that
-does not exist. There are no Pages Functions and nothing server-side.
+`landing/_headers` becomes the Worker's headers file: `nosniff` and a referrer policy everywhere, an hour's cache for
+the screenshots and a year's for MkDocs' fingerprinted assets. `landing/404.html` is served for any address that does
+not exist.
 
 ## Troubleshooting
 
-- **`Project not found`** in the deploy step: the project name must be exactly `iosuite`, in the account of
+- **`Authentication error [code: 10000]`**: the token lacks Workers Scripts › Edit on the account of
   `CLOUDFLARE_ACCOUNT_ID`.
-- **`Authentication error [code: 10000]`**: the token lacks Cloudflare Pages › Edit on that account.
-- **The domain shows an old version**: open the project's Deployments; the production one must be from branch `main`.
+- **The deploy fails on the custom domain**: the token lacks the zone permissions on `iothing.net`, or an older DNS
+  record for `iosuite.iothing.net` (such as a CNAME to a Pages project) is in the way; delete that record and deploy
+  again.
+- **`/docs/` is missing**: the deploy ran without a build; `wrangler deploy` uploads whatever is in `site/`, so run
+  `sh build.sh` first.

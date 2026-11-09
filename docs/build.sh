@@ -7,7 +7,7 @@
 #   sh build.sh               # checks against fresh clones of the apps' main
 #   sh build.sh ../src        # or against checkouts in ../src/<repo>
 #
-# Deploy with: npx wrangler pages deploy site --project-name iosuite
+# Deploy with: npx wrangler deploy        (wrangler.jsonc serves site/)
 set -e
 cd "$(dirname "$0")"
 python3 tools/check-facts.py "$@"

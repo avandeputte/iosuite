@@ -1,0 +1,14 @@
+// iosuite.iothing.net: a Worker that serves the built site (site/, made by build.sh) as static assets.
+// No code runs: every request is a file from site/, and site/404.html answers addresses that don't exist.
+{
+  "name": "iosuite",
+  "compatibility_date": "2026-11-01",
+  "assets": {
+    "directory": "./site",
+    "not_found_handling": "404-page"
+  },
+  "routes": [
+    { "pattern": "iosuite.iothing.net", "custom_domain": true }
+  ],
+  "workers_dev": true
+}
