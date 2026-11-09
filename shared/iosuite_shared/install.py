@@ -36,6 +36,7 @@ APPS = {
     "ionotes": dict(label="ioNotes", repo="avandeputte/ionotes", db="notes", port=8610, env="IONOTES", data=True,
                     extra=["--features", "none"]),
     "iohealth": dict(label="ioHealth", repo="avandeputte/iohealth", db="health", port=8650, env="IOHEALTH"),
+    "iodns": dict(label="ioDNS", repo="avandeputte/iodns", db="dns", port=8660, env="IODNS"),
     "iopix": dict(label="ioPix", repo="avandeputte/iopix", db="iopix", port=8600, env="IOPIX", data=True,
                   extra=["--no-digikam", "--features", "none"], photos=True),
 }
@@ -229,7 +230,7 @@ def install(names, config_dir, base=None, admin=None, service=None, photos=None,
 
 def add_parser(sub):
     p = sub.add_parser("install", help="install other apps of the suite here, sharing the answers of the app in --config")
-    p.add_argument("apps", nargs="+", help="iosuite, iopix, ionotes, iocalendar, iocontacts, iohealth (comma-separated or several), or all")
+    p.add_argument("apps", nargs="+", help="iosuite, iopix, ionotes, iocalendar, iocontacts, iohealth, iodns (comma-separated or several), or all")
     p.add_argument("--into", default=None, help="the folder the apps go under, each as <folder>/<app>/app (default: beside the calling app, e.g. /opt)")
     p.add_argument("--admin", default=None, help="make this account an admin of every app too (its password from ADMIN_PASSWORD)")
     g = p.add_mutually_exclusive_group()
