@@ -186,3 +186,34 @@ def test_an_admin_tool_for_admins_only(client):
     assert users.default_role("iodns") == "viewer"
     client.get("/api/auth/me")                    # the middleware registers the app
     assert suite.get("iodns")["adminTool"] is True
+
+
+def test_push_right_after_a_change_reaches_every_view_and_only_those_names(client):
+    """What the web app offers once an entry is saved, renamed or deleted: those names, in every view, nothing else."""
+    add_server(client, "AG1", "http://ag1")
+    add_server(client, "CF", "http://cf", view="external", zone="example.com")
+    fake.SERVERS["http://ag1"] = [record("other.lan", "A", "10.0.0.9")]  # an extra the push leaves alone
+    fake.SERVERS["http://cf"] = []
+    e = entry(client, "app.example.com", internal=[{"type": "A", "value": "192.168.1.20"}], external=[{"type": "A", "value": "203.0.113.5"}])
+    pre = client.post("/api/push", json={"names": ["app.example.com"], "dryRun": True}).json()
+    assert pre["dryRun"] and [v["view"] for v in pre["views"]] == ["internal", "external"]
+    assert fake.SERVERS["http://cf"] == []  # a dry run changes nothing
+    res = client.post("/api/push", json={"names": ["app.example.com"]}).json()
+    assert all(not s["errors"] for v in res["views"] for s in v["servers"])
+    assert sorted(r.key for r in fake.SERVERS["http://ag1"]) == [("app.example.com", "A", "192.168.1.20"), ("other.lan", "A", "10.0.0.9")]
+    assert [r.key for r in fake.SERVERS["http://cf"]] == [("app.example.com", "A", "203.0.113.5")]
+    assert client.post("/api/push", json={"names": ["app.example.com"], "dryRun": True}).json()["views"] == []  # in step now
+    # renamed: the new name added, the old one removed
+    client.put(f"/api/entries/{e['id']}", json={"name": "web.example.com", "records": {"external": [{"type": "A", "value": "203.0.113.5"}]}})
+    client.post("/api/push", json={"names": ["web.example.com", "app.example.com"]})
+    assert [r.key for r in fake.SERVERS["http://cf"]] == [("web.example.com", "A", "203.0.113.5")]
+    assert [r.name for r in fake.SERVERS["http://ag1"]] == ["other.lan"]  # no internal record any more: gone from AG1
+    # deleted: gone from the servers too
+    client.delete(f"/api/entries/{e['id']}")
+    client.post("/api/push", json={"names": ["web.example.com"]})
+    assert fake.SERVERS["http://cf"] == [] and [r.name for r in fake.SERVERS["http://ag1"]] == ["other.lan"]
+    # after an import: every difference, no extras removed
+    entry(client, "a.lan", internal=[{"type": "A", "value": "10.0.0.1"}])
+    client.post("/api/push", json={"names": None})
+    assert sorted(r.name for r in fake.SERVERS["http://ag1"]) == ["a.lan", "other.lan"]
+    assert client.post("/api/push", json={"names": "x"}).status_code == 400

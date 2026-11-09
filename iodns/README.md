@@ -24,6 +24,8 @@ single-page vanilla JS app, built the same way as the other io apps, signed in w
   remove) before anything is done. **Push all** makes every server of a view hold the master list (and, if asked,
   removes the names only the servers hold). A changed address is changed in place where the server can (AdGuard
   Home, Cloudflare keeps its proxy setting), so the name never goes unanswered.
+- **Push right away**: after an entry is added, changed, renamed or deleted (or the list is imported), ioDNS lists what
+  that would change on the servers, in every view, and asks whether to push it now. **Later** leaves it for Compare.
 - **Import** from any server, into its view of the master list: merge (add what is missing), merge with the server
   winning, or replace. Also export / import the whole list as JSON (Settings › Export and import).
 - **Dynamic DNS**: a record's value can be "Public address": ioDNS finds the house's public IPv4 / IPv6 every few
@@ -135,7 +137,7 @@ The DNS servers, their passwords and keys, the views and dynamic DNS are set in 
 Everything the web app does is a JSON API under `/api/` (documented at `/api/docs`), open to any client signed in with
 the user name and an app password (HTTP Basic or a bearer token): `GET /api/entries`, `POST /api/entries`,
 `GET /api/sync/<view>`, `POST /api/sync/<view>/apply` (`{decisions: {name: master | server:<id> | delete | skip}, dryRun}`),
-`POST /api/sync/<view>/push`, `POST /api/servers/<id>/import`, `POST /api/ddns/run`, `GET /api/history`.
+`POST /api/sync/<view>/push`, `POST /api/push` (`{names: [...] | null, dryRun}`: those names in every view), `POST /api/servers/<id>/import`, `POST /api/ddns/run`, `GET /api/history`.
 
 ## Tests
 

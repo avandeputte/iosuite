@@ -266,6 +266,24 @@ def push_all(view_slug: str, by: str | None, prune: bool = False, dry_run: bool 
     return apply(view_slug, decisions, by, dry_run)
 
 
+def push_names(names: list[str] | None, by: str | None, dry_run: bool = False) -> dict:
+    """Push what the master list says about some names to every server of every view, right after they were added,
+    changed or removed (a name the master list no longer holds is removed from the servers that hold it). names None:
+    every difference of every view, without removing the extras (after an import). Returns {"views": [{"view", "name",
+    "servers"}]}, only the views where something was (or would be) done."""
+    out = []
+    for v in model.views():
+        if not _targets(v["id"]):
+            continue
+        if names is None:
+            r = push_all(v["slug"], by, False, dry_run)
+        else:
+            r = apply(v["slug"], {model.norm_name(n): "master" for n in names if str(n or "").strip()}, by, dry_run)
+        if any(s["ops"] or s["errors"] for s in r["servers"]):
+            out.append({"view": v["slug"], "name": v["name"], "servers": r["servers"]})
+    return {"views": out, "dryRun": dry_run}
+
+
 def import_from(server_id: int, mode: str, by: str | None) -> dict:
     """The master list's records in the server's view, from that server:
 
