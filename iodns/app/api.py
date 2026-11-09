@@ -238,6 +238,17 @@ async def push(view: str, request: Request):
     return await run_in_threadpool(sync.push_all, view, who(request), bool(b.get("prune")), bool(b.get("dryRun")))
 
 
+@router.post("/push", dependencies=[access.editor_write])
+async def push_names(request: Request):
+    """{names: [...] | null, dryRun}: the master list's word on those names pushed to every view's servers at once (what
+    the web app offers right after an entry is saved or deleted; names null: everything that differs, after an import)."""
+    b = await body(request)
+    names = b.get("names")
+    if names is not None and not isinstance(names, list):
+        raise ValueError("names: a list of names, or null")
+    return await run_in_threadpool(sync.push_names, names, who(request), bool(b.get("dryRun")))
+
+
 @router.post("/sources/refresh", dependencies=[access.editor_write])
 async def refresh_sources(request: Request):
     """Read the Tailscale device addresses and the public address again for the records that follow them."""

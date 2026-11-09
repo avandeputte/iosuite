@@ -390,14 +390,41 @@ async function editEntry(e) {
     return { name: name.value.trim(), comment: comment.value.trim(), records: recs };
   };
   const body = h('div', { class: 'pform' }, h('div', { class: 'grid' }, fld('Name', name), fld('Note', comment)), S.views.map(viewBox),
-    h('p', { class: 'muted small' }, 'A view without records leaves that name out of its servers (an internal-only name never reaches public DNS). Saving changes the master list only: Compare pushes it.'));
+    h('p', { class: 'muted small' }, 'A view without records leaves that name out of its servers (an internal-only name never reaches public DNS). After saving, ioDNS offers to push the change to the servers.'));
   const buttons = [
-    !isNew ? { label: 'Delete', danger: true, value: async () => { if (!await confirmDialog('Delete', `Take ${e.name} out of the master list? The servers keep it until you push (Compare › Delete everywhere removes it from them too).`, 'Delete', true)) return undefined; await api(`/api/entries/${e.id}`, { method: 'DELETE' }); return 'deleted'; } } : null,
+    !isNew ? { label: 'Delete', danger: true, value: async () => { if (!await confirmDialog('Delete', `Take ${e.name} out of the master list? ioDNS then offers to remove it from the servers too.`, 'Delete', true)) return undefined; await api(`/api/entries/${e.id}`, { method: 'DELETE' }); return 'deleted'; } } : null,
     { label: 'Cancel', value: null },
     { label: isNew ? 'Add' : 'Save', primary: true, value: async () => api(isNew ? '/api/entries' : `/api/entries/${e.id}`, { method: isNew ? 'POST' : 'PUT', json: collect() }) },
   ].filter(Boolean);
   const r = await dialog(isNew ? 'New entry' : e.name, body, buttons, true);
-  if (r) { toast(r === 'deleted' ? 'Deleted' : 'Saved: Compare to push it'); if (route().view === 'records') onRoute(); }
+  if (!r) return;
+  if (route().view === 'records') onRoute();
+  // the name as saved, and the one it had (a renamed entry leaves its old name on the servers otherwise)
+  const names = r === 'deleted' ? [e.name] : [r.name, isNew ? null : e.name].filter((n, i, a) => n && a.indexOf(n) === i);
+  offerPush(names, r === 'deleted' ? 'Deleted' : 'Saved');
+}
+
+// After a change to the master list: what pushing it would do on the servers, and the choice to do it now.
+// names: the names that changed; null: everything that differs in every view (after an import; extras stay).
+async function offerPush(names, done) {
+  if (!canEdit()) { toast(done); return; }
+  let preview;
+  try { preview = await api('/api/push', { method: 'POST', json: { names, dryRun: true } }); } catch (e) { toast(`${done}. Compare to push it (${e.message})`); return; }
+  const ops = preview.views.flatMap((v) => v.servers.flatMap((s) => s.ops.map((o) => ({ ...o, server: s.name, view: v.name }))));
+  if (!ops.length) { toast(`${done}: the servers hold it already`); return; }
+  const many = new Set(preview.views.map((v) => v.view)).size > 1;
+  const opline = (o) => h('li', null, h('b', null, o.server), many ? h('span', { class: 'muted' }, ` (${o.view})`) : null, ': ', { add: 'add', delete: 'remove', update: 'change' }[o.op], ' ',
+    h('code', null, `${o.name} ${o.type} ${fmtVal(o)}`), o.was ? h('span', { class: 'muted' }, ` (was ${fmtVal({ type: o.type, value: o.was })})`) : null);
+  const body = h('div', null, h('p', null, `${done}. Push the change to the servers now?`),
+    h('ul', { class: 'ops' }, ops.map(opline)));
+  if (!await dialog('Push now?', body, [{ label: 'Later', value: false }, { label: `Push ${ops.length}`, value: true, primary: true }], true)) { toast(`${done}: Compare pushes it later`); return; }
+  try {
+    const res = await api('/api/push', { method: 'POST', json: { names } });
+    const errs = res.views.flatMap((v) => v.servers.flatMap((s) => s.errors.map((x) => `${s.name}: ${x}`)));
+    if (errs.length) await dialog('Some changes failed', h('ul', { class: 'ops' }, errs.map((x) => h('li', { class: 'warn' }, x))));
+    else toast(`Pushed: ${res.views.reduce((a, v) => a + v.servers.reduce((b, s) => b + s.ops.length, 0), 0)} change(s) on the servers`);
+  } catch (e) { fail(e); }
+  if (route().view === 'records') onRoute();
 }
 
 // ------------------------------------------------------------------ compare and push
@@ -581,12 +608,13 @@ async function importDialog(s) {
     ['overwrite', 'Merge, the server wins', 'As Merge, but where both have a name, take the server\'s records.'],
     ['replace', 'Replace', `The ${viewOf(s.view).name} records of the master list become exactly ${s.name}'s.`]].map(([v, l, d], i) =>
     h('label', { class: 'radio' }, h('input', { type: 'radio', name: 'mode', value: v, checked: i === 0 }), h('span', null, h('b', null, l), h('br'), h('span', { class: 'muted small' }, d)))));
-  const ok = await confirmDialog(`Import from ${s.name}`, h('div', null, h('p', null, `Load the master list's ${viewOf(s.view).name} records from ${s.name}. The servers are not changed (Compare pushes).`), mode), 'Import');
+  const ok = await confirmDialog(`Import from ${s.name}`, h('div', null, h('p', null, `Load the master list's ${viewOf(s.view).name} records from ${s.name}. ioDNS then offers to push what changed to the other servers.`), mode), 'Import');
   if (!ok) return;
   try {
     const r = await api(`/api/servers/${s.id}/import`, { method: 'POST', json: { mode: mode.querySelector('input:checked').value } });
-    toast(`${r.records} records read: ${r.added} added, ${r.changed} changed, ${r.removed} removed`);
     location.hash = '#/';
+    const done = `${r.records} records read: ${r.added} added, ${r.changed} changed, ${r.removed} removed`;
+    if (r.added || r.changed || r.removed) offerPush(null, done); else toast(done);
   } catch (e) { fail(e); }
 }
 
@@ -700,7 +728,7 @@ async function setData(el) {
     h('div', { class: 'pform' }, file, h('label', { class: 'check' }, replace, ' Remove the entries that are not in the file'),
       h('p', null, h('button', { class: 'pillbtn primary', onclick: async () => {
         const f = file.files[0]; if (!f) { toast('Pick a file'); return; }
-        try { const data = JSON.parse(await f.text()); const r = await api('/api/import/file', { method: 'POST', json: { data, replace: replace.checked } }); toast(`${r.entries} entries imported${r.removed ? `, ${r.removed} removed` : ''}`); } catch (e) { fail(e); }
+        try { const data = JSON.parse(await f.text()); const r = await api('/api/import/file', { method: 'POST', json: { data, replace: replace.checked } }); offerPush(null, `${r.entries} entries imported${r.removed ? `, ${r.removed} removed` : ''}`); } catch (e) { fail(e); }
       } }, icon('upload', 's'), 'Import')))) : null);
 }
 async function setSuite(el, r) {
