@@ -78,6 +78,20 @@ def test_unifi_api_key_policies():
     assert sent[1][:2] == ("DELETE", "/proxy/network/integration/v1/sites/uuid-1/dns/policies/p1")
 
 
+def test_unifi_name_it_answers_itself():
+    def h(req):
+        if req.url.path.endswith("/sites"):
+            return httpx.Response(200, json={"data": [{"id": "uuid-1", "internalReference": "default"}]})
+        return httpx.Response(400, json={"statusCode": 400, "code": "api.dns.policy.validation.overlap-with-local-dns",
+                                         "message": "DNS policy overlaps with local DNS settings"})
+    with wire(unifi.UniFi({"name": "Unifi", "url": "https://gw", "options": {"mode": "apikey"}}, "KEY"), h) as p:
+        try:
+            p.add(record("beast.iothing.net", "A", "192.168.1.101"))
+            raise AssertionError("no error")
+        except unifi.AnsweredElsewhere as e:
+            assert e.name == "beast.iothing.net" and "answers beast.iothing.net itself" in str(e)
+
+
 def test_unifi_local_account_static_dns():
     sent = []
 
@@ -133,3 +147,94 @@ def test_tailscale_devices_and_split_dns():
         assert tailscale.Tailscale.address(devs, "printer", "A") is None
         p.set_split_dns("Example.com", ["100.101.1.2"])
     assert sent[0] == ("PATCH", "/api/v2/tailnet/-/dns/split-dns", {"example.com": ["100.101.1.2"]})
+
+
+class FakeCloudflare:
+    """Zones, DNS records and tunnels with their ingress, as Cloudflare's API keeps them."""
+
+    def __init__(self):
+        self.dns = {"r1": {"id": "r1", "type": "CNAME", "name": "old.example.com", "content": "t1.cfargotunnel.com", "ttl": 1},
+                    "r2": {"id": "r2", "type": "A", "name": "nas.example.com", "content": "1.2.3.4", "ttl": 1}}
+        self.ingress = {"t1": [{"hostname": "old.example.com", "service": "http://10.0.0.5:80", "originRequest": {"noTLSVerify": True}},
+                               {"hostname": "old.example.com", "path": "/api", "service": "http://10.0.0.6:80"},
+                               {"service": "http_status:404"}]}
+        self.n = 2
+
+    def __call__(self, req):
+        path, m = req.url.path.removeprefix("/client/v4"), req.method
+        body = json.loads(req.content) if req.content else None
+        ok = lambda result: httpx.Response(200, json={"success": True, "result": result, "result_info": {"total_pages": 1}})
+        if path == "/zones":
+            return ok([{"id": "z1", "name": "example.com"}])
+        if path == "/accounts":
+            return ok([{"id": "acc", "name": "Alex"}])
+        if path == "/accounts/acc/cfd_tunnel":
+            return ok([{"id": "t1", "name": "home", "status": "healthy", "remote_config": True},
+                       {"id": "t2", "name": "lab", "status": "down", "remote_config": False, "config_src": "local"}])
+        if path == "/accounts/acc/cfd_tunnel/t1/configurations":
+            if m == "PUT":
+                self.ingress["t1"] = body["config"]["ingress"]
+            return ok({"config": {"ingress": self.ingress["t1"]}})
+        if path == "/zones/z1/dns_records" and m == "GET":
+            name = req.url.params.get("name")
+            return ok([r for r in self.dns.values() if not name or r["name"] == name])
+        if path == "/zones/z1/dns_records" and m == "POST":
+            self.n += 1
+            self.dns[f"r{self.n}"] = {"id": f"r{self.n}", **body}
+            return ok(self.dns[f"r{self.n}"])
+        rid = path.rsplit("/", 1)[-1]
+        if m == "PATCH":
+            self.dns[rid].update(body)
+            return ok(self.dns[rid])
+        if m == "DELETE":
+            del self.dns[rid]
+            return ok({"id": rid})
+        raise AssertionError(f"{m} {path}")
+
+
+def test_cloudflare_tunnel_hostnames_ingress_and_cname():
+    from app.providers import cftunnel
+    api = FakeCloudflare()
+    with wire(cftunnel.CloudflareTunnel({"url": "", "options": {}}, "T"), api) as p:
+        assert [(t["name"], t["remote"]) for t in p.tunnel_list()] == [("home", True), ("lab", False)]
+        assert [(r.name, r.type, r.value) for r in p.list()] == [("old.example.com", "TUNNEL", "home|http://10.0.0.5:80")]
+        p.add(record("cal.example.com", "TUNNEL", "home|HTTP://192.168.1.151:8620/"))
+        assert api.ingress["t1"][0] == {"hostname": "cal.example.com", "service": "http://192.168.1.151:8620"}
+        assert api.ingress["t1"][-1] == {"service": "http_status:404"}
+        cname = [r for r in api.dns.values() if r["name"] == "cal.example.com"]
+        assert cname == [{"id": "r3", "type": "CNAME", "name": "cal.example.com", "content": "t1.cfargotunnel.com", "ttl": 1, "proxied": True}]
+        # a new service: the rule changes in place and keeps its origin settings; the rule with a path stays
+        p.replace(p.list()[1], record("old.example.com", "TUNNEL", "home|https://10.0.0.5:443"))
+        old = [r for r in api.ingress["t1"] if r.get("hostname") == "old.example.com"]
+        assert old == [{"hostname": "old.example.com", "service": "https://10.0.0.5:443", "originRequest": {"noTLSVerify": True}},
+                       {"hostname": "old.example.com", "path": "/api", "service": "http://10.0.0.6:80"}]
+        p.delete(record("cal.example.com", "TUNNEL", "home|http://192.168.1.151:8620"))
+        assert not any(r.get("hostname") == "cal.example.com" for r in api.ingress["t1"])
+        assert not any(r["name"] == "cal.example.com" for r in api.dns.values())
+        try:
+            p.add(record("nas.example.com", "TUNNEL", "home|http://10.0.0.9:80"))
+            raise AssertionError("a name with an A record cannot go behind a tunnel")
+        except cftunnel.ProviderError as e:
+            assert "A 1.2.3.4" in str(e)
+        try:
+            p.add(record("x.example.com", "TUNNEL", "lab|http://10.0.0.9:80"))
+            raise AssertionError("a locally managed tunnel is not changed")
+        except cftunnel.ProviderError as e:
+            assert "config file" in str(e)
+    # the Cloudflare DNS entry leaves the tunnel's CNAMEs alone (unless asked)
+    with wire(cloudflare.Cloudflare({"url": "", "options": {}}, "T"), api) as d:
+        assert [r.name for r in d.list()] == ["nas.example.com"]
+    with wire(cloudflare.Cloudflare({"url": "", "options": {"tunnels": False}}, "T"), api) as d:
+        assert sorted(r.name for r in d.list()) == ["nas.example.com", "old.example.com"]
+
+
+def test_tunnel_values():
+    from app.providers import norm_value
+    assert norm_value("TUNNEL", " home | Http://cal:8620/ ") == "home|http://cal:8620"
+    assert norm_value("TUNNEL", "home|http_status:404") == "home|http_status:404"
+    for bad in ("http://cal:8620", "home|", "home|ftp://x", "|http://x"):
+        try:
+            norm_value("TUNNEL", bad)
+            raise AssertionError(bad)
+        except ValueError:
+            pass

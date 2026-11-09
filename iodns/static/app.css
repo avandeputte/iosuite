@@ -488,6 +488,7 @@ table.recs td, table.cmp td { vertical-align: top; }
 .rec b { font-size: 10px; padding: 1px 5px; border-radius: var(--r-xs); color: #fff; background: var(--c-teal); font-family: inherit; }
 .rec.t-AAAA b { background: var(--c-indigo); }
 .rec.t-CNAME b { background: var(--c-purple); }
+.rec.t-TUNNEL b { background: var(--c-orange, #d9480f); }
 .rec .src { font-size: 10px; font-weight: 700; color: var(--c-orange); }
 .badge { display: table; margin-top: 4px; padding: 1px 8px; border-radius: var(--r-pill); font-size: 11px; font-weight: 600; font-family: system-ui, sans-serif; }
 .b-missing { background: color-mix(in srgb, var(--c-blue) var(--mix), transparent); color: var(--c-blue); }

@@ -137,3 +137,38 @@ def test_roles(client):
     assert client.get("/api/entries").status_code == 200
     assert client.post("/api/entries", json={"name": "x.lan", "records": {}}).status_code == 403
     assert client.post("/api/servers", json={"kind": "fake", "name": "x", "url": "http://x"}).status_code == 403
+
+
+def test_a_name_the_server_answers_itself_is_left_out(client):
+    ag, uni = add_server(client, "AG1", "http://ag1"), add_server(client, "UniFi", "http://gw", exclude="*.guest.lan")
+    entry(client, "beast.iothing.net", internal=[{"type": "A", "value": "192.168.1.101"}])
+    entry(client, "tv.guest.lan", internal=[{"type": "A", "value": "192.168.2.5"}])
+    fake.SERVERS["http://ag1"], fake.SERVERS["http://gw"] = [], []
+    fake.LOCAL["http://gw"] = {"beast.iothing.net"}
+    try:
+        res = client.post("/api/sync/internal/push", json={}).json()
+    finally:
+        fake.LOCAL.clear()
+    errs = {s["name"]: s["errors"] for s in res["servers"]}
+    assert errs["AG1"] == [] and len(errs["UniFi"]) == 1 and "itself" in errs["UniFi"][0]
+    assert [r.name for r in fake.SERVERS["http://gw"]] == []  # tv.guest.lan is left out by the setting
+    assert next(x for x in client.get("/api/servers").json()["items"] if x["id"] == uni["id"])["options"]["exclude"] == "*.guest.lan, beast.iothing.net"
+    rows = {r["name"]: r for r in client.get("/api/sync/internal").json()["rows"]}
+    assert rows["beast.iothing.net"]["state"] == "ok" and rows["beast.iothing.net"]["servers"][str(uni["id"])]["state"] == "outside"
+    assert ag["id"]
+
+
+def test_tunnel_records_stand_alone_and_reach_only_tunnel_servers(client):
+    cf = add_server(client, "CF", "http://cf", view="external")
+    e = entry(client, "cal.example.com", internal=[{"type": "A", "value": "192.168.1.151"}],
+              external=[{"type": "TUNNEL", "value": "home|http://192.168.1.151:8620/", "source": "publicip"}])
+    assert e["records"]["external"] == [{"type": "TUNNEL", "value": "home|http://192.168.1.151:8620", "ttl": None, "source": None}]
+    for bad in ([{"type": "TUNNEL", "value": "home|http://a:1"}, {"type": "A", "value": "1.2.3.4"}],
+                [{"type": "TUNNEL", "value": "home|http://a:1"}, {"type": "TUNNEL", "value": "lab|http://a:1"}],
+                [{"type": "TUNNEL", "value": "http://a:1"}]):
+        r = client.post("/api/entries", json={"name": "x.example.com", "records": {"external": bad}})
+        assert r.status_code == 400, bad
+    # a DNS server is not asked to hold a tunnel record
+    rows = client.get("/api/sync/external").json()["rows"]
+    row = [r for r in rows if r["name"] == "cal.example.com"][0]
+    assert row["state"] == "ok" and row["servers"][str(cf["id"])]["state"] == "same"
