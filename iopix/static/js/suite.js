@@ -69,7 +69,10 @@ function tile(a) {
 function toggleSuite(btn) {
   if (pop) { closeSuite(); return; }
   if (!apps.length) return;
-  pop = h('div', { class: 'suitepop', role: 'menu', 'aria-label': 'ioThing apps', style: `--cols:${Math.min(3, apps.length)}` }, apps.map(tile));
+  // the apps, then the admin tools (ioDNS…) in a section of their own: the server sends those to their admins only
+  const main = apps.filter((a) => !a.adminTool), tools = apps.filter((a) => a.adminTool);
+  pop = h('div', { class: 'suitepop', role: 'menu', 'aria-label': 'ioThing apps', style: `--cols:${Math.min(3, Math.max(main.length, tools.length))}` },
+    ...main.map(tile), ...(tools.length ? [h('div', { class: 'suitesec' }, 'Admin tools'), ...tools.map(tile)] : []));
   document.body.append(pop);
   btn.setAttribute('aria-expanded', 'true');
   const r = btn.getBoundingClientRect();
