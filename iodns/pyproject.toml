@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "iodns"
+version = "0.1.0"
+description = "One master list of local DNS records, kept in step on every DNS server of the house (AdGuard Home, Pi-hole, UniFi)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "GPL-3.0-or-later" }
+dependencies = [
+  "iosuite-shared @ git+https://github.com/avandeputte/iosuite-shared.git@1dc5e15d11a83c1701a1efe9ad7296d3fa50ec59",   # iosuite-shared 0.30.0, the suite's shared library: accounts, sessions, the Shared ioSuite database (pinned: bump to pick up a new one)
+  "fastapi<1",
+  "uvicorn<1",
+  "pymysql<2",
+  "python-multipart<1",
+  "pyjwt[crypto]<3",              # Cloudflare Access tokens (proxy sign-in)
+  "httpx<1",                      # the DNS servers' HTTP APIs
+]
+
+[project.optional-dependencies]
+test = ["pytest<10", "pyflakes<4"]
+
+[project.urls]
+Homepage = "https://github.com/avandeputte/iodns"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
