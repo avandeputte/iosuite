@@ -9,10 +9,16 @@ Token › "Edit zone DNS", for the zones ioDNS keeps).
 
 Only the names under the zones listed are compared (empty: every zone the token sees). New records are proxied or not
 as the server's setting says; a record that changes keeps what it had. A TTL of 1 is Cloudflare's "automatic".
+
+The CNAMEs of Cloudflare Tunnel public hostnames (<tunnel id>.cfargotunnel.com) belong to the Cloudflare Tunnel entry
+(app/providers/cftunnel.py), which makes and removes them with the hostname: they are left out here unless asked.
 """
-from app.providers import Provider, ProviderError, Record, norm_name, record, register
+from __future__ import annotations
+
+from app.providers import DNS_TYPES, Provider, ProviderError, Record, norm_name, record, register
 
 API = "https://api.cloudflare.com/client/v4"
+TUNNEL_TARGET = ".cfargotunnel.com"
 
 
 @register
@@ -23,6 +29,8 @@ class Cloudflare(Provider):
         {"key": "secret", "label": "API token", "type": "password", "hint": "a token with Zone › DNS › Edit for these zones"},
         {"key": "zones", "label": "Zones", "type": "text", "hint": "example.com, example.net (empty: every zone the token can edit)"},
         {"key": "proxied", "label": "Proxy new records through Cloudflare (orange cloud)", "type": "check", "default": False},
+        {"key": "tunnels", "label": "Leave the tunnels' CNAMEs (….cfargotunnel.com) to the Cloudflare Tunnel entry", "type": "check",
+         "default": True},
         {"key": "url", "label": "API address", "type": "url", "default": API, "hint": "leave as it is"},
     ]
 
@@ -81,13 +89,19 @@ class Cloudflare(Provider):
         return f"Cloudflare: {len(self.zone_ids)} zone(s) ({', '.join(sorted(self.zone_ids)) or 'none'}), {len(self.list())} records"
 
     def list(self) -> list[Record]:
+        skip = self.options.get("tunnels", True) is not False
+        return [r for r in self.dns_records() if not (skip and r.type == "CNAME" and r.value.endswith(TUNNEL_TARGET))]
+
+    def dns_records(self, name: str | None = None) -> list[Record]:
         out = []
         for z, zid in self.zone_ids.items():
+            if name is not None and self._zone(name) != z:
+                continue
             page = 1
             while True:
-                r = self._get(f"/zones/{zid}/dns_records", page=page, per_page=1000)
+                r = self._get(f"/zones/{zid}/dns_records", page=page, per_page=1000, **({"name": name} if name else {}))
                 for it in r.get("result") or []:
-                    if it.get("type") not in self.types:
+                    if it.get("type") not in DNS_TYPES:
                         continue
                     ttl = it.get("ttl")
                     try:
@@ -107,8 +121,9 @@ class Cloudflare(Provider):
         return self.zone_ids[z]
 
     def add(self, r: Record) -> None:
+        tunnel = r.type == "CNAME" and r.value.endswith(TUNNEL_TARGET)  # a tunnel only answers through the proxy
         body = {"type": r.type, "name": r.name, "content": r.value, "ttl": r.ttl or 1,
-                "proxied": bool(self.options.get("proxied")) and r.type in ("A", "AAAA", "CNAME")}
+                "proxied": tunnel or (bool(self.options.get("proxied")) and r.type in ("A", "AAAA", "CNAME"))}
         self.request("POST", f"/zones/{self._zid(r.name)}/dns_records", headers=self._h(), json=body)
 
     def delete(self, r: Record) -> None:

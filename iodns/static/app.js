@@ -109,6 +109,9 @@ const isAdmin = () => S.user && S.user.role === 'admin';
 const kindOf = (k) => S.providers.find((p) => p.kind === k) || { label: k, fields: [], target: true };
 const viewOf = (slug) => S.views.find((v) => v.slug === slug) || { slug, name: slug };
 const tailscales = () => S.servers.filter((s) => s.kind === 'tailscale');
+const cftunnels = () => S.servers.filter((s) => s.kind === 'cftunnel');
+/** A record's value as shown: a tunnel's "home|http://…" as "home → http://…". */
+const fmtVal = (r) => r.type === 'TUNNEL' ? r.value.replace('|', ' → ') : r.value;
 
 async function loadOverview() {
   const o = await api('/api/overview');
@@ -271,7 +274,7 @@ const SRC_LABEL = (src) => {
   return src;
 };
 const recChip = (r) => h('span', { class: `rec t-${r.type}`, title: r.source ? `Follows ${SRC_LABEL(r.source)}` : (r.ttl ? `TTL ${r.ttl}s` : '') },
-  h('b', null, r.type), h('span', { class: 'v' }, r.value), r.source ? h('span', { class: 'src' }, r.source.startsWith('tailscale') ? 'TS' : 'IP') : null);
+  h('b', null, r.type), h('span', { class: 'v' }, fmtVal(r)), r.source ? h('span', { class: 'src' }, r.source.startsWith('tailscale') ? 'TS' : 'IP') : null);
 const matches = (e, q) => !q || e.name.includes(q) || (e.comment || '').toLowerCase().includes(q) || Object.values(e.records).flat().some((r) => r.value.includes(q));
 
 async function showRecords(page) {
@@ -296,7 +299,7 @@ async function showRecords(page) {
   };
   S.redraw = draw;
   page.append(h('div', { class: 'pagehead' }, h('h1', null, 'Records'),
-    h('span', { class: 'muted' }, 'One row per name, one column per view. A value marked TS follows a Tailscale device, IP the public address.')), body);
+    h('span', { class: 'muted' }, 'One row per name, one column per view. A value marked TS follows a Tailscale device, IP the public address; TUNNEL is a Cloudflare Tunnel public hostname.')), body);
   draw();
 }
 
@@ -310,6 +313,9 @@ async function editEntry(e) {
   const ts = tailscales();
   const devices = {};
   const loadDevices = async (sid) => { if (!devices[sid]) devices[sid] = api(`/api/servers/${sid}/devices`).then((r) => r.items).catch((x) => { fail(x); return []; }); return devices[sid]; };
+  let tunnelNames = null;
+  const loadTunnels = () => tunnelNames = tunnelNames || Promise.all(cftunnels().map((s) => api(`/api/servers/${s.id}/tunnels`).then((r) => r.items).catch((x) => { fail(x); return []; })))
+    .then((ls) => [...new Set(ls.flat().filter((t) => t.remote).map((t) => t.name))]);
   const rows = {};
   const viewBox = (v) => {
     const list = h('div', { class: 'reclist' });
@@ -317,19 +323,34 @@ async function editEntry(e) {
     const addRow = (r) => {
       r = r || { type: 'A', value: '', source: null };
       const type = h('select', { class: 't type' }, S.types.map((t) => h('option', { value: t, selected: t === r.type ? true : null }, t)));
-      const value = h('input', { class: 't val', value: r.source ? '' : r.value, placeholder: '192.168.1.10 / host.example.com', autocapitalize: 'none', spellcheck: 'false' });
+      const value = h('input', { class: 't val', value: r.source || r.type === 'TUNNEL' ? '' : r.value, placeholder: '192.168.1.10 / host.example.com', autocapitalize: 'none', spellcheck: 'false' });
       const srcOpts = [['', 'Typed'], ['publicip', 'Public address'], ...ts.map((s) => [`tailscale:${s.id}`, `Tailscale device (${s.name})`])];
       const cur = r.source ? (r.source.startsWith('tailscale:') ? r.source.split(':').slice(0, 2).join(':') : 'publicip') : '';
       const src = h('select', { class: 't src' }, srcOpts.map(([k, l]) => h('option', { value: k, selected: k === cur ? true : null }, l)));
       const dev = h('select', { class: 't dev', hidden: true });
+      const [tName, tService] = r.type === 'TUNNEL' ? [r.value.split('|')[0], r.value.split('|').slice(1).join('|')] : ['', ''];
+      const tun = h('select', { class: 't dev', hidden: true });
+      const svc = h('input', { class: 't val', hidden: true, value: tService, placeholder: 'http://192.168.1.151:8620', autocapitalize: 'none', spellcheck: 'false' });
+      let tunFilled = false;
+      const fillTunnels = async () => {
+        if (tunFilled) return; tunFilled = true;
+        tun.replaceChildren(h('option', { value: '' }, 'Loading…'));
+        const names = await loadTunnels();
+        if (tName && !names.includes(tName)) names.push(tName);
+        tun.replaceChildren(h('option', { value: '' }, names.length ? 'Pick a tunnel' : 'No tunnel: add a Cloudflare Tunnel server'), ...names.map((n) => h('option', { value: n, selected: n === tName ? true : null }, n)));
+      };
       const fillDevices = async () => {
         const sid = src.value.split(':')[1];
         const want = r.source && r.source.startsWith(`tailscale:${sid}:`) ? r.source.split(':').slice(2).join(':') : '';
         dev.replaceChildren(h('option', { value: '' }, 'Loading…'));
         const items = await loadDevices(sid);
-        dev.replaceChildren(h('option', { value: '' }, 'Pick a device'), items.map((d) => h('option', { value: d.name, selected: d.name === want ? true : null }, `${d.name} (${type.value === 'AAAA' ? d.ipv6 || 'no IPv6' : d.ipv4 || 'no IPv4'})`)));
+        dev.replaceChildren(h('option', { value: '' }, 'Pick a device'), ...items.map((d) => h('option', { value: d.name, selected: d.name === want ? true : null }, `${d.name} (${type.value === 'AAAA' ? d.ipv6 || 'no IPv6' : d.ipv4 || 'no IPv4'})`)));
       };
       const sync = () => {
+        const isT = type.value === 'TUNNEL';
+        tun.hidden = svc.hidden = !isT;
+        if (isT) { fillTunnels(); src.value = ''; src.hidden = true; value.hidden = true; dev.hidden = true; return; }
+        src.hidden = false;
         const s = src.value;
         value.hidden = !!s; dev.hidden = !s.startsWith('tailscale:');
         if (s.startsWith('tailscale:')) fillDevices();
@@ -338,8 +359,8 @@ async function editEntry(e) {
         if (type.value === 'CNAME') { src.value = ''; value.hidden = false; dev.hidden = true; }
       };
       src.onchange = sync; type.onchange = sync;
-      const row = { type, value, src, dev };
-      row.el = h('div', { class: 'recrow' }, type, src, value, dev, h('button', { class: 'iconbtn', title: 'Remove', onclick: () => { row.el.remove(); rows[v.slug].splice(rows[v.slug].indexOf(row), 1); } }, icon('close', 's')));
+      const row = { type, value, src, dev, tun, svc };
+      row.el = h('div', { class: 'recrow' }, type, src, value, dev, tun, svc, h('button', { class: 'iconbtn', title: 'Remove', onclick: () => { row.el.remove(); rows[v.slug].splice(rows[v.slug].indexOf(row), 1); } }, icon('close', 's')));
       rows[v.slug].push(row); list.append(row.el);
       sync();
     };
@@ -352,6 +373,11 @@ async function editEntry(e) {
     const recs = {};
     for (const [slug, rs] of Object.entries(rows)) {
       recs[slug] = rs.map((r) => {
+        if (r.type.value === 'TUNNEL') {
+          if (!r.svc.value.trim()) return {};
+          if (!r.tun.value) throw new Error('Pick the tunnel');
+          return { type: 'TUNNEL', value: `${r.tun.value}|${r.svc.value.trim()}` };
+        }
         const s = r.src.value;
         if (s === 'publicip') return { type: r.type.value, source: r.type.value === 'AAAA' ? 'publicip6' : 'publicip' };
         if (s.startsWith('tailscale:')) { if (!r.dev.value) throw new Error('Pick the Tailscale device'); return { type: r.type.value, source: `${s}:${r.dev.value}` }; }
@@ -432,9 +458,9 @@ async function showCompare(page, r) {
     const masterChanges = Object.entries(preview.master || {});
     const ops = preview.servers.flatMap((s) => s.ops.map((o) => ({ ...o, server: s.name })));
     if (!ops.length && !masterChanges.length) { toast('Nothing to change'); return; }
-    const opline = (o) => h('li', null, h('b', null, o.server), ': ', { add: 'add', delete: 'remove', update: 'change' }[o.op], ' ', h('code', null, `${o.name} ${o.type} ${o.value}`), o.was ? h('span', { class: 'muted' }, ` (was ${o.was})`) : null);
+    const opline = (o) => h('li', null, h('b', null, o.server), ': ', { add: 'add', delete: 'remove', update: 'change' }[o.op], ' ', h('code', null, `${o.name} ${o.type} ${fmtVal(o)}`), o.was ? h('span', { class: 'muted' }, ` (was ${fmtVal({ type: o.type, value: o.was })})`) : null);
     const body = h('div', null,
-      masterChanges.length ? [h('h3', null, 'The master list'), h('ul', { class: 'ops' }, masterChanges.map(([n, rs]) => h('li', null, h('code', null, n), ' ← ', rs.length ? rs.map((x) => `${x.type} ${x.value}`).join(', ') : 'removed')))] : null,
+      masterChanges.length ? [h('h3', null, 'The master list'), h('ul', { class: 'ops' }, masterChanges.map(([n, rs]) => h('li', null, h('code', null, n), ' ← ', rs.length ? rs.map((x) => `${x.type} ${fmtVal(x)}`).join(', ') : 'removed')))] : null,
       ops.length ? [h('h3', null, 'The servers'), h('ul', { class: 'ops' }, ops.map(opline))] : null);
     if (!await confirmDialog(all ? 'Push the master list' : 'Apply these changes', body, `Apply ${ops.length + masterChanges.length}`)) return;
     applyBtn.disabled = true;

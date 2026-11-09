@@ -137,3 +137,19 @@ def test_roles(client):
     assert client.get("/api/entries").status_code == 200
     assert client.post("/api/entries", json={"name": "x.lan", "records": {}}).status_code == 403
     assert client.post("/api/servers", json={"kind": "fake", "name": "x", "url": "http://x"}).status_code == 403
+
+
+def test_tunnel_records_stand_alone_and_reach_only_tunnel_servers(client):
+    cf = add_server(client, "CF", "http://cf", view="external")
+    e = entry(client, "cal.example.com", internal=[{"type": "A", "value": "192.168.1.151"}],
+              external=[{"type": "TUNNEL", "value": "home|http://192.168.1.151:8620/", "source": "publicip"}])
+    assert e["records"]["external"] == [{"type": "TUNNEL", "value": "home|http://192.168.1.151:8620", "ttl": None, "source": None}]
+    for bad in ([{"type": "TUNNEL", "value": "home|http://a:1"}, {"type": "A", "value": "1.2.3.4"}],
+                [{"type": "TUNNEL", "value": "home|http://a:1"}, {"type": "TUNNEL", "value": "lab|http://a:1"}],
+                [{"type": "TUNNEL", "value": "http://a:1"}]):
+        r = client.post("/api/entries", json={"name": "x.example.com", "records": {"external": bad}})
+        assert r.status_code == 400, bad
+    # a DNS server is not asked to hold a tunnel record
+    rows = client.get("/api/sync/external").json()["rows"]
+    row = [r for r in rows if r["name"] == "cal.example.com"][0]
+    assert row["state"] == "ok" and row["servers"][str(cf["id"])]["state"] == "same"

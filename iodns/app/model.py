@@ -106,6 +106,8 @@ def _clean_records(recs: dict, resolve) -> list[tuple]:
             if t not in providers.TYPES:
                 raise ValueError(f"Record type {t!r}: ioDNS keeps {', '.join(providers.TYPES)}")
             source = str(it.get("source") or "").strip() or None
+            if t == "TUNNEL":
+                source = None
             value = str(it.get("value") or "").strip()
             if source:
                 value = resolve(source, t) or value
@@ -122,10 +124,13 @@ def _clean_records(recs: dict, resolve) -> list[tuple]:
             seen.add(key)
             types.add(t)
             out.append((vs[slug], t, value, ttl, source))
+        if "TUNNEL" in types and len(types) > 1:
+            raise ValueError(f"{slug}: a name behind a Cloudflare tunnel has no other records (the tunnel makes its CNAME)")
         if "CNAME" in types and len(types) > 1:
             raise ValueError(f"{slug}: a name with a CNAME has no other records")
-        if sum(1 for r in out if r[0] == vs[slug] and r[1] == "CNAME") > 1:
-            raise ValueError(f"{slug}: one CNAME per name")
+        for t in ("CNAME", "TUNNEL"):
+            if sum(1 for r in out if r[0] == vs[slug] and r[1] == t) > 1:
+                raise ValueError(f"{slug}: one {'CNAME' if t == 'CNAME' else 'tunnel'} per name")
     return out
 
 

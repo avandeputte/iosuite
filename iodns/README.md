@@ -10,7 +10,8 @@ single-page vanilla JS app, built the same way as the other io apps, signed in w
 
 ## What it does
 
-- **A master list**: a row per name (`calendar.example.com`), with a note, and its records (A, AAAA, CNAME) per **view**.
+- **A master list**: a row per name (`calendar.example.com`), with a note, and its records (A, AAAA, CNAME, or a Cloudflare
+  Tunnel hostname) per **view**.
 - **Views (split-horizon DNS)**: a view is one answer to "who is asking". Internal (the house), External (the internet)
   and Tailscale (the tailnet) to begin with; add more in Settings › Views. Each server answers for one view, so
   `calendar.example.com` can be `192.168.1.151` inside, a public address or a tunnel outside and `100.x` on the
@@ -28,6 +29,10 @@ single-page vanilla JS app, built the same way as the other io apps, signed in w
 - **Dynamic DNS**: a record's value can be "Public address": ioDNS finds the house's public IPv4 / IPv6 every few
   minutes (an address-echo service, the UniFi gateway's WAN address, or a page of your own) and, when it changes,
   updates those records and pushes them straight away (Cloudflare…).
+- **Cloudflare Tunnel**: a name in the External view can be a tunnel's public hostname (`TUNNEL home|http://192.168.1.151:8620`:
+  the tunnel and the service behind it) instead of an address. ioDNS keeps both halves as the dashboard does: the
+  tunnel's ingress rule and the proxied CNAME to `<tunnel id>.cfargotunnel.com`. Existing hostnames are compared and
+  imported like any other record; a rule with a path, the origin settings and the catch-all are left as they are.
 - **Tailscale**: a record's value can be "Tailscale device": the device's tailnet address, read from the Tailscale API
   before every comparison, so the record follows the device. The Tailscale entry also sets up **split DNS** (send
   `example.com` queries on the tailnet to the DNS server that holds the Tailscale view).
@@ -47,7 +52,8 @@ single-page vanilla JS app, built the same way as the other io apps, signed in w
 | **AdGuard Home** | Filters › DNS rewrites (`/control/rewrite/*`) | the web interface's user and password |
 | **Pi-hole v6** | Local DNS records and CNAME records (`/api/config/dns/hosts`, `cnameRecords`) | an app password (Settings › Web interface / API). Pi-hole 5 has no API for this. |
 | **UniFi gateway** | the gateway's DNS records | an API key (Network 9.3 and later: Settings › Control Plane › Integrations), through the official integration API's DNS policies; or a local admin account, through the web app's static DNS |
-| **Cloudflare DNS** | the zones' A, AAAA and CNAME records | an API token with Zone › DNS › Edit; list the zones (empty: every zone the token sees). New records proxied or not, as set. |
+| **Cloudflare DNS** | the zones' A, AAAA and CNAME records | an API token with Zone › DNS › Edit; list the zones (empty: every zone the token sees). New records proxied or not, as set. The tunnels' CNAMEs are left to the Cloudflare Tunnel entry. |
+| **Cloudflare Tunnel** | the public hostnames of remotely managed tunnels (ingress rules) and their CNAMEs | an API token with Account › Cloudflare Tunnel › Edit and Zone › DNS › Edit; the account ID if the token sees several. Tunnels run from a config.yml can't be changed through the API and are left out. |
 | **Tailscale** | nothing is pushed: device addresses and split DNS | an API access token (`tskey-api-…`) or an OAuth client secret |
 
 Adding another kind is one module in `app/providers/`: a `Provider` subclass that lists, adds and deletes records

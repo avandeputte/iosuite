@@ -184,6 +184,16 @@ def tailscale_devices(sid: int):
         return {"items": p.devices()}
 
 
+@router.get("/servers/{sid}/tunnels", dependencies=[access.signed_in])
+def cloudflare_tunnels(sid: int):
+    """A Cloudflare Tunnel entry's tunnels, for the record form's tunnel picker."""
+    s = model.server(sid)
+    if s["kind"] != "cftunnel":
+        raise ValueError(f"{s['name']} is not a Cloudflare Tunnel entry")
+    with model.provider(s) as p:
+        return {"items": p.tunnel_list()}
+
+
 @router.get("/servers/{sid}/split-dns", dependencies=[access.admin])
 def get_split_dns(sid: int):
     with _tailscale(sid) as p:
