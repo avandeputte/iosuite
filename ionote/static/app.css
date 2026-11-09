@@ -71,6 +71,7 @@ body.side-docked #menubtn { display: none; }
 .suitebtn:hover, .suitebtn:focus-visible { background: color-mix(in srgb, var(--fg) 8%, transparent); }
 .suitebtn img { width: 30px; height: 30px; }
 #suitebtn { display: none; }
+.suitesec { grid-column: 1 / -1; padding: 8px 6px 2px; border-top: 1px solid var(--line); font-size: 12px; color: var(--fg2); }
 .suitepop { position: fixed; z-index: var(--z-menu); display: grid; grid-template-columns: repeat(var(--cols, 3), 92px); gap: 4px; padding: 8px; max-width: calc(100vw - 16px);
   background: var(--bg); border: 1px solid var(--line); border-radius: var(--r-m); box-shadow: var(--shadow); }
 .apptile { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 4px 8px; border-radius: var(--r-m); color: var(--fg); text-align: center; min-width: 0; }
