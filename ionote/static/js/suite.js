@@ -49,8 +49,11 @@ function appTile(a) {
 function toggleSuite(btn) {
   if (pop) { closeSuite(); return; }
   if (!apps.length) return;
-  pop = h('div.suitepop', { role: 'menu', 'aria-label': 'ioThing apps' }, ...apps.map(appTile));
-  pop.style.setProperty('--cols', String(Math.min(3, apps.length)));
+  // the apps, then the admin tools (ioDNS…) in a section of their own: the server sends those to their admins only
+  const main = apps.filter((a) => !a.adminTool), tools = apps.filter((a) => a.adminTool);
+  pop = h('div.suitepop', { role: 'menu', 'aria-label': 'ioThing apps' }, ...main.map(appTile),
+    ...(tools.length ? [h('div.suitesec', 'Admin tools'), ...tools.map(appTile)] : []));
+  pop.style.setProperty('--cols', String(Math.min(3, Math.max(main.length, tools.length))));
   document.body.append(pop);
   const r = btn.getBoundingClientRect();
   pop.style.top = `${Math.round(r.bottom + 6)}px`;
