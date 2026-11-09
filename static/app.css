@@ -117,8 +117,6 @@ body.home #main { top: env(safe-area-inset-top); }
 .dateline .menu { left: 0; right: auto; top: 32px; }
 /* the tiles: a column per app with a widget, and a column of two half-height tiles for the apps without (--cols is set by the page) */
 .apps { display: grid; grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr)); gap: 16px; }
-.tools { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 12px; }
-.tools .app { flex: 0 1 220px; }
 .stack { display: grid; grid-template-rows: 1fr 1fr; gap: 16px; min-width: 0; }
 .app { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "img who" "more more"; align-items: center; align-content: start; column-gap: 12px; row-gap: 4px;
   padding: 12px 14px; border-radius: var(--r-l); border: 1px solid var(--line); text-align: left; min-width: 0;

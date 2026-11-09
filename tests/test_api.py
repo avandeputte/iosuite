@@ -88,19 +88,3 @@ def test_suite_admin_screen(client):
     assert client.get("/api/users").status_code == 200
     assert client.get("/api/suite-admin").status_code == 403
     assert client.post("/api/suite-admin/users", json={"name": "x", "password": "secret123"}).status_code == 403
-
-
-def test_tiles_are_the_apps_each_person_may_use(client):
-    from iosuite_shared import db as shared_db, suite
-    from app import apps
-    suite.register("iodns", "ioDNS", url="https://dns.example.com", admin_tool=True)
-    shared_db.set_setting("default_role", "none", "iohealth")   # ioHealth: only the accounts given a role there
-    apps.forget_registry()
-    assert client.post("/api/users", json={"name": "kid", "password": "secret123", "role": "viewer"}).status_code in (200, 201)
-    by = {t["key"]: t for t in client.get("/api/apps").json()["items"]}
-    assert "iohealth" in by and by["iodns"]["adminTool"] is True and by["iopix"]["adminTool"] is False  # alex: a suite admin
-    client.post("/api/auth/logout")
-    client.post("/api/auth/login", json={"name": "kid", "password": "secret123"})
-    shared_db.settings_cache.clear()
-    keys = [t["key"] for t in client.get("/api/apps").json()["items"]]
-    assert keys == ["iopix", "iocalendar", "iocontacts", "ionotes"]   # neither ioHealth nor the admin tool

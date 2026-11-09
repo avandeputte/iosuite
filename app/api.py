@@ -24,11 +24,10 @@ def _base(request: Request) -> str:
 
 @router.get("/api/apps", dependencies=[access.signed_in])
 def list_apps(request: Request):
-    """The tiles: every app this person may use, with its name, icon, colour and address (an admin tool only for its
-    admins). Hidden ones are left out (Settings lists them)."""
+    """The tiles: every app with its name, icon, colour and address. Hidden ones are left out (Settings lists them)."""
     host = request.headers.get("x-forwarded-host") or request.headers.get("host") or request.url.netloc
     u = request.state.user
-    return {"items": apps.tiles(host, u), "photoStrip": apps.photo_strip(), "layout": layout.get(u["id"])}
+    return {"items": apps.tiles(host), "photoStrip": apps.photo_strip(), "layout": layout.get(u["id"])}
 
 
 @router.get("/api/apps/status", dependencies=[access.signed_in])

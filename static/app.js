@@ -207,9 +207,7 @@ async function showHome(page) {
   S.photoStrip = got.photoStrip;  // the admin's choice, what Customize calls "as the admin set it"
   S.allApps = got.items;
   const rank = (a) => { const i = L.order.indexOf(a.key); return i < 0 ? 100 + got.items.indexOf(a) : i; };
-  // the admin tools (ioDNS…: only their admins get them) come in a row of their own under the apps
-  const tools = got.items.filter((a) => a.adminTool && !L.hidden.includes(a.key));
-  S.apps = got.items.filter((a) => !a.adminTool && !L.hidden.includes(a.key)).sort((a, b) => rank(a) - rank(b));
+  S.apps = got.items.filter((a) => !L.hidden.includes(a.key)).sort((a, b) => rank(a) - rank(b));
   const shows = (k) => !L.hidden.includes(k);
   const first = (S.user.displayName || S.user.name).split(/\s+/)[0];
   const wx = h('div', { class: 'weather' });
@@ -229,7 +227,6 @@ async function showHome(page) {
   if (!S.apps.length) col.append(h('div', { class: 'empty' }, got.items.length ? 'Every tile is hidden. ' : 'No io app has registered itself in the Shared ioSuite database yet: each one appears here once it has started.',
     got.items.length ? h('button', { class: 'lnk', onclick: customize }, 'Customize the page') : null));
   else col.append(h('div', { class: 'apps', style: { '--cols': big.length + stacks.length } }, big.map((a) => tile(a, false)), stacks));
-  if (tools.length) col.append(h('div', { class: 'tools' }, h('span', { class: 'muted small' }, 'Admin tools'), tools.map((a) => tile(a, true))));
   drawWidgets(page);
   drawAppStatus(page);
   // the week ahead: birthdays from ioContacts and the coming days' events from ioCalendar, a card each
@@ -1088,7 +1085,7 @@ function enterWall() {
 async function showWall(page) {
   const got = await api('/api/apps');
   S.allApps = got.items; S.layout = got.layout || { hidden: [], order: [], cards: [], strip: null };
-  S.apps = got.items.filter((a) => !a.adminTool);
+  S.apps = got.items;
   const has = (k) => S.apps.some((a) => a.key === k);
   page.className = 'wallpage';
   const photos = h('div', { class: 'wallphotos' });
