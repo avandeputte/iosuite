@@ -2,15 +2,12 @@
 lives in MariaDB. The settings every app of the suite shares come from iosuite_shared.config.standard."""
 from pathlib import Path
 
-from iosuite_shared import config as shared, suite
+from iosuite_shared import config as shared
 
 APP = "iodns"
-PORT_DEFAULT = 8660
 APP_DIR = Path(__file__).resolve().parent.parent
 shared.load_file(APP_DIR)  # first: iosuite_shared reads its settings (the Shared ioSuite database, COOKIE_DOMAIN) from it too
 env, env_flag, env_int = shared.env, shared.env_flag, shared.env_int
-# the suite's list of ports (iosuite_shared.suite.PORTS) names ioDNS from iosuite-shared 0.31; until then, its port here
-suite.PORTS.setdefault(APP, PORT_DEFAULT)
 # APP_DIR, DATA_DIR, STATIC_DIR, LOG_FILE, HOST, PORT, PUBLIC_URL, BASE_URL, FORWARDED_ALLOW_IPS, TLS_CERT_FILE, TLS_KEY_FILE,
 # MCP_FORCED, ADMIN_USER, ADMIN_PASSWORD: the same names in every app (iosuite_shared.config.standard says what each is)
 globals().update(shared.standard(APP, APP_DIR))

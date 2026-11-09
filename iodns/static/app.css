@@ -71,6 +71,7 @@ body.side-docked #menubtn { display: none; }
 #nav .navhead a.brand-name { display: inline; height: auto; padding: 0 4px; border-radius: 0; }
 .suitepop { position: fixed; z-index: 60; display: grid; grid-template-columns: repeat(var(--cols, 3), 92px); gap: 4px; padding: 8px; max-width: calc(100vw - 16px);
   background: var(--bg); border: 1px solid var(--line); border-radius: var(--r-m); box-shadow: var(--shadow); }
+.suitesec { grid-column: 1 / -1; padding: 8px 6px 2px; border-top: 1px solid var(--line); font-size: var(--fs-s); color: var(--fg2); }
 .apptile { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 4px 8px; border-radius: var(--r-m); color: var(--fg); text-align: center; min-width: 0; }
 .apptile:hover, .apptile:focus-visible { background: var(--bg2); }
 .appic { width: 44px; height: 44px; border-radius: 12px; object-fit: contain; }

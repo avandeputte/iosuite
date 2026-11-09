@@ -40,7 +40,9 @@ single-page vanilla JS app, built the same way as the other io apps, signed in w
 - **A background check** compares every view every 30 minutes, so the sidebar shows which views have differences
   and each server's dot says whether it is reachable.
 - **The suite's accounts and roles**: viewers see everything, editors change the list and push, admins also manage the
-  servers and views; a suite admin is admin everywhere. The servers' passwords and API keys are kept with the suite's
+  servers and views; a suite admin is admin everywhere. ioDNS is an **admin tool**: an account without a role here has none (Settings ›
+  Global settings can change that), and only its admins see it in the start page and the app switchers, apart from
+  the other apps. The servers' passwords and API keys are kept with the suite's
   keys and tokens in the Shared ioSuite database (Settings › Global settings), never shown back.
 - **Updates, the server log and Restart** under Settings › Server, as in every ioThing app; light and dark, a phone layout,
   installable as a web app.
