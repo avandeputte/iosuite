@@ -139,7 +139,10 @@ function appTile(a) {
 function toggleSuite(btn) {
   if (suitePop) { closeSuite(); return; }
   if (!suiteApps.length) return;
-  suitePop = h('div', { class: 'suitepop', role: 'menu', 'aria-label': 'ioThing apps', style: { '--cols': String(Math.min(3, suiteApps.length)) } }, suiteApps.map(appTile));
+  // the apps, then the admin tools (ioDNS…) in a section of their own: the server sends those to their admins only
+  const apps = suiteApps.filter((a) => !a.adminTool), tools = suiteApps.filter((a) => a.adminTool);
+  suitePop = h('div', { class: 'suitepop', role: 'menu', 'aria-label': 'ioThing apps', style: { '--cols': String(Math.min(3, Math.max(apps.length, tools.length))) } },
+    ...apps.map(appTile), ...(tools.length ? [h('div', { class: 'suitesec' }, 'Admin tools'), ...tools.map(appTile)] : []));
   document.body.append(suitePop);
   const r = btn.getBoundingClientRect();
   suitePop.style.top = `${Math.round(r.bottom + 6)}px`;
