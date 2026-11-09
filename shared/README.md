@@ -308,11 +308,17 @@ start, for reference only: nothing links to it, and `url` stays as above.
 
 ```python
 from iosuite_shared import suite
-suite.apps()            # [{app, name, description, version, color, icon, url, configuredUrl, seenUrl, internalUrl, lastSeen, ...}]
+suite.apps()            # [{app, name, description, version, color, icon, url, configuredUrl, seenUrl, internalUrl, adminTool, lastSeen, ...}]
+suite.visible(user)     # the ones this account may use (below)
 suite.url_of("iopix")   # "https://photo.example.com" or None
 ```
 
-Over HTTP: `GET /api/auth/suite` (signed in) lists them; `DELETE /api/auth/suite/{app}` (suite admins) forgets an
+An account sees only the apps it has a role in: its own role there, else that app's default role, is not `none`
+(somebody without ioHealth does not see ioHealth). An app made with `Auth(..., admin_tool=True)` (ioDNS, the tools
+behind the scenes) is an **admin tool**: only its admins and the suite admins see it, and a switcher shows it apart,
+under the apps (`adminTool` is true).
+
+Over HTTP: `GET /api/auth/suite` (signed in) lists the ones the account may use (`suite.visible`); `DELETE /api/auth/suite/{app}` (suite admins) forgets an
 uninstalled one (it comes back if it starts again).
 
 ## Tests
