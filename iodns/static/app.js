@@ -259,6 +259,7 @@ async function onRoute() {
   const r = route();
   const main = $('#main');
   const page = h('div', { class: 'page' });
+  if (location.hash !== main.dataset.at) { main.scrollTop = 0; main.dataset.at = location.hash; }  // a new page starts at the top; the same one, redrawn, stays put
   main.replaceChildren(page);
   $('#newbtn').hidden = !(canEdit() && r.view === 'records');
   $('#search').hidden = !['records', 'compare'].includes(r.view);
@@ -428,8 +429,8 @@ async function offerPush(names, done) {
 }
 
 // ------------------------------------------------------------------ compare and push
-const STATE = { same: ['ok', 'In step'], missing: ['missing', 'Missing'], extra: ['extra', 'Only on the server'], different: ['diff', 'Different'],
-  unreachable: ['unr', 'Unreachable'], outside: ['out', 'Not its zone'], ok: ['ok', 'In step'] };
+const STATE = { same: ['ok', 'In sync'], missing: ['missing', 'Missing'], extra: ['extra', 'Only on the server'], different: ['diff', 'Different'],
+  unreachable: ['unr', 'Unreachable'], outside: ['out', 'Not its zone'], ok: ['ok', 'In sync'] };
 async function showCompare(page, r) {
   const v = viewOf(r.slug);
   const head = h('div', { class: 'pagehead' }, h('h1', null, `Compare: ${v.name}`));
@@ -447,7 +448,7 @@ async function showCompare(page, r) {
   let onlyDiff = S.cmp.onlyDiff ?? true;
   const servers = st.servers;
   const summary = h('div', { class: 'srvchips' }, servers.map((s) => h('span', { class: `chip srv ${s.ok ? (s.differences ? 'diff' : 'ok') : 'unr'}`, title: s.ok ? `${s.count} records` : s.error },
-    h('span', { class: 'dot' }), h('b', null, s.name), h('span', { class: 'lab' }, s.ok ? (s.differences ? `${s.differences} to fix` : 'in step') : 'unreachable'))));
+    h('span', { class: 'dot' }), h('b', null, s.name), h('span', { class: 'lab' }, s.ok ? (s.differences ? `${s.differences} to fix` : 'in sync') : 'unreachable'))));
   const notes = st.notes && st.notes.length ? h('p', { class: 'muted small' }, st.notes.join(' · ')) : null;
   const errors = servers.filter((s) => !s.ok).map((s) => h('p', { class: 'warn' }, `${s.name}: ${s.error}`));
   const applyBtn = h('button', { class: 'pillbtn primary', disabled: true, onclick: () => run(false) }, icon('play', 's'), 'Apply');
@@ -518,7 +519,7 @@ async function showServers(page) {
   page.append(h('div', { class: 'pagehead' }, h('h1', null, 'Servers'),
     isAdmin() ? h('button', { class: 'pillbtn primary', onclick: () => editServer(null) }, icon('add', 's'), 'Add a server') : null));
   if (!S.servers.length) {
-    page.append(h('div', { class: 'empty' }, icon('dns'), h('p', null, 'No DNS server yet.'), h('p', { class: 'muted' }, 'AdGuard Home, Pi-hole, UniFi gateways and Cloudflare are kept in step; Tailscale gives device addresses and split DNS.')));
+    page.append(h('div', { class: 'empty' }, icon('dns'), h('p', null, 'No DNS server yet.'), h('p', { class: 'muted' }, 'AdGuard Home, Pi-hole, UniFi gateways and Cloudflare are kept in sync; Tailscale gives device addresses and split DNS.')));
     return;
   }
   for (const v of [...S.views, { slug: null, name: 'Sources' }]) {
@@ -529,7 +530,7 @@ async function showServers(page) {
 }
 function serverCard(s) {
   const st = s.check.ok === null ? 'unk' : s.check.ok ? (s.check.differences ? 'diff' : 'ok') : 'unr';
-  const msg = h('div', { class: 'muted small' }, s.check.at ? `${s.check.ok ? (s.check.differences != null ? (s.check.differences ? `${s.check.differences} name(s) differ` : 'In step with the master list') : s.check.message) : s.check.message} · ${ago(s.check.at)}` : 'Not checked yet');
+  const msg = h('div', { class: 'muted small' }, s.check.at ? `${s.check.ok ? (s.check.differences != null ? (s.check.differences ? `${s.check.differences} name(s) differ` : 'Matches the master list') : s.check.message) : s.check.message} · ${ago(s.check.at)}` : 'Not checked yet');
   const test = async () => { msg.textContent = 'Testing…'; try { const r = await api(`/api/servers/${s.id}/test`, { method: 'POST' }); msg.textContent = r.message; msg.className = r.ok ? 'small' : 'warn small'; } catch (e) { msg.textContent = e.message; } };
   return h('div', { class: `card srvcard s-${st}` + (s.enabled ? '' : ' off') },
     h('h3', null, h('span', { class: 'dot' }), s.name, h('span', { class: 'muted small kind' }, s.kindLabel)),
@@ -588,7 +589,7 @@ async function editServer(s) {
     return b;
   };
   const body = h('div', { class: 'pform' }, h('div', { class: 'grid' }, fld('Kind', kind), fld('Name', name), fld('View', view, 'which answers this server gives')), fieldsBox,
-    h('label', { class: 'check' }, enabled, ' Kept in step (off: left out of comparisons and pushes)'), status,
+    h('label', { class: 'check' }, enabled, ' Kept in sync (off: left out of comparisons and pushes)'), status,
     h('p', { class: 'muted small' }, 'The password or key is kept with the suite\'s keys and tokens (Settings › Global settings), never shown again.'));
   kind.onchange = drawFields;
   drawFields();

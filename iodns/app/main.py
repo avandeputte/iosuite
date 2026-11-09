@@ -42,7 +42,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="ioDNS", version=__version__, lifespan=lifespan, docs_url="/api/docs", redoc_url=None,
               openapi_url="/api/openapi.json",
-              description="One master list of local DNS records, per view (Internal, External, Tailscale…), kept in step on "
+              description="One master list of local DNS records, per view (Internal, External, Tailscale…), kept in sync on "
                           "AdGuard Home, Pi-hole, UniFi and Cloudflare, with dynamic DNS and Tailscale device addresses.")
 
 app.middleware("http")(auth.middleware(open_paths=OPEN_PATHS, open_prefixes=OPEN_PREFIXES))
