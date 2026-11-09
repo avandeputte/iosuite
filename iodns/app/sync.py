@@ -63,8 +63,11 @@ def compare(master: list[Record], snapshots: dict) -> dict:
             if not s.get("ok"):
                 cells[sid] = {"state": "unreachable", "records": []}
                 continue
-            if not _holds(s, name):
-                cells[sid] = {"state": "outside", "records": []}
+            if not under(name, s.get("covers")):
+                cells[sid] = {"state": "outside", "records": []}  # not in the zones the server serves (Cloudflare)
+                continue
+            if excluded(name, s.get("excludes")):
+                cells[sid] = {"state": "leftout", "records": []}  # one of the server's "Names to leave out"
                 continue
             types = set(s.get("types") or ())
             mine = [r for r in m.get(name, []) if not types or r.type in types]
@@ -73,7 +76,7 @@ def compare(master: list[Record], snapshots: dict) -> dict:
             cells[sid] = {"state": st, "records": [r.as_dict() for r in got]}
             if st != "same":
                 counts[sid] += 1
-        states = {c["state"] for c in cells.values()} - {"unreachable", "outside"}
+        states = {c["state"] for c in cells.values()} - {"unreachable", "outside", "leftout"}
         if states - {"same"}:
             overall = ("different" if "different" in states or (len(states - {"same"}) > 1) else
                        "missing" if "missing" in states else "extra")

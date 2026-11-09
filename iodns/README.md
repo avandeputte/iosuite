@@ -3,7 +3,7 @@
 *The DNS console of the ioThing suite ([ioSuite](https://github.com/avandeputte/iosuite), [ioCalendar](https://github.com/avandeputte/iocalendar),
 [ioContacts](https://github.com/avandeputte/iocontacts), [ioNotes](https://github.com/avandeputte/ionotes), [ioPix](https://github.com/avandeputte/iopix), [ioHealth](https://github.com/avandeputte/iohealth)).*
 
-One master list of the house's DNS names, kept in step on every DNS server: two AdGuard Homes, a Pi-hole, the UniFi
+One master list of the house's DNS names, kept in sync on every DNS server: two AdGuard Homes, a Pi-hole, the UniFi
 gateway, Cloudflare. Add a name once, see where the servers disagree, pick who is right, push. FastAPI and a
 single-page vanilla JS app, built the same way as the other io apps, signed in with the suite's shared accounts
 ([`iosuite-shared`](https://github.com/avandeputte/iosuite-shared)), with its data in MariaDB / MySQL.
@@ -16,7 +16,7 @@ single-page vanilla JS app, built the same way as the other io apps, signed in w
   and Tailscale (the tailnet) to begin with; add more in Settings › Views. Each server answers for one view, so
   `calendar.example.com` can be `192.168.1.151` inside, a public address or a tunnel outside and `100.x` on the
   tailnet, all on one row. A name without an External record is never pushed to public DNS.
-- **Compare**: per view, every server is read and compared with the master list name by name: in step, missing on a
+- **Compare**: per view, every server is read and compared with the master list name by name: in sync, missing on a
   server, different, or only on a server. Unreachable servers are shown, not fatal; a server only holds some types (or,
   for Cloudflare, some zones), and only those are compared.
 - **Resolve**: a decision per name: use the master list, use one server's records (they become the master list's),

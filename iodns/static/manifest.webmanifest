@@ -1,7 +1,7 @@
 {
   "name": "ioDNS",
   "short_name": "ioDNS",
-  "description": "Local DNS for the house, kept in step on every server",
+  "description": "Local DNS for the house, kept in sync on every server",
   "start_url": "./#/",
   "scope": "./",
   "display": "standalone",

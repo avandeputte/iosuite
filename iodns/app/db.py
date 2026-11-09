@@ -56,7 +56,7 @@ SCHEMA = [
         FOREIGN KEY (entry_id) REFERENCES dns_entries(id) ON DELETE CASCADE,
         FOREIGN KEY (view_id) REFERENCES dns_views(id) ON DELETE CASCADE
     )""",
-    # a DNS server ioDNS keeps in step (or reads from: Tailscale); its password or key is in the Shared ioSuite
+    # a DNS server ioDNS keeps in sync (or reads from: Tailscale); its password or key is in the Shared ioSuite
     # database's keys and tokens (iosuite_shared.credentials, app iodns, name server_<id>), never here
     """CREATE TABLE IF NOT EXISTS dns_servers (
         id INT AUTO_INCREMENT PRIMARY KEY,
