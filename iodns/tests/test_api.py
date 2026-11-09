@@ -172,3 +172,17 @@ def test_tunnel_records_stand_alone_and_reach_only_tunnel_servers(client):
     rows = client.get("/api/sync/external").json()["rows"]
     row = [r for r in rows if r["name"] == "cal.example.com"][0]
     assert row["state"] == "ok" and row["servers"][str(cf["id"])]["state"] == "same"
+
+
+def test_an_admin_tool_for_admins_only(client):
+    from iosuite_shared import db as shared_db, suite, users
+    from app.auth import admins_only_by_default
+    admins_only_by_default()                      # at start: an account without a role here has none
+    shared_db.settings_cache.clear()
+    assert users.default_role("iodns") == "none"
+    shared_db.set_setting("default_role", "viewer", "iodns")
+    admins_only_by_default()                      # an admin's own choice stays
+    shared_db.settings_cache.clear()
+    assert users.default_role("iodns") == "viewer"
+    client.get("/api/auth/me")                    # the middleware registers the app
+    assert suite.get("iodns")["adminTool"] is True
