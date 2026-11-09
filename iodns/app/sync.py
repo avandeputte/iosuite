@@ -23,7 +23,7 @@ from __future__ import annotations
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
-from app import model
+from app import model, providers
 from app.providers import ProviderError, Record, under
 
 _lock = threading.Lock()  # one push at a time
@@ -231,9 +231,13 @@ def apply(view_slug: str, decisions: dict, by: str | None, dry_run: bool = False
                 errors.append(str(e))
             return {"id": sid, "name": s["name"], "ops": done, "errors": errors}
 
-        if p["ops"]:
-            with ThreadPoolExecutor(max_workers=min(8, len(p["ops"]))) as ex:
-                result["servers"] = list(ex.map(run, list(p["ops"])))
+        # the DNS servers first, then the tunnels: a tunnel's hostname takes over its name's CNAME once the DNS server
+        # has removed what it held for that name (the other way round, the DNS server would remove the tunnel's CNAME)
+        tunnels = [sid for sid in p["ops"] if "TUNNEL" in providers.get(by_id[sid]["kind"]).types]
+        for phase in ([sid for sid in p["ops"] if sid not in tunnels], tunnels):
+            if phase:
+                with ThreadPoolExecutor(max_workers=min(8, len(phase))) as ex:
+                    result["servers"] += list(ex.map(run, phase))
         for r in result["servers"]:
             lines = [f"{o['op']} {o['name']} {o['type']} {o['value']}" + (f" (was {o['was']})" if o.get("was") else "") for o in r["ops"]]
             lines += [f"failed: {e}" for e in r["errors"]]

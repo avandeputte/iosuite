@@ -22,7 +22,9 @@ from dataclasses import dataclass, field
 
 import httpx
 
-TYPES = ("A", "AAAA", "CNAME")  # what the master list holds
+DNS_TYPES = ("A", "AAAA", "CNAME")  # what a DNS server holds
+TYPES = DNS_TYPES + ("TUNNEL",)     # what the master list holds: TUNNEL is a Cloudflare Tunnel public hostname
+SERVICE = re.compile(r"^((https?|tcp|ssh|rdp|smb|unix|unix\+tls)://\S+|http_status:[1-5][0-9][0-9]|hello_world)$")
 HOST = re.compile(r"^(\*\.)?([a-z0-9_]([a-z0-9_-]{0,61}[a-z0-9_])?\.)*[a-z0-9_]([a-z0-9_-]{0,61}[a-z0-9_])?$")
 TIMEOUT = 10.0
 
@@ -77,7 +79,25 @@ def norm_value(type_: str, value: str) -> str:
             raise ValueError(f"Not an IPv6 address: {value!r}") from None
     if type_ == "CNAME":
         return norm_name(v)
+    if type_ == "TUNNEL":
+        tunnel, service = tunnel_value(v)
+        return f"{tunnel}|{service}"
     raise ValueError(f"Unknown record type: {type_!r}")
+
+
+def tunnel_value(value: str) -> tuple[str, str]:
+    """A TUNNEL record's value, "<tunnel name>|<service>" (home|http://192.168.1.151:8620), in its two parts."""
+    tunnel, sep, service = str(value or "").partition("|")
+    tunnel, service = tunnel.strip(), service.strip()
+    if not sep or not tunnel or len(tunnel) > 64:
+        raise ValueError(f"A tunnel record is <tunnel>|<service>: {value!r}")
+    scheme, colon, rest = service.partition(":")
+    service = (scheme.lower() + colon + rest) if colon else service.lower()
+    if "://" in service and service.count("/") == 3:
+        service = service.rstrip("/")  # http://host:port/ and http://host:port are one service
+    if not SERVICE.match(service):
+        raise ValueError(f"Not a tunnel service (http://host:port, https://, tcp://, ssh://, http_status:404…): {service!r}")
+    return tunnel, service
 
 
 def record(name: str, type_: str, value: str, ttl=None, ref=None) -> Record:
@@ -96,7 +116,7 @@ def guess_type(answer: str) -> str:
 class Provider:
     kind = ""
     label = ""
-    types: tuple = TYPES
+    types: tuple = DNS_TYPES
     target = True   # records are pushed to it (False: a source of addresses only, such as Tailscale)
     # what the server form asks for: {key, label, type: text|url|password|select|check, hint?, options?, default?}
     # key "secret" is kept in the Shared ioSuite database's keys and tokens, never shown back
@@ -190,5 +210,5 @@ def get(kind: str) -> type[Provider]:
 # the providers register themselves when imported: one module per kind of server
 import importlib  # noqa: E402
 
-for _m in ("adguard", "pihole", "unifi", "cloudflare", "tailscale"):
+for _m in ("adguard", "pihole", "unifi", "cloudflare", "cftunnel", "tailscale"):
     importlib.import_module(f"app.providers.{_m}")
