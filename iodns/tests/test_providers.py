@@ -78,6 +78,20 @@ def test_unifi_api_key_policies():
     assert sent[1][:2] == ("DELETE", "/proxy/network/integration/v1/sites/uuid-1/dns/policies/p1")
 
 
+def test_unifi_name_it_answers_itself():
+    def h(req):
+        if req.url.path.endswith("/sites"):
+            return httpx.Response(200, json={"data": [{"id": "uuid-1", "internalReference": "default"}]})
+        return httpx.Response(400, json={"statusCode": 400, "code": "api.dns.policy.validation.overlap-with-local-dns",
+                                         "message": "DNS policy overlaps with local DNS settings"})
+    with wire(unifi.UniFi({"name": "Unifi", "url": "https://gw", "options": {"mode": "apikey"}}, "KEY"), h) as p:
+        try:
+            p.add(record("beast.iothing.net", "A", "192.168.1.101"))
+            raise AssertionError("no error")
+        except unifi.AnsweredElsewhere as e:
+            assert e.name == "beast.iothing.net" and "answers beast.iothing.net itself" in str(e)
+
+
 def test_unifi_local_account_static_dns():
     sent = []
 

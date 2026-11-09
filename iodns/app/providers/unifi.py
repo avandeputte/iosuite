@@ -18,7 +18,7 @@ over the Network application's API. Two ways in, picked per server:
 
 The gateway's certificate is its own unless you replaced it, so it is not checked unless asked.
 """
-from app.providers import Provider, ProviderError, Record, record, register
+from app.providers import AnsweredElsewhere, Provider, ProviderError, Record, record, register
 
 INTEGRATION = "/proxy/network/integration/v1"
 # the integration API's policy types; older Network versions answer "A", "AAAA", "CNAME"
@@ -131,7 +131,15 @@ class UniFi(Provider):
     def add(self, r: Record) -> None:
         if self.mode == "apikey":
             body = {"type": TO_POLICY[r.type], "enabled": True, "domain": r.name, VALUE_FIELD[r.type]: r.value, "ttlSeconds": r.ttl or 0}
-            self.request("POST", self._policies(), json=body, headers=self._h(True))
+            try:
+                self.request("POST", self._policies(), json=body, headers=self._h(True))
+            except ProviderError as e:
+                if "overlap-with-local-dns" not in str(e):
+                    raise
+                raise AnsweredElsewhere(
+                    f"UniFi answers {r.name} itself (a client of a network whose domain name it is under), so it takes no DNS "
+                    f"record for it. ioDNS leaves {r.name} out of this server from now on (Servers › {self.server.get('name') or 'UniFi'} "
+                    f"› Names to leave out).", r.name) from None
         else:
             body = {"key": r.name, "value": r.value, "record_type": r.type, "enabled": True, "ttl": r.ttl or 0}
             self.request("POST", self._static(), json=body, headers=self._h(True))

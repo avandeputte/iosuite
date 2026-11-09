@@ -24,7 +24,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 
 from app import model, providers
-from app.providers import ProviderError, Record, under
+from app.providers import AnsweredElsewhere, ProviderError, Record, excluded, under
 
 _lock = threading.Lock()  # one push at a time
 
@@ -63,7 +63,7 @@ def compare(master: list[Record], snapshots: dict) -> dict:
             if not s.get("ok"):
                 cells[sid] = {"state": "unreachable", "records": []}
                 continue
-            if not under(name, s.get("covers")):
+            if not _holds(s, name):
                 cells[sid] = {"state": "outside", "records": []}
                 continue
             types = set(s.get("types") or ())
@@ -122,7 +122,7 @@ def plan(master: list[Record], snapshots: dict, decisions: dict[str, str]) -> di
         else:
             raise ValueError(f"{name}: unknown decision {action!r}")
         for sid, held in theirs.items():
-            if not under(name, snapshots[sid].get("covers")):
+            if not _holds(snapshots[sid], name):
                 continue
             types = set(snapshots[sid].get("types") or ())
             want = {r.key: r for r in desired if not types or r.type in types}
@@ -148,14 +148,19 @@ def _op(o: dict) -> dict:
 
 # ---------------------------------------------------------------- against the real servers
 
+def _holds(snap: dict, name: str) -> bool:
+    """Whether a server (its snapshot) is compared on name: in its zones, and not one of the names it leaves out."""
+    return under(name, snap.get("covers")) and not excluded(name, snap.get("excludes"))
+
+
 def snapshot(servers: list[dict]) -> dict:
     """Read every server at once: {id: {"ok", "records", "types", "error"}}."""
     def read(s):
         try:
             with model.provider(s) as p:
-                covers = p.covers()
-                recs = [r for r in p.list() if r.type in p.types and under(r.name, covers)]
-                return s["id"], {"ok": True, "records": recs, "types": list(p.types), "covers": covers, "error": None}
+                covers, excludes = p.covers(), p.excludes()
+                recs = [r for r in p.list() if r.type in p.types and under(r.name, covers) and not excluded(r.name, excludes)]
+                return s["id"], {"ok": True, "records": recs, "types": list(p.types), "covers": covers, "excludes": excludes, "error": None}
         except (ProviderError, ValueError, KeyError) as e:
             return s["id"], {"ok": False, "records": [], "types": [], "covers": None, "error": str(e)}
     if not servers:
@@ -225,6 +230,9 @@ def apply(view_slug: str, decisions: dict, by: str | None, dry_run: bool = False
                             else:
                                 prov.add(r)
                             done.append(_op(o))
+                        except AnsweredElsewhere as e:
+                            model.leave_out(sid, e.name, by)
+                            errors.append(f"{o['op']} {r.name} {r.type} {r.value}: {e}")
                         except ProviderError as e:
                             errors.append(f"{o['op']} {r.name} {r.type} {r.value}: {e}")
             except ProviderError as e:
@@ -275,7 +283,7 @@ def import_from(server_id: int, mode: str, by: str | None) -> dict:
     if not sn["ok"]:
         raise ProviderError(sn["error"])
     theirs = _by_name(sn["records"])
-    mine = {n: rs for n, rs in _by_name(model.master(s["viewId"])).items() if under(n, sn["covers"])}
+    mine = {n: rs for n, rs in _by_name(model.master(s["viewId"])).items() if _holds(sn, n)}
     added = changed = removed = 0
     for name, recs in theirs.items():
         if name not in mine:

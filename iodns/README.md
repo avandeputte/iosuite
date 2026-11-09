@@ -56,6 +56,10 @@ single-page vanilla JS app, built the same way as the other io apps, signed in w
 | **Cloudflare Tunnel** | the public hostnames of remotely managed tunnels (ingress rules) and their CNAMEs | an API token with Account › Cloudflare Tunnel › Edit and Zone › DNS › Edit; the account ID if the token sees several. Tunnels run from a config.yml can't be changed through the API and are left out. |
 | **Tailscale** | nothing is pushed: device addresses and split DNS | an API access token (`tskey-api-…`) or an OAuth client secret |
 
+Every server also has **Names to leave out** (`nas.example.com, *.guest.lan`): names it is never compared on or sent.
+A UniFi gateway refuses a record for a name it answers itself (a client of a network with a domain name); ioDNS adds such a
+name there by itself.
+
 Adding another kind is one module in `app/providers/`: a `Provider` subclass that lists, adds and deletes records
 (`app/providers/__init__.py` says how). A certificate of its own (a UniFi gateway's) is not checked unless asked.
 

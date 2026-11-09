@@ -292,7 +292,7 @@ def save_server(body: dict, by: str | None, sid: int | None = None) -> dict:
     if not url and cls.target:
         raise ValueError("A server needs its address")
     opts = dict((cur or {}).get("options") or {})
-    known = {f["key"] for f in cls.fields} - {"url", "secret"}
+    known = {f["key"] for f in cls.describe()["fields"]} - {"url", "secret"}
     for k, v in (body.get("options") or {}).items():
         if k in known:
             opts[k] = v
@@ -321,6 +321,17 @@ def delete_server(sid: int, by: str | None) -> None:
     db.ex("DELETE FROM dns_servers WHERE id = %s", (s["id"],))
     credentials.remove(config.APP, _secret_name(s["id"]))
     log(by, "server", s["id"], s["name"], "removed")
+
+
+def leave_out(sid: int, name: str, by: str | None) -> None:
+    """Add name to the server's "Names to leave out" (it answers that name itself)."""
+    s = server(sid)
+    opts = dict(s["options"])
+    names = [x.strip() for x in str(opts.get("exclude") or "").split(",") if x.strip()]
+    if name not in names:
+        opts["exclude"] = ", ".join(names + [name])
+        db.ex("UPDATE dns_servers SET options = %s WHERE id = %s", (json.dumps(opts), s["id"]))
+        log(by, "server", s["id"], s["name"], f"{name} left out: the server answers it itself")
 
 
 def record_check(sid: int, ok: bool, message: str, differences: int | None = None) -> None:

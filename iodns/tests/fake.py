@@ -1,8 +1,9 @@
 """A DNS server in memory, for the tests: kind "fake", its records in SERVERS[url] (a list of Record)."""
-from app.providers import Provider, ProviderError, Record, register
+from app.providers import AnsweredElsewhere, Provider, ProviderError, Record, register
 
 SERVERS: dict[str, list[Record]] = {}
 DOWN: set[str] = set()
+LOCAL: dict[str, set[str]] = {}  # per server: names the server answers itself and refuses (as UniFi does a client's name)
 
 
 @register
@@ -26,6 +27,8 @@ class Fake(Provider):
         return [Record(r.name, r.type, r.value, r.ttl, ref=f"{r.name}|{r.type}|{r.value}") for r in SERVERS.setdefault(self.url, [])]
 
     def add(self, r):
+        if r.name in LOCAL.get(self.url, ()):
+            raise AnsweredElsewhere(f"{self.url} answers {r.name} itself", r.name)
         SERVERS.setdefault(self.url, []).append(Record(r.name, r.type, r.value, r.ttl))
 
     def delete(self, r):
