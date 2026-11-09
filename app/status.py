@@ -65,7 +65,7 @@ def of_apps(request: Request) -> dict:
     """{key: {ok, version, update}} for every app on the page, asked in parallel; cached per viewer for APP_TTL."""
     host = widgets._host(request)
     tok = request.cookies.get(widgets.sessions.COOKIE) or request.headers.get("authorization") or ""
-    keys = [t["key"] for t in apps.tiles(host)]
+    keys = [t["key"] for t in apps.tiles(host, getattr(request.state, "user", None))]
 
     def ask(key):
         return key, _remember(("app", key, tok[:24], host), APP_TTL, lambda: _app(request, key))

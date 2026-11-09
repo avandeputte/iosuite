@@ -5,13 +5,14 @@ Every io app registers itself, with its address, in the suite's list of apps in 
 (not installed, or never started) has no tile. Nobody types an address.
 
 Each tile shows what the app registered: its name, line, colour and icon (served by the app itself, at
-/static/icons/mark.svg). ORDER is only where the apps the page has widgets for come; any other app follows by name.
+/static/icons/mark.svg). A person sees only the apps they may use (iosuite_shared.suite.visible: a role there that is not
+"none"), and an admin tool (ioDNS) only where they are its admin, in a row of its own under the others. ORDER is only where the apps the page has widgets for come; any other app follows by name.
 """
 import logging
 import re
 import time
 
-from iosuite_shared import suite
+from iosuite_shared import suite, users
 
 from app import db
 
@@ -58,14 +59,22 @@ def name_of(key: str) -> str:
     return (e or {}).get("name") or key
 
 
-def tiles(host: str = "") -> list[dict]:
-    """What the page draws: the registered apps with an address, those in ORDER first, then the others by name.
-    {key, name, tagline, color, icon, url, version}, all as the app registered them."""
-    reg = {k: e for k, e in registered().items() if k != SELF and e.get("url")}
+def may_see(user, entry: dict) -> bool:
+    """Whether this person sees the app: a role there that is not "none", and its admin for an admin tool (the same
+    rule as iosuite_shared.suite.visible, on the list kept here)."""
+    role = users.role_of(user, entry["app"])
+    return role != "none" and (not entry.get("adminTool") or role == "admin")
+
+
+def tiles(host: str = "", user=None) -> list[dict]:
+    """What the page draws: the registered apps with an address (the ones `user` may see, when given), those in ORDER
+    first, then the others by name. {key, name, tagline, color, icon, url, version, adminTool}, all as the app
+    registered them."""
+    reg = {k: e for k, e in registered().items() if k != SELF and e.get("url") and (user is None or may_see(user, e))}
     keys = [k for k in ORDER if k in reg] + sorted((k for k in reg if k not in ORDER), key=lambda k: (reg[k].get("name") or k).lower())
     return [{"key": k, "name": reg[k].get("name") or k, "tagline": reg[k].get("description") or "",
              "color": reg[k].get("color") or "#2f3a5a", "icon": reg[k].get("icon") or "static/icons/mark.svg",
-             "url": url_for(k), "version": reg[k].get("version")} for k in keys]
+             "url": url_for(k), "version": reg[k].get("version"), "adminTool": bool(reg[k].get("adminTool"))} for k in keys]
 
 
 STRIPS = ("rediscover", "onthisday", "off")
