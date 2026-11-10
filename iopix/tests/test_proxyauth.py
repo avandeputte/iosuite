@@ -107,7 +107,7 @@ def test_settings_from_the_app_and_the_token_seen(monkeypatch, account):
     import jwt
     for k in proxyauth.KEYS:
         monkeypatch.delenv(k, raising=False)
-    auth_shared.proxy.save({"AUTH_PROXY": "nginx", "AUTH_PROXY_TRUSTED": "10.0.0.0/8"})
+    proxyauth.save_suite({"AUTH_PROXY": "nginx", "AUTH_PROXY_TRUSTED": "10.0.0.0/8"})
     try:
         assert auth_shared.proxy.mode() == "nginx" and auth_shared.proxy.identity({"Remote-User": "proxy-probe"}, "10.1.2.3") == "proxy-probe"
         monkeypatch.setenv("AUTH_PROXY", "off")
@@ -118,7 +118,7 @@ def test_settings_from_the_app_and_the_token_seen(monkeypatch, account):
         auth_shared.proxy.note({proxyauth.CF_JWT_HEADER: tok}, "10.1.2.3")
         assert proxyauth.seen["iss"] == "https://myteam.cloudflareaccess.com" and proxyauth.seen["aud"] == ["aud-x"]
     finally:
-        auth_shared.proxy.save({k: "" for k in proxyauth.KEYS})
+        proxyauth.save_suite({k: "" for k in proxyauth.KEYS})
 
 
 def test_from_outside_a_password_is_required(client, monkeypatch, account):

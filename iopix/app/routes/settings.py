@@ -11,8 +11,6 @@ from starlette.concurrency import run_in_threadpool
 
 from app.ai import models as dlmodels
 from app import access, config, events, jobs as bgjobs, users
-from iosuite_shared import proxyauth
-from app.auth import auth as auth_shared
 from app.digikam import dkdb, library
 from app.faces import facevecs
 from app.photos import edits, scanner
@@ -59,35 +57,6 @@ def api_settings_get(request: Request):
     if not users.can_write(request.state.user):  # the owner's name and contact (the edit templates) and recent tags are the editors' business
         out.pop("templates", None); out.pop("recent_tags", None); out.pop("google_maps_key_set", None)
     return out
-
-
-@router.get("/api/settings/proxy", dependencies=[access.admin])
-def api_proxy_get():
-    """Sign-in at a reverse proxy (Cloudflare Access...): its settings, which of them config.env fixes, and the
-    Cloudflare Access team and application last seen in requests. Admins only."""
-    return auth_shared.proxy.status()
-
-
-@router.post("/api/settings/proxy", dependencies=[access.admin])
-async def api_proxy_set(request: Request):
-    """Body: any of proxyauth.KEYS (an empty string clears one). Settings in config.env cannot be changed here."""
-    body = await json_body(request)
-    changes = {k: str(v or "").strip() for k, v in body.items() if k in proxyauth.KEYS}
-    fixed = [k for k in changes if config.proxy_env(k) is not None]
-    if fixed:
-        raise HTTPException(400, f"Set in config.env, change it there: {', '.join(fixed)}")
-    m = changes.get("AUTH_PROXY")
-    if m is not None and m.lower() not in ("", "off", *proxyauth.PRESETS):
-        raise HTTPException(400, "Unknown proxy")
-    if changes.get("AUTH_PROXY_CREATE", "").lower() not in ("", "viewer", "editor", "deny"):
-        raise HTTPException(400, "Someone with no account: the sign-in screen, deny, or a viewer or editor account")
-    if (m or auth_shared.proxy.mode()).lower() == "cloudflare" and ("CF_ACCESS_TEAM" in changes or "CF_ACCESS_AUD" in changes or m):
-        team = changes.get("CF_ACCESS_TEAM", auth_shared.proxy.opt("CF_ACCESS_TEAM") or "")
-        aud = changes.get("CF_ACCESS_AUD", auth_shared.proxy.opt("CF_ACCESS_AUD") or "")
-        if bool(team) != bool(aud):
-            raise HTTPException(400, "Cloudflare needs both the team domain and the AUD tag (or neither)")
-    auth_shared.proxy.save(changes)
-    return auth_shared.proxy.status()
 
 
 def _switch(name):

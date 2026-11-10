@@ -13,22 +13,23 @@ from app.digikam import dkdb, merge
 from app.geo import gpx
 
 
-def _request(path: str, method: str = "GET", body: dict = None):
+def _request(path: str, method: str = "GET", body: dict = None, peer: str = "127.0.0.1", headers: dict = None):
     raw = json.dumps(body or {}).encode()
-    scope = {"type": "http", "method": method, "path": path, "query_string": b"", "headers": [(b"host", b"viewer.local"), (b"content-type", b"application/json")],
-             "scheme": "http", "server": ("viewer.local", 80), "client": ("127.0.0.1", 1234)}
+    extra = [(k.lower().encode(), v.encode()) for k, v in (headers or {}).items()]
+    scope = {"type": "http", "method": method, "path": path, "query_string": b"", "headers": [(b"host", b"viewer.local"), (b"content-type", b"application/json")] + extra,
+             "scheme": "http", "server": ("viewer.local", 80), "client": (peer, 1234)}
 
     async def receive():
         return {"type": "http.request", "body": raw, "more_body": False}
     return Request(scope, receive)
 
 
-def _call(path, method="GET", body=None):
+def _call(path, method="GET", body=None, **who):
     from app import main
 
     async def nxt(_r):
         raise AssertionError("the request must not reach the app")
-    resp = asyncio.run(main._without_database(_request(path, method, body), nxt))
+    resp = asyncio.run(main._without_database(_request(path, method, body, **who), nxt))
     return resp.status_code, json.loads(resp.body)
 
 
@@ -57,6 +58,38 @@ def test_set_up_endpoints_are_open_only_without_any_configuration(monkeypatch):
     monkeypatch.setattr(vdb, "public_settings", lambda: {"configured": False, "host": "", "password_set": False})
     code, d = _call("/api/viewerdb")
     assert code == 200 and not d["configured"] and "locked" not in d
+    assert _call("/api/viewerdb", peer="192.168.1.20")[0] == 200, "the network the viewer is on"
+
+
+def test_set_up_endpoints_answer_the_local_network_only(monkeypatch):
+    """No database is configured yet: whoever reaches the set-up endpoints chooses the server the viewer connects to,
+    so they are for the network the viewer is on. From a public address, through Cloudflare, or forwarded by a proxy
+    that is not listed as trusted: 403, and nothing is tested or switched."""
+    from app import main
+    from app.routes import settings
+    monkeypatch.setattr(vdb, "configured", lambda: False)
+    monkeypatch.setattr(vdb, "ready", lambda: False)
+    monkeypatch.setattr(vdb, "error", "no database configured")
+    monkeypatch.setattr(vdb, "public_settings", lambda: {"configured": False, "host": "", "password_set": False})
+
+    async def never(*a, **kw):
+        raise AssertionError("an outside request reached the set-up code")
+    for name in ("api_viewerdb_test", "api_viewerdb_switch", "api_viewerdb_retry"):
+        monkeypatch.setattr(settings, name, never)
+    outside = ({"peer": "8.8.8.8"}, {"headers": {"Cf-Ray": "abc-EWR"}}, {"peer": "192.168.1.5", "headers": {"X-Forwarded-For": "8.8.8.8"}},
+               {"peer": "127.0.0.1", "headers": {"X-Forwarded-For": "8.8.8.8"}})
+    for who in outside:
+        for path, method in (("/api/viewerdb", "GET"), ("/api/viewerdb/test", "POST"), ("/api/viewerdb/switch", "POST"), ("/api/viewerdb/retry", "POST")):
+            code, d = _call(path, method, {"host": "evil.example"}, **who)
+            assert code == 403 and "network the server is on" in d["detail"], (who, path)
+        assert _call("/api/status", **who)[0] == 200, "the shell still learns what is missing"
+    # the Shared ioSuite database is away too: the same answers, with only this machine believed as a proxy
+    def away(_request):
+        raise OSError("no shared database")
+    monkeypatch.setattr(main.auth, "outside", away)
+    assert _call("/api/viewerdb", peer="192.168.1.20")[0] == 200
+    assert _call("/api/viewerdb", peer="8.8.8.8")[0] == 403
+    assert _call("/api/viewerdb", peer="127.0.0.1", headers={"X-Forwarded-For": "9.9.9.9"})[0] == 403
 
 
 def test_the_stored_password_goes_to_the_stored_server_only(monkeypatch):

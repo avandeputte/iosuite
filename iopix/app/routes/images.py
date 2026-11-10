@@ -1,7 +1,9 @@
 """Images: thumbnails, previews, face avatars, originals and zip downloads."""
+import math
 import mimetypes
 import os
 import re
+import threading
 import time
 import sqlite3
 import zipfile
@@ -30,11 +32,12 @@ router = APIRouter()
 def thumb(photo_id: int, fit: str = "", h: int = 0):
     """The grid thumbnail; fit=square (or fit=WxH, an aspect such as 16x9) crops it to that shape around the photo's
     subject (smartcrop.py: the faces, else the people, else the middle), for tiles that would otherwise crop the centre;
-    h=120 (60 to 240) a smaller copy for strips and tiny tiles."""
+    h=120 (60 to 240) a smaller copy for strips and tiny tiles. Both come in a fixed set (thumbs.FIT_ASPECTS, from 1x3
+    to 3x1, and thumbs.SMALL_HEIGHTS): the nearest shape, and the next height up, is what is served and cached."""
     if h and not fit:
         row = photo_row(photo_id)
         try:
-            path = thumbs.make_small(row, max(60, min(int(h), 240)))
+            path = thumbs.make_small(row, thumbs.at_least(int(h), thumbs.SMALL_HEIGHTS))
         except FileNotFoundError:
             raise HTTPException(404, "Original file is not available")
         except OSError as e:
@@ -50,7 +53,7 @@ def thumb(photo_id: int, fit: str = "", h: int = 0):
         raise HTTPException(400, "fit is square or WxH")
     row = photo_row(photo_id, THUMB_COLS + ", focus")
     try:
-        path = thumbs.make_fit(row, aw / ah)
+        path = thumbs.make_fit(row, thumbs.nearest_aspect(aw / ah))
     except FileNotFoundError:
         raise HTTPException(404, "Original file is not available")
     except OSError as e:
@@ -102,20 +105,31 @@ def original(photo_id: int, dl: int = 0):
                         headers={"Cache-Control": "private, max-age=3600"})
 
 
+_frames = threading.BoundedSemaphore(2)  # ffmpeg runs for chapter frames at once; more than that wait their turn
+
+
 @router.get("/video/{photo_id}/frame")
 def video_frame_at(photo_id: int, t: float = 0.0, h: int = 240):
-    """One frame of a video at `t` seconds (a chapter thumbnail), cached; h is its height (120-720)."""
+    """One frame of a video at `t` seconds (a chapter thumbnail), cached; h is its height. The frame is the one at the
+    next whole second (inside the video) and the height the next of thumbs.FRAME_HEIGHTS, so a video has a bounded
+    number of them however it is asked."""
     row = photo_row(photo_id)
     if not row["video"]:
         raise HTTPException(404, "Not a video")
-    h = max(120, min(int(h), 720))
-    t = max(0.0, float(t))
-    dst = config.CACHE_DIR / "vf" / f"{photo_id % 256:02x}" / f"{photo_id}-{thumbs.stamp_for(row['hash'], row['size'], row['modified'])}-{t:.2f}-{h}.jpg"
+    if not math.isfinite(t):
+        raise HTTPException(400, "t is a time in seconds")
+    h = thumbs.at_least(int(h), thumbs.FRAME_HEIGHTS)
+    t = math.ceil(max(0.0, t))
+    duration = row.get("duration") or 0
+    if duration > 0:
+        t = min(t, int(duration))
+    dst = config.CACHE_DIR / "vf" / f"{photo_id % 256:02x}" / f"{photo_id}-{thumbs.stamp_for(row['hash'], row['size'], row['modified'])}-{t}-{h}.jpg"
     if not dst.exists():
         if not os.path.isfile(row["path"]):
             raise HTTPException(404, "Original file is not available")
-        if not thumbs.video_frame(row["path"], dst, h, row.get("duration"), at=t):
-            raise HTTPException(503, "The frame could not be read")
+        with _frames:
+            if not dst.exists() and not thumbs.video_frame(row["path"], dst, h, row.get("duration"), at=t):
+                raise HTTPException(503, "The frame could not be read")
     return FileResponse(dst, media_type="image/jpeg", headers=IMG_CACHE)
 
 

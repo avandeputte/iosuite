@@ -4,6 +4,7 @@ Source files are only ever opened for reading. Everything written goes to
 config.CACHE_DIR.
 """
 import io
+import math
 import os
 import shutil
 import subprocess
@@ -35,6 +36,13 @@ FFMPEG = shutil.which("ffmpeg")
 # camera raw files (folders.IMAGE_EXT): Pillow cannot decode them, the JPEG preview they carry is shown instead
 RAW_EXT = {".dng", ".cr2", ".cr3", ".nef", ".nrw", ".arw", ".raf", ".orf", ".rw2", ".pef", ".srw", ".x3f"}
 log = logging.getLogger(__name__)
+
+# What the image routes make on request comes in a fixed set of shapes and sizes, so that asking for one more aspect or
+# one more height never writes one more file: a request is served the nearest one (app/routes/images.py).
+FIT_ASPECTS = (1 / 3, 1 / 2, 9 / 16, 2 / 3, 5 / 7, 3 / 4, 1.0, 4 / 3, 7 / 5, 3 / 2, 16 / 9, 2.0, 3.0)  # w / h of /thumb?fit=
+SMALL_HEIGHTS = (60, 80, 120, 160, 240)  # /thumb?h=
+FRAME_HEIGHTS = (120, 240, 360, 720)  # /video/<id>/frame?h=
+PRUNE_EVERY_S = 6 * 3600
 
 _locks: dict[str, threading.Lock] = {}
 _locks_guard = threading.Lock()
@@ -202,8 +210,8 @@ def make(kind: str, photo: dict) -> Path:
 
 
 def make_fit(photo: dict, aspect: float) -> Path:
-    """The grid thumbnail cropped to `aspect` (w / h) around the photo's focus point (smartcrop.py), cached as kind
-    'c' with the aspect in the name. `photo` needs the THUMB_COLS plus `focus`."""
+    """The grid thumbnail cropped to `aspect` (w / h, one of FIT_ASPECTS) around the photo's focus point (smartcrop.py),
+    cached as kind 'c' with the aspect in the name. `photo` needs the THUMB_COLS plus `focus`."""
     stamp = stamp_for(photo["hash"], photo["size"], photo["modified"])
     dst = config.CACHE_DIR / "c" / f"{photo['id'] % 256:02x}" / f"{photo['id']}-{stamp}-{aspect:.3f}.jpg"
     if dst.exists():
@@ -220,8 +228,8 @@ def make_fit(photo: dict, aspect: float) -> Path:
 
 
 def make_small(photo: dict, height: int) -> Path:
-    """The grid thumbnail scaled down to `height` px, cached as kind 's': the film strip and the smallest tiles show
-    a 56-80 px picture, and a 360 px one is six times the bytes."""
+    """The grid thumbnail scaled down to `height` px (one of SMALL_HEIGHTS), cached as kind 's': the film strip and the
+    smallest tiles show a 56-80 px picture, and a 360 px one is six times the bytes."""
     stamp = stamp_for(photo["hash"], photo["size"], photo["modified"])
     dst = config.CACHE_DIR / "s" / f"{photo['id'] % 256:02x}" / f"{photo['id']}-{stamp}-{height}.jpg"
     if dst.exists():
@@ -315,7 +323,7 @@ class Prewarmer:
 def forget(photo_id: int):
     """Drop what was derived from a photo whose picture just changed: the cached thumbnail and preview, the face
     crops, and its content-search embedding (computed again from the new picture)."""
-    for kind in ("t", "p", "c", "s"):
+    for kind in ("t", "p", "c", "s", "vf"):
         d = config.CACHE_DIR / kind / f"{photo_id % 256:02x}"
         try:
             for f in d.glob(f"{photo_id}-*.jpg"):
@@ -349,23 +357,58 @@ def true_size(path: str):
         return None
 
 
-def prune_previews():
-    """Keep the preview cache under its size cap by deleting the oldest files (by the time they were
+def nearest_aspect(aspect: float) -> float:
+    """The shape of FIT_ASPECTS closest to `aspect` (w / h), by ratio."""
+    return min(FIT_ASPECTS, key=lambda a: abs(math.log(aspect / a)))
+
+
+def at_least(height: int, allowed: tuple) -> int:
+    """The smallest of `allowed` that is not smaller than `height` (a picture is never scaled up by the page), else the largest."""
+    return next((a for a in allowed if a >= height), allowed[-1])
+
+
+def _prune(kinds: tuple, cap_mb: int):
+    """Keep the cache folders `kinds` together under `cap_mb` by deleting the oldest files (by the time they were
     made: access times stand still on noatime mounts, which is what most NAS shares and containers are)."""
-    root = config.CACHE_DIR / "p"
-    if not root.exists():
-        return
     files = []
-    for f in root.rglob("*.jpg"):
-        try:
-            st = f.stat()
-        except OSError:  # pruned or still being written by another thread
+    for kind in kinds:
+        root = config.CACHE_DIR / kind
+        if not root.exists():
             continue
-        files.append((st.st_mtime, st.st_size, f))
+        for f in root.rglob("*.jpg"):
+            try:
+                st = f.stat()
+            except OSError:  # pruned or still being written by another thread
+                continue
+            files.append((st.st_mtime, st.st_size, f))
     total = sum(s for _, s, _ in files)
-    cap = config.PREVIEW_CACHE_MAX_MB * 1024 * 1024
+    cap = cap_mb * 1024 * 1024
     for _, size, f in sorted(files):
         if total <= cap:
             break
         f.unlink(missing_ok=True)
         total -= size
+
+
+def prune_previews():
+    """The viewer previews (cache/p), under PREVIEW_CACHE_MAX_MB."""
+    _prune(("p",), config.PREVIEW_CACHE_MAX_MB)
+
+
+def prune_variants():
+    """The cropped and small thumbnails and the video chapter frames (cache/c, cache/s, cache/vf), together under
+    VARIANT_CACHE_MAX_MB. A pruned one is made again from the grid thumbnail (or the video) when it is next asked for."""
+    _prune(("c", "s", "vf"), config.VARIANT_CACHE_MAX_MB)
+
+
+def keep_pruned(stop: threading.Event = None):
+    """Prune the caches that grow with use, at start and every few hours after (a server that runs for months)."""
+    stop = stop or threading.Event()
+    while True:
+        for prune in (prune_previews, prune_variants):
+            try:
+                prune()
+            except Exception as e:  # noqa: BLE001
+                log.warning("cache not pruned: %s", e)
+        if stop.wait(PRUNE_EVERY_S):
+            return
