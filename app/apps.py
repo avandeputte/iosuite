@@ -15,6 +15,7 @@ import time
 from iosuite_shared import suite, users
 
 from app import db
+from iosuite_shared.errors import Invalid
 
 log = logging.getLogger("iosuite.apps")
 SELF = "iosuite"
@@ -48,8 +49,8 @@ def forget_registry() -> None:
     _registry["at"] = 0.0
 
 
-def url_for(key: str, host: str = "") -> str:
-    """The address the app registered, or "" when it has not registered (`host` is not used any more)."""
+def url_for(key: str) -> str:
+    """The address the app registered, or "" when it has not registered."""
     e = registered().get(key)
     return ((e or {}).get("url") or "").rstrip("/")
 
@@ -66,7 +67,7 @@ def may_see(user, entry: dict) -> bool:
     return role != "none" and (not entry.get("adminTool") or role == "admin")
 
 
-def tiles(host: str = "", user=None) -> list[dict]:
+def tiles(user=None) -> list[dict]:
     """What the page draws: the registered apps with an address (the ones `user` may see, when given), those in ORDER
     first, then the others by name. {key, name, tagline, color, icon, url, version, adminTool}, all as the app
     registered them."""
@@ -89,5 +90,5 @@ def photo_strip() -> str:
 
 def set_photo_strip(v: str) -> None:
     if v not in STRIPS:
-        raise ValueError("The photo strip is rediscover, onthisday or off")
+        raise Invalid("The photo strip is rediscover, onthisday or off")
     db.set_setting("photo_strip", None if v == "rediscover" else v)

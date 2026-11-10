@@ -13,6 +13,7 @@ import json
 import logging
 import threading
 import time
+from iosuite_shared.errors import Invalid
 
 log = logging.getLogger("app.ha_feed")
 
@@ -120,11 +121,11 @@ class Feed:
         with _ws_connect(self._url(), open_timeout=10, close_timeout=3, max_size=16 * 1024 * 1024) as ws:
             hello = json.loads(ws.recv(timeout=10))
             if hello.get("type") != "auth_required":
-                raise ValueError(f"unexpected greeting: {hello.get('type')}")
+                raise Invalid(f"unexpected greeting: {hello.get('type')}")
             ws.send(json.dumps({"type": "auth", "access_token": tok}))
             ok = json.loads(ws.recv(timeout=10))
             if ok.get("type") != "auth_ok":
-                raise ValueError("Home Assistant refused the token")
+                raise Invalid("Home Assistant refused the token")
             ws.send(json.dumps({"id": 1, "type": "subscribe_events", "event_type": "state_changed"}))
             ws.send(json.dumps({"id": 2, "type": "get_states"}))
             nid = 3
@@ -147,7 +148,7 @@ class Feed:
                     log.info("Home Assistant's live feed is up (%d entities)", len(msg["result"]))
                     self.bump()
                 elif t == "result" and msg.get("id") == 1 and not msg.get("success"):
-                    raise ValueError(f"subscribe_events refused: {(msg.get('error') or {}).get('message')}")
+                    raise Invalid(f"subscribe_events refused: {(msg.get('error') or {}).get('message')}")
                 elif t == "event":
                     data = (msg.get("event") or {}).get("data") or {}
                     eid, new = data.get("entity_id"), data.get("new_state")

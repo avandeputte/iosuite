@@ -8,7 +8,9 @@ Accounts are the suite's: `iosuite-shared --config . admin NAME --app iosuite` m
 """
 import sys
 
-from app import apps, db, users
+from iosuite_shared import users
+
+from app import apps, config, db
 
 
 def main(argv: list[str]) -> int:
@@ -21,7 +23,7 @@ def main(argv: list[str]) -> int:
         print("ok: tables ready")
     elif cmd == "check":
         users.init()
-        u = len(users.all_users())
+        u = len(users.list_users(config.APP))
         print(f"ok: {u} account(s), {len(apps.tiles())} app(s) on the page")
     else:
         print(__doc__)

@@ -6,6 +6,7 @@ Empty: the page as it comes."""
 import json
 
 from app import apps, db
+from iosuite_shared.errors import Invalid
 
 SECTIONS = ("home", "birthdays", "week", "strip", "bookmarks")  # the cards under the tiles, hideable like a tile (home: Home Assistant)
 ENGINES = ("duckduckgo", "google", "bing", "startpage", "ecosia", "kagi")  # the search box's web search (null: DuckDuckGo)
@@ -41,7 +42,7 @@ def get(user_id: int) -> dict:
 def save(user_id: int, body: dict) -> dict:
     """Checks and keeps the layout; {} (or everything empty) puts the page back as the admin laid it out."""
     if not isinstance(body, dict):
-        raise ValueError("An object, please")
+        raise Invalid("An object, please")
     hidden = body.get("hidden") or []
     order = body.get("order") or []
     cards = body.get("cards") or []
@@ -50,19 +51,19 @@ def save(user_id: int, body: dict) -> dict:
     move = body.get("stripMove") or None
     every = body.get("stripEvery") or None
     if not isinstance(hidden, list) or not all(apps.is_key(k) or k in SECTIONS for k in hidden):
-        raise ValueError(f"hidden: a list of app keys and {', '.join(SECTIONS)}")
+        raise Invalid(f"hidden: a list of app keys and {', '.join(SECTIONS)}")
     if not isinstance(order, list) or not all(apps.is_key(k) for k in order) or len(set(order)) != len(order):
-        raise ValueError("order: a list of app keys, each once")
+        raise Invalid("order: a list of app keys, each once")
     if not isinstance(cards, list) or not all(isinstance(k, str) and k in SECTIONS for k in cards) or len(set(cards)) != len(cards):
-        raise ValueError(f"cards: a list of {', '.join(SECTIONS)}, each once")
+        raise Invalid(f"cards: a list of {', '.join(SECTIONS)}, each once")
     if strip is not None and strip not in apps.STRIPS:
-        raise ValueError("strip: rediscover, onthisday, off, or nothing (the admin's choice)")
+        raise Invalid("strip: rediscover, onthisday, off, or nothing (the admin's choice)")
     if search is not None and search not in ENGINES:
-        raise ValueError(f"search: {', '.join(ENGINES)}, or nothing (DuckDuckGo)")
+        raise Invalid(f"search: {', '.join(ENGINES)}, or nothing (DuckDuckGo)")
     if move is not None and move not in STRIP_MOVES:
-        raise ValueError(f"stripMove: {', '.join(STRIP_MOVES)}, or nothing (shuffle)")
+        raise Invalid(f"stripMove: {', '.join(STRIP_MOVES)}, or nothing (shuffle)")
     if every is not None and (isinstance(every, bool) or every not in STRIP_EVERY):
-        raise ValueError(f"stripEvery: {', '.join(map(str, STRIP_EVERY))} seconds, or nothing (60)")
+        raise Invalid(f"stripEvery: {', '.join(map(str, STRIP_EVERY))} seconds, or nothing (60)")
     v = {"hidden": list(dict.fromkeys(hidden)), "order": order, "cards": cards, "strip": strip, "search": search, "stripMove": move, "stripEvery": every}
     db.set_setting(_key(user_id), None if v == EMPTY else json.dumps(v))
     return get(user_id)
