@@ -69,11 +69,22 @@ settings and list of apps. Its default name and account are `iosuite`; `IOSUITE_
 
 Proxy sign-in (`AUTH_PROXY`, `AUTH_PROXY_HEADER`, `AUTH_PROXY_TRUSTED`, `AUTH_PROXY_CREATE`, `CF_ACCESS_TEAM`,
 `CF_ACCESS_AUD`) is kept once for the whole suite in the Shared ioSuite database and read only from there; it is changed
-in the start page's Settings › Security › Sign-in at the proxy (`/api/suite-admin/proxy`) or any app's Settings (`POST /api/auth/proxy`).
+in any app's Settings › Security › Sign-in at the proxy (`/api/suite-admin/proxy`, suite admins only: whoever sets
+them decides who is signed in as whom, so an admin of one app has no route to them).
 `config.env` and the environment are never read for them. A proxy that names the user in a header (every preset but
 Cloudflare) needs its address in `AUTH_PROXY_TRUSTED`: the header is believed from there only, and with several apps on
 one machine "this machine" would let any local process sign in as anyone. For Cloudflare the token is verified, so the
 default (127.0.0.1 and ::1, where cloudflared runs) stands.
+
+`AUTH_PROXY_TRUSTED` also decides whether a request comes from **inside the network or outside**
+(`Proxy.external`, `auth.outside(request)`), with proxy sign-in on or off. Outside: through Cloudflare, from a public
+address, forwarded by a listed proxy for a public address (the right-most address in `X-Forwarded-For` that is not a
+listed proxy; what stands left of it is the visitor's own text), or forwarded by a proxy that is **not** listed (a
+reverse proxy on another machine has a private address like any visitor of the network, so a request that carries
+`X-Forwarded-For`, `X-Forwarded-Proto`, `X-Forwarded-Host`, `X-Real-IP`, `Forwarded` or `Via` from an unlisted
+address counts as outside). From outside, one-click sign-in to an account without a password is refused, the first
+account cannot be made, and an install without accounts serves nothing but its sign-in screen (below). So a reverse
+proxy on another machine goes into `AUTH_PROXY_TRUSTED`, and it has to send `X-Forwarded-For`.
 `CF_ACCESS_AUD` takes one AUD tag or several (comma-separated): one Cloudflare Access application covering
 `*.example.com` is the simple setup (one AUD), an application per host works too (one AUD each).
 
@@ -88,8 +99,9 @@ auth.decorate = lambda u: {**u, "person": users.get_value(u["id"], "iopix", "per
 
 app.middleware("http")(auth.middleware(open_paths=("/", "/index.html"), open_prefixes=("/static/", "/api/auth/"), before=my_gate))
 app.include_router(auth.router())         # /api/auth/login, accounts, logout, me, settings, password, setup,
-                                          #           sessions (list, DELETE one), app-passwords, proxy, suite
-app.include_router(auth.users_router())   # /api/users (admins of this app), /api/users/{id}/sessions (list, DELETE all or ?session=)
+                                          #           sessions (list, DELETE one), app-passwords, suite
+app.include_router(auth.users_router())   # /api/users: list, add, the role here (admins of this app); the rest of an account,
+                                          #           its sessions and deleting it (suite admins)
 app.include_router(auth.status_router(updater, extra=lambda request: {...}))   # GET /api/status (below)
 app.include_router(auth.server_router(updater, log_file=LOG_FILE))   # /api/server, /api/log (below)
 auth.install(app, limit_for=lambda path, ctype: 4 << 20, forwarded_allow_ips=config.FORWARDED_ALLOW_IPS)   # 400 for bad input, the headers, the body cap, the forwarded headers (below)
@@ -108,11 +120,24 @@ keep working: `PATCH /api/users/{id}` changes an account, `DELETE /api/users/{id
 `POST /api/auth/password {current, password}` changes the caller's own password (never removes it: that is an
 admin's decision on the users route).
 
+An account belongs to the whole suite, so an **admin of one app** only lists the accounts, adds one and sets an
+account's role in that app (`PATCH /api/users/{id} {role}`, and the app's own fields through `auth.on_update`).
+The name, email, display name, password, `listed`, `suiteAdmin`, the roles in other apps, the sessions and deleting
+the account take a **suite admin** (403 otherwise): sign-in at a proxy finds an account by its email and name, and a
+password opens every app.
+
+**Before the first account** everything is open, to the network the server is on: a request from outside
+(`auth.outside`, above) gets the app's shell and the sign-in routes and a 403 `{detail, unclaimed: true}` for
+everything else, public routes included; every marker above `public` refuses it too; and `/api/auth/me` and
+`/api/status` answer `requireLogin: true`, `unclaimed: true` and no rights, so the page shows the sign-in screen.
+
 Wrong passwords are counted on every path: the sign-in route, HTTP Basic and bearer tokens (`Auth._authorization`)
 and, through `users.attempt_wait / attempt_failed / attempt_succeeded`, an app's own server such as ioContacts' LDAP.
 After `users.LOCK_AFTER` failures for a (visitor, name) pair the next attempt waits (429 with `Retry-After`, before any
-hash is computed); the name alone and the address alone have higher limits. A wrong password repeated within a few
-seconds (a client with a stale one) is answered from memory without a hash.
+hash is computed); the name alone and the address alone have higher limits. The name's counter never holds up a
+visitor who signed in to that account from the same address before (so guesses at a name cannot lock its owner
+out), a bearer token has no name counter, and every counter starts over after a quiet quarter of an hour. A wrong
+password repeated within a few seconds (a client with a stale one) is answered from memory without a hash.
 
 Account passwords are hashed with Argon2id (`argon2-cffi`'s defaults, RFC 9106's low-memory profile: 64 MiB, 3
 passes, 4 lanes; `iosuite_shared.passwords`). A hash with other parameters, or an `scrypt2$` hash from 0.28 and
@@ -259,7 +284,7 @@ app.include_router(auth.server_router(updater, log_file=LOG_FILE,
 | `GET /api/server/ui.js` | the Settings › Server panel (it imports `GET /api/auth/ui.js`) |
 | `GET /api/server` | `{name, version, installed, docker, canRun, repo, branch, check, progress, lastUpdate, autoCheck, autoCheckLocked}` + `info()` |
 | `POST /api/server {action: check}` | asks GitHub; the answer is the check `{status: current / update / error, remoteVersion, ...}` |
-| `POST /api/server {action: update, ref?}` | starts `update.sh` (409 when it cannot run here: Docker, no .venv, not writable) |
+| `POST /api/server {action: update}` | starts `update.sh`, which installs the tip of the branch (409 when it cannot run here: Docker, no .venv, not writable). Another commit is installed from a shell on the server only (`<APP>_REF=<commit> ./update.sh`): GitHub serves a fork's commits under the repository's address, so a commit id from a request could be anybody's code |
 | `POST /api/server {action: restart}` | ends the process; systemd, launchd or Docker starts it again |
 | `POST /api/server {autoCheck: bool, ...}` | the daily-check switch; other keys go to `apply(body)` |
 | `GET /api/log?lines&level&contains&requests` | the tail of `log_file` (`level`: any, warning, error, auth) |
@@ -297,8 +322,10 @@ Every app serves its web app's files under `/static/` and its mark at `/static/i
 `static/icons/mark.svg` in the repo), so the icon is not something an app passes.
 
 At its first request (`auth.resolve()`, which `auth.middleware()` calls, and so does an app's own middleware) the app registers (name, version, description, colour, icon, and its `PUBLIC_URL` when it has
-one), and the middleware keeps the best address it is reached at: a host under `COOKIE_DOMAIN` over HTTPS beats
-a LAN name, which beats an IP address; loopback and test hosts are never kept. `url` is the configured address, else
+one), and the middleware keeps the best address one of its admins reaches it at (before the first account: anyone
+inside the network): a host under `COOKIE_DOMAIN` over HTTPS beats a LAN name, which beats an IP address; loopback
+and test hosts are never kept. A visitor's request never names it: the address is the request's Host header, which
+a client sets to whatever it likes. `url` is the configured address, else
 that one. `register=False` keeps an app out.
 
 Each app also records where it is inside the network (`internal_url`, `internalUrl`): its `INTERNAL_URL`, else
@@ -387,7 +414,8 @@ An `env` variable that is set still wins inside the app; the panel shows that (`
 
 One app reading from another needs no setup (`iosuite_shared.links`): the other app is found in the suite's list
 (called on localhost when it runs on the same machine, then at its internal address when it recorded one, then at
-its public one, each tried when the one before does not answer;
+its `PUBLIC_URL`, each tried when the one before does not answer; never at the address it was merely reached at,
+since the call carries credentials, so an app in a container needs `INTERNAL_URL` or `PUBLIC_URL` to be read from;
 `links.url()` is the public one, for links people click), and the reader signs in as its own **service account**
 (`users.service_account(app)`: `<app>-app`, on no sign-in screen, no password anyone knows, viewer in the other app)
 with an app password of the other app with scope `read`. Both are made on first use; the password is kept in

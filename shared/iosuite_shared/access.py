@@ -6,14 +6,18 @@ from fastapi.responses import JSONResponse
 from iosuite_shared import users
 
 ACCESS_ROLES = ("public", "signed_in", "editor", "admin", "suite_admin")
+UNCLAIMED = ("No account exists here yet. Create the first one from inside your network, at the server's own address "
+             "(not through a reverse proxy on another machine), or on the server itself.")
 
 
 class Access:
     """The dependencies: public, signed_in, editor, editor_write, admin, admin_write, suite_admin. `read_only` is a
     callable the app gives: when it says True, every *_write route answers 403."""
 
-    def __init__(self, read_only=None, read_only_message: str = "This app is in read-only mode; nothing can be changed."):
-        self.read_only, self.read_only_message = read_only, read_only_message
+    def __init__(self, read_only=None, read_only_message: str = "This app is in read-only mode; nothing can be changed.", outside=None):
+        """`outside(request)` says whether the request comes from outside the network (Auth gives Proxy.external):
+        while no account exists everything is open, but only to the network the server is on."""
+        self.read_only, self.read_only_message, self.outside = read_only, read_only_message, outside
         self.public = self.require("public")
         self.signed_in = self.require("signed_in")
         self.editor = self.require("editor")
@@ -21,6 +25,12 @@ class Access:
         self.admin = self.require("admin")
         self.admin_write = self.require("admin", write=True)
         self.suite_admin = self.require("suite_admin")
+
+    def refuse_unclaimed(self, request: Request) -> None:
+        """403 for a request from outside the network while no account exists: the "no accounts yet: open" rule
+        is for whoever sets the server up, on its own network, never for the internet."""
+        if self.outside and not users.any_users() and self.outside(request):
+            raise HTTPException(403, UNCLAIMED)
 
     def custom(self, name: str, allowed, message: str = "Not allowed", write: bool = False):
         """A marker of the app's own: `allowed(user, request)` says whether the request may proceed (ioHealth's
@@ -33,6 +43,7 @@ class Access:
             user = getattr(request.state, "user", None)
             if write and self.read_only and self.read_only():
                 raise HTTPException(403, self.read_only_message)
+            self.refuse_unclaimed(request)
             if not allowed(user, request):
                 raise HTTPException(403 if user else 401, message)
 
@@ -49,6 +60,7 @@ class Access:
                 raise HTTPException(403, self.read_only_message)
             if role == "public":
                 return
+            self.refuse_unclaimed(request)
             reading = request.method in ("GET", "HEAD", "OPTIONS")
             if role == "suite_admin" and not users.is_suite_admin(user):
                 raise HTTPException(403 if user else 401, "Suite admins only")

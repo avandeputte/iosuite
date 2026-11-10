@@ -8,9 +8,11 @@ ioContacts, ioContacts' faces from ioPix.
 
 The other app is found in the suite's list (ios_apps). The server calls it on localhost when it runs on the same
 machine (its recorded internal address is one of this machine's), then at its address inside the network (the
-internal URL it records at every start) when it has one, and at its public address (PUBLIC_URL, else the one it was
-last reached at) otherwise, or when the internal one does not answer; url() is the public one, for links people
-click. The reader signs in as its own service account (users.service_account:
+internal URL it records at every start) when it has one, and at the address its configuration names (PUBLIC_URL)
+otherwise, or when the internal one does not answer. These calls carry an app password and the Cloudflare Access
+service token, so they only go to addresses the other app's own configuration gave, never to the address it was
+merely reached at (a request's Host header); an app with neither (in a container without INTERNAL_URL or PUBLIC_URL)
+cannot be read from. url() is the public one, for links people click. The reader signs in as its own service account (users.service_account:
 <app>-app, on no sign-in screen) with an app password of the other app that may only read (scope 'read'),
 and a viewer role there. Both are made the first time they are needed; the password is kept in the keys and tokens
 store (iosuite_shared.credentials) under the reader, and made again when the other app stops taking it (revoked from
@@ -62,7 +64,8 @@ def url(provider: str) -> str | None:
 
 
 def available(provider: str) -> bool:
-    return bool(url(provider))
+    """Whether the other app is in the suite's list with an address the server may call it at."""
+    return bool(addresses(provider))
 
 
 def _this_machine(host: str) -> bool:
@@ -93,14 +96,14 @@ def _local(internal: str | None) -> str | None:
 
 def addresses(provider: str) -> list:
     """Where the server calls the other app, in order: localhost (on the same machine), its internal address (when
-    recorded), then its public one."""
+    recorded), then the public one its configuration names (PUBLIC_URL)."""
     try:
         r = suite.get(provider)
     except Exception:  # noqa: BLE001  the shared database is away
         return []
     internal = (r or {}).get("internalUrl")
     out = []
-    for u in (_local(internal), internal, (r or {}).get("url")):
+    for u in (_local(internal), internal, (r or {}).get("configuredUrl")):
         u = (u or "").rstrip("/")
         if u and u not in out and urllib.parse.urlsplit(u).scheme in ("http", "https"):
             out.append(u)

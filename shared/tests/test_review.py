@@ -107,6 +107,7 @@ def test_cross_site_uses_the_forwarded_host():
 
 
 def test_forwarded_headers_keep_the_real_peer():
+    users.create("alex", "secret123", "editor", "iocontacts")  # with an account: nothing here depends on the open rule
     app, _ = make_app(forwarded_allow_ips="10.0.0.0/8")
     c = TestClient(app, base_url="http://contacts.example.com")
     r = c.get("/api/peer", headers={"x-forwarded-for": "203.0.113.9, 10.0.0.2", "x-forwarded-proto": "https"}).json()

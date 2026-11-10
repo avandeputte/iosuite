@@ -351,7 +351,8 @@ def set_settings(user_id: int, app: str, changes: dict) -> dict:
     return cur
 
 
-# ---- sign-in attempts: a wrong password costs a growing wait, per address and account (in memory: a restart clears them)
+# ---- sign-in attempts: a wrong password costs a growing wait, per address and account (in memory: a restart clears
+# them; a counter also starts over once it has been quiet for LOCK_MAX after its wait ended)
 _attempts = {}
 _attempts_lock = threading.Lock()
 LOCK_AFTER = 5
@@ -378,6 +379,8 @@ def login_failed(key: str, free: int = LOCK_AFTER) -> int:
                 for k in list(_attempts)[:len(_attempts) // 2]:
                     del _attempts[k]
         rec = _attempts.setdefault(key, [0, 0.0])
+        if rec[0] and time.time() > rec[1] + LOCK_MAX:
+            rec[0] = 0  # quiet for a quarter of an hour after its wait ended: the count starts over
         rec[0] += 1
         over = rec[0] - free
         wait = min(LOCK_MAX, LOCK_BASE * 2 ** (over - 1)) if over > 0 else 0
@@ -391,24 +394,48 @@ def login_succeeded(key: str):
 
 
 # The three counters a sign-in attempt is counted under: the pair (this visitor, this name), the name alone (a
-# distributed guess at one account locks it for everyone a while) and the address alone (a scan of many names). The
-# routes, the HTTP Basic / bearer path (Auth._authorization) and ioContacts' LDAP bind all use these three.
+# distributed guess at one account slows everyone who tries that name a while) and the address alone (a scan of many
+# names). The routes, the HTTP Basic / bearer path (Auth._authorization) and ioContacts' LDAP bind all use these three.
+# Two things keep the name counter from being a way to lock somebody else out: a visitor who signed in to that
+# account from this address before (_known) is not held up by it, only by its own pair's counter, so the owner's
+# phone and laptop keep working while a stranger hammers the name; and a bearer token has no name, so there is no
+# name counter for it (one wrong token would otherwise count against every client that sends one).
+_known: dict = {}  # (visitor, name) -> when it last signed in; the pairs the name-wide wait does not apply to
+KNOWN_MAX = 5000
+
+
 def attempt_keys(visitor: str, name: str) -> tuple:
     n = (name or "").strip().lower()
-    return f"{visitor}|{n}", f"name|{n}", f"addr|{visitor}"
+    return f"{visitor}|{n}", (f"name|{n}" if n else None), f"addr|{visitor}"
 
 
 def attempt_wait(visitor: str, name: str) -> int:
     """Seconds this visitor has to wait before another attempt at this name (0: none)."""
-    return max(login_wait(k) for k in attempt_keys(visitor, name))
+    k, nk, ak = attempt_keys(visitor, name)
+    with _attempts_lock:
+        known = k in _known
+    return max(login_wait(x) for x in (k, ak) + (() if known or not nk else (nk,)))
 
 
 def attempt_failed(visitor: str, name: str) -> int:
     """Count a failure; the wait it earned (0: none yet)."""
     k, nk, ak = attempt_keys(visitor, name)
-    return max(login_failed(k), login_failed(nk, LOCK_AFTER_NAME), login_failed(ak, LOCK_AFTER_NAME * 4))
+    with _attempts_lock:
+        known = k in _known
+    name_wait = login_failed(nk, LOCK_AFTER_NAME) if nk else 0
+    return max(login_failed(k), 0 if known else name_wait, login_failed(ak, LOCK_AFTER_NAME * 4))
 
 
 def attempt_succeeded(visitor: str, name: str):
-    for k in attempt_keys(visitor, name):
-        login_succeeded(k)
+    """A right password: this pair's counter and the address's start over (one device with an old password must not
+    hold up the others behind the same address), and the pair is remembered. The name's counter is left to run out
+    by itself: it counts other people's guesses at this account, which a sync client that signs in on every request
+    would otherwise wipe each time."""
+    k, _, ak = attempt_keys(visitor, name)
+    login_succeeded(k)
+    login_succeeded(ak)
+    with _attempts_lock:
+        if len(_known) >= KNOWN_MAX:
+            for old in sorted(_known, key=_known.get)[:KNOWN_MAX // 2]:
+                del _known[old]
+        _known[k] = time.time()

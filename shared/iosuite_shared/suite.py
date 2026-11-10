@@ -7,15 +7,18 @@ the middleware notes the address it is reached at. The start page (and any app s
 
 Where an app is (`url` in what `apps()` answers), in this order:
   1. the address an app's configuration names (its PUBLIC_URL): `configured_url`;
-  2. failing that, the address it was reached at, as browsers see it (`seen_url`): a host under the suite's cookie
-     domain over HTTPS beats a LAN name, which beats an IP address; loopback and test hosts are never kept.
+  2. failing that, the address one of its admins reached it at, as their browser sees it (`seen_url`): a host under
+     the suite's cookie domain over HTTPS beats a LAN name, which beats an IP address; loopback and test hosts are
+     never kept. Only an admin's request counts (before the first account: one from inside the network), because the
+     address is the request's Host header, which any client may set to anything.
 
 Each app also says where it is inside the network (`internal_url`, `internalUrl` in what `apps()` answers): plain
 http(s)://LAN-address:port, which works without the public domain, a reverse proxy or Cloudflare. The app's INTERNAL_URL
 names it; failing that, `local_url()` makes it from the host's LAN address and the app's PORT (not inside a Docker
 container, whose own address the network cannot reach: there INTERNAL_URL has to say it). Nothing links people to it
 (`url` stays PUBLIC_URL or the address the app is reached at); only the apps' own server-to-server calls use it
-(iosuite_shared.links: localhost when it is on the same machine, then it, then the public address).
+(iosuite_shared.links: localhost when it is on the same machine, then it, then PUBLIC_URL; never the address the app
+was merely reached at, since those calls carry credentials).
 
 Who sees which app (`visible(user)`, and `GET /api/auth/suite`): only the apps the account has a role in (not
 "none": its own role there, else that app's default role), so somebody without ioHealth does not see ioHealth. An app
@@ -172,13 +175,15 @@ def origin_of(request) -> str:
     return f"{proto}://{host}" if host else ""
 
 
-def note_seen(app: str, request) -> None:
+def note_seen(app: str, request, take_address: bool = True) -> None:
     """The middleware calls this on every request: keep the best address the app is reached at, and when it was last
-    up. Cheap: a database write only when the address gets better or once an hour."""
-    origin = origin_of(request)
-    if not origin:
+    up. Cheap: a database write only when the address gets better or once an hour. `take_address` False only notes
+    that the app is up: the address comes from the Host header, which is whatever the client sends, so the caller
+    passes True for an admin's request only (Auth.note), never for a visitor's."""
+    origin = origin_of(request) if take_address else ""
+    if take_address and not origin:
         return
-    rank, now = _rank(origin), time.time()
+    rank, now = (_rank(origin) if origin else -1), time.time()
     with _lock:
         known = _seen.get(app)
         if known is None:

@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from starlette.concurrency import run_in_threadpool
 
 from iosuite_shared import admin as suite_admin, apppasswords, proxyauth, sessions, suite, users
-from iosuite_shared.access import json_body, public_user
+from iosuite_shared.access import UNCLAIMED, json_body, public_user
 from iosuite_shared.proxyauth import authlog, peer_of
 
 STATUS_PATH = "/api/status"
@@ -139,7 +139,7 @@ def auth_router(self) -> APIRouter:
             raise HTTPException(409, "Users already exist; sign in as an admin")
         if proxy.external(request.headers, peer_of(request)):
             authlog.warning("first-account setup refused from outside (%s)", proxy.source(request))
-            raise HTTPException(403, "The first account is created from inside your network (or on the server itself)")
+            raise HTTPException(403, UNCLAIMED)
         body = await json_body(request)
         try:
             u = users.create(str(body.get("name", ""))[:64], str(body.get("password", ""))[:1024], "admin", app,
@@ -189,16 +189,6 @@ def auth_router(self) -> APIRouter:
         apppasswords.delete(auth.current_user(request)["id"], pid)
         return {"ok": True}
 
-    @r.get("/api/auth/proxy", dependencies=[access.admin])
-    def api_proxy_status():
-        return proxy.status()
-
-    @r.post("/api/auth/proxy", dependencies=[access.admin])
-    async def api_proxy_save(request: Request):
-        """{AUTH_PROXY, ...}: suite-wide, for every app."""
-        proxy.save(await json_body(request))
-        return proxy.status()
-
     @r.get("/api/auth/suite", dependencies=[access.signed_in])
     def api_suite(request: Request):
         """The suite's installed apps this account may use and where they are, for the start page and app switchers
@@ -217,8 +207,10 @@ def auth_router(self) -> APIRouter:
     return r
 
 def users_router(self) -> APIRouter:
-    """Accounts, as this app's admins see them: the role column is the role here. A suite admin may also set
-    suiteAdmin and roles in other apps ({roles: {app: role}})."""
+    """Accounts, as this app's admins see them: the role column is the role here. An admin of this app lists the
+    accounts, adds one, and sets an account's role here (and the app's own fields: ioPix's person). Everything that
+    reaches beyond this app is a suite admin's: an account's name, email, password and suiteAdmin, its roles in
+    other apps ({roles: {app: role}}), its sessions, and deleting it."""
     auth, access, app = self, self.access, self.app
     r = APIRouter()
 
@@ -249,20 +241,22 @@ def users_router(self) -> APIRouter:
             raise HTTPException(404, "No such user")
         try:
             auth._update(auth.current_user(request), user_id, body)
+        except PermissionError as e:
+            raise HTTPException(403, str(e))
         except ValueError as e:
             raise HTTPException(400, str(e))
         return {"ok": True, "user": auth.decorate(users.get(user_id, app))}
 
-    @r.get("/api/users/{user_id}/sessions", dependencies=[access.admin])
+    @r.get("/api/users/{user_id}/sessions", dependencies=[access.suite_admin])
     def api_user_sessions(user_id: int):
-        """An account's sessions (admins): app, client, address, through Cloudflare or not, last seen."""
+        """An account's sessions (suite admins): app, client, address, through Cloudflare or not, last seen."""
         if not users.get(user_id):
             raise HTTPException(404, "No such user")
         return {"sessions": sessions.list_sessions(user_id)}
 
-    @r.delete("/api/users/{user_id}/sessions", dependencies=[access.admin])
+    @r.delete("/api/users/{user_id}/sessions", dependencies=[access.suite_admin])
     def api_user_end_sessions(user_id: int, request: Request):
-        """Sign an account out everywhere (admins), or one session with ?session=<id>."""
+        """Sign an account out everywhere (suite admins), or one session with ?session=<id>."""
         if not users.get(user_id):
             raise HTTPException(404, "No such user")
         sid = request.query_params.get("session")
@@ -272,7 +266,7 @@ def users_router(self) -> APIRouter:
             sessions.end_all(user_id)
         return {"ok": True}
 
-    @r.delete("/api/users/{user_id}", dependencies=[access.admin])
+    @r.delete("/api/users/{user_id}", dependencies=[access.suite_admin])
     def api_users_delete(user_id: int, request: Request):
         if not users.get(user_id):
             raise HTTPException(404, "No such user")
@@ -437,7 +431,7 @@ def server_router(self, updater, log_file=None, info=None, apply=None) -> APIRou
         GET  /api/server/ui.js           the panel itself (static/server-panel.js), mounted by the app's Server tab:
                                          ui = await import(new URL('api/server/ui.js', document.baseURI).href); ui.mount(el, {toast})
         GET  /api/server                 the app's name, the installed version, the last check, whether update.sh can run, the switches
-        POST /api/server {action, ref?}  action: check | update | restart; {autoCheck: bool}
+        POST /api/server {action}        action: check | update | restart; {autoCheck: bool}
                                          saves the daily-check switch; anything else goes to apply(body)
         GET  /api/log?lines&level&contains&requests   the tail of the server log (with log_file)
         GET  /api/log/download
@@ -479,7 +473,7 @@ def server_router(self, updater, log_file=None, info=None, apply=None) -> APIRou
             return await run_in_threadpool(updater.check)
         if action == "update":
             try:
-                updater.run(str(body.get("ref") or ""))
+                updater.run()
             except RuntimeError as e:
                 raise HTTPException(409, str(e))
             return {"started": True}
@@ -526,9 +520,10 @@ def status_router(self, updater=None, extra=None) -> APIRouter:
 def status(self, request: Request, updater=None, extra=None) -> dict:
     """What GET /api/status answers (also for an app that has to serve it from its own route): Auth.status."""
     u = self.current_user(request)
-    signed, admin = users.is_signed_in(u), users.is_admin(u)
+    shut = self.unclaimed(request)  # no account yet, asked from outside the network: nothing is open
+    signed, admin = users.is_signed_in(u) and not shut, users.is_admin(u) and not shut
     out = {"ok": True, "app": self.app, "name": self.label, "version": (self.suite_entry or {}).get("version") or (updater.version if updater else None),
-           "usersExist": users.any_users(), "requireLogin": users.require_login(self.app), "signedIn": signed, "isAdmin": admin,
+           "usersExist": users.any_users(), "requireLogin": shut or users.require_login(self.app), "signedIn": signed, "isAdmin": admin,
            "viaProxy": bool(getattr(request.state, "via_proxy", False)), "user": public_user(u)}
     if updater is not None:
         if signed:
