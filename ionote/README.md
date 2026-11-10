@@ -220,7 +220,7 @@ UUID strings the device chooses (`UUID().uuidString`).
 | `PUT /api/folders/{id}` `{name, color, deleted, updatedAt}` | folders; `PUT /api/tags/{name}/color` `{color, updatedAt}` for tag colours |
 | `GET /api/notes?q=&folder=&tag=&pinned=&image=&sort=` | search and list (the web app's view) |
 
-**Conflicts**: each note, folder and tag colour is settled on its own by `updatedAt`. A change older than what the
+**Conflicts**: each note, folder and tag colour is settled on its own by `updatedAt`. The server never takes an `updatedAt` later than its own clock, so a device whose clock runs ahead does not win every conflict. A change older than what the
 server has is answered with 409 (or `stale` in a push) and the server's copy, which the device then keeps. An empty
 `ocrText` never erases text read earlier. Every change gets a new `rev`, from one counter, which is what `since` counts.
 
@@ -233,7 +233,7 @@ suite. An assistant such as Claude can then:
   `view_note_image` (the picture itself, small or large), `list_folders`, `list_tags`, `recent_changes`, `list_trash`
 - write, as an editor: `create_note` (optionally with a picture), `update_note` (replace or append text, tags,
   folder, pin), `organize_notes` (many notes at once), `delete_note`, `restore_note`, `manage_folder`, `manage_tag`
-- operate, as an admin: `diagnostics`, `server_log`, `proxy_signin`, `check_for_update`, `update_ionotes`
+- operate, as an admin: `diagnostics`, `server_log`, `check_for_update`, `update_ionotes` (the tip of the branch only)
 
 Every assistant signs in with an **app password** (Settings › Account › App passwords), as HTTP Basic or
 `Authorization: Bearer <app password>`, and acts as that account: notes are private to each account, so it sees and

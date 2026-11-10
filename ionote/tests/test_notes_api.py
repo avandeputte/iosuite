@@ -236,3 +236,35 @@ def test_an_import_does_not_take_a_neighbours_picture(client, admin):
     r = client.post("/api/import", files={"file": ("x.zip", buf.getvalue(), "application/zip")}).json()
     assert r["pictures"] == 1
     assert not client.get(f"/api/notes/{NID}").json()["hasImage"] and client.get(f"/api/notes/{NID2}").json()["hasImage"]
+
+
+def test_a_clock_that_runs_ahead_does_not_win_for_ever(client):
+    import time
+    ahead = time.time() + 86400 * 365
+    n = client.put(f"/api/notes/{NID}", json={"title": "from the phone", "updatedAt": ahead}).json()
+    assert n["updatedAt"] <= time.time()  # kept at the server's time, not the device's
+    # the next edit, from a device whose clock is right, is the later one
+    r = client.put(f"/api/notes/{NID}", json={"title": "from the Mac", "updatedAt": time.time()})
+    assert r.status_code == 200 and r.json()["title"] == "from the Mac"
+    for bad in ("nan", "inf", -5, "soon"):
+        r = client.put(f"/api/notes/{NID}", json={"title": "odd clock", "updatedAt": bad})
+        assert r.status_code == 200 and 0 < r.json()["updatedAt"] <= time.time(), bad
+    f = client.post("/api/folders", json={"name": "Work", "updatedAt": ahead}).json()
+    assert f["updatedAt"] <= time.time()
+
+
+def test_connections_are_reused(client):
+    from app import db
+    if not db.is_mysql():
+        return  # SQLite opens its file each time
+    client.put(f"/api/notes/{NID}", json={"title": "x"})
+    with db.connect() as con:
+        raw = con.raw
+        con.execute("SELECT count(*) FROM nts_notes").fetchone()
+    with db.connect() as con:
+        assert con.raw is raw  # the same connection, handed back and borrowed again
+        # and it reads what was written since: handing back ended its snapshot
+        with db.tx() as w:
+            w.execute("UPDATE nts_notes SET title = 'y' WHERE uuid = ?", (NID,))
+    with db.connect() as con:
+        assert con.execute("SELECT title FROM nts_notes WHERE uuid = ?", (NID,)).fetchone()[0] == "y"

@@ -1,8 +1,8 @@
 """Notes, folders and tag colours: everything the web app and the Mac and iPhone apps read and change.
 
 The apps keep an offline copy and send their changes when they can. Conflicts are settled per record by
-`updated_at` (the time of the edit on the device that made it): the later edit wins, an older one is answered
-with the record as the server has it, so the device takes that instead. Every change gets a new `rev`, and
+`updated_at` (the time of the edit on the device that made it, never later than the server's clock): the later edit
+wins, an older one is answered with the record as the server has it, so the device takes that instead. Every change gets a new `rev`, and
 GET /api/sync?since=<rev> hands a device everything that changed after the last rev it saw, tombstones of
 deleted records included.
 
@@ -113,6 +113,16 @@ def display_title(n: dict) -> str:
     return "Image" if n.get("hasImage") else "Untitled"
 
 
+def edit_time(value, now: float) -> float:
+    """When an edit was made: the device's own clock (updatedAt), never later than the server's. A device whose clock
+    runs ahead would otherwise win every conflict, for as long as its clock is ahead."""
+    try:
+        ts = float(value or now)
+    except (TypeError, ValueError):
+        return now
+    return ts if 0 < ts <= now else now  # not a number, or infinite: now as well
+
+
 # ---- notes
 def get_note(uid: str, con=None):
     own = con is None
@@ -210,7 +220,7 @@ def list_notes(q: str = "", folder: str = None, tag: str = None, pinned: bool = 
 
 def save_note(uid: str, data: dict, user: str, force: bool = False) -> dict:
     """Create or update a note from the fields given (camelCase as the API serves them). The edit's time is
-    data["updatedAt"] (a device's own clock) or now; an edit older than the stored one raises Stale."""
+    data["updatedAt"] (a device's own clock, see edit_time) or now; an edit older than the stored one raises Stale."""
     uid = check_uuid(uid) if uid else new_uuid()
     now = time.time()
     with db.tx() as con:
@@ -218,7 +228,7 @@ def save_note(uid: str, data: dict, user: str, force: bool = False) -> dict:
         if cur and cur["user_id"] != owner():
             raise NotFound("No such note")  # another account's id: refused without saying so
         old = note_dict(cur) if cur else None
-        ts = float(data.get("updatedAt") or now)
+        ts = edit_time(data.get("updatedAt"), now)
         if old and not force and ts < old["updatedAt"]:
             raise Stale(old)
         base = old or {"title": "", "body": "", "ocrText": "", "source": "manual", "sourceApp": None, "createdAt": now,
@@ -303,7 +313,7 @@ def save_folder(uid: str, data: dict, user: str, force: bool = False) -> dict:
         if r and r["user_id"] != owner():
             raise NotFound("No such folder")
         old = folder_dict(r) if r else None
-        ts = float(data.get("updatedAt") or now)
+        ts = edit_time(data.get("updatedAt"), now)
         if old and not force and ts < old["updatedAt"]:
             raise Stale(old)
         f = dict(old or {"name": "", "color": None, "createdAt": now, "deleted": False})
@@ -364,7 +374,7 @@ def set_tag_color(name: str, color, user: str, ts: float = None, force: bool = F
     if not name:
         raise ValueError("A tag needs a name")
     k = tag_key(name)
-    ts = float(ts or time.time())
+    ts = edit_time(ts, time.time())
     color = color if color in COLORS else None
     with db.tx() as con:
         r = con.execute("SELECT tag_key, name, color, updated_at, deleted, rev FROM nts_tag_colors WHERE user_id = ? AND tag_key = ?", (owner(), k)).fetchone()
