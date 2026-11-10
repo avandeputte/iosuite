@@ -11,6 +11,8 @@ import re
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
+from iosuite_shared import users as shared_users
+from iosuite_shared.access import json_body
 
 from app import access, calendar, config, csvio, db, enrich, iopix, limits, model, quality, relations as rel, users, vcard
 from app.auth import auth
@@ -105,8 +107,12 @@ async def body_contact(request: Request) -> dict:
 # what is ioContacts' own: the face on an account's tile, and which contact an account is ("me").
 
 @router.get("/api/auth/accounts/{uid}/photo", dependencies=[access.public])
-async def account_photo(uid: int):
-    """The face on an account's tile: the ioPix face of the account's "me" contact."""
+async def account_photo(uid: int, request: Request):
+    """The face on an account's tile: the ioPix face of the account's "me" contact. Public because the sign-in screen
+    shows it, and like the tiles themselves (/api/auth/accounts) it is for the network the server is on: from outside,
+    only a signed-in account gets it."""
+    if auth.outside(request) and not auth.current_user(request):
+        raise HTTPException(404)
     u = await run_in_threadpool(users.get, uid)
     cid = u.get("me_contact_id") if u and u["role"] != "none" else None
     p = await run_in_threadpool(model.photo, cid) if cid else None
@@ -120,7 +126,7 @@ async def put_me_contact(request: Request):
     """Which contact is the signed-in account ({contactId}; null: none), for CardDAV apps and the face on its tile.
     The display name and email are iosuite-shared's (PATCH /api/auth/me, Settings › Account)."""
     u = auth.current_user(request)
-    cid = (await request.json()).get("contactId")
+    cid = (await json_body(request)).get("contactId")
     if cid:
         readable_contact(u, int(cid))
     return {"user": users.public(users.update(u["id"], me_contact_id=int(cid) if cid else None))}
@@ -137,14 +143,11 @@ def list_books(request: Request):
 @router.post("/api/books", dependencies=[access.signed_in])
 async def add_book(request: Request):
     u = auth.current_user(request)
-    b = await request.json()
+    b = await json_body(request)
     shared = bool(b.get("shared"))
-    if shared and not users.can_write(u):
+    if shared and not shared_users.can_write(u):
         raise HTTPException(403, "Only editors make shared address books")
-    name = (b.get("name") or "").strip()
-    if not name:
-        raise HTTPException(400, "A name, please")
-    bid = model.create_book(None if shared else u["id"], name, b.get("description"), b.get("color"))
+    bid = model.create_book(None if shared else u["id"], b.get("name"), b.get("description"), b.get("color"))
     return {"book": model.book_public(model.book(bid), u)}
 
 
@@ -152,7 +155,7 @@ async def add_book(request: Request):
 async def edit_book(bid: int, request: Request):
     u = auth.current_user(request)
     writable_book(u, bid)
-    b = await request.json()
+    b = await json_body(request)
     model.update_book(bid, **{k: b[k] for k in ("name", "description", "color") if k in b})
     return {"book": model.book_public(model.book(bid), u)}
 
@@ -161,7 +164,7 @@ async def edit_book(bid: int, request: Request):
 def del_book(bid: int, request: Request):
     u = auth.current_user(request)
     b = writable_book(u, bid)
-    if b["owner_id"] is None and not users.is_admin(u):
+    if b["owner_id"] is None and not shared_users.is_admin(u):
         raise HTTPException(403, "Only an admin deletes a shared address book")
     if b["owner_id"] is None and len([x for x in model.books_for(u) if x["owner_id"] is None]) <= 1:
         raise HTTPException(400, "The last shared address book stays")
@@ -233,7 +236,7 @@ async def patch_contact(cid: int, request: Request):
     u = auth.current_user(request)
     r = readable_contact(u, cid)
     writable_book(u, r["address_book_id"])
-    b = await request.json()
+    b = await json_body(request)
     c = model.full(cid)
     c.update({k: v for k, v in b.items() if k not in ("id", "uid", "href", "etag", "photo")})
     dest = int(c.get("bookId") or r["address_book_id"])
@@ -256,7 +259,7 @@ def delete_contact(cid: int, request: Request):
 async def bulk(request: Request):
     """{ids: [...], action: delete | favorite | unfavorite | move | tag | untag, book?, tag?}"""
     u = auth.current_user(request)
-    b = await request.json()
+    b = await json_body(request)
     ids, action = [int(x) for x in b.get("ids") or []], b.get("action")
     for cid in ids:
         r = readable_contact(u, cid)
@@ -296,8 +299,10 @@ async def merge(request: Request):
     """{keep, others, result?}: fold the others into keep. result is the contact as it should end up (fields
     chosen one by one, as /api/merge/preview offers them); without it, everything is combined. Undo: /api/merges."""
     u = auth.current_user(request)
-    b = await request.json()
-    keep, others = int(b["keep"]), [int(x) for x in b.get("others") or [] if int(x) != int(b["keep"])]
+    b = await json_body(request)
+    if not isinstance(b.get("keep"), int) or not isinstance(b.get("others") or [], list):
+        raise HTTPException(400, "keep is the id of the contact to keep, others the ids of the ones to merge into it")
+    keep, others = b["keep"], [int(x) for x in b.get("others") or [] if int(x) != b["keep"]]
     if not others:
         raise HTTPException(400, "Name the contacts to merge into the kept one")
     for cid in [keep, *others]:
@@ -335,7 +340,7 @@ def duplicates(request: Request, book: str | None = None, min_score: int = 35):
 async def duplicates_dismiss(request: Request):
     """{ids: [...]}: these contacts are different people; they are not offered as duplicates again."""
     u = auth.current_user(request)
-    ids = [int(x) for x in (await request.json()).get("ids") or []]
+    ids = [int(x) for x in (await json_body(request)).get("ids") or []]
     for cid in ids:
         writable_book(u, readable_contact(u, cid)["address_book_id"])
     return {"ok": True, "pairs": quality.not_duplicates(ids, u["id"])}
@@ -383,7 +388,7 @@ async def contact_lookup(cid: int, request: Request):
 async def lookup_many(request: Request):
     """{ids?: [...], book?, offset?, limit?}: look several contacts up (25 at a time; call again with the next offset)."""
     u = auth.current_user(request)
-    b = await request.json()
+    b = await json_body(request)
     if b.get("ids"):
         ids = [int(x) for x in b["ids"]]
         for cid in ids:
@@ -445,7 +450,7 @@ def data_quality(request: Request, book: str | None = None, check: str | None = 
 async def data_quality_fix(request: Request):
     """{check, ids?, countryCode?, book?}: fix a check's findings (all, or these contacts) where you may change them."""
     u = auth.current_user(request)
-    b = await request.json()
+    b = await json_body(request)
     ids = [int(x) for x in b["ids"]] if b.get("ids") else None
     try:
         return await run_in_threadpool(quality.fix, u, str(b.get("check")), ids, book_ids(u, b.get("book")), b.get("countryCode"))
@@ -733,15 +738,19 @@ async def iopix_autolink(request: Request, book: str | None = None, dry: bool = 
     for p in ppl:
         by_name.setdefault(p["name"].strip().lower(), []).append(p)
     taken = {r["iopix_person_id"] for r in db.q("SELECT iopix_person_id FROM con_contacts WHERE iopix_person_id IS NOT NULL AND deleted = 0")}
+    found = [c for c in model.search(book_ids(u, book), limit=100000)[0] if not c["iopixPersonId"]]
+    same_name: dict = {}
+    for c in found:
+        same_name[c["fn"].strip().lower()] = same_name.get(c["fn"].strip().lower(), 0) + 1
     out = []
-    for c in model.search(book_ids(u, book), limit=100000)[0]:
-        if c["iopixPersonId"]:
-            continue
-        m = by_name.get(c["fn"].strip().lower()) or []
-        if len(m) == 1 and m[0]["id"] not in taken:
+    for c in found:
+        name = c["fn"].strip().lower()
+        m = by_name.get(name) or []
+        if len(m) == 1 and m[0]["id"] not in taken and same_name[name] == 1:  # one person, one contact: two contacts of a name are left to be linked by hand
             r = model.get_row(c["id"])
             if model.can_write_book(u, model.book(r["address_book_id"])):
                 out.append({"contactId": c["id"], "fn": c["fn"], "personId": m[0]["id"], "personName": m[0]["name"]})
+                taken.add(m[0]["id"])
     if not dry:
         for x in out:
             model.set_fields(x["contactId"], iopix_person_id=x["personId"], iopix_person_name=x["personName"])

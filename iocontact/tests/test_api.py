@@ -344,7 +344,7 @@ def test_iopix_is_the_only_photo_source(client, family_id, monkeypatch):
     assert got.status_code == 200 and got.content == face
     assert "PHOTO" in client.get(f"/api/contacts/{cid}", headers={"Accept": "text/vcard"}).text
     from app import db
-    assert db.one("SELECT photo FROM con_contacts WHERE id = %s", (cid,))["photo"] is None
+    assert not db.q("SHOW COLUMNS FROM con_contacts LIKE 'photo%%'")  # there is nowhere to keep one
 
 
 def test_protocols_only_app_password(client, app):

@@ -4,7 +4,9 @@ from typing import Literal, Optional
 
 from mcp.server.mcpserver.exceptions import ToolError
 
-from app import db, enrich, iopix, model, relations as rel, users
+from iosuite_shared import users as shared_users
+
+from app import db, enrich, iopix, model, relations as rel
 from app.fold import fold
 from app.mcp.base import ADDS, DELETES, READ_ONLY, WRITES, book_ids, contact_out, default_book, find_book, find_contact, server, who
 
@@ -422,7 +424,7 @@ def auto_link_iopix(book: Optional[str] = None, dry_run: bool = True) -> dict:
 def create_address_book(name: str, shared: bool = False, description: Optional[str] = None) -> dict:
     """Make an address book: private (only you see it) or, for editors and admins, shared with everyone."""
     u = who()
-    if shared and not users.can_write(u):
+    if shared and not shared_users.can_write(u):
         raise ToolError("Viewers make private address books only")
     bid = model.create_book(None if shared else u["id"], name.strip()[:128] or "Contacts", description)
     b = model.book(bid)

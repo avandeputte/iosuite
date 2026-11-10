@@ -78,7 +78,6 @@ password is used once and not written anywhere.
 | --- | --- |
 | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | the MariaDB / MySQL database |
 | `HOST`, `PORT` | where the server listens (`0.0.0.0`, 8640; every app of the suite has its own port) |
-| `FORWARDED_ALLOW_IPS` | the addresses that may pass on the visitor's address and scheme (`X-Forwarded-For` / `-Proto`): `*`, or your reverse proxy's; read by the app itself (iosuite-shared), not by uvicorn |
 | `TLS_CERT_FILE`, `TLS_KEY_FILE` | serve HTTPS directly instead of behind a reverse proxy |
 | `LDAP_PORT`, `LDAP_HOST`, `LDAP_BASE` | the LDAP directory (3890, all addresses, `dc=iocontacts`); `LDAP_PORT=0` turns it off |
 | `PUBLIC_URL` | the address people use (behind a proxy), for links in the calendar feed and Settings |
@@ -88,6 +87,7 @@ password is used once and not written anywhere.
 | `AUTH_PROXY`, `AUTH_PROXY_HEADER`, `AUTH_PROXY_TRUSTED`, `CF_ACCESS_TEAM`, `CF_ACCESS_AUD` | sign-in at a reverse proxy, exactly as in iopix: Cloudflare Access (with token checking), Authelia, Authentik, oauth2-proxy… matched to accounts by email, then name |
 | `CF_KV_ACCOUNT_ID`, `CF_KV_NAMESPACE_ID`, `CF_KV_API_TOKEN` | optional edge check of app passwords: the Workers KV namespace a Cloudflare Worker on `/dav*` reads; normally stored once for the whole suite in Settings › Global settings › Keys and tokens, these override it ([setup](https://github.com/avandeputte/iosuite-shared/blob/main/cloudflare/edge-auth/README.md)) |
 | `MCP` | `1` keeps the MCP server on, whatever the setting says |
+| `KEEP_DELETED_DAYS` | how long a deleted contact's marker is kept, so phones learn of the deletion at their next sync (`90`); a client that stayed away longer starts its sync over |
 | `MCP_USER` | the account `python -m app.mcp` (stdio) acts as |
 | `UPDATE_CHECK` | `0` turns the daily version check off for good |
 | `IOCONTACTS_REPO`, `IOCONTACTS_BRANCH` | what the version check and `update.sh` follow (`avandeputte/iocontacts`, `main`) |

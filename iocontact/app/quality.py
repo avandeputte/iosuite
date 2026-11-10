@@ -15,6 +15,7 @@ import re
 import unicodedata
 
 from app import db, model
+from iosuite_shared.errors import Invalid
 
 # ------------------------------------------------------------------ names
 
@@ -376,7 +377,7 @@ def undo(merge_id: int) -> dict:
     """Put the contacts of a merge back as they were (the kept one loses changes made to it since)."""
     m = db.one("SELECT * FROM con_contact_merges WHERE id = %s", (merge_id,))
     if not m or m["undone_at"]:
-        raise ValueError("No such merge, or it was undone already")
+        raise Invalid("No such merge, or it was undone already")
     snap = {k: [{c: _dec(v) for c, v in r.items()} for r in rows] for k, rows in json.loads(m["snapshot"]).items()}
     ids = [r["id"] for r in snap["contacts"]]
     marks = ",".join(["%s"] * len(ids))
@@ -505,11 +506,11 @@ def run_checks(book_ids: list[int], only: str | None = None) -> list[dict]:
 def fix(u: dict, check: str, contact_ids: list[int] | None, book_ids: list[int], country_code: str | None = None) -> dict:
     """Fix one check's findings (all, or only these contacts) where this account may change them."""
     if check not in CHECKS or not CHECKS[check][2]:
-        raise ValueError(f"'{check}' has no automatic fix")
+        raise Invalid(f"'{check}' has no automatic fix")
     if check == "national_phone":
         country_code = "+" + re.sub(r"\D", "", country_code or "")
         if len(country_code) < 2:
-            raise ValueError("Give the country code to add, such as +32 or +1")
+            raise Invalid("Give the country code to add, such as +32 or +1")
     items = run_checks(book_ids, check)[0]["items"]
     ids = sorted({x["contactId"] for x in items if contact_ids is None or x["contactId"] in contact_ids})
     done, skipped = [], []

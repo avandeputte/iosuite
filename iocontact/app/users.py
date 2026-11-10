@@ -4,20 +4,17 @@ Roles as in iopix: viewer (reads), editor (changes contacts), admin (also settin
 role per app, a suite admin is admin everywhere. Each account gets its own private address book; the Family book is
 shared by everyone. Web sessions are the suite's cookie (shared by the apps on the domain). CardDAV / LDAP clients
 use HTTP Basic or an LDAP bind with either the account password or an app password (one per device, revocable,
-shown once). This module keeps ioContacts' old names; the work is done by iosuite_shared.
+shown once). What is here is ioContacts' own: an account as the app sees it (with its "me" contact), its private
+address book, the LDAP bind, and the birthday calendar's private link. The rest is asked of iosuite_shared directly.
 """
 import logging
 import re
 import secrets
 
-from iosuite_shared import apppasswords, db as authdb, sessions, users as shared
+from iosuite_shared import apppasswords, db as authdb, users as shared
 
 from app import db
 from app.auth import APP, row_of
-
-COOKIE = sessions.COOKIE
-SESSION_DAYS = sessions.SESSION_DAYS
-ROLES = shared.APP_ROLES
 
 
 def public(u: dict | None) -> dict | None:
@@ -39,14 +36,6 @@ def find(name_or_email: str) -> dict | None:
 
 def all_users() -> list[dict]:
     return sorted((row_of(u) for u in shared.list_users(APP)), key=lambda u: u["name"].lower())
-
-
-def passwordless(u: dict | None) -> bool:
-    return bool(u) and bool(u.get("passwordless"))
-
-
-def any_users() -> bool:
-    return shared.any_users()
 
 
 def names_of(ids: set) -> dict:
@@ -91,11 +80,6 @@ def forget_me_contact(cid: int) -> None:
     """A deleted contact is nobody's "me" any more."""
     import json
     authdb.ex("DELETE FROM ios_user_data WHERE app = %s AND name = 'me_contact_id' AND value = %s", (APP, json.dumps(int(cid))))
-
-
-def delete(uid: int) -> None:
-    shared.delete(uid)
-    forget_gone(uid)
 
 
 def forget_gone(*uids: int) -> None:
@@ -149,14 +133,6 @@ def sweep_gone() -> int:
         return 0
     forget_gone(*gone)
     return len(gone)
-
-
-def can_write(u: dict | None) -> bool:
-    return shared.can_write(u)
-
-
-def is_admin(u: dict | None) -> bool:
-    return shared.is_admin(u)
 
 
 # ---------------------------------------------------------------- app passwords

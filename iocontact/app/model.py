@@ -1,16 +1,19 @@
 """Address books and contacts in MariaDB: reading, saving (with the inverse side of relations), deleting, searching.
 
 Every change bumps the address book's sync token and stamps the contact with it, so CardDAV's sync-collection
-and getctag tell clients exactly what changed. Deleted contacts stay as tombstones (deleted = 1, data cleared)
-so clients learn about the deletion.
+and getctag tell clients exactly what changed. Deleted contacts stay as markers (deleted = 1, nothing of the person)
+so clients learn about the deletion, for KEEP_DELETED_DAYS (purge_deleted).
 """
 import hashlib
 import json
 import re
 import time
 import uuid as uuidlib
+from contextvars import ContextVar
 
-from app import db, iopix, relations as rel, users, vcard
+from iosuite_shared.errors import Invalid
+
+from app import config, db, iopix, relations as rel, users, vcard
 
 # ------------------------------------------------------------------ address books
 
@@ -61,18 +64,53 @@ def can_write_book(user: dict | None, b: dict | None) -> bool:
     return user["role"] in ("editor", "admin")
 
 
-def create_book(owner_id: int | None, name: str, description: str | None = None, color: str | None = None) -> int:
-    base = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "contacts"
-    slug, n = base, 1
-    while db.one("SELECT 1 AS x FROM con_address_books WHERE slug = %s AND owner_id <=> %s", (slug, owner_id)):
-        n += 1
-        slug = f"{base}-{n}"
+def clean_book(f: dict) -> dict:
+    """The fields of an address book as they may be stored (name, description, color), whichever way they came in (the
+    API, CardDAV PROPPATCH or MKCOL). Invalid with the message to show."""
+    out = {}
+    if "name" in f:
+        out["name"] = (f["name"] if isinstance(f["name"], str) else "").strip()
+        if not out["name"] or len(out["name"]) > 128:
+            raise Invalid("An address book needs a name (up to 128 characters)")
+    if "description" in f:
+        d = f["description"]
+        if d is not None and not isinstance(d, str):
+            raise Invalid("The description is text")
+        out["description"] = (d or "").strip()[:512] or None
+    if "color" in f:
+        c = f["color"]
+        if c in (None, ""):
+            out["color"] = None
+        elif isinstance(c, str) and re.fullmatch(r"#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?", c.strip()):
+            out["color"] = c.strip()[:7].lower()  # Apple's clients send #rrggbbaa
+        else:
+            raise Invalid("A colour is written #rrggbb")
+    return out
+
+
+SLUG = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}")  # the last part of a book's CardDAV address
+
+
+def create_book(owner_id: int | None, name: str, description: str | None = None, color: str | None = None, slug: str | None = None) -> int:
+    """A new address book; `slug` (a CardDAV client's choice of address) must be free and plain, else one is made from the name."""
+    f = clean_book({"name": name, "description": description, "color": color})
+    if slug is not None:
+        if not SLUG.fullmatch(slug):
+            raise Invalid("An address book's address is letters, digits, dots, dashes and underscores (up to 64)")
+        if db.one("SELECT 1 AS x FROM con_address_books WHERE slug = %s AND owner_id <=> %s", (slug, owner_id)):
+            raise Invalid("There is an address book at that address already")
+    else:
+        base = re.sub(r"[^a-z0-9]+", "-", f["name"].lower()).strip("-")[:56] or "contacts"
+        slug, n = base, 1
+        while db.one("SELECT 1 AS x FROM con_address_books WHERE slug = %s AND owner_id <=> %s", (slug, owner_id)):
+            n += 1
+            slug = f"{base}-{n}"
     return db.ex("INSERT INTO con_address_books (owner_id, slug, name, description, color) VALUES (%s, %s, %s, %s, %s)",
-                 (owner_id, slug, name[:128], description, color))
+                 (owner_id, slug, f["name"], f["description"], f["color"]))
 
 
 def update_book(bid: int, **f) -> None:
-    sets = {k: v for k, v in f.items() if k in ("name", "description", "color")}
+    sets = clean_book({k: v for k, v in f.items() if k in ("name", "description", "color")})
     if sets:
         db.ex("UPDATE con_address_books SET " + ", ".join(f"{k} = %s" for k in sets) + ", sync_token = sync_token + 1 WHERE id = %s",
               (*sets.values(), bid))
@@ -199,6 +237,18 @@ def by_uid(book_id: int, uid: str) -> dict | None:
     return db.one("SELECT * FROM con_contacts WHERE address_book_id = %s AND uid = %s AND deleted = 0", (book_id, uid))
 
 
+# The account a request acts as (app/main.py sets it for every request; None in the LDAP server, the command line and
+# the tests that call the model directly: nothing is hidden there).
+viewer: ContextVar = ContextVar("iocontacts_viewer", default=None)
+
+
+def _books_seen_by(user: dict | None) -> set | None:
+    """The ids of the address books this account sees (the shared ones and its own); None: no account, no limit."""
+    if not user:
+        return None
+    return {b["id"] for b in db.q("SELECT id FROM con_address_books WHERE owner_id IS NULL OR owner_id = %s", (user["id"],))}
+
+
 def full(cid: int | dict, with_photo: bool = False) -> dict | None:
     """The whole contact (an id, or its con_contacts row), or None when it is gone."""
     r = get_row(cid) if isinstance(cid, int) else cid
@@ -210,8 +260,10 @@ def full(cid: int | dict, with_photo: bool = False) -> dict | None:
 def full_many(rows: list[dict], with_photo: bool = False) -> dict[int, dict]:
     """{id: the whole contact} for these con_contacts rows (deleted ones are left out). The emails, phones,
     addresses, tags and relations of all of them are read with one query per table, so a directory or an export of
-    two thousand contacts costs nine queries, not eighteen thousand."""
+    two thousand contacts costs nine queries, not eighteen thousand. A relation to a contact in an address book the
+    account asking cannot see (`viewer`: somebody's private book) is left out: its name and gender are not theirs to read."""
     out: dict[int, dict] = {}
+    seen_books = _books_seen_by(viewer.get())
     for r in rows:
         if not r or r["deleted"]:
             continue
@@ -244,6 +296,8 @@ def full_many(rows: list[dict], with_photo: bool = False) -> dict[int, dict]:
                       "o.iopix_person_id IS NOT NULL AS o_photo, o.iopix_person_id AS o_iopix "
                       "FROM con_contact_relations r LEFT JOIN con_contacts o ON o.id = r.related_id "
                       f"WHERE r.contact_id IN ({marks}) ORDER BY r.contact_id, r.position, r.id", part):
+            if seen_books is not None and x["related_id"] and x["o_book"] not in seen_books:
+                continue
             out[x["contact_id"]]["relations"].append(
                 {"type": x["type"], "relatedId": x["related_id"] if x["related_id"] and not x["o_del"] else None,
                  "relatedName": x["related_name"], "relatedFn": x["o_fn"], "relatedUid": x["o_uid"],
@@ -434,9 +488,17 @@ def _touch(cid: int) -> None:
 
 
 def _save_relations(cid: int, rels: list[dict], book_ids: list[int]) -> None:
+    """Replace the contact's relations with `rels`, and mirror each on the related contact (a brother has a sibling).
+    Relations to contacts outside `book_ids` (the books the account saving can see) are left as they are: it was not
+    shown them (full_many), so their absence from `rels` does not mean they were removed."""
     me = get_row(cid)
-    old = {(x["related_id"], x["type"]) for x in db.q("SELECT related_id, type FROM con_contact_relations WHERE contact_id = %s AND related_id IS NOT NULL", (cid,))}
-    db.ex("DELETE FROM con_contact_relations WHERE contact_id = %s", (cid,))
+    marks = ",".join(["%s"] * len(book_ids))
+    old = {(x["related_id"], x["type"]) for x in db.q(
+        "SELECT r.related_id, r.type FROM con_contact_relations r JOIN con_contacts o ON o.id = r.related_id "
+        f"WHERE r.contact_id = %s AND o.address_book_id IN ({marks})", (cid, *book_ids))}
+    db.ex("DELETE FROM con_contact_relations WHERE contact_id = %s AND (related_id IS NULL OR related_id IN "
+          f"(SELECT id FROM con_contacts WHERE address_book_id IN ({marks})))", (cid, *book_ids))
+    touched = set()
     new, rows, seen = set(), [], set()
     for i, r in enumerate(rels):
         t = r["type"] if r["type"] in rel.TYPES else "other"
@@ -449,10 +511,9 @@ def _save_relations(cid: int, rels: list[dict], book_ids: list[int]) -> None:
         if rid:
             new.add((rid, t))
             g = r.get("gender")  # "Brother" picked: the related person is a man, if nobody said otherwise
-            if g in ("M", "F"):
-                db.ex("UPDATE con_contacts SET gender = %s WHERE id = %s AND gender IS NULL", (g, rid))
+            if g in ("M", "F") and db.ex("UPDATE con_contacts SET gender = %s WHERE id = %s AND gender IS NULL", (g, rid)):
+                touched.add(rid)  # its card changed: a new etag, so sync clients fetch it
     db.many("INSERT INTO con_contact_relations (contact_id, position, type, related_id, related_name, label) VALUES (%s, %s, %s, %s, %s, %s)", rows)
-    touched = set()
     for rid, t in old - new:
         inv = rel.inverse(t)
         if inv:
@@ -493,11 +554,36 @@ def delete(cid: int) -> None:
             db.ex(f"DELETE FROM {table} WHERE contact_id = %s", (cid,))
         db.ex("DELETE FROM con_contact_tags WHERE contact_id = %s", (cid,))
         tok = _bump(row["address_book_id"])
-        db.ex("UPDATE con_contacts SET deleted = 1, photo = NULL, notes = NULL, extra = NULL, etag = %s, changed_token = %s, "
-              "iopix_person_id = NULL WHERE id = %s", (_etag(cid), tok, cid))
+        db.ex("UPDATE con_contacts SET deleted = 1, " + ", ".join(f"{c} = NULL" for c in CLEARED) + ", fn = '', kind = 'individual', favorite = 0, "
+              "etag = %s, changed_token = %s WHERE id = %s", (_etag(cid), tok, cid))
         users.forget_me_contact(cid)  # whoever had this card as "me"
         for o in others:
             _touch(o)
+
+
+# What a deletion marker no longer carries: everything about the person. The marker keeps the address (book, href)
+# and the uid, which is what a sync client needs to drop its copy.
+CLEARED = ("prefix", "given", "additional", "family", "suffix", "nickname", "maiden", "phonetic_given", "phonetic_family", "gender",
+           "bday_year", "bday_month", "bday_day", "org", "department", "title", "role", "notes", "extra", "iopix_person_id", "iopix_person_name")
+PURGED = "purged_token:"  # con_settings: per address book, the newest change among the markers that were purged
+
+
+def purge_deleted(days: int | None = None) -> int:
+    """Remove the deletion markers older than `days` (KEEP_DELETED_DAYS); how many went. Each book remembers how far
+    its purged markers reached, so a client that last synced before that is told to start over (purged_before)
+    instead of being left with contacts that were deleted."""
+    days = config.KEEP_DELETED_DAYS if days is None else days
+    with db.tx():
+        old = db.q("SELECT address_book_id AS book, max(changed_token) AS tok FROM con_contacts WHERE deleted = 1 "
+                   "AND updated_at < NOW() - INTERVAL %s DAY GROUP BY address_book_id", (days,))
+        for r in old:
+            db.set_setting(f"{PURGED}{r['book']}", str(max(r["tok"], purged_before(r["book"]))))
+        return db.ex("DELETE FROM con_contacts WHERE deleted = 1 AND updated_at < NOW() - INTERVAL %s DAY", (days,)) if old else 0
+
+
+def purged_before(book_id: int) -> int:
+    """The sync token up to which this book's deletion markers are gone (0: none were purged)."""
+    return int(db.get_setting(f"{PURGED}{book_id}") or 0)
 
 
 def move(cid: int, new_book: int) -> None:
@@ -544,46 +630,21 @@ def upcoming(book_ids: list[int], days: int = 30) -> list[dict]:
         for yr in (today.year, today.year + 1):
             try:
                 d = dt.date(yr, r["month"], r["day"])
-            except ValueError:  # 29 February in a common year
-                d = dt.date(yr, 3, 1)
+            except (ValueError, TypeError):
+                if (r["month"], r["day"]) != (2, 29):  # not a date at all (an import's 31 April): not listed
+                    d = None
+                    break
+                d = dt.date(yr, 3, 1)  # 29 February in a common year
             if d >= today:
                 break
+        if d is None:
+            continue
         delta = (d - today).days
         if delta <= days:
             out.append({"contactId": r["id"], "fn": r["fn"], "label": r["label"], "date": d.isoformat(), "inDays": delta,
                         "turns": (d.year - r["year"]) if r["year"] else None, "hasPhoto": bool(r["has_photo"]),
                         "iopixPersonId": r["iopix_person_id"], "remind": None if r["remind"] is None else bool(r["remind"])})
     return sorted(out, key=lambda x: (x["inDays"], x["fn"]))
-
-
-def find_duplicates(book_ids: list[int]) -> list[list[dict]]:
-    """Contacts that share a name, an email or a phone number (digits only)."""
-    if not book_ids:
-        return []
-    marks = ",".join(["%s"] * len(book_ids))
-    groups: dict = {}
-    for r in db.q(f"SELECT id, lower(fn) AS k FROM con_contacts WHERE address_book_id IN ({marks}) AND deleted = 0 AND fn <> ''", book_ids):
-        groups.setdefault(("n", r["k"]), set()).add(r["id"])
-    for r in db.q(f"SELECT c.id, lower(e.value) AS k FROM con_contact_emails e JOIN con_contacts c ON c.id = e.contact_id "
-                  f"WHERE c.address_book_id IN ({marks}) AND c.deleted = 0", book_ids):
-        groups.setdefault(("e", r["k"]), set()).add(r["id"])
-    for r in db.q(f"SELECT c.id, right(regexp_replace(p.value, '[^0-9]', ''), 9) AS k FROM con_contact_phones p "
-                  f"JOIN con_contacts c ON c.id = p.contact_id WHERE c.address_book_id IN ({marks}) AND c.deleted = 0", book_ids):
-        if r["k"] and len(r["k"]) >= 7:
-            groups.setdefault(("p", r["k"]), set()).add(r["id"])
-    # merge overlapping groups
-    sets: list[set] = []
-    for ids in groups.values():
-        if len(ids) < 2:
-            continue
-        hit = [s for s in sets if s & ids]
-        merged = set(ids).union(*hit) if hit else set(ids)
-        sets = [s for s in sets if s not in hit] + [merged]
-    out = []
-    for s in sets:
-        rows = db.q(f"{SUMMARY_SQL} WHERE c.id IN ({','.join(['%s'] * len(s))}) ORDER BY c.id", list(s))
-        out.append([summary(r) for r in rows])
-    return out
 
 
 def combine(keep: dict, others: list[dict]) -> dict:

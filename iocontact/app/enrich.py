@@ -12,14 +12,15 @@ Photos are never suggested: the linked ioPix person is a contact's only photo.
 A lookup runs only when someone asks for it. A suggestion someone dismissed is not offered again.
 """
 import hashlib
-import ipaddress
+import logging
 import json
 import re
-import socket
 import urllib.parse
 import urllib.request
 
 from app import db, model, vcard
+from iosuite_shared import outbound
+from iosuite_shared.errors import Invalid
 
 FIELDS = {  # field: (label, kind) — single fields replace, list fields add an entry
     "name": ("Name", "single"), "nickname": ("Nickname", "single"),
@@ -28,33 +29,16 @@ FIELDS = {  # field: (label, kind) — single fields replace, list fields add an
     "emails": ("Email", "list"), "phones": ("Phone", "list"), "addresses": ("Address", "list"), "urls": ("Website", "list"),
     "social": ("Social profile", "list"), "tags": ("Label", "list"),
 }
+log = logging.getLogger("iocontacts.enrich")
 UA = "iocontacts (+https://github.com/avandeputte/iocontacts)"
 TIMEOUT = 8
 
 
-def _public(url: str) -> None:
-    """Lookups only reach public web servers: an address a profile (or a Mastodon server's answer) names must be
-    http(s) on a host that resolves to public addresses, never this machine or the LAN. ValueError otherwise."""
-    u = urllib.parse.urlsplit(url)
-    if u.scheme not in ("http", "https") or not u.hostname:
-        raise ValueError(f"not a web address: {url[:80]}")
-    try:
-        infos = socket.getaddrinfo(u.hostname, u.port or (443 if u.scheme == "https" else 80), proto=socket.IPPROTO_TCP)
-    except (socket.gaierror, UnicodeError) as e:
-        raise ValueError(f"unknown host {u.hostname}") from e
-    for info in infos:
-        ip = ipaddress.ip_address(info[4][0].split("%")[0])
-        if not ip.is_global or ip.is_multicast:
-            raise ValueError(f"{u.hostname} is not a public address")
-
-
-class _Redirects(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        _public(newurl)  # a redirect may not lead inside either
-        return super().redirect_request(req, fp, code, msg, headers, newurl)
-
-
-_opener = urllib.request.build_opener(_Redirects)
+# Lookups only reach public web servers: an address a profile (or a Mastodon server's answer) names must be http(s)
+# on a host that resolves to public addresses, never this machine or the LAN, and the connection goes to the address
+# that was checked (iosuite_shared.outbound), a redirect's too.
+_public = outbound.check
+_opener = outbound.opener(outbound.public)
 
 
 def _get(url: str, accept: str = "application/json", limit: int = 2_000_000):
@@ -196,9 +180,9 @@ def _already_has(c: dict, field: str, value) -> bool:
 def normalise(field: str, value):
     """A suggestion's value in the shape the contact uses, or ValueError."""
     if field == "photo":
-        raise ValueError("contacts keep no photo of their own: link the contact to an ioPix person instead")
+        raise Invalid("contacts keep no photo of their own: link the contact to an ioPix person instead")
     if field not in FIELDS:
-        raise ValueError(f"'{field}' is not a field; one of: {', '.join(FIELDS)}")
+        raise Invalid(f"'{field}' is not a field; one of: {', '.join(FIELDS)}")
     if field == "name":
         if isinstance(value, str):
             value = {"fn": value}
@@ -206,12 +190,12 @@ def normalise(field: str, value):
     if field == "birthday":
         d = model.parse_date(value) if isinstance(value, str) else model.partial_date(value)
         if d is None:
-            raise ValueError("a birthday is YYYY-MM-DD, YYYY-MM, YYYY or MM-DD")
+            raise Invalid("a birthday is YYYY-MM-DD, YYYY-MM, YYYY or MM-DD")
         return d
     if FIELDS[field][1] == "single" or field == "tags":
         v = str(value).strip()
         if not v:
-            raise ValueError("empty value")
+            raise Invalid("empty value")
         return v[:2000]
     if isinstance(value, str):
         value = {"value": value}
@@ -259,7 +243,9 @@ def lookup(cid: int, user_id: int | None = None, providers: list[str] | None = N
                     out["sources"].append(name)
         except Exception as e:  # noqa: BLE001  one service down or the person not there: the others still run
             if not (hasattr(e, "code") and getattr(e, "code") == 404):
-                out["errors"].append(f"{name}: {str(e)[:120]}")
+                # what went wrong is for the log: the text may name hosts and addresses inside the network
+                log.warning("lookup %s for contact %s failed: %s: %s", name, cid, type(e).__name__, str(e)[:200])
+                out["errors"].append(f"{name}: no answer")
     return out
 
 
@@ -295,10 +281,10 @@ def accept(sid: int, user_id: int | None, book_ids: list[int], value=None) -> di
     """Apply one suggestion to its contact (value: an edited version of it) and mark it accepted."""
     s = db.one("SELECT * FROM con_contact_suggestions WHERE id = %s", (sid,))
     if not s or s["status"] != "pending":
-        raise ValueError("No such suggestion waiting")
+        raise Invalid("No such suggestion waiting")
     field = s["field"]
     if field not in FIELDS:
-        raise ValueError("Photos are not kept on contacts any more: link the contact to an ioPix person instead")
+        raise Invalid("Photos are not kept on contacts any more: link the contact to an ioPix person instead")
     v = normalise(field, value) if value is not None else json.loads(s["value"])
     cid = s["contact_id"]
     c = model.full(cid)

@@ -22,7 +22,7 @@ def _suite(**env):
 
 def test_new_install_defaults_to_iosuite_on_the_contacts_server():
     assert _suite(DB_HOST="db.lan", DB_PORT="3307") == {
-        "HOST": "db.lan", "PORT": "3307", "NAME": "iosuite", "USER": "iosuite", "PASSWORD": "iosuite"}
+        "HOST": "db.lan", "PORT": "3307", "NAME": "iosuite", "USER": "iosuite", "PASSWORD": ""}
 
 
 def test_iosuite_settings_are_passed_to_the_library():

@@ -13,19 +13,25 @@ import xml.etree.ElementTree as ET
 
 from defusedxml import DefusedXmlException
 from defusedxml.ElementTree import fromstring as parse_xml  # a client's XML: no entity expansion or external entities
-from email.utils import format_datetime
 from urllib.parse import quote, unquote
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import RedirectResponse, Response
+from iosuite_shared import dav as webdav  # `dav` is the route below
+from iosuite_shared.dav import AP, CS, D, q
+from iosuite_shared.errors import Invalid
 
-from app import access, limits, model, users, vcard
+from app import access, db, limits, model, vcard
 from app.fold import fold
+
+# the WebDAV plumbing ioCalendar and ioContacts share (iosuite_shared.dav), under the names this module uses
+_xml, _sub, _requested, _response, _parse, _etag_match, _http_date = webdav.xml, webdav.sub, webdav.requested, webdav.response, webdav.parts_of, webdav.etag_match, webdav.http_date
+_privs = webdav.privileges
 
 router = APIRouter()
 
-D, C, CS, AP = "DAV:", "urn:ietf:params:xml:ns:carddav", "http://calendarserver.org/ns/", "http://apple.com/ns/ical/"
+C = "urn:ietf:params:xml:ns:carddav"
 for pfx, ns in (("d", D), ("card", C), ("cs", CS), ("ap", AP)):
     ET.register_namespace(pfx, ns)
 METHODS = ["OPTIONS", "PROPFIND", "PROPPATCH", "REPORT", "GET", "HEAD", "PUT", "DELETE", "MKCOL", "MOVE", "COPY"]
@@ -33,51 +39,12 @@ SYNC_PREFIX = "urn:x-iocontacts:sync:"
 MAX_SIZE = 4 * 1024 * 1024
 
 
-def q(ns, tag):
-    return f"{{{ns}}}{tag}"
-
-
-def _xml(root: ET.Element, status: int = 207) -> Response:
-    body = b'<?xml version="1.0" encoding="utf-8"?>\n' + ET.tostring(root, encoding="utf-8")
-    return Response(body, status_code=status, media_type="application/xml; charset=utf-8")
-
-
 def _unauth() -> Response:
-    return Response("Sign in with your ioContacts name and password (or an app password).", status_code=401,
-                    headers={"WWW-Authenticate": 'Basic realm="ioContacts", charset="UTF-8"'})
+    return webdav.unauthorized("ioContacts", "password (or an app password)")
 
 
 def _opts_headers() -> dict:
-    return {"DAV": "1, 2, 3, addressbook, extended-mkcol", "Allow": ", ".join(METHODS),
-            "MS-Author-Via": "DAV"}
-
-
-def _http_date(d) -> str:
-    import datetime as dt
-    return format_datetime(d.replace(tzinfo=dt.timezone.utc), usegmt=True) if d else ""
-
-
-def _sub(parent, ns, tag, text=None):
-    e = ET.SubElement(parent, q(ns, tag))
-    if text is not None:
-        e.text = str(text)
-    return e
-
-
-def _requested(body: bytes) -> tuple[str, list[str]]:
-    """PROPFIND body: ('allprop' | 'propname' | 'prop', [clark names])."""
-    if not body or not body.strip():
-        return "allprop", []
-    try:
-        root = parse_xml(body)
-    except (ET.ParseError, DefusedXmlException):
-        return "allprop", []
-    if root.find(q(D, "propname")) is not None:
-        return "propname", []
-    p = root.find(q(D, "prop"))
-    if p is None:
-        return "allprop", []
-    return "prop", [c.tag for c in p]
+    return webdav.options("1, 2, 3, addressbook, extended-mkcol", METHODS)
 
 
 # ------------------------------------------------------------------ properties
@@ -119,12 +86,6 @@ def _common(ctx: Ctx, name: str, el: ET.Element) -> bool:
     else:
         return False
     return True
-
-
-def _privs(el, writable: bool):
-    s = _sub(el, D, "current-user-privilege-set")
-    for p in (["read", "read-acl", "read-current-user-privilege-set"] + (["write", "write-properties", "write-content", "bind", "unbind", "all"] if writable else [])):
-        _sub(_sub(s, D, "privilege"), D, p)
 
 
 def props_root(ctx: Ctx, names: list[str]) -> tuple[ET.Element, list[str]]:
@@ -189,7 +150,7 @@ def props_home(ctx: Ctx, names: list[str]):
 
 
 def sync_token(b) -> str:
-    return f"{SYNC_PREFIX}{b['id']}-{b['sync_token']}"
+    return webdav.sync_token(SYNC_PREFIX, b)
 
 
 def props_book(ctx: Ctx, b: dict, names: list[str]):
@@ -277,33 +238,7 @@ ALLPROP = {
 }
 
 
-def _response(ms: ET.Element, href: str, ok: ET.Element, missing: list[str], names_only: bool = False):
-    r = _sub(ms, D, "response")
-    _sub(r, D, "href", href)
-    if names_only:
-        for c in ok:
-            for x in list(c):
-                c.remove(x)
-            c.text = None
-    if len(ok):
-        ps = _sub(r, D, "propstat")
-        ps.append(ok)
-        _sub(ps, D, "status", "HTTP/1.1 200 OK")
-    if missing:
-        ps = _sub(r, D, "propstat")
-        p = _sub(ps, D, "prop")
-        for n in missing:
-            ET.SubElement(p, n)
-        _sub(ps, D, "status", "HTTP/1.1 404 Not Found")
-    return r
-
-
 # ------------------------------------------------------------------ resolving paths
-
-def _parse(path: str) -> list[str]:
-    parts = [unquote(p) for p in path.split("/") if p]
-    return parts[1:] if parts and parts[0] == "dav" else parts
-
 
 def _book(ctx: Ctx, slug: str):
     return model.book_by_slug(ctx.user, slug)
@@ -418,7 +353,6 @@ def _propfind(ctx: Ctx, parts, body, depth) -> Response:
 
 
 def _rows(book_id: int, since: int | None = None) -> list[dict]:
-    from app import db
     if since is None:
         return db.q("SELECT * FROM con_contacts WHERE address_book_id = %s AND deleted = 0 ORDER BY id", (book_id,))
     return db.q("SELECT * FROM con_contacts WHERE address_book_id = %s AND changed_token > %s ORDER BY changed_token", (book_id, since))
@@ -441,11 +375,11 @@ def _proppatch(ctx: Ctx, parts, body) -> Response:
             for c in prop:
                 ET.SubElement(p, c.tag)
                 if c.tag == q(D, "displayname") and (c.text or "").strip():
-                    changes["name"] = c.text.strip()[:128]
+                    changes["name"] = c.text
                 elif c.tag == q(C, "addressbook-description"):
-                    changes["description"] = (c.text or "").strip()[:512]
+                    changes["description"] = c.text
                 elif c.tag == q(AP, "calendar-color"):
-                    changes["color"] = (c.text or "").strip()[:16]
+                    changes["color"] = c.text
     for s in root.iter(q(D, "remove")):
         for prop in s.iter(q(D, "prop")):
             for c in prop:
@@ -454,7 +388,11 @@ def _proppatch(ctx: Ctx, parts, body) -> Response:
         _sub(ps, D, "status", "HTTP/1.1 403 Forbidden")  # a viewer cannot rename or recolour a shared book
         return _xml(ms)
     if b and changes:
-        model.update_book(b["id"], **changes)  # one change, one new sync token
+        try:
+            model.update_book(b["id"], **changes)  # one change, one new sync token
+        except Invalid:  # a name that is too long, a colour that is not one
+            _sub(ps, D, "status", "HTTP/1.1 409 Conflict")
+            return _xml(ms)
     _sub(ps, D, "status", "HTTP/1.1 200 OK")
     return _xml(ms)
 
@@ -480,13 +418,6 @@ def _get(ctx: Ctx, parts, head: bool, headers) -> Response:
                     headers={"ETag": f'"{row["etag"]}"', "Last-Modified": _http_date(row["updated_at"])})
 
 
-def _etag_match(header: str | None, etag: str | None) -> bool:
-    if not header:
-        return True
-    tags = [t.strip().removeprefix("W/").strip('"') for t in header.split(",")]
-    return "*" in tags or (etag is not None and etag in tags)
-
-
 def _put(ctx: Ctx, parts, body: bytes, headers) -> Response:
     if len(parts) != 4 or parts[0] != "addressbooks":
         return Response(status_code=405)
@@ -509,14 +440,14 @@ def _put(ctx: Ctx, parts, body: bytes, headers) -> Response:
     except Exception:  # noqa: BLE001
         cards = []
     if len(cards) != 1:
-        return _precondition("valid-address-data", 400 if not cards else 403)
+        return webdav.precondition(C, "valid-address-data", 400 if not cards else 403)
     c = cards[0]
     if not c.get("uid"):
         c["uid"] = parts[3].rsplit(".", 1)[0]
     # the same UID twice in one address book is refused (RFC 6352 6.3.2.1 no-uid-conflict)
     other = model.by_uid(b["id"], c["uid"])
     if other and (not row or other["id"] != row["id"]):
-        return _precondition("no-uid-conflict", 409, ctx.book_href(b) + quote(other["href"]))
+        return webdav.precondition(C, "no-uid-conflict", 409, ctx.book_href(b) + quote(other["href"]))
     if c.get("iopix") is None:
         c.pop("iopix", None)  # a client that drops X-IOPIX-PERSON does not unlink the person
     if row:  # favorites are ioContacts' own: a client that drops the mark does not unfavorite
@@ -525,14 +456,6 @@ def _put(ctx: Ctx, parts, body: bytes, headers) -> Response:
     model.save(b["id"], c, row["id"] if row else None, parts[3], resolve_book_ids=ids)
     new = model.by_href(b["id"], parts[3])
     return Response(status_code=204 if row else 201, headers={"ETag": f'"{new["etag"]}"'} if new else {})
-
-
-def _precondition(name: str, status: int, href: str | None = None) -> Response:
-    e = ET.Element(q(D, "error"))
-    el = _sub(e, C, name)
-    if href:
-        _sub(el, D, "href", href)
-    return _xml(e, status)
 
 
 def _delete(ctx: Ctx, parts, headers) -> Response:
@@ -571,9 +494,10 @@ def _mkcol(ctx: Ctx, parts, body) -> Response:
             name = dn.text.strip()
     except (ET.ParseError, DefusedXmlException):
         pass
-    from app import db
-    bid = model.create_book(ctx.user["id"], name)
-    db.ex("UPDATE con_address_books SET slug = %s WHERE id = %s", (parts[2][:64], bid))
+    try:
+        model.create_book(ctx.user["id"], name[:128], slug=parts[2])
+    except Invalid as e:  # an address that is not plain, a name that is none
+        return Response(str(e), status_code=403)
     return Response(status_code=201)
 
 
@@ -642,9 +566,10 @@ def _report(ctx: Ctx, parts, body) -> Response:
         if tok:
             m = re.match(re.escape(SYNC_PREFIX) + r"(\d+)-(\d+)$", tok)
             if not m or int(m.group(1)) != b["id"] or int(m.group(2)) > b["sync_token"]:
-                return _precondition_dav("valid-sync-token")
+                return webdav.precondition(D, "valid-sync-token")
             since = int(m.group(2))
-        lim = root.find(f"{q(D, 'limit')}/{q(D, 'nresults')}")
+            if since < model.purged_before(b["id"]):  # deletions since then are no longer on record: start over
+                return webdav.precondition(D, "valid-sync-token")
         rows = _rows(b["id"], since)
         cur = model.book(b["id"])
         loaded = _loaded(rows, names)
@@ -659,15 +584,8 @@ def _report(ctx: Ctx, parts, body) -> Response:
             else:
                 _response(ms, href, *props_card(ctx, row, names, version, loaded.get(row["id"])))
         _sub(ms, D, "sync-token", sync_token(cur))
-        _ = lim
         return _xml(ms)
     return Response(status_code=403)
-
-
-def _precondition_dav(name: str) -> Response:
-    e = ET.Element(q(D, "error"))
-    _sub(e, D, name)
-    return _xml(e, 403)
 
 
 def _matches(contact: dict, flt: ET.Element) -> bool:
@@ -698,5 +616,3 @@ def _matches(contact: dict, flt: ET.Element) -> bool:
         results.append(all(sub) if pf_all else any(sub))
     return all(results) if test_all else any(results)
 
-
-_ = users  # (authentication happens in the app's middleware)

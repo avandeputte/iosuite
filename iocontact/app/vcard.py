@@ -16,6 +16,7 @@ import uuid as uuidlib
 from dataclasses import dataclass, field
 
 from app import relations as rel
+from iosuite_shared.errors import Invalid
 
 SOCIAL_SERVICES = {
     "linkedin": ("LinkedIn", ["linkedin.com"]),
@@ -700,7 +701,7 @@ def _jparams(p: Prop) -> dict:
 def from_jcard(j) -> dict:
     """A jCard (["vcard", [...]]) as a contact dict, by way of vCard text."""
     if not (isinstance(j, list) and len(j) == 2 and j[0] == "vcard"):
-        raise ValueError("Not a jCard")
+        raise Invalid("Not a jCard")
     lines = ["BEGIN:VCARD", "VERSION:4.0"]
     for prop in j[1]:
         name, params, vtype, *vals = prop
