@@ -49,10 +49,11 @@ def auth_router(self) -> APIRouter:
 
     @r.get("/api/auth/accounts", dependencies=[access.public])
     def api_accounts(request: Request):
-        out = users.accounts(app) if users.any_users() else []
-        if proxy.external(request.headers, peer_of(request)):
-            out = [a for a in out if not a["passwordless"]]
-        return {"accounts": [auth.decorate(a) for a in out]}
+        """The accounts the sign-in screen shows as tiles, inside the network only: from outside the list is empty and
+        the screen asks for a name, so the names of the household are not handed to anyone who can reach the address."""
+        if not users.any_users() or proxy.external(request.headers, peer_of(request)):
+            return {"accounts": []}
+        return {"accounts": [auth.decorate(a) for a in users.accounts(app)]}
 
     @r.post("/api/auth/logout", dependencies=[access.public])
     def api_logout(request: Request):
@@ -503,8 +504,8 @@ def server_router(self, updater, log_file=None, info=None, apply=None) -> APIRou
 def status_router(self, updater=None, extra=None) -> APIRouter:
     """GET /api/status, open to everyone (the middleware keeps it reachable when sign-in is required): what the shell
     needs before anyone signs in, and for admins whether a newer version is out.
-        {ok, app, name, version, usersExist, requireLogin, signedIn, isAdmin, viaProxy, user,
-         commit (signed in), update (admins, while the daily check is on: {version, remote, ..., canRun, docker} or null)}
+        {ok, app, name, version (signed in, or asked from inside the network), usersExist, requireLogin, signedIn,
+         isAdmin, viaProxy, user, commit (signed in), update (admins, while the daily check is on: {version, remote, ..., canRun, docker} or null)}
     `extra(request)` adds the app's own fields (a dict); it is called after the user is known, so it may answer
     differently for a visitor, an account and an admin."""
     auth, access = self, self.access
@@ -522,7 +523,8 @@ def status(self, request: Request, updater=None, extra=None) -> dict:
     u = self.current_user(request)
     shut = self.unclaimed(request)  # no account yet, asked from outside the network: nothing is open
     signed, admin = users.is_signed_in(u) and not shut, users.is_admin(u) and not shut
-    out = {"ok": True, "app": self.app, "name": self.label, "version": (self.suite_entry or {}).get("version") or (updater.version if updater else None),
+    version = (self.suite_entry or {}).get("version") or (updater.version if updater else None)
+    out = {"ok": True, "app": self.app, "name": self.label, "version": version if signed or not self.outside(request) else None,
            "usersExist": users.any_users(), "requireLogin": shut or users.require_login(self.app), "signedIn": signed, "isAdmin": admin,
            "viaProxy": bool(getattr(request.state, "via_proxy", False)), "user": public_user(u)}
     if updater is not None:

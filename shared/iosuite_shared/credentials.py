@@ -17,6 +17,7 @@ import re
 import time
 
 from iosuite_shared import db
+from iosuite_shared.errors import Invalid
 
 NAME = re.compile(r"^[a-z0-9_]{1,64}$")
 _cache: dict = {}  # (app, name) -> (value, at)
@@ -30,7 +31,7 @@ def forget():
 def _name(name) -> str:
     name = str(name or "").strip()
     if not NAME.match(name):
-        raise ValueError("Unknown key")
+        raise Invalid("Unknown key")
     return name
 
 

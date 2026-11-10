@@ -151,14 +151,10 @@ def check_conventions(root, app: str, version: str, config, port_files=("Dockerf
 
 
 def api_routes(app) -> list:
-    """Every API route of the FastAPI app as (methods, full path, route), through included routers. FastAPI 0.162
-    keeps an included router as one entry of app.routes, so a plain walk of app.routes sees none of its routes (and
-    a check over them passes with nothing checked)."""
-    from fastapi.routing import APIRoute
-    try:
-        from fastapi.routing import iter_route_contexts
-    except ImportError:  # before 0.162: app.routes is flat
-        return [(set(r.methods), r.path, r) for r in app.routes if isinstance(r, APIRoute)]
+    """Every API route of the FastAPI app as (methods, full path, route), through included routers. FastAPI keeps an
+    included router as one entry of app.routes, so a plain walk of app.routes sees none of its routes (and a check
+    over them passes with nothing checked)."""
+    from fastapi.routing import APIRoute, iter_route_contexts
     return [(set(c.methods or ()), c.path, c.original_route) for c in iter_route_contexts(app.routes) if isinstance(c.original_route, APIRoute)]
 
 

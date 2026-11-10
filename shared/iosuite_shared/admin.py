@@ -12,6 +12,7 @@ import re
 import time
 
 from iosuite_shared import apppasswords, credentials, db, sessions, suite, users
+from iosuite_shared.errors import Invalid
 
 APP_KEY = re.compile(r"^[a-z0-9_-]{1,32}$")
 DEFAULT_ROLES = ("none", "viewer", "editor")  # what an app gives an account without a role there ("admin" by default is never wanted)
@@ -21,7 +22,7 @@ PHOTO_APP = "iopix"  # the app whose People an account can be linked to: the per
 def clean_app(app) -> str:
     app = str(app or "").strip().lower()
     if not APP_KEY.match(app) or app.startswith("_"):
-        raise ValueError("Unknown app")
+        raise Invalid("Unknown app")
     return app
 
 
@@ -62,7 +63,7 @@ def set_app(app: str, default_role=None, require_login=None) -> dict:
     app = clean_app(app)
     if default_role is not None:
         if default_role not in DEFAULT_ROLES:
-            raise ValueError("The default role is none, viewer or editor")
+            raise Invalid("The default role is none, viewer or editor")
         db.set_setting("default_role", "" if default_role == "viewer" else default_role, app)  # viewer is the default: no row
     if require_login is not None:
         db.set_setting("require_login", "1" if require_login else "", app)
@@ -130,7 +131,7 @@ def account(user_id: int) -> dict | None:
 def set_roles(me, user_id: int, roles: dict):
     """{app: role | None}: None (or "default") removes the row, so the app's default role applies."""
     if not isinstance(roles, dict):
-        raise ValueError("roles is {app: role}")
+        raise Invalid("roles is {app: role}")
     for app, role in roles.items():
         app = clean_app(app)
         if role in (None, "", "default"):
@@ -163,9 +164,9 @@ def update(me, user_id: int, body: dict) -> dict:
         raise LookupError("No such user")
     own = bool(me) and me.get("id") == user_id
     if own and body.get("suiteAdmin") is False:
-        raise ValueError("You cannot take away your own suite admin while signed in; another suite admin can")
+        raise Invalid("You cannot take away your own suite admin while signed in; another suite admin can")
     if own and body.get("password") == "":
-        raise ValueError("You cannot remove your own password")
+        raise Invalid("You cannot remove your own password")
     pw = body.get("password")
     users.update(user_id, name=body.get("name"), email=body.get("email"), display_name=body.get("displayName"),
                  listed=None if body.get("listed") is None else bool(body["listed"]),
@@ -188,7 +189,7 @@ def set_photo_person(user_id: int, person):
     try:
         person = int(person)
     except (TypeError, ValueError):
-        raise ValueError("photoPerson is a person id from ioPix's People")
+        raise Invalid("photoPerson is a person id from ioPix's People")
     users.set_value(user_id, PHOTO_APP, "person", person)
 
 
@@ -220,7 +221,7 @@ def delete(me, user_id: int):
     if not person(user_id):
         raise LookupError("No such user")
     if me and me.get("id") == user_id:
-        raise ValueError("You cannot delete your own account while signed in")
+        raise Invalid("You cannot delete your own account while signed in")
     users.delete(user_id)
     _forget_caches()
 
@@ -250,9 +251,9 @@ def new_app_password(user_id: int, app: str, label: str, scope: str = "") -> dic
     if not u:
         raise LookupError("No such user")
     if scope not in PERSON_SCOPES:
-        raise ValueError(f"Unknown app password scope: {scope!r}")
+        raise Invalid(f"Unknown app password scope: {scope!r}")
     if u["passwordless"]:
-        raise ValueError("A one-click account cannot have app passwords; give it a password first")
+        raise Invalid("A one-click account cannot have app passwords; give it a password first")
     app = clean_app(app)
     pw = apppasswords.create(user_id, app, (label or "Device").strip()[:128] or "Device", scope or "")
     return {"password": pw, "name": u["name"], "app": app, "scope": scope or ""}
@@ -264,7 +265,7 @@ def set_app_password_scope(pid: int, scope: str):
     if not r:
         raise LookupError("No such app password")
     if (scope or "") not in PERSON_SCOPES:
-        raise ValueError(f"Unknown app password scope: {scope!r}")
+        raise Invalid(f"Unknown app password scope: {scope!r}")
     apppasswords.set_scope(r["app"], r["prefix"], scope or "")
     apppasswords.forget()
 
@@ -303,7 +304,7 @@ def set_key(me, app: str, name: str, value) -> dict:
     if name.startswith("link_") or not db.one("SELECT 1 AS x FROM ios_credentials WHERE app = %s AND name = %s", (app, name)):
         raise LookupError("No such key")
     if value is not None and not isinstance(value, str):
-        raise ValueError("The value is text")
+        raise Invalid("The value is text")
     credentials.put(app, name, value, by=(me or {}).get("name"))
     return next(k for k in credentials.listing(app) if k["name"] == name)
 

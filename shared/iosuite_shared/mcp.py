@@ -21,6 +21,7 @@ from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import ToolAnnotations
 
 from iosuite_shared import users
+from iosuite_shared.errors import Invalid
 
 PATH = "/mcp"
 SETTING = "mcp_enabled"
@@ -85,13 +86,14 @@ def enabled(get_setting, forced: bool = False) -> bool:
 def set_enabled(set_setting, on: bool, forced: bool = False) -> None:
     """Save the switch from POST /api/server {mcpEnabled}; ValueError when MCP=1 keeps it on."""
     if forced and not on:
-        raise ValueError("MCP=1 in the environment keeps the MCP server on")
+        raise Invalid("MCP=1 in the environment keeps the MCP server on")
     set_setting(SETTING, "1" if on else "0")
 
 
 def mount(app, server: MCPServer, path: str = PATH) -> None:
-    """Serve the MCP server over streamable HTTP at `path` on the app's own port, ahead of every other route. DNS
-    rebinding protection is off: the apps are reached by LAN name, IP or a public name, not localhost only, and every
+    """Serve the MCP server over streamable HTTP at `path` on the app's own port, ahead of every other route. The MCP
+    library's own DNS rebinding protection is off: it takes a fixed list of hosts, and the apps are reached by LAN
+    name, IP or a public name. Auth.mcp_gate does the check instead, with the names the app is known by, and every
     request is signed in anyway."""
     asgi = server.streamable_http_app(streamable_http_path=path, stateless_http=True,
                                       transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False))

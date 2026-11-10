@@ -19,13 +19,14 @@ import logging
 import time
 from urllib.parse import urlsplit
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from starlette.concurrency import run_in_threadpool
 
 from iosuite_shared import apppasswords, db, routers, sessions, suite, users
 from iosuite_shared.access import ACCESS_ROLES, UNCLAIMED, Access, BodyCap, TooLarge, content_type, json_body, public_user
 from iosuite_shared.proxyauth import Forwarded, Proxy, authlog, peer_of, seen
+from iosuite_shared.errors import Invalid
 
 STATUS_PATH = routers.STATUS_PATH
 __all__ = ["Auth", "Access", "ACCESS_ROLES", "BodyCap", "TooLarge", "content_type", "json_body", "public_user", "peer_of", "STATUS_PATH"]
@@ -194,7 +195,7 @@ class Auth:
             sessions.set_cookie(response, request.cookies.get(sessions.COOKIE), sessions.host_of(request), via, sessions.over_https(request))
         if request.state.via_proxy and user and request.state.cookie_uid != user["id"] and path != "/api/auth/logout":
             via = "cloudflare" if self.proxy.mode() == "cloudflare" else "proxy"
-            tok = sessions.create(user["id"], self.app, via, getattr(request.state, "origin", None))
+            tok = sessions.for_proxy(user["id"], self.app, via, getattr(request.state, "origin", None))
             sessions.set_cookie(response, tok, sessions.host_of(request), via, sessions.over_https(request))
         return response
 
@@ -314,9 +315,10 @@ class Auth:
     # ---- the MCP endpoint's gate
     def mcp_gate(self, enabled, path: str = "/mcp", on_user=None):
         """A `before` hook for middleware() (or something an app's own hook calls first): a request to the MCP endpoint
-        is refused with 404 while the switch is off (`enabled()` is false), with 401 when nobody is signed in (MCP
-        clients sign in with an app password: HTTP Basic, or a bearer token), and otherwise `on_user(user)` runs (an app
-        sets its MCP context variable there). Anything else passes."""
+        is refused with 404 while the switch is off (`enabled()` is false), with 403 when a page in a browser sends it
+        under a host name the app is not known by (suite.known_host: a page on another site that points its own name
+        at this server; an MCP client is not a browser and is not asked), with 401 when nobody is signed in (MCP clients sign in with an app password: HTTP Basic, or a bearer token),
+        and otherwise `on_user(user)` runs (an app sets its MCP context variable there). Anything else passes."""
         auth = self
 
         def gate(request: Request):
@@ -325,6 +327,11 @@ class Auth:
                 return None
             if not enabled():
                 return JSONResponse({"detail": "The MCP server is switched off (Settings › Server)."}, status_code=404)
+            if "origin" in request.headers or "sec-fetch-site" in request.headers:  # sent by a page in a browser
+                for name in ("host", "x-forwarded-host"):
+                    if name in request.headers and not suite.known_host(auth.app, request.headers[name]):
+                        return JSONResponse({"detail": f"{auth.label} is not known by the name {request.headers[name][:80]!r}. Set PUBLIC_URL in "
+                                                       "config.env to the address it is reached at, or open it there once as an admin."}, status_code=403)
             user = auth.current_user(request)
             if not user:
                 return JSONResponse({"detail": "Sign in with your user name and an app password (HTTP Basic), or send 'Authorization: Bearer "
@@ -336,44 +343,43 @@ class Auth:
         return gate
 
     # ---- what every app's FastAPI gets the same way
-    def install(self, app, api_prefix: str = "/api/", body_limit: int = 4 << 20, limit_for=None, error_key: str = None,
-                not_found=(), forwarded_allow_ips: str = "*") -> None:
+    def install(self, app, api_prefix: str = "/api/", body_limit: int = 4 << 20, limit_for=None, not_found=()) -> None:
         """The pieces every app of the suite adds to its FastAPI, once:
-        - a ValueError or malformed JSON out of a route is the client's mistake: a 400 that says so, not a 500 and a
-          traceback (the apps' validation raises ValueError; a TypeError is a bug and stays a 500 with its traceback);
+        - errors.Invalid (what the suite's validation raises) or malformed JSON out of a route is the client's mistake:
+          a 400 that says so. Any other ValueError is answered 400 as well, and logged with its traceback, since it
+          came from somewhere that did not mean to answer the client (a TypeError stays a 500);
           `not_found` names the app's own exception classes that mean 404;
         - the forwarded headers (proxyauth.Forwarded): the address the connection came from is kept for proxy sign-in
-          and the throttles, and X-Forwarded-For / -Proto are believed from `forwarded_allow_ips` (FORWARDED_ALLOW_IPS;
-          the app starts uvicorn with proxy_headers=False);
-        - the headers: X-Content-Type-Options: nosniff and Referrer-Policy: same-origin on everything, Cache-Control:
-          no-store on the API (api_prefix) and no-cache elsewhere, unless the route set its own;
+          and the throttles, and X-Forwarded-For / -Proto are believed from this machine and from the reverse proxies
+          listed under Settings › Security (the app starts uvicorn with proxy_headers=False);
+        - the headers: X-Content-Type-Options: nosniff, Referrer-Policy: same-origin, and X-Frame-Options: SAMEORIGIN
+          with Content-Security-Policy: frame-ancestors 'self' (a page of another site cannot show the app in a frame;
+          a <meta> policy cannot say that) on everything, Cache-Control: no-store on the API (api_prefix) and no-cache
+          elsewhere, unless the route set its own;
         - the body cap: a request body larger than `limit_for(path, content_type)` bytes (`body_limit` by default) is
           refused with 413, by its Content-Length before it is read, and as it arrives when it comes chunked or longer
-          than it said, so nothing large is ever held in memory.
-        `error_key` names a second key the error JSON carries beside `detail` (ioHealth's phone app reads `error`)."""
+          than it said, so nothing large is ever held in memory."""
         log = self.log
         limit_for = limit_for or (lambda path, ctype: body_limit)
 
-        def error(msg: str, status: int, headers=None):
-            body = {"detail": msg}
-            if error_key:
-                body[error_key] = msg
-            return JSONResponse(body, status_code=status, headers=headers)
-
-        if error_key:
-            @app.exception_handler(HTTPException)
-            async def _http_error(request: Request, e: HTTPException):
-                return error(e.detail, e.status_code, getattr(e, "headers", None))
+        def error(msg: str, status: int):
+            return JSONResponse({"detail": msg}, status_code=status)
 
         for exc in not_found:
             @app.exception_handler(exc)
             async def _not_found(request: Request, e: Exception):
                 return error(str(e) or "Not found", 404)
 
-        @app.exception_handler(ValueError)
+        @app.exception_handler(Invalid)
         @app.exception_handler(json.JSONDecodeError)
         async def _bad_input(request: Request, e: Exception):
-            log.warning("bad input on %s %s: %s: %s", request.method, request.url.path, type(e).__name__, str(e)[:200])
+            log.info("bad input on %s %s: %s", request.method, request.url.path, str(e)[:200])
+            return error(f"Bad request: {str(e)[:200] or type(e).__name__}", 400)
+
+        @app.exception_handler(ValueError)
+        async def _value_error(request: Request, e: Exception):
+            log.warning("a ValueError on %s %s that no validation raised (answered 400; a bug if the request was fine)",
+                        request.method, request.url.path, exc_info=e)
             return error(f"Bad request: {str(e)[:200] or type(e).__name__}", 400)
 
         @app.middleware("http")
@@ -388,17 +394,19 @@ class Auth:
             response = await call_next(request)
             response.headers.setdefault("X-Content-Type-Options", "nosniff")
             response.headers.setdefault("Referrer-Policy", "same-origin")
+            response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+            response.headers.setdefault("Content-Security-Policy", "frame-ancestors 'self'")
             if "cache-control" not in response.headers:
                 response.headers["Cache-Control"] = "no-store" if request.url.path.startswith(api_prefix) else "no-cache"
             return response
 
         app.add_middleware(BodyCap, limit_for=limit_for, error=error)
-        app.add_middleware(Forwarded, allow=forwarded_allow_ips)  # added last: the outermost layer, so the peer is the real one
+        app.add_middleware(Forwarded)  # added last: the outermost layer, so the peer is the real one
 
     def _delete(self, me, user_id: int):
         """DELETE /api/users/{id} (suite admins: an account is the whole suite's)."""
         if me and me["id"] == user_id:
-            raise ValueError("You cannot delete your own account while signed in")
+            raise Invalid("You cannot delete your own account while signed in")
         users.delete(user_id)
 
     def _update(self, me, user_id: int, body: dict):
@@ -418,7 +426,7 @@ class Auth:
                 raise PermissionError("Only a suite admin can change a suite admin's role")
         role = body.get("role")
         if role is not None and me and me["id"] == user_id and role != "admin" and users.admins_of(self.app) <= 1:
-            raise ValueError("That is the only admin; make someone else admin first")
+            raise Invalid("That is the only admin; make someone else admin first")
         if suite:
             users.update(user_id, role=role, app=self.app, password=body.get("password"), name=body.get("name"), email=body.get("email"),
                          display_name=body.get("displayName"), listed=None if body.get("listed") is None else bool(body.get("listed")),

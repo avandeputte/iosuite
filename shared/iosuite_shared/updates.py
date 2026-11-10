@@ -24,6 +24,7 @@ import urllib.request
 from pathlib import Path
 
 from iosuite_shared import config, db
+from iosuite_shared.errors import Invalid
 
 DAILY = 24 * 3600
 VERSION_RE = re.compile(r'^__version__\s*=\s*"([^"]+)"', re.M)
@@ -92,7 +93,7 @@ class Updater:
 
     def set_auto_check(self, on: bool) -> None:
         if self.check_locked and on:
-            raise ValueError("UPDATE_CHECK=0 in the environment keeps the daily check off")
+            raise Invalid("UPDATE_CHECK=0 in the environment keeps the daily check off")
         self._set("update_check", "1" if on else "0")
         if not on:
             self.forget_check()

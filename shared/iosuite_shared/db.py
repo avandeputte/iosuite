@@ -1,13 +1,14 @@
 """The Shared ioSuite database: connections, the schema, and the suite-wide / per-app settings table.
 
-Connections come from a small pool (Pool): a unit of work borrows one, commits or rolls back, and gives it back; a
-request that misses the caches runs several queries without a new TCP handshake and MariaDB sign-in for each. A
-PyMySQL connection is never used by two threads at once. Rows come back as dicts. The apps use Pool for their own
-databases too (`pool = db.Pool(connect)`, `with pool.tx() as con`).
+Connections come from a small pool (Pool), in autocommit mode: a statement on its own (q, one, ex) is one round trip,
+and a unit of work (tx) begins a transaction, commits or rolls back, and gives the connection back. A PyMySQL
+connection is never used by two threads at once. Rows come back as dicts. The apps use Database (the pool, the
+transaction and q / one / ex / many) for their own databases too.
 """
 import json
 import logging
 import queue
+import select
 import threading
 import time
 from contextlib import contextmanager
@@ -27,6 +28,7 @@ OPTIONS = " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
 # own three-letter prefix). Times are seconds since 1970 (UTC).
 SCHEMA = [
     # one account for the whole suite. hash '' is a passwordless account: one-click sign-in on the LAN, viewer at most.
+    # session_gen is read by nothing; the column stays while an app on iosuite-shared before 0.34 may still select it.
     """CREATE TABLE IF NOT EXISTS ios_users (
         id INT AUTO_INCREMENT PRIMARY KEY,
         name VARCHAR(64) NOT NULL,
@@ -159,24 +161,38 @@ def connect(database: str | None = ...):
     p = params()
     return pymysql.connect(host=p["host"], port=int(p["port"]), user=p["user"], password=p["password"],
                            database=p["database"] if database is ... else database, charset="utf8mb4",
-                           cursorclass=DictCursor, autocommit=False, connect_timeout=8, read_timeout=60, write_timeout=60)
+                           cursorclass=DictCursor, autocommit=True, connect_timeout=8, read_timeout=60, write_timeout=60)
+
+
+BROKEN = (pymysql.err.OperationalError, pymysql.err.InterfaceError)  # the connection itself failed: it is closed, not kept
 
 
 class Pool:
-    """A few open connections, reused: `connect` makes a new one (autocommit off), `size` is how many are kept. A
-    borrowed connection is pinged first (and replaced when the server dropped it); one that failed inside a unit of
-    work is closed, not kept. Thread-safe: a connection is in one thread's hands at a time."""
+    """A few open connections, reused: `connect` makes a new one, `size` is how many are kept. A connection that sat
+    unused for more than IDLE_S is pinged before it is lent again (and replaced when the server dropped it); one that
+    was in use a moment ago is only looked at (_open: no round trip), so a query is one round trip to the server and
+    not three. A connection
+    that failed inside a unit of work is closed, and so are the kept ones (the server went away: they are gone too).
+    Thread-safe: a connection is in one thread's hands at a time.
+
+    `connect` should open connections in autocommit mode: `auto()` then runs a statement with nothing around it, and
+    `tx()` begins and commits its own transaction. Connections with autocommit off work as well (both commit at the end)."""
+
+    IDLE_S = 30.0
 
     def __init__(self, connect, size: int = 8):
         self._connect, self._kept = connect, queue.LifoQueue(maxsize=size)
 
     def borrow(self):
         try:
-            con = self._kept.get_nowait()
+            con, at = self._kept.get_nowait()
         except queue.Empty:
             return self._connect()
         try:
-            con.ping(reconnect=False)
+            if time.monotonic() - at >= self.IDLE_S:
+                con.ping(reconnect=False)
+            elif not _open(con):
+                raise pymysql.err.InterfaceError(0, "closed")
             return con
         except pymysql.MySQLError:
             _close(con)
@@ -185,9 +201,10 @@ class Pool:
     def give_back(self, con, broken: bool = False):
         if broken:
             _close(con)
+            self.drain()
             return
         try:
-            self._kept.put_nowait(con)
+            self._kept.put_nowait((con, time.monotonic()))
         except queue.Full:
             _close(con)
 
@@ -195,28 +212,108 @@ class Pool:
         """Close every kept connection (the database changed; shutdown)."""
         while True:
             try:
-                _close(self._kept.get_nowait())
+                _close(self._kept.get_nowait()[0])
             except queue.Empty:
                 return
 
     @contextmanager
-    def tx(self):
-        """A connection whose work is committed at the end of the block (rolled back on an exception)."""
+    def _lend(self, transaction: bool):
         con = self.borrow()
-        broken = False
+        broken, commits = False, False
         try:
+            commits = not con.get_autocommit()
+            if transaction and not commits:
+                con.begin()
+                commits = True
             yield con
-            con.commit()
+            if commits:
+                con.commit()
         except BaseException as e:
-            broken = isinstance(e, (pymysql.err.OperationalError, pymysql.err.InterfaceError))
+            broken = isinstance(e, BROKEN)
             try:
-                if not broken:
+                if not broken and commits:
                     con.rollback()
             except pymysql.MySQLError:
                 broken = True
             raise
         finally:
             self.give_back(con, broken)
+
+    def tx(self):
+        """A connection whose work is one transaction: committed at the end of the block, rolled back on an exception."""
+        return self._lend(True)
+
+    def auto(self):
+        """A connection for statements that each stand on their own (a read, one insert): no transaction is begun."""
+        return self._lend(False)
+
+
+class Database:
+    """One database as an app uses it: a Pool, a transaction that nested calls on the same thread share, and the
+    helpers q / one / ex / many, which run inside the thread's open transaction when there is one and on their own
+    otherwise. The apps keep one for their own database (`_db = Database(connect)`; `tx, q, one, ex = _db.tx, ...`)."""
+
+    def __init__(self, connect, size: int = 8):
+        self.pool = Pool(connect, size)
+        self._local = threading.local()
+
+    @contextmanager
+    def tx(self):
+        """One transaction: committed on success, rolled back on an exception. Nested calls share it."""
+        con = getattr(self._local, "con", None)
+        if con is not None:
+            yield con
+            return
+        with self.pool.tx() as con:
+            self._local.con = con
+            try:
+                yield con
+            finally:
+                self._local.con = None
+
+    @contextmanager
+    def cursor(self, kind=None):
+        """A cursor for one statement: in the thread's open transaction, else on a connection of its own. `kind`: a
+        PyMySQL cursor class other than the connection's (DictCursor on a connection that gives tuples)."""
+        con = getattr(self._local, "con", None)
+        if con is not None:
+            with con.cursor(kind) as cur:
+                yield cur
+            return
+        with self.pool.auto() as con, con.cursor(kind) as cur:
+            yield cur
+
+    def q(self, sql: str, args=None, kind=None) -> list:
+        with self.cursor(kind) as cur:
+            cur.execute(sql, args)
+            return list(cur.fetchall())
+
+    def one(self, sql: str, args=None):
+        rows = self.q(sql, args)
+        return rows[0] if rows else None
+
+    def ex(self, sql: str, args=None) -> int:
+        """Run one statement; returns lastrowid (inserts) or the affected row count."""
+        with self.cursor() as cur:
+            n = cur.execute(sql, args)
+            return cur.lastrowid or n
+
+    def many(self, sql: str, rows: list) -> None:
+        if rows:
+            with self.tx() as con, con.cursor() as cur:
+                cur.executemany(sql, rows)
+
+
+def _open(con) -> bool:
+    """Whether a kept connection still looks usable, without asking the server: it was not closed here, and nothing
+    waits to be read on its socket (a server that closed the connection, or went away, leaves an end-of-file there)."""
+    if not con.open:
+        return False
+    sock = getattr(con, "_sock", None)
+    try:
+        return sock is None or not select.select([sock], [], [], 0)[0]
+    except (OSError, ValueError):
+        return False
 
 
 def _close(con):
@@ -226,32 +323,18 @@ def _close(con):
         pass
 
 
-_pool = Pool(connect)
+_db = Database(connect)
+_pool = _db.pool
+
 
 
 def tx():
-    """A pooled connection whose work is committed at the end of the block (rolled back on an exception)."""
-    return _pool.tx()
+    """A pooled connection whose work is one transaction: committed at the end of the block, rolled back on an
+    exception. Nested calls on the same thread share it, and so do q / one / ex inside the block."""
+    return _db.tx()
 
 
-def q(sql: str, args=None) -> list:
-    with tx() as con:
-        with con.cursor() as cur:
-            cur.execute(sql, args)
-            return cur.fetchall()
-
-
-def one(sql: str, args=None):
-    rows = q(sql, args)
-    return rows[0] if rows else None
-
-
-def ex(sql: str, args=None) -> int:
-    """Run one statement; returns lastrowid (inserts) or the affected row count."""
-    with tx() as con:
-        with con.cursor() as cur:
-            cur.execute(sql, args)
-            return cur.lastrowid or cur.rowcount
+q, one, ex = _db.q, _db.one, _db.ex
 
 
 _ready = False
