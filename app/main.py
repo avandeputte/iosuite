@@ -12,9 +12,10 @@ from fastapi import FastAPI
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
+from iosuite_shared import users
 from iosuite_shared.updates import setup_log
 
-from app import __version__, api, config, db, keys, users
+from app import __version__, api, config, db, keys
 from app.auth import auth, updater
 
 setup_log(config.LOG_FILE)  # the server log that Settings › Server shows; the app runs without it
@@ -48,7 +49,7 @@ def _limit_for(path: str, ctype: str) -> int:
 
 
 # 400 for bad input, the headers, no-store on the API, the body cap: the same in every app of the suite
-auth.install(app, limit_for=_limit_for, forwarded_allow_ips=config.FORWARDED_ALLOW_IPS)  # also X-Forwarded-* from those proxies
+auth.install(app, limit_for=_limit_for)
 
 
 def _server_info() -> dict:

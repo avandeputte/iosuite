@@ -7,6 +7,9 @@ link and kept in the database (prt_bookmark_icons), which the page serves itself
 import hashlib
 import re
 import xml.etree.ElementTree as ET
+
+from defusedxml import DefusedXmlException
+from defusedxml.ElementTree import fromstring as parse_xml  # an uploaded file: no entity expansion or external entities
 from urllib.parse import urlsplit
 
 from app import db
@@ -27,11 +30,19 @@ def _abbr(name: str, abbr: str | None) -> str:
 
 
 def _href(href: str) -> str:
+    """A link's address: a web address (https:// is added to a bare one) or a mailto:. Nothing else: the page puts it
+    in an <a href>, where javascript: and data: addresses would run in the page."""
     h = (href or "").strip()
-    if not re.match(r"^[a-z][a-z0-9+.-]*://", h, re.I):
+    if re.match(r"^mailto:[^\s@]+@[^\s@]+$", h, re.I):
+        return h[:2048]
+    if not re.match(r"^[a-z][a-z0-9+.-]*:", h, re.I) or re.match(r"^[^/:]+:\d+(/|$)", h):  # no scheme, or host:port
         h = "https://" + h if h else ""
-    if not h or not urlsplit(h).netloc:
-        raise BadBookmark("The link needs an address, like https://example.com")
+    try:
+        u = urlsplit(h)
+    except ValueError:
+        u = None
+    if not u or u.scheme.lower() not in ("http", "https") or not u.netloc:
+        raise BadBookmark("The link needs a web address, like https://example.com, or a mailto: address")
     return h[:2048]
 
 
@@ -202,8 +213,8 @@ def clean_svg(data: bytes) -> str:
     if _UNSAFE.search(text):
         raise BadBookmark("The SVG contains a script, an event handler or an entity: those are not allowed")
     try:
-        root = ET.fromstring(text)
-    except ET.ParseError as e:
+        root = parse_xml(text)
+    except (ET.ParseError, DefusedXmlException) as e:
         raise BadBookmark(f"Not a valid SVG: {str(e)[:120]}")
     if root.tag not in (_SVG_NS, "svg"):
         raise BadBookmark("Not an SVG file (the root element is not <svg>)")

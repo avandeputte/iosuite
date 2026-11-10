@@ -3,8 +3,6 @@
 The start page keeps prt_settings (the default photo strip, the weather settings and its cached answers, the update
 switch, each account's layout), prt_schema_version and the bookmarks. What the page grows later gets its tables here
 too. Every table is prt_<name>, the suite's naming convention (the apps can share one database)."""
-import threading
-from contextlib import contextmanager
 
 import pymysql
 from pymysql.cursors import DictCursor
@@ -55,52 +53,15 @@ SCHEMA = [
 def connect(database: str | None = None):
     return pymysql.connect(host=config.DB_HOST, port=config.DB_PORT, user=config.DB_USER, password=config.DB_PASSWORD,
                            database=database if database is not None else config.DB_NAME, charset="utf8mb4",
-                           cursorclass=DictCursor, autocommit=False, connect_timeout=8)
+                           cursorclass=DictCursor, autocommit=True, connect_timeout=8)
 
 
-_local = threading.local()
-pool = shared_db.Pool(connect)  # a few open connections, reused: no new handshake and sign-in for every query
-
-
-@contextmanager
-def tx():
-    """A pooled connection inside one transaction: committed on success, rolled back on error. Nested calls share it."""
-    con = getattr(_local, "con", None)
-    if con is not None:
-        yield con
-        return
-    con = pool.borrow()
-    _local.con = con
-    broken = False
-    try:
-        yield con
-        con.commit()
-    except BaseException as e:
-        broken = isinstance(e, (pymysql.err.OperationalError, pymysql.err.InterfaceError))
-        if not broken:
-            con.rollback()
-        raise
-    finally:
-        _local.con = None
-        pool.give_back(con, broken)
-
-
-def q(sql: str, args=None) -> list[dict]:
-    with tx() as con, con.cursor() as cur:
-        cur.execute(sql, args)
-        return list(cur.fetchall())
-
-
-def one(sql: str, args=None) -> dict | None:
-    rows = q(sql, args)
-    return rows[0] if rows else None
-
-
-def ex(sql: str, args=None) -> int:
-    """Run a statement; returns lastrowid (inserts) or rowcount."""
-    with tx() as con, con.cursor() as cur:
-        n = cur.execute(sql, args)
-        return cur.lastrowid or n
+# The pool, the transaction nested calls share, and q / one / ex / many are the suite's (iosuite_shared.db.Database):
+# a statement on its own is one round trip, tx() is one transaction (committed on success, rolled back on error), and
+# q / one / ex inside a `with tx():` block run in it.
+_db = shared_db.Database(connect)
+pool = _db.pool
+tx, q, one, ex, many = _db.tx, _db.q, _db.one, _db.ex, _db.many
 
 
 def get_setting(k: str, default: str | None = None) -> str | None:

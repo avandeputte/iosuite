@@ -56,8 +56,9 @@ def test_bookmarks_status_pings_each_link(client, monkeypatch):
 
 
 def test_ping_without_a_server():
+    import ipaddress
     assert status._ping("mailto:x@y") == {"ok": None, "status": None}
-    assert status.pingable("http://192.168.1.1/") and status.pingable("https://nas.lan:5001")  # bookmarks are for the home network
+    assert status._allowed(ipaddress.ip_address("192.168.1.1")) and status._allowed(ipaddress.ip_address("10.0.0.7"))  # bookmarks are for the home network
 
 
 def test_ping_never_reaches_this_server_or_metadata_and_never_follows_a_redirect():
@@ -66,8 +67,7 @@ def test_ping_never_reaches_this_server_or_metadata_and_never_follows_a_redirect
     import http.server
     import threading
     for href in ("http://127.0.0.1:9/", "http://localhost/", "http://[::1]/", "http://169.254.169.254/latest/", "http://0.0.0.0/", "ftp://x/"):
-        assert not status.pingable(href), href
-        assert status._ping(href) in ({"ok": None, "status": None},)
+        assert status._ping(href) == {"ok": None, "status": None}, href
     seen = []
 
     class H(http.server.BaseHTTPRequestHandler):
@@ -86,7 +86,7 @@ def test_ping_never_reaches_this_server_or_metadata_and_never_follows_a_redirect
         # the server is reached through its own address only when it is not loopback: pretend with the check off
         href = f"http://127.0.0.1:{srv.server_port}/x"
         import unittest.mock as um
-        with um.patch.object(status, "pingable", lambda h: True):
+        with um.patch.object(status, "_allowed", lambda ip: True):
             assert status._ping(href) == {"ok": True, "status": 302}
         assert seen == ["/x"]  # the redirect was not followed
     finally:

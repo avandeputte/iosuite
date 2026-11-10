@@ -7,7 +7,7 @@ import sys
 
 import pytest
 
-from iosuite_shared import testing as _authtest
+from iosuite_shared import apppasswords, testing as _authtest, users
 
 if _authtest.server() is None:
     pytest.skip(f"{_authtest.server.reason}: the tests need a MariaDB (Docker, or IOSUITE_TEST_DB=host:port:user:password)", allow_module_level=True)
@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from app import db, users  # noqa: E402
+from app import db  # noqa: E402
 
 
 @pytest.fixture(scope="session")
@@ -43,7 +43,8 @@ def client(_client):
     db.migrate()
     from app.auth import auth
     _authtest.clean_shared_tables(auth)
-    users.forget_cached_auth()
+    apppasswords.forget()
+    users.invalidate()
     from iosuite_shared import suite
     from app import apps
     for key in apps.ORDER:  # every io app registered (each does so itself when it starts)

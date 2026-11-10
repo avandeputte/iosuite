@@ -176,7 +176,6 @@ password is used once and not written anywhere.
 | `IOSUITE_DB_HOST`, `_PORT`, `_NAME`, `_USER`, `_PASSWORD` | the Shared ioSuite database (`iosuite`, on `DB_HOST` unless set): accounts, passwords, sessions, app passwords and roles, the suite-wide settings and the list of apps, shared with every io app |
 | `COOKIE_DOMAIN` | the domain the session cookie is shared on (`example.com`): signed in at `home.example.com`, signed in at `photos.example.com` too |
 | `HOST`, `PORT` | where the server listens (`0.0.0.0`, 8630; every app of the suite has its own port) |
-| `FORWARDED_ALLOW_IPS` | the addresses that may pass on the visitor's address (`*`, or your reverse proxy's) |
 | `TLS_CERT_FILE`, `TLS_KEY_FILE` | serve HTTPS directly instead of behind a reverse proxy |
 | `PUBLIC_URL` | the address people use (behind a proxy); also what ioSuite registers in the suite's list of apps |
 | `ACCUWEATHER_API_KEY`, `ACCUWEATHER_LOCATION` | the weather: an AccuWeather key and a location key (or Settings › Home page, which finds the location from a city name) |
@@ -236,7 +235,6 @@ app/homeassistant.py  Home Assistant: the settings, the chosen entities and thei
 app/ha_feed.py     Home Assistant's websocket: state changes folded into the copy, streamed to the pages
 app/bookmarks.py   the bookmark groups and links, and the homepage bookmarks.yaml import
 app/auth.py        the shared accounts and the updater (iosuite-shared), as ioSuite uses them
-app/users.py       accounts and roles, seen from ioSuite
 app/db.py          MariaDB access and the schema (the meta settings table, the bookmarks)
 app/config.py      the settings: the suite's standard names (iosuite_shared.config) and ioSuite's own
 app/cli.py         python -m app.cli: migrate, check

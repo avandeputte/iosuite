@@ -351,7 +351,7 @@ def iocalendar_add(request: Request, b: dict) -> dict:
         ev["calendarId"] = b["calendarId"]
     got = fetch(request, "iocalendar", "/api/events", body=ev)
     eid = got.get("id") if isinstance(got, dict) else None
-    return {"id": eid, "url": f"{apps.url_for('iocalendar', _host(request))}/#/event/{eid}" if eid is not None else None}
+    return {"id": eid, "url": f"{apps.url_for('iocalendar')}/#/event/{eid}" if eid is not None else None}
 
 
 # ------------------------------------------------------------------ ioContacts: birthdays and anniversaries ahead

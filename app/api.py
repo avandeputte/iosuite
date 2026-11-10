@@ -8,16 +8,11 @@ from fastapi.concurrency import run_in_threadpool
 import asyncio
 import json
 
-from app import access, apps, bookmarks, config, homeassistant as ha, layout, status as appstatus, weather, widgets
+from iosuite_shared.access import json_body
+
+from app import access, apps, bookmarks, homeassistant as ha, layout, status as appstatus, weather, widgets
 
 router = APIRouter()
-
-
-def _base(request: Request) -> str:
-    """The page's own address, for links: PUBLIC_URL, else as reached (through the proxy's headers)."""
-    if config.PUBLIC_URL:
-        return config.PUBLIC_URL
-    return f"{request.headers.get('x-forwarded-proto', request.url.scheme)}://{request.headers.get('host', request.url.netloc)}"
 
 
 # ------------------------------------------------------------------ the apps
@@ -26,9 +21,8 @@ def _base(request: Request) -> str:
 def list_apps(request: Request):
     """The tiles: every app this person may use, with its name, icon, colour and address (an admin tool only for its
     admins). Hidden ones are left out (Settings lists them)."""
-    host = request.headers.get("x-forwarded-host") or request.headers.get("host") or request.url.netloc
     u = request.state.user
-    return {"items": apps.tiles(host, u), "photoStrip": apps.photo_strip(), "layout": layout.get(u["id"])}
+    return {"items": apps.tiles(u), "photoStrip": apps.photo_strip(), "layout": layout.get(u["id"])}
 
 
 @router.get("/api/apps/status", dependencies=[access.signed_in])
@@ -49,10 +43,7 @@ async def my_layout_save(request: Request):
     """Body: {hidden?: [keys], order?: [app keys], cards?: [home | birthdays | week | strip | bookmarks], strip?: rediscover |
     onthisday | off | null}. {} puts it back."""
     u = request.state.user
-    try:
-        return layout.save(u["id"], await request.json())
-    except ValueError as e:
-        raise HTTPException(400, str(e))
+    return layout.save(u["id"], await json_body(request))
 
 
 @router.get("/api/home/settings", dependencies=[access.admin])
@@ -64,14 +55,9 @@ def home_settings(request: Request):
 @router.post("/api/home/settings", dependencies=[access.admin])
 async def home_save(request: Request):
     """Admins. Body: {photoStrip: rediscover | onthisday | off}."""
-    b = await request.json()
-    if not isinstance(b, dict):
-        raise HTTPException(400, "An object, please")
-    try:
-        if "photoStrip" in b:
-            apps.set_photo_strip(b["photoStrip"])
-    except ValueError as e:
-        raise HTTPException(400, str(e))
+    b = await json_body(request)
+    if "photoStrip" in b:
+        apps.set_photo_strip(b["photoStrip"])
     return {"photoStrip": apps.photo_strip()}
 
 
@@ -97,9 +83,9 @@ def weather_settings(request: Request):
 async def weather_save(request: Request):
     """Admins. Body: {key?, locationKey?, locationName?, units?}."""
     u = request.state.user
-    b = await request.json()
+    b = await json_body(request)
     try:
-        weather.save(b if isinstance(b, dict) else {}, by=u.get("name"))
+        weather.save(b, by=u.get("name"))
     except weather.WeatherError as e:
         raise HTTPException(400, str(e))
     return weather.settings()
@@ -176,11 +162,7 @@ async def ha_set(entity_id: str, request: Request):
     """Editors and admins. The popups: a thermostat takes {temperature? | low? + high?, mode?, fan?, preset?}, a cover
     {action: open | close | stop} or {position: 0-100}; on an entity the admin lets the page control. Returns the
     entity's state right after."""
-    try:
-        b = await request.json()
-    except ValueError:
-        raise HTTPException(400, "JSON, please")
-    return await run_in_threadpool(_ha, ha.set_entity, entity_id, b)
+    return await run_in_threadpool(_ha, ha.set_entity, entity_id, await json_body(request))
 
 
 @router.post("/api/ha/{entity_id}/{action}", dependencies=[access.editor])
@@ -205,16 +187,14 @@ def ha_settings(request: Request):
 async def ha_save(request: Request):
     """Admins. Body: {url?, token?, entities?: [{id, name?, control?, wall?, alert?}], builtinAlerts?}."""
     u = request.state.user
-    b = await request.json()
-    _ha(ha.save, b if isinstance(b, dict) else {}, by=u.get("name"))
+    _ha(ha.save, await json_body(request), by=u.get("name"))
     return ha.settings()
 
 
 @router.post("/api/ha/test", dependencies=[access.admin])
 async def ha_test(request: Request):
     """Admins. Body: {url?, token?}: tries them (the saved ones when empty) → {ok, name, version, entities}."""
-    b = await request.json()
-    b = b if isinstance(b, dict) else {}
+    b = await json_body(request)
     return await run_in_threadpool(_ha, ha.test, str(b.get("url") or ""), str(b.get("token") or ""))
 
 
@@ -242,13 +222,13 @@ def _bm(fn, *a, **kw):
 @router.post("/api/bookmarks/groups", dependencies=[access.editor])
 async def add_group(request: Request):
     """Editors. {name}"""
-    b = await request.json()
+    b = await json_body(request)
     return _bm(bookmarks.add_group, b.get("name"))
 
 
 @router.patch("/api/bookmarks/groups/{gid}", dependencies=[access.editor])
 async def rename_group(gid: int, request: Request):
-    b = await request.json()
+    b = await json_body(request)
     _bm(bookmarks.rename_group, gid, b.get("name"))
     return {"ok": True}
 
@@ -262,7 +242,7 @@ def delete_group(gid: int, request: Request):
 @router.post("/api/bookmarks/groups/order", dependencies=[access.editor])
 async def order_groups(request: Request):
     """Editors. {ids: [group id, ...]} in the order wanted."""
-    b = await request.json()
+    b = await json_body(request)
     _bm(bookmarks.order_groups, [int(x) for x in b.get("ids") or []])
     return {"ok": True}
 
@@ -270,14 +250,14 @@ async def order_groups(request: Request):
 @router.post("/api/bookmarks/groups/{gid}/links", dependencies=[access.editor])
 async def add_link(gid: int, request: Request):
     """Editors. {name, href, abbr?, description?, icon?}"""
-    b = await request.json()
+    b = await json_body(request)
     return _bm(bookmarks.add_link, gid, b.get("name"), b.get("href"), b.get("abbr"), b.get("description"), b.get("icon"))
 
 
 @router.post("/api/bookmarks/groups/{gid}/order", dependencies=[access.editor])
 async def order_links(gid: int, request: Request):
     """Editors. {ids: [link id, ...]} in the order wanted; a link from another group moves into this one."""
-    b = await request.json()
+    b = await json_body(request)
     _bm(bookmarks.order_links, gid, [int(x) for x in b.get("ids") or []])
     return {"ok": True}
 
@@ -285,8 +265,7 @@ async def order_links(gid: int, request: Request):
 @router.patch("/api/bookmarks/links/{lid}", dependencies=[access.editor])
 async def update_link(lid: int, request: Request):
     """Editors. Any of {name, href, abbr, description, icon, groupId}."""
-    b = await request.json()
-    return _bm(bookmarks.update_link, lid, b if isinstance(b, dict) else {})
+    return _bm(bookmarks.update_link, lid, await json_body(request))
 
 
 @router.delete("/api/bookmarks/links/{lid}", dependencies=[access.editor])
@@ -322,8 +301,9 @@ def delete_link_icon(lid: int, request: Request):
 @router.post("/api/bookmarks/import", dependencies=[access.editor])
 async def import_bookmarks(request: Request):
     """Editors. {yaml, replace?}: a homepage bookmarks.yaml."""
-    b = await request.json()
+    b = await json_body(request)
     return _bm(bookmarks.import_yaml, b.get("yaml") or "", bool(b.get("replace")))
+
 
 # ------------------------------------------------------------------ what the tiles show (app/widgets.py)
 
@@ -354,10 +334,7 @@ def widget_calendars(request: Request):
 async def widget_add_event(request: Request):
     """Quick add: a new event in ioCalendar, made with the viewer's own sign-in. {title, start, end?, allDay,
     timezone?, calendarId?} → {id, url}."""
-    try:
-        b = await request.json()
-    except ValueError:
-        raise HTTPException(400, "JSON, please")
+    b = await json_body(request)
     try:
         return await run_in_threadpool(widgets.iocalendar_add, request, b)
     except widgets.Unavailable as e:
