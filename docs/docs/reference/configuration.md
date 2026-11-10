@@ -30,20 +30,27 @@ COOKIE_DOMAIN=example.com                 # one sign-in for every app under this
 HOST=0.0.0.0                              # where the server listens
 PORT=8620                                 # each app has its own default
 INTERNAL_URL=http://192.168.1.151:8620    # where the app is inside the network (default: the host's LAN address)
-FORWARDED_ALLOW_IPS=*                     # who may pass X-Forwarded-For / -Proto: your reverse proxy
 TLS_CERT_FILE=… TLS_KEY_FILE=…            # serve HTTPS directly instead of behind a proxy
 ADMIN_USER=…  ADMIN_PASSWORD=…            # the first admin, on an empty Shared ioSuite database
 TZ=Europe/Brussels
 LOG_FILE=…                                # the server log (default data/<app>.log; empty: none)
 UPDATE_CHECK=0                            # lock the daily version check off
+KEEP_DELETED_DAYS=90                      # how long what a deletion leaves behind is kept (apps that sync: see below)
 MCP=1                                     # the MCP server on (apps that have one)
 ```
 
 On/off switches take `1`/`0`, `true`/`false`, `yes`/`no` or `on`/`off`. Each app adds its own settings (the photo
 folder and digiKam for ioPix, the LDAP port for ioContacts...); see its README.
 
+`KEEP_DELETED_DAYS` is for the apps that phones and other devices sync with. A deleted event (ioCalendar) or contact
+(ioContacts) leaves a marker, so a device learns of the deletion at its next sync; the marker goes after this many days,
+and a device that stayed away longer starts its sync over. ioNotes keeps the text of a deleted note and its change log
+that long (the trash shows 30 days); after that an empty marker stays.
+
+There is no default password for the Shared ioSuite database: `IOSUITE_DB_PASSWORD` is set by the installer, or by you.
+
 Settings that hold for the whole suite are not in `config.env` but in the Shared ioSuite database, changed in any app:
-sign-in at the proxy (Settings › Security), each app's default role and sign-in requirement (Settings › Global settings ›
+sign-in at the proxy and the addresses of your reverse proxies (Settings › Security), each app's default role and sign-in requirement (Settings › Global settings ›
 Apps), and the keys for services outside the suite (Settings › Global settings › Keys and tokens).
 
 ## Default ports
@@ -56,3 +63,4 @@ Apps), and the keys for services outside the suite (Settings › Global settings
 | ioSuite | 8630 |
 | ioContacts | 8640 (LDAP 3890) |
 | ioHealth | 8650 |
+| ioDNS | 8660 |

@@ -14,7 +14,12 @@ The sign-in screen is the same in every app: a tile per account (a click and a p
   with it. The first account in a Shared ioSuite database is a **suite admin**: admin in every app, and the one who
   manages the accounts.
 - **No account yet**: the app offers to create the first one, right there in the browser. That works only from inside
-  your network (or on the server itself), never through a reverse proxy from outside.
+  your network (or on the server itself), never through a reverse proxy from outside. Open the app at the server's
+  own address for it (`http://192.168.1.10:8620`), not at its public name: until an account exists, a visitor from
+  the internet, through a Cloudflare Tunnel, or through a reverse proxy the apps have not been told about gets the
+  sign-in screen saying "No account exists here yet" and nothing else, whatever the app's sign-in setting. A reverse
+  proxy on another machine is told to the apps afterwards, under
+  [Reverse proxy addresses](../run/reverse-proxy.md#tell-the-apps-where-the-proxy-is).
 - **Another app already uses this Shared ioSuite database**: the accounts are there. Sign in with yours.
 
 ## Make the accounts
