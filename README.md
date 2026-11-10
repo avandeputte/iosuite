@@ -60,13 +60,15 @@ what the app will show on the start page later (today's events, the newest photo
   (forecast), and only while someone opens the page: 44 calls on a day the page stays open from morning to night, so
   a free key's 50 a day are enough; browsers never talk to AccuWeather.
 - **Home Assistant**: a Home card with the entities an admin picks (lights, switches, locks, covers, scenes, sensors,
-  people), each with its state; a tap toggles the ones the admin ticked "control". Sensors ticked "wall" show on the
+  people), each with its state; a tap toggles the ones the admin ticked "control", for editors and admins (a viewer sees the
+  states and switches nothing, so a wall tablet that should switch lights signs in as an editor). Sensors ticked "wall" show on the
   wall display; the search box finds any entity by name and toggles the controllable ones; a line above the tiles
   points out what needs attention (an entity in the state the admin named, and built in: a leak, smoke, gas or CO
   sensor that is on, a problem or safety sensor, a battery at 15% or under). Settings › Home Assistant (admins) takes
   the address and a long-lived access token; the server makes every call with it, and browsers never see the token
   nor talk to Home Assistant. The server holds one websocket to Home Assistant for state changes and streams the card
-  to every open page (server-sent events), so a light switched at the wall shows within a second; without the
+  to every open page (server-sent events) when something on the card or one of the alerts changes, so a light switched
+  at the wall shows within a second; without the
   websocket (HA_FEED=0, or an old install) the states come in one call kept five seconds.
 - **Bookmarks**, as [homepage](https://gethomepage.dev/configs/bookmarks/) lays them out: groups of links under the
   apps, each with a two-letter badge (or an icon: an image address, a file name from the dashboard-icons

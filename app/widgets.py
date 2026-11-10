@@ -12,15 +12,20 @@ suite's Cloudflare Access service token goes with every request when one is set 
 tokens). Only the address and the Cloudflare headers come from there: the credentials stay the viewer's own.
 
 Every app is asked with a short timeout: an app that is down, or that this account has no access to, leaves its tile
-as it was (the page hides the block) instead of holding up the others.
+as it was (the page hides the block) instead of holding up the others. An app that did not answer at any of its
+addresses is left alone for BREAK_S seconds (the tile says so at once, no thread waits for it again), the address that
+answered last is tried first, and a tile that needs several answers asks for them at the same time.
 """
 import datetime as dt
 import json
 import random
 import re
+import threading
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import Request
@@ -29,6 +34,11 @@ from iosuite_shared import links, sessions
 from app import apps
 
 TIMEOUT = 4  # seconds, per request to an app
+BREAK_S = 30  # seconds an app that did not answer is left alone
+_down: dict[str, float] = {}  # app key -> until when it is left alone (time.monotonic)
+_good: dict[str, str] = {}    # app key -> the address that answered last
+_state_lock = threading.Lock()
+_pool = ThreadPoolExecutor(max_workers=8, thread_name_prefix="widgets")
 UA = "ioSuite start page"
 WIDGETS = ("iopix", "iocalendar", "iohealth", "iocontacts")
 
@@ -74,9 +84,39 @@ def _host(request: Request) -> str:
     return request.headers.get("x-forwarded-host") or request.headers.get("host") or request.url.netloc
 
 
+def forget() -> None:
+    """Every app may be asked again, from its first address on (the tests; an admin changed the addresses)."""
+    with _state_lock:
+        _down.clear()
+        _good.clear()
+
+
+def _together(*calls) -> list:
+    """Run these at the same time; for each its result, or the exception it raised."""
+    out = []
+    for f in [_pool.submit(c) for c in calls]:
+        try:
+            out.append(f.result())
+        except Exception as e:  # noqa: BLE001 - handed to the caller, who knows which ones matter
+            out.append(e)
+    return out
+
+
+def _both(*calls) -> list:
+    """Run these at the same time; their results, or the first exception one of them raised."""
+    out = _together(*calls)
+    for r in out:
+        if isinstance(r, Exception):
+            raise r
+    return out
+
+
 def _send(request: Request, key: str, path: str, params, raw: bool, body, timeout: float):
-    """Ask each address in turn until one answers (an HTTP error is an answer)."""
+    """Ask each address in turn until one answers (an HTTP error is an answer), the one that answered last first."""
     bases = _bases(key)
+    last = _good.get(key)
+    if last in bases:
+        bases = [last] + [b for b in bases if b != last]
     query = "?" + urllib.parse.urlencode(params) if params else ""
     headers = {**_headers(request), **_cf_headers()}
     if raw:
@@ -87,8 +127,11 @@ def _send(request: Request, key: str, path: str, params, raw: bool, body, timeou
     for i, base in enumerate(bases):
         req = urllib.request.Request(base + path + query, data=data, headers=headers, method="POST" if body is not None else "GET")
         try:
-            return _ask(req, raw, timeout)
+            got = _ask(req, raw, timeout)
+            _good[key] = base
+            return got
         except urllib.error.HTTPError:
+            _good[key] = base
             raise  # it answered
         except (urllib.error.URLError, OSError):
             if i == len(bases) - 1:
@@ -106,11 +149,17 @@ def _ask(req, raw: bool, timeout: float):
 
 def fetch(request: Request, key: str, path: str, params: dict | None = None, raw: bool = False, body: dict | None = None, timeout: float = TIMEOUT):
     """GET path from the app (JSON, or (bytes, content type) with raw); with body, POST that JSON instead."""
+    wait = _down.get(key, 0) - time.monotonic()
+    if wait > 0:
+        raise Unavailable(502, f"{apps.name_of(key)} did not answer a moment ago (asked again in {int(wait) + 1} s)")
     bases = _bases(key)
     base = bases[0] if bases else "(no address)"
     try:
-        return _send(request, key, path, params, raw, body, timeout)
+        got = _send(request, key, path, params, raw, body, timeout)
+        _down.pop(key, None)
+        return got
     except urllib.error.HTTPError as e:
+        _down.pop(key, None)
         name = apps.name_of(key)
         if body is not None and e.code in (400, 403, 409):  # ioCalendar's own word on what it would not take
             try:
@@ -123,7 +172,11 @@ def fetch(request: Request, key: str, path: str, params: dict | None = None, raw
         if e.code == 404:
             raise Unavailable(404, f"{name} has no {path} (an older version, or the address is not {name}'s)")
         raise Unavailable(502, f"{name} answered {e.code}")
-    except (urllib.error.URLError, OSError, ValueError) as e:
+    except (urllib.error.URLError, OSError) as e:
+        if not raw:  # a picture that took too long says nothing about the app
+            _down[key] = time.monotonic() + BREAK_S
+        raise Unavailable(502, f"{apps.name_of(key)} is not reachable at {base} ({type(e).__name__})")
+    except ValueError as e:
         raise Unavailable(502, f"{apps.name_of(key)} is not reachable at {base} ({type(e).__name__})")
 
 
@@ -198,7 +251,9 @@ def iocalendar(request: Request, tz: str = "", n: int = 3) -> dict:
     now = dt.datetime.now(zone)
     start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     end = start + dt.timedelta(days=1)
-    colors = {c["id"]: c.get("color") for c in fetch(request, "iocalendar", "/api/calendars").get("items", [])}
+    cals, occ = _both(lambda: fetch(request, "iocalendar", "/api/calendars"),
+                      lambda: fetch(request, "iocalendar", "/api/occurrences", {"start": start.isoformat(timespec="seconds"), "end": end.isoformat(timespec="seconds")}))
+    colors = {c["id"]: c.get("color") for c in cals.get("items", [])}
 
     def pick(o: dict) -> dict:
         return {"title": o.get("title") or "(no title)", "start": o.get("start"), "end": o.get("end"), "allDay": bool(o.get("allDay")),
@@ -216,7 +271,6 @@ def iocalendar(request: Request, tz: str = "", n: int = 3) -> dict:
     def cancelled(o: dict) -> bool:
         return (o.get("status") or "").upper() == "CANCELLED"
 
-    occ = fetch(request, "iocalendar", "/api/occurrences", {"start": start.isoformat(timespec="seconds"), "end": end.isoformat(timespec="seconds")})
     today = [pick(o) for o in occ.get("items", []) if not cancelled(o) and ends_after(o, now) and (not o.get("allDay") or _covers(o, now.date()))]
     out = {"today": today[:n], "more": max(0, len(today) - n), "next": None}
     if not today:
@@ -233,8 +287,9 @@ def iocalendar_week(request: Request, tz: str = "", days: int = 7, n: int = 12) 
     zone = _zone(tz)
     start = (dt.datetime.now(zone) + dt.timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
     end = start + dt.timedelta(days=days)
-    colors = {c["id"]: c.get("color") for c in fetch(request, "iocalendar", "/api/calendars").get("items", [])}
-    occ = fetch(request, "iocalendar", "/api/occurrences", {"start": start.isoformat(timespec="seconds"), "end": end.isoformat(timespec="seconds")})
+    cals, occ = _both(lambda: fetch(request, "iocalendar", "/api/calendars"),
+                      lambda: fetch(request, "iocalendar", "/api/occurrences", {"start": start.isoformat(timespec="seconds"), "end": end.isoformat(timespec="seconds")}))
+    colors = {c["id"]: c.get("color") for c in cals.get("items", [])}
     by_day: dict[str, list] = {}
     total = 0
     first, last = start.date(), (end - dt.timedelta(days=1)).date()
@@ -348,35 +403,39 @@ def iohealth(request: Request, tz: str = "") -> dict:
     steps = rings = sleep = None
     week: list = []
     failed = []
-    try:
-        # a day per point, the last seven days: today's number, and the trend behind it
-        since = (dt.datetime.now(_zone(tz)).date() - dt.timedelta(days=6)).isoformat()
-        pts = fetch(request, "iohealth", "/api/series", {**q, "from": since, "type": "step_count", "bucket": "day"}).get("points") or []
+    # a day per point, the last seven days: today's number, and the trend behind it
+    since = (dt.datetime.now(_zone(tz)).date() - dt.timedelta(days=6)).isoformat()
+    # the three answers are asked for at the same time: the tile waits for the slowest, not for their sum
+    series, nights, activity = _together(
+        lambda: fetch(request, "iohealth", "/api/series", {**q, "from": since, "type": "step_count", "bucket": "day"}),
+        # last night: the night that ended this morning (ioHealth names a night by the day it ends on)
+        lambda: fetch(request, "iohealth", "/api/sleep", {**q, "from": (dt.date.fromisoformat(day) - dt.timedelta(days=1)).isoformat()}),
+        lambda: fetch(request, "iohealth", "/api/activity", q))
+    for r in (series, nights, activity):
+        if isinstance(r, Exception) and not isinstance(r, Unavailable):
+            raise r
+    if isinstance(series, Unavailable):
+        failed.append(series)
+    else:
+        pts = series.get("points") or []
         by_day = {dt.datetime.fromtimestamp(p["t"], _zone(tz)).date().isoformat(): p.get("v") for p in pts if p.get("t") is not None}
         week = [{"date": d, "steps": round(by_day[d]) if by_day.get(d) is not None else None}
-                for d in (( dt.date.fromisoformat(since) + dt.timedelta(days=i)).isoformat() for i in range(7))]
+                for d in ((dt.date.fromisoformat(since) + dt.timedelta(days=i)).isoformat() for i in range(7))]
         steps = week[-1]["steps"] if week and week[-1]["date"] == day else None
         if steps is None and by_day.get(day) is not None:
             steps = round(by_day[day])
-    except Unavailable as e:
-        failed.append(e)
-    try:
-        # last night: the night that ended this morning (ioHealth names a night by the day it ends on)
-        nights = fetch(request, "iohealth", "/api/sleep", {**q, "from": (dt.date.fromisoformat(day) - dt.timedelta(days=1)).isoformat()})
+    if not isinstance(nights, Unavailable):  # sleep is a bonus: the tile shows without it
         nights = nights if isinstance(nights, list) else nights.get("items", [])
         last = next((x for x in reversed(nights) if x.get("asleep")), None)
         if last:
             sleep = {"date": last.get("date"), "asleep": round(last["asleep"]), "inBed": round(last.get("inBed") or 0),
                      "start": last.get("start"), "end": last.get("end")}
-    except Unavailable:
-        pass  # sleep is a bonus: the tile shows without it
-    try:
-        a = fetch(request, "iohealth", "/api/activity", q)
-        rows = a if isinstance(a, list) else a.get("items", [])
+    if isinstance(activity, Unavailable):
+        failed.append(activity)
+    else:
+        rows = activity if isinstance(activity, list) else activity.get("items", [])
         if rows:
             rings = {k: rows[-1].get(k) for k in ("move", "moveGoal", "exercise", "exerciseGoal", "stand", "standGoal")}
-    except Unavailable as e:
-        failed.append(e)
     if len(failed) == 2:  # one of the two missing still shows the other
         raise failed[0]
     return {"steps": steps, "rings": rings, "sleep": sleep, "week": week}

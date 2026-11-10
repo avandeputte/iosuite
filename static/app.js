@@ -1301,7 +1301,7 @@ async function setHomeAssistant(el) {
   let items = (s.entities || []).map((e) => ({ ...e }));
   const list = h('div', { class: 'halist' });
   const persist = async () => { const r = await save({ entities: items }); if (r) { items = r.entities.map((e) => ({ ...e })); drawList(); } };
-  const drawList = () => { list.replaceChildren(h('div', { class: 'harow head' }, h('span'), h('span', null, 'Entity'), h('span', null, 'Shown as'), h('span', { title: 'A tap on the card switches it (anyone signed in)' }, 'Control'), h('span', { title: 'On the wall display' }, 'Wall'), h('span', { title: 'Needs attention when its state is this (on, open, unlocked…); empty: never' }, 'Alert when'), h('span')),
+  const drawList = () => { list.replaceChildren(h('div', { class: 'harow head' }, h('span'), h('span', null, 'Entity'), h('span', null, 'Shown as'), h('span', { title: 'A tap on the card switches it (editors and admins)' }, 'Control'), h('span', { title: 'On the wall display' }, 'Wall'), h('span', { title: 'Needs attention when its state is this (on, open, unlocked…); empty: never' }, 'Alert when'), h('span')),
     ...items.map((e, i) => h('div', { class: 'harow', 'data-id': e.id },
       h('button', { class: 'iconbtn grip', title: 'Drag to reorder', 'aria-label': 'Drag to reorder' }, icon('grip', 's')),
       h('span', { class: 'haid', title: e.id }, e.id),
@@ -1339,7 +1339,7 @@ async function setHomeAssistant(el) {
       s.hasToken && !s.tokenFromEnv ? h('button', { class: 'pillbtn noic', onclick: async () => { if (await confirmDialog('Remove the token', 'Remove the Home Assistant token? The Home card disappears from the page.', 'Remove', true)) { await save({ token: '' }); onRoute(); } } }, 'Remove the token') : null,
       result)),
   h('div', { class: 'box' }, h('h2', null, icon('tune'), 'On the page'),
-    h('p', { class: 'muted' }, 'The Home card, in this order. Control: a tap switches it. Wall: on the wall display too. Alert when: the state to point out (on, open, unlocked…).'),
+    h('p', { class: 'muted' }, 'The Home card, in this order. Control: a tap switches it, for editors and admins (a viewer sees the state). Wall: on the wall display too. Alert when: the state to point out (on, open, unlocked…).'),
     list,
     h('div', { class: 'multi' }, q, h('button', { class: 'pillbtn noic', onclick: find }, 'Find')), found,
     h('label', { class: 'check' }, builtin, 'Also point out leak, smoke, gas and CO sensors, problems and batteries at 15% or under')));

@@ -2,7 +2,8 @@
 state_changed, so a light switched at the wall shows on the page within a second instead of at the next poll.
 
 The thread keeps the connection up (it reconnects with a growing pause), primes the states with get_states when it
-connects, and folds each event into app.homeassistant's copy of the states. Every change bumps `version`; the page's
+connects, and folds each event into app.homeassistant's copy of the states. A change to something the page shows (a
+chosen entity, or one the built-in alerts watch) bumps `version`; the page's
 event stream (GET /api/ha/events) sends the Home card anew when it sees the version move. While the feed is live the
 copy never goes stale, so the REST polling stops; when it is down (Home Assistant restarting, no websockets package),
 the page falls back to the REST copy, a few seconds old at most.
