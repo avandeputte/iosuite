@@ -18,7 +18,7 @@ check on those paths instead.
   to Cloudflare.**
 - The Worker reads the Basic header, finds the key from the password's 8 hex, compares the hash, and lets the request
   through only on a match. No credentials get the usual 401 sign-in prompt from the Worker itself.
-- The server still checks every password itself (scrypt), and so still enforces the CalDAV/CardDAV-only scope. The
+- The server still checks every password itself, and so still enforces the CalDAV/CardDAV-only scope. The
   Worker only guards `/dav*`, where every app password of that app is valid, so scope doesn't change its answer. A
   stale key only lets a request reach the server, never in.
 - Revoking a password takes up to about a minute to reach every Cloudflare location (KV caching). The server refuses
