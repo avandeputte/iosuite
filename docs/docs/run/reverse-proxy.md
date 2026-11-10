@@ -33,6 +33,27 @@ each app keeps its own sign-in (still with the same accounts). `PUBLIC_URL` is t
 list of apps, so the start page and the other apps link to the right place; unset, the app keeps the best address it
 has been reached at.
 
+## Tell the apps where the proxy is
+
+A reverse proxy on another machine connects from a private address, like any visitor in your home. The apps have to
+know which address is the proxy to tell someone at home from someone on the internet. Until they do, **everyone who
+comes through the proxy counts as outside your network**, which is the safe side: from outside, the first account
+cannot be made, an install without accounts shows nothing but its sign-in screen, and an account without a password
+gets no one-click sign-in.
+
+Set it once for the whole suite, as a suite admin, in any app: **Settings › Security › Sign-in at the proxy ›
+Reverse proxy addresses**. Enter the address the proxy connects from (`192.168.1.2`), several of them, or a network
+(`172.18.0.0/16` for a Docker network). Leave *Proxy* at Off unless the proxy also signs people in
+([below](#sign-in-at-the-proxy)).
+
+- The proxy must send `X-Forwarded-For`: Caddy, Traefik and Nginx Proxy Manager do by themselves, nginx with the
+  `proxy_set_header` line below, HAProxy with `option forwardfor`. The app reads the visitor's address from it: a
+  private address is at home, a public one is outside.
+- A proxy on the same machine as the apps (`127.0.0.1`) is known already; nothing to set.
+- A [Cloudflare Tunnel](cloudflare.md) needs nothing here: what comes through Cloudflare is always outside.
+- On a new install, make the first account before any of this, at the server's own address
+  (`http://192.168.1.10:8620`) and not through the proxy: see [First run](../start/first-run.md).
+
 ## Caddy
 
 Caddy gets a certificate by itself:
@@ -72,8 +93,10 @@ server {
 
 - **`/mcp` streams** (server-sent events): the proxy must not buffer that path.
 - **`X-Forwarded-For` and `X-Forwarded-Proto`** tell the app the visitor's address and that the request came over
-  HTTPS (which marks the session cookie Secure). `FORWARDED_ALLOW_IPS` limits who may send them (default: anyone);
-  set it to your proxy's address.
+  HTTPS (which marks the session cookie Secure). `FORWARDED_ALLOW_IPS` in an app's `config.env` limits who may
+  send them (default: anyone); set it to your proxy's address. It is about what the app shows and logs as the
+  visitor's address; whether a visitor counts as inside your network is decided by the reverse proxy addresses
+  [above](#tell-the-apps-where-the-proxy-is).
 - **ioHealth** takes the phone's uploads on the same port; batches are compressed and normally well under 1 MB.
 - **ioContacts' LDAP** is not HTTP: keep it on the home network, or put a TLS proxy (stunnel, HAProxy, nginx stream)
   in front for `ldaps://`.
@@ -90,7 +113,7 @@ any app:
 | --- | --- |
 | Proxy | `cloudflare`, `haproxy`, `nginx`, `caddy`, `traefik` or `header` |
 | Header | the header with the user (`Remote-User`, `X-Forwarded-User`, `X-Auth-Request-Email`...; for Cloudflare `Cf-Access-Authenticated-User-Email`) |
-| Trusted | the addresses the proxy connects from: the header is believed from there only |
+| Reverse proxy addresses | the addresses the proxy connects from ([above](#tell-the-apps-where-the-proxy-is)): the header is believed from there only, and a proxy that names the user in a header cannot be saved without them |
 | New people | `viewer` or `editor` to make an account for someone the proxy lets in, `deny` for a "No access" page |
 | Cloudflare team and AUD | for Cloudflare Access: the signed token is checked against your team's keys |
 
