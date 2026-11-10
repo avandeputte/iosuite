@@ -6,7 +6,7 @@ Every io app registers itself, with its address, in the suite's list of apps in 
 
 Each tile shows what the app registered: its name, line, colour and icon (served by the app itself, at
 /static/icons/mark.svg). A person sees only the apps they may use (iosuite_shared.suite.visible: a role there that is not
-"none"), and an admin tool (ioDNS) only where they are its admin, in a row of its own under the others. ORDER is only where the apps the page has widgets for come; any other app follows by name.
+"none"), and an admin tool (ioDNS) only where they are its admin (listed in the gear menu, not as a tile). ORDER is only where the apps the page has widgets for come; any other app follows by name.
 """
 import logging
 import re
