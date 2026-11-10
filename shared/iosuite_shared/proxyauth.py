@@ -33,6 +33,9 @@ CF_JWT_HEADER = "Cf-Access-Jwt-Assertion"
 GENERIC_HEADERS = ("Remote-User", "X-Forwarded-User", "X-Auth-Request-User", "X-Auth-Request-Email", "X-Forwarded-Email")
 KEYS = ("AUTH_PROXY", "AUTH_PROXY_HEADER", "AUTH_PROXY_TRUSTED", "AUTH_PROXY_CREATE", "CF_ACCESS_TEAM", "CF_ACCESS_AUD")
 EXTERNAL_HEADERS = ("cf-ray", "cf-connecting-ip", "cf-access-jwt-assertion")
+# What a reverse proxy adds to the requests it passes on. A connection that carries one of them comes from a proxy,
+# and only a proxy listed in AUTH_PROXY_TRUSTED is believed about where its visitor is.
+FORWARDING_HEADERS = ("x-forwarded-for", "forwarded", "x-real-ip", "x-forwarded-host", "x-forwarded-proto", "via")
 
 _jwks = {"client": None, "team": None}
 _lock = threading.Lock()
@@ -50,15 +53,6 @@ class Proxy:
     def opt(self, name: str):
         """The suite-wide value."""
         return db.get_setting(name.lower(), "", "") or None
-
-    def save(self, values: dict):
-        """Store proxy sign-in settings (keys of KEYS; empty removes one) suite-wide, for every app."""
-        for k, v in values.items():
-            if k in KEYS:
-                v = str(v or "").strip()
-                v = clean_team(v) if k == "CF_ACCESS_TEAM" else ", ".join(aud_tags(v)) if k == "CF_ACCESS_AUD" else v
-                db.set_setting(k.lower(), v, "")
-        _cache.clear()
 
     def mode(self) -> str:
         m = (self.opt("AUTH_PROXY") or "off").strip().lower()
@@ -113,25 +107,38 @@ class Proxy:
         except Exception:
             pass
 
+    def forwarded_for(self, headers_in) -> str:
+        """The visitor a trusted proxy passes on: the right-most address in X-Forwarded-For that is not a trusted
+        proxy itself. Every proxy appends the address it was reached from, so anything further left is whatever
+        the visitor chose to send and is never believed. '' when there is none."""
+        hops = [x.strip() for x in (headers_in.get("x-forwarded-for") or "").split(",") if x.strip()]
+        for hop in reversed(hops):
+            if not self.from_trusted(hop):
+                return hop
+        return ""
+
     def external(self, headers_in, peer: str = "") -> bool:
-        """Did the request come in from outside? Through Cloudflare (its headers), from a public address, or forwarded
-        by a trusted proxy on behalf of a public address. Outside, one-click sign-in to a passwordless account is not
-        offered. A forged header can only take that option away from the one who forges it, never grant anything."""
+        """Did the request come in from outside? Through Cloudflare (its headers), from a public address, forwarded
+        by a trusted proxy on behalf of a public address, or forwarded by a proxy that is not in AUTH_PROXY_TRUSTED
+        (a reverse proxy on another machine of the network looks like a local visitor, so where its visitors are
+        cannot be known until its address is listed). Outside, the first account cannot be made, an install without
+        accounts answers nothing but its sign-in screen, and one-click sign-in to a passwordless account is not
+        offered. A forged header can only take those away from the one who forges it, never grant anything."""
         if any(headers_in.get(h) for h in EXTERNAL_HEADERS):
             return True
         if peer and _public(peer):
             return True
         if peer and self.from_trusted(peer):
-            fwd = (headers_in.get("x-forwarded-for") or "").split(",")[0].strip()
+            fwd = self.forwarded_for(headers_in)
             return bool(fwd) and _public(fwd)
-        return False
+        return any(headers_in.get(h) for h in FORWARDING_HEADERS)
 
     def visitor_of(self, request) -> str:
         """The address the sign-in throttle counts by: the visitor's own, as a trusted proxy reports it, else the connection's."""
         peer = peer_of(request)
         if peer and self.from_trusted(peer):
             h = request.headers
-            fwd = h.get("cf-connecting-ip") or (h.get("x-forwarded-for") or "").split(",")[0].strip()
+            fwd = h.get("cf-connecting-ip") or self.forwarded_for(h)
             if fwd:
                 return f"{fwd} via {peer}"
         return peer

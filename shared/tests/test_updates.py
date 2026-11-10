@@ -109,15 +109,16 @@ def test_run_update_script_and_result(tmp_path, monkeypatch):
     (tmp_path / ".venv").mkdir()
     (tmp_path / "update.sh").write_text('#!/bin/sh\necho "repo=$IOTEST_REPO ref=$IOTEST_REF"\nprintf "ok: updated to v9 now\\n" > "$IOTEST_RESULT"\n')
     assert u.can_run() and u.status()["canRun"]
-    with pytest.raises(RuntimeError, match="ref must be"):
-        u.run("../evil")
-    u.run("v1.3.0")
+    monkeypatch.setenv("IOTEST_REF", "0123abc")  # a ref in the service's environment is never passed on: the tip of the branch
+    with pytest.raises(TypeError):
+        u.run("0123abc")  # and a request cannot name one (a fork's commit is served under the repository's address)
+    u.run()
     for _ in range(100):
         if not u.progress["running"]:
             break
         time.sleep(0.05)
     assert not u.progress["running"] and u.progress["error"] is None
-    assert "repo=someone/iotest ref=v1.3.0" in u.progress["log"]
+    assert "repo=someone/iotest ref=\n" in u.progress["log"]
     assert u.last_result()["ok"] and u.last_result()["text"] == "updated to v9 now"
 
     (tmp_path / "update.sh").write_text('#!/bin/sh\necho "\\033[1;31merror:\\033[0m packages failed" >&2\nexit 3\n')

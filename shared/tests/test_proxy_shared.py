@@ -54,7 +54,12 @@ def test_suite_admin_api(monkeypatch):
     assert r["values"]["CF_ACCESS_TEAM"] == "t.cloudflareaccess.com" and r["auds"] == [AUD1, AUD2] and r["here"]["cloudflareVerified"]
     assert c.put("/api/suite-admin/proxy", json={"AUTH_PROXY": "squid"}).status_code == 400
     assert signed_in(app, "ann", "secret123").get("/api/suite-admin/proxy").status_code == 403
-    # an app's own Settings saves suite-wide too
     assert TestClient(app).get("/api/suite-admin/proxy").status_code == 401
-    proxyauth.Proxy("iopix").save({"AUTH_PROXY_CREATE": "viewer"})
+    # the settings are the suite's: an admin of one app has no route to them (he could name himself the proxy)
+    ann = signed_in(app, "ann", "secret123")
+    assert ann.put("/api/suite-admin/proxy", json={"AUTH_PROXY_CREATE": "viewer"}).status_code == 403
+    assert ann.post("/api/auth/proxy", json={"AUTH_PROXY": "header", "AUTH_PROXY_TRUSTED": "10.0.0.5"}).status_code in (404, 405)
+    assert ann.get("/api/auth/proxy").status_code in (404, 405)
+    assert not hasattr(proxyauth.Proxy("iopix"), "save")
+    proxyauth.save_suite({"AUTH_PROXY_CREATE": "viewer"})
     assert db.settings_of("")["auth_proxy_create"] == "viewer" and not db.settings_of("iopix")

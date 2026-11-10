@@ -121,6 +121,7 @@ def clean_shared_tables(auth=None) -> None:
     db.settings_cache.clear()
     users.invalidate()
     users._attempts.clear()
+    users._known.clear()
     sessions.invalidate()
     suite.invalidate()
     apppasswords.forget()

@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from iosuite_shared import suite, users
+from iosuite_shared import db, suite, users
 from iosuite_shared.fastapi import Auth
 
 
@@ -58,8 +58,14 @@ def test_middleware_registers_and_notes_the_best_address(monkeypatch):
     assert suite.get("iocalendar")["url"] == "http://192.168.1.89:8620"
     TestClient(app, base_url="http://calendar.lan:8620").get("/api/x")
     assert suite.get("iocalendar")["url"] == "http://calendar.lan:8620"
-    c = TestClient(app, base_url="http://10.0.0.5:8620")
-    c.get("/api/x", headers={"x-forwarded-proto": "https", "x-forwarded-host": "calendar.example.com"})
+    # through a reverse proxy: believed once its address is listed (before that its visitors count as outside)
+    c = TestClient(app, base_url="http://10.0.0.5:8620", client=("10.0.0.7", 40000))
+    fwd = {"x-forwarded-proto": "https", "x-forwarded-host": "calendar.example.com"}
+    assert c.get("/api/x", headers=fwd).status_code == 403
+    assert suite.get("iocalendar")["url"] == "http://calendar.lan:8620"
+    db.set_setting("auth_proxy_trusted", "10.0.0.7", "")
+    db.settings_cache.clear()
+    assert c.get("/api/x", headers=fwd).status_code == 200
     assert suite.get("iocalendar")["url"] == "https://calendar.example.com"
     assert suite.get("iocalendar")["icon"] == "https://calendar.example.com/static/icons/mark.svg"
     TestClient(app, base_url="http://192.168.1.89:8620").get("/api/x")  # a worse address does not replace it

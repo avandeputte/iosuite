@@ -5,7 +5,7 @@ dependencies that say who may call a route, and the routers with the sign-in and
     app.middleware("http")(auth.middleware(open_paths=..., open_prefixes=..., before=..., after=...))
     @router.get("/api/x", dependencies=[auth.access.admin])
     app.include_router(auth.router())        # /api/auth/* : login, accounts, logout, me, settings, password, setup
-    app.include_router(auth.users_router())  # /api/users  : list, create, change, delete (admins of this app)
+    app.include_router(auth.users_router())  # /api/users  : list, create, role here (admins of this app); the rest (suite admins)
     app.include_router(auth.admin_router())  # /api/suite-admin: every account, role, app password, session and app (suite admins)
     app.include_router(auth.status_router(updater, extra=...))   # GET /api/status, public, the same shape in every app
     app.include_router(auth.server_router(updater, log_file=...)) # GET/POST /api/server, GET /api/log (admins)
@@ -24,7 +24,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from starlette.concurrency import run_in_threadpool
 
 from iosuite_shared import apppasswords, db, routers, sessions, suite, users
-from iosuite_shared.access import ACCESS_ROLES, Access, BodyCap, TooLarge, content_type, json_body, public_user
+from iosuite_shared.access import ACCESS_ROLES, UNCLAIMED, Access, BodyCap, TooLarge, content_type, json_body, public_user
 from iosuite_shared.proxyauth import Forwarded, Proxy, authlog, peer_of, seen
 
 STATUS_PATH = routers.STATUS_PATH
@@ -46,7 +46,8 @@ class Auth:
         self._registered, self._retry_at = False, 0.0
         self.label = app_label or app
         self.proxy = Proxy(app)
-        self.access = Access(read_only, read_only_message or f"{self.label} is in read-only mode; nothing can be changed.")
+        self.access = Access(read_only, read_only_message or f"{self.label} is in read-only mode; nothing can be changed.",
+                             outside=self.outside)
         self.realm = basic_realm or self.label
         self.log = logging.getLogger(f"iosuite_shared.{app}")
         self.decorate = lambda user: user  # the app may add fields to the user dict it serves (iopix: the person tag)
@@ -79,13 +80,15 @@ class Auth:
             self.log.warning("could not register %s in the suite's list of apps (tried again in a minute): %s", self.app, e)
             self._retry_at = time.time() + 60
 
-    def note(self, request: Request) -> None:
-        """Register (once) and note the address this request reached the app at. resolve() calls it, so an app with
-        its own middleware gets it too."""
+    def note(self, request: Request, user=None) -> None:
+        """Register (once), note that the app is up, and take the address the request reached it at when an admin
+        asks (or, before the first account, someone inside the network): the Host header is whatever the client
+        sends, so a visitor's is never recorded. resolve() calls it, so an app with its own middleware gets it too."""
         try:
             self.register()
             if self._registered:
-                suite.note_seen(self.app, request)
+                admin = bool(user and user.get("role") == "admin") if users.any_users() else not self.outside(request)
+                suite.note_seen(self.app, request, take_address=admin)
         except Exception as e:  # noqa: BLE001
             self.log.debug("suite: %s", e)
 
@@ -93,12 +96,18 @@ class Auth:
     def current_user(self, request: Request):
         return getattr(request.state, "user", None)
 
+    def outside(self, request: Request) -> bool:
+        """Whether the request comes from outside the network (Proxy.external)."""
+        return self.proxy.external(request.headers, peer_of(request))
+
+    def unclaimed(self, request: Request) -> bool:
+        """No account exists yet and the request comes from outside: nothing but the sign-in screen is served."""
+        return not users.any_users() and self.outside(request)
+
     async def resolve(self, request: Request):
         """Who is asking: the session cookie, the proxy's identity, HTTP Basic or a bearer app password.
         Sets request.state.user, .via_proxy, .cookie_uid, .proxy_ident; returns a response to send instead when the
         proxy let in someone who has no account and that is denied."""
-        if self.suite_entry is not None:
-            await run_in_threadpool(self.note, request)
         session = request.cookies.get(sessions.COOKIE)
         request.state.origin = sessions.describe(request, self.proxy)
         user, renewed = (await run_in_threadpool(sessions.lookup, session, self.app, request.state.origin)) if session else (None, False)
@@ -124,6 +133,8 @@ class Auth:
                 return user
         if user and not request.state.via_proxy and user.get("passwordless") and self.proxy.external(request.headers, peer):
             user = None  # a passwordless account's session (begun on the LAN) does not work from outside
+        if self.suite_entry is not None:
+            await run_in_threadpool(self.note, request, user)
         if user and user.get("role") == "none":
             request.state.user = None
             request.state.no_role_user = user
@@ -223,8 +234,12 @@ class Auth:
                     r = await r
                 if r is not None:
                     return r
-            if request.state.user is None and await run_in_threadpool(users.require_login, auth.app):
-                if path not in open_paths and not path.startswith(open_prefixes) and not (is_open and is_open(path)):
+            if request.state.user is None and path not in open_paths and not path.startswith(open_prefixes) and not (is_open and is_open(path)):
+                # what a visitor who is not signed in may not reach: everything while sign-in is required, and
+                # everything from outside the network while no account exists (the open rule is for the LAN)
+                if await run_in_threadpool(auth.unclaimed, request):
+                    return JSONResponse({"detail": UNCLAIMED, "unclaimed": True}, status_code=403)
+                if await run_in_threadpool(users.require_login, auth.app):
                     if getattr(request.state, "no_role_user", None):
                         return auth.no_access(request, request.state.no_role_user["name"])
                     return JSONResponse({"detail": f"Sign in to use {auth.label}."}, status_code=401,
@@ -266,11 +281,14 @@ class Auth:
 
     def me(self, request: Request) -> dict:
         u = self.current_user(request)
+        outside = self.outside(request)
+        shut = outside and not users.any_users()  # no account yet, asked from outside: nothing is open (unclaimed)
         return {"user": u, "settings": users.get_settings(u["id"], self.app) if u else {}, "usersExist": users.any_users(),
-                "isAdmin": users.is_admin(u), "isSuiteAdmin": users.is_suite_admin(u), "canWrite": users.can_write(u),
-                "signedIn": users.is_signed_in(u), "requireLogin": users.require_login(self.app),
+                "isAdmin": users.is_admin(u) and not shut, "isSuiteAdmin": users.is_suite_admin(u) and not shut,
+                "canWrite": users.can_write(u) and not shut, "signedIn": users.is_signed_in(u) and not shut,
+                "requireLogin": shut or users.require_login(self.app), "unclaimed": shut,
                 "viaProxy": bool(getattr(request.state, "via_proxy", False)), "signedInBy": self.signed_in_by(request, u),
-                "throughCloudflare": self.proxy.external(request.headers, peer_of(request)), "app": self.app}
+                "throughCloudflare": outside, "app": self.app}
 
     # ---- the routers (iosuite_shared.routers)
     def router(self) -> APIRouter:
@@ -378,24 +396,35 @@ class Auth:
         app.add_middleware(Forwarded, allow=forwarded_allow_ips)  # added last: the outermost layer, so the peer is the real one
 
     def _delete(self, me, user_id: int):
+        """DELETE /api/users/{id} (suite admins: an account is the whole suite's)."""
         if me and me["id"] == user_id:
             raise ValueError("You cannot delete your own account while signed in")
-        target = users.get(user_id)
-        if target["suiteAdmin"] and not users.is_suite_admin(me):
-            raise ValueError("Only a suite admin can remove a suite admin")
         users.delete(user_id)
 
     def _update(self, me, user_id: int, body: dict):
+        """PATCH /api/users/{id}. An admin of this app sets the account's role here; the account itself (name, email,
+        display name, password, listed, suiteAdmin, roles elsewhere) belongs to the whole suite, so only a suite admin
+        changes it: sign-in at a proxy finds an account by its email and name, and a password opens every app."""
         target = users.get(user_id, self.app)
         suite = users.is_suite_admin(me)
-        if target["suiteAdmin"] and not suite and (body.get("role") is not None or body.get("password") is not None):
-            raise ValueError("Only a suite admin can change a suite admin's role or password")
+        if not suite:
+            same = {"name": target["name"], "email": target.get("email") or "", "displayName": target.get("displayName") or "",
+                    "listed": bool(target.get("listed", True)), "suiteAdmin": bool(target["suiteAdmin"])}
+            beyond = [k for k in ("name", "email", "displayName", "password", "listed", "suiteAdmin", "roles")
+                      if body.get(k) is not None and (k not in same or body[k] != same[k])]  # a form that sends them unchanged is fine
+            if beyond:
+                raise PermissionError(f"Only a suite admin can change an account's {', '.join(beyond)} (Settings › Security)")
+            if target["suiteAdmin"] and body.get("role") is not None:
+                raise PermissionError("Only a suite admin can change a suite admin's role")
         role = body.get("role")
         if role is not None and me and me["id"] == user_id and role != "admin" and users.admins_of(self.app) <= 1:
             raise ValueError("That is the only admin; make someone else admin first")
-        users.update(user_id, role=role, app=self.app, password=body.get("password"), name=body.get("name"), email=body.get("email"),
-                     display_name=body.get("displayName"), listed=None if body.get("listed") is None else bool(body.get("listed")),
-                     suite_admin=(None if body.get("suiteAdmin") is None or not suite else bool(body.get("suiteAdmin"))))
+        if suite:
+            users.update(user_id, role=role, app=self.app, password=body.get("password"), name=body.get("name"), email=body.get("email"),
+                         display_name=body.get("displayName"), listed=None if body.get("listed") is None else bool(body.get("listed")),
+                         suite_admin=None if body.get("suiteAdmin") is None else bool(body.get("suiteAdmin")))
+        elif role is not None:
+            users.update(user_id, role=role, app=self.app)
         if suite and isinstance(body.get("roles"), dict):
             for a, rr in body["roles"].items():
                 users.set_role(user_id, str(a)[:32], str(rr))

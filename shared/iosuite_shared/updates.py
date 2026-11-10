@@ -182,24 +182,22 @@ class Updater:
                 "repo": self.repo, "branch": self.branch, "check": dict(self._checked) or None, "progress": dict(self.progress),
                 "lastUpdate": self.last_result(), "autoCheck": self.auto_check_enabled(), "autoCheckLocked": self.check_locked}
 
-    def run(self, ref: str = "") -> None:
-        """update.sh in a child process; the service manager starts the app again when it finishes.
-        ref: a commit or branch to install instead of the tip of the branch. Raises RuntimeError when it cannot run."""
+    def run(self) -> None:
+        """update.sh in a child process, which installs the tip of the branch; the service manager starts the app
+        again when it finishes. Raises RuntimeError when it cannot run. Another commit is installed from a shell on
+        the server only (<PREFIX>_REF=<commit> ./update.sh): GitHub serves a fork's commits under the repository's
+        own address, so a commit id taken from a request could install anybody's code."""
         if self.in_docker():
             raise RuntimeError("In Docker, update by pulling the image: docker compose pull && docker compose up -d")
         if not self.can_run():
             raise RuntimeError("This install cannot update itself (no update.sh or .venv next to the app, or the folder is not "
                                "writable by the service). Run ./update.sh in the app folder.")
-        ref = (ref or "").strip()[:80]
-        if ref and not re.fullmatch(r"[0-9a-f]{7,40}|[A-Za-z0-9][A-Za-z0-9._-]*", ref):
-            raise RuntimeError("ref must be a commit id or a branch name")
         with self._run_lock:
             if self.progress["running"]:
                 raise RuntimeError("An update is already running")
             self.progress.update(running=True, error=None, log="", started=int(time.time()), finished=None)
         env = dict(os.environ, **{f"{self.prefix}_RESULT": str(self.result_file), f"{self.prefix}_REPO": self.repo, f"{self.prefix}_BRANCH": self.branch})
-        if ref:
-            env[f"{self.prefix}_REF"] = ref
+        env.pop(f"{self.prefix}_REF", None)  # never inherited: the service installs the tip of its branch
         try:
             self.result_file.unlink()
         except OSError:

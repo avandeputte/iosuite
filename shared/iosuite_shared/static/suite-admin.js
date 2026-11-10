@@ -463,7 +463,8 @@ async function signin(el) {
     const trusted = h('input', { class: 'sa-in', value: v.AUTH_PROXY_TRUSTED, placeholder: 'default: 127.0.0.1, ::1', autocomplete: 'off' });
     const create = h('select', { class: 'sa-in' }, opt(NO_ACCOUNT, (v.AUTH_PROXY_CREATE || '').toLowerCase()));
     const cf = h('div', { class: 'sa-grid' }, fld('Cloudflare team domain', team), fld('AUD tag(s)', aud));
-    const other = h('div', { class: 'sa-grid' }, fld('User header', header), fld('Proxy addresses', trusted));
+    const other = h('div', { class: 'sa-grid' }, fld('User header', header));
+    const addr = h('div', { class: 'sa-grid' }, fld('Reverse proxy addresses', trusted));
     const rest = h('div', { class: 'sa-grid' }, fld('Someone with no account', create));
     const show = () => { cf.style.display = mode.value === 'cloudflare' ? '' : 'none'; other.style.display = rest.style.display = mode.value === 'off' ? 'none' : ''; };
     mode.onchange = show;
@@ -486,7 +487,8 @@ async function signin(el) {
       h('p', null, h('b', null, state)),
       h('div', { class: 'sa-grid' }, fld('Proxy', mode)), cf, seen,
       h('p', { class: 'sa-muted sa-small' }, 'Team domain: Zero Trust › Settings › Team name and domain. AUD tag: Zero Trust › Access › Applications › Overview (one per application).'),
-      other, rest,
+      other, rest, addr,
+      h('p', { class: 'sa-muted sa-small' }, 'Reverse proxy addresses: where your reverse proxy connects from (addresses or networks), whether or not it signs people in. Whoever comes through a proxy that is not listed counts as outside your network: no one-click sign-in, no first account. A header that names the user is believed from these addresses only.'),
       h('div', { class: 'sa-btns' }, h('button', { class: 'sa-btn primary', onclick: save }, 'Save for every app'))));
     show();
   };
