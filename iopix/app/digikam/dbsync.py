@@ -249,57 +249,58 @@ def apply_pending(db_path: Path = None, pending: dict = None, require_digikam_cl
         raise SyncError("The digiKam database file is not writable.")
     # ordinary edits take no full database copy: each is in the change log, and the sidecars have their own backups
     applied, skipped = [], []
-    with write_transaction(db_path, require_digikam_closed) as con:
-        tags = dkdb.tag_tree(con)
-        by_full = {dkdb.tag_path(tags, tid): tid for tid in tags}
-        internal = "_Digikam_Internal_Tags_/"
-        pick_ids = [by_full.get(internal + n) for n in PICK_TAGS]
-        color_ids = [by_full.get(internal + n) for n in COLOR_TAGS]
+    with index.writing(applied):  # these photos and nothing else: the index rewrites their rows only
+        with write_transaction(db_path, require_digikam_closed) as con:
+            tags = dkdb.tag_tree(con)
+            by_full = {dkdb.tag_path(tags, tid): tid for tid in tags}
+            internal = "_Digikam_Internal_Tags_/"
+            pick_ids = [by_full.get(internal + n) for n in PICK_TAGS]
+            color_ids = [by_full.get(internal + n) for n in COLOR_TAGS]
 
-        for image_id, e in pending.items():
-            image_id = int(image_id)
-            if not con.execute("SELECT 1 FROM Images WHERE id = ? AND status = 1", (image_id,)).fetchone():
-                skipped.append({"id": image_id, "reason": "no longer in the digiKam database"})
-                continue
-            add = [(t, by_full.get(t)) for t in e.get("add_tags", [])]
-            rem = [(t, by_full.get(t)) for t in e.get("remove_tags", []) if by_full.get(t) is not None]  # a tag digiKam lacks is off already
-            missing = [t for t, tid in add if tid is None]
-            if missing or ("pick" in e and None in pick_ids) or ("color" in e and None in color_ids):
-                skipped.append({"id": image_id, "reason": f"tag not found in digiKam: {', '.join(missing) or 'label tags'}"})
-                continue
-            if "rating" in e:
-                r = int(e["rating"])
-                if not con.execute("SELECT 1 FROM ImageInformation WHERE imageid = ?", (image_id,)).fetchone():
-                    skipped.append({"id": image_id, "reason": "digiKam has no information row for this item yet"})
+            for image_id, e in pending.items():
+                image_id = int(image_id)
+                if not con.execute("SELECT 1 FROM Images WHERE id = ? AND status = 1", (image_id,)).fetchone():
+                    skipped.append({"id": image_id, "reason": "no longer in the digiKam database"})
                     continue
-                con.execute("UPDATE ImageInformation SET rating = ? WHERE imageid = ?", (max(0, min(5, r)), image_id))  # like ItemInfo::setRating
-            if "pick" in e:
-                _set_label(con, image_id, pick_ids, pick_ids[int(e["pick"])])
-            if "color" in e:
-                _set_label(con, image_id, color_ids, color_ids[int(e["color"])])
-            if "taken" in e:  # ItemInfo::setDateTime -> ImageInformation.creationDate
-                con.execute("UPDATE ImageInformation SET creationDate = ? WHERE imageid = ?", (e["taken"] + ".000", image_id))
-            if "gps" in e:
-                _set_position(con, image_id, e["gps"])
-            if "template" in e:
-                _set_copyright(con, image_id, e["template"])
-            if "title" in e:
-                _set_comment(con, image_id, 3, e["title"])
-            if "caption" in e:
-                stamp = e.get("caption_date")
-                _set_comment(con, image_id, 1, e["caption"], stamp + ".000" if stamp else None)
-            for _, tid in add:
-                con.execute("INSERT OR IGNORE INTO ImageTags (imageid, tagid) VALUES (?,?)", (image_id, tid))
-            for _, tid in rem:
-                # a person with a face box on the photo stays: the box says they are in it, and only a face change
-                # (remove or rename the face) takes them off. A tag removal never deletes face regions.
-                if con.execute("SELECT 1 FROM ImageTagProperties WHERE imageid = ? AND tagid = ? AND property IN ('tagRegion', 'autodetectedFace')",
-                               (image_id, tid)).fetchone():
+                add = [(t, by_full.get(t)) for t in e.get("add_tags", [])]
+                rem = [(t, by_full.get(t)) for t in e.get("remove_tags", []) if by_full.get(t) is not None]  # a tag digiKam lacks is off already
+                missing = [t for t, tid in add if tid is None]
+                if missing or ("pick" in e and None in pick_ids) or ("color" in e and None in color_ids):
+                    skipped.append({"id": image_id, "reason": f"tag not found in digiKam: {', '.join(missing) or 'label tags'}"})
                     continue
-                con.execute("DELETE FROM ImageTags WHERE imageid = ? AND tagid = ?", (image_id, tid))
-            applied.append(image_id)
-    if applied:  # the database now says what the sidecars (and files) say: digiKam need not rescan them
-        dkdb.stamp_files(photo_paths(applied))
+                if "rating" in e:
+                    r = int(e["rating"])
+                    if not con.execute("SELECT 1 FROM ImageInformation WHERE imageid = ?", (image_id,)).fetchone():
+                        skipped.append({"id": image_id, "reason": "digiKam has no information row for this item yet"})
+                        continue
+                    con.execute("UPDATE ImageInformation SET rating = ? WHERE imageid = ?", (max(0, min(5, r)), image_id))  # like ItemInfo::setRating
+                if "pick" in e:
+                    _set_label(con, image_id, pick_ids, pick_ids[int(e["pick"])])
+                if "color" in e:
+                    _set_label(con, image_id, color_ids, color_ids[int(e["color"])])
+                if "taken" in e:  # ItemInfo::setDateTime -> ImageInformation.creationDate
+                    con.execute("UPDATE ImageInformation SET creationDate = ? WHERE imageid = ?", (e["taken"] + ".000", image_id))
+                if "gps" in e:
+                    _set_position(con, image_id, e["gps"])
+                if "template" in e:
+                    _set_copyright(con, image_id, e["template"])
+                if "title" in e:
+                    _set_comment(con, image_id, 3, e["title"])
+                if "caption" in e:
+                    stamp = e.get("caption_date")
+                    _set_comment(con, image_id, 1, e["caption"], stamp + ".000" if stamp else None)
+                for _, tid in add:
+                    con.execute("INSERT OR IGNORE INTO ImageTags (imageid, tagid) VALUES (?,?)", (image_id, tid))
+                for _, tid in rem:
+                    # a person with a face box on the photo stays: the box says they are in it, and only a face change
+                    # (remove or rename the face) takes them off. A tag removal never deletes face regions.
+                    if con.execute("SELECT 1 FROM ImageTagProperties WHERE imageid = ? AND tagid = ? AND property IN ('tagRegion', 'autodetectedFace')",
+                                   (image_id, tid)).fetchone():
+                        continue
+                    con.execute("DELETE FROM ImageTags WHERE imageid = ? AND tagid = ?", (image_id, tid))
+                applied.append(image_id)
+        if applied:  # the database now says what the sidecars (and files) say: digiKam need not rescan them
+            dkdb.stamp_files(photo_paths(applied))
     edits.recheck(applied)
     history.record([{"photo_id": pid, "action": "database", "summary": "Edits written into " + ("the library" if dkdb.standalone() else "digiKam's database"),
                      "details": {k: v for k, v in pending.get(pid, pending.get(str(pid), {})).items() if k != "caption_date"}} for pid in applied])

@@ -207,7 +207,7 @@ def auto_apply():
     try:
         r = dbsync.apply_pending()
         logging.getLogger("app.sync").info("edits applied to digiKam's database (automatically): %d photos, %d skipped", r.get("applied", 0), len(r.get("skipped", [])))
-        threading.Thread(target=rebuild_after_write, daemon=True).start()
+        threading.Thread(target=update_after_write, daemon=True).start()
     except (dbsync.SyncError, *DB_ERRORS) as e:
         logging.getLogger("app.sync").warning("edits were not applied to digiKam's database: %s", e)
 
@@ -267,5 +267,17 @@ def rebuild_after_write():
     kick.set()
 
 
+def update_after_write():
+    """Like rebuild_after_write, after a write that named its photos (index.writing): the index takes in those
+    photos' rows, and is only built anew when something else changed as well."""
+    try:
+        index.ensure_fresh()
+    except Exception as e:  # the watcher retries; the cause goes to the log
+        logging.getLogger("app.data.index").warning("index update after a database write failed: %s", e)
+    state["version"] = None
+    kick.set()
+
+
+events.on("after_photo_write", update_after_write)
 events.on("after_write", rebuild_after_write)  # writers call events.after_write() without importing the server
 events.on("kick", kick.set)

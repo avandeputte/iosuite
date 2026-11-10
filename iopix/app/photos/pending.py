@@ -26,15 +26,20 @@ lock = threading.RLock()
 def signature() -> str:
     """Changes whenever the set of remembered edits changes (part of the index version)."""
     if not vdb.ready():
-        return "e0"
+        return signature_of({})
     con = appstate.connect()
     try:
         n, ts = con.execute("SELECT count(*), coalesce(max(updated_at), 0) FROM pix_pending_edits").fetchone()
-        return f"e{n}.{ts}"
+        return f"e{int(n)}.{int(ts)}"
     except Exception:
-        return "e0"
+        return signature_of({})
     finally:
         con.close()
+
+
+def signature_of(stamps: dict) -> str:
+    """signature() as it was when these stamps (pending_stamps) were read: what an index made from them is stamped with."""
+    return f"e{len(stamps)}.{max(stamps.values(), default=0)}"
 
 
 def _next_ts(c) -> int:
@@ -60,6 +65,19 @@ def pending() -> dict:
     con = appstate.connect()
     try:
         return {r[0]: json.loads(r[1]) for r in con.execute("SELECT photo_id, data FROM pix_pending_edits")}
+    except Exception:
+        return {}
+    finally:
+        con.close()
+
+
+def pending_stamps() -> dict:
+    """photo_id -> the stamp of its remembered edit: what the index compares to tell which photos' edits changed."""
+    if not vdb.ready():
+        return {}
+    con = appstate.connect()
+    try:
+        return {int(r[0]): int(r[1] or 0) for r in con.execute("SELECT photo_id, updated_at FROM pix_pending_edits")}
     except Exception:
         return {}
     finally:

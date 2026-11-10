@@ -171,7 +171,7 @@ def apply_many(ops: list, db_path=None, require_digikam_closed: bool = True, bac
     results, touched = [], []
     with lock:
         backup = None  # face changes take no full database copy; each is in the change log
-        with dbsync.write_transaction(db_path, require_digikam_closed) as con:
+        with index.writing(touched), dbsync.write_transaction(db_path, require_digikam_closed) as con:  # (the index rewrites these photos' rows only)
             sp = special_tags(con)
             for op in ops:
                 try:
@@ -533,5 +533,7 @@ def write_regions_many(images: list, db_path=None, files: bool = None, sidecars:
     for image in paths:
         out[image] = "failed" if image in failed else "written"
     # digiKam need not rescan a file that now says what its database says
-    dkdb.stamp_files([(i, p) for i, p in paths.items() if i not in failed])
+    stamped = [(i, p) for i, p in paths.items() if i not in failed]
+    with index.writing([i for i, _p in stamped]):
+        dkdb.stamp_files(stamped)
     return out

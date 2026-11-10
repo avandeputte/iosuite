@@ -31,6 +31,12 @@ def after_write():
     fire("after_write")
 
 
+def after_photo_write():
+    """The viewer wrote rows of photos it named to the index (index.writing): listeners bring the index up to date
+    now, which rewrites those photos' rows and leaves the rest of it alone."""
+    fire("after_photo_write")
+
+
 def kick():
     """Something changed that the change watcher should look at right away."""
     fire("kick")

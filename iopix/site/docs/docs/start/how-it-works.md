@@ -6,7 +6,7 @@ iopix is a small web server with a web app on top. It sits next to your digiKam 
 
 iopix reads digiKam's database for the photo list, albums, tags, people and face regions, ratings, captions, dates and places, and reads the photo files themselves to make thumbnails and previews. There is no import step and no second copy of your photos.
 
-When digiKam changes something, iopix notices within about 20 seconds and updates its search index.
+When digiKam changes something, iopix notices within about 20 seconds and rebuilds its search index. A change you make in iopix (a rating, a tag, a title, a face) rewrites only the rows of the photos it touched, so it shows at once however large the library is; a full rebuild follows a few minutes after the last change.
 
 ## It keeps its own data separately
 

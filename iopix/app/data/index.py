@@ -12,6 +12,7 @@ folder and swapped in atomically. Bump SCHEMA_VERSION whenever the tables, index
 of a column change, so running viewers rebuild.
 """
 import calendar
+import contextlib
 import json
 import logging
 import os
@@ -72,6 +73,7 @@ CREATE INDEX faces_kind ON faces (kind);
 CREATE INDEX faces_photo ON faces (photo_id);
 CREATE INDEX faces_tag ON faces (tag_id);
 CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);
+CREATE TABLE pending_seen (photo_id INTEGER PRIMARY KEY, stamp INTEGER);
 CREATE VIRTUAL TABLE fts USING fts5(
     name, album, title, caption, tags, people, camera, misc, ocr, caption_ai, speech,
     tokenize = "unicode61 remove_diacritics 2", prefix = '1 2 3'
@@ -84,7 +86,7 @@ COLOR = {f"Color Label {n}": i for i, n in enumerate(COLORS)}
 MONTHS = ["", "January", "February", "March", "April", "May", "June", "July",
           "August", "September", "October", "November", "December"]
 SPECIAL_PERSON_PROPS = ("unknownPerson", "ignoredPerson", "unconfirmedPerson")
-SCHEMA_VERSION = "17"  # 10: folder date, category and chosen cover; 11: AI descriptions without filler; 12: dprec (approximate dates); 13: photo quality (aesthetic, focus, eyes, likely rejects); 14: text in photos kept to words (ocrwords); 15: jersey numbers; 16: focus point for cropped thumbnails; 17: speech in videos (fts column)
+SCHEMA_VERSION = "18"  # 10: folder date, category and chosen cover; 11: AI descriptions without filler; 12: dprec (approximate dates); 13: photo quality (aesthetic, focus, eyes, likely rejects); 14: text in photos kept to words (ocrwords); 15: jersey numbers; 16: focus point for cropped thumbnails; 17: speech in videos (fts column); 18: pending_seen (the remembered edits the index reflects) and the version's parts, for updates in place
 RECT_RE = re.compile(r'x="(-?\d+)" y="(-?\d+)" width="(\d+)" height="(\d+)"')
 
 
@@ -180,23 +182,40 @@ IMAGE_SQL = """
 """
 
 
-def read_rows(src) -> dict:
-    """One consistent snapshot of what the index needs, through a connection that speaks digiKam's names."""
+def read_rows(src, ids=None) -> dict:
+    """One consistent snapshot of what the index needs, through a connection that speaks digiKam's names. With
+    `ids`, the per-photo tables hold only those photos' rows (the index updated in place); the albums and the
+    tags are small and always read whole."""
     src.begin_read()
     try:
         q = src.execute
+
+        def per_photo(sql: str) -> list:
+            """The rows of a per-photo table: all of them, or those of `ids` ({only} / {also} in the SQL)."""
+            if ids is None:
+                return [tuple(r) for r in q(sql.format(only="", also=""))]
+            out = []
+            for part in chunked(sorted(int(i) for i in ids), 500):
+                inlist = ",".join(map(str, part))
+                col = "i.id" if "FROM Images i" in sql else "imageid"
+                out += [tuple(r) for r in q(sql.format(only=f" WHERE {col} IN ({inlist})", also=f" AND {col} IN ({inlist})"))]
+            return out
+
         return {
             "roots": [tuple(r) for r in q("SELECT id, label, specificPath FROM AlbumRoots")],
             "albums": [tuple(r) for r in q("SELECT id, albumRoot, relativePath, caption, date, collection, icon FROM Albums")],
             "tags": [tuple(r) for r in q("SELECT id, pid, name, icon FROM Tags")],
             "tagprops": [tuple(r) for r in q("SELECT tagid, property, value FROM TagProperties")],
-            "imagetags": [tuple(r) for r in q("SELECT imageid, tagid FROM ImageTags")],
-            "regions": [tuple(r) for r in q("SELECT imageid, tagid, property, value FROM ImageTagProperties "
-                                            "WHERE property IN ('tagRegion', 'autodetectedFace', 'ignoredFace')")],
-            "comments": [tuple(r) for r in q("SELECT id, imageid, type, comment, language, author FROM ImageComments ORDER BY id")],
-            "copyright": [tuple(r) for r in q("SELECT imageid, property, value FROM ImageCopyright")],
-            "props": [tuple(r) for r in q("SELECT imageid, property, value FROM ImageProperties")],
-            "images": [tuple(r) for r in q(IMAGE_SQL).fetchall()],
+            # in one order whichever database answers (digiKam's or the copy): a photo's tags and faces are listed the same
+            # by a full build and by an update in place
+            "imagetags": sorted(per_photo("SELECT imageid, tagid FROM ImageTags{only}")),
+            "regions": sorted(per_photo("SELECT imageid, tagid, property, value FROM ImageTagProperties "
+                                        "WHERE property IN ('tagRegion', 'autodetectedFace', 'ignoredFace'){also}"),
+                              key=lambda r: (r[0], r[1], r[2], r[3] or "")),
+            "comments": sorted(per_photo("SELECT id, imageid, type, comment, language, author FROM ImageComments{only} ORDER BY id"), key=lambda r: r[0]),
+            "copyright": per_photo("SELECT imageid, property, value FROM ImageCopyright{only}"),
+            "props": per_photo("SELECT imageid, property, value FROM ImageProperties{only}"),
+            "images": per_photo(IMAGE_SQL + "{also}"),
         }
     finally:
         src.rollback()
@@ -482,20 +501,34 @@ def build(dst_path: Path = config.INDEX_DB, source: tuple = None) -> dict:
     with _build_lock:
         stats = _build(dst_path, source)
     if stats["resolved_edits"] and Path(dst_path) == config.INDEX_DB:  # digiKam now agrees with these edits; stop tracking them
-        edits.resolved(stats["resolved_edits"], stats.get("resolved_snapshot"))
-        # forgetting them changed the edits' signature, which is part of the version this index was stamped with:
-        # the stamp follows, or ensure_fresh would build the same index once more
-        try:
-            con = sqlite3.connect(str(dst_path), timeout=15)
-            try:
-                con.execute("PRAGMA journal_mode = MEMORY")
-                con.execute("UPDATE meta SET value = ? WHERE key = 'version'", (_version_for(last_source["version"]),))
-                con.commit()
-            finally:
-                con.close()
-        except sqlite3.Error as e:
-            log.warning("the index version was not restamped after resolving edits (%s); one extra build follows", e)
+        _settle(Path(dst_path), stats)
     return stats
+
+
+def _settle(dst_path: Path, stats: dict):
+    """After a build or an update in place that found edits digiKam has caught up with: they are forgotten, which
+    changes the edits' signature, a part of the version the index was just stamped with. The stamp and the edits
+    the index says it reflects (pending_seen) follow, or ensure_fresh would do the same work once more. Outside
+    the build lock: forgetting an edit takes the edits' lock, which a caller of build() may hold."""
+    edits.resolved(stats["resolved_edits"], stats.get("resolved_snapshot"))
+    stamps, now = stats["stamps"], edits.pending_stamps()
+    gone = [i for i, st in stamps.items() if now.get(i) != st]  # forgotten, or edited again meanwhile (then seen as changed)
+    parts = {**stats["parts"], "edits": edits.signature_of(now)}
+    try:
+        con = sqlite3.connect(str(dst_path), timeout=15, isolation_level=None)
+        try:
+            con.execute("PRAGMA journal_mode = MEMORY")
+            con.execute("BEGIN IMMEDIATE")
+            if con.execute("SELECT value FROM meta WHERE key = 'version'").fetchone()[0] == stats["version"]:  # still the index this is about
+                con.executemany("DELETE FROM pending_seen WHERE photo_id = ?", [(i,) for i in gone])
+                if all(stamps.get(i) == st for i, st in now.items()):  # nothing new since: the index reflects exactly the edits there are now
+                    con.execute("UPDATE meta SET value = ? WHERE key = 'version'", (":".join(parts.values()),))
+                    con.execute("UPDATE meta SET value = ? WHERE key = 'parts'", (json.dumps(parts),))
+            con.execute("COMMIT")
+        finally:
+            con.close()
+    except sqlite3.Error as e:
+        log.warning("the index version was not restamped after resolving edits (%s); one more update follows", e)
 
 
 def _read_source(source: tuple):
@@ -668,19 +701,20 @@ def _edit_done(e: dict, db: dict, add: list, rem: list, unknown_tags: bool) -> b
             and all(t in tids for t in add) and not any(t in tids for t in rem) and not unknown_tags)
 
 
-def _photo_rows(raw: dict, albums: dict, root_path: dict, tags: dict, hidden: set, side: dict, geo, phases: dict):
+def _photo_rows(raw: dict, albums: dict, root_path: dict, tags: dict, hidden: set, side: dict, geo, phases: dict, ids=None):
     """One row per photo for the photos, fts and photo_tags tables, with the viewer's pending edits overlaid
     (edits made here live in sidecars; they show until digiKam's database catches up). Returns a namespace with
-    the rows, the per-tag and per-album counts, and the edits digiKam has caught up with."""
+    the rows, the per-tag and per-album counts, and the edits digiKam has caught up with. `ids`: the photos `raw`
+    was read for (an update in place), so the analysis results are read for those only."""
     out = SimpleNamespace(photos=[], fts_rows=[], photo_tag_rows=[], burst_rows=[], resolved=[], resolved_snapshot={},
                           tag_direct=defaultdict(set), tag_all=defaultdict(set), album_n=defaultdict(int))
     img_tags, pick, color, title, caption, copyright_, iprops = (side[k] for k in ("img_tags", "pick", "color", "title", "caption", "copyright", "iprops"))
     t1 = time.time()
     pending = edits.pending()
-    seen = analysis.results()  # sharpness, OCR text, objects... from the app's own analysis
-    for pid, nums in jerseys.results().items():  # the numbers read on shirts, searchable as jersey=10
+    seen = analysis.results(ids)  # sharpness, OCR text, objects... from the app's own analysis
+    for pid, nums in jerseys.results(ids).items():  # the numbers read on shirts, searchable as jersey=10
         seen.setdefault(pid, {})["jerseys"] = nums
-    for pid, text in videos.transcripts().items():  # what is said in videos, searchable
+    for pid, text in videos.transcripts(ids).items():  # what is said in videos, searchable
         seen.setdefault(pid, {})["speech"] = text
     phases["analysis"] = time.time() - t1
     faces_by = defaultdict(list)  # the faces that place a cropped thumbnail (smartcrop.py): not the ones marked ignored
@@ -804,7 +838,8 @@ def _photo_rows(raw: dict, albums: dict, root_path: dict, tags: dict, hidden: se
     return out
 
 
-_OCR_COL = [c.split()[0] for c in re.sub(r"\s+", " ", SCHEMA[SCHEMA.index("(") + 1:SCHEMA.index(");")]).split(",")].index("ocr")
+_COLS = [c.split()[0] for c in re.sub(r"\s+", " ", SCHEMA[SCHEMA.index("(") + 1:SCHEMA.index(");")]).split(",")]  # the photos table's columns, in order
+_OCR_COL = _COLS.index("ocr")
 
 
 def _clean_ocr(out: SimpleNamespace, tags: dict, albums: dict):
@@ -908,12 +943,16 @@ def _swap_in(dst_path: Path, fill) -> None:
 def _build(dst_path: Path, source: tuple) -> dict:
     t0 = time.time()
     geo = places.geocoder()
+    with _own_lock:
+        own = list(_own)  # the viewer's writes named so far (writing): what they wrote is in the rows read now
     kind, ver, raw, root_path, direct = _read_source(source)
     all_images = raw["images"]  # the renumbering check below sees every photo, hidden ones included (a photo queued for the trash is not "gone")
     if HIDDEN:  # on their way to the trash: left out before anything is counted (digiKam's rows may not say so yet)
         hidden_ids = set(HIDDEN)
         raw["images"] = [r for r in all_images if r[0] not in hidden_ids]
-    version = _version_for(ver)
+    stamps = edits.pending_stamps()  # before the edits themselves are read: one made meanwhile is seen as changed, never missed
+    parts = {**_parts(ver), "edits": edits.signature_of(stamps)}
+    version = ":".join(parts.values())
     last_source.update(kind=kind, version=ver)
     phases = {"read": time.time() - t0}
 
@@ -933,14 +972,22 @@ def _build(dst_path: Path, source: tuple) -> dict:
 
     phases["compute"] = time.time() - t0 - sum(phases.values())
     t2 = time.time()
-    stats = {"version": version, "photos": len(rows.photos), "resolved_edits": rows.resolved, "resolved_snapshot": rows.resolved_snapshot}
+    stats = {"version": version, "photos": len(rows.photos), "resolved_edits": rows.resolved, "resolved_snapshot": rows.resolved_snapshot,
+             "kind": kind, "parts": parts, "stamps": stamps}
 
     def fill(dst):
         _fill(dst, rows, albums, root_path, tags, hidden, side["faces"])
+        dst.executemany("INSERT INTO pending_seen VALUES (?,?)", list(stamps.items()))
         stats.update(built=int(time.time()), build_seconds=round(time.time() - t0, 2))
-        dst.executemany("INSERT INTO meta VALUES (?,?)", [(k, str(v)) for k, v in stats.items() if k != "resolved_snapshot"])
+        dst.executemany("INSERT INTO meta VALUES (?,?)", [(k, json.dumps(v) if k == "parts" else str(v)) for k, v in stats.items()
+                                                          if k not in ("resolved_snapshot", "stamps")])
 
     _swap_in(Path(dst_path), fill)
+    if Path(dst_path) == config.INDEX_DB:  # the index the app answers from: nothing updated in place is left to make up for
+        _marker(Path(dst_path)).unlink(missing_ok=True)
+        _patched.update(n=0, at=0.0, first=0.0, soon=False)
+        with _own_lock:
+            _own[:] = [r for r in _own if not any(r is o for o in own)]
     HIDDEN.let_go(t0)  # this build read rows that know about every move finished before it started
     phases["write"] = time.time() - t2
     log.info("index built from %s in %.1fs: %d photos (%s)", "digiKam's database" if direct else "the library copy", time.time() - t0, len(rows.photos),
@@ -979,19 +1026,318 @@ def _embed_signature() -> str:
     return _embed_last["v"]
 
 
+_WHOLE = ("schema", "places", "analysis", "videos", "embed")  # the parts of the version that concern every photo
+
+
+def _parts(source: str) -> dict:
+    """What the index is made from, by name; joined, the version it is stamped with."""
+    return {"schema": SCHEMA_VERSION, "source": source, "places": places.signature(), "edits": edits.signature(),
+            "analysis": analysis.signature(), "videos": videos.signature(), "embed": _embed_signature()}
+
+
 def _version_for(source: str) -> str:
-    return f"{SCHEMA_VERSION}:{source}:{places.signature()}:{edits.signature()}:{analysis.signature()}:{videos.signature()}:{_embed_signature()}"
+    return ":".join(_parts(source).values())
+
+
+# ---- the index updated in place -----------------------------------------------------------------------------------
+# A change to a few photos (a rating, a tag, a title, a face named, the edits written into digiKam's database) used to
+# rebuild the whole index: every row of the library read and written again, seconds on a large one, for each change.
+# Now the rows of those photos are rewritten in the index file as it stands, with the counts and covers of the tags
+# and folders they are or were in. Which photos, the index knows two ways: the remembered edits carry a stamp each
+# (pending_seen keeps the stamps the index reflects), and the viewer's own writers name the photos they write
+# (writing()). Anything else is a full build, as before: a change digiKam made, a tag or folder renamed, moved or
+# removed, new analysis results, more than PATCH_MAX photos. And a full build follows the last update in place once
+# things are quiet (_full_build_due): what is ranked or grouped across the library (bursts, the sharpness ranks,
+# the words read in several photos) is carried over as it was for a photo updated in place, and made right then.
+PATCH_MAX = 500           # more photos than this: the full build is as quick, and simpler
+RECONCILE_S = 600         # a full build this long after the last update in place
+RECONCILE_SOON_S = 60     # ... or this long, when a photo's date, camera or size changed, or a photo came or went (bursts are found from those)
+RECONCILE_MAX_S = 3600    # ... and at least this often while the updates in place keep coming
+_CARRIED = ("sharpn", "focusn", "aesthn", "burst", "burst_best", "reject", "ocr")  # ranked, grouped or cleaned across the library: kept as the last full build left them
+_BURST_KEYS = ("ts", "name", "camera", "w", "h", "video", "dprec")
+_own_lock = threading.Lock()
+_own: list = []  # the viewer's own writes the index has not taken in yet, oldest first: {"before", "after", "ids"}
+_patched = {"n": None, "at": 0.0, "first": 0.0, "soon": False}  # updates in place since the last full build (n None: not read from the index yet)
+
+
+def _marker(dst_path: Path) -> Path:
+    """Exists while the index file is being written in place: found at a start, the process ended in the middle and
+    the file cannot be trusted (its journal is in memory, see drop_photos), so the index is built anew."""
+    return Path(str(dst_path) + ".patching")
+
+
+def _source_now():
+    if not config.INDEX_PATCH:
+        return None
+    try:
+        return probe()[1]
+    except (Unavailable, *SOURCE_ERRORS):
+        return None
+
+
+@contextlib.contextmanager
+def writing(ids):
+    """Around a write of the viewer's to digiKam's database (or the library tables) that changes rows of these
+    photos and nothing else. `ids` may be a list the caller fills while it writes. The index then rewrites those
+    photos' rows instead of everything, as long as the database's version went from the one the index was made
+    from to the one before this write, and is still the one after it: a change by anyone else in between (digiKam,
+    a writer that names no photos) means a full build."""
+    before = _source_now()
+    try:
+        yield
+    finally:
+        reg = {"before": before, "after": _source_now() if before is not None else None, "ids": frozenset(int(i) for i in ids)}
+        if reg["ids"]:
+            with _own_lock:
+                _own.append(reg)
+
+
+def _full_build_due() -> bool:
+    """Whether the full build that follows updates in place is due."""
+    p = _patched
+    if p["n"] is None:  # after a restart: what the index file says
+        try:
+            con = open_index()
+            try:
+                meta = dict(con.execute("SELECT key, value FROM meta WHERE key IN ('patches', 'patched', 'patch_first', 'patch_soon')"))
+            finally:
+                con.close()
+            p.update(n=int(meta.get("patches") or 0), at=float(meta.get("patched") or 0), first=float(meta.get("patch_first") or 0),
+                     soon=meta.get("patch_soon") == "1")
+        except (sqlite3.Error, ValueError):
+            p.update(n=0)
+    if not p["n"]:
+        return False
+    now = time.time()
+    return now - p["at"] > (RECONCILE_SOON_S if p["soon"] else RECONCILE_S) or now - p["first"] > RECONCILE_MAX_S
+
+
+def _patch(src: tuple, parts: dict, dst_path: Path = config.INDEX_DB) -> bool:
+    """Update the index in place for the photos that changed. False when it cannot be done that way (the caller
+    builds the whole index then), True when the index is up to date."""
+    if not config.INDEX_PATCH:
+        return False
+    try:
+        with _build_lock:
+            stats = _patch_locked(src, parts, Path(dst_path))
+    except Unavailable:
+        raise
+    except SOURCE_ERRORS as e:  # the build deals with a database that cannot be read (and says so)
+        log.info("the index was not updated in place (%s)", e)
+        return False
+    except Exception as e:  # a full build is always right: the index is never left as it is over a fault here
+        log.warning("the index could not be updated in place (%s); building it", e, exc_info=True)
+        return False
+    if not stats:
+        return False
+    if stats["resolved_edits"]:
+        _settle(Path(dst_path), stats)
+    return True
+
+
+def _patch_locked(src: tuple, parts: dict, dst_path: Path):
+    t0 = time.time()
+    kind, ver = src
+    marker = _marker(dst_path)
+    if not dst_path.exists() or marker.exists():
+        return None
+    con = open_index(dst_path)
+    try:
+        meta = dict(con.execute("SELECT key, value FROM meta"))
+        stored = json.loads(meta["parts"]) if meta.get("parts") else None
+        if not stored or meta.get("kind") != kind or any(stored.get(k) != parts[k] for k in _WHOLE):
+            return None
+        seen = dict(con.execute("SELECT photo_id, stamp FROM pending_seen"))
+        tags_idx = {r[0]: r[1:] for r in con.execute("SELECT id, pid, name, full, person, icon FROM tags")}
+        albums_idx = {r[0]: r[1:] for r in con.execute("SELECT id, pid, path, name, root, caption, adate, category, icon FROM albums")}
+    finally:
+        con.close()
+    with _own_lock:
+        own = list(_own)
+    if stored["source"] != ver:
+        # the database changed: only by the writes that named their photos? (index's version -> before the first,
+        # after each -> before the next, after the last -> now)
+        chain = [stored["source"], *(v for r in own for v in (r["before"], r["after"])), ver]
+        if not own or None in chain or any(chain[i] != chain[i + 1] for i in range(0, len(chain), 2)):
+            return None
+    stamps = edits.pending_stamps()  # before the rows are read: an edit made meanwhile is seen as changed, never missed
+    ids = {i for r in own for i in r["ids"]} | {i for i in set(seen) | set(stamps) if seen.get(i) != stamps.get(i)}
+    if len(ids) > PATCH_MAX:
+        return None
+    m = mirror_info()
+    if kind == "digikam" and not m:
+        return None  # the first copy of the library is taken by a build
+    direct = kind == "digikam" and m["source"] != ver  # as in _read_source: digiKam itself, and the copy follows
+    con = dkdb.connect(write=False, real=True) if direct else library.connect()
+    try:
+        raw = read_rows(con, ids)
+        root_path = dkdb.root_paths(con)
+    finally:
+        con.close()
+    if HIDDEN:
+        hidden_ids = set(HIDDEN)
+        raw["images"] = [r for r in raw["images"] if r[0] not in hidden_ids]
+    albums = {aid: a for aid, a in _album_rows(raw).items() if not config.is_system_folder(a["rel"])}
+    tags, props, internal, special, hidden = _tag_rows(raw)
+
+    def parent(t):
+        return t["pid"] if t["pid"] in tags and t["pid"] not in hidden else None
+
+    # the tags and folders the index has must be where and what they were: the text and counts of photos not read here hang on them
+    for tid, (pid, name, full, person, _icon) in tags_idx.items():
+        t = tags.get(tid)
+        if not t or tid in hidden or (parent(t), t["name"], t["full"]) != (pid, name, full):
+            return None
+        if person:
+            t["person"] = 1  # a person by a face on a photo not read here stays one
+    for aid, (pid, path, name, root, *_rest) in albums_idx.items():
+        a = albums.get(aid)
+        if not a or (a["pid"], a["path"], a["name"], root_path.get(a["root"])) != (pid, path, name, root):
+            return None
+    side = _side_tables(raw, tags, props, internal, special, hidden)
+    if any(tags[tid]["person"] != row[3] for tid, row in tags_idx.items()):
+        return None  # a tag became a person: every photo carrying it lists it among the people from now on
+    phases = {}
+    rows = _photo_rows(raw, albums, root_path, tags, hidden, side, places.geocoder(), phases, ids=ids)
+    present = {r[0] for r in rows.photos}
+    version = ":".join({**parts, "edits": edits.signature_of(stamps)}.values())
+    stats = {"version": version, "parts": {**parts, "edits": edits.signature_of(stamps)}, "stamps": stamps, "photos": len(present),
+             "resolved_edits": rows.resolved, "resolved_snapshot": rows.resolved_snapshot}
+    idl = sorted(ids)
+
+    def chain_of(aid):
+        out, cur = [], aid
+        while cur is not None and cur in albums and cur not in out:
+            out.append(cur)
+            cur = albums[cur]["pid"]
+        return out
+
+    def inlist(values):
+        return ",".join(str(int(v)) for v in values)
+
+    marker.touch()
+    dst = sqlite3.connect(str(dst_path), timeout=15, isolation_level=None)
+    try:
+        dst.execute("PRAGMA journal_mode = MEMORY")  # no journal file beside an index that readers open read-only and a build replaces
+        dst.execute("BEGIN IMMEDIATE")
+        if dst.execute("SELECT value FROM meta WHERE key = 'version'").fetchone()[0] != meta["version"]:
+            raise sqlite3.OperationalError("the index was replaced meanwhile")
+        old, old_tags = {}, set()
+        for part in chunked(idl, 900):
+            old.update((r[0], r) for r in dst.execute(f"SELECT * FROM photos WHERE id IN ({inlist(part)})"))
+            old_tags.update(r[0] for r in dst.execute(f"SELECT DISTINCT tag_id FROM photo_tags WHERE photo_id IN ({inlist(part)})"))
+        _drop(dst, idl)
+        carried = [_COLS.index(c) for c in _CARRIED]
+        photos = []
+        for r in rows.photos:
+            was = old.get(r[0])
+            if was:
+                r = list(r)
+                for k in carried:
+                    r[k] = was[k]
+            photos.append(tuple(r))
+        dst.executemany(f"INSERT INTO photos VALUES ({','.join('?' * len(_COLS))})", photos)
+        ocr = {r[0]: r[_OCR_COL] for r in photos}
+        dst.executemany("INSERT INTO fts (rowid, name, album, title, caption, tags, people, camera, misc, ocr, caption_ai, speech) "
+                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", [(*f[:9], ocr.get(f[0]), *f[10:]) for f in rows.fts_rows])
+        dst.executemany("INSERT OR IGNORE INTO photo_tags VALUES (?,?)", rows.photo_tag_rows)
+        dst.executemany("INSERT INTO faces VALUES (?,?,?,?,?,?,?)", [f for f in side["faces"] if f[0] in present])
+
+        # tags: the new ones, the badge pictures, and the counts of every tag these photos carry or carried (and of what is above them)
+        new_tags = [tid for tid in tags if tid not in hidden and tid not in tags_idx]
+        dst.executemany("INSERT INTO tags VALUES (?,?,?,?,?,0,0,NULL)", [(tid, parent(tags[tid]), tags[tid]["name"], tags[tid]["full"], tags[tid]["person"]) for tid in new_tags])
+        dst.executemany("INSERT OR IGNORE INTO tag_closure VALUES (?,?)", [(a, tid) for tid in new_tags for a in [tid] + tags[tid]["anc"]])
+        gone = sorted(set(old) - present)
+        if gone:
+            dst.execute(f"UPDATE tags SET icon = NULL WHERE icon IN ({inlist(gone)})")
+        dst.executemany("UPDATE tags SET icon = (SELECT id FROM photos WHERE id = ?) WHERE id = ?",
+                        [(t["icon"], tid) for tid, t in tags.items() if tid not in hidden and (t["icon"] or None) != (tags_idx.get(tid) or (None,) * 5)[4]])
+        touched = sorted(old_tags | {t for t, _i in rows.photo_tag_rows} | set(new_tags))
+        for part in chunked(touched, 900):
+            dst.execute(f"""UPDATE tags SET
+                  n = (SELECT count(*) FROM photo_tags pt WHERE pt.tag_id = tags.id),
+                  n_all = (SELECT count(DISTINCT pt.photo_id) FROM photo_tags pt JOIN tag_closure c ON c.tag = pt.tag_id WHERE c.anc = tags.id)
+                WHERE id IN (SELECT anc FROM tag_closure WHERE tag IN ({inlist(part)}))""")
+
+        # folders: the ones that were empty until now, what digiKam says about each, and the counts, dates and covers of
+        # every folder these photos are or were in (and of what is above them)
+        scope = set()
+        for aid in {r[1] for r in old.values()} | {r[1] for r in photos}:
+            scope.update(chain_of(aid))
+        for aid, (_pid, _path, _name, _root, caption, adate, category, icon) in albums_idx.items():
+            a = albums[aid]
+            if (a["caption"], a["date"], a["category"], a["icon"]) != (caption, adate, category, icon):
+                dst.execute("UPDATE albums SET caption = ?, adate = ?, category = ?, icon = ? WHERE id = ?", (a["caption"], a["date"], a["category"], a["icon"], aid))
+                scope.add(aid)  # its cover may be another photo now
+        for aid in sorted(scope - set(albums_idx)):
+            a = albums[aid]
+            dst.execute("DELETE FROM album_closure WHERE album = ?", (aid,))
+            dst.executemany("INSERT OR IGNORE INTO album_closure VALUES (?,?)", [(anc, aid) for anc in chain_of(aid)])
+            dst.execute("INSERT INTO albums (id, pid, path, name, root, caption, n, adate, category, icon) VALUES (?,?,?,?,?,?,0,?,?,?)",
+                        (aid, a["pid"], a["path"], a["name"], root_path[a["root"]], a["caption"], a["date"], a["category"], a["icon"]))
+        for part in chunked(sorted(scope), 900):
+            dst.execute(f"""
+                UPDATE albums SET
+                  n      = (SELECT count(*) FROM photos p WHERE p.album_id = albums.id),
+                  n_all  = (SELECT count(*) FROM photos p JOIN album_closure c ON c.album = p.album_id WHERE c.anc = albums.id),
+                  ts_min = (SELECT min(ts) FROM photos p JOIN album_closure c ON c.album = p.album_id WHERE c.anc = albums.id),
+                  ts_max = (SELECT max(ts) FROM photos p JOIN album_closure c ON c.album = p.album_id WHERE c.anc = albums.id),
+                  cover  = coalesce((SELECT p.id FROM photos p WHERE p.id = albums.icon),
+                                    (SELECT p.id FROM photos p JOIN album_closure c ON c.album = p.album_id WHERE c.anc = albums.id
+                                     ORDER BY p.video, (p.pick = 1), p.rating DESC, p.ts LIMIT 1))
+                WHERE id IN ({inlist(part)})""")
+            dst.execute(f"DELETE FROM albums WHERE n_all = 0 AND id IN ({inlist(part)})")
+
+        for part in chunked(idl, 900):
+            dst.execute(f"DELETE FROM pending_seen WHERE photo_id IN ({inlist(part)})")
+        dst.executemany("INSERT INTO pending_seen VALUES (?,?)", [(i, stamps[i]) for i in idl if i in stamps])
+
+        # what bursts are found from changed, or a photo came or went: the full build follows sooner
+        keys = [_COLS.index(c) for c in _BURST_KEYS]
+        soon = set(old) != present or any(tuple(r[k] for k in keys) != tuple(old[r[0]][k] for k in keys) for r in photos)
+        now = time.time()
+        first = float(meta.get("patch_first") or 0) if int(meta.get("patches") or 0) else now
+        soon = soon or (meta.get("patch_soon") == "1" and int(meta.get("patches") or 0) > 0)
+        done = {"version": version, "parts": json.dumps(stats["parts"]), "photos": dst.execute("SELECT count(*) FROM photos").fetchone()[0],
+                "patches": int(meta.get("patches") or 0) + 1, "patched": round(now, 3), "patch_first": round(first, 3), "patch_soon": int(soon)}
+        dst.executemany("INSERT OR REPLACE INTO meta VALUES (?,?)", [(k, str(v)) for k, v in done.items()])
+        dst.execute("COMMIT")
+    except BaseException:
+        try:
+            dst.execute("ROLLBACK")
+            marker.unlink(missing_ok=True)  # the file is as it was
+        except sqlite3.Error:
+            pass  # the marker stays: the next look builds the index anew
+        raise
+    finally:
+        dst.close()
+    marker.unlink(missing_ok=True)
+    last_source.update(kind=kind, version=ver)
+    _patched.update(n=done["patches"], at=now, first=first, soon=soon)
+    with _own_lock:
+        _own[:] = [r for r in _own if not any(r is o for o in own)]
+    if direct:
+        refresh_library_soon()
+    log.info("index updated in place in %.2fs: %d photos", time.time() - t0, len(ids))
+    return stats
 
 
 def ensure_fresh() -> bool:
-    """Rebuild the index when anything it is built from changed: digiKam's database (or the
-    viewer's copy of it), the viewer's remembered edits, analysis results, embeddings, or this
-    schema. True if rebuilt."""
+    """Bring the index up to date when anything it is made from changed: digiKam's database (or the viewer's copy
+    of it), the viewer's remembered edits, analysis results, embeddings, or this schema. A change to a few photos
+    is written into the index in place (_patch); anything else builds it anew. True if the index changed."""
     src = probe()
-    if current_version() == _version_for(src[1]) and not (src[0] == "digikam" and not mirror_info()):
+    parts = _parts(src[1])
+    with _own_lock:
+        own = bool(_own)
+    if (current_version() == ":".join(parts.values()) and not own and not _marker(config.INDEX_DB).exists()
+            and not (src[0] == "digikam" and not mirror_info())):
         # (a readable digiKam with no copy taken yet, as right after this version's first start, builds once to take it)
         last_source.update(kind=src[0], version=src[1])
-        return False
+        if not _full_build_due():
+            return False
+    elif not _full_build_due() and _patch(src, parts):
+        return True
     build(source=src)
     return True
 

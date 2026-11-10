@@ -63,6 +63,7 @@ iopix's own data lives on a MariaDB or MySQL server (see [iopix's own database](
 | `JOBS_PROCESS` | `1` | `0` runs the analysis inside the web app instead of a process of its own (no memory watch) |
 | `PREWARM` | `1` | build all grid thumbnails after start |
 | `REINDEX_POLL` | `20` | seconds between checks for changes in digiKam's database |
+| `INDEX_PATCH` | `1` | a change to a few photos rewrites only their rows of the search index; `0` rebuilds the whole index at every change |
 | `HF_HUB_OFFLINE` | unset | `1` never contacts the model hub |
 
 ## Thumbnails and previews

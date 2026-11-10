@@ -46,7 +46,7 @@ async def api_metadata_write(photo_id: int, request: Request):
         r = await run_in_threadpool(metaedit.write, photo_id, list(body.get("changes") or [])[:200])
     except dbsync.SyncError as e:
         raise HTTPException(409 if "digiKam is running" in str(e) else 400, str(e))
-    await run_in_threadpool(events.after_write)
+    await run_in_threadpool(events.after_photo_write)
     return r
 
 
@@ -59,7 +59,7 @@ async def api_metadata_reread(photo_id: int):
         r = await run_in_threadpool(metaedit.reread, photo_id)
     except dbsync.SyncError as e:
         raise HTTPException(409 if "digiKam is running" in str(e) else 400, str(e))
-    await run_in_threadpool(events.after_write)
+    await run_in_threadpool(events.after_photo_write)
     return r
 
 
@@ -296,7 +296,7 @@ async def api_edits_db_apply():
         raise HTTPException(500, f"The update failed and was rolled back: {e}")
     log.info("edits applied to digiKam's database (on request): %d photos, %d skipped%s", result["applied"], len(result["skipped"]),
              "".join(f"; {s['id']}: {s['reason']}" for s in result["skipped"][:5]))
-    await run_in_threadpool(events.after_write)
+    await run_in_threadpool(events.after_photo_write)
     return result
 
 

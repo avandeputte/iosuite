@@ -121,6 +121,7 @@ The settings are in `config.env` in the app folder (`setup.sh` writes the ones i
 | `PREWARM` | `1` | build all grid thumbnails in the background after startup |
 | `SCANNER_LOOP` | `1` | `0` keeps the file scanner's background loop off (the test suite sets it; Settings › Library can still start a scan) |
 | `REINDEX_POLL` | `20` | seconds between checks for digiKam database changes |
+| `INDEX_PATCH` | `1` | a change to a few photos rewrites only their rows of the search index; `0` rebuilds the whole index at every change |
 | `THUMB_HEIGHT` / `THUMB_MAX_WIDTH` / `THUMB_QUALITY` | `360` / `1080` / `76` | grid thumbnail size and JPEG quality |
 | `PREVIEW_SIZE` / `PREVIEW_QUALITY` | `2560` / `86` | viewer previews: long edge and JPEG quality |
 | `PREVIEW_CACHE_MAX_MB` | `8000` | preview cache cap, pruned at startup and every six hours |
