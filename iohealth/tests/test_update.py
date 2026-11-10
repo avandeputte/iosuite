@@ -41,7 +41,7 @@ def test_server_status_and_update(client, admin, monkeypatch):
     # in Docker (or with no update.sh to run) the run is refused with the pull hint, nothing is started
     monkeypatch.setattr(updater, "in_docker", lambda: True)
     r = client.post("/api/server", json={"action": "update"})
-    assert r.status_code == 409 and "docker compose pull" in r.json()["error"]
+    assert r.status_code == 409 and "docker compose pull" in r.json()["detail"]
     r = client.post("/api/server", json={"action": "update", "ref": "--evil"})
     assert r.status_code == 409
 

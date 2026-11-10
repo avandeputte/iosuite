@@ -14,6 +14,8 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import ORJSONResponse, Response
 
+from iosuite_shared.errors import Invalid
+
 from app import access, analytics as an, config, db, glucose as gl, rollup
 from app.auth import uid as uid_of
 
@@ -24,11 +26,13 @@ EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 ready = rollup.Ready()
 
 
-class BadRequest(ValueError):
+class BadRequest(Invalid):
+    """A parameter of the request is wrong: 400 with this message."""
     pass
 
 
 class NotFound(LookupError):
+    """Nothing of this account's by that id: 404."""
     pass
 
 
@@ -55,6 +59,7 @@ class Cache:
 
     @staticmethod
     def weigh(v) -> int:
+        """Roughly how many bytes a kept value takes."""
         if isinstance(v, (bytes, bytearray, str)):
             return len(v)
         try:
@@ -62,7 +67,9 @@ class Cache:
         except (TypeError, orjson.JSONEncodeError):
             return 1 << 20  # not to be weighed: counted as large
 
-    def get(self, key, ttl, f):
+    def get(self, key, ttl, make):
+        """The reply kept under `key` while it is younger than `ttl` (0: the cache's own); else `make()` works it out,
+        once for everyone who asks meanwhile."""
         ttl = ttl or self.ttl
         with self.lock:
             hit = self.m.get(key)
@@ -80,7 +87,7 @@ class Cache:
                 raise flight.error
             return flight.value
         try:
-            v = flight.value = f()
+            v = flight.value = make()
         except BaseException as e:
             flight.error = e
             raise
@@ -99,6 +106,7 @@ class Cache:
         return v
 
     def clear(self):
+        """Forget every reply (a sync finished); one being worked out is not kept when it arrives."""
         with self.lock:
             self.m = OrderedDict()
             self.bytes = 0
@@ -122,6 +130,7 @@ _backfilling = threading.Lock()
 
 
 def start_backfill():
+    """Fill the hourly rollup of the types that do not have one yet, on a thread of its own; one at a time."""
     if not _backfilling.acquire(blocking=False):
         return
 
@@ -133,12 +142,12 @@ def start_backfill():
     threading.Thread(target=run, name="hourly-rollup", daemon=True).start()
 
 
-def cached(request: Request, ttl: float, f):
+def cached(request: Request, ttl: float, make):
     """The route's reply, from the cache when it is there. What is kept is the reply as it goes out (the JSON text), so
     its size is known and a reply served from the cache is not encoded again."""
     key = (uid_of(request), request.url.path, request.url.query)
     try:
-        body = cache.get(key, ttl, lambda: orjson.dumps(jsonable_encoder(f()), option=orjson.OPT_NON_STR_KEYS))  # as ORJSONResponse writes it
+        body = cache.get(key, ttl, lambda: orjson.dumps(jsonable_encoder(make()), option=orjson.OPT_NON_STR_KEYS))  # as ORJSONResponse writes it
     except NotFound as e:
         raise HTTPException(404, str(e) or "not found")
     except BadRequest as e:
@@ -149,6 +158,7 @@ def cached(request: Request, ttl: float, f):
 # ---- parameters
 
 def location(request: Request):
+    """The time zone the reply is in: ?tz=, else the server's TZ, else UTC."""
     tz = request.query_params.get("tz")
     for name in (tz, config.TZ, "UTC"):
         if name:
@@ -165,10 +175,16 @@ def time_range(request: Request, loc, days: int) -> tuple:
     qp = request.query_params
 
     def parse(s, end):
+        """from/to as given: Unix seconds, or a local date (to: the end of that day)."""
         try:
-            return datetime.fromtimestamp(int(s), UTC)
+            seconds = int(s)
         except ValueError:
-            pass
+            seconds = None
+        if seconds is not None:
+            try:
+                return datetime.fromtimestamp(seconds, UTC)
+            except (OverflowError, OSError, ValueError):  # a number no calendar reaches
+                raise BadRequest(f'bad time "{s[:40]}"')
         try:
             d = datetime.strptime(s, "%Y-%m-%d")
         except ValueError:
@@ -191,19 +207,23 @@ def time_range(request: Request, loc, days: int) -> tuple:
 
 
 def local_add_days(d: datetime, n: int, loc) -> datetime:
+    """The same wall-clock time `n` days on in `loc` (a day there is not always 24 hours)."""
     x = date(d.year, d.month, d.day) + timedelta(days=n)
     return datetime(x.year, x.month, x.day, d.hour, d.minute, tzinfo=loc)
 
 
 def aware(dt):
+    """A naive UTC datetime from the database as an aware one."""
     return db.utc(dt)
 
 
 def ts(dt) -> int:
+    """A database datetime as Unix seconds."""
     return int(aware(dt).timestamp())
 
 
 def clean(v):
+    """A database value as JSON carries it: decimals as numbers, datetimes as Unix seconds, bytes as text."""
     if isinstance(v, Decimal):
         return int(v) if v == v.to_integral_value() else float(v)
     if isinstance(v, datetime):
@@ -214,10 +234,12 @@ def clean(v):
 
 
 def maps(sql: str, args=None) -> list:
+    """The rows of a query as dicts, cleaned for JSON."""
     return [{k: clean(v) for k, v in r.items()} for r in db.qd(sql, args)]
 
 
 def rnd(v: float, places: int) -> float:
+    """`v` rounded half away from zero; -1 for no value."""
     if v is None or math.isnan(v):
         return -1
     p = 10 ** places
@@ -227,7 +249,8 @@ def rnd(v: float, places: int) -> float:
 # ---- status and types
 
 def last_sync(u: int) -> dict:
-    """The account's latest upload, for GET /api/status (app.main): {lastSync: {started, finished, device, items}, latestArrival}, or {}."""
+    """The account's latest upload, for GET /api/status (app.main): {lastSync: {started, finished, device, items},
+    latestArrival}, or {}."""
     r = db.one("SELECT started_at, finished_at, device, items FROM hlt_sync_log WHERE user_id = %s ORDER BY id DESC LIMIT 1", (u,))
     if not r:
         return {}
@@ -246,27 +269,32 @@ def all_type_names() -> list:
     return _all_types["v"]
 
 
-_kinds = {}
+_kinds = {}  # (account, type) -> kind
+KINDS_KEPT = 5000
 
 
-def kind_of(t: str) -> str:
-    if t not in _kinds:
-        r = db.one("SELECT kind FROM hlt_samples WHERE type = %s LIMIT 1", (t,))
-        if not r:
-            return ""  # not remembered: any name can be asked for, and the list would grow with each
-        _kinds[t] = r[0]
-    return _kinds[t]
+def kind_of(u: int, t: str) -> str:
+    """The kind (quantity, category...) of this account's samples of a type; "" when it has none. Asked per account:
+    what one account uploaded under a type's name says nothing about another's."""
+    if (u, t) not in _kinds:
+        r = db.one("SELECT kind FROM hlt_samples WHERE type = %s AND user_id = %s LIMIT 1", (t, u))
+        if len(_kinds) >= KINDS_KEPT:
+            _kinds.clear()
+        _kinds[(u, t)] = r[0] if r else ""
+    return _kinds[(u, t)]
 
 
 def type_list(u: int) -> list:
-    def f():
+    """The types this account has data for: {type, count, first, last, unit, cumulative...}, from the hourly rollup where
+    a type has one and from its samples otherwise. Kept ten minutes."""
+    def reply():
         rolled = {r[0]: r for r in db.q("SELECT type, SUM(n), MIN(hour), MAX(hour) FROM hlt_sample_hourly WHERE user_id = %s GROUP BY type", (u,))}
         out = []
         for name in all_type_names():
             if ready.has(name) and name in rolled:
                 _, n, first, last = rolled[name]
                 t = {"type": name, "count": int(n), "first": ts(first), "last": ts(last), "since": last}
-            elif ready.has(name) and kind_of(name) in ("quantity", "category"):
+            elif ready.has(name) and kind_of(u, name) in ("quantity", "category"):
                 continue  # every sample of these kinds is in the rollup: none of this account's
             else:
                 n, first, last = db.one("SELECT COUNT(*), MIN(start_date), MAX(start_date) FROM hlt_samples WHERE type = %s AND user_id = %s", (name, u))
@@ -287,7 +315,7 @@ def type_list(u: int) -> list:
         out += ring_types(u)
         out.sort(key=lambda t: t["type"])
         return [{k: t[k] for k in ("type", "kind", "unit", "count", "first", "last", "cumulative")} for t in out]
-    return cache.get((u, "types"), 600, f)
+    return cache.get((u, "types"), 600, reply)
 
 
 @router.get("/api/types", dependencies=[access.signed_in])
@@ -296,6 +324,7 @@ def types(request: Request):
 
 
 def type_info(u: int, name: str):
+    """One entry of type_list, or None when the account has nothing of that type."""
     for t in type_list(u):
         if t["type"] == name:
             return t
@@ -318,6 +347,7 @@ RING_TYPES = [
 
 
 def ring_types(u: int) -> list:
+    """The activity rings as types (move, exercise, stand), when the account has activity summaries."""
     n, first, last = db.one("SELECT COUNT(*), MIN(date), MAX(date) FROM hlt_activity_summaries WHERE user_id = %s", (u,))
     if not n:
         return []
@@ -329,6 +359,7 @@ def ring_types(u: int) -> list:
 
 
 def ring_series(u: int, info: dict, frm, to, bucket: str, loc) -> dict:
+    """A ring's daily values as a series (days at the finest: a summary is one row per day)."""
     expr = next(e for name, _, e in RING_TYPES if name == info["type"])
     if bucket in ("raw", "hour"):
         bucket = "day"
@@ -346,19 +377,23 @@ def ring_series(u: int, info: dict, frm, to, bucket: str, loc) -> dict:
 
 @router.get("/api/series", dependencies=[access.signed_in])
 def series(request: Request):
+    """One type over time. type, from, to, bucket (auto | raw | hour | day | week | month), tz. {type, unit, bucket,
+    cumulative, points}."""
     u = uid_of(request)
 
-    def f():
+    def reply():
         loc = location(request)
         frm, to = time_range(request, loc, 30)
         bucket = request.query_params.get("bucket") or "auto"
         if bucket == "auto":
             bucket = an.auto_bucket(frm, to)
         return series_for(u, request.query_params.get("type", ""), frm, to, bucket, loc)
-    return cached(request, 0, f)
+    return cached(request, 0, reply)
 
 
 def series_for(u: int, name: str, frm, to, bucket: str, loc) -> dict:
+    """The points of one type in [frm, to) per bucket: from the hourly rollup when the type has one, else from its
+    samples; sleep and the rings have their own shapes."""
     info = type_info(u, name)
     reply = {"type": name, "unit": info["unit"] if info else "", "bucket": bucket, "cumulative": bool(info and info["cumulative"]), "points": []}
     if not info:
@@ -400,6 +435,7 @@ def sleep_series(u: int, frm, to, bucket: str, loc) -> dict:
 
 
 def hourly_rollup(u: int, name: str, frm, to) -> list:
+    """The account's hourly rows of a type in [frm, to)."""
     return [an.HourRow(aware(h), s, float(sm or 0), int(n), float(mn or 0), float(mx or 0)) for h, s, sm, n, mn, mx in db.q(
         "SELECT hour, source_name, sum, n, min, max FROM hlt_sample_hourly WHERE user_id = %s AND type = %s AND hour >= %s AND hour < %s",
         (u, name, frm.replace(minute=0, second=0, microsecond=0), to))]
@@ -419,6 +455,8 @@ def hourly_samples(u: int, name: str, val: str, cond: str, frm, to) -> list:
 # ---- workouts
 
 def apply_workout_meta(x: dict, meta: str):
+    """The fields a workout's HealthKit metadata adds to its reply (the elevation climbed, whether it was indoors);
+    metadata that is not a JSON object adds nothing."""
     try:
         m = json.loads(meta or "{}")
     except ValueError:
@@ -433,6 +471,8 @@ def apply_workout_meta(x: dict, meta: str):
 
 
 def workout_list(u: int, frm, to) -> list:
+    """The account's workouts that started in [frm, to), newest first, each with its statistics (distance, energy, heart
+    rate) and whether it has a route."""
     out, index = [], {}
     for uuid, at, s, e, dur, src, meta, has_route in db.q(
             """SELECT w.uuid, COALESCE(w.activity_type, ''), w.start_date, w.end_date, COALESCE(w.duration_s, 0),
@@ -477,13 +517,14 @@ def ordered(x: dict) -> dict:
 
 @router.get("/api/workouts", dependencies=[access.signed_in])
 def workouts(request: Request):
+    """The workouts in from..to (default: all), optionally of one ?type=."""
     u = uid_of(request)
 
-    def f():
+    def reply():
         frm, to = time_range(request, location(request), 365 * 30)
         t = request.query_params.get("type")
         return [ordered(x) for x in workout_list(u, frm, to) if not t or x["activityType"] == t]
-    return cached(request, 0, f)
+    return cached(request, 0, reply)
 
 
 EFFORT_DISTANCES = [("400 m", 400), ("1 km", 1000), ("1 mile", 1609.344), ("5 km", 5000), ("10 km", 10000), ("Half marathon", 21097.5), ("Marathon", 42195)]
@@ -492,6 +533,7 @@ WORKOUT_SERIES_TYPES = ["heart_rate", "running_power", "running_speed", "running
 
 
 def route_points(u: int, wid: str) -> list:
+    """A workout's GPS points in order, without the fixes of poor accuracy, each with its distance from the start."""
     return an.clean_route([an.RoutePoint(aware(t), lat, lon, float(alt), float(sp), float(acc)) for t, lat, lon, alt, sp, acc in db.q(
         """SELECT time, latitude, longitude, COALESCE(altitude, 0), COALESCE(speed, -1), COALESCE(horizontal_accuracy, 0)
         FROM hlt_workout_route_points WHERE workout_uuid = %s AND user_id = %s ORDER BY time""", (wid, u))])
@@ -522,9 +564,11 @@ def max_hr(u: int, request: Request, at: datetime) -> tuple:
 
 @router.get("/api/workouts/{wid}", dependencies=[access.signed_in])
 def workout(wid: str, request: Request):
+    """One workout: its statistics, events and activities, the series recorded during it (heart rate, power, speed...)
+    with the heart rate zones, and its route with splits and best efforts. 404 when it is not this account's."""
     u = uid_of(request)
 
-    def f():
+    def reply():
         r = db.one("""SELECT uuid, COALESCE(activity_type, ''), start_date, end_date, COALESCE(duration_s, 0),
             COALESCE(source_name, ''), COALESCE(metadata_json, '{}') FROM hlt_workouts WHERE uuid = %s AND user_id = %s""", (wid, u))
         if not r:
@@ -585,14 +629,16 @@ def workout(wid: str, request: Request):
                 d["route"].append([p.t.timestamp(), rnd(p.lat, 6), rnd(p.lon, 6), rnd(p.alt, 1), rnd(p.dist, 1), rnd(p.speed, 2),
                                    rnd(h if h is not None else math.nan, 0)])
         return ordered(d)
-    return cached(request, 0, f)
+    return cached(request, 0, reply)
 
 
 @router.get("/api/routes", dependencies=[access.signed_in])
 def routes(request: Request):
+    """The GPS routes of the workouts in from..to (default: a year), optionally of one ?type=, thinned for a map. Kept
+    ten minutes."""
     u = uid_of(request)
 
-    def f():
+    def reply():
         frm, to = time_range(request, location(request), 365)
         typ = request.query_params.get("type", "")
         out, cur, pts = [], None, []
@@ -620,12 +666,13 @@ def routes(request: Request):
         flush()
         out.sort(key=lambda r: -r["start"])
         return out
-    return cached(request, 600, f)
+    return cached(request, 600, reply)
 
 
 # ---- sleep
 
 def sleep_samples(u: int, frm, to) -> list:
+    """The account's sleep stages that started in [frm, to)."""
     return [an.SleepSample(aware(s), aware(e), stage, src) for s, e, stage, src in db.q(
         """SELECT start_date, end_date, COALESCE(text, ''), COALESCE(source_name, '') FROM hlt_samples
         WHERE type = 'sleep_analysis' AND user_id = %s AND start_date >= %s AND start_date < %s ORDER BY start_date""", (u, frm, to))]
@@ -636,7 +683,7 @@ def sleep(request: Request):
     """Nights from..to; with date=yyyy-mm-dd, that one night with its segments."""
     u = uid_of(request)
 
-    def f():
+    def reply():
         loc = location(request)
         d = request.query_params.get("date")
         if d:
@@ -652,32 +699,35 @@ def sleep(request: Request):
         frm, to = time_range(request, loc, 30)
         # samples from six hours before the first day belong to its night
         return an.sleep_nights(sleep_samples(u, frm - timedelta(hours=6), to - timedelta(hours=6)), loc, False)
-    return cached(request, 0, f)
+    return cached(request, 0, reply)
 
 
 # ---- activity rings
 
 @router.get("/api/activity", dependencies=[access.signed_in])
 def activity(request: Request):
+    """The activity rings per day in from..to: move, exercise and stand with their goals."""
     u = uid_of(request)
 
-    def f():
+    def reply():
         loc = location(request)
         frm, to = time_range(request, loc, 30)
         return maps("""SELECT DATE_FORMAT(date, '%%Y-%%m-%%d') AS date, active_energy_kcal AS move, active_energy_goal_kcal AS moveGoal,
             exercise_min AS exercise, exercise_goal_min AS exerciseGoal, stand_hours AS stand, stand_hours_goal AS standGoal
             FROM hlt_activity_summaries WHERE user_id = %s AND date >= %s AND date < %s ORDER BY date""",
                     (u, aware(frm).astimezone(loc).strftime("%Y-%m-%d"), aware(to).astimezone(loc).strftime("%Y-%m-%d")))
-    return cached(request, 0, f)
+    return cached(request, 0, reply)
 
 
 # ---- profile
 
 @router.get("/api/profile", dependencies=[access.signed_in])
 def profile(request: Request):
+    """What the phone knows about the person (birth date, sex, blood type...), with the age and the maximum and resting
+    heart rate."""
     u = uid_of(request)
 
-    def f():
+    def reply():
         chars = {k: v or "" for k, v in db.q("SELECT name, value FROM hlt_characteristics WHERE user_id = %s", (u,))}
         out = {"characteristics": chars}
         now = datetime.now(UTC)
@@ -690,7 +740,7 @@ def profile(request: Request):
         if rhr is not None:
             out["restingHr"] = an.round_half_away(float(rhr))
         return out
-    return cached(request, 0, f)
+    return cached(request, 0, reply)
 
 
 # ---- records
@@ -713,7 +763,7 @@ def records(request: Request):
     """Bests per activity type, best days, best health readings and ring streaks."""
     u = uid_of(request)
 
-    def f():
+    def reply():
         loc = location(request)
         far = db.naive(datetime.now(UTC) + timedelta(days=1))
         recs, totals, best = [], {}, {}
@@ -783,7 +833,7 @@ def records(request: Request):
             t["distance"], t["energy"] = float(an.round_half_away(t["distance"])), float(an.round_half_away(t["energy"]))
         recs.sort(key=lambda r: (r["group"], r.get("type", ""), r["name"]))
         return {"records": recs, "totals": tl, "rings": rings}
-    return cached(request, 600, f)
+    return cached(request, 600, reply)
 
 
 @router.get("/api/records/efforts", dependencies=[access.signed_in])
@@ -792,7 +842,7 @@ def efforts(request: Request):
     u = uid_of(request)
     typ = request.query_params.get("type") or "running"
 
-    def f():
+    def reply():
         bests = {}
         for x in workout_list(u, datetime(1970, 1, 1), db.naive(datetime.now(UTC) + timedelta(days=1))):
             if x["activityType"] != typ or not x["hasRoute"]:
@@ -813,7 +863,7 @@ def efforts(request: Request):
                 if b is None or e["seconds"] < b["seconds"]:
                     bests[e["name"]] = {**e, "uuid": x["uuid"], "start": x["start"]}
         return [bests[name] for name, _ in EFFORT_DISTANCES if name in bests]
-    return cached(request, 600, f)
+    return cached(request, 600, reply)
 
 
 # ---- glucose
@@ -823,7 +873,7 @@ def glucose(request: Request):
     """from, to, and the target range low/high in mg/dL (default 70–180)."""
     u = uid_of(request)
 
-    def f():
+    def reply():
         loc = location(request)
         frm, to = time_range(request, loc, 14)
         low, high = 70.0, 180.0
@@ -866,13 +916,14 @@ def glucose(request: Request):
             readings.append(row)
         return {"unit": "mg/dL", "recordedUnit": recorded, "target": [low, high], "stats": stats, "agp": agp, "days": days,
                 "readings": readings, "sources": sources}
-    return cached(request, 0, f)
+    return cached(request, 0, reply)
 
 
 # ---- settings (units, theme, hidden sections and metrics, targets, goals): per account, shared by its browsers
 
 @router.get("/api/settings", dependencies=[access.signed_in])
 def get_settings(request: Request):
+    """The account's own web app settings, as it saved them."""
     out = {}
     for k, v in db.q("SELECT name, value FROM hlt_user_settings WHERE user_id = %s", (uid_of(request),)):
         try:
@@ -884,6 +935,7 @@ def get_settings(request: Request):
 
 @router.put("/api/settings", dependencies=[access.signed_in])
 async def put_settings(request: Request):
+    """Save settings of the account's own: a JSON object of up to 100 names (1 to 64 characters), 256 KB in all."""
     u = uid_of(request)
     body = await request.body()
     if len(body) > 256 << 10:

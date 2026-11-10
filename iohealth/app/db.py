@@ -1,127 +1,57 @@
-"""The health database: a small connection pool, query helpers and the numbered schema migrations.
+"""The health database: the connection, the query helpers (iosuite-shared's pool and transactions) and the schema.
 
 Every timestamp is UTC: the session time zone is +00:00 and DATETIME values come back as naive datetimes in UTC.
 """
 import logging
-import queue
 import re
 import threading
 import time
-from contextlib import contextmanager
 from datetime import datetime, timezone
 
 import pymysql
+from iosuite_shared import db as shared_db
 
 from app import config
 
 log = logging.getLogger("app.db")
 
 TABLE_OPTIONS = " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
-POOL_SIZE = 8
-
-_pool: "queue.LifoQueue" = queue.LifoQueue(maxsize=POOL_SIZE)
 _params: dict = {}
 
 
 def configure(**values):
     """Point the pool at another database (the tests)."""
     _params.update(values)
-    close_all()
+    pool.drain()
 
 
 def params() -> dict:
+    """Where the database is: config.env, with what configure() changed."""
     p = {"host": config.DB_HOST, "port": config.DB_PORT, "user": config.DB_USER, "password": config.DB_PASSWORD, "database": config.DB_NAME}
     p.update(_params)
     return p
 
 
-def _connect(database=...):
+def connect(database=...):
+    """A new connection in autocommit mode, its session in UTC. database=None: to the server alone (to create the
+    database)."""
     p = params()
     return pymysql.connect(host=p["host"], port=int(p["port"]), user=p["user"], password=p["password"],
                            database=p["database"] if database is ... else database, charset="utf8mb4", autocommit=True,
                            connect_timeout=8, read_timeout=300, write_timeout=300, init_command="SET time_zone = '+00:00'")
 
 
-def close_all():
-    while True:
-        try:
-            _pool.get_nowait().close()
-        except queue.Empty:
-            return
-        except Exception:
-            pass
-
-
-@contextmanager
-def conn():
-    """A pooled connection in autocommit mode."""
-    try:
-        con = _pool.get_nowait()
-        try:
-            con.ping(reconnect=False)
-        except Exception:
-            con.close()
-            con = _connect()
-    except queue.Empty:
-        con = _connect()
-    ok = False
-    try:
-        yield con
-        ok = True
-    finally:
-        if ok and con.get_autocommit():
-            try:
-                _pool.put_nowait(con)
-            except queue.Full:
-                con.close()
-        else:
-            con.close()
-
-
-@contextmanager
-def tx():
-    """A transaction: committed at the end of the block, rolled back on an exception."""
-    with conn() as con:
-        con.autocommit(False)
-        try:
-            con.begin()
-            yield con
-            con.commit()
-        except BaseException:
-            try:
-                con.rollback()
-            except pymysql.MySQLError:
-                pass  # a dropped connection: the error worth seeing is the one being raised
-            raise
-        finally:
-            try:
-                con.autocommit(True)
-            except pymysql.MySQLError:
-                pass  # conn() closes it rather than pooling it: it's not in autocommit mode
-
-
-def q(sql: str, args=None) -> list:
-    with conn() as con, con.cursor() as cur:
-        cur.execute(sql, args)
-        return list(cur.fetchall())
+# The pool, the transaction nested calls share, and q / one / ex are the suite's (iosuite_shared.db.Database): a
+# statement on its own is one round trip, tx() is one transaction (committed on success, rolled back on error), and
+# q / one / ex inside a `with tx():` block run in it. Rows are tuples here (the queries pick their columns by position).
+_db = shared_db.Database(connect)
+pool = _db.pool
+tx, q, one, ex = _db.tx, _db.q, _db.one, _db.ex
 
 
 def qd(sql: str, args=None) -> list:
     """Rows as dicts."""
-    with conn() as con, con.cursor(pymysql.cursors.DictCursor) as cur:
-        cur.execute(sql, args)
-        return list(cur.fetchall())
-
-
-def one(sql: str, args=None):
-    rows = q(sql, args)
-    return rows[0] if rows else None
-
-
-def ex(sql: str, args=None) -> int:
-    with conn() as con, con.cursor() as cur:
-        cur.execute(sql, args)
-        return cur.lastrowid or cur.rowcount
+    return _db.q(sql, args, kind=pymysql.cursors.DictCursor)
 
 
 def utc(dt) -> datetime:
@@ -130,6 +60,7 @@ def utc(dt) -> datetime:
 
 
 def unix(dt):
+    """A naive UTC datetime from the database as Unix seconds; None stays None."""
     return None if dt is None else int(utc(dt).timestamp())
 
 
@@ -144,7 +75,7 @@ def wait_for_server(attempts: int = 30):
     """The server may still be starting when the container comes up."""
     for attempt in range(1, attempts + 1):
         try:
-            con = _connect(database=None)
+            con = connect(database=None)
             try:
                 with con.cursor() as cur:
                     name = params()["database"].replace("`", "``")
@@ -274,19 +205,13 @@ _lock = threading.Lock()
 
 
 def schema_version() -> int:
+    """The newest schema version the database has recorded."""
     return one("SELECT COALESCE(MAX(version), 0) FROM hlt_schema_version")[0]
-
-
-def pending() -> bool:
-    try:
-        return schema_version() < SCHEMA_VERSION
-    except pymysql.MySQLError:
-        return True
 
 
 def migrate():
     """Create the tables and views that are missing (idempotent)."""
-    with _lock, conn() as con:
+    with _lock, pool.auto() as con:
         with con.cursor() as cur:
             for stmt in SCHEMA:
                 cur.execute(stmt + TABLE_OPTIONS)

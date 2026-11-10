@@ -15,7 +15,7 @@ shared.load_file(APP_DIR)  # first: iosuite_shared reads its settings (the Share
 env, env_flag, env_int = shared.env, shared.env_flag, shared.env_int
 
 # DATA_DIR, STATIC_DIR, LOG_FILE (DATA_DIR/iohealth.log; LOG_FILE= with nothing after it: none), HOST, PORT (8650),
-# PUBLIC_URL, BASE_URL, FORWARDED_ALLOW_IPS, TLS_CERT_FILE, TLS_KEY_FILE, MCP_FORCED, ADMIN_USER, ADMIN_PASSWORD
+# PUBLIC_URL, BASE_URL, TLS_CERT_FILE, TLS_KEY_FILE, MCP_FORCED, ADMIN_USER, ADMIN_PASSWORD
 globals().update(shared.standard(APP, APP_DIR))
 
 # the health data: {host, port, database, user, password} (the DB_* settings)

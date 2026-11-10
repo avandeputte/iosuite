@@ -7,7 +7,7 @@ import logging
 import threading
 import time
 from contextlib import contextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 from app import db
 
@@ -26,6 +26,7 @@ class Locks:
 
     @contextmanager
     def batch(self, user_id: int):
+        """Held by an upload batch: waits for the backfill, then for the account's other batch."""
         with self._cond:
             while self._alone:
                 self._cond.wait()
@@ -41,6 +42,8 @@ class Locks:
 
     @contextmanager
     def alone(self):
+        """Held by the backfill for one month of one type: waits until no batch is running, and keeps new ones waiting.
+        Held by the backfill for one month of one type: waits until no batch is running, and keeps new ones waiting."""
         with self._cond:
             while self._alone or self._batches:
                 self._cond.wait()
@@ -65,8 +68,9 @@ class Touched:
     def __init__(self):
         self.hours = set()
 
-    def add(self, typ: str, start: datetime):
-        self.hours.add((typ, start.replace(minute=0, second=0, microsecond=0)))
+    def add(self, typ: str, start: datetime | None):
+        if start is not None:  # nothing to place in an hour
+            self.hours.add((typ, start.replace(minute=0, second=0, microsecond=0)))
 
     def spans(self) -> dict:
         """Each type's hours grouped into runs with no gap over a day, so a batch with samples years apart
@@ -146,7 +150,3 @@ def backfill(ready: Ready, done=None):
         if done:
             done()
     log.info("hourly rollup: done in %ds", time.time() - started)
-
-
-def utcnow() -> datetime:
-    return datetime.now(timezone.utc)

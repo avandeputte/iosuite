@@ -175,7 +175,6 @@ for the important ones, and `config.env.example` lists them all) or in the envir
 | `TZ` | no | fallback time zone (e.g. `Europe/Brussels`) for days and weeks; the browser sends its own, so this only matters for API calls without `tz` |
 | `MAP_TILE_URL`, `MAP_TILE_ATTRIBUTION` | no | map tiles for routes, default OpenStreetMap (`https://tile.openstreetmap.org/{z}/{x}/{y}.png`) |
 | `HOST`, `PORT` | no | where the server listens, default `0.0.0.0` and `8650` (every app of the suite has its own port) |
-| `FORWARDED_ALLOW_IPS` | no | the addresses allowed to pass on the visitor's address and scheme (`X-Forwarded-For` / `-Proto`: your reverse proxy's), default `*`; read by the app itself (iosuite-shared), not by uvicorn |
 | `AUTH_PROXY`… | no | sign-in at a reverse proxy or Cloudflare Access, see [HTTPS](#reverse-proxy-and-https) below |
 | `UPDATE_CHECK` | no | `0`: never ask GitHub whether a newer version exists (the daily check, see [Updates](#updates)) |
 | `DATA_DIR` | no | what ioHealth writes on its own (the server log, the outcome of an update); default `data/` in the app folder |
@@ -260,7 +259,7 @@ cost a growing wait.
 ## API
 Every `/v1` call except `/v1/health` needs the account's `Authorization: Basic <user:password>` (what the iPhone app
 sends) or `Bearer <app password>`, of an editor or admin; what is sent becomes that account's. Errors
-are JSON `{"error": "…"}` with 400, 401, 403, 404 or 413.
+are JSON `{"detail": "…"}` with 400, 401, 403, 404 or 413.
 
 | request | body | reply |
 |---|---|---|

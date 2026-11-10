@@ -35,13 +35,25 @@ on_sync = []  # callbacks after a sync finishes (the web API's caches)
 # ---- decoding
 
 def parse_time(s):
+    """An ISO 8601 time from the phone as the naive UTC value the database stores; None stays None."""
     if s is None:
         return None
+    if not isinstance(s, str):
+        raise ValueError("a time is an ISO 8601 string")
     d = datetime.fromisoformat(s.replace("Z", "+00:00"))
     return (d.astimezone(timezone.utc) if d.tzinfo else d.replace(tzinfo=timezone.utc)).replace(tzinfo=None)
 
 
+def need_time(m: dict, key: str):
+    """The time under `key`, which the message must carry."""
+    t = parse_time(m[key])
+    if t is None:
+        raise ValueError(f"{key}: a time is needed")
+    return t
+
+
 def meta_json(m):
+    """HealthKit metadata as the JSON text the database stores; None for none."""
     return orjson.dumps(m).decode() if m else None
 
 
@@ -71,6 +83,8 @@ def decode(line: bytes) -> tuple:
 
 
 def read_body(raw: bytes, encoding: str) -> bytes:
+    """The body as sent, decompressed (gzip or deflate); 413 as soon as it would pass MAX_BODY unpacked, 400 for an
+    encoding that is not one of these."""
     enc = (encoding or "").strip().lower()
     try:
         if enc in ("", "identity"):
@@ -125,12 +139,15 @@ class Batch:
                 f"ON DUPLICATE KEY UPDATE {sets}")
 
     def add(self, table: str, row: tuple):
+        """Buffer a row for `table` (the account's id is added); a full buffer is written."""
         rows = self.rows[table]
         rows.append(row + (self.uid,))
         if len(rows) >= BATCH_ROWS:
             self.flush(table)
 
     def flush(self, table: str):
+        """Write the buffered rows of `table` in one statement; samples also mark their hours for the rollup and are no
+        longer deleted."""
         rows = self.rows[table]
         if not rows:
             return
@@ -145,6 +162,7 @@ class Batch:
         rows.clear()
 
     def flush_all(self):
+        """Write every buffer."""
         for t in self.COLS:
             self.flush(t)
 
@@ -156,15 +174,17 @@ class Batch:
                 rollup.recompute(self.cur, self.uid, typ, a, b)
 
     def apply(self, kind: str, m):
+        """One line of a batch: a characteristic, sample, workout, route point, heartbeat, activity summary or deletion.
+        One line of a batch: a characteristic, sample, workout, route point, heartbeat, activity summary or deletion."""
         if kind == "characteristic":
             self.add("hlt_characteristics", (m["key"], m.get("value")))
         elif kind == "sample":
-            self.add("hlt_samples", (m["uuid"], m["type"], m["kind"], parse_time(m["start"]), parse_time(m["end"]), m.get("value"),
+            self.add("hlt_samples", (m["uuid"], m["type"], m["kind"], need_time(m, "start"), need_time(m, "end"), m.get("value"),
                                  m.get("unit"), m.get("text"), m.get("count"), (m.get("source") or {}).get("name", ""), meta_json(m.get("metadata"))))
         elif kind == "workout":
             self.workout(m)
         elif kind == "routePoint":
-            self.add("hlt_workout_route_points", (m["routeUUID"], parse_time(m["time"]), m["workoutUUID"], m["latitude"], m["longitude"],
+            self.add("hlt_workout_route_points", (m["routeUUID"], need_time(m, "time"), m["workoutUUID"], m["latitude"], m["longitude"],
                                               m.get("altitude"), m.get("horizontalAccuracy"), m.get("verticalAccuracy"), m.get("speed"), m.get("course")))
         elif kind == "heartbeat":
             self.add("hlt_heartbeats", (m["seriesUUID"], m["timeSinceStart"], bool(m.get("precededByGap"))))
@@ -179,6 +199,7 @@ class Batch:
         self.applied += 1
 
     def deleted(self, uuid: str, typ):
+        """An object the phone says is gone: the sample, heartbeat series or workout (with its children) of that id."""
         self.flush_all()  # buffered inserts first, so a delete always wins over an earlier add of the same object
         c = self.cur
         c.execute("SELECT type, start_date FROM hlt_samples WHERE uuid = %s AND user_id = %s", (uuid, self.uid))
@@ -196,6 +217,7 @@ class Batch:
                   (uuid, typ, datetime.now(timezone.utc).replace(tzinfo=None), self.uid))
 
     def workout(self, w):
+        """A workout with its statistics, events and activities; one sent again replaces what it had."""
         self.flush_all()
         c, uid = self.cur, self.uid
         c.execute("SELECT user_id FROM hlt_workouts WHERE uuid = %s", (w["uuid"],))
@@ -231,6 +253,8 @@ class Batch:
 
 
 def apply_batch(user_id: int, session_id: int, seq: int, body: bytes) -> dict:
+    """One numbered batch of a sync, in one transaction: {applied}. A batch whose number was already applied is skipped
+    ({duplicate: true}), so a retry after a lost reply changes nothing. 400 names the line that could not be read."""
     started = time.time()
     with rollup.locks.batch(user_id), db.tx() as con, con.cursor() as cur:
         cur.execute("SELECT last_batch_seq FROM hlt_sync_log WHERE id = %s AND user_id = %s FOR UPDATE", (session_id, user_id))
@@ -261,6 +285,7 @@ def apply_batch(user_id: int, session_id: int, seq: int, body: bytes) -> dict:
 
 @router.get("/v1/health", dependencies=[access.public])
 def health():
+    """Whether the server and its database are up: {ok, schemaVersion}; 503 otherwise."""
     try:
         return {"ok": True, "schemaVersion": db.schema_version()}
     except Exception as e:
@@ -284,10 +309,12 @@ async def raw_body(request: Request) -> bytes:
 
 
 async def body_of(request: Request) -> bytes:
+    """The request body, decompressed."""
     return read_body(await raw_body(request), request.headers.get("content-encoding", ""))
 
 
 async def _json(request: Request) -> dict:
+    """The request body as a JSON object; 400 otherwise."""
     body = await body_of(request)
     try:
         v = orjson.loads(body or b"{}")
@@ -300,6 +327,7 @@ async def _json(request: Request) -> dict:
 
 @router.post("/v1/sessions", status_code=201, dependencies=[access.uploader])
 async def start(request: Request):
+    """A sync begins. {deviceName?, systemVersion?, fullResync?}: {sessionId}, which the batches and the finish name."""
     uid = int(request.state.user["id"])
     h = await _json(request)
     sid = await run_in_threadpool(db.ex, "INSERT INTO hlt_sync_log (started_at, device, os, full_resync, items, user_id) VALUES (%s, %s, %s, %s, 0, %s)",
@@ -312,6 +340,7 @@ async def start(request: Request):
 
 @router.post("/v1/sessions/{session_id}/items", dependencies=[access.uploader])
 async def items(session_id: int, request: Request):
+    """A batch of a sync: lines of JSON, one item each, numbered by the X-Batch-Seq header (from 1)."""
     uid = int(request.state.user["id"])
     try:
         seq = int(request.headers.get("x-batch-seq", ""))
@@ -325,6 +354,8 @@ async def items(session_id: int, request: Request):
 
 @router.post("/v1/sessions/{session_id}/finish", dependencies=[access.uploader])
 async def finish(session_id: int, request: Request):
+    """A sync ends. {totalSent}: {received}, how many items the server applied; the web app's caches are dropped so the
+    new data shows."""
     uid = int(request.state.user["id"])
     d = await _json(request)
 

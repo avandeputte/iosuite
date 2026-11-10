@@ -19,6 +19,8 @@ CUMULATIVE_TYPES = {
 
 
 def is_cumulative(t: str) -> bool:
+    """Whether a type adds up over time (steps, energy, what was eaten) rather than being a reading (heart rate, weight).
+    Whether a type adds up over time (steps, energy, what was eaten) rather than being a reading (heart rate, weight)."""
     return t in CUMULATIVE_TYPES or t.startswith("dietary_")
 
 
@@ -94,6 +96,7 @@ def fold_hours(rows, bucket: str, loc, cumulative: bool) -> list:
 
 @dataclass
 class SleepSample:
+    """One stretch of a night in one stage, as a source recorded it."""
     start: datetime
     end: datetime
     stage: str  # inBed, asleep, awake, core, deep, rem
@@ -151,6 +154,7 @@ def sleep_nights(samples, loc, with_segments: bool) -> list:
 
 @dataclass
 class RoutePoint:
+    """One GPS fix of a workout route."""
     t: datetime
     lat: float
     lon: float
@@ -164,6 +168,7 @@ EARTH_RADIUS = 6371008.8
 
 
 def haversine(lat1, lon1, lat2, lon2) -> float:
+    """The distance in metres between two points on the globe."""
     r = math.pi / 180
     d_lat, d_lon = (lat2 - lat1) * r, (lon2 - lon1) * r
     a = math.sin(d_lat / 2) ** 2 + math.cos(lat1 * r) * math.cos(lat2 * r) * math.sin(d_lon / 2) ** 2
@@ -276,12 +281,14 @@ def round_half_away(x: float) -> float:
 
 @dataclass
 class HRSample:
+    """One heart rate reading."""
     t: datetime
     bpm: float
 
 
 @dataclass
 class HRSeries:
+    """The heart rate readings of a workout in time order, for the mean over any stretch of it."""
     samples: list = field(default_factory=list)
     times: list = field(default_factory=list)
 
@@ -334,10 +341,12 @@ def age_on(dob: str, t: datetime) -> int:
 # ---- units
 
 def to_metres(v: float, unit: str) -> float:
+    """A distance in its HealthKit unit as metres."""
     return v * {"km": 1000, "mi": 1609.344, "yd": 0.9144, "ft": 0.3048, "cm": 0.01}.get(unit, 1)
 
 
 def to_kcal(v: float, unit: str) -> float:
+    """An energy in its HealthKit unit as kilocalories."""
     return {"kJ": v / 4.184, "J": v / 4184, "cal": v / 1000}.get(unit, v)
 
 

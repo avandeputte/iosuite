@@ -41,7 +41,7 @@ def _client(app):
 def clean(_client):
     from app import webapi
     from app.auth import auth
-    with db.conn() as con, con.cursor() as cur:
+    with db.pool.auto() as con, con.cursor() as cur:
         for t in HEALTH_TABLES:
             cur.execute(f"DELETE FROM {t}")
     _authtest.clean_shared_tables(auth)

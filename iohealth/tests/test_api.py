@@ -53,7 +53,7 @@ def test_everything_needs_an_account(client):
     assert client.get("/api/series?type=step_count").status_code == 401
     assert client.get("/").status_code == 200  # the shell, which shows the sign-in
     r = client.post("/v1/sessions", json={"deviceName": "x"})
-    assert r.status_code == 401 and "error" in r.json()
+    assert r.status_code == 401 and "detail" in r.json()
 
 
 def test_the_shell_its_files_and_the_icon_are_public(client):
@@ -227,7 +227,7 @@ def test_oversized_upload_is_refused(client, admin, monkeypatch):
 @pytest.mark.parametrize("bad", ["2026-13-01", "nope"])
 def test_bad_dates(client, admin, bad):
     r = client.get("/api/series", params={"type": "step_count", "from": bad})
-    assert r.status_code == 400 and "yyyy-mm-dd" in r.json()["error"]
+    assert r.status_code == 400 and "yyyy-mm-dd" in r.json()["detail"]
 
 
 def test_the_phone_signs_in_with_the_account_password(client, admin):

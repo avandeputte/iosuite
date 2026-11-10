@@ -9,6 +9,7 @@ MGDL_PER_MMOL = 18.0182
 
 @dataclass
 class Reading:
+    """One glucose reading, in mg/dL."""
     t: datetime
     mgdl: float
     source: str = ""
@@ -42,6 +43,7 @@ def shares(vals, low: float, high: float) -> dict:
 
 
 def percentile(s, p: float) -> float:
+    """The p-th quantile (0 to 1) of a sorted list, interpolated; NaN for an empty one."""
     if not s:
         return math.nan
     x = p * (len(s) - 1)
@@ -52,6 +54,7 @@ def percentile(s, p: float) -> float:
 
 
 def mean_sd(vals) -> tuple:
+    """The mean and the sample standard deviation; (0, 0) for none."""
     if not vals:
         return 0.0, 0.0
     mean = sum(vals) / len(vals)
