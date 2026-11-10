@@ -605,7 +605,7 @@ def test_a_paused_job_says_why_and_can_be_tried_again(page, server):
     """A job stopped twice for memory shows as paused with the reason and Try again, which asks for that job; the
     memory line above the table says what is in use and which job was stopped last."""
     gb, asked = 1024 ** 3, []
-    why = "it needed more memory than analysis may use on this server (6.2 GB, the most is 6.0 GB)"
+    why = "it needed more memory than analysis may use on this server (the most is 6.0 GB)"
 
     def analysis(route):
         r = route.fetch()

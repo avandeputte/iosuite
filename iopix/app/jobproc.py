@@ -181,7 +181,7 @@ def _over(w: dict):
     rss = w["rss"] = memwatch.tree(w["proc"].pid)
     _info["peak"] = max(_info["peak"], rss)
     if b["ceiling"] and rss > b["ceiling"]:
-        return jobs.WorkerLost(f"it needed more memory than analysis may use on this server ({memwatch.gb(rss)}, the most is {memwatch.gb(b['ceiling'])})")
+        return jobs.WorkerLost(f"it needed more memory than analysis may use on this server (the most is {memwatch.gb(b['ceiling'])})")
     if b["reserve"] and b["free"] is not None and b["free"] < b["reserve"]:
         own = rss >= (b["ceiling"] or b["limit"] * memwatch.CEILING_SHARE) / 3  # a small job is not what filled the server
         return jobs.WorkerLost(f"the server was running out of memory ({memwatch.gb(b['used'])} of {memwatch.gb(b['limit'])} in use, {memwatch.gb(rss)} of it by this job)", strike=own)
