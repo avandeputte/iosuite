@@ -4,12 +4,15 @@ import json
 import math
 import threading
 import time
+from collections import OrderedDict
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+import orjson
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import ORJSONResponse
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import ORJSONResponse, Response
 
 from app import access, analytics as an, config, db, glucose as gl, rollup
 from app.auth import uid as uid_of
@@ -31,30 +34,80 @@ class NotFound(LookupError):
 
 # ---- cache: replies per account and URL, dropped when a sync finishes
 
+class _Flight:
+    """One reply being worked out: the requests that ask for the same one meanwhile wait for it here."""
+
+    def __init__(self):
+        self.done, self.value, self.error = threading.Event(), None, None
+
+
 class Cache:
-    def __init__(self, ttl: float):
-        self.ttl, self.m, self.lock = ttl, {}, threading.Lock()
+    """Replies kept `ttl` seconds, `max_bytes` in all: the ones not asked for longest go first, and one larger than a
+    quarter of the limit is not kept at all (a year of GPS routes runs to megabytes). A reply is worked out once: a
+    second request for the same key while the first is at it waits and takes that answer."""
+
+    def __init__(self, ttl: float, max_bytes: int = 64 << 20):
+        self.ttl, self.max_bytes = ttl, max_bytes
+        self.m: OrderedDict = OrderedDict()  # key -> (at, value, bytes)
+        self.bytes, self.gen = 0, 0
+        self.flights: dict = {}
+        self.lock = threading.Lock()
+
+    @staticmethod
+    def weigh(v) -> int:
+        if isinstance(v, (bytes, bytearray, str)):
+            return len(v)
+        try:
+            return len(orjson.dumps(v, default=str, option=orjson.OPT_NON_STR_KEYS))
+        except (TypeError, orjson.JSONEncodeError):
+            return 1 << 20  # not to be weighed: counted as large
 
     def get(self, key, ttl, f):
         ttl = ttl or self.ttl
         with self.lock:
             hit = self.m.get(key)
-        if hit and time.time() - hit[0] < ttl:
-            return hit[1]
-        v = f()
+            if hit and time.time() - hit[0] < ttl:
+                self.m.move_to_end(key)
+                return hit[1]
+            flight = self.flights.get(key)
+            mine = flight is None
+            if mine:
+                flight = self.flights[key] = _Flight()
+                gen = self.gen
+        if not mine:
+            flight.done.wait()
+            if flight.error is not None:
+                raise flight.error
+            return flight.value
+        try:
+            v = flight.value = f()
+        except BaseException as e:
+            flight.error = e
+            raise
+        finally:
+            with self.lock:
+                self.flights.pop(key, None)
+            flight.done.set()
+        n = self.weigh(v)
         with self.lock:
-            if len(self.m) > 500:
-                self.m = {}
-            self.m[key] = (time.time(), v)
+            if gen == self.gen and n <= self.max_bytes // 4:  # not what a sync that finished meanwhile made stale
+                old = self.m.pop(key, None)
+                self.bytes += n - (old[2] if old else 0)
+                self.m[key] = (time.time(), v, n)
+                while self.bytes > self.max_bytes and self.m:
+                    self.bytes -= self.m.popitem(last=False)[1][2]
         return v
 
     def clear(self):
         with self.lock:
-            self.m = {}
+            self.m = OrderedDict()
+            self.bytes = 0
+            self.gen += 1
 
 
-cache = Cache(120)
+cache = Cache(120)  # at most 64 MB of replies
 effort_cache = {}  # workout uuid -> (start, [efforts]); a route only changes when it is resent
+EFFORTS_KEPT = 20000  # workouts whose best efforts are remembered (a few hundred bytes each)
 
 
 def sync_finished():
@@ -81,13 +134,16 @@ def start_backfill():
 
 
 def cached(request: Request, ttl: float, f):
+    """The route's reply, from the cache when it is there. What is kept is the reply as it goes out (the JSON text), so
+    its size is known and a reply served from the cache is not encoded again."""
     key = (uid_of(request), request.url.path, request.url.query)
     try:
-        return cache.get(key, ttl, f)
+        body = cache.get(key, ttl, lambda: orjson.dumps(jsonable_encoder(f()), option=orjson.OPT_NON_STR_KEYS))  # as ORJSONResponse writes it
     except NotFound as e:
         raise HTTPException(404, str(e) or "not found")
     except BadRequest as e:
         raise HTTPException(400, str(e))
+    return Response(body, media_type="application/json")
 
 
 # ---- parameters
@@ -196,7 +252,9 @@ _kinds = {}
 def kind_of(t: str) -> str:
     if t not in _kinds:
         r = db.one("SELECT kind FROM hlt_samples WHERE type = %s LIMIT 1", (t,))
-        _kinds[t] = r[0] if r else ""
+        if not r:
+            return ""  # not remembered: any name can be asked for, and the list would grow with each
+        _kinds[t] = r[0]
     return _kinds[t]
 
 
@@ -747,6 +805,8 @@ def efforts(request: Request):
                     sec = an.best_effort(pts, m)
                     if sec is not None:
                         we.append({"name": name, "distance": m, "seconds": an.round_half_away(sec)})
+                if len(effort_cache) >= EFFORTS_KEPT:
+                    effort_cache.clear()
                 effort_cache[x["uuid"]] = we
             for e in we:
                 b = bests.get(e["name"])

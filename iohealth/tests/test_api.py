@@ -312,3 +312,50 @@ def test_uploads_are_declared_and_run_side_by_side(client, admin):
     for t in ts:
         t.join(2)
     assert order == [("in", 1), ("out", 1), ("in", 1), ("out", 1)]
+
+
+def test_the_reply_cache_has_a_size_and_works_a_reply_out_once():
+    """The cache of replies is limited by bytes (not by a count of replies of any size), drops the ones not asked for
+    longest, and two requests for the same reply at once work it out once."""
+    import threading
+    import time
+
+    from app.webapi import Cache
+
+    c = Cache(60, max_bytes=1000)
+    for i in range(20):
+        assert c.get(("u", i), 0, lambda: b"x" * 100) == b"x" * 100
+    assert c.bytes <= 1000 and len(c.m) == 10 and ("u", 19) in c.m and ("u", 0) not in c.m
+    assert c.get("big", 0, lambda: b"y" * 600) == b"y" * 600 and "big" not in c.m  # too large to keep: served, not stored
+    assert c.get("list", 0, lambda: [1, 2, 3]) == [1, 2, 3] and c.m["list"][2] == len(b"[1,2,3]")
+    # asked for twice at the same time: worked out once, both get it
+    runs, got = [], []
+
+    def slow():
+        runs.append(1)
+        time.sleep(0.2)
+        return b"answer"
+    ts = [threading.Thread(target=lambda: got.append(c.get("slow", 0, slow))) for _ in range(5)]
+    [t.start() for t in ts]
+    [t.join() for t in ts]
+    assert got == [b"answer"] * 5 and len(runs) == 1
+    # a failure reaches everyone who waited, and is not kept
+    def fail():
+        time.sleep(0.1)
+        raise LookupError("gone")
+    errs = []
+
+    def ask():
+        try:
+            c.get("bad", 0, fail)
+        except LookupError as e:
+            errs.append(str(e))
+    ts = [threading.Thread(target=ask) for _ in range(3)]
+    [t.start() for t in ts]
+    [t.join() for t in ts]
+    assert errs == ["gone"] * 3 and "bad" not in c.m
+    # a sync that finishes while a reply is worked out: that reply is served, not kept (it may be stale)
+    def during():
+        c.clear()
+        return b"old"
+    assert c.get("during", 0, during) == b"old" and "during" not in c.m and c.bytes == 0
