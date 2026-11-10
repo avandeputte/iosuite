@@ -24,7 +24,11 @@ def test_ldap_search(client, family_id):
         anon.search("dc=iocontacts", "(mail=*)")
         assert anon.result["result"] == 50 and not anon.entries
         assert not ldap3.Connection(s, "cn=alex,ou=users,dc=iocontacts", "wrong").bind()
-        c = ldap3.Connection(s, "cn=alex,ou=users,dc=iocontacts", "secret123", auto_bind=True)
+        # the directory is not encrypted: it takes an app password, never the account's own password
+        refused = ldap3.Connection(s, "cn=alex,ou=users,dc=iocontacts", "secret123")
+        assert not refused.bind() and "app password" in refused.result["message"]
+        from app import users
+        c = ldap3.Connection(s, "cn=alex,ou=users,dc=iocontacts", users.create_app_password(users.find("alex")["id"], "Mail"), auto_bind=True)
         c.search("dc=iocontacts", "(|(cn=*ann*)(mail=*ann*)(sn=*ann*))", attributes=["cn", "mail", "mobile", "o", "mozillaHomeLocalityName", "c"])
         assert len(c.entries) == 1
         e = c.entries[0]

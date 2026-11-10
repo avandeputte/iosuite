@@ -1,7 +1,6 @@
 """The server itself, for admins: health, accounts, the version check and the update (update.sh, as in iopix)."""
 import platform
 import sys
-from typing import Optional
 
 from mcp.server.mcpserver.exceptions import ToolError
 
@@ -56,18 +55,17 @@ def check_for_update() -> dict:
 
 
 @server.tool(annotations=UPDATES)
-def update_server(ref: Optional[str] = None) -> dict:
+def update_server() -> dict:
     """Admins: update ioContacts to the newest version on GitHub and restart it (update.sh: the code and its packages;
-    the settings and the database stay, and the database is brought up to date as it starts). ref: a commit id or
-    branch to install instead of the tip of main. Nothing happens when that commit is already installed. The
-    connection drops while it restarts (about a minute); call check_for_update afterwards: lastUpdate says what
-    happened. Not in Docker (pull the image there)."""
+    the settings and the database stay, and the database is brought up to date as it starts). Nothing happens when
+    the newest commit is already installed. The connection drops while it restarts (about a minute); call
+    check_for_update afterwards: lastUpdate says what happened. Not in Docker (pull the image there)."""
     need_admin()
     try:
-        updater.run(ref or "")
+        updater.run()
     except RuntimeError as e:
         raise ToolError(str(e))
-    return {"started": True, "installed": updater.local_commit()[:7], "ref": ref or updater.branch,
+    return {"started": True, "installed": updater.local_commit()[:7], "branch": updater.branch,
             "note": "update.sh is running; ioContacts restarts when it finishes. Then call check_for_update."}
 
 

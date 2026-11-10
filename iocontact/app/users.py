@@ -6,6 +6,8 @@ shared by everyone. Web sessions are the suite's cookie (shared by the apps on t
 use HTTP Basic or an LDAP bind with either the account password or an app password (one per device, revocable,
 shown once). This module keeps ioContacts' old names; the work is done by iosuite_shared.
 """
+import logging
+import re
 import secrets
 
 from iosuite_shared import apppasswords, db as authdb, sessions, users as shared
@@ -105,13 +107,48 @@ def forget_gone(*uids: int) -> None:
         db.ex("DELETE FROM con_feed_tokens WHERE user_id = %s", (uid,))
 
 
+SUITE_ID = "suite_id"             # in the Shared ioSuite database (ios_settings, suite-wide): which one it is
+KNOWN_SUITE = "shared_database"   # in ioContacts' own settings: the Shared ioSuite database its books belong to
+
+
 def init() -> None:
     """The Shared ioSuite database's tables, and the ADMIN_USER / ADMIN_PASSWORD account on a first start with no accounts.
     Accounts deleted elsewhere (Settings › Security in any app, the command line) leave their books here: swept at start."""
     shared.init()
+    sweep_gone()
+
+
+def sweep_gone() -> int:
+    """Remove the private address books of accounts that no longer exist; how many accounts' books went.
+
+    An account that is missing from the Shared ioSuite database looks the same whether it was deleted or the app was
+    pointed at another database (a new one, an empty one, a restored old one), and in the second case every private
+    book would go. So the Shared ioSuite database carries an id (made here the first time), ioContacts remembers the
+    one its books belong to, and the sweep runs only while the two agree and that database has accounts. On the
+    first start with this check nothing is removed: the id is only noted."""
+    log = logging.getLogger("iocontacts.users")
+    here = authdb.get_setting(SUITE_ID, "", "")
+    if not here:
+        here = secrets.token_hex(16)
+        authdb.set_setting(SUITE_ID, here, "")
+    known = db.get_setting(KNOWN_SUITE)
     alive = {u["id"] for u in shared.list_users()}
     owners = {r["owner_id"] for r in db.q("SELECT DISTINCT owner_id FROM con_address_books WHERE owner_id IS NOT NULL")}
-    forget_gone(*(owners - alive))
+    gone = owners - alive
+    if known is None:
+        db.set_setting(KNOWN_SUITE, here)
+        if gone:
+            log.warning("%d private address book owner(s) have no account in the Shared ioSuite database; their books are kept "
+                        "(they are removed at a later start, once this database is known to be the one they belong to)", len(gone))
+        return 0
+    if known != here or not alive:
+        if gone:
+            log.error("the Shared ioSuite database is not the one these address books belong to (or it has no accounts): "
+                      "%d owner(s) are missing from it and their private address books are KEPT. If this is the right database, "
+                      "remove the '%s' row from con_settings and restart.", len(gone), KNOWN_SUITE)
+        return 0
+    forget_gone(*gone)
+    return len(gone)
 
 
 def can_write(u: dict | None) -> bool:
@@ -131,13 +168,28 @@ def create_app_password(uid: int, label: str, protocols_only: bool = False) -> s
     return apppasswords.create(uid, APP, label, apppasswords.DAV if protocols_only else "")
 
 
-def authenticate(name: str, password: str, protocol: bool = False) -> dict | None:
-    """Account password or app password; for LDAP binds (protocol=True) and the sign-in form. A protocol-only ('dav')
-    app password is refused unless protocol is set. (HTTP Basic and Bearer go through iosuite-shared's middleware,
-    which keeps such passwords to /dav.)"""
+def authenticate(name: str, password: str) -> dict | None:
+    """Account password or an app password without a scope (a protocol-only one is for CardDAV and LDAP: HTTP Basic
+    and Bearer go through iosuite-shared's middleware, which keeps such passwords to /dav; LDAP binds: ldap_bind)."""
     user, scope = apppasswords.authenticate_scoped(name, password, APP)
-    if user and scope and not (protocol and scope == apppasswords.DAV):
+    return None if scope else row_of(user)
+
+
+APP_PASSWORD = re.compile(r"^[a-z0-9]+-([0-9a-f]{8})-")  # how every app password starts: <app>-<8 hex>-<secret>
+
+
+def ldap_bind(name: str, password: str) -> dict | None:
+    """The account for an LDAP bind, which takes an app password only (one for everything, or a CardDAV/LDAP-only
+    one). The directory is not encrypted, so the account's own password, which opens every app of the suite, is
+    never accepted here: what can be read off the network is one device's password, revocable on its own."""
+    m = APP_PASSWORD.match(password or "")
+    if not m:
         return None
+    user, scope = apppasswords.authenticate_scoped(name, password, APP)
+    if not user or scope not in ("", apppasswords.DAV):
+        return None
+    if not authdb.one("SELECT 1 AS x FROM ios_app_passwords WHERE user_id = %s AND app = %s AND prefix = %s", (user["id"], APP, m.group(1))):
+        return None  # an account password that merely looks like an app password
     return row_of(user)
 
 

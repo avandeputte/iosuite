@@ -117,7 +117,7 @@ security and global settings. Tidying the contacts is **Clean up** in the sideba
 
 ## Reverse proxy and HTTPS
 
-Run it behind a reverse proxy that terminates HTTPS (Caddy, Nginx Proxy Manager, HAProxy, Cloudflare Tunnel), as iopix: iOS and macOS want HTTPS for CardDAV accounts outside the home network, and passwords travel with every CardDAV request. The LDAP directory speaks plain LDAP; keep it on the home network, or put a TLS proxy (stunnel, HAProxy, nginx stream) in front for `ldaps://`.
+Run it behind a reverse proxy that terminates HTTPS (Caddy, Nginx Proxy Manager, HAProxy, Cloudflare Tunnel), as iopix: iOS and macOS want HTTPS for CardDAV accounts outside the home network, and passwords travel with every CardDAV request. The LDAP directory speaks plain LDAP; keep it on the home network, or put a TLS proxy (stunnel, HAProxy, nginx stream) in front for `ldaps://`. Because it is not encrypted it takes an **app password** only, never the account's own password (which opens every app of the suite); it closes a connection that has been silent for ten minutes and takes at most 16 connections from one address.
 
 ### Checking app passwords at Cloudflare (optional)
 

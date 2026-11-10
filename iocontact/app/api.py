@@ -181,9 +181,9 @@ def list_contacts(request: Request, q: str = "", book: str | None = None, tag: s
     fmt = wants(request, format)
     if fmt in ("vcard", "vcard4"):
         v = "4.0" if fmt == "vcard4" else "3.0"
-        return vcard_response("".join(model.vcard_text(x["id"], v) for x in items), v)
+        return vcard_response("".join(model.vcard_text(c["id"], v, c) for c in model.load([x["id"] for x in items], with_photo=True)), v)
     if fmt == "jcard":
-        return JSONResponse([vcard.to_jcard(model.full(x["id"], with_photo=False)) for x in items], media_type=JCARD_TYPE)
+        return JSONResponse([vcard.to_jcard(c) for c in model.load([x["id"] for x in items])], media_type=JCARD_TYPE)
     return {"total": total, "items": items}
 
 
@@ -573,7 +573,7 @@ def export(request: Request, book: str | None = None, format: str = "vcf", ids: 
     bids = book_ids(u, book)
     if ids:
         want = [int(x) for x in ids.split(",") if x.strip().isdigit()]
-        sel = [x for x in want if model.get_row(x) and model.get_row(x)["address_book_id"] in bids]
+        sel = [c["id"] for c in model.load(want) if c["bookId"] in bids]
     else:
         sel = [x["id"] for x in model.search(bids, limit=100000)[0]]
     stamp = dt.date.today().isoformat()
@@ -589,10 +589,10 @@ def export_text(ids: list[int], format: str = "vcf") -> tuple[str, str, str]:
     """(text, media type, file extension) of these contacts in one of EXPORT_FORMATS."""
     if format in ("vcf", "vcf4"):
         v = "4.0" if format == "vcf4" else "3.0"
-        return "".join(model.vcard_text(x, v) for x in ids), f"text/vcard; charset=utf-8; version={v}", "vcf"
+        return "".join(model.vcard_text(c["id"], v, c) for c in model.load(ids, with_photo=True)), f"text/vcard; charset=utf-8; version={v}", "vcf"
     if format == "jcard":
-        return json.dumps([vcard.to_jcard(model.full(x, with_photo=True)) for x in ids], ensure_ascii=False), JCARD_TYPE, "json"
-    full = [model.full(x) for x in ids]
+        return json.dumps([vcard.to_jcard(c) for c in model.load(ids, with_photo=True)], ensure_ascii=False), JCARD_TYPE, "json"
+    full = model.load(ids)
     text = csvio.export_outlook(full) if format == "csv-outlook" else csvio.export_google(full)
     return "\ufeff" + text, "text/csv; charset=utf-8", "csv"
 

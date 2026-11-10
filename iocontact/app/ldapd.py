@@ -3,7 +3,8 @@ Outlook, Thunderbird, Apple Mail / Contacts (LDAP server accounts), Evolution, C
 printers and phones with an LDAP phone book.
 
 Clients bind with an ioContacts account: the bind DN "cn=<name>,ou=users,dc=iocontacts" (or just the name or the
-email address) and the account's password or an app password. Anonymous searches see nothing. Each account sees the
+email address) and an app password (Settings › Account). The account's own password is not taken: the directory is
+not encrypted, and that password opens every app of the suite. Anonymous searches see nothing. Each account sees the
 contacts of the address books it can see, as inetOrgPerson entries (with Thunderbird's mozillaAbPersonAlpha
 attributes) under ou=contacts,dc=iocontacts.
 
@@ -178,14 +179,30 @@ def contact_entry(c: dict) -> tuple[str, dict]:
     return f"uid={_esc_dn(c['uid'])},ou=contacts,{base()}", a
 
 
+_directories: dict = {}  # account id -> (its books and their sync tokens, the entries): one search per keystroke in a mail app
+DIRECTORIES_MAX = 64
+
+
 def directory(user: dict, want_photo: bool) -> list[tuple[str, dict]]:
+    """Every entry the account may see. The contacts are read together (model.full_many) and the result is kept
+    until one of the account's address books changes (its sync token moves), so the searches a mail app sends
+    while somebody types an address cost one query each. With photos it is built fresh: they are large."""
+    books = model.books_for(user)
+    state = (base(), tuple((b["id"], b["sync_token"]) for b in books))
+    hit = _directories.get(user["id"])
+    if hit and hit[0] == state and not want_photo:
+        return hit[1]
     root = [(base(), {"objectClass": ["top", "dcObject", "organization"], "o": ["ioContacts"],
                       "dc": [base().split(",")[0].split("=")[-1]]}),
             (f"ou=contacts,{base()}", {"objectClass": ["top", "organizationalUnit"], "ou": ["contacts"]}),
             (f"ou=users,{base()}", {"objectClass": ["top", "organizationalUnit"], "ou": ["users"]})]
-    ids = [b["id"] for b in model.books_for(user)]
-    rows, _ = model.search(ids, limit=100000)
-    return root + [contact_entry(model.full(r["id"], with_photo=want_photo)) for r in rows if r["kind"] != "group"]
+    rows = model.rows_in([b["id"] for b in books], groups=False)
+    entries = root + [contact_entry(c) for c in model.full_many(rows, with_photo=want_photo).values()]
+    if not want_photo:
+        if len(_directories) >= DIRECTORIES_MAX:
+            _directories.clear()
+        _directories[user["id"]] = (state, entries)
+    return entries
 
 
 def _attr(entry: dict, name: str) -> list:
@@ -298,6 +315,13 @@ ROOT_DSE = {"objectClass": ["top"], "namingContexts": [], "supportedLDAPVersion"
 
 # ------------------------------------------------------------------ the server
 
+MAX_SESSIONS = 128        # connections open at once, all clients together
+MAX_PER_ADDRESS = 16      # and from one address
+IDLE_S = 600              # a bound connection that sends nothing for this long is closed (mail apps reconnect)
+IDLE_UNBOUND_S = 30       # one that has not bound yet
+_open: dict = {}          # address -> its open connections
+
+
 class Session:
     def __init__(self, reader, writer):
         self.r, self.w = reader, writer
@@ -308,7 +332,7 @@ class Session:
         buf = b""
         try:
             while True:
-                chunk = await self.r.read(65536)
+                chunk = await asyncio.wait_for(self.r.read(65536), IDLE_S if self.user else IDLE_UNBOUND_S)
                 if not chunk:
                     break
                 buf += chunk
@@ -323,7 +347,7 @@ class Session:
                         return
                     if not await self.handle(t[1]):
                         return
-        except (ConnectionError, asyncio.IncompleteReadError):
+        except (ConnectionError, asyncio.IncompleteReadError, asyncio.TimeoutError):
             pass
         except Exception:  # noqa: BLE001
             log.exception("LDAP session failed")
@@ -381,11 +405,12 @@ class Session:
             log.warning("LDAP bind as %r from %s refused: %d s to wait after repeated failures", name, visitor, wait)
             await self.send(result(msgid, 0x61, INVALID_CREDENTIALS, f"Too many attempts; try again in {wait} seconds"))
             return
-        u = await asyncio.get_running_loop().run_in_executor(None, lambda: users.authenticate(ident, pw, protocol=True))
+        u = await asyncio.get_running_loop().run_in_executor(None, lambda: users.ldap_bind(ident, pw))
         if not u or u["role"] == "none":  # no access to ioContacts: no directory either
             users.attempt_failed(visitor, ident)
             log.info("LDAP bind refused for %r from %s", name, self.peer)
-            await self.send(result(msgid, 0x61, INVALID_CREDENTIALS, "Wrong name or password"))
+            await self.send(result(msgid, 0x61, INVALID_CREDENTIALS, "Wrong name or app password (the directory takes an app password "
+                                                                     "from Settings › Account, not the account's own password)"))
             return
         users.attempt_succeeded(visitor, ident)
         self.user = u
@@ -430,7 +455,19 @@ class Session:
 
 async def serve(host: str, port: int):
     async def handler(r, w):
-        await Session(r, w).run()
+        peer = w.get_extra_info("peername")
+        addr = str(peer[0] if isinstance(peer, tuple) else peer)
+        if sum(_open.values()) >= MAX_SESSIONS or _open.get(addr, 0) >= MAX_PER_ADDRESS:
+            log.warning("LDAP connection from %s refused: too many open connections", addr)
+            w.close()
+            return
+        _open[addr] = _open.get(addr, 0) + 1
+        try:
+            await Session(r, w).run()
+        finally:
+            _open[addr] -= 1
+            if _open[addr] <= 0:
+                del _open[addr]
     server = await asyncio.start_server(handler, host, port)
     log.info("LDAP directory on %s:%s (base %s)", host, port, base())
     return server

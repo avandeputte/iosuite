@@ -363,7 +363,8 @@ def test_protocols_only_app_password(client, app):
     assert anon.post("/mcp", headers={"Authorization": f"Bearer {limited}"}, json={}).status_code == 403
     assert anon.post("/api/auth/login", json={"name": "alex", "password": limited}).status_code == 401
     # LDAP binds take it
-    assert users.authenticate("alex", limited, protocol=True)["name"] == "alex"
+    assert users.ldap_bind("alex", limited)["name"] == "alex" and users.ldap_bind("alex", full)["name"] == "alex"
+    assert users.ldap_bind("alex", "secret123") is None, "never the account's own password: LDAP is not encrypted"
     assert users.authenticate("alex", limited) is None
     # an app password without the limit still works everywhere
     assert anon.get("/api/books", auth=("alex", full)).status_code == 200

@@ -34,6 +34,14 @@ def book(bid: int) -> dict | None:
     return db.one("SELECT * FROM con_address_books WHERE id = %s", (bid,))
 
 
+def rows_in(book_ids: list[int], groups: bool = True) -> list[dict]:
+    """Every contact's row in these address books, by name (groups left out with groups=False)."""
+    if not book_ids:
+        return []
+    return db.q(f"SELECT * FROM con_contacts WHERE address_book_id IN ({','.join(['%s'] * len(book_ids))}) AND deleted = 0"
+                + ("" if groups else " AND kind <> 'group'") + " ORDER BY fn, id", book_ids)
+
+
 def book_by_slug(user: dict, slug: str) -> dict | None:
     for b in books_for(user):
         if b["slug"] == slug:
@@ -192,38 +200,73 @@ def by_uid(book_id: int, uid: str) -> dict | None:
 
 
 def full(cid: int | dict, with_photo: bool = False) -> dict | None:
+    """The whole contact (an id, or its con_contacts row), or None when it is gone."""
     r = get_row(cid) if isinstance(cid, int) else cid
     if not r or r["deleted"]:
         return None
-    c = {"id": r["id"], "bookId": r["address_book_id"], "uid": r["uid"], "href": r["href"], "kind": r["kind"], "fn": r["fn"],
-         "name": {k: r[k] or "" for k in ("prefix", "given", "additional", "family", "suffix")},
-         "nickname": r["nickname"], "maiden": r["maiden"], "phoneticGiven": r["phonetic_given"],
-         "phoneticFamily": r["phonetic_family"], "gender": r["gender"], "birthday": _bday(r),
-         "birthdayRemind": bool(r.get("bday_remind", 1)), "org": r["org"],
-         "department": r["department"], "title": r["title"], "role": r["role"], "notes": r["notes"],
-         "favorite": bool(r["favorite"]), "hasPhoto": r["iopix_person_id"] is not None, "etag": r["etag"],
-         "iopix": {"personId": r["iopix_person_id"], "name": r["iopix_person_name"]} if r["iopix_person_id"] else None,
-         "extra": json.loads(r["extra"]) if r["extra"] else [],
-         "created": r["created_at"].isoformat() if r["created_at"] else None,
-         "updated": r["updated_at"].strftime("%Y-%m-%dT%H:%M:%SZ") if r["updated_at"] else None}
-    for key, (table, cols) in CHILD.items():
-        c[key] = [{k: x[k] for k in cols} for x in db.q(f"SELECT * FROM {table} WHERE contact_id = %s ORDER BY position, id", (r["id"],))]
-        for x in c[key]:
-            if "pref" in x:
-                x["pref"] = int(x["pref"] or 0)
-    c["tags"] = [x["tag"] for x in db.q("SELECT tag FROM con_contact_tags WHERE contact_id = %s ORDER BY tag", (r["id"],))]
-    rels = db.q("SELECT r.*, o.fn AS o_fn, o.uid AS o_uid, o.gender AS o_gender, o.address_book_id AS o_book, o.deleted AS o_del, o.iopix_person_id IS NOT NULL AS o_photo, o.iopix_person_id AS o_iopix "
-                "FROM con_contact_relations r LEFT JOIN con_contacts o ON o.id = r.related_id WHERE r.contact_id = %s ORDER BY r.position, r.id", (r["id"],))
-    c["relations"] = [{"type": x["type"], "relatedId": x["related_id"] if x["related_id"] and not x["o_del"] else None,
-                       "relatedName": x["related_name"], "relatedFn": x["o_fn"], "relatedUid": x["o_uid"],
-                       "relatedGender": x["o_gender"], "relatedBookId": x["o_book"], "relatedHasPhoto": bool(x["o_photo"]),
-                       "relatedIopixPersonId": x["o_iopix"] if not x["o_del"] else None, "label": x["label"],
-                       "typeLabel": x["label"] or rel.label(x["type"], x["o_gender"])} for x in rels]
-    if with_photo and r["iopix_person_id"]:
-        got = iopix.photo(r["iopix_person_id"])
-        if got:
-            c["photoData"] = {"type": got[1], "data": got[0]}
-    return c
+    return full_many([r], with_photo)[r["id"]]
+
+
+def full_many(rows: list[dict], with_photo: bool = False) -> dict[int, dict]:
+    """{id: the whole contact} for these con_contacts rows (deleted ones are left out). The emails, phones,
+    addresses, tags and relations of all of them are read with one query per table, so a directory or an export of
+    two thousand contacts costs nine queries, not eighteen thousand."""
+    out: dict[int, dict] = {}
+    for r in rows:
+        if not r or r["deleted"]:
+            continue
+        c = {"id": r["id"], "bookId": r["address_book_id"], "uid": r["uid"], "href": r["href"], "kind": r["kind"], "fn": r["fn"],
+             "name": {k: r[k] or "" for k in ("prefix", "given", "additional", "family", "suffix")},
+             "nickname": r["nickname"], "maiden": r["maiden"], "phoneticGiven": r["phonetic_given"],
+             "phoneticFamily": r["phonetic_family"], "gender": r["gender"], "birthday": _bday(r),
+             "birthdayRemind": bool(r.get("bday_remind", 1)), "org": r["org"],
+             "department": r["department"], "title": r["title"], "role": r["role"], "notes": r["notes"],
+             "favorite": bool(r["favorite"]), "hasPhoto": r["iopix_person_id"] is not None, "etag": r["etag"],
+             "iopix": {"personId": r["iopix_person_id"], "name": r["iopix_person_name"]} if r["iopix_person_id"] else None,
+             "extra": json.loads(r["extra"]) if r["extra"] else [],
+             "created": r["created_at"].isoformat() if r["created_at"] else None,
+             "updated": r["updated_at"].strftime("%Y-%m-%dT%H:%M:%SZ") if r["updated_at"] else None}
+        c.update({key: [] for key in CHILD}, tags=[], relations=[])
+        out[r["id"]] = c
+    ids = list(out)
+    for i in range(0, len(ids), 1000):  # a thousand ids per statement keeps each one well inside max_allowed_packet
+        part = ids[i:i + 1000]
+        marks = ",".join(["%s"] * len(part))
+        for key, (table, cols) in CHILD.items():
+            for x in db.q(f"SELECT * FROM {table} WHERE contact_id IN ({marks}) ORDER BY contact_id, position, id", part):
+                item = {k: x[k] for k in cols}
+                if "pref" in item:
+                    item["pref"] = int(item["pref"] or 0)
+                out[x["contact_id"]][key].append(item)
+        for x in db.q(f"SELECT contact_id, tag FROM con_contact_tags WHERE contact_id IN ({marks}) ORDER BY contact_id, tag", part):
+            out[x["contact_id"]]["tags"].append(x["tag"])
+        for x in db.q("SELECT r.*, o.fn AS o_fn, o.uid AS o_uid, o.gender AS o_gender, o.address_book_id AS o_book, o.deleted AS o_del, "
+                      "o.iopix_person_id IS NOT NULL AS o_photo, o.iopix_person_id AS o_iopix "
+                      "FROM con_contact_relations r LEFT JOIN con_contacts o ON o.id = r.related_id "
+                      f"WHERE r.contact_id IN ({marks}) ORDER BY r.contact_id, r.position, r.id", part):
+            out[x["contact_id"]]["relations"].append(
+                {"type": x["type"], "relatedId": x["related_id"] if x["related_id"] and not x["o_del"] else None,
+                 "relatedName": x["related_name"], "relatedFn": x["o_fn"], "relatedUid": x["o_uid"],
+                 "relatedGender": x["o_gender"], "relatedBookId": x["o_book"], "relatedHasPhoto": bool(x["o_photo"]),
+                 "relatedIopixPersonId": x["o_iopix"] if not x["o_del"] else None, "label": x["label"],
+                 "typeLabel": x["label"] or rel.label(x["type"], x["o_gender"])})
+    if with_photo:
+        for c in out.values():
+            if c["iopix"]:
+                got = iopix.photo(c["iopix"]["personId"])
+                if got:
+                    c["photoData"] = {"type": got[1], "data": got[0]}
+    return out
+
+
+def load(ids: list[int], with_photo: bool = False) -> list[dict]:
+    """The whole contacts with these ids, in that order (those that are gone are left out): full_many for a list of ids."""
+    rows = []
+    for i in range(0, len(ids), 1000):
+        part = ids[i:i + 1000]
+        rows += db.q(f"SELECT * FROM con_contacts WHERE id IN ({','.join(['%s'] * len(part))}) AND deleted = 0", part)
+    got = full_many(rows, with_photo)
+    return [got[i] for i in ids if i in got]
 
 
 def photo(cid: int) -> tuple[bytes, str] | None:
@@ -232,9 +275,10 @@ def photo(cid: int) -> tuple[bytes, str] | None:
     return iopix.photo(r["iopix_person_id"]) if r else None
 
 
-def vcard_text(cid: int | dict, version: str = "3.0") -> str:
-    c = full(cid, with_photo=True)
-    return vcard.from_contact(c, version)
+def vcard_text(cid: int | dict, version: str = "3.0", loaded: dict | None = None) -> str:
+    """The contact as a vCard. `loaded`: its full() dict (with the photo) when the caller already has it, as the
+    reports over a whole address book do (full_many)."""
+    return vcard.from_contact(loaded or full(cid, with_photo=True), version)
 
 
 # ------------------------------------------------------------------ saving
@@ -457,21 +501,22 @@ def delete(cid: int) -> None:
 
 
 def move(cid: int, new_book: int) -> None:
-    """To another address book: the contact keeps its id (and relations); the old book gets a tombstone."""
+    """To another address book: the contact keeps its id (and relations); the old book gets a tombstone, so a phone
+    that syncs it sees the card go. The contact's own row moves first: the tombstone takes the address (book, href)
+    it had, which is unique, so written the other way round it would land on the contact itself."""
     with db.tx():
         row = get_row(cid)
-        if row["address_book_id"] == new_book:
+        if not row or row["deleted"] or row["address_book_id"] == new_book:
             return
-        tok_old = _bump(row["address_book_id"])
-        db.ex("INSERT INTO con_contacts (address_book_id, uid, href, fn, etag, changed_token, deleted) VALUES (%s, %s, %s, '', %s, %s, 1) "
-              "ON DUPLICATE KEY UPDATE deleted = 1, changed_token = VALUES(changed_token), etag = VALUES(etag)",
-              (row["address_book_id"], row["uid"], row["href"], _etag(cid), tok_old))
         href = row["href"]
         if by_href(new_book, href):
             href = f"{uuidlib.uuid4()}.vcf"
         tok = _bump(new_book)
         db.ex("UPDATE con_contacts SET address_book_id = %s, href = %s, etag = %s, changed_token = %s WHERE id = %s",
               (new_book, href, _etag(cid), tok, cid))
+        tok_old = _bump(row["address_book_id"])
+        db.ex("INSERT INTO con_contacts (address_book_id, uid, href, fn, etag, changed_token, deleted) VALUES (%s, %s, %s, '', %s, %s, 1)",
+              (row["address_book_id"], row["uid"], row["href"], _etag(cid), tok_old))
 
 
 def all_tags(book_ids: list[int]) -> list[dict]:
