@@ -93,10 +93,10 @@ server {
 
 - **`/mcp` streams** (server-sent events): the proxy must not buffer that path.
 - **`X-Forwarded-For` and `X-Forwarded-Proto`** tell the app the visitor's address and that the request came over
-  HTTPS (which marks the session cookie Secure). `FORWARDED_ALLOW_IPS` in an app's `config.env` limits who may
-  send them (default: anyone); set it to your proxy's address. It is about what the app shows and logs as the
-  visitor's address; whether a visitor counts as inside your network is decided by the reverse proxy addresses
-  [above](#tell-the-apps-where-the-proxy-is).
+  HTTPS (which marks the session cookie Secure). The apps believe them from the proxies they were told about, the
+  reverse proxy addresses [above](#tell-the-apps-where-the-proxy-is), and from a proxy on the same machine; from
+  anyone else they are ignored. That one list decides both what the app shows and logs as the visitor's address and
+  whether a visitor counts as inside your network.
 - **ioHealth** takes the phone's uploads on the same port; batches are compressed and normally well under 1 MB.
 - **ioContacts' LDAP** is not HTTP: keep it on the home network, or put a TLS proxy (stunnel, HAProxy, nginx stream)
   in front for `ldaps://`.
