@@ -99,12 +99,26 @@ def test_switching_needs_the_admins_tick(client, monkeypatch):
     assert ("POST", "/api/services/scene/turn_on", {"entity_id": "scene.movie"}) in calls
     assert client.post("/api/ha/lock.front_door/off").status_code == 200
     assert ("POST", "/api/services/lock/unlock", {"entity_id": "lock.front_door"}) in calls
-    # a viewer may read and switch the ticked ones, but not change the settings
+    assert [i["control"] for i in client.get("/api/ha").json()["items"]] == [True, False, True, True]
+    # an editor switches the ticked ones too; a viewer reads the states and switches nothing
+    client.post("/api/users", json={"name": "mum", "password": "secret123", "role": "editor"})
     client.post("/api/users", json={"name": "kid", "password": "secret123", "role": "viewer"})
     client.post("/api/auth/logout")
-    assert client.post("/api/auth/login", json={"name": "kid", "password": "secret123"}).status_code == 200
-    assert client.get("/api/ha").json()["enabled"] is True
+    assert client.post("/api/auth/login", json={"name": "mum", "password": "secret123"}).status_code == 200
     assert client.post("/api/ha/light.kitchen/toggle").status_code == 200
+    assert client.get("/api/ha").json()["items"][0]["control"] is True
+    client.post("/api/auth/logout")
+    assert client.post("/api/auth/login", json={"name": "kid", "password": "secret123"}).status_code == 200
+    d = client.get("/api/ha").json()
+    assert d["enabled"] is True and d["items"][0]["state"] and not any(i["control"] for i in d["items"])
+    n = len(calls)
+    assert client.post("/api/ha/light.kitchen/toggle").status_code == 403
+    assert client.post("/api/ha/lock.front_door/off").status_code == 403
+    assert client.post("/api/ha/light.kitchen/set", json={"temperature": 20}).status_code == 403
+    assert len(calls) == n, "nothing reached Home Assistant"
+    with client.stream("GET", "/api/ha/events?once=1") as r:  # the stream is the viewer's copy as well
+        line = next(l for l in r.iter_lines() if l.startswith("data: "))
+        assert not any(i["control"] for i in json.loads(line[6:])["items"])
     assert client.get("/api/ha/settings").status_code == 403
     assert client.post("/api/ha/settings", json={"entities": []}).status_code == 403
     assert client.post("/api/ha/test", json={}).status_code == 403
@@ -235,8 +249,15 @@ def test_live_feed_keeps_the_copy_and_streams_the_card(client, monkeypatch):
     ha.prime([dict(s) for s in STATES])
     ha.feed.live = True
     assert ha.apply("light.kitchen", {"entity_id": "light.kitchen", "state": "off", "attributes": {"friendly_name": "Kitchen"}}) is True
-    assert ha.apply("light.new", {"entity_id": "light.new", "state": "on", "attributes": {}}) is True    # a new entity
+    # an entity that is on no card is kept in the copy, and wakes no page
+    assert ha.apply("light.new", {"entity_id": "light.new", "state": "on", "attributes": {}}) is False
+    assert any(s["entity_id"] == "light.new" for s in ha.all_states())
     assert ha.apply("light.nothere", None) is False
+    # one the built-in alerts watch does wake them (a leak sensor, a battery)
+    leak = {"entity_id": "binary_sensor.cellar_leak", "state": "on", "attributes": {"device_class": "moisture", "friendly_name": "Cellar"}}
+    assert ha.apply("binary_sensor.cellar_leak", leak) is True
+    assert any(a["id"] == "binary_sensor.cellar_leak" for a in client.get("/api/ha").json()["alerts"])
+    assert ha.apply("binary_sensor.cellar_leak", None) is True
     monkeypatch.setattr(ha, "STATES_TTL", 0)   # even a stale-by-the-clock copy is not refetched while live
     d = client.get("/api/ha").json()
     assert d["live"] and d["items"][0]["text"] == "Off"
@@ -277,3 +298,22 @@ def test_event_stream_waits_without_a_thread():
         assert await ha.feed.wait_async(v, 5) == v + 1                                    # already moved: at once
         assert not ha.feed._waiters
     asyncio.run(run())
+
+
+def test_the_card_is_built_once_and_the_settings_read_once(client, monkeypatch):
+    """Many open pages ask for the card on every change: the settings come from the database once (not five queries a
+    page), and the card is built once per change."""
+    from app import db
+    _setup(client, monkeypatch)
+    client.post("/api/ha/settings", json={"entities": [{"id": "light.kitchen", "control": True}]})
+    first = ha.home()
+    asked, built = [], []
+    real_q, real_describe = db.q, ha.describe
+    monkeypatch.setattr(db, "q", lambda sql, args=None: (asked.append(sql), real_q(sql, args))[1])
+    monkeypatch.setattr(ha, "describe", lambda *a, **kw: (built.append(1), real_describe(*a, **kw))[1])
+    for _ in range(50):
+        assert ha.home() is first or ha.home() == first
+    assert not [s for s in asked if "prt_settings" in s] and not built
+    # a change of the settings shows at once
+    client.post("/api/ha/settings", json={"entities": [{"id": "light.kitchen", "name": "Stove light", "control": True}]})
+    assert ha.home()["items"][0]["name"] == "Stove light"

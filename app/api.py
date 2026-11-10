@@ -123,11 +123,20 @@ def _ha(fn, *a, **kw):
         raise HTTPException(e.status, str(e))
 
 
+def _ha_card(request: Request, d: dict) -> dict:
+    """The card as this viewer gets it: switching things takes an editor or an admin, so a viewer's copy offers no
+    control (the page then shows the state alone). A copy: the card itself is shared between the pages."""
+    if (getattr(request.state, "user", None) or {}).get("role") in ("editor", "admin") or not d.get("items"):
+        return d
+    return {**d, "items": [{**it, "control": False} for it in d["items"]]}
+
+
 @router.get("/api/ha", dependencies=[access.signed_in])
 async def get_home(request: Request):
     """The Home card and the wall's sensors: the chosen entities with their state (from the server's copy, a few seconds
-    old at most), which of them go on the wall, and what needs attention. {enabled: false} until an admin sets it up."""
-    return await run_in_threadpool(ha.home)
+    old at most), which of them go on the wall, and what needs attention. {enabled: false} until an admin sets it up.
+    `control` on an entity is true for editors and admins only."""
+    return _ha_card(request, await run_in_threadpool(ha.home))
 
 
 @router.get("/api/ha/events", dependencies=[access.signed_in])
@@ -142,7 +151,7 @@ async def ha_events(request: Request, once: bool = False):
         while True:
             if await request.is_disconnected():
                 return
-            d = await run_in_threadpool(ha.home)
+            d = _ha_card(request, await run_in_threadpool(ha.home))
             raw = json.dumps(d, separators=(",", ":"))
             now = asyncio.get_running_loop().time()
             if raw != last:
@@ -162,10 +171,11 @@ async def ha_events(request: Request, once: bool = False):
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
-@router.post("/api/ha/{entity_id}/set", dependencies=[access.signed_in])
+@router.post("/api/ha/{entity_id}/set", dependencies=[access.editor])
 async def ha_set(entity_id: str, request: Request):
-    """The popups: a thermostat takes {temperature? | low? + high?, mode?, fan?, preset?}, a cover {action: open | close |
-    stop} or {position: 0-100}; on an entity the admin lets the page control. Returns the entity's state right after."""
+    """Editors and admins. The popups: a thermostat takes {temperature? | low? + high?, mode?, fan?, preset?}, a cover
+    {action: open | close | stop} or {position: 0-100}; on an entity the admin lets the page control. Returns the
+    entity's state right after."""
     try:
         b = await request.json()
     except ValueError:
@@ -173,10 +183,10 @@ async def ha_set(entity_id: str, request: Request):
     return await run_in_threadpool(_ha, ha.set_entity, entity_id, b)
 
 
-@router.post("/api/ha/{entity_id}/{action}", dependencies=[access.signed_in])
+@router.post("/api/ha/{entity_id}/{action}", dependencies=[access.editor])
 async def ha_act(entity_id: str, action: str, request: Request):
-    """toggle | on | off: switch an entity the admin lets the page control (Settings › Home Assistant). Returns the
-    entity's state right after. 403 for any other entity."""
+    """Editors and admins. toggle | on | off: switch an entity the admin lets the page control (Settings › Home
+    Assistant). Returns the entity's state right after. 403 for any other entity, and for a viewer."""
     return await run_in_threadpool(_ha, ha.act, entity_id, action)
 
 

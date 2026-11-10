@@ -50,6 +50,10 @@ def client(_client):
         suite.register(key, "io" + key[2:].capitalize(), url=f"https://{key[2:]}.example.com", version="1.0",
                        description=key[2:].capitalize(), color="#123456")
     apps.forget_registry()
+    from app import homeassistant, status, widgets
+    homeassistant.reload()  # the settings of the test before, the apps it found down, the answers it kept
+    widgets.forget()
+    status.forget()
     _client.cookies.clear()
     r = _client.post("/api/auth/setup", json={"name": "alex", "password": "secret123"})
     assert r.status_code == 200, r.text

@@ -20,6 +20,7 @@ from app import apps, bookmarks, widgets
 APP_TTL = 60       # seconds an app's answer is kept
 LINK_TTL = 300     # seconds a bookmark's ping is kept
 TIMEOUT = 3        # seconds per request
+MAX_KEPT = 2000    # answers remembered at most (one per app and viewer, one per bookmark)
 _cache: dict = {}  # key -> (expires, value)
 _lock = threading.Lock()
 _pool = ThreadPoolExecutor(max_workers=8, thread_name_prefix="status")
@@ -34,6 +35,11 @@ def _remember(key, ttl, make):
     v = make()
     with _lock:
         _cache[key] = (now + ttl, v)
+        if len(_cache) > MAX_KEPT:  # the ones that ran out first, then the ones closest to it
+            for k in [k for k, (until, _) in _cache.items() if until <= now]:
+                del _cache[k]
+            for k in sorted(_cache, key=lambda k: _cache[k][0])[:max(0, len(_cache) - MAX_KEPT)]:
+                del _cache[k]
     return v
 
 

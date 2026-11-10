@@ -8,10 +8,13 @@ through this server, with the one token, so what the page can do is what the adm
 
 - every entity's state may be read by anyone signed in (the card, the wall, the search box);
 - an entity is switched (a light, a switch, a scene, a script, a lock, a cover…) only when the admin ticked
-  "control" for it, by anyone signed in: the page is the family's, Home Assistant decides nothing per person.
+  "control" for it, and only by an editor or an admin of the start page: a viewer sees the state and switches nothing
+  (app/api.py). Home Assistant itself decides nothing per person.
 
 Home Assistant is on the local network and quick: all its states are fetched in one call and kept STATES_TTL seconds
-here, so a houseful of open pages refreshing at once costs one call.
+here, so a houseful of open pages refreshing at once costs one call. The settings come from the database once every
+SETTINGS_TTL seconds, the card is built once per change for every open page, and the pages are woken only by a change
+to something they show (a chosen entity, or one the built-in alerts watch), not by every sensor in the house.
 """
 import json
 import re
@@ -30,6 +33,7 @@ APP = config.APP
 from app.ha_feed import Feed
 
 STATES_TTL = 5          # seconds the states are kept (the card redraws every minute, the search box types faster)
+SETTINGS_TTL = 10       # seconds the settings read from the database are kept (save() drops them at once)
 TIMEOUT = 6
 MAX_ENTITIES = 40       # on the card
 LOW_BATTERY = 15        # percent
@@ -82,18 +86,47 @@ class HAError(Exception):
 
 # ------------------------------------------------------------------ settings
 
+_conf = {"at": 0.0, "v": None}   # the settings as last read, and when
+_home = {"key": None, "v": None}  # the card as last built, and from what
+
+
+def _saved() -> dict:
+    """{url, token, entities, builtin, name} as saved (the database, and the token with the suite's keys), read together
+    and kept SETTINGS_TTL seconds. Every open page asks for the card on every change, and the card needs all five."""
+    now = time.monotonic()
+    c = _conf["v"]
+    if c is not None and now - _conf["at"] < SETTINGS_TTL:
+        return c
+    rows = {r["name"]: r["value"] for r in db.q("SELECT name, value FROM prt_settings WHERE name IN "
+                                                "('ha_url', 'ha_entities', 'ha_builtin_alerts', 'ha_name')")}
+    try:
+        tok = "" if config.HA_TOKEN else credentials.get(APP, "ha_token").strip()
+    except Exception:  # noqa: BLE001 - the shared database is away
+        tok = ""
+    try:
+        items = json.loads(rows["ha_entities"]) if rows.get("ha_entities") else []
+    except ValueError:
+        items = []
+    chosen = [_clean(e) for e in items if isinstance(e, dict) and _ENTITY_RE.match(str(e.get("id", "")))]
+    c = {"url": rows.get("ha_url") or "", "token": tok, "entities": chosen, "ids": {e["id"] for e in chosen},
+         "builtin": rows.get("ha_builtin_alerts") != "0", "name": rows.get("ha_name") or ""}
+    _conf.update(at=now, v=c)
+    return c
+
+
+def reload() -> None:
+    """The settings changed: read them again."""
+    _conf["v"] = None
+    _home["key"] = None
+
+
 def url() -> str:
-    return (config.HA_URL or (db.get_setting("ha_url") or "")).strip().rstrip("/")
+    return (config.HA_URL or _saved()["url"]).strip().rstrip("/")
 
 
 def token() -> str:
     """HA_TOKEN in the environment, else the token kept with the suite's keys and tokens (the Shared ioSuite database)."""
-    if config.HA_TOKEN:
-        return config.HA_TOKEN
-    try:
-        return credentials.get(APP, "ha_token").strip()
-    except Exception:  # noqa: BLE001 - the shared database is away
-        return ""
+    return config.HA_TOKEN or _saved()["token"]
 
 
 def enabled() -> bool:
@@ -104,12 +137,7 @@ def entities() -> list[dict]:
     """The admin's list, in order: [{id, name, control, wall, alert}]. name: what the card calls it ("" for Home
     Assistant's own name); control: a tap switches it; wall: shown on the wall display; alert: the state (text, as Home
     Assistant writes it: "on", "open", "unlocked"…) that needs attention, or ""."""
-    raw = db.get_setting("ha_entities")
-    try:
-        items = json.loads(raw) if raw else []
-    except ValueError:
-        items = []
-    return [_clean(e) for e in items if isinstance(e, dict) and _ENTITY_RE.match(str(e.get("id", "")))]
+    return [dict(e) for e in _saved()["entities"]]
 
 
 def _clean(e: dict) -> dict:
@@ -118,14 +146,19 @@ def _clean(e: dict) -> dict:
 
 
 def builtin_alerts() -> bool:
-    return db.get_setting("ha_builtin_alerts") != "0"
+    return _saved()["builtin"]
+
+
+def house() -> str:
+    """What Home Assistant calls the house (learned when the connection is tested)."""
+    return _saved()["name"]
 
 
 def settings() -> dict:
     """What Settings › Home Assistant shows (the token never leaves the server)."""
     return {"enabled": enabled(), "url": url(), "urlFromEnv": bool(config.HA_URL), "hasToken": bool(token()),
             "tokenFromEnv": bool(config.HA_TOKEN), "entities": entities(), "builtinAlerts": builtin_alerts(),
-            "name": db.get_setting("ha_name") or "", "live": feed.live, "liveError": feed.error}
+            "name": house(), "live": feed.live, "liveError": feed.error}
 
 
 def save(changes: dict, by: str = None) -> None:
@@ -153,6 +186,7 @@ def save(changes: dict, by: str = None) -> None:
         db.set_setting("ha_entities", json.dumps(out))
     if "builtinAlerts" in changes:
         db.set_setting("ha_builtin_alerts", "1" if changes["builtinAlerts"] else "0")
+    reload()
     if "url" in changes or "token" in changes:
         feed.restart()
         feed_down()
@@ -160,7 +194,8 @@ def save(changes: dict, by: str = None) -> None:
 
 
 def forget(devices: bool = False) -> None:
-    """The REST copy is dropped (the live one stays: the feed keeps it right)."""
+    """The REST copy is dropped (the live one stays: the feed keeps it right), and the card is built afresh."""
+    _home["key"] = None
     if not _cache["live"]:
         _cache.update(at=0.0, items=None)
     if devices:
@@ -171,33 +206,58 @@ def prime(states: list[dict]) -> None:
     """The feed connected: its full list becomes the copy, and the copy is live from now on."""
     with _lock:
         _cache.update(at=time.time(), items=list(states), live=True)
+    _home["key"] = None
 
 
 def apply(entity_id: str, new_state: dict | None) -> bool:
-    """One state_changed from the feed folded into the copy; True when the copy changed."""
+    """One state_changed from the feed folded into the copy; True when the pages may show the change (the feed wakes
+    them only then: a house has hundreds of sensors that change all day and are on no card)."""
     with _lock:
         items = _cache["items"]
         if items is None or not _cache["live"]:
             return False
+        old = None
         for i, st in enumerate(items):
             if st.get("entity_id") == entity_id:
+                old = st
                 if new_state is None:
                     del items[i]
                 else:
                     items[i] = new_state
-                _cache["at"] = time.time()
-                return True
-        if new_state is not None:
+                break
+        else:
+            if new_state is None:
+                return False
             items.append(new_state)
-            _cache["at"] = time.time()
-            return True
+        _cache["at"] = time.time()
+    if _shown(entity_id, old, new_state):
+        _home["key"] = None
+        return True
+    return False
+
+
+def _watched(st: dict | None) -> bool:
+    """Whether the built-in alerts look at this entity (a leak, smoke or problem sensor, a battery)."""
+    if not st:
         return False
+    dom, cls = _domain(st.get("entity_id") or ""), (st.get("attributes") or {}).get("device_class") or ""
+    return (dom == "binary_sensor" and (cls in URGENT_CLASSES or cls == "battery")) or (dom == "sensor" and cls == "battery")
+
+
+def _shown(entity_id: str, old: dict | None, new: dict | None) -> bool:
+    """Whether a change to this entity can change the card, the wall or the alerts."""
+    try:
+        c = _saved()
+    except Exception:  # noqa: BLE001 - the database is away: wake the pages, they ask again
+        return True
+    return entity_id in c["ids"] or (c["builtin"] and (_watched(old) or _watched(new)))
 
 
 def feed_down() -> None:
     """The feed lost its connection: back to the REST copy, fetched afresh."""
     with _lock:
         _cache.update(at=0.0, items=None, live=False)
+    _home["key"] = None
 
 
 # ------------------------------------------------------------------ Home Assistant's REST API
@@ -239,6 +299,7 @@ def test(base: str = "", tok: str = "") -> dict:
     name = str(cfg.get("location_name") or "Home")
     if base == url() and tok == token():
         db.set_setting("ha_name", name)
+        reload()
     return {"ok": True, "name": name, "version": cfg.get("version"), "entities": len(states) if isinstance(states, list) else 0}
 
 
@@ -385,19 +446,27 @@ def home() -> dict:
     try:
         states = all_states()
     except HAError as e:
-        return {"enabled": True, "name": db.get_setting("ha_name") or "Home", "url": url(), "error": str(e), "items": [], "wall": [], "alerts": []}
+        return {"enabled": True, "name": house() or "Home", "url": url(), "error": str(e), "items": [], "wall": [], "alerts": []}
+    # built once per change, for every page that asks: live, the feed's version says when something shown changed;
+    # otherwise the REST copy's age does
+    devs = device_ids([c["id"] for c in chosen])  # asked once per entity
+    key = (feed.version, feed.live) if _cache["live"] else (_cache["at"], feed.live)
+    key = (*key, _conf["at"], len(_devices))
+    if _home["key"] == key:
+        return _home["v"]
     by = {s.get("entity_id"): s for s in states}
     items = []
     for c in chosen:
         st = by.get(c["id"])
         items.append(describe(st, c) if st else {"id": c["id"], "domain": _domain(c["id"]), "name": c["name"] or _title(c["id"].split(".", 1)[-1]),
                                                    "state": "missing", "text": "Not in Home Assistant", "on": None, "control": False, "unit": "", "class": "", "icon": ""})
-    devs = device_ids([c["id"] for c in chosen])
     for it in items:
         if devs.get(it["id"]):
             it["device"] = devs[it["id"]]
-    return {"enabled": True, "name": db.get_setting("ha_name") or "Home", "url": url(), "items": items, "live": feed.live,
-            "wall": [c["id"] for c in chosen if c["wall"]], "alerts": alerts(states, chosen, by)}
+    out = {"enabled": True, "name": house() or "Home", "url": url(), "items": items, "live": feed.live,
+           "wall": [c["id"] for c in chosen if c["wall"]], "alerts": alerts(states, chosen, by)}
+    _home.update(key=key, v=out)
+    return out  # shared between the pages: read, never changed (app/api.py copies what it changes)
 
 
 def alerts(states: list[dict], chosen: list[dict], by: dict | None = None) -> list[dict]:

@@ -2,8 +2,8 @@
 markers come from iosuite-shared (app/auth.py). Every /api route carries one, and a test fails when one is missing.
 
 - public: the sign-in endpoints and the status (iosuite-shared's routers)
-- signed_in: an account: the page, the apps, the widgets, the bookmarks, Home Assistant
-- editor: changing the bookmarks
+- signed_in: an account: the page, the apps, the widgets, the bookmarks, Home Assistant's states
+- editor: changing the bookmarks, switching what Home Assistant lets the page control
 - admin: the home page, the weather, Home Assistant and the server settings, accounts
 """
 from app.auth import auth
