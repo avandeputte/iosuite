@@ -15,10 +15,14 @@ import time
 
 from iosuite_shared import db, edge, users
 from iosuite_shared.passwords import check_password, check_token, token_hash
+from iosuite_shared.errors import Invalid
 
 # An app password is random (144 bits), so its row keeps a SHA-256 of it (passwords.token_hash): a slow hash would add
 # latency and no safety. The name + account password route below is Argon2id, hence the caches.
-_cache: dict = {}  # a successful check, for a minute: DAV clients send Basic on every request
+# A successful check is remembered for a minute (DAV clients send Basic on every request), so the hash is not computed
+# again; what it stood on is still read each time (_still_good): a revoked app password, a changed scope or a changed
+# account password count at once, in every process and every app, not when the minute is over.
+_cache: dict = {}  # key -> (until, user id, app password id or None, the account's hash when it was the account password)
 _misses: dict = {}  # a failed check, for a few seconds: a client retrying a stale password does not cost a hash each time
 MISS_S = 10
 
@@ -31,7 +35,7 @@ SCOPES = ("", DAV, READ)
 
 def create(user_id: int, app: str, label: str, scope: str = "") -> str:
     if scope not in SCOPES:
-        raise ValueError(f"Unknown app password scope: {scope!r}")
+        raise Invalid(f"Unknown app password scope: {scope!r}")
     prefix = secrets.token_hex(4)
     pw = f"{app}-{prefix}-{secrets.token_urlsafe(18)}"
     db.ex("INSERT INTO ios_app_passwords (user_id, app, label, prefix, hash, created_at, scope) VALUES (%s, %s, %s, %s, %s, %s, %s)",
@@ -66,7 +70,7 @@ def forget():
 def set_scope(app: str, prefix: str, scope: str) -> int:
     """Give an existing password (found by its 8-hex prefix) a scope (the suite admin panel)."""
     if scope not in SCOPES:
-        raise ValueError(f"Unknown app password scope: {scope!r}")
+        raise Invalid(f"Unknown app password scope: {scope!r}")
     n = db.ex("UPDATE ios_app_passwords SET scope = %s WHERE app = %s AND prefix = %s", (scope, app, prefix))
     _cache.clear(); _misses.clear()
     return n
@@ -84,14 +88,16 @@ def authenticate_scoped(name: str | None, password: str, app: str):
     key = hashlib.sha256(f"{app}\0{name or ''}\0{password}".encode()).hexdigest()
     hit = _cache.get(key)
     if hit and hit[0] > time.time():
-        u = users.get(hit[1], app)
-        return (u, hit[2]) if u else (None, None)
+        found = _still_good(hit, app)
+        if found:
+            return found
+        _cache.pop(key, None)
     if not password:
         return None, None
     missed = _misses.get(key)
     if missed and missed > time.time():
         return None, None
-    user, scope = None, ""
+    user, scope, pid, account_hash = None, "", None, None
     m = re.match(r"^([a-z0-9]+)-([0-9a-f]{8})-", password)  # the word is a hint only: the row says which app
     if m:
         for r in db.q("SELECT * FROM ios_app_passwords WHERE prefix = %s AND app = %s", (m.group(2), app)):
@@ -102,18 +108,36 @@ def authenticate_scoped(name: str | None, password: str, app: str):
                     db.ex("UPDATE ios_app_passwords SET last_used_at = %s, hash = %s WHERE id = %s",
                           (int(time.time()), token_hash(password), r["id"]))
                     edge.publish(app, r["prefix"], password)  # made before the edge check was on, or since a restart
-                    user, scope = u, r.get("scope") or ""
+                    user, scope, pid = u, r.get("scope") or "", r["id"]
                     break
     if not user and name:
         user = users.authenticate(name, password, app)
         if user and user["passwordless"]:
             user = None  # a one-click account is for the LAN sign-in screen, not for clients
+        if user:
+            account_hash = (db.one("SELECT hash FROM ios_users WHERE id = %s", (user["id"],)) or {}).get("hash")
     if user:
         if len(_cache) > 500:
             _cache.clear()
-        _cache[key] = (time.time() + 60, user["id"], scope)
+        _cache[key] = (time.time() + 60, user["id"], pid, account_hash)
     else:
         if len(_misses) > 500:
             _misses.clear()
         _misses[key] = time.time() + MISS_S
     return user, (scope if user else None)
+
+
+def _still_good(hit, app: str):
+    """(account, scope) for a remembered check, when what it stood on is still there: the app password's row (with the
+    scope it has now), or the account password's hash unchanged. None otherwise."""
+    _, user_id, pid, account_hash = hit
+    scope = ""
+    if pid is not None:
+        r = db.one("SELECT scope FROM ios_app_passwords WHERE id = %s AND user_id = %s AND app = %s", (pid, user_id, app))
+        if not r:
+            return None
+        scope = r["scope"] or ""
+    elif (db.one("SELECT hash FROM ios_users WHERE id = %s", (user_id,)) or {}).get("hash") != account_hash:
+        return None
+    u = users.get(user_id, app)
+    return (u, scope) if u else None

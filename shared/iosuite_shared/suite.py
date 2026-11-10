@@ -33,8 +33,10 @@ import os
 import socket
 import threading
 import time
+from urllib.parse import urlsplit
 
 from iosuite_shared import config, db
+from iosuite_shared.errors import Invalid
 
 # Every app's default port: different for each, so all of them can run on one host. The apps' tests check theirs.
 PORTS = {"iopix": 8600, "ionotes": 8610, "iocalendar": 8620, "iosuite": 8630, "iocontacts": 8640, "iohealth": 8650, "iodns": 8660}
@@ -60,7 +62,7 @@ def clean_url(url) -> str | None:
     if not u:
         return None
     if not (u.startswith("http://") or u.startswith("https://")) or len(u) > 512 or any(c in u for c in " \"'<>"):
-        raise ValueError(f"not an http(s) address: {u[:80]}")
+        raise Invalid(f"not an http(s) address: {u[:80]}")
     return u
 
 
@@ -130,7 +132,7 @@ def register(app: str, name: str = None, url: str = None, version: str = None, d
     is and its colour (#rrggbb), and whether it is an admin tool (seen only by its admins); the icon is ICON on the app. Called at every start; whatever the app no longer says is
     cleared."""
     if not app or len(app) > 32:
-        raise ValueError("an app key of 1 to 32 characters")
+        raise Invalid("an app key of 1 to 32 characters")
     with _lock:
         _seen.pop(app, None)
     now = int(time.time())
@@ -245,6 +247,41 @@ def url_of(app: str) -> str | None:
     return r["url"] if r else None
 
 
+LOCAL_SUFFIXES = (".local", ".lan", ".home", ".internal", ".home.arpa", ".localdomain", ".localhost")
+_hosts: dict = {}  # app -> (the hosts of its known addresses, at)
+
+
+def known_host(app: str, host: str) -> bool:
+    """Whether `host` (a Host header) is a name this app is known by: an IP address, localhost, a name of the local
+    network (no dot, or .local, .lan, .home, .internal...), a host under COOKIE_DOMAIN, or the host of one of the app's
+    addresses in the suite's list (PUBLIC_URL, the address an admin reached it at, INTERNAL_URL). A page on another
+    site that points its own name at this server's address (DNS rebinding) arrives under a name that is none of these."""
+    host = (host or "").split(",")[0].strip().lower()
+    if host.startswith("["):
+        host = host[1:].split("]")[0]
+    elif host.count(":") == 1:
+        host = host.split(":")[0]
+    host = host.rstrip(".")
+    if not host:
+        return False
+    try:
+        ipaddress.ip_address(host.split("%")[0])
+        return True
+    except ValueError:
+        pass
+    if "." not in host or host == "localhost" or host.endswith(LOCAL_SUFFIXES):
+        return True
+    d = config.COOKIE_DOMAIN
+    if d and (host == d or host.endswith("." + d)):
+        return True
+    hit = _hosts.get(app)
+    if not hit or time.time() - hit[1] > 30:
+        r = get(app) or {}
+        names = {(urlsplit(u).hostname or "").lower() for u in (r.get("configuredUrl"), r.get("seenUrl"), r.get("internalUrl")) if u}
+        hit = _hosts[app] = (names, time.time())
+    return host in hit[0]
+
+
 def forget(app: str) -> bool:
     """Remove an app (uninstalled); it registers again when it starts."""
     with _lock:
@@ -256,3 +293,4 @@ def invalidate():
     """Tests: forget what was noted in memory."""
     with _lock:
         _seen.clear()
+    _hosts.clear()

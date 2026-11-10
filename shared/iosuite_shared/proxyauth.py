@@ -23,6 +23,7 @@ import threading
 import time
 
 from iosuite_shared import db, users
+from iosuite_shared.errors import Invalid
 
 log = logging.getLogger("iosuite_shared.proxyauth")
 authlog = logging.getLogger("iosuite_shared.auth")  # sign-ins, failed attempts and sign-outs, for the apps' server logs
@@ -37,7 +38,7 @@ EXTERNAL_HEADERS = ("cf-ray", "cf-connecting-ip", "cf-access-jwt-assertion")
 # and only a proxy listed in AUTH_PROXY_TRUSTED is believed about where its visitor is.
 FORWARDING_HEADERS = ("x-forwarded-for", "forwarded", "x-real-ip", "x-forwarded-host", "x-forwarded-proto", "via")
 
-_jwks = {"client": None, "team": None}
+_jwks = {"client": None, "team": None, "refreshed_at": 0.0}
 _lock = threading.Lock()
 seen = {}  # the last Cloudflare Access token seen (unverified claims), to set this up from: {iss, aud, email, peer, at}
 _cache: dict = {}  # identity -> (user, until): a page load makes dozens of requests
@@ -250,9 +251,9 @@ def save_suite(values: dict) -> dict:
     changes = {k: str(v or "").strip() for k, v in values.items() if k in KEYS}
     m = changes.get("AUTH_PROXY")
     if m is not None and m.lower() not in ("", "off", *PRESETS):
-        raise ValueError("Unknown proxy")
+        raise Invalid("Unknown proxy")
     if changes.get("AUTH_PROXY_CREATE", "").lower() not in ("", "viewer", "editor", "deny"):
-        raise ValueError("Someone with no account: the sign-in screen, deny, or a viewer or editor account")
+        raise Invalid("Someone with no account: the sign-in screen, deny, or a viewer or editor account")
     if "CF_ACCESS_TEAM" in changes:
         changes["CF_ACCESS_TEAM"] = clean_team(changes["CF_ACCESS_TEAM"])
     if "CF_ACCESS_AUD" in changes:
@@ -260,9 +261,9 @@ def save_suite(values: dict) -> dict:
     cur = {k: db.settings_of("").get(k.lower(), "") for k in KEYS}
     cur.update(changes)
     if (cur["AUTH_PROXY"] or "").lower() == "cloudflare" and bool(cur["CF_ACCESS_TEAM"]) != bool(cur["CF_ACCESS_AUD"]):
-        raise ValueError("Cloudflare needs both the team domain and the AUD tag (or neither)")
+        raise Invalid("Cloudflare needs both the team domain and the AUD tag (or neither)")
     if (cur["AUTH_PROXY"] or "").lower() not in ("", "off", "cloudflare") and not cur["AUTH_PROXY_TRUSTED"]:
-        raise ValueError("A proxy that sends a header needs its address in AUTH_PROXY_TRUSTED (the header is believed from there only)")
+        raise Invalid("A proxy that sends a header needs its address in AUTH_PROXY_TRUSTED (the header is believed from there only)")
     for k, v in changes.items():
         db.set_setting(k.lower(), v, "")
     _cache.clear()
@@ -297,16 +298,36 @@ def peer_of(request) -> str:
     return request.scope.get("iothing.peer") or (request.client.host if request.client else "")
 
 
+KEYS_REFRESH_S = 60  # Cloudflare's keys are fetched again for a key id nobody has seen at most this often
+
+
+def _cf_key(client, token: str):
+    """The public key a Cloudflare Access token names (its `kid`), from the team's keys. They are kept for an hour; a
+    token naming a key that is not among them makes them be fetched again (Cloudflare rotates its keys), but no more
+    than once a minute, so tokens with made-up key ids cannot make the app call Cloudflare for each of them."""
+    import jwt
+    kid = jwt.get_unverified_header(token).get("kid")
+    for refresh in (False, True):
+        if refresh:
+            with _lock:
+                if time.time() - _jwks["refreshed_at"] < KEYS_REFRESH_S:
+                    break
+                _jwks["refreshed_at"] = time.time()
+        for k in client.get_signing_keys(refresh=refresh):
+            if k.key_id == kid:
+                return k.key
+    raise jwt.PyJWKClientError(f"no Cloudflare key with id {str(kid)[:64]!r}")
+
+
 def _cf_email(token: str, team: str, aud):
     """The email in a Cloudflare Access token, once its signature, audience (any of the AUD tags), issuer and expiry check out."""
     import jwt
     with _lock:
         if _jwks["team"] != team:
-            _jwks.update(team=team, client=jwt.PyJWKClient(f"https://{team}/cdn-cgi/access/certs", cache_keys=True, lifespan=3600))
+            _jwks.update(team=team, refreshed_at=0.0, client=jwt.PyJWKClient(f"https://{team}/cdn-cgi/access/certs", cache_keys=False, lifespan=3600))
         client = _jwks["client"]
     try:
-        key = client.get_signing_key_from_jwt(token).key
-        claims = jwt.decode(token, key, algorithms=["RS256"], audience=aud, issuer=f"https://{team}", leeway=30, options={"require": ["exp"]})
+        claims = jwt.decode(token, _cf_key(client, token), algorithms=["RS256"], audience=aud, issuer=f"https://{team}", leeway=30, options={"require": ["exp"]})
     except Exception as e:
         if once("refused", 60):
             authlog.warning("Cloudflare Access token refused (%s): treated as not signed in", str(e)[:200])
@@ -314,34 +335,49 @@ def _cf_email(token: str, team: str, aud):
     return (claims.get("email") or claims.get("common_name") or "").strip() or None
 
 
+LOOPBACK = (ipaddress.ip_network("127.0.0.0/8"), ipaddress.ip_network("::1/128"))
+_forwarders = {"raw": None, "nets": LOOPBACK}
+
+
+def forwarders() -> tuple:
+    """The networks whose X-Forwarded-For and X-Forwarded-Proto are believed: this machine, and the reverse proxies
+    listed under Settings › Security (AUTH_PROXY_TRUSTED), whatever the sign-in mode. One list says where the proxies
+    are; while the settings cannot be read, this machine only."""
+    try:
+        raw = db.get_setting("auth_proxy_trusted", "", "")
+    except Exception:  # noqa: BLE001 - the database is away
+        return LOOPBACK
+    if raw != _forwarders["raw"]:
+        nets = list(LOOPBACK)
+        for part in raw.replace(" ", ",").split(","):
+            if part:
+                try:
+                    nets.append(ipaddress.ip_network(part, strict=False))
+                except ValueError:
+                    pass  # Proxy.trusted logs it
+        _forwarders.update(raw=raw, nets=tuple(nets))
+    return _forwarders["nets"]
+
+
 class Forwarded:
     """ASGI middleware, the outermost layer (Auth.install adds it): keeps the address the connection really came from
-    in scope["iothing.peer"], which is what proxy sign-in and the throttles trust, and then, for a connection from one
-    of `allow` (addresses or networks, or "*"), takes the visitor's address and scheme from X-Forwarded-For and
+    in scope["iothing.peer"], which is what proxy sign-in and the throttles trust, and then, for a connection from this
+    machine or a listed reverse proxy (forwarders()), takes the visitor's address and scheme from X-Forwarded-For and
     X-Forwarded-Proto the way uvicorn's own proxy-headers middleware does. The apps start uvicorn with
     proxy_headers=False so that this is the one place the headers are read."""
 
-    def __init__(self, app, allow: str = "*"):
+    def __init__(self, app):
         self.app = app
-        self.any = allow.strip() == "*"
-        self.nets = []
-        for part in ("" if self.any else allow).replace(" ", ",").split(","):
-            if part:
-                try:
-                    self.nets.append(ipaddress.ip_network(part, strict=False))
-                except ValueError:
-                    log.warning("FORWARDED_ALLOW_IPS: %r is not an address or network", part)
 
-    def allows(self, peer: str) -> bool:
-        if self.any:
-            return True
+    @staticmethod
+    def allows(peer: str) -> bool:
         try:
             ip = ipaddress.ip_address((peer or "").split("%")[0])
         except ValueError:
             return False
         if ip.version == 6 and ip.ipv4_mapped:
             ip = ip.ipv4_mapped
-        return any(ip in n for n in self.nets)
+        return any(ip in n for n in forwarders())
 
     async def __call__(self, scope, receive, send):
         if scope.get("type") in ("http", "websocket") and scope.get("client"):

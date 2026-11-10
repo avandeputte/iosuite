@@ -53,13 +53,13 @@ def env_int(name: str, default: int) -> int:
 # The Shared ioSuite database: accounts, sessions, roles, app passwords, and the suite-wide settings and list of apps.
 # IOSUITE_DB_HOST, _PORT, _NAME, _USER, _PASSWORD. By default it is on the same server as the app's own database
 # (DB_HOST, DB_PORT), with database and user `iosuite`.
+# There is no default password: setup.sh writes one into config.env, a container gets it from its environment.
 PREFIX = "IOSUITE_DB_"
-DEFAULT_DB_PASSWORD = "iosuite"  # a development default; users.init warns while it is in use
 
 
 def shared_db(key: str) -> str:
     defaults = {"HOST": env("DB_HOST", "127.0.0.1"), "PORT": env("DB_PORT", "3306"), "NAME": "iosuite", "USER": "iosuite",
-                "PASSWORD": DEFAULT_DB_PASSWORD}
+                "PASSWORD": ""}
     return env(PREFIX + key, defaults[key]) if key != "PASSWORD" else os.environ.get(PREFIX + key, defaults[key])
 
 
@@ -99,9 +99,10 @@ def standard(app: str, app_dir, log_name: str = None) -> dict:
       INTERNAL_URL          where the app is inside the network (http://192.168.1.151:8630); empty: the host's LAN
                             address and PORT (suite.local_url; inside a Docker container nothing unless it is set)
       BASE_URL              PUBLIC_URL, else http://localhost:PORT (the links in MCP results)
-      FORWARDED_ALLOW_IPS   the addresses that may tell the server the visitor's address and scheme (X-Forwarded-*): * by default
       TLS_CERT_FILE, TLS_KEY_FILE   HTTPS served directly instead of behind a reverse proxy: both files
       MCP_FORCED            MCP=1: the MCP endpoint is on whatever the setting says
+      KEEP_DELETED_DAYS     how long what was deleted is kept before it is purged for good (90): the marker a sync client
+                            learns a deletion from in ioCalendar and ioContacts, the change log and deleted folders' names in ioNotes
       ADMIN_USER, ADMIN_PASSWORD    the first admin account, created on a first start with no accounts (containers, installers)
 
     IOSUITE_DB_* (this module), <APP>_REPO, <APP>_BRANCH and UPDATE_CHECK (iosuite_shared.updates) are
@@ -116,8 +117,8 @@ def standard(app: str, app_dir, log_name: str = None) -> dict:
     return {"APP_DIR": app_dir, "DATA_DIR": data_dir, "STATIC_DIR": app_dir / "static", "LOG_FILE": log_file,
             "HOST": env("HOST", "0.0.0.0"), "PORT": port, "PUBLIC_URL": public_url,
             "INTERNAL_URL": env("INTERNAL_URL").rstrip("/"), "BASE_URL": public_url or f"http://localhost:{port}",
-            "FORWARDED_ALLOW_IPS": env("FORWARDED_ALLOW_IPS", "*"), "TLS_CERT_FILE": env("TLS_CERT_FILE"), "TLS_KEY_FILE": env("TLS_KEY_FILE"),
-            "MCP_FORCED": env_flag("MCP"), "ADMIN_USER": ADMIN_USER, "ADMIN_PASSWORD": ADMIN_PASSWORD}
+            "TLS_CERT_FILE": env("TLS_CERT_FILE"), "TLS_KEY_FILE": env("TLS_KEY_FILE"),
+            "MCP_FORCED": env_flag("MCP"), "KEEP_DELETED_DAYS": max(1, env_int("KEEP_DELETED_DAYS", 90)), "ADMIN_USER": ADMIN_USER, "ADMIN_PASSWORD": ADMIN_PASSWORD}
 
 
 def own_db(default_name: str, default_user: str = None) -> dict:

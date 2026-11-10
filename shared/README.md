@@ -34,7 +34,7 @@ the environment, such as a container's, win). The app reads it first, before any
 from iosuite_shared import config as shared_config
 shared_config.load_file(APP_DIR)            # APP_DIR/config.env into os.environ
 globals().update(shared_config.standard("iocalendar", APP_DIR))   # APP_DIR, DATA_DIR, STATIC_DIR, LOG_FILE, HOST, PORT, PUBLIC_URL,
-                                                                  # BASE_URL, FORWARDED_ALLOW_IPS, TLS_*_FILE, MCP_FORCED, ADMIN_USER/PASSWORD
+                                                                  # BASE_URL, TLS_*_FILE, MCP_FORCED, KEEP_DELETED_DAYS, ADMIN_USER/PASSWORD
 DB = shared_config.own_db("calendar")       # the app's own database: DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD (no default password)
 ```
 
@@ -104,7 +104,7 @@ app.include_router(auth.users_router())   # /api/users: list, add, the role here
                                           #           its sessions and deleting it (suite admins)
 app.include_router(auth.status_router(updater, extra=lambda request: {...}))   # GET /api/status (below)
 app.include_router(auth.server_router(updater, log_file=LOG_FILE))   # /api/server, /api/log (below)
-auth.install(app, limit_for=lambda path, ctype: 4 << 20, forwarded_allow_ips=config.FORWARDED_ALLOW_IPS)   # 400 for bad input, the headers, the body cap, the forwarded headers (below)
+auth.install(app, limit_for=lambda path, ctype: 4 << 20)   # 400 for bad input, the headers, the body cap, the forwarded headers (below)
 
 @router.post("/api/photos/tag", dependencies=[auth.access.editor_write])
 def tag(request: Request):
@@ -150,8 +150,23 @@ The code is in three modules: `iosuite_shared.fastapi` (`Auth`: who is asking, t
 `iosuite_shared.access` (the markers, the JSON body, the body cap) and `iosuite_shared.routers` (the routers);
 `from iosuite_shared.fastapi import Auth, public_user, json_body, BodyCap` keeps working.
 
-The Shared ioSuite database is reached through a small connection pool (`db.Pool`); an app uses the same class for
-its own database: `pool = db.Pool(connect)` and `with pool.tx() as con:`.
+The Shared ioSuite database is reached through a small connection pool (`db.Pool`) of connections in autocommit
+mode: a statement on its own is one round trip (no ping while the connection was used in the last 30 seconds, no
+commit), and `tx()` begins and commits a transaction. An app uses `db.Database` for its own database:
+`_db = db.Database(connect)`, then `_db.q`, `_db.one`, `_db.ex`, `_db.many` and `with _db.tx() as con:` (nested calls
+on a thread share the transaction, and `q` / `ex` inside the block run in it).
+
+Validation raises `iosuite_shared.Invalid` (a `ValueError`): `raise Invalid("A name is needed")` is a 400 with that
+message. ioCalendar and ioContacts share their WebDAV plumbing in `iosuite_shared.dav` (the `dav` extra).
+
+A request to an address somebody else chose (a profile's link, a bookmark) goes through `iosuite_shared.outbound`:
+`outbound.opener()` is an urllib opener whose connections go to the address that was checked, a redirect's too
+(`outbound.public` by default: the internet only; `outbound.not_this_machine` lets the home network in), and
+`outbound.check(url)` refuses a URL before anything is sent (`outbound.NotAllowed`, an `Invalid`).
+
+A job that runs once a day (purging what was deleted `KEEP_DELETED_DAYS` ago) is started in the app's lifespan with
+`task = chores.start(model.purge_deleted, name="purge of old deletion markers")` and stopped with `task.cancel()`: a
+run that fails is logged and tried again at the next turn.
 
 Per-user data: `users.get_settings(uid, app)`, `users.set_settings(uid, app, changes)`, and for anything else
 `users.get_value / set_value(uid, app, key, value)` (JSON values).
@@ -201,15 +216,18 @@ containers' health checks and the apps' shells read it alike:
  commit (signed in), update (admins, while the daily check is on: {version, remote, message, date, canRun, docker} | null), ...extra(request)}
 ```
 
-`auth.install(app)` adds what every app's FastAPI gets the same way: a `ValueError` or malformed JSON out of a route
-answers `400 {"detail": "Bad request: ..."}` (a `TypeError` is a bug and stays a 500 with its traceback;
-`not_found=(MyNotFound,)` names exceptions that mean 404; `error_key="error"` adds a second key beside `detail`);
-`X-Content-Type-Options: nosniff` and `Referrer-Policy: same-origin` on everything, `Cache-Control: no-store` on
+`auth.install(app)` adds what every app's FastAPI gets the same way: `Invalid` or malformed JSON out of a route
+answers `400 {"detail": "Bad request: ..."}`; any other `ValueError` does too, and is logged with its traceback,
+since nothing meant it for the client (a `TypeError` is a bug and stays a 500 with its traceback;
+`not_found=(MyNotFound,)` names exceptions that mean 404);
+`X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`, `X-Frame-Options: SAMEORIGIN` and
+`Content-Security-Policy: frame-ancestors 'self'` on everything, `Cache-Control: no-store` on
 `/api/` and `no-cache` elsewhere unless the route set its own; a body cap: a request larger than
 `limit_for(path, content_type)` bytes (`body_limit`, 4 MB, by default) is refused with 413 by its Content-Length
 before it is read, and as it arrives when it comes chunked or longer than it said; and the forwarded headers
 (`proxyauth.Forwarded`): the address the connection really came from is kept for proxy sign-in and the throttles, and
-`X-Forwarded-For` / `X-Forwarded-Proto` are believed from `forwarded_allow_ips` (the app's `FORWARDED_ALLOW_IPS`).
+`X-Forwarded-For` / `X-Forwarded-Proto` are believed from this machine and from the reverse proxies listed in
+`AUTH_PROXY_TRUSTED` (Settings › Security), the one list that says where the proxies are.
 The apps start uvicorn with `proxy_headers=False`, so this is the one place the headers are read.
 
 ## MCP
@@ -276,7 +294,7 @@ updater.start_daily()                                             # checks once 
 app.include_router(auth.server_router(updater, log_file=LOG_FILE,
     info=lambda: {"mcpEnabled": mcp_enabled(), "mcpLocked": MCP_FORCED,   # extra fields of GET /api/server: the MCP box,
                   "about": [["Database", "db:3306/iocalendar"]]},          # and the This server box
-    apply=save_switches))                                         # the app's own switches in the POST body (raise ValueError to refuse)
+    apply=save_switches))                                         # the app's own switches in the POST body (raise Invalid to refuse)
 ```
 
 | Route | What |

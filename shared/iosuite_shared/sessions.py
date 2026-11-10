@@ -6,10 +6,12 @@ once a day while in use, so a device used at least once a month stays signed in;
 every session of the account.
 """
 import hashlib
+import re
 import secrets
 import time
 
 from iosuite_shared import config, db, users
+from iosuite_shared.errors import Invalid
 
 COOKIE = config.COOKIE
 VIA_COOKIE = "iothing_via"  # how the session began (password, oneclick, cloudflare, proxy): shown in the account dialog only
@@ -75,11 +77,14 @@ def end(token: str):
     if token:
         db.ex("DELETE FROM ios_sessions WHERE token_hash = %s", (_hash(token),))
     invalidate()
+    for k in [k for k, v in _proxy_sessions.items() if v[0] == token]:
+        _proxy_sessions.pop(k, None)
 
 
 def end_all(user_id: int):
     db.ex("DELETE FROM ios_sessions WHERE user_id = %s", (user_id,))
     invalidate()
+    _proxy_sessions.clear()
 
 
 def user_from_token(token: str, app: str):
@@ -125,9 +130,34 @@ def list_sessions(user_id: int, current_token: str = None) -> list:
 
 
 def end_one(user_id: int, session_id: str):
-    """End one of the account's sessions by the id list_sessions gives."""
-    db.ex("DELETE FROM ios_sessions WHERE user_id = %s AND token_hash LIKE %s", (user_id, session_id[:16] + "%"))
+    """End one of the account's sessions by the id list_sessions gives (the first 16 hex digits of its hash)."""
+    if not re.fullmatch(r"[0-9a-f]{16}", session_id or ""):
+        raise Invalid("That is not a session id")
+    db.ex("DELETE FROM ios_sessions WHERE user_id = %s AND LEFT(token_hash, 16) = %s", (user_id, session_id))
     invalidate()
+    _proxy_sessions.clear()
+
+
+# A sign-in at the proxy gets a session here too (Auth.finish), and its cookie. A client that keeps no cookie (curl, a
+# script, a feed reader behind the proxy) would get a new row on every request, so the session made for one account,
+# app, address and client is handed out again for an hour instead.
+PROXY_REUSE_S = 3600
+_proxy_sessions: dict = {}  # (user id, app, via, ip, user agent) -> (token, at)
+
+
+def for_proxy(user_id: int, app: str, via: str, info: dict = None) -> str:
+    """The token of the session a proxy sign-in gets: the one made for the same account, app, address and client in
+    the last hour when it is still there, else a new one."""
+    i = info or {}
+    key = (user_id, app, via, i.get("ip"), i.get("user_agent"))
+    hit = _proxy_sessions.get(key)
+    if hit and time.time() - hit[1] < PROXY_REUSE_S and lookup(hit[0], app, i)[0]:
+        return hit[0]
+    token = create(user_id, app, via, i)
+    if len(_proxy_sessions) > 500:
+        _proxy_sessions.clear()
+    _proxy_sessions[key] = (token, time.time())
+    return token
 
 
 # ---- cookies

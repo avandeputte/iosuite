@@ -108,15 +108,18 @@ def test_cross_site_uses_the_forwarded_host():
 
 def test_forwarded_headers_keep_the_real_peer():
     users.create("alex", "secret123", "editor", "iocontacts")  # with an account: nothing here depends on the open rule
-    app, _ = make_app(forwarded_allow_ips="10.0.0.0/8")
-    c = TestClient(app, base_url="http://contacts.example.com")
-    r = c.get("/api/peer", headers={"x-forwarded-for": "203.0.113.9, 10.0.0.2", "x-forwarded-proto": "https"}).json()
-    assert r["peer"] == "testclient"  # the TestClient's address is not in 10/8: the headers are not believed
-    assert r["client"] == "testclient" and r["scheme"] == "http"
-    app, _ = make_app(forwarded_allow_ips="*")
-    c = TestClient(app, base_url="http://contacts.example.com")
-    r = c.get("/api/peer", headers={"x-forwarded-for": "203.0.113.9, 10.0.0.2", "x-forwarded-proto": "https"}).json()
-    assert r == {"peer": "testclient", "client": "203.0.113.9", "scheme": "https"}
+    app, _ = make_app()
+    fwd = {"x-forwarded-for": "8.8.8.8, 10.0.0.2", "x-forwarded-proto": "https"}
+    c = TestClient(app, base_url="http://contacts.example.com", client=("10.0.0.2", 50000))
+    r = c.get("/api/peer", headers=fwd).json()
+    assert r == {"peer": "10.0.0.2", "client": "10.0.0.2", "scheme": "http"}  # not a listed proxy: the headers are not believed
+    # the reverse proxies listed under Settings › Security are the ones believed, whatever the sign-in mode; and this machine
+    db.set_setting("auth_proxy_trusted", "10.0.0.0/8", "")
+    r = c.get("/api/peer", headers=fwd).json()
+    assert r == {"peer": "10.0.0.2", "client": "8.8.8.8", "scheme": "https"}
+    db.set_setting("auth_proxy_trusted", "", "")
+    c = TestClient(app, base_url="http://contacts.example.com", client=("127.0.0.1", 50000))
+    assert c.get("/api/peer", headers=fwd).json() == {"peer": "127.0.0.1", "client": "10.0.0.2", "scheme": "https"}
 
 
 def test_a_header_proxy_needs_its_address_named():
@@ -139,26 +142,35 @@ def test_cloudflare_token_is_verified_against_the_team_keys(monkeypatch):
     other = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     team, aud = "team.cloudflareaccess.com", ["a" * 64]
 
+    fetched = []
+
     class Signing:
-        def __init__(self, k):
-            self.key = k.public_key()
+        def __init__(self, k, kid):
+            self.key, self.key_id = k.public_key(), kid
 
     class Client:
         def __init__(self, *a, **kw):
             pass
 
-        def get_signing_key_from_jwt(self, token):
-            return Signing(key)
+        def get_signing_keys(self, refresh=False):
+            fetched.append(refresh)
+            return [Signing(key, "k1")]
 
     monkeypatch.setattr(jwt, "PyJWKClient", Client)
     proxyauth._jwks.update(team=None, client=None)
     claims = {"email": "alex@example.com", "aud": aud, "iss": f"https://{team}", "exp": int(time.time()) + 60}
-    good = jwt.encode(claims, key, algorithm="RS256")
-    assert proxyauth._cf_email(good, team, aud) == "alex@example.com"
-    assert proxyauth._cf_email(jwt.encode(claims, other, algorithm="RS256"), team, aud) is None  # another key
-    assert proxyauth._cf_email(jwt.encode({**claims, "aud": ["b" * 64]}, key, algorithm="RS256"), team, aud) is None
-    assert proxyauth._cf_email(jwt.encode({**claims, "exp": int(time.time()) - 120}, key, algorithm="RS256"), team, aud) is None
-    assert proxyauth._cf_email(jwt.encode({**claims, "iss": "https://other.cloudflareaccess.com"}, key, algorithm="RS256"), team, aud) is None
+    good = jwt.encode(claims, key, algorithm="RS256", headers={"kid": "k1"})
+    assert proxyauth._cf_email(good, team, aud) == "alex@example.com" and fetched == [False]
+    assert proxyauth._cf_email(jwt.encode(claims, other, algorithm="RS256", headers={"kid": "k1"}), team, aud) is None  # another key
+    # a key id nobody has seen: the keys are fetched again once, and not again for the next such token within the minute
+    del fetched[:]
+    for _ in range(5):
+        assert proxyauth._cf_email(jwt.encode(claims, other, algorithm="RS256", headers={"kid": "made-up"}), team, aud) is None
+    assert fetched.count(True) == 1
+    kid = {"kid": "k1"}
+    assert proxyauth._cf_email(jwt.encode({**claims, "aud": ["b" * 64]}, key, algorithm="RS256", headers=kid), team, aud) is None
+    assert proxyauth._cf_email(jwt.encode({**claims, "exp": int(time.time()) - 120}, key, algorithm="RS256", headers=kid), team, aud) is None
+    assert proxyauth._cf_email(jwt.encode({**claims, "iss": "https://other.cloudflareaccess.com"}, key, algorithm="RS256", headers=kid), team, aud) is None
 
 
 def test_session_is_renewed_once_a_day_and_the_cookie_set_again():

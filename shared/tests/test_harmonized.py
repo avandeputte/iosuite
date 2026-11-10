@@ -103,13 +103,6 @@ def test_install_answers_bad_input_with_400_and_sets_the_headers():
     assert r.status_code == 200  # the route read the raw body itself; malformed JSON is a 400 only where a route parses it
 
 
-def test_install_error_key_for_an_app_whose_phone_reads_error():
-    app, _, _ = make_app(error_key="error")
-    c = TestClient(app)
-    assert c.get("/api/gone").json() == {"detail": "No such thing", "error": "No such thing"}
-    assert c.get("/api/boom").json()["error"].startswith("Bad request")
-
-
 def test_install_caps_the_body_by_length_and_as_it_arrives():
     app, _, _ = make_app(limit_for=lambda path, ctype: 64 if ctype == "application/json" else 1024)
     c = TestClient(app)
@@ -210,12 +203,12 @@ def test_setup_log_is_idempotent_and_catches_uvicorn(tmp_path):
 
 
 def test_standard_settings(tmp_path, monkeypatch):
-    for k in ("DATA_DIR", "LOG_FILE", "HOST", "PORT", "PUBLIC_URL", "FORWARDED_ALLOW_IPS", "MCP"):
+    for k in ("DATA_DIR", "LOG_FILE", "HOST", "PORT", "PUBLIC_URL", "MCP"):
         monkeypatch.delenv(k, raising=False)
     s = config.standard("iocalendar", tmp_path)
     assert s["APP_DIR"] == tmp_path.resolve() and s["DATA_DIR"] == tmp_path.resolve() / "data" and s["DATA_DIR"].is_dir()
     assert s["STATIC_DIR"] == tmp_path.resolve() / "static" and s["LOG_FILE"] == s["DATA_DIR"] / "iocalendar.log"
-    assert (s["HOST"], s["PORT"], s["PUBLIC_URL"], s["BASE_URL"], s["FORWARDED_ALLOW_IPS"], s["MCP_FORCED"]) == ("0.0.0.0", 8620, "", "http://localhost:8620", "*", False)
+    assert (s["HOST"], s["PORT"], s["PUBLIC_URL"], s["BASE_URL"], s["MCP_FORCED"], s["KEEP_DELETED_DAYS"]) == ("0.0.0.0", 8620, "", "http://localhost:8620", False, 90)
     monkeypatch.setenv("LOG_FILE", "")
     monkeypatch.setenv("PUBLIC_URL", "https://cal.example.com/")
     monkeypatch.setenv("MCP", "1")

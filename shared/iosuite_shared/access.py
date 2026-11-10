@@ -4,6 +4,7 @@ from fastapi import Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from iosuite_shared import users
+from iosuite_shared.errors import Invalid
 
 ACCESS_ROLES = ("public", "signed_in", "editor", "admin", "suite_admin")
 UNCLAIMED = ("No account exists here yet. Create the first one from inside your network, at the server's own address "
@@ -37,7 +38,7 @@ class Access:
         uploader, ioPix's downloads). Carries the name as its role, so check_access_declared counts it and a reader
         sees what the route needs instead of a `public` that lies."""
         if name in ACCESS_ROLES:
-            raise ValueError(f"{name} is a built-in access level")
+            raise Invalid(f"{name} is a built-in access level")
 
         async def check(request: Request):
             user = getattr(request.state, "user", None)
@@ -52,7 +53,7 @@ class Access:
 
     def require(self, role: str, write: bool = False):
         if role not in ACCESS_ROLES:
-            raise ValueError(role)
+            raise Invalid(role)
 
         async def check(request: Request):
             user = getattr(request.state, "user", None)

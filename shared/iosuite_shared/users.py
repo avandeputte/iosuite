@@ -13,11 +13,12 @@ import time
 
 from iosuite_shared import db
 from iosuite_shared.passwords import burn, check_password, hash_password, needs_rehash
+from iosuite_shared.errors import Invalid
 
 ROLES = ("none", "viewer", "editor", "admin")
 APP_ROLES = ("viewer", "editor", "admin")  # what an admin picks for an account in an app ("none" takes the app away)
 RANK = {"none": 0, "viewer": 1, "editor": 2, "admin": 3}
-COLS = "id, name, display_name, email, hash, suite_admin, listed, created_at, last_login_at, session_gen, service"
+COLS = "id, name, display_name, email, hash, suite_admin, listed, created_at, last_login_at, service"
 
 _cache = {"any": None, "any_at": 0.0}
 CACHE_S = 3.0
@@ -42,8 +43,6 @@ def init() -> bool:
         logging.getLogger("iosuite_shared").error("the Shared ioSuite database (%s:%s/%s) cannot be reached: %s", db.params()["host"], db.params()["port"], db.params()["database"], e)
         return False
     db.error = None
-    if db.params()["password"] == config.DEFAULT_DB_PASSWORD:
-        logging.getLogger("iosuite_shared").warning("the Shared ioSuite database still has the default password; set IOSUITE_DB_PASSWORD in config.env (setup.sh makes one)")
     if config.ADMIN_USER and config.ADMIN_PASSWORD and not any_users():
         create(config.ADMIN_USER, config.ADMIN_PASSWORD, suite_admin=True)
     return True
@@ -70,14 +69,14 @@ def row(r, app: str | None = None) -> dict:
 def clean_email(email) -> str:
     email = (email or "").strip().lower()
     if email and (len(email) > 191 or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email)):
-        raise ValueError("That does not look like an email address")
+        raise Invalid("That does not look like an email address")
     return email
 
 
 def clean_name(name) -> str:
     name = (name or "").strip()
     if not name or len(name) > 64:
-        raise ValueError("A user name is needed (up to 64 characters)")
+        raise Invalid("A user name is needed (up to 64 characters)")
     return name
 
 
@@ -135,15 +134,15 @@ def create(name: str, password: str, role: str | None = None, app: str | None = 
     """A new account; with app and role, that role there too. ValueError with the message to show."""
     name, email = clean_name(name), clean_email(email)
     if role is not None and role not in ROLES:
-        raise ValueError("Unknown role")
+        raise Invalid("Unknown role")
     if password == "" and (suite_admin or (role or "viewer") not in ("none", "viewer")):
-        raise ValueError("Only a viewer can have no password")
+        raise Invalid("Only a viewer can have no password")
     if password != "" and len(password) < 8:
-        raise ValueError("The password needs at least 8 characters")
+        raise Invalid("The password needs at least 8 characters")
     if find(name):
-        raise ValueError("That user name is taken")
+        raise Invalid("That user name is taken")
     if email and db.one("SELECT 1 AS x FROM ios_users WHERE email = %s", (email,)):
-        raise ValueError("Another account already has that email address")
+        raise Invalid("Another account already has that email address")
     uid = db.ex("INSERT INTO ios_users (name, display_name, email, hash, suite_admin, created_at) VALUES (%s, %s, %s, %s, %s, %s)",
                 (name, (display_name or "").strip()[:128] or None, email or None, hash_password(password) if password else "", 1 if suite_admin else 0, int(time.time())))
     if app and role:
@@ -156,17 +155,17 @@ def update(user_id: int, name=None, password=None, email=None, display_name=None
     """Change the given fields (None: unchanged). A new password or a changed suite_admin ends the account's other sessions."""
     cur = db.one(f"SELECT {COLS} FROM ios_users WHERE id = %s", (user_id,))
     if not cur:
-        raise ValueError("No such user")
+        raise Invalid("No such user")
     sets = {}
     if email is not None:
         email = clean_email(email)
         if email and db.one("SELECT 1 AS x FROM ios_users WHERE email = %s AND id != %s", (email, user_id)):
-            raise ValueError("Another account already has that email address")
+            raise Invalid("Another account already has that email address")
         sets["email"] = email or None
     if name is not None:
         name = clean_name(name)
         if db.one("SELECT 1 AS x FROM ios_users WHERE name = %s AND id != %s", (name, user_id)):
-            raise ValueError("That user name is taken")
+            raise Invalid("That user name is taken")
         sets["name"] = name
     if display_name is not None:
         sets["display_name"] = display_name.strip()[:128] or None
@@ -174,27 +173,27 @@ def update(user_id: int, name=None, password=None, email=None, display_name=None
         sets["listed"] = 1 if listed else 0
     if suite_admin is not None:
         if suite_admin and not cur["hash"] and password in (None, ""):
-            raise ValueError("Set a password first; an account without one can only be a viewer")
+            raise Invalid("Set a password first; an account without one can only be a viewer")
         if not suite_admin and cur["suite_admin"] and db.one("SELECT count(*) AS n FROM ios_users WHERE suite_admin = 1 AND id != %s", (user_id,))["n"] == 0:
-            raise ValueError("That is the only suite admin; make someone else one first")
+            raise Invalid("That is the only suite admin; make someone else one first")
         sets["suite_admin"] = 1 if suite_admin else 0
     if password is not None:
         if password == "":  # remove the password: one-click sign-in, viewers only
             still_admin = cur["suite_admin"] if suite_admin is None else suite_admin
             if still_admin or RANK[_max_role(user_id)] > 1:
-                raise ValueError("Only a viewer can have no password")
+                raise Invalid("Only a viewer can have no password")
             sets["hash"] = ""
         else:
             if len(password) < 8:
-                raise ValueError("The password needs at least 8 characters")
+                raise Invalid("The password needs at least 8 characters")
             sets["hash"] = hash_password(password)
     if role is not None:
         if not app:
-            raise ValueError("A role needs an app")
+            raise Invalid("A role needs an app")
         if role not in ROLES:
-            raise ValueError("Unknown role")
+            raise Invalid("Unknown role")
         if role not in ("none", "viewer") and not (cur["hash"] or sets.get("hash")):
-            raise ValueError("Set a password first; an account without one can only be a viewer")
+            raise Invalid("Set a password first; an account without one can only be a viewer")
     if sets:
         db.ex("UPDATE ios_users SET " + ", ".join(f"{k} = %s" for k in sets) + " WHERE id = %s", (*sets.values(), user_id))
     if role is not None:
@@ -209,7 +208,7 @@ def update(user_id: int, name=None, password=None, email=None, display_name=None
 def delete(user_id: int):
     r = db.one("SELECT suite_admin FROM ios_users WHERE id = %s", (user_id,))
     if r and r["suite_admin"] and db.one("SELECT count(*) AS n FROM ios_users WHERE suite_admin = 1")["n"] == 1:
-        raise ValueError("That is the only suite admin; make someone else one first")
+        raise Invalid("That is the only suite admin; make someone else one first")
     from iosuite_shared import apppasswords
     apppasswords.forget_user(user_id)
     db.ex("DELETE FROM ios_users WHERE id = %s", (user_id,))
@@ -267,7 +266,7 @@ def roles_of(user_id: int) -> dict:
 
 def set_role(user_id: int, app: str, role: str):
     if role not in ROLES:
-        raise ValueError("Unknown role")
+        raise Invalid("Unknown role")
     db.ex("INSERT INTO ios_user_roles (user_id, app, role) VALUES (%s, %s, %s) ON DUPLICATE KEY UPDATE role = VALUES(role)", (user_id, app, role))
     invalidate()
 
