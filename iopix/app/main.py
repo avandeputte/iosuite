@@ -6,6 +6,7 @@ app password), whether sign-in is required at all, and refuses cross-site writes
 suite. The library (digiKam's database and the photo files) is only read here; the few endpoints that change it
 (sidecars, image files, digiKam's database on request) declare access.editor_write or access.admin_write on their route
 and go through the modules that own those writes."""
+import copy
 import logging
 import threading
 from contextlib import asynccontextmanager
@@ -15,6 +16,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi import HTTPException
 from iosuite_shared import mcp as shared_mcp
 from iosuite_shared.fastapi import public_user
+from iosuite_shared.proxyauth import peer_of
 from iosuite_shared.updates import setup_log
 
 from app.ai import analysis, models as dlmodels
@@ -54,7 +56,7 @@ async def lifespan(_app):
         tagmanager.start_worker()
     facemgr.resume_queue()  # and the face sidecar rewrites a restart interrupted
     refresh(initial=True)
-    threading.Thread(target=thumbs.prune_previews, daemon=True).start()
+    threading.Thread(target=thumbs.keep_pruned, name="cache-prune", daemon=True).start()  # the previews and the cut-down thumbnails, under their caps
     threading.Thread(target=watch, name="reindex", daemon=True).start()
     scanner.start(events.after_write)  # the file scanner (Settings › Library › File scanner): passes only while it is on
     if dkdb.no_digikam() and scanner.enabled():
@@ -108,12 +110,26 @@ def _before(request: Request):
 app.middleware("http")(auth.middleware(open_paths=OPEN_PATHS, open_prefixes=OPEN_PREFIXES, is_open=_open_to_visitors, before=_before))
 
 
+def _outside(request: Request) -> bool:
+    """Whether the request comes from outside the network (iosuite-shared's rule: through Cloudflare, from a public
+    address, or forwarded by a proxy that is not listed as trusted). When the Shared ioSuite database is away as
+    well, the list of trusted proxies cannot be read: only a proxy on this machine is believed then."""
+    try:
+        return auth.outside(request)
+    except Exception:  # noqa: BLE001
+        proxy = copy.copy(auth.proxy)
+        proxy.opt = lambda name: None
+        return proxy.external(request.headers, peer_of(request))
+
+
 async def _without_database(request: Request, call_next):
     """The viewer has no usable database of its own (vdb.ready() is false): the app shell and the status answer,
     the database set-up endpoints are served here directly, as an admin (there is nobody else yet, as on a fresh
     install; the sign-in middleware and the routes' own checks would need the database), and everything else
     says what is missing. The viewer restarts once a database is chosen. Once a database is configured, only
-    Retry stays open (see below)."""
+    Retry stays open (see below). While none is configured, the set-up endpoints answer the network the viewer
+    is on and nobody else: they choose the server the viewer connects to, so a visitor from the internet who
+    finds a fresh install gets the shell and a 403."""
     path, method = request.url.path, request.method
     if path == "/api/status":
         return JSONResponse({"ok": False, "app": config.APP, "name": APP_NAME_DEFAULT, "version": APP_VERSION, "appName": APP_NAME_DEFAULT,
@@ -136,6 +152,9 @@ async def _without_database(request: Request, call_next):
                 return JSONResponse({"detail": f"{APP_NAME_DEFAULT}'s database is configured but not answering ({vdb.error}). "
                                                "Retry once it is up, or change the connection with the DB_* settings in config.env."}, status_code=403)
             return JSONResponse({"detail": "Not found"}, status_code=404)
+        if _outside(request):
+            return JSONResponse({"detail": f"{APP_NAME_DEFAULT} has no database yet. Choose one from the network the server is on: "
+                                           "open the viewer at the server's own address, or put the DB_* settings in config.env."}, status_code=403)
         try:
             if path == "/api/viewerdb" and method == "GET":
                 return JSONResponse(settings.api_viewerdb())

@@ -69,6 +69,7 @@ iopix's own data lives on a MariaDB or MySQL server (see [iopix's own database](
 | `THUMB_HEIGHT` / `THUMB_MAX_WIDTH` / `THUMB_QUALITY` | `360` / `1080` / `76` | grid thumbnails |
 | `PREVIEW_SIZE` / `PREVIEW_QUALITY` | `2560` / `86` | viewer previews |
 | `PREVIEW_CACHE_MAX_MB` | `8000` | preview cache size cap |
+| `VARIANT_CACHE_MAX_MB` | `2000` | size cap of the cropped and small thumbnails and the video chapter frames |
 
 ## Maps and outside services
 

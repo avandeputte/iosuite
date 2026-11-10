@@ -1,14 +1,13 @@
 """The operator's diagnostics, for admins: what one would check in a shell. The
 viewer's health, its log and job queue, what is inside one photo's or video's file and which of
-its files exist on disk, the proxy sign-in setup, the video repair, and the updater."""
+its files exist on disk, the video repair, and the updater."""
 import json
 import os
-from typing import Literal, Optional
+from typing import Literal
 
 from mcp.server.mcpserver.exceptions import ToolError
 
 from app import __version__, config, jobs, thumbs, users
-from iosuite_shared import proxyauth
 from app.auth import auth as auth_shared, updater
 from iosuite_shared.updates import tail
 from app.photos import consistency, edits, repair
@@ -127,29 +126,6 @@ def repair_video(photo_id: int) -> dict:
         raise ToolError(str(e))
 
 
-@server.tool(annotations=WRITES)
-def proxy_signin(mode: Optional[str] = None, cf_access_team: Optional[str] = None, cf_access_aud: Optional[str] = None,
-                 trusted: Optional[str] = None, create_role: Optional[str] = None) -> dict:
-    """Sign-in at a reverse proxy (Cloudflare Access, Authelia behind HAProxy/nginx/Caddy/Traefik): with no settings
-    given, how it is set up and the Cloudflare Access team and application last seen in requests; with settings, saves
-    them (mode: off|cloudflare|haproxy|nginx|caddy|traefik|header; an empty string clears one; config.env still wins).
-    Admins only."""
-    need_admin()
-    changes = {k: v for k, v in (("AUTH_PROXY", mode), ("CF_ACCESS_TEAM", cf_access_team), ("CF_ACCESS_AUD", cf_access_aud),
-                                 ("AUTH_PROXY_TRUSTED", trusted), ("AUTH_PROXY_CREATE", create_role)) if v is not None}
-    if "AUTH_PROXY" in changes and changes["AUTH_PROXY"] not in ("", "off", *proxyauth.PRESETS):
-        raise ToolError("mode: off, cloudflare, haproxy, nginx, caddy, traefik or header")
-    if changes:
-        auth_shared.proxy.save(changes)
-    out = auth_shared.proxy.status()
-    # which account each person the proxy lets in maps to (matched on email, then name)
-    out["accounts"] = [{"name": u["name"], "role": u["role"], "email": u.get("email") or None} for u in users.list_users()]
-    if out["seen"].get("email"):
-        u = auth_shared.proxy.user_for(out["seen"]["email"]) if auth_shared.proxy.mode() != "off" else None
-        out["seen"]["account"] = u["name"] if u else None
-    return out
-
-
 @server.tool(annotations=READ_ONLY)
 def inspect_file(photo_id: int) -> dict:
     """What is inside one photo's or video's file, for "it does not show" questions: exiftool's reading of its
@@ -252,17 +228,15 @@ def check_for_update() -> dict:
 
 
 @server.tool(annotations=UPDATES)  # openWorld: it reaches GitHub
-def update_viewer(ref: str = "") -> dict:
-    """Update the viewer to the latest commit on GitHub and restart it (update.sh: code, packages,
-    service; settings and data are kept). Admins only. ref: the commit sha (or branch) to install; pass the sha
-    you just pushed, since GitHub can report the previous commit for a short while after a push.
-    Nothing happens when that commit is already installed. The connection drops when the viewer
-    restarts; call check_for_update afterwards: lastUpdate carries the outcome and installed the
-    commit. Not available in Docker (pull the image)."""
+def update_viewer() -> dict:
+    """Update the viewer to the latest commit of its branch on GitHub and restart it (update.sh: code, packages,
+    service; settings and data are kept). Admins only. Nothing happens when that commit is already installed.
+    The connection drops when the viewer restarts; call check_for_update afterwards: lastUpdate carries the
+    outcome and installed the commit. Not available in Docker (pull the image)."""
     need_admin()
     try:
-        updater.run(ref)
+        updater.run()
     except RuntimeError as e:
         raise ToolError(str(e))
-    return {"started": True, "installed": updater.local_commit()[:7], "ref": ref or "main",
+    return {"started": True, "installed": updater.local_commit()[:7],
             "note": "update.sh is running; the viewer restarts when it finishes (about a minute). Then call check_for_update: lastUpdate says what happened."}

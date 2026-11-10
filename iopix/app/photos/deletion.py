@@ -184,8 +184,8 @@ def forget(ids: list):
         semantic.remove_ids(ids)
     except Exception as e:
         log.warning("search embeddings of deleted photos were not removed: %s", e)
-    for pid in ids:  # thumbnails and previews: <kind>/<id % 256>/<id>-<stamp>.jpg
-        for d in ("t", "p"):
+    for pid in ids:  # thumbnails, previews and what is cut from them: <kind>/<id % 256>/<id>-<stamp>....jpg
+        for d in ("t", "p", "c", "s", "vf"):
             folder = config.CACHE_DIR / d / f"{int(pid) % 256:02x}"
             for f in folder.glob(f"{int(pid)}-*.jpg") if folder.exists() else []:
                 try:

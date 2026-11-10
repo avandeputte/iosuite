@@ -136,12 +136,13 @@ def test_proxy_sign_in_settings(page, server):
         box.locator("textarea").fill("aud-tag")
         box.locator("button", has_text="Save for every app").click()
         page.wait_for_selector(".iosa b:has-text('Cloudflare Access tokens are verified')", timeout=10000)
-        d = page.request.get(server + "/api/settings/proxy").json()
-        assert d["mode"] == "cloudflare" and d["team"] == "myteam.cloudflareaccess.com" and d["aud"] == "aud-tag"
-        assert page.request.post(server + "/api/settings/proxy", data={"CF_ACCESS_AUD": ""}).status == 400, "team without AUD refused"
+        d = page.request.get(server + "/api/suite-admin/proxy").json()
+        assert d["here"]["mode"] == "cloudflare" and d["values"]["CF_ACCESS_TEAM"] == "myteam.cloudflareaccess.com" and d["auds"] == ["aud-tag"]
+        assert page.request.put(server + "/api/suite-admin/proxy", data={"CF_ACCESS_AUD": ""}).status == 400, "team without AUD refused"
+        assert page.request.get(server + "/api/settings/proxy").status == 404 and page.request.get(server + "/api/auth/proxy").status == 404, "one place to set it, for suite admins"
     finally:
-        page.request.post(server + "/api/settings/proxy", data={"AUTH_PROXY": "off", "CF_ACCESS_TEAM": "", "CF_ACCESS_AUD": ""})
-    assert page.request.get(server + "/api/settings/proxy").json()["mode"] == "off"
+        page.request.put(server + "/api/suite-admin/proxy", data={"AUTH_PROXY": "off", "CF_ACCESS_TEAM": "", "CF_ACCESS_AUD": ""})
+    assert page.request.get(server + "/api/suite-admin/proxy").json()["here"]["mode"] == "off"
 
 def test_csp_lets_the_app_and_the_vendored_map_run(browser, server):
     """The page carries a Content Security Policy: the inline theme script is hashed, Leaflet comes from /vendor (and finds

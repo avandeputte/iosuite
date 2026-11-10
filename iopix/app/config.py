@@ -46,9 +46,12 @@ THUMB_QUALITY = env_int("THUMB_QUALITY", 76)
 # Lightbox previews: longest edge.
 PREVIEW_SIZE = env_int("PREVIEW_SIZE", 2560)
 PREVIEW_QUALITY = env_int("PREVIEW_QUALITY", 86)
-# Previews are only made for photos you open; the oldest are pruned at startup
-# once the folder grows past this many megabytes.
+# Previews are only made for photos you open; the oldest are pruned at startup and
+# every few hours once the folder grows past this many megabytes.
 PREVIEW_CACHE_MAX_MB = env_int("PREVIEW_CACHE_MAX_MB", 8000)
+# The cropped and small copies of thumbnails and the chapter frames of videos (cache/c, cache/s, cache/vf) are
+# made on request, in a fixed set of shapes and sizes; together they are pruned the same way past this size.
+VARIANT_CACHE_MAX_MB = env_int("VARIANT_CACHE_MAX_MB", 2000)
 
 # Build all grid thumbnails in the background after startup.
 PREWARM = env_flag("PREWARM", True)
