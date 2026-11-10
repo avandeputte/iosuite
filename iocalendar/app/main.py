@@ -13,7 +13,7 @@ from fastapi import FastAPI
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from iosuite_shared import mcp as shared_mcp
+from iosuite_shared import chores, mcp as shared_mcp
 from iosuite_shared.updates import setup_log
 
 from app import __version__, api, caldav, config, contacts, db, holiday, ical, mcp, model, users
@@ -49,9 +49,11 @@ async def lifespan(app: FastAPI):
     updater.start_daily()   # the daily "is there a newer version" check, while the setting allows it
     contacts.start_sync()   # the Birthdays calendar from ioContacts, every few hours
     holiday.start_sync()    # the Holidays calendar, every day
+    purge = chores.start(model.purge_deleted, name="purge of old deletion markers")  # once a day: KEEP_DELETED_DAYS
     log.info("ioCalendar %s started, database %s:%s/%s", __version__, config.DB_HOST, config.DB_PORT, config.DB_NAME)
     async with shared_mcp.running(mcp.server):  # the MCP endpoint (/mcp) lives in this process
         yield
+    purge.cancel()
 
 
 app = FastAPI(title="ioCalendar", version=__version__, lifespan=lifespan, docs_url="/api/docs", redoc_url=None,
@@ -79,7 +81,7 @@ def _limit_for(path: str, ctype: str) -> int:
 
 
 # 400 for bad input, the headers, no-store on the API, the body cap: the same in every app of the suite
-auth.install(app, limit_for=_limit_for, not_found=(model.NotFound,), forwarded_allow_ips=config.FORWARDED_ALLOW_IPS)  # also X-Forwarded-* from those proxies
+auth.install(app, limit_for=_limit_for, not_found=(model.NotFound,))
 
 
 def _status_extra(request) -> dict:

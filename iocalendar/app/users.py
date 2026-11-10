@@ -5,21 +5,18 @@ calendars too), admin (also settings and users); an account holds a role per app
 Web sessions are the suite's cookie (shared by the apps on the domain). CalDAV clients, the REST API and MCP use HTTP
 Basic or a bearer app password (one per device, revocable, shown once). The subscription links (/ics/...) carry a
 private token per account instead, since calendar apps cannot sign in to a subscription.
+
+What is here is ioCalendar's own: the accounts with their role here, app passwords with the CalDAV-only scope, and the
+subscription links. Whether an account may write or is an admin is asked of iosuite_shared.users directly.
 """
 import secrets
 
 from iosuite_shared import apppasswords, users as shared
-from iosuite_shared.fastapi import public_user
 
 from app import db
 from app.auth import APP
 
 ROLES = shared.APP_ROLES
-
-
-def public(u: dict | None) -> dict | None:
-    """The account as the web app sees it: the same fields /api/status carries in every app of the suite."""
-    return public_user(u)
 
 
 def get(uid: int) -> dict | None:
@@ -34,48 +31,9 @@ def all_users() -> list[dict]:
     return sorted(shared.list_users(APP), key=lambda u: u["name"].lower())
 
 
-def any_users() -> bool:
-    return shared.any_users()
-
-
-def create(name: str, password: str | None, role: str = "editor", display_name: str | None = None, email: str | None = None) -> dict:
-    return shared.create(name, password or "", role, APP, email=email or "", display_name=display_name or "")
-
-
-def update(uid: int, **f) -> dict:
-    kw = {}
-    if "display_name" in f:
-        kw["display_name"] = f["display_name"] or ""
-    if "email" in f:
-        kw["email"] = f["email"] or ""
-    if f.get("role") is not None:
-        kw["role"], kw["app"] = f["role"], APP
-    if f.get("password") is not None:
-        kw["password"] = f["password"]
-    if kw:
-        shared.update(uid, **kw)
-    return get(uid)
-
-
 def init() -> None:
     """The Shared ioSuite database's tables, and the ADMIN_USER / ADMIN_PASSWORD account on a first start with no accounts."""
     shared.init()
-
-
-def can_write(u: dict | None) -> bool:
-    return bool(u) and u.get("role") in ("editor", "admin")
-
-
-def is_admin(u: dict | None) -> bool:
-    return bool(u) and u.get("role") == "admin"
-
-
-def settings(uid: int) -> dict:
-    return shared.get_settings(uid, APP)
-
-
-def authenticate(name: str, password: str) -> dict | None:
-    return apppasswords.authenticate(name, password, APP)
 
 
 def create_app_password(uid: int, label: str, caldav_only: bool = False) -> str:

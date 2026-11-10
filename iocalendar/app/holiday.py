@@ -21,6 +21,7 @@ from pathlib import Path
 from icalendar import Event
 
 from app import config, db, ical, model
+from iosuite_shared.errors import Invalid
 
 log = logging.getLogger("iocalendar.holidays")
 SYNC_EVERY = 24 * 3600
@@ -88,7 +89,7 @@ def country_info(code: str) -> dict:
     """{code, name, regions: [{code, name}], languages: [...], defaultLanguage} of one country."""
     code = (code or "").upper()
     if code not in supported():
-        raise ValueError(f"No holidays known for country '{code}'")
+        raise Invalid(f"No holidays known for country '{code}'")
     h = _lib().country_holidays(code)
     names = {}
     for alias, sub in (getattr(h, "subdivisions_aliases", None) or {}).items():
@@ -181,27 +182,27 @@ def public_settings() -> dict:
 
 def _check(it) -> dict:
     if not isinstance(it, dict):
-        raise ValueError("Each entry is {country, region?, language?}")
+        raise Invalid("Each entry is {country, region?, language?}")
     c = str(it.get("country") or "").strip().upper()
     if c not in supported():
-        raise ValueError(f"No holidays known for country '{it.get('country') or ''}'")
+        raise Invalid(f"No holidays known for country '{it.get('country') or ''}'")
     r = str(it.get("region") or "").strip().upper() or None
     if r and r not in supported()[c]:
-        raise ValueError(f"'{it.get('region')}' is not a region of {c}")
+        raise Invalid(f"'{it.get('region')}' is not a region of {c}")
     lang = str(it.get("language") or "").strip() or None
     if lang and lang not in country_info(c)["languages"]:
-        raise ValueError(f"Holiday names for {c} come in: " + ", ".join(country_info(c)["languages"]))
+        raise Invalid(f"Holiday names for {c} come in: " + ", ".join(country_info(c)["languages"]))
     return {"country": c, "region": r, "language": lang}
 
 
 def save_settings(items) -> None:
     """The whole list: [{country, region?, language?}], one Holidays calendar each; [] switches them all off."""
     if not isinstance(items, list):
-        raise ValueError("items: a list of {country, region?, language?}")
+        raise Invalid("items: a list of {country, region?, language?}")
     out = [_check(it) for it in items]
     dup = {c for c in (x["country"] for x in out) if [x["country"] for x in out].count(c) > 1}
     if dup:
-        raise ValueError("Each country once: " + ", ".join(sorted(dup)))
+        raise Invalid("Each country once: " + ", ".join(sorted(dup)))
     db.set_setting("holidays_countries", json.dumps(out))
 
 
@@ -218,7 +219,7 @@ def remove_country(country: str) -> None:
     c = str(country or "").strip().upper()
     items = settings()["items"]
     if c not in [x["country"] for x in items]:
-        raise ValueError(f"No Holidays calendar for '{country}'")
+        raise Invalid(f"No Holidays calendar for '{country}'")
     save_settings([x for x in items if x["country"] != c])
 
 

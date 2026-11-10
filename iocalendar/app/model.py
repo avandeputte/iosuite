@@ -11,7 +11,8 @@ import re
 import threading
 from collections import OrderedDict
 
-from app import db, ical, members
+from app import config, db, ical, members
+from iosuite_shared.errors import Invalid
 
 PALETTE = ["#8e44d6", "#0b8a9e", "#1a73e8", "#e0426a", "#1e8e3e", "#e8710a", "#4b53c7", "#e8a100", "#5f6b7a", "#1294b8"]
 
@@ -135,7 +136,9 @@ def update_calendar(cid: int, **f) -> None:
 
 
 def delete_calendar(cid: int) -> None:
-    db.ex("DELETE FROM cal_calendars WHERE id = %s", (cid,))
+    with db.tx():
+        db.ex("DELETE FROM cal_calendars WHERE id = %s", (cid,))
+        db.set_setting(f"{PURGED}{cid}", None)
     _cache_clear()
 
 
@@ -224,7 +227,7 @@ def save(cid: int, cal, event_id: int | None = None, href: str | None = None, us
 
 
 def delete(eid: int) -> None:
-    """A tombstone: CalDAV clients learn of the deletion from the next sync."""
+    """A deletion marker: CalDAV clients learn of the deletion from the next sync. Kept for KEEP_DELETED_DAYS (purge_deleted)."""
     with db.tx():
         r = get_row(eid)
         if not r or r["deleted"]:
@@ -232,6 +235,27 @@ def delete(eid: int) -> None:
         tok = bump(r["calendar_id"])
         db.ex("UPDATE cal_events SET deleted = 1, ics = '', changed_token = %s WHERE id = %s", (tok, eid))
         db.ex("DELETE FROM cal_event_people WHERE event_id = %s", (eid,))
+
+
+PURGED = "purged_token:"  # cal_settings: per calendar, the newest change among the deletion markers that were purged
+
+
+def purge_deleted(days: int | None = None) -> int:
+    """Remove the deletion markers older than `days` (KEEP_DELETED_DAYS); how many went. Each calendar remembers how
+    far its purged markers reached, so a client that last synced before that is told to start over (purged_before)
+    instead of being left with events that were deleted."""
+    days = config.KEEP_DELETED_DAYS if days is None else days
+    with db.tx():
+        old = db.q("SELECT calendar_id AS cal, max(changed_token) AS tok FROM cal_events WHERE deleted = 1 "
+                   "AND updated_at < NOW() - INTERVAL %s DAY GROUP BY calendar_id", (days,))
+        for r in old:
+            db.set_setting(f"{PURGED}{r['cal']}", str(max(r["tok"], purged_before(r["cal"]))))
+        return db.ex("DELETE FROM cal_events WHERE deleted = 1 AND updated_at < NOW() - INTERVAL %s DAY", (days,)) if old else 0
+
+
+def purged_before(cid: int) -> int:
+    """The sync token up to which this calendar's deletion markers are gone (0: none were purged)."""
+    return int(db.get_setting(f"{PURGED}{cid}") or 0)
 
 
 def move(eid: int, to_cid: int) -> dict:
@@ -243,7 +267,7 @@ def move(eid: int, to_cid: int) -> dict:
             return r
         other = by_uid(to_cid, r["uid"])
         if other:
-            raise ValueError("That calendar already has this event")
+            raise Invalid("That calendar already has this event")
         cal = parsed(r)
         delete(eid)
         return save(to_cid, cal, None, None, r.get("created_by"))
@@ -326,8 +350,10 @@ def _like(w: str) -> str:
     return "%" + re.sub(r"([\\%_])", r"\\\1", w) + "%"
 
 
-def search_rows(cids: list[int], q: str, limit: int = 100) -> list[dict]:
-    """Events whose title, place, notes or people match every word of q."""
+def search_rows(cids: list[int], q: str, limit: int = 100, member_ids: set[int] | None = None) -> list[dict]:
+    """Events whose title, place, notes or people match every word of q, newest first. member_ids: only those tagged
+    with one of these family members. The tags are categories inside the object, so the database narrows the search
+    to the events that have categories at all and they are read a page at a time until `limit` are found."""
     if not cids:
         return []
     where, args = [f"e.calendar_id IN ({db.marks(len(cids))})", "e.deleted = 0"], list(cids)
@@ -336,7 +362,22 @@ def search_rows(cids: list[int], q: str, limit: int = 100) -> list[dict]:
         where.append("(e.summary LIKE %s OR e.location LIKE %s OR e.description LIKE %s OR EXISTS (SELECT 1 FROM cal_event_people p "
                      "WHERE p.event_id = e.id AND (p.name LIKE %s OR p.email LIKE %s)))")
         args += [like] * 5
-    return db.q(f"SELECT e.* FROM cal_events e WHERE {' AND '.join(where)} ORDER BY e.range_start DESC LIMIT %s", (*args, int(limit)))
+    if member_ids is not None:
+        where.append("e.ics LIKE '%%CATEGORIES%%'")
+    sql = f"SELECT e.* FROM cal_events e WHERE {' AND '.join(where)} ORDER BY e.range_start DESC, e.id DESC LIMIT %s OFFSET %s"
+    if member_ids is None:
+        return db.q(sql, (*args, int(limit), 0))
+    out, offset = [], 0
+    while len(out) < limit:
+        page = db.q(sql, (*args, SEARCH_PAGE, offset))
+        out += [r for r in page if tagged(r, member_ids)]
+        if len(page) < SEARCH_PAGE:
+            break
+        offset += SEARCH_PAGE
+    return out[:limit]
+
+
+SEARCH_PAGE = 500
 
 
 def event_out(r: dict, cal_row: dict | None = None, recurrence_id: str | None = None) -> dict:

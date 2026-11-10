@@ -11,6 +11,7 @@ too. The other categories of an event stay as they are.
 import time
 
 from app import db, users
+from iosuite_shared.errors import Invalid
 
 _cache: dict = {"at": 0.0, "list": None}
 TTL = 30
@@ -80,7 +81,7 @@ def find(ref, fam: list[dict] | None = None) -> dict:
     for m in fam:
         if s.lower() in _keys(m):
             return m
-    raise ValueError(f"No family member '{ref}'. The family: " + ", ".join(m["displayName"] for m in fam))
+    raise Invalid(f"No family member '{ref}'. The family: " + ", ".join(m["displayName"] for m in fam))
 
 
 def resolve(refs, fam: list[dict] | None = None) -> list[dict]:
