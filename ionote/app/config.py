@@ -3,8 +3,8 @@ environment, which wins. The settings every app of the suite shares come from io
 
 Everything ionotes keeps lives in its database: MySQL/MariaDB (DB_TYPE=mysql and DB_HOST, DB_PORT, DB_NAME,
 DB_USER, DB_PASSWORD), or a SQLite file in DATA_DIR for a quick try or the tests. The notes' images are stored in
-the database too (BLOBs), so one database backup holds everything. DATA_DIR only keeps the session secret,
-the log and the database settings an admin saved from the web app.
+the database too (BLOBs), so one database backup holds everything. DATA_DIR only keeps the log, the update result
+and the SQLite file.
 """
 import os
 from pathlib import Path
@@ -15,8 +15,8 @@ APP = "ionotes"
 APP_DIR = Path(__file__).resolve().parent.parent
 shared.load_file(APP_DIR)  # first: iosuite_shared reads its settings (the Shared ioSuite database, COOKIE_DOMAIN) from it too
 env, env_flag, env_int = shared.env, shared.env_flag, shared.env_int
-# APP_DIR, DATA_DIR, STATIC_DIR, LOG_FILE, HOST, PORT, PUBLIC_URL, BASE_URL, FORWARDED_ALLOW_IPS, TLS_CERT_FILE, TLS_KEY_FILE,
-# MCP_FORCED, ADMIN_USER, ADMIN_PASSWORD: the same names in every app (iosuite_shared.config.standard says what each is)
+# APP_DIR, DATA_DIR, STATIC_DIR, LOG_FILE, HOST, PORT, PUBLIC_URL, BASE_URL, TLS_CERT_FILE, TLS_KEY_FILE,
+# MCP_FORCED, KEEP_DELETED_DAYS, ADMIN_USER, ADMIN_PASSWORD: the same names in every app (iosuite_shared.config.standard says what each is)
 globals().update(shared.standard(APP, APP_DIR))
 
 # OCR=0 keeps the server from reading text in images itself (the apps read it on the device and send it along)

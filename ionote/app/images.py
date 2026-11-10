@@ -22,7 +22,7 @@ except ImportError:  # pragma: no cover
 KINDS = {"PNG": "image/png", "JPEG": "image/jpeg", "GIF": "image/gif", "WEBP": "image/webp", "TIFF": "image/tiff", "BMP": "image/bmp"}
 
 
-MAX_PIXELS = 100_000_000  # a long scrolling screenshot fits; ~400 MB once unpacked
+MAX_PIXELS = 40_000_000  # a long scrolling screenshot fits (a phone's is under 30); ~160 MB once unpacked
 Image.MAX_IMAGE_PIXELS = MAX_PIXELS
 
 

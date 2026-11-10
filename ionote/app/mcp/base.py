@@ -6,10 +6,10 @@ from mcp.server.mcpserver.exceptions import ToolError
 from app import __version__, config, notes
 
 __all__ = ["ADDS", "DELETES", "READ_ONLY", "UPDATES", "WRITES", "clamp", "current_user", "need_admin", "who", "need_writer",
-           "server", "APP", "MCP_USER", "clamp_limit", "resolve_folder", "note_or_fail", "summary", "iso", "parse_date"]
+           "server", "APP", "LOG_NAME", "clamp_limit", "resolve_folder", "note_or_fail", "summary", "iso", "parse_date"]
 
 APP = config.BASE_URL  # for the links in results
-MCP_USER = "MCP"       # the name the change log shows for a change made through MCP
+LOG_NAME = "MCP"       # the name the change log shows for a change made through MCP
 
 server = shared_mcp.make_server("ionotes", "ioNotes", __version__, instructions=(
     "A personal notes library (text, clipboard snippets, screenshots with the text read from them). Start with "

@@ -7,12 +7,12 @@ from typing import Literal, Optional
 from mcp.server.mcpserver.exceptions import ToolError
 
 from app import attachments, images, notes
-from app.mcp.base import ADDS, DELETES, MCP_USER, WRITES, need_writer, note_or_fail, resolve_folder, server, summary
+from app.mcp.base import ADDS, DELETES, LOG_NAME, WRITES, need_writer, note_or_fail, resolve_folder, server, summary
 
 
 def _save(uid, data):
     try:
-        return notes.save_note(uid, {**data, "updatedAt": time.time()}, MCP_USER, force=True)
+        return notes.save_note(uid, {**data, "updatedAt": time.time()}, LOG_NAME, force=True)
     except ValueError as e:
         raise ToolError(str(e))
 
@@ -35,7 +35,7 @@ def create_note(text: str = "", title: str = "", tags: Optional[list[str]] = Non
                      "folderID": resolve_folder(folder) if folder else base.get("folderID"), "pinned": pinned, "source": "mcp"})
     if picture_base64:
         try:
-            n = images.put(n["id"], base64.b64decode(picture_base64), MCP_USER)
+            n = images.put(n["id"], base64.b64decode(picture_base64), LOG_NAME)
         except (images.BadImage, ValueError) as e:
             raise ToolError(f"The note was made, but not its picture: {e}")
     return summary(n)
@@ -103,7 +103,7 @@ def delete_note(note_id: str) -> dict:
     """Move a note to the trash (restore_note brings it back for 30 days, then it is deleted for good; its picture is removed)."""
     need_writer()
     n = note_or_fail(note_id)
-    notes.delete_note(n["id"], MCP_USER)
+    notes.delete_note(n["id"], LOG_NAME)
     return {"deleted": n["id"], "title": notes.display_title(n)}
 
 
@@ -112,7 +112,7 @@ def restore_note(note_id: str) -> dict:
     """Take a note out of the trash."""
     need_writer()
     n = note_or_fail(note_id)
-    return summary(notes.restore_note(n["id"], MCP_USER))
+    return summary(notes.restore_note(n["id"], LOG_NAME))
 
 
 @server.tool(annotations=WRITES)
@@ -125,15 +125,15 @@ def manage_folder(action: Literal["create", "rename", "color", "delete"], name: 
         raise ToolError("Colours: " + ", ".join(notes.COLORS))
     try:
         if action == "create":
-            return notes.save_folder(None, {"name": name, "color": color or None}, MCP_USER)
+            return notes.save_folder(None, {"name": name, "color": color or None}, LOG_NAME)
         fid = resolve_folder(name)
         if action == "rename":
             if not new_name:
                 raise ToolError("new_name is needed")
-            return notes.save_folder(fid, {"name": new_name}, MCP_USER, force=True)
+            return notes.save_folder(fid, {"name": new_name}, LOG_NAME, force=True)
         if action == "color":
-            return notes.save_folder(fid, {"color": color or None}, MCP_USER, force=True)
-        return notes.save_folder(fid, {"deleted": True}, MCP_USER, force=True)
+            return notes.save_folder(fid, {"color": color or None}, LOG_NAME, force=True)
+        return notes.save_folder(fid, {"deleted": True}, LOG_NAME, force=True)
     except ValueError as e:
         raise ToolError(str(e))
 
@@ -148,12 +148,12 @@ def manage_tag(action: Literal["rename", "color", "remove"], name: str, new_name
         if action == "rename":
             if not new_name:
                 raise ToolError("new_name is needed")
-            return {"notes_changed": notes.rename_tag(name, new_name, MCP_USER)}
+            return {"notes_changed": notes.rename_tag(name, new_name, LOG_NAME)}
         if action == "color":
             if color and color not in notes.COLORS:
                 raise ToolError("Colours: " + ", ".join(notes.COLORS))
-            return notes.set_tag_color(name, color or None, MCP_USER, force=True)
-        return {"notes_changed": notes.remove_tag(name, MCP_USER)}
+            return notes.set_tag_color(name, color or None, LOG_NAME, force=True)
+        return {"notes_changed": notes.remove_tag(name, LOG_NAME)}
     except ValueError as e:
         raise ToolError(str(e))
 
@@ -180,10 +180,10 @@ def manage_template(action: Literal["create", "update", "delete"], name: str, ne
     try:
         if action == "create":
             d = {"name": name, "title": title or "", "body": text or "", "tags": tags or [], "folderID": resolve_folder(folder) if folder and folder != "none" else None}
-            return notes.save_template(None, d, MCP_USER)
+            return notes.save_template(None, d, LOG_NAME)
         t = _template(name)
         if action == "delete":
-            notes.save_template(t["id"], {"deleted": True}, MCP_USER, force=True)
+            notes.save_template(t["id"], {"deleted": True}, LOG_NAME, force=True)
             return {"deleted": t["name"]}
         d = {}
         for k, v in (("name", new_name), ("title", title), ("body", text), ("tags", tags)):
@@ -193,7 +193,7 @@ def manage_template(action: Literal["create", "update", "delete"], name: str, ne
             d["folderID"] = None if folder in ("", "none") else resolve_folder(folder)
         if not d:
             raise ToolError("Nothing to change")
-        return notes.save_template(t["id"], {**d, "updatedAt": time.time()}, MCP_USER, force=True)
+        return notes.save_template(t["id"], {**d, "updatedAt": time.time()}, LOG_NAME, force=True)
     except ValueError as e:
         raise ToolError(str(e))
 
@@ -204,7 +204,7 @@ def attach_file(note_id: str, file_base64: str, name: str) -> dict:
     need_writer()
     n = note_or_fail(note_id)
     try:
-        n = attachments.put(n["id"], base64.b64decode(file_base64), name, MCP_USER)
+        n = attachments.put(n["id"], base64.b64decode(file_base64), name, LOG_NAME)
     except (attachments.BadFile, ValueError) as e:
         raise ToolError(str(e))
     return {**summary(n), "attachments": [a["name"] for a in n["attachments"]]}
@@ -216,7 +216,7 @@ def remove_attachment(note_id: str, attachment_id: str) -> dict:
     need_writer()
     n = note_or_fail(note_id)
     try:
-        n = attachments.remove(n["id"], attachment_id, MCP_USER)
+        n = attachments.remove(n["id"], attachment_id, LOG_NAME)
     except (notes.NotFound, ValueError) as e:
         raise ToolError(str(e))
     return {**summary(n), "attachments": [a["name"] for a in n["attachments"]]}
@@ -227,6 +227,6 @@ def empty_trash(note_id: Optional[str] = None) -> dict:
     """Delete for good, with no way back: one note in the trash (note_id), or everything in it. Only when asked to."""
     need_writer()
     try:
-        return {"purged": notes.empty_trash(MCP_USER, note_id)}
+        return {"purged": notes.empty_trash(LOG_NAME, note_id)}
     except (notes.NotFound, ValueError) as e:
         raise ToolError(str(e))

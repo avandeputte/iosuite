@@ -6,7 +6,9 @@ from typing import Literal, Optional
 from mcp.server.mcpserver import Image
 from mcp.server.mcpserver.exceptions import ToolError
 
-from app import attachments, images, notes
+from iosuite_shared import users
+
+from app import attachments, config, images, notes
 from app.mcp.base import APP, READ_ONLY, clamp_limit, iso, note_or_fail, parse_date, resolve_folder, server, summary
 
 LARGE_EDGE = 1568
@@ -31,8 +33,7 @@ def notes_overview() -> dict:
 
 def _account():
     """Whose notes these are: the account the client signed in as."""
-    from app import users
-    u = users.get(notes.owner()) if notes.owner() > 0 else None
+    u = users.get(notes.owner(), config.APP) if notes.owner() > 0 else None
     return u["name"] if u else None
 
 

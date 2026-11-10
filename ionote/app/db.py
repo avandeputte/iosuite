@@ -3,19 +3,18 @@
 The code is written in one SQL dialect (? placeholders, INSERT OR REPLACE / OR IGNORE) and the wrapper translates
 it for MySQL, the same way iopix's viewer database does. Rows answer to an index and to a column name.
 
-Where the database is comes from the environment (DB_TYPE, DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD),
-else from data/db.json, else SQLite in data/ionotes.db. The settings
-live outside the database since everything else is inside it.
+Where the database is comes from config.env or the environment (DB_TYPE, DB_HOST, DB_PORT, DB_NAME, DB_USER,
+DB_PASSWORD); with none of them, SQLite in data/ionotes.db.
 
 Every note, folder and tag colour carries `rev`, a number from one counter that grows with every change. The
 apps ask for everything changed since the last rev they saw (GET /api/sync?since=), which is how they keep
 their offline copy current. Deletions are kept as tombstones (deleted = 1) for that reason.
 """
-import json
 import logging
 import re
 import sqlite3
 import threading
+import time
 from contextlib import contextmanager
 from datetime import datetime, timezone
 
@@ -24,7 +23,6 @@ from iosuite_shared.db import Pool
 from app import config
 
 log = logging.getLogger("app.db")
-CONF = config.DATA_DIR / "db.json"
 SQLITE_FILE = config.DATA_DIR / "ionotes.db"
 KEYS = ("type", "host", "port", "database", "user", "password")
 SCHEMA_VERSION = 4  # 2: notes, folders, tag colours and the change log belong to an account; 3: the suite naming convention (nts_ tables); 4: attachments and templates
@@ -257,14 +255,10 @@ class Conn:
 
 # ---- configuration
 def settings() -> dict:
-    """{type, host, port, database, user, password}: the environment wins, then data/db.json, else SQLite."""
+    """{type, host, port, database, user, password}: from config.env or the environment, else SQLite."""
     global _cfg
     if _cfg is None:
         c = {"type": "sqlite", "host": "", "port": 3306, "database": "ionotes", "user": "", "password": ""}
-        try:
-            c.update({k: v for k, v in json.loads(CONF.read_text()).items() if k in KEYS})
-        except (OSError, ValueError):
-            pass
         for k in KEYS:
             v = config.db_env(k)
             if v:
@@ -280,10 +274,6 @@ def public_settings() -> dict:
     c = settings()
     return {**{k: v for k, v in c.items() if k != "password"}, "password_set": bool(c["password"]), "error": error,
             "sqlite_file": str(SQLITE_FILE), "fromEnv": [k for k in KEYS if config.db_env(k)]}
-
-
-def is_mysql() -> bool:
-    return settings()["type"] == "mysql"
 
 
 def _open_mysql(c: dict, database=True):
@@ -393,12 +383,6 @@ def init():
         _ready = True
 
 
-def schema_version() -> int:
-    with connect() as con:
-        r = con.execute("SELECT max(version) FROM nts_schema_version").fetchone()
-    return int(r[0] or 0)
-
-
 def reset_for_tests():
     """Forget the cached settings (the tests point DATA_DIR and DB_* elsewhere)."""
     global _cfg, _ready
@@ -419,11 +403,8 @@ def set_setting(key: str, value):
                     (key, None if value is None else str(value), datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S.%f")[:23]))
 
 
-
-
 def next_rev(con: Conn) -> int:
     """A new change number, inside the caller's transaction."""
-    import time
     return con.execute("INSERT INTO nts_change_counter (created_at) VALUES (?)", (int(time.time()),)).lastrowid
 
 
