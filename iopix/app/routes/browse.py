@@ -141,8 +141,8 @@ def api_photos(request: Request):
     fetches thumbnails lazily, so scrolling never waits on the server."""
     try:
         # the prefix makes cached results expire when favorites, albums or embeddings change
-        # an album filter depends on who asks (private albums), so the cached answer is kept per user then
-        who = f".u{(request.state.user or {}).get('id')}" if "ualbum" in request.url.query else ""
+        # an album or favorites filter depends on who asks (private albums, each account's own favorites), so the cached answer is kept per user then
+        who = f".u{(request.state.user or {}).get('id')}" if ("ualbum" in request.url.query or "fav" in request.url.query) else ""
         rev = appstate.rev if ("fav" in request.url.query or "ualbum" in request.url.query) else 0  # only those depend on the viewer's tables
         key = f"{rev}.{semantic.key}{who}|{request.url.query}"
         # the answer is fixed by the index version and the cache key: their hash is its ETag (304 while unchanged)

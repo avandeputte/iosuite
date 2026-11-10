@@ -212,7 +212,7 @@ Out of the box the viewer is open to anyone who can reach it. `setup.sh` asks fo
 | Who | Can |
 | --- | --- |
 | Not signed in | browse and search everything, read-only; display settings stay in the browser |
-| **viewer** | the same, plus settings, favorites and albums kept on the server (they follow the user to another device) |
+| **viewer** | the same, plus settings, their own favorites and albums kept on the server (they follow the user to another device) |
 | **viewer without a password** | the same; signs in with one click from the account picker (like a media-server profile). An account with no password can never be more than a viewer |
 | **editor** | plus every library write: edits, tags, faces, place tags, GPS tracks, metadata sync, applying to digiKam's database |
 | **admin** | plus settings, maintenance, models, backups, updates and managing users (Settings › Security, for suite admins) |

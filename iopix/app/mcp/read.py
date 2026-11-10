@@ -168,7 +168,7 @@ def get_photo(photo_id: int) -> dict:
         if not anon_paths_ok():
             d.pop("path", None)  # the file's location is for admins (the web API hides it from visitors too)
         extra = json.loads(d.pop("extra") or "{}")
-        d["favorite"] = appstate.is_favorite(photo_id)
+        d["favorite"] = appstate.is_favorite(photo_id)  # of the account asking
         for k in ("hash", "ts", "mts", "md", "day", "ntags", "album_id"):
             d.pop(k, None)
         d["width"], d["height"] = d.pop("w"), d.pop("h")
@@ -230,8 +230,8 @@ def list_places(query: str = "", limit: int = 200) -> list[dict]:
 
 @server.tool(annotations=READ_ONLY)
 def list_app_albums() -> list[dict]:
-    """Albums made in the web viewer: groupings that exist only there, separate from digiKam's folders; plus the favorites count."""
-    s = appstate.summary()
+    """Albums made in the web viewer: groupings that exist only there, separate from digiKam's folders; plus the count of your favorites."""
+    s = appstate.summary()  # of the account asking (main._mcp_user)
     return [{"id": a["id"], "name": a["name"], "items": a["n"]} for a in s["albums"]] + [{"name": "favorites", "items": len(s["favorites"])}]
 
 

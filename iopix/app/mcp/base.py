@@ -146,7 +146,7 @@ FILTER_DOC = """
       bbox: [south, west, north, east] in degrees
       iso_min/iso_max, aperture_min/aperture_max, focal_min/focal_max (35mm equivalent when known)
       place (town), region (state/province), country: names as shown by list_places (from GPS)
-      favorites_only: items the owner marked as favorite in the viewer; app_album: an album made in the viewer
+      favorites_only: items the account asking marked as favorite in the viewer; app_album: an album made in the viewer
       looks_like: describe the picture's content ("dog on a beach"); ranked by visual match
       similar_to: a photo id; finds visually similar photos
 """

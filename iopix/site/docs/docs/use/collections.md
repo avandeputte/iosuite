@@ -31,4 +31,8 @@ The full tag tree, with a picture for each tag. Click a tag to see its photos. E
 
 ## Favorites
 
-Press ++l++ in the viewer, or the heart on a selection. Favorites are kept in iopix per account, never in digiKam.
+Press ++l++ in the viewer, or the heart on a selection. Favorites are kept in iopix, never in digiKam.
+
+Every account has its own favorites: what you mark is yours, and nobody else sees it or changes it. They follow you to another browser and to the apps. Someone who is not signed in has no favorites while accounts exist. With no accounts at all there is one list for everyone.
+
+Before version 1.151 everyone shared one list. That list now belongs to one account: the first admin who opens iopix after the update keeps it as their own favorites. Every other account starts with none.
