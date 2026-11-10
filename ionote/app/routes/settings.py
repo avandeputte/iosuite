@@ -1,4 +1,4 @@
-"""Settings: the switches admins set, sign-in at a proxy, the change log, export and import. The status, the version, updates, restart and the server log are iosuite_shared's routers (/api/status,
+"""Settings: the switches admins set, the change log, export and import. Sign-in at a proxy is set for the whole suite (Settings › Security, suite admins: iosuite_shared's routers). The status, the version, updates, restart and the server log are iosuite_shared's routers (/api/status,
 /api/server, /api/log), mounted in app/main.py."""
 import time
 
@@ -6,9 +6,7 @@ from fastapi import APIRouter, HTTPException, Request, UploadFile, File
 from fastapi.responses import Response
 from starlette.concurrency import run_in_threadpool
 
-from app import access, backup, config, db, notes, users
-from iosuite_shared import proxyauth
-from app.auth import auth as auth_shared
+from app import access, backup, db, notes, users
 from app.http import json_body, user_name
 
 router = APIRouter()
@@ -40,35 +38,6 @@ async def api_settings_set(request: Request):
             db.set_setting(k, str(v or "").strip()[:40])
     users.invalidate()
     return {"ok": True}
-
-
-@router.get("/api/settings/proxy", dependencies=[access.admin])
-def api_proxy_get():
-    """Sign-in at a reverse proxy (Cloudflare Access...): its settings, which of them config.env fixes, and the
-    Cloudflare Access team and application last seen in requests. Admins only."""
-    return auth_shared.proxy.status()
-
-
-@router.post("/api/settings/proxy", dependencies=[access.admin])
-async def api_proxy_set(request: Request):
-    """Body: any of proxyauth.KEYS (an empty string clears one). Settings in config.env cannot be changed here."""
-    body = await json_body(request)
-    changes = {k: str(v or "").strip() for k, v in body.items() if k in proxyauth.KEYS}
-    fixed = [k for k in changes if config.proxy_env(k) is not None]
-    if fixed:
-        raise HTTPException(400, f"Set in config.env, change it there: {', '.join(fixed)}")
-    m = changes.get("AUTH_PROXY")
-    if m is not None and m.lower() not in ("", "off", *proxyauth.PRESETS):
-        raise HTTPException(400, "Unknown proxy")
-    if changes.get("AUTH_PROXY_CREATE", "").lower() not in ("", "viewer", "editor", "deny"):
-        raise HTTPException(400, "Someone with no account: the sign-in screen, deny, or a viewer or editor account")
-    if (m or auth_shared.proxy.mode()).lower() == "cloudflare" and ("CF_ACCESS_TEAM" in changes or "CF_ACCESS_AUD" in changes or m):
-        team = changes.get("CF_ACCESS_TEAM", auth_shared.proxy.opt("CF_ACCESS_TEAM") or "")
-        aud = changes.get("CF_ACCESS_AUD", auth_shared.proxy.opt("CF_ACCESS_AUD") or "")
-        if bool(team) != bool(aud):
-            raise HTTPException(400, "Cloudflare needs both the team domain and the AUD tag (or neither)")
-    auth_shared.proxy.save(changes)
-    return auth_shared.proxy.status()
 
 
 # ---- the change log, export and import

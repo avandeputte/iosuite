@@ -19,6 +19,8 @@ import threading
 from contextlib import contextmanager
 from datetime import datetime, timezone
 
+from iosuite_shared.db import Pool
+
 from app import config
 
 log = logging.getLogger("app.db")
@@ -202,10 +204,23 @@ class Conn:
         self.raw.rollback()
 
     def close(self):
+        """A MySQL connection goes back to the pool, with whatever transaction it had open ended (the next one to
+        borrow it reads the present, not this one's snapshot); a SQLite one is closed."""
+        raw, self.raw = self.raw, None
+        if raw is None:
+            return
+        if not self.mysql:
+            try:
+                raw.close()
+            except Exception:
+                pass
+            return
         try:
-            self.raw.close()
+            raw.rollback()
         except Exception:
-            pass
+            _pool.give_back(raw, broken=True)
+        else:
+            _pool.give_back(raw)
 
     def __enter__(self):
         return self
@@ -253,8 +268,14 @@ def _open_mysql(c: dict, database=True):
                            read_timeout=120, write_timeout=120, autocommit=False)
 
 
+# MySQL connections, kept open and reused (iosuite-shared's Pool): no new handshake and sign-in for every query.
+# SQLite opens its file each time, which costs next to nothing.
+_pool = Pool(lambda: _open_mysql(settings()))
+
+
 def connect() -> Conn:
-    """A new connection; the caller closes it (with connect() as con: ...)."""
+    """A connection (MySQL: one from the pool); the caller closes it (with connect() as con: ...), which hands a
+    pooled one back."""
     if not _ready:
         init()
     return _raw_connect()
@@ -263,7 +284,7 @@ def connect() -> Conn:
 def _raw_connect() -> Conn:
     c = settings()
     if c["type"] == "mysql":
-        return Conn(_open_mysql(c), True)
+        return Conn(_pool.borrow(), True)
     # isolation_level "": the module opens deferred transactions by itself; Conn.begin issues BEGIN IMMEDIATE for writes
     raw = sqlite3.connect(str(SQLITE_FILE), timeout=30, isolation_level="")
     raw.execute("PRAGMA foreign_keys = OFF")
@@ -356,6 +377,7 @@ def reset_for_tests():
     """Forget the cached settings (the tests point DATA_DIR and DB_* elsewhere)."""
     global _cfg, _ready
     _cfg, _ready = None, False
+    _pool.drain()
 
 
 # ---- settings table

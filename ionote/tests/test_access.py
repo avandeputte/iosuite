@@ -46,7 +46,7 @@ def test_every_api_route_declares_who_may_call_it(app):
 
 
 def test_cloudflare_access_needs_the_team_and_aud_before_any_header_is_believed(client, admin):
-    client.post("/api/settings/proxy", json={"AUTH_PROXY": "cloudflare"})
+    client.put("/api/suite-admin/proxy", json={"AUTH_PROXY": "cloudflare"})
     client.post("/api/auth/logout")
     r = client.get("/api/auth/me", headers={"Cf-Access-Authenticated-User-Email": "alex@example.com"})
     assert r.json()["user"] is None
@@ -54,7 +54,7 @@ def test_cloudflare_access_needs_the_team_and_aud_before_any_header_is_believed(
 
 def test_a_header_proxy_signs_in_only_from_a_trusted_address(client, admin):
     client.post("/api/users/1", json={"email": "alex@example.com"})
-    client.post("/api/settings/proxy", json={"AUTH_PROXY": "header", "AUTH_PROXY_TRUSTED": "10.9.9.9"})
+    assert client.put("/api/suite-admin/proxy", json={"AUTH_PROXY": "header", "AUTH_PROXY_TRUSTED": "10.9.9.9"}).status_code == 200
     client.post("/api/auth/logout")
     r = client.get("/api/auth/me", headers={"Remote-User": "alex@example.com"})
     assert r.json()["user"] is None  # the test client is not 10.9.9.9
@@ -131,3 +131,13 @@ def test_settings_server_is_the_shared_panel(client, admin):
     assert "mcp_enabled" not in client.get("/api/settings").json()
     client.post("/api/server", json={"mcpEnabled": False})
     assert client.post("/api/auth/logout_all").status_code in (404, 405)  # Sign out is the only sign out
+
+
+def test_proxy_sign_in_is_not_set_from_this_app(client, admin):
+    # the suite-wide settings are the suite admin's page (/api/suite-admin/proxy); an app admin has no route to them
+    client.post("/api/users", json={"name": "ann", "password": "adminpw12", "role": "admin"})
+    client.post("/api/auth/logout")
+    assert client.post("/api/auth/login", json={"name": "ann", "password": "adminpw12"}).status_code == 200
+    assert client.get("/api/settings/proxy").status_code == 404
+    assert client.post("/api/settings/proxy", json={"AUTH_PROXY": "header", "AUTH_PROXY_TRUSTED": "testclient"}).status_code in (404, 405)
+    assert client.put("/api/suite-admin/proxy", json={"AUTH_PROXY": "header"}).status_code == 403
