@@ -62,6 +62,9 @@ input, select, textarea { font: inherit; color: inherit; }
 .menu { position: absolute; right: 0; top: 44px; background: var(--bg); border: 1px solid var(--line); border-radius: var(--r-m); box-shadow: var(--shadow); min-width: 220px; padding: 6px; z-index: 50; }
 .menu .mi { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--r-s); width: 100%; text-align: left; }
 .menu .mi:hover { background: var(--bg2); }
+.menu .mtools { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); margin: 4px 0; padding: 4px 0; }
+.menu .mhead { padding: 6px 10px 2px; }
+.menu .mi img { width: 18px; height: 18px; border-radius: 4px; }
 .menu .who { padding: 8px 10px 10px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
 
 /* ---- main */
@@ -117,8 +120,6 @@ body.home #main { top: env(safe-area-inset-top); }
 .dateline .menu { left: 0; right: auto; top: 32px; }
 /* the tiles: a column per app with a widget, and a column of two half-height tiles for the apps without (--cols is set by the page) */
 .apps { display: grid; grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr)); gap: 16px; }
-.tools { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 12px; }
-.tools .app { flex: 0 1 220px; }
 .stack { display: grid; grid-template-rows: 1fr 1fr; gap: 16px; min-width: 0; }
 .app { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "img who" "more more"; align-items: center; align-content: start; column-gap: 12px; row-gap: 4px;
   padding: 12px 14px; border-radius: var(--r-l); border: 1px solid var(--line); text-align: left; min-width: 0;

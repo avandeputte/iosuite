@@ -151,6 +151,16 @@ function drawUser() {
   btn.onclick = () => {
     if (menu) return closeMenu();
     const theme = localStorage.getItem('iosuite.theme') || 'system';
+    // the admin tools (ioDNS…: only their admins get them) are listed here, not on the start page
+    const tools = h('div', { class: 'mtools', hidden: true });
+    const listTools = (apps) => {
+      const t = apps.filter((a) => a.adminTool);
+      tools.hidden = !t.length;
+      tools.replaceChildren(h('div', { class: 'mhead muted small' }, 'Admin tools'),
+        ...t.map((a) => h('a', { class: 'mi', href: a.url, onclick: closeMenu }, h('img', { src: a.icon, alt: '' }), a.name)));
+    };
+    if (S.allApps) listTools(S.allApps);
+    else api('/api/apps').then((got) => { S.allApps = got.items; listTools(got.items); }).catch(() => {});
     menu = h('div', { class: 'menu' },
       h('div', { class: 'who' }, h('b', null, S.user.displayName), h('div', { class: 'muted small' }, `${S.user.name} · ${S.user.role}`)),
       h('a', { class: 'mi', href: '#/settings/account', onclick: closeMenu }, icon('person', 's'), 'Account'),
@@ -158,6 +168,7 @@ function drawUser() {
       h('button', { class: 'mi', onclick: () => { closeMenu(); enterWall(); } }, icon('wall', 's'), 'Wall display'),
       h('button', { class: 'mi', onclick: () => { const n = { system: 'light', light: 'dark', dark: 'system' }[theme]; setTheme(n); api('/api/auth/settings', { method: 'POST', json: { theme: n } }).catch(() => {}); closeMenu(); toast(`Appearance: ${n}`); } },
         icon('theme', 's'), `Appearance: ${theme}`),
+      tools,
       h('a', { class: 'mi', href: '#/settings', onclick: closeMenu }, icon('settings', 's'), 'Settings'),
       h('button', { class: 'mi', onclick: async () => { const r = await api('/api/auth/logout', { method: 'POST' }); if (r && r.cloudflareLogout) location.href = r.cloudflareLogout; else location.reload(); } }, icon('logout', 's'), 'Sign out'));
     m.append(menu);
@@ -207,8 +218,7 @@ async function showHome(page) {
   S.photoStrip = got.photoStrip;  // the admin's choice, what Customize calls "as the admin set it"
   S.allApps = got.items;
   const rank = (a) => { const i = L.order.indexOf(a.key); return i < 0 ? 100 + got.items.indexOf(a) : i; };
-  // the admin tools (ioDNS…: only their admins get them) come in a row of their own under the apps
-  const tools = got.items.filter((a) => a.adminTool && !L.hidden.includes(a.key));
+  // the admin tools (ioDNS…) are not tiles: the gear menu lists them
   S.apps = got.items.filter((a) => !a.adminTool && !L.hidden.includes(a.key)).sort((a, b) => rank(a) - rank(b));
   const shows = (k) => !L.hidden.includes(k);
   const first = (S.user.displayName || S.user.name).split(/\s+/)[0];
@@ -229,7 +239,6 @@ async function showHome(page) {
   if (!S.apps.length) col.append(h('div', { class: 'empty' }, got.items.length ? 'Every tile is hidden. ' : 'No io app has registered itself in the Shared ioSuite database yet: each one appears here once it has started.',
     got.items.length ? h('button', { class: 'lnk', onclick: customize }, 'Customize the page') : null));
   else col.append(h('div', { class: 'apps', style: { '--cols': big.length + stacks.length } }, big.map((a) => tile(a, false)), stacks));
-  if (tools.length) col.append(h('div', { class: 'tools' }, h('span', { class: 'muted small' }, 'Admin tools'), tools.map((a) => tile(a, true))));
   drawWidgets(page);
   drawAppStatus(page);
   // the week ahead: birthdays from ioContacts and the coming days' events from ioCalendar, a card each
@@ -553,7 +562,7 @@ async function drawBookmarkStatus(el) {
 // ------------------------------------------------------------------ customize the page (per account)
 async function customize() {
   const L = S.layout || { hidden: [], order: [], cards: [], strip: null };
-  const apps = S.allApps || [];
+  const apps = (S.allApps || []).filter((a) => !a.adminTool);  // the admin tools are in the gear menu, not tiles
   const rank = (a) => { const i = L.order.indexOf(a.key); return i < 0 ? 100 + apps.indexOf(a) : i; };
   const tiles = apps.slice().sort((a, b) => rank(a) - rank(b)).map((a) => ({ key: a.key, on: !L.hidden.includes(a.key), label: [h('img', { src: a.icon, alt: '' }), appName(a.name, a.color)] }));
   const NAMES = { home: 'Home (Home Assistant)', birthdays: 'Birthdays (ioContacts)', week: 'This week (ioCalendar)', strip: 'The photo strip (ioPix)', bookmarks: 'Bookmarks' };
