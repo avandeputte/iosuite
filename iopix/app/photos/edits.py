@@ -33,7 +33,7 @@ from app.photos import consistency, dateprecision, pixelguard
 # using their edits.* names (facemgr takes edits.lock, routes edits.pending_count, importer edits.SKELETON...)
 from app.photos.paths import BACKUP_DIR, FILE_BACKUP_DIR, rel, backup_path, file_backup_path, sidecar_path
 from app.photos.backups import MIN_FREE_BYTES, SKELETON, backup_original, move_backups, ensure_backup, prepare
-from app.photos.pending import (lock, signature, save_pending, pending, pending_one, drop_pending_tag, pending_count,
+from app.photos.pending import (lock, signature, signature_of, save_pending, pending, pending_one, pending_stamps, drop_pending_tag, pending_count,
                                 newest_pending, forget, remap_pending_tags, drop_pending_fields, resolved)
 
 __all__ = [  # this module's own API, then the names callers still reach through edits.* after the split
@@ -42,7 +42,7 @@ __all__ = [  # this module's own API, then the names callers still reach through
     "apply", "recheck", "rewrite_tags", "db_state", "revert",
     "BACKUP_DIR", "FILE_BACKUP_DIR", "rel", "backup_path", "file_backup_path", "sidecar_path",
     "MIN_FREE_BYTES", "SKELETON", "backup_original", "move_backups", "ensure_backup", "prepare",
-    "lock", "signature", "save_pending", "pending", "pending_one", "drop_pending_tag", "pending_count", "newest_pending",
+    "lock", "signature", "signature_of", "save_pending", "pending", "pending_one", "pending_stamps", "drop_pending_tag", "pending_count", "newest_pending",
     "forget", "remap_pending_tags", "drop_pending_fields", "resolved",
 ]
 

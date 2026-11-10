@@ -77,6 +77,10 @@ MEMORY_RESERVE_MB = env_int("MEMORY_RESERVE_MB", -1)
 
 # How often to check whether digiKam changed its database (seconds).
 REINDEX_POLL = env_int("REINDEX_POLL", 20)
+# After a change to a few photos (an edit here, a face named, edits applied to digiKam), only their rows of the search
+# index are rewritten, in place; a full rebuild follows once things have been quiet for a while. INDEX_PATCH=0
+# rebuilds the whole index at every change, as before 1.148.
+INDEX_PATCH = env_flag("INDEX_PATCH", True)
 
 for _d in (DATA_DIR, CACHE_DIR):
     _d.mkdir(parents=True, exist_ok=True)

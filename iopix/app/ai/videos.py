@@ -369,12 +369,13 @@ def info(photo_id: int) -> dict:
     return {"cover_t": r[0], "chapters": json.loads(r[1] or "[]"), "transcript": r[2], "segments": json.loads(r[3] or "[]"), "lang": r[4]}
 
 
-def transcripts() -> dict:
-    """{photo id: transcript} for the search index."""
+def transcripts(ids=None) -> dict:
+    """{photo id: transcript} for the search index; with `ids`, only for those photos."""
     out = {}
+    only = "" if ids is None else f" AND photo_id IN ({','.join(str(int(i)) for i in ids) or 'NULL'})"
     try:
         with vdb.reader() as con:
-            for pid, text in con.execute("SELECT photo_id, transcript FROM pix_video_info WHERE transcript IS NOT NULL AND transcript != ''"):
+            for pid, text in con.execute("SELECT photo_id, transcript FROM pix_video_info WHERE transcript IS NOT NULL AND transcript != ''" + only):
                 out[pid] = text
     except Exception as e:
         log.warning("videos: transcripts unreadable (%s)", e)

@@ -166,7 +166,7 @@ def reread(pid: int, require_digikam_closed: bool = True) -> dict:
         cat = con.execute("SELECT category FROM Images WHERE id = ?", (p["id"],)).fetchone()
         version = scanner.hash_version(con)
     rows = scanner.rows_for(p["path"], meta[p["path"]], cat[0] if cat else 1)
-    with dbsync.write_transaction(dkdb.sqlite_path(), require_digikam_closed) as con:
+    with index.writing([p["id"]]), dbsync.write_transaction(dkdb.sqlite_path(), require_digikam_closed) as con:  # (the index rewrites this photo's rows only)
         # what files and sidecars do not hold, and a reread must not lose: captions in other languages, and the faces
         # digiKam keeps in its database only (unknown, ignored and suggested ones)
         keep_comments = con.execute("SELECT type, language, author, date, comment FROM ImageComments WHERE imageid = ? AND language != 'x-default'",

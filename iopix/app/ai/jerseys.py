@@ -170,12 +170,13 @@ job = ScanJob("jerseys", _todo, _work, _counts, available, tables=("pix_ai_jerse
 progress, start, reset, coverage = job.progress, job.start, job.reset, job.coverage
 
 
-def results() -> dict:
-    """{photo id: "10 7"}: the numbers read in each photo, for the index."""
+def results(ids=None) -> dict:
+    """{photo id: "10 7"}: the numbers read in each photo, for the index; with `ids`, only for those photos."""
     out = defaultdict(list)
+    only = "" if ids is None else f" WHERE photo_id IN ({','.join(str(int(i)) for i in ids) or 'NULL'})"
     try:
         with vdb.reader() as con:
-            for pid, num in con.execute("SELECT photo_id, number FROM pix_ai_jerseys ORDER BY photo_id, score DESC"):
+            for pid, num in con.execute(f"SELECT photo_id, number FROM pix_ai_jerseys{only} ORDER BY photo_id, score DESC"):
                 if num not in out[pid]:
                     out[pid].append(num)
     except Exception as e:

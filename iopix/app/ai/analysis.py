@@ -625,32 +625,39 @@ def start(photos: list):
     videos.start(photos)  # cover frame, chapters and speech for videos
 
 
-def results() -> dict:
-    """{photo_id: {...}} for the index build."""
+def results(ids=None) -> dict:
+    """{photo_id: {...}} for the index build; with `ids`, only for those photos (the index updated in place)."""
     if not vdb.ready():
         return {}
     out = {}
+    if ids is None:
+        chunks = [("", "")]
+    else:  # WHERE / AND photo_id IN (...), a few hundred ids at a time
+        some = sorted(int(i) for i in ids)
+        parts = [",".join(map(str, some[n:n + 500])) for n in range(0, len(some), 500)]
+        chunks = [(f" WHERE photo_id IN ({part})", f" AND photo_id IN ({part})") for part in parts]
     try:
         with vdb.reader(READ_TIMEOUT) as con:
-            for r in con.execute("SELECT photo_id, sharp, bright, clip_lo, clip_hi FROM pix_ai_quality"):
-                out.setdefault(r[0], {}).update(sharp=r[1], bright=r[2], clip_lo=r[3], clip_hi=r[4])
-            for r in con.execute("SELECT photo_id, text FROM pix_ai_text"):
-                out.setdefault(r[0], {}).update(ocr=r[1] or None)
-            for r in con.execute("SELECT photo_id, nfaces, faceq FROM pix_ai_face_count"):
-                out.setdefault(r[0], {}).update(vfaces=r[1], faceq=r[2])
-            for r in con.execute("SELECT photo_id FROM pix_ai_scans WHERE job = 'objects'"):
-                out.setdefault(r[0], {}).update(objects={}, npeople=0)
-            for r in con.execute("SELECT photo_id, aesthetic, focus, eyes_checked, eyes_closed FROM pix_ai_looks"):
-                out.setdefault(r[0], {}).update(aesth=r[1], focus=r[2], eyes_checked=r[3], eyes_closed=r[4])
-            for r in con.execute("SELECT photo_id, text FROM pix_ai_descriptions WHERE text != ''"):  # descriptions stored before the filler was trimmed get it trimmed here
-                out.setdefault(r[0], {}).update(caption_ai=caption.tidy(r[1]))
-            for pid, x, y, w, h in con.execute("SELECT photo_id, x, y, w, h FROM pix_ai_objects WHERE cls = 'person' AND w * h >= 0.01"):
-                out.setdefault(pid, {}).setdefault("persons", []).append((x, y, w, h))  # for the focus point of a cropped thumbnail (smartcrop.py)
-            for pid, cls, n in con.execute("SELECT photo_id, cls, count(*) FROM pix_ai_objects GROUP BY 1, 2"):
-                d = out.setdefault(pid, {})
-                d.setdefault("objects", {})[cls] = n
-                if cls == "person":
-                    d["npeople"] = n
+            for w, a in chunks:
+                for r in con.execute("SELECT photo_id, sharp, bright, clip_lo, clip_hi FROM pix_ai_quality" + w):
+                    out.setdefault(r[0], {}).update(sharp=r[1], bright=r[2], clip_lo=r[3], clip_hi=r[4])
+                for r in con.execute("SELECT photo_id, text FROM pix_ai_text" + w):
+                    out.setdefault(r[0], {}).update(ocr=r[1] or None)
+                for r in con.execute("SELECT photo_id, nfaces, faceq FROM pix_ai_face_count" + w):
+                    out.setdefault(r[0], {}).update(vfaces=r[1], faceq=r[2])
+                for r in con.execute("SELECT photo_id FROM pix_ai_scans WHERE job = 'objects'" + a):
+                    out.setdefault(r[0], {}).update(objects={}, npeople=0)
+                for r in con.execute("SELECT photo_id, aesthetic, focus, eyes_checked, eyes_closed FROM pix_ai_looks" + w):
+                    out.setdefault(r[0], {}).update(aesth=r[1], focus=r[2], eyes_checked=r[3], eyes_closed=r[4])
+                for r in con.execute("SELECT photo_id, text FROM pix_ai_descriptions WHERE text != ''" + a):  # descriptions stored before the filler was trimmed get it trimmed here
+                    out.setdefault(r[0], {}).update(caption_ai=caption.tidy(r[1]))
+                for pid, x, y, w_, h in con.execute("SELECT photo_id, x, y, w, h FROM pix_ai_objects WHERE cls = 'person' AND w * h >= 0.01" + a):
+                    out.setdefault(pid, {}).setdefault("persons", []).append((x, y, w_, h))  # for the focus point of a cropped thumbnail (smartcrop.py)
+                for pid, cls, n in con.execute("SELECT photo_id, cls, count(*) FROM pix_ai_objects" + w + " GROUP BY 1, 2"):
+                    d = out.setdefault(pid, {})
+                    d.setdefault("objects", {})[cls] = n
+                    if cls == "person":
+                        d["npeople"] = n
     except Exception as e:
         log.warning("analysis: results unreadable (%s)", e)
     return out
