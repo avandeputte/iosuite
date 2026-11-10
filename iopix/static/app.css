@@ -491,6 +491,9 @@ body.filters-open #crumbbar { right: 340px; }
 .mtable .mprog .bar i { display: block; height: 100%; background: var(--accent); }
 .mtable .macts { white-space: nowrap; text-align: right; }
 .mtable .mrerun { display: inline-block; margin-top: 4px; font-size: var(--fs-s); }
+.mtable .mheld { font-size: var(--fs-s); margin-top: 3px; }
+.mmem { font-size: var(--fs-m); margin-bottom: 8px; }
+.mtable .warn, .mmem .warn { color: var(--warn); }
 .pillbtn.small { height: 28px; padding: 0 12px; font-size: var(--fs-s); }
 .mst { font-size: var(--fs-s); color: var(--fg2); margin-top: 2px; }
 .mst.ok { color: var(--c-green); } .mst.on { color: var(--accent); } .mst.warn { color: var(--warn); }

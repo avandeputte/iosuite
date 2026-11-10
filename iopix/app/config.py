@@ -67,6 +67,14 @@ def cpu_count() -> int:
 BG_THREADS = int(os.environ.get("BG_THREADS", max(1, cpu_count() // 2)))
 PREWARM_WORKERS = int(os.environ["PREWARM_WORKERS"]) if os.environ.get("PREWARM_WORKERS") else None  # None: BG_THREADS
 
+# The AI analysis jobs run in a process of their own (app/jobproc.py), so a model that needs more memory than the
+# server has takes that process down, not the web app. JOBS_PROCESS=0 runs them inside the web app, as before 1.147.
+JOBS_PROCESS = env_flag("JOBS_PROCESS", True)
+# The most memory that job process may hold, and the free memory the server keeps (megabytes). Unset: a share of the
+# memory limit of the container or the machine (app/memwatch.py: 60% and 8%). 0 turns the one off.
+JOBS_MEMORY_MB = env_int("JOBS_MEMORY_MB", -1)
+MEMORY_RESERVE_MB = env_int("MEMORY_RESERVE_MB", -1)
+
 # How often to check whether digiKam changed its database (seconds).
 REINDEX_POLL = env_int("REINDEX_POLL", 20)
 

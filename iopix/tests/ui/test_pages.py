@@ -601,6 +601,33 @@ def test_settings_explain_the_model_choices(page, server):
     row.locator(".mcompare summary").click()
     assert row.locator(".mopt").count() == 3 and "WIDER Face" in row.locator(".mopts").inner_text()
 
+def test_a_paused_job_says_why_and_can_be_tried_again(page, server):
+    """A job stopped twice for memory shows as paused with the reason and Try again, which asks for that job; the
+    memory line above the table says what is in use and which job was stopped last."""
+    gb, asked = 1024 ** 3, []
+    why = "it needed more memory than analysis may use on this server (the most is 6.0 GB)"
+
+    def analysis(route):
+        r = route.fetch()
+        a = r.json()
+        next(j for j in a["jobs"] if j["key"] == "quality").update(enabled=True, running=False, queued=False, done=1, total=5, held={"reason": why, "at": 1794000000})
+        a["queue"]["memory"] = {"process": True, "limit": 10 * gb, "used": 3 * gb, "reserve": gb, "ceiling": 6 * gb, "worker": 0, "waiting": None,
+                                "lastStop": {"at": 1794000000, "job": "pixels", "reason": why}}
+        route.fulfill(response=r, json=a)
+
+    page.route("**/api/analysis", analysis)
+    page.route("**/api/analysis/run", lambda route: (asked.append(route.request.post_data_json), route.fulfill(json={"ok": True})))
+    page.goto(server + "/#/settings/ai")
+    row = page.locator(".mtable tr[data-job=quality]")
+    row.locator(".mheld").wait_for(timeout=15000)
+    assert row.locator(".mprog .ahead .mst").inner_text() == "paused"
+    assert why in row.locator(".mheld").inner_text()
+    mem = page.locator(".mmem").inner_text()
+    assert "3.0 GB of 10.0 GB in use" in mem and "up to 6.0 GB" in mem and "Last stopped: Sharpness and exposure" in mem
+    row.locator(".mheld button").click()
+    assert _eventually(lambda: asked == [{"job": "quality"}]), asked
+
+
 SHOWN = "(id) => { return [...document.querySelectorAll('#grid img')].some((i) => new RegExp(`/thumb/${id}(\\D|$)`).test(i.getAttribute('src'))); }"  # the photo's tile is on the page
 
 def test_delete_key_asks_then_moves_to_the_trash_at_once_and_undo_restores(page, server, lib):

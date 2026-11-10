@@ -41,7 +41,12 @@ def api_analysis(request: Request):
     models = [{"key": k, "label": names[k], "installed": semantic_ready(k), "chosen": semantic.chosen() == k,
                "active": act is not None and act.name == k} for k in ENGINES]
     jobs = jobs_meta.rows(total, stills, signed_in=users.is_signed_in(request.state.user))
-    return {"jobs": jobs, "photos": total, "models": models if act is not None else [], "queue": bgjobs.status(), "progress": bgjobs.progress_all()}
+    queue = bgjobs.status()
+    if not users.is_admin(request.state.user):  # how much memory the server has, and what ran out of it: for admins
+        queue = {k: v for k, v in queue.items() if k not in ("held", "memory")}
+        for j in jobs:
+            j["held"] = None
+    return {"jobs": jobs, "photos": total, "models": models if act is not None else [], "queue": queue, "progress": bgjobs.progress_all()}
 
 
 @router.get("/api/models", dependencies=[access.public])
@@ -174,7 +179,12 @@ async def api_analysis_run(request: Request):
 
 
 def start_analysis(job: str = "all", reset: bool = False) -> dict:
-    """What the Run / Run again buttons do (and the MCP tool run_analysis): queue one analysis, or all of them."""
+    """What the Run / Run again / Try again buttons do (and the MCP tool run_analysis): queue one analysis, or all of
+    them. Asking is also what lets a job that was paused (stopped twice for memory, jobs.py) run again."""
+    if job == "all":
+        bgjobs.release()
+    elif job in jobs_meta.QUEUE_KEY:
+        bgjobs.release(jobs_meta.QUEUE_KEY[job])
     if job == "facedetect":  # writes faces into digiKam's database, so only ever on request
         face_detect_allowed()
         if reset:

@@ -8,6 +8,10 @@ from app.ai import clothing, jerseys, rotation, videos
 from app.faces import ages, facedetect, facevecs
 
 
+# a row's key -> the key of the job that fills it in the queue (jobs.ORDER)
+QUEUE_KEY = {"thumbs": "thumbs", "embeddings": "embeddings", "quality": "pixels", "objects": "pixels", "vision": "vision", "captions": "captions", "faces": "faces", "facedetect": "facedetect", "looks": "looks", "ages": "ages", "jerseys": "jerseys", "clothing": "clothing", "rotation": "rotation", "videos": "videos"}
+
+
 def rows(total: int, stills: int, signed_in: bool) -> list:
     """One dict per job. total: photos in the index; stills: photos that are not videos; signed_in: whether the
     caller may see file paths (the thumbnail job's current files)."""
@@ -57,9 +61,11 @@ def rows(total: int, stills: int, signed_in: bool) -> list:
          + (f"a transcript of what is said ({mname('speech_model')}), searchable from the search box and shown in the info panel." if videos.speech_available() else "a transcript of what is said once a speech model is installed."),
          "done": videos.coverage()[0], "total": total - stills, "running": videos.progress["running"], "enabled": config.ANALYSIS and videos.available(), "rerun": True},
     ]
-    queue_key = {"thumbs": "thumbs", "embeddings": "embeddings", "quality": "pixels", "objects": "pixels", "vision": "vision", "captions": "captions", "faces": "faces", "facedetect": "facedetect", "looks": "looks", "ages": "ages", "jerseys": "jerseys", "clothing": "clothing", "rotation": "rotation", "videos": "videos"}
+    held = bgjobs.held()
     for j in jobs:
-        j["queued"] = bgjobs.is_queued(queue_key[j["key"]])
+        j["queue"] = QUEUE_KEY[j["key"]]  # the job as the queue knows it (two rows share one pass)
+        j["queued"] = bgjobs.is_queued(j["queue"])
+        j["held"] = held.get(j["queue"])  # {"reason", "at"} when it was stopped twice in a row and waits to be asked for
     return jobs
 
 

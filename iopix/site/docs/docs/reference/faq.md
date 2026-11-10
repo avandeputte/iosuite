@@ -58,3 +58,9 @@ The model may still be indexing; **Settings › AI** shows progress. Search swit
 
 **The server is busy for hours after install.**
 The first pass over a large library takes time. Jobs run one at a time on half the cores by default; lower it in **Settings › AI**.
+
+**A job in Settings › AI says "paused".**
+It was stopped twice in a row, almost always because it needed more memory than the server could give it; the line under its progress says which. iopix itself kept running. Pick a smaller model for that feature, give the server more memory or lower the cores per job, then click **Try again**. See [Memory](../ai/overview.md#memory).
+
+**iopix restarted while an analysis was running (installs made before 1.147).**
+On a systemd install, add one line to the service so that a job the system stops for memory does not take the service with it, then reload: `mkdir -p /etc/systemd/system/iopix.service.d && printf '[Service]\nOOMPolicy=continue\n' > /etc/systemd/system/iopix.service.d/oom.conf && systemctl daemon-reload`. New installs have it already.

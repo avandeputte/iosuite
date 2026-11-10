@@ -105,14 +105,33 @@ function aiSection(view) {
     };
     const progressCell = (j, m, extra) => {
       if (!j) return h('td', { class: 'muted' }, '—');
-      const state = !j.enabled ? (m.some((x) => x && !x.installed) ? 'needs its model' : 'off') : j.running ? 'running…' : j.queued ? 'queued' : j.done >= j.total ? 'up to date' : j.key === 'facedetect' ? 'on request' : 'waiting';
+      // paused: its process was stopped twice in a row (out of memory, mostly); it stays so until someone asks for it again
+      const paused = j.enabled && j.held && !j.running && !j.queued;
+      const state = !j.enabled ? (m.some((x) => x && !x.installed) ? 'needs its model' : 'off') : j.running ? 'running…' : j.queued ? 'queued' : paused ? 'paused' : j.done >= j.total ? 'up to date' : j.key === 'facedetect' ? 'on request' : 'waiting';
       const now = Date.now() / 1000, idle = j.running && j.since ? (j.last ? now - j.last : now - j.since) : 0, stuck = idle > 300;
       return h('td', { class: 'mprog' },
-        h('div', { class: 'ahead' }, h('span', { class: j.running ? 'mst on' : j.done >= j.total && j.enabled ? 'mst ok' : 'mst' }, state), h('span', { class: 'sp' }), h('span', { class: 'muted' }, `${nf.format(Math.min(j.done, j.total))} / ${nf.format(j.total)}`)),
+        h('div', { class: 'ahead' }, h('span', { class: j.running ? 'mst on' : paused ? 'mst warn' : j.done >= j.total && j.enabled ? 'mst ok' : 'mst' }, state), h('span', { class: 'sp' }), h('span', { class: 'muted' }, `${nf.format(Math.min(j.done, j.total))} / ${nf.format(j.total)}`)),
         h('div', { class: 'bar' }, h('i', { style: `width:${j.total ? Math.min(100, 100 * j.done / j.total).toFixed(1) : 0}%` })),
         j.running && j.since ? h('div', { class: stuck ? 'warn' : 'muted', style: 'font-size:11.5px;margin-top:3px' }, `${Math.round((now - j.since) / 60)} min · last progress ${idle < 90 ? Math.round(idle) + ' s' : Math.round(idle / 60) + ' min'} ago`,
           j.current && j.current.length ? ` · ${j.current.map((x) => x.split('/').pop()).join(', ')}` : '', stuck ? ` · probably stuck on that file: see the server log, or restart ${S.APP_NAME}` : '') : null,
+        paused ? h('div', { class: 'warn mheld' }, `Stopped twice, ${fmtWhen(j.held.at)}: ${j.held.reason}. What it had finished is kept. `,
+          h('button', { type: 'button', class: 'lnk', title: `Run “${j.label}” again for the photos it has not done yet`, onclick: async () => {
+            await act(() => post('/api/analysis/run', { job: j.key }), { toast: `Trying “${j.label}” again.` });
+            draw();
+          } }, 'Try again')) : null,
         extra);
+    };
+    // the server's memory as the job queue sees it: the limit and what is in use, what analysis may take, whether
+    // the queue is waiting for memory to come free, and the last job that was stopped for it
+    const memoryLine = (mem) => {
+      if (!mem || !mem.limit) return null;
+      const labelOf = (key) => (a.jobs.find((j) => j.queue === key) || {}).label || key || 'a job';
+      const w = mem.waiting, s = mem.lastStop;
+      return h('div', { class: 'muted mmem' }, h('b', null, 'Memory: '),
+        `${fmtBytes(mem.used) || '0 B'} of ${fmtBytes(mem.limit)} in use`,
+        mem.process && mem.ceiling ? `; analysis runs in a process of its own that may use up to ${fmtBytes(mem.ceiling)}${mem.worker ? ` (now ${fmtBytes(mem.worker)})` : ''}` : '', '.',
+        w ? h('span', { class: 'warn' }, ` The next job waits for memory to come free (since ${fmtWhen(w.since)}).`) : null,
+        s ? ` Last stopped: ${labelOf(s.job)}, ${fmtWhen(s.at)}: ${s.reason}.` : '');
     };
     // face detection writes to digiKam's database, so it never starts by itself: a Run link for the photos not looked at yet
     const runNow = (j) => j && j.key === 'facedetect' && j.enabled && !j.running && j.done < j.total ? h('button', { type: 'button', class: 'lnk mrerun', style: 'margin-right:12px', title: 'Look for faces in every photo not looked at yet', onclick: async () => {
@@ -147,11 +166,12 @@ function aiSection(view) {
         h('select', { onchange: async (e) => { await act(() => post('/api/settings', { bg_threads: +e.target.value }), { toast: 'Applies when the next job starts.' }); } },
           Array.from({ length: Math.max(1, (q.cores || 4) - 1) }, (_, i) => h('option', { value: i + 1, selected: i + 1 === q.threads }, String(i + 1)))),
         ` of ${q.cores || '?'} cores.`, q.queued?.length ? ` Waiting: ${q.queued.length}.` : ''),
+      memoryLine(q.memory),
       h('div', { class: 'mwrap' }, h('table', { class: 'mtable' },
         h('thead', null, h('tr', null, ['Feature', 'Model', 'Progress', ''].map((c) => h('th', null, c)))), h('tbody', null, rows))));
     checkBtn.disabled = false; fill(checkBtn, icon('spark'), 'Check models for updates');
     clearTimeout(timer);
-    if (a.jobs.some((j) => j.running) || p.running) timer = setTimeout(() => { if (S.route.view === view && body.isConnected) drawSafe(); }, 4000);
+    if (a.jobs.some((j) => j.running || j.queued) || q.memory?.waiting || p.running) timer = setTimeout(() => { if (S.route.view === view && body.isConnected) drawSafe(); }, 4000);
   };
   const drawRaw = draw;
   const drawSafe = async () => {  // a menu the user has open is not replaced under their pointer; try again shortly

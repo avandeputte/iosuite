@@ -7,6 +7,8 @@ the "start while running" rule, the reset that cancels and empties the tables, t
 prologue and epilogue of the run itself. That bookkeeping lives here once; a module keeps only what is its own:
 which photos still need doing (`todo`), what to do with them (`work`), and how to count what is covered (`counts`).
 
+`work` runs in the job process (jobs.offload, jobproc.py); everything else here runs in the web app.
+
 The start rule matters more than it looks: the index rebuilds every few minutes and starts every job again
 with the whole library. A start whose to-do list is already inside the running job's is ignored, so a long run
 (hours of videos) is not restarted at every rebuild; one with something new cancels the run, and the new
@@ -26,14 +28,15 @@ class ScanJob:
     counts(con) -> (done, total) what coverage() reports (total None when every item is wanted)
     available()                 the job can run here (its model or package is installed); checked at start and
                                 again at run time, when the model may have been removed since
+    on_message(msg)             called in the web app with what `work` hands to jobs.emit(msg)
     tables                      the job's own tables, emptied by reset() together with its pix_ai_scans rows
     **fields                    the job's own progress fields (phase...), cleared again at each run"""
 
-    def __init__(self, name: str, todo, work, counts=None, available=None, tables: tuple = (), **fields):
+    def __init__(self, name: str, todo, work, counts=None, available=None, tables: tuple = (), on_message=None, **fields):
         self.name = name
         self.progress = jobs.Progress(name, **fields)
         self._fields = fields
-        self._todo, self._work, self._counts, self._available = todo, work, counts, available
+        self._todo, self._work, self._counts, self._available, self._on_message = todo, work, counts, available, on_message
         self.tables = tuple(tables)
         self._running = {"todo": set()}  # the photos the running job is working through, for start()'s rule
 
@@ -59,7 +62,10 @@ class ScanJob:
         if not todo:
             return
         try:
-            self._work(gen, todo)
+            # the work loads the models: in the job process (jobs.offload), so the web app stays small and survives a
+            # model that needs more memory than there is. `work` is a module-level function for that reason, and what
+            # it has to tell the web app it emits (on_message); its Progress is kept in step by the queue
+            jobs.offload(self._work, gen, todo, on_message=self._on_message)
         finally:
             self.progress.finish(gen)
 

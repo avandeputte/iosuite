@@ -39,6 +39,20 @@ Each job may use half the machine's cores by default (**Settings › AI**, or `B
 
 **Settings › AI** shows every job with its progress, **Check for new photos now** and **Run again from scratch**.
 
+## Memory
+
+The models are large, and a server has only so much memory. The jobs that load models therefore run in **a process of their own**, next to the web app: it starts when the first job needs it and ends when the queue is empty, which also gives the models' memory back.
+
+iopix reads how much memory the server may use (the container's limit, where there is one) and checks once a second while a job runs:
+
+- a job that takes more than its share (60% of the limit by default) is stopped,
+- a job is stopped when the server as a whole has less than its reserve free (8% of the limit by default), and no job starts while memory is that short,
+- the web app keeps running in every case, so the site stays up.
+
+A job that was stopped is tried once more and continues from what it had finished. Stopped a second time, it is **paused**: Settings › AI shows why, with **Try again**. The same page shows the memory in use, and the last job that was stopped and when.
+
+When a job is paused for memory, the usual cures are a smaller model for that feature (Settings › AI), more memory for the server, or fewer cores per job. `JOBS_MEMORY_MB` and `MEMORY_RESERVE_MB` change the two thresholds; see [Configuration](../reference/configuration.md).
+
 ## Turning it off
 
 | Variable | Effect |
