@@ -277,7 +277,7 @@ def props_object(ctx: Ctx, row: dict, c: dict, names: list[str], data_el: ET.Ele
         elif n == q(C, "calendar-data"):
             _sub(ok, C, "calendar-data", _calendar_data(row, data_el))
         elif n == q(D, "getcontentlength"):
-            _sub(ok, D, "getcontentlength", len(row["ics"].encode()))
+            _sub(ok, D, "getcontentlength", row["ics_bytes"] if "ics_bytes" in row else len(row["ics"].encode()))
         elif n == q(D, "current-user-privilege-set"):
             _privs(ok, model.can_write(ctx.user, c))
         elif n == q(D, "owner"):
@@ -296,10 +296,9 @@ def _calendar_data(row: dict, data_el: ET.Element | None) -> str:
         return row["ics"]
     try:
         s, e = _utc(exp.get("start")), _utc(exp.get("end"))
-        import recurring_ical_events
         cal = model.parsed(row)
         out = ical.new_calendar()
-        for occ in recurring_ical_events.of(cal).between(s, e):
+        for occ in ical.expanded(cal, s, e):
             for k in ("RRULE", "RDATE", "EXDATE"):
                 if k in occ:
                     del occ[k]
@@ -458,7 +457,7 @@ def _propfind(ctx: Ctx, parts, body, depth) -> Response:
     if len(parts) == 3:
         _response(ms, ctx.cal_href(c), *props_calendar(ctx, c, pick("calendar")), names_only=nm)
         if depth != "0":
-            for row in model.rows(c["id"]):
+            for row in model.rows(c["id"], listing=q(C, "calendar-data") not in pick("object")):
                 _response(ms, ctx.cal_href(c) + quote(row["href"]), *props_object(ctx, row, c, pick("object")), names_only=nm)
         return _xml(ms)
     row = model.by_href(c["id"], parts[3])
@@ -703,7 +702,7 @@ def _report(ctx: Ctx, parts, body) -> Response:
                 return _precondition(D, "valid-sync-token", 403)
             since = int(m.group(2))
         cur = model.calendar(c["id"])
-        for row in model.rows(c["id"], since):
+        for row in model.rows(c["id"], since, listing=q(C, "calendar-data") not in names):
             href = ctx.cal_href(c) + quote(row["href"])
             if row["deleted"]:
                 if since is None:
@@ -754,9 +753,11 @@ def _query(c: dict, flt: ET.Element | None) -> list[dict]:
 
 
 def _overlaps(row: dict, c: dict, s, e) -> bool:
+    """Whether an occurrence of the event falls in the time range (either end may be open)."""
+    if s is None:
+        return True  # chosen by where the event starts (model.rows_in_range): when in doubt, the client gets it
     try:
-        cal = model.parsed(row)
-        return bool(ical.occurrences(cal, s or dt.datetime(1900, 1, 1, tzinfo=dt.timezone.utc), e or ical.FAR, c.get("timezone")))
+        return ical.happens(model.parsed(row), s, e, c.get("timezone"))
     except Exception:  # noqa: BLE001 - when in doubt, the client gets it
         return True
 

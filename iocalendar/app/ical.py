@@ -9,6 +9,7 @@ import copy
 import datetime as dt
 import hashlib
 import json
+import math
 import os
 import re
 import uuid as uuidlib
@@ -24,6 +25,9 @@ PRODID = f"-//iothing//ioCalendar {__version__}//EN"
 UTC = dt.timezone.utc
 FAR = dt.datetime(2200, 1, 1, tzinfo=UTC)
 MAX_LAST = 20000  # occurrences counted to find where a bounded series ends; beyond that it counts as endless
+MAX_PER_DAY = 48  # a series repeats every half hour at most ...
+MAX_DENSE = 1000  # ... or more often when it ends within this many occurrences
+MAX_EXPAND = dt.timedelta(days=1830)  # the longest period CalDAV's expand writes out as separate occurrences
 REMINDER_DESC = "Reminder"
 
 
@@ -234,6 +238,74 @@ def _repeats(ev: Event) -> bool:
     return ev.get("RRULE") is not None or ev.get("RDATE") is not None
 
 
+# ------------------------------------------------------------------ how large a series is (before expanding it)
+
+def _rules(ev: Event) -> list:
+    r = ev.get("RRULE")
+    return [] if r is None else (r if isinstance(r, list) else [r])
+
+
+def _n(r, key: str) -> int:
+    return len(r.get(key) or [])
+
+
+def _per_day(r) -> float:
+    """At most how many times a day a rule repeats, read from the rule alone (an upper bound: of the BY parts that pick
+    days only the simple ones count)."""
+    freq = str((r.get("FREQ") or ["DAILY"])[0]).upper()
+    every = max(1, int((r.get("INTERVAL") or [1])[0]))
+    hours, minutes, seconds = _n(r, "BYHOUR"), _n(r, "BYMINUTE"), _n(r, "BYSECOND")
+    if freq == "SECONDLY":
+        return min(86400 / every, (hours or 24) * (minutes or 60) * (seconds or 60))
+    if freq == "MINUTELY":
+        return min(1440 / every, (hours or 24) * (minutes or 60)) * (seconds or 1)
+    if freq == "HOURLY":
+        return min(24 / every, hours or 24) * (minutes or 1) * (seconds or 1)
+    times = (hours or 1) * (minutes or 1) * (seconds or 1)
+    if freq == "DAILY":
+        return times / every
+    if freq == "WEEKLY":
+        return times * min(1, (_n(r, "BYDAY") or 1) / (7 * every))
+    if freq == "MONTHLY":
+        return times * min(1, max(5 * _n(r, "BYDAY"), _n(r, "BYMONTHDAY"), 1) / (28 * every))
+    if any(r.get(k) for k in ("BYDAY", "BYMONTHDAY", "BYYEARDAY", "BYWEEKNO")):
+        return times
+    return times * min(1, (_n(r, "BYMONTH") or 1) / (365 * every))
+
+
+def _size(ev: Event) -> int | None:
+    """At most how many occurrences a series has (None: it never ends), without expanding it."""
+    start = ev["DTSTART"].dt
+    day0 = start.date() if isinstance(start, dt.datetime) else start
+    total = 1
+    for r in _rules(ev):
+        if r.get("COUNT"):
+            total += int(r["COUNT"][0])
+        elif r.get("UNTIL"):
+            until = r["UNTIL"][0]
+            until = until.date() if isinstance(until, dt.datetime) else until
+            total += math.ceil(_per_day(r) * (max(0, (until - day0).days) + 2))
+        else:
+            return None
+    extra = ev.get("RDATE")
+    for x in (extra if isinstance(extra, list) else [extra] if extra is not None else []):
+        total += len(getattr(x, "dts", None) or [x])
+    return total
+
+
+def too_frequent(ev: Event) -> bool:
+    """A series that repeats more often than every half hour and does not end within MAX_DENSE occurrences. Expanding
+    one takes the server's time and memory (a rule for every second fills both), so it is refused when saved and
+    drawn as its first occurrence alone when it is in the database already."""
+    try:
+        if not any(_per_day(r) > MAX_PER_DAY for r in _rules(ev)):
+            return False
+        n = _size(ev)
+    except Exception:  # noqa: BLE001 - a rule this cannot read is not expanded either
+        return True
+    return n is None or n > MAX_DENSE
+
+
 def people_of(ev: Event) -> list[dict]:
     out = []
     org = ev.get("ORGANIZER")
@@ -290,12 +362,12 @@ def index(cal: Calendar, tzname: str | None = None) -> dict:
             continue
         lo, hi = min(lo, to_utc(s2, tzname)), max(hi, to_utc(e2, tzname))
     if _repeats(m):
-        r = m.get("RRULE")
-        r = r[0] if isinstance(r, list) else r
-        if r is not None and not r.get("COUNT") and not r.get("UNTIL"):
-            endless = True
-        else:
-            hi = max(hi, _last_end(cal, lo, tzname) or hi)
+        if too_frequent(m):
+            raise ValueError("An event repeats every half hour at most, or more often when it ends within "
+                             f"{MAX_DENSE} times")
+        last = _last_end(cal, m, lo, tzname)
+        endless = last is None
+        hi = max(hi, last or hi)
     people = []
     seen = set()
     for c in [m] + [x for x in comps if x is not m]:
@@ -312,15 +384,18 @@ def index(cal: Calendar, tzname: str | None = None) -> dict:
             "range_end": None if endless else hi.replace(tzinfo=None), "people": people}
 
 
-def _last_end(cal: Calendar, lo: dt.datetime, tzname: str | None) -> dt.datetime | None:
-    last = None
+def _last_end(cal: Calendar, m: Event, lo: dt.datetime, tzname: str | None) -> dt.datetime | None:
+    """Where a series ends (None: never, or after more than MAX_LAST occurrences, which counts as never). The size is
+    read from the rule first: the library builds the whole list of occurrences before the first one can be looked at."""
     try:
-        for i, occ in enumerate(recurring_ical_events.of(cal).between(lo - dt.timedelta(days=1), FAR)):
+        n = _size(m)
+        if n is None or n > MAX_LAST:
+            return None
+        last = None
+        for occ in recurring_ical_events.of(cal).between(lo - dt.timedelta(days=1), FAR):
             s, e = _start_end(occ)
             e = to_utc(e, tzname)
             last = e if last is None or e > last else last
-            if i > MAX_LAST:
-                return None
     except Exception:  # noqa: BLE001 - a rule the library cannot expand: kept, shown from its first date on
         return None
     return last
@@ -337,12 +412,14 @@ def occurrences(cal: Calendar, start: dt.datetime, end: dt.datetime, tzname: str
     recurring = _repeats(m) or any("RECURRENCE-ID" in c for c in comps)
     out = []
     try:
-        found = recurring_ical_events.of(cal).between(start, end)
+        found = None if too_frequent(m) else recurring_ical_events.of(cal).between(start, end)
     except Exception:  # noqa: BLE001 - an object the library cannot expand: its master only
-        found = [m]
-    for occ in found:
+        found = None
+    for occ in ([m] if found is None else found):
         s, e = _start_end(occ)
         if to_utc(e, tzname) <= start and not (to_utc(s, tzname) >= start):
+            continue
+        if found is None and to_utc(s, tzname) >= end:
             continue
         rid = occ.get("RECURRENCE-ID")
         out.append({"start": s, "end": e, "allDay": not isinstance(s, dt.datetime),
@@ -352,6 +429,37 @@ def occurrences(cal: Calendar, start: dt.datetime, end: dt.datetime, tzname: str
                     "transparent": str(occ.get("TRANSP") or "").upper() == "TRANSPARENT",
                     "people": [p["name"] or p["email"] for p in people_of(occ)], "categories": _categories(occ)})
     return out
+
+
+def happens(cal: Calendar, start: dt.datetime, end: dt.datetime | None, tzname: str | None = None) -> bool:
+    """Whether an occurrence overlaps [start, end) (end None: any time after start). Looks at the first occurrence
+    from start on only, so an open or very long period costs no more than a short one."""
+    m = master_of(events_of(cal))
+    if m is None:
+        return False
+    occ, whole = None, too_frequent(m)  # whole: the series is not expanded, its first occurrence stands for it
+    if not whole:
+        try:
+            occ = next(iter(recurring_ical_events.of(cal).after(start)), None)
+        except Exception:  # noqa: BLE001 - an object the library cannot expand
+            whole = True
+    if whole:
+        s, e = _start_end(m)
+        if to_utc(e, tzname) <= start and not (to_utc(s, tzname) >= start):
+            return False
+        occ = m
+    if occ is None:
+        return False
+    return end is None or to_utc(_start_end(occ)[0], tzname) < end
+
+
+def expanded(cal: Calendar, start: dt.datetime, end: dt.datetime) -> list:
+    """The occurrences in [start, end) as events of their own (what CalDAV's expand asks for). ValueError: a series or
+    a period too large to write out."""
+    m = master_of(events_of(cal))
+    if m is None or too_frequent(m) or end - start > MAX_EXPAND:
+        raise ValueError("Too many occurrences to expand")
+    return recurring_ical_events.of(cal).between(start, end)
 
 
 # ------------------------------------------------------------------ the JSON shape
@@ -784,14 +892,19 @@ def remaining_count(cal: Calendar, recurrence_id: str, tzname: str | None = None
     r = r[0] if isinstance(r, list) else r
     if r is None or not r.get("COUNT"):
         return None
+    if too_frequent(m):
+        return None
     rid = to_utc(_rid_value(m, parse_rid(recurrence_id)), tzname)
-    n = 0
-    for occ in recurring_ical_events.of(cal).between(to_utc(m["DTSTART"].dt, tzname) - dt.timedelta(days=1), FAR):
+    first = to_utc(m["DTSTART"].dt, tzname) - dt.timedelta(days=1)
+
+    def when(occ) -> dt.datetime:
         rr = occ.get("RECURRENCE-ID")
-        when = to_utc(rr.dt if rr is not None else occ["DTSTART"].dt, tzname)
-        if when >= rid:
-            n += 1
-    return max(1, n)
+        return to_utc(rr.dt if rr is not None else occ["DTSTART"].dt, tzname)
+
+    if int(r["COUNT"][0]) > MAX_LAST:  # a very long series: what came before this occurrence is the shorter list
+        before = sum(1 for occ in recurring_ical_events.of(cal).between(first, rid + dt.timedelta(days=1)) if when(occ) < rid)
+        return max(1, int(r["COUNT"][0]) - before)
+    return max(1, sum(1 for occ in recurring_ical_events.of(cal).between(first, FAR) if when(occ) >= rid))
 
 
 # ------------------------------------------------------------------ jCal (RFC 7265)
@@ -915,9 +1028,10 @@ def from_jcal(obj) -> Calendar:
 
 # ------------------------------------------------------------------ feeds
 
-def feed(objects: list[str], name: str, description: str = "", color: str | None = None, tzname: str | None = None,
+def feed(objects: list, name: str, description: str = "", color: str | None = None, tzname: str | None = None,
          refresh_hours: int = 1) -> str:
-    """Many calendar objects as one VCALENDAR (a subscription or an export), each VTIMEZONE once."""
+    """Many calendar objects (parsed, or as text) as one VCALENDAR (a subscription or an export), each VTIMEZONE once.
+    The objects are read only: their events go into the new calendar as they are."""
     out = new_calendar()
     out.add("CALSCALE", "GREGORIAN")
     out.add("METHOD", "PUBLISH")
@@ -934,7 +1048,7 @@ def feed(objects: list[str], name: str, description: str = "", color: str | None
     events = []
     for o in objects:
         try:
-            c = parse(o)
+            c = o if isinstance(o, Calendar) else parse(o)
         except ValueError:
             continue
         for sub in c.subcomponents:

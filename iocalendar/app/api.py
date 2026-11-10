@@ -273,7 +273,7 @@ def list_events(request: Request, q: str = "", calendar: str | None = None, limi
     if mids is not None:
         rows = [r for r in rows if model.tagged(r, mids)][:n]
     if wants(request, format) == "ics":
-        return Response(ical.feed([r["ics"] for r in rows], "ioCalendar"), media_type="text/calendar; charset=utf-8")
+        return Response(ical.feed(model.objects(rows), "ioCalendar"), media_type="text/calendar; charset=utf-8")
     out = []
     fam = members.family()
     for r in rows:

@@ -196,21 +196,21 @@ def save(cid: int, cal, event_id: int | None = None, href: str | None = None, us
     ix = ical.index(cal, tzname or (calendar(cid) or {}).get("timezone"))
     ics = ical.text(cal)
     etag = ical.etag_of(ics)
-    tok = bump(cid)
-    cols = dict(uid=ix["uid"][:255], summary=ix["summary"], location=(ix["location"] or None) and ix["location"][:1024],
-                description=ix["description"], all_day=ix["all_day"], dtstart=ix["dtstart"], dtend=ix["dtend"],
-                tzid=(ix["tzid"] or None) and ix["tzid"][:64], rrule=(ix["rrule"] or None) and ix["rrule"][:1024], status=ix["status"],
-                range_start=ix["range_start"], range_end=ix["range_end"], ics=ics, etag=etag, changed_token=tok, deleted=0)
-    if event_id is None:
-        if not href:
-            href = href_for(ix["uid"])
-            old = by_href(cid, href)
-            if old and not old["deleted"]:  # an app reusing a name: a new one
-                href, old = href_for(ical.new_uid()), None
-        else:
-            old = by_href(cid, href)
-        event_id = old["id"] if old else None
-    with db.tx():
+    with db.tx():  # the sync token and the row change together: a failure leaves neither
+        tok = bump(cid)
+        cols = dict(uid=ix["uid"][:255], summary=ix["summary"], location=(ix["location"] or None) and ix["location"][:1024],
+                    description=ix["description"], all_day=ix["all_day"], dtstart=ix["dtstart"], dtend=ix["dtend"],
+                    tzid=(ix["tzid"] or None) and ix["tzid"][:64], rrule=(ix["rrule"] or None) and ix["rrule"][:1024], status=ix["status"],
+                    range_start=ix["range_start"], range_end=ix["range_end"], ics=ics, etag=etag, changed_token=tok, deleted=0)
+        if event_id is None:
+            if not href:
+                href = href_for(ix["uid"])
+                old = by_href(cid, href)
+                if old and not old["deleted"]:  # an app reusing a name: a new one
+                    href, old = href_for(ical.new_uid()), None
+            else:
+                old = by_href(cid, href)
+            event_id = old["id"] if old else None
         if event_id:
             db.ex(f"UPDATE cal_events SET {', '.join(f'{k} = %s' for k in cols)}, calendar_id = %s WHERE id = %s", (*cols.values(), cid, event_id))
         else:
@@ -225,31 +225,52 @@ def save(cid: int, cal, event_id: int | None = None, href: str | None = None, us
 
 def delete(eid: int) -> None:
     """A tombstone: CalDAV clients learn of the deletion from the next sync."""
-    r = get_row(eid)
-    if not r or r["deleted"]:
-        return
-    tok = bump(r["calendar_id"])
-    db.ex("UPDATE cal_events SET deleted = 1, ics = '', changed_token = %s WHERE id = %s", (tok, eid))
-    db.ex("DELETE FROM cal_event_people WHERE event_id = %s", (eid,))
+    with db.tx():
+        r = get_row(eid)
+        if not r or r["deleted"]:
+            return
+        tok = bump(r["calendar_id"])
+        db.ex("UPDATE cal_events SET deleted = 1, ics = '', changed_token = %s WHERE id = %s", (tok, eid))
+        db.ex("DELETE FROM cal_event_people WHERE event_id = %s", (eid,))
 
 
 def move(eid: int, to_cid: int) -> dict:
-    """To another calendar: a deletion in the old one and a new event in the new one (as CalDAV sees it)."""
-    r = get_row(eid)
-    if r["calendar_id"] == to_cid:
-        return r
-    other = by_uid(to_cid, r["uid"])
-    if other:
-        raise ValueError("That calendar already has this event")
-    cal = parsed(r)
-    delete(eid)
-    return save(to_cid, cal, None, None, r.get("created_by"))
+    """To another calendar: a deletion in the old one and a new event in the new one (as CalDAV sees it), in one
+    transaction: when the new event cannot be saved, the old one stays."""
+    with db.tx():
+        r = get_row(eid)
+        if r["calendar_id"] == to_cid:
+            return r
+        other = by_uid(to_cid, r["uid"])
+        if other:
+            raise ValueError("That calendar already has this event")
+        cal = parsed(r)
+        delete(eid)
+        return save(to_cid, cal, None, None, r.get("created_by"))
 
 
-def rows(cid: int, since: int | None = None) -> list[dict]:
+LISTED = ("id, calendar_id, uid, href, etag, summary, all_day, dtstart, dtend, rrule, status, range_start, range_end, changed_token, "
+          "deleted, created_by, created_at, updated_at, LENGTH(ics) AS ics_bytes")
+
+
+def rows(cid: int, since: int | None = None, listing: bool = False) -> list[dict]:
+    """A calendar's events (since: what changed after that sync token, deletions included). listing: without the
+    objects themselves (ics_bytes says how long each is), for the replies that name events and their etags only."""
+    cols = LISTED if listing else "*"
     if since is None:
-        return db.q("SELECT * FROM cal_events WHERE calendar_id = %s AND deleted = 0 ORDER BY id", (cid,))
-    return db.q("SELECT * FROM cal_events WHERE calendar_id = %s AND changed_token > %s ORDER BY changed_token", (cid, since))
+        return db.q(f"SELECT {cols} FROM cal_events WHERE calendar_id = %s AND deleted = 0 ORDER BY id", (cid,))
+    return db.q(f"SELECT {cols} FROM cal_events WHERE calendar_id = %s AND changed_token > %s ORDER BY changed_token", (cid, since))
+
+
+def objects(rows_: list[dict]) -> list:
+    """The parsed objects of these rows (from the cache where they are there), one that cannot be read left out."""
+    out = []
+    for r in rows_:
+        try:
+            out.append(parsed(r))
+        except ValueError:
+            continue
+    return out
 
 
 PAD = dt.timedelta(hours=14)  # all-day events are kept at UTC midnight; a day elsewhere is up to 14 hours off
@@ -381,7 +402,7 @@ def tagged(r: dict, member_ids: set[int] | None) -> bool:
 def export_text(cals: list[dict], name: str, member_ids: set[int] | None = None) -> str:
     objs = []
     for c in cals:
-        objs += [r["ics"] for r in rows(c["id"]) if tagged(r, member_ids)]
+        objs += objects([r for r in rows(c["id"]) if tagged(r, member_ids)])
     tz = cals[0].get("timezone") if len(cals) == 1 else None
     return ical.feed(objs, name, color=cals[0].get("color") if len(cals) == 1 else None, tzname=tz or ical.default_tz())
 
