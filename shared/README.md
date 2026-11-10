@@ -34,7 +34,7 @@ the environment, such as a container's, win). The app reads it first, before any
 from iosuite_shared import config as shared_config
 shared_config.load_file(APP_DIR)            # APP_DIR/config.env into os.environ
 globals().update(shared_config.standard("iocalendar", APP_DIR))   # APP_DIR, DATA_DIR, STATIC_DIR, LOG_FILE, HOST, PORT, PUBLIC_URL,
-                                                                  # BASE_URL, TLS_*_FILE, MCP_FORCED, ADMIN_USER/PASSWORD
+                                                                  # BASE_URL, TLS_*_FILE, MCP_FORCED, KEEP_DELETED_DAYS, ADMIN_USER/PASSWORD
 DB = shared_config.own_db("calendar")       # the app's own database: DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD (no default password)
 ```
 
@@ -158,6 +158,15 @@ on a thread share the transaction, and `q` / `ex` inside the block run in it).
 
 Validation raises `iosuite_shared.Invalid` (a `ValueError`): `raise Invalid("A name is needed")` is a 400 with that
 message. ioCalendar and ioContacts share their WebDAV plumbing in `iosuite_shared.dav` (the `dav` extra).
+
+A request to an address somebody else chose (a profile's link, a bookmark) goes through `iosuite_shared.outbound`:
+`outbound.opener()` is an urllib opener whose connections go to the address that was checked, a redirect's too
+(`outbound.public` by default: the internet only; `outbound.not_this_machine` lets the home network in), and
+`outbound.check(url)` refuses a URL before anything is sent (`outbound.NotAllowed`, an `Invalid`).
+
+A job that runs once a day (purging what was deleted `KEEP_DELETED_DAYS` ago) is started in the app's lifespan with
+`task = chores.start(model.purge_deleted, name="purge of old deletion markers")` and stopped with `task.cancel()`: a
+run that fails is logged and tried again at the next turn.
 
 Per-user data: `users.get_settings(uid, app)`, `users.set_settings(uid, app, changes)`, and for anything else
 `users.get_value / set_value(uid, app, key, value)` (JSON values).

@@ -241,3 +241,73 @@ def test_a_value_error_no_validation_raised_is_logged_with_its_traceback(caplog)
     assert issubclass(Invalid, ValueError)
     with pytest.raises(ValueError):
         users.clean_name("")
+
+
+def test_a_chore_runs_again_after_it_failed():
+    import asyncio
+    from iosuite_shared import chores
+    runs = []
+
+    def chore():
+        runs.append(1)
+        if len(runs) == 1:
+            raise RuntimeError("the database was away")
+
+    async def go():
+        task = chores.start(chore, every_s=0.01, first_s=0)
+        await asyncio.sleep(0.2)
+        task.cancel()
+
+    asyncio.run(go())
+    assert len(runs) >= 2
+
+
+# ---- outbound requests
+def test_an_outbound_request_goes_only_where_it_may():
+    import http.server
+    import ipaddress
+    import threading
+    import urllib.error
+    from iosuite_shared import outbound
+
+    assert outbound.public(ipaddress.ip_address("93.184.215.14")) and not outbound.public(ipaddress.ip_address("192.168.1.5"))
+    assert outbound.not_this_machine(ipaddress.ip_address("192.168.1.5"))
+    assert not outbound.not_this_machine(ipaddress.ip_address("127.0.0.1")) and not outbound.not_this_machine(ipaddress.ip_address("169.254.169.254"))
+    with pytest.raises(outbound.NotAllowed):
+        outbound.address("127.0.0.1", 80)
+    assert outbound.address("127.0.0.1", 80, allowed=lambda ip: True) == "127.0.0.1"
+    for url in ("file:///etc/passwd", "ftp://example.com/x", "http://"):
+        with pytest.raises(Invalid):
+            outbound.check(url)
+    assert issubclass(outbound.NotAllowed, Invalid)
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            if self.path == "/away":
+                self.send_response(302)
+                self.send_header("Location", "http://169.254.169.254/latest/meta-data")
+                self.end_headers()
+                return
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"here")
+
+        def log_message(self, *a):
+            pass
+
+    srv = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{srv.server_port}"
+    try:
+        with pytest.raises(outbound.NotAllowed):  # the default: the internet only
+            outbound.opener().open(base + "/", timeout=5)
+        local = lambda ip: ip.is_loopback
+        assert outbound.opener(local).open(base + "/", timeout=5).read() == b"here"
+        with pytest.raises(outbound.NotAllowed):  # a redirect is checked like the first address, before anything is sent
+            outbound.opener(local).open(base + "/away", timeout=5)
+        with pytest.raises(urllib.error.HTTPError) as e:  # redirects off: the 302 is the answer
+            outbound.opener(local, redirects=False).open(base + "/away", timeout=5)
+        assert e.value.code == 302
+    finally:
+        srv.shutdown()
+        srv.server_close()

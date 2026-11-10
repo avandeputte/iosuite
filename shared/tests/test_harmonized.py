@@ -208,7 +208,7 @@ def test_standard_settings(tmp_path, monkeypatch):
     s = config.standard("iocalendar", tmp_path)
     assert s["APP_DIR"] == tmp_path.resolve() and s["DATA_DIR"] == tmp_path.resolve() / "data" and s["DATA_DIR"].is_dir()
     assert s["STATIC_DIR"] == tmp_path.resolve() / "static" and s["LOG_FILE"] == s["DATA_DIR"] / "iocalendar.log"
-    assert (s["HOST"], s["PORT"], s["PUBLIC_URL"], s["BASE_URL"], s["MCP_FORCED"]) == ("0.0.0.0", 8620, "", "http://localhost:8620", False)
+    assert (s["HOST"], s["PORT"], s["PUBLIC_URL"], s["BASE_URL"], s["MCP_FORCED"], s["KEEP_DELETED_DAYS"]) == ("0.0.0.0", 8620, "", "http://localhost:8620", False, 90)
     monkeypatch.setenv("LOG_FILE", "")
     monkeypatch.setenv("PUBLIC_URL", "https://cal.example.com/")
     monkeypatch.setenv("MCP", "1")
