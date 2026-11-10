@@ -16,6 +16,9 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
 
 from app import access, config, contacts, holiday, ical, members, model, users
+from iosuite_shared import users as shared_users
+from iosuite_shared.access import json_body
+from iosuite_shared.errors import Invalid
 
 router = APIRouter()
 
@@ -167,9 +170,9 @@ def list_calendars(request: Request):
 async def add_calendar(request: Request):
     """{name, color?, description?, timezone?, shared?}: shared calendars are made by editors and admins."""
     u = request.state.user
-    b = await request.json()
+    b = await json_body(request)
     shared = bool(b.get("shared"))
-    if shared and not users.can_write(u):
+    if shared and not shared_users.can_write(u):
         raise HTTPException(403, "Only editors make shared calendars")
     if not (b.get("name") or "").strip():
         raise HTTPException(400, "A name, please")
@@ -186,11 +189,11 @@ async def add_calendar(request: Request):
 @router.patch("/api/calendars/{cid}", dependencies=[access.signed_in])
 async def edit_calendar(cid: int, request: Request):
     u = request.state.user
-    b = await request.json()
+    b = await json_body(request)
 
     def edit():
         c = readable_calendar(u, cid)
-        if not (model.is_shared(c) and c.get("kind") in model.READ_ONLY_KINDS and users.is_admin(u)):  # admins name and color those
+        if not (model.is_shared(c) and c.get("kind") in model.READ_ONLY_KINDS and shared_users.is_admin(u)):  # admins name and color those
             writable_calendar(u, cid)
         model.update_calendar(cid, **{k: b[k] for k in ("name", "description", "color", "timezone", "sort") if k in b})
         return model.calendar(cid)
@@ -201,7 +204,7 @@ async def edit_calendar(cid: int, request: Request):
 def del_calendar(cid: int, request: Request):
     u = request.state.user
     c = writable_calendar(u, cid)
-    if model.is_shared(c) and not users.is_admin(u):
+    if model.is_shared(c) and not shared_users.is_admin(u):
         raise HTTPException(403, "Only an admin deletes a shared calendar")
     if model.is_shared(c) and len([x for x in model.calendars_for(u) if x["owner_id"] is None and x["kind"] == "events"]) <= 1:
         raise HTTPException(400, "The last shared calendar stays")
@@ -268,10 +271,7 @@ def list_events(request: Request, q: str = "", calendar: str | None = None, limi
     u = request.state.user
     cals = visible(u, calendar)
     mids = member_filter(member)
-    n = max(1, min(limit, 5000))
-    rows = model.search_rows([c["id"] for c in cals], q, n if mids is None else 100000)
-    if mids is not None:
-        rows = [r for r in rows if model.tagged(r, mids)][:n]
+    rows = model.search_rows([c["id"] for c in cals], q, max(1, min(limit, 5000)), mids)
     if wants(request, format) == "ics":
         return Response(ical.feed(model.objects(rows), "ioCalendar"), media_type="text/calendar; charset=utf-8")
     out = []
@@ -388,7 +388,7 @@ def change(u: dict, r: dict, c: dict, data: dict, partial: bool = True, scope: s
     m = ical.master_of(ical.events_of(cal))
     repeating = m.get("RRULE") is not None or m.get("RDATE") is not None
     if scope not in ("all", "this", "following"):
-        raise ValueError("scope is all, this or following")
+        raise Invalid("scope is all, this or following")
     if recurrence_id and repeating and scope == "following" and \
             ical._same_instant(ical._rid_value(m, ical.parse_rid(recurrence_id)), m["DTSTART"].dt):
         scope = "all"  # from the first one on: the whole series
@@ -433,7 +433,7 @@ def remove(u: dict, r: dict, c: dict, scope: str = "all", recurrence_id: str | N
             return
         ical.end_series_before(cal, recurrence_id)
     else:
-        raise ValueError("scope is all, this or following")
+        raise Invalid("scope is all, this or following")
     model.save(r["calendar_id"], cal, r["id"], None, u["id"], c.get("timezone"))
 
 
@@ -499,7 +499,7 @@ def family_members(request: Request):
     Admins also get leftOut: the ids of the accounts taken out."""
     u = request.state.user
     out = {"items": members.public(members.family())}
-    if users.is_admin(u):
+    if shared_users.is_admin(u):
         out["leftOut"] = sorted(members.left_out())
     return out
 
@@ -508,7 +508,7 @@ def family_members(request: Request):
 async def set_family_member(uid: int, request: Request):
     """Admins: {inFamily: bool}. An account out of the family (an admin or service account, not a person) is not
     offered as a tag and gets no private calendar here; its tags on events stay as plain categories."""
-    b = await request.json()
+    b = await json_body(request)
 
     def set_():
         if not users.get(uid):
@@ -677,7 +677,7 @@ async def iocontacts_settings(request: Request, test: int = 0):
 @router.post("/api/iocontacts/settings", dependencies=[access.admin])
 async def iocontacts_save(request: Request):
     """Admins: {birthdays}. Saving brings the Birthdays calendar up to date."""
-    b = await request.json()
+    b = await json_body(request)
     await run_in_threadpool(contacts.save_settings, bool(b["birthdays"]) if "birthdays" in b else None)
     sync = await run_in_threadpool(contacts.sync_birthdays) if contacts.enabled() or not contacts.settings()["birthdays"] else None
     return {**contacts.public_settings(), "sync": sync}
@@ -716,9 +716,9 @@ def holidays_country(code: str, request: Request):
 async def holidays_save(request: Request):
     """Admins: {items: [{country, region?, language?}]}, one Holidays calendar per country; [] switches them all off.
     Saving fills them again."""
-    b = await request.json()
+    b = await json_body(request)
     try:
-        await run_in_threadpool(holiday.save_settings, (b or {}).get("items"))
+        await run_in_threadpool(holiday.save_settings, b.get("items"))
     except ValueError as e:
         raise HTTPException(400, str(e))
     sync = await run_in_threadpool(holiday.sync)

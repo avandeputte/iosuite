@@ -17,68 +17,36 @@ import xml.etree.ElementTree as ET
 
 from defusedxml import DefusedXmlException
 from defusedxml.ElementTree import fromstring as parse_xml  # a client's XML: no entity expansion or external entities
-from email.utils import format_datetime
 from urllib.parse import quote, unquote
 
 from fastapi import APIRouter, Request
 from icalendar import vDDDTypes
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import RedirectResponse, Response
+from iosuite_shared import dav as webdav  # `dav` is the route below
+from iosuite_shared.dav import AP, CS, D, q
 
 from app import access, config, ical, model
 
+# the WebDAV plumbing ioCalendar and ioContacts share (iosuite_shared.dav), under the names this module uses
+_xml, _sub, _requested, _response, _parse, _etag_match, _http_date = webdav.xml, webdav.sub, webdav.requested, webdav.response, webdav.parts_of, webdav.etag_match, webdav.http_date
+_precondition = webdav.precondition
+
 router = APIRouter()
 
-D, C, CS, AP = "DAV:", "urn:ietf:params:xml:ns:caldav", "http://calendarserver.org/ns/", "http://apple.com/ns/ical/"
+C = "urn:ietf:params:xml:ns:caldav"
 for pfx, ns in (("d", D), ("cal", C), ("cs", CS), ("ical", AP)):
     ET.register_namespace(pfx, ns)
 METHODS = ["OPTIONS", "PROPFIND", "PROPPATCH", "REPORT", "GET", "HEAD", "PUT", "DELETE", "MKCOL", "MKCALENDAR", "MOVE", "COPY"]
 SYNC_PREFIX = "urn:x-iocalendar:sync:"
 
 
-def q(ns, tag):
-    return f"{{{ns}}}{tag}"
-
-
-def _xml(root: ET.Element, status: int = 207) -> Response:
-    body = b'<?xml version="1.0" encoding="utf-8"?>\n' + ET.tostring(root, encoding="utf-8")
-    return Response(body, status_code=status, media_type="application/xml; charset=utf-8")
-
-
 def _unauth() -> Response:
-    return Response("Sign in with your ioCalendar name and an app password.", status_code=401,
-                    headers={"WWW-Authenticate": 'Basic realm="ioCalendar", charset="UTF-8"'})
+    return webdav.unauthorized("ioCalendar", "an app password")
 
 
 def _opts_headers() -> dict:
-    return {"DAV": "1, 2, 3, calendar-access, extended-mkcol", "Allow": ", ".join(METHODS), "MS-Author-Via": "DAV"}
-
-
-def _http_date(d) -> str:
-    return format_datetime(d.replace(tzinfo=dt.timezone.utc), usegmt=True) if d else ""
-
-
-def _sub(parent, ns, tag, text=None):
-    e = ET.SubElement(parent, q(ns, tag))
-    if text is not None:
-        e.text = str(text)
-    return e
-
-
-def _requested(body: bytes) -> tuple[str, list[str]]:
-    """PROPFIND body: ('allprop' | 'propname' | 'prop', [clark names])."""
-    if not body or not body.strip():
-        return "allprop", []
-    try:
-        root = parse_xml(body)
-    except (ET.ParseError, DefusedXmlException):
-        return "allprop", []
-    if root.find(q(D, "propname")) is not None:
-        return "propname", []
-    p = root.find(q(D, "prop"))
-    if p is None:
-        return "allprop", []
-    return "prop", [c.tag for c in p]
+    return webdav.options("1, 2, 3, calendar-access, extended-mkcol", METHODS)
 
 
 # ------------------------------------------------------------------ properties
@@ -123,11 +91,7 @@ def _common(ctx: Ctx, name: str, el: ET.Element) -> bool:
 
 
 def _privs(el, writable: bool):
-    s = _sub(el, D, "current-user-privilege-set")
-    for p in (["read", "read-acl", "read-current-user-privilege-set", "read-free-busy"] +
-              (["write", "write-properties", "write-content", "bind", "unbind", "all"] if writable else [])):
-        e = _sub(s, D, "privilege")
-        _sub(e, C if p == "read-free-busy" else D, p)
+    webdav.privileges(el, writable, also=[(C, "read-free-busy")])
 
 
 def props_root(ctx: Ctx, names: list[str]):
@@ -190,7 +154,7 @@ def props_home(ctx: Ctx, names: list[str]):
 
 
 def sync_token(c) -> str:
-    return f"{SYNC_PREFIX}{c['id']}-{c['sync_token']}"
+    return webdav.sync_token(SYNC_PREFIX, c)
 
 
 def _vtimezone(name: str | None) -> str | None:
@@ -322,33 +286,7 @@ ALLPROP = {
 }
 
 
-def _response(ms: ET.Element, href: str, ok: ET.Element, missing: list[str], names_only: bool = False):
-    r = _sub(ms, D, "response")
-    _sub(r, D, "href", href)
-    if names_only:
-        for c in ok:
-            for x in list(c):
-                c.remove(x)
-            c.text = None
-    if len(ok):
-        ps = _sub(r, D, "propstat")
-        ps.append(ok)
-        _sub(ps, D, "status", "HTTP/1.1 200 OK")
-    if missing:
-        ps = _sub(r, D, "propstat")
-        p = _sub(ps, D, "prop")
-        for n in missing:
-            ET.SubElement(p, n)
-        _sub(ps, D, "status", "HTTP/1.1 404 Not Found")
-    return r
-
-
 # ------------------------------------------------------------------ resolving paths
-
-def _parse(path: str) -> list[str]:
-    parts = [unquote(p) for p in path.split("/") if p]
-    return parts[1:] if parts and parts[0] == "dav" else parts
-
 
 def _cal(ctx: Ctx, slug: str):
     return model.by_slug(ctx.user, slug)
@@ -527,21 +465,6 @@ def _get(ctx: Ctx, parts, head: bool) -> Response:
                     headers={"ETag": f'"{row["etag"]}"', "Last-Modified": _http_date(row["updated_at"])})
 
 
-def _etag_match(header: str | None, etag: str | None) -> bool:
-    if not header:
-        return True
-    tags = [t.strip().removeprefix("W/").strip('"') for t in header.split(",")]
-    return "*" in tags or (etag is not None and etag in tags)
-
-
-def _precondition(ns: str, name: str, status: int, href: str | None = None) -> Response:
-    e = ET.Element(q(D, "error"))
-    el = _sub(e, ns, name)
-    if href:
-        _sub(el, D, "href", href)
-    return _xml(e, status)
-
-
 def _put(ctx: Ctx, parts, body: bytes, headers) -> Response:
     if len(parts) != 4 or parts[0] != "calendars":
         return Response(status_code=405)
@@ -701,6 +624,8 @@ def _report(ctx: Ctx, parts, body) -> Response:
             if not m or int(m.group(1)) != c["id"] or int(m.group(2)) > c["sync_token"]:
                 return _precondition(D, "valid-sync-token", 403)
             since = int(m.group(2))
+            if since < model.purged_before(c["id"]):  # deletions this client never heard of are gone: it starts over
+                return _precondition(D, "valid-sync-token", 403)
         cur = model.calendar(c["id"])
         for row in model.rows(c["id"], since, listing=q(C, "calendar-data") not in names):
             href = ctx.cal_href(c) + quote(row["href"])

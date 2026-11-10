@@ -20,6 +20,7 @@ import recurring_ical_events
 from icalendar import Alarm, Calendar, Event, vCalAddress, vRecur, vText
 
 from app import __version__, config
+from iosuite_shared.errors import Invalid
 
 PRODID = f"-//iothing//ioCalendar {__version__}//EN"
 UTC = dt.timezone.utc
@@ -112,7 +113,7 @@ def parse_when(s: str, tzname: str | None = None, all_day: bool = False):
     tzname). ValueError when it is neither."""
     s = (s or "").strip()
     if not s:
-        raise ValueError("A date or time is missing")
+        raise Invalid("A date or time is missing")
     if all_day or re.fullmatch(r"\d{4}-\d{2}-\d{2}", s):
         return dt.date.fromisoformat(s[:10])
     d = dt.datetime.fromisoformat(s.replace("Z", "+00:00"))
@@ -131,13 +132,13 @@ def parse(text: str | bytes) -> Calendar:
         text = text.decode("utf-8", "replace")
     text = text.lstrip("\ufeff")
     if "BEGIN:VCALENDAR" not in text.upper():
-        raise ValueError("Not an iCalendar object (no BEGIN:VCALENDAR)")
+        raise Invalid("Not an iCalendar object (no BEGIN:VCALENDAR)")
     try:
         cals = Calendar.from_ical(text, multiple=True)
     except Exception as e:  # noqa: BLE001 - the library raises several kinds
-        raise ValueError(f"Not valid iCalendar: {e}") from e
+        raise Invalid(f"Not valid iCalendar: {e}") from e
     if not cals:
-        raise ValueError("No VCALENDAR in the text")
+        raise Invalid("No VCALENDAR in the text")
     if len(cals) == 1:
         return cals[0]
     out = cals[0]
@@ -210,7 +211,7 @@ def _start_end(ev: Event, tzname: str | None = None):
     """(start, end) of a VEVENT as written (date or datetime); end from DTEND, DURATION, or the RFC 5545 default."""
     s = ev.get("DTSTART")
     if s is None:
-        raise ValueError("An event without a start (DTSTART)")
+        raise Invalid("An event without a start (DTSTART)")
     start = s.dt
     if ev.get("DTEND") is not None:
         end = ev["DTEND"].dt
@@ -220,7 +221,9 @@ def _start_end(ev: Event, tzname: str | None = None):
         end = start + dt.timedelta(days=1) if not isinstance(start, dt.datetime) else start
     if isinstance(start, dt.datetime) != isinstance(end, dt.datetime):  # mixed: follow the start
         end = (dt.datetime.combine(end, dt.time(), start.tzinfo) if isinstance(start, dt.datetime) else end.date())
-    if end < start if type(end) is type(start) and not (isinstance(start, dt.datetime) and (start.tzinfo is None) != (end.tzinfo is None)) else False:
+    # a floating time and one with a zone cannot be compared; anything else that ends before it starts has no length
+    mixed_zones = isinstance(start, dt.datetime) and isinstance(end, dt.datetime) and (start.tzinfo is None) != (end.tzinfo is None)
+    if type(end) is type(start) and not mixed_zones and end < start:
         end = start
     return start, end
 
@@ -343,13 +346,13 @@ def index(cal: Calendar, tzname: str | None = None) -> dict:
     tzid, rrule, status, range_start, range_end (naive UTC; range_end None: endless) and the people."""
     comps = events_of(cal)
     if not comps:
-        raise ValueError("No VEVENT in the calendar object (ioCalendar keeps events)")
+        raise Invalid("No VEVENT in the calendar object (ioCalendar keeps events)")
     uids = {str(c.get("UID") or "") for c in comps}
     if len(uids) != 1 or not next(iter(uids)):
-        raise ValueError("A calendar object holds the events of one UID")
+        raise Invalid("A calendar object holds the events of one UID")
     m = master_of(comps)
     start, end = _start_end(m)
-    tzid = tz_name(start) or (None if isinstance(start, dt.datetime) and start.tzinfo else None)
+    tzid = tz_name(start)  # None for a date, a floating time, or a zone without a name
     all_day = not isinstance(start, dt.datetime)
     lo, hi = to_utc(start, tzname), to_utc(end, tzname)
     endless = False
@@ -363,7 +366,7 @@ def index(cal: Calendar, tzname: str | None = None) -> dict:
         lo, hi = min(lo, to_utc(s2, tzname)), max(hi, to_utc(e2, tzname))
     if _repeats(m):
         if too_frequent(m):
-            raise ValueError("An event repeats every half hour at most, or more often when it ends within "
+            raise Invalid("An event repeats every half hour at most, or more often when it ends within "
                              f"{MAX_DENSE} times")
         last = _last_end(cal, m, lo, tzname)
         endless = last is None
@@ -458,7 +461,7 @@ def expanded(cal: Calendar, start: dt.datetime, end: dt.datetime) -> list:
     a period too large to write out."""
     m = master_of(events_of(cal))
     if m is None or too_frequent(m) or end - start > MAX_EXPAND:
-        raise ValueError("Too many occurrences to expand")
+        raise Invalid("Too many occurrences to expand")
     return recurring_ical_events.of(cal).between(start, end)
 
 
@@ -571,7 +574,7 @@ def _when(data: dict, ev: Event | None, tzname: str | None):
     if not isinstance(start, dt.datetime) and end <= start:
         end = start + dt.timedelta(days=1)
     if isinstance(start, dt.datetime) and end < start:
-        raise ValueError("The event ends before it starts")
+        raise Invalid("The event ends before it starts")
     return start, end
 
 
@@ -586,9 +589,9 @@ def _rrule(value: str | dict | None):
     try:
         r = vRecur.from_ical(value)
     except Exception as e:  # noqa: BLE001
-        raise ValueError(f"Not a repeat rule (RRULE): {value}") from e
+        raise Invalid(f"Not a repeat rule (RRULE): {value}") from e
     if not r.get("FREQ"):
-        raise ValueError("A repeat rule needs FREQ (DAILY, WEEKLY, MONTHLY or YEARLY)")
+        raise Invalid("A repeat rule needs FREQ (DAILY, WEEKLY, MONTHLY or YEARLY)")
     return r
 
 
@@ -1000,7 +1003,7 @@ def from_jcal(obj) -> Calendar:
     if isinstance(obj, (str, bytes)):
         obj = json.loads(obj)
     if not (isinstance(obj, list) and len(obj) == 3 and isinstance(obj[0], str)):
-        raise ValueError("Not jCal: expected [\"vcalendar\", [properties], [components]]")
+        raise Invalid("Not jCal: expected [\"vcalendar\", [properties], [components]]")
     lines: list[str] = []
 
     def comp(c):
@@ -1022,7 +1025,7 @@ def from_jcal(obj) -> Calendar:
     try:
         comp(obj)
     except (TypeError, ValueError) as e:
-        raise ValueError(f"Not valid jCal: {e}") from e
+        raise Invalid(f"Not valid jCal: {e}") from e
     return parse("\r\n".join(lines) + "\r\n")
 
 

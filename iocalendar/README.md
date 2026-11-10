@@ -89,7 +89,6 @@ accounts are the suite's: `.venv/bin/iosuite-shared --config . admin NAME --app 
 | `IOSUITE_DB_HOST`, `_PORT`, `_NAME`, `_USER`, `_PASSWORD` | the Shared ioSuite database (`iosuite`, on `DB_HOST` unless set): accounts, passwords, sessions, app passwords, roles and suite-wide settings, shared by every app of the suite |
 | `COOKIE_DOMAIN` | the domain the session cookie is shared on (`example.com`): signed in at `contacts.example.com`, signed in at `calendar.example.com` too |
 | `HOST`, `PORT` | where the server listens (`0.0.0.0`, 8620; every app of the suite has its own port) |
-| `FORWARDED_ALLOW_IPS` | the addresses that may pass on the visitor's address and scheme (`X-Forwarded-For` / `-Proto`): `*`, or your reverse proxy's; read by the app itself (iosuite-shared), not by uvicorn |
 | `TLS_CERT_FILE`, `TLS_KEY_FILE` | serve HTTPS directly instead of behind a reverse proxy |
 | `TZ` | the family's time zone (default: the server's), for times written without one and all-day events |
 | `PUBLIC_URL` | the address people use (behind a proxy), for links in Settings, the Apple profile and the MCP tools |
@@ -98,6 +97,7 @@ accounts are the suite's: `.venv/bin/iosuite-shared --config . admin NAME --app 
 | `CF_KV_ACCOUNT_ID`, `CF_KV_NAMESPACE_ID`, `CF_KV_API_TOKEN` | optional edge check of app passwords: the Workers KV namespace a Cloudflare Worker on `/dav*` reads; normally stored once for the whole suite in Settings › Global settings › Keys and tokens, these override it ([setup](https://github.com/avandeputte/iosuite-shared/blob/main/cloudflare/edge-auth/README.md)) |
 | `HOLIDAYS_COUNTRY`, `HOLIDAYS_REGION`, `HOLIDAYS_LANGUAGE` | the first choice for Settings › Holidays and birthdays: a two-letter country code, or several comma-separated (`BE,NL`; `off`: no Holidays calendar), a region code and the language of the names for the first one; until set, the country of `TZ`, else US |
 | `MCP` | `1` keeps the MCP server on, whatever the setting says |
+| `KEEP_DELETED_DAYS` | how long a deleted event's marker is kept, so phones learn of the deletion at their next sync (`90`); a client that stayed away longer starts its sync over |
 | `MCP_USER` | the account `python -m app.mcp` (stdio) acts as |
 | `UPDATE_CHECK` | `0` turns the daily version check off for good |
 | `IOCALENDAR_REPO`, `IOCALENDAR_BRANCH` | what the version check and `update.sh` follow (`avandeputte/iocalendar`, `main`) |
