@@ -115,6 +115,9 @@ The settings are in `config.env` in the app folder (`setup.sh` writes the ones i
 | `CAPTIONS` | `1` | `0` turns the photo-description job off |
 | `BG_THREADS` | half the cores | cores one background job may use (capped at cores − 1; also in Settings) |
 | `PREWARM_WORKERS` / `ANALYSIS_WORKERS` | `BG_THREADS` | thread counts for the thumbnail pre-warm and the analysis job, if you want them different |
+| `JOBS_MEMORY_MB` | 60% of the memory limit | the most memory the analysis process may hold before it is stopped (`0`: no ceiling) |
+| `MEMORY_RESERVE_MB` | 8% of the memory limit, at least 256 | free memory kept for everything else: below it no analysis starts and a running one is stopped (`0`: off) |
+| `JOBS_PROCESS` | `1` | `0` runs the analysis inside the web app instead of a process of its own (no memory watch) |
 | `PREWARM` | `1` | build all grid thumbnails in the background after startup |
 | `SCANNER_LOOP` | `1` | `0` keeps the file scanner's background loop off (the test suite sets it; Settings › Library can still start a scan) |
 | `REINDEX_POLL` | `20` | seconds between checks for digiKam database changes |
@@ -300,6 +303,8 @@ The viewer is a web app that installs like an app on a phone or tablet (PWA): op
 All analysis runs locally and is stored in iopix's own database; nothing is written to digiKam. New and changed photos are picked up automatically (the digiKam database is polled every `REINDEX_POLL` seconds, 20 by default). Settings › AI shows every job with progress, "Check for new photos now" and "Run again from scratch".
 
 Heavy work runs through one queue, one job at a time, in this order: thumbnails, sharpness/exposure/objects, content-search embeddings, text and face quality, face grouping, similar photos (when asked for), descriptions, photo quality, ages for date suggestions. Each job may use `BG_THREADS` cores (default half the machine, changeable in Settings; a change applies when the next job starts), so the viewer and other apps stay responsive.
+
+The jobs that load models do their work in a process of their own, started when the first one needs it and ended when the queue is empty (which also hands the models' memory back). The web app watches it once a second against the server's memory limit (the container's, where there is one): a job that takes more than its share (`JOBS_MEMORY_MB`, 60% of the limit by default), or that runs while the server has less than its reserve free (`MEMORY_RESERVE_MB`, 8%), is stopped before the system has to stop something itself, and no job starts while memory is that short. The web app stays up either way. A stopped job is tried once more and goes on from what it had finished; stopped a second time it is paused, and Settings › AI says why and offers "Try again". The same page shows the memory in use and the last job that was stopped.
 
 | Job | What you get |
 | --- | --- |

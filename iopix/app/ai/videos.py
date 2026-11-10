@@ -328,11 +328,18 @@ def _work(gen: int, todo: list):
             # speech wanted but failed (a model that would not load, a broken file): recorded as "no speech", so it is tried again
             con.execute("INSERT OR REPLACE INTO pix_ai_scans VALUES (?,'videos',?,?)", (p["id"], analysis.stamp(p), key if not (speech and tr is None) else _key("")))
         if not (same_file and old[1] == cover_t):
-            thumbs.forget(p["id"])  # the thumbnail, preview and embedding are made again from the chosen frame
+            jobs.emit(("forget", p["id"]))  # the thumbnail, preview and embedding are made again from the chosen frame
         progress.step()
 
 
-job = ScanJob("videos", _todo, _work, available=available, tables=("pix_video_info",), phase="")
+def _heard(msg):
+    """In the web app, from _work in the job process: a video's cover changed, so what was derived from the old one
+    goes (the embeddings are the web app's to change, thumbs.forget)."""
+    if msg[0] == "forget":
+        thumbs.forget(msg[1])
+
+
+job = ScanJob("videos", _todo, _work, available=available, tables=("pix_video_info",), on_message=_heard, phase="")
 progress, start, reset = job.progress, job.start, job.reset
 
 

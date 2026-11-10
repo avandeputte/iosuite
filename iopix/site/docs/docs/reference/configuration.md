@@ -58,6 +58,9 @@ iopix's own data lives on a MariaDB or MySQL server (see [iopix's own database](
 | `SEMANTIC` | `1` | `0` turns content search off |
 | `CAPTIONS` | `1` | `0` turns photo descriptions off |
 | `BG_THREADS` | half the cores | cores one background job may use |
+| `JOBS_MEMORY_MB` | 60% of the memory limit | the most memory the analysis process may hold before it is stopped; `0` sets no ceiling |
+| `MEMORY_RESERVE_MB` | 8% of the memory limit, at least 256 | free memory kept for everything else: below it no analysis starts and a running one is stopped; `0` turns the check off |
+| `JOBS_PROCESS` | `1` | `0` runs the analysis inside the web app instead of a process of its own (no memory watch) |
 | `PREWARM` | `1` | build all grid thumbnails after start |
 | `REINDEX_POLL` | `20` | seconds between checks for changes in digiKam's database |
 | `HF_HUB_OFFLINE` | unset | `1` never contacts the model hub |

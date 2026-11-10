@@ -16,7 +16,7 @@ import logging
 import threading
 import time
 
-from app import config, jobs, thumbs
+from app import config, jobproc, jobs, thumbs
 from app.ai import models
 from app.digikam.dkdb import chunked
 
@@ -90,6 +90,8 @@ def _read(file):
 def _write(file, ids, vecs, revision):
     """float16 on disk halves the file; vectors are unit length so nothing is lost. The revision of the
     model they came from travels with them, so another revision's vectors are never mixed in or compared."""
+    if jobproc.IN_WORKER:  # the files are the web app's: it holds the matrix searches read, and two writers would lose rows
+        raise RuntimeError("the embeddings are written by the web app, not by the job process")
     tmp = file.with_suffix(".tmp.npz")
     extra = {"revision": np.array(revision)} if revision else {}
     np.savez(tmp, ids=ids, vecs=vecs.astype(np.float16), **extra)
@@ -137,6 +139,10 @@ class Engine:
         self.lock = threading.Lock()
         self._image_lock = threading.Lock()  # one image model load at a time (the indexing job and clothing matches share it)
         self._run = 0
+        # the indexing run's stop signal for the job process, where the vectors are computed (_embed): cancelled
+        # whenever _run moves on, which a Progress carries across (jobs.offload keeps the two processes' in step)
+        self._token = jobs.Progress(f"embeddings:{name}")
+        self._finished_ok = False
         self._text_cache = {}
 
     # ---- storage
@@ -149,7 +155,7 @@ class Engine:
                 # a file from before revisions were recorded: computed with the model installed then, which is the
                 # one installed now as far as anyone can tell; adopted, and stamped at the next save
                 self.revision = self.installed_revision()
-                if self.name == "clip" and not self.complete_marker.exists():
+                if self.name == "clip" and not self.complete_marker.exists() and not jobproc.IN_WORKER:
                     self.complete_marker.write_text("ok\n")  # complete by the old rule (its file exists); the marker keeps saying so once the file carries a revision
             self.check_revision()
         else:
@@ -218,7 +224,7 @@ class Engine:
         if self.running and {p["id"] for p in todo} <= self._todo_ids:
             return  # nothing new to embed: the running job carries on (its run number untouched, so it never sees a bump and stops)
         self._run += 1
-        run = self._run
+        run, gen = self._run, self._token.cancel()  # a run still going (here and in the job process) stops at its next batch
         self._todo_ids = {p["id"] for p in todo}
         self.total, self.done = len(todo), 0
         if not todo:
@@ -227,100 +233,77 @@ class Engine:
                 self.on_finish(self)
             return
         self.running = True
+        jobs.submit("embeddings", lambda: self._index(todo, run, gen))  # one background job at a time
 
-        def work():
-            try:
-                _work()
-            finally:
-                if run == self._run and self.running and not self._finished_ok:
-                    self.running = False  # a job that died must not look alive (the next start would wait for it)
+    def _index(self, todo: list, run: int, gen: int):
+        """The indexing job, in the web app. The vectors are computed in the job process (_embed, where the image
+        model is loaded) and arrive here in batches: this side owns the matrix searches read and the file, joins
+        what arrived once a minute and at the end, and keeps it when the job process is lost half-way."""
+        if run != self._run:
+            return
+        self.running = True  # also on the second try after the job process was lost...
+        self._finished_ok = False
+        with self.lock:
+            have = set(self.ids.tolist())  # ...which goes on from what the first try had embedded and handed over
+        todo = [p for p in todo if p["id"] not in have and p["id"] not in self.failed]
+        got = {"ids": [], "vecs": [], "added": 0, "saved": time.time()}  # embedded since the last flush: joined to the matrix once a minute, not per batch (O(n²) copies)
 
-        def _work():
-            self._finished_ok = False
-            from fastembed import ImageEmbedding
-            n = jobs.threads()
-            with self._image_lock:
-                if self._image is None or self._image_threads != n:  # the thread budget is a session option
-                    self._image = ImageEmbedding(self.cfg["image"], cache_dir=str(MODEL_DIR), threads=n, local_files_only=ready(self.name))
-                    self._image_threads = n
-            last_save = time.time()
-            done = 0
-            added = 0
-            pend_ids, pend_vecs = [], []  # embedded since the last flush: joined to the matrix once a minute, not per batch (O(n²) copies)
+        def flush():
+            """Caller holds self.lock."""
+            if got["ids"]:
+                self.ids = np.concatenate([self.ids, np.concatenate(got["ids"])])
+                self.vecs = np.concatenate([self.vecs, np.concatenate(got["vecs"])])
+                got["ids"], got["vecs"] = [], []
+                self._save()
 
-            def flush():
-                nonlocal pend_ids, pend_vecs
-                if pend_ids:
-                    self.ids = np.concatenate([self.ids, np.concatenate(pend_ids)])
-                    self.vecs = np.concatenate([self.vecs, np.concatenate(pend_vecs)])
-                    pend_ids, pend_vecs = [], []
-            for todo_batch in chunked(todo, BATCH):
-                if run != self._run:
-                    return
-                batch, paths = [], []
-                for p in todo_batch:
-                    try:
-                        paths.append(str(thumbs.make("t", p)))  # the grid thumbnail is plenty for a 224 px model
-                        batch.append(p["id"])
-                    except Exception as e:
-                        self.failed.add(p["id"])
-                        log.warning("embeddings: no thumbnail for %s (%s)", p["path"], e)
-                if batch:
-                    try:
-                        vecs = unit(list(self._image.embed(paths, batch_size=BATCH)))
-                    except Exception as e:
-                        # one unreadable image must not cost the whole batch: embed them one by one
-                        log.warning("embeddings: batch of %d failed (%s); retrying one at a time", len(batch), e)
-                        good, vl = [], []
-                        for pid, path in zip(batch, paths):
-                            try:
-                                vl.append(unit(list(self._image.embed([path], batch_size=1))))
-                                good.append(pid)
-                            except Exception as e1:
-                                self.failed.add(pid)
-                                log.warning("embeddings: cannot embed %s (%s)", path, e1)
-                        batch, vecs = good, (np.concatenate(vl) if vl else None)
-                    if batch:
-                        if run != self._run:
-                            return
-                        pend_ids.append(np.asarray(batch, np.int32))
-                        pend_vecs.append(vecs)
-                        added += len(batch)
-                done += len(todo_batch)
-                self.done = done
-                if time.time() - last_save > 60:
+        def heard(msg):
+            if run != self._run:
+                return
+            if msg[0] == "vecs":
+                got["ids"].append(msg[1])
+                got["vecs"].append(msg[2])
+                got["added"] += len(msg[1])
+            elif msg[0] == "failed":
+                self.failed.update(msg[1])
+            elif msg[0] == "done":
+                self.done = msg[1]
+                if time.time() - got["saved"] > 60:
                     with self.lock:
-                        if run != self._run:
-                            return
-                        flush()
-                        self._save()
-                    last_save = time.time()
-            if added:  # nothing new embedded: the file (and its time, part of the index version) is left alone
-                with self.lock:
-                    if run != self._run:
-                        return
-                    flush()
-                    self._save()
-            if run == self._run:
-                self._finished_ok = True
-                self.running = False
-                if added and jobs.finished_hook:  # the saved file is folded into the index once, now
-                    jobs.finished_hook()
-                if self.on_finish:
-                    self.on_finish(self)
+                        if run == self._run:
+                            flush()
+                    got["saved"] = time.time()
 
-        jobs.submit("embeddings", work)  # one background job at a time
+        try:
+            jobs.offload(_embed, self.name, todo, gen, on_message=heard)
+            self._finished_ok = run == self._run
+        finally:
+            if run == self._run:
+                with self.lock:
+                    if run == self._run:
+                        flush()  # nothing new embedded: the file (and its time, part of the index version) is left alone
+                if not self._finished_ok:
+                    self.running = False  # a job that died must not look alive (the next start would wait for it)
+        if run == self._run:
+            self.running = False
+            if got["added"] and jobs.finished_hook:  # the saved file is folded into the index once, now
+                jobs.finished_hook()
+            if self.on_finish:
+                self.on_finish(self)
+
+    def _image_model(self):
+        """The image model, loaded once for the thread budget in force (a session option). Caller holds _image_lock."""
+        from fastembed import ImageEmbedding
+        n = jobs.threads()
+        if self._image is None or self._image_threads != n:
+            self._image = ImageEmbedding(self.cfg["image"], cache_dir=str(MODEL_DIR), threads=n, local_files_only=ready(self.name))
+            self._image_threads = n
+        return self._image
 
     def embed_images(self, images: list):
         """Unit embeddings (rows) for PIL images, with the image model other jobs may use (clothing matches): the same
         model the photos are indexed with, so crops and photos compare."""
-        from fastembed import ImageEmbedding
-        n = jobs.threads()
         with self._image_lock:
-            if self._image is None or self._image_threads != n:
-                self._image = ImageEmbedding(self.cfg["image"], cache_dir=str(MODEL_DIR), threads=n, local_files_only=ready(self.name))
-                self._image_threads = n
-            return unit(list(self._image.embed([im.convert("RGB") for im in images], batch_size=BATCH)))
+            return unit(list(self._image_model().embed([im.convert("RGB") for im in images], batch_size=BATCH)))
 
     # ---- search
     def _rank(self, query_vec, k: int, exclude=None) -> list:
@@ -356,10 +339,12 @@ class Engine:
     def reset(self):
         """Forget every embedding so the library is indexed again from scratch."""
         self._run += 1
+        self._token.cancel()
         with self.lock:
             self.ids, self.vecs = np.zeros(0, np.int32), np.zeros((0, self.cfg["dim"]), np.float32)
-            self.file.unlink(missing_ok=True)
-            self.complete_marker.unlink(missing_ok=True)
+            if not jobproc.IN_WORKER:  # the files are the web app's (see _write)
+                self.file.unlink(missing_ok=True)
+                self.complete_marker.unlink(missing_ok=True)
 
     def similar(self, photo_id: int, k: int = 200) -> list:
         """Photo ids that look most like the given photo, most similar first."""
@@ -475,6 +460,49 @@ class Semantic:
 
 
 semantic = Semantic()
+
+
+def _embed(name: str, todo: list, gen: int):
+    """The work of Engine._index, in the job process (jobs.offload): thumbnails in, unit vectors out, a batch at a
+    time, each handed to the web app as it is done (("vecs", ids, vectors), ("failed", ids), ("done", photos so far))."""
+    eng = semantic.engines[name]
+    with eng._image_lock:
+        image = eng._image_model()
+    done = 0
+    for todo_batch in chunked(todo, BATCH):
+        if eng._token.cancelled(gen):
+            return
+        batch, paths, failed = [], [], []
+        for p in todo_batch:
+            try:
+                paths.append(str(thumbs.make("t", p)))  # the grid thumbnail is plenty for a 224 px model
+                batch.append(p["id"])
+            except Exception as e:
+                failed.append(p["id"])
+                log.warning("embeddings: no thumbnail for %s (%s)", p["path"], e)
+        if batch:
+            try:
+                vecs = unit(list(image.embed(paths, batch_size=BATCH)))
+            except Exception as e:
+                # one unreadable image must not cost the whole batch: embed them one by one
+                log.warning("embeddings: batch of %d failed (%s); retrying one at a time", len(batch), e)
+                good, vl = [], []
+                for pid, path in zip(batch, paths):
+                    try:
+                        vl.append(unit(list(image.embed([path], batch_size=1))))
+                        good.append(pid)
+                    except Exception as e1:
+                        failed.append(pid)
+                        log.warning("embeddings: cannot embed %s (%s)", path, e1)
+                batch, vecs = good, (np.concatenate(vl) if vl else None)
+            if batch:
+                if eng._token.cancelled(gen):
+                    return
+                jobs.emit(("vecs", np.asarray(batch, np.int32), vecs))
+        if failed:
+            jobs.emit(("failed", failed))
+        done += len(todo_batch)
+        jobs.emit(("done", done))
 
 
 def remove_ids(ids: list):

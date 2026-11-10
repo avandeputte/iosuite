@@ -10,7 +10,14 @@ check stops it at the next batch and the new submission runs afterwards.
 
 How many cores a running job may use is `threads()`: the `bg_threads`
 setting, else BG_THREADS from the environment, else half the cores.
+
+The jobs that load large models do their work in a process of their own (jobproc.py):
+`offload(fn, *args)` runs a module-level function there and waits for it, so a model
+that needs more memory than the server has takes that process down and not the web
+app. A job whose process was lost is tried once more; lost again, it is held (it
+stops being run, and says why) until someone asks for it again or the server restarts.
 """
+import logging
 import threading
 import time
 import traceback
@@ -30,6 +37,36 @@ _last_submit = 0.0  # jobs submitted close together (a start, a library change) 
 GRACE = 3.0
 MAX_SETTLE = 30.0  # a queue that never goes quiet (rebuild after rebuild) still gets its jobs run
 _progress = {}       # name -> Progress, every background job that reports one
+_strikes = {}        # key -> how often in a row the job's process was lost (a run that ends well clears it)
+_held = {}           # key -> {"reason", "at"}: lost twice in a row, not run again until release()
+_lost = None         # the WorkerLost of the job running now, noted by jobproc even when the job itself swallows it
+HOLD_AFTER = 2
+log = logging.getLogger("app.jobs")
+# set by jobproc: called with a Progress's name when its generation moves, so the job process hears of a cancel
+bump_hook = None
+# in the job process only: {name: (fields, gen)} as the web app had them when the call began, and the cancels that
+# arrived since; a Progress created during the call (a module imported late) starts from them, not from zero
+baseline, bumped = {}, {}
+
+
+class WorkerLost(Exception):
+    """The job process ended without finishing its call: stopped for memory, killed by the system, crashed.
+    `strike`: whether it counts against the job (not when the server was merely short of memory for a moment)."""
+
+    def __init__(self, text: str, strike: bool = True):
+        super().__init__(text)
+        self.strike = strike
+
+
+class Held(WorkerLost):
+    """The job is held (lost twice in a row): nothing was started."""
+
+    def __init__(self, text: str):
+        super().__init__(text, strike=False)
+
+
+class RemoteError(Exception):
+    """The function run in the job process raised; the text is its exception, the traceback is in the log."""
 # the most of an exception's text a status record keeps: the message that says what went wrong, not the
 # traceback (that goes to the log); status pages and tool answers show it whole
 ERROR_TEXT_MAX = 300
@@ -50,10 +87,17 @@ class Progress(dict):
         super().__init__({"running": False, "done": 0, "total": 0, "error": None, **fields})
         self.name, self.gen = name, 0
         self._times = {k for k in ("started", "finished") if k in self}
+        if name in baseline:  # the job process: as the web app has it, so a generation taken there means the same here
+            self.update(baseline[name][0])
+            self.gen = baseline[name][1] + bumped.get(name, 0)
+            if bumped.get(name):
+                self["running"] = False
         _progress[name] = self
 
     def start(self, total: int = 0, **fields) -> int:
         self.gen += 1
+        if bump_hook:
+            bump_hook(self.name)
         self.update(running=True, done=0, total=total, error=None)
         if "started" in self._times:
             self["started"] = int(time.time())
@@ -87,6 +131,8 @@ class Progress(dict):
         must not take the dying run for a live one."""
         self.gen += 1
         self["running"] = False
+        if bump_hook:
+            bump_hook(self.name)
         return self.gen
 
     def cancelled(self, gen: int) -> bool:
@@ -132,9 +178,70 @@ def submit(key: str, fn):
 
 
 def status() -> dict:
+    from app import jobproc
     with _lock:
         return {"running": _current, "queued": [k for k in ORDER if k in _queue], "threads": threads(),
-                "cores": config.cpu_count(), "since": _started}
+                "cores": config.cpu_count(), "since": _started, "held": {k: dict(v) for k, v in _held.items()},
+                "memory": jobproc.status()}
+
+
+def current():
+    """The key of the job running now, or None."""
+    return _current
+
+
+def held(key: str = None):
+    """Why this job is held ({"reason", "at"}), or None; with no key, every held job."""
+    with _lock:
+        return dict(_held) if key is None else _held.get(key)
+
+
+def release(key: str = None):
+    """Run a held job again at its next start (all of them with no key): someone asked for it."""
+    with _lock:
+        for k in ([key] if key else list(_held) + list(_strikes)):
+            _held.pop(k, None)
+            _strikes.pop(k, None)
+
+
+def offload(fn, *args, on_message=None):
+    """Run the module-level function `fn(*args)` in the job process and wait for what it returns. Its Progress
+    objects are the web app's (kept in step both ways), `emit(msg)` inside it reaches `on_message` here, and a
+    cancel here is seen there. Raises WorkerLost when the process ended first, Held when the job is held, and
+    RemoteError when `fn` raised. With JOBS_PROCESS=0 (and in the tests) it simply calls `fn` here."""
+    from app import jobproc
+    return jobproc.call(fn, args, on_message)
+
+
+def emit(msg):
+    """Inside an offloaded function: hand `msg` (anything that pickles) to the `on_message` of its offload()."""
+    from app import jobproc
+    jobproc.emit(msg)
+
+
+def note_lost(e: WorkerLost):
+    """jobproc: the running job's process was lost (kept even when the job's own code swallows the exception)."""
+    global _lost
+    _lost = e
+
+
+def _after_loss(key: str, fn, e: WorkerLost):
+    """Once more, then hold: what was recorded before the loss is kept, so the second run goes on from there, and a
+    job that dies at the same place again stops costing the server a model load at every library change."""
+    with _lock:
+        _strikes[key] = _strikes.get(key, 0) + (1 if e.strike else 0.5)
+        if _strikes[key] >= HOLD_AFTER:
+            _held[key] = {"reason": str(e), "at": int(time.time())}
+            _queue.pop(key, None)
+            hold = True
+        else:
+            _queue.setdefault(key, fn)  # a newer submission keeps its place
+            hold = False
+    if hold:
+        log.warning("job %s is paused: %s (twice in a row). Settings › AI runs it again.", key, e)
+    else:
+        log.warning("job %s: %s; trying once more", key, e)
+    _wake.set()
 
 
 def is_queued(key: str) -> bool:
@@ -163,10 +270,19 @@ def _worker():
             _wake.wait(timeout=30)
             _wake.clear()
             continue
+        global _lost
+        _lost = None
         try:
             fn()
+        except WorkerLost as e:
+            _lost = _lost or e
         except Exception:
             traceback.print_exc()
+        if _lost is not None and not isinstance(_lost, Held):
+            _after_loss(key, fn, _lost)
+        elif _lost is None:
+            with _lock:
+                _strikes.pop(key, None)
         with _lock:
             _current = _started = None
             idle = not _queue

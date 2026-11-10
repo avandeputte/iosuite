@@ -150,48 +150,53 @@ def _job(gen: int):
     finally:
         con.close()
     have = _have()
-    todo = [r for r in want if (r[0], r[4], r[5], r[6], r[7]) not in have]
+    todo = [tuple(r) for r in want if (r[0], r[4], r[5], r[6], r[7]) not in have]
     progress.update(running=bool(todo), done=0, total=len(todo))  # the generation was taken at submit time
     if not todo:
         return
+    try:
+        jobs.offload(_estimate_all, gen, todo)
+    finally:
+        progress.finish()
+
+
+def _estimate_all(gen: int, todo: list):
+    """The work of _job, in the job process (jobs.offload): the age model is loaded there."""
     by_photo = {}
     for r in todo:
         by_photo.setdefault(r[0], []).append(r)
-    try:
-        for pid, faces in by_photo.items():
-            if progress.cancelled(gen):
-                return
-            _, path, pw, ph = faces[0][:4]
+    for pid, faces in by_photo.items():
+        if progress.cancelled(gen):
+            return
+        _, path, pw, ph = faces[0][:4]
+        try:
+            im, _ = thumbs.open_oriented(path, 2400, 2400)
+        except OSError as e:
+            log.warning("ages: cannot read %s (%s)", path, e)
+            progress.step(len(faces))
+            continue
+        except Exception as e:  # undecodable: recorded as no age, so it is not tried again
+            log.warning("ages: cannot decode %s (%s)", path, e)
+            ages = [None] * len(faces)
+        else:
+            sx, sy = im.width / max(pw or im.width, 1), im.height / max(ph or im.height, 1)
+            crops = [im.crop((int(x * sx), int(y * sy), int((x + w) * sx), int((y + h) * sy))) for _p, _q, _w, _h, x, y, w, h in faces]
             try:
-                im, _ = thumbs.open_oriented(path, 2400, 2400)
-            except OSError as e:
-                log.warning("ages: cannot read %s (%s)", path, e)
+                ages = estimate(crops)
+            except Exception as e:
+                log.warning("ages: estimate failed on %s (%s)", path, e)
                 progress.step(len(faces))
                 continue
-            except Exception as e:  # undecodable: recorded as no age, so it is not tried again
-                log.warning("ages: cannot decode %s (%s)", path, e)
-                ages = [None] * len(faces)
-            else:
-                sx, sy = im.width / max(pw or im.width, 1), im.height / max(ph or im.height, 1)
-                crops = [im.crop((int(x * sx), int(y * sy), int((x + w) * sx), int((y + h) * sy))) for _p, _q, _w, _h, x, y, w, h in faces]
-                try:
-                    ages = estimate(crops)
-                except Exception as e:
-                    log.warning("ages: estimate failed on %s (%s)", path, e)
-                    progress.step(len(faces))
-                    continue
-            if progress.cancelled(gen):
-                return
-            db = vdb.connect()
-            try:
-                db.executemany("INSERT OR REPLACE INTO pix_ai_face_ages (photo_id, x, y, w, h, age) VALUES (?,?,?,?,?,?)",
-                               [(pid, f[4], f[5], f[6], f[7], a) for f, a in zip(faces, ages)])
-                db.commit()
-            finally:
-                db.close()
-            progress.step(len(faces))
-    finally:
-        progress.finish()
+        if progress.cancelled(gen):
+            return
+        db = vdb.connect()
+        try:
+            db.executemany("INSERT OR REPLACE INTO pix_ai_face_ages (photo_id, x, y, w, h, age) VALUES (?,?,?,?,?,?)",
+                           [(pid, f[4], f[5], f[6], f[7], a) for f, a in zip(faces, ages)])
+            db.commit()
+        finally:
+            db.close()
+        progress.step(len(faces))
 
 
 def start():

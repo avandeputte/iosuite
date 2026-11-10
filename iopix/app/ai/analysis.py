@@ -21,6 +21,7 @@ between batches: the running job stops so the new submission can take over.
 """
 from PIL import UnidentifiedImageError
 import importlib
+import importlib.util
 import logging
 import sqlite3
 import threading
@@ -123,11 +124,18 @@ def _todo(job: str, photos: list, con=None) -> list:
 
 
 def _notify(last: float, every: float) -> float:
-    """Call on_progress at most every `every` seconds; returns the new timestamp to carry."""
-    if on_progress and time.time() - last > every:
-        on_progress()
+    """Tell the web app at most every `every` seconds that results arrived (it calls on_progress); returns the new
+    timestamp to carry. The jobs' work runs in the job process (jobs.offload), hence a message and not a call."""
+    if time.time() - last > every:
+        jobs.emit("progress")
         return time.time()
     return last
+
+
+def _heard(_msg):
+    """A job's work reported new results (_notify): the index picks them up."""
+    if on_progress:
+        on_progress()
 
 
 def _finish(*keys):
@@ -175,69 +183,76 @@ def _analyse_one(p: dict, want_quality: bool, detector):
 
 
 def _pixel_job(photos: list, gens: dict):
-    """One decode serves two analyses, so this job reports as both "quality" and "objects" and stops when either is cancelled."""
-    def cancelled() -> bool:
-        return any(progress[k].cancelled(gens[k]) for k in ("quality", "objects"))
-    workers = config.ANALYSIS_WORKERS or jobs.threads()
-    detector = det.load(max(1, jobs.threads() // workers))  # None until the model is installed
+    """One decode serves two analyses, so this job reports as both "quality" and "objects" and stops when either is cancelled.
+    What is still to do is worked out here, in the web app; the work itself runs in the job process."""
     with vdb.reader(READ_TIMEOUT) as con:
         q_todo = {p["id"] for p in _todo("quality", photos, con)}
-        o_todo = {p["id"] for p in _todo("objects", photos, con)} if detector else set()
+        o_todo = {p["id"] for p in _todo("objects", photos, con)} if det.available() and config.ANALYSIS else set()  # none until the model is installed
     todo = [p for p in photos if p["id"] in q_todo or p["id"] in o_todo]
     progress["quality"].update(running=bool(q_todo), done=0, total=len(q_todo))
     progress["objects"].update(running=bool(o_todo), done=0, total=len(o_todo))
     if not todo:
         return
-
     try:
-        def work(p):
-            if cancelled():
-                return None
-            try:
-                return p, _analyse_one(p, p["id"] in q_todo, detector if p["id"] in o_todo else None)
-            except UnidentifiedImageError as e:
-                log.warning("analysis: cannot decode %s (%s)", p["path"], e)
-                # record the failure so the file is not decoded again on every pass
-                return p, {"quality": (None, None, None, None)} if p["id"] in q_todo else {}
-            except OSError as e:  # unreadable right now (a dropped mount): nothing recorded, tried again on the next pass
-                log.warning("analysis: cannot read %s (%s)", p["path"], e)
-                return None
-            except Exception as e:
-                log.warning("analysis: cannot analyse %s (%s)", p["path"], e)
-                return p, {"quality": (None, None, None, None)} if p["id"] in q_todo else {}
-
-        last = time.time()
-        with ThreadPoolExecutor(workers, thread_name_prefix="analyse") as pool:
-            for chunk in chunked(todo, 64):
-                if cancelled():
-                    return
-                qrows, orows, done = [], [], []
-                for res in pool.map(work, chunk):
-                    if not res:
-                        continue
-                    p, out = res
-                    st = stamp(p)
-                    if "quality" in out:
-                        qrows.append((p["id"], st, *out["quality"]))  # (photo, stamp, sharp, bright, clip_lo, clip_hi)
-                    if p["id"] in o_todo:
-                        done.append((p["id"], st))
-                        orows += [(p["id"], *o) for o in out.get("objects", [])]
-                if cancelled():  # reset while this batch was computed: its results are of the model before
-                    return
-                if qrows:
-                    with vdb.writer() as con:
-                        con.executemany("INSERT OR REPLACE INTO pix_ai_quality VALUES (?,?,?,?,?)", [(r[0], *r[2:]) for r in qrows])
-                        con.executemany("INSERT OR REPLACE INTO pix_ai_scans VALUES (?,'quality',?,NULL)", [(r[0], r[1]) for r in qrows])
-                    progress["quality"]["done"] += len(qrows)
-                if done:
-                    with vdb.writer() as con:
-                        con.executemany("DELETE FROM pix_ai_objects WHERE photo_id = ?", [(d[0],) for d in done])
-                        con.executemany("INSERT INTO pix_ai_objects VALUES (?,?,?,?,?,?,?)", orows)
-                        con.executemany("INSERT OR REPLACE INTO pix_ai_scans VALUES (?,'objects',?,NULL)", done)
-                    progress["objects"]["done"] += len(done)
-                last = _notify(last, 60)
+        jobs.offload(_pixel_work, todo, sorted(q_todo), sorted(o_todo), gens, on_message=_heard)
     finally:
         _finish("quality", "objects")
+
+
+def _pixel_work(todo: list, q_ids: list, o_ids: list, gens: dict):
+    """The work of _pixel_job, in the job process: decode, measure, detect, record, batch by batch."""
+    def cancelled() -> bool:
+        return any(progress[k].cancelled(gens[k]) for k in ("quality", "objects"))
+    workers = config.ANALYSIS_WORKERS or jobs.threads()
+    detector = det.load(max(1, jobs.threads() // workers))  # None when the model could not be loaded: quality only
+    q_todo, o_todo = set(q_ids), set(o_ids) if detector else set()
+
+    def work(p):
+        if cancelled():
+            return None
+        try:
+            return p, _analyse_one(p, p["id"] in q_todo, detector if p["id"] in o_todo else None)
+        except UnidentifiedImageError as e:
+            log.warning("analysis: cannot decode %s (%s)", p["path"], e)
+            # record the failure so the file is not decoded again on every pass
+            return p, {"quality": (None, None, None, None)} if p["id"] in q_todo else {}
+        except OSError as e:  # unreadable right now (a dropped mount): nothing recorded, tried again on the next pass
+            log.warning("analysis: cannot read %s (%s)", p["path"], e)
+            return None
+        except Exception as e:
+            log.warning("analysis: cannot analyse %s (%s)", p["path"], e)
+            return p, {"quality": (None, None, None, None)} if p["id"] in q_todo else {}
+
+    last = time.time()
+    with ThreadPoolExecutor(workers, thread_name_prefix="analyse") as pool:
+        for chunk in chunked(todo, 64):
+            if cancelled():
+                return
+            qrows, orows, done = [], [], []
+            for res in pool.map(work, chunk):
+                if not res:
+                    continue
+                p, out = res
+                st = stamp(p)
+                if "quality" in out:
+                    qrows.append((p["id"], st, *out["quality"]))  # (photo, stamp, sharp, bright, clip_lo, clip_hi)
+                if p["id"] in o_todo:
+                    done.append((p["id"], st))
+                    orows += [(p["id"], *o) for o in out.get("objects", [])]
+            if cancelled():  # reset while this batch was computed: its results are of the model before
+                return
+            if qrows:
+                with vdb.writer() as con:
+                    con.executemany("INSERT OR REPLACE INTO pix_ai_quality VALUES (?,?,?,?,?)", [(r[0], *r[2:]) for r in qrows])
+                    con.executemany("INSERT OR REPLACE INTO pix_ai_scans VALUES (?,'quality',?,NULL)", [(r[0], r[1]) for r in qrows])
+                progress["quality"]["done"] += len(qrows)
+            if done:
+                with vdb.writer() as con:
+                    con.executemany("DELETE FROM pix_ai_objects WHERE photo_id = ?", [(d[0],) for d in done])
+                    con.executemany("INSERT INTO pix_ai_objects VALUES (?,?,?,?,?,?,?)", orows)
+                    con.executemany("INSERT OR REPLACE INTO pix_ai_scans VALUES (?,'objects',?,NULL)", done)
+                progress["objects"]["done"] += len(done)
+            last = _notify(last, 60)
 
 
 # --------------------------------------------------------------------------
@@ -359,8 +374,14 @@ def _portable_batch(batch: list) -> list:
 
 
 def vision_available() -> bool:
-    """RapidOCR is installed (the ocr dependency group)."""
-    return ocr_engine() is not None
+    """RapidOCR is installed (the ocr dependency group). Asked by the web app, which does not load the engine to
+    find out (the job process does the reading): the package being there is the answer, unless a load already failed."""
+    if _ocr is not None:
+        return bool(_ocr)
+    try:
+        return any(importlib.util.find_spec(mod) is not None for mod in ("rapidocr", "rapidocr_onnxruntime"))
+    except (ImportError, ValueError):
+        return False
 
 
 
@@ -376,26 +397,31 @@ def _vision_job(photos: list, gen: int):
     progress["vision"].update(running=bool(todo), done=0, total=len(todo))
     if not todo:
         return
-    batches = [todo[i:i + 24] for i in range(0, len(todo), 24)]
     try:
-        recognise = _portable_batch
-        last = time.time()
-        n = _vision_workers()
-        with ThreadPoolExecutor(n, thread_name_prefix="vision") as pool:
-            for chunk in chunked(batches, n):
-                if progress["vision"].cancelled(gen):
-                    return
-                for rows in pool.map(recognise, chunk):  # (photo, stamp, text, nfaces, faceq)
-                    if progress["vision"].cancelled(gen):
-                        return
-                    with vdb.writer() as con:
-                        con.executemany("INSERT OR REPLACE INTO pix_ai_text VALUES (?,?)", [(r[0], r[2]) for r in rows])
-                        con.executemany("INSERT OR REPLACE INTO pix_ai_face_count VALUES (?,?,?)", [(r[0], r[3], r[4]) for r in rows])
-                        con.executemany("INSERT OR REPLACE INTO pix_ai_scans VALUES (?,'vision',?,NULL)", [(r[0], r[1]) for r in rows])
-                    progress["vision"]["done"] += len(rows)
-                last = _notify(last, 60)
+        jobs.offload(_vision_work, todo, gen, on_message=_heard)
     finally:
         _finish("vision")
+
+
+def _vision_work(todo: list, gen: int):
+    """The work of _vision_job, in the job process."""
+    batches = [todo[i:i + 24] for i in range(0, len(todo), 24)]
+    recognise = _portable_batch
+    last = time.time()
+    n = _vision_workers()
+    with ThreadPoolExecutor(n, thread_name_prefix="vision") as pool:
+        for chunk in chunked(batches, n):
+            if progress["vision"].cancelled(gen):
+                return
+            for rows in pool.map(recognise, chunk):  # (photo, stamp, text, nfaces, faceq)
+                if progress["vision"].cancelled(gen):
+                    return
+                with vdb.writer() as con:
+                    con.executemany("INSERT OR REPLACE INTO pix_ai_text VALUES (?,?)", [(r[0], r[2]) for r in rows])
+                    con.executemany("INSERT OR REPLACE INTO pix_ai_face_count VALUES (?,?,?)", [(r[0], r[3], r[4]) for r in rows])
+                    con.executemany("INSERT OR REPLACE INTO pix_ai_scans VALUES (?,'vision',?,NULL)", [(r[0], r[1]) for r in rows])
+                progress["vision"]["done"] += len(rows)
+            last = _notify(last, 60)
 
 
 def _caption_job(photos: list, gen: int):
@@ -406,27 +432,32 @@ def _caption_job(photos: list, gen: int):
     if not todo:
         return
     try:
-        last = time.time()
-        for chunk in chunked(todo, 8):  # one thread: the GPU serialises anyway, and the other jobs keep the CPU
-            if progress["captions"].cancelled(gen):
-                return
-            batch = chunk
-            try:
-                texts = caption.describe([p["path"] for p in batch])
-            except Exception as e:  # the batch is not recorded, so these photos are tried again on the next run
-                log.warning("captions: batch starting at %s failed (%s)", batch[0]["path"], e)
-                progress["captions"]["done"] += len(batch)
-                continue
-            rows = [(p["id"], stamp(p), (t or "")[:500]) for p, t in zip(batch, texts)]
-            if progress["captions"].cancelled(gen):
-                return
-            with vdb.writer() as con:
-                con.executemany("INSERT OR REPLACE INTO pix_ai_descriptions VALUES (?,?)", [(r[0], r[2]) for r in rows])
-                con.executemany("INSERT OR REPLACE INTO pix_ai_scans VALUES (?,'captions',?,NULL)", [(r[0], r[1]) for r in rows])
-            progress["captions"]["done"] += len(batch)
-            last = _notify(last, 120)
+        jobs.offload(_caption_work, todo, gen, on_message=_heard)
     finally:
         _finish("captions")
+
+
+def _caption_work(todo: list, gen: int):
+    """The work of _caption_job, in the job process (the caption model is the largest there is)."""
+    last = time.time()
+    for chunk in chunked(todo, 8):  # one thread: the GPU serialises anyway, and the other jobs keep the CPU
+        if progress["captions"].cancelled(gen):
+            return
+        batch = chunk
+        try:
+            texts = caption.describe([p["path"] for p in batch])
+        except Exception as e:  # the batch is not recorded, so these photos are tried again on the next run
+            log.warning("captions: batch starting at %s failed (%s)", batch[0]["path"], e)
+            progress["captions"]["done"] += len(batch)
+            continue
+        rows = [(p["id"], stamp(p), (t or "")[:500]) for p, t in zip(batch, texts)]
+        if progress["captions"].cancelled(gen):
+            return
+        with vdb.writer() as con:
+            con.executemany("INSERT OR REPLACE INTO pix_ai_descriptions VALUES (?,?)", [(r[0], r[2]) for r in rows])
+            con.executemany("INSERT OR REPLACE INTO pix_ai_scans VALUES (?,'captions',?,NULL)", [(r[0], r[1]) for r in rows])
+        progress["captions"]["done"] += len(batch)
+        last = _notify(last, 120)
 
 
 # --------------------------------------------------------------------------
@@ -481,7 +512,6 @@ def _looks_faces(ids: list) -> dict:
 
 
 def _looks_job(photos: list, gen: int):
-    import json
     if np is None:
         return
     parts = _looks_parts()
@@ -489,78 +519,84 @@ def _looks_job(photos: list, gen: int):
     progress["looks"].update(running=bool(todo), done=0, total=len(todo))
     if not todo:
         return
-    n = jobs.threads()
     try:
-        last = time.time()
-        with ThreadPoolExecutor(n, thread_name_prefix="looks") as pool:
-            for chunk in chunked(todo, 16):
-                if progress["looks"].cancelled(gen):
-                    return
-                batch = chunk
-                faces = _looks_faces([p["id"] for p, need in batch if "e" in need])
-
-                def prepare(item):
-                    p, need = item
-                    try:
-                        im, _ = thumbs.open_oriented(p["path"], 1600, 1600)
-                    except OSError as e:  # unreadable right now (a dropped mount): tried again on the next pass
-                        log.warning("photo quality: cannot read %s (%s)", p["path"], e)
-                        return None
-                    except Exception as e:  # cannot be decoded: recorded so it is not tried forever
-                        log.warning("photo quality: cannot decode %s (%s)", p["path"], e)
-                        return p, need, {}, None
-                    out = {}
-                    try:
-                        if "f" in need:
-                            out["focus"] = looks.focus(im)
-                        if "e" in need:
-                            big = [f for f in faces.get(p["id"], []) if min(f[2], f[3]) >= 0.05 * min(p.get("w") or im.width, p.get("h") or im.height)]
-                            out["eyes"] = looks.eyes(im, big, p.get("w"), p.get("h")) if big else (0, 0)
-                        clip = looks.clip_input(im) if "a" in need else None
-                    except Exception as e:
-                        log.warning("photo quality: cannot analyse %s (%s)", p["path"], e)
-                        return p, need, {}, None
-                    return p, need, out, clip
-
-                ready = [r for r in pool.map(prepare, batch) if r]
-                with_clip = [r for r in ready if r[3] is not None]
-                if with_clip:
-                    try:
-                        for r, score in zip(with_clip, looks.aesthetic([r[3] for r in with_clip], n)):
-                            r[2]["aesthetic"] = score
-                    except Exception as e:
-                        log.warning("photo quality: the aesthetic model failed on a batch (%s)", e)
-                if progress["looks"].cancelled(gen):
-                    return
-                with vdb.writer() as con:
-                    done = [int(r[0]["id"]) for r in ready]
-                    old = {r[0]: r for r in in_chunks(con, "SELECT photo_id, aesthetic, focus, eyes_checked, eyes_closed FROM pix_ai_looks WHERE photo_id IN ({ids})", done)}
-                    have = {r[0]: (r[1], r[2]) for r in in_chunks(con, "SELECT photo_id, stamp, detail FROM pix_ai_scans WHERE job = 'looks' AND photo_id IN ({ids})", done)}
-                    rows, scans = [], []
-                    for p, need, out, _clip in ready:
-                        st = stamp(p)
-                        prev = old.get(p["id"])
-                        was, detail = have.get(p["id"], (None, None))
-                        try:
-                            done = json.loads(detail or "{}") if was == st else {}
-                        except ValueError:
-                            done = {}
-                        if was != st:  # a new or changed file: nothing measured before is kept
-                            prev = None
-                        a = out.get("aesthetic", prev[1] if prev else None)
-                        f = out.get("focus", prev[2] if prev else None)
-                        ec, ex = out["eyes"] if "eyes" in out else ((prev[3], prev[4]) if prev else (None, None))
-                        rows.append((p["id"], a, f, ec, ex))
-                        for k, field in (("f", "focus"), ("a", "aesthetic"), ("e", "eyes")):
-                            if k in need and (field in out or not out):  # undecodable (no out): marked done until the file changes
-                                done[k] = parts[k]
-                        scans.append((p["id"], st, json.dumps(done, sort_keys=True)))
-                    con.executemany("INSERT OR REPLACE INTO pix_ai_looks VALUES (?,?,?,?,?)", rows)
-                    con.executemany("INSERT OR REPLACE INTO pix_ai_scans VALUES (?,'looks',?,?)", scans)
-                progress["looks"]["done"] += len(batch)
-                last = _notify(last, 120)
+        jobs.offload(_looks_work, todo, parts, gen, on_message=_heard)
     finally:
         _finish("looks")
+
+
+def _looks_work(todo: list, parts: dict, gen: int):
+    """The work of _looks_job, in the job process. todo: [(photo, {parts it needs})]."""
+    import json
+    n = jobs.threads()
+    last = time.time()
+    with ThreadPoolExecutor(n, thread_name_prefix="looks") as pool:
+        for chunk in chunked(todo, 16):
+            if progress["looks"].cancelled(gen):
+                return
+            batch = chunk
+            faces = _looks_faces([p["id"] for p, need in batch if "e" in need])
+
+            def prepare(item):
+                p, need = item
+                try:
+                    im, _ = thumbs.open_oriented(p["path"], 1600, 1600)
+                except OSError as e:  # unreadable right now (a dropped mount): tried again on the next pass
+                    log.warning("photo quality: cannot read %s (%s)", p["path"], e)
+                    return None
+                except Exception as e:  # cannot be decoded: recorded so it is not tried forever
+                    log.warning("photo quality: cannot decode %s (%s)", p["path"], e)
+                    return p, need, {}, None
+                out = {}
+                try:
+                    if "f" in need:
+                        out["focus"] = looks.focus(im)
+                    if "e" in need:
+                        big = [f for f in faces.get(p["id"], []) if min(f[2], f[3]) >= 0.05 * min(p.get("w") or im.width, p.get("h") or im.height)]
+                        out["eyes"] = looks.eyes(im, big, p.get("w"), p.get("h")) if big else (0, 0)
+                    clip = looks.clip_input(im) if "a" in need else None
+                except Exception as e:
+                    log.warning("photo quality: cannot analyse %s (%s)", p["path"], e)
+                    return p, need, {}, None
+                return p, need, out, clip
+
+            ready = [r for r in pool.map(prepare, batch) if r]
+            with_clip = [r for r in ready if r[3] is not None]
+            if with_clip:
+                try:
+                    for r, score in zip(with_clip, looks.aesthetic([r[3] for r in with_clip], n)):
+                        r[2]["aesthetic"] = score
+                except Exception as e:
+                    log.warning("photo quality: the aesthetic model failed on a batch (%s)", e)
+            if progress["looks"].cancelled(gen):
+                return
+            with vdb.writer() as con:
+                done = [int(r[0]["id"]) for r in ready]
+                old = {r[0]: r for r in in_chunks(con, "SELECT photo_id, aesthetic, focus, eyes_checked, eyes_closed FROM pix_ai_looks WHERE photo_id IN ({ids})", done)}
+                have = {r[0]: (r[1], r[2]) for r in in_chunks(con, "SELECT photo_id, stamp, detail FROM pix_ai_scans WHERE job = 'looks' AND photo_id IN ({ids})", done)}
+                rows, scans = [], []
+                for p, need, out, _clip in ready:
+                    st = stamp(p)
+                    prev = old.get(p["id"])
+                    was, detail = have.get(p["id"], (None, None))
+                    try:
+                        done = json.loads(detail or "{}") if was == st else {}
+                    except ValueError:
+                        done = {}
+                    if was != st:  # a new or changed file: nothing measured before is kept
+                        prev = None
+                    a = out.get("aesthetic", prev[1] if prev else None)
+                    f = out.get("focus", prev[2] if prev else None)
+                    ec, ex = out["eyes"] if "eyes" in out else ((prev[3], prev[4]) if prev else (None, None))
+                    rows.append((p["id"], a, f, ec, ex))
+                    for k, field in (("f", "focus"), ("a", "aesthetic"), ("e", "eyes")):
+                        if k in need and (field in out or not out):  # undecodable (no out): marked done until the file changes
+                            done[k] = parts[k]
+                    scans.append((p["id"], st, json.dumps(done, sort_keys=True)))
+                con.executemany("INSERT OR REPLACE INTO pix_ai_looks VALUES (?,?,?,?,?)", rows)
+                con.executemany("INSERT OR REPLACE INTO pix_ai_scans VALUES (?,'looks',?,?)", scans)
+            progress["looks"]["done"] += len(batch)
+            last = _notify(last, 120)
 
 
 def start(photos: list):

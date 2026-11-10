@@ -413,6 +413,7 @@ ExecStart="$VPY" -m app
 Restart=always
 RestartSec=5
 Nice=5
+OOMPolicy=continue
 
 [Install]
 WantedBy=multi-user.target

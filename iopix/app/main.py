@@ -195,7 +195,8 @@ def _status_extra(request: Request) -> dict:
         "digikam": dk if admin else {k: v for k, v in dk.items() if k != "error"}, "faceDetect": facedetect.available(),
         "lossless": lossless.capabilities() if config.DB_WRITE and edits.available() else None,
         "tagJobs": {**tagmanager.progress, "pending": tagmanager.pending_jobs()},
-        "analysis": analysis.progress, "jobs": bgjobs.status()})
+        "analysis": analysis.progress,
+        "jobs": bgjobs.status() if admin else {k: v for k, v in bgjobs.status().items() if k not in ("held", "memory")}})  # the server's memory: for admins
     return out
 
 

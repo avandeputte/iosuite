@@ -166,7 +166,45 @@ def _learn(engine, con, gen: int):
     return clf
 
 
+def _unscreened(engine, con) -> tuple:
+    """(ids, vecs, {photo: stamp}, positions in ids still to screen): the embedded photos this job has not looked at
+    in their current file with this model."""
+    with engine.lock:
+        ids, vecs = engine.ids, engine.vecs
+    if ids is None or not len(ids):
+        return ids, vecs, {}, []
+    stamps = {r[0]: r[1] for r in con.execute("SELECT id, hash || ':' || coalesce(size, 0) || ':' || coalesce(modified, '') FROM photos WHERE video = 0")}
+    with vdb.reader() as v:
+        done = {r[0]: r[1] for r in v.execute("SELECT photo_id, stamp FROM pix_ai_scans WHERE job = 'rotation'")}
+    return ids, vecs, stamps, [i for i, pid in enumerate(ids.tolist()) if pid in stamps and done.get(pid) != f"{stamps[pid]}:{engine.name}"]
+
+
 def _job(gen: int):
+    """In the web app: is there anything to learn or to screen? Only then the job process is asked to (_work)."""
+    if not available():
+        return
+    engine = _engine()
+    engine.load()
+    if model_path(engine.name).exists():
+        con = index.open_index()
+        try:
+            todo_pos = _unscreened(engine, con)[3]
+        finally:
+            con.close()
+        if not todo_pos:
+            if not progress.cancelled(gen):
+                progress.update(running=False, phase="screening", done=0, total=0)
+            return
+    try:
+        jobs.offload(_work, gen)
+    except jobs.WorkerLost:  # held, or its process was lost: the run that start() announced is not running
+        if not progress.cancelled(gen):
+            progress["running"] = False
+        raise
+
+
+def _work(gen: int):
+    """The job itself, in the job process (jobs.offload): the image model is loaded there for the four-turn check."""
     if not available():
         return
     engine = _engine()
@@ -180,15 +218,10 @@ def _job(gen: int):
             clf = _learn(engine, con, gen)
             if clf is None:
                 return
-        with engine.lock:
-            ids, vecs = engine.ids, engine.vecs
+        ids, vecs, stamps, todo_pos = _unscreened(engine, con)
         if ids is None or not len(ids):
             return
-        stamps = {r[0]: r[1] for r in con.execute("SELECT id, hash || ':' || coalesce(size, 0) || ':' || coalesce(modified, '') FROM photos WHERE video = 0")}
         key = f"{engine.name}"
-        with vdb.reader() as v:
-            done = {r[0]: r[1] for r in v.execute("SELECT photo_id, stamp FROM pix_ai_scans WHERE job = 'rotation'")}
-        todo_pos = [i for i, pid in enumerate(ids.tolist()) if pid in stamps and done.get(pid) != f"{stamps[pid]}:{key}"]
         progress.update(running=bool(todo_pos), phase="screening", done=0, total=len(todo_pos))
         if not todo_pos:
             return

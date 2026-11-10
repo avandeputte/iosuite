@@ -97,12 +97,15 @@ def server_log(lines: int = 200, contains: str = "", level: Literal["any", "warn
 def job_queue() -> dict:
     """What the background worker is doing right now: the running job, its start time and elapsed
     minutes, what is queued, the core budget, and per-job progress with the time of the last
-    completed item (a stall shows as a large 'idle_seconds')."""
+    completed item (a stall shows as a large 'idle_seconds'). 'paused' lists the jobs stopped twice in a row for
+    memory with the reason (run_analysis starts one again); 'memory' is the server's limit and use in bytes, what
+    the analysis process holds and may hold, whether the queue is waiting for memory, and the last job stopped."""
     need_admin()
     import time
     q = jobs.status()
     now = time.time()
     out = {"running": q["running"], "queued": q["queued"], "threads": q["threads"], "cores": q["cores"],
+           "paused": q["held"], "memory": q["memory"],
            "running_for_min": round((now - q["since"]) / 60, 1) if q.get("since") else None,
            "analysis": {k: {"running": v["running"], "done": v["done"], "total": v["total"]} for k, v in analysis_progress.items()},
            "search": {"running": semantic.running, "done": semantic.done, "total": semantic.total}}

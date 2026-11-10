@@ -279,18 +279,24 @@ def _same_model():
     state.set_setting("face_vectors_built", want)
 
 
+def _embed_all(gen: int, todo_p: list, todo: list, kind: str) -> bool:
+    """The work of _job, in the job process (jobs.offload): the model is loaded there. False when cancelled."""
+    sess = _sess()  # the model this whole run uses
+    # the prototypes first: they make the suggestions possible
+    return (_embed_into(gen, todo_p, "pix_ai_person_references", 0, kind, sess)
+            and _embed_into(gen, todo, "pix_ai_face_embeddings", len(todo_p), kind, sess))
+
+
 def _job(gen: int):
     _same_model()
-    kind, sess = chosen(), _sess()  # the model this whole run uses
-    faces, protos = _faces(), _proto_faces()
+    kind = chosen()
+    faces, protos = [tuple(f) for f in _faces()], [tuple(f) for f in _proto_faces()]
     have, have_p = _have(), _have_protos()
     todo = [f for f in faces if (f[0], f[1], f[2], f[3], f[4]) not in have]
     todo_p = [f for f in protos if (f[1], f[2], f[3], f[4], f[5]) not in have_p or have_p[(f[1], f[2], f[3], f[4], f[5])] != f[0]]
     progress.update(running=True, done=0, total=len(todo) + len(todo_p))  # the generation was taken at submit time
     try:
-        if not _embed_into(gen, todo_p, "pix_ai_person_references", 0, kind, sess):  # the prototypes first: they make the suggestions possible
-            return
-        if not _embed_into(gen, todo, "pix_ai_face_embeddings", len(todo_p), kind, sess):
+        if (todo or todo_p) and not jobs.offload(_embed_all, gen, todo_p, todo, kind):
             return
         # faces decided since (named, ignored, removed) no longer need a vector; prototypes follow the newest faces
         current = {(f[0], f[1], f[2], f[3], f[4]) for f in faces}

@@ -316,7 +316,8 @@ def set_date_hint(folder: str, not_before: Optional[int] = None, not_after: Opti
 def run_analysis(job: str = "all", reset: bool = False) -> dict:
     """Start a background analysis as Settings › AI does: job is all, embeddings, quality, vision, objects,
     captions, looks, faces, ages, jerseys, clothing, rotation, videos or facedetect (facedetect writes faces into digiKam's database). Without reset only
-    new or changed photos are looked at; with reset that analysis starts over. Follow it with job_queue. Admins only."""
+    new or changed photos are looked at; with reset that analysis starts over. A job that job_queue lists as paused
+    runs again when it is named here (or with all). Follow it with job_queue. Admins only."""
     need_admin()
     from fastapi import HTTPException
     try:
