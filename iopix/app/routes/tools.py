@@ -1,4 +1,4 @@
-"""Maintenance: background analysis and models, the file scanner and the library merge. The version, updates, restart and the
+"""Settings › Tools and Library: the library facts, background analysis and models, the file scanner and the library merge. The version, updates, restart and the
 server log (Settings › Server) are iosuite_shared's server_router (/api/server, /api/log), mounted in app/main.py."""
 import json
 import shutil
@@ -75,8 +75,8 @@ async def api_models_download(request: Request):
     return {"ok": True}
 
 
-@router.get("/api/maintenance", dependencies=[access.public])
-def api_maintenance(request: Request):
+@router.get("/api/tools", dependencies=[access.public])
+def api_tools(request: Request):
     """Library facts for Settings and Tools (paths and databases for admins only)."""
     con = db()
     try:
@@ -124,8 +124,8 @@ async def api_scan_run():
     return {"started": True}
 
 
-@router.post("/api/maintenance", dependencies=[access.admin])
-async def api_maintenance_run(request: Request):
+@router.post("/api/tools", dependencies=[access.admin])
+async def api_tools_run(request: Request):
     """Body: {action}. reindex: rebuild the search index from digiKam's database now.
     thumbs: throw away all grid thumbnails and rebuild. previews / faces: clear those caches.
     covers: pick tag cover photos again."""

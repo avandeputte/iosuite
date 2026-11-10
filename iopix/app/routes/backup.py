@@ -5,26 +5,21 @@ import time
 import zipfile
 from urllib.parse import quote
 
-from fastapi import APIRouter
-from fastapi import HTTPException
-from fastapi import Request
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
 from app import access, config
 from app.digikam import dbsync, dkdb
-from app.data import vdb
-
-
+from app.data import appdb
 
 router = APIRouter()
 
 
-@router.get("/api/backup/{which}", dependencies=[access.admin])
-def api_backup(which: str, request: Request):
-    """A download of digiKam's database (a consistent copy of the SQLite file, or a fresh mysqldump)
-    or of the viewer's own data (a mysqldump plus the content-search index). Admins only; the copy is also kept in db-backups."""
-    if request.headers.get("sec-fetch-site") == "cross-site":  # a link on another site must not start a multi-hundred-MB dump
-        raise HTTPException(403, "Open this from the viewer itself")
+@router.post("/api/backup/{which}", dependencies=[access.admin])
+def api_backup(which: str):
+    """Make a backup and send it: digiKam's database (a consistent copy of the SQLite file, or a fresh mysqldump) or
+    ioPix's own data (a mysqldump plus the content-search index). Admins only; the copy is also kept in db-backups.
+    A POST, since it writes a dump of hundreds of megabytes: a link on another site cannot start one."""
     stamp = time.strftime("%Y%m%d-%H%M%S")
     dkdb.BACKUP_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -46,12 +41,12 @@ def api_backup(which: str, request: Request):
         tmp.mkdir(exist_ok=True)
         try:
             with zipfile.ZipFile(dst, "w", zipfile.ZIP_DEFLATED) as z:
-                vdb.dump(tmp / "viewer.sql")  # mysqldump of the viewer's database
-                z.write(tmp / "viewer.sql", "viewer.sql")
+                appdb.dump(tmp / "iopix.sql")  # mysqldump of ioPix's own database
+                z.write(tmp / "iopix.sql", "iopix.sql")
                 for f in sorted(config.DATA_DIR.glob("embeddings*.npz")) + sorted(config.DATA_DIR.glob("embeddings*.npz.complete")):
                     z.write(f, f.name)
-                z.writestr("README.txt", "iopix backup. Restore by stopping the viewer, loading viewer.sql into its MariaDB database "
-                           "(mariadb <database> < viewer.sql: users, albums, favorites, settings, pending edits, and the analysis results: sharpness, "
+                z.writestr("README.txt", "iopix backup. Restore by stopping iopix, loading iopix.sql into its MariaDB database "
+                           "(mariadb <database> < iopix.sql: albums, favorites, settings, pending edits, and the analysis results: sharpness, "
                            "text, objects, captions, consistency report) and copying embeddings*.npz (the content-search index) into its data folder. "
                            "digiKam's own database is a separate download.\n")
         finally:

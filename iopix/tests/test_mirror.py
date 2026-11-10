@@ -265,7 +265,7 @@ def test_library_follows_digikam_row_by_row(client, lib):
     """Bringing the library up to date writes only the rows that differ (none when nothing changed), and
     leaves it identical to digiKam's tables, duplicates in the keyless tables included."""
     from app.digikam import dkdb, library
-    from app.data import vdb
+    from app.data import appdb
     index.refresh_library()
     src = dkdb.connect(real=True)
     try:
@@ -273,7 +273,7 @@ def test_library_follows_digikam_row_by_row(client, lib):
         assert library.copy_from_digikam(src) == {}, "nothing changed: nothing written"
     finally:
         src.rollback(); src.close()
-    con = vdb.connect()
+    con = appdb.connect()
     try:
         pid = con.execute("SELECT imageid FROM pix_photo_information LIMIT 1").fetchone()[0]
         con.execute("UPDATE pix_photo_information SET rating = 5 WHERE imageid = ?", (pid,))

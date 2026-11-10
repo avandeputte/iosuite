@@ -3,7 +3,7 @@ confirms a finding, and dismissed findings stay out until the file changes."""
 import pytest
 
 from app.ai import rotation
-from app.data import vdb
+from app.data import appdb
 
 np = pytest.importorskip("numpy")
 
@@ -45,7 +45,7 @@ def test_turns_and_ops():
 
 
 def test_findings_and_dismiss(lib):
-    with vdb.writer() as con:
+    with appdb.writer() as con:
         con.execute("DELETE FROM pix_ai_rotation")
         con.execute("DELETE FROM pix_quality_accepted WHERE check_name = 'rotation'")
         con.executemany("INSERT INTO pix_ai_rotation (photo_id, turn, score, stamp) VALUES (?,?,?,?)", [(1, 1, 0.99, "s1"), (2, 2, 0.95, "s2")])
@@ -56,13 +56,13 @@ def test_findings_and_dismiss(lib):
         assert rotation.dismiss([2]) == 1
         out = rotation.findings()
         assert [i["id"] for i in out["items"]] == [1] and out["dismissed"] == 1
-        with vdb.writer() as con:  # the file changed: the finding is back
+        with appdb.writer() as con:  # the file changed: the finding is back
             con.execute("UPDATE pix_ai_rotation SET stamp = 's2b' WHERE photo_id = 2")
         assert [i["id"] for i in rotation.findings()["items"]] == [1, 2]
         assert rotation.dismiss([2], on=False) == 1
         assert [i["id"] for i in rotation.findings([2])["items"]] == [2]
     finally:
-        with vdb.writer() as con:
+        with appdb.writer() as con:
             con.execute("DELETE FROM pix_ai_rotation")
             con.execute("DELETE FROM pix_quality_accepted WHERE check_name = 'rotation'")
 

@@ -18,6 +18,7 @@ from app import jobs
 from app.digikam import dbsync, dkdb
 from app.data import index
 from app.photos import edits, history
+from iosuite_shared.errors import Invalid
 
 log = logging.getLogger("app.photos.picklabels")
 LEVELS = {1: "Rejected", 2: "Pending", 3: "Accepted"}
@@ -40,7 +41,7 @@ def clear(levels: list, require_digikam_closed: bool = True, after=None) -> int:
     before this returns; the sidecars follow in the background. Returns how many photos lost a label."""
     levels = sorted({int(x) for x in levels if int(x) in LEVELS})
     if not levels:
-        raise ValueError("Choose Rejected, Pending or Accepted")
+        raise Invalid("Choose Rejected, Pending or Accepted")
     if progress["running"]:
         raise dbsync.SyncError("Pick labels are being cleared already")
     db_path = dkdb.sqlite_path()

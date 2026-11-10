@@ -17,8 +17,9 @@ import time
 from pathlib import Path
 
 from app import config
-from app.data import index, vdb
+from app.data import index, appdb
 from app.photos import consistency, edits
+from iosuite_shared.errors import Invalid
 
 log = logging.getLogger("app.photos.history")
 SNAP_DIR = config.DATA_DIR / "history"
@@ -67,7 +68,7 @@ def record(rows: list):
         return
     now, who = int(time.time()), actor()
     try:
-        with vdb.writer() as con:
+        with appdb.writer() as con:
             con.executemany("INSERT INTO pix_photo_history (photo_id, created_at, user_name, action, summary, details, undo_values, sidecar_copy, path, file_copy) VALUES (?,?,?,?,?,?,?,?,?,?)",
                             [(int(r["photo_id"]), now, r.get("user") or who, r["action"], r["summary"][:500],
                               json.dumps(r.get("details")) if r.get("details") is not None else None,
@@ -119,7 +120,7 @@ def _photos_of_person(tag_id: int) -> list:
 
 
 def users() -> list:
-    with vdb.reader() as con:
+    with appdb.reader() as con:
         return [r[0] for r in con.execute("SELECT DISTINCT user_name FROM pix_photo_history WHERE user_name IS NOT NULL ORDER BY user_name")]
 
 
@@ -133,7 +134,7 @@ def entries(photo_id: int = None, limit: int = 100, offset: int = 0, action: str
         if not ids:
             return {"total": 0, "entries": []}
         where.append(f"photo_id IN ({','.join(str(int(i)) for i in ids)})")
-    with vdb.reader() as con:
+    with appdb.reader() as con:
         if photo_id is not None:
             where.append("photo_id = ?"); params.append(int(photo_id))
         if action:
@@ -197,7 +198,7 @@ def _deleted_backup(details_json):
 
 
 def get(entry_id: int) -> dict:
-    with vdb.reader() as con:
+    with appdb.reader() as con:
         r = con.execute("SELECT id, photo_id, action, details, undo_values, sidecar_copy, path, file_copy FROM pix_photo_history WHERE id = ?", (int(entry_id),)).fetchone()
     if not r:
         return None
@@ -220,14 +221,14 @@ def restore(entry_id: int, kind: str) -> dict:
             raise FileNotFoundError("That photo is no longer in the trash")
         r = organize.restore([info])
         if not r["restored"]:
-            raise ValueError(r["failed"][0]["error"] if r["failed"] else "Could not restore it")
+            raise Invalid(r["failed"][0]["error"] if r["failed"] else "Could not restore it")
         return {"restored": "trash", "id": r["restored"][0]}
     if kind == "undo" and e["action"] == "moved" and (e["undo"] or {}).get("move"):
         from app.photos import organize  # lazy: photos.organize -> photos.history would be an import cycle
         back = e["undo"]["move"]
         r = organize.move_photos([pid], int(back["album"]), True, back.get("name"))
         if r["failed"]:
-            raise ValueError(r["failed"][0]["error"])
+            raise Invalid(r["failed"][0]["error"])
         return {"undone": 1}
     if kind == "undo" and e["action"] == "lossless":
         from app.photos import lossless  # lazy: photos.lossless -> photos.history would be an import cycle
@@ -242,16 +243,16 @@ def restore(entry_id: int, kind: str) -> dict:
         from app.faces import facemgr  # lazy: faces.facemgr -> photos.history would be an import cycle
         ops = (e["undo"] or {}).get("face_ops") or facemgr.inverse_ops(e["details"] or {})
         if not ops:
-            raise ValueError("This face change cannot be undone")
+            raise Invalid("This face change cannot be undone")
         res = facemgr.apply_many([{**o, "image": pid} for o in ops], background=True)
         bad = [r for r in res if "error" in r]
         if bad:
-            raise ValueError(f"Could not undo it: {bad[0]['error']}")
+            raise Invalid(f"Could not undo it: {bad[0]['error']}")
         record([{"photo_id": pid, "action": "restore", "summary": f"Change #{entry_id} undone", "path": photo["path"]}])
         return {"undone": len(res)}
     if kind == "undo":
         if not e["undo"]:
-            raise ValueError("This change has nothing to undo")
+            raise Invalid("This change has nothing to undo")
         r = edits.apply([photo], e["undo"])
         if r["edited"]:
             record([{"photo_id": pid, "action": "restore", "summary": f"Change #{entry_id} undone", "path": photo["path"]}])
@@ -270,10 +271,10 @@ def restore(entry_id: int, kind: str) -> dict:
         b = Path(e["file_copy"]) if e.get("file_copy") and os.path.isfile(e["file_copy"]) else edits.file_backup_path(photo["path"])
         if not b.exists():
             raise FileNotFoundError("The original of this file is no longer in file-backups")
-        with vdb.reader() as vcon:  # a rotate or crop made since changed the size, orientation and face regions in digiKam too:
+        with appdb.reader() as vcon:  # a rotate or crop made since changed the size, orientation and face regions in digiKam too:
             later = vcon.execute("SELECT count(*) FROM pix_photo_history WHERE photo_id = ? AND action = 'lossless' AND id > ?", (pid, entry_id)).fetchone()[0]
         if later:  # putting the old pixels back under those rows would leave them wrong: those edits are undone first, each restoring its rows
-            raise ValueError(f"Undo the {later} later rotate/crop {'edit' if later == 1 else 'edits'} of this photo first (each puts its size and face regions back), then restore the original")
+            raise Invalid(f"Undo the {later} later rotate/crop {'edit' if later == 1 else 'edits'} of this photo first (each puts its size and face regions back), then restore the original")
         from app.photos import lossless  # lazy: photos.lossless -> photos.history would be an import cycle
         from app.digikam import dbsync, dkdb  # lazy: digikam.dbsync -> photos.history would be an import cycle
         db_path = dkdb.sqlite_path()
@@ -288,7 +289,7 @@ def restore(entry_id: int, kind: str) -> dict:
                  "file_copy": keep, "details": {"kept": keep}}])
         index.build()  # digiKam rescans the file on its own (its time and size changed) and reads it back
         return {"restored": "original"}
-    raise ValueError("Unknown kind of restore")
+    raise Invalid("Unknown kind of restore")
 
 
 def _photo(pid: int):
@@ -357,7 +358,7 @@ def _restore_deleted(e: dict) -> dict:
             shutil.copy2(src, dst)
     added = folders.register(album, [folders.staged_entry(main_file)])
     new_id = added[0]["id"]
-    con = vdb.connect()
+    con = appdb.connect()
     try:  # the photo's history continues under its new id
         con.execute("UPDATE pix_photo_history SET photo_id = ? WHERE photo_id = ?", (new_id, e["photo"]))
         # and its identity, so the next index build does not take the restored file (same fingerprint) for a

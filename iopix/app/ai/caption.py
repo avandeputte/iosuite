@@ -53,8 +53,9 @@ def _load():
         _loaded.clear()  # first load, or another size was chosen since
         import torch
         from transformers import BlipForConditionalGeneration, BlipProcessor
-        proc = BlipProcessor.from_pretrained(name, cache_dir=str(MODEL_DIR), local_files_only=True)
-        model = BlipForConditionalGeneration.from_pretrained(name, cache_dir=str(MODEL_DIR), local_files_only=True)
+        rev = models.hf_local(name)[0]  # the copy on disk: the pinned commit, or the main branch of an earlier download
+        proc = BlipProcessor.from_pretrained(name, revision=rev, cache_dir=str(MODEL_DIR), local_files_only=True)
+        model = BlipForConditionalGeneration.from_pretrained(name, revision=rev, cache_dir=str(MODEL_DIR), local_files_only=True)
         torch.set_num_threads(jobs.threads())  # the CPU side of generation, and all of it without a GPU
         dev = "mps" if torch.backends.mps.is_available() else "cpu"
         _loaded.update(model=model.to(dev).eval(), proc=proc, dev=dev, torch=torch, repo=name)

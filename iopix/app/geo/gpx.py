@@ -14,15 +14,16 @@ import bisect
 import math
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
+from iosuite_shared.errors import Invalid
 
 
 def parse(data: bytes) -> list:
     """[(utc timestamp, lat, lon, ele or None)] sorted by time."""
     if data[:2] in (b"\xff\xfe", b"\xfe\xff") or data[:4] in (b"\xff\xfe\x00\x00", b"\x00\x00\xfe\xff") or b"\x00<" in data[:64]:
-        raise ValueError("GPX files must be UTF-8 (or ASCII) XML")  # UTF-16/32 would slip past the checks below
+        raise Invalid("GPX files must be UTF-8 (or ASCII) XML")  # UTF-16/32 would slip past the checks below
     low = data.lower()
     if b"<!doctype" in low or b"<!entity" in low:
-        raise ValueError("GPX files with a DOCTYPE are not accepted")
+        raise Invalid("GPX files with a DOCTYPE are not accepted")
     root = ET.fromstring(data)
     pts = []
     for el in root.iter():

@@ -108,7 +108,7 @@ def original(photo_id: int, dl: int = 0):
 _frames = threading.BoundedSemaphore(2)  # ffmpeg runs for chapter frames at once; more than that wait their turn
 
 
-@router.get("/video/{photo_id}/frame")
+@router.get("/video/{photo_id}/frame", dependencies=[access.public])
 def video_frame_at(photo_id: int, t: float = 0.0, h: int = 240):
     """One frame of a video at `t` seconds (a chapter thumbnail), cached; h is its height. The frame is the one at the
     next whole second (inside the video) and the height the next of thumbs.FRAME_HEIGHTS, so a video has a bounded
@@ -133,7 +133,7 @@ def video_frame_at(photo_id: int, t: float = 0.0, h: int = 240):
     return FileResponse(dst, media_type="image/jpeg", headers=IMG_CACHE)
 
 
-@router.get("/video/{photo_id}.mp4")
+@router.get("/video/{photo_id}.mp4", dependencies=[access.public])
 def video_copy(photo_id: int):
     """A copy of a video that phones play (H.264 and AAC in an MP4, Range requests for seeking), for videos whose
     /api/photo answer says playable: false. Made on the first request: until it is ready the answer is 503 with

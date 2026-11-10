@@ -25,10 +25,11 @@ import time
 from pathlib import Path
 
 from app.digikam import dbsync, dkdb
-from app.data import index, vdb
+from app.data import index, appdb
 from app.digikam.dkdb import chunked, in_chunks
 from app.photos import edits, history
 from app import config, jobs
+from iosuite_shared.errors import Invalid
 
 log = logging.getLogger("app.faces.facequality")
 NEAR = 3          # pixels: regions of one person this close on every coordinate are the same face
@@ -265,7 +266,7 @@ def _baddate() -> list:
 
 def accepted_ids(check: str) -> dict:
     """{photo: signature} the owner accepted for this check."""
-    with vdb.reader() as con:
+    with appdb.reader() as con:
         return dict(con.execute("SELECT photo_id, signature FROM pix_quality_accepted WHERE check_name = ?", (check,)).fetchall())
 
 
@@ -289,10 +290,10 @@ def ignore_unnamed(photos: list) -> dict:
 def accept(photos: list, check: str = "unnamed", on: bool = True) -> int:
     """Accept these photos' finding as it is (they leave the list until their faces change), or take it back."""
     if check not in ("unnamed", "untagged", "nolocation", "wrongfolder", "baddate"):
-        raise ValueError("Unknown check")
+        raise Invalid("Unknown check")
     want = {int(p) for p in photos}
     current = {u["photo"]: u["signature"] for u in scan()[check]} if on else {}
-    with vdb.writer() as con:
+    with appdb.writer() as con:
         if on:
             sig = current.copy()
             missing = want - set(sig)
@@ -313,7 +314,7 @@ def items(check: str, offset: int = 0, limit: int = 120) -> dict:
     elif check in ("separate", "invalid", "unnamed", "untagged", "nolocation", "wrongfolder", "baddate"):
         rows = s[check]
     else:
-        raise ValueError("Unknown list")
+        raise Invalid("Unknown list")
     return {"total": len(rows), "items": rows[max(0, offset):max(0, offset) + max(1, min(limit, 500))]}
 
 
@@ -386,7 +387,7 @@ def fix_files(after=None) -> int:
     unchanged). Runs in the background. Returns how many photos it will look at."""
     if progress["running"]:
         raise dbsync.SyncError("The clean-up is still running; the image files follow when it has finished.")
-    with vdb.reader() as con:
+    with appdb.reader() as con:
         cleaned = [r[0] for r in con.execute("SELECT DISTINCT photo_id FROM pix_photo_history WHERE action = 'face' AND summary LIKE 'Duplicate face regions removed:%'")]
         done = {r[0] for r in con.execute("SELECT DISTINCT photo_id FROM pix_photo_history WHERE summary = ?", (FILE_DONE,))}
     todo = [(pid, p) for pid, p in dbsync.photo_paths([p for p in cleaned if p not in done]) if edits.can_write_file(p)]

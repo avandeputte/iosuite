@@ -28,10 +28,11 @@ import time
 
 from app import config
 from app.ai.semantic import enabled, semantic
-from app.data import index, vdb
+from app.data import index, appdb
 from app.digikam.dkdb import in_chunks
 from app.faces import ages
 from app.photos import history
+from iosuite_shared.errors import Invalid
 
 log = logging.getLogger(__name__)
 FIRST_REAL_YEAR = ages.FIRST_REAL_YEAR
@@ -53,7 +54,7 @@ _lock = threading.Lock()
 def hints() -> dict:
     """{album id: {not_before, not_after}} as entered."""
     try:
-        with vdb.reader() as con:
+        with appdb.reader() as con:
             return {int(r[0]): {"not_before": r[1], "not_after": r[2]} for r in con.execute("SELECT album_id, not_before, not_after FROM pix_date_hints")}
     except Exception:
         return {}
@@ -65,10 +66,10 @@ def set_hint(album_id: int, not_before=None, not_after=None):
     na = int(not_after) if not_after not in (None, "") else None
     for v in (nb, na):
         if v is not None and not 1800 <= v <= time.localtime().tm_year:
-            raise ValueError("A year between 1800 and this year")
+            raise Invalid("A year between 1800 and this year")
     if nb is not None and na is not None and nb > na:
-        raise ValueError("The earliest year is after the latest")
-    with vdb.writer() as con:
+        raise Invalid("The earliest year is after the latest")
+    with appdb.writer() as con:
         if nb is None and na is None:
             con.execute("DELETE FROM pix_date_hints WHERE album_id = ?", (int(album_id),))
         else:

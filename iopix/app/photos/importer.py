@@ -30,6 +30,7 @@ from app.digikam.dbsync import SyncError
 from app.digikam.dkdb import in_chunks
 from app.data import index, state
 from app.faces import facemgr
+from iosuite_shared.errors import Invalid
 
 log = logging.getLogger("app.photos.importer")
 STAGING = config.DATA_DIR / "import-staging"
@@ -51,7 +52,7 @@ def layout() -> str:
 
 def set_layout(key: str):
     if key not in LAYOUTS:
-        raise ValueError("Unknown folder layout")
+        raise Invalid("Unknown folder layout")
     state.set_setting("import_layout", key)
 
 
@@ -65,21 +66,21 @@ def check_pattern(pattern: str) -> str:
     ValueError in plain words. Folders that do not exist yet are created at import time."""
     p = (pattern or "").strip()
     if not p:
-        raise ValueError("Give a folder, like Uploads or {yyyy}/{yyyy}{mm}")
+        raise Invalid("Give a folder, like Uploads or {yyyy}/{yyyy}{mm}")
     if len(p) > 200:
-        raise ValueError("The folder pattern is too long (200 characters at most)")
+        raise Invalid("The folder pattern is too long (200 characters at most)")
     if _BAD_CHARS.search(p):
-        raise ValueError("The folder pattern cannot contain backslashes or control characters")
+        raise Invalid("The folder pattern cannot contain backslashes or control characters")
     if p.startswith("/") or p.endswith("/"):
-        raise ValueError("The folder pattern is relative to the library: no slash at the start or the end")
+        raise Invalid("The folder pattern is relative to the library: no slash at the start or the end")
     for seg in p.split("/"):
         if seg in ("", ".", ".."):
-            raise ValueError("Every part of the folder pattern needs a name; . and .. are not allowed")
+            raise Invalid("Every part of the folder pattern needs a name; . and .. are not allowed")
     for tok in re.findall(r"\{([^{}]*)\}", p):
         if tok not in _TOKENS:
-            raise ValueError(f"Unknown placeholder {{{tok}}}: use {{yyyy}}, {{mm}} and {{dd}}")
+            raise Invalid(f"Unknown placeholder {{{tok}}}: use {{yyyy}}, {{mm}} and {{dd}}")
     if p.count("{") != p.count("}") or re.search(r"\{[^}]*\{|\}[^{]*\}(?=[^{]*\})", p) or re.search(r"\{[^}]*$", p):
-        raise ValueError("Unbalanced braces in the folder pattern; placeholders are {yyyy}, {mm} and {dd}")
+        raise Invalid("Unbalanced braces in the folder pattern; placeholders are {yyyy}, {mm} and {dd}")
     return p
 
 

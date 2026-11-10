@@ -26,10 +26,11 @@ import threading
 import time
 
 from app import jobs, runtime, thumbs
-from app.data import vdb
+from app.data import appdb
 from app.digikam.dkdb import chunked
 from app.photos import history, lossless
 from app.digikam import dbsync, dkdb
+from iosuite_shared.errors import Invalid
 
 log = logging.getLogger("app.photos.filecheck")
 JOB = "filecheck"
@@ -177,11 +178,11 @@ def keep_intact(ids: list, require_digikam_closed: bool = True) -> dict:
         p = lossless.photo(int(pid))
         lossless.check(p)
         if os.path.splitext(p["path"])[1].lower() not in JPEG_EXT:
-            raise ValueError("Only JPEGs can be cropped this way")
+            raise Invalid("Only JPEGs can be cropped this way")
         r = check_file(p["path"])
         got = intact_rows(p["path"]) if r and r["problem"] in ("truncated", "corrupt_data") else None
         if not got:
-            raise ValueError("No missing part at the bottom of this picture to crop away")
+            raise Invalid("No missing part at the bottom of this picture to crop away")
         W, H, keep = got
         lossless.crop(p["id"], keep_rect(W, H, keep, p["orientation"]), require_digikam_closed, reencode_damaged=True, con=con, after=after)
     r = dbsync.batch([int(i) for i in ids], one, require_digikam_closed, "the photos")
@@ -266,7 +267,7 @@ def _photos() -> list:
 
 
 def _done() -> dict:
-    with vdb.reader() as con:
+    with appdb.reader() as con:
         return {r[0]: (r[1], r[2]) for r in con.execute("SELECT photo_id, stamp, detail FROM pix_ai_scans WHERE job = ?", (JOB,))}
 
 
@@ -286,7 +287,7 @@ def _job(gen: int, photos: list):
                 if r:
                     progress["found"] += 1
                 rows.append((p["id"], _stamp(p), json.dumps(r) if r else None))
-            with vdb.writer() as con:
+            with appdb.writer() as con:
                 con.executemany(f"INSERT OR REPLACE INTO pix_ai_scans VALUES (?,'{JOB}',?,?)", rows)
             progress.step(len(todo_batch))
     finally:
@@ -296,7 +297,7 @@ def _job(gen: int, photos: list):
 def start(redo: bool = False) -> int:
     """Check the files not checked yet (or changed since); with redo every file again. Returns how many are queued."""
     if redo:
-        with vdb.writer() as con:
+        with appdb.writer() as con:
             con.execute("DELETE FROM pix_ai_scans WHERE job = ?", (JOB,))
     photos = _photos()
     have = _done()
@@ -338,13 +339,13 @@ def repair(ids: list, require_digikam_closed: bool = True) -> dict:
         lossless.check(p)
         r = check_file(p["path"])
         if not r or r["problem"] != "end_marker" or not r["fixable"]:
-            raise ValueError("This file does not have a repairable missing end marker (checked again just now)")
+            raise Invalid("This file does not have a repairable missing end marker (checked again just now)")
         copy = lossless.copy_before(p["path"])
         with open(p["path"], "ab") as f:
             f.write(b"\xff\xd9")
         if check_file(p["path"]):  # the repair made it no better: the copy goes back
             shutil.copy2(copy, p["path"])
-            raise ValueError("Adding the end marker did not make the file sound; it was left as it was")
+            raise Invalid("Adding the end marker did not make the file sound; it was left as it was")
         size = os.path.getsize(p["path"])
         con.execute("UPDATE Images SET fileSize = ?, modificationDate = NULL WHERE id = ?", (size, p["id"]))
         lossless.forget_checksum(p["id"])

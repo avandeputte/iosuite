@@ -2,7 +2,7 @@
 pending-edit and tag-manager queues, and (through analysis.py and consistency.py,
 which share the database) the analysis results.
 
-Everything lives in the viewer's own database (vdb.py: MariaDB or MySQL, since v1.113 nothing
+Everything lives in the viewer's own database (appdb.py: MariaDB or MySQL, since v1.113 nothing
 else), never in digiKam's database. Photos are referenced by digiKam image id; the file hash is
 stored alongside so entries could be re-matched if digiKam ever renumbers its images.
 """
@@ -11,7 +11,7 @@ import logging
 import threading
 import time
 
-from app.data import vdb
+from app.data import appdb
 from app.digikam.dkdb import in_chunks
 
 rev = 0  # bumped on every write so cached query results can be invalidated
@@ -76,20 +76,20 @@ def _known(key: str):
 
 
 def connect():
-    """The viewer database (see vdb.py); rows answer to names and indexes."""
-    return vdb.connect(timeout=10)
+    """The viewer database (see appdb.py); rows answer to names and indexes."""
+    return appdb.connect(timeout=10)
 
 
 def init():
-    """Open the viewer database and create or migrate every table (vdb.init: never raises; the viewer starts
+    """Open the viewer database and create or migrate every table (appdb.init: never raises; the viewer starts
     without a database and says so)."""
-    vdb.init()
+    appdb.init()
 
 
 def write(fn):
     """Run fn(con) inside the one writer lock and commit; returns what fn returned and moves `rev` on (polls notice the change)."""
     global rev
-    with lock, vdb.write_lock:  # one writer in the process, the jobs included: a request never waits out SQLite's busy timeout
+    with lock, appdb.write_lock:  # one writer in the process, the jobs included: a request never waits out SQLite's busy timeout
         con = connect()
         try:
             out = fn(con)

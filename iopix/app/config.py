@@ -12,17 +12,18 @@ import re
 from pathlib import Path
 
 from iosuite_shared import config as shared
+from iosuite_shared.errors import Invalid
 
 APP = "iopix"
 APP_DIR = Path(__file__).resolve().parent.parent
 _PROCESS_ENV = dict(os.environ)  # what the service or container set, before config.env adds to it (see from_environment)
 CONFIG_FILE = shared.load_file(APP_DIR)  # first: iosuite_shared reads its settings (the Shared ioSuite database, COOKIE_DOMAIN) from it too
 env, env_flag, env_int = shared.env, shared.env_flag, shared.env_int
-# APP_DIR, DATA_DIR, STATIC_DIR, LOG_FILE, HOST, PORT, PUBLIC_URL, BASE_URL, FORWARDED_ALLOW_IPS, TLS_CERT_FILE, TLS_KEY_FILE,
-# MCP_FORCED, ADMIN_USER, ADMIN_PASSWORD: the same names in every app (iosuite_shared.config.standard says what each is)
+# APP_DIR, DATA_DIR, STATIC_DIR, LOG_FILE, HOST, PORT, PUBLIC_URL, BASE_URL, TLS_CERT_FILE, TLS_KEY_FILE,
+# MCP_FORCED, KEEP_DELETED_DAYS, ADMIN_USER, ADMIN_PASSWORD: the same names in every app (iosuite_shared.config.standard says what each is)
 _std = shared.standard(APP, APP_DIR)
 DATA_DIR, STATIC_DIR, LOG_FILE, HOST, PORT = _std["DATA_DIR"], _std["STATIC_DIR"], _std["LOG_FILE"], _std["HOST"], _std["PORT"]
-PUBLIC_URL, BASE_URL, FORWARDED_ALLOW_IPS = _std["PUBLIC_URL"], _std["BASE_URL"], _std["FORWARDED_ALLOW_IPS"]
+PUBLIC_URL, BASE_URL = _std["PUBLIC_URL"], _std["BASE_URL"]
 TLS_CERT_FILE, TLS_KEY_FILE, MCP_FORCED, ADMIN_USER, ADMIN_PASSWORD = _std["TLS_CERT_FILE"], _std["TLS_KEY_FILE"], _std["MCP_FORCED"], _std["ADMIN_USER"], _std["ADMIN_PASSWORD"]
 
 
@@ -164,7 +165,7 @@ def proxy_env(name: str):
     return v if v not in (None, "") else None
 
 
-# the names of iopix's own database settings in config.env, by vdb.KEYS
+# the names of iopix's own database settings in config.env, by appdb.KEYS
 DB_ENV = {"type": "DB_TYPE", "host": "DB_HOST", "port": "DB_PORT", "database": "DB_NAME", "user": "DB_USER", "password": "DB_PASSWORD"}
 
 
@@ -203,14 +204,14 @@ def _quoted(v: str) -> str:
     """A value as config.env holds it, read back the same by iosuite_shared and by systemd's EnvironmentFile: as it
     is when plain, else in single quotes, or in double quotes when it holds a single quote itself."""
     if "\n" in v or "\r" in v:
-        raise ValueError("A setting cannot span lines")
+        raise Invalid("A setting cannot span lines")
     if not re.search(r"[\\'\"]", v) and v == v.strip():
         return v
     if "'" not in v:
         return f"'{v}'"
     if '"' not in v and "\\" not in v:
         return f'"{v}"'
-    raise ValueError("A value with a single quote cannot also hold double quotes or backslashes")
+    raise Invalid("A value with a single quote cannot also hold double quotes or backslashes")
 
 
 def save_values(values: dict, path: Path = None):

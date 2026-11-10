@@ -40,7 +40,7 @@ server = shared_mcp.make_server("iopix", "ioPix", __version__, instructions=(
 
 
 def db() -> sqlite3.Connection:
-    """A read-only connection to the index (the viewer's own data is read through appstate / vdb)."""
+    """A read-only connection to the index (the viewer's own data is read through appstate / appdb)."""
     try:
         index.ensure_fresh()  # cheap stat; rebuilds only if digiKam changed its database
     except Exception:  # a busy or unreachable digiKam database (SQLite or MySQL): answer from the index we have

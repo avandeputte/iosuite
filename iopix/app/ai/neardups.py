@@ -13,10 +13,11 @@ try:
 except ImportError:  # numpy comes with the search/objects extras; without it these features are simply off
     np = None
 
-from app.data import index, state, vdb
+from app.data import index, state, appdb
 from app import jobs
 from app.ai.semantic import enabled, semantic
 from app.digikam.dkdb import in_chunks
+from iosuite_shared.errors import Invalid
 
 log = logging.getLogger("app.ai.neardups")
 LEVELS = {"strict": 0.97, "normal": 0.94, "loose": 0.90}  # cosine similarity of the search embeddings
@@ -42,7 +43,7 @@ def _enabled() -> bool:
 
 def start(level: str = "normal"):
     if level not in LEVELS:
-        raise ValueError("level must be strict, normal or loose")
+        raise Invalid("level must be strict, normal or loose")
     if not _enabled():
         raise RuntimeError("Content search is not installed; near-duplicates need its embeddings")
     gen = progress.cancel()
@@ -60,7 +61,7 @@ def _job(gen: int, level: str):
     total = 0
     try:
         state.set_setting("near_dups_gen", "")  # not current until every block is in
-        con = vdb.connect()
+        con = appdb.connect()
         try:
             con.execute("DELETE FROM pix_ai_similar_photos")
             con.commit()
@@ -99,7 +100,7 @@ def _job(gen: int, level: str):
 
 def groups(limit: int = 300) -> list:
     """Connected components of the stored pairs, each with its photos (index facts) and the strongest score."""
-    with vdb.reader() as con:
+    with appdb.reader() as con:
         pairs = [tuple(r) for r in con.execute("SELECT photo_id, similar_photo_id, score FROM pix_ai_similar_photos")]
     if not pairs:
         return []

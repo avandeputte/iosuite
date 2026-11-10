@@ -48,7 +48,7 @@ class SyncError(Exception):
 
 def settings() -> dict:
     """The effective connection settings: a `db_<key>` setting wins over the environment."""
-    from app.data import state  # lazy: data.state -> data.vdb -> digikam.dkdb would be an import cycle
+    from app.data import state  # lazy: data.state -> data.appdb -> digikam.dkdb would be an import cycle
     out = dict(ENV)
     for k in KEYS:
         v = state.get_setting("db_" + k, "")
@@ -107,7 +107,7 @@ def is_mysql() -> bool:
 
 def no_digikam() -> bool:
     """DIGIKAM_DB_TYPE=none (or Settings > digiKam database: none): there is no digiKam database at all."""
-    from app.data import state  # lazy: data.state -> data.vdb -> digikam.dkdb would be an import cycle
+    from app.data import state  # lazy: data.state -> data.appdb -> digikam.dkdb would be an import cycle
     return str(state.get_setting("db_type", "") or ENV["type"]).lower() in NO_DIGIKAM
 
 
@@ -317,7 +317,7 @@ class Conn:
 def sync_enabled() -> bool:
     """Settings > Sync with digiKam. Off: the viewer never opens digiKam's database; the library lives in
     the viewer's own tables (library.py) and every change is made there."""
-    from app.data import state  # lazy: data.state -> data.vdb -> digikam.dkdb would be an import cycle
+    from app.data import state  # lazy: data.state -> data.appdb -> digikam.dkdb would be an import cycle
     return not no_digikam() and state.get_setting("digikam_sync", "1") != "0"
 
 
@@ -336,7 +336,7 @@ def chunked(seq, size: int = 500):
 def in_chunks(con, sql: str, values, params_before=(), params_after=(), size: int = 500):
     """The rows of a query with one IN list, run once per `size` values: `{ids}` in the SQL
     becomes that chunk's placeholders, bound between params_before and params_after. Works on
-    any connection whose execute() returns an iterable (sqlite3, dkdb.Conn, vdb.VConn). No
+    any connection whose execute() returns an iterable (sqlite3, dkdb.Conn, appdb.VConn). No
     values: no rows, the same answer as IN (NULL). A query that orders or groups across the
     whole list must not be chunked, so it is not written with this."""
     for part in chunked(values, size):
@@ -401,7 +401,7 @@ def tag_path(tags: dict, tid) -> str:
 def root_overrides() -> dict:
     """{path digiKam recorded: local path} from the `album_roots` setting (Settings > Album roots)."""
     import json
-    from app.data import state  # lazy: data.state -> data.vdb -> digikam.dkdb would be an import cycle
+    from app.data import state  # lazy: data.state -> data.appdb -> digikam.dkdb would be an import cycle
     try:
         d = json.loads(state.get_setting("album_roots", "") or "{}")
         return {str(k).rstrip("/"): str(v).rstrip("/") for k, v in d.items() if v}

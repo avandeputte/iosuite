@@ -143,7 +143,7 @@ function flashEdit(ch) {
   if (msg) toast(msg, null, null, 1200);
 }
 
-async function recentTags() { if (!S.RECENT_TAGS) try { S.RECENT_TAGS = (await api('/api/maintenance')).recentTags || []; } catch { S.RECENT_TAGS = []; } return S.RECENT_TAGS; }
+async function recentTags() { if (!S.RECENT_TAGS) try { S.RECENT_TAGS = (await api('/api/tools')).recentTags || []; } catch { S.RECENT_TAGS = []; } return S.RECENT_TAGS; }
 async function noteRecent(ids) { try { S.RECENT_TAGS = (await post('/api/tags/recent', { ids })).recent; } catch { /* cosmetic */ } }
 async function createTagThenPick(full, onPick) {
   // "Parent/Child" creates the child under an existing parent; a bare name makes a top-level tag
@@ -241,7 +241,7 @@ export async function dbDialog() {
 const TEMPLATE_LABEL = { creator: 'Creator', copyrightNotice: 'Copyright notice', rightsUsageTerms: 'Usage terms', creatorJobTitle: 'Job title', provider: 'Credit', source: 'Source', instructions: 'Instructions',
   'creatorContactInfo.address': 'Address', 'creatorContactInfo.city': 'City', 'creatorContactInfo.provinceState': 'State / province', 'creatorContactInfo.postalCode': 'Postal code', 'creatorContactInfo.country': 'Country', 'creatorContactInfo.phone': 'Phone', 'creatorContactInfo.email': 'Email', 'creatorContactInfo.webUrl': 'Web' };
 
-async function loadTemplates() { if (!S.TEMPLATES) try { S.TEMPLATES = (await api('/api/maintenance')).templates || []; } catch { S.TEMPLATES = []; } return S.TEMPLATES; }
+async function loadTemplates() { if (!S.TEMPLATES) try { S.TEMPLATES = (await api('/api/tools')).templates || []; } catch { S.TEMPLATES = []; } return S.TEMPLATES; }
 export function dateEditor(ids, current, after, precision) {
   // current: "YYYY-MM-DDTHH:MM:SS" for one photo, or null for a batch; precision: how well that date is known
   // (exact, month, year, unknown). An approximate date is saved as a placeholder (1 January of the year, or the 1st of

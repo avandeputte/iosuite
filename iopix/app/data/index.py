@@ -30,11 +30,11 @@ from app import config, jobs
 from app.digikam import dkdb, library
 from app.photos import dateprecision, edits
 from app.geo import places
-from app.data import state as appstate, vdb
+from app.data import state as appstate, appdb
 from app.digikam.dkdb import chunked, in_chunks
 
 log = logging.getLogger("app.data.index")
-SOURCE_ERRORS = (*vdb.Error, OSError, dkdb.SyncError)  # digiKam's database cannot be read right now
+SOURCE_ERRORS = (*appdb.Error, OSError, dkdb.SyncError)  # digiKam's database cannot be read right now
 
 
 class Unavailable(Exception):

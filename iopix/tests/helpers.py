@@ -113,8 +113,8 @@ def wait_for(pred, timeout=5.0):
 
 def forget_identity(ids):
     """Test photos removed behind the viewer's back lose their viewer ids too (the mirror test counts them)."""
-    from app.data import vdb
-    con = vdb.connect()
+    from app.data import appdb
+    con = appdb.connect()
     try:
         for i in ids:
             con.execute("DELETE FROM pix_photo_identity WHERE dk_id = ?", (int(i),))

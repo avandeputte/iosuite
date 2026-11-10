@@ -15,8 +15,8 @@ from helpers import _face_jpeg, _info, forget_identity, need_tool
 
 
 def _vid(pid):
-    from app.data import vdb
-    con = vdb.connect()
+    from app.data import appdb
+    con = appdb.connect()
     try:
         r = con.execute("SELECT id FROM pix_photo_identity WHERE dk_id = ?", (pid,)).fetchone()
         return r[0] if r else None

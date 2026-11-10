@@ -29,8 +29,9 @@ from iosuite_shared import schema
 from app import config
 from app.digikam import library as _library
 from app.digikam.dkdb import Conn, Cursor, norm_plain
+from iosuite_shared.errors import Invalid
 
-log = logging.getLogger("app.data.vdb")
+log = logging.getLogger("app.data.appdb")
 KEYS = ("type", "host", "port", "database", "user", "password")
 _cfg = None
 _lock = threading.Lock()
@@ -180,7 +181,7 @@ def _env_values(c: dict) -> dict:
     values = {config.DB_ENV[k]: str(v) for k, v in keep.items()}
     fixed = [n for n in from_environment() if os.environ.get(n) != values[n]]
     if fixed:
-        raise ValueError(f"{', '.join(fixed)} {'is' if len(fixed) == 1 else 'are'} set in the environment of the service or container, "
+        raise Invalid(f"{', '.join(fixed)} {'is' if len(fixed) == 1 else 'are'} set in the environment of the service or container, "
                          "which wins over config.env: change the database there")
     return values
 
@@ -596,11 +597,11 @@ def switch(c: dict, copy: bool = True, drop: bool = True) -> dict:
     c = _with_stored(c)
     c["type"] = "mysql"
     if not (c["host"] and c["database"] and c["user"]):
-        raise ValueError("A host, a database and a user are needed")
+        raise Invalid("A host, a database and a user are needed")
     _env_values(c)  # refused before anything is copied when the environment fixes the database
     same = configured() and all(str(c[k]) == str(cur[k]) for k in ("host", "port", "database"))
     if same and ready():
-        raise ValueError("The viewer already uses that database")
+        raise Invalid("The viewer already uses that database")
     if same:  # the configured database again while it was unreachable at start: nothing to copy from; the restart brings it back
         test_connection(c)
         with _lock:

@@ -16,13 +16,13 @@ submission picks the rest up (what was recorded stays recorded).
 """
 
 from app import config, jobs
-from app.data import vdb
+from app.data import appdb
 
 
 class ScanJob:
     """One scan job: `ScanJob(name, todo, work, counts, ...)`, then start(photos), reset() and coverage().
 
-    todo(con, photos) -> list   the photos (index rows) the job still has to do, read on `con` (a vdb reader)
+    todo(con, photos) -> list   the photos (index rows) the job still has to do, read on `con` (a appdb reader)
     work(gen, todo)             the run itself, batch by batch, checking progress.cancelled(gen) between batches
                                 and recording each batch in the job's tables and pix_ai_scans
     counts(con) -> (done, total) what coverage() reports (total None when every item is wanted)
@@ -41,7 +41,7 @@ class ScanJob:
         self._running = {"todo": set()}  # the photos the running job is working through, for start()'s rule
 
     def todo(self, photos: list) -> list:
-        with vdb.reader() as con:
+        with appdb.reader() as con:
             return self._todo(con, photos)
 
     def start(self, photos: list):
@@ -73,7 +73,7 @@ class ScanJob:
         """Throw the results away: the running job stops at its next batch, and the next start does it all again."""
         self.progress.cancel()
         self._running["todo"] = set()
-        with vdb.writer() as con:
+        with appdb.writer() as con:
             for t in self.tables:
                 con.execute(f"DELETE FROM {t}")
             con.execute("DELETE FROM pix_ai_scans WHERE job = ?", (self.name,))
@@ -81,7 +81,7 @@ class ScanJob:
     def coverage(self) -> tuple:
         """(done, total) for the Settings › AI row; (0, 0) when the database cannot be read (not there yet, locked)."""
         try:
-            with vdb.reader() as con:
+            with appdb.reader() as con:
                 done, total = self._counts(con)
             return int(done), (int(total) if total is not None else None)
         except Exception:

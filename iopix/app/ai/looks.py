@@ -24,6 +24,7 @@ import zipfile
 
 from app.ai import analysis, models  # analysis as a module, not its names: it is still loading when it imports this (a cycle)
 from app.faces import facedetect
+from iosuite_shared.errors import Invalid
 
 try:
     import numpy as np
@@ -188,7 +189,7 @@ def read_safetensors(path) -> dict:
             continue
         a, b = t["data_offsets"]
         if kinds.get(t["dtype"]) is None:
-            raise ValueError(f"{name}: unsupported dtype {t['dtype']}")
+            raise Invalid(f"{name}: unsupported dtype {t['dtype']}")
         out[name] = np.frombuffer(data[a:b], dtype=kinds[t["dtype"]]).astype(np.float32).reshape(t["shape"])
     return out
 

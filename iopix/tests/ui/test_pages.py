@@ -23,7 +23,7 @@ def test_grid_renders_thumbnails(page, server, lib):
 def test_the_settings_page(page, server):
     page.goto(server + "/#/settings")
     page.wait_for_selector("h1:has-text('Settings')", timeout=10000)
-    page.wait_for_selector(".stabs", timeout=10000)  # the sections arrive with /api/maintenance
+    page.wait_for_selector(".stabs", timeout=10000)  # the sections arrive with /api/tools
     tabs = page.locator(".stabs button").all_inner_texts()
     assert [t for t in tabs if t not in ("Account",)][:5] == ["Display", "Editing", "Library", "AI", "Server"], "the order every io app uses"
     heads = page.locator("h2").evaluate_all("els => els.map((e) => e.textContent)")

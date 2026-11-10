@@ -202,17 +202,17 @@ def test_a_run_that_ends_well_clears_the_count(proc):
 
 def test_asking_for_a_job_lets_a_paused_one_run_again(monkeypatch):
     """Run again, Try again and "Check new and changed photos" (and the MCP tool) are someone asking: the hold goes."""
-    from app.routes import maintenance
-    monkeypatch.setattr(maintenance, "start_prewarm", lambda: None)
-    monkeypatch.setattr(maintenance.events, "kick", lambda: None)
+    from app.routes import tools
+    monkeypatch.setattr(tools, "start_prewarm", lambda: None)
+    monkeypatch.setattr(tools.events, "kick", lambda: None)
     why = {"reason": "it needed more memory than analysis may use on this server", "at": 1}
     with jobs._lock:
         jobs._held.update(pixels=dict(why), captions=dict(why))
         jobs._strikes.update(pixels=2, captions=2)
     try:
-        maintenance.start_analysis("quality")  # a row of Settings › AI: sharpness shares the "pixels" pass
+        tools.start_analysis("quality")  # a row of Settings › AI: sharpness shares the "pixels" pass
         assert set(jobs.held()) == {"captions"} and "pixels" not in jobs._strikes
-        maintenance.start_analysis("all")
+        tools.start_analysis("all")
         assert not jobs.held() and not jobs._strikes
     finally:
         jobs.release()

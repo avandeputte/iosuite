@@ -3,7 +3,7 @@ similarities; the viewer proposes no names (groups only), both pages degrade wit
 import numpy as np
 
 from app.faces import facevecs
-from app.data import index, vdb
+from app.data import index, appdb
 from app.ai import neardups
 
 
@@ -29,7 +29,7 @@ def test_face_groups_from_vectors(client):
         pytest.skip("the scratch library has fewer than 3 unnamed faces")
     base = _vec(1)
     vecs = [base, _vec(2, base, 0.05), _vec(3)] + ([_vec(4)] if len(faces) > 3 else [])  # two alike, the rest on their own
-    con = vdb.connect()
+    con = appdb.connect()
     try:
         con.execute("DELETE FROM pix_ai_face_embeddings")
         con.executemany("INSERT INTO pix_ai_face_embeddings (photo_id, x, y, w, h, vec) VALUES (?,?,?,?,?,?)",
@@ -45,7 +45,7 @@ def test_face_groups_from_vectors(client):
     assert len(g["ungrouped"]) >= 1
     # a prototype of a named person that matches the pair: the group and that face carry a suggestion
     person = index.open_index().execute("SELECT id, name FROM tags WHERE person = 1 AND n_all > 0 LIMIT 1").fetchone()
-    con = vdb.connect()
+    con = appdb.connect()
     try:
         con.execute("INSERT OR REPLACE INTO pix_ai_person_references (tag_id, photo_id, x, y, w, h, vec) VALUES (?,?,?,?,?,?,?)", (person[0], 999999, 1, 1, 1, 1, _vec(5, base, 0.05).tobytes()))
         con.commit()
@@ -55,17 +55,17 @@ def test_face_groups_from_vectors(client):
     s0 = g["groups"][0]["suggest"]
     assert s0 and s0["tag"] == person[0] and s0["name"] == person[1] and s0["score"] >= 0.4
     assert all(f["suggest"] is None or f["suggest"]["score"] < 0.4 for f in g["ungrouped"]), "a face far from every prototype gets no guess"
-    con = vdb.connect(); con.execute("DELETE FROM pix_ai_person_references"); con.commit(); con.close()
+    con = appdb.connect(); con.execute("DELETE FROM pix_ai_person_references"); con.commit(); con.close()
     r = client.get("/api/faces/groups?kind=unknown").json()
     assert r["groups"][0]["n"] == 2 and "available" in r and "progress" in r
     assert client.get("/api/faces/groups?kind=nope").status_code == 400
-    con = vdb.connect(); con.execute("DELETE FROM pix_ai_face_embeddings"); con.commit(); con.close()
+    con = appdb.connect(); con.execute("DELETE FROM pix_ai_face_embeddings"); con.commit(); con.close()
     assert facevecs.groups("unknown")["groups"] == [] and len(facevecs.groups("unknown")["missing"]) >= 3
 
 
 def test_near_duplicate_sets(client, lib):
     ids = lib["ids"][:5]
-    con = vdb.connect()
+    con = appdb.connect()
     try:
         con.execute("DELETE FROM pix_ai_similar_photos")
         con.executemany("INSERT INTO pix_ai_similar_photos (photo_id, similar_photo_id, score) VALUES (?,?,?)", [(ids[0], ids[1], 0.98), (ids[1], ids[2], 0.95), (ids[3], ids[4], 0.91)])
@@ -81,6 +81,6 @@ def test_near_duplicate_sets(client, lib):
     assert len(r["groups"]) == 2 and r["levels"]["normal"] == 0.94 and r["current"] is False, "computed for another index generation"
     assert client.post("/api/neardups", json={"level": "weird"}).status_code == 400
     assert client.post("/api/neardups", json={"level": "normal"}).status_code == 409, "content search is off in the test environment"
-    con = vdb.connect(); con.execute("DELETE FROM pix_ai_similar_photos"); con.commit(); con.close()
+    con = appdb.connect(); con.execute("DELETE FROM pix_ai_similar_photos"); con.commit(); con.close()
     state.set_setting("near_dups_gen", "")
     assert client.get("/api/neardups").json()["groups"] == []

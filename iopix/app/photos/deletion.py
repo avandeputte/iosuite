@@ -24,7 +24,7 @@ from pathlib import Path
 
 from app import config
 from app.digikam import dbsync, dkdb
-from app.data import vdb
+from app.data import appdb
 from app.digikam.dkdb import chunked
 from app.photos import history
 from app.ai import semantic
@@ -175,7 +175,7 @@ def forget(ids: list):
     """Everything the viewer keeps about these photos."""
     if not ids:
         return
-    with vdb.writer() as con:
+    with appdb.writer() as con:
         for part in chunked(ids, 300):
             chunk = ",".join(str(int(x)) for x in part)
             for table, col in VIEWER_TABLES:

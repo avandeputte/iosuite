@@ -18,7 +18,7 @@ import time
 from app import config
 from app.digikam.dkdb import in_chunks
 from app.photos import edits
-from app.data import index, vdb
+from app.data import index, appdb
 
 log = logging.getLogger("app.photos.pixelguard")
 _warned = [False]
@@ -127,7 +127,7 @@ def _store(rows: list):
         return
     try:
         ids = _photo_ids([p for p, _h, _t in rows])
-        with vdb.writer() as con:
+        with appdb.writer() as con:
             con.executemany("INSERT OR REPLACE INTO pix_image_data_checksums (photo_id, hash, algorithm, verified_at) VALUES (?,?,?,?)",
                             [(ids[p], h, "SHA-256", t) for p, h, t in rows if p in ids])
     except Exception as e:  # bookkeeping only

@@ -46,7 +46,7 @@ The content-search model, background threads (how many cores a job may use) and 
 The same panel in every ioThing app: the MCP server switch, the installed version with **Check for updates**, **Update now** and the daily check, the server log (filtered by level or text, with a download of the whole file), and **Restart**. Then **Download a backup**:
 
 - **digiKam database**: a consistent copy of `digikam4.db` as it is right now, or a fresh dump for MariaDB,
-- **iopix data**: `viewer.sql`, a `mysqldump` of iopix's own database, the content-search embeddings files, and a README with the restore steps (`mariadb <database> < viewer.sql`).
+- **iopix data**: `iopix.sql`, a `mysqldump` of iopix's own database, the content-search embeddings files, and a README with the restore steps (`mariadb <database> < iopix.sql`).
 
 ## Security
 

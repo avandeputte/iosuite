@@ -28,7 +28,7 @@ import time
 from app import jobs, thumbs
 from app.ai import analysis, models  # the module, not its names: analysis is still loading when the index imports this (a cycle)
 from app.ai.scanjob import ScanJob
-from app.data import vdb
+from app.data import appdb
 from app.digikam.dkdb import chunked
 
 try:
@@ -275,7 +275,7 @@ def coverage() -> tuple:
     """(videos done, None): every video is wanted, so there is no total to show against (not the ScanJob's count,
     whose fallback is a (0, 0) pair)."""
     try:
-        with vdb.reader() as con:
+        with appdb.reader() as con:
             done = con.execute("SELECT count(*) FROM pix_ai_scans WHERE job = 'videos'").fetchone()[0]
         return int(done), None
     except Exception:
@@ -299,7 +299,7 @@ def _work(gen: int, todo: list):
             progress.step()
             continue
         dur = p.get("duration") or 0
-        with vdb.reader() as con:
+        with appdb.reader() as con:
             old = con.execute("SELECT stamp, cover_t, chapters, transcript, segments, lang, speech_model FROM pix_video_info WHERE photo_id = ?", (p["id"],)).fetchone()
         same_file = old is not None and old[0] == analysis.stamp(p)
         try:
@@ -320,7 +320,7 @@ def _work(gen: int, todo: list):
             continue
         if progress.cancelled(gen):
             return
-        with vdb.writer() as con:
+        with appdb.writer() as con:
             con.execute("DELETE FROM pix_video_info WHERE photo_id = ?", (p["id"],))
             con.execute("INSERT INTO pix_video_info (photo_id, stamp, cover_t, chapters, transcript, segments, lang, speech_model, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
                         (p["id"], analysis.stamp(p), cover_t, json.dumps(chapters), (tr or {}).get("text") or None, json.dumps((tr or {}).get("segments") or []),
@@ -350,7 +350,7 @@ progress, start, reset = job.progress, job.start, job.reset
 def cover_time(photo_id: int):
     """The chosen cover frame's time, or None (then thumbs.video_frame uses its own rule)."""
     try:
-        with vdb.reader() as con:
+        with appdb.reader() as con:
             r = con.execute("SELECT cover_t FROM pix_video_info WHERE photo_id = ?", (photo_id,)).fetchone()
         return float(r[0]) if r and r[0] is not None else None
     except Exception:
@@ -360,7 +360,7 @@ def cover_time(photo_id: int):
 def info(photo_id: int) -> dict:
     """{cover_t, chapters: [seconds], transcript, segments, lang} for the info panel and the player."""
     try:
-        with vdb.reader() as con:
+        with appdb.reader() as con:
             r = con.execute("SELECT cover_t, chapters, transcript, segments, lang FROM pix_video_info WHERE photo_id = ?", (photo_id,)).fetchone()
     except Exception:
         r = None
@@ -374,7 +374,7 @@ def transcripts(ids=None) -> dict:
     out = {}
     only = "" if ids is None else f" AND photo_id IN ({','.join(str(int(i)) for i in ids) or 'NULL'})"
     try:
-        with vdb.reader() as con:
+        with appdb.reader() as con:
             for pid, text in con.execute("SELECT photo_id, transcript FROM pix_video_info WHERE transcript IS NOT NULL AND transcript != ''" + only):
                 out[pid] = text
     except Exception as e:
@@ -385,7 +385,7 @@ def transcripts(ids=None) -> dict:
 def signature() -> str:
     """Part of the index version: changes as transcripts arrive."""
     try:
-        with vdb.reader() as con:
+        with appdb.reader() as con:
             n = con.execute("SELECT count(*) FROM pix_video_info WHERE transcript IS NOT NULL").fetchone()[0]
         return "v%d" % (n // 200 * 200)  # in steps; the run's end folds the rest in (jobs.finished_hook)
     except Exception:
@@ -393,6 +393,6 @@ def signature() -> str:
 
 
 def forget(ids: list):
-    with vdb.writer() as con:
+    with appdb.writer() as con:
         for part in chunked(ids, 500):
             con.execute(f"DELETE FROM pix_video_info WHERE photo_id IN ({','.join(str(int(i)) for i in part)})")

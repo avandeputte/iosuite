@@ -7,7 +7,7 @@ An edit:
      first change to it: sidecars into data/sidecar-backups and image files
      into data/file-backups, both mirroring the album folders;
   2. rewrites it with one exiftool run, setting the same fields digiKam writes;
-  3. is remembered in the viewer's own database (vdb.py) so the viewer shows the
+  3. is remembered in the viewer's own database (appdb.py) so the viewer shows the
      new values right away. digiKam sees them after "Reread Metadata From File", or after
      "Apply to digiKam database" (dbsync) writes them into its database; once
      the database agrees the remembered edit is dropped automatically.
@@ -71,7 +71,7 @@ def available() -> bool:
 
 
 def init():
-    pass  # the edits table is part of the schema vdb.ensure_schema keeps (state.init)
+    pass  # the edits table is part of the schema appdb.ensure_schema keeps (state.init)
 
 
 # --------------------------------------------------------------------------

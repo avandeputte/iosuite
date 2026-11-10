@@ -24,9 +24,9 @@ Sidecar and file backups are never deleted automatically. Allow disk space for t
 
 ## Backing iopix up
 
-Back up the database server and the data folder with the rest of your server, or use **Settings › Server › Download a backup › iopix data**, which gives `viewer.sql`, a `mysqldump` of iopix's database, plus the content-search embeddings files and the restore steps.
+Back up the database server and the data folder with the rest of your server, or use **Settings › Server › Download a backup › iopix data**, which gives `iopix.sql`, a `mysqldump` of iopix's database, plus the content-search embeddings files and the restore steps.
 
-To restore: stop iopix, load the dump into an empty database (`mariadb iopix < viewer.sql`), copy the other files into the data folder, make sure the `DB_*` settings in `config.env` point at that database, and start iopix again.
+To restore: stop iopix, load the dump into an empty database (`mariadb iopix < iopix.sql`), copy the other files into the data folder, make sure the `DB_*` settings in `config.env` point at that database, and start iopix again.
 
 ## Rolling back digiKam's database
 

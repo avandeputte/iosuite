@@ -1,6 +1,6 @@
-"""Every API route (and every image route) declares who may call it (app/access.py), and the declared levels match the table in
-access_table.json: a new route without a marker, or a route whose level changed by accident, fails here.
-Change the table on purpose when a route's audience changes."""
+"""Every route declares who may call it (app/access.py): the API, the image and video routes, the share target and the
+page itself. The declared levels match the table in access_table.json: a new route without a marker, or a route whose
+level changed by accident, fails here. Change the table on purpose when a route's audience changes."""
 import json
 
 import pytest
@@ -9,18 +9,19 @@ from pathlib import Path
 from fastapi.routing import APIRoute
 
 from app import access
-from app.routes import albums, auth, backup, browse, editing, faces, geo, images, maintenance, organize, review, settings, users
+from app.routes import albums, auth, backup, browse, editing, faces, geo, images, tools, organize, review, settings, users
 
 TABLE = json.loads((Path(__file__).parent / "access_table.json").read_text())
 
 
-IMAGE_PREFIXES = ("/thumb/", "/preview/", "/face/", "/orig/", "/facecrop/")  # the image routes, outside /api, checked too
-
-
 def _api_routes():
-    for mod in (browse, images, albums, editing, settings, maintenance, auth, users, geo, backup, review, organize, faces):
-        for r in mod.router.routes:
-            if isinstance(r, APIRoute) and (r.path.startswith("/api") or r.path.startswith(IMAGE_PREFIXES)):
+    """Every route of the route modules, whatever its address, and the ones app/main.py serves itself."""
+    from app.main import app
+    seen = set()
+    for routes in [mod.router.routes for mod in (browse, images, albums, editing, settings, tools, auth, users, geo, backup, review, organize, faces)] + [app.routes]:
+        for r in routes:
+            if isinstance(r, APIRoute) and (r.path, tuple(sorted(r.methods))) not in seen:
+                seen.add((r.path, tuple(sorted(r.methods))))
                 yield r
 
 

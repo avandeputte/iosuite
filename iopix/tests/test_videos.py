@@ -4,7 +4,7 @@ import json
 import pytest
 
 from app.ai import videos
-from app.data import vdb
+from app.data import appdb
 
 pytest.importorskip("numpy")
 
@@ -44,7 +44,7 @@ def test_cover_picks_the_sharp_lit_frame(monkeypatch):
 
 
 def test_info_and_transcripts(lib):
-    with vdb.writer() as con:
+    with appdb.writer() as con:
         con.execute("DELETE FROM pix_video_info")
         con.execute("INSERT INTO pix_video_info VALUES (?,?,?,?,?,?,?,?,?)", (5, "s", 12.5, json.dumps([3.0, 20.0]), "happy birthday", json.dumps([{"t": 1.0, "end": 3.0, "text": "happy birthday"}]), "en", "parakeet", 0))
     try:
@@ -54,7 +54,7 @@ def test_info_and_transcripts(lib):
         assert videos.transcripts() == {5: "happy birthday"} and videos.signature() == "v0"  # in steps of 200; the job's end folds the rest in
         assert videos.info(6) == {}
     finally:
-        with vdb.writer() as con:
+        with appdb.writer() as con:
             con.execute("DELETE FROM pix_video_info")
 
 

@@ -10,6 +10,7 @@ from iosuite_shared import users as shared
 from iosuite_shared.updates import Updater
 
 from app import __version__, config
+from iosuite_shared.errors import Invalid
 
 APP = config.APP
 
@@ -72,7 +73,7 @@ def _on_update(user_id: int, body: dict):
     """The old /api/users/{id} may also send {person}: the account's face badge (now set from Settings › Security › People)."""
     if "person" in body:
         if not person_tag(body["person"]):
-            raise ValueError("That tag is not a person")
+            raise Invalid("That tag is not a person")
         set_person(user_id, body["person"])
 
 
