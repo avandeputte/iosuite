@@ -121,15 +121,93 @@ def test_every_account_gets_a_private_book_however_it_was_made(client):
     books = k.get("/api/books").json()["items"]
     assert [b["name"] for b in books if not b["shared"]] == ["Personal"]
     assert len([b for b in k.get("/api/books").json()["items"] if not b["shared"]]) == 1  # not made twice
-    # an account deleted elsewhere leaves its book behind; the start-up sweep removes it
+    # an account deleted elsewhere leaves its book behind; the start-up sweep removes it, once the Shared ioSuite
+    # database is known to be the one the books belong to (the first start only notes which one it is)
     own = next(b for b in books if not b["shared"])
     mk(k, own["id"], fn="Sue's friend")
     shared.delete(u["id"])
     from app import db
     assert db.one("SELECT 1 AS x FROM con_address_books WHERE id = %s", (own["id"],))
     users.init()
+    assert db.one("SELECT 1 AS x FROM con_address_books WHERE id = %s", (own["id"],)), "nothing goes on the first start"
+    users.init()
     assert not db.one("SELECT 1 AS x FROM con_address_books WHERE id = %s", (own["id"],))
     assert not db.one("SELECT 1 AS x FROM con_contacts WHERE address_book_id = %s", (own["id"],))
+
+
+def test_another_shared_database_never_empties_the_private_books(client):
+    """Pointed at another Shared ioSuite database (a new one, an empty one, a restored copy), every owner looks
+    deleted: the books are kept, and the log says why."""
+    from iosuite_shared import db as authdb, users as shared
+    from app import db
+    mine = next(b for b in client.get("/api/books").json()["items"] if not b["shared"])
+    mk(client, mine["id"], fn="Ann Lee")
+    users.init()  # notes which Shared ioSuite database this is
+    assert db.get_setting(users.KNOWN_SUITE) == authdb.get_setting(users.SUITE_ID, "", "")
+    # the same server now reaches a different Shared ioSuite database: other accounts, another id
+    for t in ("ios_user_roles", "ios_sessions", "ios_users", "ios_settings"):
+        authdb.ex(f"DELETE FROM {t}")
+    authdb.settings_cache.clear()
+    shared.invalidate()
+    shared.create("zoe", "secret123", suite_admin=True)
+    assert users.sweep_gone() == 0
+    assert db.one("SELECT count(*) AS n FROM con_contacts WHERE address_book_id = %s AND deleted = 0", (mine["id"],))["n"] == 1
+    # and an empty one (no accounts at all) changes nothing either, even under the id it knows
+    authdb.ex("DELETE FROM ios_users")
+    shared.invalidate()
+    db.set_setting(users.KNOWN_SUITE, authdb.get_setting(users.SUITE_ID, "", ""))
+    assert users.sweep_gone() == 0 and db.one("SELECT 1 AS x FROM con_address_books WHERE id = %s", (mine["id"],))
+
+
+def test_moving_a_contact_keeps_it(client, family_id):
+    """The contact arrives in the other book with everything it had; the book it left gets a tombstone for the phones."""
+    from app import db, model
+    mine = next(b for b in client.get("/api/books").json()["items"] if not b["shared"])["id"]
+    cid = mk(client, family_id, fn="Ann Lee", emails=[{"value": "ann@lee.org"}], phones=[{"value": "+1 555 1234"}], tags=["friends"])["id"]
+    old = model.get_row(cid)
+    r = client.patch(f"/api/contacts/{cid}", json={"bookId": mine})
+    assert r.status_code == 200 and r.json()["bookId"] == mine
+    c = client.get(f"/api/contacts/{cid}").json()
+    assert c["fn"] == "Ann Lee" and c["emails"][0]["value"] == "ann@lee.org" and c["phones"] and c["tags"] == ["friends"]
+    assert client.get(f"/api/contacts?book={mine}").json()["total"] == 1 and client.get(f"/api/contacts?book={family_id}").json()["total"] == 0
+    gone = db.one("SELECT * FROM con_contacts WHERE address_book_id = %s AND href = %s", (family_id, old["href"]))
+    assert gone["deleted"] == 1 and gone["id"] != cid and gone["changed_token"] > old["changed_token"]
+    # and back, through the bulk route: the address it had there is a tombstone's now, so it gets a new one
+    assert client.post("/api/contacts/bulk", json={"action": "move", "ids": [cid], "book": family_id}).status_code == 200
+    back = model.get_row(cid)
+    assert back["deleted"] == 0 and back["address_book_id"] == family_id and back["href"] != old["href"]
+    assert client.get(f"/api/contacts/{cid}").json()["emails"][0]["value"] == "ann@lee.org"
+    assert client.get("/api/contacts?q=ann").json()["total"] == 1
+
+
+def test_bulk_reads_cost_a_fixed_number_of_queries(client, family_id, monkeypatch):
+    """An export, a jCard list, a CardDAV report and the LDAP directory read the contacts together (model.full_many):
+    the number of queries does not grow with the number of contacts."""
+    from app import db, ldapd, model
+    for i in range(12):
+        mk(client, family_id, fn=f"Person {i:02d}", emails=[{"value": f"p{i}@example.com"}], tags=["t"])
+    seen = []
+    real = db.q
+    monkeypatch.setattr(db, "q", lambda sql, args=None: seen.append(sql) or real(sql, args))
+    rows = model.rows_in([family_id])
+    seen.clear()
+    full = model.full_many(rows)
+    assert len(full) == 12 and len(seen) == len(model.CHILD) + 2, seen
+    assert full[rows[0]["id"]]["emails"][0]["value"] == "p0@example.com" and full[rows[3]["id"]]["tags"] == ["t"]
+    assert model.full(rows[5]["id"]) == full[rows[5]["id"]], "one contact reads the same as one of many"
+    seen.clear()
+    assert client.get(f"/api/export?format=vcf&book={family_id}").text.count("BEGIN:VCARD") == 12
+    assert len(seen) < 30, len(seen)
+    me = users.find("alex")
+    seen.clear()
+    assert len(ldapd.directory(me, False)) == 12 + 3
+    first = len(seen)
+    assert first < 20
+    seen.clear()
+    ldapd.directory(me, False)
+    assert len(seen) <= 2, "the same directory again is one look at the books"
+    mk(client, family_id, fn="New One")
+    assert len(ldapd.directory(me, False)) == 13 + 3, "a change in a book makes it again"
 
 
 def test_carddav_refuses_xml_entities(client):
@@ -154,13 +232,13 @@ def test_ldap_bind_is_throttled_after_repeated_failures(client):
     from app import ldapd
     shared._attempts.clear()
     checked = []
-    real = users.authenticate
+    real = users.ldap_bind
 
-    def counting(name, pw, protocol=False):
+    def counting(name, pw):
         checked.append(name)
-        return real(name, pw, protocol)
+        return real(name, pw)
 
-    users.authenticate = counting
+    users.ldap_bind = counting
     try:
         loop = asyncio.new_event_loop()
         srv = loop.run_until_complete(ldapd.serve("127.0.0.1", 0))
@@ -174,7 +252,8 @@ def test_ldap_bind_is_throttled_after_repeated_failures(client):
             for _ in range(shared.LOCK_AFTER + 1):
                 assert not ldap3.Connection(s, "cn=alex,ou=users,dc=iocontacts", "wrong").bind()
             n = len(checked)
-            c = ldap3.Connection(s, "cn=alex,ou=users,dc=iocontacts", "secret123")
+            assert n == shared.LOCK_AFTER + 1
+            c = ldap3.Connection(s, "cn=alex,ou=users,dc=iocontacts", users.create_app_password(users.find("alex")["id"], "Mail"))
             assert not c.bind() and "try again" in str(c.result.get("message", ""))
             assert len(checked) == n  # refused without checking the password
         finally:
@@ -182,5 +261,5 @@ def test_ldap_bind_is_throttled_after_repeated_failures(client):
             loop.call_soon_threadsafe(loop.stop)
             t.join(timeout=5)
     finally:
-        users.authenticate = real
+        users.ldap_bind = real
         shared._attempts.clear()

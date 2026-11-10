@@ -231,7 +231,17 @@ def props_book(ctx: Ctx, b: dict, names: list[str]):
     return ok, missing
 
 
-def props_card(ctx: Ctx, row: dict, names: list[str], data_version: str | None = None):
+DATA_PROPS = (q(C, "address-data"), q(D, "getcontentlength"))  # the properties that need the whole card
+
+
+def _loaded(rows: list[dict], names: list[str]) -> dict:
+    """{id: the whole contact} for the rows of a listing or report, read in one go (model.full_many), when the
+    properties asked for need the card itself; {} when etags and names are enough."""
+    return model.full_many(rows, with_photo=True) if any(n in DATA_PROPS for n in names) else {}
+
+
+def props_card(ctx: Ctx, row: dict, names: list[str], data_version: str | None = None, loaded: dict | None = None):
+    """`loaded`: the row's full() dict when the caller read a whole listing at once (_loaded)."""
     ok, missing = ET.Element(q(D, "prop")), []
     for n in names:
         if n == q(D, "getetag"):
@@ -245,9 +255,9 @@ def props_card(ctx: Ctx, row: dict, names: list[str], data_version: str | None =
         elif n == q(D, "displayname"):
             _sub(ok, D, "displayname", row["fn"])
         elif n == q(C, "address-data"):
-            _sub(ok, C, "address-data", model.vcard_text(row, data_version or "3.0"))
+            _sub(ok, C, "address-data", model.vcard_text(row, data_version or "3.0", loaded))
         elif n == q(D, "getcontentlength"):
-            _sub(ok, D, "getcontentlength", len(model.vcard_text(row, data_version or "3.0").encode()))
+            _sub(ok, D, "getcontentlength", len(model.vcard_text(row, data_version or "3.0", loaded).encode()))
         elif n == q(D, "current-user-privilege-set"):
             _privs(ok, model.can_write_book(ctx.user, model.book(row["address_book_id"])))
         elif n == q(D, "owner"):
@@ -395,8 +405,10 @@ def _propfind(ctx: Ctx, parts, body, depth) -> Response:
     if len(parts) == 3:
         _response(ms, ctx.book_href(b), *props_book(ctx, b, pick("book")), names_only=nm)
         if depth != "0":
-            for row in _rows(b["id"]):
-                _response(ms, ctx.book_href(b) + quote(row["href"]), *props_card(ctx, row, pick("card")), names_only=nm)
+            rows = _rows(b["id"])
+            loaded = _loaded(rows, pick("card"))
+            for row in rows:
+                _response(ms, ctx.book_href(b) + quote(row["href"]), *props_card(ctx, row, pick("card"), loaded=loaded.get(row["id"])), names_only=nm)
         return _xml(ms)
     row = model.by_href(b["id"], parts[3])
     if not row or row["deleted"]:
@@ -454,7 +466,7 @@ def _get(ctx: Ctx, parts, head: bool, headers) -> Response:
             b = _book(ctx, parts[2])
             if not b:
                 return Response(status_code=404)
-            text = "".join(model.vcard_text(r, "3.0") for r in _rows(b["id"]))
+            text = "".join(model.vcard_text(c["id"], "3.0", c) for c in model.full_many(_rows(b["id"]), with_photo=True).values())
             return Response(b"" if head else text.encode(), media_type="text/vcard; charset=utf-8")
         return Response("ioContacts CardDAV server. Point your contacts app at this address.", media_type="text/plain")
     b = _book(ctx, parts[2])
@@ -595,32 +607,33 @@ def _report(ctx: Ctx, parts, body) -> Response:
     version = _version(ad)
     ms = ET.Element(q(D, "multistatus"))
     if tag == q(C, "addressbook-multiget"):
-        for h in root.findall(q(D, "href")):
-            href = unquote((h.text or "").strip())
-            name = href.rstrip("/").rsplit("/", 1)[-1]
-            row = model.by_href(b["id"], name)
+        asked = [(h.text or "").strip() for h in root.findall(q(D, "href"))]
+        found = [model.by_href(b["id"], unquote(h).rstrip("/").rsplit("/", 1)[-1]) for h in asked]
+        loaded = _loaded([r for r in found if r], names)  # a phone asks for a hundred cards at a time: read together
+        for h, row in zip(asked, found):
             if row and not row["deleted"]:
-                _response(ms, ctx.book_href(b) + quote(row["href"]), *props_card(ctx, row, names, version))
+                _response(ms, ctx.book_href(b) + quote(row["href"]), *props_card(ctx, row, names, version, loaded.get(row["id"])))
             else:
                 r = _sub(ms, D, "response")
-                _sub(r, D, "href", (h.text or "").strip())
+                _sub(r, D, "href", h)
                 _sub(r, D, "status", "HTTP/1.1 404 Not Found")
         return _xml(ms)
     if tag == q(C, "addressbook-query"):
         flt = root.find(q(C, "filter"))
         lim = root.find(f"{q(C, 'limit')}/{q(C, 'nresults')}")
         n = int(lim.text) if lim is not None and (lim.text or "").isdigit() else None
-        hits = 0
-        for row in _rows(b["id"]):
-            if flt is not None and len(flt) and not _matches(row, flt):
-                continue
-            _response(ms, ctx.book_href(b) + quote(row["href"]), *props_card(ctx, row, names, version))
-            hits += 1
-            if n and hits >= n:
-                r = _sub(ms, D, "response")
-                _sub(r, D, "href", ctx.book_href(b))
-                _sub(r, D, "status", "HTTP/1.1 507 Insufficient Storage")
-                break
+        rows = _rows(b["id"])
+        if flt is not None and len(flt):  # the filter reads the cards (without their photos), all at once
+            plain = model.full_many(rows)
+            rows = [row for row in rows if _matches(plain[row["id"]], flt)]
+        rows = rows[:n] if n else rows
+        loaded = _loaded(rows, names)
+        for row in rows:
+            _response(ms, ctx.book_href(b) + quote(row["href"]), *props_card(ctx, row, names, version, loaded.get(row["id"])))
+        if n and len(rows) >= n:
+            r = _sub(ms, D, "response")
+            _sub(r, D, "href", ctx.book_href(b))
+            _sub(r, D, "status", "HTTP/1.1 507 Insufficient Storage")
         return _xml(ms)
     if tag == q(D, "sync-collection"):
         tok_el = root.find(q(D, "sync-token"))
@@ -634,6 +647,7 @@ def _report(ctx: Ctx, parts, body) -> Response:
         lim = root.find(f"{q(D, 'limit')}/{q(D, 'nresults')}")
         rows = _rows(b["id"], since)
         cur = model.book(b["id"])
+        loaded = _loaded(rows, names)
         for row in rows:
             href = ctx.book_href(b) + quote(row["href"])
             if row["deleted"]:
@@ -643,7 +657,7 @@ def _report(ctx: Ctx, parts, body) -> Response:
                 _sub(r, D, "href", href)
                 _sub(r, D, "status", "HTTP/1.1 404 Not Found")
             else:
-                _response(ms, href, *props_card(ctx, row, names, version))
+                _response(ms, href, *props_card(ctx, row, names, version, loaded.get(row["id"])))
         _sub(ms, D, "sync-token", sync_token(cur))
         _ = lim
         return _xml(ms)
@@ -656,10 +670,11 @@ def _precondition_dav(name: str) -> Response:
     return _xml(e, 403)
 
 
-def _matches(row: dict, flt: ET.Element) -> bool:
-    """addressbook-query filters: prop-filter with text-match (contains, equals, starts-with, ends-with), is-not-defined."""
+def _matches(contact: dict, flt: ET.Element) -> bool:
+    """addressbook-query filters: prop-filter with text-match (contains, equals, starts-with, ends-with), is-not-defined.
+    `contact` is a full() dict."""
     test_all = flt.get("test", "anyof") == "allof"
-    props = vcard.parse_many(model.vcard_text(row, "3.0"))[0]
+    props = vcard.parse_many(vcard.from_contact(contact, "3.0"))[0]
     results = []
     for pf in flt.findall(q(C, "prop-filter")):
         name = (pf.get("name") or "").upper()
