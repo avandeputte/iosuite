@@ -102,7 +102,7 @@ def standard(app: str, app_dir, log_name: str = None) -> dict:
       TLS_CERT_FILE, TLS_KEY_FILE   HTTPS served directly instead of behind a reverse proxy: both files
       MCP_FORCED            MCP=1: the MCP endpoint is on whatever the setting says
       KEEP_DELETED_DAYS     how long what was deleted is kept before it is purged for good (90): the marker a sync client
-                            learns a deletion from in ioCalendar and ioContacts, a deleted note's text in ioNotes
+                            learns a deletion from in ioCalendar and ioContacts, the change log and deleted folders' names in ioNotes
       ADMIN_USER, ADMIN_PASSWORD    the first admin account, created on a first start with no accounts (containers, installers)
 
     IOSUITE_DB_* (this module), <APP>_REPO, <APP>_BRANCH and UPDATE_CHECK (iosuite_shared.updates) are
