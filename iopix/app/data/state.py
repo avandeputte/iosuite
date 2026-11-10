@@ -121,10 +121,11 @@ def _visible(user=..., alias: str = "") -> tuple:
 def summary(user=...) -> dict:
     """Favorites, the viewer's albums (with size and cover), people groups and saved searches the user may see, in one call for the UI."""
     vis, vp = _visible(user, "a")
+    owner = _favorites_of(user)
     con = connect()
     try:
         return {
-            "favorites": [r[0] for r in con.execute("SELECT photo_id FROM pix_favorite_photos ORDER BY added_at DESC")],
+            "favorites": [] if owner is None else [r[0] for r in con.execute("SELECT photo_id FROM pix_favorite_photos WHERE user_id = ? ORDER BY added_at DESC, photo_id", (owner,))],
             "albums": [dict(r) for r in con.execute(
                 "SELECT a.id, a.name, a.created_at AS created, a.owner_id, a.shared, count(i.photo_id) AS n, "
                 "(SELECT photo_id FROM pix_album_photos WHERE album_id = a.id ORDER BY added_at, photo_id LIMIT 1) AS cover "
@@ -137,13 +138,61 @@ def summary(user=...) -> dict:
         con.close()
 
 
-def set_favorites(items: list, on: bool):
-    """items: [(photo_id, hash)]"""
+# ---- favorites: every account keeps its own. While there are no accounts there is one list (user 0), which is also
+# where the favorites of before 1.151 are, when they were one list for everyone. That list goes to one account, the
+# first admin who uses the app once accounts exist; every other account starts with none.
+_taken = False  # the one list is known to be empty (taken, or never there): not looked at again until it is added to
+
+
+def _favorites_of(user=...):
+    """Whose favorites this user sees and changes: their account's; with no accounts, the one list (0); None for a
+    visitor who is not signed in while accounts exist (no favorites)."""
+    u = viewer.get() if user is ... else user
+    uid = _uid(u)
+    if uid is not None:
+        if not _taken:
+            take_favorites(u)
+        return uid
+    from app import users  # lazy: users -> auth -> ... -> state
+    return None if users.any_users() else 0
+
+
+def take_favorites(user):
+    """The one list everyone shared becomes this account's own, when it is an admin's and the list is still there:
+    the favorites of before stay with one account, not with all of them. Nobody else gets a copy."""
+    global _taken
+    from app import users
+    if not user or user.get("id") is None or not users.is_admin(user):
+        return
+    uid = int(user["id"])
+
+    def go(c):
+        n = c.execute("SELECT count(*) FROM pix_favorite_photos WHERE user_id = 0").fetchone()[0]
+        if n:
+            c.execute("INSERT OR IGNORE INTO pix_favorite_photos (user_id, photo_id, hash, added_at) "
+                      "SELECT ?, photo_id, hash, added_at FROM pix_favorite_photos WHERE user_id = 0", (uid,))
+            c.execute("DELETE FROM pix_favorite_photos WHERE user_id = 0")
+        return n
+    n = write(go)
+    _taken = True
+    if n:
+        log.info("favorites are kept per account from now on: the %d there were are now those of %s", n, user.get("name") or uid)
+
+
+def set_favorites(items: list, on: bool, user=...):
+    """items: [(photo_id, hash)], for this user (the one asking, by default). False for a visitor, who has none."""
+    global _taken
+    owner = _favorites_of(user)
+    if owner is None:
+        return False
+    if owner == 0:
+        _taken = False  # the one list again (no accounts): the first admin there will be takes it
     now = int(time.time())
     if on:
-        write(lambda c: c.executemany("INSERT OR IGNORE INTO pix_favorite_photos VALUES (?,?,?)", [(i, h, now) for i, h in items]))
+        write(lambda c: c.executemany("INSERT OR IGNORE INTO pix_favorite_photos (user_id, photo_id, hash, added_at) VALUES (?,?,?,?)", [(owner, i, h, now) for i, h in items]))
     else:
-        write(lambda c: c.executemany("DELETE FROM pix_favorite_photos WHERE photo_id = ?", [(i,) for i, _ in items]))
+        write(lambda c: c.executemany("DELETE FROM pix_favorite_photos WHERE user_id = ? AND photo_id = ?", [(owner, i) for i, _ in items]))
+    return True
 
 
 # ---- People groups (the People page's sections; digiKam is not touched)
@@ -296,11 +345,14 @@ def set_setting(key: str, value: str):
 
 # ---- the viewer's own photo sets as id lists: favorites and album contents live in this database (SQLite or MySQL),
 # while the index is a separate SQLite file, so query.py inlines them as `id IN (...)` instead of joining
-def favorite_ids() -> list:
-    """Every favorite photo's id (favorites are shared by all users)."""
+def favorite_ids(user=...) -> list:
+    """The ids of this user's favorite photos (the one asking, by default)."""
+    owner = _favorites_of(user)
+    if owner is None:
+        return []
     con = connect()
     try:
-        return [r[0] for r in con.execute("SELECT photo_id FROM pix_favorite_photos")]
+        return [r[0] for r in con.execute("SELECT photo_id FROM pix_favorite_photos WHERE user_id = ?", (owner,))]
     finally:
         con.close()
 
@@ -329,11 +381,14 @@ def albums_of(photo_id: int) -> list:
         con.close()
 
 
-def is_favorite(photo_id: int) -> bool:
-    """Whether the photo is a favorite."""
+def is_favorite(photo_id: int, user=...) -> bool:
+    """Whether the photo is one of this user's favorites."""
+    owner = _favorites_of(user)
+    if owner is None:
+        return False
     con = connect()
     try:
-        return con.execute("SELECT 1 FROM pix_favorite_photos WHERE photo_id = ?", (photo_id,)).fetchone() is not None
+        return con.execute("SELECT 1 FROM pix_favorite_photos WHERE user_id = ? AND photo_id = ?", (owner, photo_id)).fetchone() is not None
     finally:
         con.close()
 

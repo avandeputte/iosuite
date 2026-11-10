@@ -92,7 +92,13 @@ def mcp_enabled() -> bool:
     return shared_mcp.enabled(appstate.get_setting, config.MCP_FORCED)
 
 
-_mcp_gate = auth.mcp_gate(mcp_enabled, on_user=mcp.current_user.set)
+def _mcp_user(user):
+    """The account an MCP request acts as: its tools see that account's favorites and private albums."""
+    mcp.current_user.set(user)
+    appstate.viewer.set(user)
+
+
+_mcp_gate = auth.mcp_gate(mcp_enabled, on_user=_mcp_user)
 
 
 def _before(request: Request):

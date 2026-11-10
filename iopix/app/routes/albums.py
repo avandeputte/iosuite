@@ -54,8 +54,10 @@ def api_state(request: Request):
 
 @router.post("/api/favorites", dependencies=[access.signed_in])
 async def api_favorites(request: Request):
+    """Body: {ids, on}: add to or take from the favorites of the account asking (with no accounts, the one list everyone shares)."""
     body = await json_body(request)
-    await run_in_threadpool(lambda: appstate.set_favorites(_with_hashes(body.get("ids", [])), bool(body.get("on", True))))  # the viewer database may be MySQL
+    user = request.state.user
+    await run_in_threadpool(lambda: appstate.set_favorites(_with_hashes(body.get("ids", [])), bool(body.get("on", True)), user))  # the viewer database may be MySQL
     return {"ok": True}
 
 

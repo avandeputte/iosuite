@@ -49,8 +49,11 @@ TABLES = {
     "pix_settings": (["name", "value", "updated_at"],
                      "CREATE TABLE IF NOT EXISTS pix_settings (name VARCHAR(191) PRIMARY KEY, value MEDIUMTEXT, "
                      "updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3))"),
-    "pix_favorite_photos": (["photo_id", "hash", "added_at"],
-                  "CREATE TABLE IF NOT EXISTS pix_favorite_photos (photo_id BIGINT PRIMARY KEY, hash VARCHAR(64), added_at BIGINT)"),
+    # each account's own favorites (user_id: an account id in the Shared ioSuite database; 0: the one list everyone
+    # shares while there are no accounts, and what there was before favorites were kept per account)
+    "pix_favorite_photos": (["user_id", "photo_id", "hash", "added_at"],
+                  "CREATE TABLE IF NOT EXISTS pix_favorite_photos (user_id BIGINT NOT NULL DEFAULT 0, photo_id BIGINT NOT NULL, hash VARCHAR(64), added_at BIGINT, "
+                  "PRIMARY KEY (user_id, photo_id), INDEX idx_pix_favorite_photos_photo (photo_id))"),
     # shared 1: everyone sees it, editors and admins change it; 0: only owner_id (an account id in the Shared ioSuite database) sees and changes it
     "pix_albums": (["id", "name", "created_at", "owner_id", "shared"],
                 "CREATE TABLE IF NOT EXISTS pix_albums (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255) NOT NULL, created_at BIGINT, owner_id BIGINT NULL, shared INT NOT NULL DEFAULT 1)"),
@@ -436,6 +439,23 @@ def add_missing_columns(con: VConn) -> list:
     return added
 
 
+def favorites_per_user(con: VConn):
+    """A database from before 1.151: favorites were one list (a row per photo). The rows stay, as user 0's, and the
+    key becomes (user, photo) so every account can keep its own (state.take_favorites gives that list to one)."""
+    if not con.mysql:
+        return
+    key = "SELECT column_name FROM information_schema.key_column_usage WHERE table_schema = DATABASE() AND table_name = 'pix_favorite_photos' AND constraint_name = 'PRIMARY'"
+    if [r[0] for r in con.execute(key)] != ["photo_id"]:
+        return
+    try:
+        con.execute("ALTER TABLE pix_favorite_photos DROP PRIMARY KEY, ADD PRIMARY KEY (user_id, photo_id), ADD INDEX idx_pix_favorite_photos_photo (photo_id)")
+    except Exception:  # another process did it a moment ago
+        if [r[0] for r in con.execute(key)] == ["photo_id"]:
+            raise
+        return
+    log.info("viewer database: favorites are kept per account from now on")
+
+
 # ---- the suite's naming convention: every table pix_<name>, *_at timestamps, name/value settings, idx_/uq_ index names
 PREFIX = "pix"
 SCHEMA_VERSION = 1  # 1: the suite naming convention
@@ -495,6 +515,7 @@ def ensure_schema(con: VConn = None):
         for name, (cols, ddl) in TABLES.items():
             con.execute(ddl)
         add_missing_columns(con)  # a column added to TABLES later reaches databases made before it
+        favorites_per_user(con)
         schema.ensure_version_table(con.raw.cursor(), PREFIX)
         schema.record_version(con.raw.cursor(), PREFIX, SCHEMA_VERSION)
         con.commit()
