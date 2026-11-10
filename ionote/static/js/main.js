@@ -1,10 +1,12 @@
 /** Start-up and routing: #/notes (the list and the open note), #/note/<id>, #/settings[/tab], #/changes. Pasting or
  *  dropping a picture makes a note of it; N makes a new note; / goes to the search box. */
-import { $, h, api, state, icon, paintIcons, toast, fail, canWrite, confirmIt, debounce } from './core.js';
+import { $, h, api, state, icon, paintIcons, toast, fail, canWrite, confirmIt, debounce, menu } from './core.js';
 import { loadMe, renderUserMenu, signIn } from './auth.js';
 import { loadSuite } from './suite.js';
 import { view, viewFromHash, go, loadMeta, renderNav, loadList, setOpenHandler, refresh, markSelected, setStatus } from './notes.js';
-import { openNote, flush, uploadPicture, currentNote } from './editor.js';
+import { openNote, flush, uploadPicture, currentNote, attachFiles } from './editor.js';
+import { renderTemplates, setTemplateHandler } from './templates.js';
+import { expandTemplate } from './markdown.js';
 import { renderSettings, renderChanges, renderImport, serverUi, applyTheme } from './settings.js';
 
 let lastList = '';
@@ -77,6 +79,7 @@ async function route() {
   if (page === 'settings') { await flush(); renderNav(); return renderSettings(tab, sub); }
   if (page === 'changes') { await flush(); renderNav(); return renderChanges(); }
   if (page === 'import') { await flush(); renderNav(); return renderImport(); }
+  if (page === 'templates') { await flush(); renderNav(); return renderTemplates(); }
   viewFromHash();
   $('#q').value = view.q;
   notesLayout();
@@ -90,16 +93,17 @@ async function route() {
 
 setOpenHandler((id) => go({ n: id }));
 
-async function newNote(extra = {}) {
+async function newNote(extra = {}, fromTemplate = false) {
   if (!canWrite()) { if (!state.me.user) signIn(); else toast('Your account can only read notes'); return null; }
   try {
     const body = { title: '', body: '', ...extra };
-    if (view.v === 'folder') body.folderID = view.f;
-    if (view.v === 'tag') body.tags = [view.t];
+    if (view.v === 'folder' && !(fromTemplate && extra.folderID)) body.folderID = view.f;
+    if (view.v === 'tag') body.tags = [...new Set([...(extra.tags || []), view.t])];
     if (view.v === 'pinned') body.pinned = true;
     const n = await api('/api/notes', { method: 'POST', body });
     await refresh();
-    go({ n: n.id, v: view.v === 'trash' || view.v === 'images' ? 'all' : view.v, q: '' });
+    const page = location.hash.replace(/^#/, '').split(/[?/]/)[1] || 'notes';
+    go({ n: n.id, v: view.v === 'trash' || view.v === 'images' || !['notes', 'note'].includes(page) ? 'all' : view.v, q: '' });
     return n;
   } catch (e) { fail(e); return null; }
 }
@@ -109,8 +113,36 @@ async function pictureNote(file) {
   if (n) await uploadPicture(n.id, file);
 }
 
+/** A PDF or another file dropped on the list: a note named after it, with the file attached. */
+async function fileNote(file) {
+  const n = await newNote({ title: (file.name || 'File').replace(/\.\w+$/, '') });
+  if (n) await attachFiles(n.id, [file]);
+}
+
+/** A note from a template, its placeholders filled in with this device's clock. */
+function templateNote(t) {
+  const extra = { title: expandTemplate(t.title), body: expandTemplate(t.body) };
+  if (t.tags.length) extra.tags = t.tags;
+  if (t.folderID) extra.folderID = t.folderID;
+  return newNote(extra, true);
+}
+setTemplateHandler(templateNote);
+
+function templateMenu(btn) {
+  const list = (state.meta && state.meta.templates) || [];
+  menu(btn, [
+    { icon: 'add', label: 'Empty note', action: () => newNote() },
+    list.length ? '-' : null,
+    list.length ? { head: 'From a template' } : null,
+    ...list.map((t) => ({ icon: 'template', label: t.name, action: () => templateNote(t) })),
+    '-',
+    { icon: 'edit', label: list.length ? 'Manage templates…' : 'Make a template…', action: () => { location.hash = '#/templates'; } },
+  ]);
+}
+
 function wire() {
   $('#newbtn').addEventListener('click', () => newNote());
+  $('#newmore').addEventListener('click', (e) => templateMenu(e.currentTarget));
   const search = debounce(() => go({ q: $('#q').value.trim(), n: null }), 300);
   $('#q').addEventListener('input', search);
   $('#q').addEventListener('keydown', (e) => { if (e.key === 'Escape') { $('#q').value = ''; search.flush(); } });
@@ -140,7 +172,7 @@ function wire() {
   document.addEventListener('drop', async (e) => {
     if (!hasFiles(e)) return;
     e.preventDefault(); depth = 0; $('#drop').hidden = true;
-    for (const f of [...e.dataTransfer.files].filter((x) => x.type.startsWith('image/'))) await pictureNote(f);
+    for (const f of [...e.dataTransfer.files]) await (f.type.startsWith('image/') ? pictureNote(f) : fileNote(f));
   });
   // other devices' changes show up: the list reloads when the server's rev moves on
   let rev = null;

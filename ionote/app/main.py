@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from iosuite_shared import mcp as shared_mcp
 from iosuite_shared.updates import setup_log
 
-from app import __version__, config, db, images, mcp, suitedb, users
+from app import __version__, attachments, config, db, images, mcp, suitedb, users
 from app import notes as notes_mod
 from app.auth import auth, updater
 from app.routes import auth as auth_routes, notes as notes_routes, settings, users as users_routes
@@ -38,6 +38,7 @@ async def lifespan(_app):
         raise
     users.init()
     updater.start_daily()
+    notes_mod.start_purger()  # the trash: notes deleted more than 30 days ago are purged
     c = db.settings()
     log.info("ioNotes %s started on %s (%s)", __version__,
              "MariaDB/MySQL " + f"{c['host']}:{c['port']}/{c['database']}" if c["type"] == "mysql" else "SQLite " + str(db.SQLITE_FILE),
@@ -96,6 +97,8 @@ app.middleware("http")(auth.middleware(open_paths=OPEN_PATHS, open_prefixes=OPEN
 def _limit_for(path: str, ctype: str) -> int:
     if "/api/import" in path:
         return config.MAX_IMPORT_BYTES
+    if "/attachments" in path:
+        return config.MAX_IMAGE_BYTES
     if ctype.startswith("image/") or ctype in ("multipart/form-data", "application/octet-stream", "application/zip"):
         return config.MAX_IMAGE_BYTES
     return config.MAX_JSON_BYTES
@@ -122,10 +125,10 @@ app.include_router(auth.status_router(updater, extra=_status_extra))  # /api/sta
 def _server_info() -> dict:
     """What Settings › Server shows beside the updater's own fields: the MCP box, and This server (where the notes and
     the accounts are, and how many pictures the database holds)."""
-    c, sd, im = db.settings(), suitedb.public(), images.stats()
+    c, sd, im, at = db.settings(), suitedb.public(), images.stats(), attachments.stats()
     where = (f"MariaDB/MySQL {c['user']}@{c['host']}:{c['port']}/{c['database']}" if c["type"] == "mysql" else f"SQLite {db.SQLITE_FILE}")
     about = [["Database", where], ["Shared ioSuite database", f"{sd['user']}@{sd['host']}:{sd['port']}/{sd['database']}"],
-             ["Pictures", f"{im['images']}, {im['bytes'] / 1048576:.1f} MB"]]
+             ["Pictures", f"{im['images']}, {im['bytes'] / 1048576:.1f} MB"], ["Attached files", f"{at['files']}, {at['bytes'] / 1048576:.1f} MB"]]
     return {"about": about, "mcpEnabled": mcp_enabled(), "mcpLocked": config.MCP_FORCED,
             "mcpAbout": "Lets an AI assistant search, read and write your notes, as you."}
 

@@ -4,6 +4,8 @@ ionotes-export.zip:
   notes.json            every folder, tag colour and note (live ones; with ?trash=1 the trash too) with its fields
   <Folder>/<title>.md   each note as Markdown (front matter: id, dates, tags, source), in its folder's directory
   <Folder>/<title>.png  its picture, next to it
+  <Folder>/<title> files/<name>  its attached files (notes.json lists them under each note's "attachments", with "file")
+  templates             in notes.json too
 A zip made here imports again on any ionotes server (Settings › Export and import), notes and pictures alike: records
 keep their ids, and a record that is newer on the server is left as it is.
 """
@@ -14,7 +16,7 @@ import re
 import time
 import zipfile
 
-from app import config, db, images, notes
+from app import attachments, config, db, images, notes
 
 EXT = {"image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp", "image/tiff": "tiff", "image/bmp": "bmp"}
 
@@ -50,19 +52,34 @@ def export_zip(include_trash: bool = False, pictures: bool = True) -> bytes:
     with db.connect() as con:
         rows = con.execute(f"SELECT {notes.NOTE_COLS} FROM nts_notes WHERE user_id = ? {'' if include_trash else 'AND deleted = 0'} ORDER BY created_at",
                            (notes.owner(),)).fetchall()
-    all_notes = [notes.note_dict(r) for r in rows]
+        all_notes = notes.with_attachments(con, [notes.note_dict(r) for r in rows])
     buf = io.BytesIO()
     used = set()
+    stems = {}
+    for n in all_notes:
+        d = "Trash/" if n["deleted"] else (fname.get(n["folderID"], "") + "/" if n["folderID"] in fname else "")
+        base = d + _safe(notes.display_title(n), "Note")
+        stem, i = base, 2
+        while stem.lower() in used:
+            stem, i = f"{base} {i}", i + 1
+        used.add(stem.lower())
+        stems[n["id"]] = stem
+        if pictures:
+            seen = set()
+            for a in n.get("attachments") or []:
+                fn = _safe(a["name"], "file")
+                k, j = fn, 2
+                while k.lower() in seen:
+                    stem_a, dot, ext = fn.rpartition(".")
+                    k, j = (f"{stem_a} {j}.{ext}" if dot else f"{fn} {j}"), j + 1
+                seen.add(k.lower())
+                a["file"] = f"{stem} files/{k}"
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr("notes.json", json.dumps({"format": "ionotes-export", "version": 1, "exported": time.time(),
-                                             "folders": folders, "tags": notes.tag_colors(), "notes": all_notes}, ensure_ascii=False, indent=1))
+                                             "folders": folders, "tags": notes.tag_colors(), "templates": notes.list_templates(),
+                                             "notes": all_notes}, ensure_ascii=False, indent=1))
         for n in all_notes:
-            d = "Trash/" if n["deleted"] else (fname.get(n["folderID"], "") + "/" if n["folderID"] in fname else "")
-            base = d + _safe(notes.display_title(n), "Note")
-            stem, i = base, 2
-            while stem.lower() in used:
-                stem, i = f"{base} {i}", i + 1
-            used.add(stem.lower())
+            stem = stems[n["id"]]
             md = _markdown(n)
             if pictures and n["hasImage"]:
                 got = images.get(n["id"])
@@ -70,6 +87,12 @@ def export_zip(include_trash: bool = False, pictures: bool = True) -> bytes:
                     ext = EXT.get(got[1], "img")
                     z.writestr(f"{stem}.{ext}", got[0])
                     md += f"\n![]({stem.rsplit('/', 1)[-1]}.{ext})\n".replace(" ", "%20")
+            for a in n.get("attachments") or []:
+                if "file" in a:
+                    got = attachments.get(n["id"], a["id"])
+                    if got:
+                        z.writestr(a["file"], got[0])
+                        md += f"\n- [{a['name']}](<{a['file'].rsplit('/', 1)[-1]}>)\n"
             z.writestr(f"{stem}.md", md)
     return buf.getvalue()
 
@@ -111,7 +134,7 @@ def import_zip(src, user: str) -> dict:
     # an export says what it is; a notes.json written by hand or by a device may leave that out
     if not isinstance(doc, dict) or doc.get("format", "ionotes-export") != "ionotes-export" or not isinstance(doc.get("notes", []), list):
         raise ValueError("That is not an ioNotes export")
-    out = {"folders": 0, "notes": 0, "tags": 0, "pictures": 0, "skipped": 0}
+    out = {"folders": 0, "notes": 0, "tags": 0, "pictures": 0, "files": 0, "templates": 0, "skipped": 0}
     fmap = {}  # a folder id another account has -> the new id it gets here
     for fo in doc.get("folders") or []:
         try:
@@ -128,6 +151,20 @@ def import_zip(src, user: str) -> dict:
             out["tags"] += 1
         except notes.Stale:
             out["skipped"] += 1
+    for t in doc.get("templates") or []:
+        try:
+            fields = {k: v for k, v in t.items() if k not in ("rev",)}
+            if fields.get("folderID") in fmap:
+                fields["folderID"] = fmap[fields["folderID"]]
+            try:
+                notes.save_template(t["id"], fields, user)
+            except notes.NotFound:
+                notes.save_template(None, {k: v for k, v in fields.items() if k != "id"}, user)
+            out["templates"] += 1
+        except notes.Stale:
+            out["skipped"] += 1
+        except (KeyError, ValueError, TypeError):
+            out["skipped"] += 1
     if z:  # pictures by the note's id, from the Markdown that points at them
         for name in names:
             if name.endswith(".md"):
@@ -140,7 +177,7 @@ def import_zip(src, user: str) -> dict:
                         pics[m.group(1)] = pic
     for n in doc.get("notes") or []:
         img = n.get("imageData")  # a notes.json from a device can carry the picture inline (base64)
-        fields = {k: v for k, v in n.items() if k not in ("hasImage", "imageSHA", "rev", "imageData")}
+        fields = {k: v for k, v in n.items() if k not in ("hasImage", "imageSHA", "rev", "imageData", "attachments", "image")}
         if fields.get("folderID") in fmap:
             fields["folderID"] = fmap[fields["folderID"]]
         try:
@@ -161,4 +198,16 @@ def import_zip(src, user: str) -> dict:
                 out["pictures"] += 1
         except (images.BadImage, KeyError, ValueError):  # not a picture ionotes can read, or too large: the note without it
             pass
+        for a in (n.get("attachments") or []) if z else []:
+            if not isinstance(a, dict) or a.get("file") not in names:
+                continue
+            try:
+                blob = _member(z, a["file"], config.MAX_IMAGE_MB << 20)
+                try:
+                    attachments.put(uid, blob, a.get("name") or a["file"].rsplit("/", 1)[-1], user, a.get("mime") or "", a.get("id"))
+                except notes.NotFound:  # the id is another account's or another note's: a new one
+                    attachments.put(uid, blob, a.get("name") or a["file"].rsplit("/", 1)[-1], user, a.get("mime") or "")
+                out["files"] += 1
+            except (attachments.BadFile, KeyError, ValueError):
+                pass
     return out

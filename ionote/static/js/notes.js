@@ -1,5 +1,6 @@
 /** The sidebar (views, folders, tags) and the list of notes. */
 import { $, h, api, state, icon, fmtDate, colorVar, menu, colorPicker, ask, confirmIt, toast, fail, canWrite, isAdmin, dialog, displayTitle } from './core.js';
+import { taskCounts } from './markdown.js';
 
 export const view = { v: 'all', f: null, t: null, q: '', sort: localSort(), n: null };
 const PAGE = 100;
@@ -96,9 +97,10 @@ export function renderNav() {
   }
   out.push(h('div.navgap'), sec('Manage'),
     navItem('Trash', 'trash', m.trash || null, on('trash'), to({ v: 'trash' }), 'var(--c-gray)', '.bar'),
+    navItem('Templates', 'template', (m.templates || []).length || null, page === 'templates', '#/templates', 'var(--c-purple)'),
     canWrite() ? navItem('Change log', 'history', null, page === 'changes', '#/changes', 'var(--c-indigo)') : null,
     navItem('Import and export', 'download', null, page === 'import', '#/import', 'var(--c-green)'),
-    h('button.navmore' + (['settings', 'changes', 'import'].includes(page) || (notes && ['folder', 'tag', 'nofolder'].includes(view.v)) ? '.on' : ''), { type: 'button', title: 'More', onclick: moreSheet }, icon('more'), h('span.nl', 'More')),
+    h('button.navmore' + (['settings', 'changes', 'import', 'templates'].includes(page) || (notes && ['folder', 'tag', 'nofolder'].includes(view.v)) ? '.on' : ''), { type: 'button', title: 'More', onclick: moreSheet }, icon('more'), h('span.nl', 'More')),
     h('div.navfoot',
       navItem('Settings', 'gear', null, page === 'settings', '#/settings', null, '.foot'),
       h('div#status', { role: 'status', 'aria-live': 'polite' }, statusText)));
@@ -120,6 +122,7 @@ function moreSheet() {
   const chip = (href, label, hue, on) => { const a = h('a.chip' + (on ? '.on' : ''), { href, onclick: () => close() }, label); if (hue) a.style.setProperty('--hue', hue); return a; };
   const grid = [
     tile(to({ v: 'nofolder' }), 'No folder', 'folderOff', 'var(--c-gray)', view.v === 'nofolder'),
+    tile('#/templates', 'Templates', 'template', 'var(--c-purple)', page === 'templates'),
     canWrite() ? tile('#/changes', 'Change log', 'history', 'var(--c-indigo)', page === 'changes') : null,
     tile('#/import', 'Import and export', 'download', 'var(--c-green)', page === 'import'),
     tile('#/settings', 'Settings', 'gear', 'var(--c-gray)', page === 'settings'),
@@ -204,13 +207,17 @@ export const current = () => shown;
 function card(n) {
   const tagColors = Object.fromEntries((state.meta.tags || []).map((t) => [t.name.toLowerCase(), t.color]));
   const folder = n.folderID && state.meta.folders.find((f) => f.id === n.folderID);
-  const prev = (n.body || n.ocrText || '').replace(/\s+/g, ' ').slice(0, 200);
+  const prev = (n.body || n.ocrText || '').replace(/^\s*([-*+]|\d+[.)])\s+\[( |x|X)\]\s?/gm, '').replace(/^\s*#{1,6}\s+/gm, '').replace(/\*\*|__|~~|`/g, '').replace(/\s+/g, ' ').slice(0, 200);
+  const [done, todo] = taskCounts(n.body);
+  const nfiles = (n.attachments || []).length;
   const title = displayTitle(n);
   const c = h('div.card' + (n.id === view.n ? '.on' : ''), { draggable: canWrite() && view.v !== 'trash', onclick: () => onOpen(n.id), 'data-id': n.id },
     n.hasImage ? h('img.th', { src: `/api/notes/${n.id}/thumb?v=${(n.imageSHA || '').slice(0, 8)}`, alt: '', loading: 'lazy' }) : null,
     h('div.body', h('div.t', title), prev && prev !== title ? h('div.p', prev) : null,
       h('div.m', h('span', fmtDate(view.sort === 'created' || view.sort === 'oldest' ? n.createdAt : n.updatedAt)),
         folder && view.v !== 'folder' ? h('span', '· ' + folder.name) : null,
+        todo ? h('span.prog' + (done === todo ? '.done' : ''), { title: `${done} of ${todo} checklist items done` }, icon('checklist'), `${done}/${todo}`) : null,
+        nfiles ? h('span.prog', { title: `${nfiles} attached file${nfiles > 1 ? 's' : ''}` }, icon('attach'), String(nfiles)) : null,
         n.tags.slice(0, 4).map((t) => { const s = h('span.tag', t); const cv = colorVar(tagColors[t.toLowerCase()]); if (cv) s.style.setProperty('--tc', cv); return s; }))),
     n.pinned ? h('span.pin', icon('pin')) : null);
   c.addEventListener('dragstart', (e) => { e.dataTransfer.setData('application/x-ionotes-note', n.id); e.dataTransfer.setData('text/plain', [n.title, n.body].filter(Boolean).join('\n\n')); });
@@ -224,7 +231,10 @@ export function renderList() {
     [['updated', 'Last edited'], ['created', 'Newest'], ['oldest', 'Oldest'], ['title', 'Title']].map(([v, l]) => h('option', { value: v, selected: view.sort === v }, l)));
   list.textContent = '';
   list.append(h('div#listbar', h('h2', title()), h('span.muted.small', total ? String(total) : ''), view.v !== 'trash' ? sort : null));
-  if (view.v === 'trash' && shown.length) list.append(h('div.banner', 'Deleted notes stay here for 30 days. Open one to restore it.'));
+  if (view.v === 'trash' && shown.length) {
+    list.append(h('div.banner', h('span', 'Deleted notes stay here for 30 days, then they are deleted for good. Open one to restore it.'),
+      canWrite() ? h('button.pillbtn.danger', { onclick: emptyTrash }, icon('trash'), 'Empty trash') : null));
+  }
   if (!shown.length) {
     list.append(h('div.empty', view.q ? 'No notes match.' : view.v === 'trash' ? 'The trash is empty.' :
       canWrite() ? 'No notes here yet. Click New note, paste a picture, or drop one on the window.' : 'No notes here yet.'));
@@ -232,6 +242,11 @@ export function renderList() {
   }
   for (const n of shown) list.append(card(n));
   if (shown.length < total) list.append(h('button.pillbtn.more', { onclick: () => loadList(true) }, `Show more (${total - shown.length})`));
+}
+
+async function emptyTrash() {
+  if (!await confirmIt('Empty trash', `Delete the ${shown.length} notes in the trash for good, with their pictures and files? This cannot be undone, on any device.`, 'Delete for good', true)) return;
+  try { const r = await api('/api/trash/empty', { method: 'POST' }); toast(`${r.purged} notes deleted for good`); go({ n: null }); refresh(); } catch (e) { fail(e); }
 }
 
 export function markSelected() {

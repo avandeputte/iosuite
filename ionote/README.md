@@ -19,8 +19,21 @@ and sign-in (Cloudflare Access too), the same installer, updater, Docker image a
   download. Installs like an app on a phone (PWA); light, dark or the device's theme. Laid out like iopix: the
   sidebar (dockable) has the views, Folders, Tags and Manage (trash, change log, import and export), with Settings at its
   foot; the search, New note and your account are along the top. On a phone the sidebar is a bottom bar with More.
+- **Markdown and checklists**: a note's text is shown formatted (headings, **bold**, lists, links, code, quotes), and
+  `- [ ]` lines are boxes you tick right there, on the list card as progress (2/5). The pencil (or a click on the text)
+  edits it; Enter continues a list, ⇧⌘L makes the lines a checklist.
+- **Attached files**: besides its picture a note holds up to 50 files (PDFs, more pictures, documents; up to
+  `MAX_IMAGE_MB` each), kept in the database too. A PDF's text, a text file's and (with RapidOCR) a picture's are read
+  for search. Drop files on an open note to attach them, or on the list to make a note of each.
+- **Templates** (Manage › Templates, New note ▾): a title, text, tags and a folder for new notes; `{{date}}`,
+  `{{time}}`, `{{datetime}}`, `{{weekday}}`, `{{month}}`, `{{year}}`, `{{tomorrow}}` and `{{yesterday}}` are filled in
+  when a note is made. The apps sync them.
+- **Related notes and suggestions**: under each note, the notes most like it (words and tags in common), and the tags
+  and folder those notes suggest for it, one click to apply.
+- **Trash**: deleted notes stay 30 days, then they are deleted for good (text, picture, files; a tombstone stays so
+  every device drops the note too). Empty trash and Delete for good do it at once.
 - **Search**: every word you type must match (prefix) in the title, the text, the text in the picture or the tags,
-  through MariaDB's full-text index.
+  or in one of its attached files, through MariaDB's full-text index.
 - **Text in pictures**: read on the device where the picture was taken (Apple's Vision framework, on the Mac and
   iPhone), and sent along; for pictures added in the web app the server reads it itself with RapidOCR.
 - **Settings**: Account (with your app passwords) and Display for everyone signed in (the same panels as every io app), Server for admins; a change is saved the moment it is made.
@@ -212,13 +225,17 @@ UUID strings the device chooses (`UUID().uuidString`).
 | --- | --- |
 | `GET /api/status` | version, whether sign-in is required, and (signed in) the current `rev` |
 | `POST /api/auth/login` `{name, password}` | signs in; the session cookie follows. `GET /api/auth/me`, `POST /api/auth/logout` |
-| `GET /api/sync?since=<rev>&limit=500` | every note, folder and tag colour changed after `rev`, deletions included (`deleted: true`), oldest change first; ask again with `since=<rev>` while `more` is true. A new device starts from 0 |
+| `GET /api/sync?since=<rev>&limit=500` | every note, folder, tag colour and template changed after `rev`, deletions included (`deleted: true`), oldest change first; ask again with `since=<rev>` while `more` is true. A new device starts from 0 |
 | `PUT /api/notes/{id}` | create or update a note: any of `title, body, ocrText, source, sourceApp, createdAt, tags, pinned, folderID, deleted`, plus `updatedAt`, when the edit was made on the device |
 | `POST /api/sync/push` `{notes:[], folders:[], tags:[]}` | a device's queued offline changes in one request; each answered with `ok` or `stale` and the server's copy |
 | `PUT /api/notes/{id}/image` | the picture as the raw body (`Content-Type: image/png`...); `GET` it back, or `/thumb` for a 480 px JPEG. `imageSHA` on the note changes with the picture |
 | `DELETE /api/notes/{id}?ts=` | to the trash (a tombstone that syncs); `POST /api/notes/{id}/restore` |
 | `PUT /api/folders/{id}` `{name, color, deleted, updatedAt}` | folders; `PUT /api/tags/{name}/color` `{color, updatedAt}` for tag colours |
 | `GET /api/notes?q=&folder=&tag=&pinned=&image=&sort=` | search and list (the web app's view) |
+| `PUT /api/notes/{id}/attachments/{aid}?name=` | attach a file (raw body, its `Content-Type`; `X-Ionotes-Text`: text the device read from it, percent-encoded). Each note lists its files under `attachments` (`id, name, mime, bytes, sha, width, height`); `GET …/{aid}` (`?download=1`), `…/{aid}/thumb`, `…/{aid}/text`, `PATCH {name}`, `DELETE` |
+| `PUT /api/templates/{id}` `{name, title, body, tags, folderID, deleted, updatedAt}` | templates (also in `/api/sync` as `templates`, and in a push); `POST /api/notes {template: id}` makes a note from one |
+| `GET /api/notes/{id}/related` | notes like this one, and the tags and folder they suggest: `{notes, tags, folder}` |
+| `POST /api/trash/empty`, `DELETE /api/trash/{id}` | delete for good; notes in the trash are purged after 30 days anyway (they sync as tombstones with nothing in them) |
 
 **Conflicts**: each note, folder and tag colour is settled on its own by `updatedAt`. The server never takes an `updatedAt` later than its own clock, so a device whose clock runs ahead does not win every conflict. A change older than what the
 server has is answered with 409 (or `stale` in a push) and the server's copy, which the device then keeps. An empty
@@ -230,9 +247,14 @@ Settings › Server turns on an MCP endpoint at `/mcp` (off by default), the sam
 suite. An assistant such as Claude can then:
 
 - read: `notes_overview`, `search_notes` (words, folder, tag, pinned, picture, source, dates, sort), `get_note`,
-  `view_note_image` (the picture itself, small or large), `list_folders`, `list_tags`, `recent_changes`, `list_trash`
-- write, as an editor: `create_note` (optionally with a picture), `update_note` (replace or append text, tags,
-  folder, pin), `organize_notes` (many notes at once), `delete_note`, `restore_note`, `manage_folder`, `manage_tag`
+  `view_note_image` (the picture itself, small or large), `read_attachment` (a file's text, or the picture),
+  `list_folders`, `list_tags`, `list_templates`, `recent_changes`, `list_trash`
+- help: `related_notes` (notes like one, with the tags and folder they suggest), `suggest_organization` (tags and
+  folders for unfiled notes), `notes_digest` (a period's notes with their text, to summarise); and three prompts the
+  client can offer: *Summarise a note*, *Weekly review*, *Tidy up unfiled notes*
+- write, as an editor: `create_note` (optionally with a picture, or from a template), `update_note` (replace or append
+  text, tags, folder, pin), `organize_notes` (many notes at once), `delete_note`, `restore_note`, `manage_folder`,
+  `manage_tag`, `manage_template`, `attach_file`, `remove_attachment`, `empty_trash`
 - operate, as an admin: `diagnostics`, `server_log`, `check_for_update`, `update_ionotes` (the tip of the branch only)
 
 Every assistant signs in with an **app password** (Settings › Account › App passwords), as HTTP Basic or
@@ -249,7 +271,7 @@ Apps that take a JSON configuration and only start local processes (Claude Deskt
 
 ## Export, import and backups
 
-Import and export (the sidebar) › Export downloads every note as Markdown (with front matter: id, dates, tags, source) next to its picture,
+Import and export (the sidebar) › Export downloads every note as Markdown (with front matter: id, dates, tags, source) next to its picture and its files,
 in a directory per folder, plus `notes.json` with everything. Such a zip imports again on any ionotes server (Import
 and export › Import): records keep their ids, and a newer copy on the server wins (a zip from another account on the same server comes in as new notes). For backups, back the database up
 (`mariadb-dump --single-transaction notes`): notes, pictures, accounts and settings are all in it.
@@ -262,8 +284,9 @@ app/
   access.py        who may call a route: the markers every /api route carries
   config.py        the settings: the suite's standard names (iosuite_shared.config) and ioNotes' own
   db.py            the database (MariaDB/MySQL or SQLite), its tables, the rev counter
-  notes.py         notes, folders, tag colours, search, sync and conflicts
+  notes.py         notes, folders, tag colours, templates, search, related notes, the trash, sync and conflicts
   images.py        pictures as BLOBs with a thumbnail
+  attachments.py   files attached to notes (PDFs and the like), with the text read from them
   ocr.py           RapidOCR for pictures added in the web app
   backup.py        export and import
   users.py, auth.py   accounts, sessions and roles, the updater (iosuite-shared; proxy sign-in: iosuite_shared.proxyauth through auth.proxy)

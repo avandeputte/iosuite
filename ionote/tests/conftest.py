@@ -32,7 +32,7 @@ os.environ.update(_authtest.auth_env("ionotes_test_auth"))  # IOSUITE_DB_*: the 
 from app import db  # noqa: E402
 from iosuite_shared import proxyauth  # noqa: E402
 
-TABLES = ["nts_notes", "nts_note_images", "nts_folders", "nts_tag_colors", "nts_change_log", "nts_change_counter", "nts_settings"]
+TABLES = ["nts_notes", "nts_note_images", "nts_attachments", "nts_templates", "nts_folders", "nts_tag_colors", "nts_change_log", "nts_change_counter", "nts_settings"]
 
 
 @pytest.fixture(scope="session")

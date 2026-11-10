@@ -27,7 +27,7 @@ log = logging.getLogger("app.db")
 CONF = config.DATA_DIR / "db.json"
 SQLITE_FILE = config.DATA_DIR / "ionotes.db"
 KEYS = ("type", "host", "port", "database", "user", "password")
-SCHEMA_VERSION = 3  # 2: notes, folders, tag colours and the change log belong to an account; 3: the suite naming convention (nts_ tables)
+SCHEMA_VERSION = 4  # 2: notes, folders, tag colours and the change log belong to an account; 3: the suite naming convention (nts_ tables); 4: attachments and templates
 PREFIX = "nts"
 _cfg = None
 _lock = threading.Lock()
@@ -92,6 +92,29 @@ TABLES = {
         "CREATE TABLE IF NOT EXISTS nts_tag_colors (user_id BIGINT NOT NULL DEFAULT 0, tag_key VARCHAR(191) NOT NULL, name VARCHAR(191) NOT NULL, "
         "color VARCHAR(16), updated_at DOUBLE NOT NULL, deleted INT NOT NULL DEFAULT 0, rev BIGINT NOT NULL DEFAULT 0, "
         "PRIMARY KEY (user_id, tag_key), INDEX idx_nts_tag_colors_rev (rev)) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"),
+    # files attached to a note beside its picture (PDFs, more pictures, documents): the bytes, a small JPEG for
+    # pictures, and the text found in them (a PDF's text, a picture's text read by RapidOCR, a text file), which search
+    # covers. A note's rev moves whenever its attachments change, and the note lists them (notes.py), so the devices
+    # learn of them with the note itself
+    "nts_attachments": (
+        "CREATE TABLE IF NOT EXISTS nts_attachments (uuid TEXT PRIMARY KEY, note_uuid TEXT NOT NULL, user_id INTEGER NOT NULL DEFAULT 0, "
+        "name TEXT NOT NULL DEFAULT '', mime TEXT NOT NULL, size_bytes INTEGER NOT NULL DEFAULT 0, sha TEXT, width INTEGER, height INTEGER, "
+        "data BLOB NOT NULL, thumb BLOB, text TEXT NOT NULL DEFAULT '', created_at REAL NOT NULL)",
+        "CREATE TABLE IF NOT EXISTS nts_attachments (uuid VARCHAR(64) PRIMARY KEY, note_uuid VARCHAR(64) NOT NULL, user_id BIGINT NOT NULL DEFAULT 0, "
+        "name VARCHAR(255) NOT NULL DEFAULT '', mime VARCHAR(128) NOT NULL, size_bytes BIGINT NOT NULL DEFAULT 0, sha VARCHAR(64), width INT, height INT, "
+        "data LONGBLOB NOT NULL, thumb MEDIUMBLOB, text MEDIUMTEXT NOT NULL, created_at DOUBLE NOT NULL, "
+        "INDEX idx_nts_attachments_note (note_uuid), FULLTEXT INDEX idx_nts_attachments_text (name, text)) "
+        "ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"),
+    # templates for new notes: a title, text, tags and a folder; {{date}} and the like are filled in when a note is
+    # made from one. Synced to the devices like folders (rev, tombstones)
+    "nts_templates": (
+        "CREATE TABLE IF NOT EXISTS nts_templates (uuid TEXT PRIMARY KEY, user_id INTEGER NOT NULL DEFAULT 0, name TEXT NOT NULL DEFAULT '', "
+        "title TEXT NOT NULL DEFAULT '', body TEXT NOT NULL DEFAULT '', tags TEXT NOT NULL DEFAULT '[]', folder_id TEXT, "
+        "created_at REAL NOT NULL, updated_at REAL NOT NULL, deleted INTEGER NOT NULL DEFAULT 0, rev INTEGER NOT NULL DEFAULT 0)",
+        "CREATE TABLE IF NOT EXISTS nts_templates (uuid VARCHAR(64) PRIMARY KEY, user_id BIGINT NOT NULL DEFAULT 0, name VARCHAR(255) NOT NULL DEFAULT '', "
+        "title TEXT NOT NULL, body MEDIUMTEXT NOT NULL, tags TEXT NOT NULL, folder_id VARCHAR(64), "
+        "created_at DOUBLE NOT NULL, updated_at DOUBLE NOT NULL, deleted INT NOT NULL DEFAULT 0, rev BIGINT NOT NULL DEFAULT 0, "
+        "INDEX idx_nts_templates_rev (rev), INDEX idx_nts_templates_user (user_id, rev)) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"),
     # what changed and who changed it, for the change log (Manage › Change log)
     "nts_change_log": (
         "CREATE TABLE IF NOT EXISTS nts_change_log (id INTEGER PRIMARY KEY AUTOINCREMENT, created_at INTEGER, user_name TEXT, action TEXT, kind TEXT, "
@@ -108,6 +131,9 @@ SQLITE_INDEXES = {  # SQLite's index names are database-wide: named after the ta
     "idx_nts_folders_rev": "nts_folders (rev)",
     "idx_nts_folders_user": "nts_folders (user_id, rev)",
     "idx_nts_tag_colors_rev": "nts_tag_colors (rev)",
+    "idx_nts_attachments_note": "nts_attachments (note_uuid)",
+    "idx_nts_templates_rev": "nts_templates (rev)",
+    "idx_nts_templates_user": "nts_templates (user_id, rev)",
     "idx_nts_change_log_created": "nts_change_log (created_at)",
     "idx_nts_change_log_user": "nts_change_log (user_id, id)",
 }

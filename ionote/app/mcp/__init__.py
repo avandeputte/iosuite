@@ -10,8 +10,9 @@ on the same database.
   read.py   the read-only tools, on the signed-in account's own notes
   write.py  the tools that change notes, folders and tags (editors)
   files.py  the operator's diagnostics and the updater (admins)
+  prompts.py  ready-made requests (summarise a note, a weekly review, tidy up)
 """
 from app.mcp.base import server, current_user
-from app.mcp import read, write, files  # noqa: F401  importing them registers the tools on `server`
+from app.mcp import read, write, files, prompts  # noqa: F401  importing them registers the tools and prompts on `server`
 
-__all__ = ["server", "current_user", "read", "write", "files"]
+__all__ = ["server", "current_user", "read", "write", "files", "prompts"]

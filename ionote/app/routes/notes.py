@@ -5,12 +5,13 @@ as one). A change the device made offline carries its own updatedAt: when the
 server already has a later edit, the answer is 409 with the server's copy under "current".
 """
 import time
+from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException, Request, UploadFile, File
 from fastapi.responses import JSONResponse, Response
 from starlette.concurrency import run_in_threadpool
 
-from app import access, images, notes, ocr
+from app import access, attachments, images, notes, ocr
 from app.http import jresp, json_body, user_name
 
 router = APIRouter()
@@ -49,9 +50,17 @@ def api_note(uid: str):
 
 @router.post("/api/notes", dependencies=[access.editor_write])
 async def api_note_create(request: Request):
-    """A new note; the server picks the id unless the body has one. Notes made in the browser have source "web"."""
+    """A new note; the server picks the id unless the body has one. Notes made in the browser have source "web".
+    {template: id} starts it from a template (its fields, placeholders filled in with the server's clock, unless the
+    body gives them already filled in)."""
     body = await json_body(request)
     body.setdefault("source", "web")
+    if body.get("template"):
+        try:
+            for k, v in notes.note_from_template(str(body.pop("template"))).items():
+                body.setdefault(k, v)
+        except (notes.NotFound, ValueError):
+            raise HTTPException(404, "No such template")
     return await run_in_threadpool(notes.save_note, body.get("id"), body, user_name(request))
 
 
@@ -85,7 +94,27 @@ def api_note_restore(uid: str, request: Request):
 
 @router.get("/api/trash", dependencies=[access.public])
 def api_trash(request: Request):
-    return jresp(request, {"notes": notes.trash()})
+    """The trash; notes in it are purged (deleted for good) after notes.TRASH_DAYS days."""
+    return jresp(request, {"notes": notes.trash(), "days": notes.TRASH_DAYS})
+
+
+@router.post("/api/trash/empty", dependencies=[access.editor_write])
+def api_trash_empty(request: Request):
+    """Delete every note in the trash for good (pictures and attachments too)."""
+    return {"purged": notes.empty_trash(user_name(request))}
+
+
+@router.delete("/api/trash/{uid}", dependencies=[access.editor_write])
+def api_trash_purge(uid: str, request: Request):
+    """Delete one note in the trash for good."""
+    return {"purged": notes.empty_trash(user_name(request), uid)}
+
+
+@router.get("/api/notes/{uid}/related", dependencies=[access.public])
+def api_related(uid: str, request: Request):
+    """Notes like this one, and the tags and folder it may want (from those notes): {notes, tags, folder}."""
+    s = notes.suggestions(uid)
+    return jresp(request, {"notes": s["related"], "tags": s["tags"], "folder": s["folder"]})
 
 
 # ---- pictures
@@ -164,6 +193,117 @@ def api_image_delete(uid: str, request: Request):
         raise HTTPException(404, "No such note")
 
 
+# ---- attachments
+def _store_attachment(uid: str, data: bytes, name: str, mime: str, request: Request, aid: str = None, text: str = None):
+    try:
+        return attachments.put(uid, data, name, user_name(request), mime, aid, text)
+    except attachments.BadFile as e:
+        raise HTTPException(400, str(e))
+    except notes.NotFound:
+        raise HTTPException(404, "No such note (create the note first)")
+
+
+@router.post("/api/notes/{uid}/attachments", dependencies=[access.editor_write])
+async def api_attach_upload(uid: str, request: Request, file: UploadFile = File(...)):
+    """A file as a form upload (the web app); the server picks the attachment's id."""
+    data = await file.read()
+    return await run_in_threadpool(_store_attachment, uid, data, file.filename or "file", file.content_type or "", request)
+
+
+@router.put("/api/notes/{uid}/attachments/{aid}", dependencies=[access.editor_write])
+async def api_attach_put(uid: str, aid: str, request: Request, name: str = "file"):
+    """A file as the raw request body, with the id the device chose (?name=<file name>; X-Ionotes-Text: the text the
+    device read from it, percent-encoded, when it did)."""
+    data = await request.body()
+    t = request.headers.get("x-ionotes-text")
+    if t is not None:
+        from urllib.parse import unquote
+        t = unquote(t)
+    return await run_in_threadpool(_store_attachment, uid, data, name, request.headers.get("content-type", ""), request, aid, t)
+
+
+@router.patch("/api/notes/{uid}/attachments/{aid}", dependencies=[access.editor_write])
+async def api_attach_rename(uid: str, aid: str, request: Request):
+    """{name}: rename the file."""
+    body = await json_body(request)
+    return attachments.rename(uid, aid, str(body.get("name") or ""), user_name(request))
+
+
+@router.delete("/api/notes/{uid}/attachments/{aid}", dependencies=[access.editor_write])
+def api_attach_delete(uid: str, aid: str, request: Request):
+    return attachments.remove(uid, aid, user_name(request))
+
+
+def _attachment_resp(request: Request, uid: str, aid: str, thumb: bool, download: bool = False):
+    got = attachments.get(uid, aid, thumb)
+    if not got:
+        raise HTTPException(404, "No such attachment" if not thumb else "This attachment has no preview")
+    data, mime, sha, name = got
+    etag = f'"{(sha or "")[:24]}{"t" if thumb else ""}"'
+    headers = {"ETag": etag, "Cache-Control": "private, max-age=86400", "Vary": "Cookie", "X-Content-Type-Options": "nosniff",
+               "Content-Security-Policy": "sandbox; default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'"}
+    if not thumb:
+        how = "inline" if mime in attachments.INLINE and not download else "attachment"
+        ascii_name = "".join(c if 32 <= ord(c) < 127 and c not in '"\\' else "_" for c in name)
+        headers["Content-Disposition"] = f"{how}; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(name)}"
+        if mime not in attachments.INLINE:
+            mime = mime if not mime.startswith("text/") else "text/plain"
+    if etag in request.headers.get("if-none-match", ""):
+        return Response(status_code=304, headers=headers)
+    return Response(data, media_type=mime, headers=headers)
+
+
+@router.get("/api/notes/{uid}/attachments/{aid}", dependencies=[access.public])
+def api_attachment(uid: str, aid: str, request: Request, download: int = 0):
+    return _attachment_resp(request, uid, aid, False, bool(download))
+
+
+@router.get("/api/notes/{uid}/attachments/{aid}/thumb", dependencies=[access.public])
+def api_attachment_thumb(uid: str, aid: str, request: Request):
+    return _attachment_resp(request, uid, aid, True)
+
+
+@router.get("/api/notes/{uid}/attachments/{aid}/text", dependencies=[access.public])
+def api_attachment_text(uid: str, aid: str):
+    """The text found in the file (a PDF's, a picture's read by the server, a text file's)."""
+    t = attachments.text(uid, aid)
+    if t is None:
+        raise HTTPException(404, "No such attachment")
+    return {"text": t}
+
+
+# ---- templates
+@router.get("/api/templates", dependencies=[access.public])
+def api_templates(request: Request):
+    return jresp(request, {"templates": notes.list_templates()})
+
+
+@router.post("/api/templates", dependencies=[access.editor_write])
+async def api_template_create(request: Request):
+    body = await json_body(request)
+    return notes.save_template(body.get("id"), body, user_name(request))
+
+
+@router.put("/api/templates/{uid}", dependencies=[access.editor_write])
+async def api_template_put(uid: str, request: Request):
+    """{name, title, body, tags, folderID, updatedAt}; {deleted: true} deletes it."""
+    body = await json_body(request)
+    try:
+        return notes.save_template(uid, body, user_name(request), bool(body.get("force")))
+    except notes.Stale as e:
+        return _stale(e)
+
+
+@router.delete("/api/templates/{uid}", dependencies=[access.editor_write])
+def api_template_delete(uid: str, request: Request, ts: float = None):
+    if not notes.get_template(uid):
+        raise HTTPException(404, "No such template")
+    try:
+        return notes.save_template(uid, {"deleted": True, "updatedAt": ts or time.time()}, user_name(request), force=ts is None)
+    except notes.Stale as e:
+        return _stale(e)
+
+
 # ---- folders
 @router.get("/api/folders", dependencies=[access.public])
 def api_folders(request: Request):
@@ -233,7 +373,7 @@ def api_sync(request: Request, since: int = 0, limit: int = 500):
 
 @router.post("/api/sync/push", dependencies=[access.editor_write])
 async def api_sync_push(request: Request):
-    """A device's queued changes in one request: {notes: [...], folders: [...], tags: [{name, color, updatedAt}]}.
+    """A device's queued changes in one request: {notes: [...], folders: [...], tags: [{name, color, updatedAt}], templates: [...]}.
     Each is applied like its own PUT; the answer lists, per item, the server's copy and whether it was taken
     ("ok") or the server already had a later edit ("stale"). Pictures go separately (PUT /api/notes/{id}/image)."""
     body = await json_body(request)
@@ -247,6 +387,8 @@ async def api_sync_push(request: Request):
             out["notes"].append(_one(lambda: notes.save_note(n.get("id"), n, user)))
         for t in (body.get("tags") or [])[:5000]:
             out["tags"].append(_one(lambda: notes.set_tag_color(t.get("name", ""), t.get("color"), user, t.get("updatedAt"))))
+        if body.get("templates"):
+            out["templates"] = [_one(lambda: notes.save_template(t.get("id"), t, user)) for t in (body.get("templates") or [])[:5000]]
         out["rev"] = notes.db.current_rev()
         return out
     return await run_in_threadpool(apply)

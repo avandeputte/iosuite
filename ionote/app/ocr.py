@@ -50,34 +50,56 @@ def _read(data: bytes) -> str:
 def _work():
     global _failed
     while True:
-        uid = _q.get()
+        item = _q.get()
         with _qlock:
-            _queued.discard(uid)
+            _queued.discard(item)
         try:
-            got = images.get(uid)
-            if got:
-                text = _read(got[0])
-                if text:
-                    notes.set_ocr_text(uid, text, got[2])
-                    log.info("read %d characters of text in the picture of %s", len(text), uid)
+            if isinstance(item, tuple):  # ("att", id): a picture attached to a note
+                from app import attachments
+                got = attachments.raw_for_ocr(item[1])
+                if got:
+                    text = _read(got[0])
+                    if text:
+                        attachments.set_text(item[1], text, got[1])
+                        log.info("read %d characters of text in attachment %s", len(text), item[1])
+            else:
+                got = images.get(item)
+                if got:
+                    text = _read(got[0])
+                    if text:
+                        notes.set_ocr_text(item, text, got[2])
+                        log.info("read %d characters of text in the picture of %s", len(text), item)
             _failed = None
         except Exception as e:
             _failed = f"{type(e).__name__}: {e}"[:300]
-            log.warning("text recognition failed for %s: %s", uid, _failed)
+            log.warning("text recognition failed for %s: %s", item, _failed)
         finally:
             _q.task_done()
 
 
-def enqueue(uid: str) -> bool:
-    """Read the text in this note's picture in the background; False when RapidOCR is not installed."""
+def _start():
     global _thread
-    if not available():
-        return False
     if _thread is None or not _thread.is_alive():
         _thread = threading.Thread(target=_work, name="ocr", daemon=True)
         _thread.start()
+
+
+def _put(item) -> bool:
+    if not available():
+        return False
+    _start()
     with _qlock:
-        if uid not in _queued:
-            _queued.add(uid)
-            _q.put(uid)
+        if item not in _queued:
+            _queued.add(item)
+            _q.put(item)
     return True
+
+
+def enqueue_attachment(att_uid: str) -> bool:
+    """Read the text in a picture attached to a note, in the background; False when RapidOCR is not installed."""
+    return _put(("att", att_uid))
+
+
+def enqueue(uid: str) -> bool:
+    """Read the text in this note's picture in the background; False when RapidOCR is not installed."""
+    return _put(uid)

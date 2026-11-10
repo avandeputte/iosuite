@@ -14,7 +14,8 @@ MCP_USER = "MCP"       # the name the change log shows for a change made through
 server = shared_mcp.make_server("ionotes", "ioNotes", __version__, instructions=(
     "A personal notes library (text, clipboard snippets, screenshots with the text read from them). Start with "
     "notes_overview, use list_folders / list_tags to find exact names, then search_notes and get_note. "
-    "view_note_image shows a note's picture. Notes are private to each account: these tools work on the notes of the "
+    "view_note_image shows a note's picture, read_attachment a file's text. related_notes, suggest_organization and "
+    "notes_digest help find what belongs together, tidy up and summarise. Notes are private to each account: these tools work on the notes of the "
     "account you signed in as (notes_overview names it). Changing anything takes an editor's account; the server tools "
     "an admin's."))
 
@@ -63,7 +64,7 @@ def summary(n: dict, folders: dict = None, text_chars: int = 300) -> dict:
     text = n["body"] or n["ocrText"]
     out = {"id": n["id"], "title": notes.display_title(n), "preview": text[:text_chars] + ("…" if len(text) > text_chars else ""),
            "tags": n["tags"], "folder": (folders or {}).get(n["folderID"]), "pinned": n["pinned"] or None,
-           "has_image": n["hasImage"] or None, "source": n["source"], "source_app": n["sourceApp"],
+           "has_image": n["hasImage"] or None, "files": len(n.get("attachments") or []) or None, "source": n["source"], "source_app": n["sourceApp"],
            "created": iso(n["createdAt"]), "updated": iso(n["updatedAt"]), "url": f"{APP}/#/note/{n['id']}"}
     return {k: v for k, v in out.items() if v not in (None, [], "")}
 

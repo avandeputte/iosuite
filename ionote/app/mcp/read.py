@@ -6,7 +6,7 @@ from typing import Literal, Optional
 from mcp.server.mcpserver import Image
 from mcp.server.mcpserver.exceptions import ToolError
 
-from app import images, notes
+from app import attachments, images, notes
 from app.mcp.base import APP, READ_ONLY, clamp_limit, iso, note_or_fail, parse_date, resolve_folder, server, summary
 
 LARGE_EDGE = 1568
@@ -69,7 +69,95 @@ def get_note(note_id: str) -> dict:
            "in_trash": n["deleted"], "url": f"{APP}/#/note/{n['id']}"}
     if n["hasImage"]:
         out["picture"] = images.info(n["id"])
+    if n.get("attachments"):
+        out["attachments"] = [{"id": a["id"], "name": a["name"], "type": a["mime"], "bytes": a["bytes"],
+                               "text_preview": _preview(attachments.text(n["id"], a["id"]) or "", 400)} for a in n["attachments"]]
     return {k: v for k, v in out.items() if v not in (None, "", [])}
+
+
+def _preview(t: str, chars: int) -> str:
+    t = t.strip()
+    return t[:chars] + ("…" if len(t) > chars else "")
+
+
+@server.tool(annotations=READ_ONLY)
+def read_attachment(note_id: str, attachment_id: str, offset: int = 0, max_chars: int = 20000):
+    """An attached file: its text (a PDF's, a text file's, the text read from a picture), a page of max_chars at a time
+    from offset, or, for a picture with no text, the picture itself."""
+    n = note_or_fail(note_id)
+    a = next((a for a in n.get("attachments") or [] if a["id"] == attachment_id.upper() or a["id"] == attachment_id), None)
+    if not a:
+        raise ToolError("No such attachment on this note (get_note lists them)")
+    t = attachments.text(n["id"], a["id"]) or ""
+    if not t and a["mime"].startswith("image/"):
+        got = attachments.get(n["id"], a["id"], thumb=False)
+        from PIL import Image as PILImage
+        with PILImage.open(io.BytesIO(got[0])) as im:
+            im.thumbnail((LARGE_EDGE, LARGE_EDGE))
+            buf = io.BytesIO()
+            im.convert("RGB").save(buf, "JPEG", quality=82)
+        return Image(data=buf.getvalue(), format="jpeg")
+    offset, max_chars = max(0, int(offset)), clamp_limit(max_chars, 100000)
+    return {"name": a["name"], "type": a["mime"], "chars": len(t), "offset": offset, "text": t[offset:offset + max_chars],
+            "more": offset + max_chars < len(t)}
+
+
+@server.tool(annotations=READ_ONLY)
+def related_notes(note_id: str, limit: int = 8) -> dict:
+    """Notes like this one (words and tags in common), best first, with the tags and the folder those notes suggest
+    for it. Use it to find what belongs together, to link notes, or before filing or tagging a note."""
+    n = note_or_fail(note_id)
+    s = notes.suggestions(n["id"])
+    folders = {f["id"]: f["name"] for f in notes.list_folders()}
+    return {"note": notes.display_title(n), "related": [{**summary(d, folders, 160), "score": d["score"]} for d in s["related"][:clamp_limit(limit, 30)]],
+            "suggested_tags": s["tags"], "suggested_folder": s["folder"]["name"] if s["folder"] else None}
+
+
+@server.tool(annotations=READ_ONLY)
+def suggest_organization(limit: int = 30, only_unfiled: bool = True) -> dict:
+    """For the newest notes with no folder (or, only_unfiled false, with no tags either way), the tags and folder the
+    notes most like them have. A starting point for tidying up: review the suggestions, then apply them with
+    organize_notes or update_note."""
+    res = notes.list_notes(folder="none" if only_unfiled else None, limit=clamp_limit(limit, 100))
+    out = []
+    for n in res["notes"]:
+        if not only_unfiled and n["tags"] and n["folderID"]:
+            continue
+        s = notes.suggestions(n["id"])
+        if s["tags"] or s["folder"]:
+            out.append({"id": n["id"], "title": notes.display_title(n), "tags": n["tags"], "suggested_tags": s["tags"],
+                        "suggested_folder": s["folder"]["name"] if s["folder"] else None})
+    return {"checked": len(res["notes"]), "with_suggestions": len(out), "notes": out}
+
+
+@server.tool(annotations=READ_ONLY)
+def notes_digest(since: str, until: Optional[str] = None, folder: Optional[str] = None, tag: Optional[str] = None,
+                 text_chars: int = 2000, limit: int = 50) -> dict:
+    """The notes made between two dates (YYYY-MM-DD, inclusive; until defaults to today), oldest first, each with up
+    to text_chars of its text and of the text in its picture and files: what you need to summarise a day, a week or a
+    project. Narrow it with folder or tag."""
+    lo = parse_date(since)
+    hi = parse_date(until, end=True) if until else None
+    fid = "none" if folder == "none" else resolve_folder(folder)
+    res = notes.list_notes("", fid, tag, None, None, "oldest", clamp_limit(limit, 200), 0, None, created_from=lo, created_before=hi)
+    folders = {f["id"]: f["name"] for f in notes.list_folders()}
+    chars = clamp_limit(text_chars, 20000)
+    items = []
+    for n in res["notes"]:
+        files = [{"name": a["name"], "text": _preview(attachments.text(n["id"], a["id"]) or "", chars // 2)} for a in n.get("attachments") or []]
+        items.append({k: v for k, v in {"id": n["id"], "title": notes.display_title(n), "created": iso(n["createdAt"]), "folder": folders.get(n["folderID"]),
+                                        "tags": n["tags"], "text": _preview(n["body"], chars), "text_in_picture": _preview(n["ocrText"], chars // 2),
+                                        "files": files, "url": f"{APP}/#/note/{n['id']}"}.items() if v not in (None, "", [])})
+    return {"total": res["total"], "returned": len(items), "notes": items}
+
+
+@server.tool(annotations=READ_ONLY)
+def list_templates() -> list:
+    """The templates for new notes (create_note with template= makes a note from one; {{date}}, {{time}}, {{weekday}}
+    and the like are filled in)."""
+    folders = {f["id"]: f["name"] for f in notes.list_folders()}
+    return [{k: v for k, v in {"id": t["id"], "name": t["name"], "title": t["title"], "text": t["body"], "tags": t["tags"],
+                               "folder": folders.get(t["folderID"])}.items() if v not in (None, "", [])} for t in notes.list_templates()]
 
 
 @server.tool(annotations=READ_ONLY)
@@ -92,7 +180,7 @@ def recent_changes(limit: int = 50) -> list:
 
 @server.tool(annotations=READ_ONLY)
 def list_trash(limit: int = 50) -> list:
-    """Notes deleted in the last 30 days (restore_note brings one back)."""
+    """Notes in the trash (restore_note brings one back; they are deleted for good after 30 days)."""
     return [summary(n) for n in notes.trash(clamp_limit(limit, 200))]
 
 

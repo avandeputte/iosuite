@@ -13,12 +13,18 @@ records only. Records made while the install was open, before any account existe
 
 Text read from an image (OCR) is done on the device where it can be (Apple's Vision on the Mac and the iPhone)
 and sent along as ocr_text; the server reads it itself (RapidOCR, app/ocr.py) only for notes made in the web app.
+
+A note in the trash (deleted = 1) is kept for 30 days, then purged (deleted = 2): its text, tags, picture and
+attachments go, and only the tombstone stays, so a device that has not synced since still learns it was deleted.
 """
 import contextvars
 import json
+import logging
 import re
+import threading
 import time
 import uuid as uuidlib
+from datetime import datetime, timedelta
 
 from app import db
 
@@ -29,6 +35,9 @@ NOTE_COLS = ("uuid, title, body, ocr_text, source, source_app, created_at, updat
 SORTS = {"updated": "updated_at DESC", "created": "created_at DESC", "oldest": "created_at ASC", "title": "lower(title) ASC, updated_at DESC"}
 MAX_TEXT = 4 << 20  # 4 MB of text per field is more than any note needs
 _UUID = re.compile(r"^[A-Za-z0-9-]{8,64}$")
+TRASH_DAYS = 30
+PURGED = 2  # nts_notes.deleted: 1 in the trash, 2 purged (a tombstone with nothing in it)
+log = logging.getLogger("app.notes")
 
 
 NOBODY = -1  # a visitor while accounts exist: no notes at all
@@ -129,10 +138,35 @@ def get_note(uid: str, con=None):
     con = con or db.connect()
     try:
         r = con.execute(f"SELECT {NOTE_COLS} FROM nts_notes WHERE uuid = ? AND user_id = ?", (check_uuid(uid), owner())).fetchone()
-        return note_dict(r) if r else None
+        return with_attachments(con, [note_dict(r)])[0] if r else None
     finally:
         if own:
             con.close()
+
+
+ATTACHMENT_COLS = "uuid, note_uuid, name, mime, size_bytes, sha, width, height, created_at"
+
+
+def attachment_dict(r) -> dict:
+    return {"id": r["uuid"], "name": r["name"], "mime": r["mime"], "bytes": r["size_bytes"], "sha": r["sha"],
+            "width": r["width"], "height": r["height"], "createdAt": r["created_at"]}
+
+
+def with_attachments(con, out: list) -> list:
+    """Each note with the list of its attachments (no bytes: GET /api/notes/<id>/attachments/<aid> has those)."""
+    if not out:
+        return out
+    by = {n["id"]: n for n in out}
+    for n in out:
+        n["attachments"] = []
+    ids = list(by)
+    for i in range(0, len(ids), 500):
+        part = ids[i:i + 500]
+        rows = con.execute(f"SELECT {ATTACHMENT_COLS} FROM nts_attachments WHERE note_uuid IN ({','.join('?' * len(part))}) AND user_id = ? "
+                           "ORDER BY created_at, uuid", part + [owner()]).fetchall()
+        for r in rows:
+            by[r["note_uuid"]]["attachments"].append(attachment_dict(r))
+    return out
 
 
 def _search_clause(con, q: str):
@@ -156,7 +190,21 @@ def _search_clause(con, q: str):
     if ft:
         clauses.insert(0, "MATCH (title, body, ocr_text, tags) AGAINST (? IN BOOLEAN MODE)")
         params.insert(0, " ".join(ft))
-    return " AND ".join(clauses), params
+    # or every word in one of its attachments (a PDF's text, its file name)
+    aclauses, aparams = [], []
+    for w in words[:12]:
+        core = re.sub(r"[^\w]", " ", w).split()
+        if con.mysql and core and all(len(c) >= 3 for c in core):
+            aclauses.append("MATCH (a.name, a.text) AGAINST (? IN BOOLEAN MODE)")
+            aparams.append(" ".join("+" + c + "*" for c in core))
+        else:
+            like = "%" + w.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+            esc = "'\\\\'" if con.mysql else "'\\'"
+            aclauses.append(f"(lower(a.name) LIKE ? ESCAPE {esc} OR lower(a.text) LIKE ? ESCAPE {esc})")
+            aparams += [like, like]
+    sql = ("((" + " AND ".join(clauses) + ") OR EXISTS (SELECT 1 FROM nts_attachments a WHERE a.note_uuid = nts_notes.uuid AND a.user_id = nts_notes.user_id AND "
+           + " AND ".join(aclauses) + "))")
+    return sql, params + aparams
 
 
 def _like_escape(s: str) -> str:
@@ -211,7 +259,7 @@ def list_notes(q: str = "", folder: str = None, tag: str = None, pinned: bool = 
         order = SORTS.get(sort, SORTS["updated"])
         rows = con.execute(f"SELECT {NOTE_COLS} FROM nts_notes WHERE {w} ORDER BY pinned DESC, {order} LIMIT ? OFFSET ?",
                            params + [max(1, min(int(limit), 1000)), max(0, int(offset))]).fetchall()
-    out = [note_dict(r) for r in rows]
+        out = with_attachments(con, [note_dict(r) for r in rows])
     if tag:  # the LIKE above is a prefilter; exact (case-insensitive) membership here
         t = tag.strip().lower()
         out = [n for n in out if t in (x.lower() for x in n["tags"])]
@@ -257,8 +305,10 @@ def save_note(uid: str, data: dict, user: str, force: bool = False) -> dict:
         if "deleted" in data:
             n["deleted"] = bool(data["deleted"])
         rev = db.next_rev(con)
+        # a purged tombstone stays purged unless the edit brings the note back
+        dval = (PURGED if cur and cur["deleted"] == PURGED else 1) if n["deleted"] else 0
         vals = (n["title"], n["body"], n["ocrText"], n["source"], n["sourceApp"], n["createdAt"], ts, json.dumps(n["tags"], ensure_ascii=False),
-                1 if n["pinned"] else 0, n["folderID"], 1 if n["hasImage"] else 0, n["imageSHA"], 1 if n["deleted"] else 0, rev, user)
+                1 if n["pinned"] else 0, n["folderID"], 1 if n["hasImage"] else 0, n["imageSHA"], dval, rev, user)
         if old:
             con.execute("UPDATE nts_notes SET title=?, body=?, ocr_text=?, source=?, source_app=?, created_at=?, updated_at=?, tags=?, pinned=?, "
                         "folder_id=?, has_image=?, image_sha=?, deleted=?, rev=?, changed_by=? WHERE uuid=?", vals + (uid,))
@@ -277,15 +327,75 @@ def delete_note(uid: str, user: str, ts: float = None) -> dict:
 
 
 def restore_note(uid: str, user: str) -> dict:
+    with db.connect() as con:
+        r = con.execute("SELECT deleted FROM nts_notes WHERE uuid = ? AND user_id = ?", (check_uuid(uid), owner())).fetchone()
+    if not r or r[0] == PURGED:
+        raise NotFound("No such note (notes are kept in the trash for 30 days)")
     return save_note(uid, {"deleted": False, "updatedAt": time.time()}, user, force=True)
 
 
 def trash(limit: int = 200) -> list:
-    """Notes deleted in the last 30 days (their text is kept; an image goes with the delete)."""
+    """The notes in the trash, newest delete first (their text is kept; an image goes with the delete, attachments
+    stay until the note is purged)."""
     with db.connect() as con:
-        rows = con.execute(f"SELECT {NOTE_COLS} FROM nts_notes WHERE user_id = ? AND deleted = 1 AND updated_at > ? ORDER BY updated_at DESC LIMIT ?",
-                           (owner(), time.time() - 30 * 86400, limit)).fetchall()
-    return [note_dict(r) for r in rows]
+        rows = con.execute(f"SELECT {NOTE_COLS} FROM nts_notes WHERE user_id = ? AND deleted = 1 ORDER BY updated_at DESC LIMIT ?",
+                           (owner(), limit)).fetchall()
+        return with_attachments(con, [note_dict(r) for r in rows])
+
+
+def _purge_rows(con, uids: list) -> int:
+    """Empty these notes out for good: text, tags, picture and attachments go, the tombstone stays (deleted = 2) with
+    a new rev, so every device drops the note too."""
+    for uid in uids:
+        con.execute("DELETE FROM nts_note_images WHERE uuid = ?", (uid,))
+        con.execute("DELETE FROM nts_attachments WHERE note_uuid = ?", (uid,))
+        con.execute("UPDATE nts_notes SET title = '', body = '', ocr_text = '', tags = '[]', pinned = 0, folder_id = NULL, has_image = 0, "
+                    "image_sha = NULL, source_app = NULL, deleted = ?, rev = ? WHERE uuid = ?", (PURGED, db.next_rev(con), uid))
+    return len(uids)
+
+
+def empty_trash(user: str, uid: str = None) -> int:
+    """Delete forever: every note in this account's trash, or the one with this id. Returns how many went."""
+    with db.tx() as con:
+        if uid:
+            rows = con.execute("SELECT uuid, title, body FROM nts_notes WHERE uuid = ? AND user_id = ? AND deleted = 1", (check_uuid(uid), owner())).fetchall()
+            if not rows:
+                raise NotFound("That note is not in the trash")
+        else:
+            rows = con.execute("SELECT uuid, title, body FROM nts_notes WHERE user_id = ? AND deleted = 1", (owner(),)).fetchall()
+        n = _purge_rows(con, [r["uuid"] for r in rows])
+        if n:
+            log_change(con, user, "purge", "note", uid or "", display_title({"title": rows[0]["title"], "body": rows[0]["body"]}) if uid else f"emptied the trash ({n} notes)")
+        return n
+
+
+def purge_expired(days: int = TRASH_DAYS) -> int:
+    """Every account's notes that have been in the trash longer than `days`: purged (the background job, daily)."""
+    with db.tx() as con:
+        rows = con.execute("SELECT uuid FROM nts_notes WHERE deleted = 1 AND updated_at < ?", (time.time() - days * 86400,)).fetchall()
+        return _purge_rows(con, [r[0] for r in rows])
+
+
+_purger = None
+
+
+def start_purger(every: float = 6 * 3600):
+    """Purge expired trash at start and every few hours, on a thread of its own."""
+    global _purger
+    if _purger and _purger.is_alive():
+        return
+
+    def run():
+        while True:
+            try:
+                n = purge_expired()
+                if n:
+                    log.info("purged %d notes that were in the trash for more than %d days", n, TRASH_DAYS)
+            except Exception as e:  # the database may be away for a while: try again next time
+                log.warning("purging the trash failed: %s", e)
+            time.sleep(every)
+    _purger = threading.Thread(target=run, name="trash-purge", daemon=True)
+    _purger.start()
 
 
 def set_ocr_text(uid: str, text: str, sha: str):
@@ -448,9 +558,9 @@ def meta() -> dict:
         o = owner()
         total, pinned, images = con.execute("SELECT count(*), coalesce(sum(pinned), 0), coalesce(sum(has_image), 0) FROM nts_notes WHERE user_id = ? AND deleted = 0", (o,)).fetchone()
         nofolder = con.execute("SELECT count(*) FROM nts_notes WHERE user_id = ? AND deleted = 0 AND folder_id IS NULL", (o,)).fetchone()[0]
-        trashed = con.execute("SELECT count(*) FROM nts_notes WHERE user_id = ? AND deleted = 1 AND updated_at > ?", (o, time.time() - 30 * 86400)).fetchone()[0]
+        trashed = con.execute("SELECT count(*) FROM nts_notes WHERE user_id = ? AND deleted = 1", (o,)).fetchone()[0]
     return {"total": int(total), "pinned": int(pinned), "images": int(images), "noFolder": int(nofolder), "trash": int(trashed),
-            "folders": list_folders(), "tags": list_tags(), "rev": owner_rev()}
+            "folders": list_folders(), "tags": list_tags(), "templates": list_templates(), "rev": owner_rev()}
 
 
 def owner_rev() -> int:
@@ -458,7 +568,7 @@ def owner_rev() -> int:
     this account sees changes; the server-wide counter would also tell of other accounts' edits."""
     with db.connect() as con:
         return max(int(con.execute(f"SELECT coalesce(max(rev), 0) FROM {t} WHERE user_id = ?", (owner(),)).fetchone()[0])
-                   for t in ("nts_notes", "nts_folders", "nts_tag_colors"))
+                   for t in ("nts_notes", "nts_folders", "nts_tag_colors", "nts_templates"))
 
 
 def changes(since: int, limit: int = 500) -> dict:
@@ -481,8 +591,10 @@ def changes(since: int, limit: int = 500) -> dict:
                                                        "WHERE user_id = ? AND rev > ? AND rev <= ? ORDER BY rev", p).fetchall()]
         tags = [tag_dict(r) for r in con.execute("SELECT tag_key, name, color, updated_at, deleted, rev FROM nts_tag_colors "
                                                  "WHERE user_id = ? AND rev > ? AND rev <= ? ORDER BY rev", p).fetchall()]
+        templates = [template_dict(r) for r in con.execute(f"SELECT {TEMPLATE_COLS} FROM nts_templates WHERE user_id = ? AND rev > ? AND rev <= ? ORDER BY rev", p).fetchall()]
         rev = upto
-    return {"rev": rev, "more": more, "notes": [note_dict(r) for r in rows], "folders": folders, "tags": tags, "serverTime": time.time()}
+        out = with_attachments(con, [note_dict(r) for r in rows])
+    return {"rev": rev, "more": more, "notes": out, "folders": folders, "tags": tags, "templates": templates, "serverTime": time.time()}
 
 
 def change_log(limit: int = 200, before: int = None) -> list:
@@ -493,3 +605,174 @@ def change_log(limit: int = 200, before: int = None) -> list:
             p.append(int(before))
         rows = con.execute(q + " ORDER BY id DESC LIMIT ?", p + [max(1, min(int(limit), 1000))]).fetchall()
     return [{"id": r[0], "ts": r[1], "user": r[2], "action": r[3], "kind": r[4], "uuid": r[5], "summary": r[6]} for r in rows]
+
+
+# ---- templates
+TEMPLATE_COLS = "uuid, name, title, body, tags, folder_id, created_at, updated_at, deleted, rev"
+
+
+def template_dict(r) -> dict:
+    return {"id": r["uuid"], "name": r["name"], "title": r["title"], "body": r["body"], "tags": json.loads(r["tags"] or "[]"),
+            "folderID": r["folder_id"], "createdAt": r["created_at"], "updatedAt": r["updated_at"], "deleted": bool(r["deleted"]), "rev": r["rev"]}
+
+
+def list_templates(include_deleted: bool = False) -> list:
+    with db.connect() as con:
+        rows = con.execute(f"SELECT {TEMPLATE_COLS} FROM nts_templates WHERE user_id = ? {'' if include_deleted else 'AND deleted = 0'} ORDER BY lower(name)",
+                           (owner(),)).fetchall()
+    return [template_dict(r) for r in rows]
+
+
+def get_template(uid: str):
+    with db.connect() as con:
+        r = con.execute(f"SELECT {TEMPLATE_COLS} FROM nts_templates WHERE uuid = ? AND user_id = ?", (check_uuid(uid), owner())).fetchone()
+    return template_dict(r) if r else None
+
+
+def save_template(uid: str, data: dict, user: str, force: bool = False) -> dict:
+    """Create or change a template ({name, title, body, tags, folderID, updatedAt}; {deleted: true} deletes it)."""
+    uid = check_uuid(uid) if uid else new_uuid()
+    now = time.time()
+    with db.tx() as con:
+        r = con.execute(f"SELECT {TEMPLATE_COLS}, user_id FROM nts_templates WHERE uuid = ?", (uid,)).fetchone()
+        if r and r["user_id"] != owner():
+            raise NotFound("No such template")
+        old = template_dict(r) if r else None
+        ts = edit_time(data.get("updatedAt"), now)
+        if old and not force and ts < old["updatedAt"]:
+            raise Stale(old)
+        t = dict(old or {"name": "", "title": "", "body": "", "tags": [], "folderID": None, "createdAt": now, "deleted": False})
+        for k, limit in (("name", 255), ("title", 1000), ("body", MAX_TEXT)):
+            if k in data:
+                t[k] = _text(data[k], limit)
+        t["name"] = t["name"].strip()
+        if "tags" in data:
+            t["tags"] = clean_tags(data["tags"])
+        if "folderID" in data:
+            t["folderID"] = check_uuid(data["folderID"]) if data["folderID"] else None
+        if "createdAt" in data and data["createdAt"]:
+            t["createdAt"] = float(data["createdAt"])
+        if "deleted" in data:
+            t["deleted"] = bool(data["deleted"])
+        if not t["deleted"] and not t["name"]:
+            raise ValueError("A template needs a name")
+        rev = db.next_rev(con)
+        vals = (t["name"], t["title"], t["body"], json.dumps(t["tags"], ensure_ascii=False), t["folderID"], t["createdAt"], ts, 1 if t["deleted"] else 0, rev)
+        if old:
+            con.execute("UPDATE nts_templates SET name=?, title=?, body=?, tags=?, folder_id=?, created_at=?, updated_at=?, deleted=?, rev=? WHERE uuid=?", vals + (uid,))
+        else:
+            con.execute("INSERT INTO nts_templates (name, title, body, tags, folder_id, created_at, updated_at, deleted, rev, uuid, user_id) "
+                        "VALUES (?,?,?,?,?,?,?,?,?,?,?)", vals + (uid, owner()))
+        log_change(con, user, "delete" if t["deleted"] else ("create" if not old else "edit"), "template", uid, t["name"])
+        r = con.execute(f"SELECT {TEMPLATE_COLS} FROM nts_templates WHERE uuid = ?", (uid,)).fetchone()
+        return template_dict(r)
+
+
+_PLACEHOLDER = re.compile(r"\{\{\s*(date|time|datetime|weekday|month|year|tomorrow|yesterday)\s*\}\}", re.I)
+
+
+def expand(text: str, now: datetime = None) -> str:
+    """Fill in a template's placeholders: {{date}} 2026-11-10, {{time}} 14:05, {{datetime}}, {{weekday}} Tuesday,
+    {{month}} November, {{year}}, {{tomorrow}} / {{yesterday}} (dates). The apps and the web app do the same, with
+    the device's own clock and time zone."""
+    now = now or datetime.now()
+
+    def one(m):
+        k = m.group(1).lower()
+        return {"date": now.strftime("%Y-%m-%d"), "time": now.strftime("%H:%M"), "datetime": now.strftime("%Y-%m-%d %H:%M"),
+                "weekday": now.strftime("%A"), "month": now.strftime("%B"), "year": now.strftime("%Y"),
+                "tomorrow": (now + timedelta(days=1)).strftime("%Y-%m-%d"), "yesterday": (now - timedelta(days=1)).strftime("%Y-%m-%d")}[k]
+    return _PLACEHOLDER.sub(one, text or "")
+
+
+def note_from_template(uid: str, now: datetime = None) -> dict:
+    """The fields of a new note made from a template (placeholders filled in), to pass to save_note."""
+    t = get_template(uid)
+    if not t or t["deleted"]:
+        raise NotFound("No such template")
+    return {"title": expand(t["title"], now), "body": expand(t["body"], now), "tags": list(t["tags"]), "folderID": t["folderID"]}
+
+
+# ---- related notes and suggestions
+_STOP = set("""a an and are as at be but by for from has have i in is it its of on or that the this to was were will with you your
+not no yes can just about into than then them they there their what when where which who why how all any our out over
+also some more most such only own same so too very de het een en van ik je dat die niet op te met voor""".split())
+
+
+def _keywords(text: str, n: int = 12) -> list:
+    """The words that say most about a text: the most frequent ones that are not stop words, longest first on ties."""
+    counts = {}
+    for w in re.findall(r"[^\W\d_][\w'-]{2,}", (text or "").lower()):
+        w = w.strip("'-")
+        if len(w) >= 3 and w not in _STOP:
+            counts[w] = counts.get(w, 0) + 1
+    return [w for w, _ in sorted(counts.items(), key=lambda kv: (-kv[1], -len(kv[0]), kv[0]))[:n]]
+
+
+def related(uid: str, limit: int = 8) -> list:
+    """Notes like this one, best first: words in common (MariaDB's full-text relevance; a keyword count on SQLite)
+    plus tags in common. Each comes with "score"."""
+    n = get_note(uid)
+    if not n:
+        raise NotFound("No such note")
+    text = " ".join([n["title"], n["body"][:4000], n["ocrText"][:2000], " ".join(n["tags"])])
+    words = _keywords(text)
+    mine = {t.lower() for t in n["tags"]}
+    scores = {}
+    with db.connect() as con:
+        if words:
+            if con.mysql:
+                rows = con.execute(f"SELECT {NOTE_COLS}, MATCH (title, body, ocr_text, tags) AGAINST (?) AS score FROM nts_notes "
+                                   "WHERE user_id = ? AND deleted = 0 AND uuid != ? AND MATCH (title, body, ocr_text, tags) AGAINST (?) "
+                                   "ORDER BY score DESC LIMIT 60", (" ".join(words), owner(), n["id"], " ".join(words))).fetchall()
+            else:
+                hay = "lower(title || ' ' || body || ' ' || ocr_text || ' ' || tags)"
+                expr = " + ".join(f"(CASE WHEN instr({hay}, ?) > 0 THEN 1 ELSE 0 END)" for _ in words)
+                rows = con.execute(f"SELECT {NOTE_COLS}, ({expr}) AS score FROM nts_notes WHERE user_id = ? AND deleted = 0 AND uuid != ? "
+                                   f"AND ({expr}) > 0 ORDER BY score DESC LIMIT 60", words + [owner(), n["id"]] + words).fetchall()
+            for r in rows:
+                scores[r["uuid"]] = [note_dict(r), float(r["score"] or 0)]
+        if mine:  # tags in common count too, even with no words in common
+            for t in list(mine)[:8]:
+                c, p = _tag_clause(con, t)
+                for r in con.execute(f"SELECT {NOTE_COLS} FROM nts_notes WHERE user_id = ? AND deleted = 0 AND uuid != ? AND {c} LIMIT 60",
+                                     (owner(), n["id"], p)).fetchall():
+                    scores.setdefault(r["uuid"], [note_dict(r), 0.0])
+        top = scores and max(s for _, s in scores.values()) or 1.0
+        out = []
+        for d, s in scores.values():
+            common = len(mine & {t.lower() for t in d["tags"]})
+            score = (s / top if top else 0) + 0.5 * common
+            if score > 0:
+                out.append({**d, "score": round(score, 3)})
+        out.sort(key=lambda d: -d["score"])
+        return with_attachments(con, out[:max(1, min(int(limit), 50))])
+
+
+def suggestions(uid: str) -> dict:
+    """Tags and a folder this note may want, from the notes most like it (and tags whose name is a word in it):
+    {"tags": [names, best first], "folder": {id, name} or None, "related": [notes]}."""
+    n = get_note(uid)
+    if not n:
+        raise NotFound("No such note")
+    rel = related(uid, 10)
+    have = {t.lower() for t in n["tags"]}
+    tag_votes, folder_votes = {}, {}
+    for d in rel:
+        for t in d["tags"]:
+            if t.lower() not in have:
+                tag_votes[t] = tag_votes.get(t, 0) + d["score"]
+        if d["folderID"]:
+            folder_votes[d["folderID"]] = folder_votes.get(d["folderID"], 0) + d["score"]
+    words = set(re.findall(r"\w+", " ".join([n["title"], n["body"][:8000], n["ocrText"][:4000]]).lower()))
+    for t in list_tags():
+        if t["name"].lower() not in have and t["name"].lower() in words:
+            tag_votes[t["name"]] = tag_votes.get(t["name"], 0) + 1.0
+    tags = [t for t, v in sorted(tag_votes.items(), key=lambda kv: -kv[1]) if v >= 0.5][:5]
+    folder = None
+    if folder_votes and not n["folderID"]:
+        fid, votes = max(folder_votes.items(), key=lambda kv: kv[1])
+        f = next((f for f in list_folders() if f["id"] == fid), None)
+        if f and votes >= 0.8:
+            folder = {"id": f["id"], "name": f["name"]}
+    return {"tags": tags, "folder": folder, "related": rel}

@@ -157,3 +157,27 @@ def test_the_update_tools_are_for_admins(client, on):
     # no ref: the tip of the branch only
     props = {t["name"]: t["inputSchema"].get("properties", {}) for t in _rpc(client, "tools/list")["result"]["tools"]}
     assert props["update_ionotes"] == {}
+
+
+def test_ai_helpers_templates_and_files(client, on):
+    import base64
+    from helpers import NID2, pdf
+    client.put(f"/api/notes/{NID}", json={"title": "Tomato seedlings", "body": "tomato greenhouse watering", "tags": ["garden"], "updatedAt": 1})
+    client.put(f"/api/notes/{NID2}", json={"title": "More tomato", "body": "greenhouse tomato harvest", "updatedAt": 1})
+    rel = _call(client, "related_notes", {"note_id": NID2}, headers=on)["structuredContent"]
+    assert rel["related"][0]["id"] == NID and rel["suggested_tags"] == ["garden"]
+    tidy = _call(client, "suggest_organization", {}, headers=on)["structuredContent"]
+    assert any(x["id"] == NID2 for x in tidy["notes"])
+    dig = _call(client, "notes_digest", {"since": "1970-01-01"}, headers=on)["structuredContent"]
+    assert dig["total"] == 2
+    t = _call(client, "manage_template", {"action": "create", "name": "Daily", "title": "Log {{date}}", "tags": ["log"]}, headers=on)
+    assert not t.get("isError"), t
+    n = _call(client, "create_note", {"template": "daily", "text": "hello"}, headers=on)["structuredContent"]
+    assert n["title"].startswith("Log 2") and n["tags"] == ["log"]
+    a = _call(client, "attach_file", {"note_id": NID, "file_base64": base64.b64encode(pdf()).decode(), "name": "acme.pdf"}, headers=on)
+    assert not a.get("isError"), a
+    aid = client.get(f"/api/notes/{NID}").json()["attachments"][0]["id"]
+    txt = _call(client, "read_attachment", {"note_id": NID, "attachment_id": aid}, headers=on)["structuredContent"]
+    assert "Acme" in txt["text"]
+    prompts = {p["name"] for p in _rpc(client, "prompts/list", headers=on)["result"]["prompts"]}
+    assert {"summarize_note", "weekly_review", "tidy_up"} <= prompts

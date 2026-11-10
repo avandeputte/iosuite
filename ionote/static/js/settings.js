@@ -74,7 +74,7 @@ export function renderImport() {
     const f = e.target.files[0]; if (!f) return;
     const fd = new FormData(); fd.append('file', f);
     toast('Importing…', 60000);
-    try { const r = await api('/api/import', { method: 'POST', body: fd }); toast(`Imported ${r.notes} notes, ${r.pictures} pictures, ${r.folders} folders${r.skipped ? `; ${r.skipped} were newer here` : ''}`, 6000); } catch (err) { fail(err); }
+    try { const r = await api('/api/import', { method: 'POST', body: fd }); toast(`Imported ${r.notes} notes, ${r.pictures} pictures, ${r.files || 0} files, ${r.folders} folders, ${r.templates || 0} templates${r.skipped ? `; ${r.skipped} were newer here` : ''}`, 6000); } catch (err) { fail(err); }
   } });
   main.append(h('div.page', h('div.pagein', pageTitle('Import and export', 'download', 'var(--c-green)'),
     h('section.sec', h('h2', 'Export'), h('p.intro', 'Your notes as Markdown files with their pictures, plus notes.json with everything.'),
