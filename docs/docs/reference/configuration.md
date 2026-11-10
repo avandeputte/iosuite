@@ -63,3 +63,4 @@ Apps), and the keys for services outside the suite (Settings › Global settings
 | ioSuite | 8630 |
 | ioContacts | 8640 (LDAP 3890) |
 | ioHealth | 8650 |
+| ioDNS | 8660 |
