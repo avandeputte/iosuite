@@ -13,10 +13,12 @@ import base64
 import io
 import json
 import re
+import tempfile
 import time
 import zipfile
 
 from app import attachments, config, db, images, notes
+from iosuite_shared.errors import Invalid
 
 EXT = {"image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp", "image/tiff": "tiff", "image/bmp": "bmp"}
 
@@ -46,14 +48,16 @@ def _markdown(n: dict) -> str:
     return "\n".join(parts)
 
 
-def export_zip(include_trash: bool = False, pictures: bool = True) -> bytes:
+def export_zip(include_trash: bool = False, pictures: bool = True):
+    """The export as a file: written to a temporary file (in memory while small) and handed back at its start, for the
+    caller to send in pieces and close. The pictures go in one at a time, so the whole export is never in memory."""
     folders = notes.list_folders()
     fname = {f["id"]: _safe(f["name"], "Folder") for f in folders}
     with db.connect() as con:
-        rows = con.execute(f"SELECT {notes.NOTE_COLS} FROM nts_notes WHERE user_id = ? {'' if include_trash else 'AND deleted = 0'} ORDER BY created_at",
+        rows = con.execute(f"SELECT {notes.NOTE_COLS} FROM nts_notes WHERE user_id = ? AND deleted {'< 2' if include_trash else '= 0'} ORDER BY created_at",
                            (notes.owner(),)).fetchall()
         all_notes = notes.with_attachments(con, [notes.note_dict(r) for r in rows])
-    buf = io.BytesIO()
+    buf = tempfile.SpooledTemporaryFile(max_size=8 << 20)
     used = set()
     stems = {}
     for n in all_notes:
@@ -94,7 +98,17 @@ def export_zip(include_trash: bool = False, pictures: bool = True) -> bytes:
                         z.writestr(a["file"], got[0])
                         md += f"\n- [{a['name']}](<{a['file'].rsplit('/', 1)[-1]}>)\n"
             z.writestr(f"{stem}.md", md)
-    return buf.getvalue()
+    buf.seek(0)
+    return buf
+
+
+def pieces(f, size: int = 1 << 20):
+    """A file's bytes a piece at a time; the file is closed at the end (or when the download is given up)."""
+    try:
+        while chunk := f.read(size):
+            yield chunk
+    finally:
+        f.close()
 
 
 MAX_JSON = 256 << 20  # notes.json (a device's can carry its pictures inline)
@@ -104,11 +118,11 @@ MAX_MD = 16 << 20  # one note as Markdown: its text and the text in its picture
 def _member(z: zipfile.ZipFile, name: str, limit: int) -> bytes:
     """One file of the zip, refused when it would unpack to more than limit bytes (a zip bomb)."""
     if z.getinfo(name).file_size > limit:
-        raise ValueError(f"{name} is too large")
+        raise Invalid(f"{name} is too large")
     with z.open(name) as f:
         data = f.read(limit + 1)
     if len(data) > limit:
-        raise ValueError(f"{name} is too large")
+        raise Invalid(f"{name} is too large")
     return data
 
 
@@ -122,18 +136,18 @@ def import_zip(src, user: str) -> dict:
         try:
             z = zipfile.ZipFile(f)
         except zipfile.BadZipFile:
-            raise ValueError("That is not a zip ioNotes can read")
+            raise Invalid("That is not a zip ioNotes can read")
         doc = json.loads(_member(z, "notes.json", MAX_JSON))
         names = z.namelist()
     else:
         f.seek(0)
         data = f.read(MAX_JSON + 1)
         if len(data) > MAX_JSON:
-            raise ValueError("notes.json is too large")
+            raise Invalid("notes.json is too large")
         z, doc, names = None, json.loads(data), []
     # an export says what it is; a notes.json written by hand or by a device may leave that out
     if not isinstance(doc, dict) or doc.get("format", "ionotes-export") != "ionotes-export" or not isinstance(doc.get("notes", []), list):
-        raise ValueError("That is not an ioNotes export")
+        raise Invalid("That is not an ioNotes export")
     out = {"folders": 0, "notes": 0, "tags": 0, "pictures": 0, "files": 0, "templates": 0, "skipped": 0}
     fmap = {}  # a folder id another account has -> the new id it gets here
     for fo in doc.get("folders") or []:
@@ -166,15 +180,17 @@ def import_zip(src, user: str) -> dict:
         except (KeyError, ValueError, TypeError):
             out["skipped"] += 1
     if z:  # pictures by the note's id, from the Markdown that points at them
+        # exactly <stem>.<ext>: "Meeting.png" is not the picture of "Meeting.v2"'s neighbour "Meeting"
+        by_stem = {}
+        for x in names:
+            stem, _, ext = x.rpartition(".")
+            if ext in EXT.values():
+                by_stem.setdefault(stem, x)
         for name in names:
-            if name.endswith(".md"):
+            if name.endswith(".md") and name[:-3] in by_stem:
                 m = re.search(r"^id: (\S+)$", _member(z, name, MAX_MD).decode("utf-8", "replace"), re.M)
                 if m:
-                    stem = name[:-3]
-                    # exactly <stem>.<ext>: "Meeting.png" is not the picture of "Meeting.v2"'s neighbour "Meeting"
-                    pic = next((x for x in names if x != name and x.rpartition(".")[0] == stem and x.rpartition(".")[2] in EXT.values()), None)
-                    if pic:
-                        pics[m.group(1)] = pic
+                    pics[m.group(1)] = by_stem[name[:-3]]
     for n in doc.get("notes") or []:
         img = n.get("imageData")  # a notes.json from a device can carry the picture inline (base64)
         fields = {k: v for k, v in n.items() if k not in ("hasImage", "imageSHA", "rev", "imageData", "attachments", "image")}

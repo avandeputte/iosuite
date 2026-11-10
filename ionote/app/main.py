@@ -11,10 +11,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from iosuite_shared import mcp as shared_mcp
+from iosuite_shared import chores, mcp as shared_mcp, users
 from iosuite_shared.updates import setup_log
 
-from app import __version__, attachments, config, db, images, mcp, suitedb, users
+from app import __version__, attachments, config, db, images, mcp, suitedb
 from app import notes as notes_mod
 from app.auth import auth, updater
 from app.routes import auth as auth_routes, notes as notes_routes, settings, users as users_routes
@@ -38,7 +38,7 @@ async def lifespan(_app):
         raise
     users.init()
     updater.start_daily()
-    notes_mod.start_purger()  # the trash: notes deleted more than 30 days ago are purged
+    purge = chores.start(notes_mod.housekeeping, every_s=6 * 3600, name="purge of the trash and of what deletions left behind")
     c = db.settings()
     log.info("ioNotes %s started on %s (%s)", __version__,
              "MariaDB/MySQL " + f"{c['host']}:{c['port']}/{c['database']}" if c["type"] == "mysql" else "SQLite " + str(db.SQLITE_FILE),
@@ -47,6 +47,7 @@ async def lifespan(_app):
     log.info("Shared ioSuite database (accounts, suite settings): %s@%s:%s/%s", sd["user"], sd["host"], sd["port"], sd["database"])
     async with shared_mcp.running(mcp.server):  # the MCP endpoint (/mcp) lives in this process
         yield
+    purge.cancel()
 
 
 app = FastAPI(title="ioNotes", version=__version__, lifespan=lifespan, docs_url="/api/docs", redoc_url=None,
@@ -106,7 +107,7 @@ def _limit_for(path: str, ctype: str) -> int:
 
 # 400 for bad input, the headers, no-store on the API, the body cap (counted as the body arrives, so nothing large is
 # ever held in memory), and the same 404 for another account's note as for none at all: iosuite-shared
-auth.install(app, limit_for=_limit_for, not_found=(notes_mod.NotFound,), forwarded_allow_ips=config.FORWARDED_ALLOW_IPS)  # also X-Forwarded-* from those proxies
+auth.install(app, limit_for=_limit_for, not_found=(notes_mod.NotFound,))
 
 
 def _status_extra(request: Request) -> dict:

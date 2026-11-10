@@ -126,17 +126,17 @@ name and the same names), or in the environment, which wins. `config.env.example
 | `DB_TYPE` | `sqlite` | `mysql` for MariaDB/MySQL (setup.sh writes it) |
 | `DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USER` / `DB_PASSWORD` | | the database |
 | `HOST` / `PORT` | `0.0.0.0` / `8610` | where the server listens (every app of the suite has its own port) |
-| `FORWARDED_ALLOW_IPS` | `*` | the addresses allowed to pass on the visitor's address and scheme (`X-Forwarded-For` / `-Proto`: your reverse proxy's); read by the app itself (iosuite-shared), not by uvicorn |
 | `TLS_CERT_FILE` / `TLS_KEY_FILE` | | HTTPS served directly instead of behind a reverse proxy |
-| `DATA_DIR` | `./data` | what the app writes on its own: the log, the update result, the database settings saved from the web app (and the SQLite file) |
+| `DATA_DIR` | `./data` | what the app writes on its own: the log, the update result (and the SQLite file) |
 | `LOG_FILE` | `DATA_DIR/ionotes.log` | the server log (empty: none) |
 | `PUBLIC_URL` | | the address ionotes is reached at, for links in MCP answers and the suite's list of apps |
 | `COOKIE_DOMAIN` | | the domain the sign-in is shared on (e.g. `example.com`); a LAN address outside it gets a cookie of its own |
 | `ADMIN_USER` / `ADMIN_PASSWORD` | | the first admin, created on a first start with no accounts |
-| `IOSUITE_DB_HOST` / `_PORT` / `_NAME` / `_USER` / `_PASSWORD` | `DB_HOST` / `DB_PORT` / `iosuite` / `iosuite` / `iosuite` | the Shared ioSuite database (MariaDB): accounts, sessions, suite-wide settings |
+| `IOSUITE_DB_HOST` / `_PORT` / `_NAME` / `_USER` / `_PASSWORD` | `DB_HOST` / `DB_PORT` / `iosuite` / `iosuite` / none | the Shared ioSuite database (MariaDB): accounts, sessions, suite-wide settings |
 | `TZ` | | the time zone |
 | `OCR` | `1` | `0`: the server never reads text in pictures (the apps still do) |
-| `MAX_IMAGE_MB` | `15` | the largest picture a note may carry |
+| `MAX_IMAGE_MB` | `15` | the largest picture a note may carry (and at most 40 megapixels) |
+| `KEEP_DELETED_DAYS` | `90` | how long the change log's entries and the names of deleted folders are kept; after that only an empty marker stays, so devices still learn of the deletion (a deleted note goes sooner: after its 30 days in the trash) |
 | `MCP` / `MCP_USER` | | `MCP=1` keeps the endpoint on whatever Settings says; the account `python -m app.mcp` (stdio) acts as |
 | `UPDATE_CHECK` | `1` | `0`: never ask GitHub for a newer version (Settings › Server) |
 | `AUTH_PROXY`... | `off` | sign-in at a reverse proxy, above |
@@ -276,6 +276,14 @@ in a directory per folder, plus `notes.json` with everything. Such a zip imports
 and export › Import): records keep their ids, and a newer copy on the server wins (a zip from another account on the same server comes in as new notes). For backups, back the database up
 (`mariadb-dump --single-transaction notes`): notes, pictures, accounts and settings are all in it.
 
+## Tests
+
+`pip install -e '.[test]' && pytest tests` (SQLite for the notes), and `IONOTES_TEST_DB=mysql pytest tests` with a
+MariaDB database `notes_test` for the user `notes`/`notes` on 127.0.0.1 (`IONOTES_TEST_DB_HOST` and friends change that).
+The Shared ioSuite database always goes to a test MariaDB of its own: a Docker container the suite starts
+(`iosuite-test-mariadb`), or `IOSUITE_TEST_DB=host:port:user:password`; never a live `iosuite` database.
+CI runs both.
+
 ## Layout
 
 ```
@@ -289,19 +297,13 @@ app/
   attachments.py   files attached to notes (PDFs and the like), with the text read from them
   ocr.py           RapidOCR for pictures added in the web app
   backup.py        export and import
-  users.py, auth.py   accounts, sessions and roles, the updater (iosuite-shared; proxy sign-in: iosuite_shared.proxyauth through auth.proxy)
+  auth.py          accounts, sessions and roles, the updater (iosuite-shared; proxy sign-in: iosuite_shared.proxyauth through auth.proxy)
   routes/          the HTTP API
   mcp/             the MCP server: read, write and operator tools
 proxmox/           Proxmox VE LXC scripts in the community-scripts layout
 static/            the web app (index.html, app.css, js/*.js modules, service worker, icons)
 tests/             pytest; IONOTES_TEST_DB=mysql runs them on MariaDB
 ```
-
-Tests: `pip install -e '.[test]' && pytest tests` (SQLite for the notes), and `IONOTES_TEST_DB=mysql pytest tests` with a
-MariaDB database `notes_test` for the user `notes`/`notes` on 127.0.0.1 (`IONOTES_TEST_DB_HOST` and friends change that).
-The Shared ioSuite database always goes to a test MariaDB of its own: a Docker container the suite starts
-(`iosuite-test-mariadb`), or `IOSUITE_TEST_DB=host:port:user:password`; never a live `iosuite` database.
-CI runs both.
 
 ## License
 

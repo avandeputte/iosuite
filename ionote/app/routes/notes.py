@@ -9,10 +9,11 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException, Request, UploadFile, File
 from fastapi.responses import JSONResponse, Response
+from iosuite_shared.access import json_body
 from starlette.concurrency import run_in_threadpool
 
 from app import access, attachments, images, notes, ocr
-from app.http import jresp, json_body, user_name
+from app.http import attachment, jresp, user_name
 
 router = APIRouter()
 
@@ -146,7 +147,7 @@ def api_image(uid: str, request: Request, download: int = 0):
         n = notes.get_note(uid) or {}
         ext = {"image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp"}.get(r.media_type, "img")
         name = "".join(c for c in notes.display_title(n) if c.isalnum() or c in " -_")[:60].strip() or "ionotes"
-        r.headers["Content-Disposition"] = f'attachment; filename="{name}.{ext}"'
+        r.headers.update(attachment(f"{name}.{ext}"))
     return r
 
 

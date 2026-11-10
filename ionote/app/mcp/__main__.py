@@ -3,7 +3,9 @@ database as the web app. It acts as the account named by --user or MCP_USER (or 
 one), on that account's own notes, as the HTTP endpoint does for a client signed in with an app password."""
 import sys
 
-from app import config, db, notes, users
+from iosuite_shared import users
+
+from app import config, db, notes
 from app.mcp import current_user, server
 
 
@@ -12,7 +14,7 @@ def _pick_user():
     if "--user" in sys.argv[1:]:
         i = sys.argv.index("--user")
         name = sys.argv[i + 1] if i + 1 < len(sys.argv) else ""
-    accounts = users.list_users()
+    accounts = users.list_users(config.APP)
     if name:
         u = next((u for u in accounts if u["name"].lower() == name.lower()), None)
         if not u:

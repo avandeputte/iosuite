@@ -1,9 +1,10 @@
-"""Response helpers the route modules share: JSON answers with an ETag and gzip, and JSON request bodies."""
+"""Response helpers the route modules share: JSON answers with an ETag and gzip, and the download header."""
 import gzip
 import hashlib
+from urllib.parse import quote
 
 import orjson
-from fastapi import HTTPException, Request
+from fastapi import Request
 from fastapi.responses import Response
 
 
@@ -21,15 +22,11 @@ def jresp(request: Request, data) -> Response:
     return Response(body, media_type="application/json", headers=headers)
 
 
-async def json_body(request) -> dict:
-    """The request's JSON body, which must be an object: anything else is the client's mistake (400)."""
-    try:
-        body = await request.json()
-    except ValueError:
-        raise HTTPException(400, "The body is not valid JSON")
-    if not isinstance(body, dict):
-        raise HTTPException(400, "The body must be a JSON object")
-    return body
+def attachment(name: str) -> dict:
+    """The header that makes a browser save the answer under this name. A header is Latin-1 only, so a name with other
+    characters goes twice (RFC 6266): an ASCII stand-in, and the real name as filename*=UTF-8''..."""
+    plain = "".join(c if c.isascii() and c not in '"\\' and c.isprintable() else "_" for c in name)
+    return {"Content-Disposition": f"attachment; filename=\"{plain}\"; filename*=UTF-8''{quote(name, safe='')}"}
 
 
 def user_name(request: Request) -> str:

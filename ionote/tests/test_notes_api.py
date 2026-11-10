@@ -255,7 +255,7 @@ def test_a_clock_that_runs_ahead_does_not_win_for_ever(client):
 
 def test_connections_are_reused(client):
     from app import db
-    if not db.is_mysql():
+    if db.settings()["type"] != "mysql":
         return  # SQLite opens its file each time
     client.put(f"/api/notes/{NID}", json={"title": "x"})
     with db.connect() as con:

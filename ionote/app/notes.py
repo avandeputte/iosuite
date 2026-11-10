@@ -21,12 +21,12 @@ import contextvars
 import json
 import logging
 import re
-import threading
 import time
 import uuid as uuidlib
 from datetime import datetime, timedelta
 
-from app import db
+from app import config, db
+from iosuite_shared.errors import Invalid
 
 SOURCES = ("clipboard", "service", "screenshot", "manual", "web", "photo", "import", "share", "mcp")
 COLORS = ("red", "orange", "yellow", "green", "mint", "teal", "blue", "indigo", "purple", "pink", "brown", "gray")
@@ -62,7 +62,7 @@ class Stale(Exception):
 def check_uuid(u: str) -> str:
     u = str(u or "").strip()
     if not _UUID.match(u):
-        raise ValueError("A note, folder or tag id is 8 to 64 letters, digits or dashes")
+        raise Invalid("A note, folder or tag id is 8 to 64 letters, digits or dashes")
     return u.upper() if len(u) == 36 else u
 
 
@@ -376,26 +376,13 @@ def purge_expired(days: int = TRASH_DAYS) -> int:
         return _purge_rows(con, [r[0] for r in rows])
 
 
-_purger = None
-
-
-def start_purger(every: float = 6 * 3600):
-    """Purge expired trash at start and every few hours, on a thread of its own."""
-    global _purger
-    if _purger and _purger.is_alive():
-        return
-
-    def run():
-        while True:
-            try:
-                n = purge_expired()
-                if n:
-                    log.info("purged %d notes that were in the trash for more than %d days", n, TRASH_DAYS)
-            except Exception as e:  # the database may be away for a while: try again next time
-                log.warning("purging the trash failed: %s", e)
-            time.sleep(every)
-    _purger = threading.Thread(target=run, name="trash-purge", daemon=True)
-    _purger.start()
+def housekeeping() -> None:
+    """What the server does on its own, a few times a day: the notes that have been in the trash for TRASH_DAYS are
+    purged, and what deletions left behind KEEP_DELETED_DAYS ago goes."""
+    n = purge_expired()
+    if n:
+        log.info("purged %d notes that were in the trash for more than %d days", n, TRASH_DAYS)
+    purge_deleted()
 
 
 def set_ocr_text(uid: str, text: str, sha: str):
@@ -436,7 +423,7 @@ def save_folder(uid: str, data: dict, user: str, force: bool = False) -> dict:
         if "deleted" in data:
             f["deleted"] = bool(data["deleted"])
         if not f["deleted"] and not f["name"]:
-            raise ValueError("A folder needs a name")
+            raise Invalid("A folder needs a name")
         rev = db.next_rev(con)
         if old:
             con.execute("UPDATE nts_folders SET name=?, color=?, created_at=?, updated_at=?, deleted=?, rev=? WHERE uuid=?",
@@ -458,8 +445,22 @@ def tag_key(name: str) -> str:
     return name.strip().lower()[:191]
 
 
-def list_tags() -> list:
-    """Every tag on a note, with its count and colour, by name."""
+_tags_seen = {}  # account -> (its rev, its tags): the sidebar asks on every refresh, the answer changes with a rev
+
+
+def list_tags(rev: int = None) -> list:
+    """Every tag on a note, with its count and colour, by name. rev: the account's rev as the caller just read it
+    (owner_rev); while that has not moved, the tags counted for it are still the answer."""
+    hit = _tags_seen.get(owner())
+    if rev is not None and hit and hit[0] == rev:
+        return [dict(t) for t in hit[1]]
+    out = _count_tags()
+    if rev is not None:
+        _tags_seen[owner()] = (rev, [dict(t) for t in out])
+    return out
+
+
+def _count_tags() -> list:
     counts, names = {}, {}
     with db.connect() as con:
         for (tags,) in con.execute("SELECT tags FROM nts_notes WHERE user_id = ? AND deleted = 0 AND tags != '[]'", (owner(),)).fetchall():
@@ -482,7 +483,7 @@ def tag_colors(include_deleted: bool = False) -> list:
 def set_tag_color(name: str, color, user: str, ts: float = None, force: bool = False) -> dict:
     name = _text(name, 191).strip().lstrip("#").strip()
     if not name:
-        raise ValueError("A tag needs a name")
+        raise Invalid("A tag needs a name")
     k = tag_key(name)
     ts = edit_time(ts, time.time())
     color = color if color in COLORS else None
@@ -502,7 +503,7 @@ def rename_tag(old: str, new: str, user: str) -> int:
     """Rename a tag on every note (merging into an existing one of that name); returns how many notes changed."""
     ok, new = tag_key(old), clean_tags([new])
     if not new:
-        raise ValueError("The new name is empty")
+        raise Invalid("The new name is empty")
     new = new[0]
     now, changed = time.time(), 0
     with db.tx() as con:
@@ -559,8 +560,9 @@ def meta() -> dict:
         total, pinned, images = con.execute("SELECT count(*), coalesce(sum(pinned), 0), coalesce(sum(has_image), 0) FROM nts_notes WHERE user_id = ? AND deleted = 0", (o,)).fetchone()
         nofolder = con.execute("SELECT count(*) FROM nts_notes WHERE user_id = ? AND deleted = 0 AND folder_id IS NULL", (o,)).fetchone()[0]
         trashed = con.execute("SELECT count(*) FROM nts_notes WHERE user_id = ? AND deleted = 1", (o,)).fetchone()[0]
+    rev = owner_rev()
     return {"total": int(total), "pinned": int(pinned), "images": int(images), "noFolder": int(nofolder), "trash": int(trashed),
-            "folders": list_folders(), "tags": list_tags(), "templates": list_templates(), "rev": owner_rev()}
+            "folders": list_folders(), "tags": list_tags(rev), "templates": list_templates(), "rev": rev}
 
 
 def owner_rev() -> int:
@@ -595,6 +597,21 @@ def changes(since: int, limit: int = 500) -> dict:
         rev = upto
         out = with_attachments(con, [note_dict(r) for r in rows])
     return {"rev": rev, "more": more, "notes": out, "folders": folders, "tags": tags, "templates": templates, "serverTime": time.time()}
+
+
+def purge_deleted(days: int = None) -> dict:
+    """What a deletion leaves behind, removed once it is older than `days` (KEEP_DELETED_DAYS): the names of deleted
+    folders (the markers stay, empty, so a device that syncs later still learns of the deletion), the change log's
+    entries of that age, and the change counter's used numbers. All accounts at once. A deleted note's text goes
+    sooner, with the trash (purge_expired)."""
+    before = time.time() - (config.KEEP_DELETED_DAYS if days is None else days) * 86400
+    with db.tx() as con:
+        f = con.execute("UPDATE nts_folders SET name = '', color = NULL WHERE deleted = 1 AND updated_at < ? AND name != ''", (before,)).rowcount
+        c = con.execute("DELETE FROM nts_change_log WHERE created_at < ?", (int(before),)).rowcount
+        head = con.execute("SELECT max(rev) FROM nts_change_counter").fetchone()[0]
+        if head:  # the counter only ever needs its newest row (the next rev follows it)
+            con.execute("DELETE FROM nts_change_counter WHERE rev < ?", (head,))
+    return {"folders": f, "changes": c}
 
 
 def change_log(limit: int = 200, before: int = None) -> list:
@@ -655,7 +672,7 @@ def save_template(uid: str, data: dict, user: str, force: bool = False) -> dict:
         if "deleted" in data:
             t["deleted"] = bool(data["deleted"])
         if not t["deleted"] and not t["name"]:
-            raise ValueError("A template needs a name")
+            raise Invalid("A template needs a name")
         rev = db.next_rev(con)
         vals = (t["name"], t["title"], t["body"], json.dumps(t["tags"], ensure_ascii=False), t["folderID"], t["createdAt"], ts, 1 if t["deleted"] else 0, rev)
         if old:

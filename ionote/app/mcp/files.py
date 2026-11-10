@@ -5,8 +5,9 @@ from typing import Literal
 
 from mcp.server.mcpserver.exceptions import ToolError
 
-from app import __version__, config, db, images, ocr, users
+from app import __version__, config, db, images, ocr
 from app.auth import updater
+from iosuite_shared import users
 from iosuite_shared.updates import tail
 from app.mcp.base import READ_ONLY, UPDATES, need_admin, server
 
@@ -21,8 +22,8 @@ def diagnostics() -> dict:
     s = db.public_settings()
     out = {"version": __version__, "commit": updater.local_commit()[:7], "python": sys.version.split()[0], "platform": platform.platform(),
            "docker": updater.in_docker(), "database": {k: s[k] for k in ("type", "host", "port", "database", "user") if k in s},
-           "pictures": images.stats(), "ocr": ocr.status(), "accounts": len(users.list_users()), "rev": db.current_rev(),
-           "require_login": users.require_login(), "data_dir": str(config.DATA_DIR), "app_url": config.BASE_URL}
+           "pictures": images.stats(), "ocr": ocr.status(), "accounts": len(users.list_users(config.APP)), "rev": db.current_rev(),
+           "require_login": users.require_login(config.APP), "data_dir": str(config.DATA_DIR), "app_url": config.BASE_URL}
     if s["type"] == "mysql":
         t = db.test({})
         out["database"].update({"reachable": t["ok"], "server": t.get("version"), "max_allowed_packet": t.get("maxAllowedPacket"),

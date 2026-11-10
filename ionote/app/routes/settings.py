@@ -3,11 +3,13 @@
 import time
 
 from fastapi import APIRouter, HTTPException, Request, UploadFile, File
-from fastapi.responses import Response
+from fastapi.responses import StreamingResponse
+from iosuite_shared import admin as suite_admin, users
+from iosuite_shared.access import json_body
 from starlette.concurrency import run_in_threadpool
 
-from app import access, backup, db, notes, users
-from app.http import json_body, user_name
+from app import access, backup, config, db, notes
+from app.http import attachment, user_name
 
 router = APIRouter()
 SWITCHES = ("require_login",)  # the MCP switch is Settings › Server (POST /api/server {mcpEnabled})
@@ -16,7 +18,7 @@ TEXTS = ("app_name",)
 
 @router.get("/api/settings", dependencies=[access.public])
 def api_settings(request: Request):
-    out = {"app_name": db.get_setting("app_name", "") or "ionotes", "require_login": users.require_login(),
+    out = {"app_name": db.get_setting("app_name", "") or "ionotes", "require_login": users.require_login(config.APP),
            "colors": list(notes.COLORS)}
     if users.is_admin(request.state.user):
         out.update({k: db.get_setting(k, "0") == "1" for k in SWITCHES})
@@ -31,7 +33,7 @@ async def api_settings_set(request: Request):
             if k == "require_login":
                 if v and not users.any_users():
                     raise HTTPException(400, "Create an account first, or nobody could sign in")
-                users.set_require_login(bool(v))  # in the Shared ioSuite database, per app
+                suite_admin.set_app(config.APP, require_login=bool(v))  # in the Shared ioSuite database, per app
                 continue
             db.set_setting(k, "1" if v else "0")
         elif k in TEXTS:
@@ -49,9 +51,8 @@ def api_changes(limit: int = 200, before: int = None):
 
 @router.get("/api/export.zip", dependencies=[access.signed_in])
 async def api_export(trash: int = 0, pictures: int = 1):
-    data = await run_in_threadpool(backup.export_zip, bool(trash), bool(pictures))
-    name = time.strftime("ionotes-export-%Y%m%d-%H%M.zip")
-    return Response(data, media_type="application/zip", headers={"Content-Disposition": f'attachment; filename="{name}"'})
+    f = await run_in_threadpool(backup.export_zip, bool(trash), bool(pictures))
+    return StreamingResponse(backup.pieces(f), media_type="application/zip", headers=attachment(time.strftime("ionotes-export-%Y%m%d-%H%M.zip")))
 
 
 @router.post("/api/import", dependencies=[access.editor_write])
