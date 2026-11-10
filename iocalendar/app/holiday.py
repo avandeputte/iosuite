@@ -277,7 +277,7 @@ def _fill(it: dict, cal: dict | None, n: int) -> tuple[int, int]:
         cal = model.calendar(cid)
     elif cal.get("description") != want and (cal.get("description") or "").startswith("Public holidays"):
         model.update_calendar(cal["id"], description=want)
-    have = {r["uid"]: r for r in model.rows(cal["id"])}
+    have = {r["uid"]: r for r in model.rows(cal["id"], listing=True)}
     seen, changed = set(), 0
     for d, name in found:
         uid = _uid(it["country"], it["region"], d, name)

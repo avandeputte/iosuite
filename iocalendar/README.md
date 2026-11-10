@@ -7,7 +7,7 @@ A self-hosted calendar: a web app for the whole family, and the standard protoco
 ## What it does
 
 - **Events** with a title, a place (address), start and end (or all day, over one day or many), a time zone, notes, the **people** who are there, **reminders**, a link, tentative or cancelled, busy or free.
-- **Repeating events**: every day, week (on chosen days), weekday, month (on a date, or the second Tuesday, the last Friday…), year, every few of them, until a date or a number of times. Changing or deleting one asks, as phones do: **this one**, **this and later** (the series is split in two) or **all of them**. Exceptions made in other apps (moved or removed occurrences) are kept.
+- **Repeating events**: every day, week (on chosen days), weekday, month (on a date, or the second Tuesday, the last Friday…), year, every few of them, until a date or a number of times. Changing or deleting one asks, as phones do: **this one**, **this and later** (the series is split in two) or **all of them**. Exceptions made in other apps (moved or removed occurrences) are kept. A series repeats every half hour at most (more often only when it ends within 1000 times): one that a calendar app sends for every second or minute is refused.
 - **Calendars**: a shared **Family** calendar, a private **Personal** one for each account, and as many more as you like (shared or private), each with its colour. The calendars in the sidebar are check boxes: tick to show, untick to hide (remembered per account).
 - **Views**: month, week, day and agenda, with a small month to jump around, drag and drop to move an event (to another day, or another time in the week and day views), a line at the current time, search across titles, places, people and notes, and keyboard shortcuts (`t` today, `n` new, `d`/`w`/`m`/`a` the views, ←/→ earlier and later, `/` search, `e` change the open event).
 - **ioContacts (optional)**: the people on an event come from your contacts (picked as you type, with a link back to each), and a shared, read-only **Birthdays** calendar shows the birthdays and anniversaries kept in ioContacts, brought up to date every six hours.
@@ -155,7 +155,7 @@ them with a Bypass policy:
 | Path | Used by | Still protected by |
 |---|---|---|
 | `/dav/*` and `/.well-known/caldav` | CalDAV (Apple Calendar, the Apple profile, DAVx⁵, Thunderbird) | your user name and an app password |
-| `/ics/*` | subscription links and free/busy | the private token in the link |
+| `/ics/*` | subscription links and free/busy | the private token in the link (the request log keeps the address without it) |
 | `/mcp` | AI assistants (only if MCP is on) | an app password as a Bearer token |
 
 Everything else, the web app and `/api/`, stays behind Access. A script that calls `/api/` from outside needs a

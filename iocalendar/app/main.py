@@ -6,6 +6,7 @@ app password), whether sign-in is required at all, and refuses cross-site writes
 suite.
 """
 import logging
+import re
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -20,6 +21,20 @@ from app.auth import auth, updater
 
 setup_log(config.LOG_FILE)  # the server log that Settings › Server shows; the app runs without it
 log = logging.getLogger("iocalendar")
+
+
+class FeedTokenFilter(logging.Filter):
+    """A subscription link carries its secret in the address (/ics/<token>/...). The request log, which admins read in
+    Settings › Server, keeps the line without the token: with it an admin could read another account's calendars."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        a = record.args
+        if isinstance(a, tuple) and len(a) > 2 and isinstance(a[2], str) and "/ics/" in a[2]:
+            record.args = (*a[:2], re.sub(r"/ics/[^/?\s]+", "/ics/-", a[2], count=1), *a[3:])
+        return True
+
+
+logging.getLogger("uvicorn.access").addFilter(FeedTokenFilter())
 
 # what a visitor may still fetch when sign-in is required: the app shell and its files, the API docs, the subscription
 # links and CalDAV (their own sign-in), and the MCP endpoint (its gate below)
