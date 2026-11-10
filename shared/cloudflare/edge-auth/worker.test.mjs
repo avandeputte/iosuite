@@ -5,9 +5,11 @@ import { createHash } from "node:crypto";
 import worker from "./worker.js";
 
 const PW = "ical-3fa91c02-Xx_9aBcDeFgHiJkLmNoPqRsTu";
-const kv = new Map([["iocalendar:3fa91c02", JSON.stringify({ h: createHash("sha256").update(PW).digest("hex") })]]);
+const HPW = "iohealth-0a1b2c3d-Yy_9aBcDeFgHiJkLmNoPqRsTu";
+const sha = (s) => createHash("sha256").update(s).digest("hex");
+const kv = new Map([["iocalendar:3fa91c02", JSON.stringify({ h: sha(PW) })], ["iohealth:0a1b2c3d", JSON.stringify({ h: sha(HPW) })]]);
 const env = (mode) => ({
-  MODE: mode, APPS: '{"calendar.example.com": "iocalendar"}',
+  MODE: mode, APPS: '{"calendar.example.com": "iocalendar", "health.example.com": "iohealth"}',
   APP_PASSWORDS: { get: async (k) => (kv.has(k) ? JSON.parse(kv.get(k)) : null) },
 });
 let forwarded = 0;
@@ -44,4 +46,23 @@ test("paths outside /dav are not checked", async () => {
   assert.equal((await worker.fetch(req("/davx", undefined), env("enforce"))).status, 207);
   assert.equal((await worker.fetch(req("/api/events", undefined), env("enforce"))).status, 207);
   assert.equal(forwarded, 2);
+});
+
+const hreq = (path, auth, method = "POST") => new Request(`https://health.example.com${path}`, {
+  method, headers: auth ? { Authorization: auth } : {} });
+
+test("ioHealth: /v1/ uploads need a known app password, Basic or Bearer; /v1/health stays open", async () => {
+  forwarded = 0;
+  assert.equal((await worker.fetch(hreq("/v1/sessions", "Basic " + btoa(`alex:${HPW}`)), env("enforce"))).status, 207);
+  assert.equal((await worker.fetch(hreq("/v1/sessions/4/items", "Bearer " + HPW), env("enforce"))).status, 207);
+  assert.equal((await worker.fetch(hreq("/v1/health", null, "GET"), env("enforce"))).status, 207);
+  assert.equal(forwarded, 3);
+  const r = await worker.fetch(hreq("/v1/sessions", "Basic " + btoa("alex:hunter2")), env("enforce"));
+  assert.equal(r.status, 401);
+  assert.match(r.headers.get("WWW-Authenticate"), /realm="ioHealth"/);
+  assert.equal((await worker.fetch(hreq("/v1/sessions", "Bearer iohealth-0a1b2c3d-wrong"), env("enforce"))).status, 401);
+  assert.equal((await worker.fetch(hreq("/v1/sessions", null), env("enforce"))).status, 401);
+  assert.equal(forwarded, 3);
+  assert.equal((await worker.fetch(hreq("/api/today", null, "GET"), env("enforce"))).status, 207); // the web app: not ours
+  assert.equal((await worker.fetch(new Request("https://health.example.com/dav/"), env("enforce"))).status, 207);
 });

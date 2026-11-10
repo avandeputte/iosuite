@@ -1,8 +1,14 @@
 # Edge check of app passwords (Cloudflare Worker)
 
-Optional. When ioCalendar and ioContacts are reached through Cloudflare, this Worker sits on their DAV paths
-(`/dav*`) and turns away a request whose app password is wrong before it reaches your server. Someone guessing
-passwords against CalDAV or CardDAV then never touches the server, and a WAF rate limit on the same paths stops them
+Optional. When the apps are reached through Cloudflare, this Worker sits on the paths where devices sign in with an
+app password and turns away a request whose app password is wrong before it reaches your server:
+
+| App | Paths | Devices |
+|---|---|---|
+| ioCalendar, ioContacts | `/dav*` | Apple Calendar and Contacts, DAVx5, Thunderbird (HTTP Basic) |
+| ioHealth | `/v1/*` (not `/v1/health`, which answers without a password) | the iPhone app's uploads (HTTP Basic, or Bearer) |
+
+Someone guessing passwords there then never touches the server, and a WAF rate limit on the DAV paths stops them
 trying fast.
 
 Cloudflare Access can't do this itself: Apple Calendar, Apple Contacts, DAVx5 and Thunderbird send an HTTP Basic
@@ -16,7 +22,7 @@ check on those paths instead.
   Deleting the password, or the account, removes the key.
 - An app password is 144 random bits, so its SHA-256 can't be turned back into it. **Account passwords are never sent
   to Cloudflare.**
-- The Worker reads the Basic header, finds the key from the password's 8 hex, compares the hash, and lets the request
+- The Worker reads the Basic (or Bearer) header, finds the key from the password's 8 hex, compares the hash, and lets the request
   through only on a match. No credentials get the usual 401 sign-in prompt from the Worker itself.
 - The server still checks every password itself, and so still enforces the CalDAV/CardDAV-only scope. The
   Worker only guards `/dav*`, where every app password of that app is valid, so scope doesn't change its answer. A
@@ -25,8 +31,8 @@ check on those paths instead.
   it straight away.
 - `/.well-known/caldav`, `/.well-known/carddav`, `/ics/*`, `/mcp`, `/api` and the web app are not touched.
 
-What stops working behind the Worker in `enforce` mode: signing a DAV client in with your **account** password. Use
-an app password (Settings › Account), which the Apple profile download already does.
+What stops working behind the Worker in `enforce` mode: signing a DAV client, or the ioHealth iPhone app, in with your
+**account** password. Use an app password (Settings › Account), which the Apple profile download already does.
 
 ## Set it up
 
@@ -60,7 +66,8 @@ Then step 3 with the ids it prints and that token file. By hand:
 4. **The Worker.** Copy `wrangler.toml.example` to `wrangler.toml`, put in your two hosts, the zone and the namespace
    id, and run `npx wrangler deploy` in this folder. Without wrangler, create a Worker in the dashboard, paste
    `worker.js`, bind the KV namespace as `APP_PASSWORDS`, add the variables `APPS` and `MODE`, and add the routes
-   `calendar.example.com/dav*` and `contacts.example.com/dav*`.
+   `calendar.example.com/dav*`, `contacts.example.com/dav*` and `health.example.com/v1/*`. `setup.py` writes these
+   for you (`--host health.example.com=iohealth`).
 5. **Monitor first.** `MODE = "monitor"` checks and logs (Workers › iosuite-edge-auth › Logs: `"would block"`) but lets
    everything through. Leave it like that until each of your devices has synced once, so passwords made before step 3
    get published. Then check from an app's folder:

@@ -3,12 +3,15 @@ Every step finds what is already there and only makes what is missing, so it can
 
     export CLOUDFLARE_API_TOKEN=…  CLOUDFLARE_ACCOUNT_ID=…
     python3 setup.py --host calendar.example.com=iocalendar --host contacts.example.com=iocontacts \\
+        --host health.example.com=iohealth \\
         [--mode monitor|enforce] [--deploy] [--rate-limit] [--app-token-file ~/.iosuite-edge-kv-token] [--dry-run]
 
 1. the Workers KV namespace APP_PASSWORDS (made when missing)
-2. wrangler.toml in this folder (gitignored): the routes <host>/dav*, the namespace, APPS and MODE
+2. wrangler.toml in this folder (gitignored): a route per host on its app's sign-in path (ROUTES: /dav* for
+   ioCalendar and ioContacts, /v1/* for ioHealth), the namespace, APPS and MODE
 3. --deploy: `npx --yes wrangler@4 deploy`
-4. --rate-limit: the zone's rule "ioSuite DAV rate limit" on /dav* of those hosts, 60 requests per 10 s per IP and
+4. --rate-limit: the zone's rule "ioSuite DAV rate limit" on /dav* of the DAV hosts (not ioHealth: a full sync sends
+   a burst of uploads), 60 requests per 10 s per IP and
    location, block 10 s (the Free plan's limits); other rate-limit rules are left as they are
 5. --app-token-file: the apps' API token "iosuite-edge-kv" (Account › Workers KV Storage › Read + Write on this account
    only), written to that file (mode 600). Never printed. An existing token of that name is left alone: Cloudflare
@@ -37,6 +40,12 @@ NAMESPACE = "APP_PASSWORDS"
 RULE = "ioSuite DAV rate limit"
 TOKEN_NAME = "iosuite-edge-kv"
 dry = False
+# each app's sign-in path for devices (worker.js GUARDED says the same)
+ROUTES = {"iocalendar": "/dav", "iocontacts": "/dav", "iohealth": "/v1/"}
+
+
+def route_path(app: str) -> str:
+    return ROUTES.get(app, "/dav")
 
 
 def call(method: str, path: str, body=None, ok_missing: bool = False):
@@ -87,12 +96,12 @@ def namespace(account: str) -> str:
 
 
 def wrangler_toml(apps: dict, zone: str, ns: str, mode: str):
-    routes = "".join(f'  {{ pattern = "{h}/dav*", zone_name = "{zone}" }},\n' for h in apps)
+    routes = "".join(f'  {{ pattern = "{h}{route_path(app)}*", zone_name = "{zone}" }},\n' for h, app in apps.items())
     text = f'''name = "iosuite-edge-auth"
 main = "worker.js"
 compatibility_date = "2026-10-01"
 
-# the DAV paths only: the web app, /api, /mcp, /ics and /.well-known go straight to the server as before
+# the devices' sign-in paths only: the web app, /api, /mcp, /ics and /.well-known go straight to the server as before
 routes = [
 {routes}]
 
@@ -119,7 +128,12 @@ def deploy():
         subprocess.run(["npx", "--yes", "wrangler@4", "deploy"], cwd=HERE, check=True)
 
 
-def rate_limit(zone: dict, hosts):
+def rate_limit(zone: dict, apps: dict):
+    # DAV only: ioHealth's phone sends a burst of upload batches on a full sync, which a 60-per-10 s limit would cut off
+    hosts = [h for h, app in apps.items() if route_path(app) == "/dav"]
+    if not hosts:
+        print("rate limit rule: no DAV host, nothing to do")
+        return
     rule = {"description": RULE, "action": "block", "enabled": True,
             "expression": "(http.host in {%s} and starts_with(http.request.uri.path, \"/dav\"))" % " ".join(f'"{h}"' for h in hosts),
             "ratelimit": {"characteristics": ["ip.src", "cf.colo.id"], "period": 10, "requests_per_period": 60,
@@ -164,7 +178,7 @@ def main():
     global dry
     p = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     p.add_argument("--host", action="append", required=True, metavar="HOST=APP",
-                   help="a public host and its app (iocalendar, iocontacts); once per host")
+                   help="a public host and its app (iocalendar, iocontacts, iohealth); once per host")
     p.add_argument("--mode", choices=("monitor", "enforce"), default="monitor")
     p.add_argument("--deploy", action="store_true", help="run wrangler deploy")
     p.add_argument("--rate-limit", action="store_true", help="add or update the WAF rate limit rule")
@@ -189,7 +203,7 @@ def main():
     if a.deploy:
         deploy()
     if a.rate_limit:
-        rate_limit(zone, list(apps))
+        rate_limit(zone, apps)
     if a.app_token_file:
         app_token(account, a.app_token_file.expanduser())
     print(f"\nthen, from an app's folder: .venv/bin/iosuite-shared --config . edge --account-id {account} --namespace-id {ns}"
