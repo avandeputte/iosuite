@@ -20,7 +20,8 @@ APP, PROVIDER = "iocontacts", "iopix"
 _lock = threading.Lock()
 _cache: dict = {"at": 0, "people": None}
 _faces: dict = {}  # person id -> (when, (bytes, type) or None): ioPix is the only source of contact photos, so they are asked often
-FACE_TTL, FACE_MISS_TTL, FACE_ERROR_TTL, FACE_MAX = 3600, 600, 60, 4000
+FACE_TTL, FACE_MISS_TTL, FACE_ERROR_TTL = 3600, 600, 60
+FACE_MAX_BYTES = 64 * 1024 * 1024  # what the kept faces may weigh together; past it the oldest go
 def settings() -> dict:
     try:
         return {"url": links.url(PROVIDER) or ""}
@@ -83,9 +84,12 @@ def face(person_id: int) -> tuple[bytes, str] | None:
 
 
 def _remember(person_id: int, got, err) -> None:
-    if len(_faces) >= FACE_MAX:
-        _faces.clear()
-    _faces[person_id] = (time.time(), got, err)
+    _faces.pop(person_id, None)
+    _faces[person_id] = (time.time(), got, err)  # a dict keeps the order things were put in: the oldest come first
+    weight = sum(len(v[1][0]) if v[1] else 64 for v in _faces.values())
+    while weight > FACE_MAX_BYTES and len(_faces) > 1:
+        old = _faces.pop(next(iter(_faces)))
+        weight -= len(old[1][0]) if old[1] else 64
 
 
 def photo(person_id: int | None) -> tuple[bytes, str] | None:

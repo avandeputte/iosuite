@@ -12,10 +12,10 @@ from fastapi import FastAPI
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from iosuite_shared import mcp as shared_mcp
+from iosuite_shared import chores, mcp as shared_mcp
 from iosuite_shared.updates import setup_log
 
-from app import __version__, api, carddav, config, db, enrich, iopix, ldapd, mcp, users
+from app import __version__, api, carddav, config, db, enrich, iopix, ldapd, mcp, model, users
 from app.auth import auth, updater
 
 setup_log(config.LOG_FILE)  # the server log that Settings › Server shows; the app runs without it
@@ -38,9 +38,11 @@ async def lifespan(app: FastAPI):
         except OSError as e:
             log.warning("LDAP directory not started on port %s: %s", config.LDAP_PORT, e)
     updater.start_daily()  # the daily "is there a newer version" check, while the setting allows it
+    purge = chores.start(model.purge_deleted, name="purge of old deletion markers")  # once a day: KEEP_DELETED_DAYS
     log.info("ioContacts %s started, database %s:%s/%s", __version__, config.DB_HOST, config.DB_PORT, config.DB_NAME)
     async with shared_mcp.running(mcp.server):  # the MCP endpoint (/mcp) lives in this process
         yield
+    purge.cancel()
     if server:
         server.close()
 
@@ -60,8 +62,17 @@ def mcp_enabled() -> bool:
 # who is asking, whether sign-in is required at all, the cross-site check on writes, and the MCP endpoint's gate (the
 # switch; an app password or session; every tool acts as that account): iosuite-shared's middleware
 # (an app password with a scope, such as an Apple profile's CardDAV/LDAP-only one, is kept to its paths by the same middleware)
-app.middleware("http")(auth.middleware(open_paths=OPEN_PATHS, open_prefixes=OPEN_PREFIXES,
-                                       before=auth.mcp_gate(mcp_enabled, on_user=mcp.current_user.set)))
+_mcp_gate = auth.mcp_gate(mcp_enabled, on_user=mcp.current_user.set)
+
+
+def _before(request):
+    """Once the account is known: the model is told who reads (relations into somebody's private book are theirs
+    alone, model.full_many), then the MCP endpoint's gate."""
+    model.viewer.set(request.state.user)
+    return _mcp_gate(request)
+
+
+app.middleware("http")(auth.middleware(open_paths=OPEN_PATHS, open_prefixes=OPEN_PREFIXES, before=_before))
 
 
 def _limit_for(path: str, ctype: str) -> int:
@@ -71,7 +82,7 @@ def _limit_for(path: str, ctype: str) -> int:
 
 
 # 400 for bad input, the headers, no-store on the API, the body cap: the same in every app of the suite
-auth.install(app, limit_for=_limit_for, forwarded_allow_ips=config.FORWARDED_ALLOW_IPS)  # also X-Forwarded-* from those proxies
+auth.install(app, limit_for=_limit_for)
 
 
 def _status_extra(request) -> dict:

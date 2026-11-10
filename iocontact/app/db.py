@@ -1,15 +1,13 @@
-"""MariaDB access: one short connection per unit of work, and the schema (created and migrated at start)."""
-import threading
-from contextlib import contextmanager
+"""MariaDB access (a pool of connections, iosuite_shared.db.Database) and the schema (created and migrated at start)."""
 
 import pymysql
 from pymysql.cursors import DictCursor
 
 from app import config
 
-from iosuite_shared import schema
+from iosuite_shared import db as shared_db, schema
 
-SCHEMA_VERSION = 5  # 5: the suite naming convention (con_ tables, *_at times, con_settings, named indexes)
+SCHEMA_VERSION = 6  # 5: the suite naming convention (con_ tables, *_at times, con_settings, named indexes); 6: no photo columns
 PREFIX = "con"
 
 # Every table is con_<name> (the suite's naming convention: the apps can share one database) and InnoDB/utf8mb4. Child rows (emails, phones...) are replaced as a whole when a contact is saved.
@@ -61,8 +59,6 @@ SCHEMA = [
         role VARCHAR(255) NULL,
         notes TEXT NULL,
         favorite TINYINT NOT NULL DEFAULT 0,
-        photo MEDIUMBLOB NULL,
-        photo_type VARCHAR(32) NULL,
         iopix_person_id INT NULL,
         iopix_person_name VARCHAR(255) NULL,
         extra MEDIUMTEXT NULL,
@@ -143,54 +139,15 @@ SCHEMA = [
 def connect(database: str | None = None):
     return pymysql.connect(host=config.DB_HOST, port=config.DB_PORT, user=config.DB_USER, password=config.DB_PASSWORD,
                            database=database if database is not None else config.DB_NAME, charset="utf8mb4",
-                           cursorclass=DictCursor, autocommit=False, connect_timeout=8)
+                           cursorclass=DictCursor, autocommit=True, connect_timeout=8)
 
 
-_local = threading.local()
-
-
-@contextmanager
-def tx():
-    """A connection inside one transaction: committed on success, rolled back on error. Nested calls share it."""
-    con = getattr(_local, "con", None)
-    if con is not None:
-        yield con
-        return
-    con = connect()
-    _local.con = con
-    try:
-        yield con
-        con.commit()
-    except BaseException:
-        con.rollback()
-        raise
-    finally:
-        _local.con = None
-        con.close()
-
-
-def q(sql: str, args=None) -> list[dict]:
-    with tx() as con, con.cursor() as cur:
-        cur.execute(sql, args)
-        return list(cur.fetchall())
-
-
-def one(sql: str, args=None) -> dict | None:
-    rows = q(sql, args)
-    return rows[0] if rows else None
-
-
-def ex(sql: str, args=None) -> int:
-    """Run a statement; returns lastrowid (inserts) or rowcount."""
-    with tx() as con, con.cursor() as cur:
-        n = cur.execute(sql, args)
-        return cur.lastrowid or n
-
-
-def many(sql: str, rows: list) -> None:
-    if rows:
-        with tx() as con, con.cursor() as cur:
-            cur.executemany(sql, rows)
+# The pool, the transaction nested calls share, and q / one / ex / many are the suite's (iosuite_shared.db.Database):
+# a statement on its own is one round trip, tx() is one transaction (committed on success, rolled back on error), and
+# q / one / ex inside a `with tx():` block run in it.
+_db = shared_db.Database(connect)
+pool = _db.pool
+tx, q, one, ex, many = _db.tx, _db.q, _db.one, _db.ex, _db.many
 
 
 _collation: str | None = None
@@ -247,6 +204,9 @@ def migrate() -> None:
     with tx() as con, con.cursor() as cur:
         for stmt in SCHEMA:
             cur.execute(stmt + " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci")
+        for col in ("photo", "photo_type"):  # 6: a contact's photo is the ioPix face it is linked to; the columns held nothing
+            if col in schema.columns(cur, "con_contacts"):
+                cur.execute(f"ALTER TABLE con_contacts DROP COLUMN {col}")
         schema.ensure_version_table(cur, PREFIX)
         schema.record_version(cur, PREFIX, SCHEMA_VERSION)
         # the family address book everyone shares
