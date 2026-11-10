@@ -44,7 +44,7 @@ def test_roles(client, fresh, lib):
     assert client.get("/api/log").status_code == 403 and client.get("/api/log/download").status_code == 403
     assert client.get("/api/library/merge").status_code == 403
     assert client.get("/api/history").status_code == 403 and client.get("/api/elevation?lat=1&lon=1").status_code == 403
-    assert "database" not in client.get("/api/settings").json() and "paths" not in client.get("/api/maintenance").json()
+    assert "database" not in client.get("/api/settings").json() and "paths" not in client.get("/api/tools").json()
     _login(client, "ed", "editor-pass")
     s = client.get("/api/status").json()
     assert s["editing"] is True and s["isAdmin"] is False
@@ -53,7 +53,7 @@ def test_roles(client, fresh, lib):
     assert client.post("/api/users", json={"name": "z", "password": "password1", "role": "viewer"}).status_code == 403
     _login(client, "alex", "correct horse")
     assert client.get("/api/status").json()["isAdmin"] is True
-    assert client.get("/api/log").status_code == 200 and "paths" in client.get("/api/maintenance").json()
+    assert client.get("/api/log").status_code == 200 and "paths" in client.get("/api/tools").json()
     assert client.post("/api/settings", json={"bg_threads": 2}).status_code == 200
     assert client.get("/api/users").status_code == 200 and len(client.get("/api/users").json()["users"]) == 3
 
@@ -216,18 +216,20 @@ def test_backup_downloads_are_for_admins(client, fresh, lib):
     users.create("alex", "correct horse", "admin")
     users.create("vi", "", "viewer")
     client.cookies.clear()
-    assert client.get("/api/backup/app").status_code == 401, "once accounts exist, a visitor gets nothing"
+    assert client.post("/api/backup/app").status_code == 401, "once accounts exist, a visitor gets nothing"
     _login(client, "vi", "")
-    assert client.get("/api/backup/app").status_code == 403
+    assert client.post("/api/backup/app").status_code == 403
     _login(client, "alex", "correct horse")
-    r = client.get("/api/backup/app")
+    r = client.post("/api/backup/app")
     assert r.status_code == 200 and r.content.startswith(b"PK") and r.headers["content-disposition"].endswith('.zip"')
     import io, zipfile
     names = zipfile.ZipFile(io.BytesIO(r.content)).namelist()
-    assert "viewer.sql" in names and "README.txt" in names and "viewer.db" not in names, names
-    r = client.get("/api/backup/digikam")
+    assert "iopix.sql" in names and "README.txt" in names and "viewer.db" not in names, names
+    r = client.post("/api/backup/digikam")
     assert r.status_code == 200 and r.content.startswith(b"SQLite format 3") and "digikam4-" in r.headers["content-disposition"]
-    assert client.get("/api/backup/other").status_code == 404
+    assert client.post("/api/backup/other").status_code == 404
+    assert client.get("/api/backup/app").status_code == 405, "making a backup is a POST: no link starts one"
+    assert client.post("/api/backup/app", headers={"Origin": "https://evil.example"}).status_code == 403
 
 
 def test_an_account_can_be_left_off_the_sign_in_list(client, fresh):

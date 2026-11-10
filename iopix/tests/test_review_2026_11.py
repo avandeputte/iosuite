@@ -8,7 +8,7 @@ import json
 import pytest
 from starlette.requests import Request
 
-from app.data import vdb
+from app.data import appdb
 from app.digikam import dkdb, merge
 from app.geo import gpx
 
@@ -36,29 +36,29 @@ def _call(path, method="GET", body=None, **who):
 def test_set_up_endpoints_are_locked_while_a_configured_database_is_down(monkeypatch):
     """A database is configured but was unreachable at start: nobody can sign in, so nothing may test another server
     with the stored password or point the viewer elsewhere; only Retry, and the error, are served."""
-    monkeypatch.setattr(vdb, "configured", lambda: True)
-    monkeypatch.setattr(vdb, "ready", lambda: False)
-    monkeypatch.setattr(vdb, "error", "connection refused")
-    code, d = _call("/api/viewerdb")
+    monkeypatch.setattr(appdb, "configured", lambda: True)
+    monkeypatch.setattr(appdb, "ready", lambda: False)
+    monkeypatch.setattr(appdb, "error", "connection refused")
+    code, d = _call("/api/database")
     assert code == 200 and d["locked"] and d["configured"] and d["error"] == "connection refused" and "host" not in d and "user" not in d
-    for p in ("/api/viewerdb/test", "/api/viewerdb/switch"):
+    for p in ("/api/database/test", "/api/database/switch"):
         code, d = _call(p, "POST", {"host": "evil.example", "password": ""})
         assert code == 403 and "not answering" in d["detail"], p
-    monkeypatch.setattr(vdb, "retry", lambda: False)
-    code, d = _call("/api/viewerdb/retry", "POST")
+    monkeypatch.setattr(appdb, "retry", lambda: False)
+    code, d = _call("/api/database/retry", "POST")
     assert code == 400 and "Still unavailable" in d["detail"]
     code, d = _call("/api/status")
     assert code == 200 and d["needsDatabase"] and d["databaseConfigured"]
 
 
 def test_set_up_endpoints_are_open_only_without_any_configuration(monkeypatch):
-    monkeypatch.setattr(vdb, "configured", lambda: False)
-    monkeypatch.setattr(vdb, "ready", lambda: False)
-    monkeypatch.setattr(vdb, "error", "no database configured")
-    monkeypatch.setattr(vdb, "public_settings", lambda: {"configured": False, "host": "", "password_set": False})
-    code, d = _call("/api/viewerdb")
+    monkeypatch.setattr(appdb, "configured", lambda: False)
+    monkeypatch.setattr(appdb, "ready", lambda: False)
+    monkeypatch.setattr(appdb, "error", "no database configured")
+    monkeypatch.setattr(appdb, "public_settings", lambda: {"configured": False, "host": "", "password_set": False})
+    code, d = _call("/api/database")
     assert code == 200 and not d["configured"] and "locked" not in d
-    assert _call("/api/viewerdb", peer="192.168.1.20")[0] == 200, "the network the viewer is on"
+    assert _call("/api/database", peer="192.168.1.20")[0] == 200, "the network the viewer is on"
 
 
 def test_set_up_endpoints_answer_the_local_network_only(monkeypatch):
@@ -67,19 +67,19 @@ def test_set_up_endpoints_answer_the_local_network_only(monkeypatch):
     that is not listed as trusted: 403, and nothing is tested or switched."""
     from app import main
     from app.routes import settings
-    monkeypatch.setattr(vdb, "configured", lambda: False)
-    monkeypatch.setattr(vdb, "ready", lambda: False)
-    monkeypatch.setattr(vdb, "error", "no database configured")
-    monkeypatch.setattr(vdb, "public_settings", lambda: {"configured": False, "host": "", "password_set": False})
+    monkeypatch.setattr(appdb, "configured", lambda: False)
+    monkeypatch.setattr(appdb, "ready", lambda: False)
+    monkeypatch.setattr(appdb, "error", "no database configured")
+    monkeypatch.setattr(appdb, "public_settings", lambda: {"configured": False, "host": "", "password_set": False})
 
     async def never(*a, **kw):
         raise AssertionError("an outside request reached the set-up code")
-    for name in ("api_viewerdb_test", "api_viewerdb_switch", "api_viewerdb_retry"):
+    for name in ("api_database_test", "api_database_switch", "api_database_retry"):
         monkeypatch.setattr(settings, name, never)
     outside = ({"peer": "8.8.8.8"}, {"headers": {"Cf-Ray": "abc-EWR"}}, {"peer": "192.168.1.5", "headers": {"X-Forwarded-For": "8.8.8.8"}},
                {"peer": "127.0.0.1", "headers": {"X-Forwarded-For": "8.8.8.8"}})
     for who in outside:
-        for path, method in (("/api/viewerdb", "GET"), ("/api/viewerdb/test", "POST"), ("/api/viewerdb/switch", "POST"), ("/api/viewerdb/retry", "POST")):
+        for path, method in (("/api/database", "GET"), ("/api/database/test", "POST"), ("/api/database/switch", "POST"), ("/api/database/retry", "POST")):
             code, d = _call(path, method, {"host": "evil.example"}, **who)
             assert code == 403 and "network the server is on" in d["detail"], (who, path)
         assert _call("/api/status", **who)[0] == 200, "the shell still learns what is missing"
@@ -87,19 +87,19 @@ def test_set_up_endpoints_answer_the_local_network_only(monkeypatch):
     def away(_request):
         raise OSError("no shared database")
     monkeypatch.setattr(main.auth, "outside", away)
-    assert _call("/api/viewerdb", peer="192.168.1.20")[0] == 200
-    assert _call("/api/viewerdb", peer="8.8.8.8")[0] == 403
-    assert _call("/api/viewerdb", peer="127.0.0.1", headers={"X-Forwarded-For": "9.9.9.9"})[0] == 403
+    assert _call("/api/database", peer="192.168.1.20")[0] == 200
+    assert _call("/api/database", peer="8.8.8.8")[0] == 403
+    assert _call("/api/database", peer="127.0.0.1", headers={"X-Forwarded-For": "9.9.9.9"})[0] == 403
 
 
 def test_the_stored_password_goes_to_the_stored_server_only(monkeypatch):
     stored = {"type": "mysql", "host": "db.local", "port": 3306, "database": "iopix", "user": "iopix", "password": "s3cret"}
-    monkeypatch.setattr(vdb, "settings", lambda: dict(stored))
-    assert vdb._with_stored({"password": ""})["password"] == "s3cret", "the same server: an empty field keeps the stored password"
-    assert vdb._with_stored({"port": "3306"})["password"] == "s3cret", "the same port as text is the same server"
-    assert vdb._with_stored({"host": "other.example", "password": ""})["password"] == "", "another host never gets the stored password"
-    assert vdb._with_stored({"user": "root"})["password"] == ""
-    assert vdb._with_stored({"host": "other.example", "password": "given"})["password"] == "given"
+    monkeypatch.setattr(appdb, "settings", lambda: dict(stored))
+    assert appdb._with_stored({"password": ""})["password"] == "s3cret", "the same server: an empty field keeps the stored password"
+    assert appdb._with_stored({"port": "3306"})["password"] == "s3cret", "the same port as text is the same server"
+    assert appdb._with_stored({"host": "other.example", "password": ""})["password"] == "", "another host never gets the stored password"
+    assert appdb._with_stored({"user": "root"})["password"] == ""
+    assert appdb._with_stored({"host": "other.example", "password": "given"})["password"] == "given"
     # digiKam's connection test keeps the same rule
     seen = {}
 
@@ -122,23 +122,23 @@ def test_a_nested_reader_does_not_roll_back_the_writer_above_it():
     (a setting looked up, a row read) gets a connection of its own, so its close() ends nothing of the writer's."""
     from app.data import state
     state.init()
-    with vdb.writer() as con:
+    with appdb.writer() as con:
         con.execute("INSERT OR REPLACE INTO pix_settings (name, value) VALUES (?, ?)", ("zz_nested_probe", "kept"))
-        with vdb.reader() as inner:
+        with appdb.reader() as inner:
             assert inner.raw is not con.raw, "the nested reader has its own connection"
             inner.execute("SELECT 1").fetchone()
-        own = vdb.connect()  # what a writer opened inside a library transaction (Sync off) gets: a connection of its own
+        own = appdb.connect()  # what a writer opened inside a library transaction (Sync off) gets: a connection of its own
         try:
-            assert isinstance(own.raw, vdb._Own) and own.raw is not con.raw
+            assert isinstance(own.raw, appdb._Own) and own.raw is not con.raw
             own.execute("INSERT OR REPLACE INTO pix_settings (name, value) VALUES (?, ?)", ("zz_nested_probe2", "own"))
             own.commit()
         finally:
             own.close()
         assert con.execute("SELECT value FROM pix_settings WHERE name = ?", ("zz_nested_probe",)).fetchone()[0] == "kept", "the outer write survived the nested blocks"
-    with vdb.reader() as con:
-        assert isinstance(con.raw, vdb._Kept), "after the blocks, the pooled connection is leased again"
+    with appdb.reader() as con:
+        assert isinstance(con.raw, appdb._Kept), "after the blocks, the pooled connection is leased again"
         assert con.execute("SELECT value FROM pix_settings WHERE name = ?", ("zz_nested_probe",)).fetchone()[0] == "kept"
-    with vdb.writer() as con:
+    with appdb.writer() as con:
         con.execute("DELETE FROM pix_settings WHERE name LIKE 'zz_nested_probe%'")
 
 

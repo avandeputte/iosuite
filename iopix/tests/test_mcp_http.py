@@ -128,17 +128,17 @@ def test_diagnostic_tools(client, lib):
     assert bad.get("isError")
 
 
-def test_update_viewer_needs_an_admin(client, monkeypatch, tmp_path):
+def test_update_server_needs_an_admin(client, monkeypatch, tmp_path):
     from app.auth import updater
     started = []
     monkeypatch.setattr(updater, "run", lambda: started.append(1))
     vi = _viewer(client)
-    bad = _call(client, "update_viewer", id=20, who=vi)
+    bad = _call(client, "update_server", id=20, who=vi)
     assert bad.get("isError") and "admin" in bad["content"][0]["text"].lower() and not started
-    ok = _call(client, "update_viewer", id=21)
+    ok = _call(client, "update_server", id=21)
     assert not ok.get("isError") and started == [1]
     tools = {t["name"]: t for t in _rpc(client, "tools/list", id=24)["result"]["tools"]}
-    assert "ref" not in tools["update_viewer"]["inputSchema"].get("properties", {}), "the update installs the tip of the branch only"
+    assert "ref" not in tools["update_server"]["inputSchema"].get("properties", {}), "the update installs the tip of the branch only"
     assert "proxy_signin" not in tools, "sign-in at the proxy is set up by a suite admin, in Settings"
     chk = _call(client, "check_for_update", id=23, who=vi)
     assert "version" in json.loads(chk["content"][0]["text"])

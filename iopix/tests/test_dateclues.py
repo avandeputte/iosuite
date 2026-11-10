@@ -118,8 +118,8 @@ def test_folder_hints_bound_the_clues(tmp_path, monkeypatch, lib):
     monkeypatch.setattr(index, "open_index", lambda path=None: sqlite3.connect(f"file:{p}?mode=ro", uri=True))
     monkeypatch.setattr(ages, "available", lambda: False)
     monkeypatch.setattr(dateclues, "_look_years", lambda con, ids, win=None: {})
-    from app.data import vdb
-    with vdb.writer() as con:
+    from app.data import appdb
+    with appdb.writer() as con:
         con.execute("DELETE FROM pix_date_hints")
     try:
         before = {i["id"]: i for i in dateclues.suggestions()["items"]}
@@ -135,7 +135,7 @@ def test_folder_hints_bound_the_clues(tmp_path, monkeypatch, lib):
         dateclues.set_hint(1, None, None)
         assert dateclues.hints() == {}
     finally:
-        with vdb.writer() as con:
+        with appdb.writer() as con:
             con.execute("DELETE FROM pix_date_hints")
 
 
@@ -156,8 +156,8 @@ def test_an_age_estimate_far_outside_the_hint_is_dropped_not_capped(tmp_path, mo
         "items": [{"id": 1, "year": 2001, "lo": 1999, "hi": 2003, "floor": None, "people": [{"tag": 10, "name": "Ann", "age": 21, "year": 2001}]},
                   {"id": 2, "year": 1993, "lo": 1990, "hi": 1996, "floor": None, "people": [{"tag": 12, "name": "Cy", "age": 33, "year": 1993}]}],
         "people": []})
-    from app.data import vdb
-    with vdb.writer() as con:
+    from app.data import appdb
+    with appdb.writer() as con:
         con.execute("DELETE FROM pix_date_hints")
     try:
         dateclues.set_hint(1, None, 1990)
@@ -166,5 +166,5 @@ def test_an_age_estimate_far_outside_the_hint_is_dropped_not_capped(tmp_path, mo
         two = out[2]                             # 1993 is three years over with a two-year uncertainty: capped, but less sure
         assert two["year"] == 1990 and two["clues"][0]["kind"] == "ages" and two["clues"][0]["sd"] > 3
     finally:
-        with vdb.writer() as con:
+        with appdb.writer() as con:
             con.execute("DELETE FROM pix_date_hints")

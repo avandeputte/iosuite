@@ -90,7 +90,7 @@ def test_scan_job_start_rule_and_reset(monkeypatch):
     """The shared scan scaffolding (app/ai/scanjob.py): a start whose to-do is already inside the running job's is
     ignored, one with something new cancels the run, and a reset cancels it and empties the job's tables."""
     from app.ai.scanjob import ScanJob
-    from app.data import vdb
+    from app.data import appdb
     monkeypatch.setattr(jobs.config, "ANALYSIS", True)  # the tests run with analysis off; start() refuses otherwise
     monkeypatch.setattr(jobs, "GRACE", 0.2)
     gate = threading.Event()
@@ -123,6 +123,6 @@ def test_scan_job_start_rule_and_reset(monkeypatch):
     gate.set()
     assert _wait(lambda: jobs.status()["running"] is None)
     assert done == [[1, 2, 3]]
-    with vdb.reader() as con:
+    with appdb.reader() as con:
         assert con.execute("SELECT count(*) FROM pix_ai_scans WHERE job = 'captions'").fetchone()[0] == 0
     jobs._progress.pop("captions", None)  # the test's own Progress leaves the status registry as it found it

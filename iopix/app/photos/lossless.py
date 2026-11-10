@@ -33,9 +33,10 @@ from app import config, thumbs
 from app.digikam import dbsync, dkdb
 from app.photos import edits, history
 from app.faces import facemgr
-from app.data import index, vdb
+from app.data import index, appdb
 from app.digikam.dbsync import SyncError
 from app.photos.pixelguard import Guard
+from iosuite_shared.errors import Invalid
 
 log = logging.getLogger("app.photos.lossless")
 
@@ -88,7 +89,7 @@ def compose(orientation: int, op: str) -> int:
         cand = base.transpose(_PIL_UPRIGHT[code]) if code != 1 else base
         if (cand.size, cand.tobytes()) == want:
             return code
-    raise ValueError("orientation")
+    raise Invalid("orientation")
 
 
 def turn_rect(r, op: str, W: int, H: int):
@@ -104,7 +105,7 @@ def turn_rect(r, op: str, W: int, H: int):
         return (W - x - w, y, w, h)
     if op == "flipv":
         return (x, H - y - h, w, h)
-    raise ValueError(op)
+    raise Invalid(op)
 
 
 def crop_rect(r, box):
@@ -270,7 +271,7 @@ def _write_rows(con, pid, w, h, orientation, size, kept, dropped, restore_region
 
 def forget_checksum(pid: int):
     try:
-        with vdb.writer() as con:
+        with appdb.writer() as con:
             con.execute("DELETE FROM pix_image_data_checksums WHERE photo_id = ?", (int(pid),))
     except Exception:
         pass
@@ -453,7 +454,7 @@ def undo(entry: dict, require_digikam_closed: bool = True) -> dict:
     """The file, digiKam's rows and the regions as they were before this edit."""
     u = (entry.get("undo") or {}).get("lossless")
     if not u:
-        raise ValueError("This change has nothing to undo")
+        raise Invalid("This change has nothing to undo")
     copy = entry.get("file_copy") if entry.get("file_copy") and os.path.isfile(entry["file_copy"]) else u.get("file_copy")
     if not copy or not os.path.isfile(copy):
         raise FileNotFoundError("The copy of the file from before this edit is gone")

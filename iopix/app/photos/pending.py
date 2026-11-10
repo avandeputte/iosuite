@@ -1,5 +1,5 @@
 """The remembered edits: what the viewer wrote to sidecars (and files) that digiKam's database does
-not have yet, kept in the viewer's own database (vdb's pix_pending_edits table) so the viewer shows the
+not have yet, kept in the viewer's own database (appdb's pix_pending_edits table) so the viewer shows the
 new values right away and the index can lay them over digiKam's rows.
 
 One row per photo, the whole edit as JSON, replaced on every change, so an edit is read as one
@@ -14,7 +14,7 @@ import threading
 import time
 from pathlib import Path
 
-from app.data import index, state as appstate, vdb
+from app.data import index, state as appstate, appdb
 from app.digikam.dkdb import in_chunks
 from app.photos.paths import backup_path
 
@@ -25,7 +25,7 @@ lock = threading.RLock()
 
 def signature() -> str:
     """Changes whenever the set of remembered edits changes (part of the index version)."""
-    if not vdb.ready():
+    if not appdb.ready():
         return signature_of({})
     con = appstate.connect()
     try:
@@ -60,7 +60,7 @@ def save_pending(rows: list):
 
 def pending() -> dict:
     """photo_id -> remembered edit."""
-    if not vdb.ready():
+    if not appdb.ready():
         return {}
     con = appstate.connect()
     try:
@@ -73,7 +73,7 @@ def pending() -> dict:
 
 def pending_stamps() -> dict:
     """photo_id -> the stamp of its remembered edit: what the index compares to tell which photos' edits changed."""
-    if not vdb.ready():
+    if not appdb.ready():
         return {}
     con = appstate.connect()
     try:
@@ -86,7 +86,7 @@ def pending_stamps() -> dict:
 
 def pending_one(photo_id: int):
     """The remembered edit of one photo, or None."""
-    if not vdb.ready():
+    if not appdb.ready():
         return None
     con = appstate.connect()
     try:
@@ -116,7 +116,7 @@ def drop_pending_tag(photo_id: int, path: str):
 
 def pending_count() -> int:
     """How many edits are remembered (what status polls show; cheaper than loading them all)."""
-    if not vdb.ready():
+    if not appdb.ready():
         return 0
     con = appstate.connect()
     try:

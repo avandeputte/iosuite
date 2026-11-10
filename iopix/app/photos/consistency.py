@@ -5,7 +5,7 @@ direction you choose.
 Compared fields: rating, pick label, color label, title, caption, tags.
 Values are read with exiftool from the sidecar and from the file (its embedded
 XMP), and straight from digiKam's database (read-only). Results are stored in
-the viewer's own database (vdb.py) so the report can be browsed without rescanning.
+the viewer's own database (appdb.py) so the report can be browsed without rescanning.
 
 Syncing writes with the same code paths as editing: digiKam's writers for the
 sidecar / file (edits.write_args), and dbsync for the database (digiKam closed,
@@ -24,8 +24,9 @@ from app import config, jobs
 from app.ai import analysis
 from app.digikam import dbsync, dkdb
 from app.photos import edits, history
-from app.data import index, vdb
+from app.data import index, appdb
 from app.digikam.dkdb import chunked, in_chunks
+from iosuite_shared.errors import Invalid
 
 CHECK_VERSION = 2  # bumped when the check compares more: every photo is looked at again by "Check new and changed photos"
 FIELDS = ["rating", "title", "caption", "tags", "taken", "gps"]  # what the viewer shows and edits (digiKam's pick and colour labels are not offered)
@@ -42,7 +43,7 @@ VALUE_KEYS = ("Rating", "PickLabel", "ColorLabel", "Title", "Description", *TAG_
 
 
 def init():
-    pass  # the consistency table is part of the schema vdb.ensure_schema keeps (state.init)
+    pass  # the consistency table is part of the schema appdb.ensure_schema keeps (state.init)
 
 
 # --------------------------------------------------------------------------
@@ -267,7 +268,7 @@ def scan(photos: list, rescan_all: bool = True):
     init()
     todo = list(photos)  # videos too: their sidecar against digiKam (the file itself is not read)
     if not rescan_all:
-        con = vdb.connect(timeout=READ_TIMEOUT)
+        con = appdb.connect(timeout=READ_TIMEOUT)
         try:
             have = dict(con.execute("SELECT photo_id, stamp FROM pix_metadata_check").fetchall())
         finally:
@@ -293,7 +294,7 @@ def scan(photos: list, rescan_all: bool = True):
                 now = int(time.time())
                 rows = [(r["id"], _cstamp(p), _report(r), len(r["mismatch"]), r["has_sidecar"], r["file_xmp"], now)
                         for p, r in zip(batch, recs)]
-                with vdb.writer() as con:
+                with appdb.writer() as con:
                     con.executemany("INSERT OR REPLACE INTO pix_metadata_check VALUES (?,?,?,?,?,?,?)", rows)
                 progress.step(len(batch))
             progress["scanned_at"] = int(time.time())
@@ -312,9 +313,9 @@ def scan(photos: list, rescan_all: bool = True):
 
 def summary() -> dict:
     empty = {"scanned": 0, "mismatched": 0, "by_field": {}, "no_sidecar": 0, "scanned_at": None}
-    if not vdb.ready():
+    if not appdb.ready():
         return empty
-    con = vdb.connect(timeout=READ_TIMEOUT)
+    con = appdb.connect(timeout=READ_TIMEOUT)
     try:
         scanned, mism, no_side, last = con.execute(
             "SELECT count(*), sum(mismatch > 0), sum(has_sidecar = 0), max(checked_at) FROM pix_metadata_check").fetchone()
@@ -334,7 +335,7 @@ def summary() -> dict:
 
 def report(field: str = None, offset: int = 0, limit: int = 100) -> dict:
     """The photos that disagree (on `field`, or on any), newest first; field "nosidecar": those without a sidecar."""
-    con = vdb.connect(timeout=READ_TIMEOUT)
+    con = appdb.connect(timeout=READ_TIMEOUT)
     try:
         if field == "nosidecar":
             rows = con.execute("SELECT data FROM pix_metadata_check WHERE has_sidecar = 0 ORDER BY photo_id DESC").fetchall()
@@ -360,7 +361,7 @@ def recheck(photo_ids: list):
     ids = [int(i) for i in photo_ids]
     if not ids:
         return
-    con = vdb.connect(timeout=READ_TIMEOUT)
+    con = appdb.connect(timeout=READ_TIMEOUT)
     try:
         known = {r[0] for r in in_chunks(con, "SELECT photo_id FROM pix_metadata_check WHERE photo_id IN ({ids})", ids)}
     finally:
@@ -380,7 +381,7 @@ def recheck(photo_ids: list):
             recs = compare(photos)
             now = int(time.time())
             rows = [(r["id"], _cstamp(p), _report(r), len(r["mismatch"]), r["has_sidecar"], r["file_xmp"], now) for p, r in zip(photos, recs)]
-            with vdb.writer() as c:
+            with appdb.writer() as c:
                 c.executemany("INSERT OR REPLACE INTO pix_metadata_check VALUES (?,?,?,?,?,?,?)", rows)
         except Exception:
             log.warning("consistency: re-checking %d edited photos failed", len(photos), exc_info=True)
@@ -390,7 +391,7 @@ def recheck(photo_ids: list):
 def forget(photo_ids: list):
     """Drop stored results so those photos are compared again on the next scan."""
     if photo_ids:
-        with vdb.writer() as con:
+        with appdb.writer() as con:
             con.executemany("DELETE FROM pix_metadata_check WHERE photo_id = ?", [(int(i),) for i in photo_ids])
 
 
@@ -425,9 +426,9 @@ def _report(r: dict):
 def sync(photo_ids: list, source: str, targets: list, fields: list = None) -> dict:
     """Copy the chosen fields from `source` (db|sidecar|file) to each of `targets`."""
     if source not in SOURCES or any(t not in SOURCES or t == source for t in targets) or not targets:
-        raise ValueError("Choose a source and at least one different target")
+        raise Invalid("Choose a source and at least one different target")
     fields = [f for f in (fields or FIELDS) if f in FIELDS]
-    con = vdb.connect(timeout=READ_TIMEOUT)
+    con = appdb.connect(timeout=READ_TIMEOUT)
     try:
         stored = {}
         for pid, data in in_chunks(con, "SELECT photo_id, data FROM pix_metadata_check WHERE photo_id IN ({ids})", map(int, photo_ids)):

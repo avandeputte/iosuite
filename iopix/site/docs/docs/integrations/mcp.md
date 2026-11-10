@@ -24,10 +24,10 @@ Results carry links into ioPix (set `PUBLIC_URL` to your public address).
 
 These take an **admin's account** (the app password of an admin), because they reveal paths, log lines and settings or change the library:
 
-`diagnostics`, `server_log`, `job_queue`, `photo_file`, `date_suggestions` (the year suggestions for undated photos, with their clues), `set_date_hint` (a folder's earliest and latest possible year), `place_suggestions` (where photos without a position were probably taken), `jersey_suggestions` (players for the shirt numbers read on unnamed people), `clothing_suggestions` (people probably present, by their clothes), `rotation_findings` (photos stored on their side or upside down), `run_analysis` (start a background analysis, as Settings › AI does), and `update_viewer`, which installs a new version. `check_for_update` answers any account.
+`diagnostics`, `server_log`, `job_queue`, `photo_file`, `date_suggestions` (the year suggestions for undated photos, with their clues), `set_date_hint` (a folder's earliest and latest possible year), `place_suggestions` (where photos without a position were probably taken), `jersey_suggestions` (players for the shirt numbers read on unnamed people), `clothing_suggestions` (people probably present, by their clothes), `rotation_findings` (photos stored on their side or upside down), `run_analysis` (start a background analysis, as Settings › AI does), and `update_server`, which installs a new version. `check_for_update` answers any account.
 
 !!! danger "Treat an admin's app password like a root password"
-    `update_viewer` replaces the code ioPix runs. Give the assistant its own app password and revoke it (Settings › Account › App passwords) if it was ever shared.
+    `update_server` replaces the code ioPix runs. Give the assistant its own app password and revoke it (Settings › Account › App passwords) if it was ever shared.
 
 ## Connecting Claude
 

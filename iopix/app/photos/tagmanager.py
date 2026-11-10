@@ -36,7 +36,7 @@ _worker_lock = threading.Lock()
 
 
 def init():
-    pass  # the tagjobs table (and the drop of the early schema) is part of vdb.ensure_schema (state.init)
+    pass  # the tagjobs table (and the drop of the early schema) is part of appdb.ensure_schema (state.init)
 
 
 def pending_jobs() -> int:

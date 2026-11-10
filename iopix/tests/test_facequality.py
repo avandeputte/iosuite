@@ -71,7 +71,7 @@ def test_report_endpoint_is_for_admins_and_lists_counts(client, lib):
 
 def test_image_files_with_the_duplicates_are_rewritten_too(client, lib):
     need_tool("exiftool", edits.available())
-    from app.data import vdb
+    from app.data import appdb
     ic = index.open_index()
     jpegs = {r[0] for r in ic.execute("SELECT id FROM photos WHERE lower(path) LIKE '%.jpg' OR lower(path) LIKE '%.jpeg'")}
     ic.close()
@@ -108,7 +108,7 @@ def test_image_files_with_the_duplicates_are_rewritten_too(client, lib):
     mwg, mp = facequality._file_regions([path])[path]
     assert not facequality._has_duplicates(mwg, mp) and len(mwg) >= 1
     assert edits.file_backup_path(path).exists(), "the original file is kept in file-backups"
-    con = vdb.connect()
+    con = appdb.connect()
     try:
         assert con.execute("SELECT count(*) FROM pix_photo_history WHERE photo_id = ? AND summary = ?", (pid, facequality.FILE_DONE)).fetchone()[0] == 1
     finally:
@@ -163,7 +163,7 @@ def test_photos_with_only_unnamed_faces_can_be_accepted_or_ignored(client, lib):
 
 
 def test_people_without_any_face_or_tag_are_listed_and_can_be_accepted(client, lib):
-    from app.data import vdb
+    from app.data import appdb
     q = client.get("/api/quality").json()["untagged"]
     assert {"count", "items", "accepted"} <= set(q)
     # object detection saw two people on a photo nobody is tagged on
@@ -174,8 +174,8 @@ def test_people_without_any_face_or_tag_are_listed_and_can_be_accepted(client, l
     dk = sqlite3.connect(lib["db"])  # the fixture's photos all carry some face region: take this one's away for the test
     saved = dk.execute("SELECT imageid, tagid, property, value FROM ImageTagProperties WHERE imageid = ?", (pid,)).fetchall()
     dk.execute("DELETE FROM ImageTagProperties WHERE imageid = ?", (pid,)); dk.commit(); dk.close()
-    with vdb.write_lock:
-        con = vdb.connect()
+    with appdb.write_lock:
+        con = appdb.connect()
         con.executemany("INSERT INTO pix_ai_objects (photo_id, cls, score, x, y, w, h) VALUES (?,?,?,?,?,?,?)", [(pid, "person", 0.9, 0.1, 0.1, 0.2, 0.4), (pid, "person", 0.8, 0.5, 0.1, 0.2, 0.4)])
         con.commit(); con.close()
     index.build()
@@ -186,8 +186,8 @@ def test_people_without_any_face_or_tag_are_listed_and_can_be_accepted(client, l
     assert not any(x["photo"] == pid for x in q2["items"]) and q2["accepted"] >= 1
     client.post("/api/quality/accept", json={"photos": [pid], "check": "untagged", "on": False})
     assert any(x["photo"] == pid for x in client.get("/api/quality").json()["untagged"]["items"])
-    with vdb.write_lock:
-        con = vdb.connect(); con.execute("DELETE FROM pix_ai_objects WHERE photo_id = ?", (pid,)); con.commit(); con.close()
+    with appdb.write_lock:
+        con = appdb.connect(); con.execute("DELETE FROM pix_ai_objects WHERE photo_id = ?", (pid,)); con.commit(); con.close()
     dk = sqlite3.connect(lib["db"]); dk.executemany("INSERT INTO ImageTagProperties VALUES (?,?,?,?)", saved); dk.commit(); dk.close()
     index.build()
 

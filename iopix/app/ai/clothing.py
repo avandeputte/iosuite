@@ -22,7 +22,7 @@ from app import jobs, thumbs
 from app.ai import detector, dismissed
 from app.ai.analysis import stamp
 from app.ai.scanjob import ScanJob
-from app.data import index, vdb
+from app.data import index, appdb
 from app.digikam.dkdb import chunked, in_chunks
 
 try:
@@ -114,7 +114,7 @@ def _work(gen: int, todo: list):
                     continue
             if progress.cancelled(gen):
                 return
-            with vdb.writer() as con:
+            with appdb.writer() as con:
                 con.executemany("DELETE FROM pix_ai_person_looks WHERE photo_id = ?", [(p["id"],) for p, _bs, _cs in ready])
                 con.executemany("INSERT OR REPLACE INTO pix_ai_person_looks (photo_id, px, py, pw, ph, vec) VALUES (?,?,?,?,?,?)",
                                 [(p["id"], detector.thousandths(b[0]), detector.thousandths(b[1]), detector.thousandths(b[2]), detector.thousandths(b[3]), np.asarray(v, np.float32).tobytes()) for (p, b, _c), v in zip(flat, vecs)])
@@ -139,11 +139,11 @@ def _events(con, ids: list = None) -> dict:
             mates = [r[0] for r in con.execute("SELECT id FROM photos WHERE album_id = ? AND day = ? AND dprec IS NULL", (album, day))]
             if not mates:
                 continue
-            with vdb.reader() as vcon:
+            with appdb.reader() as vcon:
                 have = {r[0] for r in in_chunks(vcon, "SELECT DISTINCT photo_id FROM pix_ai_person_looks WHERE photo_id IN ({ids})", mates)}
             events[(album, day)] = [i for i in mates if i in have]
         return events
-    with vdb.reader() as vcon:
+    with appdb.reader() as vcon:
         have = sorted({r[0] for r in vcon.execute("SELECT DISTINCT photo_id FROM pix_ai_person_looks")})
     meta = {}
     for pid, album, day in in_chunks(con, "SELECT id, album_id, day FROM photos WHERE dprec IS NULL AND id IN ({ids})", have):  # an approximate date has no day to make an event of
@@ -157,7 +157,7 @@ def _events(con, ids: list = None) -> dict:
 def _boxes_of(ids: list) -> list:
     """[(photo, (x, y, w, h), vec)] for the photos given."""
     out = []
-    with vdb.reader() as con:
+    with appdb.reader() as con:
         for pid, px, py, pw, ph, vec in in_chunks(con, "SELECT photo_id, px, py, pw, ph, vec FROM pix_ai_person_looks WHERE photo_id IN ({ids})", ids):
             out.append((pid, (px / 1000, py / 1000, pw / 1000, ph / 1000), np.frombuffer(vec, np.float32)))
     return out
@@ -257,7 +257,7 @@ def suggestions(ids: list = None) -> dict:
 def for_photo(photo_id: int) -> int:
     """How many people in a photo have a clothing embedding (the info panel)."""
     try:
-        with vdb.reader() as con:
+        with appdb.reader() as con:
             return int(con.execute("SELECT count(*) FROM pix_ai_person_looks WHERE photo_id = ?", (photo_id,)).fetchone()[0])
     except Exception:
         return 0

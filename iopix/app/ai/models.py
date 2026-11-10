@@ -191,9 +191,35 @@ def _remember(key: str, revision):
     RECORD.write_text(json.dumps(rec, indent=1))
 
 
+# Hub repositories downloaded at a pinned commit (repository -> commit id), like the plain downloads above: what
+# is fetched is what was looked at when the commit was written here, whatever the repository holds later. Moving to a
+# newer commit is a change here. A copy downloaded before the pin (the repository's main branch of that day) keeps
+# working, and shows as "update" until it is downloaded again.
+REVISIONS = {
+    "Salesforce/blip-image-captioning-base": "82a37760796d32b1411fe092ab5d4e227313294b",
+    "Salesforce/blip-image-captioning-large": "353689b859fcf0523410b1806dace5fb46ecdf41",
+    "onnx-community/Florence-2-base-ft": "e88a44eaf3791a35eae0c5a47b3dbcd36e67eb6f",
+}
+
+
+def pinned(repo: str):
+    """The commit a repository is downloaded at; None: its main branch."""
+    return REVISIONS.get(repo)
+
+
 def hf_local(repo: str):
-    """(commit id, downloaded time) of a cached repository, or (None, None)."""
-    ref = MODEL_DIR / f"models--{repo.replace('/', '--')}" / "refs" / "main"
+    """(commit id, downloaded time) of a cached repository, or (None, None): the pinned commit when that is on disk,
+    else what the main branch pointed at when it was downloaded."""
+    base = MODEL_DIR / f"models--{repo.replace('/', '--')}"
+    pin = pinned(repo)
+    if pin:
+        try:
+            snap = base / "snapshots" / pin
+            if any(snap.iterdir()):
+                return pin, int(snap.stat().st_mtime)
+        except OSError:
+            pass
+    ref = base / "refs" / "main"
     try:
         sha = ref.read_text().strip()
         if not any((ref.parent.parent / "snapshots" / sha).iterdir()):
@@ -312,13 +338,15 @@ def check(key: str) -> dict:
         if m["kind"] == "hf":
             remote, changed = [], False
             for repo in m["repos"]:
-                with _get(f"https://huggingface.co/api/models/{repo}") as r:
-                    info = json.load(r)
-                sha = info.get("sha", "")
-                remote.append(sha[:7])
                 mine, _ = hf_local(repo)
+                sha = pinned(repo)
+                if not sha:  # not pinned: the repository's main branch is what a download gets
+                    with _get(f"https://huggingface.co/api/models/{repo}") as r:
+                        info = json.load(r)
+                    sha = info.get("sha", "")
+                    out["remote_at"] = info.get("lastModified")
+                remote.append(sha[:7])
                 changed |= bool(mine) and sha != mine
-                out["remote_at"] = info.get("lastModified")
             out["remote"] = "+".join(remote)
             out["status"] = "missing" if not loc["installed"] else ("update" if changed else "current")
         elif m["kind"] in ("url", "zip", "data"):
@@ -529,8 +557,8 @@ def _download_here(key: str):
     elif m.get("choice") == "caption_model":
         from transformers import BlipForConditionalGeneration, BlipProcessor
         MODEL_DIR.mkdir(parents=True, exist_ok=True)
-        BlipProcessor.from_pretrained(m["repos"][0], cache_dir=str(MODEL_DIR))
-        BlipForConditionalGeneration.from_pretrained(m["repos"][0], cache_dir=str(MODEL_DIR))
+        BlipProcessor.from_pretrained(m["repos"][0], revision=pinned(m["repos"][0]), cache_dir=str(MODEL_DIR))
+        BlipForConditionalGeneration.from_pretrained(m["repos"][0], revision=pinned(m["repos"][0]), cache_dir=str(MODEL_DIR))
     elif m["kind"] in ("url", "zip"):
         fetch_file(m["url"], path(key), m.get("member"), m.get("sha256"))
         for x in m.get("extra", []):

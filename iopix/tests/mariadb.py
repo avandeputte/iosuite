@@ -20,7 +20,7 @@ server = _testing.server  # {host, port, user, password} of a reachable MariaDB,
 
 
 def fresh_database(name: str) -> dict:
-    """Drop and create `name` on the test server; the connection settings for it (vdb's KEYS)."""
+    """Drop and create `name` on the test server; the connection settings for it (appdb's KEYS)."""
     return {"type": "mysql", **_testing.fresh_database(name)}
 
 

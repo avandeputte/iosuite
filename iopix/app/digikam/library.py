@@ -67,7 +67,7 @@ _WRITE = re.compile(r"^\s*(INSERT|UPDATE|DELETE|REPLACE)\b", re.I)
 
 
 def tables() -> dict:
-    """vdb.TABLES entries for the library tables: table -> (columns, MySQL DDL). The SQLite types in SPEC
+    """appdb.TABLES entries for the library tables: table -> (columns, MySQL DDL). The SQLite types in SPEC
     serve the merge-base file (save_base) only."""
     out = {}
     for name, (_dk, cols, _sq_extra, my_extra) in SPEC.items():
@@ -82,7 +82,7 @@ def rename(sql: str) -> str:
 
 
 def _vconn_class():
-    from app.data.vdb import VConn  # lazy: data.vdb -> digikam.library would be an import cycle
+    from app.data.appdb import VConn  # lazy: data.appdb -> digikam.library would be an import cycle
 
     class LibraryConn(VConn):
         """A connection to the library tables that speaks digiKam's table names (see the module docstring)."""
@@ -130,10 +130,10 @@ _CLASS = None
 def connect(write: bool = False):
     """The library tables, through digiKam's table names."""
     global _CLASS
-    from app.data import vdb  # lazy: data.vdb -> digikam.library would be an import cycle
+    from app.data import appdb  # lazy: data.appdb -> digikam.library would be an import cycle
     if _CLASS is None:
         _CLASS = _vconn_class()
-    v = vdb.connect()
+    v = appdb.connect()
     return _CLASS(v.raw, v.mysql, write)
 
 
@@ -157,9 +157,9 @@ def _bump(con):
 
 def info() -> dict:
     """{source, taken, photos, local_changes, version, changed} or {} when no copy exists yet."""
-    from app.data import vdb  # lazy: data.vdb -> digikam.library would be an import cycle
+    from app.data import appdb  # lazy: data.appdb -> digikam.library would be an import cycle
     try:
-        with vdb.reader() as con:
+        with appdb.reader() as con:
             d = {r[0]: r[1] for r in con.execute("SELECT name, value FROM pix_library_info").fetchall()}
     except Exception:
         return {}
@@ -203,14 +203,14 @@ def copy_from_digikam(src) -> dict:
     rows digiKam no longer has are deleted, new and changed ones are written, the rest is left alone.
     src: a read connection to digiKam's database (dkdb.Conn) inside a snapshot. Returns {table: rows
     written}; the very first copy writes everything."""
-    from app.data import vdb  # lazy: data.vdb -> digikam.library would be an import cycle
+    from app.data import appdb  # lazy: data.appdb -> digikam.library would be an import cycle
     t0 = time.time()
     theirs = {}
     for name, (dk, cols, *_rest) in SPEC.items():
         theirs[name] = [tuple(r) for r in src.execute(f"SELECT {', '.join(c for c, _s, _m in cols)} FROM {dk}").fetchall()]
     source = dkdb.source_version()
     ours = current()
-    con = vdb.connect()
+    con = appdb.connect()
     written, photos = {}, len(theirs["photos"])
     try:
         if con.mysql:  # digiKam's MySQL root tag has id 0, which AUTO_INCREMENT would otherwise renumber
@@ -287,8 +287,8 @@ def ensure_base():
     if not d.get("taken") or int(d.get("local_changes") or 0) or d.get("base_source") == d.get("source"):
         return
     save_base(current())
-    from app.data import vdb  # lazy: data.vdb -> digikam.library would be an import cycle
-    with vdb.writer() as con:
+    from app.data import appdb  # lazy: data.appdb -> digikam.library would be an import cycle
+    with appdb.writer() as con:
         _set_info(con, {"base_source": d.get("source")})
 
 
@@ -335,8 +335,8 @@ def load_base() -> dict:
 
 def current() -> dict:
     """{table: rows} of the library tables as they are now."""
-    from app.data import vdb  # lazy: data.vdb -> digikam.library would be an import cycle
-    with vdb.reader() as con:
+    from app.data import appdb  # lazy: data.appdb -> digikam.library would be an import cycle
+    with appdb.reader() as con:
         out = {}
         for name, (dk, cols, *_rest) in SPEC.items():
             names = [c for c, _s, _m in cols]
@@ -346,8 +346,8 @@ def current() -> dict:
 
 def discard_local_changes():
     """Forget that changes were made here, so the next read of digiKam replaces the library with its data."""
-    from app.data import vdb  # lazy: data.vdb -> digikam.library would be an import cycle
-    with vdb.writer() as con:
+    from app.data import appdb  # lazy: data.appdb -> digikam.library would be an import cycle
+    with appdb.writer() as con:
         _set_info(con, {"local_changes": 0, "source": "-"})
 
 

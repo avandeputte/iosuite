@@ -86,7 +86,7 @@ def test_requests_through_the_proxy_are_signed_in(client, monkeypatch, account):
 
 def test_the_real_peer_survives_the_forwarded_rewrite():
     """iosuite-shared's Forwarded middleware (uvicorn runs with proxy_headers=False) takes the visitor's address from
-    X-Forwarded-For only for a connection from FORWARDED_ALLOW_IPS, and keeps the address the connection really
+    X-Forwarded-For only for a connection from a listed reverse proxy, and keeps the address the connection really
     came from, which proxy sign-in and the throttles trust."""
     import asyncio
     seen = {}
@@ -94,7 +94,7 @@ def test_the_real_peer_survives_the_forwarded_rewrite():
     async def inner(scope, receive, send):
         seen.update(client=scope["client"][0], peer=scope.get("iothing.peer"), scheme=scope["scheme"])
     headers = [(b"x-forwarded-for", b"203.0.113.9"), (b"x-forwarded-proto", b"https")]
-    mw = proxyauth.Forwarded(inner, allow="127.0.0.1")
+    mw = proxyauth.Forwarded(inner)  # this machine is always believed; other proxies are the ones listed in Settings
     asyncio.run(mw({"type": "http", "client": ("127.0.0.1", 5000), "headers": headers, "scheme": "http"}, None, None))
     assert seen == {"client": "203.0.113.9", "peer": "127.0.0.1", "scheme": "https"}, seen
     asyncio.run(mw({"type": "http", "client": ("10.9.9.9", 5000), "headers": headers, "scheme": "http"}, None, None))

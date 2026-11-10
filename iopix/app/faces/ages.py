@@ -20,7 +20,7 @@ import time
 
 from app import config, iocontacts, jobs, thumbs
 from app.ai import models
-from app.data import index, vdb
+from app.data import index, appdb
 
 try:
     import numpy as np
@@ -126,7 +126,7 @@ def _wanted(con) -> list:
 
 
 def _have() -> set:
-    with vdb.reader() as con:
+    with appdb.reader() as con:
         return {tuple(r) for r in con.execute("SELECT photo_id, x, y, w, h FROM pix_ai_face_ages")}
 
 
@@ -189,7 +189,7 @@ def _estimate_all(gen: int, todo: list):
                 continue
         if progress.cancelled(gen):
             return
-        db = vdb.connect()
+        db = appdb.connect()
         try:
             db.executemany("INSERT OR REPLACE INTO pix_ai_face_ages (photo_id, x, y, w, h, age) VALUES (?,?,?,?,?,?)",
                            [(pid, f[4], f[5], f[6], f[7], a) for f, a in zip(faces, ages)])
@@ -209,7 +209,7 @@ def start():
 
 def reset():
     progress.cancel()
-    with vdb.writer() as con:
+    with appdb.writer() as con:
         con.execute("DELETE FROM pix_ai_face_ages")
 
 
@@ -218,7 +218,7 @@ def reset():
 # --------------------------------------------------------------------------
 
 def births() -> dict:
-    with vdb.reader() as con:
+    with appdb.reader() as con:
         return {int(r[0]): int(r[1]) for r in con.execute("SELECT tag_id, birth_year FROM pix_person_births")}
 
 
@@ -228,7 +228,7 @@ def known_births() -> dict:
 
 
 def set_birth(tag: int, year):
-    with vdb.writer() as con:
+    with appdb.writer() as con:
         if year is None:
             con.execute("DELETE FROM pix_person_births WHERE tag_id = ?", (tag,))
         else:
@@ -244,7 +244,7 @@ _ages_cache = {"at": 0.0, "n": -1, "value": None}
 
 def _ages() -> dict:
     """Every stored age; kept for two minutes (the info panel asks per photo, and the table only grows while the job runs)."""
-    with vdb.reader() as con:
+    with appdb.reader() as con:
         n = con.execute("SELECT count(*) FROM pix_ai_face_ages").fetchone()[0]
         if _ages_cache["value"] is not None and _ages_cache["n"] == n and time.time() - _ages_cache["at"] < 120:
             return _ages_cache["value"]

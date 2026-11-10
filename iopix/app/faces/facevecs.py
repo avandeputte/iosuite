@@ -24,7 +24,7 @@ except ImportError:  # numpy comes with the search/objects extras; without it th
     np = None
 
 from app import config, jobs, thumbs
-from app.data import index, state, vdb
+from app.data import index, state, appdb
 from app.ai import models
 from app.digikam.dkdb import chunked
 from app.faces import facedetect
@@ -195,12 +195,12 @@ def _proto_faces():
 
 
 def _have_protos() -> dict:
-    with vdb.reader() as con:
+    with appdb.reader() as con:
         return {(r[1], r[2], r[3], r[4], r[5]): r[0] for r in con.execute("SELECT tag_id, photo_id, x, y, w, h FROM pix_ai_person_references")}
 
 
 def _have() -> set:
-    with vdb.reader() as con:
+    with appdb.reader() as con:
         return {tuple(r) for r in con.execute("SELECT photo_id, x, y, w, h FROM pix_ai_face_embeddings")}
 
 
@@ -245,7 +245,7 @@ def _embed_into(gen: int, todo: list, table: str, offset: int, kind: str, sess):
                 continue
             if progress.cancelled(gen):  # a switch or reset happened while this batch was computed: its vectors are not kept
                 return False
-            with vdb.writer() as con:
+            with appdb.writer() as con:
                 if tagged:
                     con.executemany("INSERT OR REPLACE INTO pix_ai_person_references (tag_id, photo_id, x, y, w, h, vec) VALUES (?,?,?,?,?,?,?)",
                                     [(*key, vecs[k].astype(np.float32).tobytes()) for k, key in enumerate(batch)])
@@ -272,7 +272,7 @@ def _same_model():
     if have == want:
         return
     if have != kind:  # the bare name is what versions before revisions wrote: those vectors came from the file installed then, adopted as is
-        with vdb.writer() as con:
+        with appdb.writer() as con:
             con.execute("DELETE FROM pix_ai_face_embeddings")
             con.execute("DELETE FROM pix_ai_person_references")
         log.info("faces: embeddings recomputed with %s", want)
@@ -304,7 +304,7 @@ def _job(gen: int):
         current_p = {(f[1], f[2], f[3], f[4], f[5]) for f in protos}
         stale_p = [k for k in have_p if k not in current_p]
         if stale or stale_p:
-            with vdb.writer() as con:
+            with appdb.writer() as con:
                 if stale:
                     con.executemany("DELETE FROM pix_ai_face_embeddings WHERE photo_id = ? AND x = ? AND y = ? AND w = ? AND h = ?", stale)
                 if stale_p:
@@ -315,14 +315,14 @@ def _job(gen: int):
 
 def reset():
     progress.cancel()
-    with vdb.writer() as con:
+    with appdb.writer() as con:
         con.execute("DELETE FROM pix_ai_face_embeddings")
         con.execute("DELETE FROM pix_ai_person_references")
 
 
 def _prototypes() -> tuple:
     """(matrix of prototype vectors, their tag ids, {tag: name}) for the suggestions; empty when none."""
-    with vdb.reader() as con:
+    with appdb.reader() as con:
         rows = [(r[0], np.frombuffer(r[1], dtype=np.float32)) for r in con.execute("SELECT tag_id, vec FROM pix_ai_person_references")]
     rows = [r for r in rows if len(r[1]) == DIMS.get(chosen(), 128)]  # never a stray vector of another model
     if not rows:
@@ -396,7 +396,7 @@ def groups(kind: str = "unknown", threshold: float = None, tag: int = None) -> d
     finally:
         con.close()
     faces = [dict(r) for r in rows]
-    vcon = vdb.connect()
+    vcon = appdb.connect()
     try:
         vecs = {(r[0], r[1], r[2], r[3], r[4]): np.frombuffer(r[5], dtype=np.float32) for r in vcon.execute("SELECT photo_id, x, y, w, h, vec FROM pix_ai_face_embeddings")}
     finally:

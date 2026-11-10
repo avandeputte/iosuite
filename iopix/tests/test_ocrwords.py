@@ -34,11 +34,11 @@ def test_words_of_the_library_and_the_corpus():
 def test_the_index_shows_the_cleaned_text(client, lib):
     if not ocrwords.dictionary():
         pytest.skip("pyspellchecker not installed here")
-    from app.data import index, vdb
+    from app.data import index, appdb
     con = index.open_index()
     pid = con.execute("SELECT id FROM photos WHERE video = 0 ORDER BY id LIMIT 1").fetchone()[0]
     con.close()
-    db = vdb.connect()
+    db = appdb.connect()
     try:
         before = db.execute("SELECT text FROM pix_ai_text WHERE photo_id = ?", (pid,)).fetchone()
         db.execute("INSERT OR REPLACE INTO pix_ai_text VALUES (?, ?)", (pid, "NIVHITY IOWA.\nscabeyes\nCITY"))

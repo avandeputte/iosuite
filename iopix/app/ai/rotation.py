@@ -20,7 +20,7 @@ import threading
 import time
 
 from app import config, jobs, thumbs
-from app.data import index, vdb
+from app.data import index, appdb
 from app.digikam.dkdb import in_chunks
 
 try:
@@ -174,7 +174,7 @@ def _unscreened(engine, con) -> tuple:
     if ids is None or not len(ids):
         return ids, vecs, {}, []
     stamps = {r[0]: r[1] for r in con.execute("SELECT id, hash || ':' || coalesce(size, 0) || ':' || coalesce(modified, '') FROM photos WHERE video = 0")}
-    with vdb.reader() as v:
+    with appdb.reader() as v:
         done = {r[0]: r[1] for r in v.execute("SELECT photo_id, stamp FROM pix_ai_scans WHERE job = 'rotation'")}
     return ids, vecs, stamps, [i for i, pid in enumerate(ids.tolist()) if pid in stamps and done.get(pid) != f"{stamps[pid]}:{engine.name}"]
 
@@ -228,7 +228,7 @@ def _work(gen: int):
         probs = predict(clf, vecs[todo_pos])
         cand = [(int(ids[i]), int(probs[j].argmax()), float(probs[j].max())) for j, i in enumerate(todo_pos) if probs[j].argmax() != 0 and probs[j].max() >= SCREEN_MIN]
         clean = [int(ids[i]) for j, i in enumerate(todo_pos) if not (probs[j].argmax() != 0 and probs[j].max() >= SCREEN_MIN)]
-        with vdb.writer() as v:
+        with appdb.writer() as v:
             v.executemany("DELETE FROM pix_ai_rotation WHERE photo_id = ?", [(p,) for p in clean])
             v.executemany("INSERT OR REPLACE INTO pix_ai_scans VALUES (?,'rotation',?,NULL)", [(p, f"{stamps[p]}:{key}") for p in clean])
         progress.update(running=True, phase="checking", done=0, total=len(cand))
@@ -245,7 +245,7 @@ def _work(gen: int):
                         found = (t, sure)
                 except Exception as e:
                     log.warning("rotation: could not check %s (%s)", pid, e)
-            with vdb.writer() as v:
+            with appdb.writer() as v:
                 v.execute("DELETE FROM pix_ai_rotation WHERE photo_id = ?", (pid,))
                 if found:
                     v.execute("INSERT INTO pix_ai_rotation (photo_id, turn, score, stamp) VALUES (?,?,?,?)", (pid, found[0], round(found[1], 4), stamps[pid]))
@@ -271,14 +271,14 @@ def reset():
         model_path(_engine().name).unlink(missing_ok=True)
     except Exception:
         pass
-    with vdb.writer() as con:
+    with appdb.writer() as con:
         con.execute("DELETE FROM pix_ai_rotation")
         con.execute("DELETE FROM pix_ai_scans WHERE job = 'rotation'")
 
 
 def coverage() -> tuple:
     try:
-        with vdb.reader() as con:
+        with appdb.reader() as con:
             done = con.execute("SELECT count(*) FROM pix_ai_scans WHERE job = 'rotation'").fetchone()[0]
         total = len(semantic.ids) if available() and semantic.ids is not None else 0
         return int(done), int(total)
@@ -293,7 +293,7 @@ def coverage() -> tuple:
 def dismiss(photos: list, on: bool = True) -> int:
     """These photos are fine as they are (on: false takes it back); a dismissal lasts until the file changes."""
     want = [int(p) for p in photos]
-    with vdb.writer() as con:
+    with appdb.writer() as con:
         if on:
             stamps = dict(in_chunks(con, "SELECT photo_id, stamp FROM pix_ai_rotation WHERE photo_id IN ({ids})", want))
             con.executemany("INSERT OR REPLACE INTO pix_quality_accepted (photo_id, check_name, signature, user_name, created_at) VALUES (?,'rotation',?,?,?)",
@@ -307,7 +307,7 @@ def findings(ids: list = None) -> dict:
     """{"items": [{id, turn, op, text, score}], "dismissed": n}: the photos read as turned, surest first, the dismissed
     ones left out (unless their file changed since)."""
     where = f" WHERE photo_id IN ({','.join(str(int(i)) for i in ids) or 'NULL'})" if ids is not None else ""
-    with vdb.reader() as con:
+    with appdb.reader() as con:
         rows = [tuple(r) for r in con.execute("SELECT photo_id, turn, score, stamp FROM pix_ai_rotation" + where)]
         acc = dict(con.execute("SELECT photo_id, signature FROM pix_quality_accepted WHERE check_name = 'rotation'" + where.replace(" WHERE", " AND")).fetchall())
     items, dismissed = [], 0

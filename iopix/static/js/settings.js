@@ -242,14 +242,14 @@ function settingsTabs(page, view) {
   page.querySelector('.stab-mark').before(bar);
   show(pick);
 }
-/** What every settings row is built from: the library data `m` (GET /api/maintenance), the page being drawn and the shared helpers
+/** What every settings row is built from: the library data `m` (GET /api/tools), the page being drawn and the shared helpers
  * (row and button builders, the library action runner `maint`, and the checkbox that saves one setting). */
 function settingsContext(m, view) {
   const again = () => { if (S.route.view === view) (view === 'tools' ? showTools() : settingsPage(view)); };
   const when = (t) => (t ? fmtWhen(t) : 'never');
   const maint = async (action, msg, confirmText) => {
     if (confirmText && !await confirmDialog(confirmText)) return;
-    await act(() => post('/api/maintenance', { action }), { toast: msg });
+    await act(() => post('/api/tools', { action }), { toast: msg });
     setTimeout(again, 1500);
   };
   const row = (label, detail, btn) => h('div', { class: 'srow' }, h('div', null, h('b', null, label), h('div', { class: 'muted note' }, detail)), btn);
@@ -406,7 +406,7 @@ export async function showTools() {
   let m;
   if (!main.querySelector('.tpage')) main.replaceChildren(h('div', { class: 'page spage tpage' }, loadingBox('Loading…')));
   if (!S.IS_ADMIN) { main.replaceChildren(h('div', { class: 'empty' }, 'Tools are for admins.')); return; }
-  try { m = await api('/api/maintenance'); } catch (e) { if (S.route.view === 'tools') main.replaceChildren(h('div', { class: 'empty' }, 'Could not load the tools: ' + e.message)); return; }
+  try { m = await api('/api/tools'); } catch (e) { if (S.route.view === 'tools') main.replaceChildren(h('div', { class: 'empty' }, 'Could not load the tools: ' + e.message)); return; }
   if (S.route.view !== 'tools') return;
   const c = settingsContext(m, 'tools');
   const { row, btn, maint, when, again } = c;
@@ -471,6 +471,13 @@ export async function showTools() {
 
 /** Settings › Server: iosuite-shared's panel, the same in every ioThing app, then the backups to download. */
 export const serverUi = () => import(new URL('api/server/ui.js', document.baseURI).href);
+/** A backup is made by a POST (it writes a large dump, so no link on another site may start one): a form, whose
+ * answer the browser saves as a download. */
+function backupButton(which, label) {
+  return h('form', { method: 'post', action: `/api/backup/${which}`, style: 'display:contents' },
+    h('button', { class: 'pillbtn', type: 'submit' }, icon('download'), h('span', null, label)));
+}
+
 function serverTab(c) {
   const { row } = c;
   const box = h('div');
@@ -478,13 +485,13 @@ function serverTab(c) {
   return [stab('server'), box,
     h('h2', null, 'Backups'),
     row('Download a backup', S.NO_DK ? `${S.APP_NAME}’s database and search index, as a zip.` : `digiKam’s database as it is now, and ${S.APP_NAME}’s database and search index as a zip.`,
-      h('div', { style: 'display:flex;gap:8px;flex-wrap:wrap' }, S.NO_DK ? null : h('a', { class: 'pillbtn', href: '/api/backup/digikam', download: '' }, icon('download'), h('span', null, 'digiKam database')),
-        h('a', { class: 'pillbtn', href: '/api/backup/app', download: '' }, icon('download'), h('span', null, `${S.APP_NAME} data (zip)`))))];
+      h('div', { style: 'display:flex;gap:8px;flex-wrap:wrap' }, S.NO_DK ? null : backupButton('digikam', 'digiKam database'),
+        backupButton('app', `${S.APP_NAME} data (zip)`)))];
 }
 async function settingsPage(view) {
   let m;
   if (!main.querySelector('.spage:not(.tpage)')) main.replaceChildren(h('div', { class: 'page spage' }, loadingBox('Loading the settings…')));
-  try { m = await api('/api/maintenance'); } catch (e) { if (S.route.view === view) main.replaceChildren(h('div', { class: 'empty' }, 'Could not load settings: ' + e.message)); return; }
+  try { m = await api('/api/tools'); } catch (e) { if (S.route.view === view) main.replaceChildren(h('div', { class: 'empty' }, 'Could not load settings: ' + e.message)); return; }
   if (S.route.view !== view) return;
   const c = settingsContext(m, view);
   const { row, btn } = c;
@@ -511,13 +518,13 @@ export function viewerDbPanel({ setup = false } = {}) {
   const body = h('div', { class: 'muted note' }, 'Loading…');
   const btn = (label, fn, primary) => h('button', { class: 'pillbtn' + (primary ? ' on' : ''), onclick: fn }, label);
   (async () => {
-    let d; try { d = await api('/api/viewerdb'); } catch (e) { fill(body, e.message); return; }
+    let d; try { d = await api('/api/database'); } catch (e) { fill(body, e.message); return; }
     if (d.locked) {  // configured but not answering, and nobody signed in: only Retry (the connection is changed in the DB_* settings of config.env)
       const result = h('div', { class: 'muted', style: 'font-size:12.5px;margin-top:6px' });
       fill(body, h('div', null, `${S.APP_NAME}’s database is configured but not answering: `, h('span', { class: 'warn' }, d.error || ''),
         h('div', { class: 'muted note mt6' }, 'Start the database server (or wait for it) and retry. To use another server, change the DB_* settings in config.env and restart.')),
         h('div', { class: 'btnrow', style: 'margin-top:8px' },
-          btn('Retry the configured database', async () => { fill(result, 'Trying…'); try { await post('/api/viewerdb/retry', {}); fill(result, 'It answers now. Restarting…'); setTimeout(() => location.reload(), 4000); } catch (e) { fill(result, e.message); } }, true)), result);
+          btn('Retry the configured database', async () => { fill(result, 'Trying…'); try { await post('/api/database/retry', {}); fill(result, 'It answers now. Restarting…'); setTimeout(() => location.reload(), 4000); } catch (e) { fill(result, e.message); } }, true)), result);
       return;
     }
     const inp = (k, ph, type = 'text', w = 160) => h('input', { class: 'einput', type, placeholder: ph, value: type === 'password' ? '' : (d[k] ?? ''), autocomplete: 'off', style: `margin:0;width:${w}px`, onkeydown: (e) => e.stopPropagation() });
@@ -539,13 +546,13 @@ export function viewerDbPanel({ setup = false } = {}) {
     fill(body, h('div', null, current, d.error && d.configured ? h('span', { class: 'warn' }, ` · not answering: ${d.error}`) : null),
       fixed, fields, opts,
       h('div', { class: 'btnrow', style: 'margin-top:8px' },
-        btn('Test connection', async () => { fill(result, 'Testing…'); try { const r = await post('/api/viewerdb/test', payload()); const t = Object.entries(r.tables); fill(result, `OK: ${r.version}. ${t.length ? `${S.APP_NAME} tables already there: ` + t.map(([k, n]) => `${k} ${nf.format(n)}`).join(', ') : 'An empty database.'}`); } catch (e) { fill(result, e.message); } }),
-        d.configured && d.error ? btn('Retry the configured database', async () => { fill(result, 'Trying…'); try { await post('/api/viewerdb/retry', {}); restartThen('It answers now.'); } catch (e) { fill(result, e.message); } }) : null,
+        btn('Test connection', async () => { fill(result, 'Testing…'); try { const r = await post('/api/database/test', payload()); const t = Object.entries(r.tables); fill(result, `OK: ${r.version}. ${t.length ? `${S.APP_NAME} tables already there: ` + t.map(([k, n]) => `${k} ${nf.format(n)}`).join(', ') : 'An empty database.'}`); } catch (e) { fill(result, e.message); } }),
+        d.configured && d.error ? btn('Retry the configured database', async () => { fill(result, 'Trying…'); try { await post('/api/database/retry', {}); restartThen('It answers now.'); } catch (e) { fill(result, e.message); } }) : null,
         fixed ? null : btn(d.configured ? 'Switch' : 'Use this database', async () => {
           const p = payload();
           if (!await confirmDialog(`${d.configured ? 'Switch' : 'Set up'} ${S.APP_NAME} on MySQL ${p.user}@${p.host}:${p.port}/${p.database}?` + (copyLabel && copy.checked ? `\n\nEvery row is copied there first${drop.checked ? ', after dropping and recreating the tables there' : ''}.` : drop.checked ? '\n\nThe tables there are dropped and created again.' : '') + `\n\n${S.APP_NAME} restarts on the new database.`, { ok: d.configured ? 'Switch' : 'Use it' })) return;
           fill(result, 'Copying… this can take a minute on a large library.');
-          try { const r = await post('/api/viewerdb/switch', { ...p, copy: !!copyLabel && copy.checked, drop: drop.checked }); restartThen(`Set up on ${r.database}: ` + Object.entries(r.copied).map(([k, n]) => `${k} ${nf.format(n)}`).join(', ') + '.'); } catch (e) { fill(result, e.message); }
+          try { const r = await post('/api/database/switch', { ...p, copy: !!copyLabel && copy.checked, drop: drop.checked }); restartThen(`Set up on ${r.database}: ` + Object.entries(r.copied).map(([k, n]) => `${k} ${nf.format(n)}`).join(', ') + '.'); } catch (e) { fill(result, e.message); }
         }, true)), result);
   })();
   return body;

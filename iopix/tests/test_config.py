@@ -52,5 +52,5 @@ def test_a_setting_from_the_environment_is_told_apart(tmp_path, monkeypatch):
 
 def test_no_settings_file_beside_config_env():
     """The database connection lives in config.env (DB_*), not in a file of its own under data/."""
-    for f in ("app/data/vdb.py", "setup.sh", "README.md", "static/js/settings.js", "app/main.py", "proxmox/ct/iopix.sh"):
+    for f in ("app/data/appdb.py", "setup.sh", "README.md", "static/js/settings.js", "app/main.py", "proxmox/ct/iopix.sh"):
         assert "viewer-db.json" not in (ROOT / f).read_text(), f

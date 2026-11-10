@@ -231,7 +231,7 @@ def check_for_update() -> dict:
 
 
 @server.tool(annotations=UPDATES)  # openWorld: it reaches GitHub
-def update_viewer() -> dict:
+def update_server() -> dict:
     """Update the viewer to the latest commit of its branch on GitHub and restart it (update.sh: code, packages,
     service; settings and data are kept). Admins only. Nothing happens when that commit is already installed.
     The connection drops when the viewer restarts; call check_for_update afterwards: lastUpdate carries the

@@ -477,7 +477,7 @@ def api_import_discard(token: str):
     return {"ok": True}
 
 
-@router.post("/share")
+@router.post("/share", dependencies=[access.public])  # the route itself sends whoever may not import to a page that says so
 async def share_target(request: Request):
     """The installed app as a share target (Android): files shared to it are staged, then the Import page opens."""
     if not users.can_write(request.state.user):  # the share sheet cannot show a JSON error: the page explains

@@ -27,7 +27,7 @@ import threading
 import time
 
 from app.ai import analysis, models
-from app.data import index, vdb
+from app.data import index, appdb
 from app import jobs, thumbs
 from app.digikam.dkdb import chunked, in_chunks
 
@@ -272,16 +272,16 @@ def _existing(ids: list) -> dict:
 
 
 def _scanned() -> dict:
-    with vdb.reader() as con:
+    with appdb.reader() as con:
         return dict(con.execute("SELECT photo_id, stamp FROM pix_ai_scans WHERE job = 'facedetect'").fetchall())
 
 
 def coverage() -> int:
     """How many photos the detector has looked at (Settings › AI); 0 without a viewer database."""
-    if not vdb.ready():
+    if not appdb.ready():
         return 0
     try:
-        with vdb.reader() as con:
+        with appdb.reader() as con:
             return con.execute("SELECT count(*) FROM pix_ai_scans WHERE job = 'facedetect'").fetchone()[0]
     except Exception:
         return 0
@@ -290,7 +290,7 @@ def coverage() -> int:
 def reset():
     """Forget which photos were looked at, so the next library run looks at all of them again."""
     progress.cancel()
-    with vdb.writer() as con:
+    with appdb.writer() as con:
         con.execute("DELETE FROM pix_ai_scans WHERE job = 'facedetect'")
 
 
@@ -313,7 +313,7 @@ def _write(found: dict) -> int:
 def _record(rows: list):
     if not rows:
         return
-    with vdb.writer() as con:
+    with appdb.writer() as con:
         con.executemany("INSERT OR REPLACE INTO pix_ai_scans (photo_id, job, stamp, detail) VALUES (?,'facedetect',?,?)",
                         [(r[0], r[1], json.dumps({"found": r[2], "added": r[3], "checked": r[4]})) for r in rows])
 

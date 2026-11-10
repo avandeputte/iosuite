@@ -22,7 +22,7 @@ from app.digikam.dbsync import SyncError
 from app.http import MAX_IDS
 from app.mcp.base import READ_ONLY, WRITES, clamp_limit, db, need_admin, resolve_album, server
 from app.routes.editing import current_dates
-from app.routes.maintenance import start_analysis
+from app.routes.tools import start_analysis
 
 # a job that starts a background run but changes nothing by itself
 STARTS_JOB = ToolAnnotations(readOnlyHint=True, openWorldHint=False)

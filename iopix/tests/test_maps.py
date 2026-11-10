@@ -22,7 +22,7 @@ def test_google_needs_a_key_and_never_shows_it(client):
     assert client.post("/api/settings", json={"map_provider": "google"}).status_code == 200
     assert maps.provider() == "osm", "without a key the provider stays OSM"
     client.post("/api/settings", json={"google_maps_key": "AIza-secret"})
-    s = client.get("/api/settings").json() if client.get("/api/settings").status_code == 200 else client.get("/api/maintenance").json()
+    s = client.get("/api/settings").json() if client.get("/api/settings").status_code == 200 else client.get("/api/tools").json()
     assert "AIza-secret" not in str(s) and (s.get("google_maps_key_set") or s.get("googleMapsKeySet"))
     assert client.post("/api/settings", json={"map_provider": "nope"}).status_code == 400
     _reset()

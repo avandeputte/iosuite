@@ -340,10 +340,10 @@ if [ -n "${DB_HOST:-}" ]; then
   echo "iopix's own database on MySQL/MariaDB: testing, creating it if needed"
   "$VPY" - <<'PYEOF' && VDB_OK=1 || echo "  could not use that MySQL/MariaDB database for iopix (see above); run setup.sh again, or fix it later on the viewer's set-up page"
 import sys
-from app.data import vdb
-c = vdb.settings()  # DB_* from config.env (exported above; the password is not in the process list)
+from app.data import appdb
+c = appdb.settings()  # DB_* from config.env (exported above; the password is not in the process list)
 try:
-    vdb.test_connection(c)
+    appdb.test_connection(c)
 except Exception as e:
     if "1049" not in str(e) and "Unknown database" not in str(e):
         raise SystemExit(f"  {e}")
@@ -356,7 +356,7 @@ except Exception as e:
     finally:
         con.close()
     print(f"  created the database {c['database']}")
-r = vdb.test_connection(c)
+r = appdb.test_connection(c)
 print(f"  OK: {r['version']}; iopix keeps its data in {c['database']} on {c['host']}:{c['port']} ({len(r['tables'])} of its tables already there)")
 PYEOF
 else

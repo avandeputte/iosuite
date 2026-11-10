@@ -485,7 +485,7 @@ def api_duplicates(request: Request):
 
 
 
-@router.get("/manifest.webmanifest")
+@router.get("/manifest.webmanifest", dependencies=[access.public])
 def api_manifest():
     """The PWA manifest, with the configured name (the file in static/ is the template)."""
     data = json.loads((config.STATIC_DIR / "manifest.webmanifest").read_text())

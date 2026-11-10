@@ -50,6 +50,7 @@ def test_hf_local_revision_and_missing(hf_cache):
 
 def test_hf_check_current_vs_update(hf_cache, monkeypatch):
     repo = models.REGISTRY["blip"]["repos"][0]
+    monkeypatch.setattr(models, "REVISIONS", {})  # a repository that is not pinned: its main branch is asked
     monkeypatch.setattr(models, "_get", _fake_get({repo: (json.dumps({"sha": "0123456789abcdef", "lastModified": "2025-01-01T00:00:00Z"}).encode(), {})}))
     assert models.check("blip")["status"] == "current"
     monkeypatch.setattr(models, "_get", _fake_get({repo: (json.dumps({"sha": "ffffffffffffffff"}).encode(), {})}))
@@ -57,7 +58,45 @@ def test_hf_check_current_vs_update(hf_cache, monkeypatch):
     assert out["status"] == "update" and out["remote"] == "fffffff"
 
 
+def test_a_pinned_repository_is_downloaded_at_its_commit(hf_cache, monkeypatch):
+    """The download asks for the pinned commit, the check compares with it without asking the hub, and a copy from
+    before the pin keeps working and shows as an update."""
+    repo = models.REGISTRY["blip"]["repos"][0]
+    pin = "a" * 40
+    assert all(len(v) == 40 and set(v) <= set("0123456789abcdef") for v in models.REVISIONS.values()), "a pin is a full commit id"
+    assert set(models.REVISIONS) <= {r for m in models.REGISTRY.values() for r in m.get("repos", [])}
+    monkeypatch.setattr(models, "REVISIONS", {repo: pin})
+    monkeypatch.setattr(models, "_get", _fake_get({}))  # the hub is not asked
+    assert models.pinned(repo) == pin and models.pinned("someone/else") is None
+    out = models.check("blip")  # on disk: the main branch of an earlier download
+    assert out["status"] == "update" and out["remote"] == "aaaaaaa" and models.hf_local(repo)[0] == "0123456789abcdef"
+    snap = hf_cache / f"models--{repo.replace('/', '--')}" / "snapshots" / pin
+    snap.mkdir()
+    (snap / "config.json").write_text("{}")
+    assert models.hf_local(repo)[0] == pin and models.check("blip")["status"] == "current" and models.local("blip")["revision"] == "aaaaaaa"
+    asked = []
+
+    class Fake:
+        @staticmethod
+        def from_pretrained(name, **kw):
+            asked.append((name, kw.get("revision")))
+    import sys
+    import types
+    monkeypatch.setitem(sys.modules, "transformers", types.SimpleNamespace(BlipProcessor=Fake, BlipForConditionalGeneration=Fake))
+    monkeypatch.setattr(models, "chosen", lambda choice: "blip")
+    models._download_here("blip")
+    assert asked == [(repo, pin), (repo, pin)]
+    from app.ai import florence
+    got = {}
+    monkeypatch.setitem(sys.modules, "huggingface_hub", types.SimpleNamespace(snapshot_download=lambda repo, **kw: got.update(repo=repo, **kw)))
+    frepo = models.REGISTRY["florence2"]["repos"][0]
+    monkeypatch.setattr(models, "REVISIONS", {frepo: "b" * 40})
+    florence.download()
+    assert got["repo"] == frepo and got["revision"] == "b" * 40
+
+
 def test_check_reports_errors_instead_of_raising(hf_cache, monkeypatch):
+    monkeypatch.setattr(models, "REVISIONS", {})
     monkeypatch.setattr(models, "_get", _fake_get({}))
     out = models.check("blip")
     assert out["status"] == "error" and "offline" in out["error"]

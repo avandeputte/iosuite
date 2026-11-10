@@ -16,6 +16,7 @@ An unknown date keeps the photo's date as it is (where digiKam sorts it), only m
 import re
 from app.digikam import dkdb
 from app.data import index
+from iosuite_shared.errors import Invalid
 
 ROOT = "Date approximate"
 TAGS = {"month": ROOT + "/Month and year", "year": ROOT + "/Year only", "unknown": ROOT + "/Unknown"}
@@ -77,7 +78,7 @@ def prepare(photos: list, precision: str, known: str, ch: dict, per_photo: dict,
         if t:
             per_photo[p["id"]] = {"taken": t}
         elif precision in ("year", "month"):
-            raise ValueError("Give the year: the photo has no date to take it from")
+            raise Invalid("Give the year: the photo has no date to take it from")
 
 
 def ensure_tags(precision: str):

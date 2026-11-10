@@ -14,7 +14,7 @@ from app import access, config, events, jobs as bgjobs, users
 from app.digikam import dkdb, library
 from app.faces import facevecs
 from app.photos import edits, scanner
-from app.data import index, state as appstate, vdb
+from app.data import index, state as appstate, appdb
 from app.geo import geocode, maps
 from app.ai.semantic import ready as semantic_ready, ENGINES, semantic
 from app.http import json_body
@@ -249,39 +249,39 @@ async def api_db_test(request: Request):
         raise HTTPException(400, f"Connection failed: {str(e)[:200]}")
 
 
-@router.get("/api/viewerdb", dependencies=[access.admin])
-def api_viewerdb():
+@router.get("/api/database", dependencies=[access.admin])
+def api_database():
     """Where the viewer keeps its own data (MariaDB/MySQL): the settings without the password, and the current error."""
-    return vdb.public_settings()
+    return appdb.public_settings()
 
 
-@router.post("/api/viewerdb/retry", dependencies=[access.admin])
-async def api_viewerdb_retry():
+@router.post("/api/database/retry", dependencies=[access.admin])
+async def api_database_retry():
     """Try the configured database again (it was unreachable at start); the viewer restarts when it answers now."""
-    if not await run_in_threadpool(vdb.retry):
-        raise HTTPException(400, f"Still unavailable: {vdb.error}")
+    if not await run_in_threadpool(appdb.retry):
+        raise HTTPException(400, f"Still unavailable: {appdb.error}")
     threading.Timer(1.0, lambda: os._exit(0)).start()
     return {"ok": True, "restarting": True}
 
 
-@router.post("/api/viewerdb/test", dependencies=[access.admin])
-async def api_viewerdb_test(request: Request):
+@router.post("/api/database/test", dependencies=[access.admin])
+async def api_database_test(request: Request):
     """Try the given viewer-database settings without saving (admin); an empty password keeps the stored one."""
     d = await json_body(request)
     try:
-        return await run_in_threadpool(vdb.test_connection, d)
+        return await run_in_threadpool(appdb.test_connection, d)
     except Exception as e:
         raise HTTPException(400, f"Connection failed: {str(e)[:200]}")
 
 
-@router.post("/api/viewerdb/switch", dependencies=[access.admin])
-async def api_viewerdb_switch(request: Request):
+@router.post("/api/database/switch", dependencies=[access.admin])
+async def api_database_switch(request: Request):
     """Body: the settings plus copy (default true: carry every row over from the current database) and drop (default
     true: drop and recreate the viewer's tables at the target first).
     Saves the configuration and restarts the viewer."""
     d = await json_body(request)
     try:
-        res = await run_in_threadpool(vdb.switch, d, bool(d.get("copy", True)), bool(d.get("drop", True)))
+        res = await run_in_threadpool(appdb.switch, d, bool(d.get("copy", True)), bool(d.get("drop", True)))
     except ValueError as e:
         raise HTTPException(400, str(e))
     except Exception as e:

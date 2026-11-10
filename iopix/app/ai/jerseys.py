@@ -21,7 +21,7 @@ from concurrent.futures import ThreadPoolExecutor
 from app import jobs, thumbs
 from app.ai import analysis, detector  # analysis as a module, not its names: it is still loading when the index imports this (a cycle)
 from app.ai.scanjob import ScanJob
-from app.data import index, vdb
+from app.data import index, appdb
 from app.digikam.dkdb import chunked, in_chunks
 
 log = logging.getLogger(__name__)
@@ -158,7 +158,7 @@ def _work(gen: int, todo: list):
             ready = [r for r in pool.map(work, chunk) if r]
             if progress.cancelled(gen):
                 return
-            with vdb.writer() as con:
+            with appdb.writer() as con:
                 con.executemany("DELETE FROM pix_ai_jerseys WHERE photo_id = ?", [(p["id"],) for p, _ in ready])
                 con.executemany("INSERT OR REPLACE INTO pix_ai_jerseys (photo_id, px, py, pw, ph, number, score, hue, sat, val) VALUES (?,?,?,?,?,?,?,?,?,?)",
                                 [(p["id"], detector.thousandths(b[0]), detector.thousandths(b[1]), detector.thousandths(b[2]), detector.thousandths(b[3]), num, sc, *col) for p, found in ready for b, num, sc, col in found])
@@ -175,7 +175,7 @@ def results(ids=None) -> dict:
     out = defaultdict(list)
     only = "" if ids is None else f" WHERE photo_id IN ({','.join(str(int(i)) for i in ids) or 'NULL'})"
     try:
-        with vdb.reader() as con:
+        with appdb.reader() as con:
             for pid, num in con.execute(f"SELECT photo_id, number FROM pix_ai_jerseys{only} ORDER BY photo_id, score DESC"):
                 if num not in out[pid]:
                     out[pid].append(num)
@@ -245,7 +245,7 @@ def suggestions(ids: list = None) -> dict:
     """{"items": [{id, number, tag, name, basis: folder|year, n, box: {x, y, w, h}}], "players": [{tag, name, numbers}]}:
     photos where a number is read on someone whose face is not named, and that number names a player in the same folder
     (else the same year) who is not yet tagged on the photo. Computed on request; nothing is written."""
-    with vdb.reader() as vcon:
+    with appdb.reader() as vcon:
         rows = [tuple(r) for r in vcon.execute("SELECT photo_id, px, py, pw, ph, number, score, hue, sat, val FROM pix_ai_jerseys")]
     con = index.open_index()
     try:
@@ -299,7 +299,7 @@ def suggestions(ids: list = None) -> dict:
 def for_photo(photo_id: int) -> list:
     """[{number, score, box}] read in one photo, for the info panel."""
     try:
-        with vdb.reader() as con:
+        with appdb.reader() as con:
             return [{"number": r[4], "score": r[5], "box": {"x": r[0] / 1000, "y": r[1] / 1000, "w": r[2] / 1000, "h": r[3] / 1000}}
                     for r in con.execute("SELECT px, py, pw, ph, number, score FROM pix_ai_jerseys WHERE photo_id = ? ORDER BY score DESC", (photo_id,))]
     except Exception:

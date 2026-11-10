@@ -60,7 +60,8 @@ def download():
     """Runs in models.py's download process (the hub reachable): only the files the pipeline uses."""
     from huggingface_hub import snapshot_download
     models.MODEL_DIR.mkdir(parents=True, exist_ok=True)
-    snapshot_download(models.REGISTRY[KEY]["repos"][0], cache_dir=str(models.MODEL_DIR), allow_patterns=FILES)
+    repo = models.REGISTRY[KEY]["repos"][0]
+    snapshot_download(repo, revision=models.pinned(repo), cache_dir=str(models.MODEL_DIR), allow_patterns=FILES)
 
 
 def reset():

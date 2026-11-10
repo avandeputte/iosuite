@@ -3,7 +3,7 @@ digiKam's database, in the background, one worker, in order.
 
 The web app asks for a face change to show at once (facemgr.apply_many background=True), so the
 database write returns and the sidecar follows from here. The queue is also kept in the viewer
-database (vdb's pix_face_sidecar_queue table): a restart in between must not leave regions in digiKam's
+database (appdb's pix_face_sidecar_queue table): a restart in between must not leave regions in digiKam's
 rows but not in the sidecars, so resume_queue() picks it up at start. A sidecar that could not be
 written is tried a few more times, a minute apart, then logged and left (the next change to that
 photo rewrites it anyway). A reread of the file (metaedit) first flushes the photo's pending
@@ -13,7 +13,7 @@ import logging
 import threading
 import time
 
-from app.data import vdb
+from app.data import appdb
 
 log = logging.getLogger("app.faces.sidecar_queue")
 
@@ -81,7 +81,7 @@ def _unqueue(images: list):
     if not images:
         return
     try:
-        with vdb.writer() as con:
+        with appdb.writer() as con:
             con.executemany("DELETE FROM pix_face_sidecar_queue WHERE photo_id = ?", [(int(i),) for i in images])
     except Exception as e:
         log.debug("face sidecar queue: %s", e)
@@ -90,7 +90,7 @@ def _unqueue(images: list):
 def resume_queue():
     """At start: the sidecar rewrites a restart interrupted (the queue is kept in the viewer database) go on."""
     try:
-        with vdb.reader() as con:
+        with appdb.reader() as con:
             images = [r[0] for r in con.execute("SELECT photo_id FROM pix_face_sidecar_queue")]
     except Exception as e:
         log.debug("face sidecar queue: %s", e)
@@ -106,7 +106,7 @@ def queue_sidecars(images: list, db_path=None, remember: bool = True):
     the sidecars."""
     if remember and images:
         try:
-            with vdb.writer() as con:
+            with appdb.writer() as con:
                 con.executemany("INSERT OR REPLACE INTO pix_face_sidecar_queue (photo_id, created_at) VALUES (?,?)", [(int(i), int(time.time())) for i in images])
         except Exception as e:
             log.debug("face sidecar queue: %s", e)

@@ -19,7 +19,7 @@ from app import config, events, jobs, thumbs
 from app.digikam import dbsync, dkdb
 from app.photos import edits
 from app.faces import ages, facevecs
-from app.data import index, state as appstate, vdb
+from app.data import index, state as appstate, appdb
 from app.ai.semantic import enabled as semantic_enabled, semantic
 from app.data.query import build_where
 
@@ -28,7 +28,7 @@ CACHES: list = []  # lru caches cleared when the index changes (the browsing rou
 THUMB_COLS = "id, path, video, duration, w, h, hash, size, modified"
 # what a failed write to digiKam's database (SQLite or MySQL) or to the file system raises; the
 # writers roll back on any of these, so the route can report the failure as such
-DB_ERRORS = (*vdb.Error, OSError)
+DB_ERRORS = (*appdb.Error, OSError)
 
 # version: the index build the API answers from; source: digiKam's database as of
 # that build (background jobs restart only when this changes)

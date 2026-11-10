@@ -116,7 +116,7 @@ def page(browser, server):
     assert not errors, "uncaught JS errors: " + "; ".join(errors)[:500]
 
 
-UI_DB: dict = {}  # the browser tests' server's own viewer database (vdb-style settings), filled by the server fixture
+UI_DB: dict = {}  # the browser tests' server's own viewer database (appdb-style settings), filled by the server fixture
 
 
 def ui_db():

@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from app.ai import analysis, looks, models, moments
-from app.data import index, query, vdb
+from app.data import index, query, appdb
 
 MODELS = Path("/private/tmp/claude-501/-Users-alex-Pictures/cd6ab508-dd1f-4df1-999c-d6fe0a83fe5c/scratchpad/models")
 np = pytest.importorskip("numpy")
@@ -103,7 +103,7 @@ def test_a_model_installed_later_fills_in_only_its_part(client, lib, monkeypatch
         monkeypatch.setattr(looks, "aesthetic_available", lambda: False)
         monkeypatch.setattr(looks, "eyes_available", lambda: False)
         analysis._looks_job(photos, analysis.progress["looks"].gen)
-        db = vdb.connect()
+        db = appdb.connect()
         first = {r[0]: r[1:] for r in db.execute("SELECT photo_id, aesthetic, focus FROM pix_ai_looks")}
         db.close()
         assert set(first) == {p["id"] for p in photos} and all(a is None and f is not None for a, f in first.values())
@@ -118,7 +118,7 @@ def test_a_model_installed_later_fills_in_only_its_part(client, lib, monkeypatch
         assert len(analysis._looks_todo(photos, analysis._looks_parts())) == len(photos)
         monkeypatch.setattr(looks, "focus", lambda im: pytest.fail("focus measured again"))
         analysis._looks_job(photos, analysis.progress["looks"].gen)
-        db = vdb.connect()
+        db = appdb.connect()
         second = {r[0]: r[1:] for r in db.execute("SELECT photo_id, aesthetic, focus, eyes_checked, eyes_closed FROM pix_ai_looks")}
         db.close()
         for pid, (a, f, judged, closed) in second.items():
@@ -133,7 +133,7 @@ def test_the_api_shows_quality_and_filters_likely_rejects(client, lib):
     con = index.open_index()
     a, b = [r[0] for r in con.execute("SELECT id FROM photos WHERE video = 0 ORDER BY id LIMIT 2")]
     con.close()
-    db = vdb.connect()
+    db = appdb.connect()
     try:
         db.executemany("INSERT OR REPLACE INTO pix_ai_looks VALUES (?,?,?,?,?)", [(a, 6.2, 900.0, 2, 2), (b, 4.1, 300.0, 2, 0)])
         db.commit()

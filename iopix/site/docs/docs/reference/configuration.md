@@ -39,7 +39,6 @@ iopix's own data lives on a MariaDB or MySQL server (see [iopix's own database](
 | `ADMIN_USER` / `ADMIN_PASSWORD` | unset | create the admin at start when no account exists |
 | `PUBLIC_URL` | unset | the address people reach iopix at (e.g. `https://photo.example.com`), shown on the ioThing suite's start page and in the other apps; unset, the best address iopix has been reached at is used |
 | `HOST` / `PORT` | `0.0.0.0` / `8600` | where the server listens (every app of the suite has its own port) |
-| `FORWARDED_ALLOW_IPS` | `*` | the addresses allowed to pass on the visitor's address (your reverse proxy's) |
 | `TLS_CERT_FILE` / `TLS_KEY_FILE` | unset | HTTPS served directly instead of behind a reverse proxy |
 | `LOG_FILE` | `DATA_DIR/iopix.log` | the server's rotating log (empty: none) |
 | `EDITING` | `1` | `0` removes the editing controls |

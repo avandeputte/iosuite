@@ -8,7 +8,7 @@ import time
 import numpy as np
 
 from app.ai import concepts, neardups, semantic
-from app.data import state, vdb
+from app.data import state, appdb
 from app.faces import facevecs
 
 
@@ -215,7 +215,7 @@ def test_near_duplicate_pairs_in_blocks_match_the_full_comparison(monkeypatch):
     try:
         neardups._job(gen, "loose")
         assert neardups.progress["error"] is None
-        con = vdb.connect()
+        con = appdb.connect()
         try:
             pairs = {(a, b): s for a, b, s in con.execute("SELECT photo_id, similar_photo_id, score FROM pix_ai_similar_photos")}
         finally:
@@ -236,7 +236,7 @@ def test_near_duplicate_pairs_in_blocks_match_the_full_comparison(monkeypatch):
         assert all(abs(pairs[k] - expect[k]) < 1e-6 for k in expect)
         assert state.get_setting("near_dups_gen") == "stub:7:loose" and state.get_setting("near_dups_level") == "loose"
     finally:
-        con = vdb.connect()
+        con = appdb.connect()
         try:
             con.execute("DELETE FROM pix_ai_similar_photos")
             con.commit()
@@ -282,14 +282,14 @@ def test_face_vectors_are_dropped_when_the_model_revision_changes(monkeypatch):
     monkeypatch.setattr(facevecs.models, "installed_revision", lambda key: revs["r"])
 
     def count():
-        con = vdb.connect()
+        con = appdb.connect()
         try:
             return con.execute("SELECT count(*) FROM pix_ai_face_embeddings").fetchone()[0]
         finally:
             con.close()
 
     def seed():
-        con = vdb.connect()
+        con = appdb.connect()
         try:
             con.execute("INSERT OR REPLACE INTO pix_ai_face_embeddings (photo_id, x, y, w, h, vec) VALUES (1, 0, 0, 10, 10, ?)", (np.zeros(128, np.float32).tobytes(),))
             con.commit()
@@ -307,7 +307,7 @@ def test_face_vectors_are_dropped_when_the_model_revision_changes(monkeypatch):
         facevecs._same_model()
         assert count() == 1, "nothing changed: nothing dropped"
     finally:
-        con = vdb.connect()
+        con = appdb.connect()
         try:
             con.execute("DELETE FROM pix_ai_face_embeddings")
             con.commit()

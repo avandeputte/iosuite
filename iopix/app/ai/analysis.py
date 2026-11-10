@@ -1,4 +1,4 @@
-"""Background image analysis, stored in the viewer's own database (vdb.py).
+"""Background image analysis, stored in the viewer's own database (appdb.py).
 
   quality   sharpness and exposure, measured on a ~1000 px decode of each photo
   vision    text in the picture (OCR) and face quality. Portable engine: RapidOCR
@@ -31,7 +31,7 @@ from urllib.parse import quote
 
 from app import config, jobs, thumbs
 from app.digikam.dkdb import chunked, in_chunks
-from app.data import vdb
+from app.data import appdb
 from app.ai import caption, detector as det, looks
 
 try:
@@ -47,19 +47,19 @@ _ocr = None  # the OCR engine once loaded, False when none could be loaded
 on_progress = None  # set by the web app: called now and then so the index picks up new results
 
 
-READ_TIMEOUT = 30  # a read here may wait behind a job's long write transaction: longer than vdb.reader's default
+READ_TIMEOUT = 30  # a read here may wait behind a job's long write transaction: longer than appdb.reader's default
 
 
 def init():
-    pass  # the analysis tables are part of the schema vdb.ensure_schema keeps (state.init)
+    pass  # the analysis tables are part of the schema appdb.ensure_schema keeps (state.init)
 
 
 def _counts() -> dict:
     """{job: photos analysed so far}, or None when the database is missing or unreadable."""
-    if not vdb.ready():
+    if not appdb.ready():
         return None
     try:
-        with vdb.reader(READ_TIMEOUT) as con:
+        with appdb.reader(READ_TIMEOUT) as con:
             have = dict(con.execute("SELECT job, count(*) FROM pix_ai_scans GROUP BY job").fetchall())
         return {key: int(have.get(key, 0)) for key in JOBS}
     except Exception:
@@ -117,7 +117,7 @@ def stamp(p: dict) -> str:
 def _todo(job: str, photos: list, con=None) -> list:
     """The still photos this job has not looked at, or looked at in an older version of the file (pix_ai_scans)."""
     if con is None:
-        with vdb.reader(READ_TIMEOUT) as con:
+        with appdb.reader(READ_TIMEOUT) as con:
             return _todo(job, photos, con)
     have = dict(con.execute("SELECT photo_id, stamp FROM pix_ai_scans WHERE job = ?", (job,)).fetchall())
     return [p for p in photos if not p["video"] and have.get(p["id"]) != stamp(p)]
@@ -185,7 +185,7 @@ def _analyse_one(p: dict, want_quality: bool, detector):
 def _pixel_job(photos: list, gens: dict):
     """One decode serves two analyses, so this job reports as both "quality" and "objects" and stops when either is cancelled.
     What is still to do is worked out here, in the web app; the work itself runs in the job process."""
-    with vdb.reader(READ_TIMEOUT) as con:
+    with appdb.reader(READ_TIMEOUT) as con:
         q_todo = {p["id"] for p in _todo("quality", photos, con)}
         o_todo = {p["id"] for p in _todo("objects", photos, con)} if det.available() and config.ANALYSIS else set()  # none until the model is installed
     todo = [p for p in photos if p["id"] in q_todo or p["id"] in o_todo]
@@ -242,12 +242,12 @@ def _pixel_work(todo: list, q_ids: list, o_ids: list, gens: dict):
             if cancelled():  # reset while this batch was computed: its results are of the model before
                 return
             if qrows:
-                with vdb.writer() as con:
+                with appdb.writer() as con:
                     con.executemany("INSERT OR REPLACE INTO pix_ai_quality VALUES (?,?,?,?,?)", [(r[0], *r[2:]) for r in qrows])
                     con.executemany("INSERT OR REPLACE INTO pix_ai_scans VALUES (?,'quality',?,NULL)", [(r[0], r[1]) for r in qrows])
                 progress["quality"]["done"] += len(qrows)
             if done:
-                with vdb.writer() as con:
+                with appdb.writer() as con:
                     con.executemany("DELETE FROM pix_ai_objects WHERE photo_id = ?", [(d[0],) for d in done])
                     con.executemany("INSERT INTO pix_ai_objects VALUES (?,?,?,?,?,?,?)", orows)
                     con.executemany("INSERT OR REPLACE INTO pix_ai_scans VALUES (?,'objects',?,NULL)", done)
@@ -416,7 +416,7 @@ def _vision_work(todo: list, gen: int):
             for rows in pool.map(recognise, chunk):  # (photo, stamp, text, nfaces, faceq)
                 if progress["vision"].cancelled(gen):
                     return
-                with vdb.writer() as con:
+                with appdb.writer() as con:
                     con.executemany("INSERT OR REPLACE INTO pix_ai_text VALUES (?,?)", [(r[0], r[2]) for r in rows])
                     con.executemany("INSERT OR REPLACE INTO pix_ai_face_count VALUES (?,?,?)", [(r[0], r[3], r[4]) for r in rows])
                     con.executemany("INSERT OR REPLACE INTO pix_ai_scans VALUES (?,'vision',?,NULL)", [(r[0], r[1]) for r in rows])
@@ -453,7 +453,7 @@ def _caption_work(todo: list, gen: int):
         rows = [(p["id"], stamp(p), (t or "")[:500]) for p, t in zip(batch, texts)]
         if progress["captions"].cancelled(gen):
             return
-        with vdb.writer() as con:
+        with appdb.writer() as con:
             con.executemany("INSERT OR REPLACE INTO pix_ai_descriptions VALUES (?,?)", [(r[0], r[2]) for r in rows])
             con.executemany("INSERT OR REPLACE INTO pix_ai_scans VALUES (?,'captions',?,NULL)", [(r[0], r[1]) for r in rows])
         progress["captions"]["done"] += len(batch)
@@ -475,7 +475,7 @@ def _looks_todo(photos: list, parts: dict, con=None) -> list:
     arrived since (or whose measure changed) is filled in, and the rest is kept."""
     import json
     if con is None:
-        with vdb.reader(READ_TIMEOUT) as con:
+        with appdb.reader(READ_TIMEOUT) as con:
             return _looks_todo(photos, parts, con)
     have = {r[0]: (r[1], r[2]) for r in con.execute("SELECT photo_id, stamp, detail FROM pix_ai_scans WHERE job = 'looks'")}
     out = []
@@ -570,7 +570,7 @@ def _looks_work(todo: list, parts: dict, gen: int):
                     log.warning("photo quality: the aesthetic model failed on a batch (%s)", e)
             if progress["looks"].cancelled(gen):
                 return
-            with vdb.writer() as con:
+            with appdb.writer() as con:
                 done = [int(r[0]["id"]) for r in ready]
                 old = {r[0]: r for r in in_chunks(con, "SELECT photo_id, aesthetic, focus, eyes_checked, eyes_closed FROM pix_ai_looks WHERE photo_id IN ({ids})", done)}
                 have = {r[0]: (r[1], r[2]) for r in in_chunks(con, "SELECT photo_id, stamp, detail FROM pix_ai_scans WHERE job = 'looks' AND photo_id IN ({ids})", done)}
@@ -627,7 +627,7 @@ def start(photos: list):
 
 def results(ids=None) -> dict:
     """{photo_id: {...}} for the index build; with `ids`, only for those photos (the index updated in place)."""
-    if not vdb.ready():
+    if not appdb.ready():
         return {}
     out = {}
     if ids is None:
@@ -637,7 +637,7 @@ def results(ids=None) -> dict:
         parts = [",".join(map(str, some[n:n + 500])) for n in range(0, len(some), 500)]
         chunks = [(f" WHERE photo_id IN ({part})", f" AND photo_id IN ({part})") for part in parts]
     try:
-        with vdb.reader(READ_TIMEOUT) as con:
+        with appdb.reader(READ_TIMEOUT) as con:
             for w, a in chunks:
                 for r in con.execute("SELECT photo_id, sharp, bright, clip_lo, clip_hi FROM pix_ai_quality" + w):
                     out.setdefault(r[0], {}).update(sharp=r[1], bright=r[2], clip_lo=r[3], clip_hi=r[4])
@@ -665,10 +665,10 @@ def results(ids=None) -> dict:
 
 def boxes(photo_id: int) -> list:
     """Detected objects of one photo for the info panel: [{cls, score, x, y, w, h}], best first."""
-    if not vdb.ready():
+    if not appdb.ready():
         return []
     try:
-        with vdb.reader(READ_TIMEOUT) as con:
+        with appdb.reader(READ_TIMEOUT) as con:
             return [dict(r) for r in con.execute(
                 "SELECT cls, round(score, 2) AS score, x, y, w, h FROM pix_ai_objects WHERE photo_id = ? ORDER BY score DESC", (photo_id,))]
     except Exception:
@@ -680,7 +680,7 @@ def reset(job: str):
     tables = {"quality": ["pix_ai_quality"], "vision": ["pix_ai_text", "pix_ai_face_count"], "objects": ["pix_ai_objects"], "captions": ["pix_ai_descriptions"], "looks": ["pix_ai_looks"]}.get(job, [])
     for k in JOBS:  # stop the running jobs (all of them: they run as one set, and the caller restarts the set)
         progress[k].cancel()
-    with vdb.writer() as con:
+    with appdb.writer() as con:
         for t in tables:
             con.execute(f"DELETE FROM {t}")
         if job in JOBS:
