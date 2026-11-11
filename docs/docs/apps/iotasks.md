@@ -11,6 +11,19 @@ same lists show up in Apple Reminders on iPhone, iPad and Mac, in Tasks.org or j
 
 - **Tasks** with notes, a due date (a day, or a day and a time), a priority, alerts and a link; **repeating tasks**
   that move on to their next date when you tick them off; **subtasks**.
+- **Quick add in plain words**: "Pay rent every month on the 1st 9am !high", "Call mom tomorrow 5pm @emma",
+  "Milk #groceries". The line shows what it understood (the date, the repeat, the priority, the list, who it's for)
+  before you press Enter.
+- **Postpone** with one click: a task to tomorrow, the weekend or next week, and everything overdue to today in one
+  go. Alerts move along.
+- **Repeat after it's done**: "every 2 weeks after done" counts from the day you tick it off, not from the date it was
+  due; for the things that slip (descaling the kettle, the filter, a haircut).
+- **Your own order**: drag tasks within a list and the lists in the sidebar.
+- **Activity and undo**: who added, changed, ticked off or deleted what, from the web app, a phone or an assistant.
+  Every change can be taken back, right after it (a note with Undo) or later from the Activity page.
+- **Templates**: save a list as a template (a packing list, the weekly clean) and add it to any list again, with its
+  subtasks, due on a day you pick.
+- **Print** a list as a checklist.
 - **Lists**: a shared Family list, a private Personal one for each account, and as many more as you like, each with its
   colour.
 - **Today, Scheduled, All and Completed** across every list, with quick add and search.
@@ -28,11 +41,13 @@ phones should sync away from home.
 Settings › Apps and devices › *Download the profile* adds the account to an iPhone, iPad or Mac in one step; the lists
 then appear in Reminders under "ioTasks". Reminders keeps the standard part of a task for an account that is not
 iCloud: title, notes, due date and time, repeat, alert, priority and done. Subtasks made in ioTasks arrive as ordinary
-tasks of the list, and Reminders' own tags, flags and sections stay on iCloud lists.
+tasks of the list, and Reminders' own tags, flags and sections stay on iCloud lists. A task that repeats after it's
+done keeps doing so when it is ticked off in Reminders: ioTasks brings it back with its next date.
 
 ## With the other apps
 
 - **ioSuite**: the tasks due today on the tile, the overdue ones first.
+- **ioCalendar**: the tasks that are due show on their day in the calendar, beside the events, and are ticked off there.
 
 ## Install
 
