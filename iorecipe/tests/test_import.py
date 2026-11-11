@@ -77,9 +77,10 @@ def test_only_addresses_on_the_internet_are_fetched():
 
 
 def test_import_keeps_the_recipe_and_its_picture(client, monkeypatch):
-    asked = []
+    asked, refs = [], []
 
-    def fetch(url, limit, accept="", allowed=None):
+    def fetch(url, limit, accept="", allowed=None, referer=None):
+        refs.append(referer)
         asked.append(url)
         if url.endswith(".jpg"):
             return png(), "image/png", url
@@ -89,11 +90,12 @@ def test_import_keeps_the_recipe_and_its_picture(client, monkeypatch):
     assert r.status_code == 201, r.text
     j = r.json()
     assert asked == ["https://example.com/cookies?utm=1", "https://img.example.com/a.jpg"]
+    assert refs == [None, "https://example.com/cookies"]  # the picture is asked for as from its page, and kept here
     assert j["readBy"] == "data" and client.get("/api/import").json()["aiState"] in ("off", "ready", "fetching", "missing")
     assert j["title"] == "Grandma's cookies" and j["family"] is True and j["sourceUrl"] == "https://example.com/cookies"
     assert j["photo"] and client.get(j["photo"]).headers["content-type"] == "image/jpeg"
     # a picture that cannot be had or is not one: the recipe without it
-    monkeypatch.setattr(scrape, "fetch", lambda url, limit, accept="", allowed=None:
+    monkeypatch.setattr(scrape, "fetch", lambda url, limit, accept="", allowed=None, referer=None:
                         (b"<html>not a picture</html>", "text/html", url) if url.endswith(".jpg") else fetch(url, limit))
     assert client.post("/api/import", json={"url": "https://example.com/cookies", "family": False}).json()["photo"] is None
     # no recipe there, no address
@@ -221,8 +223,9 @@ def test_a_page_is_asked_for_as_a_browser_does(monkeypatch):
     h = {k.lower(): v for k, v in sent[0].items()}
     assert "Chrome/" in h["user-agent"] and h["sec-fetch-mode"] == "navigate" and h["sec-fetch-dest"] == "document"
     assert h["accept"].startswith("text/html") and h["accept-language"] and h["upgrade-insecure-requests"] == "1" and "sec-ch-ua" in h
-    scrape.fetch("https://example.com/x.jpg", 1000, accept="image/*")
+    scrape.fetch("https://example.com/x.jpg", 1000, accept="image/*", referer="https://example.com/x")
     h = {k.lower(): v for k, v in sent[1].items()}
+    assert h["referer"] == "https://example.com/x" and "referer" not in {k.lower() for k in sent[0]}
     assert h["sec-fetch-dest"] == "image" and h["accept"] == "image/*" and "upgrade-insecure-requests" not in h
     with pytest.raises(Invalid, match="Pasted text"):  # a site that tests for a browser: said so, with the way around
         scrape.fetch("https://example.com/refused", 1000)

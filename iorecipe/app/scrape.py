@@ -46,13 +46,16 @@ PAGE = "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/w
 TIMEOUT = 15
 
 
-def fetch(url: str, limit: int, accept: str = PAGE, allowed=outbound.public) -> tuple[bytes, str, str]:
-    """(body, content type, final address) of an http(s) address, at most `limit` bytes. Invalid when it cannot be had."""
+def fetch(url: str, limit: int, accept: str = PAGE, allowed=outbound.public, referer: str | None = None) -> tuple[bytes, str, str]:
+    """(body, content type, final address) of an http(s) address, at most `limit` bytes. Invalid when it cannot be had.
+    `referer` is the page a picture is on: sites refuse their pictures to a request that does not name it."""
     outbound.check(url, allowed)
     head = {**BROWSER, "Accept": accept}
     if accept != PAGE:  # a picture, as a page asks for one
         head = {k: v for k, v in head.items() if k not in ("Upgrade-Insecure-Requests", "Sec-Fetch-User", "Cache-Control")}
         head.update({"Sec-Fetch-Dest": "image", "Sec-Fetch-Mode": "no-cors", "Sec-Fetch-Site": "cross-site"})
+    if referer:
+        head["Referer"] = referer
     req = urllib.request.Request(url, headers=head)
     try:
         with outbound.opener(allowed).open(req, timeout=TIMEOUT) as r:
@@ -537,7 +540,7 @@ def recipe_at(url: str, allowed=outbound.public) -> tuple[dict, bytes | None]:
     img = data.pop("image", None)
     if img:
         try:
-            picture = fetch(img, config.MAX_PHOTO_BYTES, accept="image/*", allowed=allowed)[0]
+            picture = fetch(img, config.MAX_PHOTO_BYTES, accept="image/*", allowed=allowed, referer=final)[0]
         except Invalid:
             picture = None  # the recipe without its picture
     return data, picture
