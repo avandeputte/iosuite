@@ -60,6 +60,14 @@ if [ "$SYSDEPS" != 0 ] && ! python3 -c 'import sys, venv, ensurepip; assert sys.
   elif command -v brew >/dev/null; then brew install python
   else die "install Python 3.10 or newer with venv, then run this again"; fi
 fi
+# Tesseract reads the text on a photo of a recipe (Import > Photo); the app runs without it
+if [ "$SYSDEPS" != 0 ] && ! command -v tesseract >/dev/null; then
+  say "Installing Tesseract (reads a photo of a recipe)"
+  if command -v apt-get >/dev/null; then apt-get install -y -qq tesseract-ocr >/dev/null 2>&1 || true
+  elif command -v dnf >/dev/null; then dnf install -y -q tesseract >/dev/null 2>&1 || true
+  elif command -v brew >/dev/null; then brew install tesseract >/dev/null 2>&1 || true; fi
+  command -v tesseract >/dev/null || say "Tesseract was not installed: Import > Photo stays off until it is (see the README)"
+fi
 command -v git >/dev/null || die "git is needed to install the suite's shared library (iosuite-shared, from the iosuite-shared repository): install git, then run this again"
 PY="${PY:-python3}"
 

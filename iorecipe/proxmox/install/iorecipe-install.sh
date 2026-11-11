@@ -22,7 +22,11 @@ $STD apt-get install -y \
   python3-venv \
   python3-pip \
   mariadb-client \
-  curl
+  curl \
+  tesseract-ocr \
+  tesseract-ocr-nld \
+  tesseract-ocr-fra \
+  tesseract-ocr-deu
 msg_ok "Installed Dependencies"
 
 msg_info "Fetching ioRecipe"

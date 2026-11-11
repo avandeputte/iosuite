@@ -12,7 +12,7 @@ from app.mcp.base import READ_ONLY, UPDATES, need_admin, server
 @server.tool(annotations=READ_ONLY)
 def diagnostics() -> dict:
     """Admins: the server's health: version and commit, Python and platform, the database (server
-    version, recipes, photos), the MCP switch, the last update check and update, and the accounts."""
+    version, recipes, photos, cookbooks), the MCP switch, the last update check and update, and the accounts."""
     need_admin()
     out = {"version": __version__, "commit": updater.local_commit()[:7], "docker": updater.in_docker(),
            "python": sys.version.split()[0], "platform": platform.platform(), "appDir": str(config.APP_DIR),
@@ -23,6 +23,7 @@ def diagnostics() -> dict:
                            "schema": db.schema_version(),
                            "recipes": db.one("SELECT count(*) AS n FROM rcp_recipes")["n"],
                            "photos": db.one("SELECT count(*) AS n FROM rcp_photos")["n"],
+                           "cookbooks": db.one("SELECT count(*) AS n FROM rcp_books")["n"],
                            "photoBytes": int(db.one("SELECT COALESCE(SUM(LENGTH(picture) + LENGTH(thumb)), 0) AS n FROM rcp_photos")["n"])}
     except Exception as e:  # noqa: BLE001
         out["database"] = {"error": str(e)[:200]}

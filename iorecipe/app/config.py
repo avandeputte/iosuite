@@ -18,7 +18,12 @@ DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD = _db["host"], _db["port"], _db[
 
 MAX_PHOTO_BYTES = 20 * 1024 * 1024    # a photo as it is uploaded (it is kept much smaller: app/images.py)
 MAX_PAGE_BYTES = 5 * 1024 * 1024      # a web page a recipe is imported from
+MAX_IMPORT_BYTES = 300 * 1024 * 1024  # a file of recipes to import (an ioRecipe or Mealie export, with its photos)
 MAX_JSON_BYTES = 2 * 1024 * 1024      # any other request body
+
+# reading a photo of a recipe (app/ocr.py): the languages Tesseract tries, as its codes with + between (eng+nld+fra);
+# empty: every language installed
+OCR_LANGUAGES = env("OCR_LANGUAGES")
 
 # `python -m app.mcp` (stdio) acts as this account. Updates: IORECIPE_REPO, IORECIPE_BRANCH and UPDATE_CHECK are read
 # by iosuite_shared.updates (app.auth.updater)

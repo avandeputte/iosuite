@@ -5,7 +5,8 @@ COPY pyproject.toml README.md ./
 COPY app ./app
 COPY static ./static
 # git only while installing: iosuite-shared (the suite's shared library) comes from its GitHub repository, avandeputte/iosuite-shared
-RUN apt-get update && apt-get install -y --no-install-recommends git \
+# tesseract stays: it reads the text on a photo of a recipe (Import › Photo), in English, Dutch, French and German
+RUN apt-get update && apt-get install -y --no-install-recommends git tesseract-ocr tesseract-ocr-nld tesseract-ocr-fra tesseract-ocr-deu \
     && pip install --no-cache-dir -e . \
     && apt-get purge -y --auto-remove git && rm -rf /var/lib/apt/lists/* \
     && useradd --uid 1000 --user-group --no-create-home --shell /usr/sbin/nologin iorecipe && chown -R iorecipe:iorecipe /app

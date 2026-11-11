@@ -5,7 +5,7 @@ from typing import Literal, Optional
 from mcp.server.mcpserver.exceptions import ToolError
 
 from app import __version__, api, config, model
-from app.mcp.base import ADDS, DELETES, READ_ONLY, WRITES, clamp, find_recipe, recipe_out, server, summary, who
+from app.mcp.base import ADDS, DELETES, READ_ONLY, WRITES, clamp, find_book, find_recipe, recipe_out, server, summary, who
 
 RECIPE_FIELDS = """
     ingredients, steps: lists of lines, one ingredient or one step each; a line that ends with a colon is a heading.
@@ -38,20 +38,24 @@ def _data(**kw) -> dict:
 
 @server.tool(annotations=READ_ONLY)
 def overview() -> dict:
-    """Who you are signed in as, how many recipes you see (the family's and your own), whether you may add family or
-    private recipes, and the tags in use. Start here."""
+    """Who you are signed in as, how many recipes you see (the family's, your own, your favourites), whether you may
+    add family or private recipes, the tags in use and the cookbooks. Start here."""
     u = who()
     return {"you": {"name": u["name"], "displayName": u.get("displayName"), "role": u.get("role")},
             "recipes": model.counts(u), "youCanAdd": {"family": model.may_add(u, True), "private": model.may_add(u, False)},
-            "tags": model.tags(u)[:60], "version": __version__, "webApp": config.PUBLIC_URL or None}
+            "tags": model.tags(u)[:60], "cookbooks": [model.book_public(b, u) for b in model.books(u)],
+            "version": __version__, "webApp": config.PUBLIC_URL or None}
 
 
 @server.tool(annotations=READ_ONLY)
-def list_recipes(tag: Optional[str] = None, scope: Optional[Literal["family", "mine"]] = None, limit: int = 100) -> list:
-    """The recipes, by title: id, title, servings, times, tags. tag: only those with this tag; scope: only the
-    family's, or only your own private ones."""
+def list_recipes(tag: Optional[str] = None, scope: Optional[Literal["family", "mine", "favourites"]] = None, cookbook: Optional[str] = None,
+                 sort: Optional[Literal["title", "new", "rating"]] = None, limit: int = 100) -> list:
+    """The recipes: id, title, servings, times, tags, your favourite and rating, the average rating. tag: only those
+    with this tag; scope: only the family's, only your own private ones, or only your favourites; cookbook: only those
+    in this cookbook (its id or name); sort: by title (as left out), the newest first, or the best rated first."""
     u = who()
-    return [summary(u, r) for r in model.find(u, "", tag, scope, limit=clamp(limit, 1, 500))]
+    book = find_book(u, cookbook)["id"] if cookbook else None
+    return [summary(u, r) for r in _guard(model.find, u, "", tag, scope, limit=clamp(limit, 1, 500), book=book, sort=sort)]
 
 
 @server.tool(annotations=READ_ONLY)
@@ -65,7 +69,7 @@ def search_recipes(query: str, limit: int = 30) -> list:
 @server.tool(annotations=READ_ONLY)
 def get_recipe(recipe: str) -> dict:
     """Everything about one recipe (its id, or its title when that names one): ingredients, steps, notes, times, tags,
-    where it comes from."""
+    where it comes from, your favourite and rating, the cookbooks it is in."""
     u = who()
     return recipe_out(u, find_recipe(u, recipe))
 
@@ -122,3 +126,64 @@ def import_recipe(url: str, family: Optional[bool] = None) -> dict:
     u = who()
     fam = model.may_add(u, True) if family is None else family
     return recipe_out(u, _guard(api.import_from, u, url, fam))
+
+
+@server.tool(annotations=WRITES)
+def mark_recipe(recipe: str, favourite: Optional[bool] = None, rating: Optional[int] = None) -> dict:
+    """What the account you act as thinks of a recipe (its id or title): favourite true or false, rating 1 to 5 (0
+    takes the rating away). Only what is given changes. The others see only the average of the ratings."""
+    u = who()
+    d = {}
+    if favourite is not None:
+        d["favourite"] = favourite
+    if rating is not None:
+        d["rating"] = rating
+    return recipe_out(u, _guard(model.mark, u, find_recipe(u, recipe), d))
+
+
+@server.tool(annotations=READ_ONLY)
+def list_cookbooks() -> list:
+    """The cookbooks: id, name, whether it is the family's (everyone sees it; it holds family recipes) or yours,
+    whether you may change it, how many recipes it holds. list_recipes(cookbook=...) lists what is in one."""
+    u = who()
+    return [model.book_public(b, u) for b in model.books(u)]
+
+
+@server.tool(annotations=ADDS)
+def create_cookbook(name: str, description: Optional[str] = None, family: Optional[bool] = None) -> dict:
+    """A new cookbook. family: true for a family cookbook (editors and admins), false for one of yours; left out, it
+    is the family's when you may add there."""
+    u = who()
+    fam = model.may_add(u, True) if family is None else family
+    return model.book_public({**_guard(model.create_book, u, {"name": name, "description": description}, fam), "n": 0}, u)
+
+
+@server.tool(annotations=WRITES)
+def add_to_cookbook(cookbook: str, recipes: list[str]) -> dict:
+    """Put recipes (ids or titles) in a cookbook (its id or name). A family cookbook takes family recipes only."""
+    u = who()
+    b = find_book(u, cookbook)
+    rows = [find_recipe(u, r) for r in recipes]
+    for r in rows:
+        _guard(model.book_add, u, b, r)
+    return {"cookbook": b["name"], "added": [r["title"] for r in rows]}
+
+
+@server.tool(annotations=WRITES)
+def remove_from_cookbook(cookbook: str, recipes: list[str]) -> dict:
+    """Take recipes (ids or titles) out of a cookbook (its id or name). The recipes themselves stay."""
+    u = who()
+    b = find_book(u, cookbook)
+    rows = [find_recipe(u, r) for r in recipes]
+    for r in rows:
+        _guard(model.book_remove, u, b, r)
+    return {"cookbook": b["name"], "removed": [r["title"] for r in rows]}
+
+
+@server.tool(annotations=DELETES)
+def delete_cookbook(cookbook: str) -> dict:
+    """Delete a cookbook (its id or name). Its recipes stay. Ask first."""
+    u = who()
+    b = find_book(u, cookbook)
+    _guard(model.delete_book, u, b)
+    return {"deleted": b["name"]}
