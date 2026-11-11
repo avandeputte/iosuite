@@ -13,9 +13,9 @@ every app works without it. It earns its place once you run two or more apps.
 
 - **A tile per app**, found by itself: every app registers in the suite's list of apps, so there is nothing to type.
   An app that isn't installed has no tile.
-- **A glimpse of each app**: ioPix's photos from this day in earlier years, ioCalendar's rest of today, ioTasks' tasks due today, ioHealth's
+- **A glimpse of each app**: ioPix's photos from this day in earlier years, ioCalendar's rest of today, ioTask's tasks due today, ioHealth's
   steps, rings and sleep; each person sees only what that app shows them.
-- **The week ahead**: a Birthdays card (ioContacts) and a This week card (ioCalendar).
+- **The week ahead**: a Birthdays card (ioContact) and a This week card (ioCalendar).
 - **A search box** (⌘K / Ctrl-K) across the apps and bookmarks, the web as a fallback, and **Quick add** for events.
 - **Weather** (AccuWeather, a free key), **Home Assistant** entities you can switch from the page, and **bookmarks**.
 - **A wall display** for a tablet: photos behind a big clock, the weather, today's and the coming days' events.

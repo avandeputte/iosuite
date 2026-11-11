@@ -14,20 +14,20 @@ HTTPS (or `localhost`).
 
 | App | Device | What it does | Source |
 | --- | --- | --- | --- |
-| **ionotes** | Mac, iPhone, iPad | the clipboard Inbox and screenshots on the Mac, notes everywhere, synced with the ioNotes server and usable offline | [ionotes-apps](https://github.com/avandeputte/ionotes-apps) |
+| **ionote** | Mac, iPhone, iPad | the clipboard Inbox and screenshots on the Mac, notes everywhere, synced with the ioNote server and usable offline | [ionote-apps](https://github.com/avandeputte/ionote-apps) |
 | **ioHealthSync** | iPhone | copies Apple Health data to the ioHealth server: everything or the types you pick, incremental, in the background | [iohealth-apps](https://github.com/avandeputte/iohealth-apps) |
 
 Both are built from source with Xcode and XcodeGen (`brew install xcodegen`, then `xcodegen generate`); each
-repository's README has the steps. They sign in with your suite account. Behind Cloudflare Access, ionotes takes a
+repository's README has the steps. They sign in with your suite account. Behind Cloudflare Access, ionote takes a
 Cloudflare Access service token; ioHealthSync's uploads (`/v1/`) need a bypass rule or a service token (see
 [Cloudflare](../run/cloudflare.md)).
 
 ## Calendars, tasks and contacts on every device
 
-ioCalendar, ioTasks and ioContacts speak the standards phones and desktop apps already use. Settings › Apps and devices in each
+ioCalendar, ioTask and ioContact speak the standards phones and desktop apps already use. Settings › Apps and devices in each
 app shows the exact addresses to type.
 
-| On | ioCalendar | ioTasks | ioContacts |
+| On | ioCalendar | ioTask | ioContact |
 | --- | --- | --- | --- |
 | iPhone, iPad, Mac | CalDAV, or the **configuration profile** from Settings › Apps and devices (one tap, with a device-only app password inside) | Apple Reminders over CalDAV, or its configuration profile | CardDAV, or its configuration profile |
 | Android | CalDAV with DAVx⁵ | CalDAV with DAVx⁵ and Tasks.org or jtx Board | CardDAV with DAVx⁵ |

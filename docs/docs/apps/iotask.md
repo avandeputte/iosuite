@@ -1,8 +1,8 @@
 ---
-description: ioTasks, the family's task lists in the ioThing suite.
+description: ioTask, the family's task lists in the ioThing suite.
 ---
 
-# ioTasks <small>tasks</small>
+# ioTask <small>tasks</small>
 
 The family's task lists: a web app for everyone at home, and the standard protocol reminders apps already speak, so the
 same lists show up in Apple Reminders on iPhone, iPad and Mac, in Tasks.org or jtx Board on Android, and in Thunderbird.
@@ -33,16 +33,16 @@ same lists show up in Apple Reminders on iPhone, iPad and Mac, in Tasks.org or j
 
 ## On its own
 
-ioTasks is a complete task manager for a family. It needs its database and the Shared ioSuite database, and HTTPS if
+ioTask is a complete task manager for a family. It needs its database and the Shared ioSuite database, and HTTPS if
 phones should sync away from home.
 
 ## In Apple Reminders
 
 Settings › Apps and devices › *Download the profile* adds the account to an iPhone, iPad or Mac in one step; the lists
-then appear in Reminders under "ioTasks". Reminders keeps the standard part of a task for an account that is not
-iCloud: title, notes, due date and time, repeat, alert, priority and done. Subtasks made in ioTasks arrive as ordinary
+then appear in Reminders under "ioTask". Reminders keeps the standard part of a task for an account that is not
+iCloud: title, notes, due date and time, repeat, alert, priority and done. Subtasks made in ioTask arrive as ordinary
 tasks of the list, and Reminders' own tags, flags and sections stay on iCloud lists. A task that repeats after it's
-done keeps doing so when it is ticked off in Reminders: ioTasks brings it back with its next date.
+done keeps doing so when it is ticked off in Reminders: ioTask brings it back with its next date.
 
 ## With the other apps
 
@@ -53,8 +53,8 @@ done keeps doing so when it is ticked off in Reminders: ioTasks brings it back w
 
 | | |
 | --- | --- |
-| Proxmox VE | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iotasks/main/proxmox/ct/iotasks.sh)"` |
-| Docker | [docker-compose.yml](https://github.com/avandeputte/iotasks/blob/main/docker-compose.yml): the image `ghcr.io/avandeputte/iotasks` |
-| Any Linux or Mac | `git clone https://github.com/avandeputte/iotasks && cd iotasks && ./setup.sh` |
+| Proxmox VE | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iotask/main/proxmox/ct/iotask.sh)"` |
+| Docker | [docker-compose.yml](https://github.com/avandeputte/iotask/blob/main/docker-compose.yml): the image `ghcr.io/avandeputte/iotask` |
+| Any Linux or Mac | `git clone https://github.com/avandeputte/iotask && cd iotask && ./setup.sh` |
 | Port | 8670 |
-| Source | [github.com/avandeputte/iotasks](https://github.com/avandeputte/iotasks) |
+| Source | [github.com/avandeputte/iotask](https://github.com/avandeputte/iotask) |

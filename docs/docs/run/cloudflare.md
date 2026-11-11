@@ -40,15 +40,15 @@ for these paths, or a second Access application covering only them. They stay pr
 | --- | --- | --- | --- |
 | ioCalendar | `/dav/*`, `/.well-known/caldav` | CalDAV clients and the Apple profile | user name and app password |
 | ioCalendar | `/ics/*` | subscription links and free/busy | the private token in the link |
-| ioTasks | `/dav/*`, `/.well-known/caldav` | Apple Reminders, other CalDAV clients and the Apple profile | user name and app password |
-| ioTasks | `/profile/*` | the Apple profile's download link | the short-lived secret in the link |
-| ioContacts | `/dav/*`, `/.well-known/carddav` | CardDAV clients and the Apple profile | user name and app password |
+| ioTask | `/dav/*`, `/.well-known/caldav` | Apple Reminders, other CalDAV clients and the Apple profile | user name and app password |
+| ioTask | `/profile/*` | the Apple profile's download link | the short-lived secret in the link |
+| ioContact | `/dav/*`, `/.well-known/carddav` | CardDAV clients and the Apple profile | user name and app password |
 | ioHealth | `/v1/*` | the ioHealthSync iPhone app (or give it a service token) | user name and password |
-| ioPix, ioNotes, ioCalendar, ioTasks, ioRecipe, ioContacts | `/mcp` | AI assistants, if MCP is on | an app password |
+| ioPix, ioNote, ioCalendar, ioTask, ioRecipe, ioContact | `/mcp` | AI assistants, if MCP is on | an app password |
 
 Everything else, the web apps and `/api/`, stays behind Access. A script calling `/api/` from outside needs a Cloudflare
 **service token** (`CF-Access-Client-Id` and `CF-Access-Client-Secret`) allowed in the policy, as well as an app password.
-The ionotes Mac and iPhone apps take a service token in their settings. The ioSuite start page asks the other apps for its
+The ionote Mac and iPhone apps take a service token in their settings. The ioSuite start page asks the other apps for its
 tiles with the suite's service token (Settings › Global settings › Keys and tokens) when they are only reachable through
 Access.
 

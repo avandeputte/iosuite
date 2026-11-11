@@ -4,7 +4,7 @@ description: Connect Claude or another AI assistant to the ioThing apps over MCP
 
 # AI assistants (MCP)
 
-ioPix, ioNotes, ioCalendar, ioTasks, ioRecipe and ioContacts are also [Model Context Protocol](https://modelcontextprotocol.io) servers,
+ioPix, ioNote, ioCalendar, ioTask, ioRecipe and ioContact are also [Model Context Protocol](https://modelcontextprotocol.io) servers,
 at `/mcp` on their own port, so an assistant such as Claude can work with them as you: explore and search the photo
 library, search and write notes, read the agenda and add events, add tasks and tick them off, look recipes up and import them from the web, find contacts and file suggestions for them, and,
 for admins, check the server's health. ioHealth and the ioSuite start page have no MCP server.

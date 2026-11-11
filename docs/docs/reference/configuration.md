@@ -40,11 +40,11 @@ MCP=1                                     # the MCP server on (apps that have on
 ```
 
 On/off switches take `1`/`0`, `true`/`false`, `yes`/`no` or `on`/`off`. Each app adds its own settings (the photo
-folder and digiKam for ioPix, the LDAP port for ioContacts...); see its README.
+folder and digiKam for ioPix, the LDAP port for ioContact...); see its README.
 
-`KEEP_DELETED_DAYS` is for the apps that phones and other devices sync with. A deleted event (ioCalendar), task (ioTasks) or contact
-(ioContacts) leaves a marker, so a device learns of the deletion at its next sync; the marker goes after this many days,
-and a device that stayed away longer starts its sync over. ioNotes keeps the text of a deleted note and its change log
+`KEEP_DELETED_DAYS` is for the apps that phones and other devices sync with. A deleted event (ioCalendar), task (ioTask) or contact
+(ioContact) leaves a marker, so a device learns of the deletion at its next sync; the marker goes after this many days,
+and a device that stayed away longer starts its sync over. ioNote keeps the text of a deleted note and its change log
 that long (the trash shows 30 days); after that an empty marker stays.
 
 There is no default password for the Shared ioSuite database: `IOSUITE_DB_PASSWORD` is set by the installer, or by you.
@@ -58,12 +58,12 @@ Apps), and the keys for services outside the suite (Settings › Global settings
 | App | Port |
 | --- | --- |
 | ioPix | 8600 |
-| ioNotes | 8610 |
+| ioNote | 8610 |
 | ioCalendar | 8620 |
 | ioSuite | 8630 |
-| ioContacts | 8640 (LDAP 3890) |
+| ioContact | 8640 (LDAP 3890) |
 | ioHealth | 8650 |
 | ioDNS | 8660 |
-| ioTasks | 8670 |
+| ioTask | 8670 |
 | ioBackup | 8680 |
 | ioRecipe | 8690 |

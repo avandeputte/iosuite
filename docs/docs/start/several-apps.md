@@ -10,12 +10,12 @@ container or one database server:
 | App | Port | Database | Folder (as root) |
 | --- | --- | --- | --- |
 | ioPix | 8600 | `iopix` | `/opt/iopix/app` |
-| ioNotes | 8610 | `notes` | `/opt/ionotes/app` |
+| ioNote | 8610 | `notes` | `/opt/ionote/app` |
 | ioCalendar | 8620 | `calendar` | `/opt/iocalendar/app` |
 | ioSuite | 8630 | `suite` | `/opt/iosuite/app` |
-| ioContacts | 8640 (LDAP 3890) | `contacts` | `/opt/iocontacts/app` |
+| ioContact | 8640 (LDAP 3890) | `contacts` | `/opt/iocontact/app` |
 | ioHealth | 8650 | `health` | `/opt/iohealth/app` |
-| ioTasks | 8670 | `tasks` | `/opt/iotasks/app` |
+| ioTask | 8670 | `tasks` | `/opt/iotask/app` |
 | ioRecipe | 8690 | `recipe` | `/opt/iorecipe/app` |
 
 ## "Also install …?"
@@ -25,13 +25,13 @@ Whichever app you install first, its installer's last question puts others besid
 === "setup.sh"
 
     ```sh
-    ./setup.sh --also iocalendar,iocontacts     # or --also all, or --also none
+    ./setup.sh --also iocalendar,iocontact     # or --also all, or --also none
     ```
 
 === "Proxmox VE"
 
     ```sh
-    IOSUITE_ALSO=iocalendar,iocontacts \
+    IOSUITE_ALSO=iocalendar,iocontact \
     bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/proxmox/ct/iosuite.sh)"
     ```
 

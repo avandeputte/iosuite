@@ -15,12 +15,12 @@ Give each app a host name under one domain, for example:
 | App | Address | Upstream |
 | --- | --- | --- |
 | ioPix | `photos.example.com` | `192.168.1.10:8600` |
-| ioNotes | `notes.example.com` | `192.168.1.10:8610` |
+| ioNote | `notes.example.com` | `192.168.1.10:8610` |
 | ioCalendar | `calendar.example.com` | `192.168.1.10:8620` |
 | ioSuite | `home.example.com` | `192.168.1.10:8630` |
-| ioContacts | `contacts.example.com` | `192.168.1.10:8640` |
+| ioContact | `contacts.example.com` | `192.168.1.10:8640` |
 | ioHealth | `health.example.com` | `192.168.1.10:8650` |
-| ioTasks | `tasks.example.com` | `192.168.1.10:8670` |
+| ioTask | `tasks.example.com` | `192.168.1.10:8670` |
 | ioRecipe | `recipes.example.com` | `192.168.1.10:8690` |
 
 and set in each app's `config.env`:
@@ -100,7 +100,7 @@ server {
   anyone else they are ignored. That one list decides both what the app shows and logs as the visitor's address and
   whether a visitor counts as inside your network.
 - **ioHealth** takes the phone's uploads on the same port; batches are compressed and normally well under 1 MB.
-- **ioContacts' LDAP** is not HTTP: keep it on the home network, or put a TLS proxy (stunnel, HAProxy, nginx stream)
+- **ioContact's LDAP** is not HTTP: keep it on the home network, or put a TLS proxy (stunnel, HAProxy, nginx stream)
   in front for `ldaps://`.
 - An app can serve HTTPS itself instead: `TLS_CERT_FILE` and `TLS_KEY_FILE`.
 

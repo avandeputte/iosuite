@@ -93,11 +93,11 @@ nav:
       - First run: start/first-run.md
   - The apps:
       - ioPix: apps/iopix.md
-      - ioNotes: apps/ionotes.md
+      - ioNote: apps/ionote.md
       - ioCalendar: apps/iocalendar.md
-      - ioTasks: apps/iotasks.md
+      - ioTask: apps/iotask.md
       - ioRecipe: apps/iorecipe.md
-      - ioContacts: apps/iocontacts.md
+      - ioContact: apps/iocontact.md
       - ioHealth: apps/iohealth.md
       - ioSuite start page: apps/iosuite.md
       - Phones, Macs and other apps: apps/devices.md

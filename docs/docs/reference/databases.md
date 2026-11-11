@@ -26,12 +26,12 @@ one. It can sit on the same server as the app databases.
 | --- | --- | --- |
 | Shared ioSuite database | `iosuite` | `ios_` |
 | ioPix | `iopix` | `pix_` |
-| ioNotes | `notes` | `nts_` |
+| ioNote | `notes` | `nts_` |
 | ioCalendar | `calendar` | `cal_` |
 | ioSuite (start page) | `suite` | `prt_` |
-| ioContacts | `contacts` | `con_` |
+| ioContact | `contacts` | `con_` |
 | ioHealth | `health` | `hlt_` |
-| ioTasks | `tasks` | `tsk_` |
+| ioTask | `tasks` | `tsk_` |
 | ioBackup | `backup` | `bkp_` |
 | ioRecipe | `recipe` | `rcp_` |
 
@@ -46,4 +46,4 @@ Back up the databases with ioBackup, the suite's admin tool for database backups
 Google Drive, keeps the newest few, and restores whole databases or single tables. Your usual MariaDB tools
 (`mariadb-dump`) work too. The Shared ioSuite database belongs in every
 backup: it has the accounts for all the apps. ioPix keeps its own data folder too (thumbnails, models, the edit log's
-backups), and ioNotes can export every note to a file under Import and export.
+backups), and ioNote can export every note to a file under Import and export.

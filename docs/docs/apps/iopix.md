@@ -20,7 +20,7 @@ folder of photos and it keeps the library itself.
   your own server. Each feature is optional and downloads its model when you turn it on.
 - **Edit** ratings, titles, captions, tags, dates, locations and faces, written to sidecars or into the files, the way
   digiKam writes them, with an edit log and undo for every change.
-- **People**: name the faces in your photos; with ioContacts, a person can be a contact's photo.
+- **People**: name the faces in your photos; with ioContact, a person can be a contact's photo.
 
 ![The ioPix viewer with its info panel](../img/iopix-viewer.jpg)
 
@@ -31,7 +31,7 @@ database for what it builds, and the Shared ioSuite database for its accounts. d
 
 ## With the other apps
 
-- **ioContacts** can link a contact to a person named in ioPix; the face becomes the contact's photo.
+- **ioContact** can link a contact to a person named in ioPix; the face becomes the contact's photo.
 - **ioSuite** shows photos taken on this day in earlier years on the ioPix tile, and a strip of photos under the
   tiles.
 - The start page's search box searches ioPix too.

@@ -13,7 +13,7 @@ A single app needs:
 
 - somewhere to run: a Proxmox VE container, a Docker host, or any Linux machine or Mac;
 - a MariaDB or MySQL server with two databases on it: the app's own, and the **Shared ioSuite database** that holds its
-  accounts. The installer can create both for you (give it a database administrator once). ioNotes can even keep its
+  accounts. The installer can create both for you (give it a database administrator once). ioNote can even keep its
   notes in a SQLite file instead.
 
 That's all. A photo app alone is a perfectly good install:
@@ -30,11 +30,11 @@ those manage the accounts in the Shared ioSuite database, whether one app uses t
 | You want | Install |
 | --- | --- |
 | A web app for your photos (with digiKam, or without) | [ioPix](../apps/iopix.md) |
-| Notes and clipboard snippets on your Mac and iPhone | [ioNotes](../apps/ionotes.md) (the server) and the Mac / iPhone app |
+| Notes and clipboard snippets on your Mac and iPhone | [ioNote](../apps/ionote.md) (the server) and the Mac / iPhone app |
 | A family calendar on every phone | [ioCalendar](../apps/iocalendar.md) |
-| Shared task lists, in Apple Reminders too | [ioTasks](../apps/iotasks.md) |
+| Shared task lists, in Apple Reminders too | [ioTask](../apps/iotask.md) |
 | The family's recipes, typed in or imported from the web | [ioRecipe](../apps/iorecipe.md) |
-| A family address book on every phone and in every mail app | [ioContacts](../apps/iocontacts.md) |
+| A family address book on every phone and in every mail app | [ioContact](../apps/iocontact.md) |
 | Your Apple Health data, kept and charted at home | [ioHealth](../apps/iohealth.md) and the ioHealthSync iPhone app |
 
 ## Adding another app later
@@ -58,8 +58,8 @@ These are extras, switched on by having both apps; neither app needs the other:
 
 | Together | You get |
 | --- | --- |
-| ioContacts + ioCalendar | a read-only **Birthdays** calendar with the birthdays and anniversaries from ioContacts; the people on an event are picked from your contacts |
-| ioPix + ioContacts | link a contact to a person named in ioPix: that face becomes the contact's photo, on phones (CardDAV) and in the LDAP directory too |
+| ioContact + ioCalendar | a read-only **Birthdays** calendar with the birthdays and anniversaries from ioContact; the people on an event are picked from your contacts |
+| ioPix + ioContact | link a contact to a person named in ioPix: that face becomes the contact's photo, on phones (CardDAV) and in the LDAP directory too |
 | ioSuite + any app | a tile per app on the start page with what matters today: the next events, the tasks due, photos from this day, today's steps and last night's sleep |
 | ioSuite + ioCalendar | "Quick add": type "dinner fri 19:00" in the start page's search box to make the event |
 | any two | the same accounts and roles, one admin panel, the same Settings, one sign-in |

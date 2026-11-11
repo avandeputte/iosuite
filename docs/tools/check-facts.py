@@ -29,10 +29,10 @@ import tempfile
 
 HERE = pathlib.Path(__file__).resolve().parent.parent
 OWNER = "avandeputte"
-REPOS = ["iosuite-shared", "iopix", "ionotes", "iocalendar", "iocontacts", "iohealth", "iosuite", "iotasks", "iorecipe",
-         "ionotes-apps", "iohealth-apps"]
-LABELS = {"ioPix": "iopix", "ioNotes": "ionotes", "ioCalendar": "iocalendar", "ioSuite": "iosuite",
-          "ioContacts": "iocontacts", "ioHealth": "iohealth", "ioTasks": "iotasks", "ioRecipe": "iorecipe"}
+REPOS = ["iosuite-shared", "iopix", "ionote", "iocalendar", "iocontact", "iohealth", "iosuite", "iotask", "iorecipe",
+         "ionote-apps", "iohealth-apps"]
+LABELS = {"ioPix": "iopix", "ioNote": "ionote", "ioCalendar": "iocalendar", "ioSuite": "iosuite",
+          "ioContact": "iocontact", "ioHealth": "iohealth", "ioTask": "iotask", "ioRecipe": "iorecipe"}
 
 problems = []
 
@@ -81,7 +81,7 @@ def main():
 
         # 2. default ports next to an app's name
         ports = app_ports(src)
-        near = re.compile(r"\b(ioPix|ioNotes|ioCalendar|ioSuite|ioContacts|ioHealth)\b(?:[^\n\d]{0,14}?)\b(8\d\d0)\b")
+        near = re.compile(r"\b(ioPix|ioNote|ioCalendar|ioSuite|ioContact|ioHealth)\b(?:[^\n\d]{0,14}?)\b(8\d\d0)\b")
         js = re.compile(r'name:"(io\w+)",\s*port:(\d+)')
         for p, text in pages():
             for m in list(near.finditer(text)) + list(js.finditer(text)):

@@ -11,25 +11,25 @@ the Proxmox VE host, as root, run the line for the app you want:
 | App | Command | Container by default |
 | --- | --- | --- |
 | ioPix | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iopix/main/proxmox/ct/iopix.sh)"` | 4 CPU, 4 GB, 16 GB |
-| ioNotes | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/ionotes/main/proxmox/ct/ionotes.sh)"` | 2 CPU, 2 GB, 8 GB |
+| ioNote | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/ionote/main/proxmox/ct/ionote.sh)"` | 2 CPU, 2 GB, 8 GB |
 | ioCalendar | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iocalendar/main/proxmox/ct/iocalendar.sh)"` | 1 CPU, 512 MB, 4 GB |
 | ioSuite | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/proxmox/ct/iosuite.sh)"` | 1 CPU, 512 MB, 4 GB |
-| ioContacts | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iocontacts/main/proxmox/ct/iocontacts.sh)"` | 1 CPU, 512 MB, 4 GB |
+| ioContact | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iocontact/main/proxmox/ct/iocontact.sh)"` | 1 CPU, 512 MB, 4 GB |
 | ioHealth | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iohealth/main/proxmox/ct/iohealth.sh)"` | 2 CPU, 1 GB, 4 GB |
-| ioTasks | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iotasks/main/proxmox/ct/iotasks.sh)"` | 1 CPU, 512 MB, 4 GB |
+| ioTask | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iotask/main/proxmox/ct/iotask.sh)"` | 1 CPU, 512 MB, 4 GB |
 | ioRecipe | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iorecipe/main/proxmox/ct/iorecipe.sh)"` | 1 CPU, 512 MB, 4 GB |
 
 ## What it asks
 
 First the app's own questions, then the framework's (resources, network):
 
-1. **The app's database**: host, port, database, user and password (MariaDB or MySQL). ioNotes can use a SQLite file in
+1. **The app's database**: host, port, database, user and password (MariaDB or MySQL). ioNote can use a SQLite file in
    the container instead; ioPix can install MariaDB in the container.
 2. **The Shared ioSuite database**: the same five answers; database and user `iosuite` by default. Give every app the
    same one.
 3. **A MariaDB / MySQL administrator** (optional): with one, the databases and users are created for you.
-4. What is particular to the app: the photo folder and digiKam for ioPix, the family's time zone for ioCalendar and ioTasks, the
-   LDAP port for ioContacts, which features to download for ioPix and ioNotes...
+4. What is particular to the app: the photo folder and digiKam for ioPix, the family's time zone for ioCalendar and ioTask, the
+   LDAP port for ioContact, which features to download for ioPix and ioNote...
 5. The **public address** behind your reverse proxy and the **domain the sign-in is shared on** (both optional).
 6. **The admin account**, used only when the Shared ioSuite database has no accounts yet.
 7. **Also install in this container**: a checklist of the other apps. Leave it empty for one app.
@@ -60,7 +60,7 @@ The common ones are `IO<APP>_DB`, `IO<APP>_SUITE_DB` (`host:port/database:user:p
 Tick them in the "Also install" checklist, or set `IO<APP>_ALSO`:
 
 ```sh
-IOSUITE_ALSO=iocalendar,iocontacts \
+IOSUITE_ALSO=iocalendar,iocontact \
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/proxmox/ct/iosuite.sh)"
 ```
 

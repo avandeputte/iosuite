@@ -13,20 +13,20 @@ git clone https://github.com/avandeputte/iocalendar && cd iocalendar
 ./update.sh         # later: the latest code, the same settings
 ```
 
-Replace `iocalendar` with `iopix`, `ionotes`, `iosuite`, `iocontacts`, `iohealth`, `iotasks` or `iorecipe`.
+Replace `iocalendar` with `iopix`, `ionote`, `iosuite`, `iocontact`, `iohealth`, `iotask` or `iorecipe`.
 
 ## What setup.sh does
 
 It needs Python 3.10 or later (ioHealth: 3.11) and git, and asks for:
 
 - the app's database (host, port, database, user, password), tests the connection and creates the database when the
-  user may; ioNotes also offers `--sqlite`;
+  user may; ioNote also offers `--sqlite`;
 - the Shared ioSuite database, the same way (database and user `iosuite` by default);
 - a MariaDB / MySQL administrator, optional, to create the databases and users for you;
 - the port (each app's own default), the public address and the sign-in domain (optional), an admin account;
 - what is particular to the app: the photos and digiKam for ioPix (it also installs exiftool, ffmpeg and the other
-  tools it needs, with apt, dnf, zypper, pacman or Homebrew), the time zone for ioCalendar, ioTasks and ioHealth, the optional
-  text recognition for ioNotes...;
+  tools it needs, with apt, dnf, zypper, pacman or Homebrew), the time zone for ioCalendar, ioTask and ioHealth, the optional
+  text recognition for ioNote...;
 - **Also install other apps of the suite here?** Say no for one app.
 
 Then it makes a Python virtual environment in `.venv`, installs the packages, writes `config.env` (readable by the owner
@@ -40,9 +40,9 @@ The flags are the same in every app: `--db`, `--suite-db`, `--admin`, `--port`, 
 command line in `IO<APP>_DB`, `IO<APP>_SUITE_DB`, `IO<APP>_ADMIN` and `IO<APP>_DB_ADMIN`:
 
 ```sh
-IOCONTACTS_DB=db.lan:3306/contacts:contacts:secret \
-IOCONTACTS_SUITE_DB=db.lan:3306/iosuite:iosuite:secret \
-IOCONTACTS_ADMIN=alex:secret ./setup.sh --yes --service
+IOCONTACT_DB=db.lan:3306/contacts:contacts:secret \
+IOCONTACT_SUITE_DB=db.lan:3306/iosuite:iosuite:secret \
+IOCONTACT_ADMIN=alex:secret ./setup.sh --yes --service
 ```
 
 ## Accounts from the command line

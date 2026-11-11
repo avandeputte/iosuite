@@ -1,13 +1,13 @@
 ---
-description: ioContacts, contacts for the family in the ioThing suite.
+description: ioContact, contacts for the family in the ioThing suite.
 ---
 
-# ioContacts <small>contacts</small>
+# ioContact <small>contacts</small>
 
 A contact manager for the whole family: a web app, and the standard protocols every mail, contacts and calendar app
 already speaks, so the same contacts show up on phones, in Apple Contacts, Outlook, Thunderbird and anywhere else.
 
-![ioContacts with a contact open](../img/iocontacts.jpg)
+![ioContact with a contact open](../img/iocontact.jpg)
 
 ## What it does
 
@@ -23,7 +23,7 @@ already speaks, so the same contacts show up on phones, in Apple Contacts, Outlo
 
 ## On its own
 
-ioContacts is a complete family address book. It needs its database and the Shared ioSuite database, and HTTPS if
+ioContact is a complete family address book. It needs its database and the Shared ioSuite database, and HTTPS if
 phones should sync away from home. The LDAP directory speaks plain LDAP: keep it on the home network.
 
 ## With the other apps
@@ -37,8 +37,8 @@ phones should sync away from home. The LDAP directory speaks plain LDAP: keep it
 
 | | |
 | --- | --- |
-| Proxmox VE | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iocontacts/main/proxmox/ct/iocontacts.sh)"` |
-| Docker | [docker-compose.yml](https://github.com/avandeputte/iocontacts/blob/main/docker-compose.yml): the image `ghcr.io/avandeputte/iocontacts` |
-| Any Linux or Mac | `git clone https://github.com/avandeputte/iocontacts && cd iocontacts && ./setup.sh` |
+| Proxmox VE | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iocontact/main/proxmox/ct/iocontact.sh)"` |
+| Docker | [docker-compose.yml](https://github.com/avandeputte/iocontact/blob/main/docker-compose.yml): the image `ghcr.io/avandeputte/iocontact` |
+| Any Linux or Mac | `git clone https://github.com/avandeputte/iocontact && cd iocontact && ./setup.sh` |
 | Port | 8640 (LDAP 3890) |
-| Source | [github.com/avandeputte/iocontacts](https://github.com/avandeputte/iocontacts) |
+| Source | [github.com/avandeputte/iocontact](https://github.com/avandeputte/iocontact) |
