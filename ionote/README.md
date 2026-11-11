@@ -188,7 +188,7 @@ someone signed in at `photo.example.com` is signed in at `notes.example.com` too
 *suite admin* is admin in every app. Point ionotes at that database with `IOSUITE_DB_HOST`, `IOSUITE_DB_PORT`,
 `IOSUITE_DB_NAME`, `IOSUITE_DB_USER` and `IOSUITE_DB_PASSWORD` in `config.env` (database and user `iosuite` and the notes' server by
 default; the tables are created at start; `iosuite-shared migrate --ionotes`
-folds a 1.0 install's `user_accounts` table into it). Settings › Server › This server shows which database it is. Out of the box ionotes is open to anyone who can reach it;
+folds a 1.0 install's `user_accounts` table into it). Out of the box ionotes is open to anyone who can reach it;
 `setup.sh` (or `ADMIN_USER` / `ADMIN_PASSWORD`, or the person icon in the web app) creates the admin. Once an
 account exists:
 
