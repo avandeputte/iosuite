@@ -15,7 +15,9 @@ the web, from pasted text, from a photo or from a file, and to cook, shop and pr
   phone.
 - **Import from the web**: paste the address of a recipe page and ioRecipe keeps the recipe it describes (title,
   ingredients, steps, times, tags) with its picture and a link back. It reads the recipe data most recipe sites
-  publish for search engines.
+  publish for search engines; on a page without it, the page's own lists and the text under "Ingredients". With an
+  Anthropic API key in `config.env`, a page that still gives no recipe is read by Claude: only that page's text is
+  sent, and nothing without a key.
 - **Import from pasted text or a photo**: paste a recipe from a message or a document, or give a photo of a page of
   a cookbook. The text becomes a draft in the recipe form, for you to look over before it is saved. A photo is read
   on your own server (by Tesseract); it goes nowhere else.
