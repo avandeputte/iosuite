@@ -4,7 +4,7 @@ import datetime as dt
 from zoneinfo import ZoneInfo
 
 from tests.test_api import new
-from tests.test_caldav import TODO, dav  # noqa: F401 - the fixture
+from tests.test_caldav import TODO
 
 NY = ZoneInfo("America/New_York")
 
