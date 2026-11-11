@@ -1,4 +1,4 @@
-"""The WebDAV plumbing ioCalendar (CalDAV) and ioContacts (CardDAV) share: building and reading the XML of RFC 4918,
+"""The WebDAV plumbing ioCalendar and ioTasks (CalDAV) and ioContacts (CardDAV) share: building and reading the XML of RFC 4918,
 the multistatus response, the preconditions, and the small header rules. What a calendar or an address book is, and
 which properties and reports it has, stays in each app (app/caldav.py, app/carddav.py).
 

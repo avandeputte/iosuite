@@ -9,11 +9,12 @@
 //         "health.example.com": "iohealth"}
 //   MODE  "monitor" (default): check and log, but let everything through; "enforce": turn away what fails.
 
-const REALMS = { iocalendar: "ioCalendar", iocontacts: "ioContacts", iohealth: "ioHealth" };
+const REALMS = { iocalendar: "ioCalendar", iocontacts: "ioContacts", iotasks: "ioTasks", iohealth: "ioHealth" };
 // what each app's devices sign in on, and what stays open there (ioHealth's /v1/health answers without a password)
 const GUARDED = {
   iocalendar: { paths: [/^\/dav(\/|$)/] },
   iocontacts: { paths: [/^\/dav(\/|$)/] },
+  iotasks: { paths: [/^\/dav(\/|$)/] },
   iohealth: { paths: [/^\/v1\//], open: [/^\/v1\/health\/?$/] },
 };
 const DEFAULT = { paths: [/^\/dav(\/|$)/] };
