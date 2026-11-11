@@ -15,7 +15,7 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
 
-from app import access, config, contacts, holiday, ical, members, model, users
+from app import access, config, contacts, holiday, ical, members, model, tasks, users
 from iosuite_shared import users as shared_users
 from iosuite_shared.access import json_body
 from iosuite_shared.errors import Invalid
@@ -704,6 +704,42 @@ def apple_profile_download(token: str, name: str):
         return Response("This download link has expired. Make a new one in ioCalendar: Settings › Apps and devices.",
                         status_code=404, media_type="text/plain; charset=utf-8", headers={"Cache-Control": "no-store"})
     return _profile_response(hit[1], hit[2])
+
+
+# ------------------------------------------------------------------ tasks from ioTasks
+
+def _date(s: str, name: str) -> dt.date:
+    try:
+        return dt.date.fromisoformat(str(s)[:10])
+    except ValueError:
+        raise HTTPException(400, f"{name} is a day (YYYY-MM-DD)")
+
+
+@router.get("/api/tasks", dependencies=[access.signed_in])
+def due_tasks(request: Request, start: str, end: str, tz: str | None = None):
+    """The tasks from ioTasks due from start up to end (days, YYYY-MM-DD; end not included), open and done, over the
+    lists you see there: {available, url, items: [{id, title, due, allDay, done, list, listId, color, writable,
+    priority, members, repeats}]}. tz: the time zone the days are in (the browser's). ioTasks is asked as you; when it
+    is not part of the suite, does not answer or does not let you in: {available: false, reason} and no items."""
+    s, e = _date(start, "start"), _date(end, "end")
+    if not s < e <= s + dt.timedelta(days=400):
+        raise HTTPException(400, "end comes after start, a year later at most")
+    try:
+        return {"available": True, "url": tasks.url(), "items": tasks.between(request, s, e, tz)}
+    except tasks.Unavailable as x:
+        return {"available": False, "reason": str(x), "url": tasks.url(), "items": []}
+
+
+@router.post("/api/tasks/{tid}/complete", dependencies=[access.signed_in])
+async def complete_task(tid: int, request: Request):
+    """{done: true} (the default) ticks a task off in ioTasks, {done: false} opens it again; as you, so only in a list
+    you may change there. {done, due, moved}: a repeating task moves on to its next day (moved) instead of closing.
+    tz: whose today a task that repeats after completion counts from."""
+    b = await json_body(request)
+    try:
+        return await run_in_threadpool(tasks.complete, request, tid, bool(b.get("done", True)), b.get("tz"))
+    except tasks.Unavailable as x:
+        raise HTTPException(x.status, str(x))
 
 
 # ------------------------------------------------------------------ ioContacts

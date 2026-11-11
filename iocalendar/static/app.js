@@ -200,7 +200,7 @@ const RANK = { none: 0, viewer: 1, member: 2, editor: 3, admin: 4 };
 const roleAtLeast = (r) => (RANK[S.user && S.user.role] || 0) >= RANK[r];
 const canOwn = () => roleAtLeast('member');
 const canShared = () => roleAtLeast('editor');
-const S = { status: {}, user: null, suite: [], settings: {}, cals: [], hidden: new Set(), members: [], who: new Set(), view: 'month', date: dayStart(new Date()), occ: [], q: '', mini: null, editing: null };
+const S = { status: {}, user: null, suite: [], settings: {}, cals: [], hidden: new Set(), members: [], who: new Set(), view: 'month', date: dayStart(new Date()), occ: [], q: '', mini: null, editing: null, tasks: { items: [] } };
 const calOf = (id) => S.cals.find((c) => c.id === id) || {};
 const colorOf = (id) => calOf(id).color || 'var(--brand)';
 const writable = () => S.cals.filter((c) => c.writable);
@@ -215,6 +215,43 @@ const memberColor = (m) => MEMBER_COLORS[Math.max(0, S.members.findIndex((x) => 
 const memberBadge = (m) => h('span', { class: 'mem', title: m.displayName, style: { '--mc': memberColor(m) } }, initials(m.displayName));
 /** With family members picked in the sidebar: only the events tagged with one of them (holidays and birthdays stay). */
 const passesWho = (o) => !S.who.size || isAuto(calOf(o.calendarId)) || (o.members || []).some((id) => S.who.has(id));
+
+// tasks from ioTasks, when it is part of the suite: each on the day it is due, ticked off from here
+const tasksOn = () => !!S.status.iotasks && S.settings.hideTasks !== '1';
+/** A task as the views take an occurrence: on its due day (half an hour from its time, when it has one). */
+function taskOcc(t) {
+  if (t.allDay) return { ...t, task: true, start: t.due.slice(0, 10), end: ymd(addDays(parseDay(t.due), 1)) };
+  return { ...t, task: true, start: t.due, end: new Date(+new Date(t.due) + 30 * 6e4).toISOString() };
+}
+function toggleTasks() {
+  saveSettings({ hideTasks: tasksOn() ? '1' : '' });
+  drawNav();
+  if (['month', 'week', 'day', 'agenda'].includes(route().view)) drawView();
+}
+function openTask(o) { if (S.tasks.url) window.open(`${S.tasks.url}/#/task/${o.id}`, '_blank', 'noopener'); }
+function tickBtn(o) {
+  const b = h('button', { class: `tk ${o.done ? 'on' : ''}`, disabled: !o.writable, 'aria-label': o.done ? 'Not done after all' : 'Done',
+    title: !o.writable ? 'You can see this task but not change it' : o.done ? 'Not done after all' : 'Done',
+    onclick: (ev) => { ev.stopPropagation(); tickTask(o); } });
+  b.innerHTML = `<svg viewBox="0 0 24 24"><path d="${ICONS.check}"/></svg>`;
+  return b;
+}
+async function tickTask(o) {
+  try {
+    const r = await api(`/api/tasks/${o.id}/complete`, { method: 'POST', json: { done: !o.done, tz: LOCAL_TZ } });
+    const next = r.moved && r.due ? fmtDay(r.allDay ? parseDay(r.due) : new Date(r.due), { weekday: 'short', month: 'short', day: 'numeric' }) : null;
+    toast(next ? `Done. It comes back on ${next}` : r.done ? 'Done' : 'Open again');
+  } catch (e) { fail(e); }
+  if (['month', 'week', 'day', 'agenda'].includes(route().view)) drawView();
+}
+const taskTitle = (o) => `${o.title}\n${o.list ? `${o.list} · ` : ''}${o.allDay ? 'Due this day' : `Due at ${fmtTime(span(o)[0])}`}${o.done ? ' · done' : ''}${o.repeats ? ' · repeats' : ''}`;
+function taskChip(o) {
+  return h('div', { class: `chip-ev task ${o.done ? 'done' : ''}`, style: { '--c': o.color || 'var(--brand)' }, title: taskTitle(o),
+    onclick: (ev) => { ev.stopPropagation(); openTask(o); } },
+  tickBtn(o), o.allDay ? null : h('span', { class: 't' }, fmtTime(span(o)[0])), h('span', { class: 'nm' }, o.title),
+  (o.members || []).map(memberOf).filter(Boolean).map(memberBadge));
+}
+
 function toggleWho(id) {
   if (id == null) S.who.clear(); else if (S.who.has(id)) S.who.delete(id); else S.who.add(id);
   saveSettings({ memberFilter: [...S.who].join(',') });
@@ -355,6 +392,13 @@ function drawNav() {
   const whoRow = (m) => h('a', { href: '#', 'data-v': 'who', class: `who ${S.who.has(m.id) ? 'picked' : ''}`, style: { '--mc': memberColor(m) },
     title: S.who.has(m.id) ? `Stop showing only ${m.displayName}'s events` : `Show only ${m.displayName}'s events`,
     onclick: (e) => { e.preventDefault(); toggleWho(m.id); } }, memberBadge(m), h('span', { class: 'nl' }, m.displayName));
+  const taskRow = () => {
+    const ck = h('span', { class: 'ck' }); ck.innerHTML = check;
+    const why = tasksOn() && S.tasks.available === false ? S.tasks.reason : null;
+    return h('a', { href: '#', 'data-v': 'cal', class: `cal ${tasksOn() ? 'shown' : ''} ${why ? 'away' : ''}`, style: { '--hue': '#146b5e' },
+      title: why || (tasksOn() ? 'Hide the tasks that are due' : 'Show the tasks on the day they are due'),
+      onclick: (e) => { e.preventDefault(); toggleTasks(); } }, ck, h('span', { class: 'nl' }, 'Tasks due'));
+  };
   const shared = S.cals.filter((c) => c.shared), mine = S.cals.filter((c) => !c.shared);
   nav.replaceChildren(...[
     h('div', { class: 'navhead' },
@@ -378,6 +422,9 @@ function drawNav() {
     h('div', { class: 'navgap' }),
     canOwn() || mine.length ? sec('Mine', canOwn() ? h('button', { class: 'iconbtn', title: 'New private calendar', onclick: () => newCalendar(false) }, icon('add', 's')) : null) : null,
     mine.map(calRow),
+    S.status.iotasks ? [h('div', { class: 'navgap' }),
+      sec('ioTasks', S.tasks.url ? h('a', { class: 'iconbtn', href: S.tasks.url, target: '_blank', rel: 'noopener', title: 'Open ioTasks' }, icon('open', 's')) : null),
+      taskRow()] : null,
     h('div', { class: 'navgap' }), sec('Manage'),
     writable().some((c) => !isAuto(c)) ? link('import', '#/import', 'upload', 'Import', null, r.view === 'import', '--c-green') : null,
     h('div', { class: 'navfoot' }, link('settings', '#/settings', 'settings', 'Settings', null, r.view === 'settings')),
@@ -528,6 +575,9 @@ function byDay(days, items) {
 /** Spans more than one day: drawn as a bar (month) or in the all-day row (week). */
 const longEvent = (o) => { if (o.allDay) return true; const [a, b] = span(o); return b - a >= 864e5; };
 
+/** A day's entries in order: what takes the whole day (events, then the tasks without a time), then by time. */
+const dayOrder = (x, y) => longEvent(y) - longEvent(x) || (longEvent(x) ? !!x.task - !!y.task : 0) || span(x)[0] - span(y)[0];
+
 let drawSeq = 0;
 async function drawView() {
   const main = $('#main');
@@ -535,10 +585,16 @@ async function drawView() {
   const [s, e] = viewRange();
   const seq = ++drawSeq;
   const ids = shownCals().map((c) => c.id);
-  let items = [];
-  if (ids.length) items = (await api(`/api/occurrences?start=${encodeURIComponent(s.toISOString())}&end=${encodeURIComponent(e.toISOString())}&calendars=${ids.join(',')}`)).items;
+  const [occ, tasks] = await Promise.all([
+    ids.length ? api(`/api/occurrences?start=${encodeURIComponent(s.toISOString())}&end=${encodeURIComponent(e.toISOString())}&calendars=${ids.join(',')}`) : { items: [] },
+    tasksOn() ? api(`/api/tasks?start=${ymd(s)}&end=${ymd(e)}&tz=${encodeURIComponent(LOCAL_TZ)}`).catch((x) => ({ available: false, reason: x.message, items: [] })) : null]);
   if (seq !== drawSeq) return;
-  S.occ = items.filter(passesWho);
+  if (tasks) {
+    const was = `${S.tasks.available}|${S.tasks.url}`;
+    S.tasks = tasks;
+    if (was !== `${tasks.available}|${tasks.url}`) drawNav();  // the link to ioTasks, or why its tasks are not here
+  }
+  S.occ = [...occ.items, ...(tasks ? tasks.items.map(taskOcc) : [])].filter(passesWho);
   const body = h('div', { class: 'calbody' });
   const key = `${S.view}|${ymd(s)}`;
   const keep = S.drawn === key ? main.querySelector('.calbody')?.scrollTop : undefined;
@@ -549,6 +605,7 @@ async function drawView() {
 
 const canChange = (o) => !!calOf(o.calendarId).writable;
 function chip(o, day) {
+  if (o.task) return taskChip(o);
   const [a] = span(o);
   const long = longEvent(o);
   const el = h('div', { class: ['chip-ev', long ? 'allday' : '', o.status === 'CANCELLED' ? 'cancelled' : '', o.status === 'TENTATIVE' ? 'tentative' : ''].join(' '),
@@ -570,7 +627,7 @@ function drawMonth(body, s, e) {
   for (let w = 0; w < weeks; w++) {
     const row = h('div', { class: 'wk' });
     for (const d of days.slice(w * 7, w * 7 + 7)) {
-      const list = map.get(ymd(d)).slice().sort((x, y) => longEvent(y) - longEvent(x) || span(x)[0] - span(y)[0]);
+      const list = map.get(ymd(d)).slice().sort(dayOrder);
       const cell = h('div', { class: ['mday', d.getMonth() !== month ? 'other' : '', sameDay(d, today) ? 'today' : ''].join(' '),
         onclick: () => newAt(d), title: 'New event' },
       h('span', { class: 'dnum', title: 'Open the day', onclick: (ev) => { ev.stopPropagation(); go('day', d); } }, d.getDate() === 1 ? d.toLocaleDateString([], { month: 'short', day: 'numeric' }) : d.getDate()),
@@ -666,6 +723,12 @@ function drawWeek(body, s, e, keep) {
     const lay = layout(map.get(ymd(d)).filter((o) => !longEvent(o)), d);
     for (const x of lay) {
       const o = x.o, [a, b] = span(o);
+      if (o.task) {
+        col.append(h('div', { class: `tev task ${o.done ? 'done' : ''}`, title: taskTitle(o), onclick: (ev) => { ev.stopPropagation(); openTask(o); },
+          style: { '--c': o.color || 'var(--brand)', top: `${x.top / 60 * HH}px`, height: `${(x.bottom - x.top) / 60 * HH - 2}px`,
+            left: `calc(${x.col / x.cols * 100}% + 1px)`, width: `calc(${100 / x.cols}% - 3px)` } }, tickBtn(o), h('span', { class: 'nm' }, o.title)));
+        continue;
+      }
       const el = h('div', { class: ['tev', o.status === 'CANCELLED' ? 'cancelled' : '', o.busy === false ? 'free' : ''].join(' '),
         style: { '--c': colorOf(o.calendarId), top: `${x.top / 60 * HH}px`, height: `${Math.max(18, (x.bottom - x.top) / 60 * HH - 2)}px`,
           left: `calc(${x.col / x.cols * 100}% + 1px)`, width: `calc(${100 / x.cols}% - 3px)` },
@@ -718,7 +781,7 @@ function drawAgenda(body, s, e) {
   const wrap = h('div', { class: 'agenda' });
   let any = false;
   for (const d of days) {
-    const list = map.get(ymd(d));
+    const list = map.get(ymd(d)).sort(dayOrder);
     if (!list.length) continue;
     any = true;
     wrap.append(h('div', { class: `aday ${sameDay(d, today) ? 'today' : ''}` },
@@ -726,12 +789,18 @@ function drawAgenda(body, s, e) {
         h('div', { class: 'w' }, d.toLocaleDateString([], { weekday: 'short', month: 'short' }))),
       h('div', { class: 'evs' }, list.map((o) => agendaRow(o, d)))));
   }
-  if (!any) wrap.append(h('div', { class: 'empty' }, icon('agenda'), h('p', null, shownCals().length ? 'Nothing planned in these weeks.' : 'Every calendar is hidden: tick one in the sidebar.')));
+  if (!any) wrap.append(h('div', { class: 'empty' }, icon('agenda'), h('p', null, shownCals().length || tasksOn() ? 'Nothing planned in these weeks.' : 'Every calendar is hidden: tick one in the sidebar.')));
   wrap.append(h('p', null, h('button', { class: 'pillbtn noic', onclick: () => { S.agendaDays = (S.agendaDays || 31) + 61; drawView(); } }, 'Show more')));
   body.append(wrap);
 }
 function agendaRow(o, d) {
   const [a, b] = span(o);
+  if (o.task) {
+    return h('div', { class: `arow task ${o.done ? 'done' : ''}`, style: { '--c': o.color || 'var(--brand)' }, title: taskTitle(o), onclick: () => openTask(o) },
+      tickBtn(o), h('span', { class: 'tm' }, o.allDay ? 'Task' : `Task · ${fmtTime(a)}`),
+      h('div', { style: { minWidth: 0 } }, h('div', { class: 'nm' }, o.title),
+        h('div', { class: 'sub' }, [o.list, (o.members || []).map(memberOf).filter(Boolean).map((m) => m.displayName).join(', ')].filter(Boolean).join(' · '))));
+  }
   const tm = o.allDay ? 'All day' : longEvent(o) || !sameDay(a, new Date(+b - 1)) ? (sameDay(a, d) ? `From ${fmtTime(a)}` : sameDay(b, d) ? `Until ${fmtTime(b)}` : 'All day') : `${fmtTime(a)} – ${fmtTime(b)}`;
   return h('div', { class: 'arow', style: { '--c': colorOf(o.calendarId) }, onclick: () => openEvent(o) },
     h('span', { class: 'dot' }), h('span', { class: 'tm' }, tm),
