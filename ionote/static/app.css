@@ -79,6 +79,13 @@ body.side-docked #menubtn { display: none; }
 .appic { width: 44px; height: 44px; border-radius: 12px; object-fit: contain; }
 .appic.fb { display: inline-flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 18px; }
 .appnm { font-size: var(--fs-s); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* the app this menu is in stays in the list (one order in every app), marked; admin tools come smaller, apart */
+.apptile.cur { background: var(--bg2); }
+.apptile.cur .appnm { font-weight: 600; }
+.apptile.tool { gap: 4px; padding: 6px 4px; }
+.apptile.tool .appic { width: 28px; height: 28px; border-radius: 8px; }
+.apptile.tool .appic.fb { font-size: 13px; }
+.apptile.tool .appnm { font-size: 12px; }
 #search { flex: 1 1 0; min-width: 0; display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 14px;
   background: var(--bg2); border-radius: var(--r-pill); color: var(--fg2); }
 #search:focus-within { background: var(--bg); box-shadow: var(--shadow); }

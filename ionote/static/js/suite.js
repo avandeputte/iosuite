@@ -3,12 +3,14 @@
  *  All notes. The same as ioContacts'. */
 import { $, h, api } from './core.js';
 
+let suiteSelf = null;  // this app's key, marked in the menu
 let apps = [], pop = null;
 
 export async function loadSuite() {
   try {
     const r = await api('/api/auth/suite');
-    apps = (r.items || []).filter((a) => a.app !== r.app && a.url);
+    apps = (r.items || []).filter((a) => a.url); suiteSelf = r.app;  // in the suite's one order, this app too
+    if (!apps.some((a) => a.app !== r.app)) apps = [];  // only this app: no menu
   } catch (e) { apps = []; }
   const b = $('#suitebtn');
   if (b) { b.hidden = !apps.length; b.onclick = () => toggleSuite(b); }
@@ -43,7 +45,10 @@ function appTile(a) {
   const letter = (a.name || a.app).replace(/^io(?=[A-Z])/, '').slice(0, 1).toUpperCase();
   const fallback = () => h('span.appic.fb', { style: { background: a.color || 'var(--brand)' } }, letter);
   const ic = a.icon ? h('img.appic', { src: a.icon, alt: '', onerror: (e) => e.currentTarget.replaceWith(fallback()) }) : fallback();
-  return h('a.apptile', { href: a.url, role: 'menuitem', title: a.description || a.name, onclick: closeSuite }, ic, h('span.appnm', a.name || a.app));
+  const el = h('a.apptile', { href: a.url, role: 'menuitem', title: a.description || a.name, onclick: closeSuite }, ic, h('span.appnm', a.name || a.app));
+  el.classList.toggle('tool', !!a.adminTool);  // admin tools: a smaller icon
+  if (a.app === suiteSelf) { el.classList.add('cur'); el.setAttribute('aria-current', 'page'); }
+  return el;
 }
 
 function toggleSuite(btn) {
