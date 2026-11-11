@@ -67,7 +67,7 @@ def find_calendar(u: dict, ref, writable: bool = False) -> dict:
     c = hit[0]
     if writable and not model.can_write(u, c):
         raise ToolError(f"You can read '{c['name']}' but not change it" + (f" ({model.read_only_reason(c)})" if model.read_only_reason(c)
-                                                                            else " (viewers change only their own private calendars)"))
+                                                                            else " (a viewer only reads; members change their own private calendars, editors the shared ones)"))
     return c
 
 

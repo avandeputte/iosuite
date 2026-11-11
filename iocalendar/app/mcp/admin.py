@@ -100,7 +100,7 @@ def update_server() -> dict:
 
 @server.tool(annotations=READ_ONLY)
 def list_accounts() -> list:
-    """Admins: the accounts, with their roles here (viewer, editor, admin)."""
+    """Admins: the accounts, with their roles here (viewer, member, editor, admin)."""
     need_admin()
     return [{"name": u["name"], "displayName": u.get("displayName"), "email": u.get("email") or None, "role": u.get("role")}
             for u in users.all_users()]

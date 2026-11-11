@@ -1,8 +1,10 @@
-"""The tools that change events and calendars, with the same permissions as the web app: a viewer changes only their
-own private calendars, editors and admins the shared ones too. Every change reaches phones and apps at their next sync."""
+"""The tools that change events and calendars, with the same permissions as the web app: a viewer only reads, a
+member changes their own private calendars, editors and admins the shared ones too. Every change reaches phones and apps at their next sync."""
 from typing import Literal, Optional
 
 from mcp.server.mcpserver.exceptions import ToolError
+
+from iosuite_shared import users as shared_users
 
 from app import ical, members, model
 from app.mcp.base import ADDS, DELETES, WRITES, default_calendar, event_out, find_calendar, find_event, server, who
@@ -126,8 +128,10 @@ def create_calendar(name: str, shared: bool = False, color: Optional[str] = None
                     timezone: Optional[str] = None) -> dict:
     """A new calendar: private (only you see it) or shared with everyone (editors and admins). color: #rrggbb."""
     u = who()
-    if shared and u.get("role") not in ("editor", "admin"):
+    if shared and not shared_users.can_write(u):
         raise ToolError("Only editors make shared calendars")
+    if not shared and not shared_users.is_member(u):
+        raise ToolError("A viewer only looks; a member keeps calendars of their own")
     cid = model.create_calendar(None if shared else u["id"], name, description, color, timezone=timezone)
     c = model.calendar(cid)
     return {"id": c["id"], "name": c["name"], "shared": shared, "color": c["color"]}

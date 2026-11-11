@@ -40,7 +40,7 @@ def writable_calendar(u: dict, cid) -> dict:
     if not model.can_write(u, c):
         why = model.read_only_reason(c)
         raise HTTPException(403, f"You cannot change '{c['name']}': {why}" if why
-                            else "Viewers can only change their own private calendars")
+                            else "You can see this calendar but not change it")
     return c
 
 
@@ -174,6 +174,8 @@ async def add_calendar(request: Request):
     shared = bool(b.get("shared"))
     if shared and not shared_users.can_write(u):
         raise HTTPException(403, "Only editors make shared calendars")
+    if not shared and not shared_users.is_member(u):
+        raise HTTPException(403, "A viewer only looks; a member keeps calendars of their own")
     if not (b.get("name") or "").strip():
         raise HTTPException(400, "A name, please")
 

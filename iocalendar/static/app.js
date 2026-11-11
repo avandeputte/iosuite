@@ -194,6 +194,12 @@ function whenText(o) {
 }
 
 // ------------------------------------------------------------------ state
+// the suite's roles, each able to do what the one before can: a viewer only looks, a member keeps their own calendars,
+// an editor changes the shared ones too
+const RANK = { none: 0, viewer: 1, member: 2, editor: 3, admin: 4 };
+const roleAtLeast = (r) => (RANK[S.user && S.user.role] || 0) >= RANK[r];
+const canOwn = () => roleAtLeast('member');
+const canShared = () => roleAtLeast('editor');
 const S = { status: {}, user: null, suite: [], settings: {}, cals: [], hidden: new Set(), members: [], who: new Set(), view: 'month', date: dayStart(new Date()), occ: [], q: '', mini: null, editing: null, tasks: { items: [] } };
 const calOf = (id) => S.cals.find((c) => c.id === id) || {};
 const colorOf = (id) => calOf(id).color || 'var(--brand)';
@@ -408,13 +414,13 @@ function drawNav() {
     link('agenda', '#/agenda', 'agenda', 'Agenda', null, r.view === 'agenda', '--c-blue'),
     h('button', { class: 'navmore', 'data-v': 'more', title: 'More', onclick: moreSheet }, icon('more'), h('span', { class: 'nl' }, 'More')),
     miniMonth(),
-    sec('Shared', S.user.role !== 'viewer' ? h('button', { class: 'iconbtn', title: 'New shared calendar', onclick: () => newCalendar(true) }, icon('add', 's')) : null),
+    sec('Shared', canShared() ? h('button', { class: 'iconbtn', title: 'New shared calendar', onclick: () => newCalendar(true) }, icon('add', 's')) : null),
     shared.map(calRow),
     S.members.length > 1 ? [h('div', { class: 'navgap' }),
       sec('Family', S.who.size ? h('button', { class: 'pillbtn noic tiny', title: 'Show everyone again', onclick: () => toggleWho(null) }, 'Everyone') : null),
       S.members.map(whoRow)] : null,
     h('div', { class: 'navgap' }),
-    sec('Mine', h('button', { class: 'iconbtn', title: 'New private calendar', onclick: () => newCalendar(false) }, icon('add', 's'))),
+    canOwn() || mine.length ? sec('Mine', canOwn() ? h('button', { class: 'iconbtn', title: 'New private calendar', onclick: () => newCalendar(false) }, icon('add', 's')) : null) : null,
     mine.map(calRow),
     S.status.iotasks ? [h('div', { class: 'navgap' }),
       sec('ioTasks', S.tasks.url ? h('a', { class: 'iconbtn', href: S.tasks.url, target: '_blank', rel: 'noopener', title: 'Open ioTasks' }, icon('open', 's')) : null),
@@ -1280,8 +1286,8 @@ async function setDevices(el) {
 async function setCalendars(el) {
   await loadCals();
   const tzs = zones(S.status.timezone);
-  el.append(h('p', null, S.user.role !== 'viewer' ? h('button', { class: 'pillbtn', onclick: async () => { await newCalendar(true); onRoute(); } }, icon('add', 's'), 'New shared calendar') : null, ' ',
-    h('button', { class: 'pillbtn', onclick: async () => { await newCalendar(false); onRoute(); } }, icon('add', 's'), 'New private calendar')),
+  el.append(h('p', null, canShared() ? h('button', { class: 'pillbtn', onclick: async () => { await newCalendar(true); onRoute(); } }, icon('add', 's'), 'New shared calendar') : null, ' ',
+    canOwn() ? h('button', { class: 'pillbtn', onclick: async () => { await newCalendar(false); onRoute(); } }, icon('add', 's'), 'New private calendar') : null),
   ...S.cals.map((c) => {
     const auto = isAuto(c);
     const save = async (body) => { try { await api(`/api/calendars/${c.id}`, { method: 'PATCH', json: body }); await loadCals(); toast('Saved'); } catch (e) { fail(e); } };
@@ -1437,7 +1443,7 @@ function updateBanner() {
 
 // ------------------------------------------------------------------ sign-in
 function showSignIn() {
-  // as in the other io apps: a tile per account; one click for a passwordless viewer, a password for the others
+  // as in the other io apps: a tile per account; one click for a passwordless account, a password for the others
   if (document.querySelector('.signin')) return;
   const first = !S.status.usersExist;
   const name = h('input', { class: 't', placeholder: 'User name', autocomplete: 'username', autocapitalize: 'none' });
