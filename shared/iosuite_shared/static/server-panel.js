@@ -1,6 +1,6 @@
 /* The Server panel: Settings › Server, the same screen in every io app (admins). The MCP switch (when the app has
-   one), the installed version with Check for updates, Update now and the daily check, what this server runs on, the
-   server log, and Restart. Everything comes from iosuite-shared's /api/server and /api/log (Auth.server_router).
+   one), the installed version with Check for updates, Update now and the daily check, the server log, and Restart.
+   Everything comes from iosuite-shared's /api/server and /api/log (Auth.server_router).
 
    Served at <app>/api/server/ui.js; it talks to the API next to it, so an app served under a sub-path works too. One
    ES module, no build step, its own styles (scoped under .iosv), using the app's colours when it has them (--fg,
@@ -10,7 +10,7 @@
      ui.mount(el, { toast });
 
    The app's info() for GET /api/server can add: mcpEnabled and mcpLocked (the MCP box; POST {mcpEnabled} goes to the
-   app's apply()), mcpAbout (what /mcp lets an assistant do), and about: [[label, value], ...] (the This server box).
+   app's apply()) and mcpAbout (what /mcp lets an assistant do).
 */
 import { api, confirmDialog, fail, h, icon, setToast, styles, toast } from '../auth/ui.js';
 
@@ -80,13 +80,6 @@ function versionBox(s, redraw) {
     h('p', { class: 'sv-muted sv-small' }, `Follows ${s.repo} (${s.branch}). `, h('a', { href: `https://github.com/${s.repo}/commits/${s.branch}`, target: '_blank', rel: 'noopener' }, 'Change log'), '.'));
 }
 
-function aboutBox(s) {
-  if (!s.about || !s.about.length) return null;
-  return h('div', { class: 'sv-box' }, h('h2', null, icon('server'), 'This server'),
-    s.about.map(([k, v]) => h('div', { class: 'sv-kv' }, h('span', null, k), h('span', null, v == null || v === '' ? '—' : String(v)))),
-    h('p', { class: 'sv-muted sv-small' }, 'Set in config.env.'));
-}
-
 function logBox() {
   const level = h('select', { class: 'sv-in' }, [['any', 'Everything'], ['warning', 'Warnings and errors'], ['error', 'Errors'], ['auth', 'Sign-ins']].map(([v, l]) => h('option', { value: v }, l)));
   const contains = h('input', { class: 'sv-in', placeholder: 'Contains…' });
@@ -130,7 +123,7 @@ export async function mount(el, opts = {}) {
     let s;
     try { s = await api('server'); } catch (e) { el.replaceChildren(h('p', { class: 'sv-warn' }, e.message)); return; }
     log = log || logBox();
-    el.replaceChildren(...['mcpEnabled' in s ? mcpBox(s, draw) : null, versionBox(s, draw), aboutBox(s), log, restartBox(s)].filter(Boolean));
+    el.replaceChildren(...['mcpEnabled' in s ? mcpBox(s, draw) : null, versionBox(s, draw), log, restartBox(s)].filter(Boolean));
     clearTimeout(timer);
     if (s.progress && s.progress.running) timer = setTimeout(() => { if (el.isConnected) draw(); }, 4000);
   };

@@ -296,7 +296,7 @@ Server tab, so the page is the same everywhere.
 
 ```js
 const ui = await import(new URL('api/server/ui.js', document.baseURI).href);
-ui.mount(el, { toast });          // the MCP switch, the version and updates, This server, the server log, Restart
+ui.mount(el, { toast });          // the MCP switch, the version and updates, the server log, Restart
 ui.runUpdate({ toast });          // the same Update now, for the app's "a new version is out" banner
 ```
 
@@ -306,8 +306,7 @@ from iosuite_shared.updates import Updater
 updater = Updater("iocalendar", version=__version__, root=ROOT)   # repo avandeputte/iocalendar, branch main, update.sh in ROOT
 updater.start_daily()                                             # checks once a day while the setting is on
 app.include_router(auth.server_router(updater, log_file=LOG_FILE,
-    info=lambda: {"mcpEnabled": mcp_enabled(), "mcpLocked": MCP_FORCED,   # extra fields of GET /api/server: the MCP box,
-                  "about": [["Time zone", "Europe/Brussels"]]},             # and the This server box (no database address)
+    info=lambda: {"mcpEnabled": mcp_enabled(), "mcpLocked": MCP_FORCED},  # extra fields of GET /api/server: the MCP box
     apply=save_switches))                                         # the app's own switches in the POST body (raise Invalid to refuse)
 ```
 
