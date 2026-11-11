@@ -12,6 +12,9 @@ services:
       # args: { OCR: "1" }
     container_name: ionotes
     restart: unless-stopped
+    logging:                          # the output Docker keeps (the app's log, again): at most 3 files of 5 MB
+      driver: json-file
+      options: {max-size: 5m, max-file: "3"}
     ports:
       - "8610:8610"
     volumes:

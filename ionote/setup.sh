@@ -248,11 +248,12 @@ if [ "$SERVICE" = 1 ] && [ "$OS" = Darwin ]; then
   "$VPY" - "$PL" "$APP" "$VPY" "$DATA" <<'PYEOF'
 import plistlib, sys, os
 pl, app, vpy, data = sys.argv[1:5]
-# the settings stay in config.env, which the app reads itself: the login item only starts `python -m app`
+# the settings stay in config.env, which the app reads itself: the login item only starts `python -m app`. Its output
+# goes nowhere: the app keeps its own log (data/ionotes.log, at most 4 files of 5 MB); ./run.sh shows why it will not start
 d = {"Label": "net.iothing.ionotes.server", "ProgramArguments": [vpy, "-m", "app"],
      "WorkingDirectory": app, "RunAtLoad": True, "KeepAlive": True, "ThrottleInterval": 10,
      "EnvironmentVariables": {"PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"},
-     "StandardOutPath": os.path.join(data, "server.log"), "StandardErrorPath": os.path.join(data, "server.log")}
+     "StandardOutPath": "/dev/null", "StandardErrorPath": "/dev/null"}
 os.makedirs(os.path.dirname(pl), exist_ok=True)
 with open(pl, "wb") as f: plistlib.dump(d, f)
 print("  wrote", pl)
