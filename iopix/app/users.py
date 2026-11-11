@@ -25,7 +25,7 @@ CACHE_S = shared.CACHE_S
 _attempts = shared._attempts
 LOCK_AFTER, LOCK_AFTER_NAME, LOCK_BASE, LOCK_MAX = shared.LOCK_AFTER, shared.LOCK_AFTER_NAME, shared.LOCK_BASE, shared.LOCK_MAX
 login_wait, login_failed, login_succeeded = shared.login_wait, shared.login_failed, shared.login_succeeded
-any_users, delete, is_signed_in, can_write, is_admin = shared.any_users, shared.delete, shared.is_signed_in, shared.can_write, shared.is_admin
+any_users, delete, is_signed_in, is_member, can_write, is_admin = shared.any_users, shared.delete, shared.is_signed_in, shared.is_member, shared.can_write, shared.is_admin
 end_all_sessions = sessions.end_all
 
 

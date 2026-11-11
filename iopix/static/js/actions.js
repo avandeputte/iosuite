@@ -232,6 +232,7 @@ export async function renamePhoto(d) {
   if (LB.open && LB.src.id[LB.i] === d.id) setTimeout(() => { LB.detail = null; showItem(); }, 1500);
 }
 export async function setFavorite(ids, on) {
+  if (!S.IS_MEMBER) { toast('A viewer only looks. An admin can make you a member to keep favorites.'); return; }
   try { await post('/api/favorites', { ids, on }); } catch { toast('Could not save the favorite.'); return; }
   ids.forEach((id) => (on ? ST.fav.add(id) : ST.fav.delete(id)));
   ST.rev++;

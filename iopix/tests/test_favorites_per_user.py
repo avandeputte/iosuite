@@ -22,7 +22,7 @@ def _clear():
 
 def test_each_account_keeps_its_own_favorites(client, fresh, lib):
     _clear()
-    users.create("alex", "admin-pass1", "admin"); users.create("vi", "viewer-pass", "viewer")
+    users.create("alex", "admin-pass1", "admin"); users.create("vi", "viewer-pass", "member")
     p1, p2, p3 = lib["ids"][:3]
     try:
         _login(client, "alex", "admin-pass1")
@@ -55,7 +55,7 @@ def test_the_one_list_goes_to_one_account(client, fresh, lib):
         # no accounts: one list for everyone, as before
         assert client.post("/api/favorites", json={"ids": [p1, p2]}).status_code == 200
         assert set(_favs(client)) == {p1, p2} and _count(client) == 2
-        users.create("alex", "admin-pass1", "admin"); users.create("sam", "admin-pass2", "admin"); users.create("vi", "viewer-pass", "viewer")
+        users.create("alex", "admin-pass1", "admin"); users.create("sam", "admin-pass2", "admin"); users.create("vi", "viewer-pass", "member")
 
         _login(client, "vi", "viewer-pass")  # not an admin: the list is not theirs to take
         assert _favs(client) == [] and _count(client) == 0
