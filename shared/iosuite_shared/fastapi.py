@@ -39,9 +39,11 @@ class Auth:
         """version, public_url (the app's PUBLIC_URL; empty: the address it is reached at), description and color (the
         icon is suite.ICON, the same path in every app) and internal_url (where it is inside the network; None:
         suite.local_url(), from INTERNAL_URL or the LAN address and PORT) go into the suite's list of apps (iosuite_shared.suite) when the app first reaches the Shared ioSuite database; register=False
-        keeps the app out of it. admin_tool=True: an app behind the scenes (ioDNS), which only its admins see in the
-        start page and the app switchers."""
+        keeps the app out of it. admin_tool=True: an app behind the scenes (ioDNS, ioBackup), for suite admins only:
+        everybody else is none there, so it is on no one else's start page or app switcher."""
         self.app = app
+        if admin_tool:
+            suite.declare_admin_tool(app)
         self.suite_entry = dict(name=app_label or app, url=public_url or None, version=version, description=description,
                                 color=color, internal_url=internal_url or suite.local_url(app), admin_tool=admin_tool) if register else None
         self._registered, self._retry_at = False, 0.0
@@ -53,6 +55,9 @@ class Auth:
         self.log = logging.getLogger(f"iosuite_shared.{app}")
         self.decorate = lambda user: user  # the app may add fields to the user dict it serves (iopix: the person tag)
         self.on_update = None  # on_update(user_id, body) after an admin changed an account: the app's own fields (iopix: the person tag)
+        # the role `canWrite` in /api/auth/me stands for: "editor" where the app has things shared with everyone; an app
+        # where everything is one's own (ioNotes, ioHealth) sets "member", so its pages and native apps offer changes to members
+        self.write_role = "editor"
         self.deny_exempt = ()  # path prefixes a denied proxy identity may still reach (iopix: /mcp, which signs in with its own token)
         # what a scoped app password may reach, by path prefix (apppasswords: 'dav', the app's sync protocols); anywhere
         # else it gets 403. An app without DAV sets it to {} so it offers no such passwords.
@@ -286,7 +291,7 @@ class Auth:
         shut = outside and not users.any_users()  # no account yet, asked from outside: nothing is open (unclaimed)
         return {"user": u, "settings": users.get_settings(u["id"], self.app) if u else {}, "usersExist": users.any_users(),
                 "isAdmin": users.is_admin(u) and not shut, "isSuiteAdmin": users.is_suite_admin(u) and not shut,
-                "canWrite": users.can_write(u) and not shut, "signedIn": users.is_signed_in(u) and not shut,
+                "isMember": users.is_member(u) and not shut, "canWrite": users.at_least(u, self.write_role) and not shut, "signedIn": users.is_signed_in(u) and not shut,
                 "requireLogin": shut or users.require_login(self.app), "unclaimed": shut,
                 "viaProxy": bool(getattr(request.state, "via_proxy", False)), "signedInBy": self.signed_in_by(request, u),
                 "throughCloudflare": outside, "app": self.app}

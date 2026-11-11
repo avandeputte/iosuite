@@ -20,14 +20,15 @@ from iosuite_shared import config, schema
 
 log = logging.getLogger("iosuite_shared.db")
 
-SCHEMA_VERSION = 5  # 4: the suite naming convention (ios_ tables, *_at times, name/value, named indexes); 5: ios_apps.admin_tool
+SCHEMA_VERSION = 6  # 4: the suite naming convention (ios_ tables, *_at times, name/value, named indexes); 5: ios_apps.admin_tool;
+# 6: the member role (between viewer and editor); the viewers of before, who kept their own things, became members
 PREFIX = "ios"
 OPTIONS = " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
 
 # Every table is ios_<name>, so the shared tables can sit in the same database as the apps' own (each app has its
 # own three-letter prefix). Times are seconds since 1970 (UTC).
 SCHEMA = [
-    # one account for the whole suite. hash '' is a passwordless account: one-click sign-in on the LAN, viewer at most.
+    # one account for the whole suite. hash '' is a passwordless account: one-click sign-in on the LAN, member at most.
     # session_gen is read by nothing; the column stays while an app on iosuite-shared before 0.34 may still select it.
     """CREATE TABLE IF NOT EXISTS ios_users (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -44,11 +45,11 @@ SCHEMA = [
         UNIQUE KEY uq_ios_users_name (name),
         UNIQUE KEY uq_ios_users_email (email)
     )""",
-    # the role an account holds in one app; no row: the app's default_role setting (viewer unless changed)
+    # the role an account holds in one app; no row: the app's default_role setting (member unless changed)
     """CREATE TABLE IF NOT EXISTS ios_user_roles (
         user_id INT NOT NULL,
         app VARCHAR(32) NOT NULL,
-        role ENUM('none','viewer','editor','admin') NOT NULL,
+        role ENUM('none','viewer','member','editor','admin') NOT NULL,
         PRIMARY KEY (user_id, app),
         FOREIGN KEY (user_id) REFERENCES ios_users(id) ON DELETE CASCADE
     )""",
@@ -367,8 +368,20 @@ def init():
                 if "admin_tool" not in schema.columns(cur, "ios_apps"):  # 5: an app may be an admin tool
                     cur.execute("ALTER TABLE ios_apps ADD COLUMN admin_tool TINYINT NOT NULL DEFAULT 0 AFTER internal_url")
                 schema.ensure_version_table(cur, PREFIX)
+                if schema.current_version(cur, PREFIX) < 6:
+                    _members(cur)
                 schema.record_version(cur, PREFIX, SCHEMA_VERSION)
         _ready = True
+
+
+def _members(cur):
+    """6: the member role. A viewer used to keep their own things (calendars, lists, address books); that is a member
+    now and a viewer is read-only, so the people who were viewers become members (the apps' own service accounts stay
+    viewers: they only read), and an app whose default was viewer gets the new default, member."""
+    cur.execute("ALTER TABLE ios_user_roles MODIFY role ENUM('none','viewer','member','editor','admin') NOT NULL")
+    cur.execute("UPDATE ios_user_roles r JOIN ios_users u ON u.id = r.user_id SET r.role = 'member' "
+                "WHERE r.role = 'viewer' AND u.service IS NULL")
+    cur.execute("DELETE FROM ios_settings WHERE name = 'default_role' AND value = 'viewer'")
 
 
 def ready() -> bool:

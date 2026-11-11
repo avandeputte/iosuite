@@ -13,13 +13,15 @@ def test_create_authenticate_roles():
     assert users.authenticate("ALEX@example.com", "secret123")["id"] == u["id"]  # by email, case-insensitive
     v = users.create("kid", "", "viewer", "iopix")
     assert v["passwordless"] and v["role"] == "viewer"
-    assert users.role_of(v, "ionotes") == "viewer"  # the default role
+    assert users.role_of(v, "ionotes") == "member"  # the default role
     users.db.set_setting("default_role", "none", "ionotes")
     assert users.role_of(v, "ionotes") == "none"
     with pytest.raises(ValueError):
         users.set_role(v["id"], "iopix", "bogus")
     with pytest.raises(ValueError):
-        users.update(v["id"], role="editor", app="iopix")  # no password: viewer at most
+        users.update(v["id"], role="editor", app="iopix")  # no password: member at most
+    users.update(v["id"], role="member", app="iopix")  # a member is fine without one
+    assert users.get(v["id"], "iopix")["role"] == "member"
     users.update(v["id"], password="longenough", role="editor", app="iopix")
     assert users.get(v["id"], "iopix")["role"] == "editor"
     assert users.get(v["id"], "ionotes")["role"] == "none"
@@ -50,7 +52,7 @@ def test_sessions():
     u = users.create("alex", "secret123", "editor", "iopix")
     tok = sessions.create(u["id"], "iopix", "password")
     got = sessions.user_from_token(tok, "ionotes")  # the same session serves another app, with the role there
-    assert got["id"] == u["id"] and got["role"] == "viewer"
+    assert got["id"] == u["id"] and got["role"] == "member"
     users.update(u["id"], password="changed123")  # ends every session
     assert sessions.user_from_token(tok, "iopix") is None
     tok = sessions.create(u["id"], "iopix", "password")
@@ -128,3 +130,82 @@ def test_sign_in_by_name_never_picks_another_account_by_its_email():
     assert users.authenticate("alex@example.com", "other-pass")["name"] == "alex@example.com"
     assert users.authenticate("alex@example.com", "secret123") is None  # the name wins; bob's email is not tried
     assert users.authenticate("bob", "secret123")["name"] == "bob"
+
+
+def test_role_ladder_and_markers():
+    users.create("alex", "secret123", suite_admin=True)
+    v = users.create("vic", "secret123", "viewer", "iocalendar")
+    m = users.create("meg", "secret123", "member", "iocalendar")
+    e = users.create("ed", "secret123", "editor", "iocalendar")
+    for u, member, writer in ((v, False, False), (m, True, False), (e, True, True)):
+        u = users.get(u["id"], "iocalendar")
+        assert users.is_signed_in(u) and users.is_member(u) is member and users.can_write(u) is writer
+    assert users.role_of(users.get(v["id"]), "ionotes") == "member"  # no row: the default, member
+    users.db.set_setting("default_role", "viewer", "ionotes")
+    assert users.role_of(users.get(v["id"]), "ionotes") == "viewer"
+
+
+def test_admin_tools_are_for_suite_admins_only():
+    from iosuite_shared import admin, suite
+    suite.register("iodns", name="ioDNS", admin_tool=True)
+    suite.register("iocalendar", name="ioCalendar")
+    boss = users.create("alex", "secret123", suite_admin=True)
+    with pytest.raises(ValueError):
+        users.create("ed", "secret123", "admin", "iodns")  # takes no roles
+    ed = users.create("ed", "secret123")
+    users.set_role(ed["id"], "iodns", "admin")  # a row from before: ignored
+    with pytest.raises(ValueError):
+        users.update(ed["id"], role="viewer", app="iodns")
+    assert users.role_of(users.get(boss["id"]), "iodns") == "admin"
+    assert users.role_of(users.get(ed["id"]), "iodns") == "none" and users.default_role("iodns") == "none"
+    assert [a["app"] for a in suite.visible(users.get(ed["id"]))] == ["iocalendar"]
+    assert {a["app"] for a in suite.visible(users.get(boss["id"]))} == {"iocalendar", "iodns"}
+    with pytest.raises(ValueError):
+        admin.set_roles(boss, ed["id"], {"iodns": "admin"})
+    with pytest.raises(ValueError):
+        admin.set_app("iodns", default_role="member")
+    eff = {u["name"]: u["effective"] for u in admin.accounts()}
+    assert eff["ed"]["iodns"] == "none" and eff["alex"]["iodns"] == "admin"
+    svc = users.service_account("iosuite")
+    users.set_role(svc["id"], "iodns", "viewer")  # an app reading an admin tool keeps the role links gave it
+    assert users.role_of(users.get(svc["id"]), "iodns") == "viewer"
+
+
+def test_viewers_become_members_once():
+    from iosuite_shared import db, schema
+    users.create("alex", "secret123", suite_admin=True)
+    v = users.create("vic", "secret123", "viewer", "iocalendar")
+    svc = users.service_account("iosuite")
+    users.set_role(svc["id"], "iocalendar", "viewer")
+    db.set_setting("default_role", "viewer", "iotasks")
+    with db.tx() as con, con.cursor() as cur:
+        cur.execute("DELETE FROM ios_schema_version WHERE version >= 6")
+    db._ready = False
+    db.init()
+    assert users.roles_of(v["id"]) == {"iocalendar": "member"}
+    assert users.roles_of(svc["id"]) == {"iocalendar": "viewer"}  # the apps' own accounts only read
+    assert db.get_setting("default_role", "", "iotasks") == ""
+    users.set_role(v["id"], "iocalendar", "viewer")  # a viewer set after the change stays one
+    db._ready = False
+    db.init()
+    assert users.roles_of(v["id"]) == {"iocalendar": "viewer"}
+    with db.tx() as con, con.cursor() as cur:
+        assert schema.current_version(cur, db.PREFIX) == db.SCHEMA_VERSION
+
+
+def test_me_says_what_the_account_may_change():
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from iosuite_shared.fastapi import Auth
+    users.create("alex", "secret123", suite_admin=True)
+    users.create("meg", "secret123", "member", "ionotes")
+    auth = Auth("ionotes", register=False)
+    app = FastAPI()
+    app.middleware("http")(auth.middleware())
+    app.include_router(auth.router())
+    c = TestClient(app)
+    assert c.post("/api/auth/login", json={"name": "meg", "password": "secret123"}).status_code == 200
+    me = c.get("/api/auth/me").json()
+    assert me["isMember"] and not me["canWrite"]
+    auth.write_role = "member"  # an app where everything is one's own
+    assert c.get("/api/auth/me").json()["canWrite"]

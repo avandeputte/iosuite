@@ -23,7 +23,7 @@ def main(argv=None):
     c.add_argument("name"); c.add_argument("--email", default=""); c.add_argument("--password", default=None); c.add_argument("--suite-admin", action="store_true")
     c.add_argument("--app", default=None); c.add_argument("--role", default=None)
     r = sub.add_parser("role", help="set an account's role in an app")
-    r.add_argument("name"); r.add_argument("app"); r.add_argument("role", choices=("none", "viewer", "editor", "admin"))
+    r.add_argument("name"); r.add_argument("app"); r.add_argument("role", choices=("none", "viewer", "member", "editor", "admin"))
     pw = sub.add_parser("password", help="set an account's password")
     pw.add_argument("name"); pw.add_argument("--password", default=None)
     e = sub.add_parser("edge", help="compare the Cloudflare KV namespace of the edge check with the app passwords (removes stale keys with --apply)")
@@ -69,7 +69,7 @@ def main(argv=None):
             roles = ", ".join(f"{k}={v}" for k, v in users.roles_of(u["id"]).items()) or "-"
             print(f"{u['id']:4} {u['name']:24} {u['email'] or '':30} {'suite-admin' if u['suiteAdmin'] else '':12} {'(no password)' if u['passwordless'] else '':14} {roles}")
     elif a.cmd == "create":
-        password = a.password if a.password is not None else getpass.getpass("Password (empty: one-click viewer): ")
+        password = a.password if a.password is not None else getpass.getpass("Password (empty: one-click, a member at most): ")
         print(users.create(a.name, password, a.role, a.app, email=a.email, suite_admin=a.suite_admin))
     elif a.cmd == "role":
         u = users.find(a.name)

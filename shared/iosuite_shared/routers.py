@@ -228,7 +228,7 @@ def users_router(self) -> APIRouter:
     async def api_users_create(request: Request):
         body = await json_body(request)
         try:
-            u = users.create(str(body.get("name", "")), str(body.get("password", "")), str(body.get("role", "viewer")), app,
+            u = users.create(str(body.get("name", "")), str(body.get("password", "")), str(body.get("role") or "") or (None if suite.is_admin_tool(app) else users.DEFAULT_ROLE), app,
                              email=str(body.get("email") or ""), display_name=str(body.get("displayName") or ""),
                              suite_admin=bool(body.get("suiteAdmin")) and users.is_suite_admin(auth.current_user(request)))
         except ValueError as e:

@@ -1,8 +1,18 @@
 """Accounts: one per person for the whole suite, plus their role in each app and their per-app data.
 
-Roles per app: none (no access there), viewer, editor, admin. An account without a row for an app holds the app's
-default_role setting (viewer unless an admin changes it). suite_admin is admin in every app and manages accounts.
-A passwordless account (hash '') signs in with one click on the LAN and is never more than a viewer anywhere.
+Roles per app, each including the one before it:
+- none: no access there.
+- viewer: read-only. Sees what is shared with everyone (the Family calendar, the photo library); keeps nothing of
+  its own and changes nothing.
+- member: keeps their own private things (calendars, lists, address books, notes, health data, favourites) and sees
+  the shared ones without changing them.
+- editor: also changes what is shared with everyone.
+- admin: also the app's settings.
+An account without a row for an app holds the app's default_role setting (member unless an admin changes it).
+suite_admin is admin in every app and manages accounts. An admin tool (ioDNS, ioBackup: suite.is_admin_tool) is for
+suite admins only: everybody else is none there, whatever row or default says otherwise (an app's own service
+account keeps the role iosuite_shared.links gave it).
+A passwordless account (hash '') signs in with one click on the LAN and is never more than a member anywhere.
 
 Until the first account exists every app is open, as before (a fresh install is not locked out).
 """
@@ -15,9 +25,17 @@ from iosuite_shared import db
 from iosuite_shared.passwords import burn, check_password, hash_password, needs_rehash
 from iosuite_shared.errors import Invalid
 
-ROLES = ("none", "viewer", "editor", "admin")
-APP_ROLES = ("viewer", "editor", "admin")  # what an admin picks for an account in an app ("none" takes the app away)
-RANK = {"none": 0, "viewer": 1, "editor": 2, "admin": 3}
+ROLES = ("none", "viewer", "member", "editor", "admin")
+APP_ROLES = ("viewer", "member", "editor", "admin")  # what an admin picks for an account in an app ("none" takes the app away)
+RANK = {"none": 0, "viewer": 1, "member": 2, "editor": 3, "admin": 4}
+DEFAULT_ROLE = "member"  # an app's default_role when no admin changed it
+PASSWORDLESS_MAX = "member"  # the most a one-click account (no password) is anywhere
+NO_PASSWORD = "Set a password first; an account without one can be a member at most"
+
+
+def _capped(role: str) -> bool:
+    """Whether the role is more than a one-click account may hold."""
+    return RANK.get(role, 0) > RANK[PASSWORDLESS_MAX]
 COLS = "id, name, display_name, email, hash, suite_admin, listed, created_at, last_login_at, service"
 
 _cache = {"any": None, "any_at": 0.0}
@@ -135,8 +153,10 @@ def create(name: str, password: str, role: str | None = None, app: str | None = 
     name, email = clean_name(name), clean_email(email)
     if role is not None and role not in ROLES:
         raise Invalid("Unknown role")
-    if password == "" and (suite_admin or (role or "viewer") not in ("none", "viewer")):
-        raise Invalid("Only a viewer can have no password")
+    if app and role and not suite_admin:
+        _not_a_tool(app)
+    if password == "" and (suite_admin or _capped(role or DEFAULT_ROLE)):
+        raise Invalid(NO_PASSWORD)
     if password != "" and len(password) < 8:
         raise Invalid("The password needs at least 8 characters")
     if find(name):
@@ -145,7 +165,7 @@ def create(name: str, password: str, role: str | None = None, app: str | None = 
         raise Invalid("Another account already has that email address")
     uid = db.ex("INSERT INTO ios_users (name, display_name, email, hash, suite_admin, created_at) VALUES (%s, %s, %s, %s, %s, %s)",
                 (name, (display_name or "").strip()[:128] or None, email or None, hash_password(password) if password else "", 1 if suite_admin else 0, int(time.time())))
-    if app and role:
+    if app and role and not (suite_admin and _is_tool(app)):  # a suite admin is admin in an admin tool without a row
         set_role(uid, app, role)
     invalidate()
     return get(uid, app)
@@ -173,15 +193,15 @@ def update(user_id: int, name=None, password=None, email=None, display_name=None
         sets["listed"] = 1 if listed else 0
     if suite_admin is not None:
         if suite_admin and not cur["hash"] and password in (None, ""):
-            raise Invalid("Set a password first; an account without one can only be a viewer")
+            raise Invalid(NO_PASSWORD)
         if not suite_admin and cur["suite_admin"] and db.one("SELECT count(*) AS n FROM ios_users WHERE suite_admin = 1 AND id != %s", (user_id,))["n"] == 0:
             raise Invalid("That is the only suite admin; make someone else one first")
         sets["suite_admin"] = 1 if suite_admin else 0
     if password is not None:
-        if password == "":  # remove the password: one-click sign-in, viewers only
+        if password == "":  # remove the password: one-click sign-in, a member at most
             still_admin = cur["suite_admin"] if suite_admin is None else suite_admin
-            if still_admin or RANK[_max_role(user_id)] > 1:
-                raise Invalid("Only a viewer can have no password")
+            if still_admin or _capped(_max_role(user_id)):
+                raise Invalid(NO_PASSWORD)
             sets["hash"] = ""
         else:
             if len(password) < 8:
@@ -192,8 +212,9 @@ def update(user_id: int, name=None, password=None, email=None, display_name=None
             raise Invalid("A role needs an app")
         if role not in ROLES:
             raise Invalid("Unknown role")
-        if role not in ("none", "viewer") and not (cur["hash"] or sets.get("hash")):
-            raise Invalid("Set a password first; an account without one can only be a viewer")
+        _not_a_tool(app)
+        if _capped(role) and not (cur["hash"] or sets.get("hash")):
+            raise Invalid(NO_PASSWORD)
     if sets:
         db.ex("UPDATE ios_users SET " + ", ".join(f"{k} = %s" for k in sets) + " WHERE id = %s", (*sets.values(), user_id))
     if role is not None:
@@ -242,26 +263,52 @@ def authenticate(name: str, password: str, app: str | None = None):
 
 # ---- roles
 def default_role(app: str) -> str:
-    v = db.get_setting("default_role", "viewer", app)
-    return v if v in ROLES else "viewer"
+    """What an account without a row holds in the app: none in an admin tool, else the app's setting (member)."""
+    from iosuite_shared import suite
+    if suite.is_admin_tool(app):
+        return "none"
+    v = db.get_setting("default_role", DEFAULT_ROLE, app)
+    return v if v in ROLES else DEFAULT_ROLE
+
+
+def effective(role: str, suite_admin: bool, passwordless: bool, admin_tool: bool) -> str:
+    """The role an account holds, from its row (or the default) and what the account is: a suite admin is admin
+    everywhere, an admin tool is none for everybody else, a one-click account is a member at most."""
+    if suite_admin:
+        return "admin"
+    if admin_tool:
+        return "none"
+    if passwordless and _capped(role):
+        return PASSWORDLESS_MAX
+    return role if role in RANK else "none"
 
 
 def role_of(user, app: str) -> str:
     """The role this account holds in the app."""
     if not user:
         return "none"
+    from iosuite_shared import suite
     if user.get("suiteAdmin"):
         return "admin"
-    r = db.one("SELECT role FROM ios_user_roles WHERE user_id = %s AND app = %s", (user["id"], app))
-    role = r["role"] if r else default_role(app)
-    if user.get("passwordless") and RANK[role] > 1:
-        role = "viewer"
-    return role
+    tool = suite.is_admin_tool(app) and not user.get("service")  # an app's own service account keeps the role links gave it
+    r = None if tool else db.one("SELECT role FROM ios_user_roles WHERE user_id = %s AND app = %s", (user["id"], app))
+    return effective(r["role"] if r else default_role(app), False, bool(user.get("passwordless")), tool)
 
 
 def roles_of(user_id: int) -> dict:
     """{app: role} for every app the account has an explicit role in."""
     return {r["app"]: r["role"] for r in db.q("SELECT app, role FROM ios_user_roles WHERE user_id = %s", (user_id,))}
+
+
+def _is_tool(app: str) -> bool:
+    from iosuite_shared import suite
+    return suite.is_admin_tool(app)
+
+
+def _not_a_tool(app: str) -> None:
+    """An admin tool takes no roles: it is for suite admins only."""
+    if _is_tool(app):
+        raise Invalid("This is an admin tool, for suite admins only: it takes no roles")
 
 
 def set_role(user_id: int, app: str, role: str):
@@ -291,8 +338,19 @@ def is_signed_in(user) -> bool:
     return not any_users() or (user is not None and user.get("role", "viewer") != "none")
 
 
+def at_least(user, role: str) -> bool:
+    """Whether the account holds this role or a higher one in the app (everyone, before the first account exists)."""
+    return not any_users() or (user is not None and RANK.get(user.get("role"), 0) >= RANK[role])
+
+
+def is_member(user) -> bool:
+    """A member or more: may keep their own private things (and change them)."""
+    return at_least(user, "member")
+
+
 def can_write(user) -> bool:
-    return not any_users() or (user is not None and user.get("role") in ("editor", "admin"))
+    """An editor or admin: may change what is shared with everyone."""
+    return at_least(user, "editor")
 
 
 def is_admin(user) -> bool:
