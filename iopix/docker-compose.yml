@@ -15,6 +15,9 @@ services:
       # args: { AI: "1", CAPTIONS: "0" }
     container_name: iopix
     restart: unless-stopped
+    logging:                          # the output Docker keeps (the app's log, again): at most 3 files of 5 MB
+      driver: json-file
+      options: {max-size: 5m, max-file: "3"}
     depends_on:
       iopix-db:
         condition: service_healthy
@@ -84,6 +87,9 @@ services:
     image: mariadb:11
     container_name: iopix-db
     restart: unless-stopped
+    logging:                          # the output Docker keeps: at most 3 files of 5 MB
+      driver: json-file
+      options: {max-size: 5m, max-file: "3"}
     environment:
       MARIADB_DATABASE: iopix
       MARIADB_USER: iopix
