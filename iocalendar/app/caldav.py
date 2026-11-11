@@ -540,6 +540,13 @@ def _mkcalendar(ctx: Ctx, parts, body) -> Response:
         rt = root.find(f".//{q(D, 'resourcetype')}")
         if rt is not None and rt.find(q(C, "calendar")) is None:
             return Response("Only calendars can be made here", status_code=403)
+        # a task list (iOS Reminders makes one, "DEFAULT_TASK_CALENDAR_NAME", when it finds an account with none):
+        # this server keeps events only, so a collection that can't hold them is refused, not made
+        comps = root.find(f".//{q(C, 'supported-calendar-component-set')}")
+        dn = root.find(f".//{q(D, 'displayname')}")
+        if (comps is not None and "VEVENT" not in {(c.get("name") or "").upper() for c in comps.findall(q(C, "comp"))}) \
+                or (dn is not None and (dn.text or "").strip() == "DEFAULT_TASK_CALENDAR_NAME"):
+            return _precondition(C, "supported-calendar-component", 403)
         for el, attr in ((q(D, "displayname"), "name"), (q(AP, "calendar-color"), "color"), (q(C, "calendar-description"), "desc"),
                          (q(C, "calendar-timezone"), "tz")):
             x = root.find(f".//{el}")
