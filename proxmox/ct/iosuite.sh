@@ -81,8 +81,9 @@ ask_app_settings() {
     fi
   fi
   if [[ -z "${IOSUITE_ALSO+x}" ]]; then  # the other apps of the suite in the same container (ioPix has its own script: photo mounts)
-    IOSUITE_ALSO=$(whiptail --backtitle "$bt" --checklist "Also install in this container (same database server, each app its own database; same accounts and admin; each on its usual port):" 14 78 4 \
+    IOSUITE_ALSO=$(whiptail --backtitle "$bt" --checklist "Also install in this container (same database server, each app its own database; same accounts and admin; each on its usual port):" 15 78 5 \
       iocalendar "ioCalendar  (8620)" OFF \
+      iotasks "ioTasks  (8670)" OFF \
       iocontacts "ioContacts  (8640, LDAP 3890)" OFF \
       ionotes "ioNotes  (8610)" OFF \
       iohealth "ioHealth  (8650)" OFF 3>&1 1>&2 2>&3) || exit 1
@@ -135,6 +136,6 @@ echo -e "${CREATING}${GN}${APP} setup has been successfully initialized!${CL}"
 echo -e "${INFO}${YW}Access it using the following URL:${CL}"
 echo -e "${GATEWAY}${BGN}http://${IP}:${IOSUITE_PORT:-8630}${CL}"
 for a in ${IOSUITE_ALSO//,/ }; do
-  case "$a" in iocalendar) p=8620;; iocontacts) p=8640;; ionotes) p=8610;; iohealth) p=8650;; iopix) p=8600;; *) p="";; esac
+  case "$a" in iocalendar) p=8620;; iotasks) p=8670;; iocontacts) p=8640;; ionotes) p=8610;; iohealth) p=8650;; iopix) p=8600;; *) p="";; esac
   [[ -n "$p" ]] && echo -e "${INFO}${YW}$a:${CL} ${BGN}http://${IP}:$p${CL}"
 done

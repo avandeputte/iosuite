@@ -1,7 +1,7 @@
 # ioSuite
 
 *The start page of the ioThing suite: one place with every io app ([ioPix](https://github.com/avandeputte/iopix),
-[ioHealth](https://github.com/avandeputte/iohealth), [ioCalendar](https://github.com/avandeputte/iocalendar),
+[ioHealth](https://github.com/avandeputte/iohealth), [ioCalendar](https://github.com/avandeputte/iocalendar), [ioTasks](https://github.com/avandeputte/iotasks),
 [ioContacts](https://github.com/avandeputte/iocontacts), [ioNotes](https://github.com/avandeputte/ionotes)).*
 
 A self-hosted home page for the family: a tile per app, signed in with the suite's shared accounts ([`iosuite-shared`](https://github.com/avandeputte/iosuite-shared)), so
@@ -48,7 +48,7 @@ what the app will show on the start page later (today's events, the newest photo
   On this day; an admin picks which, or turns it off, in Settings › Home page.
 - **A glimpse of each app on its tile**: ioPix shows photos taken on this day in earlier years (one per year, "3 years
   ago"), or a few picked at random (Rediscover) on a day without any; ioCalendar the rest of today (else the next event
-  in the coming 60 days), in each calendar's colour; ioHealth today's steps with the last seven days as bars, the
+  in the coming 60 days), in each calendar's colour; ioTasks what is due today, the overdue tasks first, in each list's colour; ioHealth today's steps with the last seven days as bars, the
   move, exercise and stand rings, and last night's sleep. The
   server asks each app over its own API with the viewer's sign-in (the suite's session cookie, or the Basic / bearer
   credentials they came with), so everyone sees only what that app shows them; ioPix's thumbnails come through the
@@ -120,7 +120,7 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main
 
 It asks for the ioSuite database (host, port, database, user, password), the Shared ioSuite database, the web port
 (8630), the public address behind your reverse proxy (optional), the domain the sign-in is shared on (optional) and the
-admin account, and which other apps of the suite go in the same container (ioCalendar, ioContacts, ioNotes, ioHealth:
+admin account, and which other apps of the suite go in the same container (ioCalendar, ioTasks, ioContacts, ioNotes, ioHealth:
 they reuse those answers, each app with its own database on the same server, the same accounts and admin, each on its
 usual port); then the framework's own questions (resources, network). It creates a small Debian 13 container and runs the app's own `setup.sh` inside with
 those answers. The passwords reach `setup.sh` through its environment (a root-only file pushed in and removed again),
@@ -138,7 +138,7 @@ docker compose up -d     # edit the CHANGE ME spots in docker-compose.yml first
 The image (`ghcr.io/avandeputte/iosuite`) holds no data: everything is in the database.
 
 The whole suite in one stack, MariaDB included: [`docker/suite/docker-compose.yml`](docker/suite/docker-compose.yml)
-starts a MariaDB with a database per app, ioSuite, ioCalendar, ioContacts, ioNotes, ioHealth and ioPix (without
+starts a MariaDB with a database per app, ioSuite, ioCalendar, ioTasks, ioContacts, ioNotes, ioHealth and ioPix (without
 digiKam), with one Shared ioSuite database and one admin. Edit the passwords, the photos path and the time zone at
 the top, then `docker compose -f docker/suite/docker-compose.yml up -d` (or paste it as a stack in Dockge / Portainer).
 
@@ -155,7 +155,7 @@ git clone https://github.com/avandeputte/iosuite && cd iosuite
 `--suite-db`, `--admin`, `--port`, `--public-url`, `--cookie-domain`, `--service`, `--yes`) are the same in every app of
 the suite. Its last question, "Also install …?" (flag `--also iopix,ionotes`, `--also all`), puts other apps of the
 suite in this same machine, beside ioSuite (`/opt/iocalendar/app` next to `/opt/iosuite/app`), without asking the
-shared questions again: the same database server (each app gets its own database: `calendar`, `contacts`, `notes`,
+shared questions again: the same database server (each app gets its own database: `calendar`, `tasks`, `contacts`, `notes`,
 `health`, `iopix`; the user needs rights on those names too), the same Shared ioSuite database, sign-in domain and
 admin. Each app keeps its usual port and updates itself as always. Accounts are the suite's: `.venv/bin/iosuite-shared --config . admin NAME --app iosuite` (password from
 `ADMIN_PASSWORD`, or asked for) and `.venv/bin/iosuite-shared --config . password NAME`.
@@ -229,7 +229,7 @@ app/api.py         the REST API: the apps and their settings (sign-in, accounts,
 app/apps.py        the suite's apps as they registered (iosuite_shared.suite) and the order of their tiles
 app/status.py      is each app up (its /api/status) and does it have an update; is each bookmark reachable
 app/layout.py      each account's own layout: hidden tiles and cards, the tiles' order, the photo strip
-app/widgets.py     what the tiles and cards show: ioPix, ioCalendar, ioHealth and ioContacts asked over their APIs with the viewer's sign-in
+app/widgets.py     what the tiles and cards show: ioPix, ioCalendar, ioTasks, ioHealth and ioContacts asked over their APIs with the viewer's sign-in
 app/weather.py     AccuWeather: the settings, the place search, the cached conditions and forecast
 app/homeassistant.py  Home Assistant: the settings, the chosen entities and their state, switching them, the search, the alerts
 app/ha_feed.py     Home Assistant's websocket: state changes folded into the copy, streamed to the pages

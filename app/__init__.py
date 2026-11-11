@@ -1,2 +1,2 @@
-"""ioSuite: the start page of the ioThing suite (ioPix, ioHealth, ioCalendar, ioContacts, ioNotes)."""
-__version__ = "0.34.0"
+"""ioSuite: the start page of the ioThing suite (ioPix, ioHealth, ioCalendar, ioTasks, ioContacts, ioNotes)."""
+__version__ = "0.35.0"
