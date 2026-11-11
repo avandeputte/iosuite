@@ -22,7 +22,7 @@ was merely reached at, since those calls carry credentials).
 
 Who sees which app (`visible(user)`, and `GET /api/auth/suite`): only the apps the account has a role in (not
 "none": its own role there, else that app's default role), so somebody without ioHealth does not see ioHealth. An app
-that registers as an admin tool (`Auth(..., admin_tool=True)`; `adminTool` in what `apps()` answers: ioDNS, things
+that registers as an admin tool (`Auth(..., admin_tool=True)`; `adminTool` in what `apps()` answers: ioDNS, ioBackup, things
 behind the scenes) is seen only by its admins and the suite admins, and a switcher shows it apart from the others.
 
 A suite admin may forget an app that was uninstalled (`DELETE /api/auth/suite/{app}`); it comes back the next time it
@@ -39,7 +39,7 @@ from iosuite_shared import config, db
 from iosuite_shared.errors import Invalid
 
 # Every app's default port: different for each, so all of them can run on one host. The apps' tests check theirs.
-PORTS = {"iopix": 8600, "ionotes": 8610, "iocalendar": 8620, "iosuite": 8630, "iocontacts": 8640, "iohealth": 8650, "iodns": 8660, "iotasks": 8670}
+PORTS = {"iopix": 8600, "ionotes": 8610, "iocalendar": 8620, "iosuite": 8630, "iocontacts": 8640, "iohealth": 8650, "iodns": 8660, "iotasks": 8670, "iobackup": 8680}
 
 FIELDS = ("name", "description", "version", "color", "icon")
 # Where every app serves its mark (static/icons/mark.svg in its repo, the web app's files under /static/): the same in
