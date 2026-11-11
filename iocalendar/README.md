@@ -1,6 +1,6 @@
 # ioCalendar
 
-*The family calendar, in the ioThing suite (with [ioPix](https://github.com/avandeputte/iopix), [ioNotes](https://github.com/avandeputte/ionotes), [ioContacts](https://github.com/avandeputte/iocontacts), [ioHealth](https://github.com/avandeputte/iohealth) and the [ioSuite](https://github.com/avandeputte/iosuite) start page).*
+*The family calendar, in the ioThing suite (with [ioPix](https://github.com/avandeputte/iopix), [ioNotes](https://github.com/avandeputte/ionotes), [ioContacts](https://github.com/avandeputte/iocontacts), [ioTasks](https://github.com/avandeputte/iotasks), [ioHealth](https://github.com/avandeputte/iohealth) and the [ioSuite](https://github.com/avandeputte/iosuite) start page).*
 
 A self-hosted calendar: a web app for the whole family, and the standard protocols every calendar app already speaks, so the same events show up on phones, in Apple Calendar, Google Calendar, Outlook, Thunderbird and anywhere else. FastAPI and a single-page vanilla JS app, with everything stored in MariaDB / MySQL, and the suite's shared library (`iosuite-shared`, in [iosuite-shared](https://github.com/avandeputte/iosuite-shared)).
 
@@ -11,6 +11,7 @@ A self-hosted calendar: a web app for the whole family, and the standard protoco
 - **Calendars**: a shared **Family** calendar, a private **Personal** one for each account, and as many more as you like (shared or private), each with its colour. The calendars in the sidebar are check boxes: tick to show, untick to hide (remembered per account).
 - **Views**: month, week, day and agenda, with a small month to jump around, drag and drop to move an event (to another day, or another time in the week and day views), a line at the current time, search across titles, places, people and notes, and keyboard shortcuts (`t` today, `n` new, `d`/`w`/`m`/`a` the views, ←/→ earlier and later, `/` search, `e` change the open event).
 - **ioContacts (optional)**: the people on an event come from your contacts (picked as you type, with a link back to each), and a shared, read-only **Birthdays** calendar shows the birthdays and anniversaries kept in ioContacts, brought up to date every six hours.
+- **ioTasks (optional)**: the tasks that are due show on their day, beside the events, in every view: a round tick in the list's colour, at their time when they have one. Tick one off (or open it again) right on the calendar; a repeating task moves on to its next day. Click the title to open the task in ioTasks. Each person sees the lists they see in ioTasks, the Family filter applies to tasks too, and **Tasks due** in the sidebar hides them.
 - **Public holidays**: shared, read-only **Holidays** calendars with the public holidays of one or more countries and, if you like, a state or province for each (Settings › Holidays and birthdays; it starts with the country of the family's time zone, else the United States). Worked out on the server with the `holidays` package (nothing is fetched), last year to three years ahead, renewed daily; anyone can hide each one in the sidebar.
 - **Family members on events**: tag an event with the people of the family it is for ("For Emma"). The tags show as coloured initials on the calendar, the sidebar's Family list shows only one person's (or a few people's) events, and the tag is kept as an iCalendar `CATEGORIES` value with the member's name, so phones and calendar apps show it and a category typed there tags the event here too. The REST API, the subscription links (`?member=emma`) and MCP filter by member as well. Accounts that are not a person (an admin or service account) can be left out of the family in Settings › Family: they are not offered as a tag and get no private calendar.
 - **Roles as in the other io apps**: viewers read the shared calendars (and change only their own), editors change shared events, admins also manage users and settings. The same accounts, passwords and app passwords as ioPix, ioNotes and ioContacts; one sign-in for all of them with a shared cookie domain.
@@ -112,6 +113,15 @@ first use and listed on the start page's Settings › Security, where a suite ad
 next time). Behind Cloudflare Access, the suite's Cloudflare Access service token (Settings › Global settings › Keys and tokens)
 goes along. The Birthdays calendar is filled from ioContacts' birthday feed and brought up to date every six hours
 (and on request from Settings › Holidays and birthdays, which has the Birthdays switch, or `python -m app.cli sync-birthdays`).
+
+### ioTasks
+
+Nothing to set up. ioCalendar finds ioTasks in the suite's list of apps and asks it for the tasks due in the days on
+screen (`GET /api/tasks?start=&end=&tz=` here), on the viewer's behalf: the request goes out from this server with
+the viewer's own session (or the app password they came with), so ioTasks answers with the lists that person sees and
+takes a tick (`POST /api/tasks/<id>/complete`) only from someone who may change the list. Nothing about tasks is kept
+here. Behind Cloudflare Access, the suite's service token goes along. When ioTasks is away, the calendar draws without
+the tasks and the sidebar's **Tasks due** says why.
 
 ## Updates
 
@@ -247,6 +257,7 @@ app/caldav.py      CalDAV / WebDAV
 app/ical.py        iCalendar and jCal: reading, indexing, expanding repeating events, editing, writing
 app/model.py       calendars and events in MariaDB, sync tokens and tombstones for CalDAV
 app/contacts.py    the ioContacts client: people and the Birthdays calendar
+app/tasks.py       the ioTasks client: the tasks due on a day, ticked off from the calendar (asked as the viewer)
 app/holiday.py     the Holidays calendars (one per country, with region and language; filled daily)
 app/members.py     family members on events (kept as CATEGORIES), and the member filter
 app/mcp/           the MCP server: base (the server, finding events; who is asking comes from iosuite_shared.mcp), read, write and admin tools
