@@ -268,7 +268,7 @@ def list_tasks(request: Request, list: str | None = None, q: str = "", status: s
     rows = model.find([c["id"] for c in lists], q, status, due, member_filter(member), max(1, min(limit, 5000)), zone_name(tz),
                       sort, _day(from_, "from"), _day(to, "to"))
     if wants_ics(request, format):
-        return Response(ical.feed(model.objects(rows), "ioTasks"), media_type="text/calendar; charset=utf-8")
+        return Response(ical.feed(model.objects(rows), "ioTask"), media_type="text/calendar; charset=utf-8")
     subs = model.subtask_counts([c["id"] for c in lists])
     return {"items": [model.task_out(r, subs) for r in rows]}
 
@@ -602,7 +602,7 @@ async def apply_template(tid: int, request: Request):
 
 @router.get("/api/members", dependencies=[access.signed_in])
 def family_members(request: Request):
-    """The family members a task can be for (the accounts that use ioTasks, less the ones taken out of the family):
+    """The family members a task can be for (the accounts that use ioTask, less the ones taken out of the family):
     [{id, name, displayName}]. Filter with ?member= on /api/tasks. Admins also get leftOut."""
     u = request.state.user
     out = {"items": members.public(members.family())}
@@ -648,9 +648,9 @@ def _apple_profile(request: Request, label: str, password: str) -> tuple:
     host = urlsplit(base).hostname or "localhost"
     secret = appleprofile.new_password(u, config.APP, label) if password == "new" else None
     who = u.get("displayName") or u["name"]
-    body = appleprofile.build(appleprofile.ident(config.APP, base, u), f"ioTasks for {who}",
-                              f"Adds {who}'s ioTasks lists from {host} to Reminders." + appleprofile.asks(secret), "ioTasks",
-                              [appleprofile.account(config.APP, "ioTasks", base, u, secret)])
+    body = appleprofile.build(appleprofile.ident(config.APP, base, u), f"ioTask for {who}",
+                              f"Adds {who}'s ioTask lists from {host} to Reminders." + appleprofile.asks(secret), "ioTask",
+                              [appleprofile.account(config.APP, "ioTask", base, u, secret)])
     return body, appleprofile.file_name(config.APP, u)
 
 

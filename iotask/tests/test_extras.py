@@ -51,7 +51,7 @@ def test_postpone_keeps_the_time_and_moves_the_alert(client, family_id):
 def test_repeat_after_completion(client, family_id):
     t = new(client, title="Water the plants", due="2026-11-01T09:00", timezone="America/New_York", repeatAfter="P2W", listId=family_id)
     assert t["repeatAfter"] == "P2W" and t["rrule"] is None
-    assert "X-IOTASKS-AFTER-DONE:P2W" in client.get(f"/api/tasks/{t['id']}?format=ics").text
+    assert "X-IOTASK-AFTER-DONE:P2W" in client.get(f"/api/tasks/{t['id']}?format=ics").text
     r = client.post(f"/api/tasks/{t['id']}/complete", json={"tz": "America/New_York"}).json()
     again = today() + dt.timedelta(days=14)  # two weeks after today, not after the old due date; at its usual time
     assert r["moved"] and not r["done"] and r["due"].startswith(f"{again.isoformat()}T09:00:00-0")
@@ -76,10 +76,10 @@ def test_a_reminders_app_ticks_off_a_task_that_repeats_after_completion(client, 
     r = dav("PUT", href, TODO.format(uid=t["uid"], title="Change the filter", extra="DUE;VALUE=DATE:20261101\r\nSTATUS:COMPLETED\r\nCOMPLETED:20261111T080000Z\r\n"))
     assert r.status_code == 204 and "ETag" not in r.headers  # the server changed it: the app fetches it again
     got = dav("GET", href).text
-    assert "X-IOTASKS-AFTER-DONE:P1M" in got and "STATUS:NEEDS-ACTION" in got and "DUE;VALUE=DATE:20261101" not in got
+    assert "X-IOTASK-AFTER-DONE:P1M" in got and "STATUS:NEEDS-ACTION" in got and "DUE;VALUE=DATE:20261101" not in got
     # an edit from the phone that leaves the task open keeps the rule too
     r = dav("PUT", href, TODO.format(uid=t["uid"], title="Change the water filter", extra="DUE;VALUE=DATE:20261220\r\n"))
-    assert "X-IOTASKS-AFTER-DONE:P1M" in dav("GET", href).text and "DUE;VALUE=DATE:20261220" in dav("GET", href).text
+    assert "X-IOTASK-AFTER-DONE:P1M" in dav("GET", href).text and "DUE;VALUE=DATE:20261220" in dav("GET", href).text
 
 
 def test_order_by_hand(client, family_id):

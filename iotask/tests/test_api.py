@@ -186,19 +186,19 @@ def test_profile_for_all_apps_that_sync(client):
     own app; this app's own profile stays, and with no other app there is no such choice."""
     import plistlib
     from iosuite_shared import suite
-    assert [a["app"] for a in client.get("/api/apple-profile/suite").json()["apps"]] == ["iotasks"]
+    assert [a["app"] for a in client.get("/api/apple-profile/suite").json()["apps"]] == ["iotask"]
     assert client.post("/api/apple-profile/suite/link", json={}).status_code == 409
-    suite.register("iocontacts", name="ioContacts", url="https://other.example.com")
-    assert sorted(a["app"] for a in client.get("/api/apple-profile/suite").json()["apps"]) == sorted(["iotasks", "iocontacts"])
+    suite.register("iocontact", name="ioContact", url="https://other.example.com")
+    assert sorted(a["app"] for a in client.get("/api/apple-profile/suite").json()["apps"]) == sorted(["iotask", "iocontact"])
     r = client.post("/api/apple-profile/suite/link", json={"label": "iPhone", "password": "new"}).json()
     assert r["url"].endswith("/iosuite-alex.mobileconfig")
     p = plistlib.loads(client.get(r["url"]).content)
     assert p["PayloadDisplayName"].startswith("ioSuite for ")
-    own = next(x for x in p["PayloadContent"] if x.get("CalDAVAccountDescription") == "ioTasks")
+    own = next(x for x in p["PayloadContent"] if x.get("CalDAVAccountDescription") == "ioTask")
     other = next(x for x in p["PayloadContent"] if x is not own)
-    assert other["CardDAVHostName"] == "other.example.com" and other["CardDAVPassword"].startswith("iocontacts-")
+    assert other["CardDAVHostName"] == "other.example.com" and other["CardDAVPassword"].startswith("iocontact-")
     pw = own["CalDAVPassword"]
-    assert pw.startswith("iotasks-")
+    assert pw.startswith("iotask-")
     client.cookies.clear()
     assert client.request("PROPFIND", "/dav/", auth=("alex", pw), headers={"Depth": "0"}).status_code == 207
     assert client.request("PROPFIND", "/dav/", auth=("alex", other["CardDAVPassword"]), headers={"Depth": "0"}).status_code == 401

@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def test_suite_conventions():
-    testing.check_conventions(ROOT, "iotasks", __version__, config)
+    testing.check_conventions(ROOT, "iotask", __version__, config)
 
 
 def test_every_api_route_declares_who_may_call_it(app):

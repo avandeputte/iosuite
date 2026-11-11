@@ -30,7 +30,7 @@ from iosuite_shared.dav import AP, CS, D, q
 
 from app import access, config, ical, model
 
-# the WebDAV plumbing ioCalendar and ioContacts share (iosuite_shared.dav), under the names this module uses
+# the WebDAV plumbing ioCalendar and ioContact share (iosuite_shared.dav), under the names this module uses
 _xml, _sub, _requested, _response, _parse, _etag_match, _http_date = webdav.xml, webdav.sub, webdav.requested, webdav.response, webdav.parts_of, webdav.etag_match, webdav.http_date
 _precondition = webdav.precondition
 
@@ -40,11 +40,11 @@ C = "urn:ietf:params:xml:ns:caldav"
 for pfx, ns in (("d", D), ("cal", C), ("cs", CS), ("ical", AP)):
     ET.register_namespace(pfx, ns)
 METHODS = ["OPTIONS", "PROPFIND", "PROPPATCH", "REPORT", "GET", "HEAD", "PUT", "DELETE", "MKCOL", "MKCALENDAR", "MOVE", "COPY"]
-SYNC_PREFIX = "urn:x-iotasks:sync:"
+SYNC_PREFIX = "urn:x-iotask:sync:"
 
 
 def _unauth() -> Response:
-    return webdav.unauthorized("ioTasks", "an app password")
+    return webdav.unauthorized("ioTask", "an app password")
 
 
 def _opts_headers() -> dict:
@@ -104,7 +104,7 @@ def props_root(ctx: Ctx, names: list[str]):
         if n == q(D, "resourcetype"):
             _sub(_sub(ok, D, "resourcetype"), D, "collection")
         elif n == q(D, "displayname"):
-            _sub(ok, D, "displayname", "ioTasks")
+            _sub(ok, D, "displayname", "ioTask")
         else:
             missing.append(n)
     return ok, missing
@@ -419,7 +419,7 @@ def _get(ctx: Ctx, parts, head: bool) -> Response:
         text = model.export_text([c], c["name"])
         return Response(b"" if head else text.encode(), media_type="text/calendar; charset=utf-8")
     if len(parts) < 4 or parts[0] != "calendars":
-        return Response("ioTasks CalDAV server. Point your reminders app at this address.", media_type="text/plain")
+        return Response("ioTask CalDAV server. Point your reminders app at this address.", media_type="text/plain")
     c = _cal(ctx, parts[2])
     row = model.by_href(c["id"], parts[3]) if c else None
     if not row or row["deleted"]:

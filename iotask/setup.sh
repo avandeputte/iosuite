@@ -1,5 +1,5 @@
 #!/bin/sh
-# ioTasks setup: asks a few questions (or takes flags), then installs the Python packages, writes the settings,
+# ioTask setup: asks a few questions (or takes flags), then installs the Python packages, writes the settings,
 # creates the tables and the admin account and, on Linux with systemd, installs and starts the service.
 #
 #   ./setup.sh                 ask the questions
@@ -12,12 +12,12 @@
 #        --admin NAME:PASSWORD | --no-admin   --port N (8670)   --public-url URL   --cookie-domain DOMAIN
 #        --service | --no-service   --system-deps | --no-system-deps   --python PATH
 #   --db-admin USER:PASSWORD      a MariaDB / MySQL administrator (root...): the databases and users above are created
-#                                 for you, with the passwords you answered (IOTASKS_DB_ADMIN does the same; empty: they exist)
-#   --also APP,APP | all | none   also install other apps of the suite here (iosuite, iocontacts, ionotes, iohealth, iopix), beside this one,
+#                                 for you, with the passwords you answered (IOTASK_DB_ADMIN does the same; empty: they exist)
+#   --also APP,APP | all | none   also install other apps of the suite here (iosuite, iocontact, ionote, iohealth, iopix), beside this one,
 #                                 with the same database server (each app its own database), Shared ioSuite database,
-#                                 sign-in domain and admin: those questions are asked once (IOTASKS_ALSO does the same)
-#        ioTasks' own: --timezone ZONE
-# Secrets can stay off the command line: IOTASKS_DB, IOTASKS_SUITE_DB and IOTASKS_ADMIN in the environment do
+#                                 sign-in domain and admin: those questions are asked once (IOTASK_ALSO does the same)
+#        ioTask's own: --timezone ZONE
+# Secrets can stay off the command line: IOTASK_DB, IOTASK_SUITE_DB and IOTASK_ADMIN in the environment do
 # what --db, --suite-db and --admin do. Run it again at any time: it keeps config.env and only changes what you answer.
 set -e
 cd "$(dirname "$0")"
@@ -35,11 +35,11 @@ while [ $# -gt 0 ]; do
     *) die "unknown option $1 (try --help)";;
   esac
 done
-[ -n "$DBS" ] || DBS="${IOTASKS_DB:-}"
-[ -n "$ADBS" ] || ADBS="${IOTASKS_SUITE_DB:-}"
-[ -n "$ADMIN" ] || ADMIN="${IOTASKS_ADMIN:-}"
-[ -n "$ALSO" ] || ALSO="${IOTASKS_ALSO:-}"
-[ -n "$DBADMIN" ] || DBADMIN="${IOTASKS_DB_ADMIN:-}"
+[ -n "$DBS" ] || DBS="${IOTASK_DB:-}"
+[ -n "$ADBS" ] || ADBS="${IOTASK_SUITE_DB:-}"
+[ -n "$ADMIN" ] || ADMIN="${IOTASK_ADMIN:-}"
+[ -n "$ALSO" ] || ALSO="${IOTASK_ALSO:-}"
+[ -n "$DBADMIN" ] || DBADMIN="${IOTASK_DB_ADMIN:-}"
 ask() { _v="$1"; _q="$2"; _d="$3"
   if [ "$YES" = 1 ] || [ ! -t 0 ]; then eval "$_v=\"\$_d\""; return; fi
   printf '%s [%s]: ' "$_q" "$_d"; read -r _a || _a=""; [ -n "$_a" ] && eval "$_v=\"\$_a\"" || eval "$_v=\"\$_d\""; }
@@ -96,8 +96,8 @@ if [ -z "$DBADMIN" ] && [ "$YES" = 0 ]; then
   if [ -n "$DAU" ]; then asksecret DAW "Password of $DAU"; DBADMIN="$DAU:$DAW"; fi
 fi
 if [ -z "$ALSO" ]; then
-  say "The other apps of the suite can be installed here too, beside ioTasks, with the same database server (each app gets its own database), the same Shared ioSuite database, sign-in domain and admin"
-  ask ALSO "Also install (iosuite, iocalendar, iocontacts, ionotes, iohealth, iopix; comma-separated, 'all', or 'none')" "none"
+  say "The other apps of the suite can be installed here too, beside ioTask, with the same database server (each app gets its own database), the same Shared ioSuite database, sign-in domain and admin"
+  ask ALSO "Also install (iosuite, iocalendar, iocontact, ionote, iohealth, iopix; comma-separated, 'all', or 'none')" "none"
 fi
 
 # ---- Python environment
@@ -123,7 +123,7 @@ if [ -n "$DBADMIN" ]; then
 fi
 .venv/bin/python -m app.cli check || die "could not reach a database: check the host, port, user and password (and that the user may connect from this machine)"
 if [ -n "$ADMIN" ]; then
-  ADMIN_PASSWORD="${ADMIN#*:}" .venv/bin/iosuite-shared --config . admin "${ADMIN%%:*}" --app iotasks
+  ADMIN_PASSWORD="${ADMIN#*:}" .venv/bin/iosuite-shared --config . admin "${ADMIN%%:*}" --app iotask
 fi
 
 # ---- the service
@@ -131,11 +131,11 @@ if [ -z "$SERVICE" ]; then
   if command -v systemctl >/dev/null && [ "$(id -u)" = 0 ]; then SERVICE=1; else SERVICE=0; fi
 fi
 if [ "$SERVICE" = 1 ]; then
-  say "Installing the iotasks service"
+  say "Installing the iotask service"
   OWNER="$(stat -c %U "$APP" 2>/dev/null || echo root)"
-  cat > /etc/systemd/system/iotasks.service <<UNIT
+  cat > /etc/systemd/system/iotask.service <<UNIT
 [Unit]
-Description=ioTasks
+Description=ioTask
 After=network-online.target mariadb.service
 Wants=network-online.target
 
@@ -152,11 +152,11 @@ RestartSec=5
 WantedBy=multi-user.target
 UNIT
   systemctl daemon-reload
-  systemctl enable -q iotasks
-  systemctl restart iotasks
+  systemctl enable -q iotask
+  systemctl restart iotask
   sleep 2
-  systemctl is-active -q iotasks || die "the service did not start: journalctl -u iotasks -n 50"
-  say "ioTasks runs on port $PORT"
+  systemctl is-active -q iotask || die "the service did not start: journalctl -u iotask -n 50"
+  say "ioTask runs on port $PORT"
 else
   say "Done. Start it with ./run.sh (port $PORT)"
 fi
@@ -167,8 +167,8 @@ case "$ALSO" in ''|none|no) ;;
      if [ "$SERVICE" = 1 ]; then SVC="--service"; else SVC="--no-service"; fi
      DBA=""; [ -z "$DBADMIN" ] || { DBA="--db-admin ${DBADMIN%%:*}"; DB_ADMIN_PASSWORD="${DBADMIN#*:}"; export DB_ADMIN_PASSWORD; }
      if [ -n "$ADMIN" ]; then
-       ADMIN_PASSWORD="${ADMIN#*:}" .venv/bin/iosuite-shared --config "$APP" install "$ALSO" --admin "${ADMIN%%:*}" --from iotasks $SVC $DBA
+       ADMIN_PASSWORD="${ADMIN#*:}" .venv/bin/iosuite-shared --config "$APP" install "$ALSO" --admin "${ADMIN%%:*}" --from iotask $SVC $DBA
      else
-       .venv/bin/iosuite-shared --config "$APP" install "$ALSO" --from iotasks $SVC $DBA
+       .venv/bin/iosuite-shared --config "$APP" install "$ALSO" --from iotask $SVC $DBA
      fi || die "not every app could be installed; see the lines above (each one can be set up again with its own setup.sh)";;
 esac

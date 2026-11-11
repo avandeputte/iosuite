@@ -15,7 +15,7 @@ permissions:
   packages: write
 
 env:
-  IMAGE: ghcr.io/avandeputte/iotasks
+  IMAGE: ghcr.io/avandeputte/iotask
 
 jobs:
   tests:
@@ -42,7 +42,7 @@ jobs:
           python -m pyflakes app tests
           node --input-type=module --check < static/app.js
           for f in *.sh; do sh -n "$f"; done
-          bash -n proxmox/ct/iotasks.sh proxmox/install/iotasks-install.sh
+          bash -n proxmox/ct/iotask.sh proxmox/install/iotask-install.sh
       - name: Tests
         # scratch databases tasks_test and tasks_test_auth on the service (iosuite_shared.testing)
         env:
@@ -99,5 +99,5 @@ jobs:
           v="v$(python3 -c 'import re;print(re.search(r"__version__ = \"([^\"]+)\"", open("app/__init__.py").read()).group(1))')"
           if gh release view "$v" >/dev/null 2>&1; then echo "$v is released already"; exit 0; fi
           git log -1 --format=%B > notes.md
-          printf '\n\nImage: `ghcr.io/avandeputte/iotasks:%s` (also `latest`).\n' "$v" >> notes.md
+          printf '\n\nImage: `ghcr.io/avandeputte/iotask:%s` (also `latest`).\n' "$v" >> notes.md
           gh release create "$v" --target "$GITHUB_SHA" --title "$v: $(git log -1 --format=%s | sed -E 's/^v[0-9.]+: //; s/ \(#[0-9]+\)$//')" --notes-file notes.md

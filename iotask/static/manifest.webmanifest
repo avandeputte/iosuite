@@ -1,6 +1,6 @@
 {
-  "name": "ioTasks",
-  "short_name": "ioTasks",
+  "name": "ioTask",
+  "short_name": "ioTask",
   "description": "Task lists for the family",
   "start_url": "./#/",
   "scope": "./",

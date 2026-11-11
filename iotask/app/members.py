@@ -1,7 +1,7 @@
 """Family members on tasks: a task on the Family list (or any list) can be for one or more people of the family
 ("Emma: pack the swim bag", "Dad: renew the passport").
 
-The family is the accounts that use ioTasks (the suite's shared accounts, iosuite-shared), except the ones an admin
+The family is the accounts that use ioTask (the suite's shared accounts, iosuite-shared), except the ones an admin
 took out of it (Settings › Family: an "admin" or service account is not a person). Those cannot be picked and get no
 private list of their own here. The tag is kept in the task itself as an iCalendar CATEGORIES value with the member's
 display name, so reminders apps that show categories show it, and a category typed there with a member's name (or
@@ -39,7 +39,7 @@ def set_in_family(uid: int, yes: bool) -> None:
 
 
 def family() -> list[dict]:
-    """[{id, name, displayName}] of every account that may use ioTasks and is in the family, by display name."""
+    """[{id, name, displayName}] of every account that may use ioTask and is in the family, by display name."""
     now = time.monotonic()
     if _cache["list"] is None or now - _cache["at"] > TTL:
         out_ = left_out()

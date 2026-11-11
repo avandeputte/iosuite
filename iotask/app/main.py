@@ -1,4 +1,4 @@
-"""ioTasks: the application (start-up, who is asking, the routes and the web app).
+"""ioTask: the application (start-up, who is asking, the routes and the web app).
 
 Who may call a route is declared on the route (app/access.py); iosuite-shared's middleware works out who is asking
 (the shared session cookie, the identity a reverse proxy such as Cloudflare Access vouches for, HTTP Basic or a bearer
@@ -20,7 +20,7 @@ from app import __version__, api, caldav, config, db, ical, mcp, model, users
 from app.auth import auth, updater
 
 setup_log(config.LOG_FILE)  # the server log that Settings › Server shows; the app runs without it
-log = logging.getLogger("iotasks")
+log = logging.getLogger("iotask")
 
 
 class ProfileLinkFilter(logging.Filter):
@@ -48,13 +48,13 @@ async def lifespan(app: FastAPI):
     await run_in_threadpool(users.init)
     updater.start_daily()   # the daily "is there a newer version" check, while the setting allows it
     purge = chores.start(model.purge_deleted, name="purge of old deletion markers")  # once a day: KEEP_DELETED_DAYS
-    log.info("ioTasks %s started, database %s:%s/%s", __version__, config.DB_HOST, config.DB_PORT, config.DB_NAME)
+    log.info("ioTask %s started, database %s:%s/%s", __version__, config.DB_HOST, config.DB_PORT, config.DB_NAME)
     async with shared_mcp.running(mcp.server):  # the MCP endpoint (/mcp) lives in this process
         yield
     purge.cancel()
 
 
-app = FastAPI(title="ioTasks", version=__version__, lifespan=lifespan, docs_url="/api/docs", redoc_url=None,
+app = FastAPI(title="ioTask", version=__version__, lifespan=lifespan, docs_url="/api/docs", redoc_url=None,
               openapi_url="/api/openapi.json",
               description="Task lists for the family. Also served over CalDAV at /dav/ (to-dos, for Apple Reminders and "
                           "other reminders apps) and to AI assistants over MCP (/mcp). JSON by default; ask for "
@@ -85,7 +85,7 @@ auth.install(app, limit_for=_limit_for, not_found=(model.NotFound,))
 
 
 def _status_extra(request) -> dict:
-    """ioTasks' own fields of GET /api/status, beside the suite's."""
+    """ioTask's own fields of GET /api/status, beside the suite's."""
     u = request.state.user
     return {"timezone": ical.default_tz(), "mcp": mcp_enabled() if u else None}
 

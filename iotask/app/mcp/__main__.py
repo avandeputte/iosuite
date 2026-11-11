@@ -14,7 +14,7 @@ def _pick_user():
     if name:
         u = users.find(name)
         if not u:
-            sys.exit(f"no ioTasks account named {name!r}")
+            sys.exit(f"no ioTask account named {name!r}")
         return u
     admins = [u for u in users.all_users() if u["role"] == "admin"]
     if len(admins) == 1:

@@ -61,7 +61,7 @@ def test_put_get_query_sync_delete(client, dav):
     r = dav("REPORT", base, sc.format(t=tok0))
     assert "T1.ics" in r.text
     tok1 = re.search(r"<d:sync-token>([^<]+)<", r.text).group(1)
-    assert tok1.startswith("urn:x-iotasks:sync:")
+    assert tok1.startswith("urn:x-iotask:sync:")
     assert dav("DELETE", base + "T1.ics").status_code == 204
     r = dav("REPORT", base, sc.format(t=tok1))
     assert "T1.ics" in r.text and "404 Not Found" in r.text

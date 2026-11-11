@@ -4,7 +4,7 @@ from pathlib import Path
 
 from iosuite_shared import config as shared
 
-APP = "iotasks"
+APP = "iotask"
 APP_DIR = Path(__file__).resolve().parent.parent
 shared.load_file(APP_DIR)  # first: iosuite_shared reads its settings (the Shared ioSuite database, COOKIE_DOMAIN) from it too
 env, env_flag, env_int = shared.env, shared.env_flag, shared.env_int
@@ -23,6 +23,6 @@ MAX_TASK_BYTES = 1024 * 1024          # one task (CalDAV PUT, REST)
 MAX_IMPORT_BYTES = 16 * 1024 * 1024   # an .ics file to import
 MAX_JSON_BYTES = 2 * 1024 * 1024      # any other request body
 
-# `python -m app.mcp` (stdio) acts as this account. Updates: IOTASKS_REPO, IOTASKS_BRANCH and UPDATE_CHECK are read
+# `python -m app.mcp` (stdio) acts as this account. Updates: IOTASK_REPO, IOTASK_BRANCH and UPDATE_CHECK are read
 # by iosuite_shared.updates (app.auth.updater)
 MCP_USER = env("MCP_USER")

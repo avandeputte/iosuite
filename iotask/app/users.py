@@ -1,4 +1,4 @@
-"""Accounts, roles, sessions and app passwords: the shared ioThing accounts (iosuite-shared), seen from ioTasks.
+"""Accounts, roles, sessions and app passwords: the shared ioThing accounts (iosuite-shared), seen from ioTask.
 
 Roles as in the rest of the suite: viewer (reads the shared lists), member (also keeps their own private lists),
 editor (changes the shared lists too), admin (also settings and users); an account holds a role per app, a suite admin is admin everywhere. Web

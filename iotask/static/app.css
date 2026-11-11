@@ -1,4 +1,4 @@
-/* ioTasks: the iothing look (as the other io apps): light by default, dark with the system or the Appearance setting.
+/* ioTask: the iothing look (as the other io apps): light by default, dark with the system or the Appearance setting.
    The name in two colours: "io" in the sun's gold, "Tasks" in deep teal (the icon's colour). */
 :root {
   --warn: #e37400; --danger: #d93025; --ok: #1e8e3e; --star: #f9ab00;

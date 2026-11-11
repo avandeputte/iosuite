@@ -38,7 +38,7 @@ def overview() -> dict:
 
 @server.tool(annotations=READ_ONLY)
 def list_family_members() -> list:
-    """The family members a task can be for (the accounts that use ioTasks)."""
+    """The family members a task can be for (the accounts that use ioTask)."""
     who()
     return members.public(members.family())
 

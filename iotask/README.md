@@ -1,6 +1,6 @@
-# ioTasks
+# ioTask
 
-*The family's task lists, in the ioThing suite (with [ioPix](https://github.com/avandeputte/iopix), [ioNotes](https://github.com/avandeputte/ionotes), [ioContacts](https://github.com/avandeputte/iocontacts), [ioCalendar](https://github.com/avandeputte/iocalendar), [ioHealth](https://github.com/avandeputte/iohealth) and the [ioSuite](https://github.com/avandeputte/iosuite) start page).*
+*The family's task lists, in the ioThing suite (with [ioPix](https://github.com/avandeputte/iopix), [ioNote](https://github.com/avandeputte/ionote), [ioContact](https://github.com/avandeputte/iocontact), [ioCalendar](https://github.com/avandeputte/iocalendar), [ioHealth](https://github.com/avandeputte/iohealth) and the [ioSuite](https://github.com/avandeputte/iosuite) start page).*
 
 Self-hosted task lists: a web app for the whole family, and the standard protocol reminders apps already speak, so the same lists show up in Apple Reminders on iPhone, iPad and Mac, in Tasks.org or jtx Board on Android, in Thunderbird and anywhere else that syncs to-dos over CalDAV. FastAPI and a single-page vanilla JS app, with everything stored in MariaDB / MySQL, and the suite's shared library (`iosuite-shared`, in [iosuite-shared](https://github.com/avandeputte/iosuite-shared)).
 
@@ -8,7 +8,7 @@ Self-hosted task lists: a web app for the whole family, and the standard protoco
 
 - **Tasks** with a title, notes, a due date (a day, or a day and a time), a **priority**, **alerts**, a link, and a box to tick them off.
 - **Repeating tasks**: every day, weekday, week, two weeks, month or year, every so many of them (and whatever rule another app gave it). Ticking one off moves it on to its next date, as Apple Reminders does, instead of closing it; a rule with a number of times counts down.
-- **Repeat after completion**: "two weeks after I tick it off" instead of "every two weeks": the task comes back that long after the day it was done, at its usual time. Reminders has no such repeat, so the rule is ioTasks' own (`X-IOTASKS-AFTER-DONE:P2W` on the task); a task ticked off on a phone still comes back.
+- **Repeat after completion**: "two weeks after I tick it off" instead of "every two weeks": the task comes back that long after the day it was done, at its usual time. Reminders has no such repeat, so the rule is ioTask's own (`X-IOTASK-AFTER-DONE:P2W` on the task); a task ticked off on a phone still comes back.
 - **Subtasks**: a task under another one, shown indented under it with a count (2/5). Deleting or moving a task takes its subtasks along.
 - **Lists**: a shared **Family** list, a private **Personal** one for each account, and as many more as you like (shared or private), each with its colour and its count of open tasks (red when something is overdue).
 - **Today, Scheduled, All and Completed** across every list you see: Today has what is due today and what is overdue, Scheduled everything with a date, day by day. "Today" is the day where you are, not where the server is.
@@ -28,7 +28,7 @@ No events: those belong in [ioCalendar](https://github.com/avandeputte/iocalenda
 
 ## Run
 
-ioTasks needs Python 3.10+, git (to install `iosuite-shared` from the [iosuite-shared](https://github.com/avandeputte/iosuite-shared) repository) and a MariaDB or MySQL database. Give it its own database
+ioTask needs Python 3.10+, git (to install `iosuite-shared` from the [iosuite-shared](https://github.com/avandeputte/iosuite-shared) repository) and a MariaDB or MySQL database. Give it its own database
 and user, for example:
 
 ```sql
@@ -42,13 +42,13 @@ app of the suite uses); a new install of the suite creates it the same way. The 
 
 ### Proxmox VE (LXC)
 
-`proxmox/ct/iotasks.sh` and `proxmox/install/iotasks-install.sh` follow the community-scripts (ProxmoxVE) framework layout, as the other io apps do. On the Proxmox host, as root:
+`proxmox/ct/iotask.sh` and `proxmox/install/iotask-install.sh` follow the community-scripts (ProxmoxVE) framework layout, as the other io apps do. On the Proxmox host, as root:
 
 ```sh
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iotasks/main/proxmox/ct/iotasks.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iotask/main/proxmox/ct/iotask.sh)"
 ```
 
-It asks for the tasks database (host, port, database, user, password), the Shared ioSuite database, the web port (8670), the family's time zone, the public address behind your reverse proxy (optional), the domain the sign-in is shared on (optional) and the admin account; then the framework's own questions (resources, network). It creates a small Debian 13 container and runs the app's own `setup.sh` inside with those answers. The passwords reach `setup.sh` through its environment (a root-only file pushed in and removed again), never on a command line; the output is kept in `/opt/iotasks/setup.log`. The container's `update` command pulls the latest code and keeps the settings. For unattended runs set `IOTASKS_DB` and `IOTASKS_SUITE_DB` (`host:port/db:user:password`), `IOTASKS_ADMIN` (`name:password`), `IOTASKS_PORT`, `IOTASKS_TIMEZONE`, `IOTASKS_PUBLIC_URL` and `IOTASKS_COOKIE_DOMAIN`.
+It asks for the tasks database (host, port, database, user, password), the Shared ioSuite database, the web port (8670), the family's time zone, the public address behind your reverse proxy (optional), the domain the sign-in is shared on (optional) and the admin account; then the framework's own questions (resources, network). It creates a small Debian 13 container and runs the app's own `setup.sh` inside with those answers. The passwords reach `setup.sh` through its environment (a root-only file pushed in and removed again), never on a command line; the output is kept in `/opt/iotask/setup.log`. The container's `update` command pulls the latest code and keeps the settings. For unattended runs set `IOTASK_DB` and `IOTASK_SUITE_DB` (`host:port/db:user:password`), `IOTASK_ADMIN` (`name:password`), `IOTASK_PORT`, `IOTASK_TIMEZONE`, `IOTASK_PUBLIC_URL` and `IOTASK_COOKIE_DOMAIN`.
 
 ### Docker
 
@@ -56,26 +56,26 @@ It asks for the tasks database (host, port, database, user, password), the Share
 docker compose up -d     # edit the CHANGE ME spots in docker-compose.yml first
 ```
 
-The image (`ghcr.io/avandeputte/iotasks`) holds no data: everything is in the database.
+The image (`ghcr.io/avandeputte/iotask`) holds no data: everything is in the database.
 
 ### Any Linux or Mac
 
 ```sh
-git clone https://github.com/avandeputte/iotasks && cd iotasks
+git clone https://github.com/avandeputte/iotask && cd iotask
 ./setup.sh          # asks for the databases, port, time zone and admin; installs a systemd service when run as root
 ./run.sh            # or start it in the foreground
 ./update.sh         # later: the latest code, same settings
 ```
 
-Its last question, "Also install …?" (flag `--also iocalendar,ionotes`, `--also all`; `IOTASKS_ALSO` in the environment), puts
-other apps of the suite in this same machine, beside ioTasks (`/opt/iocalendar/app` next to `/opt/iotasks/app`),
+Its last question, "Also install …?" (flag `--also iocalendar,ionote`, `--also all`; `IOTASK_ALSO` in the environment), puts
+other apps of the suite in this same machine, beside ioTask (`/opt/iocalendar/app` next to `/opt/iotask/app`),
 without asking the shared questions again: the same database server (each app gets its own database: `suite`,
 `calendar`, `contacts`, `notes`, `health`, `iopix`, `tasks`; the user needs rights on those names too), the same Shared ioSuite
 database, sign-in domain and admin (`iosuite-shared install`, from the shared library). Each app keeps its usual port
 and updates itself as always. The Proxmox installer offers the same as a checklist, for one container with several apps.
 
 The databases and users need not exist beforehand: give a MariaDB / MySQL administrator (the question after the
-databases; flag `--db-admin USER:PASSWORD`, or `IOTASKS_DB_ADMIN`, also in the Proxmox installer) and `setup.sh` creates
+databases; flag `--db-admin USER:PASSWORD`, or `IOTASK_DB_ADMIN`, also in the Proxmox installer) and `setup.sh` creates
 the app's database and user, the Shared ioSuite database and user and, with other apps installed alongside, their
 databases too, with the passwords you answered (`iosuite-shared provision`). Nothing is dropped, and the administrator's
 password is used once and not written anywhere.
@@ -83,7 +83,7 @@ password is used once and not written anywhere.
 `setup.sh` offers 127.0.0.1, database `tasks`, user `tasks`, password `tasks` as the defaults; its flags
 (`--db`, `--suite-db`, `--admin`, `--port`, `--public-url`, `--cookie-domain`, `--service`, `--yes`) are the same in
 every app of the suite. `python -m app.cli import LIST-ID FILE.ics` and `check` work from a shell;
-accounts are the suite's: `.venv/bin/iosuite-shared --config . admin NAME --app iotasks` (password from
+accounts are the suite's: `.venv/bin/iosuite-shared --config . admin NAME --app iotask` (password from
 `ADMIN_PASSWORD`, or asked for) and `.venv/bin/iosuite-shared --config . password NAME`.
 
 ## Configuration
@@ -106,21 +106,21 @@ accounts are the suite's: `.venv/bin/iosuite-shared --config . admin NAME --app 
 | `KEEP_DELETED_DAYS` | how long a deleted task's marker is kept, so phones learn of the deletion at their next sync (`90`); a client that stayed away longer starts its sync over. The activity log is kept as long |
 | `MCP_USER` | the account `python -m app.mcp` (stdio) acts as |
 | `UPDATE_CHECK` | `0` turns the daily version check off for good |
-| `IOTASKS_REPO`, `IOTASKS_BRANCH` | what the version check and `update.sh` follow (`avandeputte/iotasks`, `main`) |
+| `IOTASK_REPO`, `IOTASK_BRANCH` | what the version check and `update.sh` follow (`avandeputte/iotask`, `main`) |
 | `DATA_DIR` | where the app writes on its own: the log and the update result (`data/` in the app folder) |
-| `LOG_FILE` | the server log shown at Settings › Server (`DATA_DIR/iotasks.log`; `LOG_FILE=` with nothing after it: no file) |
+| `LOG_FILE` | the server log shown at Settings › Server (`DATA_DIR/iotask.log`; `LOG_FILE=` with nothing after it: no file) |
 
 ## Updates
 
-ioTasks asks GitHub once a day whether the main branch has a newer version (only the public commit list is read;
+ioTask asks GitHub once a day whether the main branch has a newer version (only the public commit list is read;
 nothing about the server is sent; Settings › Server switches it off, `UPDATE_CHECK=0` locks it off). Admins
 then see a note with **Update now**, and **Settings › Server** has the version, **Check for updates**,
-**Update now**, what the server runs on, the tail of the server log (`data/iotasks.log`; `LOG_FILE` moves it, empty switches it
+**Update now**, what the server runs on, the tail of the server log (`data/iotask.log`; `LOG_FILE` moves it, empty switches it
 off) and **Restart**. The page is the same in every ioThing app: the panel (`/api/server/ui.js`), the version check, `update.sh`, the
 restart and the log come from iosuite-shared, served at `/api/server` and `/api/log`. Updating runs the app's own
 `update.sh`: the new version's Python packages first, then the code (a failed step leaves the running version as it
 was), the database is brought up to date, and the service restarts; the page reloads when the new version answers. In
-Docker, pull the image instead. From a shell: `./update.sh` (`--check` only looks, `IOTASKS_REF=<sha>` installs a
+Docker, pull the image instead. From a shell: `./update.sh` (`--check` only looks, `IOTASK_REF=<sha>` installs a
 given commit).
 
 Everything is under one Settings page (the sidebar and the avatar menu); a change is saved the moment it is made: your own tabs (account, display, apps and
@@ -129,7 +129,7 @@ devices, lists), then for admins family and server (with Export: each list as an
 
 ### Releases
 
-Every version merged into main is released by itself: when `__version__` (app/__init__.py) has no GitHub release yet, CI tags it `v<version>`, publishes the image as `ghcr.io/avandeputte/iotasks:v<version>` (and `latest`) and makes the release with the merge's message as notes. Bump the version in a change to release it.
+Every version merged into main is released by itself: when `__version__` (app/__init__.py) has no GitHub release yet, CI tags it `v<version>`, publishes the image as `ghcr.io/avandeputte/iotask:v<version>` (and `latest`) and makes the release with the merge's message as notes. Bump the version in a change to release it.
 
 ## Reverse proxy and HTTPS
 
@@ -141,7 +141,7 @@ macOS want HTTPS for CalDAV accounts outside the home network, and passwords tra
 With a `cloudflared` tunnel in front, set `PUBLIC_URL` to the public address. To make people sign in at Cloudflare
 Access first, add a self-hosted Access application for that hostname, then turn on Settings › Security ›
 Sign-in at the proxy › Cloudflare Access with your team (`myteam.cloudflareaccess.com`) and the application's AUD tag
-(one setting for the whole suite, kept in the Shared ioSuite database). ioTasks checks Cloudflare's signed token and signs
+(one setting for the whole suite, kept in the Shared ioSuite database). ioTask checks Cloudflare's signed token and signs
 the person in to the matching account (by email, then by name).
 
 Reminders apps cannot get through Access: Apple Reminders, DAVx⁵ and Thunderbird cannot open the Access sign-in page or
@@ -172,7 +172,7 @@ account password.
 | For | Standard | Where |
 | --- | --- | --- |
 | Reminders and tasks apps, two-way: Apple Reminders (iPhone, iPad, Mac), DAVx⁵ with Tasks.org, jtx Board or OpenTasks on Android, Thunderbird, Evolution, GNOME, KDE | **CalDAV** (RFC 4791) with to-dos (`VTODO`): each list is a calendar collection that takes only to-dos, which is how Reminders tells a task list from a calendar; sync-collection (RFC 6578), getctag, MKCALENDAR and extended MKCOL (a list made in Reminders is made here), PROPPATCH (name, colour, description, order), calendar-query, calendar-multiget, If-Match / If-None-Match, discovery via `/.well-known/caldav` (RFC 6764) and current-user-principal | `https://host/dav/` |
-| Any app that reads calendar files | **iCalendar** (RFC 5545): every task is kept as the `VTODO` it came in as, so properties ioTasks does not edit (other apps' X- properties, Apple's sort order) survive a round trip; `DUE`, `RRULE`, `VALARM`, `PRIORITY`, `RELATED-TO` (subtasks) and `CATEGORIES` included | CalDAV, `/api/tasks/<id>?format=ics`, import/export |
+| Any app that reads calendar files | **iCalendar** (RFC 5545): every task is kept as the `VTODO` it came in as, so properties ioTask does not edit (other apps' X- properties, Apple's sort order) survive a round trip; `DUE`, `RRULE`, `VALARM`, `PRIORITY`, `RELATED-TO` (subtasks) and `CATEGORIES` included | CalDAV, `/api/tasks/<id>?format=ics`, import/export |
 | Web and JSON clients | **REST/JSON**, and iCalendar by content negotiation (`Accept: text/calendar`): lists, tasks with filters (due, a range of days, status, member, words), a task from one line of plain English (`{"text": …}`, previewed by `/api/quick`), ticking off, postponing, subtasks, the order by hand, the activity log and undo, templates, import/export | `/api/`, OpenAPI docs at `/api/docs` |
 | iPhone, iPad and Mac in one step | **Apple configuration profile** (`com.apple.caldav.account`) | Settings › Apps and devices |
 | AI assistants: Claude and anything else that speaks MCP | **Model Context Protocol** (streamable HTTP, and stdio) | `https://host/mcp` (switched on in Settings › Server) |
@@ -180,9 +180,9 @@ account password.
 **iPhone, iPad and Mac in one step:** Settings › Apps and devices › *Download the profile* gives a configuration profile
 (`.mobileconfig`) with the CalDAV account and a new CalDAV-only app password for that device inside (or none, and the device asks).
 Open the page in Safari on the iPhone, tap Download, then Settings › Profile Downloaded › Install. The lists then appear
-in Reminders under the account "ioTasks".
+in Reminders under the account "ioTask".
 
-Where the suite has more than one app that syncs (ioCalendar, ioContacts, ioTasks), *Set up* in the same box offers
+Where the suite has more than one app that syncs (ioCalendar, ioContact, ioTask), *Set up* in the same box offers
 **All apps**: one profile with the account of each, and an app password of its own per app.
 
 What Reminders keeps for an account that is not iCloud is the standard part: title, notes, due date and time, repeat,
@@ -213,7 +213,7 @@ Every change answers with `undo`, the step it was; `POST /api/undo/<step>` takes
 
 ## MCP server
 
-ioTasks is also an MCP server, as the other io apps are, so an assistant such as Claude can work with the lists:
+ioTask is also an MCP server, as the other io apps are, so an assistant such as Claude can work with the lists:
 read what is due, search tasks, add, change, tick off, move and delete them, make lists, add a template's tasks,
 import iCalendar files, see who did what lately and take a change back (undo), and, for admins, check the server's
 health, look for a new version and install it.
@@ -223,7 +223,7 @@ at all. Every assistant signs in with an **app password** (Settings › Account 
 `Authorization: Bearer <app password>`, and acts as that account, with its rights.
 
 ```sh
-claude mcp add --transport http iotasks https://tasks.example.com/mcp --header "Authorization: Bearer APP-PASSWORD"
+claude mcp add --transport http iotask https://tasks.example.com/mcp --header "Authorization: Bearer APP-PASSWORD"
 ```
 
 On the server itself, `.venv/bin/python -m app.mcp --user NAME` serves the same tools over stdio.

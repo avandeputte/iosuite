@@ -23,16 +23,16 @@ from icalendar import Alarm, Calendar, Event, Todo, vDDDTypes, vRecur
 from app import __version__, config
 from iosuite_shared.errors import Invalid
 
-PRODID = f"-//iothing//ioTasks {__version__}//EN"
+PRODID = f"-//iothing//ioTask {__version__}//EN"
 UTC = dt.timezone.utc
 STATUSES = ("NEEDS-ACTION", "IN-PROCESS", "COMPLETED", "CANCELLED")
 PRIORITIES = {"high": 1, "medium": 5, "low": 9, "none": 0, "": 0}
 EDITABLE = ("title", "notes", "due", "start", "timezone", "priority", "done", "status", "percent", "url", "location",
             "categories", "parent", "rrule", "repeatAfter", "alarms")
-# ioTasks' own property: the task comes back this long after the day it is ticked off (an ISO 8601 duration of days,
+# ioTask's own property: the task comes back this long after the day it is ticked off (an ISO 8601 duration of days,
 # weeks, months or years: "P2W" is two weeks later), where RRULE counts from the due date. Reminders apps keep a
 # property they do not know.
-AFTER_DONE = "X-IOTASKS-AFTER-DONE"
+AFTER_DONE = "X-IOTASK-AFTER-DONE"
 SORT_ORDER = "X-APPLE-SORT-ORDER"   # Apple Reminders' manual order: lower comes first; without it, the seconds from 2001 to CREATED
 APPLE_EPOCH = dt.datetime(2001, 1, 1, tzinfo=UTC)
 UNITS = {"D": "days", "W": "weeks", "M": "months", "Y": "years"}
@@ -698,7 +698,7 @@ def complete(cal: Calendar, done: bool, tzname: str | None = None) -> bool:
 
 
 def keep_after_done(old: Calendar, new: Calendar, tzname: str | None = None) -> bool:
-    """A reminders app saved a task that repeats after completion. The rule is ioTasks' own, so an app that dropped it
+    """A reminders app saved a task that repeats after completion. The rule is ioTask's own, so an app that dropped it
     gets it back; and when the app ticked the task off, it comes back with its next due date instead of closing. True
     when the object was changed (the app then fetches it again)."""
     rule = after_done_of(todo(old))

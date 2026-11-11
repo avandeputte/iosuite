@@ -1,14 +1,14 @@
 #!/bin/sh
-# Update an installed ioTasks in place (a git checkout, an installed copy such as /opt/iotasks/app, or the Proxmox
+# Update an installed ioTask in place (a git checkout, an installed copy such as /opt/iotask/app, or the Proxmox
 # container; Docker users pull the image instead). The same script in every app of the suite: only the block
 # "the app" below differs.
 #
 #   ./update.sh            fetch the latest code, refresh the packages, restart the service
-#   ./update.sh --check    only say whether something newer exists (IOTASKS_REF is honoured)
+#   ./update.sh --check    only say whether something newer exists (IOTASK_REF is honoured)
 #   ./update.sh --force    reinstall and restart even when the installed commit is already the latest
-#   IOTASKS_REF=<sha|branch> ./update.sh   install that commit instead of the tip of main
+#   IOTASK_REF=<sha|branch> ./update.sh   install that commit instead of the tip of main
 #     (right after a push GitHub may still report the previous commit; naming the sha avoids that)
-#   IOTASKS_RESULT=<file>  write the outcome ("ok: ..." or "error: ...") there before the restart, so the web app
+#   IOTASK_RESULT=<file>  write the outcome ("ok: ..." or "error: ...") there before the restart, so the web app
 #     can show it afterwards (its own child process dies in the restart)
 #
 # Keeps config.env, the data folder and the Python environment. A git checkout is pulled; an installed copy (no .git)
@@ -20,12 +20,12 @@ set -e
 cd "$(dirname "$0")"
 
 # ---- the app: the only lines that differ between the apps of the suite
-# the key (the service, the environment variables IOTASKS_REPO, _BRANCH, _REF and _RESULT, the launchd label), what messages
-# call it, the GitHub repository followed unless IOTASKS_REPO says otherwise, where the server lives in the repository
+# the key (the service, the environment variables IOTASK_REPO, _BRANCH, _REF and _RESULT, the launchd label), what messages
+# call it, the GitHub repository followed unless IOTASK_REPO says otherwise, where the server lives in the repository
 # ("" : at the root), and the files and folders an installed copy replaces
-NAME=iotasks
-LABEL=ioTasks
-REPO_DEFAULT=avandeputte/iotasks
+NAME=iotask
+LABEL=ioTask
+REPO_DEFAULT=avandeputte/iotask
 SUBDIR=""
 ITEMS="app static proxmox pyproject.toml README.md LICENSE setup.sh run.sh update.sh Dockerfile docker-compose.yml config.env.example"
 # the optional dependency groups installed here (has <group> <module to probe>), and anything else a new version needs on this machine

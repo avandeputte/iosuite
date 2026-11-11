@@ -1,10 +1,10 @@
-# ioTasks with Docker: `docker compose up -d` pulls the published image; `docker compose up -d --build` builds it
+# ioTask with Docker: `docker compose up -d` pulls the published image; `docker compose up -d --build` builds it
 # from this checkout. Works as a stack in Dockge / Portainer. Edit the CHANGE ME spots.
 services:
-  iotasks:
-    image: ghcr.io/avandeputte/iotasks:latest
+  iotask:
+    image: ghcr.io/avandeputte/iotask:latest
     build: .
-    container_name: iotasks
+    container_name: iotask
     restart: unless-stopped
     logging:                          # the output Docker keeps (the app's log, again): at most 3 files of 5 MB
       driver: json-file

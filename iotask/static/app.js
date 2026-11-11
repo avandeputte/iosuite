@@ -1,4 +1,4 @@
-/* ioTasks web app: one module, no build step. The smart lists (Today, Scheduled, All, Completed) and the lists to
+/* ioTask web app: one module, no build step. The smart lists (Today, Scheduled, All, Completed) and the lists to
    pick in the sidebar; a list of tasks with a box to tick each off, a new-task line that reads plain English, subtasks
    under their task, postponing, the order by hand (drag); the task form (due date and time, repeat, alert, priority,
    the family members it is for, notes, link); the activity log with undo, templates, a print view; search, import,
@@ -177,7 +177,7 @@ const initials = (fn) => { const p = (fn || '?').trim().split(/\s+/); return ((p
 async function copyText(t) { try { await navigator.clipboard.writeText(t); toast('Copied'); } catch { toast(t); } }
 const copyRow = (v) => h('div', { class: 'copy' }, h('code', null, v), h('button', { class: 'iconbtn', title: 'Copy', onclick: () => copyText(v) }, icon('copy', 's')));
 const safeUrl = (u) => /^(https?:\/\/|mailto:)/i.test(u || '');  // a link that is a link (never javascript:)
-const store = { get: (k) => { try { return localStorage.getItem(`iotasks.${k}`); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(`iotasks.${k}`, v); } catch { /* private mode */ } } };
+const store = { get: (k) => { try { return localStorage.getItem(`iotask.${k}`); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(`iotask.${k}`, v); } catch { /* private mode */ } } };
 
 // ------------------------------------------------------------------ dates
 const pad2 = (n) => String(n).padStart(2, '0');
@@ -1072,7 +1072,7 @@ async function showImport(page, r) {
   };
   page.append(h('div', { class: 'pagehead' }, h('h1', null, 'Import')),
     w.length ? h('div', { class: 'box' }, h('h2', null, icon('upload'), 'Import'),
-      h('p', null, 'An iCalendar file (.ics) with to-dos, from another tasks app or another ioTasks. Due dates, repeats, alerts, priorities and subtasks come along; events in the file are left out.'),
+      h('p', null, 'An iCalendar file (.ics) with to-dos, from another tasks app or another ioTask. Due dates, repeats, alerts, priorities and subtasks come along; events in the file are left out.'),
       h('div', { class: 'pform' }, h('label', { class: 'field' }, h('span', null, 'Into the list'), sel), file,
         h('label', { class: 'check' }, replace, ' Update tasks that are already here (same UID)'),
         h('p', null, h('button', { class: 'pillbtn primary', onclick: run }, icon('upload', 's'), 'Import'))), out) : h('p', { class: 'muted' }, 'You cannot add tasks to any list.'));
@@ -1163,14 +1163,14 @@ async function setDevices(el) {
     canPw ? h('div', { class: 'box' }, h('h2', null, icon('devices'), 'iPhone, iPad and Mac'),
       h('p', null, 'A profile that adds your lists to Apple Reminders in one step. Tasks you add or tick off there show up here, and the other way round.'),
       h('form', { method: 'POST', action: '/api/apple-profile', class: 'pform', onsubmit: downloadProfile },
-        profileScope(suiteApps, 'ioTasks'),
+        profileScope(suiteApps, 'ioTask'),
         fld('Device name', plabel),
         fld('Password', h('select', { class: 't', name: 'password' }, h('option', { value: 'new' }, 'Include a new app password'), h('option', { value: 'ask' }, 'Ask on the device'))),
         h('p', null, h('button', { class: 'pillbtn primary', type: 'submit' }, icon('download', 's'), 'Download the profile'))),
       how('How to install', h('p', { class: 'muted small' }, isApple ? 'Open the download, then Settings › Profile Downloaded › Install.' : 'Download it in Safari on the iPhone or iPad, then Settings › Profile Downloaded › Install. On a Mac: open the file, then System Settings › Privacy & Security › Profiles.',
         ' iOS shows the profile as “Not Verified”: that is expected. Revoke its app password under Settings › Account if the device is lost.',
         suiteApps.length > 1 ? ' A profile for all apps holds one app password per app; revoke each one in its own app.' : null),
-      h('p', { class: 'muted small' }, 'The lists appear in Reminders under the account “ioTasks”. Lists made there are made here too.'))) : null,
+      h('p', { class: 'muted small' }, 'The lists appear in Reminders under the account “ioTask”. Lists made there are made here too.'))) : null,
     h('div', { class: 'box' }, h('h2', null, icon('list'), 'Reminders and tasks apps (CalDAV)'),
       h('p', null, 'Two-way sync with your user name and an app password (Settings › Account).'),
       kv('Server', info.server), kv('User name', info.user), kv('CalDAV', info.caldav),
@@ -1181,8 +1181,8 @@ async function setDevices(el) {
       h('p', null, 'Give the assistant its own app password (not “Reminders apps only”), sent as a Bearer token.'),
       kv('MCP address', info.mcp),
       how('Setup for Claude Code and JSON-configured apps',
-        copyRow(`claude mcp add --transport http iotasks ${info.mcp} --header "Authorization: Bearer APP-PASSWORD"`),
-        copyRow(JSON.stringify({ mcpServers: { iotasks: { command: 'npx', args: ['-y', 'mcp-remote', info.mcp, '--header', 'Authorization: Bearer APP-PASSWORD'] } } }))))
+        copyRow(`claude mcp add --transport http iotask ${info.mcp} --header "Authorization: Bearer APP-PASSWORD"`),
+        copyRow(JSON.stringify({ mcpServers: { iotask: { command: 'npx', args: ['-y', 'mcp-remote', info.mcp, '--header', 'Authorization: Bearer APP-PASSWORD'] } } }))))
       : (S.user.role === 'admin' ? h('div', { class: 'box' }, h('h2', null, icon('ai'), 'AI assistants (MCP)'), h('p', { class: 'muted' }, 'Off. Turn it on in ', h('a', { class: 'lnk', href: '#/settings/server' }, 'Settings › Server'), '.')) : null),
     h('div', { class: 'box' }, h('h2', null, icon('link'), 'Other apps (REST API)'),
       h('p', null, 'JSON or iCalendar with your user name and an app password. ', h('a', { class: 'lnk', href: info.api, target: '_blank' }, 'API documentation')),
@@ -1280,8 +1280,8 @@ function updateBanner() {
   const u = S.status && S.status.update;
   if (!u || store.get('updateDismissed') === u.remote) return;
   const b = h('div', { id: 'updbanner', role: 'status' }, icon('update'),
-    h('span', null, `ioTasks ${u.version ? `v${u.version}` : 'update'} is available${u.message ? `: ${u.message.replace(/^v\d+\.\d+\.\d+:\s*/, '')}` : ''}`),
-    h('button', { class: 'pillbtn primary noic', onclick: async () => { if (await confirmDialog('Update ioTasks', 'Install the new version and restart? The page reloads when it is back.', 'Update now')) { b.remove(); (await serverUi()).runUpdate({ toast }); } } }, 'Update now'),
+    h('span', null, `ioTask ${u.version ? `v${u.version}` : 'update'} is available${u.message ? `: ${u.message.replace(/^v\d+\.\d+\.\d+:\s*/, '')}` : ''}`),
+    h('button', { class: 'pillbtn primary noic', onclick: async () => { if (await confirmDialog('Update ioTask', 'Install the new version and restart? The page reloads when it is back.', 'Update now')) { b.remove(); (await serverUi()).runUpdate({ toast }); } } }, 'Update now'),
     h('a', { class: 'pillbtn noic', href: '#/settings/server', onclick: () => b.remove() }, 'Details'),
     h('button', { class: 'iconbtn', title: 'Not now (hidden until the next version)', onclick: () => { store.set('updateDismissed', u.remote); b.remove(); } }, icon('close', 's')));
   document.body.append(b);

@@ -43,7 +43,7 @@ def check_for_update() -> dict:
 
 @server.tool(annotations=UPDATES)
 def update_server() -> dict:
-    """Admins: update ioTasks to the newest version on GitHub and restart it (update.sh: the code and its packages;
+    """Admins: update ioTask to the newest version on GitHub and restart it (update.sh: the code and its packages;
     the settings and the database stay, and the database is brought up to date as it starts). The connection drops
     while it restarts (about a minute); call check_for_update afterwards: lastUpdate says what happened. Not in
     Docker (pull the image there)."""
@@ -53,7 +53,7 @@ def update_server() -> dict:
     except RuntimeError as e:
         raise ToolError(str(e))
     return {"started": True, "installed": updater.local_commit()[:7], "ref": updater.branch,
-            "note": "update.sh is running; ioTasks restarts when it finishes. Then call check_for_update."}
+            "note": "update.sh is running; ioTask restarts when it finishes. Then call check_for_update."}
 
 
 @server.tool(annotations=READ_ONLY)

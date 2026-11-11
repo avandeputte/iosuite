@@ -3,7 +3,7 @@ and filters on), finding tasks (open, due, overdue, done, by member, by words), 
 CalDAV clients use.
 
 Lists: the shared ones (owner_id NULL, Family first) that everyone sees, and each account's own private ones (Personal,
-made the first time a member uses ioTasks). Viewers only read the shared lists; members also keep their own private
+made the first time a member uses ioTask). Viewers only read the shared lists; members also keep their own private
 lists; editors change the shared ones too; admins also manage settings and users.
 """
 import contextlib
@@ -50,7 +50,7 @@ def can_write(u: dict | None, c: dict | None) -> bool:
 
 
 def ensure_personal(u: dict) -> None:
-    """Every member gets their private Personal list the first time they use ioTasks (accounts are made in any app of the
+    """Every member gets their private Personal list the first time they use ioTask (accounts are made in any app of the
     suite, so not necessarily here). A viewer keeps nothing of their own."""
     if not u or not u.get("id") or not members.in_family(u["id"]):  # not a person (Settings › Family): no list of its own
         return
@@ -207,8 +207,8 @@ def href_for(uid: str) -> str:
 
 # ------------------------------------------------------------------ the activity log
 
-_via = contextvars.ContextVar("iotasks_via", default="web")
-_batch = contextvars.ContextVar("iotasks_batch", default=None)
+_via = contextvars.ContextVar("iotask_via", default="web")
+_batch = contextvars.ContextVar("iotask_batch", default=None)
 
 
 @contextlib.contextmanager
