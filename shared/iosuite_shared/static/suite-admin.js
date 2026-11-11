@@ -53,7 +53,7 @@ async function api(path, opts = {}) {
 
 // ------------------------------------------------------------------ styles (once per page)
 const CSS = `
-.iosa, .iosa-back { --sa-fg: var(--fg, var(--text, #202124)); --sa-fg2: var(--fg2, var(--muted, #5f6368)); --sa-line: var(--line, #dadce0);
+.iosa, .iosa-back, .iosa-menu { --sa-fg: var(--fg, var(--text, #202124)); --sa-fg2: var(--fg2, var(--muted, #5f6368)); --sa-line: var(--line, #dadce0);
   --sa-bg: var(--card, var(--bg, #fff)); --sa-bg2: var(--bg2, color-mix(in srgb, var(--sa-fg) 7%, var(--sa-bg)));
   --sa-accent: var(--accent, var(--link, #1a73e8)); --sa-accent-bg: var(--accent-bg, color-mix(in srgb, var(--sa-accent) 14%, transparent));
   --sa-brand: var(--brand, var(--sa-accent)); --sa-danger: var(--danger, #d93025); color: var(--sa-fg); font-size: 14px; line-height: 1.45; }
@@ -77,8 +77,20 @@ const CSS = `
 .iosa table.sa-t th { font-size: 12px; color: var(--sa-fg2); font-weight: 600; }
 .iosa .sa-face, .iosa-back .sa-face { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; flex: none; background: var(--sa-bg2); }
 .iosa .sa-who, .iosa-back .sa-who { display: flex; align-items: center; gap: 8px; }
-.iosa table.sa-roles th, .iosa table.sa-roles td { white-space: nowrap; padding: 8px 6px; }  /* compact: a column per app */
-.iosa table.sa-roles select.sa-in.sa-sm { font-size: 13px; padding: 0 4px; }
+.iosa .sa-admins { display: flex; gap: 6px 8px; align-items: center; flex-wrap: wrap; padding: 10px 12px; border-radius: 10px; background: var(--sa-bg2); margin: 10px 0 6px; font-size: 13px; }
+.iosa .sa-chip { font: inherit; font-size: 12px; color: var(--sa-fg); display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--sa-line); background: var(--sa-bg); }
+.iosa button.sa-chip { cursor: pointer; }
+.iosa button.sa-chip:hover, .iosa button.sa-chip[aria-expanded="true"] { border-color: var(--sa-accent); color: var(--sa-accent); }
+.iosa button.sa-chip.add { border-style: dashed; color: var(--sa-fg2); background: none; }
+.iosa .sa-exc { display: grid; grid-template-columns: minmax(120px, max-content) 1fr; }  /* an app per row; only the people whose role differs */
+.iosa .sa-exc > div { padding: 8px 0; border-bottom: 1px solid var(--sa-line); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+.iosa .sa-exc > div.sa-app { font-weight: 600; padding-right: 24px; }
+.iosa-menu { position: fixed; z-index: 1002; min-width: 170px; padding: 4px; border-radius: 10px; border: 1px solid var(--sa-line); background: var(--sa-bg); color: var(--sa-fg); box-shadow: 0 6px 20px rgba(0,0,0,.25); font-size: 13px; }
+.iosa-menu button { font: inherit; display: flex; justify-content: space-between; gap: 16px; width: 100%; text-align: left; border: 0; background: none; color: inherit; padding: 6px 10px; border-radius: 6px; cursor: pointer; }
+.iosa-menu button:hover, .iosa-menu button:focus-visible { background: var(--sa-accent-bg); color: var(--sa-accent); outline: 0; }
+.iosa-menu .sa-muted { color: var(--sa-fg2); font-size: 12px; }
+.iosa-menu .sa-mhead { padding: 6px 10px 2px; font-size: 12px; color: var(--sa-fg2); }
+.iosa-menu hr { border: 0; border-top: 1px solid var(--sa-line); margin: 4px 0; }
 .iosa .sa-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: middle; }
 .iosa a { color: var(--sa-accent); }
 .iosa input.sa-in, .iosa select.sa-in, .iosa textarea.sa-in, .iosa-back input.sa-in, .iosa-back select.sa-in, .iosa-back textarea.sa-in {
@@ -335,21 +347,71 @@ async function revokeAppPassword(p) {
   try { await api(`app-passwords/${p.id}`, { method: 'DELETE' }); toast('Revoked'); return true; } catch (e) { fail(e); return false; }
 }
 
+/** A small menu under `anchor`: items are {label, hint, run}, '-' (a line) or a string (a heading). One at a time; a
+    click elsewhere, Esc or scrolling closes it. Fixed to the window, so it works whatever scrolls the page. */
+let closeMenu = () => {};
+function menu(anchor, items) {
+  closeMenu();
+  const m = h('div', { class: 'iosa-menu', role: 'menu' }, items.map((it) => it === '-' ? h('hr')
+    : typeof it === 'string' ? h('div', { class: 'sa-mhead' }, it)
+    : h('button', { role: 'menuitem', onclick: () => { closeMenu(); it.run(); } }, it.label, it.hint ? h('span', { class: 'sa-muted' }, it.hint) : null)));
+  document.body.append(m);
+  const r = anchor.getBoundingClientRect(), vw = document.documentElement.clientWidth, vh = document.documentElement.clientHeight;
+  m.style.left = `${Math.max(8, Math.min(r.left, vw - m.offsetWidth - 8))}px`;
+  m.style.top = `${r.bottom + 4 + m.offsetHeight > vh - 8 ? Math.max(8, r.top - 4 - m.offsetHeight) : r.bottom + 4}px`;
+  anchor.setAttribute('aria-expanded', 'true');
+  const off = (e) => {
+    if (e.type === 'keydown') { if (e.key === 'Escape') { closeMenu(); anchor.focus(); } return; }
+    if (e.type === 'scroll' || !(m.contains(e.target) || anchor.contains(e.target))) closeMenu();
+  };
+  const evs = ['mousedown', 'keydown', 'scroll'];
+  evs.forEach((t) => document.addEventListener(t, off, true));
+  closeMenu = () => { m.remove(); anchor.removeAttribute('aria-expanded'); evs.forEach((t) => document.removeEventListener(t, off, true)); closeMenu = () => {}; };
+  const first = m.querySelector('button'); if (first) first.focus();
+}
+
+/** Roles: one row per app with its default role, and only the people whose role there differs from it. The page grows
+    downward as apps are added; suite admins (admin everywhere) are one line above. */
 function roles(el, ctx) {
   const { o } = ctx;
+  const admins = o.users.filter((u) => u.suiteAdmin), people = o.users.filter((u) => !u.suiteAdmin);
+  // a person without a password is viewer at most, so an app's editor or admin default is viewer for them
+  const dflt = (u, a) => (u.passwordless && ['editor', 'admin'].includes(a.defaultRole) ? 'viewer' : a.defaultRole);
+  const allowed = (u) => (u.passwordless ? ['none', 'viewer'] : ['none', 'viewer', 'editor', 'admin']);
+  const list = h('div', { class: 'sa-exc' });
+  const set = async (u, a, role) => {
+    try {
+      await api(`users/${u.id}`, { method: 'PATCH', json: { roles: { [a.app]: role } } });
+      if (role) u.roles[a.app] = role; else delete u.roles[a.app];
+      toast(`${u.displayName}: ${role || `default (${dflt(u, a)})`} in ${a.name}`);
+      draw();
+    } catch (e) { fail(e); ctx.redraw(); }
+  };
+  const roleItems = (u, a) => allowed(u).map((r) => ({ label: r, hint: r === u.roles[a.app] ? 'now' : r === dflt(u, a) ? 'default' : '', run: () => set(u, a, r) }));
+  const chip = (u, a) => {
+    const b = h('button', { class: 'sa-chip', 'aria-haspopup': 'menu', title: `${u.displayName} in ${a.name}` }, `${u.displayName}: `, h('b', null, u.roles[a.app]));
+    b.onclick = () => menu(b, [`${u.displayName} in ${a.name}`, ...roleItems(u, a), '-', { label: 'Back to the default', hint: dflt(u, a), run: () => set(u, a, null) }]);
+    return b;
+  };
+  const adder = (a) => {
+    const rest = people.filter((u) => !u.roles[a.app]);
+    if (!rest.length) return null;
+    const b = h('button', { class: 'sa-chip add', 'aria-haspopup': 'menu', title: `Give someone another role in ${a.name}` }, icon('add'), 'person');
+    b.querySelector('.sa-ic').style.cssText = 'width:14px;height:14px';
+    b.onclick = () => menu(b, [`Someone in ${a.name}`, ...rest.map((u) => ({ label: u.displayName, hint: `now ${dflt(u, a)}`,
+      run: () => menu(b, [`${u.displayName} in ${a.name}`, ...roleItems(u, a).filter((x) => x.label !== dflt(u, a))]) }))]);
+    return b;
+  };
+  const draw = () => list.replaceChildren(...o.apps.flatMap((a) => [
+    h('div', { class: 'sa-app' }, a.name, a.registered ? null : h('span', { class: 'sa-muted sa-small', style: { fontWeight: 400 } }, '(not running)')),
+    h('div', null, h('span', { class: 'sa-muted sa-small' }, `everyone: ${a.defaultRole}`),
+      people.filter((u) => u.roles[a.app]).map((u) => chip(u, a)), adder(a))]));
+  draw();
   el.append(box('lock', 'Roles',
-    h('p', { class: 'sa-muted' }, 'none, viewer, editor or admin. “default” follows the app’s default role (under Apps). Suite admins are admin everywhere.'),
-    h('table', { class: 'sa-t sa-roles' },
-      h('tr', null, h('th', null, 'Person'), o.apps.map((a) => h('th', null, a.name, h('div', { class: 'sa-muted sa-small' }, `default: ${a.defaultRole}`)))),
-      o.users.map((u) => h('tr', null, h('td', null, h('b', null, u.displayName), h('div', { class: 'sa-muted sa-small' }, u.name)),
-        o.apps.map((a) => {
-          if (u.suiteAdmin) return h('td', { class: 'sa-muted sa-small' }, 'admin (suite)');
-          const s = roleSelect(u, a);
-          s.onchange = async () => {
-            try { await api(`users/${u.id}`, { method: 'PATCH', json: { roles: { [a.app]: s.value || null } } }); u.roles[a.app] = s.value || undefined; toast(`${u.displayName}: ${s.value || 'default'} in ${a.name}`); } catch (e) { fail(e); ctx.redraw(); }
-          };
-          return h('td', null, s);
-        }))))));
+    h('p', { class: 'sa-muted' }, 'Each app gives everyone its default role (set under Global settings › Apps). Only the people who have another role in an app are listed there.'),
+    admins.length ? h('div', { class: 'sa-admins' }, h('span', { class: 'sa-muted' }, 'Suite admins, admin in every app:'),
+      admins.map((u) => h('span', { class: 'sa-chip' }, u.displayName)), h('span', { class: 'sa-muted sa-small' }, 'Change this under People.')) : null,
+    people.length ? list : h('p', { class: 'sa-muted' }, 'Everyone is a suite admin, so there are no roles to set.')));
 }
 
 async function passwords(el, ctx) {
