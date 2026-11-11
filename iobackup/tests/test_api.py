@@ -138,22 +138,22 @@ def test_job_checks(client):
     assert client.post("/api/destinations", json={"name": "rel", "kind": "local", "path": "backups"}).status_code == 400
 
 
-def test_viewers_see_but_do_not_change(client):
+def test_for_suite_admins_only(client):
+    import pytest
     from iosuite_shared import users
     srv, dst, job = setup_all(client)
-    users.create("vera", "secret123", role="viewer", app="iobackup")
+    with pytest.raises(ValueError):
+        users.create("vera", "secret123", role="admin", app="iobackup")  # takes no roles
+    vera = users.create("vera", "secret123")
+    users.set_role(vera["id"], "iobackup", "admin")  # a role from before the rule: ignored
     client.cookies.clear()
-    assert client.post("/api/auth/login", json={"name": "vera", "password": "secret123"}).status_code == 200
-    assert client.get("/api/overview").status_code == 200
-    assert client.post("/api/servers", json={"name": "x", "host": "h"}).status_code == 403
-    assert client.post(f"/api/jobs/{job['id']}/run").status_code == 403
-    assert client.get(f"/api/servers/{srv['id']}/info").status_code == 403
+    client.post("/api/auth/login", json={"name": "vera", "password": "secret123"})
+    assert client.get("/api/overview").status_code in (401, 403)
+    assert client.post(f"/api/jobs/{job['id']}/run").status_code in (401, 403)
 
 
 def test_no_role_by_default(client):
     from iosuite_shared import users
-    from app.auth import admins_only_by_default
-    admins_only_by_default()  # at start (the tests wipe the shared settings between tests)
     users.create("nora", "secret123")
     client.cookies.clear()
     r = client.post("/api/auth/login", json={"name": "nora", "password": "secret123"})

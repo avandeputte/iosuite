@@ -7,8 +7,8 @@
 Backs up the MariaDB server the suite's apps keep their data on (and any other MariaDB or Galera server) on demand or
 on a schedule, to a folder or Google Drive, keeps the newest *N* backups of each job, and **restores exactly what you
 pick**: whole databases, single tables or views, stored routines, events, users and roles, onto the same server or
-another, under the same name or a new one. An admin tool of the suite: the gear menu of the ioSuite start page lists
-it for its admins and the suite admins, nobody else sees it. FastAPI and a single-page vanilla JS app, built the same
+another, under the same name or a new one. An admin tool of the suite, for suite admins only: the gear menu of the
+ioSuite start page lists it for them, nobody else sees it. FastAPI and a single-page vanilla JS app, built the same
 way as the other io apps, signed in with the suite's shared accounts ([`iosuite-shared`](https://github.com/avandeputte/iosuite-shared)),
 with its own settings in MariaDB / MySQL. It grew out of [mariadb-backup](https://github.com/avandeputte/mariadb-backup),
 whose backup files it reads and writes unchanged.
@@ -31,9 +31,8 @@ whose backup files it reads and writes unchanged.
   tick users and roles, pick the server and the options (structure only, replace existing users, carry on past
   errors), review what it would overwrite there, and confirm.
 
-Roles: a viewer sees the jobs, the runs and the backups; an editor also runs a job and verifies a backup; an admin
-manages the servers, destinations and jobs, downloads, deletes and restores. An account has no role here unless it is
-given one (a backup holds everybody's data); a suite admin is admin everywhere. The servers' passwords and the Google
+Access: suite admins only (a backup holds everybody's data). Everybody else has no access, whatever role or default
+role says, and ioBackup takes no roles. The servers' passwords and the Google
 keys are kept with the suite's keys and tokens (start page: Settings › Global settings › Keys and tokens), never shown
 back.
 
