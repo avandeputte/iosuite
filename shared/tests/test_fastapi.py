@@ -211,3 +211,70 @@ def test_settings_account_panel_and_its_own_fields():
     assert c.patch("/api/auth/me", json={"displayName": ""}).json()["user"]["displayName"] in (None, "", "alex")
     c.post("/api/auth/logout")
     assert c.patch("/api/auth/me", json={"displayName": "x"}).status_code in (401, 403)
+
+
+# ---- Apple profiles (iosuite_shared.appleprofile)
+def _profile_app(name):
+    auth = Auth(name, app_label="ioTasks")
+    app = FastAPI()
+    app.middleware("http")(auth.middleware(open_paths=("/",), open_prefixes=("/api/auth/", "/profile/")))
+    app.include_router(auth.router())
+    app.include_router(auth.profile_router(lambda request: "https://tasks.example.com"))
+    return app
+
+
+def _sync_suite(*apps):
+    from iosuite_shared import suite
+    for a, name, url in (("iocalendar", "ioCalendar", "https://calendar.example.com"), ("iocontacts", "ioContacts", "http://contacts.lan:8640"),
+                         ("iotasks", "ioTasks", None), ("iopix", "ioPix", "https://photo.example.com")):
+        if a in apps:
+            suite.register(a, name=name, url=url)
+
+
+def test_suite_profile_has_every_sync_app_with_its_own_password():
+    import plistlib
+    from iosuite_shared import apppasswords
+    _sync_suite("iocalendar", "iocontacts", "iotasks", "iopix")
+    users.create("alex", "secret123", "admin", "iotasks", suite_admin=True)
+    c = TestClient(_profile_app("iotasks"), base_url="https://tasks.example.com")
+    assert c.get("/api/apple-profile/suite").status_code == 401
+    c.post("/api/auth/login", json={"name": "alex", "password": "secret123"})
+    assert [a["app"] for a in c.get("/api/apple-profile/suite").json()["apps"]] == ["iocalendar", "iocontacts", "iotasks"]
+    url = c.post("/api/apple-profile/suite/link", json={"label": "Phone", "password": "new"}).json()["url"]
+    assert url.endswith("/iosuite-alex.mobileconfig")
+    r = TestClient(_profile_app("iotasks"), base_url="https://tasks.example.com").get(url)  # no cookie: the token is the secret
+    assert r.status_code == 200 and r.headers["content-type"].startswith("application/x-apple-aspen-config")
+    p = plistlib.loads(r.content)
+    assert p["PayloadIdentifier"] == "net.iothing.iosuite.tasks.example.com.alex" and p["PayloadDisplayName"] == "ioSuite for alex"
+    cal, con, tsk = p["PayloadContent"]
+    assert (cal["PayloadType"], cal["CalDAVHostName"], cal["CalDAVPort"], cal["CalDAVUseSSL"]) == ("com.apple.caldav.account", "calendar.example.com", 443, True)
+    assert (con["PayloadType"], con["CardDAVHostName"], con["CardDAVPort"], con["CardDAVUseSSL"]) == ("com.apple.carddav.account", "contacts.lan", 8640, False)
+    assert (tsk["CalDAVHostName"], tsk["CalDAVAccountDescription"], tsk["CalDAVPrincipalURL"]) == ("tasks.example.com", "ioTasks", "/dav/principals/alex/")
+    uid = users.find("alex")["id"]
+    for app, pw in (("iocalendar", cal["CalDAVPassword"]), ("iocontacts", con["CardDAVPassword"]), ("iotasks", tsk["CalDAVPassword"])):
+        assert pw.startswith(app + "-"), "each account has an app password of its own app"
+        (row,) = apppasswords.list_for(uid, app)
+        assert row["scope"] == apppasswords.DAV and row["label"] == "Phone (profile)"
+    assert not apppasswords.list_for(uid, "iopix")
+    # "ask": no passwords in the file, none made
+    r = c.post("/api/apple-profile/suite", data={"label": "Mac", "password": "ask"})
+    assert not any(k.endswith("Password") for x in plistlib.loads(r.content)["PayloadContent"] for k in x)
+    assert len(apppasswords.list_for(uid, "iotasks")) == 1
+    assert c.get("/profile/nope/x.mobileconfig").status_code == 404
+
+
+def test_suite_profile_only_for_two_or_more_apps_the_account_may_use():
+    _sync_suite("iotasks", "iopix")
+    users.create("alex", "secret123", "admin", "iotasks", suite_admin=True)
+    users.create("bob", "secret123", "member", "iotasks")
+    c = TestClient(_profile_app("iotasks"), base_url="https://tasks.example.com")
+    c.post("/api/auth/login", json={"name": "alex", "password": "secret123"})
+    assert [a["app"] for a in c.get("/api/apple-profile/suite").json()["apps"]] == ["iotasks"]
+    assert c.post("/api/apple-profile/suite/link", json={}).status_code == 409
+    _sync_suite("iocalendar")
+    assert len(c.get("/api/apple-profile/suite").json()["apps"]) == 2
+    users.set_role(users.find("bob")["id"], "iocalendar", "none")
+    b = TestClient(_profile_app("iotasks"), base_url="https://tasks.example.com")
+    b.post("/api/auth/login", json={"name": "bob", "password": "secret123"})
+    assert [a["app"] for a in b.get("/api/apple-profile/suite").json()["apps"]] == ["iotasks"], "not an app the account has no role in"
+    assert b.post("/api/apple-profile/suite", data={}).status_code == 409

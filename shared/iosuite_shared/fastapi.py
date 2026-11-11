@@ -317,6 +317,12 @@ class Auth:
         """GET /api/status, open to everyone: the same shape in every app."""
         return routers.status_router(self, updater, extra)
 
+    def profile_router(self, base_url) -> APIRouter:
+        """The Apple profile downloads (iosuite_shared.appleprofile): /profile/<token>/<file> and the profile for all
+        the apps that sync (/api/apple-profile/suite). base_url(request): the address this app is reached at."""
+        from iosuite_shared import appleprofile
+        return appleprofile.router(self, base_url)
+
     # ---- the MCP endpoint's gate
     def mcp_gate(self, enabled, path: str = "/mcp", on_user=None):
         """A `before` hook for middleware() (or something an app's own hook calls first): a request to the MCP endpoint
