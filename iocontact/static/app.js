@@ -1,4 +1,4 @@
-/* ioContacts web app: one module, no build step. Pages: the contact list with a detail pane, the edit form, upcoming
+/* ioContact web app: one module, no build step. Pages: the contact list with a detail pane, the edit form, upcoming
    birthdays, the family tree, ioPix people, import/export, clean up (duplicates, data quality, suggestions, merge
    history) and settings (account, display, apps and devices, address books, and for admins storage and
    backups, server, and for suite admins security and global settings), laid out as in the other ioThing
@@ -177,7 +177,7 @@ function scopeParams() {
   if (S.scope.kind === 'book') p.set('book', S.scope.id);
   if (S.scope.kind === 'tag') p.set('tag', S.scope.name);
   if (S.scope.kind === 'iopix') p.set('iopix_linked', 'true');
-  p.set('order', localStorage.getItem('iocontacts.order') || 'given');
+  p.set('order', localStorage.getItem('iocontact.order') || 'given');
   return p;
 }
 const scopeHash = () => S.scope.kind === 'fav' ? '#/fav' : S.scope.kind === 'book' ? `#/book/${S.scope.id}` : S.scope.kind === 'tag' ? `#/tag/${encodeURIComponent(S.scope.name)}` : '#/';
@@ -213,12 +213,12 @@ function drawUser() {
   const outside = (e) => { if (menu && !menu.contains(e.target) && e.target !== btn) closeMenu(); };
   btn.onclick = () => {
     if (menu) return closeMenu();
-    const theme = localStorage.getItem('iocontacts.theme') || 'system';
+    const theme = localStorage.getItem('iocontact.theme') || 'system';
     menu = h('div', { class: 'menu' },
       h('div', { class: 'who' }, h('b', null, S.user.displayName), h('div', { class: 'muted small' }, `${S.user.name} · ${S.user.role}`)),
       h('a', { class: 'mi', href: '#/settings/account', onclick: closeMenu }, icon('person', 's'), 'Account'),
       h('a', { class: 'mi', href: '#/settings/devices', onclick: closeMenu }, icon('devices', 's'), 'Connect apps and devices'),
-      h('button', { class: 'mi', onclick: () => { const n = { system: 'light', light: 'dark', dark: 'system' }[theme]; localStorage.setItem('iocontacts.theme', n); applyTheme(); closeMenu(); toast(`Appearance: ${n}`); } },
+      h('button', { class: 'mi', onclick: () => { const n = { system: 'light', light: 'dark', dark: 'system' }[theme]; localStorage.setItem('iocontact.theme', n); applyTheme(); closeMenu(); toast(`Appearance: ${n}`); } },
         icon('theme', 's'), `Appearance: ${theme}`),
       h('a', { class: 'mi', href: '#/settings', onclick: closeMenu }, icon('settings', 's'), 'Settings'),
       h('button', { class: 'mi', onclick: async () => { await api('/api/auth/logout', { method: 'POST' }); location.reload(); } }, icon('logout', 's'), 'Sign out'));
@@ -276,8 +276,8 @@ function toggleSuite(btn) {
 }
 /** The theme: the account's (Settings › Display), remembered in this browser too so the sign-in page has it. */
 function applyTheme(choice) {
-  try { if (choice) localStorage.setItem('iocontacts.theme', choice); } catch { /* private mode */ }
-  let t = choice; try { t = t || localStorage.getItem('iocontacts.theme'); } catch { /* */ }
+  try { if (choice) localStorage.setItem('iocontact.theme', choice); } catch { /* private mode */ }
+  let t = choice; try { t = t || localStorage.getItem('iocontact.theme'); } catch { /* */ }
   t = t || 'system';
   if (t === 'system') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t;
 }
@@ -324,7 +324,7 @@ function drawNav() {
   applySidebar();
   $('.navmore')?.classList.toggle('on', ['book', 'tag', 'import', 'cleanup', 'settings', 'iopix'].some((v) => (v === 'book' || v === 'tag') ? listView && S.scope.kind === v : r.view === v));
 }
-function sideDockedPref() { try { return localStorage.getItem('iocontacts.sidebar') !== '0'; } catch { return true; } }
+function sideDockedPref() { try { return localStorage.getItem('iocontact.sidebar') !== '0'; } catch { return true; } }
 function applySidebar() {
   const body = document.body, btn = $('#sidebtn');
   const docked = innerWidth >= DOCK_MIN && sideDockedPref();
@@ -335,8 +335,8 @@ function applySidebar() {
   btn.replaceChildren(icon(ic)); btn.title = title; btn.setAttribute('aria-label', title);
 }
 function sidebarButton() {
-  if (document.body.classList.contains('side-docked')) { try { localStorage.setItem('iocontacts.sidebar', '0'); } catch { /* */ } }
-  else if (innerWidth >= DOCK_MIN) { try { localStorage.setItem('iocontacts.sidebar', '1'); } catch { /* */ } }
+  if (document.body.classList.contains('side-docked')) { try { localStorage.setItem('iocontact.sidebar', '0'); } catch { /* */ } }
+  else if (innerWidth >= DOCK_MIN) { try { localStorage.setItem('iocontact.sidebar', '1'); } catch { /* */ } }
   else { closeNav(); return; }
   applySidebar();
 }
@@ -426,12 +426,12 @@ function drawList() {
   const pane = $('#main .listpane'); if (!pane) return;
   const keep = pane.scrollTop;
   const r = route();
-  const order = localStorage.getItem('iocontacts.order') || 'given';
+  const order = localStorage.getItem('iocontact.order') || 'given';
   const head = h('div', { class: 'listhead' }, h('button', { class: 'iconbtn back', style: { display: 'none' } }),
     h('span', { class: 'title' }, scopeTitle()), h('span', { class: 'count' }, S.total),
     h('span', { class: 'tools' },
       h('button', { class: `iconbtn ${S.selecting ? 'on' : ''}`, title: 'Select', onclick: () => { S.selecting = !S.selecting; S.sel.clear(); drawList(); } }, icon('select', 's')),
-      h('button', { class: 'iconbtn', title: `Sort by ${order === 'given' ? 'last name' : 'first name'}`, onclick: () => { localStorage.setItem('iocontacts.order', order === 'given' ? 'family' : 'given'); onRoute(); } },
+      h('button', { class: 'iconbtn', title: `Sort by ${order === 'given' ? 'last name' : 'first name'}`, onclick: () => { localStorage.setItem('iocontact.order', order === 'given' ? 'family' : 'given'); onRoute(); } },
         h('span', { class: 'small', style: { fontWeight: 600 } }, order === 'given' ? 'A·first' : 'A·last')),
       h('a', { class: 'iconbtn', title: 'Download these as vCards', href: `/api/contacts?${scopeParams()}&format=vcard` }, icon('download', 's'))));
   const kids = [head];
@@ -729,9 +729,9 @@ async function pickIopix(c, saveNow) {
 
 // ------------------------------------------------------------------ pages
 async function showUpcoming(page) {
-  const days = +(localStorage.getItem('iocontacts.days') || 60);
+  const days = +(localStorage.getItem('iocontact.days') || 60);
   const r = await api(`/api/upcoming?days=${days}`);
-  const range = h('select', { class: 't', style: 'width:auto', onchange: (e) => { localStorage.setItem('iocontacts.days', e.target.value); onRoute(); } },
+  const range = h('select', { class: 't', style: 'width:auto', onchange: (e) => { localStorage.setItem('iocontact.days', e.target.value); onRoute(); } },
     [14, 30, 60, 90, 180, 366].map((d) => h('option', { value: d, selected: d === days ? true : null }, d === 366 ? 'The next year' : `The next ${d} days`)));
   const when = (x) => x.inDays === 0 ? 'Today' : x.inDays === 1 ? 'Tomorrow' : `In ${x.inDays} days`;
   page.append(h('div', { class: 'pagehead' }, h('h1', null, 'Birthdays and anniversaries'), range,
@@ -1319,10 +1319,10 @@ async function maintQuality(el) {
   if (!found.length) el.append(h('div', { class: 'empty' }, icon('check'), h('p', null, 'Everything looks tidy.')));
   const SEV = { problem: '--c-rose', tidy: '--c-amber', info: '--c-slate' };
   for (const c of found) {
-    const cc = h('input', { class: 't', placeholder: '+32', style: { width: '80px' }, value: (() => { try { return localStorage.getItem('iocontacts.cc') || ''; } catch { return ''; } })() });
+    const cc = h('input', { class: 't', placeholder: '+32', style: { width: '80px' }, value: (() => { try { return localStorage.getItem('iocontact.cc') || ''; } catch { return ''; } })() });
     const fixBtn = c.fix ? h('button', { class: 'pillbtn', onclick: async () => {
       const json = { check: c.check };
-      if (c.check === 'national_phone') { if (!cc.value.trim()) { toast('Type the country code first, such as +32'); cc.focus(); return; } json.countryCode = cc.value; try { localStorage.setItem('iocontacts.cc', cc.value); } catch { /* */ } }
+      if (c.check === 'national_phone') { if (!cc.value.trim()) { toast('Type the country code first, such as +32'); cc.focus(); return; } json.countryCode = cc.value; try { localStorage.setItem('iocontact.cc', cc.value); } catch { /* */ } }
       try { const res = await api('/api/quality/fix', { method: 'POST', json }); toast(`Fixed ${res.fixed.length}${res.skipped.length ? `, ${res.skipped.length} left (not yours to change, or nothing found)` : ''}`); S.all = null; onRoute(); } catch (e) { fail(e); }
     } }, icon('check', 's'), c.fix) : null;
     el.append(h('details', { class: 'qcheck' }, h('summary', null, h('span', { class: 'lvl', style: { '--hue': `var(${SEV[c.severity]})` } }, c.count), h('b', null, c.title)),
@@ -1471,7 +1471,7 @@ async function setAccount(el) {
 /** Settings › Display: the theme, saved with the account. The sort order and the fields shown are at the top of the list. */
 async function setDisplay(el) {
   const ui = await accountUi();
-  el.append(ui.box('theme', 'Appearance', ui.themeRow((S.settings && S.settings.theme) || localStorage.getItem('iocontacts.theme') || 'system', (t) => { S.settings = { ...S.settings, theme: t }; applyTheme(t); })));
+  el.append(ui.box('theme', 'Appearance', ui.themeRow((S.settings && S.settings.theme) || localStorage.getItem('iocontact.theme') || 'system', (t) => { S.settings = { ...S.settings, theme: t }; applyTheme(t); })));
 }
 
 /** The "Set up" choice of the profile box: this app only, or every app that syncs (iosuite-shared's suite profile),
@@ -1500,7 +1500,7 @@ async function setDevices(el) {
     S.user.passwordless ? null : h('div', { class: 'box' }, h('h2', null, icon('devices'), 'iPhone, iPad and Mac'),
       h('p', null, 'A profile that adds your contacts and, if you like, a birthday calendar in one step.'),
       h('form', { method: 'POST', action: '/api/apple-profile', class: 'pform', onsubmit: downloadProfile },
-        profileScope(suiteApps, 'ioContacts'),
+        profileScope(suiteApps, 'ioContact'),
         fld('Device name', plabel),
         fld('Password', h('select', { class: 't', name: 'password' }, h('option', { value: 'new' }, 'Include a new app password'), h('option', { value: 'ask' }, 'Ask on the device'))),
         h('div', { 'data-own': '' }, fld('Birthday calendar', h('select', { class: 't', name: 'calendar' }, h('option', { value: 'family' }, 'Family birthdays'), h('option', { value: 'all' }, 'Birthdays from all my books'), h('option', { value: 'none' }, 'No calendar')))),
@@ -1526,8 +1526,8 @@ async function setDevices(el) {
       h('p', null, 'Give the assistant its own app password (not “Contacts apps only”), sent as a Bearer token.'),
       kv('MCP address', `${info.server}/mcp`),
       how('Setup for Claude Code and JSON-configured apps',
-        copyRow(`claude mcp add --transport http iocontacts ${info.server}/mcp --header "Authorization: Bearer APP-PASSWORD"`),
-        copyRow(JSON.stringify({ mcpServers: { iocontacts: { command: 'npx', args: ['-y', 'mcp-remote', `${info.server}/mcp`, '--header', 'Authorization: Bearer APP-PASSWORD'] } } }))))
+        copyRow(`claude mcp add --transport http iocontact ${info.server}/mcp --header "Authorization: Bearer APP-PASSWORD"`),
+        copyRow(JSON.stringify({ mcpServers: { iocontact: { command: 'npx', args: ['-y', 'mcp-remote', `${info.server}/mcp`, '--header', 'Authorization: Bearer APP-PASSWORD'] } } }))))
       : (S.user.role === 'admin' ? h('div', { class: 'box' }, h('h2', null, icon('ai'), 'AI assistants (MCP)'), h('p', { class: 'muted' }, 'Off. Turn it on in ', h('a', { class: 'lnk', href: '#/settings/server' }, 'Settings › Server'), '.')) : null),
     h('div', { class: 'box' }, h('h2', null, icon('link'), 'Other apps (REST API)'),
       h('p', null, 'JSON, vCard or jCard with your user name and an app password. ', h('a', { class: 'lnk', href: '/api/docs', target: '_blank' }, 'API documentation')),
@@ -1573,13 +1573,13 @@ const serverUi = () => import(new URL('api/server/ui.js', document.baseURI).href
 function updateBanner() {
   $('#updbanner')?.remove();
   const u = S.status && S.status.update;
-  let dismissed = null; try { dismissed = localStorage.getItem('iocontacts.updateDismissed'); } catch { /* private mode */ }
+  let dismissed = null; try { dismissed = localStorage.getItem('iocontact.updateDismissed'); } catch { /* private mode */ }
   if (!u || dismissed === u.remote) return;
   const b = h('div', { id: 'updbanner', role: 'status' }, icon('update'),
-    h('span', null, `ioContacts ${u.version ? `v${u.version}` : 'update'} is available${u.message ? `: ${u.message.replace(/^v\d+\.\d+\.\d+:\s*/, '')}` : ''}`),
-    h('button', { class: 'pillbtn primary noic', onclick: async () => { if (await confirmDialog('Update ioContacts', 'Install the new version and restart? The page reloads when it is back.', 'Update now')) { b.remove(); (await serverUi()).runUpdate({ toast }); } } }, 'Update now'),
+    h('span', null, `ioContact ${u.version ? `v${u.version}` : 'update'} is available${u.message ? `: ${u.message.replace(/^v\d+\.\d+\.\d+:\s*/, '')}` : ''}`),
+    h('button', { class: 'pillbtn primary noic', onclick: async () => { if (await confirmDialog('Update ioContact', 'Install the new version and restart? The page reloads when it is back.', 'Update now')) { b.remove(); (await serverUi()).runUpdate({ toast }); } } }, 'Update now'),
     h('a', { class: 'pillbtn noic', href: '#/settings/server', onclick: () => b.remove() }, 'Details'),
-    h('button', { class: 'iconbtn', title: 'Not now (hidden until the next version)', onclick: () => { try { localStorage.setItem('iocontacts.updateDismissed', u.remote); } catch { /* */ } b.remove(); } }, icon('close', 's')));
+    h('button', { class: 'iconbtn', title: 'Not now (hidden until the next version)', onclick: () => { try { localStorage.setItem('iocontact.updateDismissed', u.remote); } catch { /* */ } b.remove(); } }, icon('close', 's')));
   document.body.append(b);
 }
 

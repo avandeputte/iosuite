@@ -3,7 +3,7 @@
   migrate                         create or update the tables
   check                           connect to the database and say what is there
 
-Accounts are the suite's: `iosuite-shared --config . admin NAME --app iocontacts` makes an admin (setup.sh does),
+Accounts are the suite's: `iosuite-shared --config . admin NAME --app iocontact` makes an admin (setup.sh does),
 `iosuite-shared --config . password NAME` sets a password.
 """
 import sys

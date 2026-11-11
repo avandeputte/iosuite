@@ -1,4 +1,4 @@
-"""ioContacts: the application (start-up, who is asking, the routes and the web app).
+"""ioContact: the application (start-up, who is asking, the routes and the web app).
 
 Who may call a route is declared on the route (app/access.py); iosuite-shared's middleware works out who is asking
 (the shared session cookie, the identity a reverse proxy such as Cloudflare Access vouches for, HTTP Basic or a bearer
@@ -19,7 +19,7 @@ from app import __version__, api, carddav, config, db, enrich, iopix, ldapd, mcp
 from app.auth import auth, updater
 
 setup_log(config.LOG_FILE)  # the server log that Settings › Server shows; the app runs without it
-log = logging.getLogger("iocontacts")
+log = logging.getLogger("iocontact")
 
 # what a visitor may still fetch when sign-in is required: the app shell and its files, the API docs, the birthday
 # calendar links and CardDAV (their own sign-in), and the MCP endpoint (its gate below)
@@ -39,7 +39,7 @@ async def lifespan(app: FastAPI):
             log.warning("LDAP directory not started on port %s: %s", config.LDAP_PORT, e)
     updater.start_daily()  # the daily "is there a newer version" check, while the setting allows it
     purge = chores.start(model.purge_deleted, name="purge of old deletion markers")  # once a day: KEEP_DELETED_DAYS
-    log.info("ioContacts %s started, database %s:%s/%s", __version__, config.DB_HOST, config.DB_PORT, config.DB_NAME)
+    log.info("ioContact %s started, database %s:%s/%s", __version__, config.DB_HOST, config.DB_PORT, config.DB_NAME)
     async with shared_mcp.running(mcp.server):  # the MCP endpoint (/mcp) lives in this process
         yield
     purge.cancel()
@@ -47,7 +47,7 @@ async def lifespan(app: FastAPI):
         server.close()
 
 
-app = FastAPI(title="ioContacts", version=__version__, lifespan=lifespan, docs_url="/api/docs", redoc_url=None,
+app = FastAPI(title="ioContact", version=__version__, lifespan=lifespan, docs_url="/api/docs", redoc_url=None,
               openapi_url="/api/openapi.json",
               description="Contacts for the family. Also served over CardDAV at /dav/ (vCard 3.0 and 4.0), LDAP "
                           "(read-only), as a birthday calendar (iCalendar) and to AI assistants over MCP (/mcp). JSON by "
@@ -86,7 +86,7 @@ auth.install(app, limit_for=_limit_for)
 
 
 def _status_extra(request) -> dict:
-    """ioContacts' own fields of GET /api/status, beside the suite's (its `user` also names the account's own contact)."""
+    """ioContact's own fields of GET /api/status, beside the suite's (its `user` also names the account's own contact)."""
     u = request.state.user
     return {"user": users.public(u), "iopix": bool(iopix.settings()["url"]) if u else None, "mcp": mcp_enabled() if u else None,
             "suggestions": enrich.pending_count(api.book_ids(u)) if u else None}

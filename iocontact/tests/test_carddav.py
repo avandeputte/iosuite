@@ -60,7 +60,7 @@ def test_discovery_and_sync(client, family_id):
     assert r.status_code == 204
     r = dav(c, "REPORT", "/dav/addressbooks/alex/family/", sync.replace(tok0, tok1))
     assert "abc-123.vcf" in r.text and "404 Not Found" in r.text
-    assert tok1.startswith("urn:x-iocontacts:sync:")
+    assert tok1.startswith("urn:x-iocontact:sync:")
     r = dav(c, "REPORT", "/dav/addressbooks/alex/family/", sync.replace(tok0, "http://bogus/1"))
     assert r.status_code == 403 and "valid-sync-token" in r.text
 
@@ -86,7 +86,7 @@ def test_phone_round_trip_keeps_relations_single(client, family_id):
     href = f"/dav/addressbooks/alex/family/{kid['uid']}.vcf"
     card = c.get(href, auth=("alex", "secret123")).text
     assert "item1.X-ABRELATEDNAMES:Mary Doe" in card
-    sent = re.sub(r"RELATED;X-IOCONTACTS-TYPE=parent:", "RELATED:", card).replace(
+    sent = re.sub(r"RELATED;X-IOCONTACT-TYPE=parent:", "RELATED:", card).replace(
         "END:VCARD", "item1.X-ADDRESSING-GRAMMAR:abcd\r\nX-IMAGETYPE:PHOTO\r\nX-IMAGEHASH:kQQW==\r\nEND:VCARD")
     assert sent != card
     r = c.put(href, content=sent, headers={"Content-Type": "text/vcard"}, auth=("alex", "secret123"))

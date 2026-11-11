@@ -1,10 +1,10 @@
-"""Accounts, roles, sessions and app passwords: the shared ioThing accounts (iosuite-shared), seen from ioContacts.
+"""Accounts, roles, sessions and app passwords: the shared ioThing accounts (iosuite-shared), seen from ioContact.
 
 Roles as in the rest of the suite: viewer (reads the shared books), member (also keeps their own private books),
 editor (changes the shared contacts too), admin (also settings and users); an account holds a role per app, a suite
 admin is admin everywhere. Each member gets their own private address book; the Family book is shared by everyone. Web sessions are the suite's cookie (shared by the apps on the domain). CardDAV / LDAP clients
 use HTTP Basic or an LDAP bind with either the account password or an app password (one per device, revocable,
-shown once). What is here is ioContacts' own: an account as the app sees it (with its "me" contact), its private
+shown once). What is here is ioContact's own: an account as the app sees it (with its "me" contact), its private
 address book, the LDAP bind, and the birthday calendar's private link. The rest is asked of iosuite_shared directly.
 """
 import logging
@@ -95,7 +95,7 @@ def forget_gone(*uids: int) -> None:
 
 
 SUITE_ID = "suite_id"             # in the Shared ioSuite database (ios_settings, suite-wide): which one it is
-KNOWN_SUITE = "shared_database"   # in ioContacts' own settings: the Shared ioSuite database its books belong to
+KNOWN_SUITE = "shared_database"   # in ioContact's own settings: the Shared ioSuite database its books belong to
 
 
 def init() -> None:
@@ -110,10 +110,10 @@ def sweep_gone() -> int:
 
     An account that is missing from the Shared ioSuite database looks the same whether it was deleted or the app was
     pointed at another database (a new one, an empty one, a restored old one), and in the second case every private
-    book would go. So the Shared ioSuite database carries an id (made here the first time), ioContacts remembers the
+    book would go. So the Shared ioSuite database carries an id (made here the first time), ioContact remembers the
     one its books belong to, and the sweep runs only while the two agree and that database has accounts. On the
     first start with this check nothing is removed: the id is only noted."""
-    log = logging.getLogger("iocontacts.users")
+    log = logging.getLogger("iocontact.users")
     here = authdb.get_setting(SUITE_ID, "", "")
     if not here:
         here = secrets.token_hex(16)
@@ -141,7 +141,7 @@ def sweep_gone() -> int:
 # ---------------------------------------------------------------- app passwords
 
 def create_app_password(uid: int, label: str, protocols_only: bool = False) -> str:
-    """Returns the password (shown once): iocontacts-XXXXXXXX-<secret>. protocols_only: scope 'dav', it works for CardDAV
+    """Returns the password (shown once): iocontact-XXXXXXXX-<secret>. protocols_only: scope 'dav', it works for CardDAV
     and LDAP only, not for the web app, the REST API or MCP (what a phone or a configuration profile needs, and no more).
     The scope lives with the password in the Shared ioSuite database; iosuite-shared's middleware enforces it by path."""
     return apppasswords.create(uid, APP, label, apppasswords.DAV if protocols_only else "")
@@ -181,7 +181,7 @@ def forget_cached_auth() -> None:
 attempt_wait, attempt_failed, attempt_succeeded = shared.attempt_wait, shared.attempt_failed, shared.attempt_succeeded
 
 
-# ---------------------------------------------------------------- calendar feed tokens (ioContacts' own)
+# ---------------------------------------------------------------- calendar feed tokens (ioContact's own)
 
 def calendar_token(uid: int) -> str:
     r = db.one("SELECT token FROM con_feed_tokens WHERE user_id = %s ORDER BY id LIMIT 1", (uid,))

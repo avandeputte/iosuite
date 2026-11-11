@@ -1,10 +1,10 @@
 """ioPix: the People list (people tags with their face), to link a contact to a person.
 
-A linked person's face is the contact's only photo: ioContacts stores none of its own, and serves the ioPix face
+A linked person's face is the contact's only photo: ioContact stores none of its own, and serves the ioPix face
 wherever a photo goes (the web app, vCards, CardDAV, LDAP jpegPhoto, the account tiles).
 
 Nothing to set up: ioPix is found in the suite's list of apps, and the server reads from it (never the browser) as
-ioContacts' own service account with a read-only app password, both made by itself the first time
+ioContact's own service account with a read-only app password, both made by itself the first time
 (iosuite_shared.links).
 """
 import json
@@ -15,8 +15,8 @@ import urllib.error
 
 from iosuite_shared import links
 
-log = logging.getLogger("iocontacts.iopix")
-APP, PROVIDER = "iocontacts", "iopix"
+log = logging.getLogger("iocontact.iopix")
+APP, PROVIDER = "iocontact", "iopix"
 _lock = threading.Lock()
 _cache: dict = {"at": 0, "people": None}
 _faces: dict = {}  # person id -> (when, (bytes, type) or None): ioPix is the only source of contact photos, so they are asked often
@@ -37,7 +37,7 @@ def public_settings() -> dict:
 def _get(path: str, timeout: float = 10):
     if not settings()["url"]:
         raise RuntimeError("ioPix is not part of the suite (it has not started on this Shared ioSuite database)")
-    return links.get(APP, PROVIDER, path, timeout=timeout, user_agent="ioContacts")
+    return links.get(APP, PROVIDER, path, timeout=timeout, user_agent="ioContact")
 
 
 def people(force: bool = False) -> list[dict]:

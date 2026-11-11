@@ -26,7 +26,7 @@ from iosuite_shared.errors import Invalid
 from app import access, db, limits, model, vcard
 from app.fold import fold
 
-# the WebDAV plumbing ioCalendar and ioContacts share (iosuite_shared.dav), under the names this module uses
+# the WebDAV plumbing ioCalendar and ioContact share (iosuite_shared.dav), under the names this module uses
 _xml, _sub, _requested, _response, _parse, _etag_match, _http_date = webdav.xml, webdav.sub, webdav.requested, webdav.response, webdav.parts_of, webdav.etag_match, webdav.http_date
 _privs = webdav.privileges
 
@@ -36,12 +36,12 @@ C = "urn:ietf:params:xml:ns:carddav"
 for pfx, ns in (("d", D), ("card", C), ("cs", CS), ("ap", AP)):
     ET.register_namespace(pfx, ns)
 METHODS = ["OPTIONS", "PROPFIND", "PROPPATCH", "REPORT", "GET", "HEAD", "PUT", "DELETE", "MKCOL", "MOVE", "COPY"]
-SYNC_PREFIX = "urn:x-iocontacts:sync:"
+SYNC_PREFIX = "urn:x-iocontact:sync:"
 MAX_SIZE = 4 * 1024 * 1024
 
 
 def _unauth() -> Response:
-    return webdav.unauthorized("ioContacts", "password (or an app password)")
+    return webdav.unauthorized("ioContact", "password (or an app password)")
 
 
 def _opts_headers() -> dict:
@@ -97,7 +97,7 @@ def props_root(ctx: Ctx, names: list[str]) -> tuple[ET.Element, list[str]]:
         if n == q(D, "resourcetype"):
             _sub(_sub(ok, D, "resourcetype"), D, "collection")
         elif n == q(D, "displayname"):
-            _sub(ok, D, "displayname", "ioContacts")
+            _sub(ok, D, "displayname", "ioContact")
         else:
             missing.append(n)
     return ok, missing
@@ -407,7 +407,7 @@ def _get(ctx: Ctx, parts, head: bool, headers) -> Response:
                 return Response(status_code=404)
             text = "".join(model.vcard_text(c["id"], "3.0", c) for c in model.full_many(_rows(b["id"]), with_photo=True).values())
             return Response(b"" if head else text.encode(), media_type="text/vcard; charset=utf-8")
-        return Response("ioContacts CardDAV server. Point your contacts app at this address.", media_type="text/plain")
+        return Response("ioContact CardDAV server. Point your contacts app at this address.", media_type="text/plain")
     b = _book(ctx, parts[2])
     row = model.by_href(b["id"], parts[3]) if b else None
     if not row or row["deleted"]:
@@ -451,7 +451,7 @@ def _put(ctx: Ctx, parts, body: bytes, headers) -> Response:
         return webdav.precondition(C, "no-uid-conflict", 409, ctx.book_href(b) + quote(other["href"]))
     if c.get("iopix") is None:
         c.pop("iopix", None)  # a client that drops X-IOPIX-PERSON does not unlink the person
-    if row:  # favorites are ioContacts' own: a client that drops the mark does not unfavorite
+    if row:  # favorites are ioContact's own: a client that drops the mark does not unfavorite
         c["favorite"] = c.get("favorite") or bool(row["favorite"])
     ids = [x["id"] for x in model.books_for(ctx.user)]
     model.save(b["id"], c, row["id"] if row else None, parts[3], resolve_book_ids=ids)

@@ -37,7 +37,7 @@ def test_the_old_names_are_not_read():
 
 def test_suite_conventions():
     from app import __version__, config
-    testing.check_conventions(ROOT, "iocontacts", __version__, config)
+    testing.check_conventions(ROOT, "iocontact", __version__, config)
 
 
 def test_every_api_route_declares_who_may_call_it(app):

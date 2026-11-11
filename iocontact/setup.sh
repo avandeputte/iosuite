@@ -1,5 +1,5 @@
 #!/bin/sh
-# ioContacts setup: asks a few questions (or takes flags), then installs the Python packages, writes the settings,
+# ioContact setup: asks a few questions (or takes flags), then installs the Python packages, writes the settings,
 # creates the tables and the admin account and, on Linux with systemd, installs and starts the service.
 #
 #   ./setup.sh                 ask the questions
@@ -12,12 +12,12 @@
 #        --admin NAME:PASSWORD | --no-admin   --port N (8640)   --public-url URL   --cookie-domain DOMAIN
 #        --service | --no-service   --system-deps | --no-system-deps   --python PATH
 #   --db-admin USER:PASSWORD      a MariaDB / MySQL administrator (root...): the databases and users above are created
-#                                 for you, with the passwords you answered (IOCONTACTS_DB_ADMIN does the same; empty: they exist)
-#   --also APP,APP | all | none   also install other apps of the suite here (iosuite, iocalendar, ionotes, iohealth, iopix), beside this one,
+#                                 for you, with the passwords you answered (IOCONTACT_DB_ADMIN does the same; empty: they exist)
+#   --also APP,APP | all | none   also install other apps of the suite here (iosuite, iocalendar, ionote, iohealth, iopix), beside this one,
 #                                 with the same database server (each app its own database), Shared ioSuite database,
-#                                 sign-in domain and admin: those questions are asked once (IOCONTACTS_ALSO does the same)
-#        ioContacts' own: --ldap-port N (3890; 0 turns LDAP off)
-# Secrets can stay off the command line: IOCONTACTS_DB, IOCONTACTS_SUITE_DB and IOCONTACTS_ADMIN in the environment do
+#                                 sign-in domain and admin: those questions are asked once (IOCONTACT_ALSO does the same)
+#        ioContact's own: --ldap-port N (3890; 0 turns LDAP off)
+# Secrets can stay off the command line: IOCONTACT_DB, IOCONTACT_SUITE_DB and IOCONTACT_ADMIN in the environment do
 # what --db, --suite-db and --admin do. Run it again at any time: it keeps config.env and only changes what you answer.
 set -e
 cd "$(dirname "$0")"
@@ -35,11 +35,11 @@ while [ $# -gt 0 ]; do
     *) die "unknown option $1 (try --help)";;
   esac
 done
-[ -n "$DBS" ] || DBS="${IOCONTACTS_DB:-}"
-[ -n "$SDBS" ] || SDBS="${IOCONTACTS_SUITE_DB:-}"
-[ -n "$ADMIN" ] || ADMIN="${IOCONTACTS_ADMIN:-}"
-[ -n "$ALSO" ] || ALSO="${IOCONTACTS_ALSO:-}"
-[ -n "$DBADMIN" ] || DBADMIN="${IOCONTACTS_DB_ADMIN:-}"
+[ -n "$DBS" ] || DBS="${IOCONTACT_DB:-}"
+[ -n "$SDBS" ] || SDBS="${IOCONTACT_SUITE_DB:-}"
+[ -n "$ADMIN" ] || ADMIN="${IOCONTACT_ADMIN:-}"
+[ -n "$ALSO" ] || ALSO="${IOCONTACT_ALSO:-}"
+[ -n "$DBADMIN" ] || DBADMIN="${IOCONTACT_DB_ADMIN:-}"
 ask() { _v="$1"; _q="$2"; _d="$3"
   if [ "$YES" = 1 ] || [ ! -t 0 ]; then eval "$_v=\"\$_d\""; return; fi
   printf '%s [%s]: ' "$_q" "$_d"; read -r _a || _a=""; [ -n "$_a" ] && eval "$_v=\"\$_a\"" || eval "$_v=\"\$_d\""; }
@@ -90,8 +90,8 @@ if [ -z "$DBADMIN" ] && [ "$YES" = 0 ]; then
   if [ -n "$DAU" ]; then asksecret DAW "Password of $DAU"; DBADMIN="$DAU:$DAW"; fi
 fi
 if [ -z "$ALSO" ]; then
-  say "The other apps of the suite can be installed here too, beside ioContacts, with the same database server (each app gets its own database), the same Shared ioSuite database, sign-in domain and admin"
-  ask ALSO "Also install (iosuite, iocalendar, ionotes, iohealth, iopix; comma-separated, 'all', or 'none')" "none"
+  say "The other apps of the suite can be installed here too, beside ioContact, with the same database server (each app gets its own database), the same Shared ioSuite database, sign-in domain and admin"
+  ask ALSO "Also install (iosuite, iocalendar, ionote, iohealth, iopix; comma-separated, 'all', or 'none')" "none"
 fi
 
 # ---- Python environment
@@ -116,7 +116,7 @@ if [ -n "$DBADMIN" ]; then
 fi
 .venv/bin/python -m app.cli check || die "could not reach a database: check the host, port, user and password (and that the user may connect from this machine)"
 if [ -n "$ADMIN" ]; then
-  ADMIN_PASSWORD="${ADMIN#*:}" .venv/bin/iosuite-shared --config . admin "${ADMIN%%:*}" --app iocontacts
+  ADMIN_PASSWORD="${ADMIN#*:}" .venv/bin/iosuite-shared --config . admin "${ADMIN%%:*}" --app iocontact
 fi
 
 # ---- the service
@@ -124,11 +124,11 @@ if [ -z "$SERVICE" ]; then
   if command -v systemctl >/dev/null && [ "$(id -u)" = 0 ]; then SERVICE=1; else SERVICE=0; fi
 fi
 if [ "$SERVICE" = 1 ]; then
-  say "Installing the iocontacts service"
+  say "Installing the iocontact service"
   OWNER="$(stat -c %U "$APP" 2>/dev/null || echo root)"
-  cat > /etc/systemd/system/iocontacts.service <<UNIT
+  cat > /etc/systemd/system/iocontact.service <<UNIT
 [Unit]
-Description=ioContacts
+Description=ioContact
 After=network-online.target mariadb.service
 Wants=network-online.target
 
@@ -146,11 +146,11 @@ RestartSec=5
 WantedBy=multi-user.target
 UNIT
   systemctl daemon-reload
-  systemctl enable -q iocontacts
-  systemctl restart iocontacts
+  systemctl enable -q iocontact
+  systemctl restart iocontact
   sleep 2
-  systemctl is-active -q iocontacts || die "the service did not start: journalctl -u iocontacts -n 50"
-  say "ioContacts runs on port $PORT (LDAP: ${LDAP})"
+  systemctl is-active -q iocontact || die "the service did not start: journalctl -u iocontact -n 50"
+  say "ioContact runs on port $PORT (LDAP: ${LDAP})"
 else
   say "Done. Start it with ./run.sh (port $PORT)"
 fi
@@ -161,8 +161,8 @@ case "$ALSO" in ''|none|no) ;;
      if [ "$SERVICE" = 1 ]; then SVC="--service"; else SVC="--no-service"; fi
      DBA=""; [ -z "$DBADMIN" ] || { DBA="--db-admin ${DBADMIN%%:*}"; DB_ADMIN_PASSWORD="${DBADMIN#*:}"; export DB_ADMIN_PASSWORD; }
      if [ -n "$ADMIN" ]; then
-       ADMIN_PASSWORD="${ADMIN#*:}" .venv/bin/iosuite-shared --config "$APP" install "$ALSO" --admin "${ADMIN%%:*}" --from iocontacts $SVC $DBA
+       ADMIN_PASSWORD="${ADMIN#*:}" .venv/bin/iosuite-shared --config "$APP" install "$ALSO" --admin "${ADMIN%%:*}" --from iocontact $SVC $DBA
      else
-       .venv/bin/iosuite-shared --config "$APP" install "$ALSO" --from iocontacts $SVC $DBA
+       .venv/bin/iosuite-shared --config "$APP" install "$ALSO" --from iocontact $SVC $DBA
      fi || die "not every app could be installed; see the lines above (each one can be set up again with its own setup.sh)";;
 esac

@@ -104,7 +104,7 @@ async def body_contact(request: Request) -> dict:
 
 # ------------------------------------------------------------------ the account's own fields
 # Sign-in, accounts, sessions, passwords, app passwords and the users admin are iosuite-shared's routes (app/main.py);
-# what is ioContacts' own: the face on an account's tile, and which contact an account is ("me").
+# what is ioContact's own: the face on an account's tile, and which contact an account is ("me").
 
 @router.get("/api/auth/accounts/{uid}/photo", dependencies=[access.public])
 async def account_photo(uid: int, request: Request):
@@ -585,7 +585,7 @@ def export(request: Request, book: str | None = None, format: str = "vcf", ids: 
         sel = [x["id"] for x in model.search(bids, limit=100000)[0]]
     stamp = dt.date.today().isoformat()
     text, mtype, ext = export_text(sel, format)
-    name = f"iocontacts-{stamp}{'-' + format.replace('csv-', '') if format.startswith('csv') else ''}.{ext}"
+    name = f"iocontact-{stamp}{'-' + format.replace('csv-', '') if format.startswith('csv') else ''}.{ext}"
     return Response(text, media_type=mtype, headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
 
@@ -648,7 +648,7 @@ def _apple_profile(request: Request, label: str, password: str, calendar: str, l
     secret = appleprofile.new_password(u, config.APP, label) if password == "new" else None
     ident = appleprofile.ident(config.APP, base, u)
     who = u.get("displayName") or u["name"]
-    content = [appleprofile.account(config.APP, "ioContacts", base, u, secret)]
+    content = [appleprofile.account(config.APP, "ioContact", base, u, secret)]
     if calendar in ("family", "all"):
         tok = users.calendar_token(u["id"])
         content.append({"PayloadType": "com.apple.subscribedcalendar.account", "PayloadVersion": 1,
@@ -659,16 +659,16 @@ def _apple_profile(request: Request, label: str, password: str, calendar: str, l
     if ldap and config.LDAP_PORT:
         lp = {"PayloadType": "com.apple.ldap.account", "PayloadVersion": 1, "PayloadIdentifier": ident + ".ldap",
               "PayloadUUID": str(uuid.uuid4()).upper(), "PayloadDisplayName": "Directory (LDAP)",
-              "LDAPAccountDescription": "ioContacts directory", "LDAPAccountHostName": f"{host}:{config.LDAP_PORT}",
+              "LDAPAccountDescription": "ioContact directory", "LDAPAccountHostName": f"{host}:{config.LDAP_PORT}",
               "LDAPAccountUseSSL": False, "LDAPAccountUserName": f"cn={u['name']},ou=users,{config.LDAP_BASE}",
               "LDAPSearchSettings": [{"LDAPSearchSettingDescription": "Contacts", "LDAPSearchSettingSearchBase": config.LDAP_BASE,
                                       "LDAPSearchSettingScope": "LDAPSearchSettingScopeSubtree"}]}
         if secret:
             lp["LDAPAccountPassword"] = secret
         content.append(lp)
-    body = appleprofile.build(ident, f"ioContacts for {who}",
-                              f"Sets up {who}'s ioContacts contacts" + (" and the birthday calendar" if len(content) > 1 else "")
-                              + f" from {host}." + appleprofile.asks(secret), "ioContacts", content)
+    body = appleprofile.build(ident, f"ioContact for {who}",
+                              f"Sets up {who}'s ioContact contacts" + (" and the birthday calendar" if len(content) > 1 else "")
+                              + f" from {host}." + appleprofile.asks(secret), "ioContact", content)
     return body, appleprofile.file_name(config.APP, u)
 
 

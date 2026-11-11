@@ -1,7 +1,7 @@
 """The MCP server: lets an AI assistant (Claude, for example) search, read and keep the family's contacts.
 
 Served at /mcp by the web app (main.py) over streamable HTTP, and with `python -m app.mcp` over stdio. Every call acts as
-one ioContacts account, so it sees that account's books (the shared ones and its own private ones) and may change what
+one ioContact account, so it sees that account's books (the shared ones and its own private ones) and may change what
 the account may change in the web app; the server tools need an admin.
 
   base.py   the MCPServer instance, who is asking, and the shared helpers (finding a contact or a book by name)

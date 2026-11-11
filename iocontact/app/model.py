@@ -240,7 +240,7 @@ def by_uid(book_id: int, uid: str) -> dict | None:
 
 # The account a request acts as (app/main.py sets it for every request; None in the LDAP server, the command line and
 # the tests that call the model directly: nothing is hidden there).
-viewer: ContextVar = ContextVar("iocontacts_viewer", default=None)
+viewer: ContextVar = ContextVar("iocontact_viewer", default=None)
 
 
 def _books_seen_by(user: dict | None) -> set | None:

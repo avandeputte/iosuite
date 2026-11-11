@@ -4,7 +4,7 @@ from pathlib import Path
 
 from iosuite_shared import config as shared
 
-APP = "iocontacts"
+APP = "iocontact"
 APP_DIR = Path(__file__).resolve().parent.parent
 shared.load_file(APP_DIR)  # first: iosuite_shared reads its settings (the Shared ioSuite database, COOKIE_DOMAIN) from it too
 env, env_flag, env_int = shared.env, shared.env_flag, shared.env_int
@@ -21,7 +21,7 @@ DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD = _db["host"], _db["port"], _db[
 # LDAP directory (read-only): port 0 turns it off
 LDAP_PORT = env_int("LDAP_PORT", 3890)
 LDAP_HOST = env("LDAP_HOST", "0.0.0.0")
-LDAP_BASE = env("LDAP_BASE", "dc=iocontacts")
+LDAP_BASE = env("LDAP_BASE", "dc=iocontact")
 
 # ioPix is found in the suite's list of apps and signed in to by itself (app/iopix.py): nothing to set
 
@@ -29,6 +29,6 @@ MAX_PHOTO_BYTES = 2 * 1024 * 1024
 MAX_IMPORT_BYTES = 64 * 1024 * 1024   # a vCard, CSV or JSON file to import
 MAX_JSON_BYTES = 16 * 1024 * 1024     # any other request body: a contact (JSON or vCard, a photo inline) or a CardDAV request
 
-# `python -m app.mcp` (stdio) acts as this account. Updates: IOCONTACTS_REPO, IOCONTACTS_BRANCH and UPDATE_CHECK are read
+# `python -m app.mcp` (stdio) acts as this account. Updates: IOCONTACT_REPO, IOCONTACT_BRANCH and UPDATE_CHECK are read
 # by iosuite_shared.updates (app.auth.updater)
 MCP_USER = env("MCP_USER")

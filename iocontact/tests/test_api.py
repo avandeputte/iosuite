@@ -121,7 +121,7 @@ def test_apple_profile(client):
     p = plistlib.loads(r.content)
     dav, cal = p["PayloadContent"]
     assert dav["PayloadType"] == "com.apple.carddav.account" and dav["CardDAVUsername"] == "alex"
-    assert dav["CardDAVPrincipalURL"] == "/dav/principals/alex/" and dav["CardDAVPassword"].startswith("iocontacts-")
+    assert dav["CardDAVPrincipalURL"] == "/dav/principals/alex/" and dav["CardDAVPassword"].startswith("iocontact-")
     assert cal["PayloadType"] == "com.apple.subscribedcalendar.account" and cal["SubCalAccountHostName"].endswith("/family.ics")
     # the app password in the profile works for CardDAV
     client.cookies.clear()
@@ -187,13 +187,13 @@ def test_page_stamps_the_version(client):
 
 
 def test_registers_in_the_suite(client):
-    """The first request writes ioContacts' row in the suite's list of apps (iosuite-shared ios_apps)."""
+    """The first request writes ioContact's row in the suite's list of apps (iosuite-shared ios_apps)."""
     from iosuite_shared import suite
     from app import __version__
     client.get("/api/books")
-    me = suite.get("iocontacts")
+    me = suite.get("iocontact")
     assert me is not None
-    assert me["name"] == "ioContacts" and me["version"] == __version__
+    assert me["name"] == "ioContact" and me["version"] == __version__
     assert me["description"] == "Contacts" and me["color"] == "#4f2f7d"
 
 
@@ -206,7 +206,7 @@ def test_suite_apps_for_the_app_switcher(client):
     client.get("/api/books")
     suite.register("iopix", name="ioPix", url="https://photo.example.net", color="#123456")
     r = client.get("/api/auth/suite").json()
-    assert r["app"] == "iocontacts"
+    assert r["app"] == "iocontact"
     other = [a for a in r["items"] if a["app"] != r["app"]]
     assert [(a["name"], a["url"], a["icon"]) for a in other] == [("ioPix", "https://photo.example.net", "https://photo.example.net/static/icons/mark.svg")]
 
@@ -325,7 +325,7 @@ def test_partial_birthdays(client, family_id):
         after = {c["fn"]: c["birthday"] for c in client.get("/api/contacts").json()["items"]}
         assert after == byname, (fmt, after)
     vcf3 = client.get("/api/export?format=vcf").text
-    assert "X-IOCONTACTS-BDAY:1950" in vcf3 and f"X-IOCONTACTS-BDAY:1960-{soon.month:02d}" in vcf3
+    assert "X-IOCONTACT-BDAY:1950" in vcf3 and f"X-IOCONTACT-BDAY:1960-{soon.month:02d}" in vcf3
     assert f"BDAY;X-APPLE-OMIT-YEAR=1604:1604-{soon.month:02d}-{soon.day:02d}" in vcf3
     csvg = client.get("/api/export?format=csv-google").text
     assert "1950" in csvg and f"1960-{soon.month:02d}" in csvg and f"--{soon.month:02d}-{soon.day:02d}" in csvg
@@ -400,7 +400,7 @@ def test_iopix_is_found_in_the_suite(client, monkeypatch):
         def read(self):
             return b'{"tags": [{"id": 5, "name": "Ann", "person": true, "n": 3}]}'
     monkeypatch.setattr(links, "get", lambda app, provider, path, **kw: seen.append((app, provider, path)) or R())
-    assert [p["name"] for p in iopix.people(force=True)] == ["Ann"] and seen == [("iocontacts", "iopix", "/api/meta")]
+    assert [p["name"] for p in iopix.people(force=True)] == ["Ann"] and seen == [("iocontact", "iopix", "/api/meta")]
 
 
 def test_suite_admin_panel(client):
@@ -418,7 +418,7 @@ def test_settings_server_is_the_shared_panel(client):
     """Settings › Server is iosuite-shared's panel: its module, and the MCP box, with no This server box."""
     assert "export async function mount" in client.get("/api/server/ui.js").text
     s = client.get("/api/server").json()
-    assert s["name"] == "ioContacts" and "mcpEnabled" in s and s["mcpAbout"]
+    assert s["name"] == "ioContact" and "mcpEnabled" in s and s["mcpAbout"]
     assert "about" not in s
     assert client.post("/api/auth/logout_all").status_code in (404, 405)  # Sign out is the only sign out
 
@@ -428,19 +428,19 @@ def test_profile_for_all_apps_that_sync(client):
     own app; this app's own profile stays, and with no other app there is no such choice."""
     import plistlib
     from iosuite_shared import suite
-    assert [a["app"] for a in client.get("/api/apple-profile/suite").json()["apps"]] == ["iocontacts"]
+    assert [a["app"] for a in client.get("/api/apple-profile/suite").json()["apps"]] == ["iocontact"]
     assert client.post("/api/apple-profile/suite/link", json={}).status_code == 409
     suite.register("iocalendar", name="ioCalendar", url="https://other.example.com")
-    assert sorted(a["app"] for a in client.get("/api/apple-profile/suite").json()["apps"]) == sorted(["iocontacts", "iocalendar"])
+    assert sorted(a["app"] for a in client.get("/api/apple-profile/suite").json()["apps"]) == sorted(["iocontact", "iocalendar"])
     r = client.post("/api/apple-profile/suite/link", json={"label": "iPhone", "password": "new"}).json()
     assert r["url"].endswith("/iosuite-alex.mobileconfig")
     p = plistlib.loads(client.get(r["url"]).content)
     assert p["PayloadDisplayName"].startswith("ioSuite for ")
-    own = next(x for x in p["PayloadContent"] if x.get("CardDAVAccountDescription") == "ioContacts")
+    own = next(x for x in p["PayloadContent"] if x.get("CardDAVAccountDescription") == "ioContact")
     other = next(x for x in p["PayloadContent"] if x is not own)
     assert other["CalDAVHostName"] == "other.example.com" and other["CalDAVPassword"].startswith("iocalendar-")
     pw = own["CardDAVPassword"]
-    assert pw.startswith("iocontacts-")
+    assert pw.startswith("iocontact-")
     client.cookies.clear()
     assert client.request("PROPFIND", "/dav/", auth=("alex", pw), headers={"Depth": "0"}).status_code == 207
     assert client.request("PROPFIND", "/dav/", auth=("alex", other["CalDAVPassword"]), headers={"Depth": "0"}).status_code == 401

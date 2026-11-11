@@ -2,8 +2,8 @@
 
 # Copyright (c) 2026 Alex Van de Putte
 # License: GPL-3.0-or-later
-# Source: https://github.com/avandeputte/iocontacts
-# ioContacts: runs inside the LXC, driven by proxmox/ct/iocontacts.sh (community-scripts framework).
+# Source: https://github.com/avandeputte/iocontact
+# ioContact: runs inside the LXC, driven by proxmox/ct/iocontact.sh (community-scripts framework).
 # This only installs the system packages and fetches the code; the ct script then runs the app's own
 # setup.sh inside the container with the answers given on the host (database, ports, admin, service).
 
@@ -25,13 +25,13 @@ $STD apt-get install -y \
   curl
 msg_ok "Installed Dependencies"
 
-msg_info "Fetching ioContacts"
-REPO="${IOCONTACTS_REPO:-https://github.com/avandeputte/iocontacts}"
-mkdir -p /opt/iocontacts
-$STD git clone --depth 1 "$REPO" /opt/iocontacts/app
-git -C /opt/iocontacts/app rev-parse HEAD > /opt/iocontacts/app/COMMIT
-rm -rf /opt/iocontacts/app/.git
-msg_ok "Fetched ioContacts"
+msg_info "Fetching ioContact"
+REPO="${IOCONTACT_REPO:-https://github.com/avandeputte/iocontact}"
+mkdir -p /opt/iocontact
+$STD git clone --depth 1 "$REPO" /opt/iocontact/app
+git -C /opt/iocontact/app rev-parse HEAD > /opt/iocontact/app/COMMIT
+rm -rf /opt/iocontact/app/.git
+msg_ok "Fetched ioContact"
 
 motd_ssh
 customize

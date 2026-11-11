@@ -1,11 +1,11 @@
-"""vCard 2.1 / 3.0 (RFC 2426) / 4.0 (RFC 6350) and jCard (RFC 7095), to and from ioContacts' contact dicts.
+"""vCard 2.1 / 3.0 (RFC 2426) / 4.0 (RFC 6350) and jCard (RFC 7095), to and from ioContact's contact dicts.
 
 Writing: vCard 3.0 is what Apple Contacts, iOS, Outlook and most older clients expect; vCard 4.0 for clients that ask
 for it (CardDAV address-data version="4.0", Accept: text/vcard;version=4.0). Apple's extensions (X-ABRELATEDNAMES,
 X-ABDATE, X-SOCIALPROFILE, X-ABLabel item groups) ride along in 3.0 so relations, anniversaries and social profiles
 survive in Apple Contacts. Reading takes all of them, plus Google's and Outlook's habits.
 
-Properties ioContacts does not model are kept verbatim (contact["extra"]) and written back, so a client's own data
+Properties ioContact does not model are kept verbatim (contact["extra"]) and written back, so a client's own data
 round-trips through the server.
 """
 import base64
@@ -48,15 +48,15 @@ SOCIAL_BASE = {"linkedin": "https://www.linkedin.com/in/", "facebook": "https://
                "snapchat": "https://www.snapchat.com/add/", "flickr": "https://www.flickr.com/people/", "telegram": "https://t.me/"}
 
 STRUCTURED = {"N", "ADR", "ORG", "GENDER", "CLIENTPIDMAP"}
-KEEP_OUT = {"BEGIN", "END", "VERSION", "PRODID", "REV", "UID", "FN", "N", "NICKNAME", "BDAY", "X-IOCONTACTS-BDAY", "ANNIVERSARY", "GENDER",
+KEEP_OUT = {"BEGIN", "END", "VERSION", "PRODID", "REV", "UID", "FN", "N", "NICKNAME", "BDAY", "X-IOCONTACT-BDAY", "ANNIVERSARY", "GENDER",
             "X-GENDER", "ORG", "TITLE", "ROLE", "NOTE", "EMAIL", "TEL", "ADR", "URL", "PHOTO", "CATEGORIES", "RELATED",
             "X-ABRELATEDNAMES", "X-ABDATE", "X-ABLABEL", "X-SOCIALPROFILE", "SOCIALPROFILE", "KIND", "X-ADDRESSBOOKSERVER-KIND",
-            "X-MAIDENNAME", "X-PHONETIC-FIRST-NAME", "X-PHONETIC-LAST-NAME", "X-IOPIX-PERSON", "X-IOCONTACTS-FAVORITE",
+            "X-MAIDENNAME", "X-PHONETIC-FIRST-NAME", "X-PHONETIC-LAST-NAME", "X-IOPIX-PERSON", "X-IOCONTACT-FAVORITE",
             "X-ABSHOWAS", "LABEL", "X-ANNIVERSARY", "X-MS-ANNIVERSARY", "X-EVOLUTION-ANNIVERSARY", "X-ABUID", "X-ABADR",
             "IMPP", "X-AIM", "X-JABBER", "X-SKYPE", "X-TWITTER", "X-SPOUSE",
             "X-MS-SPOUSE", "X-EVOLUTION-SPOUSE", "X-KADDRESSBOOK-X-SPOUSENAME", "X-ASSISTANT", "X-MANAGER",
             "X-EVOLUTION-ASSISTANT", "X-EVOLUTION-MANAGER", "X-KADDRESSBOOK-X-ANNIVERSARY", "X-KADDRESSBOOK-X-MANAGERSNAME",
-            "X-KADDRESSBOOK-X-ASSISTANTSNAME", "X-IOCONTACTS-ROLE", "X-ABORG",
+            "X-KADDRESSBOOK-X-ASSISTANTSNAME", "X-IOCONTACT-ROLE", "X-ABORG",
             "X-IMAGEHASH", "X-IMAGETYPE"}  # these two describe the photo a phone sent, which is not kept
 
 
@@ -273,11 +273,11 @@ def to_contact(props: list[Prop]) -> dict:
             c["kind"] = "org" if k == "org" else "group" if k == "group" else "individual"
         elif n == "X-ABSHOWAS" and raw.strip().upper() == "COMPANY":
             c["kind"] = "org"
-        elif n in ("BDAY", "X-IOCONTACTS-BDAY"):
-            # X-IOCONTACTS-BDAY carries a birthday vCard 3 cannot (a year, or a year and month) next to no BDAY; a
+        elif n in ("BDAY", "X-IOCONTACT-BDAY"):
+            # X-IOCONTACT-BDAY carries a birthday vCard 3 cannot (a year, or a year and month) next to no BDAY; a
             # real BDAY wins over it
             d = _date(raw)
-            if d and not (n == "X-IOCONTACTS-BDAY" and c.get("birthday")):
+            if d and not (n == "X-IOCONTACT-BDAY" and c.get("birthday")):
                 y, m, dd = d
                 if _omitted(p, y):
                     y = None
@@ -360,8 +360,8 @@ def to_contact(props: list[Prop]) -> dict:
         elif n == "RELATED":
             v = unescape(raw).strip()
             t, g = rel.from_label((_types(p) or ["contact"])[0])
-            if (p.params.get("x-iocontacts-type")):
-                t = p.params["x-iocontacts-type"][0]
+            if (p.params.get("x-iocontact-type")):
+                t = p.params["x-iocontact-type"][0]
             r = {"type": t, "gender": g, "label": None}
             if v.lower().startswith("urn:uuid:"):
                 r["relatedUid"] = v[9:]
@@ -396,7 +396,7 @@ def to_contact(props: list[Prop]) -> dict:
             pid = p.params.get("x-id", [""])[0]
             if pid.isdigit():
                 c["iopix"] = {"personId": int(pid), "name": unescape(raw).strip() or None}
-        elif n == "X-IOCONTACTS-FAVORITE":
+        elif n == "X-IOCONTACT-FAVORITE":
             c["favorite"] = raw.strip() in ("1", "TRUE", "true", "yes")
         elif n in KEEP_OUT or n == "X-ABLABEL":
             continue
@@ -441,7 +441,7 @@ def parse(text: str) -> list[dict]:
 
 def _date_str(y, m, d, version: str) -> tuple[str, dict]:
     """vCard 4: 19800415, --0415, 1980-04 or 1980. vCard 3 takes a full date only (1604 with Apple's omit-year stands
-    for no year); for a date without a day the vCard 4 form is returned, for X-IOCONTACTS-BDAY."""
+    for no year); for a date without a day the vCard 4 form is returned, for X-IOCONTACT-BDAY."""
     if version == "4.0" or not (m and d):
         if not y:
             return f"--{m:02d}{d:02d}", {}
@@ -496,7 +496,7 @@ def from_contact(c: dict, version: str = "3.0") -> str:
 
 def _props(c: dict, version: str) -> list[Prop]:
     v4 = version == "4.0"
-    out: list[Prop] = [Prop("BEGIN", "VCARD"), Prop("VERSION", version), Prop("PRODID", "-//iothing//ioContacts//EN")]
+    out: list[Prop] = [Prop("BEGIN", "VCARD"), Prop("VERSION", version), Prop("PRODID", "-//iothing//ioContact//EN")]
     item = [0]
     # the groups of the properties kept as received (a phone's own item1.X-...) are theirs: ours take other numbers
     taken = {m.group(1).lower() for m in (re.match(r"^([A-Za-z0-9-]+)\.", raw) for raw in c.get("extra") or []) if m}
@@ -542,7 +542,7 @@ def _props(c: dict, version: str) -> list[Prop]:
         if v4 or (b.get("month") and b.get("day")):
             out.append(Prop("BDAY", s, params, None, "date-and-or-time" if v4 else "date"))
         else:  # vCard 3 has no partial dates: the year (and month) ride along in a property clients keep
-            out.append(Prop("X-IOCONTACTS-BDAY", s))
+            out.append(Prop("X-IOCONTACT-BDAY", s))
     for d in c.get("dates") or []:
         s, params = _date_str(d.get("year"), d["month"], d["day"], version)
         if v4 and d.get("label") == "anniversary":
@@ -578,9 +578,9 @@ def _props(c: dict, version: str) -> list[Prop]:
         t = r.get("type") or "other"
         if r.get("relatedUid"):
             out.append(Prop("RELATED", f"urn:uuid:{r['relatedUid']}",
-                            {"type": [rel.vcard4_type(t)], "x-iocontacts-type": [t]} if v4 else {"x-iocontacts-type": [t]}, None, "uri"))
+                            {"type": [rel.vcard4_type(t)], "x-iocontact-type": [t]} if v4 else {"x-iocontact-type": [t]}, None, "uri"))
         elif v4 and name:
-            out.append(Prop("RELATED", name, {"value": ["text"], "type": [rel.vcard4_type(t)], "x-iocontacts-type": [t]}))
+            out.append(Prop("RELATED", name, {"value": ["text"], "type": [rel.vcard4_type(t)], "x-iocontact-type": [t]}))
         if not v4 and name:
             g = grp()
             out.append(Prop("X-ABRELATEDNAMES", name, {}, g))
@@ -595,7 +595,7 @@ def _props(c: dict, version: str) -> list[Prop]:
     if c.get("iopix") and c["iopix"].get("personId"):
         out.append(Prop("X-IOPIX-PERSON", c["iopix"].get("name") or "", {"x-id": [str(c["iopix"]["personId"])]}))
     if c.get("favorite"):
-        out.append(Prop("X-IOCONTACTS-FAVORITE", "1"))
+        out.append(Prop("X-IOCONTACT-FAVORITE", "1"))
     photo = c.get("photoData")
     if photo and photo.get("data"):
         b64 = base64.b64encode(photo["data"]).decode()

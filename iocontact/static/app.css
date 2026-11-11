@@ -1,4 +1,4 @@
-/* ioContacts: the iothing look (as iopix): light by default, dark with the system or the Appearance setting.
+/* ioContact: the iothing look (as iopix): light by default, dark with the system or the Appearance setting.
    The name in two colours: "io" in the sun's gold, "Contacts" in plum (the icon's colour). */
 :root {
   --warn: #e37400; --danger: #d93025; --ok: #1e8e3e; --star: #f9ab00;

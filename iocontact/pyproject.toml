@@ -3,14 +3,14 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "iocontacts"
-version = "0.44.2"
+name = "iocontact"
+version = "0.45.0"
 description = "Self-hosted contacts for the family: web app, CardDAV, LDAP, REST/jCard, birthday calendar"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "GPL-3.0-or-later" }
 dependencies = [
-  "iosuite-shared @ git+https://github.com/avandeputte/iosuite-shared.git@63bf17a31e9a6218dc15057042bac13c784bd6f5",   # iosuite-shared 0.43.1, the suite's shared library: accounts, sessions, the Shared ioSuite database (pinned: bump to pick up a new one)
+  "iosuite-shared @ git+https://github.com/avandeputte/iosuite-shared.git@4c6177b58cc1eaca28573f64ac5f8aebee805147",   # iosuite-shared 0.45.0, the suite's shared library: accounts, sessions, the Shared ioSuite database (pinned: bump to pick up a new one)
   "fastapi<1",
   "uvicorn<1",
   "pymysql<2",
@@ -24,7 +24,7 @@ dependencies = [
 test = ["pytest<10", "httpx<1", "ldap3<3", "pyflakes<4"]
 
 [project.urls]
-Homepage = "https://github.com/avandeputte/iocontacts"
+Homepage = "https://github.com/avandeputte/iocontact"
 
 [tool.setuptools.packages.find]
 include = ["app*"]

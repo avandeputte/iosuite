@@ -96,7 +96,7 @@ def test_apple_omit_year_keeps_a_real_year():
 
 def test_app_passwords_are_the_shared_routes_and_only_the_owner_revokes(client):
     """/api/auth/app-passwords (iosuite-shared): a signed-in account makes and revokes its own; the old admin-only
-    DELETE is gone with ioContacts' own routes."""
+    DELETE is gone with ioContact's own routes."""
     k, uid, _own = member(client)
     pid = None
     k.post("/api/auth/app-passwords", json={"label": "kid phone", "scope": "dav"})
@@ -113,9 +113,9 @@ def test_app_passwords_are_the_shared_routes_and_only_the_owner_revokes(client):
 
 def test_every_account_gets_a_private_book_however_it_was_made(client):
     """Accounts made by the suite (Settings › Security, the shared setup, the command line) never passed through
-    ioContacts' users.create: their private book appears when their books are first listed."""
+    ioContact's users.create: their private book appears when their books are first listed."""
     from iosuite_shared import users as shared
-    u = shared.create("sue", "suepass123", "editor", "iocontacts")
+    u = shared.create("sue", "suepass123", "editor", "iocontact")
     k = TestClient(app)
     assert k.post("/api/auth/login", json={"name": "sue", "password": "suepass123"}).status_code == 200
     books = k.get("/api/books").json()["items"]
@@ -250,10 +250,10 @@ def test_ldap_bind_is_throttled_after_repeated_failures(client):
             import ldap3
             s = ldap3.Server("127.0.0.1", port=port, get_info=ldap3.NONE)
             for _ in range(shared.LOCK_AFTER + 1):
-                assert not ldap3.Connection(s, "cn=alex,ou=users,dc=iocontacts", "wrong").bind()
+                assert not ldap3.Connection(s, "cn=alex,ou=users,dc=iocontact", "wrong").bind()
             n = len(checked)
             assert n == shared.LOCK_AFTER + 1
-            c = ldap3.Connection(s, "cn=alex,ou=users,dc=iocontacts", users.create_app_password(users.find("alex")["id"], "Mail"))
+            c = ldap3.Connection(s, "cn=alex,ou=users,dc=iocontact", users.create_app_password(users.find("alex")["id"], "Mail"))
             assert not c.bind() and "try again" in str(c.result.get("message", ""))
             assert len(checked) == n  # refused without checking the password
         finally:

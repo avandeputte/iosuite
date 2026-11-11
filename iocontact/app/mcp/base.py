@@ -7,13 +7,13 @@ from iosuite_shared.mcp import ADDS, DELETES, READ_ONLY, UPDATES, WRITES, clamp,
 
 from app import __version__, config, db, model
 
-# what the tool modules take from here: the suite's pieces (iosuite_shared.mcp) and ioContacts' own helpers
+# what the tool modules take from here: the suite's pieces (iosuite_shared.mcp) and ioContact's own helpers
 __all__ = ["ADDS", "DELETES", "READ_ONLY", "UPDATES", "WRITES", "book_ids", "brief", "clamp", "contact_out", "current_user", "default_book", "find_book", "find_contact", "need_admin", "readable_books", "server", "who"]
 
 server = shared_mcp.make_server(
-    config.APP, "ioContacts", __version__,
+    config.APP, "ioContact", __version__,
     instructions=(
-        "The family's address book (ioContacts). Start with overview. Find people with search_contacts (names, emails, "
+        "The family's address book (ioContact). Start with overview. Find people with search_contacts (names, emails, "
         "phone digits, companies, addresses, labels and notes all match), then get_contact for everything about one, "
         "including relations. Contacts are named by id or by name; a name has to match one contact. Relations are "
         "gender-neutral types (sibling, parent, child, cousin, spouse...; see relation_types) and the other side is kept "

@@ -2,11 +2,11 @@
 Outlook, Thunderbird, Apple Mail / Contacts (LDAP server accounts), Evolution, Claws, mutt (via a query tool),
 printers and phones with an LDAP phone book.
 
-Clients bind with an ioContacts account: the bind DN "cn=<name>,ou=users,dc=iocontacts" (or just the name or the
+Clients bind with an ioContact account: the bind DN "cn=<name>,ou=users,dc=iocontact" (or just the name or the
 email address) and an app password (Settings › Account). The account's own password is not taken: the directory is
 not encrypted, and that password opens every app of the suite. Anonymous searches see nothing. Each account sees the
 contacts of the address books it can see, as inetOrgPerson entries (with Thunderbird's mozillaAbPersonAlpha
-attributes) under ou=contacts,dc=iocontacts.
+attributes) under ou=contacts,dc=iocontact.
 
 Only bind, search, unbind and abandon are served; every change is refused (unwillingToPerform) and StartTLS is
 not offered: run it on the LAN, or behind a TLS proxy (stunnel, HAProxy, nginx stream) for ldaps://.
@@ -18,7 +18,7 @@ import re
 from app import config, model, users
 from app.fold import fold
 
-log = logging.getLogger("iocontacts.ldap")
+log = logging.getLogger("iocontact.ldap")
 
 # ------------------------------------------------------------------ BER
 
@@ -192,7 +192,7 @@ def directory(user: dict, want_photo: bool) -> list[tuple[str, dict]]:
     hit = _directories.get(user["id"])
     if hit and hit[0] == state and not want_photo:
         return hit[1]
-    root = [(base(), {"objectClass": ["top", "dcObject", "organization"], "o": ["ioContacts"],
+    root = [(base(), {"objectClass": ["top", "dcObject", "organization"], "o": ["ioContact"],
                       "dc": [base().split(",")[0].split("=")[-1]]}),
             (f"ou=contacts,{base()}", {"objectClass": ["top", "organizationalUnit"], "ou": ["contacts"]}),
             (f"ou=users,{base()}", {"objectClass": ["top", "organizationalUnit"], "ou": ["users"]})]
@@ -310,7 +310,7 @@ def entry_msg(msgid: int, dn: str, attrs: dict, wanted: list[str], types_only: b
 
 
 ROOT_DSE = {"objectClass": ["top"], "namingContexts": [], "supportedLDAPVersion": ["3"], "vendorName": ["iothing"],
-            "vendorVersion": ["ioContacts"], "supportedExtension": [], "supportedControl": []}
+            "vendorVersion": ["ioContact"], "supportedExtension": [], "supportedControl": []}
 
 
 # ------------------------------------------------------------------ the server
@@ -378,7 +378,7 @@ class Session:
         elif op == 0x77:  # extended (StartTLS, whoami...)
             await self.send(seq(ber_int(msgid), seq(ber_int(PROTOCOL_ERROR, 0x0A), ber_str(""), ber_str("Not supported"), tag=0x78)))
         elif op in (0x66, 0x68, 0x4A, 0x6C, 0x6E):  # modify, add, delete, modDN, compare
-            await self.send(result(msgid, op + 1 if op != 0x4A else 0x6B, UNWILLING, "ioContacts' LDAP directory is read-only"))
+            await self.send(result(msgid, op + 1 if op != 0x4A else 0x6B, UNWILLING, "ioContact's LDAP directory is read-only"))
         else:
             await self.send(result(msgid, 0x65, PROTOCOL_ERROR, "Unsupported operation"))
         return True
@@ -406,7 +406,7 @@ class Session:
             await self.send(result(msgid, 0x61, INVALID_CREDENTIALS, f"Too many attempts; try again in {wait} seconds"))
             return
         u = await asyncio.get_running_loop().run_in_executor(None, lambda: users.ldap_bind(ident, pw))
-        if not u or u["role"] == "none":  # no access to ioContacts: no directory either
+        if not u or u["role"] == "none":  # no access to ioContact: no directory either
             users.attempt_failed(visitor, ident)
             log.info("LDAP bind refused for %r from %s", name, self.peer)
             await self.send(result(msgid, 0x61, INVALID_CREDENTIALS, "Wrong name or app password (the directory takes an app password "
@@ -430,7 +430,7 @@ class Session:
             await self.send(result(msgid, 0x65, SUCCESS))
             return
         if not self.user:
-            await self.send(result(msgid, 0x65, INSUFFICIENT_ACCESS, "Bind with your ioContacts account first"))
+            await self.send(result(msgid, 0x65, INSUFFICIENT_ACCESS, "Bind with your ioContact account first"))
             return
         bd, root = norm_dn(base_dn), norm_dn(base())
         if base_dn and not (bd == root or bd.endswith("," + root) or root.endswith("," + bd)):

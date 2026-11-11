@@ -31,8 +31,8 @@ def _fold(line: str) -> str:
 
 
 def feed(book_ids: list[int], title: str = "Family birthdays", base_url: str = "") -> str:
-    lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//iothing//ioContacts//EN", "CALSCALE:GREGORIAN", "METHOD:PUBLISH",
-             f"X-WR-CALNAME:{_esc(title)}", "X-WR-CALDESC:Birthdays and anniversaries from ioContacts",
+    lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//iothing//ioContact//EN", "CALSCALE:GREGORIAN", "METHOD:PUBLISH",
+             f"X-WR-CALNAME:{_esc(title)}", "X-WR-CALDESC:Birthdays and anniversaries from ioContact",
              "REFRESH-INTERVAL;VALUE=DURATION:PT6H", "X-PUBLISHED-TTL:PT6H"]
     if book_ids:
         marks = ",".join(["%s"] * len(book_ids))
@@ -52,7 +52,7 @@ def feed(book_ids: list[int], title: str = "Family birthdays", base_url: str = "
             continue
         kind = NAMES.get(r["label"], r["label"].title())
         summary = f"{r['fn']}'s {kind.lower()}" if r["label"] == "birthday" else f"{r['fn']}: {kind}"
-        lines += ["BEGIN:VEVENT", f"UID:{_uid(r['uid'])}-{_uid(r['label'])}@iocontacts", f"DTSTAMP:{stamp}",
+        lines += ["BEGIN:VEVENT", f"UID:{_uid(r['uid'])}-{_uid(r['label'])}@iocontact", f"DTSTAMP:{stamp}",
                   f"DTSTART;VALUE=DATE:{start:%Y%m%d}", f"DTEND;VALUE=DATE:{start + dt.timedelta(days=1):%Y%m%d}",
                   "RRULE:FREQ=YEARLY", f"SUMMARY:{_esc(summary)}", "TRANSP:TRANSPARENT",
                   f"CATEGORIES:{'BIRTHDAY' if r['label'] == 'birthday' else 'ANNIVERSARY'}"]

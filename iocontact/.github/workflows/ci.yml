@@ -14,7 +14,7 @@ permissions:
   packages: write
 
 env:
-  IMAGE: ghcr.io/avandeputte/iocontacts
+  IMAGE: ghcr.io/avandeputte/iocontact
 
 jobs:
   tests:
@@ -41,7 +41,7 @@ jobs:
           python -m pyflakes app tests
           node --input-type=module --check < static/app.js
           for f in *.sh; do sh -n "$f"; done
-          bash -n proxmox/ct/iocontacts.sh proxmox/install/iocontacts-install.sh
+          bash -n proxmox/ct/iocontact.sh proxmox/install/iocontact-install.sh
       - name: Tests
         # scratch databases on the service (iosuite_shared.testing)
         env:

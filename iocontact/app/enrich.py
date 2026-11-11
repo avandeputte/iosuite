@@ -29,8 +29,8 @@ FIELDS = {  # field: (label, kind) — single fields replace, list fields add an
     "emails": ("Email", "list"), "phones": ("Phone", "list"), "addresses": ("Address", "list"), "urls": ("Website", "list"),
     "social": ("Social profile", "list"), "tags": ("Label", "list"),
 }
-log = logging.getLogger("iocontacts.enrich")
-UA = "iocontacts (+https://github.com/avandeputte/iocontacts)"
+log = logging.getLogger("iocontact.enrich")
+UA = "iocontact (+https://github.com/avandeputte/iocontact)"
 TIMEOUT = 8
 
 

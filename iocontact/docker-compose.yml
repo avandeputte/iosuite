@@ -1,10 +1,10 @@
-# ioContacts with Docker: `docker compose up -d` pulls the published image; `docker compose up -d --build` builds it
+# ioContact with Docker: `docker compose up -d` pulls the published image; `docker compose up -d --build` builds it
 # from this checkout. Works as a stack in Dockge / Portainer. Edit the CHANGE ME spots.
 services:
-  iocontacts:
-    image: ghcr.io/avandeputte/iocontacts:latest
+  iocontact:
+    image: ghcr.io/avandeputte/iocontact:latest
     build: .
-    container_name: iocontacts
+    container_name: iocontact
     restart: unless-stopped
     logging:                          # the output Docker keeps (the app's log, again): at most 3 files of 5 MB
       driver: json-file

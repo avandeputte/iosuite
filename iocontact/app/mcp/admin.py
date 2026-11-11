@@ -56,7 +56,7 @@ def check_for_update() -> dict:
 
 @server.tool(annotations=UPDATES)
 def update_server() -> dict:
-    """Admins: update ioContacts to the newest version on GitHub and restart it (update.sh: the code and its packages;
+    """Admins: update ioContact to the newest version on GitHub and restart it (update.sh: the code and its packages;
     the settings and the database stay, and the database is brought up to date as it starts). Nothing happens when
     the newest commit is already installed. The connection drops while it restarts (about a minute); call
     check_for_update afterwards: lastUpdate says what happened. Not in Docker (pull the image there)."""
@@ -66,7 +66,7 @@ def update_server() -> dict:
     except RuntimeError as e:
         raise ToolError(str(e))
     return {"started": True, "installed": updater.local_commit()[:7], "branch": updater.branch,
-            "note": "update.sh is running; ioContacts restarts when it finishes. Then call check_for_update."}
+            "note": "update.sh is running; ioContact restarts when it finishes. Then call check_for_update."}
 
 
 @server.tool(annotations=READ_ONLY)
