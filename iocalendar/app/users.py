@@ -11,7 +11,7 @@ subscription links. Whether an account may write or is an admin is asked of iosu
 """
 import secrets
 
-from iosuite_shared import apppasswords, users as shared
+from iosuite_shared import users as shared
 
 from app import db
 from app.auth import APP
@@ -34,13 +34,6 @@ def all_users() -> list[dict]:
 def init() -> None:
     """The Shared ioSuite database's tables, and the ADMIN_USER / ADMIN_PASSWORD account on a first start with no accounts."""
     shared.init()
-
-
-def create_app_password(uid: int, label: str, caldav_only: bool = False) -> str:
-    """A new app password for this account; caldav_only: it works for CalDAV and nothing else (not the REST API, MCP
-    or the web app), the kind the Apple profile puts on a phone. The scope is kept with the password in the Shared
-    ioSuite database (ios_app_passwords.scope) and enforced by iosuite-shared's middleware."""
-    return apppasswords.create(uid, APP, label, apppasswords.DAV if caldav_only else "")
 
 
 # ---------------------------------------------------------------- subscription links (ioCalendar's own)

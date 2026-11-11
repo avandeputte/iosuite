@@ -10,13 +10,14 @@ import copy
 import datetime as dt
 import json
 import re
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
 
 from app import access, config, contacts, holiday, ical, members, model, tasks, users
-from iosuite_shared import users as shared_users
+from iosuite_shared import appleprofile, users as shared_users
 from iosuite_shared.access import json_body
 from iosuite_shared.errors import Invalid
 
@@ -88,7 +89,7 @@ def wants(request: Request, fmt: str | None) -> str:
     return "json"
 
 
-def _base(request: Request) -> str:
+def base_url(request: Request) -> str:
     """The address links are made with: PUBLIC_URL, else what the proxy (or the client) says, kept to a scheme and a
     host[:port] (a forged header only changes the links in that client's own answer, but it stays an address)."""
     if config.PUBLIC_URL:
@@ -585,7 +586,7 @@ def vfreebusy(cals: list[dict], who: dict, days_back: int = 7, days_ahead: int =
 def connect_info(request: Request):
     """What to type into a calendar app: CalDAV, the subscription links, free/busy, the API."""
     u = request.state.user
-    base = _base(request)
+    base = base_url(request)
     tok = users.feed_token(u["id"])
     cals = model.calendars_for(u)
     return {"user": u["name"], "server": base, "caldav": f"{base}/dav/", "principal": f"{base}/dav/principals/{u['name']}/",
@@ -632,78 +633,34 @@ def feed(token: str, name: str, request: Request, member: str | None = None):
 
 def _apple_profile(request: Request, label: str, password: str) -> tuple:
     """A configuration profile (.mobileconfig) that adds the CalDAV account to an iPhone, iPad or Mac in one go:
-    (bytes, file name). password: "new" puts a new app password (named after label) in it; "ask" leaves it out."""
-    import plistlib
-    import uuid
-    from urllib.parse import urlsplit
+    (bytes, file name). password: "new" puts a new app password (named after label) in it; "ask" leaves it out. The
+    profile for all the apps that sync is iosuite-shared's (auth.profile_router in main.py)."""
     u = request.state.user
     if u.get("passwordless"):
         raise HTTPException(403, "A one-click account cannot have app passwords")
-    base = _base(request)
-    parts = urlsplit(base)
-    ssl = parts.scheme == "https"
-    host = parts.hostname or "localhost"
-    port = parts.port or (443 if ssl else 80)
-    label = (label or "iPhone").strip()[:48] or "iPhone"
-    secret = users.create_app_password(u["id"], f"{label} (profile)", caldav_only=True) if password == "new" else None
-    ident = "net.iothing.iocalendar." + re.sub(r"[^A-Za-z0-9.-]", "-", host) + "." + re.sub(r"[^A-Za-z0-9-]", "-", u["name"])
+    base = base_url(request)
+    host = urlsplit(base).hostname or "localhost"
+    secret = appleprofile.new_password(u, config.APP, label) if password == "new" else None
     who = u.get("displayName") or u["name"]
-    caldav = {"PayloadType": "com.apple.caldav.account", "PayloadVersion": 1, "PayloadIdentifier": ident + ".caldav",
-              "PayloadUUID": str(uuid.uuid4()).upper(), "PayloadDisplayName": "Calendars (CalDAV)",
-              "CalDAVAccountDescription": "ioCalendar", "CalDAVHostName": host, "CalDAVPort": port, "CalDAVUseSSL": ssl,
-              "CalDAVPrincipalURL": f"{parts.path.rstrip('/')}/dav/principals/{u['name']}/", "CalDAVUsername": u["name"]}
-    if secret:
-        caldav["CalDAVPassword"] = secret
-    profile = {"PayloadType": "Configuration", "PayloadVersion": 1, "PayloadIdentifier": ident,
-               "PayloadUUID": str(uuid.uuid4()).upper(), "PayloadDisplayName": f"ioCalendar for {who}",
-               "PayloadDescription": f"Adds {who}'s ioCalendar calendars from {host}." + ("" if secret else " The device asks for an app password while installing."),
-               "PayloadOrganization": "ioCalendar", "PayloadRemovalDisallowed": False, "PayloadContent": [caldav]}
-    return plistlib.dumps(profile), f'iocalendar-{re.sub(r"[^A-Za-z0-9-]", "-", u["name"])}.mobileconfig'
-
-
-def _profile_response(body: bytes, name: str) -> Response:
-    return Response(body, media_type="application/x-apple-aspen-config",
-                    headers={"Content-Disposition": f'attachment; filename="{name}"', "Cache-Control": "no-store"})
+    body = appleprofile.build(appleprofile.ident(config.APP, base, u), f"ioCalendar for {who}",
+                              f"Adds {who}'s ioCalendar calendars from {host}." + appleprofile.asks(secret), "ioCalendar",
+                              [appleprofile.account(config.APP, "ioCalendar", base, u, secret)])
+    return body, appleprofile.file_name(config.APP, u)
 
 
 @router.post("/api/apple-profile", dependencies=[access.signed_in])
 def apple_profile(request: Request, label: str = Form("iPhone"), password: str = Form("new")):
     """The profile itself, as the answer to a form post (a browser tab that downloads in place: Safari, a Mac)."""
-    return _profile_response(*_apple_profile(request, label, password))
-
-
-PROFILE_LINK_SECONDS = 600
-_profile_links: dict = {}  # token -> (expires, bytes, file name): a few minutes, in this process
+    return appleprofile.response(*_apple_profile(request, label, password))
 
 
 @router.post("/api/apple-profile/link", dependencies=[access.signed_in])
 async def apple_profile_link(request: Request):
     """{label, password} -> {url}: the profile behind a short-lived download link (/profile/<token>) that needs no
-    cookie. The app on the Home Screen hands a download to a separate browser sheet that has none of its cookies, so a
-    form post answers that sheet "Sign in to use ioCalendar"; a link it can open by itself works. The link may be opened
-    more than once in its few minutes (the sheet can ask again, or sign in through Cloudflare Access first) and always
-    gives the same profile, with one app password."""
-    import secrets
-    import time
+    cookie. The app on the Home Screen hands a download to a separate browser sheet that has none of its cookies; a
+    link it can open by itself works. The link gives the same profile, with one app password, for a few minutes."""
     b = await json_body(request)
-    body, name = await run_in_threadpool(_apple_profile, request, str(b.get("label") or ""), str(b.get("password") or "new"))
-    now = time.monotonic()
-    for t in [t for t, v in _profile_links.items() if v[0] < now]:
-        _profile_links.pop(t, None)
-    token = secrets.token_urlsafe(24)
-    _profile_links[token] = (now + PROFILE_LINK_SECONDS, body, name)
-    return {"url": f"/profile/{token}/{name}", "expiresIn": PROFILE_LINK_SECONDS}
-
-
-@router.get("/profile/{token}/{name}", include_in_schema=False)
-def apple_profile_download(token: str, name: str):
-    import time
-    hit = _profile_links.get(token)
-    if not hit or hit[0] < time.monotonic():
-        _profile_links.pop(token, None)
-        return Response("This download link has expired. Make a new one in ioCalendar: Settings › Apps and devices.",
-                        status_code=404, media_type="text/plain; charset=utf-8", headers={"Cache-Control": "no-store"})
-    return _profile_response(hit[1], hit[2])
+    return appleprofile.link(*await run_in_threadpool(_apple_profile, request, str(b.get("label") or ""), str(b.get("password") or "new")))
 
 
 # ------------------------------------------------------------------ tasks from ioTasks
