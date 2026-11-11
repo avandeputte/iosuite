@@ -119,7 +119,8 @@ body.side-docked { --nav: var(--side); }
 #main { position: fixed; top: var(--topbar); bottom: 0; left: var(--nav); right: 0; overflow: hidden; display: flex; }
 .listpane { width: 380px; flex: none; border-right: 1px solid var(--line); overflow-y: auto; }
 .detailpane { flex: 1; overflow-y: auto; min-width: 0; }
-.page { flex: 1; overflow-y: auto; padding: 20px 28px 60px; max-width: 1100px; }
+#main:has(> .page) { display: block; overflow: auto; }  /* a page scrolls as a whole, its scrollbars at the window's edges */
+.page { padding: 20px 28px 60px; max-width: 1100px; }
 .pagehead { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
 .pagehead h1 { font-size: var(--fs-xxl); font-weight: 500; margin: 0; }
 .listhead { position: sticky; top: 0; background: var(--bg); z-index: 2; padding: 12px 16px 8px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--line); }
@@ -203,13 +204,13 @@ input.t:focus, select.t:focus, textarea.t:focus { border-color: var(--accent); b
 table.t { border-collapse: collapse; width: 100%; }
 table.t th, table.t td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
 table.t th { font-size: var(--fs-s); color: var(--fg2); font-weight: 600; }
-.box { border: 1px solid var(--line); border-radius: var(--r-l); padding: 16px 20px; margin-bottom: 16px; }
+.box { border: 1px solid var(--line); border-radius: var(--r-l); padding: 16px 20px; margin-bottom: 16px; min-width: min-content; }  /* wide content widens its box; past the window, the page scrolls at its edge */
 .box h2 { margin: 0 0 6px; font-size: var(--fs-l); font-weight: 600; display: flex; align-items: center; gap: 8px; }
 .box h2 .ic { color: var(--brand); }
 .box p { margin: 6px 0; }
 pre.log { background: var(--bg2); border: 1px solid var(--line); border-radius: var(--r-s); padding: 10px 12px; margin: 10px 0 4px; max-height: 420px; overflow: auto; font-size: var(--fs-xs); line-height: 1.45; white-space: pre; }
 .copy { display: flex; gap: 6px; align-items: center; margin: 6px 0; }
-.copy code { flex: 1; background: var(--bg2); padding: 8px 10px; border-radius: var(--r-s); overflow-x: auto; white-space: nowrap; font-size: var(--fs-m); }
+.copy code { flex: 1; background: var(--bg2); padding: 8px 10px; border-radius: var(--r-s); overflow-wrap: anywhere; font-size: var(--fs-m); }
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 16px; overflow-x: auto; }
 @media (min-width: 700px) { .tabs { flex-wrap: wrap; overflow: visible; } }  /* one Settings page has many tabs: wrap them where there is room */
 .tabs button { padding: 10px 14px; border-bottom: 2px solid transparent; color: var(--fg2); white-space: nowrap; }
@@ -304,10 +305,10 @@ label.check input { margin-top: 3px; accent-color: var(--brand); }
 .reasons { margin: 6px 0 4px; padding-left: 20px; color: var(--fg2); font-size: var(--fs-s); }
 .duprow { display: flex; align-items: center; gap: 8px 12px; padding: 6px 0; min-width: 0; flex-wrap: wrap; }
 .dup .btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
-.qcheck { border: 1px solid var(--line); border-radius: var(--r-l); margin-bottom: 10px; }
+.qcheck { border: 1px solid var(--line); border-radius: var(--r-l); margin-bottom: 10px; min-width: min-content; }
 .qcheck summary { display: flex; align-items: center; gap: 10px; padding: 12px 16px; cursor: pointer; list-style: none; }
 .qcheck summary::-webkit-details-marker { display: none; }
-.qcheck .qbody { padding: 0 16px 12px; overflow-x: auto; }
+.qcheck .qbody { padding: 0 16px 12px; }
 .slist { display: flex; flex-direction: column; }
 .srow { display: flex; gap: 12px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); flex-wrap: wrap; }
 .srow .sk { width: 110px; flex: none; color: var(--fg2); font-size: var(--fs-s); }
