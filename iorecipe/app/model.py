@@ -2,6 +2,10 @@
 
 A recipe is either a family recipe (owner_id NULL: everyone with a role here sees it; editors and admins change it)
 or the private recipe of one account (only that account sees it; members and more keep their own). A viewer only looks.
+
+Around a recipe: its photos (its own, the first of which the cards show, and one for a step), what each account
+thinks of it (a favourite, a rating of 1 to 5) and the cookbooks it is in (a family cookbook holds family recipes; a
+private one is its owner's).
 """
 import json
 import re
@@ -23,6 +27,7 @@ class Forbidden(Exception):
 MAX_LINES = 400       # ingredients or steps of one recipe
 MAX_LINE = 4000       # one of them
 MAX_TAGS = 30
+MAX_PHOTOS = 40       # of one recipe, its steps' included
 
 
 # ---- who may
@@ -148,14 +153,23 @@ def _row(r: dict | None) -> dict | None:
 # ---- reading
 
 LIST_COLUMNS = "id, owner_id, title, description, servings, prep_minutes, cook_minutes, total_minutes, tags, source_name, photo, updated_at, created_at"
+# what the account asking thinks of it, and what everyone who rated it does
+MARKS = ("COALESCE(m.favourite, 0) AS favourite, m.rating AS rating, "
+         "(SELECT AVG(x.rating) FROM rcp_marks x WHERE x.recipe_id = r.id AND x.rating IS NOT NULL) AS rating_avg, "
+         "(SELECT COUNT(x.rating) FROM rcp_marks x WHERE x.recipe_id = r.id AND x.rating IS NOT NULL) AS rating_n")
+SORTS = {"title": "r.title, r.id", "new": "r.created_at DESC, r.id DESC", "rating": "rating_avg IS NULL, rating_avg DESC, r.title, r.id"}
 
 
-def get(rid: int) -> dict | None:
-    return _row(db.one("SELECT * FROM rcp_recipes WHERE id = %s", (int(rid),)))
+def get(rid: int, u: dict | None = None) -> dict | None:
+    """The recipe; with u, what that account thinks of it too (favourite, rating, and everyone's average)."""
+    if u is None:
+        return _row(db.one("SELECT * FROM rcp_recipes WHERE id = %s", (int(rid),)))
+    return _row(db.one(f"SELECT r.*, {MARKS} FROM rcp_recipes r LEFT JOIN rcp_marks m ON m.recipe_id = r.id AND m.user_id = %s WHERE r.id = %s",
+                       (u["id"], int(rid))))
 
 
 def readable(u: dict, rid) -> dict:
-    r = get(rid) if str(rid).isdigit() else None
+    r = get(rid, u) if str(rid).isdigit() else None
     if not can_read(u, r):
         raise NotFound("No such recipe")
     return r
@@ -163,19 +177,30 @@ def readable(u: dict, rid) -> dict:
 
 def _scope(u: dict, scope: str | None) -> tuple[str, list]:
     if scope == "family":
-        return "owner_id IS NULL", []
+        return "r.owner_id IS NULL", []
     if scope == "mine":
-        return "owner_id = %s", [u["id"]]
-    return "(owner_id IS NULL OR owner_id = %s)", [u["id"]]
+        return "r.owner_id = %s", [u["id"]]
+    seen = "(r.owner_id IS NULL OR r.owner_id = %s)"
+    if scope == "favourites":
+        return seen + " AND m.favourite = 1", [u["id"]]
+    return seen, [u["id"]]
 
 
-def find(u: dict, q: str = "", tag: str | None = None, scope: str | None = None, limit: int = 500, full: bool = False) -> list[dict]:
-    """The recipes this account sees, by title: every word of q somewhere in them, with this tag, family or mine."""
+def find(u: dict, q: str = "", tag: str | None = None, scope: str | None = None, limit: int = 500, full: bool = False,
+         book: int | None = None, sort: str | None = None) -> list[dict]:
+    """The recipes this account sees: every word of q somewhere in them, with this tag, the family's, its own or its
+    favourites, in this cookbook; by title, or the newest or the best rated first."""
     where, args = _scope(u, scope)
+    join = "LEFT JOIN rcp_marks m ON m.recipe_id = r.id AND m.user_id = %s"
+    if book is not None:
+        b = readable_book(u, book)
+        join += " JOIN rcp_book_recipes br ON br.recipe_id = r.id AND br.book_id = %s"
+        args = [b["id"], *args]
     for w in (q or "").lower().split()[:8]:
-        where += " AND words LIKE %s"
+        where += " AND r.words LIKE %s"
         args.append("%" + w.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%")
-    rows = db.q(f"SELECT {'*' if full else LIST_COLUMNS} FROM rcp_recipes WHERE {where} ORDER BY title, id", args)
+    cols = "r.*" if full else ", ".join("r." + c.strip() for c in LIST_COLUMNS.split(","))
+    rows = db.q(f"SELECT {cols}, {MARKS} FROM rcp_recipes r {join} WHERE {where} ORDER BY {SORTS.get(sort or 'title', SORTS['title'])}", [u["id"], *args])
     rows = [_row(r) for r in rows]
     if tag:
         rows = [r for r in rows if tag.lower() in [t.lower() for t in r["tags"]]]
@@ -184,17 +209,17 @@ def find(u: dict, q: str = "", tag: str | None = None, scope: str | None = None,
 
 def tags(u: dict) -> list[dict]:
     """[{tag, count}] over the recipes this account sees, the most used first."""
-    where, args = _scope(u, None)
     n: dict[str, list] = {}
-    for r in db.q(f"SELECT tags FROM rcp_recipes WHERE {where}", args):
+    for r in db.q("SELECT tags FROM rcp_recipes r WHERE (r.owner_id IS NULL OR r.owner_id = %s)", (u["id"],)):
         for t in json.loads(r["tags"] or "[]"):
             n.setdefault(t.lower(), [t, 0])[1] += 1
     return [{"tag": t, "count": c} for t, c in sorted(n.values(), key=lambda x: (-x[1], x[0].lower()))]
 
 
 def counts(u: dict) -> dict:
-    r = db.one("SELECT count(*) AS n, COALESCE(SUM(owner_id IS NULL), 0) AS fam FROM rcp_recipes WHERE (owner_id IS NULL OR owner_id = %s)", (u["id"],))
-    return {"all": int(r["n"]), "family": int(r["fam"]), "mine": int(r["n"]) - int(r["fam"])}
+    r = db.one("SELECT count(*) AS n, COALESCE(SUM(r.owner_id IS NULL), 0) AS fam, COALESCE(SUM(m.favourite = 1), 0) AS fav FROM rcp_recipes r "
+               "LEFT JOIN rcp_marks m ON m.recipe_id = r.id AND m.user_id = %s WHERE (r.owner_id IS NULL OR r.owner_id = %s)", (u["id"], u["id"]))
+    return {"all": int(r["n"]), "family": int(r["fam"]), "mine": int(r["n"]) - int(r["fam"]), "favourites": int(r["fav"])}
 
 
 # ---- changing
@@ -210,7 +235,7 @@ def create(u: dict, data: dict, family: bool) -> dict:
     f["created_by"] = u["id"]
     cols = list(f)
     rid = db.ex(f"INSERT INTO rcp_recipes ({', '.join(cols)}) VALUES ({db.marks(len(cols))})", [f[c] for c in cols])
-    return get(rid)
+    return get(rid, u)
 
 
 def update(u: dict, r: dict, data: dict) -> dict:
@@ -225,8 +250,15 @@ def update(u: dict, r: dict, data: dict) -> dict:
         if not shared_users.can_write(u):
             raise Forbidden("Only editors move a recipe to or from the family's")
         sets["owner_id"] = None if data["family"] else u["id"]
-    db.ex(f"UPDATE rcp_recipes SET {', '.join(k + ' = %s' for k in sets)} WHERE id = %s", [*sets.values(), r["id"]])
-    return get(r["id"])
+    with db.tx():
+        db.ex(f"UPDATE rcp_recipes SET {', '.join(k + ' = %s' for k in sets)} WHERE id = %s", [*sets.values(), r["id"]])
+        if "steps" in f and f["steps"] != r["steps"]:
+            _move_step_photos(r["id"], r["steps"], f["steps"])
+        if sets.get("owner_id", None) is not None:
+            # private now: out of the family's cookbooks, and nobody else's favourite or rating stays on it
+            db.ex("DELETE br FROM rcp_book_recipes br JOIN rcp_books b ON b.id = br.book_id WHERE br.recipe_id = %s AND b.owner_id IS NULL", (r["id"],))
+            db.ex("DELETE FROM rcp_marks WHERE recipe_id = %s AND user_id <> %s", (r["id"], u["id"]))
+    return get(r["id"], u)
 
 
 def delete(u: dict, r: dict) -> None:
@@ -235,44 +267,220 @@ def delete(u: dict, r: dict) -> None:
     db.ex("DELETE FROM rcp_recipes WHERE id = %s", (r["id"],))
 
 
-# ---- the photo
+# ---- the photos
 
-def set_photo(u: dict, r: dict, raw: bytes) -> dict:
+def _writable(u: dict, r: dict) -> None:
     if not can_write(u, r):
         raise Forbidden("You can see this recipe but not change it")
+
+
+def _cover(rid: int) -> None:
+    """The picture the cards show: the first of the recipe's own."""
+    p = db.one("SELECT id FROM rcp_photos WHERE recipe_id = %s AND step IS NULL ORDER BY position, id LIMIT 1", (rid,))
+    db.ex("UPDATE rcp_recipes SET photo = %s WHERE id = %s", (p["id"] if p else 0, rid))
+
+
+def photos(rid: int) -> list[dict]:
+    """The recipe's pictures without their bytes: its own in their order, then the steps'."""
+    return db.q("SELECT id, step, position, width, height FROM rcp_photos WHERE recipe_id = %s ORDER BY step IS NOT NULL, step, position, id", (int(rid),))
+
+
+def add_photo(u: dict, r: dict, raw: bytes, step: int | None = None) -> dict:
+    """One more picture of the recipe (the first is the one the cards show), or the picture of a step (it replaces
+    the one that step had). The picture's row, without its bytes."""
+    _writable(u, r)
+    if step is not None:
+        if not 0 <= int(step) < len(r["steps"]):
+            raise Invalid("This recipe has no such step")
+        step = int(step)
     pic = images.prepare(raw)
     with db.tx():
-        db.ex("REPLACE INTO rcp_photos (recipe_id, picture, thumb, width, height) VALUES (%s, %s, %s, %s, %s)",
-              (r["id"], pic["picture"], pic["thumb"], pic["width"], pic["height"]))
-        db.ex("UPDATE rcp_recipes SET photo = photo + 1 WHERE id = %s", (r["id"],))
-    return get(r["id"])
+        if step is not None:
+            db.ex("DELETE FROM rcp_photos WHERE recipe_id = %s AND step = %s", (r["id"], step))
+        n = db.one("SELECT COUNT(*) AS n, COALESCE(MAX(position), -1) AS last FROM rcp_photos WHERE recipe_id = %s", (r["id"],))
+        if n["n"] >= MAX_PHOTOS:
+            raise Invalid(f"A recipe holds at most {MAX_PHOTOS} photos")
+        pid = db.ex("INSERT INTO rcp_photos (recipe_id, step, position, picture, thumb, width, height) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                    (r["id"], step, n["last"] + 1, pic["picture"], pic["thumb"], pic["width"], pic["height"]))
+        _cover(r["id"])
+    return {"id": pid, "step": step, "width": pic["width"], "height": pic["height"]}
 
 
-def remove_photo(u: dict, r: dict) -> dict:
-    if not can_write(u, r):
-        raise Forbidden("You can see this recipe but not change it")
+def remove_photo(u: dict, r: dict, pid: int) -> None:
+    _writable(u, r)
     with db.tx():
-        db.ex("DELETE FROM rcp_photos WHERE recipe_id = %s", (r["id"],))
-        db.ex("UPDATE rcp_recipes SET photo = 0 WHERE id = %s", (r["id"],))
-    return get(r["id"])
+        if not db.ex("DELETE FROM rcp_photos WHERE id = %s AND recipe_id = %s", (int(pid), r["id"])):
+            raise NotFound("This recipe has no such photo")
+        _cover(r["id"])
 
 
-def photo(rid: int, small: bool) -> bytes | None:
-    r = db.one(f"SELECT {'thumb' if small else 'picture'} AS b FROM rcp_photos WHERE recipe_id = %s", (int(rid),))
+def order_photos(u: dict, r: dict, ids: list) -> None:
+    """The recipe's own pictures in this order (the first is the one the cards show); those left out follow."""
+    _writable(u, r)
+    have = [p["id"] for p in photos(r["id"]) if p["step"] is None]
+    want = [int(i) for i in ids if str(i).isdigit() and int(i) in have]
+    order = list(dict.fromkeys(want)) + [i for i in have if i not in want]
+    with db.tx():
+        for n, pid in enumerate(order):
+            db.ex("UPDATE rcp_photos SET position = %s WHERE id = %s", (n, pid))
+        _cover(r["id"])
+
+
+def _move_step_photos(rid: int, old: list[str], new: list[str]) -> None:
+    """The steps changed: each step's picture follows its step (the same words), stays where it was when that place
+    still holds a step, and otherwise becomes one of the recipe's own."""
+    rows = db.q("SELECT id, step FROM rcp_photos WHERE recipe_id = %s AND step IS NOT NULL ORDER BY step", (rid,))
+    taken: set[int] = set()
+    for p in rows:
+        text = old[p["step"]] if p["step"] < len(old) else None
+        to = next((i for i, s in enumerate(new) if s == text and i not in taken), None)
+        if to is None and p["step"] < len(new) and p["step"] not in taken and new[p["step"]] not in old:
+            to = p["step"]  # the step was reworded where it stands
+        if to is not None:
+            taken.add(to)
+        db.ex("UPDATE rcp_photos SET step = %s WHERE id = %s", (to, p["id"]))
+    _cover(rid)
+
+
+def photo(rid: int, pid: int, small: bool) -> bytes | None:
+    r = db.one(f"SELECT {'thumb' if small else 'picture'} AS b FROM rcp_photos WHERE id = %s AND recipe_id = %s", (int(pid), int(rid)))
     return bytes(r["b"]) if r else None
+
+
+# ---- favourites and ratings
+
+def mark(u: dict, r: dict, data: dict) -> dict:
+    """{favourite?: bool, rating?: 1 to 5, or null for none}: what this account thinks of the recipe."""
+    if not shared_users.is_member(u):
+        raise Forbidden("A viewer only looks")
+    sets = {}
+    if "favourite" in data:
+        sets["favourite"] = 1 if data["favourite"] else 0
+    if "rating" in data:
+        v = data["rating"]
+        if v in (None, "", 0):
+            sets["rating"] = None
+        else:
+            try:
+                sets["rating"] = int(v)
+            except (TypeError, ValueError):
+                raise Invalid("A rating is a number from 1 to 5")
+            if not 1 <= sets["rating"] <= 5:
+                raise Invalid("A rating is a number from 1 to 5")
+    if sets:
+        with db.tx():
+            db.ex("INSERT IGNORE INTO rcp_marks (recipe_id, user_id) VALUES (%s, %s)", (r["id"], u["id"]))
+            db.ex(f"UPDATE rcp_marks SET {', '.join(k + ' = %s' for k in sets)} WHERE recipe_id = %s AND user_id = %s", [*sets.values(), r["id"], u["id"]])
+            db.ex("DELETE FROM rcp_marks WHERE recipe_id = %s AND user_id = %s AND favourite = 0 AND rating IS NULL", (r["id"], u["id"]))
+    return get(r["id"], u)
+
+
+# ---- cookbooks
+
+def can_change_book(u: dict | None, b: dict | None) -> bool:
+    """A family cookbook: editors and admins. One's own: members and more."""
+    if not u or not b:
+        return False
+    return shared_users.can_write(u) if b["owner_id"] is None else (b["owner_id"] == u["id"] and shared_users.is_member(u))
+
+
+def books(u: dict) -> list[dict]:
+    """The cookbooks this account sees (the family's, then its own, by name), each with how many recipes it shows."""
+    return db.q("SELECT b.*, (SELECT COUNT(*) FROM rcp_book_recipes br JOIN rcp_recipes r ON r.id = br.recipe_id "
+                "WHERE br.book_id = b.id AND (r.owner_id IS NULL OR r.owner_id = %s)) AS n "
+                "FROM rcp_books b WHERE b.owner_id IS NULL OR b.owner_id = %s ORDER BY b.owner_id IS NOT NULL, b.name, b.id", (u["id"], u["id"]))
+
+
+def readable_book(u: dict, bid) -> dict:
+    b = db.one("SELECT * FROM rcp_books WHERE id = %s", (int(bid),)) if str(bid).isdigit() else None
+    if not b or not (b["owner_id"] is None or b["owner_id"] == u["id"]):
+        raise NotFound("No such cookbook")
+    return b
+
+
+def _book_fields(data: dict, partial: bool) -> dict:
+    out = {}
+    if "name" in data or not partial:
+        out["name"] = _text(data.get("name"), 191, "The name")
+        if not out["name"]:
+            raise Invalid("A name, please")
+    if "description" in data or not partial:
+        out["description"] = _text(data.get("description"), 4000, "The description")
+    return out
+
+
+def create_book(u: dict, data: dict, family: bool) -> dict:
+    if not may_add(u, family):
+        raise Forbidden("Only editors make family cookbooks" if family else "A viewer only looks; a member keeps cookbooks of their own")
+    f = _book_fields(data, False)
+    bid = db.ex("INSERT INTO rcp_books (owner_id, name, description) VALUES (%s, %s, %s)", (None if family else u["id"], f["name"], f["description"]))
+    return readable_book(u, bid)
+
+
+def update_book(u: dict, b: dict, data: dict) -> dict:
+    if not can_change_book(u, b):
+        raise Forbidden("You can see this cookbook but not change it")
+    f = _book_fields(data, True)
+    if f:
+        db.ex(f"UPDATE rcp_books SET {', '.join(k + ' = %s' for k in f)} WHERE id = %s", [*f.values(), b["id"]])
+    return readable_book(u, b["id"])
+
+
+def delete_book(u: dict, b: dict) -> None:
+    """The cookbook goes; its recipes stay."""
+    if not can_change_book(u, b):
+        raise Forbidden("You can see this cookbook but not delete it")
+    db.ex("DELETE FROM rcp_books WHERE id = %s", (b["id"],))
+
+
+def book_add(u: dict, b: dict, r: dict) -> None:
+    if not can_change_book(u, b):
+        raise Forbidden("You can see this cookbook but not change it")
+    if b["owner_id"] is None and r["owner_id"] is not None:
+        raise Invalid("A family cookbook holds family recipes; this one is private")
+    db.ex("INSERT IGNORE INTO rcp_book_recipes (book_id, recipe_id) VALUES (%s, %s)", (b["id"], r["id"]))
+
+
+def book_remove(u: dict, b: dict, r: dict) -> None:
+    if not can_change_book(u, b):
+        raise Forbidden("You can see this cookbook but not change it")
+    db.ex("DELETE FROM rcp_book_recipes WHERE book_id = %s AND recipe_id = %s", (b["id"], r["id"]))
+
+
+def books_of(u: dict, rid: int) -> list[int]:
+    """The cookbooks this account sees that hold the recipe."""
+    return [x["id"] for x in db.q("SELECT b.id FROM rcp_books b JOIN rcp_book_recipes br ON br.book_id = b.id WHERE br.recipe_id = %s "
+                                  "AND (b.owner_id IS NULL OR b.owner_id = %s) ORDER BY b.name", (int(rid), u["id"]))]
+
+
+def book_public(b: dict, u: dict) -> dict:
+    return {"id": b["id"], "name": b["name"], "description": b.get("description"), "family": b["owner_id"] is None,
+            "writable": can_change_book(u, b), "count": int(b["n"]) if b.get("n") is not None else None}
 
 
 # ---- as JSON
 
+def photo_url(rid: int, pid: int) -> str:
+    return f"/api/recipes/{rid}/photos/{pid}"
+
+
 def public(r: dict, u: dict, full: bool = True) -> dict:
+    if "favourite" not in r:  # a row read without the asker's marks
+        r = {**get(r["id"], u), **{k: v for k, v in r.items() if k in ("updated_at",)}}
+    avg = r.get("rating_avg")
     out = {"id": r["id"], "title": r["title"], "description": r.get("description"), "family": r["owner_id"] is None,
            "servings": r.get("servings"), "prepMinutes": r.get("prep_minutes"), "cookMinutes": r.get("cook_minutes"),
            "totalMinutes": r.get("total_minutes") or ((r.get("prep_minutes") or 0) + (r.get("cook_minutes") or 0)) or None,
            "tags": r.get("tags") or [], "sourceName": r.get("source_name"),
-           "photo": f"/api/recipes/{r['id']}/photo?v={r['photo']}" if r.get("photo") else None,
+           "photo": photo_url(r["id"], r["photo"]) if r.get("photo") else None,
+           "favourite": bool(r.get("favourite")), "rating": r.get("rating"),
+           "ratingAverage": round(float(avg), 1) if avg is not None else None, "ratingCount": int(r.get("rating_n") or 0),
            "writable": can_write(u, r),
            "updated": r["updated_at"].isoformat() if r.get("updated_at") else None}
     if full:
         out.update(ingredients=r["ingredients"], steps=r["steps"], notes=r.get("notes"), sourceUrl=r.get("source_url"),
-                   created=r["created_at"].isoformat() if r.get("created_at") else None)
+                   created=r["created_at"].isoformat() if r.get("created_at") else None,
+                   photos=[{"id": p["id"], "url": photo_url(r["id"], p["id"]), "step": p["step"], "width": p["width"], "height": p["height"]}
+                           for p in photos(r["id"])],
+                   books=books_of(u, r["id"]))
     return out

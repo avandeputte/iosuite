@@ -2,15 +2,20 @@
 
 *The family's recipes, in the ioThing suite (with [ioPix](https://github.com/avandeputte/iopix), [ioNote](https://github.com/avandeputte/ionote), [ioContact](https://github.com/avandeputte/iocontact), [ioCalendar](https://github.com/avandeputte/iocalendar), [ioTask](https://github.com/avandeputte/iotask), [ioHealth](https://github.com/avandeputte/iohealth) and the [ioSuite](https://github.com/avandeputte/iosuite) start page).*
 
-A self-hosted recipe book: a web app for the whole family to keep recipes with their ingredients, steps and a photo, and to import a recipe from the web by its address. FastAPI and a single-page vanilla JS app, with everything stored in MariaDB / MySQL (the photos too), and the suite's shared library (`iosuite-shared`, in [iosuite-shared](https://github.com/avandeputte/iosuite-shared)).
+A self-hosted recipe book: a web app for the whole family to keep recipes with their ingredients, steps and photos, to import a recipe from the web by its address, from pasted text, from a photo or from a file, and to cook, shop and print from it. FastAPI and a single-page vanilla JS app, with everything stored in MariaDB / MySQL (the photos too), and the suite's shared library (`iosuite-shared`, in [iosuite-shared](https://github.com/avandeputte/iosuite-shared)).
 
 ## What it does
 
 - **Recipes** with a title, a description, what they make (4, or 24 cookies), preparation and cooking time, **ingredients**, **steps**, notes, tags, and where they come from. In the ingredients and the steps, a line that ends with a colon ("For the icing:") is a heading.
-- **A photo** for each recipe: upload one from the computer or take one with the phone. It is turned upright, made smaller and kept as a JPEG in the database, with a small copy for the cards.
+- **Photos**: as many as you like for a recipe (the first is the one on its card) and one for any step, uploaded from the computer or taken with the phone. Each is turned upright, made smaller and kept as a JPEG in the database, with a small copy for the cards.
 - **Import from the web**: paste the address of a recipe page and ioRecipe fetches it and keeps the recipe it describes (title, ingredients, steps, times, servings, tags) with its picture and a link back. It reads the schema.org Recipe data that most recipe sites publish for search engines (JSON-LD or microdata), not the page's layout; where a page has none, it says so. Only addresses on the internet are fetched, never this machine or the home network.
-- **The recipes as cards**, with their photo, how long they take and what they make: all of them, the family's, your own, or the ones with a tag; **search** finds words in the title, the ingredients, the steps, the notes and the tags.
-- **Cooking from it**: the ingredients have boxes to tick off as they go in, a step is struck out with a click, and the page prints as the recipe alone (the ⋯ menu, or the browser's Print).
+- **Import from pasted text or a photo**: paste a recipe from a message or a document, or give a photo of one (a page of a cookbook, a card, a screenshot): the text is made into a draft that opens in the recipe form, to be looked over before it is saved. A photo is read on the server itself, by Tesseract (see [Reading a photo of a recipe](#reading-a-photo-of-a-recipe)); it goes nowhere else.
+- **Export and import as a file**: one recipe, a cookbook or everything you see as a `.zip` (the recipes, their photos, your favourites and ratings, their cookbooks), to keep safe or to import into another ioRecipe. The same import takes **Mealie**'s recipes: a recipe's JSON, a `.zip` of them with their pictures, or a Mealie backup.
+- **The recipes as cards**, with their photo, how long they take and what they make: all of them, the family's, your own, your favourites, the ones with a tag or in a cookbook, by title, the newest or the best rated first; **search** finds words in the title, the ingredients, the steps, the notes and the tags.
+- **Favourites and ratings**: the heart makes a recipe one of your favourites, the stars are your rating (1 to 5). Both are yours alone; everyone sees the average of the ratings.
+- **Cookbooks**: recipes grouped under a name (Baking, Weeknights, To try). A family cookbook is everyone's and holds family recipes; a cookbook of your own may hold the family's recipes and yours. A recipe can be in several.
+- **Cooking from it**: the amounts follow the servings you want (half, double, ten times: `1 1/2 cups` becomes `3 cups`, `2-3 tbsp` becomes `4-6 tbsp`), the ingredients have boxes to tick off as they go in, a step is struck out with a click, and **Print** gives the recipe alone on paper, with the amounts as they are shown.
+- **The shopping list**, when [ioTask](https://github.com/avandeputte/iotask) is part of the suite: a recipe's ingredients (for the servings shown, without the ones ticked off) become tasks in one of your lists there. Nothing to set up; ioTask is asked as you.
 - **Family and private recipes**: a family recipe is seen by everyone; a private one only by its owner. A recipe can be moved from one to the other.
 - **Roles as in the other io apps**: viewers only read the family's recipes, members (the default) also keep private recipes of their own, editors change the family's recipes too, admins also manage users and settings. The same accounts, passwords and app passwords as the other io apps; one sign-in for all of them with a shared cookie domain.
 - **Settings › Security** and **Global settings** (suite admins): the whole suite's people and their role in every app, app passwords and sign-in at the proxy; the apps, keys and tokens; the same panel as on the start page and in every io app (iosuite-shared's `/api/suite-admin/ui.js`).
@@ -91,12 +96,27 @@ accounts are the suite's: `.venv/bin/iosuite-shared --config . admin NAME --app 
 | `PUBLIC_URL` | the address people use (behind a proxy), for the links the MCP tools give |
 | `ADMIN_USER`, `ADMIN_PASSWORD` | the first admin, made on the first start when there are no accounts |
 | `AUTH_PROXY`, `AUTH_PROXY_HEADER`, `AUTH_PROXY_TRUSTED`, `CF_ACCESS_TEAM`, `CF_ACCESS_AUD` | sign-in at a reverse proxy, as in the other io apps (Cloudflare Access, Authelia, Authentik, oauth2-proxy…) |
+| `OCR_LANGUAGES` | the languages a photo of a recipe is read in, as Tesseract's codes (`eng+nld+fra`); left out, every language installed |
 | `MCP` | `1` keeps the MCP server on, whatever the setting says |
 | `MCP_USER` | the account `python -m app.mcp` (stdio) acts as |
 | `UPDATE_CHECK` | `0` turns the daily version check off for good |
 | `IORECIPE_REPO`, `IORECIPE_BRANCH` | what the version check and `update.sh` follow (`avandeputte/iorecipe`, `main`) |
 | `DATA_DIR` | where the app writes on its own: the log and the update result (`data/` in the app folder) |
 | `LOG_FILE` | the server log shown at Settings › Server (`DATA_DIR/iorecipe.log`; `LOG_FILE=` with nothing after it: no file) |
+
+### Reading a photo of a recipe
+
+Import › Photo reads the text on a picture with [Tesseract](https://github.com/tesseract-ocr/tesseract), a program
+of its own that runs on the server: the photo is not sent anywhere. The Docker image and the Proxmox container come
+with it (English, Dutch, French and German); `setup.sh` installs it where it can. Without it, everything else works
+and the Photo tab says what is missing. To add it, or another language, by hand:
+
+```sh
+sudo apt-get install tesseract-ocr tesseract-ocr-nld tesseract-ocr-fra    # Debian, Ubuntu (tesseract-ocr-<code> per language)
+brew install tesseract tesseract-lang                                      # macOS
+```
+
+Print reads well; handwriting mostly does not. What comes out is a draft in the recipe form, never a saved recipe.
 
 ## Updates
 
@@ -140,8 +160,10 @@ as an app password.
 
 | For | Standard | Where |
 | --- | --- | --- |
-| Web and JSON clients | **REST/JSON**: recipes (list, search, by tag, the family's or your own), one recipe, add, change, delete, its photo, import from a web address | `/api/`, OpenAPI docs at `/api/docs` |
+| Web and JSON clients | **REST/JSON**: recipes (list, search, by tag, cookbook, the family's, your own or your favourites), one recipe, add, change, delete, its photos, your favourite and rating, cookbooks, import and export | `/api/`, OpenAPI docs at `/api/docs` |
 | Recipes from other sites | **schema.org Recipe** (JSON-LD and microdata), read from the page at the address given | `POST /api/import` |
+| Recipes as files | a `.zip` with `recipes.json` and `photos/`; in: that, a Mealie export or backup, a recipe as JSON | `GET /api/export`, `POST /api/import/file` |
+| The shopping list | ioTask's REST API, asked as the person signed in | `POST /api/recipes/{id}/shopping` |
 | AI assistants: Claude and anything else that speaks MCP | **Model Context Protocol** (streamable HTTP, and stdio) | `https://host/mcp` (switched on in Settings › Server) |
 
 Settings › Account makes **app passwords**: one per program, revocable on its own, used with your user name for the
@@ -154,20 +176,27 @@ curl -u alex:APP-PASSWORD -X POST -H 'Content-Type: application/json' \
   -d '{"title": "Oat cookies", "servings": "24 cookies", "prepMinutes": 15, "cookMinutes": 12,
        "ingredients": ["200 g oats", "100 g butter", "1 egg"], "steps": ["Mix.", "Bake 12 minutes at 180 °C."],
        "tags": ["cookies"], "family": true}' https://recipes.example.com/api/recipes
-curl -u alex:APP-PASSWORD -X PUT -H 'Content-Type: image/jpeg' --data-binary @cookies.jpg https://recipes.example.com/api/recipes/12/photo
+curl -u alex:APP-PASSWORD -X POST -H 'Content-Type: image/jpeg' --data-binary @cookies.jpg https://recipes.example.com/api/recipes/12/photos
+curl -u alex:APP-PASSWORD -X POST -H 'Content-Type: image/jpeg' --data-binary @dough.jpg "https://recipes.example.com/api/recipes/12/photos?step=1"
+curl -u alex:APP-PASSWORD -X PUT -H 'Content-Type: application/json' -d '{"favourite": true, "rating": 5}' https://recipes.example.com/api/recipes/12/mark
 curl -u alex:APP-PASSWORD -X POST -H 'Content-Type: application/json' \
   -d '{"url": "https://www.example.com/recipes/oat-cookies"}' https://recipes.example.com/api/import
+curl -u alex:APP-PASSWORD -o recipes.zip https://recipes.example.com/api/export
+curl -u alex:APP-PASSWORD -X POST --data-binary @mealie-export.zip "https://recipes.example.com/api/import/file?family=true"
 ```
 
 `ingredients` and `steps` are lists of lines (or one text with a line each). `family` says where a new recipe goes:
 `true` for the family's (editors and admins), `false` for a private one; left out, it is the family's for those who
-may add there. A photo's address (`photo` in a recipe) changes whenever the picture does; `&size=small` gives the
-card's copy.
+may add there. A recipe's `photos` are its own, in their order, then its steps' (`step`: the step's place in `steps`,
+from 0); `photo` is the one its card shows, and `?size=small` gives a picture's small copy. `POST /api/import/text`
+(`{text}`) and `POST /api/import/photo` (the picture as the body) save nothing: they answer with a `draft`, the
+fields `POST /api/recipes` takes.
 
 ## MCP server
 
 ioRecipe is also an MCP server, as the other io apps are, so an assistant such as Claude can work with the recipes:
-look them up by words or tag, read one in full, add and change them, import one from a web address, delete them, and,
+look them up by words, tag or cookbook, read one in full, add and change them, import one from a web address, mark
+favourites and rate them, keep cookbooks, delete them, and,
 for admins, check the server's health, look for a new version and install it.
 
 It is off until an admin turns it on in **Settings › Server** (or `MCP=1` in the environment); off, `/mcp` does not answer
@@ -181,7 +210,8 @@ claude mcp add --transport http iorecipe https://recipes.example.com/mcp --heade
 On the server itself, `.venv/bin/python -m app.mcp --user NAME` serves the same tools over stdio.
 
 The tools: `overview`, `list_recipes`, `search_recipes`, `get_recipe`; `create_recipe`, `update_recipe`,
-`delete_recipe`, `import_recipe`; and for admins `diagnostics`, `list_accounts`, `check_for_update`, `update_server`.
+`delete_recipe`, `import_recipe`, `mark_recipe`; `list_cookbooks`, `create_cookbook`, `add_to_cookbook`,
+`remove_from_cookbook`, `delete_cookbook`; and for admins `diagnostics`, `list_accounts`, `check_for_update`, `update_server`.
 
 ## Tests
 
@@ -191,19 +221,26 @@ python -m pytest tests     # on a test MariaDB of its own: a Docker container it
 ```
 
 Covered: a recipe's fields round-tripping, the search, tags and counts, who sees and changes what in each role, the
-photo (resized, its address changing with it, refused when it is not a picture), reading recipes from web pages
+photos (resized, in their order, a step's following its step, refused when not a picture), favourites and ratings,
+cookbooks, reading recipes from web pages
 (JSON-LD on its own and in a graph, with sections and HTML in the values; microdata; pages without a recipe;
-addresses the server will not fetch), the import with its picture, and the MCP server (switch, sign-in, the tools).
+addresses the server will not fetch), the import with its picture, a recipe out of plain text and off a photo (where
+Tesseract is installed), an export coming back whole, Mealie's recipes and backup, the shopping list, and the MCP
+server (switch, sign-in, the tools).
 CI runs them against MariaDB.
 
 ## Layout
 
 ```
 app/main.py        the application: start-up (tables, first admin), who is asking, routes
-app/api.py         the REST API: recipes, the photo, import from a web address
-app/model.py       recipes in MariaDB: the fields, who sees and changes what, the search and the tags
+app/api.py         the REST API: recipes, photos, favourites and ratings, cookbooks, import, export, the shopping list
+app/model.py       recipes in MariaDB: the fields, who sees and changes what, the search and the tags, photos, marks, cookbooks
 app/scrape.py      import from the web: fetching a page and reading its schema.org Recipe (JSON-LD, microdata)
-app/images.py      the photo: checked, turned upright, kept as two JPEGs
+app/textimport.py  a recipe out of plain text (pasted, or read off a photo)
+app/ocr.py         the text on a photo, read by Tesseract on this server
+app/portable.py    recipes as files: the export, and imports of it and of Mealie's
+app/shopping.py    the ingredients as tasks in ioTask, asked as the person signed in
+app/images.py      a photo: checked, turned upright, kept as two JPEGs
 app/mcp/           the MCP server: base (the server, finding a recipe; who is asking comes from iosuite_shared.mcp), recipes and admin tools
 app/access.py      who may call a route (the markers come from iosuite-shared)
 app/users.py       accounts and app passwords (the suite's, through iosuite-shared)

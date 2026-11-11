@@ -100,4 +100,4 @@ def test_import_keeps_the_recipe_and_its_picture(client, monkeypatch):
     r = client.post("/api/import", json={"url": "https://example.com/"})
     assert r.status_code == 400 and "No recipe" in r.json()["detail"]
     assert client.post("/api/import", json={"url": " "}).status_code == 400
-    assert client.get("/api/recipes").json()["counts"] == {"all": 2, "family": 1, "mine": 1}
+    assert client.get("/api/recipes").json()["counts"] == {"all": 2, "family": 1, "mine": 1, "favourites": 0}

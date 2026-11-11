@@ -9,7 +9,7 @@ from app import __version__, config, model
 
 # what the tool modules take from here: the suite's pieces (iosuite_shared.mcp) and ioRecipe's own helpers
 __all__ = ["server", "ADDS", "DELETES", "READ_ONLY", "UPDATES", "WRITES", "clamp", "current_user", "need_admin", "who",
-           "find_recipe", "recipe_out", "summary"]
+           "find_book", "find_recipe", "recipe_out", "summary"]
 
 server = shared_mcp.make_server(
     config.APP, "ioRecipe", __version__,
@@ -19,8 +19,11 @@ server = shared_mcp.make_server(
         "words in the title, the ingredients, the steps or the tags; get_recipe has everything about one. A recipe "
         "is either a family recipe (everyone sees it, editors change it) or a private one of the account you act as. "
         "Ingredients and steps are lists of lines; a line that ends with a colon is a heading ('For the icing:'). "
-        "Times are minutes. import_recipe takes the address of a recipe on the web and keeps it with its picture. "
-        "Ask before deleting a recipe."
+        "Times are minutes. import_recipe takes the address of a recipe on the web and keeps it with its picture; a "
+        "recipe you read yourself (from text, a photo, a file somebody shows you) goes in with create_recipe. "
+        "mark_recipe sets the favourite and the rating (1 to 5) of the account you act as. Cookbooks group recipes: "
+        "list_cookbooks, create_cookbook, add_to_cookbook, remove_from_cookbook. "
+        "Ask before deleting a recipe or a cookbook."
     ),
 )
 
@@ -48,6 +51,18 @@ def find_recipe(u: dict, ref) -> dict:
     return rows[0]
 
 
+def find_book(u: dict, ref) -> dict:
+    """A cookbook by id, or by its name."""
+    s = str(ref).strip()
+    rows = model.books(u)
+    found = [b for b in rows if str(b["id"]) == s] or [b for b in rows if b["name"].lower() == s.lower()] or \
+        [b for b in rows if s and s.lower() in b["name"].lower()]
+    if len(found) != 1:
+        raise ToolError((f"No cookbook matches '{s}'. " if not found else f"'{s}' matches several cookbooks. ")
+                        + "The cookbooks: " + ("; ".join(f"{b['name']} (id {b['id']})" for b in rows[:30]) or "none yet"))
+    return found[0]
+
+
 def _tidy(j: dict, rid: int) -> dict:
     j.pop("photo", None)
     j.pop("updated", None)
@@ -55,12 +70,14 @@ def _tidy(j: dict, rid: int) -> dict:
     link = _link(rid)
     if link:
         j["webUrl"] = link
-    return {k: v for k, v in j.items() if v not in (None, "", [], {}) or k in ("family",)}
+    return {k: v for k, v in j.items() if v not in (None, "", [], {}, 0, False) or k in ("family",)}
 
 
 def recipe_out(u: dict, r: dict) -> dict:
     j = model.public(r, u)
-    j["hasPhoto"] = bool(r.get("photo"))
+    j["photos"] = len(j.pop("photos"))
+    names = {b["id"]: b["name"] for b in model.books(u)}
+    j["cookbooks"] = [names[i] for i in j.pop("books") if i in names]
     j["youCanChange"] = j.pop("writable")
     return _tidy(j, r["id"])
 
