@@ -120,8 +120,21 @@ def test_roles(client, family_id):
     assert client.get(f"/api/tasks/{t['id']}").status_code == 200
     assert client.patch(f"/api/tasks/{t['id']}", json={"title": "x"}).status_code == 403
     assert client.post("/api/tasks", json={"title": "x", "listId": family_id}).status_code == 403
-    mine = new(client, title="My own")  # into vic's own Personal list
+    assert client.post("/api/tasks", json={"title": "x"}).status_code == 403  # a viewer keeps nothing of their own
+    assert client.post("/api/lists", json={"name": "Mine"}).status_code == 403
+    assert all(c["shared"] for c in client.get("/api/lists").json()["items"])  # and gets no Personal list
+
+
+def test_member_keeps_own_lists(client, family_id):
+    client.post("/api/users", json={"name": "meg", "password": "secret123", "role": "member"})
+    t = new(client, title="Shared", listId=family_id)
+    client.cookies.clear()
+    assert client.post("/api/auth/login", json={"name": "meg", "password": "secret123"}).status_code == 200
+    assert client.patch(f"/api/tasks/{t['id']}", json={"title": "x"}).status_code == 403  # the shared list: read only
+    assert client.post("/api/lists", json={"name": "Groceries", "shared": True}).status_code == 403
+    mine = new(client, title="My own")  # into meg's own Personal list
     assert mine["listId"] != family_id
+    assert client.post("/api/lists", json={"name": "Groceries"}).status_code == 201
 
 
 def test_ics_create_import_export(client, family_id):

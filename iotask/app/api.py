@@ -35,7 +35,7 @@ def readable_list(u: dict, lid) -> dict:
 def writable_list(u: dict, lid) -> dict:
     c = readable_list(u, lid)
     if not model.can_write(u, c):
-        raise HTTPException(403, "Viewers can only change their own private lists")
+        raise HTTPException(403, "You can see this list but not change it")
     return c
 
 
@@ -147,6 +147,8 @@ async def add_list(request: Request):
     shared = bool(b.get("shared"))
     if shared and not shared_users.can_write(u):
         raise HTTPException(403, "Only editors make shared lists")
+    if not shared and not shared_users.is_member(u):
+        raise HTTPException(403, "A viewer only looks; a member keeps lists of their own")
     if not (b.get("name") or "").strip():
         raise HTTPException(400, "A name, please")
 
@@ -521,7 +523,7 @@ def undo(batch: str, request: Request):
 def _template(u: dict, tid: int, write: bool = False) -> dict:
     t = model.template(u, tid)
     if write and not model.template_public(t, u)["writable"]:
-        raise HTTPException(403, "Editors and admins change shared templates")
+        raise HTTPException(403, "Editors and admins change shared templates; members their own")
     return t
 
 
@@ -548,6 +550,8 @@ async def add_template(request: Request):
     shared = bool(b.get("shared"))
     if shared and not shared_users.can_write(u):
         raise HTTPException(403, "Only editors make shared templates")
+    if not shared_users.is_member(u):
+        raise HTTPException(403, "A viewer can only look; ask an admin to make you a member to keep your own")
     if not (b.get("name") or "").strip():
         raise HTTPException(400, "A name, please")
 

@@ -262,6 +262,12 @@ function laterDays(withToday) {
 
 // ------------------------------------------------------------------ state
 const S = { status: {}, user: null, suite: [], settings: {}, lists: [], counts: {}, members: [], who: new Set(), q: '' };
+// the suite's roles, each able to do what the one before can: a viewer only looks, a member keeps their own lists,
+// an editor changes the shared ones too
+const RANK = { none: 0, viewer: 1, member: 2, editor: 3, admin: 4 };
+const roleAtLeast = (r) => (RANK[S.user && S.user.role] || 0) >= RANK[r];
+const canOwn = () => roleAtLeast('member');
+const canShared = () => roleAtLeast('editor');
 const listOf = (id) => S.lists.find((c) => c.id === id) || {};
 const colorOf = (id) => listOf(id).color || 'var(--brand)';
 const writable = () => S.lists.filter((c) => c.writable);
@@ -405,14 +411,14 @@ function drawNav() {
     Object.entries(SMART).map(([k, [label, ic, hv]]) => link(k, `#/${k}`, ic, label, k === 'done' ? null : (k === 'today' ? S.counts.today : S.counts[k]) || null, r.view === k, hv)),
     h('button', { class: 'navmore', 'data-v': 'more', title: 'More', onclick: moreSheet }, icon('more'), h('span', { class: 'nl' }, 'More')),
     h('div', { class: 'navgap' }),
-    sec('Shared', S.user.role !== 'viewer' ? h('button', { class: 'iconbtn', title: 'New shared list', onclick: () => newList(true) }, icon('add', 's')) : null),
-    group(shared, S.user.role !== 'viewer'),
+    sec('Shared', canShared() ? h('button', { class: 'iconbtn', title: 'New shared list', onclick: () => newList(true) }, icon('add', 's')) : null),
+    group(shared, canShared()),
     S.members.length > 1 ? [h('div', { class: 'navgap' }),
       sec('Family', S.who.size ? h('button', { class: 'pillbtn noic tiny', title: 'Show everyone again', onclick: () => toggleWho(null) }, 'Everyone') : null),
       S.members.map(whoRow)] : null,
     h('div', { class: 'navgap' }),
-    sec('Mine', h('button', { class: 'iconbtn', title: 'New private list', onclick: () => newList(false) }, icon('add', 's'))),
-    group(mine, true),
+    canOwn() || mine.length ? sec('Mine', canOwn() ? h('button', { class: 'iconbtn', title: 'New private list', onclick: () => newList(false) }, icon('add', 's')) : null) : null,
+    group(mine, canOwn()),
     h('div', { class: 'navgap' }), sec('Manage'),
     link('activity', '#/activity', 'history', 'Activity', null, r.view === 'activity', '--c-slate'),
     writable().length ? link('import', '#/import', 'upload', 'Import', null, r.view === 'import', '--c-teal') : null,
@@ -674,9 +680,9 @@ function listMenu(c) {
 /** Templates: a list's tasks kept to add again (a packing list, the weekly shop). */
 async function saveTemplate(c) {
   const name = h('input', { class: 't', value: c.name });
-  const shared = h('input', { type: 'checkbox', checked: c.shared && S.user.role !== 'viewer' });
+  const shared = h('input', { type: 'checkbox', checked: c.shared && canShared() });
   const body = h('div', { style: { display: 'grid', gap: '12px' } }, h('label', { class: 'field' }, h('span', null, 'Name'), name),
-    S.user.role !== 'viewer' ? h('label', { class: 'check' }, shared, ' Everyone in the family can use it') : null,
+    canShared() ? h('label', { class: 'check' }, shared, ' Everyone in the family can use it') : null,
     h('p', { class: 'muted small', style: { margin: 0 } }, 'Every task of the list with its notes, priority, link, people and subtasks. Due dates, repeats and what is ticked off are left out.'));
   if (!await dialog('Save as a template', body, [{ label: 'Cancel', value: false }, { label: 'Save', value: true, primary: true }])) return;
   try {
@@ -1197,8 +1203,8 @@ async function setLists(el, r) {
       if (!await confirmDialog('Delete template', `Delete the template ${t.name}? The lists made from it stay.`, 'Delete', true)) return;
       try { await api(`/api/templates/${t.id}`, { method: 'DELETE' }); onRoute(); } catch (x) { fail(x); }
     } }, 'Delete') : null));
-  el.append(h('p', null, S.user.role !== 'viewer' ? h('button', { class: 'pillbtn', onclick: () => newList(true) }, icon('add', 's'), 'New shared list') : null, ' ',
-    h('button', { class: 'pillbtn', onclick: () => newList(false) }, icon('add', 's'), 'New private list')),
+  el.append(h('p', null, canShared() ? h('button', { class: 'pillbtn', onclick: () => newList(true) }, icon('add', 's'), 'New shared list') : null, ' ',
+    canOwn() ? h('button', { class: 'pillbtn', onclick: () => newList(false) }, icon('add', 's'), 'New private list') : null),
   group(S.lists.filter((c) => c.shared)), group(S.lists.filter((c) => !c.shared)),
   h('div', { class: 'box' }, h('h2', null, icon('template'), 'Templates'),
     h('p', { class: 'muted' }, 'A list’s tasks kept to add again: a packing list, the weekly shop. Save one from a list (here, or in the list’s ⋯ menu); add its tasks with “Add from a template…” in a list’s ⋯ menu, or start a new list with it.'),
@@ -1264,7 +1270,7 @@ function updateBanner() {
 
 // ------------------------------------------------------------------ sign-in
 function showSignIn() {
-  // as in the other io apps: a tile per account; one click for a passwordless viewer, a password for the others
+  // as in the other io apps: a tile per account; one click for a passwordless account, a password for the others
   if (document.querySelector('.signin')) return;
   const first = !S.status.usersExist;
   const name = h('input', { class: 't', placeholder: 'User name', autocomplete: 'username', autocapitalize: 'none' });

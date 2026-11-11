@@ -25,6 +25,7 @@ from fastapi import APIRouter, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import RedirectResponse, Response
 from iosuite_shared import dav as webdav  # `dav` is the route below
+from iosuite_shared import users as shared_users
 from iosuite_shared.dav import AP, CS, D, q
 
 from app import access, config, ical, model
@@ -499,6 +500,8 @@ def _mkcalendar(ctx: Ctx, parts, body) -> Response:
     events (a component set without VTODO) is refused: events belong in ioCalendar."""
     if len(parts) != 3 or parts[0] != "calendars":
         return Response(status_code=403)
+    if not shared_users.is_member(ctx.user):
+        return Response("A viewer only looks; a member keeps lists of their own", status_code=403)
     if _cal(ctx, parts[2]):
         return Response(status_code=405)
     name, color, desc = parts[2], None, None

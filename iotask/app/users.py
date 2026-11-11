@@ -1,7 +1,7 @@
 """Accounts, roles, sessions and app passwords: the shared ioThing accounts (iosuite-shared), seen from ioTasks.
 
-Roles as in the rest of the suite: viewer (reads the shared lists and keeps their own), editor (changes the shared
-lists too), admin (also settings and users); an account holds a role per app, a suite admin is admin everywhere. Web
+Roles as in the rest of the suite: viewer (reads the shared lists), member (also keeps their own private lists),
+editor (changes the shared lists too), admin (also settings and users); an account holds a role per app, a suite admin is admin everywhere. Web
 sessions are the suite's cookie (shared by the apps on the domain). Reminders apps (CalDAV), the REST API and MCP use
 HTTP Basic or a bearer app password (one per device, revocable, shown once).
 """

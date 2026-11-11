@@ -48,7 +48,7 @@ def find_list(u: dict, ref, writable: bool = False) -> dict:
         raise ToolError(f"'{ref}' names more than one list: " + ", ".join(f"{c['name']} (id {c['id']})" for c in hit))
     c = hit[0]
     if writable and not model.can_write(u, c):
-        raise ToolError(f"You can read '{c['name']}' but not change it (viewers change only their own private lists)")
+        raise ToolError(f"You can read '{c['name']}' but not change it (a viewer only reads; members change their own private lists, editors the shared ones)")
     return c
 
 

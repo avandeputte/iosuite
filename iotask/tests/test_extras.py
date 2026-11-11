@@ -173,6 +173,7 @@ def test_viewers_see_the_log_but_do_not_undo(client, family_id):
     log = client.get("/api/activity").json()["items"]
     assert log[0]["title"] == "Shared thing" and not log[0]["canUndo"]
     assert client.post(f"/api/undo/{t['undo']}").status_code == 403
+    assert client.post("/api/templates", json={"name": "Mine", "listId": family_id}).status_code == 403  # keeps none of their own
 
 
 def test_templates(client, family_id):
