@@ -191,10 +191,14 @@ class Updater:
         the restart was running, how it went (update.sh wrote that down before the restart)."""
         r = suiteupdates.row(self.app) or {}
         fields = {"installed": self.version, "git_commit": self.local_commit()[:7], "can_run": int(self.can_run()), "docker": int(self.in_docker())}
+        last = self.last_result()
         if r.get("state") == "running" and not self.progress["running"]:
-            last = self.last_result()
             fields.update(state="ok" if last and last["ok"] else "failed",
                           message=(last or {}).get("text") or "update.sh did not say how it went (see the server log)")
+        elif r.get("state") == "failed" and last and last["ok"] and last["at"] >= (r.get("updated_at") or 0) - 120:
+            # the run before this start was marked failed as the restart ended it, but update.sh had written "ok"
+            # (the result file is removed when a run starts, so it is that run's)
+            fields.update(state="ok", message=last["text"])
         if r.get("latest") and r.get("status") != "error":
             # the newest version GitHub had when last asked: what this start installed may be it
             fields["status"] = "update" if _version_tuple(r["latest"]) > _version_tuple(self.version) else "current"
@@ -259,7 +263,12 @@ class Updater:
             try:
                 res = subprocess.run(["sh", str(self.root / "update.sh")], cwd=str(self.root), capture_output=True, text=True, timeout=1800, env=env)
                 self.progress["log"] = (res.stdout + res.stderr)[-3000:]
-                if res.returncode != 0:
+                done = self.last_result()
+                if res.returncode < 0 and done and done["ok"]:
+                    # update.sh wrote "ok" and then restarted the service, which ends every process of it, the script
+                    # included (killed by a signal): the update went through, the restart is under way
+                    pass
+                elif res.returncode != 0:
                     tail = re.sub(r"\x1b\[[0-9;]*m", "", (res.stderr or res.stdout)).strip()
                     self.progress["error"] = tail.splitlines()[-1] if tail else f"exit {res.returncode}"
                 elif os.environ.get("INVOCATION_ID") and "updated to" in (self.last_result() or {}).get("text", ""):
