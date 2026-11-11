@@ -107,6 +107,7 @@ from iosuite_shared import users
 
 auth = Auth("iopix", read_only=lambda: appstate.read_only())
 auth.decorate = lambda u: {**u, "person": users.get_value(u["id"], "iopix", "person")}   # optional extra fields
+auth.write_role = "member"   # only in an app where everything is one's own (ioNotes, ioHealth): canWrite in /me means member
 
 app.middleware("http")(auth.middleware(open_paths=("/", "/index.html"), open_prefixes=("/static/", "/api/auth/"), before=my_gate))
 app.include_router(auth.router())         # /api/auth/login, accounts, logout, me, settings, password, setup,

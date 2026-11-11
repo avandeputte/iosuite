@@ -186,3 +186,21 @@ def test_viewers_become_members_once():
     assert users.roles_of(v["id"]) == {"iocalendar": "viewer"}
     with db.tx() as con, con.cursor() as cur:
         assert schema.current_version(cur, db.PREFIX) == db.SCHEMA_VERSION
+
+
+def test_me_says_what_the_account_may_change():
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from iosuite_shared.fastapi import Auth
+    users.create("alex", "secret123", suite_admin=True)
+    users.create("meg", "secret123", "member", "ionotes")
+    auth = Auth("ionotes", register=False)
+    app = FastAPI()
+    app.middleware("http")(auth.middleware())
+    app.include_router(auth.router())
+    c = TestClient(app)
+    assert c.post("/api/auth/login", json={"name": "meg", "password": "secret123"}).status_code == 200
+    me = c.get("/api/auth/me").json()
+    assert me["isMember"] and not me["canWrite"]
+    auth.write_role = "member"  # an app where everything is one's own
+    assert c.get("/api/auth/me").json()["canWrite"]
