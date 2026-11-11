@@ -3,8 +3,8 @@ and filters on), finding tasks (open, due, overdue, done, by member, by words), 
 CalDAV clients use.
 
 Lists: the shared ones (owner_id NULL, Family first) that everyone sees, and each account's own private ones (Personal,
-made the first time the account uses ioTasks). Viewers read the shared lists and change only their own; editors change
-the shared ones too; admins also manage settings and users.
+made the first time a member uses ioTasks). Viewers only read the shared lists; members also keep their own private
+lists; editors change the shared ones too; admins also manage settings and users.
 """
 import datetime as dt
 import re
@@ -12,6 +12,7 @@ import threading
 from collections import OrderedDict
 
 from app import config, db, ical, members
+from iosuite_shared import users as shared_users
 from iosuite_shared.errors import Invalid
 
 PALETTE = ["#146b5e", "#1a73e8", "#e0426a", "#8e44d6", "#e8710a", "#0b8a9e", "#1e8e3e", "#4b53c7", "#e8a100", "#5f6b7a"]
@@ -36,17 +37,20 @@ def can_read(u: dict | None, c: dict | None) -> bool:
 
 
 def can_write(u: dict | None, c: dict | None) -> bool:
+    """A shared list: editors and admins. One's own private list: members and more (a viewer only looks)."""
     if not can_read(u, c):
         return False
     if c["owner_id"] is None:
-        return u.get("role") in ("editor", "admin")
-    return True
+        return shared_users.can_write(u)
+    return shared_users.is_member(u)
 
 
 def ensure_personal(u: dict) -> None:
-    """Every account gets its private Personal list the first time it uses ioTasks (accounts are made in any app of the
-    suite, so not necessarily here)."""
+    """Every member gets their private Personal list the first time they use ioTasks (accounts are made in any app of the
+    suite, so not necessarily here). A viewer keeps nothing of their own."""
     if not u or not u.get("id") or not members.in_family(u["id"]):  # not a person (Settings › Family): no list of its own
+        return
+    if not shared_users.is_member(u):
         return
     if not db.one("SELECT id FROM tsk_lists WHERE owner_id = %s LIMIT 1", (u["id"],)):
         who = u.get("displayName") or u.get("display_name") or u.get("name")

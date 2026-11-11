@@ -114,3 +114,15 @@ def test_caldav_refuses_xml_entities(client, dav):
     bomb = ('<?xml version="1.0"?><!DOCTYPE x [<!ENTITY a "aaaaaaaaaa"><!ENTITY b "&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;">]>'
             '<C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:prop><D:getetag>&b;</D:getetag></D:prop></C:calendar-query>')
     assert dav("REPORT", base, bomb, Depth="1").status_code == 400
+
+
+def test_a_viewer_only_reads_over_caldav(client, family_id):
+    client.post("/api/users", json={"name": "vic", "password": "secret123", "role": "viewer"})
+    client.cookies.clear()
+    assert client.post("/api/auth/login", json={"name": "vic", "password": "secret123"}).status_code == 200
+    pw = client.post("/api/auth/app-passwords", json={"label": "iPhone"}).json()["password"]
+    client.cookies.clear()
+    dav = lambda method, path, body=None: client.request(method, path, content=body, auth=("vic", pw))  # noqa: E731
+    assert dav("MKCALENDAR", "/dav/calendars/vic/mine/").status_code == 403
+    assert dav("PUT", "/dav/calendars/vic/family/x.ics", TODO.format(uid="x", title="No", extra="")).status_code == 403
+    assert dav("PROPFIND", "/dav/calendars/vic/family/").status_code == 207

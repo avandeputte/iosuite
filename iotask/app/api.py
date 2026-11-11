@@ -35,7 +35,7 @@ def readable_list(u: dict, lid) -> dict:
 def writable_list(u: dict, lid) -> dict:
     c = readable_list(u, lid)
     if not model.can_write(u, c):
-        raise HTTPException(403, "Viewers can only change their own private lists")
+        raise HTTPException(403, "You can see this list but not change it")
     return c
 
 
@@ -143,6 +143,8 @@ async def add_list(request: Request):
     shared = bool(b.get("shared"))
     if shared and not shared_users.can_write(u):
         raise HTTPException(403, "Only editors make shared lists")
+    if not shared and not shared_users.is_member(u):
+        raise HTTPException(403, "A viewer only looks; a member keeps lists of their own")
     if not (b.get("name") or "").strip():
         raise HTTPException(400, "A name, please")
 

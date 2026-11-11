@@ -1,7 +1,8 @@
-"""The tools that change tasks and lists, with the same permissions as the web app: a viewer changes only their own
-private lists, editors and admins the shared ones too. Every change reaches phones at their next sync."""
+"""The tools that change tasks and lists, with the same permissions as the web app: a viewer only reads, a member
+changes their own private lists, editors and admins the shared ones too. Every change reaches phones at their next sync."""
 from typing import Literal, Optional
 
+from iosuite_shared import users as shared_users
 from mcp.server.mcpserver.exceptions import ToolError
 
 from app import ical, members as fam, model
@@ -122,8 +123,10 @@ def move_task(task: str, list: str) -> dict:
 def create_list(name: str, shared: bool = False, color: Optional[str] = None, description: Optional[str] = None) -> dict:
     """A new list: private (only you see it) or shared with everyone (editors and admins). color: #rrggbb."""
     u = who()
-    if shared and u.get("role") not in ("editor", "admin"):
+    if shared and not shared_users.can_write(u):
         raise ToolError("Only editors make shared lists")
+    if not shared and not shared_users.is_member(u):
+        raise ToolError("A viewer only looks; a member keeps lists of their own")
     lid = model.create_list(None if shared else u["id"], name, description, color)
     c = model.task_list(lid)
     return {"id": c["id"], "name": c["name"], "shared": shared, "color": c["color"]}
