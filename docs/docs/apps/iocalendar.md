@@ -31,6 +31,8 @@ should sync away from home.
 
 - **ioContacts**: a read-only **Birthdays** calendar with the birthdays and anniversaries kept in ioContacts, brought up
   to date every six hours; the people on an event come from your contacts.
+- **ioTasks**: the tasks that are due show on their day, beside the events, in the month, week, day and agenda views.
+  Tick one off right on the calendar; a repeating task moves on to its next day.
 - **ioSuite**: today's events on the tile, a This week card, and "Quick add" from the search box ("dentist tomorrow 9am").
 
 ## Install

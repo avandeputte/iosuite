@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+<defs>
+<linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0f5a4f"/><stop offset=".55" stop-color="#146b5e"/><stop offset="1" stop-color="#2a8f7f"/></linearGradient>
+<linearGradient id="card" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e3f4f0"/><stop offset="1" stop-color="#bfe3dc"/></linearGradient>
+<radialGradient id="sun" cx=".5" cy=".45" r=".55"><stop offset="0" stop-color="#fff3cf"/><stop offset="1" stop-color="#f3c96b"/></radialGradient>
+<clipPath id="c"><rect width="100" height="100" rx="22"/></clipPath>
+</defs>
+<g clip-path="url(#c)">
+<rect width="100" height="100" fill="url(#bg)"/>
+<rect x="17" y="18" width="66" height="64" rx="9" fill="url(#card)"/>
+<circle cx="33" cy="35" r="12" fill="#f3c96b" opacity=".22"/>
+<circle cx="33" cy="34" r="8" fill="url(#sun)"/>
+<path d="M29 34.2 l3 3 l5.4 -6" fill="none" stroke="#146b5e" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="46" y="31.8" width="28" height="4.6" rx="2.3" fill="#146b5e" opacity=".75"/>
+<circle cx="33" cy="52" r="6.2" fill="none" stroke="#146b5e" stroke-width="2.4" opacity=".55"/>
+<rect x="46" y="49.7" width="24" height="4.6" rx="2.3" fill="#146b5e" opacity=".55"/>
+<circle cx="33" cy="68" r="6.2" fill="none" stroke="#146b5e" stroke-width="2.4" opacity=".4"/>
+<rect x="46" y="65.7" width="17" height="4.6" rx="2.3" fill="#146b5e" opacity=".4"/>
+</g></svg>

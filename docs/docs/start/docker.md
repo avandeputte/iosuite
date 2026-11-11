@@ -14,6 +14,7 @@ Every app is published as a public image for amd64 and arm64:
 | ioSuite | `ghcr.io/avandeputte/iosuite` | [docker-compose.yml](https://github.com/avandeputte/iosuite/blob/main/docker-compose.yml) |
 | ioContacts | `ghcr.io/avandeputte/iocontacts` | [docker-compose.yml](https://github.com/avandeputte/iocontacts/blob/main/docker-compose.yml) |
 | ioHealth | `ghcr.io/avandeputte/iohealth` | [docker-compose.yml](https://github.com/avandeputte/iohealth/blob/main/docker-compose.yml) |
+| ioTasks | `ghcr.io/avandeputte/iotasks` | [docker-compose.yml](https://github.com/avandeputte/iotasks/blob/main/docker-compose.yml) |
 
 ## One app
 
@@ -33,7 +34,7 @@ To share the accounts with apps you run elsewhere, give the container the same `
 ## The whole suite in one stack
 
 [`docker/suite/docker-compose.yml`](https://github.com/avandeputte/iosuite/blob/main/docker/suite/docker-compose.yml) in
-the ioSuite repository starts a MariaDB with a database per app, and ioSuite, ioCalendar, ioContacts, ioNotes, ioHealth
+the ioSuite repository starts a MariaDB with a database per app, and ioSuite, ioCalendar, ioTasks, ioContacts, ioNotes, ioHealth
 and ioPix (without digiKam) with one Shared ioSuite database and one admin:
 
 ```sh

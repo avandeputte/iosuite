@@ -2,7 +2,7 @@
 
 The source of [iosuite.iothing.net](https://iosuite.iothing.net): the landing page for the ioThing suite
 ([ioPix](https://github.com/avandeputte/iopix), [ioNotes](https://github.com/avandeputte/ionotes),
-[ioCalendar](https://github.com/avandeputte/iocalendar), [ioContacts](https://github.com/avandeputte/iocontacts),
+[ioCalendar](https://github.com/avandeputte/iocalendar), [ioTasks](https://github.com/avandeputte/iotasks), [ioContacts](https://github.com/avandeputte/iocontacts),
 [ioHealth](https://github.com/avandeputte/iohealth) and the [ioSuite](https://github.com/avandeputte/iosuite) start
 page), and its guide under [/docs/](https://iosuite.iothing.net/docs/).
 

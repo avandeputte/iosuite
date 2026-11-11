@@ -15,6 +15,7 @@ Small self-hosted apps for the family, each one a complete product on its own:
 | [ioSuite](apps/iosuite.md) | The start page: a tile per app, search, weather, bookmarks | 8630 | [iosuite](https://github.com/avandeputte/iosuite) |
 | [ioContacts](apps/iocontacts.md) | Contacts for the family, over CardDAV and LDAP | 8640 | [iocontacts](https://github.com/avandeputte/iocontacts) |
 | [ioHealth](apps/iohealth.md) | Apple Health data in your own database, with a fitness web app | 8650 | [iohealth](https://github.com/avandeputte/iohealth) |
+| [ioTasks](apps/iotasks.md) | The family's task lists, in Apple Reminders and every tasks app over CalDAV | 8670 | [iotasks](https://github.com/avandeputte/iotasks) |
 
 !!! tip "You don't need the whole suite"
     Every app installs, runs and updates on its own. If all you want is a photo app, install ioPix and stop there:
@@ -35,7 +36,7 @@ Every app is built the same way, so what you learn in one holds in the others:
 - **The same Settings**: Account and Display for everyone; Server (version, updates, log, restart) for admins;
   Security and Global settings for suite admins.
 - **Updates from the web app**: a daily check, then **Update now** under Settings › Server. See [Updates](run/updates.md).
-- **An MCP server** at `/mcp` in ioPix, ioNotes, ioCalendar and ioContacts, so an AI assistant such as Claude can
+- **An MCP server** at `/mcp` in ioPix, ioNotes, ioCalendar, ioTasks and ioContacts, so an AI assistant such as Claude can
   work with them as you, with an app password. See [AI assistants](run/assistants.md).
 - **Free and open source**, GPL-3.0-or-later.
 

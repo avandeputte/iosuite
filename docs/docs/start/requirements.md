@@ -10,7 +10,7 @@ Every app keeps its data in **MariaDB or MySQL**, in two databases:
 
 | Database | Default name and user | Holds |
 | --- | --- | --- |
-| the app's own | `iopix`, `notes`, `calendar`, `suite`, `contacts` or `health` | everything the app keeps |
+| the app's own | `iopix`, `notes`, `calendar`, `suite`, `contacts`, `health` or `tasks` | everything the app keeps |
 | the **Shared ioSuite database** | `iosuite` | accounts, sessions, roles, app passwords, the suite-wide settings and the list of installed apps |
 
 Both can live on the same server, and the Shared ioSuite database is one per household: every app you install points at
@@ -51,7 +51,7 @@ Pick one; every app offers all three.
 | **Docker** | Docker with Compose, amd64 or arm64. The images are public on `ghcr.io/avandeputte/` | [Docker](docker.md) |
 | **Any Linux or Mac** | Python 3.10 or later (ioHealth: 3.11), git. `setup.sh` makes a virtual environment and a systemd service (launchd on a Mac) | [Any Linux or Mac](linux-mac.md) |
 
-Each app is small: the Proxmox containers for ioCalendar, ioContacts, ioNotes, ioHealth and ioSuite default to 1 or 2 CPUs and 512 MB to 2 GB of memory. ioPix
+Each app is small: the Proxmox containers for ioCalendar, ioTasks, ioContacts, ioNotes, ioHealth and ioSuite default to 1 or 2 CPUs and 512 MB to 2 GB of memory. ioPix
 is the exception when its AI features are on (content search, faces, objects, text in photos): its container defaults to
 4 CPUs and 4 GB, and the models it downloads take a few GB of disk.
 
@@ -59,9 +59,9 @@ is the exception when its AI features are on (content search, faces, objects, te
 
 Every app has its own default port, so all of them can run on one host:
 
-| ioPix | ioNotes | ioCalendar | ioSuite | ioContacts | ioHealth |
-| --- | --- | --- | --- | --- | --- |
-| 8600 | 8610 | 8620 | 8630 | 8640 | 8650 |
+| ioPix | ioNotes | ioCalendar | ioSuite | ioContacts | ioHealth | ioTasks |
+| --- | --- | --- | --- | --- | --- | --- |
+| 8600 | 8610 | 8620 | 8630 | 8640 | 8650 | 8670 |
 
 ioContacts also serves an LDAP directory, on port 3890 by default (the Proxmox installer offers 389).
 

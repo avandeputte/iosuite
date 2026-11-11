@@ -13,7 +13,7 @@ git clone https://github.com/avandeputte/iocalendar && cd iocalendar
 ./update.sh         # later: the latest code, the same settings
 ```
 
-Replace `iocalendar` with `iopix`, `ionotes`, `iosuite`, `iocontacts` or `iohealth`.
+Replace `iocalendar` with `iopix`, `ionotes`, `iosuite`, `iocontacts`, `iohealth` or `iotasks`.
 
 ## What setup.sh does
 
@@ -25,7 +25,7 @@ It needs Python 3.10 or later (ioHealth: 3.11) and git, and asks for:
 - a MariaDB / MySQL administrator, optional, to create the databases and users for you;
 - the port (each app's own default), the public address and the sign-in domain (optional), an admin account;
 - what is particular to the app: the photos and digiKam for ioPix (it also installs exiftool, ffmpeg and the other
-  tools it needs, with apt, dnf, zypper, pacman or Homebrew), the time zone for ioCalendar and ioHealth, the optional
+  tools it needs, with apt, dnf, zypper, pacman or Homebrew), the time zone for ioCalendar, ioTasks and ioHealth, the optional
   text recognition for ioNotes...;
 - **Also install other apps of the suite here?** Say no for one app.
 

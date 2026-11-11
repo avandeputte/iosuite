@@ -15,6 +15,7 @@ container or one database server:
 | ioSuite | 8630 | `suite` | `/opt/iosuite/app` |
 | ioContacts | 8640 (LDAP 3890) | `contacts` | `/opt/iocontacts/app` |
 | ioHealth | 8650 | `health` | `/opt/iohealth/app` |
+| ioTasks | 8670 | `tasks` | `/opt/iotasks/app` |
 
 ## "Also install …?"
 
