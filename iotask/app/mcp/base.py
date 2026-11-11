@@ -20,8 +20,9 @@ server = shared_mcp.make_server(
         "by words; get_task has everything about one, with its subtasks. Due dates are ISO 8601: '2026-11-03' is a day, "
         "'2026-11-03T17:00' a time in the server's time zone (or the timezone argument). complete_task ticks a task off; "
         "a repeating task then moves on to its next due date instead. A task can be for family members (members: names "
-        "from overview's family) and can have subtasks (parent: the parent task's id). The same tasks show in Apple "
-        "Reminders on the family's phones. Ask before deleting tasks or lists."
+        "from overview's family) and can have subtasks (parent: the parent task's id). A task can repeat on fixed dates (repeat) or come back "
+        "some time after it was ticked off (repeat_after). recent_activity says who did what, and undo takes a change "
+        "back. The same tasks show in Apple Reminders on the family's phones. Ask before deleting tasks or lists."
     ),
 )
 

@@ -149,3 +149,33 @@ def import_ics(ics: str, list: Optional[str] = None, replace: bool = True) -> di
             return model.import_text(c["id"], ics, u["id"], replace)
     except ValueError as e:
         raise ToolError(str(e))
+
+
+@server.tool(annotations=WRITES)
+def undo(step: str) -> dict:
+    """Take a change back: `step` is what recent_activity gives for it. What the step added goes, what it changed or
+    deleted is as it was before (a task with its subtasks, as one). Refused once a task was changed again since."""
+    u = who()
+    try:
+        with model.step("mcp"):
+            return model.undo(step, u)
+    except (ValueError, PermissionError, model.NotFound) as e:
+        raise ToolError(str(e))
+
+
+@server.tool(annotations=ADDS)
+def apply_template(template: str, list: str, due: Optional[str] = None) -> dict:
+    """Add a template's tasks (by its name or id, see list_templates) to a list. due: a day they are all due on
+    ('2026-11-20'); without it they have no due date."""
+    u = who()
+    s = str(template).strip().lower()
+    hit = [t for t in model.templates_for(u) if str(t["id"]) == s or t["name"].lower() == s]
+    if len(hit) != 1:
+        raise ToolError(f"No template '{template}'. There are: " + (", ".join(t["name"] for t in model.templates_for(u)) or "none yet"))
+    c = find_list(u, list, writable=True)
+    try:
+        with model.step("mcp") as step:
+            return {"created": model.apply_template(hit[0], c["id"], u["id"], ical.parse_when(due).isoformat()[:10] if due else None),
+                    "list": c["name"], "step": step}
+    except ValueError as e:
+        raise ToolError(str(e))
