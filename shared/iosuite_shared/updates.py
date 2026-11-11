@@ -11,6 +11,10 @@ outcome and which repository and branch to follow through <PREFIX>_RESULT, <PREF
 <PREFIX>_REF in its environment (PREFIX is the app's key in capitals: IOCALENDAR_RESULT ...). Docker installs are
 updated by pulling the image, so there the check only reports.
 
+A suite admin can also ask every app at once, from the start page or its MCP endpoint (iosuite_shared.suiteupdates):
+start_daily() also watches this app's row in the Shared ioSuite database for such a request, and writes back the
+installed version, the newest one on GitHub and how the last update went.
+
 The "check for updates daily" switch is a setting of the app in the Shared ioSuite database
 (`db.get_setting(key, app=...)`); an app that keeps its settings elsewhere passes `settings=(get, set)`.
 """
@@ -23,7 +27,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-from iosuite_shared import config, db
+from iosuite_shared import config, db, suiteupdates
 from iosuite_shared.errors import Invalid
 
 DAILY = 24 * 3600
@@ -135,6 +139,9 @@ class Updater:
             out.update(status="error", error=str(e)[:160])
         self._checked.clear()
         self._checked.update(out)
+        latest = out.get("remoteVersion") or (self.version if out.get("status") == "current" else None)
+        suiteupdates.publish(self.app, installed=self.version, git_commit=mine[:7], latest=latest, status=out["status"],
+                             checked_at=out["checked"])
         return out
 
     def available(self) -> dict | None:
@@ -144,9 +151,12 @@ class Updater:
             return None
         return {"remote": c.get("remote"), "version": c.get("remoteVersion"), "message": c.get("remoteMessage"), "date": c.get("remoteDate")}
 
-    def start_daily(self, first_after: float = 60) -> threading.Thread:
+    def start_daily(self, first_after: float = 60, watch: bool = True) -> threading.Thread:
         """Ask GitHub once a day (the first time a minute after start) whether the branch has moved on, while the
-        setting is on. Only the public commit is fetched; nothing about this install is sent."""
+        setting is on. Only the public commit is fetched; nothing about this install is sent. With `watch`, also
+        watch for a check or an update a suite admin asks for (watch())."""
+        if watch:
+            self.watch()
         def loop():
             time.sleep(first_after)
             while True:
@@ -159,6 +169,46 @@ class Updater:
         t = threading.Thread(target=loop, name="update-check", daemon=True)
         t.start()
         return t
+
+    # ---- asked from the start page (iosuite_shared.suiteupdates)
+    def watch(self, every: float = None) -> threading.Thread:
+        """Say what is installed, then look every few seconds for a check or an update a suite admin asked for and run
+        it: a check asks GitHub even while the daily check is off (an admin asked), an update runs update.sh."""
+        def loop():
+            self._said_hello()
+            while True:
+                time.sleep(every or suiteupdates.WATCH_S)
+                try:
+                    self.serve(suiteupdates.claim(self.app))
+                except Exception:  # noqa: BLE001
+                    pass
+        t = threading.Thread(target=loop, name="update-watch", daemon=True)
+        t.start()
+        return t
+
+    def _said_hello(self) -> None:
+        """What a fresh start knows: the version, the commit, whether it can update itself; and when the update before
+        the restart was running, how it went (update.sh wrote that down before the restart)."""
+        r = suiteupdates.row(self.app) or {}
+        fields = {"installed": self.version, "git_commit": self.local_commit()[:7], "can_run": int(self.can_run()), "docker": int(self.in_docker())}
+        if r.get("state") == "running" and not self.progress["running"]:
+            last = self.last_result()
+            fields.update(state="ok" if last and last["ok"] else "failed",
+                          message=(last or {}).get("text") or "update.sh did not say how it went (see the server log)")
+        if r.get("latest") and r.get("status") != "error":
+            # the newest version GitHub had when last asked: what this start installed may be it
+            fields["status"] = "update" if _version_tuple(r["latest"]) > _version_tuple(self.version) else "current"
+        suiteupdates.publish(self.app, **fields)
+
+    def serve(self, action: str | None) -> None:
+        """Run what a suite admin asked for ('check' or 'update'); an update that cannot run says why on the row."""
+        if action == "check":
+            self.check()
+        elif action == "update":
+            try:
+                self.run()
+            except RuntimeError as e:
+                suiteupdates.publish(self.app, state="failed", message=str(e)[:300])
 
     # ---- running update.sh
     def last_result(self) -> dict | None:
@@ -197,6 +247,7 @@ class Updater:
             if self.progress["running"]:
                 raise RuntimeError("An update is already running")
             self.progress.update(running=True, error=None, log="", started=int(time.time()), finished=None)
+        suiteupdates.publish(self.app, state="running", message=f"update.sh started at version {self.version}")
         env = dict(os.environ, **{f"{self.prefix}_RESULT": str(self.result_file), f"{self.prefix}_REPO": self.repo, f"{self.prefix}_BRANCH": self.branch})
         env.pop(f"{self.prefix}_REF", None)  # never inherited: the service installs the tip of its branch
         try:
@@ -220,6 +271,11 @@ class Updater:
             finally:
                 self.progress.update(running=False, finished=int(time.time()))
                 self._checked.clear()
+                last = self.last_result()
+                if self.progress["error"]:
+                    suiteupdates.publish(self.app, state="failed", message=self.progress["error"][:300])
+                elif last:  # nothing to install, or updated and about to restart (the new start says it again)
+                    suiteupdates.publish(self.app, state="ok" if last["ok"] else "failed", message=last["text"])
 
         threading.Thread(target=work, name="self-update", daemon=True).start()
 

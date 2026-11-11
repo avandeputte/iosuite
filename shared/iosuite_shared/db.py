@@ -20,8 +20,9 @@ from iosuite_shared import config, schema
 
 log = logging.getLogger("iosuite_shared.db")
 
-SCHEMA_VERSION = 6  # 4: the suite naming convention (ios_ tables, *_at times, name/value, named indexes); 5: ios_apps.admin_tool;
-# 6: the member role (between viewer and editor); the viewers of before, who kept their own things, became members
+SCHEMA_VERSION = 7  # 4: the suite naming convention (ios_ tables, *_at times, name/value, named indexes); 5: ios_apps.admin_tool;
+# 6: the member role (between viewer and editor); the viewers of before, who kept their own things, became members;
+# 7: ios_updates (updating the apps from one place)
 PREFIX = "ios"
 OPTIONS = " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
 
@@ -137,6 +138,24 @@ SCHEMA = [
         created_at BIGINT NOT NULL,
         updated_at BIGINT NOT NULL,
         last_seen_at BIGINT NULL
+    )""",
+    # updating the apps from one place (iosuite_shared.suiteupdates): a suite admin leaves an action for an app, the
+    # app takes it off and runs it, and writes back what it knows about its own version and its last update
+    """CREATE TABLE IF NOT EXISTS ios_updates (
+        app VARCHAR(32) PRIMARY KEY,
+        action VARCHAR(16) NULL,
+        requested_at BIGINT NULL,
+        requested_by VARCHAR(64) NULL,
+        installed VARCHAR(32) NULL,
+        git_commit VARCHAR(40) NULL,
+        latest VARCHAR(32) NULL,
+        status VARCHAR(16) NULL,
+        checked_at BIGINT NULL,
+        can_run TINYINT NOT NULL DEFAULT 0,
+        docker TINYINT NOT NULL DEFAULT 0,
+        state VARCHAR(16) NULL,
+        message VARCHAR(300) NULL,
+        updated_at BIGINT NOT NULL
     )""",
 ]
 

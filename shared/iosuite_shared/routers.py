@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 from starlette.concurrency import run_in_threadpool
 
-from iosuite_shared import admin as suite_admin, apppasswords, proxyauth, sessions, suite, users
+from iosuite_shared import admin as suite_admin, apppasswords, proxyauth, sessions, suite, suiteupdates, users
 from iosuite_shared.access import UNCLAIMED, json_body, public_user
 from iosuite_shared.proxyauth import authlog, peer_of
 
@@ -411,6 +411,24 @@ def admin_router(self) -> APIRouter:
         if key == auth.app:
             auth._registered = False
         return {"ok": True}
+
+    @r.get("/updates", dependencies=[access.suite_admin])
+    def api_updates(request: Request):
+        """Every app's version, the newest on GitHub, and its last update (iosuite_shared.suiteupdates)."""
+        return {"apps": suiteupdates.overview()}
+
+    @r.post("/updates", dependencies=[access.suite_admin])
+    async def api_updates_ask(request: Request):
+        """Body {action: check | update, apps: [keys] (left out: every app for a check, every app with an update
+        waiting for an update)}. The apps pick it up within seconds."""
+        body = await json_body(request)
+        apps = body.get("apps")
+        if apps is not None and not isinstance(apps, list):
+            raise HTTPException(400, "apps must be a list of app keys")
+        who = me(request)
+        asked = await run_in_threadpool(call, suiteupdates.request, body.get("action"), apps, (who or {}).get("name"))
+        authlog.info("suite admin: %s asked of %s by %s", body.get("action"), ", ".join(asked) or "no app", (who or {}).get("name"))
+        return {"asked": asked, "apps": await run_in_threadpool(suiteupdates.overview)}
 
     @r.get("/proxy", dependencies=[access.suite_admin])
     def api_proxy(request: Request):

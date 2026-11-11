@@ -214,6 +214,8 @@ The routes:
 | `GET /api/suite-admin/keys?app=` | every app's keys and tokens (`iosuite_shared.credentials`), never the value: `{app ('' : the whole suite), appName, name, label, hint, set, env, envSet, updated, updatedBy}` |
 | `PUT /api/suite-admin/keys/{app}/{name}` | `{value}`: replace it (`''` clears it); `_suite` for the whole suite's keys |
 | `DELETE /api/suite-admin/keys/{app}/{name}` | clear it |
+| `GET /api/suite-admin/updates` | every app's version, the newest on GitHub, its last update (`iosuite_shared.suiteupdates`, below) |
+| `POST /api/suite-admin/updates` | `{action: check / update, apps?: [keys]}`: ask the apps (without `apps`: every app for a check, every app with an update waiting for an update) |
 
 The usual rules hold: a one-click account is a member at most and has no app passwords, an admin tool takes no roles, the last suite admin stays, and
 the signed-in admin cannot delete their own account, drop their own suite admin or remove their own password here.
@@ -324,6 +326,16 @@ app.include_router(auth.server_router(updater, log_file=LOG_FILE,
 and writes `ok: …` or `error: …` to the result file before the restart. `<APP>_REPO` and `<APP>_BRANCH` in the app's
 environment change what is followed; `UPDATE_CHECK=0` locks the daily check off.
 `updater.available()` gives the banner what it needs after a check found a newer version.
+
+### Every app from one place
+
+A suite admin can check and update every app at once: Settings › Global settings › Updates in any app, or the
+start page's MCP tools `suite_versions` and `update_suite_apps` (`shared_mcp.add_suite_update_tools(server)`). The apps
+do not call each other for it: the request goes into `ios_updates` (one row per app) in the Shared ioSuite database,
+and `updater.start_daily()` also watches the app's own row every ten seconds (`watch=False` leaves that out). A check
+asks GitHub, an update runs `update.sh` exactly as `POST /api/server {action: update}` does. Each app writes back its
+installed version and commit, the newest version on GitHub, whether it can update itself, and how its last update went
+(running, ok, failed and the result line); after the restart the new process finishes that line from the result file.
 
 Every app's `update.sh` is the same script, rendered from `templates/update.sh`; only the block "the app" differs
 (name, label, repository, the `server` subfolder for ioHealth, the files an installed copy gets, optional package
