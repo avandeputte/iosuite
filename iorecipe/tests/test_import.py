@@ -89,7 +89,7 @@ def test_import_keeps_the_recipe_and_its_picture(client, monkeypatch):
     assert r.status_code == 201, r.text
     j = r.json()
     assert asked == ["https://example.com/cookies?utm=1", "https://img.example.com/a.jpg"]
-    assert j["readBy"] == "data" and client.get("/api/import").json()["ai"] is False
+    assert j["readBy"] == "data" and client.get("/api/import").json()["aiState"] in ("off", "ready", "fetching", "missing")
     assert j["title"] == "Grandma's cookies" and j["family"] is True and j["sourceUrl"] == "https://example.com/cookies"
     assert j["photo"] and client.get(j["photo"]).headers["content-type"] == "image/jpeg"
     # a picture that cannot be had or is not one: the recipe without it
@@ -166,24 +166,26 @@ PROSE = """<html><head><title>My goulash</title></head><body><h1>My goulash</h1>
 
 
 def test_ai_reads_what_the_page_does_not_lay_out(monkeypatch):
-    from app import ai, config
-    with pytest.raises(Invalid):  # no key: nothing to make it out with
+    from app import ai
+    monkeypatch.setattr(ai, "state", lambda: "off")
+    with pytest.raises(Invalid):  # no model: nothing to make it out with
         scrape.parse(PROSE, "https://example.com/goulash")
     asked = []
 
     def answer(text, url):
         asked.append(text)
-        return {"found": True, "title": "My  goulash", "description": "", "servings": "", "prepMinutes": 0, "cookMinutes": 0, "totalMinutes": 0,
-                "ingredients": ["2 pounds beef", "1 onion, diced", " "], "steps": ["Brown the beef with the onion.", "Simmer with the rest."], "tags": []}
-    monkeypatch.setattr(config, "ANTHROPIC_API_KEY", "k")
+        return {"found": True, "title": "My  goulash", "servings": "", "prepMinutes": 0, "cookMinutes": 0, "totalMinutes": 0,
+                "ingredients": ["two pounds of beef", "a diced onion", " ", "3 tablespoons smoked paprika"],  # the last is not on the page
+                "steps": ["Brown two pounds of beef in a little oil with a diced onion", "simmer until the pasta is tender", "Serve with sour cream."]}
+    monkeypatch.setattr(ai, "state", lambda: "ready")
     monkeypatch.setattr(ai, "_ask", answer)
     r = scrape.parse(PROSE, "https://example.com/goulash")
-    assert r["readBy"] == "ai" and r["title"] == "My goulash" and r["ingredients"] == ["2 pounds beef", "1 onion, diced"]
-    assert r["steps"] == ["Brown the beef with the onion.", "Simmer with the rest."] and r["prepMinutes"] is None
+    assert r["readBy"] == "ai" and r["title"] == "My goulash" and r["ingredients"] == ["two pounds of beef", "a diced onion"]
+    assert r["steps"] == ["Brown two pounds of beef in a little oil with a diced onion", "simmer until the pasta is tender"] and r["prepMinutes"] is None
     assert "Brown two pounds of beef" in asked[0] and len(asked) == 1
     # the ingredients alone were made out: the AI is asked for the steps too, and what the page gave stands when it finds nothing
     r = scrape.parse(BLOG, "https://blog.example.com/g")
-    assert r["readBy"] == "ai" and len(asked) == 2 and "52 comments" in asked[1]
+    assert r["readBy"] == "page" and len(r["ingredients"]) == 10 and len(asked) == 2 and "52 comments" in asked[1]
     monkeypatch.setattr(ai, "_ask", lambda text, url: {"found": False})
     r = scrape.parse(BLOG, "https://blog.example.com/g")
     assert r["readBy"] == "page" and len(r["ingredients"]) == 10
@@ -224,3 +226,25 @@ def test_a_page_is_asked_for_as_a_browser_does(monkeypatch):
     assert h["sec-fetch-dest"] == "image" and h["accept"] == "image/*" and "upgrade-insecure-requests" not in h
     with pytest.raises(Invalid, match="Pasted text"):  # a site that tests for a browser: said so, with the way around
         scrape.fetch("https://example.com/refused", 1000)
+
+
+def test_the_ai_model_and_where_it_is_kept(monkeypatch, tmp_path):
+    from app import ai, config
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(ai, "runtime", lambda: True)
+    monkeypatch.setattr(config, "AI", True)
+    monkeypatch.setattr(config, "AI_MODEL", "")
+    assert ai.model_file() == tmp_path / "models" / "qwen2.5-1.5b-instruct-q4_k_m.gguf" and ai.state() == "missing" and not ai.available()
+    assert "could not be fetched" in ai.why_not()
+    monkeypatch.setattr(config, "AI", False)
+    assert ai.state() == "off" and ai.why_not() == ""
+    monkeypatch.setattr(config, "AI", True)
+    mine = tmp_path / "mine.gguf"
+    mine.write_bytes(b"GGUF")
+    monkeypatch.setattr(config, "AI_MODEL", str(mine))
+    assert ai.model_file() == mine and ai.state() == "ready"
+    # a page longer than the model takes in: from a little before its ingredients
+    lines = [f"story {i}" for i in range(400)] + ["# Ingredients", "2 eggs", "1 cup flour"] + [f"comment {i}" for i in range(400)]
+    part = ai._window(lines, lambda s: len(s.split()), 200).split("\n")
+    assert "# Ingredients" in part and "2 eggs" in part and part[0] == "story 375" and len(part) < 100
+    assert ai._window(lines[:20], lambda s: len(s.split()), 200) == "\n".join(lines[:20])

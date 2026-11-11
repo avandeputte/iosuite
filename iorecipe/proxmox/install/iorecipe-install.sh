@@ -26,7 +26,9 @@ $STD apt-get install -y \
   tesseract-ocr \
   tesseract-ocr-nld \
   tesseract-ocr-fra \
-  tesseract-ocr-deu
+  tesseract-ocr-deu \
+  build-essential \
+  cmake
 msg_ok "Installed Dependencies"
 
 msg_info "Fetching ioRecipe"

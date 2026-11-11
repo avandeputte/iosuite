@@ -121,8 +121,8 @@ def delete_recipe(recipe: str) -> dict:
 @server.tool(annotations=ADDS)
 def import_recipe(url: str, family: Optional[bool] = None) -> dict:
     """Keep the recipe on a web page: the server fetches the page, reads the recipe on it (its schema.org
-    Recipe data, which most recipe sites publish; otherwise the page's own lists and text, or AI where the server has
-    a key) and saves it with its picture. family as in create_recipe. An error when the page cannot be fetched or no
+    Recipe data, which most recipe sites publish; otherwise the page's own lists and text, or the AI model
+    on the server) and saves it with its picture. family as in create_recipe. An error when the page cannot be fetched or no
     recipe is found on it."""
     u = who()
     fam = model.may_add(u, True) if family is None else family

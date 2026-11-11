@@ -8,7 +8,7 @@ A self-hosted recipe book: a web app for the whole family to keep recipes with t
 
 - **Recipes** with a title, a description, what they make (4, or 24 cookies), preparation and cooking time, **ingredients**, **steps**, notes, tags, and where they come from. In the ingredients and the steps, a line that ends with a colon ("For the icing:") is a heading.
 - **Photos**: as many as you like for a recipe (the first is the one on its card) and one for any step, uploaded from the computer or taken with the phone. Each is turned upright, made smaller and kept as a JPEG in the database, with a small copy for the cards.
-- **Import from the web**: paste the address of a recipe page and ioRecipe fetches it, the way a browser asks for a page, and keeps the recipe on it (title, ingredients, steps, times, servings, tags) with its picture and a link back. It reads the schema.org Recipe data that most recipe sites publish for search engines; where a page has none, it reads the page as a person would: the lists a recipe plugin marks as ingredients and instructions, or the text under an "Ingredients" heading. With an AI key set, a page that still gives no recipe is read by Claude (see [Reading a page with AI](#reading-a-page-with-ai)).
+- **Import from the web**: paste the address of a recipe page and ioRecipe fetches it, the way a browser asks for a page, and keeps the recipe on it (title, ingredients, steps, times, servings, tags) with its picture and a link back. It reads the schema.org Recipe data that most recipe sites publish for search engines; where a page has none, it reads the page as a person would: the lists a recipe plugin marks as ingredients and instructions, or the text under an "Ingredients" heading. A page that still gives no complete recipe is read by a small AI model that runs inside the app, on your own server (see [Reading a page with AI](#reading-a-page-with-ai)).
 - **Import from pasted text or a photo**: paste a recipe from a message or a document, or give a photo of one (a page of a cookbook, a card, a screenshot): the text is made into a draft that opens in the recipe form, to be looked over before it is saved. A photo is read on the server itself, by Tesseract (see [Reading a photo of a recipe](#reading-a-photo-of-a-recipe)); it goes nowhere else.
 - **Export and import as a file**: one recipe, a cookbook or everything you see as a `.zip` (the recipes, their photos, your favourites and ratings, their cookbooks), to keep safe or to import into another ioRecipe. The same import takes **Mealie**'s recipes: a recipe's JSON, a `.zip` of them with their pictures, or a Mealie backup.
 - **The recipes as cards**, with their photo, how long they take and what they make: all of them, the family's, your own, your favourites, the ones with a tag or in a cookbook, by title, the newest or the best rated first; **search** finds words in the title, the ingredients, the steps, the notes and the tags.
@@ -97,28 +97,31 @@ accounts are the suite's: `.venv/bin/iosuite-shared --config . admin NAME --app 
 | `ADMIN_USER`, `ADMIN_PASSWORD` | the first admin, made on the first start when there are no accounts |
 | `AUTH_PROXY`, `AUTH_PROXY_HEADER`, `AUTH_PROXY_TRUSTED`, `CF_ACCESS_TEAM`, `CF_ACCESS_AUD` | sign-in at a reverse proxy, as in the other io apps (Cloudflare Access, Authelia, Authentik, oauth2-proxy…) |
 | `OCR_LANGUAGES` | the languages a photo of a recipe is read in, as Tesseract's codes (`eng+nld+fra`); left out, every language installed |
-| `ANTHROPIC_API_KEY`, `AI_MODEL` | an Anthropic API key turns on reading a web page with AI where the page gives no recipe otherwise; the model asked (default `claude-opus-5-5`) |
+| `AI`, `AI_MODEL`, `AI_TIMEOUT` | the AI model on this server that reads a web page without recipe data: `AI=0` turns it off; another GGUF model (a file, or its address); the seconds a page may take (300) |
 | `MCP` | `1` keeps the MCP server on, whatever the setting says |
 | `MCP_USER` | the account `python -m app.mcp` (stdio) acts as |
 | `UPDATE_CHECK` | `0` turns the daily version check off for good |
 | `IORECIPE_REPO`, `IORECIPE_BRANCH` | what the version check and `update.sh` follow (`avandeputte/iorecipe`, `main`) |
-| `DATA_DIR` | where the app writes on its own: the log and the update result (`data/` in the app folder) |
+| `DATA_DIR` | where the app writes on its own: the log, the update result and the AI model (`data/` in the app folder) |
 | `LOG_FILE` | the server log shown at Settings › Server (`DATA_DIR/iorecipe.log`; `LOG_FILE=` with nothing after it: no file) |
 
 ### Reading a page with AI
 
 Most recipe pages are imported without it. For the ones that are not (a recipe told as a story, a layout ioRecipe
-cannot make out), put an [Anthropic API key](https://console.anthropic.com/) in `config.env`:
+cannot make out), ioRecipe has a small language model **inside the app, on your own server**: when a page has no
+recipe data and its own lists and headings give no complete recipe, the model reads the page's text and returns
+the recipe as the page words it. Nothing is sent to an AI service; there is none behind this.
 
-```
-ANTHROPIC_API_KEY=sk-ant-...
-# AI_MODEL=claude-opus-5-5
-```
-
-Then, when a page has no recipe data and its own lists and headings give no complete recipe, the page's text is sent
-to Claude, which returns the recipe as the page words it. Only the text of such a page goes to Anthropic (a public
-page, fetched from the web): never your recipes, photos or pasted text. Each such import costs a few cents at most
-on the key's account; `AI_MODEL=claude-haiku-5-5` is cheaper. Without a key nothing is sent anywhere.
+- The runtime is [llama.cpp](https://github.com/ggml-org/llama.cpp) (through `llama-cpp-python`). It is in the Docker
+  image; `setup.sh` and the Proxmox installer compile it on the server, which takes a few minutes. By hand:
+  `.venv/bin/python -m pip install -e '.[ai]'` (needs a C++ compiler and `cmake`).
+- The model is Qwen2.5 1.5B Instruct (Apache 2.0), one file of about 1 GB, fetched once from Hugging Face into
+  `DATA_DIR/models` when the app first starts with the runtime. With Docker, keep `/app/data` on a volume (the
+  `docker-compose.yml` here does) so an update does not fetch it again.
+- A page takes a minute or so of the server's processor, in a process of its own, and about 2 GB of memory while it
+  is read. Lines the model gives that are not on the page are dropped.
+- `AI=0` in `config.env` turns it off. `AI_MODEL` names another GGUF model (a file on the server, or its web
+  address): a larger one reads better and slower. `AI_TIMEOUT` is the seconds a page may take (300).
 
 Some sites test for a person's browser and refuse a server whatever it sends. The import says so; copy the page's
 text and use Import › Pasted text for those.
@@ -180,7 +183,7 @@ as an app password.
 | For | Standard | Where |
 | --- | --- | --- |
 | Web and JSON clients | **REST/JSON**: recipes (list, search, by tag, cookbook, the family's, your own or your favourites), one recipe, add, change, delete, its photos, your favourite and rating, cookbooks, import and export | `/api/`, OpenAPI docs at `/api/docs` |
-| Recipes from other sites | **schema.org Recipe** (JSON-LD and microdata) read from the page at the address given; without it, the page's own lists and text, or AI | `POST /api/import` |
+| Recipes from other sites | **schema.org Recipe** (JSON-LD and microdata) read from the page at the address given; without it, the page's own lists and text, or the AI model on the server | `POST /api/import` |
 | Recipes as files | a `.zip` with `recipes.json` and `photos/`; in: that, a Mealie export or backup, a recipe as JSON | `GET /api/export`, `POST /api/import/file` |
 | The shopping list | ioTask's REST API, asked as the person signed in | `POST /api/recipes/{id}/shopping` |
 | AI assistants: Claude and anything else that speaks MCP | **Model Context Protocol** (streamable HTTP, and stdio) | `https://host/mcp` (switched on in Settings › Server) |
@@ -255,7 +258,7 @@ app/main.py        the application: start-up (tables, first admin), who is askin
 app/api.py         the REST API: recipes, photos, favourites and ratings, cookbooks, import, export, the shopping list
 app/model.py       recipes in MariaDB: the fields, who sees and changes what, the search and the tags, photos, marks, cookbooks
 app/scrape.py      import from the web: fetching a page and reading its schema.org Recipe (JSON-LD, microdata), else its lists and text
-app/ai.py          a page's text read by Claude, where a key is set and nothing else found the recipe
+app/ai.py          a page's text read by a small AI model on this server (llama.cpp), where nothing else found the recipe
 app/textimport.py  a recipe out of plain text (pasted, or read off a photo)
 app/ocr.py         the text on a photo, read by Tesseract on this server
 app/portable.py    recipes as files: the export, and imports of it and of Mealie's

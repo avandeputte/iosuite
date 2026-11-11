@@ -4,6 +4,7 @@ what other languages and cookbooks call them) start their parts, "Serves 4" and 
 and where the text has no such headings the lines that begin with an amount are the ingredients and the rest the
 steps. The result is a draft: the web app opens it in the recipe form, to be read over before it is saved.
 """
+import html
 import re
 
 from iosuite_shared.errors import Invalid
@@ -17,7 +18,7 @@ HEADS = {
 }
 _HEAD = {k: re.compile(rf"^(?:{v})\s*:?$", re.I) for k, v in HEADS.items()}
 _BULLET = re.compile(r"^\s*(?:[-*•·‣▪▢□☐◦–—]+|\[\s?\]|\(\s?\))\s*")
-_NUMBER = re.compile(r"^\s*(?:step\s*)?(\d{1,2})\s*[.):]\s*(?=\S)|^\s*step\s*(\d{1,2})\s*[:.]?\s*$", re.I)
+_NUMBER = re.compile(r"^\s*(?:step\s*)?(\d{1,2})\s*[.):]\s*(?=[^\d\s])|^\s*step\s*(\d{1,2})\s*[:.]?\s*$", re.I)
 _AMOUNT = re.compile(r"^(?:\d|[¼½¾⅓⅔⅛⅜⅝⅞]|an?\s|one\s|two\s|three\s|half\s|a\s(?:pinch|handful|few|dash|splash)|pinch|handful|salt\b|pepper\b|juice of|zest of)", re.I)
 _SERVES = re.compile(r"^(?:serves|servings?|yields?|makes|portions?|for|voor|pour|f[üu]r|personen|aantal personen)\s*:?\s*(.+)$", re.I)
 _TIME = re.compile(r"^(prep(?:aration)?|cook(?:ing)?|bak(?:e|ing)|total|ready in|active|voorbereiding(?:stijd)?|bereidingstijd|baktijd|kooktijd|totaal|pr[ée]paration|cuisson|temps total|zubereitungszeit|kochzeit|backzeit|gesamtzeit)(?:\s*time|\s*tijd)?\s*:?\s+(.+)$", re.I)
@@ -47,7 +48,7 @@ def duration(text: str) -> int | None:
 
 
 def _clean(line: str) -> str:
-    return re.sub(r"\s+", " ", _BULLET.sub("", line.replace("\xa0", " "))).strip()
+    return re.sub(r"\s+", " ", _BULLET.sub("", html.unescape(line).replace("\xa0", " "))).strip()
 
 
 def _steps(lines: list[str]) -> list[str]:
@@ -81,6 +82,46 @@ def _steps(lines: list[str]) -> list[str]:
             out.append(text)
         fresh = heading
     return [s for s in out if s]
+
+
+def _sorted(lines: list[str]) -> tuple[list[str], list[str], list[str]]:
+    """Text without the headings "Ingredients" and "Instructions", told apart line by line: (what comes before the
+    recipe, the ingredients, the lines of the steps). A numbered line or a sentence is a step, a short line that begins
+    with an amount an ingredient; a short line ending in a colon ("Sponge:", "For the batter:") names a part, and
+    heads the ingredients and the steps that follow it. '' is an empty line."""
+    before: list[str] = []
+    ing: list[str] = []
+    steps: list[str] = []
+    part = None        # a part's name, not yet given to the ingredients / the steps
+    owed = [False, False]
+    mode = None        # "ing" or "steps": what the last line was
+    for t in lines:
+        if not t:
+            if mode == "steps":
+                steps.append("")
+            continue
+        words = len(t.split())
+        if t.endswith(":") and len(t) < 60 and not _NUMBER.match(t):
+            part, owed = t, [True, True]
+            continue
+        numbered = bool(_NUMBER.match(t))
+        sentence = len(t) > 90 or (words >= 8 and t[-1] in ".!?") or (words >= 5 and t[-1] in ".!?" and not _AMOUNT.match(t))
+        if numbered or sentence:
+            kind = "steps" if numbered or mode or ing else None  # sentences before anything else: the recipe's introduction
+        elif _AMOUNT.match(t) or (mode == "ing" and len(t) < 60):
+            kind = "ing"
+        else:
+            kind = "steps" if mode == "steps" else None
+        if kind is None:
+            before.append(t)
+            continue
+        i = 0 if kind == "ing" else 1
+        if part and owed[i]:
+            (ing if i == 0 else steps).append(part)
+            owed[i] = False
+        (ing if i == 0 else steps).append(t)
+        mode = kind
+    return before, ing, steps
 
 
 def _ingredients(lines: list[str]) -> list[str]:
@@ -142,20 +183,16 @@ def parse(text: str) -> dict:
             continue
         parts[where].append(raw.strip() if where == "steps" else t)
     top = [t for t in parts["top"] if t]
-    title = top[0].strip("#*_ ").strip() if top else ""
-    rest = top[1:]
+    # the first line is the title, unless the recipe starts right away ("Sponge:", "2 eggs", "1. Whisk")
+    titled = bool(top) and not (top[0].endswith(":") or _AMOUNT.match(top[0]) or _NUMBER.match(top[0]))
+    title = top[0].strip("#*_ ").strip() if titled else ""
+    body = parts["top"][parts["top"].index(top[0]) + 1:] if titled else parts["top"]
+    rest = [t for t in body if t]
     ingredients, steps = _ingredients(parts["ingredients"]), _steps(parts["steps"])
     if not ingredients and not steps:
-        # no headings: the first run of lines that begin with an amount are the ingredients, what follows the steps
-        start = next((i for i, t in enumerate(rest) if _AMOUNT.match(t)), None)
-        if start is not None:
-            end = start
-            while end < len(rest) and (_AMOUNT.match(rest[end]) or (rest[end].endswith(":") and len(rest[end]) < 60) or len(rest[end]) < 40):
-                end += 1
-            ingredients, steps = _ingredients(rest[start:end]), _steps(rest[end:])
-            rest = rest[:start]
-        else:
-            steps, rest = _steps(rest), []
+        # no headings: each line is told apart by what it looks like
+        rest, ing, lines_ = _sorted(body)
+        ingredients, steps = _ingredients(ing), _steps(lines_)
     elif not ingredients:
         start = next((i for i, t in enumerate(rest) if _AMOUNT.match(t)), None)
         if start is not None:

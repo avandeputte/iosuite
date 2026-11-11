@@ -113,6 +113,17 @@ say "Installing the Python packages"
 [ -x .venv/bin/python ] || "$PY" -m venv .venv
 .venv/bin/python -m pip install -q --upgrade pip
 .venv/bin/python -m pip install -q -e .
+# the AI that reads a web page without recipe data, on this server (app/ai.py): llama.cpp, compiled here, which takes
+# a few minutes and a C++ compiler; the app runs without it
+if [ "$SYSDEPS" != 0 ] && ! .venv/bin/python -c 'import llama_cpp' 2>/dev/null; then
+  say "Building the AI model's runtime (a few minutes; reads web pages that do not say what their recipe is)"
+  if ! command -v cmake >/dev/null || ! command -v c++ >/dev/null; then
+    if command -v apt-get >/dev/null; then apt-get install -y -qq build-essential cmake >/dev/null 2>&1 || true
+    elif command -v dnf >/dev/null; then dnf install -y -q gcc-c++ make cmake >/dev/null 2>&1 || true
+    elif command -v brew >/dev/null; then brew install cmake >/dev/null 2>&1 || true; fi
+  fi
+  .venv/bin/python -m pip install -q -e '.[ai]' >/dev/null 2>&1 || say "The AI runtime was not built: such pages are read without it (see the README)"
+fi
 
 # ---- settings (kept between runs; passwords readable by the owner only)
 say "Writing config.env"

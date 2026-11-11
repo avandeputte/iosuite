@@ -9,6 +9,8 @@ services:
     logging:                          # the output Docker keeps (the app's log, again): at most 3 files of 5 MB
       driver: json-file
       options: {max-size: 5m, max-file: "3"}
+    volumes:
+      - iorecipe-data:/app/data       # the AI model the app fetches once (about 1 GB), kept between updates
     ports:
       - "8690:8690"     # web app, REST API (/api/), MCP (/mcp)
     environment:
@@ -30,3 +32,6 @@ services:
       # INTERNAL_URL: http://192.168.1.151:8690   # the host's LAN address and port, kept in the suite's list of apps (a container cannot tell)
       # COOKIE_DOMAIN: example.com                 # one sign-in for every app of the suite under this domain
       # AUTH_PROXY: cloudflare        # sign-in at the proxy, as in the other io apps (see README)
+
+volumes:
+  iorecipe-data:

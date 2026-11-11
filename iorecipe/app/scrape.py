@@ -4,7 +4,7 @@ Most recipe sites describe their recipe for search engines as schema.org Recipe 
 microdata (itemprop) on the page's own elements; that is read first, and is the surest. A page without it is read as
 a person would: the lists a recipe plugin marks as its ingredients and instructions, or the text under a heading
 "Ingredients" (in the languages app/textimport.py knows), with the steps after it when the page writes them out.
-When that finds no recipe either and an AI key is set (app/ai.py), the page's text is given to Claude to find it.
+When that finds no complete recipe and the server has its AI model (app/ai.py), the model reads the page's text.
 The page is fetched with iosuite-shared's outbound opener: only addresses on the internet, each redirect checked
 like the first.
 """
@@ -513,8 +513,7 @@ def parse(text: str, base: str) -> dict:
             out.setdefault("image", None)
             out["title"] = out["title"] or _page_title(p, base)
     if not out or not (out["ingredients"] or out["steps"]):
-        raise Invalid("No recipe was found on that page" + ("" if ai.available() else ": it has no recipe data for search engines and no list of "
-                      "ingredients ioRecipe could make out") + ". Copy its text and use Pasted text, or add it by hand.")
+        raise Invalid(" ".join(x for x in ("No recipe was found on that page.", ai.why_not(), "Copy its text and use Pasted text, or add it by hand.") if x))
     out["title"] = out["title"] or _one_line(p.meta.get("og:title")) or _one_line(p.title) or "Recipe"
     out["title"] = out["title"][:255]
     out["description"] = (out["description"] or _plain(p.meta.get("og:description")) or None)
