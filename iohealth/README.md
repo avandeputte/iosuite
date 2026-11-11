@@ -230,8 +230,8 @@ exactly as the other apps in the suite do: the proxy passes who signed in in a h
 as signed in when an account exists for them (matched on the account's email address, then its name). Set it up once
 for the whole suite in Settings › Security › Sign-in at the proxy (it's kept in the shared account database), or in the
 environment, which wins: `AUTH_PROXY` (`cloudflare`, `haproxy`, `nginx`, `caddy`, `traefik` or `header`),
-`AUTH_PROXY_HEADER`, `AUTH_PROXY_TRUSTED` (the addresses the proxy connects from), `AUTH_PROXY_CREATE` (`viewer`
-or `editor` to create an account for someone new, `deny` for a "No access" page), and for Cloudflare Access
+`AUTH_PROXY_HEADER`, `AUTH_PROXY_TRUSTED` (the addresses the proxy connects from), `AUTH_PROXY_CREATE` (`viewer`,
+`member` or `editor` to create an account for someone new, `deny` for a "No access" page), and for Cloudflare Access
 `CF_ACCESS_TEAM` and `CF_ACCESS_AUD` (the signed token Cloudflare adds to every request is checked against your
 team's keys). The header is believed only from the proxy's own addresses. The iPhone's uploads carry the account's own
 user name and password instead, so for a server behind Cloudflare Access the upload paths (`/v1/`) need a bypass
@@ -248,7 +248,8 @@ its health data. A *suite admin* is admin in every app.
 |---|---|
 | not signed in | nothing but the sign-in screen (there is no shared data to look at) |
 | **viewer** | see their own data, and their own settings and goals |
-| **editor** | plus upload: the iPhone app signs in as an editor |
+| **member** (the default) | plus upload their own data: the iPhone app signs in as a member or more |
+| **editor** | the same as a member: everyone's data is their own, so there is nothing shared to change |
 | **admin** | plus Server in Settings; accounts, roles and the sign-in settings are for suite admins (Settings › Security) |
 
 Settings › Account is where you change your name, email and password. Every setting saves as soon as you change it. The iPhone app signs in with this server's address, your user
@@ -258,7 +259,7 @@ cost a growing wait.
 
 ## API
 Every `/v1` call except `/v1/health` needs the account's `Authorization: Basic <user:password>` (what the iPhone app
-sends) or `Bearer <app password>`, of an editor or admin; what is sent becomes that account's. Errors
+sends) or `Bearer <app password>`, of a member or more; what is sent becomes that account's. Errors
 are JSON `{"detail": "…"}` with 400, 401, 403, 404 or 413.
 
 | request | body | reply |
@@ -279,7 +280,7 @@ user name and password, then **Sync now**. Later syncs only send what's new or c
 the phone also syncs in the background when new Health data arrives. The server has to be reachable at that moment; a
 missed or cut-short round costs nothing, because the phone only moves on for batches the server has acknowledged.
 
-The account the phone signs in with must be an **editor** (or admin) in ioHealth; a viewer can look but not upload.
+The account the phone signs in with must be a **member** (the default) or more in ioHealth; a viewer can look but not upload.
 Everyone in the household gets their own account, and the phones upload side by side into the same database, each
 row tagged with its owner.
 

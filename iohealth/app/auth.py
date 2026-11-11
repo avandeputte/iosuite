@@ -4,7 +4,7 @@ Accounts, passwords, sessions and roles live in the Shared ioSuite database (IOS
 ioNotes and ioContacts: one sign-in serves every app on the domain (COOKIE_DOMAIN). What is ioHealth's own
 stays here: the role an account holds in ioHealth, and its health data, which nobody else sees.
 
-Roles: a viewer sees their own data; an editor can also upload it (the iPhone app signs in as an editor, with an
+Roles: a viewer sees their own data; a member (the default) can also upload it (the iPhone app signs in as a member or more, with an
 app password); an admin can also see Server; accounts, roles and the sign-in
 settings are for suite admins (Settings › Security, the Shared ioSuite database).
 """
@@ -23,6 +23,7 @@ log = logging.getLogger("app.auth")
 # written on the first request, so the start page (ioSuite) and the other apps find it
 auth = Auth(APP, app_label="ioHealth", version=__version__, public_url=config.PUBLIC_URL or None,
             description="Health and fitness", color="#e8445a")
+auth.write_role = "member"  # every account's data is its own: a member uploads theirs (canWrite in /api/auth/me)
 
 
 # updates (the daily check, update.sh, restart) and the server log, as in every app of the suite (iosuite_shared.updates)
