@@ -137,6 +137,6 @@ echo -e "${CREATING}${GN}${APP} setup has been successfully initialized!${CL}"
 echo -e "${INFO}${YW}Access it using the following URL:${CL}"
 echo -e "${GATEWAY}${BGN}http://${IP}:${IORECIPE_PORT:-8690}${CL}"
 for a in ${IORECIPE_ALSO//,/ }; do
-  case "$a" in iosuite) p=8630;; iocalendar) p=8620;; iocontacts) p=8640;; ionotes) p=8610;; iohealth) p=8650;; iopix) p=8600;; *) p="";; esac
+  case "$a" in iosuite) p=8630;; iocalendar) p=8620;; iocontacts) p=8640;; iotasks) p=8670;; ionotes) p=8610;; iohealth) p=8650;; iopix) p=8600;; *) p="";; esac
   [[ -n "$p" ]] && echo -e "${INFO}${YW}$a:${CL} ${BGN}http://${IP}:$p${CL}"
 done
