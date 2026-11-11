@@ -1145,6 +1145,23 @@ async function setDisplay(el) {
     h('div', { class: 'box' }, h('h2', null, icon('tune'), 'Calendar'), h('div', { class: 'grid' }, fld('Weeks start on', ws), fld('Open on', dv), fld('Reminder for new events', dr))));
 }
 
+/** The profile through a short-lived link instead of the form post: the app on the Home Screen opens a download in a
+ * separate sheet without its cookies, which a link opens by itself (the form post stays the fallback without script). */
+async function downloadProfile(e) {
+  e.preventDefault();
+  const f = e.target;
+  const btn = f.querySelector('button[type=submit]');
+  if (btn) btn.disabled = true;
+  try {
+    const r = await api('/api/apple-profile/link', { method: 'POST', json: { label: f.elements.label.value, password: f.elements.password.value } });
+    location.href = r.url;
+  } catch (err) {
+    toast(err.message);
+  } finally {
+    if (btn) setTimeout(() => { btn.disabled = false; }, 1500);
+  }
+}
+
 /** Settings › Apps and devices: how to connect each kind of app (the app passwords themselves are on Settings › Account). */
 async function setDevices(el) {
   const info = await api('/api/connect');
@@ -1155,7 +1172,7 @@ async function setDevices(el) {
   el.append(...[
     canPw ? h('div', { class: 'box' }, h('h2', null, icon('devices'), 'iPhone, iPad and Mac'),
       h('p', null, 'A profile that adds your calendars to Apple Calendar in one step.'),
-      h('form', { method: 'POST', action: '/api/apple-profile', class: 'pform' },
+      h('form', { method: 'POST', action: '/api/apple-profile', class: 'pform', onsubmit: downloadProfile },
         fld('Device name', plabel),
         fld('Password', h('select', { class: 't', name: 'password' }, h('option', { value: 'new' }, 'Include a new app password'), h('option', { value: 'ask' }, 'Ask on the device'))),
         h('p', null, h('button', { class: 'pillbtn primary', type: 'submit' }, icon('download', 's'), 'Download the profile'))),
