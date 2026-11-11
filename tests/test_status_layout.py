@@ -130,3 +130,22 @@ def test_contacts_search_for_the_search_box(client, monkeypatch):
     d = client.get("/api/widgets/iocontacts?q=ada").json()
     assert d == {"items": [{"id": 3, "name": "Ada Lovelace", "hasPhoto": True, "iopixPersonId": None, "org": "Analytical Engines"}], "total": 1}
     assert asked == [("iocontacts", "/api/contacts", {"q": "ada", "limit": 5})]
+
+
+def test_ping_trusts_a_self_signed_certificate(monkeypatch):
+    """A router on a home address with its own certificate answered: it is up, not "Not reachable"."""
+    import ssl
+    import urllib.error
+
+    class Opener:
+        def __init__(self, err):
+            self.err = err
+
+        def open(self, req, timeout=None):
+            raise self.err
+    monkeypatch.setattr(status, "_opener", Opener(urllib.error.URLError(ssl.SSLCertVerificationError(1, "self-signed certificate"))))
+    assert status._ping("https://192.168.1.1") == {"ok": True, "status": None}
+    monkeypatch.setattr(status, "_opener", Opener(ssl.SSLCertVerificationError(1, "self-signed certificate")))
+    assert status._ping("https://192.168.1.1") == {"ok": True, "status": None}
+    monkeypatch.setattr(status, "_opener", Opener(urllib.error.URLError(ConnectionRefusedError(111, "refused"))))
+    assert status._ping("https://192.168.1.1") == {"ok": False, "status": None}

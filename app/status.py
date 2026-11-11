@@ -4,6 +4,7 @@ The start page asks every app its /api/status with the viewer's own sign-in (as 
 glimpses) and pings each bookmark's address from the server, a few at a time, and remembers the answers for a while:
 a page opened ten times in a minute asks each app once. The tiles and bookmarks show a dot from it.
 """
+import ssl
 import threading
 import time
 import urllib.error
@@ -92,7 +93,9 @@ _opener = outbound.opener(lambda ip: _allowed(ip), redirects=False)
 
 def _ping(href: str) -> dict:
     """{ok, status}: HEAD (GET when the server dislikes HEAD); a 3xx or 4xx is "up" (it answered), a 5xx or no answer is
-    not. Redirects are not followed, and nothing of the answer but its status is read."""
+    not. Redirects are not followed, and nothing of the answer but its status is read. A certificate the server cannot
+    vouch for (a router or NAS on a home address with its own self-signed one) is "up" too: something answered the TLS
+    handshake there, which is all a ping asks, and the browser is where the person decides to trust it."""
     if not href.startswith(("http://", "https://")):
         return {"ok": None, "status": None}  # nothing to ping (a mailto:)
     for method in ("HEAD", "GET"):
@@ -106,7 +109,11 @@ def _ping(href: str) -> dict:
             if e.code in (405, 501) and method == "HEAD":
                 continue
             return {"ok": e.code < 500, "status": e.code}
-        except (urllib.error.URLError, OSError, ValueError):
+        except ssl.SSLCertVerificationError:
+            return {"ok": True, "status": None}
+        except urllib.error.URLError as e:
+            return {"ok": isinstance(e.reason, ssl.SSLCertVerificationError), "status": None}
+        except (OSError, ValueError):
             return {"ok": False, "status": None}
     return {"ok": False, "status": None}
 

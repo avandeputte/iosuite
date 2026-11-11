@@ -555,7 +555,7 @@ async function drawBookmarkStatus(el) {
     const s = d.items[a.dataset.id];
     if (!s) continue;
     a.classList.toggle('down', s.ok === false);
-    if (s.ok === false) a.title = `${a.title}\nNot reachable${s.status ? ` (${s.status})` : ''}`;
+    a.title = s.ok === false ? `${a.getAttribute('href')}\nNot reachable${s.status ? ` (${s.status})` : ''}` : a.getAttribute('href');  // set afresh: the live refresh draws this again and again
   }
 }
 
