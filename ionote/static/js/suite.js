@@ -23,7 +23,7 @@ function drawBrand() {
   const old = $('#nav .navhead .brand');
   if (!old) return;
   const mark = () => h('img.brand-mark', { src: 'static/icons/mark.svg', alt: '' });
-  const name = () => h('span.brand-name', h('span.io', 'io'), h('span.nm', 'Notes'));
+  const name = () => h('span.brand-name', h('span.io', 'io'), h('span.nm', 'Note'));
   old.replaceWith(apps.length
     ? h('div.brand',
       h('button.suitebtn', { type: 'button', title: 'ioThing apps', 'aria-label': 'ioThing apps', 'aria-haspopup': 'menu', onclick: (e) => toggleSuite(e.currentTarget) }, mark()),
