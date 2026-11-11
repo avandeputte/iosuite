@@ -60,16 +60,11 @@ async def drive_error(request: Request, e: gdrive.DriveError):
     return JSONResponse({"detail": str(e)}, status_code=502)
 
 
-def _server_info() -> dict:
-    """What Settings › Server shows beside the updater's own fields."""
-    return {"about": [["Work folder", str(config.WORK_DIR)], ["Time zone", config.TZ or "the host's"]]}
-
-
 app.include_router(auth.router())        # /api/auth/*: sign-in, accounts, me, settings, password, sessions, app passwords, suite
 app.include_router(auth.users_router())  # /api/users: accounts and their role here (admins)
 app.include_router(auth.admin_router())  # /api/suite-admin (+ ui.js): the whole suite (suite admins)
 app.include_router(auth.status_router(updater))  # /api/status: public, the same shape in every app
-app.include_router(auth.server_router(updater, log_file=config.LOG_FILE, info=_server_info))  # /api/server, /api/log (admins)
+app.include_router(auth.server_router(updater, log_file=config.LOG_FILE))  # /api/server, /api/log (admins)
 app.include_router(api.router)
 
 
