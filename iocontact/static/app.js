@@ -1560,7 +1560,7 @@ async function setSuite(el, r) {
   await ui.mount(el, { tab: r.tab, sub: r.sub, toast, onSub: (x) => history.replaceState(null, '', `#/settings/${r.tab}/${x}`) });
 }
 
-/** Settings › Server (admins): the MCP switch, the version and its updates, this server, the server log and Restart:
+/** Settings › Server (admins): the MCP switch, the version and its updates, the server log and Restart:
     iosuite-shared's panel, the same in every io app. */
 async function setServer(el) {
   let ui;
