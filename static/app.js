@@ -101,9 +101,9 @@ const confirmDialog = (title, text, ok = 'OK', danger = false) => dialog(title, 
 
 const hue = (s) => { let x = 0; for (const c of s || '') x = (x * 31 + c.charCodeAt(0)) % 360; return x; };
 const initials = (fn) => { const p = (fn || '?').trim().split(/\s+/); return ((p[0] || '?')[0] + (p.length > 1 ? p[p.length - 1][0] : '')).toUpperCase(); };
-/** A contact's face as ioContacts shows it: its own photo, else its face in ioPix (when linked), else its initials. */
+/** A contact's face as ioContact shows it: its own photo, else its face in ioPix (when linked), else its initials. */
 function contactFace(c, lazy = true) {
-  const src = c.hasPhoto ? `/api/widgets/iocontacts/photo/${c.id}` : c.iopixPersonId ? `/api/widgets/iocontacts/face/${c.iopixPersonId}` : null;
+  const src = c.hasPhoto ? `/api/widgets/iocontact/photo/${c.id}` : c.iopixPersonId ? `/api/widgets/iocontact/face/${c.iopixPersonId}` : null;
   return h('span', { class: 'face' }, src ? h('img', { src, alt: '', loading: lazy ? 'lazy' : undefined, onerror: (e) => e.target.replaceWith(initials(c.name)) }) : initials(c.name));
 }
 /** An app's name as the apps write it: "io" in gold, the rest in the app's colour. */
@@ -241,10 +241,10 @@ async function showHome(page) {
   else col.append(h('div', { class: 'apps', style: { '--cols': big.length + stacks.length } }, big.map((a) => tile(a, false)), stacks));
   drawWidgets(page);
   drawAppStatus(page);
-  // the week ahead: birthdays from ioContacts and the coming days' events from ioCalendar, a card each
+  // the week ahead: birthdays from ioContact and the coming days' events from ioCalendar, a card each
   // the cards under the tiles, in the viewer's order (Customize); Birthdays and This week share a row when they follow
   // each other, else each stands on its own
-  S.birthdaysCard = shows('birthdays') && S.apps.some((a) => a.key === 'iocontacts');  // then the calendar leaves birthdays to it
+  S.birthdaysCard = shows('birthdays') && S.apps.some((a) => a.key === 'iocontact');  // then the calendar leaves birthdays to it
   const stripKind = L.strip || got.photoStrip;
   const alerts = h('div', { class: 'alerts', hidden: true });  // what Home Assistant says needs attention (drawHomeCard fills it)
   col.append(alerts);
@@ -296,12 +296,12 @@ const CARDS = ['home', 'birthdays', 'week', 'strip', 'bookmarks'];
 const cardOrder = (L) => [...(L.cards || []), ...CARDS.filter((k) => !(L.cards || []).includes(k))];
 
 // ------------------------------------------------------------------ the search box (⌘K / Ctrl-K)
-/* Type, and the box lists the bookmarks that match, the contacts ioContacts finds, and a row per app that searches
-   itself (ioPix, ioCalendar, ioNotes open on their own results). Arrows pick a row, Enter opens it, Escape clears. */
+/* Type, and the box lists the bookmarks that match, the contacts ioContact finds, and a row per app that searches
+   itself (ioPix, ioCalendar, ioNote open on their own results). Arrows pick a row, Enter opens it, Escape clears. */
 // Lower case without accents, so "celia" finds "Célia" (and "Celia" finds "célia"); a few letters NFD does not split.
 const FOLD = { ß: 'ss', æ: 'ae', œ: 'oe', ø: 'o', ł: 'l', đ: 'd', ð: 'd', þ: 'th', ı: 'i' };
 const fold = (s) => String(s || '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[ßæœøłđðþı]/g, (c) => FOLD[c]);
-const APP_SEARCH = { iopix: (q) => `#/photos?q=${encodeURIComponent(q)}`, iocalendar: (q) => `#/search/${encodeURIComponent(q)}`, ionotes: (q) => `#/notes?q=${encodeURIComponent(q)}` };
+const APP_SEARCH = { iopix: (q) => `#/photos?q=${encodeURIComponent(q)}`, iocalendar: (q) => `#/search/${encodeURIComponent(q)}`, ionote: (q) => `#/notes?q=${encodeURIComponent(q)}` };
 function searchBox() {
   const inp = h('input', { class: 'q', type: 'search', placeholder: 'Search, or add an event', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Search bookmarks, contacts, the apps and the web, or add an event' });
   const list = h('div', { class: 'qlist', hidden: true });
@@ -314,7 +314,7 @@ function searchBox() {
     rows = [];
     if (!q) return hide();
     const links = (S.bookmarks || []).filter((l) => fold(`${l.name} ${l.description || ''} ${l.href}`).includes(fold(q))).slice(0, 6);
-    const contacts = S.apps.find((a) => a.key === 'iocontacts');
+    const contacts = S.apps.find((a) => a.key === 'iocontact');
     const bang = webBang(q), site = bang ? null : looksLikeSite(q), cal = !bang && S.apps.find((a) => a.key === 'iocalendar') && parseEvent(q);
     const eng = bang ? bang.engine : webEngine(), wq = bang ? bang.q : q;
     const webRow = () => row(eng.url(wq), [h('span', { class: 'bmic' }, icon('web', 's')), h('span', { class: 'qname' }, `“${wq}”`), h('span', { class: 'muted small' }, eng.name)], true);
@@ -347,8 +347,8 @@ function searchBox() {
   };
   const askPeople = async () => {
     const q = inp.value.trim(), ql = q.toLowerCase();
-    if (q.length < 2 || !S.apps.some((a) => a.key === 'iocontacts')) return;
-    const d = await widget('iocontacts', { q });
+    if (q.length < 2 || !S.apps.some((a) => a.key === 'iocontact')) return;
+    const d = await widget('iocontact', { q });
     if (inp.value.trim().toLowerCase() !== ql) return;
     people = { q: ql, items: (d && d.items) || [] }; build();
   };
@@ -565,7 +565,7 @@ async function customize() {
   const apps = (S.allApps || []).filter((a) => !a.adminTool);  // the admin tools are in the gear menu, not tiles
   const rank = (a) => { const i = L.order.indexOf(a.key); return i < 0 ? 100 + apps.indexOf(a) : i; };
   const tiles = apps.slice().sort((a, b) => rank(a) - rank(b)).map((a) => ({ key: a.key, on: !L.hidden.includes(a.key), label: [h('img', { src: a.icon, alt: '' }), appName(a.name, a.color)] }));
-  const NAMES = { home: 'Home (Home Assistant)', birthdays: 'Birthdays (ioContacts)', week: 'This week (ioCalendar)', strip: 'The photo strip (ioPix)', bookmarks: 'Bookmarks' };
+  const NAMES = { home: 'Home (Home Assistant)', birthdays: 'Birthdays (ioContact)', week: 'This week (ioCalendar)', strip: 'The photo strip (ioPix)', bookmarks: 'Bookmarks' };
   const cards = cardOrder(L).map((k) => ({ key: k, on: !L.hidden.includes(k), label: [NAMES[k]] }));
   // a list of rows with a drag handle and a tick box, for the tiles and for the cards alike (dragSort, as the bookmarks)
   const sortable = (items) => {
@@ -631,12 +631,12 @@ const showAll = (card) => h('button', { class: 'lnk showall', hidden: true, oncl
 const isBirthdayEvent = (o) => o.allDay && /\b(birthday|anniversary)\b/i.test(o.title || '');
 const withoutBirthdays = (items) => (S.birthdaysCard ? items.filter((o) => !isBirthdayEvent(o)) : items);
 
-/** Birthdays (and the other dates ioContacts keeps) in the next 30 days, a line each; a row opens the contact. */
+/** Birthdays (and the other dates ioContact keeps) in the next 30 days, a line each; a row opens the contact. */
 async function drawBirthdays(el, again = false) {
-  const app = S.apps.find((a) => a.key === 'iocontacts'), d = await widget('iocontacts');
+  const app = S.apps.find((a) => a.key === 'iocontact'), d = await widget('iocontact');
   if (!d || !d.items || !el.isConnected) { if (!again) el.remove(); return; }
   const what = (it) => (it.label === 'birthday' ? (it.turns ? String(it.turns) : '') : it.label + (it.turns ? ` · ${it.turns} years` : ''));
-  el.replaceChildren(h('div', { class: 'wghead' }, h('span', null, 'Birthdays'), showAll(el), h('a', { class: 'muted', href: app.url, title: app.url }, d.more ? `+${d.more} more · ioContacts` : 'ioContacts')),
+  el.replaceChildren(h('div', { class: 'wghead' }, h('span', null, 'Birthdays'), showAll(el), h('a', { class: 'muted', href: app.url, title: app.url }, d.more ? `+${d.more} more · ioContact` : 'ioContact')),
     d.items.length ? h('div', { class: 'rows bdrows' }, d.items.map((it) => h('a', { class: 'bday', href: `${app.url}/#/c/${it.id}`, title: it.turns && it.label === 'birthday' ? `${it.name} turns ${it.turns}` : it.name }, contactFace(it),
       h('span', { class: 'bdname' }, it.name), h('span', { class: 'muted small bdwhat' }, what(it)),
       h('span', { class: `bdwhen${it.in === 0 ? ' today' : ''}` }, inDays(it.in)))))
@@ -720,7 +720,7 @@ function autoStrip(el, row, reshuffle) {
 /* Under an app's name, a glimpse of it: ioPix's photos from this day in earlier years (else a few at random),
    ioCalendar's rest of today (else what's next), ioHealth's steps and rings. The server asks each app with the
    viewer's own sign-in; an app that is down or not open to this account leaves its tile as it was. */
-const WIDGETS = { iopix: drawPixWidget, iocalendar: drawCalendarWidget, iotasks: drawTasksWidget, iohealth: drawHealthWidget };
+const WIDGETS = { iopix: drawPixWidget, iocalendar: drawCalendarWidget, iotask: drawTasksWidget, iohealth: drawHealthWidget };
 /** ioPix opens one photo in its lightbox at #/photos?p=<id>. */
 const pixPhotoUrl = (pix, id) => `${pix.url}/#/photos?p=${id}`;
 const viewerTz = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch { return ''; } };
@@ -738,7 +738,7 @@ function drawWidgets(page, again = false) {
   }
 }
 
-const EMPTY = { iopix: 'No photos yet', iocalendar: 'Nothing planned', iotasks: 'Nothing due today', iohealth: 'No steps, rings or sleep for today yet' };
+const EMPTY = { iopix: 'No photos yet', iocalendar: 'Nothing planned', iotask: 'Nothing due today', iohealth: 'No steps, rings or sleep for today yet' };
 const wgHead = (t, extra) => h('div', { class: 'wghead' }, h('span', null, t), extra ? h('span', { class: 'muted' }, extra) : null);
 
 function drawPixWidget(d) {
@@ -778,7 +778,7 @@ function drawCalendarWidget(d) {
   return [wgHead('Today'), h('div', { class: 'muted small' }, 'Nothing planned')];
 }
 
-/** ioTasks: what is due today (and what is overdue, first), in each list's colour. */
+/** ioTask: what is due today (and what is overdue, first), in each list's colour. */
 function drawTasksWidget(d) {
   const today = d.today || [];
   if (!today.length) return [wgHead('Today'), h('div', { class: 'muted small' }, 'Nothing due')];
@@ -1207,7 +1207,7 @@ async function wallWeather(el, hoursEl) {
 /** Today (what is left of it) and the coming days, a line per event, with today's and tomorrow's birthdays on top. */
 async function wallAgenda(el, has) {
   const [today, week, bdays] = await Promise.all([has('iocalendar') ? widget('iocalendar', { n: 6 }) : null, has('iocalendar') ? widget('iocalendar', { kind: 'week' }) : null,
-    has('iocontacts') ? widget('iocontacts') : null]);
+    has('iocontact') ? widget('iocontact') : null]);
   if (!el.isConnected) return;
   S.birthdaysCard = !!(bdays && bdays.items);
   const kids = [];

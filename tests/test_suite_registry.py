@@ -19,10 +19,10 @@ def test_iosuite_registers_itself(client):
 
 def test_only_registered_apps_have_a_tile(client):
     suite.forget("iocalendar")
-    _registered(iopix={"name": "ioPix", "url": "https://photo.example.com", "version": "2.1.0"}, ionotes={"name": "ioNotes"})
+    _registered(iopix={"name": "ioPix", "url": "https://photo.example.com", "version": "2.1.0"}, ionote={"name": "ioNote"})
     by = {t["key"]: t for t in client.get("/api/apps", headers={"host": "home.lan:8630"}).json()["items"]}
     assert by["iopix"]["url"] == "https://photo.example.com" and by["iopix"]["version"] == "2.1.0"
-    assert "iocalendar" not in by and "ionotes" not in by  # not registered, or registered without an address
+    assert "iocalendar" not in by and "ionote" not in by  # not registered, or registered without an address
 
 
 def test_an_app_the_page_does_not_know_gets_a_tile(client):

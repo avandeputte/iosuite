@@ -1,5 +1,5 @@
 # The whole ioSuite in one Docker stack: MariaDB with a database per app, the Shared ioSuite database (accounts, one
-# sign-in for every app) and ioSuite (the start page), ioCalendar, ioContacts, ioNotes, ioHealth and ioPix.
+# sign-in for every app) and ioSuite (the start page), ioCalendar, ioContact, ioNote, ioHealth and ioPix.
 #
 #   docker compose -f docker/suite/docker-compose.yml up -d        # or paste this file as a stack in Dockge / Portainer
 #
@@ -84,10 +84,10 @@ services:
       # PUBLIC_URL: https://calendar.example.com
       # INTERNAL_URL: http://192.168.1.151:8620   # this host's LAN address and the port, for the suite's list of apps
 
-  iotasks:
+  iotask:
     <<: *app
-    image: ghcr.io/avandeputte/iotasks:latest
-    container_name: iotasks
+    image: ghcr.io/avandeputte/iotask:latest
+    container_name: iotask
     ports: ["8670:8670"]                 # web app, CalDAV for reminders apps (/dav/), REST API, MCP (/mcp)
     environment:
       <<: *shared
@@ -106,10 +106,10 @@ services:
       # PUBLIC_URL: https://recipes.example.com
       # INTERNAL_URL: http://192.168.1.151:8690   # this host's LAN address and the port, for the suite's list of apps
 
-  iocontacts:
+  iocontact:
     <<: *app
-    image: ghcr.io/avandeputte/iocontacts:latest
-    container_name: iocontacts
+    image: ghcr.io/avandeputte/iocontact:latest
+    container_name: iocontact
     ports:
       - "8640:8640"                      # web app, CardDAV (/dav/), REST API, birthday calendar (/cal/)
       - "389:3890"                       # LDAP directory for mail apps (read-only); drop it when not needed
@@ -119,13 +119,13 @@ services:
       # PUBLIC_URL: https://contacts.example.com
       # INTERNAL_URL: http://192.168.1.151:8640   # this host's LAN address and the port, for the suite's list of apps
 
-  ionotes:
+  ionote:
     <<: *app
-    image: ghcr.io/avandeputte/ionotes:latest
-    container_name: ionotes
+    image: ghcr.io/avandeputte/ionote:latest
+    container_name: ionote
     ports: ["8610:8610"]
     volumes:
-      - ionotes-data:/data               # the session secret and the log; the notes are in the database
+      - ionote-data:/data               # the session secret and the log; the notes are in the database
     environment:
       <<: *shared
       DB_NAME: notes
@@ -192,5 +192,5 @@ configs:
 
 volumes:
   suite-db:
-  ionotes-data:
+  ionote-data:
   iopix-data:

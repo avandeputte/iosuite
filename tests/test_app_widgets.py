@@ -32,7 +32,7 @@ def test_needs_sign_in(client):
 
 
 def test_unknown_app_and_unreachable(client, apps_answer):
-    assert client.get("/api/widgets/ionotes").status_code == 404
+    assert client.get("/api/widgets/ionote").status_code == 404
     assert client.get("/api/widgets/iopix").status_code == 502
 
 
@@ -162,27 +162,27 @@ def test_iocalendar_week_ahead(client, apps_answer):
     assert "today" in client.get("/api/widgets/iocalendar").json()
 
 
-def test_iocontacts_birthdays_and_photo(client, apps_answer):
+def test_iocontact_birthdays_and_photo(client, apps_answer):
     table, asked = apps_answer
-    table[("iocontacts", "/api/upcoming")] = {"items": [
+    table[("iocontact", "/api/upcoming")] = {"items": [
         {"contactId": 5, "fn": "Ada Lovelace", "hasPhoto": True, "label": "birthday", "turns": 41, "inDays": 0, "date": "2026-11-04", "remind": True},
         {"contactId": 6, "fn": "Muted", "hasPhoto": False, "label": "birthday", "turns": 30, "inDays": 1, "date": "2026-11-05", "remind": False},
         {"contactId": 9, "fn": "Bob", "hasPhoto": False, "iopixPersonId": 77, "label": "anniversary", "turns": 10, "inDays": 12, "date": "2026-11-16"},
     ] + [{"contactId": i, "fn": f"P{i}", "inDays": 20} for i in range(10, 20)]}
-    d = client.get("/api/widgets/iocontacts").json()
+    d = client.get("/api/widgets/iocontact").json()
     assert len(d["items"]) == 8 and d["more"] == 4
     assert d["items"][0] == {"id": 5, "name": "Ada Lovelace", "hasPhoto": True, "iopixPersonId": None, "label": "birthday",
                            "turns": 41, "in": 0, "date": "2026-11-04"}
     assert d["items"][1]["iopixPersonId"] == 77  # no photo of its own, but a face in ioPix, which the card shows
     assert d["items"][1]["label"] == "anniversary" and d["items"][2]["label"] == "birthday"
-    assert all(x["id"] != 6 for x in d["items"])  # "Remind me" unchecked in ioContacts: not on the start page
+    assert all(x["id"] != 6 for x in d["items"])  # "Remind me" unchecked in ioContact: not on the start page
     assert asked[-1][2] == {"days": 30}
-    table[("iocontacts", "/api/contacts/5/photo")] = (b"\xff\xd8jpeg", "image/jpeg")
-    r = client.get("/api/widgets/iocontacts/photo/5")
+    table[("iocontact", "/api/contacts/5/photo")] = (b"\xff\xd8jpeg", "image/jpeg")
+    r = client.get("/api/widgets/iocontact/photo/5")
     assert r.status_code == 200 and r.content == b"\xff\xd8jpeg" and r.headers["content-type"] == "image/jpeg"
-    assert client.get("/api/widgets/iocontacts/photo/6").status_code == 502
-    table[("iocontacts", "/api/iopix/face/77")] = (b"\xff\xd8face", "image/jpeg")
-    r = client.get("/api/widgets/iocontacts/face/77")
+    assert client.get("/api/widgets/iocontact/photo/6").status_code == 502
+    table[("iocontact", "/api/iopix/face/77")] = (b"\xff\xd8face", "image/jpeg")
+    r = client.get("/api/widgets/iocontact/face/77")
     assert r.status_code == 200 and r.content == b"\xff\xd8face" and r.headers["content-type"] == "image/jpeg"
 
 
@@ -265,17 +265,17 @@ def test_apps_asked_like_the_apps_ask_each_other(client, monkeypatch):
         credentials.put("", "cf_access_client_secret", "")
 
 
-def test_iotasks_due_today_overdue_first(client, apps_answer):
+def test_iotask_due_today_overdue_first(client, apps_answer):
     table, asked = apps_answer
-    table[("iotasks", "/api/lists")] = {"items": [{"id": 1, "color": "#146b5e"}]}
+    table[("iotask", "/api/lists")] = {"items": [{"id": 1, "color": "#146b5e"}]}
     due = [{"id": 5, "listId": 1, "title": "Passport", "due": "2026-01-02", "dueAllDay": True},
            {"id": 6, "listId": 1, "title": "Bins", "due": "2026-01-05T19:00:00-05:00", "dueAllDay": False},
            {"id": 7, "listId": 1, "title": "", "due": "2026-01-05", "dueAllDay": True},
            {"id": 8, "listId": 2, "title": "Milk", "due": "2026-01-05", "dueAllDay": True}]
-    table[("iotasks", "/api/tasks")] = lambda p: {"items": due[:1] if p["due"] == "overdue" else due}
-    d = client.get("/api/widgets/iotasks?tz=Europe/Brussels").json()
+    table[("iotask", "/api/tasks")] = lambda p: {"items": due[:1] if p["due"] == "overdue" else due}
+    d = client.get("/api/widgets/iotask?tz=Europe/Brussels").json()
     assert [t["title"] for t in d["today"]] == ["Passport", "Bins", "(no title)"] and d["more"] == 1 and d["overdue"] == 1
     assert d["today"][0]["late"] and not d["today"][1]["late"] and d["today"][0]["color"] == "#146b5e"
     assert all(p["tz"] == "Europe/Brussels" for k, path, p, _ in asked if path == "/api/tasks")
-    table[("iotasks", "/api/tasks")] = {"items": []}
-    assert client.get("/api/widgets/iotasks").json() == {"today": [], "more": 0, "overdue": 0}
+    table[("iotask", "/api/tasks")] = {"items": []}
+    assert client.get("/api/widgets/iotask").json() == {"today": [], "more": 0, "overdue": 0}

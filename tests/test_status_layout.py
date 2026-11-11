@@ -15,22 +15,22 @@ def test_apps_status_from_each_apps_status(client, monkeypatch):
     answers = {"iopix": {"app": "ioPix", "version": "1.4.0", "update": {"version": "1.5.0", "remote": "1.5.0"}},
                "iohealth": {"app": "ioHealth", "version": "2.0", "update": None},
                "iocalendar": {"app": "ioCalendar", "version": "0.9", "update": None},
-               "iotasks": {"app": "ioTasks", "version": "0.1", "update": None}}
+               "iotask": {"app": "ioTask", "version": "0.1", "update": None}}
     asked = []
 
     def fake(request, key, path, params=None, raw=False):
         asked.append(key)
-        if key == "iocontacts":
-            raise widgets.Unavailable(403, "iocontacts answered 401")  # up, but not open to this account
-        if key == "ionotes":
-            raise widgets.Unavailable(502, "ionotes is not reachable (URLError)")
+        if key == "iocontact":
+            raise widgets.Unavailable(403, "iocontact answered 401")  # up, but not open to this account
+        if key == "ionote":
+            raise widgets.Unavailable(502, "ionote is not reachable (URLError)")
         return answers[key]
     monkeypatch.setattr(widgets, "fetch", fake)
     d = client.get("/api/apps/status").json()["items"]
     assert d["iopix"] == {"ok": True, "version": "1.4.0", "update": "1.5.0", "why": None}
     assert d["iohealth"]["ok"] and d["iohealth"]["update"] is None and d["iocalendar"]["update"] is None
-    assert d["iocontacts"]["ok"] is True and d["ionotes"] == {"ok": False, "version": None, "update": None, "why": "ionotes is not reachable (URLError)"}
-    assert sorted(asked) == ["iocalendar", "iocontacts", "iohealth", "ionotes", "iopix", "iotasks"]
+    assert d["iocontact"]["ok"] is True and d["ionote"] == {"ok": False, "version": None, "update": None, "why": "ionote is not reachable (URLError)"}
+    assert sorted(asked) == ["iocalendar", "iocontact", "iohealth", "ionote", "iopix", "iotask"]
     client.get("/api/apps/status")
     assert len(asked) == 6  # remembered for a minute
     client.cookies.clear()
@@ -97,8 +97,8 @@ def test_ping_never_reaches_this_server_or_metadata_and_never_follows_a_redirect
 def test_my_layout(client):
     assert client.get("/api/me/layout").json() == {"hidden": [], "order": [], "cards": [], "strip": None, "search": None, "stripMove": None, "stripEvery": None}
     assert client.get("/api/apps").json()["layout"] == {"hidden": [], "order": [], "cards": [], "strip": None, "search": None, "stripMove": None, "stripEvery": None}
-    r = client.put("/api/me/layout", json={"hidden": ["ionotes", "week", "ionotes"], "order": ["iocalendar", "iopix"], "cards": ["strip", "birthdays"], "strip": "onthisday"})
-    assert r.status_code == 200 and r.json() == {"hidden": ["ionotes", "week"], "order": ["iocalendar", "iopix"], "cards": ["strip", "birthdays"], "strip": "onthisday", "search": None, "stripMove": None, "stripEvery": None}
+    r = client.put("/api/me/layout", json={"hidden": ["ionote", "week", "ionote"], "order": ["iocalendar", "iopix"], "cards": ["strip", "birthdays"], "strip": "onthisday"})
+    assert r.status_code == 200 and r.json() == {"hidden": ["ionote", "week"], "order": ["iocalendar", "iopix"], "cards": ["strip", "birthdays"], "strip": "onthisday", "search": None, "stripMove": None, "stripEvery": None}
     assert client.put("/api/me/layout", json={"cards": ["strip", "strip"]}).status_code == 400
     assert client.put("/api/me/layout", json={"cards": ["iopix"]}).status_code == 400
     assert client.get("/api/apps").json()["layout"]["order"] == ["iocalendar", "iopix"]
@@ -128,9 +128,9 @@ def test_contacts_search_for_the_search_box(client, monkeypatch):
         asked.append((key, path, params))
         return {"total": 1, "items": [{"id": 3, "fn": "Ada Lovelace", "hasPhoto": True, "org": "Analytical Engines"}]}
     monkeypatch.setattr(widgets, "fetch", fake)
-    d = client.get("/api/widgets/iocontacts?q=ada").json()
+    d = client.get("/api/widgets/iocontact?q=ada").json()
     assert d == {"items": [{"id": 3, "name": "Ada Lovelace", "hasPhoto": True, "iopixPersonId": None, "org": "Analytical Engines"}], "total": 1}
-    assert asked == [("iocontacts", "/api/contacts", {"q": "ada", "limit": 5})]
+    assert asked == [("iocontact", "/api/contacts", {"q": "ada", "limit": 5})]
 
 
 def test_ping_trusts_a_self_signed_certificate(monkeypatch):

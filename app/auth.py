@@ -1,7 +1,7 @@
 """The shared ioThing accounts (the iosuite-shared library), as ioSuite uses them.
 
 Accounts, passwords, sessions, app passwords and roles live in the Shared ioSuite database (IOSUITE_DB_* in
-config.env), shared with ioPix, ioNotes, ioContacts, ioCalendar and ioHealth: one sign-in serves every app on the
+config.env), shared with ioPix, ioNote, ioContact, ioCalendar and ioHealth: one sign-in serves every app on the
 domain (COOKIE_DOMAIN). Signed in on the start page, a person is signed in everywhere it links to.
 What is ioSuite's own stays per app: the role an account holds here (admins set the weather and the home page) and its settings.
 
