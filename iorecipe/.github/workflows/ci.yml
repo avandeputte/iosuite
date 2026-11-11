@@ -85,11 +85,16 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
+          # a pull request is checked on one kind of processor; what is published is built for both
+          platforms: ${{ github.event_name == 'pull_request' && 'linux/amd64' || 'linux/amd64,linux/arm64' }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: COMMIT=${{ github.sha }}
+          # the layers are kept between runs: the AI model's runtime (llama.cpp) is compiled once, not on every
+          # push, which for arm64 under emulation takes the better part of an hour
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
   release:
     # every new version on main becomes a release (tag v<version>), with no one having to click anything
