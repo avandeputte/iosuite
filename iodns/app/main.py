@@ -48,8 +48,7 @@ app = FastAPI(title="ioDNS", version=__version__, lifespan=lifespan, docs_url="/
 app.middleware("http")(auth.middleware(open_paths=OPEN_PATHS, open_prefixes=OPEN_PREFIXES))
 
 # 400 for bad input, the headers, no-store on the API, the body cap: the same in every app of the suite
-auth.install(app, limit_for=lambda path, ctype: config.MAX_JSON_BYTES, not_found=(model.NotFound,),
-             forwarded_allow_ips=config.FORWARDED_ALLOW_IPS)
+auth.install(app, limit_for=lambda path, ctype: config.MAX_JSON_BYTES, not_found=(model.NotFound,))
 
 
 @app.exception_handler(ProviderError)
