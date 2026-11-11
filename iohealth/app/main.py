@@ -76,12 +76,7 @@ app.include_router(upload.router)
 app.include_router(webapi.router)
 
 
-def _server_info() -> dict:
-    """What Settings › Server shows beside the updater's own fields: This server."""
-    return {"about": [["Time zone", config.TZ]]}
-
-
-app.include_router(auth.server_router(updater, log_file=config.LOG_FILE, info=_server_info))  # /api/server, /api/log: admins
+app.include_router(auth.server_router(updater, log_file=config.LOG_FILE))  # /api/server, /api/log: admins
 
 
 @app.get("/", include_in_schema=False)

@@ -2550,7 +2550,7 @@ async function setGoals() {
       alertIn('sync', 'No sync from the iPhone for', 'hours'))];
 }
 
-// ---- Settings › Server (admins): the version and its updates, this server, the server log and Restart:
+// ---- Settings › Server (admins): the version and its updates, the server log and Restart:
 // iosuite-shared's panel, the same in every ioThing app.
 
 const serverUi = () => import(new URL('api/server/ui.js', document.baseURI).href);
