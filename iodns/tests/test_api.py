@@ -129,16 +129,6 @@ def test_tailscale_and_public_ip_sources(client, monkeypatch):
     assert cf["id"]
 
 
-def test_roles(client):
-    from iosuite_shared import users
-    users.create("kid", "secret123", "viewer", "iodns")
-    client.cookies.clear()
-    assert client.post("/api/auth/login", json={"name": "kid", "password": "secret123"}).status_code == 200
-    assert client.get("/api/entries").status_code == 200
-    assert client.post("/api/entries", json={"name": "x.lan", "records": {}}).status_code == 403
-    assert client.post("/api/servers", json={"kind": "fake", "name": "x", "url": "http://x"}).status_code == 403
-
-
 def test_a_name_the_server_answers_itself_is_left_out(client):
     ag, uni = add_server(client, "AG1", "http://ag1"), add_server(client, "UniFi", "http://gw", exclude="*.guest.lan")
     entry(client, "beast.iothing.net", internal=[{"type": "A", "value": "192.168.1.101"}])
@@ -174,18 +164,19 @@ def test_tunnel_records_stand_alone_and_reach_only_tunnel_servers(client):
     assert row["state"] == "ok" and row["servers"][str(cf["id"])]["state"] == "same"
 
 
-def test_an_admin_tool_for_admins_only(client):
-    from iosuite_shared import db as shared_db, suite, users
-    from app.auth import admins_only_by_default
-    admins_only_by_default()                      # at start: an account without a role here has none
-    shared_db.settings_cache.clear()
-    assert users.default_role("iodns") == "none"
-    shared_db.set_setting("default_role", "viewer", "iodns")
-    admins_only_by_default()                      # an admin's own choice stays
-    shared_db.settings_cache.clear()
-    assert users.default_role("iodns") == "viewer"
+def test_an_admin_tool_for_suite_admins_only(client):
+    from iosuite_shared import suite, users
     client.get("/api/auth/me")                    # the middleware registers the app
     assert suite.get("iodns")["adminTool"] is True
+    assert users.default_role("iodns") == "none"
+    ed = client.post("/api/users", json={"name": "ed", "password": "secret123", "role": "admin"})
+    assert ed.status_code == 400                  # takes no roles: suite admins only
+    ed = users.create("ed", "secret123")
+    users.set_role(ed["id"], "iodns", "admin")    # a role from before the rule: ignored
+    client.cookies.clear()
+    client.post("/api/auth/login", json={"name": "ed", "password": "secret123"})
+    assert client.get("/api/entries").status_code in (401, 403)
+    assert client.post("/api/entries", json={"name": "x.lan", "records": {}}).status_code in (401, 403)
 
 
 def test_push_right_after_a_change_reaches_every_view_and_only_those_names(client):
