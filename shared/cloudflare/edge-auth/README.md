@@ -5,7 +5,7 @@ app password and turns away a request whose app password is wrong before it reac
 
 | App | Paths | Devices |
 |---|---|---|
-| ioCalendar, ioContacts | `/dav*` | Apple Calendar and Contacts, DAVx5, Thunderbird (HTTP Basic) |
+| ioCalendar, ioContact | `/dav*` | Apple Calendar and Contacts, DAVx5, Thunderbird (HTTP Basic) |
 | ioHealth | `/v1/*` (not `/v1/health`, which answers without a password) | the iPhone app's uploads (HTTP Basic, or Bearer) |
 
 Someone guessing passwords there then never touches the server, and a WAF rate limit on the DAV paths stops them
@@ -42,7 +42,7 @@ the top of the script.
 
 ```
 export CLOUDFLARE_API_TOKEN=…  CLOUDFLARE_ACCOUNT_ID=…
-python3 setup.py --host calendar.example.com=iocalendar --host contacts.example.com=iocontacts \
+python3 setup.py --host calendar.example.com=iocalendar --host contacts.example.com=iocontact \
     --deploy --rate-limit --app-token-file ~/.iosuite-edge-kv-token
 ```
 

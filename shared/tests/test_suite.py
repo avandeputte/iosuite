@@ -85,9 +85,9 @@ def test_configured_url_wins_and_register_false_stays_out():
 
 def test_bad_public_url_registers_without_it():
     suite.invalidate()
-    app, _ = make_app("ionotes", public_url="notes.example.com")
+    app, _ = make_app("ionote", public_url="notes.example.com")
     TestClient(app, base_url="http://192.168.1.89:8610").get("/api/x")
-    assert suite.get("ionotes")["url"] == "http://192.168.1.89:8610"
+    assert suite.get("ionote")["url"] == "http://192.168.1.89:8610"
 
 
 def test_api_lists_for_signed_in_and_suite_admins_forget():
@@ -210,6 +210,6 @@ def test_before_the_first_account_the_switcher_lists_every_app():
 
 
 def test_one_order_everywhere_iosuite_first_then_by_name():
-    for key, name in (("iotasks", "ioTasks"), ("iosuite", "ioSuite"), ("iocalendar", "ioCalendar"), ("iodns", "ioDNS")):
+    for key, name in (("iotask", "ioTask"), ("iosuite", "ioSuite"), ("iocalendar", "ioCalendar"), ("iodns", "ioDNS")):
         suite.register(key, name, url=f"https://{key}.example.com", admin_tool=key == "iodns")
-    assert [a["app"] for a in suite.apps()] == ["iosuite", "iocalendar", "iodns", "iotasks"]
+    assert [a["app"] for a in suite.apps()] == ["iosuite", "iocalendar", "iodns", "iotask"]

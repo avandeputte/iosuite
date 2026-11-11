@@ -107,7 +107,7 @@ def add_suite_update_tools(server: MCPServer) -> None:
     @server.tool(annotations=UPDATES)
     async def update_suite_apps(apps: list[str] | None = None) -> dict:
         """Suite admins: update apps of the suite to the newest version on GitHub. apps: their keys (iocalendar,
-        ionotes...); left out, every app whose last check found a newer version (run suite_versions first). Each app
+        ionote...); left out, every app whose last check found a newer version (run suite_versions first). Each app
         runs its own update.sh within ten seconds and restarts (settings and data stay; its database is brought up to
         date as it starts). Call suite_versions(check=False) a minute or two later: state ok or failed, and the new
         version. Apps in Docker cannot update themselves (pull the image there)."""

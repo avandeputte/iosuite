@@ -36,7 +36,7 @@ def test_plan_local_server_and_two_servers():
 
 def test_plan_without_an_app_database_uses_the_shared_one():
     cfg = dict(IOSUITE_DB_HOST="db.lan", IOSUITE_DB_PASSWORD="pw")
-    [stmts] = provision.plan_sql(cfg, also=["ionotes"]).values()
+    [stmts] = provision.plan_sql(cfg, also=["ionote"]).values()
     assert ("GRANT ALL PRIVILEGES ON `notes`.* TO `iosuite`@%s", ("%",)) in stmts
     assert not any("`suite`" in s for s, _ in stmts)
 
@@ -98,7 +98,7 @@ def test_install_uses_the_admin_for_the_companions(tmp_path, monkeypatch):
 
 def test_cli_provision(tmp_path, monkeypatch, capsys):
     (tmp_path / "config.env").write_text("".join(f"{k}={v}\n" for k, v in CFG.items()))
-    assert cli.main(["--config", str(tmp_path), "provision", "--admin", "root", "--also", "ionotes", "--dry-run"]) == 0
+    assert cli.main(["--config", str(tmp_path), "provision", "--admin", "root", "--also", "ionote", "--dry-run"]) == 0
     out = capsys.readouterr().out
     assert "db.lan:3307" in out and "`notes`" in out and "s3cret" not in out
     seen = {}

@@ -34,22 +34,22 @@ def updater(tmp_path, monkeypatch, app="iocalendar", version="1.0.0", remote="1.
 
 def test_request_claim_and_overview(tmp_path, monkeypatch):
     suite.register("iocalendar", name="ioCalendar", version="1.0.0")
-    suite.register("ionotes", name="ioNotes", version="2.0.0")
+    suite.register("ionote", name="ioNote", version="2.0.0")
     cal = updater(tmp_path, monkeypatch)
     cal._said_hello()
     by = {a["app"]: a for a in suiteupdates.overview()}
     assert by["iocalendar"]["watching"] and by["iocalendar"]["version"] == "1.0.0" and not by["iocalendar"]["canUpdate"]
-    assert not by["ionotes"]["watching"] and by["ionotes"]["version"] == "2.0.0"  # never wrote its row
+    assert not by["ionote"]["watching"] and by["ionote"]["version"] == "2.0.0"  # never wrote its row
 
-    assert suiteupdates.request("check", None, by="alex") == ["iocalendar", "ionotes"]
+    assert suiteupdates.request("check", None, by="alex") == ["iocalendar", "ionote"]
     assert suiteupdates.claim("iocalendar") == "check" and suiteupdates.claim("iocalendar") is None  # taken once
     cal.serve("check")
     a = {a["app"]: a for a in suiteupdates.overview()}["iocalendar"]
     assert a["latest"] == "1.1.0" and a["status"] == "update" and a["checked"] and a["commit"]
-    assert {a["app"]: a for a in suiteupdates.overview()}["ionotes"]["pending"] == "check"
+    assert {a["app"]: a for a in suiteupdates.overview()}["ionote"]["pending"] == "check"
 
     assert suiteupdates.request("update", None) == ["iocalendar"]  # only the apps with an update waiting
-    assert suiteupdates.request("update", ["ionotes", "IONOTES"]) == ["ionotes"]
+    assert suiteupdates.request("update", ["ionote", "IONOTE"]) == ["ionote"]
     with pytest.raises(ValueError):
         suiteupdates.request("update", ["nope"])
     with pytest.raises(ValueError):

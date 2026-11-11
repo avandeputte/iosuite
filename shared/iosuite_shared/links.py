@@ -1,10 +1,10 @@
 """One app of the suite reading from another, with nothing to set up: ioCalendar's and ioPix's birthdays from
-ioContacts, ioContacts' faces from ioPix.
+ioContact, ioContact's faces from ioPix.
 
     from iosuite_shared import links
-    if links.available("iocontacts"):                       # it is in the suite's list of apps, with an address
-        r = links.get("iocalendar", "iocontacts", "/api/contacts?q=ann")   # a urllib response; links.json(...) for JSON
-    links.url("iocontacts")                                  # its address, for links people click
+    if links.available("iocontact"):                       # it is in the suite's list of apps, with an address
+        r = links.get("iocalendar", "iocontact", "/api/contacts?q=ann")   # a urllib response; links.json(...) for JSON
+    links.url("iocontact")                                  # its address, for links people click
 
 The other app is found in the suite's list (ios_apps). The server calls it on localhost when it runs on the same
 machine (its recorded internal address is one of this machine's), then at its address inside the network (the

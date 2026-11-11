@@ -9,13 +9,13 @@ def test_create_authenticate_roles():
     assert u["email"] == "alex@example.com" and u["suiteAdmin"] and u["role"] == "admin"
     assert users.any_users()
     assert users.authenticate("alex", "wrong") is None
-    assert users.authenticate("alex", "secret123", "ionotes")["role"] == "admin"  # a suite admin everywhere
+    assert users.authenticate("alex", "secret123", "ionote")["role"] == "admin"  # a suite admin everywhere
     assert users.authenticate("ALEX@example.com", "secret123")["id"] == u["id"]  # by email, case-insensitive
     v = users.create("kid", "", "viewer", "iopix")
     assert v["passwordless"] and v["role"] == "viewer"
-    assert users.role_of(v, "ionotes") == "member"  # the default role
-    users.db.set_setting("default_role", "none", "ionotes")
-    assert users.role_of(v, "ionotes") == "none"
+    assert users.role_of(v, "ionote") == "member"  # the default role
+    users.db.set_setting("default_role", "none", "ionote")
+    assert users.role_of(v, "ionote") == "none"
     with pytest.raises(ValueError):
         users.set_role(v["id"], "iopix", "bogus")
     with pytest.raises(ValueError):
@@ -24,14 +24,14 @@ def test_create_authenticate_roles():
     assert users.get(v["id"], "iopix")["role"] == "member"
     users.update(v["id"], password="longenough", role="editor", app="iopix")
     assert users.get(v["id"], "iopix")["role"] == "editor"
-    assert users.get(v["id"], "ionotes")["role"] == "none"
+    assert users.get(v["id"], "ionote")["role"] == "none"
     with pytest.raises(ValueError):
         users.update(v["id"], password="")  # an editor somewhere: keeps its password
     with pytest.raises(ValueError):
         users.create("Alex", "another12")  # names are unique, case-insensitively
     with pytest.raises(ValueError):
         users.delete(u["id"])  # the only suite admin
-    assert [a["name"] for a in users.accounts("ionotes")] == ["alex"]  # kid has no access there
+    assert [a["name"] for a in users.accounts("ionote")] == ["alex"]  # kid has no access there
     assert {a["name"] for a in users.accounts("iopix")} == {"alex", "kid"}
 
 
@@ -41,7 +41,7 @@ def test_settings_and_data():
     out = users.set_settings(u["id"], "iopix", {"theme": "dark", "grid": 4, "x" * 65: "ignored"})
     assert out == {"theme": "dark", "grid": 4}
     assert users.set_settings(u["id"], "iopix", {"theme": None}) == {"grid": 4}
-    assert users.get_settings(u["id"], "ionotes") == {}  # per app
+    assert users.get_settings(u["id"], "ionote") == {}  # per app
     users.set_value(u["id"], "iopix", "person", 42)
     assert users.get_value(u["id"], "iopix", "person") == 42
     users.set_value(u["id"], "iopix", "person", None)
@@ -51,7 +51,7 @@ def test_settings_and_data():
 def test_sessions():
     u = users.create("alex", "secret123", "editor", "iopix")
     tok = sessions.create(u["id"], "iopix", "password")
-    got = sessions.user_from_token(tok, "ionotes")  # the same session serves another app, with the role there
+    got = sessions.user_from_token(tok, "ionote")  # the same session serves another app, with the role there
     assert got["id"] == u["id"] and got["role"] == "member"
     users.update(u["id"], password="changed123")  # ends every session
     assert sessions.user_from_token(tok, "iopix") is None
@@ -70,17 +70,17 @@ def test_cookie_domain(monkeypatch):
 
 
 def test_app_passwords():
-    u = users.create("alex", "secret123", "editor", "iocontacts")
-    pw = apppasswords.create(u["id"], "iocontacts", "Phone")
-    assert pw.startswith("iocontacts-")
-    assert apppasswords.authenticate("alex", pw, "iocontacts")["id"] == u["id"]
-    assert apppasswords.authenticate(None, pw, "iocontacts")["id"] == u["id"]  # bearer: no name needed
+    u = users.create("alex", "secret123", "editor", "iocontact")
+    pw = apppasswords.create(u["id"], "iocontact", "Phone")
+    assert pw.startswith("iocontact-")
+    assert apppasswords.authenticate("alex", pw, "iocontact")["id"] == u["id"]
+    assert apppasswords.authenticate(None, pw, "iocontact")["id"] == u["id"]  # bearer: no name needed
     assert apppasswords.authenticate("alex", pw, "iopix") is None  # one app only
-    assert apppasswords.authenticate("alex", "secret123", "iocontacts")["id"] == u["id"]  # the account password works too
-    assert apppasswords.authenticate("alex", "nope", "iocontacts") is None
-    assert len(apppasswords.list_for(u["id"], "iocontacts")) == 1
-    apppasswords.delete(u["id"], apppasswords.list_for(u["id"], "iocontacts")[0]["id"])
-    assert apppasswords.authenticate("alex", pw, "iocontacts") is None
+    assert apppasswords.authenticate("alex", "secret123", "iocontact")["id"] == u["id"]  # the account password works too
+    assert apppasswords.authenticate("alex", "nope", "iocontact") is None
+    assert len(apppasswords.list_for(u["id"], "iocontact")) == 1
+    apppasswords.delete(u["id"], apppasswords.list_for(u["id"], "iocontact")[0]["id"])
+    assert apppasswords.authenticate("alex", pw, "iocontact") is None
 
 
 def test_a_hash_with_other_parameters_or_scrypt_is_upgraded_and_the_old_format_refused():
@@ -109,17 +109,17 @@ def test_app_passwords_are_stored_as_sha256_and_scrypt_rows_move_over():
     from iosuite_shared import db
     from iosuite_shared.passwords import token_hash
     import base64, hashlib, os
-    u = users.create("alex", "secret123", "editor", "iocontacts")
-    pw = apppasswords.create(u["id"], "iocontacts", "Mac")
+    u = users.create("alex", "secret123", "editor", "iocontact")
+    pw = apppasswords.create(u["id"], "iocontact", "Mac")
     assert db.one("SELECT hash FROM ios_app_passwords")["hash"] == token_hash(pw)
-    assert apppasswords.authenticate(None, pw, "iocontacts")["id"] == u["id"]
+    assert apppasswords.authenticate(None, pw, "iocontact")["id"] == u["id"]
     # a row from 0.24 (scrypt2) still signs in, and is rewritten to the SHA-256
     salt = os.urandom(16)
     h = hashlib.scrypt(pw.encode(), salt=salt, n=2 ** 13, r=8, p=1, dklen=32)
     db.ex("UPDATE ios_app_passwords SET hash = %s", (f"scrypt2$8192$8$1${base64.b64encode(salt).decode()}${base64.b64encode(h).decode()}",))
     apppasswords.forget()
-    assert apppasswords.authenticate(None, pw[:-1] + ("x" if pw[-1] != "x" else "y"), "iocontacts") is None
-    assert apppasswords.authenticate(None, pw, "iocontacts")["id"] == u["id"]
+    assert apppasswords.authenticate(None, pw[:-1] + ("x" if pw[-1] != "x" else "y"), "iocontact") is None
+    assert apppasswords.authenticate(None, pw, "iocontact")["id"] == u["id"]
     assert db.one("SELECT hash FROM ios_app_passwords")["hash"] == token_hash(pw)
 
 
@@ -140,9 +140,9 @@ def test_role_ladder_and_markers():
     for u, member, writer in ((v, False, False), (m, True, False), (e, True, True)):
         u = users.get(u["id"], "iocalendar")
         assert users.is_signed_in(u) and users.is_member(u) is member and users.can_write(u) is writer
-    assert users.role_of(users.get(v["id"]), "ionotes") == "member"  # no row: the default, member
-    users.db.set_setting("default_role", "viewer", "ionotes")
-    assert users.role_of(users.get(v["id"]), "ionotes") == "viewer"
+    assert users.role_of(users.get(v["id"]), "ionote") == "member"  # no row: the default, member
+    users.db.set_setting("default_role", "viewer", "ionote")
+    assert users.role_of(users.get(v["id"]), "ionote") == "viewer"
 
 
 def test_admin_tools_are_for_suite_admins_only():
@@ -177,18 +177,43 @@ def test_viewers_become_members_once():
     v = users.create("vic", "secret123", "viewer", "iocalendar")
     svc = users.service_account("iosuite")
     users.set_role(svc["id"], "iocalendar", "viewer")
-    db.set_setting("default_role", "viewer", "iotasks")
+    db.set_setting("default_role", "viewer", "iotask")
     with db.tx() as con, con.cursor() as cur:
         cur.execute("DELETE FROM ios_schema_version WHERE version >= 6")
     db._ready = False
     db.init()
     assert users.roles_of(v["id"]) == {"iocalendar": "member"}
     assert users.roles_of(svc["id"]) == {"iocalendar": "viewer"}  # the apps' own accounts only read
-    assert db.get_setting("default_role", "", "iotasks") == ""
+    assert db.get_setting("default_role", "", "iotask") == ""
     users.set_role(v["id"], "iocalendar", "viewer")  # a viewer set after the change stays one
     db._ready = False
     db.init()
     assert users.roles_of(v["id"]) == {"iocalendar": "viewer"}
+    with db.tx() as con, con.cursor() as cur:
+        assert schema.current_version(cur, db.PREFIX) == db.SCHEMA_VERSION
+
+
+def test_old_app_ids_move_to_the_singular_names_once():
+    from iosuite_shared import db, schema
+    a = users.create("alex", "secret123", suite_admin=True)
+    b = users.create("bea", "secret123", "editor", "iocalendar")
+    with db.tx() as con, con.cursor() as cur:
+        cur.execute("INSERT INTO ios_user_roles (user_id, app, role) VALUES (%s, 'ionotes', 'editor'), (%s, 'iocontacts', 'none')",
+                    (b["id"], b["id"]))
+        cur.execute("INSERT INTO ios_settings (app, name, value) VALUES ('iotasks', 'default_role', 'editor')")
+        cur.execute("INSERT INTO ios_users (name, display_name, hash, suite_admin, listed, created_at, service) "
+                    "VALUES ('iocontacts-app', 'iocontacts (automatic)', '', 0, 0, 0, 'iocontacts')")
+        cur.execute("DELETE FROM ios_schema_version WHERE version >= 8")
+    db._ready = False
+    db.settings_cache.clear()
+    users.invalidate()
+    db.init()
+    assert users.roles_of(b["id"]) == {"iocalendar": "editor", "ionote": "editor", "iocontact": "none"}
+    assert db.get_setting("default_role", "", "iotask") == "editor"
+    svc = users.service_account("iocontact")
+    assert svc["name"] == "iocontact-app"
+    assert db.one("SELECT COUNT(*) AS n FROM ios_users WHERE service IS NOT NULL")["n"] == 1
+    assert users.roles_of(a["id"]) == {}
     with db.tx() as con, con.cursor() as cur:
         assert schema.current_version(cur, db.PREFIX) == db.SCHEMA_VERSION
 
@@ -198,8 +223,8 @@ def test_me_says_what_the_account_may_change():
     from fastapi.testclient import TestClient
     from iosuite_shared.fastapi import Auth
     users.create("alex", "secret123", suite_admin=True)
-    users.create("meg", "secret123", "member", "ionotes")
-    auth = Auth("ionotes", register=False)
+    users.create("meg", "secret123", "member", "ionote")
+    auth = Auth("ionote", register=False)
     app = FastAPI()
     app.middleware("http")(auth.middleware())
     app.include_router(auth.router())

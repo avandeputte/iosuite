@@ -87,7 +87,7 @@ def run(admin_user, admin_password, cfg, also=(), connect=None, log=print):
 def add_parser(sub):
     p = sub.add_parser("provision", help="create the app's database and user and the Shared ioSuite database and user with a MariaDB administrator account")
     p.add_argument("--admin", required=True, help="the administrator's user name (its password from DB_ADMIN_PASSWORD, else asked for)")
-    p.add_argument("--also", default="", help="also the databases of these companion apps (iopix,ionotes,... or all) for the same app user")
+    p.add_argument("--also", default="", help="also the databases of these companion apps (iopix,ionote,... or all) for the same app user")
     p.add_argument("--dry-run", action="store_true", help="only print what would be run (passwords hidden)")
     return p
 

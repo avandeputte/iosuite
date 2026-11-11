@@ -11,7 +11,7 @@ from iosuite_shared import apppasswords, db, proxyauth, sessions, users
 from iosuite_shared.fastapi import Auth
 
 
-def make_app(name="iocontacts", **install):
+def make_app(name="iocontact", **install):
     auth = Auth(name, register=False)
     app = FastAPI()
     app.middleware("http")(auth.middleware(open_paths=("/",), open_prefixes=("/api/auth/",)))
@@ -48,8 +48,8 @@ def no_attempts():
 
 def test_basic_and_bearer_are_throttled_before_any_hash(monkeypatch):
     app, _ = make_app()
-    u = users.create("alex", "secret123", "editor", "iocontacts")
-    pw = apppasswords.create(u["id"], "iocontacts", "Mac")
+    u = users.create("alex", "secret123", "editor", "iocontact")
+    pw = apppasswords.create(u["id"], "iocontact", "Mac")
     c = TestClient(app, base_url="http://contacts.example.com")
     hashes = []
     monkeypatch.setattr("iosuite_shared.passwords.check_password", lambda p, h: hashes.append(p) or False)
@@ -69,22 +69,22 @@ def test_basic_and_bearer_are_throttled_before_any_hash(monkeypatch):
 
 
 def test_a_repeated_wrong_password_is_refused_from_a_short_memory(monkeypatch):
-    users.create("alex", "secret123", "editor", "iocontacts")
+    users.create("alex", "secret123", "editor", "iocontact")
     calls = []
     real = apppasswords.check_password
     monkeypatch.setattr(apppasswords, "check_password", lambda p, h: calls.append(p) or real(p, h))
     monkeypatch.setattr("iosuite_shared.users.check_password", lambda p, h: calls.append(p) or real(p, h))
-    assert apppasswords.authenticate("alex", "nope", "iocontacts") is None
+    assert apppasswords.authenticate("alex", "nope", "iocontact") is None
     n = len(calls)
-    assert apppasswords.authenticate("alex", "nope", "iocontacts") is None
+    assert apppasswords.authenticate("alex", "nope", "iocontact") is None
     assert len(calls) == n, "the same wrong password within a few seconds is answered from memory"
     apppasswords.forget()
-    assert apppasswords.authenticate("alex", "nope", "iocontacts") is None and len(calls) > n
+    assert apppasswords.authenticate("alex", "nope", "iocontact") is None and len(calls) > n
 
 
 def test_login_route_locks_the_name_and_the_address():
     app, _ = make_app()
-    users.create("alex", "secret123", "editor", "iocontacts")
+    users.create("alex", "secret123", "editor", "iocontact")
     c = TestClient(app, base_url="http://contacts.example.com")
     for _ in range(users.LOCK_AFTER + 1):
         assert c.post("/api/auth/login", json={"name": "alex", "password": "wrong"}).status_code == 401
@@ -97,7 +97,7 @@ def test_login_route_locks_the_name_and_the_address():
 
 def test_cross_site_uses_the_forwarded_host():
     app, _ = make_app()
-    users.create("alex", "secret123", "editor", "iocontacts")
+    users.create("alex", "secret123", "editor", "iocontact")
     c = TestClient(app, base_url="http://contacts.example.com")
     assert c.post("/api/auth/login", json={"name": "alex", "password": "secret123"}).status_code == 200
     ok = {"origin": "https://contacts.example.com", "x-forwarded-host": "contacts.example.com", "host": "10.0.0.5:8640"}
@@ -107,7 +107,7 @@ def test_cross_site_uses_the_forwarded_host():
 
 
 def test_forwarded_headers_keep_the_real_peer():
-    users.create("alex", "secret123", "editor", "iocontacts")  # with an account: nothing here depends on the open rule
+    users.create("alex", "secret123", "editor", "iocontact")  # with an account: nothing here depends on the open rule
     app, _ = make_app()
     fwd = {"x-forwarded-for": "8.8.8.8, 10.0.0.2", "x-forwarded-proto": "https"}
     c = TestClient(app, base_url="http://contacts.example.com", client=("10.0.0.2", 50000))
@@ -124,7 +124,7 @@ def test_forwarded_headers_keep_the_real_peer():
 
 def test_a_header_proxy_needs_its_address_named():
     db.set_setting("auth_proxy", "nginx", "")
-    pr = proxyauth.Proxy("iocontacts")
+    pr = proxyauth.Proxy("iocontact")
     assert pr.trusted() == [] and pr.identity({"Remote-User": "alex"}, "127.0.0.1") is None
     with pytest.raises(ValueError):
         proxyauth.save_suite({"AUTH_PROXY": "haproxy"})
@@ -175,7 +175,7 @@ def test_cloudflare_token_is_verified_against_the_team_keys(monkeypatch):
 
 def test_session_is_renewed_once_a_day_and_the_cookie_set_again():
     app, _ = make_app()
-    u = users.create("alex", "secret123", "editor", "iocontacts")
+    u = users.create("alex", "secret123", "editor", "iocontact")
     c = TestClient(app, base_url="http://contacts.example.com")
     assert c.post("/api/auth/login", json={"name": "alex", "password": "secret123"}).status_code == 200
     tok = c.cookies[sessions.COOKIE]
@@ -190,14 +190,14 @@ def test_session_is_renewed_once_a_day_and_the_cookie_set_again():
 
 
 def test_expired_sessions_are_purged_at_most_hourly():
-    users.create("alex", "secret123", "editor", "iocontacts")
+    users.create("alex", "secret123", "editor", "iocontact")
     uid = users.find("alex")["id"]
-    db.ex("INSERT INTO ios_sessions (token_hash, user_id, app, via, created_at, expires_at, renewed_at) VALUES ('x' , %s, 'iocontacts', 'password', 1, 2, 1)", (uid,))
+    db.ex("INSERT INTO ios_sessions (token_hash, user_id, app, via, created_at, expires_at, renewed_at) VALUES ('x' , %s, 'iocontact', 'password', 1, 2, 1)", (uid,))
     sessions._purged["at"] = 0
-    sessions.create(uid, "iocontacts", "password")
+    sessions.create(uid, "iocontact", "password")
     assert db.one("SELECT 1 AS x FROM ios_sessions WHERE token_hash = 'x'") is None
-    db.ex("INSERT INTO ios_sessions (token_hash, user_id, app, via, created_at, expires_at, renewed_at) VALUES ('y' , %s, 'iocontacts', 'password', 1, 2, 1)", (uid,))
-    sessions.create(uid, "iocontacts", "password")
+    db.ex("INSERT INTO ios_sessions (token_hash, user_id, app, via, created_at, expires_at, renewed_at) VALUES ('y' , %s, 'iocontact', 'password', 1, 2, 1)", (uid,))
+    sessions.create(uid, "iocontact", "password")
     assert db.one("SELECT 1 AS x FROM ios_sessions WHERE token_hash = 'y'"), "within the hour nothing is purged"
 
 

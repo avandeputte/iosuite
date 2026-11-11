@@ -2,7 +2,7 @@
 
 The suite's shared library: the Python package `iosuite-shared` (module `iosuite_shared`).
 
-The Shared ioSuite database for the ioThing apps (ioPix, ioNotes, ioContacts): one account, one password, one session for
+The Shared ioSuite database for the ioThing apps (ioPix, ioNote, ioContact): one account, one password, one session for
 the whole suite. Signed in at `photo.example.com`, a person is signed in at `notes.example.com` too.
 
 ## What is shared, what is per app
@@ -71,7 +71,7 @@ TZ=Europe/Brussels  LOG_FILE=…  UPDATE_CHECK=0  MCP=1
 
 Default ports, different for every app so that all of them can run on one host (`suite.PORTS`):
 
-| ioPix | ioNotes | ioCalendar | ioSuite | ioContacts | ioHealth | ioDNS | ioTasks | ioBackup | ioRecipe |
+| ioPix | ioNote | ioCalendar | ioSuite | ioContact | ioHealth | ioDNS | ioTask | ioBackup | ioRecipe |
 |-------|---------|------------|---------|------------|----------|-------|---------|----------|----------|
 | 8600  | 8610    | 8620       | 8630    | 8640 (LDAP 3890) | 8650 | 8660 | 8670 | 8680 | 8690 |
 
@@ -107,7 +107,7 @@ from iosuite_shared import users
 
 auth = Auth("iopix", read_only=lambda: appstate.read_only())
 auth.decorate = lambda u: {**u, "person": users.get_value(u["id"], "iopix", "person")}   # optional extra fields
-auth.write_role = "member"   # only in an app where everything is one's own (ioNotes, ioHealth): canWrite in /me means member
+auth.write_role = "member"   # only in an app where everything is one's own (ioNote, ioHealth): canWrite in /me means member
 
 app.middleware("http")(auth.middleware(open_paths=("/", "/index.html"), open_prefixes=("/static/", "/api/auth/"), before=my_gate))
 app.include_router(auth.router())         # /api/auth/login, accounts, logout, me, settings, password, setup,
@@ -127,7 +127,7 @@ def tag(request: Request):
 `_write` ones answer 403 while `read_only()` says so. A rule of the app's own gets a marker of its own,
 `auth.access.custom("uploader", lambda user, request: ..., "Uploads need an editor")`, so the route says what it needs
 instead of carrying `public` and checking inside. The marker is the check: a route does not test the role again in
-its body. The JSON shapes are those of iopix's API, so its pages and the ionotes/iocontacts ones (which copied them)
+its body. The JSON shapes are those of iopix's API, so its pages and the ionote/iocontact ones (which copied them)
 keep working: `PATCH /api/users/{id}` changes an account, `DELETE /api/users/{id}` removes it;
 `POST /api/auth/password {current, password}` changes the caller's own password (never removes it: that is an
 admin's decision on the users route).
@@ -144,7 +144,7 @@ everything else, public routes included; every marker above `public` refuses it 
 `/api/status` answer `requireLogin: true`, `unclaimed: true` and no rights, so the page shows the sign-in screen.
 
 Wrong passwords are counted on every path: the sign-in route, HTTP Basic and bearer tokens (`Auth._authorization`)
-and, through `users.attempt_wait / attempt_failed / attempt_succeeded`, an app's own server such as ioContacts' LDAP.
+and, through `users.attempt_wait / attempt_failed / attempt_succeeded`, an app's own server such as ioContact's LDAP.
 After `users.LOCK_AFTER` failures for a (visitor, name) pair the next attempt waits (429 with `Retry-After`, before any
 hash is computed); the name alone and the address alone have higher limits. The name's counter never holds up a
 visitor who signed in to that account from the same address before (so guesses at a name cannot lock its owner
@@ -169,7 +169,7 @@ commit), and `tx()` begins and commits a transaction. An app uses `db.Database` 
 on a thread share the transaction, and `q` / `ex` inside the block run in it).
 
 Validation raises `iosuite_shared.Invalid` (a `ValueError`): `raise Invalid("A name is needed")` is a 400 with that
-message. ioCalendar and ioContacts share their WebDAV plumbing in `iosuite_shared.dav` (the `dav` extra).
+message. ioCalendar and ioContact share their WebDAV plumbing in `iosuite_shared.dav` (the `dav` extra).
 
 A request to an address somebody else chose (a profile's link, a bookmark) goes through `iosuite_shared.outbound`:
 `outbound.opener()` is an urllib opener whose connections go to the address that was checked, a redirect's too
@@ -389,6 +389,9 @@ under the apps and with a smaller icon (`adminTool` is true).
 The list comes in one order everywhere: ioSuite (the start page) first, then the others by name. Every app's switcher
 keeps that order and lists the app it is in too (marked as the current one), so the menu looks the same in each app.
 
+App ids are the apps' names in lower case (`ionote`, `iotask`, `iocontact`...). Schema 8 moved what the shared tables kept
+under the plural ids of before (`ionotes`, `iotasks`, `iocontacts`) to the singular ones, once, at the first start on 0.45.0.
+
 Over HTTP: `GET /api/auth/suite` (signed in) lists the ones the account may use (`suite.visible`); `DELETE /api/auth/suite/{app}` (suite admins) forgets an
 uninstalled one (it comes back if it starts again).
 
@@ -405,7 +408,7 @@ Every database in the suite follows the same rules, so the apps read alike and c
 
 | What | Rule |
 |---|---|
-| Tables | `<prefix>_<plural noun>`, snake_case. Prefixes: `ios_` (this library), `prt_` (ioSuite start page), `nts_` (ioNotes), `pix_` (ioPix), `cal_` (ioCalendar), `con_` (ioContacts), `hlt_` (ioHealth), `dns_` (ioDNS) |
+| Tables | `<prefix>_<plural noun>`, snake_case. Prefixes: `ios_` (this library), `prt_` (ioSuite start page), `nts_` (ioNote), `pix_` (ioPix), `cal_` (ioCalendar), `con_` (ioContact), `hlt_` (ioHealth), `dns_` (ioDNS) |
 | Child tables | `<prefix>_<parent singular>_<children>`: `con_contact_emails`, `pix_album_photos` |
 | Keys | `id` (a natural key the devices sync by keeps its name: `uuid`); references `<table singular>_id` |
 | Accounts | `user_id` (the row belongs to an account), `owner_id` (NULL: shared with everyone), `created_by` / `decided_by` (who did it) |
@@ -429,7 +432,7 @@ Every app password has a **scope** (`ios_app_passwords.scope`): `''` (the defaul
 `'dav'` reaches the app's sync protocols only, so a password lifted from a phone cannot open the REST API, MCP or the
 web app. `Auth.scope_paths` says which path prefixes each scope may reach (by default `dav`: `/dav`,
 `/.well-known/caldav`, `/.well-known/carddav`); the middleware answers 403 anywhere else. An app without DAV sets
-`auth.scope_paths = {}`. A server outside FastAPI (ioContacts' LDAP) calls `apppasswords.authenticate_scoped(name,
+`auth.scope_paths = {}`. A server outside FastAPI (ioContact's LDAP) calls `apppasswords.authenticate_scoped(name,
 password, app)`, which returns `(user, scope)`, and checks the scope itself.
 
 - `apppasswords.create(user_id, app, label, scope="")`, `list_for(...)` items carry `scope`
@@ -442,7 +445,7 @@ password, app)`, which returns `(user, scope)`, and checks the scope itself.
 ## Apple profiles
 
 `iosuite_shared.appleprofile` builds the configuration profiles (`.mobileconfig`) that add an app's sync account to an
-iPhone, iPad or Mac. `PROFILE_APPS` names the apps that sync (ioCalendar and ioTasks over CalDAV, ioContacts over
+iPhone, iPad or Mac. `PROFILE_APPS` names the apps that sync (ioCalendar and ioTask over CalDAV, ioContact over
 CardDAV); an app's own profile is made of `account(app, name, base, user, secret)` payloads and `build(...)`.
 
 `app.include_router(auth.profile_router(base_url))` adds the downloads: `GET /profile/<token>/<file>` (short-lived
@@ -484,9 +487,9 @@ them itself: the Security panel and `/api/suite-admin` neither list nor change s
 
 ```python
 from iosuite_shared import links
-if links.available("iocontacts"):
-    data = links.json("iocalendar", "iocontacts", "/api/contacts?q=ann")   # or links.get(...): the urllib response
-links.url("iocontacts")                                                    # for links people click
+if links.available("iocontact"):
+    data = links.json("iocalendar", "iocontact", "/api/contacts?q=ann")   # or links.get(...): the urllib response
+links.url("iocontact")                                                    # for links people click
 ```
 
 Behind Cloudflare Access, the whole suite's keys `cf_access_client_id` / `cf_access_client_secret` (a Cloudflare
@@ -518,7 +521,7 @@ ADMIN_PASSWORD=… iosuite-shared admin alex --app iocalendar   # an admin of th
 iosuite-shared --config /opt/iocalendar/app check             # the app's config.env first (what setup.sh does)
 iosuite-shared list
 iosuite-shared create alex --email a@b.c --suite-admin
-iosuite-shared role alex ionotes editor
+iosuite-shared role alex ionote editor
 iosuite-shared password alex
 iosuite-shared edge [--apply]                # the edge check's KV namespace vs the app passwords (below)
 ```
@@ -526,11 +529,11 @@ iosuite-shared edge [--apply]                # the edge check's KV namespace vs 
 ### Several apps in one machine or container: `install`
 
 ```
-ADMIN_PASSWORD=… iosuite-shared --config /opt/iosuite/app install iocalendar iocontacts --admin alex --service --from iosuite
+ADMIN_PASSWORD=… iosuite-shared --config /opt/iosuite/app install iocalendar iocontact --admin alex --service --from iosuite
 iosuite-shared --config /opt/iopix/app install all --no-service
 ```
 
-Every app's `setup.sh` ends with "Also install other apps of the suite here?" (flag `--also iopix,ionotes`; `--also all`;
+Every app's `setup.sh` ends with "Also install other apps of the suite here?" (flag `--also iopix,ionote`; `--also all`;
 the `IO<APP>_ALSO` environment variable in the Proxmox installers). The answer comes here, so the questions every app
 shares are asked once: `install` reads the calling app's config.env and hands each companion the same **app database
 server** (`DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`; each app gets its own database name, `calendar`, `contacts`,
@@ -547,7 +550,7 @@ is left alone. Afterwards each app updates itself as always (its `update.sh`, or
 ### A MariaDB administrator makes the databases and users: `provision`
 
 ```
-DB_ADMIN_PASSWORD=… iosuite-shared --config /opt/iosuite/app provision --admin root [--also iocalendar,ionotes] [--dry-run]
+DB_ADMIN_PASSWORD=… iosuite-shared --config /opt/iosuite/app provision --admin root [--also iocalendar,ionote] [--dry-run]
 DB_ADMIN_PASSWORD=… iosuite-shared --config /opt/iosuite/app install iocalendar --db-admin root ...
 ```
 

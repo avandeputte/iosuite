@@ -24,9 +24,9 @@ def test_declare_lists_without_values(monkeypatch):
 
 def test_admin_keys_and_forget_app():
     suite.register("iocalendar", name="ioCalendar", url="https://cal.example.com", version="1.0")
-    credentials.declare("iocalendar", [{"name": "iocontacts_password", "label": "ioContacts password"}])
+    credentials.declare("iocalendar", [{"name": "iocontact_password", "label": "ioContact password"}])
     me = users.create("alex", "secret123", suite_admin=True)
-    k = admin.set_key(me, "iocalendar", "iocontacts_password", "pw")
+    k = admin.set_key(me, "iocalendar", "iocontact_password", "pw")
     assert k["set"] and k["updatedBy"] == "alex" and k["appName"] == "ioCalendar"
     with pytest.raises(LookupError):
         admin.set_key(me, "iocalendar", "undeclared", "x")

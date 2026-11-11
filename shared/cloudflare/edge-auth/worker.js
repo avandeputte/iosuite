@@ -5,16 +5,16 @@
 // Everything else gets the same 401 the server would give, here, at the edge. The server still checks every password.
 //
 // Variables (wrangler.toml [vars], or Settings › Variables in the dashboard):
-//   APPS  JSON, the host each app is reached at: {"calendar.example.com": "iocalendar", "contacts.example.com": "iocontacts",
+//   APPS  JSON, the host each app is reached at: {"calendar.example.com": "iocalendar", "contacts.example.com": "iocontact",
 //         "health.example.com": "iohealth"}
 //   MODE  "monitor" (default): check and log, but let everything through; "enforce": turn away what fails.
 
-const REALMS = { iocalendar: "ioCalendar", iocontacts: "ioContacts", iotasks: "ioTasks", iohealth: "ioHealth" };
+const REALMS = { iocalendar: "ioCalendar", iocontact: "ioContact", iotask: "ioTask", iohealth: "ioHealth" };
 // what each app's devices sign in on, and what stays open there (ioHealth's /v1/health answers without a password)
 const GUARDED = {
   iocalendar: { paths: [/^\/dav(\/|$)/] },
-  iocontacts: { paths: [/^\/dav(\/|$)/] },
-  iotasks: { paths: [/^\/dav(\/|$)/] },
+  iocontact: { paths: [/^\/dav(\/|$)/] },
+  iotask: { paths: [/^\/dav(\/|$)/] },
   iohealth: { paths: [/^\/v1\//], open: [/^\/v1\/health\/?$/] },
 };
 const DEFAULT = { paths: [/^\/dav(\/|$)/] };

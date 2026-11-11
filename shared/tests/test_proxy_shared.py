@@ -33,10 +33,10 @@ def test_only_the_suite_wide_rows_count(monkeypatch):
     db.set_setting("cf_access_team", "t.cloudflareaccess.com", "")
     db.set_setting("cf_access_aud", f"{AUD1}, {AUD2}", "")
     db.set_setting("auth_proxy", "cloudflare", "")
-    db.set_setting("auth_proxy_trusted", "10.0.0.0/8", "iocontacts")  # a per-app row: never read
+    db.set_setting("auth_proxy_trusted", "10.0.0.0/8", "iocontact")  # a per-app row: never read
     monkeypatch.setenv("CF_ACCESS_TEAM", "x.cloudflareaccess.com")  # nor the environment
     monkeypatch.setenv("AUTH_PROXY", "nginx")
-    pr = proxyauth.Proxy("iocontacts")
+    pr = proxyauth.Proxy("iocontact")
     assert pr.mode() == "cloudflare" and pr.cf_settings() == ("t.cloudflareaccess.com", [AUD1, AUD2])
     assert pr.opt("AUTH_PROXY_TRUSTED") is None
 

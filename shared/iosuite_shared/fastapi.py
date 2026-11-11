@@ -11,7 +11,7 @@ dependencies that say who may call a route, and the routers with the sign-in and
     app.include_router(auth.server_router(updater, log_file=...)) # GET/POST /api/server, GET /api/log (admins)
     auth.install(app, limit_for=...)         # 400 for bad input, the security headers, no-store on the API, the body cap
 
-The API shapes are those of iopix (ionotes copied them), so the apps' pages keep working.
+The API shapes are those of iopix (ionote copied them), so the apps' pages keep working.
 """
 import base64
 import json
@@ -56,7 +56,7 @@ class Auth:
         self.decorate = lambda user: user  # the app may add fields to the user dict it serves (iopix: the person tag)
         self.on_update = None  # on_update(user_id, body) after an admin changed an account: the app's own fields (iopix: the person tag)
         # the role `canWrite` in /api/auth/me stands for: "editor" where the app has things shared with everyone; an app
-        # where everything is one's own (ioNotes, ioHealth) sets "member", so its pages and native apps offer changes to members
+        # where everything is one's own (ioNote, ioHealth) sets "member", so its pages and native apps offer changes to members
         self.write_role = "editor"
         self.deny_exempt = ()  # path prefixes a denied proxy identity may still reach (iopix: /mcp, which signs in with its own token)
         # what a scoped app password may reach, by path prefix (apppasswords: 'dav', the app's sync protocols); anywhere

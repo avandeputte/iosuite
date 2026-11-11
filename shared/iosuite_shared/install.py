@@ -32,11 +32,11 @@ from pathlib import Path
 APPS = {
     "iosuite": dict(label="ioSuite", repo="avandeputte/iosuite", db="suite", port=8630, env="IOSUITE"),
     "iocalendar": dict(label="ioCalendar", repo="avandeputte/iocalendar", db="calendar", port=8620, env="IOCALENDAR"),
-    "iocontacts": dict(label="ioContacts", repo="avandeputte/iocontacts", db="contacts", port=8640, env="IOCONTACTS"),
-    "ionotes": dict(label="ioNotes", repo="avandeputte/ionotes", db="notes", port=8610, env="IONOTES", data=True,
+    "iocontact": dict(label="ioContact", repo="avandeputte/iocontact", db="contacts", port=8640, env="IOCONTACT"),
+    "ionote": dict(label="ioNote", repo="avandeputte/ionote", db="notes", port=8610, env="IONOTE", data=True,
                     extra=["--features", "none"]),
     "iohealth": dict(label="ioHealth", repo="avandeputte/iohealth", db="health", port=8650, env="IOHEALTH"),
-    "iotasks": dict(label="ioTasks", repo="avandeputte/iotasks", db="tasks", port=8670, env="IOTASKS"),
+    "iotask": dict(label="ioTask", repo="avandeputte/iotask", db="tasks", port=8670, env="IOTASK"),
     "iodns": dict(label="ioDNS", repo="avandeputte/iodns", db="dns", port=8660, env="IODNS"),
     "iobackup": dict(label="ioBackup", repo="avandeputte/iobackup", db="backup", port=8680, env="IOBACKUP"),
     "iorecipe": dict(label="ioRecipe", repo="avandeputte/iorecipe", db="recipe", port=8690, env="IORECIPE"),
@@ -62,7 +62,7 @@ def read_env_file(path):
 
 
 def parse_apps(spec):
-    """'iopix, ionotes' / ['iopix,ionotes'] -> ['iopix', 'ionotes']; 'all' -> every app; 'none' / '' -> []."""
+    """'iopix, ionote' / ['iopix,ionote'] -> ['iopix', 'ionote']; 'all' -> every app; 'none' / '' -> []."""
     if isinstance(spec, str):
         spec = [spec]
     names = []
@@ -88,7 +88,7 @@ def dsn(host, port, name, user, password):
 def shared_answers(cfg):
     """The answers every app shares, from the calling app's config.env: the app database server (its credentials;
     the database name differs per app), the Shared ioSuite database and the cookie domain. An app without a MariaDB
-    of its own (ioNotes on SQLite, ioPix set up from its web page) lends the Shared ioSuite database's server and
+    of its own (ioNote on SQLite, ioPix set up from its web page) lends the Shared ioSuite database's server and
     credentials for the companions' databases instead."""
     s_host = cfg.get("IOSUITE_DB_HOST") or cfg.get("DB_HOST") or "127.0.0.1"
     s_port = cfg.get("IOSUITE_DB_PORT") or cfg.get("DB_PORT") or "3306"
@@ -233,7 +233,7 @@ def install(names, config_dir, base=None, admin=None, service=None, photos=None,
 
 def add_parser(sub):
     p = sub.add_parser("install", help="install other apps of the suite here, sharing the answers of the app in --config")
-    p.add_argument("apps", nargs="+", help="iosuite, iopix, ionotes, iocalendar, iocontacts, iotasks, iorecipe, iohealth, iodns, iobackup (comma-separated or several), or all")
+    p.add_argument("apps", nargs="+", help="iosuite, iopix, ionote, iocalendar, iocontact, iotask, iorecipe, iohealth, iodns, iobackup (comma-separated or several), or all")
     p.add_argument("--into", default=None, help="the folder the apps go under, each as <folder>/<app>/app (default: beside the calling app, e.g. /opt)")
     p.add_argument("--admin", default=None, help="make this account an admin of every app too (its password from ADMIN_PASSWORD)")
     g = p.add_mutually_exclusive_group()
