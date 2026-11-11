@@ -8,10 +8,10 @@ def test_status_and_signin(client):
     assert client.get("/").status_code == 200
     from fastapi.testclient import TestClient
     from app.main import app
-    with TestClient(app) as anon:
-        assert anon.get("/").status_code == 200
-        assert anon.get("/api/status").json()["user"] is None
-        assert anon.get("/api/apps").status_code == 401
+    anon = TestClient(app)  # no `with`: the app is started once per process (the MCP session manager)
+    assert anon.get("/").status_code == 200
+    assert anon.get("/api/status").json()["user"] is None
+    assert anon.get("/api/apps").status_code == 401
 
 
 def test_tiles_are_the_registered_apps(client):

@@ -92,6 +92,8 @@ what the app will show on the start page later (today's events, the newest photo
   invitation-only) and sign-in requirement; forget an uninstalled app. **Sign-in at the proxy** for the whole suite. The
   panel is iosuite-shared's (`/api/suite-admin/ui.js` on `/api/suite-admin`), so every io app shows the same one.
 - **Updates**: the daily version check, the note for admins and **Update now**, the server log and Restart under Settings › Server, as in every ioThing app.
+- **Update every app at once**: Settings › Global settings › Updates (suite admins) shows each app's version against GitHub with **Check all now** and **Update all**; each app runs its own `update.sh`.
+- **MCP** (`/mcp`, off until switched on at Settings › Server): `suite_versions` and `update_suite_apps` let an AI assistant do the same, signed in with a suite admin's user name and an ioSuite app password (Settings › Account).
 - Light and dark, a phone layout, installable as a web app (manifest and icons).
 
 ## Run
@@ -224,6 +226,7 @@ what a viewer may not change. CI runs them against MariaDB.
 
 ```
 app/main.py        the application: start-up (tables, first admin, the update check), the suite's middleware, status and routes
+app/mcp.py         the MCP server (/mcp): suite_versions and update_suite_apps (iosuite_shared), suite admins only
 app/access.py      who may call a route: the markers every /api route carries (public, signed_in, editor, admin)
 app/api.py         the REST API: the apps and their settings (sign-in, accounts, status, the server, updates and the log: iosuite_shared's routers)
 app/apps.py        the suite's apps as they registered (iosuite_shared.suite) and the order of their tiles
