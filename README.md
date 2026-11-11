@@ -203,6 +203,15 @@ version as it was), the database is brought up to date, and the service restarts
 answers. In Docker, pull the image instead. From a shell: `./update.sh` (`--check` only looks,
 `IOSUITE_REF=<sha>` installs a given commit).
 
+ioNotes, ioTasks and ioContacts became ioNote, ioTask and ioContact. After updating them, move an existing install
+(service, `/opt` folder, log and config.env names) once per machine with
+[`tools/rename-install.sh`](tools/rename-install.sh):
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/avandeputte/iosuite/main/tools/rename-install.sh
+sudo bash rename-install.sh --dry-run    # then without --dry-run
+```
+
 ## Reverse proxy and HTTPS
 
 Run it behind a reverse proxy that terminates HTTPS (Caddy, Nginx Proxy Manager, HAProxy, Cloudflare Tunnel), on a
