@@ -273,3 +273,26 @@ def test_apple_profile_link_needs_no_cookie(client):
     pw = plistlib.loads(first.content)["PayloadContent"][0]["CalDAVPassword"]
     assert client.request("PROPFIND", "/dav/", auth=("alex", pw), headers={"Depth": "0"}).status_code == 207
     assert client.get("/profile/not-a-token/x.mobileconfig").status_code == 404
+
+
+def test_profile_for_all_apps_that_sync(client):
+    """With another app that syncs in the suite, one profile sets up both, each account with an app password of its
+    own app; this app's own profile stays, and with no other app there is no such choice."""
+    import plistlib
+    from iosuite_shared import suite
+    assert [a["app"] for a in client.get("/api/apple-profile/suite").json()["apps"]] == ["iocalendar"]
+    assert client.post("/api/apple-profile/suite/link", json={}).status_code == 409
+    suite.register("iotasks", name="ioTasks", url="https://other.example.com")
+    assert sorted(a["app"] for a in client.get("/api/apple-profile/suite").json()["apps"]) == sorted(["iocalendar", "iotasks"])
+    r = client.post("/api/apple-profile/suite/link", json={"label": "iPhone", "password": "new"}).json()
+    assert r["url"].endswith("/iosuite-alex.mobileconfig")
+    p = plistlib.loads(client.get(r["url"]).content)
+    assert p["PayloadDisplayName"].startswith("ioSuite for ")
+    own = next(x for x in p["PayloadContent"] if x.get("CalDAVAccountDescription") == "ioCalendar")
+    other = next(x for x in p["PayloadContent"] if x is not own)
+    assert other["CalDAVHostName"] == "other.example.com" and other["CalDAVPassword"].startswith("iotasks-")
+    pw = own["CalDAVPassword"]
+    assert pw.startswith("iocalendar-")
+    client.cookies.clear()
+    assert client.request("PROPFIND", "/dav/", auth=("alex", pw), headers={"Depth": "0"}).status_code == 207
+    assert client.request("PROPFIND", "/dav/", auth=("alex", other["CalDAVPassword"]), headers={"Depth": "0"}).status_code == 401

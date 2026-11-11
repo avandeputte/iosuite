@@ -196,6 +196,9 @@ account password.
 (`.mobileconfig`) with the CalDAV account and a new CalDAV-only app password for that device inside (or none, and the device asks).
 Open the page in Safari on the iPhone, tap Download, then Settings › Profile Downloaded › Install.
 
+Where the suite has more than one app that syncs (ioCalendar, ioContacts, ioTasks), *Set up* in the same box offers
+**All apps**: one profile with the account of each, and an app password of its own per app.
+
 Settings › Apps and devices shows the exact addresses to type; Settings › Account makes **app passwords**: one per phone or app,
 revocable on its own, used with your user name for CalDAV and the REST API (HTTP Basic, or
 `Authorization: Bearer <app password>`). An app password can be made **CalDAV only**: it opens `/dav` and nothing

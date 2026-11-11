@@ -1233,7 +1233,8 @@ async function downloadProfile(e) {
   const btn = f.querySelector('button[type=submit]');
   if (btn) btn.disabled = true;
   try {
-    const r = await api('/api/apple-profile/link', { method: 'POST', json: { label: f.elements.label.value, password: f.elements.password.value } });
+    const all = f.elements.scope && f.elements.scope.value === 'suite';
+    const r = await api(all ? '/api/apple-profile/suite/link' : '/api/apple-profile/link', { method: 'POST', json: { label: f.elements.label.value, password: f.elements.password.value } });
     location.href = r.url;
   } catch (err) {
     toast(err.message);
@@ -1242,9 +1243,25 @@ async function downloadProfile(e) {
   }
 }
 
+/** The "Set up" choice of the profile box: this app only, or every app that syncs (iosuite-shared's suite profile),
+ * offered when the account may use two or more of them. Fields marked data-own belong to this app's own profile. */
+function profileScope(apps, own) {
+  if (!apps || apps.length < 2) return null;
+  const names = apps.map((a) => a.name);
+  const pick = (e) => {
+    const f = e.target.form, all = e.target.value === 'suite';
+    f.action = all ? '/api/apple-profile/suite' : '/api/apple-profile';
+    f.querySelectorAll('[data-own]').forEach((x) => { x.hidden = all; });
+  };
+  return fld('Set up', h('select', { class: 't', name: 'scope', onchange: pick },
+    h('option', { value: 'app' }, `${own} only`),
+    h('option', { value: 'suite' }, `All apps: ${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`)));
+}
+
 /** Settings › Apps and devices: how to connect each kind of app (the app passwords themselves are on Settings › Account). */
 async function setDevices(el) {
   const info = await api('/api/connect');
+  const suiteApps = S.user.passwordless ? [] : (await api('/api/apple-profile/suite').catch(() => ({ apps: [] }))).apps;
   const canPw = !S.user.passwordless;
   const isApple = /iPhone|iPad|Macintosh/.test(navigator.userAgent);
   const plabel = h('input', { class: 't', name: 'label', value: /iPad/.test(navigator.userAgent) ? 'iPad' : /Macintosh/.test(navigator.userAgent) ? 'Mac' : 'iPhone', style: 'max-width:200px' });
@@ -1253,11 +1270,13 @@ async function setDevices(el) {
     canPw ? h('div', { class: 'box' }, h('h2', null, icon('devices'), 'iPhone, iPad and Mac'),
       h('p', null, 'A profile that adds your calendars to Apple Calendar in one step.'),
       h('form', { method: 'POST', action: '/api/apple-profile', class: 'pform', onsubmit: downloadProfile },
+        profileScope(suiteApps, 'ioCalendar'),
         fld('Device name', plabel),
         fld('Password', h('select', { class: 't', name: 'password' }, h('option', { value: 'new' }, 'Include a new app password'), h('option', { value: 'ask' }, 'Ask on the device'))),
         h('p', null, h('button', { class: 'pillbtn primary', type: 'submit' }, icon('download', 's'), 'Download the profile'))),
       how('How to install', h('p', { class: 'muted small' }, isApple ? 'Open the download, then Settings › Profile Downloaded › Install.' : 'Download it in Safari on the iPhone or iPad, then Settings › Profile Downloaded › Install. On a Mac: open the file, then System Settings › Privacy & Security › Profiles.',
-        ' iOS shows the profile as “Not Verified”: that is expected. Revoke its app password under Settings › Account if the device is lost.'))) : null,
+        ' iOS shows the profile as “Not Verified”: that is expected. Revoke its app password under Settings › Account if the device is lost.',
+        suiteApps.length > 1 ? ' A profile for all apps holds one app password per app; revoke each one in its own app.' : null))) : null,
     h('div', { class: 'box' }, h('h2', null, icon('today'), 'Calendar apps (CalDAV)'),
       h('p', null, 'Two-way sync with your user name and an app password (Settings › Account).'),
       kv('Server', info.server), kv('User name', info.user), kv('CalDAV', info.caldav),

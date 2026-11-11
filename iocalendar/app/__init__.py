@@ -1,2 +1,2 @@
 """ioCalendar: self-hosted calendars for the ioThing suite."""
-__version__ = "0.37.0"
+__version__ = "0.39.0"
