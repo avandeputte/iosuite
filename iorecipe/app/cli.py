@@ -1,0 +1,50 @@
+"""Command line: python -m app.cli <command>
+
+  migrate                     create or update the tables
+  check                       connect to the databases and say what is there
+  import URL [--private NAME] the recipe on a web page, as a family recipe (or the private one of an account)
+
+Accounts are the suite's: `iosuite-shared --config . admin NAME --app iorecipe` makes an admin (setup.sh does),
+`iosuite-shared --config . password NAME` sets a password.
+"""
+import sys
+
+from app import db, users
+
+
+def main(argv: list[str]) -> int:
+    if not argv or argv[0] in ("-h", "--help"):
+        print(__doc__)
+        return 0
+    cmd, args = argv[0], argv[1:]
+    db.migrate()
+    if cmd == "migrate":
+        print("ok: tables ready")
+    elif cmd == "check":
+        n = db.one("SELECT count(*) AS n FROM rcp_recipes")["n"]
+        users.init()
+        u = len(users.all_users())
+        print(f"ok: {u} account(s), {n} recipe(s)")
+    elif cmd == "import":
+        if not args or (len(args) > 1 and (len(args) != 3 or args[1] != "--private")):
+            print("import URL [--private NAME]", file=sys.stderr)
+            return 2
+        from app import api
+        users.init()
+        if len(args) == 3:
+            u = users.find(args[2])
+        else:
+            u = next((x for x in users.all_users() if x["role"] == "admin"), None)
+        if not u:
+            print("no such account (or no admin to add it as)", file=sys.stderr)
+            return 2
+        r = api.import_from(u, args[0], family=len(args) == 1)
+        print(f"ok: {r['title']} ({len(r['ingredients'])} ingredients, {len(r['steps'])} steps)")
+    else:
+        print(__doc__)
+        return 2
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
