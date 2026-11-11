@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "iocalendar"
-version = "0.32.2"
+version = "0.33.0"
 description = "Self-hosted calendars for the family: web app, CalDAV, iCalendar feeds, REST/jCal, MCP"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "GPL-3.0-or-later" }
 dependencies = [
-  "iosuite-shared @ git+https://github.com/avandeputte/iosuite-shared.git@b164c6cdcd74849dfb5d324f87bdea7333d9364d",   # iosuite-shared 0.34.0, the suite's shared library: accounts, sessions, the Shared ioSuite database (pinned: bump to pick up a new one)
+  "iosuite-shared @ git+https://github.com/avandeputte/iosuite-shared.git@a50e6b1ecaac07bd702e58663b27746daca3834d",   # iosuite-shared 0.35.0, the suite's shared library: accounts, sessions, the Shared ioSuite database (pinned: bump to pick up a new one)
   "fastapi<1",
   "uvicorn<1",
   "pymysql<2",
