@@ -458,8 +458,15 @@ def _put(ctx: Ctx, parts, body: bytes, headers) -> Response:
     other = model.by_uid(c["id"], ix["uid"])
     if other and (not row or other["id"] != row["id"]):
         return _precondition(C, "no-uid-conflict", 409, ctx.cal_href(c) + quote(other["href"]))
-    new = model.save(c["id"], cal, row["id"] if row else None, parts[3], ctx.user["id"])
-    return Response(status_code=204 if row else 201, headers={"ETag": f'"{new["etag"]}"'})
+    # a task that repeats after completion keeps its rule, and comes back when the app ticked it off: the app is not
+    # told an ETag then, so it fetches what the server made of it
+    ticked = bool(row) and not row["done"] and ical.status_of(ical.todo(cal)) == "COMPLETED"
+    mine = bool(row) and ical.keep_after_done(model.parsed(row), cal)
+    back = mine and ticked
+    with model.step("caldav"):
+        new = model.save(c["id"], ical.finish(cal) if mine else cal, row["id"] if row else None, parts[3], ctx.user["id"],
+                         "done" if back else None, f"next {(ical.todo_json(cal)['due'] or '')[:10]}" if back else None)
+    return Response(status_code=204 if row else 201, headers={} if mine else {"ETag": f'"{new["etag"]}"'})
 
 
 def _delete(ctx: Ctx, parts, headers) -> Response:
@@ -482,7 +489,8 @@ def _delete(ctx: Ctx, parts, headers) -> Response:
         return Response(status_code=404)
     if headers.get("if-match") and not _etag_match(headers.get("if-match"), row["etag"]):
         return Response(status_code=412)
-    model.delete(row["id"])
+    with model.step("caldav"):
+        model.delete(row["id"], ctx.user["id"])
     return Response(status_code=204)
 
 

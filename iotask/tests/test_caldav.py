@@ -2,17 +2,9 @@
 conflicts, multiget, calendar-query for the open tasks, sync-collection with deletions, MKCALENDAR, PROPPATCH."""
 import re
 
-import pytest
 
 TODO = ("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Apple Inc.//iOS 18//EN\r\nBEGIN:VTODO\r\nUID:{uid}\r\nDTSTAMP:20260101T000000Z\r\n"
         "SUMMARY:{title}\r\n{extra}X-APPLE-SORT-ORDER:790000000\r\nEND:VTODO\r\nEND:VCALENDAR\r\n")
-
-
-@pytest.fixture()
-def dav(client):
-    pw = client.post("/api/auth/app-passwords", json={"label": "iPhone"}).json()["password"]
-    client.cookies.clear()
-    return lambda method, path, body=None, **h: client.request(method, path, content=body, auth=("alex", pw), headers=h)
 
 
 def test_discovery_shows_lists_of_todos(client, dav):

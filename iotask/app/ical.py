@@ -17,6 +17,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from dateutil import rrule as du_rrule
+from dateutil.relativedelta import relativedelta
 from icalendar import Alarm, Calendar, Event, Todo, vDDDTypes, vRecur
 
 from app import __version__, config
@@ -27,7 +28,14 @@ UTC = dt.timezone.utc
 STATUSES = ("NEEDS-ACTION", "IN-PROCESS", "COMPLETED", "CANCELLED")
 PRIORITIES = {"high": 1, "medium": 5, "low": 9, "none": 0, "": 0}
 EDITABLE = ("title", "notes", "due", "start", "timezone", "priority", "done", "status", "percent", "url", "location",
-            "categories", "parent", "rrule", "alarms")
+            "categories", "parent", "rrule", "repeatAfter", "alarms")
+# ioTasks' own property: the task comes back this long after the day it is ticked off (an ISO 8601 duration of days,
+# weeks, months or years: "P2W" is two weeks later), where RRULE counts from the due date. Reminders apps keep a
+# property they do not know.
+AFTER_DONE = "X-IOTASKS-AFTER-DONE"
+SORT_ORDER = "X-APPLE-SORT-ORDER"   # Apple Reminders' manual order: lower comes first; without it, the seconds from 2001 to CREATED
+APPLE_EPOCH = dt.datetime(2001, 1, 1, tzinfo=UTC)
+UNITS = {"D": "days", "W": "weeks", "M": "months", "Y": "years"}
 
 
 # ------------------------------------------------------------------ time zones
@@ -271,6 +279,43 @@ def priority_name(p: int) -> str | None:
     return None if not p else "high" if p < 5 else "medium" if p == 5 else "low"
 
 
+def sort_of(t: Todo) -> int | None:
+    """Where the task stands in its list's manual order (X-APPLE-SORT-ORDER, else as Reminders counts without one: the
+    seconds from 2001 to when it was made)."""
+    try:
+        n = int(float(_str(t, SORT_ORDER)))
+        if n:
+            return n
+    except ValueError:
+        pass
+    made = _val(t, "CREATED")
+    return int((to_utc(made) - APPLE_EPOCH).total_seconds()) if isinstance(made, dt.datetime) else None
+
+
+def set_sort(cal: Calendar, n: int) -> None:
+    t = todo(cal)
+    _set(t, SORT_ORDER, str(int(n)))
+    stamp(t)
+
+
+def after_done_of(t: Todo) -> str | None:
+    """How long after it is ticked off the task comes back ("P2W"), or None."""
+    try:
+        return _after_done(_str(t, AFTER_DONE))
+    except ValueError:
+        return None
+
+
+def _after_done(value) -> str | None:
+    """A repeat-after-completion duration, checked: P and a number of days, weeks, months or years."""
+    if not value:
+        return None
+    m = re.fullmatch(r"P([1-9]\d{0,2})([DWMY])", str(value).strip().upper())
+    if not m:
+        raise Invalid("repeatAfter is a number of days, weeks, months or years as an ISO 8601 duration: P3D, P2W, P1M, P1Y")
+    return m.group(0)
+
+
 def alarms_of(t: Todo, tzname: str | None = None) -> list[str]:
     """When each alert goes off, as ISO date-times: absolute triggers as they are, relative ones from the due time (or
     the start, for RELATED=START with a start)."""
@@ -301,16 +346,12 @@ def index(cal: Calendar, tzname: str | None = None) -> dict:
         raise Invalid("A task without a UID")
     due, start, done_at = due_of(t), _val(t, "DTSTART"), _val(t, "COMPLETED")
     st = status_of(t)
-    try:
-        sort = int(_str(t, "X-APPLE-SORT-ORDER") or 0) or None
-    except ValueError:
-        sort = None
     return {"uid": uid, "summary": _str(t, "SUMMARY")[:512], "description": _str(t, "DESCRIPTION") or None, "status": st,
             "done": int(st in ("COMPLETED", "CANCELLED")), "priority": priority_of(t),
             "due": naive_utc(due, tzname) if due is not None else None, "due_all_day": int(due is not None and not isinstance(due, dt.datetime)),
             "start": naive_utc(start, tzname) if start is not None else None,
             "completed_at": naive_utc(done_at, tzname) if isinstance(done_at, dt.datetime) else None,
-            "parent_uid": (parent_of(t) or "")[:255] or None, "rrule": (rrule_text(t) or "")[:1024] or None, "sort_order": sort}
+            "parent_uid": (parent_of(t) or "")[:255] or None, "rrule": (rrule_text(t) or "")[:1024] or None, "sort_order": sort_of(t)}
 
 
 def todo_json(cal: Calendar, tzname: str | None = None) -> dict:
@@ -326,7 +367,8 @@ def todo_json(cal: Calendar, tzname: str | None = None) -> dict:
             "due": iso(due), "dueAllDay": due is not None and not isinstance(due, dt.datetime), "start": iso(start),
             "priority": priority_name(p), "priorityValue": p, "percent": int(pct) if pct.isdigit() else None,
             "url": _str(t, "URL") or None, "location": _str(t, "LOCATION") or None, "categories": categories_of(t),
-            "parent": parent_of(t), "rrule": rrule_text(t), "alarms": alarms_of(t, tzname)}
+            "parent": parent_of(t), "rrule": rrule_text(t), "repeatAfter": after_done_of(t), "alarms": alarms_of(t, tzname),
+            "sortOrder": sort_of(t)}
 
 
 # ------------------------------------------------------------------ writing
@@ -399,6 +441,35 @@ def _priority(v) -> int:
     return p
 
 
+def _wall(d, tzname: str | None) -> dt.datetime:
+    """A date or time as the clock on the wall shows it (a date: its midnight)."""
+    if not isinstance(d, dt.datetime):
+        return dt.datetime(d.year, d.month, d.day)
+    return (d.astimezone(zone(tzname)) if d.tzinfo else d).replace(tzinfo=None)
+
+
+def shift_alarms(t: Todo, old, new, tzname: str | None = None) -> None:
+    """The alerts follow the due date: each absolute one moves by as much as the due did, on the clock (an alert at
+    9:00 stays at 9:00 across a change of the clocks). Alerts counted from the due time move by themselves."""
+    if old is None or new is None:
+        return
+    if isinstance(old, dt.datetime) and isinstance(new, dt.datetime):
+        delta = _wall(new, tzname) - _wall(old, tzname)
+    else:  # a day became a time or the other way round: the alerts move by whole days
+        delta = _wall(new, tzname).date() - _wall(old, tzname).date()
+    if not delta:
+        return
+    for a in t.walk("VALARM"):
+        tr = a.get("TRIGGER")
+        if tr is not None and isinstance(tr.dt, dt.datetime):
+            at = tr.dt if tr.dt.tzinfo else tr.dt.replace(tzinfo=zone(tzname))
+            z = zone(tzname)
+            a["TRIGGER"] = vDDDTypes(((at.astimezone(z).replace(tzinfo=None) + delta).replace(tzinfo=z)).astimezone(UTC))
+            a["TRIGGER"].params["VALUE"] = "DATE-TIME"
+        if "ACKNOWLEDGED" in a:
+            del a["ACKNOWLEDGED"]
+
+
 def set_done(t: Todo, done: bool) -> None:
     """Mark the VTODO itself done or not done (no repeat handling: see complete)."""
     if done:
@@ -434,6 +505,8 @@ def apply(t: Todo, data: dict, tzname: str | None = None) -> Todo:
             # kind, or after the new due, would make the object invalid (RFC 5545: DUE not before DTSTART, same kind)
             if new is None or old_start == old_due or type(old_start) is not type(new) or to_utc(old_start, tz) > to_utc(new, tz):
                 _set(t, "DTSTART", new)
+        if "alarms" not in data:
+            shift_alarms(t, old_due, new, tz)
     if "start" in data:
         st = parse_when(data["start"], tz) if data.get("start") else None
         d = due_of(t)
@@ -474,6 +547,13 @@ def apply(t: Todo, data: dict, tzname: str | None = None) -> Todo:
         if r is not None and anchor is None:
             raise Invalid("A repeating task needs a due date")
         _set(t, "RRULE", _fit_until(r, anchor) if r is not None else None)
+        if r is not None and "repeatAfter" not in data:  # one way of repeating at a time
+            _set(t, AFTER_DONE, None)
+    if "repeatAfter" in data:
+        rule = _after_done(data.get("repeatAfter"))
+        _set(t, AFTER_DONE, rule)
+        if rule:
+            _set(t, "RRULE", None)
     if "alarms" in data:
         t.subcomponents[:] = [a for a in t.subcomponents if a.name != "VALARM"]
         for x in data.get("alarms") or []:
@@ -552,12 +632,48 @@ def next_due(t: Todo, tzname: str | None = None):
     return nxt - start, r
 
 
+def _add(day: dt.date, after: str) -> dt.date:
+    """A day, a repeat-after-completion duration later."""
+    return day + relativedelta(**{UNITS[after[-1]]: int(after[1:-1])})
+
+
+def _move_to(t: Todo, new, tzname: str | None) -> None:
+    """Open again with a new due date: the start that went with it and the alerts move along."""
+    old, start = due_of(t), _val(t, "DTSTART")
+    if "DURATION" in t:
+        del t["DURATION"]
+    _set(t, "DUE", new)
+    if start is not None:
+        if old is not None and type(start) is type(old) and type(old) is type(new):
+            _set(t, "DTSTART", start + (new - old))
+        else:
+            _set(t, "DTSTART", new)
+    shift_alarms(t, old, new, tzname)
+    for a in t.walk("VALARM"):
+        if "ACKNOWLEDGED" in a:
+            del a["ACKNOWLEDGED"]
+    set_done(t, False)
+    stamp(t)
+
+
 def complete(cal: Calendar, done: bool, tzname: str | None = None) -> bool:
     """Tick a task off (done) or open it again. A repeating task that is ticked off moves on to its next occurrence
-    instead, as Apple Reminders does: the due date, the start and the alerts move by as much, and it stays open. True
-    when it moved on."""
+    instead, as Apple Reminders does: the due date, the start and the alerts move by as much, and it stays open. One
+    that repeats after completion comes back that long after today (tzname's today), at its usual time. True when it
+    moved on."""
     t = todo(cal)
     if done:
+        after = after_done_of(t)
+        if after:
+            old = due_of(t)
+            if isinstance(old, dt.datetime):
+                z = old.tzinfo or zone(tzname)
+                day = _add(dt.datetime.now(z).date(), after)
+                new = dt.datetime.combine(day, old.replace(tzinfo=None).time(), old.tzinfo)
+            else:
+                new = _add(dt.datetime.now(zone(tzname)).date(), after)
+            _move_to(t, new, tzname)
+            return True
         step = next_due(t, tzname)
         if step is not None:
             delta, r = step
@@ -579,6 +695,43 @@ def complete(cal: Calendar, done: bool, tzname: str | None = None) -> bool:
     set_done(t, done)
     stamp(t)
     return False
+
+
+def keep_after_done(old: Calendar, new: Calendar, tzname: str | None = None) -> bool:
+    """A reminders app saved a task that repeats after completion. The rule is ioTasks' own, so an app that dropped it
+    gets it back; and when the app ticked the task off, it comes back with its next due date instead of closing. True
+    when the object was changed (the app then fetches it again)."""
+    rule = after_done_of(todo(old))
+    if not rule:
+        return False
+    t, changed = todo(new), False
+    if not after_done_of(t):
+        if rrule_text(t):  # the app gave it a repeat of its own: that one counts now
+            return False
+        _set(t, AFTER_DONE, rule)
+        changed = True
+    if status_of(t) == "COMPLETED" and status_of(todo(old)) != "COMPLETED":
+        complete(new, True, tzname)
+        changed = True
+    return changed
+
+
+def postpone(cal: Calendar, day: dt.date, tzname: str | None = None) -> None:
+    """Due on another day, at the time it had (the alerts follow)."""
+    t = todo(cal)
+    old = due_of(t)
+    if isinstance(old, dt.datetime):
+        new = dt.datetime.combine(day, old.replace(tzinfo=None).time(), old.tzinfo)
+    else:
+        new = day
+    start = _val(t, "DTSTART")
+    if "DURATION" in t:
+        del t["DURATION"]
+    _set(t, "DUE", new)
+    if start is not None:
+        _set(t, "DTSTART", start + (new - old) if old is not None and type(start) is type(old) else new)
+    shift_alarms(t, old, new, tzname)
+    stamp(t)
 
 
 def feed(objects: list, name: str, color: str | None = None) -> str:

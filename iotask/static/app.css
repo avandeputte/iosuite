@@ -182,7 +182,11 @@ pre.log { background: var(--bg2); border: 1px solid var(--line); border-radius: 
 .menu .mi:hover { background: var(--bg2); }
 .menu .who { padding: 8px 10px 10px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
 #toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: #323232; color: #fff; padding: 12px 18px; border-radius: var(--r-s); z-index: 100;
-  box-shadow: var(--shadow); max-width: calc(100vw - 32px); }
+  box-shadow: var(--shadow); max-width: calc(100vw - 32px); display: flex; align-items: center; gap: 16px; }
+#toast[hidden] { display: none; }
+#toast .undo { color: #8fe3d3; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; font-size: var(--fs-m); padding: 4px 6px; margin: -4px -6px -4px 0; border-radius: var(--r-s); }
+#toast .undo:hover { background: rgba(255,255,255,.12); }
+.menu.pop { position: fixed; right: auto; z-index: 95; }
 .dialog-back { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 90; display: flex; align-items: center; justify-content: center; padding: 16px; }
 .dialog { background: var(--bg); border-radius: var(--r-l); padding: 20px 22px; width: 100%; max-width: 460px; box-shadow: var(--shadow); max-height: 90vh; overflow: auto; }
 .dialog h2 { margin: 0 0 10px; font-size: var(--fs-xl); font-weight: 500; }
@@ -241,7 +245,7 @@ button.chip.toggle.on .mem { opacity: 1; }
 
 /* ---- narrow screens: the sidebar slides in; phones get a bottom bar with the smart lists and More */
 @media (max-width: 860px) {
-  #menubtn, #navscrim, .navhead, .navgap, .navsec, .navfoot, #nav a[data-v="list"], #nav a[data-v="import"], #nav a[data-v="who"] { display: none !important; }
+  #menubtn, #navscrim, .navhead, .navgap, .navsec, .navfoot, #nav a[data-v="list"], #nav a[data-v="import"], #nav a[data-v="who"], #nav a[data-v="activity"] { display: none !important; }
   #suitebtn:not([hidden]) { display: inline-flex; margin: 0; }
   #topbar { gap: 6px; padding: 0 8px; left: 0; padding-top: env(safe-area-inset-top); height: calc(var(--topbar) + env(safe-area-inset-top)); }
   #nav { top: auto; bottom: 0; left: 0; right: 0; width: auto; height: calc(56px + env(safe-area-inset-bottom)); flex-direction: row; justify-content: space-around;
@@ -260,6 +264,7 @@ button.chip.toggle.on .mem { opacity: 1; }
   #newbtn span:last-child { display: none; }
   #newbtn { padding: 0 8px; }
   .trow .info { display: none; }
+  #toast { bottom: calc(68px + env(safe-area-inset-bottom)); }
 }
 
 /* ================================================================== the tasks */
@@ -314,3 +319,64 @@ input.t.big:hover { border-color: var(--line); }
 .formbar .grow { flex: 1; }
 .subs .tasks { margin-top: 2px; }
 .subs .trow .ttl { font-size: var(--fs-base); }
+
+/* ---- the new-task line: what it understood, under it */
+.qhint { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 6px 4px 8px 36px; border-bottom: 1px solid var(--line); font-size: var(--fs-m); color: var(--fg2); }
+.qhint[hidden] { display: none; }
+.qhint .qt { color: var(--fg); font-weight: 600; margin-right: 4px; overflow-wrap: anywhere; }
+.qchip { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 9px 0 7px; border-radius: var(--r-pill); background: var(--accent-bg); color: var(--accent); white-space: nowrap; }
+.qchip .ldot { width: 10px; height: 10px; margin: 0 1px; }
+
+/* ---- putting off: the button on a task, the row of days in the form, "move all to today" on Overdue */
+.trow .later { width: 30px; height: 30px; opacity: 0; color: var(--fg2); }
+.trow:hover .later, .trow .later:focus-visible, .trow .later.soon { opacity: 1; }
+.tsec.late { display: flex; align-items: center; gap: 12px; }
+.pillbtn.tiny { height: 24px; padding: 0 10px; font-size: var(--fs-s); font-weight: 500; }
+.laterrow { margin-top: 8px; }
+.reprow { display: flex; gap: 6px; align-items: center; }
+.reprow > select.t { flex: 1 1 160px; min-width: 0; max-width: 260px; }
+.listboxes.one .grip { display: none; }
+.everybox { display: inline-flex; gap: 6px; }
+.everybox[hidden] { display: none; }
+.everybox input.t { width: 64px; }
+.everybox select.t { width: auto; }
+
+/* ---- the order by hand: a task moves by its grip, with its subtasks; a list by its grip (Settings) or, in the
+   sidebar, by itself */
+.grip { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 24px; margin: 0 -8px 0 -4px; color: var(--fg2); opacity: .45; cursor: grab; touch-action: none; }
+.grip:hover { opacity: 1; }
+.tgrp.dragging, .listboxes .box.dragging { background: var(--accent-bg); border-radius: var(--r-s); box-shadow: var(--shadow); position: relative; z-index: 2; }
+body.sorting, body.sorting * { cursor: grabbing !important; user-select: none; -webkit-user-select: none; }
+.navgrp { display: contents; }
+#nav .navgrp a.dragging { background: var(--accent-bg); box-shadow: var(--shadow); }
+.box h2 .grip { margin: 0 2px 0 -6px; }
+
+/* ---- activity */
+.act { display: flex; align-items: center; gap: 12px; padding: 8px 4px; border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent); }
+.act .av { width: 30px; height: 30px; font-size: 11px; background: hsl(var(--h, 200) 45% 45%); }
+.act .abody { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.act b { font-weight: 600; }
+.act.undone .abody > div:first-child { text-decoration: line-through; color: var(--fg2); }
+.act .pillbtn { flex: none; }
+
+/* ---- on paper: the list as a checklist (the ⋯ menu of a list, or the browser's Print) */
+@media print {
+  :root { color-scheme: light; --bg: #fff; --bg2: #fff; --fg: #000; --fg2: #444; --line: #bbb; }
+  html, body { background: #fff !important; color: #000; height: auto; overflow: visible; }
+  #topbar, #nav, #navscrim, #toast, #updbanner, .menu, .dialog-back, .qwrap, .tasks-head .iconbtn, .tasks-head .pillbtn, .trow .info, .trow .later, .grip,
+  .taskpage > p.center, .tsec .pillbtn, .act .pillbtn { display: none !important; }
+  #main { position: static !important; inset: auto; overflow: visible !important; display: block; height: auto; }
+  .page { padding: 0; max-width: none; }
+  .tasks-head h1 { color: #000; font-size: 20pt; }
+  .tasks-head .count { display: none; }
+  .trow { break-inside: avoid; padding-top: 6px; padding-bottom: 6px; border-bottom: 1px solid #ccc; }
+  .trow:hover { background: none; }
+  .tick { border: 1.5px solid #000 !important; background: none !important; }
+  .tick.on svg { fill: #000 !important; }
+  .tick svg { opacity: 0; }
+  .tick.on svg { opacity: 1; }
+  .tnotes { white-space: normal; }
+  .tmeta, .tmeta .late, .tmeta .lname, .tsec, .tsec.late, .prio { color: #000; }
+  .mem { border: 1px solid #000; background: none !important; color: #000 !important; }
+  a { text-decoration: none; color: inherit; }
+}

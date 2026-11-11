@@ -5,7 +5,7 @@ from typing import Literal, Optional
 from mcp.server.mcpserver.exceptions import ToolError
 
 from app import __version__, config, ical, members, model
-from app.mcp.base import READ_ONLY, clamp, find_list, find_task, lists, member_ids, server, task_out, who
+from app.mcp.base import READ_ONLY, clamp, find_list, find_task, list_names, lists, member_ids, server, task_out, who
 
 
 def _pick(u: dict, names: Optional[list[str]]) -> list[dict]:
@@ -107,3 +107,28 @@ def connection_details() -> dict:
     base = config.PUBLIC_URL or "(this server's address)"
     return {"user": u["name"], "caldav": f"{base}/dav/", "lists": {c["name"]: f"{base}/dav/calendars/{u['name']}/{c['slug']}/" for c in lists(u)},
             "api": f"{base}/api/docs", "apple": "Settings › Apps and devices › Download the profile (adds the account to Reminders)"}
+
+
+@server.tool(annotations=READ_ONLY)
+def recent_activity(list: Optional[str] = None, limit: int = 30) -> dict:
+    """Who did what lately, newest first: who added, changed, ticked off, moved or deleted which task, and through
+    what (web: the web app, caldav: a reminders app, mcp: an assistant). list: a name or id (else every list you see).
+    Each of the items has `step`: undo takes that step back while canUndo is true."""
+    u = who()
+    ls = [find_list(u, list)] if list else lists(u)
+    names = list_names(u)
+    out = []
+    for a in model.activity([c["id"] for c in ls], {c["id"] for c in ls if model.can_write(u, c)}, clamp(limit, 1, 200)):
+        out.append({k: v for k, v in {"step": a["batch"], "at": a["at"], "who": a["user"], "action": a["action"], "task": a["title"],
+                                      "taskId": a["taskId"], "list": names.get(a["listId"]), "via": a["via"], "detail": a["detail"],
+                                      "tasks": a["count"] if a["count"] > 1 else None, "undone": a["undone"] or None,
+                                      "canUndo": a["canUndo"]}.items() if v is not None})
+    return {"items": out}
+
+
+@server.tool(annotations=READ_ONLY)
+def list_templates() -> dict:
+    """The templates (a list's tasks kept to add again: a packing list, the weekly shop): {items: [{id, name, shared, count}]}.
+    apply_template adds one's tasks to a list."""
+    u = who()
+    return {"items": [{k: t[k] for k in ("id", "name", "shared", "count")} for t in (model.template_public(t, u) for t in model.templates_for(u))]}
