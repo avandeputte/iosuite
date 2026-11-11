@@ -57,7 +57,7 @@ def find_book(u: dict, ref, writable: bool = False) -> dict:
         raise ToolError(f"'{ref}' names more than one address book: " + ", ".join(f"{b['name']} (id {b['id']})" for b in hit))
     b = hit[0]
     if writable and not model.can_write_book(u, b):
-        raise ToolError(f"You can read '{b['name']}' but not change it (viewers change only their own private book)")
+        raise ToolError(f"You can read '{b['name']}' but not change it (a viewer only reads; members change their own private books, editors the shared ones)")
     return b
 
 
@@ -96,7 +96,7 @@ def find_contact(u: dict, ref, writable: bool = False) -> dict:
             raise ToolError(f"'{s}' matches several contacts; give the id: " + "; ".join(f"{r['fn']} (id {r['id']})" for r in names))
         row = model.get_row(rows[0]["id"])
     if writable and not model.can_write_book(u, model.book(row["address_book_id"])):
-        raise ToolError(f"You can read {row['fn']} but not change them (viewers change only their own private book)")
+        raise ToolError(f"You can read {row['fn']} but not change them (a viewer only reads; members change their own private books, editors the shared ones)")
     return row
 
 

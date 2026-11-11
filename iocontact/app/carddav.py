@@ -19,6 +19,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import RedirectResponse, Response
 from iosuite_shared import dav as webdav  # `dav` is the route below
+from iosuite_shared import users as shared_users
 from iosuite_shared.dav import AP, CS, D, q
 from iosuite_shared.errors import Invalid
 
@@ -385,7 +386,7 @@ def _proppatch(ctx: Ctx, parts, body) -> Response:
             for c in prop:
                 ET.SubElement(p, c.tag)
     if b and not model.can_write_book(ctx.user, b):
-        _sub(ps, D, "status", "HTTP/1.1 403 Forbidden")  # a viewer cannot rename or recolour a shared book
+        _sub(ps, D, "status", "HTTP/1.1 403 Forbidden")  # only an editor renames or recolours a shared book
         return _xml(ms)
     if b and changes:
         try:
@@ -481,9 +482,11 @@ def _delete(ctx: Ctx, parts, headers) -> Response:
 
 
 def _mkcol(ctx: Ctx, parts, body) -> Response:
-    """Extended MKCOL (RFC 5689): a client making a new private address book."""
+    """Extended MKCOL (RFC 5689): a client making a new private address book (members and more)."""
     if len(parts) != 3 or parts[0] != "addressbooks":
         return Response(status_code=403)
+    if not shared_users.is_member(ctx.user):
+        return Response("A viewer only looks; a member keeps address books of their own", status_code=403)
     if _book(ctx, parts[2]):
         return Response(status_code=405)
     name = parts[2]

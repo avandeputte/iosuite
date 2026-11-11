@@ -1,5 +1,5 @@
-"""The tools that change contacts, with the same permissions as the web app: a viewer changes only their own private
-book, editors and admins the shared ones too. Every change reaches phones and apps at their next CardDAV sync."""
+"""The tools that change contacts, with the same permissions as the web app: a viewer only reads, a member
+changes their own private books, editors and admins the shared ones too. Every change reaches phones and apps at their next CardDAV sync."""
 from typing import Literal, Optional
 
 from mcp.server.mcpserver.exceptions import ToolError
@@ -426,7 +426,9 @@ def create_address_book(name: str, shared: bool = False, description: Optional[s
     """Make an address book: private (only you see it) or, for editors and admins, shared with everyone."""
     u = who()
     if shared and not shared_users.can_write(u):
-        raise ToolError("Viewers make private address books only")
+        raise ToolError("Only editors make shared address books")
+    if not shared and not shared_users.is_member(u):
+        raise ToolError("A viewer only looks; a member keeps address books of their own")
     bid = model.create_book(None if shared else u["id"], name.strip()[:128] or "Contacts", description)
     b = model.book(bid)
     return {"id": bid, "name": b["name"], "shared": shared}

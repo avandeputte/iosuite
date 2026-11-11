@@ -308,7 +308,7 @@ function drawNav() {
     S.status.iopix ? link('iopix', '#/iopix', 'image', 'ioPix people', null, r.view === 'iopix', '--c-indigo') : null,
     h('button', { class: 'navmore', 'data-v': 'more', title: 'More', onclick: moreSheet }, icon('more'), h('span', { class: 'nl' }, 'More')),
     h('div', { class: 'navgap' }),
-    sec('Address books', h('button', { class: 'iconbtn', title: 'New address book', onclick: newBook }, icon('add', 's'))),
+    sec('Address books', canOwn() ? h('button', { class: 'iconbtn', title: 'New address book', onclick: newBook }, icon('add', 's')) : null),
     S.books.map((b) => h('a', { href: `#/book/${b.id}`, 'data-v': 'book', class: listView && S.scope.kind === 'book' && +S.scope.id === b.id ? 'on' : null,
       style: { '--hue': b.color || (b.shared ? 'var(--c-purple)' : 'var(--c-teal)') } },
       h('span', { class: 'ic dotic' }, h('span', { class: 'dot' })), h('span', { class: 'nl' }, b.name), h('span', { class: 'n' }, b.count))),
@@ -357,10 +357,17 @@ function moreSheet() {
   return p;
 }
 
+// the suite's roles, each able to do what the one before can: a viewer only looks, a member keeps their own books,
+// an editor changes the shared ones too
+const RANK = { none: 0, viewer: 1, member: 2, editor: 3, admin: 4 };
+const roleAtLeast = (r) => (RANK[S.user && S.user.role] || 0) >= RANK[r];
+const canOwn = () => roleAtLeast('member');
+const canShared = () => roleAtLeast('editor');
+
 async function newBook() {
   const name = h('input', { class: 't', placeholder: 'Name, e.g. Work or School friends' });
   const shared = h('input', { type: 'checkbox' });
-  const body = h('div', null, name, S.user.role !== 'viewer' ? h('label', { class: 'prefck', style: { marginTop: '10px' } }, shared, 'Shared with the whole family') : null);
+  const body = h('div', null, name, canShared() ? h('label', { class: 'prefck', style: { marginTop: '10px' } }, shared, 'Shared with the whole family') : null);
   if (!await dialog('New address book', body, [{ label: 'Cancel', value: false }, { label: 'Create', value: true, primary: true }])) return;
   try { const r = await api('/api/books', { method: 'POST', json: { name: name.value, shared: shared.checked } }); await loadMeta(); location.hash = `#/book/${r.book.id}`; } catch (e) { fail(e); }
 }
@@ -1509,7 +1516,7 @@ async function setDevices(el) {
 }
 
 async function setBooks(el) {
-  el.append(h('p', null, h('button', { class: 'pillbtn primary', onclick: newBook }, icon('add', 's'), 'New address book')),
+  el.append(h('p', null, canOwn() ? h('button', { class: 'pillbtn primary', onclick: newBook }, icon('add', 's'), 'New address book') : null),
     h('table', { class: 't' }, h('tr', null, h('th', null, 'Name'), h('th', null, 'Who sees it'), h('th', null, 'Contacts'), h('th', null, 'Colour'), h('th')),
       S.books.map((b) => {
         const save = async (body) => { try { await api(`/api/books/${b.id}`, { method: 'PATCH', json: body }); await loadMeta(); toast('Saved'); } catch (e) { fail(e); } };
@@ -1559,7 +1566,7 @@ function updateBanner() {
 
 // ------------------------------------------------------------------ sign-in
 function showSignIn() {
-  // like ioPix: a tile per account; one click for a passwordless viewer, a password for the others
+  // like ioPix: a tile per account; one click for a passwordless account, a password for the others
   if (document.querySelector('.signin')) return;
   const first = !S.status.usersExist;
   const name = h('input', { class: 't', placeholder: 'User name', autocomplete: 'username', autocapitalize: 'none' });

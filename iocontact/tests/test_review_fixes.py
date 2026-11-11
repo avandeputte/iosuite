@@ -12,8 +12,8 @@ def mk(client, book, **kw):
     return r.json()
 
 
-def viewer(client):
-    uid = client.post("/api/users", json={"name": "kid", "password": "kidpass99", "role": "viewer"}).json()["id"]
+def member(client):
+    uid = client.post("/api/users", json={"name": "kid", "password": "kidpass99", "role": "member"}).json()["id"]
     k = TestClient(app)
     assert k.post("/api/auth/login", json={"name": "kid", "password": "kidpass99"}).status_code == 200
     own = next(b for b in k.get("/api/books").json()["items"] if not b["shared"])
@@ -21,7 +21,7 @@ def viewer(client):
 
 
 def test_viewer_cannot_move_a_contact_into_a_book_they_cannot_write(client, family_id):
-    k, _uid, own = viewer(client)
+    k, _uid, own = member(client)
     c = mk(k, own["id"], fn="Sneaky")
     assert k.patch(f"/api/contacts/{c['id']}", json={"bookId": family_id}).status_code == 403
     assert k.get(f"/api/contacts/{c['id']}").json()["bookId"] == own["id"]
@@ -31,7 +31,7 @@ def test_viewer_cannot_move_a_contact_into_a_book_they_cannot_write(client, fami
 def test_viewer_cannot_mark_shared_contacts(client, family_id):
     a = mk(client, family_id, fn="Dup One", emails=[{"value": "same@x.org"}])
     b = mk(client, family_id, fn="Dup Two", emails=[{"value": "same@x.org"}])
-    k, _uid, _own = viewer(client)
+    k, _uid, _own = member(client)
     assert k.post("/api/duplicates/dismiss", json={"ids": [a["id"], b["id"]]}).status_code == 403
     assert k.post(f"/api/contacts/{a['id']}/lookup").status_code == 403
     assert k.post("/api/lookup", json={"ids": [a["id"]]}).status_code == 403
@@ -40,7 +40,7 @@ def test_viewer_cannot_mark_shared_contacts(client, family_id):
 
 
 def test_no_access_means_no_calendar_feed(client, family_id):
-    _k, uid, _own = viewer(client)
+    _k, uid, _own = member(client)
     tok = users.calendar_token(uid)
     assert users.user_from_calendar_token(tok)
     users.update(uid, role="none")
@@ -97,7 +97,7 @@ def test_apple_omit_year_keeps_a_real_year():
 def test_app_passwords_are_the_shared_routes_and_only_the_owner_revokes(client):
     """/api/auth/app-passwords (iosuite-shared): a signed-in account makes and revokes its own; the old admin-only
     DELETE is gone with ioContacts' own routes."""
-    k, uid, _own = viewer(client)
+    k, uid, _own = member(client)
     pid = None
     k.post("/api/auth/app-passwords", json={"label": "kid phone", "scope": "dav"})
     items = k.get("/api/auth/app-passwords").json()["items"]
@@ -263,3 +263,13 @@ def test_ldap_bind_is_throttled_after_repeated_failures(client):
     finally:
         users.ldap_bind = real
         shared._attempts.clear()
+
+
+def test_a_viewer_only_reads(client, family_id):
+    client.post("/api/users", json={"name": "vic", "password": "vicpass99", "role": "viewer"})
+    k = TestClient(app)
+    assert k.post("/api/auth/login", json={"name": "vic", "password": "vicpass99"}).status_code == 200
+    books = k.get("/api/books").json()["items"]
+    assert books and all(b["shared"] and not b["writable"] for b in books)  # no Personal book
+    assert k.post("/api/books", json={"name": "Mine"}).status_code == 403
+    assert k.post("/api/contacts", json={"fn": "Nope", "bookId": family_id}).status_code == 403
