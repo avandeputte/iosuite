@@ -153,7 +153,7 @@ def create(name: str, password: str, role: str | None = None, app: str | None = 
     name, email = clean_name(name), clean_email(email)
     if role is not None and role not in ROLES:
         raise Invalid("Unknown role")
-    if app and role:
+    if app and role and not suite_admin:
         _not_a_tool(app)
     if password == "" and (suite_admin or _capped(role or DEFAULT_ROLE)):
         raise Invalid(NO_PASSWORD)
@@ -165,7 +165,7 @@ def create(name: str, password: str, role: str | None = None, app: str | None = 
         raise Invalid("Another account already has that email address")
     uid = db.ex("INSERT INTO ios_users (name, display_name, email, hash, suite_admin, created_at) VALUES (%s, %s, %s, %s, %s, %s)",
                 (name, (display_name or "").strip()[:128] or None, email or None, hash_password(password) if password else "", 1 if suite_admin else 0, int(time.time())))
-    if app and role:
+    if app and role and not (suite_admin and _is_tool(app)):  # a suite admin is admin in an admin tool without a row
         set_role(uid, app, role)
     invalidate()
     return get(uid, app)
@@ -300,10 +300,14 @@ def roles_of(user_id: int) -> dict:
     return {r["app"]: r["role"] for r in db.q("SELECT app, role FROM ios_user_roles WHERE user_id = %s", (user_id,))}
 
 
+def _is_tool(app: str) -> bool:
+    from iosuite_shared import suite
+    return suite.is_admin_tool(app)
+
+
 def _not_a_tool(app: str) -> None:
     """An admin tool takes no roles: it is for suite admins only."""
-    from iosuite_shared import suite
-    if suite.is_admin_tool(app):
+    if _is_tool(app):
         raise Invalid("This is an admin tool, for suite admins only: it takes no roles")
 
 
