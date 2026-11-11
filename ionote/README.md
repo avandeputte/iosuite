@@ -173,7 +173,7 @@ in `config.env`, which wins:
 | `AUTH_PROXY` | `cloudflare`, `haproxy`, `nginx`, `caddy`, `traefik` or `header`; `off` by default |
 | `AUTH_PROXY_HEADER` | the header(s) with the user; default for `cloudflare`: `Cf-Access-Authenticated-User-Email`; for the others: `Remote-User`, `X-Forwarded-User`, `X-Auth-Request-User`, `X-Auth-Request-Email`, `X-Forwarded-Email` |
 | `AUTH_PROXY_TRUSTED` | addresses or networks the proxy connects from; default `127.0.0.1,::1` |
-| `AUTH_PROXY_CREATE` | `viewer` or `editor`: create an account for someone the proxy lets in who has none; `deny`: a "No access" page; empty: the sign-in screen |
+| `AUTH_PROXY_CREATE` | `viewer`, `member` or `editor`: create an account for someone the proxy lets in who has none; `deny`: a "No access" page; empty: the sign-in screen |
 | `CF_ACCESS_TEAM` / `CF_ACCESS_AUD` | your Cloudflare Access team domain and the application's AUD tag: the signed token Cloudflare adds to every request (`Cf-Access-Jwt-Assertion`) is checked against your team's keys, and the email is taken from it. The recommended setup for a Cloudflare Tunnel |
 
 The header is believed only from the proxy: a request that reaches ionotes any other way is ignored, whatever headers
@@ -203,9 +203,10 @@ account) stay with the open install: export them before making the first account
 | Who | Can |
 | --- | --- |
 | Not signed in | nothing but the sign-in screen (there are no shared notes to read) |
-| **viewer** | read and search their own notes; their own settings kept on the server |
-| **viewer without a password** | the same; signs in with one click from the account picker, on the home network only |
-| **editor** | plus every change to their own notes, folders and tags, and export/import of them (Import and export; the Mac and iPhone apps sign in as an editor) |
+| **viewer** | read and search their own notes (there is nothing shared to see); their own settings kept on the server |
+| **member** (the default) | plus every change to their own notes, folders, tags and templates, and export/import of them (Import and export; the Mac and iPhone apps sign in as a member or more) |
+| **without a password** | a member at most; signs in with one click from the account picker, on the home network only |
+| **editor** | the same as a member: every note is private, so there is nothing shared for an editor to change |
 | **admin** | plus settings, accounts, updates and the server log |
 
 **Sign-in required** (Settings › Global settings › Apps) also closes the open routes to visitors, but for the app shell, `/api/status` and the sign-in routes (the MCP endpoint wants an app password either way).
@@ -256,7 +257,7 @@ suite. An assistant such as Claude can then:
 - help: `related_notes` (notes like one, with the tags and folder they suggest), `suggest_organization` (tags and
   folders for unfiled notes), `notes_digest` (a period's notes with their text, to summarise); and three prompts the
   client can offer: *Summarise a note*, *Weekly review*, *Tidy up unfiled notes*
-- write, as an editor: `create_note` (optionally with a picture, or from a template), `update_note` (replace or append
+- write, as a member: `create_note` (optionally with a picture, or from a template), `update_note` (replace or append
   text, tags, folder, pin), `organize_notes` (many notes at once), `delete_note`, `restore_note`, `manage_folder`,
   `manage_tag`, `manage_template`, `attach_file`, `remove_attachment`, `empty_trash`
 - operate, as an admin: `diagnostics`, `server_log`, `check_for_update`, `update_ionotes` (the tip of the branch only)

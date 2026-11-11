@@ -1,7 +1,7 @@
 """Notes, folders, tags, pictures and sync: the API the web app and the Mac and iPhone apps share.
 
-Reads are open to whoever the sign-in rule lets in (as in iopix); every change needs an editor (the apps sign in
-as one). A change the device made offline carries its own updatedAt: when the
+Reads are open to whoever the sign-in rule lets in (as in iopix); every change needs a member (the apps sign in
+as one, or as an editor or admin). A change the device made offline carries its own updatedAt: when the
 server already has a later edit, the answer is 409 with the server's copy under "current".
 """
 import time
@@ -49,7 +49,7 @@ def api_note(uid: str):
     return n
 
 
-@router.post("/api/notes", dependencies=[access.editor_write])
+@router.post("/api/notes", dependencies=[access.member_write])
 async def api_note_create(request: Request):
     """A new note; the server picks the id unless the body has one. Notes made in the browser have source "web".
     {template: id} starts it from a template (its fields, placeholders filled in with the server's clock, unless the
@@ -65,7 +65,7 @@ async def api_note_create(request: Request):
     return await run_in_threadpool(notes.save_note, body.get("id"), body, user_name(request))
 
 
-@router.put("/api/notes/{uid}", dependencies=[access.editor_write])
+@router.put("/api/notes/{uid}", dependencies=[access.member_write])
 async def api_note_put(uid: str, request: Request):
     """Create or update the note with this id (the apps choose ids). updatedAt: when the edit was made."""
     body = await json_body(request)
@@ -75,7 +75,7 @@ async def api_note_put(uid: str, request: Request):
         return _stale(e)
 
 
-@router.delete("/api/notes/{uid}", dependencies=[access.editor_write])
+@router.delete("/api/notes/{uid}", dependencies=[access.member_write])
 def api_note_delete(uid: str, request: Request, ts: float = None):
     """Move to the trash (a tombstone the devices sync). ts: when the device deleted it."""
     if not notes.get_note(uid):
@@ -86,7 +86,7 @@ def api_note_delete(uid: str, request: Request, ts: float = None):
         return _stale(e)
 
 
-@router.post("/api/notes/{uid}/restore", dependencies=[access.editor_write])
+@router.post("/api/notes/{uid}/restore", dependencies=[access.member_write])
 def api_note_restore(uid: str, request: Request):
     if not notes.get_note(uid):
         raise HTTPException(404, "No such note")
@@ -99,13 +99,13 @@ def api_trash(request: Request):
     return jresp(request, {"notes": notes.trash(), "days": notes.TRASH_DAYS})
 
 
-@router.post("/api/trash/empty", dependencies=[access.editor_write])
+@router.post("/api/trash/empty", dependencies=[access.member_write])
 def api_trash_empty(request: Request):
     """Delete every note in the trash for good (pictures and attachments too)."""
     return {"purged": notes.empty_trash(user_name(request))}
 
 
-@router.delete("/api/trash/{uid}", dependencies=[access.editor_write])
+@router.delete("/api/trash/{uid}", dependencies=[access.member_write])
 def api_trash_purge(uid: str, request: Request):
     """Delete one note in the trash for good."""
     return {"purged": notes.empty_trash(user_name(request), uid)}
@@ -171,21 +171,21 @@ def _store(uid: str, data: bytes, request: Request):
     return n
 
 
-@router.put("/api/notes/{uid}/image", dependencies=[access.editor_write])
+@router.put("/api/notes/{uid}/image", dependencies=[access.member_write])
 async def api_image_put(uid: str, request: Request):
     """The picture as the raw request body (Content-Type image/png, image/jpeg...), as the apps send it."""
     data = await request.body()
     return await run_in_threadpool(_store, uid, data, request)
 
 
-@router.post("/api/notes/{uid}/image", dependencies=[access.editor_write])
+@router.post("/api/notes/{uid}/image", dependencies=[access.member_write])
 async def api_image_upload(uid: str, request: Request, file: UploadFile = File(...)):
     """The picture as a form upload (the web app)."""
     data = await file.read()
     return await run_in_threadpool(_store, uid, data, request)
 
 
-@router.delete("/api/notes/{uid}/image", dependencies=[access.editor_write])
+@router.delete("/api/notes/{uid}/image", dependencies=[access.member_write])
 def api_image_delete(uid: str, request: Request):
     _mine(uid)
     try:
@@ -204,14 +204,14 @@ def _store_attachment(uid: str, data: bytes, name: str, mime: str, request: Requ
         raise HTTPException(404, "No such note (create the note first)")
 
 
-@router.post("/api/notes/{uid}/attachments", dependencies=[access.editor_write])
+@router.post("/api/notes/{uid}/attachments", dependencies=[access.member_write])
 async def api_attach_upload(uid: str, request: Request, file: UploadFile = File(...)):
     """A file as a form upload (the web app); the server picks the attachment's id."""
     data = await file.read()
     return await run_in_threadpool(_store_attachment, uid, data, file.filename or "file", file.content_type or "", request)
 
 
-@router.put("/api/notes/{uid}/attachments/{aid}", dependencies=[access.editor_write])
+@router.put("/api/notes/{uid}/attachments/{aid}", dependencies=[access.member_write])
 async def api_attach_put(uid: str, aid: str, request: Request, name: str = "file"):
     """A file as the raw request body, with the id the device chose (?name=<file name>; X-Ionotes-Text: the text the
     device read from it, percent-encoded, when it did)."""
@@ -223,14 +223,14 @@ async def api_attach_put(uid: str, aid: str, request: Request, name: str = "file
     return await run_in_threadpool(_store_attachment, uid, data, name, request.headers.get("content-type", ""), request, aid, t)
 
 
-@router.patch("/api/notes/{uid}/attachments/{aid}", dependencies=[access.editor_write])
+@router.patch("/api/notes/{uid}/attachments/{aid}", dependencies=[access.member_write])
 async def api_attach_rename(uid: str, aid: str, request: Request):
     """{name}: rename the file."""
     body = await json_body(request)
     return attachments.rename(uid, aid, str(body.get("name") or ""), user_name(request))
 
 
-@router.delete("/api/notes/{uid}/attachments/{aid}", dependencies=[access.editor_write])
+@router.delete("/api/notes/{uid}/attachments/{aid}", dependencies=[access.member_write])
 def api_attach_delete(uid: str, aid: str, request: Request):
     return attachments.remove(uid, aid, user_name(request))
 
@@ -280,19 +280,19 @@ def api_templates(request: Request):
     return jresp(request, {"templates": notes.list_templates()})
 
 
-@router.post("/api/templates", dependencies=[access.editor_write])
+@router.post("/api/templates", dependencies=[access.member_write])
 async def api_template_create(request: Request):
     body = await json_body(request)
     return notes.save_template(body.get("id"), body, user_name(request))
 
 
-@router.post("/api/templates/standard", dependencies=[access.editor_write])
+@router.post("/api/templates/standard", dependencies=[access.member_write])
 def api_templates_standard(request: Request):
     """Add the standard templates that are missing, deleted ones included."""
     return {"added": notes.restore_standard_templates(user_name(request)), "templates": notes.list_templates()}
 
 
-@router.put("/api/templates/{uid}", dependencies=[access.editor_write])
+@router.put("/api/templates/{uid}", dependencies=[access.member_write])
 async def api_template_put(uid: str, request: Request):
     """{name, title, body, tags, folderID, updatedAt}; {deleted: true} deletes it."""
     body = await json_body(request)
@@ -302,7 +302,7 @@ async def api_template_put(uid: str, request: Request):
         return _stale(e)
 
 
-@router.delete("/api/templates/{uid}", dependencies=[access.editor_write])
+@router.delete("/api/templates/{uid}", dependencies=[access.member_write])
 def api_template_delete(uid: str, request: Request, ts: float = None):
     if not notes.get_template(uid):
         raise HTTPException(404, "No such template")
@@ -318,13 +318,13 @@ def api_folders(request: Request):
     return jresp(request, {"folders": notes.list_folders()})
 
 
-@router.post("/api/folders", dependencies=[access.editor_write])
+@router.post("/api/folders", dependencies=[access.member_write])
 async def api_folder_create(request: Request):
     body = await json_body(request)
     return notes.save_folder(body.get("id"), body, user_name(request))
 
 
-@router.put("/api/folders/{uid}", dependencies=[access.editor_write])
+@router.put("/api/folders/{uid}", dependencies=[access.member_write])
 async def api_folder_put(uid: str, request: Request):
     """{name, color, updatedAt}; {deleted: true} deletes it (its notes stay, in no folder)."""
     body = await json_body(request)
@@ -334,7 +334,7 @@ async def api_folder_put(uid: str, request: Request):
         return _stale(e)
 
 
-@router.delete("/api/folders/{uid}", dependencies=[access.editor_write])
+@router.delete("/api/folders/{uid}", dependencies=[access.member_write])
 def api_folder_delete(uid: str, request: Request, ts: float = None):
     if not any(f["id"] == notes.check_uuid(uid) for f in notes.list_folders(include_deleted=True)):
         raise HTTPException(404, "No such folder")
@@ -350,7 +350,7 @@ def api_tags(request: Request):
     return jresp(request, {"tags": notes.list_tags(), "colors": list(notes.COLORS)})
 
 
-@router.put("/api/tags/{name}/color", dependencies=[access.editor_write])
+@router.put("/api/tags/{name}/color", dependencies=[access.member_write])
 async def api_tag_color(name: str, request: Request):
     """{color: one of the colours, or null for none, updatedAt}."""
     body = await json_body(request)
@@ -360,13 +360,13 @@ async def api_tag_color(name: str, request: Request):
         return _stale(e)
 
 
-@router.post("/api/tags/rename", dependencies=[access.editor_write])
+@router.post("/api/tags/rename", dependencies=[access.member_write])
 async def api_tag_rename(request: Request):
     body = await json_body(request)
     return {"changed": notes.rename_tag(str(body.get("from", "")), str(body.get("to", "")), user_name(request))}
 
 
-@router.post("/api/tags/remove", dependencies=[access.editor_write])
+@router.post("/api/tags/remove", dependencies=[access.member_write])
 async def api_tag_remove(request: Request):
     body = await json_body(request)
     return {"changed": notes.remove_tag(str(body.get("name", "")), user_name(request))}
@@ -379,7 +379,7 @@ def api_sync(request: Request, since: int = 0, limit: int = 500):
     return jresp(request, notes.changes(since, limit))
 
 
-@router.post("/api/sync/push", dependencies=[access.editor_write])
+@router.post("/api/sync/push", dependencies=[access.member_write])
 async def api_sync_push(request: Request):
     """A device's queued changes in one request: {notes: [...], folders: [...], tags: [{name, color, updatedAt}], templates: [...]}.
     Each is applied like its own PUT; the answer lists, per item, the server's copy and whether it was taken

@@ -121,7 +121,7 @@ export async function api(path, { method = 'GET', body, raw, headers, keepalive 
 
 // ---- shared state
 export const state = { me: null, meta: null, settings: {}, onSignedOut: null };
-export const canWrite = () => !!(state.me && state.me.canWrite);
+export const canWrite = () => !!(state.me && state.me.canWrite);  // a member or more: the notes are one's own
 export const isAdmin = () => !!(state.me && state.me.isAdmin);
 
 // ---- toast, dialogs, menus

@@ -1,5 +1,5 @@
-"""The tools that change notes, folders and tags. Each takes an editor's or admin's account (the one the client signed
-in as). Changes are logged under the name "MCP" and reach the apps with their next sync."""
+"""The tools that change notes, folders and tags. Each takes a member's account or more (the one the client
+signed in as). Changes are logged under the name "MCP" and reach the apps with their next sync."""
 import base64
 import time
 from typing import Literal, Optional
@@ -7,7 +7,7 @@ from typing import Literal, Optional
 from mcp.server.mcpserver.exceptions import ToolError
 
 from app import attachments, images, notes
-from app.mcp.base import ADDS, DELETES, LOG_NAME, WRITES, need_writer, note_or_fail, resolve_folder, server, summary
+from app.mcp.base import ADDS, DELETES, LOG_NAME, WRITES, need_member, note_or_fail, resolve_folder, server, summary
 
 
 def _save(uid, data):
@@ -23,7 +23,7 @@ def create_note(text: str = "", title: str = "", tags: Optional[list[str]] = Non
     """Create a note. folder: a name or id. picture_base64: an optional PNG/JPEG for the note (base64).
     template: a template's name or id (list_templates): the note starts from it, and text, title, tags and folder
     given here are added (text goes after the template's)."""
-    need_writer()
+    need_member()
     base = {}
     if template:
         t = _template(template)
@@ -47,7 +47,7 @@ def update_note(note_id: str, title: Optional[str] = None, text: Optional[str] =
                 folder: Optional[str] = None, pinned: Optional[bool] = None) -> dict:
     """Change a note: any of title, text (replaces it), append_text (adds a paragraph at the end), tags (replaces
     them), add_tags / remove_tags, folder (a name or id; "none" takes it out of its folder), pinned."""
-    need_writer()
+    need_member()
     n = note_or_fail(note_id)
     d = {}
     if title is not None:
@@ -77,7 +77,7 @@ def update_note(note_id: str, title: Optional[str] = None, text: Optional[str] =
 def organize_notes(note_ids: list[str], folder: Optional[str] = None, add_tags: Optional[list[str]] = None,
                    remove_tags: Optional[list[str]] = None, pinned: Optional[bool] = None) -> dict:
     """The same change for many notes at once: move to a folder ("none": out of any folder), add or remove tags, pin."""
-    need_writer()
+    need_member()
     if len(note_ids) > 500:
         raise ToolError("At most 500 notes at a time")
     fid = None if folder in (None, "", "none") else resolve_folder(folder)
@@ -101,7 +101,7 @@ def organize_notes(note_ids: list[str], folder: Optional[str] = None, add_tags: 
 @server.tool(annotations=DELETES)
 def delete_note(note_id: str) -> dict:
     """Move a note to the trash (restore_note brings it back for 30 days, then it is deleted for good; its picture is removed)."""
-    need_writer()
+    need_member()
     n = note_or_fail(note_id)
     notes.delete_note(n["id"], LOG_NAME)
     return {"deleted": n["id"], "title": notes.display_title(n)}
@@ -110,7 +110,7 @@ def delete_note(note_id: str) -> dict:
 @server.tool(annotations=WRITES)
 def restore_note(note_id: str) -> dict:
     """Take a note out of the trash."""
-    need_writer()
+    need_member()
     n = note_or_fail(note_id)
     return summary(notes.restore_note(n["id"], LOG_NAME))
 
@@ -120,7 +120,7 @@ def manage_folder(action: Literal["create", "rename", "color", "delete"], name: 
                   color: Optional[str] = None) -> dict:
     """Folders: create (name, optional color), rename (name → new_name), color (name, color or "" for none), delete
     (the notes in it stay, in no folder). Colours: red orange yellow green mint teal blue indigo purple pink brown gray."""
-    need_writer()
+    need_member()
     if color and color not in notes.COLORS:
         raise ToolError("Colours: " + ", ".join(notes.COLORS))
     try:
@@ -143,7 +143,7 @@ def manage_tag(action: Literal["rename", "color", "remove"], name: str, new_name
                color: Optional[str] = None) -> dict:
     """Tags: rename (on every note; merges into an existing tag of that name), color (or "" for none), remove (from
     every note)."""
-    need_writer()
+    need_member()
     try:
         if action == "rename":
             if not new_name:
@@ -176,7 +176,7 @@ def manage_template(action: Literal["create", "update", "delete"], name: str, ne
     """Templates for new notes: create (name, and any of title, text, tags, folder), update (the template called name:
     any of new_name, title, text, tags, folder; folder "none" for none), delete. In title and text, {{date}}, {{time}},
     {{datetime}}, {{weekday}}, {{month}}, {{year}}, {{tomorrow}} and {{yesterday}} are filled in when a note is made."""
-    need_writer()
+    need_member()
     try:
         if action == "create":
             d = {"name": name, "title": title or "", "body": text or "", "tags": tags or [], "folderID": resolve_folder(folder) if folder and folder != "none" else None}
@@ -201,7 +201,7 @@ def manage_template(action: Literal["create", "update", "delete"], name: str, ne
 @server.tool(annotations=ADDS)
 def attach_file(note_id: str, file_base64: str, name: str) -> dict:
     """Attach a file (a PDF, a picture, a document; base64) to a note. Its text is read for search."""
-    need_writer()
+    need_member()
     n = note_or_fail(note_id)
     try:
         n = attachments.put(n["id"], base64.b64decode(file_base64), name, LOG_NAME)
@@ -213,7 +213,7 @@ def attach_file(note_id: str, file_base64: str, name: str) -> dict:
 @server.tool(annotations=DELETES)
 def remove_attachment(note_id: str, attachment_id: str) -> dict:
     """Remove a file attached to a note (get_note lists them)."""
-    need_writer()
+    need_member()
     n = note_or_fail(note_id)
     try:
         n = attachments.remove(n["id"], attachment_id, LOG_NAME)
@@ -225,7 +225,7 @@ def remove_attachment(note_id: str, attachment_id: str) -> dict:
 @server.tool(annotations=DELETES)
 def empty_trash(note_id: Optional[str] = None) -> dict:
     """Delete for good, with no way back: one note in the trash (note_id), or everything in it. Only when asked to."""
-    need_writer()
+    need_member()
     try:
         return {"purged": notes.empty_trash(LOG_NAME, note_id)}
     except (notes.NotFound, ValueError) as e:

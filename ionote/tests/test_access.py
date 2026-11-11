@@ -9,12 +9,22 @@ def test_open_until_the_first_account_exists(client):
     assert client.put(f"/api/notes/{NID}", json={"title": "x"}).status_code == 200
 
 
-def test_writes_need_an_editor_once_accounts_exist(client, admin):
+def test_a_member_writes_their_own_notes(client, admin):
+    client.post("/api/users", json={"name": "meg", "password": "memberpw1", "role": "member"})
+    client.post("/api/auth/logout")
+    assert client.post("/api/auth/login", json={"name": "meg", "password": "memberpw1"}).status_code == 200
+    assert client.get("/api/auth/me").json()["canWrite"]  # what the Mac and iPhone apps look at
+    assert client.put(f"/api/notes/{NID}", json={"title": "Mine"}).status_code == 200
+    assert client.get("/api/users").status_code == 403
+
+
+def test_writes_need_a_member_once_accounts_exist(client, admin):
     client.post("/api/users", json={"name": "vic", "password": "viewerpw1", "role": "viewer"})
     client.post("/api/auth/logout")
     assert client.get("/api/notes").status_code == 200  # reading stays open, as in iopix
     assert client.put(f"/api/notes/{NID}", json={"title": "x"}).status_code == 401
     assert client.post("/api/auth/login", json={"name": "vic", "password": "viewerpw1"}).status_code == 200
+    assert not client.get("/api/auth/me").json()["canWrite"]
     assert client.put(f"/api/notes/{NID}", json={"title": "x"}).status_code == 403
     assert client.get("/api/users").status_code == 403
 

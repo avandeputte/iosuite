@@ -15,6 +15,7 @@ APP = config.APP
 # app_label, version, public_url, description and color: ionotes' row in the suite's list of apps (ioSuite's start page)
 auth = Auth(APP, app_label="ioNotes",
             version=__version__, public_url=config.PUBLIC_URL or None, description="Notes", color="#1c5a5e")
+auth.write_role = "member"  # every note is its owner's own: a member writes theirs (canWrite in /api/auth/me), a viewer only reads
 auth.deny_exempt = ("/mcp",)  # MCP clients sign in with an app password, whatever Cloudflare service token got them through
 
 # updates (the daily check, update.sh, restart) and the server log, as in every app of the suite (iosuite_shared.updates);

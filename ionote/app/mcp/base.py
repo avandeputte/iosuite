@@ -5,7 +5,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 from app import __version__, config, notes
 
-__all__ = ["ADDS", "DELETES", "READ_ONLY", "UPDATES", "WRITES", "clamp", "current_user", "need_admin", "who", "need_writer",
+__all__ = ["ADDS", "DELETES", "READ_ONLY", "UPDATES", "WRITES", "clamp", "current_user", "need_admin", "who", "need_member",
            "server", "APP", "LOG_NAME", "clamp_limit", "resolve_folder", "note_or_fail", "summary", "iso", "parse_date"]
 
 APP = config.BASE_URL  # for the links in results
@@ -16,13 +16,13 @@ server = shared_mcp.make_server("ionotes", "ioNotes", __version__, instructions=
     "notes_overview, use list_folders / list_tags to find exact names, then search_notes and get_note. "
     "view_note_image shows a note's picture, read_attachment a file's text. related_notes, suggest_organization and "
     "notes_digest help find what belongs together, tidy up and summarise. Notes are private to each account: these tools work on the notes of the "
-    "account you signed in as (notes_overview names it). Changing anything takes an editor's account; the server tools "
+    "account you signed in as (notes_overview names it). Changing anything takes a member's account (a viewer only reads); the server tools "
     "an admin's."))
 
 
-def need_writer() -> dict:
-    """Changes take an editor or admin, as in the web app."""
-    return shared_mcp.need_writer()
+def need_member() -> dict:
+    """Changes take a member or more, as in the web app: the notes are one's own."""
+    return shared_mcp.need_member()
 
 
 def clamp_limit(limit, cap: int) -> int:
