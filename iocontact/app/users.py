@@ -1,8 +1,8 @@
 """Accounts, roles, sessions and app passwords: the shared ioThing accounts (iosuite-shared), seen from ioContacts.
 
-Roles as in iopix: viewer (reads), editor (changes contacts), admin (also settings and users); an account holds a
-role per app, a suite admin is admin everywhere. Each account gets its own private address book; the Family book is
-shared by everyone. Web sessions are the suite's cookie (shared by the apps on the domain). CardDAV / LDAP clients
+Roles as in the rest of the suite: viewer (reads the shared books), member (also keeps their own private books),
+editor (changes the shared contacts too), admin (also settings and users); an account holds a role per app, a suite
+admin is admin everywhere. Each member gets their own private address book; the Family book is shared by everyone. Web sessions are the suite's cookie (shared by the apps on the domain). CardDAV / LDAP clients
 use HTTP Basic or an LDAP bind with either the account password or an app password (one per device, revocable,
 shown once). What is here is ioContacts' own: an account as the app sees it (with its "me" contact), its private
 address book, the LDAP bind, and the birthday calendar's private link. The rest is asked of iosuite_shared directly.
@@ -51,8 +51,11 @@ def create(name: str, password: str | None, role: str = "editor", display_name: 
 
 
 def personal_book(u: dict) -> None:
-    """Every account gets its own private address book, whichever way the account was made (here, Settings › Security,
-    the shared setup or the command line): made the first time the account's books are listed (one small query)."""
+    """Every member gets their own private address book, whichever way the account was made (here, Settings › Security,
+    the shared setup or the command line): made the first time the account's books are listed (one small query). A
+    viewer keeps nothing of their own."""
+    if not shared.is_member(u):
+        return
     if not db.one("SELECT 1 AS x FROM con_address_books WHERE owner_id = %s LIMIT 1", (u["id"],)):
         db.ex("INSERT INTO con_address_books (owner_id, slug, name, description) VALUES (%s, 'personal', 'Personal', %s)",
               (u["id"], f"{u.get('display_name') or u['name']}'s private contacts"))
@@ -70,7 +73,7 @@ def update(uid: int, **fields) -> dict:
     if fields.get("role") is not None:
         kw["role"], kw["app"] = fields["role"], APP
     if fields.get("password") is not None:
-        kw["password"] = fields["password"]  # "" removes it: one-click sign-in, viewers only
+        kw["password"] = fields["password"]  # "" removes it: one-click sign-in, a member at most
     if kw:
         shared.update(uid, **kw)
     return get(uid)

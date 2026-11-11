@@ -76,7 +76,7 @@ def test_import_export(client, family_id):
 
 
 def test_roles_and_private_books(client, family_id):
-    client.post("/api/users", json={"name": "kid", "password": "kidpass99", "role": "viewer"})
+    client.post("/api/users", json={"name": "kid", "password": "kidpass99", "role": "member"})
     mine = next(b for b in client.get("/api/books").json()["items"] if not b["shared"])
     mk(client, mine["id"], fn="Secret Friend")
     from fastapi.testclient import TestClient

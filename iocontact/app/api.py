@@ -36,7 +36,7 @@ def readable_book(u: dict, bid) -> dict:
 def writable_book(u: dict, bid) -> dict:
     b = readable_book(u, bid)
     if not model.can_write_book(u, b):
-        raise HTTPException(403, "Viewers can only change their own private address book")
+        raise HTTPException(403, "You can see this address book but not change it")
     return b
 
 
@@ -147,6 +147,8 @@ async def add_book(request: Request):
     shared = bool(b.get("shared"))
     if shared and not shared_users.can_write(u):
         raise HTTPException(403, "Only editors make shared address books")
+    if not shared and not shared_users.is_member(u):
+        raise HTTPException(403, "A viewer only looks; a member keeps address books of their own")
     bid = model.create_book(None if shared else u["id"], b.get("name"), b.get("description"), b.get("color"))
     return {"book": model.book_public(model.book(bid), u)}
 

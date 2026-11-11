@@ -11,6 +11,7 @@ import time
 import uuid as uuidlib
 from contextvars import ContextVar
 
+from iosuite_shared import users as shared_users
 from iosuite_shared.errors import Invalid
 
 from app import config, db, iopix, relations as rel, users, vcard
@@ -60,8 +61,8 @@ def can_write_book(user: dict | None, b: dict | None) -> bool:
     if not can_read_book(user, b):
         return False
     if b["owner_id"] == user["id"]:
-        return True  # everyone may change their own private book, viewers included
-    return user["role"] in ("editor", "admin")
+        return shared_users.is_member(user)  # one's own private book: members and more (a viewer only looks)
+    return shared_users.can_write(user)  # a shared book: editors and admins
 
 
 def clean_book(f: dict) -> dict:

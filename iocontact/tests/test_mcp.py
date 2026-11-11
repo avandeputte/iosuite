@@ -89,8 +89,8 @@ def test_mcp_contacts_relations_and_permissions(client, family_id):
     assert call(client, auth, "remove_relation", contact="Mary Ray", related="Tim Ray")["relations"] in (None, [])
     assert not call(client, auth, "get_contact", contact="Tim Ray").get("relations")
     assert call(client, auth, "delete_contact", contact="Bob Lee")["deleted"] == "Bob Lee"
-    # a viewer: reads the family book, changes only their own
-    client.post("/api/users", json={"name": "kid", "password": "secret123", "role": "viewer"})
+    # a member: reads the family book, changes only their own
+    client.post("/api/users", json={"name": "kid", "password": "secret123", "role": "member"})
     client.post("/api/auth/logout")
     client.post("/api/auth/login", json={"name": "kid", "password": "secret123"})
     kid, _ = app_password(client)
