@@ -293,7 +293,7 @@ updater = Updater("iocalendar", version=__version__, root=ROOT)   # repo avandep
 updater.start_daily()                                             # checks once a day while the setting is on
 app.include_router(auth.server_router(updater, log_file=LOG_FILE,
     info=lambda: {"mcpEnabled": mcp_enabled(), "mcpLocked": MCP_FORCED,   # extra fields of GET /api/server: the MCP box,
-                  "about": [["Database", "db:3306/iocalendar"]]},          # and the This server box
+                  "about": [["Time zone", "Europe/Brussels"]]},             # and the This server box (no database address)
     apply=save_switches))                                         # the app's own switches in the POST body (raise Invalid to refuse)
 ```
 

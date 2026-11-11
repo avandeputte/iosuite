@@ -84,7 +84,7 @@ const CSS = `
 .iosv .sv-btn[disabled] { opacity: .5; pointer-events: none; }
 .iosv label.sv-check { display: flex; gap: 8px; align-items: flex-start; margin: 6px 0; }
 .iosv label.sv-check input { margin-top: 3px; accent-color: var(--sv-brand); }
-.iosv pre.sv-log { max-height: 420px; overflow: auto; font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--sv-bg2);
+.iosv pre.sv-log { font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--sv-bg2);
   border-radius: 8px; padding: 10px 12px; margin: 8px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .iosv-back { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 16px; }
 .iosv-back .sv-dialog { background: var(--sv-bg); border-radius: 16px; padding: 20px 22px; width: 100%; max-width: 460px; box-shadow: 0 2px 12px rgba(0,0,0,.4); }
