@@ -112,8 +112,8 @@ def test_accounts_see_only_their_own_data(client, admin):
     upload(client, alex_pw, sample("a1", "step_count", T0, 100), {"workout": {"_0": {
         "uuid": "w1", "activityType": "running", "activityTypeRaw": 37, "start": "2026-10-01T07:00:00Z", "end": "2026-10-01T07:30:00Z", "duration": 1800,
         "source": {"name": "Watch"}, "statistics": [{"type": "distance_walking_running", "unit": "km", "sum": 5}], "events": [], "activities": []}}})
-    # a second account: an editor
-    r = client.post("/api/users", json={"name": "bo", "password": "secretpw2", "role": "editor"})
+    # a second account: a member, who uploads their own
+    r = client.post("/api/users", json={"name": "bo", "password": "secretpw2", "role": "member"})
     assert r.status_code == 200, r.text
     client.cookies.clear()
     assert client.post("/api/auth/login", json={"name": "bo", "password": "secretpw2"}).status_code == 200
