@@ -312,7 +312,7 @@ def widget(key: str, request: Request, tz: str = "", kind: str = "", n: int = 0,
     """A glimpse of one app for its tile, asked of the app with the viewer's own sign-in. tz: the viewer's time zone
     (IANA, e.g. Europe/Brussels), for what "today" is. For iopix, kind (onthisday | rediscover; empty: on this day
     when there are photos, else rediscover) and n (how many, up to 24) pick what the photo strip shows; for iocalendar,
-    kind=week gives the coming week instead of today; for iocontacts, q searches the contacts (the search box) instead
+    kind=week gives the coming week instead of today; for iocontact, q searches the contacts (the search box) instead
     of listing the birthdays ahead. 404 for an app without one; 401/403 when the app refuses this account; 502 when it does not answer. The page leaves the
     tile as it is on any of these."""
     try:
@@ -341,22 +341,22 @@ async def widget_add_event(request: Request):
         raise HTTPException(e.status, str(e))
 
 
-@router.get("/api/widgets/iocontacts/photo/{contact_id}", dependencies=[access.signed_in])
+@router.get("/api/widgets/iocontact/photo/{contact_id}", dependencies=[access.signed_in])
 def widget_contact_photo(contact_id: int, request: Request):
-    """A contact's photo from ioContacts, passed through (for the birthdays card)."""
+    """A contact's photo from ioContact, passed through (for the birthdays card)."""
     try:
-        body, ctype = widgets.iocontacts_photo(request, contact_id)
+        body, ctype = widgets.iocontact_photo(request, contact_id)
     except widgets.Unavailable as e:
         raise HTTPException(e.status, str(e))
     return Response(body, media_type=ctype if ctype.startswith("image/") else "image/jpeg",
                     headers={"Cache-Control": "private, max-age=86400"})
 
 
-@router.get("/api/widgets/iocontacts/face/{person_id}", dependencies=[access.signed_in])
+@router.get("/api/widgets/iocontact/face/{person_id}", dependencies=[access.signed_in])
 def widget_contact_face(person_id: int, request: Request):
-    """A contact's ioPix face, through ioContacts (a contact linked to an ioPix person, without a photo of its own)."""
+    """A contact's ioPix face, through ioContact (a contact linked to an ioPix person, without a photo of its own)."""
     try:
-        body, ctype = widgets.iocontacts_face(request, person_id)
+        body, ctype = widgets.iocontact_face(request, person_id)
     except widgets.Unavailable as e:
         raise HTTPException(e.status, str(e))
     return Response(body, media_type=ctype if ctype.startswith("image/") else "image/jpeg",

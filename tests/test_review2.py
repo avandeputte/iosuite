@@ -27,9 +27,9 @@ def test_an_app_that_is_down_is_left_alone_for_a_while(client, monkeypatch):
         tried.append(req.full_url)
         raise urllib.error.URLError("refused")
     monkeypatch.setattr(widgets.urllib.request, "urlopen", down)
-    assert client.get("/api/widgets/iocontacts").status_code == 502
+    assert client.get("/api/widgets/iocontact").status_code == 502
     assert len(tried) == 2  # both addresses, once
-    r = client.get("/api/widgets/iocontacts")
+    r = client.get("/api/widgets/iocontact")
     assert r.status_code == 502 and "a moment ago" in r.json()["detail"] and len(tried) == 2  # not asked again
     assert client.get("/api/widgets/iopix").status_code == 502 and len(tried) == 4  # another app is another matter
     # a picture that fails says nothing about the app: asked again the next time
@@ -38,7 +38,7 @@ def test_an_app_that_is_down_is_left_alone_for_a_while(client, monkeypatch):
     n = len(tried)
     assert client.get("/api/widgets/iopix/thumb/5").status_code == 502 and len(tried) == n + 2
     # when the time is up the app is asked again, and an answer clears it
-    widgets._down["iocontacts"] = time.monotonic() - 1
+    widgets._down["iocontact"] = time.monotonic() - 1
 
     def up(req, timeout=None):
         tried.append(req.full_url)
@@ -47,11 +47,11 @@ def test_an_app_that_is_down_is_left_alone_for_a_while(client, monkeypatch):
         return Answer(json.dumps({"items": []}).encode())
     monkeypatch.setattr(widgets.urllib.request, "urlopen", up)
     del tried[:]
-    assert client.get("/api/widgets/iocontacts").status_code == 200
+    assert client.get("/api/widgets/iocontact").status_code == 200
     assert [u.split("/api")[0] for u in tried] == ["http://127.0.0.1:8650", "http://10.0.0.5:8650"]
     # the address that answered is asked first from now on
     del tried[:]
-    assert client.get("/api/widgets/iocontacts").status_code == 200
+    assert client.get("/api/widgets/iocontact").status_code == 200
     assert [u.split("/api")[0] for u in tried] == ["http://10.0.0.5:8650"]
 
 

@@ -23,7 +23,7 @@ REGISTRY_TTL = 30  # seconds the suite's list is kept here (asked on every tile,
 _registry = {"at": 0.0, "items": {}}
 
 # the apps the page has widgets for, in the order their tiles come; any other registered app follows by name
-ORDER = ["iopix", "iohealth", "iocalendar", "iotasks", "iocontacts", "ionotes"]
+ORDER = ["iopix", "iohealth", "iocalendar", "iotask", "iocontact", "ionote"]
 _KEY_RE = re.compile(r"[a-z0-9_-]{1,32}")
 
 

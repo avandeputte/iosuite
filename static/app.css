@@ -1,4 +1,4 @@
-/* ioSuite: the iothing look (as iopix, ioContacts and ioCalendar): light by default, dark with the system or the
+/* ioSuite: the iothing look (as iopix, ioContact and ioCalendar): light by default, dark with the system or the
    Appearance setting. The name in two colours: "io" in the sun's gold, "Suite" in the icon's night blue. */
 :root {
   --warn: #e37400; --danger: #d93025; --ok: #1e8e3e; --star: #f9ab00;

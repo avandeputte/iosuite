@@ -16,9 +16,9 @@ def test_status_and_signin(client):
 
 def test_tiles_are_the_registered_apps(client):
     items = client.get("/api/apps", headers={"host": "home.lan:8630"}).json()["items"]
-    assert [t["key"] for t in items] == ["iopix", "iohealth", "iocalendar", "iotasks", "iocontacts", "ionotes"]
+    assert [t["key"] for t in items] == ["iopix", "iohealth", "iocalendar", "iotask", "iocontact", "ionote"]
     by = {t["key"]: t for t in items}
-    assert by["iopix"]["url"] == "https://pix.example.com" and by["iocontacts"]["name"] == "ioContacts"
+    assert by["iopix"]["url"] == "https://pix.example.com" and by["iocontact"]["name"] == "ioContact"
     assert "hidden" not in by["iopix"] and "port" not in by["iopix"]
 
 
@@ -73,11 +73,11 @@ def test_the_shell_its_files_and_the_icon_are_public(client):
 def test_suite_admin_screen(client):
     """Settings › Security: every account, its role in every app, app passwords with their scope, the apps' access."""
     o = client.get("/api/suite-admin").json()
-    assert {a["app"] for a in o["apps"]} >= {"iopix", "iocalendar", "iocontacts"} and [u["name"] for u in o["users"]] == ["alex"]
+    assert {a["app"] for a in o["apps"]} >= {"iopix", "iocalendar", "iocontact"} and [u["name"] for u in o["users"]] == ["alex"]
     r = client.post("/api/suite-admin/users", json={"name": "ann", "password": "secret123", "roles": {"iopix": "editor", "iosuite": "admin"}})
     assert r.status_code == 200, r.text
     ann = r.json()["id"]
-    pw = client.post("/api/suite-admin/app-passwords", json={"userId": ann, "app": "iocontacts", "label": "Phone", "scope": "dav"}).json()
+    pw = client.post("/api/suite-admin/app-passwords", json={"userId": ann, "app": "iocontact", "label": "Phone", "scope": "dav"}).json()
     assert pw["scope"] == "dav"
     items = client.get("/api/suite-admin/app-passwords").json()["items"]
     assert [(i["userName"], i["scope"]) for i in items] == [("ann", "dav")]
@@ -103,4 +103,4 @@ def test_tiles_are_the_apps_each_person_may_use(client):
     client.post("/api/auth/login", json={"name": "kid", "password": "secret123"})
     shared_db.settings_cache.clear()
     keys = [t["key"] for t in client.get("/api/apps").json()["items"]]
-    assert keys == ["iopix", "iocalendar", "iotasks", "iocontacts", "ionotes"]   # neither ioHealth nor the admin tool
+    assert keys == ["iopix", "iocalendar", "iotask", "iocontact", "ionote"]   # neither ioHealth nor the admin tool

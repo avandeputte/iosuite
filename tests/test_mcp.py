@@ -39,7 +39,7 @@ def test_mcp_updates_every_app(client):
     names = {t["name"] for t in rpc(client, "tools/list", auth=auth)[1]["result"]["tools"]}
     assert {"suite_versions", "update_suite_apps"} <= names
     out = call(client, auth, "suite_versions", check=False)
-    assert {a["app"] for a in out["apps"]} >= {"iocalendar", "ionotes"}
+    assert {a["app"] for a in out["apps"]} >= {"iocalendar", "ionote"}
     out = call(client, auth, "update_suite_apps", apps=["iocalendar"])
     assert out["asked"] == ["iocalendar"]
     assert shared_db.one("SELECT action, requested_by FROM ios_updates WHERE app = 'iocalendar'") == {"action": "update", "requested_by": "alex"}

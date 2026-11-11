@@ -18,7 +18,7 @@ services:
       DB_NAME: suite
       DB_USER: suite
       DB_PASSWORD: change-me          # CHANGE ME
-      # the accounts shared by the io apps (the same database ioPix, ioNotes, ioContacts, ioCalendar and ioHealth use)
+      # the accounts shared by the io apps (the same database ioPix, ioNote, ioContact, ioCalendar and ioHealth use)
       # IOSUITE_DB_HOST: db.example.lan   # default: DB_HOST
       # IOSUITE_DB_PORT: "3306"            # default: DB_PORT
       IOSUITE_DB_NAME: iosuite

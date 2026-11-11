@@ -12,7 +12,7 @@
 # (COMMUNITY_SCRIPTS_URL below; the core engine still comes from community-scripts). Run on the Proxmox host as root:
 #   bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/proxmox/ct/iosuite.sh)"
 # Unattended: IOSUITE_DB=host:port/db:user:password IOSUITE_SUITE_DB=host:port/db:user:password
-#   IOSUITE_ADMIN=name:password IOSUITE_PORT=8630 IOSUITE_DB_ADMIN=root:password (the databases and users are created) IOSUITE_ALSO=iocalendar,iocontacts (or none)
+#   IOSUITE_ADMIN=name:password IOSUITE_PORT=8630 IOSUITE_DB_ADMIN=root:password (the databases and users are created) IOSUITE_ALSO=iocalendar,iocontact (or none)
 #   IOSUITE_PUBLIC_URL=https://home.example.com in the environment skip the questions.
 export COMMUNITY_SCRIPTS_URL="${COMMUNITY_SCRIPTS_URL:-https://raw.githubusercontent.com/avandeputte/iosuite/main/proxmox}"
 _cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
@@ -83,10 +83,10 @@ ask_app_settings() {
   if [[ -z "${IOSUITE_ALSO+x}" ]]; then  # the other apps of the suite in the same container (ioPix has its own script: photo mounts)
     IOSUITE_ALSO=$(whiptail --backtitle "$bt" --checklist "Also install in this container (same database server, each app its own database; same accounts and admin; each on its usual port):" 16 78 6 \
       iocalendar "ioCalendar  (8620)" OFF \
-      iotasks "ioTasks  (8670)" OFF \
+      iotask "ioTask  (8670)" OFF \
       iorecipe "ioRecipe  (8690)" OFF \
-      iocontacts "ioContacts  (8640, LDAP 3890)" OFF \
-      ionotes "ioNotes  (8610)" OFF \
+      iocontact "ioContact  (8640, LDAP 3890)" OFF \
+      ionote "ioNote  (8610)" OFF \
       iohealth "ioHealth  (8650)" OFF 3>&1 1>&2 2>&3) || exit 1
     IOSUITE_ALSO=$(echo "$IOSUITE_ALSO" | tr -d '"' | tr ' ' ',')
   fi
@@ -137,6 +137,6 @@ echo -e "${CREATING}${GN}${APP} setup has been successfully initialized!${CL}"
 echo -e "${INFO}${YW}Access it using the following URL:${CL}"
 echo -e "${GATEWAY}${BGN}http://${IP}:${IOSUITE_PORT:-8630}${CL}"
 for a in ${IOSUITE_ALSO//,/ }; do
-  case "$a" in iocalendar) p=8620;; iotasks) p=8670;; iorecipe) p=8690;; iocontacts) p=8640;; ionotes) p=8610;; iohealth) p=8650;; iopix) p=8600;; *) p="";; esac
+  case "$a" in iocalendar) p=8620;; iotask) p=8670;; iorecipe) p=8690;; iocontact) p=8640;; ionote) p=8610;; iohealth) p=8650;; iopix) p=8600;; *) p="";; esac
   [[ -n "$p" ]] && echo -e "${INFO}${YW}$a:${CL} ${BGN}http://${IP}:$p${CL}"
 done

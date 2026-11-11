@@ -40,7 +40,7 @@ _good: dict[str, str] = {}    # app key -> the address that answered last
 _state_lock = threading.Lock()
 _pool = ThreadPoolExecutor(max_workers=8, thread_name_prefix="widgets")
 UA = "ioSuite start page"
-WIDGETS = ("iopix", "iocalendar", "iotasks", "iohealth", "iocontacts")
+WIDGETS = ("iopix", "iocalendar", "iotask", "iohealth", "iocontact")
 
 
 class Unavailable(Exception):
@@ -354,14 +354,14 @@ def iocalendar_add(request: Request, b: dict) -> dict:
     return {"id": eid, "url": f"{apps.url_for('iocalendar')}/#/event/{eid}" if eid is not None else None}
 
 
-# ------------------------------------------------------------------ ioContacts: birthdays and anniversaries ahead
+# ------------------------------------------------------------------ ioContact: birthdays and anniversaries ahead
 
-def iocontacts(request: Request, days: int = 30, n: int = 8) -> dict:
+def iocontact(request: Request, days: int = 30, n: int = 8) -> dict:
     """{items: [{id, name, hasPhoto, iopixPersonId, label, turns, in, date}]}: the family's birthdays and other dates in
     the next `days` days, soonest first, up to n. A contact without a photo of its own may still have a face in ioPix
-    (iopixPersonId), which ioContacts shows in its place; so does the card. A birthday whose "Remind me" box is unchecked
-    in ioContacts (remind false) is left out; other dates carry no such box (remind null) and always show."""
-    got = fetch(request, "iocontacts", "/api/upcoming", {"days": max(1, min(days, 366))})
+    (iopixPersonId), which ioContact shows in its place; so does the card. A birthday whose "Remind me" box is unchecked
+    in ioContact (remind false) is left out; other dates carry no such box (remind null) and always show."""
+    got = fetch(request, "iocontact", "/api/upcoming", {"days": max(1, min(days, 366))})
     items = []
     for x in got.get("items", []):
         if x.get("remind") is False:
@@ -372,22 +372,22 @@ def iocontacts(request: Request, days: int = 30, n: int = 8) -> dict:
     return {"items": items[:n], "more": max(0, len(items) - n)}
 
 
-def iocontacts_search(request: Request, q: str, n: int = 5) -> dict:
+def iocontact_search(request: Request, q: str, n: int = 5) -> dict:
     """{items: [{id, name, hasPhoto, iopixPersonId, org}]}: the contacts whose name, email, phone, address… match q (the
     search box)."""
-    got = fetch(request, "iocontacts", "/api/contacts", {"q": q[:80], "limit": n})
+    got = fetch(request, "iocontact", "/api/contacts", {"q": q[:80], "limit": n})
     return {"items": [{"id": x.get("id"), "name": x.get("fn"), "hasPhoto": bool(x.get("hasPhoto")),
                        "iopixPersonId": x.get("iopixPersonId"), "org": x.get("org")} for x in got.get("items", [])],
             "total": got.get("total")}
 
 
-def iocontacts_photo(request: Request, contact_id: int) -> tuple[bytes, str]:
-    return fetch(request, "iocontacts", f"/api/contacts/{int(contact_id)}/photo", raw=True)
+def iocontact_photo(request: Request, contact_id: int) -> tuple[bytes, str]:
+    return fetch(request, "iocontact", f"/api/contacts/{int(contact_id)}/photo", raw=True)
 
 
-def iocontacts_face(request: Request, person_id: int) -> tuple[bytes, str]:
-    """A person's face from ioPix, as ioContacts hands it out (for contacts linked to an ioPix person, no photo of their own)."""
-    return fetch(request, "iocontacts", f"/api/iopix/face/{int(person_id)}", raw=True)
+def iocontact_face(request: Request, person_id: int) -> tuple[bytes, str]:
+    """A person's face from ioPix, as ioContact hands it out (for contacts linked to an ioPix person, no photo of their own)."""
+    return fetch(request, "iocontact", f"/api/iopix/face/{int(person_id)}", raw=True)
 
 
 # ------------------------------------------------------------------ ioHealth: today's steps and activity rings
@@ -441,16 +441,16 @@ def iohealth(request: Request, tz: str = "") -> dict:
     return {"steps": steps, "rings": rings, "sleep": sleep, "week": week}
 
 
-def iotasks(request: Request, tz: str = "", n: int = 3) -> dict:
+def iotask(request: Request, tz: str = "", n: int = 3) -> dict:
     """{today: [task], more, overdue}: the open tasks due today or before (the viewer's today), the overdue ones first
-    as ioTasks sorts them, up to n, each with its list's colour; overdue is how many of them all are late."""
+    as ioTask sorts them, up to n, each with its list's colour; overdue is how many of them all are late."""
     q = {"due": "today", "status": "open", "limit": 200}
     late = {"due": "overdue", "status": "open", "limit": 200}
     if tz:
         q["tz"] = late["tz"] = tz
-    lists, due, over = _together(lambda: fetch(request, "iotasks", "/api/lists"),
-                                 lambda: fetch(request, "iotasks", "/api/tasks", q),
-                                 lambda: fetch(request, "iotasks", "/api/tasks", late))
+    lists, due, over = _together(lambda: fetch(request, "iotask", "/api/lists"),
+                                 lambda: fetch(request, "iotask", "/api/tasks", q),
+                                 lambda: fetch(request, "iotask", "/api/tasks", late))
     colors = {c["id"]: c.get("color") for c in lists.get("items", [])}
     late_ids = {t.get("id") for t in over.get("items", [])}
     items = due.get("items", [])
@@ -468,10 +468,10 @@ def get(request: Request, key: str, tz: str = "", kind: str = "", n: int = 0, q:
         return iopix(request, tz, min(max(int(n or 0), 1), 24) if n else 4, kind if kind in ("onthisday", "rediscover") else "")
     if key == "iocalendar" and kind == "week":
         return iocalendar_week(request, tz)
-    if key == "iocontacts":
-        return iocontacts_search(request, q.strip()) if q.strip() else iocontacts(request)
+    if key == "iocontact":
+        return iocontact_search(request, q.strip()) if q.strip() else iocontact(request)
     if key == "iocalendar":
         return iocalendar(request, tz, min(max(int(n or 0), 1), 12) if n else 3)
-    if key == "iotasks":
-        return iotasks(request, tz, min(max(int(n or 0), 1), 12) if n else 3)
+    if key == "iotask":
+        return iotask(request, tz, min(max(int(n or 0), 1), 12) if n else 3)
     return iohealth(request, tz)
