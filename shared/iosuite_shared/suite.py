@@ -217,8 +217,10 @@ def _out(r: dict) -> dict:
 
 def apps() -> list:
     """Every registered app: {app, name, description, version, color, icon (absolute), url, configuredUrl, seenUrl,
-    internalUrl, adminTool, registered, updated, lastSeen}, by name. What one account may see: visible()."""
-    return [_out(r) for r in db.q("SELECT * FROM ios_apps ORDER BY name, app")]
+    internalUrl, adminTool, registered, updated, lastSeen}, in the suite's one order (ioSuite, the start page, first,
+    then the others by name), so every app switcher lists them alike. What one account may see: visible()."""
+    rows = db.q("SELECT * FROM ios_apps ORDER BY name, app")
+    return [_out(r) for r in sorted(rows, key=lambda r: r["app"] != "iosuite")]
 
 
 def visible(user) -> list:

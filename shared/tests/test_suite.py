@@ -207,3 +207,9 @@ def test_before_the_first_account_the_switcher_lists_every_app():
     suite.register("iodns", "ioDNS", url="https://dns.example.com", admin_tool=True)
     c = TestClient(app, base_url="http://home.lan")
     assert {a["app"] for a in c.get("/api/auth/suite").json()["items"]} == {"iosuite", "iodns"}
+
+
+def test_one_order_everywhere_iosuite_first_then_by_name():
+    for key, name in (("iotasks", "ioTasks"), ("iosuite", "ioSuite"), ("iocalendar", "ioCalendar"), ("iodns", "ioDNS")):
+        suite.register(key, name, url=f"https://{key}.example.com", admin_tool=key == "iodns")
+    assert [a["app"] for a in suite.apps()] == ["iosuite", "iocalendar", "iodns", "iotasks"]
