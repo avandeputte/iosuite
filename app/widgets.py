@@ -40,7 +40,7 @@ _good: dict[str, str] = {}    # app key -> the address that answered last
 _state_lock = threading.Lock()
 _pool = ThreadPoolExecutor(max_workers=8, thread_name_prefix="widgets")
 UA = "ioSuite start page"
-WIDGETS = ("iopix", "iocalendar", "iohealth", "iocontacts")
+WIDGETS = ("iopix", "iocalendar", "iotasks", "iohealth", "iocontacts")
 
 
 class Unavailable(Exception):
@@ -441,6 +441,24 @@ def iohealth(request: Request, tz: str = "") -> dict:
     return {"steps": steps, "rings": rings, "sleep": sleep, "week": week}
 
 
+def iotasks(request: Request, tz: str = "", n: int = 3) -> dict:
+    """{today: [task], more, overdue}: the open tasks due today or before (the viewer's today), the overdue ones first
+    as ioTasks sorts them, up to n, each with its list's colour; overdue is how many of them all are late."""
+    q = {"due": "today", "status": "open", "limit": 200}
+    late = {"due": "overdue", "status": "open", "limit": 200}
+    if tz:
+        q["tz"] = late["tz"] = tz
+    lists, due, over = _together(lambda: fetch(request, "iotasks", "/api/lists"),
+                                 lambda: fetch(request, "iotasks", "/api/tasks", q),
+                                 lambda: fetch(request, "iotasks", "/api/tasks", late))
+    colors = {c["id"]: c.get("color") for c in lists.get("items", [])}
+    late_ids = {t.get("id") for t in over.get("items", [])}
+    items = due.get("items", [])
+    return {"today": [{"id": t.get("id"), "title": t.get("title") or "(no title)", "due": t.get("due"), "allDay": bool(t.get("dueAllDay")),
+                       "late": t.get("id") in late_ids, "color": colors.get(t.get("listId"))} for t in items[:n]],
+            "more": max(0, len(items) - n), "overdue": len(late_ids)}
+
+
 def get(request: Request, key: str, tz: str = "", kind: str = "", n: int = 0, q: str = "") -> dict:
     if key not in WIDGETS:
         raise Unavailable(404, f"{key} has nothing to show here")
@@ -454,4 +472,6 @@ def get(request: Request, key: str, tz: str = "", kind: str = "", n: int = 0, q:
         return iocontacts_search(request, q.strip()) if q.strip() else iocontacts(request)
     if key == "iocalendar":
         return iocalendar(request, tz, min(max(int(n or 0), 1), 12) if n else 3)
+    if key == "iotasks":
+        return iotasks(request, tz, min(max(int(n or 0), 1), 12) if n else 3)
     return iohealth(request, tz)

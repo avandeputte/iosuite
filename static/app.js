@@ -720,7 +720,7 @@ function autoStrip(el, row, reshuffle) {
 /* Under an app's name, a glimpse of it: ioPix's photos from this day in earlier years (else a few at random),
    ioCalendar's rest of today (else what's next), ioHealth's steps and rings. The server asks each app with the
    viewer's own sign-in; an app that is down or not open to this account leaves its tile as it was. */
-const WIDGETS = { iopix: drawPixWidget, iocalendar: drawCalendarWidget, iohealth: drawHealthWidget };
+const WIDGETS = { iopix: drawPixWidget, iocalendar: drawCalendarWidget, iotasks: drawTasksWidget, iohealth: drawHealthWidget };
 /** ioPix opens one photo in its lightbox at #/photos?p=<id>. */
 const pixPhotoUrl = (pix, id) => `${pix.url}/#/photos?p=${id}`;
 const viewerTz = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch { return ''; } };
@@ -738,7 +738,7 @@ function drawWidgets(page, again = false) {
   }
 }
 
-const EMPTY = { iopix: 'No photos yet', iocalendar: 'Nothing planned', iohealth: 'No steps, rings or sleep for today yet' };
+const EMPTY = { iopix: 'No photos yet', iocalendar: 'Nothing planned', iotasks: 'Nothing due today', iohealth: 'No steps, rings or sleep for today yet' };
 const wgHead = (t, extra) => h('div', { class: 'wghead' }, h('span', null, t), extra ? h('span', { class: 'muted' }, extra) : null);
 
 function drawPixWidget(d) {
@@ -776,6 +776,15 @@ function drawCalendarWidget(d) {
   }
   if (d.next) return [wgHead('Next', evDay(d.next)), evRow(d.next, evTime(d.next))];
   return [wgHead('Today'), h('div', { class: 'muted small' }, 'Nothing planned')];
+}
+
+/** ioTasks: what is due today (and what is overdue, first), in each list's colour. */
+function drawTasksWidget(d) {
+  const today = d.today || [];
+  if (!today.length) return [wgHead('Today'), h('div', { class: 'muted small' }, 'Nothing due')];
+  const when = (t) => { if (t.late) return 'Late'; if (t.allDay || !t.due) return ''; const s = new Date(t.due); return isNaN(s) ? '' : s.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); };
+  return [wgHead('Due today', [d.overdue ? `${d.overdue} overdue` : null, d.more ? `+${d.more} more` : null].filter(Boolean).join(' · ') || null),
+    today.map((t) => evRow(t, when(t)))];
 }
 
 /** Three rings, outside in: move, exercise, stand; each full at its goal (and past it, a second lap is not drawn). */

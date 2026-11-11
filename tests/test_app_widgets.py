@@ -263,3 +263,19 @@ def test_apps_asked_like_the_apps_ask_each_other(client, monkeypatch):
     finally:
         credentials.put("", "cf_access_client_id", "")
         credentials.put("", "cf_access_client_secret", "")
+
+
+def test_iotasks_due_today_overdue_first(client, apps_answer):
+    table, asked = apps_answer
+    table[("iotasks", "/api/lists")] = {"items": [{"id": 1, "color": "#146b5e"}]}
+    due = [{"id": 5, "listId": 1, "title": "Passport", "due": "2026-01-02", "dueAllDay": True},
+           {"id": 6, "listId": 1, "title": "Bins", "due": "2026-01-05T19:00:00-05:00", "dueAllDay": False},
+           {"id": 7, "listId": 1, "title": "", "due": "2026-01-05", "dueAllDay": True},
+           {"id": 8, "listId": 2, "title": "Milk", "due": "2026-01-05", "dueAllDay": True}]
+    table[("iotasks", "/api/tasks")] = lambda p: {"items": due[:1] if p["due"] == "overdue" else due}
+    d = client.get("/api/widgets/iotasks?tz=Europe/Brussels").json()
+    assert [t["title"] for t in d["today"]] == ["Passport", "Bins", "(no title)"] and d["more"] == 1 and d["overdue"] == 1
+    assert d["today"][0]["late"] and not d["today"][1]["late"] and d["today"][0]["color"] == "#146b5e"
+    assert all(p["tz"] == "Europe/Brussels" for k, path, p, _ in asked if path == "/api/tasks")
+    table[("iotasks", "/api/tasks")] = {"items": []}
+    assert client.get("/api/widgets/iotasks").json() == {"today": [], "more": 0, "overdue": 0}
