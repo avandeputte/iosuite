@@ -40,7 +40,7 @@ def test_overview_lists_every_app_and_effective_roles():
     assert by["iocontacts"]["appPasswords"] == 1
     u = {x["name"]: x for x in o["users"]}
     assert u["alex"]["effective"] == {k: "admin" for k in keys}
-    assert u["kid"]["effective"]["iopix"] == "viewer" and u["kid"]["effective"]["iocalendar"] == "none"
+    assert u["kid"]["effective"]["iopix"] == "member" and u["kid"]["effective"]["iocalendar"] == "none"
     assert u["ed"]["roles"] == {"iopix": "editor", "oldapp": "admin"} and u["ed"]["appPasswords"] == 1
     assert alex["id"] and kid["passwordless"]
 
@@ -50,11 +50,11 @@ def test_roles_reset_to_default_and_checks():
     me = users.create("alex", "secret123", suite_admin=True)
     kid = users.create("kid", "")
     with pytest.raises(ValueError):
-        admin.update(me, kid["id"], {"roles": {"iopix": "editor"}})  # no password: viewer at most
+        admin.update(me, kid["id"], {"roles": {"iopix": "editor"}})  # no password: member at most
     got = admin.update(me, kid["id"], {"password": "longenough", "roles": {"iopix": "editor", "ionotes": "none"}})
     assert got["roles"] == {"iopix": "editor", "ionotes": "none"} and not got["passwordless"]
     got = admin.update(me, kid["id"], {"roles": {"ionotes": None}})
-    assert got["roles"] == {"iopix": "editor"} and got["effective"]["ionotes"] == "viewer"
+    assert got["roles"] == {"iopix": "editor"} and got["effective"]["ionotes"] == "member"
     with pytest.raises(ValueError):
         admin.update(me, me["id"], {"suiteAdmin": False})  # not your own
     with pytest.raises(ValueError):
@@ -68,7 +68,7 @@ def test_roles_reset_to_default_and_checks():
     a = admin.set_app("iopix", default_role="none", require_login=True)
     assert a["defaultRole"] == "none" and a["requireLogin"]
     assert users.role_of(users.get(me["id"]), "iopix") == "admin"
-    admin.set_app("iopix", default_role="viewer", require_login=False)
+    admin.set_app("iopix", default_role="member", require_login=False)
     assert db.settings_of("iopix") == {}
 
 

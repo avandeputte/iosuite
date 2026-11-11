@@ -39,9 +39,11 @@ class Auth:
         """version, public_url (the app's PUBLIC_URL; empty: the address it is reached at), description and color (the
         icon is suite.ICON, the same path in every app) and internal_url (where it is inside the network; None:
         suite.local_url(), from INTERNAL_URL or the LAN address and PORT) go into the suite's list of apps (iosuite_shared.suite) when the app first reaches the Shared ioSuite database; register=False
-        keeps the app out of it. admin_tool=True: an app behind the scenes (ioDNS), which only its admins see in the
-        start page and the app switchers."""
+        keeps the app out of it. admin_tool=True: an app behind the scenes (ioDNS, ioBackup), for suite admins only:
+        everybody else is none there, so it is on no one else's start page or app switcher."""
         self.app = app
+        if admin_tool:
+            suite.declare_admin_tool(app)
         self.suite_entry = dict(name=app_label or app, url=public_url or None, version=version, description=description,
                                 color=color, internal_url=internal_url or suite.local_url(app), admin_tool=admin_tool) if register else None
         self._registered, self._retry_at = False, 0.0

@@ -23,7 +23,8 @@ was merely reached at, since those calls carry credentials).
 Who sees which app (`visible(user)`, and `GET /api/auth/suite`): only the apps the account has a role in (not
 "none": its own role there, else that app's default role), so somebody without ioHealth does not see ioHealth. An app
 that registers as an admin tool (`Auth(..., admin_tool=True)`; `adminTool` in what `apps()` answers: ioDNS, ioBackup, things
-behind the scenes) is seen only by its admins and the suite admins, and a switcher shows it apart from the others.
+behind the scenes) is for suite admins only (`is_admin_tool`: users.role_of gives everybody else none there, whatever
+role row or default role says), and a switcher shows it apart from the others.
 
 A suite admin may forget an app that was uninstalled (`DELETE /api/auth/suite/{app}`); it comes back the next time it
 starts.
@@ -135,6 +136,11 @@ def register(app: str, name: str = None, url: str = None, version: str = None, d
         raise Invalid("an app key of 1 to 32 characters")
     with _lock:
         _seen.pop(app, None)
+        _tools["at"] = 0.0
+        if admin_tool:
+            _declared.add(app)
+        else:
+            _declared.discard(app)
     now = int(time.time())
     row = {"name": _clip(name or app, 64), "description": _clip(description, 255), "version": _clip(version, 32),
            "color": _clip(color, 16), "icon": ICON, "configured_url": clean_url(url), "internal_url": clean_url(internal_url),
@@ -225,15 +231,14 @@ def apps() -> list:
 
 def visible(user) -> list:
     """The apps this account may use, for the start page and the app switchers: those it has a role in (not "none"),
-    and an admin tool only where it is an admin (a suite admin is admin everywhere). Before the first account exists
+    so an admin tool only for a suite admin. Before the first account exists
     (everything is open then), every app."""
     from iosuite_shared import users
     if not users.any_users():  # before the first account, everything is open to whoever asks: every app
         return apps()
     out = []
     for a in apps():
-        role = users.role_of(user, a["app"])
-        if role == "none" or (a["adminTool"] and role != "admin"):
+        if users.role_of(user, a["app"]) == "none":  # an admin tool is none for everybody but the suite admins
             continue
         out.append(a)
     return out
@@ -284,10 +289,39 @@ def known_host(app: str, host: str) -> bool:
     return host in hit[0]
 
 
+_tools = {"set": frozenset(), "at": 0.0}  # the admin tools in the registry, read at most every TOOLS_S
+_declared: set = set()  # admin tools this process registered (its own app, before the registry has its row)
+TOOLS_S = 30.0
+
+
+def admin_tools() -> frozenset:
+    """The apps that are admin tools (for suite admins only): the registry's, and the one this process declared."""
+    now = time.time()
+    if now - _tools["at"] >= TOOLS_S:
+        try:
+            got = frozenset(r["app"] for r in db.q("SELECT app FROM ios_apps WHERE admin_tool = 1"))
+        except Exception:  # noqa: BLE001 - no database yet: what this process knows
+            got = _tools["set"]
+        with _lock:
+            _tools.update(set=got, at=now)
+    return _tools["set"] | frozenset(_declared)
+
+
+def is_admin_tool(app: str) -> bool:
+    return app in admin_tools()
+
+
+def declare_admin_tool(app: str) -> None:
+    """This process is an admin tool (Auth(admin_tool=True)): known before its row reaches the registry."""
+    with _lock:
+        _declared.add(app)
+
+
 def forget(app: str) -> bool:
     """Remove an app (uninstalled); it registers again when it starts."""
     with _lock:
         _seen.pop(app, None)
+        _tools["at"] = 0.0
     return db.ex("DELETE FROM ios_apps WHERE app = %s", (app,)) > 0
 
 
@@ -295,4 +329,6 @@ def invalidate():
     """Tests: forget what was noted in memory."""
     with _lock:
         _seen.clear()
+        _declared.clear()
+        _tools.update(set=frozenset(), at=0.0)
     _hosts.clear()

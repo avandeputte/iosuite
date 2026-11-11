@@ -15,7 +15,7 @@ from iosuite_shared import apppasswords, credentials, db, sessions, suite, users
 from iosuite_shared.errors import Invalid
 
 APP_KEY = re.compile(r"^[a-z0-9_-]{1,32}$")
-DEFAULT_ROLES = ("none", "viewer", "editor")  # what an app gives an account without a role there ("admin" by default is never wanted)
+DEFAULT_ROLES = ("none", "viewer", "member", "editor")  # what an app gives an account without a role there ("admin" by default is never wanted)
 PHOTO_APP = "iopix"  # the app whose People an account can be linked to: the person in photos, its face the account's picture
 
 
@@ -51,7 +51,7 @@ def apps() -> list:
         a = dict(reg.get(k) or {"app": k, "name": k, "description": None, "version": None, "color": None, "icon": None, "url": None,
                                 "lastSeen": None})
         a["registered"] = k in reg
-        a["defaultRole"] = users.default_role(k)
+        a["defaultRole"] = users.default_role(k)  # none in an admin tool, which is for suite admins only
         a["requireLogin"] = db.get_setting("require_login", "0", k) == "1"
         a["roles"], a["appPasswords"], a["credentials"] = roles.get(k, 0), pws.get(k, 0), creds.get(k, 0)
         out.append(a)
@@ -62,9 +62,11 @@ def set_app(app: str, default_role=None, require_login=None) -> dict:
     """Change an app's access settings (None: unchanged)."""
     app = clean_app(app)
     if default_role is not None:
+        if suite.is_admin_tool(app):
+            raise Invalid("An admin tool is for suite admins only; it has no default role")
         if default_role not in DEFAULT_ROLES:
-            raise Invalid("The default role is none, viewer or editor")
-        db.set_setting("default_role", "" if default_role == "viewer" else default_role, app)  # viewer is the default: no row
+            raise Invalid("The default role is none, viewer, member or editor")
+        db.set_setting("default_role", "" if default_role == users.DEFAULT_ROLE else default_role, app)  # member is the default: no row
     if require_login is not None:
         db.set_setting("require_login", "1" if require_login else "", app)
     _forget_caches()
@@ -89,7 +91,8 @@ def forget_app(app: str, data: bool = False) -> bool:
 # ---- accounts
 def accounts() -> list:
     """Every account people use (never the apps' own service accounts, which the suite manages itself): the shared fields, `roles` (the explicit role per app), `effective` (the role it holds in every
-    known app: the row, else the app's default; suite admin: admin; passwordless: viewer at most), its number of app
+    known app: the row, else the app's default; suite admin: admin; admin tool: none for the others; passwordless: member
+    at most), its number of app
     passwords and sessions, and when it was last seen in any session."""
     keys = [a["app"] for a in apps()]
     pw = {r["user_id"]: r["n"] for r in db.q("SELECT user_id, count(*) AS n FROM ios_app_passwords GROUP BY user_id")}
@@ -100,6 +103,7 @@ def accounts() -> list:
     for r in db.q("SELECT user_id, app, role FROM ios_user_roles"):
         roles.setdefault(r["user_id"], {})[r["app"]] = r["role"]
     defaults = {k: users.default_role(k) for k in keys}
+    tools = suite.admin_tools()
     photo = {r["user_id"]: db.json_load(r["value"]) for r in db.q(
         "SELECT user_id, value FROM ios_user_data WHERE app = %s AND name = 'person'", (PHOTO_APP,))}
     out = []
@@ -107,10 +111,7 @@ def accounts() -> list:
         mine = roles.get(u["id"], {})
         eff = {}
         for k in keys:
-            role = "admin" if u["suiteAdmin"] else mine.get(k, defaults[k])
-            if u["passwordless"] and users.RANK[role] > 1:
-                role = "viewer"
-            eff[k] = role
+            eff[k] = users.effective(mine.get(k, defaults[k]), u["suiteAdmin"], u["passwordless"], k in tools)
         s = ses.get(u["id"]) or {}
         out.append({**u, "roles": mine, "effective": eff, "appPasswords": pw.get(u["id"], 0), "sessions": int(s.get("n") or 0),
                     "lastSeen": s.get("seen"), "photoPerson": photo.get(u["id"])})
@@ -136,8 +137,10 @@ def set_roles(me, user_id: int, roles: dict):
         app = clean_app(app)
         if role in (None, "", "default"):
             db.ex("DELETE FROM ios_user_roles WHERE user_id = %s AND app = %s", (user_id, app))
+        elif suite.is_admin_tool(app):
+            raise Invalid(f"{(suite.get(app) or {}).get('name') or app} is an admin tool, for suite admins only")
         else:
-            users.update(user_id, role=str(role), app=app)  # the checks: a known role, a password for more than viewer
+            users.update(user_id, role=str(role), app=app)  # the checks: a known role, a password for more than member
 
 
 def create(me, body: dict) -> dict:
@@ -158,7 +161,7 @@ def create(me, body: dict) -> dict:
 
 
 def update(me, user_id: int, body: dict) -> dict:
-    """Change an account: name, displayName, email, listed, suiteAdmin, password ('' removes it: one-click viewer),
+    """Change an account: name, displayName, email, listed, suiteAdmin, password ('' removes it: one-click, member at most),
     roles {app: role | None}, photoPerson (the person in ioPix's People, a tag id; None unlinks)."""
     if not person(user_id):
         raise LookupError("No such user")

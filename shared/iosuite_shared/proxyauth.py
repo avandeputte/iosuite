@@ -177,7 +177,7 @@ class Proxy:
         if u:
             return u
         role = (self.opt("AUTH_PROXY_CREATE") or "").strip().lower()
-        if role not in ("viewer", "editor"):
+        if role not in ("viewer", "member", "editor"):
             return None
         name = ident.strip()[:64]
         try:
@@ -252,8 +252,8 @@ def save_suite(values: dict) -> dict:
     m = changes.get("AUTH_PROXY")
     if m is not None and m.lower() not in ("", "off", *PRESETS):
         raise Invalid("Unknown proxy")
-    if changes.get("AUTH_PROXY_CREATE", "").lower() not in ("", "viewer", "editor", "deny"):
-        raise Invalid("Someone with no account: the sign-in screen, deny, or a viewer or editor account")
+    if changes.get("AUTH_PROXY_CREATE", "").lower() not in ("", "viewer", "member", "editor", "deny"):
+        raise Invalid("Someone with no account: the sign-in screen, deny, or a viewer, member or editor account")
     if "CF_ACCESS_TEAM" in changes:
         changes["CF_ACCESS_TEAM"] = clean_team(changes["CF_ACCESS_TEAM"])
     if "CF_ACCESS_AUD" in changes:

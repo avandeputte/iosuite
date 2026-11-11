@@ -6,14 +6,15 @@ from fastapi.responses import JSONResponse
 from iosuite_shared import users
 from iosuite_shared.errors import Invalid
 
-ACCESS_ROLES = ("public", "signed_in", "editor", "admin", "suite_admin")
+ACCESS_ROLES = ("public", "signed_in", "member", "editor", "admin", "suite_admin")
 UNCLAIMED = ("No account exists here yet. Create the first one from inside your network, at the server's own address "
              "(not through a reverse proxy on another machine), or on the server itself.")
 
 
 class Access:
-    """The dependencies: public, signed_in, editor, editor_write, admin, admin_write, suite_admin. `read_only` is a
-    callable the app gives: when it says True, every *_write route answers 403."""
+    """The dependencies: public, signed_in (any role, viewer included), member and member_write (a member or more: their
+    own private things), editor and editor_write (an editor or more: what is shared with everyone), admin, admin_write,
+    suite_admin. `read_only` is a callable the app gives: when it says True, every *_write route answers 403."""
 
     def __init__(self, read_only=None, read_only_message: str = "This app is in read-only mode; nothing can be changed.", outside=None):
         """`outside(request)` says whether the request comes from outside the network (Auth gives Proxy.external):
@@ -21,6 +22,8 @@ class Access:
         self.read_only, self.read_only_message, self.outside = read_only, read_only_message, outside
         self.public = self.require("public")
         self.signed_in = self.require("signed_in")
+        self.member = self.require("member")
+        self.member_write = self.require("member", write=True)
         self.editor = self.require("editor")
         self.editor_write = self.require("editor", write=True)
         self.admin = self.require("admin")
@@ -67,6 +70,8 @@ class Access:
                 raise HTTPException(403 if user else 401, "Suite admins only")
             if role == "admin" and not users.is_admin(user):
                 raise HTTPException(403 if user else 401, "Admins only" if reading else "Only an admin can change settings or run maintenance.")
+            if role == "member" and not users.is_member(user):
+                raise HTTPException(403 if user else 401, "Members only" if reading else "A viewer can only look; ask an admin to make you a member to keep your own.")
             if role == "editor" and not users.can_write(user):
                 raise HTTPException(403 if user else 401, "Editors only" if reading else "Sign in as an editor to make changes.")
             if role == "signed_in" and not users.is_signed_in(user):

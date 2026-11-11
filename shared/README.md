@@ -9,15 +9,26 @@ the whole suite. Signed in at `photo.example.com`, a person is signed in at `not
 
 | Shared (one row per person)            | Per app                                                   |
 |----------------------------------------|-----------------------------------------------------------|
-| name, display name, email, password    | role: `none`, `viewer`, `editor` or `admin`               |
+| name, display name, email, password    | role: `none`, `viewer`, `member`, `editor` or `admin`     |
 | sessions (the `iothing_session` cookie): where each began and was last seen (address, through Cloudflare or not, web or which app, User-Agent) | settings (display preferences) and other per-user data    |
 | suite admin flag, sign-in list flag    | app passwords (for CardDAV, LDAP, MCP clients…)           |
 | proxy sign-in (Cloudflare Access…)     | `require_login`, `default_role` |
 
-A **suite admin** is admin in every app and manages accounts. An app's **admin** manages that app's settings and
-the accounts' roles there. An account without a role row in an app holds the app's `default_role` (`viewer` unless
-changed; set it to `none` to make an app invitation-only). A **passwordless** account signs in with one click on the
-LAN and is a viewer at most, everywhere.
+The roles, each able to do what the one before it does:
+
+| Role | Can |
+|------|-----|
+| `none` | nothing: the app is not theirs |
+| `viewer` | look at what is shared with everyone (the Family calendar, shared lists and address books, the photo library) and change nothing |
+| `member` | also keep their own private things: calendars, lists, address books, notes, health data, favourites and albums (`access.member`, `users.is_member`) |
+| `editor` | also change what is shared with everyone (`access.editor`, `users.can_write`) |
+| `admin` | also the app's settings |
+
+A **suite admin** is admin in every app and manages accounts. An account without a role row in an app holds the
+app's `default_role` (`member` unless changed; set it to `none` to make an app invitation-only). An **admin tool**
+(`Auth(..., admin_tool=True)`: ioDNS, ioBackup) is for suite admins only: everybody else is `none` there, whatever row
+or default says, and it has no default role to set. A **passwordless** account signs in with one click on the LAN and
+is a member at most, everywhere.
 
 ## Install
 
@@ -111,7 +122,7 @@ def tag(request: Request):
     user = request.state.user          # {id, name, displayName, email, role, passwordless, suiteAdmin, ...} or None
 ```
 
-`auth.access` gives `public`, `signed_in`, `editor`, `editor_write`, `admin`, `admin_write`, `suite_admin`; the
+`auth.access` gives `public`, `signed_in`, `member`, `member_write`, `editor`, `editor_write`, `admin`, `admin_write`, `suite_admin`; the
 `_write` ones answer 403 while `read_only()` says so. A rule of the app's own gets a marker of its own,
 `auth.access.custom("uploader", lambda user, request: ..., "Uploads need an editor")`, so the route says what it needs
 instead of carrying `public` and checking inside. The marker is the check: a route does not test the role again in
@@ -189,7 +200,7 @@ The routes:
 | Route | What |
 |-------|------|
 | `GET /api/suite-admin` | `{apps, users, roles, defaultRoles, me}`: every app the database knows (the registered ones, plus keys only seen in roles, settings or app passwords: `registered: false`) with `defaultRole`, `requireLogin` and counts; every account people use (never a service account) with `roles` (explicit, per app), `effective` (the role it holds in each app), `appPasswords`, `sessions`, `lastSeen` |
-| `POST /api/suite-admin/users` | a new account: `{name, password ('': one-click viewer), email, displayName, suiteAdmin, listed, roles: {app: role}}` |
+| `POST /api/suite-admin/users` | a new account: `{name, password ('': one-click, member at most), email, displayName, suiteAdmin, listed, roles: {app: role}}` |
 | `PATCH /api/suite-admin/users/{id}` | any of those; `roles: {app: null}` removes the row, so the app's default role applies |
 | `DELETE /api/suite-admin/users/{id}` | the account, everywhere |
 | `GET`/`DELETE /api/suite-admin/users/{id}/sessions` | its sessions; end all, or one with `?session=` |
@@ -197,13 +208,13 @@ The routes:
 | `POST /api/suite-admin/app-passwords` | `{userId, app, label, scope}`: a new one for that account, shown once |
 | `PATCH /api/suite-admin/app-passwords/{id}` | `{scope}`: `''` everything, `dav` the app's sync protocols only |
 | `DELETE /api/suite-admin/app-passwords/{id}` | revoke one |
-| `PATCH /api/suite-admin/apps/{app}` | `{defaultRole: none/viewer/editor, requireLogin}` |
+| `PATCH /api/suite-admin/apps/{app}` | `{defaultRole: none/viewer/member/editor, requireLogin}` (an admin tool has no default role) |
 | `DELETE /api/suite-admin/apps/{app}` | off the list (it registers again if it starts); `?data=1` also drops its roles, settings, app passwords and keys |
 | `GET /api/suite-admin/keys?app=` | every app's keys and tokens (`iosuite_shared.credentials`), never the value: `{app ('' : the whole suite), appName, name, label, hint, set, env, envSet, updated, updatedBy}` |
 | `PUT /api/suite-admin/keys/{app}/{name}` | `{value}`: replace it (`''` clears it); `_suite` for the whole suite's keys |
 | `DELETE /api/suite-admin/keys/{app}/{name}` | clear it |
 
-The usual rules hold: a one-click account is a viewer at most and has no app passwords, the last suite admin stays, and
+The usual rules hold: a one-click account is a member at most and has no app passwords, an admin tool takes no roles, the last suite admin stays, and
 the signed-in admin cannot delete their own account, drop their own suite admin or remove their own password here.
 
 ## The status, the error answers, the headers and the body cap

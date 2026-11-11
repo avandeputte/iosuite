@@ -56,7 +56,16 @@ def need_admin() -> dict:
     return u
 
 
+def need_member() -> dict:
+    """A member or more: may change their own private things."""
+    u = who()
+    if not users.is_member(u):
+        raise ToolError("A viewer can only look; a member, editor or admin can change their own")
+    return u
+
+
 def need_writer() -> dict:
+    """An editor or more: may change what is shared with everyone."""
     u = who()
     if not users.can_write(u):
         raise ToolError("Only an editor or admin can change this")

@@ -163,7 +163,21 @@ const fld = (l, e) => h('label', { class: 'sa-field' }, h('span', null, l), e);
 const box = (ic, title, ...kids) => h('div', { class: 'sa-box' }, h('h2', null, icon(ic), title), ...kids);
 
 const SCOPE_LABEL = { '': 'Everything', dav: 'Sync only (CalDAV, CardDAV, LDAP)' };
-const ROLE_HELP = { none: 'no access', viewer: 'sees', editor: 'changes', admin: 'manages' };
+const ROLE_HELP = { none: 'no access', viewer: 'only looks', member: 'keeps their own', editor: 'also changes shared', admin: 'also settings' };
+// what each role means, in the words the Roles and Apps panes show
+const ROLE_LEGEND = [
+  ['viewer', 'looks at what is shared with everyone (the Family calendar, the photo library) and changes nothing'],
+  ['member', 'also keeps their own private calendars, lists, contacts, notes, health data and favourites'],
+  ['editor', 'also changes what is shared with everyone'],
+  ['admin', 'also the app’s settings']];
+const legend = () => h('ul', { class: 'sa-muted sa-small', style: { margin: '4px 0 10px', paddingLeft: '18px' } },
+  ROLE_LEGEND.map(([r, t]) => h('li', null, h('b', null, r), `: ${t}`)));
+// a person without a password is a member at most, so an app's editor or admin default is member for them
+const PW_MAX = ['none', 'viewer', 'member'];
+const ALL_ROLES = ['none', 'viewer', 'member', 'editor', 'admin'];
+const allowedFor = (u) => (u.passwordless ? PW_MAX : ALL_ROLES);
+const defaultFor = (u, a) => (u.passwordless && !PW_MAX.includes(a.defaultRole) ? 'member' : a.defaultRole);
+const TOOL_NOTE = 'suite admins only';
 function sinceText(ts) {
   if (!ts) return 'never';
   const s = Date.now() / 1000 - ts;
@@ -216,11 +230,11 @@ export async function mount(el, opts = {}) {
 
 /** A role picker for one account in one app: "default (…)" removes the row, so the app's default applies. */
 function roleSelect(u, a) {
+  if (a.adminTool) return null;  // an admin tool is for suite admins only: no role to pick
   const cur = u.roles[a.app] || '';
-  const allowed = u.passwordless ? ['none', 'viewer'] : ['none', 'viewer', 'editor', 'admin'];
   return h('select', { class: 'sa-in sa-sm', title: `${u.displayName} in ${a.name}` },
-    h('option', { value: '' }, `default (${u.passwordless && ['editor', 'admin'].includes(a.defaultRole) ? 'viewer' : a.defaultRole})`),
-    [...new Set([...allowed, ...(cur ? [cur] : [])])].map((x) => h('option', { value: x, selected: x === cur ? true : null }, x)));
+    h('option', { value: '' }, `default (${defaultFor(u, a)})`),
+    [...new Set([...allowedFor(u), ...(cur ? [cur] : [])])].map((x) => h('option', { value: x, selected: x === cur ? true : null }, x)));
 }
 
 const faceUrl = (id) => new URL(`photo-people/${id}/face.jpg`, API).href;
@@ -248,7 +262,7 @@ function people(el, ctx) {
           u.suiteAdmin ? ' · suite admin' : '', u.listed ? '' : ' · not on the sign-in list', u.id === o.me ? ' · you' : '')),
         (photoTd[u.id] = h('td', { class: 'sa-small', style: { display: 'none' } })),
         h('td', { class: 'sa-small' }, u.email || h('span', { class: 'sa-muted' }, '–')),
-        h('td', { class: 'sa-small' }, u.passwordless ? 'One click (LAN, viewer)' : 'Password',
+        h('td', { class: 'sa-small' }, u.passwordless ? 'One click (LAN, member at most)' : 'Password',
           u.appPasswords ? h('div', { class: 'sa-muted' }, `${u.appPasswords} app password${u.appPasswords > 1 ? 's' : ''}`) : null),
         h('td', { class: 'sa-small' }, sinceText(u.lastSeen || u.last_login), h('div', { class: 'sa-muted' }, `${u.sessions} session${u.sessions === 1 ? '' : 's'}`)),
         h('td', { style: { textAlign: 'right' } }, h('button', { class: 'sa-btn', onclick: () => editAccount(ctx, u) }, 'Manage'))))),
@@ -266,10 +280,10 @@ async function editAccount(ctx, u) {
   const em = h('input', { class: 'sa-in', type: 'email', value: u.email, autocomplete: 'off' });
   const listed = h('input', { type: 'checkbox', checked: u.listed });
   const sa = h('input', { type: 'checkbox', checked: u.suiteAdmin, disabled: me ? true : null });
-  const pw = h('input', { class: 'sa-in', type: 'password', autocomplete: 'new-password', placeholder: isNew ? '8 or more; empty: one click on the LAN, viewer only' : (u.passwordless ? 'none yet (one click on the LAN)' : 'unchanged') });
+  const pw = h('input', { class: 'sa-in', type: 'password', autocomplete: 'new-password', placeholder: isNew ? '8 or more; empty: one click on the LAN, member at most' : (u.passwordless ? 'none yet (one click on the LAN)' : 'unchanged') });
   const nopw = h('input', { type: 'checkbox', checked: !isNew && u.passwordless });
   const sels = {};
-  const roleRows = o.apps.map((a) => { sels[a.app] = roleSelect(u, a); return h('div', { class: 'sa-rolerow' }, h('span', null, a.name, a.registered ? '' : h('span', { class: 'sa-muted sa-small' }, ' (not running)')), sels[a.app]); });
+  const roleRows = o.apps.map((a) => { sels[a.app] = roleSelect(u, a); return h('div', { class: 'sa-rolerow' }, h('span', null, a.name, a.registered ? '' : h('span', { class: 'sa-muted sa-small' }, ' (not running)')), sels[a.app] || h('span', { class: 'sa-muted sa-small' }, TOOL_NOTE)); });
   const extra = h('div');
   // the person in photos: someone in ioPix's People; their face is the account's picture in ioPix (sign-in screen, menu)
   const ppSel = h('select', { class: 'sa-in' }, h('option', { value: '' }, 'not linked'));
@@ -291,14 +305,14 @@ async function editAccount(ctx, u) {
   });
   const body = h('div', null,
     h('div', { class: 'sa-grid' }, fld('User name', name), fld('Display name', dn), fld('Email', em), fld(isNew ? 'Password' : 'New password', pw)),
-    !isNew && !me ? h('label', { class: 'sa-check' }, nopw, h('span', null, 'No password: one-click sign-in on the LAN only, viewer everywhere, no app passwords')) : null,
+    !isNew && !me ? h('label', { class: 'sa-check' }, nopw, h('span', null, 'No password: one-click sign-in on the LAN only, member at most everywhere, no app passwords')) : null,
     h('label', { class: 'sa-check' }, listed, h('span', null, 'On the sign-in list')),
     h('label', { class: 'sa-check' }, sa, h('span', null, 'Suite admin: admin in every app, manages this screen', me ? h('span', { class: 'sa-muted sa-small' }, ' (another suite admin can change yours)') : '')),
     ppRow, h('h3', null, 'Role in each app'), h('div', { class: 'sa-rolegrid' }, roleRows), extra);
   if (!isNew) accountExtra(extra, o, u);
   const save = async () => {
     const roles = {};
-    for (const [k, s] of Object.entries(sels)) if ((s.value || '') !== (u.roles[k] || '')) roles[k] = s.value || null;
+    for (const [k, s] of Object.entries(sels)) if (s && (s.value || '') !== (u.roles[k] || '')) roles[k] = s.value || null;
     const b = { name: name.value.trim(), displayName: dn.value.trim(), email: em.value.trim(), listed: listed.checked, suiteAdmin: sa.checked, roles };
     if (isNew) b.password = pw.value;
     else if (nopw.checked && !u.passwordless) b.password = '';
@@ -375,9 +389,7 @@ function menu(anchor, items) {
 function roles(el, ctx) {
   const { o } = ctx;
   const admins = o.users.filter((u) => u.suiteAdmin), people = o.users.filter((u) => !u.suiteAdmin);
-  // a person without a password is viewer at most, so an app's editor or admin default is viewer for them
-  const dflt = (u, a) => (u.passwordless && ['editor', 'admin'].includes(a.defaultRole) ? 'viewer' : a.defaultRole);
-  const allowed = (u) => (u.passwordless ? ['none', 'viewer'] : ['none', 'viewer', 'editor', 'admin']);
+  const dflt = defaultFor, allowed = allowedFor;
   const list = h('div', { class: 'sa-exc' });
   const set = async (u, a, role) => {
     try {
@@ -404,11 +416,13 @@ function roles(el, ctx) {
   };
   const draw = () => list.replaceChildren(...o.apps.flatMap((a) => [
     h('div', { class: 'sa-app' }, a.name, a.registered ? null : h('span', { class: 'sa-muted sa-small', style: { fontWeight: 400 } }, '(not running)')),
-    h('div', null, h('span', { class: 'sa-muted sa-small' }, `everyone: ${a.defaultRole}`),
-      people.filter((u) => u.roles[a.app]).map((u) => chip(u, a)), adder(a))]));
+    a.adminTool ? h('div', null, h('span', { class: 'sa-muted sa-small' }, `admin tool: ${TOOL_NOTE}`))
+      : h('div', null, h('span', { class: 'sa-muted sa-small' }, `everyone: ${a.defaultRole}`),
+        people.filter((u) => u.roles[a.app]).map((u) => chip(u, a)), adder(a))]));
   draw();
   el.append(box('lock', 'Roles',
-    h('p', { class: 'sa-muted' }, 'Each app gives everyone its default role (set under Global settings › Apps). Only the people who have another role in an app are listed there.'),
+    h('p', { class: 'sa-muted' }, 'Each app gives everyone its default role (set under Global settings › Apps). Only the people who have another role in an app are listed there. Each role can do what the one before it does:'),
+    legend(),
     admins.length ? h('div', { class: 'sa-admins' }, h('span', { class: 'sa-muted' }, 'Suite admins, admin in every app:'),
       admins.map((u) => h('span', { class: 'sa-chip' }, u.displayName)), h('span', { class: 'sa-muted sa-small' }, 'Change this under People.')) : null,
     people.length ? list : h('p', { class: 'sa-muted' }, 'Everyone is a suite admin, so there are no roles to set.')));
@@ -485,10 +499,12 @@ async function keys(el, ctx) {
 function apps(el, ctx) {
   const { o } = ctx;
   el.append(box('apps', 'Apps',
-    h('p', { class: 'sa-muted' }, 'The default role is what someone without a role in the app gets (“none”: invitation only). “Sign-in required” shows visitors only the sign-in page.'),
+    h('p', { class: 'sa-muted' }, 'The default role is what someone without a role in the app gets (“none”: invitation only). Admin tools are for suite admins only. “Sign-in required” shows visitors only the sign-in page.'),
+    legend(),
     h('table', { class: 'sa-t' }, h('tr', null, h('th', null, 'App'), h('th', null, 'Version'), h('th', null, 'Default role'), h('th', null, 'Sign-in required'), h('th', null, 'In use'), h('th')),
       o.apps.map((a) => {
-        const dr = h('select', { class: 'sa-in sa-sm' }, (o.defaultRoles || ['none', 'viewer', 'editor']).map((x) => h('option', { value: x, selected: x === a.defaultRole ? true : null }, `${x} (${ROLE_HELP[x]})`)));
+        const dr = a.adminTool ? h('span', { class: 'sa-muted sa-small' }, TOOL_NOTE)
+          : h('select', { class: 'sa-in sa-sm' }, (o.defaultRoles || ['none', 'viewer', 'member', 'editor']).map((x) => h('option', { value: x, selected: x === a.defaultRole ? true : null }, `${x} (${ROLE_HELP[x]})`)));
         dr.onchange = async () => { try { await api(`apps/${a.app}`, { method: 'PATCH', json: { defaultRole: dr.value } }); a.defaultRole = dr.value; toast(`${a.name}: ${dr.value} by default`); } catch (e) { fail(e); dr.value = a.defaultRole; } };
         const rl = h('input', { type: 'checkbox', checked: a.requireLogin, onchange: async (e) => { try { await api(`apps/${a.app}`, { method: 'PATCH', json: { requireLogin: e.target.checked } }); toast('Saved'); } catch (err) { e.target.checked = !e.target.checked; fail(err); } } });
         return h('tr', null,
@@ -511,7 +527,7 @@ async function forgetApp(ctx, a) {
 /* Sign-in at a reverse proxy (Cloudflare Access on a tunnel, or Authelia & co. behind nginx...), once for every app:
    iosuite-shared keeps it suite-wide and reads it from nowhere else (config.env and the environment are ignored). */
 const PROXIES = [['off', 'Off'], ['cloudflare', 'Cloudflare Access'], ['haproxy', 'HAProxy'], ['nginx', 'nginx'], ['caddy', 'Caddy'], ['traefik', 'Traefik'], ['header', 'Another proxy']];
-const NO_ACCOUNT = [['', 'Gets the sign-in screen'], ['deny', 'Is denied access'], ['viewer', 'Gets a viewer account'], ['editor', 'Gets an editor account']];
+const NO_ACCOUNT = [['', 'Gets the sign-in screen'], ['deny', 'Is denied access'], ['viewer', 'Gets a viewer account'], ['member', 'Gets a member account'], ['editor', 'Gets an editor account']];
 async function signin(el) {
   let d;
   try { d = await api('proxy'); } catch (e) { el.replaceChildren(h('p', { class: 'sa-err' }, e.message)); return; }
