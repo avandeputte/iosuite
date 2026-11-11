@@ -16,7 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from iosuite_shared import chores, mcp as shared_mcp
 from iosuite_shared.updates import setup_log
 
-from app import __version__, api, caldav, config, contacts, db, holiday, ical, mcp, model, users
+from app import __version__, api, caldav, config, contacts, db, holiday, ical, mcp, model, tasks, users
 from app.auth import auth, updater
 
 setup_log(config.LOG_FILE)  # the server log that Settings › Server shows; the app runs without it
@@ -87,7 +87,7 @@ auth.install(app, limit_for=_limit_for, not_found=(model.NotFound,))
 def _status_extra(request) -> dict:
     """ioCalendar's own fields of GET /api/status, beside the suite's."""
     u = request.state.user
-    return {"timezone": ical.default_tz(), "iocontacts": contacts.enabled() if u else None, "mcp": mcp_enabled() if u else None}
+    return {"timezone": ical.default_tz(), "iocontacts": contacts.enabled() if u else None, "iotasks": tasks.enabled() if u else None, "mcp": mcp_enabled() if u else None}
 
 
 def _server_info() -> dict:

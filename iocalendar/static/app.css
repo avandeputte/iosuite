@@ -483,3 +483,17 @@ button.chip.toggle { border: 1px solid var(--line, transparent); cursor: pointer
 button.chip.toggle .mem { opacity: .5; }
 button.chip.toggle.on { background: var(--accent-bg); color: var(--accent); border-color: var(--accent); font-weight: 600; }
 button.chip.toggle.on .mem { opacity: 1; }
+
+/* tasks from ioTasks: on the day they are due, with a round tick in the list's colour */
+.tk { flex: none; width: 16px; height: 16px; padding: 0; border-radius: 50%; border: 2px solid var(--c); background: none; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.tk svg { width: 11px; height: 11px; fill: #fff; opacity: 0; }
+.tk:hover:not(:disabled) svg { opacity: .5; fill: var(--c); }
+.tk.on { background: var(--c); }
+.tk.on svg, .tk.on:hover:not(:disabled) svg { opacity: 1; fill: #fff; }
+.tk:disabled { opacity: .5; cursor: default; }
+.chip-ev.task.done .nm, .tev.task.done .nm, .arow.task.done .nm { text-decoration: line-through; color: var(--fg2); }
+.tev.task { display: flex; align-items: center; gap: 5px; padding: 0 5px; background: var(--bg); border: 1px solid color-mix(in srgb, var(--c) 55%, var(--line)); white-space: nowrap; }
+.tev.task:hover { background: var(--bg2); }
+.tev.task .nm { font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
+.arow.task .tk { margin: 2px -3px 0; align-self: flex-start; }
+#nav a.cal.away { opacity: .6; }
