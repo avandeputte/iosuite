@@ -1,6 +1,7 @@
 """Who may call a route, declared on the route itself: `dependencies=[access.signed_in]` (or admin, admin_write,
 public). The markers come from iosuite-shared (app/auth.py). Every /api route carries one, and a test fails when one
-is missing.
+is missing. ioBackup is an admin tool, so only suite admins (admin everywhere) get past any of them; the levels still
+say what each route does.
 
 - signed_in: the jobs, their schedule and last run, the history of runs and the list of backups (never a password)
 - editor_write: run a job now, verify a backup
