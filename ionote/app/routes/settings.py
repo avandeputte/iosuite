@@ -43,7 +43,7 @@ async def api_settings_set(request: Request):
 
 
 # ---- the change log, export and import
-@router.get("/api/changes", dependencies=[access.editor])
+@router.get("/api/changes", dependencies=[access.member])
 def api_changes(limit: int = 200, before: int = None):
     """The change log: who created, edited, deleted or recoloured what, newest first."""
     return {"changes": notes.change_log(limit, before)}
@@ -55,7 +55,7 @@ async def api_export(trash: int = 0, pictures: int = 1):
     return StreamingResponse(backup.pieces(f), media_type="application/zip", headers=attachment(time.strftime("ionotes-export-%Y%m%d-%H%M.zip")))
 
 
-@router.post("/api/import", dependencies=[access.editor_write])
+@router.post("/api/import", dependencies=[access.member_write])
 async def api_import(request: Request, file: UploadFile = File(...)):
     try:  # the upload is a temporary file (on disk once large): read from there, not into memory
         return await run_in_threadpool(backup.import_zip, file.file, user_name(request))
