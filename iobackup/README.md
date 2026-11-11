@@ -1,8 +1,8 @@
 # ioBackup
 
 *The database backups of the ioThing suite ([ioSuite](https://github.com/avandeputte/iosuite), [ioCalendar](https://github.com/avandeputte/iocalendar),
-[ioContacts](https://github.com/avandeputte/iocontacts), [ioNotes](https://github.com/avandeputte/ionotes), [ioPix](https://github.com/avandeputte/iopix),
-[ioHealth](https://github.com/avandeputte/iohealth), [ioTasks](https://github.com/avandeputte/iotasks), [ioDNS](https://github.com/avandeputte/iodns)).*
+[ioContact](https://github.com/avandeputte/iocontact), [ioNote](https://github.com/avandeputte/ionote), [ioPix](https://github.com/avandeputte/iopix),
+[ioHealth](https://github.com/avandeputte/iohealth), [ioTask](https://github.com/avandeputte/iotask), [ioDNS](https://github.com/avandeputte/iodns)).*
 
 Backs up the MariaDB server the suite's apps keep their data on (and any other MariaDB or Galera server) on demand or
 on a schedule, to a folder or Google Drive, keeps the newest *N* backups of each job, and **restores exactly what you
