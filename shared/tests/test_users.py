@@ -150,7 +150,12 @@ def test_admin_tools_are_for_suite_admins_only():
     suite.register("iodns", name="ioDNS", admin_tool=True)
     suite.register("iocalendar", name="ioCalendar")
     boss = users.create("alex", "secret123", suite_admin=True)
-    ed = users.create("ed", "secret123", "admin", "iodns")  # a row from before: ignored
+    with pytest.raises(ValueError):
+        users.create("ed", "secret123", "admin", "iodns")  # takes no roles
+    ed = users.create("ed", "secret123")
+    users.set_role(ed["id"], "iodns", "admin")  # a row from before: ignored
+    with pytest.raises(ValueError):
+        users.update(ed["id"], role="viewer", app="iodns")
     assert users.role_of(users.get(boss["id"]), "iodns") == "admin"
     assert users.role_of(users.get(ed["id"]), "iodns") == "none" and users.default_role("iodns") == "none"
     assert [a["app"] for a in suite.visible(users.get(ed["id"]))] == ["iocalendar"]

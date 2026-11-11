@@ -153,6 +153,8 @@ def create(name: str, password: str, role: str | None = None, app: str | None = 
     name, email = clean_name(name), clean_email(email)
     if role is not None and role not in ROLES:
         raise Invalid("Unknown role")
+    if app and role:
+        _not_a_tool(app)
     if password == "" and (suite_admin or _capped(role or DEFAULT_ROLE)):
         raise Invalid(NO_PASSWORD)
     if password != "" and len(password) < 8:
@@ -210,6 +212,7 @@ def update(user_id: int, name=None, password=None, email=None, display_name=None
             raise Invalid("A role needs an app")
         if role not in ROLES:
             raise Invalid("Unknown role")
+        _not_a_tool(app)
         if _capped(role) and not (cur["hash"] or sets.get("hash")):
             raise Invalid(NO_PASSWORD)
     if sets:
@@ -295,6 +298,13 @@ def role_of(user, app: str) -> str:
 def roles_of(user_id: int) -> dict:
     """{app: role} for every app the account has an explicit role in."""
     return {r["app"]: r["role"] for r in db.q("SELECT app, role FROM ios_user_roles WHERE user_id = %s", (user_id,))}
+
+
+def _not_a_tool(app: str) -> None:
+    """An admin tool takes no roles: it is for suite admins only."""
+    from iosuite_shared import suite
+    if suite.is_admin_tool(app):
+        raise Invalid("This is an admin tool, for suite admins only: it takes no roles")
 
 
 def set_role(user_id: int, app: str, role: str):
