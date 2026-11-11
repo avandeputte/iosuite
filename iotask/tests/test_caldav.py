@@ -103,6 +103,9 @@ def test_mkcalendar_and_proppatch(client, dav):
     assert "Shopping" in r.text
     events = body.replace('name="VTODO"', 'name="VEVENT"')
     assert dav("MKCALENDAR", "/dav/calendars/alex/cal/", events).status_code == 403
+    # the placeholder calendar iOS makes for an account without one: not made
+    plain = '<c:mkcalendar xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav"><d:set><d:prop><d:displayname>DEFAULT_CALENDAR_NAME</d:displayname></d:prop></d:set></c:mkcalendar>'
+    assert dav("MKCALENDAR", "/dav/calendars/alex/x1/", plain).status_code == 403
     assert dav("DELETE", "/dav/calendars/alex/A1B2/").status_code == 204
 
 

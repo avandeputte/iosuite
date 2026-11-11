@@ -402,12 +402,11 @@ async function onRoute() {
 async function redraw() {
   const r = route();
   if (!TASK_VIEWS.includes(r.view)) return;
-  const old = $('#main .page');
-  const top = old ? old.scrollTop : 0;
+  const top = $('#main').scrollTop;
   const page = h('div', { class: 'page' });
   try { await drawTasks(page, r); } catch (e) { fail(e); return; }
   $('#main').replaceChildren(page);
-  page.scrollTop = top;
+  $('#main').scrollTop = top;
 }
 async function refresh() { await loadLists(); await redraw(); }
 

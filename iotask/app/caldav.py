@@ -505,6 +505,11 @@ def _mkcalendar(ctx: Ctx, parts, body) -> Response:
         comps = root.find(f".//{q(C, 'supported-calendar-component-set')}")
         if comps is not None and "VTODO" not in {(x.get("name") or "").upper() for x in comps.findall(q(C, "comp"))}:
             return _precondition(C, "supported-calendar-component", 403)
+        # iOS makes a placeholder collection when an account has none of a kind ("DEFAULT_CALENDAR_NAME" for events,
+        # "DEFAULT_TASK_CALENDAR_NAME" for to-dos): every account has a list here, and events are not kept, so neither is made
+        dn = root.find(f".//{q(D, 'displayname')}")
+        if dn is not None and (dn.text or "").strip() in ("DEFAULT_CALENDAR_NAME", "DEFAULT_TASK_CALENDAR_NAME"):
+            return _precondition(C, "supported-calendar-component", 403)
         for el, attr in ((q(D, "displayname"), "name"), (q(AP, "calendar-color"), "color"), (q(C, "calendar-description"), "desc")):
             x = root.find(f".//{el}")
             if x is not None and (x.text or "").strip():

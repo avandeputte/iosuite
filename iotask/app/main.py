@@ -94,7 +94,7 @@ def _server_info() -> dict:
     """What Settings › Server shows beside the updater's own fields: the MCP box and This server."""
     return {"mcpEnabled": mcp_enabled(), "mcpLocked": config.MCP_FORCED,
             "mcpAbout": "Lets an AI assistant read the lists, add tasks and tick them off, as you.",
-            "about": [["Database", f"{config.DB_HOST}:{config.DB_PORT}/{config.DB_NAME}"], ["Time zone", ical.default_tz()]]}
+            "about": [["Time zone", ical.default_tz()]]}
 
 
 def _server_apply(body: dict) -> None:
