@@ -5,6 +5,7 @@ import { $, api, h } from './core.js';
 import { S, brandName } from './state.js';
 
 let apps = [];
+let suiteSelf = null;  // this app's key, marked in the menu
 let pop = null;
 let loadedFor;  // the account the list was loaded for: loaded again when it changes
 
@@ -16,7 +17,8 @@ export async function loadSuite() {
   if (who != null) {
     try {
       const r = await api('/api/auth/suite');
-      list = (r.items || []).filter((a) => a.app !== r.app && a.url);
+      list = (r.items || []).filter((a) => a.url); suiteSelf = r.app;  // in the suite's one order, this app too
+      if (!list.some((a) => a.app !== r.app)) list = [];  // only this app: no menu
     } catch { list = []; }  // a convenience: no menu rather than an error
   }
   if (loadedFor !== who) return;  // the account changed meanwhile
@@ -29,7 +31,7 @@ export async function loadSuite() {
  *  logo button instead. */
 const mark = () => h('img', { src: 'static/icons/mark.svg', alt: '', class: 'brand-mark' });
 function suiteButton(id) {
-  return h('button', { type: 'button', id, class: 'suitebtn', title: 'Other ioThing apps', 'aria-haspopup': 'menu', 'aria-label': 'Open another ioThing app',
+  return h('button', { type: 'button', id, class: 'suitebtn', title: 'ioThing apps', 'aria-haspopup': 'menu', 'aria-label': 'ioThing apps',
     onclick: (e) => toggleSuite(e.currentTarget) }, mark());
 }
 function draw() {
@@ -62,8 +64,11 @@ function tile(a) {
   const letter = (a.name || a.app).replace(/^io(?=[A-Z])/, '').slice(0, 1).toUpperCase();
   const fallback = () => h('span', { class: 'appic fb', style: `background:${/^#[0-9a-f]{3,8}$/i.test(a.color || '') ? a.color : 'var(--brand)'}` }, letter);
   const ic = a.icon ? h('img', { class: 'appic', src: a.icon, alt: '', onerror: (e) => e.currentTarget.replaceWith(fallback()) }) : fallback();
-  return h('a', { class: 'apptile', href: a.url, role: 'menuitem', title: a.description || a.name || a.app, onclick: closeSuite },
+  const el = h('a', { class: 'apptile', href: a.url, role: 'menuitem', title: a.description || a.name || a.app, onclick: closeSuite },
     ic, h('span', { class: 'appnm' }, a.name || a.app));
+  el.classList.toggle('tool', !!a.adminTool);  // admin tools: a smaller icon
+  if (a.app === suiteSelf) { el.classList.add('cur'); el.setAttribute('aria-current', 'page'); }
+  return el;
 }
 
 function toggleSuite(btn) {

@@ -90,6 +90,13 @@ body.side-docked #menubtn { display: none; }
 .appic { width: 44px; height: 44px; border-radius: var(--r-m); object-fit: contain; }
 .appic.fb { display: inline-flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: var(--fs-xl); }
 .appnm { font-size: var(--fs-s); white-space: nowrap; }
+/* the app this menu is in stays in the list (one order in every app), marked; admin tools come smaller, apart */
+.apptile.cur { background: var(--bg2); }
+.apptile.cur .appnm { font-weight: 600; }
+.apptile.tool { gap: 4px; padding: 6px 4px; }
+.apptile.tool .appic { width: 28px; height: 28px; border-radius: 8px; }
+.apptile.tool .appic.fb { font-size: 13px; }
+.apptile.tool .appnm { font-size: 12px; }
 .signin-brand { display: flex; align-items: center; gap: 10px; margin: -4px 0 14px; }
 .signin-brand .logo { width: 36px; height: 36px; }
 .signin-brand .brand-name, .signin-brand .brand-name:has(.io) { font-size: var(--fs-xxl); }
