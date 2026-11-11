@@ -288,10 +288,11 @@ def undo_merge(merge_id: int) -> dict:
 
 
 @server.tool(annotations=WRITES)
-def fix_data_quality(check: Literal["name_case", "repeats", "unlinked_relation", "national_phone"],
+def fix_data_quality(check: Literal["name_case", "repeats", "joined", "unlinked_relation", "national_phone"],
                      contacts: Optional[list[str]] = None, country_code: Optional[str] = None) -> dict:
     """Repair what a data quality check found, for all its findings or only these contacts: capitalise names, remove a
-    repeated email or phone, link relations to the contact of that name, add the country code (country_code, such as
+    repeated email or phone, split values glued together with ::: (a Google import: two addresses in one become
+    two), link relations to the contact of that name, add the country code (country_code, such as
     +32) to numbers written without it."""
     from app import quality
     u = who()

@@ -14,7 +14,7 @@ import json
 import re
 import unicodedata
 
-from app import db, model
+from app import csvio, db, model
 from iosuite_shared.errors import Invalid
 
 # ------------------------------------------------------------------ names
@@ -438,8 +438,12 @@ CHECKS = {
     "repeats": ("The same email, phone or address twice on one contact", "tidy", "Remove the repeats"),
     "unlinked_relation": ("Relations to a name that is now a contact", "tidy", "Link them to the contact"),
     "national_phone": ("Phone numbers without the country code", "tidy", "Add the country code"),
+    "joined": ("Values glued together with ::: (from a Google import)", "tidy", "Split them"),
     "unreachable": ("No phone, email or address at all", "info", None),
 }
+
+
+JOINED_COLS = ("fn", "prefix", "given", "additional", "family", "suffix", "nickname", "maiden", "org", "department", "title", "role")
 
 
 def run_checks(book_ids: list[int], only: str | None = None) -> list[dict]:
@@ -449,7 +453,7 @@ def run_checks(book_ids: list[int], only: str | None = None) -> list[dict]:
     marks = ",".join(["%s"] * len(book_ids))
     found: dict = {k: [] for k in CHECKS}
     cs = {r["id"]: r for r in db.q(f"SELECT id, address_book_id, fn, given, family, org, bday_year, bday_month, bday_day, "
-                                   f"iopix_person_id FROM con_contacts WHERE deleted = 0 AND address_book_id IN ({marks})", book_ids)}
+                                   f"iopix_person_id, {', '.join(JOINED_COLS)} FROM con_contacts WHERE deleted = 0 AND address_book_id IN ({marks})", book_ids)}
 
     def add(check, cid, detail=""):
         found[check].append({"contactId": cid, "fn": cs[cid]["fn"], "bookId": cs[cid]["address_book_id"], "detail": detail})
@@ -485,6 +489,11 @@ def run_checks(book_ids: list[int], only: str | None = None) -> list[dict]:
                 rep.append(key)
         if rep:
             add("repeats", cid, ", ".join(rep))
+        glued = [k for k in JOINED_COLS if csvio.joined(c[k])] + \
+            [key for key in ("emails", "phones") if any(csvio.joined(x["value"]) for x in ch.get(key, []))] + \
+            (["addresses"] if any(csvio.joined(x.get(k)) for x in ch.get("addresses", []) for k in csvio.ADDR_KEYS) else [])
+        if glued:
+            add("joined", cid, ", ".join(glued))
         if not ch:
             add("unreachable", cid)
     names: dict = {}
@@ -542,6 +551,17 @@ def fix(u: dict, check: str, contact_ids: list[int] | None, book_ids: list[int],
                     seen.add(k)
                     keep.append(x)
                 c[key] = keep
+        elif check == "joined":
+            for k in ("fn", "nickname", "maiden", "org", "department", "title", "role"):
+                if csvio.joined(c.get(k)):
+                    c[k] = csvio._one(c[k])
+            for k, v in (c.get("name") or {}).items():
+                if csvio.joined(v):
+                    c["name"][k] = csvio._one(v)
+            for key in ("emails", "phones"):
+                c[key] = [{**x, "value": v, "pref": x.get("pref") if not j else 0}
+                          for x in c[key] for j, v in enumerate(p for p in csvio._parts(x["value"]) if p)]
+            c["addresses"] = [b for a in c["addresses"] for b in csvio.split_address(a)]
         elif check == "national_phone":
             for p in c["phones"]:
                 v = p["value"].strip()
