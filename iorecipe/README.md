@@ -1,6 +1,6 @@
 # ioRecipe
 
-*The family's recipes, in the ioThing suite (with [ioPix](https://github.com/avandeputte/iopix), [ioNotes](https://github.com/avandeputte/ionotes), [ioContacts](https://github.com/avandeputte/iocontacts), [ioCalendar](https://github.com/avandeputte/iocalendar), [ioTasks](https://github.com/avandeputte/iotasks), [ioHealth](https://github.com/avandeputte/iohealth) and the [ioSuite](https://github.com/avandeputte/iosuite) start page).*
+*The family's recipes, in the ioThing suite (with [ioPix](https://github.com/avandeputte/iopix), [ioNote](https://github.com/avandeputte/ionote), [ioContact](https://github.com/avandeputte/iocontact), [ioCalendar](https://github.com/avandeputte/iocalendar), [ioTask](https://github.com/avandeputte/iotask), [ioHealth](https://github.com/avandeputte/iohealth) and the [ioSuite](https://github.com/avandeputte/iosuite) start page).*
 
 A self-hosted recipe book: a web app for the whole family to keep recipes with their ingredients, steps and a photo, and to import a recipe from the web by its address. FastAPI and a single-page vanilla JS app, with everything stored in MariaDB / MySQL (the photos too), and the suite's shared library (`iosuite-shared`, in [iosuite-shared](https://github.com/avandeputte/iosuite-shared)).
 
@@ -57,7 +57,7 @@ git clone https://github.com/avandeputte/iorecipe && cd iorecipe
 ./update.sh         # later: the latest code, same settings
 ```
 
-Its last question, "Also install …?" (flag `--also iocalendar,ionotes`, `--also all`; `IORECIPE_ALSO` in the environment), puts
+Its last question, "Also install …?" (flag `--also iocalendar,ionote`, `--also all`; `IORECIPE_ALSO` in the environment), puts
 other apps of the suite in this same machine, beside ioRecipe (`/opt/iocalendar/app` next to `/opt/iorecipe/app`),
 without asking the shared questions again: the same database server (each app gets its own database: `suite`,
 `calendar`, `contacts`, `notes`, `health`, `iopix`, `tasks`, `recipe`; the user needs rights on those names too), the same Shared ioSuite

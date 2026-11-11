@@ -13,7 +13,7 @@
 #        --service | --no-service   --system-deps | --no-system-deps   --python PATH
 #   --db-admin USER:PASSWORD      a MariaDB / MySQL administrator (root...): the databases and users above are created
 #                                 for you, with the passwords you answered (IORECIPE_DB_ADMIN does the same; empty: they exist)
-#   --also APP,APP | all | none   also install other apps of the suite here (iosuite, iocalendar, iocontacts, iotasks, ionotes, iohealth, iopix), beside this one,
+#   --also APP,APP | all | none   also install other apps of the suite here (iosuite, iocalendar, iocontact, iotask, ionote, iohealth, iopix), beside this one,
 #                                 with the same database server (each app its own database), Shared ioSuite database,
 #                                 sign-in domain and admin: those questions are asked once (IORECIPE_ALSO does the same)
 #        ioRecipe's own: --timezone ZONE
@@ -97,7 +97,7 @@ if [ -z "$DBADMIN" ] && [ "$YES" = 0 ]; then
 fi
 if [ -z "$ALSO" ]; then
   say "The other apps of the suite can be installed here too, beside ioRecipe, with the same database server (each app gets its own database), the same Shared ioSuite database, sign-in domain and admin"
-  ask ALSO "Also install (iosuite, iocalendar, iocontacts, iotasks, ionotes, iohealth, iopix; comma-separated, 'all', or 'none')" "none"
+  ask ALSO "Also install (iosuite, iocalendar, iocontact, iotask, ionote, iohealth, iopix; comma-separated, 'all', or 'none')" "none"
 fi
 
 # ---- Python environment
