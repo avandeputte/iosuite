@@ -1428,7 +1428,7 @@ async function setHolidays(el) {
   await birthdaysBox(el);
 }
 
-/** Settings › Server (admins): the MCP switch, the version and its updates, this server, the server log and Restart
+/** Settings › Server (admins): the MCP switch, the version and its updates, the server log and Restart
     (iosuite-shared's panel, the same in every io app), then Export: each calendar as an .ics file. */
 async function setServer(el) {
   let ui;

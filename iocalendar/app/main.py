@@ -91,10 +91,9 @@ def _status_extra(request) -> dict:
 
 
 def _server_info() -> dict:
-    """What Settings › Server shows beside the updater's own fields: the MCP box and This server."""
+    """What Settings › Server shows beside the updater's own fields: the MCP box."""
     return {"mcpEnabled": mcp_enabled(), "mcpLocked": config.MCP_FORCED,
-            "mcpAbout": "Lets an AI assistant read the agenda, find free time and add or change events, as you.",
-            "about": [["Time zone", ical.default_tz()]]}
+            "mcpAbout": "Lets an AI assistant read the agenda, find free time and add or change events, as you."}
 
 
 def _server_apply(body: dict) -> None:
