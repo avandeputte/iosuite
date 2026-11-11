@@ -455,7 +455,7 @@ def server_router(self, updater, log_file=None, info=None, apply=None) -> APIRou
         GET  /api/log?lines&level&contains&requests   the tail of the server log (with log_file)
         GET  /api/log/download
     `info()` returns extra fields for GET /api/server that the panel shows: mcpEnabled + mcpLocked (the MCP box) and
-    mcpAbout (what /mcp offers), about: [[label, value], ...] (the This server box). `apply(body)` saves the app's own
+    mcpAbout (what /mcp offers). `apply(body)` saves the app's own
     switches sent in the POST body (mcpEnabled) and raises ValueError when one cannot be set."""
     from fastapi.responses import FileResponse
     from iosuite_shared import updates as upd
