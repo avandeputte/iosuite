@@ -1,6 +1,7 @@
 """Who may call a route, declared on the route itself: `dependencies=[access.signed_in]` (or editor_write, admin_write,
 public). The markers come from iosuite-shared (app/auth.py). Every /api route carries one, and a test fails when one
-is missing.
+is missing. ioDNS is an admin tool, so only suite admins (admin everywhere) get past any of them; the levels still say
+what each route does.
 
 - signed_in: the master list, the views, the servers (never their secrets), the differences and the log
 - editor_write: change the master list, push it to the servers, import from one

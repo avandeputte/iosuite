@@ -16,7 +16,7 @@ from iosuite_shared import users as shared_users
 from iosuite_shared.updates import setup_log
 
 from app import __version__, api, config, db, ddns, model, sync
-from app.auth import admins_only_by_default, auth, updater
+from app.auth import auth, updater
 from app.providers import ProviderError
 
 setup_log(config.LOG_FILE)  # the server log that Settings › Server shows; the app runs without it
@@ -31,7 +31,6 @@ OPEN_PREFIXES = ("/static/",)
 async def lifespan(app: FastAPI):
     await run_in_threadpool(db.migrate)
     await run_in_threadpool(shared_users.init)
-    await run_in_threadpool(admins_only_by_default)
     updater.start_daily()             # the daily "is there a newer version" check, while the setting allows it
     if config.env_flag("BACKGROUND", True):
         sync.start_checks(config.CHECK_MINUTES)   # every server compared with the master list now and then
