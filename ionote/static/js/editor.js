@@ -2,7 +2,7 @@
  *  from it, its attached files, and the notes related to it. Saved as you type. */
 import { $, h, api, state, icon, fmtDate, colorVar, toast, fail, canWrite, debounce, confirmIt, menu, displayTitle } from './core.js';
 import { view, go, updateCard, refresh, markSelected } from './notes.js';
-import { renderMarkdown, toggleTask, continueList, toggleChecklist } from './markdown.js';
+import { renderMarkdown, toggleTask, continueList, applyFormat, FORMATS } from './markdown.js';
 
 let note = null;     // the note as the server last answered
 let pending = {};    // fields changed and not yet saved
@@ -271,9 +271,11 @@ function render() {
   const b = h('textarea.ed-body', { placeholder: w ? 'Write something… (Markdown works: # heading, **bold**, - [ ] checklist)' : '', readOnly: !w, 'aria-label': 'Text',
     oninput: (e) => { change('body', e.target.value); grow(e.target); },
     onkeydown: (e) => {
-      if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && continueList(b)) { e.preventDefault(); change('body', b.value); grow(b); }
-      else if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'l' || e.key === 'L')) { e.preventDefault(); toggleChecklist(b); change('body', b.value); grow(b); }
+      if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && continueList(b)) { e.preventDefault(); change('body', b.value); grow(b); return; }
+      const f = (e.metaKey || e.ctrlKey) && !e.altKey && FORMATS.find((x) => x.key && keyCode(x.key) === e.code && !!x.shift === e.shiftKey);
+      if (f) { e.preventDefault(); format(f.cmd); }
     } });
+  const format = (cmd) => { applyFormat(b, cmd); change('body', b.value); grow(b); };
   b.value = note.body;
   // the text drawn as Markdown: a click (not on a link or a box) edits it; boxes tick and save at once
   const preview = h('div.ed-preview', { title: w ? 'Click to edit' : '', onclick: (e) => {
@@ -297,13 +299,16 @@ function render() {
     b.hidden = m === 'preview';
     modeBtn.replaceChildren(icon(m === 'preview' ? 'edit' : 'eye'));
     modeBtn.title = m === 'preview' ? 'Edit the text' : 'Show as formatted text';
-    checkBtn.hidden = m === 'preview' || !w;
+    fmt.hidden = m === 'preview' || !w;
     if (m === 'edit') { requestAnimationFrame(() => { grow(b); if (w) b.focus(); }); }
   };
   const modeBtn = h('button.iconbtn', { 'aria-label': 'Formatted or plain text', onclick: () => setMode(mode === 'preview' ? 'edit' : 'preview') });
-  const checkBtn = h('button.iconbtn', { title: 'Checklist (⇧⌘L)', 'aria-label': 'Checklist', onclick: () => { toggleChecklist(b); change('body', b.value); grow(b); b.focus(); } }, icon('checklist'));
-  bar.insertBefore(checkBtn, bar.querySelector('.sp'));
+  // the formatting bar: a second row of the bar while the text is edited (a press keeps the selection in the text)
+  const fmt = h('div.fmtbar', { role: 'toolbar', 'aria-label': 'Formatting' }, FORMATS.map((f) => f === '-' ? h('span.gap') :
+    h('button.iconbtn', { title: f.label + (f.key ? ` (${f.shift ? '⇧' : ''}⌘${f.key.toUpperCase()})` : ''), 'aria-label': f.label,
+      onmousedown: (e) => e.preventDefault(), onclick: () => format(f.cmd) }, icon(f.icon))));
   bar.insertBefore(modeBtn, bar.querySelector('.sp'));
+  bar.append(fmt);
   const meta = h('div.ed-meta',
     h('span', 'Created ' + fmtDate(note.createdAt, true)),
     note.updatedAt - note.createdAt > 60 ? h('span', 'Edited ' + fmtDate(note.updatedAt, true)) : null,
@@ -329,6 +334,9 @@ function render() {
     });
   }
 }
+
+/** The key's code (layout-free, and the same with ⇧): 'b' KeyB, '8' Digit8, '.' Period. */
+const keyCode = (k) => /\d/.test(k) ? 'Digit' + k : k === '.' ? 'Period' : 'Key' + k.toUpperCase();
 
 function grow(t) { t.style.height = 'auto'; t.style.height = Math.max(t.scrollHeight, window.innerHeight * 0.4) + 'px'; }
 
