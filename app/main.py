@@ -54,7 +54,7 @@ auth.install(app, limit_for=_limit_for)
 
 def _server_info() -> dict:
     """What Settings › Server shows beside the updater's own fields: this server's address and database."""
-    return {"about": [["Address", config.PUBLIC_URL or None], ["Database", f"{config.DB_HOST}:{config.DB_PORT}/{config.DB_NAME}"]]}
+    return {"about": [["Address", config.PUBLIC_URL or None]]}
 
 
 app.include_router(auth.router())        # /api/auth/*: sign-in, accounts, me, settings, password, sessions, app passwords, suite
