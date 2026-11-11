@@ -1,7 +1,7 @@
 # ioDNS
 
 *The DNS console of the ioThing suite ([ioSuite](https://github.com/avandeputte/iosuite), [ioCalendar](https://github.com/avandeputte/iocalendar),
-[ioContacts](https://github.com/avandeputte/iocontacts), [ioNotes](https://github.com/avandeputte/ionotes), [ioPix](https://github.com/avandeputte/iopix), [ioHealth](https://github.com/avandeputte/iohealth)).*
+[ioContact](https://github.com/avandeputte/iocontact), [ioNote](https://github.com/avandeputte/ionote), [ioPix](https://github.com/avandeputte/iopix), [ioHealth](https://github.com/avandeputte/iohealth)).*
 
 One master list of the house's DNS names, kept in sync on every DNS server: two AdGuard Homes, a Pi-hole, the UniFi
 gateway, Cloudflare. Add a name once, see where the servers disagree, pick who is right, push. FastAPI and a

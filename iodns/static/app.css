@@ -1,4 +1,4 @@
-/* ioDNS: the iothing look (as ioCalendar, iopix and ioContacts): light by default, dark with the system or the Appearance setting.
+/* ioDNS: the iothing look (as ioCalendar, iopix and ioContact): light by default, dark with the system or the Appearance setting.
    The name in two colours: "io" in gold, "DNS" in deep teal (the icon's colour). */
 :root {
   --warn: #e37400; --danger: #d93025; --ok: #1e8e3e; --star: #f9ab00;
