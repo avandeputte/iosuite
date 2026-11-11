@@ -122,7 +122,7 @@ suite beside it. From a shell: `python -m app.cli compare internal`, `push inter
 
 `config.env` in the app folder (written by `setup.sh`; `config.env.example` lists every setting), or the environment,
 which wins. The names are the suite's (`DB_*`, `IOSUITE_DB_*`, `PUBLIC_URL`, `COOKIE_DOMAIN`, `HOST`, `PORT`,
-`FORWARDED_ALLOW_IPS`, `TLS_*`, `TZ`, `ADMIN_USER` / `ADMIN_PASSWORD`, `UPDATE_CHECK`, `DATA_DIR`, `LOG_FILE`), plus:
+`TLS_*`, `TZ`, `ADMIN_USER` / `ADMIN_PASSWORD`, `UPDATE_CHECK`, `DATA_DIR`, `LOG_FILE`), plus:
 
 | Setting | Meaning |
 | --- | --- |
