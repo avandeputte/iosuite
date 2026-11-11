@@ -500,9 +500,22 @@ def _save_relations(cid: int, rels: list[dict], book_ids: list[int]) -> None:
           f"(SELECT id FROM con_contacts WHERE address_book_id IN ({marks})))", (cid, *book_ids))
     touched = set()
     new, rows, seen = set(), [], set()
-    for i, r in enumerate(rels):
-        t = r["type"] if r["type"] in rel.TYPES else "other"
-        rid = _resolve(r, book_ids, cid)
+    found = [(r, r["type"] if r["type"] in rel.TYPES else "other", _resolve(r, book_ids, cid)) for r in rels]
+    # A phone sends a relation back twice: by name with its label ("Son": Eric) and as a bare link to the contact, which
+    # reads as "other". The link then only says who the name is: it gives a relation by that name its contact, and is
+    # dropped when the contact has a real relation.
+    typed = {rid for _, t, rid in found if rid and t != "other"}
+    for k, (r, t, rid) in enumerate(found):
+        if t != "other" or not rid or rid in typed:
+            continue
+        fn = ((get_row(rid) or {}).get("fn") or "").strip().lower()
+        for j, (r2, t2, rid2) in enumerate(found):
+            if t2 != "other" and not rid2 and fn and (r2.get("relatedName") or "").strip().lower() == fn:
+                found[j] = (r2, t2, rid)
+                typed.add(rid)
+    for i, (r, t, rid) in enumerate(found):
+        if t == "other" and rid in typed:
+            continue
         key = (rid, t) if rid else (None, t, (r.get("relatedName") or "").strip().lower())
         if key in seen:
             continue

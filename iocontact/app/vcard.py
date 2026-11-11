@@ -56,7 +56,8 @@ KEEP_OUT = {"BEGIN", "END", "VERSION", "PRODID", "REV", "UID", "FN", "N", "NICKN
             "IMPP", "X-AIM", "X-JABBER", "X-SKYPE", "X-TWITTER", "X-SPOUSE",
             "X-MS-SPOUSE", "X-EVOLUTION-SPOUSE", "X-KADDRESSBOOK-X-SPOUSENAME", "X-ASSISTANT", "X-MANAGER",
             "X-EVOLUTION-ASSISTANT", "X-EVOLUTION-MANAGER", "X-KADDRESSBOOK-X-ANNIVERSARY", "X-KADDRESSBOOK-X-MANAGERSNAME",
-            "X-KADDRESSBOOK-X-ASSISTANTSNAME", "X-IOCONTACTS-ROLE", "X-ABORG"}
+            "X-KADDRESSBOOK-X-ASSISTANTSNAME", "X-IOCONTACTS-ROLE", "X-ABORG",
+            "X-IMAGEHASH", "X-IMAGETYPE"}  # these two describe the photo a phone sent, which is not kept
 
 
 @dataclass
@@ -497,9 +498,13 @@ def _props(c: dict, version: str) -> list[Prop]:
     v4 = version == "4.0"
     out: list[Prop] = [Prop("BEGIN", "VCARD"), Prop("VERSION", version), Prop("PRODID", "-//iothing//ioContacts//EN")]
     item = [0]
+    # the groups of the properties kept as received (a phone's own item1.X-...) are theirs: ours take other numbers
+    taken = {m.group(1).lower() for m in (re.match(r"^([A-Za-z0-9-]+)\.", raw) for raw in c.get("extra") or []) if m}
 
     def grp() -> str:
         item[0] += 1
+        while f"item{item[0]}" in taken:
+            item[0] += 1
         return f"item{item[0]}"
 
     def add_labeled(name, value, params, label, vtype="text"):
