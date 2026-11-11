@@ -29,10 +29,10 @@ import tempfile
 
 HERE = pathlib.Path(__file__).resolve().parent.parent
 OWNER = "avandeputte"
-REPOS = ["iosuite-shared", "iopix", "ionotes", "iocalendar", "iocontacts", "iohealth", "iosuite",
+REPOS = ["iosuite-shared", "iopix", "ionotes", "iocalendar", "iocontacts", "iohealth", "iosuite", "iotasks",
          "ionotes-apps", "iohealth-apps"]
 LABELS = {"ioPix": "iopix", "ioNotes": "ionotes", "ioCalendar": "iocalendar", "ioSuite": "iosuite",
-          "ioContacts": "iocontacts", "ioHealth": "iohealth"}
+          "ioContacts": "iocontacts", "ioHealth": "iohealth", "ioTasks": "iotasks"}
 
 problems = []
 

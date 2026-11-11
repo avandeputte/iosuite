@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ioThing suite — self-hosted photos, notes, calendar, contacts and health</title>
-<meta name="description" content="Small self-hosted apps for the family: ioPix for photos, ioNotes, ioCalendar, ioContacts, ioHealth and the ioSuite start page. Install just the one you need, or all of them; they share one sign-in.">
+<meta name="description" content="Small self-hosted apps for the family: ioPix for photos, ioNotes, ioCalendar, ioTasks, ioContacts, ioHealth and the ioSuite start page. Install just the one you need, or all of them; they share one sign-in.">
 <link rel="canonical" href="https://iosuite.iothing.net/">
 <link rel="icon" type="image/svg+xml" href="img/icon.svg">
 <meta property="og:type" content="website">
@@ -139,7 +139,8 @@ header{
   background:var(--card);border:1px solid var(--line);border-radius:16px;
   padding:26px 24px 16px;box-shadow:var(--shadow);margin:0;
 }
-.mix-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.mix-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+@media (max-width:560px){ .mix-grid{grid-template-columns:repeat(3,1fr)} }
 .mix-app{
   display:flex;flex-direction:column;align-items:center;gap:8px;padding:16px 8px 12px;
   border:1px solid var(--line);border-radius:12px;background:var(--bg);
@@ -266,7 +267,7 @@ dialog.lightbox button{
 dialog.lightbox button:hover{border-color:var(--gold)}
 
 /* ---------- install picker ---------- */
-.pick{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:22px}
+.pick{display:grid;grid-template-columns:repeat(7,1fr);gap:12px;margin-bottom:22px}
 @media (max-width:900px){ .pick{grid-template-columns:repeat(3,1fr)} }
 @media (max-width:420px){ .pick{grid-template-columns:repeat(2,1fr)} }
 .pick label{
@@ -356,7 +357,7 @@ footer p{margin:16px 0 0;max-width:52em}
       <div>
         <span class="eyebrow">self-hosted · free &amp; open source</span>
         <h1>Take the app you need.<br>Leave the rest.</h1>
-        <p class="lede">Small self-hosted apps for the family: photos, notes, a calendar, contacts and health data, on your own server. <strong>Each one installs and runs on its own</strong>: if all you want is a photo app, install ioPix and you're done. Add another whenever you like, and it signs in with the same accounts.</p>
+        <p class="lede">Small self-hosted apps for the family: photos, notes, a calendar, tasks, contacts and health data, on your own server. <strong>Each one installs and runs on its own</strong>: if all you want is a photo app, install ioPix and you're done. Add another whenever you like, and it signs in with the same accounts.</p>
         <div class="meta">GPL-3.0 · Proxmox VE · Docker (amd64 / arm64) · any Linux or Mac · MariaDB / MySQL</div>
         <div class="cta">
           <a class="btn btn-primary" href="#install">
@@ -372,6 +373,7 @@ footer p{margin:16px 0 0;max-width:52em}
           <div class="mix-app" data-app="iopix"><img src="img/iopix.svg" alt="" width="46" height="46"><b>ioPix</b><small>photos</small></div>
           <div class="mix-app" data-app="ionotes"><img src="img/ionotes.svg" alt="" width="46" height="46"><b>ioNotes</b><small>notes</small></div>
           <div class="mix-app" data-app="iocalendar"><img src="img/iocalendar.svg" alt="" width="46" height="46"><b>ioCalendar</b><small>calendar</small></div>
+          <div class="mix-app" data-app="iotasks"><img src="img/iotasks.svg" alt="" width="46" height="46"><b>ioTasks</b><small>tasks</small></div>
           <div class="mix-app" data-app="iocontacts"><img src="img/iocontacts.svg" alt="" width="46" height="46"><b>ioContacts</b><small>contacts</small></div>
           <div class="mix-app" data-app="iohealth"><img src="img/iohealth.svg" alt="" width="46" height="46"><b>ioHealth</b><small>health</small></div>
           <div class="mix-app" data-app="iosuite"><img src="img/iosuite.svg" alt="" width="46" height="46"><b>ioSuite</b><small>start page</small></div>
@@ -387,7 +389,7 @@ footer p{margin:16px 0 0;max-width:52em}
     <div class="wrap">
       <div class="section-head">
         <span class="eyebrow">the apps</span>
-        <h2>Six apps. Each one complete on its own.</h2>
+        <h2>Seven apps. Each one complete on its own.</h2>
         <p>Every app is a small web server with its own web app, its own database and its own installer, built the same way: FastAPI, a single-page app, light and dark, a real phone layout, installable on a home screen.</p>
       </div>
       <div class="agrid">
@@ -420,6 +422,16 @@ footer p{margin:16px 0 0;max-width:52em}
           </ul>
           <p class="alone"><b>On its own:</b> a family calendar every phone already speaks to.</p>
           <div class="links"><a href="/docs/apps/iocalendar/">Docs</a><a href="https://github.com/avandeputte/iocalendar" rel="noopener">GitHub</a><span class="port">:8620</span></div>
+        </article>
+        <article class="app" style="--c:#146b5e">
+          <div class="app-top"><img src="img/iotasks.svg" alt="" width="44" height="44"><h3>ioTasks<span class="tag">The family's task lists</span></h3></div>
+          <ul>
+            <li>Shared and private lists, due dates, repeats, alerts, subtasks</li>
+            <li>CalDAV, so the same lists are in Apple Reminders and every tasks app</li>
+            <li>Tag tasks with the family member they're for</li>
+          </ul>
+          <p class="alone"><b>On its own:</b> the family's to-dos, in the reminders app each phone already has.</p>
+          <div class="links"><a href="/docs/apps/iotasks/">Docs</a><a href="https://github.com/avandeputte/iotasks" rel="noopener">GitHub</a><span class="port">:8670</span></div>
         </article>
         <article class="app" style="--c:#4f2f7d">
           <div class="app-top"><img src="img/iocontacts.svg" alt="" width="44" height="44"><h3>ioContacts<span class="tag">Contacts for the family</span></h3></div>
@@ -483,7 +495,7 @@ footer p{margin:16px 0 0;max-width:52em}
       <div class="together">
         <div class="pair"><span class="icons"><img src="img/iocontacts.svg" alt=""><img src="img/iocalendar.svg" alt=""></span><span><b>ioContacts + ioCalendar:</b> a Birthdays calendar from your contacts, and the people on an event picked from them.</span></div>
         <div class="pair"><span class="icons"><img src="img/iopix.svg" alt=""><img src="img/iocontacts.svg" alt=""></span><span><b>ioPix + ioContacts:</b> the face named in ioPix becomes the contact's photo, on every phone.</span></div>
-        <div class="pair"><span class="icons"><img src="img/iosuite.svg" alt=""><img src="img/iohealth.svg" alt=""></span><span><b>ioSuite + any app:</b> a tile with what matters today: the next events, photos from this day, last night's sleep.</span></div>
+        <div class="pair"><span class="icons"><img src="img/iosuite.svg" alt=""><img src="img/iohealth.svg" alt=""></span><span><b>ioSuite + any app:</b> a tile with what matters today: the next events, the tasks due, photos from this day, last night's sleep.</span></div>
         <div class="pair"><span class="icons"><img src="img/ionotes.svg" alt=""><img src="img/iopix.svg" alt=""></span><span><b>Any two apps:</b> the same accounts, roles per app, one sign-in, one admin panel, the same Settings in every app.</span></div>
       </div>
     </div>
@@ -560,6 +572,7 @@ footer p{margin:16px 0 0;max-width:52em}
         <label><input type="checkbox" value="iopix" checked><img src="img/iopix.svg" alt="" width="38" height="38"><b>ioPix</b><small>photos</small></label>
         <label><input type="checkbox" value="ionotes"><img src="img/ionotes.svg" alt="" width="38" height="38"><b>ioNotes</b><small>notes</small></label>
         <label><input type="checkbox" value="iocalendar"><img src="img/iocalendar.svg" alt="" width="38" height="38"><b>ioCalendar</b><small>calendar</small></label>
+        <label><input type="checkbox" value="iotasks"><img src="img/iotasks.svg" alt="" width="38" height="38"><b>ioTasks</b><small>tasks</small></label>
         <label><input type="checkbox" value="iocontacts"><img src="img/iocontacts.svg" alt="" width="38" height="38"><b>ioContacts</b><small>contacts</small></label>
         <label><input type="checkbox" value="iohealth"><img src="img/iohealth.svg" alt="" width="38" height="38"><b>ioHealth</b><small>health</small></label>
         <label><input type="checkbox" value="iosuite"><img src="img/iosuite.svg" alt="" width="38" height="38"><b>ioSuite</b><small>start page</small></label>
@@ -582,7 +595,7 @@ footer p{margin:16px 0 0;max-width:52em}
 
       <div class="istep">
         <h3><span class="chip">then</span> Open <code>http://&lt;host&gt;:&lt;port&gt;</code> and sign in</h3>
-        <div class="ports"><span>ioPix <b>8600</b></span><span>ioNotes <b>8610</b></span><span>ioCalendar <b>8620</b></span><span>ioSuite <b>8630</b></span><span>ioContacts <b>8640</b></span><span>ioHealth <b>8650</b></span></div>
+        <div class="ports"><span>ioPix <b>8600</b></span><span>ioNotes <b>8610</b></span><span>ioCalendar <b>8620</b></span><span>ioSuite <b>8630</b></span><span>ioContacts <b>8640</b></span><span>ioHealth <b>8650</b></span><span>ioTasks <b>8670</b></span></div>
         <p>Every app has its own default port, so all of them fit on one host. The installer creates the admin you answered; with several apps it is the same admin everywhere, because the accounts live in one <a href="/docs/reference/databases/">Shared ioSuite database</a>.</p>
         <p>Then put the apps behind your reverse proxy for HTTPS (<a href="/docs/run/reverse-proxy/">Caddy, nginx, HAProxy</a> or a <a href="/docs/run/cloudflare/">Cloudflare Tunnel</a>), and every app updates itself from Settings › Server.</p>
       </div>
@@ -620,7 +633,7 @@ footer p{margin:16px 0 0;max-width:52em}
         </a>
         <a class="dcard" href="/docs/run/assistants/">
           <h3>AI assistants (MCP) <span>→</span></h3>
-          <p>ioPix, ioNotes, ioCalendar and ioContacts are MCP servers: connect Claude or another assistant with an app password.</p>
+          <p>ioPix, ioNotes, ioCalendar, ioTasks and ioContacts are MCP servers: connect Claude or another assistant with an app password.</p>
         </a>
       </div>
     </div>
@@ -634,6 +647,7 @@ footer p{margin:16px 0 0;max-width:52em}
         <a href="https://github.com/avandeputte/iopix" rel="noopener">ioPix</a>
         <a href="https://github.com/avandeputte/ionotes" rel="noopener">ioNotes</a>
         <a href="https://github.com/avandeputte/iocalendar" rel="noopener">ioCalendar</a>
+        <a href="https://github.com/avandeputte/iotasks" rel="noopener">ioTasks</a>
         <a href="https://github.com/avandeputte/iocontacts" rel="noopener">ioContacts</a>
         <a href="https://github.com/avandeputte/iohealth" rel="noopener">ioHealth</a>
         <a href="https://github.com/avandeputte/iosuite" rel="noopener">ioSuite</a>
@@ -661,9 +675,10 @@ footer p{margin:16px 0 0;max-width:52em}
     iocalendar: {name:"ioCalendar", port:8620, docker:"iocalendar"},
     iosuite:    {name:"ioSuite",    port:8630, docker:"iosuite"},
     iocontacts: {name:"ioContacts", port:8640, docker:"iocontacts"},
-    iohealth:   {name:"ioHealth",   port:8650, docker:"iohealth"}
+    iohealth:   {name:"ioHealth",   port:8650, docker:"iohealth"},
+    iotasks:    {name:"ioTasks",    port:8670, docker:"iotasks"}
   };
-  var ORDER = ["iopix","ionotes","iocalendar","iocontacts","iohealth","iosuite"];
+  var ORDER = ["iopix","ionotes","iocalendar","iotasks","iocontacts","iohealth","iosuite"];
   var RAW = "https://raw.githubusercontent.com/avandeputte/";
 
   function esc(s){ return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
@@ -692,7 +707,7 @@ footer p{margin:16px 0 0;max-width:52em}
   var mixCount = document.getElementById("mix-count");
   var STEPS = [
     {apps:["iopix"], name:"Just the photos"},
-    {apps:["iocalendar","iocontacts"], name:"The family's calendar and contacts"},
+    {apps:["iocalendar","iotasks","iocontacts"], name:"The family's calendar, tasks and contacts"},
     {apps:["ionotes"], name:"Just the notes"},
     {apps:["iopix","iocalendar","iocontacts","iosuite"], name:"Photos, calendar, contacts, a start page"},
     {apps:["iohealth"], name:"Just the health data"},
@@ -770,7 +785,7 @@ footer p{margin:16px 0 0;max-width:52em}
         });
         msg = sel.length === 1
           ? "<strong>One stack, one app.</strong> The image (<code>ghcr.io/avandeputte/" + APPS[sel[0]].docker + "</code>, amd64 and arm64) holds no data of its own."
-          : "A stack per app. Give them all the same <code>IOSUITE_DB_*</code> settings and they share the accounts. All six? Tick them all for the one-stack version.";
+          : "A stack per app. Give them all the same <code>IOSUITE_DB_*</code> settings and they share the accounts. All seven? Tick them all for the one-stack version.";
       }
     } else {
       var b = sel[0], al = sel.slice(1);

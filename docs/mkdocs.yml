@@ -1,7 +1,7 @@
 site_name: ioThing suite
 site_url: https://iosuite.iothing.net/docs/
 site_dir: site/docs
-site_description: Self-hosted photos, notes, calendar, contacts and health for the family. Install one app, or all of them. The guide.
+site_description: Self-hosted photos, notes, calendar, tasks, contacts and health for the family. Install one app, or all of them. The guide.
 repo_url: https://github.com/avandeputte/iosuite-docs
 repo_name: GitHub
 edit_uri: ""
@@ -95,6 +95,7 @@ nav:
       - ioPix: apps/iopix.md
       - ioNotes: apps/ionotes.md
       - ioCalendar: apps/iocalendar.md
+      - ioTasks: apps/iotasks.md
       - ioContacts: apps/iocontacts.md
       - ioHealth: apps/iohealth.md
       - ioSuite start page: apps/iosuite.md

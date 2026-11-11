@@ -16,6 +16,7 @@ the Proxmox VE host, as root, run the line for the app you want:
 | ioSuite | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/proxmox/ct/iosuite.sh)"` | 1 CPU, 512 MB, 4 GB |
 | ioContacts | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iocontacts/main/proxmox/ct/iocontacts.sh)"` | 1 CPU, 512 MB, 4 GB |
 | ioHealth | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iohealth/main/proxmox/ct/iohealth.sh)"` | 2 CPU, 1 GB, 4 GB |
+| ioTasks | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iotasks/main/proxmox/ct/iotasks.sh)"` | 1 CPU, 512 MB, 4 GB |
 
 ## What it asks
 
@@ -26,7 +27,7 @@ First the app's own questions, then the framework's (resources, network):
 2. **The Shared ioSuite database**: the same five answers; database and user `iosuite` by default. Give every app the
    same one.
 3. **A MariaDB / MySQL administrator** (optional): with one, the databases and users are created for you.
-4. What is particular to the app: the photo folder and digiKam for ioPix, the family's time zone for ioCalendar, the
+4. What is particular to the app: the photo folder and digiKam for ioPix, the family's time zone for ioCalendar and ioTasks, the
    LDAP port for ioContacts, which features to download for ioPix and ioNotes...
 5. The **public address** behind your reverse proxy and the **domain the sign-in is shared on** (both optional).
 6. **The admin account**, used only when the Shared ioSuite database has no accounts yet.
