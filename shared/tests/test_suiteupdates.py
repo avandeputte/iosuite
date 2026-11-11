@@ -140,3 +140,22 @@ def test_the_mcp_tools():
     assert db.one("SELECT action FROM ios_updates WHERE app = 'iocalendar'")["action"] == "update"
     out = call(users.get(alex["id"], "iosuite"), "suite_versions", {"check": False})
     assert "iocalendar" in str(out)
+
+
+def test_the_restart_that_ends_update_sh_is_not_a_failure(tmp_path, monkeypatch):
+    """update.sh writes ok, then restarts the service, which ends the script too (a signal): the update went through."""
+    suite.register("iocalendar", name="ioCalendar")
+    cal = updater(tmp_path, monkeypatch, script='printf "ok: updated to 1.1.0" > "$IOCALENDAR_RESULT"\necho "==> Restarting the service"\nkill -TERM $$\n')
+    cal.serve("update")
+    for _ in range(100):
+        if not cal.progress["running"]:
+            break
+        time.sleep(0.05)
+    assert cal.progress["error"] is None
+    a = suiteupdates.overview()[0]
+    assert a["state"] == "ok" and a["message"] == "updated to 1.1.0"
+
+    # a row an older version marked failed that way is put right by the next start
+    suiteupdates.publish("iocalendar", state="failed", message="==> Restarting the service")
+    cal._said_hello()
+    assert suiteupdates.overview()[0]["state"] == "ok"
