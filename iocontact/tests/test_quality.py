@@ -93,3 +93,36 @@ def test_quality_checks_and_fixes(client, family_id):
     assert out["fixed"] == ["Later Person"] and client.get(f"/api/contacts/{later}").json()["phones"][0]["value"] == "+32 16 22 33 44"
     assert client.post("/api/quality/fix", json={"check": "bad_email"}).status_code == 400
     assert lonely
+
+
+def test_joined_values_split(client, family_id):
+    # what an old Google CSV import left: two home addresses glued together part by part
+    glued = mk(client, family_id, name={"given": "Thad", "family": "Christian"}, org="Phenomenon Post ::: Phenomenon Post",
+               addresses=[{"label": "home", "street": " ::: ", "city": "Pittsburgh ::: Mount Lebanon",
+                           "region": "Pennsylvania ::: Pennsylvania", "country": "United States ::: ", "pref": 1}],
+               phones=[{"value": "+1 412 555 0100 ::: +1 412 555 0101"}])
+    fine = mk(client, family_id, fn="Fine Person", addresses=[{"city": "Gent"}])
+    q = {x["check"]: x for x in client.get("/api/quality").json()["checks"]}
+    assert [i["contactId"] for i in q["joined"]["items"]] == [glued] and fine
+    client.post("/api/quality/fix", json={"check": "joined"})
+    c = client.get(f"/api/contacts/{glued}").json()
+    assert c["org"] == "Phenomenon Post"
+    assert [(a["city"], a["region"], a["country"] or "", a["street"] or "") for a in c["addresses"]] == [
+        ("Pittsburgh", "Pennsylvania", "United States", ""), ("Mount Lebanon", "Pennsylvania", "", "")]
+    assert [p["value"] for p in c["phones"]] == ["+1 412 555 0100", "+1 412 555 0101"]
+    q = {x["check"]: x for x in client.get("/api/quality").json()["checks"]}
+    assert q["joined"]["count"] == 0
+
+
+def test_google_csv_joined_values():
+    from app import csvio
+    text = ("First Name,Last Name,Organization Name,Address 1 - Label,Address 1 - Street,Address 1 - City,Address 1 - Region,"
+            "Address 1 - Country,Phone 1 - Label,Phone 1 - Value,Relation 1 - Label,Relation 1 - Value\n"
+            "Thad,Christian,Phenomenon Post ::: Phenomenon Post,Home, ::: ,Pittsburgh ::: Mount Lebanon,Pennsylvania ::: Pennsylvania,"
+            "United States ::: ,Mobile ::: Work,1 ::: 2,Spouse ::: Child,Dana ::: Kid\n")
+    c = csvio.parse(text)[0]
+    assert c["org"] == "Phenomenon Post"
+    assert [(a["label"], a["city"], a["region"], a["country"]) for a in c["addresses"]] == [
+        ("home", "Pittsburgh", "Pennsylvania", "United States"), ("home", "Mount Lebanon", "Pennsylvania", "")]
+    assert [(p["label"], p["value"]) for p in c["phones"]] == [("mobile", "1"), ("work", "2")]
+    assert [(r["type"], r["relatedName"]) for r in c["relations"]] == [("spouse", "Dana"), ("child", "Kid")]

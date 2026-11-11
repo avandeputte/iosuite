@@ -62,12 +62,57 @@ def parse(text: str) -> list[dict]:
     return [c for c in (_google_row(r) for r in rows) if c]
 
 
+def _parts(v: str | None) -> list[str]:
+    """Google joins several values of one column with " ::: " (two home addresses, two companies...): the values,
+    each stripped, empty ones kept so that the parts of one address line up across columns."""
+    return [x.strip() for x in (v or "").split(":::")]
+
+
+def _one(v: str | None) -> str:
+    """A single-value field from a column that may hold several joined values: the distinct non-empty ones, joined
+    with a comma, so "Pennsylvania ::: Pennsylvania" is Pennsylvania and " ::: " is empty."""
+    out = []
+    for x in _parts(v):
+        if x and x.lower() not in (o.lower() for o in out):
+            out.append(x)
+    return ", ".join(out)
+
+
 def _g(r: dict, *keys) -> str:
     for k in keys:
-        v = r.get(k)
-        if v and v.strip():
-            return v.strip()
+        v = _one(r.get(k))
+        if v:
+            return v
     return ""
+
+
+ADDR_KEYS = ("street", "city", "pobox", "region", "postcode", "country", "ext")
+
+
+def split_address(a: dict) -> list[dict]:
+    """An address whose parts hold several values joined with ":::" (from a Google CSV) as one address per value."""
+    parts = {k: _parts(a.get(k)) for k in ADDR_KEYS}
+    out = []
+    for j in range(max(len(x) for x in parts.values())):
+        b = {**a, **{k: (_at(v, j) or "") for k, v in parts.items()}}
+        if j:
+            b["pref"] = 0
+        if any(b[k] for k in ADDR_KEYS) and b not in out:
+            out.append(b)
+    return out
+
+
+def joined(v) -> bool:
+    return isinstance(v, str) and ":::" in v
+
+
+def _labels(r: dict, p: str) -> list[str | None]:
+    return [_lab(x) for x in _parts(r.get(f"{p} - Label") or r.get(f"{p} - Type"))]
+
+
+def _at(xs: list, i: int):
+    """The i-th of a column's joined values, or its only value when it has one for all (a shared label)."""
+    return xs[i] if i < len(xs) else (xs[0] if len(xs) == 1 else None)
 
 
 def _google_row(r: dict) -> dict | None:
@@ -88,44 +133,50 @@ def _google_row(r: dict) -> dict | None:
     if d:
         c["birthday"] = {"year": d[0], "month": d[1], "day": d[2]}
     labels = _g(r, "Labels", "Group Membership")
-    c["tags"] = [t.strip().lstrip("* ") for t in labels.split(":::") if t.strip() and t.strip() not in ("* myContacts", "myContacts", "* starred", "starred")]
+    c["tags"] = [t.strip().lstrip("* ") for t in (r.get("Labels") or r.get("Group Membership") or "").split(":::") if t.strip() and t.strip() not in ("* myContacts", "myContacts", "* starred", "starred")]
     if "starred" in labels:
         c["favorite"] = True
     for i in range(1, 11):
-        p = f"E-mail {i}"
-        for v in (r.get(f"{p} - Value") or "").split(":::"):
-            if v.strip():
-                c["emails"].append({"label": _lab(r.get(f"{p} - Label") or r.get(f"{p} - Type")), "value": v.strip(), "pref": 0})
-        p = f"Phone {i}"
-        for v in (r.get(f"{p} - Value") or "").split(":::"):
-            if v.strip():
-                c["phones"].append({"label": _lab(r.get(f"{p} - Label") or r.get(f"{p} - Type")), "value": v.strip(), "pref": 0})
+        for p, key in ((f"E-mail {i}", "emails"), (f"Phone {i}", "phones")):
+            labs = _labels(r, p)
+            for j, v in enumerate(_parts(r.get(f"{p} - Value"))):
+                if v:
+                    c[key].append({"label": _at(labs, j), "value": v, "pref": 0})
         p = f"Address {i}"
-        a = {"label": _lab(r.get(f"{p} - Label") or r.get(f"{p} - Type")), "street": _g(r, f"{p} - Street"), "city": _g(r, f"{p} - City"),
-             "pobox": _g(r, f"{p} - PO Box"), "region": _g(r, f"{p} - Region"), "postcode": _g(r, f"{p} - Postal Code"),
-             "country": _g(r, f"{p} - Country"), "ext": _g(r, f"{p} - Extended Address")}
-        if not any(v for k, v in a.items() if k != "label") and _g(r, f"{p} - Formatted"):
-            a["street"] = _g(r, f"{p} - Formatted")
-        if any(v for k, v in a.items() if k != "label"):
-            c["addresses"].append(a)
+        cols = {"street": "Street", "city": "City", "pobox": "PO Box", "region": "Region", "postcode": "Postal Code",
+                "country": "Country", "ext": "Extended Address"}
+        parts = {k: _parts(r.get(f"{p} - {col}")) for k, col in cols.items()}
+        formatted = _parts(r.get(f"{p} - Formatted"))
+        labs = _labels(r, p)
+        for j in range(max(len(x) for x in [formatted, *parts.values()])):
+            a = {"label": _at(labs, j), **{k: (_at(v, j) or "") for k, v in parts.items()}}
+            if not any(v for k, v in a.items() if k != "label") and _at(formatted, j):
+                a["street"] = _at(formatted, j)
+            if any(v for k, v in a.items() if k != "label") and a not in c["addresses"]:
+                c["addresses"].append(a)
         p = f"Website {i}"
-        for v in (r.get(f"{p} - Value") or "").split(":::"):
-            if v.strip():
-                lab = _lab(r.get(f"{p} - Label") or r.get(f"{p} - Type"))
+        labs = _labels(r, p)
+        for j, v in enumerate(_parts(r.get(f"{p} - Value"))):
+            if v:
+                lab = _at(labs, j)
                 from app.vcard import social_from_url
                 svc = social_from_url(v) or (lab if lab in ("linkedin", "facebook", "instagram") else None)
                 if svc:
-                    c["social"].append({"service": svc, "value": v.strip()})
+                    c["social"].append({"service": svc, "value": v})
                 else:
-                    c["urls"].append({"label": lab, "value": v.strip()})
+                    c["urls"].append({"label": lab, "value": v})
         p = f"Relation {i}"
-        if _g(r, f"{p} - Value"):
-            t, gnd = rel.from_label(_g(r, f"{p} - Label", f"{p} - Type"))
-            c["relations"].append({"type": t, "gender": gnd, "relatedName": _g(r, f"{p} - Value")})
+        labs = _parts(r.get(f"{p} - Label") or r.get(f"{p} - Type"))
+        for j, v in enumerate(_parts(r.get(f"{p} - Value"))):
+            if v:
+                t, gnd = rel.from_label(_at(labs, j) or "")
+                c["relations"].append({"type": t, "gender": gnd, "relatedName": v})
         p = f"Event {i}"
-        d = _parse_date(_g(r, f"{p} - Value"))
-        if d:
-            c["dates"].append({"label": (_g(r, f"{p} - Label", f"{p} - Type") or "other").lower(), "year": d[0], "month": d[1], "day": d[2]})
+        labs = _parts(r.get(f"{p} - Label") or r.get(f"{p} - Type"))
+        for j, v in enumerate(_parts(r.get(f"{p} - Value"))):
+            d = _parse_date(v)
+            if d:
+                c["dates"].append({"label": (_at(labs, j) or "other").lower(), "year": d[0], "month": d[1], "day": d[2]})
     if not (c["fn"] or any(c["name"].values()) or c.get("org") or c["emails"] or c["phones"]):
         return None
     return c
