@@ -1,8 +1,9 @@
 /* ioTasks web app: one module, no build step. The smart lists (Today, Scheduled, All, Completed) and the lists to
-   pick in the sidebar; a list of tasks with a box to tick each off, quick add, subtasks under their task; the task form
-   (due date and time, repeat, alert, priority, the family members it is for, notes, link); search, import, and
-   settings (account, display, apps and devices, lists, and for admins family and server, and for suite admins security
-   and global settings), laid out as in the other ioThing apps. */
+   pick in the sidebar; a list of tasks with a box to tick each off, a new-task line that reads plain English, subtasks
+   under their task, postponing, the order by hand (drag); the task form (due date and time, repeat, alert, priority,
+   the family members it is for, notes, link); the activity log with undo, templates, a print view; search, import,
+   and settings (account, display, apps and devices, lists, and for admins family and server, and for suite admins
+   security and global settings), laid out as in the other ioThing apps. */
 
 // ------------------------------------------------------------------ helpers
 const $ = (s, el = document) => el.querySelector(s);
@@ -44,6 +45,12 @@ const ICONS = {
   ai: 'M19 9l1.25-2.75L23 5l-2.75-1.25L19 1l-1.25 2.75L15 5l2.75 1.25L19 9zm-7.5.5L9 4 6.5 9.5 1 12l5.5 2.5L9 20l2.5-5.5L17 12l-5.5-2.5zM19 15l-1.25 2.75L15 19l2.75 1.25L19 23l1.25-2.75L23 19l-2.75-1.25L19 15z',
   theme: 'M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 0 1-4.4 2.26 5.403 5.403 0 0 1-3.14-9.8c-.44-.06-.9-.1-1.36-.1z',
   subtask: 'M19 15l-6 6-1.42-1.42L15.17 16H4V4h2v10h9.17l-3.59-3.58L13 9l6 6z',
+  history: 'M13 3a9 9 0 0 0-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42A8.954 8.954 0 0 0 13 21a9 9 0 0 0 0-18zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z',
+  later: 'M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z',
+  grip: 'M11 18c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2zm-2-8c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0-6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm6 4c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z',
+  print: 'M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z',
+  template: 'M19 3h-4.18C14.4 1.84 13.3 1 12 1s-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm-2 14-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z',
+  sort: 'M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z',
 };
 const icon = (n, cls = '') => { const s = document.createElement('span'); s.className = 'ic ' + cls; s.innerHTML = `<svg viewBox="0 0 24 24"><path d="${ICONS[n] || ''}"/></svg>`; return s; };
 
@@ -77,9 +84,15 @@ async function api(path, opts = {}) {
 }
 
 let toastTimer;
-function toast(msg) {
-  const t = $('#toast'); t.textContent = msg; t.hidden = false;
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 3500);
+/** A note at the foot of the page. With undo (the step a change answered with): an Undo button, for ten seconds. */
+function toast(msg, undo) {
+  const t = $('#toast');
+  fill(t, h('span', null, msg), undo ? h('button', { class: 'undo', onclick: () => { t.hidden = true; undoStep(undo); } }, 'Undo') : null);
+  t.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, undo ? 10000 : 3500);
+}
+async function undoStep(batch) {
+  try { await api(`/api/undo/${batch}`, { method: 'POST' }); await refresh(); toast('Undone'); } catch (e) { fail(e); }
 }
 const fail = (e) => toast(e.message || String(e));
 
@@ -97,6 +110,67 @@ function dialog(title, body, buttons, cls = '') {
 }
 const confirmDialog = (title, text, ok = 'OK', danger = false) => dialog(title, h('p', null, text), [{ label: 'Cancel', value: false }, { label: ok, value: true, primary: !danger, danger }]);
 function closeDialogs() { document.querySelectorAll('.dialog-back').forEach((d) => d.remove()); }
+
+/** A menu that drops from a button: items are [icon, label, what it does (a function, or an address)]; a second click
+    on the button, a click elsewhere, Escape or scrolling puts it away. */
+let openMenu = null;
+function closeMenu() {
+  if (!openMenu) return;
+  openMenu.el.remove(); document.removeEventListener('click', openMenu.outside); openMenu = null;
+}
+function popMenu(btn, items) {
+  const mine = openMenu && openMenu.btn === btn;
+  closeMenu();
+  if (mine) return;
+  const el = h('div', { class: 'menu pop', role: 'menu' }, items.filter(Boolean).map(([ic, label, act]) => (typeof act === 'string'
+    ? h('a', { class: 'mi', role: 'menuitem', href: act, onclick: closeMenu }, icon(ic, 's'), label)
+    : h('button', { class: 'mi', role: 'menuitem', onclick: () => { closeMenu(); act(); } }, icon(ic, 's'), label))));
+  document.body.append(el);
+  const r = btn.getBoundingClientRect();
+  el.style.left = `${Math.round(Math.max(8, Math.min(r.right - el.offsetWidth, innerWidth - el.offsetWidth - 8)))}px`;
+  el.style.top = `${Math.round(r.bottom + 4 + el.offsetHeight > innerHeight - 8 ? Math.max(8, r.top - el.offsetHeight - 4) : r.bottom + 4)}px`;
+  const outside = (e) => { if (!el.contains(e.target) && !btn.contains(e.target)) closeMenu(); };
+  openMenu = { el, btn, outside };
+  setTimeout(() => document.addEventListener('click', outside), 0);
+  $('#main').addEventListener('scroll', closeMenu, { once: true });
+}
+
+/** Drag to reorder: the children of `box` that match `item` change places among themselves, taken by the `grip` inside
+    one (mouse or finger) or, without a grip, by the whole item (mouse only, once it moved a little, so a click stays a
+    click). The item moves as the pointer passes its neighbours; done(ids) gets the new order of their data-id. */
+function dragSort(box, item, grip, done) {
+  const items = () => [...box.children].filter((x) => x.matches(item));
+  box.addEventListener('click', (e) => { if (e.target.closest('[data-dragged]')) { e.preventDefault(); e.stopPropagation(); } }, true);
+  box.addEventListener('dragstart', (e) => e.preventDefault());  // a link or a picture would be dragged off as itself
+  box.addEventListener('pointerdown', (e) => {
+    if (e.button) return;
+    const g = grip ? e.target.closest(grip) : (e.pointerType === 'mouse' ? e.target.closest(item) : null);
+    const it = g && g.closest(item);
+    if (!it || it.parentElement !== box) return;
+    const before = items().map((x) => x.dataset.id).join();
+    const y0 = e.clientY;
+    let on = false;
+    const start = () => { on = true; it.classList.add('dragging'); document.body.classList.add('sorting'); };
+    if (grip) { e.preventDefault(); start(); }
+    const move = (ev) => {
+      if (!on) { if (Math.abs(ev.clientY - y0) < 6) return; start(); }
+      ev.preventDefault();
+      const others = items().filter((x) => x !== it);
+      const next = others.find((x) => { const r = x.getBoundingClientRect(); return ev.clientY < r.top + r.height / 2; });
+      if (next) { if (it.nextElementSibling !== next) box.insertBefore(it, next); }
+      else if (others.length && others[others.length - 1].nextElementSibling !== it) others[others.length - 1].after(it);
+    };
+    const up = () => {
+      removeEventListener('pointermove', move); removeEventListener('pointerup', up); removeEventListener('pointercancel', up);
+      if (!on) return;
+      it.classList.remove('dragging'); document.body.classList.remove('sorting');
+      it.dataset.dragged = '1'; setTimeout(() => { delete it.dataset.dragged; }, 60);
+      const after = items().map((x) => x.dataset.id);
+      if (after.join() !== before) done(after.map(Number));
+    };
+    addEventListener('pointermove', move, { passive: false }); addEventListener('pointerup', up); addEventListener('pointercancel', up);
+  });
+}
 
 const hue = (s) => { let x = 0; for (const c of s || '') x = (x * 31 + c.charCodeAt(0)) % 360; return x; };
 const initials = (fn) => { const p = (fn || '?').trim().split(/\s+/); return ((p[0] || '?')[0] + (p.length > 1 ? p[p.length - 1][0] : '')).toUpperCase(); };
@@ -160,6 +234,30 @@ function describeRule(rule, day) {
   if (p.COUNT) s += `, ${p.COUNT} more times`;
   if (p.UNTIL) { const u = p.UNTIL; s += `, until ${parseDay(`${u.slice(0, 4)}-${u.slice(4, 6)}-${u.slice(6, 8)}`).toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' })}`; }
   return s;
+}
+
+/* A task that repeats after completion comes back some time after the day it is ticked off: "P2W" (an ISO 8601
+   duration of days, weeks, months or years) is two weeks. The form shows it as the repeat rule of that length. */
+const AFTER_UNIT = { D: 'DAILY', W: 'WEEKLY', M: 'MONTHLY', Y: 'YEARLY' };
+const afterParts = (p) => { const m = /^P(\d+)([DWMY])$/.exec(p || ''); return m ? [+m[1], m[2]] : null; };
+const afterRule = (p) => { const a = afterParts(p); return a ? `FREQ=${AFTER_UNIT[a[1]]}${a[0] > 1 ? `;INTERVAL=${a[0]}` : ''}` : ''; };
+/** A rule that is only "every n days, weeks, months or years" as such a duration (null: it says more than that). */
+function afterOf(rule) {
+  const p = Object.fromEntries((rule || '').split(';').map((x) => x.split('=')));
+  const u = Object.keys(AFTER_UNIT).find((k) => AFTER_UNIT[k] === p.FREQ);
+  return u && Object.keys(p).every((k) => k === 'FREQ' || k === 'INTERVAL') ? `P${+p.INTERVAL || 1}${u}` : null;
+}
+function describeAfter(p) {
+  const a = afterParts(p);
+  if (!a) return '';
+  const unit = { D: 'day', W: 'week', M: 'month', Y: 'year' }[a[1]];
+  return `${a[0] === 1 ? `A ${unit}` : `${a[0]} ${unit}s`} after it is ticked off`;
+}
+/** Where a task can be put off to: [label, day]; Today only for what is overdue. */
+function laterDays(withToday) {
+  const t = dayStart(new Date()), wd = t.getDay();
+  return [withToday ? ['Today', t] : null, ['Tomorrow', addDays(t, 1)], ['This weekend', addDays(t, (6 - wd + 7) % 7 || 7)],
+    ['Next week', addDays(t, (8 - wd) % 7 || 7)]].filter(Boolean);
 }
 
 // ------------------------------------------------------------------ state
@@ -286,13 +384,19 @@ function drawNav() {
   const link = (v, href, ic, label, n, on, hueVar) => h('a', { href, 'data-v': v, class: on ? 'on' : null, style: hueVar ? { '--hue': `var(${hueVar})` } : null },
     icon(ic), h('span', { class: 'nl' }, label), n ? h('span', { class: 'n' }, n) : null);
   const sec = (label, btn) => h('div', { class: 'navsec' }, h('span', null, label), btn || null);
-  const listRow = (c) => h('a', { href: `#/list/${c.id}`, 'data-v': 'list', class: r.view === 'list' && r.id === c.id ? 'on' : null, style: { '--hue': c.color } },
+  const listRow = (c) => h('a', { href: `#/list/${c.id}`, 'data-v': 'list', 'data-id': c.id, class: r.view === 'list' && r.id === c.id ? 'on' : null, style: { '--hue': c.color } },
     h('span', { class: 'ldot' }), h('span', { class: 'nl' }, c.name),
     h('span', { class: `n ${c.overdue ? 'late' : ''}`, title: c.overdue ? `${c.overdue} overdue` : null }, c.count || ''));
   const whoRow = (m) => h('a', { href: '#', 'data-v': 'who', class: `who ${S.who.has(m.id) ? 'picked' : ''}`, style: { '--mc': memberColor(m) },
     title: S.who.has(m.id) ? `Stop showing only ${m.displayName}'s tasks` : `Show only ${m.displayName}'s tasks`,
     onclick: (e) => { e.preventDefault(); toggleWho(m.id); } }, memberBadge(m), h('span', { class: 'nl' }, m.displayName));
   const shared = S.lists.filter((c) => c.shared), mine = S.lists.filter((c) => !c.shared);
+  // the lists of a kind, in the order they were put in: drag one (with a mouse) to move it
+  const group = (lists, can) => {
+    const g = h('div', { class: 'navgrp' }, lists.map(listRow));
+    if (can && lists.length > 1) dragSort(g, 'a', null, orderLists);
+    return g;
+  };
   const brandName = () => [h('span', { class: 'io' }, 'io'), h('span', { class: 'nm' }, 'Tasks')];
   nav.replaceChildren(...[
     h('div', { class: 'navhead' },
@@ -308,19 +412,23 @@ function drawNav() {
     h('button', { class: 'navmore', 'data-v': 'more', title: 'More', onclick: moreSheet }, icon('more'), h('span', { class: 'nl' }, 'More')),
     h('div', { class: 'navgap' }),
     sec('Shared', canShared() ? h('button', { class: 'iconbtn', title: 'New shared list', onclick: () => newList(true) }, icon('add', 's')) : null),
-    shared.map(listRow),
+    group(shared, canShared()),
     S.members.length > 1 ? [h('div', { class: 'navgap' }),
       sec('Family', S.who.size ? h('button', { class: 'pillbtn noic tiny', title: 'Show everyone again', onclick: () => toggleWho(null) }, 'Everyone') : null),
       S.members.map(whoRow)] : null,
     h('div', { class: 'navgap' }),
     canOwn() || mine.length ? sec('Mine', canOwn() ? h('button', { class: 'iconbtn', title: 'New private list', onclick: () => newList(false) }, icon('add', 's')) : null) : null,
-    mine.map(listRow),
+    group(mine, canOwn()),
     h('div', { class: 'navgap' }), sec('Manage'),
+    link('activity', '#/activity', 'history', 'Activity', null, r.view === 'activity', '--c-slate'),
     writable().length ? link('import', '#/import', 'upload', 'Import', null, r.view === 'import', '--c-teal') : null,
     h('div', { class: 'navfoot' }, link('settings', '#/settings', 'settings', 'Settings', null, r.view === 'settings')),
   ].flat(3).filter(Boolean));
   applySidebar();
-  $('.navmore')?.classList.toggle('on', ['list', 'import', 'settings', 'search'].includes(r.view));
+  $('.navmore')?.classList.toggle('on', ['list', 'import', 'settings', 'search', 'activity'].includes(r.view));
+}
+async function orderLists(ids) {
+  try { await api('/api/lists/order', { method: 'POST', json: { ids } }); await loadLists(); } catch (e) { fail(e); drawNav(); }
 }
 function applySidebar() {
   const body = document.body, btn = $('#sidebtn');
@@ -347,6 +455,7 @@ function moreSheet() {
     S.lists.map((c) => tile(`#/list/${c.id}`, 'list', c.name, c.color, r.view === 'list' && r.id === c.id)),
     S.members.length > 1 ? S.members.map((m) => tile('#', 'person', S.who.has(m.id) ? `Only ${m.displayName}` : m.displayName, memberColor(m), S.who.has(m.id),
       (e) => { e.preventDefault(); e.stopPropagation(); closeDialogs(); toggleWho(m.id); moreSheet(); })) : null,
+    tile('#/activity', 'history', 'Activity', 'var(--c-slate)', r.view === 'activity'),
     writable().length ? tile('#/import', 'upload', 'Import', 'var(--c-teal)', r.view === 'import') : null,
     tile('#/settings', 'settings', 'Settings', 'var(--c-slate)', r.view === 'settings'));
   const p = dialog('More', grid, [{ label: 'Close', value: null }]);
@@ -369,11 +478,15 @@ function colorPicker(value, onPick) {
 async function newList(shared) {
   const name = h('input', { class: 't', placeholder: shared ? 'Name, e.g. Groceries or Chores' : 'Name, e.g. Work' });
   const col = colorPicker(SWATCHES[S.lists.length % SWATCHES.length]);
-  const body = h('div', { style: { display: 'grid', gap: '12px' } }, name, col,
+  const tpls = (await api('/api/templates').catch(() => ({ items: [] }))).items;
+  const from = h('select', { class: 't' }, h('option', { value: '' }, 'An empty list'), tpls.map((t) => h('option', { value: t.id }, `The template ${t.name} (${t.count} tasks)`)));
+  const body = h('div', { style: { display: 'grid', gap: '12px' } }, name, col, tpls.length ? h('label', { class: 'field' }, h('span', null, 'Start with'), from) : null,
     h('p', { class: 'muted small', style: { margin: 0 } }, shared ? 'Everyone in the family sees it and ticks tasks off; editors change it.' : 'Only you see it.'));
   if (!await dialog(shared ? 'New shared list' : 'New private list', body, [{ label: 'Cancel', value: false }, { label: 'Create', value: true, primary: true }])) return;
   try {
-    const r = await api('/api/lists', { method: 'POST', json: { name: name.value, shared, color: col.get() } });
+    const picked = tpls.find((t) => t.id === +from.value);
+    const r = await api('/api/lists', { method: 'POST', json: { name: name.value || (picked ? picked.name : ''), shared, color: col.get() } });
+    if (picked) await api(`/api/templates/${picked.id}/apply`, { method: 'POST', json: { listId: r.list.id } });
     await loadLists();
     location.hash = `#/list/${r.list.id}`;
   } catch (e) { fail(e); }
@@ -393,6 +506,7 @@ function route() {
   if (a === 'new') return { view: 'new', list: +qs.get('list') || null, parent: +qs.get('parent') || null };
   if (a === 'search') return { view: 'search', q: b || '' };
   if (a === 'import') return { view: 'import', list: +qs.get('list') || null };
+  if (a === 'activity') return { view: 'activity', list: +qs.get('list') || null };
   if (a === 'settings') return { view: 'settings', tab: b || 'account', sub: p[2] };
   return { view: 'today' };
 }
@@ -401,11 +515,12 @@ const TASK_VIEWS = ['today', 'scheduled', 'all', 'done', 'list', 'search'];
 async function onRoute() {
   const r = route();
   const main = $('#main');
+  closeMenu();
   try {
     const page = h('div', { class: 'page' });
     main.replaceChildren(page);
     if (TASK_VIEWS.includes(r.view)) await drawTasks(page, r);
-    else await ({ task: showTaskPage, new: showTaskPage, import: showImport, settings: showSettings })[r.view](page, r);
+    else await ({ task: showTaskPage, new: showTaskPage, import: showImport, activity: showActivity, settings: showSettings })[r.view](page, r);
   } catch (e) { fail(e); }
   drawNav();
 }
@@ -419,7 +534,7 @@ async function redraw() {
   $('#main').replaceChildren(page);
   $('#main').scrollTop = top;
 }
-async function refresh() { await loadLists(); await redraw(); }
+async function refresh() { await loadLists(); if (route().view === 'activity') await onRoute(); else await redraw(); }
 
 // ------------------------------------------------------------------ the task lists
 const showDone = (lid) => (S.settings.showCompleted || '').split(',').includes(String(lid));
@@ -429,13 +544,21 @@ function setShowDone(lid, on) {
   saveSettings({ showCompleted: [...s].join(',') });
 }
 
+/** A list is in the order its tasks were put in by hand (the ⋯ menu of the list), or by due date. */
+const byHand = (lid) => (S.settings.manualSort || '').split(',').includes(String(lid));
+function setByHand(lid, on) {
+  const s = new Set((S.settings.manualSort || '').split(',').filter(Boolean));
+  if (on) s.add(String(lid)); else s.delete(String(lid));
+  saveSettings({ manualSort: [...s].join(',') });
+}
+
 /** The tasks the view shows, from the server: [rows, title, colour, the list (list view only)]. */
 async function fetchTasks(r) {
   const who = `&${TZQ}${S.who.size ? `&member=${[...S.who].join(',')}` : ''}`;
   if (r.view === 'list') {
     const c = listOf(r.id);
     if (!c.id) throw new Error('That list is not here (any more)');
-    const items = (await api(`/api/tasks?list=${c.id}&status=${showDone(c.id) ? 'all' : 'open'}&limit=2000${who}`)).items;
+    const items = (await api(`/api/tasks?list=${c.id}&status=${showDone(c.id) ? 'all' : 'open'}&limit=2000${byHand(c.id) ? '&sort=manual' : ''}${who}`)).items;
     return [items, c.name, c.color, c];
   }
   if (r.view === 'search') {
@@ -448,18 +571,30 @@ async function fetchTasks(r) {
   return [(await api(`/api/tasks?${qs}${who}`)).items, SMART[r.view][0], `var(${SMART[r.view][2]})`, null];
 }
 
-/** Subtasks right under their task (indented), the rest in the server's order. */
-function nest(items) {
+/** The tasks without a parent among them, in the server's order, and a function that gives a task's subtasks. */
+function tree(items) {
   const byUid = new Map(items.map((t) => [`${t.listId}|${t.uid}`, t]));
-  const kids = new Map(), out = [];
+  const kids = new Map(), roots = [];
   for (const t of items) {
     const k = t.parent && byUid.has(`${t.listId}|${t.parent}`) ? `${t.listId}|${t.parent}` : null;
-    if (k) { if (!kids.has(k)) kids.set(k, []); kids.get(k).push(t); } else out.push(t);
+    if (k) { if (!kids.has(k)) kids.set(k, []); kids.get(k).push(t); } else roots.push(t);
   }
-  const flat = [];
-  const add = (t, depth) => { flat.push([t, depth]); for (const c of kids.get(`${t.listId}|${t.uid}`) || []) add(c, depth + 1); };
-  out.forEach((t) => add(t, 0));
-  return flat;
+  return [roots, (t) => kids.get(`${t.listId}|${t.uid}`) || []];
+}
+/** A task with its subtasks under it (indented): one block, which is what moves when the task is dragged. */
+function taskGroup(t, kidsOf, depth, o) {
+  const kids = kidsOf(t);
+  return h('div', { class: 'tgrp', 'data-id': t.id }, taskRow(t, { ...o, depth }),
+    kids.length ? h('div', { class: 'tkids' }, kids.map((k) => taskGroup(k, kidsOf, depth + 1, o))) : null);
+}
+/** Put tasks off to a day (each keeps its time; the alerts follow), with Undo. */
+async function postpone(ids, day) {
+  try {
+    const r = await api('/api/tasks/postpone', { method: 'POST', json: { ids, due: ymd(day), tz: LOCAL_TZ } });
+    await refresh();
+    const w = dayWords(day);
+    toast(`${r.moved === 1 ? 'Now due' : `${r.moved} tasks now due`} ${/^(Today|Tomorrow)$/.test(w) ? w.toLowerCase() : w}`, r.undo);
+  } catch (e) { fail(e); }
 }
 
 async function drawTasks(page, r) {
@@ -476,17 +611,29 @@ async function drawTasks(page, r) {
   const canAdd = list ? list.writable : (['today', 'all', 'scheduled'].includes(r.view) && !!defaultList());
   const rows = h('div', { class: 'tasks' });
   const section = (label, cls) => h('div', { class: `tsec ${cls || ''}` }, label);
+  // Overdue, with one button to put all of it (that you may change) off to today
+  const overdue = () => {
+    const mine = items.filter((t) => isLate(t) && listOf(t.listId).writable).map((t) => t.id);
+    return h('div', { class: 'tsec late' }, h('span', null, 'Overdue'),
+      mine.length ? h('button', { class: 'pillbtn noic tiny', title: 'Each keeps its time of day', onclick: () => postpone(mine, dayStart(new Date())) }, mine.length > 1 ? 'Move all to today' : 'Move to today') : null);
+  };
   if (r.view === 'list') {
-    nest(items).forEach(([t, depth]) => rows.append(taskRow(t, { depth })));
+    const [roots, kidsOf] = tree(items);
+    const hand = byHand(list.id) && list.writable;
+    roots.forEach((t) => rows.append(taskGroup(t, kidsOf, 0, { grip: hand })));
+    if (hand) {
+      const order = (ids) => api(`/api/lists/${list.id}/order`, { method: 'POST', json: { ids } }).catch((e) => { fail(e); redraw(); });
+      [rows, ...rows.querySelectorAll('.tkids')].forEach((box) => dragSort(box, '.tgrp', '.grip', order));
+    }
   } else if (r.view === 'today') {
     const late = items.filter(isLate), now = items.filter((t) => !isLate(t));
-    if (late.length) put(rows, section('Overdue', 'late'), late.map((t) => taskRow(t, { showList: true })));
+    if (late.length) put(rows, overdue(), late.map((t) => taskRow(t, { showList: true })));
     if (now.length) put(rows, late.length ? section('Today') : null, now.map((t) => taskRow(t, { showList: true, noDay: true })));
   } else if (r.view === 'scheduled') {
     let last = null;
     for (const t of items) {
       const d = dueOf(t), label = isLate(t) ? 'Overdue' : dayWords(d);
-      if (label !== last) { rows.append(section(label, label === 'Overdue' ? 'late' : '')); last = label; }
+      if (label !== last) { rows.append(label === 'Overdue' ? overdue() : section(label)); last = label; }
       rows.append(taskRow(t, { showList: true, noDay: label !== 'Overdue' }));
     }
   } else {
@@ -495,7 +642,8 @@ async function drawTasks(page, r) {
       const mine = items.filter((t) => t.listId === c.id);
       if (!mine.length) continue;
       rows.append(h('div', { class: 'tsec', style: { '--c': c.color } }, h('a', { href: `#/list/${c.id}` }, c.name)));
-      (r.view === 'all' ? nest(mine) : mine.map((t) => [t, 0])).forEach(([t, depth]) => rows.append(taskRow(t, { depth })));
+      if (r.view === 'all') { const [roots, kidsOf] = tree(mine); roots.forEach((t) => rows.append(taskGroup(t, kidsOf, 0, {}))); }
+      else mine.forEach((t) => rows.append(taskRow(t, {})));
     }
   }
   if (canAdd) page.append(quickAdd(r, list));
@@ -510,51 +658,120 @@ async function drawTasks(page, r) {
   }
 }
 
-/** The ⋯ menu of a list: show completed, export, import, clear completed, the list's settings. */
+/** The ⋯ menu of a list: show completed, the order, templates, activity, print, export, import, clear completed, the
+    list's settings. */
 function listMenu(c) {
-  const btn = h('button', { class: 'iconbtn', title: 'More', 'aria-haspopup': 'menu' }, icon('more'));
-  let menu = null;
-  const close = () => { if (menu) { menu.remove(); menu = null; document.removeEventListener('click', outside); } };
-  const outside = (e) => { if (menu && !menu.contains(e.target) && !btn.contains(e.target)) close(); };
-  btn.onclick = () => {
-    if (menu) return close();
-    const on = showDone(c.id);
-    menu = h('div', { class: 'menu', style: { top: '44px' } },
-      h('button', { class: 'mi', onclick: () => { close(); setShowDone(c.id, !on); redraw(); } }, icon('done', 's'), on ? 'Hide completed' : 'Show completed'),
-      c.writable ? h('button', { class: 'mi', onclick: () => { close(); clearCompleted(c); } }, icon('delete', 's'), 'Clear completed') : null,
-      h('a', { class: 'mi', href: `/api/lists/${c.id}/export`, onclick: close }, icon('download', 's'), 'Export (.ics)'),
-      c.writable ? h('a', { class: 'mi', href: `#/import?list=${c.id}`, onclick: close }, icon('upload', 's'), 'Import') : null,
-      h('a', { class: 'mi', href: `#/settings/lists/${c.id}`, onclick: close }, icon('settings', 's'), 'List settings'));
-    btn.parentElement.style.position = 'relative';
-    btn.after(menu);
-    setTimeout(() => document.addEventListener('click', outside), 0);
-  };
-  return btn;
+  return h('button', { class: 'iconbtn', title: 'More', 'aria-haspopup': 'menu', onclick: (e) => {
+    const on = showDone(c.id), hand = byHand(c.id);
+    popMenu(e.currentTarget, [
+      ['done', on ? 'Hide completed' : 'Show completed', () => { setShowDone(c.id, !on); redraw(); }],
+      ['sort', hand ? 'Sort by due date' : 'Sort by hand (drag)', () => { setByHand(c.id, !hand); redraw(); }],
+      c.writable ? ['template', 'Add from a template…', () => addFromTemplate(c)] : null,
+      ['template', 'Save as a template…', () => saveTemplate(c)],
+      ['history', 'Activity', `#/activity?list=${c.id}`],
+      ['print', 'Print', () => window.print()],
+      ['download', 'Export (.ics)', `/api/lists/${c.id}/export`],
+      c.writable ? ['upload', 'Import', `#/import?list=${c.id}`] : null,
+      c.writable ? ['delete', 'Clear completed', () => clearCompleted(c)] : null,
+      ['settings', 'List settings', `#/settings/lists/${c.id}`]]);
+  } }, icon('more'));
+}
+
+/** Templates: a list's tasks kept to add again (a packing list, the weekly shop). */
+async function saveTemplate(c) {
+  const name = h('input', { class: 't', value: c.name });
+  const shared = h('input', { type: 'checkbox', checked: c.shared && canShared() });
+  const body = h('div', { style: { display: 'grid', gap: '12px' } }, h('label', { class: 'field' }, h('span', null, 'Name'), name),
+    canShared() ? h('label', { class: 'check' }, shared, ' Everyone in the family can use it') : null,
+    h('p', { class: 'muted small', style: { margin: 0 } }, 'Every task of the list with its notes, priority, link, people and subtasks. Due dates, repeats and what is ticked off are left out.'));
+  if (!await dialog('Save as a template', body, [{ label: 'Cancel', value: false }, { label: 'Save', value: true, primary: true }])) return;
+  try {
+    const r = await api('/api/templates', { method: 'POST', json: { name: name.value, listId: c.id, shared: shared.checked } });
+    toast(`Template ${r.template.name} saved (${r.template.count} tasks)`);
+  } catch (e) { fail(e); }
+}
+async function addFromTemplate(c) {
+  const tpls = (await api('/api/templates')).items;
+  if (!tpls.length) { await dialog('Templates', h('p', null, 'There are no templates yet. Make one of a list with “Save as a template…” in its ⋯ menu.')); return; }
+  const sel = h('select', { class: 't' }, tpls.map((t) => h('option', { value: t.id }, `${t.name} (${t.count} tasks)`)));
+  const hasDue = h('input', { type: 'checkbox' });
+  const date = h('input', { class: 't', type: 'date', value: ymd(new Date()), hidden: true });
+  hasDue.onchange = () => { date.hidden = !hasDue.checked; };
+  const body = h('div', { style: { display: 'grid', gap: '12px' } }, h('label', { class: 'field' }, h('span', null, 'Template'), sel),
+    h('div', { class: 'when-row' }, h('label', { class: 'check' }, hasDue, ' All due on'), date));
+  if (!await dialog(`Add to ${c.name}`, body, [{ label: 'Cancel', value: false }, { label: 'Add', value: true, primary: true }])) return;
+  try {
+    const r = await api(`/api/templates/${sel.value}/apply`, { method: 'POST', json: { listId: c.id, due: hasDue.checked ? date.value : null } });
+    await refresh();
+    toast(`${r.created} tasks added`, r.undo);
+  } catch (e) { fail(e); }
 }
 async function clearCompleted(c) {
   if (!await confirmDialog('Clear completed', `Delete the completed tasks of ${c.name}? Apps that sync the list lose them too.`, 'Delete', true)) return;
-  try { const r = await api(`/api/lists/${c.id}/clear-completed`, { method: 'POST' }); toast(`${r.deleted} deleted`); await refresh(); } catch (e) { fail(e); }
+  try { const r = await api(`/api/lists/${c.id}/clear-completed`, { method: 'POST' }); await refresh(); toast(`${r.deleted} deleted`, r.undo); } catch (e) { fail(e); }
 }
 
-/** The "New task" line on top of a list: Enter adds it and leaves the line ready for the next one. On Today and
-    Scheduled a new task is due today. */
+/** The new-task line reads plain English unless that is switched off (Settings › Display). */
+const smartAdd = () => S.settings.quickAdd !== 'off';
+/** What the server made of a line, as chips: [[icon or mark, words]]. */
+function quickChips(p) {
+  const due = { due: p.due, dueAllDay: !!p.due && !p.due.includes('T') };
+  const c = listOf(p.listId);
+  return [
+    p.due ? [icon('today', 'xs'), dueText(due)] : null,
+    p.rrule ? [icon('repeat', 'xs'), describeRule(p.rrule, dueOf(due))] : null,
+    p.repeatAfter ? [icon('repeat', 'xs'), describeAfter(p.repeatAfter)] : null,
+    p.priority ? [icon('flag', 'xs'), `${p.priority[0].toUpperCase()}${p.priority.slice(1)} priority`] : null,
+    c.id ? [h('span', { class: 'ldot', style: { '--hue': c.color } }), c.name] : null,
+    ...(p.members || []).map(memberOf).filter(Boolean).map((m) => [memberBadge(m), m.displayName]),
+  ].filter(Boolean);
+}
+
+/** The "New task" line on top of a list: Enter adds it and leaves the line ready for the next one. What it says about
+    when, how often, how important, which list and for whom becomes the task's fields, shown under the line while
+    typing ("Pay rent every month on the 1st 9am !high"). On Today and Scheduled a new task is due today unless the
+    line says when. */
 function quickAdd(r, list) {
   const target = list || defaultList();
   const input = h('input', { class: 'qadd', id: 'qadd', placeholder: list ? `New task in ${list.name}` : `New task (${target.name}${['today', 'scheduled'].includes(r.view) ? ', due today' : ''})`,
+    title: smartAdd() ? 'Understands dates, repeats and priorities: “Call the bank tomorrow 5pm”, “Pay rent every month on the 1st !high”' : null,
     autocomplete: 'off', enterkeyhint: 'done', 'aria-label': 'New task' });
+  const hint = h('div', { class: 'qhint', hidden: true });
+  let seq = 0, timer;
+  input.addEventListener('input', () => {
+    clearTimeout(timer);
+    const text = input.value.trim();
+    const my = ++seq;
+    if (!smartAdd() || !text) { hint.hidden = true; return; }
+    timer = setTimeout(async () => {
+      try {
+        const p = await api(`/api/quick?text=${encodeURIComponent(text)}&${TZQ}`);
+        if (my !== seq) return;
+        const chips = quickChips(p);
+        fill(hint, h('span', { class: 'qt' }, p.title), chips.map((c) => h('span', { class: 'qchip' }, c)));
+        hint.hidden = !chips.length;
+      } catch { hint.hidden = true; }
+    }, 150);
+  });
   input.addEventListener('keydown', async (e) => {
     if (e.key !== 'Enter' || !input.value.trim()) return;
     e.preventDefault();
-    const data = { title: input.value.trim(), listId: target.id };
+    const text = input.value.trim();
+    const data = smartAdd() ? { text, timezone: LOCAL_TZ, listId: target.id } : { title: text, listId: target.id };
     if (['today', 'scheduled'].includes(r.view)) data.due = ymd(new Date());
     if (S.who.size) data.members = [...S.who];
     input.disabled = true;
-    try { await api('/api/tasks', { method: 'POST', json: data }); input.value = ''; await refresh(); } catch (err) { fail(err); }
+    try {
+      const t = await api('/api/tasks', { method: 'POST', json: data });
+      input.value = ''; seq += 1; hint.hidden = true;
+      await refresh();
+      if (t.title !== text) toast(`Added “${t.title}”${t.due ? `, ${dueText(t).toLowerCase()}` : ''}${t.listId !== target.id ? ` to ${listOf(t.listId).name}` : ''}`, t.undo);
+    } catch (err) { fail(err); }
     input.disabled = false;
     $('#qadd')?.focus();
   });
-  return h('div', { class: 'qrow', style: { '--c': target.color } }, h('span', { class: 'tick ghost' }, icon('add', 's')), input,
-    h('button', { class: 'iconbtn', title: 'More details', onclick: () => { location.hash = `#/new?list=${target.id}`; } }, icon('edit', 's')));
+  return h('div', { class: 'qwrap' }, h('div', { class: 'qrow', style: { '--c': target.color } }, h('span', { class: 'tick ghost' }, icon('add', 's')), input,
+    h('button', { class: 'iconbtn', title: 'More details', onclick: () => { location.hash = `#/new?list=${target.id}`; } }, icon('edit', 's'))), hint);
 }
 
 const PRIO_MARK = { high: '!!!', medium: '!!', low: '!' };
@@ -565,27 +782,35 @@ function taskRow(t, o = {}) {
   const late = isLate(t);
   const meta = [
     t.due && !(o.noDay && t.dueAllDay) ? h('span', { class: late ? 'late' : '' }, o.noDay ? fmtTime(dueOf(t)) : dueText(t)) : null,
-    t.rrule ? h('span', { title: describeRule(t.rrule, dueOf(t)) }, icon('repeat', 'xs')) : null,
+    t.rrule || t.repeatAfter ? h('span', { title: t.rrule ? describeRule(t.rrule, dueOf(t)) : describeAfter(t.repeatAfter) }, icon('repeat', 'xs')) : null,
     t.alarms && t.alarms.length && !t.done ? h('span', { title: t.alarms.map((a) => new Date(a).toLocaleString()).join('\n') }, icon('bell', 'xs')) : null,
     o.showList ? h('span', { class: 'lname', style: { '--c': c.color } }, c.name) : null,
     t.subtasks && t.subtasks.total ? h('span', null, icon('subtask', 'xs'), `${t.subtasks.total - t.subtasks.open}/${t.subtasks.total}`) : null,
     t.url && safeUrl(t.url) ? h('a', { href: t.url, target: '_blank', rel: 'noopener', onclick: (e) => e.stopPropagation(), title: t.url }, icon('link', 'xs')) : null,
     t.done && t.completedAt ? h('span', null, `Done ${dayWords(new Date(t.completedAt)).toLowerCase().replace(/^(mon|tue|wed|thu|fri|sat|sun)/i, (x) => x[0].toUpperCase() + x.slice(1))}`) : null,
   ].filter(Boolean);
+  // put off: a button on the tasks that are overdue or due today (the others show it under the mouse)
+  const d0 = dueOf(t), soon = !!d0 && dayStart(d0) <= dayStart(new Date());
+  const later = canTick && !t.done && d0 ? h('button', { class: `iconbtn later ${soon ? 'soon' : ''}`, title: 'Postpone', 'aria-haspopup': 'menu', onclick: (e) => {
+    popMenu(e.currentTarget, [...laterDays(dayStart(d0) < dayStart(new Date())).map(([label, day]) => ['later', label, () => postpone([t.id], day)]),
+      ['event', 'Another day…', () => openTask(t.id)]]);
+  } }, icon('later', 's')) : null;
   const row = h('div', { class: `trow ${t.done ? 'done' : ''}`, style: { '--depth': o.depth || 0 }, 'data-id': t.id },
+    o.grip ? h('span', { class: 'grip', title: 'Drag to move' }, icon('grip', 's')) : null,
     tick,
     h('div', { class: 'tbody', onclick: () => openTask(t.id) },
       h('div', { class: 'ttl' }, t.priority ? h('span', { class: 'prio' }, PRIO_MARK[t.priority] + ' ') : null, t.title || '(no title)'),
       t.notes ? h('div', { class: 'tnotes' }, t.notes) : null,
       meta.length ? h('div', { class: 'tmeta' }, meta) : null),
     (t.members || []).map((m) => memberOf(m.id) || m).map(memberBadge),
+    later,
     h('button', { class: 'iconbtn info', title: 'Details', onclick: () => openTask(t.id) }, icon('chevR', 's')));
   tick.onclick = async () => {
     const done = !t.done;
     tick.classList.toggle('on', done); row.classList.toggle('done', done);
     try {
-      const res = await api(`/api/tasks/${t.id}/complete`, { method: 'POST', json: { done } });
-      if (res.moved) toast(`Done. Next: ${dueText(res) || 'again'}`);
+      const res = await api(`/api/tasks/${t.id}/complete`, { method: 'POST', json: { done, tz: LOCAL_TZ } });
+      if (done) toast(res.moved ? `Done. Next: ${dueText(res) || 'again'}` : 'Done', res.undo);
       // a moment to see the tick before the row leaves a list of open tasks
       setTimeout(() => refresh().catch(fail), done && !res.moved ? 700 : 0);
     } catch (e) { tick.classList.toggle('on', !done); row.classList.toggle('done', !done); fail(e); }
@@ -596,7 +821,7 @@ function taskRow(t, o = {}) {
 // ------------------------------------------------------------------ one task: the form
 const TIMED_ALERTS = [[0, 'At the time'], [5, '5 minutes before'], [15, '15 minutes before'], [30, '30 minutes before'], [60, '1 hour before'], [120, '2 hours before'], [1440, '1 day before']];
 const ALLDAY_ALERTS = [[-540, 'On the day at 9:00'], [900, 'The day before at 9:00'], [9540, 'A week before at 9:00']];
-const REPEATS = [['', 'Never'], ['FREQ=DAILY', 'Daily'], ['FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR', 'Weekdays'], ['FREQ=WEEKLY', 'Weekly'], ['FREQ=WEEKLY;INTERVAL=2', 'Every 2 weeks'], ['FREQ=MONTHLY', 'Monthly'], ['FREQ=YEARLY', 'Yearly']];
+const REPEATS = [['', 'Never'], ['FREQ=DAILY', 'Daily'], ['FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR', 'Weekdays'], ['FREQ=WEEKLY', 'Weekly'], ['FREQ=WEEKLY;INTERVAL=2', 'Every 2 weeks'], ['FREQ=MONTHLY', 'Monthly'], ['FREQ=YEARLY', 'Yearly'], ['every', 'Every…']];
 
 /** Wide screens: the task opens in a sheet over the list; phones: as a page of its own. */
 function openTask(id) {
@@ -637,11 +862,27 @@ async function taskForm(el, opts, done) {
   const url = h('input', { class: 't', type: 'url', value: t && t.url ? t.url : '', placeholder: 'https://…', disabled: ro || null });
   const picked = new Set(t ? (t.members || []).map((m) => m.id) : [...S.who]);
 
-  // repeat: the usual ones, and the task's own rule when it is another
-  const curRule = t && t.rrule ? t.rrule : '';
+  // repeat: the usual ones, "Every…" with a number of days, weeks, months or years, and the task's own rule when it
+  // is yet another; counted from the due date, or from the day the task is ticked off (repeat after completion)
+  const curRule = t ? t.rrule || afterRule(t.repeatAfter) : '';
   const reps = REPEATS.slice();
-  if (curRule && !reps.some(([v]) => v === curRule)) reps.push([curRule, describeRule(curRule, dd)]);
-  fill(repeat, reps.map(([v, l]) => h('option', { value: v, selected: v === curRule ? true : null }, l)));
+  const plain = afterParts(afterOf(curRule));  // [n, unit] when the rule is only "every n days / weeks / months / years"
+  const listed = reps.some(([v]) => v === curRule);
+  if (curRule && !listed && !plain) reps.splice(-1, 0, [curRule, describeRule(curRule, dd)]);
+  const repValue = listed || !plain ? curRule : 'every';
+  fill(repeat, reps.map(([v, l]) => h('option', { value: v, selected: v === repValue ? true : null }, l)));
+  const every = h('input', { class: 't', type: 'number', min: 1, max: 999, value: plain ? plain[0] : 2, disabled: ro || null, 'aria-label': 'How many' });
+  const unit = h('select', { class: 't', disabled: ro || null, 'aria-label': 'Days, weeks, months or years' },
+    [['D', 'days'], ['W', 'weeks'], ['M', 'months'], ['Y', 'years']].map(([v, l]) => h('option', { value: v, selected: plain && plain[1] === v ? true : null }, l)));
+  const from = h('select', { class: 't', disabled: ro || null }, [['due', 'The due date'], ['done', 'The day it is ticked off']].map(([v, l]) => h('option', { value: v, selected: (t && t.repeatAfter ? 'done' : 'due') === v ? true : null }, l)));
+  const rule = () => (repeat.value === 'every' ? afterRule(`P${Math.max(1, Math.min(999, +every.value || 1))}${unit.value}`) : repeat.value);
+  const everyBox = h('span', { class: 'everybox' }, every, unit);
+  const drawRepeat = () => {
+    everyBox.hidden = repeat.value !== 'every';
+    repeat.closest('.field')?.classList.toggle('wide', repeat.value === 'every');  // room for the number and the unit
+    from.closest('.field')?.toggleAttribute('hidden', !hasDue.checked || !afterOf(rule()));
+  };
+  repeat.onchange = drawRepeat;
   // alert: minutes before the due time (all-day: before its midnight), worked out from the task's first alert
   const alertMins = () => {
     if (!t || !t.alarms || !t.alarms.length || !dd) return null;
@@ -660,7 +901,11 @@ async function taskForm(el, opts, done) {
     fill(whenRow, h('label', { class: 'check' }, hasDue, ' Due'), hasDue.checked ? [date, h('label', { class: 'check' }, hasTime, ' At a time'), hasTime.checked ? time : null] : null);
     repeat.closest('.field')?.toggleAttribute('hidden', !hasDue.checked);
     alert.closest('.field')?.toggleAttribute('hidden', !hasDue.checked);
+    drawRepeat();
   };
+  // the days a task is usually put off to, one click each
+  const laterRow = ro ? null : h('div', { class: 'chiprow laterrow' }, laterDays(true).map(([label, day]) => h('button', { type: 'button', class: 'chip toggle',
+    onclick: () => { hasDue.checked = true; date.value = ymd(day); drawWhen(); } }, label)));
   hasDue.onchange = drawWhen;
   hasTime.onchange = () => { drawWhen(); drawAlerts(false); };
 
@@ -689,10 +934,12 @@ async function taskForm(el, opts, done) {
   /** The fields as the API takes them. */
   const collect = () => {
     const data = { title: title.value.trim(), notes: notes.value, priority: prio.value || 'none', url: url.value.trim(), members: [...picked] };
-    if (!hasDue.checked) { data.due = null; data.rrule = null; data.alarms = []; return data; }
+    if (!hasDue.checked) { data.due = null; data.rrule = null; data.repeatAfter = null; data.alarms = []; return data; }
     data.due = hasTime.checked ? `${date.value}T${time.value || '09:00'}` : date.value;
     data.timezone = LOCAL_TZ;
-    data.rrule = repeat.value || null;
+    const after = from.value === 'done' ? afterOf(rule()) : null;
+    data.rrule = after ? null : rule() || null;
+    data.repeatAfter = after;
     if (alert.value !== 'keep') {
       const due = hasTime.checked ? new Date(`${date.value}T${time.value || '09:00'}`) : parseDay(date.value);
       data.alarms = alert.value === '' ? [] : [new Date(+due - +alert.value * 6e4).toISOString()];
@@ -705,20 +952,21 @@ async function taskForm(el, opts, done) {
     try {
       if (t) {
         if (+list.value !== t.listId) data.listId = +list.value;
-        await api(`/api/tasks/${t.id}`, { method: 'PATCH', json: data });
+        const r = await api(`/api/tasks/${t.id}`, { method: 'PATCH', json: data });
+        toast('Saved', r.undo);
       } else {
         data.listId = +list.value;
         if (parent) { data.parent = parent.id; data.listId = parent.listId; }
         await api('/api/tasks', { method: 'POST', json: data });
+        toast('Saved');
       }
-      toast('Saved');
       done();
     } catch (e) { fail(e); }
   };
   const del = async () => {
     const n = t.subtasks ? t.subtasks.total : 0;
     if (!await confirmDialog('Delete task', `Delete “${t.title || 'this task'}”${n ? ` and its ${n} subtask${n > 1 ? 's' : ''}` : ''}?`, 'Delete', true)) return;
-    try { await api(`/api/tasks/${t.id}`, { method: 'DELETE' }); toast('Deleted'); done(); } catch (e) { fail(e); }
+    try { const r = await api(`/api/tasks/${t.id}`, { method: 'DELETE' }); toast('Deleted', r.undo); done(); } catch (e) { fail(e); }
   };
   title.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); save(); } });
   const fld = (l, e, cls) => h('label', { class: `field ${cls || ''}` }, h('span', null, l), e);
@@ -726,16 +974,17 @@ async function taskForm(el, opts, done) {
   fill(el,
     h('div', { class: 'taskhead', style: { '--c': listOf(+list.value).color || 'var(--brand)' } },
       t ? h('button', { class: `tick big ${t.done ? 'on' : ''}`, title: t.done ? 'Not done after all' : 'Done', disabled: ro || null, onclick: async (e) => {
-        try { const res = await api(`/api/tasks/${t.id}/complete`, { method: 'POST', json: { done: !t.done } }); toast(res.moved ? `Done. Next: ${dueText(res)}` : res.done ? 'Done' : 'Open again'); done(); } catch (err) { fail(err); }
+        try { const res = await api(`/api/tasks/${t.id}/complete`, { method: 'POST', json: { done: !t.done, tz: LOCAL_TZ } }); toast(res.moved ? `Done. Next: ${dueText(res)}` : res.done ? 'Done' : 'Open again', res.undo); done(); } catch (err) { fail(err); }
         e.stopPropagation();
       } }) : null,
       title),
     parent ? h('p', { class: 'muted small' }, `Subtask of “${parent.title}”`) : null,
     ro ? h('p', { class: 'muted small' }, 'Read-only: editors and admins change shared lists.') : null,
     notes,
-    h('div', { class: 'fsec' }, icon('today'), 'When'), whenRow,
-    h('div', { class: 'grid', style: { marginTop: '10px' } }, fld('Repeat', repeat), fld('Alert', alert)),
+    h('div', { class: 'fsec' }, icon('today'), 'When'), whenRow, laterRow,
+    h('div', { class: 'grid', style: { marginTop: '10px' } }, fld('Repeat', h('div', { class: 'reprow' }, repeat, everyBox)), fld('Counted from', from), fld('Alert', alert)),
     t && t.rrule ? h('p', { class: 'muted small' }, `${describeRule(t.rrule, dd)}. Ticking it off moves it to the next date.`) : null,
+    t && t.repeatAfter ? h('p', { class: 'muted small' }, `Ticking it off brings it back ${describeAfter(t.repeatAfter).replace(/^A /, 'a ')}.`) : null,
     h('div', { class: 'fsec' }, icon('tune'), 'Details'),
     h('div', { class: 'grid' }, fld('List', list), fld('Priority', prio), fld('Link', url, 'wide')),
     S.members.length > 1 ? [h('div', { class: 'fsec' }, icon('people'), 'For'), who] : null,
@@ -751,6 +1000,53 @@ async function taskForm(el, opts, done) {
   drawWhen();
   await drawSubs();
   if (!t) title.focus();
+}
+
+// ------------------------------------------------------------------ activity
+/** What an entry of the log says, as the parts of a sentence. */
+function activityWords(a) {
+  const who = a.user || 'Someone', more = a.count > 1 ? ` and ${a.count - 1} more` : '';
+  const title = h('b', null, `“${a.title || '(no title)'}”`);
+  const undo = a.detail === 'undo';
+  const d = a.detail && !undo ? a.detail : '';
+  switch (a.action) {
+    case 'added': return [who, undo ? ' brought back ' : ' added ', title, more, d === 'import' ? ' (import)' : d.startsWith('template ') ? ` from the template ${d.slice(9)}` : d.startsWith('from ') ? ` (moved here ${d})` : ''];
+    case 'done': return [who, ' ticked off ', title, more, d.startsWith('next ') ? ` (it repeats: next ${dayWords(parseDay(d.slice(5)))})` : ''];
+    case 'reopened': return [who, ' opened ', title, ' again', more];
+    case 'moved': return [who, ' moved ', title, more, d ? ` ${d}` : ''];
+    case 'deleted': return [who, undo ? ' took back adding ' : ' deleted ', title, more];
+    default: return [who, d === 'postponed' ? ' postponed ' : undo ? ' put back ' : ' changed ', title, more, d && d !== 'postponed' ? ` (${d})` : ''];
+  }
+}
+/** Who did what, newest first (all the lists you see, or one), each step with Undo while the task is still as that
+    step left it. */
+async function showActivity(page, r) {
+  const c = r.list ? listOf(r.list) : null;
+  const rows = h('div', { class: 'acts' });
+  const more = h('p', { class: 'center' });
+  let last = null, lastDay = null;
+  const load = async () => {
+    const items = (await api(`/api/activity?limit=60${c && c.id ? `&list=${c.id}` : ''}${last ? `&before=${last}` : ''}`)).items;
+    for (const a of items) {
+      const at = new Date(a.at), day = dayWords(at);
+      if (day !== lastDay) { rows.append(h('div', { class: 'tsec' }, day)); lastDay = day; }
+      const l = listOf(a.listId);
+      rows.append(h('div', { class: `act ${a.undone ? 'undone' : ''}` },
+        h('span', { class: 'av', style: { '--h': hue(a.user || '') } }, a.user ? initials(a.user) : '?'),
+        h('div', { class: 'abody' }, h('div', null, activityWords(a)),
+          h('div', { class: 'tmeta' }, h('span', null, fmtTime(at)), l.id && !(c && c.id) ? h('span', { class: 'lname', style: { '--c': l.color } }, l.name) : null,
+            a.via === 'caldav' ? h('span', null, 'in a reminders app') : a.via === 'mcp' ? h('span', null, 'through an assistant') : null,
+            a.undone ? h('span', null, 'undone') : null)),
+        a.canUndo ? h('button', { class: 'pillbtn noic', onclick: () => undoStep(a.batch) }, 'Undo') : null));
+    }
+    last = items.length ? items[items.length - 1].id : last;
+    fill(more, items.length === 60 ? h('button', { class: 'pillbtn noic', onclick: () => load().catch(fail) }, 'Earlier') : null);
+    if (!rows.children.length) rows.append(h('div', { class: 'empty' }, icon('history'), h('p', null, 'Nothing has happened yet.')));
+  };
+  page.classList.add('taskpage');
+  page.append(h('div', { class: 'pagehead tasks-head', style: c && c.id ? { '--c': c.color } : null }, h('h1', null, c && c.id ? `Activity: ${c.name}` : 'Activity'), h('span', { class: 'grow' }),
+    c && c.id ? h('a', { class: 'pillbtn noic', href: '#/activity' }, 'All lists') : null), rows, more);
+  await load();
 }
 
 // ------------------------------------------------------------------ import
@@ -815,8 +1111,11 @@ async function setDisplay(el) {
     Object.entries(SMART).slice(0, 3).map(([v, [l]]) => h('option', { value: v, selected: v === (S.settings.startView || 'today') ? true : null }, l)));
   const dl = h('select', { class: 't', onchange: (e) => save({ defaultList: +e.target.value }) },
     writable().map((c) => h('option', { value: c.id, selected: c.id === defaultList()?.id ? true : null }, `${c.name}${c.shared ? ' (shared)' : ''}`)));
+  const qa = h('input', { type: 'checkbox', checked: smartAdd(), onchange: (e) => save({ quickAdd: e.target.checked ? 'on' : 'off' }) });
   el.append(ui.box('theme', 'Appearance', ui.themeRow(S.settings.theme || store.get('theme') || 'system', (t) => { S.settings.theme = t; applyTheme(t); })),
-    h('div', { class: 'box' }, h('h2', null, icon('tune'), 'Tasks'), h('div', { class: 'grid' }, fld('Open on', sv), fld('New tasks go to', dl))));
+    h('div', { class: 'box' }, h('h2', null, icon('tune'), 'Tasks'), h('div', { class: 'grid' }, fld('Open on', sv), fld('New tasks go to', dl)),
+      h('p', null, h('label', { class: 'check' }, qa, ' The new-task line understands what is typed')),
+      h('p', { class: 'muted small' }, 'When (tomorrow 5pm, friday, 15 nov, in 2 weeks), how often (every monday, monthly, every 2 weeks after done), how important (!high), which list (#groceries) and for whom (@emma) become the task’s fields: “Pay rent every month on the 1st 9am !high”. What was understood shows under the line while you type; the rest is the title.')));
 }
 
 /** The profile through a short-lived link instead of the form post: the app on the Home Screen opens a download in a
@@ -873,24 +1172,43 @@ async function setDevices(el) {
 
 async function setLists(el, r) {
   await loadLists();
-  el.append(h('p', null, canShared() ? h('button', { class: 'pillbtn', onclick: () => newList(true) }, icon('add', 's'), 'New shared list') : null, ' ',
-    canOwn() ? h('button', { class: 'pillbtn', onclick: () => newList(false) }, icon('add', 's'), 'New private list') : null),
-  ...S.lists.map((c) => {
+  const tpls = (await api('/api/templates').catch(() => ({ items: [] }))).items;
+  const box = (c) => {
     const save = async (body) => { try { await api(`/api/lists/${c.id}`, { method: 'PATCH', json: body }); await loadLists(); toast('Saved'); } catch (e) { fail(e); } };
     const name = h('input', { class: 't', value: c.name, onchange: (e) => save({ name: e.target.value }) });
     const desc = h('input', { class: 't', value: c.description || '', placeholder: 'What it is for', onchange: (e) => save({ description: e.target.value }) });
     const col = colorPicker(c.color, (v) => save({ color: v }));
-    return h('div', { class: 'box', id: `list-${c.id}`, style: { '--c': c.color } },
-      h('h2', null, h('span', { class: 'ldot', style: { '--hue': c.color } }), c.name,
+    return h('div', { class: 'box', id: `list-${c.id}`, 'data-id': c.id, style: { '--c': c.color } },
+      h('h2', null, c.writable ? h('span', { class: 'grip', title: 'Drag to move the list' }, icon('grip', 's')) : null, h('span', { class: 'ldot', style: { '--hue': c.color } }), c.name,
         h('span', { class: 'muted small', style: { fontWeight: 400 } }, c.shared ? 'shared with everyone' : 'only you')),
       c.writable ? [h('div', { class: 'grid' }, fld('Name', name), fld('Description', desc)), h('div', { style: { margin: '10px 0' } }, col),
         h('p', null, h('a', { class: 'pillbtn noic', href: `/api/lists/${c.id}/export` }, 'Export (.ics)'), ' ',
+          h('button', { class: 'pillbtn noic', onclick: () => saveTemplate(c).then(() => onRoute()) }, 'Save as a template…'), ' ',
           !c.shared || S.user.role === 'admin' ? h('button', { class: 'pillbtn noic danger', onclick: async () => {
             if (!await confirmDialog('Delete list', `Delete ${c.name} and its tasks? Apps that sync it lose it too.`, 'Delete', true)) return;
             try { await api(`/api/lists/${c.id}`, { method: 'DELETE' }); await loadLists(); onRoute(); } catch (e) { fail(e); }
           } }, 'Delete') : null)]
         : h('p', { class: 'muted' }, `${c.count || 0} open tasks. Editors and admins change shared lists.`));
-  }));
+  };
+  // the lists of a kind, in their order: a list moves by its grip (the sidebar follows)
+  const group = (lists) => {
+    const g = h('div', { class: `listboxes ${lists.length > 1 ? '' : 'one'}` }, lists.map(box));
+    dragSort(g, '.box', '.grip', orderLists);
+    return g;
+  };
+  const tplRow = (t) => h('tr', null,
+    h('td', null, t.writable ? h('input', { class: 't', value: t.name, 'aria-label': 'Name', onchange: async (e) => { try { await api(`/api/templates/${t.id}`, { method: 'PATCH', json: { name: e.target.value } }); toast('Saved'); } catch (x) { fail(x); } } }) : t.name),
+    h('td', { class: 'muted' }, `${t.count} tasks`), h('td', { class: 'muted' }, t.shared ? 'shared with everyone' : 'only you'),
+    h('td', { style: { textAlign: 'right' } }, t.writable ? h('button', { class: 'pillbtn noic danger', onclick: async () => {
+      if (!await confirmDialog('Delete template', `Delete the template ${t.name}? The lists made from it stay.`, 'Delete', true)) return;
+      try { await api(`/api/templates/${t.id}`, { method: 'DELETE' }); onRoute(); } catch (x) { fail(x); }
+    } }, 'Delete') : null));
+  el.append(h('p', null, canShared() ? h('button', { class: 'pillbtn', onclick: () => newList(true) }, icon('add', 's'), 'New shared list') : null, ' ',
+    canOwn() ? h('button', { class: 'pillbtn', onclick: () => newList(false) }, icon('add', 's'), 'New private list') : null),
+  group(S.lists.filter((c) => c.shared)), group(S.lists.filter((c) => !c.shared)),
+  h('div', { class: 'box' }, h('h2', null, icon('template'), 'Templates'),
+    h('p', { class: 'muted' }, 'A list’s tasks kept to add again: a packing list, the weekly shop. Save one from a list (here, or in the list’s ⋯ menu); add its tasks with “Add from a template…” in a list’s ⋯ menu, or start a new list with it.'),
+    tpls.length ? h('table', { class: 't' }, tpls.map(tplRow)) : null));
   if (r.sub) setTimeout(() => $(`#list-${r.sub}`)?.scrollIntoView({ block: 'start' }), 0);
 }
 
@@ -1020,7 +1338,7 @@ async function start() {
     }, 250);
   });
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') { if (document.querySelector('.dialog-back')) closeDialogs(); else if (document.body.classList.contains('side-open')) closeNav(); return; }
+    if (e.key === 'Escape') { if (openMenu) closeMenu(); else if (document.querySelector('.dialog-back')) closeDialogs(); else if (document.body.classList.contains('side-open')) closeNav(); return; }
     if (e.ctrlKey || e.metaKey || e.altKey || ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName) || document.querySelector('.signin, .dialog-back')) return;
     const k = e.key;
     if (k === '/') { e.preventDefault(); $('#q').focus(); }

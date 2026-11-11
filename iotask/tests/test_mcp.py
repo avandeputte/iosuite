@@ -49,4 +49,19 @@ def test_mcp_tasks(client):
     ov = call(client, auth, "overview")
     assert ov["you"]["name"] == "alex" and {c["name"] for c in ov["lists"]} == {"Family", "Personal"}
     assert call(client, auth, "delete_task", task="Buy milk")["count"] == 2
+    # the log says it was an assistant; undo brings the task and its subtask back
+    log = call(client, auth, "recent_activity", limit=2)["items"]
+    assert (log[0]["action"], log[0]["task"], log[0]["via"], log[0]["tasks"], log[0]["canUndo"]) == ("deleted", "Buy milk", "mcp", 2, True)
+    assert call(client, auth, "undo", step=log[0]["step"])["undone"] == 2
+    assert call(client, auth, "get_task", task="Buy milk")["children"][0]["title"] == "Oat milk"
+    wk = call(client, auth, "create_task", title="Water the plants", repeat_after="P2W")
+    assert wk["repeatAfter"] == "P2W" and call(client, auth, "complete_task", task="Water the plants")["moved"] is True
+    client.post("/api/auth/login", json={"name": "alex", "password": "secret123"})
+    fam = next(c["id"] for c in client.get("/api/lists").json()["items"] if c["shared"])
+    client.post("/api/templates", json={"name": "Chores", "listId": fam, "shared": True})
+    client.cookies.clear()
+    assert [(t["name"], t["count"]) for t in call(client, auth, "list_templates")["items"]] == [("Chores", 3)]
+    assert call(client, auth, "apply_template", template="Chores", list="Personal", due="2026-11-20")["created"] == 3
+    for t in call(client, auth, "list_tasks", status="all")["items"]:
+        call(client, auth, "delete_task", task=str(t["id"]))
     assert "diagnostics" and call(client, auth, "diagnostics")["database"]["tasks"] == 0

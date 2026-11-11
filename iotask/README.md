@@ -7,11 +7,17 @@ Self-hosted task lists: a web app for the whole family, and the standard protoco
 ## What it does
 
 - **Tasks** with a title, notes, a due date (a day, or a day and a time), a **priority**, **alerts**, a link, and a box to tick them off.
-- **Repeating tasks**: every day, weekday, week, two weeks, month or year (and whatever rule another app gave it). Ticking one off moves it on to its next date, as Apple Reminders does, instead of closing it; a rule with a number of times counts down.
+- **Repeating tasks**: every day, weekday, week, two weeks, month or year, every so many of them (and whatever rule another app gave it). Ticking one off moves it on to its next date, as Apple Reminders does, instead of closing it; a rule with a number of times counts down.
+- **Repeat after completion**: "two weeks after I tick it off" instead of "every two weeks": the task comes back that long after the day it was done, at its usual time. Reminders has no such repeat, so the rule is ioTasks' own (`X-IOTASKS-AFTER-DONE:P2W` on the task); a task ticked off on a phone still comes back.
 - **Subtasks**: a task under another one, shown indented under it with a count (2/5). Deleting or moving a task takes its subtasks along.
 - **Lists**: a shared **Family** list, a private **Personal** one for each account, and as many more as you like (shared or private), each with its colour and its count of open tasks (red when something is overdue).
 - **Today, Scheduled, All and Completed** across every list you see: Today has what is due today and what is overdue, Scheduled everything with a date, day by day. "Today" is the day where you are, not where the server is.
-- **Quick add**: type a title on top of any list and press Enter; on Today it is due today. The form has the rest.
+- **Smart quick add**: type a line on top of any list and press Enter. Plain English becomes the task's fields: "Pay rent every month on the 1st 9am !high" is *Pay rent*, due on the next 1st at 9:00, monthly, high priority. It reads when (`tomorrow 5pm`, `friday`, `15 nov`, `in 2 weeks`, `the 20th`, `tonight`), how often (`daily`, `every monday and thursday`, `every 2 weeks after done`), how important (`!high`, `!!`), which list (`#groceries`) and for whom (`@emma`); what it understood shows under the line while you type, and the rest is the title. It can be switched off in Settings › Display.
+- **Postpone**: a button on every task that is due puts it off to tomorrow, the weekend or next week (it keeps its time, and its alerts move along), and "Move all to today" on Overdue does that for everything that is late. The task form has the same days one click away.
+- **Order by hand**: a list can be sorted by due date or put in your own order by dragging (a task takes its subtasks along; subtasks move within their task). The order is kept as `X-APPLE-SORT-ORDER`, the property Apple Reminders uses for its manual order. Lists are dragged into order too, in the sidebar or in Settings › Lists.
+- **Activity and undo**: who added, changed, ticked off, moved or deleted what, in the web app, in a reminders app or through an assistant, per list or for all of them. Every change can be taken back: **Undo** shows for ten seconds after a change, and on the Activity page for as long as the task is still as that change left it. Deleting a task with its subtasks, "Clear completed" or adding a template is one step, undone as one.
+- **Templates**: save a list's tasks (with notes, priorities, links, people and subtasks) as a template, and add them to a list again later, or start a new list with them: the packing list, the weekly shop. Shared with everyone, or your own.
+- **Print**: a list prints as a checklist (the list's ⋯ menu, or the browser's Print).
 - **Family members on tasks**: tag a task with the people of the family it is for. The tags show as coloured initials, the sidebar's Family list shows only one person's (or a few people's) tasks, and the tag is kept as an iCalendar `CATEGORIES` value with the member's name. The REST API (`?member=emma`) and MCP filter by member as well. Accounts that are not a person (an admin or service account) can be left out of the family in Settings › Family: they are not offered as a tag and get no private list.
 - **Search** across titles and notes, **import** of .ics files with to-dos, **export** of each list, and keyboard shortcuts (`n` new, `t` today, `s` scheduled, `a` all, `/` search).
 - **Roles as in the other io apps**: viewers only read the shared lists, members (the default) also keep their own private lists, editors change the shared lists too, admins also manage users and settings. The same accounts, passwords and app passwords as the other io apps; one sign-in for all of them with a shared cookie domain.
@@ -97,7 +103,7 @@ accounts are the suite's: `.venv/bin/iosuite-shared --config . admin NAME --app 
 | `AUTH_PROXY`, `AUTH_PROXY_HEADER`, `AUTH_PROXY_TRUSTED`, `CF_ACCESS_TEAM`, `CF_ACCESS_AUD` | sign-in at a reverse proxy, as in the other io apps (Cloudflare Access, Authelia, Authentik, oauth2-proxy…) |
 | `CF_KV_ACCOUNT_ID`, `CF_KV_NAMESPACE_ID`, `CF_KV_API_TOKEN` | optional edge check of app passwords: the Workers KV namespace a Cloudflare Worker on `/dav*` reads; normally stored once for the whole suite in Settings › Global settings › Keys and tokens, these override it ([setup](https://github.com/avandeputte/iosuite-shared/blob/main/cloudflare/edge-auth/README.md)) |
 | `MCP` | `1` keeps the MCP server on, whatever the setting says |
-| `KEEP_DELETED_DAYS` | how long a deleted task's marker is kept, so phones learn of the deletion at their next sync (`90`); a client that stayed away longer starts its sync over |
+| `KEEP_DELETED_DAYS` | how long a deleted task's marker is kept, so phones learn of the deletion at their next sync (`90`); a client that stayed away longer starts its sync over. The activity log is kept as long |
 | `MCP_USER` | the account `python -m app.mcp` (stdio) acts as |
 | `UPDATE_CHECK` | `0` turns the daily version check off for good |
 | `IOTASKS_REPO`, `IOTASKS_BRANCH` | what the version check and `update.sh` follow (`avandeputte/iotasks`, `main`) |
@@ -167,7 +173,7 @@ account password.
 | --- | --- | --- |
 | Reminders and tasks apps, two-way: Apple Reminders (iPhone, iPad, Mac), DAVx⁵ with Tasks.org, jtx Board or OpenTasks on Android, Thunderbird, Evolution, GNOME, KDE | **CalDAV** (RFC 4791) with to-dos (`VTODO`): each list is a calendar collection that takes only to-dos, which is how Reminders tells a task list from a calendar; sync-collection (RFC 6578), getctag, MKCALENDAR and extended MKCOL (a list made in Reminders is made here), PROPPATCH (name, colour, description, order), calendar-query, calendar-multiget, If-Match / If-None-Match, discovery via `/.well-known/caldav` (RFC 6764) and current-user-principal | `https://host/dav/` |
 | Any app that reads calendar files | **iCalendar** (RFC 5545): every task is kept as the `VTODO` it came in as, so properties ioTasks does not edit (other apps' X- properties, Apple's sort order) survive a round trip; `DUE`, `RRULE`, `VALARM`, `PRIORITY`, `RELATED-TO` (subtasks) and `CATEGORIES` included | CalDAV, `/api/tasks/<id>?format=ics`, import/export |
-| Web and JSON clients | **REST/JSON**, and iCalendar by content negotiation (`Accept: text/calendar`): lists, tasks with filters (due, status, member, words), ticking off, subtasks, import/export | `/api/`, OpenAPI docs at `/api/docs` |
+| Web and JSON clients | **REST/JSON**, and iCalendar by content negotiation (`Accept: text/calendar`): lists, tasks with filters (due, a range of days, status, member, words), a task from one line of plain English (`{"text": …}`, previewed by `/api/quick`), ticking off, postponing, subtasks, the order by hand, the activity log and undo, templates, import/export | `/api/`, OpenAPI docs at `/api/docs` |
 | iPhone, iPad and Mac in one step | **Apple configuration profile** (`com.apple.caldav.account`) | Settings › Apps and devices |
 | AI assistants: Claude and anything else that speaks MCP | **Model Context Protocol** (streamable HTTP, and stdio) | `https://host/mcp` (switched on in Settings › Server) |
 
@@ -194,13 +200,20 @@ curl -u alex:APP-PASSWORD -X POST -H 'Content-Type: application/json' \
   -d '{"title": "Take out the bins", "due": "2026-11-12T19:00", "rrule": "FREQ=WEEKLY", "priority": "high"}' \
   https://tasks.example.com/api/tasks
 curl -u alex:APP-PASSWORD -X POST https://tasks.example.com/api/tasks/7/complete
+curl -u alex:APP-PASSWORD -X POST -H 'Content-Type: application/json' \
+  -d '{"text": "Call the bank tomorrow 5pm !high", "timezone": "Europe/Brussels"}' https://tasks.example.com/api/tasks
+curl -u alex:APP-PASSWORD "https://tasks.example.com/api/tasks?from=2026-11-16&to=2026-11-22"   # due that week
+curl -u alex:APP-PASSWORD "https://tasks.example.com/api/activity?limit=20"
 ```
+
+Every change answers with `undo`, the step it was; `POST /api/undo/<step>` takes it back (400 once the task was changed again).
 
 ## MCP server
 
 ioTasks is also an MCP server, as the other io apps are, so an assistant such as Claude can work with the lists:
-read what is due, search tasks, add, change, tick off, move and delete them, make lists, import iCalendar files, and,
-for admins, check the server's health, look for a new version and install it.
+read what is due, search tasks, add, change, tick off, move and delete them, make lists, add a template's tasks,
+import iCalendar files, see who did what lately and take a change back (undo), and, for admins, check the server's
+health, look for a new version and install it.
 
 It is off until an admin turns it on in **Settings › Server** (or `MCP=1` in the environment); off, `/mcp` does not answer
 at all. Every assistant signs in with an **app password** (Settings › Account › App passwords), as HTTP Basic or
@@ -233,10 +246,11 @@ them against MariaDB.
 
 ```
 app/main.py        the application: start-up (tables, first admin), who is asking, routes
-app/api.py         the REST API: lists, tasks, ticking off, import/export, connection details, Apple profile
+app/api.py         the REST API: lists, tasks, ticking off, postponing, activity and undo, templates, import/export, connection details, Apple profile
 app/caldav.py      CalDAV / WebDAV (to-dos)
 app/ical.py        iCalendar: reading, indexing, editing and writing VTODOs, moving a repeating task on
-app/model.py       lists and tasks in MariaDB, sync tokens and tombstones for CalDAV
+app/quick.py       smart quick add: a line of plain English as a task's fields
+app/model.py       lists and tasks in MariaDB, sync tokens and tombstones for CalDAV, the activity log and undo, the order by hand, templates
 app/members.py     family members on tasks (kept as CATEGORIES), and the member filter
 app/mcp/           the MCP server: base (the server, finding tasks; who is asking comes from iosuite_shared.mcp), read, write and admin tools
 app/access.py      who may call a route (the markers come from iosuite-shared)

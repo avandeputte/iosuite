@@ -7,7 +7,7 @@ from app import config
 
 from iosuite_shared import db as shared_db, schema
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2   # 2: tsk_activity, tsk_templates
 PREFIX = "tsk"
 
 # Every table is tsk_<name> (the suite's naming convention: the apps can share one database) and InnoDB/utf8mb4. A
@@ -68,6 +68,40 @@ SCHEMA = [
         KEY idx_tsk_tasks_list_changes (list_id, deleted, changed_token),
         KEY idx_tsk_tasks_list_open (list_id, deleted, done, due),
         FOREIGN KEY (list_id) REFERENCES tsk_lists(id) ON DELETE CASCADE
+    )""",
+    # The activity log: who added, changed, ticked off or deleted which task, and through what (the web app and the
+    # API, a reminders app over CalDAV, an assistant over MCP). before_ics is the task as it was (NULL: it was not
+    # there), so a step can be undone while the task is still as that step left it (etag_after). The entries of one
+    # step (a task and its subtasks, "clear completed", a move to another list) share a batch and are undone together.
+    """CREATE TABLE IF NOT EXISTS tsk_activity (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        list_id INT NOT NULL,
+        task_id INT NULL,
+        uid VARCHAR(255) NOT NULL,
+        title VARCHAR(512) NOT NULL DEFAULT '',
+        user_id INT NULL,
+        action VARCHAR(16) NOT NULL,
+        via VARCHAR(8) NOT NULL DEFAULT 'web',
+        detail VARCHAR(255) NULL,
+        before_ics MEDIUMTEXT NULL,
+        etag_after VARCHAR(64) NULL,
+        batch VARCHAR(32) NOT NULL,
+        undone TINYINT NOT NULL DEFAULT 0,
+        at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        KEY idx_tsk_activity_list (list_id, id),
+        KEY idx_tsk_activity_task (list_id, uid, id),
+        KEY idx_tsk_activity_batch (batch),
+        FOREIGN KEY (list_id) REFERENCES tsk_lists(id) ON DELETE CASCADE
+    )""",
+    # A template: the tasks of a list as they were when it was saved (items: JSON, [{title, notes, priority, url,
+    # categories, children}]), to add to a list again. owner_id NULL: shared with everyone.
+    """CREATE TABLE IF NOT EXISTS tsk_templates (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        owner_id INT NULL,
+        name VARCHAR(128) NOT NULL,
+        items MEDIUMTEXT NOT NULL,
+        created_by INT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     )""",
 ]
 

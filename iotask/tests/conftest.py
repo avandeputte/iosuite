@@ -59,3 +59,11 @@ def client(_client):
 @pytest.fixture()
 def family_id(client):
     return next(c["id"] for c in client.get("/api/lists").json()["items"] if c["shared"])
+
+
+@pytest.fixture()
+def dav(client):
+    """A CalDAV client as alex with an app password (the web session is gone: sign in again to use the REST API)."""
+    pw = client.post("/api/auth/app-passwords", json={"label": "iPhone"}).json()["password"]
+    client.cookies.clear()
+    return lambda method, path, body=None, **h: client.request(method, path, content=body, auth=("alex", pw), headers=h)

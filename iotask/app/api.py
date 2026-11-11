@@ -10,11 +10,11 @@ import datetime as dt
 import json
 import re
 
-from fastapi import APIRouter, Form, HTTPException, Request
+from fastapi import APIRouter, Form, HTTPException, Query, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
 
-from app import access, config, ical, members, model, users
+from app import access, config, ical, members, model, quick, users
 from iosuite_shared import users as shared_users
 from iosuite_shared.access import json_body
 
@@ -108,11 +108,15 @@ async def body_object(request: Request) -> tuple[dict | None, object | None]:
     return data, None
 
 
-def task_response(request: Request, r: dict, fmt: str | None = None, status: int = 200):
+def task_response(request: Request, r: dict, fmt: str | None = None, status: int = 200, undo: str | None = None):
+    """A task as JSON or iCalendar. undo: the step that made it so (POST /api/undo/<it> takes the step back)."""
     headers = {"ETag": f'"{r["etag"]}"'}
     if wants_ics(request, fmt):
         return Response(r["ics"], status_code=status, media_type="text/calendar; charset=utf-8", headers=headers)
-    return JSONResponse(model.task_out(r, model.subtask_counts([r["list_id"]])), status_code=status, headers=headers)
+    j = model.task_out(r, model.subtask_counts([r["list_id"]]))
+    if undo:
+        j["undo"] = undo
+    return JSONResponse(j, status_code=status, headers=headers)
 
 
 def _check_match(request: Request, r: dict) -> None:
@@ -155,6 +159,30 @@ async def add_list(request: Request):
         return c
     c = await run_in_threadpool(make)
     return JSONResponse({"list": model.list_public(c, u)}, status_code=201)
+
+
+@router.post("/api/lists/order", dependencies=[access.signed_in])
+async def order_lists(request: Request):
+    """{ids: [list ids]}: the lists in this order (the ones you may change; shared lists stay ahead of private ones)."""
+    u = request.state.user
+    b = await json_body(request)
+    ids = [int(i) for i in (b.get("ids") or []) if str(i).isdigit()]
+    await run_in_threadpool(model.order_lists, u, ids)
+    return {"items": [model.list_public(c, u) for c in await run_in_threadpool(model.lists_for, u)]}
+
+
+@router.post("/api/lists/{lid}/order", dependencies=[access.signed_in])
+async def order_tasks(lid: int, request: Request):
+    """{ids: [task ids]}: these tasks of the list in this order (the tasks of one level: the list's own, or one task's
+    subtasks). Kept as X-APPLE-SORT-ORDER, the order by hand of Apple Reminders; ask for it with /api/tasks?sort=manual."""
+    u = request.state.user
+    b = await json_body(request)
+    ids = [int(i) for i in (b.get("ids") or []) if str(i).isdigit()]
+
+    def run():
+        writable_list(u, lid)
+        return {"changed": model.reorder(lid, ids, u["id"])}
+    return await run_in_threadpool(run)
 
 
 @router.patch("/api/lists/{lid}", dependencies=[access.signed_in])
@@ -215,16 +243,29 @@ async def import_list(lid: int, request: Request, replace: bool = True):
 
 # ------------------------------------------------------------------ tasks
 
+def _day(s: str | None, name: str) -> dt.date | None:
+    if not s:
+        return None
+    try:
+        return dt.date.fromisoformat(s)
+    except ValueError:
+        raise HTTPException(400, f"{name} is a date (YYYY-MM-DD)")
+
+
 @router.get("/api/tasks", dependencies=[access.signed_in])
 def list_tasks(request: Request, list: str | None = None, q: str = "", status: str = "open", due: str | None = None,
-               member: str | None = None, limit: int = 500, format: str | None = None, tz: str | None = None):
+               member: str | None = None, limit: int = 500, format: str | None = None, tz: str | None = None,
+               sort: str = "due", from_: str | None = Query(None, alias="from"), to: str | None = None):
     """Tasks from the lists named (ids, comma-separated) or all you see. status: open (default), done or all. due:
-    today (due today or before), overdue, week, scheduled, none, or a date. q: words in the title or notes. member: only
-    the tasks for these family members (ids or names). Open tasks come soonest due first; done ones latest first. Each
-    has `subtasks`: {open, total}. tz: the time zone "today" is in (the server's unless given). With Accept: text/calendar (or ?format=ics), one .ics with all of them."""
+    today (due today or before), overdue, week, scheduled, none, or a date; from and to: due on these days or between
+    them. q: words in the title or notes. member: only the tasks for these family members (ids or names). Open tasks
+    come soonest due first (sort=manual: in the order they were put in by hand); done ones latest first. Each has
+    `subtasks`: {open, total}. tz: the time zone "today" is in (the server's unless given). With Accept: text/calendar
+    (or ?format=ics), one .ics with all of them."""
     u = request.state.user
     lists = visible(u, list)
-    rows = model.find([c["id"] for c in lists], q, status, due, member_filter(member), max(1, min(limit, 5000)), zone_name(tz))
+    rows = model.find([c["id"] for c in lists], q, status, due, member_filter(member), max(1, min(limit, 5000)), zone_name(tz),
+                      sort, _day(from_, "from"), _day(to, "to"))
     if wants_ics(request, format):
         return Response(ical.feed(model.objects(rows), "ioTasks"), media_type="text/calendar; charset=utf-8")
     subs = model.subtask_counts([c["id"] for c in lists])
@@ -240,16 +281,35 @@ def counts(request: Request, tz: str | None = None):
             (("today", "today"), ("overdue", "overdue"), ("scheduled", "scheduled"), ("all", None))}
 
 
+def _quick(u: dict, text: str, tz: str | None) -> dict:
+    """A line of plain English as task fields (app/quick.py), read as of now in tz."""
+    return quick.parse(str(text)[:1000], dt.datetime.now(ical.zone(tz)), [c for c in model.lists_for(u) if model.can_write(u, c)], members.family())
+
+
+@router.get("/api/quick", dependencies=[access.signed_in])
+def quick_preview(request: Request, text: str = "", tz: str | None = None):
+    """What a line of plain English would become as a task ("Pay rent every month on the 1st 9am !high"): {title} and,
+    when the line says so, due, rrule, repeatAfter, priority, listId (#name) and members (@name). Nothing is saved:
+    POST /api/tasks with {text} adds it."""
+    return _quick(request.state.user, text, zone_name(tz))
+
+
 @router.post("/api/tasks", dependencies=[access.signed_in])
 async def create_task(request: Request, list: str | None = None):
     """A new task in ?list= (or the listId field; else the first list you may change), from JSON fields (title, notes,
-    due, start, priority, done, url, location, parent, rrule, alarms, members, categories) or iCalendar (a VTODO).
-    due: a date (2026-11-12) or a time (2026-11-12T17:00, in timezone or the server's). members: the family members it
-    is for (ids or names), kept as CATEGORIES. parent: the UID (or id) of the task it is a subtask of."""
+    due, start, priority, done, url, location, parent, rrule, repeatAfter, alarms, members, categories) or iCalendar (a
+    VTODO). due: a date (2026-11-12) or a time (2026-11-12T17:00, in timezone or the server's). members: the family
+    members it is for (ids or names), kept as CATEGORIES. parent: the UID (or id) of the task it is a subtask of.
+    rrule repeats from the due date; repeatAfter (P2W: two weeks) that long after the day the task is ticked off. Or
+    {text}: one line of plain English (see GET /api/quick), with the other fields as what it falls back on."""
     u = request.state.user
     data, cal = await body_object(request)
-    r = await run_in_threadpool(_create_task, u, data, cal, list)
-    return task_response(request, r, None, 201)
+
+    def run():
+        with model.step() as b:
+            return _create_task(u, data, cal, list), b
+    r, b = await run_in_threadpool(run)
+    return task_response(request, r, None, 201, b)
 
 
 def _resolve_parent(u: dict, data: dict, lid: int) -> dict:
@@ -264,6 +324,12 @@ def _resolve_parent(u: dict, data: dict, lid: int) -> dict:
 
 
 def _create_task(u: dict, data: dict | None, cal, lst: str | None) -> dict:
+    if data and data.get("text"):  # smart quick add: what the line says wins over what came with it
+        tz = zone_name(data.get("timezone"))
+        said = _quick(u, data["text"], tz)
+        if "listId" in said:
+            lst = None
+        data = {**{k: v for k, v in data.items() if k != "text"}, **said}
     lid = lst or (data or {}).get("listId")
     if not lid and data and str(data.get("parent") or "").isdigit():
         pr, _ = readable_task(u, int(data["parent"]))
@@ -304,7 +370,7 @@ def change(u: dict, r: dict, c: dict, data: dict, partial: bool = True) -> dict:
         target = model.task_list(int(data["listId"]))
         if not model.can_write(u, target):
             raise PermissionError("You cannot add tasks to that list")
-        r = model.move(r["id"], target["id"])
+        r = model.move(r["id"], target["id"], u["id"])
         c = target
     cal = ical.parse(r["ics"])
     if "members" in data:
@@ -316,16 +382,26 @@ def change(u: dict, r: dict, c: dict, data: dict, partial: bool = True) -> dict:
         for k in ("notes", "due", "start", "priority", "url", "location", "categories", "parent", "rrule", "alarms"):
             data.setdefault(k, None)
     ical.edit(cal, data)
+    moved = False
     if done is not None and bool(done) != ical.todo_json(cal)["done"]:
-        ical.complete(cal, bool(done))
-    return model.save(r["list_id"], ical.finish(cal), r["id"], None, u["id"])
+        moved = ical.complete(cal, bool(done), zone_name(data.get("timezone")))
+    return model.save(r["list_id"], ical.finish(cal), r["id"], None, u["id"], *_next(cal, moved))
+
+
+def _next(cal, moved: bool) -> tuple:
+    """What the activity log says of a repeating task that was ticked off and moved on: (action, detail)."""
+    return ("done", f"next {(ical.todo_json(cal)['due'] or '')[:10]}") if moved else (None, None)
 
 
 async def _change(request: Request, tid: int, partial: bool):
     u = request.state.user
     data, newcal = await body_object(request)
-    r2 = await run_in_threadpool(_change_sync, request, u, tid, data, newcal, partial)
-    return task_response(request, r2)
+
+    def run():
+        with model.step() as b:
+            return _change_sync(request, u, tid, data, newcal, partial), b
+    r2, b = await run_in_threadpool(run)
+    return task_response(request, r2, undo=b)
 
 
 def _change_sync(request: Request, u: dict, tid: int, data, newcal, partial: bool):
@@ -358,37 +434,167 @@ async def patch_task(tid: int, request: Request):
 @router.post("/api/tasks/{tid}/complete", dependencies=[access.signed_in])
 async def complete_task(tid: int, request: Request):
     """{done: true} (the default) ticks a task off, {done: false} opens it again. A repeating task moves on to its next
-    occurrence instead of being closed ({moved: true})."""
+    occurrence instead of being closed ({moved: true}); one that repeats after completion comes back that long after
+    today (tz: whose today). {undo}: the step, for POST /api/undo."""
     u = request.state.user
     b = await json_body(request)
 
     def run():
         r, _ = writable_task(u, tid)
         cal = ical.parse(r["ics"])
-        moved = ical.complete(cal, bool(b.get("done", True)))
-        r2 = model.save(r["list_id"], ical.finish(cal), r["id"], None, u["id"])
-        return {**model.task_out(r2, model.subtask_counts([r2["list_id"]])), "moved": moved}
+        moved = ical.complete(cal, bool(b.get("done", True)), zone_name(b.get("tz")))
+        with model.step() as step:
+            r2 = model.save(r["list_id"], ical.finish(cal), r["id"], None, u["id"], *_next(cal, moved))
+        return {**model.task_out(r2, model.subtask_counts([r2["list_id"]])), "moved": moved, "undo": step}
+    return await run_in_threadpool(run)
+
+
+@router.post("/api/tasks/postpone", dependencies=[access.signed_in])
+async def postpone_tasks(request: Request):
+    """{ids: [task ids], due: "2026-11-12"}: these tasks are due on that day instead, each at the time it had; their
+    alerts move along. One step: {moved, undo}."""
+    u = request.state.user
+    b = await json_body(request)
+    day = _day(str(b.get("due") or ""), "due")
+    if day is None:
+        raise HTTPException(400, "due: the day to move them to (YYYY-MM-DD)")
+    ids = [int(i) for i in (b.get("ids") or []) if str(i).isdigit()][:2000]
+
+    def run():
+        n = 0
+        with model.step() as step:
+            for tid in ids:
+                r, _ = writable_task(u, tid)
+                cal = ical.parse(r["ics"])
+                ical.postpone(cal, day, zone_name(b.get("tz")))
+                model.save(r["list_id"], ical.finish(cal), r["id"], None, u["id"], "changed", "postponed")
+                n += 1
+        return {"moved": n, "undo": step}
     return await run_in_threadpool(run)
 
 
 @router.delete("/api/tasks/{tid}", dependencies=[access.signed_in])
 def delete_task(tid: int, request: Request):
-    """Delete a task and its subtasks."""
+    """Delete a task and its subtasks ({undo}: the step, for POST /api/undo)."""
     u = request.state.user
     r, _ = writable_task(u, tid)
     _check_match(request, r)
-    return {"ok": True, "deleted": model.delete_with_subtasks(r["id"])}
+    with model.step() as step:
+        return {"ok": True, "deleted": model.delete_with_subtasks(r["id"], u["id"]), "undo": step}
 
 
 @router.post("/api/lists/{lid}/clear-completed", dependencies=[access.signed_in])
 def clear_completed(lid: int, request: Request):
-    """Delete the done tasks of a list."""
+    """Delete the done tasks of a list ({undo}: the step, for POST /api/undo)."""
     u = request.state.user
     writable_list(u, lid)
     rows = model.find([lid], status="done", limit=100000)
-    for r in rows:
-        model.delete(r["id"])
-    return {"deleted": len(rows)}
+    with model.step() as step:
+        for r in rows:
+            model.delete(r["id"], u["id"])
+    return {"deleted": len(rows), "undo": step if rows else None}
+
+
+# ------------------------------------------------------------------ activity and undo
+
+@router.get("/api/activity", dependencies=[access.signed_in])
+def activity(request: Request, list: str | None = None, limit: int = 100, before: int | None = None):
+    """Who did what, newest first, in the lists named (ids, comma-separated) or all you see: [{id, batch, at (UTC),
+    action (added, changed, done, reopened, moved, deleted), title, taskId, listId, user, via (web, caldav: a reminders
+    app, mcp: an assistant), detail, count (the tasks of the step), undone, canUndo}]. before: the id to continue from.
+    Kept for KEEP_DELETED_DAYS days."""
+    u = request.state.user
+    lists = visible(u, list)
+    return {"items": model.activity([c["id"] for c in lists], {c["id"] for c in lists if model.can_write(u, c)}, max(1, min(limit, 500)), before)}
+
+
+@router.post("/api/undo/{batch}", dependencies=[access.signed_in])
+def undo(batch: str, request: Request):
+    """Take a step back (the `undo` of a change, or the `batch` of an activity entry): what it added goes, what it
+    changed or deleted is as it was. 400 when a task was changed again since. {undone, undo}: undo again to redo."""
+    try:
+        return model.undo(batch, request.state.user)
+    except PermissionError as e:
+        raise HTTPException(403, str(e))
+
+
+# ------------------------------------------------------------------ templates
+
+def _template(u: dict, tid: int, write: bool = False) -> dict:
+    t = model.template(u, tid)
+    if write and not model.template_public(t, u)["writable"]:
+        raise HTTPException(403, "Editors and admins change shared templates; members their own")
+    return t
+
+
+@router.get("/api/templates", dependencies=[access.signed_in])
+def templates(request: Request):
+    """The templates you see (the shared ones and your own): [{id, name, shared, count, writable}]."""
+    u = request.state.user
+    return {"items": [model.template_public(t, u) for t in model.templates_for(u)]}
+
+
+@router.get("/api/templates/{tid}", dependencies=[access.signed_in])
+def get_template(tid: int, request: Request):
+    """One template with its items: [{title, notes?, priority?, url?, categories?, children?}]."""
+    u = request.state.user
+    return model.template_public(_template(u, tid), u, items=True)
+
+
+@router.post("/api/templates", dependencies=[access.signed_in])
+async def add_template(request: Request):
+    """{name, listId, shared?}: the tasks of a list as a template (titles, notes, priorities, links, who they are for
+    and subtasks; not the due dates), or {name, items, shared?}. Shared templates are made by editors and admins."""
+    u = request.state.user
+    b = await json_body(request)
+    shared = bool(b.get("shared"))
+    if shared and not shared_users.can_write(u):
+        raise HTTPException(403, "Only editors make shared templates")
+    if not shared_users.is_member(u):
+        raise HTTPException(403, "A viewer can only look; ask an admin to make you a member to keep your own")
+    if not (b.get("name") or "").strip():
+        raise HTTPException(400, "A name, please")
+
+    def make():
+        items = b.get("items") if isinstance(b.get("items"), list) else model.template_items(readable_list(u, b.get("listId"))["id"])
+        return model.template(u, model.create_template(None if shared else u["id"], b["name"], items, u["id"]))
+    return JSONResponse({"template": model.template_public(await run_in_threadpool(make), u)}, status_code=201)
+
+
+@router.patch("/api/templates/{tid}", dependencies=[access.signed_in])
+async def edit_template(tid: int, request: Request):
+    """{name}"""
+    u = request.state.user
+    b = await json_body(request)
+
+    def edit():
+        _template(u, tid, True)
+        if (b.get("name") or "").strip():
+            model.db.ex("UPDATE tsk_templates SET name = %s WHERE id = %s", (b["name"].strip()[:128], tid))
+        return model.template(u, tid)
+    return {"template": model.template_public(await run_in_threadpool(edit), u)}
+
+
+@router.delete("/api/templates/{tid}", dependencies=[access.signed_in])
+def del_template(tid: int, request: Request):
+    _template(request.state.user, tid, True)
+    model.db.ex("DELETE FROM tsk_templates WHERE id = %s", (tid,))
+    return {"ok": True}
+
+
+@router.post("/api/templates/{tid}/apply", dependencies=[access.signed_in])
+async def apply_template(tid: int, request: Request):
+    """{listId, due?}: add the template's tasks to a list (due: a day they are all due on). {created, undo}."""
+    u = request.state.user
+    b = await json_body(request)
+    due = _day(str(b.get("due") or "") or None, "due")
+
+    def run():
+        t = _template(u, tid)
+        c = writable_list(u, b.get("listId"))
+        with model.step() as step:
+            return {"created": model.apply_template(t, c["id"], u["id"], due.isoformat() if due else None), "undo": step}
+    return await run_in_threadpool(run)
 
 
 # ------------------------------------------------------------------ family members
