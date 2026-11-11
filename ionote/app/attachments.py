@@ -178,9 +178,3 @@ def set_text(att_uid: str, found: str, sha: str):
         if r:
             con.execute("UPDATE nts_attachments SET text = ? WHERE uuid = ?", (found[:MAX_TEXT], att_uid))
             con.execute("UPDATE nts_notes SET rev = ? WHERE uuid = ?", (db.next_rev(con), r[0]))
-
-
-def stats() -> dict:
-    with db.connect() as con:
-        n, size = con.execute("SELECT count(*), coalesce(sum(size_bytes), 0) FROM nts_attachments").fetchone()
-    return {"files": int(n), "bytes": int(size)}

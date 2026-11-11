@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from iosuite_shared import chores, mcp as shared_mcp, users
 from iosuite_shared.updates import setup_log
 
-from app import __version__, attachments, config, db, images, mcp, suitedb
+from app import __version__, config, db, mcp, suitedb
 from app import notes as notes_mod
 from app.auth import auth, updater
 from app.routes import auth as auth_routes, notes as notes_routes, settings, users as users_routes
@@ -124,11 +124,8 @@ app.include_router(users_routes.router)  # /api/users: accounts and their role h
 app.include_router(auth.admin_router())  # /api/suite-admin (+ ui.js, the Settings › Security panel): the whole suite (suite admins)
 app.include_router(auth.status_router(updater, extra=_status_extra))  # /api/status: public, the same shape in every app
 def _server_info() -> dict:
-    """What Settings › Server shows beside the updater's own fields: the MCP box, and This server (how many pictures and
-    files the database holds)."""
-    im, at = images.stats(), attachments.stats()
-    about = [["Pictures", f"{im['images']}, {im['bytes'] / 1048576:.1f} MB"], ["Attached files", f"{at['files']}, {at['bytes'] / 1048576:.1f} MB"]]
-    return {"about": about, "mcpEnabled": mcp_enabled(), "mcpLocked": config.MCP_FORCED,
+    """What Settings › Server shows beside the updater's own fields: the MCP box."""
+    return {"mcpEnabled": mcp_enabled(), "mcpLocked": config.MCP_FORCED,
             "mcpAbout": "Lets an AI assistant search, read and write your notes, as you."}
 
 
