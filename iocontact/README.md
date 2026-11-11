@@ -146,6 +146,10 @@ directory for Mail on a Mac), with a new app password for that device inside (or
 only, so a lost phone or a leaked profile file does not reach the web app, the REST API or MCP. Open the
 page in Safari on the iPhone, tap Download, then Settings › Profile Downloaded › Install.
 
+Where the suite has more than one app that syncs (ioCalendar, ioContacts, ioTasks), *Set up* in the same box offers
+**All apps**: one profile with the account of each, and an app password of its own per app (the birthday calendar and
+the LDAP directory are in ioContacts' own profile only).
+
 Settings › Apps and devices shows the exact addresses to type; Settings › Account makes **app passwords**: one per phone or app, revocable on its own, used with your user name for CardDAV, LDAP and the REST API (HTTP Basic, or `Authorization: Bearer <app password>`). *Contacts apps only* (ticked by default) limits a password to CardDAV and LDAP: the web sign-in, the REST API and MCP answer it with 403. Untick it for a script or an AI assistant.
 
 ```sh

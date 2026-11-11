@@ -11,7 +11,7 @@ import re
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
-from iosuite_shared import users as shared_users
+from iosuite_shared import appleprofile, users as shared_users
 from iosuite_shared.access import json_body
 
 from app import access, calendar, config, csvio, db, enrich, iopix, limits, model, quality, relations as rel, users, vcard
@@ -606,7 +606,7 @@ def export_text(ids: list[int], format: str = "vcf") -> tuple[str, str, str]:
 
 # ------------------------------------------------------------------ calendar and connection details
 
-def _base(request: Request) -> str:
+def base_url(request: Request) -> str:
     if config.PUBLIC_URL:
         return config.PUBLIC_URL
     proto = request.headers.get("x-forwarded-proto") or request.url.scheme
@@ -618,7 +618,7 @@ def _base(request: Request) -> str:
 def connect_info(request: Request):
     """What to type into a mail, contacts or calendar app."""
     u = auth.current_user(request)
-    base = _base(request)
+    base = base_url(request)
     tok = users.calendar_token(u["id"])
     host = re.sub(r"^https?://", "", base).split("/")[0].split(":")[0]
     return {"user": u["name"], "server": base, "carddav": f"{base}/dav/", "principal": f"{base}/dav/principals/{u['name']}/",
@@ -633,28 +633,22 @@ def connect_info(request: Request):
 def _apple_profile(request: Request, label: str, password: str, calendar: str, ldap: bool) -> tuple:
     """(bytes, file name) of a configuration profile (.mobileconfig) that sets an iPhone, iPad or Mac up in one go: the CardDAV account for the
     contacts and, if asked, the birthday calendar subscription (and the LDAP directory). password: "new" puts a new app
-    password (named after label) in the profile; "ask" leaves it out, and the device asks for it while installing."""
-    import plistlib
+    password (named after label) in the profile; "ask" leaves it out, and the device asks for it while installing. The
+    profile for all the apps that sync (the accounts only) is iosuite-shared's (auth.profile_router in main.py)."""
     import uuid
     from urllib.parse import urlsplit
     u = auth.current_user(request)
-    base = _base(request)
+    if u.get("passwordless"):
+        raise HTTPException(403, "A one-click account cannot have app passwords")
+    base = base_url(request)
     parts = urlsplit(base)
     ssl = parts.scheme == "https"
     host = parts.hostname or "localhost"
-    port = parts.port or (443 if ssl else 80)
-    label = (label or "iPhone").strip()[:48] or "iPhone"
     # the profile's password is for CardDAV and LDAP only: a lost phone or a leaked profile file does not reach the web app, API or MCP
-    secret = users.create_app_password(u["id"], f"{label} (profile)", protocols_only=True) if password == "new" else None
-    ident = "net.iothing.iocontacts." + re.sub(r"[^A-Za-z0-9.-]", "-", host) + "." + re.sub(r"[^A-Za-z0-9-]", "-", u["name"])
-    who = u.get("display_name") or u["name"]
-    carddav = {"PayloadType": "com.apple.carddav.account", "PayloadVersion": 1, "PayloadIdentifier": ident + ".carddav",
-               "PayloadUUID": str(uuid.uuid4()).upper(), "PayloadDisplayName": "Contacts (CardDAV)",
-               "CardDAVAccountDescription": "ioContacts", "CardDAVHostName": host, "CardDAVPort": port, "CardDAVUseSSL": ssl,
-               "CardDAVPrincipalURL": f"{parts.path.rstrip('/')}/dav/principals/{u['name']}/", "CardDAVUsername": u["name"]}
-    if secret:
-        carddav["CardDAVPassword"] = secret
-    content = [carddav]
+    secret = appleprofile.new_password(u, config.APP, label) if password == "new" else None
+    ident = appleprofile.ident(config.APP, base, u)
+    who = u.get("displayName") or u["name"]
+    content = [appleprofile.account(config.APP, "ioContacts", base, u, secret)]
     if calendar in ("family", "all"):
         tok = users.calendar_token(u["id"])
         content.append({"PayloadType": "com.apple.subscribedcalendar.account", "PayloadVersion": 1,
@@ -672,28 +666,17 @@ def _apple_profile(request: Request, label: str, password: str, calendar: str, l
         if secret:
             lp["LDAPAccountPassword"] = secret
         content.append(lp)
-    profile = {"PayloadType": "Configuration", "PayloadVersion": 1, "PayloadIdentifier": ident,
-               "PayloadUUID": str(uuid.uuid4()).upper(), "PayloadDisplayName": f"ioContacts for {who}",
-               "PayloadDescription": f"Sets up {who}'s ioContacts contacts" + (" and the birthday calendar" if len(content) > 1 else "")
-                                     + f" from {host}." + ("" if secret else " The device asks for an app password while installing."),
-               "PayloadOrganization": "ioContacts", "PayloadRemovalDisallowed": False, "PayloadContent": content}
-    return plistlib.dumps(profile), f'iocontacts-{re.sub(r"[^A-Za-z0-9-]", "-", u["name"])}.mobileconfig'
-
-
-def _profile_response(body: bytes, name: str) -> Response:
-    return Response(body, media_type="application/x-apple-aspen-config",
-                    headers={"Content-Disposition": f'attachment; filename="{name}"', "Cache-Control": "no-store"})
+    body = appleprofile.build(ident, f"ioContacts for {who}",
+                              f"Sets up {who}'s ioContacts contacts" + (" and the birthday calendar" if len(content) > 1 else "")
+                              + f" from {host}." + appleprofile.asks(secret), "ioContacts", content)
+    return body, appleprofile.file_name(config.APP, u)
 
 
 @router.post("/api/apple-profile", dependencies=[access.signed_in])
 def apple_profile(request: Request, label: str = Form("iPhone"), password: str = Form("new"), calendar: str = Form("family"),
                   ldap: bool = Form(False)):
     """The profile itself, as the answer to a form post (a browser tab that downloads in place: Safari, a Mac)."""
-    return _profile_response(*_apple_profile(request, label, password, calendar, ldap))
-
-
-PROFILE_LINK_SECONDS = 600
-_profile_links: dict = {}  # token -> (expires, bytes, file name): a few minutes, in this process
+    return appleprofile.response(*_apple_profile(request, label, password, calendar, ldap))
 
 
 @router.post("/api/apple-profile/link", dependencies=[access.signed_in])
@@ -702,28 +685,9 @@ async def apple_profile_link(request: Request):
     that needs no cookie. The app on the Home Screen hands a download to a separate browser sheet that has none of its
     cookies, so a form post answers that sheet "Sign in"; a link it can open by itself works. The link may be opened
     more than once in its few minutes and always gives the same profile, with one app password."""
-    import secrets
-    import time
     b = await json_body(request)
-    body, name = await run_in_threadpool(_apple_profile, request, str(b.get("label") or ""), str(b.get("password") or "new"),
-                                         str(b.get("calendar") or "family"), bool(b.get("ldap")))
-    now = time.monotonic()
-    for t in [t for t, v in _profile_links.items() if v[0] < now]:
-        _profile_links.pop(t, None)
-    token = secrets.token_urlsafe(24)
-    _profile_links[token] = (now + PROFILE_LINK_SECONDS, body, name)
-    return {"url": f"/profile/{token}/{name}", "expiresIn": PROFILE_LINK_SECONDS}
-
-
-@router.get("/profile/{token}/{name}", include_in_schema=False)
-def apple_profile_download(token: str, name: str):
-    import time
-    hit = _profile_links.get(token)
-    if not hit or hit[0] < time.monotonic():
-        _profile_links.pop(token, None)
-        return Response("This download link has expired. Make a new one in ioContacts: Settings › Apps and devices.",
-                        status_code=404, media_type="text/plain; charset=utf-8", headers={"Cache-Control": "no-store"})
-    return _profile_response(hit[1], hit[2])
+    return appleprofile.link(*await run_in_threadpool(_apple_profile, request, str(b.get("label") or ""), str(b.get("password") or "new"),
+                                                      str(b.get("calendar") or "family"), bool(b.get("ldap"))))
 
 
 @router.post("/api/calendar/reset", dependencies=[access.signed_in])
@@ -742,7 +706,7 @@ def calendar_feed(token: str, which: str, request: Request):
         ids, title = [b["id"] for b in books if b["owner_id"] is None], "Family birthdays"
     else:
         ids, title = [b["id"] for b in books], "Birthdays"
-    return Response(calendar.feed(ids, title, _base(request)), media_type="text/calendar; charset=utf-8")
+    return Response(calendar.feed(ids, title, base_url(request)), media_type="text/calendar; charset=utf-8")
 
 
 # ------------------------------------------------------------------ ioPix

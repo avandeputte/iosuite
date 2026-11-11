@@ -421,3 +421,26 @@ def test_settings_server_is_the_shared_panel(client):
     assert s["name"] == "ioContacts" and "mcpEnabled" in s and s["mcpAbout"]
     assert [k for k, _ in s["about"]] == ["LDAP directory"]
     assert client.post("/api/auth/logout_all").status_code in (404, 405)  # Sign out is the only sign out
+
+
+def test_profile_for_all_apps_that_sync(client):
+    """With another app that syncs in the suite, one profile sets up both, each account with an app password of its
+    own app; this app's own profile stays, and with no other app there is no such choice."""
+    import plistlib
+    from iosuite_shared import suite
+    assert [a["app"] for a in client.get("/api/apple-profile/suite").json()["apps"]] == ["iocontacts"]
+    assert client.post("/api/apple-profile/suite/link", json={}).status_code == 409
+    suite.register("iocalendar", name="ioCalendar", url="https://other.example.com")
+    assert sorted(a["app"] for a in client.get("/api/apple-profile/suite").json()["apps"]) == sorted(["iocontacts", "iocalendar"])
+    r = client.post("/api/apple-profile/suite/link", json={"label": "iPhone", "password": "new"}).json()
+    assert r["url"].endswith("/iosuite-alex.mobileconfig")
+    p = plistlib.loads(client.get(r["url"]).content)
+    assert p["PayloadDisplayName"].startswith("ioSuite for ")
+    own = next(x for x in p["PayloadContent"] if x.get("CardDAVAccountDescription") == "ioContacts")
+    other = next(x for x in p["PayloadContent"] if x is not own)
+    assert other["CalDAVHostName"] == "other.example.com" and other["CalDAVPassword"].startswith("iocalendar-")
+    pw = own["CardDAVPassword"]
+    assert pw.startswith("iocontacts-")
+    client.cookies.clear()
+    assert client.request("PROPFIND", "/dav/", auth=("alex", pw), headers={"Depth": "0"}).status_code == 207
+    assert client.request("PROPFIND", "/dav/", auth=("alex", other["CalDAVPassword"]), headers={"Depth": "0"}).status_code == 401
