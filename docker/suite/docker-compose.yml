@@ -84,6 +84,17 @@ services:
       # PUBLIC_URL: https://calendar.example.com
       # INTERNAL_URL: http://192.168.1.151:8620   # this host's LAN address and the port, for the suite's list of apps
 
+  iotasks:
+    <<: *app
+    image: ghcr.io/avandeputte/iotasks:latest
+    container_name: iotasks
+    ports: ["8670:8670"]                 # web app, CalDAV for reminders apps (/dav/), REST API, MCP (/mcp)
+    environment:
+      <<: *shared
+      DB_NAME: tasks
+      # PUBLIC_URL: https://tasks.example.com
+      # INTERNAL_URL: http://192.168.1.151:8670   # this host's LAN address and the port, for the suite's list of apps
+
   iocontacts:
     <<: *app
     image: ghcr.io/avandeputte/iocontacts:latest
@@ -151,12 +162,14 @@ configs:
       GRANT ALL PRIVILEGES ON iosuite.* TO 'iosuite'@'%';
       CREATE DATABASE IF NOT EXISTS suite CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
       CREATE DATABASE IF NOT EXISTS calendar CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+      CREATE DATABASE IF NOT EXISTS tasks CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
       CREATE DATABASE IF NOT EXISTS contacts CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
       CREATE DATABASE IF NOT EXISTS notes CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
       CREATE DATABASE IF NOT EXISTS health CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
       CREATE DATABASE IF NOT EXISTS iopix CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
       GRANT ALL PRIVILEGES ON suite.* TO 'suite'@'%';
       GRANT ALL PRIVILEGES ON calendar.* TO 'suite'@'%';
+      GRANT ALL PRIVILEGES ON tasks.* TO 'suite'@'%';
       GRANT ALL PRIVILEGES ON contacts.* TO 'suite'@'%';
       GRANT ALL PRIVILEGES ON notes.* TO 'suite'@'%';
       GRANT ALL PRIVILEGES ON health.* TO 'suite'@'%';

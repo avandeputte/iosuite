@@ -16,7 +16,7 @@ def test_status_and_signin(client):
 
 def test_tiles_are_the_registered_apps(client):
     items = client.get("/api/apps", headers={"host": "home.lan:8630"}).json()["items"]
-    assert [t["key"] for t in items] == ["iopix", "iohealth", "iocalendar", "iocontacts", "ionotes"]
+    assert [t["key"] for t in items] == ["iopix", "iohealth", "iocalendar", "iotasks", "iocontacts", "ionotes"]
     by = {t["key"]: t for t in items}
     assert by["iopix"]["url"] == "https://pix.example.com" and by["iocontacts"]["name"] == "ioContacts"
     assert "hidden" not in by["iopix"] and "port" not in by["iopix"]
@@ -103,4 +103,4 @@ def test_tiles_are_the_apps_each_person_may_use(client):
     client.post("/api/auth/login", json={"name": "kid", "password": "secret123"})
     shared_db.settings_cache.clear()
     keys = [t["key"] for t in client.get("/api/apps").json()["items"]]
-    assert keys == ["iopix", "iocalendar", "iocontacts", "ionotes"]   # neither ioHealth nor the admin tool
+    assert keys == ["iopix", "iocalendar", "iotasks", "iocontacts", "ionotes"]   # neither ioHealth nor the admin tool

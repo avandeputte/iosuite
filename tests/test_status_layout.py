@@ -14,7 +14,8 @@ def fresh():
 def test_apps_status_from_each_apps_status(client, monkeypatch):
     answers = {"iopix": {"app": "ioPix", "version": "1.4.0", "update": {"version": "1.5.0", "remote": "1.5.0"}},
                "iohealth": {"app": "ioHealth", "version": "2.0", "update": None},
-               "iocalendar": {"app": "ioCalendar", "version": "0.9", "update": None}}
+               "iocalendar": {"app": "ioCalendar", "version": "0.9", "update": None},
+               "iotasks": {"app": "ioTasks", "version": "0.1", "update": None}}
     asked = []
 
     def fake(request, key, path, params=None, raw=False):
@@ -29,9 +30,9 @@ def test_apps_status_from_each_apps_status(client, monkeypatch):
     assert d["iopix"] == {"ok": True, "version": "1.4.0", "update": "1.5.0", "why": None}
     assert d["iohealth"]["ok"] and d["iohealth"]["update"] is None and d["iocalendar"]["update"] is None
     assert d["iocontacts"]["ok"] is True and d["ionotes"] == {"ok": False, "version": None, "update": None, "why": "ionotes is not reachable (URLError)"}
-    assert sorted(asked) == ["iocalendar", "iocontacts", "iohealth", "ionotes", "iopix"]
+    assert sorted(asked) == ["iocalendar", "iocontacts", "iohealth", "ionotes", "iopix", "iotasks"]
     client.get("/api/apps/status")
-    assert len(asked) == 5  # remembered for a minute
+    assert len(asked) == 6  # remembered for a minute
     client.cookies.clear()
     assert client.get("/api/apps/status").status_code == 401
 
