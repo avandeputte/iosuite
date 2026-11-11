@@ -106,7 +106,7 @@ def auth_env(name: str) -> dict:
 
 
 # ---- what every app's test suite does the same way
-SHARED_TABLES = ("ios_user_roles", "ios_user_data", "ios_app_passwords", "ios_sessions", "ios_users", "ios_settings", "ios_apps", "ios_credentials")
+SHARED_TABLES = ("ios_user_roles", "ios_user_data", "ios_app_passwords", "ios_sessions", "ios_users", "ios_settings", "ios_apps", "ios_credentials", "ios_updates")
 
 
 def clean_shared_tables(auth=None) -> None:

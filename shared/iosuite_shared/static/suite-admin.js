@@ -19,6 +19,7 @@ const ICONS = {
   people: 'M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z',
   key: 'M12.65 10C11.83 7.67 9.61 6 7 6c-3.31 0-6 2.69-6 6s2.69 6 6 6c2.61 0 4.83-1.67 5.65-4H17v4h4v-4h2v-4H12.65zM7 14c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z',
   apps: 'M4 8h4V4H4v4zm6 12h4v-4h-4v4zm-6 0h4v-4H4v4zm0-6h4v-4H4v4zm6 0h4v-4h-4v4zm6-10v4h4V4h-4zm-6 4h4V4h-4v4zm6 6h4v-4h-4v4zm0 6h4v-4h-4v4z',
+  update: 'M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z',
   lock: 'M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zM9 8V6c0-1.66 1.34-3 3-3s3 1.34 3 3v2H9z',
 };
 const icon = (n) => { const s = document.createElement('span'); s.className = 'sa-ic'; s.innerHTML = `<svg viewBox="0 0 24 24"><path d="${ICONS[n] || ''}"/></svg>`; return s; };
@@ -190,13 +191,13 @@ function sinceText(ts) {
 const appLabel = (o, key) => (o.apps.find((a) => a.app === key) || {}).name || key;
 
 // ------------------------------------------------------------------ the panel
-export const SUBS = [['people', 'People'], ['roles', 'Roles'], ['passwords', 'App passwords'], ['signin', 'Sign-in at the proxy'], ['apps', 'Apps'], ['keys', 'Keys and tokens']];
+export const SUBS = [['people', 'People'], ['roles', 'Roles'], ['passwords', 'App passwords'], ['signin', 'Sign-in at the proxy'], ['apps', 'Apps'], ['updates', 'Updates'], ['keys', 'Keys and tokens']];
 /** The two Settings tabs the panel fills, in every app: #/settings/security/<sub> and #/settings/global/<sub>. */
 export const TABS = {
   security: { label: 'Security', subs: ['people', 'roles', 'passwords', 'signin'],
     intro: 'Who can sign in to the io apps, and with which role. Changes apply to every app.' },
-  global: { label: 'Global settings', subs: ['apps', 'keys'],
-    intro: 'Settings for every io app: default roles, sign-in, and keys.' },
+  global: { label: 'Global settings', subs: ['apps', 'updates', 'keys'],
+    intro: 'Settings for every io app: default roles, sign-in, updates and keys.' },
 };
 
 /** Draw the panel into `el`. Options: tab (security or global: which parts are shown, see TABS), sub (the first part
@@ -221,7 +222,7 @@ export async function mount(el, opts = {}) {
       h('div', { class: 'sa-segs' }, subs.map(([k, l]) => h('button', { class: sub === k ? 'on' : '', onclick: () => go(k) }, l))),
       body);
     const ctx = { o, redraw: draw, go, photoPeople };
-    await ({ people: people, roles: roles, passwords: passwords, keys: keys, apps: apps, signin: signin })[sub](body, ctx);
+    await ({ people: people, roles: roles, passwords: passwords, keys: keys, apps: apps, updates: updates, signin: signin })[sub](body, ctx);
   };
   const go = (k) => { sub = k; if (opts.onSub) opts.onSub(k); draw(); };
   await draw();
@@ -515,6 +516,60 @@ function apps(el, ctx) {
           h('td', { style: { textAlign: 'right' } }, h('button', { class: 'sa-btn danger', onclick: () => forgetApp(ctx, a) }, 'Forget')));
       }))));
 }
+/* Updates: every app's version against GitHub, and updating them all from here (iosuite_shared.suiteupdates). The
+   apps pick a request up within seconds, so the list refreshes itself while something is waiting or running. */
+const UPDATE_STATUS = { current: 'up to date', update: 'update waiting', error: 'check failed' };
+async function updates(el) {
+  let d;
+  try { d = await api('updates'); } catch (e) { el.replaceChildren(h('p', { class: 'sa-err' }, e.message)); return; }
+  const list = h('div');
+  const head = h('div', { class: 'sa-multi', style: { margin: '6px 0 10px' } });
+  let timer = null, until = 0;
+  const busy = () => d.apps.some((a) => a.pending || a.state === 'running');
+  const refresh = async () => {
+    timer = null;
+    if (!el.isConnected) return;
+    try { d = await api('updates'); draw(); } catch { /* try again on the next tick */ }
+    if ((busy() || Date.now() < until) && Date.now() < until + 180000) timer = setTimeout(refresh, 4000);
+  };
+  const watch = () => { until = Date.now() + 30000; if (!timer) timer = setTimeout(refresh, 3000); };
+  const ask = async (action, apps) => {
+    try {
+      const r = await api('updates', { method: 'POST', json: { action, ...(apps ? { apps } : {}) } });
+      d = { apps: r.apps }; draw(); watch();
+      toast(r.asked.length ? `${action === 'check' ? 'Checking' : 'Updating'} ${r.asked.length === 1 ? appLabel({ apps: d.apps }, r.asked[0]) : `${r.asked.length} apps`}` : 'No app has an update waiting');
+    } catch (e) { fail(e); }
+  };
+  const last = (a) => {
+    if (a.pending) return h('span', { class: 'sa-muted' }, `${a.pending === 'update' ? 'update' : 'check'} asked ${sinceText(a.requested)}${a.requestedBy ? ` by ${a.requestedBy}` : ''}`);
+    if (!a.state) return h('span', { class: 'sa-muted' }, '–');
+    return h('span', { class: a.state === 'failed' ? 'sa-err' : '' }, a.state === 'running' ? 'running…' : a.state, a.message ? h('div', { class: 'sa-muted sa-small' }, a.message) : null);
+  };
+  const draw = () => {
+    const waiting = d.apps.filter((a) => a.status === 'update' && a.canUpdate);
+    head.replaceChildren(
+      h('button', { class: 'sa-btn', onclick: () => ask('check') }, 'Check all now'),
+      h('button', { class: 'sa-btn primary', disabled: waiting.length ? null : true, onclick: () => ask('update') }, waiting.length ? `Update all (${waiting.length})` : 'Update all'));
+    list.replaceChildren(h('table', { class: 'sa-t' }, h('tr', null, h('th', null, 'App'), h('th', null, 'Installed'), h('th', null, 'On GitHub'), h('th', null, 'Last update'), h('th')),
+      d.apps.map((a) => h('tr', null,
+        h('td', null, h('b', null, a.name), h('div', { class: 'sa-muted sa-small' }, a.app)),
+        h('td', { class: 'sa-small' }, a.version || '–', a.commit ? h('div', { class: 'sa-muted' }, a.commit) : null),
+        h('td', { class: 'sa-small' }, !a.watching ? h('span', { class: 'sa-muted' }, 'not reporting (not running, or on an older iosuite-shared)')
+          : [a.latest || '–', h('div', { class: a.status === 'error' ? 'sa-err' : 'sa-muted' }, `${UPDATE_STATUS[a.status] || 'not checked'} · ${sinceText(a.checked)}`)]),
+        h('td', { class: 'sa-small' }, last(a)),
+        h('td', { style: { textAlign: 'right' } }, a.docker ? h('span', { class: 'sa-muted sa-small' }, 'Docker: pull the image')
+          : !a.watching ? null
+          : h('button', { class: 'sa-btn', disabled: a.canUpdate && !a.pending && a.state !== 'running' ? null : true,
+            title: a.canUpdate ? `Run ${a.name}'s update.sh now` : 'This install cannot update itself (no update.sh or .venv, or the folder is not writable)',
+            onclick: () => ask('update', [a.app]) }, 'Update'))))));
+  };
+  draw();
+  if (busy()) watch();
+  el.append(box('update', 'Updates',
+    h('p', { class: 'sa-muted' }, 'Each app checks GitHub for a newer version and updates itself with its own update.sh, as under Settings › Server, but all from here. An app picks up what you ask within ten seconds; its settings and data stay. An AI assistant can do the same through the start page’s MCP endpoint.'),
+    head, list));
+}
+
 async function forgetApp(ctx, a) {
   const data = h('input', { type: 'checkbox' });
   const v = await dialog(`Forget ${a.name}`, h('div', null, h('p', null, `Take ${a.name} off the list of apps? If it is still installed, it comes back the next time it starts.`),
