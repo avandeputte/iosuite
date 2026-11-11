@@ -148,11 +148,16 @@ function drawUser() {
 }
 /* The suite (iosuite-shared's suite_apps): when other ioThing apps are registered, the app mark opens a menu of them. */
 async function loadSuite() {
-  try { const r = await api('/api/auth/suite'); S.suite = (r.items || []).filter((a) => a.app !== r.app && a.url); } catch { S.suite = []; }
+  try {
+    const r = await api('/api/auth/suite');
+    S.suite = (r.items || []).filter((a) => a.url); suiteSelf = r.app;  // in the suite's one order, this app too
+    if (!S.suite.some((a) => a.app !== r.app)) S.suite = [];  // only this app: no menu
+  } catch { S.suite = []; }
   const b = $('#suitebtn');
   if (b) { b.hidden = !S.suite.length; b.onclick = () => toggleSuite(b); }
   drawNav();
 }
+let suiteSelf = null;  // this app's key, marked in the menu
 let suitePop = null;
 function closeSuite() {
   if (!suitePop) return;
@@ -164,7 +169,10 @@ function appTile(a) {
   const mark = (a.name || a.app).replace(/^io(?=[A-Z])/, '').slice(0, 1).toUpperCase();
   const fallback = () => h('span', { class: 'appic fb', style: { background: a.color || 'var(--brand)' } }, mark);
   const ic = a.icon ? h('img', { class: 'appic', src: a.icon, alt: '', onerror: (e) => e.currentTarget.replaceWith(fallback()) }) : fallback();
-  return h('a', { class: 'apptile', href: a.url, role: 'menuitem', title: a.description || a.name, onclick: closeSuite }, ic, h('span', { class: 'appnm' }, a.name || a.app));
+  const el = h('a', { class: 'apptile', href: a.url, role: 'menuitem', title: a.description || a.name, onclick: closeSuite }, ic, h('span', { class: 'appnm' }, a.name || a.app));
+  el.classList.toggle('tool', !!a.adminTool);  // admin tools: a smaller icon
+  if (a.app === suiteSelf) { el.classList.add('cur'); el.setAttribute('aria-current', 'page'); }
+  return el;
 }
 function toggleSuite(btn) {
   if (suitePop) { closeSuite(); return; }
