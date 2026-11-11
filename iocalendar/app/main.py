@@ -29,8 +29,8 @@ class FeedTokenFilter(logging.Filter):
 
     def filter(self, record: logging.LogRecord) -> bool:
         a = record.args
-        if isinstance(a, tuple) and len(a) > 2 and isinstance(a[2], str) and "/ics/" in a[2]:
-            record.args = (*a[:2], re.sub(r"/ics/[^/?\s]+", "/ics/-", a[2], count=1), *a[3:])
+        if isinstance(a, tuple) and len(a) > 2 and isinstance(a[2], str) and ("/ics/" in a[2] or "/profile/" in a[2]):
+            record.args = (*a[:2], re.sub(r"/(ics|profile)/[^/?\s]+", r"/\1/-", a[2], count=1), *a[3:])
         return True
 
 
@@ -39,7 +39,7 @@ logging.getLogger("uvicorn.access").addFilter(FeedTokenFilter())
 # what a visitor may still fetch when sign-in is required: the app shell and its files, the API docs, the subscription
 # links and CalDAV (their own sign-in), and the MCP endpoint (its gate below)
 OPEN_PATHS = ("/", "/manifest.webmanifest", "/api/docs", "/api/openapi.json")
-OPEN_PREFIXES = ("/static/", "/ics/", "/dav", "/.well-known/", "/mcp")
+OPEN_PREFIXES = ("/static/", "/ics/", "/dav", "/.well-known/", "/mcp", "/profile/")
 
 
 @asynccontextmanager
