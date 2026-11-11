@@ -67,18 +67,18 @@ const CSS = `
 .iosa .sa-segs { display: inline-flex; gap: 2px; padding: 3px; border-radius: 999px; background: var(--sa-bg2); margin: 4px 0 14px; flex-wrap: wrap; }
 .iosa .sa-segs button { font: inherit; border: 0; background: none; cursor: pointer; padding: 6px 14px; border-radius: 999px; color: var(--sa-fg2); }
 .iosa .sa-segs button.on { background: var(--sa-bg); color: var(--sa-accent); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.12); }
-.iosa .sa-box { border: 1px solid var(--sa-line); border-radius: 16px; padding: 16px 20px; margin-bottom: 16px; background: var(--card, transparent); }
+.iosa .sa-box { border: 1px solid var(--sa-line); border-radius: 16px; padding: 16px 20px; margin-bottom: 16px; background: var(--card, transparent); min-width: min-content; }  /* a table wider than the page widens its box; past the window, the page scrolls at its edge */
 .iosa .sa-box h2 { margin: 0 0 6px; font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
 .iosa .sa-box h2 .sa-ic { color: var(--sa-brand); }
 .iosa .sa-box h3 { margin: 16px 0 4px; font-size: 13px; font-weight: 600; }
 .iosa .sa-box p { margin: 6px 0; }
-.iosa .sa-scrollx { overflow-x: auto; max-width: 100%; }
 .iosa table.sa-t { border-collapse: collapse; width: 100%; }
 .iosa table.sa-t th, .iosa table.sa-t td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--sa-line); vertical-align: middle; }
 .iosa table.sa-t th { font-size: 12px; color: var(--sa-fg2); font-weight: 600; }
 .iosa .sa-face, .iosa-back .sa-face { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; flex: none; background: var(--sa-bg2); }
 .iosa .sa-who, .iosa-back .sa-who { display: flex; align-items: center; gap: 8px; }
-.iosa table.sa-roles th, .iosa table.sa-roles td { white-space: nowrap; }
+.iosa table.sa-roles th, .iosa table.sa-roles td { white-space: nowrap; padding: 8px 6px; }  /* compact: a column per app */
+.iosa table.sa-roles select.sa-in.sa-sm { font-size: 13px; padding: 0 4px; }
 .iosa .sa-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: middle; }
 .iosa a { color: var(--sa-accent); }
 .iosa input.sa-in, .iosa select.sa-in, .iosa textarea.sa-in, .iosa-back input.sa-in, .iosa-back select.sa-in, .iosa-back textarea.sa-in {
@@ -230,7 +230,7 @@ function people(el, ctx) {
     }
   });
   el.append(box('people', 'People',
-    h('div', { class: 'sa-scrollx' }, h('table', { class: 'sa-t' }, h('tr', null, h('th', null, 'Account'), photoTh, h('th', null, 'Email'), h('th', null, 'Sign-in'), h('th', null, 'Last seen'), h('th')),
+    h('table', { class: 'sa-t' }, h('tr', null, h('th', null, 'Account'), photoTh, h('th', null, 'Email'), h('th', null, 'Sign-in'), h('th', null, 'Last seen'), h('th')),
       o.users.map((u) => h('tr', null,
         h('td', null, h('b', null, u.displayName), h('div', { class: 'sa-muted sa-small' }, u.name,
           u.suiteAdmin ? ' · suite admin' : '', u.listed ? '' : ' · not on the sign-in list', u.id === o.me ? ' · you' : '')),
@@ -239,7 +239,7 @@ function people(el, ctx) {
         h('td', { class: 'sa-small' }, u.passwordless ? 'One click (LAN, viewer)' : 'Password',
           u.appPasswords ? h('div', { class: 'sa-muted' }, `${u.appPasswords} app password${u.appPasswords > 1 ? 's' : ''}`) : null),
         h('td', { class: 'sa-small' }, sinceText(u.lastSeen || u.last_login), h('div', { class: 'sa-muted' }, `${u.sessions} session${u.sessions === 1 ? '' : 's'}`)),
-        h('td', { style: { textAlign: 'right' } }, h('button', { class: 'sa-btn', onclick: () => editAccount(ctx, u) }, 'Manage')))))),
+        h('td', { style: { textAlign: 'right' } }, h('button', { class: 'sa-btn', onclick: () => editAccount(ctx, u) }, 'Manage'))))),
     h('p', null, h('button', { class: 'sa-btn primary', onclick: () => editAccount(ctx, null) }, icon('add'), 'Add someone'))));
 }
 
@@ -339,7 +339,7 @@ function roles(el, ctx) {
   const { o } = ctx;
   el.append(box('lock', 'Roles',
     h('p', { class: 'sa-muted' }, 'none, viewer, editor or admin. “default” follows the app’s default role (under Apps). Suite admins are admin everywhere.'),
-    h('div', { class: 'sa-scrollx' }, h('table', { class: 'sa-t sa-roles' },
+    h('table', { class: 'sa-t sa-roles' },
       h('tr', null, h('th', null, 'Person'), o.apps.map((a) => h('th', null, a.name, h('div', { class: 'sa-muted sa-small' }, `default: ${a.defaultRole}`)))),
       o.users.map((u) => h('tr', null, h('td', null, h('b', null, u.displayName), h('div', { class: 'sa-muted sa-small' }, u.name)),
         o.apps.map((a) => {
@@ -349,14 +349,14 @@ function roles(el, ctx) {
             try { await api(`users/${u.id}`, { method: 'PATCH', json: { roles: { [a.app]: s.value || null } } }); u.roles[a.app] = s.value || undefined; toast(`${u.displayName}: ${s.value || 'default'} in ${a.name}`); } catch (e) { fail(e); ctx.redraw(); }
           };
           return h('td', null, s);
-        })))))));
+        }))))));
 }
 
 async function passwords(el, ctx) {
   const { o } = ctx;
   const fu = h('select', { class: 'sa-in sa-sm' }, h('option', { value: '' }, 'Everyone'), o.users.map((u) => h('option', { value: u.id }, u.displayName)));
   const fa = h('select', { class: 'sa-in sa-sm' }, h('option', { value: '' }, 'Every app'), o.apps.map((a) => h('option', { value: a.app }, a.name)));
-  const list = h('div', { class: 'sa-scrollx' });
+  const list = h('div');
   const draw = async () => {
     let r; try { r = await api(`app-passwords?${new URLSearchParams({ ...(fu.value ? { user: fu.value } : {}), ...(fa.value ? { app: fa.value } : {}) })}`); } catch (e) { list.replaceChildren(h('p', { class: 'sa-err' }, e.message)); return; }
     list.replaceChildren(r.items.length ? h('table', { class: 'sa-t' }, h('tr', null, h('th', null, 'Person'), h('th', null, 'App'), h('th', null, 'Device'), h('th', null, 'Reaches'), h('th', null, 'Made'), h('th', null, 'Last used'), h('th')),
@@ -424,7 +424,7 @@ function apps(el, ctx) {
   const { o } = ctx;
   el.append(box('apps', 'Apps',
     h('p', { class: 'sa-muted' }, 'The default role is what someone without a role in the app gets (“none”: invitation only). “Sign-in required” shows visitors only the sign-in page.'),
-    h('div', { class: 'sa-scrollx' }, h('table', { class: 'sa-t' }, h('tr', null, h('th', null, 'App'), h('th', null, 'Version'), h('th', null, 'Default role'), h('th', null, 'Sign-in required'), h('th', null, 'In use'), h('th')),
+    h('table', { class: 'sa-t' }, h('tr', null, h('th', null, 'App'), h('th', null, 'Version'), h('th', null, 'Default role'), h('th', null, 'Sign-in required'), h('th', null, 'In use'), h('th')),
       o.apps.map((a) => {
         const dr = h('select', { class: 'sa-in sa-sm' }, (o.defaultRoles || ['none', 'viewer', 'editor']).map((x) => h('option', { value: x, selected: x === a.defaultRole ? true : null }, `${x} (${ROLE_HELP[x]})`)));
         dr.onchange = async () => { try { await api(`apps/${a.app}`, { method: 'PATCH', json: { defaultRole: dr.value } }); a.defaultRole = dr.value; toast(`${a.name}: ${dr.value} by default`); } catch (e) { fail(e); dr.value = a.defaultRole; } };
@@ -435,7 +435,7 @@ function apps(el, ctx) {
           h('td', { class: 'sa-small' }, a.version || '–'), h('td', null, dr), h('td', null, rl),
           h('td', { class: 'sa-small' }, `${a.roles} role${a.roles === 1 ? '' : 's'}, ${a.appPasswords} app password${a.appPasswords === 1 ? '' : 's'}`),
           h('td', { style: { textAlign: 'right' } }, h('button', { class: 'sa-btn danger', onclick: () => forgetApp(ctx, a) }, 'Forget')));
-      })))));
+      }))));
 }
 async function forgetApp(ctx, a) {
   const data = h('input', { type: 'checkbox' });
