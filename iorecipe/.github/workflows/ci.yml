@@ -45,7 +45,12 @@ jobs:
           bash -n proxmox/ct/iorecipe.sh proxmox/install/iorecipe-install.sh
       - name: Tesseract
         # reads the text on a photo of a recipe: with it, that test runs too
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq tesseract-ocr
+        run: |
+          for n in 1 2 3 4; do
+            sudo apt-get update -qq -o Acquire::Retries=3 && sudo apt-get install -y -qq -o Acquire::Retries=3 tesseract-ocr && break
+            [ "$n" = 4 ] && exit 1
+            sleep $((n * 15))
+          done
       - name: Tests
         # scratch databases recipe_test and recipe_test_auth on the service (iosuite_shared.testing)
         env:
