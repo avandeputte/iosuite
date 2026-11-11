@@ -60,8 +60,7 @@ async def provider_error(request: Request, e: ProviderError):
 
 def _server_info() -> dict:
     """What Settings › Server shows beside the updater's own fields."""
-    return {"about": [["Database", f"{config.DB_HOST}:{config.DB_PORT}/{config.DB_NAME}"],
-                      ["Background check", f"every {config.CHECK_MINUTES} minutes" if config.CHECK_MINUTES else "off"]]}
+    return {"about": [["Background check", f"every {config.CHECK_MINUTES} minutes" if config.CHECK_MINUTES else "off"]]}
 
 
 app.include_router(auth.router())        # /api/auth/*: sign-in, accounts, me, settings, password, sessions, app passwords, suite
