@@ -118,16 +118,17 @@ body.home #main { top: env(safe-area-inset-top); }
 .dateline .iconbtn.gear { width: 28px; height: 28px; }
 .dateline .iconbtn.gear .ic { width: 18px; height: 18px; }
 .dateline .menu { left: 0; right: auto; top: 32px; }
-/* the tiles: a column per app with a widget, and a column of two half-height tiles for the apps without (--cols is set by the page) */
+/* the tiles: a column per app with a widget, and a column of three low tiles for the apps without (--cols is set by the page) */
 .apps { display: grid; grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr)); gap: 16px; }
-.stack { display: grid; grid-template-rows: 1fr 1fr; gap: 16px; min-width: 0; }
+.stack { display: grid; grid-template-rows: repeat(3, 1fr); gap: 8px; min-width: 0; }
 .app { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "img who" "more more"; align-items: center; align-content: start; column-gap: 12px; row-gap: 4px;
   padding: 12px 14px; border-radius: var(--r-l); border: 1px solid var(--line); text-align: left; min-width: 0;
   transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease; }
 .app img { grid-area: img; }
 .app .who { grid-area: who; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; }
 .app .more { grid-area: more; }
-.app.small { align-content: center; }
+.app.small { align-content: center; padding-top: 6px; padding-bottom: 6px; }
+.app.small > img { width: 28px; height: 28px; }
 /* a tile shows the app's name alone (no tagline); one with a widget has a smaller icon so its head stays low */
 .app:not(.small) > img { width: 32px; height: 32px; }
 .app.small .more { display: none; }

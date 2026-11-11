@@ -230,12 +230,12 @@ async function showHome(page) {
   const col = h('div', { class: 'homecol' }), side = h('div', { class: 'homeside' });
   page.append(h('div', { class: 'homegrid' }, col, side));
   drawWeather(wx);  // fills in when AccuWeather (or the server's copy) answers
-  // the tiles: an app with something to show gets a column of its own; the others go two to a column, half the height
+  // the tiles: an app with something to show gets a column of its own; the others go three to a column, a third of the height
   const tile = (a, small) => h('a', { class: `app${small ? ' small' : ''}`, href: a.url, 'data-app': a.key, title: a.url },
     h('img', { src: a.icon, alt: '' }), h('span', { class: 'who' }, h('span', { class: 'nmrow' }, appName(a.name, a.color), h('span', { class: 'st' }))),
     h('div', { class: 'more' }));  // what the app shows here: drawWidgets
   const big = S.apps.filter((a) => WIDGETS[a.key]), rest = S.apps.filter((a) => !WIDGETS[a.key]);
-  const stacks = []; for (let i = 0; i < rest.length; i += 2) stacks.push(h('div', { class: 'stack' }, rest.slice(i, i + 2).map((a) => tile(a, true))));
+  const stacks = []; for (let i = 0; i < rest.length; i += 3) stacks.push(h('div', { class: 'stack' }, rest.slice(i, i + 3).map((a) => tile(a, true))));
   if (!S.apps.length) col.append(h('div', { class: 'empty' }, got.items.length ? 'Every tile is hidden. ' : 'No io app has registered itself in the Shared ioSuite database yet: each one appears here once it has started.',
     got.items.length ? h('button', { class: 'lnk', onclick: customize }, 'Customize the page') : null));
   else col.append(h('div', { class: 'apps', style: { '--cols': big.length + stacks.length } }, big.map((a) => tile(a, false)), stacks));
