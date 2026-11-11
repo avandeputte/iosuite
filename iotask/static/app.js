@@ -397,7 +397,7 @@ function drawNav() {
     if (can && lists.length > 1) dragSort(g, 'a', null, orderLists);
     return g;
   };
-  const brandName = () => [h('span', { class: 'io' }, 'io'), h('span', { class: 'nm' }, 'Tasks')];
+  const brandName = () => [h('span', { class: 'io' }, 'io'), h('span', { class: 'nm' }, 'Task')];
   nav.replaceChildren(...[
     h('div', { class: 'navhead' },
       S.suite.length
@@ -1304,7 +1304,7 @@ function showSignIn() {
   };
   const submit = (e) => { e.preventDefault(); login(name.value.trim(), pw.value); };
   document.body.append(h('div', { class: 'signin' }, h('form', { class: 'dialog', onsubmit: submit },
-    h('div', { class: 'brand' }, h('img', { src: 'static/icons/mark.svg', alt: '', class: 'brand-mark' }), h('span', { class: 'brand-name', style: { display: 'inline' } }, h('span', { class: 'io' }, 'io'), h('span', { class: 'nm' }, 'Tasks'))),
+    h('div', { class: 'brand' }, h('img', { src: 'static/icons/mark.svg', alt: '', class: 'brand-mark' }), h('span', { class: 'brand-name', style: { display: 'inline' } }, h('span', { class: 'io' }, 'io'), h('span', { class: 'nm' }, 'Task'))),
     first ? h('p', { class: 'muted' }, 'Welcome. Make the first account: it is the admin, who adds the rest of the family in Settings. (Already use another io app? Sign in there first, or use the same name and password here once the apps share their accounts.)') : h('h2', null, 'Sign in'),
     tiles, form, err, h('div', { class: 'btns' }, btn))));
   if (first) { name.focus(); return; }
