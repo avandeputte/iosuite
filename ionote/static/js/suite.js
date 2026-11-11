@@ -1,6 +1,6 @@
 /** The suite (iosuite-shared's suite_apps): when other ioThing apps are registered, the app mark top left (in the sidebar;
  *  in the top bar on a phone) opens a menu of them, each a link to that app. Alone, the mark and the name stay the link to
- *  All notes. The same as ioContacts'. */
+ *  All notes. The same as ioContact's. */
 import { $, h, api } from './core.js';
 
 let suiteSelf = null;  // this app's key, marked in the menu

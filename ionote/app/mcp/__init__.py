@@ -1,4 +1,4 @@
-"""MCP server for ionotes, in the same shape as iopix's.
+"""MCP server for ionote, in the same shape as iopix's.
 
 Lets an MCP client such as Claude search the notes, read any note (and look at its picture), list folders and
 tags, and, as a member, write: create, edit, file, tag, pin and delete notes, manage folders and tag

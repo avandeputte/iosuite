@@ -18,7 +18,7 @@ def _pick_user():
     if name:
         u = next((u for u in accounts if u["name"].lower() == name.lower()), None)
         if not u:
-            sys.exit(f"no ioNotes account named {name!r}")
+            sys.exit(f"no ioNote account named {name!r}")
         return u
     admins = [u for u in accounts if u.get("role") == "admin" or u.get("suiteAdmin")]
     if len(admins) == 1:

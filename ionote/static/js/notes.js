@@ -8,7 +8,7 @@ let shown = [], total = 0, loading = false;
 let onOpen = () => {};
 export function setOpenHandler(fn) { onOpen = fn; }
 
-function localSort() { try { return localStorage.getItem('ionotes.sort') || 'updated'; } catch (e) { return 'updated'; } }
+function localSort() { try { return localStorage.getItem('ionote.sort') || 'updated'; } catch (e) { return 'updated'; } }
 
 export function viewFromHash() {
   const [path, qs] = location.hash.replace(/^#/, '').split('?');
@@ -51,11 +51,11 @@ function navItem(label, ic, count, on, href, hue, cls = '') {
 
 function dropTarget(el, folderId) {
   if (!canWrite()) return el;
-  el.addEventListener('dragover', (e) => { if (e.dataTransfer.types.includes('application/x-ionotes-note')) { e.preventDefault(); el.classList.add('drop'); } });
+  el.addEventListener('dragover', (e) => { if (e.dataTransfer.types.includes('application/x-ionote-note')) { e.preventDefault(); el.classList.add('drop'); } });
   el.addEventListener('dragleave', () => el.classList.remove('drop'));
   el.addEventListener('drop', async (e) => {
     e.preventDefault(); el.classList.remove('drop');
-    const id = e.dataTransfer.getData('application/x-ionotes-note');
+    const id = e.dataTransfer.getData('application/x-ionote-note');
     if (!id) return;
     try { await api(`/api/notes/${id}`, { method: 'PUT', body: { folderID: folderId, updatedAt: Date.now() / 1000 } }); toast(folderId ? 'Moved to the folder' : 'Taken out of its folder'); refresh(); } catch (err) { fail(err); }
   });
@@ -220,14 +220,14 @@ function card(n) {
         nfiles ? h('span.prog', { title: `${nfiles} attached file${nfiles > 1 ? 's' : ''}` }, icon('attach'), String(nfiles)) : null,
         n.tags.slice(0, 4).map((t) => { const s = h('span.tag', t); const cv = colorVar(tagColors[t.toLowerCase()]); if (cv) s.style.setProperty('--tc', cv); return s; }))),
     n.pinned ? h('span.pin', icon('pin')) : null);
-  c.addEventListener('dragstart', (e) => { e.dataTransfer.setData('application/x-ionotes-note', n.id); e.dataTransfer.setData('text/plain', [n.title, n.body].filter(Boolean).join('\n\n')); });
+  c.addEventListener('dragstart', (e) => { e.dataTransfer.setData('application/x-ionote-note', n.id); e.dataTransfer.setData('text/plain', [n.title, n.body].filter(Boolean).join('\n\n')); });
   return c;
 }
 
 export function renderList() {
   const list = $('#list');
   if (!list) return;
-  const sort = h('select', { 'aria-label': 'Sort', onchange: (e) => { view.sort = e.target.value; try { localStorage.setItem('ionotes.sort', view.sort); } catch (err) {} loadList(); } },
+  const sort = h('select', { 'aria-label': 'Sort', onchange: (e) => { view.sort = e.target.value; try { localStorage.setItem('ionote.sort', view.sort); } catch (err) {} loadList(); } },
     [['updated', 'Last edited'], ['created', 'Newest'], ['oldest', 'Oldest'], ['title', 'Title']].map(([v, l]) => h('option', { value: v, selected: view.sort === v }, l)));
   list.textContent = '';
   list.append(h('div#listbar', h('h2', title()), h('span.muted.small', total ? String(total) : ''), view.v !== 'trash' ? sort : null));

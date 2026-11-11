@@ -1,5 +1,5 @@
 #!/bin/sh
-# Start ioNotes in the foreground, with the settings in config.env (HOST and PORT there say where it listens; the
+# Start ioNote in the foreground, with the settings in config.env (HOST and PORT there say where it listens; the
 # default port is 8610). The first run creates .venv (with uv when available, else python3 -m venv) and installs the
 # app; ./setup.sh does that too and also writes config.env. The service setup.sh installs and the container run the
 # same `python -m app`.

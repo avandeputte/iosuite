@@ -5,10 +5,10 @@ import { $, h, api, state, icon, toast, fail, isAdmin, canWrite, fmtDate } from 
 /** Settings › Account (with the app passwords) and Display: iosuite-shared's panels, the same in every io app. */
 const accountUi = () => import(new URL('api/auth/ui.js', document.baseURI).href);
 export function applyTheme(t) {
-  try { localStorage.setItem('ionotes.theme', t); } catch (e) { /* private mode */ }
+  try { localStorage.setItem('ionote.theme', t); } catch (e) { /* private mode */ }
   if (t === 'system') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t;
 }
-const currentTheme = () => { try { return localStorage.getItem('ionotes.theme') || 'system'; } catch (e) { return 'system'; } };
+const currentTheme = () => { try { return localStorage.getItem('ionote.theme') || 'system'; } catch (e) { return 'system'; } };
 async function accountPanel() {
   const ui = await accountUi(), el = h('div'), pw = h('div');
   await ui.mountAccount(el, { toast });
@@ -79,7 +79,7 @@ export function renderImport() {
   main.append(h('div.page', h('div.pagein', pageTitle('Import and export', 'download', 'var(--c-green)'),
     h('section.sec', h('h2', 'Export'), h('p.intro', 'Your notes as Markdown files with their pictures, plus notes.json with everything.'),
       h('div.row', h('a.pillbtn', { href: '/api/export.zip' }, icon('download'), 'Export all notes'), h('a.pillbtn', { href: '/api/export.zip?trash=1' }, 'With the trash'))),
-    canWrite() ? h('section.sec', h('h2', 'Import'), h('p.intro', 'A zip or notes.json from any ioNotes server. Newer copies here are kept.'),
+    canWrite() ? h('section.sec', h('h2', 'Import'), h('p.intro', 'A zip or notes.json from any ioNote server. Newer copies here are kept.'),
       h('div.row', h('button.pillbtn', { onclick: () => file.click() }, icon('upload'), 'Import…'), file)) : null)));
 }
 

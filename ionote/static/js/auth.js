@@ -9,14 +9,14 @@ export async function loadMe() {
 
 /** The brand above the sign-in's title, as in iopix: the logo and the two-tone name. */
 function signinBrand() {
-  const n = (state.settings && state.settings.app_name) || 'ionotes';
-  const name = n.toLowerCase() === 'ionotes' ? h('span.brand-name', h('span.io', n.slice(0, 2)), h('span.nm', n.toLowerCase() === 'ionotes' ? 'Notes' : n.slice(2))) : h('span.brand-name', n);
+  const n = (state.settings && state.settings.app_name) || 'ionote';
+  const name = n.toLowerCase() === 'ionote' ? h('span.brand-name', h('span.io', n.slice(0, 2)), h('span.nm', n.toLowerCase() === 'ionote' ? 'Notes' : n.slice(2))) : h('span.brand-name', n);
   return h('div.signin-brand', h('img.logo', { src: 'static/icons/mark.svg', alt: '' }), name);
 }
 const avatar = (a) => h('span.avatar.big', (a.name || '?')[0].toUpperCase());
 
 /** iopix's sign-in: a tile per account (one click for an account without a password, a password for the others),
- *  "Other" to type a name. required: ionotes shows nothing else until someone signs in (no Cancel, no closing). */
+ *  "Other" to type a name. required: ionote shows nothing else until someone signs in (no Cancel, no closing). */
 export async function signIn(required = false) {
   if (!state.me.usersExist) return firstAdmin();
   const name = h('input.einput', { type: 'text', placeholder: 'User name', autocomplete: 'username' });
@@ -55,7 +55,7 @@ async function firstAdmin() {
   const name = h('input.einput', { type: 'text', placeholder: 'Admin user name', autocomplete: 'username' });
   const pw = h('input.einput', { type: 'password', placeholder: 'Password (8 characters or more)', autocomplete: 'new-password' });
   const msg = h('p.err.small');
-  return dialog('Create the admin account', h('div', h('p.muted', 'Right now ioNotes is open to anyone who can reach it. Once an admin exists, every account has notes of its own, visible to nobody else; notes made so far stay with the open install, so export them first (Import and export) and import them once signed in.'), h('div.signin-form', name, pw), msg), [
+  return dialog('Create the admin account', h('div', h('p.muted', 'Right now ioNote is open to anyone who can reach it. Once an admin exists, every account has notes of its own, visible to nobody else; notes made so far stay with the open install, so export them first (Import and export) and import them once signed in.'), h('div.signin-form', name, pw), msg), [
     { label: 'Cancel', value: null },
     { label: 'Create', primary: true, action: async () => { try { await api('/api/auth/setup', { method: 'POST', body: { name: name.value, password: pw.value } }); location.reload(); } catch (e) { msg.textContent = e.message; return false; } } },
   ]);

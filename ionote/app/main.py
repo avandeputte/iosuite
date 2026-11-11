@@ -1,9 +1,9 @@
-"""ioNotes: the web app, the API the Mac and iPhone apps use, and the MCP endpoint, on one port (8610).
+"""ioNote: the web app, the API the Mac and iPhone apps use, and the MCP endpoint, on one port (8610).
 
 Who may call a route is declared on the route (app/access.py); iosuite-shared's middleware works out who is asking
 (the shared session cookie, the identity a reverse proxy such as Cloudflare Access vouches for, HTTP Basic or a bearer
 app password), whether sign-in is required at all, and refuses cross-site writes. The same scheme as every app of the
-suite. What is ioNotes' own: whose notes a request works on (notes are private to each account).
+suite. What is ioNote's own: whose notes a request works on (notes are private to each account).
 """
 import logging
 from contextlib import asynccontextmanager
@@ -40,7 +40,7 @@ async def lifespan(_app):
     updater.start_daily()
     purge = chores.start(notes_mod.housekeeping, every_s=6 * 3600, name="purge of the trash and of what deletions left behind")
     c = db.settings()
-    log.info("ioNotes %s started on %s (%s)", __version__,
+    log.info("ioNote %s started on %s (%s)", __version__,
              "MariaDB/MySQL " + f"{c['host']}:{c['port']}/{c['database']}" if c["type"] == "mysql" else "SQLite " + str(db.SQLITE_FILE),
              "accounts exist" if users.any_users() else "no accounts yet: open to everyone until one is made")
     sd = suitedb.public()
@@ -50,7 +50,7 @@ async def lifespan(_app):
     purge.cancel()
 
 
-app = FastAPI(title="ioNotes", version=__version__, lifespan=lifespan, docs_url="/api/docs", redoc_url=None,
+app = FastAPI(title="ioNote", version=__version__, lifespan=lifespan, docs_url="/api/docs", redoc_url=None,
               openapi_url="/api/openapi.json",
               description="Notes for the family, private to each account. The API the Mac and iPhone apps use, and an MCP "
                           "endpoint (/mcp) for AI assistants.")
@@ -111,9 +111,9 @@ auth.install(app, limit_for=_limit_for, not_found=(notes_mod.NotFound,))
 
 
 def _status_extra(request: Request) -> dict:
-    """ioNotes' own fields of GET /api/status, beside the suite's: the name an admin gave the app and,
+    """ioNote's own fields of GET /api/status, beside the suite's: the name an admin gave the app and,
     signed in, the account's change counter (the page polls it to learn of changes made elsewhere)."""
-    out = {"appName": db.get_setting("app_name", "") or "ionotes"}
+    out = {"appName": db.get_setting("app_name", "") or "ionote"}
     if users.is_signed_in(request.state.user):
         out["rev"] = notes_mod.owner_rev()
     return out

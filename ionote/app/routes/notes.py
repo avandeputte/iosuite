@@ -146,7 +146,7 @@ def api_image(uid: str, request: Request, download: int = 0):
     if download and r.status_code == 200:
         n = notes.get_note(uid) or {}
         ext = {"image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp"}.get(r.media_type, "img")
-        name = "".join(c for c in notes.display_title(n) if c.isalnum() or c in " -_")[:60].strip() or "ionotes"
+        name = "".join(c for c in notes.display_title(n) if c.isalnum() or c in " -_")[:60].strip() or "ionote"
         r.headers.update(attachment(f"{name}.{ext}"))
     return r
 
@@ -213,10 +213,10 @@ async def api_attach_upload(uid: str, request: Request, file: UploadFile = File(
 
 @router.put("/api/notes/{uid}/attachments/{aid}", dependencies=[access.member_write])
 async def api_attach_put(uid: str, aid: str, request: Request, name: str = "file"):
-    """A file as the raw request body, with the id the device chose (?name=<file name>; X-Ionotes-Text: the text the
+    """A file as the raw request body, with the id the device chose (?name=<file name>; X-Ionote-Text: the text the
     device read from it, percent-encoded, when it did)."""
     data = await request.body()
-    t = request.headers.get("x-ionotes-text")
+    t = request.headers.get("x-ionote-text")
     if t is not None:
         from urllib.parse import unquote
         t = unquote(t)

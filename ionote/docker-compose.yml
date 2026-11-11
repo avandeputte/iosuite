@@ -1,16 +1,16 @@
-# ionotes with Docker: `docker compose up -d` pulls the published image; `docker compose up -d --build` builds it
+# ionote with Docker: `docker compose up -d` pulls the published image; `docker compose up -d --build` builds it
 # from this checkout instead. Works as a stack in Dockge / Portainer. Edit the "CHANGE ME" spots (the databases and
-# the admin password). Everything ionotes keeps (notes, pictures, accounts, settings) is in the MariaDB database;
+# the admin password). Everything ionote keeps (notes, pictures, accounts, settings) is in the MariaDB database;
 # the named volume only holds the session secret and the log.
 #
 # The image is public on GitHub's registry: no login is needed to pull it.
 services:
-  ionotes:
-    image: ghcr.io/avandeputte/ionotes:latest
+  ionote:
+    image: ghcr.io/avandeputte/ionote:latest
     build:
       context: .
       # args: { OCR: "1" }
-    container_name: ionotes
+    container_name: ionote
     restart: unless-stopped
     logging:                          # the output Docker keeps (the app's log, again): at most 3 files of 5 MB
       driver: json-file
@@ -18,7 +18,7 @@ services:
     ports:
       - "8610:8610"
     volumes:
-      - ionotes-data:/data
+      - ionote-data:/data
     environment:
       TZ: America/New_York
       DB_TYPE: mysql
@@ -36,7 +36,7 @@ services:
       # the first admin account, created on the first start (remove both lines to start open and create it in the web app)
       ADMIN_USER: admin
       ADMIN_PASSWORD: change-me-please              # CHANGE ME (8 characters or more)
-      # the address people and the other apps reach ionotes at, and the domain the sign-in is shared on
+      # the address people and the other apps reach ionote at, and the domain the sign-in is shared on
       # PUBLIC_URL: https://notes.example.com
       # INTERNAL_URL: http://192.168.1.151:8610   # the host's LAN address and port, kept in the suite's list of apps (a container cannot tell)
       # COOKIE_DOMAIN: example.com
@@ -48,4 +48,4 @@ services:
       start_period: 30s
 
 volumes:
-  ionotes-data:
+  ionote-data:

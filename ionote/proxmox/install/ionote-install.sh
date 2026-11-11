@@ -2,8 +2,8 @@
 
 # Copyright (c) 2026 Alex Van de Putte
 # License: GPL-3.0-or-later
-# Source: https://github.com/avandeputte/ionotes
-# ionotes: runs inside the LXC, driven by proxmox/ct/ionotes.sh (community-scripts framework).
+# Source: https://github.com/avandeputte/ionote
+# ionote: runs inside the LXC, driven by proxmox/ct/ionote.sh (community-scripts framework).
 # This only installs the system packages and fetches the code; the ct script then runs the app's own
 # setup.sh inside the container with the answers given on the host (database, OCR, admin, service).
 
@@ -28,13 +28,13 @@ $STD apt-get install -y \
   curl
 msg_ok "Installed Dependencies"
 
-msg_info "Fetching ionotes"
-REPO="${IONOTES_REPO:-https://github.com/avandeputte/ionotes}"
-mkdir -p /opt/ionotes /opt/ionotes/data
-$STD git clone --depth 1 "$REPO" /opt/ionotes/app
-git -C /opt/ionotes/app rev-parse HEAD > /opt/ionotes/app/COMMIT  # the installed commit, shown in Settings › ionotes version
-rm -rf /opt/ionotes/app/.git
-msg_ok "Fetched ionotes"
+msg_info "Fetching ionote"
+REPO="${IONOTE_REPO:-https://github.com/avandeputte/ionote}"
+mkdir -p /opt/ionote /opt/ionote/data
+$STD git clone --depth 1 "$REPO" /opt/ionote/app
+git -C /opt/ionote/app rev-parse HEAD > /opt/ionote/app/COMMIT  # the installed commit, shown in Settings › ionote version
+rm -rf /opt/ionote/app/.git
+msg_ok "Fetched ionote"
 
 motd_ssh
 customize

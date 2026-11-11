@@ -1,7 +1,7 @@
 #!/bin/sh
-# ionotes setup: asks where the MariaDB/MySQL database is (and tests it), where the Shared ioSuite database is
+# ionote setup: asks where the MariaDB/MySQL database is (and tests it), where the Shared ioSuite database is
 # (the accounts and suite-wide settings shared by the ioThing apps), the port, an admin account, whether
-# pictures added in the web app should have their text read (RapidOCR), and whether to start ionotes at login;
+# pictures added in the web app should have their text read (RapidOCR), and whether to start ionote at login;
 # then creates the Python environment, installs the packages, writes config.env, creates the tables and the
 # admin, and starts the service (launchd on macOS, systemd on Linux). Run it again at any time; it keeps what
 # is there.
@@ -9,17 +9,17 @@
 #   ./setup.sh                       ask everything
 #   ./setup.sh --yes --db db.example.lan:3306/notes:notes:secret --admin alex:secret
 # Flags (the same in every app of the suite):
-#   --db HOST:PORT/DB:USER:PASSWORD        the database (IONOTES_DB in the environment does the same, off the command line)
-#   --suite-db HOST:PORT/DB:USER:PASSWORD  the Shared ioSuite database (IONOTES_SUITE_DB does the same; default
+#   --db HOST:PORT/DB:USER:PASSWORD        the database (IONOTE_DB in the environment does the same, off the command line)
+#   --suite-db HOST:PORT/DB:USER:PASSWORD  the Shared ioSuite database (IONOTE_SUITE_DB does the same; default
 #                                          database and user: iosuite); kept as it is in config.env when not given
-#   --admin NAME:PASS (or IONOTES_ADMIN) | --no-admin   --port 8610   --public-url URL   --cookie-domain DOMAIN
+#   --admin NAME:PASS (or IONOTE_ADMIN) | --no-admin   --port 8610   --public-url URL   --cookie-domain DOMAIN
 #   --service | --no-service   --python PATH   --system-deps | --no-system-deps   --yes
 #   --db-admin USER:PASSWORD      a MariaDB / MySQL administrator (root...): the databases and users above are created
-#                                 for you, with the passwords you answered (IONOTES_DB_ADMIN does the same; empty: they exist)
-#   --also APP,APP | all | none   also install other apps of the suite here (iosuite, iocalendar, iocontacts, iohealth, iopix), beside this one,
+#                                 for you, with the passwords you answered (IONOTE_DB_ADMIN does the same; empty: they exist)
+#   --also APP,APP | all | none   also install other apps of the suite here (iosuite, iocalendar, iocontact, iohealth, iopix), beside this one,
 #                                 with the same database server (each app its own database), Shared ioSuite database,
-#                                 sign-in domain and admin: those questions are asked once (IONOTES_ALSO does the same)
-# ioNotes' own: --sqlite (a SQLite file in the data folder instead, a quick try)   --data DIR   --features ocr|none
+#                                 sign-in domain and admin: those questions are asked once (IONOTE_ALSO does the same)
+# ioNote's own: --sqlite (a SQLite file in the data folder instead, a quick try)   --data DIR   --features ocr|none
 set -e
 cd "$(dirname "$0")"
 APP="$(pwd)"
@@ -37,11 +37,11 @@ while [ $# -gt 0 ]; do
     *) die "unknown option $1 (try --help)";;
   esac
 done
-[ -n "$ADMIN" ] || ADMIN="${IONOTES_ADMIN:-}"
-[ -n "$ALSO" ] || ALSO="${IONOTES_ALSO:-}"
-[ -n "$DBADMIN" ] || DBADMIN="${IONOTES_DB_ADMIN:-}"
-[ -n "$MYSQL" ] || MYSQL="${IONOTES_DB:-}"
-[ -n "$SUITE" ] || SUITE="${IONOTES_SUITE_DB:-}"
+[ -n "$ADMIN" ] || ADMIN="${IONOTE_ADMIN:-}"
+[ -n "$ALSO" ] || ALSO="${IONOTE_ALSO:-}"
+[ -n "$DBADMIN" ] || DBADMIN="${IONOTE_DB_ADMIN:-}"
+[ -n "$MYSQL" ] || MYSQL="${IONOTE_DB:-}"
+[ -n "$SUITE" ] || SUITE="${IONOTE_SUITE_DB:-}"
 if [ "$YES" = 1 ]; then TTY=""; else TTY=/dev/stdin; fi
 ask() {  # ask VAR "question" "default"
   _v="$1"; _q="$2"; _d="$3"
@@ -60,9 +60,9 @@ secret() {  # secret VAR "question"
   printf '%s: ' "$2"; stty -echo 2>/dev/null < "$TTY" || true; read -r _a < "$TTY" || _a=""; stty echo 2>/dev/null < "$TTY" || true; echo; eval "$1=\"\$_a\""
 }
 
-say "ionotes setup"
+say "ionote setup"
 echo "This asks a few questions, installs the Python packages, writes the settings, creates the tables in your"
-echo "database and starts ionotes as a service."
+echo "database and starts ionote as a service."
 
 pyok() { [ -n "$1" ] && "$1" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)' 2>/dev/null; }
 findpy() { for c in python3.13 python3.12 python3.11 python3.10 python3; do p="$(command -v $c 2>/dev/null || true)"; pyok "$p" && { echo "$p"; return 0; }; done; return 0; }
@@ -89,7 +89,7 @@ pyok "$PY" || die "python3 (3.10 or newer) is needed (found ${PY:-none})"
 "$PY" -c 'import venv' 2>/dev/null || die "the python3 venv module is missing (Debian/Ubuntu: apt install python3-venv)"
 
 say "Database"
-ask DATA "Folder for ionotes' own files (session secret, log)" "${DATA:-$APP/data}"
+ask DATA "Folder for ionote' own files (session secret, log)" "${DATA:-$APP/data}"
 if [ -z "$MYSQL" ] && [ "$SQLITE" = 0 ]; then
   if [ -f "$APP/config.env" ] && grep -q '^DB_TYPE=mysql' "$APP/config.env" && ! yesno "config.env already names a database; change it?" n; then
     MYSQL="keep"
@@ -108,7 +108,7 @@ if [ -z "$SUITE" ]; then
   if [ "$SUITE_SET" = 1 ] && ! yesno "config.env already names the Shared ioSuite database; change it?" n; then
     SUITE="keep"
   elif [ "$YES" = 1 ] || [ -z "$TTY" ]; then
-    SUITE="keep"; [ "$SUITE_SET" = 1 ] || echo "not named: ionotes uses the defaults (the notes' server, database and user iosuite); set IOSUITE_DB_* in config.env"
+    SUITE="keep"; [ "$SUITE_SET" = 1 ] || echo "not named: ionote uses the defaults (the notes' server, database and user iosuite); set IOSUITE_DB_* in config.env"
   else
     case "$MYSQL" in ''|keep) SH="$(grep -E '^DB_HOST=' "$APP/config.env" 2>/dev/null | head -1 | cut -d= -f2-)"; SH="${SH:-127.0.0.1}";; *) SH="${MYSQL%%:*}"; SH="${SH%%/*}";; esac
     ask SH "Shared ioSuite database host" "$SH"; ask SP "port" "3306"; ask SD "database (created if the user may)" "iosuite"; ask SU "user" "iosuite"; secret SW "password"
@@ -123,7 +123,7 @@ if [ -z "$FEATURES" ]; then
   yesno "Read the text in pictures added in the web app (RapidOCR, ~60 MB; the Mac and iPhone apps read it themselves)?" y && FEATURES=ocr || FEATURES=none
 fi
 if [ -z "$ADMIN" ] && [ "$NO_ADMIN" = 0 ]; then
-  if yesno "Create an admin account now (until one exists, anyone who can reach ionotes can read and change the notes)?" y; then
+  if yesno "Create an admin account now (until one exists, anyone who can reach ionote can read and change the notes)?" y; then
     ask AN "Admin user name" "admin"; secret AW "Admin password (8 characters or more)"
     [ -n "$AW" ] && ADMIN="$AN:$AW" || echo "no password given; skipping the admin account (the web app can create it later)"
   fi
@@ -133,12 +133,12 @@ if [ -z "$DBADMIN" ] && [ "$YES" = 0 ]; then
   if [ -n "$DAU" ]; then secret DAW "Password of $DAU"; DBADMIN="$DAU:$DAW"; fi
 fi
 if [ -z "$ALSO" ]; then
-  say "The other apps of the suite can be installed here too, beside ionotes, with the same database server (each app gets its own database), the same Shared ioSuite database, sign-in domain and admin"
-  ask ALSO "Also install (iosuite, iocalendar, iocontacts, iohealth, iopix; comma-separated, 'all', or 'none')" "none"
+  say "The other apps of the suite can be installed here too, beside ionote, with the same database server (each app gets its own database), the same Shared ioSuite database, sign-in domain and admin"
+  ask ALSO "Also install (iosuite, iocalendar, iocontact, iohealth, iopix; comma-separated, 'all', or 'none')" "none"
 fi
 if [ -z "$SERVICE" ]; then
   case "$OS" in Darwin) SVC="a launchd login item";; *) SVC="a systemd service";; esac
-  yesno "Start ionotes at login as $SVC?" y && SERVICE=1 || SERVICE=0
+  yesno "Start ionote at login as $SVC?" y && SERVICE=1 || SERVICE=0
 fi
 
 say "Python environment"
@@ -154,7 +154,7 @@ ENVF="$APP/config.env"
 umask 077  # the settings file holds the database password: private from the first byte
 OLD=""; [ -f "$ENVF" ] && OLD="$(grep -vE '^(#|DATA_DIR=|PORT=|OCR=|PUBLIC_URL=|COOKIE_DOMAIN=|$)' "$ENVF" || true)"
 {
-  echo "# ionotes settings, written by setup.sh (config.env.example lists them all). Edit and restart the service."
+  echo "# ionote settings, written by setup.sh (config.env.example lists them all). Edit and restart the service."
   echo "DATA_DIR=$DATA"
   echo "PORT=$PORT"
   echo "PUBLIC_URL=$PUBURL"
@@ -215,7 +215,7 @@ PYEOF
 fi
 
 echo "testing the Shared ioSuite database, creating it if needed"
-"$VPY" - <<'PYEOF' || printf '\033[1;33mwarning:\033[0m could not use the Shared ioSuite database (see above); ionotes needs it for sign-in. Run setup.sh again with --suite-db HOST:PORT/DB:USER:PASSWORD\n' >&2
+"$VPY" - <<'PYEOF' || printf '\033[1;33mwarning:\033[0m could not use the Shared ioSuite database (see above); ionote needs it for sign-in. Run setup.sh again with --suite-db HOST:PORT/DB:USER:PASSWORD\n' >&2
 import os
 import pymysql
 from iosuite_shared import config as sc  # the Shared ioSuite database's settings (IOSUITE_DB_*, or the defaults)
@@ -239,18 +239,18 @@ PYEOF
 
 if [ -n "$ADMIN" ]; then
   say "Admin account"
-  ADMIN_PASSWORD="${ADMIN#*:}" "$VENV/bin/iosuite-shared" --config "$APP" admin "${ADMIN%%:*}" --app ionotes
+  ADMIN_PASSWORD="${ADMIN#*:}" "$VENV/bin/iosuite-shared" --config "$APP" admin "${ADMIN%%:*}" --app ionote
 fi
 
 say "Service"
 if [ "$SERVICE" = 1 ] && [ "$OS" = Darwin ]; then
-  PL="$HOME/Library/LaunchAgents/net.iothing.ionotes.server.plist"
+  PL="$HOME/Library/LaunchAgents/net.iothing.ionote.server.plist"
   "$VPY" - "$PL" "$APP" "$VPY" "$DATA" <<'PYEOF'
 import plistlib, sys, os
 pl, app, vpy, data = sys.argv[1:5]
 # the settings stay in config.env, which the app reads itself: the login item only starts `python -m app`. Its output
-# goes nowhere: the app keeps its own log (data/ionotes.log, at most 4 files of 5 MB); ./run.sh shows why it will not start
-d = {"Label": "net.iothing.ionotes.server", "ProgramArguments": [vpy, "-m", "app"],
+# goes nowhere: the app keeps its own log (data/ionote.log, at most 4 files of 5 MB); ./run.sh shows why it will not start
+d = {"Label": "net.iothing.ionote.server", "ProgramArguments": [vpy, "-m", "app"],
      "WorkingDirectory": app, "RunAtLoad": True, "KeepAlive": True, "ThrottleInterval": 10,
      "EnvironmentVariables": {"PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"},
      "StandardOutPath": "/dev/null", "StandardErrorPath": "/dev/null"}
@@ -258,15 +258,15 @@ os.makedirs(os.path.dirname(pl), exist_ok=True)
 with open(pl, "wb") as f: plistlib.dump(d, f)
 print("  wrote", pl)
 PYEOF
-  launchctl bootout "gui/$(id -u)/net.iothing.ionotes.server" 2>/dev/null || true
+  launchctl bootout "gui/$(id -u)/net.iothing.ionote.server" 2>/dev/null || true
   launchctl bootstrap "gui/$(id -u)" "$PL" || die "launchctl could not start the login item (see above)"
   echo "  started (login item)"
 elif [ "$SERVICE" = 1 ] && command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
-  UNIT=/etc/systemd/system/ionotes.service
+  UNIT=/etc/systemd/system/ionote.service
   if [ "$(id -u)" = 0 ]; then SUDO=""; else SUDO="sudo"; fi
   $SUDO sh -c "cat > $UNIT" <<UEOF
 [Unit]
-Description=ionotes
+Description=ionote
 After=network.target
 
 [Service]
@@ -282,10 +282,10 @@ RestartSec=5
 WantedBy=multi-user.target
 UEOF
   $SUDO systemctl daemon-reload || die "systemctl daemon-reload failed"
-  $SUDO systemctl enable --now ionotes || die "the ionotes service could not be started (see above; journalctl -u ionotes)"
+  $SUDO systemctl enable --now ionote || die "the ionote service could not be started (see above; journalctl -u ionote)"
   echo "  started (systemd)"
 else
-  echo "  not installed as a service. Start ionotes with:"
+  echo "  not installed as a service. Start ionote with:"
   echo "    cd \"$APP\" && ./run.sh"
 fi
 say "Done: http://localhost:$PORT   settings: $ENVF"
@@ -296,8 +296,8 @@ case "$ALSO" in ''|none|no) ;;
      if [ "$SERVICE" = 1 ]; then SVC="--service"; else SVC="--no-service"; fi
      DBA=""; [ -z "$DBADMIN" ] || { DBA="--db-admin ${DBADMIN%%:*}"; DB_ADMIN_PASSWORD="${DBADMIN#*:}"; export DB_ADMIN_PASSWORD; }
      if [ -n "$ADMIN" ]; then
-       ADMIN_PASSWORD="${ADMIN#*:}" "$VENV/bin"/iosuite-shared --config "$APP" install "$ALSO" --admin "${ADMIN%%:*}" --from ionotes $SVC $DBA
+       ADMIN_PASSWORD="${ADMIN#*:}" "$VENV/bin"/iosuite-shared --config "$APP" install "$ALSO" --admin "${ADMIN%%:*}" --from ionote $SVC $DBA
      else
-       "$VENV/bin"/iosuite-shared --config "$APP" install "$ALSO" --from ionotes $SVC $DBA
+       "$VENV/bin"/iosuite-shared --config "$APP" install "$ALSO" --from ionote $SVC $DBA
      fi || die "not every app could be installed; see the lines above (each one can be set up again with its own setup.sh)";;
 esac

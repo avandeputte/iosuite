@@ -18,7 +18,7 @@ TEXTS = ("app_name",)
 
 @router.get("/api/settings", dependencies=[access.public])
 def api_settings(request: Request):
-    out = {"app_name": db.get_setting("app_name", "") or "ionotes", "require_login": users.require_login(config.APP),
+    out = {"app_name": db.get_setting("app_name", "") or "ionote", "require_login": users.require_login(config.APP),
            "colors": list(notes.COLORS)}
     if users.is_admin(request.state.user):
         out.update({k: db.get_setting(k, "0") == "1" for k in SWITCHES})
@@ -52,7 +52,7 @@ def api_changes(limit: int = 200, before: int = None):
 @router.get("/api/export.zip", dependencies=[access.signed_in])
 async def api_export(trash: int = 0, pictures: int = 1):
     f = await run_in_threadpool(backup.export_zip, bool(trash), bool(pictures))
-    return StreamingResponse(backup.pieces(f), media_type="application/zip", headers=attachment(time.strftime("ionotes-export-%Y%m%d-%H%M.zip")))
+    return StreamingResponse(backup.pieces(f), media_type="application/zip", headers=attachment(time.strftime("ionote-export-%Y%m%d-%H%M.zip")))
 
 
 @router.post("/api/import", dependencies=[access.member_write])

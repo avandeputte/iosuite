@@ -11,7 +11,7 @@ __all__ = ["ADDS", "DELETES", "READ_ONLY", "UPDATES", "WRITES", "clamp", "curren
 APP = config.BASE_URL  # for the links in results
 LOG_NAME = "MCP"       # the name the change log shows for a change made through MCP
 
-server = shared_mcp.make_server("ionotes", "ioNotes", __version__, instructions=(
+server = shared_mcp.make_server("ionote", "ioNote", __version__, instructions=(
     "A personal notes library (text, clipboard snippets, screenshots with the text read from them). Start with "
     "notes_overview, use list_folders / list_tags to find exact names, then search_notes and get_note. "
     "view_note_image shows a note's picture, read_attachment a file's text. related_notes, suggest_organization and "

@@ -1,4 +1,4 @@
-# ionotes in a container. Everything it keeps is in its MariaDB/MySQL database (DB_* below); /data only holds
+# ionote in a container. Everything it keeps is in its MariaDB/MySQL database (DB_* below); /data only holds
 # the session secret, the log and settings an admin saved. See docker-compose.yml and README "Running in Docker".
 #
 # Build arguments:
@@ -19,11 +19,11 @@ ARG COMMIT=unknown
 RUN echo "$COMMIT" > COMMIT
 RUN pip install --no-cache-dir -e ".$([ "$OCR" = "1" ] && echo [ocr])"
 # runs as its own user (uid 1000), not as root, like iopix
-RUN useradd --uid 1000 --user-group --create-home --shell /usr/sbin/nologin ionotes \
-    && mkdir -p /data && chown -R ionotes:ionotes /data /app
+RUN useradd --uid 1000 --user-group --create-home --shell /usr/sbin/nologin ionote \
+    && mkdir -p /data && chown -R ionote:ionote /data /app
 VOLUME ["/data"]
 ENV DATA_DIR=/data PYTHONUNBUFFERED=1 OCR=${OCR}
 EXPOSE 8610
-USER ionotes
+USER ionote
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8610/api/status', timeout=4)" || exit 1
 CMD ["python", "-m", "app"]

@@ -8,7 +8,7 @@ let note = null;     // the note as the server last answered
 let pending = {};    // fields changed and not yet saved
 let saving = null;
 let mode = 'edit';   // the text: 'preview' (drawn as Markdown) or 'edit' (the text box)
-const MODE = 'ionotes.textMode';
+const MODE = 'ionote.textMode';
 const prefMode = () => { try { return localStorage.getItem(MODE) || 'preview'; } catch (e) { return 'preview'; } };
 
 const SOURCES = { clipboard: 'Copied', service: 'Saved with right-click', screenshot: 'Screenshot', manual: 'Typed', web: 'Made in the web app',

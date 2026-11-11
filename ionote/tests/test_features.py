@@ -35,7 +35,7 @@ def test_a_pdf_attached_is_listed_with_the_note_and_its_text_found_by_search(cli
 
 def test_a_device_puts_a_file_with_its_own_id_and_again_is_a_no_op(client, admin):
     client.put(f"/api/notes/{NID}", json={"title": "x", "updatedAt": 1})
-    h = {"content-type": "image/png", "x-ionotes-text": "Hello%20world"}
+    h = {"content-type": "image/png", "x-ionote-text": "Hello%20world"}
     a = client.put(f"/api/notes/{NID}/attachments/{AID}", params={"name": "shot.png"}, content=png(), headers=h).json()
     b = client.put(f"/api/notes/{NID}/attachments/{AID}", params={"name": "shot.png"}, content=png(), headers=h).json()
     assert a["rev"] == b["rev"] and a["attachments"][0]["width"] == 320

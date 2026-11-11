@@ -13,7 +13,7 @@ let lastList = '';
 
 /** The "a newer version is out" card, for admins, when the daily check found one (as iopix shows it): Update now runs
  *  update.sh from here and the page reloads with the new version; dismissed per version in this browser. */
-const DISMISSED = 'ionotes.updateDismissed';
+const DISMISSED = 'ionote.updateDismissed';
 function updateBanner(u) {
   let b = $('#updbanner');
   let gone = ''; try { gone = localStorage.getItem(DISMISSED) || ''; } catch (e) { /* private mode */ }
@@ -24,10 +24,10 @@ function updateBanner(u) {
     h('div.muted', `You have v${state.version || '?'}. ${(u.message || '').replace(/^v\d+\.\d+\.\d+:\s*/, '').slice(0, 140)}`));
   const more = h('a.pillbtn', { href: '#/settings/server', onclick: () => b.remove() }, 'Details');
   const run = u.canRun ? h('button.pillbtn.primary', { onclick: async () => {
-    if (!await confirmIt('Update ioNotes', `Fetch ${u.version ? 'version ' + u.version : 'the latest version'}, refresh the packages and restart ioNotes? The page reloads when the new version is up.`, 'Update')) return;
+    if (!await confirmIt('Update ioNote', `Fetch ${u.version ? 'version ' + u.version : 'the latest version'}, refresh the packages and restart ioNote? The page reloads when the new version is up.`, 'Update')) return;
     run.hidden = more.hidden = true;
     text.textContent = '';
-    text.append(h('b', 'Updating…'), h('div.muted', 'ioNotes restarts when it is done, and the page reloads.'));
+    text.append(h('b', 'Updating…'), h('div.muted', 'ioNote restarts when it is done, and the page reloads.'));
     if (!await (await serverUi()).runUpdate({ toast })) run.hidden = more.hidden = false;
   } }, 'Update now') : null;
   b = h('div#updbanner', { 'data-remote': u.remote }, h('span.icwrap', icon('spark')), text, run, more,
@@ -39,7 +39,7 @@ function updateBanner(u) {
  *  Put away, or on a narrower screen, it hides off the left edge and the menu button in the top bar slides it over the
  *  page; choosing a destination, the dimmed page or Escape puts it away again. Phones keep the bottom bar instead.
  *  The same as iopix. */
-const DOCK_MIN = 1100, SIDEBAR = 'ionotes.sidebar';
+const DOCK_MIN = 1100, SIDEBAR = 'ionote.sidebar';
 function initSidebar() {
   const body = document.body, btn = $('#sidebtn');
   const canDock = () => innerWidth >= DOCK_MIN;
@@ -180,7 +180,7 @@ function wire() {
     if (document.hidden) return;
     try {
       const s = await api('/api/status');
-      setStatus(`ionotes ${s.version || ''}`.trim());
+      setStatus(`ionote ${s.version || ''}`.trim());
       updateBanner(s.update);
       if (!$('#list')) return;
       if (rev !== null && s.rev !== undefined && s.rev !== rev && !document.activeElement.closest('.editor')) { lastList = ''; await loadMeta(); renderNav(); await loadList(); markSelected(); }
@@ -199,14 +199,14 @@ async function start() {
   // notes are private to each account: once accounts exist, nothing shows until someone signs in
   if (!state.me.user && (state.me.requireLogin || state.me.usersExist)) { document.body.classList.add('locked'); signIn(true); return; }
   if (state.me.user && state.me.settings && state.me.settings.theme) applyTheme(state.me.settings.theme);  // the account's theme (Settings › Display)
-  if (state.settings.app_name && state.settings.app_name !== 'ionotes') document.title = state.settings.app_name;
+  if (state.settings.app_name && state.settings.app_name !== 'ionote') document.title = state.settings.app_name;
   await loadMeta();
   loadSuite();
   wire();
-  api('/api/status').then((s) => { state.version = s.version; setStatus(`ioNotes ${s.version}`); updateBanner(s.update); }).catch(() => {});
+  api('/api/status').then((s) => { state.version = s.version; setStatus(`ioNote ${s.version}`); updateBanner(s.update); }).catch(() => {});
   if (!location.hash) history.replaceState(null, '', '#/notes');
   await route();
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 
-start().catch((e) => { $('#main').textContent = ''; $('#main').append(h('div.noteempty', h('div', 'ionotes could not start: ' + e.message))); });
+start().catch((e) => { $('#main').textContent = ''; $('#main').append(h('div.noteempty', h('div', 'ionote could not start: ' + e.message))); });

@@ -1,4 +1,4 @@
-"""The operator's tools, for admins: ioNotes' health, its log and the updater."""
+"""The operator's tools, for admins: ioNote's health, its log and the updater."""
 import platform
 import sys
 from typing import Literal
@@ -16,7 +16,7 @@ LOG_LINES_MAX = 2000
 
 @server.tool(annotations=READ_ONLY)
 def diagnostics() -> dict:
-    """ionotes' own health: version and commit, Python and platform, the database (type, server version,
+    """ionote' own health: version and commit, Python and platform, the database (type, server version,
     reachable), the stored pictures, text recognition, accounts, and the switches that are on."""
     need_admin()
     s = db.public_settings()
@@ -33,7 +33,7 @@ def diagnostics() -> dict:
 
 @server.tool(annotations=READ_ONLY)
 def server_log(lines: int = 200, contains: str = "", level: Literal["any", "warning", "error", "auth"] = "any") -> dict:
-    """The last lines of ionotes' own log (data/ionotes.log, rotating). `contains` keeps only lines with that text;
+    """The last lines of ionote' own log (data/ionote.log, rotating). `contains` keeps only lines with that text;
     `level` keeps only WARNING+ or ERROR+ lines, or the sign-ins (auth)."""
     need_admin()
     if not config.LOG_FILE:
@@ -53,9 +53,9 @@ def check_for_update() -> dict:
 
 
 @server.tool(annotations=UPDATES)
-def update_ionotes() -> dict:
-    """Admins: update ionotes to the latest commit on GitHub and restart it (update.sh: code, packages, service;
-    settings and data are kept). The connection drops when ionotes restarts; call check_for_update afterwards. Not
+def update_ionote() -> dict:
+    """Admins: update ionote to the latest commit on GitHub and restart it (update.sh: code, packages, service;
+    settings and data are kept). The connection drops when ionote restarts; call check_for_update afterwards. Not
     available in Docker (pull the image)."""
     need_admin()
     try:
@@ -63,4 +63,4 @@ def update_ionotes() -> dict:
     except RuntimeError as e:
         raise ToolError(str(e))
     return {"started": True, "installed": updater.local_commit()[:7], "ref": updater.branch,
-            "note": "update.sh is running; ioNotes restarts when it finishes. Then call check_for_update."}
+            "note": "update.sh is running; ioNote restarts when it finishes. Then call check_for_update."}

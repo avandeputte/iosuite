@@ -1,5 +1,5 @@
 """User accounts (admins): list, create, change, delete; iosuite-shared's routes. The role shown and set is the
-account's role in ionotes."""
+account's role in ionote."""
 
 from app.auth import auth
 

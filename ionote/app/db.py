@@ -1,10 +1,10 @@
-"""ionotes' database: MySQL/MariaDB (the normal case), or a SQLite file in DATA_DIR (a quick try, the tests).
+"""ionote' database: MySQL/MariaDB (the normal case), or a SQLite file in DATA_DIR (a quick try, the tests).
 
 The code is written in one SQL dialect (? placeholders, INSERT OR REPLACE / OR IGNORE) and the wrapper translates
 it for MySQL, the same way iopix's viewer database does. Rows answer to an index and to a column name.
 
 Where the database is comes from config.env or the environment (DB_TYPE, DB_HOST, DB_PORT, DB_NAME, DB_USER,
-DB_PASSWORD); with none of them, SQLite in data/ionotes.db.
+DB_PASSWORD); with none of them, SQLite in data/ionote.db.
 
 Every note, folder and tag colour carries `rev`, a number from one counter that grows with every change. The
 apps ask for everything changed since the last rev they saw (GET /api/sync?since=), which is how they keep
@@ -23,7 +23,7 @@ from iosuite_shared.db import Pool
 from app import config
 
 log = logging.getLogger("app.db")
-SQLITE_FILE = config.DATA_DIR / "ionotes.db"
+SQLITE_FILE = config.DATA_DIR / "ionote.db"
 KEYS = ("type", "host", "port", "database", "user", "password")
 SCHEMA_VERSION = 4  # 2: notes, folders, tag colours and the change log belong to an account; 3: the suite naming convention (nts_ tables); 4: attachments and templates
 PREFIX = "nts"
@@ -258,7 +258,7 @@ def settings() -> dict:
     """{type, host, port, database, user, password}: from config.env or the environment, else SQLite."""
     global _cfg
     if _cfg is None:
-        c = {"type": "sqlite", "host": "", "port": 3306, "database": "ionotes", "user": "", "password": ""}
+        c = {"type": "sqlite", "host": "", "port": 3306, "database": "ionote", "user": "", "password": ""}
         for k in KEYS:
             v = config.db_env(k)
             if v:

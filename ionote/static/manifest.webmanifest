@@ -1,6 +1,6 @@
 {
-  "name": "ioNotes",
-  "short_name": "ioNotes",
+  "name": "ioNote",
+  "short_name": "ioNote",
   "description": "Your notes, clipboard snippets and screenshots, searchable",
   "start_url": "./#/notes",
   "scope": "./",

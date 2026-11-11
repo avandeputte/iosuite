@@ -87,12 +87,12 @@ def test_status_tells_admins_of_a_newer_version_while_the_daily_check_is_on(clie
         updater._checked.clear()
 
 
-def test_ionotes_registers_in_the_suites_list_of_apps(client):
+def test_ionote_registers_in_the_suites_list_of_apps(client):
     from iosuite_shared import suite
     from app import __version__
     client.get("/api/notes")
-    row = suite.get("ionotes")
-    assert row["name"] == "ioNotes" and row["version"] == __version__
+    row = suite.get("ionote")
+    assert row["name"] == "ioNote" and row["version"] == __version__
     assert row["description"] == "Notes" and row["color"] == "#1c5a5e" and row["icon"] == "/static/icons/mark.svg"
 
 
@@ -118,7 +118,7 @@ def test_the_shell_its_files_and_the_icon_are_public(client, admin):
 
 
 def test_suite_apps_for_the_app_switcher(client):
-    """The app mark becomes a menu of the suite's other apps (as ioContacts'): the page has the phone's button, may show
+    """The app mark becomes a menu of the suite's other apps (as ioContact's): the page has the phone's button, may show
     their icons (other origins), and /api/auth/suite lists them with an address and an absolute icon."""
     from iosuite_shared import suite
     html = client.get("/").text
@@ -127,7 +127,7 @@ def test_suite_apps_for_the_app_switcher(client):
     client.get("/api/notes")
     suite.register("iopix", name="ioPix", url="https://photo.example.net", color="#123456")
     r = client.get("/api/auth/suite").json()
-    assert r["app"] == "ionotes"
+    assert r["app"] == "ionote"
     other = [a for a in r["items"] if a["app"] != r["app"]]
     assert [(a["name"], a["url"], a["icon"]) for a in other] == [("ioPix", "https://photo.example.net", "https://photo.example.net/static/icons/mark.svg")]
 
@@ -136,7 +136,7 @@ def test_settings_server_is_the_shared_panel(client, admin):
     """Settings › Server is iosuite-shared's panel, with the MCP switch; /api/settings no longer has a second one."""
     assert "export async function mount" in client.get("/api/server/ui.js").text
     s = client.get("/api/server").json()
-    assert s["name"] == "ioNotes" and s["mcpEnabled"] is False and s["mcpAbout"]
+    assert s["name"] == "ioNote" and s["mcpEnabled"] is False and s["mcpAbout"]
     assert client.post("/api/server", json={"mcpEnabled": True}).json()["mcpEnabled"] is True
     assert "mcp_enabled" not in client.get("/api/settings").json()
     client.post("/api/server", json={"mcpEnabled": False})

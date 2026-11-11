@@ -1,7 +1,7 @@
 """Paths and tunables: config.env in the app folder (setup.sh writes it; config.env.example lists them all), or the
 environment, which wins. The settings every app of the suite shares come from iosuite_shared.config.standard.
 
-Everything ionotes keeps lives in its database: MySQL/MariaDB (DB_TYPE=mysql and DB_HOST, DB_PORT, DB_NAME,
+Everything ionote keeps lives in its database: MySQL/MariaDB (DB_TYPE=mysql and DB_HOST, DB_PORT, DB_NAME,
 DB_USER, DB_PASSWORD), or a SQLite file in DATA_DIR for a quick try or the tests. The notes' images are stored in
 the database too (BLOBs), so one database backup holds everything. DATA_DIR only keeps the log, the update result
 and the SQLite file.
@@ -11,7 +11,7 @@ from pathlib import Path
 
 from iosuite_shared import config as shared
 
-APP = "ionotes"
+APP = "ionote"
 APP_DIR = Path(__file__).resolve().parent.parent
 shared.load_file(APP_DIR)  # first: iosuite_shared reads its settings (the Shared ioSuite database, COOKIE_DOMAIN) from it too
 env, env_flag, env_int = shared.env, shared.env_flag, shared.env_int
@@ -21,7 +21,7 @@ globals().update(shared.standard(APP, APP_DIR))
 
 # OCR=0 keeps the server from reading text in images itself (the apps read it on the device and send it along)
 OCR = env_flag("OCR", True)
-# the account `python -m app.mcp` (stdio) acts as. Updates: IONOTES_REPO, IONOTES_BRANCH and UPDATE_CHECK are read by
+# the account `python -m app.mcp` (stdio) acts as. Updates: IONOTE_REPO, IONOTE_BRANCH and UPDATE_CHECK are read by
 # iosuite_shared.updates (app.auth.updater)
 MCP_USER = env("MCP_USER")
 

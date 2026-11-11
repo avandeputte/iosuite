@@ -73,7 +73,7 @@ def test_an_import_finds_its_pictures_in_one_pass(client, admin):
     buf = io.BytesIO()
     ids = [f"{i:08d}-1D2B-4F3A-9C1A-1234567890AB" for i in range(30)]
     with zipfile.ZipFile(buf, "w") as z:
-        z.writestr("notes.json", json.dumps({"format": "ionotes-export", "notes": [{"id": i, "title": f"Note {n}", "updatedAt": 1} for n, i in enumerate(ids)]}))
+        z.writestr("notes.json", json.dumps({"format": "ionote-export", "notes": [{"id": i, "title": f"Note {n}", "updatedAt": 1} for n, i in enumerate(ids)]}))
         for n, i in enumerate(ids):
             z.writestr(f"Note {n}.md", f"---\nid: {i}\n---\n")
             if n % 2:

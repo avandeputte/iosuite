@@ -41,7 +41,7 @@ log = logging.getLogger("app.notes")
 
 
 NOBODY = -1  # a visitor while accounts exist: no notes at all
-current_owner = contextvars.ContextVar("ionotes_owner", default=0)
+current_owner = contextvars.ContextVar("ionote_owner", default=0)
 
 
 def owner() -> int:
@@ -713,7 +713,7 @@ def standard_template_id(key: str, o: int = None) -> str:
     return str(uuidlib.uuid5(_STANDARD_NS, f"{owner() if o is None else o}:{key}")).upper()
 
 
-def ensure_standard_templates(user: str = "ioNotes") -> int:
+def ensure_standard_templates(user: str = "ioNote") -> int:
     """Give this account the standard templates, once (per STANDARD_VERSION); the web app and the apps call this as
     they load. Skips one whose name is already taken. Returns how many were added."""
     o = owner()
