@@ -61,10 +61,9 @@ def name_of(key: str) -> str:
 
 
 def may_see(user, entry: dict) -> bool:
-    """Whether this person sees the app: a role there that is not "none", and its admin for an admin tool (the same
-    rule as iosuite_shared.suite.visible, on the list kept here)."""
-    role = users.role_of(user, entry["app"])
-    return role != "none" and (not entry.get("adminTool") or role == "admin")
+    """Whether this person sees the app: a role there that is not "none" (an admin tool is none for everybody but the
+    suite admins; the same rule as iosuite_shared.suite.visible, on the list kept here)."""
+    return users.role_of(user, entry["app"]) != "none"
 
 
 def tiles(user=None) -> list[dict]:
