@@ -1,5 +1,7 @@
 """MariaDB access (a pool of connections, iosuite_shared.db.Database) and the schema (created and migrated at start)."""
 
+import json
+
 import pymysql
 from pymysql.cursors import DictCursor
 
@@ -207,6 +209,7 @@ def migrate() -> None:
         for col in ("photo", "photo_type"):  # 6: a contact's photo is the ioPix face it is linked to; the columns held nothing
             if col in schema.columns(cur, "con_contacts"):
                 cur.execute(f"ALTER TABLE con_contacts DROP COLUMN {col}")
+        _forget_photos(cur)
         schema.ensure_version_table(cur, PREFIX)
         schema.record_version(cur, PREFIX, SCHEMA_VERSION)
         # the family address book everyone shares
@@ -214,6 +217,21 @@ def migrate() -> None:
         if not cur.fetchone():
             cur.execute("INSERT INTO con_address_books (owner_id, slug, name, description) VALUES "
                         "(NULL, 'family', 'Family', 'Shared with everyone in the family')")
+
+
+def _forget_photos(cur) -> None:
+    """Contacts keep no photos (Alex, 2026-11-11: delete the ones still stored). The photo columns are gone (6); this
+    also removes the copies elsewhere: photo suggestions from lookups, and the photo columns kept in merge-undo
+    snapshots. Idempotent and cheap once done: only snapshots that still mention a photo are read."""
+    cur.execute("DELETE FROM con_contact_suggestions WHERE field = 'photo'")
+    cur.execute("SELECT id, snapshot FROM con_contact_merges WHERE snapshot LIKE %s", ('%"photo%',))
+    for r in cur.fetchall():
+        snap = json.loads(r["snapshot"])
+        rows = snap.get("contacts") or []
+        if not any("photo" in x or "photo_type" in x for x in rows):
+            continue
+        snap["contacts"] = [{k: v for k, v in x.items() if k not in ("photo", "photo_type")} for x in rows]
+        cur.execute("UPDATE con_contact_merges SET snapshot = %s WHERE id = %s", (json.dumps(snap), r["id"]))
 
 
 def reset_all() -> None:
