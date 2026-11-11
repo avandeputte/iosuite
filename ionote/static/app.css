@@ -152,6 +152,11 @@ body.side-docked { --nav: var(--side); }
 .editor { max-width: 860px; margin: 0 auto; padding: 16px 28px 80px; }
 .edbar { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; position: sticky; top: 0; background: var(--bg); padding: 8px 0; z-index: 1; border-bottom: 1px solid var(--line); margin-bottom: 12px; }
 .edbar .sp { flex: 1; }
+.fmtbar { flex-basis: 100%; display: flex; align-items: center; gap: 2px; flex-wrap: wrap; padding-top: 4px; }
+.fmtbar[hidden] { display: none; }
+.fmtbar .iconbtn { width: 32px; height: 32px; border-radius: var(--r-s); }
+.fmtbar .iconbtn .ic { width: 19px; height: 19px; }
+.fmtbar .gap { width: 1px; height: 18px; background: var(--line); margin: 0 6px; }
 .edbar .status { color: var(--fg2); font-size: var(--fs-s); margin-right: 8px; }
 .edbar select { max-width: 180px; border: 1px solid var(--line); background: var(--bg); border-radius: var(--r-s); padding: 5px 8px; }
 #backbtn { display: none; }

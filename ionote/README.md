@@ -21,7 +21,9 @@ and sign-in (Cloudflare Access too), the same installer, updater, Docker image a
   foot; the search, New note and your account are along the top. On a phone the sidebar is a bottom bar with More.
 - **Markdown and checklists**: a note's text is shown formatted (headings, **bold**, lists, links, code, quotes), and
   `- [ ]` lines are boxes you tick right there, on the list card as progress (2/5). The pencil (or a click on the text)
-  edits it; Enter continues a list, ⇧⌘L makes the lines a checklist.
+  edits it, with a formatting bar above the text: bold (⌘B), italic (⌘I), strikethrough (⇧⌘X), code (⌘E), link (⌘K),
+  heading (⇧⌘H, again for ## and ###), bulleted (⇧⌘8) and numbered (⇧⌘7) lists, checklist (⇧⌘L), quote (⇧⌘.), code
+  block and divider. Each one toggles (bold text turns plain again) and ⌘Z undoes it; Enter continues a list.
 - **Attached files**: besides its picture a note holds up to 50 files (PDFs, more pictures, documents; up to
   `MAX_IMAGE_MB` each), kept in the database too. A PDF's text, a text file's and (with RapidOCR) a picture's are read
   for search. Drop files on an open note to attach them, or on the list to make a note of each.
