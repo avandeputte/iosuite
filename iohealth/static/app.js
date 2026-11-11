@@ -2586,7 +2586,7 @@ function updateBanner(u) {
 }
 
 // ---------- accounts: sign-in, the account menu, Settings › Account (people, roles and proxy sign-in: Settings › Security) ----------
-// The same flow as iopix (and ionotes, ioContacts): accounts live in the Shared ioSuite database, so
+// The same flow as iopix (and ionote, ioContact): accounts live in the Shared ioSuite database, so
 // one sign-in serves every app on the domain. Health data is private: nothing shows until someone signs in.
 
 let me = { user: null, usersExist: false, isAdmin: false };

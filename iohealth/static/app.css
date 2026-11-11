@@ -65,7 +65,7 @@ body.side-docked #menubtn, body.side-docked .topbrand { display: none; }
 .brand-name .io { color: var(--muted); } .brand-name .nm { color: var(--accent); }
 .topbrand .brand-name { font-size: 22px; }
 .brand-mark { flex: none; }
-/* the suite's app switcher: with other ioThing apps registered, the mark opens a menu of them (as in ioContacts) */
+/* the suite's app switcher: with other ioThing apps registered, the mark opens a menu of them (as in ioContact) */
 .suitebtn { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; margin: 0 -5px; padding: 0;
   border: 0; border-radius: 8px; background: none; cursor: pointer; }
 .suitebtn:hover, .suitebtn:focus-visible { background: var(--line); }

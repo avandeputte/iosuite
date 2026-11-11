@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# ioHealth LXC for Proxmox VE, in the community-scripts (ProxmoxVE) framework layout, as ioContacts and ioNotes:
+# ioHealth LXC for Proxmox VE, in the community-scripts (ProxmoxVE) framework layout, as ioContact and ioNote:
 # this is the ct/ script; proxmox/install/iohealth-install.sh runs inside the container.
 #
 # After the framework's own questions (resources, network) it asks about the app, as the other apps' scripts do: the
 # MariaDB server, database, user and password for the health data, the same for the Shared ioSuite database
-# (accounts and suite-wide settings, the one ioPix, ioNotes and ioContacts use), the cookie domain, the first account, the time zone and the port. It
+# (accounts and suite-wide settings, the one ioPix, ioNote and ioContact use), the cookie domain, the first account, the time zone and the port. It
 # creates the container, puts the
 # server in /opt/iohealth/app and runs its setup.sh inside, which installs the
 # packages, writes config.env, installs the iohealth service and waits until it answers.
@@ -51,7 +51,7 @@ ask_app_settings() {
   fi
   local dbhost="${IOHEALTH_DB%%:*}" r="${IOHEALTH_DB#*:}"; local dbport="${r%%/*}"
   if [[ -z "${IOHEALTH_SUITE_DB:-}" ]]; then
-    h=$(whiptail --backtitle "$bt" --inputbox "Host of the Shared ioSuite database, the one ioPix, ioNotes and ioContacts use (accounts, passwords, sessions and suite-wide settings are shared)" 11 76 "$dbhost" 3>&1 1>&2 2>&3) || exit 1
+    h=$(whiptail --backtitle "$bt" --inputbox "Host of the Shared ioSuite database, the one ioPix, ioNote and ioContact use (accounts, passwords, sessions and suite-wide settings are shared)" 11 76 "$dbhost" 3>&1 1>&2 2>&3) || exit 1
     p=$(whiptail --backtitle "$bt" --inputbox "Port" 9 60 "$dbport" 3>&1 1>&2 2>&3) || exit 1
     d=$(whiptail --backtitle "$bt" --inputbox "Shared ioSuite database (created if the user may)" 9 70 "iosuite" 3>&1 1>&2 2>&3) || exit 1
     u=$(whiptail --backtitle "$bt" --inputbox "Its user" 9 60 "iosuite" 3>&1 1>&2 2>&3) || exit 1
@@ -87,8 +87,8 @@ ask_app_settings() {
     IOHEALTH_ALSO=$(whiptail --backtitle "$bt" --checklist "Also install in this container (same database server, each app its own database; same accounts and admin; each on its usual port):" 14 78 4 \
       iosuite "ioSuite (the start page)  (8630)" OFF \
       iocalendar "ioCalendar  (8620)" OFF \
-      iocontacts "ioContacts  (8640, LDAP 3890)" OFF \
-      ionotes "ionotes  (8610)" OFF 3>&1 1>&2 2>&3) || exit 1
+      iocontact "ioContact  (8640, LDAP 3890)" OFF \
+      ionote "ionote  (8610)" OFF 3>&1 1>&2 2>&3) || exit 1
     IOHEALTH_ALSO=$(echo "$IOHEALTH_ALSO" | tr -d '"' | tr ' ' ',')
   fi
   if [[ -n "$IOHEALTH_ALSO" ]]; then  # room for more than one app
@@ -152,6 +152,6 @@ echo -e "${CREATING}${GN}${APP} setup has been successfully initialized!${CL}"
 echo -e "${INFO}${YW}Access it using the following URL (the phone's server address too):${CL}"
 echo -e "${GATEWAY}${BGN}http://${IP}:${IOHEALTH_PORT:-8650}${CL}"
 for a in ${IOHEALTH_ALSO//,/ }; do
-  case "$a" in iosuite) p=8630;; iocalendar) p=8620;; iocontacts) p=8640;; ionotes) p=8610;; iohealth) p=8650;; iopix) p=8600;; *) p="";; esac
+  case "$a" in iosuite) p=8630;; iocalendar) p=8620;; iocontact) p=8640;; ionote) p=8610;; iohealth) p=8650;; iopix) p=8600;; *) p="";; esac
   [[ -n "$p" ]] && echo -e "${INFO}${YW}$a:${CL} ${BGN}http://${IP}:$p${CL}"
 done

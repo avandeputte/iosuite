@@ -5,13 +5,13 @@ fitness web app on top of it: dashboards, charts of any metric (stacked or overl
 a map, sleep, training load and personal records. Nothing goes through a cloud service: an iPhone app uploads straight
 to a small server that you run in Docker, over HTTPS behind your reverse proxy (or plain HTTP on your own network).
 The same container serves the web app. Accounts are the ioThing suite's shared ones (the same as
-[ioPix](https://github.com/avandeputte/iopix), [ioNotes](https://github.com/avandeputte/ionotes) and
-[ioContacts](https://github.com/avandeputte/iocontacts)): every person in the household signs in with their own name
+[ioPix](https://github.com/avandeputte/iopix), [ioNote](https://github.com/avandeputte/ionote) and
+[ioContact](https://github.com/avandeputte/iocontact)): every person in the household signs in with their own name
 and sees only their own health data.
 
 The iPhone app that uploads the data is in its own repository,
-[iohealth-apps](https://github.com/avandeputte/iohealth-apps) (Health data only exists on the iPhone), as ioNotes and
-ioPix keep theirs in [ionotes-apps](https://github.com/avandeputte/ionotes-apps) and iopix-apps.
+[iohealth-apps](https://github.com/avandeputte/iohealth-apps) (Health data only exists on the iPhone), as ioNote and
+ioPix keep theirs in [ionote-apps](https://github.com/avandeputte/ionote-apps) and iopix-apps.
 
 ```
 ┌──────────────┐   HTTPS (REST, gzip NDJSON)   ┌───────────────┐        ┌──────────┐
@@ -44,7 +44,7 @@ under More.
 | **Glucose** | blood glucose from a CGM or meter: average, GMI (estimated A1c), time in/below/above range, variability (CV), low episodes; readings with your target band and optional overlays (heart rate, steps, carbohydrates, insulin, workouts…); the daily pattern (ambulatory glucose profile) and time in range per day; **glucose around workouts and meals**: the average change from an hour before to three hours after, per activity or per meal size (from logged carbohydrates), and each event's numbers. A workout's own page shows its glucose curve too. mg/dL or mmol/L and the target range are set in Settings |
 | **Correlations** | pick two metrics and a period: a scatter plot of the days (click a dot for that day), the correlation, how much one explains the other and the best-fit line, same day or "the day before" (sleep, workouts or carbs, then the next day's glucose). Includes glucose time in range and variability per day and workout minutes. A table ranks what else goes with the second metric |
 | **Records** | fastest running efforts from the GPS routes, best days, health bests, ring streaks, and bests per activity |
-| **Settings** | in tabs, as in ioContacts and ioCalendar (`#/settings/<tab>`; each tab loads only what it shows). *Account*: your name, email and password (iosuite-shared's panel, the same in every io app). *Display*: theme (light, dark or system, kept with your account), units (automatic from your region, kilometres or miles), and which pages and metrics to show (turn off Sleep, Glucose or any metric you don't use and it disappears from the menu, the dashboard, Metrics and Records). *Health*: glucose unit and target range, maximum heart rate (default 220 − age from your date of birth). *Goals and alerts*: **goals** (any metric, at least or at most: 10,000 steps a day, weight at most 75 kg, 7.5 h of sleep…) and the thresholds for dashboard alerts. For admins: *Server*: iosuite-shared's panel, the same in every io app: the installed version with Check for updates / Update now and the daily check, the database and time zone, the server log, Restart. For suite admins: *Security* (people and their role in every app, app passwords, sign-in at the proxy) and *Global settings* (the apps, keys and tokens), the suite's admin panel, the same as on the start page and in every io app (iosuite-shared's `/api/suite-admin/ui.js`) |
+| **Settings** | in tabs, as in ioContact and ioCalendar (`#/settings/<tab>`; each tab loads only what it shows). *Account*: your name, email and password (iosuite-shared's panel, the same in every io app). *Display*: theme (light, dark or system, kept with your account), units (automatic from your region, kilometres or miles), and which pages and metrics to show (turn off Sleep, Glucose or any metric you don't use and it disappears from the menu, the dashboard, Metrics and Records). *Health*: glucose unit and target range, maximum heart rate (default 220 − age from your date of birth). *Goals and alerts*: **goals** (any metric, at least or at most: 10,000 steps a day, weight at most 75 kg, 7.5 h of sleep…) and the thresholds for dashboard alerts. For admins: *Server*: iosuite-shared's panel, the same in every io app: the installed version with Check for updates / Update now and the daily check, the database and time zone, the server log, Restart. For suite admins: *Security* (people and their role in every app, app passwords, sign-in at the proxy) and *Global settings* (the apps, keys and tokens), the suite's admin panel, the same as on the start page and in every io app (iosuite-shared's `/api/suite-admin/ui.js`) |
 
 **Export.** The ⤓ CSV buttons download what a chart or table shows (Metrics, Day, glucose readings and responses,
 workouts, sleep, correlations). ⤓ PDF in the header saves the current page through the print dialog, in light colours
@@ -66,7 +66,7 @@ libraries, [uPlot](https://github.com/leeoniya/uPlot) and [Leaflet](https://leaf
 container.
 
 ## Run
-The server runs in any of three ways, as ioPix, ioNotes and ioContacts do; pick one:
+The server runs in any of three ways, as ioPix, ioNote and ioContact do; pick one:
 
 | | how | where the settings live |
 |---|---|---|
@@ -76,7 +76,7 @@ The server runs in any of three ways, as ioPix, ioNotes and ioContacts do; pick 
 
 Whichever way, it needs an existing MariaDB (or MySQL) server with two databases on it: one for the health data
 (created if the user may; tables are created and migrated at every start) and the **Shared ioSuite** database
-(`iosuite`), which holds the accounts and the suite-wide settings for every app in the suite (also created at start; if ioPix, ioNotes or ioContacts
+(`iosuite`), which holds the accounts and the suite-wide settings for every app in the suite (also created at start; if ioPix, ioNote or ioContact
 already runs, point ioHealth at the same one and the accounts are there already). It listens on port **8650**, for
 both the phone's uploads and the web app; put it behind your reverse proxy for [HTTPS](#reverse-proxy-and-https).
 
@@ -90,8 +90,8 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iohealth/mai
 
 creates a small Debian 13 container (2 CPUs, 1 GB, 4 GB disk by default), puts the server in `/opt/iohealth/app` and
 runs its `setup.sh` there. It asks, as the other apps' scripts do, for the MariaDB host, port, database, user and
-password of the health data, the same for the Shared ioSuite database (`iosuite` by default; the one ioPix, ioNotes
-and ioContacts use), the public address, the cookie domain, the first account (only used when that database is still empty), the time zone and the
+password of the health data, the same for the Shared ioSuite database (`iosuite` by default; the one ioPix, ioNote
+and ioContact use), the public address, the cookie domain, the first account (only used when that database is still empty), the time zone and the
 port (8650), after the framework's own questions (resources, network). The passwords reach `setup.sh` through its environment (a root-only file pushed in and removed again),
 never on a command line; the setup's output is kept in `/opt/iohealth/setup.log`. The MariaDB users must be allowed to connect from the container's address. For unattended runs `IOHEALTH_DB` and
 `IOHEALTH_SUITE_DB` (`host:port/db:user:password`), `IOHEALTH_TZ`, `IOHEALTH_PORT`, `IOHEALTH_PUBLIC_URL`, `IOHEALTH_COOKIE_DOMAIN` and
@@ -134,7 +134,7 @@ git clone https://github.com/avandeputte/iohealth && cd iohealth
 ./update.sh         # later: the latest code, same settings
 ```
 
-Its last question, "Also install …?" (flag `--also iocalendar,ionotes`, `--also all`; `IOHEALTH_ALSO` in the environment), puts
+Its last question, "Also install …?" (flag `--also iocalendar,ionote`, `--also all`; `IOHEALTH_ALSO` in the environment), puts
 other apps of the suite in this same machine, beside ioHealth (`/opt/iocalendar/app` next to `/opt/iohealth/app`),
 without asking the shared questions again: the same database server (each app gets its own database: `suite`,
 `calendar`, `contacts`, `notes`, `health`, `iopix`; the user needs rights on those names too), the same Shared ioSuite
@@ -239,7 +239,7 @@ rule or a Cloudflare service token.
 
 ## Users and permissions
 **Accounts** are the ioThing suite's shared accounts ([iosuite-shared](https://github.com/avandeputte/iosuite-shared): the
-Shared ioSuite database in MariaDB, shared with ioPix, ioNotes and ioContacts), so one name, password and session serve every app, and
+Shared ioSuite database in MariaDB, shared with ioPix, ioNote and ioContact), so one name, password and session serve every app, and
 someone signed in at `photos.example.com` is signed in at `health.example.com` too when the apps share a domain
 (`COOKIE_DOMAIN`). What is ioHealth's own is kept per app: the role an account holds here, its settings and
 its health data. A *suite admin* is admin in every app.
