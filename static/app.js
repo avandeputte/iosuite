@@ -1496,7 +1496,7 @@ async function setSuite(el, r) {
 }
 
 // ------------------------------------------------------------------ settings › server (admins)
-/* The server panel every io app shares (iosuite-shared /api/server/ui.js): version and updates, this server,
+/* The server panel every io app shares (iosuite-shared /api/server/ui.js): version and updates,
    the server log and Restart. */
 async function setServer(el) {
   let ui;

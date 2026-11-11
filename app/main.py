@@ -61,10 +61,9 @@ auth.install(app, limit_for=_limit_for)
 
 
 def _server_info() -> dict:
-    """What Settings › Server shows beside the updater's own fields: the MCP box and this server's address."""
+    """What Settings › Server shows beside the updater's own fields: the MCP box."""
     return {"mcpEnabled": mcp_enabled(), "mcpLocked": config.MCP_FORCED,
-            "mcpAbout": "Lets an AI assistant check and update every app of the suite at once (suite admins).",
-            "about": [["Address", config.PUBLIC_URL or None]]}
+            "mcpAbout": "Lets an AI assistant check and update every app of the suite at once (suite admins)."}
 
 
 def _server_apply(body: dict) -> None:
