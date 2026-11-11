@@ -13,14 +13,17 @@ app password (Settings › Account); every tool acts as that account. The switch
 (`enabled(get_setting, forced)`): off until an admin turns it on under Settings › Server, or MCP=1 in the environment.
 """
 import contextvars
+import time
 from contextlib import asynccontextmanager
+
+import anyio
 
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import ToolAnnotations
 
-from iosuite_shared import users
+from iosuite_shared import suiteupdates, users
 from iosuite_shared.errors import Invalid
 
 PATH = "/mcp"
@@ -56,6 +59,13 @@ def need_admin() -> dict:
     return u
 
 
+def need_suite_admin() -> dict:
+    u = who()
+    if not users.is_suite_admin(u):
+        raise ToolError("Only a suite admin can do this")
+    return u
+
+
 def need_member() -> dict:
     """A member or more: may change their own private things."""
     u = who()
@@ -70,6 +80,45 @@ def need_writer() -> dict:
     if not users.can_write(u):
         raise ToolError("Only an editor or admin can change this")
     return u
+
+
+def add_suite_update_tools(server: MCPServer) -> None:
+    """The start page's tools for updating every app of the suite at once (iosuite_shared.suiteupdates), suite admins
+    only: suite_versions and update_suite_apps."""
+
+    @server.tool(annotations=UPDATES)
+    async def suite_versions(check: bool = True) -> dict:
+        """Suite admins: every app of the suite with its installed version, the newest version on GitHub (status:
+        current, update or error), whether it can update itself, and how its last update went (state: running, ok or
+        failed, with a message). check True (the default) first has every app ask GitHub again, which takes up to half
+        a minute; False answers from the last check."""
+        u = need_suite_admin()
+
+        def work():
+            if check:
+                since = time.time()
+                asked = suiteupdates.request("check", None, by=u["name"])
+                suiteupdates.wait_checked(asked, since)
+            return suiteupdates.overview()
+        apps = await anyio.to_thread.run_sync(work)
+        return {"apps": apps, "updatesWaiting": [a["app"] for a in apps if a["status"] == "update"],
+                "notWatching": [a["app"] for a in apps if not a["watching"]]}
+
+    @server.tool(annotations=UPDATES)
+    async def update_suite_apps(apps: list[str] | None = None) -> dict:
+        """Suite admins: update apps of the suite to the newest version on GitHub. apps: their keys (iocalendar,
+        ionotes...); left out, every app whose last check found a newer version (run suite_versions first). Each app
+        runs its own update.sh within ten seconds and restarts (settings and data stay; its database is brought up to
+        date as it starts). Call suite_versions(check=False) a minute or two later: state ok or failed, and the new
+        version. Apps in Docker cannot update themselves (pull the image there)."""
+        u = need_suite_admin()
+        try:
+            asked = await anyio.to_thread.run_sync(lambda: suiteupdates.request("update", apps, by=u["name"]))
+        except Invalid as e:
+            raise ToolError(str(e))
+        if not asked:
+            return {"asked": [], "note": "No app has an update waiting (suite_versions checks GitHub again)."}
+        return {"asked": asked, "note": "Each app runs update.sh within ten seconds and restarts; call suite_versions(check=False) in a minute or two."}
 
 
 def clamp(n, lo: int, hi: int) -> int:

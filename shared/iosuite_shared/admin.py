@@ -78,6 +78,7 @@ def forget_app(app: str, data: bool = False) -> bool:
     tokens (an app that was uninstalled for good). It registers again if it starts."""
     app = clean_app(app)
     gone = suite.forget(app)
+    db.ex("DELETE FROM ios_updates WHERE app = %s", (app,))  # what it said about its version; it writes it again if it starts
     if data:
         for pid, uid in [(r["id"], r["user_id"]) for r in db.q("SELECT id, user_id FROM ios_app_passwords WHERE app = %s", (app,))]:
             apppasswords.delete(uid, pid)
