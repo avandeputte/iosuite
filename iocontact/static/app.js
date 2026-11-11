@@ -90,6 +90,25 @@ function toast(msg) {
   const t = $('#toast'); t.textContent = msg; t.hidden = false;
   clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 3500);
 }
+
+/** The profile through a short-lived link instead of the form post: the app on the Home Screen opens a download in a
+ * separate sheet without its cookies, which a link opens by itself (the form post stays the fallback without script). */
+async function downloadProfile(e) {
+  e.preventDefault();
+  const f = e.target, el = f.elements;
+  const btn = f.querySelector('button[type=submit]');
+  if (btn) btn.disabled = true;
+  try {
+    const r = await api('/api/apple-profile/link', { method: 'POST', json: { label: el.label.value, password: el.password.value,
+      calendar: el.calendar ? el.calendar.value : 'none', ldap: !!(el.ldap && el.ldap.checked) } });
+    location.href = r.url;
+  } catch (err) {
+    toast(err.message);
+  } finally {
+    if (btn) setTimeout(() => { btn.disabled = false; }, 1500);
+  }
+}
+
 const fail = (e) => toast(e.message || String(e));
 
 function dialog(title, body, buttons) {
@@ -1451,7 +1470,7 @@ async function setDevices(el) {
   el.append(...[
     S.user.passwordless ? null : h('div', { class: 'box' }, h('h2', null, icon('devices'), 'iPhone, iPad and Mac'),
       h('p', null, 'A profile that adds your contacts and, if you like, a birthday calendar in one step.'),
-      h('form', { method: 'POST', action: '/api/apple-profile', class: 'pform' },
+      h('form', { method: 'POST', action: '/api/apple-profile', class: 'pform', onsubmit: downloadProfile },
         fld('Device name', plabel),
         fld('Password', h('select', { class: 't', name: 'password' }, h('option', { value: 'new' }, 'Include a new app password'), h('option', { value: 'ask' }, 'Ask on the device'))),
         fld('Birthday calendar', h('select', { class: 't', name: 'calendar' }, h('option', { value: 'family' }, 'Family birthdays'), h('option', { value: 'all' }, 'Birthdays from all my books'), h('option', { value: 'none' }, 'No calendar'))),

@@ -628,10 +628,8 @@ def connect_info(request: Request):
             "api": f"{base}/api/docs"}
 
 
-@router.post("/api/apple-profile", dependencies=[access.signed_in])
-def apple_profile(request: Request, label: str = Form("iPhone"), password: str = Form("new"), calendar: str = Form("family"),
-                  ldap: bool = Form(False)):
-    """A configuration profile (.mobileconfig) that sets an iPhone, iPad or Mac up in one go: the CardDAV account for the
+def _apple_profile(request: Request, label: str, password: str, calendar: str, ldap: bool) -> tuple:
+    """(bytes, file name) of a configuration profile (.mobileconfig) that sets an iPhone, iPad or Mac up in one go: the CardDAV account for the
     contacts and, if asked, the birthday calendar subscription (and the LDAP directory). password: "new" puts a new app
     password (named after label) in the profile; "ask" leaves it out, and the device asks for it while installing."""
     import plistlib
@@ -677,9 +675,53 @@ def apple_profile(request: Request, label: str = Form("iPhone"), password: str =
                "PayloadDescription": f"Sets up {who}'s ioContacts contacts" + (" and the birthday calendar" if len(content) > 1 else "")
                                      + f" from {host}." + ("" if secret else " The device asks for an app password while installing."),
                "PayloadOrganization": "ioContacts", "PayloadRemovalDisallowed": False, "PayloadContent": content}
-    return Response(plistlib.dumps(profile), media_type="application/x-apple-aspen-config",
-                    headers={"Content-Disposition": f'attachment; filename="iocontacts-{re.sub(r"[^A-Za-z0-9-]", "-", u["name"])}.mobileconfig"',
-                             "Cache-Control": "no-store"})
+    return plistlib.dumps(profile), f'iocontacts-{re.sub(r"[^A-Za-z0-9-]", "-", u["name"])}.mobileconfig'
+
+
+def _profile_response(body: bytes, name: str) -> Response:
+    return Response(body, media_type="application/x-apple-aspen-config",
+                    headers={"Content-Disposition": f'attachment; filename="{name}"', "Cache-Control": "no-store"})
+
+
+@router.post("/api/apple-profile", dependencies=[access.signed_in])
+def apple_profile(request: Request, label: str = Form("iPhone"), password: str = Form("new"), calendar: str = Form("family"),
+                  ldap: bool = Form(False)):
+    """The profile itself, as the answer to a form post (a browser tab that downloads in place: Safari, a Mac)."""
+    return _profile_response(*_apple_profile(request, label, password, calendar, ldap))
+
+
+PROFILE_LINK_SECONDS = 600
+_profile_links: dict = {}  # token -> (expires, bytes, file name): a few minutes, in this process
+
+
+@router.post("/api/apple-profile/link", dependencies=[access.signed_in])
+async def apple_profile_link(request: Request):
+    """{label, password, calendar, ldap} -> {url}: the profile behind a short-lived download link (/profile/<token>)
+    that needs no cookie. The app on the Home Screen hands a download to a separate browser sheet that has none of its
+    cookies, so a form post answers that sheet "Sign in"; a link it can open by itself works. The link may be opened
+    more than once in its few minutes and always gives the same profile, with one app password."""
+    import secrets
+    import time
+    b = await json_body(request)
+    body, name = await run_in_threadpool(_apple_profile, request, str(b.get("label") or ""), str(b.get("password") or "new"),
+                                         str(b.get("calendar") or "family"), bool(b.get("ldap")))
+    now = time.monotonic()
+    for t in [t for t, v in _profile_links.items() if v[0] < now]:
+        _profile_links.pop(t, None)
+    token = secrets.token_urlsafe(24)
+    _profile_links[token] = (now + PROFILE_LINK_SECONDS, body, name)
+    return {"url": f"/profile/{token}/{name}", "expiresIn": PROFILE_LINK_SECONDS}
+
+
+@router.get("/profile/{token}/{name}", include_in_schema=False)
+def apple_profile_download(token: str, name: str):
+    import time
+    hit = _profile_links.get(token)
+    if not hit or hit[0] < time.monotonic():
+        _profile_links.pop(token, None)
+        return Response("This download link has expired. Make a new one in ioContacts: Settings › Apps and devices.",
+                        status_code=404, media_type="text/plain; charset=utf-8", headers={"Cache-Control": "no-store"})
+    return _profile_response(hit[1], hit[2])
 
 
 @router.post("/api/calendar/reset", dependencies=[access.signed_in])

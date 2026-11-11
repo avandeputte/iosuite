@@ -136,6 +136,21 @@ def test_apple_profile(client):
     assert len(ask["PayloadContent"]) == 1 and "CardDAVPassword" not in ask["PayloadContent"][0]
 
 
+
+def test_apple_profile_link_needs_no_cookie(client):
+    """The Home Screen app opens a download in a sheet without its cookies: the profile comes from a short-lived link,
+    the same profile (one app password) each time it is opened, and a made-up link gives nothing."""
+    import plistlib
+    r = client.post("/api/apple-profile/link", json={"label": "iPhone", "password": "new", "calendar": "none"}).json()
+    assert r["url"].startswith("/profile/") and r["url"].endswith(".mobileconfig")
+    client.cookies.clear()
+    first, again = client.get(r["url"]), client.get(r["url"])
+    assert first.status_code == 200 and first.headers["content-type"].startswith("application/x-apple-aspen-config")
+    assert first.content == again.content
+    pw = plistlib.loads(first.content)["PayloadContent"][0]["CardDAVPassword"]
+    assert client.request("PROPFIND", "/dav/", auth=("alex", pw), headers={"Depth": "0"}).status_code == 207
+    assert client.get("/profile/not-a-token/x.mobileconfig").status_code == 404
+
 def test_account_picker_and_one_click(client, family_id):
     """Like ioPix: the sign-in screen lists the accounts; a viewer without a password signs in with one click,
     but never from outside (through Cloudflare)."""

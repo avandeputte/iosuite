@@ -24,7 +24,7 @@ log = logging.getLogger("iocontacts")
 # what a visitor may still fetch when sign-in is required: the app shell and its files, the API docs, the birthday
 # calendar links and CardDAV (their own sign-in), and the MCP endpoint (its gate below)
 OPEN_PATHS = ("/", "/manifest.webmanifest", "/api/docs", "/api/openapi.json")
-OPEN_PREFIXES = ("/static/", "/cal/", "/dav", "/.well-known/", "/mcp")
+OPEN_PREFIXES = ("/static/", "/cal/", "/dav", "/.well-known/", "/mcp", "/profile/")
 
 
 @asynccontextmanager
