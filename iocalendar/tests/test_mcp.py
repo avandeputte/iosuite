@@ -80,9 +80,9 @@ def test_mcp_events(client, family_id):
     assert len(ag["items"] if isinstance(ag, dict) else ag) == 3
 
 
-def test_mcp_viewer_cannot_change_shared(client, family_id):
+def test_mcp_member_cannot_change_shared(client, family_id):
     client.post("/api/server", json={"mcpEnabled": True})
-    client.post("/api/users", json={"name": "kid", "password": "kidpass123", "role": "viewer"})
+    client.post("/api/users", json={"name": "kid", "password": "kidpass123", "role": "member"})
     client.cookies.clear()
     assert client.post("/api/auth/login", json={"name": "kid", "password": "kidpass123"}).status_code == 200
     auth, _ = app_password(client)
@@ -90,3 +90,14 @@ def test_mcp_viewer_cannot_change_shared(client, family_id):
     assert "error" in r
     mine = call(client, auth, "create_event", title="Homework", start="2026-11-20T18:00")
     assert mine["calendar"] == "Personal"
+
+
+def test_mcp_viewer_only_reads(client, family_id):
+    client.post("/api/server", json={"mcpEnabled": True})
+    client.post("/api/users", json={"name": "vic", "password": "vicpass123", "role": "viewer"})
+    client.cookies.clear()
+    assert client.post("/api/auth/login", json={"name": "vic", "password": "vicpass123"}).status_code == 200
+    auth, _ = app_password(client)
+    assert "error" in call(client, auth, "create_event", title="Homework", start="2026-11-20T18:00")
+    code, msg = rpc(client, "tools/call", {"name": "create_calendar", "arguments": {"name": "Mine"}}, auth)
+    assert code == 200 and msg["result"].get("isError")

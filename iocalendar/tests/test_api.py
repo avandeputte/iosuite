@@ -144,8 +144,8 @@ def test_import_export_and_feeds(client, family_id):
     assert client.get("/api/calendars").status_code == 401
 
 
-def test_roles_viewers_keep_their_own(client, family_id):
-    assert client.post("/api/users", json={"name": "kid", "password": "kidpass99", "role": "viewer"}).status_code == 200
+def test_roles_members_keep_their_own(client, family_id):
+    assert client.post("/api/users", json={"name": "kid", "password": "kidpass99", "role": "member"}).status_code == 200
     e = mk(client, family_id, title="Family thing", start="2026-11-10T10:00")
     client.cookies.clear()
     assert client.post("/api/auth/login", json={"name": "kid", "password": "kidpass99"}).status_code == 200
@@ -161,6 +161,19 @@ def test_roles_viewers_keep_their_own(client, family_id):
     client.cookies.clear()
     client.post("/api/auth/login", json={"name": "alex", "password": "secret123"})
     assert [i["title"] for i in occ(client, "2026-11-10", "2026-11-11")] == ["Family thing"]
+
+
+def test_roles_viewers_only_look(client, family_id):
+    assert client.post("/api/users", json={"name": "vic", "password": "vicpass99", "role": "viewer"}).status_code == 200
+    e = mk(client, family_id, title="Family thing", start="2026-11-10T10:00")
+    client.cookies.clear()
+    assert client.post("/api/auth/login", json={"name": "vic", "password": "vicpass99"}).status_code == 200
+    cals = client.get("/api/calendars").json()["items"]
+    assert cals and all(c["shared"] and not c["writable"] for c in cals)  # no Personal calendar
+    assert [i["title"] for i in occ(client, "2026-11-10", "2026-11-11")] == ["Family thing"]
+    assert client.patch(f"/api/events/{e['id']}", json={"title": "x"}).status_code == 403
+    assert client.post("/api/calendars", json={"name": "Mine"}).status_code == 403
+    assert client.post("/api/events", json={"title": "x", "start": "2026-11-10T10:00"}).status_code == 403
 
 
 def test_free_busy(client, family_id):

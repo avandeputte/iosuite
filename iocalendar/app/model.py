@@ -2,8 +2,8 @@
 the app searches and draws from), occurrences in a time range, search, import, and the sync tokens CalDAV clients use.
 
 Calendars: the shared ones (owner_id NULL, Family first) that everyone sees, and each account's own private ones
-(Personal, made the first time the account uses ioCalendar). Viewers read the shared calendars and change only their
-own; editors change the shared ones too; admins also manage settings and users. A calendar of kind 'birthdays' is
+(Personal, made the first time a member uses ioCalendar). Viewers only read the shared calendars; members also keep
+their own private ones; editors change the shared ones too; admins also manage settings and users. A calendar of kind 'birthdays' is
 filled from ioContacts, one of kind 'holidays' from the holiday rules (app/holiday.py); nobody changes either here.
 """
 import datetime as dt
@@ -12,6 +12,7 @@ import threading
 from collections import OrderedDict
 
 from app import config, db, ical, members
+from iosuite_shared import users as shared_users
 from iosuite_shared.errors import Invalid
 
 PALETTE = ["#8e44d6", "#0b8a9e", "#1a73e8", "#e0426a", "#1e8e3e", "#e8710a", "#4b53c7", "#e8a100", "#5f6b7a", "#1294b8"]
@@ -50,14 +51,16 @@ def can_write(u: dict | None, c: dict | None) -> bool:
     if not can_read(u, c) or c.get("kind") in READ_ONLY_KINDS:
         return False
     if c["owner_id"] is None:
-        return u.get("role") in ("editor", "admin")
-    return True
+        return shared_users.can_write(u)  # a shared calendar: editors and admins
+    return shared_users.is_member(u)  # one's own: members and more (a viewer only looks)
 
 
 def ensure_personal(u: dict) -> None:
-    """Every account gets its private Personal calendar the first time it uses ioCalendar (accounts are made in any
-    app of the suite, so not necessarily here)."""
+    """Every member gets their private Personal calendar the first time they use ioCalendar (accounts are made in any
+    app of the suite, so not necessarily here). A viewer keeps nothing of their own."""
     if not u or not u.get("id") or not members.in_family(u["id"]):  # not a person (Settings › Users): no calendar of its own
+        return
+    if not shared_users.is_member(u):
         return
     if not db.one("SELECT id FROM cal_calendars WHERE owner_id = %s LIMIT 1", (u["id"],)):
         who = u.get("displayName") or u.get("display_name") or u.get("name")

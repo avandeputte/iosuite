@@ -24,6 +24,7 @@ from icalendar import vDDDTypes
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import RedirectResponse, Response
 from iosuite_shared import dav as webdav  # `dav` is the route below
+from iosuite_shared import users as shared_users
 from iosuite_shared.dav import AP, CS, D, q
 
 from app import access, config, ical, model
@@ -526,9 +527,11 @@ def _delete(ctx: Ctx, parts, headers) -> Response:
 
 
 def _mkcalendar(ctx: Ctx, parts, body) -> Response:
-    """MKCALENDAR (RFC 4791) or extended MKCOL (RFC 5689): a client making a new private calendar."""
+    """MKCALENDAR (RFC 4791) or extended MKCOL (RFC 5689): a client making a new private calendar (members and more)."""
     if len(parts) != 3 or parts[0] != "calendars":
         return Response(status_code=403)
+    if not shared_users.is_member(ctx.user):
+        return Response("A viewer only looks; a member keeps calendars of their own", status_code=403)
     if _cal(ctx, parts[2]):
         return Response(status_code=405)
     name, color, desc, tz = parts[2], None, None, None
