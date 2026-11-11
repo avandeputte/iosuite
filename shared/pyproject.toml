@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "iosuite-shared"
-version = "0.35.0"
-description = "Shared accounts, sessions, roles and per-user settings for the ioThing apps (ioPix, ioNotes, ioCalendar, ioContacts, ioHealth, ioSuite)"
+version = "0.36.0"
+description = "Shared accounts, sessions, roles and per-user settings for the ioThing apps (ioPix, ioNotes, ioCalendar, ioContacts, ioTasks, ioHealth, ioSuite)"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "GPL-3.0-or-later" }

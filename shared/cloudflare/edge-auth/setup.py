@@ -8,7 +8,7 @@ Every step finds what is already there and only makes what is missing, so it can
 
 1. the Workers KV namespace APP_PASSWORDS (made when missing)
 2. wrangler.toml in this folder (gitignored): a route per host on its app's sign-in path (ROUTES: /dav* for
-   ioCalendar and ioContacts, /v1/* for ioHealth), the namespace, APPS and MODE
+   ioCalendar, ioContacts and ioTasks, /v1/* for ioHealth), the namespace, APPS and MODE
 3. --deploy: `npx --yes wrangler@4 deploy`
 4. --rate-limit: the zone's rule "ioSuite DAV rate limit" on /dav* of the DAV hosts (not ioHealth: a full sync sends
    a burst of uploads), 60 requests per 10 s per IP and
@@ -41,7 +41,7 @@ RULE = "ioSuite DAV rate limit"
 TOKEN_NAME = "iosuite-edge-kv"
 dry = False
 # each app's sign-in path for devices (worker.js GUARDED says the same)
-ROUTES = {"iocalendar": "/dav", "iocontacts": "/dav", "iohealth": "/v1/"}
+ROUTES = {"iocalendar": "/dav", "iocontacts": "/dav", "iotasks": "/dav", "iohealth": "/v1/"}
 
 
 def route_path(app: str) -> str:
@@ -178,7 +178,7 @@ def main():
     global dry
     p = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     p.add_argument("--host", action="append", required=True, metavar="HOST=APP",
-                   help="a public host and its app (iocalendar, iocontacts, iohealth); once per host")
+                   help="a public host and its app (iocalendar, iocontacts, iotasks, iohealth); once per host")
     p.add_argument("--mode", choices=("monitor", "enforce"), default="monitor")
     p.add_argument("--deploy", action="store_true", help="run wrangler deploy")
     p.add_argument("--rate-limit", action="store_true", help="add or update the WAF rate limit rule")
