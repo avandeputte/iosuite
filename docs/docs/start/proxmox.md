@@ -17,6 +17,7 @@ the Proxmox VE host, as root, run the line for the app you want:
 | ioContacts | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iocontacts/main/proxmox/ct/iocontacts.sh)"` | 1 CPU, 512 MB, 4 GB |
 | ioHealth | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iohealth/main/proxmox/ct/iohealth.sh)"` | 2 CPU, 1 GB, 4 GB |
 | ioTasks | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iotasks/main/proxmox/ct/iotasks.sh)"` | 1 CPU, 512 MB, 4 GB |
+| ioRecipe | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iorecipe/main/proxmox/ct/iorecipe.sh)"` | 1 CPU, 512 MB, 4 GB |
 
 ## What it asks
 

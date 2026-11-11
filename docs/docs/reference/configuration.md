@@ -66,3 +66,4 @@ Apps), and the keys for services outside the suite (Settings › Global settings
 | ioDNS | 8660 |
 | ioTasks | 8670 |
 | ioBackup | 8680 |
+| ioRecipe | 8690 |
