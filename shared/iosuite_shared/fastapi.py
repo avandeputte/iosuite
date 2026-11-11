@@ -288,7 +288,7 @@ class Auth:
         shut = outside and not users.any_users()  # no account yet, asked from outside: nothing is open (unclaimed)
         return {"user": u, "settings": users.get_settings(u["id"], self.app) if u else {}, "usersExist": users.any_users(),
                 "isAdmin": users.is_admin(u) and not shut, "isSuiteAdmin": users.is_suite_admin(u) and not shut,
-                "canWrite": users.can_write(u) and not shut, "signedIn": users.is_signed_in(u) and not shut,
+                "isMember": users.is_member(u) and not shut, "canWrite": users.can_write(u) and not shut, "signedIn": users.is_signed_in(u) and not shut,
                 "requireLogin": shut or users.require_login(self.app), "unclaimed": shut,
                 "viaProxy": bool(getattr(request.state, "via_proxy", False)), "signedInBy": self.signed_in_by(request, u),
                 "throughCloudflare": outside, "app": self.app}
