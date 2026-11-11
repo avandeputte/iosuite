@@ -150,7 +150,7 @@ export async function showPeople() {
     s.suggested[0] ? h('a', { class: 'pill', href: '#/faces?tab=suggested' }, 'Suggestions to confirm', h('b', null, `${nf.format(s.suggested[1])} in ${nf.format(s.suggested[0])} photos`)) : null,
     s.unknown[0] ? h('a', { class: 'pill', href: '#/faces?tab=unknown' }, 'Unnamed faces', h('b', null, `${nf.format(s.unknown[1])} in ${nf.format(s.unknown[0])} photos`)) : null,
     s.ignored[0] ? h('a', { class: 'pill', href: '#/faces?tab=ignored' }, 'Ignored faces', h('b', null, nf.format(s.ignored[1]))) : null)).catch(() => {});
-  // birthdays in the next month, from ioContacts (found in the suite by itself): nothing shows when it is off or not reached
+  // birthdays in the next month, from ioContact (found in the suite by itself): nothing shows when it is off or not reached
   const bdays = h('div', { class: 'pills bdays' });
   if (S.USER || !S.USERS_EXIST) api('/api/people/birthdays').then((r) => {
     const list = r.upcoming.filter((b) => byId.has(b.tag)).slice(0, 12);
@@ -639,7 +639,7 @@ async function suggestionPage({ view, loading, endpoint, trail, icon: ic, hue, t
  * how old its named people look, the years those people are photographed in, dated look-alikes and the camera).
  * Nothing is written until a year is used; birth years entered here help people with few dated photos. */
 export function showDateSuggest() {
-  const basis = (p) => p.basis === 'fit' ? `from ${nf.format(p.n)} photos with a date` : p.basis === 'dated' ? `from only ${p.n} photos with a date` : p.basis === 'entered' ? (p.fromContacts ? 'birthday in ioContacts' : 'birth year you entered') : 'too few photos with a date: enter a birth year';
+  const basis = (p) => p.basis === 'fit' ? `from ${nf.format(p.n)} photos with a date` : p.basis === 'dated' ? `from only ${p.n} photos with a date` : p.basis === 'entered' ? (p.fromContacts ? 'birthday in ioContact' : 'birth year you entered') : 'too few photos with a date: enter a birth year';
   const birthBtn = (p) => S.EDITING ? h('button', { type: 'button', class: 'lnk', onclick: async () => {
     const v = await promptDialog(`${p.name}’s year of birth (leave empty to work it out from photos with a date)`, { value: p.entered && !p.fromContacts ? String(p.birth) : '', placeholder: 'e.g. 1942' });
     if (v === null || v === undefined) return;
@@ -668,7 +668,7 @@ export function showDateSuggest() {
       try { hints = await api('/api/datehints'); } catch { /* shown without */ }
       const people = h('div', { class: 'hlist' }, d.people.map((p) => h('div', { class: 'hrow' },
         h('img', { class: 'avatar', src: faceUrl(p.tag), alt: '' }),
-        h('div', { class: 'hmain' }, h('b', null, p.name), ' · ', p.birth ? `born ${p.entered ? '' : 'about '}${p.birth}` : 'birth year unknown', h('span', { class: 'muted' }, ` (${p.fromContacts && p.basis !== 'entered' ? `${basis(p)}; birth year from ioContacts` : basis(p)}) `), birthBtn(p)))));
+        h('div', { class: 'hmain' }, h('b', null, p.name), ' · ', p.birth ? `born ${p.entered ? '' : 'about '}${p.birth}` : 'birth year unknown', h('span', { class: 'muted' }, ` (${p.fromContacts && p.basis !== 'entered' ? `${basis(p)}; birth year from ioContact` : basis(p)}) `), birthBtn(p)))));
       return [hints.folders.length ? [h('h3', null, 'Folder hints'), h('div', { class: 'muted', style: 'margin:-4px 0 8px' }, 'The earliest and latest year anything in a folder can be from, subfolders included: every suggestion in it keeps to those years, and dated photos outside them are not used as clues.'), h('div', { class: 'hlist' }, hints.folders.map(hintRow))] : null,
         d.people.length ? [h('h3', null, 'People'), people] : null];
     },

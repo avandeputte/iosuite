@@ -64,7 +64,7 @@ def test_sidebar_docks_hides_and_slides_over(browser, server):
     ctx = browser.new_context(bypass_csp=True, viewport={"width": 1280, "height": 860}); page = ctx.new_page()
     try:
         page.goto(server + "/#/photos"); page.wait_for_selector("body.side-docked #nav a.on", timeout=10000)
-        assert page.locator(".navhead .brand-name").is_visible() and page.locator(".navhead a.brand img.brand-mark").is_visible()  # the logo beside the name, as in ioContacts
+        assert page.locator(".navhead .brand-name").is_visible() and page.locator(".navhead a.brand img.brand-mark").is_visible()  # the logo beside the name, as in ioContact
         assert page.locator(".navfoot a[data-v=settings]").is_visible() and not page.locator("#menubtn").is_visible()
         nav, main = page.locator("#nav").bounding_box(), page.locator("#main").bounding_box()
         assert abs(main["x"] - (nav["x"] + nav["width"])) < 1.5, (nav, main)
@@ -318,8 +318,8 @@ def test_the_name_opens_the_other_suite_apps(page, server, browser):
     assert page.locator("#suitebtn").count() == 0
     others = {"app": "iopix", "items": [
         {"app": "iopix", "name": "iopix", "url": server, "icon": server + "/static/icons/mark.svg", "color": "#3b4a8c"},
-        {"app": "iocontacts", "name": "ioContacts", "description": "Contacts", "url": "https://contacts.example.com", "icon": None, "color": "#7a4fd0"},
-        {"app": "ionotes", "name": "ioNotes", "url": "https://notes.example.com", "icon": "https://notes.example.com/icon.svg", "color": "#2f8f5b"},
+        {"app": "iocontact", "name": "ioContact", "description": "Contacts", "url": "https://contacts.example.com", "icon": None, "color": "#7a4fd0"},
+        {"app": "ionote", "name": "ioNote", "url": "https://notes.example.com", "icon": "https://notes.example.com/icon.svg", "color": "#2f8f5b"},
         {"app": "nowhere", "name": "ioNowhere", "url": None}]}  # never seen anywhere: no address to link to
     page.route("**/api/auth/suite", lambda r: r.fulfill(json=others))
     page.route("https://notes.example.com/**", lambda r: r.fulfill(status=404))  # its icon fails: a coloured letter instead
@@ -329,7 +329,7 @@ def test_the_name_opens_the_other_suite_apps(page, server, browser):
     page.locator("#nav .navhead button.suitebtn").click()
     page.wait_for_selector(".suitepop .apptile", timeout=5000)
     tiles = page.locator(".suitepop .apptile")
-    assert page.locator(".suitepop .appnm").all_inner_texts() == ["ioContacts", "ioNotes"]  # the others, not iopix itself
+    assert page.locator(".suitepop .appnm").all_inner_texts() == ["ioContact", "ioNote"]  # the others, not iopix itself
     assert [tiles.nth(i).get_attribute("href") for i in range(2)] == ["https://contacts.example.com", "https://notes.example.com"]
     page.wait_for_selector(".suitepop .apptile:nth-child(2) .appic.fb", timeout=5000)
     page.keyboard.press("Escape")

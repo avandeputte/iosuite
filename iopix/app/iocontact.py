@@ -1,13 +1,13 @@
-"""ioContacts: birthdays of the people named here, from the suite's address book (found in the suite by itself; nothing to set up).
+"""ioContact: birthdays of the people named here, from the suite's address book (found in the suite by itself; nothing to set up).
 
-The mirror of ioContacts' own ioPix link, with nothing to set up: ioContacts is found in the suite's list of apps, and
+The mirror of ioContact's own ioPix link, with nothing to set up: ioContact is found in the suite's list of apps, and
 the server (never the browser) reads from it as iopix's own service account with a read-only app password, both made
 by itself the first time (iosuite_shared.links).
 
-Which contact is which person is ioContacts' own link (a contact's "ioPix person", made there); iopix keeps no
+Which contact is which person is ioContact's own link (a contact's "ioPix person", made there); iopix keeps no
 mapping of its own. Only linked contacts with a birthday count.
 The list is kept in memory and fetched again in the background every ten minutes; pages only ever read what is kept,
-so ioContacts being slow or down never holds up a page: its birthdays are then those of the last good fetch (none
+so ioContact being slow or down never holds up a page: its birthdays are then those of the last good fetch (none
 after a restart), and Settings shows the error.
 """
 import datetime
@@ -22,7 +22,7 @@ from iosuite_shared import links
 from app.data import index
 
 log = logging.getLogger(__name__)
-APP, PROVIDER = "iopix", "iocontacts"
+APP, PROVIDER = "iopix", "iocontact"
 TTL = 600              # seconds a fetch is used before the next one is started
 _lock = threading.Lock()
 _state = {"at": 0.0, "people": None, "error": None, "busy": False, "contacts": 0}
@@ -47,20 +47,20 @@ def public_settings() -> dict:
 
 def _get(path: str, timeout: float = 15):
     if not settings()["url"]:
-        raise RuntimeError("ioContacts is not part of the suite (it has not started on this Shared ioSuite database)")
+        raise RuntimeError("ioContact is not part of the suite (it has not started on this Shared ioSuite database)")
     try:
         with links.get(APP, PROVIDER, path, timeout=timeout, user_agent="iopix") as r:
             return json.loads(r.read())
     except urllib.error.HTTPError as e:
         if e.code in (401, 403):
-            raise RuntimeError(f"ioContacts refused iopix's app password ({e.code})") from None
-        raise RuntimeError(f"ioContacts answered {e.code}") from None
+            raise RuntimeError(f"ioContact refused iopix's app password ({e.code})") from None
+        raise RuntimeError(f"ioContact answered {e.code}") from None
     except ValueError:
-        raise RuntimeError("ioContacts answered something that is not ioContacts") from None
+        raise RuntimeError("ioContact answered something that is not ioContact") from None
 
 
 def match(contacts: list, persons: dict, base: str = "") -> dict:
-    """{tag id: {contactId, name, year, month, day, url}} for the contacts with a birthday that ioContacts links to a
+    """{tag id: {contactId, name, year, month, day, url}} for the contacts with a birthday that ioContact links to a
     person here (its "ioPix person"); a link to a person no longer here is left out. `persons` is {tag id: name}."""
     out = {}
     for c in contacts:
@@ -86,10 +86,10 @@ def refresh() -> dict:
         contacts = _get("/api/contacts?iopix_linked=true&limit=20000", timeout=30).get("items", [])
         people = match(contacts, _persons(), settings()["url"])
     except Exception as e:  # noqa: BLE001 - kept for Settings; the last good list stays in use
-        msg = str(e) if isinstance(e, RuntimeError) else f"ioContacts did not answer: {type(e).__name__}: {e}"
+        msg = str(e) if isinstance(e, RuntimeError) else f"ioContact did not answer: {type(e).__name__}: {e}"
         with _lock:
             _state.update(error=msg, at=time.time(), busy=False)
-        log.info("ioContacts: %s", msg)
+        log.info("ioContact: %s", msg)
         return {"ok": False, "error": msg}
     with _lock:
         _state.update(people=people, contacts=len(contacts), error=None, at=time.time(), busy=False)
@@ -97,7 +97,7 @@ def refresh() -> dict:
 
 
 def people() -> dict:
-    """The matched birthdays as last fetched ({} when ioContacts is off or not reached yet); a stale list starts a
+    """The matched birthdays as last fetched ({} when ioContact is off or not reached yet); a stale list starts a
     fetch in the background and is returned as it is."""
     if not enabled():
         return {}
@@ -106,7 +106,7 @@ def people() -> dict:
         if stale:
             _state["busy"] = True
     if stale:
-        threading.Thread(target=refresh, name="iocontacts", daemon=True).start()
+        threading.Thread(target=refresh, name="iocontact", daemon=True).start()
     return _state["people"] or {}
 
 

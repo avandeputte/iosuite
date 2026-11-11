@@ -8,7 +8,7 @@ from fastapi import Request
 from fastapi.responses import FileResponse
 from starlette.concurrency import run_in_threadpool
 
-from app import access, config, events, iocontacts, thumbs, users
+from app import access, config, events, iocontact, thumbs, users
 from app.digikam import dbsync
 from app.digikam.dkdb import in_chunks
 from app.photos import edits
@@ -390,9 +390,9 @@ def api_people_list():
 
 @router.get("/api/people/birthdays", dependencies=[access.signed_in])
 def api_people_birthdays():
-    """The birthdays from ioContacts (found in the suite by itself) in the next month, today first:
+    """The birthdays from ioContact (found in the suite by itself) in the next month, today first:
     {enabled, upcoming: [{tag, month, day, year, turns, in, date, url}]}. Read from what was last fetched."""
-    return {"enabled": iocontacts.enabled(), "upcoming": iocontacts.upcoming()}
+    return {"enabled": iocontact.enabled(), "upcoming": iocontact.upcoming()}
 
 
 @router.post("/api/people/birth", dependencies=[access.signed_in])

@@ -17,7 +17,7 @@ from fastapi.responses import JSONResponse
 from fastapi.responses import Response
 
 from app.ai import analysis, concepts, moments
-from app import access, config, iocontacts, users
+from app import access, config, iocontact, users
 from app.photos import edits
 from app.data import index, state as appstate
 from app.digikam.dkdb import in_chunks
@@ -408,8 +408,8 @@ def api_photo(photo_id: int, request: Request):
         d.pop("hash", None)
         if hide_path:
             d.pop("path", None)
-        if not hide_path and (bdays := iocontacts.people()):  # how old the people were, from ioContacts' birthdays
-            told = {str(t["id"]): iocontacts.age_text(bdays[t["id"]], d.get("taken"), d["dprec"]) for t in d["tags"] if t["person"] and t["id"] in bdays}
+        if not hide_path and (bdays := iocontact.people()):  # how old the people were, from ioContact's birthdays
+            told = {str(t["id"]): iocontact.age_text(bdays[t["id"]], d.get("taken"), d["dprec"]) for t in d["tags"] if t["person"] and t["id"] in bdays}
             d["ages"] = {k: v for k, v in told.items() if v}  # keyed by the tag id as a string (JSON)
         d["ualbums"] = appstate.albums_of(photo_id)
         d["similar"] = semantic_enabled()

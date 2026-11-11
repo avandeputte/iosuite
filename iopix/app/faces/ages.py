@@ -18,7 +18,7 @@ import math
 import threading
 import time
 
-from app import config, iocontacts, jobs, thumbs
+from app import config, iocontact, jobs, thumbs
 from app.ai import models
 from app.data import index, appdb
 
@@ -223,8 +223,8 @@ def births() -> dict:
 
 
 def known_births() -> dict:
-    """The birth years the suggestions go by: those from ioContacts' birthdays, and over them the ones entered here."""
-    return {**iocontacts.birth_years(), **births()}
+    """The birth years the suggestions go by: those from ioContact's birthdays, and over them the ones entered here."""
+    return {**iocontact.birth_years(), **births()}
 
 
 def set_birth(tag: int, year):
@@ -313,7 +313,7 @@ def year_for(c: dict, age: float) -> tuple:
 
 def suggestions(ids: list = None) -> dict:
     """{"items": [{id, year, lo, hi, people: [{tag, name, age, year}]}], "people": [{tag, name, birth, entered, fromContacts, basis, n}]}
-    (a birth year from ioContacts counts as entered; one entered here wins over it)
+    (a birth year from ioContact counts as entered; one entered here wins over it)
     for the photos marked "Date unknown" (or those of `ids`), best supported first. Computed on request from the
     stored ages; a photo none of whose named faces has a calibrated person gets no item."""
     if np is None:

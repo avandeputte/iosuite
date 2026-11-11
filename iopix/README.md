@@ -34,7 +34,7 @@ git clone https://github.com/avandeputte/iopix && cd iopix
 ./setup.sh
 ```
 
-Its last question, "Also install …?" (flag `--also iocalendar,ionotes`, `--also all`; `IOPIX_ALSO` in the environment), puts
+Its last question, "Also install …?" (flag `--also iocalendar,ionote`, `--also all`; `IOPIX_ALSO` in the environment), puts
 other apps of the suite in this same machine, beside iopix (`/opt/iocalendar/app` next to `/opt/iopix/app`),
 without asking the shared questions again: the same database server (each app gets its own database: `suite`,
 `calendar`, `contacts`, `notes`, `health`, `iopix`; the user needs rights on those names too), the same Shared ioSuite
@@ -205,7 +205,7 @@ The Google Maps key (Settings › Map provider) reaches every browser in the til
 
 ## Users and permissions
 
-Accounts are the **ioThing suite's shared accounts** in the **Shared ioSuite database** (the `iosuite-shared` library from the [iosuite-shared](https://github.com/avandeputte/iosuite-shared) repository; a MariaDB database shared with ioNotes, ioContacts and the other apps, holding accounts, sessions, roles, the suite-wide settings and the list of apps): one name, password and session for every app, so someone signed in at `photo.example.com` is signed in at `notes.example.com` too when the apps share a domain (`COOKIE_DOMAIN`). What is iopix's own is kept per app: the role an account holds here, its display settings and the person it is linked to. A *suite admin* is admin in every app; an app admin manages this app's settings and the accounts' roles here. Point iopix at that database with `IOSUITE_DB_HOST`, `IOSUITE_DB_NAME`, `IOSUITE_DB_USER` and `IOSUITE_DB_PASSWORD` in `config.env` (the tables are created at start; `iosuite-shared migrate` folds an older install's `user_accounts` table into it).
+Accounts are the **ioThing suite's shared accounts** in the **Shared ioSuite database** (the `iosuite-shared` library from the [iosuite-shared](https://github.com/avandeputte/iosuite-shared) repository; a MariaDB database shared with ioNote, ioContact and the other apps, holding accounts, sessions, roles, the suite-wide settings and the list of apps): one name, password and session for every app, so someone signed in at `photo.example.com` is signed in at `notes.example.com` too when the apps share a domain (`COOKIE_DOMAIN`). What is iopix's own is kept per app: the role an account holds here, its display settings and the person it is linked to. A *suite admin* is admin in every app; an app admin manages this app's settings and the accounts' roles here. Point iopix at that database with `IOSUITE_DB_HOST`, `IOSUITE_DB_NAME`, `IOSUITE_DB_USER` and `IOSUITE_DB_PASSWORD` in `config.env` (the tables are created at start; `iosuite-shared migrate` folds an older install's `user_accounts` table into it).
 
 Out of the box the viewer is open to anyone who can reach it. `setup.sh` asks for the admin account; Settings offers **Create the admin account** later (or set `ADMIN_USER` and `ADMIN_PASSWORD` for a container, or run `.venv/bin/python -m app.users create <name> <password> admin`). Once a user exists:
 
