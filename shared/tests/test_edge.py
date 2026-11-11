@@ -64,12 +64,12 @@ def test_create_publishes_the_hash_and_delete_removes_it(kv):
 
 def test_first_use_after_a_start_publishes_again(kv):
     u = _alex()
-    pw = apppasswords.create(u["id"], "iocontacts", "Mac")
+    pw = apppasswords.create(u["id"], "iocontact", "Mac")
     kv.clear()                      # made before the edge check was on
     edge._published.clear()         # the app restarted
-    assert apppasswords.authenticate("alex", pw, "iocontacts")
-    assert list(kv) == [f"iocontacts:{pw.split('-')[1]}"]
-    assert apppasswords.authenticate("alex", "secret-pass-1", "iocontacts")  # an account password is never sent
+    assert apppasswords.authenticate("alex", pw, "iocontact")
+    assert list(kv) == [f"iocontact:{pw.split('-')[1]}"]
+    assert apppasswords.authenticate("alex", "secret-pass-1", "iocontact")  # an account password is never sent
     assert len(kv) == 1
 
 
@@ -77,7 +77,7 @@ def test_deleting_the_account_removes_its_keys(kv):
     _alex()
     bob = users.create("bob", "secret-pass-2", "editor", "iocalendar")
     apppasswords.create(bob["id"], "iocalendar", "iPad")
-    apppasswords.create(bob["id"], "iocontacts", "iPad")
+    apppasswords.create(bob["id"], "iocontact", "iPad")
     assert len(kv) == 2
     users.delete(bob["id"])
     assert kv == {}

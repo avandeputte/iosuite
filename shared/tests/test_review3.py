@@ -29,7 +29,7 @@ class Version:
         return False
 
 
-def make_app(name="iocontacts", mcp_on=True, **kw):
+def make_app(name="iocontact", mcp_on=True, **kw):
     auth = Auth(name, register=False, **kw)
     app = FastAPI()
     app.middleware("http")(auth.middleware(open_paths=("/",), before=auth.mcp_gate(lambda: mcp_on)))
@@ -73,22 +73,22 @@ def clean():
 
 # ---- S-8
 def test_a_revoked_app_password_stops_at_once_in_every_process():
-    alex = users.create("alex", "secret123", "editor", "iocontacts")
-    pw = apppasswords.create(alex["id"], "iocontacts", "Phone")
-    assert apppasswords.authenticate("alex", pw, "iocontacts")["name"] == "alex"
+    alex = users.create("alex", "secret123", "editor", "iocontact")
+    pw = apppasswords.create(alex["id"], "iocontact", "Phone")
+    assert apppasswords.authenticate("alex", pw, "iocontact")["name"] == "alex"
     assert apppasswords._cache  # remembered: the next check computes no hash
     # another process (another app's server) revokes it: this one's cache is not cleared
     db.ex("DELETE FROM ios_app_passwords WHERE user_id = %s", (alex["id"],))
-    assert apppasswords.authenticate("alex", pw, "iocontacts") is None
+    assert apppasswords.authenticate("alex", pw, "iocontact") is None
     # a scope set elsewhere counts at once too
-    pw = apppasswords.create(alex["id"], "iocontacts", "Phone")
-    assert apppasswords.authenticate_scoped("alex", pw, "iocontacts")[1] == ""
+    pw = apppasswords.create(alex["id"], "iocontact", "Phone")
+    assert apppasswords.authenticate_scoped("alex", pw, "iocontact")[1] == ""
     db.ex("UPDATE ios_app_passwords SET scope = 'dav' WHERE user_id = %s", (alex["id"],))
-    assert apppasswords.authenticate_scoped("alex", pw, "iocontacts")[1] == "dav"
+    assert apppasswords.authenticate_scoped("alex", pw, "iocontact")[1] == "dav"
     # and the account password, remembered the same way, stops when it is changed elsewhere
-    assert apppasswords.authenticate("alex", "secret123", "iocontacts")["name"] == "alex"
+    assert apppasswords.authenticate("alex", "secret123", "iocontact")["name"] == "alex"
     db.ex("UPDATE ios_users SET hash = %s WHERE id = %s", (users.hash_password("another-one"), alex["id"]))
-    assert apppasswords.authenticate("alex", "secret123", "iocontacts") is None
+    assert apppasswords.authenticate("alex", "secret123", "iocontact") is None
 
 
 # ---- S-10
@@ -103,8 +103,8 @@ def test_the_apps_cannot_be_framed_by_another_site():
 # ---- S-11
 def test_a_page_in_a_browser_reaches_mcp_only_under_a_known_name(monkeypatch):
     app, auth = make_app()
-    alex = users.create("alex", "secret123", "editor", "iocontacts")
-    pw = apppasswords.create(alex["id"], "iocontacts", "Assistant")
+    alex = users.create("alex", "secret123", "editor", "iocontact")
+    pw = apppasswords.create(alex["id"], "iocontact", "Assistant")
     for host in ("192.168.1.10:8640", "contacts.lan", "nas:8640", "localhost:8640", "[fd00::1]:8640", "contacts.local"):
         r = TestClient(app, base_url=f"http://{host}", client=LAN).post("/mcp", headers={**basic("alex", pw), "origin": f"http://{host}"})
         assert r.status_code == 200, host
@@ -114,20 +114,20 @@ def test_a_page_in_a_browser_reaches_mcp_only_under_a_known_name(monkeypatch):
     assert evil.post("/mcp", headers={**basic("alex", pw), "sec-fetch-site": "same-origin"}).status_code == 403
     assert evil.post("/mcp", headers=basic("alex", pw)).status_code == 200  # an MCP client is not a browser: no Origin, not asked
     # the app's own addresses are known: PUBLIC_URL, and the shared cookie domain
-    suite.register("iocontacts", name="ioContacts", url="https://contacts.example.org")
+    suite.register("iocontact", name="ioContact", url="https://contacts.example.org")
     suite._hosts.clear()
     pub = TestClient(app, base_url="https://contacts.example.org", client=LAN)
     assert pub.post("/mcp", headers={**basic("alex", pw), "origin": "https://contacts.example.org"}).status_code == 200
     monkeypatch.setattr("iosuite_shared.config.COOKIE_DOMAIN", "example.com")
     dom = TestClient(app, base_url="https://contacts.example.com", client=LAN)
     assert dom.post("/mcp", headers={**basic("alex", pw), "origin": "https://contacts.example.com"}).status_code == 200
-    assert not suite.known_host("iocontacts", "example.com.evil.example") and not suite.known_host("iocontacts", "")
+    assert not suite.known_host("iocontact", "example.com.evil.example") and not suite.known_host("iocontact", "")
 
 
 # ---- S-12
 def test_a_proxy_client_without_cookies_keeps_one_session():
     app, _ = make_app()
-    alex = users.create("alex", "secret123", "editor", "iocontacts", email="alex@example.com")
+    alex = users.create("alex", "secret123", "editor", "iocontact", email="alex@example.com")
     db.set_setting("auth_proxy", "nginx", "")
     db.set_setting("auth_proxy_trusted", PROXY[0], "")
     who = {"remote-user": "alex", "user-agent": "curl/8"}
@@ -144,9 +144,9 @@ def test_a_proxy_client_without_cookies_keeps_one_session():
 
 
 def test_a_session_is_ended_by_its_exact_id():
-    alex = users.create("alex", "secret123", "editor", "iocontacts")
+    alex = users.create("alex", "secret123", "editor", "iocontact")
     for _ in range(3):
-        sessions.create(alex["id"], "iocontacts", "password")
+        sessions.create(alex["id"], "iocontact", "password")
     ids = [s["id"] for s in sessions.list_sessions(alex["id"])]
     for bad in ("%", "", "_" * 16, ids[0][:4], ids[0].upper() + "%"):
         with pytest.raises(Invalid):
@@ -159,8 +159,8 @@ def test_a_session_is_ended_by_its_exact_id():
 # ---- S-13
 def test_the_account_list_and_the_version_stay_inside_the_network():
     app, _ = make_app()
-    users.create("alex", "secret123", "editor", "iocontacts")
-    users.create("kid", "", "viewer", "iocontacts")
+    users.create("alex", "secret123", "editor", "iocontact")
+    users.create("kid", "", "viewer", "iocontact")
     inside = TestClient(app, base_url="http://contacts.lan", client=LAN)
     assert [a["name"] for a in inside.get("/api/auth/accounts").json()["accounts"]] == ["alex", "kid"]
     assert inside.get("/api/status").json()["version"] == "1.2.3"
@@ -231,7 +231,7 @@ def test_a_pool_of_connections_that_commit_themselves_still_works():
 def test_a_value_error_no_validation_raised_is_logged_with_its_traceback(caplog):
     app, _ = make_app()
     c = TestClient(app, client=LAN)
-    with caplog.at_level(logging.INFO, logger="iosuite_shared.iocontacts"):
+    with caplog.at_level(logging.INFO, logger="iosuite_shared.iocontact"):
         r = c.post("/api/checked")
         assert r.status_code == 400 and r.json()["detail"] == "Bad request: A name is needed"
         assert not [x for x in caplog.records if x.exc_info]

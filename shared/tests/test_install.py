@@ -26,8 +26,8 @@ PORT=8630
 
 
 def test_parse_apps():
-    assert install.parse_apps("iopix, ionotes") == ["iopix", "ionotes"]
-    assert install.parse_apps(["iocalendar,iocontacts", "iocalendar"]) == ["iocalendar", "iocontacts"]
+    assert install.parse_apps("iopix, ionote") == ["iopix", "ionote"]
+    assert install.parse_apps(["iocalendar,iocontact", "iocalendar"]) == ["iocalendar", "iocontact"]
     assert install.parse_apps("none") == []
     assert install.parse_apps("all") == list(install.APPS)
     with pytest.raises(SystemExit):
@@ -58,7 +58,7 @@ def test_plan_shares_the_answers(tmp_path):
 
 
 def test_plan_without_an_app_database_lends_the_shared_one(tmp_path):
-    cfg = install.read_env_file(tmp_path / "missing")  # ionotes on SQLite: no DB_* at all
+    cfg = install.read_env_file(tmp_path / "missing")  # ionote on SQLite: no DB_* at all
     cfg.update(IOSUITE_DB_HOST="db.lan", IOSUITE_DB_PASSWORD="pw")
     [e] = install.plan(["iohealth"], cfg, tmp_path, service=False)
     assert e["env"]["IOHEALTH_DB"] == "db.lan:3306/health:iosuite:pw"
@@ -70,7 +70,7 @@ def test_install_runs_each_setup_and_skips_what_is_there(tmp_path, monkeypatch):
     app = tmp_path / "opt" / "iosuite" / "app"
     app.mkdir(parents=True)
     (app / "config.env").write_text(CFG)
-    done = tmp_path / "opt" / "iocontacts" / "app"
+    done = tmp_path / "opt" / "iocontact" / "app"
     done.mkdir(parents=True)
     (done / "config.env").write_text("PORT=8640\n")
     fetched, ran, lines = [], [], []
@@ -83,7 +83,7 @@ def test_install_runs_each_setup_and_skips_what_is_there(tmp_path, monkeypatch):
         ran.append(entry["name"])
         return 1 if entry["name"] == "iohealth" else 0
 
-    failed = install.install(["iocontacts", "iocalendar", "iohealth"], app, photos=str(tmp_path / "photos"),
+    failed = install.install(["iocontact", "iocalendar", "iohealth"], app, photos=str(tmp_path / "photos"),
                              fetcher=fetcher, runner=runner, log=lines.append)
     assert fetched == ["iocalendar", "iohealth"] and ran == ["iocalendar", "iohealth"]
     assert failed == ["iohealth"]
@@ -93,8 +93,8 @@ def test_install_runs_each_setup_and_skips_what_is_there(tmp_path, monkeypatch):
 def test_cli_has_install(tmp_path, monkeypatch):
     calls = {}
     monkeypatch.setattr(install, "install", lambda names, config_dir, **kw: calls.update(names=names, config_dir=config_dir, **kw) or [])
-    assert cli.main(["--config", str(tmp_path), "install", "iopix,ionotes", "--admin", "alex", "--no-service", "--from", "iosuite"]) == 0
-    assert calls["names"] == ["iopix", "ionotes"] and calls["admin"] == "alex" and calls["service"] is False and calls["from_app"] == "iosuite"
+    assert cli.main(["--config", str(tmp_path), "install", "iopix,ionote", "--admin", "alex", "--no-service", "--from", "iosuite"]) == 0
+    assert calls["names"] == ["iopix", "ionote"] and calls["admin"] == "alex" and calls["service"] is False and calls["from_app"] == "iosuite"
 
 
 def test_local_mariadb_gets_the_databases(tmp_path, monkeypatch):
@@ -107,7 +107,7 @@ def test_local_mariadb_gets_the_databases(tmp_path, monkeypatch):
 
     monkeypatch.setattr(install.subprocess, "run", lambda cmd, **kw: seen.update(cmd=cmd, sql=kw["input"]) or R())
     cfg = dict(DB_HOST="127.0.0.1", DB_USER="iopix", DB_PASSWORD="x")
-    entries = install.plan(["iocalendar", "ionotes"], cfg, tmp_path)
+    entries = install.plan(["iocalendar", "ionote"], cfg, tmp_path)
     install.prepare_local_databases(entries, cfg, log=lambda *_: None)
     assert seen["cmd"] == ["mariadb"] and "`calendar`" in seen["sql"] and "`notes`" in seen["sql"] and "'iopix'@'localhost'" in seen["sql"]
     seen.clear()

@@ -12,7 +12,7 @@ LAN = ("192.168.1.20", 50000)       # a browser on the network
 PROXY = ("192.168.1.5", 50001)      # a reverse proxy on another machine of the network
 
 
-def make_app(name="iocontacts", register=False, **kw):
+def make_app(name="iocontact", register=False, **kw):
     auth = Auth(name, register=register, **kw)
     app = FastAPI()
     app.middleware("http")(auth.middleware(open_paths=("/",), open_prefixes=("/static/",)))
@@ -56,12 +56,12 @@ def clean():
 def test_an_app_admin_sets_roles_here_and_nothing_beyond():
     app, _ = make_app()
     boss = users.create("alex", "secret123", suite_admin=True, email="alex@example.com")
-    users.create("bob", "secret123", "admin", "iocontacts")
-    ann = users.create("ann", "secret123", "viewer", "iocontacts", email="ann@example.com")
+    users.create("bob", "secret123", "admin", "iocontact")
+    ann = users.create("ann", "secret123", "viewer", "iocontact", email="ann@example.com")
     bob = signed_in(app, "bob")
     # the role here: his to give
     assert bob.patch(f"/api/users/{ann['id']}", json={"role": "editor"}).status_code == 200
-    assert users.get(ann["id"], "iocontacts")["role"] == "editor"
+    assert users.get(ann["id"], "iocontact")["role"] == "editor"
     # a form that sends the other fields back unchanged is fine
     assert bob.patch(f"/api/users/{ann['id']}", json={"role": "viewer", "name": "ann", "email": "ann@example.com"}).status_code == 200
     # the account itself is the suite's: sign-in at a proxy finds it by email and name, a password opens every app
@@ -71,7 +71,7 @@ def test_an_app_admin_sets_roles_here_and_nothing_beyond():
         assert r.status_code == 403 and "suite admin" in r.json()["detail"], body
     for body in ({"name": "bob2"}, {"email": "bob@example.com"}, {"role": "viewer"}):
         assert bob.patch(f"/api/users/{boss['id']}", json=body).status_code == 403, body
-    again = users.get(ann["id"], "iocontacts")
+    again = users.get(ann["id"], "iocontact")
     assert (again["name"], again["email"], again["suiteAdmin"]) == ("ann", "ann@example.com", False)
     assert users.get(boss["id"])["name"] == "alex" and users.authenticate("ann", "secret123")
     # nor its sessions, nor deleting it
@@ -90,7 +90,7 @@ def test_an_app_admin_cannot_name_himself_the_proxy():
     """The path the review ran: save AUTH_PROXY=header with one's own address, then send Remote-User: <a suite admin>."""
     app, _ = make_app()
     users.create("alex", "secret123", suite_admin=True)
-    users.create("bob", "secret123", "admin", "iocontacts")
+    users.create("bob", "secret123", "admin", "iocontact")
     bob = signed_in(app, "bob", client=("10.0.0.5", 4444))
     body = {"AUTH_PROXY": "header", "AUTH_PROXY_TRUSTED": "10.0.0.5"}
     assert bob.post("/api/auth/proxy", json=body).status_code in (404, 405)
@@ -136,7 +136,7 @@ def test_no_accounts_is_open_inside_and_shut_outside():
 
 # ---- inside or outside
 def test_a_proxy_that_is_not_listed_counts_as_outside():
-    pr = proxyauth.Proxy("iocontacts")
+    pr = proxyauth.Proxy("iocontact")
     assert not pr.external({}, "192.168.1.20")
     assert pr.external({}, "8.8.8.8")
     # a reverse proxy on another machine: a private address, so only what it adds gives it away
@@ -157,7 +157,7 @@ def test_a_proxy_that_is_not_listed_counts_as_outside():
 def test_one_click_and_setup_through_an_unlisted_proxy():
     app, _ = make_app()
     users.create("alex", "secret123", suite_admin=True)
-    users.create("kid", "", "viewer", "iocontacts")
+    users.create("kid", "", "viewer", "iocontact")
     via = TestClient(app, base_url="http://contacts.lan:8640", client=PROXY, headers={"x-forwarded-for": "8.8.8.8"})
     assert [a["name"] for a in via.get("/api/auth/accounts").json()["accounts"] if a["passwordless"]] == []
     assert via.post("/api/auth/login", json={"name": "kid", "password": ""}).status_code == 403
@@ -198,15 +198,15 @@ def test_only_an_admin_request_sets_the_address(monkeypatch):
 
 
 def test_links_never_call_the_address_an_app_was_merely_reached_at():
-    suite.register("iocontacts", "ioContacts")
-    db.ex("UPDATE ios_apps SET seen_url = 'https://evil.example.net' WHERE app = 'iocontacts'")
-    assert links.url("iocontacts") == "https://evil.example.net"  # for links people click
-    assert links.addresses("iocontacts") == [] and not links.available("iocontacts")
+    suite.register("iocontact", "ioContact")
+    db.ex("UPDATE ios_apps SET seen_url = 'https://evil.example.net' WHERE app = 'iocontact'")
+    assert links.url("iocontact") == "https://evil.example.net"  # for links people click
+    assert links.addresses("iocontact") == [] and not links.available("iocontact")
     with pytest.raises(RuntimeError):
-        links.get("iocalendar", "iocontacts", "/api/contacts")
-    suite.register("iocontacts", "ioContacts", url="https://contacts.example.com", internal_url="http://192.168.1.10:8640")
-    db.ex("UPDATE ios_apps SET seen_url = 'https://evil.example.net' WHERE app = 'iocontacts'")
-    assert links.addresses("iocontacts")[-2:] == ["http://192.168.1.10:8640", "https://contacts.example.com"]
+        links.get("iocalendar", "iocontact", "/api/contacts")
+    suite.register("iocontact", "ioContact", url="https://contacts.example.com", internal_url="http://192.168.1.10:8640")
+    db.ex("UPDATE ios_apps SET seen_url = 'https://evil.example.net' WHERE app = 'iocontact'")
+    assert links.addresses("iocontact")[-2:] == ["http://192.168.1.10:8640", "https://contacts.example.com"]
 
 
 # ---- the name-wide wait

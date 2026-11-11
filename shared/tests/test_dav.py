@@ -1,4 +1,4 @@
-"""The WebDAV plumbing ioCalendar and ioContacts share (iosuite_shared.dav)."""
+"""The WebDAV plumbing ioCalendar and ioContact share (iosuite_shared.dav)."""
 import datetime as dt
 import xml.etree.ElementTree as ET
 

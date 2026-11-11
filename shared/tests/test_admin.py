@@ -31,13 +31,13 @@ def test_overview_lists_every_app_and_effective_roles():
     ed = users.create("ed", "secret123", "editor", "iopix")
     users.set_role(ed["id"], "oldapp", "admin")  # an app that is not registered any more
     db.set_setting("default_role", "none", "iocalendar")
-    apppasswords.create(ed["id"], "iocontacts", "Phone")
+    apppasswords.create(ed["id"], "iocontact", "Phone")
     o = admin.overview()
     keys = [a["app"] for a in o["apps"]]
-    assert keys[0] == "iopix" and set(keys) == {"iopix", "oldapp", "iocalendar", "iocontacts"}
+    assert keys[0] == "iopix" and set(keys) == {"iopix", "oldapp", "iocalendar", "iocontact"}
     by = {a["app"]: a for a in o["apps"]}
     assert by["iopix"]["registered"] and not by["oldapp"]["registered"] and by["iocalendar"]["defaultRole"] == "none"
-    assert by["iocontacts"]["appPasswords"] == 1
+    assert by["iocontact"]["appPasswords"] == 1
     u = {x["name"]: x for x in o["users"]}
     assert u["alex"]["effective"] == {k: "admin" for k in keys}
     assert u["kid"]["effective"]["iopix"] == "member" and u["kid"]["effective"]["iocalendar"] == "none"
@@ -46,15 +46,15 @@ def test_overview_lists_every_app_and_effective_roles():
 
 
 def test_roles_reset_to_default_and_checks():
-    suite.register("ionotes", name="ioNotes")
+    suite.register("ionote", name="ioNote")
     me = users.create("alex", "secret123", suite_admin=True)
     kid = users.create("kid", "")
     with pytest.raises(ValueError):
         admin.update(me, kid["id"], {"roles": {"iopix": "editor"}})  # no password: member at most
-    got = admin.update(me, kid["id"], {"password": "longenough", "roles": {"iopix": "editor", "ionotes": "none"}})
-    assert got["roles"] == {"iopix": "editor", "ionotes": "none"} and not got["passwordless"]
-    got = admin.update(me, kid["id"], {"roles": {"ionotes": None}})
-    assert got["roles"] == {"iopix": "editor"} and got["effective"]["ionotes"] == "member"
+    got = admin.update(me, kid["id"], {"password": "longenough", "roles": {"iopix": "editor", "ionote": "none"}})
+    assert got["roles"] == {"iopix": "editor", "ionote": "none"} and not got["passwordless"]
+    got = admin.update(me, kid["id"], {"roles": {"ionote": None}})
+    assert got["roles"] == {"iopix": "editor"} and got["effective"]["ionote"] == "member"
     with pytest.raises(ValueError):
         admin.update(me, me["id"], {"suiteAdmin": False})  # not your own
     with pytest.raises(ValueError):
@@ -77,18 +77,18 @@ def test_app_passwords_and_forget_app():
     ed = users.create("ed", "secret123")
     kid = users.create("kid", "")
     with pytest.raises(ValueError):
-        admin.new_app_password(kid["id"], "iocontacts", "Phone")
-    pw = admin.new_app_password(ed["id"], "iocontacts", "Phone", "dav")["password"]
-    assert apppasswords.authenticate("ed", pw, "iocontacts")["id"] == ed["id"]
+        admin.new_app_password(kid["id"], "iocontact", "Phone")
+    pw = admin.new_app_password(ed["id"], "iocontact", "Phone", "dav")["password"]
+    assert apppasswords.authenticate("ed", pw, "iocontact")["id"] == ed["id"]
     items = admin.app_passwords()
-    assert [(i["userName"], i["app"], i["label"], i["scope"]) for i in items] == [("ed", "iocontacts", "Phone", "dav")]
+    assert [(i["userName"], i["app"], i["label"], i["scope"]) for i in items] == [("ed", "iocontact", "Phone", "dav")]
     with pytest.raises(ValueError):
         admin.set_app_password_scope(items[0]["id"], "bogus")
     admin.set_app_password_scope(items[0]["id"], "")
     assert admin.app_passwords()[0]["scope"] == ""
-    assert apppasswords.authenticate_scoped("ed", pw, "iocontacts")[1] == ""
+    assert apppasswords.authenticate_scoped("ed", pw, "iocontact")[1] == ""
     admin.revoke_app_password(items[0]["id"])
-    assert admin.app_passwords() == [] and apppasswords.authenticate(None, pw, "iocontacts") is None
+    assert admin.app_passwords() == [] and apppasswords.authenticate(None, pw, "iocontact") is None
     users.set_role(ed["id"], "oldapp", "editor")
     admin.new_app_password(ed["id"], "oldapp", "x")
     assert admin.forget_app("oldapp", data=True)
@@ -115,8 +115,8 @@ def test_api_suite_admins_only():
     assert len(c.get(f"/api/suite-admin/users/{bob}/sessions").json()["sessions"]) == 1
     assert c.delete(f"/api/suite-admin/users/{bob}/sessions").status_code == 200
     assert b.get("/api/auth/me").json()["user"] is None
-    r = c.post("/api/suite-admin/app-passwords", json={"userId": bob, "app": "iocontacts", "label": "Phone"})
-    assert r.json()["password"].startswith("iocontacts-")
+    r = c.post("/api/suite-admin/app-passwords", json={"userId": bob, "app": "iocontact", "label": "Phone"})
+    assert r.json()["password"].startswith("iocontact-")
     items = c.get(f"/api/suite-admin/app-passwords?user={bob}").json()["items"]
     assert len(items) == 1 and c.delete(f"/api/suite-admin/app-passwords/{items[0]['id']}").status_code == 200
     assert c.delete("/api/suite-admin/app-passwords/9999").status_code == 404

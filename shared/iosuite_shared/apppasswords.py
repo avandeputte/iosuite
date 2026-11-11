@@ -2,7 +2,7 @@
 clients, HTTP Basic). Shown once, revocable. The form is <app>-<8 hex>-<secret>, so the prefix finds the row.
 
 Scope: what a password may reach. '' (the default) is everything the account may; DAV ('dav') is the app's sync
-protocols only (CalDAV / CardDAV, and LDAP in ioContacts), the kind an Apple profile puts on a phone, so a password
+protocols only (CalDAV / CardDAV, and LDAP in ioContact), the kind an Apple profile puts on a phone, so a password
 lifted from a device cannot reach the REST API, MCP or the web app. Auth enforces it by path (Auth.scope_paths); a
 server of its own (LDAP) asks authenticate_scoped and checks the scope itself. READ ('read') may only read (GET and
 HEAD, anywhere but MCP and the sync protocols: READ_NEVER): what the apps' own service accounts get to read from each other

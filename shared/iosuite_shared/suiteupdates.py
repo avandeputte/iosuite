@@ -7,7 +7,7 @@ whether there is a newer version, "update" runs the app's own update.sh, exactly
 writes back what it knows (the installed version and commit, the newest version on GitHub, whether it can update
 itself, how the last update went), which is what overview() shows.
 
-    suiteupdates.request("update", ["iocalendar", "ionotes"], by="alex")   # or apps=None: every app with an update waiting
+    suiteupdates.request("update", ["iocalendar", "ionote"], by="alex")   # or apps=None: every app with an update waiting
     suiteupdates.overview()                                                 # one line per app
 """
 import time

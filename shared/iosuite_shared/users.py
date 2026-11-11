@@ -366,7 +366,7 @@ def require_login(app: str) -> bool:
     return db.get_setting("require_login", "0", app) == "1" and any_users()
 
 
-# ---- per-user, per-app data (display settings; the ioPix person tag; the ioContacts "me" contact)
+# ---- per-user, per-app data (display settings; the ioPix person tag; the ioContact "me" contact)
 def get_data(user_id: int, app: str) -> dict:
     return {r["name"]: db.json_load(r["value"]) for r in db.q("SELECT name, value FROM ios_user_data WHERE user_id = %s AND app = %s", (user_id, app))}
 
@@ -452,7 +452,7 @@ def login_succeeded(key: str):
 
 # The three counters a sign-in attempt is counted under: the pair (this visitor, this name), the name alone (a
 # distributed guess at one account slows everyone who tries that name a while) and the address alone (a scan of many
-# names). The routes, the HTTP Basic / bearer path (Auth._authorization) and ioContacts' LDAP bind all use these three.
+# names). The routes, the HTTP Basic / bearer path (Auth._authorization) and ioContact's LDAP bind all use these three.
 # Two things keep the name counter from being a way to lock somebody else out: a visitor who signed in to that
 # account from this address before (_known) is not held up by it, only by its own pair's counter, so the owner's
 # phone and laptop keep working while a stranger hammers the name; and a bearer token has no name, so there is no

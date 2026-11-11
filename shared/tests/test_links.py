@@ -10,7 +10,7 @@ from iosuite_shared.fastapi import Auth
 
 
 def provider_app():
-    auth = Auth("iocontacts", register=False)
+    auth = Auth("iocontact", register=False)
     app = FastAPI()
     app.middleware("http")(auth.middleware())
 
@@ -34,20 +34,20 @@ def provider_app():
 
 def test_service_account_and_read_only_app_password():
     users.create("alex", "secret123", suite_admin=True)
-    assert links.url("iocontacts") is None and not links.available("iocontacts")
-    suite.register("iocontacts", name="ioContacts", url="https://contacts.example.com/", version="1")
-    assert links.url("iocontacts") == "https://contacts.example.com"
-    h = links.headers("iocalendar", "iocontacts")
+    assert links.url("iocontact") is None and not links.available("iocontact")
+    suite.register("iocontact", name="ioContact", url="https://contacts.example.com/", version="1")
+    assert links.url("iocontact") == "https://contacts.example.com"
+    h = links.headers("iocalendar", "iocontact")
     svc = users.service_account("iocalendar")
     assert svc["name"] == "iocalendar-app" and svc["service"] == "iocalendar" and not svc["listed"]
-    assert users.role_of(users.get(svc["id"]), "iocontacts") == "viewer"
-    assert links.headers("iocalendar", "iocontacts") == h  # kept, not made again
+    assert users.role_of(users.get(svc["id"]), "iocontact") == "viewer"
+    assert links.headers("iocalendar", "iocontact") == h  # kept, not made again
     assert [u["name"] for u in users.list_users()] == ["alex"]  # people only
     assert "iocalendar-app" in [u["name"] for u in users.list_users(services=True)]
     assert users.authenticate("iocalendar-app", "anything") is None
     assert credentials.listing() == [] or all(not k["name"].startswith("link_") for k in credentials.listing())
     from iosuite_shared import db
-    assert [(r["app"], r["scope"]) for r in db.q("SELECT app, scope FROM ios_app_passwords WHERE user_id = %s", (svc["id"],))] == [("iocontacts", "read")]
+    assert [(r["app"], r["scope"]) for r in db.q("SELECT app, scope FROM ios_app_passwords WHERE user_id = %s", (svc["id"],))] == [("iocontact", "read")]
     # the suite looks after its own accounts: the Security panel neither shows nor changes them
     assert admin.app_passwords() == [] and [u["name"] for u in admin.accounts()] == ["alex"]
     pid = db.one("SELECT id FROM ios_app_passwords WHERE user_id = %s", (svc["id"],))["id"]
@@ -72,7 +72,7 @@ def test_first_run_is_not_spoiled_by_a_service_account():
 
 def test_revoked_password_is_made_again(monkeypatch):
     suite.register("iopix", name="ioPix", url="https://photo.example.com", version="1")
-    first = links.password("iocontacts", "iopix")[1]
+    first = links.password("iocontact", "iopix")[1]
     seen = []
 
     def fake(req, timeout=None):
@@ -81,27 +81,27 @@ def test_revoked_password_is_made_again(monkeypatch):
             raise urllib.error.HTTPError(req.full_url, 401, "no", {}, io.BytesIO(b""))
         return io.BytesIO(b'{"ok": 1}')
     monkeypatch.setattr("urllib.request.urlopen", fake)
-    assert links.json("iocontacts", "iopix", "/api/meta") == {"ok": 1}
-    second = links.password("iocontacts", "iopix")[1]
+    assert links.json("iocontact", "iopix", "/api/meta") == {"ok": 1}
+    second = links.password("iocontact", "iopix")[1]
     assert second != first and len(seen) == 2 and seen[0] != seen[1]
     assert apppasswords.authenticate(None, first, "iopix") is None and apppasswords.authenticate(None, second, "iopix")
     with pytest.raises(RuntimeError):
-        links.get("iocontacts", "nothere", "/api/x")
+        links.get("iocontact", "nothere", "/api/x")
 
 
 def test_cloudflare_service_token_goes_along():
     suite.register("iopix", name="ioPix", url="https://photo.example.com", version="1")
-    assert "CF-Access-Client-Id" not in links.headers("iocontacts", "iopix")
-    assert links.headers("iocontacts", "iopix", sign_in=False) == {}
+    assert "CF-Access-Client-Id" not in links.headers("iocontact", "iopix")
+    assert links.headers("iocontact", "iopix", sign_in=False) == {}
     me = users.create("alex", "secret123", suite_admin=True)
     admin.set_key(me, "_suite", "cf_access_client_id", "id.access")
     admin.set_key(me, "_suite", "cf_access_client_secret", "sec")
-    h = links.headers("iocontacts", "iopix")
+    h = links.headers("iocontact", "iopix")
     assert h["CF-Access-Client-Id"] == "id.access" and h["CF-Access-Client-Secret"] == "sec"
-    assert set(links.headers("iocontacts", "iopix", sign_in=False)) == {"CF-Access-Client-Id", "CF-Access-Client-Secret"}
+    assert set(links.headers("iocontact", "iopix", sign_in=False)) == {"CF-Access-Client-Id", "CF-Access-Client-Secret"}
     assert {k["name"] for k in admin.keys("_suite")} == {"cf_access_client_id", "cf_access_client_secret", "cf_kv_account_id",
                                                          "cf_kv_namespace_id", "cf_kv_api_token"}
-    links.forget("iocontacts")
+    links.forget("iocontact")
     assert admin.app_passwords() == []
 
 
@@ -117,17 +117,17 @@ def test_internal_address_first_then_public(monkeypatch):
             raise urllib.error.URLError("refused")
         return io.BytesIO(b'{"ok": 2}')
     monkeypatch.setattr("urllib.request.urlopen", fake)
-    assert links.json("iocontacts", "iopix", "/api/meta") == {"ok": 2}
+    assert links.json("iocontact", "iopix", "/api/meta") == {"ok": 2}
     assert seen == ["http://192.168.1.5:8600/api/meta", "https://photo.example.com/api/meta"]
 
 
 def test_same_machine_goes_over_localhost(monkeypatch):
-    suite.register("iocontacts", name="ioContacts", url="https://contacts.example.com", version="1", internal_url="http://127.0.0.1:8640")
-    assert links.addresses("iocontacts") == ["http://127.0.0.1:8640", "https://contacts.example.com"]
+    suite.register("iocontact", name="ioContact", url="https://contacts.example.com", version="1", internal_url="http://127.0.0.1:8640")
+    assert links.addresses("iocontact") == ["http://127.0.0.1:8640", "https://contacts.example.com"]
     monkeypatch.setattr(links, "_this_machine", lambda host: host == "192.168.1.9")
-    suite.register("iocontacts", name="ioContacts", url="https://contacts.example.com", version="1", internal_url="http://192.168.1.9:8640")
-    assert links.addresses("iocontacts") == ["http://127.0.0.1:8640", "http://192.168.1.9:8640", "https://contacts.example.com"]
+    suite.register("iocontact", name="ioContact", url="https://contacts.example.com", version="1", internal_url="http://192.168.1.9:8640")
+    assert links.addresses("iocontact") == ["http://127.0.0.1:8640", "http://192.168.1.9:8640", "https://contacts.example.com"]
     monkeypatch.setattr(links, "_this_machine", lambda host: False)
-    assert links.addresses("iocontacts") == ["http://192.168.1.9:8640", "https://contacts.example.com"]
+    assert links.addresses("iocontact") == ["http://192.168.1.9:8640", "https://contacts.example.com"]
     monkeypatch.undo()
     assert not links._this_machine("203.0.113.7") and links._this_machine("127.0.0.1") and not links._this_machine("a.lan")

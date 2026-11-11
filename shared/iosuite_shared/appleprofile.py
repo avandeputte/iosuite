@@ -21,7 +21,7 @@ from iosuite_shared import apppasswords, suite
 
 # app -> (protocol, what the account holds): the apps a profile can set up, in no particular order (the suite's order
 # comes from suite.apps())
-PROFILE_APPS = {"iocalendar": ("caldav", "Calendars"), "iocontacts": ("carddav", "Contacts"), "iotasks": ("caldav", "Reminders")}
+PROFILE_APPS = {"iocalendar": ("caldav", "Calendars"), "iocontact": ("carddav", "Contacts"), "iotask": ("caldav", "Reminders")}
 LINK_SECONDS = 600
 MEDIA_TYPE = "application/x-apple-aspen-config"
 
