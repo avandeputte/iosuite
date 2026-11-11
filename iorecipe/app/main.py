@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from iosuite_shared import mcp as shared_mcp
 from iosuite_shared.updates import setup_log
 
-from app import __version__, api, config, db, mcp, model, users
+from app import __version__, ai, api, config, db, mcp, model, users
 from app.auth import auth, updater
 
 setup_log(config.LOG_FILE)  # the server log that Settings › Server shows; the app runs without it
@@ -32,6 +32,7 @@ OPEN_PREFIXES = ("/static/", "/mcp")
 async def lifespan(app: FastAPI):
     await run_in_threadpool(db.migrate)
     await run_in_threadpool(users.init)
+    ai.start()              # the AI model on its way, where it is wanted and not there yet
     updater.start_daily()   # the daily "is there a newer version" check, while the setting allows it
     log.info("ioRecipe %s started, database %s:%s/%s", __version__, config.DB_HOST, config.DB_PORT, config.DB_NAME)
     async with shared_mcp.running(mcp.server):  # the MCP endpoint (/mcp) lives in this process

@@ -4,7 +4,7 @@ Most recipe sites describe their recipe for search engines as schema.org Recipe 
 microdata (itemprop) on the page's own elements; that is read first, and is the surest. A page without it is read as
 a person would: the lists a recipe plugin marks as its ingredients and instructions, or the text under a heading
 "Ingredients" (in the languages app/textimport.py knows), with the steps after it when the page writes them out.
-When that finds no recipe either and an AI key is set (app/ai.py), the page's text is given to Claude to find it.
+When that finds no complete recipe and the server has its AI model (app/ai.py), the model reads the page's text.
 The page is fetched with iosuite-shared's outbound opener: only addresses on the internet, each redirect checked
 like the first.
 """
@@ -46,13 +46,16 @@ PAGE = "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/w
 TIMEOUT = 15
 
 
-def fetch(url: str, limit: int, accept: str = PAGE, allowed=outbound.public) -> tuple[bytes, str, str]:
-    """(body, content type, final address) of an http(s) address, at most `limit` bytes. Invalid when it cannot be had."""
+def fetch(url: str, limit: int, accept: str = PAGE, allowed=outbound.public, referer: str | None = None) -> tuple[bytes, str, str]:
+    """(body, content type, final address) of an http(s) address, at most `limit` bytes. Invalid when it cannot be had.
+    `referer` is the page a picture is on: sites refuse their pictures to a request that does not name it."""
     outbound.check(url, allowed)
     head = {**BROWSER, "Accept": accept}
     if accept != PAGE:  # a picture, as a page asks for one
         head = {k: v for k, v in head.items() if k not in ("Upgrade-Insecure-Requests", "Sec-Fetch-User", "Cache-Control")}
         head.update({"Sec-Fetch-Dest": "image", "Sec-Fetch-Mode": "no-cors", "Sec-Fetch-Site": "cross-site"})
+    if referer:
+        head["Referer"] = referer
     req = urllib.request.Request(url, headers=head)
     try:
         with outbound.opener(allowed).open(req, timeout=TIMEOUT) as r:
@@ -513,8 +516,7 @@ def parse(text: str, base: str) -> dict:
             out.setdefault("image", None)
             out["title"] = out["title"] or _page_title(p, base)
     if not out or not (out["ingredients"] or out["steps"]):
-        raise Invalid("No recipe was found on that page" + ("" if ai.available() else ": it has no recipe data for search engines and no list of "
-                      "ingredients ioRecipe could make out") + ". Copy its text and use Pasted text, or add it by hand.")
+        raise Invalid(" ".join(x for x in ("No recipe was found on that page.", ai.why_not(), "Copy its text and use Pasted text, or add it by hand.") if x))
     out["title"] = out["title"] or _one_line(p.meta.get("og:title")) or _one_line(p.title) or "Recipe"
     out["title"] = out["title"][:255]
     out["description"] = (out["description"] or _plain(p.meta.get("og:description")) or None)
@@ -538,7 +540,7 @@ def recipe_at(url: str, allowed=outbound.public) -> tuple[dict, bytes | None]:
     img = data.pop("image", None)
     if img:
         try:
-            picture = fetch(img, config.MAX_PHOTO_BYTES, accept="image/*", allowed=allowed)[0]
+            picture = fetch(img, config.MAX_PHOTO_BYTES, accept="image/*", allowed=allowed, referer=final)[0]
         except Invalid:
             picture = None  # the recipe without its picture
     return data, picture

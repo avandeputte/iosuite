@@ -204,3 +204,44 @@ def test_shopping_list(client, monkeypatch):
     monkeypatch.setattr(shopping, "ask", down)
     assert client.get("/api/shopping").json()["error"].startswith("ioTask is not reachable")
     assert client.post(f"/api/recipes/{r['id']}/shopping", json={"listId": 3, "lines": ["x"]}).status_code == 502
+
+
+WAFFLES = """Sponge:
+2 packages active dry yeast
+1 1/3 cups warm milk
+1 tablespoon granulated sugar
+1 3/4 cups flour
+1 egg, beaten
+
+1. In a small bowl, sprinkle the yeast over the milk. Add 1 tablespoon of flour and the sugar; set aside for 5 minutes or until foamy.
+
+2. Sift the remaining flour into a large mixing bowl. Make a well in the center and add the yeast mixture and egg.
+
+3. Cover and set aside in a warm place for 2 hours to rise until the batter has doubled or tripled in bulk.
+
+Batter:
+9 tablespoons unsalted butter, at room temperature
+1/4 cup flour
+Pinch of salt
+3/4 cup pearl sugar
+
+1. In a bowl with a wooden spoon, work the butter, flour, salt and pearl sugar into a paste.
+
+2. Work the butter mixture into the sponge mixture until well combined. Cover, and set aside for 10 minutes.
+
+3. With floured hands, shape the dough into 10 balls. (If the dough seems too wet to handle, that&#39;s OK.)"""
+
+
+def test_text_in_parts_with_numbered_steps_and_no_headings():
+    r = textimport.parse(WAFFLES)
+    assert r["title"] == "Recipe" and r["description"] is None
+    assert r["ingredients"] == ["Sponge:", "2 packages active dry yeast", "1 1/3 cups warm milk", "1 tablespoon granulated sugar", "1 3/4 cups flour",
+                                "1 egg, beaten", "Batter:", "9 tablespoons unsalted butter, at room temperature", "1/4 cup flour", "Pinch of salt",
+                                "3/4 cup pearl sugar"]
+    assert [s[:22] for s in r["steps"]] == ["Sponge:", "In a small bowl, sprin", "Sift the remaining flo", "Cover and set aside in", "Batter:",
+                                            "In a bowl with a woode", "Work the butter mixtur", "With floured hands, sh"]
+    assert r["steps"][-1].endswith("that's OK.)")
+    # a title and an introduction before it, amounts written 1.5, steps as plain sentences
+    r = textimport.parse("Oat cookies\nMy gran's, soft and chewy.\n\n1.5 cups oats\n100 g butter\na pinch of salt\n\nHeat the oven to 180 degrees and line a tray.\nMix everything, shape and bake for 12 minutes.")
+    assert r["title"] == "Oat cookies" and r["description"] == "My gran's, soft and chewy."
+    assert r["ingredients"] == ["1.5 cups oats", "100 g butter", "a pinch of salt"] and len(r["steps"]) == 2

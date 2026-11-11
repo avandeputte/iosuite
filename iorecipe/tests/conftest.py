@@ -17,6 +17,7 @@ _authtest.fresh_database("recipe_test")
 os.environ.update(_authtest.auth_env("recipe_test_auth"))
 os.environ.setdefault("UPDATE_CHECK", "0")
 os.environ.setdefault("LOG_FILE", "")  # no server log from the tests
+os.environ["AI"] = "0"  # no AI model is fetched by the tests
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from fastapi.testclient import TestClient  # noqa: E402

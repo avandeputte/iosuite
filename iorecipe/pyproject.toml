@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "iorecipe"
-version = "0.4.0"
+version = "0.5.0"
 description = "Self-hosted recipes for the family: web app with photos and import from the web, REST, MCP"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -17,11 +17,12 @@ dependencies = [
   "python-multipart<1",
   "pyjwt[crypto]<3",              # Cloudflare Access tokens (proxy sign-in)
   "mcp<3",                        # the MCP server at /mcp
-  "anthropic>=1,<3",              # reading a page without recipe data with AI (only with ANTHROPIC_API_KEY set)
   "pillow>=10,<13",               # the recipe photos: checked, turned upright, made smaller
 ]
 
 [project.optional-dependencies]
+# the AI that reads a page without recipe data, on this server (app/ai.py): llama.cpp, compiled when it is installed
+ai = ["llama-cpp-python>=0.3,<0.4"]
 test = ["pytest<10", "httpx<1", "pyflakes<4"]
 
 [project.urls]
