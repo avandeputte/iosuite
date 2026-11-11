@@ -25,6 +25,11 @@ MAX_JSON_BYTES = 2 * 1024 * 1024      # any other request body
 # empty: every language installed
 OCR_LANGUAGES = env("OCR_LANGUAGES")
 
+# reading a web page that has no recipe data with AI (app/ai.py): an Anthropic API key turns it on, and the text of such
+# a page then goes to Anthropic; AI_MODEL is the model asked
+ANTHROPIC_API_KEY = env("ANTHROPIC_API_KEY")
+AI_MODEL = env("AI_MODEL", "claude-opus-5-5")
+
 # `python -m app.mcp` (stdio) acts as this account. Updates: IORECIPE_REPO, IORECIPE_BRANCH and UPDATE_CHECK are read
 # by iosuite_shared.updates (app.auth.updater)
 MCP_USER = env("MCP_USER")

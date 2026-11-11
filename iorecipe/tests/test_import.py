@@ -89,6 +89,7 @@ def test_import_keeps_the_recipe_and_its_picture(client, monkeypatch):
     assert r.status_code == 201, r.text
     j = r.json()
     assert asked == ["https://example.com/cookies?utm=1", "https://img.example.com/a.jpg"]
+    assert j["readBy"] == "data" and client.get("/api/import").json()["ai"] is False
     assert j["title"] == "Grandma's cookies" and j["family"] is True and j["sourceUrl"] == "https://example.com/cookies"
     assert j["photo"] and client.get(j["photo"]).headers["content-type"] == "image/jpeg"
     # a picture that cannot be had or is not one: the recipe without it
@@ -101,3 +102,125 @@ def test_import_keeps_the_recipe_and_its_picture(client, monkeypatch):
     assert r.status_code == 400 and "No recipe" in r.json()["detail"]
     assert client.post("/api/import", json={"url": " "}).status_code == 400
     assert client.get("/api/recipes").json()["counts"] == {"all": 2, "family": 1, "mine": 1, "favourites": 0}
+
+
+# ---- pages without recipe data: read as a person would, and with AI where a key is set
+
+PLUGIN = """<html><head><title>Lemon bars - Site</title><meta property="og:title" content="Lemon bars">
+  <style>.wprm-recipe-ingredients{color:red}</style></head><body>
+  <nav><ul><li>Home</li><li>All recipes</li></ul></nav><h1>Lemon bars</h1><p>A long story about lemons.</p>
+  <div class="wprm-recipe-container"><span>Prep time: 20 min</span><p>Serves 12</p>
+  <div class="wprm-recipe-ingredients-container"><h3>Ingredients</h3><ul class="wprm-recipe-ingredients">
+    <li class="wprm-recipe-ingredient"><span class="wprm-recipe-ingredient-amount">200</span> <span>g</span> <span>flour</span></li>
+    <li class="wprm-recipe-ingredient"><span>3</span> <span>lemons</span></li></ul></div>
+  <div class="wprm-recipe-instructions-container"><h3>Instructions</h3><ol>
+    <li class="wprm-recipe-instruction"><div class="wprm-recipe-instruction-text"><p>Bake the base.</p></div></li>
+    <li class="wprm-recipe-instruction"><div><p>Pour over the curd and bake again.</p></div></li></ol></div></div>
+  <script>var ingredients = ["not this"];</script><footer><p>1 cup of nonsense</p></footer></body></html>"""
+
+# a blog post as Blogger writes one: lines parted by <br>, the ingredients under a bold line, the method in a video
+BLOG = """<html><head><title>Food Blog: American Goulash - Just Like the Lunch Lady Used to Make</title>
+  <meta property="og:title" content="American Goulash - Just Like the Lunch Lady Used to Make"><meta property="og:image" content="https://img.example.com/g.jpg">
+  </head><body><h1 class="title">Food Blog</h1><h3 class="post-title entry-title">American Goulash - Just Like the Lunch Lady Used to Make</h3>
+  <div class="post-body entry-content">I ate this at school, and so did everyone I know. Begin checking the macaroni after ten minutes, since it should be tender and not falling apart, which is easier said than done.<br /><br />
+  <iframe src="https://video.example.com/x"></iframe><br />
+  <b>Ingredients for 6 portions:</b><br />2 tablespoons olive oil<br />2 pounds ground beef<br />1 large onion, diced<br />
+  salt and freshly ground black pepper<br />4 cloves garlic, minced<br />2 bay leaves<br />1 quart chicken broth<br />2 cups elbow macaroni<br />
+  1 cup shredded white cheddar<br />freshly chopped Italian parsley<br /></div>
+  <div class="post-footer">Posted by Chef at 12:00 PM</div><div>Labels: Beef, Pasta</div>
+  <h4>52 comments:</h4><p>2 cups of beans would be nice in this.</p><p>1 question: which beans?</p></body></html>"""
+
+HEADED = """<html><head><title>Erwtensoep | Oma kookt</title></head><body><header><h1>Erwtensoep</h1></header>
+  <p>Voor 6 personen</p><p>Bereidingstijd: 2 uur</p>
+  <h2>Ingrediënten</h2><p>500 g spliterwten<br>1 rookworst<br>2 preien</p>
+  <h2>Bereiding</h2><p>Kook de erwten gaar in twee liter water.</p><p>Voeg de prei en de worst toe en laat nog een half uur trekken.</p>
+  <h2>Reacties</h2><p>3 keer gemaakt, heerlijk!</p></body></html>"""
+
+
+def test_a_recipe_plugins_lists():
+    r = scrape.parse(PLUGIN, "https://example.com/lemon-bars")
+    assert r["readBy"] == "page" and r["title"] == "Lemon bars"
+    assert r["ingredients"] == ["200 g flour", "3 lemons"]
+    assert r["steps"] == ["Bake the base.", "Pour over the curd and bake again."]
+    assert r["servings"] == "12" and r["prepMinutes"] == 20 and r["sourceUrl"] == "https://example.com/lemon-bars"
+
+
+def test_a_blog_post_with_the_ingredients_only():
+    r = scrape.parse(BLOG, "https://blog.example.com/2019/08/american-goulash.html?m=1")
+    assert r["readBy"] == "page" and r["title"] == "American Goulash - Just Like the Lunch Lady Used to Make"
+    assert r["servings"] == "6 portions" and r["steps"] == []
+    assert r["ingredients"][0] == "2 tablespoons olive oil" and r["ingredients"][-1] == "freshly chopped Italian parsley"
+    assert len(r["ingredients"]) == 10 and "salt and freshly ground black pepper" in r["ingredients"]
+    assert r["image"] == "https://img.example.com/g.jpg" and r["sourceName"] == "blog.example.com"
+
+
+def test_a_page_with_headings_in_dutch():
+    r = scrape.parse(HEADED, "https://example.nl/erwtensoep")
+    assert r["readBy"] == "page" and r["title"] == "Erwtensoep" and r["servings"] == "6" and r["cookMinutes"] == 120
+    assert r["ingredients"] == ["500 g spliterwten", "1 rookworst", "2 preien"]
+    assert r["steps"] == ["Kook de erwten gaar in twee liter water.", "Voeg de prei en de worst toe en laat nog een half uur trekken."]
+
+
+PROSE = """<html><head><title>My goulash</title></head><body><h1>My goulash</h1><p>Brown two pounds of beef in a little oil with a diced
+  onion, add four cloves of garlic, a quart of broth and two cups of macaroni, and simmer until the pasta is tender.</p></body></html>"""
+
+
+def test_ai_reads_what_the_page_does_not_lay_out(monkeypatch):
+    from app import ai, config
+    with pytest.raises(Invalid):  # no key: nothing to make it out with
+        scrape.parse(PROSE, "https://example.com/goulash")
+    asked = []
+
+    def answer(text, url):
+        asked.append(text)
+        return {"found": True, "title": "My  goulash", "description": "", "servings": "", "prepMinutes": 0, "cookMinutes": 0, "totalMinutes": 0,
+                "ingredients": ["2 pounds beef", "1 onion, diced", " "], "steps": ["Brown the beef with the onion.", "Simmer with the rest."], "tags": []}
+    monkeypatch.setattr(config, "ANTHROPIC_API_KEY", "k")
+    monkeypatch.setattr(ai, "_ask", answer)
+    r = scrape.parse(PROSE, "https://example.com/goulash")
+    assert r["readBy"] == "ai" and r["title"] == "My goulash" and r["ingredients"] == ["2 pounds beef", "1 onion, diced"]
+    assert r["steps"] == ["Brown the beef with the onion.", "Simmer with the rest."] and r["prepMinutes"] is None
+    assert "Brown two pounds of beef" in asked[0] and len(asked) == 1
+    # the ingredients alone were made out: the AI is asked for the steps too, and what the page gave stands when it finds nothing
+    r = scrape.parse(BLOG, "https://blog.example.com/g")
+    assert r["readBy"] == "ai" and len(asked) == 2 and "52 comments" in asked[1]
+    monkeypatch.setattr(ai, "_ask", lambda text, url: {"found": False})
+    r = scrape.parse(BLOG, "https://blog.example.com/g")
+    assert r["readBy"] == "page" and len(r["ingredients"]) == 10
+    with pytest.raises(Invalid):
+        scrape.parse(PROSE, "https://example.com/goulash")
+    # a page that says what its recipe is, or lays it out, is never sent anywhere
+    monkeypatch.setattr(ai, "_ask", lambda text, url: pytest.fail("asked"))
+    assert scrape.parse(page(LD), "https://example.com/cookies")["readBy"] == "data"
+    assert scrape.parse(PLUGIN, "https://example.com/lemon-bars")["readBy"] == "page"
+    assert scrape.parse(HEADED, "https://example.nl/erwtensoep")["readBy"] == "page"
+
+
+def test_a_page_is_asked_for_as_a_browser_does(monkeypatch):
+    from iosuite_shared import outbound
+    sent = []
+
+    class Answer:
+        headers = {"Content-Type": "text/html"}
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def read(self, n): return b"<html></html>"
+        def geturl(self): return "https://example.com/x"
+
+    class Opener:
+        def open(self, req, timeout=None):
+            sent.append(dict(req.header_items()))
+            if req.full_url.endswith("/refused"):
+                raise scrape.urllib.error.HTTPError(req.full_url, 403, "Forbidden", {}, None)
+            return Answer()
+    monkeypatch.setattr(outbound, "check", lambda url, allowed=None: None)
+    monkeypatch.setattr(outbound, "opener", lambda allowed=None: Opener())
+    scrape.fetch("https://example.com/x", 1000)
+    h = {k.lower(): v for k, v in sent[0].items()}
+    assert "Chrome/" in h["user-agent"] and h["sec-fetch-mode"] == "navigate" and h["sec-fetch-dest"] == "document"
+    assert h["accept"].startswith("text/html") and h["accept-language"] and h["upgrade-insecure-requests"] == "1" and "sec-ch-ua" in h
+    scrape.fetch("https://example.com/x.jpg", 1000, accept="image/*")
+    h = {k.lower(): v for k, v in sent[1].items()}
+    assert h["sec-fetch-dest"] == "image" and h["accept"] == "image/*" and "upgrade-insecure-requests" not in h
+    with pytest.raises(Invalid, match="Pasted text"):  # a site that tests for a browser: said so, with the way around
+        scrape.fetch("https://example.com/refused", 1000)
