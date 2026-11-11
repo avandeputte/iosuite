@@ -134,12 +134,12 @@ def test_shared_slugs_are_unique(client):
     db.ex("INSERT INTO cal_calendars (owner_id, slug, name) VALUES (1, 'twice', 'Mine')")
 
 
-def test_iocontacts_is_found_in_the_suite(client, monkeypatch):
+def test_iocontact_is_found_in_the_suite(client, monkeypatch):
     from iosuite_shared import links, suite
     from app import contacts
-    assert client.get("/api/iocontacts/settings").json()["enabled"] is False
-    suite.register("iocontacts", name="ioContacts", url="https://contacts.example.org", version="1")
-    s = client.get("/api/iocontacts/settings").json()
+    assert client.get("/api/iocontact/settings").json()["enabled"] is False
+    suite.register("iocontact", name="ioContact", url="https://contacts.example.org", version="1")
+    s = client.get("/api/iocontact/settings").json()
     assert s["enabled"] and s["url"] == "https://contacts.example.org"
     seen = []
 
@@ -161,8 +161,8 @@ def test_iocontacts_is_found_in_the_suite(client, monkeypatch):
         return R(b'{"items": [{"id": 3, "fn": "Ann", "email": "a@x.org"}]}')
     monkeypatch.setattr(links, "get", fake)
     assert contacts.search("ann")[0] == {"contactId": 3, "name": "Ann", "email": "a@x.org", "url": "https://contacts.example.org/#/c/3"}
-    assert seen[0][:2] == ("iocalendar", "iocontacts")
-    assert client.post("/api/iocontacts/settings", json={"birthdays": False}).json()["birthdays"] is False
+    assert seen[0][:2] == ("iocalendar", "iocontact")
+    assert client.post("/api/iocontact/settings", json={"birthdays": False}).json()["birthdays"] is False
 
 
 def test_base_url_is_an_address(client):

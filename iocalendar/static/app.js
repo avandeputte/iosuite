@@ -1,5 +1,5 @@
 /* ioCalendar web app: one module, no build step. Views: month, week, day and agenda, with the calendars to show in the
-   sidebar; the event form (repeating events, people from ioContacts, reminders), search, import/export, settings
+   sidebar; the event form (repeating events, people from ioContact, reminders), search, import/export, settings
    (account, display, apps and devices, calendars, holidays and birthdays, and for admins family, storage and backups,
    server, and for suite admins security and global settings), laid out as in the other ioThing apps. Events can be tagged with the family
    members they are for, and the sidebar filters the calendar by member. */
@@ -205,7 +205,7 @@ const calOf = (id) => S.cals.find((c) => c.id === id) || {};
 const colorOf = (id) => calOf(id).color || 'var(--brand)';
 const writable = () => S.cals.filter((c) => c.writable);
 const shownCals = () => S.cals.filter((c) => !S.hidden.has(c.id));
-/** Filled by the server (Birthdays from ioContacts, public Holidays): nobody changes them here. */
+/** Filled by the server (Birthdays from ioContact, public Holidays): nobody changes them here. */
 const AUTO_KINDS = ['birthdays', 'holidays'];
 const isAuto = (c) => AUTO_KINDS.includes(c.kind);
 const memberOf = (id) => S.members.find((m) => m.id === id);
@@ -216,8 +216,8 @@ const memberBadge = (m) => h('span', { class: 'mem', title: m.displayName, style
 /** With family members picked in the sidebar: only the events tagged with one of them (holidays and birthdays stay). */
 const passesWho = (o) => !S.who.size || isAuto(calOf(o.calendarId)) || (o.members || []).some((id) => S.who.has(id));
 
-// tasks from ioTasks, when it is part of the suite: each on the day it is due, ticked off from here
-const tasksOn = () => !!S.status.iotasks && S.settings.hideTasks !== '1';
+// tasks from ioTask, when it is part of the suite: each on the day it is due, ticked off from here
+const tasksOn = () => !!S.status.iotask && S.settings.hideTasks !== '1';
 /** A task as the views take an occurrence: on its due day (half an hour from its time, when it has one). */
 function taskOcc(t) {
   if (t.allDay) return { ...t, task: true, start: t.due.slice(0, 10), end: ymd(addDays(parseDay(t.due), 1)) };
@@ -372,7 +372,7 @@ function miniMonth() {
       h('button', { class: 'iconbtn', title: 'Next month', onclick: () => { S.mini = addMonths(base, 1); drawNav(); } }, icon('chevR', 's')))), g);
 }
 
-/* The sidebar, as in ioPix and ioContacts: the name on top, the destinations, the calendars (each with its colour as a
+/* The sidebar, as in ioPix and ioContact: the name on top, the destinations, the calendars (each with its colour as a
    check box that shows or hides it), Settings at the foot. It docks beside the page on a wide screen unless its button
    put it away (remembered); otherwise it slides over the page. Phones get a bottom bar instead. */
 const DOCK_MIN = 1100;
@@ -422,8 +422,8 @@ function drawNav() {
     h('div', { class: 'navgap' }),
     canOwn() || mine.length ? sec('Mine', canOwn() ? h('button', { class: 'iconbtn', title: 'New private calendar', onclick: () => newCalendar(false) }, icon('add', 's')) : null) : null,
     mine.map(calRow),
-    S.status.iotasks ? [h('div', { class: 'navgap' }),
-      sec('ioTasks', S.tasks.url ? h('a', { class: 'iconbtn', href: S.tasks.url, target: '_blank', rel: 'noopener', title: 'Open ioTasks' }, icon('open', 's')) : null),
+    S.status.iotask ? [h('div', { class: 'navgap' }),
+      sec('ioTask', S.tasks.url ? h('a', { class: 'iconbtn', href: S.tasks.url, target: '_blank', rel: 'noopener', title: 'Open ioTask' }, icon('open', 's')) : null),
       taskRow()] : null,
     h('div', { class: 'navgap' }), sec('Manage'),
     writable().some((c) => !isAuto(c)) ? link('import', '#/import', 'upload', 'Import', null, r.view === 'import', '--c-green') : null,
@@ -592,7 +592,7 @@ async function drawView() {
   if (tasks) {
     const was = `${S.tasks.available}|${S.tasks.url}`;
     S.tasks = tasks;
-    if (was !== `${tasks.available}|${tasks.url}`) drawNav();  // the link to ioTasks, or why its tasks are not here
+    if (was !== `${tasks.available}|${tasks.url}`) drawNav();  // the link to ioTask, or why its tasks are not here
   }
   S.occ = [...occ.items, ...(tasks ? tasks.items.map(taskOcc) : [])].filter(passesWho);
   const body = h('div', { class: 'calbody' });
@@ -848,7 +848,7 @@ function eventCard(j, inDialog) {
     j.notes ? line('note', h('div', { style: { whiteSpace: 'pre-wrap' } }, j.notes)) : null,
     j.url ? line('link', safeUrl(j.url) ? h('a', { class: 'lnk', href: j.url, target: '_blank', rel: 'noopener' }, j.url) : h('span', null, j.url)) : null,
     line('today', c.name || '', j.busy === false ? h('span', { class: 'muted' }, ' · shown as free') : null,
-      c.kind === 'birthdays' ? h('div', { class: 'muted small' }, 'From ioContacts; change the birthday there.') : null,
+      c.kind === 'birthdays' ? h('div', { class: 'muted small' }, 'From ioContact; change the birthday there.') : null,
       c.kind === 'holidays' ? h('div', { class: 'muted small' }, 'A public holiday (Settings › Holidays and birthdays).') : null));
 }
 function closeDialogs() { document.querySelectorAll('.dialog-back').forEach((d) => d.remove()); }
@@ -1024,7 +1024,7 @@ async function showEdit(page, r) {
   const place = h('input', { class: 't', value: j.location || '', placeholder: 'Address or place' });
   const people = (j.people || []).filter((p) => p.role !== 'organizer').map((p) => ({ name: p.name, email: p.email, contactId: p.contactId }));
   const pchips = h('div', { class: 'chiprow' });
-  const pin = h('input', { class: 't', placeholder: S.status.iocontacts ? 'Add someone (from ioContacts, or type a name or email)' : 'Add someone (a name or email)', autocomplete: 'off' });
+  const pin = h('input', { class: 't', placeholder: S.status.iocontact ? 'Add someone (from ioContact, or type a name or email)' : 'Add someone (a name or email)', autocomplete: 'off' });
   const drop = h('div', { class: 'drop', hidden: true });
   const drawPeople = () => pchips.replaceChildren(...people.map((p, i) => h('span', { class: 'chip', title: p.email || '' }, p.contactId ? icon('contacts', 's') : icon('person', 's'), p.name || p.email,
     h('span', { class: 'x', title: 'Remove', onclick: () => { people.splice(i, 1); drawPeople(); } }, icon('close', 's')))));
@@ -1317,13 +1317,13 @@ async function setCalendars(el) {
     const canEdit = c.writable || (auto && S.user.role === 'admin');
     return h('div', { class: 'box', style: { '--c': c.color } },
       h('h2', null, h('span', { class: 'chip-ev allday', style: { '--c': c.color, display: 'inline-flex', width: '14px', height: '14px', padding: 0 } }), c.name,
-        h('span', { class: 'muted small', style: { fontWeight: 400 } }, c.kind === 'birthdays' ? 'from ioContacts, read-only' : c.kind === 'holidays' ? 'public holidays, read-only' : c.shared ? 'shared with everyone' : 'only you')),
+        h('span', { class: 'muted small', style: { fontWeight: 400 } }, c.kind === 'birthdays' ? 'from ioContact, read-only' : c.kind === 'holidays' ? 'public holidays, read-only' : c.shared ? 'shared with everyone' : 'only you')),
       canEdit ? [h('div', { class: 'grid' }, fld('Name', name), fld('Description', desc), auto ? null : fld('Time zone for floating times', tz)), h('div', { style: { margin: '10px 0' } }, col),
         h('p', null,
         !auto && (!c.shared || S.user.role === 'admin') ? h('button', { class: 'pillbtn noic danger', onclick: async () => {
           if (!await confirmDialog('Delete calendar', `Delete ${c.name} and its ${c.count || 0} events? Apps that sync it lose it too.`, 'Delete', true)) return;
           try { await api(`/api/calendars/${c.id}`, { method: 'DELETE' }); await loadCals(); onRoute(); } catch (e) { fail(e); }
-        } }, 'Delete') : null)] : h('p', { class: 'muted' }, auto ? (c.kind === 'holidays' ? 'Filled from Settings › Holidays and birthdays.' : 'Filled from ioContacts (Settings › Holidays and birthdays).') : `${c.count || 0} events. Editors and admins change shared calendars.`));
+        } }, 'Delete') : null)] : h('p', { class: 'muted' }, auto ? (c.kind === 'holidays' ? 'Filled from Settings › Holidays and birthdays.' : 'Filled from ioContact (Settings › Holidays and birthdays).') : `${c.count || 0} events. Editors and admins change shared calendars.`));
   }));
 }
 
@@ -1353,14 +1353,14 @@ async function setSuite(el, r) {
   await ui.mount(el, { tab: r.tab, sub: r.sub, toast, onSub: (x) => history.replaceState(null, '', `#/settings/${r.tab}/${x}`) });
 }
 
-/** Settings › Holidays and birthdays, for admins: the Birthdays calendar ioContacts fills (the suite connects the two by
+/** Settings › Holidays and birthdays, for admins: the Birthdays calendar ioContact fills (the suite connects the two by
     itself, so there is nothing else to set). */
 async function birthdaysBox(el) {
-  const s = await api('/api/iocontacts/settings');
+  const s = await api('/api/iocontact/settings');
   const out = h('p', { class: 'muted small' }, s.lastSync && s.lastSync.synced ? `Last brought up to date ${new Date(s.lastSync.synced * 1000).toLocaleString()} (${s.lastSync.count} dates).` : s.lastSync && s.lastSync.error ? `The last sync failed: ${s.lastSync.error}` : '');
   const bdays = h('input', { type: 'checkbox', checked: s.birthdays, onchange: async (e) => {
     try {
-      const r = await api('/api/iocontacts/settings', { method: 'POST', json: { birthdays: e.target.checked } });
+      const r = await api('/api/iocontact/settings', { method: 'POST', json: { birthdays: e.target.checked } });
       S.status = await api('/api/status'); await loadCals();
       out.className = r.sync && !r.sync.ok ? 'warn' : 'muted small';
       out.textContent = r.sync ? (r.sync.ok ? (r.sync.count ? `${r.sync.count} dates.` : 'The Birthdays calendar is off.') : r.sync.error) : '';
@@ -1368,10 +1368,10 @@ async function birthdaysBox(el) {
     } catch (err) { e.target.checked = !e.target.checked; fail(err); }
   } });
   el.append(h('div', { class: 'box' }, h('h2', null, icon('contacts'), 'Birthdays'),
-    h('p', { class: 'muted' }, s.enabled ? ['Birthdays and anniversaries from ', h('a', { href: s.url, target: '_blank', rel: 'noopener' }, 'ioContacts'), ', updated every six hours.']
-      : 'Shown once ioContacts runs in the same suite.'),
+    h('p', { class: 'muted' }, s.enabled ? ['Birthdays and anniversaries from ', h('a', { href: s.url, target: '_blank', rel: 'noopener' }, 'ioContact'), ', updated every six hours.']
+      : 'Shown once ioContact runs in the same suite.'),
     h('p', null, h('label', { class: 'check' }, bdays, ' Show the Birthdays calendar'), ' ',
-      s.enabled ? h('button', { class: 'pillbtn noic', onclick: async () => { try { const r = await api('/api/iocontacts/sync', { method: 'POST' }); await loadCals(); toast(r.ok ? `Birthdays: ${r.count} dates` : r.error); } catch (e) { fail(e); } } }, 'Update now') : null), out));
+      s.enabled ? h('button', { class: 'pillbtn noic', onclick: async () => { try { const r = await api('/api/iocontact/sync', { method: 'POST' }); await loadCals(); toast(r.ok ? `Birthdays: ${r.count} dates` : r.error); } catch (e) { fail(e); } } }, 'Update now') : null), out));
 }
 
 async function setHolidays(el) {
@@ -1440,7 +1440,7 @@ async function setServer(el) {
   el.append(h('div', { class: 'box' }, h('h2', null, icon('download'), 'Export'),
       h('p', null, 'Each calendar as an .ics file.'),
       h('table', { class: 't' }, S.cals.map((c) => h('tr', null, h('td', null, h('span', { class: 'chip-ev', style: { '--c': c.color, display: 'inline-flex' } }, h('span', { class: 'dot' }), h('span', { class: 'nm' }, c.name))),
-        h('td', { class: 'muted' }, c.kind === 'birthdays' ? 'from ioContacts' : `${c.count || 0} events`),
+        h('td', { class: 'muted' }, c.kind === 'birthdays' ? 'from ioContact' : `${c.count || 0} events`),
         h('td', { style: { textAlign: 'right' } }, h('a', { class: 'pillbtn noic', href: `/api/calendars/${c.id}/export` }, 'Download'))))),
       ));
 }

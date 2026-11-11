@@ -1,5 +1,5 @@
 """The server itself, for admins: health, the version check and the update (update.sh, as in the rest of the suite),
-the Birthdays calendar from ioContacts and the Holidays calendars."""
+the Birthdays calendar from ioContact and the Holidays calendars."""
 import platform
 import sys
 from typing import Optional
@@ -14,7 +14,7 @@ from app.mcp.base import READ_ONLY, UPDATES, WRITES, need_admin, server
 @server.tool(annotations=READ_ONLY)
 def diagnostics() -> dict:
     """Admins: the server's health: version and commit, Python and platform, the time zone, the database (server
-    version, tables, rows), ioContacts, the MCP switch, the last update check and update, and the accounts."""
+    version, tables, rows), ioContact, the MCP switch, the last update check and update, and the accounts."""
     need_admin()
     out = {"version": __version__, "commit": updater.local_commit()[:7], "docker": updater.in_docker(),
            "python": sys.version.split()[0], "platform": platform.platform(), "appDir": str(config.APP_DIR),
@@ -31,7 +31,7 @@ def diagnostics() -> dict:
     from app.main import mcp_enabled
     out["mcp"] = {"enabled": mcp_enabled(), "forcedByEnv": config.MCP_FORCED}
     s = contacts.public_settings()
-    out["iocontacts"] = {"url": s.get("url") or None, "connected": s["enabled"], "birthdays": s["birthdays"], "lastSync": s["lastSync"]}
+    out["iocontact"] = {"url": s.get("url") or None, "connected": s["enabled"], "birthdays": s["birthdays"], "lastSync": s["lastSync"]}
     h = holiday.public_settings()
     out["holidays"] = {"countries": [{k: x[k] for k in ("country", "region", "language")} for x in h["items"]], "lastSync": h["lastSync"]}
     out["accounts"] = [{"name": u["name"], "role": u.get("role")} for u in users.all_users()]
@@ -40,10 +40,10 @@ def diagnostics() -> dict:
 
 @server.tool(annotations=UPDATES)
 def sync_birthdays() -> dict:
-    """Admins: bring the Birthdays calendar up to date from ioContacts now (it also happens every few hours)."""
+    """Admins: bring the Birthdays calendar up to date from ioContact now (it also happens every few hours)."""
     need_admin()
     if not contacts.enabled():
-        raise ToolError("ioContacts is not part of the suite (it connects by itself once it runs on the same Shared ioSuite database)")
+        raise ToolError("ioContact is not part of the suite (it connects by itself once it runs on the same Shared ioSuite database)")
     return contacts.sync_birthdays()
 
 

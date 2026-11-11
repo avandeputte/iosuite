@@ -523,7 +523,7 @@ async def set_family_member(uid: int, request: Request):
 
 @router.get("/api/people", dependencies=[access.signed_in])
 async def people(request: Request, q: str = "", limit: int = 12):
-    """Names for the people on an event: from ioContacts when it is connected, and the people on earlier events."""
+    """Names for the people on an event: from ioContact when it is connected, and the people on earlier events."""
     u = request.state.user
     out, err = [], None
     q = q.strip()
@@ -531,7 +531,7 @@ async def people(request: Request, q: str = "", limit: int = 12):
         try:
             out = await run_in_threadpool(contacts.search, q, max(1, min(limit, 50)))
         except Exception as e:  # noqa: BLE001
-            err = f"ioContacts did not answer: {type(e).__name__}"
+            err = f"ioContact did not answer: {type(e).__name__}"
     seen = {(p.get("email") or "", p["name"]) for p in out}
     for p in await run_in_threadpool(lambda: model.people_seen([c["id"] for c in model.calendars_for(u)], q, limit)):
         if (p["email"] or "", p["name"]) not in seen and len(out) < limit:
@@ -663,7 +663,7 @@ async def apple_profile_link(request: Request):
     return appleprofile.link(*await run_in_threadpool(_apple_profile, request, str(b.get("label") or ""), str(b.get("password") or "new")))
 
 
-# ------------------------------------------------------------------ tasks from ioTasks
+# ------------------------------------------------------------------ tasks from ioTask
 
 def _date(s: str, name: str) -> dt.date:
     try:
@@ -674,9 +674,9 @@ def _date(s: str, name: str) -> dt.date:
 
 @router.get("/api/tasks", dependencies=[access.signed_in])
 def due_tasks(request: Request, start: str, end: str, tz: str | None = None):
-    """The tasks from ioTasks due from start up to end (days, YYYY-MM-DD; end not included), open and done, over the
+    """The tasks from ioTask due from start up to end (days, YYYY-MM-DD; end not included), open and done, over the
     lists you see there: {available, url, items: [{id, title, due, allDay, done, list, listId, color, writable,
-    priority, members, repeats}]}. tz: the time zone the days are in (the browser's). ioTasks is asked as you; when it
+    priority, members, repeats}]}. tz: the time zone the days are in (the browser's). ioTask is asked as you; when it
     is not part of the suite, does not answer or does not let you in: {available: false, reason} and no items."""
     s, e = _date(start, "start"), _date(end, "end")
     if not s < e <= s + dt.timedelta(days=400):
@@ -689,7 +689,7 @@ def due_tasks(request: Request, start: str, end: str, tz: str | None = None):
 
 @router.post("/api/tasks/{tid}/complete", dependencies=[access.signed_in])
 async def complete_task(tid: int, request: Request):
-    """{done: true} (the default) ticks a task off in ioTasks, {done: false} opens it again; as you, so only in a list
+    """{done: true} (the default) ticks a task off in ioTask, {done: false} opens it again; as you, so only in a list
     you may change there. {done, due, moved}: a repeating task moves on to its next day (moved) instead of closing.
     tz: whose today a task that repeats after completion counts from."""
     b = await json_body(request)
@@ -699,20 +699,20 @@ async def complete_task(tid: int, request: Request):
         raise HTTPException(x.status, str(x))
 
 
-# ------------------------------------------------------------------ ioContacts
+# ------------------------------------------------------------------ ioContact
 
-@router.get("/api/iocontacts/settings", dependencies=[access.admin])
-async def iocontacts_settings(request: Request, test: int = 0):
-    """Whether ioContacts is part of the suite (found and signed in to by itself), the Birthdays switch, the last sync;
-    ?test=1 also asks ioContacts."""
+@router.get("/api/iocontact/settings", dependencies=[access.admin])
+async def iocontact_settings(request: Request, test: int = 0):
+    """Whether ioContact is part of the suite (found and signed in to by itself), the Birthdays switch, the last sync;
+    ?test=1 also asks ioContact."""
     out = contacts.public_settings()
     if test and out["enabled"]:
         out["test"] = await run_in_threadpool(contacts.test)
     return out
 
 
-@router.post("/api/iocontacts/settings", dependencies=[access.admin])
-async def iocontacts_save(request: Request):
+@router.post("/api/iocontact/settings", dependencies=[access.admin])
+async def iocontact_save(request: Request):
     """Admins: {birthdays}. Saving brings the Birthdays calendar up to date."""
     b = await json_body(request)
     await run_in_threadpool(contacts.save_settings, bool(b["birthdays"]) if "birthdays" in b else None)
@@ -720,8 +720,8 @@ async def iocontacts_save(request: Request):
     return {**contacts.public_settings(), "sync": sync}
 
 
-@router.post("/api/iocontacts/sync", dependencies=[access.admin])
-async def iocontacts_sync(request: Request):
+@router.post("/api/iocontact/sync", dependencies=[access.admin])
+async def iocontact_sync(request: Request):
     return await run_in_threadpool(contacts.sync_birthdays)
 
 

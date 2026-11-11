@@ -21,7 +21,7 @@ SCHEMA = [
         updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3)
     )""",
     # accounts and app passwords live in the Shared ioSuite database (iosuite-shared, app/auth.py)
-    # owner_id NULL: a shared calendar (everyone sees it); kind 'birthdays' is filled from ioContacts and read-only.
+    # owner_id NULL: a shared calendar (everyone sees it); kind 'birthdays' is filled from ioContact and read-only.
     # owner_key stands in for owner_id in the unique key: NULLs never clash in a unique key, so (owner_id, slug) alone
     # would let two shared calendars share a slug
     """CREATE TABLE IF NOT EXISTS cal_calendars (
@@ -71,7 +71,7 @@ SCHEMA = [
         FOREIGN KEY (calendar_id) REFERENCES cal_calendars(id) ON DELETE CASCADE
     )""",
     # the people on an event (ATTENDEE, and ORGANIZER with role 'organizer'), for search and "what is X doing";
-    # contact_id is the ioContacts contact the web app picked them from
+    # contact_id is the ioContact contact the web app picked them from
     """CREATE TABLE IF NOT EXISTS cal_event_people (
         id INT AUTO_INCREMENT PRIMARY KEY, event_id INT NOT NULL, position SMALLINT NOT NULL DEFAULT 0,
         name VARCHAR(255) NULL, email VARCHAR(255) NULL, contact_id INT NULL, role VARCHAR(16) NULL,

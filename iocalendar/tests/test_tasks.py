@@ -1,4 +1,4 @@
-"""Tasks from ioTasks on the calendar: asked for as the viewer, shown on the day they are due, ticked off from here."""
+"""Tasks from ioTask on the calendar: asked for as the viewer, shown on the day they are due, ticked off from here."""
 import io
 import json
 import urllib.error
@@ -20,10 +20,10 @@ TASKS = {"items": [
 
 
 @pytest.fixture()
-def iotasks(client, monkeypatch):
-    """ioTasks in the suite's list of apps, answering from here: the requests it got, and what it answers per path."""
+def iotask(client, monkeypatch):
+    """ioTask in the suite's list of apps, answering from here: the requests it got, and what it answers per path."""
     tasks.forget()
-    suite.register("iotasks", name="ioTasks", url="https://tasks.example.org", version="1")
+    suite.register("iotask", name="ioTask", url="https://tasks.example.org", version="1")
     seen, answers = [], {"/api/lists": LISTS, "/api/tasks": TASKS}
 
     def fake(req, timeout):
@@ -43,17 +43,17 @@ def refusal(code: int, detail: str):
     return urllib.error.HTTPError("https://tasks.example.org", code, "no", {}, io.BytesIO(json.dumps({"detail": detail}).encode()))
 
 
-def test_without_iotasks_the_calendar_has_no_tasks(client):
+def test_without_iotask_the_calendar_has_no_tasks(client):
     tasks.forget()
-    assert client.get("/api/status").json()["iotasks"] is False
+    assert client.get("/api/status").json()["iotask"] is False
     r = client.get("/api/tasks?start=2026-11-09&end=2026-11-16").json()
     assert r["available"] is False and r["items"] == [] and "not part of the suite" in r["reason"]
     assert client.post("/api/tasks/7/complete", json={}).status_code == 404
 
 
-def test_due_tasks_are_asked_for_as_the_viewer(client, iotasks):
-    seen, _ = iotasks
-    assert client.get("/api/status").json()["iotasks"] is True
+def test_due_tasks_are_asked_for_as_the_viewer(client, iotask):
+    seen, _ = iotask
+    assert client.get("/api/status").json()["iotask"] is True
     r = client.get("/api/tasks?start=2026-11-09&end=2026-11-16&tz=Europe/Brussels").json()
     assert r["available"] is True and r["url"] == "https://tasks.example.org"
     assert [t["id"] for t in r["items"]] == [8, 7]  # by day; the one without a due date and the one outside these days are left out
@@ -70,16 +70,16 @@ def test_due_tasks_are_asked_for_as_the_viewer(client, iotasks):
     assert client.get("/api/tasks?start=soon&end=2026-11-09").status_code == 400
 
 
-def test_an_app_password_goes_along_as_it_came(client, iotasks):
-    seen, _ = iotasks
+def test_an_app_password_goes_along_as_it_came(client, iotask):
+    seen, _ = iotask
     pw = client.post("/api/auth/app-passwords", json={"label": "script"}).json()["password"]
     client.cookies.clear()
     assert client.get("/api/tasks?start=2026-11-09&end=2026-11-16", auth=("alex", pw)).json()["available"] is True
     assert seen[0]["headers"]["authorization"].startswith("Basic ") and "cookie" not in seen[0]["headers"]
 
 
-def test_ticking_a_task_off_from_the_calendar(client, iotasks):
-    seen, answers = iotasks
+def test_ticking_a_task_off_from_the_calendar(client, iotask):
+    seen, answers = iotask
     answers["/api/tasks/7/complete"] = {"id": 7, "title": "Bins out", "done": False, "due": "2026-11-19", "dueAllDay": True, "moved": True}
     r = client.post("/api/tasks/7/complete", json={"done": True, "tz": "America/New_York"})
     assert r.status_code == 200 and r.json() == {"id": 7, "title": "Bins out", "done": False, "due": "2026-11-19", "allDay": True, "moved": True}
@@ -90,8 +90,8 @@ def test_ticking_a_task_off_from_the_calendar(client, iotasks):
     assert seen[-1]["body"] == {"done": False}
 
 
-def test_an_iotasks_that_refuses_or_is_away(client, iotasks):
-    seen, answers = iotasks
+def test_an_iotask_that_refuses_or_is_away(client, iotask):
+    seen, answers = iotask
     answers["/api/lists"] = refusal(401, "Sign in first")
     r = client.get("/api/tasks?start=2026-11-09&end=2026-11-16").json()
     assert r["available"] is False and r["items"] == [] and "does not let this account in" in r["reason"]

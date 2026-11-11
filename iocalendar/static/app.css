@@ -1,4 +1,4 @@
-/* ioCalendar: the iothing look (as iopix and ioContacts): light by default, dark with the system or the Appearance setting.
+/* ioCalendar: the iothing look (as iopix and ioContact): light by default, dark with the system or the Appearance setting.
    The name in two colours: "io" in the sun's gold, "Calendar" in brick red (the icon's colour). */
 :root {
   --warn: #e37400; --danger: #d93025; --ok: #1e8e3e; --star: #f9ab00;
@@ -484,7 +484,7 @@ button.chip.toggle .mem { opacity: .5; }
 button.chip.toggle.on { background: var(--accent-bg); color: var(--accent); border-color: var(--accent); font-weight: 600; }
 button.chip.toggle.on .mem { opacity: 1; }
 
-/* tasks from ioTasks: on the day they are due, with a round tick in the list's colour */
+/* tasks from ioTask: on the day they are due, with a round tick in the list's colour */
 .tk { flex: none; width: 16px; height: 16px; padding: 0; border-radius: 50%; border: 2px solid var(--c); background: none; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
 .tk svg { width: 11px; height: 11px; fill: #fff; opacity: 0; }
 .tk:hover:not(:disabled) svg { opacity: .5; fill: var(--c); }

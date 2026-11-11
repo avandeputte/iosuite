@@ -32,7 +32,7 @@ def overview() -> dict:
         "nextSevenDays": [occurrence_out(u, o) for o in occ][:200],
         "family": [m["displayName"] for m in members.family()],
         "holidays": _holidays(),
-        "iocontactsConnected": contacts.enabled(), "version": __version__, "webApp": config.PUBLIC_URL or None,
+        "iocontactConnected": contacts.enabled(), "version": __version__, "webApp": config.PUBLIC_URL or None,
     }
 
 
@@ -49,7 +49,7 @@ def list_family_members() -> list:
 
 @server.tool(annotations=READ_ONLY)
 def list_calendars() -> list:
-    """The calendars you can see: the shared Family calendar (and other shared ones, Birthdays from ioContacts and the
+    """The calendars you can see: the shared Family calendar (and other shared ones, Birthdays from ioContact and the
     public Holidays among them) and your private ones."""
     u = who()
     return [{"id": c["id"], "name": c["name"], "description": c.get("description"), "color": c.get("color"), "shared": c["owner_id"] is None,

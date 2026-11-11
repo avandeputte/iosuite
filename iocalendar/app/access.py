@@ -3,7 +3,7 @@ markers come from iosuite-shared (app/auth.py). Every /api route carries one, an
 
 - public: the sign-in endpoints, the status, the subscription links (their own secret) and CalDAV (it challenges itself)
 - signed_in: an account: everything else (what it may change is a calendar's business: app/model.py)
-- admin: users, the server, ioContacts and the holidays
+- admin: users, the server, ioContact and the holidays
 """
 from app.auth import auth
 

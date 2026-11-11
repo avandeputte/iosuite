@@ -26,7 +26,7 @@ HOLIDAYS_COUNTRY = env("HOLIDAYS_COUNTRY").strip()
 HOLIDAYS_REGION = env("HOLIDAYS_REGION").strip().upper()
 HOLIDAYS_LANGUAGE = env("HOLIDAYS_LANGUAGE").strip()
 
-# ioContacts is found in the suite's list of apps and signed in to by itself (app/contacts.py): nothing to set
+# ioContact is found in the suite's list of apps and signed in to by itself (app/contacts.py): nothing to set
 
 MAX_EVENT_BYTES = 2 * 1024 * 1024     # one calendar object (CalDAV PUT, REST)
 MAX_IMPORT_BYTES = 32 * 1024 * 1024   # an .ics file to import

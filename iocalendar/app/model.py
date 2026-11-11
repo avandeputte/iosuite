@@ -4,7 +4,7 @@ the app searches and draws from), occurrences in a time range, search, import, a
 Calendars: the shared ones (owner_id NULL, Family first) that everyone sees, and each account's own private ones
 (Personal, made the first time a member uses ioCalendar). Viewers only read the shared calendars; members also keep
 their own private ones; editors change the shared ones too; admins also manage settings and users. A calendar of kind 'birthdays' is
-filled from ioContacts, one of kind 'holidays' from the holiday rules (app/holiday.py); nobody changes either here.
+filled from ioContact, one of kind 'holidays' from the holiday rules (app/holiday.py); nobody changes either here.
 """
 import datetime as dt
 import re
@@ -22,7 +22,7 @@ READ_ONLY_KINDS = ("birthdays", "holidays")  # filled by the server, never chang
 
 
 def read_only_reason(c: dict) -> str | None:
-    return {"birthdays": "it comes from ioContacts", "holidays": "it is filled from the holiday settings"}.get((c or {}).get("kind"))
+    return {"birthdays": "it comes from ioContact", "holidays": "it is filled from the holiday settings"}.get((c or {}).get("kind"))
 
 
 class NotFound(Exception):
@@ -452,7 +452,7 @@ def export_text(cals: list[dict], name: str, member_ids: set[int] | None = None)
 
 
 def people_seen(cids: list[int], q: str = "", limit: int = 20) -> list[dict]:
-    """People who were on events before (for the picker when ioContacts is not connected)."""
+    """People who were on events before (for the picker when ioContact is not connected)."""
     if not cids:
         return []
     like = _like(q)

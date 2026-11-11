@@ -47,7 +47,7 @@ async def lifespan(app: FastAPI):
     await run_in_threadpool(db.migrate)
     await run_in_threadpool(users.init)
     updater.start_daily()   # the daily "is there a newer version" check, while the setting allows it
-    contacts.start_sync()   # the Birthdays calendar from ioContacts, every few hours
+    contacts.start_sync()   # the Birthdays calendar from ioContact, every few hours
     holiday.start_sync()    # the Holidays calendar, every day
     purge = chores.start(model.purge_deleted, name="purge of old deletion markers")  # once a day: KEEP_DELETED_DAYS
     log.info("ioCalendar %s started, database %s:%s/%s", __version__, config.DB_HOST, config.DB_PORT, config.DB_NAME)
@@ -87,7 +87,7 @@ auth.install(app, limit_for=_limit_for, not_found=(model.NotFound,))
 def _status_extra(request) -> dict:
     """ioCalendar's own fields of GET /api/status, beside the suite's."""
     u = request.state.user
-    return {"timezone": ical.default_tz(), "iocontacts": contacts.enabled() if u else None, "iotasks": tasks.enabled() if u else None, "mcp": mcp_enabled() if u else None}
+    return {"timezone": ical.default_tz(), "iocontact": contacts.enabled() if u else None, "iotask": tasks.enabled() if u else None, "mcp": mcp_enabled() if u else None}
 
 
 def _server_info() -> dict:

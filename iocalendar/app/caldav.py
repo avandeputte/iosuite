@@ -29,7 +29,7 @@ from iosuite_shared.dav import AP, CS, D, q
 
 from app import access, config, ical, model
 
-# the WebDAV plumbing ioCalendar and ioContacts share (iosuite_shared.dav), under the names this module uses
+# the WebDAV plumbing ioCalendar and ioContact share (iosuite_shared.dav), under the names this module uses
 _xml, _sub, _requested, _response, _parse, _etag_match, _http_date = webdav.xml, webdav.sub, webdav.requested, webdav.response, webdav.parts_of, webdav.etag_match, webdav.http_date
 _precondition = webdav.precondition
 

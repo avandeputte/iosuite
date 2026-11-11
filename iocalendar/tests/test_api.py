@@ -211,11 +211,11 @@ def test_suite_apps_for_the_app_switcher(client):
     html = client.get("/").text
     assert 'id="suitebtn"' in html and "img-src 'self' data: blob: https:" in html
     client.get("/api/calendars")
-    suite.register("iocontacts", name="ioContacts", url="https://contacts.example.net", color="#4f2f7d")
+    suite.register("iocontact", name="ioContact", url="https://contacts.example.net", color="#4f2f7d")
     r = client.get("/api/auth/suite").json()
     assert r["app"] == "iocalendar"
     other = [a for a in r["items"] if a["app"] != r["app"]]
-    assert [(a["name"], a["url"], a["icon"]) for a in other] == [("ioContacts", "https://contacts.example.net", "https://contacts.example.net/static/icons/mark.svg")]
+    assert [(a["name"], a["url"], a["icon"]) for a in other] == [("ioContact", "https://contacts.example.net", "https://contacts.example.net/static/icons/mark.svg")]
 
 
 def test_the_shell_its_files_and_the_icon_are_public(client):
@@ -282,15 +282,15 @@ def test_profile_for_all_apps_that_sync(client):
     from iosuite_shared import suite
     assert [a["app"] for a in client.get("/api/apple-profile/suite").json()["apps"]] == ["iocalendar"]
     assert client.post("/api/apple-profile/suite/link", json={}).status_code == 409
-    suite.register("iotasks", name="ioTasks", url="https://other.example.com")
-    assert sorted(a["app"] for a in client.get("/api/apple-profile/suite").json()["apps"]) == sorted(["iocalendar", "iotasks"])
+    suite.register("iotask", name="ioTask", url="https://other.example.com")
+    assert sorted(a["app"] for a in client.get("/api/apple-profile/suite").json()["apps"]) == sorted(["iocalendar", "iotask"])
     r = client.post("/api/apple-profile/suite/link", json={"label": "iPhone", "password": "new"}).json()
     assert r["url"].endswith("/iosuite-alex.mobileconfig")
     p = plistlib.loads(client.get(r["url"]).content)
     assert p["PayloadDisplayName"].startswith("ioSuite for ")
     own = next(x for x in p["PayloadContent"] if x.get("CalDAVAccountDescription") == "ioCalendar")
     other = next(x for x in p["PayloadContent"] if x is not own)
-    assert other["CalDAVHostName"] == "other.example.com" and other["CalDAVPassword"].startswith("iotasks-")
+    assert other["CalDAVHostName"] == "other.example.com" and other["CalDAVPassword"].startswith("iotask-")
     pw = own["CalDAVPassword"]
     assert pw.startswith("iocalendar-")
     client.cookies.clear()

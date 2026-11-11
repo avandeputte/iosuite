@@ -318,7 +318,7 @@ def people_of(ev: Event) -> list[dict]:
         addr = str(v)
         email = addr[7:] if addr.lower().startswith("mailto:") else None
         name = v.params.get("CN") if hasattr(v, "params") else None
-        cid = v.params.get("X-IOCONTACTS-ID") if hasattr(v, "params") else None
+        cid = v.params.get("X-IOCONTACT-ID") if hasattr(v, "params") else None
         if not name and not email:
             m = re.match(r"urn:x-iocalendar:person:(.*)$", addr)
             name = m.group(1).replace("-", " ") if m else None
@@ -626,7 +626,7 @@ def _person(p: dict) -> vCalAddress | None:
     a.params["PARTSTAT"] = str(p.get("status") or "accepted").upper() if str(p.get("status") or "").upper() in ("ACCEPTED", "DECLINED", "TENTATIVE", "NEEDS-ACTION") else "ACCEPTED"
     a.params["RSVP"] = "FALSE"
     if p.get("contactId"):
-        a.params["X-IOCONTACTS-ID"] = str(int(p["contactId"]))
+        a.params["X-IOCONTACT-ID"] = str(int(p["contactId"]))
     return a
 
 

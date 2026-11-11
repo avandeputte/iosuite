@@ -1,12 +1,12 @@
-"""ioTasks, when it is part of the suite: the tasks that are due show on their day, beside the events, and are ticked
+"""ioTask, when it is part of the suite: the tasks that are due show on their day, beside the events, and are ticked
 off from the calendar.
 
-Nothing to set up: ioTasks is found in the suite's list of apps. Unlike the contacts (app/contacts.py), tasks are asked
+Nothing to set up: ioTask is found in the suite's list of apps. Unlike the contacts (app/contacts.py), tasks are asked
 for on the viewer's behalf: the request goes out from this server with the viewer's own credentials (the suite's shared
-session cookie, or the Authorization header they came with), so ioTasks answers with the lists that person sees there
+session cookie, or the Authorization header they came with), so ioTask answers with the lists that person sees there
 and takes a tick only from someone who may change the list. Nothing is kept here.
 
-ioTasks is asked at the addresses the apps use for each other (iosuite_shared.links: localhost on this machine, its
+ioTask is asked at the addresses the apps use for each other (iosuite_shared.links: localhost on this machine, its
 address inside the network, its public one), with the suite's Cloudflare Access service token when one is set. One
 that did not answer is left alone for BREAK_S seconds, so a calendar without its tasks draws at once.
 """
@@ -21,15 +21,15 @@ import urllib.request
 from fastapi import Request
 from iosuite_shared import links, sessions
 
-APP, PROVIDER = "iocalendar", "iotasks"
+APP, PROVIDER = "iocalendar", "iotask"
 TIMEOUT = 5    # seconds, per request
-BREAK_S = 30   # seconds ioTasks is left alone after it did not answer
+BREAK_S = 30   # seconds ioTask is left alone after it did not answer
 MAX_TASKS = 2000
 _state = {"down": 0.0, "good": None}  # until when it is left alone (time.monotonic); the address that answered last
 
 
 class Unavailable(Exception):
-    """ioTasks could not be asked, or would not answer: (status, why)."""
+    """ioTask could not be asked, or would not answer: (status, why)."""
 
     def __init__(self, status: int, why: str):
         super().__init__(why)
@@ -44,7 +44,7 @@ def enabled() -> bool:
 
 
 def url() -> str:
-    """Where the browser opens ioTasks ('' when it is not part of the suite)."""
+    """Where the browser opens ioTask ('' when it is not part of the suite)."""
     try:
         return links.url(PROVIDER) or ""
     except Exception:  # noqa: BLE001
@@ -52,7 +52,7 @@ def url() -> str:
 
 
 def forget() -> None:
-    """ioTasks may be asked again, from its first address on (the tests)."""
+    """ioTask may be asked again, from its first address on (the tests)."""
     _state.update(down=0.0, good=None)
 
 
@@ -77,11 +77,11 @@ def _open(req, timeout: float):
 
 
 def ask(request: Request, path: str, params: dict | None = None, body: dict | None = None):
-    """GET path from ioTasks as the viewer (with body: POST that JSON); its JSON answer, or Unavailable."""
+    """GET path from ioTask as the viewer (with body: POST that JSON); its JSON answer, or Unavailable."""
     if not enabled():
-        raise Unavailable(404, "ioTasks is not part of the suite")
+        raise Unavailable(404, "ioTask is not part of the suite")
     if _state["down"] > time.monotonic():
-        raise Unavailable(502, "ioTasks did not answer a moment ago")
+        raise Unavailable(502, "ioTask did not answer a moment ago")
     try:
         bases = links.addresses(PROVIDER)
     except Exception:  # noqa: BLE001
@@ -103,7 +103,7 @@ def ask(request: Request, path: str, params: dict | None = None, body: dict | No
         except urllib.error.HTTPError as e:  # it answered
             _state["good"] = base
             if e.code in (401, 403) and body is None:
-                raise Unavailable(403, "ioTasks does not let this account in: open it once and sign in there")
+                raise Unavailable(403, "ioTask does not let this account in: open it once and sign in there")
             try:
                 detail = json.loads(e.read()).get("detail")
             except (ValueError, AttributeError):
@@ -111,12 +111,12 @@ def ask(request: Request, path: str, params: dict | None = None, body: dict | No
             if e.code in (400, 403, 404, 409, 412) and isinstance(detail, str):
                 raise Unavailable(e.code, detail)  # its own word on what it would not take
             if e.code in (404, 405):
-                raise Unavailable(502, "This ioTasks is too old for that: update it")
-            raise Unavailable(502, f"ioTasks answered {e.code}")
+                raise Unavailable(502, "This ioTask is too old for that: update it")
+            raise Unavailable(502, f"ioTask answered {e.code}")
         except (urllib.error.URLError, OSError, ValueError) as e:
             why = type(e).__name__
     _state["down"] = time.monotonic() + BREAK_S
-    raise Unavailable(502, f"ioTasks is not reachable ({why})")
+    raise Unavailable(502, f"ioTask is not reachable ({why})")
 
 
 def _tz(tz: str | None) -> str | None:
@@ -124,7 +124,7 @@ def _tz(tz: str | None) -> str | None:
 
 
 def between(request: Request, start: dt.date, end: dt.date, tz: str | None = None) -> list[dict]:
-    """The tasks due from start up to end (end not included), open and done, over the lists the viewer sees in ioTasks:
+    """The tasks due from start up to end (end not included), open and done, over the lists the viewer sees in ioTask:
     [{id, title, due, allDay, done, listId, list, color, writable, priority, members (ids), repeats}], by day, the ones without a time first."""
     q = {"status": "all", "from": start.isoformat(), "to": (end - dt.timedelta(days=1)).isoformat(), "limit": MAX_TASKS}
     if _tz(tz):
@@ -133,7 +133,7 @@ def between(request: Request, start: dt.date, end: dt.date, tz: str | None = Non
     out = []
     for t in ask(request, "/api/tasks", q).get("items", []):
         due = t.get("due")
-        # a day (or a time) to show it on; the days are checked here too (an ioTasks from before from= and to= sends every task)
+        # a day (or a time) to show it on; the days are checked here too (an ioTask from before from= and to= sends every task)
         if not due or not (start - dt.timedelta(days=1)).isoformat() <= due[:10] <= end.isoformat():
             continue
         c = lists.get(t.get("listId")) or {}
@@ -147,7 +147,7 @@ def between(request: Request, start: dt.date, end: dt.date, tz: str | None = Non
 
 
 def complete(request: Request, tid: int, done: bool = True, tz: str | None = None) -> dict:
-    """Tick a task off (or open it again) in ioTasks, as the viewer: {done, due, moved, title}. moved: a repeating task
+    """Tick a task off (or open it again) in ioTask, as the viewer: {done, due, moved, title}. moved: a repeating task
     went on to its next day (due) instead of closing."""
     body = {"done": bool(done)}
     if _tz(tz):
