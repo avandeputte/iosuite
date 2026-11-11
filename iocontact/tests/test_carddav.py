@@ -71,3 +71,29 @@ def test_web_edits_show_up_over_dav(client, family_id):
     assert c["href"] in r.text
     r = client.get(f"/dav/addressbooks/alex/family/{c['href']}", auth=("alex", "secret123"))
     assert "TEL;TYPE=CELL:1" in r.text
+
+
+def test_phone_round_trip_keeps_relations_single(client, family_id):
+    """An iPhone saves a card back with the relation twice (the name with its label, and the bare link to the contact,
+    its type gone) and with its own item1.X-... property: the relation stays one, and the groups do not collide."""
+    from fastapi.testclient import TestClient
+    from app.main import app
+    from tests.test_api import mk
+    c = TestClient(app)
+    mom = mk(client, family_id, fn="Mary Doe", gender="F")
+    mk(client, family_id, fn="Mary Doe")  # a namesake: the name alone no longer says who the mother is
+    kid = mk(client, family_id, fn="Tim Doe", relations=[{"type": "parent", "relatedId": mom["id"]}])
+    href = f"/dav/addressbooks/alex/family/{kid['uid']}.vcf"
+    card = c.get(href, auth=("alex", "secret123")).text
+    assert "item1.X-ABRELATEDNAMES:Mary Doe" in card
+    sent = re.sub(r"RELATED;X-IOCONTACTS-TYPE=parent:", "RELATED:", card).replace(
+        "END:VCARD", "item1.X-ADDRESSING-GRAMMAR:abcd\r\nX-IMAGETYPE:PHOTO\r\nX-IMAGEHASH:kQQW==\r\nEND:VCARD")
+    assert sent != card
+    r = c.put(href, content=sent, headers={"Content-Type": "text/vcard"}, auth=("alex", "secret123"))
+    assert r.status_code in (200, 201, 204), r.text
+    k = client.get(f"/api/contacts/{kid['id']}").json()
+    assert [(x["type"], x.get("relatedId")) for x in k["relations"]] == [("parent", mom["id"])]
+    back = c.get(href, auth=("alex", "secret123")).text
+    assert "item1.X-ADDRESSING-GRAMMAR:abcd" in back and "X-IMAGEHASH" not in back and "X-IMAGETYPE" not in back
+    assert "item1.X-ABRELATEDNAMES" not in back and "item2.X-ABRELATEDNAMES:Mary Doe" in back
+    assert back.endswith("END:VCARD\r\n")
