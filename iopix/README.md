@@ -176,7 +176,7 @@ When the proxy already makes people sign in, the viewer can take that sign-in in
 | `AUTH_PROXY` | `cloudflare`, `haproxy`, `nginx`, `caddy`, `traefik` or `header` (any other proxy); `off` by default |
 | `AUTH_PROXY_HEADER` | the header(s) with the user, comma-separated. Default for `cloudflare`: `Cf-Access-Authenticated-User-Email`; for the others: `Remote-User`, `X-Forwarded-User`, `X-Auth-Request-User`, `X-Auth-Request-Email`, `X-Forwarded-Email` |
 | `AUTH_PROXY_TRUSTED` | addresses or networks the proxy connects from, e.g. `172.18.0.0/16` for a Docker network; default `127.0.0.1,::1` (a proxy on the same machine) |
-| `AUTH_PROXY_CREATE` | `viewer` or `editor`: create an account with that role for someone the proxy lets in who has none; `deny`: they get a "No access" page and cannot sign in here; empty (default): they get the sign-in screen |
+| `AUTH_PROXY_CREATE` | `viewer`, `member` or `editor`: create an account with that role for someone the proxy lets in who has none; `deny`: they get a "No access" page and cannot sign in here; empty (default): they get the sign-in screen |
 | `CF_ACCESS_TEAM`, `CF_ACCESS_AUD` | Cloudflare Access team domain (`myteam.cloudflareaccess.com`) and the application's AUD tag |
 
 The header is only believed from the proxy. A request that reaches the viewer any other way is ignored, whatever headers it carries. The one exception is Cloudflare Access with `CF_ACCESS_TEAM` and `CF_ACCESS_AUD` set: there the signed token Cloudflare adds to every request (`Cf-Access-Jwt-Assertion`) is checked against your team's keys, and the email is taken from that token. This is the recommended setup for a Cloudflare Tunnel. Without those two settings, `cloudflared` must connect from an address in `AUTH_PROXY_TRUSTED`.
@@ -212,12 +212,13 @@ Out of the box the viewer is open to anyone who can reach it. `setup.sh` asks fo
 | Who | Can |
 | --- | --- |
 | Not signed in | browse and search everything, read-only; display settings stay in the browser |
-| **viewer** | the same, plus settings, their own favorites and albums kept on the server (they follow the user to another device) |
-| **viewer without a password** | the same; signs in with one click from the account picker (like a media-server profile). An account with no password can never be more than a viewer |
+| **viewer** | the same, plus their display settings kept on the server; only looks |
+| **member** (the default) | plus their own favorites and private albums kept on the server (they follow the user to another device) |
+| **without a password** | signs in with one click from the account picker (like a media-server profile). An account with no password can never be more than a member |
 | **editor** | plus every library write: edits, tags, faces, place tags, GPS tracks, metadata sync, applying to digiKam's database |
 | **admin** | plus settings, maintenance, models, backups, updates and managing users (Settings › Security, for suite admins) |
 
-**Albums are shared or private.** A shared album is seen by everyone who can browse, and only editors and admins create, rename, fill, share or delete it. A private album is seen and changed only by the account that made it, whatever its role (admins do not see other people's private albums); any signed-in account can make one. An editor or admin can share their private album, or make a shared album private, which makes it theirs. Albums from before v1.27 are shared. With no accounts yet, every album is shared.
+**Albums are shared or private.** A shared album is seen by everyone who can browse, and only editors and admins create, rename, fill, share or delete it. A private album is seen and changed only by the account that made it, (admins do not see other people's private albums); any member, editor or admin can make one. An editor or admin can share their private album, or make a shared album private, which makes it theirs. Albums from before v1.27 are shared. With no accounts yet, every album is shared.
 
 **Settings › Security** (suite admins) is the suite's admin panel, the same as on the start page and in every io app (iosuite-shared's `/api/suite-admin/ui.js`): people and their role in every app, app passwords, keys and tokens, the apps (default role, sign-in required) and sign-in at the proxy.
 

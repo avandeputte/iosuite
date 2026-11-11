@@ -39,6 +39,7 @@ export const S = {
   APP_STAMP: null,
   dragTag: null,
   IS_ADMIN: true,
+  IS_MEMBER: true,  // a member or more keeps favorites and albums of their own; a viewer only looks
   USERS_EXIST: false,
   REQUIRE_LOGIN: false,
   BOOTED: false,

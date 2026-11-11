@@ -1,5 +1,5 @@
 """Users and permissions: open until the first user exists; then anonymous is read-only,
-viewers keep settings and favorites on the server, editors write the library, admins
+viewers keep settings on the server, members also favorites, editors write the library, admins
 manage settings, maintenance and users; sessions are signed cookies."""
 from app import users
 from helpers import login as _login
@@ -100,7 +100,7 @@ def test_own_password_change(client, fresh):
 def test_passwordless_viewer_one_click_and_limits(client, fresh):
     users.create("alex", "correct horse", "admin")
     _login(client, "alex", "correct horse")
-    assert client.post("/api/users", json={"name": "kid", "password": "", "role": "editor"}).status_code == 400, "no password means viewer only"
+    assert client.post("/api/users", json={"name": "kid", "password": "", "role": "editor"}).status_code == 400, "no password means a member at most"
     kid = client.post("/api/users", json={"name": "kid", "password": "", "role": "viewer"}).json()
     assert kid["passwordless"] is True
     assert client.post(f"/api/users/{kid['id']}", json={"role": "editor"}).status_code == 400, "cannot be promoted without a password"
@@ -113,7 +113,7 @@ def test_passwordless_viewer_one_click_and_limits(client, fresh):
     assert r.status_code == 200 and r.json()["user"]["role"] == "viewer"
     s = client.get("/api/status").json()
     assert s["user"]["name"] == "kid" and s["editing"] is False and s["signedIn"] is True
-    assert client.post("/api/favorites", json={"ids": [], "on": True}).status_code == 200
+    assert client.post("/api/favorites", json={"ids": [], "on": True}).status_code == 403, "a viewer only looks"
     client.cookies.clear()
     assert client.post("/api/auth/login", json={"name": "alex"}).status_code == 401, "a protected account still needs its password"
     _login(client, "alex", "correct horse")

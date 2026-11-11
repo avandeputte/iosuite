@@ -31,14 +31,14 @@ def _with_hashes(ids) -> list:
 
 def _album_rights(user) -> dict:
     """What this user may do with albums: shared ones are created and changed by editors and admins; private
-    ones by their owner, any signed-in user (with no accounts yet, every album is shared)."""
-    return {"canShareAlbums": bool(users.can_write(user)), "canPrivateAlbums": bool(user and user.get("id") is not None)}
+    ones by their owner, a member or more (a viewer only looks; with no accounts yet, every album is shared)."""
+    return {"canShareAlbums": bool(users.can_write(user)), "canPrivateAlbums": bool(user and user.get("id") is not None and users.is_member(user))}
 
 
 def _can_change_album(a: dict, user) -> bool:
     if a["shared"]:
         return bool(users.can_write(user))
-    return bool(user) and a["owner_id"] == user.get("id")
+    return bool(user) and a["owner_id"] == user.get("id") and bool(users.is_member(user))
 
 
 @router.get("/api/state", dependencies=[access.public])
@@ -52,7 +52,7 @@ def api_state(request: Request):
     return jresp(request, {"rev": appstate.rev, **s, **_album_rights(user)})
 
 
-@router.post("/api/favorites", dependencies=[access.signed_in])
+@router.post("/api/favorites", dependencies=[access.member])
 async def api_favorites(request: Request):
     """Body: {ids, on}: add to or take from the favorites of the account asking (with no accounts, the one list everyone shares)."""
     body = await json_body(request)
@@ -61,10 +61,10 @@ async def api_favorites(request: Request):
     return {"ok": True}
 
 
-@router.post("/api/ualbums", dependencies=[access.signed_in])
+@router.post("/api/ualbums", dependencies=[access.member])
 async def api_ualbum_create(request: Request):
     """Body: {name, shared: bool (default: shared when allowed), ids?}. Shared albums: editors and admins;
-    private albums: any signed-in user, seen only by them."""
+    private albums: a member or more, seen only by them."""
     body = await json_body(request)
     user = request.state.user
     name = str(body.get("name", "")).strip()[:200]
@@ -82,7 +82,7 @@ async def api_ualbum_create(request: Request):
     return {"id": album_id}
 
 
-@router.post("/api/ualbums/{album_id}", dependencies=[access.signed_in])
+@router.post("/api/ualbums/{album_id}", dependencies=[access.member])
 async def api_ualbum_update(album_id: int, request: Request):
     """Body: {name} to rename, {ids, on} to add or remove photos, {shared: bool} to share it or make it
     private, {delete: true} to remove the album. A shared album is changed by editors and admins, a private

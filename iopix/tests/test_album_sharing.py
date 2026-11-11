@@ -18,21 +18,21 @@ def _clear_albums():
 def test_shared_and_private_albums(client, fresh, lib):
     _clear_albums()
     users.create("alex", "admin-pass1", "admin"); users.create("ed", "editor-pass", "editor")
-    users.create("vi", "viewer-pass", "viewer"); users.create("vo", "viewer-pass2", "viewer")
+    users.create("vi", "viewer-pass", "member"); users.create("vo", "viewer-pass2", "member")
     p1, p2 = lib["ids"][0], lib["ids"][1]
     try:
-        # a viewer: private albums only
+        # a member: private albums only
         _login(client, "vi", "viewer-pass")
         st = client.get("/api/state").json()
         assert st["canShareAlbums"] is False and st["canPrivateAlbums"] is True
         assert client.post("/api/ualbums", json={"name": "Team", "shared": True}).status_code == 403
-        r = client.post("/api/ualbums", json={"name": "Mine", "ids": [p1]})  # default for a viewer: private
+        r = client.post("/api/ualbums", json={"name": "Mine", "ids": [p1]})  # default for a member: private
         assert r.status_code == 200
         mine = r.json()["id"]
         a = _albums(client)["Mine"]
         assert a["shared"] is False and a["mine"] is True and a["canEdit"] is True and a["n"] == 1
         assert client.post(f"/api/ualbums/{mine}", json={"ids": [p2], "on": True}).status_code == 200
-        assert client.post(f"/api/ualbums/{mine}", json={"shared": True}).status_code == 403, "a viewer cannot share"
+        assert client.post(f"/api/ualbums/{mine}", json={"shared": True}).status_code == 403, "a member cannot share"
         assert client.get(f"/api/photos?ualbum={mine}").json()["count"] == 2
 
         # an editor makes a shared album; the viewer sees it but cannot change it
