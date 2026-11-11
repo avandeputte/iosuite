@@ -95,6 +95,33 @@ def _ingredients(lines: list[str]) -> list[str]:
     return out
 
 
+def heading(line: str) -> str | None:
+    """Which part a line starts ("ingredients", "steps", "notes") when it is such a heading."""
+    t = line.strip("#*_ ").strip()
+    return next((k for k, rx in _HEAD.items() if t and rx.match(t)), None)
+
+
+def amount(line: str) -> bool:
+    """Whether a line begins as an ingredient does: with an amount."""
+    return bool(_AMOUNT.match(line))
+
+
+def fact(t: str, facts: dict) -> bool:
+    """Picks "Serves 4" and "Prep time: 15 min" out of a line into `facts` (the first of each counts). Whether it was one."""
+    m = _TIME.match(t)
+    if m:
+        mins = duration(m.group(2))
+        if mins:
+            key = "prepMinutes" if _PREP.match(m.group(1)) else "totalMinutes" if _TOTAL.match(m.group(1)) else "cookMinutes"
+            facts.setdefault(key, mins)
+            return True
+    m = _SERVES.match(t)
+    if m and len(t) < 60 and re.search(r"\d", m.group(1)) and "servings" not in facts:
+        facts["servings"] = re.sub(r"\s*(?:servings?|portions?|personen|personnes)\s*$", "", m.group(1), flags=re.I).strip()[:64] or m.group(1)[:64]
+        return True
+    return False
+
+
 def parse(text: str) -> dict:
     """The fields POST /api/recipes takes, as far as the text gives them. Invalid when there is nothing to read."""
     if not isinstance(text, str) or not text.strip():
@@ -107,20 +134,11 @@ def parse(text: str) -> dict:
     where = "top"
     for raw in lines:
         t = _clean(raw)
-        head = next((k for k, rx in _HEAD.items() if t and rx.match(t.strip("#*_ ").strip())), None)
+        head = heading(t)
         if head:
             where = head
             continue
-        m = _TIME.match(t)
-        if m and where != "steps":
-            mins = duration(m.group(2))
-            if mins:
-                key = "prepMinutes" if _PREP.match(m.group(1)) else "totalMinutes" if _TOTAL.match(m.group(1)) else "cookMinutes"
-                facts.setdefault(key, mins)
-                continue
-        m = _SERVES.match(t)
-        if m and where != "steps" and len(t) < 60 and re.search(r"\d", m.group(1)) and "servings" not in facts:
-            facts["servings"] = re.sub(r"\s*(?:servings?|portions?|personen|personnes)\s*$", "", m.group(1), flags=re.I).strip()[:64] or m.group(1)[:64]
+        if where != "steps" and fact(t, facts):
             continue
         parts[where].append(raw.strip() if where == "steps" else t)
     top = [t for t in parts["top"] if t]

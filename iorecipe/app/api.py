@@ -12,7 +12,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
 from iosuite_shared.access import json_body
 
-from app import access, config, model, ocr, portable, scrape, shopping, textimport
+from app import access, ai, config, model, ocr, portable, scrape, shopping, textimport
 
 router = APIRouter()
 
@@ -189,25 +189,28 @@ def import_from(u: dict, url: str, family: bool) -> dict:
     if not model.may_add(u, family):
         raise model.Forbidden("Only editors add family recipes" if family else "A viewer only looks; a member keeps recipes of their own")
     data, picture = scrape.recipe_at(url)
+    how = data.pop("readBy", "data")
     r = model.create(u, data, family)
     if picture:
         try:
             model.add_photo(u, r, picture)
         except ValueError:
             pass  # not a picture after all: the recipe without it
-    return model.readable(u, r["id"])
+    return {**model.readable(u, r["id"]), "readBy": how}
 
 
 @router.post("/api/import", dependencies=[access.signed_in])
 async def import_recipe(request: Request):
-    """{url, family?}: the recipe on that web page (the schema.org Recipe data most recipe sites publish), with its
-    picture, as a new recipe. 400 when the page cannot be fetched or describes no recipe."""
+    """{url, family?}: the recipe on that web page, with its picture, as a new recipe. `readBy` in the answer says how
+    it was found: "data" (the schema.org Recipe data most recipe sites publish), "page" (the page's own lists or the
+    text under its "Ingredients" heading) or "ai" (Claude read the page's text; only with an AI key in config.env).
+    400 when the page cannot be fetched or no recipe is found on it."""
     u = request.state.user
     b = await json_body(request)
     if not str(b.get("url") or "").strip():
         raise HTTPException(400, "The address of a recipe, please")
     r = await run_in_threadpool(import_from, u, str(b["url"]), _family(u, b))
-    return JSONResponse(model.public(r, u), status_code=201)
+    return JSONResponse({**model.public(r, u), "readBy": r["readBy"]}, status_code=201)
 
 
 def _may_draft(u: dict) -> None:
@@ -219,8 +222,8 @@ def _may_draft(u: dict) -> None:
 @router.get("/api/import", dependencies=[access.signed_in])
 def import_ways(request: Request):
     """What this server can import from: {photo: whether it reads a photo of a recipe (Tesseract is installed),
-    languages: the languages it reads}."""
-    return {"photo": ocr.available(), "languages": ocr.languages()}
+    languages: the languages it reads, ai: whether a web page without recipe data is read with AI (a key is set)}."""
+    return {"photo": ocr.available(), "languages": ocr.languages(), "ai": ai.available()}
 
 
 @router.post("/api/import/text", dependencies=[access.signed_in])

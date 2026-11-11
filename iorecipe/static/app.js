@@ -770,7 +770,8 @@ async function showImport(page, r) {
   const toForm = (draft) => { S.draft = draft; location.hash = '#/new'; };
   await ({ web: importWeb, text: importText, photo: importPhoto, file: importFile, export: exportBox }[r.tab] || importWeb)();
 
-  function importWeb() {
+  async function importWeb() {
+    const ai = await api('/api/import').then((w) => w.ai, () => false);
     const url = h('input', { class: 't', type: 'url', placeholder: 'https://www.example.com/recipes/oat-cookies', autocapitalize: 'none', spellcheck: 'false' });
     const kept = where();
     const btn = h('button', { class: 'pillbtn primary', type: 'submit' }, icon('download', 's'), 'Import');
@@ -782,7 +783,9 @@ async function showImport(page, r) {
         const body = { url: url.value.trim() };
         if (canFamily()) body.family = kept.value === '1';
         const got = await api('/api/import', { method: 'POST', json: body });
-        toast(`Imported “${got.title}”. Have a look, and edit what needs it.`);
+        toast(got.readBy === 'ai' ? `Imported “${got.title}”, read from the page by AI. Check it against the page.`
+          : got.readBy === 'page' ? `Imported “${got.title}” from the page’s text${got.steps.length ? '' : ' (the page writes out no steps)'}. Check it against the page.`
+          : `Imported “${got.title}”. Have a look, and edit what needs it.`);
         location.hash = `#/recipe/${got.id}`;
       } catch (err) { failed(btn, err); }
     };
@@ -790,7 +793,7 @@ async function showImport(page, r) {
       h('h2', null, icon('globe'), 'A recipe’s web address'),
       h('p', { class: 'muted' }, 'Paste the address of a recipe page. ioRecipe fetches the page and keeps the recipe it describes (title, ingredients, steps, times, tags) with its picture and a link back to where it came from.'),
       h('div', { class: 'pform' }, url, canFamily() ? fld('Kept with', kept) : null, h('div', null, btn), note),
-      h('p', { class: 'muted small' }, 'This works on the many sites that describe their recipes for search engines (schema.org Recipe). Where a page does not, copy its text and use Pasted text.')));
+      h('p', { class: 'muted small' }, 'Most recipe sites describe their recipes for search engines, and that is read first. Where a page does not, ioRecipe reads its lists and the text under “Ingredients”', ai ? ', and has AI read the page when that gives no recipe.' : '.', ' A site that only answers a person’s browser cannot be fetched: copy its text and use Pasted text.')));
     setTimeout(() => url.focus(), 0);
   }
 
