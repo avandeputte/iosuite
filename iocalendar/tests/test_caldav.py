@@ -100,6 +100,38 @@ def test_mkcalendar_proppatch_and_free_busy(client, dav):
     assert dav("DELETE", "/dav/calendars/alex/work-1/").status_code == 204
 
 
+def test_mkcalendar_refuses_a_task_list(client, dav):
+    """iOS Reminders asks for a VTODO-only list (DEFAULT_TASK_CALENDAR_NAME); this server keeps events, so none is made."""
+    body = ('<c:mkcalendar xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav"><d:set><d:prop>'
+            '<d:displayname>DEFAULT_TASK_CALENDAR_NAME</d:displayname>'
+            '<c:supported-calendar-component-set><c:comp name="VTODO"/></c:supported-calendar-component-set>'
+            '</d:prop></d:set></c:mkcalendar>')
+    r = dav("MKCALENDAR", "/dav/calendars/alex/tasks-1/", body)
+    assert r.status_code == 403 and "supported-calendar-component" in r.text
+    assert dav("PROPFIND", "/dav/calendars/alex/tasks-1/", '<d:propfind xmlns:d="DAV:"><d:prop><d:displayname/></d:prop></d:propfind>',
+               Depth="0").status_code == 404
+    # the placeholder name alone is enough
+    named = '<c:mkcalendar xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav"><d:set><d:prop><d:displayname>DEFAULT_TASK_CALENDAR_NAME</d:displayname></d:prop></d:set></c:mkcalendar>'
+    assert dav("MKCALENDAR", "/dav/calendars/alex/tasks-2/", named).status_code == 403
+    # one that can hold events is still made
+    ok = body.replace('<c:comp name="VTODO"/>', '<c:comp name="VEVENT"/><c:comp name="VTODO"/>').replace("DEFAULT_TASK_CALENDAR_NAME", "Both")
+    assert dav("MKCALENDAR", "/dav/calendars/alex/both-1/", ok).status_code == 201
+
+
+def test_migrate_drops_empty_ios_task_lists(client, dav):
+    """The lists iOS made before 0.32.2 go at startup when empty; one that somehow holds an event stays."""
+    from app import db, model
+    assert dav("MKCALENDAR", "/dav/calendars/alex/mine-1/", "").status_code == 201
+    uid = db.one("SELECT owner_id FROM cal_calendars WHERE slug = 'mine-1'")["owner_id"]
+    empty = model.create_calendar(uid, "DEFAULT_TASK_CALENDAR_NAME")
+    kept = model.create_calendar(uid, "DEFAULT_TASK_CALENDAR_NAME")
+    mine = model.create_calendar(uid, "Work")
+    db.ex("INSERT INTO cal_events (calendar_id, uid, href, ics, etag) VALUES (%s, 'x', 'x.ics', '', 'e')", (kept,))
+    db.migrate()
+    left = {r["id"] for r in db.q("SELECT id FROM cal_calendars")}
+    assert empty not in left and kept in left and mine in left
+
+
 def test_caldav_refuses_xml_entities(client, dav):
     """A report body with entity expansion (a billion laughs) or an external entity is refused (400), not parsed."""
     base = "/dav/calendars/alex/family/"
