@@ -32,6 +32,7 @@ one. It can sit on the same server as the app databases.
 | ioContacts | `contacts` | `con_` |
 | ioHealth | `health` | `hlt_` |
 | ioTasks | `tasks` | `tsk_` |
+| ioBackup | `backup` | `bkp_` |
 
 Every table carries its app's prefix, so all of them could share one database if you wanted. The tables are created
 on the first start, and every app keeps a `<prefix>_schema_version` table and brings its tables up to date by itself
@@ -39,6 +40,9 @@ when it is updated.
 
 ## Backups
 
-Back up the databases with your usual MariaDB tools (`mariadb-dump`). The Shared ioSuite database belongs in every
+Back up the databases with ioBackup, the suite's admin tool for database backups (its own app, on port 8680; see its
+[README](https://github.com/avandeputte/iobackup)): it backs up the database server on a schedule to a folder or
+Google Drive, keeps the newest few, and restores whole databases or single tables. Your usual MariaDB tools
+(`mariadb-dump`) work too. The Shared ioSuite database belongs in every
 backup: it has the accounts for all the apps. ioPix keeps its own data folder too (thumbnails, models, the edit log's
 backups), and ioNotes can export every note to a file under Import and export.
