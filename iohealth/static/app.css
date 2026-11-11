@@ -79,6 +79,13 @@ a.brand-name { color: var(--text); } a.brand-name:hover { text-decoration: none;
 .appic { width: 44px; height: 44px; border-radius: 12px; object-fit: contain; }
 .appic.fb { display: inline-flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 18px; }
 .appnm { font-size: 12px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* the app this menu is in stays in the list (one order in every app), marked; admin tools come smaller, apart */
+.apptile.cur { background: var(--bg); }
+.apptile.cur .appnm { font-weight: 600; }
+.apptile.tool { gap: 4px; padding: 6px 4px; }
+.apptile.tool .appic { width: 28px; height: 28px; border-radius: 8px; }
+.apptile.tool .appic.fb { font-size: 13px; }
+.apptile.tool .appnm { font-size: 12px; }
 #sync-status { margin-left: auto; padding-left: 8px; text-align: right; }
 
 /* ---- the sidebar: the name on top, the destinations in groups (each with its own hue), Settings and Maintenance at the
