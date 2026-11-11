@@ -345,7 +345,7 @@ label.check input { margin-top: 3px; accent-color: var(--brand); }
 table.t { border-collapse: collapse; width: 100%; }
 table.t th, table.t td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
 table.t th { font-size: var(--fs-s); color: var(--fg2); font-weight: 600; }
-.box { border: 1px solid var(--line); border-radius: var(--r-l); padding: 16px 20px; margin-bottom: 16px; }
+.box { border: 1px solid var(--line); border-radius: var(--r-l); padding: 16px 20px; margin-bottom: 16px; min-width: min-content; }  /* wide content widens its box; past the window, the page scrolls at its edge */
 .box h2 { margin: 0 0 6px; font-size: var(--fs-l); font-weight: 600; display: flex; align-items: center; gap: 8px; }
 .box h2 .ic { color: var(--brand); }
 .box p { margin: 6px 0; }
@@ -442,7 +442,7 @@ a.hatile:hover { background: var(--bg3); }
 .qrow .bmic.ha.on .ic { color: var(--star); }
 .qrow .tap { color: var(--accent); }
 .ok { color: var(--ok); }
-.halist { display: flex; flex-direction: column; gap: 4px; margin: 8px 0 12px; overflow-x: auto; }
+.halist { display: flex; flex-direction: column; gap: 4px; margin: 8px 0 12px; }
 .harow { display: grid; grid-template-columns: 28px minmax(140px, 1.2fr) minmax(120px, 1fr) 60px 48px minmax(90px, .7fr) 36px; gap: 8px; align-items: center; min-width: 620px; padding: 2px 0; border-radius: var(--r-s); }
 .harow.dragging { background: var(--bg3); }
 .harow.head { font-size: var(--fs-xs); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--fg2); }

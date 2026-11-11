@@ -46,7 +46,7 @@ def test_viewer_cannot_change_settings(client):
 def test_server_info(client):
     s = client.get("/api/server").json()
     assert s["version"] and "canRun" in s and s["autoCheck"] is False and s["autoCheckLocked"] is True
-    assert s["about"][1][0] == "Database" and "progress" in s and s["repo"] and s["branch"]
+    assert [k for k, _ in s["about"]] == ["Address"] and "progress" in s and s["repo"] and s["branch"]
     assert client.get("/api/log").status_code in (200, 404)  # the server log, when there is one
 
 
