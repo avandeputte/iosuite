@@ -116,7 +116,7 @@ body.side-docked { --nav: var(--side); }
 .sheetgrid .sic { width: 44px; height: 44px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: var(--hue); background: color-mix(in srgb, var(--hue) var(--mix), transparent); }
 
 /* ---- main */
-#main { position: fixed; top: var(--topbar); bottom: 0; left: var(--nav); right: 0; overflow-y: auto; }  /* the page scrolls as a whole: its scrollbar at the window's edge */
+#main { position: fixed; top: var(--topbar); bottom: 0; left: var(--nav); right: 0; overflow: auto; }  /* the page scrolls as a whole, its scrollbars at the window's edges */
 .listpane { width: 380px; flex: none; border-right: 1px solid var(--line); overflow-y: auto; }
 .detailpane { flex: 1; overflow-y: auto; min-width: 0; }
 .page { padding: 20px 28px 60px; max-width: 1100px; }
@@ -203,13 +203,13 @@ input.t:focus, select.t:focus, textarea.t:focus { border-color: var(--accent); b
 table.t { border-collapse: collapse; width: 100%; }
 table.t th, table.t td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
 table.t th { font-size: var(--fs-s); color: var(--fg2); font-weight: 600; }
-.box { border: 1px solid var(--line); border-radius: var(--r-l); padding: 16px 20px; margin-bottom: 16px; }
+.box { border: 1px solid var(--line); border-radius: var(--r-l); padding: 16px 20px; margin-bottom: 16px; min-width: min-content; }  /* wide content widens its box; past the window, the page scrolls at its edge */
 .box h2 { margin: 0 0 6px; font-size: var(--fs-l); font-weight: 600; display: flex; align-items: center; gap: 8px; }
 .box h2 .ic { color: var(--brand); }
 .box p { margin: 6px 0; }
 pre.log { background: var(--bg2); border: 1px solid var(--line); border-radius: var(--r-s); padding: 10px 12px; margin: 10px 0 4px; max-height: 420px; overflow: auto; font-size: var(--fs-xs); line-height: 1.45; white-space: pre; }
 .copy { display: flex; gap: 6px; align-items: center; margin: 6px 0; }
-.copy code { flex: 1; background: var(--bg2); padding: 8px 10px; border-radius: var(--r-s); overflow-x: auto; white-space: nowrap; font-size: var(--fs-m); }
+.copy code { flex: 1; background: var(--bg2); padding: 8px 10px; border-radius: var(--r-s); overflow-wrap: anywhere; font-size: var(--fs-m); }
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 16px; overflow-x: auto; }
 @media (min-width: 700px) { .tabs { flex-wrap: wrap; overflow: visible; } }  /* one Settings page has many tabs: wrap them where there is room */
 .tabs button { padding: 10px 14px; border-bottom: 2px solid transparent; color: var(--fg2); white-space: nowrap; }
@@ -304,10 +304,10 @@ label.check input { margin-top: 3px; accent-color: var(--brand); }
 .reasons { margin: 6px 0 4px; padding-left: 20px; color: var(--fg2); font-size: var(--fs-s); }
 .duprow { display: flex; align-items: center; gap: 8px 12px; padding: 6px 0; min-width: 0; flex-wrap: wrap; }
 .dup .btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
-.qcheck { border: 1px solid var(--line); border-radius: var(--r-l); margin-bottom: 10px; }
+.qcheck { border: 1px solid var(--line); border-radius: var(--r-l); margin-bottom: 10px; min-width: min-content; }
 .qcheck summary { display: flex; align-items: center; gap: 10px; padding: 12px 16px; cursor: pointer; list-style: none; }
 .qcheck summary::-webkit-details-marker { display: none; }
-.qcheck .qbody { padding: 0 16px 12px; overflow-x: auto; }
+.qcheck .qbody { padding: 0 16px 12px; }
 .slist { display: flex; flex-direction: column; }
 .srow { display: flex; gap: 12px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); flex-wrap: wrap; }
 .srow .sk { width: 110px; flex: none; color: var(--fg2); font-size: var(--fs-s); }
@@ -477,7 +477,7 @@ button.chip.toggle.on { background: var(--accent-bg); color: var(--accent); bord
 button.chip.toggle.on .mem { opacity: 1; }
 
 /* ---- ioDNS: the master list, Compare, servers */
-.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--r-l); }
+.tablewrap { min-width: min-content; border: 1px solid var(--line); border-radius: var(--r-l); }
 .tablewrap table.t tr:last-child td { border-bottom: 0; }
 table.t td.nm { font-weight: 600; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: var(--fs-m); white-space: nowrap; }
 table.t tr.click { cursor: pointer; }
