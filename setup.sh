@@ -14,7 +14,7 @@
 #   --db-admin USER:PASSWORD      a MariaDB / MySQL administrator (root...): the databases and users above are created
 #                                 for you, with the passwords you answered (IOSUITE_DB_ADMIN does the same; empty: they exist)
 #        --also APP,APP | all | none   also install other apps of the suite here (iopix, ionotes, iocalendar, iocontacts,
-#                                      iotasks, iohealth), beside this one, with the same database server, Shared ioSuite
+#                                      iotasks, iorecipe, iohealth), beside this one, with the same database server, Shared ioSuite
 #                                      database, sign-in domain and admin: those questions are asked once
 # Secrets can stay off the command line: IOSUITE_DB, IOSUITE_SUITE_DB and IOSUITE_ADMIN in the environment do what
 # --db, --suite-db and --admin do (IOSUITE_ALSO what --also does). Run it again at any time: it keeps config.env and
@@ -93,7 +93,7 @@ if [ -z "$DBADMIN" ] && [ "$YES" = 0 ]; then
 fi
 if [ -z "$ALSO" ]; then
   say "The other apps of the suite can be installed here too, beside ioSuite, with the same database server (each app gets its own database), the same Shared ioSuite database, sign-in domain and admin"
-  ask ALSO "Also install (iopix, ionotes, iocalendar, iocontacts, iotasks, iohealth; comma-separated, 'all', or 'none')" "none"
+  ask ALSO "Also install (iopix, ionotes, iocalendar, iocontacts, iotasks, iorecipe, iohealth; comma-separated, 'all', or 'none')" "none"
 fi
 
 # ---- Python environment
