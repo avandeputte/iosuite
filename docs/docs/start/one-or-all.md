@@ -33,6 +33,7 @@ those manage the accounts in the Shared ioSuite database, whether one app uses t
 | Notes and clipboard snippets on your Mac and iPhone | [ioNotes](../apps/ionotes.md) (the server) and the Mac / iPhone app |
 | A family calendar on every phone | [ioCalendar](../apps/iocalendar.md) |
 | Shared task lists, in Apple Reminders too | [ioTasks](../apps/iotasks.md) |
+| The family's recipes, typed in or imported from the web | [ioRecipe](../apps/iorecipe.md) |
 | A family address book on every phone and in every mail app | [ioContacts](../apps/iocontacts.md) |
 | Your Apple Health data, kept and charted at home | [ioHealth](../apps/iohealth.md) and the ioHealthSync iPhone app |
 

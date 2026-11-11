@@ -96,6 +96,7 @@ nav:
       - ioNotes: apps/ionotes.md
       - ioCalendar: apps/iocalendar.md
       - ioTasks: apps/iotasks.md
+      - ioRecipe: apps/iorecipe.md
       - ioContacts: apps/iocontacts.md
       - ioHealth: apps/iohealth.md
       - ioSuite start page: apps/iosuite.md

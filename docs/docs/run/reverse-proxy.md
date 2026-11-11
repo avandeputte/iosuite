@@ -21,6 +21,7 @@ Give each app a host name under one domain, for example:
 | ioContacts | `contacts.example.com` | `192.168.1.10:8640` |
 | ioHealth | `health.example.com` | `192.168.1.10:8650` |
 | ioTasks | `tasks.example.com` | `192.168.1.10:8670` |
+| ioRecipe | `recipes.example.com` | `192.168.1.10:8690` |
 
 and set in each app's `config.env`:
 

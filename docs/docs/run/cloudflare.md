@@ -44,7 +44,7 @@ for these paths, or a second Access application covering only them. They stay pr
 | ioTasks | `/profile/*` | the Apple profile's download link | the short-lived secret in the link |
 | ioContacts | `/dav/*`, `/.well-known/carddav` | CardDAV clients and the Apple profile | user name and app password |
 | ioHealth | `/v1/*` | the ioHealthSync iPhone app (or give it a service token) | user name and password |
-| ioPix, ioNotes, ioCalendar, ioTasks, ioContacts | `/mcp` | AI assistants, if MCP is on | an app password |
+| ioPix, ioNotes, ioCalendar, ioTasks, ioRecipe, ioContacts | `/mcp` | AI assistants, if MCP is on | an app password |
 
 Everything else, the web apps and `/api/`, stays behind Access. A script calling `/api/` from outside needs a Cloudflare
 **service token** (`CF-Access-Client-Id` and `CF-Access-Client-Secret`) allowed in the policy, as well as an app password.

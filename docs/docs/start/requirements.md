@@ -51,7 +51,7 @@ Pick one; every app offers all three.
 | **Docker** | Docker with Compose, amd64 or arm64. The images are public on `ghcr.io/avandeputte/` | [Docker](docker.md) |
 | **Any Linux or Mac** | Python 3.10 or later (ioHealth: 3.11), git. `setup.sh` makes a virtual environment and a systemd service (launchd on a Mac) | [Any Linux or Mac](linux-mac.md) |
 
-Each app is small: the Proxmox containers for ioCalendar, ioTasks, ioContacts, ioNotes, ioHealth and ioSuite default to 1 or 2 CPUs and 512 MB to 2 GB of memory. ioPix
+Each app is small: the Proxmox containers for ioCalendar, ioTasks, ioRecipe, ioContacts, ioNotes, ioHealth and ioSuite default to 1 or 2 CPUs and 512 MB to 2 GB of memory. ioPix
 is the exception when its AI features are on (content search, faces, objects, text in photos): its container defaults to
 4 CPUs and 4 GB, and the models it downloads take a few GB of disk.
 
@@ -59,9 +59,9 @@ is the exception when its AI features are on (content search, faces, objects, te
 
 Every app has its own default port, so all of them can run on one host:
 
-| ioPix | ioNotes | ioCalendar | ioSuite | ioContacts | ioHealth | ioTasks |
-| --- | --- | --- | --- | --- | --- | --- |
-| 8600 | 8610 | 8620 | 8630 | 8640 | 8650 | 8670 |
+| ioPix | ioNotes | ioCalendar | ioSuite | ioContacts | ioHealth | ioTasks | ioRecipe |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 8600 | 8610 | 8620 | 8630 | 8640 | 8650 | 8670 | 8690 |
 
 ioContacts also serves an LDAP directory, on port 3890 by default (the Proxmox installer offers 389).
 

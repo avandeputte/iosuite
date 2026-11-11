@@ -13,7 +13,7 @@ git clone https://github.com/avandeputte/iocalendar && cd iocalendar
 ./update.sh         # later: the latest code, the same settings
 ```
 
-Replace `iocalendar` with `iopix`, `ionotes`, `iosuite`, `iocontacts`, `iohealth` or `iotasks`.
+Replace `iocalendar` with `iopix`, `ionotes`, `iosuite`, `iocontacts`, `iohealth`, `iotasks` or `iorecipe`.
 
 ## What setup.sh does
 
