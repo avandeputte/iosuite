@@ -3,12 +3,6 @@
 import { $, h, api, state, icon, toast, fail, canWrite, confirmIt } from './core.js';
 import { loadMeta, renderNav } from './notes.js';
 
-const EXAMPLES = [
-  { name: 'Meeting notes', title: 'Meeting {{date}}', body: '**Who:** \n\n## Agenda\n- \n\n## Notes\n\n\n## Actions\n- [ ] ', tags: ['meeting'] },
-  { name: 'Daily log', title: '{{weekday}} {{date}}', body: '## Done\n- \n\n## To do\n- [ ] \n\n## Notes\n', tags: ['daily'] },
-  { name: 'Shopping list', title: 'Shopping {{date}}', body: '- [ ] \n', tags: ['shopping'] },
-];
-
 let editing = null;  // the template open in the form (null: none; {}: a new one)
 
 export async function renderTemplates() {
@@ -22,10 +16,7 @@ export async function renderTemplates() {
   page.append(h('p.muted', 'Start a note from a template with New note ▾, here, or in the apps. In the title and text, {{date}}, {{time}}, {{datetime}}, ',
     '{{weekday}}, {{month}}, {{year}}, {{tomorrow}} and {{yesterday}} are filled in when the note is made.'));
   if (editing) page.append(form(editing));
-  if (!list.length && !editing) {
-    page.append(h('section.sec', h('p', 'No templates yet.'), w ? h('div.chips', h('span.muted.small', 'Add an example:'),
-      EXAMPLES.map((ex) => h('button.chip', { onclick: async () => { try { await api('/api/templates', { method: 'POST', body: ex }); await reload(); } catch (e) { fail(e); } } }, ex.name))) : null));
-  }
+  if (!list.length && !editing) page.append(h('section.sec', h('p', 'No templates yet.')));
   for (const t of list) {
     if (editing && editing.id === t.id) continue;
     const folder = t.folderID && state.meta.folders.find((f) => f.id === t.folderID);
@@ -40,7 +31,19 @@ export async function renderTemplates() {
       h('div.muted.small', [t.title ? 'Title: ' + t.title : null, folder ? 'Folder: ' + folder.name : null, t.tags.length ? t.tags.map((x) => '#' + x).join(' ') : null].filter(Boolean).join(' · ')),
       t.body ? h('pre.tplbody', t.body.slice(0, 400)) : null));
   }
+  if (w && !editing) {
+    page.append(h('p.muted.small', 'Meeting notes, Daily journal, To-do list, Weekly review, Project plan and Shopping list come with every account. ',
+      h('button.linkbtn', { onclick: addStandard }, 'Add back any you deleted')));
+  }
   main.append(h('div.page', page));
+}
+
+async function addStandard() {
+  try {
+    const r = await api('/api/templates/standard', { method: 'POST' });
+    toast(r.added ? `Added ${r.added} standard template${r.added > 1 ? 's' : ''}` : 'All the standard templates are here');
+    await reload();
+  } catch (e) { fail(e); }
 }
 
 function form(t) {

@@ -34,7 +34,7 @@ def test_each_account_sees_only_its_own_notes(client, admin):
     assert s["notes"] == [] and s["folders"] == [] and s["tags"] == []
     m = client.get("/api/meta").json()
     assert m["total"] == 0 and m["folders"] == [] and m["tags"] == []
-    assert client.get("/api/changes").json()["changes"] == []
+    assert [c for c in client.get("/api/changes").json()["changes"] if c["kind"] != "template"] == []  # only its own standard templates
     # sam's own note, with the same tag coloured differently
     client.put(f"/api/notes/{OTHER}", json={"title": "sam's", "tags": ["work"], "updatedAt": 2})
     client.put("/api/tags/work/color", json={"color": "blue"})

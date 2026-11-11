@@ -276,6 +276,7 @@ def api_attachment_text(uid: str, aid: str):
 # ---- templates
 @router.get("/api/templates", dependencies=[access.public])
 def api_templates(request: Request):
+    notes.ensure_standard_templates()
     return jresp(request, {"templates": notes.list_templates()})
 
 
@@ -283,6 +284,12 @@ def api_templates(request: Request):
 async def api_template_create(request: Request):
     body = await json_body(request)
     return notes.save_template(body.get("id"), body, user_name(request))
+
+
+@router.post("/api/templates/standard", dependencies=[access.editor_write])
+def api_templates_standard(request: Request):
+    """Add the standard templates that are missing, deleted ones included."""
+    return {"added": notes.restore_standard_templates(user_name(request)), "templates": notes.list_templates()}
 
 
 @router.put("/api/templates/{uid}", dependencies=[access.editor_write])

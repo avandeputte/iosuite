@@ -27,7 +27,8 @@ and sign-in (Cloudflare Access too), the same installer, updater, Docker image a
   for search. Drop files on an open note to attach them, or on the list to make a note of each.
 - **Templates** (Manage › Templates, New note ▾): a title, text, tags and a folder for new notes; `{{date}}`,
   `{{time}}`, `{{datetime}}`, `{{weekday}}`, `{{month}}`, `{{year}}`, `{{tomorrow}}` and `{{yesterday}}` are filled in
-  when a note is made. The apps sync them.
+  when a note is made. The apps sync them. Every account starts with six standard ones (Meeting notes, Daily journal,
+  To-do list, Weekly review, Project plan, Shopping list); deleted ones stay deleted until "Add back any you deleted".
 - **Related notes and suggestions**: under each note, the notes most like it (words and tags in common), and the tags
   and folder those notes suggest for it, one click to apply.
 - **Trash**: deleted notes stay 30 days, then they are deleted for good (text, picture, files; a tombstone stays so
@@ -234,6 +235,7 @@ UUID strings the device chooses (`UUID().uuidString`).
 | `GET /api/notes?q=&folder=&tag=&pinned=&image=&sort=` | search and list (the web app's view) |
 | `PUT /api/notes/{id}/attachments/{aid}?name=` | attach a file (raw body, its `Content-Type`; `X-Ionotes-Text`: text the device read from it, percent-encoded). Each note lists its files under `attachments` (`id, name, mime, bytes, sha, width, height`); `GET …/{aid}` (`?download=1`), `…/{aid}/thumb`, `…/{aid}/text`, `PATCH {name}`, `DELETE` |
 | `PUT /api/templates/{id}` `{name, title, body, tags, folderID, deleted, updatedAt}` | templates (also in `/api/sync` as `templates`, and in a push); `POST /api/notes {template: id}` makes a note from one |
+| `POST /api/templates/standard` | adds back the standard templates that are missing |
 | `GET /api/notes/{id}/related` | notes like this one, and the tags and folder they suggest: `{notes, tags, folder}` |
 | `POST /api/trash/empty`, `DELETE /api/trash/{id}` | delete for good; notes in the trash are purged after 30 days anyway (they sync as tombstones with nothing in them) |
 
