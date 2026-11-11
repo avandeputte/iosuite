@@ -182,6 +182,9 @@ account password.
 Open the page in Safari on the iPhone, tap Download, then Settings › Profile Downloaded › Install. The lists then appear
 in Reminders under the account "ioTasks".
 
+Where the suite has more than one app that syncs (ioCalendar, ioContacts, ioTasks), *Set up* in the same box offers
+**All apps**: one profile with the account of each, and an app password of its own per app.
+
 What Reminders keeps for an account that is not iCloud is the standard part: title, notes, due date and time, repeat,
 alert, priority, done. Subtasks made here arrive there as ordinary tasks of the list, and Reminders' own tags, flags
 and sections stay on iCloud lists.
