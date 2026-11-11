@@ -67,4 +67,4 @@ def test_shared_database_defaults_to_the_apps_server(monkeypatch):
 
 def test_every_app_has_its_own_port():
     from iosuite_shared import suite
-    assert len(set(suite.PORTS.values())) == len(suite.PORTS) == 8
+    assert len(set(suite.PORTS.values())) == len(suite.PORTS) == 9
