@@ -227,6 +227,7 @@ details.ocr pre { white-space: pre-wrap; word-break: break-word; font: inherit; 
 .tplhead { display: flex; align-items: center; gap: 8px; }
 .tplhead .sp { flex: 1; }
 .tplbody { white-space: pre-wrap; font: inherit; font-size: var(--fs-m); color: var(--fg2); background: var(--bg2); border-radius: var(--r-s); padding: 8px 10px; margin: 8px 0 0; max-height: 160px; overflow: hidden; }
+.linkbtn { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); cursor: pointer; text-decoration: underline; }
 .tplform label { display: flex; flex-direction: column; gap: 4px; margin: 0 0 10px; font-weight: 600; font-size: var(--fs-m); }
 .tplform input, .tplform select, .tplform textarea { font: inherit; font-weight: 400; border: 1px solid var(--line); border-radius: var(--r-s); padding: 7px 10px; background: var(--bg); color: var(--fg); }
 .tplta { min-height: 160px; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, monospace !important; font-size: var(--fs-m) !important; }

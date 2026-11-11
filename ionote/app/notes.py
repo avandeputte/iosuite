@@ -555,6 +555,7 @@ def remove_tag(name: str, user: str) -> int:
 # ---- overview and sync
 def meta() -> dict:
     """What the sidebar shows: counts, folders, tags, and the current rev."""
+    ensure_standard_templates()
     with db.connect() as con:
         o = owner()
         total, pinned, images = con.execute("SELECT count(*), coalesce(sum(pinned), 0), coalesce(sum(has_image), 0) FROM nts_notes WHERE user_id = ? AND deleted = 0", (o,)).fetchone()
@@ -578,6 +579,7 @@ def changes(since: int, limit: int = 500) -> dict:
     ask again with since=rev. Image bytes are fetched separately (imageSHA tells a device when to)."""
     since = max(0, int(since))
     limit = max(1, min(int(limit), 2000))
+    ensure_standard_templates()
     with db.connect() as con:
         o = owner()
         # the head first, and nothing past it: a change committed while this runs is left for the next call, not
@@ -683,6 +685,75 @@ def save_template(uid: str, data: dict, user: str, force: bool = False) -> dict:
         log_change(con, user, "delete" if t["deleted"] else ("create" if not old else "edit"), "template", uid, t["name"])
         r = con.execute(f"SELECT {TEMPLATE_COLS} FROM nts_templates WHERE uuid = ?", (uid,)).fetchone()
         return template_dict(r)
+
+
+# The standard templates every account starts with (added once; deleting one is remembered, and Manage › Templates ›
+# Add the standard templates brings back any that are missing). Ids are fixed per account, so a deleted one comes back
+# as itself rather than as a copy. Bump STANDARD_VERSION when one is added: accounts then get only the new ones.
+STANDARD_VERSION = 1
+STANDARD_TEMPLATES = [  # "since": the STANDARD_VERSION that added it (1 when left out)
+    {"key": "meeting", "name": "Meeting notes", "title": "Meeting {{date}}", "tags": ["meeting"],
+     "body": "**When:** {{weekday}} {{date}}, {{time}}\n**Who:** \n\n## Agenda\n1. \n\n## Notes\n\n\n## Decisions\n- \n\n## Action items\n- [ ] "},
+    {"key": "journal", "name": "Daily journal", "title": "{{weekday}} {{date}}", "tags": ["journal"],
+     "body": "## Top 3 for today\n- [ ] \n- [ ] \n- [ ] \n\n## Notes\n\n\n## Grateful for\n- \n\n## For tomorrow\n- [ ] "},
+    {"key": "todo", "name": "To-do list", "title": "To do", "tags": ["todo"],
+     "body": "## Today\n- [ ] \n\n## This week\n- [ ] \n\n## Someday\n- [ ] "},
+    {"key": "weekly", "name": "Weekly review", "title": "Week of {{date}}", "tags": ["weekly"],
+     "body": "## Went well\n- \n\n## Could be better\n- \n\n## Still open\n- [ ] \n\n## Focus for next week\n1. "},
+    {"key": "project", "name": "Project plan", "title": "Project: ", "tags": ["project"],
+     "body": "## Goal\nWhat does done look like?\n\n## Why\n\n\n## Milestones\n- [ ] \n\n## Open questions\n- \n\n## Links\n- "},
+    {"key": "shopping", "name": "Shopping list", "title": "Shopping {{date}}", "tags": ["shopping"],
+     "body": "## Groceries\n- [ ] \n\n## Other\n- [ ] "},
+]
+_STANDARD_NS = uuidlib.UUID("6f1d2c4e-8b0a-4c51-9a77-3e2b5d9c1f60")
+_seeded = set()  # owners whose standard templates are known to be in place (saves a query per sync)
+
+
+def standard_template_id(key: str, o: int = None) -> str:
+    return str(uuidlib.uuid5(_STANDARD_NS, f"{owner() if o is None else o}:{key}")).upper()
+
+
+def ensure_standard_templates(user: str = "ioNotes") -> int:
+    """Give this account the standard templates, once (per STANDARD_VERSION); the web app and the apps call this as
+    they load. Skips one whose name is already taken. Returns how many were added."""
+    o = owner()
+    if o == NOBODY or o in _seeded:
+        return 0
+    key = f"standard_templates:{o}"
+    try:
+        if int(db.get_setting(key, "0") or 0) >= STANDARD_VERSION:
+            _seeded.add(o)
+            return 0
+        added = _add_standard(user, since=int(db.get_setting(key, "0") or 0))
+        db.set_setting(key, STANDARD_VERSION)
+        _seeded.add(o)
+        return added
+    except Exception:  # never stand in the way of loading notes
+        log.exception("Could not add the standard templates")
+        return 0
+
+
+def restore_standard_templates(user: str) -> int:
+    """Manage › Templates › Add the standard templates: any that are missing (deleted ones come back)."""
+    return _add_standard(user, since=0, revive=True)
+
+
+def _add_standard(user: str, since: int, revive: bool = False) -> int:
+    with db.connect() as con:
+        rows = con.execute("SELECT uuid, name, deleted FROM nts_templates WHERE user_id = ?", (owner(),)).fetchall()
+    names = {r["name"].strip().lower() for r in rows if not r["deleted"]}
+    by_id = {r["uuid"]: bool(r["deleted"]) for r in rows}
+    added, now = 0, time.time()
+    for t in STANDARD_TEMPLATES:
+        uid = standard_template_id(t["key"])
+        if t.get("since", 1) <= since or t["name"].lower() in names:
+            continue
+        if uid in by_id and not (revive and by_id[uid]):
+            continue  # there already, or deleted on purpose (only the button brings it back)
+        save_template(uid, {"name": t["name"], "title": t["title"], "body": t["body"], "tags": t["tags"], "folderID": None,
+                            "deleted": False, "updatedAt": now}, user, force=True)
+        added += 1
+    return added
 
 
 _PLACEHOLDER = re.compile(r"\{\{\s*(date|time|datetime|weekday|month|year|tomorrow|yesterday)\s*\}\}", re.I)

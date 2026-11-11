@@ -85,9 +85,9 @@ def test_templates_sync_and_fill_in_new_notes(client, admin):
     f = client.post("/api/folders", json={"name": "Meetings"}).json()
     t = client.post("/api/templates", json={"name": "Meeting", "title": "Meeting {{date}}", "body": "## Agenda\n- [ ] \n\n{{weekday}}",
                                             "tags": ["meeting"], "folderID": f["id"]}).json()
-    assert client.get("/api/templates").json()["templates"][0]["id"] == t["id"]
-    assert client.get("/api/sync").json()["templates"][0]["name"] == "Meeting"
-    assert client.get("/api/meta").json()["templates"][0]["id"] == t["id"]
+    assert t["id"] in [x["id"] for x in client.get("/api/templates").json()["templates"]]
+    assert "Meeting" in [x["name"] for x in client.get("/api/sync").json()["templates"]]
+    assert t["id"] in [x["id"] for x in client.get("/api/meta").json()["templates"]]
     n = client.post("/api/notes", json={"template": t["id"]}).json()
     assert n["title"] == "Meeting " + time.strftime("%Y-%m-%d") and n["tags"] == ["meeting"] and n["folderID"] == f["id"]
     assert "{{" not in n["body"] and n["body"].startswith("## Agenda")
@@ -96,7 +96,31 @@ def test_templates_sync_and_fill_in_new_notes(client, admin):
     assert n["title"] == "Mine"
     assert client.post("/api/notes", json={"template": NID}).status_code == 404
     client.delete(f"/api/templates/{t['id']}")
-    assert client.get("/api/templates").json()["templates"] == []
+    assert t["id"] not in [x["id"] for x in client.get("/api/templates").json()["templates"]]
+
+
+def test_standard_templates_come_once_and_stay_deleted(client, admin):
+    from app import notes
+    names = lambda: sorted(x["name"] for x in client.get("/api/templates").json()["templates"])  # noqa: E731
+    standard = sorted(t["name"] for t in notes.STANDARD_TEMPLATES)
+    assert names() == standard
+    assert sorted(x["name"] for x in client.get("/api/sync").json()["templates"]) == standard  # the apps get them too
+    meeting = next(x for x in client.get("/api/templates").json()["templates"] if x["name"] == "Meeting notes")
+    assert "- [ ] " in meeting["body"] and "{{date}}" in meeting["title"]
+    n = client.post("/api/notes", json={"template": meeting["id"]}).json()
+    assert n["title"] == "Meeting " + time.strftime("%Y-%m-%d") and "{{" not in n["body"]
+    # a deleted one stays deleted, also once the server forgets what it knew (a restart)
+    client.delete(f"/api/templates/{meeting['id']}")
+    notes._seeded.clear()
+    assert "Meeting notes" not in names()
+    # the button brings it back, as itself, and leaves a template of the same name alone
+    shop = next(x for x in client.get("/api/templates").json()["templates"] if x["name"] == "Shopping list")
+    client.delete(f"/api/templates/{shop['id']}")
+    mine = client.post("/api/templates", json={"name": "Shopping list", "body": "- [ ] milk"}).json()
+    r = client.post("/api/templates/standard").json()
+    assert r["added"] == 1 and names() == standard
+    assert meeting["id"] in [x["id"] for x in r["templates"]] and mine["id"] in [x["id"] for x in r["templates"]]
+    assert client.post("/api/templates/standard").json()["added"] == 0
 
 
 def test_related_notes_and_suggestions(client, admin):
@@ -127,4 +151,4 @@ def test_export_and_import_carry_files_and_templates(client, admin):
     assert r.status_code == 200, r.text
     n = client.get(f"/api/notes/{NID}").json()
     assert [a["name"] for a in n["attachments"]] == ["acme.pdf"]
-    assert [t["name"] for t in client.get("/api/templates").json()["templates"]] == ["Daily"]
+    assert "Daily" in [t["name"] for t in client.get("/api/templates").json()["templates"]]
