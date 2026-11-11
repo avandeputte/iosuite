@@ -37,7 +37,7 @@ def test_a_viewer_gets_neither_the_banner_nor_maintenance(client, admin):
 def test_server_status_and_update(client, admin, monkeypatch):
     s = client.get("/api/server").json()
     assert s["version"] == __version__ and s["installed"] and isinstance(s["canRun"], bool)
-    assert s["autoCheck"] is True and s["progress"]["running"] is False and s["repo"] and s["branch"] and s["about"][0][0] == "Database"
+    assert s["autoCheck"] is True and s["progress"]["running"] is False and s["repo"] and s["branch"] and s["about"][0][0] == "Database schema"
     # in Docker (or with no update.sh to run) the run is refused with the pull hint, nothing is started
     monkeypatch.setattr(updater, "in_docker", lambda: True)
     r = client.post("/api/server", json={"action": "update"})
@@ -59,5 +59,5 @@ def test_settings_server_is_the_shared_panel(client, admin):
     """Settings › Server is iosuite-shared's panel: its module and This server, once."""
     assert "export async function mount" in client.get("/api/server/ui.js").text
     s = client.get("/api/server").json()
-    assert s["name"] == "ioHealth" and [k for k, _ in s["about"]] == ["Database", "Time zone"]
+    assert s["name"] == "ioHealth" and [k for k, _ in s["about"]] == ["Database schema", "Time zone"]
     assert client.post("/api/auth/logout_all").status_code in (404, 405)  # Sign out is the only sign out

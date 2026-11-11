@@ -108,7 +108,7 @@ body.side-docked { --nav: var(--side); }
 .navfoot .ver { padding: 8px 12px 0; font-size: 11px; color: var(--muted); }
 
 /* ---- the page scrolls on its own, beside the docked sidebar and under the top bar */
-main { position: fixed; top: var(--topbar); bottom: 0; left: var(--nav); right: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; padding: 8px 28px 60px 20px; }
+main { position: fixed; top: var(--topbar); bottom: 0; left: var(--nav); right: 0; overflow: auto; overscroll-behavior: contain; padding: 8px 28px 60px 20px; }
 main > * { max-width: 1400px; margin-left: auto; margin-right: auto; }
 h1.ptitle { display: flex; align-items: center; gap: 10px; font-weight: 500; margin: 10px 0 16px; }
 h1.ptitle .pic { width: 34px; height: 34px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; flex: none;
@@ -150,7 +150,7 @@ h1.ptitle .muted { font-size: 13px; font-weight: 400; margin-left: 4px; }
 .cols-2 { grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); }
 .cols-3 { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
 .kpis { grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); }
-.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; box-shadow: var(--shadow); min-width: 0; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; box-shadow: var(--shadow); min-width: min-content; }  /* wide content widens its card; past the window, the page scrolls at its edge */
 .card + .card, .grid + .card, .card + .grid, .grid + .grid { margin-top: 16px; }
 .grid > .card { margin-top: 0; }
 .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
@@ -187,7 +187,6 @@ th { color: var(--muted); font-weight: 600; font-size: 12px; }
 td.r, th.r { text-align: right; }
 tr.click { cursor: pointer; }
 tr.click:hover td { background: var(--bg); }
-.scroll { overflow-x: auto; }
 
 .chart { width: 100%; min-height: 60px; }
 .chart + .chart { margin-top: 8px; }
@@ -220,7 +219,6 @@ tr.click:hover td { background: var(--bg); }
 .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-top: 8px; }
 .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
 
-.calendar { overflow-x: auto; }
 .calendar svg rect { rx: 2; }
 .tip { position: fixed; pointer-events: none; background: var(--text); color: var(--card); padding: 4px 8px; border-radius: 6px; font-size: 12px; z-index: 2000; white-space: nowrap; }
 

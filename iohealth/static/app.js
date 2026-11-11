@@ -1037,9 +1037,9 @@ function workoutTable(ws, { compact = false } = {}) {
       compact ? null : h('td', { class: 'r num' }, w.elevation ? fmtElev(w.elevation) : ''),
       compact ? null : h('td', { class: 'muted' }, w.source)));
   }
-  return h('div', { class: 'scroll' }, h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'Workout'), h('th', {}, 'Date'), h('th', { class: 'r' }, 'Time'),
+  return h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'Workout'), h('th', {}, 'Date'), h('th', { class: 'r' }, 'Time'),
     h('th', { class: 'r' }, 'Distance'), compact ? null : h('th', { class: 'r' }, 'Pace / speed'), h('th', { class: 'r' }, 'Energy'), h('th', { class: 'r' }, 'Avg HR'),
-    compact ? null : h('th', { class: 'r' }, 'Climb'), compact ? null : h('th', {}, 'Source'))), tb));
+    compact ? null : h('th', { class: 'r' }, 'Climb'), compact ? null : h('th', {}, 'Source'))), tb);
 }
 
 // ---------- metrics explorer ----------
@@ -1260,8 +1260,8 @@ pages.metrics = async (main, _, params) => {
           shift ? h('td', { class: 'r num' }, cmpCell(d, a, b, avg, dec)) : null));
       }
       const per = loaded.results[0]?.bucket === 'raw' ? 'sample' : { hour: 'hour', day: 'day', week: 'week', month: 'month', year: 'year' }[loaded.results[0]?.bucket];
-      summary.replaceChildren(card('Summary of the visible period', h('div', { class: 'scroll' }, h('table', {}, h('thead', {}, h('tr', {},
-        ...['Metric', `Average per ${per}`, 'Min', 'Max', 'Total', 'Latest', 'Trend', ...(shift ? [cmpLabel] : [])].map((x, i) => h('th', { class: i ? 'r' : '' }, x)))), tb))));
+      summary.replaceChildren(card('Summary of the visible period', h('table', {}, h('thead', {}, h('tr', {},
+        ...['Metric', `Average per ${per}`, 'Min', 'Max', 'Total', 'Latest', 'Trend', ...(shift ? [cmpLabel] : [])].map((x, i) => h('th', { class: i ? 'r' : '' }, x)))), tb)));
     }
     // The comparison period's average for what is in view, and the change to now.
     function cmpCell(d, a, b, avg, dec) {
@@ -1439,9 +1439,9 @@ pages.correlations = async (main, _, params) => {
     const list = rows.filter(Boolean).sort((a, b) => Math.max(...b.res.map(x => Math.abs(x?.r ?? 0))) - Math.max(...a.res.map(x => Math.abs(x?.r ?? 0))));
     const cell = (x, lag, k) => h('td', { class: 'r num click', style: { cursor: 'pointer' }, onclick: () => { state.x = k; state.lag = lag; draw(); $('#app').scrollTo(0, 0); } },
       x?.r == null ? '—' : h('span', {}, h('span', { class: 'corr-bar', style: { width: Math.abs(x.r) * 60 + 'px', background: x.r > 0 ? '#2563eb' : '#e8445a', marginRight: '8px' } }), fmtNum(x.r, 2)));
-    table.replaceChildren(card(`What goes with ${corrLabel(state.y).toLowerCase()}`, list.length ? h('div', { class: 'scroll' }, h('table', {},
+    table.replaceChildren(card(`What goes with ${corrLabel(state.y).toLowerCase()}`, list.length ? h('table', {},
       h('thead', {}, h('tr', {}, h('th', {}, 'Metric'), h('th', { class: 'r' }, 'Same day (r)'), h('th', { class: 'r' }, 'Day before (r)'), h('th', { class: 'r' }, 'Days'))),
-      h('tbody', {}, list.map(({ k, res }) => h('tr', {}, h('td', {}, corrLabel(k)), cell(res[0], 0, k), cell(res[1], 1, k), h('td', { class: 'r num muted' }, fmtNum(Math.max(res[0]?.n || 0, res[1]?.n || 0)))))))) : empty('Not enough overlapping days.'),
+      h('tbody', {}, list.map(({ k, res }) => h('tr', {}, h('td', {}, corrLabel(k)), cell(res[0], 0, k), cell(res[1], 1, k), h('td', { class: 'r num muted' }, fmtNum(Math.max(res[0]?.n || 0, res[1]?.n || 0))))))) : empty('Not enough overlapping days.'),
     h('p', { class: 'small muted' }, 'Blue: both go up together. Red: one goes up as the other goes down. Click a number to plot it. Needs at least 14 days in common.')));
   }
   draw();
@@ -1703,8 +1703,8 @@ pages.workout = async (main, id) => {
       h('td', { style: { width: '40%' } }, h('div', { class: 'bar-bg' }, h('div', { class: 'bar', style: { width: (30 + 70 * (slowest === fastest ? 1 : (slowest - paces[i]) / (slowest - fastest))) + '%', background: paces[i] === fastest ? '#16a34a' : cssVar('--accent') } }))),
       h('td', { class: 'r num' }, x.hr ? fmtNum(x.hr) + ' bpm' : ''),
       h('td', { class: 'r num' }, fmtElev(x.gain)))));
-    grid.append(card(`Splits per ${imperial() ? 'mile' : 'km'}`, h('div', { class: 'scroll' }, h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, imperial() ? 'Mile' : 'Km'),
-      h('th', {}, isPace ? 'Pace' : 'Speed'), h('th', {}), h('th', { class: 'r' }, 'HR'), h('th', { class: 'r' }, 'Climb'))), tb))));
+    grid.append(card(`Splits per ${imperial() ? 'mile' : 'km'}`, h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, imperial() ? 'Mile' : 'Km'),
+      h('th', {}, isPace ? 'Pace' : 'Speed'), h('th', {}), h('th', { class: 'r' }, 'HR'), h('th', { class: 'r' }, 'Climb'))), tb)));
   }
   // Zones
   if (w.zones?.length) {
@@ -1728,14 +1728,14 @@ pages.workout = async (main, id) => {
       h('td', {}, fmtTime(a.start)), h('td', { class: 'r num' }, a.end ? fmtDuration(a.end - a.start) : '')))))));
   }
   if (laps.length) {
-    grid.append(card(`Laps and segments (${laps.length})`, h('div', { class: 'scroll', style: { maxHeight: '320px' } }, h('table', {}, h('tbody', {}, laps.map((e, i) => h('tr', {},
-      h('td', {}, `${e.type} ${i + 1}`), h('td', {}, fmtDuration(e.start - w.start)), h('td', { class: 'r num' }, fmtDuration(e.end - e.start)))))))));
+    grid.append(card(`Laps and segments (${laps.length})`, h('table', {}, h('tbody', {}, laps.map((e, i) => h('tr', {},
+      h('td', {}, `${e.type} ${i + 1}`), h('td', {}, fmtDuration(e.start - w.start)), h('td', { class: 'r num' }, fmtDuration(e.end - e.start))))))));
   }
   // All statistics
   if (w.statistics?.length) {
-    grid.append(card('All statistics', h('div', { class: 'scroll' }, h('table', {}, h('thead', {}, h('tr', {}, ...['Type', 'Average', 'Min', 'Max', 'Total'].map((x, i) => h('th', { class: i ? 'r' : '' }, x)))),
+    grid.append(card('All statistics', h('table', {}, h('thead', {}, h('tr', {}, ...['Type', 'Average', 'Min', 'Max', 'Total'].map((x, i) => h('th', { class: i ? 'r' : '' }, x)))),
       h('tbody', {}, w.statistics.map(st => h('tr', {}, h('td', {}, typeLabel(st.type), h('span', { class: 'muted small' }, ' ' + prettyUnit(st.unit))),
-        ...['average', 'minimum', 'maximum', 'sum'].map(k => h('td', { class: 'r num' }, st[k] == null ? '' : fmtCompact(st[k] * scaleFor(st.unit)))))))))));
+        ...['average', 'minimum', 'maximum', 'sum'].map(k => h('td', { class: 'r num' }, st[k] == null ? '' : fmtCompact(st[k] * scaleFor(st.unit))))))))));
   }
   if (grid.children.length) main.append(grid);
 };
@@ -2110,10 +2110,10 @@ pages.glucose = async (main, _, params) => {
     // Finger-prick style readings list.
     if (!cgm) {
       const recent = g.readings.slice(-60).reverse();
-      body.append(card('Latest readings', h('div', { class: 'scroll', style: { maxHeight: '360px' } }, h('table', {}, h('tbody', {}, recent.map(r => h('tr', {},
+      body.append(card('Latest readings', h('table', {}, h('tbody', {}, recent.map(r => h('tr', {},
         h('td', {}, fmtDateTime(r[0])), h('td', { class: 'r num' }, fmtG(r[1]), ' ', gUnit()), h('td', { class: 'muted' }, r[2] || ''),
         h('td', {}, h('span', { class: 'badge', style: { color: r[1] < g.target[0] ? '#ef4444' : r[1] > g.target[1] ? '#f59e0b' : '#16a34a' } },
-          r[1] < g.target[0] ? 'low' : r[1] > g.target[1] ? 'high' : 'in range')))))))));
+          r[1] < g.target[0] ? 'low' : r[1] > g.target[1] ? 'high' : 'in range'))))))));
     }
   }
   draw();
@@ -2219,7 +2219,7 @@ function responseCard(readings, workouts, carbPoints) {
     body.replaceChildren(chartEl,
       h('p', { class: 'small muted' }, isW ? 'Average change from the level in the 30 minutes before the start, per activity. 0 is the start of the workout.'
         : 'Average change from the level in the 30 minutes before eating, per meal size. Carb entries less than 30 minutes apart count as one meal.'),
-      h('div', { class: 'scroll', style: { maxHeight: '360px' } }, h('table', {}, h('thead', {}, h('tr', {}, ...heads.map((x, i) => h('th', { class: i > 1 ? 'r' : '' }, x)))), tb)),
+      h('table', {}, h('thead', {}, h('tr', {}, ...heads.map((x, i) => h('th', { class: i > 1 ? 'r' : '' }, x)))), tb),
       ...(rows.length > 60 ? [h('p', { class: 'small muted' }, `Latest 60 of ${rows.length}; the chart uses all of them.`)] : []));
     chart(chartEl, { xs: mins.map(m => m * 60), xTime: false, height: 260, xIncrs: [1800, 3600, 7200, 10800], xSpace: 64, xFmt: (u, vals) => vals.map(v => fmtMin(v / 60)), series,
       axisFmt: v => (v > 0 ? '+' : '') + fmtNum(v, mmol() ? 1 : 0),
