@@ -428,6 +428,22 @@ password, app)`, which returns `(user, scope)`, and checks the scope itself.
 `'read'` (`apppasswords.READ`) may only read: GET and HEAD, in every app the same, anywhere but `/mcp`, `/dav` and
 `/.well-known/` (no writes, no MCP, no sync). It is what the apps' own service accounts get (see App links below).
 
+## Apple profiles
+
+`iosuite_shared.appleprofile` builds the configuration profiles (`.mobileconfig`) that add an app's sync account to an
+iPhone, iPad or Mac. `PROFILE_APPS` names the apps that sync (ioCalendar and ioTasks over CalDAV, ioContacts over
+CardDAV); an app's own profile is made of `account(app, name, base, user, secret)` payloads and `build(...)`.
+
+`app.include_router(auth.profile_router(base_url))` adds the downloads: `GET /profile/<token>/<file>` (short-lived
+links made with `appleprofile.link(body, name)`, for a download that carries no cookie) and the **suite profile**,
+one file with the account of every app in `PROFILE_APPS` that is in the suite's list and that the account may use:
+
+- `GET /api/apple-profile/suite`: `{apps: [{app, name}]}`; the pages offer it when there are two or more
+- `POST /api/apple-profile/suite` (form) and `POST /api/apple-profile/suite/link` (`{label, password}` → `{url}`)
+
+An app password belongs to one app, so the suite profile holds one new `dav` password per app (`password: "new"`),
+or none and the device asks for each (`"ask"`). The other apps' addresses come from the suite's list of apps.
+
 ## Keys and tokens
 
 Every credential an app keeps for something outside the suite (the start page's Home Assistant token and AccuWeather
