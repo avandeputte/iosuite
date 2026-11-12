@@ -133,7 +133,23 @@ const fmtTemp = (v) => (v == null ? '–' : `${Math.round(v)}°`);
 /** A bookmark's icon as homepage reads it: a full address, or a file name from the dashboard-icons collection. */
 const bmIconUrl = (icon) => { if (!icon) return ''; if (/^https?:\/\//.test(icon)) return icon; const m = icon.match(/^([\w.-]+)\.(png|svg|webp)$/); return m ? `https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/${m[2]}/${m[1]}.${m[2]}` : ''; };
 /** What to show for a link: the SVG uploaded for it (served by this page) wins over the icon field. */
-const bmIcon = (l) => l.iconUrl || bmIconUrl(l.icon);
+const bmIcon = (l) => l.iconUrl || bmIconUrl(l.icon) || l.siteIcon || '';  // its own, else the site's (fetched by the server)
+/** Links whose site icon the server is still fetching (iconPending): ask again shortly, a few times, and put the
+ *  icons that arrived in place of the badges. `again` reads the links anew. */
+function bmIconsLater(el, links, again, n = 0) {
+  if (n >= 4 || !links.some((l) => l.iconPending)) return;
+  setTimeout(async () => {
+    if (!el.isConnected) return;
+    let now; try { now = await again(); } catch { return; }
+    if (!el.isConnected) return;
+    for (const l of now) {
+      const ic = l.siteIcon && !l.iconPending ? el.querySelector(`[data-id="${l.id}"] > .bmic`) : null;
+      if (ic && !ic.querySelector('img')) ic.replaceChildren(h('img', { src: l.siteIcon, alt: '', onerror: (e) => { e.target.replaceWith(l.abbr); } }));
+    }
+    bmIconsLater(el, now, again, n + 1);
+  }, 2500 + n * 2500);
+}
+const bmFlat = (items) => items.flatMap((x) => (x.type === 'folder' ? bmFlat(x.items) : [x]));
 
 const appName = (name, color) => h('span', { class: 'nm', style: { '--c': color } }, h('span', { class: 'io' }, 'io'), h('span', { class: 'ap' }, name.replace(/^io/, '')));
 
@@ -1072,6 +1088,7 @@ async function drawBookmarks(el) {
     canEdit && !g.links.length ? h('a', { class: 'lnk small', href: '#/bookmarks' }, 'Nothing shown: add or pick links') : null));
   packBookmarks(el, groups);
   drawBookmarkStatus(el);
+  bmIconsLater(el, S.bookmarks, async () => (await api('/api/bookmarks')).groups.flatMap((g) => g.links));
 }
 
 /** The groups packed into columns: each goes, in order, under the shortest column so far, so a short group fills the
@@ -1370,6 +1387,8 @@ const bmOpen = new Set();  // the folders unfolded, kept while the page is open
 async function setBookmarks(el) {
   const draw = async () => {
     const [tree, sync] = await Promise.all([api('/api/bookmarks/tree'), api('/api/bookmarks/sync')]);
+    const mine = el.bmDrawn = {};  // a later draw makes the wait for icons of this one moot
+    bmIconsLater(el, bmFlat(tree.items), async () => (el.bmDrawn === mine ? bmFlat((await api('/api/bookmarks/tree')).items) : []));
     const canEdit = ['editor', 'admin'].includes(S.user.role);
     if (!el.isConnected) return;
     const call = async (path, opts, msg) => { try { await api(path, opts); if (msg) toast(msg); } catch (e) { fail(e); } await draw(); };
@@ -1383,7 +1402,7 @@ async function setBookmarks(el) {
       const name = h('input', { class: 't', value: l ? l.name : '', placeholder: 'Name' }), href = h('input', { class: 't', value: l ? l.href : '', placeholder: 'https://…' });
       const abbr = h('input', { class: 't', value: l ? l.abbr : '', placeholder: 'Two letters (from the name when empty)', maxlength: 4 });
       const desc = h('input', { class: 't', value: l ? l.customDescription : '', placeholder: 'Line under the name (the host name when empty)' });
-      const ic = h('input', { class: 't', value: l ? l.icon : '', placeholder: 'Icon: an image address, or a name from dashboard-icons (github.png)' });
+      const ic = h('input', { class: 't', value: l ? l.icon : '', placeholder: 'The site\'s own icon when empty; or an image address, or a dashboard-icons name (github.png)' });
       const grp = h('select', { class: 't' }, folders.map((x) => h('option', { value: x.id, selected: x.id === gid ? true : null }, x.label)));
       // an SVG of your own, kept in the database: it wins over the icon field
       const file = h('input', { type: 'file', accept: '.svg,image/svg+xml', class: 't' });

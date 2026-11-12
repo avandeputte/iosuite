@@ -10,7 +10,7 @@ import json
 
 from iosuite_shared.access import json_body
 
-from app import access, apps, bookmarkdav, bookmarkfiles, bookmarks, bookmarksync, homeassistant as ha, ncbookmarks, layout, status as appstatus, weather, widgets
+from app import access, apps, siteicons, bookmarkdav, bookmarkfiles, bookmarks, bookmarksync, homeassistant as ha, ncbookmarks, layout, status as appstatus, weather, widgets
 
 router = APIRouter()
 
@@ -295,6 +295,19 @@ def link_icon(lid: int, request: Request):
     return Response(ic["svg"], media_type="image/svg+xml",
                     headers={"Cache-Control": "private, max-age=31536000, immutable", "ETag": f'"{ic["etag"]}"',
                              "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'", "X-Content-Type-Options": "nosniff"})
+
+
+@router.get("/api/bookmarks/site-icon", dependencies=[access.signed_in])
+def site_icon(site: str, request: Request):
+    """A bookmarked site's own icon, as the server fetched it (app/siteicons.py), for everyone signed in. Cached by the
+    browser for good: the address carries a version (?v=etag). Served as the kind of image its bytes are, and as
+    nothing a browser would run."""
+    ic = siteicons.get(site)
+    if not ic:
+        raise HTTPException(404, "No icon")
+    return Response(bytes(ic["data"]), media_type=ic["mime"],
+                    headers={"Cache-Control": "private, max-age=31536000, immutable", "ETag": f'"{ic["etag"]}"',
+                             "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox", "X-Content-Type-Options": "nosniff"})
 
 
 @router.put("/api/bookmarks/links/{lid}/icon", dependencies=[access.editor])
