@@ -7,13 +7,14 @@ its own (`start`: None follows the folder). Editors and admins change the tree i
 
 A link on the start page has a name, a two-letter abbreviation or an icon, the address and a line under it (the host
 name unless a description is given). An icon is an address or a dashboard-icons name in the link's icon field, or an
-SVG uploaded for the link and kept in the database (prt_bookmark_node_icons), which the page serves itself.
+SVG (or a PNG) uploaded for the link and kept in the database (prt_bookmark_node_icons), which the page serves itself.
 
 Sync clients may keep any address a browser can (javascript:, file:, about:…); the start page only ever shows web and
 mailto: addresses, and what is typed in Settings must be one. Ids are handed out here and never reused (clients
 remember them); every change moves the store's revision on (`revision()`), which is how a client's copy is known to
 be current.
 """
+import base64
 import hashlib
 import re
 import xml.etree.ElementTree as ET
@@ -484,13 +485,13 @@ def clean_svg(data: bytes) -> str:
     external entities or embedded documents (it is shown in an <img>, which runs none of these, but the file is
     served from this origin, so a stray script never gets a chance)."""
     if not data:
-        raise BadBookmark("Choose an .svg file")
+        raise BadBookmark("Choose an .svg or .png file")
     if len(data) > ICON_MAX:
         raise BadBookmark(f"The icon is over {ICON_MAX // 1024} KB")
     try:
         text = data.decode("utf-8")
     except UnicodeDecodeError:
-        raise BadBookmark("Not an SVG file (not UTF-8 text)")
+        raise BadBookmark("Not an SVG or PNG file")
     if _UNSAFE.search(text):
         raise BadBookmark("The SVG contains a script, an event handler or an entity: those are not allowed")
     try:
@@ -502,11 +503,28 @@ def clean_svg(data: bytes) -> str:
     return text.strip()
 
 
+_PNG = b"\x89PNG\r\n\x1a\n"
+
+
+def png_as_svg(data: bytes) -> str:
+    """An uploaded PNG as the SVG that is stored: the picture, inside an <svg> of its size. One kind of file is kept
+    and served for a link's own icon (an SVG, which stays the better choice: sharp at any size), and a PNG rides in it."""
+    if len(data) > ICON_MAX:
+        raise BadBookmark(f"The icon is over {ICON_MAX // 1024} KB")
+    if len(data) < 45 or data[12:16] != b"IHDR" or b"IEND" not in data[-16:]:
+        raise BadBookmark("Not a valid PNG file")
+    w, h = int.from_bytes(data[16:20], "big"), int.from_bytes(data[20:24], "big")
+    if not (0 < w <= 4096 and 0 < h <= 4096):
+        raise BadBookmark("The PNG is larger than 4096 px")
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w} {h}" width="{w}" height="{h}">'
+            f'<image width="{w}" height="{h}" href="data:image/png;base64,{base64.b64encode(data).decode("ascii")}"/></svg>')
+
+
 def set_icon(lid: int, data: bytes) -> dict:
-    """Store the uploaded SVG for a link; returns the link."""
+    """Store the icon uploaded for a link (an SVG, or a PNG); returns the link."""
     if node(lid)["folder"]:
         raise NotFound("No such link")
-    svg = clean_svg(data)
+    svg = png_as_svg(data) if data[:8] == _PNG else clean_svg(data)
     etag = hashlib.sha256(svg.encode("utf-8")).hexdigest()[:16]
     db.ex("INSERT INTO prt_bookmark_node_icons (node_id, svg, etag) VALUES (%s, %s, %s) ON DUPLICATE KEY UPDATE svg = VALUES(svg), etag = VALUES(etag)",
           (lid, svg, etag))

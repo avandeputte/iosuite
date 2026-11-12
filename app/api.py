@@ -287,14 +287,14 @@ def delete_link(lid: int, request: Request):
 
 @router.get("/api/bookmarks/links/{lid}/icon.svg", dependencies=[access.signed_in])
 def link_icon(lid: int, request: Request):
-    """The SVG uploaded for a link, for everyone signed in. Cached by the browser for good: the address carries a
+    """The icon uploaded for a link (an SVG; an uploaded PNG is served inside one), for everyone signed in. Cached by the browser for good: the address carries a
     version (?v=etag) that changes with the file."""
     ic = bookmarks.icon(lid)
     if not ic:
         raise HTTPException(404, "No icon")
     return Response(ic["svg"], media_type="image/svg+xml",
                     headers={"Cache-Control": "private, max-age=31536000, immutable", "ETag": f'"{ic["etag"]}"',
-                             "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'", "X-Content-Type-Options": "nosniff"})
+                             "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; img-src data:", "X-Content-Type-Options": "nosniff"})
 
 
 @router.get("/api/bookmarks/site-icon", dependencies=[access.signed_in])
@@ -312,7 +312,7 @@ def site_icon(site: str, request: Request):
 
 @router.put("/api/bookmarks/links/{lid}/icon", dependencies=[access.editor])
 async def upload_link_icon(lid: int, request: Request):
-    """Editors. The body is the SVG file itself (up to 256 KB); the stored one is replaced. Returns the link."""
+    """Editors. The body is the file itself, an SVG or a PNG (up to 256 KB); the stored one is replaced. Returns the link."""
     data = await request.body()
     return _bm(bookmarks.set_icon, lid, data)
 

@@ -77,7 +77,7 @@ what the app will show on the start page later (today's events, the newest photo
   own, as a browser finds it: the server asks the bookmarked page for its icon (`<link rel="icon">`, else
   `/favicon.ico`), keeps it in the database per site and serves it itself, so your browser asks the bookmarked sites
   nothing; a site without one shows a two-letter badge. An icon you give a link wins: an image address, a file name
-  from the dashboard-icons collection (`github.png`), or an SVG of your own uploaded for the link. The groups pack into columns (as many 250 px columns as
+  from the dashboard-icons collection (`github.png`), or a file of your own uploaded for the link (an SVG, which stays sharp at any size, or a PNG). The groups pack into columns (as many 250 px columns as
   fit). Editors and admins add, change, reorder and move folders and links (drag by the handle, with a mouse or a
   finger), import a bookmarks file a browser exported (HTML) or an XBEL file, and export either;
   `POST /api/bookmarks/import` still takes a homepage `bookmarks.yaml`.

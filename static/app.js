@@ -132,7 +132,7 @@ const degF = (c) => (c == null ? null : c * 9 / 5 + 32);
 const fmtTemp = (v) => (v == null ? '–' : `${Math.round(v)}°`);
 /** A bookmark's icon as homepage reads it: a full address, or a file name from the dashboard-icons collection. */
 const bmIconUrl = (icon) => { if (!icon) return ''; if (/^https?:\/\//.test(icon)) return icon; const m = icon.match(/^([\w.-]+)\.(png|svg|webp)$/); return m ? `https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/${m[2]}/${m[1]}.${m[2]}` : ''; };
-/** What to show for a link: the SVG uploaded for it (served by this page) wins over the icon field. */
+/** What to show for a link: the icon uploaded for it (served by this page) wins over the icon field. */
 const bmIcon = (l) => l.iconUrl || bmIconUrl(l.icon) || l.siteIcon || '';  // its own, else the site's (fetched by the server)
 /** Links whose site icon the server is still fetching (iconPending): ask again shortly, a few times, and put the
  *  icons that arrived in place of the badges. `again` reads the links anew. */
@@ -1404,12 +1404,12 @@ async function setBookmarks(el) {
       const desc = h('input', { class: 't', value: l ? l.customDescription : '', placeholder: 'Line under the name (the host name when empty)' });
       const ic = h('input', { class: 't', value: l ? l.icon : '', placeholder: 'The site\'s own icon when empty; or an image address, or a dashboard-icons name (github.png)' });
       const grp = h('select', { class: 't' }, folders.map((x) => h('option', { value: x.id, selected: x.id === gid ? true : null }, x.label)));
-      // an SVG of your own, kept in the database: it wins over the icon field
-      const file = h('input', { type: 'file', accept: '.svg,image/svg+xml', class: 't' });
+      // an icon of your own (an SVG, or a PNG), kept in the database: it wins over the icon field
+      const file = h('input', { type: 'file', accept: '.svg,.png,image/svg+xml,image/png', class: 't' });
       const drop = h('input', { type: 'checkbox' });
       const upload = h('div', { class: 'upload' }, l && l.iconUrl ? h('img', { src: l.iconUrl, alt: '', class: 'bmprev' }) : null, file,
         l && l.iconUrl ? h('label', { class: 'small' }, drop, ' Remove the uploaded icon') : null);
-      return { body: h('div', { class: 'grid' }, fld('Name', name), fld('Address', href), fld('Abbreviation', abbr), fld('Description', desc), fld('Icon', ic), h('div', { class: 'field' }, h('span', null, 'Upload an SVG icon'), upload), fld('Folder', grp)),
+      return { body: h('div', { class: 'grid' }, fld('Name', name), fld('Address', href), fld('Abbreviation', abbr), fld('Description', desc), fld('Icon', ic), h('div', { class: 'field' }, h('span', null, 'Upload an icon (SVG is best, or PNG)'), upload), fld('Folder', grp)),
         value: () => ({ name: name.value, href: href.value, abbr: abbr.value, description: desc.value, icon: ic.value, groupId: +grp.value }), file: () => file.files[0], drop: () => drop.checked };
     };
     const editLink = async (gid, l) => {
@@ -1418,7 +1418,7 @@ async function setBookmarks(el) {
       if (!v) return;
       try {
         const saved = await api(l ? `/api/bookmarks/links/${l.id}` : `/api/bookmarks/groups/${v.link.groupId}/links`, { method: l ? 'PATCH' : 'POST', json: v.link });
-        if (v.file) await api(`/api/bookmarks/links/${saved.id}/icon`, { method: 'PUT', body: v.file, headers: { 'Content-Type': 'image/svg+xml' } });
+        if (v.file) await api(`/api/bookmarks/links/${saved.id}/icon`, { method: 'PUT', body: v.file, headers: { 'Content-Type': v.file.type || 'application/octet-stream' } });
         else if (v.drop) await api(`/api/bookmarks/links/${saved.id}/icon`, { method: 'DELETE' });
         toast('Saved');
       } catch (e) { fail(e); }
