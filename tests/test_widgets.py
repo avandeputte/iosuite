@@ -140,7 +140,16 @@ def test_uploaded_svg_icon(client):
                      (b"<html/>", "root"), (b"not xml <", "parse"), (b"", "empty"), (b"<svg/>" + b" " * (256 * 1024), "size")]:
         assert client.put(f"/api/bookmarks/links/{l['id']}/icon", content=bad).status_code == 400, why
     assert client.put("/api/bookmarks/links/9999/icon", content=SVG).status_code == 404
-    # removing, and the icon goes with its link
+    # a PNG is taken too, and served inside an SVG of its size
+    import base64 as b64
+    png = b64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAIAAAADCAYAAAC56t6BAAAAEUlEQVR4nGM4ISf3H4QZMBgAoR8ME4Q16BEAAAAASUVORK5CYII=")
+    rp = client.put(f"/api/bookmarks/links/{l['id']}/icon", content=png, headers={"Content-Type": "image/png"})
+    assert rp.status_code == 200 and rp.json()["iconUrl"] not in ("", r2.json()["iconUrl"])
+    got = client.get("/" + rp.json()["iconUrl"])
+    assert got.headers["content-type"].startswith("image/svg+xml") and 'viewBox="0 0 2 3"' in got.text
+    assert b64.b64encode(png).decode() in got.text and "img-src data:" in got.headers["content-security-policy"]
+    for bad, why in ((png[:30], "cut short"), (b"\x89PNG\r\n\x1a\n" + b"x" * 300 * 1024, "too large"), (b"GIF89a" + b"0" * 50, "another kind")):
+        assert client.put(f"/api/bookmarks/links/{l['id']}/icon", content=bad).status_code == 400, why
     assert client.delete(f"/api/bookmarks/links/{l['id']}/icon").json()["iconUrl"] == ""
     assert client.get(f"/api/bookmarks/links/{l['id']}/icon.svg").status_code == 404
     client.put(f"/api/bookmarks/links/{l['id']}/icon", content=SVG)
