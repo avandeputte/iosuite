@@ -31,6 +31,7 @@
   function isVivaldi(top) {
     const own = (n) => n.trash !== undefined || n.speeddial !== undefined || n.bookmarkbar !== undefined;
     const kids = top.children || [];
+    if (typeof navigator !== 'undefined' && /\bOPR\//.test(navigator.userAgent || '')) return false;  // Opera has a Trash too, but Chrome's tree
     return kids.some((c) => own(c) || (c.children || []).some(own))
       || kids.some((c) => c.url === undefined && Number(c.id) > 3 && /^trash$/i.test(c.title || '') && !c.folderType);
   }
@@ -47,7 +48,10 @@
       out.other = main;
       return out;
     }
-    for (const c of top.children || []) {
+    // Chrome signed in to a Google account can hold two of each (the account's and this device's): the account's, where
+    // Chrome itself puts new bookmarks, is the one that syncs
+    const tops = [...(top.children || [])].sort((a, b) => (b.syncing === true) - (a.syncing === true));
+    for (const c of tops) {
       const kind = c.folderType === 'bookmarks-bar' || c.id === '1' || c.id === 'toolbar_____' ? 'toolbar'
         : c.folderType === 'other' || c.id === '2' || c.id === 'unfiled_____' ? 'other'
           : c.id === 'menu________' ? 'menu' : null;
