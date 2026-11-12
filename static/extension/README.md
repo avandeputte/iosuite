@@ -6,6 +6,10 @@ as the ioSuite start page's bookmarks, both ways.
 - The bookmarks bar ↔ the top-level folder **Bookmarks bar** (also found as "Bookmarks Toolbar" or "Favorites bar").
 - Firefox's bookmarks menu ↔ the top-level folder **Bookmarks menu** (a folder in Other bookmarks in Chrome and Edge).
 - Other bookmarks ↔ everything else at the top level.
+- Vivaldi keeps one tree, "Bookmarks": the folder set as its bookmark bar ↔ **Bookmarks bar** (a folder "Bookmarks
+  bar" is made when none is set: right-click it › *Set as Bookmark Bar Folder*), and the rest of "Bookmarks", Speed
+  Dial folders included, ↔ everything else at the top level. Its Trash does not sync: what goes there is deleted on
+  the start page. Vivaldi's hidden "Other Bookmarks" folder is left alone.
 
 It syncs a few seconds after a bookmark changes in the browser, every minute (one small request: "did anything
 change?"), and when the browser starts. Deletes travel both ways. The first sync either brings both sides together
@@ -13,8 +17,8 @@ change?"), and when the browser starts. Deletes travel both ways. The first sync
 
 ## Install
 
-**Chrome, Edge**: download the .zip from the start page's Bookmarks page (or a release), unpack it, open
-`chrome://extensions` (`edge://extensions`), turn on *Developer mode*, *Load unpacked*, pick the folder. Keep the
+**Chrome, Edge, Vivaldi**: download the .zip from the start page's Bookmarks page (or a release), unpack it, open
+`chrome://extensions` (`edge://extensions`, `vivaldi://extensions`), turn on *Developer mode*, *Load unpacked*, pick the folder. Keep the
 folder where it is: the browser loads the extension from it. To update, replace the folder's contents and press the
 reload arrow on the extension's card.
 
