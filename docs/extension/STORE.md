@@ -48,10 +48,10 @@ on the start page's Bookmarks page). Chrome, Edge, Vivaldi, Brave and Opera all 
     known in advance. Nothing is granted at install; when the user signs in, access to that one address is requested
     and nothing else is ever requested.
 - **Remote code**: No, I am not using remote code.
-- **Data usage**: tick *Website content* is not needed; tick **Personal communications: no**, **Web history: no**.
-  The form has no "bookmarks" box: declare **User activity: no**, and under "Personally identifiable information"
-  nothing. If the reviewer asks: bookmarks are sent only to the server the user configures. Certify the three
-  statements (no selling, no unrelated use, no creditworthiness use).
+- **Data usage**: tick **Authentication information** (it keeps the sign-in made for it on your start page). The
+  form has no box for bookmarks; the nearest is **Web history**, and ticking it is the cautious choice. Leave the
+  others unticked. Then certify the three statements (not sold, not used for anything but the single purpose, not
+  used for creditworthiness). What it handles goes only to the server the user names (`PRIVACY.md`).
 - **Privacy policy URL**: <https://github.com/avandeputte/iosuite/blob/main/docs/extension/PRIVACY.md>
 
 ## Distribution tab
