@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "iosuite"
-version = "0.45.1"
+version = "0.46.0"
 description = "The start page of the ioThing suite: one place with every io app (ioPix, ioHealth, ioCalendar, ioContact, ioNote)"
 readme = "README.md"
 requires-python = ">=3.10"
