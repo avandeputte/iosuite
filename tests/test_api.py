@@ -70,6 +70,24 @@ def test_the_shell_its_files_and_the_icon_are_public(client):
         assert client.get(p).status_code == 200, p
 
 
+def test_bookmarks_as_an_app_of_its_own(client):
+    """/bookmarks: the same page with its own name, home-screen icon and manifest (start there, the whole app in scope),
+    open before sign-in as / is, every file it names there."""
+    import re
+    r = client.get("/bookmarks")
+    assert r.status_code == 200 and "<title>Bookmarks</title>" in r.text
+    assert '<meta name="apple-mobile-web-app-title" content="Bookmarks">' in r.text
+    assert 'href="static/icons/bookmarks-180.png"' in r.text and 'href="bookmarks.webmanifest" crossorigin="use-credentials"' in r.text
+    m = client.get("/bookmarks.webmanifest")
+    assert m.headers["content-type"].startswith("application/manifest+json")
+    m = m.json()
+    assert (m["name"], m["start_url"], m["scope"], m["display"]) == ("Bookmarks", "./bookmarks", "./", "standalone")
+    assert m["id"] != client.get("/manifest.webmanifest").json().get("id", "./#/")  # installs apart from the start page
+    for p in re.findall(r'(?:src|href)="(static/[^"?]+)', r.text) + [i["src"] for i in m["icons"]]:
+        assert client.get("/" + p).status_code == 200, p
+    assert 'href="manifest.webmanifest"' in client.get("/").text  # the start page keeps its own
+
+
 def test_suite_admin_screen(client):
     """Settings › Security: every account, its role in every app, app passwords with their scope, the apps' access."""
     o = client.get("/api/suite-admin").json()

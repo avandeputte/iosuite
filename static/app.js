@@ -46,6 +46,8 @@ const ICONS = {
   bolt: 'M7 2v11h3v9l7-12h-4l4-8z',
   battery: 'M15.67 4H14V2h-4v2H8.33C7.6 4 7 4.6 7 5.33v15.33C7 21.4 7.6 22 8.33 22h7.33c.74 0 1.34-.6 1.34-1.33V5.33C17 4.6 16.4 4 15.67 4zM15 18H9v-6h6v6z',
   folder: 'M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z',
+  phone: 'M15.5 1h-8A2.5 2.5 0 0 0 5 3.5v17A2.5 2.5 0 0 0 7.5 23h8a2.5 2.5 0 0 0 2.5-2.5v-17A2.5 2.5 0 0 0 15.5 1zm-4 21c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm4.5-4H7V4h9v14z',
+  more: 'M6 10c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm12 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm-6 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z',
   left: 'M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z',
   right: 'M8.59 16.59 13.17 12 8.59 7.41 10 6l6 6-6 6z',
   server: 'M20 13H4c-.55 0-1 .45-1 1v6c0 .55.45 1 1 1h16c.55 0 1-.45 1-1v-6c0-.55-.45-1-1-1zM7 19c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zM20 3H4c-.55 0-1 .45-1 1v6c0 .55.45 1 1 1h16c.55 0 1-.45 1-1V4c0-.55-.45-1-1-1zM7 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z',
@@ -208,11 +210,15 @@ function applyTheme() {
 }
 
 // ------------------------------------------------------------------ routes
+/* /bookmarks is the Bookmarks page as an app of its own (its own name, icon and manifest: "Add to Home Screen" on an
+   iPhone, "Install" on a desktop): the same page, opening on the bookmarks, with the start page a tap on the brand away. */
+const BM_APP = /\/bookmarks\/?$/.test(location.pathname);
 function route() {
   const [a, b, c] = location.hash.replace(/^#\/?/, '').split('/').map(decodeURIComponent);
   if (a === 'settings') return { view: 'settings', tab: b || 'account', sub: c };
   if (a === 'bookmarks' || (a === 'settings' && b === 'bookmarks')) return { view: 'bookmarks' };
   if (a === 'wall') return { view: 'wall' };
+  if (BM_APP && !a) return { view: 'bookmarks' };  // the Bookmarks app opens on them
   return { view: 'home' };
 }
 async function onRoute() {
@@ -1379,23 +1385,54 @@ async function setHomeAssistant(el) {
    browser keeps them), what of it is on the start page (the house on a folder or on a single link), the addresses a
    sync app needs, and files in and out. Everyone signed in sees it; editors and admins change it. */
 async function showBookmarks(page) {
-  page.append(h('div', { class: 'pagehead' }, h('a', { class: 'iconbtn', href: '#/', title: 'Back to the start page', 'aria-label': 'Back to the start page' }, icon('left')), h('h1', null, 'Bookmarks')));
-  const body = h('div'); page.append(body);
+  const canEdit = ['editor', 'admin'].includes(S.user.role);
+  const body = h('div');
+  // the search box: as you type, the links that match (name, address, description, folder), wherever they are
+  const q = h('input', { class: 't bmq', type: 'search', placeholder: 'Search the bookmarks', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', enterkeyhint: 'search', 'aria-label': 'Search the bookmarks' });
+  q.addEventListener('input', () => body.bmPaint && body.bmPaint());
+  q.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && q.value) { e.stopPropagation(); q.value = ''; body.bmPaint && body.bmPaint(); }
+    if (e.key === 'Enter') { const a = body.querySelector('.bmrow a.bmname'); if (a) { e.preventDefault(); a.click(); } }  // the first match
+  });
+  body.bmQuery = () => q.value.trim();
+  page.append(h('div', { class: 'pagehead bmpagehead' },
+    BM_APP ? null : h('a', { class: 'iconbtn', href: '#/', title: 'Back to the start page', 'aria-label': 'Back to the start page' }, icon('left')),
+    h('h1', null, 'Bookmarks'),
+    canEdit ? h('button', { class: 'pillbtn primary bmaddtop', onclick: () => body.bmAdd && body.bmAdd() }, icon('add', 's'), 'Link') : null,
+    h('div', { class: 'bmsearch' }, icon('search', 's'), q)));
+  page.append(body);
   await setBookmarks(body);
+  // back to the app (from a tab it opened, or the home screen): the tree as it is now, as the start page does
+  S.refresh = () => body.bmDraw && body.bmDraw();
 }
+/** Running as an app from the home screen (or installed), without the browser around it. */
+const standalone = () => navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
 const bmOpen = new Set();  // the folders unfolded, kept while the page is open
 async function setBookmarks(el) {
+  let tree = null, sync = null;
   const draw = async () => {
-    const [tree, sync] = await Promise.all([api('/api/bookmarks/tree'), api('/api/bookmarks/sync')]);
+    [tree, sync] = await Promise.all([api('/api/bookmarks/tree'), api('/api/bookmarks/sync')]);
+    if (!el.isConnected) return;
+    paint();
     const mine = el.bmDrawn = {};  // a later draw makes the wait for icons of this one moot
     bmIconsLater(el, bmFlat(tree.items), async () => (el.bmDrawn === mine ? bmFlat((await api('/api/bookmarks/tree')).items) : []));
+  };
+  // the search box redraws from the tree in hand; changes fetch it again (draw)
+  const paint = () => {
+    if (!tree || !el.isConnected) return;
     const canEdit = ['editor', 'admin'].includes(S.user.role);
-    if (!el.isConnected) return;
+    const query = el.bmQuery ? fold(el.bmQuery()) : '';
     const call = async (path, opts, msg) => { try { await api(path, opts); if (msg) toast(msg); } catch (e) { fail(e); } await draw(); };
     // every folder, for the "Folder" choice of a link: the top level, then each with its path
     const folders = [{ id: 0, label: 'Top level' }];
-    const walk = (items, path) => { for (const f of items) if (f.type === 'folder') { folders.push({ id: f.id, label: [...path, f.name].join(' › ') }); walk(f.items, [...path, f.name]); } };
-    walk(tree.items, []);
+    const where = new Map();  // a link's id: its folder and the folder's path, for the search results
+    const walk = (items, path, parent) => {
+      for (const x of items) {
+        if (x.type === 'folder') { folders.push({ id: x.id, label: [...path, x.name].join(' › ') }); walk(x.items, [...path, x.name], x); }
+        else where.set(x.id, { f: parent, path: path.join(' › ') });
+      }
+    };
+    walk(tree.items, [], null);
     const few = tree.count <= 60;  // a small tree shows unfolded; a browser's whole menu starts folded
     const isOpen = (f) => bmOpen.has(f.id) || (few && !bmOpen.has(-f.id));
     const linkForm = (gid, l) => {
@@ -1409,8 +1446,15 @@ async function setBookmarks(el) {
       const drop = h('input', { type: 'checkbox' });
       const upload = h('div', { class: 'upload' }, l && l.iconUrl ? h('img', { src: l.iconUrl, alt: '', class: 'bmprev' }) : null, file,
         l && l.iconUrl ? h('label', { class: 'small' }, drop, ' Remove the uploaded icon') : null);
-      return { body: h('div', { class: 'grid' }, fld('Name', name), fld('Address', href), fld('Abbreviation', abbr), fld('Description', desc), fld('Icon', ic), h('div', { class: 'field' }, h('span', null, 'Upload an icon (SVG is best, or PNG)'), upload), fld('Folder', grp)),
-        value: () => ({ name: name.value, href: href.value, abbr: abbr.value, description: desc.value, icon: ic.value, groupId: +grp.value }), file: () => file.files[0], drop: () => drop.checked };
+      Object.assign(href, { type: 'url', inputMode: 'url', autocapitalize: 'off', spellcheck: false }); href.setAttribute('autocorrect', 'off');
+      name.placeholder = 'Name (the site\'s address when empty)';
+      // what a phone rarely needs folds away: open when the link already has some of it
+      const more = h('details', { class: 'bmmoreform', open: l && (l.customDescription || l.icon || l.iconUrl) ? true : null },
+        h('summary', { class: 'muted small' }, 'Abbreviation, description and icon'),
+        h('div', { class: 'grid' }, fld('Abbreviation', abbr), fld('Description', desc), fld('Icon', ic), h('div', { class: 'field' }, h('span', null, 'Upload an icon (SVG is best, or PNG)'), upload)));
+      const hostOf = (u) => { try { return new URL(/^[a-z][a-z0-9+.-]*:/i.test(u) ? u : `https://${u}`).hostname.replace(/^www\./, ''); } catch { return u; } };
+      return { body: h('div', null, h('div', { class: 'grid' }, fld('Address', href), fld('Name', name), fld('Folder', grp)), more),
+        value: () => ({ name: name.value.trim() || hostOf(href.value.trim()), href: href.value.trim(), abbr: abbr.value, description: desc.value, icon: ic.value, groupId: +grp.value }), file: () => file.files[0], drop: () => drop.checked };
     };
     const editLink = async (gid, l) => {
       const f = linkForm(gid, l);
@@ -1433,28 +1477,44 @@ async function setBookmarks(el) {
     const grip = (title, kind) => (canEdit ? h('button', { class: 'iconbtn grip', title, 'aria-label': title, 'data-kind': kind }, icon('grip', 's')) : null);
     // the house: lit when the folder (its links, as a group) or the link is on the start page
     const house = (on, title, click, disabled) => h('button', { class: `iconbtn bmstart${on ? ' on' : ''}`, title, 'aria-label': title, 'aria-pressed': on ? 'true' : 'false', disabled: disabled ? true : null, onclick: click }, icon('home', 's'));
-    const linkRow = (l, f) => h('div', { class: `bmrow${l.onStart ? '' : ' off'}`, 'data-id': l.id }, grip('Drag to move the link', 'link'),
-      h('span', { class: 'bmic' }, bmIcon(l) ? h('img', { src: bmIcon(l), alt: '', onerror: (e) => { e.target.replaceWith(l.abbr); } }) : l.abbr), l.linkable ? h('a', { class: 'bmname', href: l.href, target: '_blank', rel: 'noreferrer', title: l.href }, l.name || l.href) : h('span', { class: 'bmname', title: l.href }, l.name || l.href), h('span', { class: 'muted small bmdesc' }, l.description),
+    // a link's and a folder's tools: buttons in the row, or (on a phone) behind one ⋯ button, as a list to tap
+    const linkActions = (l, f) => [
+      { label: 'Open', icon: 'web', run: () => window.open(l.href, '_blank', 'noreferrer'), hidden: !l.linkable },
+      { label: l.onStart ? 'Take it off the start page' : 'Show it on the start page', icon: 'home', disabled: !l.linkable, run: () => {
+        const want = !l.onStart;  // as its folder when that already says so, else this link's own choice
+        call(`/api/bookmarks/links/${l.id}`, { method: 'PATCH', json: { start: want === !!(f && f.start) ? null : want } });
+      } },
+      { label: 'Change', icon: 'edit', run: () => editLink(f ? f.id : 0, l) },
+      { label: 'Copy the address', icon: 'copy', run: async () => { try { await navigator.clipboard.writeText(l.href); toast('Copied'); } catch { toast(l.href); } } },
+      { label: 'Delete', icon: 'delete', danger: true, run: async () => { if (await confirmDialog('Delete the link', `Delete "${l.name || l.href}"? Browsers that sync lose it too.`, 'Delete', true)) call(`/api/bookmarks/links/${l.id}`, { method: 'DELETE' }, 'Deleted'); } },
+    ];
+    const moreBtn = (title, actions) => h('button', { class: 'iconbtn bmmore', title: 'More', 'aria-label': `More: ${title}`, onclick: () => sheet(title, actions) }, icon('more', 's'));
+    const linkRow = (l, f, path) => h('div', { class: `bmrow${l.onStart ? '' : ' off'}`, 'data-id': l.id }, path === undefined ? grip('Drag to move the link', 'link') : null,
+      h('span', { class: 'bmic' }, bmIcon(l) ? h('img', { src: bmIcon(l), alt: '', onerror: (e) => { e.target.replaceWith(l.abbr); } }) : l.abbr), l.linkable ? h('a', { class: 'bmname', href: l.href, target: '_blank', rel: 'noreferrer', title: l.href }, l.name || l.href) : h('span', { class: 'bmname', title: l.href }, l.name || l.href),
+      h('span', { class: 'muted small bmdesc' }, path === undefined ? l.description : path || 'Top level'),
       !canEdit ? null : h('span', { class: 'bmtools' },
-        house(l.onStart, !l.linkable ? 'Only web addresses can go on the start page' : l.onStart ? 'On the start page: click to take it off' : 'Not on the start page: click to show it', () => {
-          const want = !l.onStart;  // as its folder when that already says so, else this link's own choice
-          call(`/api/bookmarks/links/${l.id}`, { method: 'PATCH', json: { start: want === !!(f && f.start) ? null : want } });
-        }, !l.linkable),
+        house(l.onStart, !l.linkable ? 'Only web addresses can go on the start page' : l.onStart ? 'On the start page: click to take it off' : 'Not on the start page: click to show it', linkActions(l, f)[1].run, !l.linkable),
         h('button', { class: 'iconbtn', title: 'Change', onclick: () => editLink(f ? f.id : 0, l) }, icon('edit', 's')),
-        h('button', { class: 'iconbtn', title: 'Delete', onclick: async () => { if (await confirmDialog('Delete the link', `Delete "${l.name || l.href}"? Browsers that sync lose it too.`, 'Delete', true)) call(`/api/bookmarks/links/${l.id}`, { method: 'DELETE' }, 'Deleted'); } }, icon('delete', 's'))));
+        h('button', { class: 'iconbtn', title: 'Delete', onclick: linkActions(l, f)[4].run }, icon('delete', 's'))),
+      canEdit ? moreBtn(l.name || l.href, linkActions(l, f)) : null);
     const count = (f) => f.items.reduce((n, x) => n + (x.type === 'folder' ? count(x) : 1), 0);
+    const folderActions = (f, n) => [
+      { label: f.start ? 'Take it off the start page' : 'Show it on the start page', icon: 'home', run: () => call(`/api/bookmarks/groups/${f.id}`, { method: 'PATCH', json: { start: !f.start } }) },
+      { label: 'Add a link', icon: 'add', run: () => { bmOpen.add(f.id); bmOpen.delete(-f.id); editLink(f.id, null); } },
+      { label: 'Add a folder inside', icon: 'folder', run: () => { bmOpen.delete(-f.id); newFolder(f.id); } },
+      { label: 'Rename', icon: 'edit', run: async () => { const i = h('input', { class: 't', value: f.name }); const v = await dialog('Rename the folder', i, [{ label: 'Cancel', value: null }, { label: 'Save', value: () => i.value, primary: true }]); if (v) call(`/api/bookmarks/groups/${f.id}`, { method: 'PATCH', json: { name: v } }, 'Saved'); } },
+      { label: 'Delete the folder', icon: 'delete', danger: true, run: async () => { if (await confirmDialog('Delete the folder', `Delete "${f.name}" and the ${n} link(s) in it? Browsers that sync lose them too.`, 'Delete', true)) call(`/api/bookmarks/groups/${f.id}`, { method: 'DELETE' }, 'Deleted'); } },
+    ];
     const folderBox = (f) => {
-      const open = isOpen(f), n = count(f);
+      const open = isOpen(f), n = count(f), acts = folderActions(f, n);
       return h('div', { class: `bmedit${open ? '' : ' shut'}`, 'data-id': f.id },
         h('div', { class: 'bmhead' }, grip('Drag to move the folder', 'group'),
-          h('button', { class: 'bmfold', 'aria-expanded': open ? 'true' : 'false', title: open ? 'Fold' : 'Unfold', onclick: () => { if (open) { bmOpen.delete(f.id); bmOpen.add(-f.id); } else { bmOpen.add(f.id); bmOpen.delete(-f.id); } draw(); } },
+          h('button', { class: 'bmfold', 'aria-expanded': open ? 'true' : 'false', title: open ? 'Fold' : 'Unfold', onclick: () => { if (open) { bmOpen.delete(f.id); bmOpen.add(-f.id); } else { bmOpen.add(f.id); bmOpen.delete(-f.id); } paint(); } },
             icon(open ? 'down' : 'right', 's'), icon('folder', 's'), h('b', null, f.name || '(no name)'), h('span', { class: 'muted small' }, `${n}`)),
           !canEdit ? null : h('span', { class: 'bmtools' },
-            house(f.start, f.start ? 'On the start page, as a group with its links: click to take it off' : 'Not on the start page: click to show it as a group', () => call(`/api/bookmarks/groups/${f.id}`, { method: 'PATCH', json: { start: !f.start } })),
-            h('button', { class: 'iconbtn', title: 'Add a link', onclick: () => { bmOpen.add(f.id); editLink(f.id, null); } }, icon('add', 's')),
-            h('button', { class: 'iconbtn', title: 'Add a folder inside', onclick: () => newFolder(f.id) }, icon('folder', 's')),
-            h('button', { class: 'iconbtn', title: 'Rename', onclick: async () => { const i = h('input', { class: 't', value: f.name }); const v = await dialog('Rename the folder', i, [{ label: 'Cancel', value: null }, { label: 'Save', value: () => i.value, primary: true }]); if (v) call(`/api/bookmarks/groups/${f.id}`, { method: 'PATCH', json: { name: v } }, 'Saved'); } }, icon('edit', 's')),
-            h('button', { class: 'iconbtn', title: 'Delete the folder', onclick: async () => { if (await confirmDialog('Delete the folder', `Delete "${f.name}" and the ${n} link(s) in it? Browsers that sync lose them too.`, 'Delete', true)) call(`/api/bookmarks/groups/${f.id}`, { method: 'DELETE' }, 'Deleted'); } }, icon('delete', 's')))),
+            house(f.start, f.start ? 'On the start page, as a group with its links: click to take it off' : 'Not on the start page: click to show it as a group', acts[0].run),
+            ...acts.slice(1).map((a) => h('button', { class: 'iconbtn', title: a.label, onclick: a.run }, icon(a.icon, 's')))),
+          canEdit ? moreBtn(f.name || 'Folder', acts) : null),
         open ? level(f.items, f) : null);
     };
     // a folder's links, then the folders inside it (each list takes what is dragged into it)
@@ -1470,11 +1530,17 @@ async function setBookmarks(el) {
       try { const r = await api('/api/bookmarks/import', { method: 'POST', json: { file: await f.text() } }); toast(`Added ${r.links} link(s) in ${r.groups} folder(s)`); } catch (e) { fail(e); }
       await draw();
     };
+    const results = () => {
+      const found = bmFlat(tree.items).filter((l) => fold(`${l.name} ${l.href} ${l.description || ''} ${where.get(l.id)?.path || ''}`).includes(query));
+      return found.length ? h('div', { class: 'bmresults' }, found.slice(0, 200).map((l) => linkRow(l, where.get(l.id)?.f || null, where.get(l.id)?.path || '')))
+        : h('p', { class: 'muted' }, 'No bookmark matches.');
+    };
+    el.bmAdd = () => editLink(0, null);
     el.replaceChildren(
-      h('div', { class: 'box' }, h('h2', null, icon('link'), 'Bookmarks'),
+      h('div', { class: 'box bmtree' }, h('h2', null, icon('link'), query ? 'Found' : 'Bookmarks'),
         h('p', { class: 'muted' }, canEdit ? 'Every bookmark of the family, in folders as a browser keeps them. The house says what is on the start page: on a folder it shows the folder as a group with its links, on a link it shows or hides just that one. Everything here syncs to the browsers, on the start page or not. Drag a folder or a link by its handle to move it.' : 'Every bookmark of the family, in folders as a browser keeps them. Editors and admins change them.'),
-        tree.items.length ? h('div', { class: 'bmgroups' }, level(tree.items, null)) : h('p', { class: 'muted' }, 'No bookmarks yet.'),
-        !canEdit ? null : h('div', { class: 'multi', style: 'margin-top:12px' },
+        query ? results() : tree.items.length ? h('div', { class: 'bmgroups' }, level(tree.items, null)) : h('p', { class: 'muted' }, 'No bookmarks yet.'),
+        !canEdit || query ? null : h('div', { class: 'multi', style: 'margin-top:12px' },
           h('button', { class: 'pillbtn primary', onclick: () => newFolder(0) }, icon('add', 's'), 'Folder'),
           h('button', { class: 'pillbtn', onclick: () => editLink(0, null) }, icon('add', 's'), 'Link'))),
       h('div', { class: 'box' }, h('h2', null, icon('update'), 'Sync with browsers'),
@@ -1486,13 +1552,16 @@ async function setBookmarks(el) {
         !canEdit ? null : h('p', { class: 'muted' }, 'Other sync apps work too. With Floccus (Firefox, Chrome, Edge, Android, iOS): add an account of the kind Nextcloud Bookmarks, give it the first address, and say yes on the page it opens. Apps that sync a bookmarks file over WebDAV take the second address, the file bookmarks.xbel (or bookmarks.html), your name and an app password from Settings › Account; leave any passphrase empty.'),
         !canEdit ? null : addr('Nextcloud Bookmarks', sync.nextcloud), !canEdit ? null : addr('WebDAV folder', sync.webdav),
         sync.syncing ? h('p', { class: 'small' }, 'A browser is syncing right now.') : null),
+      standalone() ? null : h('div', { class: 'box' }, h('h2', null, icon('phone'), 'On a phone'),
+        h('p', { class: 'muted' }, 'These bookmarks as an app of their own, with an icon on the home screen: on an iPhone or iPad open the address below (Safari, or Vivaldi, Chrome, Edge or Firefox), tap Share, then Add to Home Screen. On Android or a desktop browser, choose Install (or Add to Home screen) in the browser\'s menu.'),
+        addr('Bookmarks app', new URL('bookmarks', document.baseURI).href)),
       h('div', { class: 'box' }, h('h2', null, icon('download'), canEdit ? 'Import and export' : 'Export'),
         canEdit ? h('p', { class: 'muted' }, 'A bookmarks file exported from a browser (HTML) or an XBEL file is added at the top level; pick what goes on the start page afterwards.') : null,
         canEdit ? h('div', { class: 'multi' }, file, h('button', { class: 'pillbtn noic', onclick: importFile }, 'Import')) : null,
         h('p', { class: 'multi' }, h('a', { class: 'pillbtn', href: 'api/bookmarks/export.html', download: 'bookmarks.html' }, icon('download', 's'), 'Export for a browser (HTML)'),
           h('a', { class: 'pillbtn', href: 'api/bookmarks/export.xbel', download: 'bookmarks.xbel' }, icon('download', 's'), 'Export XBEL'))));
     const root = el.querySelector('.bmgroups');
-    if (!root) return;
+    if (!root || !canEdit) return;
     // drag the grip (mouse, pen or finger): a link lands in any folder's links, a folder among any folder's folders
     const save = (list) => call(`/api/bookmarks/groups/${list.dataset.gid}/order`, { method: 'POST', json: { ids: [...list.children].filter((x) => x.dataset.id).map((x) => +x.dataset.id) } });
     for (const g of root.querySelectorAll('.grip')) {
@@ -1503,7 +1572,20 @@ async function setBookmarks(el) {
       });
     }
   };
+  el.bmDraw = draw; el.bmPaint = paint;
   await draw();
+}
+
+/** A short list of things to do, each a full-width row to tap (a phone's stand-in for a row of small buttons). */
+function sheet(title, actions) {
+  const back = h('div', { class: 'dialog-back sheetback' });
+  const close = () => back.remove();
+  back.addEventListener('click', (e) => { if (e.target === back) close(); });
+  back.append(h('div', { class: 'dialog sheet', role: 'dialog', 'aria-label': title },
+    h('div', { class: 'sheettitle muted small' }, title),
+    ...actions.filter((a) => !a.hidden).map((a) => h('button', { class: `sheetrow${a.danger ? ' danger' : ''}`, disabled: a.disabled ? true : null, onclick: () => { close(); a.run(); } }, icon(a.icon, 's'), a.label)),
+    h('button', { class: 'sheetrow cancel', onclick: close }, 'Cancel')));
+  document.body.append(back);
 }
 
 /** Reorder by dragging `handle` (mouse, pen or touch, through pointer events): `item` follows the pointer and the
@@ -1656,6 +1738,7 @@ async function start() {
   try { S.settings = (await api('/api/auth/me')).settings || {}; } catch { S.settings = {}; }
   if (S.settings.theme && S.settings.theme !== (localStorage.getItem('iosuite.theme') || 'system')) setTheme(S.settings.theme);
   drawUser();
+  if (BM_APP) { document.body.classList.add('bmapp'); $('#topbar .brand').href = './'; $('#topbar .brand').title = 'The start page'; }
   addEventListener('hashchange', onRoute);
   await onRoute();
   updateBanner();

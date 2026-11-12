@@ -509,3 +509,40 @@ a.hatile:hover { background: var(--bg3); }
   .bmlevel .bmlevel { margin-left: 8px; padding-left: 6px; }
   .bmtools .iconbtn, .bmhead .iconbtn { width: 28px; }
 }
+
+/* ---- the Bookmarks page: a search box in its head, and on a phone (or as the home-screen Bookmarks app) rows to tap */
+.bmpagehead .bmaddtop { margin-left: auto; }
+.bmsearch { flex: 1 1 100%; display: flex; align-items: center; gap: 8px; position: relative; }
+.bmsearch > .ic { position: absolute; left: 12px; color: var(--fg2); pointer-events: none; }
+.bmsearch input.t { padding-left: 38px; border-radius: var(--r-pill); }
+.bmresults .bmrow { padding-left: 4px; }
+.bmmore { display: none; }
+.bmmoreform { margin-top: 4px; }
+.bmmoreform summary { cursor: pointer; padding: 6px 0; }
+.sheet { padding: 8px; max-width: 420px; }
+.sheettitle { padding: 8px 12px 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sheetrow { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 48px; padding: 0 12px; border-radius: var(--r-m); text-align: left; font-size: var(--fs-l); }
+.sheetrow:hover, .sheetrow:active { background: var(--bg2); }
+.sheetrow .ic { color: var(--fg2); }
+.sheetrow.danger, .sheetrow.danger .ic { color: var(--danger); }
+.sheetrow.cancel { justify-content: center; color: var(--fg2); margin-top: 4px; border-top: 1px solid var(--line); border-radius: 0 0 var(--r-m) var(--r-m); }
+.sheetrow:disabled { opacity: .4; }
+@media (max-width: 640px) {
+  .bmpagehead { gap: 8px; }
+  .bmtree .bmtools { display: none; }
+  .bmmore { display: inline-flex; width: 40px !important; height: 40px !important; }
+  .bmrow { height: 48px; }
+  .bmrow .bmic { width: 40px; }
+  .bmresults .bmrow .bmdesc { display: block; flex: 0 1 40%; text-align: right; }
+  .bmhead { min-height: 44px; }
+  .bmfold { height: 44px; flex: 1 1 auto !important; }
+  .bmtree.box, .bmapp .box { padding: 12px; border-radius: var(--r-m); }
+  .bmtree.box > p.muted { display: none; }  /* the long explanation: the ⋯ menus say it */
+  /* a sheet rises from the bottom, in thumb's reach; a form sits at the top, clear of the keyboard */
+  .sheetback { align-items: flex-end; padding: 8px 8px calc(8px + env(safe-area-inset-bottom)); }
+  .dialog-back:not(.sheetback) { align-items: flex-start; padding-top: calc(12px + env(safe-area-inset-top)); }
+}
+/* a phone zooms into any field under 16px when it gets focus */
+@media (pointer: coarse) { input.t, select.t, textarea.t { font-size: 16px; } }
+/* the home-screen app: room for the home indicator under the last box */
+.bmapp .page { padding-bottom: calc(60px + env(safe-area-inset-bottom)); }

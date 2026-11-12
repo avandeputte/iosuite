@@ -81,6 +81,13 @@ what the app will show on the start page later (today's events, the newest photo
   fit). Editors and admins add, change, reorder and move folders and links (drag by the handle, with a mouse or a
   finger), import a bookmarks file a browser exported (HTML) or an XBEL file, and export either;
   `POST /api/bookmarks/import` still takes a homepage `bookmarks.yaml`.
+- **The Bookmarks app** at `<address>/bookmarks`: the Bookmarks page as an app of its own, with its own name, icon
+  and manifest (`static/bookmarks.webmanifest`), opening straight on the bookmarks. On an iPhone or iPad open that
+  address (Safari, or Vivaldi, Chrome, Edge, Firefox) and choose Share › Add to Home Screen; on Android or a desktop,
+  the browser's Install. It runs without the browser around it and fetches the tree each time it comes back to the
+  front (no offline copy). On a phone it has a search box, rows to tap, a ⋯ menu per link and folder, and a short
+  link form (the address; the name is the site's address when left empty). Sign-in is the page's own: behind
+  Cloudflare Access a home-screen app signs in once by itself (it keeps its own cookies, apart from the browser's).
 - **Bookmark sync with browsers**: everything in the tree syncs, on the start page or not.
   - *The ioSuite Bookmarks extension* (`static/extension`, Chrome, Edge and Firefox; its own README there): keeps the
     browser's own bookmarks the same as the tree, both ways, with nothing to configure but the address. The bookmarks
