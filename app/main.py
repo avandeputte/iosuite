@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from iosuite_shared import mcp as shared_mcp, users
 from iosuite_shared.updates import setup_log
 
-from app import __version__, api, config, db, keys, mcp
+from app import __version__, api, bookmarkdav, bookmarks, config, db, keys, mcp, ncbookmarks
 from app.auth import auth, updater
 
 setup_log(config.LOG_FILE)  # the server log that Settings › Server shows; the app runs without it
@@ -23,12 +23,15 @@ log = logging.getLogger("iosuite")
 
 # what a visitor may still fetch when sign-in is required: the app shell and its files, and the API docs
 OPEN_PATHS = ("/", "/manifest.webmanifest", "/api/docs", "/api/openapi.json")
-OPEN_PREFIXES = ("/static/", "/mcp")  # /mcp signs in on its own (Auth.mcp_gate)
+# /mcp signs in on its own (Auth.mcp_gate); the sync protocols under /dav answer 401 with a Basic challenge themselves
+# (a sync app shows that as "wrong password"), and the Nextcloud sign-in flow starts before anyone is signed in
+OPEN_PREFIXES = ("/static/", "/mcp", "/dav/")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await run_in_threadpool(db.migrate)
+    await run_in_threadpool(bookmarks.carry_over)  # once: the bookmarks of before the tree (goes away next version)
     await run_in_threadpool(users.init)
     await run_in_threadpool(keys.declare)  # the Home Assistant token and AccuWeather key live with the suite's keys and tokens
     updater.start_daily()   # the daily "is there a newer version" check, while the setting allows it
@@ -53,7 +56,7 @@ app.middleware("http")(auth.middleware(open_paths=OPEN_PATHS, open_prefixes=OPEN
 
 
 def _limit_for(path: str, ctype: str) -> int:
-    return config.MAX_IMPORT_BYTES if "/import" in path else config.MAX_JSON_BYTES
+    return config.MAX_IMPORT_BYTES if "/import" in path or path.startswith("/dav/") else config.MAX_JSON_BYTES
 
 
 # 400 for bad input, the headers, no-store on the API, the body cap: the same in every app of the suite
@@ -78,6 +81,8 @@ app.include_router(auth.admin_router())  # /api/suite-admin: every account, role
 app.include_router(auth.status_router(updater))  # /api/status: public, the same shape in every app
 app.include_router(auth.server_router(updater, log_file=config.LOG_FILE, info=_server_info, apply=_server_apply))  # /api/server, /api/log (admins)
 app.include_router(api.router)
+app.include_router(ncbookmarks.router)  # /dav/nextcloud: the Nextcloud Bookmarks API, for Floccus and other sync apps
+app.include_router(bookmarkdav.router)  # /dav/bookmarks: the bookmarks as a file over WebDAV
 shared_mcp.mount(app, mcp.server)  # MCP over streamable HTTP at /mcp, ahead of everything else
 
 
