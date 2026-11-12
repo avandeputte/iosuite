@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from iosuite_shared import mcp as shared_mcp, users
 from iosuite_shared.updates import setup_log
 
-from app import __version__, api, bookmarkdav, bookmarks, config, db, keys, mcp, ncbookmarks
+from app import __version__, api, bookmarkdav, bookmarkext, bookmarks, config, db, keys, mcp, ncbookmarks
 from app.auth import auth, updater
 
 setup_log(config.LOG_FILE)  # the server log that Settings › Server shows; the app runs without it
@@ -83,6 +83,7 @@ app.include_router(auth.server_router(updater, log_file=config.LOG_FILE, info=_s
 app.include_router(api.router)
 app.include_router(ncbookmarks.router)  # /dav/nextcloud: the Nextcloud Bookmarks API, for Floccus and other sync apps
 app.include_router(bookmarkdav.router)  # /dav/bookmarks: the bookmarks as a file over WebDAV
+app.include_router(bookmarkext.router)  # /dav/ext: the ioSuite Bookmarks browser extension (static/extension/)
 shared_mcp.mount(app, mcp.server)  # MCP over streamable HTTP at /mcp, ahead of everything else
 
 

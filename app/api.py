@@ -6,11 +6,14 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response, StreamingResponse
 from fastapi.concurrency import run_in_threadpool
 import asyncio
+import io
 import json
+import os
+import zipfile
 
 from iosuite_shared.access import json_body
 
-from app import access, apps, siteicons, bookmarkdav, bookmarkfiles, bookmarks, bookmarksync, homeassistant as ha, ncbookmarks, layout, status as appstatus, weather, widgets
+from app import access, apps, config, siteicons, bookmarkdav, bookmarkfiles, bookmarks, bookmarksync, homeassistant as ha, ncbookmarks, layout, status as appstatus, weather, widgets
 
 router = APIRouter()
 
@@ -354,7 +357,33 @@ def bookmarks_sync(request: Request):
     """What to type into a sync app (the Bookmarks page): the addresses, and whether one is syncing right now."""
     root = ncbookmarks._root(request)
     return {"nextcloud": root + ncbookmarks.BASE, "webdav": root + bookmarkdav.BASE + "/", "files": list(bookmarkdav.NAMES),
-            "syncing": bool(bookmarksync.locked_at()), "user": request.state.user["name"] if request.state.user else ""}
+            "syncing": bool(bookmarksync.locked_at()), "user": request.state.user["name"] if request.state.user else "",
+            "extension": _extension_version()}
+
+
+EXTENSION_DIR = os.path.join(config.STATIC_DIR, "extension")
+
+
+def _extension_version() -> str:
+    try:
+        with open(os.path.join(EXTENSION_DIR, "manifest.json"), encoding="utf-8") as f:
+            return str(json.load(f).get("version") or "")
+    except (OSError, ValueError):
+        return ""
+
+
+@router.get("/api/bookmarks/extension.zip", dependencies=[access.signed_in])
+def bookmarks_extension():
+    """The ioSuite Bookmarks browser extension (static/extension) as one file: unpacked, Chrome and Edge load the
+    folder; Firefox takes the signed file of the same version (the repository's releases)."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for base, _dirs, files in sorted(os.walk(EXTENSION_DIR)):
+            for name in sorted(files):
+                full = os.path.join(base, name)
+                z.write(full, os.path.join("iosuite-bookmarks", os.path.relpath(full, EXTENSION_DIR)))
+    return Response(buf.getvalue(), media_type="application/zip",
+                    headers={"Content-Disposition": f'attachment; filename="iosuite-bookmarks-{_extension_version() or "extension"}.zip"'})
 
 
 # ------------------------------------------------------------------ what the tiles show (app/widgets.py)
