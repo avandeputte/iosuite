@@ -73,9 +73,11 @@ what the app will show on the start page later (today's events, the newest photo
 - **Bookmarks**: one tree of folders and links for the family, as a browser keeps them, on a page of its own
   (`#/bookmarks`, from the start page and the gear menu). The start page shows the part picked for it, as
   [homepage](https://gethomepage.dev/configs/bookmarks/) lays bookmarks out: the house on a folder shows it as a group
-  with its links, the house on a link shows or hides just that one; each link has a two-letter badge (or an icon: an
-  image address, a file name from the dashboard-icons collection, `github.png`, or an SVG of your own uploaded for the
-  link and kept in the database), the name and the site. The groups pack into columns (as many 250 px columns as
+  with its links, the house on a link shows or hides just that one; each link has an icon, the name and the site. The icon is the site's
+  own, as a browser finds it: the server asks the bookmarked page for its icon (`<link rel="icon">`, else
+  `/favicon.ico`), keeps it in the database per site and serves it itself, so your browser asks the bookmarked sites
+  nothing; a site without one shows a two-letter badge. An icon you give a link wins: an image address, a file name
+  from the dashboard-icons collection (`github.png`), or an SVG of your own uploaded for the link. The groups pack into columns (as many 250 px columns as
   fit). Editors and admins add, change, reorder and move folders and links (drag by the handle, with a mouse or a
   finger), import a bookmarks file a browser exported (HTML) or an XBEL file, and export either;
   `POST /api/bookmarks/import` still takes a homepage `bookmarks.yaml`.
@@ -198,6 +200,7 @@ password is used once and not written anywhere.
 | `ACCUWEATHER_API_KEY`, `ACCUWEATHER_LOCATION` | the weather: an AccuWeather key and a location key (or Settings › Home page, which finds the location from a city name) |
 | `HA_URL`, `HA_TOKEN` | Home Assistant: its address (`http://homeassistant.local:8123`) and a long-lived access token (or Settings › Home Assistant) |
 | `HA_FEED` | `0` turns off the websocket to Home Assistant (the page then polls every few seconds) |
+| `SITE_ICONS` | `0`: the server does not fetch the bookmarked sites' icons (links show their badge, or the icon you gave them) |
 | `ADMIN_USER`, `ADMIN_PASSWORD` | the first admin, made on the first start when there are no accounts |
 | `AUTH_PROXY`, `AUTH_PROXY_HEADER`, `AUTH_PROXY_TRUSTED`, `CF_ACCESS_TEAM`, `CF_ACCESS_AUD` | sign-in at a reverse proxy, as in the other io apps (Cloudflare Access, Authelia, Authentik, oauth2-proxy…) |
 | `UPDATE_CHECK` | `0` turns the daily version check off for good |

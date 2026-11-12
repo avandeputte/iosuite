@@ -22,7 +22,7 @@ from defusedxml import DefusedXmlException
 from defusedxml.ElementTree import fromstring as parse_xml  # an uploaded file: no entity expansion or external entities
 from urllib.parse import urlsplit
 
-from app import db
+from app import db, siteicons
 
 
 class BadBookmark(ValueError):
@@ -164,11 +164,14 @@ class Tree:
         return out
 
 
-def _link(r: dict, shown: bool | None = None) -> dict:
+def _link(r: dict, shown: bool | None = None, sites: dict | None = None) -> dict:
+    """A link as the page gets it. Its icon: the SVG uploaded for it (iconUrl), else its icon field, else the site's
+    own (siteIcon, app/siteicons.py; `sites` is siteicons.known() when many links are read)."""
     d = {"id": r["id"], "groupId": r["parent_id"] or 0, "name": r["name"], "abbr": r["abbr"] or _abbr(r["name"], None), "href": r["url"],
          "description": r["description"] or (_host(r["url"])), "customDescription": r["description"] or "",
          "icon": r["icon"] or "", "iconUrl": f"api/bookmarks/links/{r['id']}/icon.svg?v={r['etag']}" if r.get("etag") else "",
          "tags": tags_of(r), "start": None if r["start"] is None else bool(r["start"])}
+    d.update(siteicons.of(r["url"], sites) if not (d["iconUrl"] or d["icon"]) else {"siteIcon": "", "iconPending": False})
     if shown is not None:
         d["onStart"], d["linkable"] = shown, bool(_SHOWN.match(r["url"] or ""))
     return d
@@ -184,11 +187,11 @@ def _host(url: str) -> str:
 def groups() -> list[dict]:
     """What the start page shows: every folder picked for it (and every folder holding a link picked on its own), in
     the tree's order, with the links shown. Links at the top level come first, as "Bookmarks"."""
-    t = Tree()
+    t, sites = Tree(), siteicons.known()
     out = []
 
     def walk(pid, folder):
-        links = [_link(r) for r in t.children(pid) if not r["folder"] and t.shown(r)]
+        links = [_link(r, None, sites) for r in t.children(pid) if not r["folder"] and t.shown(r)]
         if links or (folder and folder["start"]):
             out.append({"id": folder["id"] if folder else 0, "name": folder["name"] if folder else "Bookmarks",
                         "path": t.path(folder) if folder else [], "links": links})
@@ -202,11 +205,11 @@ def groups() -> list[dict]:
 
 def tree() -> dict:
     """Everything, nested, for the Bookmarks page: {rev, items: [folder {id, type, name, start, items} | link]}."""
-    t = Tree()
+    t, sites = Tree(), siteicons.known()
 
     def level(pid):
         return [{"id": r["id"], "type": "folder", "parentId": r["parent_id"] or 0, "name": r["name"], "start": bool(r["start"]), "items": level(r["id"])}
-                if r["folder"] else {"type": "bookmark", **_link(r, t.shown(r))} for r in t.children(pid)]
+                if r["folder"] else {"type": "bookmark", **_link(r, t.shown(r), sites)} for r in t.children(pid)]
 
     return {"rev": revision(), "items": level(None), "count": sum(1 for r in t.rows if not r["folder"])}
 

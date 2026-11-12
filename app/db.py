@@ -11,7 +11,7 @@ from app import config
 
 from iosuite_shared import db as shared_db, schema
 
-SCHEMA_VERSION = 5  # 5: the bookmarks are one tree (prt_bookmark_nodes), for sync clients
+SCHEMA_VERSION = 6  # 6: the bookmarked sites' own icons (prt_site_icons)
 PREFIX = "prt"
 
 # Every table is InnoDB/utf8mb4. Accounts and app passwords live in the Shared ioSuite database (iosuite-shared,
@@ -52,6 +52,15 @@ SCHEMA = [
         svg MEDIUMTEXT NOT NULL,
         etag CHAR(16) NOT NULL,
         FOREIGN KEY (node_id) REFERENCES prt_bookmark_nodes(id) ON DELETE CASCADE
+    )""",
+    # a bookmarked site's own icon (app/siteicons.py), one per scheme://host[:port]: what a link without an icon of
+    # its own shows. data NULL: looked for, none found
+    """CREATE TABLE IF NOT EXISTS prt_site_icons (
+        site VARCHAR(255) PRIMARY KEY,
+        data MEDIUMBLOB NULL,
+        mime VARCHAR(32) NULL,
+        etag CHAR(16) NULL,
+        fetched_at DATETIME NOT NULL
     )""",
 ]
 
