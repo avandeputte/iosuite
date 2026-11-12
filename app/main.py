@@ -22,7 +22,7 @@ setup_log(config.LOG_FILE)  # the server log that Settings › Server shows; the
 log = logging.getLogger("iosuite")
 
 # what a visitor may still fetch when sign-in is required: the app shell and its files, and the API docs
-OPEN_PATHS = ("/", "/manifest.webmanifest", "/api/docs", "/api/openapi.json")
+OPEN_PATHS = ("/", "/bookmarks", "/manifest.webmanifest", "/bookmarks.webmanifest", "/api/docs", "/api/openapi.json")
 # /mcp signs in on its own (Auth.mcp_gate); the sync protocols under /dav answer 401 with a Basic challenge themselves
 # (a sync app shows that as "wrong password"), and the Nextcloud sign-in flow starts before anyone is signed in
 OPEN_PREFIXES = ("/static/", "/mcp", "/dav/")
@@ -87,19 +87,49 @@ app.include_router(bookmarkext.router)  # /dav/ext: the ioSuite Bookmarks browse
 shared_mcp.mount(app, mcp.server)  # MCP over streamable HTTP at /mcp, ahead of everything else
 
 
-@app.get("/", include_in_schema=False)
-def index():
+def _page(swap: dict[str, str] | None = None) -> HTMLResponse:
     """The page, with the version stamped on the script and stylesheet: after an update the browser (and Cloudflare,
     which caches .js and .css at the edge) fetches the new ones instead of serving what it kept."""
     html = (config.STATIC_DIR / "index.html").read_text(encoding="utf-8")
     for f in ("static/app.js", "static/app.css", "static/js/theme.js"):
         html = html.replace(f'"{f}"', f'"{f}?v={__version__}"')
+    for a, b in (swap or {}).items():
+        html = html.replace(a, b)
     return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/", include_in_schema=False)
+def index():
+    return _page()
+
+
+@app.get("/bookmarks", include_in_schema=False)
+def bookmarks_app():
+    """The Bookmarks page as an app of its own: the same page, opening on the bookmarks, with its own name, icon and
+    manifest, so "Add to Home Screen" (iPhone, iPad) or "Install" (desktop, Android) makes a Bookmarks icon that opens
+    straight on them, without the browser around it."""
+    return _page({
+        "<title>ioSuite</title>": "<title>Bookmarks</title>",
+        '<meta name="apple-mobile-web-app-capable" content="yes">':
+            '<meta name="apple-mobile-web-app-capable" content="yes">\n<meta name="apple-mobile-web-app-title" content="Bookmarks">',
+        'href="static/icons/apple-touch-icon.png"': 'href="static/icons/bookmarks-180.png"',
+        'href="static/icons/mark.svg" type="image/svg+xml"': 'href="static/icons/bookmarks.svg" type="image/svg+xml"',
+        'href="manifest.webmanifest"': 'href="bookmarks.webmanifest"',
+    })
+
+
+def _manifest(name: str):
+    return FileResponse(config.STATIC_DIR / name, media_type="application/manifest+json", headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/manifest.webmanifest", include_in_schema=False)
 def manifest():
-    return FileResponse(config.STATIC_DIR / "manifest.webmanifest", media_type="application/manifest+json")
+    return _manifest("manifest.webmanifest")
+
+
+@app.get("/bookmarks.webmanifest", include_in_schema=False)
+def bookmarks_manifest():
+    return _manifest("bookmarks.webmanifest")
 
 
 app.mount("/static", StaticFiles(directory=config.STATIC_DIR), name="static")
