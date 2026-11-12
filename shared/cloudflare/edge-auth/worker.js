@@ -1,5 +1,6 @@
 // ioSuite edge check: a Cloudflare Worker on the paths where devices sign in with an app password: CalDAV and CardDAV
-// (calendar.example.com/dav*, contacts.example.com/dav*) and ioHealth's phone uploads (health.example.com/v1/*).
+// (calendar.example.com/dav*, contacts.example.com/dav*), the start page's bookmark sync (start.example.com/dav*) and
+// ioHealth's phone uploads (health.example.com/v1/*).
 // A request there goes on to the server only with an app password (HTTP Basic, or Bearer) the app has published
 // to the Workers KV namespace bound as APP_PASSWORDS (iosuite_shared.edge): key <app>:<prefix>, value {"h": sha-256 hex}.
 // Everything else gets the same 401 the server would give, here, at the edge. The server still checks every password.
@@ -9,13 +10,17 @@
 //         "health.example.com": "iohealth"}
 //   MODE  "monitor" (default): check and log, but let everything through; "enforce": turn away what fails.
 
-const REALMS = { iocalendar: "ioCalendar", iocontact: "ioContact", iotask: "ioTask", iohealth: "ioHealth" };
+const REALMS = { iocalendar: "ioCalendar", iocontact: "ioContact", iotask: "ioTask", iohealth: "ioHealth", iosuite: "ioSuite bookmarks" };
 // what each app's devices sign in on, and what stays open there (ioHealth's /v1/health answers without a password)
 const GUARDED = {
   iocalendar: { paths: [/^\/dav(\/|$)/] },
   iocontact: { paths: [/^\/dav(\/|$)/] },
   iotask: { paths: [/^\/dav(\/|$)/] },
   iohealth: { paths: [/^\/v1\//], open: [/^\/v1\/health\/?$/] },
+  // the start page's bookmark sync (Nextcloud Bookmarks API and the WebDAV file). Open: what a sync app asks before it
+  // has a password (is this a Nextcloud), and Nextcloud's sign-in flow, which is how it gets one: the app starts it and
+  // polls without credentials, and the page in between is the browser's, signed in with the session cookie
+  iosuite: { paths: [/^\/dav(\/|$)/], open: [/^\/dav\/nextcloud\/status\.php$/, /^\/dav\/nextcloud\/index\.php\/login\/v2(\/|$)/] },
 };
 const DEFAULT = { paths: [/^\/dav(\/|$)/] };
 

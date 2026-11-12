@@ -6,14 +6,30 @@ app password and turns away a request whose app password is wrong before it reac
 | App | Paths | Devices |
 |---|---|---|
 | ioCalendar, ioContact | `/dav*` | Apple Calendar and Contacts, DAVx5, Thunderbird (HTTP Basic) |
+| ioSuite (the start page) | `/dav*` (not the Nextcloud sign-in flow under `/dav/nextcloud/index.php/login/v2` and `/dav/nextcloud/status.php`, which answer before a sync app has a password) | Floccus and other bookmark sync apps: the Nextcloud Bookmarks API at `/dav/nextcloud`, the bookmarks file at `/dav/bookmarks/` (HTTP Basic) |
 | ioHealth | `/v1/*` (not `/v1/health`, which answers without a password) | the iPhone app's uploads (HTTP Basic, or Bearer) |
 
 Someone guessing passwords there then never touches the server, and a WAF rate limit on the DAV paths stops them
 trying fast.
 
-Cloudflare Access can't do this itself: Apple Calendar, Apple Contacts, DAVx5 and Thunderbird send an HTTP Basic
-header, which Access doesn't read. That is why `/dav*` has a Bypass policy in Access, and why this Worker is the
-check on those paths instead.
+Cloudflare Access can't do this itself: Apple Calendar, Apple Contacts, DAVx5, Thunderbird and bookmark sync apps send
+an HTTP Basic header, which Access doesn't read. That is why `/dav*` has a Bypass policy in Access, and why this Worker
+is the check on those paths instead.
+
+## The Access bypass for `/dav*` (each host with sync, the start page included)
+
+In Zero Trust › Access › Applications, add a self-hosted application per host next to the one that protects the app:
+
+- **Application domain:** the host with the path `dav` (`start.example.com/dav`; Access matches everything under it).
+  The more specific path wins over the application for the whole host.
+- **Policy:** action *Bypass*, include *Everyone*.
+
+Nothing else of the host is opened: the web app, `/api` and `/mcp` stay behind Access. On `/dav*` the server asks for an
+app password itself, and this Worker turns wrong ones away first.
+
+Bookmark sync on the start page (Floccus, as a *Nextcloud Bookmarks* account at `https://start.example.com/dav/nextcloud`)
+signs in through a page under `/dav` too. It is opened in your browser, where you are signed in to ioSuite already, and
+it only ever hands out an app password after you press Allow there.
 
 ## How it works
 
@@ -43,7 +59,7 @@ the top of the script.
 ```
 export CLOUDFLARE_API_TOKEN=…  CLOUDFLARE_ACCOUNT_ID=…
 python3 setup.py --host calendar.example.com=iocalendar --host contacts.example.com=iocontact \
-    --deploy --rate-limit --app-token-file ~/.iosuite-edge-kv-token
+    --host start.example.com=iosuite --deploy --rate-limit --app-token-file ~/.iosuite-edge-kv-token
 ```
 
 Then step 3 with the ids it prints and that token file. By hand:
@@ -66,7 +82,7 @@ Then step 3 with the ids it prints and that token file. By hand:
 4. **The Worker.** Copy `wrangler.toml.example` to `wrangler.toml`, put in your two hosts, the zone and the namespace
    id, and run `npx wrangler deploy` in this folder. Without wrangler, create a Worker in the dashboard, paste
    `worker.js`, bind the KV namespace as `APP_PASSWORDS`, add the variables `APPS` and `MODE`, and add the routes
-   `calendar.example.com/dav*`, `contacts.example.com/dav*` and `health.example.com/v1/*`. `setup.py` writes these
+   `calendar.example.com/dav*`, `contacts.example.com/dav*`, `start.example.com/dav*` and `health.example.com/v1/*`. `setup.py` writes these
    for you (`--host health.example.com=iohealth`).
 5. **Monitor first.** `MODE = "monitor"` checks and logs (Workers › iosuite-edge-auth › Logs: `"would block"`) but lets
    everything through. Leave it like that until each of your devices has synced once, so passwords made before step 3
@@ -90,7 +106,8 @@ Under Security › WAF › Rate limiting rules › Create rule:
   a paid plan, use 300 per minute.
 - **Then** Block for 10 seconds (Free) or 10 minutes.
 
-A phone syncing a calendar sends a burst of tens of requests, so keep the limit well above that. With
+A phone syncing a calendar sends a burst of tens of requests, so keep the limit well above that. Leave the start
+page's host out of this rule (`setup.py` does): a browser's first bookmark sync sends a request per bookmark. With
 the Worker enforcing, failed attempts cost nothing at the server anyway; the rule just stops the Worker being hammered
 too. To narrow it to failures only, Pro and above can match on `http.response.code eq 401`.
 
