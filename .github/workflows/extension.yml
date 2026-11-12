@@ -1,7 +1,8 @@
 # The ioSuite Bookmarks browser extension (static/extension): packaged on every change to it, as a release named
 # extension-v<its version> with the .zip (Chrome, Edge: load unpacked, or upload to the Chrome Web Store) and, when
 # the repository has the secrets AMO_JWT_ISSUER and AMO_JWT_SECRET (an API key of addons.mozilla.org), the .xpi signed
-# by Mozilla, which Firefox installs for good. A version is released once: bump "version" in manifest.json for a new one.
+# by Mozilla, which Firefox installs for good. With the Chrome Web Store secrets (docs/extension/STORE.md) a new version
+# is also uploaded to the store and published. A version is released once: bump "version" in manifest.json for a new one.
 name: Browser extension
 
 on:
@@ -26,7 +27,7 @@ jobs:
       - name: Package
         run: |
           mkdir -p out
-          (cd static/extension && zip -qr "../../out/iosuite-bookmarks-${{ steps.v.outputs.version }}.zip" .)
+          (cd static/extension && zip -qr "../../out/iosuite-bookmarks-${{ steps.v.outputs.version }}.zip" . -x README.md -x icons/icon.svg)
       - name: Sign for Firefox
         env:
           WEB_EXT_API_KEY: ${{ secrets.AMO_JWT_ISSUER }}
@@ -37,6 +38,18 @@ jobs:
           if gh release view "extension-v${{ steps.v.outputs.version }}" --json assets -q '.assets[].name' 2>/dev/null | grep -q '\.xpi$'; then echo "Signed already"; exit 0; fi
           npx --yes web-ext@8 sign --source-dir static/extension --channel unlisted --artifacts-dir signed
           cp signed/*.xpi "out/iosuite-bookmarks-${{ steps.v.outputs.version }}.xpi"
+      - name: Publish to the Chrome Web Store
+        # with the secrets of docs/extension/STORE.md; a version the store already has is left alone
+        env:
+          EXTENSION_ID: ${{ secrets.CWS_EXTENSION_ID }}
+          CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
+          REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -z "$EXTENSION_ID" ] || [ -z "$CLIENT_ID" ] || [ -z "$REFRESH_TOKEN" ]; then echo "No Chrome Web Store secrets: not published"; exit 0; fi
+          if gh release view "extension-v${{ steps.v.outputs.version }}" >/dev/null 2>&1; then echo "This version was released before"; exit 0; fi
+          npx --yes chrome-webstore-upload-cli@3 upload --source "out/iosuite-bookmarks-${{ steps.v.outputs.version }}.zip" --auto-publish
       - name: Release
         env:
           GH_TOKEN: ${{ github.token }}

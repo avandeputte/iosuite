@@ -38,6 +38,22 @@ const serverId = async (title) => {
 (async () => {
   assert.equal(await serverTree(), '', 'the test starts from no bookmarks');
 
+  // ---- which folders are which: Chrome and Edge by kind or id, Firefox by id; a Chrome signed in to an account has
+  // two of each and the account's one counts; Opera has a Trash but is not Vivaldi
+  const { localRoots, isVivaldi } = require('../../static/extension/sync.js');
+  const f = (id, title, extra) => ({ id, title, children: [], ...extra });
+  let r = localRoots({ children: [f('1', 'Favorites bar'), f('2', 'Other favorites'), f('3', 'Mobile favorites')] });
+  assert.deepEqual([r.toolbar.id, r.other.id, r.menu], ['1', '2', undefined]);
+  r = localRoots({ children: [f('1', 'Bookmarks bar', { folderType: 'bookmarks-bar', syncing: false }), f('2', 'Other bookmarks', { folderType: 'other', syncing: false }),
+    f('7', 'Bookmarks bar', { folderType: 'bookmarks-bar', syncing: true }), f('8', 'Other bookmarks', { folderType: 'other', syncing: true }), f('9', 'Managed', { folderType: 'managed' })] });
+  assert.deepEqual([r.toolbar.id, r.other.id], ['7', '8']);
+  const opera = { children: [f('1', 'Bookmarks bar', { folderType: 'bookmarks-bar' }), f('2', 'Other bookmarks', { folderType: 'other' }), f('5', 'Trash')] };
+  assert.equal(isVivaldi(opera), true);
+  const nav = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+  Object.defineProperty(globalThis, 'navigator', { value: { userAgent: 'Mozilla/5.0 Chrome/130.0.0.0 Safari/537.36 OPR/115.0.0.0' }, configurable: true });
+  assert.equal(isVivaldi(opera), false);
+  if (nav) Object.defineProperty(globalThis, 'navigator', nav); else delete globalThis.navigator;
+
   // ---- a first browser brings its bookmarks
   const A = browser('chrome');
   await A.bm.create({ parentId: A.bar, title: 'News', url: 'https://news.example/' });

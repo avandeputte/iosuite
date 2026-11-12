@@ -17,7 +17,8 @@ change?"), and when the browser starts. Deletes travel both ways. The first sync
 
 ## Install
 
-**Chrome, Edge, Vivaldi**: download the .zip from the start page's Bookmarks page (or a release), unpack it, open
+**Chrome, Edge, Vivaldi, Brave and other Chromium browsers**: from the Chrome Web Store once it is published there
+(`docs/extension/STORE.md`). Until then, or for a build of your own: download the .zip from the start page's Bookmarks page (or a release), unpack it, open
 `chrome://extensions` (`edge://extensions`, `vivaldi://extensions`), turn on *Developer mode*, *Load unpacked*, pick the folder. Keep the
 folder where it is: the browser loads the extension from it. To update, replace the folder's contents and press the
 reload arrow on the extension's card.
@@ -36,9 +37,8 @@ it). The browser asks once whether the extension may reach that one address; it 
   <https://addons.mozilla.org/developers/addon/api/key/> and put it in the repository's secrets as `AMO_JWT_ISSUER`
   and `AMO_JWT_SECRET`. The workflow `Browser extension` then has Mozilla sign each new version and attaches the
   `.xpi` to the release.
-- **Chrome Web Store / Edge Add-ons** (optional; unpacked works without): a developer account (Chrome: a one-time
-  fee), upload the .zip, visibility *Unlisted* or *Private*. The single purpose is bookmark sync; the host permission
-  is optional and asked per site at sign-in.
+- **Chrome Web Store** (Chrome, Edge, Vivaldi, Brave and Opera install from it): `docs/extension/STORE.md` has the
+  steps, every text the forms ask for, the screenshots and the privacy policy.
 
 ## Files
 
