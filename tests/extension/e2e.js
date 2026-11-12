@@ -179,6 +179,26 @@ const serverId = async (title) => {
   await W.run({ mode: 'server' });
   assert.equal(W.bm.show('1'), V.bm.show('1').replace('My bar[', 'Bookmarks bar['));
 
+  // ---- a Vivaldi that synced with the first version of the extension (which lined it up as Chrome: the bar's links
+  // loose in its tree, the rest in the folder Vivaldi does not show): the new line-up starts over, and deletes nothing
+  const U = browser('vivaldi');
+  const plain = U.sync;
+  const { Sync: S } = require('../../static/extension/sync.js');
+  const asChrome = { getTree: async () => { const [t] = await U.bm.getTree(); const strip = (n) => { delete n.trash; delete n.speeddial; delete n.bookmarkbar; (n.children || []).forEach(strip); return n; }; t.children = t.children.filter((c) => c.id !== '4'); return [strip(t)]; } };
+  for (const m of ['get', 'getChildren', 'create', 'update', 'move', 'remove', 'removeTree']) asChrome[m] = (...a) => U.bm[m](...a);
+  const old = new S({ bm: asChrome, http, state: {} });
+  await A.run(); await old.run({ mode: 'server' });
+  assert.equal(U.bm.show('1'), A.bm.show(A.bar));       // as 1.0.0 left it: the bar's links at the top of the tree
+  assert.equal(U.bm.show('2'), A.bm.show(A.other));     // and everything else where Vivaldi does not show it
+  const kept = await serverTree();
+  plain.state = JSON.parse(JSON.stringify(old.state));
+  await U.run();
+  assert.equal(await serverTree(), kept, 'nothing was deleted, moved or doubled on the server');
+  assert.equal(U.bm.show('1'), V.bm.show('1').replace('My bar[', 'Bookmarks bar['));
+  assert.equal(U.bm.show('2'), '');
+  assert.equal(find(U, 'Bookmarks bar').bookmarkbar, true);
+  assert.deepEqual(await U.run(), { changed: false, pushed: 0 });
+
   // ---- every browser ends the same, and a last round changes nothing
   await A.run(); await B.run();
   for (const X of [A, B]) { X.bm.calls = 0; assert.deepEqual(await X.run(), { changed: false, pushed: 0 }); assert.equal(X.bm.calls, 0); }

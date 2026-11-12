@@ -61,6 +61,7 @@ class FakeBookmarks {
     const n = this._need(id);
     if (n.parentId === this.rootId) throw new Error('Cannot change a root folder');
     this.calls++;
+    if (arguments[1].bookmarkbar !== undefined) { if (this.kind !== 'vivaldi') throw new Error('Unexpected property: bookmarkbar'); n.bookmarkbar = arguments[1].bookmarkbar; }
     if (title !== undefined) n.title = title;
     if (url !== undefined) n.url = url;
     return this._out(n);

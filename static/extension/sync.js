@@ -30,7 +30,9 @@
   /** Vivaldi: its tree has a Trash, and its nodes say whether they are a speed dial or the bookmark bar. */
   function isVivaldi(top) {
     const own = (n) => n.trash !== undefined || n.speeddial !== undefined || n.bookmarkbar !== undefined;
-    return (top.children || []).some((c) => own(c) || (c.children || []).some(own));
+    const kids = top.children || [];
+    return kids.some((c) => own(c) || (c.children || []).some(own))
+      || kids.some((c) => c.url === undefined && Number(c.id) > 3 && /^trash$/i.test(c.title || '') && !c.folderType);
   }
 
   /** The browser's own top folders: {toolbar, other, menu?} -> its node. In Vivaldi `toolbar` may be missing. */
@@ -107,17 +109,33 @@
     /** One sync. mode: 'merge' or 'server' for a first one (no snapshot yet). Returns a summary. */
     async run({ canWrite = true, mode = 'merge' } = {}) {
       const st = this.state;
-      const first = !st.snap;
       let [top] = await this.bm.getTree();
       let lroots = localRoots(top);
-      if (lroots.other && !lroots.toolbar && isVivaldi(top)) {  // Vivaldi without a bookmark bar folder: one is made
+      const vivaldi = isVivaldi(top);
+      let madeBar = false;
+      if (lroots.other && !lroots.toolbar && vivaldi) {  // Vivaldi without a bookmark bar folder: one is made, and set as the bar
         this.applying = true;
-        try { await this.bm.create({ parentId: lroots.other.id, index: 0, title: 'Bookmarks bar' }); } finally { this.applying = false; }
+        try {
+          const f = await this.bm.create({ parentId: lroots.other.id, index: 0, title: 'Bookmarks bar' });
+          await Promise.resolve(this.bm.update(f.id, { bookmarkbar: true })).catch(() => {});  // Vivaldi's own field; by hand when it refuses
+          madeBar = true;
+        } finally { this.applying = false; }
         [top] = await this.bm.getTree();
         lroots = localRoots(top);
       }
       this.rootIds = new Set(Object.values(lroots).map((r) => r.id));
       if (!lroots.toolbar || !lroots.other) throw new Error('This browser\'s bookmarks bar or other bookmarks were not found');
+      // which of the browser's folders stand for what: when that is not what the last sync went by (another folder is
+      // the bar now, or a version of this extension that lined them up differently), what it remembers no longer
+      // says what changed here. It starts over by bringing both sides together, which deletes nothing.
+      const layout = [vivaldi ? 'vivaldi' : 'plain', lroots.toolbar.id, lroots.other.id, lroots.menu ? lroots.menu.id : ''].join(':');
+      if (st.snap && st.layout !== layout) {
+        if (vivaldi) await this.dropHidden(top, lroots);
+        delete st.snap; delete st.map; delete st.roots; delete st.rev;
+        mode = 'merge';
+      }
+      st.layout = layout;
+      const first = !st.snap;
 
       // nothing changed here and nothing on the server: done, with one small request
       if (!first) {
@@ -130,6 +148,19 @@
 
       const got = await this.http('GET', '/tree');
       let roots = serverRoots(got.tree, st.roots);
+      if (first && madeBar && roots.toolbar) {  // what is on the server's bar and loose in Vivaldi's tree goes into the new bar folder
+        const bar = got.tree.find((n) => n.id === roots.toolbar);
+        const onBar = new Set((bar.children || []).filter((n) => !n.folder).map((n) => n.url));
+        const atTop = new Set(got.tree.filter((n) => !n.folder).map((n) => n.url));
+        this.applying = true;
+        try {
+          for (const c of lroots.other.children || []) {
+            if (c.url !== undefined && onBar.has(c.url) && !atTop.has(c.url)) await this.bm.move(c.id, { parentId: lroots.toolbar.id }).catch(() => {});
+          }
+        } finally { this.applying = false; }
+        [top] = await this.bm.getTree();
+        lroots = localRoots(top);
+      }
       if (first) {
         st.map = {};
         this.match(lroots, serverParts(got.tree, roots, lroots));
@@ -313,6 +344,24 @@
         this.applying = false;
       }
       return changed;
+    }
+
+    /** Vivaldi does not show its "Other Bookmarks" folder: what an earlier sync put there (it is on the server) goes. */
+    async dropHidden(top, lroots) {
+      const hidden = (top.children || []).find((c) => c.id === '2' || c.folderType === 'other');
+      if (!hidden || hidden.id === lroots.other.id) return;
+      const mine = new Set(Object.values(this.state.map || {}));
+      this.applying = true;
+      try {
+        const drop = async (n) => {
+          if (!mine.has(n.id)) return false;
+          let all = true;
+          for (const c of n.children || []) if (!(await drop(c))) all = false;
+          if (all) await (isFolder(n) ? this.bm.removeTree(n.id) : this.bm.remove(n.id)).catch(() => {});
+          return all;
+        };
+        for (const c of hidden.children || []) await drop(c);
+      } finally { this.applying = false; }
     }
 
     async dropUnmapped(n, mapped) {

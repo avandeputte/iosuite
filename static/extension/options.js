@@ -4,14 +4,15 @@
 let waiting = null;  // the sign-in under way: {stop}
 
 async function show() {
-  const { account, status } = await ext.storage.local.get(['account', 'status']);
+  const { account, status, sync } = await ext.storage.local.get(['account', 'status', 'sync']);
   $('in').hidden = !account;
   $('out').hidden = !!account;
   if (!account) return;
   const d = describe(account, status);
   $('dot').className = 'dot ' + d.cls;
   $('state').textContent = d.text;
-  $('who').textContent = `Signed in as ${account.user} at ${account.server}` + (account.canWrite === false ? '. This account can read the bookmarks, not change them: changes made here are not kept.' : '');
+  const vivaldi = sync && String(sync.layout || '').startsWith('vivaldi');
+  $('who').textContent = `Signed in as ${account.user} at ${account.server}` + (vivaldi ? ' · lined up for Vivaldi' : '') + (account.canWrite === false ? '. This account can read the bookmarks, not change them: changes made here are not kept.' : '');
 }
 
 function address(text) {
