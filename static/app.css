@@ -327,6 +327,25 @@ body.wall #main { top: 0; overflow: hidden; background: #000; }
 .bmrow .bmname { flex: 0 1 auto; }
 .bmrow .bmdesc { flex: 1; max-width: none; }
 .bmtools { margin-left: auto; display: flex; flex: none; }
+/* the Bookmarks page: the tree. A folder folds; what is inside is indented under it; the house is lit for what the start page shows */
+.bmfold { display: inline-flex; align-items: center; gap: 6px; min-width: 0; height: 32px; padding: 0 6px 0 0; border-radius: var(--r-s); color: inherit; text-align: left; }
+.bmfold:hover { background: var(--bg2); }
+.bmfold b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; margin: 0; }
+.bmfold .ic { flex: none; color: var(--fg2); }
+.bmlevel .bmlevel { margin-left: 18px; padding-left: 10px; border-left: 1px solid var(--line); }
+.bmsubs > .bmedit:last-child, .bmlevel .bmlevel .bmedit { border-bottom: 0; }
+.bmlevel .bmlevel .bmedit { padding: 2px 0; }
+.bmstart { color: var(--fg2); opacity: .45; }
+.bmstart.on { color: var(--accent); opacity: 1; }
+.bmrow.off .bmname, .bmrow.off .bmic { opacity: .6; }
+.bmgroups.sorting-groups .bmsubs, .bmgroups.sorting-links .bmsubs:empty { min-height: 0; }
+.bmgroups.sorting-groups .bmedit:not(.shut) > .bmlevel > .bmsubs { min-height: 14px; }
+.bmall { grid-column: 1 / -1; justify-self: start; }
+a.bmname { color: inherit; text-decoration: none; }
+a.bmname:hover { text-decoration: underline; }
+.bmaddr { display: flex; align-items: center; gap: 10px; margin: 6px 0; min-width: 0; flex-wrap: wrap; }
+.bmaddr > span { flex: 0 0 150px; }
+.bmaddr code { flex: 1 1 240px; min-width: 0; overflow-wrap: anywhere; padding: 6px 10px; border-radius: var(--r-s); background: var(--bg2); font-size: var(--fs-s); }
 .bmtools .iconbtn, .bmhead .iconbtn { width: 32px; height: 32px; }
 .iconbtn:disabled { opacity: .3; pointer-events: none; }
 textarea.t { height: auto; min-height: 120px; padding: 10px 12px; resize: vertical; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: var(--fs-m); }
@@ -478,3 +497,15 @@ a.hatile:hover { background: var(--bg3); }
 .habtns { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0; }
 .harange { display: flex; align-items: center; gap: 10px; }
 .harange input { flex: 1; }
+.bmgroups { overflow: hidden; }
+.bmgroups, .bmlevel, .bmedit, .bmlinks, .bmsubs, .bmhead { min-width: 0; max-width: 100%; }
+.bmhead .bmfold { flex: 0 1 auto; }
+.bmrow .bmname { min-width: 48px; }
+@media (max-width: 640px) {
+  .bmrow .bmdesc { display: none; }
+  .bmrow .bmname { flex: 1 1 auto; }
+  .bmrow { gap: 2px; }
+  .bmrow .bmic { width: 36px; }
+  .bmlevel .bmlevel { margin-left: 8px; padding-left: 6px; }
+  .bmtools .iconbtn, .bmhead .iconbtn { width: 28px; }
+}

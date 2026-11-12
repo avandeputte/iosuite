@@ -45,6 +45,9 @@ const ICONS = {
   fan: 'M12 11a1 1 0 1 0 0 2 1 1 0 0 0 0-2zm0-9c-1.5 0-3 .9-3 3 0 1.7.9 3.4 2 5.3-1.9-1-3.6-1.3-5.3-1.3-2.1 0-3.7 1.5-3.7 3s1.6 3 3.7 3c1.7 0 3.4-.3 5.3-1.3-1.1 1.9-2 3.6-2 5.3 0 2.1 1.5 3 3 3s3-.9 3-3c0-1.7-.9-3.4-2-5.3 1.9 1 3.6 1.3 5.3 1.3 2.1 0 3.7-1.5 3.7-3s-1.6-3-3.7-3c-1.7 0-3.4.3-5.3 1.3 1.1-1.9 2-3.6 2-5.3 0-2.1-1.5-3-3-3z',
   bolt: 'M7 2v11h3v9l7-12h-4l4-8z',
   battery: 'M15.67 4H14V2h-4v2H8.33C7.6 4 7 4.6 7 5.33v15.33C7 21.4 7.6 22 8.33 22h7.33c.74 0 1.34-.6 1.34-1.33V5.33C17 4.6 16.4 4 15.67 4zM15 18H9v-6h6v6z',
+  folder: 'M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z',
+  left: 'M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z',
+  right: 'M8.59 16.59 13.17 12 8.59 7.41 10 6l6 6-6 6z',
   server: 'M20 13H4c-.55 0-1 .45-1 1v6c0 .55.45 1 1 1h16c.55 0 1-.45 1-1v-6c0-.55-.45-1-1-1zM7 19c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zM20 3H4c-.55 0-1 .45-1 1v6c0 .55.45 1 1 1h16c.55 0 1-.45 1-1V4c0-.55-.45-1-1-1zM7 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z',
 };
 const icon = (n, cls = '') => { const s = document.createElement('span'); s.className = 'ic ' + cls; s.innerHTML = `<svg viewBox="0 0 24 24"><path d="${ICONS[n] || ''}"/></svg>`; return s; };
@@ -164,6 +167,7 @@ function drawUser() {
     menu = h('div', { class: 'menu' },
       h('div', { class: 'who' }, h('b', null, S.user.displayName), h('div', { class: 'muted small' }, `${S.user.name} · ${S.user.role}`)),
       h('a', { class: 'mi', href: '#/settings/account', onclick: closeMenu }, icon('person', 's'), 'Account'),
+      h('a', { class: 'mi', href: '#/bookmarks', onclick: closeMenu }, icon('link', 's'), 'Bookmarks'),
       h('button', { class: 'mi', onclick: () => { closeMenu(); customize(); } }, icon('tune', 's'), 'Customize the page'),
       h('button', { class: 'mi', onclick: () => { closeMenu(); enterWall(); } }, icon('wall', 's'), 'Wall display'),
       h('button', { class: 'mi', onclick: () => { const n = { system: 'light', light: 'dark', dark: 'system' }[theme]; setTheme(n); api('/api/auth/settings', { method: 'POST', json: { theme: n } }).catch(() => {}); closeMenu(); toast(`Appearance: ${n}`); } },
@@ -191,6 +195,7 @@ function applyTheme() {
 function route() {
   const [a, b, c] = location.hash.replace(/^#\/?/, '').split('/').map(decodeURIComponent);
   if (a === 'settings') return { view: 'settings', tab: b || 'account', sub: c };
+  if (a === 'bookmarks' || (a === 'settings' && b === 'bookmarks')) return { view: 'bookmarks' };
   if (a === 'wall') return { view: 'wall' };
   return { view: 'home' };
 }
@@ -205,7 +210,7 @@ async function onRoute() {
   haStreamStop();  // the view opens its own stream of Home Assistant changes when it needs one
   $('#topbar').append(userMenu());  // out of the old page before it goes; showHome takes it into the new one
   $('#main').replaceChildren(page);
-  try { await ({ home: showHome, settings: showSettings, wall: showWall })[r.view](page, r); } catch (e) { fail(e); }
+  try { await ({ home: showHome, settings: showSettings, wall: showWall, bookmarks: showBookmarks })[r.view](page, r); } catch (e) { fail(e); }
 }
 
 // ------------------------------------------------------------------ the start page
@@ -1056,7 +1061,7 @@ async function drawBookmarks(el) {
   if (!el.isConnected) return;
   const canEdit = ['editor', 'admin'].includes(S.user.role);
   S.bookmarks = gs.flatMap((g) => g.links);  // the search box looks through them
-  if (!gs.length) { el.replaceChildren(canEdit ? h('a', { class: 'lnk small', href: '#/settings/bookmarks' }, 'Add bookmarks') : null); return; }
+  if (!gs.length) { el.replaceChildren(h('a', { class: 'lnk small', href: '#/bookmarks' }, canEdit ? 'Add bookmarks, or pick some for this page' : 'All bookmarks')); return; }
   const groups = gs.filter((g) => g.links.length || canEdit).map((g) => h('div', { class: 'bmgroup' }, h('h2', null, g.name),
     g.links.map((l) => {
       const src = bmIcon(l);
@@ -1064,7 +1069,7 @@ async function drawBookmarks(el) {
         h('span', { class: 'bmic' }, src ? h('img', { src, alt: '', onerror: (e) => { e.target.replaceWith(l.abbr); } }) : l.abbr),
         h('span', { class: 'bmname' }, l.name), h('span', { class: 'bmdesc muted small' }, l.description));
     }),
-    canEdit && !g.links.length ? h('a', { class: 'lnk small', href: '#/settings/bookmarks' }, 'Empty: add a link') : null));
+    canEdit && !g.links.length ? h('a', { class: 'lnk small', href: '#/bookmarks' }, 'Nothing shown: add or pick links') : null));
   packBookmarks(el, groups);
   drawBookmarkStatus(el);
 }
@@ -1087,7 +1092,7 @@ function packBookmarks(el, groups) {
       heights[i] += 36 + g.querySelectorAll('.bm, .lnk').length * 48 + 20;  // the heading, the rows, the gap under
     }
     el.style.setProperty('--bmcols', n);
-    el.replaceChildren(...columns);
+    el.replaceChildren(...columns, h('a', { class: 'pillbtn bmall', href: '#/bookmarks', title: 'Every bookmark, what is on this page, and sync with browsers' }, icon('link', 's'), 'All bookmarks'));
   };
   pack();
   new ResizeObserver(pack).observe(el);
@@ -1234,21 +1239,20 @@ async function wallAgenda(el, has) {
 // ------------------------------------------------------------------ settings
 async function showSettings(page, r) {
   const adm = S.user.role === 'admin';
-  const canEdit = ['editor', 'admin'].includes(S.user.role);
-  const tabs = [['account', 'Account'], ['display', 'Display'], ...(adm ? [['weather', 'Home page'], ['ha', 'Home Assistant']] : []), ...(canEdit ? [['bookmarks', 'Bookmarks']] : []), ...(adm ? [['server', 'Server']] : []),
+  const tabs = [['account', 'Account'], ['display', 'Display'], ...(adm ? [['weather', 'Home page'], ['ha', 'Home Assistant']] : []), ...(adm ? [['server', 'Server']] : []),
     ...(S.user.suiteAdmin ? [['security', 'Security'], ['global', 'Global settings']] : [])];
   if (!tabs.some(([k]) => k === r.tab)) r.tab = 'account';
   page.append(h('div', { class: 'pagehead' }, h('h1', null, 'Settings')),
     h('div', { class: 'tabs' }, tabs.map(([k, l]) => h('button', { class: r.tab === k ? 'on' : '', onclick: () => { location.hash = `#/settings/${k}`; } }, l))));
   const body = h('div'); page.append(body);
-  await ({ account: setAccount, display: setDisplay, apps: setHome, weather: setHome, ha: setHomeAssistant, bookmarks: setBookmarks, server: setServer, security: setSuite, global: setSuite }[r.tab] || setAccount)(body, r);
+  await ({ account: setAccount, display: setDisplay, apps: setHome, weather: setHome, ha: setHomeAssistant, server: setServer, security: setSuite, global: setSuite }[r.tab] || setAccount)(body, r);
 }
 const fld = (l, e) => h('label', { class: 'field' }, h('span', null, l), e);
 
 /** Settings › Account and Display: iosuite-shared's panels, the same in every io app. */
 const accountUi = () => import(new URL('api/auth/ui.js', document.baseURI).href);
 async function setAccount(el) {
-  await (await accountUi()).mountAccount(el, { toast, onSaved: (u) => { Object.assign(S.user, u); drawUser(); } });
+  await (await accountUi()).mountAccount(el, { toast, syncOnly: 'Bookmark sync only', onSaved: (u) => { Object.assign(S.user, u); drawUser(); } });
 }
 async function setDisplay(el) {
   const ui = await accountUi();
@@ -1320,7 +1324,7 @@ async function setHomeAssistant(el) {
       h('input', { class: 't', value: e.alert || '', placeholder: '–', onchange: (ev) => { e.alert = ev.target.value.trim().toLowerCase(); persist(); } }),
       h('span', { class: 'bmtools' }, h('button', { class: 'iconbtn', title: 'Remove', onclick: () => { items.splice(i, 1); persist(); } }, icon('close', 's'))))),
     ...(items.length ? [] : [h('p', { class: 'muted small' }, 'Nothing picked yet: find entities below and add them.')]));
-    // reorder by dragging the handle (or ArrowUp / ArrowDown on it), as in Settings › Bookmarks
+    // reorder by dragging the handle (or ArrowUp / ArrowDown on it), as in the Bookmarks page
     for (const g of list.querySelectorAll('.grip')) dragSort(g, g.closest('.harow'), { root: list, lists: () => [list], items: '.harow:not(.head)', sorting: 'sorting-rows',
       done: () => { const by = Object.fromEntries(items.map((e) => [e.id, e])); items = [...list.querySelectorAll('.harow[data-id]')].map((r) => by[r.dataset.id]).filter(Boolean); persist(); } });
   };
@@ -1354,62 +1358,124 @@ async function setHomeAssistant(el) {
     h('label', { class: 'check' }, builtin, 'Also point out leak, smoke, gas and CO sensors, problems and batteries at 15% or under')));
 }
 
+/* The Bookmarks page (#/bookmarks, from the start page and the gear menu): the whole tree (folders in folders, as a
+   browser keeps them), what of it is on the start page (the house on a folder or on a single link), the addresses a
+   sync app needs, and files in and out. Everyone signed in sees it; editors and admins change it. */
+async function showBookmarks(page) {
+  page.append(h('div', { class: 'pagehead' }, h('a', { class: 'iconbtn', href: '#/', title: 'Back to the start page', 'aria-label': 'Back to the start page' }, icon('left')), h('h1', null, 'Bookmarks')));
+  const body = h('div'); page.append(body);
+  await setBookmarks(body);
+}
+const bmOpen = new Set();  // the folders unfolded, kept while the page is open
 async function setBookmarks(el) {
   const draw = async () => {
-    const gs = (await api('/api/bookmarks')).groups;
+    const [tree, sync] = await Promise.all([api('/api/bookmarks/tree'), api('/api/bookmarks/sync')]);
+    const canEdit = ['editor', 'admin'].includes(S.user.role);
     if (!el.isConnected) return;
-    const call = async (path, opts, msg) => { try { await api(path, opts); if (msg) toast(msg); await draw(); } catch (e) { fail(e); } };
-    const linkForm = (g, l) => {
+    const call = async (path, opts, msg) => { try { await api(path, opts); if (msg) toast(msg); } catch (e) { fail(e); } await draw(); };
+    // every folder, for the "Folder" choice of a link: the top level, then each with its path
+    const folders = [{ id: 0, label: 'Top level' }];
+    const walk = (items, path) => { for (const f of items) if (f.type === 'folder') { folders.push({ id: f.id, label: [...path, f.name].join(' › ') }); walk(f.items, [...path, f.name]); } };
+    walk(tree.items, []);
+    const few = tree.count <= 60;  // a small tree shows unfolded; a browser's whole menu starts folded
+    const isOpen = (f) => bmOpen.has(f.id) || (few && !bmOpen.has(-f.id));
+    const linkForm = (gid, l) => {
       const name = h('input', { class: 't', value: l ? l.name : '', placeholder: 'Name' }), href = h('input', { class: 't', value: l ? l.href : '', placeholder: 'https://…' });
       const abbr = h('input', { class: 't', value: l ? l.abbr : '', placeholder: 'Two letters (from the name when empty)', maxlength: 4 });
       const desc = h('input', { class: 't', value: l ? l.customDescription : '', placeholder: 'Line under the name (the host name when empty)' });
       const ic = h('input', { class: 't', value: l ? l.icon : '', placeholder: 'Icon: an image address, or a name from dashboard-icons (github.png)' });
-      const grp = h('select', { class: 't' }, gs.map((x) => h('option', { value: x.id, selected: x.id === g.id ? true : null }, x.name)));
+      const grp = h('select', { class: 't' }, folders.map((x) => h('option', { value: x.id, selected: x.id === gid ? true : null }, x.label)));
       // an SVG of your own, kept in the database: it wins over the icon field
       const file = h('input', { type: 'file', accept: '.svg,image/svg+xml', class: 't' });
       const drop = h('input', { type: 'checkbox' });
       const upload = h('div', { class: 'upload' }, l && l.iconUrl ? h('img', { src: l.iconUrl, alt: '', class: 'bmprev' }) : null, file,
         l && l.iconUrl ? h('label', { class: 'small' }, drop, ' Remove the uploaded icon') : null);
-      return { body: h('div', { class: 'grid' }, fld('Name', name), fld('Address', href), fld('Abbreviation', abbr), fld('Description', desc), fld('Icon', ic), h('div', { class: 'field' }, h('span', null, 'Upload an SVG icon'), upload), fld('Group', grp)),
+      return { body: h('div', { class: 'grid' }, fld('Name', name), fld('Address', href), fld('Abbreviation', abbr), fld('Description', desc), fld('Icon', ic), h('div', { class: 'field' }, h('span', null, 'Upload an SVG icon'), upload), fld('Folder', grp)),
         value: () => ({ name: name.value, href: href.value, abbr: abbr.value, description: desc.value, icon: ic.value, groupId: +grp.value }), file: () => file.files[0], drop: () => drop.checked };
     };
-    const editLink = async (g, l) => {
-      const f = linkForm(g, l);
+    const editLink = async (gid, l) => {
+      const f = linkForm(gid, l);
       const v = await dialog(l ? 'Change the link' : 'New link', f.body, [{ label: 'Cancel', value: null }, { label: l ? 'Save' : 'Add', value: () => ({ link: f.value(), file: f.file(), drop: f.drop() }), primary: true }]);
       if (!v) return;
       try {
-        const saved = await api(l ? `/api/bookmarks/links/${l.id}` : `/api/bookmarks/groups/${g.id}/links`, { method: l ? 'PATCH' : 'POST', json: v.link });
+        const saved = await api(l ? `/api/bookmarks/links/${l.id}` : `/api/bookmarks/groups/${v.link.groupId}/links`, { method: l ? 'PATCH' : 'POST', json: v.link });
         if (v.file) await api(`/api/bookmarks/links/${saved.id}/icon`, { method: 'PUT', body: v.file, headers: { 'Content-Type': 'image/svg+xml' } });
         else if (v.drop) await api(`/api/bookmarks/links/${saved.id}/icon`, { method: 'DELETE' });
         toast('Saved');
       } catch (e) { fail(e); }
       await draw();
     };
-    const newGroup = h('input', { class: 't', placeholder: 'New group, e.g. Developer', style: 'max-width:280px' });
-    // drag the grip (mouse, pen or finger) to reorder; links can also be dropped into another group
-    const saveGroups = () => call('/api/bookmarks/groups/order', { method: 'POST', json: { ids: [...el.querySelectorAll('.bmedit')].map((x) => +x.dataset.id) } });
-    const saveLinks = (list) => call(`/api/bookmarks/groups/${list.dataset.gid}/order`, { method: 'POST', json: { ids: [...list.querySelectorAll('.bmrow')].map((x) => +x.dataset.id) } });
-    const grip = (title, kind) => h('button', { class: 'iconbtn grip', title, 'aria-label': title, 'data-kind': kind }, icon('grip', 's'));
+    const newFolder = async (parentId) => {
+      const i = h('input', { class: 't', placeholder: 'Name, e.g. Developer' });
+      const st = h('input', { type: 'checkbox', checked: true });
+      const v = await dialog('New folder', h('div', null, fld('Name', i), h('label', { class: 'check' }, st, 'Show it on the start page')), [{ label: 'Cancel', value: null }, { label: 'Add', value: () => ({ name: i.value, start: st.checked }), primary: true }]);
+      if (v && v.name.trim()) { bmOpen.add(parentId); await call('/api/bookmarks/groups', { method: 'POST', json: { ...v, parentId } }, 'Folder made'); }
+    };
+    const grip = (title, kind) => (canEdit ? h('button', { class: 'iconbtn grip', title, 'aria-label': title, 'data-kind': kind }, icon('grip', 's')) : null);
+    // the house: lit when the folder (its links, as a group) or the link is on the start page
+    const house = (on, title, click, disabled) => h('button', { class: `iconbtn bmstart${on ? ' on' : ''}`, title, 'aria-label': title, 'aria-pressed': on ? 'true' : 'false', disabled: disabled ? true : null, onclick: click }, icon('home', 's'));
+    const linkRow = (l, f) => h('div', { class: `bmrow${l.onStart ? '' : ' off'}`, 'data-id': l.id }, grip('Drag to move the link', 'link'),
+      h('span', { class: 'bmic' }, bmIcon(l) ? h('img', { src: bmIcon(l), alt: '', onerror: (e) => { e.target.replaceWith(l.abbr); } }) : l.abbr), l.linkable ? h('a', { class: 'bmname', href: l.href, target: '_blank', rel: 'noreferrer', title: l.href }, l.name || l.href) : h('span', { class: 'bmname', title: l.href }, l.name || l.href), h('span', { class: 'muted small bmdesc' }, l.description),
+      !canEdit ? null : h('span', { class: 'bmtools' },
+        house(l.onStart, !l.linkable ? 'Only web addresses can go on the start page' : l.onStart ? 'On the start page: click to take it off' : 'Not on the start page: click to show it', () => {
+          const want = !l.onStart;  // as its folder when that already says so, else this link's own choice
+          call(`/api/bookmarks/links/${l.id}`, { method: 'PATCH', json: { start: want === !!(f && f.start) ? null : want } });
+        }, !l.linkable),
+        h('button', { class: 'iconbtn', title: 'Change', onclick: () => editLink(f ? f.id : 0, l) }, icon('edit', 's')),
+        h('button', { class: 'iconbtn', title: 'Delete', onclick: async () => { if (await confirmDialog('Delete the link', `Delete "${l.name || l.href}"? Browsers that sync lose it too.`, 'Delete', true)) call(`/api/bookmarks/links/${l.id}`, { method: 'DELETE' }, 'Deleted'); } }, icon('delete', 's'))));
+    const count = (f) => f.items.reduce((n, x) => n + (x.type === 'folder' ? count(x) : 1), 0);
+    const folderBox = (f) => {
+      const open = isOpen(f), n = count(f);
+      return h('div', { class: `bmedit${open ? '' : ' shut'}`, 'data-id': f.id },
+        h('div', { class: 'bmhead' }, grip('Drag to move the folder', 'group'),
+          h('button', { class: 'bmfold', 'aria-expanded': open ? 'true' : 'false', title: open ? 'Fold' : 'Unfold', onclick: () => { if (open) { bmOpen.delete(f.id); bmOpen.add(-f.id); } else { bmOpen.add(f.id); bmOpen.delete(-f.id); } draw(); } },
+            icon(open ? 'down' : 'right', 's'), icon('folder', 's'), h('b', null, f.name || '(no name)'), h('span', { class: 'muted small' }, `${n}`)),
+          !canEdit ? null : h('span', { class: 'bmtools' },
+            house(f.start, f.start ? 'On the start page, as a group with its links: click to take it off' : 'Not on the start page: click to show it as a group', () => call(`/api/bookmarks/groups/${f.id}`, { method: 'PATCH', json: { start: !f.start } })),
+            h('button', { class: 'iconbtn', title: 'Add a link', onclick: () => { bmOpen.add(f.id); editLink(f.id, null); } }, icon('add', 's')),
+            h('button', { class: 'iconbtn', title: 'Add a folder inside', onclick: () => newFolder(f.id) }, icon('folder', 's')),
+            h('button', { class: 'iconbtn', title: 'Rename', onclick: async () => { const i = h('input', { class: 't', value: f.name }); const v = await dialog('Rename the folder', i, [{ label: 'Cancel', value: null }, { label: 'Save', value: () => i.value, primary: true }]); if (v) call(`/api/bookmarks/groups/${f.id}`, { method: 'PATCH', json: { name: v } }, 'Saved'); } }, icon('edit', 's')),
+            h('button', { class: 'iconbtn', title: 'Delete the folder', onclick: async () => { if (await confirmDialog('Delete the folder', `Delete "${f.name}" and the ${n} link(s) in it? Browsers that sync lose them too.`, 'Delete', true)) call(`/api/bookmarks/groups/${f.id}`, { method: 'DELETE' }, 'Deleted'); } }, icon('delete', 's')))),
+        open ? level(f.items, f) : null);
+    };
+    // a folder's links, then the folders inside it (each list takes what is dragged into it)
+    const level = (items, f) => h('div', { class: 'bmlevel' },
+      h('div', { class: 'bmlinks', 'data-gid': f ? f.id : 0 }, items.filter((x) => x.type === 'bookmark').map((l) => linkRow(l, f))),
+      h('div', { class: 'bmsubs', 'data-gid': f ? f.id : 0 }, items.filter((x) => x.type === 'folder').map(folderBox)));
+    const copy = (text) => h('button', { class: 'iconbtn', title: 'Copy', onclick: async () => { try { await navigator.clipboard.writeText(text); toast('Copied'); } catch { toast(text); } } }, icon('copy', 's'));
+    const addr = (label, text) => h('div', { class: 'bmaddr' }, h('span', { class: 'muted small' }, label), h('code', null, text), copy(text));
+    const file = h('input', { type: 'file', accept: '.html,.htm,.xbel,.xml,text/html', class: 't' });
+    const importFile = async () => {
+      const f = file.files[0];
+      if (!f) { toast('Choose a bookmarks file first'); return; }
+      try { const r = await api('/api/bookmarks/import', { method: 'POST', json: { file: await f.text() } }); toast(`Added ${r.links} link(s) in ${r.groups} folder(s)`); } catch (e) { fail(e); }
+      await draw();
+    };
     el.replaceChildren(
       h('div', { class: 'box' }, h('h2', null, icon('link'), 'Bookmarks'),
-        h('p', { class: 'muted' }, 'Groups of links under the apps: a two-letter badge (or an icon), the name and the site. Drag a group or a link by its handle to put it elsewhere; a link can go into another group too. Everyone in the family sees the same bookmarks; editors and admins change them.'),
-        gs.length ? h('div', { class: 'bmgroups' }, gs.map((g) => h('div', { class: 'bmedit', 'data-id': g.id },
-          h('div', { class: 'bmhead' }, grip('Drag to move the group', 'group'), h('b', null, g.name),
-            h('button', { class: 'iconbtn', title: 'Rename', onclick: async () => { const i = h('input', { class: 't', value: g.name }); const v = await dialog('Rename the group', i, [{ label: 'Cancel', value: null }, { label: 'Save', value: () => i.value, primary: true }]); if (v) call(`/api/bookmarks/groups/${g.id}`, { method: 'PATCH', json: { name: v } }, 'Saved'); } }, icon('edit', 's')),
-            h('button', { class: 'iconbtn', title: 'Delete the group', onclick: async () => { if (await confirmDialog('Delete the group', `Delete "${g.name}" and its ${g.links.length} link(s)?`, 'Delete', true)) call(`/api/bookmarks/groups/${g.id}`, { method: 'DELETE' }, 'Deleted'); } }, icon('delete', 's')),
-            h('button', { class: 'pillbtn', style: 'margin-left:auto', onclick: () => editLink(g, null) }, icon('add', 's'), 'Link')),
-          h('div', { class: 'bmlinks', 'data-gid': g.id }, g.links.map((l) => h('div', { class: 'bmrow', 'data-id': l.id }, grip('Drag to move the link', 'link'), h('span', { class: 'bmic' }, bmIcon(l) ? h('img', { src: bmIcon(l), alt: '', onerror: (e) => { e.target.replaceWith(l.abbr); } }) : l.abbr), h('span', { class: 'bmname' }, l.name), h('span', { class: 'muted small bmdesc' }, l.description),
-            h('span', { class: 'bmtools' },
-              h('button', { class: 'iconbtn', title: 'Change', onclick: () => editLink(g, l) }, icon('edit', 's')),
-              h('button', { class: 'iconbtn', title: 'Delete', onclick: async () => { if (await confirmDialog('Delete the link', `Delete "${l.name}"?`, 'Delete', true)) call(`/api/bookmarks/links/${l.id}`, { method: 'DELETE' }, 'Deleted'); } }, icon('delete', 's'))))))))) : h('p', { class: 'muted' }, 'No bookmarks yet.'),
-        h('div', { class: 'multi', style: 'margin-top:12px' }, newGroup, h('button', { class: 'pillbtn primary', onclick: () => { if (newGroup.value.trim()) call('/api/bookmarks/groups', { method: 'POST', json: { name: newGroup.value } }, 'Group made'); } }, icon('add', 's'), 'Group'))));
+        h('p', { class: 'muted' }, canEdit ? 'Every bookmark of the family, in folders as a browser keeps them. The house says what is on the start page: on a folder it shows the folder as a group with its links, on a link it shows or hides just that one. Everything here syncs to the browsers, on the start page or not. Drag a folder or a link by its handle to move it.' : 'Every bookmark of the family, in folders as a browser keeps them. Editors and admins change them.'),
+        tree.items.length ? h('div', { class: 'bmgroups' }, level(tree.items, null)) : h('p', { class: 'muted' }, 'No bookmarks yet.'),
+        !canEdit ? null : h('div', { class: 'multi', style: 'margin-top:12px' },
+          h('button', { class: 'pillbtn primary', onclick: () => newFolder(0) }, icon('add', 's'), 'Folder'),
+          h('button', { class: 'pillbtn', onclick: () => editLink(0, null) }, icon('add', 's'), 'Link'))),
+      !canEdit ? null : h('div', { class: 'box' }, h('h2', null, icon('update'), 'Sync with browsers'),
+        h('p', { class: 'muted' }, 'A sync app keeps a browser\'s bookmarks the same as these, both ways. With Floccus (Firefox, Chrome, Edge, Android, iOS): add an account of the kind Nextcloud Bookmarks, give it the first address, and say yes on the page it opens. Apps that sync a bookmarks file over WebDAV (Floccus can too) take the second address, the file bookmarks.xbel (or bookmarks.html), your name and an app password from Settings › Account; leave any passphrase empty. Sync apps sign in with an app password, listed under Settings › Account.'),
+        addr('Nextcloud Bookmarks', sync.nextcloud), addr('WebDAV folder', sync.webdav),
+        sync.syncing ? h('p', { class: 'small' }, 'A browser is syncing right now.') : null),
+      h('div', { class: 'box' }, h('h2', null, icon('download'), canEdit ? 'Import and export' : 'Export'),
+        canEdit ? h('p', { class: 'muted' }, 'A bookmarks file exported from a browser (HTML) or an XBEL file is added at the top level; pick what goes on the start page afterwards.') : null,
+        canEdit ? h('div', { class: 'multi' }, file, h('button', { class: 'pillbtn noic', onclick: importFile }, 'Import')) : null,
+        h('p', { class: 'multi' }, h('a', { class: 'pillbtn', href: 'api/bookmarks/export.html', download: 'bookmarks.html' }, icon('download', 's'), 'Export for a browser (HTML)'),
+          h('a', { class: 'pillbtn', href: 'api/bookmarks/export.xbel', download: 'bookmarks.xbel' }, icon('download', 's'), 'Export XBEL'))));
     const root = el.querySelector('.bmgroups');
     if (!root) return;
+    // drag the grip (mouse, pen or finger): a link lands in any folder's links, a folder among any folder's folders
+    const save = (list) => call(`/api/bookmarks/groups/${list.dataset.gid}/order`, { method: 'POST', json: { ids: [...list.children].filter((x) => x.dataset.id).map((x) => +x.dataset.id) } });
     for (const g of root.querySelectorAll('.grip')) {
-      const group = g.dataset.kind === 'group';
-      dragSort(g, g.closest(group ? '.bmedit' : '.bmrow'), {
-        root, lists: () => group ? [root] : [...root.querySelectorAll('.bmlinks')], items: group ? '.bmedit' : '.bmrow', sorting: group ? 'sorting-groups' : 'sorting-links',
-        done: (from, to) => { if (group) saveGroups(); else saveLinks(to); },
+      const group = g.dataset.kind === 'group', item = g.closest(group ? '.bmedit' : '.bmrow');
+      dragSort(g, item, {
+        root, lists: () => [...root.querySelectorAll(group ? '.bmsubs' : '.bmlinks')].filter((l) => !item.contains(l)), items: group ? '.bmedit' : '.bmrow', sorting: group ? 'sorting-groups' : 'sorting-links',
+        done: (from, to) => save(to),
       });
     }
   };

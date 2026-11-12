@@ -139,14 +139,14 @@ def test_uploaded_svg_icon(client):
     for bad, why in [(b"<svg onload='alert(1)'/>", "handler"), (b"<svg xmlns='http://www.w3.org/2000/svg'><script>1</script></svg>", "script"),
                      (b"<html/>", "root"), (b"not xml <", "parse"), (b"", "empty"), (b"<svg/>" + b" " * (256 * 1024), "size")]:
         assert client.put(f"/api/bookmarks/links/{l['id']}/icon", content=bad).status_code == 400, why
-    assert client.put("/api/bookmarks/links/9999/icon", content=SVG).status_code == 400
+    assert client.put("/api/bookmarks/links/9999/icon", content=SVG).status_code == 404
     # removing, and the icon goes with its link
     assert client.delete(f"/api/bookmarks/links/{l['id']}/icon").json()["iconUrl"] == ""
     assert client.get(f"/api/bookmarks/links/{l['id']}/icon.svg").status_code == 404
     client.put(f"/api/bookmarks/links/{l['id']}/icon", content=SVG)
     client.delete(f"/api/bookmarks/links/{l['id']}")
     from app import db
-    assert db.q("SELECT * FROM prt_bookmark_icons") == []
+    assert db.q("SELECT * FROM prt_bookmark_node_icons") == []
     # a viewer sees the icon but cannot change it
     l2 = client.post(f"/api/bookmarks/groups/{g['id']}/links", json={"name": "Wiki", "href": "https://wiki.example"}).json()
     client.put(f"/api/bookmarks/links/{l2['id']}/icon", content=SVG)

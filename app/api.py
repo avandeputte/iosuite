@@ -10,7 +10,7 @@ import json
 
 from iosuite_shared.access import json_body
 
-from app import access, apps, bookmarks, homeassistant as ha, layout, status as appstatus, weather, widgets
+from app import access, apps, bookmarkdav, bookmarkfiles, bookmarks, bookmarksync, homeassistant as ha, ncbookmarks, layout, status as appstatus, weather, widgets
 
 router = APIRouter()
 
@@ -202,69 +202,80 @@ async def ha_test(request: Request):
 
 @router.get("/api/bookmarks", dependencies=[access.signed_in])
 def list_bookmarks(request: Request):
+    """What the start page shows: {groups: [{id, name, path, links}]}: the folders picked for it, with the links shown."""
     return {"groups": bookmarks.groups()}
+
+
+@router.get("/api/bookmarks/tree", dependencies=[access.signed_in])
+def bookmarks_tree(request: Request):
+    """Every folder and link, nested (the Bookmarks page): {rev, count, items}. A folder: {id, type: 'folder', name,
+    start, items}; a link: {id, type: 'bookmark', name, href, start (null: as its folder), onStart, …}."""
+    return bookmarks.tree()
 
 
 @router.get("/api/bookmarks/status", dependencies=[access.signed_in])
 async def bookmarks_status(request: Request):
-    """Each bookmark pinged from this server: {items: {link id: {ok, status}}}; ok is null for an address that cannot
-    be pinged (mailto:…). Cached five minutes."""
+    """Each bookmark on the start page pinged from this server: {items: {link id: {ok, status}}}; ok is null for an
+    address that cannot be pinged (mailto:…). Cached five minutes."""
     return {"items": await run_in_threadpool(appstatus.of_bookmarks)}
 
 
 def _bm(fn, *a, **kw):
     try:
         return fn(*a, **kw)
-    except bookmarks.BadBookmark as e:
+    except bookmarks.NotFound as e:
+        raise HTTPException(404, str(e))
+    except (bookmarks.BadBookmark, bookmarkfiles.BadFile) as e:
         raise HTTPException(400, str(e))
 
 
 @router.post("/api/bookmarks/groups", dependencies=[access.editor])
 async def add_group(request: Request):
-    """Editors. {name}"""
+    """Editors. {name, parentId? (a folder; none: the top), start? (on the start page; true unless said)}"""
     b = await json_body(request)
-    return _bm(bookmarks.add_group, b.get("name"))
+    return _bm(bookmarks.add_group, b.get("name"), b.get("parentId"), bool(b.get("start", True)))
 
 
 @router.patch("/api/bookmarks/groups/{gid}", dependencies=[access.editor])
-async def rename_group(gid: int, request: Request):
-    b = await json_body(request)
-    _bm(bookmarks.rename_group, gid, b.get("name"))
-    return {"ok": True}
+async def update_group(gid: int, request: Request):
+    """Editors. Any of {name, parentId (0: the top), start}."""
+    return _bm(bookmarks.update_group, gid, await json_body(request))
 
 
 @router.delete("/api/bookmarks/groups/{gid}", dependencies=[access.editor])
 def delete_group(gid: int, request: Request):
+    """Editors. The folder and everything in it."""
     _bm(bookmarks.delete_group, gid)
     return {"ok": True}
 
 
 @router.post("/api/bookmarks/groups/order", dependencies=[access.editor])
 async def order_groups(request: Request):
-    """Editors. {ids: [group id, ...]} in the order wanted."""
+    """Editors. {ids: [folder id, ...], parentId?}: these folders in this order inside the parent (none: the top); one
+    named from elsewhere moves in."""
     b = await json_body(request)
-    _bm(bookmarks.order_groups, [int(x) for x in b.get("ids") or []])
+    _bm(bookmarks.order, b.get("parentId"), [int(x) for x in b.get("ids") or []])
     return {"ok": True}
 
 
 @router.post("/api/bookmarks/groups/{gid}/links", dependencies=[access.editor])
 async def add_link(gid: int, request: Request):
-    """Editors. {name, href, abbr?, description?, icon?}"""
+    """Editors. {name, href, abbr?, description?, icon?, start?, tags?}; group 0 is the top level."""
     b = await json_body(request)
-    return _bm(bookmarks.add_link, gid, b.get("name"), b.get("href"), b.get("abbr"), b.get("description"), b.get("icon"))
+    return _bm(bookmarks.add_link, gid, b.get("name"), b.get("href"), b.get("abbr"), b.get("description"), b.get("icon"), b.get("start"), b.get("tags"))
 
 
 @router.post("/api/bookmarks/groups/{gid}/order", dependencies=[access.editor])
 async def order_links(gid: int, request: Request):
-    """Editors. {ids: [link id, ...]} in the order wanted; a link from another group moves into this one."""
+    """Editors. {ids: [link id, ...]} in the order wanted; a link from another folder moves into this one (0: the top)."""
     b = await json_body(request)
-    _bm(bookmarks.order_links, gid, [int(x) for x in b.get("ids") or []])
+    _bm(bookmarks.order, gid, [int(x) for x in b.get("ids") or []])
     return {"ok": True}
 
 
 @router.patch("/api/bookmarks/links/{lid}", dependencies=[access.editor])
 async def update_link(lid: int, request: Request):
-    """Editors. Any of {name, href, abbr, description, icon, groupId}."""
+    """Editors. Any of {name, href, abbr, description, icon, groupId, tags, start (true | false | null: as its folder)}."""
     return _bm(bookmarks.update_link, lid, await json_body(request))
 
 
@@ -300,9 +311,37 @@ def delete_link_icon(lid: int, request: Request):
 
 @router.post("/api/bookmarks/import", dependencies=[access.editor])
 async def import_bookmarks(request: Request):
-    """Editors. {yaml, replace?}: a homepage bookmarks.yaml."""
+    """Editors. {yaml, replace?}: a homepage bookmarks.yaml (its groups go on the start page). Or {file, parentId?,
+    start?}: the text of a bookmarks file a browser exported (HTML) or an XBEL file, added under the folder (none: the
+    top); start: its folders go on the start page too (false unless said)."""
     b = await json_body(request)
+    if b.get("file") is not None:
+        def work():
+            items = bookmarkfiles.parse(str(b["file"]))
+            bookmarks.add_items(b.get("parentId"), items, bool(b.get("start")))
+            f, l = bookmarkfiles.count(items)
+            return {"groups": f, "links": l}
+        return await run_in_threadpool(_bm, work)
     return _bm(bookmarks.import_yaml, b.get("yaml") or "", bool(b.get("replace")))
+
+
+@router.get("/api/bookmarks/export.{kind}", dependencies=[access.signed_in])
+def export_bookmarks(kind: str, request: Request):
+    """Every bookmark as a file: export.html (what a browser imports) or export.xbel."""
+    if kind not in ("html", "xbel"):
+        raise HTTPException(404, "export.html or export.xbel")
+    items = bookmarksync.items()
+    body = bookmarkfiles.to_html(items) if kind == "html" else bookmarkfiles.to_xbel(items, bookmarks.highest_id())
+    return Response(body, media_type="text/html; charset=utf-8" if kind == "html" else "application/xml; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="bookmarks.{kind}"'})
+
+
+@router.get("/api/bookmarks/sync", dependencies=[access.signed_in])
+def bookmarks_sync(request: Request):
+    """What to type into a sync app (the Bookmarks page): the addresses, and whether one is syncing right now."""
+    root = ncbookmarks._root(request)
+    return {"nextcloud": root + ncbookmarks.BASE, "webdav": root + bookmarkdav.BASE + "/", "files": list(bookmarkdav.NAMES),
+            "syncing": bool(bookmarksync.locked_at()), "user": request.state.user["name"] if request.state.user else ""}
 
 
 # ------------------------------------------------------------------ what the tiles show (app/widgets.py)

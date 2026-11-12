@@ -11,7 +11,7 @@ from app import config
 
 from iosuite_shared import db as shared_db, schema
 
-SCHEMA_VERSION = 4  # 4: the suite naming convention (prt_ tables, prt_settings, position, url, named indexes)
+SCHEMA_VERSION = 5  # 5: the bookmarks are one tree (prt_bookmark_nodes), for sync clients
 PREFIX = "prt"
 
 # Every table is InnoDB/utf8mb4. Accounts and app passwords live in the Shared ioSuite database (iosuite-shared,
@@ -22,31 +22,36 @@ SCHEMA = [
         value MEDIUMTEXT NOT NULL,
         updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3)
     )""",
-    # bookmarks, as homepage lays them out: groups of links, each with a name, an abbreviation (or an icon), the link and a
-    # line under it (the host name when empty). Shared by the family; editors and admins change them.
-    """CREATE TABLE IF NOT EXISTS prt_bookmark_groups (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        name VARCHAR(128) NOT NULL,
-        position INT NOT NULL DEFAULT 0
-    )""",
-    """CREATE TABLE IF NOT EXISTS prt_bookmarks (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        group_id INT NOT NULL,
-        name VARCHAR(128) NOT NULL,
+    # the bookmarks: one tree of folders and links, as a browser keeps them, which sync clients (Floccus, anything that
+    # speaks the Nextcloud Bookmarks API, a bookmarks file over WebDAV) read and write. An id is handed out by the app
+    # (never reused: sync clients remember them). `start` picks what the start page shows: on a folder, 1 shows it as a
+    # group with its links; on a link, NULL follows its folder, 1 shows it anyway and 0 hides it. `rev` / `created_rev`
+    # are the store's revision (prt_settings bookmarks_rev) when the row last changed and when it was made.
+    """CREATE TABLE IF NOT EXISTS prt_bookmark_nodes (
+        id INT PRIMARY KEY,
+        parent_id INT NULL,
+        folder TINYINT(1) NOT NULL DEFAULT 0,
+        name VARCHAR(1024) NOT NULL,
+        url TEXT NULL,
         abbr VARCHAR(8) NULL,
-        url VARCHAR(2048) NOT NULL,
         description VARCHAR(512) NULL,
         icon VARCHAR(1024) NULL,
+        tags TEXT NULL,
+        start TINYINT(1) NULL,
         position INT NOT NULL DEFAULT 0,
-        KEY idx_prt_bookmarks_group_position (group_id, position),
-        FOREIGN KEY (group_id) REFERENCES prt_bookmark_groups(id) ON DELETE CASCADE
+        rev BIGINT NOT NULL DEFAULT 0,
+        created_rev BIGINT NOT NULL DEFAULT 0,
+        created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+        KEY idx_prt_bookmark_nodes_parent_position (parent_id, position),
+        FOREIGN KEY (parent_id) REFERENCES prt_bookmark_nodes(id) ON DELETE CASCADE
     )""",
-    # an SVG uploaded for a bookmark (Settings › Bookmarks), served by the page itself: it wins over the icon field
-    """CREATE TABLE IF NOT EXISTS prt_bookmark_icons (
-        bookmark_id INT PRIMARY KEY,
+    # an SVG uploaded for a bookmark (the Bookmarks page), served by the page itself: it wins over the icon field
+    """CREATE TABLE IF NOT EXISTS prt_bookmark_node_icons (
+        node_id INT PRIMARY KEY,
         svg MEDIUMTEXT NOT NULL,
         etag CHAR(16) NOT NULL,
-        FOREIGN KEY (bookmark_id) REFERENCES prt_bookmarks(id) ON DELETE CASCADE
+        FOREIGN KEY (node_id) REFERENCES prt_bookmark_nodes(id) ON DELETE CASCADE
     )""",
 ]
 

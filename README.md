@@ -70,13 +70,28 @@ what the app will show on the start page later (today's events, the newest photo
   to every open page (server-sent events) when something on the card or one of the alerts changes, so a light switched
   at the wall shows within a second; without the
   websocket (HA_FEED=0, or an old install) the states come in one call kept five seconds.
-- **Bookmarks**, as [homepage](https://gethomepage.dev/configs/bookmarks/) lays them out: groups of links under the
-  apps, each with a two-letter badge (or an icon: an image address, a file name from the dashboard-icons
-  collection, `github.png`, or an SVG of your own uploaded for the link and kept in the database), the name and the
-  site. The groups pack into columns (as many 250 px columns as fit): each goes, in order, under the shortest column
-  so far, so a short group fills the room under another instead of starting a new row. Editors and admins add,
-  change, reorder and move them in Settings › Bookmarks (drag a group or a link by its handle, with a mouse or a
-  finger; a link can go into another group). `POST /api/bookmarks/import` still takes a homepage `bookmarks.yaml`.
+- **Bookmarks**: one tree of folders and links for the family, as a browser keeps them, on a page of its own
+  (`#/bookmarks`, from the start page and the gear menu). The start page shows the part picked for it, as
+  [homepage](https://gethomepage.dev/configs/bookmarks/) lays bookmarks out: the house on a folder shows it as a group
+  with its links, the house on a link shows or hides just that one; each link has a two-letter badge (or an icon: an
+  image address, a file name from the dashboard-icons collection, `github.png`, or an SVG of your own uploaded for the
+  link and kept in the database), the name and the site. The groups pack into columns (as many 250 px columns as
+  fit). Editors and admins add, change, reorder and move folders and links (drag by the handle, with a mouse or a
+  finger), import a bookmarks file a browser exported (HTML) or an XBEL file, and export either;
+  `POST /api/bookmarks/import` still takes a homepage `bookmarks.yaml`.
+- **Bookmark sync with browsers**: everything in the tree syncs, on the start page or not.
+  - *Nextcloud Bookmarks API* at `<address>/dav/nextcloud` (REST v2: folders, bookmarks, tags, order, hashes, bulk
+    import, the lock, and Nextcloud's sign-in flow for apps). [Floccus](https://floccus.org) (Firefox, Chrome, Edge,
+    Android, iOS): add a *Nextcloud Bookmarks* account with that address and say yes on the page it opens; it gets an
+    app password of its own, for sync only. Other clients written for Nextcloud Bookmarks sign in with the account's
+    name and an app password.
+  - *A bookmarks file over WebDAV* at `<address>/dav/bookmarks/`: `bookmarks.xbel` (XBEL) or `bookmarks.html`
+    (the bookmarks HTML of browsers), for Floccus's WebDAV kind of account and anything else that syncs such a file.
+    Name and app password; no passphrase (an encrypted file cannot be read, so it is refused).
+  - App passwords live in the Shared ioSuite database like all others (Settings › Account, Settings › Security). A
+    viewer's sync app can read; changing takes an editor or admin. Behind Cloudflare Access, `/dav/*` needs the same
+    bypass as the other apps' CalDAV / CardDAV paths. A bookmark is in one folder (the same address in two folders is
+    two bookmarks); bookmarklets and other non-web addresses sync but never show on the start page.
 - **The suite's accounts**: the same sign-in as every io app (the account tiles, one click for a passwordless viewer),
   Settings › Account (display name, email, password) and Settings › Display (the theme, kept with the account), both
   iosuite-shared's panels, the same in every io app; every setting saves as soon as you change it. Accounts and roles
