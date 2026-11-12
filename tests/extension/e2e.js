@@ -22,7 +22,7 @@ const nc = (method, path, body) => call(method, '/dav/nextcloud/index.php/apps/b
 function browser(kind) {
   const bm = new FakeBookmarks(kind);
   const sync = new Sync({ bm, http, state: {} });
-  const ids = kind === 'chrome' ? { bar: '1', other: '2' } : { bar: 'toolbar_____', other: 'unfiled_____', menu: 'menu________' };
+  const ids = kind !== 'firefox' ? { bar: '1', other: '2' } : { bar: 'toolbar_____', other: 'unfiled_____', menu: 'menu________' };
   return { bm, sync, ...ids, run: (o) => sync.run(o), state: () => JSON.parse(JSON.stringify(sync.state)) };
 }
 const find = (b, title) => Object.values(b.bm.nodes).find((n) => n.title === title);
@@ -151,6 +151,33 @@ const serverId = async (title) => {
   await C.run({ canWrite: false });
   assert.ok(!requests.some((r) => r.startsWith('POST')), requests.join());
   assert.equal(await serverTree(), before);
+
+  // ---- Vivaldi: one tree; the folder set as its bookmark bar is the bar, the rest is "Other bookmarks"; its Trash is a delete
+  const V = browser('vivaldi');
+  const sd = await V.bm.create({ parentId: '1', title: 'Speed Dial' }); V.bm.flag(sd.id, 'speeddial');
+  await V.bm.create({ parentId: sd.id, title: 'Vivaldi', url: 'https://vivaldi.example/' });
+  const vb = await V.bm.create({ parentId: '1', title: 'My bar' }); V.bm.flag(vb.id, 'bookmarkbar');
+  await V.bm.create({ parentId: vb.id, title: 'Help', url: 'https://help.example/' });  // on the server's bar already
+  await V.bm.create({ parentId: '2', title: 'Unseen', url: 'https://unseen.example/' });  // Vivaldi does not show this folder: left alone
+  await V.run(); await A.run();
+  assert.equal(V.bm.show(vb.id), A.bm.show(A.bar));
+  assert.ok(V.bm.show('1').startsWith('My bar['), V.bm.show('1'));
+  assert.equal(V.bm.show('1').replace(/^My bar\[[^\]]*\],/, ''), A.bm.show(A.other));
+  assert.ok(A.bm.show(A.other).endsWith('Speed Dial[Vivaldi]') && !(await serverTree()).includes('My bar') && !(await serverTree()).includes('Unseen'));
+  await V.bm.move(find(V, 'Vivaldi').id, { parentId: '4' });  // deleted in Vivaldi: to its Trash
+  await V.bm.create({ parentId: vb.id, title: 'Search', url: 'https://search.example/' });
+  await V.run(); await A.run();
+  assert.ok(A.bm.show(A.other).endsWith('Speed Dial[]') && A.bm.show(A.bar).endsWith(',Search'));
+  await nc('DELETE', `/bookmark/${await serverId('Search')}`);
+  await V.run();
+  assert.equal(V.bm.show(vb.id), A.bm.show(A.bar).replace(',Search', ''));
+  assert.equal(V.bm.show('4'), 'Vivaldi');
+  V.bm.calls = 0;
+  assert.deepEqual(await V.run(), { changed: false, pushed: 0 });
+  assert.equal(V.bm.calls, 0);
+  const W = browser('vivaldi');  // no bookmark bar folder yet: "Bookmarks bar" is made, first in the tree
+  await W.run({ mode: 'server' });
+  assert.equal(W.bm.show('1'), V.bm.show('1').replace('My bar[', 'Bookmarks bar['));
 
   // ---- every browser ends the same, and a last round changes nothing
   await A.run(); await B.run();

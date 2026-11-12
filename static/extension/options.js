@@ -39,7 +39,9 @@ async function signIn() {
   waiting = { stop: () => { stopped = true; } };
   try {
     const nc = server + '/dav/nextcloud/index.php/login/v2';
-    const r = await fetch(`${nc}?client=${encodeURIComponent('ioSuite Bookmarks in ' + browserName())}`, { method: 'POST', credentials: 'omit' }).catch(() => null);
+    const [top] = await ext.bookmarks.getTree();
+    const name = IoSync.isVivaldi(top) ? 'Vivaldi' : browserName();
+    const r = await fetch(`${nc}?client=${encodeURIComponent('ioSuite Bookmarks in ' + name)}`, { method: 'POST', credentials: 'omit' }).catch(() => null);
     if (!r || !r.ok) throw new Error(r ? `That address did not answer as an ioSuite start page (${r.status}).` : 'That address cannot be reached.');
     const flow = await r.json();
     // the addresses the start page answers with are as it sees itself; this goes by the address typed here
