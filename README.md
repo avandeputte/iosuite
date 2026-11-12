@@ -82,6 +82,14 @@ what the app will show on the start page later (today's events, the newest photo
   finger), import a bookmarks file a browser exported (HTML) or an XBEL file, and export either;
   `POST /api/bookmarks/import` still takes a homepage `bookmarks.yaml`.
 - **Bookmark sync with browsers**: everything in the tree syncs, on the start page or not.
+  - *The ioSuite Bookmarks extension* (`static/extension`, Chrome, Edge and Firefox; its own README there): keeps the
+    browser's own bookmarks the same as the tree, both ways, with nothing to configure but the address. The bookmarks
+    bar is the top-level folder "Bookmarks bar", Firefox's bookmarks menu the folder "Bookmarks menu", Other bookmarks
+    everything else at the top, so every browser shows the same. It sends what changed in the browser in one request
+    (`/dav/ext`, `app/bookmarkext.py`) and makes the browser the tree that comes back, so a delete here or in another
+    browser goes everywhere. One-click sign-in (the same flow as below: an app password of its own, for sync only).
+    Download it from the Bookmarks page; `.github/workflows/extension.yml` packages each version as a release and,
+    with an addons.mozilla.org API key in the repository's secrets, has Mozilla sign the Firefox file.
   - *Nextcloud Bookmarks API* at `<address>/dav/nextcloud` (REST v2: folders, bookmarks, tags, order, hashes, bulk
     import, the lock, and Nextcloud's sign-in flow for apps). [Floccus](https://floccus.org) (Firefox, Chrome, Edge,
     Android, iOS): add a *Nextcloud Bookmarks* account with that address and say yes on the page it opens; it gets an

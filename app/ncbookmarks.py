@@ -165,7 +165,8 @@ def flow_start(request: Request):
     if len(_flows) > 200:
         raise HTTPException(429, "Too many sign-ins waiting; try again in a few minutes")
     poll, page = secrets.token_urlsafe(48), secrets.token_urlsafe(32)
-    _flows[poll] = {"at": time.time(), "page": page, "ua": (request.headers.get("user-agent") or "")[:80], "done": None}
+    who = request.query_params.get("client") or request.headers.get("user-agent") or ""  # ?client=: the extension names itself
+    _flows[poll] = {"at": time.time(), "page": page, "ua": who[:80], "done": None}
     root = _root(request) + BASE
     return {"poll": {"token": poll, "endpoint": f"{root}/index.php/login/v2/poll"}, "login": f"{root}/index.php/login/v2/flow/{page}"}
 

@@ -1,0 +1,47 @@
+# The ioSuite Bookmarks browser extension (static/extension): packaged on every change to it, as a release named
+# extension-v<its version> with the .zip (Chrome, Edge: load unpacked, or upload to the Chrome Web Store) and, when
+# the repository has the secrets AMO_JWT_ISSUER and AMO_JWT_SECRET (an API key of addons.mozilla.org), the .xpi signed
+# by Mozilla, which Firefox installs for good. A version is released once: bump "version" in manifest.json for a new one.
+name: Browser extension
+
+on:
+  push:
+    branches: [main]
+    paths: ["static/extension/**", ".github/workflows/extension.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - id: v
+        run: echo "version=$(node -p 'require("./static/extension/manifest.json").version')" >> "$GITHUB_OUTPUT"
+      - name: Package
+        run: |
+          mkdir -p out
+          (cd static/extension && zip -qr "../../out/iosuite-bookmarks-${{ steps.v.outputs.version }}.zip" .)
+      - name: Sign for Firefox
+        env:
+          WEB_EXT_API_KEY: ${{ secrets.AMO_JWT_ISSUER }}
+          WEB_EXT_API_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -z "$WEB_EXT_API_KEY" ] || [ -z "$WEB_EXT_API_SECRET" ]; then echo "No AMO secrets: no signed .xpi"; exit 0; fi
+          if gh release view "extension-v${{ steps.v.outputs.version }}" --json assets -q '.assets[].name' 2>/dev/null | grep -q '\.xpi$'; then echo "Signed already"; exit 0; fi
+          npx --yes web-ext@8 sign --source-dir static/extension --channel unlisted --artifacts-dir signed
+          cp signed/*.xpi "out/iosuite-bookmarks-${{ steps.v.outputs.version }}.xpi"
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="extension-v${{ steps.v.outputs.version }}"
+          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --title "ioSuite Bookmarks ${{ steps.v.outputs.version }}" --latest=false \
+            --notes "The browser extension that keeps a browser's bookmarks the same as the start page's. Firefox: open the .xpi. Chrome and Edge: unpack the .zip and load the folder (chrome://extensions, Developer mode, Load unpacked)."
+          gh release upload "$tag" out/* --clobber
