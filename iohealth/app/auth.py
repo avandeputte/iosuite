@@ -20,7 +20,7 @@ APP = "iohealth"
 log = logging.getLogger("app.auth")
 
 # version, public_url, description and color: ioHealth's row in the suite's list of apps (iosuite_shared.suite),
-# written on the first request, so the start page (ioSuite) and the other apps find it
+# written on the first request, so the start page (ioStart) and the other apps find it
 auth = Auth(APP, app_label="ioHealth", version=__version__, public_url=config.PUBLIC_URL or None,
             description="Health and fitness", color="#e8445a")
 auth.write_role = "member"  # every account's data is its own: a member uploads theirs (canWrite in /api/auth/me)

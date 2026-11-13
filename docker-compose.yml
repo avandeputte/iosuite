@@ -1,5 +1,5 @@
 # The whole ioSuite in one Docker stack: MariaDB with a database per app, the Shared ioSuite database (accounts, one
-# sign-in for every app) and ioSuite (the start page), ioCalendar, ioContact, ioNote, ioHealth and ioPix.
+# sign-in for every app) and ioStart (the start page), ioCalendar, ioContact, ioNote, ioHealth and ioPix.
 #
 #   docker compose -f docker/suite/docker-compose.yml up -d        # or paste this file as a stack in Dockge / Portainer
 #
@@ -62,10 +62,10 @@ services:
       start_period: 30s
       retries: 6
 
-  iosuite:                               # the start page
+  iostart:                               # the start page
     <<: *app
-    image: ghcr.io/avandeputte/iosuite:latest
-    container_name: iosuite
+    image: ghcr.io/avandeputte/iostart:latest
+    container_name: iostart
     ports: ["8630:8630"]
     environment:
       <<: *shared

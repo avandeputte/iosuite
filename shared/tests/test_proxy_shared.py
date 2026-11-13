@@ -10,7 +10,7 @@ AUD1, AUD2 = "a" * 64, "b" * 64
 
 
 def make_app():
-    auth = Auth("iosuite", register=False)
+    auth = Auth("iostart", register=False)
     app = FastAPI()
     app.middleware("http")(auth.middleware(open_prefixes=("/api/auth/",)))
     app.include_router(auth.router())
@@ -46,7 +46,7 @@ def test_suite_admin_api(monkeypatch):
         monkeypatch.delenv(k, raising=False)
     app = make_app()
     users.create("alex", "secret123", suite_admin=True)
-    users.create("ann", "secret123", "admin", "iosuite")
+    users.create("ann", "secret123", "admin", "iostart")
     c = signed_in(app, "alex", "secret123")
     assert c.get("/api/suite-admin/proxy").json()["values"]["AUTH_PROXY"] == ""
     assert c.put("/api/suite-admin/proxy", json={"AUTH_PROXY": "cloudflare", "CF_ACCESS_TEAM": "t.cloudflareaccess.com"}).status_code == 400

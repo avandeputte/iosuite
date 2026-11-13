@@ -92,20 +92,20 @@ def test_bad_public_url_registers_without_it():
 
 def test_api_lists_for_signed_in_and_suite_admins_forget():
     suite.invalidate()
-    app, _ = make_app("iosuite", label="ioSuite")
-    users.create("alex", "secret123", "admin", "iosuite", suite_admin=True)
-    users.create("bob", "secret123", "viewer", "iosuite")
+    app, _ = make_app("iostart", label="ioStart")
+    users.create("alex", "secret123", "admin", "iostart", suite_admin=True)
+    users.create("bob", "secret123", "viewer", "iostart")
     suite.register("iopix", "ioPix", url="https://photo.example.com")
     c = TestClient(app, base_url="http://home.lan")
     assert c.get("/api/auth/suite").status_code == 401
     c.post("/api/auth/login", json={"name": "bob", "password": "secret123"})
     body = c.get("/api/auth/suite").json()
-    assert body["app"] == "iosuite" and {a["app"] for a in body["items"]} == {"iopix", "iosuite"}
+    assert body["app"] == "iostart" and {a["app"] for a in body["items"]} == {"iopix", "iostart"}
     assert c.delete("/api/auth/suite/iopix").status_code == 403
     c.post("/api/auth/login", json={"name": "alex", "password": "secret123"})
     assert c.delete("/api/auth/suite/iopix").status_code == 200
     assert c.delete("/api/auth/suite/iopix").status_code == 404
-    assert [a["app"] for a in c.get("/api/auth/suite").json()["items"]] == ["iosuite"]
+    assert [a["app"] for a in c.get("/api/auth/suite").json()["items"]] == ["iostart"]
 
 
 def test_an_app_with_its_own_middleware_registers_through_resolve():
@@ -127,14 +127,14 @@ def test_an_app_with_its_own_middleware_registers_through_resolve():
 
 
 def test_internal_url_is_recorded_and_never_the_link():
-    suite.register("iosuite", "ioSuite", url="https://home.example.com", internal_url="http://192.168.1.151:8630/")
-    r = suite.get("iosuite")
+    suite.register("iostart", "ioStart", url="https://home.example.com", internal_url="http://192.168.1.151:8630/")
+    r = suite.get("iostart")
     assert r["internalUrl"] == "http://192.168.1.151:8630" and r["url"] == "https://home.example.com"
-    suite.register("iosuite", "ioSuite", internal_url="http://192.168.1.151:8630")
-    r = suite.get("iosuite")
+    suite.register("iostart", "ioStart", internal_url="http://192.168.1.151:8630")
+    r = suite.get("iostart")
     assert r["url"] is None and r["internalUrl"] == "http://192.168.1.151:8630"
-    suite.register("iosuite", "ioSuite")
-    assert suite.get("iosuite")["internalUrl"] is None
+    suite.register("iostart", "ioStart")
+    assert suite.get("iostart")["internalUrl"] is None
 
 
 def test_local_url(monkeypatch):
@@ -142,31 +142,31 @@ def test_local_url(monkeypatch):
         monkeypatch.delenv(k, raising=False)
     monkeypatch.setattr(suite, "_lan_ip", lambda: "192.168.1.151")
     monkeypatch.setattr(suite, "in_container", lambda: False)
-    assert suite.local_url("iosuite") == "http://192.168.1.151:8630"
+    assert suite.local_url("iostart") == "http://192.168.1.151:8630"
     monkeypatch.setenv("PORT", "9000")
-    assert suite.local_url("iosuite") == "http://192.168.1.151:9000"
+    assert suite.local_url("iostart") == "http://192.168.1.151:9000"
     monkeypatch.setenv("HOST", "127.0.0.1")
-    assert suite.local_url("iosuite") is None  # behind a reverse proxy on the same host
+    assert suite.local_url("iostart") is None  # behind a reverse proxy on the same host
     monkeypatch.setenv("HOST", "10.0.0.7")
-    assert suite.local_url("iosuite") == "http://10.0.0.7:9000"
+    assert suite.local_url("iostart") == "http://10.0.0.7:9000"
     monkeypatch.setenv("HOST", "::")
     monkeypatch.setattr(suite, "in_container", lambda: True)
-    assert suite.local_url("iosuite") is None  # a container's own address is no use
+    assert suite.local_url("iostart") is None  # a container's own address is no use
     monkeypatch.setenv("INTERNAL_URL", "http://192.168.1.20:8630/")
-    assert suite.local_url("iosuite") == "http://192.168.1.20:8630"
+    assert suite.local_url("iostart") == "http://192.168.1.20:8630"
     monkeypatch.delenv("INTERNAL_URL")
     monkeypatch.setattr(suite, "in_container", lambda: False)
     monkeypatch.setattr(suite, "_lan_ip", lambda: "fd00::5")
     monkeypatch.setenv("TLS_CERT_FILE", "/c"); monkeypatch.setenv("TLS_KEY_FILE", "/k")
-    assert suite.local_url("iosuite") == "https://[fd00::5]:9000"
+    assert suite.local_url("iostart") == "https://[fd00::5]:9000"
 
 
 def test_auth_registers_the_internal_url(monkeypatch):
     monkeypatch.setenv("INTERNAL_URL", "http://192.168.1.151:8630")
     suite.invalidate()
-    app, _ = make_app("iosuite", label="ioSuite")
+    app, _ = make_app("iostart", label="ioStart")
     TestClient(app, base_url="http://testserver").get("/api/x")
-    assert suite.get("iosuite")["internalUrl"] == "http://192.168.1.151:8630"
+    assert suite.get("iostart")["internalUrl"] == "http://192.168.1.151:8630"
     monkeypatch.setenv("INTERNAL_URL", "not an address")
     app, _ = make_app("iocalendar", label="ioCalendar", public_url="https://cal.example.com")
     TestClient(app, base_url="http://testserver").get("/api/x")
@@ -177,10 +177,10 @@ def test_auth_registers_the_internal_url(monkeypatch):
 def test_switcher_shows_only_the_apps_an_account_may_use():
     from iosuite_shared import db
     suite.invalidate()
-    app, _ = make_app("iosuite", label="ioSuite")
-    users.create("alex", "secret123", "admin", "iosuite", suite_admin=True)
-    bob = users.create("bob", "secret123", "viewer", "iosuite")
-    carol = users.create("carol", "secret123", "viewer", "iosuite")
+    app, _ = make_app("iostart", label="ioStart")
+    users.create("alex", "secret123", "admin", "iostart", suite_admin=True)
+    bob = users.create("bob", "secret123", "viewer", "iostart")
+    carol = users.create("carol", "secret123", "viewer", "iostart")
     suite.register("iohealth", "ioHealth", url="https://health.example.com")
     suite.register("iodns", "ioDNS", url="https://dns.example.com", admin_tool=True)
     db.set_setting("default_role", "none", "iohealth")  # ioHealth: only the accounts given a role there
@@ -192,9 +192,9 @@ def test_switcher_shows_only_the_apps_an_account_may_use():
         c.post("/api/auth/login", json={"name": name, "password": "secret123"})
         items = c.get("/api/auth/suite").json()["items"]
         return {a["app"]: a["adminTool"] for a in items}
-    assert seen("bob") == {"iosuite": False}                                       # no role in ioHealth; ioDNS is an admin tool
-    assert seen("carol") == {"iosuite": False, "iohealth": False}                  # an editor of ioDNS is not its admin
-    assert seen("alex") == {"iosuite": False, "iohealth": False, "iodns": True}    # a suite admin sees everything
+    assert seen("bob") == {"iostart": False}                                       # no role in ioHealth; ioDNS is an admin tool
+    assert seen("carol") == {"iostart": False, "iohealth": False}                  # an editor of ioDNS is not its admin
+    assert seen("alex") == {"iostart": False, "iohealth": False, "iodns": True}    # a suite admin sees everything
     assert bob is not None
     # an app that registers again without the flag (an older library) is no admin tool any more only when it says so
     suite.register("iodns", "ioDNS", url="https://dns.example.com")
@@ -203,13 +203,13 @@ def test_switcher_shows_only_the_apps_an_account_may_use():
 
 def test_before_the_first_account_the_switcher_lists_every_app():
     suite.invalidate()
-    app, _ = make_app("iosuite", label="ioSuite")
+    app, _ = make_app("iostart", label="ioStart")
     suite.register("iodns", "ioDNS", url="https://dns.example.com", admin_tool=True)
     c = TestClient(app, base_url="http://home.lan")
-    assert {a["app"] for a in c.get("/api/auth/suite").json()["items"]} == {"iosuite", "iodns"}
+    assert {a["app"] for a in c.get("/api/auth/suite").json()["items"]} == {"iostart", "iodns"}
 
 
-def test_one_order_everywhere_iosuite_first_then_by_name():
-    for key, name in (("iotask", "ioTask"), ("iosuite", "ioSuite"), ("iocalendar", "ioCalendar"), ("iodns", "ioDNS")):
+def test_one_order_everywhere_iostart_first_then_by_name():
+    for key, name in (("iotask", "ioTask"), ("iostart", "ioStart"), ("iocalendar", "ioCalendar"), ("iodns", "ioDNS")):
         suite.register(key, name, url=f"https://{key}.example.com", admin_tool=key == "iodns")
-    assert [a["app"] for a in suite.apps()] == ["iosuite", "iocalendar", "iodns", "iotask"]
+    assert [a["app"] for a in suite.apps()] == ["iostart", "iocalendar", "iodns", "iotask"]

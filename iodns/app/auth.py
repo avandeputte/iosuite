@@ -12,7 +12,7 @@ from app import __version__, config, db
 
 APP = config.APP
 
-# version, address, description and color go into the suite's list of apps (iosuite_shared.suite, read by ioSuite);
+# version, address, description and color go into the suite's list of apps (iosuite_shared.suite, read by ioStart);
 # ioDNS is an admin tool: only the suite admins reach it and see it in the start page and the app switchers
 auth = Auth(APP, app_label="ioDNS", basic_realm="ioDNS", version=__version__, public_url=config.PUBLIC_URL or None,
             description="Local DNS", color="#0e7c86", admin_tool=True)

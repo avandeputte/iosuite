@@ -10,7 +10,7 @@ from iosuite_shared.fastapi import Auth
 
 
 def make_app():
-    auth = Auth("iosuite", register=False)
+    auth = Auth("iostart", register=False)
     app = FastAPI()
     app.middleware("http")(auth.middleware(open_prefixes=("/api/auth/",)))
     app.include_router(auth.router())
@@ -99,7 +99,7 @@ def test_app_passwords_and_forget_app():
 def test_api_suite_admins_only():
     app = make_app()
     users.create("alex", "secret123", suite_admin=True)
-    users.create("ann", "secret123", "admin", "iosuite")  # admin of this app, not of the suite
+    users.create("ann", "secret123", "admin", "iostart")  # admin of this app, not of the suite
     c = signed_in(app, "alex", "secret123")
     o = c.get("/api/suite-admin").json()
     assert {u["name"] for u in o["users"]} == {"alex", "ann"} and o["me"]
@@ -129,7 +129,7 @@ def test_api_suite_admins_only():
 def test_panel_module_for_suite_admins():
     app = make_app()
     users.create("alex", "secret123", suite_admin=True)
-    users.create("ann", "secret123", "admin", "iosuite")
+    users.create("ann", "secret123", "admin", "iostart")
     r = signed_in(app, "alex", "secret123").get("/api/suite-admin/ui.js")
     assert r.status_code == 200 and "javascript" in r.headers["content-type"]
     assert "export async function mount" in r.text
@@ -161,7 +161,7 @@ def test_person_in_photos(monkeypatch):
     monkeypatch.setattr("iosuite_shared.links.json", lambda reader, provider, path, timeout=15: seen.append((reader, provider, path)) or
                         {"people": [{"id": 42, "name": "Kid", "photos": 12}]})
     assert c.get("/api/suite-admin/photo-people").json() == {"available": True, "people": [{"id": 42, "name": "Kid", "photos": 12}]}
-    assert seen == [("iosuite", "iopix", "/api/people/list")]
+    assert seen == [("iostart", "iopix", "/api/people/list")]
 
     def away(*a, **k):
         raise OSError("down")

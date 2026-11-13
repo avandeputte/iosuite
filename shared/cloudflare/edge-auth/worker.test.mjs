@@ -68,9 +68,9 @@ test("ioHealth: /v1/ uploads need a known app password, Basic or Bearer; /v1/hea
 });
 
 test("the start page's bookmark sync: /dav is guarded, the Nextcloud sign-in flow before a password exists is not", async () => {
-  const SPW = "iosuite-9f8e7d6c-Zz_9aBcDeFgHiJkLmNoPqRsTu";
-  kv.set("iosuite:9f8e7d6c", JSON.stringify({ h: sha(SPW) }));
-  const e = (mode) => ({ ...env(mode), APPS: '{"start.example.com": "iosuite"}' });
+  const SPW = "iostart-9f8e7d6c-Zz_9aBcDeFgHiJkLmNoPqRsTu";
+  kv.set("iostart:9f8e7d6c", JSON.stringify({ h: sha(SPW) }));
+  const e = (mode) => ({ ...env(mode), APPS: '{"start.example.com": "iostart"}' });
   const sreq = (path, pw, method = "GET") => new Request(`https://start.example.com${path}`, {
     method, headers: pw ? { Authorization: "Basic " + btoa(`alex:${pw}`) } : {} });
   const NC = "/dav/nextcloud/index.php/apps/bookmarks/public/rest/v2";
@@ -81,7 +81,7 @@ test("the start page's bookmark sync: /dav is guarded, the Nextcloud sign-in flo
   for (const pw of [SPW + "x", "hunter2", null]) {
     const r = await worker.fetch(sreq(`${NC}/bookmark`, pw, "POST"), e("enforce"));
     assert.equal(r.status, 401);
-    assert.match(r.headers.get("WWW-Authenticate"), /realm="ioSuite bookmarks"/);
+    assert.match(r.headers.get("WWW-Authenticate"), /realm="ioStart bookmarks"/);
   }
   assert.equal((await worker.fetch(sreq("/dav/nextcloud/ocs/v2.php/cloud/capabilities", null), e("monitor"))).status, 401);
   assert.equal(forwarded, 2);

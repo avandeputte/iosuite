@@ -14,7 +14,7 @@
 #   --service | --no-service   --python PATH   --system-deps | --no-system-deps   --yes
 #   --db-admin USER:PASSWORD      a MariaDB / MySQL administrator (root...): the databases and users above are created
 #                                 for you, with the passwords you answered (IOHEALTH_DB_ADMIN does the same; empty: they exist)
-#   --also APP,APP | all | none   also install other apps of the suite here (iosuite, iocalendar, iocontact, ionote, iopix), beside this one,
+#   --also APP,APP | all | none   also install other apps of the suite here (iostart, iocalendar, iocontact, ionote, iopix), beside this one,
 #                                 with the same database server (each app its own database), Shared ioSuite database,
 #                                 sign-in domain and admin: those questions are asked once (IOHEALTH_ALSO does the same)
 # ioHealth's own: --tz ZONE
@@ -104,7 +104,7 @@ if [ -z "$DBADMIN" ] && [ "$YES" = 0 ]; then
 fi
 if [ -z "$ALSO" ]; then
   say "The other apps of the suite can be installed here too, beside ioHealth, with the same database server (each app gets its own database), the same Shared ioSuite database, sign-in domain and admin"
-  ask ALSO "Also install (iosuite, iocalendar, iocontact, ionote, iopix; comma-separated, 'all', or 'none')" "none"
+  ask ALSO "Also install (iostart, iocalendar, iocontact, ionote, iopix; comma-separated, 'all', or 'none')" "none"
 fi
 
 # ---- Python environment

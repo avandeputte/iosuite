@@ -130,7 +130,7 @@ ask_app_settings() {
   fi
   if [[ -z "${IOPIX_ALSO+x}" ]]; then  # the other apps of the suite in the same container
     IOPIX_ALSO=$(whiptail --backtitle "$bt" --checklist "Also install in this container (same database server, each app its own database; same accounts and admin; each on its usual port):" 15 78 5 \
-      iosuite "ioSuite (the start page)  (8630)" OFF \
+      iostart "ioStart (the start page)  (8630)" OFF \
       iocalendar "ioCalendar  (8620)" OFF \
       iocontact "ioContact  (8640, LDAP 3890)" OFF \
       ionote "ionote  (8610)" OFF \
@@ -212,7 +212,7 @@ echo -e "${CREATING}${GN}${APP} setup has been successfully initialized!${CL}"
 echo -e "${INFO}${YW}Access it using the following URL:${CL}"
 echo -e "${GATEWAY}${BGN}http://${IP}:8600${CL}"
 for a in ${IOPIX_ALSO//,/ }; do
-  case "$a" in iosuite) p=8630;; iocalendar) p=8620;; iocontact) p=8640;; ionote) p=8610;; iohealth) p=8650;; iopix) p=8600;; *) p="";; esac
+  case "$a" in iostart) p=8630;; iocalendar) p=8620;; iocontact) p=8640;; ionote) p=8610;; iohealth) p=8650;; iopix) p=8600;; *) p="";; esac
   [[ -n "$p" ]] && echo -e "${INFO}${YW}$a:${CL} ${BGN}http://${IP}:$p${CL}"
 done
 [[ "${IOPIX_DB:-local}" == local ]] && echo -e "${INFO}${YW}iopix's own database: MariaDB inside the container (database iopix; the credentials are in /opt/iopix/app/config.env).${CL}" || echo -e "${INFO}${YW}iopix's own database: the MySQL/MariaDB server you named (DB_* in /opt/iopix/app/config.env).${CL}"

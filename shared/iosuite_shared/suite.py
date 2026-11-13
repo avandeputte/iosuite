@@ -40,7 +40,7 @@ from iosuite_shared import config, db
 from iosuite_shared.errors import Invalid
 
 # Every app's default port: different for each, so all of them can run on one host. The apps' tests check theirs.
-PORTS = {"iopix": 8600, "ionote": 8610, "iocalendar": 8620, "iosuite": 8630, "iocontact": 8640, "iohealth": 8650, "iodns": 8660, "iotask": 8670, "iobackup": 8680, "iorecipe": 8690}
+PORTS = {"iopix": 8600, "ionote": 8610, "iocalendar": 8620, "iostart": 8630, "iocontact": 8640, "iohealth": 8650, "iodns": 8660, "iotask": 8670, "iobackup": 8680, "iorecipe": 8690}
 
 FIELDS = ("name", "description", "version", "color", "icon")
 # Where every app serves its mark (static/icons/mark.svg in its repo, the web app's files under /static/): the same in
@@ -223,10 +223,10 @@ def _out(r: dict) -> dict:
 
 def apps() -> list:
     """Every registered app: {app, name, description, version, color, icon (absolute), url, configuredUrl, seenUrl,
-    internalUrl, adminTool, registered, updated, lastSeen}, in the suite's one order (ioSuite, the start page, first,
+    internalUrl, adminTool, registered, updated, lastSeen}, in the suite's one order (ioStart, the start page, first,
     then the others by name), so every app switcher lists them alike. What one account may see: visible()."""
     rows = db.q("SELECT * FROM ios_apps ORDER BY name, app")
-    return [_out(r) for r in sorted(rows, key=lambda r: r["app"] != "iosuite")]
+    return [_out(r) for r in sorted(rows, key=lambda r: r["app"] != "iostart")]
 
 
 def visible(user) -> list:

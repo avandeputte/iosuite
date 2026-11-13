@@ -6,14 +6,14 @@ comes here: with the calling app's config.env (`--config FOLDER`) this reads the
 app and hands them to each companion's own setup.sh, which runs unattended (`--yes`):
 
   * the app database server: DB_HOST, DB_PORT, DB_USER and DB_PASSWORD are reused, each app gets its own database
-    name (iosuite -> suite, iocalendar -> calendar, ...; the app creates it when the user may);
+    name (iostart -> suite, iocalendar -> calendar, ...; the app creates it when the user may);
   * the Shared ioSuite database: IOSUITE_DB_* as they are;
   * the sign-in domain (COOKIE_DOMAIN) and, with `--admin NAME` and ADMIN_PASSWORD in the environment, the admin
     account, made an admin of every companion too (the account already exists in the shared database).
 
 Each companion is fetched from GitHub (its folder of the suite's repository, with the shared library beside it in
 shared/) into BASE/<app>/app (BASE is the folder above the calling app's own
-<name>/app, so /opt when the app is in /opt/iosuite/app) with its commit in COMMIT, the layout the Proxmox installers
+<name>/app, so /opt when the app is in /opt/iostart/app) with its commit in COMMIT, the layout the Proxmox installers
 make and update.sh understands; then `sh setup.sh --yes ...` runs there and installs the packages, writes config.env,
 creates the tables and (as root with systemd) the service. The passwords travel in the environment, never on a
 command line. What differs per app is left to its defaults: the usual port, no public address (reached as is), the
@@ -34,7 +34,7 @@ REPO = "avandeputte/iosuite"
 # name -> how to set it up (its folder in the repository has the same name). `db` is the app's default database name; `env` the prefix of the environment
 # variables its setup.sh reads the secrets from (PFX_DB, PFX_SUITE_DB, PFX_ADMIN).
 APPS = {
-    "iosuite": dict(label="ioSuite", db="suite", port=8630, env="IOSUITE"),
+    "iostart": dict(label="ioStart", db="suite", port=8630, env="IOSTART"),
     "iocalendar": dict(label="ioCalendar", db="calendar", port=8620, env="IOCALENDAR"),
     "iocontact": dict(label="ioContact", db="contacts", port=8640, env="IOCONTACT"),
     "ionote": dict(label="ioNote", db="notes", port=8610, env="IONOTE", data=True,

@@ -3,7 +3,7 @@ Every step finds what is already there and only makes what is missing, so it can
 
     export CLOUDFLARE_API_TOKEN=…  CLOUDFLARE_ACCOUNT_ID=…
     python3 setup.py --host calendar.example.com=iocalendar --host contacts.example.com=iocontact \\
-        --host start.example.com=iosuite --host health.example.com=iohealth \\
+        --host start.example.com=iostart --host health.example.com=iohealth \\
         [--mode monitor|enforce] [--deploy] [--rate-limit] [--app-token-file ~/.iosuite-edge-kv-token] [--dry-run]
 
 1. the Workers KV namespace APP_PASSWORDS (made when missing)
@@ -41,10 +41,10 @@ RULE = "ioSuite DAV rate limit"
 TOKEN_NAME = "iosuite-edge-kv"
 dry = False
 # each app's sign-in path for devices (worker.js GUARDED says the same)
-ROUTES = {"iocalendar": "/dav", "iocontact": "/dav", "iotask": "/dav", "iosuite": "/dav", "iohealth": "/v1/"}
+ROUTES = {"iocalendar": "/dav", "iocontact": "/dav", "iotask": "/dav", "iostart": "/dav", "iohealth": "/v1/"}
 
 
-UNLIMITED = ("iosuite",)  # on /dav, but left out of the rate limit rule (rate_limit says why)
+UNLIMITED = ("iostart",)  # on /dav, but left out of the rate limit rule (rate_limit says why)
 
 
 def route_path(app: str) -> str:
@@ -182,7 +182,7 @@ def main():
     global dry
     p = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     p.add_argument("--host", action="append", required=True, metavar="HOST=APP",
-                   help="a public host and its app (iocalendar, iocontact, iotask, iosuite, iohealth); once per host")
+                   help="a public host and its app (iocalendar, iocontact, iotask, iostart, iohealth); once per host")
     p.add_argument("--mode", choices=("monitor", "enforce"), default="monitor")
     p.add_argument("--deploy", action="store_true", help="run wrangler deploy")
     p.add_argument("--rate-limit", action="store_true", help="add or update the WAF rate limit rule")

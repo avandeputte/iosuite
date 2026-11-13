@@ -90,7 +90,7 @@ def test_an_update_runs_and_the_next_start_says_how_it_went(tmp_path, monkeypatc
 
 
 def make_app():
-    auth = Auth("iosuite", register=False)
+    auth = Auth("iostart", register=False)
     app = FastAPI()
     app.middleware("http")(auth.middleware(open_prefixes=("/api/auth/",)))
     app.include_router(auth.router())
@@ -107,7 +107,7 @@ def signed_in(app, name, password):
 def test_the_admin_routes():
     suite.register("iocalendar", name="ioCalendar")
     users.create("alex", "secret123", suite_admin=True)
-    users.create("ed", "secret123", "admin", "iosuite")
+    users.create("ed", "secret123", "admin", "iostart")
     app = make_app()
     ed = signed_in(app, "ed", "secret123")
     assert ed.get("/api/suite-admin/updates").status_code == 403  # an app admin is not a suite admin
@@ -122,10 +122,10 @@ def test_the_admin_routes():
 def test_the_mcp_tools():
     from mcp.server.mcpserver.exceptions import ToolError
     suite.register("iocalendar", name="ioCalendar")
-    server = shared_mcp.make_server("iosuite", "ioSuite", "1.0", instructions="")
+    server = shared_mcp.make_server("iostart", "ioStart", "1.0", instructions="")
     shared_mcp.add_suite_update_tools(server)
     alex = users.create("alex", "secret123", suite_admin=True)
-    ed = users.create("ed", "secret123", "admin", "iosuite")
+    ed = users.create("ed", "secret123", "admin", "iostart")
 
     def call(user, name, args):
         tok = shared_mcp.current_user.set(user)
@@ -134,11 +134,11 @@ def test_the_mcp_tools():
         finally:
             shared_mcp.current_user.reset(tok)
     with pytest.raises(ToolError):
-        call(users.get(ed["id"], "iosuite"), "update_suite_apps", {})
-    out = call(users.get(alex["id"], "iosuite"), "update_suite_apps", {"apps": ["iocalendar"]})
+        call(users.get(ed["id"], "iostart"), "update_suite_apps", {})
+    out = call(users.get(alex["id"], "iostart"), "update_suite_apps", {"apps": ["iocalendar"]})
     assert "iocalendar" in str(out)
     assert db.one("SELECT action FROM ios_updates WHERE app = 'iocalendar'")["action"] == "update"
-    out = call(users.get(alex["id"], "iosuite"), "suite_versions", {"check": False})
+    out = call(users.get(alex["id"], "iostart"), "suite_versions", {"check": False})
     assert "iocalendar" in str(out)
 
 

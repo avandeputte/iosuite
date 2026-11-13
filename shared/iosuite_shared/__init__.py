@@ -14,7 +14,7 @@ Configuration (environment): IOSUITE_DB_HOST, _PORT, _NAME, _USER, _PASSWORD (th
 COOKIE_DOMAIN (the domain the session cookie is shared on, e.g. example.com; a request from a host outside it,
 such as a LAN address, gets a cookie for that host only).
 """
-__version__ = "0.46.0"
+__version__ = "0.47.0"
 
 from iosuite_shared.errors import Invalid
 

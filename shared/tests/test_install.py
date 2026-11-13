@@ -17,8 +17,8 @@ DB_USER=suite
 DB_PASSWORD=s3cret
 IOSUITE_DB_HOST=db.lan
 IOSUITE_DB_PORT=3307
-IOSUITE_DB_NAME=iosuite
-IOSUITE_DB_USER=iosuite
+IOSUITE_DB_NAME=iostart
+IOSUITE_DB_USER=iostart
 IOSUITE_DB_PASSWORD=sh4red
 COOKIE_DOMAIN=example.com
 PORT=8630
@@ -35,19 +35,19 @@ def test_parse_apps():
 
 
 def test_plan_shares_the_answers(tmp_path):
-    app = tmp_path / "opt" / "iosuite" / "app"
+    app = tmp_path / "opt" / "iostart" / "app"
     app.mkdir(parents=True)
     (app / "config.env").write_text(CFG)
     cfg = install.read_env_file(app / "config.env")
     base = install.base_dir(app)
     assert base == tmp_path / "opt"
-    entries = install.plan(["iocalendar", "iopix", "iosuite"], cfg, base, admin="alex", service=True, from_app="iosuite")
+    entries = install.plan(["iocalendar", "iopix", "iostart"], cfg, base, admin="alex", service=True, from_app="iostart")
     assert [e["name"] for e in entries] == ["iocalendar", "iopix"]  # the caller is never reinstalled
     cal = entries[0]
     assert cal["target"] == tmp_path / "opt" / "iocalendar" / "app"
     # the same server, user and password; the app's own database name; the Shared ioSuite database as it is
     assert cal["env"]["IOCALENDAR_DB"] == "db.lan:3307/calendar:suite:s3cret"
-    assert cal["env"]["IOCALENDAR_SUITE_DB"] == "db.lan:3307/iosuite:iosuite:sh4red"
+    assert cal["env"]["IOCALENDAR_SUITE_DB"] == "db.lan:3307/iostart:iostart:sh4red"
     assert cal["env"]["IOCALENDAR_ADMIN"].startswith("alex:")
     assert cal["args"][:5] == ["--yes", "--cookie-domain", "example.com", "--public-url", ""]
     assert "--service" in cal["args"] and "--no-admin" not in cal["args"]
@@ -67,7 +67,7 @@ def test_plan_without_an_app_database_lends_the_shared_one(tmp_path):
 
 
 def test_install_runs_each_setup_and_skips_what_is_there(tmp_path, monkeypatch):
-    app = tmp_path / "opt" / "iosuite" / "app"
+    app = tmp_path / "opt" / "iostart" / "app"
     app.mkdir(parents=True)
     (app / "config.env").write_text(CFG)
     done = tmp_path / "opt" / "iocontact" / "app"
@@ -93,8 +93,8 @@ def test_install_runs_each_setup_and_skips_what_is_there(tmp_path, monkeypatch):
 def test_cli_has_install(tmp_path, monkeypatch):
     calls = {}
     monkeypatch.setattr(install, "install", lambda names, config_dir, **kw: calls.update(names=names, config_dir=config_dir, **kw) or [])
-    assert cli.main(["--config", str(tmp_path), "install", "iopix,ionote", "--admin", "alex", "--no-service", "--from", "iosuite"]) == 0
-    assert calls["names"] == ["iopix", "ionote"] and calls["admin"] == "alex" and calls["service"] is False and calls["from_app"] == "iosuite"
+    assert cli.main(["--config", str(tmp_path), "install", "iopix,ionote", "--admin", "alex", "--no-service", "--from", "iostart"]) == 0
+    assert calls["names"] == ["iopix", "ionote"] and calls["admin"] == "alex" and calls["service"] is False and calls["from_app"] == "iostart"
 
 
 def test_local_mariadb_gets_the_databases(tmp_path, monkeypatch):

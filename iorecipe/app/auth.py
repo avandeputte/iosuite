@@ -11,7 +11,7 @@ from app import __version__, config, db
 
 APP = config.APP
 
-# version, address, description and color go into the suite's list of apps (iosuite_shared.suite, read by ioSuite)
+# version, address, description and color go into the suite's list of apps (iosuite_shared.suite, read by ioStart)
 auth = Auth(APP, app_label="ioRecipe", basic_realm="ioRecipe", version=__version__, public_url=config.PUBLIC_URL or None,
             description="Recipes", color="#4a7c23")
 auth.deny_exempt = ("/mcp",)  # assistants sign in with app passwords, whatever got them through a proxy

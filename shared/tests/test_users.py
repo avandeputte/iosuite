@@ -166,7 +166,7 @@ def test_admin_tools_are_for_suite_admins_only():
         admin.set_app("iodns", default_role="member")
     eff = {u["name"]: u["effective"] for u in admin.accounts()}
     assert eff["ed"]["iodns"] == "none" and eff["alex"]["iodns"] == "admin"
-    svc = users.service_account("iosuite")
+    svc = users.service_account("iostart")
     users.set_role(svc["id"], "iodns", "viewer")  # an app reading an admin tool keeps the role links gave it
     assert users.role_of(users.get(svc["id"]), "iodns") == "viewer"
 
@@ -175,7 +175,7 @@ def test_viewers_become_members_once():
     from iosuite_shared import db, schema
     users.create("alex", "secret123", suite_admin=True)
     v = users.create("vic", "secret123", "viewer", "iocalendar")
-    svc = users.service_account("iosuite")
+    svc = users.service_account("iostart")
     users.set_role(svc["id"], "iocalendar", "viewer")
     db.set_setting("default_role", "viewer", "iotask")
     with db.tx() as con, con.cursor() as cur:
@@ -214,6 +214,27 @@ def test_old_app_ids_move_to_the_singular_names_once():
     assert svc["name"] == "iocontact-app"
     assert db.one("SELECT COUNT(*) AS n FROM ios_users WHERE service IS NOT NULL")["n"] == 1
     assert users.roles_of(a["id"]) == {}
+    with db.tx() as con, con.cursor() as cur:
+        assert schema.current_version(cur, db.PREFIX) == db.SCHEMA_VERSION
+
+
+def test_the_start_page_id_moves_to_iostart_once():
+    from iosuite_shared import db, schema
+    b = users.create("bea", "secret123", "editor", "iocalendar")
+    with db.tx() as con, con.cursor() as cur:
+        cur.execute("INSERT INTO ios_user_roles (user_id, app, role) VALUES (%s, 'iosuite', 'admin')", (b["id"],))
+        cur.execute("INSERT INTO ios_settings (app, name, value) VALUES ('iosuite', 'default_role', 'editor')")
+        cur.execute("INSERT INTO ios_users (name, display_name, hash, suite_admin, listed, created_at, service) "
+                    "VALUES ('iosuite-app', 'iosuite (automatic)', '', 0, 0, 0, 'iosuite')")
+        cur.execute("DELETE FROM ios_schema_version WHERE version >= 9")
+    db._ready = False
+    db.settings_cache.clear()
+    users.invalidate()
+    db.init()
+    assert users.roles_of(b["id"]) == {"iocalendar": "editor", "iostart": "admin"}
+    assert db.get_setting("default_role", "", "iostart") == "editor"
+    assert users.service_account("iostart")["name"] == "iostart-app"
+    assert db.one("SELECT COUNT(*) AS n FROM ios_users WHERE service = 'iosuite'")["n"] == 0
     with db.tx() as con, con.cursor() as cur:
         assert schema.current_version(cur, db.PREFIX) == db.SCHEMA_VERSION
 

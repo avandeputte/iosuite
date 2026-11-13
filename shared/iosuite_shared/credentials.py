@@ -3,11 +3,11 @@ password one app uses to reach another), kept in the Shared ioSuite database so 
 all from one place (Settings › Global settings › Keys and tokens on the start page).
 
     from iosuite_shared import credentials
-    credentials.declare("iosuite", [
+    credentials.declare("iostart", [
         {"name": "ha_token", "label": "Home Assistant token", "hint": "a long-lived access token", "env": "HA_TOKEN"},
     ])    # once at start: what the app keeps
-    token = os.environ.get("HA_TOKEN") or credentials.get("iosuite", "ha_token")
-    credentials.put("iosuite", "ha_token", new_value, by=user_name)     # '' or None clears it
+    token = os.environ.get("HA_TOKEN") or credentials.get("iostart", "ha_token")
+    credentials.put("iostart", "ha_token", new_value, by=user_name)     # '' or None clears it
 
 Values are write-only from the outside: listing() never returns one, only whether it is set and when it changed.
 The app reads its own with get(). A value from the environment (`env`) still wins inside the app; the listing says

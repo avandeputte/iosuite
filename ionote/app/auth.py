@@ -12,7 +12,7 @@ from app import __version__, config, db
 APP = config.APP
 
 
-# app_label, version, public_url, description and color: ionote' row in the suite's list of apps (ioSuite's start page)
+# app_label, version, public_url, description and color: ionote' row in the suite's list of apps (ioStart, the start page)
 auth = Auth(APP, app_label="ioNote",
             version=__version__, public_url=config.PUBLIC_URL or None, description="Notes", color="#1c5a5e")
 auth.write_role = "member"  # every note is its owner's own: a member writes theirs (canWrite in /api/auth/me), a viewer only reads

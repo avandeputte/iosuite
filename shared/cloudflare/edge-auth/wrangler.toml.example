@@ -16,7 +16,7 @@ binding = "APP_PASSWORDS"
 id = "your-namespace-id"          # npx wrangler kv namespace create APP_PASSWORDS
 
 [vars]
-APPS = '{"calendar.example.com": "iocalendar", "contacts.example.com": "iocontact", "start.example.com": "iosuite", "health.example.com": "iohealth"}'
+APPS = '{"calendar.example.com": "iocalendar", "contacts.example.com": "iocontact", "start.example.com": "iostart", "health.example.com": "iohealth"}'
 MODE = "monitor"                   # "enforce" once `iosuite-shared edge` shows no password missing
 
 [observability]

@@ -20,9 +20,10 @@ from iosuite_shared import config, schema
 
 log = logging.getLogger("iosuite_shared.db")
 
-SCHEMA_VERSION = 8  # 4: the suite naming convention (ios_ tables, *_at times, name/value, named indexes); 5: ios_apps.admin_tool;
+SCHEMA_VERSION = 9  # 4: the suite naming convention (ios_ tables, *_at times, name/value, named indexes); 5: ios_apps.admin_tool;
 # 6: the member role (between viewer and editor); the viewers of before, who kept their own things, became members;
-# 7: ios_updates (updating the apps from one place); 8: ioNotes, ioTasks and ioContacts became ioNote, ioTask, ioContact
+# 7: ios_updates (updating the apps from one place); 8: ioNotes, ioTasks and ioContacts became ioNote, ioTask, ioContact;
+# 9: the start page, ioSuite until then, became ioStart (ioSuite is the suite and its repository)
 PREFIX = "ios"
 OPTIONS = " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
 
@@ -390,7 +391,9 @@ def init():
                 if schema.current_version(cur, PREFIX) < 6:
                     _members(cur)
                 if schema.current_version(cur, PREFIX) < 8:
-                    _renamed(cur)
+                    _renamed(cur, RENAMED)
+                if schema.current_version(cur, PREFIX) < 9:
+                    _renamed(cur, RENAMED_START)
                 schema.record_version(cur, PREFIX, SCHEMA_VERSION)
         _ready = True
 
@@ -407,15 +410,17 @@ def _members(cur):
 
 # 8: the apps' ids before and after the suite's names became singular
 RENAMED = {"ionotes": "ionote", "iotasks": "iotask", "iocontacts": "iocontact"}
+# 9: the start page's id before and after it got a name of its own
+RENAMED_START = {"iosuite": "iostart"}
 _APP_TABLES = ("ios_user_roles", "ios_user_data", "ios_sessions", "ios_app_passwords", "ios_settings", "ios_credentials",
                "ios_apps", "ios_updates")
 
 
-def _renamed(cur):
-    """8: ioNotes, ioTasks and ioContacts are ioNote, ioTask and ioContact, so every row kept under the old app id
-    moves to the new one (roles, sessions, app passwords, settings, the list of apps...), and so do the apps' own
+def _renamed(cur, names):
+    """8: ioNotes, ioTasks and ioContacts are ioNote, ioTask and ioContact; 9: ioSuite, the start page, is ioStart. Every
+    row kept under the old app id moves to the new one (roles, sessions, app passwords, settings, the list of apps...), and so do the apps' own
     service accounts (<app>-app). A row the renamed app already wrote under its new id wins over the old one."""
-    for old, new in RENAMED.items():
+    for old, new in names.items():
         for t in _APP_TABLES:
             cur.execute(f"UPDATE IGNORE {t} SET app = %s WHERE app = %s", (new, old))
             cur.execute(f"DELETE FROM {t} WHERE app = %s", (old,))
