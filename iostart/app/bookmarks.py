@@ -633,6 +633,26 @@ def claim_unowned() -> None:
             db.ex("UPDATE prt_bookmark_nodes SET owner = %s WHERE owner IS NULL AND shared = 0", (admin["id"],))
 
 
+def give_back_to_alex() -> None:
+    """Once, on Alex's server (approved 2026-11-13): 0.49.0's claim_unowned() gave every bookmark to the admin account
+    with the lowest id, which was not alex. The bookmarks that are not shared and belong to no one, or to an admin
+    account other than alex, become alex's. Temporary: goes away in the next version."""
+    if db.get_setting("bookmarks_given_back"):
+        return
+    from iosuite_shared import users
+    from app import config
+    alex = users.find("alex")
+    if not alex:
+        return
+    others = [u["id"] for u in users.list_users(config.APP) if u.get("role") == "admin" and u["id"] != alex["id"]]
+    with writing():
+        db.ex("UPDATE prt_bookmark_nodes SET owner = %s WHERE shared = 0 AND owner IS NULL", (alex["id"],))
+        if others:
+            db.ex(f"UPDATE prt_bookmark_nodes SET owner = %s WHERE shared = 0 AND owner IN ({', '.join(['%s'] * len(others))})",
+                  (alex["id"], *others))
+    db.set_setting("bookmarks_given_back", "1")
+
+
 # ------------------------------------------------------------------ uploaded icons
 
 ICON_MAX = 256 * 1024
