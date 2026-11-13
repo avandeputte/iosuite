@@ -337,6 +337,14 @@ body.wall #main { top: 0; overflow: hidden; background: #000; }
 .bmlevel .bmlevel .bmedit { padding: 2px 0; }
 .bmstart { color: var(--fg2); opacity: .45; }
 .bmstart.on { color: var(--accent); opacity: 1; }
+/* shared with everyone: the admins' toggle beside the house, and a plain mark for everyone else */
+.bmshare { color: var(--fg2); opacity: .45; }
+.bmshare.on { color: var(--accent); opacity: 1; }
+.bmshared { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; color: var(--accent); flex: none; }
+.gripgap { display: inline-block; width: 38px; flex: none; }
+.bmhead .gripgap { width: 32px; }
+.bmrow .gripgap { margin-left: 2px; }
+.bmsharedtag { display: none; color: var(--accent); flex: none; }
 .bmrow.off .bmname, .bmrow.off .bmic { opacity: .6; }
 .bmgroups.sorting-groups .bmsubs, .bmgroups.sorting-links .bmsubs:empty { min-height: 0; }
 .bmgroups.sorting-groups .bmedit:not(.shut) > .bmlevel > .bmsubs { min-height: 14px; }
@@ -530,6 +538,7 @@ a.hatile:hover { background: var(--bg3); }
 @media (max-width: 640px) {
   .bmpagehead { gap: 8px; }
   .bmtree .bmtools { display: none; }
+  .bmsharedtag { display: inline-flex; align-items: center; margin-left: auto; }
   .bmmore { display: inline-flex; width: 40px !important; height: 40px !important; }
   .bmrow { height: 48px; }
   .bmrow .bmic { width: 40px; }

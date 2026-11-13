@@ -156,8 +156,10 @@ def test_uploaded_svg_icon(client):
     client.delete(f"/api/bookmarks/links/{l['id']}")
     from app import db
     assert db.q("SELECT * FROM prt_bookmark_node_icons") == []
-    # a viewer sees the icon but cannot change it
+    # a viewer sees the icon of a shared link but cannot change it
+    client.patch(f"/api/bookmarks/groups/{g['id']}", json={"shared": True})
     l2 = client.post(f"/api/bookmarks/groups/{g['id']}/links", json={"name": "Wiki", "href": "https://wiki.example"}).json()
+    assert l2["shared"] is True
     client.put(f"/api/bookmarks/links/{l2['id']}/icon", content=SVG)
     client.post("/api/users", json={"name": "kid", "password": "secret123", "role": "viewer"})
     client.post("/api/auth/logout")

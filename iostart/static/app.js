@@ -1383,9 +1383,10 @@ async function setHomeAssistant(el) {
 
 /* The Bookmarks page (#/bookmarks, from the start page and the gear menu): the whole tree (folders in folders, as a
    browser keeps them), what of it is on the start page (the house on a folder or on a single link), the addresses a
-   sync app needs, and files in and out. Everyone signed in sees it; editors and admins change it. */
+   sync app needs, and files in and out. Each person sees their own bookmarks and the shared ones (the people icon);
+   members, editors and admins keep their own, and the start page's admins share them and change the shared ones. */
 async function showBookmarks(page) {
-  const canEdit = ['editor', 'admin'].includes(S.user.role);
+  const canEdit = ['member', 'editor', 'admin'].includes(S.user.role);
   const body = h('div');
   // the search box: as you type, the links that match (name, address, description, folder), wherever they are
   const q = h('input', { class: 't bmq', type: 'search', placeholder: 'Search the bookmarks', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', enterkeyhint: 'search', 'aria-label': 'Search the bookmarks' });
@@ -1420,7 +1421,7 @@ async function setBookmarks(el) {
   // the search box redraws from the tree in hand; changes fetch it again (draw)
   const paint = () => {
     if (!tree || !el.isConnected) return;
-    const canEdit = ['editor', 'admin'].includes(S.user.role);
+    const canEdit = !!tree.canEdit, canShare = !!tree.canShare;
     const query = el.bmQuery ? fold(el.bmQuery()) : '';
     const call = async (path, opts, msg) => { try { await api(path, opts); if (msg) toast(msg); } catch (e) { fail(e); } await draw(); };
     // every folder, for the "Folder" choice of a link: the top level, then each with its path
@@ -1474,47 +1475,63 @@ async function setBookmarks(el) {
       const v = await dialog('New folder', h('div', null, fld('Name', i), h('label', { class: 'check' }, st, 'Show it on the start page')), [{ label: 'Cancel', value: null }, { label: 'Add', value: () => ({ name: i.value, start: st.checked }), primary: true }]);
       if (v && v.name.trim()) { bmOpen.add(parentId); await call('/api/bookmarks/groups', { method: 'POST', json: { ...v, parentId } }, 'Folder made'); }
     };
-    const grip = (title, kind) => (canEdit ? h('button', { class: 'iconbtn grip', title, 'aria-label': title, 'data-kind': kind }, icon('grip', 's')) : null);
+    const grip = (title, kind, x) => (canEdit && x.canChange ? h('button', { class: 'iconbtn grip', title, 'aria-label': title, 'data-kind': kind }, icon('grip', 's'))
+      : canEdit ? h('span', { class: 'gripgap' }) : null);
+    // shared with everyone: a toggle for the start page's admins, a mark for everyone else
+    const shareAct = (x, path) => ({ label: x.shared ? 'Stop sharing (yours only)' : 'Share with everyone', icon: 'people', hidden: !canShare,
+      run: () => call(path, { method: 'PATCH', json: { shared: !x.shared } }, x.shared ? 'Yours only now' : 'Shared with everyone') });
+    const share = (x, path) => (canShare
+      ? h('button', { class: `iconbtn bmshare${x.shared ? ' on' : ''}`, title: x.shared ? 'Shared with everyone: click to make it yours only' : 'Yours only: click to share it with everyone', 'aria-label': 'Shared with everyone', 'aria-pressed': x.shared ? 'true' : 'false', onclick: shareAct(x, path).run }, icon('people', 's'))
+      : x.shared ? h('span', { class: 'bmshared', title: 'Shared with everyone, kept by an admin' }, icon('people', 's')) : null);
     // the house: lit when the folder (its links, as a group) or the link is on the start page
     const house = (on, title, click, disabled) => h('button', { class: `iconbtn bmstart${on ? ' on' : ''}`, title, 'aria-label': title, 'aria-pressed': on ? 'true' : 'false', disabled: disabled ? true : null, onclick: click }, icon('home', 's'));
     // a link's and a folder's tools: buttons in the row, or (on a phone) behind one ⋯ button, as a list to tap
-    const linkActions = (l, f) => [
-      { label: 'Open', icon: 'web', run: () => window.open(l.href, '_blank', 'noreferrer'), hidden: !l.linkable },
-      { label: l.onStart ? 'Take it off the start page' : 'Show it on the start page', icon: 'home', disabled: !l.linkable, run: () => {
-        const want = !l.onStart;  // as its folder when that already says so, else this link's own choice
-        call(`/api/bookmarks/links/${l.id}`, { method: 'PATCH', json: { start: want === !!(f && f.start) ? null : want } });
-      } },
-      { label: 'Change', icon: 'edit', run: () => editLink(f ? f.id : 0, l) },
-      { label: 'Copy the address', icon: 'copy', run: async () => { try { await navigator.clipboard.writeText(l.href); toast('Copied'); } catch { toast(l.href); } } },
-      { label: 'Delete', icon: 'delete', danger: true, run: async () => { if (await confirmDialog('Delete the link', `Delete "${l.name || l.href}"? Browsers that sync lose it too.`, 'Delete', true)) call(`/api/bookmarks/links/${l.id}`, { method: 'DELETE' }, 'Deleted'); } },
-    ];
+    const linkActions = (l, f) => {
+      const a = {
+        open: { label: 'Open', icon: 'web', run: () => window.open(l.href, '_blank', 'noreferrer'), hidden: !l.linkable },
+        start: { label: l.onStart ? 'Take it off the start page' : 'Show it on the start page', icon: 'home', disabled: !l.linkable, run: () => {
+          const want = !l.onStart;  // as its folder when that already says so, else this link's own choice
+          call(`/api/bookmarks/links/${l.id}`, { method: 'PATCH', json: { start: want === !!(f && f.start) ? null : want } });
+        } },
+        share: shareAct(l, `/api/bookmarks/links/${l.id}`),
+        change: { label: 'Change', icon: 'edit', run: () => editLink(f ? f.id : 0, l), hidden: !l.canChange },
+        copy: { label: 'Copy the address', icon: 'copy', run: async () => { try { await navigator.clipboard.writeText(l.href); toast('Copied'); } catch { toast(l.href); } } },
+        del: { label: 'Delete', icon: 'delete', danger: true, hidden: !l.canChange, run: async () => { if (await confirmDialog('Delete the link', `Delete "${l.name || l.href}"? ${l.shared ? 'It is shared: everyone loses it, and so do the browsers that sync.' : 'Browsers that sync lose it too.'}`, 'Delete', true)) call(`/api/bookmarks/links/${l.id}`, { method: 'DELETE' }, 'Deleted'); } },
+      };
+      return Object.assign(Object.values(a).filter((x) => !x.hidden), a);
+    };
     const moreBtn = (title, actions) => h('button', { class: 'iconbtn bmmore', title: 'More', 'aria-label': `More: ${title}`, onclick: () => sheet(title, actions) }, icon('more', 's'));
-    const linkRow = (l, f, path) => h('div', { class: `bmrow${l.onStart ? '' : ' off'}`, 'data-id': l.id }, path === undefined ? grip('Drag to move the link', 'link') : null,
+    const linkRow = (l, f, path) => h('div', { class: `bmrow${l.onStart ? '' : ' off'}`, 'data-id': l.id }, path === undefined ? grip('Drag to move the link', 'link', l) : null,
       h('span', { class: 'bmic' }, bmIcon(l) ? h('img', { src: bmIcon(l), alt: '', onerror: (e) => { e.target.replaceWith(l.abbr); } }) : l.abbr), l.linkable ? h('a', { class: 'bmname', href: l.href, target: '_blank', rel: 'noreferrer', title: l.href }, l.name || l.href) : h('span', { class: 'bmname', title: l.href }, l.name || l.href),
       h('span', { class: 'muted small bmdesc' }, path === undefined ? l.description : path || 'Top level'),
-      !canEdit ? null : h('span', { class: 'bmtools' },
-        house(l.onStart, !l.linkable ? 'Only web addresses can go on the start page' : l.onStart ? 'On the start page: click to take it off' : 'Not on the start page: click to show it', linkActions(l, f)[1].run, !l.linkable),
-        h('button', { class: 'iconbtn', title: 'Change', onclick: () => editLink(f ? f.id : 0, l) }, icon('edit', 's')),
-        h('button', { class: 'iconbtn', title: 'Delete', onclick: linkActions(l, f)[4].run }, icon('delete', 's'))),
-      canEdit ? moreBtn(l.name || l.href, linkActions(l, f)) : null);
+      !canEdit && !l.shared ? null : h('span', { class: 'bmtools' },
+        share(l, `/api/bookmarks/links/${l.id}`),
+        house(l.onStart, !l.linkable ? 'Only web addresses can go on the start page' : (l.onStart ? 'On the start page: click to take it off' : 'Not on the start page: click to show it') + (l.shared && !canShare ? ' (yours only)' : ''), linkActions(l, f).start.run, !l.linkable),
+        l.canChange ? h('button', { class: 'iconbtn', title: 'Change', onclick: () => editLink(f ? f.id : 0, l) }, icon('edit', 's')) : null,
+        l.canChange ? h('button', { class: 'iconbtn', title: 'Delete', onclick: linkActions(l, f).del.run }, icon('delete', 's')) : null),
+      l.shared ? h('span', { class: 'bmsharedtag', title: 'Shared with everyone' }, icon('people', 's')) : null,
+      canEdit || l.shared ? moreBtn(l.name || l.href, linkActions(l, f)) : null);
     const count = (f) => f.items.reduce((n, x) => n + (x.type === 'folder' ? count(x) : 1), 0);
     const folderActions = (f, n) => [
       { label: f.start ? 'Take it off the start page' : 'Show it on the start page', icon: 'home', run: () => call(`/api/bookmarks/groups/${f.id}`, { method: 'PATCH', json: { start: !f.start } }) },
-      { label: 'Add a link', icon: 'add', run: () => { bmOpen.add(f.id); bmOpen.delete(-f.id); editLink(f.id, null); } },
-      { label: 'Add a folder inside', icon: 'folder', run: () => { bmOpen.delete(-f.id); newFolder(f.id); } },
-      { label: 'Rename', icon: 'edit', run: async () => { const i = h('input', { class: 't', value: f.name }); const v = await dialog('Rename the folder', i, [{ label: 'Cancel', value: null }, { label: 'Save', value: () => i.value, primary: true }]); if (v) call(`/api/bookmarks/groups/${f.id}`, { method: 'PATCH', json: { name: v } }, 'Saved'); } },
-      { label: 'Delete the folder', icon: 'delete', danger: true, run: async () => { if (await confirmDialog('Delete the folder', `Delete "${f.name}" and the ${n} link(s) in it? Browsers that sync lose them too.`, 'Delete', true)) call(`/api/bookmarks/groups/${f.id}`, { method: 'DELETE' }, 'Deleted'); } },
-    ];
+      shareAct(f, `/api/bookmarks/groups/${f.id}`),
+      { label: 'Add a link', icon: 'add', hidden: !canEdit, run: () => { bmOpen.add(f.id); bmOpen.delete(-f.id); editLink(f.id, null); } },
+      { label: 'Add a folder inside', icon: 'folder', hidden: !canEdit, run: () => { bmOpen.delete(-f.id); newFolder(f.id); } },
+      { label: 'Rename', icon: 'edit', hidden: !f.canChange, run: async () => { const i = h('input', { class: 't', value: f.name }); const v = await dialog('Rename the folder', i, [{ label: 'Cancel', value: null }, { label: 'Save', value: () => i.value, primary: true }]); if (v) call(`/api/bookmarks/groups/${f.id}`, { method: 'PATCH', json: { name: v } }, 'Saved'); } },
+      { label: 'Delete the folder', icon: 'delete', danger: true, hidden: !f.canChange, run: async () => { if (await confirmDialog('Delete the folder', `Delete "${f.name}" and the ${n} link(s) in it? ${f.shared ? 'It is shared: everyone loses it (what others added of their own in it stays theirs), and so do the browsers that sync.' : 'Browsers that sync lose them too.'}`, 'Delete', true)) call(`/api/bookmarks/groups/${f.id}`, { method: 'DELETE' }, 'Deleted'); } },
+    ].filter((a) => !a.hidden);
     const folderBox = (f) => {
       const open = isOpen(f), n = count(f), acts = folderActions(f, n);
       return h('div', { class: `bmedit${open ? '' : ' shut'}`, 'data-id': f.id },
-        h('div', { class: 'bmhead' }, grip('Drag to move the folder', 'group'),
+        h('div', { class: 'bmhead' }, grip('Drag to move the folder', 'group', f),
           h('button', { class: 'bmfold', 'aria-expanded': open ? 'true' : 'false', title: open ? 'Fold' : 'Unfold', onclick: () => { if (open) { bmOpen.delete(f.id); bmOpen.add(-f.id); } else { bmOpen.add(f.id); bmOpen.delete(-f.id); } paint(); } },
             icon(open ? 'down' : 'right', 's'), icon('folder', 's'), h('b', null, f.name || '(no name)'), h('span', { class: 'muted small' }, `${n}`)),
-          !canEdit ? null : h('span', { class: 'bmtools' },
-            house(f.start, f.start ? 'On the start page, as a group with its links: click to take it off' : 'Not on the start page: click to show it as a group', acts[0].run),
-            ...acts.slice(1).map((a) => h('button', { class: 'iconbtn', title: a.label, onclick: a.run }, icon(a.icon, 's')))),
-          canEdit ? moreBtn(f.name || 'Folder', acts) : null),
+          !canEdit && !f.shared ? null : h('span', { class: 'bmtools' },
+            share(f, `/api/bookmarks/groups/${f.id}`),
+            house(f.start, (f.start ? 'On the start page, as a group with its links: click to take it off' : 'Not on the start page: click to show it as a group') + (f.shared && !canShare ? ' (yours only)' : ''), acts[0].run),
+            ...acts.slice(1).filter((a) => a.icon !== 'people').map((a) => h('button', { class: 'iconbtn', title: a.label, onclick: a.run }, icon(a.icon, 's')))),
+          f.shared ? h('span', { class: 'bmsharedtag', title: 'Shared with everyone' }, icon('people', 's')) : null,
+          canEdit || f.shared ? moreBtn(f.name || 'Folder', acts) : null),
         open ? level(f.items, f) : null);
     };
     // a folder's links, then the folders inside it (each list takes what is dragged into it)
@@ -1538,7 +1555,9 @@ async function setBookmarks(el) {
     el.bmAdd = () => editLink(0, null);
     el.replaceChildren(
       h('div', { class: 'box bmtree' }, h('h2', null, icon('link'), query ? 'Found' : 'Bookmarks'),
-        h('p', { class: 'muted' }, canEdit ? 'Every bookmark of the family, in folders as a browser keeps them. The house says what is on the start page: on a folder it shows the folder as a group with its links, on a link it shows or hides just that one. Everything here syncs to the browsers, on the start page or not. Drag a folder or a link by its handle to move it.' : 'Every bookmark of the family, in folders as a browser keeps them. Editors and admins change them.'),
+        h('p', { class: 'muted' }, (canEdit ? 'Your bookmarks and the shared ones, in folders as a browser keeps them. Yours are yours alone; the shared ones (the people icon) everyone sees. The house says what is on the start page: on a folder it shows the folder as a group with its links, on a link it shows or hides just that one. Everything here syncs to your browsers, on the start page or not. Drag a folder or a link by its handle to move it.'
+          : 'The shared bookmarks, in folders as a browser keeps them. The house says what is on your start page.')
+          + (canShare ? ' The people icon shares a folder or a link with everyone (what you add in a shared folder is shared too); only the start page\'s admins change the shared ones.' : canEdit ? ' The shared ones are kept by an admin: you can add links of your own in a shared folder, and take shared ones off your own start page.' : '')),
         query ? results() : tree.items.length ? h('div', { class: 'bmgroups' }, level(tree.items, null)) : h('p', { class: 'muted' }, 'No bookmarks yet.'),
         !canEdit || query ? null : h('div', { class: 'multi', style: 'margin-top:12px' },
           h('button', { class: 'pillbtn primary', onclick: () => newFolder(0) }, icon('add', 's'), 'Folder'),

@@ -1,10 +1,13 @@
 """The sync API of the ioStart Bookmarks browser extension (static/extension/): the tree in one request, and a browser's
 changes in one request, applied together.
 
-    GET  <address>/dav/ext        who is signed in, whether they may change the bookmarks, the revision
+    GET  <address>/dav/ext        who is signed in, whether they may change their bookmarks (canWrite) and the shared
+                                  ones (canShare), the revision
     GET  <address>/dav/ext/tree   {rev, tree}: every folder and link, nested, with their ids
     POST <address>/dav/ext/sync   {base, ops}: a browser's changes since its copy at revision `base`;
-                                  answers {rev, ids, tree}: the tree after them, and the ids given to what it made
+                                  answers {rev, ids, tree, refused}: the tree after them, the ids given to what it
+                                  made, and how many changes were not taken (a shared bookmark, by someone who does
+                                  not manage them: it comes back as it was)
     GET  <address>/dav/ext/icon/<id>  the icon of a link's site, as the server keeps it (app/siteicons.py); 404 without one
 
 ioStart, the iPhone and iPad app (the repository avandeputte/iostart-apps), speaks the same API: it shows the tree,
@@ -24,6 +27,10 @@ An op is one of
 applied creates, then updates, then orders, then deletes. A change to something already gone is skipped. A delete of
 something changed on the server after `base` (in another browser, or on the start page) is skipped too: it comes back
 to the browser, which is the safe way round.
+
+The tree is the account's (app/bookmarks.py): their own bookmarks and the shared ones, in the same folders; a node the
+account may not change carries "shared": true and "readOnly": true. Someone who is not an admin of the start page can
+add their own links in a shared folder; what they change of the shared bookmarks themselves is refused and goes back.
 """
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
@@ -39,8 +46,10 @@ MAX_OPS = 20000
 
 def tree(t: bookmarks.Tree | None = None, pid=None) -> list[dict]:
     t = t or bookmarks.Tree()
-    return [{"id": r["id"], "folder": True, "title": r["name"], "children": tree(t, r["id"])} if r["folder"] else
-            {"id": r["id"], "folder": False, "title": r["name"], "url": r["url"]} for r in t.children(pid)]
+    def marks(r):
+        return {} if not r["shared"] else {"shared": True, "readOnly": not bookmarks.may_change(r)}
+    return [{"id": r["id"], "folder": True, "title": r["name"], **marks(r), "children": tree(t, r["id"])} if r["folder"] else
+            {"id": r["id"], "folder": False, "title": r["name"], "url": r["url"], **marks(r)} for r in t.children(pid)]
 
 
 def _state() -> dict:
@@ -51,11 +60,12 @@ def _state() -> dict:
 
 
 def apply(base: int, ops: list) -> dict:
-    """The ops of one browser, together (see the module's doc). Returns {rev, ids, tree}."""
+    """The ops of one browser, together (see the module's doc). Returns {rev, ids, tree, refused}."""
     if not isinstance(ops, list) or len(ops) > MAX_OPS:
         raise bookmarks.BadBookmark("The changes are not a list, or too many at once")
     ops = [o for o in ops if isinstance(o, dict)]
     ids: dict = {}
+    refused = 0
 
     def ref(v):
         """An id, a ref to something made in this request (None when it was not made), or None: the top."""
@@ -68,12 +78,15 @@ def apply(base: int, ops: list) -> dict:
         return int(v)
 
     if not ops:
-        return {**_state(), "ids": ids}
+        return {**_state(), "ids": ids, "refused": 0}
     with bookmarks.writing() as now:
         for o in (o for o in ops if o.get("op") == "create"):
             try:
                 r = bookmarks.create(ref(o.get("parent")), bool(o.get("folder")), str(o.get("title") or ""),
                                      None if o.get("folder") else str(o.get("url") or ""))
+            except bookmarks.NotAllowed:
+                refused += 1
+                continue
             except (LookupError, ValueError):  # its folder was not made (or is gone), or the address is unusable
                 continue
             if isinstance(o.get("ref"), str):
@@ -84,6 +97,8 @@ def apply(base: int, ops: list) -> dict:
                 c["name"] = c.pop("title")
             try:
                 bookmarks.change(int(o["id"]), c)
+            except bookmarks.NotAllowed:
+                refused += 1
             except (KeyError, LookupError, ValueError):
                 continue
         for o in (o for o in ops if o.get("op") == "order"):
@@ -95,6 +110,9 @@ def apply(base: int, ops: list) -> dict:
                         want.append(ref(i))
                     except (LookupError, ValueError):
                         pass
+                mine = bookmarks.Tree()
+                refused += sum(1 for i in want if i in mine.by and not bookmarks.may_change(mine.by[i])
+                               and mine.by[i]["parent_id"] != parent)  # a move of a shared one (its place among others is no change)
                 bookmarks.order(parent, [i for i in want if i is not None])
             except (LookupError, ValueError):
                 continue
@@ -108,9 +126,12 @@ def apply(base: int, ops: list) -> dict:
                 continue
             if any(base < t.by[i]["rev"] < now for i in t.below(nid) if i in t.by):
                 continue  # changed after the browser's copy: it stays, and comes back to the browser
+            if not bookmarks.may_change(t.by[nid]):
+                refused += 1
+                continue
             bookmarks.remove(nid)
             t = bookmarks.Tree()
-    return {**_state(), "ids": ids}
+    return {**_state(), "ids": ids, "refused": refused}
 
 
 def _guard(fn):
@@ -125,7 +146,7 @@ def _guard(fn):
 @router.get(BASE, include_in_schema=False)
 def hello(request: Request):
     u = sync.user(request)
-    return {"user": u["name"], "displayName": u.get("displayName") or u["name"], "canWrite": bool(users.can_write(u)),
+    return {"user": u["name"], "displayName": u.get("displayName") or u["name"], "canWrite": bool(users.is_member(u)), "canShare": bool(users.is_admin(u)),
             "rev": bookmarks.revision(), "version": __version__}
 
 

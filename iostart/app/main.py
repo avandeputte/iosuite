@@ -31,8 +31,8 @@ OPEN_PREFIXES = ("/static/", "/mcp", "/dav/")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await run_in_threadpool(db.migrate)
-    await run_in_threadpool(bookmarks.carry_over)  # once: the bookmarks of before the tree (goes away next version)
     await run_in_threadpool(users.init)
+    await run_in_threadpool(bookmarks.claim_unowned)  # bookmarks nobody owns become the first admin's
     await run_in_threadpool(keys.declare)  # the Home Assistant token and AccuWeather key live with the suite's keys and tokens
     updater.start_daily()   # the daily "is there a newer version" check, while the setting allows it
     log.info("ioStart %s started, database %s:%s/%s", __version__, config.DB_HOST, config.DB_PORT, config.DB_NAME)

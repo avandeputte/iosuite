@@ -43,7 +43,7 @@ def test_sync_api(client):
     assert me["user"] == "alex" and me["canWrite"] is True
     rev0 = anon.get(EXT + "/rev", headers=auth).json()["rev"]
     # nothing to do moves nothing on
-    assert anon.post(EXT + "/sync", headers=auth, json={"base": rev0, "ops": []}).json() == {"rev": rev0, "tree": [], "ids": {}}
+    assert anon.post(EXT + "/sync", headers=auth, json={"base": rev0, "ops": []}).json() == {"rev": rev0, "tree": [], "ids": {}, "refused": 0}
     r = anon.post(EXT + "/sync", headers=auth, json={"base": rev0, "ops": [
         {"op": "create", "ref": "bar", "parent": None, "folder": True, "title": "Bookmarks bar"},
         {"op": "create", "ref": "a", "parent": "bar", "folder": False, "title": "A", "url": "https://a.example/"},

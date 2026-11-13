@@ -6,7 +6,7 @@ import hashlib
 import json
 import re
 
-from app import bookmarkfiles, bookmarks, bookmarksync, db
+from app import bookmarkfiles, bookmarks
 
 NC = "/dav/nextcloud/index.php/apps/bookmarks/public/rest/v2"
 DAV = "/dav/bookmarks"
@@ -318,24 +318,3 @@ def test_order_keeps_the_places_of_what_is_not_named(client):
     bookmarks.order(f, [a, other, c, b])  # one dragged in from elsewhere
     assert [r["id"] for r in bookmarks.Tree().children(f)] == [a, sub, other, c, b]
     assert bookmarks.Tree().by[other]["parent_id"] == f
-
-
-def test_bookmarks_from_before_the_tree_are_carried_over(client):
-    with db.tx() as con, con.cursor() as cur:
-        cur.execute("CREATE TABLE prt_bookmark_groups (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(128) NOT NULL, position INT NOT NULL DEFAULT 0)")
-        cur.execute("CREATE TABLE prt_bookmarks (id INT AUTO_INCREMENT PRIMARY KEY, group_id INT NOT NULL, name VARCHAR(128) NOT NULL, abbr VARCHAR(8) NULL, "
-                    "url VARCHAR(2048) NOT NULL, description VARCHAR(512) NULL, icon VARCHAR(1024) NULL, position INT NOT NULL DEFAULT 0)")
-        cur.execute("CREATE TABLE prt_bookmark_icons (bookmark_id INT PRIMARY KEY, svg MEDIUMTEXT NOT NULL, etag CHAR(16) NOT NULL)")
-        cur.execute("INSERT INTO prt_bookmark_groups (id, name, position) VALUES (7, 'Later', 1), (9, 'First', 0)")
-        cur.execute("INSERT INTO prt_bookmarks (id, group_id, name, abbr, url, description, icon, position) VALUES "
-                    "(3, 9, 'Git', 'GH', 'https://github.com', 'Code', 'github.png', 1), (4, 9, 'Mail', 'MA', 'https://mail.example', NULL, NULL, 0), (5, 7, 'X', 'X', 'https://x.example', NULL, NULL, 0)")
-        cur.execute("INSERT INTO prt_bookmark_icons VALUES (3, '<svg xmlns=''http://www.w3.org/2000/svg''/>', 'abcdabcdabcdabcd')")
-    db.set_setting("bookmarks_carried", None)
-    bookmarks.carry_over()
-    bookmarks.carry_over()  # once
-    gs = client.get("/api/bookmarks").json()["groups"]
-    assert [(g["name"], [(l["name"], l["abbr"], l["description"]) for l in g["links"]]) for g in gs] == \
-        [("First", [("Mail", "MA", "mail.example"), ("Git", "GH", "Code")]), ("Later", [("X", "X", "x.example")])]
-    git = gs[0]["links"][1]
-    assert git["icon"] == "github.png" and git["iconUrl"].endswith("v=abcdabcdabcdabcd") and client.get("/" + git["iconUrl"]).status_code == 200
-    assert bookmarksync.items()[0]["title"] == "First"

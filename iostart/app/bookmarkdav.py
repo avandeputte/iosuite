@@ -43,9 +43,15 @@ def _kind(name: str) -> tuple[str, str, str]:
     return name, m.group(1), part
 
 
+def _key(what: str, name: str) -> str:
+    """A file's state is the account's: each one's file is their own tree (their bookmarks and the shared ones)."""
+    v = bookmarks.viewer()
+    return f"{what}:{v.uid if v else ''}:{name}"
+
+
 def _state(name: str) -> dict | None:
     try:
-        return json.loads(db.get_setting(f"bookmarkfile:{name}") or "null")
+        return json.loads(db.get_setting(_key("bookmarkfile", name)) or "null")
     except ValueError:
         return None
 
@@ -55,7 +61,7 @@ def _write_out(name: str, kind: str) -> str:
     rev = bookmarks.revision()
     its = sync.items(t)
     body = bookmarkfiles.to_xbel(its, bookmarks.highest_id()) if kind == "xbel" else bookmarkfiles.to_html(its, bookmarks.highest_id())
-    db.set_setting(f"bookmarkfile:{name}", json.dumps({"rev": rev, "body": body, "fresh": True}))
+    db.set_setting(_key("bookmarkfile", name), json.dumps({"rev": rev, "body": body, "fresh": True}))
     return body
 
 
@@ -81,11 +87,11 @@ def take(name: str, kind: str, text: str) -> None:
     except bookmarkfiles.BadFile as e:
         raise HTTPException(400, str(e))
     with bookmarks.writing() as rev:
-        base = int(db.get_setting(f"bookmarkfile-base:{name}") or 0)
+        base = int(db.get_setting(_key("bookmarkfile-base", name)) or 0)
         bookmarks.saw_id(bookmarkfiles.highest_id(text))
         exact = sync.replace(new, base)
-        db.set_setting(f"bookmarkfile:{name}", json.dumps({"rev": rev, "body": text, "fresh": exact}))
-        db.set_setting(f"bookmarkfile-base:{name}", str(rev))
+        db.set_setting(_key("bookmarkfile", name), json.dumps({"rev": rev, "body": text, "fresh": exact}))
+        db.set_setting(_key("bookmarkfile-base", name), str(rev))
     sync.alive()
 
 
@@ -121,7 +127,7 @@ async def folder(request: Request):
         return Response(status_code=200, headers=dav.options("1", METHODS))
     sync.user(request)
     if request.method == "GET":
-        return Response("The family's bookmarks, for sync apps: bookmarks.xbel and bookmarks.html in this folder.\n", media_type="text/plain; charset=utf-8")
+        return Response("Your bookmarks and the shared ones, for sync apps: bookmarks.xbel and bookmarks.html in this folder.\n", media_type="text/plain; charset=utf-8")
 
     def work():
         ms = ET.Element(dav.q(dav.D, "multistatus"))
@@ -168,7 +174,7 @@ async def file(name: str, request: Request):
         return Response(body, media_type="text/html", headers={"Last-Modified": dav.http_date(when)})
 
     def temp_file():
-        key = f"bookmarkfile-temp:{name}"
+        key = _key("bookmarkfile-temp", name)
         if m == "PUT":
             if len(data) > MAX_FILE:
                 raise HTTPException(413, "That bookmarks file is too large")
@@ -200,7 +206,7 @@ async def file(name: str, request: Request):
             take(name, kind, text())
             return Response(status_code=204)
         if m == "DELETE":  # the tree is not a file to delete: only the kept copy of the last upload goes
-            db.set_setting(f"bookmarkfile:{name}", None)
+            db.set_setting(_key("bookmarkfile", name), None)
             return Response(status_code=204)
         if m == "MOVE":
             raise HTTPException(403, "The bookmarks file stays where it is")
@@ -211,7 +217,7 @@ async def file(name: str, request: Request):
         rev = bookmarks.revision()
         raw = body_of(name, kind).encode("utf-8")
         if m == "GET":
-            db.set_setting(f"bookmarkfile-base:{name}", str(rev))  # what this client now knows
+            db.set_setting(_key("bookmarkfile-base", name), str(rev))  # what this client now knows
         return Response(raw, media_type=_ctype(kind), headers={"Last-Modified": dav.http_date(_modified()), "Cache-Control": "no-store"})
 
     return await run_in_threadpool({"lock": lock_file, "temp": temp_file}.get(part, main_file))

@@ -3,8 +3,9 @@ bookmarks file over WebDAV): who is asking, the lock a client holds while it syn
 and taking a whole file as the new state of the tree.
 
 A sync client signs in with HTTP Basic: the account's name and an app password (Settings › Account, or the one the
-Nextcloud sign-in flow makes), kept in the Shared ioSuite database like every app password. Reading takes an account;
-changing takes an editor or admin, as in the Bookmarks page.
+Nextcloud sign-in flow makes), kept in the Shared ioSuite database like every app password. A client gets the account's
+tree (their own bookmarks and the shared ones, app/bookmarks.py); changing it takes a member, editor or admin, and the
+shared bookmarks only change for an admin of the start page, as in the Bookmarks page.
 """
 import time
 
@@ -23,8 +24,9 @@ def user(request: Request, write: bool = False) -> dict:
     u = auth.current_user(request)
     if not u:
         raise HTTPException(401, "Sign in with your ioStart name and an app password.", headers={"WWW-Authenticate": REALM})
-    if write and not users.can_write(u):
-        raise HTTPException(403, "Only an editor or admin can change the bookmarks; this account can read them.")
+    if write and not users.is_member(u):
+        raise HTTPException(403, "This account can read the bookmarks, not change them.")
+    bookmarks.as_user(u)
     return u
 
 
@@ -62,11 +64,12 @@ def items(t: bookmarks.Tree | None = None, pid=None) -> list[dict]:
 
 
 def replace(new: list[dict], base_rev: int) -> bool:
-    """The tree becomes what a client's file says (a WebDAV client uploads the whole of it). An item is the node with
-    its id (when the client can have known it: made by `base_rev`, the revision its copy was fetched at), else, with
-    no id, a node in the same folder with the same address (or folder name); anything else is new, under the id the
-    file gives when that is free. What the file leaves out is removed, unless it changed after the client fetched its
-    copy (somebody edited the start page meanwhile): that stays, for the client's next sync.
+    """The account's tree becomes what a client's file says (a WebDAV client uploads the whole of it). An item is the
+    node with its id (when the client can have known it: made by `base_rev`, the revision its copy was fetched at),
+    else, with no id, a node in the same folder with the same address (or folder name); anything else is new, under the
+    id the file gives when that is free. What the file leaves out is removed, unless it changed after the client
+    fetched its copy (somebody edited the start page meanwhile): that stays, for the client's next sync. What the
+    account may not change (the shared bookmarks, for someone who does not manage them) stays as it is.
     Returns whether the tree is now exactly the file, ids included (then the file can be served back as it came)."""
     exact = True
     with bookmarks.writing() as rev:
@@ -86,7 +89,8 @@ def replace(new: list[dict], base_rev: int) -> bool:
 
         def level(new, pid):
             nonlocal exact
-            for pos, it in enumerate(new):
+            here = []
+            for it in new:
                 folder = it["type"] == "folder"
                 title = (it.get("title") or "").strip()[:bookmarks.NAME_MAX]
                 url = None if folder else (it.get("url") or "").strip()
@@ -94,27 +98,33 @@ def replace(new: list[dict], base_rev: int) -> bool:
                     exact = False
                     continue
                 r = find(it, pid)
-                if r:
-                    nid = r["id"]
-                    if (r["name"], r["url"], r["parent_id"], r["position"]) != (title, url, pid, pos):
-                        db.ex("UPDATE prt_bookmark_nodes SET name = %s, url = %s, parent_id = %s, position = %s, rev = %s WHERE id = %s",
-                              (title, url, pid, pos, rev, nid))
-                    if it["id"] is None:
-                        exact = False
-                else:
-                    free = it["id"] is not None and it["id"] not in t.by and it["id"] not in seen
-                    if free:
-                        nid = it["id"]
-                        bookmarks.saw_id(nid)
+                try:
+                    if r:
+                        nid = r["id"]
+                        if (r["name"], r["url"], r["parent_id"]) != (title, url, pid):
+                            if not bookmarks.may_change(r):
+                                exact = False
+                            else:
+                                if r["parent_id"] != pid:
+                                    bookmarks.change(nid, {"parent": pid})
+                                if (r["name"], r["url"]) != (title, url):
+                                    db.ex("UPDATE prt_bookmark_nodes SET name = %s, url = %s, rev = %s WHERE id = %s", (title, url, rev, nid))
+                        if it["id"] is None:
+                            exact = False
                     else:
-                        nid, exact = bookmarks._new_id(), False
-                    db.ex("INSERT INTO prt_bookmark_nodes (id, parent_id, folder, name, url, tags, start, position, rev, created_rev) "
-                          "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
-                          (nid, pid, 1 if folder else 0, title, url, "\n".join(bookmarks.clean_tags(it.get("tags"))) or None,
-                           0 if folder else None, pos, rev, rev))
+                        free = it["id"] is not None and it["id"] not in t.by and it["id"] not in seen and not db.one(
+                            "SELECT id FROM prt_bookmark_nodes WHERE id = %s", (it["id"],))
+                        nid = bookmarks.create(pid, folder, title, url, tags=it.get("tags"), nid=it["id"] if free else None)["id"]
+                        if not free:
+                            exact = False
+                except bookmarks.BadBookmark:
+                    exact = False
+                    continue
                 seen.add(nid)
+                here.append(nid)
                 if folder:
                     level(it.get("children") or [], nid)
+            bookmarks.order(pid, here)
 
         level(new, None)
         keep: set = set()
@@ -125,7 +135,14 @@ def replace(new: list[dict], base_rev: int) -> bool:
                     r = t.by.get(r["parent_id"])
         if keep:
             exact = False
-        gone = [r["id"] for r in t.rows if r["id"] not in seen and r["id"] not in keep]
-        for nid in gone:
-            db.ex("DELETE FROM prt_bookmark_nodes WHERE id = %s", (nid,))  # a folder takes what is left in it along
+        for r in t.rows:
+            if r["id"] in seen or r["id"] in keep:
+                continue
+            if not bookmarks.may_change(r):
+                exact = False
+                continue
+            try:
+                bookmarks.remove(r["id"])  # a folder takes what is left in it along
+            except bookmarks.NotFound:
+                pass
     return exact
