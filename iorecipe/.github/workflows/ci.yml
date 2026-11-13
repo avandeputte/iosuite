@@ -1,0 +1,116 @@
+# Tests against a MariaDB service, then builds the container image and pushes it to ghcr.io on pushes to main and
+# version tags (pull requests only build). A push to main whose __version__ (app/__init__.py) has no release yet is
+# released: the image also gets the v<version> tag, and a GitHub release v<version> is made with the merge's message.
+name: Tests and image
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/avandeputte/iorecipe
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized" --health-interval=5s --health-timeout=5s --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Syntax checks
+        run: |
+          python -m pip install -q -e ".[test]" pyflakes
+          python -m pyflakes app tests
+          node --input-type=module --check < static/app.js
+          for f in *.sh; do sh -n "$f"; done
+          bash -n proxmox/ct/iorecipe.sh proxmox/install/iorecipe-install.sh
+      - name: Tesseract
+        # reads the text on a photo of a recipe: with it, that test runs too
+        run: |
+          for n in 1 2 3 4; do
+            sudo apt-get update -qq -o Acquire::Retries=3 && sudo apt-get install -y -qq -o Acquire::Retries=3 tesseract-ocr && break
+            [ "$n" = 4 ] && exit 1
+            sleep $((n * 15))
+          done
+      - name: Tests
+        # scratch databases recipe_test and recipe_test_auth on the service (iosuite_shared.testing)
+        env:
+          IOSUITE_TEST_DB: 127.0.0.1:3306:root:root
+        run: python -m pytest -q -p no:cacheprovider tests
+
+  image:
+    needs: tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: version
+        run: echo "version=$(python3 -c 'import re;print(re.search(r"__version__ = \"([^\"]+)\"", open("app/__init__.py").read()).group(1))')" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - name: Log in to ghcr.io
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=v${{ steps.version.outputs.version }},enable=${{ github.ref == 'refs/heads/main' }}
+            type=ref,event=tag
+            type=sha,prefix=
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          # a pull request is checked on one kind of processor; what is published is built for both
+          platforms: ${{ github.event_name == 'pull_request' && 'linux/amd64' || 'linux/amd64,linux/arm64' }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: COMMIT=${{ github.sha }}
+          # the layers are kept between runs: the AI model's runtime (llama.cpp) is compiled once, not on every
+          # push, which for arm64 under emulation takes the better part of an hour
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  release:
+    # every new version on main becomes a release (tag v<version>), with no one having to click anything
+    needs: image
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Release the version when it is new
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          v="v$(python3 -c 'import re;print(re.search(r"__version__ = \"([^\"]+)\"", open("app/__init__.py").read()).group(1))')"
+          if gh release view "$v" >/dev/null 2>&1; then echo "$v is released already"; exit 0; fi
+          git log -1 --format=%B > notes.md
+          printf '\n\nImage: `ghcr.io/avandeputte/iorecipe:%s` (also `latest`).\n' "$v" >> notes.md
+          gh release create "$v" --target "$GITHUB_SHA" --title "$v: $(git log -1 --format=%s | sed -E 's/^v[0-9.]+: //; s/ \(#[0-9]+\)$//')" --notes-file notes.md
