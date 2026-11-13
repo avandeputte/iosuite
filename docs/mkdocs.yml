@@ -113,3 +113,5 @@ nav:
   - Reference:
       - Configuration: reference/configuration.md
       - Databases: reference/databases.md
+  - Privacy:
+      - ioStart Bookmarks extension: privacy/iostart-bookmarks.md
