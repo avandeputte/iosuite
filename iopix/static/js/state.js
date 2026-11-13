@@ -1,0 +1,279 @@
+/** What the whole app shares: user and settings, the library's metadata, the route and the navigation, status polling. */
+import { $, DOCK_MIN, PREF, api, fill, h, main, norm, store } from './core.js';
+import { crumbs, renderChips } from './search.js';
+import { G, keepPlace, removeScrubber, showPhotos } from './grid.js';
+import { clearSelection, showDamaged, showHistory, showImport, showQuality, showTrash } from './actions.js';
+import { MORE_VIEWS, currentNav, showAlbums, showClothing, showDateSuggest, showDetected, showEvents, showExplore, showFolders, showJerseys, showPeople, showPlaceSuggest, showPlaces, showRotation } from './pages.js';
+import { showConsistency, showDuplicates, showFaces, showTags } from './admin.js';
+import { showSettings, showTools } from './settings.js';
+import { M, showMap } from './map.js';
+import { renderFilters, toggleFilters } from './filters.js';
+import { LB, syncLightbox } from './lightbox.js';
+import { pollStatus } from './main.js';
+
+/** Mutable state every module reads and writes (one object, so modules can assign it; ES module bindings cannot be
+ *  assigned from outside). Each group of fields has one writer; the rest only read:
+ *  - the session (users.js loadUser, after a sign-in or sign-out): USER, IS_ADMIN, USERS_EXIST, REQUIRE_LOGIN, VIA_PROXY;
+ *  - the server's status (main.js pollStatus, from /api/status and /api/meta): META, tagById, albumById, SEM, APP_STAMP,
+ *    APP_VERSION, APP_COMMIT, APP_NAME, LOSSLESS, EDITING, WRITE_FILES, CAN_MANAGE, FACE_DETECT, SYNC_OFF, NO_DK, AUTO_DB,
+ *    DIGIKAM_CHECK, PENDING, BOOTED, RELOAD_PENDING, STALE_VIEW, liveRedraw, quietUntil, pollTimer;
+ *  - the route and what is drawn (state.js onRoute and go): route, viewKey, drawnKey, lastHash, keepView, facetToken, placeRows;
+ *  - editing helpers loaded on first use (editing.js): TEMPLATES, RECENT_TAGS, CONCEPTS (loadConcepts below), dragTag, manageTags;
+ *  - the maps (map.js): MAPS, mapsLoaded, leafletP, clusterP; the search box (search.js): sgItems, sgSel, scrollRaf.
+ *  A page may also keep a flag of its own here (arrangePeople, applySidebar, reindexUntil), set and read by that one module.
+ *  Keys are UPPER_CASE when they come from the server or the session and camelCase when the page sets them; G (grid.js),
+ *  LB (lightbox.js) and M (map.js) stay with their widget: they are that widget's own working state (what it shows, where it
+ *  is scrolled, its DOM nodes), reset by it and read by nobody else except to ask what it shows. */
+export const S = {
+  RELOAD_PENDING: false,
+  STALE_VIEW: false,
+  USER: null,
+  META: null,
+  tagById: new Map(),
+  albumById: new Map(),
+  route: { view: 'photos', params: new URLSearchParams() },
+  viewKey: null,
+  drawnKey: null,  // the page last drawn: viewKey is cleared to have it drawn again, this one is not
+  SEM: { enabled: false },
+  CONCEPTS: null,
+  APP_STAMP: null,
+  dragTag: null,
+  IS_ADMIN: true,
+  IS_MEMBER: true,  // a member or more keeps favorites and albums of their own; a viewer only looks
+  USERS_EXIST: false,
+  REQUIRE_LOGIN: false,
+  BOOTED: false,
+  DIGIKAM_CHECK: 'pgrep',
+  APP_VERSION: '',
+  APP_COMMIT: '',
+  APP_NAME: 'ioPix',
+  LOSSLESS: null,
+  EDITING: false,
+  WRITE_FILES: false,
+  CAN_MANAGE: false,
+  FACE_DETECT: false,
+  SYNC_OFF: false,
+  NO_DK: false,  // no digiKam database at all: the library lives only in iopix's own database
+  manageTags: false,
+  PENDING: 0,
+  pollTimer: 0,
+  keepView: false,
+  sgItems: [],
+  sgSel: 0,
+  scrollRaf: 0,
+  RECENT_TAGS: null,
+  TEMPLATES: null,
+  leafletP: null,
+  clusterP: null,
+  MAPS: { provider: 'osm', url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', attribution: '© OpenStreetMap contributors', maxZoom: 19, link: 'https://www.openstreetmap.org/?mlat={lat}&mlon={lon}#map=15/{lat}/{lon}', linkLabel: 'OpenStreetMap' },
+  mapsLoaded: false,
+  facetToken: 0,
+  placeRows: [],
+  lastHash: null,  // the hash onRoute last drew (a link click fires popstate and hashchange for the same hash)
+  liveRedraw: null,  // a list page the library changed under, waiting to be redrawn (main.js)
+  quietUntil: 0,  // until then (a minute after a move to the trash) the library's catching up redraws no page: the page already shows it
+};
+
+/** A person's badge picture; the version key busts the cache when digiKam's tag icon changes. */
+export const faceUrl = (tagId) => `/face/${tagId}?v=${S.tagById.get(tagId)?.icon || 0}`;
+// an account's avatar: the linked person's face badge from People, else the first letter
+export const avatarOf = (u, big) => u.person ? h('img', { class: 'avatar' + (big ? ' big' : ''), src: faceUrl(u.person), alt: '' }) : h('span', { class: 'avatar' + (big ? ' big' : '') }, u.name[0].toUpperCase());
+export { toast, toastError } from './core.js';  // defined there so core's act() can use them; every module keeps importing them from here
+
+
+export const FILTER_VIEWS = ['photos', 'map'];
+export const NAV = [
+  ['explore', 'Explore', 'explore'], ['photos', 'Photos', 'photo'], ['people', 'People', 'person'], ['places', 'Places', 'place'],
+  ['favorites', 'Favorites', 'heartO', '#/photos?fav=1'], ['folders', 'Folders', 'folder'], ['albums', 'Albums', 'album'], ['tags', 'Tags', 'tag'], ['map', 'Map', 'map'],
+  ['events', 'Events & trips', 'calendar'],
+];
+export const NAV_LIBRARY = 'favorites';  // the first link of the sidebar's "Library" group (everyone)
+// the sidebar's "Manage" group: library management, for admins only
+export const NAV_MANAGE = [
+  ['import', 'Import', 'add'], ['trash', 'Trash', 'trash'],
+  ['detected', 'Detected content', 'spark'], ['history', 'Edit log', 'edit'], ['tools', 'Tools', 'wrench'],
+];
+// The suggestion and check pages (date and place suggestions, jersey numbers, clothing matches, wrongly rotated, damaged
+// files, duplicate files, metadata quality) are reached from Tools, each summarised there in a line, not from the sidebar: they are
+// occasional clean-up work, not browsing.
+// hash S.route name -> page renderer (function declarations are hoisted, so this can sit above them)
+export const VIEW_FNS = { photos: showPhotos, explore: showExplore, people: showPeople, places: showPlaces, folders: showFolders, albums: showAlbums, tags: showTags, map: showMap, duplicates: showDuplicates,
+  detected: showDetected, events: showEvents, history: showHistory, settings: showSettings, tools: showTools, consistency: showConsistency, quality: showQuality, trash: showTrash, import: showImport, faces: showFaces, datesuggest: showDateSuggest, placesuggest: showPlaceSuggest, jerseys: showJerseys, clothing: showClothing, rotation: showRotation, damaged: showDamaged };
+const VIEWS = Object.keys(VIEW_FNS);
+const PARAM_VIEWS = ['places', 'faces', 'history', 'import'];  // views whose own query parameters (not photo filters) pick what they show
+// favorites and app albums (stored by the app, not in digiKam)
+export const ST = { rev: -1, fav: new Set(), albums: [], searches: [] };
+
+
+export function loadConcepts() { if (S.CONCEPTS || !S.SEM.enabled) return; S.CONCEPTS = []; api('/api/concepts').then((c) => { S.CONCEPTS = c.concepts.map((x) => ({ ...x, _n: norm(x.name) })); }).catch(() => { S.CONCEPTS = null; }); }
+
+export const applyBadgePref = () => document.body.classList.toggle('nobadges', store.get(PREF.badges, '1') === '0');
+// The photo info panel's sections, each one a user can hide (Settings › Display › Info panel, or the gear in the
+// panel). What is stored is the hidden set, so a section added later shows by default.
+const INFO_SECTIONS = [
+  ['caption', 'Title and caption'], ['date', 'Date and time'], ['file', 'File name, size and folder'], ['people', 'People'], ['tags', 'Tags'],
+  ['location', 'Location and map'], ['details', 'Details: rating, creator, copyright, video'], ['camera', 'Camera, lens and exposure'],
+  ['ai', 'AI analysis: description, detected content, objects, text, sharpness'], ['history', 'Edit log: every change made here, with undo'],
+];
+export const infoHidden = () => new Set(store.get(PREF.infoHide, '').split(',').filter(Boolean));
+export function infoPrefsEditor(onchange) {
+  const hid = infoHidden();
+  return h('div', { class: 'iprefs' }, INFO_SECTIONS.map(([k, label]) => h('label', null, h('input', { type: 'checkbox', checked: !hid.has(k), onchange: (e) => {
+    const s = infoHidden(); if (e.target.checked) s.delete(k); else s.add(k); store.set(PREF.infoHide, [...s].join(',')); onchange?.(); } }), label)));
+}
+/** Appearance: light, dark, or follow the system (the default). Set on <html> so the stylesheet
+ *  picks the palette; the browser chrome (theme-color) follows the page background. */
+export const THEMES = [['light', 'Light'], ['dark', 'Dark'], ['system', 'System']];  // the device's unless chosen otherwise
+export function applyTheme() {
+  const t = store.get(PREF.theme, 'system');
+  if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;
+  S.applySidebar?.();  // docked or put away is a display preference too: it follows the account
+  requestAnimationFrame(() => { const m = document.querySelector('meta[name=theme-color]'); if (m) m.content = getComputedStyle(document.body).backgroundColor; });
+}
+
+
+/** The app's name as a .brand-name span: when it is ioPix (in any capitalisation), the wordmark "io" + "Pix" in its two colours (Settings › Name can change it). */
+export function brandName(el = h('span', { class: 'brand-name' })) {
+  const n = S.APP_NAME || 'ioPix';
+  if (n.toLowerCase() === 'iopix') fill(el, h('span', { class: 'io' }, 'io'), h('span', { class: 'pix' }, 'Pix'));
+  else el.textContent = n;
+  return el;
+}
+export function applyAppName() {
+  document.querySelectorAll('.brand-name').forEach((b) => brandName(b));
+  document.title = S.APP_NAME;
+  const meta = document.querySelector('meta[name="apple-mobile-web-app-title"]'); if (meta) meta.content = S.APP_NAME;
+}
+
+
+/** Re-check server status soon (after an edit) instead of waiting for the regular poll. */
+export function pollSoon(ms = 1500) { clearTimeout(S.pollTimer); S.pollTimer = setTimeout(pollStatus, document.hidden ? Math.max(ms, 120000) : ms); }  // a hidden tab asks every two minutes at most
+export async function loadState() {
+  const s = await api('/api/state');
+  ST.rev = s.rev; ST.fav = new Set(s.favorites); ST.albums = s.albums; ST.searches = s.searches || []; ST.canShare = !!s.canShareAlbums; ST.canPrivate = !!s.canPrivateAlbums;
+}
+export const ualbumById = (id) => ST.albums.find((a) => a.id === +id);
+
+export function parseHash() {
+  const raw = location.hash.replace(/^#\/?/, '');
+  const i = raw.indexOf('?');  // only the first ? starts the query: #/photos?q=why? keeps its question mark
+  let path = i < 0 ? raw : raw.slice(0, i);
+  const params = new URLSearchParams(i < 0 ? '' : raw.slice(i + 1));
+  // Settings carries its tab and the part of it in the path, as in every io app: #/settings/security/people
+  const [first, tab, part] = path.split('/');
+  if (first === 'settings') { path = first; if (tab) params.set('tab', tab); if (part) params.set('part', part); }
+  return { view: VIEWS.includes(path) ? path : 'explore', params };  // Explore is the home page
+}
+export function hashFor(view, params) {
+  const p = new URLSearchParams(params || '');
+  let path = view;
+  if (view === 'settings' && p.get('tab')) { path += `/${p.get('tab')}${p.get('part') ? '/' + p.get('part') : ''}`; p.delete('tab'); p.delete('part'); }
+  const qs = p.toString();
+  return `#/${path}${qs ? '?' + qs : ''}`;
+}
+export function go(view, params, replace = false) {
+  history[replace ? 'replaceState' : 'pushState'](null, '', hashFor(view, params));
+  onRoute();
+}
+export function filterParams() {
+  const p = new URLSearchParams(FILTER_VIEWS.includes(S.route.view) ? S.route.params : '');
+  p.delete('p');
+  return p;
+}
+/** The smart album whose query is exactly this filter set (sort ignored), if any. */
+export function savedSearchFor(p) {
+  const q = new URLSearchParams(p); q.delete('sort'); q.delete('p');
+  const key = [...q.entries()].sort().map((kv) => kv.join('=')).join('&');
+  return ST.searches.find((s) => [...new URLSearchParams(s.query).entries()].sort().map((kv) => kv.join('=')).join('&') === key) || null;
+}
+/** Change the active filters, staying on the map if that is where we are. */
+export function applyFilter(mutate, view) {
+  const p = filterParams();
+  mutate(p);
+  go(view || (S.route.view === 'map' ? 'map' : 'photos'), p);
+}
+export function toggle(p, key, value) {
+  value = String(value);
+  const all = p.getAll(key);
+  p.delete(key);
+  if (all.includes(value)) all.filter((v) => v !== value).forEach((v) => p.append(key, v));
+  else [...all, value].forEach((v) => p.append(key, v));
+}
+export function setOne(p, key, value) {
+  if (value == null || value === '' || p.get(key) === String(value)) p.delete(key);
+  else p.set(key, value);
+}
+export const photosWith = (obj) => {
+  const p = new URLSearchParams();
+  for (const [k, v] of Object.entries(obj)) p.append(k, v);
+  return p;
+};
+
+/** Draw the view the hash names. Returns a promise for the page being drawn (list pages fetch their data first). */
+export function onRoute() {
+  if (S.RELOAD_PENDING && !LB.open && !G.sel.size) { location.reload(); return Promise.resolve(); }  // a new version waits: a change of page is a good moment
+  S.route = parseHash();
+  S.lastHash = location.hash;
+  try { window.webkit?.messageHandlers?.iopixRoute?.postMessage(location.hash); } catch { /* not in the app */ }
+  let done = Promise.resolve();
+  const fp = filterParams();
+  const vp = new URLSearchParams(S.route.params); vp.delete('p');
+  const key = S.route.view + '?' + (PARAM_VIEWS.includes(S.route.view) ? vp : fp).toString();
+  const cur = currentNav();
+  document.querySelectorAll('#nav a').forEach((a) => a.classList.toggle('on', a.dataset.v === cur));
+  $('#nav .navmore')?.classList.toggle('on', MORE_VIEWS.includes(cur));
+  renderChips();
+  if (key !== S.viewKey) {
+    // the page on screen drawn again (after an edit, a library update, closing the viewer on a list that changed
+    // meanwhile): it keeps its place, the selection and the focus, and the photos grid keeps the same photo at the same height
+    const again = key === S.drawnKey;
+    const quiet = S.keepView || again;
+    S.viewKey = key; S.drawnKey = key;
+    const kept = again && S.route.view !== 'photos' ? { nodes: [...main.childNodes], top: main.scrollTop } : null;
+    $('#libnote')?.remove();  // what it offered is being drawn now
+    if (again && S.route.view === 'photos' && keepPlace()) { /* the grid stays on screen until the new one is laid out */ }
+    else if (kept) { /* another page drawn again: it stays on screen, and at the same place, until the new one is drawn */ }
+    else { if (quiet) G.restore = main.scrollTop; else clearSelection(true); main.scrollTop = 0; }
+    S.keepView = false;
+    removeScrubber();
+    if (M.map && S.route.view !== 'map') { M.map.remove(); M.map = null; }  // Leaflet keeps window listeners until the map is removed
+    crumbs(null);  // each view sets its own trail
+    document.body.classList.remove('cbulk-open', 'managing');  // page-wide states of the consistency and tags pages; they set them again when drawn
+    // the filter pane belongs to the photo and map views: it steps aside elsewhere and comes back with them
+    if (!FILTER_VIEWS.includes(S.route.view)) { if (!$('#filters').hidden) toggleFilters(false, false); }
+    else if ($('#filters').hidden && store.get(PREF.filters, '0') === '1' && innerWidth >= DOCK_MIN) toggleFilters(true, false);
+    const drawn = VIEW_FNS[S.route.view](PARAM_VIEWS.includes(S.route.view) ? vp : fp);
+    done = Promise.resolve(drawn);
+    if (kept) {
+      // a page that fetches first puts up a "Loading…" line: the page as it was stays in its place meanwhile
+      const only = (el) => el && el.parentElement.children.length === 1 ? el : null, first = only(main.firstElementChild);
+      const waiting = drawn instanceof Promise && kept.nodes.length && !main.contains(kept.nodes[0]) && first && (first.matches('.empty') || first.matches('.page') && only(first.firstElementChild)?.matches('.empty'));
+      const placeholder = waiting ? [...main.childNodes] : null;
+      if (waiting) { main.replaceChildren(...kept.nodes); main.scrollTop = kept.top; }
+      done = done.then(() => {
+        if (S.viewKey !== key) return;
+        if (placeholder && main.contains(kept.nodes[0])) main.replaceChildren(...placeholder);  // the page ended on its message (an error, nothing to show)
+        main.scrollTop = kept.top;
+      });
+    }
+    if (!$('#filters').hidden) renderFilters();
+    if (!quiet) done.then(() => focusTitle(key));
+  } else if (S.route.params.get('tab')) $('.stabs')?.show?.(S.route.params.get('tab'));  // Settings: a link to another tab of the page open
+  syncLightbox();
+  return done;
+}
+/** Screen readers hear the new page: its title takes focus once it is drawn, unless something else holds it on
+ *  purpose (a field being typed in, a dialog, the viewer). */
+function focusTitle(key) {
+  if (S.viewKey !== key || LB.open) return;
+  const a = document.activeElement;
+  if (a && a !== document.body && (a.matches('input, textarea, select, [contenteditable]') || a.closest('#lightbox, .modal-back'))) return;
+  const t = main.querySelector('h1');
+  if (!t) return;
+  t.tabIndex = -1;
+  t.focus({ preventScroll: true });
+}
+// a plain <a href="#/…"> click fires popstate and then hashchange: the same hash is drawn once
+const onNav = () => { if (location.hash === S.lastHash && S.viewKey !== null) return; onRoute(); };
+window.addEventListener('popstate', onNav);
+window.addEventListener('hashchange', onNav);

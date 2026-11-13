@@ -1,0 +1,272 @@
+/** Startup: metadata, state, the first route. */
+import { $, DOCK_MIN, NET, NO_CONNECTION, PREF, api, fmtWhen, h, healSoon, icon, main, nf, norm, plural, sleep, store } from './core.js';
+import { FILTER_VIEWS, NAV, NAV_LIBRARY, NAV_MANAGE, S, ST, applyAppName, applyBadgePref, applyTheme, loadState, onRoute, parseHash, pollSoon, toast } from './state.js';
+import { initSearch } from './search.js';
+import { confirmDialog } from './actions.js';
+import { G } from './grid.js';
+import { dbDialog } from './editing.js';
+import { moreSheet, showAlbums } from './pages.js';
+import { loadUser, loginDialog, renderUserMenu } from './users.js';
+import { serverUi, viewerDbPanel } from './settings.js';
+import { M } from './map.js';
+import { toggleFilters } from './filters.js';
+import { LB, details } from './lightbox.js';
+
+export function indexMeta(meta) {
+  S.META = meta;
+  S.tagById = new Map(meta.tags.map((t) => [t.id, t]));
+  S.albumById = new Map(meta.albums.map((a) => [a.id, a]));
+  for (const t of meta.tags) { t._n = norm(t.full.replaceAll('/', ' ')); if (t.pid != null && S.tagById.has(t.pid)) S.tagById.get(t.pid).hasKids = true; }
+  for (const a of meta.albums) a._n = norm(a.path);
+  const rows = new Map();
+  for (const [city, region, country, n] of meta.places) {
+    for (const [key, name, sub] of [['place', city, [region, country].filter(Boolean).join(', ')], ['region', region, country], ['country', country, '']]) {
+      if (!name) continue;
+      const r = rows.get(key + name) || rows.set(key + name, { key, name, sub, n: 0, _n: norm(name) }).get(key + name);
+      r.n += n;
+    }
+  }
+  S.placeRows = [...rows.values()];
+}
+/**
+ * After a change to digiKam's database, wait for the server to rebuild its index and load the new metadata.
+ * `until` can demand more than a version bump (e.g. that a new tag is present). Returns whether it happened.
+ */
+export function awaitReindex(until = () => true, tries = 20, ms = 400) {
+  // many edits in a row (naming faces) share one wait instead of one polling loop each
+  if (S.reindexP && until === S.reindexUntil) return S.reindexP;
+  S.reindexUntil = until;
+  S.reindexP = _awaitReindex(until, tries, ms).finally(() => { if (S.reindexUntil === until) { S.reindexP = null; S.reindexUntil = null; } });
+  return S.reindexP;
+}
+async function _awaitReindex(until, tries, ms) {
+  let seen = S.META.version;
+  for (let i = 0; i < tries; i++) {
+    await sleep(ms);
+    try {
+      const s = await api('/api/status');
+      if (s.index === seen) continue;
+      seen = s.index;
+      const m = await api('/api/meta');
+      if (until(m)) { indexMeta(m); return true; }
+    } catch { /* retry */ }
+  }
+  return false;
+}
+/** For admins: digiKam's database is unreachable (the viewer works from its copy of the library) or Sync with digiKam is off.
+ *  Dismissed for this browser session, per episode. */
+/** The corner the cards stack in (the update card above digiKam's), made when the first card needs it. */
+function banners() { return $('#banners') || document.body.appendChild(h('div', { id: 'banners' })); }
+export function dkBanner(d) {  // exported for test_ui.py, which calls it through import()
+  let b = $('#dkbanner');
+  const show = d && S.IS_ADMIN && !d.none && (!d.sync || !d.reachable || d.conflict);  // no digiKam at all: nothing to warn about
+  const key = !show ? null : d.conflict ? 'conflict:' + d.localChanges : d.sync ? 'offline:' + d.since : 'off';
+  let dismissed = null; try { dismissed = sessionStorage.getItem('iopix.digikamBannerDismissed'); } catch { /* private mode */ }
+  if (!show || dismissed === key) { b?.remove(); return; }
+  if (b && b.dataset.key === key) return;
+  b?.remove();
+  const asOf = d.mirror?.taken ? fmtWhen(d.mirror.taken) : 'the last read';
+  const text = d.conflict
+    ? ['Changes made while sync was off', `${plural(d.localChanges, 'change')} made with Sync with digiKam off ${d.localChanges === 1 ? 'is' : 'are'} not in digiKam yet, so ${S.APP_NAME} keeps using its own library. Settings › Sync with digiKam merges them into digiKam, or replaces them with digiKam’s library.`]
+    : !d.sync
+    ? ['Sync with digiKam is off', `The library lives in ${S.APP_NAME}’s own tables and everything works there; digiKam’s database is not opened.`]
+    : ['digiKam’s database is unreachable', `Since ${fmtWhen(d.since)}. Showing the library as of ${asOf}; edits are saved to the sidecars and will be applied to digiKam when it is back.`];
+  b = h('div', { id: 'dkbanner', class: 'sysbanner', 'data-key': key },
+    h('span', { class: 'ic-wrap', style: 'background:var(--c-orange)' }, icon('wrench')),
+    h('div', null, h('b', null, text[0]), h('div', { class: 'muted' }, text[1], ' ', h('a', { href: '#/settings', class: 'lnk' }, 'Settings'))),
+    h('button', { class: 'iconbtn', title: 'Hide for now', onclick: () => { try { sessionStorage.setItem('iopix.digikamBannerDismissed', key); } catch { /* private mode */ } b.remove(); } }, icon('close')));
+  banners().append(b);
+}
+/** The "a newer version is out" banner, for admins, when the daily check found one; dismissed per version in this browser. */
+export function updateBanner(u) {  // exported for test_ui.py, which calls it through import()
+  let b = $('#updbanner');
+  let gone = '';
+  gone = store.local.get(PREF.updateDismissed, '');
+  if (!u || gone === u.remote) { b?.remove(); return; }
+  if (b && b.dataset.remote === u.remote) return;
+  b?.remove();
+  const text = h('div', null, h('b', null, u.version ? `Version ${u.version} is available` : 'A newer build is available'),
+    h('div', { class: 'muted' }, `You have v${S.APP_VERSION || '?'}. ${u.version ? '' : 'Latest change: '}${(u.message || '').replace(/^v\d+\.\d+\.\d+:\s*/, '').slice(0, 140)}`));
+  // the update runs from here; the banner then says so and the page reloads with the new version (details and Docker's way: Settings › Server)
+  const run = h('button', { class: 'pillbtn on', onclick: async () => {
+    if (!await confirmDialog(`Fetch ${u.version ? 'version ' + u.version : 'the latest version'}, refresh the packages and restart ${S.APP_NAME}? The page reloads when the new version is up.`)) return;
+    b.remove(); (await serverUi()).runUpdate({ toast });
+  } }, 'Update now');
+  const more = h('a', { class: 'pillbtn', href: '#/settings/server', onclick: () => b.remove() }, 'Details');
+  b = h('div', { id: 'updbanner', 'data-remote': u.remote }, h('span', { class: 'ic-wrap' }, icon('spark')), text, run, more,
+    h('button', { class: 'iconbtn', title: 'Not now (hidden until the next version)', onclick: () => { store.local.set(PREF.updateDismissed, u.remote); b.remove(); } }, icon('close')));
+  banners().prepend(b);
+}
+const LIVE_VIEWS = ['photos', 'people', 'places', 'folders', 'albums', 'tags', 'duplicates', 'detected', 'events', 'favorites'];
+/** A list page the library changed under is drawn again in place, keeping what was typed in its filter box. Not while
+ *  the user is typing in the page or arranging People: then it waits for the next poll. */
+function redrawLive() {
+  const r = S.liveRedraw;
+  if (S.viewKey !== r.key) { S.liveRedraw = null; return; }  // drawn again since (a change of page): nothing stale left
+  // a change from elsewhere (digiKam, a scan, a job, another person) never redraws the page being looked at: a note offers it
+  if (!r.quiet && !S.keepView) { S.liveRedraw = null; libraryNote(r.key); return; }
+  const a = document.activeElement;
+  if (S.arrangePeople || (a && main.contains(a) && a.matches('input, textarea'))) return;
+  S.liveRedraw = null;
+  const pf = main.querySelector('.pagefilter'), kept = pf && pf.value ? { value: pf.value, start: pf.selectionStart, end: pf.selectionEnd } : null;
+  S.keepView = true; S.viewKey = null;
+  onRoute().then(() => {
+    const el = main.querySelector('.pagefilter');
+    if (!kept || !el || el.value) return;
+    el.value = kept.value; el.dispatchEvent(new Event('input'));
+    try { el.setSelectionRange(kept.start, kept.end); } catch { /* not a text field */ }
+  });
+}
+/** The library changed while a list page was on screen: the page stays as it is, and this note draws it again on request
+ *  (in place: the same scroll position). A change of page draws the new one fresh and takes the note away (state.js). */
+function libraryNote(key) {
+  if ($('#libnote')) return;
+  document.body.append(h('div', { id: 'libnote' }, h('span', null, 'The library has changed.'),
+    h('button', { class: 'pillbtn on', onclick: () => { $('#libnote')?.remove(); if (S.viewKey === key) { S.liveRedraw = { key, quiet: true }; redrawLive(); } } }, 'Show changes'),
+    h('button', { class: 'iconbtn', title: 'Not now: the changes show when the page is next opened', onclick: (e) => e.currentTarget.parentElement.remove() }, icon('close'))));
+}
+/** A new version of the viewer is on the server: a small note to load it now; it also loads at the next change of page. */
+function updateReadyNote() {
+  if ($('#reloadnote')) return;
+  document.body.append(h('div', { id: 'reloadnote' }, h('span', null, `A new version of ${S.APP_NAME} is ready.`),
+    h('button', { class: 'pillbtn on', onclick: () => location.reload() }, 'Load it now'),
+    h('button', { class: 'iconbtn', title: 'Later: it loads when you next change page', onclick: (e) => e.currentTarget.parentElement.remove() }, icon('close'))));
+}
+export async function pollStatus() {
+  let delay = 20000;
+  try {
+    const s = await api('/api/status');
+    if (NET.lost) reconnected();
+    if (s.requireLogin && !s.user && S.USER) { location.reload(); return; }  // the session ended: the sign-in screen, not a dead page
+    const el = $('#status');
+    const progress = (label, p, ms) => { el.replaceChildren(label, h('br'), `${nf.format(p.done)} / ${nf.format(p.total)}`, h('div', { class: 'bar' }, h('i', { style: `width:${(100 * p.done / p.total).toFixed(1)}%` }))); delay = ms; };
+    el.replaceChildren();
+    if (s.thumbs.running && s.thumbs.total) progress('Preparing thumbnails', s.thumbs, 3000);
+    else if (s.semantic.running && s.semantic.total) progress('Learning photo content', s.semantic, 4000);
+    const an = s.analysis || {};
+    for (const [key, label] of [['quality', 'Scoring sharpness'], ['vision', 'Reading text in photos'], ['objects', 'Finding objects'], ['captions', 'Describing photos'], ['looks', 'Scoring photo quality']]) {
+      if (an[key]?.running && an[key].total && !el.childNodes.length) progress(label, an[key], 5000);
+    }
+    if (s.tagJobs.pending) {
+      el.replaceChildren('Updating tag in sidecars', h('br'), `${nf.format(s.tagJobs.pending)} left`);
+      delay = 3000;
+    }
+    // the viewer was updated: the new version loads when it cannot interrupt anything (the tab is in the
+    // background, or at the next change of page); meanwhile a quiet note offers to load it now
+    if (s.stamp && S.APP_STAMP && s.stamp !== S.APP_STAMP) {
+      if (document.hidden && !LB.open && !G.sel.size) { location.reload(); return; }
+      if (!S.RELOAD_PENDING) { S.RELOAD_PENDING = true; updateReadyNote(); }
+    }
+    if (s.stamp && !S.RELOAD_PENDING) S.APP_STAMP = s.stamp;
+    S.SEM = s.semantic; S.EDITING = s.editing; S.FACE_DETECT = !!s.faceDetect; S.LOSSLESS = s.lossless || null; S.SYNC_OFF = !!(s.digikam && !s.digikam.sync); S.NO_DK = !!(s.digikam && s.digikam.none); S.PENDING = s.pendingEdits; S.WRITE_FILES = s.writeFiles; S.CAN_MANAGE = s.editing && s.dbWrite;
+    S.AUTO_DB = !!(s.dbWrite && s.digikam && (s.digikam.none || s.digikam.sync && s.digikam.reachable));  // edits go into the database by themselves, a minute later
+    S.IS_ADMIN = s.isAdmin; S.USERS_EXIST = s.usersExist; S.DIGIKAM_CHECK = s.digikamCheck || 'pgrep';
+    if (s.version) { S.APP_VERSION = s.version; S.APP_COMMIT = s.commit || ''; const b = $('.brand'); if (b) b.title = `${S.APP_NAME} v${S.APP_VERSION}`; } if ((s.user && s.user.id) !== (S.USER && S.USER.id)) { S.USER = s.user; renderUserMenu(); }  // before the banner, which names the installed version
+    updateBanner(s.update);
+    dkBanner(s.digikam);
+    if (s.appName && s.appName !== S.APP_NAME) { S.APP_NAME = s.appName; applyAppName(); }
+    document.body.classList.toggle('noadmin', !S.IS_ADMIN);
+    if (S.PENDING && s.dbWrite && !S.NO_DK && !el.childNodes.length) el.replaceChildren(h('button', { type: 'button', class: 'lnk', style: 'cursor:pointer', title: 'Edits saved in sidecars that digiKam’s database does not have yet', onclick: dbDialog },
+      `${nf.format(S.PENDING)} ${S.PENDING === 1 ? 'edit' : 'edits'} not in digiKam yet`));
+    if (s.rev !== ST.rev && ST.rev >= 0) { const mine = ST.rev; await loadState(); if (mine !== ST.rev && S.route.view === 'albums') showAlbums(); }
+    if (S.META && s.index && s.index !== S.META.version) {
+      indexMeta(await api('/api/meta'));
+      details.clear();
+      // pages that are only lists of the library are redrawn in place; pages holding work in progress (the map
+      // while placing, forms, dialogs, the edit log's search) keep what is on screen and refresh their data quietly
+      if (LB.open) { if (LIVE_VIEWS.includes(S.route.view)) S.viewKey = null; else S.STALE_VIEW = true; }  // a list is drawn again when the viewer closes; a work page (quality, consistency, the edit log) keeps its place
+      else if (S.route.view === 'map' && M.update) M.update();
+      else if (Date.now() < (S.quietUntil || 0)) { /* photos just moved to the trash: the page already shows it, nothing to redraw */ }
+      else if (LIVE_VIEWS.includes(S.route.view)) S.liveRedraw = { key: S.viewKey, quiet: S.keepView || !!S.liveRedraw?.quiet };
+      else S.STALE_VIEW = true;
+    }
+    if (S.liveRedraw) redrawLive();
+  } catch { if (NET.lost) delay = 4000; }  // server restarting, or no network: look again soon
+  pollSoon(delay);
+}
+/** The server answers again after a lost connection: what failed for want of it is loaded again. Only a page that
+ *  shows the "no connection" message is drawn again (a page in use is left as it is); broken thumbnails reload. */
+function reconnected() {
+  NET.lost = false;
+  if (!S.META) { boot(); return; }  // the library never loaded
+  if (main.textContent.includes(NO_CONNECTION)) { S.viewKey = null; onRoute(); }
+  document.querySelectorAll('img').forEach((i) => { if (i.complete && !i.naturalWidth && i.src) { const src = i.src; i.src = ''; i.src = src; } });
+}
+const lookAgain = () => { if (NET.lost) pollSoon(300); };
+window.addEventListener('online', lookAgain);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') pollSoon(300); });  // back in view: catch up now
+async function start() {
+  let st = null;
+  try { st = await api('/api/status'); } catch { /* the poll below says what is wrong */ }
+  if (st?.needsDatabase) { setupDatabasePage(st); return; }
+  await loadUser();
+  // the sidebar: the destinations in groups (a gap after Favorites, Places and Map), then Settings at
+  // the foot above the status line. On phones the same links are the bottom bar: four of them and More.
+  const link = ([v, label, ic, href]) => h('a', { href: href || `#/${v}`, 'data-v': v }, icon(ic), h('span', { class: 'nl' }, label));
+  // three groups: browsing, the Library everyone has, and (admins only) managing the library
+  document.body.classList.toggle('noadmin', !S.IS_ADMIN);
+  const sec = (label, cls) => h('div', { class: 'navsec' + (cls ? ' ' + cls : '') }, label);
+  $('#nav').append(...NAV.map((n) => [n[0] === NAV_LIBRARY ? [h('div', { class: 'navgap' }), sec('Library')] : null, link(n)]).flat(2).filter(Boolean),
+    h('div', { class: 'navmanage' }, h('div', { class: 'navgap' }), sec('Manage'), ...NAV_MANAGE.map(link)),
+    h('button', { class: 'navmore', 'data-v': 'more', title: 'More', onclick: moreSheet }, icon('more'), 'More'),
+    h('div', { class: 'navfoot' }, link(['settings', 'Settings', 'gear']), h('div', { id: 'status', role: 'status', 'aria-live': 'polite' })));
+  initSidebar();
+  initSearch();
+  applyBadgePref(); applyTheme();
+  if (S.REQUIRE_LOGIN && !S.USER) { document.body.classList.add('locked'); loginDialog(true); return; }  // boot() runs after sign-in
+  await boot();
+}
+/** No database of its own yet (a fresh install without DB_* in config.env, an install from before v1.113, or its server is
+ *  down): nothing else works, so the page is the database panel from Settings, and reloads once the viewer restarts. */
+function setupDatabasePage(st) {
+  document.body.classList.add('locked');
+  document.title = st.appName || 'ioPix';
+  main.replaceChildren(h('div', { class: 'page' }, h('h1', { class: 'ptitle' }, `${st.appName || 'ioPix'} needs its database`),
+    h('div', { class: 'muted intro' }, st.databaseConfigured
+      ? `The configured MariaDB/MySQL database is not answering (${st.databaseError}). Start the server, or point ${st.appName || 'ioPix'} at another database below.`
+      : `${st.appName || 'ioPix'} keeps its own data (accounts, settings, albums, the edit log, AI results) in a MariaDB or MySQL database. Create an empty database with a user that owns it, then enter its details.`),
+    h('div', { class: 'srow' }, viewerDbPanel({ setup: true }))));
+}
+/** The sidebar docks beside the page on a wide screen, unless its button put it away (remembered). Put away, or on a
+ *  narrower screen, it hides off the left edge and the menu button in the top bar slides it over the page; choosing a
+ *  destination, the dimmed page or Escape puts it away again. Phones keep the bottom bar instead. */
+function initSidebar() {
+  const body = document.body, btn = $('#sidebtn');
+  const canDock = () => innerWidth >= DOCK_MIN;
+  const setOpen = (on) => { body.classList.toggle('side-open', on); $('#navscrim').hidden = !on; };
+  const apply = () => {
+    const docked = canDock() && store.get(PREF.sidebar, '1') === '1';
+    body.classList.toggle('side-docked', docked);
+    if (docked) setOpen(false);
+    const [ic, title] = docked ? ['menuOpen', 'Hide the sidebar'] : canDock() ? ['pin', 'Keep the sidebar open'] : ['close', 'Close the sidebar'];
+    btn.replaceChildren(icon(ic)); btn.title = title; btn.setAttribute('aria-label', title);
+  };
+  btn.onclick = () => {
+    if (body.classList.contains('side-docked')) store.set(PREF.sidebar, '0');
+    else if (canDock()) store.set(PREF.sidebar, '1');
+    else { setOpen(false); return; }
+    apply();
+  };
+  $('#menubtn').onclick = () => setOpen(true);
+  $('#navscrim').onclick = () => setOpen(false);
+  $('#nav').addEventListener('click', (e) => { if (e.target.closest('a') && !body.classList.contains('side-docked')) setOpen(false); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && body.classList.contains('side-open')) { setOpen(false); e.stopPropagation(); } }, true);
+  addEventListener('resize', apply);
+  S.applySidebar = apply;  // the stored choice can change with the account (signed-in users keep it on the server)
+  apply();
+}
+/** Load the library and show the first view; once per page load, after sign-in when that is required. */
+export async function boot() {
+  S.BOOTED = true; document.body.classList.remove('locked');
+  // (a search typed before the metadata arrived draws its list once it is here)
+  try { indexMeta(await api('/api/meta')); await loadState(); const q = $('#q'); if (q && q.value && document.activeElement === q) q.dispatchEvent(new Event('input')); } catch (e) { main.replaceChildren(h('div', { class: 'empty' }, 'Could not reach the server: ' + e.message)); S.BOOTED = false; setTimeout(boot, 5000); return; }  // tried again until it answers (the index may not be readable yet after a first start)
+  if (store.get(PREF.filters, '0') === '1' && innerWidth >= DOCK_MIN && FILTER_VIEWS.includes(parseHash().view)) toggleFilters(true, false);
+  await pollStatus();
+  onRoute();
+}
+// Inside the iopix app (?app=1 on the first load, remembered for the tab): the app's own tab bar replaces the web
+// navigation (html.inapp), and every change of page is posted to the app (state.onRoute).
+try { if (new URLSearchParams(location.search).get('app') === '1') sessionStorage.setItem('iopix.app', '1'); } catch { /* private mode */ }
+if (new URLSearchParams(location.search).get('app') === '1' || (() => { try { return sessionStorage.getItem('iopix.app') === '1'; } catch { return false; } })()) document.documentElement.classList.add('inapp');
+healSoon();
+start();

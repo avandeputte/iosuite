@@ -1,0 +1,404 @@
+"""The library itself, in the viewer's own database: photos, folders, tags, faces, captions...
+
+These tables have exactly the columns of the digiKam tables they correspond to (Images -> photos,
+Albums -> folders, ImageTagProperties -> face_regions, ...), only with names that say what they hold
+(in the database pix_photos, pix_folders...: TABLE; SPEC's short names are what the code calls them). That is what lets the viewer work without digiKam:
+
+- While Sync with digiKam is on, these tables follow digiKam's database (copy_from_digikam, in the
+  background after the index is built): the rows on both sides are compared and only the rows that differ
+  are deleted, inserted or replaced, so a change, made here or in digiKam, costs a few row writes.
+- When Sync with digiKam is off, dkdb.connect() hands out a LibraryConn instead of a connection to
+  digiKam's database. It speaks digiKam's table names and rewrites them to these, so every module that
+  writes the library (tags, faces, folders, uploads, place tags, tag pictures, applying edits) works
+  unchanged, on the viewer's own copy. Each change made that way is counted (pix_library_info
+  local_changes), so turning sync back on never silently replaces it with digiKam's data.
+"""
+import re
+import time
+from app.digikam.dkdb import chunked
+from app.digikam import dkdb
+from app import config
+
+# viewer table: (digiKam table, [(column, SQLite type, MySQL type)], SQLite constraints, MySQL constraints)
+SPEC = {
+    "album_roots": ("AlbumRoots", [("id", "INTEGER PRIMARY KEY", "INT AUTO_INCREMENT PRIMARY KEY"), ("label", "TEXT", "TEXT"), ("status", "INTEGER", "INT"),
+                                    ("type", "INTEGER", "INT"), ("identifier", "TEXT", "TEXT"), ("specificPath", "TEXT", "TEXT"), ("caseSensitivity", "INTEGER", "INT")], "", ""),
+    "folders": ("Albums", [("id", "INTEGER PRIMARY KEY", "INT AUTO_INCREMENT PRIMARY KEY"), ("albumRoot", "INTEGER", "INT"), ("relativePath", "TEXT", "VARCHAR(700)"),
+                           ("date", "TEXT", "VARCHAR(32)"), ("caption", "TEXT", "TEXT"), ("collection", "TEXT", "TEXT"), ("icon", "INTEGER", "BIGINT"),
+                           ("modificationDate", "TEXT", "VARCHAR(32)")],
+                ", UNIQUE (albumRoot, relativePath)", ", UNIQUE KEY uq_pix_folders_path (albumRoot, relativePath)"),
+    "photos": ("Images", [("id", "INTEGER PRIMARY KEY", "BIGINT AUTO_INCREMENT PRIMARY KEY"), ("album", "INTEGER", "INT"), ("name", "TEXT", "VARCHAR(500)"),
+                          ("status", "INTEGER", "INT"), ("category", "INTEGER", "INT"), ("modificationDate", "TEXT", "VARCHAR(32)"), ("fileSize", "INTEGER", "BIGINT"),
+                          ("uniqueHash", "TEXT", "VARCHAR(128)"), ("manualOrder", "INTEGER", "BIGINT")],
+               ", UNIQUE (album, name)", ", UNIQUE KEY uq_pix_photos_name (album, name), INDEX idx_pix_photos_hash (uniqueHash)"),
+    "photo_information": ("ImageInformation", [("imageid", "INTEGER PRIMARY KEY", "BIGINT PRIMARY KEY"), ("rating", "INTEGER", "INT"), ("creationDate", "TEXT", "VARCHAR(32)"),
+                                               ("digitizationDate", "TEXT", "VARCHAR(32)"), ("orientation", "INTEGER", "INT"), ("width", "INTEGER", "INT"), ("height", "INTEGER", "INT"),
+                                               ("format", "TEXT", "VARCHAR(64)"), ("colorDepth", "INTEGER", "INT"), ("colorModel", "INTEGER", "INT"), ("timeZone", "INTEGER", "INT")], "", ""),
+    "photo_metadata": ("ImageMetadata", [("imageid", "INTEGER PRIMARY KEY", "BIGINT PRIMARY KEY"), ("make", "TEXT", "TEXT"), ("model", "TEXT", "TEXT"), ("lens", "TEXT", "TEXT"),
+                                         ("aperture", "REAL", "DOUBLE"), ("focalLength", "REAL", "DOUBLE"), ("focalLength35", "REAL", "DOUBLE"), ("exposureTime", "REAL", "DOUBLE"),
+                                         ("exposureProgram", "INTEGER", "INT"), ("exposureMode", "INTEGER", "INT"), ("sensitivity", "INTEGER", "INT"), ("flash", "INTEGER", "INT"),
+                                         ("whiteBalance", "INTEGER", "INT"), ("whiteBalanceColorTemperature", "INTEGER", "INT"), ("meteringMode", "INTEGER", "INT"),
+                                         ("subjectDistance", "REAL", "DOUBLE"), ("subjectDistanceCategory", "INTEGER", "INT")], "", ""),
+    "photo_positions": ("ImagePositions", [("imageid", "INTEGER PRIMARY KEY", "BIGINT PRIMARY KEY"), ("latitude", "TEXT", "TEXT"), ("latitudeNumber", "REAL", "DOUBLE"),
+                                           ("longitude", "TEXT", "TEXT"), ("longitudeNumber", "REAL", "DOUBLE"), ("altitude", "REAL", "DOUBLE"), ("orientation", "REAL", "DOUBLE"),
+                                           ("tilt", "REAL", "DOUBLE"), ("roll", "REAL", "DOUBLE"), ("accuracy", "REAL", "DOUBLE"), ("description", "TEXT", "TEXT")], "", ""),
+    "video_metadata": ("VideoMetadata", [("imageid", "INTEGER PRIMARY KEY", "BIGINT PRIMARY KEY"), ("aspectRatio", "TEXT", "TEXT"), ("audioBitRate", "TEXT", "TEXT"),
+                                         ("audioChannelType", "TEXT", "TEXT"), ("audioCompressor", "TEXT", "TEXT"), ("duration", "TEXT", "TEXT"), ("frameRate", "TEXT", "TEXT"),
+                                         ("exposureProgram", "INTEGER", "INT"), ("videoCodec", "TEXT", "TEXT")], "", ""),
+    "comments": ("ImageComments", [("id", "INTEGER PRIMARY KEY", "BIGINT AUTO_INCREMENT PRIMARY KEY"), ("imageid", "INTEGER", "BIGINT"), ("type", "INTEGER", "INT"),
+                                   ("language", "TEXT", "VARCHAR(128)"), ("author", "TEXT", "TEXT"), ("date", "TEXT", "VARCHAR(32)"), ("comment", "TEXT", "MEDIUMTEXT")],
+                 "", ", INDEX idx_pix_comments_image (imageid)"),
+    "copyright": ("ImageCopyright", [("id", "INTEGER PRIMARY KEY", "BIGINT AUTO_INCREMENT PRIMARY KEY"), ("imageid", "INTEGER", "BIGINT"), ("property", "TEXT", "TEXT"),
+                                     ("value", "TEXT", "TEXT"), ("extraValue", "TEXT", "TEXT")], "", ", INDEX idx_pix_copyright_image (imageid)"),
+    "photo_properties": ("ImageProperties", [("imageid", "INTEGER", "BIGINT"), ("property", "TEXT", "VARCHAR(255)"), ("value", "TEXT", "TEXT")],
+                         ", UNIQUE (imageid, property)", ", UNIQUE KEY uq_pix_photo_properties_image_property (imageid, property)"),
+    "photo_tags": ("ImageTags", [("imageid", "INTEGER", "BIGINT"), ("tagid", "INTEGER", "INT")], ", UNIQUE (imageid, tagid)", ", PRIMARY KEY (imageid, tagid), INDEX idx_pix_photo_tags_tag (tagid)"),
+    "face_regions": ("ImageTagProperties", [("imageid", "INTEGER", "BIGINT"), ("tagid", "INTEGER", "INT"), ("property", "TEXT", "VARCHAR(255)"), ("value", "TEXT", "TEXT")],
+                     "", ", INDEX idx_pix_face_regions_image (imageid), INDEX idx_pix_face_regions_tag (tagid)"),
+    "tags": ("Tags", [("id", "INTEGER PRIMARY KEY", "INT AUTO_INCREMENT PRIMARY KEY"), ("pid", "INTEGER", "INT"), ("name", "TEXT", "VARCHAR(500)"), ("icon", "INTEGER", "BIGINT"),
+                      ("iconkde", "TEXT", "TEXT")], ", UNIQUE (name, pid)", ", UNIQUE KEY uq_pix_tags_name (name, pid)"),
+    "tag_properties": ("TagProperties", [("tagid", "INTEGER", "INT"), ("property", "TEXT", "VARCHAR(255)"), ("value", "TEXT", "TEXT")], "", ", INDEX idx_pix_tag_properties_tag (tagid)"),
+    "library_settings": ("Settings", [("keyword", "TEXT", "VARCHAR(191)"), ("value", "TEXT", "TEXT")], ", UNIQUE (keyword)", ", UNIQUE KEY uq_pix_library_settings_keyword (keyword)"),
+}
+TABLE = {name: "pix_" + name for name in SPEC}  # the table in the viewer database; SPEC's names are what the code and the merge base call them
+DIGIKAM = {dk: TABLE[ours] for ours, (dk, *_rest) in SPEC.items()}
+_NAMES = re.compile(r"\b(" + "|".join(sorted(DIGIKAM, key=len, reverse=True)) + r")\b")
+_WRITE = re.compile(r"^\s*(INSERT|UPDATE|DELETE|REPLACE)\b", re.I)
+
+
+def tables() -> dict:
+    """appdb.TABLES entries for the library tables: table -> (columns, MySQL DDL). The SQLite types in SPEC
+    serve the merge-base file (save_base) only."""
+    out = {}
+    for name, (_dk, cols, _sq_extra, my_extra) in SPEC.items():
+        out[TABLE[name]] = ([c for c, _s, _m in cols],
+                            f"CREATE TABLE IF NOT EXISTS {TABLE[name]} (" + ", ".join(f"`{c}` {m}" for c, _s, m in cols) + my_extra + ")")
+    return out
+
+
+def rename(sql: str) -> str:
+    """digiKam's table names in a statement -> the viewer's."""
+    return _NAMES.sub(lambda m: DIGIKAM[m.group(1)], sql)
+
+
+def _vconn_class():
+    from app.data.appdb import VConn  # lazy: data.appdb -> digikam.library would be an import cycle
+
+    class LibraryConn(VConn):
+        """A connection to the library tables that speaks digiKam's table names (see the module docstring)."""
+
+        def __init__(self, raw, mysql, writable):
+            super().__init__(raw, mysql, writable)
+            self.changed = False
+            self.standalone = True
+            if mysql:  # keep digiKam's root tag (id 0) as it is when rows are written back
+                raw.cursor().execute("SET SESSION sql_mode = CONCAT(@@sql_mode, ',NO_AUTO_VALUE_ON_ZERO')")
+
+        def execute(self, sql: str, params=()):
+            if _WRITE.match(sql):
+                self.changed = True
+            return super().execute(rename(sql), params)
+
+        def executemany(self, sql: str, rows):
+            if _WRITE.match(sql):
+                self.changed = True
+            return super().executemany(rename(sql), rows)
+
+        def begin_write(self):
+            ensure_base()  # before the first change made here: what digiKam held, for the merge back
+            self.raw.execute("BEGIN IMMEDIATE") if not self.mysql else self.raw.cursor().execute("START TRANSACTION")
+
+        def begin_read(self):
+            if self.mysql:
+                self.raw.cursor().execute("START TRANSACTION WITH CONSISTENT SNAPSHOT")
+
+        def commit(self):
+            if self.changed:  # a change made here, not copied from digiKam: count it (see note_local_change)
+                _bump(self)
+                self.changed = False
+            self.raw.commit()
+
+        def integrity_ok(self) -> bool:
+            return True
+
+    return LibraryConn
+
+
+_CLASS = None
+
+
+def connect(write: bool = False):
+    """The library tables, through digiKam's table names."""
+    global _CLASS
+    from app.data import appdb  # lazy: data.appdb -> digikam.library would be an import cycle
+    if _CLASS is None:
+        _CLASS = _vconn_class()
+    v = appdb.connect()
+    return _CLASS(v.raw, v.mysql, write)
+
+
+def _info(con, key: str, default=None):
+    row = con.execute("SELECT value FROM pix_library_info WHERE name = ?", (key,)).fetchone()
+    return row[0] if row else default
+
+
+def _set_info(con, pairs: dict):
+    for k, v in pairs.items():
+        con.execute("DELETE FROM pix_library_info WHERE name = ?", (k,))
+        con.execute("INSERT INTO pix_library_info (name, value) VALUES (?,?)", (k, str(v)))
+
+
+def _bump(con):
+    """Inside the writer's transaction: one more change that digiKam does not have."""
+    n = int(_info(con, "local_changes", "0") or 0) + 1
+    v = int(_info(con, "version", "0") or 0) + 1
+    _set_info(con, {"local_changes": n, "version": v, "changed": int(time.time())})
+
+
+def info() -> dict:
+    """{source, taken, photos, local_changes, version, changed} or {} when no copy exists yet."""
+    from app.data import appdb  # lazy: data.appdb -> digikam.library would be an import cycle
+    try:
+        with appdb.reader() as con:
+            d = {r[0]: r[1] for r in con.execute("SELECT name, value FROM pix_library_info").fetchall()}
+    except Exception:
+        return {}
+    return d
+
+
+def version() -> str:
+    """Changes whenever the library tables change (a copy from digiKam, or a change made here)."""
+    d = info()
+    if not int(d.get("local_changes") or 0) and d.get("source") not in (None, "-"):
+        return d["source"]  # an untouched copy of digiKam: the same version as digiKam itself, so no rebuild
+    return f"local:{d.get('source', '-')}:{d.get('version', '0')}"
+
+
+def _canon(v):
+    """One form for a value read from either database, so equal values compare equal (5 and 5.0, bytes and text)."""
+    if v is None or isinstance(v, str):
+        return v
+    if isinstance(v, bool):
+        return int(v)
+    if isinstance(v, (bytes, bytearray, memoryview)):
+        return bytes(v).decode("utf-8", "replace")
+    if isinstance(v, int):
+        return v
+    try:
+        f = float(v)  # float, Decimal
+    except (TypeError, ValueError):
+        return str(v)
+    return int(f) if f.is_integer() else f
+
+
+def _key_cols(cols: list) -> list:
+    """The primary key of a library table: its id or imageid column; None for the tables without one,
+    whose rows are compared whole."""
+    first = cols[0]
+    return [first[0]] if "PRIMARY KEY" in first[1] else None
+
+
+def copy_from_digikam(src) -> dict:
+    """Bring the library tables to digiKam's current rows, in one transaction, writing only what differs:
+    rows digiKam no longer has are deleted, new and changed ones are written, the rest is left alone.
+    src: a read connection to digiKam's database (dkdb.Conn) inside a snapshot. Returns {table: rows
+    written}; the very first copy writes everything."""
+    from app.data import appdb  # lazy: data.appdb -> digikam.library would be an import cycle
+    t0 = time.time()
+    theirs = {}
+    for name, (dk, cols, *_rest) in SPEC.items():
+        theirs[name] = [tuple(r) for r in src.execute(f"SELECT {', '.join(c for c, _s, _m in cols)} FROM {dk}").fetchall()]
+    source = dkdb.source_version()
+    ours = current()
+    con = appdb.connect()
+    written, photos = {}, len(theirs["photos"])
+    try:
+        if con.mysql:  # digiKam's MySQL root tag has id 0, which AUTO_INCREMENT would otherwise renumber
+            con.execute("SET SESSION sql_mode = CONCAT(@@sql_mode, ',NO_AUTO_VALUE_ON_ZERO')")
+        else:
+            con.raw.execute("BEGIN IMMEDIATE")
+        for name, (dk, cols, *_rest) in SPEC.items():
+            names = [c for c, _s, _m in cols]
+            q = (lambda c: f"`{c}`") if con.mysql else (lambda c: c)
+            ql = ", ".join(q(c) for c in names)
+            insert = f"INSERT INTO {TABLE[name]} ({ql}) VALUES ({', '.join('?' * len(names))})"
+            keys = _key_cols(cols)
+            gone, add = [], []
+            if keys:  # one row per id: compare by id
+                mine = {r[0]: tuple(_canon(v) for v in r) for r in ours[name]}
+                for r in theirs[name]:
+                    c = tuple(_canon(v) for v in r)
+                    was = mine.pop(c[0], None)
+                    if was != c:
+                        if was is not None:
+                            gone.append((c[0],))
+                        add.append(r)
+                gone += [(k,) for k in mine]
+                for chunk in chunked(gone, 2000):
+                    con.executemany(f"DELETE FROM {TABLE[name]} WHERE {q(keys[0])} = ?", chunk)
+            else:  # no key: rows are compared whole, duplicates counted
+                from collections import Counter
+                mine, want, raw_of = Counter(), Counter(), {}
+                for r in ours[name]:
+                    mine[tuple(_canon(v) for v in r)] += 1
+                for r in theirs[name]:
+                    c = tuple(_canon(v) for v in r)
+                    want[c] += 1
+                    raw_of.setdefault(c, r)
+                same = "<=>" if con.mysql else "IS"
+                where = " AND ".join(f"{q(c)} {same} ?" for c in names)
+                for c in set(mine) | set(want):
+                    if mine[c] != want[c]:
+                        if mine[c]:
+                            gone.append(c)
+                        if want[c]:
+                            add += [raw_of[c]] * want[c]
+                for chunk in chunked(gone, 2000):
+                    con.executemany(f"DELETE FROM {TABLE[name]} WHERE {where}", chunk)
+            for chunk in chunked(add, 2000):
+                con.executemany(insert, chunk)
+            if gone or add:
+                written[name] = len(gone) + len(add)
+        _set_info(con, {"source": source, "taken": int(time.time()), "photos": photos, "local_changes": 0,
+                        "version": int(time.time()), "base_source": "-"})
+        con.commit()
+    except BaseException:
+        con.rollback()
+        raise
+    finally:
+        con.close()
+    import logging
+    logging.getLogger("app.digikam.library").info("library brought up to date with digiKam in %.1fs: %s", time.time() - t0,
+                                          ", ".join(f"{n} {k}" for k, n in written.items()) or "nothing changed")
+    return written
+
+
+BASE_FILE = None  # set from config below
+
+
+def _base_path():
+    return config.DATA_DIR / "library-base.sqlite"
+
+
+def ensure_base():
+    """The merge base: the library as it was while it still matched digiKam, saved once before the first change
+    made here (sync off, or digiKam unreachable), rather than after every copy."""
+    d = info()
+    if not d.get("taken") or int(d.get("local_changes") or 0) or d.get("base_source") == d.get("source"):
+        return
+    save_base(current())
+    from app.data import appdb  # lazy: data.appdb -> digikam.library would be an import cycle
+    with appdb.writer() as con:
+        _set_info(con, {"base_source": d.get("source")})
+
+
+def save_base(data: dict):
+    """The rows as they came from digiKam, in a SQLite file: the base of the three-way merge that brings
+    changes made with sync off back into digiKam (merge.py)."""
+    import os
+    import sqlite3
+    path = _base_path()
+    tmp = path.with_suffix(".tmp")
+    tmp.unlink(missing_ok=True)
+    con = sqlite3.connect(tmp)
+    try:
+        con.executescript("PRAGMA journal_mode = OFF; PRAGMA synchronous = OFF;")
+        for name, (dk, cols, sq_extra, _my) in SPEC.items():
+            names = [c for c, _s, _m in cols]
+            con.execute(f"CREATE TABLE {name} (" + ", ".join(f"{c} {s}" for c, s, _m in cols) + ")")
+            con.executemany(f"INSERT INTO {name} ({', '.join(names)}) VALUES ({', '.join('?' * len(names))})", data[name])
+        con.commit()
+    finally:
+        con.close()
+    os.replace(tmp, path)
+
+
+def load_base() -> dict:
+    """{table: rows} from the base file, or None when there is none."""
+    import sqlite3
+    path = _base_path()
+    if not path.exists():
+        return None
+    con = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    try:
+        out = {}
+        for name, (dk, cols, *_rest) in SPEC.items():
+            names = [c for c, _s, _m in cols]
+            try:
+                out[name] = [tuple(r) for r in con.execute(f"SELECT {', '.join(names)} FROM {name}").fetchall()]
+            except sqlite3.OperationalError:
+                out[name] = []
+        return out
+    finally:
+        con.close()
+
+
+def current() -> dict:
+    """{table: rows} of the library tables as they are now."""
+    from app.data import appdb  # lazy: data.appdb -> digikam.library would be an import cycle
+    with appdb.reader() as con:
+        out = {}
+        for name, (dk, cols, *_rest) in SPEC.items():
+            names = [c for c, _s, _m in cols]
+            out[name] = [tuple(r) for r in con.execute(f"SELECT {', '.join(names)} FROM {TABLE[name]}").fetchall()]
+        return out
+
+
+def discard_local_changes():
+    """Forget that changes were made here, so the next read of digiKam replaces the library with its data."""
+    from app.data import appdb  # lazy: data.appdb -> digikam.library would be an import cycle
+    with appdb.writer() as con:
+        _set_info(con, {"local_changes": 0, "source": "-"})
+
+
+# the tags digiKam itself creates in a new database (TagsCache, FaceTags): the internal pick and color labels,
+# and the three face tags under People that unnamed faces, suggestions and ignored faces hang on
+NEW_FACE_TAGS = (("Unknown", "unknownPerson"), ("Unconfirmed", "unconfirmedPerson"), ("Ignored", "ignoredPerson"))
+NEW_DB_VERSION = "16"  # digiKam 8 and 9's core database schema
+
+
+def start_new() -> bool:
+    """No digiKam at all (DIGIKAM_DB_TYPE=none): a fresh, empty library on PHOTOS_ROOT, laid out as digiKam
+    would lay out a new database, so every reader and writer works on it and the file scanner fills it. Only
+    when the library tables were never filled; an existing library (a copy of digiKam's, or one started here
+    earlier) is left as it is. Returns whether it started one."""
+    import os
+    from app.digikam.dbsync import COLOR_TAGS, PICK_TAGS  # lazy: digikam.dbsync -> data.index -> digikam.library would be an import cycle
+    if info().get("taken"):
+        return False
+    root = str(config.PHOTOS_ROOT)
+    con = connect(write=True)
+    try:
+        con.begin_write()
+        if con.execute("SELECT count(*) FROM AlbumRoots").fetchone()[0]:  # rows without the bookkeeping: left alone
+            con.rollback()
+            return False
+        cur = con.execute("INSERT INTO AlbumRoots (label, status, type, identifier, specificPath, caseSensitivity) VALUES (?,?,?,?,?,?)",
+                          (os.path.basename(root.rstrip("/")) or "Photos", 0, 1, "volumeid:?path=" + root, root, 2))
+        root_id = cur.lastrowid
+        con.execute("INSERT INTO Albums (albumRoot, relativePath, date, caption, collection) VALUES (?, '/', ?, NULL, NULL)",
+                    (root_id, time.strftime("%Y-%m-%d")))
+
+        def tag(name, pid, *props):
+            tid = con.execute("INSERT INTO Tags (pid, name, icon, iconkde) VALUES (?,?,NULL,NULL)", (pid, name)).lastrowid
+            for prop in props:
+                con.execute("INSERT INTO TagProperties (tagid, property, value) VALUES (?,?,NULL)", (tid, prop))
+            return tid
+        internal = tag("_Digikam_Internal_Tags_", 0, "internalTag")
+        for name in (*PICK_TAGS, *COLOR_TAGS):
+            tag(name, internal, "internalTag")
+        people = tag("People", 0)
+        for name, prop in NEW_FACE_TAGS:
+            tag(name, people, prop)
+        for k, v in (("DBVersion", NEW_DB_VERSION), ("uniqueHashVersion", "3")):
+            con.execute("INSERT INTO Settings (keyword, value) VALUES (?,?)", (k, v))
+        _set_info(con, {"source": "-", "taken": int(time.time()), "photos": 0, "base_source": "-"})
+        con.commit()  # counted as a change made here, so connecting a digiKam later merges instead of replacing it
+    except BaseException:
+        con.rollback()
+        raise
+    finally:
+        con.close()
+    import logging
+    logging.getLogger("app.digikam.library").info("no digiKam database: a new library was started on %s", root)
+    return True

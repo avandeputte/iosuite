@@ -1,0 +1,84 @@
+# Quick start
+
+This page gets iopix running against your digiKam library with the fewest decisions. Every step links to a fuller page if you want more.
+
+## 1. Check what you have
+
+You need:
+
+- A **digiKam library**: the folder with your photos and digiKam's database. The database is either a file called `digikam4.db` (SQLite, digiKam's default) or a MariaDB/MySQL server.
+- Or, if you don't use digiKam, just the **folder with your photos**: see [Using iopix without digiKam](../connect/no-digikam.md).
+- A **computer that can see them**, which stays on: a home server, a NAS that runs Docker, a Proxmox host, or the Mac or Linux PC digiKam runs on.
+- A **MariaDB or MySQL database for iopix itself**: Docker brings one along, the Linux installer and the Proxmox script install one for you, and any server you already run will do (the one digiKam uses too, with its own database for iopix). See [iopix's own database](../connect/iopix-database.md).
+
+See [What you need](requirements.md) for the details.
+
+## 2. Install
+
+Pick the way that matches your machine. If you are not sure, Docker is the easiest to keep tidy.
+
+=== "Docker"
+
+    ```sh
+    curl -O https://raw.githubusercontent.com/avandeputte/iopix/main/docker-compose.yml
+    # edit the CHANGE ME lines: photo folder, digiKam database, admin password, database password
+    docker compose up -d
+    ```
+
+    Full guide: [Docker](../install/docker.md).
+
+=== "Proxmox"
+
+    On the Proxmox host, as root:
+
+    ```sh
+    bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iopix/main/proxmox/ct/iopix.sh)"
+    ```
+
+    Full guide: [Proxmox container](../install/proxmox.md).
+
+=== "Linux"
+
+    Download `iopix-install.sh` from the [latest release](https://github.com/avandeputte/iopix/releases/latest), then as root:
+
+    ```sh
+    sh iopix-install.sh --photos /srv/photos --digikam-sqlite /srv/digikamDB --db local
+    # or, without digiKam:
+    sh iopix-install.sh --photos /srv/photos --no-digikam --db local
+    ```
+
+    Full guide: [Linux installer](../install/linux.md).
+
+=== "macOS"
+
+    ```sh
+    git clone https://github.com/avandeputte/iopix && cd iopix
+    ./setup.sh
+    ```
+
+    Full guide: [setup.sh](../install/setup-script.md).
+
+Each of these asks for (or lets you set) the photo folder, digiKam's database (or that you don't use digiKam), the MariaDB or MySQL database for iopix's own data, and an admin account.
+
+!!! note "Upgrading from a version before 1.113"
+    iopix's own data used to live in a SQLite file, `viewer.db`. From 1.113 it needs a MariaDB or MySQL database. After the update it shows a set-up page asking for one; enter the details, leave **Import the existing data** ticked, and every row of the old file is carried over. See [iopix's own database](../connect/iopix-database.md).
+
+## 3. Open it
+
+Go to `http://<your-server>:8600` in a browser. The first visit builds the thumbnails in the background; you can browse straight away while it works.
+
+The sidebar has three groups: **Explore, Photos, People and Places** at the top; **Library** (Favorites, Folders, Albums, Tags, Map, Events & trips), which everyone sees; and, for admins only, **Manage** (Import, Trash, Detected content, the Edit log and Tools). Settings sits at its foot; the suggestion and check pages (Metadata quality, Duplicate files, Date and Place suggestions, Jersey numbers, Clothing matches, Wrongly rotated, Damaged files) open from **Tools**, each summarised there in a line. On a phone the main pages are in the bottom bar and the rest under **More**.
+
+!!! tip "Use it from anywhere"
+    iopix speaks plain HTTP. To use it away from home, or to install it on a phone, put it behind a reverse proxy with HTTPS. See [HTTPS and a reverse proxy](../install/reverse-proxy.md).
+
+## 4. Sign in and set up
+
+1. Sign in with the admin account from the person icon.
+2. Open **Settings** to choose the theme, the name iopix shows, and the map provider.
+3. Open **Settings › AI** to download the features you want, such as content search or places.
+4. Create accounts for the family under **Settings › Security › People**, and link each to their person in photos there too.
+
+## 5. Turn on editing when you are ready
+
+iopix writes nothing to your library until someone with editor rights makes a change. Read [How editing works](../edit/how-editing-works.md) before you start, so you know where each change goes and how to undo it.

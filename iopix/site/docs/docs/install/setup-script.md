@@ -1,0 +1,46 @@
+# setup.sh on macOS or Linux
+
+`setup.sh` is the installer inside a checkout of the repository. It is the right choice on the Mac or PC where digiKam lives, or for development.
+
+```sh
+git clone https://github.com/avandeputte/iopix && cd iopix
+./setup.sh
+```
+
+## What it asks
+
+- Where the **photos** are.
+- Whether you **use digiKam** with those photos and, if so, whether its database is the **SQLite file** or **MariaDB/MySQL** (it tests the connection). Without digiKam, iopix keeps the library itself: see [Using iopix without digiKam](../connect/no-digikam.md).
+- The MariaDB/MySQL server for **iopix's own database**: host, port, database, user and password (it tests the connection, and creates the database if the account may). The server digiKam uses will do, with a separate database. See [iopix's own database](../connect/iopix-database.md).
+- Which **features** you want: content search, places, objects, text recognition, photo descriptions. Each downloads its model.
+- The **port**, the **admin account**, and whether to **start at login** (launchd on macOS, systemd on Linux).
+
+Then it creates the Python environment, installs the packages, downloads the models, writes `config.env`, creates the admin and starts the service.
+
+It also installs the system tools iopix needs when they are missing (Python 3.10+, exiftool, ffmpeg, jpegtran, the MariaDB client): with **Homebrew** on macOS (offering to install Homebrew first), or apt, dnf, zypper or pacman on Linux. It does not install a MariaDB server; on a Mac `brew install mariadb && brew services start mariadb` gives you one.
+
+Run it again at any time to add a feature; it keeps what is there.
+
+## Without questions
+
+Flags skip the questions. `./setup.sh --help` lists them all. For example:
+
+```sh
+./setup.sh --yes --photos /srv/photos \
+  --digikam-db db:3306/digikam:digikam:secret \
+  --db db:3306/iopix:iopix:secret \
+  --features search,places \
+  --admin admin:secret
+```
+
+Without digiKam: `./setup.sh --yes --photos /srv/photos --no-digikam --db db:3306/iopix:iopix:secret --admin admin:secret`.
+
+Skipped, `--db` leaves iopix to ask for the database on its set-up page the first time you open it.
+
+## Running in the foreground
+
+Without the service, `./run.sh` starts iopix in the terminal.
+
+## Updating
+
+`./update.sh`, or **Settings › Server › Update now**. See [Updating](updating.md).
