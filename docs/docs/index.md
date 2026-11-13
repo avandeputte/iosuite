@@ -18,6 +18,13 @@ Small self-hosted apps for the family, each one a complete product on its own:
 | [ioTask](apps/iotask.md) | The family's task lists, in Apple Reminders and every tasks app over CalDAV | 8670 | [iotask](https://github.com/avandeputte/iosuite/tree/main/iotask) |
 | [ioRecipe](apps/iorecipe.md) | The family's recipes, with photos and import from the web | 8690 | [iorecipe](https://github.com/avandeputte/iosuite/tree/main/iorecipe) |
 
+Two **admin tools** come with the suite, for the person who runs the servers. Only suite admins see them:
+
+| Tool | What it is | Default port | Source |
+| --- | --- | --- | --- |
+| [ioDNS](apps/iodns.md) | One list of the house's DNS names, kept in sync on AdGuard Home, Pi-hole, UniFi and Cloudflare | 8660 | [iodns](https://github.com/avandeputte/iosuite/tree/main/iodns) |
+| [ioBackup](apps/iobackup.md) | Scheduled backups of the MariaDB databases to a folder or Google Drive, and restores of exactly what you pick | 8680 | [iobackup](https://github.com/avandeputte/iosuite/tree/main/iobackup) |
+
 !!! tip "You don't need the whole suite"
     Every app installs, runs and updates on its own. If all you want is a photo app, install ioPix and stop there:
     nothing else is required, and nothing is missing. Add another app later, or never.

@@ -184,6 +184,17 @@ header{
 .copy:hover{color:var(--gold);border-color:var(--gold)}
 
 /* ---------- apps ---------- */
+.tools{margin-top:34px;border-top:1px dashed var(--line);padding-top:26px}
+.tools h3{margin:0 0 4px;font-size:1rem}
+.tools>p{margin:0 0 16px;color:var(--muted);font-size:.92rem;max-width:44em}
+.tgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+@media (max-width:760px){ .tgrid{grid-template-columns:1fr} }
+.tool{display:flex;gap:13px;align-items:flex-start;border:1px solid var(--line);border-radius:12px;background:var(--bg);padding:14px 16px}
+.tool img{width:32px;height:32px;border-radius:8px;flex:none;margin-top:2px}
+.tool b{color:var(--ink)}
+.tool p{margin:2px 0 6px;font-size:.9rem;color:var(--body)}
+.tool .links{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:.86rem;font-weight:500}
+
 .apps{background:var(--card);border-block:1px solid var(--line)}
 .agrid{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
 @media (max-width:980px){ .agrid{grid-template-columns:repeat(2,1fr)} }
@@ -475,6 +486,18 @@ footer p{margin:16px 0 0;max-width:52em}
           <div class="links"><a href="/docs/apps/iostart/">Docs</a><a href="https://github.com/avandeputte/iosuite/tree/main/iostart" rel="noopener">GitHub</a><span class="port">:8630</span></div>
         </article>
       </div>
+      <div class="tools">
+        <h3>And two admin tools</h3>
+        <p>Utilities for the person who runs the servers. Only suite admins see them, and they install like any other app.</p>
+        <div class="tgrid">
+          <div class="tool"><img src="img/iodns.svg" alt="" width="32" height="32"><div><b>ioDNS</b>
+            <p>One list of the house's DNS names, kept in sync on AdGuard Home, Pi-hole, a UniFi gateway and Cloudflare.</p>
+            <div class="links"><a href="/docs/apps/iodns/">Docs</a><a href="https://github.com/avandeputte/iosuite/tree/main/iodns" rel="noopener">GitHub</a></div></div></div>
+          <div class="tool"><img src="img/iobackup.svg" alt="" width="32" height="32"><div><b>ioBackup</b>
+            <p>Scheduled backups of the MariaDB databases to a folder or Google Drive, and restores of exactly what you pick.</p>
+            <div class="links"><a href="/docs/apps/iobackup/">Docs</a><a href="https://github.com/avandeputte/iosuite/tree/main/iobackup" rel="noopener">GitHub</a></div></div></div>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -663,6 +686,8 @@ footer p{margin:16px 0 0;max-width:52em}
         <a href="https://github.com/avandeputte/iosuite/tree/main/iorecipe" rel="noopener">ioRecipe</a>
         <a href="https://github.com/avandeputte/iosuite/tree/main/iocontact" rel="noopener">ioContact</a>
         <a href="https://github.com/avandeputte/iosuite/tree/main/iohealth" rel="noopener">ioHealth</a>
+        <a href="https://github.com/avandeputte/iosuite/tree/main/iodns" rel="noopener">ioDNS</a>
+        <a href="https://github.com/avandeputte/iosuite/tree/main/iobackup" rel="noopener">ioBackup</a>
         <a href="https://github.com/avandeputte/iosuite" rel="noopener">ioSuite</a>
         <a href="https://github.com/avandeputte/iosuite/tree/main/docs" rel="noopener">This site</a>
       </div>

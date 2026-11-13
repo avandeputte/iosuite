@@ -101,6 +101,9 @@ nav:
       - ioHealth: apps/iohealth.md
       - ioStart start page: apps/iostart.md
       - Phones, Macs and other apps: apps/devices.md
+  - Admin tools:
+      - ioDNS: apps/iodns.md
+      - ioBackup: apps/iobackup.md
   - Running them:
       - Accounts and roles: run/accounts.md
       - Reverse proxy and HTTPS: run/reverse-proxy.md
