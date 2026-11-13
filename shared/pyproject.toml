@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,7 +8,7 @@ version = "0.47.0"
 description = "Shared accounts, sessions, roles and per-user settings for the ioThing apps (ioPix, ioNote, ioCalendar, ioContact, ioTask, ioRecipe, ioHealth, ioSuite)"
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "GPL-3.0-or-later" }
+license = "GPL-3.0-or-later"
 dependencies = [
   "pymysql<2",
   "argon2-cffi>=23,<26",  # account password hashes (Argon2id)

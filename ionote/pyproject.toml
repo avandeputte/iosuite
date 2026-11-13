@@ -3,7 +3,7 @@
 #   pip install -e '.[ocr]'
 #   pip install -e '.[test]'                      (pytest)
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -12,7 +12,7 @@ version = "1.39.1"
 description = "Notes from the clipboard, screenshots and the share sheet, kept in MariaDB, with a web app and the API the Mac and iPhone apps use"
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "GPL-3.0-or-later" }
+license = "GPL-3.0-or-later"
 # upper bounds: the next major version of each package as installed and tested (the same as iopix)
 dependencies = [
   "fastapi<1",

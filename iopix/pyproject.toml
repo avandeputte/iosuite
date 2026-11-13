@@ -4,7 +4,7 @@
 #   pip install -e '.[captions]' --extra-index-url https://download.pytorch.org/whl/cpu
 #   pip install -e '.[test]'                      (pytest, Playwright)
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -13,7 +13,7 @@ version = "1.157.0"
 description = "Web front end for a digiKam library, with local AI search"
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "GPL-3.0-or-later" }
+license = "GPL-3.0-or-later"
 # upper bounds: the next major version of each package as installed and tested; raise them on purpose, after a test run
 dependencies = [
   "fastapi<1",
