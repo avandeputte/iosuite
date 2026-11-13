@@ -12,13 +12,13 @@
 # Until the scripts are merged upstream, the framework is pointed at this repository for the
 # install script (COMMUNITY_SCRIPTS_URL below; the core engine still comes from community-scripts).
 # Run on the Proxmox host as root:
-#   bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iopix/main/proxmox/ct/iopix.sh)"
-export COMMUNITY_SCRIPTS_URL="${COMMUNITY_SCRIPTS_URL:-https://raw.githubusercontent.com/avandeputte/iopix/main/proxmox}"
+#   bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/iopix/proxmox/ct/iopix.sh)"
+export COMMUNITY_SCRIPTS_URL="${COMMUNITY_SCRIPTS_URL:-https://raw.githubusercontent.com/avandeputte/iosuite/main/iopix/proxmox}"
 _cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
 source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/build.func")
 # Copyright (c) 2026 Alex Van de Putte
 # License: GPL-3.0-or-later
-# Source: https://github.com/avandeputte/iopix
+# Source: https://github.com/avandeputte/iosuite (iopix/)
 
 APP="iopix"
 var_tags="${var_tags:-photos;media}"
@@ -151,10 +151,10 @@ function update_script() {
     exit
   fi
   msg_info "Updating ${APP}"
-  REPO="${IOPIX_REPO:-https://github.com/avandeputte/iopix}"
+  REPO="${IOPIX_REPO:-https://github.com/avandeputte/iosuite}"  # the suite's repository: this app in iopix/, the shared library in shared/
   # the app's own updater: latest code, same settings, data and packages, service restarted.
   # Installs made before update.sh existed fetch it first; its output is shown, not hidden.
-  [[ -f /opt/iopix/app/update.sh ]] || curl -fsSL "https://raw.githubusercontent.com/avandeputte/iopix/main/update.sh" -o /opt/iopix/app/update.sh
+  [[ -f /opt/iopix/app/update.sh ]] || curl -fsSL "https://raw.githubusercontent.com/avandeputte/iosuite/main/iopix/update.sh" -o /opt/iopix/app/update.sh
   if sh /opt/iopix/app/update.sh; then msg_ok "Updated successfully!"; else msg_error "update.sh failed; see the lines above"; exit 1; fi
   exit
 }

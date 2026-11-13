@@ -147,6 +147,10 @@ VENV="$APP/.venv"
 VPY="$VENV/bin/python"
 pipi() { if command -v uv >/dev/null 2>&1; then uv pip install -q -p "$VPY" "$@"; else "$VPY" -m pip install -q "$@"; fi; }
 "$VPY" -m pip --version >/dev/null 2>&1 || command -v uv >/dev/null 2>&1 || "$VPY" -m ensurepip -q
+# the suite's shared library, from the same commit: shared/ inside an installed copy, beside this folder in a checkout of the repository
+SHARED="$APP/shared"; [ -f "$SHARED/pyproject.toml" ] || SHARED="$APP/../shared"
+[ -f "$SHARED/pyproject.toml" ] || die "the suite's shared library is missing: this folder is part of the suite's repository (github.com/avandeputte/iosuite) and needs its shared/ folder beside it"
+pipi -e "$SHARED"
 if [ "$FEATURES" = ocr ]; then echo "installing the packages (with RapidOCR)"; pipi -e ".[ocr]"; else echo "installing the packages"; pipi -e .; fi
 
 say "Settings"

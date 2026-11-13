@@ -53,7 +53,7 @@ split() {  # HOST:PORT/DATABASE:USER:PASSWORD into $1_HOST, $1_PORT, $1_NAME, $1
   _s="$2"; eval "$1_HOST=\"\${_s%%:*}\""; _r="${_s#*:}"; eval "$1_PORT=\"\${_r%%/*}\""; _r="${_r#*/}"
   eval "$1_NAME=\"\${_r%%:*}\""; _r="${_r#*:}"; eval "$1_USER=\"\${_r%%:*}\""; eval "$1_PASSWORD=\"\${_r#*:}\""; }
 
-# ---- system packages (Python 3.11+ with venv, and git for the iosuite-shared package from the iosuite-shared repository)
+# ---- system packages (Python 3.11+ with venv; git fetches the other apps of the suite when they are installed too)
 if [ "$SYSDEPS" != 0 ] && { ! python3 -c 'import sys, venv, ensurepip; assert sys.version_info >= (3, 11)' 2>/dev/null || ! command -v git >/dev/null; }; then
   say "Installing Python and git"
   if command -v apt-get >/dev/null; then apt-get update -qq && apt-get install -y -qq python3 python3-venv python3-pip git curl >/dev/null
@@ -111,6 +111,10 @@ fi
 say "Installing the Python packages"
 [ -x .venv/bin/python ] || "$PY" -m venv .venv
 .venv/bin/python -m pip install -q --disable-pip-version-check --upgrade pip
+# the suite's shared library, from the same commit: shared/ inside an installed copy, beside this folder in a checkout of the repository
+SHARED=shared; [ -f shared/pyproject.toml ] || SHARED=../shared
+[ -f "$SHARED/pyproject.toml" ] || die "the suite's shared library is missing: this folder is part of the suite's repository (github.com/avandeputte/iosuite) and needs its shared/ folder beside it"
+.venv/bin/python -m pip install -q --disable-pip-version-check -e "$SHARED"
 .venv/bin/python -m pip install -q --disable-pip-version-check -e .
 chmod 755 run.sh update.sh setup.sh 2>/dev/null || true
 

@@ -269,6 +269,10 @@ VENV="$APP/.venv"
 VPY="$VENV/bin/python"
 pipi() { if command -v uv >/dev/null 2>&1; then uv pip install -q -p "$VPY" "$@"; else "$VPY" -m pip install -q "$@"; fi; }
 "$VPY" -m pip --version >/dev/null 2>&1 || command -v uv >/dev/null 2>&1 || "$VPY" -m ensurepip -q
+# the suite's shared library, from the same commit: shared/ inside an installed copy, beside this folder in a checkout of the repository
+SHARED="$APP/shared"; [ -f "$SHARED/pyproject.toml" ] || SHARED="$APP/../shared"
+[ -f "$SHARED/pyproject.toml" ] || die "the suite's shared library is missing: this folder is part of the suite's repository (github.com/avandeputte/iosuite) and needs its shared/ folder beside it"
+pipi -e "$SHARED"
 G=""; has search && G="$G,search"; has objects && G="$G,objects"; has ocr && G="$G,ocr"
 G="${G#,}"; echo "installing the packages (pyproject.toml${G:+, groups: $G})"; if [ -n "$G" ]; then pipi -e ".[$G]"; else pipi -e .; fi
 has captions && { echo "installing PyTorch and transformers (large)"; pipi --extra-index-url https://download.pytorch.org/whl/cpu -e ".[captions]"; }

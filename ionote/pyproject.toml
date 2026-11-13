@@ -25,7 +25,7 @@ dependencies = [
   "pypdf<7",           # the text of attached PDFs, for search
   "mcp<3",
   "pyjwt[crypto]<3",   # Cloudflare Access tokens (proxy sign-in)
-  "iosuite-shared @ git+https://github.com/avandeputte/iosuite-shared.git@4c6177b58cc1eaca28573f64ac5f8aebee805147",   # iosuite-shared 0.45.0, the suite's shared library: accounts, sessions, the Shared ioSuite database (pinned: bump to pick up a new one)
+  "iosuite-shared",   # the suite's shared library (shared/ of this repository): setup.sh, update.sh and the Dockerfile install it from there, at the same commit
 ]
 
 [project.optional-dependencies]
@@ -33,7 +33,7 @@ ocr = ["rapidocr<4", "onnxruntime<2", "numpy<3"]   # text in pictures added in t
 test = ["pytest<10", "httpx<1", "pyflakes<4"]
 
 [project.urls]
-Homepage = "https://github.com/avandeputte/ionote"
+Homepage = "https://github.com/avandeputte/iosuite/tree/main/ionote"
 
 [tool.setuptools.packages.find]
 include = ["app*"]

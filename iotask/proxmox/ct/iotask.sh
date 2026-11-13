@@ -9,16 +9,16 @@
 #
 # Until the scripts are merged upstream, the framework is pointed at this repository for the install script
 # (COMMUNITY_SCRIPTS_URL below; the core engine still comes from community-scripts). Run on the Proxmox host as root:
-#   bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iotask/main/proxmox/ct/iotask.sh)"
+#   bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/iotask/proxmox/ct/iotask.sh)"
 # Unattended: IOTASK_DB=host:port/db:user:password IOTASK_SUITE_DB=host:port/db:user:password
 #   IOTASK_ADMIN=name:password IOTASK_PORT=8670 IOTASK_TIMEZONE=America/New_York
 #   IOTASK_PUBLIC_URL=https://tasks.example.com IOTASK_COOKIE_DOMAIN=example.com in the environment skip the questions.
-export COMMUNITY_SCRIPTS_URL="${COMMUNITY_SCRIPTS_URL:-https://raw.githubusercontent.com/avandeputte/iotask/main/proxmox}"
+export COMMUNITY_SCRIPTS_URL="${COMMUNITY_SCRIPTS_URL:-https://raw.githubusercontent.com/avandeputte/iosuite/main/iotask/proxmox}"
 _cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
 source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/build.func")
 # Copyright (c) 2026 Alex Van de Putte
 # License: GPL-3.0-or-later
-# Source: https://github.com/avandeputte/iotask
+# Source: https://github.com/avandeputte/iosuite (iotask/)
 
 APP="iotask"
 var_tags="${var_tags:-tasks;caldav}"

@@ -3,7 +3,7 @@
 services:
   iobackup:
     image: ghcr.io/avandeputte/iobackup:latest
-    build: .
+    build: {context: .., dockerfile: iobackup/Dockerfile}   # from a checkout of the suite's repository: its root is the build context
     container_name: iobackup
     restart: unless-stopped
     logging:                          # the output Docker keeps (the app's log, again): at most 3 files of 5 MB

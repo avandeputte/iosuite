@@ -9,7 +9,8 @@ services:
   iohealth:
     image: ghcr.io/avandeputte/iohealth:latest   # or a version such as 2.7.0
     build:
-      context: .
+      context: ..                    # the root of the suite's repository (shared/ is needed too)
+      dockerfile: iohealth/Dockerfile
     container_name: iohealth
     restart: unless-stopped
     logging:                          # the output Docker keeps (the app's log, again): at most 3 files of 5 MB

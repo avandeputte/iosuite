@@ -11,7 +11,8 @@ services:
   iopix:
     image: ghcr.io/avandeputte/iopix:latest
     build:
-      context: .
+      context: ..                    # the root of the suite's repository (shared/ is needed too)
+      dockerfile: iopix/Dockerfile
       # args: { AI: "1", CAPTIONS: "0" }
     container_name: iopix
     restart: unless-stopped

@@ -10,17 +10,17 @@
 #
 # Until the scripts are merged upstream, the framework is pointed at this repository for the install script
 # (COMMUNITY_SCRIPTS_URL below; the core engine still comes from community-scripts). Run on the Proxmox host as root:
-#   bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iocontact/main/proxmox/ct/iocontact.sh)"
+#   bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/iocontact/proxmox/ct/iocontact.sh)"
 # Unattended: IOCONTACT_DB=host:port/db:user:password IOCONTACT_SUITE_DB=host:port/iosuite:iosuite:password
 #   IOCONTACT_ADMIN=name:password IOCONTACT_PORT=8640
 #   IOCONTACT_LDAP_PORT=3890 IOCONTACT_PUBLIC_URL=https://contacts.example.com
 #   IOCONTACT_COOKIE_DOMAIN=example.com in the environment skip the questions.
-export COMMUNITY_SCRIPTS_URL="${COMMUNITY_SCRIPTS_URL:-https://raw.githubusercontent.com/avandeputte/iocontact/main/proxmox}"
+export COMMUNITY_SCRIPTS_URL="${COMMUNITY_SCRIPTS_URL:-https://raw.githubusercontent.com/avandeputte/iosuite/main/iocontact/proxmox}"
 _cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
 source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/build.func")
 # Copyright (c) 2026 Alex Van de Putte
 # License: GPL-3.0-or-later
-# Source: https://github.com/avandeputte/iocontact
+# Source: https://github.com/avandeputte/iosuite (iocontact/)
 
 APP="iocontact"
 var_tags="${var_tags:-contacts;carddav}"

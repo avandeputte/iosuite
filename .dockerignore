@@ -1,0 +1,21 @@
+# keep the build context small: an image gets its app's code and static files, pyproject.toml, the README and shared/
+.git
+.github
+docs
+tools
+**/.venv
+**/__pycache__
+**/*.pyc
+**/*.egg-info
+**/.pytest_cache
+**/tests
+**/proxmox
+**/config.env
+**/data
+**/*.log
+**/.DS_Store
+iopix/docs
+iopix/site
+iopix/installer
+iopix/dist
+iosuite/docs

@@ -8,13 +8,15 @@
 FROM python:3.12-slim
 ARG OCR=1
 # libheif1: HEIC pictures from iPhones (pillow-heif). libglib2.0-0: RapidOCR's headless OpenCV.
-# git: pip fetches the ioSuite shared library (package iosuite-shared, repository avandeputte/iosuite-shared) from GitHub.
-RUN apt-get update && apt-get install -y --no-install-recommends libheif1 libglib2.0-0 git \
+RUN apt-get update && apt-get install -y --no-install-recommends libheif1 libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-COPY pyproject.toml README.md ./
-COPY app ./app
-COPY static ./static
+COPY ionote/pyproject.toml ionote/README.md ./
+COPY ionote/app ./app
+COPY ionote/static ./static
+# the suite's shared library, from the same commit: shared/ of the repository (the build context is the repository root)
+COPY shared /opt/iosuite-shared
+RUN pip install --no-cache-dir /opt/iosuite-shared
 ARG COMMIT=unknown
 RUN echo "$COMMIT" > COMMIT
 RUN pip install --no-cache-dir -e ".$([ "$OCR" = "1" ] && echo [ocr])"

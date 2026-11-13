@@ -3,7 +3,7 @@
 services:
   iorecipe:
     image: ghcr.io/avandeputte/iorecipe:latest
-    build: .
+    build: {context: .., dockerfile: iorecipe/Dockerfile}   # from a checkout of the suite's repository: its root is the build context
     container_name: iorecipe
     restart: unless-stopped
     logging:                          # the output Docker keeps (the app's log, again): at most 3 files of 5 MB

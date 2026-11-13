@@ -2,14 +2,16 @@
 # volume mounted at /backups is the suggested local one) and are put together in /data/work first.
 FROM python:3.12-slim
 WORKDIR /app
-COPY pyproject.toml README.md ./
-COPY app ./app
-COPY static ./static
-# git only while installing: iosuite-shared (the suite's shared library) comes from its GitHub repository, avandeputte/iosuite-shared
+COPY iobackup/pyproject.toml iobackup/README.md ./
+COPY iobackup/app ./app
+COPY iobackup/static ./static
+# the suite's shared library, from the same commit: shared/ of the repository (the build context is the repository root)
+COPY shared /opt/iosuite-shared
+RUN pip install --no-cache-dir /opt/iosuite-shared
 # mariadb-client: mariadb-dump and mariadb, which take the backups and replay them; openssl signs Google service account keys
-RUN apt-get update && apt-get install -y --no-install-recommends git mariadb-client openssl \
+RUN apt-get update && apt-get install -y --no-install-recommends mariadb-client openssl \
     && pip install --no-cache-dir -e . \
-    && apt-get purge -y --auto-remove git && rm -rf /var/lib/apt/lists/* \
+    && rm -rf /var/lib/apt/lists/* \
     && useradd --uid 1000 --user-group --no-create-home --shell /usr/sbin/nologin iobackup && chown -R iobackup:iobackup /app \
     && mkdir -p /data /backups && chown iobackup:iobackup /data /backups
 # the commit the image was built from, for Maintenance › Updates and logs (the workflow passes it)

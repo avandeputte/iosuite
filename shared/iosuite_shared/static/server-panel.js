@@ -17,6 +17,9 @@ import { api, confirmDialog, fail, h, icon, setToast, styles, toast } from '../a
 const API = new URL('../', import.meta.url);   // .../api/
 
 const short = (s) => `v${s.version}${s.installed && s.installed !== 'unknown' ? ` (${s.installed.slice(0, 7)})` : ''}`;
+/** What a check found newer: the app's version, or only the shared library's (the app's own number is unchanged then). */
+const newer = (s, c) => (c.remoteVersion && c.remoteVersion !== s.version ? `v${c.remoteVersion}`
+  : c.remoteShared && c.remoteShared !== s.shared ? `the suite's shared library ${c.remoteShared}` : 'a newer build');
 
 /** Watch /api/status until `done(status)` says so (or the time is up), then reload the page. */
 function reloadWhen(done, ms, gave) {
@@ -57,9 +60,9 @@ function versionBox(s, redraw) {
   const c = s.check, p = s.progress || {}, last = s.lastUpdate, name = s.name || 'The app';
   const state = h('p', null, p.running ? `Updating… ${name} restarts when it is done, and this page reloads.`
     : p.error ? `The last update failed: ${p.error}`
-      : !c ? `You have ${short(s)}.`
+      : !c ? `You have ${short(s)}${s.shared ? `, shared library ${s.shared}` : ''}.`
         : c.status === 'current' ? `${short(s)} is the latest version.`
-          : c.status === 'update' ? `You have ${short(s)}; ${c.remoteVersion ? `v${c.remoteVersion}` : 'a newer build'} is available${c.remoteDate ? ` (${c.remoteDate})` : ''}${c.remoteMessage ? `: ${c.remoteMessage.replace(/^v\d+\.\d+\.\d+:\s*/, '')}` : ''}.`
+          : c.status === 'update' ? `You have ${short(s)}; ${newer(s, c)} is available${c.remoteDate ? ` (${c.remoteDate})` : ''}${c.remoteMessage ? `: ${c.remoteMessage.replace(/^v\d+\.\d+\.\d+:\s*/, '')}` : ''}.`
             : `Could not check: ${c.error}`);
   const auto = h('input', { type: 'checkbox', checked: s.autoCheck, disabled: s.autoCheckLocked ? true : null, onchange: async (e) => {
     try { await api('server', { json: { autoCheck: e.target.checked } }); toast('Saved'); redraw(); } catch (err) { e.target.checked = !e.target.checked; fail(err); }

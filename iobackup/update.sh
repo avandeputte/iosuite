@@ -1,7 +1,7 @@
 #!/bin/sh
-# Update an installed ioBackup in place (a git checkout, an installed copy such as /opt/iobackup/app, or the Proxmox
-# container; Docker users pull the image instead). The same script in every app of the suite: only the block
-# "the app" below differs.
+# Update an installed ioBackup in place (a git checkout of the suite's repository, an installed copy such as
+# /opt/iobackup/app, or the Proxmox container; Docker users pull the image instead). The same script in every app of
+# the suite, made from shared/templates/update.sh: only the block "the app" below differs.
 #
 #   ./update.sh            fetch the latest code, refresh the packages, restart the service
 #   ./update.sh --check    only say whether something newer exists (IOBACKUP_REF is honoured)
@@ -11,7 +11,9 @@
 #   IOBACKUP_RESULT=<file>  write the outcome ("ok: ..." or "error: ...") there before the restart, so the web app
 #     can show it afterwards (its own child process dies in the restart)
 #
-# Keeps config.env, the data folder and the Python environment. A git checkout is pulled; an installed copy (no .git)
+# Every app lives in a folder of one repository (iobackup/ here), with the suite's shared library beside it in shared/;
+# both are installed from the same commit. Keeps config.env, the data folder and the Python environment. A git checkout
+# (the whole repository, this folder inside it) is pulled; an installed copy (this folder's files, with shared/ inside)
 # is replaced from the GitHub tarball of the commit. The order protects the install: the Python packages the new
 # version asks for (its pyproject.toml) are installed first, and the code moves only once that succeeded, so a failed
 # package install leaves the installed version running as it was; a failed swap puts the previous files back.
@@ -21,13 +23,10 @@ cd "$(dirname "$0")"
 
 # ---- the app: the only lines that differ between the apps of the suite
 # the key (the service, the environment variables IOBACKUP_REPO, _BRANCH, _REF and _RESULT, the launchd label), what messages
-# call it, the GitHub repository followed unless IOBACKUP_REPO says otherwise, where the server lives in the repository
-# ("" : at the root), and the files and folders an installed copy replaces
+# call it, and the files and folders of its folder that an installed copy replaces (shared/ and LICENSE come with them)
 NAME=iobackup
 LABEL=ioBackup
-REPO_DEFAULT=avandeputte/iobackup
-SUBDIR=""
-ITEMS="app static proxmox pyproject.toml README.md LICENSE setup.sh run.sh update.sh Dockerfile docker-compose.yml config.env.example"
+ITEMS="app static proxmox pyproject.toml README.md setup.sh run.sh update.sh Dockerfile docker-compose.yml config.env.example"
 # the optional dependency groups installed here (has <group> <module to probe>), and anything else a new version needs on this machine
 groups() {
   :
@@ -38,6 +37,9 @@ after_install() {
 # ----
 
 APP="$(pwd)"
+# the suite's repository (followed unless IOBACKUP_REPO says otherwise) and the app's folder in it
+REPO_DEFAULT=avandeputte/iosuite
+SUBDIR="$NAME"
 UP="$(printf '%s' "$NAME" | tr '[:lower:]' '[:upper:]')"
 eval "REPO=\"\${${UP}_REPO:-$REPO_DEFAULT}\""
 eval "BRANCH=\"\${${UP}_BRANCH:-main}\""
@@ -53,9 +55,10 @@ trap cleanup EXIT
 say() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 note() { [ -n "$RESULT" ] && printf '%s\n' "$*" > "$RESULT" 2>/dev/null || true; }
 die() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; note "error: $*"; NOTED=1; exit 1; }
-# a checkout: .git is here, or one level up when the server lives in a folder of the repository; an installed copy records its commit in COMMIT
-GITROOT=""
-if [ -d .git ]; then GITROOT="$APP"; elif [ -n "$SUBDIR" ] && [ -d "$APP/../.git" ]; then GITROOT="$(cd "$APP/.." && pwd)"; fi
+# a checkout: the repository's .git is one level up, the shared library beside this folder; an installed copy records
+# its commit in COMMIT and keeps the shared library inside, in shared/
+GITROOT=""; SHARED="$APP/shared"
+if [ -e "$APP/../.git" ] && [ -d "$APP/../shared" ]; then GITROOT="$(cd "$APP/.." && pwd)"; SHARED="$GITROOT/shared"; fi
 local_commit() { if [ -n "$GITROOT" ]; then git -C "$GITROOT" rev-parse HEAD 2>/dev/null; elif [ -f COMMIT ]; then cat COMMIT; else echo unknown; fi; }
 # network access through the app's own Python (no curl needed inside a container)
 PYF="$(ls -d .venv/bin/python 2>/dev/null || command -v python3)"
@@ -90,7 +93,8 @@ if [ -n "$GITROOT" ]; then
     [ -n "$f" ] && ! git -C "$GITROOT" diff --quiet HEAD FETCH_HEAD -- "$f" && { printf '  locally changed and also changed by the update: %s\n' "$f" >&2; exit 1; }
     :
   done || die "local changes to files the update also changes (git stash them first)"
-  git -C "$GITROOT" show "FETCH_HEAD:${SUBDIR:+$SUBDIR/}pyproject.toml" > "$TMP/pyproject.toml" 2>/dev/null || die "the fetched commit has no pyproject.toml"
+  git -C "$GITROOT" show "FETCH_HEAD:$SUBDIR/pyproject.toml" > "$TMP/pyproject.toml" 2>/dev/null || die "the fetched commit has no $SUBDIR/pyproject.toml"
+  git -C "$GITROOT" show "FETCH_HEAD:shared/pyproject.toml" > "$TMP/shared.toml" 2>/dev/null || die "the fetched commit has no shared/pyproject.toml"
 else
   # the archive is fetched by commit id, so the code and the recorded COMMIT always match
   R="$(remote_commit "$REF")" || R=""; [ -n "$R" ] || die "could not reach GitHub (or no such commit: $REF)"
@@ -99,15 +103,18 @@ else
   fi
   fetch "https://github.com/$REPO/archive/$R.tar.gz" "$TMP/src.tgz" || die "download failed"
   tar xzf "$TMP/src.tgz" -C "$TMP"
-  SRC="$(ls -d "$TMP"/*/ | head -1)$SUBDIR"
+  TOP="$(ls -d "$TMP"/*/ | head -1)"; SRC="$TOP$SUBDIR"
+  [ -d "$SRC" ] && [ -f "$TOP/shared/pyproject.toml" ] || die "the downloaded archive has no $SUBDIR/ or no shared/ folder (is $REPO the suite's repository?)"
   # stage everything first; the swap comes after the packages are in. Settings, data and the environment live outside
   # these items and are never touched
   STAGE="$APP/.update-stage"; rm -rf "${STAGE:?}"; mkdir -p "$STAGE"
   for item in $ITEMS; do
     [ -e "$SRC/$item" ] && { mkdir -p "$STAGE/$(dirname "$item")"; cp -R "$SRC/$item" "$STAGE/$item"; }
   done
+  cp -R "$TOP/shared" "$STAGE/shared"
+  [ ! -f "$TOP/LICENSE" ] || cp "$TOP/LICENSE" "$STAGE/LICENSE"
   [ -d "$STAGE/app" ] && [ -d "$STAGE/static" ] && [ -f "$STAGE/pyproject.toml" ] || { rm -rf "${STAGE:?}"; die "the downloaded archive looks incomplete"; }
-  cp "$STAGE/pyproject.toml" "$TMP/pyproject.toml"
+  cp "$STAGE/pyproject.toml" "$TMP/pyproject.toml"; cp "$STAGE/shared/pyproject.toml" "$TMP/shared.toml"
 fi
 
 say "Refreshing the Python packages (the new version's, before the code moves)"
@@ -115,10 +122,11 @@ G=""; PIPX=""
 has() { "$VPY" -c "import $2" 2>/dev/null && G="$G,$1"; :; }
 groups
 G="${G#,}"
-# the dependency list of the fetched pyproject.toml, base set plus the groups already installed here
-"$VPY" - "$TMP/pyproject.toml" "$G" > "$TMP/requirements.txt" <<'PYEOF' || die "could not read the fetched pyproject.toml"
+# the dependency lists of the fetched pyproject.toml files: the app's base set plus the groups already installed here,
+# and the shared library's (the library itself is installed from its folder, after the code moves)
+"$VPY" - "$TMP/pyproject.toml" "$G" "$TMP/shared.toml" > "$TMP/requirements.txt" <<'PYEOF' || die "could not read the fetched pyproject.toml"
 import re, sys
-path, groups = sys.argv[1], [g for g in sys.argv[2].split(",") if g]
+path, groups, shared = sys.argv[1], [g for g in sys.argv[2].split(",") if g], sys.argv[3]
 try:
     import tomllib
 except ImportError:  # Python 3.10: a plain reading of the two array shapes pyproject.toml uses
@@ -130,6 +138,8 @@ if tomllib:
     deps += proj.get("dependencies", [])
     for g in groups:
         deps += proj.get("optional-dependencies", {}).get(g, [])
+    with open(shared, "rb") as f:
+        deps += tomllib.load(f).get("project", {}).get("dependencies", [])
 else:
     text = open(path, encoding="utf-8").read()
     def arr(key):
@@ -138,7 +148,9 @@ else:
     deps += arr("dependencies")
     for g in groups:
         deps += arr(g)
-print("\n".join(deps))
+    text = open(shared, encoding="utf-8").read()
+    deps += arr("dependencies")
+print("\n".join(d for d in deps if not re.match(r"iosuite[-_]shared\b", d)))
 PYEOF
 pipi() { if command -v uv >/dev/null 2>&1; then uv pip install -q -p "$VPY" "$@"; else "$VPY" -m pip install -q --disable-pip-version-check "$@"; fi; }
 # shellcheck disable=SC2086
@@ -150,7 +162,7 @@ if [ -n "$GITROOT" ]; then
 else
   MOVED=""
   swap_back() { for item in $MOVED; do rm -rf "${APP:?}/${item:?}"; [ -e "$APP/$item.old" ] && mv "$APP/$item.old" "$APP/$item"; done; rm -rf "${STAGE:?}"; }
-  for item in $ITEMS; do
+  for item in $ITEMS shared LICENSE; do
     [ -e "$STAGE/$item" ] || continue
     rm -rf "${APP:?}/${item:?}.old"
     if [ -e "$APP/$item" ]; then mv "$APP/$item" "$APP/$item.old" || { swap_back; die "could not set $item aside; the previous files are back in place"; }; fi
@@ -162,8 +174,9 @@ else
   echo "$R" > COMMIT
 fi
 chmod 755 setup.sh update.sh run.sh 2>/dev/null || true
-# the editable install's metadata follows the new pyproject.toml (its import path already points here, and the packages
-# are in place, so this is bookkeeping: the app runs either way)
+# the editable installs' metadata follows the new pyproject.toml files (their import paths already point at the app and
+# at the shared library, and the packages are in place, so this is bookkeeping: the app runs either way)
+pipi --no-deps -e "$SHARED" 2>/dev/null || echo "  note: the shared library's package metadata could not be refreshed (pip install -e $SHARED); $LABEL runs regardless"
 pipi --no-deps -e . 2>/dev/null || echo "  note: the package metadata could not be refreshed (pip install -e .); $LABEL runs regardless"
 # the database is brought up to date now when the app has a command line for it (app/cli.py); otherwise the app does it as it starts
 CLI=app.cli

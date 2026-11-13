@@ -1,13 +1,13 @@
 # ioSuite in a container. Its few settings live in MariaDB / MySQL (DB_* below), so the container itself is stateless.
 FROM python:3.12-slim
 WORKDIR /app
-COPY pyproject.toml README.md ./
-COPY app ./app
-COPY static ./static
-# git only while installing: the suite's shared library (avandeputte/iosuite-shared) comes from GitHub
-RUN apt-get update && apt-get install -y --no-install-recommends git \
-    && pip install --no-cache-dir -e . \
-    && apt-get purge -y --auto-remove git && rm -rf /var/lib/apt/lists/* \
+COPY iosuite/pyproject.toml iosuite/README.md ./
+COPY iosuite/app ./app
+COPY iosuite/static ./static
+# the suite's shared library, from the same commit: shared/ of the repository (the build context is the repository root)
+COPY shared /opt/iosuite-shared
+RUN pip install --no-cache-dir /opt/iosuite-shared
+RUN pip install --no-cache-dir -e . \
     && useradd --uid 1000 --user-group --no-create-home --shell /usr/sbin/nologin iosuite && chown -R iosuite:iosuite /app
 # the commit the image was built from, for Settings › Server (the workflow passes it)
 ARG COMMIT=unknown

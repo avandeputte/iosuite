@@ -10,17 +10,17 @@
 # packages, writes config.env, installs the iohealth service and waits until it answers.
 #
 # Run on the Proxmox host as root:
-#   bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iohealth/main/proxmox/ct/iohealth.sh)"
+#   bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/iohealth/proxmox/ct/iohealth.sh)"
 # Unattended: IOHEALTH_DB=host:port/db:user:password IOHEALTH_SUITE_DB=host:port/db:user:password
 #   IOHEALTH_TZ=Europe/Brussels IOHEALTH_PORT=8650 IOHEALTH_PUBLIC_URL=https://health.example.com IOHEALTH_COOKIE_DOMAIN=example.com IOHEALTH_ADMIN=name:password
 #   in the environment answer the questions in advance. IOHEALTH_REF=<branch|sha> installs that instead of main.
 IOHEALTH_REF="${IOHEALTH_REF:-main}"
-export COMMUNITY_SCRIPTS_URL="${COMMUNITY_SCRIPTS_URL:-https://raw.githubusercontent.com/avandeputte/iohealth/${IOHEALTH_REF}/proxmox}"
+export COMMUNITY_SCRIPTS_URL="${COMMUNITY_SCRIPTS_URL:-https://raw.githubusercontent.com/avandeputte/iosuite/${IOHEALTH_REF}/iohealth/proxmox}"
 _cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
 source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/build.func")
 # Copyright (c) 2026 Alex Van de Putte
 # License: GPL-3.0-or-later
-# Source: https://github.com/avandeputte/iohealth
+# Source: https://github.com/avandeputte/iosuite (iohealth/)
 
 APP="iohealth"
 var_tags="${var_tags:-health;fitness}"
@@ -118,11 +118,12 @@ description
 msg_info "Fetching ioHealth ($IOHEALTH_REF)"
 # COMMIT records what was installed (update.sh compares against it)
 FETCH='set -e; cd /tmp; rm -rf iohealth-src; mkdir iohealth-src; cd iohealth-src
-sha=$(curl -fsSL -H "Accept: application/vnd.github+json" "https://api.github.com/repos/avandeputte/iohealth/commits/'"$IOHEALTH_REF"'" | python3 -c "import sys, json; print(json.load(sys.stdin)[\"sha\"])")
-curl -fsSL "https://github.com/avandeputte/iohealth/archive/$sha.tar.gz" | tar xz
+sha=$(curl -fsSL -H "Accept: application/vnd.github+json" "https://api.github.com/repos/avandeputte/iosuite/commits/'"$IOHEALTH_REF"'" | python3 -c "import sys, json; print(json.load(sys.stdin)[\"sha\"])")
+curl -fsSL "https://github.com/avandeputte/iosuite/archive/$sha.tar.gz" | tar xz
 src=$(ls -d */ | head -1)
 mkdir -p /opt/iohealth/app
-for i in app static proxmox pyproject.toml README.md LICENSE run.sh update.sh setup.sh Dockerfile docker-compose.yml config.env.example; do cp -R "$src/$i" /opt/iohealth/app/; done
+cp -R "$src/iohealth/." /opt/iohealth/app/   # the app's folder of the suite's repository, with the shared library and the licence beside it
+cp -R "$src/shared" /opt/iohealth/app/shared; cp "$src/LICENSE" /opt/iohealth/app/LICENSE
 echo "$sha" > /opt/iohealth/app/COMMIT
 cd /tmp; rm -rf iohealth-src'
 if ! pct exec "$CTID" -- bash -c "$FETCH"; then msg_error "Could not fetch ioHealth from GitHub inside the container"; exit 1; fi

@@ -2,9 +2,13 @@
 version, running the app's update.sh, restarting, and the tail of the server log.
 
     from iosuite_shared.updates import Updater
-    updater = Updater("iocalendar", version=__version__, root=ROOT)        # repo avandeputte/iocalendar, branch main
+    updater = Updater("iocalendar", version=__version__, root=ROOT)        # repo avandeputte/iosuite, folder iocalendar, branch main
     updater.start_daily()                                                   # the daily check, while the setting is on
     app.include_router(auth.server_router(updater, log_file=LOG_FILE))      # GET/POST /api/server, GET /api/log
+
+Every app of the suite lives in a folder of one repository (avandeputte/iosuite: iocalendar/, iotask/ ..., and this
+library in shared/). An update is one the app's own version or this library's version on the branch is higher than
+what is installed; a commit that only touches another app is nothing to install.
 
 Each app keeps its `update.sh` next to the code; this module only runs it. The script is told where to write its
 outcome and which repository and branch to follow through <PREFIX>_RESULT, <PREFIX>_REPO, <PREFIX>_BRANCH and
@@ -31,6 +35,8 @@ from iosuite_shared import config, db, suiteupdates
 from iosuite_shared.errors import Invalid
 
 DAILY = 24 * 3600
+SUITE_REPO = "avandeputte/iosuite"  # the one repository: a folder per app, this library in shared/
+SHARED_VERSION_FILE = "shared/iosuite_shared/__init__.py"
 VERSION_RE = re.compile(r'^__version__\s*=\s*"([^"]+)"', re.M)
 
 
@@ -44,17 +50,17 @@ def _env_flag_off(name: str) -> bool:
 
 class Updater:
     """One per app. `app` is its key (iocalendar), `version` the running version, `root` the folder with update.sh.
-    `repo` and `branch` default to <PREFIX>_REPO / <PREFIX>_BRANCH in the environment, then avandeputte/<app> and main.
+    `repo` and `branch` default to <PREFIX>_REPO / <PREFIX>_BRANCH in the environment, then avandeputte/iosuite and main.
     `version_file` is the file in the repository that holds the version line (__version__ = "..."),
-    relative to the repository root. UPDATE_CHECK=0 in the environment locks the daily check off."""
+    relative to the repository root: <app>/app/__init__.py unless given. UPDATE_CHECK=0 in the environment locks the daily check off."""
 
-    def __init__(self, app: str, version: str, root, repo: str = None, branch: str = None, version_file: str = "app/__init__.py",
+    def __init__(self, app: str, version: str, root, repo: str = None, branch: str = None, version_file: str = None,
                  result_file=None, settings=None, env_prefix: str = None, user_agent: str = None):
         self.app, self.version, self.root = app, version, Path(root)
         self.prefix = (env_prefix or app).upper()
-        self.repo = repo or os.environ.get(f"{self.prefix}_REPO") or f"avandeputte/{app}"
+        self.repo = repo or os.environ.get(f"{self.prefix}_REPO") or SUITE_REPO
         self.branch = branch or os.environ.get(f"{self.prefix}_BRANCH") or "main"
-        self.version_file = version_file
+        self.version_file = version_file or f"{app}/app/__init__.py"
         self.result_file = Path(result_file) if result_file else self.root / ".update-result"
         self.user_agent = user_agent or app
         self.check_locked = _env_flag_off("UPDATE_CHECK")
@@ -74,8 +80,15 @@ class Updater:
             self._commit = self._read_commit()  # "unknown" is kept too: no git subprocess per status call
         return self._commit
 
+    def _git_root(self) -> Path | None:
+        """A checkout of the repository: the app's folder sits one level below its .git (or holds it, in a test)."""
+        for d in (self.root, self.root.parent):
+            if (d / ".git").exists():
+                return d
+        return None
+
     def _read_commit(self) -> str:
-        if (self.root / ".git").exists():
+        if self._git_root():
             try:
                 return subprocess.run(["git", "rev-parse", "HEAD"], cwd=str(self.root), capture_output=True, text=True,
                                       timeout=10).stdout.strip() or "unknown"
@@ -110,16 +123,23 @@ class Updater:
         with urllib.request.urlopen(req, timeout=10) as r:
             return r.read()
 
-    def _remote_version(self, sha: str) -> str | None:
-        """The version at that commit, so a commit that only changes the docs or the workflow is not announced as new."""
-        text = self._get_url(f"https://raw.githubusercontent.com/{self.repo}/{sha}/{self.version_file}", "text/plain").decode("utf-8", "replace")
+    def _remote_version(self, sha: str, version_file: str = None) -> str | None:
+        """The version at that commit, so a commit that only changes another app, the docs or a workflow is not announced as new."""
+        text = self._get_url(f"https://raw.githubusercontent.com/{self.repo}/{sha}/{version_file or self.version_file}", "text/plain").decode("utf-8", "replace")
         m = VERSION_RE.search(text)
         return m.group(1) if m else None
 
+    @staticmethod
+    def shared_version() -> str:
+        """The installed version of this library, which travels with the app (the same commit of the repository)."""
+        import iosuite_shared
+        return iosuite_shared.__version__
+
     def check(self) -> dict:
-        """{installed, version, remote, remoteDate, remoteMessage, remoteVersion, status: current | update | error, checked}"""
+        """{installed, version, shared, remote, remoteDate, remoteMessage, remoteVersion, remoteShared,
+        status: current | update | error, checked}"""
         mine = self.local_commit()
-        out = {"installed": mine[:7], "version": self.version, "checked": int(time.time())}
+        out = {"installed": mine[:7], "version": self.version, "shared": self.shared_version(), "checked": int(time.time())}
         try:
             c = json.loads(self._get_url(f"https://api.github.com/repos/{self.repo}/commits/{self.branch}"))
             out.update(remote=c["sha"][:7], remoteDate=c["commit"]["committer"]["date"][:10],
@@ -131,10 +151,18 @@ class Updater:
                     rv = self._remote_version(c["sha"])
                 except Exception:  # noqa: BLE001
                     rv = None
+                try:
+                    rs = self._remote_version(c["sha"], SHARED_VERSION_FILE)
+                except Exception:  # noqa: BLE001
+                    rs = None
                 out["remoteVersion"] = rv
-                # a newer build is one with a higher version; the same version under another commit (docs, the
-                # workflow) is nothing to install, and an older one means this install is ahead of the branch
-                out["status"] = "update" if rv is None or _version_tuple(rv) > _version_tuple(self.version) else "current"
+                out["remoteShared"] = rs
+                # a newer build is one with a higher version of the app or of the shared library; the same versions
+                # under another commit (another app, the docs, a workflow) are nothing to install, and older ones
+                # mean this install is ahead of the branch
+                newer_app = rv is None or _version_tuple(rv) > _version_tuple(self.version)
+                newer_shared = rs is not None and _version_tuple(rs) > _version_tuple(out["shared"])
+                out["status"] = "update" if newer_app or newer_shared else "current"
         except Exception as e:  # noqa: BLE001
             out.update(status="error", error=str(e)[:160])
         self._checked.clear()
@@ -226,14 +254,15 @@ class Updater:
         return {"ok": text.startswith("ok:"), "text": text.split(":", 1)[-1].strip()[:300], "at": int(self.result_file.stat().st_mtime)}
 
     def _writable(self) -> bool:
-        paths = [self.root] + [p for p in (self.root / ".venv", self.root / ".git") if p.exists()]
+        g = self._git_root()
+        paths = [self.root] + [p for p in (self.root / ".venv", g / ".git" if g else None) if p and p.exists()]
         return all(os.access(str(p), os.W_OK) for p in paths)
 
     def can_run(self) -> bool:
         return (self.root / "update.sh").exists() and (self.root / ".venv").exists() and not self.in_docker() and self._writable()
 
     def status(self) -> dict:
-        return {"version": self.version, "installed": self.local_commit()[:7], "docker": self.in_docker(), "canRun": self.can_run(),
+        return {"version": self.version, "shared": self.shared_version(), "installed": self.local_commit()[:7], "docker": self.in_docker(), "canRun": self.can_run(),
                 "repo": self.repo, "branch": self.branch, "check": dict(self._checked) or None, "progress": dict(self.progress),
                 "lastUpdate": self.last_result(), "autoCheck": self.auto_check_enabled(), "autoCheckLocked": self.check_locked}
 

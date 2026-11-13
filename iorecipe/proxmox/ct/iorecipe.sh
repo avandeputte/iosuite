@@ -9,16 +9,16 @@
 #
 # Until the scripts are merged upstream, the framework is pointed at this repository for the install script
 # (COMMUNITY_SCRIPTS_URL below; the core engine still comes from community-scripts). Run on the Proxmox host as root:
-#   bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iorecipe/main/proxmox/ct/iorecipe.sh)"
+#   bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/iorecipe/proxmox/ct/iorecipe.sh)"
 # Unattended: IORECIPE_DB=host:port/db:user:password IORECIPE_SUITE_DB=host:port/db:user:password
 #   IORECIPE_ADMIN=name:password IORECIPE_PORT=8690 IORECIPE_TIMEZONE=America/New_York
 #   IORECIPE_PUBLIC_URL=https://recipes.example.com IORECIPE_COOKIE_DOMAIN=example.com in the environment skip the questions.
-export COMMUNITY_SCRIPTS_URL="${COMMUNITY_SCRIPTS_URL:-https://raw.githubusercontent.com/avandeputte/iorecipe/main/proxmox}"
+export COMMUNITY_SCRIPTS_URL="${COMMUNITY_SCRIPTS_URL:-https://raw.githubusercontent.com/avandeputte/iosuite/main/iorecipe/proxmox}"
 _cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
 source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/build.func")
 # Copyright (c) 2026 Alex Van de Putte
 # License: GPL-3.0-or-later
-# Source: https://github.com/avandeputte/iorecipe
+# Source: https://github.com/avandeputte/iosuite (iorecipe/)
 
 APP="iorecipe"
 var_tags="${var_tags:-recipes}"

@@ -1,16 +1,21 @@
 # Builds the container image and pushes it to GitHub's registry (ghcr.io) on every push to
 # main and on version tags; pull requests only build. The image holds no models: the
 # container downloads them on first start (AUTO_MODELS), see the README.
-name: Tests and image
+name: ioPix
 
 on:
   push:
     branches: [main]
-    tags: ["v*"]
-    paths-ignore: ["site/**", ".github/workflows/site.yml"]  # the website has its own workflow
+    tags: ["iopix-v*"]
+    paths: ["iopix/**", "shared/**", ".github/workflows/iopix.yml"]
   pull_request:
-    paths-ignore: ["site/**", ".github/workflows/site.yml"]
+    paths: ["iopix/**", "shared/**", ".github/workflows/iopix.yml"]
   workflow_dispatch:
+
+# every step runs in the app's folder; the shared library sits beside it in shared/
+defaults:
+  run:
+    working-directory: iopix
 
 permissions:
   contents: read
@@ -41,7 +46,9 @@ jobs:
           python-version: "3.12"
       - name: Syntax and import checks
         run: |
+          python -m pip install -q -e ../shared
           python -m pip install -q -e ".[test]"
+          python3 ../shared/templates/render-update.py --check
           python -m pyflakes app
           python -c "import app.main"
           for f in static/app.js static/js/*.js; do node --input-type=module --check < "$f" || exit 1; done; node --check static/sw.js  # ES modules parsed as modules (a plain --check can miss errors), then the service worker
@@ -89,6 +96,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
+          file: iopix/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
@@ -97,8 +105,8 @@ jobs:
             AI=1
             CAPTIONS=0
             COMMIT=${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=iopix
+          cache-to: type=gha,mode=max,scope=iopix
 
   installer:
     needs: tests
@@ -112,9 +120,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: iopix-install.sh
-          path: dist/iopix-install.sh
+          path: iopix/dist/iopix-install.sh
       - name: Attach to the release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/iopix-v')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/iopix-install.sh
+          files: iopix/dist/iopix-install.sh

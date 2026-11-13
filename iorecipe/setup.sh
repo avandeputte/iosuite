@@ -68,7 +68,6 @@ if [ "$SYSDEPS" != 0 ] && ! command -v tesseract >/dev/null; then
   elif command -v brew >/dev/null; then brew install tesseract >/dev/null 2>&1 || true; fi
   command -v tesseract >/dev/null || say "Tesseract was not installed: Import > Photo stays off until it is (see the README)"
 fi
-command -v git >/dev/null || die "git is needed to install the suite's shared library (iosuite-shared, from the iosuite-shared repository): install git, then run this again"
 PY="${PY:-python3}"
 
 # ---- the answers
@@ -112,6 +111,10 @@ fi
 say "Installing the Python packages"
 [ -x .venv/bin/python ] || "$PY" -m venv .venv
 .venv/bin/python -m pip install -q --upgrade pip
+# the suite's shared library, from the same commit: shared/ inside an installed copy, beside this folder in a checkout of the repository
+SHARED=shared; [ -f shared/pyproject.toml ] || SHARED=../shared
+[ -f "$SHARED/pyproject.toml" ] || die "the suite's shared library is missing: this folder is part of the suite's repository (github.com/avandeputte/iosuite) and needs its shared/ folder beside it"
+.venv/bin/python -m pip install -q -e "$SHARED"
 .venv/bin/python -m pip install -q -e .
 # the AI that reads a web page without recipe data, on this server (app/ai.py): llama.cpp, compiled here, which takes
 # a few minutes and a C++ compiler; the app runs without it

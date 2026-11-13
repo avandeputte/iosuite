@@ -1,13 +1,19 @@
 # Tests against a MariaDB service, then builds the container image and pushes it to ghcr.io (ghcr.io/avandeputte/iohealth)
 # on pushes to main (tags `latest` and `main-<sha>`) and version tags like v2.0.0 (pull requests only build).
-name: Tests and image
+name: ioHealth
 
 on:
   push:
     branches: [main]
-    tags: ["v*"]
+    paths: ["iohealth/**", "shared/**", ".github/workflows/iohealth.yml"]
   pull_request:
+    paths: ["iohealth/**", "shared/**", ".github/workflows/iohealth.yml"]
   workflow_dispatch:
+
+# every step runs in the app's folder; the shared library sits beside it in shared/
+defaults:
+  run:
+    working-directory: iohealth
 
 env:
   IMAGE: ghcr.io/${{ github.repository_owner }}/iohealth
@@ -29,7 +35,9 @@ jobs:
           python-version: "3.12"
       - name: Syntax and import checks
         run: |
+          python -m pip install -q -e ../shared
           python -m pip install -q -e ".[test]"
+          python3 ../shared/templates/render-update.py --check
           python -m pyflakes app tests
           python -c "import app.main"
           node --check static/app.js
@@ -70,10 +78,11 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           context: .
+          file: iohealth/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: COMMIT=${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=iohealth
+          cache-to: type=gha,mode=max,scope=iohealth

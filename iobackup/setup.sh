@@ -69,7 +69,6 @@ if [ "$SYSDEPS" != 0 ] && ! command -v mariadb-dump >/dev/null && ! command -v m
   fi
 fi
 command -v mariadb-dump >/dev/null || command -v mysqldump >/dev/null || die "the MariaDB client programs (mariadb-dump, mariadb) are needed: install mariadb-client, then run this again"
-command -v git >/dev/null || die "git is needed to install the suite's shared library (iosuite-shared, from the iosuite-shared repository): install git, then run this again"
 PY="${PY:-python3}"
 
 # ---- the answers
@@ -113,6 +112,10 @@ fi
 say "Installing the Python packages"
 [ -x .venv/bin/python ] || "$PY" -m venv .venv
 .venv/bin/python -m pip install -q --upgrade pip
+# the suite's shared library, from the same commit: shared/ inside an installed copy, beside this folder in a checkout of the repository
+SHARED=shared; [ -f shared/pyproject.toml ] || SHARED=../shared
+[ -f "$SHARED/pyproject.toml" ] || die "the suite's shared library is missing: this folder is part of the suite's repository (github.com/avandeputte/iosuite) and needs its shared/ folder beside it"
+.venv/bin/python -m pip install -q -e "$SHARED"
 .venv/bin/python -m pip install -q -e .
 
 # ---- settings (kept between runs; passwords readable by the owner only)

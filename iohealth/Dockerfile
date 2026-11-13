@@ -2,11 +2,13 @@
 # (DB_* and the Shared ioSuite database, IOSUITE_DB_*); only the server log is written, to data/ inside the container. See docker-compose.yml.
 FROM python:3.12-slim
 WORKDIR /app
-RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
-COPY pyproject.toml ./
-COPY app ./app
-COPY static ./static
-RUN pip install --no-cache-dir -e . && apt-get purge -y git && apt-get autoremove -y
+COPY iohealth/pyproject.toml ./
+COPY iohealth/app ./app
+COPY iohealth/static ./static
+# the suite's shared library, from the same commit: shared/ of the repository (the build context is the repository root)
+COPY shared /opt/iosuite-shared
+RUN pip install --no-cache-dir /opt/iosuite-shared
+RUN pip install --no-cache-dir -e .
 # the commit the image was built from, for Maintenance › ioHealth version (the workflow passes it)
 ARG COMMIT=unknown
 RUN echo "$COMMIT" > COMMIT

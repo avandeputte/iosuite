@@ -3,7 +3,7 @@
 services:
   iotask:
     image: ghcr.io/avandeputte/iotask:latest
-    build: .
+    build: {context: .., dockerfile: iotask/Dockerfile}   # from a checkout of the suite's repository: its root is the build context
     container_name: iotask
     restart: unless-stopped
     logging:                          # the output Docker keeps (the app's log, again): at most 3 files of 5 MB

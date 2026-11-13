@@ -1,4 +1,4 @@
-# Builds iopix.net (site/) and publishes it to Cloudflare Pages on every push to main that
+# Builds iopix.net (iopix/site/) and publishes it to Cloudflare Pages on every push to main that
 # touches the site, the README screenshots or the version (for the What's new page).
 # The Cloudflare key lives only in the secrets of the GitHub environment "iopix.net", which only
 # the main branch may use; pull requests and forks never run this workflow.
@@ -8,10 +8,10 @@ on:
   push:
     branches: [main]
     paths:
-      - "site/**"
-      - "docs/screenshots/**"
-      - "pyproject.toml"
-      - ".github/workflows/site.yml"
+      - "iopix/site/**"
+      - "iopix/docs/screenshots/**"
+      - "iopix/pyproject.toml"
+      - ".github/workflows/iopix-site.yml"
   workflow_dispatch:
 
 permissions:
@@ -35,7 +35,7 @@ jobs:
       - name: Build
         run: |
           python -m pip install -q mkdocs==1.6.1 mkdocs-material==9.7.7
-          site/build.sh
+          iopix/site/build.sh
       - name: Publish to Cloudflare Pages
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -45,5 +45,5 @@ jobs:
             echo "::notice::CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID secrets not set; built but not published"
             exit 0
           fi
-          # from site/, so the Pages Functions in site/functions (the www redirect) go along
-          cd site && npx -y wrangler@4.152.0 pages deploy dist --project-name iopix --branch main --commit-dirty=true
+          # from iopix/site/, so the Pages Functions in site/functions (the www redirect) go along
+          cd iopix/site && npx -y wrangler@4.152.0 pages deploy dist --project-name iopix --branch main --commit-dirty=true

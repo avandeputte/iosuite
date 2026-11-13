@@ -2,7 +2,7 @@
 
 # Copyright (c) 2026 Alex Van de Putte
 # License: GPL-3.0-or-later
-# Source: https://github.com/avandeputte/iotask
+# Source: https://github.com/avandeputte/iosuite (iotask/)
 # ioTask: runs inside the LXC, driven by proxmox/ct/iotask.sh (community-scripts framework).
 # This only installs the system packages and fetches the code; the ct script then runs the app's own
 # setup.sh inside the container with the answers given on the host (database, ports, admin, service).
@@ -26,11 +26,15 @@ $STD apt-get install -y \
 msg_ok "Installed Dependencies"
 
 msg_info "Fetching ioTask"
-REPO="${IOTASK_REPO:-https://github.com/avandeputte/iotask}"
+REPO="${IOTASK_REPO:-https://github.com/avandeputte/iosuite}"  # the suite's repository: this app in iotask/, the shared library in shared/
 mkdir -p /opt/iotask
-$STD git clone --depth 1 "$REPO" /opt/iotask/app
-git -C /opt/iotask/app rev-parse HEAD > /opt/iotask/app/COMMIT
-rm -rf /opt/iotask/app/.git
+$STD git clone --depth 1 "$REPO" /tmp/iosuite-src
+mkdir -p /opt/iotask/app
+cp -a /tmp/iosuite-src/iotask/. /opt/iotask/app/
+cp -a /tmp/iosuite-src/shared /opt/iotask/app/shared
+cp /tmp/iosuite-src/LICENSE /opt/iotask/app/LICENSE
+git -C /tmp/iosuite-src rev-parse HEAD > /opt/iotask/app/COMMIT
+rm -rf /tmp/iosuite-src
 msg_ok "Fetched ioTask"
 
 motd_ssh

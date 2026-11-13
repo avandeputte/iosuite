@@ -11,7 +11,8 @@ app and hands them to each companion's own setup.sh, which runs unattended (`--y
   * the sign-in domain (COOKIE_DOMAIN) and, with `--admin NAME` and ADMIN_PASSWORD in the environment, the admin
     account, made an admin of every companion too (the account already exists in the shared database).
 
-Each companion is fetched from GitHub into BASE/<app>/app (BASE is the folder above the calling app's own
+Each companion is fetched from GitHub (its folder of the suite's repository, with the shared library beside it in
+shared/) into BASE/<app>/app (BASE is the folder above the calling app's own
 <name>/app, so /opt when the app is in /opt/iosuite/app) with its commit in COMMIT, the layout the Proxmox installers
 make and update.sh understands; then `sh setup.sh --yes ...` runs there and installs the packages, writes config.env,
 creates the tables and (as root with systemd) the service. The passwords travel in the environment, never on a
@@ -20,6 +21,7 @@ system time zone. ioPix gets `--no-digikam` and a photos folder (`--photos DIR`,
 missing), and the AI models are left off (`--features none`) so the install stays small; both are changed later in
 its Settings or by running its setup.sh again.
 """
+import atexit
 import os
 import shutil
 import subprocess
@@ -27,20 +29,22 @@ import sys
 import tempfile
 from pathlib import Path
 
-# name -> how to fetch and set it up. `db` is the app's default database name; `env` the prefix of the environment
+# the one repository of the suite: a folder per app, the shared library in shared/
+REPO = "avandeputte/iosuite"
+# name -> how to set it up (its folder in the repository has the same name). `db` is the app's default database name; `env` the prefix of the environment
 # variables its setup.sh reads the secrets from (PFX_DB, PFX_SUITE_DB, PFX_ADMIN).
 APPS = {
-    "iosuite": dict(label="ioSuite", repo="avandeputte/iosuite", db="suite", port=8630, env="IOSUITE"),
-    "iocalendar": dict(label="ioCalendar", repo="avandeputte/iocalendar", db="calendar", port=8620, env="IOCALENDAR"),
-    "iocontact": dict(label="ioContact", repo="avandeputte/iocontact", db="contacts", port=8640, env="IOCONTACT"),
-    "ionote": dict(label="ioNote", repo="avandeputte/ionote", db="notes", port=8610, env="IONOTE", data=True,
+    "iosuite": dict(label="ioSuite", db="suite", port=8630, env="IOSUITE"),
+    "iocalendar": dict(label="ioCalendar", db="calendar", port=8620, env="IOCALENDAR"),
+    "iocontact": dict(label="ioContact", db="contacts", port=8640, env="IOCONTACT"),
+    "ionote": dict(label="ioNote", db="notes", port=8610, env="IONOTE", data=True,
                     extra=["--features", "none"]),
-    "iohealth": dict(label="ioHealth", repo="avandeputte/iohealth", db="health", port=8650, env="IOHEALTH"),
-    "iotask": dict(label="ioTask", repo="avandeputte/iotask", db="tasks", port=8670, env="IOTASK"),
-    "iodns": dict(label="ioDNS", repo="avandeputte/iodns", db="dns", port=8660, env="IODNS"),
-    "iobackup": dict(label="ioBackup", repo="avandeputte/iobackup", db="backup", port=8680, env="IOBACKUP"),
-    "iorecipe": dict(label="ioRecipe", repo="avandeputte/iorecipe", db="recipe", port=8690, env="IORECIPE"),
-    "iopix": dict(label="ioPix", repo="avandeputte/iopix", db="iopix", port=8600, env="IOPIX", data=True,
+    "iohealth": dict(label="ioHealth", db="health", port=8650, env="IOHEALTH"),
+    "iotask": dict(label="ioTask", db="tasks", port=8670, env="IOTASK"),
+    "iodns": dict(label="ioDNS", db="dns", port=8660, env="IODNS"),
+    "iobackup": dict(label="ioBackup", db="backup", port=8680, env="IOBACKUP"),
+    "iorecipe": dict(label="ioRecipe", db="recipe", port=8690, env="IORECIPE"),
+    "iopix": dict(label="ioPix", db="iopix", port=8600, env="IOPIX", data=True,
                   extra=["--no-digikam", "--features", "none"], photos=True),
 }
 DEFAULT_PHOTOS = "/library/photos"
@@ -164,23 +168,36 @@ def say(msg):
     print(f"\n\033[1;34m==>\033[0m {msg}", flush=True)
 
 
-def fetch(name, target, log=print):
-    """A shallow clone of the app's repository into TARGET, COMMIT written, .git removed:
-    the layout the Proxmox installers make, which the app's update.sh keeps up to date."""
-    a = APPS[name]
-    url = os.environ.get(f"{a['env']}_REPO") or f"https://github.com/{a['repo']}"
-    target = Path(target)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    tmp = Path(tempfile.mkdtemp(prefix=f"{name}-src-", dir=str(target.parent)))
-    try:
+_sources = {}  # repository address -> (a shallow clone of it, its commit): fetched once, however many apps are installed
+
+
+def _source(url):
+    if url not in _sources:
+        tmp = Path(tempfile.mkdtemp(prefix="iosuite-src-"))
+        atexit.register(shutil.rmtree, tmp, ignore_errors=True)
         subprocess.run(["git", "clone", "-q", "--depth", "1", url, str(tmp)], check=True)
         sha = subprocess.run(["git", "-C", str(tmp), "rev-parse", "HEAD"], check=True, capture_output=True, text=True).stdout.strip()
-        shutil.rmtree(tmp / ".git", ignore_errors=True)
-        shutil.copytree(tmp, target, symlinks=True, dirs_exist_ok=True)
-        (target / "COMMIT").write_text(sha + "\n")
-        log(f"  fetched {a['label']} {sha[:7]} into {target}")
-    finally:
-        shutil.rmtree(tmp, ignore_errors=True)
+        _sources[url] = (tmp, sha)
+    return _sources[url]
+
+
+def fetch(name, target, log=print):
+    """The app's folder of the suite's repository into TARGET, the shared library into TARGET/shared, COMMIT written:
+    the layout the Proxmox installers make, which the app's update.sh keeps up to date."""
+    a = APPS[name]
+    url = os.environ.get(f"{a['env']}_REPO") or f"https://github.com/{REPO}"
+    if "://" not in url and not os.path.exists(url):
+        url = f"https://github.com/{url}"  # owner/name, as update.sh and the Updater take it
+    src, sha = _source(url)
+    if not (src / name / "setup.sh").is_file() or not (src / "shared" / "pyproject.toml").is_file():
+        raise RuntimeError(f"{url} has no {name}/ folder with a setup.sh, or no shared/ folder")
+    target = Path(target)
+    target.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(src / name, target, symlinks=True, dirs_exist_ok=True)
+    shutil.rmtree(target / "shared", ignore_errors=True)
+    shutil.copytree(src / "shared", target / "shared", symlinks=True)
+    (target / "COMMIT").write_text(sha + "\n")
+    log(f"  fetched {a['label']} {sha[:7]} into {target}")
 
 
 def run_setup(entry, log=print):

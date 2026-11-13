@@ -1,14 +1,20 @@
 # Tests on SQLite and on MariaDB, then builds the container image and pushes it to GitHub's registry (ghcr.io) on
 # every push to main and on version tags; pull requests only build. The shared accounts go in scratch databases
 # on the same MariaDB (iosuite_shared.testing, IOSUITE_TEST_DB).
-name: Tests and image
+name: ioNote
 
 on:
   push:
     branches: [main]
-    tags: ["v*"]
+    paths: ["ionote/**", "shared/**", ".github/workflows/ionote.yml"]
   pull_request:
+    paths: ["ionote/**", "shared/**", ".github/workflows/ionote.yml"]
   workflow_dispatch:
+
+# every step runs in the app's folder; the shared library sits beside it in shared/
+defaults:
+  run:
+    working-directory: ionote
 
 permissions:
   contents: read
@@ -37,7 +43,9 @@ jobs:
           python-version: "3.12"
       - name: Syntax and import checks
         run: |
+          python -m pip install -q -e ../shared
           python -m pip install -q -e ".[test]"
+          python3 ../shared/templates/render-update.py --check
           python -m pyflakes app tests
           python -c "import app.main"
           for f in static/app.js static/js/*.js; do node --input-type=module --check < "$f" || exit 1; done; node --check static/sw.js
@@ -85,6 +93,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
+          file: ionote/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
@@ -92,5 +101,5 @@ jobs:
           build-args: |
             OCR=1
             COMMIT=${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=ionote
+          cache-to: type=gha,mode=max,scope=ionote

@@ -5,7 +5,7 @@
 #
 #   ./installer/make-installer.sh            -> dist/iopix-install.sh
 #
-# The archive carries the code, static files, pyproject.toml and README; no models
+# The archive carries the code, static files, pyproject.toml, README and the suite's shared library (shared/); no models
 # (they are downloaded at install time) and nothing from data/ or .venv/.
 set -e
 cd "$(dirname "$0")/.."
@@ -17,7 +17,9 @@ OUT="dist/iopix-install.sh"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/iopix"
-cp -R app static pyproject.toml README.md LICENSE setup.sh run.sh update.sh config.env.example "$TMP/iopix/"
+cp -R app static pyproject.toml README.md setup.sh run.sh update.sh config.env.example "$TMP/iopix/"
+# the suite's shared library and the licence, from the repository this folder is part of
+cp -R ../shared "$TMP/iopix/shared"; cp ../LICENSE "$TMP/iopix/LICENSE"
 git rev-parse HEAD > "$TMP/iopix/COMMIT" 2>/dev/null || echo unknown > "$TMP/iopix/COMMIT"
 find "$TMP/iopix" -name '__pycache__' -prune -exec rm -rf {} + 2>/dev/null || true
 find "$TMP/iopix" -name '.DS_Store' -delete 2>/dev/null || true

@@ -2,7 +2,7 @@
 
 # Copyright (c) 2026 Alex Van de Putte
 # License: GPL-3.0-or-later
-# Source: https://github.com/avandeputte/iopix
+# Source: https://github.com/avandeputte/iosuite (iopix/)
 # iopix: runs inside the LXC, driven by proxmox/ct/iopix.sh (community-scripts framework).
 # This installs the system packages (MariaDB for iopix's own database among them), creates that database and
 # fetches the code; the ct script then runs the app's own setup.sh inside the container with the answers given
@@ -53,11 +53,15 @@ mkdir -p /opt/iopix
 msg_ok "Set up MariaDB (database iopix, user iopix; credentials in /opt/iopix/viewer-db.env, root only, until setup.sh puts them in config.env)"
 
 msg_info "Fetching iopix"
-REPO="${IOPIX_REPO:-https://github.com/avandeputte/iopix}"
+REPO="${IOPIX_REPO:-https://github.com/avandeputte/iosuite}"  # the suite's repository: this app in iopix/, the shared library in shared/
 mkdir -p /opt/iopix /opt/iopix/data /library
-$STD git clone --depth 1 "$REPO" /opt/iopix/app
-git -C /opt/iopix/app rev-parse HEAD > /opt/iopix/app/COMMIT  # the installed commit, shown in Settings › Server
-rm -rf /opt/iopix/app/.git
+$STD git clone --depth 1 "$REPO" /tmp/iosuite-src
+mkdir -p /opt/iopix/app
+cp -a /tmp/iosuite-src/iopix/. /opt/iopix/app/
+cp -a /tmp/iosuite-src/shared /opt/iopix/app/shared
+cp /tmp/iosuite-src/LICENSE /opt/iopix/app/LICENSE
+git -C /tmp/iosuite-src rev-parse HEAD > /opt/iopix/app/COMMIT  # the installed commit, shown in Settings › Server
+rm -rf /tmp/iosuite-src
 msg_ok "Fetched iopix"
 
 motd_ssh

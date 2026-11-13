@@ -3,7 +3,7 @@
 services:
   iosuite:
     image: ghcr.io/avandeputte/iosuite:latest
-    build: .
+    build: {context: .., dockerfile: iosuite/Dockerfile}   # from a checkout of the suite's repository: its root is the build context
     container_name: iosuite
     restart: unless-stopped
     logging:                          # the output Docker keeps (the app's log, again): at most 3 files of 5 MB

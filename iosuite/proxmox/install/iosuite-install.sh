@@ -2,7 +2,7 @@
 
 # Copyright (c) 2026 Alex Van de Putte
 # License: GPL-3.0-or-later
-# Source: https://github.com/avandeputte/iosuite
+# Source: https://github.com/avandeputte/iosuite (iosuite/)
 # ioSuite: runs inside the LXC, driven by proxmox/ct/iosuite.sh (community-scripts framework).
 # This only installs the system packages and fetches the code; the ct script then runs the app's own
 # setup.sh inside the container with the answers given on the host (database, ports, admin, service).
@@ -26,11 +26,15 @@ $STD apt-get install -y \
 msg_ok "Installed Dependencies"
 
 msg_info "Fetching ioSuite"
-REPO="${IOSUITE_REPO:-https://github.com/avandeputte/iosuite}"
+REPO="${IOSUITE_REPO:-https://github.com/avandeputte/iosuite}"  # the suite's repository: this app in iosuite/, the shared library in shared/
 mkdir -p /opt/iosuite
-$STD git clone --depth 1 "$REPO" /opt/iosuite/app
-git -C /opt/iosuite/app rev-parse HEAD > /opt/iosuite/app/COMMIT
-rm -rf /opt/iosuite/app/.git
+$STD git clone --depth 1 "$REPO" /tmp/iosuite-src
+mkdir -p /opt/iosuite/app
+cp -a /tmp/iosuite-src/iosuite/. /opt/iosuite/app/
+cp -a /tmp/iosuite-src/shared /opt/iosuite/app/shared
+cp /tmp/iosuite-src/LICENSE /opt/iosuite/app/LICENSE
+git -C /tmp/iosuite-src rev-parse HEAD > /opt/iosuite/app/COMMIT
+rm -rf /tmp/iosuite-src
 msg_ok "Fetched ioSuite"
 
 motd_ssh

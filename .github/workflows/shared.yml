@@ -1,12 +1,18 @@
-# The library's own tests against a MariaDB service, on every push and pull request. The apps pin a commit of this
-# repository; their own CI runs their suites with it.
-name: Tests
+# The shared library's own tests against a MariaDB service, when shared/ changes. Every app's workflow runs on such a
+# change too (its tests use the library at the same commit), and each checks that the update.sh files match the template.
+name: Shared library
 
 on:
   push:
     branches: [main]
+    paths: ["shared/**", "*/update.sh", ".github/workflows/shared.yml"]
   pull_request:
+    paths: ["shared/**", "*/update.sh", ".github/workflows/shared.yml"]
   workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: shared
 
 permissions:
   contents: read
@@ -37,6 +43,7 @@ jobs:
           node --input-type=module --check < iosuite_shared/static/suite-admin.js
           node --input-type=module --check < iosuite_shared/static/server-panel.js
           sh -n templates/update.sh
+          python3 templates/render-update.py --check
       - name: Tests
         env:
           IOSUITE_TEST_DB: 127.0.0.1:3306:root:root

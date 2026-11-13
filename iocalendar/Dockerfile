@@ -1,13 +1,13 @@
 # ioCalendar in a container. It keeps everything in MariaDB / MySQL (DB_* below), so the container itself is stateless.
 FROM python:3.12-slim
 WORKDIR /app
-COPY pyproject.toml README.md ./
-COPY app ./app
-COPY static ./static
-# git only while installing: iosuite-shared (the suite's shared library) comes from its GitHub repository, avandeputte/iosuite-shared
-RUN apt-get update && apt-get install -y --no-install-recommends git \
-    && pip install --no-cache-dir -e . \
-    && apt-get purge -y --auto-remove git && rm -rf /var/lib/apt/lists/* \
+COPY iocalendar/pyproject.toml iocalendar/README.md ./
+COPY iocalendar/app ./app
+COPY iocalendar/static ./static
+# the suite's shared library, from the same commit: shared/ of the repository (the build context is the repository root)
+COPY shared /opt/iosuite-shared
+RUN pip install --no-cache-dir /opt/iosuite-shared
+RUN pip install --no-cache-dir -e . \
     && useradd --uid 1000 --user-group --no-create-home --shell /usr/sbin/nologin iocalendar && chown -R iocalendar:iocalendar /app
 # the commit the image was built from, for Maintenance › Updates and logs (the workflow passes it)
 ARG COMMIT=unknown

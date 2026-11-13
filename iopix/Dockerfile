@@ -18,13 +18,16 @@ ARG CAPTIONS=0
 # ffmpeg: video thumbnails. exiftool: metadata editing and the consistency checker.
 # libheif1: HEIC decoding for pillow-heif. libglib2.0-0: needed by RapidOCR's headless OpenCV.
 # mariadb-client: mariadb-dump, so "Apply to digiKam database" can back a MySQL/MariaDB digiKam up first.
-# libjpeg-turbo-progs: jpegtran, lossless rotate and crop of JPEGs. git: pip fetches iosuite-shared from GitHub.
-RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg libimage-exiftool-perl libjpeg-turbo-progs libheif1 libglib2.0-0 mariadb-client git \
+# libjpeg-turbo-progs: jpegtran, lossless rotate and crop of JPEGs.
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg libimage-exiftool-perl libjpeg-turbo-progs libheif1 libglib2.0-0 mariadb-client \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-COPY pyproject.toml README.md ./
-COPY app ./app
-COPY static ./static
+COPY iopix/pyproject.toml iopix/README.md ./
+COPY iopix/app ./app
+COPY iopix/static ./static
+# the suite's shared library, from the same commit: shared/ of the repository (the build context is the repository root)
+COPY shared /opt/iosuite-shared
+RUN pip install --no-cache-dir /opt/iosuite-shared
 ARG COMMIT=unknown
 RUN echo "$COMMIT" > COMMIT
 # editable install: the app runs from /app (its static files sit next to the package)

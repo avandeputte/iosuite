@@ -3,7 +3,7 @@
 services:
   iodns:
     image: ghcr.io/avandeputte/iodns:latest
-    build: .
+    build: {context: .., dockerfile: iodns/Dockerfile}   # from a checkout of the suite's repository: its root is the build context
     container_name: iodns
     restart: unless-stopped
     logging:                          # the output Docker keeps (the app's log, again): at most 3 files of 5 MB

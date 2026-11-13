@@ -2,7 +2,7 @@
 
 # Copyright (c) 2026 Alex Van de Putte
 # License: GPL-3.0-or-later
-# Source: https://github.com/avandeputte/iocalendar
+# Source: https://github.com/avandeputte/iosuite (iocalendar/)
 # ioCalendar: runs inside the LXC, driven by proxmox/ct/iocalendar.sh (community-scripts framework).
 # This only installs the system packages and fetches the code; the ct script then runs the app's own
 # setup.sh inside the container with the answers given on the host (database, ports, admin, service).
@@ -26,11 +26,15 @@ $STD apt-get install -y \
 msg_ok "Installed Dependencies"
 
 msg_info "Fetching ioCalendar"
-REPO="${IOCALENDAR_REPO:-https://github.com/avandeputte/iocalendar}"
+REPO="${IOCALENDAR_REPO:-https://github.com/avandeputte/iosuite}"  # the suite's repository: this app in iocalendar/, the shared library in shared/
 mkdir -p /opt/iocalendar
-$STD git clone --depth 1 "$REPO" /opt/iocalendar/app
-git -C /opt/iocalendar/app rev-parse HEAD > /opt/iocalendar/app/COMMIT
-rm -rf /opt/iocalendar/app/.git
+$STD git clone --depth 1 "$REPO" /tmp/iosuite-src
+mkdir -p /opt/iocalendar/app
+cp -a /tmp/iosuite-src/iocalendar/. /opt/iocalendar/app/
+cp -a /tmp/iosuite-src/shared /opt/iocalendar/app/shared
+cp /tmp/iosuite-src/LICENSE /opt/iocalendar/app/LICENSE
+git -C /tmp/iosuite-src rev-parse HEAD > /opt/iocalendar/app/COMMIT
+rm -rf /tmp/iosuite-src
 msg_ok "Fetched ioCalendar"
 
 motd_ssh
