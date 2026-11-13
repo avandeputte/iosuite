@@ -19,6 +19,7 @@ def test_a_member_writes_their_own_notes(client, admin):
 
 
 def test_writes_need_a_member_once_accounts_exist(client, admin):
+    assert client.post("/api/settings", json={"require_login": False}).status_code == 200  # on by default
     client.post("/api/users", json={"name": "vic", "password": "viewerpw1", "role": "viewer"})
     client.post("/api/auth/logout")
     assert client.get("/api/notes").status_code == 200  # reading stays open, as in iopix

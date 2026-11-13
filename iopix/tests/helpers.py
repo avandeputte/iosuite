@@ -42,6 +42,7 @@ def clear_accounts(db_path=None):
     authdb.ex("DELETE FROM ios_users")
     authdb.ex("ALTER TABLE ios_users AUTO_INCREMENT = 1")
     authdb.ex("DELETE FROM ios_settings")
+    authdb.set_setting("require_login", "0", "iopix")  # sign-in required is on by default; most tests browse as a visitor once accounts exist
     authdb.ex("DELETE FROM ios_apps")
     from app.auth import auth
     auth._registered = False  # the next request registers iopix in the list of apps again

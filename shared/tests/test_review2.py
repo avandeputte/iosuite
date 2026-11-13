@@ -130,7 +130,9 @@ def test_no_accounts_is_open_inside_and_shut_outside():
     assert inside.post("/api/auth/setup", json={"name": "alex", "password": "secret123"}).status_code == 200
     users.invalidate()
     out = TestClient(app, base_url="http://contacts.lan:8640", client=("8.8.8.8", 40000))
-    assert out.get("/api/data").status_code == 200, "with an account the usual rules apply again"
+    assert out.get("/api/data").status_code == 401, "with an account sign-in is required (the default)"
+    db.set_setting("require_login", "0", "iocontact")
+    assert out.get("/api/data").status_code == 200, "and with it turned off the usual rules apply again"
     assert out.post("/api/change").status_code == 401
 
 

@@ -209,7 +209,7 @@ The routes:
 | `POST /api/suite-admin/app-passwords` | `{userId, app, label, scope}`: a new one for that account, shown once |
 | `PATCH /api/suite-admin/app-passwords/{id}` | `{scope}`: `''` everything, `dav` the app's sync protocols only |
 | `DELETE /api/suite-admin/app-passwords/{id}` | revoke one |
-| `PATCH /api/suite-admin/apps/{app}` | `{defaultRole: none/viewer/member/editor, requireLogin}` (an admin tool has no default role) |
+| `PATCH /api/suite-admin/apps/{app}` | `{defaultRole: none/viewer/member/editor, requireLogin}` (an admin tool has no default role, and always requires sign-in: `requireLogin: false` is refused). Sign-in required is on unless turned off (a `require_login` row of `0`) |
 | `DELETE /api/suite-admin/apps/{app}` | off the list (it registers again if it starts); `?data=1` also drops its roles, settings, app passwords and keys |
 | `GET /api/suite-admin/keys?app=` | every app's keys and tokens (`iosuite_shared.credentials`), never the value: `{app ('' : the whole suite), appName, name, label, hint, set, env, envSet, updated, updatedBy}` |
 | `PUT /api/suite-admin/keys/{app}/{name}` | `{value}`: replace it (`''` clears it); `_suite` for the whole suite's keys |

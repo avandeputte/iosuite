@@ -68,7 +68,7 @@ def test_session_shared_between_apps_with_their_own_roles():
     users.set_role(users.find("bob")["id"], "ionote", "none")
     from iosuite_shared import sessions
     sessions.invalidate()
-    assert n.get("/api/private").status_code == 401  # no access there
+    assert n.get("/api/private").json().get("noAccess")  # no access there: signed in, but not to this app
     assert n.post("/api/auth/login", json={"name": "bob", "password": "secret123"}).status_code == 403
 
 

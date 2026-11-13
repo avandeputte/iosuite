@@ -108,6 +108,7 @@ def test_cross_site_uses_the_forwarded_host():
 
 def test_forwarded_headers_keep_the_real_peer():
     users.create("alex", "secret123", "editor", "iocontact")  # with an account: nothing here depends on the open rule
+    db.set_setting("require_login", "0", "iocontact")
     app, _ = make_app()
     fwd = {"x-forwarded-for": "8.8.8.8, 10.0.0.2", "x-forwarded-proto": "https"}
     c = TestClient(app, base_url="http://contacts.example.com", client=("10.0.0.2", 50000))

@@ -2,7 +2,7 @@
 
 Accounts (with their role in every app), app passwords of every account in every app, sessions, the keys and tokens
 every app keeps (iosuite_shared.credentials; never their values), and the suite's apps with the per-app access settings
-(default_role, require_login). `Auth.admin_router()` serves it at /api/suite-admin/*
+(default_role, require_login: on unless turned off, always on in an admin tool). `Auth.admin_router()` serves it at /api/suite-admin/*
 (suite admins only); the start page's Settings › Security and Global settings are its screen.
 
 The apps are the registered ones (ios_apps) plus any app key that only shows up in roles, settings or app passwords
@@ -52,7 +52,7 @@ def apps() -> list:
                                 "lastSeen": None})
         a["registered"] = k in reg
         a["defaultRole"] = users.default_role(k)  # none in an admin tool, which is for suite admins only
-        a["requireLogin"] = db.get_setting("require_login", "0", k) == "1"
+        a["requireLogin"] = users.sign_in_required(k)  # always in an admin tool
         a["roles"], a["appPasswords"], a["credentials"] = roles.get(k, 0), pws.get(k, 0), creds.get(k, 0)
         out.append(a)
     return sorted(out, key=lambda a: (not a["registered"], (a["name"] or a["app"]).lower(), a["app"]))
@@ -68,7 +68,9 @@ def set_app(app: str, default_role=None, require_login=None) -> dict:
             raise Invalid("The default role is none, viewer, member or editor")
         db.set_setting("default_role", "" if default_role == users.DEFAULT_ROLE else default_role, app)  # member is the default: no row
     if require_login is not None:
-        db.set_setting("require_login", "1" if require_login else "", app)
+        if not require_login and suite.is_admin_tool(app):
+            raise Invalid("An admin tool always requires sign-in")
+        db.set_setting("require_login", "" if require_login else "0", app)  # on is the default: no row
     _forget_caches()
     return next((a for a in apps() if a["app"] == app), {"app": app})
 
