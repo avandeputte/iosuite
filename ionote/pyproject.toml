@@ -1,0 +1,39 @@
+# ionote: one place for the Python dependencies. The base set runs the server; the optional groups add
+# text recognition for pictures added in the web app (setup.sh asks):
+#   pip install -e '.[ocr]'
+#   pip install -e '.[test]'                      (pytest)
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ionote"
+version = "1.39.1"
+description = "Notes from the clipboard, screenshots and the share sheet, kept in MariaDB, with a web app and the API the Mac and iPhone apps use"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "GPL-3.0-or-later" }
+# upper bounds: the next major version of each package as installed and tested (the same as iopix)
+dependencies = [
+  "fastapi<1",
+  "uvicorn<1",
+  "pillow<13",
+  "pillow-heif<2",
+  "orjson<4",
+  "pymysql<2",
+  "python-multipart<1",
+  "pypdf<7",           # the text of attached PDFs, for search
+  "mcp<3",
+  "pyjwt[crypto]<3",   # Cloudflare Access tokens (proxy sign-in)
+  "iosuite-shared @ git+https://github.com/avandeputte/iosuite-shared.git@4c6177b58cc1eaca28573f64ac5f8aebee805147",   # iosuite-shared 0.45.0, the suite's shared library: accounts, sessions, the Shared ioSuite database (pinned: bump to pick up a new one)
+]
+
+[project.optional-dependencies]
+ocr = ["rapidocr<4", "onnxruntime<2", "numpy<3"]   # text in pictures added in the web app
+test = ["pytest<10", "httpx<1", "pyflakes<4"]
+
+[project.urls]
+Homepage = "https://github.com/avandeputte/ionote"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
