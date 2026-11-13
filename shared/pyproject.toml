@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "iosuite-shared"
+version = "0.46.0"
+description = "Shared accounts, sessions, roles and per-user settings for the ioThing apps (ioPix, ioNote, ioCalendar, ioContact, ioTask, ioRecipe, ioHealth, ioSuite)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "GPL-3.0-or-later" }
+dependencies = [
+  "pymysql<2",
+  "argon2-cffi>=23,<26",  # account password hashes (Argon2id)
+  "pyjwt[crypto]<3",   # Cloudflare Access tokens (proxy sign-in)
+]
+
+[project.optional-dependencies]
+fastapi = ["fastapi<1"]
+dav = ["fastapi<1", "defusedxml<1"]  # iosuite_shared.dav (ioCalendar, ioContact)
+test = ["pytest<10", "httpx<1", "fastapi<1", "defusedxml<1", "mcp<3", "pyflakes<4"]
+
+[project.scripts]
+iosuite-shared = "iosuite_shared.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["iosuite_shared*"]
+
+[tool.setuptools.package-data]
+iosuite_shared = ["static/*.js"]

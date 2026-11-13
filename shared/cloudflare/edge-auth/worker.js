@@ -1,0 +1,92 @@
+// ioSuite edge check: a Cloudflare Worker on the paths where devices sign in with an app password: CalDAV and CardDAV
+// (calendar.example.com/dav*, contacts.example.com/dav*), the start page's bookmark sync (start.example.com/dav*) and
+// ioHealth's phone uploads (health.example.com/v1/*).
+// A request there goes on to the server only with an app password (HTTP Basic, or Bearer) the app has published
+// to the Workers KV namespace bound as APP_PASSWORDS (iosuite_shared.edge): key <app>:<prefix>, value {"h": sha-256 hex}.
+// Everything else gets the same 401 the server would give, here, at the edge. The server still checks every password.
+//
+// Variables (wrangler.toml [vars], or Settings › Variables in the dashboard):
+//   APPS  JSON, the host each app is reached at: {"calendar.example.com": "iocalendar", "contacts.example.com": "iocontact",
+//         "health.example.com": "iohealth"}
+//   MODE  "monitor" (default): check and log, but let everything through; "enforce": turn away what fails.
+
+const REALMS = { iocalendar: "ioCalendar", iocontact: "ioContact", iotask: "ioTask", iohealth: "ioHealth", iosuite: "ioSuite bookmarks" };
+// what each app's devices sign in on, and what stays open there (ioHealth's /v1/health answers without a password)
+const GUARDED = {
+  iocalendar: { paths: [/^\/dav(\/|$)/] },
+  iocontact: { paths: [/^\/dav(\/|$)/] },
+  iotask: { paths: [/^\/dav(\/|$)/] },
+  iohealth: { paths: [/^\/v1\//], open: [/^\/v1\/health\/?$/] },
+  // the start page's bookmark sync (Nextcloud Bookmarks API and the WebDAV file). Open: what a sync app asks before it
+  // has a password (is this a Nextcloud), and Nextcloud's sign-in flow, which is how it gets one: the app starts it and
+  // polls without credentials, and the page in between is the browser's, signed in with the session cookie
+  iosuite: { paths: [/^\/dav(\/|$)/], open: [/^\/dav\/nextcloud\/status\.php$/, /^\/dav\/nextcloud\/index\.php\/login\/v2(\/|$)/] },
+};
+const DEFAULT = { paths: [/^\/dav(\/|$)/] };
+
+export function guarded(app, path) {
+  const g = GUARDED[app] || DEFAULT;
+  return g.paths.some((r) => r.test(path)) && !(g.open || []).some((r) => r.test(path));
+}
+const APP_PASSWORD = /^([a-z0-9]+)-([0-9a-f]{8})-/; // as the server reads it: the word is a hint, the 8 hex find the row
+
+function unauthorized(app) {
+  const realm = REALMS[app] || "ioSuite";
+  return new Response(`Sign in with your ${realm} name and an app password.`, {
+    status: 401,
+    headers: { "WWW-Authenticate": `Basic realm="${realm}", charset="UTF-8"`, "Content-Type": "text/plain; charset=utf-8" },
+  });
+}
+
+async function sha256hex(text) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function sameString(a, b) {
+  if (typeof a !== "string" || typeof b !== "string" || a.length !== b.length) return false;
+  let d = 0;
+  for (let i = 0; i < a.length; i++) d |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return d === 0;
+}
+
+function password(header) {
+  const b = /^Bearer\s+(\S+)\s*$/i.exec(header || "");
+  if (b) return b[1];
+  const m = /^Basic\s+([A-Za-z0-9+/=]+)\s*$/i.exec(header || "");
+  if (!m) return null;
+  let decoded;
+  try { decoded = atob(m[1]); } catch { return null; }
+  const i = decoded.indexOf(":");
+  return i < 0 ? null : decoded.slice(i + 1);
+}
+
+// "pass" or the reason it fails
+export async function check(request, env, app) {
+  if (!app) return "host not in APPS";
+  const pw = password(request.headers.get("Authorization"));
+  if (pw === null) return "no credentials";
+  const m = APP_PASSWORD.exec(pw);
+  if (!m) return "not an app password";
+  const entry = await env.APP_PASSWORDS.get(`${app}:${m[2]}`, { type: "json", cacheTtl: 60 });
+  if (!entry || !entry.h) return "unknown app password";
+  return sameString(await sha256hex(pw), entry.h) ? "pass" : "wrong app password";
+}
+
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url);
+    let apps = {};
+    try { apps = JSON.parse(env.APPS || "{}"); } catch { /* checked below as an unknown host */ }
+    const app = apps[url.hostname.toLowerCase()];
+    if (!guarded(app, url.pathname)) return fetch(request); // a route wider than the sign-in paths: not ours to check
+    const result = await check(request, env, app);
+    if (result === "pass") return fetch(request);
+    const enforce = (env.MODE || "monitor").toLowerCase() === "enforce";
+    if (result !== "no credentials") console.log(JSON.stringify({ edge: enforce ? "blocked" : "would block", reason: result, host: url.hostname,
+      path: url.pathname, method: request.method, ip: request.headers.get("CF-Connecting-IP") }));
+    // a request with no credentials is the client asking how to sign in: answer it here either way
+    if (enforce || result === "no credentials") return unauthorized(app);
+    return fetch(request);
+  },
+};
