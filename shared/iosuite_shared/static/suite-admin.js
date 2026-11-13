@@ -57,7 +57,7 @@ const CSS = `
 .iosa, .iosa-back, .iosa-menu { --sa-fg: var(--fg, var(--text, #202124)); --sa-fg2: var(--fg2, var(--muted, #5f6368)); --sa-line: var(--line, #dadce0);
   --sa-bg: var(--card, var(--bg, #fff)); --sa-bg2: var(--bg2, color-mix(in srgb, var(--sa-fg) 7%, var(--sa-bg)));
   --sa-accent: var(--accent, var(--link, #1a73e8)); --sa-accent-bg: var(--accent-bg, color-mix(in srgb, var(--sa-accent) 14%, transparent));
-  --sa-brand: var(--brand, var(--sa-accent)); --sa-danger: var(--danger, #d93025); color: var(--sa-fg); font-size: 14px; line-height: 1.45; }
+  --sa-brand: var(--brand, var(--sa-accent)); --sa-danger: var(--danger, #d93025); --sa-update: #e8710a; color: var(--sa-fg); font-size: 14px; line-height: 1.45; }
 .iosa *, .iosa-back * { box-sizing: border-box; }
 .iosa .sa-ic, .iosa-back .sa-ic { display: inline-flex; width: 20px; height: 20px; flex: none; }
 .iosa .sa-ic svg, .iosa-back .sa-ic svg { width: 100%; height: 100%; fill: currentColor; }
@@ -92,6 +92,8 @@ const CSS = `
 .iosa-menu .sa-muted { color: var(--sa-fg2); font-size: 12px; }
 .iosa-menu .sa-mhead { padding: 6px 10px 2px; font-size: 12px; color: var(--sa-fg2); }
 .iosa-menu hr { border: 0; border-top: 1px solid var(--sa-line); margin: 4px 0; }
+.iosa .sa-badge { display: inline-block; font-size: 12px; font-weight: 600; line-height: 1.5; padding: 1px 9px; border-radius: 999px; white-space: nowrap;
+  color: var(--sa-update); background: color-mix(in srgb, var(--sa-update) 16%, transparent); border: 1px solid color-mix(in srgb, var(--sa-update) 45%, transparent); }
 .iosa .sa-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: middle; }
 .iosa a { color: var(--sa-accent); }
 .iosa input.sa-in, .iosa select.sa-in, .iosa textarea.sa-in, .iosa-back input.sa-in, .iosa-back select.sa-in, .iosa-back textarea.sa-in {
@@ -519,7 +521,17 @@ function apps(el, ctx) {
 }
 /* Updates: every app's version against GitHub, and updating them all from here (iosuite_shared.suiteupdates). The
    apps pick a request up within seconds, so the list refreshes itself while something is waiting or running. */
-const UPDATE_STATUS = { current: 'up to date', update: 'update waiting', error: 'check failed' };
+const UPDATE_STATUS = { current: 'up to date', error: 'check failed' };
+/** On GitHub: the newest version, the shared library's when that is what changed (an update can be the library's alone),
+    and whether there is something to install: a coloured badge, else up to date or check failed. */
+function onGitHub(a) {
+  const sharedNewer = a.status === 'update' && a.latestShared && a.shared && a.latestShared !== a.shared;
+  const checked = h('span', { class: 'sa-muted' }, sinceText(a.checked));
+  return [h('div', null, a.latest || '–'),
+    sharedNewer ? h('div', { class: 'sa-muted' }, `shared library ${a.shared} → ${a.latestShared}`) : null,
+    h('div', { style: { marginTop: '2px' } }, a.status === 'update' ? [h('span', { class: 'sa-badge' }, 'Update available'), ' ', checked]
+      : [h('span', { class: a.status === 'error' ? 'sa-err' : 'sa-muted' }, UPDATE_STATUS[a.status] || 'not checked'), h('span', { class: 'sa-muted' }, ' · '), checked])];
+}
 async function updates(el) {
   let d;
   try { d = await api('updates'); } catch (e) { el.replaceChildren(h('p', { class: 'sa-err' }, e.message)); return; }
@@ -556,7 +568,7 @@ async function updates(el) {
         h('td', null, h('b', null, a.name), h('div', { class: 'sa-muted sa-small' }, a.app)),
         h('td', { class: 'sa-small' }, a.version || '–', a.commit ? h('div', { class: 'sa-muted' }, a.commit) : null),
         h('td', { class: 'sa-small' }, !a.watching ? h('span', { class: 'sa-muted' }, 'not reporting (not running, or on an older iosuite-shared)')
-          : [a.latest || '–', h('div', { class: a.status === 'error' ? 'sa-err' : 'sa-muted' }, `${UPDATE_STATUS[a.status] || 'not checked'} · ${sinceText(a.checked)}`)]),
+          : onGitHub(a)),
         h('td', { class: 'sa-small' }, last(a)),
         h('td', { style: { textAlign: 'right' } }, a.docker ? h('span', { class: 'sa-muted sa-small' }, 'Docker: pull the image')
           : !a.watching ? null

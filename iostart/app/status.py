@@ -12,7 +12,7 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import Request
-from iosuite_shared import outbound
+from iosuite_shared import outbound, suiteupdates
 
 from app import apps, bookmarks, widgets
 
@@ -74,7 +74,28 @@ def of_apps(request: Request) -> dict:
 
     def ask(key):
         return key, _remember(("app", key, tok[:24], host), APP_TTL, lambda: _app(request, key))
-    return dict(_pool.map(ask, keys))
+    return _settled(dict(_pool.map(ask, keys)))
+
+
+def _settled(out: dict) -> dict:
+    """The update flag as the apps last wrote it to the Shared ioSuite database (Settings › Global settings › Updates
+    reads the same rows): an app that restarts after an update says so there at once, while its answer here may be a
+    minute old. The note says what is new, the shared library's version when that is all that changed."""
+    try:
+        rows = {r["app"]: r for r in suiteupdates.overview() if r["watching"]}
+    except Exception:  # noqa: BLE001  the database is away: the apps' own answers
+        return out
+    for key, v in out.items():
+        r = rows.get(key)
+        if not v.get("update") or not r:
+            continue
+        if r["status"] != "update":
+            out[key] = dict(v, update=None)
+        elif r.get("latest") and r["latest"] != r.get("version"):
+            out[key] = dict(v, note=f"v{r['latest']} is out (now v{r.get('version') or '?'})")
+        elif r.get("latestShared") and r["latestShared"] != r.get("shared"):
+            out[key] = dict(v, note=f"The shared library v{r['latestShared']} is out (now v{r.get('shared') or '?'})")
+    return out
 
 
 # ------------------------------------------------------------------ the bookmarks

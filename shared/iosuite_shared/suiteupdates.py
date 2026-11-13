@@ -18,7 +18,7 @@ from iosuite_shared.errors import Invalid
 ACTIONS = ("check", "update")
 WATCH_S = 10     # how often an app looks at its row
 STALE_S = 3600   # a request nobody picked up within the hour: the app is not running (or too old to know about this)
-FIELDS = ("installed", "git_commit", "latest", "status", "state", "message", "can_run", "docker", "checked_at")
+FIELDS = ("installed", "git_commit", "latest", "shared", "latest_shared", "status", "state", "message", "can_run", "docker", "checked_at")
 
 
 def publish(app: str, **fields) -> None:
@@ -59,6 +59,7 @@ def _out(a: dict, r: dict | None) -> dict:
     pending = r.get("action") if r.get("action") and now - (r.get("requested_at") or 0) < STALE_S else None
     return {"app": a["app"], "name": a["name"], "version": r.get("installed") or a.get("version"), "commit": r.get("git_commit"),
             "latest": r.get("latest"), "status": r.get("status"),  # current | update | error, from the app's last check
+            "shared": r.get("shared"), "latestShared": r.get("latest_shared"),  # the shared library: installed, on GitHub
             "checked": r.get("checked_at"), "canUpdate": bool(r.get("can_run")), "docker": bool(r.get("docker")),
             "state": r.get("state") or None,  # running | ok | failed: the last update
             "message": r.get("message") or None, "pending": pending, "requestedBy": r.get("requested_by") if pending else None,
