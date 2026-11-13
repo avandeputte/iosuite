@@ -32,7 +32,7 @@ database for what it builds, and the Shared ioSuite database for its accounts. d
 ## With the other apps
 
 - **ioContact** can link a contact to a person named in ioPix; the face becomes the contact's photo.
-- **ioSuite** shows photos taken on this day in earlier years on the ioPix tile, and a strip of photos under the
+- **ioStart** shows photos taken on this day in earlier years on the ioPix tile, and a strip of photos under the
   tiles.
 - The start page's search box searches ioPix too.
 
@@ -40,11 +40,11 @@ database for what it builds, and the Shared ioSuite database for its accounts. d
 
 | | |
 | --- | --- |
-| Proxmox VE | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iopix/main/proxmox/ct/iopix.sh)"` |
-| Docker | [docker-compose.yml](https://github.com/avandeputte/iopix/blob/main/docker-compose.yml): the image `ghcr.io/avandeputte/iopix`, with a MariaDB service |
-| Any Linux or Mac | `git clone https://github.com/avandeputte/iopix && cd iopix && ./setup.sh` |
+| Proxmox VE | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/iopix/proxmox/ct/iopix.sh)"` |
+| Docker | [docker-compose.yml](https://github.com/avandeputte/iosuite/blob/main/iopix/docker-compose.yml): the image `ghcr.io/avandeputte/iopix`, with a MariaDB service |
+| Any Linux or Mac | `git clone https://github.com/avandeputte/iosuite && cd iosuite/iopix && ./setup.sh` |
 | Port | 8600 |
-| Source | [github.com/avandeputte/iopix](https://github.com/avandeputte/iopix) |
+| Source | [iosuite/iopix](https://github.com/avandeputte/iosuite/tree/main/iopix) |
 
 The Proxmox installer bind-mounts the photo folder (and digiKam's database folder) into the container. See
 [iopix.net › Install](https://iopix.net/docs/) for digiKam on SQLite or MariaDB, the AI models and the album roots.

@@ -14,8 +14,8 @@ HTTPS (or `localhost`).
 
 | App | Device | What it does | Source |
 | --- | --- | --- | --- |
-| **ionote** | Mac, iPhone, iPad | the clipboard Inbox and screenshots on the Mac, notes everywhere, synced with the ioNote server and usable offline | [ionote-apps](https://github.com/avandeputte/ionote-apps) |
-| **ioHealthSync** | iPhone | copies Apple Health data to the ioHealth server: everything or the types you pick, incremental, in the background | [iohealth-apps](https://github.com/avandeputte/iohealth-apps) |
+| **ionote** | Mac, iPhone, iPad | the clipboard Inbox and screenshots on the Mac, notes everywhere, synced with the ioNote server and usable offline | [ionote-apps](https://github.com/avandeputte/iosuite-apps/tree/main/ionote) |
+| **ioHealthSync** | iPhone | copies Apple Health data to the ioHealth server: everything or the types you pick, incremental, in the background | [iohealth-apps](https://github.com/avandeputte/iosuite-apps/tree/main/iohealth) |
 
 Both are built from source with Xcode and XcodeGen (`brew install xcodegen`, then `xcodegen generate`); each
 repository's README has the steps. They sign in with your suite account. Behind Cloudflare Access, ionote takes a

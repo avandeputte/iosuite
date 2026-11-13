@@ -16,7 +16,7 @@ from collections import OrderedDict
 from app.geo import maps, places
 
 URL = "https://nominatim.openstreetmap.org/search"
-USER_AGENT = "iopix/1.0 (https://github.com/avandeputte/iopix)"
+USER_AGENT = "iopix/1.0 (https://github.com/avandeputte/iosuite/tree/main/iopix)"
 _cache = OrderedDict()
 
 

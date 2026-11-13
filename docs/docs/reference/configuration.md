@@ -5,7 +5,7 @@ description: config.env, the settings every ioThing app reads the same way, and 
 # Configuration
 
 Every app keeps its settings in **`config.env`** in its own folder: `KEY=value` lines, `#` for comments. The installers
-write it; `config.env.example` in each repository lists every setting. Variables already in the environment (a
+write it; `config.env.example` in each app's folder lists every setting. Variables already in the environment (a
 container's, a service's) win over the file. `config.env` holds passwords: keep it readable by the owner only.
 
 ## The names every app reads the same way
@@ -60,7 +60,7 @@ Apps), and the keys for services outside the suite (Settings › Global settings
 | ioPix | 8600 |
 | ioNote | 8610 |
 | ioCalendar | 8620 |
-| ioSuite | 8630 |
+| ioStart | 8630 |
 | ioContact | 8640 (LDAP 3890) |
 | ioHealth | 8650 |
 | ioDNS | 8660 |

@@ -1,8 +1,8 @@
 # ioContact
 
-*Contacts for the family, in the ioThing suite (with [ioPix](https://github.com/avandeputte/iopix), [ioNote](https://github.com/avandeputte/ionote), [ioCalendar](https://github.com/avandeputte/iocalendar), [ioHealth](https://github.com/avandeputte/iohealth) and the [ioSuite](https://github.com/avandeputte/iosuite) start page).*
+*Contacts for the family, in the ioThing suite (with [ioPix](https://github.com/avandeputte/iosuite/tree/main/iopix), [ioNote](https://github.com/avandeputte/iosuite/tree/main/ionote), [ioCalendar](https://github.com/avandeputte/iosuite/tree/main/iocalendar), [ioHealth](https://github.com/avandeputte/iosuite/tree/main/iohealth) and the [ioStart](https://github.com/avandeputte/iosuite/tree/main/iostart) start page).*
 
-A self-hosted contact manager: a web app for the whole family, and the standard protocols every mail, contacts and calendar app already speaks, so the same contacts show up on phones, in Apple Contacts, Outlook, Thunderbird and anywhere else. FastAPI and a single-page vanilla JS app, with everything stored in MariaDB / MySQL, and the suite's shared library (`iosuite-shared`, in [iosuite-shared](https://github.com/avandeputte/iosuite-shared)).
+A self-hosted contact manager: a web app for the whole family, and the standard protocols every mail, contacts and calendar app already speaks, so the same contacts show up on phones, in Apple Contacts, Outlook, Thunderbird and anywhere else. FastAPI and a single-page vanilla JS app, with everything stored in MariaDB / MySQL, and the suite's shared library (`iosuite-shared`, in [iosuite-shared](https://github.com/avandeputte/iosuite/tree/main/shared)).
 
 ## What it does
 
@@ -33,7 +33,7 @@ The tables are created on the first start and updated by later versions by thems
 `proxmox/ct/iocontact.sh` and `proxmox/install/iocontact-install.sh` follow the community-scripts (ProxmoxVE) framework layout, the same way as iopix, so they can be submitted upstream as they are. Until then the ct script points the framework at this repository for the install script (`COMMUNITY_SCRIPTS_URL`), while the engine itself comes from community-scripts. On the Proxmox host, as root:
 
 ```sh
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iocontact/main/proxmox/ct/iocontact.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/iocontact/proxmox/ct/iocontact.sh)"
 ```
 
 It asks for the MariaDB host, port, database, user and password, the Shared ioSuite database, the web port (8640), the LDAP port (389), the public address behind your reverse proxy (optional), the domain the sign-in is shared on (optional) and the admin account; then the framework's own questions (resources, network). It creates a small Debian 13 container (1 CPU, 512 MB, 4 GB disk by default) and runs the app's own `setup.sh` inside with those answers: packages, settings, tables, admin and the `iocontact` service. The passwords reach `setup.sh` through its environment (a root-only file pushed in and removed again), never on a command line. The setup's output is kept in `/opt/iocontact/setup.log`; on failure its last lines are shown with the command to run it again. The container's `update` command pulls the latest code and keeps the settings. For unattended runs set `IOCONTACT_DB` and `IOCONTACT_SUITE_DB` (`host:port/db:user:password`), `IOCONTACT_ADMIN` (`name:password`), `IOCONTACT_PORT`, `IOCONTACT_LDAP_PORT`, `IOCONTACT_PUBLIC_URL` and `IOCONTACT_COOKIE_DOMAIN`. The MariaDB user must be allowed to connect from the container's address.
@@ -49,7 +49,7 @@ The image (`ghcr.io/avandeputte/iocontact`) holds no data: everything is in the 
 ### Any Linux or Mac
 
 ```sh
-git clone https://github.com/avandeputte/iocontact && cd iocontact
+git clone https://github.com/avandeputte/iosuite && cd iosuite/iocontact
 ./setup.sh          # asks for the database, ports and the admin; installs a systemd service when run as root
 ./run.sh            # or start it in the foreground
 ./update.sh         # later: the latest code, same settings
@@ -82,15 +82,15 @@ password is used once and not written anywhere.
 | `LDAP_PORT`, `LDAP_HOST`, `LDAP_BASE` | the LDAP directory (3890, all addresses, `dc=iocontact`); `LDAP_PORT=0` turns it off |
 | `PUBLIC_URL` | the address people use (behind a proxy), for links in the calendar feed and Settings |
 | `ADMIN_USER`, `ADMIN_PASSWORD` | the first admin, made on the first start when there are no accounts |
-| `IOSUITE_DB_HOST`, `_PORT`, `_NAME`, `_USER`, `_PASSWORD` | the Shared ioSuite database (MariaDB; by default on the contacts' server, database, user and password `iosuite`): accounts, passwords, sessions, app passwords, roles and the suite-wide settings, shared by every app of the suite (the `iosuite-shared` library, from [iosuite-shared](https://github.com/avandeputte/iosuite-shared)); only the role an account holds here and its "me" contact are ioContact's own. `iosuite-shared migrate --iocontact` folds a 0.3 install's `users` table into it |
+| `IOSUITE_DB_HOST`, `_PORT`, `_NAME`, `_USER`, `_PASSWORD` | the Shared ioSuite database (MariaDB; by default on the contacts' server, database, user and password `iosuite`): accounts, passwords, sessions, app passwords, roles and the suite-wide settings, shared by every app of the suite (the `iosuite-shared` library, from [iosuite-shared](https://github.com/avandeputte/iosuite/tree/main/shared)); only the role an account holds here and its "me" contact are ioContact's own. `iosuite-shared migrate --iocontact` folds a 0.3 install's `users` table into it |
 | `COOKIE_DOMAIN` | the domain the session cookie is shared on (`example.com`): signed in at `photo.example.com`, signed in at `contacts.example.com` too |
 | `AUTH_PROXY`, `AUTH_PROXY_HEADER`, `AUTH_PROXY_TRUSTED`, `CF_ACCESS_TEAM`, `CF_ACCESS_AUD` | sign-in at a reverse proxy, exactly as in iopix: Cloudflare Access (with token checking), Authelia, Authentik, oauth2-proxy… matched to accounts by email, then name |
-| `CF_KV_ACCOUNT_ID`, `CF_KV_NAMESPACE_ID`, `CF_KV_API_TOKEN` | optional edge check of app passwords: the Workers KV namespace a Cloudflare Worker on `/dav*` reads; normally stored once for the whole suite in Settings › Global settings › Keys and tokens, these override it ([setup](https://github.com/avandeputte/iosuite-shared/blob/main/cloudflare/edge-auth/README.md)) |
+| `CF_KV_ACCOUNT_ID`, `CF_KV_NAMESPACE_ID`, `CF_KV_API_TOKEN` | optional edge check of app passwords: the Workers KV namespace a Cloudflare Worker on `/dav*` reads; normally stored once for the whole suite in Settings › Global settings › Keys and tokens, these override it ([setup](https://github.com/avandeputte/iosuite/blob/main/shared/cloudflare/edge-auth/README.md)) |
 | `MCP` | `1` keeps the MCP server on, whatever the setting says |
 | `KEEP_DELETED_DAYS` | how long a deleted contact's marker is kept, so phones learn of the deletion at their next sync (`90`); a client that stayed away longer starts its sync over |
 | `MCP_USER` | the account `python -m app.mcp` (stdio) acts as |
 | `UPDATE_CHECK` | `0` turns the daily version check off for good |
-| `IOCONTACT_REPO`, `IOCONTACT_BRANCH` | what the version check and `update.sh` follow (`avandeputte/iocontact`, `main`) |
+| `IOCONTACT_REPO`, `IOCONTACT_BRANCH` | what the version check and `update.sh` follow (`avandeputte/iosuite`, `main`) |
 | `DATA_DIR` | where the app writes on its own: the log and the update result (`data/` in the app folder) |
 | `LOG_FILE` | the server log shown at Settings › Server (`DATA_DIR/iocontact.log`; `LOG_FILE=` with nothing after it: no file) |
 
@@ -125,7 +125,7 @@ Cloudflare Access can't check what DAV clients send, so `/dav*` bypasses it. A s
 check the app password there instead and turn wrong ones away before they reach the server. With the edge check's three
 settings stored for the whole suite (Settings › Global settings › Keys and tokens), the app keeps the Worker's KV namespace up to date with a SHA-256 of each app password (never the account
 password). The Worker, the rollout (monitor first, then enforce) and a WAF rate-limit rule for `/dav*` are in
-[iosuite-shared's cloudflare/edge-auth](https://github.com/avandeputte/iosuite-shared/blob/main/cloudflare/edge-auth/README.md). Once it enforces, DAV clients must sign in with an app password, not the
+[iosuite-shared's cloudflare/edge-auth](https://github.com/avandeputte/iosuite/blob/main/shared/cloudflare/edge-auth/README.md). Once it enforces, DAV clients must sign in with an app password, not the
 account password.
 
 ## API

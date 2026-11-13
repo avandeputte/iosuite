@@ -17,7 +17,7 @@ Give each app a host name under one domain, for example:
 | ioPix | `photos.example.com` | `192.168.1.10:8600` |
 | ioNote | `notes.example.com` | `192.168.1.10:8610` |
 | ioCalendar | `calendar.example.com` | `192.168.1.10:8620` |
-| ioSuite | `home.example.com` | `192.168.1.10:8630` |
+| ioStart | `home.example.com` | `192.168.1.10:8630` |
 | ioContact | `contacts.example.com` | `192.168.1.10:8640` |
 | ioHealth | `health.example.com` | `192.168.1.10:8650` |
 | ioTask | `tasks.example.com` | `192.168.1.10:8670` |

@@ -9,14 +9,14 @@ Small self-hosted apps for the family, each one a complete product on its own:
 
 | App | What it is | Default port | Source |
 | --- | --- | --- | --- |
-| [ioPix](apps/iopix.md) | Photos: a web app for a photo library, with or without digiKam | 8600 | [iopix](https://github.com/avandeputte/iopix) |
-| [ioNote](apps/ionote.md) | Notes, clipboard snippets and screenshots, with Mac and iPhone apps | 8610 | [ionote](https://github.com/avandeputte/ionote) |
-| [ioCalendar](apps/iocalendar.md) | The family calendar, over CalDAV on every phone | 8620 | [iocalendar](https://github.com/avandeputte/iocalendar) |
-| [ioSuite](apps/iosuite.md) | The start page: a tile per app, search, weather, bookmarks | 8630 | [iosuite](https://github.com/avandeputte/iosuite) |
-| [ioContact](apps/iocontact.md) | Contacts for the family, over CardDAV and LDAP | 8640 | [iocontact](https://github.com/avandeputte/iocontact) |
-| [ioHealth](apps/iohealth.md) | Apple Health data in your own database, with a fitness web app | 8650 | [iohealth](https://github.com/avandeputte/iohealth) |
-| [ioTask](apps/iotask.md) | The family's task lists, in Apple Reminders and every tasks app over CalDAV | 8670 | [iotask](https://github.com/avandeputte/iotask) |
-| [ioRecipe](apps/iorecipe.md) | The family's recipes, with photos and import from the web | 8690 | [iorecipe](https://github.com/avandeputte/iorecipe) |
+| [ioPix](apps/iopix.md) | Photos: a web app for a photo library, with or without digiKam | 8600 | [iopix](https://github.com/avandeputte/iosuite/tree/main/iopix) |
+| [ioNote](apps/ionote.md) | Notes, clipboard snippets and screenshots, with Mac and iPhone apps | 8610 | [ionote](https://github.com/avandeputte/iosuite/tree/main/ionote) |
+| [ioCalendar](apps/iocalendar.md) | The family calendar, over CalDAV on every phone | 8620 | [iocalendar](https://github.com/avandeputte/iosuite/tree/main/iocalendar) |
+| [ioStart](apps/iostart.md) | The start page: a tile per app, search, weather, bookmarks | 8630 | [iostart](https://github.com/avandeputte/iosuite/tree/main/iostart) |
+| [ioContact](apps/iocontact.md) | Contacts for the family, over CardDAV and LDAP | 8640 | [iocontact](https://github.com/avandeputte/iosuite/tree/main/iocontact) |
+| [ioHealth](apps/iohealth.md) | Apple Health data in your own database, with a fitness web app | 8650 | [iohealth](https://github.com/avandeputte/iosuite/tree/main/iohealth) |
+| [ioTask](apps/iotask.md) | The family's task lists, in Apple Reminders and every tasks app over CalDAV | 8670 | [iotask](https://github.com/avandeputte/iosuite/tree/main/iotask) |
+| [ioRecipe](apps/iorecipe.md) | The family's recipes, with photos and import from the web | 8690 | [iorecipe](https://github.com/avandeputte/iosuite/tree/main/iorecipe) |
 
 !!! tip "You don't need the whole suite"
     Every app installs, runs and updates on its own. If all you want is a photo app, install ioPix and stop there:

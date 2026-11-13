@@ -46,15 +46,15 @@ done keeps doing so when it is ticked off in Reminders: ioTask brings it back wi
 
 ## With the other apps
 
-- **ioSuite**: the tasks due today on the tile, the overdue ones first.
+- **ioStart**: the tasks due today on the tile, the overdue ones first.
 - **ioCalendar**: the tasks that are due show on their day in the calendar, beside the events, and are ticked off there.
 
 ## Install
 
 | | |
 | --- | --- |
-| Proxmox VE | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iotask/main/proxmox/ct/iotask.sh)"` |
-| Docker | [docker-compose.yml](https://github.com/avandeputte/iotask/blob/main/docker-compose.yml): the image `ghcr.io/avandeputte/iotask` |
-| Any Linux or Mac | `git clone https://github.com/avandeputte/iotask && cd iotask && ./setup.sh` |
+| Proxmox VE | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/iotask/proxmox/ct/iotask.sh)"` |
+| Docker | [docker-compose.yml](https://github.com/avandeputte/iosuite/blob/main/iotask/docker-compose.yml): the image `ghcr.io/avandeputte/iotask` |
+| Any Linux or Mac | `git clone https://github.com/avandeputte/iosuite && cd iosuite/iotask && ./setup.sh` |
 | Port | 8670 |
-| Source | [github.com/avandeputte/iotask](https://github.com/avandeputte/iotask) |
+| Source | [iosuite/iotask](https://github.com/avandeputte/iosuite/tree/main/iotask) |

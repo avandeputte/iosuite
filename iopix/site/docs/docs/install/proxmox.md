@@ -7,7 +7,7 @@ The Proxmox script creates a Debian 13 container (LXC) with iopix inside, your l
 On the Proxmox host, as root:
 
 ```sh
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iopix/main/proxmox/ct/iopix.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/iopix/proxmox/ct/iopix.sh)"
 ```
 
 ## What it asks

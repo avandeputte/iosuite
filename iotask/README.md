@@ -1,8 +1,8 @@
 # ioTask
 
-*The family's task lists, in the ioThing suite (with [ioPix](https://github.com/avandeputte/iopix), [ioNote](https://github.com/avandeputte/ionote), [ioContact](https://github.com/avandeputte/iocontact), [ioCalendar](https://github.com/avandeputte/iocalendar), [ioHealth](https://github.com/avandeputte/iohealth) and the [ioSuite](https://github.com/avandeputte/iosuite) start page).*
+*The family's task lists, in the ioThing suite (with [ioPix](https://github.com/avandeputte/iosuite/tree/main/iopix), [ioNote](https://github.com/avandeputte/iosuite/tree/main/ionote), [ioContact](https://github.com/avandeputte/iosuite/tree/main/iocontact), [ioCalendar](https://github.com/avandeputte/iosuite/tree/main/iocalendar), [ioHealth](https://github.com/avandeputte/iosuite/tree/main/iohealth) and the [ioStart](https://github.com/avandeputte/iosuite/tree/main/iostart) start page).*
 
-Self-hosted task lists: a web app for the whole family, and the standard protocol reminders apps already speak, so the same lists show up in Apple Reminders on iPhone, iPad and Mac, in Tasks.org or jtx Board on Android, in Thunderbird and anywhere else that syncs to-dos over CalDAV. FastAPI and a single-page vanilla JS app, with everything stored in MariaDB / MySQL, and the suite's shared library (`iosuite-shared`, in [iosuite-shared](https://github.com/avandeputte/iosuite-shared)).
+Self-hosted task lists: a web app for the whole family, and the standard protocol reminders apps already speak, so the same lists show up in Apple Reminders on iPhone, iPad and Mac, in Tasks.org or jtx Board on Android, in Thunderbird and anywhere else that syncs to-dos over CalDAV. FastAPI and a single-page vanilla JS app, with everything stored in MariaDB / MySQL, and the suite's shared library (`iosuite-shared`, in [iosuite-shared](https://github.com/avandeputte/iosuite/tree/main/shared)).
 
 ## What it does
 
@@ -24,11 +24,11 @@ Self-hosted task lists: a web app for the whole family, and the standard protoco
 - **Settings › Security** and **Global settings** (suite admins): the whole suite's people and their role in every app, app passwords and sign-in at the proxy; the apps, keys and tokens; the same panel as on the start page and in every io app (iosuite-shared's `/api/suite-admin/ui.js`).
 - Light and dark, phone-sized screens, installable as an app.
 
-No events: those belong in [ioCalendar](https://github.com/avandeputte/iocalendar).
+No events: those belong in [ioCalendar](https://github.com/avandeputte/iosuite/tree/main/iocalendar).
 
 ## Run
 
-ioTask needs Python 3.10+, git (to install `iosuite-shared` from the [iosuite-shared](https://github.com/avandeputte/iosuite-shared) repository) and a MariaDB or MySQL database. Give it its own database
+ioTask needs Python 3.10+ and a MariaDB or MySQL database. Give it its own database
 and user, for example:
 
 ```sql
@@ -45,7 +45,7 @@ app of the suite uses); a new install of the suite creates it the same way. The 
 `proxmox/ct/iotask.sh` and `proxmox/install/iotask-install.sh` follow the community-scripts (ProxmoxVE) framework layout, as the other io apps do. On the Proxmox host, as root:
 
 ```sh
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iotask/main/proxmox/ct/iotask.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/iotask/proxmox/ct/iotask.sh)"
 ```
 
 It asks for the tasks database (host, port, database, user, password), the Shared ioSuite database, the web port (8670), the family's time zone, the public address behind your reverse proxy (optional), the domain the sign-in is shared on (optional) and the admin account; then the framework's own questions (resources, network). It creates a small Debian 13 container and runs the app's own `setup.sh` inside with those answers. The passwords reach `setup.sh` through its environment (a root-only file pushed in and removed again), never on a command line; the output is kept in `/opt/iotask/setup.log`. The container's `update` command pulls the latest code and keeps the settings. For unattended runs set `IOTASK_DB` and `IOTASK_SUITE_DB` (`host:port/db:user:password`), `IOTASK_ADMIN` (`name:password`), `IOTASK_PORT`, `IOTASK_TIMEZONE`, `IOTASK_PUBLIC_URL` and `IOTASK_COOKIE_DOMAIN`.
@@ -61,7 +61,7 @@ The image (`ghcr.io/avandeputte/iotask`) holds no data: everything is in the dat
 ### Any Linux or Mac
 
 ```sh
-git clone https://github.com/avandeputte/iotask && cd iotask
+git clone https://github.com/avandeputte/iosuite && cd iosuite/iotask
 ./setup.sh          # asks for the databases, port, time zone and admin; installs a systemd service when run as root
 ./run.sh            # or start it in the foreground
 ./update.sh         # later: the latest code, same settings
@@ -101,12 +101,12 @@ accounts are the suite's: `.venv/bin/iosuite-shared --config . admin NAME --app 
 | `PUBLIC_URL` | the address people use (behind a proxy), for links in Settings, the Apple profile and the MCP tools |
 | `ADMIN_USER`, `ADMIN_PASSWORD` | the first admin, made on the first start when there are no accounts |
 | `AUTH_PROXY`, `AUTH_PROXY_HEADER`, `AUTH_PROXY_TRUSTED`, `CF_ACCESS_TEAM`, `CF_ACCESS_AUD` | sign-in at a reverse proxy, as in the other io apps (Cloudflare Access, Authelia, Authentik, oauth2-proxy…) |
-| `CF_KV_ACCOUNT_ID`, `CF_KV_NAMESPACE_ID`, `CF_KV_API_TOKEN` | optional edge check of app passwords: the Workers KV namespace a Cloudflare Worker on `/dav*` reads; normally stored once for the whole suite in Settings › Global settings › Keys and tokens, these override it ([setup](https://github.com/avandeputte/iosuite-shared/blob/main/cloudflare/edge-auth/README.md)) |
+| `CF_KV_ACCOUNT_ID`, `CF_KV_NAMESPACE_ID`, `CF_KV_API_TOKEN` | optional edge check of app passwords: the Workers KV namespace a Cloudflare Worker on `/dav*` reads; normally stored once for the whole suite in Settings › Global settings › Keys and tokens, these override it ([setup](https://github.com/avandeputte/iosuite/blob/main/shared/cloudflare/edge-auth/README.md)) |
 | `MCP` | `1` keeps the MCP server on, whatever the setting says |
 | `KEEP_DELETED_DAYS` | how long a deleted task's marker is kept, so phones learn of the deletion at their next sync (`90`); a client that stayed away longer starts its sync over. The activity log is kept as long |
 | `MCP_USER` | the account `python -m app.mcp` (stdio) acts as |
 | `UPDATE_CHECK` | `0` turns the daily version check off for good |
-| `IOTASK_REPO`, `IOTASK_BRANCH` | what the version check and `update.sh` follow (`avandeputte/iotask`, `main`) |
+| `IOTASK_REPO`, `IOTASK_BRANCH` | what the version check and `update.sh` follow (`avandeputte/iosuite`, `main`) |
 | `DATA_DIR` | where the app writes on its own: the log and the update result (`data/` in the app folder) |
 | `LOG_FILE` | the server log shown at Settings › Server (`DATA_DIR/iotask.log`; `LOG_FILE=` with nothing after it: no file) |
 
@@ -164,7 +164,7 @@ Cloudflare Access can't check what DAV clients send, so `/dav*` bypasses it. A s
 check the app password there instead and turn wrong ones away before they reach the server. With the edge check's three
 settings stored for the whole suite (Settings › Global settings › Keys and tokens), the app keeps the Worker's KV namespace up to date with a SHA-256 of each app password (never the account
 password). The Worker, the rollout (monitor first, then enforce) and a WAF rate-limit rule for `/dav*` are in
-[iosuite-shared's cloudflare/edge-auth](https://github.com/avandeputte/iosuite-shared/blob/main/cloudflare/edge-auth/README.md). Once it enforces, DAV clients must sign in with an app password, not the
+[iosuite-shared's cloudflare/edge-auth](https://github.com/avandeputte/iosuite/blob/main/shared/cloudflare/edge-auth/README.md). Once it enforces, DAV clients must sign in with an app password, not the
 account password.
 
 ## API

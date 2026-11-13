@@ -22,4 +22,4 @@ FastAPI, Pillow, ONNX Runtime, exiftool by Phil Harvey, ffmpeg, libjpeg-turbo, l
 
 ## Screenshots { #screenshots }
 
-The screenshots on this site show a demo library. The photos come from Wikimedia Commons (Creative Commons or public domain), StockSnap (CC0), Unsplash (Unsplash License) and the project owner's own photos; the names of the people in them are invented for the demo. The full list of photos, authors and licences is in [CREDITS.md](https://github.com/avandeputte/iopix/blob/main/docs/screenshots/CREDITS.md).
+The screenshots on this site show a demo library. The photos come from Wikimedia Commons (Creative Commons or public domain), StockSnap (CC0), Unsplash (Unsplash License) and the project owner's own photos; the names of the people in them are invented for the demo. The full list of photos, authors and licences is in [CREDITS.md](https://github.com/avandeputte/iosuite/blob/main/iopix/docs/screenshots/CREDITS.md).

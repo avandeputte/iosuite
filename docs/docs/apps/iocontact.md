@@ -31,14 +31,14 @@ phones should sync away from home. The LDAP directory speaks plain LDAP: keep it
 - **ioCalendar** shows the birthdays and anniversaries as a Birthdays calendar, and picks the people on an event
   from your contacts.
 - **ioPix**: link a contact to a person named in ioPix and that face is the contact's photo, everywhere.
-- **ioSuite**: a Birthdays card on the start page, and the search box finds people.
+- **ioStart**: a Birthdays card on the start page, and the search box finds people.
 
 ## Install
 
 | | |
 | --- | --- |
-| Proxmox VE | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iocontact/main/proxmox/ct/iocontact.sh)"` |
-| Docker | [docker-compose.yml](https://github.com/avandeputte/iocontact/blob/main/docker-compose.yml): the image `ghcr.io/avandeputte/iocontact` |
-| Any Linux or Mac | `git clone https://github.com/avandeputte/iocontact && cd iocontact && ./setup.sh` |
+| Proxmox VE | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/iocontact/proxmox/ct/iocontact.sh)"` |
+| Docker | [docker-compose.yml](https://github.com/avandeputte/iosuite/blob/main/iocontact/docker-compose.yml): the image `ghcr.io/avandeputte/iocontact` |
+| Any Linux or Mac | `git clone https://github.com/avandeputte/iosuite && cd iosuite/iocontact && ./setup.sh` |
 | Port | 8640 (LDAP 3890) |
-| Source | [github.com/avandeputte/iocontact](https://github.com/avandeputte/iocontact) |
+| Source | [iosuite/iocontact](https://github.com/avandeputte/iosuite/tree/main/iocontact) |

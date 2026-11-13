@@ -28,7 +28,7 @@ one. It can sit on the same server as the app databases.
 | ioPix | `iopix` | `pix_` |
 | ioNote | `notes` | `nts_` |
 | ioCalendar | `calendar` | `cal_` |
-| ioSuite (start page) | `suite` | `prt_` |
+| ioStart (start page) | `suite` | `prt_` |
 | ioContact | `contacts` | `con_` |
 | ioHealth | `health` | `hlt_` |
 | ioTask | `tasks` | `tsk_` |
@@ -42,7 +42,7 @@ when it is updated.
 ## Backups
 
 Back up the databases with ioBackup, the suite's admin tool for database backups (its own app, on port 8680; see its
-[README](https://github.com/avandeputte/iobackup)): it backs up the database server on a schedule to a folder or
+[README](https://github.com/avandeputte/iosuite/tree/main/iobackup)): it backs up the database server on a schedule to a folder or
 Google Drive, keeps the newest few, and restores whole databases or single tables. Your usual MariaDB tools
 (`mariadb-dump`) work too. The Shared ioSuite database belongs in every
 backup: it has the accounts for all the apps. ioPix keeps its own data folder too (thumbnails, models, the edit log's

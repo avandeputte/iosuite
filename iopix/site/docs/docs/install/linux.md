@@ -1,6 +1,6 @@
 # Linux installer
 
-`iopix-install.sh` is one self-extracting file of about 200 KB (the app without models). It is attached to every [release](https://github.com/avandeputte/iopix/releases/latest).
+`iopix-install.sh` is one self-extracting file of about 200 KB (the app without models). It is attached to every [release](https://github.com/avandeputte/iosuite/releases?q=iopix).
 
 ## Install
 

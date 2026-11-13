@@ -1,8 +1,8 @@
 # Hosting on Cloudflare Workers
 
 iosuite.iothing.net is a Cloudflare Worker named `iosuite` that serves the built site as static assets. No code runs
-in it: every request is answered with a file from `site/`. This repository's workflow builds the site in GitHub
-Actions (it checks the pages against the apps' repositories first) and deploys it with Wrangler. Cloudflare's own Git
+in it: every request is answered with a file from `site/`. The workflow `.github/workflows/docs.yml` builds the site in GitHub
+Actions (it checks the pages against the apps' folders first) and deploys it with Wrangler. Cloudflare's own Git
 integration is not used.
 
 Everything about the Worker is in [`wrangler.jsonc`](wrangler.jsonc): its name, the `site/` folder, the 404 page and
@@ -26,7 +26,7 @@ The two zone permissions are for the custom domain: Wrangler adds the `iosuite` 
 
 ## 2. The repository secrets
 
-In GitHub: **avandeputte/iosuite-docs › Settings › Secrets and variables › Actions › New repository secret**:
+In GitHub: **avandeputte/iosuite › Settings › Secrets and variables › Actions › New repository secret**:
 
 | Secret | Value |
 | --- | --- |
@@ -36,8 +36,8 @@ In GitHub: **avandeputte/iosuite-docs › Settings › Secrets and variables ›
 Or with the GitHub CLI:
 
 ```bash
-gh secret set CLOUDFLARE_API_TOKEN --repo avandeputte/iosuite-docs
-gh secret set CLOUDFLARE_ACCOUNT_ID --repo avandeputte/iosuite-docs
+gh secret set CLOUDFLARE_API_TOKEN --repo avandeputte/iosuite
+gh secret set CLOUDFLARE_ACCOUNT_ID --repo avandeputte/iosuite
 ```
 
 Until both are set, the workflow still builds and checks every push but skips the deploy step.

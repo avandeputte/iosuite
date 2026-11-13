@@ -1,49 +1,35 @@
 #!/usr/bin/env python3
 """Hold what the site says about the apps to the apps' own code.
 
-    python3 tools/check-facts.py            # shallow-clones every app repository
-    python3 tools/check-facts.py ../src     # or uses checkouts in ../src/<repo>
+    python3 tools/check-facts.py
 
-The pages here are written by hand, so this is what keeps them true. It reads
-docs/ and landing/ and fails on:
+The pages here are written by hand, so this is what keeps them true. The apps are the folders beside docs/ in this
+repository. It reads docs/ and landing/ and fails on:
 
-  - a link to a file in an app repository (raw.githubusercontent.com/.../main/x,
-    github.com/.../blob|tree/main/x) that is not in that repository's main;
-  - a default port, next to an app's name, that is not the one in
-    iosuite-shared's list of apps (iosuite_shared/install.py, APPS);
-  - a Proxmox container size in docs/start/proxmox.md that is not the app's
-    ct script default (var_cpu, var_ram, var_disk);
-  - an image ghcr.io/avandeputte/<app> that the app's docker-compose.yml does
-    not use.
+  - a link to a file in this repository (raw.githubusercontent.com/.../iosuite/main/x,
+    github.com/.../iosuite/blob|tree/main/x) that is not there;
+  - a default port, next to an app's name, that is not the one in the shared library's list of apps
+    (shared/iosuite_shared/install.py, APPS);
+  - a Proxmox container size in docs/start/proxmox.md that is not the app's ct script default (var_cpu, var_ram,
+    var_disk);
+  - an image ghcr.io/avandeputte/<app> that the app's docker-compose.yml does not use.
 
-The workflow runs it on every build and nightly, so a change in an app that
-makes a page wrong fails the build here instead of shipping.
+The docs workflow runs it whenever a page or an app changes, so a change in an app that makes a page wrong fails in
+the same pull request.
 """
 import ast
 import pathlib
 import re
-import shutil
-import subprocess
 import sys
-import tempfile
 
 HERE = pathlib.Path(__file__).resolve().parent.parent
+SRC = HERE.parent
 OWNER = "avandeputte"
-REPOS = ["iosuite-shared", "iopix", "ionote", "iocalendar", "iocontact", "iohealth", "iosuite", "iotask", "iorecipe",
-         "ionote-apps", "iohealth-apps"]
-LABELS = {"ioPix": "iopix", "ioNote": "ionote", "ioCalendar": "iocalendar", "ioSuite": "iosuite",
-          "ioContact": "iocontact", "ioHealth": "iohealth", "ioTask": "iotask", "ioRecipe": "iorecipe"}
+REPO = "iosuite"
+LABELS = {"ioPix": "iopix", "ioNote": "ionote", "ioCalendar": "iocalendar", "ioStart": "iostart", "ioContact": "iocontact",
+          "ioHealth": "iohealth", "ioTask": "iotask", "ioRecipe": "iorecipe", "ioDNS": "iodns", "ioBackup": "iobackup"}
 
 problems = []
-
-
-def sources():
-    if len(sys.argv) > 1:
-        return pathlib.Path(sys.argv[1]).resolve(), None
-    tmp = pathlib.Path(tempfile.mkdtemp(prefix="iosuite-src-"))
-    for r in REPOS:
-        subprocess.run(["git", "clone", "-q", "--depth", "1", f"https://github.com/{OWNER}/{r}", str(tmp / r)], check=True)
-    return tmp, tmp
 
 
 def pages():
@@ -52,8 +38,8 @@ def pages():
 
 
 def app_ports(src):
-    """iosuite_shared/install.py's APPS, read without importing it."""
-    tree = ast.parse((src / "iosuite-shared" / "iosuite_shared" / "install.py").read_text())
+    """shared/iosuite_shared/install.py's APPS, read without importing it."""
+    tree = ast.parse((src / "shared" / "iosuite_shared" / "install.py").read_text())
     for node in tree.body:
         if isinstance(node, ast.Assign) and any(getattr(t, "id", "") == "APPS" for t in node.targets):
             apps = {}
@@ -65,23 +51,23 @@ def app_ports(src):
 
 
 def main():
-    src, tmp = sources()
-    try:
+    src = SRC
+    if True:
         checked = 0
-        # 1. links into the app repositories
+        # 1. links into the repository
         link = re.compile(r"https://(?:raw\.githubusercontent\.com/%s/([\w.-]+)/main/|github\.com/%s/([\w.-]+)/(?:blob|tree)/main/)([^\s\"')<>`#?]+)" % (OWNER, OWNER))
         for p, text in pages():
             for m in link.finditer(text):
                 repo, path = m.group(1) or m.group(2), m.group(3).rstrip(".,")
-                if repo not in REPOS:
+                if repo != REPO:
                     continue
                 checked += 1
-                if not (src / repo / path).exists():
-                    problems.append(f"{p.relative_to(HERE)}: {repo}/{path} is not in {repo}'s main")
+                if not (src / path).exists():
+                    problems.append(f"{p.relative_to(HERE)}: {path} is not in the repository")
 
         # 2. default ports next to an app's name
         ports = app_ports(src)
-        near = re.compile(r"\b(ioPix|ioNote|ioCalendar|ioSuite|ioContact|ioHealth)\b(?:[^\n\d]{0,14}?)\b(8\d\d0)\b")
+        near = re.compile(r"\b(ioPix|ioNote|ioCalendar|ioStart|ioContact|ioHealth|ioTask|ioRecipe|ioDNS|ioBackup)\b(?:[^\n\d]{0,14}?)\b(8\d\d0)\b")
         js = re.compile(r'name:"(io\w+)",\s*port:(\d+)')
         for p, text in pages():
             for m in list(near.finditer(text)) + list(js.finditer(text)):
@@ -124,9 +110,6 @@ def main():
                 print("  - " + x)
             sys.exit(1)
         print("every checked claim holds")
-    finally:
-        if tmp:
-            shutil.rmtree(tmp, ignore_errors=True)
 
 
 if __name__ == "__main__":

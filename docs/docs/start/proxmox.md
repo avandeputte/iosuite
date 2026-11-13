@@ -5,19 +5,19 @@ description: Install an ioThing app in a Proxmox VE container with one command.
 # Proxmox VE (LXC)
 
 Every app has a container installer that follows the [community-scripts](https://community-scripts.github.io/ProxmoxVE/)
-(ProxmoxVE) framework: the engine comes from community-scripts, the app's install script from its own repository. On
+(ProxmoxVE) framework: the engine comes from community-scripts, the app's install script from its folder of the suite's repository. On
 the Proxmox VE host, as root, run the line for the app you want:
 
 | App | Command | Container by default |
 | --- | --- | --- |
-| ioPix | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iopix/main/proxmox/ct/iopix.sh)"` | 4 CPU, 4 GB, 16 GB |
-| ioNote | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/ionote/main/proxmox/ct/ionote.sh)"` | 2 CPU, 2 GB, 8 GB |
-| ioCalendar | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iocalendar/main/proxmox/ct/iocalendar.sh)"` | 1 CPU, 512 MB, 4 GB |
-| ioSuite | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/proxmox/ct/iosuite.sh)"` | 1 CPU, 512 MB, 4 GB |
-| ioContact | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iocontact/main/proxmox/ct/iocontact.sh)"` | 1 CPU, 512 MB, 4 GB |
-| ioHealth | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iohealth/main/proxmox/ct/iohealth.sh)"` | 2 CPU, 1 GB, 4 GB |
-| ioTask | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iotask/main/proxmox/ct/iotask.sh)"` | 1 CPU, 512 MB, 4 GB |
-| ioRecipe | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iorecipe/main/proxmox/ct/iorecipe.sh)"` | 1 CPU, 512 MB, 4 GB |
+| ioPix | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/iopix/proxmox/ct/iopix.sh)"` | 4 CPU, 4 GB, 16 GB |
+| ioNote | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/ionote/proxmox/ct/ionote.sh)"` | 2 CPU, 2 GB, 8 GB |
+| ioCalendar | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/iocalendar/proxmox/ct/iocalendar.sh)"` | 1 CPU, 512 MB, 4 GB |
+| ioStart | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/iostart/proxmox/ct/iostart.sh)"` | 1 CPU, 512 MB, 4 GB |
+| ioContact | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/iocontact/proxmox/ct/iocontact.sh)"` | 1 CPU, 512 MB, 4 GB |
+| ioHealth | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/iohealth/proxmox/ct/iohealth.sh)"` | 2 CPU, 1 GB, 4 GB |
+| ioTask | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/iotask/proxmox/ct/iotask.sh)"` | 1 CPU, 512 MB, 4 GB |
+| ioRecipe | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/iorecipe/proxmox/ct/iorecipe.sh)"` | 1 CPU, 512 MB, 4 GB |
 
 ## What it asks
 
@@ -48,7 +48,7 @@ IOCALENDAR_DB=db.lan:3306/calendar:calendar:secret \
 IOCALENDAR_SUITE_DB=db.lan:3306/iosuite:iosuite:secret \
 IOCALENDAR_ADMIN=alex:secret IOCALENDAR_TIMEZONE=Europe/Brussels \
 IOCALENDAR_ALSO=none \
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iocalendar/main/proxmox/ct/iocalendar.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/iocalendar/proxmox/ct/iocalendar.sh)"
 ```
 
 The common ones are `IO<APP>_DB`, `IO<APP>_SUITE_DB` (`host:port/database:user:password`), `IO<APP>_ADMIN`
@@ -61,7 +61,7 @@ Tick them in the "Also install" checklist, or set `IO<APP>_ALSO`:
 
 ```sh
 IOSUITE_ALSO=iocalendar,iocontact \
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/proxmox/ct/iosuite.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/iostart/proxmox/ct/iostart.sh)"
 ```
 
 Every app gets its own database on the same server, its usual port, and the same accounts and admin. ioPix's installer

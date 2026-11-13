@@ -5,13 +5,13 @@ fitness web app on top of it: dashboards, charts of any metric (stacked or overl
 a map, sleep, training load and personal records. Nothing goes through a cloud service: an iPhone app uploads straight
 to a small server that you run in Docker, over HTTPS behind your reverse proxy (or plain HTTP on your own network).
 The same container serves the web app. Accounts are the ioThing suite's shared ones (the same as
-[ioPix](https://github.com/avandeputte/iopix), [ioNote](https://github.com/avandeputte/ionote) and
-[ioContact](https://github.com/avandeputte/iocontact)): every person in the household signs in with their own name
+[ioPix](https://github.com/avandeputte/iosuite/tree/main/iopix), [ioNote](https://github.com/avandeputte/iosuite/tree/main/ionote) and
+[ioContact](https://github.com/avandeputte/iosuite/tree/main/iocontact)): every person in the household signs in with their own name
 and sees only their own health data.
 
 The iPhone app that uploads the data is in its own repository,
-[iohealth-apps](https://github.com/avandeputte/iohealth-apps) (Health data only exists on the iPhone), as ioNote and
-ioPix keep theirs in [ionote-apps](https://github.com/avandeputte/ionote-apps) and iopix-apps.
+[iohealth-apps](https://github.com/avandeputte/iosuite-apps/tree/main/iohealth) (Health data only exists on the iPhone), as ioNote and
+ioPix keep theirs in [ionote-apps](https://github.com/avandeputte/iosuite-apps/tree/main/ionote) and iopix-apps.
 
 ```
 ┌──────────────┐   HTTPS (REST, gzip NDJSON)   ┌───────────────┐        ┌──────────┐
@@ -85,7 +85,7 @@ both the phone's uploads and the web app; put it behind your reverse proxy for [
 (ProxmoxVE) framework layout, the same way as the other apps. On the Proxmox host, as root,
 
 ```sh
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iohealth/main/proxmox/ct/iohealth.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/iohealth/proxmox/ct/iohealth.sh)"
 ```
 
 creates a small Debian 13 container (2 CPUs, 1 GB, 4 GB disk by default), puts the server in `/opt/iohealth/app` and
@@ -128,7 +128,7 @@ docker logs -f iohealth
 
 ### Any Linux or Mac
 ```sh
-git clone https://github.com/avandeputte/iohealth && cd iohealth
+git clone https://github.com/avandeputte/iosuite && cd iosuite/iohealth
 ./setup.sh          # asks for the databases, the port and the first account; installs a systemd service when run as root
 ./run.sh            # or start it in the foreground
 ./update.sh         # later: the latest code, same settings
@@ -238,7 +238,7 @@ user name and password instead, so for a server behind Cloudflare Access the upl
 rule or a Cloudflare service token.
 
 ## Users and permissions
-**Accounts** are the ioThing suite's shared accounts ([iosuite-shared](https://github.com/avandeputte/iosuite-shared): the
+**Accounts** are the ioThing suite's shared accounts ([iosuite-shared](https://github.com/avandeputte/iosuite/tree/main/shared): the
 Shared ioSuite database in MariaDB, shared with ioPix, ioNote and ioContact), so one name, password and session serve every app, and
 someone signed in at `photos.example.com` is signed in at `health.example.com` too when the apps share a domain
 (`COOKIE_DOMAIN`). What is ioHealth's own is kept per app: the role an account holds here, its settings and
@@ -274,7 +274,7 @@ acknowledged (`"duplicate":true`) without being applied twice. Every write is an
 resending anything is safe.
 
 ## The iPhone app
-Build and install it from [iohealth-apps](https://github.com/avandeputte/iohealth-apps), whose README has the steps.
+Build and install it from [iohealth-apps](https://github.com/avandeputte/iosuite-apps/tree/main/iohealth), whose README has the steps.
 On the phone, enter this server's URL (`https://health.example.com`, or `http://192.168.1.10:8650` at home) and your
 user name and password, then **Sync now**. Later syncs only send what's new or changed; with "Sync automatically" on
 the phone also syncs in the background when new Health data arrives. The server has to be reachable at that moment; a
@@ -353,7 +353,7 @@ databases of its own, `health_test`, `iosuite_test_iohealth` and `health_mig_tes
 ## Layout
 | path | what |
 |---|---|
-| `app/` | the FastAPI service: the upload API (`/v1`), the web app's API (`/api`), the database and its migrations; accounts through the suite's [iosuite-shared](https://github.com/avandeputte/iosuite-shared) |
+| `app/` | the FastAPI service: the upload API (`/v1`), the web app's API (`/api`), the database and its migrations; accounts through the suite's [iosuite-shared](https://github.com/avandeputte/iosuite/tree/main/shared) |
 | `static/` | the web app (one page, `app.js`, `app.css`, the chart and map libraries, icons) |
 | `tests/` | the tests, on a real MariaDB |
 | `proxmox/` | the Proxmox VE LXC scripts (`ct/` on the host, `install/` in the container) |

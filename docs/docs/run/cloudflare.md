@@ -48,7 +48,7 @@ for these paths, or a second Access application covering only them. They stay pr
 
 Everything else, the web apps and `/api/`, stays behind Access. A script calling `/api/` from outside needs a Cloudflare
 **service token** (`CF-Access-Client-Id` and `CF-Access-Client-Secret`) allowed in the policy, as well as an app password.
-The ionote Mac and iPhone apps take a service token in their settings. The ioSuite start page asks the other apps for its
+The ionote Mac and iPhone apps take a service token in their settings. The ioStart start page asks the other apps for its
 tiles with the suite's service token (Settings › Global settings › Keys and tokens) when they are only reachable through
 Access.
 
@@ -63,5 +63,5 @@ iosuite-shared edge --account-id … --namespace-id … --token-file token.txt
 ```
 
 The Worker, its `wrangler.toml`, the rollout (monitor first, then enforce) and a WAF rate-limit rule are in
-[iosuite-shared's cloudflare/edge-auth](https://github.com/avandeputte/iosuite-shared/blob/main/cloudflare/edge-auth/README.md).
+[iosuite-shared's cloudflare/edge-auth](https://github.com/avandeputte/iosuite/blob/main/shared/cloudflare/edge-auth/README.md).
 Once it enforces, sync clients must use an app password, not the account password.

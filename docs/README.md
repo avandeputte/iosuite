@@ -1,9 +1,9 @@
 # iosuite.iothing.net
 
-The source of [iosuite.iothing.net](https://iosuite.iothing.net): the landing page for the ioThing suite
-([ioPix](https://github.com/avandeputte/iopix), [ioNote](https://github.com/avandeputte/ionote),
-[ioCalendar](https://github.com/avandeputte/iocalendar), [ioTask](https://github.com/avandeputte/iotask), [ioRecipe](https://github.com/avandeputte/iorecipe), [ioContact](https://github.com/avandeputte/iocontact),
-[ioHealth](https://github.com/avandeputte/iohealth) and the [ioSuite](https://github.com/avandeputte/iosuite) start
+The website of the suite, in `docs/` of the suite's repository. The source of [iosuite.iothing.net](https://iosuite.iothing.net): the landing page for the ioThing suite
+([ioPix](https://github.com/avandeputte/iosuite/tree/main/iopix), [ioNote](https://github.com/avandeputte/iosuite/tree/main/ionote),
+[ioCalendar](https://github.com/avandeputte/iosuite/tree/main/iocalendar), [ioTask](https://github.com/avandeputte/iosuite/tree/main/iotask), [ioRecipe](https://github.com/avandeputte/iosuite/tree/main/iorecipe), [ioContact](https://github.com/avandeputte/iosuite/tree/main/iocontact),
+[ioHealth](https://github.com/avandeputte/iosuite/tree/main/iohealth) and the [ioStart](https://github.com/avandeputte/iosuite/tree/main/iostart) start
 page), and its guide under [/docs/](https://iosuite.iothing.net/docs/).
 
 The message of the site: **every app installs and runs on its own**. Someone who only wants a photo app installs ioPix
@@ -31,15 +31,14 @@ README (and, for ioPix, at [iopix.net](https://iopix.net/docs/)); link there rat
 
 Screenshots live in `landing/img/` (the guide gets a copy at build time), 1600 × 1000 JPEGs, under 400 KB each. They
 are the real apps holding made-up data (the Parker family); the ioPix ones are from
-[iopix/docs/screenshots](https://github.com/avandeputte/iopix/tree/main/docs/screenshots), whose photo credits the
+[iopix/docs/screenshots](https://github.com/avandeputte/iosuite/tree/main/iopix/docs/screenshots), whose photo credits the
 landing page links to.
 
 ## Building
 
 ```bash
 pip install -r requirements.txt
-sh build.sh                          # checks against fresh clones of the apps' main
-sh build.sh ../src                   # or against checkouts in ../src/<repo>
+sh build.sh                          # checks the pages against the apps' folders beside docs/
 python3 -m http.server -d site 8000  # http://localhost:8000/ and /docs/
 ```
 
@@ -50,8 +49,9 @@ port, a Proxmox container size or a Docker image that is not what the app's code
 ## Deploying
 
 The site is a Cloudflare Worker (`iosuite`, in `wrangler.jsonc`) that serves `site/` as static assets, on the custom
-domain `iosuite.iothing.net`. The workflow builds
-every pull request, and deploys on every push to `main`, nightly (so the checks follow the apps) and on demand, with
+domain `iosuite.iothing.net`. The workflow
+(`.github/workflows/docs.yml` at the root) builds every pull request that touches the site or an app, and deploys on
+every push to `main` that does, and on demand, with
 `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` from the repository secrets. By hand:
 
 ```bash

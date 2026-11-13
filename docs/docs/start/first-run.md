@@ -6,7 +6,7 @@ description: The first sign-in, the first accounts, and what to set next.
 
 ## Open the app
 
-Open `http://<host>:<port>`, with the app's port: ioPix 8600, ioNote 8610, ioCalendar 8620, ioSuite 8630, ioContact 8640, ioHealth 8650, ioTask 8670, ioRecipe 8690.
+Open `http://<host>:<port>`, with the app's port: ioPix 8600, ioNote 8610, ioCalendar 8620, ioStart 8630, ioContact 8640, ioHealth 8650, ioTask 8670, ioRecipe 8690.
 
 The sign-in screen is the same in every app: a tile per account (a click and a password), or *Other* to type a name.
 

@@ -8,20 +8,20 @@ Every app is published as a public image for amd64 and arm64:
 
 | App | Image | Compose file |
 | --- | --- | --- |
-| ioPix | `ghcr.io/avandeputte/iopix` | [docker-compose.yml](https://github.com/avandeputte/iopix/blob/main/docker-compose.yml) (MariaDB included) |
-| ioNote | `ghcr.io/avandeputte/ionote` | [docker-compose.yml](https://github.com/avandeputte/ionote/blob/main/docker-compose.yml) |
-| ioCalendar | `ghcr.io/avandeputte/iocalendar` | [docker-compose.yml](https://github.com/avandeputte/iocalendar/blob/main/docker-compose.yml) |
-| ioSuite | `ghcr.io/avandeputte/iosuite` | [docker-compose.yml](https://github.com/avandeputte/iosuite/blob/main/docker-compose.yml) |
-| ioContact | `ghcr.io/avandeputte/iocontact` | [docker-compose.yml](https://github.com/avandeputte/iocontact/blob/main/docker-compose.yml) |
-| ioHealth | `ghcr.io/avandeputte/iohealth` | [docker-compose.yml](https://github.com/avandeputte/iohealth/blob/main/docker-compose.yml) |
-| ioTask | `ghcr.io/avandeputte/iotask` | [docker-compose.yml](https://github.com/avandeputte/iotask/blob/main/docker-compose.yml) |
-| ioRecipe | `ghcr.io/avandeputte/iorecipe` | [docker-compose.yml](https://github.com/avandeputte/iorecipe/blob/main/docker-compose.yml) |
+| ioPix | `ghcr.io/avandeputte/iopix` | [docker-compose.yml](https://github.com/avandeputte/iosuite/blob/main/iopix/docker-compose.yml) (MariaDB included) |
+| ioNote | `ghcr.io/avandeputte/ionote` | [docker-compose.yml](https://github.com/avandeputte/iosuite/blob/main/ionote/docker-compose.yml) |
+| ioCalendar | `ghcr.io/avandeputte/iocalendar` | [docker-compose.yml](https://github.com/avandeputte/iosuite/blob/main/iocalendar/docker-compose.yml) |
+| ioStart | `ghcr.io/avandeputte/iostart` | [docker-compose.yml](https://github.com/avandeputte/iosuite/blob/main/iostart/docker-compose.yml) |
+| ioContact | `ghcr.io/avandeputte/iocontact` | [docker-compose.yml](https://github.com/avandeputte/iosuite/blob/main/iocontact/docker-compose.yml) |
+| ioHealth | `ghcr.io/avandeputte/iohealth` | [docker-compose.yml](https://github.com/avandeputte/iosuite/blob/main/iohealth/docker-compose.yml) |
+| ioTask | `ghcr.io/avandeputte/iotask` | [docker-compose.yml](https://github.com/avandeputte/iosuite/blob/main/iotask/docker-compose.yml) |
+| ioRecipe | `ghcr.io/avandeputte/iorecipe` | [docker-compose.yml](https://github.com/avandeputte/iosuite/blob/main/iorecipe/docker-compose.yml) |
 
 ## One app
 
 ```sh
 mkdir iocalendar && cd iocalendar
-curl -fsSLO https://raw.githubusercontent.com/avandeputte/iocalendar/main/docker-compose.yml
+curl -fsSLO https://raw.githubusercontent.com/avandeputte/iosuite/main/iocalendar/docker-compose.yml
 # fill in the CHANGE ME values: the databases, the admin, the time zone
 docker compose up -d
 ```
@@ -34,12 +34,12 @@ To share the accounts with apps you run elsewhere, give the container the same `
 
 ## The whole suite in one stack
 
-[`docker/suite/docker-compose.yml`](https://github.com/avandeputte/iosuite/blob/main/docker/suite/docker-compose.yml) in
-the ioSuite repository starts a MariaDB with a database per app, and ioSuite, ioCalendar, ioTask, ioRecipe, ioContact, ioNote, ioHealth
+[`docker-compose.yml`](https://github.com/avandeputte/iosuite/blob/main/docker-compose.yml) in
+the ioSuite repository starts a MariaDB with a database per app, and ioStart, ioCalendar, ioTask, ioRecipe, ioContact, ioNote, ioHealth
 and ioPix (without digiKam) with one Shared ioSuite database and one admin:
 
 ```sh
-curl -fsSLO https://raw.githubusercontent.com/avandeputte/iosuite/main/docker/suite/docker-compose.yml
+curl -fsSLO https://raw.githubusercontent.com/avandeputte/iosuite/main/docker-compose.yml
 # set the passwords, the photos folder and the time zone at the top, then
 docker compose up -d
 ```

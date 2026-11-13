@@ -1,13 +1,13 @@
 ---
-description: ioSuite, the start page of the ioThing suite.
+description: ioStart, the start page of the ioThing suite.
 ---
 
-# ioSuite <small>start page</small>
+# ioStart <small>start page</small>
 
 A self-hosted home page for the family: a tile per installed app, with what matters today on it. **It is optional**:
 every app works without it. It earns its place once you run two or more apps.
 
-![The ioSuite start page: a tile per app with today on it, birthdays, the week ahead and bookmarks](../img/iosuite.jpg)
+![The ioStart start page: a tile per app with today on it, birthdays, the week ahead and bookmarks](../img/iostart.jpg)
 
 ## What it does
 
@@ -23,17 +23,17 @@ every app works without it. It earns its place once you run two or more apps.
 
 ## With the other apps
 
-ioSuite is all about them: it shows a tile and widgets for each app it finds, asks each app with the viewer's own
+ioStart is all about them: it shows a tile and widgets for each app it finds, asks each app with the viewer's own
 sign-in, and leaves a tile as it was when its app is down.
 
 ## Install
 
 | | |
 | --- | --- |
-| Proxmox VE | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/proxmox/ct/iosuite.sh)"` |
-| Docker | [docker-compose.yml](https://github.com/avandeputte/iosuite/blob/main/docker-compose.yml), or the [whole suite in one stack](../start/docker.md#the-whole-suite-in-one-stack) |
-| Any Linux or Mac | `git clone https://github.com/avandeputte/iosuite && cd iosuite && ./setup.sh` |
+| Proxmox VE | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/iostart/proxmox/ct/iostart.sh)"` |
+| Docker | [docker-compose.yml](https://github.com/avandeputte/iosuite/blob/main/iostart/docker-compose.yml), or the [whole suite in one stack](../start/docker.md#the-whole-suite-in-one-stack) |
+| Any Linux or Mac | `git clone https://github.com/avandeputte/iosuite && cd iosuite/iostart && ./setup.sh` |
 | Port | 8630 |
-| Source | [github.com/avandeputte/iosuite](https://github.com/avandeputte/iosuite) |
+| Source | [iosuite/iostart](https://github.com/avandeputte/iosuite/tree/main/iostart) |
 
 Its Proxmox installer is a convenient place to start with several apps: tick the others in its checklist.

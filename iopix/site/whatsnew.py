@@ -40,7 +40,7 @@ def main():
                              text=True, check=True, cwd=Path(__file__).parent).stdout
     except (OSError, subprocess.CalledProcessError) as e:
         print(f'whatsnew: no git history ({e}); writing a placeholder', file=sys.stderr)
-        OUT.write_text(HEAD + '\nSee the [releases on GitHub](https://github.com/avandeputte/iopix/commits/main).\n')
+        OUT.write_text(HEAD + '\nSee the [releases on GitHub](https://github.com/avandeputte/iosuite/commits/main/iopix).\n')
         return
     seen, days = set(), OrderedDict()
     for line in log.splitlines():

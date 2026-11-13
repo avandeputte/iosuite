@@ -137,7 +137,7 @@ DIGIKAM_DB_BACKUP = os.environ.get("DIGIKAM_DB_BACKUP", "auto")
 # a command that writes a full MySQL dump to stdout, used instead of mysqldump (e.g. through docker exec)
 DIGIKAM_DB_DUMP = os.environ.get("DIGIKAM_DB_DUMP", "").strip()
 # the GitHub repository and branch update.sh follows and the update check compares against
-IOPIX_REPO = env("IOPIX_REPO") or "avandeputte/iopix"
+IOPIX_REPO = env("IOPIX_REPO") or "avandeputte/iosuite"
 IOPIX_BRANCH = env("IOPIX_BRANCH") or "main"
 MCP_USER = env("MCP_USER")  # the account `python -m app.mcp` (stdio) acts as
 GOOGLE_MAPS_API_KEY = os.environ.get("GOOGLE_MAPS_API_KEY", "")  # the browser-facing key, when not entered in Settings

@@ -41,15 +41,15 @@ are kept in the database too, so there is nothing else to back up.
 
 ## With the other apps
 
-- **ioSuite**: a tile on the start page, and one sign-in for all the apps.
+- **ioStart**: a tile on the start page, and one sign-in for all the apps.
 - **ioTask**: a recipe's ingredients go to one of your task lists as a shopping list.
 
 ## Install
 
 | | |
 | --- | --- |
-| Proxmox VE | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iorecipe/main/proxmox/ct/iorecipe.sh)"` |
-| Docker | [docker-compose.yml](https://github.com/avandeputte/iorecipe/blob/main/docker-compose.yml): the image `ghcr.io/avandeputte/iorecipe` |
-| Any Linux or Mac | `git clone https://github.com/avandeputte/iorecipe && cd iorecipe && ./setup.sh` |
+| Proxmox VE | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/iorecipe/proxmox/ct/iorecipe.sh)"` |
+| Docker | [docker-compose.yml](https://github.com/avandeputte/iosuite/blob/main/iorecipe/docker-compose.yml): the image `ghcr.io/avandeputte/iorecipe` |
+| Any Linux or Mac | `git clone https://github.com/avandeputte/iosuite && cd iosuite/iorecipe && ./setup.sh` |
 | Port | 8690 |
-| Source | [github.com/avandeputte/iorecipe](https://github.com/avandeputte/iorecipe) |
+| Source | [iosuite/iorecipe](https://github.com/avandeputte/iosuite/tree/main/iorecipe) |

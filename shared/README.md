@@ -33,7 +33,7 @@ is a member at most, everywhere.
 ## Install
 
 ```
-pip install git+https://github.com/avandeputte/iosuite-shared.git
+pip install git+https://github.com/avandeputte/iosuite/tree/main/shared.git
 ```
 
 ## Settings: config.env

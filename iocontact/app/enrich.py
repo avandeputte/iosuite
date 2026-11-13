@@ -30,7 +30,7 @@ FIELDS = {  # field: (label, kind) — single fields replace, list fields add an
     "social": ("Social profile", "list"), "tags": ("Label", "list"),
 }
 log = logging.getLogger("iocontact.enrich")
-UA = "iocontact (+https://github.com/avandeputte/iocontact)"
+UA = "iocontact (+https://github.com/avandeputte/iosuite/tree/main/iocontact)"
 TIMEOUT = 8
 
 

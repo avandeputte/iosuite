@@ -1,7 +1,7 @@
 # The whole ioSuite in one Docker stack: MariaDB with a database per app, the Shared ioSuite database (accounts, one
-# sign-in for every app) and ioStart (the start page), ioCalendar, ioContact, ioNote, ioHealth and ioPix.
+# sign-in for every app) and ioStart (the start page), ioCalendar, ioTask, ioRecipe, ioContact, ioNote, ioHealth and ioPix.
 #
-#   docker compose -f docker/suite/docker-compose.yml up -d        # or paste this file as a stack in Dockge / Portainer
+#   docker compose up -d        # or paste this file as a stack in Dockge / Portainer
 #
 # Edit the CHANGE ME spots below (or put the same names in a .env file next to this file): the two passwords, the
 # admin, the time zone, the photos folder. Everything else is shared through the YAML anchors, so it is written once:
@@ -12,7 +12,7 @@
 # calendar.example.com ... with COOKIE_DOMAIN example.com).
 #
 # Not wanted? Delete an app's service (and its database line in the `init` config below); nothing else refers to it.
-# ioPix here runs without digiKam and without the AI models (AUTO_MODELS empty); see iopix's own docker-compose.yml
+# ioPix here runs without digiKam and without the AI models (AUTO_MODELS empty); see iopix/docker-compose.yml
 # for those. The images are public on GitHub's registry: no login is needed to pull them.
 
 x-change-me: &change-me

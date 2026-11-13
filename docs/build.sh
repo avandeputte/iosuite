@@ -4,13 +4,12 @@
 # repositories, ports, container sizes, images) are checked against the apps'
 # code; last, every local link and image in the built site must resolve.
 #
-#   sh build.sh               # checks against fresh clones of the apps' main
-#   sh build.sh ../src        # or against checkouts in ../src/<repo>
+#   sh build.sh
 #
 # Deploy with: npx wrangler deploy        (wrangler.jsonc serves site/)
 set -e
 cd "$(dirname "$0")"
-python3 tools/check-facts.py "$@"
+python3 tools/check-facts.py
 rm -rf site docs/img
 # the guide shows the landing page's screenshots and icons
 mkdir -p docs/img && cp landing/img/* docs/img/

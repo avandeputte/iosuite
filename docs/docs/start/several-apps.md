@@ -12,7 +12,7 @@ container or one database server:
 | ioPix | 8600 | `iopix` | `/opt/iopix/app` |
 | ioNote | 8610 | `notes` | `/opt/ionote/app` |
 | ioCalendar | 8620 | `calendar` | `/opt/iocalendar/app` |
-| ioSuite | 8630 | `suite` | `/opt/iosuite/app` |
+| ioStart | 8630 | `suite` | `/opt/iostart/app` |
 | ioContact | 8640 (LDAP 3890) | `contacts` | `/opt/iocontact/app` |
 | ioHealth | 8650 | `health` | `/opt/iohealth/app` |
 | ioTask | 8670 | `tasks` | `/opt/iotask/app` |
@@ -32,7 +32,7 @@ Whichever app you install first, its installer's last question puts others besid
 
     ```sh
     IOSUITE_ALSO=iocalendar,iocontact \
-    bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/proxmox/ct/iosuite.sh)"
+    bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/iostart/proxmox/ct/iostart.sh)"
     ```
 
     Or tick them in the installer's checklist. ioPix's installer offers all the others; theirs leave out ioPix, whose

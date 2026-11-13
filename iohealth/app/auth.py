@@ -27,7 +27,7 @@ auth.write_role = "member"  # every account's data is its own: a member uploads 
 
 
 # updates (the daily check, update.sh, restart) and the server log, as in every app of the suite (iosuite_shared.updates)
-updater = Updater(APP, __version__, config.APP_DIR, repo=config.env("IOHEALTH_REPO", "avandeputte/iohealth"), user_agent="iohealth")
+updater = Updater(APP, __version__, config.APP_DIR, repo=config.env("IOHEALTH_REPO", ""), user_agent="iohealth")
 
 
 def me(request: Request) -> dict:

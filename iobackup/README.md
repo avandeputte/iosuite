@@ -1,15 +1,15 @@
 # ioBackup
 
-*The database backups of the ioThing suite ([ioSuite](https://github.com/avandeputte/iosuite), [ioCalendar](https://github.com/avandeputte/iocalendar),
-[ioContact](https://github.com/avandeputte/iocontact), [ioNote](https://github.com/avandeputte/ionote), [ioPix](https://github.com/avandeputte/iopix),
-[ioHealth](https://github.com/avandeputte/iohealth), [ioTask](https://github.com/avandeputte/iotask), [ioDNS](https://github.com/avandeputte/iodns)).*
+*The database backups of the ioThing suite ([ioStart](https://github.com/avandeputte/iosuite/tree/main/iostart), [ioCalendar](https://github.com/avandeputte/iosuite/tree/main/iocalendar),
+[ioContact](https://github.com/avandeputte/iosuite/tree/main/iocontact), [ioNote](https://github.com/avandeputte/iosuite/tree/main/ionote), [ioPix](https://github.com/avandeputte/iosuite/tree/main/iopix),
+[ioHealth](https://github.com/avandeputte/iosuite/tree/main/iohealth), [ioTask](https://github.com/avandeputte/iosuite/tree/main/iotask), [ioDNS](https://github.com/avandeputte/iosuite/tree/main/iodns)).*
 
 Backs up the MariaDB server the suite's apps keep their data on (and any other MariaDB or Galera server) on demand or
 on a schedule, to a folder or Google Drive, keeps the newest *N* backups of each job, and **restores exactly what you
 pick**: whole databases, single tables or views, stored routines, events, users and roles, onto the same server or
 another, under the same name or a new one. An admin tool of the suite, for suite admins only: the gear menu of the
 ioSuite start page lists it for them, nobody else sees it. FastAPI and a single-page vanilla JS app, built the same
-way as the other io apps, signed in with the suite's shared accounts ([`iosuite-shared`](https://github.com/avandeputte/iosuite-shared)),
+way as the other io apps, signed in with the suite's shared accounts ([`iosuite-shared`](https://github.com/avandeputte/iosuite/tree/main/shared)),
 with its own settings in MariaDB / MySQL. It grew out of [mariadb-backup](https://github.com/avandeputte/mariadb-backup),
 whose backup files it reads and writes unchanged.
 
@@ -101,8 +101,7 @@ Stop the apps whose database you restore over, and start them again after.
 
 ## Run
 
-ioBackup needs Python 3.10+, git (to install `iosuite-shared` from the [iosuite-shared](https://github.com/avandeputte/iosuite-shared)
-repository), the MariaDB client programs (`mariadb-dump`, `mariadb`; `setup.sh` installs them) and a MariaDB or MySQL
+ioBackup needs Python 3.10+, the MariaDB client programs (`mariadb-dump`, `mariadb`; `setup.sh` installs them) and a MariaDB or MySQL
 database for its own settings. Give it its own database and user, for example:
 
 ```sql
@@ -120,7 +119,7 @@ app of the suite uses). The tables are created on the first start and updated by
 layout, as the other io apps do. On the Proxmox host, as root:
 
 ```sh
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iobackup/main/proxmox/ct/iobackup.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/iobackup/proxmox/ct/iobackup.sh)"
 ```
 
 It asks for the ioBackup database, the Shared ioSuite database, the web port (8680), the time zone, the public address
@@ -143,7 +142,7 @@ The image (`ghcr.io/avandeputte/iobackup`) has the MariaDB client in it; mount t
 ### Any Linux or Mac
 
 ```sh
-git clone https://github.com/avandeputte/iobackup && cd iobackup
+git clone https://github.com/avandeputte/iosuite && cd iosuite/iobackup
 ./setup.sh          # asks for the databases, port and admin; installs a systemd service when run as root
 ./run.sh            # or start it in the foreground
 ./update.sh         # later: the latest code, same settings
@@ -165,7 +164,7 @@ which wins. The names are the suite's (`DB_*`, `IOSUITE_DB_*`, `PUBLIC_URL`, `CO
 | `WORK_DIR` | where a backup is put together before it is stored; room for two compressed backups (`DATA_DIR/work`) |
 | `CACHE_DIR` | where a backup read from Google Drive is kept while it is restored (`DATA_DIR/cache`) |
 | `BACKGROUND` | `0` turns the queue and the scheduler off (nothing runs, no schedule fires) |
-| `IOBACKUP_REPO`, `IOBACKUP_BRANCH` | what the version check and `update.sh` follow (`avandeputte/iobackup`, `main`) |
+| `IOBACKUP_REPO`, `IOBACKUP_BRANCH` | what the version check and `update.sh` follow (`avandeputte/iosuite`, `main`) |
 
 Schedules run in `TZ` (or the host's time zone). The servers, destinations and jobs are set in the app itself.
 

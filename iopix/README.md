@@ -30,7 +30,7 @@ You don't need digiKam to use it: point it at a folder of photos and it keeps th
 ## Run
 
 ```sh
-git clone https://github.com/avandeputte/iopix && cd iopix
+git clone https://github.com/avandeputte/iosuite && cd iosuite/iopix
 ./setup.sh
 ```
 
@@ -56,7 +56,7 @@ It also installs what the viewer needs from the system when it is missing: Pytho
 `proxmox/ct/iopix.sh` and `proxmox/install/iopix-install.sh` follow the community-scripts (ProxmoxVE) framework layout, so they can be submitted upstream as they are. Until then the ct script points the framework at this repository for the install script (`COMMUNITY_SCRIPTS_URL`), while the engine itself comes from community-scripts. On the Proxmox host, as root:
 
 ```sh
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iopix/main/proxmox/ct/iopix.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/iopix/proxmox/ct/iopix.sh)"
 ```
 
 It asks about the app first: the photo folder, then where digiKam's database is (the digiKam folder on the host, or MariaDB host, port, database, user, password, or "I don't use digiKam"), where iopix keeps its own database (MariaDB installed in the container with the database created, or a server: host, port, database, user, password, the digiKam answers being the defaults), whether the viewer may write into the library (yes: sidecar edits; the mounts are read/write and the container is created privileged, since an unprivileged container cannot write files owned by a host user), which features to install (each downloads its model), and the admin account; then the framework's own questions (resources, network). It creates a Debian 13 container (4 CPU, 4 GB, 16 GB disk by default), bind-mounts the library at `/library/photos` and `/library/digikamDB` (the photos only, without digiKam), and runs the app's own `setup.sh` inside with those answers: packages, model downloads, settings, admin, and the `iopix` service on port 8600. For unattended runs set `IOPIX_PHOTOS`, `IOPIX_DB` (`sqlite:/path`, `mysql:host:port/db:user:pass` or `none`), `IOPIX_DB` (`local` or `host:port/db:user:pass`), `IOPIX_WRITE` (1/0), `IOPIX_FEATURES` and `IOPIX_ADMIN` in the environment. The passwords reach `setup.sh` inside the container through its environment (a root-only file pushed in and removed again), not on a command line. The setup's output inside the container is kept in `/opt/iopix/setup.log`; on failure its last lines are shown and the command to rerun it is printed. The container's `update` command pulls the latest code and keeps the settings and data. Because the container cannot see digiKam's process, it runs with `DIGIKAM_CHECK=none`: database writes go ahead without checking or asking. These scripts have not been run on a Proxmox host since the move to the iopix name and layout; they are checked for syntax in CI and mirror the tested `setup.sh`.
@@ -130,7 +130,7 @@ The settings are in `config.env` in the app folder (`setup.sh` writes the ones i
 | `MCP` | unset | `1` switches the MCP endpoint at `/mcp` on regardless of the setting (it is off by default; Settings › Server › MCP server) |
 | `MCP_USER` | unset | the account `python -m app.mcp` (stdio) acts as (over HTTP, every `/mcp` request signs in with an app password) |
 | `DB_TYPE` / `DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USER` / `DB_PASSWORD` | unset | the viewer's own MySQL/MariaDB database (`DB_TYPE=mysql`, port 3306 by default); Settings › iopix database writes them; without them the viewer shows its database set-up page |
-| `IOPIX_REPO` / `IOPIX_BRANCH` | `avandeputte/iopix` / `main` | where update checks and `update.sh` fetch from |
+| `IOPIX_REPO` / `IOPIX_BRANCH` | `avandeputte/iosuite` / `main` | where update checks and `update.sh` fetch from |
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
@@ -205,7 +205,7 @@ The Google Maps key (Settings › Map provider) reaches every browser in the til
 
 ## Users and permissions
 
-Accounts are the **ioThing suite's shared accounts** in the **Shared ioSuite database** (the `iosuite-shared` library from the [iosuite-shared](https://github.com/avandeputte/iosuite-shared) repository; a MariaDB database shared with ioNote, ioContact and the other apps, holding accounts, sessions, roles, the suite-wide settings and the list of apps): one name, password and session for every app, so someone signed in at `photo.example.com` is signed in at `notes.example.com` too when the apps share a domain (`COOKIE_DOMAIN`). What is iopix's own is kept per app: the role an account holds here, its display settings and the person it is linked to. A *suite admin* is admin in every app; an app admin manages this app's settings and the accounts' roles here. Point iopix at that database with `IOSUITE_DB_HOST`, `IOSUITE_DB_NAME`, `IOSUITE_DB_USER` and `IOSUITE_DB_PASSWORD` in `config.env` (the tables are created at start; `iosuite-shared migrate` folds an older install's `user_accounts` table into it).
+Accounts are the **ioThing suite's shared accounts** in the **Shared ioSuite database** (the `iosuite-shared` library, in [shared/](https://github.com/avandeputte/iosuite/tree/main/shared); a MariaDB database shared with ioNote, ioContact and the other apps, holding accounts, sessions, roles, the suite-wide settings and the list of apps): one name, password and session for every app, so someone signed in at `photo.example.com` is signed in at `notes.example.com` too when the apps share a domain (`COOKIE_DOMAIN`). What is iopix's own is kept per app: the role an account holds here, its display settings and the person it is linked to. A *suite admin* is admin in every app; an app admin manages this app's settings and the accounts' roles here. Point iopix at that database with `IOSUITE_DB_HOST`, `IOSUITE_DB_NAME`, `IOSUITE_DB_USER` and `IOSUITE_DB_PASSWORD` in `config.env` (the tables are created at start; `iosuite-shared migrate` folds an older install's `user_accounts` table into it).
 
 Out of the box the viewer is open to anyone who can reach it. `setup.sh` asks for the admin account; Settings offers **Create the admin account** later (or set `ADMIN_USER` and `ADMIN_PASSWORD` for a container, or run `.venv/bin/python -m app.users create <name> <password> admin`). Once a user exists:
 

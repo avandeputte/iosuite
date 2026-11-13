@@ -1,12 +1,12 @@
 # ioDNS
 
-*The DNS console of the ioThing suite ([ioSuite](https://github.com/avandeputte/iosuite), [ioCalendar](https://github.com/avandeputte/iocalendar),
-[ioContact](https://github.com/avandeputte/iocontact), [ioNote](https://github.com/avandeputte/ionote), [ioPix](https://github.com/avandeputte/iopix), [ioHealth](https://github.com/avandeputte/iohealth)).*
+*The DNS console of the ioThing suite ([ioStart](https://github.com/avandeputte/iosuite/tree/main/iostart), [ioCalendar](https://github.com/avandeputte/iosuite/tree/main/iocalendar),
+[ioContact](https://github.com/avandeputte/iosuite/tree/main/iocontact), [ioNote](https://github.com/avandeputte/iosuite/tree/main/ionote), [ioPix](https://github.com/avandeputte/iosuite/tree/main/iopix), [ioHealth](https://github.com/avandeputte/iosuite/tree/main/iohealth)).*
 
 One master list of the house's DNS names, kept in sync on every DNS server: two AdGuard Homes, a Pi-hole, the UniFi
 gateway, Cloudflare. Add a name once, see where the servers disagree, pick who is right, push. FastAPI and a
 single-page vanilla JS app, built the same way as the other io apps, signed in with the suite's shared accounts
-([`iosuite-shared`](https://github.com/avandeputte/iosuite-shared)), with its data in MariaDB / MySQL.
+([`iosuite-shared`](https://github.com/avandeputte/iosuite/tree/main/shared)), with its data in MariaDB / MySQL.
 
 ## What it does
 
@@ -68,8 +68,7 @@ Adding another kind is one module in `app/providers/`: a `Provider` subclass tha
 
 ## Run
 
-ioDNS needs Python 3.10+, git (to install `iosuite-shared` from the [iosuite-shared](https://github.com/avandeputte/iosuite-shared)
-repository) and a MariaDB or MySQL database. Give it its own database and user, for example:
+ioDNS needs Python 3.10+ and a MariaDB or MySQL database. Give it its own database and user, for example:
 
 ```sql
 CREATE DATABASE dns CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -86,7 +85,7 @@ app of the suite uses). The tables are created on the first start and updated by
 as the other io apps do. On the Proxmox host, as root:
 
 ```sh
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iodns/main/proxmox/ct/iodns.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/iodns/proxmox/ct/iodns.sh)"
 ```
 
 It asks for the ioDNS database, the Shared ioSuite database, the web port (8660), the time zone, the public address
@@ -106,7 +105,7 @@ The image (`ghcr.io/avandeputte/iodns`) holds no data: everything is in the data
 ### Any Linux or Mac
 
 ```sh
-git clone https://github.com/avandeputte/iodns && cd iodns
+git clone https://github.com/avandeputte/iosuite && cd iosuite/iodns
 ./setup.sh          # asks for the databases, port and admin; installs a systemd service when run as root
 ./run.sh            # or start it in the foreground
 ./update.sh         # later: the latest code, same settings
@@ -127,7 +126,7 @@ which wins. The names are the suite's (`DB_*`, `IOSUITE_DB_*`, `PUBLIC_URL`, `CO
 | --- | --- |
 | `CHECK_MINUTES` | how often every view is compared in the background (30; 0: only when someone looks) |
 | `BACKGROUND` | `0` turns the background work off (the comparisons and dynamic DNS) |
-| `IODNS_REPO`, `IODNS_BRANCH` | what the version check and `update.sh` follow (`avandeputte/iodns`, `main`) |
+| `IODNS_REPO`, `IODNS_BRANCH` | what the version check and `update.sh` follow (`avandeputte/iosuite`, `main`) |
 
 The DNS servers, their passwords and keys, the views and dynamic DNS are set in the app itself.
 

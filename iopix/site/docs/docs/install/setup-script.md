@@ -3,7 +3,7 @@
 `setup.sh` is the installer inside a checkout of the repository. It is the right choice on the Mac or PC where digiKam lives, or for development.
 
 ```sh
-git clone https://github.com/avandeputte/iopix && cd iopix
+git clone https://github.com/avandeputte/iosuite && cd iosuite/iopix
 ./setup.sh
 ```
 

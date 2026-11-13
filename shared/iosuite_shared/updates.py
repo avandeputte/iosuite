@@ -81,11 +81,9 @@ class Updater:
         return self._commit
 
     def _git_root(self) -> Path | None:
-        """A checkout of the repository: the app's folder sits one level below its .git (or holds it, in a test)."""
-        for d in (self.root, self.root.parent):
-            if (d / ".git").exists():
-                return d
-        return None
+        """A checkout of the repository: the app's folder sits one level below its .git, beside shared/ (as update.sh sees it)."""
+        d = self.root.parent
+        return d if (d / ".git").exists() and (d / "shared").is_dir() else None
 
     def _read_commit(self) -> str:
         if self._git_root():

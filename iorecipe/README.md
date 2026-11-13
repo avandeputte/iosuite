@@ -1,8 +1,8 @@
 # ioRecipe
 
-*The family's recipes, in the ioThing suite (with [ioPix](https://github.com/avandeputte/iopix), [ioNote](https://github.com/avandeputte/ionote), [ioContact](https://github.com/avandeputte/iocontact), [ioCalendar](https://github.com/avandeputte/iocalendar), [ioTask](https://github.com/avandeputte/iotask), [ioHealth](https://github.com/avandeputte/iohealth) and the [ioSuite](https://github.com/avandeputte/iosuite) start page).*
+*The family's recipes, in the ioThing suite (with [ioPix](https://github.com/avandeputte/iosuite/tree/main/iopix), [ioNote](https://github.com/avandeputte/iosuite/tree/main/ionote), [ioContact](https://github.com/avandeputte/iosuite/tree/main/iocontact), [ioCalendar](https://github.com/avandeputte/iosuite/tree/main/iocalendar), [ioTask](https://github.com/avandeputte/iosuite/tree/main/iotask), [ioHealth](https://github.com/avandeputte/iosuite/tree/main/iohealth) and the [ioStart](https://github.com/avandeputte/iosuite/tree/main/iostart) start page).*
 
-A self-hosted recipe book: a web app for the whole family to keep recipes with their ingredients, steps and photos, to import a recipe from the web by its address, from pasted text, from a photo or from a file, and to cook, shop and print from it. FastAPI and a single-page vanilla JS app, with everything stored in MariaDB / MySQL (the photos too), and the suite's shared library (`iosuite-shared`, in [iosuite-shared](https://github.com/avandeputte/iosuite-shared)).
+A self-hosted recipe book: a web app for the whole family to keep recipes with their ingredients, steps and photos, to import a recipe from the web by its address, from pasted text, from a photo or from a file, and to cook, shop and print from it. FastAPI and a single-page vanilla JS app, with everything stored in MariaDB / MySQL (the photos too), and the suite's shared library (`iosuite-shared`, in [iosuite-shared](https://github.com/avandeputte/iosuite/tree/main/shared)).
 
 ## What it does
 
@@ -15,7 +15,7 @@ A self-hosted recipe book: a web app for the whole family to keep recipes with t
 - **Favourites and ratings**: the heart makes a recipe one of your favourites, the stars are your rating (1 to 5). Both are yours alone; everyone sees the average of the ratings.
 - **Cookbooks**: recipes grouped under a name (Baking, Weeknights, To try). A family cookbook is everyone's and holds family recipes; a cookbook of your own may hold the family's recipes and yours. A recipe can be in several.
 - **Cooking from it**: the amounts follow the servings you want (half, double, ten times: `1 1/2 cups` becomes `3 cups`, `2-3 tbsp` becomes `4-6 tbsp`), the ingredients have boxes to tick off as they go in, a step is struck out with a click, and **Print** gives the recipe alone on paper, with the amounts as they are shown.
-- **The shopping list**, when [ioTask](https://github.com/avandeputte/iotask) is part of the suite: a recipe's ingredients (for the servings shown, without the ones ticked off) become tasks in one of your lists there. Nothing to set up; ioTask is asked as you.
+- **The shopping list**, when [ioTask](https://github.com/avandeputte/iosuite/tree/main/iotask) is part of the suite: a recipe's ingredients (for the servings shown, without the ones ticked off) become tasks in one of your lists there. Nothing to set up; ioTask is asked as you.
 - **Family and private recipes**: a family recipe is seen by everyone; a private one only by its owner. A recipe can be moved from one to the other.
 - **Roles as in the other io apps**: viewers only read the family's recipes, members (the default) also keep private recipes of their own, editors change the family's recipes too, admins also manage users and settings. The same accounts, passwords and app passwords as the other io apps; one sign-in for all of them with a shared cookie domain.
 - **Settings › Security** and **Global settings** (suite admins): the whole suite's people and their role in every app, app passwords and sign-in at the proxy; the apps, keys and tokens; the same panel as on the start page and in every io app (iosuite-shared's `/api/suite-admin/ui.js`).
@@ -23,7 +23,7 @@ A self-hosted recipe book: a web app for the whole family to keep recipes with t
 
 ## Run
 
-ioRecipe needs Python 3.10+, git (to install `iosuite-shared` from the [iosuite-shared](https://github.com/avandeputte/iosuite-shared) repository) and a MariaDB or MySQL database. Give it its own database
+ioRecipe needs Python 3.10+ and a MariaDB or MySQL database. Give it its own database
 and user, for example:
 
 ```sql
@@ -40,7 +40,7 @@ app of the suite uses); a new install of the suite creates it the same way. The 
 `proxmox/ct/iorecipe.sh` and `proxmox/install/iorecipe-install.sh` follow the community-scripts (ProxmoxVE) framework layout, as the other io apps do. On the Proxmox host, as root:
 
 ```sh
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iorecipe/main/proxmox/ct/iorecipe.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/iorecipe/proxmox/ct/iorecipe.sh)"
 ```
 
 It asks for the recipe database (host, port, database, user, password), the Shared ioSuite database, the web port (8690), the time zone, the public address behind your reverse proxy (optional), the domain the sign-in is shared on (optional) and the admin account; then the framework's own questions (resources, network). It creates a small Debian 13 container and runs the app's own `setup.sh` inside with those answers. The passwords reach `setup.sh` through its environment (a root-only file pushed in and removed again), never on a command line; the output is kept in `/opt/iorecipe/setup.log`. The container's `update` command pulls the latest code and keeps the settings. For unattended runs set `IORECIPE_DB` and `IORECIPE_SUITE_DB` (`host:port/db:user:password`), `IORECIPE_ADMIN` (`name:password`), `IORECIPE_PORT`, `IORECIPE_TIMEZONE`, `IORECIPE_PUBLIC_URL` and `IORECIPE_COOKIE_DOMAIN`.
@@ -56,7 +56,7 @@ The image (`ghcr.io/avandeputte/iorecipe`) holds no data: everything is in the d
 ### Any Linux or Mac
 
 ```sh
-git clone https://github.com/avandeputte/iorecipe && cd iorecipe
+git clone https://github.com/avandeputte/iosuite && cd iosuite/iorecipe
 ./setup.sh          # asks for the databases, port, time zone and admin; installs a systemd service when run as root
 ./run.sh            # or start it in the foreground
 ./update.sh         # later: the latest code, same settings
@@ -101,7 +101,7 @@ accounts are the suite's: `.venv/bin/iosuite-shared --config . admin NAME --app 
 | `MCP` | `1` keeps the MCP server on, whatever the setting says |
 | `MCP_USER` | the account `python -m app.mcp` (stdio) acts as |
 | `UPDATE_CHECK` | `0` turns the daily version check off for good |
-| `IORECIPE_REPO`, `IORECIPE_BRANCH` | what the version check and `update.sh` follow (`avandeputte/iorecipe`, `main`) |
+| `IORECIPE_REPO`, `IORECIPE_BRANCH` | what the version check and `update.sh` follow (`avandeputte/iosuite`, `main`) |
 | `DATA_DIR` | where the app writes on its own: the log, the update result and the AI model (`data/` in the app folder) |
 | `LOG_FILE` | the server log shown at Settings › Server (`DATA_DIR/iorecipe.log`; `LOG_FILE=` with nothing after it: no file) |
 

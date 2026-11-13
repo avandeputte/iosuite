@@ -20,7 +20,7 @@ Pick the way that matches your machine. If you are not sure, Docker is the easie
 === "Docker"
 
     ```sh
-    curl -O https://raw.githubusercontent.com/avandeputte/iopix/main/docker-compose.yml
+    curl -O https://raw.githubusercontent.com/avandeputte/iosuite/main/iopix/docker-compose.yml
     # edit the CHANGE ME lines: photo folder, digiKam database, admin password, database password
     docker compose up -d
     ```
@@ -32,14 +32,14 @@ Pick the way that matches your machine. If you are not sure, Docker is the easie
     On the Proxmox host, as root:
 
     ```sh
-    bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iopix/main/proxmox/ct/iopix.sh)"
+    bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/iopix/proxmox/ct/iopix.sh)"
     ```
 
     Full guide: [Proxmox container](../install/proxmox.md).
 
 === "Linux"
 
-    Download `iopix-install.sh` from the [latest release](https://github.com/avandeputte/iopix/releases/latest), then as root:
+    Download `iopix-install.sh` from the [latest release](https://github.com/avandeputte/iosuite/releases?q=iopix), then as root:
 
     ```sh
     sh iopix-install.sh --photos /srv/photos --digikam-sqlite /srv/digikamDB --db local
@@ -52,7 +52,7 @@ Pick the way that matches your machine. If you are not sure, Docker is the easie
 === "macOS"
 
     ```sh
-    git clone https://github.com/avandeputte/iopix && cd iopix
+    git clone https://github.com/avandeputte/iosuite && cd iosuite/iopix
     ./setup.sh
     ```
 

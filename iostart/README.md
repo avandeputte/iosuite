@@ -1,10 +1,10 @@
 # ioStart
 
-*The start page of the ioThing suite: one place with every io app ([ioPix](https://github.com/avandeputte/iopix),
-[ioHealth](https://github.com/avandeputte/iohealth), [ioCalendar](https://github.com/avandeputte/iocalendar), [ioTask](https://github.com/avandeputte/iotask), [ioRecipe](https://github.com/avandeputte/iorecipe),
-[ioContact](https://github.com/avandeputte/iocontact), [ioNote](https://github.com/avandeputte/ionote)).*
+*The start page of the ioThing suite: one place with every io app ([ioPix](https://github.com/avandeputte/iosuite/tree/main/iopix),
+[ioHealth](https://github.com/avandeputte/iosuite/tree/main/iohealth), [ioCalendar](https://github.com/avandeputte/iosuite/tree/main/iocalendar), [ioTask](https://github.com/avandeputte/iosuite/tree/main/iotask), [ioRecipe](https://github.com/avandeputte/iosuite/tree/main/iorecipe),
+[ioContact](https://github.com/avandeputte/iosuite/tree/main/iocontact), [ioNote](https://github.com/avandeputte/iosuite/tree/main/ionote)).*
 
-A self-hosted home page for the family: a tile per app, signed in with the suite's shared accounts ([`iosuite-shared`](https://github.com/avandeputte/iosuite-shared)), so
+A self-hosted home page for the family: a tile per app, signed in with the suite's shared accounts ([`iosuite-shared`](https://github.com/avandeputte/iosuite/tree/main/shared)), so
 one sign-in here is a sign-in everywhere the page links to. FastAPI and a single-page vanilla JS app, built the same
 way as the other io apps, with its few settings in MariaDB / MySQL. For now the tiles are links; each one keeps room for
 what the app will show on the start page later (today's events, the newest photos, last night's sleep…).
@@ -130,7 +130,7 @@ what the app will show on the start page later (today's events, the newest photo
 
 ## Run
 
-ioStart needs Python 3.10+, git (to install the shared library, `avandeputte/iosuite-shared`) and a MariaDB or MySQL database. Give it its own database
+ioStart needs Python 3.10+ and a MariaDB or MySQL database. Give it its own database
 and user, for example:
 
 ```sql
@@ -171,15 +171,15 @@ docker compose up -d     # edit the CHANGE ME spots in docker-compose.yml first
 
 The image (`ghcr.io/avandeputte/iostart`) holds no data: everything is in the database.
 
-The whole suite in one stack, MariaDB included: [`docker/suite/docker-compose.yml`](docker/suite/docker-compose.yml)
+The whole suite in one stack, MariaDB included: [`docker-compose.yml`](../docker-compose.yml) at the root of the repository
 starts a MariaDB with a database per app, ioStart, ioCalendar, ioTask, ioRecipe, ioContact, ioNote, ioHealth and ioPix (without
 digiKam), with one Shared ioSuite database and one admin. Edit the passwords, the photos path and the time zone at
-the top, then `docker compose -f docker/suite/docker-compose.yml up -d` (or paste it as a stack in Dockge / Portainer).
+the top, then `docker compose up -d` there (or paste it as a stack in Dockge / Portainer).
 
 ### Any Linux or Mac
 
 ```sh
-git clone https://github.com/avandeputte/iosuite && cd iostart
+git clone https://github.com/avandeputte/iosuite && cd iosuite/iostart
 ./setup.sh          # asks for the databases, port and admin; installs a systemd service when run as root
 ./run.sh            # or start it in the foreground
 ./update.sh         # later: the latest code, same settings

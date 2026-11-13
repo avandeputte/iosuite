@@ -3,9 +3,9 @@
 *Your notes, clipboard snippets and screenshots, searchable everywhere.*
 
 The server behind ionote: a web app for reading, writing and organising notes from any browser, and the API the
-ionote apps for Mac and iPhone/iPad use ([ionote-apps](https://github.com/avandeputte/ionote-apps)). Everything is kept
+ionote apps for Mac and iPhone/iPad use ([ionote-apps](https://github.com/avandeputte/iosuite-apps/tree/main/ionote)). Everything is kept
 in one MariaDB/MySQL database, pictures included. It is built the same way as its sibling
-[iopix](https://github.com/avandeputte/iopix): FastAPI with a single-page vanilla JS app, the same accounts, roles
+[iopix](https://github.com/avandeputte/iosuite/tree/main/iopix): FastAPI with a single-page vanilla JS app, the same accounts, roles
 and sign-in (Cloudflare Access too), the same installer, updater, Docker image and MCP server.
 
 ## What it does
@@ -48,7 +48,7 @@ and sign-in (Cloudflare Access too), the same installer, updater, Docker image a
 ## Run
 
 ```sh
-git clone https://github.com/avandeputte/ionote && cd ionote
+git clone https://github.com/avandeputte/iosuite && cd iosuite/ionote
 ./setup.sh
 ```
 
@@ -93,7 +93,7 @@ framework at this repository for the install script (`COMMUNITY_SCRIPTS_URL`), w
 community-scripts. On the Proxmox host, as root:
 
 ```sh
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/ionote/main/proxmox/ct/ionote.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/ionote/proxmox/ct/ionote.sh)"
 ```
 
 It asks about the app first: whether the notes live in MariaDB/MySQL (host, port, database, user, password; the
@@ -184,7 +184,7 @@ token** (client ID and secret, kept in the Keychain), as the iopix apps do.
 ## Users and permissions
 
 Accounts are the **ioThing suite's shared accounts**, kept in the **Shared ioSuite database** (a MariaDB database
-shared with iopix and ioContact, used through the ioSuite shared library, [`iosuite-shared`](https://github.com/avandeputte/iosuite-shared); besides the accounts it holds sessions,
+shared with iopix and ioContact, used through the ioSuite shared library, [`iosuite-shared`](https://github.com/avandeputte/iosuite/tree/main/shared); besides the accounts it holds sessions,
 roles, the suite's list of apps and the suite-wide settings), so one name, password and session serve every app, and
 someone signed in at `photo.example.com` is signed in at `notes.example.com` too when the apps share a domain
 (`COOKIE_DOMAIN`). What is ionote' own is kept per app: the role an account holds here and its settings. A

@@ -4,16 +4,16 @@ description: Install an ioThing app on any Linux machine or Mac with setup.sh.
 
 # Any Linux or Mac
 
-Every app has the same three scripts in its repository:
+Every app is a folder of the suite's repository, with the same three scripts:
 
 ```sh
-git clone https://github.com/avandeputte/iocalendar && cd iocalendar
+git clone https://github.com/avandeputte/iosuite && cd iosuite/iocalendar
 ./setup.sh          # asks the questions, installs, writes config.env, starts the service
 ./run.sh            # or start it in the foreground
 ./update.sh         # later: the latest code, the same settings
 ```
 
-Replace `iocalendar` with `iopix`, `ionote`, `iosuite`, `iocontact`, `iohealth`, `iotask` or `iorecipe`.
+Replace `iocalendar` with `iopix`, `ionote`, `iostart`, `iocontact`, `iohealth`, `iotask` or `iorecipe`.
 
 ## What setup.sh does
 

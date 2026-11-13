@@ -6,7 +6,7 @@ The image `ghcr.io/avandeputte/iopix` is public, built for **amd64 and arm64**, 
 
 ```sh
 mkdir iopix && cd iopix
-curl -O https://raw.githubusercontent.com/avandeputte/iopix/main/docker-compose.yml
+curl -O https://raw.githubusercontent.com/avandeputte/iosuite/main/iopix/docker-compose.yml
 ```
 
 It also works as a stack in Dockge or Portainer: paste its contents in.

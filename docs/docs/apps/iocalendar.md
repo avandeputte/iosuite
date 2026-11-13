@@ -33,14 +33,14 @@ should sync away from home.
   to date every six hours; the people on an event come from your contacts.
 - **ioTask**: the tasks that are due show on their day, beside the events, in the month, week, day and agenda views.
   Tick one off right on the calendar; a repeating task moves on to its next day.
-- **ioSuite**: today's events on the tile, a This week card, and "Quick add" from the search box ("dentist tomorrow 9am").
+- **ioStart**: today's events on the tile, a This week card, and "Quick add" from the search box ("dentist tomorrow 9am").
 
 ## Install
 
 | | |
 | --- | --- |
-| Proxmox VE | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iocalendar/main/proxmox/ct/iocalendar.sh)"` |
-| Docker | [docker-compose.yml](https://github.com/avandeputte/iocalendar/blob/main/docker-compose.yml): the image `ghcr.io/avandeputte/iocalendar` |
-| Any Linux or Mac | `git clone https://github.com/avandeputte/iocalendar && cd iocalendar && ./setup.sh` |
+| Proxmox VE | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/iocalendar/proxmox/ct/iocalendar.sh)"` |
+| Docker | [docker-compose.yml](https://github.com/avandeputte/iosuite/blob/main/iocalendar/docker-compose.yml): the image `ghcr.io/avandeputte/iocalendar` |
+| Any Linux or Mac | `git clone https://github.com/avandeputte/iosuite && cd iosuite/iocalendar && ./setup.sh` |
 | Port | 8620 |
-| Source | [github.com/avandeputte/iocalendar](https://github.com/avandeputte/iocalendar) |
+| Source | [iosuite/iocalendar](https://github.com/avandeputte/iosuite/tree/main/iocalendar) |

@@ -1,8 +1,8 @@
 site_name: ioPix
 site_description: Documentation for iopix, a web companion for your digiKam library.
 site_url: https://iopix.net/docs/
-repo_url: https://github.com/avandeputte/iopix
-repo_name: avandeputte/iopix
+repo_url: https://github.com/avandeputte/iosuite/tree/main/iopix
+repo_name: avandeputte/iosuite
 edit_uri: ""
 copyright: © 2026 Alex Van de Putte · GPL-3.0 licence
 docs_dir: docs

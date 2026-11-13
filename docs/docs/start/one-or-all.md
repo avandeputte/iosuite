@@ -20,11 +20,11 @@ That's all. A photo app alone is a perfectly good install:
 
 ```sh
 # on a Proxmox VE host, as root
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iopix/main/proxmox/ct/iopix.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/iopix/proxmox/ct/iopix.sh)"
 ```
 
 The app does not look for the others, does not show empty spaces for them, and does not need the
-[ioSuite start page](../apps/iosuite.md). Its Settings show Security and Global settings to suite admins all the same:
+[ioStart start page](../apps/iostart.md). Its Settings show Security and Global settings to suite admins all the same:
 those manage the accounts in the Shared ioSuite database, whether one app uses them or seven.
 
 | You want | Install |
@@ -60,8 +60,8 @@ These are extras, switched on by having both apps; neither app needs the other:
 | --- | --- |
 | ioContact + ioCalendar | a read-only **Birthdays** calendar with the birthdays and anniversaries from ioContact; the people on an event are picked from your contacts |
 | ioPix + ioContact | link a contact to a person named in ioPix: that face becomes the contact's photo, on phones (CardDAV) and in the LDAP directory too |
-| ioSuite + any app | a tile per app on the start page with what matters today: the next events, the tasks due, photos from this day, today's steps and last night's sleep |
-| ioSuite + ioCalendar | "Quick add": type "dinner fri 19:00" in the start page's search box to make the event |
+| ioStart + any app | a tile per app on the start page with what matters today: the next events, the tasks due, photos from this day, today's steps and last night's sleep |
+| ioStart + ioCalendar | "Quick add": type "dinner fri 19:00" in the start page's search box to make the event |
 | any two | the same accounts and roles, one admin panel, the same Settings, one sign-in |
 
 ## All of them at once
@@ -75,5 +75,5 @@ included. See [Several apps on one host](several-apps.md).
 
 Stop it and remove it the way you installed it (delete the container, the stack, or the service and its folder). The
 other apps don't notice. The app's row stays in the suite's list of apps until a suite admin forgets it under Settings ›
-Global settings › Apps, which can also drop the roles, settings, app passwords and keys it kept in the Shared ioSuite
+Global settings › Apps, which can also drop the roles, settings, app passwords and keys it kept in the Shared ioStart
 database. Its own database is left for you to drop.

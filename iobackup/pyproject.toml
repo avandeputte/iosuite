@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "iobackup"
-version = "0.4.0"
+version = "0.5.0"
 description = "Backups of the suite's MariaDB servers, on a schedule, to a folder or Google Drive, with retention and a restore of exactly what you pick"
 readme = "README.md"
 requires-python = ">=3.10"

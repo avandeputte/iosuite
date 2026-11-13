@@ -29,18 +29,18 @@ about 60 MB); the Mac and iPhone read the text on the device.
 
 ## With the other apps
 
-- **ioSuite**: the start page's search box searches your notes.
+- **ioStart**: the start page's search box searches your notes.
 - The same accounts and sign-in as every other app.
 
 ## Install
 
 | | |
 | --- | --- |
-| Proxmox VE | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/ionote/main/proxmox/ct/ionote.sh)"` |
-| Docker | [docker-compose.yml](https://github.com/avandeputte/ionote/blob/main/docker-compose.yml): the image `ghcr.io/avandeputte/ionote` |
-| Any Linux or Mac | `git clone https://github.com/avandeputte/ionote && cd ionote && ./setup.sh` |
+| Proxmox VE | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/ionote/proxmox/ct/ionote.sh)"` |
+| Docker | [docker-compose.yml](https://github.com/avandeputte/iosuite/blob/main/ionote/docker-compose.yml): the image `ghcr.io/avandeputte/ionote` |
+| Any Linux or Mac | `git clone https://github.com/avandeputte/iosuite && cd iosuite/ionote && ./setup.sh` |
 | Port | 8610 |
-| Source | [ionote](https://github.com/avandeputte/ionote) (server), [ionote-apps](https://github.com/avandeputte/ionote-apps) (Mac, iPhone, iPad) |
+| Source | [ionote](https://github.com/avandeputte/iosuite/tree/main/ionote) (server), [ionote-apps](https://github.com/avandeputte/iosuite-apps/tree/main/ionote) (Mac, iPhone, iPad) |
 
-The Mac and iPhone apps are built from [ionote-apps](https://github.com/avandeputte/ionote-apps) with Xcode. See
+The Mac and iPhone apps are built from [ionote-apps](https://github.com/avandeputte/iosuite-apps/tree/main/ionote) with Xcode. See
 [Phones, Macs and other apps](devices.md).

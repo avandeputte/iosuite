@@ -31,7 +31,7 @@ to addresses on your own network; anything else must be HTTPS.
 
 ## With the other apps
 
-- **ioSuite**: today's steps with the last seven days as bars, the move, exercise and stand rings, and last night's
+- **ioStart**: today's steps with the last seven days as bars, the move, exercise and stand rings, and last night's
   sleep on the ioHealth tile.
 - The same accounts as every other app: each person signs in to ioHealthSync with their suite account.
 
@@ -39,11 +39,11 @@ to addresses on your own network; anything else must be HTTPS.
 
 | | |
 | --- | --- |
-| Proxmox VE | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iohealth/main/proxmox/ct/iohealth.sh)"` |
-| Docker | [docker-compose.yml](https://github.com/avandeputte/iohealth/blob/main/docker-compose.yml): the image `ghcr.io/avandeputte/iohealth` |
-| Any Linux or Mac | `git clone https://github.com/avandeputte/iohealth && cd iohealth && ./setup.sh` |
+| Proxmox VE | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/iohealth/proxmox/ct/iohealth.sh)"` |
+| Docker | [docker-compose.yml](https://github.com/avandeputte/iosuite/blob/main/iohealth/docker-compose.yml): the image `ghcr.io/avandeputte/iohealth` |
+| Any Linux or Mac | `git clone https://github.com/avandeputte/iosuite && cd iosuite/iohealth && ./setup.sh` |
 | Port | 8650 (the web app and the phone's uploads) |
-| Source | [iohealth](https://github.com/avandeputte/iohealth) (server), [iohealth-apps](https://github.com/avandeputte/iohealth-apps) (the ioHealthSync iPhone app) |
+| Source | [iohealth](https://github.com/avandeputte/iosuite/tree/main/iohealth) (server), [iohealth-apps](https://github.com/avandeputte/iosuite-apps/tree/main/iohealth) (the ioHealthSync iPhone app) |
 
-The iPhone app is built from [iohealth-apps](https://github.com/avandeputte/iohealth-apps) with Xcode. See
+The iPhone app is built from [iohealth-apps](https://github.com/avandeputte/iosuite-apps/tree/main/iohealth) with Xcode. See
 [Phones, Macs and other apps](devices.md).

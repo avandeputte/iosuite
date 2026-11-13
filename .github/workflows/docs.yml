@@ -1,11 +1,16 @@
-name: build
+name: docs
+# The website (iosuite.iothing.net), in docs/. Its pages are checked against the apps' folders, so a change in an app
+# that makes a page wrong fails here, in the same pull request.
 on:
   push:
     branches: [main]
+    paths: ["docs/**", "*/proxmox/ct/**", "*/docker-compose.yml", "docker-compose.yml", "shared/iosuite_shared/install.py", ".github/workflows/docs.yml"]
   pull_request:
-  schedule:
-    - cron: "23 4 * * *"      # the pages describe the apps: check them against the apps' code nightly
+    paths: ["docs/**", "*/proxmox/ct/**", "*/docker-compose.yml", "docker-compose.yml", "shared/iosuite_shared/install.py", ".github/workflows/docs.yml"]
   workflow_dispatch:
+defaults:
+  run:
+    working-directory: docs
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -22,6 +27,6 @@ jobs:
         env:
           NO_MKDOCS_2_WARNING: "1"
       - name: Deploy to Cloudflare Workers
-        # only from main, and only once the Cloudflare secrets are set (see CLOUDFLARE.md); wrangler.jsonc says what
+        # only from main, and only once the Cloudflare secrets are set (see docs/CLOUDFLARE.md); wrangler.jsonc says what
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && env.CLOUDFLARE_API_TOKEN != ''
         run: npx --yes wrangler@4 deploy
