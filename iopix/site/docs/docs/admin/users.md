@@ -24,7 +24,7 @@ The server enforces all of this; hiding a button is never the only protection.
 
 ## Sign-in required
 
-**Settings › Global settings › Apps › Sign-in required** (for ioPix) turns open browsing off. Visitors get the sign-in screen and nothing else: no thumbnail, photo or search result is served without an account. Turn it on for anything reachable from the internet.
+**Settings › Global settings › Apps › Sign-in required** (for ioPix) is on by default (and always on in the admin tools, ioDNS and ioBackup): visitors get the sign-in screen and nothing else, no thumbnail, photo or search result is served without an account. Turning it off opens browsing to visitors; keep it on for anything reachable from the internet.
 
 ## Managing accounts
 

@@ -362,8 +362,14 @@ def is_suite_admin(user) -> bool:
 
 
 def require_login(app: str) -> bool:
-    """Settings › Require sign-in for this app: nothing but the sign-in screen for visitors."""
-    return db.get_setting("require_login", "0", app) == "1" and any_users()
+    """Settings › Global settings › Apps › Sign-in required: nothing but the sign-in screen for visitors. On unless it
+    was turned off ("0"); always on in an admin tool. Off while no account exists, or nobody could sign in."""
+    return any_users() and sign_in_required(app)
+
+
+def sign_in_required(app: str) -> bool:
+    """The Sign-in required setting itself (whether or not an account exists yet)."""
+    return _is_tool(app) or db.get_setting("require_login", "1", app) != "0"
 
 
 # ---- per-user, per-app data (display settings; the ioPix person tag; the ioContact "me" contact)

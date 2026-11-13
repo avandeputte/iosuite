@@ -500,14 +500,15 @@ async function keys(el, ctx) {
 function apps(el, ctx) {
   const { o } = ctx;
   el.append(box('apps', 'Apps',
-    h('p', { class: 'sa-muted' }, 'The default role is what someone without a role in the app gets (“none”: invitation only). Admin tools are for suite admins only. “Sign-in required” shows visitors only the sign-in page.'),
+    h('p', { class: 'sa-muted' }, 'The default role is what someone without a role in the app gets (“none”: invitation only). Admin tools are for suite admins only. “Sign-in required” shows visitors only the sign-in page: on unless you turn it off, and always on in an admin tool.'),
     legend(),
     h('table', { class: 'sa-t' }, h('tr', null, h('th', null, 'App'), h('th', null, 'Version'), h('th', null, 'Default role'), h('th', null, 'Sign-in required'), h('th', null, 'In use'), h('th')),
       o.apps.map((a) => {
         const dr = a.adminTool ? h('span', { class: 'sa-muted sa-small' }, TOOL_NOTE)
           : h('select', { class: 'sa-in sa-sm' }, (o.defaultRoles || ['none', 'viewer', 'member', 'editor']).map((x) => h('option', { value: x, selected: x === a.defaultRole ? true : null }, `${x} (${ROLE_HELP[x]})`)));
         dr.onchange = async () => { try { await api(`apps/${a.app}`, { method: 'PATCH', json: { defaultRole: dr.value } }); a.defaultRole = dr.value; toast(`${a.name}: ${dr.value} by default`); } catch (e) { fail(e); dr.value = a.defaultRole; } };
-        const rl = h('input', { type: 'checkbox', checked: a.requireLogin, onchange: async (e) => { try { await api(`apps/${a.app}`, { method: 'PATCH', json: { requireLogin: e.target.checked } }); toast('Saved'); } catch (err) { e.target.checked = !e.target.checked; fail(err); } } });
+        const rl = a.adminTool ? h('input', { type: 'checkbox', checked: true, disabled: true, title: 'An admin tool always requires sign-in' })
+          : h('input', { type: 'checkbox', checked: a.requireLogin, onchange: async (e) => { try { await api(`apps/${a.app}`, { method: 'PATCH', json: { requireLogin: e.target.checked } }); toast('Saved'); } catch (err) { e.target.checked = !e.target.checked; fail(err); } } });
         return h('tr', null,
           h('td', null, h('span', { style: { whiteSpace: 'nowrap' } }, h('span', { class: 'sa-dot', style: { background: a.color || 'var(--sa-fg2)' } }), ' ', a.url ? h('a', { href: a.url, target: '_blank', rel: 'noopener' }, a.name) : h('b', null, a.name)),
             h('div', { class: 'sa-muted sa-small' }, a.registered ? `${a.app} · seen ${sinceText(a.lastSeen)}` : `${a.app} · not registered (only in the data)`)),

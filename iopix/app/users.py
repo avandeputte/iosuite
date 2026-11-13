@@ -76,7 +76,7 @@ def require_login() -> bool:
 
 
 def set_require_login(on: bool):
-    authdb.set_setting("require_login", "1" if on else "0", APP)
+    authdb.set_setting("require_login", "" if on else "0", APP)  # on is the default: no row
 
 
 def get_settings(user_id: int) -> dict:

@@ -25,7 +25,6 @@ log = logging.getLogger("app.data.state")
 # error: it is logged once, and the read or write goes ahead (the tests use probe keys on purpose).
 SETTINGS = {
     "app_name": ("", str, "what the viewer calls itself (Settings › Name); empty: the app's own name"),
-    "require_login": ("0", bool, "visitors must sign in before they see anything"),
     "write_files": ("0", bool, "metadata edits go into the image files too, not only the sidecars"),
     "sidecar_compat": ("0", bool, "new sidecars are named photo.xmp, digiKam's compatible file name (SIDECAR_COMPAT=1 locks it on)"),
     "digikam_sync": ("1", bool, "the viewer reads digiKam's database and writes applied edits into it; off: the library tables"),

@@ -12,30 +12,23 @@ from app import access, backup, config, db, notes
 from app.http import attachment, user_name
 
 router = APIRouter()
-SWITCHES = ("require_login",)  # the MCP switch is Settings › Server (POST /api/server {mcpEnabled})
-TEXTS = ("app_name",)
+TEXTS = ("app_name",)  # the MCP switch is Settings › Server (POST /api/server {mcpEnabled})
 
 
 @router.get("/api/settings", dependencies=[access.public])
 def api_settings(request: Request):
-    out = {"app_name": db.get_setting("app_name", "") or "ionote", "require_login": users.require_login(config.APP),
-           "colors": list(notes.COLORS)}
-    if users.is_admin(request.state.user):
-        out.update({k: db.get_setting(k, "0") == "1" for k in SWITCHES})
-    return out
+    return {"app_name": db.get_setting("app_name", "") or "ionote", "require_login": users.require_login(config.APP),
+            "colors": list(notes.COLORS)}
 
 
 @router.post("/api/settings", dependencies=[access.admin])
 async def api_settings_set(request: Request):
     body = await json_body(request)
     for k, v in body.items():
-        if k in SWITCHES:
-            if k == "require_login":
-                if v and not users.any_users():
-                    raise HTTPException(400, "Create an account first, or nobody could sign in")
-                suite_admin.set_app(config.APP, require_login=bool(v))  # in the Shared ioSuite database, per app
-                continue
-            db.set_setting(k, "1" if v else "0")
+        if k == "require_login":  # Settings › Global settings › Apps, in the Shared ioSuite database, per app
+            if v and not users.any_users():
+                raise HTTPException(400, "Create an account first, or nobody could sign in")
+            suite_admin.set_app(config.APP, require_login=bool(v))
         elif k in TEXTS:
             db.set_setting(k, str(v or "").strip()[:40])
     users.invalidate()

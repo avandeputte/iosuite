@@ -27,8 +27,8 @@ in each app as described there.
 
 That setting is kept in the Shared ioSuite database, so every app picks it up. Each app checks the signed token
 Cloudflare adds to every request (`Cf-Access-Jwt-Assertion`) against your team's keys and signs in the account with that
-email, then that name. Sign out also ends the Access session. Turn on **Sign-in required** (Settings › Global settings ›
-Apps) as well, so nobody gets in without it. Requests through Cloudflare never get one-click sign-in for passwordless
+email, then that name. Sign out also ends the Access session. Keep **Sign-in required** (Settings › Global settings ›
+Apps) on, as it is by default, so nobody gets in without it. Requests through Cloudflare never get one-click sign-in for passwordless
 accounts.
 
 ## Paths that must bypass Access

@@ -209,7 +209,7 @@ account) stay with the open install: export them before making the first account
 | **editor** | the same as a member: every note is private, so there is nothing shared for an editor to change |
 | **admin** | plus settings, accounts, updates and the server log |
 
-**Sign-in required** (Settings › Global settings › Apps) also closes the open routes to visitors, but for the app shell, `/api/status` and the sign-in routes (the MCP endpoint wants an app password either way).
+**Sign-in required** (Settings › Global settings › Apps, on by default) also closes the open routes to visitors, but for the app shell, `/api/status` and the sign-in routes (the MCP endpoint wants an app password either way).
 Sessions are random tokens in an HttpOnly cookie (`iothing_session`, shared by the apps on the domain) valid for
 30 days and renewed while in use; each records where it began and was last seen (address, through Cloudflare or
 not, web or which app): `GET /api/auth/sessions` for your own, `GET /api/users/<id>/sessions` for admins. Passwords

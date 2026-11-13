@@ -64,6 +64,7 @@ def test_ids_never_reach_another_accounts_note(client, admin):
 
 
 def test_visitors_see_no_notes_once_accounts_exist(client, admin):
+    assert client.post("/api/settings", json={"require_login": False}).status_code == 200  # on by default; off, a visitor still sees nobody's notes
     client.put(f"/api/notes/{NID}", json={"title": "mine", "updatedAt": 1})
     client.post("/api/auth/logout")
     client.cookies.clear()

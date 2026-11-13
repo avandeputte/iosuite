@@ -7,7 +7,7 @@ import pytest
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.testclient import TestClient
 
-from iosuite_shared import config, testing, users
+from iosuite_shared import config, db, testing, users
 from iosuite_shared import mcp as shared_mcp
 from iosuite_shared.fastapi import Auth
 from iosuite_shared.updates import Updater, setup_log
@@ -84,7 +84,6 @@ def test_status_is_public_and_the_same_shape_everywhere():
     updater.auto = False
     assert c.get("/api/status").json()["update"] is None
     # sign-in required: the status still answers a visitor, with nothing about the install
-    from iosuite_shared import db
     db.set_setting("require_login", "1", "iotest")
     v = TestClient(app, base_url="http://test.example.com")
     s = v.get("/api/status").json()
@@ -136,6 +135,7 @@ def test_mcp_gate_switch_sign_in_and_the_context():
     pw = c.post("/api/auth/app-passwords", json={"label": "Claude"}).json()["password"]
     assert v.post("/mcp", json={}, headers={"authorization": f"Bearer {pw}"}).status_code == 200
     assert seen[-1]["name"] == "alex"
+    db.set_setting("require_login", "0", "iotest")
     assert v.post("/api/echo", json={}).status_code == 200  # the gate touches /mcp only
 
 

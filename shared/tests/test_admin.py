@@ -69,7 +69,22 @@ def test_roles_reset_to_default_and_checks():
     assert a["defaultRole"] == "none" and a["requireLogin"]
     assert users.role_of(users.get(me["id"]), "iopix") == "admin"
     admin.set_app("iopix", default_role="member", require_login=False)
+    assert db.settings_of("iopix") == {"require_login": "0"}  # sign-in required is on by default: off is the row
+    assert not users.require_login("iopix")
+    admin.set_app("iopix", require_login=True)
     assert db.settings_of("iopix") == {}
+
+
+def test_sign_in_required_by_default_and_always_in_an_admin_tool():
+    users.create("alex", "secret123", "admin", "iopix", suite_admin=True)
+    assert users.require_login("iopix") and next(a for a in admin.apps() if a["app"] == "iopix")["requireLogin"]
+    suite.declare_admin_tool("iodns")
+    with pytest.raises(ValueError):
+        admin.set_app("iodns", require_login=False)
+    db.set_setting("require_login", "0", "iodns")  # a row from before, or written by hand: still on
+    assert users.require_login("iodns") and next(a for a in admin.apps() if a["app"] == "iodns")["requireLogin"]
+    admin.set_app("iodns", require_login=True)
+    assert db.settings_of("iodns") == {}
 
 
 def test_app_passwords_and_forget_app():
