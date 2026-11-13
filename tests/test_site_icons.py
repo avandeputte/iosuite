@@ -1,4 +1,6 @@
 """A bookmark's icon by default: the site's own, fetched by the server (app/siteicons.py). The sites are mocked."""
+import base64
+
 import pytest
 
 from app import config, siteicons
@@ -53,6 +55,17 @@ def test_a_link_shows_its_sites_icon(client, web):
     assert tree["items"][0]["items"][0]["siteIcon"] == l["News"]["siteIcon"]
     siteicons.settle()
     assert len(web.asked) == 2  # nothing is asked again while the answer is fresh
+    # the same icon for a sync client that draws the bookmarks itself (the iOS app): by the link's id, with its app password
+    pw = client.post("/api/auth/app-passwords", json={"label": "Phone", "scope": "dav"}).json()["password"]
+    auth = {"Authorization": "Basic " + base64.b64encode(f"alex:{pw}".encode()).decode()}
+    from fastapi.testclient import TestClient
+    from app.main import app
+    anon = TestClient(app)
+    assert anon.get(f"/dav/ext/icon/{made['id']}").status_code == 401
+    r = anon.get(f"/dav/ext/icon/{made['id']}", headers=auth)
+    assert r.status_code == 200 and r.content == PNG and r.headers["content-type"] == "image/png"
+    assert anon.get(f"/dav/ext/icon/{g['id']}", headers=auth).status_code == 404   # a folder
+    assert anon.get("/dav/ext/icon/99999", headers=auth).status_code == 404
 
 
 def test_favicon_ico_and_sites_without_an_icon(client, web):
