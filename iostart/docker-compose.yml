@@ -2,7 +2,7 @@
 # from this checkout. Works as a stack in Dockge / Portainer. Edit the CHANGE ME spots.
 services:
   iostart:
-    image: ghcr.io/avandeputte/iostart:latest
+    image: ghcr.io/avandeputte/iosuite/iostart:latest
     build: {context: .., dockerfile: iostart/Dockerfile}   # from a checkout of the suite's repository: its root is the build context
     container_name: iostart
     restart: unless-stopped

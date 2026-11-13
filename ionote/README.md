@@ -112,7 +112,7 @@ checked for syntax in CI and drive the tested `setup.sh`; they have not been run
 
 ### Docker
 
-`docker-compose.yml` pulls the published image (`ghcr.io/avandeputte/ionote:latest`, built by the GitHub workflow
+`docker-compose.yml` pulls the published image (`ghcr.io/avandeputte/iosuite/ionote:latest`, built by the GitHub workflow
 for amd64 and arm64) and works as a stack in Dockge or Portainer: set the database and the admin password and start
 it; `docker compose up -d --build` builds from the checkout instead. The container runs as its own user (uid 1000);
 the named volume `ionote-data` at `/data` only holds the session secret and the log, since everything else is in

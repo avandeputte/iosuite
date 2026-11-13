@@ -22,7 +22,7 @@ permissions:
   packages: write
 
 env:
-  IMAGE: ghcr.io/avandeputte/iopix
+  IMAGE: ghcr.io/avandeputte/iosuite/iopix
 
 jobs:
   tests:

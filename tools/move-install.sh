@@ -3,7 +3,7 @@
 # shared library in shared/), and of the start page from the name iosuite to iostart. Run it once on each machine
 # (or LXC container) that runs io apps installed from the old per-app repositories. Safe to run twice: it skips what
 # is done. Docker installs need nothing: `docker compose pull && docker compose up -d` (the start page's image is now
-# ghcr.io/avandeputte/iostart; take its new docker-compose.yml).
+# ghcr.io/avandeputte/iosuite/iostart; take its new docker-compose.yml).
 #
 #   curl -fsSLO https://raw.githubusercontent.com/avandeputte/iosuite/main/tools/move-install.sh
 #   sudo bash move-install.sh --dry-run  # only say what it would do

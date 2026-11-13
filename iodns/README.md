@@ -100,7 +100,7 @@ apps of the suite go in the same container, then runs the app's own `setup.sh` i
 docker compose up -d     # edit the CHANGE ME spots in docker-compose.yml first
 ```
 
-The image (`ghcr.io/avandeputte/iodns`) holds no data: everything is in the database.
+The image (`ghcr.io/avandeputte/iosuite/iodns`) holds no data: everything is in the database.
 
 ### Any Linux or Mac
 

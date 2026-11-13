@@ -41,7 +41,7 @@ database for what it builds, and the Shared ioSuite database for its accounts. d
 | | |
 | --- | --- |
 | Proxmox VE | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/iopix/proxmox/ct/iopix.sh)"` |
-| Docker | [docker-compose.yml](https://github.com/avandeputte/iosuite/blob/main/iopix/docker-compose.yml): the image `ghcr.io/avandeputte/iopix`, with a MariaDB service |
+| Docker | [docker-compose.yml](https://github.com/avandeputte/iosuite/blob/main/iopix/docker-compose.yml): the image `ghcr.io/avandeputte/iosuite/iopix`, with a MariaDB service |
 | Any Linux or Mac | `git clone https://github.com/avandeputte/iosuite && cd iosuite/iopix && ./setup.sh` |
 | Port | 8600 |
 | Source | [iosuite/iopix](https://github.com/avandeputte/iosuite/tree/main/iopix) |

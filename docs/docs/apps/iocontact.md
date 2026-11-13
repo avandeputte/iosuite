@@ -38,7 +38,7 @@ phones should sync away from home. The LDAP directory speaks plain LDAP: keep it
 | | |
 | --- | --- |
 | Proxmox VE | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/iocontact/proxmox/ct/iocontact.sh)"` |
-| Docker | [docker-compose.yml](https://github.com/avandeputte/iosuite/blob/main/iocontact/docker-compose.yml): the image `ghcr.io/avandeputte/iocontact` |
+| Docker | [docker-compose.yml](https://github.com/avandeputte/iosuite/blob/main/iocontact/docker-compose.yml): the image `ghcr.io/avandeputte/iosuite/iocontact` |
 | Any Linux or Mac | `git clone https://github.com/avandeputte/iosuite && cd iosuite/iocontact && ./setup.sh` |
 | Port | 8640 (LDAP 3890) |
 | Source | [iosuite/iocontact](https://github.com/avandeputte/iosuite/tree/main/iocontact) |

@@ -21,7 +21,7 @@ permissions:
   packages: write
 
 env:
-  IMAGE: ghcr.io/avandeputte/iocalendar
+  IMAGE: ghcr.io/avandeputte/iosuite/iocalendar
 
 jobs:
   tests:
@@ -107,5 +107,5 @@ jobs:
           v="iocalendar-v$(python3 -c 'import re;print(re.search(r"__version__ = \"([^\"]+)\"", open("app/__init__.py").read()).group(1))')"
           if gh release view "$v" >/dev/null 2>&1; then echo "$v is released already"; exit 0; fi
           git log -1 --format=%B > notes.md
-          printf '\n\nImage: `ghcr.io/avandeputte/iocalendar:%s` (also `latest`).\n' "${v#iocalendar-}" >> notes.md
+          printf '\n\nImage: `ghcr.io/avandeputte/iosuite/iocalendar:%s` (also `latest`).\n' "${v#iocalendar-}" >> notes.md
           gh release create "$v" --target "$GITHUB_SHA" --title "ioCalendar ${v#iocalendar-}: $(git log -1 --format=%s | sed -E 's/^v[0-9.]+: //; s/ \(#[0-9]+\)$//')" --notes-file notes.md

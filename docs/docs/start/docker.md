@@ -8,14 +8,14 @@ Every app is published as a public image for amd64 and arm64:
 
 | App | Image | Compose file |
 | --- | --- | --- |
-| ioPix | `ghcr.io/avandeputte/iopix` | [docker-compose.yml](https://github.com/avandeputte/iosuite/blob/main/iopix/docker-compose.yml) (MariaDB included) |
-| ioNote | `ghcr.io/avandeputte/ionote` | [docker-compose.yml](https://github.com/avandeputte/iosuite/blob/main/ionote/docker-compose.yml) |
-| ioCalendar | `ghcr.io/avandeputte/iocalendar` | [docker-compose.yml](https://github.com/avandeputte/iosuite/blob/main/iocalendar/docker-compose.yml) |
-| ioStart | `ghcr.io/avandeputte/iostart` | [docker-compose.yml](https://github.com/avandeputte/iosuite/blob/main/iostart/docker-compose.yml) |
-| ioContact | `ghcr.io/avandeputte/iocontact` | [docker-compose.yml](https://github.com/avandeputte/iosuite/blob/main/iocontact/docker-compose.yml) |
-| ioHealth | `ghcr.io/avandeputte/iohealth` | [docker-compose.yml](https://github.com/avandeputte/iosuite/blob/main/iohealth/docker-compose.yml) |
-| ioTask | `ghcr.io/avandeputte/iotask` | [docker-compose.yml](https://github.com/avandeputte/iosuite/blob/main/iotask/docker-compose.yml) |
-| ioRecipe | `ghcr.io/avandeputte/iorecipe` | [docker-compose.yml](https://github.com/avandeputte/iosuite/blob/main/iorecipe/docker-compose.yml) |
+| ioPix | `ghcr.io/avandeputte/iosuite/iopix` | [docker-compose.yml](https://github.com/avandeputte/iosuite/blob/main/iopix/docker-compose.yml) (MariaDB included) |
+| ioNote | `ghcr.io/avandeputte/iosuite/ionote` | [docker-compose.yml](https://github.com/avandeputte/iosuite/blob/main/ionote/docker-compose.yml) |
+| ioCalendar | `ghcr.io/avandeputte/iosuite/iocalendar` | [docker-compose.yml](https://github.com/avandeputte/iosuite/blob/main/iocalendar/docker-compose.yml) |
+| ioStart | `ghcr.io/avandeputte/iosuite/iostart` | [docker-compose.yml](https://github.com/avandeputte/iosuite/blob/main/iostart/docker-compose.yml) |
+| ioContact | `ghcr.io/avandeputte/iosuite/iocontact` | [docker-compose.yml](https://github.com/avandeputte/iosuite/blob/main/iocontact/docker-compose.yml) |
+| ioHealth | `ghcr.io/avandeputte/iosuite/iohealth` | [docker-compose.yml](https://github.com/avandeputte/iosuite/blob/main/iohealth/docker-compose.yml) |
+| ioTask | `ghcr.io/avandeputte/iosuite/iotask` | [docker-compose.yml](https://github.com/avandeputte/iosuite/blob/main/iotask/docker-compose.yml) |
+| ioRecipe | `ghcr.io/avandeputte/iosuite/iorecipe` | [docker-compose.yml](https://github.com/avandeputte/iosuite/blob/main/iorecipe/docker-compose.yml) |
 
 ## One app
 

@@ -136,7 +136,7 @@ disk as the database.
 docker compose up -d     # edit the CHANGE ME spots in docker-compose.yml first
 ```
 
-The image (`ghcr.io/avandeputte/iobackup`) has the MariaDB client in it; mount the folder local backups go to at
+The image (`ghcr.io/avandeputte/iosuite/iobackup`) has the MariaDB client in it; mount the folder local backups go to at
 `/backups`, and `/data` for the work space a backup is put together in.
 
 ### Any Linux or Mac

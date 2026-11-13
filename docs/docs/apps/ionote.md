@@ -37,7 +37,7 @@ about 60 MB); the Mac and iPhone read the text on the device.
 | | |
 | --- | --- |
 | Proxmox VE | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/ionote/proxmox/ct/ionote.sh)"` |
-| Docker | [docker-compose.yml](https://github.com/avandeputte/iosuite/blob/main/ionote/docker-compose.yml): the image `ghcr.io/avandeputte/ionote` |
+| Docker | [docker-compose.yml](https://github.com/avandeputte/iosuite/blob/main/ionote/docker-compose.yml): the image `ghcr.io/avandeputte/iosuite/ionote` |
 | Any Linux or Mac | `git clone https://github.com/avandeputte/iosuite && cd iosuite/ionote && ./setup.sh` |
 | Port | 8610 |
 | Source | [ionote](https://github.com/avandeputte/iosuite/tree/main/ionote) (server), [ionote-apps](https://github.com/avandeputte/iosuite-apps/tree/main/ionote) (Mac, iPhone, iPad) |

@@ -7,7 +7,7 @@
 # The image is public on GitHub's registry: no login is needed to pull it.
 services:
   iohealth:
-    image: ghcr.io/avandeputte/iohealth:latest   # or a version such as 2.7.0
+    image: ghcr.io/avandeputte/iosuite/iohealth:latest   # or a version such as 2.7.0
     build:
       context: ..                    # the root of the suite's repository (shared/ is needed too)
       dockerfile: iohealth/Dockerfile

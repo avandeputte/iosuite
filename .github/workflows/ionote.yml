@@ -21,7 +21,7 @@ permissions:
   packages: write
 
 env:
-  IMAGE: ghcr.io/avandeputte/ionote
+  IMAGE: ghcr.io/avandeputte/iosuite/ionote
 
 jobs:
   tests:

@@ -40,7 +40,7 @@ to addresses on your own network; anything else must be HTTPS.
 | | |
 | --- | --- |
 | Proxmox VE | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/iohealth/proxmox/ct/iohealth.sh)"` |
-| Docker | [docker-compose.yml](https://github.com/avandeputte/iosuite/blob/main/iohealth/docker-compose.yml): the image `ghcr.io/avandeputte/iohealth` |
+| Docker | [docker-compose.yml](https://github.com/avandeputte/iosuite/blob/main/iohealth/docker-compose.yml): the image `ghcr.io/avandeputte/iosuite/iohealth` |
 | Any Linux or Mac | `git clone https://github.com/avandeputte/iosuite && cd iosuite/iohealth && ./setup.sh` |
 | Port | 8650 (the web app and the phone's uploads) |
 | Source | [iohealth](https://github.com/avandeputte/iosuite/tree/main/iohealth) (server), [iohealth-apps](https://github.com/avandeputte/iosuite-apps/tree/main/iohealth) (the ioHealthSync iPhone app) |

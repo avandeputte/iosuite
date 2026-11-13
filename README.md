@@ -45,7 +45,7 @@ curl -fsSLO https://raw.githubusercontent.com/avandeputte/iosuite/main/docker-co
 docker compose up -d     # edit the CHANGE ME spots first
 ```
 
-**One app in Docker.** The `docker-compose.yml` in the app's folder; the images are `ghcr.io/avandeputte/<app>`.
+**One app in Docker.** The `docker-compose.yml` in the app's folder; the images are `ghcr.io/avandeputte/iosuite/<app>`.
 
 **Proxmox.** One container per app:
 
