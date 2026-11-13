@@ -1,0 +1,30 @@
+{
+  "name": "ioPix",
+  "short_name": "ioPix",
+  "description": "Browse and search a digiKam photo library",
+  "start_url": "./#/explore",
+  "scope": "./",
+  "share_target": { "action": "share", "method": "POST", "enctype": "multipart/form-data", "params": { "files": [{ "name": "files", "accept": ["image/*", "video/*"] }] } },
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#3b4a8c",
+  "theme_color": "#3b4a8c",
+  "icons": [
+    {
+      "src": "static/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "static/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "static/icons/icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

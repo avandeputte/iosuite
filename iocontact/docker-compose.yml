@@ -1,0 +1,31 @@
+# ioContact with Docker: `docker compose up -d` pulls the published image; `docker compose up -d --build` builds it
+# from this checkout. Works as a stack in Dockge / Portainer. Edit the CHANGE ME spots.
+services:
+  iocontact:
+    image: ghcr.io/avandeputte/iosuite/iocontact:latest
+    build: {context: .., dockerfile: iocontact/Dockerfile}   # from a checkout of the suite's repository: its root is the build context
+    container_name: iocontact
+    restart: unless-stopped
+    logging:                          # the output Docker keeps (the app's log, again): at most 3 files of 5 MB
+      driver: json-file
+      options: {max-size: 5m, max-file: "3"}
+    ports:
+      - "8640:8640"     # web app, CardDAV (/dav/), REST API (/api/), birthday calendar (/cal/)
+      - "389:3890"      # LDAP directory for mail apps (read-only)
+    environment:
+      TZ: America/New_York
+      DB_HOST: db.example.lan         # CHANGE ME: your MariaDB host
+      DB_PORT: "3306"
+      DB_NAME: contacts
+      DB_USER: contacts
+      DB_PASSWORD: change-me          # CHANGE ME
+      # the Shared ioSuite database (accounts, sessions and settings shared by every app of the suite); by default on DB_HOST
+      IOSUITE_DB_NAME: iosuite
+      IOSUITE_DB_USER: iosuite
+      IOSUITE_DB_PASSWORD: change-me  # CHANGE ME
+      ADMIN_USER: admin               # the first admin, made on the first start (or remove both and make it in the browser)
+      ADMIN_PASSWORD: change-me-please  # CHANGE ME (8 characters or more)
+      # PUBLIC_URL: https://contacts.example.com   # behind a reverse proxy: links in the calendar feed and Settings
+      # INTERNAL_URL: http://192.168.1.151:8640   # the host's LAN address and port, kept in the suite's list of apps (a container cannot tell)
+      # COOKIE_DOMAIN: example.com                 # one sign-in for every app of the suite under this domain
+      # AUTH_PROXY: cloudflare        # sign-in at the proxy, as in iopix (see README)

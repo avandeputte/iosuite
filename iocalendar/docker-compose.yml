@@ -1,0 +1,32 @@
+# ioCalendar with Docker: `docker compose up -d` pulls the published image; `docker compose up -d --build` builds it
+# from this checkout. Works as a stack in Dockge / Portainer. Edit the CHANGE ME spots.
+services:
+  iocalendar:
+    image: ghcr.io/avandeputte/iosuite/iocalendar:latest
+    build: {context: .., dockerfile: iocalendar/Dockerfile}   # from a checkout of the suite's repository: its root is the build context
+    container_name: iocalendar
+    restart: unless-stopped
+    logging:                          # the output Docker keeps (the app's log, again): at most 3 files of 5 MB
+      driver: json-file
+      options: {max-size: 5m, max-file: "3"}
+    ports:
+      - "8620:8620"     # web app, CalDAV (/dav/), REST API (/api/), subscription links (/ics/), MCP (/mcp)
+    environment:
+      TZ: America/New_York            # the family's time zone, for times written without one
+      DB_HOST: db.example.lan         # CHANGE ME: your MariaDB host
+      DB_PORT: "3306"
+      DB_NAME: calendar
+      DB_USER: calendar
+      DB_PASSWORD: change-me          # CHANGE ME
+      # the Shared ioSuite database: accounts and suite-wide settings (the same one every app of the suite uses)
+      # IOSUITE_DB_HOST: db.example.lan   # default: DB_HOST
+      # IOSUITE_DB_PORT: "3306"            # default: DB_PORT
+      IOSUITE_DB_NAME: iosuite
+      IOSUITE_DB_USER: iosuite
+      IOSUITE_DB_PASSWORD: change-me  # CHANGE ME
+      # ADMIN_USER: admin             # a first admin, made on the first start when there is no account yet
+      # ADMIN_PASSWORD: change-me-please
+      # PUBLIC_URL: https://calendar.example.com   # behind a reverse proxy: the links in Settings and the Apple profile
+      # INTERNAL_URL: http://192.168.1.151:8620   # the host's LAN address and port, kept in the suite's list of apps (a container cannot tell)
+      # COOKIE_DOMAIN: example.com                 # one sign-in for every app of the suite under this domain
+      # AUTH_PROXY: cloudflare        # sign-in at the proxy, as in the other io apps (see README)

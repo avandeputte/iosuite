@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "iorecipe"
+version = "0.6.0"
+description = "Self-hosted recipes for the family: web app with photos and import from the web, REST, MCP"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "GPL-3.0-or-later"
+dependencies = [
+  "iosuite-shared",   # the suite's shared library (shared/ of this repository): setup.sh, update.sh and the Dockerfile install it from there, at the same commit
+  "fastapi<1",
+  "uvicorn<1",
+  "pymysql<2",
+  "python-multipart<1",
+  "pyjwt[crypto]<3",              # Cloudflare Access tokens (proxy sign-in)
+  "mcp<3",                        # the MCP server at /mcp
+  "pillow>=10,<13",               # the recipe photos: checked, turned upright, made smaller
+]
+
+[project.optional-dependencies]
+# the AI that reads a page without recipe data, on this server (app/ai.py): llama.cpp, compiled when it is installed
+ai = ["llama-cpp-python>=0.3,<0.4"]
+test = ["pytest<10", "httpx<1", "pyflakes<4"]
+
+[project.urls]
+Homepage = "https://github.com/avandeputte/iosuite/tree/main/iorecipe"
+
+[tool.setuptools.packages.find]
+include = ["app*"]

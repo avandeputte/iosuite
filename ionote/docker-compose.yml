@@ -1,0 +1,52 @@
+# ionote with Docker: `docker compose up -d` pulls the published image; `docker compose up -d --build` builds it
+# from this checkout instead. Works as a stack in Dockge / Portainer. Edit the "CHANGE ME" spots (the databases and
+# the admin password). Everything ionote keeps (notes, pictures, accounts, settings) is in the MariaDB database;
+# the named volume only holds the session secret and the log.
+#
+# The image is public on GitHub's registry: no login is needed to pull it.
+services:
+  ionote:
+    image: ghcr.io/avandeputte/iosuite/ionote:latest
+    build:
+      context: ..                    # the root of the suite's repository (shared/ is needed too)
+      dockerfile: ionote/Dockerfile
+      # args: { OCR: "1" }
+    container_name: ionote
+    restart: unless-stopped
+    logging:                          # the output Docker keeps (the app's log, again): at most 3 files of 5 MB
+      driver: json-file
+      options: {max-size: 5m, max-file: "3"}
+    ports:
+      - "8610:8610"
+    volumes:
+      - ionote-data:/data
+    environment:
+      TZ: America/New_York
+      DB_TYPE: mysql
+      DB_HOST: db.example.lan                       # CHANGE ME: your MariaDB host or IP
+      DB_PORT: "3306"
+      DB_NAME: notes
+      DB_USER: notes
+      DB_PASSWORD: change-me                        # CHANGE ME
+      # the Shared ioSuite database (MariaDB): accounts, sessions and suite-wide settings, shared with the other
+      # ioThing apps
+      # (same server as DB_HOST / DB_PORT unless IOSUITE_DB_HOST / IOSUITE_DB_PORT are set)
+      IOSUITE_DB_NAME: iosuite
+      IOSUITE_DB_USER: iosuite
+      IOSUITE_DB_PASSWORD: change-me                # CHANGE ME
+      # the first admin account, created on the first start (remove both lines to start open and create it in the web app)
+      ADMIN_USER: admin
+      ADMIN_PASSWORD: change-me-please              # CHANGE ME (8 characters or more)
+      # the address people and the other apps reach ionote at, and the domain the sign-in is shared on
+      # PUBLIC_URL: https://notes.example.com
+      # INTERNAL_URL: http://192.168.1.151:8610   # the host's LAN address and port, kept in the suite's list of apps (a container cannot tell)
+      # COOKIE_DOMAIN: example.com
+      # sign-in at Cloudflare Access (see README): AUTH_PROXY: cloudflare, CF_ACCESS_TEAM, CF_ACCESS_AUD
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8610/api/status', timeout=4)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+
+volumes:
+  ionote-data:

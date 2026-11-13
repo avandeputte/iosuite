@@ -1,0 +1,2 @@
+# each app folder has its own .gitignore; this one is for the repository root
+.DS_Store

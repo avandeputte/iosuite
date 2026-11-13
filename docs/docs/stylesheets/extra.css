@@ -1,0 +1,110 @@
+/* The landing page's palette and type, applied to Material. Light and dark
+   follow the system, exactly as the landing page does; the variables are the
+   landing page's own (landing/index.html), so the two halves of the site
+   read as one. */
+:root, [data-md-color-scheme="default"] {
+  --bg:#f3f4f7; --card:#ffffff; --ink:#1b2236; --body:#333c52; --muted:#5d6680;
+  --accent:#3b4a8c; --gold:#f3c96b; --line:#dfe2ea;
+  --term-bg:#1b2236; --term-fg:#dde2ee;
+  --sans:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,'SFMono-Regular',Menlo,Consolas,monospace;
+
+  --md-default-bg-color:var(--bg);
+  --md-default-fg-color:var(--body);
+  --md-default-fg-color--light:var(--muted);
+  --md-default-fg-color--lighter:#8b93aa;
+  --md-default-fg-color--lightest:var(--line);
+  --md-primary-fg-color:var(--bg);
+  --md-primary-bg-color:var(--ink);
+  --md-accent-fg-color:var(--accent);
+  --md-accent-fg-color--transparent:rgba(59,74,140,.10);
+  --md-typeset-color:var(--body);
+  --md-typeset-a-color:var(--accent);
+  --md-code-bg-color:var(--card);
+  --md-code-fg-color:var(--ink);
+  --md-admonition-bg-color:var(--card);
+  --md-footer-bg-color:var(--card);
+  --md-footer-bg-color--dark:var(--bg);
+  --md-footer-fg-color:var(--muted);
+  --md-footer-fg-color--light:var(--muted);
+  --md-footer-fg-color--lighter:#8b93aa;
+  --md-typeset-table-color:var(--line);
+  --md-typeset-kbd-color:var(--card);
+  --md-text-font:var(--sans);
+  --md-code-font:var(--mono);
+}
+[data-md-color-scheme="slate"] {
+  --bg:#0f1320; --card:#171c2e; --ink:#eef0f6; --body:#c9cedd; --muted:#8c93ab;
+  --accent:#f3c96b; --gold:#f3c96b; --line:#262c44;
+  --term-bg:#0c101b; --term-fg:#dde2ee;
+
+  --md-default-bg-color:var(--bg);
+  --md-default-fg-color:var(--body);
+  --md-default-fg-color--light:var(--muted);
+  --md-default-fg-color--lighter:#6b7391;
+  --md-default-fg-color--lightest:var(--line);
+  --md-primary-fg-color:var(--bg);
+  --md-primary-bg-color:var(--ink);
+  --md-accent-fg-color:var(--accent);
+  --md-accent-fg-color--transparent:rgba(243,201,107,.12);
+  --md-typeset-color:var(--body);
+  --md-typeset-a-color:var(--accent);
+  --md-code-bg-color:var(--card);
+  --md-code-fg-color:var(--term-fg);
+  --md-admonition-bg-color:var(--card);
+  --md-footer-bg-color:var(--card);
+  --md-footer-bg-color--dark:var(--bg);
+  --md-footer-fg-color:var(--muted);
+  --md-footer-fg-color--light:var(--muted);
+  --md-footer-fg-color--lighter:#6b7391;
+  --md-typeset-table-color:var(--line);
+  --md-typeset-kbd-color:var(--card);
+}
+
+body{font-family:var(--sans)}
+.md-typeset{font-size:.82rem;line-height:1.62}
+.md-typeset h1,.md-typeset h2,.md-typeset h3{color:var(--ink);letter-spacing:-.01em}
+
+/* the header, like the landing page's: sticky, translucent, a hairline under it */
+.md-header{background:color-mix(in srgb,var(--bg) 82%,transparent);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid var(--line);box-shadow:none;color:var(--ink)}
+.md-header__title{display:none}
+.md-header__button.md-logo{padding:.4rem .6rem}
+.md-header__button.md-logo img,.md-header__button.md-logo svg{display:none}
+/* the brand, as the landing page draws it */
+.ios-brand{display:inline-flex;align-items:center;gap:11px;color:var(--ink);white-space:nowrap}
+.md-header__button.md-logo .ios-brand img{width:30px;height:30px;display:block;border-radius:7px}
+.ios-brand b{font-weight:700;font-size:.98rem;letter-spacing:-.01em}
+.ios-brand b .io{color:#c99a2e}
+[data-md-color-scheme="slate"] .ios-brand b .io{color:var(--gold)}
+.ios-brand b .suite{color:var(--muted);font-weight:400}
+.md-search__form{background:var(--card);border:1px solid var(--line);border-radius:8px}
+.md-search__input{color:var(--ink)}
+.md-search__input::placeholder{color:var(--muted)}
+
+/* navigation */
+.md-sidebar .md-nav__title{color:var(--muted);font-family:var(--mono);letter-spacing:.08em;text-transform:uppercase;font-size:.62rem;background:transparent;box-shadow:none}
+.md-nav--primary .md-nav__title{background:transparent}
+.md-nav__item--section>.md-nav__link{color:var(--muted);font-family:var(--mono);letter-spacing:.08em;text-transform:uppercase;font-size:.62rem}
+.md-nav__link{color:var(--body)}
+.md-nav__item .md-nav__link--active,.md-nav__link:hover{color:var(--accent)}
+
+/* content */
+.md-typeset a{color:var(--accent)} .md-typeset a:hover{text-decoration:underline}
+.md-typeset code{background:var(--card);border:1px solid var(--line);border-radius:5px;padding:.1em .35em;font-size:.86em;color:var(--ink)}
+.md-typeset pre>code{border:0;padding:0;background:transparent;color:var(--term-fg)}
+.md-typeset .highlight,.md-typeset pre{background:var(--term-bg);border-radius:10px;border:1px solid var(--line)}
+.md-typeset .highlight code{background:transparent}
+.md-typeset table:not([class]){font-size:.78rem;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.md-typeset table:not([class]) th{background:var(--card);color:var(--ink);font-weight:600}
+.md-typeset img{border-radius:10px;border:1px solid var(--line)}
+.md-typeset .admonition,.md-typeset details{border-left-width:3px;border-radius:9px;background:var(--card);box-shadow:none;font-size:.78rem}
+.md-typeset .md-button{border:1px solid var(--line);color:var(--ink);border-radius:9px;background:var(--card)}
+.md-typeset .md-button--primary{background:var(--gold);color:#1a1608;border-color:var(--gold)}
+.md-footer{border-top:1px solid var(--line)}
+.md-footer-meta{background:var(--bg)}
+
+/* the app name in a page title: "ioPix <small>photos</small>" */
+.md-typeset h1 small{font-size:.5em;font-weight:400;color:var(--muted);margin-left:.4em;letter-spacing:0}
+.md-typeset .admonition.tip,.md-typeset details.tip{border-color:var(--gold)}
+.md-typeset .tip>.admonition-title,.md-typeset .tip>summary{background-color:rgba(243,201,107,.14)}
+.md-typeset .tip>.admonition-title::before,.md-typeset .tip>summary::before{background-color:#c99a2e}

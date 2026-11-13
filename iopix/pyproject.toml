@@ -1,0 +1,44 @@
+# iopix: one place for the Python dependencies. The base set runs the viewer;
+# the optional groups add the AI features (setup.sh asks which ones you want):
+#   pip install -e '.[search,ocr,objects]'        (or: '.[ai]' for those three)
+#   pip install -e '.[captions]' --extra-index-url https://download.pytorch.org/whl/cpu
+#   pip install -e '.[test]'                      (pytest, Playwright)
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "iopix"
+version = "1.158.0"
+description = "Web front end for a digiKam library, with local AI search"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "GPL-3.0-or-later"
+# upper bounds: the next major version of each package as installed and tested; raise them on purpose, after a test run
+dependencies = [
+  "fastapi<1",
+  "uvicorn<1",
+  "pillow<13",
+  "pillow-heif<2",
+  "orjson<4",
+  "pymysql<2",
+  "python-multipart<1",
+  "mcp<3",
+  "pyjwt[crypto]<3",   # Cloudflare Access tokens (proxy sign-in)
+  "iosuite-shared",   # the suite's shared library (shared/ of this repository): setup.sh, update.sh and the Dockerfile install it from there, at the same commit
+]
+
+[project.optional-dependencies]
+search = ["fastembed<1", "huggingface_hub<2", "numpy<3"]            # CLIP / SigLIP 2 content search (ONNX Runtime)
+ocr = ["rapidocr<4", "pyspellchecker<1"]                             # text in photos (word lists keep it to words)
+objects = ["numpy<3", "onnxruntime<2"]                               # YOLOX object detection
+captions = ["torch>=2,<3", "transformers>=5,<6"]                     # BLIP photo descriptions (large; CPU wheels from the PyTorch index)
+speech = ["onnx-asr<1", "numpy<3", "onnxruntime<2"]                  # speech in videos (Parakeet / Whisper with ONNX Runtime)
+ai = ["fastembed<1", "huggingface_hub<2", "numpy<3", "rapidocr<4", "pyspellchecker<1", "onnxruntime<2"]
+test = ["pytest<10", "httpx<1", "playwright<2", "pytest-playwright<1", "pyflakes<4"]
+
+[project.urls]
+Homepage = "https://github.com/avandeputte/iosuite/tree/main/iopix"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
