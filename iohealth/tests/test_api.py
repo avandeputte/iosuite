@@ -1,0 +1,361 @@
+"""Sign-in, uploads per account, and the web API over them."""
+import gzip
+import json
+from datetime import datetime, timedelta, timezone
+
+import pytest
+
+from app import db
+
+UTC = timezone.utc
+
+
+def ndjson(*msgs) -> bytes:
+    return b"".join(json.dumps(m).encode() + b"\n" for m in msgs)
+
+
+def sample(uuid, typ, t, value, unit="count", kind="quantity", source="Watch", minutes=1, **extra):
+    s = {"uuid": uuid, "type": typ, "kind": kind, "start": t.strftime("%Y-%m-%dT%H:%M:%SZ"), "end": (t + timedelta(minutes=minutes)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+         "value": value, "unit": unit, "source": {"name": source}}
+    s.update(extra)
+    return {"sample": {"_0": s}}
+
+
+def upload(client, token, *msgs, seq=1, gz=True):
+    r = client.post("/v1/sessions", json={"deviceName": "aphone", "systemVersion": "26.1", "fullResync": False}, headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 201, r.text
+    sid = r.json()["sessionId"]
+    body = ndjson(*msgs)
+    headers = {"Authorization": f"Bearer {token}", "X-Batch-Seq": str(seq), "Content-Type": "application/x-ndjson"}
+    if gz:
+        body, headers["Content-Encoding"] = gzip.compress(body), "gzip"
+    r = client.post(f"/v1/sessions/{sid}/items", content=body, headers=headers)
+    assert r.status_code == 200, r.text
+    applied = r.json()["applied"]
+    r = client.post(f"/v1/sessions/{sid}/finish", json={"totalSent": len(msgs)}, headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 200, r.text
+    return sid, applied, r.json()["received"]
+
+
+def app_password(client, label="iPhone"):
+    r = client.post("/api/auth/app-passwords", json={"label": label})
+    assert r.status_code == 200, r.text
+    return r.json()["password"]
+
+
+T0 = datetime(2026, 10, 1, 8, tzinfo=UTC)
+
+
+def test_everything_needs_an_account(client):
+    assert client.get("/v1/health").status_code == 200
+    st = client.get("/api/status").json()  # the suite's status is public: the shell reads it before anyone signs in
+    assert st["app"] == "iohealth" and st["usersExist"] is False and "lastSync" not in st
+    assert client.get("/api/series?type=step_count").status_code == 401
+    assert client.get("/").status_code == 200  # the shell, which shows the sign-in
+    r = client.post("/v1/sessions", json={"deviceName": "x"})
+    assert r.status_code == 401 and "detail" in r.json()
+
+
+def test_the_shell_its_files_and_the_icon_are_public(client):
+    """The suite's layout: the page at /, every file it names under /static/, the mark at suite.ICON."""
+    import json
+    import re
+    from iosuite_shared import suite
+    html = client.get("/").text
+    paths = re.findall(r'(?:src|href)="(static/[^"?]+)', html)
+    paths += [i["src"] for i in json.loads(client.get("/manifest.webmanifest").content)["icons"]]
+    assert paths and all(p.startswith("static/") for p in paths)
+    for p in ["/" + p for p in paths] + [suite.ICON, "/static/icons/apple-touch-icon.png"]:
+        assert client.get(p).status_code == 200, p
+
+
+def test_upload_with_app_password_and_read_back(client, admin):
+    pw = app_password(client)
+    assert pw.startswith("iohealth-")
+    sid, applied, received = upload(client, pw,
+                                    sample("s1", "step_count", T0, 100), sample("s2", "step_count", T0 + timedelta(minutes=5), 50, source="iPhone"),
+                                    sample("s3", "heart_rate", T0, 70, "count/min"), {"characteristic": {"key": "dateOfBirth", "value": "1980-01-01"}},
+                                    {"typeDone": {"type": "step_count", "added": 2, "deleted": 0}}, {"ecg": {"_0": {"uuid": "e"}}})
+    assert applied == 4 and received == 4
+    assert db.one("SELECT user_id FROM hlt_samples WHERE uuid = 's1'")[0] == admin["id"]
+    assert db.one("SELECT user_id, device FROM hlt_sync_log WHERE id = %s", (sid,)) == (admin["id"], "aphone")
+    # the rollup kept the hours up to date inside the batch
+    assert db.one("SELECT SUM(n) FROM hlt_sample_hourly WHERE type = 'step_count' AND user_id = %s", (admin["id"],))[0] == 2
+
+    types = {t["type"]: t for t in client.get("/api/types").json()}
+    assert types["step_count"]["count"] == 2 and types["step_count"]["cumulative"] and types["heart_rate"]["unit"] == "count/min"
+    s = client.get("/api/series", params={"type": "step_count", "from": "2026-10-01", "to": "2026-10-01", "bucket": "day", "tz": "Europe/Brussels"}).json()
+    assert [p["v"] for p in s["points"]] == [100]  # the biggest source, not the sum
+    st = client.get("/api/status").json()
+    assert st["lastSync"]["device"] == "aphone" and st["lastSync"]["items"] == 6
+    p = client.get("/api/profile").json()
+    assert p["age"] == 46 and p["maxHrFrom"] == "age"
+    assert client.get("/api/settings").json() == {}
+    assert client.put("/api/settings", json={"units": "imperial"}).json() == {"saved": 1}
+    assert client.get("/api/settings").json() == {"units": "imperial"}
+
+
+def test_duplicate_batch_is_skipped(client, admin):
+    pw = app_password(client)
+    r = client.post("/v1/sessions", json={"deviceName": "aphone"}, headers={"Authorization": f"Bearer {pw}"})
+    sid = r.json()["sessionId"]
+    h = {"Authorization": f"Bearer {pw}", "X-Batch-Seq": "1"}
+    assert client.post(f"/v1/sessions/{sid}/items", content=ndjson(sample("s1", "step_count", T0, 100)), headers=h).json()["applied"] == 1
+    assert client.post(f"/v1/sessions/{sid}/items", content=ndjson(sample("s1", "step_count", T0, 100)), headers=h).json() == {"applied": 0, "duplicate": True}
+    assert client.post(f"/v1/sessions/{sid}/items", content=b"{}", headers={**h, "X-Batch-Seq": "2"}).status_code == 400
+    assert client.post(f"/v1/sessions/{sid}/items", content=b"", headers={"Authorization": f"Bearer {pw}"}).status_code == 400
+    assert client.post("/v1/sessions/999999/items", content=b"", headers={**h, "X-Batch-Seq": "3"}).status_code == 404
+
+
+def test_accounts_see_only_their_own_data(client, admin):
+    alex_pw = app_password(client)
+    upload(client, alex_pw, sample("a1", "step_count", T0, 100), {"workout": {"_0": {
+        "uuid": "w1", "activityType": "running", "activityTypeRaw": 37, "start": "2026-10-01T07:00:00Z", "end": "2026-10-01T07:30:00Z", "duration": 1800,
+        "source": {"name": "Watch"}, "statistics": [{"type": "distance_walking_running", "unit": "km", "sum": 5}], "events": [], "activities": []}}})
+    # a second account: a member, who uploads their own
+    r = client.post("/api/users", json={"name": "bo", "password": "secretpw2", "role": "member"})
+    assert r.status_code == 200, r.text
+    client.cookies.clear()
+    assert client.post("/api/auth/login", json={"name": "bo", "password": "secretpw2"}).status_code == 200
+    bo_pw = app_password(client, "Bo's phone")
+    upload(client, bo_pw, sample("b1", "step_count", T0, 7), sample("a1", "step_count", T0, 999))  # a1 is alex's: left alone
+    assert db.one("SELECT value, user_id FROM hlt_samples WHERE uuid = 'a1'") == (100, admin["id"])
+    types = {t["type"]: t for t in client.get("/api/types").json()}
+    assert types["step_count"]["count"] == 1
+    assert client.get("/api/workouts").json() == []
+    assert client.get("/api/workouts/w1").status_code == 404
+    assert client.get("/api/records").json()["totals"] == []
+    # alex still sees the workout
+    client.cookies.clear()
+    client.post("/api/auth/login", json={"name": "alex", "password": "secretpw1"})
+    ws = client.get("/api/workouts").json()
+    assert len(ws) == 1 and ws[0]["distance"] == 5000 and ws[0]["hasRoute"] is False
+    w = client.get("/api/workouts/w1").json()
+    assert w["activityType"] == "running" and w["statistics"][0]["sum"] == 5
+    rec = client.get("/api/records").json()
+    assert rec["totals"][0]["count"] == 1 and any(r["name"] == "Farthest" for r in rec["records"])
+    # a viewer may not upload
+    client.post("/api/users", json={"name": "cy", "password": "secretpw3", "role": "viewer"})
+    client.cookies.clear()
+    client.post("/api/auth/login", json={"name": "cy", "password": "secretpw3"})
+    cy_pw = app_password(client)
+    r = client.post("/v1/sessions", json={"deviceName": "x"}, headers={"Authorization": f"Bearer {cy_pw}"})
+    assert r.status_code == 403
+
+
+def test_sleep_glucose_and_deletes(client, admin):
+    pw = app_password(client)
+    night = datetime(2026, 10, 1, 22, tzinfo=UTC)
+    glucose = [sample(f"g{i}", "blood_glucose", T0 + timedelta(minutes=5 * i), 100 + i, "mg/dL") for i in range(10)]
+    upload(client, pw, sample("sl1", "sleep_analysis", night, None, None, "category", minutes=420, text="core"),
+           sample("sl2", "sleep_analysis", night + timedelta(minutes=420), None, None, "category", minutes=60, text="rem"),
+           {"activitySummary": {"_0": {"date": "2026-10-01", "activeEnergyBurned": 600, "activeEnergyBurnedGoal": 500, "appleExerciseTime": 40,
+                                        "appleExerciseTimeGoal": 30, "appleStandHours": 12, "appleStandHoursGoal": 12, "appleMoveTime": 0, "appleMoveTimeGoal": 0}}},
+           *glucose)
+    nights = client.get("/api/sleep", params={"from": "2026-10-01", "to": "2026-10-03", "tz": "UTC"}).json()
+    assert len(nights) == 1 and nights[0]["asleep"] == 480 and nights[0]["date"] == "2026-10-02"
+    one = client.get("/api/sleep", params={"date": "2026-10-02", "tz": "UTC"}).json()
+    assert len(one["segments"]) == 2
+    g = client.get("/api/glucose", params={"from": "2026-10-01", "to": "2026-10-01", "tz": "UTC"}).json()
+    assert g["stats"]["readings"] == 10 and g["stats"]["min"] == 100 and len(g["readings"]) == 10
+    act = client.get("/api/activity", params={"from": "2026-10-01", "to": "2026-10-01", "tz": "UTC"}).json()
+    assert act == [{"date": "2026-10-01", "move": 600, "moveGoal": 500, "exercise": 40, "exerciseGoal": 30, "stand": 12, "standGoal": 12}]
+    types = {t["type"]: t for t in client.get("/api/types").json()}
+    assert types["activity_move"]["kind"] == "ring" and types["sleep_analysis"]["unit"] == "h"
+    s = client.get("/api/series", params={"type": "activity_move", "from": "2026-10-01", "to": "2026-10-01", "tz": "UTC"}).json()
+    assert [p["v"] for p in s["points"]] == [600]
+    rec = client.get("/api/records").json()
+    assert rec["rings"][3]["longest"] == 1
+    # a delete removes the sample and its hour
+    upload(client, pw, {"deleted": {"uuid": "g0", "type": "blood_glucose"}}, seq=1)
+    assert db.one("SELECT COUNT(*) FROM hlt_samples WHERE type = 'blood_glucose'")[0] == 9
+    assert db.one("SELECT uuid FROM hlt_deleted_objects")[0] == "g0"
+
+
+def workout_msg(uuid, stats, events=()):
+    return {"workout": {"_0": {
+        "uuid": uuid, "activityType": "running", "activityTypeRaw": 37, "start": "2026-10-01T07:00:00Z", "end": "2026-10-01T07:30:00Z", "duration": 1800,
+        "source": {"name": "Watch"}, "statistics": [{"type": t, "unit": "km", "sum": v} for t, v in stats],
+        "events": [{"type": e, "start": "2026-10-01T07:10:00Z", "end": "2026-10-01T07:11:00Z"} for e in events], "activities": []}}}
+
+
+def route_point(workout, route, minute, lat=50.0):
+    return {"routePoint": {"_0": {"workoutUUID": workout, "routeUUID": route, "time": f"2026-10-01T07:{minute:02d}:00Z", "latitude": lat, "longitude": 4.0}}}
+
+
+def test_workout_children_follow_the_workout(client, admin):
+    pw = app_password(client)
+    upload(client, pw, workout_msg("w1", [("distance_walking_running", 5), ("heart_rate", 150)], ["pause"]),
+           route_point("w1", "r1", 1), route_point("w1", "r1", 2), sample("hb1", "heartbeat_series", T0, None, None, "heartbeatSeries"),
+           {"heartbeat": {"seriesUUID": "hb1", "timeSinceStart": 0.5}}, {"heartbeat": {"seriesUUID": "hb1", "timeSinceStart": 1.2}})
+    # a resent workout keeps only the statistics it still has
+    upload(client, pw, workout_msg("w1", [("distance_walking_running", 6)]))
+    assert db.q("SELECT type, sum FROM hlt_workout_statistics WHERE workout_uuid = 'w1'") == [("distance_walking_running", 6)]
+    # deleting the workout and the heartbeat series takes their rows with them
+    upload(client, pw, {"deleted": {"uuid": "w1", "type": "workout"}}, {"deleted": {"uuid": "hb1", "type": "heartbeat_series"}})
+    for t in ("hlt_workout_statistics", "hlt_workout_events", "hlt_workout_activities", "hlt_workout_route_points"):
+        assert db.one(f"SELECT COUNT(*) FROM {t} WHERE workout_uuid = 'w1'")[0] == 0, t
+    assert db.one("SELECT COUNT(*) FROM hlt_heartbeats")[0] == 0
+
+
+def test_another_account_cannot_add_to_a_workout(client, admin):
+    alex_pw = app_password(client)
+    upload(client, alex_pw, workout_msg("w1", [("distance_walking_running", 5)]), route_point("w1", "r1", 1), route_point("w1", "r1", 2))
+    client.post("/api/users", json={"name": "bo", "password": "secretpw2", "role": "editor"})
+    client.cookies.clear()
+    client.post("/api/auth/login", json={"name": "bo", "password": "secretpw2"})
+    bo_pw = app_password(client, "Bo's phone")
+    upload(client, bo_pw, workout_msg("w1", [("heart_rate", 99)], ["pause"]), route_point("w1", "r2", 5, lat=10.0), route_point("w1", "r2", 6, lat=10.1))
+    client.cookies.clear()
+    client.post("/api/auth/login", json={"name": "alex", "password": "secretpw1"})
+    w = client.get("/api/workouts/w1").json()
+    assert [s["type"] for s in w["statistics"]] == ["distance_walking_running"] and w["events"] == []
+    assert all(abs(p[1] - 50) < 1 for p in w["route"])
+    rs = client.get("/api/routes", params={"from": "2026-09-01", "to": "2026-10-31"}).json()
+    assert len(rs) == 1 and all(abs(p[0] - 50) < 1 for p in rs[0]["points"])
+
+
+def test_oversized_upload_is_refused(client, admin, monkeypatch):
+    from app import upload as up
+    pw = app_password(client)
+    sid = client.post("/v1/sessions", json={"deviceName": "x"}, headers={"Authorization": f"Bearer {pw}"}).json()["sessionId"]
+    monkeypatch.setattr(up, "MAX_BODY", 1000)
+    r = client.post(f"/v1/sessions/{sid}/items", content=b"x" * 2000, headers={"Authorization": f"Bearer {pw}", "X-Batch-Seq": "1"})
+    assert r.status_code == 413
+
+
+@pytest.mark.parametrize("bad", ["2026-13-01", "nope"])
+def test_bad_dates(client, admin, bad):
+    r = client.get("/api/series", params={"type": "step_count", "from": bad})
+    assert r.status_code == 400 and "yyyy-mm-dd" in r.json()["detail"]
+
+
+def test_the_phone_signs_in_with_the_account_password(client, admin):
+    """HTTP Basic with the user name and account password, as the iPhone app sends it (an app password works there too)."""
+    import base64
+    client.cookies.clear()
+    basic = "Basic " + base64.b64encode(b"alex:secretpw1").decode()
+    r = client.post("/v1/sessions", json={"deviceName": "aphone"}, headers={"Authorization": basic})
+    assert r.status_code == 201 and r.json()["sessionId"]
+    wrong = "Basic " + base64.b64encode(b"alex:not-the-password").decode()
+    assert client.post("/v1/sessions", json={"deviceName": "aphone"}, headers={"Authorization": wrong}).status_code == 401
+
+
+def test_registers_in_the_suite_list(client):
+    from iosuite_shared import suite
+    from app import __version__
+    assert suite.get("iohealth") is None
+    client.get("/v1/health")
+    row = suite.get("iohealth")
+    assert row["name"] == "ioHealth" and row["version"] == __version__
+    assert row["description"] == "Health and fitness" and row["color"] == "#e8445a"
+
+
+def test_suite_apps_for_the_app_switcher(client):
+    """The app mark becomes a menu of the suite's other apps: /api/auth/suite lists them with an address and an
+    absolute icon, ioHealth among them."""
+    from iosuite_shared import suite
+    client.get("/v1/health")
+    suite.register("iopix", name="ioPix", url="https://photo.example.net", color="#123456")
+    r = client.get("/api/auth/suite").json()
+    assert r["app"] == "iohealth"
+    other = [a for a in r["items"] if a["app"] != r["app"]]
+    assert [(a["name"], a["url"], a["icon"]) for a in other] == [("ioPix", "https://photo.example.net", "https://photo.example.net/static/icons/mark.svg")]
+
+
+def test_uploads_are_declared_and_run_side_by_side(client, admin):
+    """/v1/* carries the uploader marker (a viewer gets 403 from it, nobody from the route body), and the rollup locks
+    let two accounts' batches overlap while the backfill waits for both."""
+    import threading
+    import time
+    from app import access, rollup
+    from app.main import app
+    from iosuite_shared import testing
+    roles = {p: access.declared(r) for _m, p, r in testing.api_routes(app) if p.startswith("/v1/")}
+    assert roles["/v1/sessions"] == ("uploader", True) and roles["/v1/sessions/{session_id}/items"] == ("uploader", True)
+    assert roles["/v1/health"] == ("public", False)
+    locks = rollup.Locks()
+    order = []
+    go = threading.Event()
+
+    def batch(uid):
+        with locks.batch(uid):
+            order.append(("in", uid))
+            go.wait(2)
+            order.append(("out", uid))
+
+    def alone():
+        with locks.alone():
+            order.append(("alone", None))
+    ts = [threading.Thread(target=batch, args=(1,)), threading.Thread(target=batch, args=(2,))]
+    for t in ts:
+        t.start()
+    time.sleep(0.1)
+    assert order == [("in", 1), ("in", 2)] or order == [("in", 2), ("in", 1)]  # different accounts: side by side
+    a = threading.Thread(target=alone)
+    a.start()
+    time.sleep(0.1)
+    assert ("alone", None) not in order  # the backfill waits for the batches
+    go.set()
+    for t in ts + [a]:
+        t.join(2)
+    assert order[-1] == ("alone", None)
+    # the same account: one after the other
+    order.clear()
+    go.clear()
+    ts = [threading.Thread(target=batch, args=(1,)), threading.Thread(target=batch, args=(1,))]
+    for t in ts:
+        t.start()
+    time.sleep(0.1)
+    assert order == [("in", 1)]
+    go.set()
+    for t in ts:
+        t.join(2)
+    assert order == [("in", 1), ("out", 1), ("in", 1), ("out", 1)]
+
+
+def test_the_reply_cache_has_a_size_and_works_a_reply_out_once():
+    """The cache of replies is limited by bytes (not by a count of replies of any size), drops the ones not asked for
+    longest, and two requests for the same reply at once work it out once."""
+    import threading
+    import time
+
+    from app.webapi import Cache
+
+    c = Cache(60, max_bytes=1000)
+    for i in range(20):
+        assert c.get(("u", i), 0, lambda: b"x" * 100) == b"x" * 100
+    assert c.bytes <= 1000 and len(c.m) == 10 and ("u", 19) in c.m and ("u", 0) not in c.m
+    assert c.get("big", 0, lambda: b"y" * 600) == b"y" * 600 and "big" not in c.m  # too large to keep: served, not stored
+    assert c.get("list", 0, lambda: [1, 2, 3]) == [1, 2, 3] and c.m["list"][2] == len(b"[1,2,3]")
+    # asked for twice at the same time: worked out once, both get it
+    runs, got = [], []
+
+    def slow():
+        runs.append(1)
+        time.sleep(0.2)
+        return b"answer"
+    ts = [threading.Thread(target=lambda: got.append(c.get("slow", 0, slow))) for _ in range(5)]
+    [t.start() for t in ts]
+    [t.join() for t in ts]
+    assert got == [b"answer"] * 5 and len(runs) == 1
+    # a failure reaches everyone who waited, and is not kept
+    def fail():
+        time.sleep(0.1)
+        raise LookupError("gone")
+    errs = []
+
+    def ask():
+        try:
+            c.get("bad", 0, fail)
+        except LookupError as e:
+            errs.append(str(e))
+    ts = [threading.Thread(target=ask) for _ in range(3)]
+    [t.start() for t in ts]
+    [t.join() for t in ts]
+    assert errs == ["gone"] * 3 and "bad" not in c.m
+    # a sync that finishes while a reply is worked out: that reply is served, not kept (it may be stale)
+    def during():
+        c.clear()
+        return b"old"
+    assert c.get("during", 0, during) == b"old" and "during" not in c.m and c.bytes == 0

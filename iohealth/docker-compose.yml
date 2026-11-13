@@ -1,0 +1,53 @@
+# ioHealth with Docker: `docker compose up -d` pulls the published image; `docker compose up -d --build` builds it
+# from this checkout instead. Works as a stack in Dockge / Portainer. Edit the "CHANGE ME" spots (the databases and
+# the admin password). The iPhone app uploads to port 8650 and the web app is on the same port; everything is
+# written to your MariaDB server (the server log goes to data/ inside the container). For HTTPS, put it behind your reverse proxy (see README.md), or
+# set TLS_CERT_FILE / TLS_KEY_FILE and mount the files.
+#
+# The image is public on GitHub's registry: no login is needed to pull it.
+services:
+  iohealth:
+    image: ghcr.io/avandeputte/iohealth:latest   # or a version such as 2.7.0
+    build:
+      context: .
+    container_name: iohealth
+    restart: unless-stopped
+    logging:                          # the output Docker keeps (the app's log, again): at most 3 files of 5 MB
+      driver: json-file
+      options: {max-size: 5m, max-file: "3"}
+    ports:
+      - "8650:8650"                             # host:container; change the host side if 8650 is taken
+    environment:
+      TZ: Europe/Brussels                         # fallback time zone for days and weeks; the browser normally sends its own
+      # --- The health data: MariaDB / MySQL (created on first start if the user may; tables are always created/migrated)
+      DB_HOST: db.example.lan                     # CHANGE ME: your MariaDB host or IP
+      DB_PORT: "3306"
+      DB_NAME: health
+      DB_USER: health
+      DB_PASSWORD: change-me                      # CHANGE ME
+      # --- The Shared ioSuite database: accounts, sessions and suite-wide settings, shared with the other ioThing apps
+      # (same server as DB_HOST / DB_PORT unless IOSUITE_DB_HOST / IOSUITE_DB_PORT are set)
+      IOSUITE_DB_NAME: iosuite
+      IOSUITE_DB_USER: iosuite
+      IOSUITE_DB_PASSWORD: change-me              # CHANGE ME
+      # the first admin account, created on the first start (remove both lines to create it from the sign-in screen)
+      ADMIN_USER: admin
+      ADMIN_PASSWORD: change-me-please            # CHANGE ME (8 characters or more)
+      # the address people and the other apps reach ioHealth at, and the domain the sign-in is shared on
+      # PUBLIC_URL: https://health.example.com
+      # INTERNAL_URL: http://192.168.1.151:8650   # the host's LAN address and port, kept in the suite's list of apps (a container cannot tell)
+      # COOKIE_DOMAIN: example.com
+      # MAP_TILE_URL: https://tile.openstreetmap.org/{z}/{x}/{y}.png   # map tiles for workout routes
+      # MAP_TILE_ATTRIBUTION: "&copy; OpenStreetMap contributors"
+      # UPDATE_CHECK: "0"                         # never ask GitHub whether a newer version exists
+      # sign-in at Cloudflare Access (see README): AUTH_PROXY: cloudflare, CF_ACCESS_TEAM, CF_ACCESS_AUD
+      # HTTPS served directly: set both and mount the files below
+      # TLS_CERT_FILE: /certs/fullchain.pem
+      # TLS_KEY_FILE: /certs/privkey.pem
+    # volumes:
+    #   - /path/to/certs:/certs:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8650/v1/health', timeout=4)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
