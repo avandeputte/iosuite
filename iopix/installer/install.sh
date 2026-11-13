@@ -33,7 +33,7 @@
 # Python venv and installs the packages; writes PREFIX/app/config.env;
 # then runs the app's own interactive setup (setup.sh: iopix's MariaDB database, features and model downloads,
 # admin account) and installs a systemd service. The app folder (with its venv) belongs to the service
-# user and a sudoers rule lets that user restart the service, so "Update now" in the web app (update.sh) works.
+# user and a sudoers rule lets that user restart the service, so updating from the web app (update.sh) works.
 # Running it again upgrades the code and keeps DATA. The library is
 # only ever read unless you edit metadata from the viewer, which backs every file up first.
 set -e

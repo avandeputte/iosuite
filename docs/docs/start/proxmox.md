@@ -71,4 +71,4 @@ the photo library. See [Several apps on one host](several-apps.md).
 ## Updating
 
 Inside the container, `update` pulls the latest code of each app and keeps the settings and data. Or use
-**Update now** in the web app (Settings › Server). See [Updates](../run/updates.md).
+**Update** in the web app (Settings › Global settings › Updates). See [Updates](../run/updates.md).

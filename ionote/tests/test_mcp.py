@@ -62,7 +62,8 @@ def test_off_until_switched_on(client, admin):
 def test_tools_are_listed(client, on):
     names = {t["name"] for t in _rpc(client, "tools/list")["result"]["tools"]}
     assert {"notes_overview", "search_notes", "get_note", "view_note_image", "create_note", "update_note", "organize_notes",
-            "delete_note", "manage_folder", "manage_tag", "diagnostics", "server_log", "check_for_update", "update_ionote"} <= names
+            "delete_note", "manage_folder", "manage_tag", "diagnostics", "server_log"} <= names
+    assert not {"check_for_update", "update_ionote"} & names  # updating is the suite's (ioStart: suite_version, update_suite)
     assert "proxy_signin" not in names  # sign-in at the proxy is the suite admin's page, never a tool
 
 
@@ -146,17 +147,6 @@ def test_search_by_date_filters_in_the_database(client, on):
     assert res["total"] == 1 and res["notes"][0]["title"] == "n1"
     res = _call(client, "search_notes", {"created_to": "2026-01-05"})["structuredContent"]
     assert res["total"] == 1 and res["notes"][0]["title"] == "n0"
-
-
-def test_the_update_tools_are_for_admins(client, on):
-    client.post("/api/users", json={"name": "ed", "password": "editorpw1", "role": "editor"})
-    ed = app_password(signed_in("ed", "editorpw1"))
-    for tool in ("check_for_update", "update_ionote"):
-        res = _call(anon(), tool, {}, headers=ed)
-        assert res.get("isError"), tool
-    # no ref: the tip of the branch only
-    props = {t["name"]: t["inputSchema"].get("properties", {}) for t in _rpc(client, "tools/list")["result"]["tools"]}
-    assert props["update_ionote"] == {}
 
 
 def test_ai_helpers_templates_and_files(client, on):

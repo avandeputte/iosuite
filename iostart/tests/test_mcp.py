@@ -37,16 +37,17 @@ def test_mcp_updates_every_app(client):
     client.cookies.clear()
     assert rpc(client, "tools/list")[0] == 401
     names = {t["name"] for t in rpc(client, "tools/list", auth=auth)[1]["result"]["tools"]}
-    assert {"suite_versions", "update_suite_apps"} <= names
-    out = call(client, auth, "suite_versions", check=False)
-    assert {a["app"] for a in out["apps"]} >= {"iocalendar", "ionote"}
-    out = call(client, auth, "update_suite_apps", apps=["iocalendar"])
-    assert out["asked"] == ["iocalendar"]
+    assert {"suite_version", "update_suite"} <= names
+    out = call(client, auth, "suite_version", check=False)
+    assert out["status"] == "current" and {a["app"] for a in out["apps"]} >= {"iocalendar", "ionote"}
+    assert call(client, auth, "update_suite")["asked"] == []  # nothing is behind
+    from iosuite_shared import suiteupdates
+    suiteupdates.publish("iocalendar", installed="1.0.0", latest="9.0.0", status="update", can_run=1)
+    assert "iocalendar" in call(client, auth, "update_suite")["asked"]  # every app below the newest version known
     assert shared_db.one("SELECT action, requested_by FROM ios_updates WHERE app = 'iocalendar'") == {"action": "update", "requested_by": "alex"}
-    assert "error" in call(client, auth, "update_suite_apps", apps=["nope"])
 
     # an admin of the start page who is not a suite admin cannot
     ed = users.create("ed", "secret123", "admin", "iostart")
     from iosuite_shared import apppasswords
     pw = apppasswords.create(ed["id"], "iostart", "phone")
-    assert "error" in call(client, {"Authorization": f"Bearer {pw}"}, "update_suite_apps", apps=["iocalendar"])
+    assert "error" in call(client, {"Authorization": f"Bearer {pw}"}, "update_suite")

@@ -83,42 +83,38 @@ def need_writer() -> dict:
 
 
 def add_suite_update_tools(server: MCPServer) -> None:
-    """The start page's tools for updating every app of the suite at once (iosuite_shared.suiteupdates), suite admins
-    only: suite_versions and update_suite_apps."""
+    """The start page's tools for updating the suite (iosuite_shared.suiteupdates), suite admins only: suite_version
+    and update_suite."""
 
     @server.tool(annotations=UPDATES)
-    async def suite_versions(check: bool = True) -> dict:
-        """Suite admins: every app of the suite with its installed version, the newest version on GitHub (status:
-        current, update or error), whether it can update itself, and how its last update went (state: running, ok or
-        failed, with a message). check True (the default) first has every app ask GitHub again, which takes up to half
-        a minute; False answers from the last check."""
+    async def suite_version(check: bool = True) -> dict:
+        """Suite admins: the suite's version (one number for every app), the newest version on GitHub, and status:
+        current, update (apps are behind: their keys in `behind`), updating, or error (GitHub could not be asked).
+        apps has every app's own line: its version, whether it runs (watching), whether it can update itself, and how
+        its last update went (state: running, ok or failed, with a message). check True (the default) first has every
+        app ask GitHub again, which takes up to half a minute; False answers from the last check."""
         u = need_suite_admin()
 
         def work():
             if check:
                 since = time.time()
-                asked = suiteupdates.request("check", None, by=u["name"])
-                suiteupdates.wait_checked(asked, since)
-            return suiteupdates.overview()
-        apps = await anyio.to_thread.run_sync(work)
-        return {"apps": apps, "updatesWaiting": [a["app"] for a in apps if a["status"] == "update"],
-                "notWatching": [a["app"] for a in apps if not a["watching"]]}
+                suiteupdates.request("check", by=u["name"])
+                suiteupdates.wait_checked(since)
+            return suiteupdates.summary()
+        return await anyio.to_thread.run_sync(work)
 
     @server.tool(annotations=UPDATES)
-    async def update_suite_apps(apps: list[str] | None = None) -> dict:
-        """Suite admins: update apps of the suite to the newest version on GitHub. apps: their keys (iocalendar,
-        ionote...); left out, every app whose last check found a newer version (run suite_versions first). Each app
-        runs its own update.sh within ten seconds and restarts (settings and data stay; its database is brought up to
-        date as it starts). Call suite_versions(check=False) a minute or two later: state ok or failed, and the new
-        version. Apps in Docker cannot update themselves (pull the image there)."""
+    async def update_suite() -> dict:
+        """Suite admins: update the suite to the newest version on GitHub: every app that is behind (run suite_version
+        first) runs its own update.sh within ten seconds and restarts (settings and data stay; its database is brought
+        up to date as it starts). Call suite_version(check=False) a minute or two later: status current, or the apps
+        still behind and why (state failed, with a message). Apps in Docker cannot update themselves (pull the image
+        there)."""
         u = need_suite_admin()
-        try:
-            asked = await anyio.to_thread.run_sync(lambda: suiteupdates.request("update", apps, by=u["name"]))
-        except Invalid as e:
-            raise ToolError(str(e))
+        asked = await anyio.to_thread.run_sync(lambda: suiteupdates.request("update", by=u["name"]))
         if not asked:
-            return {"asked": [], "note": "No app has an update waiting (suite_versions checks GitHub again)."}
-        return {"asked": asked, "note": "Each app runs update.sh within ten seconds and restarts; call suite_versions(check=False) in a minute or two."}
+            return {"asked": [], "note": "Every app is on the newest version known (suite_version checks GitHub again)."}
+        return {"asked": asked, "note": "Each app runs update.sh within ten seconds and restarts; call suite_version(check=False) in a minute or two."}
 
 
 def clamp(n, lo: int, hi: int) -> int:

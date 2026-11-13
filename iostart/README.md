@@ -33,9 +33,8 @@ what the app will show on the start page later (today's events, the newest photo
   after another behind a big clock, the date, the weather and its next hours, and today's and the coming days'
   events with the birthdays. It keeps the screen on where the browser allows it; Escape or the ✕ (shown on a touch)
   goes back.
-- **A dot by each app's name**: green when the app answers its `/api/status`, red when it does not, and an "update"
-  badge when the app tells the viewer (an admin there) that a newer version is out. Bookmarks the server cannot
-  reach get a red dot too. The server asks each app once a minute and pings each bookmark every five (HEAD, redirects not followed; never its own address or a link-local one).
+- **A dot by each app's name**: green when the app answers its `/api/status`, red when it does not. Bookmarks the
+  server cannot reach get a red dot too. The server asks each app once a minute and pings each bookmark every five (HEAD, redirects not followed; never its own address or a link-local one).
 - **Your own page** (the gear next to the date › Customize the page): untick the tiles and cards you do not need, put the tiles and
   the cards (Birthdays, This week, the photo strip, the bookmarks) in your order, and pick your own photo strip
   ("Default" is the admin's choice). Saved per account, on top of the default the admin set in Settings › Home page.
@@ -130,9 +129,8 @@ what the app will show on the start page later (today's events, the newest photo
   (`iocalendar-app`…, under People), with which apps read from each other without any setup. **Apps**: each app's default role (none makes it
   invitation-only) and sign-in requirement; forget an uninstalled app. **Sign-in at the proxy** for the whole suite. The
   panel is iosuite-shared's (`/api/suite-admin/ui.js` on `/api/suite-admin`), so every io app shows the same one.
-- **Updates**: the daily version check, the note for admins and **Update now**, the server log and Restart under Settings › Server, as in every ioThing app.
-- **Update every app at once**: Settings › Global settings › Updates (suite admins) shows each app's version against GitHub with **Check all now** and **Update all**; each app runs its own `update.sh`.
-- **MCP** (`/mcp`, off until switched on at Settings › Server): `suite_versions` and `update_suite_apps` let an AI assistant do the same, signed in with a suite admin's user name and an ioStart app password (Settings › Account).
+- **Updates**: the suite has one version, the same for every app. When a newer one is out, suite admins see one note on the start page with **Update now**; Settings › Global settings › Updates shows the installed version against GitHub with one **Update** button (each app runs its own `update.sh`) and every app's own line under Details. The version, the server log and Restart are under Settings › Server, as in every ioThing app.
+- **MCP** (`/mcp`, off until switched on at Settings › Server): `suite_version` and `update_suite` let an AI assistant do the same, signed in with a suite admin's user name and an ioStart app password (Settings › Account).
 - Light and dark, a phone layout, installable as a web app (manifest and icons).
 
 ## Run
@@ -232,16 +230,16 @@ password is used once and not written anywhere.
 
 ## Updates
 
-ioStart asks GitHub once a day whether the main branch has a newer version (only the public commit list is read;
-nothing about the server is sent; Settings › Server switches it off, `UPDATE_CHECK=0` locks it off). Admins
-then see a note with **Update now**, and **Settings › Server** has the version, **Check for updates**,
-**Update now**, the tail of the server log (`data/iostart.log` in the app folder; `LOG_FILE` moves it, empty switches it
-off) and **Restart**. The page is the same in every ioThing app: the version check, `update.sh`, the restart and the log
-come from `iosuite_shared.updates` in iosuite-shared, served at `/api/server` and `/api/log`. Updating runs the app's own
-`update.sh`: the new version's Python packages first, then the code (a failed step leaves the running
-version as it was), the database is brought up to date, and the service restarts; the page reloads when the new version
-answers. In Docker, pull the image instead. From a shell: `./update.sh` (`--check` only looks,
-`IOSTART_REF=<sha>` installs a given commit).
+The suite has one version, the same for every app, and the apps are updated together: **Settings › Global settings ›
+Updates** (suite admins, in any app) shows the installed version and the newest one on GitHub, with one **Update**
+button; each app's own line is under Details. Once a day every app asks GitHub whether a newer version exists (only
+the public commit list is read; nothing about the server is sent; the Updates page switches it off for the suite,
+`UPDATE_CHECK=0` locks it off for this app). **Settings › Server** shows the version ioStart runs, the tail of the
+server log (`data/iostart.log`; `LOG_FILE` moves it, empty switches it off) and **Restart**; the panel
+(`/api/server/ui.js`) is iosuite-shared's, the same in every app. Updating runs the app's own `update.sh`: the new
+version's Python packages first, then the code (a failed step leaves the running version as it was), the database is
+brought up to date, and the service restarts. In Docker, pull the image instead. From a shell: `./update.sh`
+(`--check` only looks, `IOSTART_REF=<sha>` installs a given commit).
 
 ioNotes, ioTasks and ioContacts became ioNote, ioTask and ioContact. After updating them, move an existing install
 (service, `/opt` folder, log and config.env names) once per machine with
@@ -275,7 +273,7 @@ what a viewer may not change. CI runs them against MariaDB.
 
 ```
 app/main.py        the application: start-up (tables, first admin, the update check), the suite's middleware, status and routes
-app/mcp.py         the MCP server (/mcp): suite_versions and update_suite_apps (iosuite_shared), suite admins only
+app/mcp.py         the MCP server (/mcp): suite_version and update_suite (iosuite_shared), suite admins only
 app/access.py      who may call a route: the markers every /api route carries (public, signed_in, editor, admin)
 app/api.py         the REST API: the apps and their settings (sign-in, accounts, status, the server, updates and the log: iosuite_shared's routers)
 app/apps.py        the suite's apps as they registered (iosuite_shared.suite) and the order of their tiles

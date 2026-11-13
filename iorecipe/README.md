@@ -142,22 +142,22 @@ Print reads well; handwriting mostly does not. What comes out is a draft in the 
 
 ## Updates
 
-ioRecipe asks GitHub once a day whether the main branch has a newer version (only the public commit list is read;
-nothing about the server is sent; Settings › Server switches it off, `UPDATE_CHECK=0` locks it off). Admins
-then see a note with **Update now**, and **Settings › Server** has the version, **Check for updates**,
-**Update now**, what the server runs on, the tail of the server log (`data/iorecipe.log`; `LOG_FILE` moves it, empty switches it
-off) and **Restart**. The page is the same in every ioThing app: the panel (`/api/server/ui.js`), the version check, `update.sh`, the
-restart and the log come from iosuite-shared, served at `/api/server` and `/api/log`. Updating runs the app's own
-`update.sh`: the new version's Python packages first, then the code (a failed step leaves the running version as it
-was), the database is brought up to date, and the service restarts; the page reloads when the new version answers. In
-Docker, pull the image instead. From a shell: `./update.sh` (`--check` only looks, `IORECIPE_REF=<sha>` installs a
-given commit).
+The suite has one version, the same for every app, and the apps are updated together: **Settings › Global settings ›
+Updates** (suite admins, in any app) shows the installed version and the newest one on GitHub, with one **Update**
+button; each app's own line is under Details. Once a day every app asks GitHub whether a newer version exists (only
+the public commit list is read; nothing about the server is sent; the Updates page switches it off for the suite,
+`UPDATE_CHECK=0` locks it off for this app). **Settings › Server** shows the version ioRecipe runs, the tail of the
+server log (`data/iorecipe.log`; `LOG_FILE` moves it, empty switches it off) and **Restart**; the panel
+(`/api/server/ui.js`) is iosuite-shared's, the same in every app. Updating runs the app's own `update.sh`: the new
+version's Python packages first, then the code (a failed step leaves the running version as it was), the database is
+brought up to date, and the service restarts. In Docker, pull the image instead. From a shell: `./update.sh`
+(`--check` only looks, `IORECIPE_REF=<sha>` installs a given commit).
 
 Everything is under one Settings page (the sidebar and the avatar menu); a change is saved the moment it is made: your own tabs (account, display), then for admins server, and for suite admins security and global settings. Import from the web is a page of its own in the sidebar.
 
 ### Releases
 
-Every version merged into main is released by itself: when `__version__` (app/__init__.py) has no GitHub release yet, CI tags it `v<version>`, publishes the image as `ghcr.io/avandeputte/iosuite/iorecipe:v<version>` (and `latest`) and makes the release with the merge's message as notes. Bump the version in a change to release it.
+Every version of the suite merged into main is released by itself: when `__version__` (`shared/iosuite_shared/__init__.py`, one number for every app) has no GitHub release yet, CI makes the release `v<version>` with the merge's message as notes, and the image is published as `ghcr.io/avandeputte/iosuite/iorecipe:v<version>` (and `latest`). Bump the version in a change to release it.
 
 ## Reverse proxy and HTTPS
 
@@ -233,7 +233,7 @@ On the server itself, `.venv/bin/python -m app.mcp --user NAME` serves the same 
 
 The tools: `overview`, `list_recipes`, `search_recipes`, `get_recipe`; `create_recipe`, `update_recipe`,
 `delete_recipe`, `import_recipe`, `mark_recipe`; `list_cookbooks`, `create_cookbook`, `add_to_cookbook`,
-`remove_from_cookbook`, `delete_cookbook`; and for admins `diagnostics`, `list_accounts`, `check_for_update`, `update_server`.
+`remove_from_cookbook`, `delete_cookbook`; and for admins `diagnostics`, `list_accounts`.
 
 ## Tests
 

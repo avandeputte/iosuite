@@ -1,4 +1,4 @@
-"""Is each app up, and does it have an update waiting? Is each bookmark reachable?
+"""Is each app up? Is each bookmark reachable?
 
 The start page asks every app its /api/status with the viewer's own sign-in (as app/widgets.py does for the tiles'
 glimpses) and pings each bookmark's address from the server, a few at a time, and remembers the answers for a while:
@@ -12,7 +12,7 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import Request
-from iosuite_shared import outbound, suiteupdates
+from iosuite_shared import outbound
 
 from app import apps, bookmarks, widgets
 
@@ -50,52 +50,26 @@ def forget() -> None:
 # ------------------------------------------------------------------ the apps
 
 def _app(request: Request, key: str) -> dict:
-    """{ok, version, update, why}: up (its /api/status answers) and, for an admin there, whether it can update."""
+    """{ok, version, why}: up when its /api/status answers."""
     try:
         s = widgets.fetch(request, key, "/api/status")
     except widgets.Unavailable as e:
         # 401/403 from the app: it is up, the viewer is just not an account there (or no session); 404: an older app
-        return {"ok": e.status in (403, 404), "version": None, "update": None, "why": str(e)}
+        return {"ok": e.status in (403, 404), "version": None, "why": str(e)}
     if not isinstance(s, dict):
-        return {"ok": False, "version": None, "update": None, "why": f"{key} did not answer with its status"}
-    upd = s.get("update")  # the suite's status shape: {version, remote, message, date} for an admin there, else null
-    if isinstance(upd, dict):
-        upd = upd.get("version") or upd.get("remote") or True
-    elif upd is not None and not isinstance(upd, (str, bool)):
-        upd = bool(upd)
-    return {"ok": True, "version": s.get("version"), "update": upd or None, "why": None}
+        return {"ok": False, "version": None, "why": f"{key} did not answer with its status"}
+    return {"ok": True, "version": s.get("version"), "why": None}
 
 
 def of_apps(request: Request) -> dict:
-    """{key: {ok, version, update}} for every app on the page, asked in parallel; cached per viewer for APP_TTL."""
+    """{key: {ok, version, why}} for every app on the page, asked in parallel; cached per viewer for APP_TTL."""
     host = widgets._host(request)
     tok = request.cookies.get(widgets.sessions.COOKIE) or request.headers.get("authorization") or ""
     keys = [t["key"] for t in apps.tiles(getattr(request.state, "user", None))]
 
     def ask(key):
         return key, _remember(("app", key, tok[:24], host), APP_TTL, lambda: _app(request, key))
-    return _settled(dict(_pool.map(ask, keys)))
-
-
-def _settled(out: dict) -> dict:
-    """The update flag as the apps last wrote it to the Shared ioSuite database (Settings › Global settings › Updates
-    reads the same rows): an app that restarts after an update says so there at once, while its answer here may be a
-    minute old. The note says what is new, the shared library's version when that is all that changed."""
-    try:
-        rows = {r["app"]: r for r in suiteupdates.overview() if r["watching"]}
-    except Exception:  # noqa: BLE001  the database is away: the apps' own answers
-        return out
-    for key, v in out.items():
-        r = rows.get(key)
-        if not v.get("update") or not r:
-            continue
-        if r["status"] != "update":
-            out[key] = dict(v, update=None)
-        elif r.get("latest") and r["latest"] != r.get("version"):
-            out[key] = dict(v, note=f"v{r['latest']} is out (now v{r.get('version') or '?'})")
-        elif r.get("latestShared") and r["latestShared"] != r.get("shared"):
-            out[key] = dict(v, note=f"The shared library v{r['latestShared']} is out (now v{r.get('shared') or '?'})")
-    return out
+    return dict(_pool.map(ask, keys))
 
 
 # ------------------------------------------------------------------ the bookmarks

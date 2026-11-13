@@ -46,7 +46,8 @@ def test_mcp_switch_and_sign_in(client):
     code, msg = rpc(client, "tools/list", auth=auth)
     names = {t["name"] for t in msg["result"]["tools"]}
     assert {"overview", "list_calendars", "agenda", "search_events", "get_event", "get_ics", "free_busy", "create_event", "update_event",
-            "delete_event", "move_event", "create_calendar", "import_ics", "diagnostics", "check_for_update", "update_server"} <= names
+            "delete_event", "move_event", "create_calendar", "import_ics", "diagnostics"} <= names
+    assert not {"check_for_update", "update_server"} & names  # updating is the suite's (ioStart: suite_version, update_suite)
     basic = {"Authorization": "Basic " + base64.b64encode(f"alex:{secret}".encode()).decode()}
     assert call(client, basic, "overview")["you"]["name"] == "alex"
 

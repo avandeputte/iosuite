@@ -55,9 +55,10 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main
 
 ## Update
 
-Settings › Server › Update now in the app, or `./update.sh` in its folder. An app is updated when its own version or
-the shared library's is newer; both always come from the same commit. Settings › Global settings › Updates on a
-suite admin's page updates every app at once. Docker: `docker compose pull && docker compose up -d`.
+The suite has one version, the same for every app. Settings › Global settings › Updates (suite admins, in any app)
+shows it against the newest one on GitHub and updates every app with one button; the start page tells suite admins
+when a newer version is out. From a shell: `./update.sh` in an app's folder. Docker:
+`docker compose pull && docker compose up -d`.
 
 ## Develop
 
@@ -74,8 +75,9 @@ In a checkout an app uses `../shared` as it is (`pip install -e ../shared`), so 
 with every app in the same pull request. `update.sh` is the same in every app, made from
 `shared/templates/update.sh` by `shared/templates/render-update.py`.
 
-Versions are per app (`<app>/app/__init__.py`, `shared/iosuite_shared/__init__.py`); a release is the tag
-`<app>-v<version>`, which publishes the app's image.
+The suite has one version, `__version__` in `shared/iosuite_shared/__init__.py`; every app reports it. Bump that one
+line with every change that reaches users, whichever app it is in. On main, a new version becomes the release
+`v<version>` and every app's image is tagged `v<version>` (and `latest`).
 
 ## License
 

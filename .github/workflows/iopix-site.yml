@@ -10,7 +10,7 @@ on:
     paths:
       - "iopix/site/**"
       - "iopix/docs/screenshots/**"
-      - "iopix/pyproject.toml"
+      - "shared/iosuite_shared/__init__.py"
       - ".github/workflows/iopix-site.yml"
   workflow_dispatch:
 

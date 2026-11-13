@@ -133,16 +133,19 @@ def clean_shared_tables(auth=None) -> None:
 
 def check_conventions(root, app: str, version: str, config, port_files=("Dockerfile", "docker-compose.yml", "config.env.example", "run.sh")) -> None:
     """The conventions every app's repository follows (one test per app calls this): the suite's port for the app
-    (config.PORT, and named in the files that bind it), one version in pyproject.toml and the package, config.env as
-    the settings file (ignored by git, no older name left in the scripts or the README)."""
+    (config.PORT, and named in the files that bind it), the suite's version as the app's (`version` is the app's
+    __version__; its pyproject.toml carries no number of its own), config.env as the settings file (ignored by git, no
+    older name left in the scripts or the README)."""
     import re
     from pathlib import Path
+    import iosuite_shared
     from iosuite_shared import suite
     root = Path(root)
     assert config.PORT == suite.PORTS[app], f"PORT defaults to {config.PORT}, the suite's port for {app} is {suite.PORTS[app]}"
     for f in port_files:
         assert str(suite.PORTS[app]) in (root / f).read_text(), f"{f} does not name port {suite.PORTS[app]}"
-    assert f'version = "{version}"' in (root / "pyproject.toml").read_text(), "pyproject.toml and the package disagree on the version"
+    assert version == iosuite_shared.__version__, "the app's __version__ is the suite's: from iosuite_shared import __version__"
+    assert 'version = "0.0.0"' in (root / "pyproject.toml").read_text(), "pyproject.toml carries a version of its own (the suite's is iosuite_shared.__version__)"
     assert "config.env" in (root / ".gitignore").read_text().split(), "config.env is not in .gitignore"
     for f in ("setup.sh", "update.sh", "README.md"):
         if (root / f).exists():

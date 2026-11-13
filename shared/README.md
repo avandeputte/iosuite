@@ -214,8 +214,8 @@ The routes:
 | `GET /api/suite-admin/keys?app=` | every app's keys and tokens (`iosuite_shared.credentials`), never the value: `{app ('' : the whole suite), appName, name, label, hint, set, env, envSet, updated, updatedBy}` |
 | `PUT /api/suite-admin/keys/{app}/{name}` | `{value}`: replace it (`''` clears it); `_suite` for the whole suite's keys |
 | `DELETE /api/suite-admin/keys/{app}/{name}` | clear it |
-| `GET /api/suite-admin/updates` | every app's version and the shared library's (`shared`, `latestShared`), the newest on GitHub, its last update (`iosuite_shared.suiteupdates`, below) |
-| `POST /api/suite-admin/updates` | `{action: check / update, apps?: [keys]}`: ask the apps (without `apps`: every app for a check, every app with an update waiting for an update) |
+| `GET /api/suite-admin/updates` | the suite as one thing: `{installed, latest, status: current / update / updating / error, checked, behind, failed, canUpdate, autoCheck, apps}`; `apps` has every app's own line: its version and commit, whether it runs (`watching`), whether it is `behind`, its last update (`iosuite_shared.suiteupdates`, below) |
+| `POST /api/suite-admin/updates` | `{action: check}` asks every app to look at GitHub again, `{action: update}` updates every app that is behind; `{autoCheck: bool}` is the daily check, one switch for the suite |
 
 The usual rules hold: a one-click account is a member at most and has no app passwords, an admin tool takes no roles, the last suite admin stays, and
 the signed-in admin cannot delete their own account, drop their own suite admin or remove their own password here.
@@ -227,7 +227,7 @@ containers' health checks and the apps' shells read it alike:
 
 ```
 {ok, app, name, version, usersExist, requireLogin, signedIn, isAdmin, viaProxy, user: {id, name, displayName, email, role, suiteAdmin, passwordless} | null,
- commit (signed in), update (admins, while the daily check is on: {version, remote, message, date, canRun, docker} | null), ...extra(request)}
+ commit (signed in), ...extra(request)}
 ```
 
 `auth.install(app)` adds what every app's FastAPI gets the same way: `Invalid` or malformed JSON out of a route
@@ -288,23 +288,27 @@ await ui.mountAppPasswords(pw, { toast, syncOnly: 'Calendar apps only (CalDAV)' 
 
 ## Updates, restart and the server log
 
+The suite has one version: `iosuite_shared.__version__`, which every app reports as its own
+(`from iosuite_shared import __version__` in the app's `app/__init__.py`). Bump that one line with every change that
+reaches users, whichever app it is in. A newer version on GitHub is an update for every app, and the apps are updated
+together.
+
 Every app updates itself the same way, from `iosuite_shared.updates`: the installed commit, a daily check of GitHub
-for a newer version, the app's own `update.sh`, a restart, and the tail of the server log.
-`Auth.server_router` serves it all at the same addresses in every app (admins only), with the panel that shows it:
-Settings › Server is one ES module (`static/server-panel.js`, at `GET /api/server/ui.js`) that every app mounts in its
-Server tab, so the page is the same everywhere.
+for a newer version, the app's own `update.sh`, a restart, and the tail of the server log. `Auth.server_router` serves
+the app's own part at the same addresses in every app (admins only), with the panel that shows it: Settings › Server
+is one ES module (`static/server-panel.js`, at `GET /api/server/ui.js`) that every app mounts in its Server tab, so
+the page is the same everywhere.
 
 ```js
 const ui = await import(new URL('api/server/ui.js', document.baseURI).href);
-ui.mount(el, { toast });          // the MCP switch, the version and updates, the server log, Restart
-ui.runUpdate({ toast });          // the same Update now, for the app's "a new version is out" banner
+ui.mount(el, { toast });          // the MCP switch, the version, the server log, Restart
 ```
 
 ```python
 from iosuite_shared.updates import Updater
 
-updater = Updater("iocalendar", version=__version__, root=ROOT)   # repo avandeputte/iocalendar, branch main, update.sh in ROOT
-updater.start_daily()                                             # checks once a day while the setting is on
+updater = Updater("iocalendar", version=__version__, root=ROOT)   # repo avandeputte/iosuite, branch main, update.sh in ROOT
+updater.start_daily()                                             # checks once a day while the suite's switch is on, and watches for requests
 app.include_router(auth.server_router(updater, log_file=LOG_FILE,
     info=lambda: {"mcpEnabled": mcp_enabled(), "mcpLocked": MCP_FORCED},  # extra fields of GET /api/server: the MCP box
     apply=save_switches))                                         # the app's own switches in the POST body (raise Invalid to refuse)
@@ -313,28 +317,30 @@ app.include_router(auth.server_router(updater, log_file=LOG_FILE,
 | Route | What |
 |---|---|
 | `GET /api/server/ui.js` | the Settings › Server panel (it imports `GET /api/auth/ui.js`) |
-| `GET /api/server` | `{name, version, installed, docker, canRun, repo, branch, check, progress, lastUpdate, autoCheck, autoCheckLocked}` + `info()` |
-| `POST /api/server {action: check}` | asks GitHub; the answer is the check `{status: current / update / error, remoteVersion, ...}` |
-| `POST /api/server {action: update}` | starts `update.sh`, which installs the tip of the branch (409 when it cannot run here: Docker, no .venv, not writable). Another commit is installed from a shell on the server only (`<APP>_REF=<commit> ./update.sh`): GitHub serves a fork's commits under the repository's address, so a commit id from a request could be anybody's code |
-| `POST /api/server {action: restart}` | ends the process; systemd, launchd or Docker starts it again |
-| `POST /api/server {autoCheck: bool, ...}` | the daily-check switch; other keys go to `apply(body)` |
+| `GET /api/server` | `{name, version, installed, docker, canRun, repo, branch, progress, lastUpdate}` + `info()` |
+| `POST /api/server {action: restart}` | ends the process; systemd, launchd or Docker starts it again. Other keys go to `apply(body)` |
 | `GET /api/log?lines&level&contains&requests` | the tail of `log_file` (`level`: any, warning, error, auth) |
 | `GET /api/log/download` | the whole file |
 
 `update.sh` gets `<APP>_RESULT`, `<APP>_REPO`, `<APP>_BRANCH` and `<APP>_REF` in its environment (`IOCALENDAR_RESULT`…)
 and writes `ok: …` or `error: …` to the result file before the restart. `<APP>_REPO` and `<APP>_BRANCH` in the app's
-environment change what is followed; `UPDATE_CHECK=0` locks the daily check off.
-`updater.available()` gives the banner what it needs after a check found a newer version.
+environment change what is followed; `UPDATE_CHECK=0` locks the daily check off for that app. It installs the tip of
+the branch; another commit is installed from a shell on the server only (`<APP>_REF=<commit> ./update.sh`): GitHub
+serves a fork's commits under the repository's address, so a commit id from a request could be anybody's code.
 
-### Every app from one place
+### One update for the suite
 
-A suite admin can check and update every app at once: Settings › Global settings › Updates in any app, or the
-start page's MCP tools `suite_versions` and `update_suite_apps` (`shared_mcp.add_suite_update_tools(server)`). The apps
-do not call each other for it: the request goes into `ios_updates` (one row per app) in the Shared ioSuite database,
-and `updater.start_daily()` also watches the app's own row every ten seconds (`watch=False` leaves that out). A check
-asks GitHub, an update runs `update.sh` exactly as `POST /api/server {action: update}` does. Each app writes back its
-installed version and commit, the newest version on GitHub, whether it can update itself, and how its last update went
-(running, ok, failed and the result line); after the restart the new process finishes that line from the result file.
+A suite admin checks and updates the suite in one place: Settings › Global settings › Updates in any app (one line,
+one **Update** button, every app's own line under Details), or the start page's MCP tools `suite_version` and
+`update_suite` (`shared_mcp.add_suite_update_tools(server)`). There is no update button per app. The apps do not call
+each other for it: the request goes into `ios_updates` (one row per app) in the Shared ioSuite database, and
+`updater.start_daily()` also watches the app's own row every ten seconds (`watch=False` leaves that out) and marks it
+every minute, which is how the page tells the apps that run from the ones that stopped. A check asks GitHub, an update
+runs `update.sh` (an app that cannot run it here, in Docker or without a .venv or write access, says so on its row). Each app
+writes back its installed version and commit, the newest version on GitHub, whether it can update itself, and how its
+last update went (running, ok, failed and the result line); after the restart the new process finishes that line from
+the result file. `suiteupdates.summary()` makes one answer of the rows: the version the running apps have, the newest
+one, and the apps still behind.
 
 Every app's `update.sh` is the same script, rendered from `templates/update.sh`; only the block "the app" differs
 (name, label, repository, the `server` subfolder for ioHealth, the files an installed copy gets, optional package

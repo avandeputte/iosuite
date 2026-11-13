@@ -1,5 +1,4 @@
-"""The server itself, for admins: health, the version check and the update (update.sh, as in the rest of the suite),
-the Birthdays calendar from ioContact and the Holidays calendars."""
+"""The server itself, for admins: health, the Birthdays calendar from ioContact and the Holidays calendars."""
 import platform
 import sys
 from typing import Optional
@@ -73,29 +72,6 @@ def holiday_regions(country: str) -> dict:
         return holiday.country_info(country)
     except ValueError as e:
         raise ToolError(str(e))
-
-
-@server.tool(annotations=UPDATES)
-def check_for_update() -> dict:
-    """Admins: the installed version and commit against GitHub's main branch (status: current, update or error), and
-    the outcome of the last update (lastUpdate: ok, text, at)."""
-    need_admin()
-    return {**updater.check(), "lastUpdate": updater.last_result(), "canUpdateHere": updater.can_run(), "docker": updater.in_docker()}
-
-
-@server.tool(annotations=UPDATES)
-def update_server() -> dict:
-    """Admins: update ioCalendar to the newest version on GitHub and restart it (update.sh: the code and its packages;
-    the settings and the database stay, and the database is brought up to date as it starts). The connection drops
-    while it restarts (about a minute); call check_for_update afterwards: lastUpdate says what happened. Not in
-    Docker (pull the image there)."""
-    need_admin()
-    try:
-        updater.run()
-    except RuntimeError as e:
-        raise ToolError(str(e))
-    return {"started": True, "installed": updater.local_commit()[:7], "ref": updater.branch,
-            "note": "update.sh is running; ioCalendar restarts when it finishes. Then call check_for_update."}
 
 
 @server.tool(annotations=READ_ONLY)

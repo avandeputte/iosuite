@@ -12,10 +12,10 @@ def fresh():
 
 
 def test_apps_status_from_each_apps_status(client, monkeypatch):
-    answers = {"iopix": {"app": "ioPix", "version": "1.4.0", "update": {"version": "1.5.0", "remote": "1.5.0"}},
-               "iohealth": {"app": "ioHealth", "version": "2.0", "update": None},
-               "iocalendar": {"app": "ioCalendar", "version": "0.9", "update": None},
-               "iotask": {"app": "ioTask", "version": "0.1", "update": None}}
+    answers = {"iopix": {"app": "ioPix", "version": "1.4.0"},
+               "iohealth": {"app": "ioHealth", "version": "2.0"},
+               "iocalendar": {"app": "ioCalendar", "version": "0.9"},
+               "iotask": {"app": "ioTask", "version": "0.1"}}
     asked = []
 
     def fake(request, key, path, params=None, raw=False):
@@ -27,9 +27,9 @@ def test_apps_status_from_each_apps_status(client, monkeypatch):
         return answers[key]
     monkeypatch.setattr(widgets, "fetch", fake)
     d = client.get("/api/apps/status").json()["items"]
-    assert d["iopix"] == {"ok": True, "version": "1.4.0", "update": "1.5.0", "why": None}
-    assert d["iohealth"]["ok"] and d["iohealth"]["update"] is None and d["iocalendar"]["update"] is None
-    assert d["iocontact"]["ok"] is True and d["ionote"] == {"ok": False, "version": None, "update": None, "why": "ionote is not reachable (URLError)"}
+    assert d["iopix"] == {"ok": True, "version": "1.4.0", "why": None}
+    assert d["iohealth"]["ok"] and d["iocalendar"]["ok"]
+    assert d["iocontact"]["ok"] is True and d["ionote"] == {"ok": False, "version": None, "why": "ionote is not reachable (URLError)"}
     assert sorted(asked) == ["iocalendar", "iocontact", "iohealth", "ionote", "iopix", "iotask"]
     client.get("/api/apps/status")
     assert len(asked) == 6  # remembered for a minute

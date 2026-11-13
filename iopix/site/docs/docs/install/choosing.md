@@ -5,9 +5,9 @@ There are four ways to install iopix. They all run the same app; they differ in 
 | | Best for | Updates | Notes |
 | --- | --- | --- | --- |
 | [**Docker**](docker.md) | a home server or NAS that already runs containers (Dockge, Portainer, Unraid, Synology) | `docker compose pull && docker compose up -d` | image for Intel and ARM; models live in a volume |
-| [**Proxmox container**](proxmox.md) | a Proxmox VE host | `update` inside the container, or **Update now** in the app | creates a Debian container and mounts your library |
-| [**Linux installer**](linux.md) | any Linux server or VM (Debian, Ubuntu, Fedora, openSUSE, Arch) | **Update now** in the app, or `update.sh` | one file; installs a systemd service |
-| [**setup.sh**](setup-script.md) | the Mac or PC digiKam runs on, or a developer checkout | **Update now** in the app, or `update.sh` | can start at login (launchd or systemd) |
+| [**Proxmox container**](proxmox.md) | a Proxmox VE host | `update` inside the container, or **Update** in the app | creates a Debian container and mounts your library |
+| [**Linux installer**](linux.md) | any Linux server or VM (Debian, Ubuntu, Fedora, openSUSE, Arch) | **Update** in the app, or `update.sh` | one file; installs a systemd service |
+| [**setup.sh**](setup-script.md) | the Mac or PC digiKam runs on, or a developer checkout | **Update** in the app, or `update.sh` | can start at login (launchd or systemd) |
 
 ## Which one should I pick?
 

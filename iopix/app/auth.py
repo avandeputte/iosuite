@@ -22,20 +22,8 @@ auth = Auth(APP, app_label="ioPix",
 auth.deny_exempt = ("/mcp",)  # MCP clients sign in with an app password, whatever Cloudflare service token got them through
 
 
-def _get_setting(key: str, default: str = "") -> str:
-    from app.data import state
-    return state.get_setting(key, default)
-
-
-def _set_setting(key: str, value: str) -> None:
-    from app.data import state
-    state.set_setting(key, value)
-
-
-# updates (the daily check, update.sh, restart) and the server log, as in every app of the suite (iosuite_shared.updates);
-# the daily-check switch is kept with iopix's own settings
-updater = Updater(APP, __version__, config.APP_DIR, repo=config.IOPIX_REPO, branch=config.IOPIX_BRANCH, result_file=config.DATA_DIR / ".update-result",
-                  settings=(_get_setting, _set_setting), user_agent="iopix")
+# updates (the daily check, update.sh, restart) and the server log, as in every app of the suite (iosuite_shared.updates)
+updater = Updater(APP, __version__, config.APP_DIR, repo=config.IOPIX_REPO, branch=config.IOPIX_BRANCH, result_file=config.DATA_DIR / ".update-result", user_agent="iopix")
 
 
 def decorate(u):

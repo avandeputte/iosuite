@@ -1,5 +1,8 @@
 # The shared library's own tests against a MariaDB service, when shared/ changes. Every app's workflow runs on such a
 # change too (its tests use the library at the same commit), and each checks that the update.sh files match the template.
+# The suite's version is the library's (shared/iosuite_shared/__init__.py): a push to main with a version that has no
+# release yet makes the release v<version>, with ioPix's Linux installer attached. The apps' workflows tag their images
+# with the same version.
 name: Shared library
 
 on:
@@ -51,3 +54,26 @@ jobs:
       - name: Edge worker tests
         working-directory: shared/cloudflare/edge-auth
         run: node --test
+
+  release:
+    # every new version on main becomes the suite's release (tag v<version>), with no one having to click anything
+    needs: tests
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Release the version when it is new
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          v="v$(sed -n 's/^__version__ = "\([^"]*\)".*/\1/p' iosuite_shared/__init__.py)"
+          if gh release view "$v" >/dev/null 2>&1; then echo "$v is released already"; exit 0; fi
+          ../iopix/installer/make-installer.sh
+          # the words of the change: a merge commit carries the pull request's title as the first line of its body
+          t="$(git log -1 --format=%s)"; case "$t" in "Merge pull request"*) t="$(git log -1 --format=%b | sed -n '1p')";; esac
+          t="$(printf '%s' "$t" | sed -E 's/^(ioSuite )?v?[0-9]+\.[0-9]+\.[0-9]+: //; s/ \(#[0-9]+\)$//')"
+          git log -1 --format=%B > notes.md
+          printf '\n\nImages: `ghcr.io/avandeputte/iosuite/<app>:%s` (also `latest`).\n' "$v" >> notes.md
+          gh release create "$v" ../iopix/dist/iopix-install.sh --target "$GITHUB_SHA" --title "ioSuite ${v#v}: $t" --notes-file notes.md

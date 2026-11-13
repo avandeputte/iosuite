@@ -36,7 +36,8 @@ def test_mcp_tasks(client):
     assert rpc(client, "tools/list")[0] == 401
     names = {t["name"] for t in rpc(client, "tools/list", auth=auth)[1]["result"]["tools"]}
     assert {"overview", "list_lists", "list_tasks", "search_tasks", "get_task", "create_task", "update_task", "complete_task",
-            "delete_task", "move_task", "create_list", "import_ics", "diagnostics", "check_for_update"} <= names
+            "delete_task", "move_task", "create_list", "import_ics", "diagnostics"} <= names
+    assert not {"check_for_update", "update_server"} & names  # updating is the suite's (ioStart: suite_version, update_suite)
     t = call(client, auth, "create_task", title="Buy milk", due="2026-11-12", priority="medium")
     assert t["title"] == "Buy milk" and t["list"] == "Family" and t["priority"] == "medium"
     sub = call(client, auth, "create_task", title="Oat milk", parent=str(t["id"]))

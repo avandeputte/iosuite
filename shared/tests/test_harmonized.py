@@ -3,6 +3,7 @@ cap), the MCP gate and helpers, the log set-up, the standard settings and the te
 import json
 import logging
 
+import iosuite_shared
 import pytest
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.testclient import TestClient
@@ -16,24 +17,8 @@ from iosuite_shared.updates import Updater, setup_log
 class FakeUpdater:
     version = "1.2.3"
 
-    def __init__(self):
-        self.found = None
-        self.auto = True
-
     def local_commit(self):
         return "abcdef0123"
-
-    def auto_check_enabled(self):
-        return self.auto
-
-    def available(self):
-        return dict(self.found) if self.found else None
-
-    def can_run(self):
-        return False
-
-    def in_docker(self):
-        return False
 
 
 def make_app(mcp_on=lambda: True, seen=None, **install):
@@ -74,15 +59,12 @@ def test_status_is_public_and_the_same_shape_everywhere():
     s = c.get("/api/status").json()
     # no accounts yet: the install is open, so a visitor counts as signed in and admin (the suite's rule), and sees the commit
     assert s == {"ok": True, "app": "iotest", "name": "ioTest", "version": "1.2.3", "usersExist": False, "requireLogin": False, "signedIn": True,
-                 "isAdmin": True, "viaProxy": False, "user": None, "mine": True, "commit": "abcdef0", "update": None}
+                 "isAdmin": True, "viaProxy": False, "user": None, "mine": True, "commit": "abcdef0"}
     c.post("/api/auth/setup", json={"name": "alex", "password": "secret123", "email": "a@b.c"})
-    updater.found = {"version": "1.3.0", "remote": "fedcba9"}
     s = c.get("/api/status").json()
     assert s["user"] == {"id": 1, "name": "alex", "displayName": "alex", "email": "a@b.c", "role": "admin", "suiteAdmin": True, "passwordless": False}
     assert s["signedIn"] and s["isAdmin"] and s["mine"] and s["commit"] == "abcdef0" and s["usersExist"]
-    assert s["update"] == {"version": "1.3.0", "remote": "fedcba9", "canRun": False, "docker": False}
-    updater.auto = False
-    assert c.get("/api/status").json()["update"] is None
+    assert "update" not in s  # updating is the suite's: Settings › Global settings › Updates
     # sign-in required: the status still answers a visitor, with nothing about the install
     db.set_setting("require_login", "1", "iotest")
     v = TestClient(app, base_url="http://test.example.com")
@@ -236,15 +218,15 @@ def test_check_access_declared_names_the_route_without_a_marker():
 def test_check_conventions(tmp_path):
     class Cfg:
         PORT = 8620
-    (tmp_path / "pyproject.toml").write_text('version = "1.0"\n')
+    (tmp_path / "pyproject.toml").write_text('version = "0.0.0"\n')
     (tmp_path / ".gitignore").write_text("config.env\n.venv\n")
     for f in ("Dockerfile", "docker-compose.yml", "config.env.example", "run.sh"):
         (tmp_path / f).write_text("8620\n")
     (tmp_path / "README.md").write_text("Settings live in config.env; the example is config.env.example.\n")
-    testing.check_conventions(tmp_path, "iocalendar", "1.0", Cfg)
+    testing.check_conventions(tmp_path, "iocalendar", iosuite_shared.__version__, Cfg)
     (tmp_path / "setup.sh").write_text("cp .env iocalendar.env\n")
     with pytest.raises(AssertionError):
-        testing.check_conventions(tmp_path, "iocalendar", "1.0", Cfg)
+        testing.check_conventions(tmp_path, "iocalendar", iosuite_shared.__version__, Cfg)
 
 
 def test_clean_shared_tables():
@@ -258,8 +240,8 @@ def test_clean_shared_tables():
 
 
 def test_updater_is_what_status_router_expects(tmp_path):
-    u = Updater("iotest", "1.0", tmp_path, settings=(lambda k, d="": d, lambda k, v: None))
-    for name in ("local_commit", "auto_check_enabled", "available", "can_run", "in_docker"):
+    u = Updater("iotest", "1.0", tmp_path)
+    for name in ("local_commit", "can_run", "in_docker"):
         assert callable(getattr(u, name))
     assert json.dumps(u.status())
 

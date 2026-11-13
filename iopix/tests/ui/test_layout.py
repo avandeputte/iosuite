@@ -193,15 +193,9 @@ def test_page_title_takes_focus_and_the_status_box_is_live(page, server):
 
 def test_floating_notes_take_the_width_their_words_need_on_a_phone(browser, server):
     """A note centred with left: 50% used to be sized to the right half of the screen, so its words wrapped into a
-    tall column on phones; the update and digiKam cards stack in one corner instead of overlapping."""
+    tall column on phones."""
     ctx = browser.new_context(bypass_csp=True, viewport={"width": 390, "height": 844}, device_scale_factor=2, is_mobile=True, has_touch=True)
     page = ctx.new_page()
-    # the status poll draws the update card from what the server says, so without this the card drawn below is taken away again
-    def with_update(route):
-        r = route.fetch(); body = r.json(); body["update"] = {"version": "9.9.9", "remote": "r", "message": "v9.9.9: words"}
-        body["digikam"] = dict(body.get("digikam") or {}, none=False, sync=True, reachable=False, since=1760000000)  # the digiKam card too
-        route.fulfill(response=r, json=body)
-    page.route("**/api/status*", with_update)
     try:
         page.goto(server + "/#/explore"); page.wait_for_selector("#nav > a", timeout=10000)
         page.evaluate("() => { import('/static/js/state.js').then((st) => st.toast('3 photos moved to the trash. 1 could not be: the file is not on disk.', 'Undo', () => {}, 60000)); }")
@@ -211,14 +205,7 @@ def test_floating_notes_take_the_width_their_words_need_on_a_phone(browser, serv
             box = page.locator(sel).bounding_box()
             assert box["width"] > 300 and box["height"] < 90, (sel, box)
             assert box["x"] >= 0 and box["x"] + box["width"] <= 390, (sel, box)
-        page.evaluate("() => { import('/static/js/main.js').then((m) => { m.updateBanner({ version: '9.9.9', remote: 'r', message: 'v9.9.9: words' }); m.dkBanner({ sync: true, reachable: false, since: 1760000000 }); }); }")
-        page.wait_for_selector("#updbanner", timeout=5000)  # both cards are drawn in the same call
-        if page.locator("#dkbanner").count():  # admins only
-            u, d = page.locator("#updbanner").bounding_box(), page.locator("#dkbanner").bounding_box()
-            assert u["y"] + u["height"] <= d["y"], "the update card sits above the digiKam card, not on it"
-        assert page.locator("#updbanner").bounding_box()["width"] > 300
     finally:
-        page.unroute_all(behavior="ignoreErrors")
         ctx.close()
 
 def _units_page(browser, server, locale):

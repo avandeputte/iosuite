@@ -1,4 +1,4 @@
-"""The server itself, for admins: health, accounts, the version check and the update (update.sh, as in iopix)."""
+"""The server itself, for admins: health, accounts."""
 import platform
 import sys
 
@@ -6,7 +6,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 from app import __version__, config, db, iopix, users
 from app.auth import auth, updater
-from app.mcp.base import READ_ONLY, UPDATES, need_admin, server
+from app.mcp.base import READ_ONLY, need_admin, server
 
 
 @server.tool(annotations=READ_ONLY)
@@ -44,29 +44,6 @@ def test_iopix() -> dict:
     if not iopix.settings()["url"]:
         raise ToolError("ioPix is not part of the suite (it connects by itself once it runs on the same Shared ioSuite database)")
     return iopix.test()
-
-
-@server.tool(annotations=UPDATES)
-def check_for_update() -> dict:
-    """Admins: the installed version and commit against GitHub's main branch (status: current, update or error), and
-    the outcome of the last update (lastUpdate: ok, text, at)."""
-    need_admin()
-    return {**updater.check(), "lastUpdate": updater.last_result(), "canUpdateHere": updater.can_run(), "docker": updater.in_docker()}
-
-
-@server.tool(annotations=UPDATES)
-def update_server() -> dict:
-    """Admins: update ioContact to the newest version on GitHub and restart it (update.sh: the code and its packages;
-    the settings and the database stay, and the database is brought up to date as it starts). Nothing happens when
-    the newest commit is already installed. The connection drops while it restarts (about a minute); call
-    check_for_update afterwards: lastUpdate says what happened. Not in Docker (pull the image there)."""
-    need_admin()
-    try:
-        updater.run()
-    except RuntimeError as e:
-        raise ToolError(str(e))
-    return {"started": True, "installed": updater.local_commit()[:7], "branch": updater.branch,
-            "note": "update.sh is running; ioContact restarts when it finishes. Then call check_for_update."}
 
 
 @server.tool(annotations=READ_ONLY)

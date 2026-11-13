@@ -1,5 +1,6 @@
 # Tests against a MariaDB service, then builds the container image and pushes it to ghcr.io (ghcr.io/avandeputte/iosuite/iohealth)
-# on pushes to main (tags `latest` and `main-<sha>`) and version tags like v2.0.0 (pull requests only build).
+# on pushes to main: tags `latest`, `main-<sha>` and v<the suite's version> (shared/iosuite_shared/__init__.py). Pull
+# requests only build.
 name: ioHealth
 
 on:
@@ -57,6 +58,8 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
+      - id: version
+        run: echo "version=$(sed -n 's/^__version__ = "\([^"]*\)".*/\1/p' ../shared/iosuite_shared/__init__.py)" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
       - name: Log in to GHCR
@@ -73,7 +76,7 @@ jobs:
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha,prefix=main-,enable={{is_default_branch}}
-            type=semver,pattern={{version}}
+            type=raw,value=v${{ steps.version.outputs.version }},enable=${{ github.ref == 'refs/heads/main' }}
             type=ref,event=pr
       - uses: docker/build-push-action@v6
         with:

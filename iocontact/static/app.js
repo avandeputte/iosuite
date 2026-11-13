@@ -1569,20 +1569,6 @@ async function setServer(el) {
 }
 const serverUi = () => import(new URL('api/server/ui.js', document.baseURI).href);
 
-/** Admins: a note when the daily check found a newer version, with Update now. Hidden until the next version when dismissed. */
-function updateBanner() {
-  $('#updbanner')?.remove();
-  const u = S.status && S.status.update;
-  let dismissed = null; try { dismissed = localStorage.getItem('iocontact.updateDismissed'); } catch { /* private mode */ }
-  if (!u || dismissed === u.remote) return;
-  const b = h('div', { id: 'updbanner', role: 'status' }, icon('update'),
-    h('span', null, `ioContact ${u.version ? `v${u.version}` : 'update'} is available${u.message ? `: ${u.message.replace(/^v\d+\.\d+\.\d+:\s*/, '')}` : ''}`),
-    h('button', { class: 'pillbtn primary noic', onclick: async () => { if (await confirmDialog('Update ioContact', 'Install the new version and restart? The page reloads when it is back.', 'Update now')) { b.remove(); (await serverUi()).runUpdate({ toast }); } } }, 'Update now'),
-    h('a', { class: 'pillbtn noic', href: '#/settings/server', onclick: () => b.remove() }, 'Details'),
-    h('button', { class: 'iconbtn', title: 'Not now (hidden until the next version)', onclick: () => { try { localStorage.setItem('iocontact.updateDismissed', u.remote); } catch { /* */ } b.remove(); } }, icon('close', 's')));
-  document.body.append(b);
-}
-
 // ------------------------------------------------------------------ sign-in
 function showSignIn() {
   // like ioPix: a tile per account; one click for a passwordless account, a password for the others
@@ -1659,7 +1645,5 @@ async function start() {
   window.addEventListener('hashchange', onRoute);
   onRoute();
   loadSuite();
-  updateBanner();
-  setInterval(async () => { try { S.status = await api('/api/status'); updateBanner(); } catch { /* restarting */ } }, 15 * 60 * 1000);
 }
 start().catch(fail);

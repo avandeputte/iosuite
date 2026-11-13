@@ -651,16 +651,15 @@ body.nobadges .cbadges, body.nobadges .fbadge { display: none; }
 #filterbtn .ic { width: 20px; height: 20px; }
 #selbar .pillbtn { height: 34px; }
 
-/* the update banner: bottom right, above everything but dialogs */
-/* the cards (an update, digiKam's state) stack in one corner, each as tall as its words need */
+/* the cards (digiKam's state, a new version to load) stack in one corner, bottom right, each as tall as its words need */
 #banners { position: fixed; right: 16px; bottom: 16px; z-index: var(--z-banner); display: flex; flex-direction: column; align-items: flex-end; gap: 8px; max-width: 520px; }
-#updbanner, #dkbanner { display: flex; gap: 12px; align-items: center; max-width: 100%; box-sizing: border-box; padding: 12px 10px 12px 14px;
+#dkbanner { display: flex; gap: 12px; align-items: center; max-width: 100%; box-sizing: border-box; padding: 12px 10px 12px 14px;
   background: var(--bg); border-radius: var(--r-l); box-shadow: var(--shadow); border: 1px solid color-mix(in srgb, var(--brand) 35%, transparent); font-size: var(--fs-m); }
-#updbanner .ic-wrap, #dkbanner .ic-wrap { width: 34px; height: 34px; border-radius: var(--r-m); flex: none; display: inline-flex; align-items: center; justify-content: center; color: #fff;
+#dkbanner .ic-wrap { width: 34px; height: 34px; border-radius: var(--r-m); flex: none; display: inline-flex; align-items: center; justify-content: center; color: #fff;
   background: var(--brand-deep); }
-#updbanner .ic-wrap .ic, #dkbanner .ic-wrap .ic { width: 20px; height: 20px; }
-#updbanner .muted, #dkbanner .muted { font-size: var(--fs-s); margin-top: 2px; white-space: normal; }
-#updbanner .pillbtn, #dkbanner .pillbtn { height: 32px; }
+#dkbanner .ic-wrap .ic { width: 20px; height: 20px; }
+#dkbanner .muted { font-size: var(--fs-s); margin-top: 2px; white-space: normal; }
+#dkbanner .pillbtn { height: 32px; }
 
 /* metadata consistency: the summary tiles are the filter; everything in one column */
 .cpage .ctools { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 16px 0 4px; }
@@ -912,9 +911,9 @@ button.lnk:hover { text-decoration: underline; }
   #scrub .ribbon { width: 10px; } #scrub .pos { font-size: var(--fs-xs); padding: 0 5px; } #scrub .bubble .bth img { width: 44px; height: 44px; }
   /* the cards wrap on phones: icon, words and the close on the first row, the buttons on their own row below */
   #banners { left: 8px; right: 8px; bottom: calc(64px + env(safe-area-inset-bottom)); max-width: none; align-items: stretch; }
-  #updbanner, #dkbanner { flex-wrap: wrap; justify-content: flex-end; gap: 10px; padding: 12px; }
-  #updbanner > div, #dkbanner > div { flex: 1 1 200px; min-width: 0; }
-  #updbanner .pillbtn, #dkbanner .pillbtn { order: 1; }
+  #dkbanner { flex-wrap: wrap; justify-content: flex-end; gap: 10px; padding: 12px; }
+  #dkbanner > div { flex: 1 1 200px; min-width: 0; }
+  #dkbanner .pillbtn { order: 1; }
   #topbar { padding: env(safe-area-inset-top) 8px 0 8px; height: calc(var(--topbar) + env(safe-area-inset-top)); }
   #selbar { padding: env(safe-area-inset-top) 6px 0 6px; height: calc(var(--topbar) + env(safe-area-inset-top)); overflow-x: auto; scrollbar-width: none; }
   #selbar .pillbtn > span:not(.ic), #selbar .lnk { display: none; }  /* icons only: every action stays on screen */

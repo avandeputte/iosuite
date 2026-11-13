@@ -1,13 +1,12 @@
 /** Startup: metadata, state, the first route. */
 import { $, DOCK_MIN, NET, NO_CONNECTION, PREF, api, fmtWhen, h, healSoon, icon, main, nf, norm, plural, sleep, store } from './core.js';
-import { FILTER_VIEWS, NAV, NAV_LIBRARY, NAV_MANAGE, S, ST, applyAppName, applyBadgePref, applyTheme, loadState, onRoute, parseHash, pollSoon, toast } from './state.js';
+import { FILTER_VIEWS, NAV, NAV_LIBRARY, NAV_MANAGE, S, ST, applyAppName, applyBadgePref, applyTheme, loadState, onRoute, parseHash, pollSoon } from './state.js';
 import { initSearch } from './search.js';
-import { confirmDialog } from './actions.js';
 import { G } from './grid.js';
 import { dbDialog } from './editing.js';
 import { moreSheet, showAlbums } from './pages.js';
 import { loadUser, loginDialog, renderUserMenu } from './users.js';
-import { serverUi, viewerDbPanel } from './settings.js';
+import { viewerDbPanel } from './settings.js';
 import { M } from './map.js';
 import { toggleFilters } from './filters.js';
 import { LB, details } from './lightbox.js';
@@ -77,26 +76,6 @@ export function dkBanner(d) {  // exported for test_ui.py, which calls it throug
     h('button', { class: 'iconbtn', title: 'Hide for now', onclick: () => { try { sessionStorage.setItem('iopix.digikamBannerDismissed', key); } catch { /* private mode */ } b.remove(); } }, icon('close')));
   banners().append(b);
 }
-/** The "a newer version is out" banner, for admins, when the daily check found one; dismissed per version in this browser. */
-export function updateBanner(u) {  // exported for test_ui.py, which calls it through import()
-  let b = $('#updbanner');
-  let gone = '';
-  gone = store.local.get(PREF.updateDismissed, '');
-  if (!u || gone === u.remote) { b?.remove(); return; }
-  if (b && b.dataset.remote === u.remote) return;
-  b?.remove();
-  const text = h('div', null, h('b', null, u.version ? `Version ${u.version} is available` : 'A newer build is available'),
-    h('div', { class: 'muted' }, `You have v${S.APP_VERSION || '?'}. ${u.version ? '' : 'Latest change: '}${(u.message || '').replace(/^v\d+\.\d+\.\d+:\s*/, '').slice(0, 140)}`));
-  // the update runs from here; the banner then says so and the page reloads with the new version (details and Docker's way: Settings › Server)
-  const run = h('button', { class: 'pillbtn on', onclick: async () => {
-    if (!await confirmDialog(`Fetch ${u.version ? 'version ' + u.version : 'the latest version'}, refresh the packages and restart ${S.APP_NAME}? The page reloads when the new version is up.`)) return;
-    b.remove(); (await serverUi()).runUpdate({ toast });
-  } }, 'Update now');
-  const more = h('a', { class: 'pillbtn', href: '#/settings/server', onclick: () => b.remove() }, 'Details');
-  b = h('div', { id: 'updbanner', 'data-remote': u.remote }, h('span', { class: 'ic-wrap' }, icon('spark')), text, run, more,
-    h('button', { class: 'iconbtn', title: 'Not now (hidden until the next version)', onclick: () => { store.local.set(PREF.updateDismissed, u.remote); b.remove(); } }, icon('close')));
-  banners().prepend(b);
-}
 const LIVE_VIEWS = ['photos', 'people', 'places', 'folders', 'albums', 'tags', 'duplicates', 'detected', 'events', 'favorites'];
 /** A list page the library changed under is drawn again in place, keeping what was typed in its filter box. Not while
  *  the user is typing in the page or arranging People: then it waits for the next poll. */
@@ -162,7 +141,6 @@ export async function pollStatus() {
     S.AUTO_DB = !!(s.dbWrite && s.digikam && (s.digikam.none || s.digikam.sync && s.digikam.reachable));  // edits go into the database by themselves, a minute later
     S.IS_ADMIN = s.isAdmin; S.USERS_EXIST = s.usersExist; S.DIGIKAM_CHECK = s.digikamCheck || 'pgrep';
     if (s.version) { S.APP_VERSION = s.version; S.APP_COMMIT = s.commit || ''; const b = $('.brand'); if (b) b.title = `${S.APP_NAME} v${S.APP_VERSION}`; } if ((s.user && s.user.id) !== (S.USER && S.USER.id)) { S.USER = s.user; renderUserMenu(); }  // before the banner, which names the installed version
-    updateBanner(s.update);
     dkBanner(s.digikam);
     if (s.appName && s.appName !== S.APP_NAME) { S.APP_NAME = s.appName; applyAppName(); }
     document.body.classList.toggle('noadmin', !S.IS_ADMIN);

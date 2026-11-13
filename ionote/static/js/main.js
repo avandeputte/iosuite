@@ -1,39 +1,15 @@
 /** Start-up and routing: #/notes (the list and the open note), #/note/<id>, #/settings[/tab], #/changes. Pasting or
  *  dropping a picture makes a note of it; N makes a new note; / goes to the search box. */
-import { $, h, api, state, icon, paintIcons, toast, fail, canWrite, confirmIt, debounce, menu } from './core.js';
+import { $, h, api, state, icon, paintIcons, toast, fail, canWrite, debounce, menu } from './core.js';
 import { loadMe, renderUserMenu, signIn } from './auth.js';
 import { loadSuite } from './suite.js';
 import { view, viewFromHash, go, loadMeta, renderNav, loadList, setOpenHandler, refresh, markSelected, setStatus } from './notes.js';
 import { openNote, flush, uploadPicture, currentNote, attachFiles } from './editor.js';
 import { renderTemplates, setTemplateHandler } from './templates.js';
 import { expandTemplate } from './markdown.js';
-import { renderSettings, renderChanges, renderImport, serverUi, applyTheme } from './settings.js';
+import { renderSettings, renderChanges, renderImport, applyTheme } from './settings.js';
 
 let lastList = '';
-
-/** The "a newer version is out" card, for admins, when the daily check found one (as iopix shows it): Update now runs
- *  update.sh from here and the page reloads with the new version; dismissed per version in this browser. */
-const DISMISSED = 'ionote.updateDismissed';
-function updateBanner(u) {
-  let b = $('#updbanner');
-  let gone = ''; try { gone = localStorage.getItem(DISMISSED) || ''; } catch (e) { /* private mode */ }
-  if (!u || gone === u.remote) { if (b) b.remove(); return; }
-  if (b && b.dataset.remote === u.remote) return;
-  if (b) b.remove();
-  const text = h('div', h('b', u.version ? `Version ${u.version} is available` : 'A newer build is available'),
-    h('div.muted', `You have v${state.version || '?'}. ${(u.message || '').replace(/^v\d+\.\d+\.\d+:\s*/, '').slice(0, 140)}`));
-  const more = h('a.pillbtn', { href: '#/settings/server', onclick: () => b.remove() }, 'Details');
-  const run = u.canRun ? h('button.pillbtn.primary', { onclick: async () => {
-    if (!await confirmIt('Update ioNote', `Fetch ${u.version ? 'version ' + u.version : 'the latest version'}, refresh the packages and restart ioNote? The page reloads when the new version is up.`, 'Update')) return;
-    run.hidden = more.hidden = true;
-    text.textContent = '';
-    text.append(h('b', 'Updating…'), h('div.muted', 'ioNote restarts when it is done, and the page reloads.'));
-    if (!await (await serverUi()).runUpdate({ toast })) run.hidden = more.hidden = false;
-  } }, 'Update now') : null;
-  b = h('div#updbanner', { 'data-remote': u.remote }, h('span.icwrap', icon('spark')), text, run, more,
-    h('button.iconbtn', { title: 'Not now (hidden until the next version)', onclick: () => { try { localStorage.setItem(DISMISSED, u.remote); } catch (e) {} b.remove(); } }, icon('close')));
-  document.body.append(b);
-}
 
 /** The sidebar docks beside the page on a wide screen, unless its button put it away (remembered in this browser).
  *  Put away, or on a narrower screen, it hides off the left edge and the menu button in the top bar slides it over the
@@ -181,7 +157,6 @@ function wire() {
     try {
       const s = await api('/api/status');
       setStatus(`ionote ${s.version || ''}`.trim());
-      updateBanner(s.update);
       if (!$('#list')) return;
       if (rev !== null && s.rev !== undefined && s.rev !== rev && !document.activeElement.closest('.editor')) { lastList = ''; await loadMeta(); renderNav(); await loadList(); markSelected(); }
       rev = s.rev;
@@ -203,7 +178,7 @@ async function start() {
   await loadMeta();
   loadSuite();
   wire();
-  api('/api/status').then((s) => { state.version = s.version; setStatus(`ioNote ${s.version}`); updateBanner(s.update); }).catch(() => {});
+  api('/api/status').then((s) => { state.version = s.version; setStatus(`ioNote ${s.version}`); }).catch(() => {});
   if (!location.hash) history.replaceState(null, '', '#/notes');
   await route();
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});

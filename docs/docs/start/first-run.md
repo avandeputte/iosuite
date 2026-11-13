@@ -38,5 +38,5 @@ See [Accounts and roles](../run/accounts.md).
 
 - Put the app behind HTTPS: [Reverse proxy and HTTPS](../run/reverse-proxy.md), or [Cloudflare Tunnel and Access](../run/cloudflare.md).
 - Connect your devices: [Phones, Macs and other apps](../apps/devices.md).
-- Settings › Server shows the version and has **Check for updates**: [Updates](../run/updates.md).
+- Settings › Global settings › Updates shows the suite's version and updates every app: [Updates](../run/updates.md).
 - Optionally, let an AI assistant in: [AI assistants (MCP)](../run/assistants.md).

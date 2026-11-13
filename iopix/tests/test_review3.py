@@ -24,4 +24,4 @@ def test_the_names_from_before_the_rename_are_gone():
     assert not [p for p in paths if "viewerdb" in p or "maintenance" in p]
     assert {"/api/database", "/api/database/test", "/api/database/switch", "/api/database/retry", "/api/tools"} <= set(paths)
     from app.mcp import files
-    assert hasattr(files, "update_server") and not hasattr(files, "update_viewer")
+    assert not hasattr(files, "update_viewer") and not hasattr(files, "update_server")  # updating is the suite's

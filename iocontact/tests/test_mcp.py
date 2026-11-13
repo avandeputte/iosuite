@@ -46,7 +46,8 @@ def test_mcp_switch_and_sign_in(client):
     code, msg = rpc(client, "tools/list", auth=auth)
     names = {t["name"] for t in msg["result"]["tools"]}
     assert {"overview", "search_contacts", "get_contact", "create_contact", "update_contact", "add_relation", "family_tree",
-            "upcoming_dates", "import_contacts", "export_contacts", "check_for_update", "update_server", "diagnostics"} <= names
+            "upcoming_dates", "import_contacts", "export_contacts", "diagnostics"} <= names
+    assert not {"check_for_update", "update_server"} & names  # updating is the suite's (ioStart: suite_version, update_suite)
     basic = {"Authorization": "Basic " + base64.b64encode(f"alex:{secret}".encode()).decode()}
     assert call(client, basic, "overview")["you"]["name"] == "alex"
 
@@ -99,7 +100,6 @@ def test_mcp_contacts_relations_and_permissions(client, family_id):
     assert "not change" in call(client, kid, "update_contact", contact="Mary Ray", changes={"notes": "x"})["error"]
     mine = call(client, kid, "create_contact", contact={"fn": "Best Friend"})
     assert mine["book"] == "Personal"
-    assert "admin" in call(client, kid, "update_server")["error"]
     assert "admin" in call(client, kid, "diagnostics")["error"]
     # alex does not see kid's private contact
     assert "No contact" in call(client, auth, "get_contact", contact=str(mine["id"]))["error"]
@@ -108,6 +108,5 @@ def test_mcp_contacts_relations_and_permissions(client, family_id):
 def test_server_status_for_admins(client):
     s = client.get("/api/server").json()
     assert s["version"] and "canRun" in s and s["mcpEnabled"] is False
-    client.post("/api/server", json={"autoCheck": False})
-    assert client.get("/api/server").json()["autoCheck"] is False
-    assert client.get("/api/status").json()["update"] is None
+    assert "autoCheck" not in s and "update" not in client.get("/api/status").json()  # updating is the suite's
+    assert client.post("/api/server", json={"action": "update"}).status_code == 400

@@ -44,7 +44,7 @@ under More.
 | **Glucose** | blood glucose from a CGM or meter: average, GMI (estimated A1c), time in/below/above range, variability (CV), low episodes; readings with your target band and optional overlays (heart rate, steps, carbohydrates, insulin, workouts…); the daily pattern (ambulatory glucose profile) and time in range per day; **glucose around workouts and meals**: the average change from an hour before to three hours after, per activity or per meal size (from logged carbohydrates), and each event's numbers. A workout's own page shows its glucose curve too. mg/dL or mmol/L and the target range are set in Settings |
 | **Correlations** | pick two metrics and a period: a scatter plot of the days (click a dot for that day), the correlation, how much one explains the other and the best-fit line, same day or "the day before" (sleep, workouts or carbs, then the next day's glucose). Includes glucose time in range and variability per day and workout minutes. A table ranks what else goes with the second metric |
 | **Records** | fastest running efforts from the GPS routes, best days, health bests, ring streaks, and bests per activity |
-| **Settings** | in tabs, as in ioContact and ioCalendar (`#/settings/<tab>`; each tab loads only what it shows). *Account*: your name, email and password (iosuite-shared's panel, the same in every io app). *Display*: theme (light, dark or system, kept with your account), units (automatic from your region, kilometres or miles), and which pages and metrics to show (turn off Sleep, Glucose or any metric you don't use and it disappears from the menu, the dashboard, Metrics and Records). *Health*: glucose unit and target range, maximum heart rate (default 220 − age from your date of birth). *Goals and alerts*: **goals** (any metric, at least or at most: 10,000 steps a day, weight at most 75 kg, 7.5 h of sleep…) and the thresholds for dashboard alerts. For admins: *Server*: iosuite-shared's panel, the same in every io app: the installed version with Check for updates / Update now and the daily check, the database and time zone, the server log, Restart. For suite admins: *Security* (people and their role in every app, app passwords, sign-in at the proxy) and *Global settings* (the apps, keys and tokens), the suite's admin panel, the same as on the start page and in every io app (iosuite-shared's `/api/suite-admin/ui.js`) |
+| **Settings** | in tabs, as in ioContact and ioCalendar (`#/settings/<tab>`; each tab loads only what it shows). *Account*: your name, email and password (iosuite-shared's panel, the same in every io app). *Display*: theme (light, dark or system, kept with your account), units (automatic from your region, kilometres or miles), and which pages and metrics to show (turn off Sleep, Glucose or any metric you don't use and it disappears from the menu, the dashboard, Metrics and Records). *Health*: glucose unit and target range, maximum heart rate (default 220 − age from your date of birth). *Goals and alerts*: **goals** (any metric, at least or at most: 10,000 steps a day, weight at most 75 kg, 7.5 h of sleep…) and the thresholds for dashboard alerts. For admins: *Server*: iosuite-shared's panel, the same in every io app: the installed version, the database and time zone, the server log, Restart. For suite admins: *Security* (people and their role in every app, app passwords, sign-in at the proxy) and *Global settings* (the apps, keys and tokens), the suite's admin panel, the same as on the start page and in every io app (iosuite-shared's `/api/suite-admin/ui.js`) |
 
 **Export.** The ⤓ CSV buttons download what a chart or table shows (Metrics, Day, glucose readings and responses,
 workouts, sleep, correlations). ⤓ PDF in the header saves the current page through the print dialog, in light colours
@@ -60,7 +60,7 @@ sleep that night. Settings are stored in the database (`hlt_user_settings`, per 
 
 The web app's data comes from a JSON API under `/api/` (`types`, `series`, `workouts`, `workouts/{uuid}`, `routes`,
 `sleep`, `glucose`, `activity`, `profile`, `records`, `records/efforts`, `status`, and `settings`, which also takes `PUT`; for admins
-`server`, which also takes `POST` with `{"action": "check"}`, `{"action": "update"}` or `{"autoCheck": false}`), which also accepts an app password as a bearer token, for
+`server`, which also takes `POST` with `{"action": "restart"}`), which also accepts an app password as a bearer token, for
 scripts (`Authorization: Bearer iohealth-…`); it answers with that account's data. Map tiles load from OpenStreetMap in the browser; everything else (including the chart and map
 libraries, [uPlot](https://github.com/leeoniya/uPlot) and [Leaflet](https://leafletjs.com)) is served by the
 container.
@@ -95,7 +95,7 @@ and ioContact use), the public address, the cookie domain, the first account (on
 port (8650), after the framework's own questions (resources, network). The passwords reach `setup.sh` through its environment (a root-only file pushed in and removed again),
 never on a command line; the setup's output is kept in `/opt/iohealth/setup.log`. The MariaDB users must be allowed to connect from the container's address. For unattended runs `IOHEALTH_DB` and
 `IOHEALTH_SUITE_DB` (`host:port/db:user:password`), `IOHEALTH_TZ`, `IOHEALTH_PORT`, `IOHEALTH_PUBLIC_URL`, `IOHEALTH_COOKIE_DOMAIN` and
-`IOHEALTH_ADMIN` (`name:password`) in the environment answer the questions in advance. `update` inside the container (or "Update now" in the web app) runs
+`IOHEALTH_ADMIN` (`name:password`) in the environment answer the questions in advance. `update` inside the container (or the suite's Update button in the web app) runs
 `update.sh`.
 
 ### Docker: with Compose
@@ -151,7 +151,7 @@ password is used once and not written anywhere.
 `IOHEALTH_SUITE_DB` and `IOHEALTH_ADMIN` in the environment), writes `config.env` (readable by the owner only), makes
 `.venv` (Python 3.11 or later), creates the first admin with `iosuite-shared admin`, installs the `iohealth` systemd
 service (`python -m app`) and waits until it answers. Without the service, `./run.sh` starts it in the foreground with
-the same `config.env`; a launchd job `net.iothing.iohealth.server` on a Mac can run that script, and "Update now" in the web app restarts
+the same `config.env`; a launchd job `net.iothing.iohealth.server` on a Mac can run that script, and an update from the web app restarts
 either.
 
 ## Configuration
@@ -185,13 +185,14 @@ for the important ones, and `config.env.example` lists them all) or in the envir
 - **Standalone:** `./update.sh` fetches the latest code (git, or the GitHub tarball when
   there is no checkout), installs the packages the new version asks for and only then moves the code in, then
   restarts the service. `--check` only reports; `IOHEALTH_REF=<sha>` installs that commit.
-- **From the web app:** Settings › Server (admins), the same page in every ioThing app (it comes from
-  `iosuite_shared.updates` in iosuite-shared, at `/api/server` and `/api/log`), shows the installed version and commit,
-  "Check for updates" compares it with GitHub's `main`, and "Update now" runs `update.sh` (in Docker it says to pull
-  instead); below it the tail of the server log (`data/iohealth.log` in the app folder; `LOG_FILE` moves it, empty switches it
-  off) and Restart. A daily check (on by default; `UPDATE_CHECK=0` locks it off, the page switches it off) shows admins
-  a card when a newer version exists, with Update now right on it. Only the public commit list is fetched; nothing
-  about the install is sent.
+- **From the web app:** the suite has one version, the same for every app, and the apps are updated together: Settings ›
+  Global settings › Updates (suite admins, in any app) shows the installed version and the newest one on GitHub, with
+  one Update button that runs each app's `update.sh` (in Docker it says to pull instead). A daily check (on by
+  default; the Updates page switches it off for the suite, `UPDATE_CHECK=0` locks it off for this app) finds a newer
+  version; only the public commit list is fetched, nothing about the install is sent. Settings › Server (admins), the
+  same page in every ioThing app (iosuite-shared's, at `/api/server` and `/api/log`), shows the version and commit
+  ioHealth runs, the tail of the server log (`data/iohealth.log` in the app folder; `LOG_FILE` moves it, empty
+  switches it off) and Restart.
 
 ## Reverse proxy and HTTPS
 The server speaks plain HTTP; put it behind your reverse proxy for HTTPS. With Caddy, which gets a certificate by

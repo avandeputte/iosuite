@@ -42,7 +42,8 @@ def test_mcp_recipes(client, monkeypatch):
     names = {t["name"] for t in rpc(client, "tools/list", auth=auth)[1]["result"]["tools"]}
     assert {"overview", "list_recipes", "search_recipes", "get_recipe", "create_recipe", "update_recipe", "delete_recipe",
             "import_recipe", "mark_recipe", "list_cookbooks", "create_cookbook", "add_to_cookbook", "remove_from_cookbook",
-            "delete_cookbook", "diagnostics", "check_for_update"} <= names
+            "delete_cookbook", "diagnostics"} <= names
+    assert not {"check_for_update", "update_server"} & names  # updating is the suite's (ioStart: suite_version, update_suite)
     r = call(client, auth, "create_recipe", title="Oat cookies", ingredients=["200 g oats", "1 egg"], steps=["Mix.", "Bake."],
              servings="24", cook_minutes=12, tags=["dessert"])
     assert r["title"] == "Oat cookies" and r["family"] is True and r["youCanChange"] is True and r["cookMinutes"] == 12

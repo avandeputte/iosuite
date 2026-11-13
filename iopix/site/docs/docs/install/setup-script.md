@@ -43,4 +43,4 @@ Without the service, `./run.sh` starts iopix in the terminal.
 
 ## Updating
 
-`./update.sh`, or **Settings › Server › Update now**. See [Updating](updating.md).
+`./update.sh`, or **Settings › Global settings › Updates**. See [Updating](updating.md).

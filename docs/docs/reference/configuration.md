@@ -34,7 +34,7 @@ TLS_CERT_FILE=… TLS_KEY_FILE=…            # serve HTTPS directly instead of 
 ADMIN_USER=…  ADMIN_PASSWORD=…            # the first admin, on an empty Shared ioSuite database
 TZ=Europe/Brussels
 LOG_FILE=…                                # the server log (default data/<app>.log; empty: none)
-UPDATE_CHECK=0                            # lock the daily version check off
+UPDATE_CHECK=0                            # lock this app's daily version check off
 KEEP_DELETED_DAYS=90                      # how long what a deletion leaves behind is kept (apps that sync: see below)
 MCP=1                                     # the MCP server on (apps that have one)
 ```

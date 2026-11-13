@@ -137,14 +137,6 @@ h1.ptitle .muted { font-size: 13px; font-weight: 400; margin-left: 4px; }
 .srow .note { color: var(--muted); font-size: 13px; }
 .okc { color: var(--good); }
 
-/* ---- "a newer version is out", for admins (as iopix shows it) */
-#updbanner { position: fixed; right: 16px; bottom: 16px; z-index: 1500; display: flex; gap: 12px; align-items: center; max-width: min(520px, calc(100vw - 32px));
-  padding: 12px 14px; border-radius: 14px; background: var(--card); border: 1px solid var(--line); box-shadow: 0 6px 24px rgba(0, 0, 0, .2); }
-#updbanner .icwrap { width: 34px; height: 34px; border-radius: 12px; flex: none; display: inline-flex; align-items: center; justify-content: center; color: #fff; background: var(--accent); }
-#updbanner .icwrap .ic { width: 20px; height: 20px; }
-#updbanner > div { min-width: 0; flex: 1; }
-#updbanner .muted { font-size: 12px; margin-top: 2px; }
-
 /* ---- phones: More, a sheet with the destinations the bottom bar has no room for */
 .sheetgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 4px 0 6px; }
 .sheetgrid a { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 6px; border-radius: 14px; background: var(--bg); color: var(--text); font-size: 13px; }
@@ -295,7 +287,7 @@ table.grid td { padding: 6px 8px 6px 0; border-top: 1px solid var(--line); }
 @page { margin: 12mm; }
 @media print {
   :root, :root[data-theme="dark"] { --bg: #fff; --card: #fff; --text: #1b1e24; --muted: #6b7280; --line: #e5e7eb; --link: #2563eb; --shadow: none; color-scheme: light; }
-  #topbar, #nav, #navscrim, #updbanner, .toolbar, .zoombar, .noprint, button, .type-picker, .hint, .leaflet-control-container, .stabs { display: none !important; }
+  #topbar, #nav, #navscrim, .toolbar, .zoombar, .noprint, button, .type-picker, .hint, .leaflet-control-container, .stabs { display: none !important; }
   .card:not(:has(> :not(.toolbar):not(.zoombar):not(.type-picker):not(datalist))) { display: none !important; }
   #print-head { display: block; font-size: 12px; color: #444; margin: 0 0 8px; }
   body { background: #fff; }
@@ -331,8 +323,6 @@ table.grid td { padding: 6px 8px 6px 0; border-top: 1px solid var(--line); }
   #nav .navmore .ic { width: 24px; height: 24px; }
   #nav .navmore.on { color: var(--accent); font-weight: 600; }
   main { top: calc(var(--topbar) + env(safe-area-inset-top)); bottom: calc(56px + env(safe-area-inset-bottom)); padding: 8px 16px 24px; }
-  #updbanner { left: 8px; right: 8px; bottom: calc(64px + env(safe-area-inset-bottom)); max-width: none; flex-wrap: wrap; justify-content: flex-end; }
-  #updbanner > div { flex: 1 1 200px; }
   .cols-2, .cols-3 { grid-template-columns: 1fr; }
   .map { height: 340px; }
   .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }

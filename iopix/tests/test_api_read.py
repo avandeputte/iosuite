@@ -119,12 +119,11 @@ def test_job_rows_expose_progress_visibility(client):
 
 
 def test_version_is_single_sourced_and_shown(client):
-    import re
+    import iosuite_shared
     from app import __version__
-    toml = re.search(r'^version = "([^"]+)"', open("pyproject.toml").read(), re.M).group(1)
-    assert __version__ == toml, "bump app/__init__.py and pyproject.toml together"
+    assert __version__ == iosuite_shared.__version__, "the suite has one version: shared/iosuite_shared/__init__.py"
     s = client.get("/api/status").json()
-    assert s["version"] == __version__ and s["app"] == "iopix" and s["name"] == "ioPix" and "commit" in s and "update" in s
+    assert s["version"] == __version__ and s["app"] == "iopix" and s["name"] == "ioPix" and "commit" in s and "update" not in s
     assert client.get("/api/server").json()["version"] == __version__
 
 

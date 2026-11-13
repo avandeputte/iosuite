@@ -45,7 +45,7 @@ def test_viewer_cannot_change_settings(client):
 
 def test_server_info(client):
     s = client.get("/api/server").json()
-    assert s["version"] and "canRun" in s and s["autoCheck"] is False and s["autoCheckLocked"] is True
+    assert s["version"] and "canRun" in s and "autoCheck" not in s  # the daily check is the suite's switch (Updates)
     assert "about" not in s and "progress" in s and s["repo"] and s["branch"]
     assert client.get("/api/log").status_code in (200, 404)  # the server log, when there is one
 
@@ -55,7 +55,7 @@ def test_the_server_log_is_for_admins_only(client):
     client.post("/api/auth/logout")
     assert client.post("/api/auth/login", json={"name": "kid2", "password": "secret123"}).status_code == 200
     assert client.get("/api/log").status_code in (403, 404)  # 404: the tests run without a log file, so the route is not there
-    assert client.post("/api/server", json={"action": "check"}).status_code == 403
+    assert client.post("/api/server", json={"action": "restart"}).status_code == 403
 
 
 def test_the_shell_its_files_and_the_icon_are_public(client):

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "iodns"
-version = "0.11.0"
+version = "0.0.0"  # not this app's version: the suite has one, iosuite_shared.__version__ (shared/iosuite_shared/__init__.py)
 description = "One master list of local DNS records, kept in step on every DNS server of the house (AdGuard Home, Pi-hole, UniFi)"
 readme = "README.md"
 requires-python = ">=3.10"

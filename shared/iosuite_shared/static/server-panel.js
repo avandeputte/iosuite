@@ -1,5 +1,5 @@
 /* The Server panel: Settings › Server, the same screen in every io app (admins). The MCP switch (when the app has
-   one), the installed version with Check for updates, Update now and the daily check, the server log, and Restart.
+   one), the installed version (updating is the suite's: Settings › Global settings › Updates), the server log, and Restart.
    Everything comes from iosuite-shared's /api/server and /api/log (Auth.server_router).
 
    Served at <app>/api/server/ui.js; it talks to the API next to it, so an app served under a sub-path works too. One
@@ -16,11 +16,6 @@ import { api, confirmDialog, fail, h, icon, setToast, styles, toast } from '../a
 
 const API = new URL('../', import.meta.url);   // .../api/
 
-const short = (s) => `v${s.version}${s.installed && s.installed !== 'unknown' ? ` (${s.installed.slice(0, 7)})` : ''}`;
-/** What a check found newer: the app's version, or only the shared library's (the app's own number is unchanged then). */
-const newer = (s, c) => (c.remoteVersion && c.remoteVersion !== s.version ? `v${c.remoteVersion}`
-  : c.remoteShared && c.remoteShared !== s.shared ? `the suite's shared library ${c.remoteShared}` : 'a newer build');
-
 /** Watch /api/status until `done(status)` says so (or the time is up), then reload the page. */
 function reloadWhen(done, ms, gave) {
   const until = Date.now() + ms, from = Date.now() + 3000;
@@ -29,18 +24,6 @@ function reloadWhen(done, ms, gave) {
     if (Date.now() < until) setTimeout(look, 3000); else toast(gave);
   };
   setTimeout(look, 3000);
-}
-
-/** Start update.sh, then reload once another version or commit answers. Exported for the app's "update available"
- *  banner, so Update now behaves the same there. Returns false when it could not start. */
-export async function runUpdate(opts = {}) {
-  setToast(opts.toast);
-  let was;
-  try { const s = await fetch(new URL('status', API), { credentials: 'same-origin' }).then((r) => r.json()); was = `${s.version}|${s.commit || ''}`; } catch { was = ''; }
-  try { await api('server', { json: { action: 'update' } }); } catch (e) { fail(e); return false; }
-  toast('Updating; the app restarts when it is done, and the page reloads.');
-  reloadWhen((s) => s.version && `${s.version}|${s.commit || ''}` !== was, 240000, 'The update did not finish; see Settings › Server.');
-  return true;
 }
 
 // ------------------------------------------------------------------ the boxes
@@ -56,31 +39,13 @@ function mcpBox(s, redraw) {
     s.mcpEnabled ? h('div', { class: 'sv-kv' }, h('span', null, 'Address'), h('span', null, addr)) : null);
 }
 
-function versionBox(s, redraw) {
-  const c = s.check, p = s.progress || {}, last = s.lastUpdate, name = s.name || 'The app';
-  const state = h('p', null, p.running ? `Updating… ${name} restarts when it is done, and this page reloads.`
-    : p.error ? `The last update failed: ${p.error}`
-      : !c ? `You have ${short(s)}${s.shared ? `, shared library ${s.shared}` : ''}.`
-        : c.status === 'current' ? `${short(s)} is the latest version.`
-          : c.status === 'update' ? `You have ${short(s)}; ${newer(s, c)} is available${c.remoteDate ? ` (${c.remoteDate})` : ''}${c.remoteMessage ? `: ${c.remoteMessage.replace(/^v\d+\.\d+\.\d+:\s*/, '')}` : ''}.`
-            : `Could not check: ${c.error}`);
-  const auto = h('input', { type: 'checkbox', checked: s.autoCheck, disabled: s.autoCheckLocked ? true : null, onchange: async (e) => {
-    try { await api('server', { json: { autoCheck: e.target.checked } }); toast('Saved'); redraw(); } catch (err) { e.target.checked = !e.target.checked; fail(err); }
-  } });
-  return h('div', { class: 'sv-box' }, h('h2', null, icon('update'), `${name} version`),
-    state,
-    !p.running && !p.error && last ? h('p', { class: last.ok ? 'sv-muted sv-small' : 'sv-warn sv-small' }, `Last update: ${last.text}`) : null,
-    h('div', { class: 'sv-row' },
-      h('button', { class: 'sv-btn', onclick: async () => { state.textContent = 'Checking…'; try { await api('server', { json: { action: 'check' } }); } catch (e) { fail(e); } redraw(); } }, icon('update'), 'Check for updates'),
-      s.docker ? h('span', { class: 'sv-muted' }, 'Docker: docker compose pull && docker compose up -d')
-        : s.canRun ? h('button', { class: `sv-btn${c && c.status === 'update' ? ' primary' : ''}`, disabled: p.running ? true : null, onclick: async () => {
-          if (!await confirmDialog(`Update ${name}`, `Install the new version and restart ${name}? The page reloads when it is back.`, 'Update now')) return;
-          if (await runUpdate()) setTimeout(redraw, 2500);
-        } }, 'Update now')
-          : h('span', { class: 'sv-muted' }, 'Run ./update.sh in the app folder to update.')),
-    h('label', { class: 'sv-check' }, auto, ' Check for updates daily'),
-    s.autoCheckLocked ? h('p', { class: 'sv-muted sv-small' }, 'UPDATE_CHECK=0 in the environment keeps it off.') : null,
-    h('p', { class: 'sv-muted sv-small' }, `Follows ${s.repo} (${s.branch}). `, h('a', { href: `https://github.com/${s.repo}/commits/${s.branch}`, target: '_blank', rel: 'noopener' }, 'Change log'), '.'));
+function versionBox(s) {
+  const name = s.name || 'The app', last = s.lastUpdate;
+  return h('div', { class: 'sv-box' }, h('h2', null, icon('update'), 'Version'),
+    h('p', null, `${name} runs ioSuite v${s.version}${s.installed && s.installed !== 'unknown' ? ` (${s.installed.slice(0, 7)})` : ''}.`),
+    last ? h('p', { class: last.ok ? 'sv-muted sv-small' : 'sv-warn sv-small' }, `Last update: ${last.text}`) : null,
+    h('p', { class: 'sv-muted sv-small' }, s.docker ? 'In Docker, update by pulling the image: docker compose pull && docker compose up -d'
+      : 'The suite has one version and every app is updated together: Settings › Global settings › Updates (suite admins).'));
 }
 
 function logBox() {
@@ -121,14 +86,12 @@ export async function mount(el, opts = {}) {
   styles();
   setToast(opts.toast);
   el.classList.add('iosv');
-  let log = null, timer = 0;
+  let log = null;
   const draw = async () => {
     let s;
     try { s = await api('server'); } catch (e) { el.replaceChildren(h('p', { class: 'sv-warn' }, e.message)); return; }
     log = log || logBox();
-    el.replaceChildren(...['mcpEnabled' in s ? mcpBox(s, draw) : null, versionBox(s, draw), log, restartBox(s)].filter(Boolean));
-    clearTimeout(timer);
-    if (s.progress && s.progress.running) timer = setTimeout(() => { if (el.isConnected) draw(); }, 4000);
+    el.replaceChildren(...['mcpEnabled' in s ? mcpBox(s, draw) : null, versionBox(s), log, restartBox(s)].filter(Boolean));
   };
   el.replaceChildren(h('p', { class: 'sv-muted' }, 'Loading…'));
   await draw();

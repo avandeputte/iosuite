@@ -750,19 +750,6 @@ async function setServer(el) {
   const panel = h('div'); el.append(panel);
   try { await (await serverUi()).mount(panel, { toast }); } catch (e) { panel.append(h('p', { class: 'warn' }, `The Server panel did not load: ${e.message}`)); }
 }
-function updateBanner() {
-  $('#updbanner')?.remove();
-  const u = S.status && S.status.update;
-  let dismissed = null; try { dismissed = localStorage.getItem('iodns.updateDismissed'); } catch { /* */ }
-  if (!u || dismissed === u.remote) return;
-  const b = h('div', { id: 'updbanner', role: 'status' }, icon('update'),
-    h('span', null, `ioDNS ${u.version ? `v${u.version}` : 'update'} is available${u.message ? `: ${u.message.replace(/^v\d+\.\d+\.\d+:\s*/, '')}` : ''}`),
-    h('button', { class: 'pillbtn primary noic', onclick: async () => { if (await confirmDialog('Update ioDNS', 'Install the new version and restart? The page reloads when it is back.', 'Update now')) { b.remove(); (await serverUi()).runUpdate({ toast }); } } }, 'Update now'),
-    h('a', { class: 'pillbtn noic', href: '#/settings/server', onclick: () => b.remove() }, 'Details'),
-    h('button', { class: 'iconbtn', title: 'Not now', onclick: () => { try { localStorage.setItem('iodns.updateDismissed', u.remote); } catch { /* */ } b.remove(); } }, icon('close', 's')));
-  document.body.append(b);
-}
-
 // ------------------------------------------------------------------ sign-in
 function showSignIn() {
   if (document.querySelector('.signin')) return;
@@ -826,7 +813,5 @@ async function start() {
   addEventListener('hashchange', () => { S.redraw = null; onRoute(); });
   await onRoute();
   loadSuite();
-  updateBanner();
-  setInterval(async () => { try { S.status = await api('/api/status'); updateBanner(); } catch { /* restarting */ } }, 15 * 60 * 1000);
 }
 start().catch(fail);

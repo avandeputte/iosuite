@@ -17,7 +17,7 @@
 # is replaced from the GitHub tarball of the commit. The order protects the install: the Python packages the new
 # version asks for (its pyproject.toml) are installed first, and the code moves only once that succeeded, so a failed
 # package install leaves the installed version running as it was; a failed swap puts the previous files back.
-# Settings › Server › Update now runs this same script from the web app.
+# Settings › Global settings › Updates runs this same script from the web app.
 set -e
 cd "$(dirname "$0")"
 
@@ -186,7 +186,7 @@ CLI=app.cli
 [ ! -f app/cli.py ] || "$VPY" -m "$CLI" migrate >/dev/null 2>&1 || echo "  note: the database could not be updated now; $LABEL does it when it starts"
 after_install
 
-NEWV="$(sed -n 's/^__version__ = "\([^"]*\)".*/\1/p' app/__init__.py)"
+NEWV="$(sed -n 's/^__version__ = "\([^"]*\)".*/\1/p' "$SHARED/iosuite_shared/__init__.py")"  # the suite's version
 # the outcome goes to the result file now: the service restart below also ends this script when the web app started it
 note "ok: updated to v$NEWV on $(date '+%Y-%m-%d %H:%M')"
 
