@@ -1262,13 +1262,13 @@ async function wallAgenda(el, has) {
 // ------------------------------------------------------------------ settings
 async function showSettings(page, r) {
   const adm = S.user.role === 'admin';
-  const tabs = [['account', 'Account'], ['display', 'Display'], ...(adm ? [['weather', 'Home page'], ['ha', 'Home Assistant']] : []), ...(adm ? [['server', 'Server']] : []),
+  const tabs = [['account', 'Account'], ['display', 'Display'], ['bookmarks', 'Bookmarks'], ...(adm ? [['weather', 'Home page'], ['ha', 'Home Assistant']] : []), ...(adm ? [['server', 'Server']] : []),
     ...(S.user.suiteAdmin ? [['security', 'Security'], ['global', 'Global settings']] : [])];
   if (!tabs.some(([k]) => k === r.tab)) r.tab = 'account';
   page.append(h('div', { class: 'pagehead' }, h('h1', null, 'Settings')),
     h('div', { class: 'tabs' }, tabs.map(([k, l]) => h('button', { class: r.tab === k ? 'on' : '', onclick: () => { location.hash = `#/settings/${k}`; } }, l))));
   const body = h('div'); page.append(body);
-  await ({ account: setAccount, display: setDisplay, apps: setHome, weather: setHome, ha: setHomeAssistant, server: setServer, security: setSuite, global: setSuite }[r.tab] || setAccount)(body, r);
+  await ({ account: setAccount, display: setDisplay, bookmarks: setBookmarkSettings, apps: setHome, weather: setHome, ha: setHomeAssistant, server: setServer, security: setSuite, global: setSuite }[r.tab] || setAccount)(body, r);
 }
 const fld = (l, e) => h('label', { class: 'field' }, h('span', null, l), e);
 
@@ -1400,6 +1400,7 @@ async function showBookmarks(page) {
     BM_APP ? null : h('a', { class: 'iconbtn', href: '#/', title: 'Back to the start page', 'aria-label': 'Back to the start page' }, icon('left')),
     h('h1', null, 'Bookmarks'),
     canEdit ? h('button', { class: 'pillbtn primary bmaddtop', onclick: () => body.bmAdd && body.bmAdd() }, icon('add', 's'), 'Link') : null,
+    h('a', { class: 'iconbtn', href: '#/settings/bookmarks', title: 'Sync with browsers, on a phone, import and export (Settings › Bookmarks)', 'aria-label': 'Bookmark settings' }, icon('settings', 's')),
     h('div', { class: 'bmsearch' }, icon('search', 's'), q)));
   page.append(body);
   await setBookmarks(body);
@@ -1410,9 +1411,9 @@ async function showBookmarks(page) {
 const standalone = () => navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
 const bmOpen = new Set();  // the folders unfolded, kept while the page is open
 async function setBookmarks(el) {
-  let tree = null, sync = null;
+  let tree = null;
   const draw = async () => {
-    [tree, sync] = await Promise.all([api('/api/bookmarks/tree'), api('/api/bookmarks/sync')]);
+    tree = await api('/api/bookmarks/tree');
     if (!el.isConnected) return;
     paint();
     const mine = el.bmDrawn = {};  // a later draw makes the wait for icons of this one moot
@@ -1538,15 +1539,6 @@ async function setBookmarks(el) {
     const level = (items, f) => h('div', { class: 'bmlevel' },
       h('div', { class: 'bmlinks', 'data-gid': f ? f.id : 0 }, items.filter((x) => x.type === 'bookmark').map((l) => linkRow(l, f))),
       h('div', { class: 'bmsubs', 'data-gid': f ? f.id : 0 }, items.filter((x) => x.type === 'folder').map(folderBox)));
-    const copy = (text) => h('button', { class: 'iconbtn', title: 'Copy', onclick: async () => { try { await navigator.clipboard.writeText(text); toast('Copied'); } catch { toast(text); } } }, icon('copy', 's'));
-    const addr = (label, text) => h('div', { class: 'bmaddr' }, h('span', { class: 'muted small' }, label), h('code', null, text), copy(text));
-    const file = h('input', { type: 'file', accept: '.html,.htm,.xbel,.xml,text/html', class: 't' });
-    const importFile = async () => {
-      const f = file.files[0];
-      if (!f) { toast('Choose a bookmarks file first'); return; }
-      try { const r = await api('/api/bookmarks/import', { method: 'POST', json: { file: await f.text() } }); toast(`Added ${r.links} link(s) in ${r.groups} folder(s)`); } catch (e) { fail(e); }
-      await draw();
-    };
     const results = () => {
       const found = bmFlat(tree.items).filter((l) => fold(`${l.name} ${l.href} ${l.description || ''} ${where.get(l.id)?.path || ''}`).includes(query));
       return found.length ? h('div', { class: 'bmresults' }, found.slice(0, 200).map((l) => linkRow(l, where.get(l.id)?.f || null, where.get(l.id)?.path || '')))
@@ -1561,24 +1553,7 @@ async function setBookmarks(el) {
         query ? results() : tree.items.length ? h('div', { class: 'bmgroups' }, level(tree.items, null)) : h('p', { class: 'muted' }, 'No bookmarks yet.'),
         !canEdit || query ? null : h('div', { class: 'multi', style: 'margin-top:12px' },
           h('button', { class: 'pillbtn primary', onclick: () => newFolder(0) }, icon('add', 's'), 'Folder'),
-          h('button', { class: 'pillbtn', onclick: () => editLink(0, null) }, icon('add', 's'), 'Link'))),
-      h('div', { class: 'box' }, h('h2', null, icon('update'), 'Sync with browsers'),
-        h('p', { class: 'muted' }, 'The ioStart Bookmarks extension keeps a browser\'s own bookmarks the same as these, both ways: the bookmarks bar is the folder "Bookmarks bar" here, Firefox\'s bookmarks menu the folder "Bookmarks menu", and Other bookmarks everything else at the top (in Vivaldi, which keeps one tree: the folder set as its bookmark bar, and the rest of its Bookmarks). What is added, changed or deleted here or in one browser is so in every browser, within a minute. It signs in with one click.'),
-        !sync.extension ? null : h('div', { class: 'multi' },
-          h('a', { class: 'pillbtn primary', href: 'api/bookmarks/extension.zip', download: '' }, icon('download', 's'), `Extension ${sync.extension} for Chrome, Edge and Vivaldi`),
-          h('a', { class: 'pillbtn', href: 'https://github.com/avandeputte/iosuite/releases?q=extension', target: '_blank', rel: 'noopener' }, 'For Firefox')),
-        h('p', { class: 'muted small' }, 'Chrome, Edge and Vivaldi: unpack the file, open chrome://extensions (edge://extensions, vivaldi://extensions), turn on Developer mode, choose Load unpacked and pick the folder. Firefox: open the signed .xpi file of the release. Then type this page\'s address in the extension and say yes.'),
-        !canEdit ? null : h('p', { class: 'muted' }, 'Other sync apps work too. With Floccus (Firefox, Chrome, Edge, Android, iOS): add an account of the kind Nextcloud Bookmarks, give it the first address, and say yes on the page it opens. Apps that sync a bookmarks file over WebDAV take the second address, the file bookmarks.xbel (or bookmarks.html), your name and an app password from Settings › Account; leave any passphrase empty.'),
-        !canEdit ? null : addr('Nextcloud Bookmarks', sync.nextcloud), !canEdit ? null : addr('WebDAV folder', sync.webdav),
-        sync.syncing ? h('p', { class: 'small' }, 'A browser is syncing right now.') : null),
-      standalone() ? null : h('div', { class: 'box' }, h('h2', null, icon('phone'), 'On a phone'),
-        h('p', { class: 'muted' }, 'These bookmarks as an app of their own, with an icon on the home screen: on an iPhone or iPad open the address below (Safari, or Vivaldi, Chrome, Edge or Firefox), tap Share, then Add to Home Screen. On Android or a desktop browser, choose Install (or Add to Home screen) in the browser\'s menu.'),
-        addr('Bookmarks app', new URL('bookmarks', document.baseURI).href)),
-      h('div', { class: 'box' }, h('h2', null, icon('download'), canEdit ? 'Import and export' : 'Export'),
-        canEdit ? h('p', { class: 'muted' }, 'A bookmarks file exported from a browser (HTML) or an XBEL file is added at the top level; pick what goes on the start page afterwards.') : null,
-        canEdit ? h('div', { class: 'multi' }, file, h('button', { class: 'pillbtn noic', onclick: importFile }, 'Import')) : null,
-        h('p', { class: 'multi' }, h('a', { class: 'pillbtn', href: 'api/bookmarks/export.html', download: 'bookmarks.html' }, icon('download', 's'), 'Export for a browser (HTML)'),
-          h('a', { class: 'pillbtn', href: 'api/bookmarks/export.xbel', download: 'bookmarks.xbel' }, icon('download', 's'), 'Export XBEL'))));
+          h('button', { class: 'pillbtn', onclick: () => editLink(0, null) }, icon('add', 's'), 'Link'))));
     const root = el.querySelector('.bmgroups');
     if (!root || !canEdit) return;
     // drag the grip (mouse, pen or finger): a link lands in any folder's links, a folder among any folder's folders
@@ -1593,6 +1568,39 @@ async function setBookmarks(el) {
   };
   el.bmDraw = draw; el.bmPaint = paint;
   await draw();
+}
+
+/** Settings › Bookmarks: syncing with browsers (the extension, other sync apps), the Bookmarks app on a phone, and
+ * files in and out. The Bookmarks page itself is only the tree. */
+async function setBookmarkSettings(el) {
+  const [tree, sync] = await Promise.all([api('/api/bookmarks/tree'), api('/api/bookmarks/sync')]);
+  const canEdit = !!tree.canEdit;
+  const copy = (text) => h('button', { class: 'iconbtn', title: 'Copy', onclick: async () => { try { await navigator.clipboard.writeText(text); toast('Copied'); } catch { toast(text); } } }, icon('copy', 's'));
+  const addr = (label, text) => h('div', { class: 'bmaddr' }, h('span', { class: 'muted small' }, label), h('code', null, text), copy(text));
+  const file = h('input', { type: 'file', accept: '.html,.htm,.xbel,.xml,text/html', class: 't' });
+  const importFile = async () => {
+    const f = file.files[0];
+    if (!f) { toast('Choose a bookmarks file first'); return; }
+    try { const r = await api('/api/bookmarks/import', { method: 'POST', json: { file: await f.text() } }); toast(`Added ${r.links} link(s) in ${r.groups} folder(s)`); file.value = ''; } catch (e) { fail(e); }
+  };
+  el.append(
+  h('div', { class: 'box' }, h('h2', null, icon('update'), 'Sync with browsers'),
+      h('p', { class: 'muted' }, 'The ioStart Bookmarks extension keeps a browser\'s own bookmarks the same as these, both ways: the bookmarks bar is the folder "Bookmarks bar" here, Firefox\'s bookmarks menu the folder "Bookmarks menu", and Other bookmarks everything else at the top (in Vivaldi, which keeps one tree: the folder set as its bookmark bar, and the rest of its Bookmarks). What is added, changed or deleted here or in one browser is so in every browser, within a minute. It signs in with one click.'),
+      !sync.extension ? null : h('div', { class: 'multi' },
+        h('a', { class: 'pillbtn primary', href: 'api/bookmarks/extension.zip', download: '' }, icon('download', 's'), `Extension ${sync.extension} for Chrome, Edge and Vivaldi`),
+        h('a', { class: 'pillbtn', href: 'https://github.com/avandeputte/iosuite/releases?q=extension', target: '_blank', rel: 'noopener' }, 'For Firefox')),
+      h('p', { class: 'muted small' }, 'Chrome, Edge and Vivaldi: unpack the file, open chrome://extensions (edge://extensions, vivaldi://extensions), turn on Developer mode, choose Load unpacked and pick the folder. Firefox: open the signed .xpi file of the release. Then type this page\'s address in the extension and say yes.'),
+      !canEdit ? null : h('p', { class: 'muted' }, 'Other sync apps work too. With Floccus (Firefox, Chrome, Edge, Android, iOS): add an account of the kind Nextcloud Bookmarks, give it the first address, and say yes on the page it opens. Apps that sync a bookmarks file over WebDAV take the second address, the file bookmarks.xbel (or bookmarks.html), your name and an app password from Settings › Account; leave any passphrase empty.'),
+      !canEdit ? null : addr('Nextcloud Bookmarks', sync.nextcloud), !canEdit ? null : addr('WebDAV folder', sync.webdav),
+      sync.syncing ? h('p', { class: 'small' }, 'A browser is syncing right now.') : null),
+    standalone() ? null : h('div', { class: 'box' }, h('h2', null, icon('phone'), 'On a phone'),
+      h('p', { class: 'muted' }, 'These bookmarks as an app of their own, with an icon on the home screen: on an iPhone or iPad open the address below (Safari, or Vivaldi, Chrome, Edge or Firefox), tap Share, then Add to Home Screen. On Android or a desktop browser, choose Install (or Add to Home screen) in the browser\'s menu.'),
+      addr('Bookmarks app', new URL('bookmarks', document.baseURI).href)),
+    h('div', { class: 'box' }, h('h2', null, icon('download'), canEdit ? 'Import and export' : 'Export'),
+      canEdit ? h('p', { class: 'muted' }, 'A bookmarks file exported from a browser (HTML) or an XBEL file is added at the top level; pick what goes on the start page afterwards.') : null,
+      canEdit ? h('div', { class: 'multi' }, file, h('button', { class: 'pillbtn noic', onclick: importFile }, 'Import')) : null,
+      h('p', { class: 'multi' }, h('a', { class: 'pillbtn', href: 'api/bookmarks/export.html', download: 'bookmarks.html' }, icon('download', 's'), 'Export for a browser (HTML)'),
+        h('a', { class: 'pillbtn', href: 'api/bookmarks/export.xbel', download: 'bookmarks.xbel' }, icon('download', 's'), 'Export XBEL'))));
 }
 
 /** A short list of things to do, each a full-width row to tap (a phone's stand-in for a row of small buttons). */
