@@ -2,7 +2,7 @@ site_name: ioThing suite
 site_url: https://iosuite.iothing.net/docs/
 site_dir: site/docs
 site_description: Self-hosted photos, notes, calendar, tasks, contacts and health for the family. Install one app, or all of them. The guide.
-repo_url: https://github.com/avandeputte/iosuite/tree/main/docs
+repo_url: https://github.com/avandeputte/iosuite
 repo_name: GitHub
 edit_uri: ""
 copyright: © Alex Van de Putte · the ioThing apps are GPL-3.0-or-later
@@ -49,7 +49,7 @@ extra:
   homepage: https://iosuite.iothing.net/
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/avandeputte?tab=repositories&q=io
+      link: https://github.com/avandeputte/iosuite
       name: the ioThing apps on GitHub
 
 extra_css:
