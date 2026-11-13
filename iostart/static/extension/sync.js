@@ -187,7 +187,7 @@
       const changed = await this.apply(res.tree, lroots, roots, first && mode === 'server');
       st.snap = snapshot(res.tree);
       st.rev = res.rev;
-      return { changed: changed || ops.length > 0, pushed: ops.length };
+      return { changed: changed || ops.length > 0, pushed: ops.length, refused: res.refused || 0 };
     }
 
     /** First sync: what is on both sides already, folder by name and link by address (and name, when it can). */

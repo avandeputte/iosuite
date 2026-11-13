@@ -11,7 +11,7 @@ from app import config
 
 from iosuite_shared import db as shared_db, schema
 
-SCHEMA_VERSION = 6  # 6: the bookmarked sites' own icons (prt_site_icons)
+SCHEMA_VERSION = 7  # 7: shared and personal bookmarks (owner, shared; prt_bookmark_starts)
 PREFIX = "prt"
 
 # Every table is InnoDB/utf8mb4. Accounts and app passwords live in the Shared ioSuite database (iosuite-shared,
@@ -27,6 +27,8 @@ SCHEMA = [
     # (never reused: sync clients remember them). `start` picks what the start page shows: on a folder, 1 shows it as a
     # group with its links; on a link, NULL follows its folder, 1 shows it anyway and 0 hides it. `rev` / `created_rev`
     # are the store's revision (prt_settings bookmarks_rev) when the row last changed and when it was made.
+    # `owner` is the account (ios_users.id) whose bookmark it is; `shared` 1: everyone sees it, and only an admin of
+    # the start page changes it (app/bookmarks.py has the rules).
     """CREATE TABLE IF NOT EXISTS prt_bookmark_nodes (
         id INT PRIMARY KEY,
         parent_id INT NULL,
@@ -41,9 +43,12 @@ SCHEMA = [
         position INT NOT NULL DEFAULT 0,
         rev BIGINT NOT NULL DEFAULT 0,
         created_rev BIGINT NOT NULL DEFAULT 0,
+        owner INT NULL,
+        shared TINYINT(1) NOT NULL DEFAULT 0,
         created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
         updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
         KEY idx_prt_bookmark_nodes_parent_position (parent_id, position),
+        KEY idx_prt_bookmark_nodes_owner (owner, shared),
         FOREIGN KEY (parent_id) REFERENCES prt_bookmark_nodes(id) ON DELETE CASCADE
     )""",
     # an SVG uploaded for a bookmark (the Bookmarks page), served by the page itself: it wins over the icon field
@@ -51,6 +56,15 @@ SCHEMA = [
         node_id INT PRIMARY KEY,
         svg MEDIUMTEXT NOT NULL,
         etag CHAR(16) NOT NULL,
+        FOREIGN KEY (node_id) REFERENCES prt_bookmark_nodes(id) ON DELETE CASCADE
+    )""",
+    # a person's own choice of whether a shared folder or link is on their start page (the house, for someone who is
+    # not an admin): `start` as in prt_bookmark_nodes, and it wins over the node's own for that account
+    """CREATE TABLE IF NOT EXISTS prt_bookmark_starts (
+        user_id INT NOT NULL,
+        node_id INT NOT NULL,
+        start TINYINT(1) NULL,
+        PRIMARY KEY (user_id, node_id),
         FOREIGN KEY (node_id) REFERENCES prt_bookmark_nodes(id) ON DELETE CASCADE
     )""",
     # a bookmarked site's own icon (app/siteicons.py), one per scheme://host[:port]: what a link without an icon of
@@ -63,6 +77,15 @@ SCHEMA = [
         fetched_at DATETIME NOT NULL
     )""",
 ]
+
+# columns a table got after it was first made: added to a database made before them, like any new table
+COLUMNS = {
+    "prt_bookmark_nodes": [("owner", "INT NULL AFTER created_rev"), ("shared", "TINYINT(1) NOT NULL DEFAULT 0 AFTER owner")],
+}
+INDEXES = {
+    "prt_bookmark_nodes": [("idx_prt_bookmark_nodes_owner", "(owner, shared)")],
+}
+
 
 def connect(database: str | None = None):
     return pymysql.connect(host=config.DB_HOST, port=config.DB_PORT, user=config.DB_USER, password=config.DB_PASSWORD,
@@ -111,6 +134,16 @@ def migrate() -> None:
     with tx() as con, con.cursor() as cur:
         for stmt in SCHEMA:
             cur.execute(stmt + " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci")
+        for table, cols in COLUMNS.items():
+            have = schema.columns(cur, table)
+            for name, definition in cols:
+                if name not in have:
+                    cur.execute(f"ALTER TABLE `{table}` ADD COLUMN `{name}` {definition}")
+        for table, idx in INDEXES.items():
+            have = schema.indexes(cur, table)
+            for name, cols in idx:
+                if name not in have:
+                    cur.execute(f"ALTER TABLE `{table}` ADD KEY `{name}` {cols}")
         schema.ensure_version_table(cur, PREFIX)
         schema.record_version(cur, PREFIX, SCHEMA_VERSION)
 

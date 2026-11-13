@@ -2,7 +2,9 @@
  * request that asks whether the server changed), when the browser starts, and when asked from the popup.
  * Chrome and Edge run this as a service worker (sync.js comes in with importScripts); Firefox as a background page
  * that lists both scripts. What it keeps (storage.local): account {server, user, password, canWrite},
- * sync {rev, snap, map, roots}, status {at, ok, error, pushed}, mode (how the first sync goes). */
+ * sync {rev, snap, map, roots}, status {at, ok, error, pushed, undone}, mode (how the first sync goes). undone {n, at}:
+ * changes made here to shared bookmarks that the start page did not take (only its admins change those), shown in the
+ * popup for an hour. */
 'use strict';
 if (typeof IoSync === 'undefined' && typeof importScripts === 'function') importScripts('sync.js');
 const ext = globalThis.browser || globalThis.chrome;
@@ -36,7 +38,7 @@ async function badge(status) {
 }
 
 async function once() {
-  const { account, sync, mode } = await load(['account', 'sync', 'mode']);
+  const { account, sync, mode, status: before } = await load(['account', 'sync', 'mode', 'status']);
   if (!account) return;
   engine = new IoSync.Sync({ bm: ext.bookmarks, state: sync || {}, http: (m, p, b) => request(account, m, p, b), log: (m) => console.warn(m) });
   let status;
@@ -44,7 +46,8 @@ async function once() {
     const me = await request(account, 'GET', '');
     if (me.canWrite !== account.canWrite) await save({ account: { ...account, canWrite: me.canWrite } });
     const res = await engine.run({ canWrite: me.canWrite, mode: mode || 'merge' });
-    status = { at: Date.now(), ok: true, pushed: res.pushed, changed: res.changed };
+    const kept = before && before.undone && Date.now() - before.undone.at < 3600e3 ? before.undone : null;
+    status = { at: Date.now(), ok: true, pushed: res.pushed, changed: res.changed, undone: res.refused ? { n: res.refused, at: Date.now() } : kept };
   } catch (e) {
     status = { at: Date.now(), ok: false, error: e.message, offline: !!e.offline || !!e.busy, signedOut: !!e.signedOut };
   }

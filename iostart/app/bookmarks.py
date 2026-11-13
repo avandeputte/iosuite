@@ -1,6 +1,13 @@
 """The bookmarks: one tree of folders and links, as a browser keeps them.
 
-The whole family shares it. Browsers sync with it (app/ncbookmarks.py: the Nextcloud Bookmarks API, which Floccus and
+Each bookmark is someone's own (`owner`: only they see it and change it) or shared (`shared`: everyone sees it, and
+only an admin of the start page changes it, the Shared toggle on the Bookmarks page included). One tree holds both: a
+person sees the shared bookmarks and their own, in the same folders (their own links can sit in a shared folder; a
+shared bookmark is only ever in a shared folder or at the top). Who is asking is `viewer()`, which each request sets
+with `as_user()`; every read below is that person's tree and every change is checked against what they may do. Someone
+who is not an admin may still take a shared folder or link off their own start page (prt_bookmark_starts).
+
+Browsers sync with it (app/ncbookmarks.py: the Nextcloud Bookmarks API, which Floccus and
 other clients speak; app/bookmarkdav.py: a bookmarks file over WebDAV), and the start page shows the part picked for
 it: a folder marked for the start page is a group there with its links, and a single link can be shown or hidden on
 its own (`start`: None follows the folder). Editors and admins change the tree in the Bookmarks page.
@@ -60,6 +67,7 @@ def _href(href: str) -> str:
 
 import threading
 from contextlib import contextmanager
+from contextvars import ContextVar
 
 NAME_MAX, URL_MAX = 1024, 60000
 _SHOWN = re.compile(r"^(https?://|mailto:)", re.I)  # what the start page puts in an <a href>
@@ -68,6 +76,58 @@ _w = threading.local()
 
 class NotFound(BadBookmark):
     pass
+
+
+class NotAllowed(BadBookmark):
+    pass
+
+
+# ------------------------------------------------------------------ who is asking
+
+class Viewer:
+    """Whose tree it is: the account's id (`uid`), whether it may keep and change bookmarks of its own (`member`: a
+    member, editor or admin of the start page) and whether it manages the shared ones (`admin`)."""
+
+    def __init__(self, uid, member: bool, admin: bool):
+        self.uid, self.member, self.admin = uid, bool(member), bool(admin)
+
+
+_viewer: ContextVar = ContextVar("bookmarks_viewer", default=None)  # None: the server itself, which sees everything
+
+
+def as_user(u: dict | None) -> Viewer:
+    """The bookmarks read and changed from here on (this request) are this account's."""
+    from iosuite_shared import users
+    v = Viewer(u["id"] if u else None, users.is_member(u), users.is_admin(u))
+    _viewer.set(v)
+    return v
+
+
+def viewer() -> Viewer | None:
+    return _viewer.get()
+
+
+def sees(r: dict, v: Viewer | None = None) -> bool:
+    v = v or viewer()
+    return v is None or bool(r["shared"]) or r["owner"] == v.uid
+
+
+def may_change(r: dict, v: Viewer | None = None) -> bool:
+    v = v or viewer()
+    if v is None:
+        return True
+    return v.admin if r["shared"] else (v.member and r["owner"] == v.uid)
+
+
+def _need(r: dict) -> None:
+    if not may_change(r):
+        raise NotAllowed("Only an admin of the start page changes the shared bookmarks" if r["shared"] else "This account can only read the bookmarks")
+
+
+def _need_member() -> None:
+    v = viewer()
+    if v is not None and not v.member:
+        raise NotAllowed("This account can only read the bookmarks")
 
 
 # ------------------------------------------------------------------ the revision, the ids
@@ -125,15 +185,31 @@ def clean_tags(tags) -> list[str]:
     return out
 
 
-class Tree:
-    """Every node, read once: `by` id, `kids` of a parent (None: the top) in order."""
+def _own_starts(rows: list[dict], v: Viewer | None) -> list[dict]:
+    """The shared rows with the viewer's own start page choice in `start` (and `ownStart` set) where they made one."""
+    if v is None or v.uid is None or not any(r["shared"] for r in rows):
+        return rows
+    own = {r["node_id"]: r["start"] for r in db.q("SELECT node_id, start FROM prt_bookmark_starts WHERE user_id = %s", (v.uid,))}
+    for r in rows:
+        if r["shared"] and r["id"] in own:
+            r["start"], r["ownStart"] = own[r["id"]], True
+    return rows
 
-    def __init__(self):
-        self.rows = db.q(_NODE + " ORDER BY n.position, n.id")
+
+class Tree:
+    """The viewer's nodes (`everything`: all of them, whoever's), read once: `by` id, `kids` of a parent (None: the
+    top) in order."""
+
+    def __init__(self, everything: bool = False):
+        v = None if everything else viewer()
+        if v is None:
+            self.rows = db.q(_NODE + " ORDER BY n.position, n.id")
+        else:
+            self.rows = _own_starts(db.q(_NODE + " WHERE n.shared = 1 OR n.owner <=> %s ORDER BY n.position, n.id", (v.uid,)), v)
         self.by = {r["id"]: r for r in self.rows}
         self.kids: dict = {}
         for r in self.rows:
-            self.kids.setdefault(r["parent_id"], []).append(r)
+            self.kids.setdefault(r["parent_id"] if r["parent_id"] in self.by else None, []).append(r)
 
     def children(self, pid) -> list[dict]:
         return self.kids.get(pid, [])
@@ -171,7 +247,7 @@ def _link(r: dict, shown: bool | None = None, sites: dict | None = None) -> dict
     d = {"id": r["id"], "groupId": r["parent_id"] or 0, "name": r["name"], "abbr": r["abbr"] or _abbr(r["name"], None), "href": r["url"],
          "description": r["description"] or (_host(r["url"])), "customDescription": r["description"] or "",
          "icon": r["icon"] or "", "iconUrl": f"api/bookmarks/links/{r['id']}/icon.svg?v={r['etag']}" if r.get("etag") else "",
-         "tags": tags_of(r), "start": None if r["start"] is None else bool(r["start"])}
+         "tags": tags_of(r), "start": None if r["start"] is None else bool(r["start"]), "shared": bool(r["shared"]), "canChange": may_change(r)}
     d.update(siteicons.of(r["url"], sites) if not (d["iconUrl"] or d["icon"]) else {"siteIcon": "", "iconPending": False})
     if shown is not None:
         d["onStart"], d["linkable"] = shown, bool(_SHOWN.match(r["url"] or ""))
@@ -209,27 +285,82 @@ def tree() -> dict:
     t, sites = Tree(), siteicons.known()
 
     def level(pid):
-        return [{"id": r["id"], "type": "folder", "parentId": r["parent_id"] or 0, "name": r["name"], "start": bool(r["start"]), "items": level(r["id"])}
+        return [{"id": r["id"], "type": "folder", "parentId": r["parent_id"] or 0, "name": r["name"], "start": bool(r["start"]),
+                 "shared": bool(r["shared"]), "canChange": may_change(r), "items": level(r["id"])}
                 if r["folder"] else {"type": "bookmark", **_link(r, t.shown(r), sites)} for r in t.children(pid)]
 
-    return {"rev": revision(), "items": level(None), "count": sum(1 for r in t.rows if not r["folder"])}
+    v = viewer()
+    return {"rev": revision(), "items": level(None), "count": sum(1 for r in t.rows if not r["folder"]),
+            "canEdit": v is None or v.member, "canShare": v is None or v.admin}
 
 
 def node(nid: int) -> dict:
+    """A node the viewer sees (with their own start page choice on a shared one), or NotFound."""
     r = db.one(_NODE + " WHERE n.id = %s", (int(nid),))
-    if not r:
+    if not r or not sees(r):
         raise NotFound("No such bookmark or folder")
-    return r
+    return _own_starts([r], viewer())[0]
 
 
 def _folder(pid) -> int | None:
     """The folder a parent id names (None, 0 and -1: the top), or NotFound."""
     if pid in (None, "", 0, -1, "0", "-1"):
         return None
-    r = db.one("SELECT id, folder FROM prt_bookmark_nodes WHERE id = %s", (int(pid),))
-    if not r or not r["folder"]:
+    try:
+        r = node(int(pid))
+    except (TypeError, ValueError):
+        raise NotFound("No such folder")
+    if not r["folder"]:
         raise NotFound("No such folder")
     return r["id"]
+
+
+def _to_top(nid: int, rev: int) -> None:
+    db.ex("UPDATE prt_bookmark_nodes SET parent_id = NULL, position = %s, rev = %s WHERE id = %s", (_next_position(None), rev, nid))
+
+
+def _others_inside(t: Tree, nid: int, v: Viewer | None) -> list[int]:
+    """Under a shared folder: the topmost bookmarks of other people (their own, in it), which must not go with it."""
+    if v is None:
+        return []
+    return [i for i in t.below(nid) if i != nid and not t.by[i]["shared"] and t.by[i]["owner"] != v.uid
+            and t.by.get(t.by[i]["parent_id"], {}).get("shared")]
+
+
+def _share(nid: int, rev: int) -> None:
+    """Shared: the node, what of the viewer's is in it, and the folders it is in (a shared bookmark is only ever in a
+    shared folder)."""
+    v, t = viewer(), Tree(everything=True)
+    mine = [i for i in t.below(nid) if t.by[i]["shared"] or v is None or t.by[i]["owner"] == v.uid]
+    r = t.by.get(t.by[nid]["parent_id"])
+    while r is not None:
+        mine.append(r["id"])
+        r = t.by.get(r["parent_id"])
+    todo = [i for i in mine if not t.by[i]["shared"]]
+    if todo:
+        db.ex(f"UPDATE prt_bookmark_nodes SET shared = 1, rev = %s WHERE id IN ({', '.join(['%s'] * len(todo))})", (rev, *todo))
+
+
+def _unshare(nid: int, rev: int) -> None:
+    """The viewer's own again (an admin's): the node and the shared bookmarks in it. Other people's own bookmarks in
+    it go to the top of their tree, where they still see them."""
+    v, t = viewer(), Tree(everything=True)
+    for i in _others_inside(t, nid, v):
+        _to_top(i, rev)
+    todo = [i for i in t.below(nid) if t.by[i]["shared"]]
+    if todo:
+        db.ex(f"UPDATE prt_bookmark_nodes SET shared = 0, owner = %s, rev = %s WHERE id IN ({', '.join(['%s'] * len(todo))})",
+              (v.uid if v else None, rev, *todo))
+
+
+def _set_own_start(r: dict, start) -> None:
+    """Someone who does not manage the shared bookmarks takes a shared folder or link on or off their own start page."""
+    v = viewer()
+    if v is None or v.uid is None:
+        raise NotAllowed("Sign in to choose what is on your start page")
+    val = (1 if start else 0) if r["folder"] or start is not None else None
+    db.ex("INSERT INTO prt_bookmark_starts (user_id, node_id, start) VALUES (%s, %s, %s) ON DUPLICATE KEY UPDATE start = VALUES(start)",
+          (v.uid, r["id"], val))
 
 
 # ------------------------------------------------------------------ changing (the web app and the sync clients alike)
@@ -253,9 +384,13 @@ def _next_position(pid) -> int:
 
 def create(parent, folder: bool, name: str, url: str | None = None, *, tags=None, start=None, strict: bool = False,
            abbr=None, description=None, icon=None, nid: int | None = None) -> dict:
-    """A new folder or link at the end of `parent` (None: the top). `nid`: the id a sync client's file gave it."""
+    """A new folder or link at the end of `parent` (None: the top). `nid`: the id a sync client's file gave it. It is
+    the viewer's own; an admin's in a shared folder is shared, as the folder is."""
+    v = viewer()
     with writing() as rev:
         pid = _folder(parent)
+        _need_member()
+        shared = 1 if pid is not None and node(pid)["shared"] and (v is None or v.admin) else 0
         name = (name or "").strip()[:NAME_MAX]
         if strict and not name:
             raise BadBookmark("A name for the group, please" if folder else "A name for the link, please")
@@ -264,18 +399,29 @@ def create(parent, folder: bool, name: str, url: str | None = None, *, tags=None
             nid = _new_id()
         else:
             saw_id(nid)
-        db.ex("INSERT INTO prt_bookmark_nodes (id, parent_id, folder, name, url, abbr, description, icon, tags, start, position, rev, created_rev) "
-              "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+        db.ex("INSERT INTO prt_bookmark_nodes (id, parent_id, folder, name, url, abbr, description, icon, tags, start, position, rev, created_rev, owner, shared) "
+              "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
               (nid, pid, 1 if folder else 0, name, url, None if folder else ((abbr or "").strip()[:4] or None),
                (description or "").strip()[:512] or None, (icon or "").strip()[:1024] or None, "\n".join(clean_tags(tags)) or None,
-               (1 if start else 0) if folder else (None if start is None else (1 if start else 0)), _next_position(pid), rev, rev))
+               (1 if start else 0) if folder else (None if start is None else (1 if start else 0)), _next_position(pid), rev, rev,
+               v.uid if v else None, shared))
         return node(nid)
 
 
 def change(nid: int, c: dict, strict: bool = False) -> dict:
-    """Any of name, url, parent (a folder id; None: the top), tags, start, abbr, description, icon."""
+    """Any of name, url, parent (a folder id; None: the top), tags, start, abbr, description, icon, shared (admins).
+    A shared bookmark moved into a folder that is not shared is no longer shared."""
+    v = viewer()
+    r = node(nid)
+    if c and set(c) <= {"start"} and r["shared"] and v is not None and not v.admin:
+        _set_own_start(r, c["start"])  # their own start page; the tree itself does not change
+        return node(nid)
     with writing() as rev:
         r = node(nid)
+        _need(r)
+        if "shared" in c and v is not None and not v.admin:
+            raise NotAllowed("Only an admin of the start page shares bookmarks")
+        share = None if "shared" not in c else bool(c["shared"])
         sets, args = ["rev = %s"], [rev]
         if "name" in c:
             name = (c["name"] or "").strip()[:NAME_MAX]
@@ -298,28 +444,45 @@ def change(nid: int, c: dict, strict: bool = False) -> dict:
                 if r["folder"] and pid is not None and pid in Tree().below(nid):
                     raise BadBookmark("A folder cannot go inside itself")
                 sets += ["parent_id = %s", "position = %s"]; args += [pid, _next_position(pid)]
+                if r["shared"] and pid is not None and not node(pid)["shared"] and share is None:
+                    share = False
         db.ex(f"UPDATE prt_bookmark_nodes SET {', '.join(sets)} WHERE id = %s", (*args, nid))
+        if share is True:
+            _share(nid, rev)
+        elif share is False and r["shared"]:
+            _unshare(nid, rev)
         return node(nid)
 
 
 def remove(nid: int) -> None:
-    """A link, or a folder with everything in it."""
-    with writing():
+    """A link, or a folder with everything in it (but other people's own bookmarks in a shared folder: those go to the
+    top of their tree)."""
+    with writing() as rev:
+        r = node(nid)
+        _need(r)
+        if r["shared"] and r["folder"]:
+            for i in _others_inside(Tree(everything=True), r["id"], viewer()):
+                _to_top(i, rev)
         if not db.ex("DELETE FROM prt_bookmark_nodes WHERE id = %s", (int(nid),)):
             raise NotFound("No such bookmark or folder")
 
 
 def order(parent, ids: list[int]) -> None:
     """The children of `parent` named in `ids` in that order, in the places they held; the children not named stay
-    where they are. A node named from elsewhere moves in, after the last one named."""
+    where they are. A node named from elsewhere moves in, after the last one named. What the viewer may not change (a
+    shared bookmark, for someone who is not an admin) is left where it is, and so is what they do not see."""
     with writing() as rev:
         pid = _folder(parent)
-        t = Tree()
-        ids = [int(i) for i in dict.fromkeys(ids) if int(i) in t.by]
+        mine = Tree()
+        ids = [int(i) for i in dict.fromkeys(ids) if int(i) in mine.by and may_change(mine.by[int(i)])]
         for i in ids:
-            if pid is not None and t.by[i]["folder"] and pid in t.below(i):
+            if pid is not None and mine.by[i]["folder"] and pid in mine.below(i):
                 raise BadBookmark("A folder cannot go inside itself")
-        now = [r["id"] for r in t.children(pid)]
+        moved = [i for i in ids if mine.by[i]["parent_id"] != pid]
+        for i in moved:
+            change(i, {"parent": pid})  # the rules of a move (a shared one into a folder that is not), at the end for now
+        t = Tree(everything=True)
+        now = [r["id"] for r in t.children(pid) if r["id"] not in moved]
         named, queue = set(ids), list(ids)
         out = []
         last = max((k for k, i in enumerate(now) if i in named), default=len(now) - 1)
@@ -338,7 +501,8 @@ def order(parent, ids: list[int]) -> None:
 # ------------------------------------------------------------------ the web app's calls (the Bookmarks page)
 
 def _group_public(r: dict) -> dict:
-    return {"id": r["id"], "name": r["name"], "parentId": r["parent_id"] or 0, "start": bool(r["start"]), "links": []}
+    return {"id": r["id"], "name": r["name"], "parentId": r["parent_id"] or 0, "start": bool(r["start"]), "links": [],
+            "shared": bool(r["shared"]), "canChange": may_change(r)}
 
 
 def add_group(name: str, parent=None, start: bool = True) -> dict:
@@ -348,7 +512,7 @@ def add_group(name: str, parent=None, start: bool = True) -> dict:
 def update_group(gid: int, c: dict) -> dict:
     if not node(gid)["folder"]:
         raise NotFound("No such group")
-    ch = {k: c[k] for k in ("name", "start") if k in c}
+    ch = {k: c[k] for k in ("name", "start", "shared") if k in c}
     if "parentId" in c:
         ch["parent"] = c["parentId"]
     return _group_public(change(gid, ch, strict=True))
@@ -378,7 +542,7 @@ def update_link(lid: int, changes: dict) -> dict:
         c["url"] = changes["href"]
     if "abbr" in changes or "name" in changes:
         c["abbr"] = _abbr((changes.get("name") if "name" in changes else r["name"]) or "", changes.get("abbr") if "abbr" in changes else None)
-    for k in ("description", "icon", "tags", "start"):
+    for k in ("description", "icon", "tags", "start", "shared"):
         if k in changes:
             c[k] = changes[k]
     if "groupId" in changes and changes["groupId"] is not None:
@@ -406,9 +570,12 @@ def import_yaml(text: str, replace: bool = False) -> dict:
         raise BadBookmark("A homepage bookmarks.yaml is a list of groups")
     ng = nl = 0
     with writing():
-        if replace:
-            db.ex("DELETE FROM prt_bookmark_nodes WHERE parent_id IS NULL")
-        existing = {g["name"].lower(): g["id"] for g in db.q("SELECT id, name FROM prt_bookmark_nodes WHERE folder = 1 AND parent_id IS NULL")}
+        _need_member()
+        if replace:  # the viewer's own, at the top (and what is in it)
+            for r in Tree().children(None):
+                if not r["shared"] and may_change(r):
+                    remove(r["id"])
+        existing = {g["name"].lower(): g["id"] for g in Tree().children(None) if g["folder"] and may_change(g)}
         for group in doc:
             if not isinstance(group, dict) or len(group) != 1:
                 continue
@@ -453,24 +620,17 @@ def add_items(parent, items: list[dict], start=None) -> list[dict]:
     return out
 
 
-def carry_over() -> None:
-    """Once: the groups and links of the start page before the tree (prt_bookmark_groups, prt_bookmarks, their icons)
-    become top-level folders shown on the start page. The old tables are left as they are. Temporary: goes away in the
-    version after this one."""
-    if db.get_setting("bookmarks_carried"):
+def claim_unowned() -> None:
+    """Bookmarks nobody owns (made before the first account, or before bookmarks had owners) become the first admin's
+    own: an admin shares what everyone should see."""
+    if not db.one("SELECT id FROM prt_bookmark_nodes WHERE owner IS NULL AND shared = 0 LIMIT 1"):
         return
-    with db.tx() as con, con.cursor() as cur:
-        from iosuite_shared import schema
-        have = schema.tables(cur)
-    if "prt_bookmark_groups" in have and "prt_bookmarks" in have and not db.one("SELECT id FROM prt_bookmark_nodes LIMIT 1"):
+    from iosuite_shared import users
+    from app import config
+    admin = next((u for u in users.list_users(config.APP) if u.get("role") == "admin"), None)
+    if admin:
         with writing():
-            for g in db.q("SELECT * FROM prt_bookmark_groups ORDER BY position, id"):
-                gid = create(None, True, g["name"], start=True)["id"]
-                for l in db.q("SELECT * FROM prt_bookmarks WHERE group_id = %s ORDER BY position, id", (g["id"],)):
-                    nid = create(gid, False, l["name"], l["url"], abbr=l["abbr"], description=l["description"], icon=l["icon"])["id"]
-                    if "prt_bookmark_icons" in have:
-                        db.ex("INSERT INTO prt_bookmark_node_icons (node_id, svg, etag) SELECT %s, svg, etag FROM prt_bookmark_icons WHERE bookmark_id = %s", (nid, l["id"]))
-    db.set_setting("bookmarks_carried", "1")
+            db.ex("UPDATE prt_bookmark_nodes SET owner = %s WHERE owner IS NULL AND shared = 0", (admin["id"],))
 
 
 # ------------------------------------------------------------------ uploaded icons
@@ -522,6 +682,7 @@ def png_as_svg(data: bytes) -> str:
 
 def set_icon(lid: int, data: bytes) -> dict:
     """Store the icon uploaded for a link (an SVG, or a PNG); returns the link."""
+    _need(node(lid))
     if node(lid)["folder"]:
         raise NotFound("No such link")
     svg = png_as_svg(data) if data[:8] == _PNG else clean_svg(data)
@@ -532,11 +693,12 @@ def set_icon(lid: int, data: bytes) -> dict:
 
 
 def clear_icon(lid: int) -> dict:
-    node(lid)
+    _need(node(lid))
     db.ex("DELETE FROM prt_bookmark_node_icons WHERE node_id = %s", (lid,))
     return _link(node(lid))
 
 
 def icon(lid: int) -> dict | None:
     """{svg, etag} of the uploaded icon, or None."""
+    node(lid)
     return db.one("SELECT svg, etag FROM prt_bookmark_node_icons WHERE node_id = %s", (lid,))

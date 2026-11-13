@@ -15,6 +15,7 @@ function ago(at) {
 function describe(account, status) {
   if (!account) return { cls: '', text: 'Not signed in' };
   if (!status) return { cls: '', text: 'First sync…' };
+  if (status.ok && status.undone) return { cls: 'ok', text: `In sync · checked ${ago(status.at)}. ${status.undone.n} change(s) to shared bookmarks were put back ${ago(status.undone.at)}: only an admin of the start page changes those.` };
   if (status.ok) return { cls: 'ok', text: `In sync · checked ${ago(status.at)}` };
   return { cls: status.offline ? '' : 'bad', text: `${status.error} · ${ago(status.at)}` };
 }

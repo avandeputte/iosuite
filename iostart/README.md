@@ -70,8 +70,11 @@ what the app will show on the start page later (today's events, the newest photo
   to every open page (server-sent events) when something on the card or one of the alerts changes, so a light switched
   at the wall shows within a second; without the
   websocket (HA_FEED=0, or an old install) the states come in one call kept five seconds.
-- **Bookmarks**: one tree of folders and links for the family, as a browser keeps them, on a page of its own
-  (`#/bookmarks`, from the start page and the gear menu). The start page shows the part picked for it, as
+- **Bookmarks**: one tree of folders and links, as a browser keeps them, on a page of its own
+  (`#/bookmarks`, from the start page and the gear menu). Each person's bookmarks are their own (members, editors and
+  admins keep some; nobody else sees them), and the start page's admins share folders and links with everyone (the
+  people icon beside the house); only they change the shared ones. Others can add their own links in a shared folder
+  and take a shared one off their own start page; their browsers put back what they change of the shared ones. The start page shows the part picked for it, as
   [homepage](https://gethomepage.dev/configs/bookmarks/) lays bookmarks out: the house on a folder shows it as a group
   with its links, the house on a link shows or hides just that one; each link has an icon, the name and the site. The icon is the site's
   own, as a browser finds it: the server asks the bookmarked page for its icon (`<link rel="icon">`, else

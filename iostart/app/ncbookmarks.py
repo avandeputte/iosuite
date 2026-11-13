@@ -96,6 +96,8 @@ def _guard(fn):
             return await run_in_threadpool(fn, *a, **kw)
         except bookmarks.NotFound as e:
             return fail(404, str(e))
+        except bookmarks.NotAllowed as e:
+            return fail(403, str(e))
         except bookmarks.BadBookmark as e:
             return fail(400, str(e))
     return run
@@ -203,9 +205,9 @@ def flow_page(page: str, request: Request):
         return _page("ioStart", '<h1>Sign in to ioStart first</h1><p>Then you are asked whether the app may sync the bookmarks.</p>'
                                 f'<p><a class="btn" href="/?flow={html.escape(page)}">Sign in</a></p>')
     who = html.escape(f["ua"] or "An app")
-    can = "read and change" if sync.users.can_write(u) else "read"
+    can = "read and change" if sync.users.is_member(u) else "read"
     return _page("Sync bookmarks with ioStart", f"""<h1>Let this app sync the bookmarks?</h1>
-<p><b>{who}</b> asks to {can} the family's bookmarks as <b>{html.escape(u["name"])}</b>.</p>
+<p><b>{who}</b> asks to {can} your bookmarks and the shared ones as <b>{html.escape(u["name"])}</b>.</p>
 <p class="muted">It gets an app password of its own, for sync only. You can revoke it any time in Settings.</p>
 <form method="post" action="{BASE}/index.php/login/v2/grant"><input type="hidden" name="page" value="{html.escape(page)}"><button>Allow</button></form>""")
 
