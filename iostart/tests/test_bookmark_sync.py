@@ -72,6 +72,7 @@ def test_nextcloud_sign_in_flow_gives_a_sync_only_app_password(client):
     assert poll().status_code == 404
     page = f["login"].replace("http://start.example.com", "")
     assert "Sign in to ioStart first" in anon.get(page).text  # nobody signed in: nothing to allow
+    assert f'href="/?flow={page.rsplit("/", 1)[-1]}"' in anon.get(page).text  # the start page signs in and sends back here
     r = client.get(page)
     assert "Floccus bookmarks sync" in r.text and "alex" in r.text
     token = page.rsplit("/", 1)[-1]
