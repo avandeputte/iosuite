@@ -214,7 +214,7 @@ The routes:
 | `GET /api/suite-admin/keys?app=` | every app's keys and tokens (`iosuite_shared.credentials`), never the value: `{app ('' : the whole suite), appName, name, label, hint, set, env, envSet, updated, updatedBy}` |
 | `PUT /api/suite-admin/keys/{app}/{name}` | `{value}`: replace it (`''` clears it); `_suite` for the whole suite's keys |
 | `DELETE /api/suite-admin/keys/{app}/{name}` | clear it |
-| `GET /api/suite-admin/updates` | every app's version, the newest on GitHub, its last update (`iosuite_shared.suiteupdates`, below) |
+| `GET /api/suite-admin/updates` | every app's version and the shared library's (`shared`, `latestShared`), the newest on GitHub, its last update (`iosuite_shared.suiteupdates`, below) |
 | `POST /api/suite-admin/updates` | `{action: check / update, apps?: [keys]}`: ask the apps (without `apps`: every app for a check, every app with an update waiting for an update) |
 
 The usual rules hold: a one-click account is a member at most and has no app passwords, an admin tool takes no roles, the last suite admin stays, and

@@ -56,6 +56,25 @@ def test_request_claim_and_overview(tmp_path, monkeypatch):
         suiteupdates.request("reboot", None)
 
 
+def test_an_update_of_the_shared_library_alone_says_so(tmp_path, monkeypatch):
+    """The app's version is the same on GitHub, the shared library's is newer: an update, and the overview says which."""
+    suite.register("iocalendar", name="ioCalendar", version="1.0.0")
+    cal = updater(tmp_path, monkeypatch, remote="1.0.0")
+    mine = updates.Updater.shared_version()
+    plain = cal._get_url
+    cal._get_url = lambda url, accept="": b'__version__ = "999.0.0"\n' if updates.SHARED_VERSION_FILE in url else plain(url, accept)
+    cal._said_hello()
+    cal.serve("check")
+    a = suiteupdates.overview()[0]
+    assert a["status"] == "update" and a["latest"] == "1.0.0" == a["version"]
+    assert a["shared"] == mine and a["latestShared"] == "999.0.0"
+    cal._said_hello()  # a restart without installing it: still waiting
+    assert suiteupdates.overview()[0]["status"] == "update"
+    db.ex("UPDATE ios_updates SET latest_shared = %s WHERE app = 'iocalendar'", (mine,))
+    cal._said_hello()  # after installing it
+    assert suiteupdates.overview()[0]["status"] == "current"
+
+
 def test_an_update_that_cannot_run_says_why(tmp_path, monkeypatch):
     suite.register("iocalendar", name="ioCalendar")
     cal = updater(tmp_path, monkeypatch)

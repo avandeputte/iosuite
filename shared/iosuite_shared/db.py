@@ -20,10 +20,11 @@ from iosuite_shared import config, schema
 
 log = logging.getLogger("iosuite_shared.db")
 
-SCHEMA_VERSION = 9  # 4: the suite naming convention (ios_ tables, *_at times, name/value, named indexes); 5: ios_apps.admin_tool;
+SCHEMA_VERSION = 10  # 4: the suite naming convention (ios_ tables, *_at times, name/value, named indexes); 5: ios_apps.admin_tool;
 # 6: the member role (between viewer and editor); the viewers of before, who kept their own things, became members;
 # 7: ios_updates (updating the apps from one place); 8: ioNotes, ioTasks and ioContacts became ioNote, ioTask, ioContact;
-# 9: the start page, ioSuite until then, became ioStart (ioSuite is the suite and its repository)
+# 9: the start page, ioSuite until then, became ioStart (ioSuite is the suite and its repository);
+# 10: ios_updates.shared and latest_shared (an update can be the shared library's alone)
 PREFIX = "ios"
 OPTIONS = " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
 
@@ -150,6 +151,8 @@ SCHEMA = [
         installed VARCHAR(32) NULL,
         git_commit VARCHAR(40) NULL,
         latest VARCHAR(32) NULL,
+        shared VARCHAR(32) NULL,
+        latest_shared VARCHAR(32) NULL,
         status VARCHAR(16) NULL,
         checked_at BIGINT NULL,
         can_run TINYINT NOT NULL DEFAULT 0,
@@ -387,6 +390,8 @@ def init():
                     cur.execute(stmt + OPTIONS)
                 if "admin_tool" not in schema.columns(cur, "ios_apps"):  # 5: an app may be an admin tool
                     cur.execute("ALTER TABLE ios_apps ADD COLUMN admin_tool TINYINT NOT NULL DEFAULT 0 AFTER internal_url")
+                if "latest_shared" not in schema.columns(cur, "ios_updates"):  # 10: the shared library's versions
+                    cur.execute("ALTER TABLE ios_updates ADD COLUMN shared VARCHAR(32) NULL AFTER latest, ADD COLUMN latest_shared VARCHAR(32) NULL AFTER shared")
                 schema.ensure_version_table(cur, PREFIX)
                 if schema.current_version(cur, PREFIX) < 6:
                     _members(cur)

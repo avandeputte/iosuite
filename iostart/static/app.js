@@ -570,7 +570,7 @@ async function drawAppStatus(page) {
     const st = page.querySelector(`.app[data-app="${key}"] .st`);
     if (!st) continue;
     st.replaceChildren(h('span', { class: `dot ${s.ok ? 'ok' : 'down'}`, title: s.ok ? `Up${s.version ? ` · v${s.version}` : ''}` : `Not reachable${s.why ? `: ${s.why}` : ''}` }));
-    if (s.update) st.append(h('span', { class: 'upd', title: typeof s.update === 'string' ? `v${s.update} is out (now v${s.version || '?'})` : 'An update is waiting' }, 'update'));
+    if (s.update) st.append(h('span', { class: 'upd', title: s.note || (typeof s.update === 'string' ? `v${s.update} is out (now v${s.version || '?'})` : 'An update is waiting') }, 'update'));
   }
 }
 /** The bookmarks the server could not reach get a red dot and a tooltip. */

@@ -165,9 +165,11 @@ class Updater:
             out.update(status="error", error=str(e)[:160])
         self._checked.clear()
         self._checked.update(out)
-        latest = out.get("remoteVersion") or (self.version if out.get("status") == "current" else None)
-        suiteupdates.publish(self.app, installed=self.version, git_commit=mine[:7], latest=latest, status=out["status"],
-                             checked_at=out["checked"])
+        current = out.get("status") == "current"
+        latest = out.get("remoteVersion") or (self.version if current else None)
+        latest_shared = out.get("remoteShared") or (out["shared"] if current else None)
+        suiteupdates.publish(self.app, installed=self.version, git_commit=mine[:7], latest=latest, shared=out["shared"],
+                             latest_shared=latest_shared, status=out["status"], checked_at=out["checked"])
         return out
 
     def available(self) -> dict | None:
@@ -216,7 +218,8 @@ class Updater:
         """What a fresh start knows: the version, the commit, whether it can update itself; and when the update before
         the restart was running, how it went (update.sh wrote that down before the restart)."""
         r = suiteupdates.row(self.app) or {}
-        fields = {"installed": self.version, "git_commit": self.local_commit()[:7], "can_run": int(self.can_run()), "docker": int(self.in_docker())}
+        shared = self.shared_version()
+        fields = {"installed": self.version, "shared": shared, "git_commit": self.local_commit()[:7], "can_run": int(self.can_run()), "docker": int(self.in_docker())}
         last = self.last_result()
         if r.get("state") == "running" and not self.progress["running"]:
             fields.update(state="ok" if last and last["ok"] else "failed",
@@ -226,8 +229,9 @@ class Updater:
             # (the result file is removed when a run starts, so it is that run's)
             fields.update(state="ok", message=last["text"])
         if r.get("latest") and r.get("status") != "error":
-            # the newest version GitHub had when last asked: what this start installed may be it
-            fields["status"] = "update" if _version_tuple(r["latest"]) > _version_tuple(self.version) else "current"
+            # the newest versions GitHub had when last asked: what this start installed may be them
+            newer_shared = r.get("latest_shared") and _version_tuple(r["latest_shared"]) > _version_tuple(shared)
+            fields["status"] = "update" if _version_tuple(r["latest"]) > _version_tuple(self.version) or newer_shared else "current"
         suiteupdates.publish(self.app, **fields)
 
     def serve(self, action: str | None) -> None:
