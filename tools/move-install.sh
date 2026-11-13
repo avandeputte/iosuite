@@ -47,7 +47,7 @@ rename_start() {  # the start page: iosuite -> iostart (service, folder, log, co
     run launchctl bootout "gui/$(id -u)/net.iothing.iosuite.server" || true
   fi
   if [ -f "$c" ] && grep -E '^[# ]*IOSUITE_' "$c" | grep -vq 'IOSUITE_DB_'; then
-    run sed -i.bak -E '/^[# ]*IOSUITE_DB_/!s/^([# ]*)IOSUITE_/\1IOSTART_/' "$c"
+    run sed -i.bak -E '/^[# ]*IOSUITE_DB_/!s/^([# ]*)IOSUITE_/\1IOSTART_/' "$c"; run rm -f "$c.bak"
   fi
   for f in "$d"/data/iosuite.log*; do [ -e "$f" ] && run mv "$f" "$d/data/iostart${f#"$d/data/iosuite"}"; done
   if [ -d /opt/iosuite ] && [ ! -e /opt/iostart ]; then run mv /opt/iosuite /opt/iostart; fi
@@ -70,11 +70,12 @@ move_app() {  # $1 app (its folder in the repository, its service), $2 the repos
   if [ -d "$d/shared/iosuite_shared" ] && [ ! -e "$d/.git" ]; then say "$app: already from the suite's repository ($d)"; return 0; fi
   say "$app: $d moves to the suite's repository"
   c="$d/config.env"; UP="$(printf '%s' "$app" | tr '[:lower:]' '[:upper:]')"
-  if [ -f "$c" ] && grep -Eq "^${UP}_REPO=" "$c"; then run sed -i.bak -E "/^${UP}_REPO=/d" "$c"; fi
+  if [ -f "$c" ] && grep -Eq "^${UP}_REPO=" "$c"; then run sed -i.bak -E "/^${UP}_REPO=/d" "$c"; run rm -f "$c.bak"; fi
   if [ -e "$d/.git" ]; then
-    if [ -n "$(git -C "$d" status --porcelain 2>/dev/null)" ]; then
+    if [ -n "$(git -C "$d" status --porcelain --untracked-files=no 2>/dev/null)" ]; then
       echo "  the old checkout has local changes: its .git is kept as .git-old-repository"; run mv "$d/.git" "$d/.git-old-repository"
     else run rm -rf "$d/.git"; fi
+    run rm -rf "$d/.github" "$d/.dockerignore" "$d/docker" "$d/tools" "$d/iosuite.egg-info"  # of the old repository's root; an app's folder has none
   fi
   if [ -f /usr/bin/update ] && grep -q "avandeputte/$old/main/" /usr/bin/update; then
     run sed -i "s#avandeputte/$old/main/#avandeputte/iosuite/main/$app/#g" /usr/bin/update
