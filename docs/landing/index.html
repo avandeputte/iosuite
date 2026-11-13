@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ioThing suite — self-hosted photos, notes, calendar, contacts and health</title>
+<meta name="description" content="Small self-hosted apps for the family: ioPix for photos, ioNote, ioCalendar, ioTask, ioRecipe, ioContact, ioHealth and the ioSuite start page. Install just the one you need, or all of them; they share one sign-in.">
+<link rel="canonical" href="https://iosuite.iothing.net/">
+<link rel="icon" type="image/svg+xml" href="img/icon.svg">
+<meta property="og:type" content="website">
+<meta property="og:title" content="ioThing suite">
+<meta property="og:description" content="Photos, notes, calendar, contacts and health on your own server. Take one app, or all of them.">
+<meta property="og:url" content="https://iosuite.iothing.net/">
+<meta property="og:image" content="https://iosuite.iothing.net/img/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f3f4f7;
+  --card:#ffffff;
+  --ink:#1b2236;
+  --body:#333c52;
+  --muted:#5d6680;
+  --accent:#3b4a8c;
+  --gold:#f3c96b;
+  --gold-ink:#1a1608;
+  --line:#dfe2ea;
+  --term-bg:#1b2236;
+  --term-fg:#dde2ee;
+  --term-line:#2a3350;
+  --shadow:0 1px 2px rgba(27,34,54,.06),0 10px 30px -12px rgba(27,34,54,.2);
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#0f1320;
+    --card:#171c2e;
+    --ink:#eef0f6;
+    --body:#c9cedd;
+    --muted:#8c93ab;
+    --accent:#f3c96b;
+    --gold:#f3c96b;
+    --line:#262c44;
+    --term-bg:#0c101b;
+    --term-fg:#dde2ee;
+    --term-line:#232a40;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 12px 32px -14px rgba(0,0,0,.6);
+  }
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:72px}
+@media (prefers-reduced-motion: reduce){
+  html{scroll-behavior:auto}
+  *,*::before,*::after{animation:none!important;transition:none!important}
+}
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--body);
+  font-family:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  font-size:16.5px;
+  line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3{color:var(--ink);line-height:1.15;margin:0 0 .5em;letter-spacing:-.015em}
+h1{font-size:clamp(2.1rem,4.6vw,3.25rem);font-weight:700}
+h2{font-size:clamp(1.5rem,3vw,2.1rem);font-weight:700}
+h3{font-size:1.05rem;font-weight:600}
+p{margin:0 0 1em}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px;border-radius:4px}
+code,pre,.mono{font-family:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+code{font-size:.9em}
+.wrap{max-width:1120px;margin:0 auto;padding:0 24px}
+@media (max-width:480px){ .wrap{padding:0 16px} }
+.eyebrow{
+  font-family:'IBM Plex Mono',monospace;
+  font-size:.78rem;font-weight:500;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--accent);display:block;margin-bottom:.7em;
+}
+section{padding:72px 0}
+.section-head{max-width:660px;margin-bottom:40px}
+.section-head p{color:var(--muted)}
+.io{color:#c99a2e}
+@media (prefers-color-scheme: dark){ .io{color:var(--gold)} }
+
+/* ---------- header ---------- */
+header{
+  position:sticky;top:0;z-index:50;
+  background:var(--bg);
+  background:color-mix(in srgb,var(--bg) 82%,transparent);
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--line);
+}
+.nav{display:flex;align-items:center;gap:28px;height:64px}
+.brand{display:flex;align-items:center;gap:11px;margin-right:auto;color:var(--ink);text-decoration:none}
+.brand:hover{text-decoration:none}
+.brand img{width:34px;height:34px;display:block}
+.brand b{font-weight:700;font-size:1.02rem;letter-spacing:-.01em}
+.brand b .suite{color:var(--muted);font-weight:400}
+.nav a.link{color:var(--body);font-size:.92rem;font-weight:500}
+.nav a.link:hover{color:var(--accent);text-decoration:none}
+.nav .gh{
+  display:inline-flex;align-items:center;gap:7px;
+  border:1px solid var(--line);border-radius:8px;padding:7px 13px;
+  font-size:.88rem;font-weight:500;color:var(--ink);background:var(--card);
+}
+.nav .gh:hover{border-color:var(--gold);text-decoration:none}
+.nav .gh svg{width:16px;height:16px;fill:currentColor}
+@media (max-width:760px){ .nav a.link{display:none} }
+
+/* ---------- hero ---------- */
+.hero{padding:80px 0 64px}
+.hero-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:56px;align-items:center}
+@media (max-width:920px){ .hero-grid{grid-template-columns:1fr;gap:40px} }
+.hero p.lede{font-size:1.12rem;color:var(--muted);max-width:34em}
+.hero p.lede strong{color:var(--ink)}
+.hero .meta{
+  font-family:'IBM Plex Mono',monospace;font-size:.78rem;color:var(--muted);
+  margin:18px 0 26px;letter-spacing:.02em;
+}
+.cta{display:flex;flex-wrap:wrap;gap:12px}
+.btn{
+  display:inline-flex;align-items:center;gap:8px;
+  border-radius:9px;padding:12px 20px;font-weight:600;font-size:.95rem;
+  text-decoration:none;border:1px solid transparent;cursor:pointer;font-family:inherit;
+}
+.btn:hover{text-decoration:none}
+.btn-primary{background:var(--gold);color:var(--gold-ink)}
+.btn-primary:hover{background:#e9bb55}
+.btn-ghost{border-color:var(--line);color:var(--ink);background:var(--card)}
+.btn-ghost:hover{border-color:var(--gold)}
+.btn svg{width:17px;height:17px;fill:currentColor}
+
+/* the hero card: one app, a few, or all of them */
+.mix{
+  background:var(--card);border:1px solid var(--line);border-radius:16px;
+  padding:26px 24px 16px;box-shadow:var(--shadow);margin:0;
+}
+.mix-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+@media (max-width:560px){ .mix-grid{grid-template-columns:repeat(3,1fr)} }
+.mix-app{
+  display:flex;flex-direction:column;align-items:center;gap:8px;padding:16px 8px 12px;
+  border:1px solid var(--line);border-radius:12px;background:var(--bg);
+  opacity:.38;filter:grayscale(.85);transform:scale(.97);
+  transition:opacity .45s, filter .45s, transform .45s, border-color .45s;
+}
+.mix-app.on{opacity:1;filter:none;transform:none;border-color:var(--gold)}
+.mix-app img{width:46px;height:46px;display:block;border-radius:11px}
+.mix-app b{font-size:.9rem;color:var(--ink);font-weight:600}
+.mix-app small{font-family:'IBM Plex Mono',monospace;font-size:.7rem;color:var(--muted)}
+.mix-label{
+  display:flex;align-items:baseline;justify-content:space-between;gap:12px;
+  margin:18px 2px 4px;font-family:'IBM Plex Mono',monospace;font-size:.78rem;color:var(--muted);
+}
+.mix-label b{color:var(--ink);font-weight:600;font-family:'IBM Plex Sans',sans-serif;font-size:1rem}
+.mix figcaption{font-size:.85rem;color:var(--muted);text-align:center;padding:12px 8px 4px}
+
+/* ---------- terminal blocks ---------- */
+.term{
+  background:var(--term-bg);border:1px solid var(--term-line);border-radius:12px;
+  overflow:hidden;box-shadow:var(--shadow);
+}
+.term + .term{margin-top:18px}
+.term-head{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:9px 14px;border-bottom:1px solid var(--term-line);
+  font-family:'IBM Plex Mono',monospace;font-size:.75rem;letter-spacing:.08em;
+  text-transform:uppercase;color:#8a93b0;
+}
+.term pre{
+  margin:0;padding:16px 18px;overflow-x:auto;
+  font-size:.86rem;line-height:1.65;color:var(--term-fg);white-space:pre;
+}
+.term code .p{color:var(--gold);user-select:none}
+.term code .c{color:#76809e}
+.copy{
+  font-family:'IBM Plex Mono',monospace;font-size:.72rem;letter-spacing:.06em;
+  background:transparent;color:#a5aecb;border:1px solid var(--term-line);
+  border-radius:6px;padding:4px 10px;cursor:pointer;text-transform:uppercase;flex:none;
+}
+.copy:hover{color:var(--gold);border-color:var(--gold)}
+
+/* ---------- apps ---------- */
+.apps{background:var(--card);border-block:1px solid var(--line)}
+.agrid{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
+@media (max-width:980px){ .agrid{grid-template-columns:repeat(2,1fr)} }
+@media (max-width:620px){ .agrid{grid-template-columns:1fr} }
+.app{
+  display:flex;flex-direction:column;border:1px solid var(--line);border-radius:14px;
+  background:var(--bg);padding:22px 22px 18px;position:relative;overflow:hidden;
+}
+.app::before{content:"";position:absolute;inset:0 0 auto 0;height:4px;background:var(--c)}
+.app-top{display:flex;align-items:center;gap:13px;margin-bottom:12px}
+.app-top img{width:44px;height:44px;border-radius:10px;display:block;flex:none}
+.app-top h3{margin:0;font-size:1.15rem}
+.app-top .tag{display:block;font-size:.85rem;color:var(--muted);font-weight:400;margin-top:2px}
+.app ul{margin:0 0 14px;padding-left:1.1em;font-size:.92rem;color:var(--body)}
+.app li{margin:.25em 0}
+.app .alone{
+  font-size:.84rem;color:var(--muted);border-top:1px dashed var(--line);
+  padding-top:11px;margin-top:auto;
+}
+.app .alone b{color:var(--ink);font-weight:600}
+.app .links{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:12px;font-size:.88rem;font-weight:500;align-items:center}
+.app .port{
+  margin-left:auto;font-family:'IBM Plex Mono',monospace;font-size:.72rem;color:var(--muted);
+  border:1px solid var(--line);border-radius:99px;padding:2px 9px;background:var(--card);
+}
+
+/* ---------- one app is enough ---------- */
+.ogrid{display:grid;grid-template-columns:repeat(3,1fr);gap:28px 32px}
+@media (max-width:900px){ .ogrid{grid-template-columns:1fr} }
+.opt .fk{
+  font-family:'IBM Plex Mono',monospace;font-size:.72rem;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--accent);display:block;margin-bottom:8px;
+}
+.opt p{font-size:.95rem;color:var(--muted);margin:0 0 .6em}
+.opt p strong{color:var(--ink);font-weight:600}
+.together{
+  margin-top:44px;padding-top:26px;border-top:1px solid var(--line);
+  display:grid;grid-template-columns:repeat(2,1fr);gap:14px 32px;
+}
+@media (max-width:760px){ .together{grid-template-columns:1fr} }
+.pair{display:flex;gap:12px;align-items:flex-start;font-size:.92rem;color:var(--muted)}
+.pair .icons{display:flex;flex:none}
+.pair .icons img{width:26px;height:26px;border-radius:7px;display:block;border:2px solid var(--bg)}
+.pair .icons img + img{margin-left:-8px}
+.pair b{color:var(--ink);font-weight:600}
+
+/* ---------- gallery ---------- */
+.shots{background:var(--card);border-block:1px solid var(--line)}
+.ggrid{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
+@media (max-width:900px){ .ggrid{grid-template-columns:repeat(2,1fr)} }
+@media (max-width:560px){ .ggrid{grid-template-columns:1fr} }
+.shot{
+  display:block;width:100%;padding:0;border:1px solid var(--line);border-radius:12px;
+  overflow:hidden;background:var(--card);cursor:zoom-in;box-shadow:var(--shadow);
+  text-align:left;font:inherit;color:inherit;
+}
+.shot:hover{border-color:var(--gold)}
+.shot img{display:block;width:100%;height:auto;aspect-ratio:16/10;object-fit:cover;object-position:top}
+.shot figcaption{
+  display:flex;align-items:center;gap:9px;
+  padding:11px 14px;font-size:.83rem;color:var(--muted);
+  border-top:1px solid var(--line);
+}
+.shot figcaption img{width:18px;height:18px;aspect-ratio:auto;border-radius:5px;flex:none}
+.credit{margin-top:22px;font-size:.82rem;color:var(--muted)}
+dialog.lightbox{
+  border:none;border-radius:14px;padding:0;max-width:min(1200px,94vw);
+  background:var(--card);box-shadow:0 30px 80px rgba(0,0,0,.45);
+}
+dialog.lightbox::backdrop{background:rgba(12,15,26,.75);backdrop-filter:blur(3px)}
+dialog.lightbox img{display:block;width:100%;height:auto;max-height:82vh;object-fit:contain;background:var(--bg)}
+dialog.lightbox .lb-foot{
+  display:flex;align-items:center;justify-content:space-between;gap:16px;
+  padding:12px 18px;font-size:.86rem;color:var(--muted);
+}
+dialog.lightbox button{
+  font-family:'IBM Plex Mono',monospace;font-size:.75rem;letter-spacing:.06em;text-transform:uppercase;
+  background:transparent;border:1px solid var(--line);border-radius:7px;
+  color:var(--ink);padding:6px 14px;cursor:pointer;
+}
+dialog.lightbox button:hover{border-color:var(--gold)}
+
+/* ---------- install picker ---------- */
+.pick{display:grid;grid-template-columns:repeat(7,1fr);gap:12px;margin-bottom:22px}
+@media (max-width:900px){ .pick{grid-template-columns:repeat(3,1fr)} }
+@media (max-width:420px){ .pick{grid-template-columns:repeat(2,1fr)} }
+.pick label{
+  display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer;
+  border:1px solid var(--line);border-radius:12px;padding:14px 6px 11px;background:var(--card);
+  transition:border-color .2s, box-shadow .2s;position:relative;user-select:none;
+}
+.pick label:hover{border-color:var(--gold)}
+.pick input{position:absolute;opacity:0;pointer-events:none}
+.pick label img{width:38px;height:38px;border-radius:9px;display:block;filter:grayscale(.9);opacity:.55;transition:filter .2s,opacity .2s}
+.pick label b{font-size:.88rem;color:var(--muted);font-weight:600}
+.pick label small{font-family:'IBM Plex Mono',monospace;font-size:.68rem;color:var(--muted)}
+.pick input:checked + img{filter:none;opacity:1}
+.pick input:checked ~ b{color:var(--ink)}
+.pick label:has(input:checked){border-color:var(--gold);box-shadow:0 0 0 1px var(--gold) inset}
+.pick input:focus-visible ~ b{outline:2px solid var(--gold);outline-offset:2px;border-radius:4px}
+.tabs{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.tabs button{
+  font:500 .88rem 'IBM Plex Sans',sans-serif;color:var(--body);background:var(--card);
+  border:1px solid var(--line);border-radius:8px;padding:8px 14px;cursor:pointer;
+}
+.tabs button[aria-selected="true"]{border-color:var(--gold);color:var(--ink);box-shadow:0 0 0 1px var(--gold) inset}
+.pick-note{font-size:.92rem;color:var(--muted);margin:14px 2px 0;min-height:1.6em}
+.pick-note strong{color:var(--ink)}
+.istep{
+  margin-top:34px;background:var(--card);border:1px solid var(--line);border-radius:14px;
+  padding:24px 26px;box-shadow:var(--shadow);
+}
+.istep h3{display:flex;align-items:center;flex-wrap:wrap;gap:10px}
+.istep p{font-size:.93rem;color:var(--muted)}
+.istep p:last-child{margin-bottom:0}
+.chip{
+  font-family:'IBM Plex Mono',monospace;font-size:.72rem;font-weight:600;
+  background:var(--gold);color:var(--gold-ink);border-radius:99px;padding:3px 11px;letter-spacing:.04em;
+}
+.ports{display:flex;flex-wrap:wrap;gap:8px 18px;font-family:'IBM Plex Mono',monospace;font-size:.82rem;margin:4px 0 14px}
+.ports span{color:var(--muted)} .ports b{color:var(--ink);font-weight:600}
+
+/* ---------- docs ---------- */
+.docs{background:var(--card);border-block:1px solid var(--line)}
+.dgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+@media (max-width:900px){ .dgrid{grid-template-columns:repeat(2,1fr)} }
+@media (max-width:600px){ .dgrid{grid-template-columns:1fr} }
+.dcard{
+  display:block;border:1px solid var(--line);border-radius:12px;padding:20px 22px;
+  background:var(--bg);color:inherit;
+}
+.dcard:hover{border-color:var(--gold);text-decoration:none}
+.dcard h3{margin-bottom:.3em}
+.dcard h3 span{color:var(--accent);font-weight:400}
+.dcard p{margin:0;font-size:.9rem;color:var(--muted)}
+
+/* ---------- footer ---------- */
+footer{padding:44px 0 56px;font-size:.86rem;color:var(--muted)}
+footer .frow{display:flex;flex-wrap:wrap;gap:10px 24px;align-items:center}
+footer .fbrand{display:flex;align-items:center;gap:9px;color:var(--ink);font-weight:600;margin-right:auto}
+footer .fbrand img{width:24px;height:24px}
+footer .fbrand .io{font-weight:600}
+footer p{margin:16px 0 0;max-width:52em}
+</style>
+</head>
+<body>
+
+<header>
+  <nav class="nav wrap" aria-label="Main">
+    <a class="brand" href="#top">
+      <img src="img/icon.svg" alt="" width="34" height="34">
+      <b><span class="io">io</span>Thing <span class="suite">suite</span></b>
+    </a>
+    <a class="link" href="#apps">Apps</a>
+    <a class="link" href="#one-app">One or all</a>
+    <a class="link" href="#screenshots">Screenshots</a>
+    <a class="link" href="#install">Install</a>
+    <a class="link" href="/docs/">Docs</a>
+    <a class="gh" href="https://github.com/avandeputte?tab=repositories&amp;q=io" rel="noopener">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+      GitHub
+    </a>
+  </nav>
+</header>
+
+<main id="top">
+
+  <!-- ================= HERO ================= -->
+  <section class="hero">
+    <div class="wrap hero-grid">
+      <div>
+        <span class="eyebrow">self-hosted · free &amp; open source</span>
+        <h1>Take the app you need.<br>Leave the rest.</h1>
+        <p class="lede">Small self-hosted apps for the family: photos, notes, a calendar, tasks, contacts and health data, on your own server. <strong>Each one installs and runs on its own</strong>: if all you want is a photo app, install ioPix and you're done. Add another whenever you like, and it signs in with the same accounts.</p>
+        <div class="meta">GPL-3.0 · Proxmox VE · Docker (amd64 / arm64) · any Linux or Mac · MariaDB / MySQL</div>
+        <div class="cta">
+          <a class="btn btn-primary" href="#install">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1v8.6L4.7 6.3 3.3 7.7 8 12.4l4.7-4.7-1.4-1.4L8 9.6V1H8zM2 13h12v2H2v-2z"/></svg>
+            Pick your apps
+          </a>
+          <a class="btn btn-ghost" href="/docs/start/one-or-all/">One app or all of them?</a>
+        </div>
+      </div>
+
+      <figure class="mix" aria-label="Any combination of the apps is a complete install">
+        <div class="mix-grid" id="mix">
+          <div class="mix-app" data-app="iopix"><img src="img/iopix.svg" alt="" width="46" height="46"><b>ioPix</b><small>photos</small></div>
+          <div class="mix-app" data-app="ionote"><img src="img/ionote.svg" alt="" width="46" height="46"><b>ioNote</b><small>notes</small></div>
+          <div class="mix-app" data-app="iocalendar"><img src="img/iocalendar.svg" alt="" width="46" height="46"><b>ioCalendar</b><small>calendar</small></div>
+          <div class="mix-app" data-app="iotask"><img src="img/iotask.svg" alt="" width="46" height="46"><b>ioTask</b><small>tasks</small></div>
+          <div class="mix-app" data-app="iorecipe"><img src="img/iorecipe.svg" alt="" width="46" height="46"><b>ioRecipe</b><small>recipes</small></div>
+          <div class="mix-app" data-app="iocontact"><img src="img/iocontact.svg" alt="" width="46" height="46"><b>ioContact</b><small>contacts</small></div>
+          <div class="mix-app" data-app="iohealth"><img src="img/iohealth.svg" alt="" width="46" height="46"><b>ioHealth</b><small>health</small></div>
+          <div class="mix-app" data-app="iosuite"><img src="img/iosuite.svg" alt="" width="46" height="46"><b>ioSuite</b><small>start page</small></div>
+        </div>
+        <div class="mix-label" aria-live="polite"><b id="mix-name">Just the photos</b><span id="mix-count">1 app</span></div>
+        <figcaption>Every combination is a complete install. Each app has its own port, its own database and its own updates.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <!-- ================= APPS ================= -->
+  <section class="apps" id="apps">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">the apps</span>
+        <h2>Seven apps. Each one complete on its own.</h2>
+        <p>Every app is a small web server with its own web app, its own database and its own installer, built the same way: FastAPI, a single-page app, light and dark, a real phone layout, installable on a home screen.</p>
+      </div>
+      <div class="agrid">
+        <article class="app" style="--c:#3b4a8c">
+          <div class="app-top"><img src="img/iopix.svg" alt="" width="44" height="44"><h3>ioPix<span class="tag">Photos</span></h3></div>
+          <ul>
+            <li>Browse, search, map and edit a photo library from any browser</li>
+            <li>Search by what is in the photos, faces and places, with AI that runs on your own server</li>
+            <li>A web companion for digiKam, or a library of its own without it</li>
+          </ul>
+          <p class="alone"><b>On its own:</b> a complete photo app. Point it at a folder of photos.</p>
+          <div class="links"><a href="/docs/apps/iopix/">Docs</a><a href="https://iopix.net" rel="noopener">iopix.net</a><a href="https://github.com/avandeputte/iopix" rel="noopener">GitHub</a><span class="port">:8600</span></div>
+        </article>
+        <article class="app" style="--c:#1c5a5e">
+          <div class="app-top"><img src="img/ionote.svg" alt="" width="44" height="44"><h3>ioNote<span class="tag">Notes, clipboard snippets and screenshots</span></h3></div>
+          <ul>
+            <li>Notes with folders, tags, pins and full-text search, text in pictures included</li>
+            <li>Mac and iPhone apps: save anything from the clipboard, synced and offline</li>
+            <li>Notes are private to each account</li>
+          </ul>
+          <p class="alone"><b>On its own:</b> your notes, searchable everywhere. It can even keep them in a SQLite file.</p>
+          <div class="links"><a href="/docs/apps/ionote/">Docs</a><a href="https://github.com/avandeputte/ionote" rel="noopener">GitHub</a><span class="port">:8610</span></div>
+        </article>
+        <article class="app" style="--c:#963522">
+          <div class="app-top"><img src="img/iocalendar.svg" alt="" width="44" height="44"><h3>ioCalendar<span class="tag">The family calendar</span></h3></div>
+          <ul>
+            <li>Shared and private calendars, repeating events, reminders, public holidays</li>
+            <li>CalDAV, so the same events are on every phone and in every calendar app</li>
+            <li>Tag events with the family member they're for</li>
+          </ul>
+          <p class="alone"><b>On its own:</b> a family calendar every phone already speaks to.</p>
+          <div class="links"><a href="/docs/apps/iocalendar/">Docs</a><a href="https://github.com/avandeputte/iocalendar" rel="noopener">GitHub</a><span class="port">:8620</span></div>
+        </article>
+        <article class="app" style="--c:#146b5e">
+          <div class="app-top"><img src="img/iotask.svg" alt="" width="44" height="44"><h3>ioTask<span class="tag">The family's task lists</span></h3></div>
+          <ul>
+            <li>Shared and private lists, due dates, repeats, alerts, subtasks</li>
+            <li>CalDAV, so the same lists are in Apple Reminders and every tasks app</li>
+            <li>Tag tasks with the family member they're for</li>
+          </ul>
+          <p class="alone"><b>On its own:</b> the family's to-dos, in the reminders app each phone already has.</p>
+          <div class="links"><a href="/docs/apps/iotask/">Docs</a><a href="https://github.com/avandeputte/iotask" rel="noopener">GitHub</a><span class="port">:8670</span></div>
+        </article>
+        <article class="app" style="--c:#4a7c23">
+          <div class="app-top"><img src="img/iorecipe.svg" alt="" width="44" height="44"><h3>ioRecipe<span class="tag">The family's recipes</span></h3></div>
+          <ul>
+            <li>Ingredients, steps, photos, cookbooks, favourites and ratings</li>
+            <li>Import from a web address, pasted text, a photo or Mealie</li>
+            <li>Scale the servings, print, send the ingredients to ioTask</li>
+          </ul>
+          <p class="alone"><b>On its own:</b> the family's recipe book, on every screen in the kitchen.</p>
+          <div class="links"><a href="/docs/apps/iorecipe/">Docs</a><a href="https://github.com/avandeputte/iorecipe" rel="noopener">GitHub</a><span class="port">:8690</span></div>
+        </article>
+        <article class="app" style="--c:#4f2f7d">
+          <div class="app-top"><img src="img/iocontact.svg" alt="" width="44" height="44"><h3>ioContact<span class="tag">Contacts for the family</span></h3></div>
+          <ul>
+            <li>Every field a phone has, relations and a family tree, birthdays</li>
+            <li>CardDAV and an LDAP directory for phones, mail apps and printers</li>
+            <li>Duplicates, data quality checks and merges you can undo</li>
+          </ul>
+          <p class="alone"><b>On its own:</b> one family address book on every device.</p>
+          <div class="links"><a href="/docs/apps/iocontact/">Docs</a><a href="https://github.com/avandeputte/iocontact" rel="noopener">GitHub</a><span class="port">:8640</span></div>
+        </article>
+        <article class="app" style="--c:#e8445a">
+          <div class="app-top"><img src="img/iohealth.svg" alt="" width="44" height="44"><h3>ioHealth<span class="tag">Apple Health, on your own server</span></h3></div>
+          <ul>
+            <li>The ioHealthSync iPhone app copies your Health data into your own database</li>
+            <li>Dashboards, charts of any metric, workouts on a map, sleep, glucose, records</li>
+            <li>Everyone sees only their own data</li>
+          </ul>
+          <p class="alone"><b>On its own:</b> a fitness web app that needs no cloud service.</p>
+          <div class="links"><a href="/docs/apps/iohealth/">Docs</a><a href="https://github.com/avandeputte/iohealth" rel="noopener">GitHub</a><span class="port">:8650</span></div>
+        </article>
+        <article class="app" style="--c:#2f3a5a">
+          <div class="app-top"><img src="img/iosuite.svg" alt="" width="44" height="44"><h3>ioSuite<span class="tag">The start page</span></h3></div>
+          <ul>
+            <li>A tile per installed app, with today's events, photos and steps on it</li>
+            <li>Search, quick add to the calendar, weather, Home Assistant, bookmarks</li>
+            <li>A wall display for a tablet in the kitchen</li>
+          </ul>
+          <p class="alone"><b>Optional:</b> worth it once you run two or more apps. It finds them by itself.</p>
+          <div class="links"><a href="/docs/apps/iosuite/">Docs</a><a href="https://github.com/avandeputte/iosuite" rel="noopener">GitHub</a><span class="port">:8630</span></div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= ONE APP OR ALL ================= -->
+  <section id="one-app">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">one app or all of them</span>
+        <h2>You don't need the whole suite.</h2>
+        <p>There is no suite to install first and no central server to run. Each app is the whole product for what it does; the others only add to it.</p>
+      </div>
+      <div class="ogrid">
+        <div class="opt">
+          <span class="fk">just one</span>
+          <h3>A photo app, and nothing else? Fine.</h3>
+          <p>Install ioPix with one command. It needs a MariaDB or MySQL server for its data and its accounts, and that's it: <strong>no start page, no other apps</strong>, nothing waiting for something you didn't install.</p>
+        </div>
+        <div class="opt">
+          <span class="fk">add one later</span>
+          <h3>Grow when you want to</h3>
+          <p>Months later, install ioCalendar and point it at the same account database. <strong>Everyone already has an account</strong>, and with a shared domain one sign-in covers both. Nothing about the first app changes.</p>
+        </div>
+        <div class="opt">
+          <span class="fk">or all at once</span>
+          <h3>The whole suite in one go</h3>
+          <p>Every installer ends with "Also install…?". Tick the others and they go in the same machine or container, <strong>each with its own database and port</strong>, without asking the shared questions twice. Or run the whole-suite Docker stack.</p>
+        </div>
+      </div>
+      <div class="together">
+        <div class="pair"><span class="icons"><img src="img/iocontact.svg" alt=""><img src="img/iocalendar.svg" alt=""></span><span><b>ioContact + ioCalendar:</b> a Birthdays calendar from your contacts, and the people on an event picked from them.</span></div>
+        <div class="pair"><span class="icons"><img src="img/iopix.svg" alt=""><img src="img/iocontact.svg" alt=""></span><span><b>ioPix + ioContact:</b> the face named in ioPix becomes the contact's photo, on every phone.</span></div>
+        <div class="pair"><span class="icons"><img src="img/iosuite.svg" alt=""><img src="img/iohealth.svg" alt=""></span><span><b>ioSuite + any app:</b> a tile with what matters today: the next events, the tasks due, photos from this day, last night's sleep.</span></div>
+        <div class="pair"><span class="icons"><img src="img/ionote.svg" alt=""><img src="img/iopix.svg" alt=""></span><span><b>Any two apps:</b> the same accounts, roles per app, one sign-in, one admin panel, the same Settings in every app.</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= GALLERY ================= -->
+  <section class="shots" id="screenshots">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">screenshots</span>
+        <h2>The real applications.</h2>
+        <p>Every screenshot is the actual app, holding made-up data: the Parker family and their friends are invented.</p>
+      </div>
+      <div class="ggrid" id="gallery">
+        <button class="shot" data-full="img/iopix-explore.jpg" data-cap="ioPix — Explore: library totals, photos from this day in past years and a shuffle of older ones">
+          <img src="img/iopix-explore.jpg" loading="lazy" alt="ioPix Explore page" width="1600" height="1000">
+          <figcaption><img src="img/iopix.svg" alt="">ioPix — this day in past years</figcaption>
+        </button>
+        <button class="shot" data-full="img/iopix-viewer.jpg" data-cap="ioPix — the viewer with its info panel: rating, caption, named faces, tags and details">
+          <img src="img/iopix-viewer.jpg" loading="lazy" alt="ioPix photo viewer" width="1600" height="1000">
+          <figcaption><img src="img/iopix.svg" alt="">ioPix — the viewer, faces and tags</figcaption>
+        </button>
+        <button class="shot" data-full="img/iopix-map.jpg" data-cap="ioPix — every geotagged photo on a map">
+          <img src="img/iopix-map.jpg" loading="lazy" alt="ioPix map" width="1600" height="1000">
+          <figcaption><img src="img/iopix.svg" alt="">ioPix — every photo on the map</figcaption>
+        </button>
+        <button class="shot" data-full="img/ionote.jpg" data-cap="ioNote — folders and tags in the sidebar, the notes, and one open for editing">
+          <img src="img/ionote.jpg" loading="lazy" alt="ioNote with a note open" width="1600" height="1000">
+          <figcaption><img src="img/ionote.svg" alt="">ioNote — folders, tags, full-text search</figcaption>
+        </button>
+        <button class="shot" data-full="img/iocalendar-week.jpg" data-cap="ioCalendar — the family's week, each event tagged with who it is for">
+          <img src="img/iocalendar-week.jpg" loading="lazy" alt="ioCalendar week view" width="1600" height="1000">
+          <figcaption><img src="img/iocalendar.svg" alt="">ioCalendar — the family's week</figcaption>
+        </button>
+        <button class="shot" data-full="img/iocontact.jpg" data-cap="ioContact — the family address book, one contact open">
+          <img src="img/iocontact.jpg" loading="lazy" alt="ioContact with a contact open" width="1600" height="1000">
+          <figcaption><img src="img/iocontact.svg" alt="">ioContact — the family address book</figcaption>
+        </button>
+        <button class="shot" data-full="img/iohealth.jpg" data-cap="ioHealth — the dashboard: activity rings, last night's sleep, the trend of every metric">
+          <img src="img/iohealth.jpg" loading="lazy" alt="ioHealth dashboard" width="1600" height="1000">
+          <figcaption><img src="img/iohealth.svg" alt="">ioHealth — the dashboard</figcaption>
+        </button>
+        <button class="shot" data-full="img/iohealth-sleep.jpg" data-cap="ioHealth — sleep stages per night, bedtimes and one night's timeline">
+          <img src="img/iohealth-sleep.jpg" loading="lazy" alt="ioHealth sleep page" width="1600" height="1000">
+          <figcaption><img src="img/iohealth.svg" alt="">ioHealth — sleep, night by night</figcaption>
+        </button>
+        <button class="shot" data-full="img/iosuite.jpg" data-cap="ioSuite — the start page: a tile per app with today on it, birthdays, the week ahead and bookmarks">
+          <img src="img/iosuite.jpg" loading="lazy" alt="ioSuite start page" width="1600" height="1000">
+          <figcaption><img src="img/iosuite.svg" alt="">ioSuite — the start page</figcaption>
+        </button>
+      </div>
+      <p class="credit">Photos in the ioPix screenshots: Wikimedia Commons, StockSnap, Unsplash and the project owner's own, under the licenses <a href="https://github.com/avandeputte/iopix/blob/main/docs/screenshots/CREDITS.md" rel="noopener">listed here</a>. The names are invented.</p>
+    </div>
+  </section>
+
+  <dialog class="lightbox" id="lightbox">
+    <img src="" alt="">
+    <div class="lb-foot">
+      <span id="lb-cap"></span>
+      <button id="lb-close" autofocus>Close</button>
+    </div>
+  </dialog>
+
+  <!-- ================= INSTALL ================= -->
+  <section class="install" id="install">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">install</span>
+        <h2>Pick your apps. One is enough.</h2>
+        <p>Tick what you want and copy the command. Each app's installer asks for its database, the shared account database and an admin, then starts the service. The <a href="/docs/start/requirements/">requirements</a> are short.</p>
+      </div>
+
+      <div class="pick" id="pick" role="group" aria-label="Apps to install">
+        <label><input type="checkbox" value="iopix" checked><img src="img/iopix.svg" alt="" width="38" height="38"><b>ioPix</b><small>photos</small></label>
+        <label><input type="checkbox" value="ionote"><img src="img/ionote.svg" alt="" width="38" height="38"><b>ioNote</b><small>notes</small></label>
+        <label><input type="checkbox" value="iocalendar"><img src="img/iocalendar.svg" alt="" width="38" height="38"><b>ioCalendar</b><small>calendar</small></label>
+        <label><input type="checkbox" value="iotask"><img src="img/iotask.svg" alt="" width="38" height="38"><b>ioTask</b><small>tasks</small></label>
+        <label><input type="checkbox" value="iorecipe"><img src="img/iorecipe.svg" alt="" width="38" height="38"><b>ioRecipe</b><small>recipes</small></label>
+        <label><input type="checkbox" value="iocontact"><img src="img/iocontact.svg" alt="" width="38" height="38"><b>ioContact</b><small>contacts</small></label>
+        <label><input type="checkbox" value="iohealth"><img src="img/iohealth.svg" alt="" width="38" height="38"><b>ioHealth</b><small>health</small></label>
+        <label><input type="checkbox" value="iosuite"><img src="img/iosuite.svg" alt="" width="38" height="38"><b>ioSuite</b><small>start page</small></label>
+      </div>
+
+      <div class="tabs" role="tablist" aria-label="Where to install">
+        <button role="tab" aria-selected="true" data-way="proxmox">Proxmox VE (LXC)</button>
+        <button role="tab" aria-selected="false" data-way="docker">Docker</button>
+        <button role="tab" aria-selected="false" data-way="linux">Any Linux or Mac</button>
+      </div>
+
+      <div id="cmds">
+        <!-- filled in by the script below; this is what shows without JavaScript -->
+        <div class="term">
+          <div class="term-head"><span>proxmox ve host, as root — ioPix</span><button class="copy" data-copy>copy</button></div>
+          <pre><code><span class="p">$ </span>bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iopix/main/proxmox/ct/iopix.sh)"</code></pre>
+        </div>
+      </div>
+      <p class="pick-note" id="pick-note" aria-live="polite"></p>
+
+      <div class="istep">
+        <h3><span class="chip">then</span> Open <code>http://&lt;host&gt;:&lt;port&gt;</code> and sign in</h3>
+        <div class="ports"><span>ioPix <b>8600</b></span><span>ioNote <b>8610</b></span><span>ioCalendar <b>8620</b></span><span>ioSuite <b>8630</b></span><span>ioContact <b>8640</b></span><span>ioHealth <b>8650</b></span><span>ioTask <b>8670</b></span><span>ioRecipe <b>8690</b></span></div>
+        <p>Every app has its own default port, so all of them fit on one host. The installer creates the admin you answered; with several apps it is the same admin everywhere, because the accounts live in one <a href="/docs/reference/databases/">Shared ioSuite database</a>.</p>
+        <p>Then put the apps behind your reverse proxy for HTTPS (<a href="/docs/run/reverse-proxy/">Caddy, nginx, HAProxy</a> or a <a href="/docs/run/cloudflare/">Cloudflare Tunnel</a>), and every app updates itself from Settings › Server.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= DOCS ================= -->
+  <section class="docs" id="docs">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">documentation</span>
+        <h2>Detailed guides</h2>
+        <p>The <a href="/docs/">guide</a> covers what every app shares, how to install one or several, and how to run them. Start here:</p>
+      </div>
+      <div class="dgrid">
+        <a class="dcard" href="/docs/start/one-or-all/">
+          <h3>One app or all of them <span>→</span></h3>
+          <p>What a single app needs, what you gain by adding another, and what stays separate.</p>
+        </a>
+        <a class="dcard" href="/docs/start/requirements/">
+          <h3>Requirements <span>→</span></h3>
+          <p>A MariaDB or MySQL server, and somewhere to run the app: Proxmox, Docker or any Linux or Mac.</p>
+        </a>
+        <a class="dcard" href="/docs/start/several-apps/">
+          <h3>Several apps on one host <span>→</span></h3>
+          <p>"Also install…", one container with several apps, the whole-suite Docker stack.</p>
+        </a>
+        <a class="dcard" href="/docs/run/accounts/">
+          <h3>Accounts and roles <span>→</span></h3>
+          <p>One account for every app, a role per app, suite admins, app passwords, passwordless viewers.</p>
+        </a>
+        <a class="dcard" href="/docs/run/cloudflare/">
+          <h3>Cloudflare Tunnel and Access <span>→</span></h3>
+          <p>One Access application for every app, the paths phones need, the optional edge check.</p>
+        </a>
+        <a class="dcard" href="/docs/run/assistants/">
+          <h3>AI assistants (MCP) <span>→</span></h3>
+          <p>ioPix, ioNote, ioCalendar, ioTask, ioRecipe and ioContact are MCP servers: connect Claude or another assistant with an app password.</p>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= FOOTER ================= -->
+  <footer>
+    <div class="wrap">
+      <div class="frow">
+        <span class="fbrand"><img src="img/icon.svg" alt=""><span><span class="io">io</span>Thing suite</span></span>
+        <a href="https://github.com/avandeputte/iopix" rel="noopener">ioPix</a>
+        <a href="https://github.com/avandeputte/ionote" rel="noopener">ioNote</a>
+        <a href="https://github.com/avandeputte/iocalendar" rel="noopener">ioCalendar</a>
+        <a href="https://github.com/avandeputte/iotask" rel="noopener">ioTask</a>
+        <a href="https://github.com/avandeputte/iorecipe" rel="noopener">ioRecipe</a>
+        <a href="https://github.com/avandeputte/iocontact" rel="noopener">ioContact</a>
+        <a href="https://github.com/avandeputte/iohealth" rel="noopener">ioHealth</a>
+        <a href="https://github.com/avandeputte/iosuite" rel="noopener">ioSuite</a>
+        <a href="https://github.com/avandeputte/iosuite-docs" rel="noopener">This site</a>
+      </div>
+      <div class="frow" style="margin-top:14px">
+        <span>More projects:</span>
+        <a href="https://ham.iothing.net" rel="noopener">HAProxy Cluster Manager</a>
+        <a href="https://splitflap.iothing.net" rel="noopener">SplitFlap — split-flap display ecosystem</a>
+        <a href="https://iopix.net" rel="noopener">iopix.net</a>
+      </div>
+      <p>Free and open source software, licensed under the GNU GPL v3 or later. An independent project. Apple Health, HealthKit and iPhone are trademarks of Apple Inc.; digiKam, Proxmox, Docker, MariaDB, MySQL and Cloudflare are trademarks of their owners.</p>
+    </div>
+  </footer>
+
+</main>
+
+<script>
+(function(){
+  "use strict";
+
+  var APPS = {
+    iopix:      {name:"ioPix",      port:8600, docker:"iopix"},
+    ionote:    {name:"ioNote",    port:8610, docker:"ionote"},
+    iocalendar: {name:"ioCalendar", port:8620, docker:"iocalendar"},
+    iosuite:    {name:"ioSuite",    port:8630, docker:"iosuite"},
+    iocontact: {name:"ioContact", port:8640, docker:"iocontact"},
+    iohealth:   {name:"ioHealth",   port:8650, docker:"iohealth"},
+    iotask:    {name:"ioTask",    port:8670, docker:"iotask"},
+    iorecipe:   {name:"ioRecipe",   port:8690, docker:"iorecipe"}
+  };
+  var ORDER = ["iopix","ionote","iocalendar","iotask","iorecipe","iocontact","iohealth","iosuite"];
+  var RAW = "https://raw.githubusercontent.com/avandeputte/";
+
+  function esc(s){ return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
+  /* --- copy buttons (delegated: the install commands are redrawn) --- */
+  document.addEventListener("click", function(e){
+    var btn = e.target.closest("[data-copy]");
+    if(!btn) return;
+    var pre = btn.closest(".term").querySelector("pre code");
+    var text = "";
+    pre.childNodes.forEach(function(n){
+      if(n.nodeType === 1 && (n.classList.contains("p") || n.classList.contains("c"))) return;
+      text += n.textContent;
+    });
+    var lines = text.split("\n").map(function(l){ return l.replace(/\s+$/,""); }).filter(function(l){ return l; });
+    navigator.clipboard.writeText(lines.join("\n")).then(function(){
+      var old = btn.textContent;
+      btn.textContent = "copied";
+      setTimeout(function(){ btn.textContent = old; }, 1400);
+    });
+  });
+
+  /* --- hero: one app, a few, all of them --- */
+  var mix = document.getElementById("mix");
+  var mixName = document.getElementById("mix-name");
+  var mixCount = document.getElementById("mix-count");
+  var STEPS = [
+    {apps:["iopix"], name:"Just the photos"},
+    {apps:["iocalendar","iotask","iocontact"], name:"The family's calendar, tasks and contacts"},
+    {apps:["ionote"], name:"Just the notes"},
+    {apps:["iopix","iocalendar","iocontact","iosuite"], name:"Photos, calendar, contacts, a start page"},
+    {apps:["iohealth"], name:"Just the health data"},
+    {apps:ORDER, name:"The whole suite"}
+  ];
+  function showStep(s){
+    mix.querySelectorAll(".mix-app").forEach(function(el){
+      el.classList.toggle("on", s.apps.indexOf(el.dataset.app) >= 0);
+    });
+    mixName.textContent = s.name;
+    mixCount.textContent = s.apps.length === 1 ? "1 app" : s.apps.length + " apps";
+  }
+  if(mix){
+    var step = 0;
+    showStep(STEPS[0]);
+    if(!window.matchMedia("(prefers-reduced-motion: reduce)").matches){
+      setInterval(function(){ step = (step + 1) % STEPS.length; showStep(STEPS[step]); }, 3200);
+    }
+  }
+
+  /* --- install picker --- */
+  var pick = document.getElementById("pick");
+  var cmds = document.getElementById("cmds");
+  var note = document.getElementById("pick-note");
+  var way = "proxmox";
+
+  function term(head, lines){
+    return '<div class="term"><div class="term-head"><span>' + esc(head) +
+      '</span><button class="copy" data-copy>copy</button></div><pre><code>' +
+      lines.map(function(l){
+        if(l.charAt(0) === "#") return '<span class="c">' + esc(l) + '</span>';
+        return '<span class="p">$ </span>' + esc(l);
+      }).join("\n") + '</code></pre></div>';
+  }
+  function names(list){
+    var n = list.map(function(a){ return APPS[a].name; });
+    if(n.length < 2) return n.join("");
+    return n.slice(0,-1).join(", ") + " and " + n[n.length-1];
+  }
+
+  function draw(){
+    var sel = ORDER.filter(function(a){ return pick.querySelector('input[value="'+a+'"]').checked; });
+    var html = "", msg = "";
+    if(!sel.length){
+      cmds.innerHTML = "";
+      note.innerHTML = "Pick at least one app.";
+      return;
+    }
+    if(way === "proxmox"){
+      // ioPix's installer can take the others into its container (it mounts the photo library); theirs can't take ioPix
+      var base = sel.indexOf("iopix") >= 0 ? "iopix" : (sel.indexOf("iosuite") >= 0 ? "iosuite" : sel[0]);
+      var also = sel.filter(function(a){ return a !== base; });
+      var line = 'bash -c "$(curl -fsSL ' + RAW + base + '/main/proxmox/ct/' + base + '.sh)"';
+      if(also.length) line = base.toUpperCase() + "_ALSO=" + also.join(",") + " " + line;
+      html += term("proxmox ve host, as root — " + names(sel), [line]);
+      msg = sel.length === 1
+        ? "<strong>One container, one app.</strong> It asks for the databases and the admin, then for the container's resources. Its \u201cAlso install\u201d checklist can stay empty."
+        : "One container with " + names(sel) + ", each with its own database and port, sharing the accounts and the admin. Without the <code>_ALSO=\u2026</code> the installer offers the same as a checklist.";
+    } else if(way === "docker"){
+      if(sel.length === ORDER.length){
+        html += term("the whole suite in one stack, mariadb included", [
+          "curl -fsSLO " + RAW + "iosuite/main/docker/suite/docker-compose.yml",
+          "# set the passwords, the photos folder and the time zone at the top, then",
+          "docker compose up -d"
+        ]);
+        msg = "<strong>The whole suite:</strong> one MariaDB with a database per app, one Shared ioSuite database, one admin.";
+      } else {
+        sel.forEach(function(a){
+          html += term("docker compose — " + APPS[a].name, [
+            "mkdir " + a + " && cd " + a,
+            "curl -fsSLO " + RAW + a + "/main/docker-compose.yml",
+            "# fill in the CHANGE ME values, then",
+            "docker compose up -d"
+          ]);
+        });
+        msg = sel.length === 1
+          ? "<strong>One stack, one app.</strong> The image (<code>ghcr.io/avandeputte/" + APPS[sel[0]].docker + "</code>, amd64 and arm64) holds no data of its own."
+          : "A stack per app. Give them all the same <code>IOSUITE_DB_*</code> settings and they share the accounts. All seven? Tick them all for the one-stack version.";
+      }
+    } else {
+      var b = sel[0], al = sel.slice(1);
+      html += term("any linux or mac — " + names(sel), [
+        "git clone https://github.com/avandeputte/" + b + " && cd " + b,
+        "./setup.sh" + (al.length ? " --also " + al.join(",") : "")
+      ]);
+      msg = sel.length === 1
+        ? "<strong>One app.</strong> <code>setup.sh</code> asks for the databases, the port and an admin, and installs a service (systemd, or launchd on a Mac). Its last question offers the other apps: say no."
+        : "<code>--also</code> puts " + names(al) + " beside " + APPS[b].name + " (<code>/opt/&lt;app&gt;/app</code> as root), with the same database server, accounts and admin, each on its own port.";
+    }
+    cmds.innerHTML = html;
+    note.innerHTML = msg;
+  }
+
+  if(pick){
+    pick.addEventListener("change", draw);
+    document.querySelectorAll(".tabs button").forEach(function(b){
+      b.addEventListener("click", function(){
+        way = b.dataset.way;
+        document.querySelectorAll(".tabs button").forEach(function(o){ o.setAttribute("aria-selected", o === b ? "true" : "false"); });
+        draw();
+      });
+    });
+    draw();
+  }
+
+  /* --- lightbox --- */
+  var box = document.getElementById("lightbox");
+  var boxImg = box.querySelector("img");
+  var boxCap = document.getElementById("lb-cap");
+  document.querySelectorAll(".shot").forEach(function(b){
+    b.addEventListener("click", function(){
+      boxImg.src = b.dataset.full;
+      boxImg.alt = b.dataset.cap;
+      boxCap.textContent = b.dataset.cap;
+      box.showModal();
+    });
+  });
+  document.getElementById("lb-close").addEventListener("click", function(){ box.close(); });
+  box.addEventListener("click", function(e){ if(e.target === box) box.close(); });
+})();
+</script>
+</body>
+</html>

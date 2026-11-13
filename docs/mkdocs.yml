@@ -1,0 +1,112 @@
+site_name: ioThing suite
+site_url: https://iosuite.iothing.net/docs/
+site_dir: site/docs
+site_description: Self-hosted photos, notes, calendar, tasks, contacts and health for the family. Install one app, or all of them. The guide.
+repo_url: https://github.com/avandeputte/iosuite-docs
+repo_name: GitHub
+edit_uri: ""
+copyright: © Alex Van de Putte · the ioThing apps are GPL-3.0-or-later
+
+theme:
+  name: material
+  custom_dir: overrides
+  language: en
+  favicon: img/icon.svg
+  # Light and dark, following the system like the landing page does, in the
+  # landing page's palette (docs/stylesheets/extra.css). The brand in the
+  # header is overrides/partials/logo.html; it links back to the landing page
+  # (extra.homepage).
+  font:
+    text: IBM Plex Sans
+    code: IBM Plex Mono
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - navigation.indexes
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.tabs.link
+    - toc.follow
+
+extra:
+  homepage: https://iosuite.iothing.net/
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/avandeputte?tab=repositories&q=io
+      name: the ioThing apps on GitHub
+
+extra_css:
+  - stylesheets/extra.css
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
+
+plugins:
+  - search
+
+validation:
+  omitted_files: warn
+  absolute_links: warn
+  unrecognized_links: warn
+  anchors: warn
+
+# Every page lives in docs/; the screenshots in docs/img/ are copied from
+# landing/img/ by build.sh. A page listed here but missing fails the --strict
+# build, which is the point.
+nav:
+  - Home: index.md
+  - Getting started:
+      - One app or all of them: start/one-or-all.md
+      - Requirements: start/requirements.md
+      - Proxmox VE (LXC): start/proxmox.md
+      - Docker: start/docker.md
+      - Any Linux or Mac: start/linux-mac.md
+      - Several apps on one host: start/several-apps.md
+      - First run: start/first-run.md
+  - The apps:
+      - ioPix: apps/iopix.md
+      - ioNote: apps/ionote.md
+      - ioCalendar: apps/iocalendar.md
+      - ioTask: apps/iotask.md
+      - ioRecipe: apps/iorecipe.md
+      - ioContact: apps/iocontact.md
+      - ioHealth: apps/iohealth.md
+      - ioSuite start page: apps/iosuite.md
+      - Phones, Macs and other apps: apps/devices.md
+  - Running them:
+      - Accounts and roles: run/accounts.md
+      - Reverse proxy and HTTPS: run/reverse-proxy.md
+      - Cloudflare Tunnel and Access: run/cloudflare.md
+      - Updates: run/updates.md
+      - AI assistants (MCP): run/assistants.md
+  - Reference:
+      - Configuration: reference/configuration.md
+      - Databases: reference/databases.md

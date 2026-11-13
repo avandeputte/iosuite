@@ -1,0 +1,6 @@
+site/
+# copied from landing/img/ by build.sh
+docs/img/
+__pycache__/
+.DS_Store
+.wrangler/
