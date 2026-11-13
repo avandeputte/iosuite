@@ -88,9 +88,10 @@ what the app will show on the start page later (today's events, the newest photo
   front (no offline copy). On a phone it has a search box, rows to tap, a ⋯ menu per link and folder, and a short
   link form (the address; the name is the site's address when left empty). Sign-in is the page's own: behind
   Cloudflare Access a home-screen app signs in once by itself (it keeps its own cookies, apart from the browser's).
-- **ioBookmarks, the iPhone and iPad app** (`ios/`, its own README there): the tree with search and editing, a share
-  sheet entry that bookmarks the page open in any browser, and a built-in browser (WebKit) for opening bookmarks
-  inside the app. It speaks the extension's API (`/dav/ext`) and signs in with the same one-tap flow.
+- **ioStart, the iPhone and iPad app** ([avandeputte/iostart-apps](https://github.com/avandeputte/iostart-apps)): the
+  tree with search and editing, a share sheet entry that bookmarks the page open in any browser, and a built-in
+  browser (WebKit) for opening bookmarks inside the app. It speaks the extension's API (`/dav/ext`) and signs in with
+  the same one-tap flow.
 - **Bookmark sync with browsers**: everything in the tree syncs, on the start page or not.
   - *The ioSuite Bookmarks extension* (`static/extension`, Chrome, Edge and Firefox; its own README there): keeps the
     browser's own bookmarks the same as the tree, both ways, with nothing to configure but the address. The bookmarks

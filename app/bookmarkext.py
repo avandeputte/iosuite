@@ -7,8 +7,8 @@ changes in one request, applied together.
                                   answers {rev, ids, tree}: the tree after them, and the ids given to what it made
     GET  <address>/dav/ext/icon/<id>  the icon of a link's site, as the server keeps it (app/siteicons.py); 404 without one
 
-The iPhone and iPad app (ios/) speaks the same API: it shows the tree, sends what is changed in it as ops, and draws
-the links with the icons.
+ioStart, the iPhone and iPad app (the repository avandeputte/iostart-apps), speaks the same API: it shows the tree,
+sends what is changed in it as ops, and draws the links with the icons.
 
 The extension signs in with Nextcloud's sign-in flow (app/ncbookmarks.py: one click, a sync-only app password in the
 Shared ioSuite database) and then HTTP Basic, like the other sync clients; under /dav, so the Cloudflare Worker checks
