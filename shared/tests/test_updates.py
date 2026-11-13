@@ -27,12 +27,16 @@ def make_updater(tmp_path, monkeypatch, version="1.2.0", **kw):
     return u, store
 
 
-def github(sha="abcdef0123456789", remote_version="1.3.0", msg="v1.3.0: better", fail=False):
+def github(sha="abcdef0123456789", remote_version="1.3.0", msg="v1.3.0: better", fail=False, shared_version=None):
+    """GitHub as the Updater asks it: the branch's commit, the app's version file and the shared library's
+    (shared/iosuite_shared/__init__.py; the installed version unless `shared_version` says otherwise)."""
     def _get(url, accept=""):
         if fail:
             raise OSError("no network")
         if "api.github.com" in url:
             return json.dumps({"sha": sha, "commit": {"committer": {"date": "2026-11-05T01:02:03Z"}, "message": msg + "\n\nmore"}}).encode()
+        if url.endswith("/" + updates.SHARED_VERSION_FILE):
+            return f'__version__ = "{shared_version or updates.Updater.shared_version()}"\n'.encode()
         if remote_version is None:
             return b"nothing here"
         return f'__version__ = "{remote_version}"\n'.encode()
@@ -58,6 +62,10 @@ def test_commit_from_file_and_check_outcomes(tmp_path, monkeypatch):
 
     u._get_url = github(sha="fedcba9876543210", remote_version="1.2.0")  # another commit, the same version: nothing to install
     assert u.check()["status"] == "current"
+    # the same app version, a newer shared library: an update (both come from the same commit of the one repository)
+    u._get_url = github(sha="fedcba9876543210", remote_version="1.2.0", shared_version="999.0.0")
+    c = u.check()
+    assert c["status"] == "update" and c["remoteShared"] == "999.0.0" and c["shared"] == updates.Updater.shared_version()
     u._get_url = github(sha="fedcba9876543210", remote_version=None)  # no version line found: say so, to be safe
     assert u.check()["status"] == "update" and u.check()["remoteVersion"] is None
     u._get_url = github(fail=True)
@@ -98,7 +106,7 @@ def test_env_defaults(tmp_path, monkeypatch):
     monkeypatch.delenv("IOCALENDAR_REPO")
     monkeypatch.delenv("IOCALENDAR_BRANCH")
     u = updates.Updater("iocalendar", "1", tmp_path, settings=({}.get, lambda k, v: None))
-    assert u.repo == "avandeputte/iocalendar" and u.branch == "main"
+    assert u.repo == "avandeputte/iosuite" and u.branch == "main" and u.version_file == "iocalendar/app/__init__.py"
 
 
 def test_run_update_script_and_result(tmp_path, monkeypatch):
