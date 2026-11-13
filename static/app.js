@@ -1735,6 +1735,9 @@ async function start() {
   S.status = await api('/api/status');
   if (!S.status.user) { showSignIn(); return; }
   S.user = S.status.user;
+  // sent here to sign in by a sync app's "may it sync?" page (app/ncbookmarks.py): back to it, now signed in
+  const flow = new URLSearchParams(location.search).get('flow');
+  if (flow && /^[\w-]{20,}$/.test(flow)) { location.replace('dav/nextcloud/index.php/login/v2/flow/' + flow); return; }
   try { S.settings = (await api('/api/auth/me')).settings || {}; } catch { S.settings = {}; }
   if (S.settings.theme && S.settings.theme !== (localStorage.getItem('iosuite.theme') || 'system')) setTheme(S.settings.theme);
   drawUser();

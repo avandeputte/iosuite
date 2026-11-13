@@ -5,6 +5,10 @@ changes in one request, applied together.
     GET  <address>/dav/ext/tree   {rev, tree}: every folder and link, nested, with their ids
     POST <address>/dav/ext/sync   {base, ops}: a browser's changes since its copy at revision `base`;
                                   answers {rev, ids, tree}: the tree after them, and the ids given to what it made
+    GET  <address>/dav/ext/icon/<id>  the icon of a link's site, as the server keeps it (app/siteicons.py); 404 without one
+
+ioStart, the iPhone and iPad app (the repository avandeputte/iostart-apps), speaks the same API: it shows the tree,
+sends what is changed in it as ops, and draws the links with the icons.
 
 The extension signs in with Nextcloud's sign-in flow (app/ncbookmarks.py: one click, a sync-only app password in the
 Shared ioSuite database) and then HTTP Basic, like the other sync clients; under /dav, so the Cloudflare Worker checks
@@ -23,9 +27,9 @@ to the browser, which is the safe way round.
 """
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
-from app import __version__, bookmarks, bookmarksync as sync
+from app import __version__, bookmarks, bookmarksync as sync, siteicons
 from iosuite_shared import users
 
 BASE = "/dav/ext"
@@ -136,6 +140,26 @@ def rev(request: Request):
 async def get_tree(request: Request):
     sync.user(request)
     return await _guard(_state)()
+
+
+@router.get(BASE + "/icon/{nid}", include_in_schema=False)
+def icon(nid: int, request: Request):
+    """The icon of a link's site, for a client that draws the bookmarks itself (the iOS app): the image as the server
+    fetched it. Asks for the look when it is due, like the Bookmarks page; 404 until there is one (or for good)."""
+    sync.user(request)
+    try:
+        r = bookmarks.node(nid)
+    except bookmarks.BadBookmark:
+        raise HTTPException(404, "No such bookmark")
+    s = None if r["folder"] else siteicons.site(r["url"] or "")
+    if s:
+        siteicons.of(r["url"])
+    ic = siteicons.get(s) if s else None
+    if not ic:
+        raise HTTPException(404, "No icon")
+    return Response(bytes(ic["data"]), media_type=ic["mime"],
+                    headers={"Cache-Control": "private, max-age=86400", "ETag": f'"{ic["etag"]}"',
+                             "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox", "X-Content-Type-Options": "nosniff"})
 
 
 @router.post(BASE + "/sync", include_in_schema=False)
