@@ -51,8 +51,8 @@ on the start page's Bookmarks page). Chrome, Edge, Vivaldi, Brave and Opera all 
 - **Data usage**: tick **Authentication information** (it keeps the sign-in made for it on your start page). The
   form has no box for bookmarks; the nearest is **Web history**, and ticking it is the cautious choice. Leave the
   others unticked. Then certify the three statements (not sold, not used for anything but the single purpose, not
-  used for creditworthiness). What it handles goes only to the server the user names (`PRIVACY.md`).
-- **Privacy policy URL**: <https://github.com/avandeputte/iosuite/blob/main/iostart/docs/extension/PRIVACY.md>
+  used for creditworthiness). What it handles goes only to the server the user names (see the privacy policy).
+- **Privacy policy URL**: <https://iosuite.iothing.net/docs/privacy/iostart-bookmarks/> (source: `docs/docs/privacy/iostart-bookmarks.md`)
 
 ## Distribution tab
 
