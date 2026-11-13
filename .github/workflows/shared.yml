@@ -49,5 +49,5 @@ jobs:
           IOSUITE_TEST_DB: 127.0.0.1:3306:root:root
         run: python -m pytest -q -p no:cacheprovider tests
       - name: Edge worker tests
-        working-directory: cloudflare/edge-auth
+        working-directory: shared/cloudflare/edge-auth
         run: node --test
