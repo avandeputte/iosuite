@@ -1,0 +1,42 @@
+---
+description: The first sign-in, the first accounts, and what to set next.
+---
+
+# First run
+
+## Open the app
+
+Open `http://<host>:<port>`, with the app's port: ioPix 8600, ioNote 8610, ioCalendar 8620, ioStart 8630, ioContact 8640, ioHealth 8650, ioTask 8670, ioRecipe 8690.
+
+The sign-in screen is the same in every app: a tile per account (a click and a password), or *Other* to type a name.
+
+- **The installer made an admin** (you answered the admin question, or set `ADMIN_USER` / `ADMIN_PASSWORD`): sign in
+  with it. The first account in a Shared ioSuite database is a **suite admin**: admin in every app, and the one who
+  manages the accounts.
+- **No account yet**: the app offers to create the first one, right there in the browser. That works only from inside
+  your network (or on the server itself), never through a reverse proxy from outside. Open the app at the server's
+  own address for it (`http://192.168.1.10:8620`), not at its public name: until an account exists, a visitor from
+  the internet, through a Cloudflare Tunnel, or through a reverse proxy the apps have not been told about gets the
+  sign-in screen saying "No account exists here yet" and nothing else, whatever the app's sign-in setting. A reverse
+  proxy on another machine is told to the apps afterwards, under
+  [Reverse proxy addresses](../run/reverse-proxy.md#tell-the-apps-where-the-proxy-is).
+- **Another app already uses this Shared ioSuite database**: the accounts are there. Sign in with yours.
+
+## Make the accounts
+
+As a suite admin, open **Settings › Security › People** in any app:
+
+- add an account for each person (name, display name, email, password), or a **passwordless viewer** for a child or a
+  kitchen tablet: one click to sign in, on the home network only, and a viewer at most everywhere;
+- set each person's role per app under **Roles** (viewer, editor, admin, or none), or leave the app's default;
+- decide under **Settings › Global settings › Apps** whether an app is open to everyone with an account (its default
+  role) or by invitation only (default role `none`), and whether it requires a sign-in at all.
+
+See [Accounts and roles](../run/accounts.md).
+
+## Next
+
+- Put the app behind HTTPS: [Reverse proxy and HTTPS](../run/reverse-proxy.md), or [Cloudflare Tunnel and Access](../run/cloudflare.md).
+- Connect your devices: [Phones, Macs and other apps](../apps/devices.md).
+- Settings › Server shows the version and has **Check for updates**: [Updates](../run/updates.md).
+- Optionally, let an AI assistant in: [AI assistants (MCP)](../run/assistants.md).

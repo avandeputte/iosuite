@@ -1,35 +1,196 @@
-# ioSuite with Docker: `docker compose up -d` pulls the published image; `docker compose up -d --build` builds it
-# from this checkout. Works as a stack in Dockge / Portainer. Edit the CHANGE ME spots.
+# The whole ioSuite in one Docker stack: MariaDB with a database per app, the Shared ioSuite database (accounts, one
+# sign-in for every app) and ioStart (the start page), ioCalendar, ioTask, ioRecipe, ioContact, ioNote, ioHealth and ioPix.
+#
+#   docker compose up -d        # or paste this file as a stack in Dockge / Portainer
+#
+# Edit the CHANGE ME spots below (or put the same names in a .env file next to this file): the two passwords, the
+# admin, the time zone, the photos folder. Everything else is shared through the YAML anchors, so it is written once:
+# every app talks to the same MariaDB (`db`), each with its own database and the same user, and to the same Shared
+# ioSuite database `iosuite`. The admin account is created on the first start by whichever app comes first and is an
+# admin of every app. Each app is published on its usual port; put a reverse proxy in front for HTTPS and set
+# PUBLIC_URL / COOKIE_DOMAIN (one sign-in across the apps needs them on one domain, e.g. home.example.com,
+# calendar.example.com ... with COOKIE_DOMAIN example.com).
+#
+# Not wanted? Delete an app's service (and its database line in the `init` config below); nothing else refers to it.
+# ioPix here runs without digiKam and without the AI models (AUTO_MODELS empty); see iopix/docker-compose.yml
+# for those. The images are public on GitHub's registry: no login is needed to pull them.
+
+x-change-me: &change-me
+  TZ: ${TZ:-America/New_York}                                 # CHANGE ME: the family's time zone
+  DB_PASSWORD: &app-db-password ${APP_DB_PASSWORD:-change-me}  # CHANGE ME: the apps' database user `suite`
+  IOSUITE_DB_PASSWORD: ${SUITE_DB_PASSWORD:-change-me-too}    # CHANGE ME: the Shared ioSuite database user `iosuite`
+  ADMIN_USER: ${ADMIN_USER:-admin}                            # the first admin, made on the first start (remove both lines to make it in the browser)
+  ADMIN_PASSWORD: ${ADMIN_PASSWORD:-change-me-please}         # CHANGE ME (8 characters or more)
+  # PUBLIC_URL is per app (below); COOKIE_DOMAIN shares the sign-in across the apps under one domain
+  # COOKIE_DOMAIN: example.com
+
+x-shared: &shared                      # the same for every app: one MariaDB, one Shared ioSuite database
+  <<: *change-me
+  DB_TYPE: mysql
+  DB_HOST: db
+  DB_PORT: "3306"
+  DB_USER: suite
+  IOSUITE_DB_HOST: db
+  IOSUITE_DB_PORT: "3306"
+  IOSUITE_DB_NAME: iosuite
+  IOSUITE_DB_USER: iosuite
+
+x-app: &app
+  restart: unless-stopped
+  depends_on:
+    db:
+      condition: service_healthy
+
 services:
-  iosuite:
-    image: ghcr.io/avandeputte/iosuite:latest
-    build: .
-    container_name: iosuite
+  db:
+    image: mariadb:11
+    container_name: iosuite-db
     restart: unless-stopped
-    logging:                          # the output Docker keeps (the app's log, again): at most 3 files of 5 MB
-      driver: json-file
-      options: {max-size: 5m, max-file: "3"}
-    ports:
-      - "8630:8630"     # the start page and its REST API (/api/)
     environment:
-      TZ: America/New_York
-      DB_HOST: db.example.lan         # CHANGE ME: your MariaDB host
-      DB_PORT: "3306"
+      MARIADB_RANDOM_ROOT_PASSWORD: "1"    # printed once in the container's log; no app needs it
+      APP_DB_PASSWORD: *app-db-password
+      SUITE_DB_PASSWORD: ${SUITE_DB_PASSWORD:-change-me-too}
+    configs:
+      - source: init
+        target: /docker-entrypoint-initdb.d/00-iosuite.sh
+    volumes:
+      - suite-db:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 6
+
+  iostart:                               # the start page
+    <<: *app
+    image: ghcr.io/avandeputte/iostart:latest
+    container_name: iostart
+    ports: ["8630:8630"]
+    environment:
+      <<: *shared
       DB_NAME: suite
-      DB_USER: suite
-      DB_PASSWORD: change-me          # CHANGE ME
-      # the accounts shared by the io apps (the same database ioPix, ioNote, ioContact, ioCalendar and ioHealth use)
-      # IOSUITE_DB_HOST: db.example.lan   # default: DB_HOST
-      # IOSUITE_DB_PORT: "3306"            # default: DB_PORT
-      IOSUITE_DB_NAME: iosuite
-      IOSUITE_DB_USER: iosuite
-      IOSUITE_DB_PASSWORD: change-me  # CHANGE ME
-      # ADMIN_USER: admin             # a first admin, made on the first start when there is no account yet
-      # ADMIN_PASSWORD: change-me-please
-      # PUBLIC_URL: https://home.example.com       # behind a reverse proxy
-      # INTERNAL_URL: http://192.168.1.151:8630   # the host's LAN address and port, kept in the suite's list of apps (a container cannot tell)
-      # COOKIE_DOMAIN: example.com                 # one sign-in for every app of the suite under this domain
-      # AUTH_PROXY: cloudflare        # sign-in at the proxy, as in the other io apps (see README)
-      # the weather (or Settings › Home page): a key from developer.accuweather.com and a location key Settings finds
-      # ACCUWEATHER_API_KEY: change-me
-      # ACCUWEATHER_LOCATION: "349727"
+      # PUBLIC_URL: https://home.example.com
+      # INTERNAL_URL: http://192.168.1.151:8630   # this host's LAN address and the port, for the suite's list of apps
+
+  iocalendar:
+    <<: *app
+    image: ghcr.io/avandeputte/iocalendar:latest
+    container_name: iocalendar
+    ports: ["8620:8620"]                 # web app, CalDAV (/dav/), REST API, subscription links (/ics/)
+    environment:
+      <<: *shared
+      DB_NAME: calendar
+      # PUBLIC_URL: https://calendar.example.com
+      # INTERNAL_URL: http://192.168.1.151:8620   # this host's LAN address and the port, for the suite's list of apps
+
+  iotask:
+    <<: *app
+    image: ghcr.io/avandeputte/iotask:latest
+    container_name: iotask
+    ports: ["8670:8670"]                 # web app, CalDAV for reminders apps (/dav/), REST API, MCP (/mcp)
+    environment:
+      <<: *shared
+      DB_NAME: tasks
+      # PUBLIC_URL: https://tasks.example.com
+      # INTERNAL_URL: http://192.168.1.151:8670   # this host's LAN address and the port, for the suite's list of apps
+
+  iorecipe:
+    <<: *app
+    image: ghcr.io/avandeputte/iorecipe:latest
+    container_name: iorecipe
+    ports: ["8690:8690"]                 # web app, REST API, MCP (/mcp)
+    environment:
+      <<: *shared
+      DB_NAME: recipe
+      # PUBLIC_URL: https://recipes.example.com
+      # INTERNAL_URL: http://192.168.1.151:8690   # this host's LAN address and the port, for the suite's list of apps
+
+  iocontact:
+    <<: *app
+    image: ghcr.io/avandeputte/iocontact:latest
+    container_name: iocontact
+    ports:
+      - "8640:8640"                      # web app, CardDAV (/dav/), REST API, birthday calendar (/cal/)
+      - "389:3890"                       # LDAP directory for mail apps (read-only); drop it when not needed
+    environment:
+      <<: *shared
+      DB_NAME: contacts
+      # PUBLIC_URL: https://contacts.example.com
+      # INTERNAL_URL: http://192.168.1.151:8640   # this host's LAN address and the port, for the suite's list of apps
+
+  ionote:
+    <<: *app
+    image: ghcr.io/avandeputte/ionote:latest
+    container_name: ionote
+    ports: ["8610:8610"]
+    volumes:
+      - ionote-data:/data               # the session secret and the log; the notes are in the database
+    environment:
+      <<: *shared
+      DB_NAME: notes
+      # PUBLIC_URL: https://notes.example.com
+      # INTERNAL_URL: http://192.168.1.151:8610   # this host's LAN address and the port, for the suite's list of apps
+
+  iohealth:
+    <<: *app
+    image: ghcr.io/avandeputte/iohealth:latest
+    container_name: iohealth
+    ports: ["8650:8650"]                 # the iPhone app uploads here; the web app is on the same port
+    environment:
+      <<: *shared
+      DB_NAME: health
+      # PUBLIC_URL: https://health.example.com
+      # INTERNAL_URL: http://192.168.1.151:8650   # this host's LAN address and the port, for the suite's list of apps
+
+  iopix:                                 # without digiKam: iopix keeps the library itself and scans the folder
+    <<: *app
+    image: ghcr.io/avandeputte/iopix:latest
+    container_name: iopix
+    ports: ["8600:8600"]
+    volumes:
+      - ${PHOTOS:-/path/to/photos}:/library/photos   # CHANGE ME: the folder with the photos (read/write: sidecar files beside them)
+      - iopix-data:/data                 # index, thumbnails, models, backups (the container runs as uid 1000)
+    environment:
+      <<: *shared
+      DB_NAME: iopix
+      DIGIKAM_DB_TYPE: none
+      DIGIKAM_CHECK: none
+      PHOTOS_ROOT: /library/photos
+      AUTO_MODELS: ""                    # e.g. siglip2,yolox,geonames: content search, objects, places (about 1.6 GB, fetched on the first start)
+      # PUBLIC_URL: https://photo.example.com
+      # INTERNAL_URL: http://192.168.1.151:8600   # this host's LAN address and the port, for the suite's list of apps
+
+configs:
+  init:                                  # runs once, when the `suite-db` volume is new: a database per app, the two users
+    content: |
+      #!/bin/sh
+      set -e
+      mariadb -uroot -p"$$MARIADB_ROOT_PASSWORD" <<SQL
+      CREATE USER IF NOT EXISTS 'suite'@'%' IDENTIFIED BY '$$APP_DB_PASSWORD';
+      CREATE USER IF NOT EXISTS 'iosuite'@'%' IDENTIFIED BY '$$SUITE_DB_PASSWORD';
+      CREATE DATABASE IF NOT EXISTS iosuite CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+      GRANT ALL PRIVILEGES ON iosuite.* TO 'iosuite'@'%';
+      CREATE DATABASE IF NOT EXISTS suite CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+      CREATE DATABASE IF NOT EXISTS calendar CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+      CREATE DATABASE IF NOT EXISTS tasks CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+      CREATE DATABASE IF NOT EXISTS recipe CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+      CREATE DATABASE IF NOT EXISTS contacts CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+      CREATE DATABASE IF NOT EXISTS notes CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+      CREATE DATABASE IF NOT EXISTS health CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+      CREATE DATABASE IF NOT EXISTS iopix CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+      GRANT ALL PRIVILEGES ON suite.* TO 'suite'@'%';
+      GRANT ALL PRIVILEGES ON calendar.* TO 'suite'@'%';
+      GRANT ALL PRIVILEGES ON tasks.* TO 'suite'@'%';
+      GRANT ALL PRIVILEGES ON recipe.* TO 'suite'@'%';
+      GRANT ALL PRIVILEGES ON contacts.* TO 'suite'@'%';
+      GRANT ALL PRIVILEGES ON notes.* TO 'suite'@'%';
+      GRANT ALL PRIVILEGES ON health.* TO 'suite'@'%';
+      GRANT ALL PRIVILEGES ON iopix.* TO 'suite'@'%';
+      FLUSH PRIVILEGES;
+      SQL
+
+volumes:
+  suite-db:
+  ionote-data:
+  iopix-data:

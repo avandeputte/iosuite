@@ -1,0 +1,43 @@
+/* ioStart Bookmarks: the look of the start page (light, dark with the system). */
+:root { --bg: #ffffff; --bg2: #f1f3f4; --fg: #202124; --fg2: #5f6368; --line: #dadce0; --brand: #2f3a5a; --io: #e2a93a; --nm: #2f3a5a;
+  --ok: #1e8e3e; --danger: #d93025; --accent: #3b4a8c; color-scheme: light dark; }
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #17181b; --bg2: #24262b; --fg: #e8eaed; --fg2: #9aa0a6; --line: #3c4043; --brand: #5f6fb4; --io: #f6cf72; --nm: #ffffff;
+    --ok: #81c995; --danger: #f28b82; --accent: #a3a9ff; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+.brand { display: flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 600; }
+.brand img { width: 28px; height: 28px; }
+.brand .io { color: var(--io); } .brand .nm { color: var(--nm); } .brand .what { color: var(--fg2); font-weight: 400; }
+.muted { color: var(--fg2); }
+.small { font-size: 12px; }
+button { font: inherit; padding: 8px 16px; border-radius: 999px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); cursor: pointer; }
+button:hover { background: var(--bg2); }
+button.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+button.primary:hover { filter: brightness(1.1); }
+button:disabled { opacity: .55; cursor: default; }
+button.link { border: 0; padding: 0; background: none; color: var(--accent); border-radius: 0; }
+input[type="text"], input[type="url"] { font: inherit; width: 100%; padding: 9px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); }
+input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--fg2); margin-right: 7px; }
+.dot.ok { background: var(--ok); } .dot.bad { background: var(--danger); }
+.err { color: var(--danger); }
+[hidden] { display: none !important; }
+
+/* the popup */
+body.popup { width: 300px; padding: 14px 16px; }
+.popup .status { margin: 14px 0 4px; }
+.popup .row { display: flex; gap: 8px; margin-top: 14px; align-items: center; }
+.popup .row .grow { flex: 1; }
+
+/* the settings page */
+body.options main { max-width: 560px; margin: 0 auto; padding: 40px 20px; }
+.options h2 { font-size: 15px; margin: 28px 0 8px; }
+.options label.field { display: block; margin: 18px 0 6px; font-weight: 600; }
+.options .choice { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; margin-top: 8px; cursor: pointer; }
+.options .choice input { margin-top: 3px; }
+.options .choice b { display: block; }
+.options .actions { display: flex; gap: 10px; margin-top: 20px; align-items: center; flex-wrap: wrap; }
+.options .card { border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-top: 18px; }
+.options ul { padding-left: 20px; margin: 8px 0; }

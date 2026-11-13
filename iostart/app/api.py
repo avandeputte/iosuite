@@ -1,0 +1,469 @@
+"""The REST API (JSON) the start page uses. OpenAPI docs at /api/docs. Who may call a route is declared on it (app/access.py).
+
+Clients authenticate with the web session cookie (the suite's, shared by every io app on the domain), HTTP Basic or
+`Authorization: Bearer <app password>`, as in the other io apps."""
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import Response, StreamingResponse
+from fastapi.concurrency import run_in_threadpool
+import asyncio
+import io
+import json
+import os
+import zipfile
+
+from iosuite_shared.access import json_body
+
+from app import access, apps, config, siteicons, bookmarkdav, bookmarkfiles, bookmarks, bookmarksync, homeassistant as ha, ncbookmarks, layout, status as appstatus, weather, widgets
+
+router = APIRouter()
+
+
+# ------------------------------------------------------------------ the apps
+
+@router.get("/api/apps", dependencies=[access.signed_in])
+def list_apps(request: Request):
+    """The tiles: every app this person may use, with its name, icon, colour and address (an admin tool only for its
+    admins). Hidden ones are left out (Settings lists them)."""
+    u = request.state.user
+    return {"items": apps.tiles(u), "photoStrip": apps.photo_strip(), "layout": layout.get(u["id"])}
+
+
+@router.get("/api/apps/status", dependencies=[access.signed_in])
+async def apps_status(request: Request):
+    """Each app's /api/status, asked with the viewer's sign-in: {items: {key: {ok, version, update, why}}}. `update` is
+    set when the app says one is waiting (it tells admins only). Cached a minute."""
+    return {"items": await run_in_threadpool(appstatus.of_apps, request)}
+
+
+@router.get("/api/me/layout", dependencies=[access.signed_in])
+def my_layout(request: Request):
+    """The viewer's own start page: {hidden, order, strip} (see app/layout.py)."""
+    return layout.get(request.state.user["id"])
+
+
+@router.put("/api/me/layout", dependencies=[access.signed_in])
+async def my_layout_save(request: Request):
+    """Body: {hidden?: [keys], order?: [app keys], cards?: [home | birthdays | week | strip | bookmarks], strip?: rediscover |
+    onthisday | off | null}. {} puts it back."""
+    u = request.state.user
+    return layout.save(u["id"], await json_body(request))
+
+
+@router.get("/api/home/settings", dependencies=[access.admin])
+def home_settings(request: Request):
+    """Admins: what the home page shows everyone by default (the photo strip under the tiles)."""
+    return {"photoStrip": apps.photo_strip()}
+
+
+@router.post("/api/home/settings", dependencies=[access.admin])
+async def home_save(request: Request):
+    """Admins. Body: {photoStrip: rediscover | onthisday | off}."""
+    b = await json_body(request)
+    if "photoStrip" in b:
+        apps.set_photo_strip(b["photoStrip"])
+    return {"photoStrip": apps.photo_strip()}
+
+
+# ------------------------------------------------------------------ the weather
+
+@router.get("/api/weather", dependencies=[access.signed_in])
+async def get_weather(request: Request):
+    """The widget: current conditions and the 5-day forecast, from the server's copy (refreshed from AccuWeather when
+    it is older than 45 minutes / 6 hours). {enabled: false} until an admin sets it up."""
+    try:
+        return await run_in_threadpool(weather.current)
+    except weather.WeatherError as e:
+        return {"enabled": True, "error": str(e), "current": None, "forecast": None, "units": weather.settings()["units"],
+                "location": weather.settings()["locationName"]}
+
+
+@router.get("/api/weather/settings", dependencies=[access.admin])
+def weather_settings(request: Request):
+    return weather.settings()
+
+
+@router.post("/api/weather/settings", dependencies=[access.admin])
+async def weather_save(request: Request):
+    """Admins. Body: {key?, locationKey?, locationName?, units?}."""
+    u = request.state.user
+    b = await json_body(request)
+    try:
+        weather.save(b, by=u.get("name"))
+    except weather.WeatherError as e:
+        raise HTTPException(400, str(e))
+    return weather.settings()
+
+
+@router.get("/api/weather/search", dependencies=[access.admin])
+async def weather_search(request: Request, q: str = "", key: str = ""):
+    """Admins: places matching a city name, to pick the location in Settings. `key` tries a key before it is saved."""
+    try:
+        return {"items": await run_in_threadpool(weather.search, q, key)}
+    except weather.WeatherError as e:
+        raise HTTPException(400, str(e))
+
+
+# ------------------------------------------------------------------ Home Assistant (app/homeassistant.py)
+
+def _ha(fn, *a, **kw):
+    try:
+        return fn(*a, **kw)
+    except ha.HAError as e:
+        raise HTTPException(e.status, str(e))
+
+
+def _ha_card(request: Request, d: dict) -> dict:
+    """The card as this viewer gets it: switching things takes an editor or an admin, so a viewer's copy offers no
+    control (the page then shows the state alone). A copy: the card itself is shared between the pages."""
+    if (getattr(request.state, "user", None) or {}).get("role") in ("editor", "admin") or not d.get("items"):
+        return d
+    return {**d, "items": [{**it, "control": False} for it in d["items"]]}
+
+
+@router.get("/api/ha", dependencies=[access.signed_in])
+async def get_home(request: Request):
+    """The Home card and the wall's sensors: the chosen entities with their state (from the server's copy, a few seconds
+    old at most), which of them go on the wall, and what needs attention. {enabled: false} until an admin sets it up.
+    `control` on an entity is true for editors and admins only."""
+    return _ha_card(request, await run_in_threadpool(ha.home))
+
+
+@router.get("/api/ha/events", dependencies=[access.signed_in])
+async def ha_events(request: Request, once: bool = False):
+    """The Home card as server-sent events: the same JSON as /api/ha, sent when something in it changes (within a
+    second while the live feed is up, else as the REST copy refreshes) and a comment every 20 seconds to keep the
+    connection. The page's EventSource reconnects by itself. once=1: the card as it stands, then the end (a check)."""
+
+    async def gen():
+        last, seen = None, ha.feed.version
+        beat = 0.0
+        while True:
+            if await request.is_disconnected():
+                return
+            d = _ha_card(request, await run_in_threadpool(ha.home))
+            raw = json.dumps(d, separators=(",", ":"))
+            now = asyncio.get_running_loop().time()
+            if raw != last:
+                last = raw
+                beat = now
+                yield f"data: {raw}\n\n"
+                if once:
+                    return
+            elif now - beat > 20:
+                beat = now
+                yield ": keep\n\n"
+            if d.get("live"):  # wait for the feed to move (or a few seconds, to notice a disconnect), without a thread
+                seen = await ha.feed.wait_async(seen, 5.0)
+            else:
+                await asyncio.sleep(ha.STATES_TTL)
+    return StreamingResponse(gen(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@router.post("/api/ha/{entity_id}/set", dependencies=[access.editor])
+async def ha_set(entity_id: str, request: Request):
+    """Editors and admins. The popups: a thermostat takes {temperature? | low? + high?, mode?, fan?, preset?}, a cover
+    {action: open | close | stop} or {position: 0-100}; on an entity the admin lets the page control. Returns the
+    entity's state right after."""
+    return await run_in_threadpool(_ha, ha.set_entity, entity_id, await json_body(request))
+
+
+@router.post("/api/ha/{entity_id}/{action}", dependencies=[access.editor])
+async def ha_act(entity_id: str, action: str, request: Request):
+    """Editors and admins. toggle | on | off: switch an entity the admin lets the page control (Settings › Home
+    Assistant). Returns the entity's state right after. 403 for any other entity, and for a viewer."""
+    return await run_in_threadpool(_ha, ha.act, entity_id, action)
+
+
+@router.get("/api/ha/search", dependencies=[access.admin])
+async def ha_search(request: Request, q: str = "", n: int = 8):
+    """Entities whose name or id contains every word of q (the search box; up to 50)."""
+    return {"items": await run_in_threadpool(_ha, ha.search, q, max(1, min(int(n or 8), 50)))}
+
+
+@router.get("/api/ha/settings", dependencies=[access.admin])
+def ha_settings(request: Request):
+    return ha.settings()
+
+
+@router.post("/api/ha/settings", dependencies=[access.admin])
+async def ha_save(request: Request):
+    """Admins. Body: {url?, token?, entities?: [{id, name?, control?, wall?, alert?}], builtinAlerts?}."""
+    u = request.state.user
+    _ha(ha.save, await json_body(request), by=u.get("name"))
+    return ha.settings()
+
+
+@router.post("/api/ha/test", dependencies=[access.admin])
+async def ha_test(request: Request):
+    """Admins. Body: {url?, token?}: tries them (the saved ones when empty) → {ok, name, version, entities}."""
+    b = await json_body(request)
+    return await run_in_threadpool(_ha, ha.test, str(b.get("url") or ""), str(b.get("token") or ""))
+
+
+# ------------------------------------------------------------------ bookmarks
+
+@router.get("/api/bookmarks", dependencies=[access.signed_in])
+def list_bookmarks(request: Request):
+    """What the start page shows: {groups: [{id, name, path, links}]}: the folders picked for it, with the links shown."""
+    return {"groups": bookmarks.groups()}
+
+
+@router.get("/api/bookmarks/tree", dependencies=[access.signed_in])
+def bookmarks_tree(request: Request):
+    """Every folder and link, nested (the Bookmarks page): {rev, count, items}. A folder: {id, type: 'folder', name,
+    start, items}; a link: {id, type: 'bookmark', name, href, start (null: as its folder), onStart, …}."""
+    return bookmarks.tree()
+
+
+@router.get("/api/bookmarks/status", dependencies=[access.signed_in])
+async def bookmarks_status(request: Request):
+    """Each bookmark on the start page pinged from this server: {items: {link id: {ok, status}}}; ok is null for an
+    address that cannot be pinged (mailto:…). Cached five minutes."""
+    return {"items": await run_in_threadpool(appstatus.of_bookmarks)}
+
+
+def _bm(fn, *a, **kw):
+    try:
+        return fn(*a, **kw)
+    except bookmarks.NotFound as e:
+        raise HTTPException(404, str(e))
+    except (bookmarks.BadBookmark, bookmarkfiles.BadFile) as e:
+        raise HTTPException(400, str(e))
+
+
+@router.post("/api/bookmarks/groups", dependencies=[access.editor])
+async def add_group(request: Request):
+    """Editors. {name, parentId? (a folder; none: the top), start? (on the start page; true unless said)}"""
+    b = await json_body(request)
+    return _bm(bookmarks.add_group, b.get("name"), b.get("parentId"), bool(b.get("start", True)))
+
+
+@router.patch("/api/bookmarks/groups/{gid}", dependencies=[access.editor])
+async def update_group(gid: int, request: Request):
+    """Editors. Any of {name, parentId (0: the top), start}."""
+    return _bm(bookmarks.update_group, gid, await json_body(request))
+
+
+@router.delete("/api/bookmarks/groups/{gid}", dependencies=[access.editor])
+def delete_group(gid: int, request: Request):
+    """Editors. The folder and everything in it."""
+    _bm(bookmarks.delete_group, gid)
+    return {"ok": True}
+
+
+@router.post("/api/bookmarks/groups/order", dependencies=[access.editor])
+async def order_groups(request: Request):
+    """Editors. {ids: [folder id, ...], parentId?}: these folders in this order inside the parent (none: the top); one
+    named from elsewhere moves in."""
+    b = await json_body(request)
+    _bm(bookmarks.order, b.get("parentId"), [int(x) for x in b.get("ids") or []])
+    return {"ok": True}
+
+
+@router.post("/api/bookmarks/groups/{gid}/links", dependencies=[access.editor])
+async def add_link(gid: int, request: Request):
+    """Editors. {name, href, abbr?, description?, icon?, start?, tags?}; group 0 is the top level."""
+    b = await json_body(request)
+    return _bm(bookmarks.add_link, gid, b.get("name"), b.get("href"), b.get("abbr"), b.get("description"), b.get("icon"), b.get("start"), b.get("tags"))
+
+
+@router.post("/api/bookmarks/groups/{gid}/order", dependencies=[access.editor])
+async def order_links(gid: int, request: Request):
+    """Editors. {ids: [link id, ...]} in the order wanted; a link from another folder moves into this one (0: the top)."""
+    b = await json_body(request)
+    _bm(bookmarks.order, gid, [int(x) for x in b.get("ids") or []])
+    return {"ok": True}
+
+
+@router.patch("/api/bookmarks/links/{lid}", dependencies=[access.editor])
+async def update_link(lid: int, request: Request):
+    """Editors. Any of {name, href, abbr, description, icon, groupId, tags, start (true | false | null: as its folder)}."""
+    return _bm(bookmarks.update_link, lid, await json_body(request))
+
+
+@router.delete("/api/bookmarks/links/{lid}", dependencies=[access.editor])
+def delete_link(lid: int, request: Request):
+    _bm(bookmarks.delete_link, lid)
+    return {"ok": True}
+
+
+@router.get("/api/bookmarks/links/{lid}/icon.svg", dependencies=[access.signed_in])
+def link_icon(lid: int, request: Request):
+    """The icon uploaded for a link (an SVG; an uploaded PNG is served inside one), for everyone signed in. Cached by the browser for good: the address carries a
+    version (?v=etag) that changes with the file."""
+    ic = bookmarks.icon(lid)
+    if not ic:
+        raise HTTPException(404, "No icon")
+    return Response(ic["svg"], media_type="image/svg+xml",
+                    headers={"Cache-Control": "private, max-age=31536000, immutable", "ETag": f'"{ic["etag"]}"',
+                             "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; img-src data:", "X-Content-Type-Options": "nosniff"})
+
+
+@router.get("/api/bookmarks/site-icon", dependencies=[access.signed_in])
+def site_icon(site: str, request: Request):
+    """A bookmarked site's own icon, as the server fetched it (app/siteicons.py), for everyone signed in. Cached by the
+    browser for good: the address carries a version (?v=etag). Served as the kind of image its bytes are, and as
+    nothing a browser would run."""
+    ic = siteicons.get(site)
+    if not ic:
+        raise HTTPException(404, "No icon")
+    return Response(bytes(ic["data"]), media_type=ic["mime"],
+                    headers={"Cache-Control": "private, max-age=31536000, immutable", "ETag": f'"{ic["etag"]}"',
+                             "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox", "X-Content-Type-Options": "nosniff"})
+
+
+@router.put("/api/bookmarks/links/{lid}/icon", dependencies=[access.editor])
+async def upload_link_icon(lid: int, request: Request):
+    """Editors. The body is the file itself, an SVG or a PNG (up to 256 KB); the stored one is replaced. Returns the link."""
+    data = await request.body()
+    return _bm(bookmarks.set_icon, lid, data)
+
+
+@router.delete("/api/bookmarks/links/{lid}/icon", dependencies=[access.editor])
+def delete_link_icon(lid: int, request: Request):
+    return _bm(bookmarks.clear_icon, lid)
+
+
+@router.post("/api/bookmarks/import", dependencies=[access.editor])
+async def import_bookmarks(request: Request):
+    """Editors. {yaml, replace?}: a homepage bookmarks.yaml (its groups go on the start page). Or {file, parentId?,
+    start?}: the text of a bookmarks file a browser exported (HTML) or an XBEL file, added under the folder (none: the
+    top); start: its folders go on the start page too (false unless said)."""
+    b = await json_body(request)
+    if b.get("file") is not None:
+        def work():
+            items = bookmarkfiles.parse(str(b["file"]))
+            bookmarks.add_items(b.get("parentId"), items, bool(b.get("start")))
+            f, l = bookmarkfiles.count(items)
+            return {"groups": f, "links": l}
+        return await run_in_threadpool(_bm, work)
+    return _bm(bookmarks.import_yaml, b.get("yaml") or "", bool(b.get("replace")))
+
+
+@router.get("/api/bookmarks/export.{kind}", dependencies=[access.signed_in])
+def export_bookmarks(kind: str, request: Request):
+    """Every bookmark as a file: export.html (what a browser imports) or export.xbel."""
+    if kind not in ("html", "xbel"):
+        raise HTTPException(404, "export.html or export.xbel")
+    items = bookmarksync.items()
+    body = bookmarkfiles.to_html(items) if kind == "html" else bookmarkfiles.to_xbel(items, bookmarks.highest_id())
+    return Response(body, media_type="text/html; charset=utf-8" if kind == "html" else "application/xml; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="bookmarks.{kind}"'})
+
+
+@router.get("/api/bookmarks/sync", dependencies=[access.signed_in])
+def bookmarks_sync(request: Request):
+    """What to type into a sync app (the Bookmarks page): the addresses, and whether one is syncing right now."""
+    root = ncbookmarks._root(request)
+    return {"nextcloud": root + ncbookmarks.BASE, "webdav": root + bookmarkdav.BASE + "/", "files": list(bookmarkdav.NAMES),
+            "syncing": bool(bookmarksync.locked_at()), "user": request.state.user["name"] if request.state.user else "",
+            "extension": _extension_version()}
+
+
+EXTENSION_DIR = os.path.join(config.STATIC_DIR, "extension")
+
+
+def _extension_version() -> str:
+    try:
+        with open(os.path.join(EXTENSION_DIR, "manifest.json"), encoding="utf-8") as f:
+            return str(json.load(f).get("version") or "")
+    except (OSError, ValueError):
+        return ""
+
+
+@router.get("/api/bookmarks/extension.zip", dependencies=[access.signed_in])
+def bookmarks_extension():
+    """The ioStart Bookmarks browser extension (static/extension) as one file: unpacked, Chrome and Edge load the
+    folder; Firefox takes the signed file of the same version (the repository's releases)."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for base, _dirs, files in sorted(os.walk(EXTENSION_DIR)):
+            for name in sorted(files):
+                full = os.path.join(base, name)
+                z.write(full, os.path.join("iostart-bookmarks", os.path.relpath(full, EXTENSION_DIR)))
+    return Response(buf.getvalue(), media_type="application/zip",
+                    headers={"Content-Disposition": f'attachment; filename="iostart-bookmarks-{_extension_version() or "extension"}.zip"'})
+
+
+# ------------------------------------------------------------------ what the tiles show (app/widgets.py)
+
+@router.get("/api/widgets/{key}", dependencies=[access.signed_in])
+def widget(key: str, request: Request, tz: str = "", kind: str = "", n: int = 0, q: str = ""):
+    """A glimpse of one app for its tile, asked of the app with the viewer's own sign-in. tz: the viewer's time zone
+    (IANA, e.g. Europe/Brussels), for what "today" is. For iopix, kind (onthisday | rediscover; empty: on this day
+    when there are photos, else rediscover) and n (how many, up to 24) pick what the photo strip shows; for iocalendar,
+    kind=week gives the coming week instead of today; for iocontact, q searches the contacts (the search box) instead
+    of listing the birthdays ahead. 404 for an app without one; 401/403 when the app refuses this account; 502 when it does not answer. The page leaves the
+    tile as it is on any of these."""
+    try:
+        return widgets.get(request, key, tz, kind, n, q)
+    except widgets.Unavailable as e:
+        raise HTTPException(e.status, str(e))
+
+
+@router.get("/api/widgets/iocalendar/calendars", dependencies=[access.signed_in])
+def widget_calendars(request: Request):
+    """The ioCalendar calendars this viewer may add events to (quick add in the search box)."""
+    try:
+        return widgets.iocalendar_calendars(request)
+    except widgets.Unavailable as e:
+        raise HTTPException(e.status, str(e))
+
+
+@router.post("/api/widgets/iocalendar/events", dependencies=[access.signed_in])
+async def widget_add_event(request: Request):
+    """Quick add: a new event in ioCalendar, made with the viewer's own sign-in. {title, start, end?, allDay,
+    timezone?, calendarId?} → {id, url}."""
+    b = await json_body(request)
+    try:
+        return await run_in_threadpool(widgets.iocalendar_add, request, b)
+    except widgets.Unavailable as e:
+        raise HTTPException(e.status, str(e))
+
+
+@router.get("/api/widgets/iocontact/photo/{contact_id}", dependencies=[access.signed_in])
+def widget_contact_photo(contact_id: int, request: Request):
+    """A contact's photo from ioContact, passed through (for the birthdays card)."""
+    try:
+        body, ctype = widgets.iocontact_photo(request, contact_id)
+    except widgets.Unavailable as e:
+        raise HTTPException(e.status, str(e))
+    return Response(body, media_type=ctype if ctype.startswith("image/") else "image/jpeg",
+                    headers={"Cache-Control": "private, max-age=86400"})
+
+
+@router.get("/api/widgets/iocontact/face/{person_id}", dependencies=[access.signed_in])
+def widget_contact_face(person_id: int, request: Request):
+    """A contact's ioPix face, through ioContact (a contact linked to an ioPix person, without a photo of its own)."""
+    try:
+        body, ctype = widgets.iocontact_face(request, person_id)
+    except widgets.Unavailable as e:
+        raise HTTPException(e.status, str(e))
+    return Response(body, media_type=ctype if ctype.startswith("image/") else "image/jpeg",
+                    headers={"Cache-Control": "private, max-age=86400"})
+
+
+@router.get("/api/widgets/iopix/thumb/{photo_id}", dependencies=[access.signed_in])
+def widget_thumb(photo_id: int, request: Request):
+    """An ioPix thumbnail (square, cropped around its subject), passed through: the page shows images from here only."""
+    try:
+        body, ctype = widgets.iopix_thumb(request, photo_id)
+    except widgets.Unavailable as e:
+        raise HTTPException(e.status, str(e))
+    return Response(body, media_type=ctype if ctype.startswith("image/") else "image/jpeg",
+                    headers={"Cache-Control": "private, max-age=86400"})
+
+
+@router.get("/api/widgets/iopix/preview/{photo_id}", dependencies=[access.signed_in])
+def widget_preview(photo_id: int, request: Request):
+    """An ioPix photo at screen size, passed through (the wall display's slideshow)."""
+    try:
+        body, ctype = widgets.iopix_preview(request, photo_id)
+    except widgets.Unavailable as e:
+        raise HTTPException(e.status, str(e))
+    return Response(body, media_type=ctype if ctype.startswith("image/") else "image/jpeg",
+                    headers={"Cache-Control": "private, max-age=86400"})
+
+
+# the server (version, updates, the log, restart): iosuite_shared's server_router, mounted in main.py

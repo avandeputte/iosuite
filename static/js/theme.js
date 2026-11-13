@@ -1,2 +1,0 @@
-// Applied before the page draws, so it never flashes the wrong theme: the device's by default, or what Settings › Display chose (kept with the account).
-(function () { var t = 'system'; try { t = localStorage.getItem('iosuite.theme') || 'system'; } catch (e) {} if (t !== 'system') document.documentElement.dataset.theme = t === 'dark' ? 'dark' : 'light'; })();

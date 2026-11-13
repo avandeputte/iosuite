@@ -1,0 +1,162 @@
+#!/usr/bin/env bash
+# ionote LXC for Proxmox VE, in the community-scripts (ProxmoxVE) framework layout, the same as iopix's:
+# this is the ct/ script; proxmox/install/ionote-install.sh runs inside the container.
+#
+# It asks about the app first: where the notes are kept (MariaDB/MySQL host, port, database, user, password, or a
+# SQLite file in the container), where the Shared ioSuite database is (accounts and suite-wide settings, shared by
+# the ioThing apps; database and user `iosuite` by default), whether pictures added in the web app get their text read (RapidOCR), and the
+# admin account; then the framework's own questions (resources, network). It then creates the container and runs
+# the app's own setup.sh inside with those answers, which installs the packages, writes the settings, creates the
+# tables and the admin and starts the service on port 8610.
+#
+# Until the scripts are merged upstream, the framework is pointed at this repository for the
+# install script (COMMUNITY_SCRIPTS_URL below; the core engine still comes from community-scripts).
+# Run on the Proxmox host as root:
+#   bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/ionote/proxmox/ct/ionote.sh)"
+export COMMUNITY_SCRIPTS_URL="${COMMUNITY_SCRIPTS_URL:-https://raw.githubusercontent.com/avandeputte/iosuite/main/ionote/proxmox}"
+_cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
+source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/build.func")
+# Copyright (c) 2026 Alex Van de Putte
+# License: GPL-3.0-or-later
+# Source: https://github.com/avandeputte/iosuite (ionote/)
+
+APP="ionote"
+var_tags="${var_tags:-notes;productivity}"
+var_cpu="${var_cpu:-2}"
+var_ram="${var_ram:-2048}"
+var_disk="${var_disk:-8}"
+var_os="${var_os:-debian}"
+var_version="${var_version:-13}"
+var_arm64="${var_arm64:-yes}"
+var_unprivileged="${var_unprivileged:-1}"
+
+header_info "$APP"
+variables
+color
+catch_errors
+
+# ---- the app's own questions (whiptail on the host; env vars IONOTE_* skip them for unattended runs)
+#   IONOTE_DB        sqlite, or host:port/db:user:pass (MariaDB/MySQL)
+#   IONOTE_SUITE_DB  host:port/db:user:pass (the Shared ioSuite database, MariaDB)
+#   IONOTE_FEATURES  ocr or none
+#   IONOTE_ADMIN     name:password (empty: create the admin later in the web app)
+#   IONOTE_PUBLIC_URL     e.g. https://notes.example.com (empty: the address it is reached at)
+#   IONOTE_COOKIE_DOMAIN  e.g. example.com (empty: this host only)
+ask_app_settings() {
+  local bt="ionote"
+  if [[ -z "${IONOTE_DB:-}" ]]; then
+    if whiptail --backtitle "$bt" --yesno "Keep the notes in MySQL/MariaDB?\n\nIt holds the notes, their pictures (as BLOBs), folders, tags, users and settings.\n\nNo: a SQLite file in the container's data folder (a quick try; the apps' sync works the same)." 14 76 3>&1 1>&2 2>&3; then
+      local h p d u w
+      h=$(whiptail --backtitle "$bt" --inputbox "MariaDB host or IP" 9 60 "127.0.0.1" 3>&1 1>&2 2>&3) || exit 1
+      p=$(whiptail --backtitle "$bt" --inputbox "Port" 9 60 "3306" 3>&1 1>&2 2>&3) || exit 1
+      d=$(whiptail --backtitle "$bt" --inputbox "Database (created if the user may)" 9 60 "notes" 3>&1 1>&2 2>&3) || exit 1
+      u=$(whiptail --backtitle "$bt" --inputbox "User" 9 60 "notes" 3>&1 1>&2 2>&3) || exit 1
+      w=$(whiptail --backtitle "$bt" --passwordbox "Password" 9 60 3>&1 1>&2 2>&3) || exit 1
+      IONOTE_DB="$h:$p/$d:$u:$w"
+    else
+      IONOTE_DB="sqlite"
+    fi
+  fi
+  if [[ -z "${IONOTE_SUITE_DB:-}" ]]; then
+    local sh sp sd su sw
+    sh="${IONOTE_DB%%/*}"; sh="${sh%%:*}"; [[ "$IONOTE_DB" == sqlite ]] && sh="127.0.0.1"
+    sh=$(whiptail --backtitle "$bt" --inputbox "Shared ioSuite database: MariaDB host or IP\n\nAccounts, sessions and suite-wide settings, shared with the other ioThing apps (one sign-in for all)." 12 76 "$sh" 3>&1 1>&2 2>&3) || exit 1
+    sp=$(whiptail --backtitle "$bt" --inputbox "Shared ioSuite database: port" 9 60 "3306" 3>&1 1>&2 2>&3) || exit 1
+    sd=$(whiptail --backtitle "$bt" --inputbox "Shared ioSuite database: database (created if the user may)" 9 72 "iosuite" 3>&1 1>&2 2>&3) || exit 1
+    su=$(whiptail --backtitle "$bt" --inputbox "Shared ioSuite database: user" 9 60 "iosuite" 3>&1 1>&2 2>&3) || exit 1
+    sw=$(whiptail --backtitle "$bt" --passwordbox "Shared ioSuite database: password" 9 60 3>&1 1>&2 2>&3) || exit 1
+    IONOTE_SUITE_DB="$sh:$sp/$sd:$su:$sw"
+  fi
+  if [[ -z "${IONOTE_FEATURES:-}" ]]; then
+    if whiptail --backtitle "$bt" --yesno "Read the text in pictures added in the web app (RapidOCR, ~60 MB)?\n\nThe Mac and iPhone apps read text on the device; this is only for pictures uploaded in the browser." 12 76 3>&1 1>&2 2>&3; then IONOTE_FEATURES=ocr; else IONOTE_FEATURES=none; fi
+  fi
+  if [[ -z "${IONOTE_ADMIN+x}" ]]; then
+    local an aw
+    an=$(whiptail --backtitle "$bt" --inputbox "Admin user name" 9 72 "admin" 3>&1 1>&2 2>&3) || exit 1
+    aw=$(whiptail --backtitle "$bt" --passwordbox "Admin password (8 characters or more; empty: create it later in the web app)" 9 72 3>&1 1>&2 2>&3) || exit 1
+    [[ -n "$aw" ]] && IONOTE_ADMIN="$an:$aw" || IONOTE_ADMIN=""
+  fi
+  if [[ -z "${IONOTE_PUBLIC_URL+x}" ]]; then
+    IONOTE_PUBLIC_URL=$(whiptail --backtitle "$bt" --inputbox "Public address behind your reverse proxy, e.g. https://notes.example.com (empty: the address it is reached at)" 10 76 "" 3>&1 1>&2 2>&3) || exit 1
+  fi
+  if [[ -z "${IONOTE_COOKIE_DOMAIN+x}" ]]; then
+    IONOTE_COOKIE_DOMAIN=$(whiptail --backtitle "$bt" --inputbox "Domain the sign-in is shared on by every app, e.g. example.com (empty: this host only)" 10 76 "" 3>&1 1>&2 2>&3) || exit 1
+  fi
+  if [[ -z "${IONOTE_DB_ADMIN+x}" ]]; then  # a MariaDB administrator: the databases and users above are created for you (empty: they exist)
+    local dau daw
+    dau=$(whiptail --backtitle "$bt" --inputbox "MariaDB administrator who may create the databases and users above, e.g. root (empty: they exist already)" 10 76 "" 3>&1 1>&2 2>&3) || exit 1
+    if [[ -n "$dau" ]]; then
+      daw=$(whiptail --backtitle "$bt" --passwordbox "Password of $dau" 9 60 3>&1 1>&2 2>&3) || exit 1
+      IONOTE_DB_ADMIN="$dau:$daw"
+    else
+      IONOTE_DB_ADMIN=""
+    fi
+  fi
+  if [[ -z "${IONOTE_ALSO+x}" ]]; then  # the other apps of the suite in the same container (ioPix has its own script: photo mounts)
+    IONOTE_ALSO=$(whiptail --backtitle "$bt" --checklist "Also install in this container (same database server, each app its own database; same accounts and admin; each on its usual port):" 14 78 4 \
+      iostart "ioStart (the start page)  (8630)" OFF \
+      iocalendar "ioCalendar  (8620)" OFF \
+      iocontact "ioContact  (8640, LDAP 3890)" OFF \
+      iohealth "ioHealth  (8650)" OFF 3>&1 1>&2 2>&3) || exit 1
+    IONOTE_ALSO=$(echo "$IONOTE_ALSO" | tr -d '"' | tr ' ' ',')
+  fi
+  if [[ -n "$IONOTE_ALSO" ]]; then  # room for more than one app
+    (( var_ram < 2048 )) && var_ram=2048; (( var_disk < 8 )) && var_disk=8
+  fi
+}
+
+function update_script() {
+  header_info
+  check_container_storage
+  check_container_resources
+  if [[ ! -d /opt/ionote/app/app ]]; then
+    msg_error "No ${APP} Installation Found!"
+    exit
+  fi
+  msg_info "Updating ${APP}"
+  # the app's own updater: latest code, same settings, data and packages, service restarted; its output is shown
+  if sh /opt/ionote/app/update.sh; then msg_ok "Updated successfully!"; else msg_error "update.sh failed; see the lines above"; exit 1; fi
+  exit
+}
+
+if command -v pveversion >/dev/null 2>&1; then ask_app_settings; fi  # on the Proxmox host; inside the container `update` needs no answers
+start
+build_container
+description
+
+# ---- the app's own setup with the answers
+msg_info "Running the app's setup inside the container (packages, settings, tables, admin, service)"
+SECRETS=""  # setup.sh reads IONOTE_DB, IONOTE_SUITE_DB and IONOTE_ADMIN from its environment: the passwords stay off every command line
+if [[ "${IONOTE_DB:-sqlite}" == sqlite ]]; then
+  DBARG="--sqlite"
+else
+  DBARG=""; SECRETS+="IONOTE_DB=$(printf '%q' "$IONOTE_DB")"$'\n'
+fi
+if [[ -n "${IONOTE_SUITE_DB:-}" ]]; then SECRETS+="IONOTE_SUITE_DB=$(printf '%q' "$IONOTE_SUITE_DB")"$'\n'; fi
+if [[ -n "${IONOTE_ADMIN:-}" ]]; then SECRETS+="IONOTE_ADMIN=$(printf '%q' "$IONOTE_ADMIN")"$'\n'; ADMINARG=""; else ADMINARG="--no-admin"; fi
+# the answers with passwords go in as a root-only file (pushed, read into setup.sh's environment, removed), never as arguments
+[[ -n "${IONOTE_DB_ADMIN:-}" ]] && SECRETS+="IONOTE_DB_ADMIN=$(printf '%q' "$IONOTE_DB_ADMIN")"$'\n'
+SECF="$(mktemp)"; chmod 600 "$SECF"; printf '%s' "$SECRETS" > "$SECF"
+pct push "$CTID" "$SECF" /opt/ionote/setup.env --perms 0600 --user 0 --group 0
+rm -f "$SECF"
+SETUP_CMD="cd /opt/ionote/app && sh ./setup.sh --yes $DBARG $ADMINARG --data /opt/ionote/data --features '${IONOTE_FEATURES:-none}' --service --no-system-deps --port 8610 --public-url '${IONOTE_PUBLIC_URL:-}' --cookie-domain '${IONOTE_COOKIE_DOMAIN:-}' --also '${IONOTE_ALSO:-none}'"
+WRAPPED="set -a; . /opt/ionote/setup.env; set +a; rm -f /opt/ionote/setup.env; $SETUP_CMD > /opt/ionote/setup.log 2>&1"
+# the setup's output is kept in the container; on failure the last lines are shown here
+if ! pct exec "$CTID" -- bash -c "$WRAPPED"; then
+  msg_error "setup.sh failed inside the container; last lines of /opt/ionote/setup.log:"
+  pct exec "$CTID" -- tail -n 40 /opt/ionote/setup.log || true
+  msg_error "Fix the cause, then run it again inside the container with IONOTE_ADMIN=name:password (and IONOTE_DB=host:port/db:user:password for MariaDB, IONOTE_SUITE_DB=host:port/db:user:password for the Shared ioSuite database) in the environment: pct exec $CTID -- bash -c \"$SETUP_CMD\""
+  exit 1
+fi
+msg_ok "Setup finished"
+
+msg_ok "Completed successfully!\n"
+echo -e "${CREATING}${GN}${APP} setup has been successfully initialized!${CL}"
+echo -e "${INFO}${YW}Access it using the following URL:${CL}"
+echo -e "${GATEWAY}${BGN}http://${IP}:8610${CL}"
+for a in ${IONOTE_ALSO//,/ }; do
+  case "$a" in iostart) p=8630;; iocalendar) p=8620;; iocontact) p=8640;; ionote) p=8610;; iohealth) p=8650;; iopix) p=8600;; *) p="";; esac
+  [[ -n "$p" ]] && echo -e "${INFO}${YW}$a:${CL} ${BGN}http://${IP}:$p${CL}"
+done
+[[ -z "${IONOTE_ADMIN:-}" ]] && echo -e "${INFO}${YW}No admin yet: open the URL and choose Settings › Create the admin account.${CL}"
+echo -e "${INFO}${YW}Put it behind an HTTPS reverse proxy (Caddy, Nginx Proxy Manager, a Cloudflare tunnel) before the apps use it from outside your network.${CL}"

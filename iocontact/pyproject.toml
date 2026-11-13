@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "iocontact"
+version = "0.46.0"
+description = "Self-hosted contacts for the family: web app, CardDAV, LDAP, REST/jCard, birthday calendar"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "GPL-3.0-or-later"
+dependencies = [
+  "iosuite-shared",   # the suite's shared library (shared/ of this repository): setup.sh, update.sh and the Dockerfile install it from there, at the same commit
+  "fastapi<1",
+  "uvicorn<1",
+  "pymysql<2",
+  "python-multipart<1",
+  "pyjwt[crypto]<3",   # Cloudflare Access tokens (proxy sign-in)
+  "mcp<3",             # the MCP server at /mcp
+  "defusedxml<1",      # CardDAV request bodies
+]
+
+[project.optional-dependencies]
+test = ["pytest<10", "httpx<1", "ldap3<3", "pyflakes<4"]
+
+[project.urls]
+Homepage = "https://github.com/avandeputte/iosuite/tree/main/iocontact"
+
+[tool.setuptools.packages.find]
+include = ["app*"]

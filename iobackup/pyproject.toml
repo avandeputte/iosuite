@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "iobackup"
+version = "0.5.0"
+description = "Backups of the suite's MariaDB servers, on a schedule, to a folder or Google Drive, with retention and a restore of exactly what you pick"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "GPL-3.0-or-later"
+dependencies = [
+  "iosuite-shared",   # the suite's shared library (shared/ of this repository): setup.sh, update.sh and the Dockerfile install it from there, at the same commit
+  "fastapi<1",
+  "uvicorn<1",
+  "pymysql<2",
+  "python-multipart<1",
+  "pyjwt[crypto]<3",              # Cloudflare Access tokens (proxy sign-in)
+  "requests<3",                   # Google Drive
+]
+
+[project.optional-dependencies]
+test = ["pytest<10", "pyflakes<4", "httpx<1"]
+
+[project.urls]
+Homepage = "https://github.com/avandeputte/iosuite/tree/main/iobackup"
+
+[tool.setuptools.packages.find]
+include = ["app*"]

@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>ioStart Bookmarks</title><link rel="stylesheet" href="style.css"></head>
+<body class="options">
+<main>
+  <div class="brand"><img src="icons/48.png" alt=""><span><span class="io">io</span><span class="nm">Suite</span> <span class="what">Bookmarks</span></span></div>
+
+  <section id="out" hidden>
+    <p class="muted">Keeps this browser's bookmarks the same as your start page's, both ways: the bookmarks bar, the other bookmarks and, in Firefox, the bookmarks menu. What you add, change or delete here goes to the start page and to your other browsers, and the other way round.</p>
+    <label class="field" for="server">Your start page's address</label>
+    <input type="url" id="server" placeholder="https://start.example.com" autocomplete="url" spellcheck="false">
+    <h2>The first time</h2>
+    <label class="choice"><input type="radio" name="mode" value="merge" checked><span><b>Bring both together</b><span class="muted">This browser's bookmarks are added to the start page's, and the start page's come here. What is in both already is not doubled.</span></span></label>
+    <label class="choice"><input type="radio" name="mode" value="server"><span><b>Take the start page's bookmarks</b><span class="muted">This browser's own bookmarks are replaced by the start page's. For a browser whose bookmarks you do not need.</span></span></label>
+    <div class="actions"><button class="primary" id="signin">Sign in</button><span id="wait" class="muted"></span></div>
+    <p id="error" class="err"></p>
+  </section>
+
+  <section id="in" hidden>
+    <div class="card">
+      <div><span class="dot" id="dot"></span><span id="state"></span></div>
+      <div class="muted" id="who" style="margin-top:6px"></div>
+      <div class="actions"><button class="primary" id="sync">Sync now</button><button id="open">Open the bookmarks</button><button id="signout">Sign out</button></div>
+    </div>
+    <h2>How it lines up</h2>
+    <ul class="muted">
+      <li>The bookmarks bar is the folder <b>Bookmarks bar</b> on the start page, in every browser.</li>
+      <li>Firefox's bookmarks menu is the folder <b>Bookmarks menu</b>; Chrome and Edge show it as a folder in Other bookmarks.</li>
+      <li>Other bookmarks is everything else at the top of the start page's bookmarks.</li>
+      <li>Vivaldi keeps one tree: the folder set as its bookmark bar is <b>Bookmarks bar</b>, and everything else in Bookmarks (Speed Dial folders too) is what other browsers show as Other bookmarks. What goes to Vivaldi's Trash is deleted on the start page.</li>
+    </ul>
+    <p class="muted small">It syncs a few seconds after a bookmark changes here, and asks the start page every minute whether anything changed there. It signs in with an app password of its own, for sync only: listed, and removable, under Settings › Account on the start page.</p>
+  </section>
+</main>
+<script src="sync.js"></script><script src="lib.js"></script><script src="options.js"></script>
+</body>
+</html>

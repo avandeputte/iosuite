@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "iodns"
+version = "0.11.0"
+description = "One master list of local DNS records, kept in step on every DNS server of the house (AdGuard Home, Pi-hole, UniFi)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "GPL-3.0-or-later"
+dependencies = [
+  "iosuite-shared",   # the suite's shared library (shared/ of this repository): setup.sh, update.sh and the Dockerfile install it from there, at the same commit
+  "fastapi<1",
+  "uvicorn<1",
+  "pymysql<2",
+  "python-multipart<1",
+  "pyjwt[crypto]<3",              # Cloudflare Access tokens (proxy sign-in)
+  "httpx<1",                      # the DNS servers' HTTP APIs
+]
+
+[project.optional-dependencies]
+test = ["pytest<10", "pyflakes<4"]
+
+[project.urls]
+Homepage = "https://github.com/avandeputte/iosuite/tree/main/iodns"
+
+[tool.setuptools.packages.find]
+include = ["app*"]

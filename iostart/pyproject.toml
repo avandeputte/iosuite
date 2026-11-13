@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "iostart"
+version = "0.48.0"
+description = "The start page of the ioThing suite: one place with every io app (ioPix, ioHealth, ioCalendar, ioContact, ioNote)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "GPL-3.0-or-later"
+dependencies = [
+  "iosuite-shared",   # the suite's shared library (shared/ of this repository): setup.sh, update.sh and the Dockerfile install it from there, at the same commit
+  "fastapi<1",
+  "uvicorn>=0.29,<1",
+  "pymysql<2",
+  "python-multipart<1",
+  "pyjwt[crypto]<3",              # Cloudflare Access tokens (proxy sign-in)
+  "defusedxml<1",                 # an uploaded SVG icon
+  "pyyaml<7",                     # importing a homepage bookmarks.yaml
+  "websockets<16",                # Home Assistant's live feed (app/ha_feed.py)
+  "mcp<3",                        # the MCP server at /mcp: updating every app at once
+]
+
+[project.optional-dependencies]
+test = ["pytest<10", "httpx<1", "pyflakes<4"]
+
+[project.urls]
+Homepage = "https://github.com/avandeputte/iosuite/tree/main/iostart"
+
+[tool.setuptools.packages.find]
+include = ["app*"]

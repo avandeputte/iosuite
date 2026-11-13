@@ -1,0 +1,38 @@
+# ioBackup with Docker: `docker compose up -d` pulls the published image; `docker compose up -d --build` builds it
+# from this checkout. Works as a stack in Dockge / Portainer. Edit the CHANGE ME spots.
+services:
+  iobackup:
+    image: ghcr.io/avandeputte/iobackup:latest
+    build: {context: .., dockerfile: iobackup/Dockerfile}   # from a checkout of the suite's repository: its root is the build context
+    container_name: iobackup
+    restart: unless-stopped
+    logging:                          # the output Docker keeps (the app's log, again): at most 3 files of 5 MB
+      driver: json-file
+      options: {max-size: 5m, max-file: "3"}
+    ports:
+      - "8680:8680"     # web app and REST API (/api/)
+    environment:
+      TZ: America/New_York            # schedules run in this time zone
+      DB_HOST: db.example.lan         # CHANGE ME: your MariaDB host
+      DB_PORT: "3306"
+      DB_NAME: backup
+      DB_USER: backup
+      DB_PASSWORD: change-me          # CHANGE ME
+      # the Shared ioSuite database: accounts and suite-wide settings (the same one every app of the suite uses)
+      # IOSUITE_DB_HOST: db.example.lan   # default: DB_HOST
+      # IOSUITE_DB_PORT: "3306"            # default: DB_PORT
+      IOSUITE_DB_NAME: iosuite
+      IOSUITE_DB_USER: iosuite
+      IOSUITE_DB_PASSWORD: change-me  # CHANGE ME
+      # ADMIN_USER: admin             # a first admin, made on the first start when there is no account yet
+      # ADMIN_PASSWORD: change-me-please
+      # PUBLIC_URL: https://backup.example.com   # behind a reverse proxy: the address the other apps of the suite link to
+      # INTERNAL_URL: http://192.168.1.151:8680   # the host's LAN address and port, kept in the suite's list of apps (a container cannot tell)
+      # COOKIE_DOMAIN: example.com                 # one sign-in for every app of the suite under this domain
+      # AUTH_PROXY: cloudflare        # sign-in at the proxy, as in the other io apps (see README)
+    volumes:
+      - iobackup-data:/data                # where a backup is put together before it is stored
+      - /srv/backups/iobackup:/backups     # CHANGE ME: the folder a local destination keeps the backups in
+
+volumes:
+  iobackup-data:

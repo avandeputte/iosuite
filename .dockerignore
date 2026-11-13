@@ -1,15 +1,21 @@
-# keep the build context small: the image gets the code, the static files, pyproject.toml and the README only
+# keep the build context small: an image gets its app's code and static files, pyproject.toml, the README and shared/
 .git
 .github
-.venv
-.pytest_cache
-__pycache__
-*.pyc
-*.egg-info
-*.log
-.DS_Store
-tests
 docs
-data
-proxmox
-config.env
+tools
+**/.venv
+**/__pycache__
+**/*.pyc
+**/*.egg-info
+**/.pytest_cache
+**/tests
+**/proxmox
+**/config.env
+**/data
+**/*.log
+**/.DS_Store
+iopix/docs
+iopix/site
+iopix/installer
+iopix/dist
+iostart/docs

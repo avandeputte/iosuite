@@ -1,14 +1,2 @@
-# virtual environment and Python caches
-.venv/
-__pycache__/
-*.pyc
-*.egg-info/
-.pytest_cache/
-# the settings setup.sh writes (they hold the database passwords), and what the app writes on its own (data/: the log, the update result)
-config.env
-data/
-*.log
-.update-result
-COMMIT
-# macOS
+# each app folder has its own .gitignore; this one is for the repository root
 .DS_Store

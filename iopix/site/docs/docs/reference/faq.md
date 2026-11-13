@@ -1,0 +1,66 @@
+# FAQ and troubleshooting
+
+## General
+
+**Does iopix replace digiKam?**
+It works alongside it. iopix covers browsing, searching and the everyday editing (ratings, captions, tags, faces, dates, places, files) from any device. Everything it writes is in digiKam's format, so you can keep using both.
+
+**Do I need digiKam?**
+No. With just a folder of photos, iopix keeps the library itself and finds new photos on its own. See [Using iopix without digiKam](../connect/no-digikam.md).
+
+**Does it copy or move my photos?**
+No. It reads them where they are. It only writes when someone with editor rights changes something, and then as digiKam would.
+
+**Does it need the internet?**
+No. Model downloads, the daily update check, OpenStreetMap place search and Google Maps (if chosen) are the only outside requests, and each can be turned off.
+
+**Can I try it without any risk?**
+Yes: mount the library read-only (Docker), and set `DB_WRITE=0` so nothing is written to digiKam's database.
+
+## Setup
+
+**iopix starts but shows no photos.**
+Check the album roots: digiKam recorded the folders with the paths on its own machine. Map each to where iopix sees it under **Settings › Library › Album roots**.
+
+**Thumbnails are missing for some photos.**
+The files are not where iopix looks, or not readable by its user (uid 1000 in Docker). Check the photo mount and its permissions.
+
+**"Add to Home Screen" does not give a full-screen app.**
+The browser only allows that over HTTPS. Put iopix behind a [reverse proxy](../install/reverse-proxy.md).
+
+**In Docker, iopix cannot write its data folder.**
+An old volume is owned by root. Run `docker run --rm -v iopix-data:/data alpine chown -R 1000:1000 /data` once.
+
+**Dates on MariaDB look a few hours off.**
+Set `DIGIKAM_MYSQL_DATES` to `local` or `utc`; see [digiKam on MariaDB](../connect/mariadb.md).
+
+**iopix only shows a page asking for a database.**
+Since 1.113 iopix keeps its own data on a MariaDB or MySQL server and starts on that page until it has one. Create a database (the page shows how), enter the details, **Test connection**, then **Use this database**. If the server is configured but down, the page shows the error and a **Retry** button only (change the `DB_*` lines of `config.env` if the server moved); API calls answer 503 meanwhile. See [iopix's own database](../connect/iopix-database.md).
+
+**I updated and my settings, accounts and favorites are gone.**
+They are still in `viewer.db` in the data folder. On the database set-up page, leave **Import the existing data** ticked: every row is copied into the new database and the file is renamed `viewer.db.imported`.
+
+## Editing
+
+**I changed a photo in iopix but digiKam does not show it.**
+If digiKam was open, the change waits in the sidecar and in iopix. Close digiKam, or use **Tools › Edits waiting for digiKam › Apply to digiKam database**.
+
+**A face shows up twice for the same person.**
+That is usually a leftover from older digiKam versions. **Tools › Metadata quality** finds and removes these duplicates.
+
+**How do I undo something?**
+Every change is in the [edit log](../edit/edit-log.md), with Undo. The message after each change also has an Undo button.
+
+## AI
+
+**Content search finds nothing.**
+The model may still be indexing; **Settings › AI** shows progress. Search switches on when the index is complete.
+
+**The server is busy for hours after install.**
+The first pass over a large library takes time. Jobs run one at a time on half the cores by default; lower it in **Settings › AI**.
+
+**A job in Settings › AI says "paused".**
+It was stopped twice in a row, almost always because it needed more memory than the server could give it; the line under its progress says which. iopix itself kept running. Pick a smaller model for that feature, give the server more memory or lower the cores per job, then click **Try again**. See [Memory](../ai/overview.md#memory).
+
+**iopix restarted while an analysis was running (installs made before 1.147).**
+On a systemd install, add one line to the service so that a job the system stops for memory does not take the service with it, then reload: `mkdir -p /etc/systemd/system/iopix.service.d && printf '[Service]\nOOMPolicy=continue\n' > /etc/systemd/system/iopix.service.d/oom.conf && systemctl daemon-reload`. New installs have it already.

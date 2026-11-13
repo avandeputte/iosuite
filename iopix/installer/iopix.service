@@ -1,0 +1,20 @@
+[Unit]
+Description=iopix
+After=network.target
+
+[Service]
+Type=simple
+User=@USER@
+EnvironmentFile=@PREFIX@/app/config.env
+WorkingDirectory=@PREFIX@/app
+ExecStart="@PREFIX@/app/.venv/bin/python" -m app
+Restart=always
+RestartSec=5
+# CPU-heavy background jobs run in this service; keep it below interactive work
+Nice=5
+# AI analysis runs in a process of its own: when the system has to end it for memory, the web app carries on
+# (and tries the job again) instead of the whole service being stopped and started
+OOMPolicy=continue
+
+[Install]
+WantedBy=multi-user.target
