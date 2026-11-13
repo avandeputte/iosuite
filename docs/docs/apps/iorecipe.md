@@ -49,7 +49,7 @@ are kept in the database too, so there is nothing else to back up.
 | | |
 | --- | --- |
 | Proxmox VE | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/iorecipe/proxmox/ct/iorecipe.sh)"` |
-| Docker | [docker-compose.yml](https://github.com/avandeputte/iosuite/blob/main/iorecipe/docker-compose.yml): the image `ghcr.io/avandeputte/iorecipe` |
+| Docker | [docker-compose.yml](https://github.com/avandeputte/iosuite/blob/main/iorecipe/docker-compose.yml): the image `ghcr.io/avandeputte/iosuite/iorecipe` |
 | Any Linux or Mac | `git clone https://github.com/avandeputte/iosuite && cd iosuite/iorecipe && ./setup.sh` |
 | Port | 8690 |
 | Source | [iosuite/iorecipe](https://github.com/avandeputte/iosuite/tree/main/iorecipe) |

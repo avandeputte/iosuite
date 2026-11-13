@@ -20,7 +20,7 @@ permissions:
   packages: write
 
 env:
-  IMAGE: ghcr.io/avandeputte/iocontact
+  IMAGE: ghcr.io/avandeputte/iosuite/iocontact
 
 jobs:
   tests:

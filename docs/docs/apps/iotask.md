@@ -54,7 +54,7 @@ done keeps doing so when it is ticked off in Reminders: ioTask brings it back wi
 | | |
 | --- | --- |
 | Proxmox VE | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/iotask/proxmox/ct/iotask.sh)"` |
-| Docker | [docker-compose.yml](https://github.com/avandeputte/iosuite/blob/main/iotask/docker-compose.yml): the image `ghcr.io/avandeputte/iotask` |
+| Docker | [docker-compose.yml](https://github.com/avandeputte/iosuite/blob/main/iotask/docker-compose.yml): the image `ghcr.io/avandeputte/iosuite/iotask` |
 | Any Linux or Mac | `git clone https://github.com/avandeputte/iosuite && cd iosuite/iotask && ./setup.sh` |
 | Port | 8670 |
 | Source | [iosuite/iotask](https://github.com/avandeputte/iosuite/tree/main/iotask) |

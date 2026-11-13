@@ -64,7 +64,7 @@ services:
 
   iostart:                               # the start page
     <<: *app
-    image: ghcr.io/avandeputte/iostart:latest
+    image: ghcr.io/avandeputte/iosuite/iostart:latest
     container_name: iostart
     ports: ["8630:8630"]
     environment:
@@ -75,7 +75,7 @@ services:
 
   iocalendar:
     <<: *app
-    image: ghcr.io/avandeputte/iocalendar:latest
+    image: ghcr.io/avandeputte/iosuite/iocalendar:latest
     container_name: iocalendar
     ports: ["8620:8620"]                 # web app, CalDAV (/dav/), REST API, subscription links (/ics/)
     environment:
@@ -86,7 +86,7 @@ services:
 
   iotask:
     <<: *app
-    image: ghcr.io/avandeputte/iotask:latest
+    image: ghcr.io/avandeputte/iosuite/iotask:latest
     container_name: iotask
     ports: ["8670:8670"]                 # web app, CalDAV for reminders apps (/dav/), REST API, MCP (/mcp)
     environment:
@@ -97,7 +97,7 @@ services:
 
   iorecipe:
     <<: *app
-    image: ghcr.io/avandeputte/iorecipe:latest
+    image: ghcr.io/avandeputte/iosuite/iorecipe:latest
     container_name: iorecipe
     ports: ["8690:8690"]                 # web app, REST API, MCP (/mcp)
     environment:
@@ -108,7 +108,7 @@ services:
 
   iocontact:
     <<: *app
-    image: ghcr.io/avandeputte/iocontact:latest
+    image: ghcr.io/avandeputte/iosuite/iocontact:latest
     container_name: iocontact
     ports:
       - "8640:8640"                      # web app, CardDAV (/dav/), REST API, birthday calendar (/cal/)
@@ -121,7 +121,7 @@ services:
 
   ionote:
     <<: *app
-    image: ghcr.io/avandeputte/ionote:latest
+    image: ghcr.io/avandeputte/iosuite/ionote:latest
     container_name: ionote
     ports: ["8610:8610"]
     volumes:
@@ -134,7 +134,7 @@ services:
 
   iohealth:
     <<: *app
-    image: ghcr.io/avandeputte/iohealth:latest
+    image: ghcr.io/avandeputte/iosuite/iohealth:latest
     container_name: iohealth
     ports: ["8650:8650"]                 # the iPhone app uploads here; the web app is on the same port
     environment:
@@ -145,7 +145,7 @@ services:
 
   iopix:                                 # without digiKam: iopix keeps the library itself and scans the folder
     <<: *app
-    image: ghcr.io/avandeputte/iopix:latest
+    image: ghcr.io/avandeputte/iosuite/iopix:latest
     container_name: iopix
     ports: ["8600:8600"]
     volumes:

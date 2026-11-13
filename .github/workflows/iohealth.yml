@@ -1,4 +1,4 @@
-# Tests against a MariaDB service, then builds the container image and pushes it to ghcr.io (ghcr.io/avandeputte/iohealth)
+# Tests against a MariaDB service, then builds the container image and pushes it to ghcr.io (ghcr.io/avandeputte/iosuite/iohealth)
 # on pushes to main (tags `latest` and `main-<sha>`) and version tags like v2.0.0 (pull requests only build).
 name: ioHealth
 
@@ -16,7 +16,7 @@ defaults:
     working-directory: iohealth
 
 env:
-  IMAGE: ghcr.io/${{ github.repository_owner }}/iohealth
+  IMAGE: ghcr.io/avandeputte/iosuite/iohealth
 
 jobs:
   tests:

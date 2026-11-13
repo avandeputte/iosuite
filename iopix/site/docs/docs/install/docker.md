@@ -1,6 +1,6 @@
 # Docker
 
-The image `ghcr.io/avandeputte/iopix` is public, built for **amd64 and arm64**, and needs no registry login. It runs as its own user (uid 1000), not as root.
+The image `ghcr.io/avandeputte/iosuite/iopix` is public, built for **amd64 and arm64**, and needs no registry login. It runs as its own user (uid 1000), not as root.
 
 ## 1. Get the compose file
 
@@ -16,7 +16,7 @@ It also works as a stack in Dockge or Portainer: paste its contents in.
 ```yaml
 services:
   iopix:
-    image: ghcr.io/avandeputte/iopix:latest
+    image: ghcr.io/avandeputte/iosuite/iopix:latest
     container_name: iopix
     restart: unless-stopped
     ports:

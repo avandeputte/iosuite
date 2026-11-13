@@ -21,7 +21,7 @@ permissions:
   packages: write
 
 env:
-  IMAGE: ghcr.io/avandeputte/iobackup
+  IMAGE: ghcr.io/avandeputte/iosuite/iobackup
 
 jobs:
   tests:
@@ -115,5 +115,5 @@ jobs:
           v="iobackup-v$(python3 -c 'import re;print(re.search(r"__version__ = \"([^\"]+)\"", open("app/__init__.py").read()).group(1))')"
           if gh release view "$v" >/dev/null 2>&1; then echo "$v is released already"; exit 0; fi
           git log -1 --format=%B > notes.md
-          printf '\n\nImage: `ghcr.io/avandeputte/iobackup:%s` (also `latest`).\n' "${v#iobackup-}" >> notes.md
+          printf '\n\nImage: `ghcr.io/avandeputte/iosuite/iobackup:%s` (also `latest`).\n' "${v#iobackup-}" >> notes.md
           gh release create "$v" --target "$GITHUB_SHA" --title "ioBackup ${v#iobackup-}: $(git log -1 --format=%s | sed -E 's/^v[0-9.]+: //; s/ \(#[0-9]+\)$//')" --notes-file notes.md

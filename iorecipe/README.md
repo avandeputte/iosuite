@@ -51,7 +51,7 @@ It asks for the recipe database (host, port, database, user, password), the Shar
 docker compose up -d     # edit the CHANGE ME spots in docker-compose.yml first
 ```
 
-The image (`ghcr.io/avandeputte/iorecipe`) holds no data: everything is in the database.
+The image (`ghcr.io/avandeputte/iosuite/iorecipe`) holds no data: everything is in the database.
 
 ### Any Linux or Mac
 
@@ -157,7 +157,7 @@ Everything is under one Settings page (the sidebar and the avatar menu); a chang
 
 ### Releases
 
-Every version merged into main is released by itself: when `__version__` (app/__init__.py) has no GitHub release yet, CI tags it `v<version>`, publishes the image as `ghcr.io/avandeputte/iorecipe:v<version>` (and `latest`) and makes the release with the merge's message as notes. Bump the version in a change to release it.
+Every version merged into main is released by itself: when `__version__` (app/__init__.py) has no GitHub release yet, CI tags it `v<version>`, publishes the image as `ghcr.io/avandeputte/iosuite/iorecipe:v<version>` (and `latest`) and makes the release with the merge's message as notes. Bump the version in a change to release it.
 
 ## Reverse proxy and HTTPS
 

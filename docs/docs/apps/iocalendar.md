@@ -40,7 +40,7 @@ should sync away from home.
 | | |
 | --- | --- |
 | Proxmox VE | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/iocalendar/proxmox/ct/iocalendar.sh)"` |
-| Docker | [docker-compose.yml](https://github.com/avandeputte/iosuite/blob/main/iocalendar/docker-compose.yml): the image `ghcr.io/avandeputte/iocalendar` |
+| Docker | [docker-compose.yml](https://github.com/avandeputte/iosuite/blob/main/iocalendar/docker-compose.yml): the image `ghcr.io/avandeputte/iosuite/iocalendar` |
 | Any Linux or Mac | `git clone https://github.com/avandeputte/iosuite && cd iosuite/iocalendar && ./setup.sh` |
 | Port | 8620 |
 | Source | [iosuite/iocalendar](https://github.com/avandeputte/iosuite/tree/main/iocalendar) |

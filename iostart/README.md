@@ -173,7 +173,7 @@ latest code and keeps the settings. For unattended runs set `IOSTART_DB` and `IO
 docker compose up -d     # edit the CHANGE ME spots in docker-compose.yml first
 ```
 
-The image (`ghcr.io/avandeputte/iostart`) holds no data: everything is in the database.
+The image (`ghcr.io/avandeputte/iosuite/iostart`) holds no data: everything is in the database.
 
 The whole suite in one stack, MariaDB included: [`docker-compose.yml`](../docker-compose.yml) at the root of the repository
 starts a MariaDB with a database per app, ioStart, ioCalendar, ioTask, ioRecipe, ioContact, ioNote, ioHealth and ioPix (without

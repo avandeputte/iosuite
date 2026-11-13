@@ -48,7 +48,7 @@ Pick one; every app offers all three.
 | Way | What it takes | Guide |
 | --- | --- | --- |
 | **Proxmox VE** | a Proxmox VE host. One command creates an unprivileged Debian 13 container and installs the app inside | [Proxmox VE](proxmox.md) |
-| **Docker** | Docker with Compose, amd64 or arm64. The images are public on `ghcr.io/avandeputte/` | [Docker](docker.md) |
+| **Docker** | Docker with Compose, amd64 or arm64. The images are public on `ghcr.io/avandeputte/iosuite/` | [Docker](docker.md) |
 | **Any Linux or Mac** | Python 3.10 or later (ioHealth: 3.11), git. `setup.sh` makes a virtual environment and a systemd service (launchd on a Mac) | [Any Linux or Mac](linux-mac.md) |
 
 Each app is small: the Proxmox containers for ioCalendar, ioTask, ioRecipe, ioContact, ioNote, ioHealth and ioStart default to 1 or 2 CPUs and 512 MB to 2 GB of memory. ioPix

@@ -12,7 +12,7 @@ repository. It reads docs/ and landing/ and fails on:
     (shared/iosuite_shared/install.py, APPS);
   - a Proxmox container size in docs/start/proxmox.md that is not the app's ct script default (var_cpu, var_ram,
     var_disk);
-  - an image ghcr.io/avandeputte/<app> that the app's docker-compose.yml does not use.
+  - an image ghcr.io/avandeputte/iosuite/<app> that the app's docker-compose.yml does not use.
 
 The docs workflow runs it whenever a page or an app changes, so a change in an app that makes a page wrong fails in
 the same pull request.
@@ -96,12 +96,12 @@ def main():
 
         # 4. images
         for p, text in pages():
-            for m in re.finditer(r"ghcr\.io/%s/([\w-]+)" % OWNER, text):
+            for m in re.finditer(r"ghcr\.io/%s/%s/([\w-]+)" % (OWNER, REPO), text):
                 app = m.group(1)
                 compose = src / app / "docker-compose.yml"
                 checked += 1
-                if not compose.exists() or f"ghcr.io/{OWNER}/{app}" not in compose.read_text():
-                    problems.append(f"{p.relative_to(HERE)}: ghcr.io/{OWNER}/{app} is not the image in {app}/docker-compose.yml")
+                if not compose.exists() or f"ghcr.io/{OWNER}/{REPO}/{app}" not in compose.read_text():
+                    problems.append(f"{p.relative_to(HERE)}: ghcr.io/{OWNER}/{REPO}/{app} is not the image in {app}/docker-compose.yml")
 
         print(f"checked {checked} claims about the apps against their code")
         if problems:

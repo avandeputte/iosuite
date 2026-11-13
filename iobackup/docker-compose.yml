@@ -2,7 +2,7 @@
 # from this checkout. Works as a stack in Dockge / Portainer. Edit the CHANGE ME spots.
 services:
   iobackup:
-    image: ghcr.io/avandeputte/iobackup:latest
+    image: ghcr.io/avandeputte/iosuite/iobackup:latest
     build: {context: .., dockerfile: iobackup/Dockerfile}   # from a checkout of the suite's repository: its root is the build context
     container_name: iobackup
     restart: unless-stopped

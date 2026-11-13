@@ -44,7 +44,7 @@ It asks for the MariaDB host, port, database, user and password, the Shared ioSu
 docker compose up -d     # edit the CHANGE ME spots in docker-compose.yml first
 ```
 
-The image (`ghcr.io/avandeputte/iocontact`) holds no data: everything is in the database, so the container can be replaced at will.
+The image (`ghcr.io/avandeputte/iosuite/iocontact`) holds no data: everything is in the database, so the container can be replaced at will.
 
 ### Any Linux or Mac
 

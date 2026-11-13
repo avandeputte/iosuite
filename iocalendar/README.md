@@ -50,7 +50,7 @@ It asks for the calendar database (host, port, database, user, password), the Sh
 docker compose up -d     # edit the CHANGE ME spots in docker-compose.yml first
 ```
 
-The image (`ghcr.io/avandeputte/iocalendar`) holds no data: everything is in the database.
+The image (`ghcr.io/avandeputte/iosuite/iocalendar`) holds no data: everything is in the database.
 
 ### Any Linux or Mac
 
@@ -142,7 +142,7 @@ devices, calendars, holidays and birthdays), then for admins family and server (
 
 ### Releases
 
-Every version merged into main is released by itself: when `__version__` (app/__init__.py) has no GitHub release yet, CI tags it `v<version>`, publishes the image as `ghcr.io/avandeputte/iocalendar:v<version>` (and `latest`) and makes the release with the merge's message as notes. Bump the version in a change to release it.
+Every version merged into main is released by itself: when `__version__` (app/__init__.py) has no GitHub release yet, CI tags it `v<version>`, publishes the image as `ghcr.io/avandeputte/iosuite/iocalendar:v<version>` (and `latest`) and makes the release with the merge's message as notes. Bump the version in a change to release it.
 
 ## Reverse proxy and HTTPS
 

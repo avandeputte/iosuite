@@ -9,7 +9,7 @@
 # The image is public on GitHub's registry: no login is needed to pull it.
 services:
   iopix:
-    image: ghcr.io/avandeputte/iopix:latest
+    image: ghcr.io/avandeputte/iosuite/iopix:latest
     build:
       context: ..                    # the root of the suite's repository (shared/ is needed too)
       dockerfile: iopix/Dockerfile

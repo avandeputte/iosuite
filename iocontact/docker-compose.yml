@@ -2,7 +2,7 @@
 # from this checkout. Works as a stack in Dockge / Portainer. Edit the CHANGE ME spots.
 services:
   iocontact:
-    image: ghcr.io/avandeputte/iocontact:latest
+    image: ghcr.io/avandeputte/iosuite/iocontact:latest
     build: {context: .., dockerfile: iocontact/Dockerfile}   # from a checkout of the suite's repository: its root is the build context
     container_name: iocontact
     restart: unless-stopped

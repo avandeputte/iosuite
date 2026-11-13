@@ -2,7 +2,7 @@
 # from this checkout. Works as a stack in Dockge / Portainer. Edit the CHANGE ME spots.
 services:
   iorecipe:
-    image: ghcr.io/avandeputte/iorecipe:latest
+    image: ghcr.io/avandeputte/iosuite/iorecipe:latest
     build: {context: .., dockerfile: iorecipe/Dockerfile}   # from a checkout of the suite's repository: its root is the build context
     container_name: iorecipe
     restart: unless-stopped

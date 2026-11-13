@@ -70,7 +70,7 @@ The server runs in any of three ways, as ioPix, ioNote and ioContact do; pick on
 
 | | how | where the settings live |
 |---|---|---|
-| [Docker](#docker-with-compose) | the image `ghcr.io/avandeputte/iohealth` with Compose or `docker run` | the compose file or `-e` flags |
+| [Docker](#docker-with-compose) | the image `ghcr.io/avandeputte/iosuite/iohealth` with Compose or `docker run` | the compose file or `-e` flags |
 | [Proxmox VE (LXC)](#proxmox-ve-lxc) | one command on the Proxmox host creates a container and sets the server up inside it | `/opt/iohealth/app/config.env` in the container |
 | [Standalone](#any-linux-or-mac) | `setup.sh` on any Linux box or Mac: a Python virtual environment and a `systemd` service | `config.env` |
 
@@ -99,9 +99,8 @@ never on a command line; the setup's output is kept in `/opt/iohealth/setup.log`
 `update.sh`.
 
 ### Docker: with Compose
-The image is `ghcr.io/avandeputte/iohealth` (public, `linux/amd64` and `linux/arm64`). Versions up to 1.1.1 were
-published as `ghcr.io/avandeputte/healthexport-receiver`; to upgrade, change the `image:` line and pull. Tags: `latest`
-(current `main`), `2.0.0` and other release versions, and one tag per branch while it's being worked on.
+The image is `ghcr.io/avandeputte/iosuite/iohealth` (public, `linux/amd64` and `linux/arm64`). Tag: `latest`
+(current `main`).
 
 Save [`docker-compose.yml`](docker-compose.yml) (every option the server understands is in it), fill
 in the "CHANGE ME" values, and run `docker compose up -d`; it pulls the published image, and `docker compose up -d
@@ -120,7 +119,7 @@ there). Update later with `docker compose pull && docker compose up -d`.
 docker run -d --name iohealth --restart unless-stopped -p 8650:8650 \
   -e DB_HOST=db.example.lan -e DB_USER=health -e DB_PASSWORD=change-me -e DB_NAME=health \
   -e IOSUITE_DB_NAME=iosuite -e IOSUITE_DB_USER=iosuite -e IOSUITE_DB_PASSWORD=change-me \
-  ghcr.io/avandeputte/iohealth:latest
+  ghcr.io/avandeputte/iosuite/iohealth:latest
 docker logs -f iohealth
 ```
 
