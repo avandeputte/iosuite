@@ -6,7 +6,7 @@ account may change in the web app; the server tools need an admin.
 
   base.py     the MCPServer instance, who is asking, and the shared helpers (finding a recipe by name)
   recipes.py  the recipe tools: overview, list, search, one recipe, add, change, delete, import from a web page
-  admin.py    the server: diagnostics, the version check and the update
+  admin.py    the server: diagnostics
 """
 from app.mcp.base import server, current_user
 from app.mcp import recipes, admin  # noqa: F401  importing them registers the tools on `server`

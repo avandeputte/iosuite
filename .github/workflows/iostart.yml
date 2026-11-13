@@ -1,5 +1,6 @@
-# Tests against a MariaDB service, then builds the container image and pushes it to ghcr.io on pushes to main and
-# version tags (pull requests only build). The image of a push to main is also tagged v<__version__ in app/__init__.py>.
+# Tests against a MariaDB service, then builds the container image and pushes it to ghcr.io on pushes to main
+# (pull requests only build). The image of a push to main is also tagged v<the suite's version>
+# (shared/iosuite_shared/__init__.py).
 name: ioStart
 
 on:
@@ -64,7 +65,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - id: version
-        run: echo "version=$(python3 -c 'import re;print(re.search(r"__version__ = \"([^\"]+)\"", open("app/__init__.py").read()).group(1))')" >> "$GITHUB_OUTPUT"
+        run: echo "version=$(sed -n 's/^__version__ = "\([^"]*\)".*/\1/p' ../shared/iosuite_shared/__init__.py)" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
       - name: Log in to ghcr.io

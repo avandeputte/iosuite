@@ -141,20 +141,22 @@ name and the same names), or in the environment, which wins. `config.env.example
 | `MAX_IMAGE_MB` | `15` | the largest picture a note may carry (and at most 40 megapixels) |
 | `KEEP_DELETED_DAYS` | `90` | how long the change log's entries and the names of deleted folders are kept; after that only an empty marker stays, so devices still learn of the deletion (a deleted note goes sooner: after its 30 days in the trash) |
 | `MCP` / `MCP_USER` | | `MCP=1` keeps the endpoint on whatever Settings says; the account `python -m app.mcp` (stdio) acts as |
-| `UPDATE_CHECK` | `1` | `0`: never ask GitHub for a newer version (Settings › Server) |
+| `UPDATE_CHECK` | `1` | `0`: this app never asks GitHub for a newer version |
 | `AUTH_PROXY`... | `off` | sign-in at a reverse proxy, above |
 
 ## Updates
 
 - **Standalone:** `./update.sh` fetches the latest code (git, or the GitHub tarball), installs the packages the new
-  version asks for and only then moves the code in, then restarts the service. `--check` only reports. Settings ›
-  Server › Update now runs the same script; the page (the same in every ioThing app: it comes from
-  iosuite-shared, at `/api/server/ui.js`, `/api/server` and `/api/log`) also has the tail of the server log
-  (`data/ionote.log`) and Restart. A daily check (on by default; `UPDATE_CHECK=0` locks it off, the page switches it
-  off) shows admins a card when a newer version exists, with Update now right on it (dismissed per version).
+  version asks for and only then moves the code in, then restarts the service. `--check` only reports.
+- **From the web:** the suite has one version, the same for every app, and the apps are updated together: Settings ›
+  Global settings › Updates (suite admins, in any app) shows the installed version and the newest one on GitHub, with
+  one Update button that runs each app's `update.sh`. A daily check (on by default; the Updates page switches it off
+  for the suite, `UPDATE_CHECK=0` locks it off for this app) finds a newer version. Settings › Server (iosuite-shared's
+  panel, the same in every app: `/api/server/ui.js`, `/api/server` and `/api/log`) shows the version ioNote runs, the
+  tail of the server log (`data/ionote.log`) and Restart.
 - **Proxmox:** `update` inside the container (the framework's command) runs the same script.
 - **Docker:** `docker compose pull && docker compose up -d`.
-- **From an MCP client:** `check_for_update` and `update_ionote` (as an admin).
+- **From an MCP client:** ioStart's `suite_version` and `update_suite` (as a suite admin).
 
 ## Reverse proxy and HTTPS
 
@@ -260,7 +262,7 @@ suite. An assistant such as Claude can then:
 - write, as a member: `create_note` (optionally with a picture, or from a template), `update_note` (replace or append
   text, tags, folder, pin), `organize_notes` (many notes at once), `delete_note`, `restore_note`, `manage_folder`,
   `manage_tag`, `manage_template`, `attach_file`, `remove_attachment`, `empty_trash`
-- operate, as an admin: `diagnostics`, `server_log`, `check_for_update`, `update_ionote` (the tip of the branch only)
+- operate, as an admin: `diagnostics`, `server_log`
 
 Every assistant signs in with an **app password** (Settings › Account › App passwords), as HTTP Basic or
 `Authorization: Bearer <app password>`, and acts as that account: notes are private to each account, so it sees and

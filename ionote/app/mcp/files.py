@@ -1,4 +1,4 @@
-"""The operator's tools, for admins: ioNote's health, its log and the updater."""
+"""The operator's tools, for admins: ioNote's health and its log."""
 import platform
 import sys
 from typing import Literal
@@ -9,7 +9,7 @@ from app import __version__, config, db, images, ocr
 from app.auth import updater
 from iosuite_shared import users
 from iosuite_shared.updates import tail
-from app.mcp.base import READ_ONLY, UPDATES, need_admin, server
+from app.mcp.base import READ_ONLY, need_admin, server
 
 LOG_LINES_MAX = 2000
 
@@ -42,25 +42,3 @@ def server_log(lines: int = 200, contains: str = "", level: Literal["any", "warn
         return tail(config.LOG_FILE, min(int(lines), LOG_LINES_MAX), contains, level)
     except OSError as e:
         raise ToolError(f"cannot read the log: {e}")
-
-
-@server.tool(annotations=READ_ONLY)
-def check_for_update() -> dict:
-    """Admins: the installed version and commit versus GitHub's main branch (network), and the outcome of the last
-    update run."""
-    need_admin()
-    return {"version": __version__, **updater.check(), "lastUpdate": updater.last_result()}
-
-
-@server.tool(annotations=UPDATES)
-def update_ionote() -> dict:
-    """Admins: update ionote to the latest commit on GitHub and restart it (update.sh: code, packages, service;
-    settings and data are kept). The connection drops when ionote restarts; call check_for_update afterwards. Not
-    available in Docker (pull the image)."""
-    need_admin()
-    try:
-        updater.run()
-    except RuntimeError as e:
-        raise ToolError(str(e))
-    return {"started": True, "installed": updater.local_commit()[:7], "ref": updater.branch,
-            "note": "update.sh is running; ioNote restarts when it finishes. Then call check_for_update."}

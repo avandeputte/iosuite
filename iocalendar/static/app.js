@@ -1446,20 +1446,6 @@ async function setServer(el) {
 }
 const serverUi = () => import(new URL('api/server/ui.js', document.baseURI).href);
 
-/** Admins: a note when the daily check found a newer version, with Update now. Hidden until the next version when dismissed. */
-function updateBanner() {
-  $('#updbanner')?.remove();
-  const u = S.status && S.status.update;
-  let dismissed = null; try { dismissed = localStorage.getItem('iocalendar.updateDismissed'); } catch { /* private mode */ }
-  if (!u || dismissed === u.remote) return;
-  const b = h('div', { id: 'updbanner', role: 'status' }, icon('update'),
-    h('span', null, `ioCalendar ${u.version ? `v${u.version}` : 'update'} is available${u.message ? `: ${u.message.replace(/^v\d+\.\d+\.\d+:\s*/, '')}` : ''}`),
-    h('button', { class: 'pillbtn primary noic', onclick: async () => { if (await confirmDialog('Update ioCalendar', 'Install the new version and restart? The page reloads when it is back.', 'Update now')) { b.remove(); (await serverUi()).runUpdate({ toast }); } } }, 'Update now'),
-    h('a', { class: 'pillbtn noic', href: '#/settings/server', onclick: () => b.remove() }, 'Details'),
-    h('button', { class: 'iconbtn', title: 'Not now (hidden until the next version)', onclick: () => { try { localStorage.setItem('iocalendar.updateDismissed', u.remote); } catch { /* */ } b.remove(); } }, icon('close', 's')));
-  document.body.append(b);
-}
-
 // ------------------------------------------------------------------ sign-in
 function showSignIn() {
   // as in the other io apps: a tile per account; one click for a passwordless account, a password for the others
@@ -1547,7 +1533,6 @@ async function start() {
   addEventListener('hashchange', onRoute);
   await onRoute();
   loadSuite();
-  updateBanner();
   setInterval(moveNowLine, 60000);
   // come back to the tab: show what changed elsewhere (a phone, another person)
   let away = Date.now();
@@ -1555,6 +1540,5 @@ async function start() {
     if (document.hidden) { away = Date.now(); return; }
     if (Date.now() - away > 60000 && ['month', 'week', 'day', 'agenda'].includes(route().view) && !document.querySelector('.dialog-back')) { loadCals().then(drawView).catch(() => {}); }
   });
-  setInterval(async () => { try { S.status = await api('/api/status'); updateBanner(); } catch { /* restarting */ } }, 15 * 60 * 1000);
 }
 start().catch(fail);

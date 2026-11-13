@@ -519,68 +519,75 @@ function apps(el, ctx) {
           h('td', { style: { textAlign: 'right' } }, h('button', { class: 'sa-btn danger', onclick: () => forgetApp(ctx, a) }, 'Forget')));
       }))));
 }
-/* Updates: every app's version against GitHub, and updating them all from here (iosuite_shared.suiteupdates). The
-   apps pick a request up within seconds, so the list refreshes itself while something is waiting or running. */
-const UPDATE_STATUS = { current: 'up to date', error: 'check failed' };
-/** On GitHub: the newest version, the shared library's when that is what changed (an update can be the library's alone),
-    and whether there is something to install: a coloured badge, else up to date or check failed. */
-function onGitHub(a) {
-  const sharedNewer = a.status === 'update' && a.latestShared && a.shared && a.latestShared !== a.shared;
-  const checked = h('span', { class: 'sa-muted' }, sinceText(a.checked));
-  return [h('div', null, a.latest || '–'),
-    sharedNewer ? h('div', { class: 'sa-muted' }, `shared library ${a.shared} → ${a.latestShared}`) : null,
-    h('div', { style: { marginTop: '2px' } }, a.status === 'update' ? [h('span', { class: 'sa-badge' }, 'Update available'), ' ', checked]
-      : [h('span', { class: a.status === 'error' ? 'sa-err' : 'sa-muted' }, UPDATE_STATUS[a.status] || 'not checked'), h('span', { class: 'sa-muted' }, ' · '), checked])];
-}
+/* Updates: the suite has one version and one update, every app at once (iosuite_shared.suiteupdates). The apps pick a
+   request up within seconds, so the page follows along while an update runs, and loads again when it is over: the app
+   that serves this page was updated too. The apps' own lines are under Details. */
 async function updates(el) {
-  let d;
+  let d, timer = null, until = 0, round = false;
   try { d = await api('updates'); } catch (e) { el.replaceChildren(h('p', { class: 'sa-err' }, e.message)); return; }
-  const list = h('div');
-  const head = h('div', { class: 'sa-multi', style: { margin: '6px 0 10px' } });
-  let timer = null, until = 0;
-  const busy = () => d.apps.some((a) => a.pending || a.state === 'running');
+  const head = h('div'), list = h('div');
+  const v = (x) => (x ? `v${x}` : 'an unknown version');
   const refresh = async () => {
     timer = null;
     if (!el.isConnected) return;
-    try { d = await api('updates'); draw(); } catch { /* try again on the next tick */ }
-    if ((busy() || Date.now() < until) && Date.now() < until + 180000) timer = setTimeout(refresh, 4000);
+    try { d = await api('updates'); draw(); } catch { /* the app serving this page is restarting: try again */ }
+    if (round && d.status !== 'updating') { location.reload(); return; }
+    if (round || Date.now() < until) timer = setTimeout(refresh, 4000);
   };
   const watch = () => { until = Date.now() + 30000; if (!timer) timer = setTimeout(refresh, 3000); };
-  const ask = async (action, apps) => {
-    try {
-      const r = await api('updates', { method: 'POST', json: { action, ...(apps ? { apps } : {}) } });
-      d = { apps: r.apps }; draw(); watch();
-      toast(r.asked.length ? `${action === 'check' ? 'Checking' : 'Updating'} ${r.asked.length === 1 ? appLabel({ apps: d.apps }, r.asked[0]) : `${r.asked.length} apps`}` : 'No app has an update waiting');
-    } catch (e) { fail(e); }
+  const ask = async (json) => {
+    try { d = await api('updates', { method: 'POST', json }); draw(); watch(); return true; } catch (e) { fail(e); return false; }
+  };
+  const update = async () => {
+    if (!await confirmDialog('Update ioSuite', `Install ${v(d.latest)} in every app? Each app restarts; this page follows along and loads again when they are back.`, 'Update')) return;
+    await ask({ action: 'update' });
   };
   const last = (a) => {
-    if (a.pending) return h('span', { class: 'sa-muted' }, `${a.pending === 'update' ? 'update' : 'check'} asked ${sinceText(a.requested)}${a.requestedBy ? ` by ${a.requestedBy}` : ''}`);
+    if (!a.watching) return h('span', { class: 'sa-muted' }, 'not running');
+    if (a.pending === 'update' || a.state === 'running') return 'updating…';
+    if (a.docker && a.behind) return h('span', { class: 'sa-muted' }, 'Docker: pull the image');
     if (!a.state) return h('span', { class: 'sa-muted' }, '–');
-    return h('span', { class: a.state === 'failed' ? 'sa-err' : '' }, a.state === 'running' ? 'running…' : a.state, a.message ? h('div', { class: 'sa-muted sa-small' }, a.message) : null);
+    return h('span', { class: a.state === 'failed' ? 'sa-err' : '' }, a.state, a.message ? h('div', { class: 'sa-muted sa-small' }, a.message) : null);
   };
   const draw = () => {
-    const waiting = d.apps.filter((a) => a.status === 'update' && a.canUpdate);
-    head.replaceChildren(
-      h('button', { class: 'sa-btn', onclick: () => ask('check') }, 'Check all now'),
-      h('button', { class: 'sa-btn primary', disabled: waiting.length ? null : true, onclick: () => ask('update') }, waiting.length ? `Update all (${waiting.length})` : 'Update all'));
-    list.replaceChildren(h('table', { class: 'sa-t' }, h('tr', null, h('th', null, 'App'), h('th', null, 'Installed'), h('th', null, 'On GitHub'), h('th', null, 'Last update'), h('th')),
-      d.apps.map((a) => h('tr', null,
-        h('td', null, h('b', null, a.name), h('div', { class: 'sa-muted sa-small' }, a.app)),
-        h('td', { class: 'sa-small' }, a.version || '–', a.commit ? h('div', { class: 'sa-muted' }, a.commit) : null),
-        h('td', { class: 'sa-small' }, !a.watching ? h('span', { class: 'sa-muted' }, 'not reporting (not running, or on an older iosuite-shared)')
-          : onGitHub(a)),
-        h('td', { class: 'sa-small' }, last(a)),
-        h('td', { style: { textAlign: 'right' } }, a.docker ? h('span', { class: 'sa-muted sa-small' }, 'Docker: pull the image')
-          : !a.watching ? null
-          : h('button', { class: 'sa-btn', disabled: a.canUpdate && !a.pending && a.state !== 'running' ? null : true,
-            title: a.canUpdate ? `Run ${a.name}'s update.sh now` : 'This install cannot update itself (no update.sh or .venv, or the folder is not writable)',
-            onclick: () => ask('update', [a.app]) }, 'Update'))))));
+    const live = d.apps.filter((a) => a.watching), name = (k) => appLabel({ apps: d.apps }, k);
+    round = round || d.status === 'updating';
+    const checked = h('span', { class: 'sa-muted sa-small' }, ` Checked ${sinceText(d.checked)}.`);
+    let line, button = null;
+    if (d.status === 'updating') {
+      line = [h('b', null, `Updating to ${v(d.latest)}…`), ` ${live.filter((a) => !a.behind).length} of ${live.length} apps done.`];
+    } else if (d.status === 'update') {
+      line = [h('b', null, `ioSuite ${v(d.installed)}`), ' is installed. ', h('span', { class: 'sa-badge' }, `Update available: ${v(d.latest)}`), checked];
+      button = d.canUpdate ? h('button', { class: 'sa-btn primary', onclick: update }, d.failed.length ? 'Try again' : `Update to ${v(d.latest)}`) : null;
+    } else if (d.status === 'error') {
+      line = [h('b', null, `ioSuite ${v(d.installed)}`), ' is installed. ', h('span', { class: 'sa-err' }, 'GitHub could not be asked for the newest version.')];
+    } else {
+      line = [h('b', null, `ioSuite ${v(d.installed)}`), ' is the newest version.', checked];
+    }
+    const docker = d.apps.filter((a) => a.behind && a.docker);
+    head.replaceChildren(...[
+      h('p', { style: { fontSize: '15px' } }, line),
+      d.failed.length ? h('p', { class: 'sa-err' }, `The update failed in ${d.failed.map(name).join(', ')}; see Details.`) : null,
+      docker.length && d.status === 'update' ? h('p', { class: 'sa-muted sa-small' }, `In Docker (${docker.map((a) => a.name).join(', ')}): docker compose pull && docker compose up -d`) : null,
+      h('div', { class: 'sa-multi', style: { margin: '10px 0' } }, button,
+        h('button', { class: 'sa-btn', disabled: d.status === 'updating' ? true : null, onclick: async () => { if (await ask({ action: 'check' })) toast('Asking GitHub…'); } }, 'Check now'))].filter(Boolean));
+    // the apps' own lines, shown without asking when they are not all in the same place: one failed, or some are behind and others not
+    const uneven = d.failed.length > 0 || (d.status === 'update' && d.behind.length < live.length);
+    const was = list.querySelector('details');
+    list.replaceChildren(h('details', { open: (was ? was.open : uneven) ? true : null },
+      h('summary', { class: 'sa-muted', style: { cursor: 'pointer' } }, `Details: ${d.apps.length} app${d.apps.length === 1 ? '' : 's'}`),
+      h('table', { class: 'sa-t' }, h('tr', null, h('th', null, 'App'), h('th', null, 'Version'), h('th', null, 'Last update')),
+        d.apps.map((a) => h('tr', null,
+          h('td', null, h('b', null, a.name), h('div', { class: 'sa-muted sa-small' }, a.app)),
+          h('td', { class: 'sa-small' }, a.version || '–', a.behind ? [' ', h('span', { class: 'sa-badge' }, 'behind')] : null, a.commit ? h('div', { class: 'sa-muted' }, a.commit) : null),
+          h('td', { class: 'sa-small' }, last(a)))))));
   };
   draw();
-  if (busy()) watch();
+  if (round) watch();
+  const auto = h('input', { type: 'checkbox', checked: d.autoCheck, onchange: async (e) => { if (await ask({ autoCheck: e.target.checked })) toast('Saved'); else e.target.checked = !e.target.checked; } });
   el.append(box('update', 'Updates',
-    h('p', { class: 'sa-muted' }, 'Each app checks GitHub for a newer version and updates itself with its own update.sh, as under Settings › Server, but all from here. An app picks up what you ask within ten seconds; its settings and data stay. An AI assistant can do the same through the start page’s MCP endpoint.'),
-    head, list));
+    h('p', { class: 'sa-muted' }, 'The suite has one version, and every app is updated together: each app installs the new version with its own update.sh and restarts; settings and data stay.'),
+    head, h('label', { class: 'sa-check' }, auto, h('span', null, 'Check for a new version daily')), list));
 }
 
 async function forgetApp(ctx, a) {

@@ -1,5 +1,5 @@
-"""The shared updater and server router, without a database: the settings go to a dict, GitHub is a stub, update.sh a
-tiny script that writes its result file."""
+"""The shared updater and server router, without a database: GitHub is a stub, update.sh a tiny script that writes
+its result file. (The suite's daily-check switch and the rows the apps write are in test_suiteupdates.py.)"""
 import json
 import os
 import time
@@ -21,22 +21,20 @@ def fresh_db():
 def make_updater(tmp_path, monkeypatch, version="1.2.0", **kw):
     monkeypatch.delenv("UPDATE_CHECK", raising=False)
     monkeypatch.delenv("INVOCATION_ID", raising=False)
-    store = {}
-    u = updates.Updater("iotest", version, tmp_path, repo="someone/iotest", branch="main", settings=(store.get, store.__setitem__), **kw)
+    u = updates.Updater("iotest", version, tmp_path, repo="someone/iotest", branch="main", **kw)
     u.in_docker = lambda: False
-    return u, store
+    return u
 
 
-def github(sha="abcdef0123456789", remote_version="1.3.0", msg="v1.3.0: better", fail=False, shared_version=None):
-    """GitHub as the Updater asks it: the branch's commit, the app's version file and the shared library's
-    (shared/iosuite_shared/__init__.py; the installed version unless `shared_version` says otherwise)."""
+def github(sha="abcdef0123456789", remote_version="1.3.0", msg="v1.3.0: better", fail=False):
+    """GitHub as the Updater asks it: the branch's commit and the suite's version file at that commit
+    (shared/iosuite_shared/__init__.py)."""
     def _get(url, accept=""):
         if fail:
             raise OSError("no network")
         if "api.github.com" in url:
             return json.dumps({"sha": sha, "commit": {"committer": {"date": "2026-11-05T01:02:03Z"}, "message": msg + "\n\nmore"}}).encode()
-        if url.endswith("/" + updates.SHARED_VERSION_FILE):
-            return f'__version__ = "{shared_version or updates.Updater.shared_version()}"\n'.encode()
+        assert url.endswith("/fedcba9876543210/" + updates.VERSION_FILE), url
         if remote_version is None:
             return b"nothing here"
         return f'__version__ = "{remote_version}"\n'.encode()
@@ -44,7 +42,7 @@ def github(sha="abcdef0123456789", remote_version="1.3.0", msg="v1.3.0: better",
 
 
 def test_commit_from_file_and_check_outcomes(tmp_path, monkeypatch):
-    u, _ = make_updater(tmp_path, monkeypatch)
+    u = make_updater(tmp_path, monkeypatch)
     assert u.local_commit() == "unknown" and u.status()["installed"] == "unknown"
     (tmp_path / "COMMIT").write_text("abcdef0123456789\n")
     assert u.local_commit() == "unknown"  # cached, "unknown" too: no git subprocess per status call
@@ -53,27 +51,21 @@ def test_commit_from_file_and_check_outcomes(tmp_path, monkeypatch):
 
     u._get_url = github()
     assert u.check()["status"] == "current"  # the same commit
-    assert u.available() is None
 
     u._get_url = github(sha="fedcba9876543210")
     c = u.check()
     assert c["status"] == "update" and c["remoteVersion"] == "1.3.0" and c["remote"] == "fedcba9" and c["remoteDate"] == "2026-11-05"
-    assert u.available() == {"remote": "fedcba9", "version": "1.3.0", "message": "v1.3.0: better", "date": "2026-11-05"}
+    assert c["remoteMessage"] == "v1.3.0: better"
 
     u._get_url = github(sha="fedcba9876543210", remote_version="1.2.0")  # another commit, the same version: nothing to install
     assert u.check()["status"] == "current"
-    # the same app version, a newer shared library: an update (both come from the same commit of the one repository)
-    u._get_url = github(sha="fedcba9876543210", remote_version="1.2.0", shared_version="999.0.0")
-    c = u.check()
-    assert c["status"] == "update" and c["remoteShared"] == "999.0.0" and c["shared"] == updates.Updater.shared_version()
+    u._get_url = github(sha="fedcba9876543210", remote_version="1.1.9")  # this install is ahead of the branch
+    assert u.check()["status"] == "current"
     u._get_url = github(sha="fedcba9876543210", remote_version=None)  # no version line found: say so, to be safe
     assert u.check()["status"] == "update" and u.check()["remoteVersion"] is None
     u._get_url = github(fail=True)
     c = u.check()
     assert c["status"] == "error" and "no network" in c["error"]
-    assert u.status()["check"]["status"] == "error"
-    u.forget_check()
-    assert u.status()["check"] is None
 
 
 def test_version_line_shapes():
@@ -82,35 +74,31 @@ def test_version_line_shapes():
     assert updates._version_tuple("1.10.2") > updates._version_tuple("1.9.9")
 
 
-def test_daily_check_switch_and_lock(tmp_path, monkeypatch):
-    u, store = make_updater(tmp_path, monkeypatch)
+def test_the_daily_check_and_its_lock(tmp_path, monkeypatch):
+    u = make_updater(tmp_path, monkeypatch)
+    monkeypatch.setattr(updates, "auto_check_enabled", lambda: True)  # the suite's switch (in the database)
     assert u.auto_check_enabled()
-    u.set_auto_check(False)
-    assert store["update_check"] == "0" and not u.auto_check_enabled()
-    u.set_auto_check(True)
-    assert u.auto_check_enabled()
-    monkeypatch.setenv("UPDATE_CHECK", "0")
-    locked, _ = make_updater(tmp_path, monkeypatch)
-    monkeypatch.setenv("UPDATE_CHECK", "0")
-    locked = updates.Updater("iotest", "1", tmp_path, settings=(store.get, store.__setitem__))
-    assert locked.check_locked and not locked.auto_check_enabled() and locked.status()["autoCheckLocked"]
-    with pytest.raises(ValueError):
-        locked.set_auto_check(True)
+    monkeypatch.setattr(updates, "auto_check_enabled", lambda: False)
+    assert not u.auto_check_enabled()
+    monkeypatch.setattr(updates, "auto_check_enabled", lambda: True)
+    monkeypatch.setenv("UPDATE_CHECK", "0")  # this app never asks GitHub by itself, whatever the switch says
+    locked = updates.Updater("iotest", "1", tmp_path)
+    assert locked.check_locked and not locked.auto_check_enabled()
 
 
 def test_env_defaults(tmp_path, monkeypatch):
     monkeypatch.setenv("IOCALENDAR_REPO", "me/cal")
     monkeypatch.setenv("IOCALENDAR_BRANCH", "dev")
-    u = updates.Updater("iocalendar", "1", tmp_path, settings=({}.get, lambda k, v: None))
+    u = updates.Updater("iocalendar", "1", tmp_path)
     assert u.repo == "me/cal" and u.branch == "dev" and u.prefix == "IOCALENDAR"
     monkeypatch.delenv("IOCALENDAR_REPO")
     monkeypatch.delenv("IOCALENDAR_BRANCH")
-    u = updates.Updater("iocalendar", "1", tmp_path, settings=({}.get, lambda k, v: None))
-    assert u.repo == "avandeputte/iosuite" and u.branch == "main" and u.version_file == "iocalendar/app/__init__.py"
+    u = updates.Updater("iocalendar", "1", tmp_path)
+    assert u.repo == "avandeputte/iosuite" and u.branch == "main"
 
 
 def test_run_update_script_and_result(tmp_path, monkeypatch):
-    u, _ = make_updater(tmp_path, monkeypatch)
+    u = make_updater(tmp_path, monkeypatch)
     assert not u.can_run()
     with pytest.raises(RuntimeError, match="cannot update itself"):
         u.run()
@@ -180,9 +168,8 @@ def admin_app(auth: Auth, monkeypatch):
 
 
 def test_server_router(tmp_path, monkeypatch):
-    u, store = make_updater(tmp_path, monkeypatch)
+    u = make_updater(tmp_path, monkeypatch)
     (tmp_path / "COMMIT").write_text("abcdef0123456789\n")
-    u._get_url = github(sha="fedcba9876543210")
     log = tmp_path / "app.log"
     log.write_text("2026-11-05 10:00:03 ERROR app: boom\n2026-11-05 10:00:04 INFO app: fine\n")
     restarted = []
@@ -205,32 +192,16 @@ def test_server_router(tmp_path, monkeypatch):
 
     s = c.get("/api/server").json()
     assert s["name"] == auth.label
-    assert s["version"] == "1.2.0" and s["installed"] == "abcdef0" and s["repo"] == "someone/iotest" and s["check"] is None
-    assert s["autoCheck"] and s["database"] == "db:3306/x" and s["mcpEnabled"] is False and not s["canRun"]
+    assert s["version"] == "1.2.0" and s["installed"] == "abcdef0" and s["repo"] == "someone/iotest"
+    assert s["database"] == "db:3306/x" and s["mcpEnabled"] is False and not s["canRun"] and "autoCheck" not in s
 
-    r = c.post("/api/server", json={"action": "check"}).json()
-    assert r["status"] == "update" and r["remoteVersion"] == "1.3.0"
-    assert c.get("/api/server").json()["check"]["status"] == "update"
-
-    assert c.post("/api/server", json={"autoCheck": False, "mcpEnabled": True}).json()["autoCheck"] is False
-    assert store["update_check"] == "0" and saved["mcp"] is True
-    assert c.get("/api/server").json()["check"] is None  # switching the check off forgets the result
+    assert c.post("/api/server", json={"mcpEnabled": True}).json()["mcpEnabled"] is True and saved["mcp"] is True
     assert c.post("/api/server", json={"mcpEnabled": "locked"}).status_code == 400
     assert c.post("/api/server", json={"action": "nonsense"}).status_code == 400
     assert c.post("/api/server").status_code == 200  # an empty body: the info
-
-    r = c.post("/api/server", json={"action": "update"})
-    assert r.status_code == 409 and "cannot update itself" in r.json()["detail"]
-    (tmp_path / ".venv").mkdir()
-    (tmp_path / "update.sh").write_text('#!/bin/sh\nprintf "ok: updated to v9\\n" > "$IOTEST_RESULT"\n')
-    assert c.post("/api/server", json={"action": "update"}).json() == {"started": True}
-    for _ in range(100):
-        if not u.progress["running"]:
-            break
-        time.sleep(0.05)
-    assert c.get("/api/server").json()["lastUpdate"]["ok"]
-
-    assert c.post("/api/server", json={"action": "token"}).status_code == 400  # the old MCP admin token is gone
+    # updating is the suite's (/api/suite-admin/updates): one app is not updated on its own from here
+    assert c.post("/api/server", json={"action": "update"}).status_code == 400
+    assert c.post("/api/server", json={"action": "check"}).status_code == 400
 
     assert c.post("/api/server", json={"action": "restart"}).json() == {"ok": True} and restarted == [0.5]
 
@@ -245,7 +216,7 @@ def test_server_router(tmp_path, monkeypatch):
 
 
 def test_server_router_is_for_admins_only(tmp_path, monkeypatch):
-    u, _ = make_updater(tmp_path, monkeypatch)
+    u = make_updater(tmp_path, monkeypatch)
     auth = Auth("iotest", register=False)
     app = FastAPI()
 

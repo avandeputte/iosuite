@@ -30,8 +30,8 @@ def list_apps(request: Request):
 
 @router.get("/api/apps/status", dependencies=[access.signed_in])
 async def apps_status(request: Request):
-    """Each app's /api/status, asked with the viewer's sign-in: {items: {key: {ok, version, update, why}}}. `update` is
-    set when the app says one is waiting (it tells admins only). Cached a minute."""
+    """Each app's /api/status, asked with the viewer's sign-in: {items: {key: {ok, version, why}}}. Cached a
+    minute."""
     return {"items": await run_in_threadpool(appstatus.of_apps, request)}
 
 

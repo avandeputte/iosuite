@@ -239,8 +239,8 @@ export const PREF = {
   tile: 'tile', group: 'group', hsize: 'hsize', qsize: 'qsize', qcheck: 'qcheck', faceGroups: 'facegroups',
   exploreSize: 'explore-size', peopleSort: 'people-sort', peopleSize: 'people-size', peopleWithin: 'people-within',
   mapLayer: 'map-layer', traySize: 'tray-size', expSize: 'exp-size', expFmt: 'exp-fmt', expName: 'exp-name', expNoGps: 'exp-nogps', expFlat: 'exp-flat',
-  // this browser only, even when signed in (store.local): which tab Settings last showed, the update banner dismissed
-  settingsTab: 'settingsTab', updateDismissed: 'updateDismissed',
+  // this browser only, even when signed in (store.local): which tab Settings last showed
+  settingsTab: 'settingsTab',
 };
 /** The browser's own copy, whoever is signed in; localStorage can be missing or full (a private window). */
 const local = {

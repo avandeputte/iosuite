@@ -1,2 +1,4 @@
 """ioTask: self-hosted task lists for the ioThing suite."""
-__version__ = "0.9.0"
+from iosuite_shared import __version__  # the suite's version: one number for every app
+
+__all__ = ["__version__"]

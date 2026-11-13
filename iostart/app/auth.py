@@ -11,7 +11,7 @@ reads the others' addresses from it (app/apps.py).
 from iosuite_shared.fastapi import Auth
 from iosuite_shared.updates import Updater
 
-from app import __version__, config, db
+from app import __version__, config
 
 APP = config.APP
 
@@ -20,5 +20,5 @@ auth = Auth(APP, app_label="ioStart", basic_realm="ioStart", version=__version__
 
 # the version check and the self-update (update.sh), shared with the suite: Settings › Server,
 # GET/POST /api/server and GET /api/log (main.py mounts the router)
-updater = Updater(APP, __version__, config.APP_DIR, settings=(db.get_setting, db.set_setting), user_agent="iostart",
+updater = Updater(APP, __version__, config.APP_DIR, user_agent="iostart",
                   result_file=config.DATA_DIR / ".update-result")

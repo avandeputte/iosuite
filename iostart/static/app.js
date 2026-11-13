@@ -560,8 +560,8 @@ async function quickAdd(ev) {
   } catch (e) { fail(e); }
 }
 
-// ------------------------------------------------------------------ is each app up? does one have an update?
-/** A dot by each app's name (green: it answers; red: it does not), and "update" when the app says one is waiting. */
+// ------------------------------------------------------------------ is each app up?
+/** A dot by each app's name (green: it answers; red: it does not). */
 async function drawAppStatus(page) {
   let d;
   try { d = await api('/api/apps/status'); } catch { return; }
@@ -570,7 +570,6 @@ async function drawAppStatus(page) {
     const st = page.querySelector(`.app[data-app="${key}"] .st`);
     if (!st) continue;
     st.replaceChildren(h('span', { class: `dot ${s.ok ? 'ok' : 'down'}`, title: s.ok ? `Up${s.version ? ` · v${s.version}` : ''}` : `Not reachable${s.why ? `: ${s.why}` : ''}` }));
-    if (s.update) st.append(h('span', { class: 'upd', title: s.note || (typeof s.update === 'string' ? `v${s.update} is out (now v${s.version || '?'})` : 'An update is waiting') }, 'update'));
   }
 }
 /** The bookmarks the server could not reach get a red dot and a tooltip. */
@@ -1704,17 +1703,25 @@ async function setServer(el) {
 }
 const serverUi = () => import(new URL('api/server/ui.js', document.baseURI).href);
 
-/** Admins: a note when the daily check found a newer version, with Update now. Hidden until the next version when dismissed. */
-function updateBanner() {
-  $('#updbanner')?.remove();
-  const u = S.status && S.status.update;
+/** Suite admins: one note when a newer version of the suite is out (every app has the same one), with Update now.
+ *  Hidden until the next version when dismissed. The details are Settings › Global settings › Updates. */
+async function updateNote() {
+  if (!S.user || !S.user.suiteAdmin) return;
+  let u;
+  try { u = await api('/api/suite-admin/updates'); } catch { return; }
+  $('#updnote')?.remove();
   let dismissed = null; try { dismissed = localStorage.getItem('iostart.updateDismissed'); } catch { /* private mode */ }
-  if (!u || dismissed === u.remote) return;
-  const b = h('div', { id: 'updbanner', role: 'status' }, icon('update'),
-    h('span', null, `ioStart ${u.version ? `v${u.version}` : 'update'} is available${u.message ? `: ${u.message.replace(/^v\d+\.\d+\.\d+:\s*/, '')}` : ''}`),
-    h('button', { class: 'pillbtn primary noic', onclick: async () => { if (await confirmDialog('Update ioStart', 'Install the new version and restart? The page reloads when it is back.', 'Update now')) { b.remove(); (await serverUi()).runUpdate({ toast }); } } }, 'Update now'),
-    h('a', { class: 'pillbtn noic', href: '#/settings/server', onclick: () => b.remove() }, 'Details'),
-    h('button', { class: 'iconbtn', title: 'Not now (hidden until the next version)', onclick: () => { try { localStorage.setItem('iostart.updateDismissed', u.remote); } catch { /* */ } b.remove(); } }, icon('close', 's')));
+  if (u.status !== 'update' || !u.latest || dismissed === u.latest) return;
+  const page = '#/settings/global/updates';
+  const b = h('div', { id: 'updnote', role: 'status' }, icon('update'),
+    h('span', null, `ioSuite v${u.latest} is available (now v${u.installed || '?'}).`),
+    u.canUpdate ? h('button', { class: 'pillbtn primary noic', onclick: async () => {
+      if (!await confirmDialog(`Update to v${u.latest}`, 'Update every app and restart them? Each one is away for a moment.', 'Update now')) return;
+      try { await api('/api/suite-admin/updates', { method: 'POST', json: { action: 'update' } }); } catch (e) { fail(e); return; }
+      b.remove(); location.hash = page;
+    } }, 'Update now') : null,
+    h('a', { class: 'pillbtn noic', href: page, onclick: () => b.remove() }, 'Details'),
+    h('button', { class: 'iconbtn', title: 'Not now (hidden until the next version)', onclick: () => { try { localStorage.setItem('iostart.updateDismissed', u.latest); } catch { /* */ } b.remove(); } }, icon('close', 's')));
   document.body.append(b);
 }
 
@@ -1771,7 +1778,7 @@ async function start() {
   if (BM_APP) { document.body.classList.add('bmapp'); $('#topbar .brand').href = './'; $('#topbar .brand').title = 'The start page'; }
   addEventListener('hashchange', onRoute);
   await onRoute();
-  updateBanner();
+  updateNote();
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && document.querySelector('.dialog-back')) document.querySelector('.dialog-back').remove(); });
   // ⌘K / Ctrl-K: the search box on the start page (from another view: go there first)
   document.addEventListener('keydown', (e) => {
@@ -1783,6 +1790,6 @@ async function start() {
   // back from an app: the page again as it is now (in place); and every few minutes while it stays open (liveRefresh)
   document.addEventListener('visibilitychange', () => liveRefresh(true));
   setInterval(() => liveRefresh(), 60 * 1000);
-  setInterval(async () => { try { S.status = await api('/api/status'); updateBanner(); } catch { /* restarting */ } }, 15 * 60 * 1000);
+  setInterval(updateNote, 15 * 60 * 1000);
 }
 start().catch(fail);

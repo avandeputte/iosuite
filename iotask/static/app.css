@@ -207,12 +207,6 @@ pre.log { background: var(--bg2); border: 1px solid var(--line); border-radius: 
 .err { color: var(--danger); font-size: var(--fs-m); min-height: 18px; margin-top: 6px; }
 .back { display: none; }
 
-/* a newer version (admins) */
-#updbanner { position: fixed; right: 16px; bottom: 16px; z-index: 90; max-width: min(460px, calc(100vw - 32px)); display: flex; flex-wrap: wrap;
-  align-items: center; gap: 8px 10px; padding: 12px 12px 12px 16px; background: var(--bg); color: var(--fg); border: 1px solid var(--line);
-  border-radius: var(--r-l); box-shadow: 0 6px 24px rgba(0, 0, 0, .18); }
-#updbanner > .ic { color: var(--brand); }
-#updbanner > span:not(.ic) { flex: 1 1 200px; }
 label.check { display: inline-flex; align-items: flex-start; gap: 6px; cursor: pointer; }
 label.check input { margin-top: 3px; accent-color: var(--brand); }
 .warn { color: var(--warn); }
@@ -259,7 +253,6 @@ button.chip.toggle.on .mem { opacity: 1; }
   #nav .navmore { display: flex; align-items: center; }
   #nav .navmore.on { color: var(--accent); font-weight: 600; }
   #main { left: 0; top: calc(var(--topbar) + env(safe-area-inset-top)); bottom: calc(56px + env(safe-area-inset-bottom)); }
-  #updbanner { bottom: calc(68px + env(safe-area-inset-bottom)); }
   .page { padding: 16px 12px 60px; }
   #newbtn span:last-child { display: none; }
   #newbtn { padding: 0 8px; }
@@ -363,7 +356,7 @@ body.sorting, body.sorting * { cursor: grabbing !important; user-select: none; -
 @media print {
   :root { color-scheme: light; --bg: #fff; --bg2: #fff; --fg: #000; --fg2: #444; --line: #bbb; }
   html, body { background: #fff !important; color: #000; height: auto; overflow: visible; }
-  #topbar, #nav, #navscrim, #toast, #updbanner, .menu, .dialog-back, .qwrap, .tasks-head .iconbtn, .tasks-head .pillbtn, .trow .info, .trow .later, .grip,
+  #topbar, #nav, #navscrim, #toast, .menu, .dialog-back, .qwrap, .tasks-head .iconbtn, .tasks-head .pillbtn, .trow .info, .trow .later, .grip,
   .taskpage > p.center, .tsec .pillbtn, .act .pillbtn { display: none !important; }
   #main { position: static !important; inset: auto; overflow: visible !important; display: block; height: auto; }
   .page { padding: 0; max-width: none; }

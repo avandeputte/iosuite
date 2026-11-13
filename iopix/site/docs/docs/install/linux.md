@@ -24,7 +24,7 @@ It then:
 6. writes the settings to `/opt/iopix/app/config.env`, with the data in `/opt/iopix/data`,
 7. installs and starts a systemd service called `iopix`, running as the `iopix` user on port 8600.
 
-A sudoers rule lets the service user run exactly `systemctl restart iopix`, so **Update now** in the app works.
+A sudoers rule lets the service user run exactly `systemctl restart iopix`, so updating from the app works.
 
 ## Options
 
@@ -50,7 +50,7 @@ To keep passwords off the command line, set `IOPIX_ADMIN=NAME:PASS` and `IOPIX_D
 
 ## Upgrading
 
-Running the installer again upgrades the code and keeps the data folder and the settings file. So does `./update.sh` in `/opt/iopix/app`, or **Update now** in the app.
+Running the installer again upgrades the code and keeps the data folder and the settings file. So does `./update.sh` in `/opt/iopix/app`, or **Update** in the app (Settings › Global settings › Updates).
 
 !!! note "Upgrading from a version before 1.113"
     An install that still has `viewer.db` in its data folder needs a MariaDB or MySQL database from 1.113 on. Run the installer again with `--db local` (or a server), then open iopix: its set-up page offers to import the old file. See [iopix's own database](../connect/iopix-database.md).

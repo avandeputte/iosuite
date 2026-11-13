@@ -100,16 +100,16 @@ Nothing to set up: ioContact finds ioPix in the suite's list of apps (the Shared
 
 ## Updates
 
-ioContact asks GitHub once a day whether the main branch has a newer version (only the public commit list is read;
-nothing about the server is sent; Settings › Server switches it off, `UPDATE_CHECK=0` locks it off). Admins
-then see a note with **Update now**, and **Settings › Server** has the version, **Check for updates**,
-**Update now**, the tail of the server log (`data/iocontact.log` in the app folder; `LOG_FILE` moves it, empty switches it
-off) and **Restart**. The page is the same in every ioThing app: the version check, `update.sh`, the restart and the log
-come from `iosuite_shared.updates` in iosuite-shared, served at `/api/server` and `/api/log`. Updating runs the app's own
-`update.sh`: the new version's Python packages first, then the code (a failed step leaves the running version as it
-was), the database is brought up to date, and the service restarts; the page reloads when the new version answers. The
-MCP tools `check_for_update` and `update_server` do the same. In Docker, pull the image instead. From a shell:
-`./update.sh` (`--check` only looks, `IOCONTACT_REF=<sha>` installs a given commit).
+The suite has one version, the same for every app, and the apps are updated together: **Settings › Global settings ›
+Updates** (suite admins, in any app) shows the installed version and the newest one on GitHub, with one **Update**
+button; each app's own line is under Details. Once a day every app asks GitHub whether a newer version exists (only
+the public commit list is read; nothing about the server is sent; the Updates page switches it off for the suite,
+`UPDATE_CHECK=0` locks it off for this app). **Settings › Server** shows the version ioContact runs, the tail of the
+server log (`data/iocontact.log`; `LOG_FILE` moves it, empty switches it off) and **Restart**; the panel
+(`/api/server/ui.js`) is iosuite-shared's, the same in every app. Updating runs the app's own `update.sh`: the new
+version's Python packages first, then the code (a failed step leaves the running version as it was), the database is
+brought up to date, and the service restarts. In Docker, pull the image instead. From a shell: `./update.sh`
+(`--check` only looks, `IOCONTACT_REF=<sha>` installs a given commit).
 
 Everything about the app is under one Settings page (the sidebar and the avatar menu; a change is saved the moment it
 is made): your own tabs (account, display, apps and devices, address books), then for admins server, and for suite admins
@@ -186,7 +186,7 @@ The tools: `overview`, `list_address_books`, `search_contacts`, `get_contact`, `
 `find_duplicates`, `preview_merge`, `merge_contacts`, `mark_not_duplicates`, `list_merges`, `undo_merge`,
 `data_quality_report`, `fix_data_quality`; enrichment: `lookup_contact`, `suggest_contact_update`, `list_suggestions`
 (an assistant proposes; only a person accepts, in the web app); and for admins `diagnostics`, `test_iopix`,
-`list_accounts`, `check_for_update`, `update_server`. An app password cannot make more app passwords over MCP.
+`list_accounts`. An app password cannot make more app passwords over MCP.
 
 ## Clean up and enrichment
 

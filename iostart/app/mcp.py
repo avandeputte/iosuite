@@ -8,11 +8,11 @@ from app import __version__, config
 server = shared_mcp.make_server(
     config.APP, "ioStart", __version__,
     instructions=(
-        "The start page of the ioThing suite (ioStart). It keeps every io app up to date: suite_versions lists each app "
-        "with its installed version, the newest on GitHub (status: current, update or error), whether it can update "
-        "itself and how its last update went; update_suite_apps updates the apps that have an update waiting (or the "
-        "ones named). Each app updates and restarts within a minute or two; then call suite_versions(check=False) to "
-        "see state ok or failed and the new version. Suite admins only."
+        "The start page of the ioThing suite (ioStart). It keeps the suite up to date: the suite has one version, the "
+        "same for every app. suite_version gives the installed version, the newest on GitHub and status (current, "
+        "update, updating or error), with every app's own line under apps; update_suite updates every app that is "
+        "behind. Each app updates and restarts within a minute or two; then call suite_version(check=False) to see "
+        "status current, or which apps failed and why. Suite admins only."
     ),
 )
 current_user = shared_mcp.current_user

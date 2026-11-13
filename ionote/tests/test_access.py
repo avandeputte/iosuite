@@ -71,21 +71,13 @@ def test_a_header_proxy_signs_in_only_from_a_trusted_address(client, admin):
     assert r.json()["user"] is None  # the test client is not 10.9.9.9
 
 
-def test_status_tells_admins_of_a_newer_version_while_the_daily_check_is_on(client, admin, monkeypatch):
-    from app.auth import updater
-    monkeypatch.setattr(updater, "check_locked", False)  # UPDATE_CHECK=0 in the tests' environment: never start the daily check itself
-    updater._checked.clear()
-    updater._checked.update(status="update", remote="abc1234", remoteVersion="9.9.9", remoteMessage="v9.9.9: new", remoteDate="2026-11-03")
-    try:
-        s = client.get("/api/status").json()
-        assert s["update"]["version"] == "9.9.9" and "canRun" in s["update"] and s["commit"]
-        client.post("/api/server", json={"autoCheck": False})
-        assert client.get("/api/status").json()["update"] is None
-        client.post("/api/server", json={"autoCheck": True})
-        client.post("/api/auth/logout")
-        assert "update" not in client.get("/api/status").json()
-    finally:
-        updater._checked.clear()
+def test_updating_is_the_suites_not_the_apps(client, admin):
+    """One version and one update for the suite (Settings › Global settings › Updates): the app's status carries no
+    update of its own, and its Server page only restarts."""
+    s = client.get("/api/status").json()
+    assert s["version"] and s["commit"] and "update" not in s
+    assert "autoCheck" not in client.get("/api/server").json()
+    assert client.post("/api/server", json={"action": "update"}).status_code == 400
 
 
 def test_ionote_registers_in_the_suites_list_of_apps(client):

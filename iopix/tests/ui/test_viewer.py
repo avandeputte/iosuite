@@ -461,8 +461,8 @@ def test_person_options_menu_opens_in_front_of_the_map(page, server, lib):
     opt.click()
     menu = page.locator(".facemenu")
     menu.wait_for(timeout=5000)
-    # a toast, or the update banner an earlier test's version check switched on, would sit where the probe lands
-    page.evaluate("document.querySelector('#toast').hidden = true; document.querySelector('#updbanner')?.remove()")
+    # a toast would sit where the probe lands
+    page.evaluate("document.querySelector('#toast').hidden = true")
     b = menu.bounding_box()
     hit = page.evaluate("([x, y]) => { const e = document.elementFromPoint(x, y); if (e && e.closest('.facemenu')) return 'menu'; if (!e) return 'none'; const cs = getComputedStyle(e); const chain = []; for (let p = e; p && p !== document.body; p = p.parentElement) chain.push(`${p.tagName}#${p.id}.${p.className}`); return `${e.outerHTML.slice(0, 160)} | ${cs.position}/${cs.zIndex} | ${chain.join(' < ')}`; }", [b["x"] + b["width"] / 2, b["y"] + b["height"] - 12])
     assert hit == "menu", (hit, b, page.viewport_size)

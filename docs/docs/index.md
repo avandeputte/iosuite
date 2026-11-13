@@ -41,9 +41,9 @@ Every app is built the same way, so what you learn in one holds in the others:
   for all of them. See [Databases](reference/databases.md).
 - **The same installers**: a one-line Proxmox VE container, a Docker image (amd64 and arm64), or `setup.sh` on any
   Linux or Mac. See [Requirements](start/requirements.md).
-- **The same Settings**: Account and Display for everyone; Server (version, updates, log, restart) for admins;
+- **The same Settings**: Account and Display for everyone; Server (version, log, restart) for admins;
   Security and Global settings for suite admins.
-- **Updates from the web app**: a daily check, then **Update now** under Settings › Server. See [Updates](run/updates.md).
+- **One version, one update**: a daily check, then one **Update** button for every app under Settings › Global settings › Updates. See [Updates](run/updates.md).
 - **An MCP server** at `/mcp` in ioPix, ioNote, ioCalendar, ioTask, ioRecipe and ioContact, so an AI assistant such as Claude can
   work with them as you, with an app password. See [AI assistants](run/assistants.md).
 - **Free and open source**, GPL-3.0-or-later.

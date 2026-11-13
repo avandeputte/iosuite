@@ -1,6 +1,6 @@
 """The operator's diagnostics, for admins: what one would check in a shell. The
 viewer's health, its log and job queue, what is inside one photo's or video's file and which of
-its files exist on disk, the video repair, and the updater."""
+its files exist on disk, and the video repair."""
 import json
 import os
 from typing import Literal
@@ -16,7 +16,7 @@ from app.ai.semantic import semantic, enabled as semantic_enabled
 from app.digikam import dbsync, dkdb
 from app.ai import models
 from app.ai.analysis import progress as analysis_progress
-from app.mcp.base import READ_ONLY, UPDATES, WRITES, db, need_admin, server
+from app.mcp.base import READ_ONLY, WRITES, db, need_admin, server
 
 # the probe outputs an answer keeps: the first lines say what is wrong, the rest is noise in a transcript
 FFMPEG_ERRORS_MAX = 1500
@@ -221,25 +221,3 @@ def photo_file(photo_id: int) -> dict:
     except Exception:
         pass
     return out
-
-
-@server.tool(annotations=READ_ONLY)
-def check_for_update() -> dict:
-    """Installed version and commit versus GitHub's main branch (network), and the outcome of the
-    last update run (lastUpdate: ok, text, at)."""
-    return {"version": __version__, **updater.check(), "lastUpdate": updater.last_result()}
-
-
-@server.tool(annotations=UPDATES)  # openWorld: it reaches GitHub
-def update_server() -> dict:
-    """Update the viewer to the latest commit of its branch on GitHub and restart it (update.sh: code, packages,
-    service; settings and data are kept). Admins only. Nothing happens when that commit is already installed.
-    The connection drops when the viewer restarts; call check_for_update afterwards: lastUpdate carries the
-    outcome and installed the commit. Not available in Docker (pull the image)."""
-    need_admin()
-    try:
-        updater.run()
-    except RuntimeError as e:
-        raise ToolError(str(e))
-    return {"started": True, "installed": updater.local_commit()[:7],
-            "note": "update.sh is running; the viewer restarts when it finishes (about a minute). Then call check_for_update: lastUpdate says what happened."}

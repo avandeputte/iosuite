@@ -8,7 +8,7 @@ what the account may change in the web app; the server tools need an admin.
   read.py   the read-only tools: overview, calendars, the agenda, search, one event, free/busy, connection details
   write.py  the tools that change events and calendars: create, update (series, one occurrence, or from one on),
             delete, move, new calendar, import
-  admin.py  the server: diagnostics, the version check and the update, the Birthdays calendar from ioContact
+  admin.py  the server: diagnostics, the Birthdays calendar from ioContact
 """
 from app.mcp.base import server, current_user
 from app.mcp import read, write, admin  # noqa: F401  importing them registers the tools on `server`

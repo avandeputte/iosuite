@@ -2,9 +2,9 @@
 
 ## From the app
 
-**Settings › Server** shows the installed version. **Check for updates** compares it with the newest version, and **Update now** installs it and restarts iopix. The page reloads by itself when the new version is up.
+iopix is part of the ioThing suite, which has one version, the same for every app. **Settings › Global settings › Updates** (suite admins) shows the installed version and the newest one. **Update** installs it and restarts iopix, together with any other app of the suite you run; **Check now** looks again. The page follows along and reloads when the new version is up. **Settings › Server** shows the version iopix runs.
 
-With **Check for updates daily** on (the default), iopix asks once a day whether a newer version exists and shows admins a note with a link. Only the public list of versions is fetched; nothing about your install is sent. `UPDATE_CHECK=0` turns this off for good.
+With **Check for a new version daily** on (the default), iopix asks once a day whether a newer version exists. Only the public list of versions is fetched; nothing about your install is sent. `UPDATE_CHECK=0` turns this off for good.
 
 ## From the command line
 

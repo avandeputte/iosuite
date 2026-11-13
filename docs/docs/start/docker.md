@@ -52,5 +52,5 @@ Remove the services you don't want; the rest keep working.
 docker compose pull && docker compose up -d
 ```
 
-In a container, pulling the image takes the place of the web app's **Update now**. Released versions are tagged as
-well, if you'd rather pin one than follow `latest`.
+In a container, pulling the image takes the place of the web app's **Update**. Every version of the suite is tagged
+as well (`v3.0.0`, the same tag on every app's image), if you'd rather pin one than follow `latest`.

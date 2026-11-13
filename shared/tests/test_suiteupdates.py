@@ -17,8 +17,7 @@ def updater(tmp_path, monkeypatch, app="iocalendar", version="1.0.0", remote="1.
     monkeypatch.delenv("INVOCATION_ID", raising=False)
     root = tmp_path / app
     root.mkdir()
-    store = {}
-    u = updates.Updater(app, version, root, repo=f"someone/{app}", settings=(store.get, store.__setitem__))
+    u = updates.Updater(app, version, root, repo=f"someone/{app}")
     u.in_docker = lambda: False
 
     def get(url, accept=""):
@@ -32,54 +31,79 @@ def updater(tmp_path, monkeypatch, app="iocalendar", version="1.0.0", remote="1.
     return u
 
 
-def test_request_claim_and_overview(tmp_path, monkeypatch):
+def test_request_claim_and_summary(tmp_path, monkeypatch):
     suite.register("iocalendar", name="ioCalendar", version="1.0.0")
-    suite.register("ionote", name="ioNote", version="2.0.0")
+    suite.register("ionote", name="ioNote", version="1.0.0")
     cal = updater(tmp_path, monkeypatch)
     cal._said_hello()
     by = {a["app"]: a for a in suiteupdates.overview()}
     assert by["iocalendar"]["watching"] and by["iocalendar"]["version"] == "1.0.0" and not by["iocalendar"]["canUpdate"]
-    assert not by["ionote"]["watching"] and by["ionote"]["version"] == "2.0.0"  # never wrote its row
+    assert not by["ionote"]["watching"] and by["ionote"]["version"] == "1.0.0"  # never wrote its row: not running
+    s = suiteupdates.summary()
+    assert s["installed"] == "1.0.0" and s["latest"] is None and s["status"] == "current" and s["behind"] == []
 
-    assert suiteupdates.request("check", None, by="alex") == ["iocalendar", "ionote"]
+    assert suiteupdates.request("check", by="alex") == ["iocalendar", "ionote"]
     assert suiteupdates.claim("iocalendar") == "check" and suiteupdates.claim("iocalendar") is None  # taken once
     cal.serve("check")
     a = {a["app"]: a for a in suiteupdates.overview()}["iocalendar"]
     assert a["latest"] == "1.1.0" and a["status"] == "update" and a["checked"] and a["commit"]
-    assert {a["app"]: a for a in suiteupdates.overview()}["ionote"]["pending"] == "check"
+    by = {a["app"]: a for a in suiteupdates.overview()}
+    assert by["ionote"]["pending"] == "check" and not by["ionote"]["watching"]  # asked, still not running
 
-    assert suiteupdates.request("update", None) == ["iocalendar"]  # only the apps with an update waiting
-    assert suiteupdates.request("update", ["ionote", "IONOTE"]) == ["ionote"]
+    # the suite: one app found 1.1.0, so every app below it is behind, the one that has not asked GitHub itself too
+    note = updater(tmp_path, monkeypatch, app="ionote")
+    note._said_hello()
+    s = suiteupdates.summary()
+    assert s["installed"] == "1.0.0" and s["latest"] == "1.1.0" and s["status"] == "update" and s["checked"]
+    assert s["behind"] == ["iocalendar", "ionote"] and s["failed"] == [] and not s["canUpdate"]
+    assert suiteupdates.request("update", by="alex") == ["iocalendar", "ionote"]
+    assert suiteupdates.summary()["status"] == "updating"
+    assert suiteupdates.claim("iocalendar") == "update" and suiteupdates.claim("ionote") == "update"
+
+    # one app is on 1.1.0 now, the other failed: the suite is still at 1.0.0, and only that app is asked again
+    suiteupdates.publish("iocalendar", installed="1.1.0", status="current", state="ok")
+    suiteupdates.publish("ionote", state="failed", message="pip said no")
+    s = suiteupdates.summary()
+    assert s["installed"] == "1.0.0" and s["status"] == "update" and s["behind"] == ["ionote"] == s["failed"]
+    assert suiteupdates.request("update") == ["ionote"]
+    suiteupdates.claim("ionote")
+    suiteupdates.publish("ionote", installed="1.1.0", status="current", state="ok")
+    s = suiteupdates.summary()
+    assert s["installed"] == "1.1.0" == s["latest"] and s["status"] == "current" and suiteupdates.request("update") == []
     with pytest.raises(ValueError):
-        suiteupdates.request("update", ["nope"])
-    with pytest.raises(ValueError):
-        suiteupdates.request("reboot", None)
+        suiteupdates.request("reboot")
 
 
-def test_an_update_of_the_shared_library_alone_says_so(tmp_path, monkeypatch):
-    """The app's version is the same on GitHub, the shared library's is newer: an update, and the overview says which."""
-    suite.register("iocalendar", name="ioCalendar", version="1.0.0")
-    cal = updater(tmp_path, monkeypatch, remote="1.0.0")
-    mine = updates.Updater.shared_version()
-    plain = cal._get_url
-    cal._get_url = lambda url, accept="": b'__version__ = "999.0.0"\n' if updates.SHARED_VERSION_FILE in url else plain(url, accept)
-    cal._said_hello()
-    cal.serve("check")
-    a = suiteupdates.overview()[0]
-    assert a["status"] == "update" and a["latest"] == "1.0.0" == a["version"]
-    assert a["shared"] == mine and a["latestShared"] == "999.0.0"
-    cal._said_hello()  # a restart without installing it: still waiting
-    assert suiteupdates.overview()[0]["status"] == "update"
-    db.ex("UPDATE ios_updates SET latest_shared = %s WHERE app = 'iocalendar'", (mine,))
-    cal._said_hello()  # after installing it
-    assert suiteupdates.overview()[0]["status"] == "current"
+def test_an_app_that_stopped_does_not_hold_the_suite_back(tmp_path, monkeypatch):
+    suite.register("iocalendar", name="ioCalendar", version="1.1.0")
+    suite.register("ionote", name="ioNote", version="1.0.0")
+    suiteupdates.publish("iocalendar", installed="1.1.0", latest="1.1.0", status="current")
+    suiteupdates.publish("ionote", installed="1.0.0", latest="1.0.0", status="current", state="running")
+    db.ex("UPDATE ios_updates SET updated_at = %s WHERE app = 'ionote'", (int(time.time()) - suiteupdates.ALIVE_S - 5,))
+    s = suiteupdates.summary()
+    by = {a["app"]: a for a in s["apps"]}
+    assert not by["ionote"]["watching"] and by["ionote"]["behind"]
+    assert s["installed"] == "1.1.0" and s["status"] == "current" and s["behind"] == []
+    assert suiteupdates.request("update") == ["ionote"]  # asked all the same, should it be there after all
+    # what was asked more than an hour ago is not run when the app starts again
+    db.ex("UPDATE ios_updates SET requested_at = %s WHERE app = 'ionote'", (int(time.time()) - suiteupdates.STALE_S - 5,))
+    assert suiteupdates.claim("ionote") is None and db.one("SELECT action FROM ios_updates WHERE app = 'ionote'")["action"] is None
+    suiteupdates.beat("ionote")  # it runs again
+    assert suiteupdates.summary()["behind"] == ["ionote"]
+
+
+def test_the_daily_check_is_one_switch_for_the_suite():
+    assert updates.auto_check_enabled()
+    updates.set_auto_check(False)
+    assert not updates.auto_check_enabled() and db.settings_of("") == {"update_check": "0"}
+    updates.set_auto_check(True)
+    assert updates.auto_check_enabled() and db.settings_of("") == {}
 
 
 def test_an_update_that_cannot_run_says_why(tmp_path, monkeypatch):
     suite.register("iocalendar", name="ioCalendar")
     cal = updater(tmp_path, monkeypatch)
-    suiteupdates.request("update", ["iocalendar"], by="alex")
-    cal.serve(suiteupdates.claim("iocalendar"))
+    cal.serve("update")
     a = suiteupdates.overview()[0]
     assert a["state"] == "failed" and "cannot update itself" in a["message"] and not a["pending"]
 
@@ -131,11 +155,17 @@ def test_the_admin_routes():
     ed = signed_in(app, "ed", "secret123")
     assert ed.get("/api/suite-admin/updates").status_code == 403  # an app admin is not a suite admin
     c = signed_in(app, "alex", "secret123")
-    assert c.get("/api/suite-admin/updates").json()["apps"][0]["app"] == "iocalendar"
+    d = c.get("/api/suite-admin/updates").json()
+    assert d["apps"][0]["app"] == "iocalendar" and d["status"] == "current" and d["autoCheck"] is True
     r = c.post("/api/suite-admin/updates", json={"action": "check"}).json()
     assert r["asked"] == ["iocalendar"] and r["apps"][0]["pending"] == "check" and r["apps"][0]["requestedBy"] == "alex"
-    assert c.post("/api/suite-admin/updates", json={"action": "update", "apps": "iocalendar"}).status_code == 400
-    assert c.post("/api/suite-admin/updates", json={"action": "update", "apps": ["nope"]}).status_code == 400
+    suiteupdates.publish("iocalendar", installed="1.0.0", latest="1.1.0", status="update")
+    r = c.post("/api/suite-admin/updates", json={"action": "update"}).json()
+    assert r["asked"] == ["iocalendar"] and r["status"] == "updating" and r["latest"] == "1.1.0"
+    r = c.post("/api/suite-admin/updates", json={"autoCheck": False}).json()
+    assert r["autoCheck"] is False and r["asked"] == [] and not updates.auto_check_enabled()
+    assert c.post("/api/suite-admin/updates", json={"action": "reboot"}).status_code == 400
+    assert c.post("/api/suite-admin/updates", json={}).status_code == 400
 
 
 def test_the_mcp_tools():
@@ -153,12 +183,14 @@ def test_the_mcp_tools():
         finally:
             shared_mcp.current_user.reset(tok)
     with pytest.raises(ToolError):
-        call(users.get(ed["id"], "iostart"), "update_suite_apps", {})
-    out = call(users.get(alex["id"], "iostart"), "update_suite_apps", {"apps": ["iocalendar"]})
+        call(users.get(ed["id"], "iostart"), "update_suite", {})
+    assert "newest version" in str(call(users.get(alex["id"], "iostart"), "update_suite", {}))  # nothing is behind
+    suiteupdates.publish("iocalendar", installed="1.0.0", latest="1.1.0", status="update")
+    out = call(users.get(alex["id"], "iostart"), "update_suite", {})
     assert "iocalendar" in str(out)
     assert db.one("SELECT action FROM ios_updates WHERE app = 'iocalendar'")["action"] == "update"
-    out = call(users.get(alex["id"], "iostart"), "suite_versions", {"check": False})
-    assert "iocalendar" in str(out)
+    out = call(users.get(alex["id"], "iostart"), "suite_version", {"check": False})
+    assert "iocalendar" in str(out) and "updating" in str(out)
 
 
 def test_the_restart_that_ends_update_sh_is_not_a_failure(tmp_path, monkeypatch):

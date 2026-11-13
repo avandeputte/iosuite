@@ -412,23 +412,30 @@ def admin_router(self) -> APIRouter:
             auth._registered = False
         return {"ok": True}
 
+    def updates_now():
+        from iosuite_shared import updates as upd
+        return {**suiteupdates.summary(), "autoCheck": upd.auto_check_enabled()}
+
     @r.get("/updates", dependencies=[access.suite_admin])
     def api_updates(request: Request):
-        """Every app's version, the newest on GitHub, and its last update (iosuite_shared.suiteupdates)."""
-        return {"apps": suiteupdates.overview()}
+        """The suite's version, the newest on GitHub and whether an update is waiting or running, with every app's
+        own line (iosuite_shared.suiteupdates.summary), and the daily-check switch (autoCheck)."""
+        return updates_now()
 
     @r.post("/updates", dependencies=[access.suite_admin])
     async def api_updates_ask(request: Request):
-        """Body {action: check | update, apps: [keys] (left out: every app for a check, every app with an update
-        waiting for an update)}. The apps pick it up within seconds."""
+        """Body {action: check | update}: every app asks GitHub, or every app that is behind updates itself; they
+        pick it up within seconds. {autoCheck: bool} saves the daily check, one switch for the suite."""
+        from iosuite_shared import updates as upd
         body = await json_body(request)
-        apps = body.get("apps")
-        if apps is not None and not isinstance(apps, list):
-            raise HTTPException(400, "apps must be a list of app keys")
         who = me(request)
-        asked = await run_in_threadpool(call, suiteupdates.request, body.get("action"), apps, (who or {}).get("name"))
-        authlog.info("suite admin: %s asked of %s by %s", body.get("action"), ", ".join(asked) or "no app", (who or {}).get("name"))
-        return {"asked": asked, "apps": await run_in_threadpool(suiteupdates.overview)}
+        if "autoCheck" in body:
+            await run_in_threadpool(upd.set_auto_check, bool(body["autoCheck"]))
+        asked = []
+        if body.get("action") or "autoCheck" not in body:
+            asked = await run_in_threadpool(call, suiteupdates.request, body.get("action"), (who or {}).get("name"))
+            authlog.info("suite admin: %s asked of %s by %s", body.get("action"), ", ".join(asked) or "no app", (who or {}).get("name"))
+        return {"asked": asked, **await run_in_threadpool(updates_now)}
 
     @r.get("/proxy", dependencies=[access.suite_admin])
     def api_proxy(request: Request):
@@ -449,9 +456,9 @@ def server_router(self, updater, log_file=None, info=None, apply=None) -> APIRou
     """Settings › Server, the same in every app (admins):
         GET  /api/server/ui.js           the panel itself (static/server-panel.js), mounted by the app's Server tab:
                                          ui = await import(new URL('api/server/ui.js', document.baseURI).href); ui.mount(el, {toast})
-        GET  /api/server                 the app's name, the installed version, the last check, whether update.sh can run, the switches
-        POST /api/server {action}        action: check | update | restart; {autoCheck: bool}
-                                         saves the daily-check switch; anything else goes to apply(body)
+        GET  /api/server                 the app's name, the installed version and commit, the app's switches
+        POST /api/server {action}        action: restart; anything else in the body goes to apply(body)
+                                         (updating is the suite's: /api/suite-admin/updates)
         GET  /api/log?lines&level&contains&requests   the tail of the server log (with log_file)
         GET  /api/log/download
     `info()` returns extra fields for GET /api/server that the panel shows: mcpEnabled + mcpLocked (the MCP box) and
@@ -479,8 +486,6 @@ def server_router(self, updater, log_file=None, info=None, apply=None) -> APIRou
     async def api_server_action(request: Request):
         body = await json_body(request) if int(request.headers.get("content-length") or 0) else {}
         try:
-            if "autoCheck" in body:
-                await run_in_threadpool(updater.set_auto_check, bool(body["autoCheck"]))
             if apply:
                 rr = apply(body)
                 if hasattr(rr, "__await__"):
@@ -488,20 +493,12 @@ def server_router(self, updater, log_file=None, info=None, apply=None) -> APIRou
         except ValueError as e:
             raise HTTPException(400, str(e))
         action = body.get("action")
-        if action == "check":
-            return await run_in_threadpool(updater.check)
-        if action == "update":
-            try:
-                updater.run()
-            except RuntimeError as e:
-                raise HTTPException(409, str(e))
-            return {"started": True}
         if action == "restart":
             authlog.info("%s restarted by %s", label, (self.current_user(request) or {}).get("name"))
             updater.restart()
             return {"ok": True}
         if action:
-            raise HTTPException(400, "action must be check, update or restart")
+            raise HTTPException(400, "action must be restart")
         return await run_in_threadpool(server_info)
 
     if log_file:
@@ -521,9 +518,9 @@ def server_router(self, updater, log_file=None, info=None, apply=None) -> APIRou
 # ---- the status: public, the same shape in every app
 def status_router(self, updater=None, extra=None) -> APIRouter:
     """GET /api/status, open to everyone (the middleware keeps it reachable when sign-in is required): what the shell
-    needs before anyone signs in, and for admins whether a newer version is out.
+    needs before anyone signs in.
         {ok, app, name, version (signed in, or asked from inside the network), usersExist, requireLogin, signedIn,
-         isAdmin, viaProxy, user, commit (signed in), update (admins, while the daily check is on: {version, remote, ..., canRun, docker} or null)}
+         isAdmin, viaProxy, user, commit (signed in)}
     `extra(request)` adds the app's own fields (a dict); it is called after the user is known, so it may answer
     differently for a visitor, an account and an admin."""
     auth, access = self, self.access
@@ -545,14 +542,8 @@ def status(self, request: Request, updater=None, extra=None) -> dict:
     out = {"ok": True, "app": self.app, "name": self.label, "version": version if signed or not self.outside(request) else None,
            "usersExist": users.any_users(), "requireLogin": shut or users.require_login(self.app), "signedIn": signed, "isAdmin": admin,
            "viaProxy": bool(getattr(request.state, "via_proxy", False)), "user": public_user(u)}
-    if updater is not None:
-        if signed:
-            out["commit"] = updater.local_commit()[:7]
-        if admin:
-            a = updater.available() if updater.auto_check_enabled() else None
-            if a:
-                a.update(canRun=updater.can_run(), docker=updater.in_docker())
-            out["update"] = a
+    if updater is not None and signed:
+        out["commit"] = updater.local_commit()[:7]
     if extra:
         out.update(extra(request) or {})
     return out

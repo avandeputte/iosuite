@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ionote"
-version = "1.41.0"
+version = "0.0.0"  # not this app's version: the suite has one, iosuite_shared.__version__ (shared/iosuite_shared/__init__.py)
 description = "Notes from the clipboard, screenshots and the share sheet, kept in MariaDB, with a web app and the API the Mac and iPhone apps use"
 readme = "README.md"
 requires-python = ">=3.10"

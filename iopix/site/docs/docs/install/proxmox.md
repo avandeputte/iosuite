@@ -46,6 +46,6 @@ The setup log is kept in `/opt/iopix/setup.log` inside the container. On failure
 
 ## Updating
 
-Run `update` inside the container, or use **Settings › Server › Update now** in the app. Settings and data are kept.
+Run `update` inside the container, or use **Settings › Global settings › Updates** in the app. Settings and data are kept.
 
 Because the container cannot see digiKam's process, it runs with `DIGIKAM_CHECK=none`.

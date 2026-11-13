@@ -7,7 +7,7 @@ domain (COOKIE_DOMAIN). What is ioRecipe's own stays per app: the role an accoun
 from iosuite_shared.fastapi import Auth
 from iosuite_shared.updates import Updater
 
-from app import __version__, config, db
+from app import __version__, config
 
 APP = config.APP
 
@@ -18,5 +18,5 @@ auth.deny_exempt = ("/mcp",)  # assistants sign in with app passwords, whatever 
 
 # updates (the daily check, update.sh, restart) and the server log, as in every app of the suite (iosuite_shared.updates);
 # the daily-check switch is kept with ioRecipe's own settings
-updater = Updater(APP, __version__, config.APP_DIR, settings=(db.get_setting, db.set_setting), result_file=config.DATA_DIR / ".update-result",
+updater = Updater(APP, __version__, config.APP_DIR, result_file=config.DATA_DIR / ".update-result",
                   user_agent=APP)

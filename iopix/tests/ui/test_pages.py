@@ -307,24 +307,6 @@ def test_timeline_rail_ribbon_marker_and_preview(page, server, lib):
     assert page.locator("#main").evaluate("m => m.scrollTop") > 0
     assert page.locator("#scrub .pos").count() == 1  # the position label is still there after the jump
 
-def test_update_banner_shows_and_can_be_dismissed(page, server):
-    import json as _json
-    def fake_status(route):
-        r = route.fetch()
-        body = r.json()
-        body["update"] = {"remote": "abc1234", "version": "9.9.9", "message": "v9.9.9: something new", "date": "2026-10-16"}
-        route.fulfill(response=r, body=_json.dumps(body), headers={**r.headers, "content-type": "application/json"})
-    page.route("**/api/status", fake_status)
-    page.goto(server + "/#/photos")
-    page.wait_for_selector("#updbanner", timeout=10000)
-    assert "9.9.9" in page.locator("#updbanner").inner_text()
-    page.locator("#updbanner button[title^='Not now']").click()
-    assert page.locator("#updbanner").count() == 0
-    page.reload()
-    page.wait_for_selector("#topbar", timeout=10000)
-    _wait_flags(page)  # the banner is drawn, or not, by the status poll
-    assert page.locator("#updbanner").count() == 0, "dismissed for this version"
-
 def test_digikam_offline_banner_and_sync_setting(page, server):
     """Admins see a card when digiKam's database is unreachable (the viewer works from its copy); Settings has the
     Sync with digiKam switch."""
@@ -778,39 +760,6 @@ def test_search_box_enter_runs_the_search(page, server):
     page.wait_for_function("location.hash.includes('q=') || location.hash.includes('place') || location.hash.includes('tag')", timeout=10000)
     assert page.locator(".chip").count() >= 1
     assert not errors, errors
-
-def test_update_banner_runs_the_update_and_reloads_on_the_new_version(page, server):
-    """Update now on the banner starts update.sh (mocked here), says so, and watches /api/status: a new version reloads the page."""
-    import json as _json
-    state = {"version": None}
-    def fake_status(route):
-        try:
-            r = route.fetch()
-            body = r.json()
-            body["update"] = {"remote": "abc1234", "version": "9.9.9", "message": "v9.9.9: something new", "date": "2026-10-16"}
-            if state["version"]:
-                body["version"] = state["version"]
-            route.fulfill(response=r, body=_json.dumps(body), headers={**r.headers, "content-type": "application/json"})
-        except Exception:
-            pass  # a status request still in flight when the page reloads itself: its response is gone with the old page
-    runs = []
-    def fake_update(route):
-        if route.request.method != "POST":
-            route.fallback(); return
-        runs.append(route.request.post_data_json)
-        route.fulfill(status=200, body='{"ok": true}', headers={"content-type": "application/json"})
-    page.route("**/api/status", fake_status)
-    page.route("**/api/server", fake_update)
-    page.goto(server + "/#/photos")
-    page.wait_for_selector("#updbanner button:has-text('Update now')", timeout=10000)
-    page.locator("#updbanner button:has-text('Update now')").click()
-    page.locator(".modal-btns .pillbtn.on").click()  # the confirmation
-    page.wait_for_function("document.querySelector('#updbanner') && document.querySelector('#updbanner').innerText.includes('Updating')", timeout=5000)
-    assert runs == [{"action": "update"}]
-    assert page.locator("#updbanner button:has-text('Update now')").is_hidden()
-    with page.expect_event("load", timeout=15000):  # the version poll (every 5 s) sees the new one and reloads
-        state["version"] = "9.9.9"
-    page.wait_for_selector("#topbar", timeout=10000)
 
 def test_several_unlocated_photos_get_one_location_together(page, server, lib):
     """Metadata quality › No location: tick photos and set their location in one go; the rows fold away."""

@@ -795,7 +795,6 @@ async function refreshStatus() {
     else el.textContent = 'No sync yet';
     window.healthStatus = st;
     if (st.version) { const v = $('#nav-version'); if (v) v.textContent = `ioHealth v${st.version}`; }
-    updateBanner(st.update);
   } catch { /* shown by the page */ }
 }
 
@@ -2560,29 +2559,6 @@ async function setServer() {
   try { ui = await serverUi(); } catch (e) { return [h('p', { class: 'error' }, `The Server panel did not load: ${e.message}`)]; }
   await ui.mount(el, { toast });
   return [el];
-}
-
-const DISMISSED_UPDATE = 'iohealth.updateDismissed';
-/** The "a newer version is out" card, for admins, when the daily check found one (as in the other ioThing apps):
- *  Update now runs update.sh from here and the page reloads with the new version; Details opens Settings › Server;
- *  dismissed per version in this browser. */
-function updateBanner(u) {
-  let b = $('#updbanner');
-  let gone = ''; try { gone = localStorage.getItem(DISMISSED_UPDATE) || ''; } catch { /* private mode */ }
-  if (!u || gone === u.remote) { if (b) b.remove(); return; }
-  if (b && b.dataset.remote === u.remote) return;
-  if (b) b.remove();
-  const text = h('div', {}, h('b', {}, u.version ? `ioHealth ${u.version} is available` : 'A newer build of ioHealth is available'),
-    h('div', { class: 'muted' }, `You have v${window.healthStatus?.version || '?'}. ${(u.message || '').replace(/^v\d+\.\d+\.\d+:\s*/, '').slice(0, 140)}`));
-  const more = h('a', { href: '#/settings/server', onclick: () => b.remove() }, h('button', { class: 'small-btn' }, 'Details'));
-  const run = u.canRun ? h('button', { class: 'small-btn primary', onclick: async () => {
-    if (!await dialog('Update ioHealth', h('p', {}, `Fetch ${u.version ? 'version ' + u.version : 'the latest version'}, refresh the packages and restart ioHealth? The page reloads when the new version is up.`), [{ label: 'Cancel', value: null }, { label: 'Update now', primary: true, value: true }])) return;
-    run.hidden = more.hidden = true; text.replaceChildren(h('b', {}, 'Updating…'), h('div', { class: 'muted' }, 'ioHealth restarts when it is done, and the page reloads.'));
-    if (!await (await serverUi()).runUpdate({ toast })) { run.hidden = more.hidden = false; }
-  } }, 'Update now') : null;
-  b = h('div', { id: 'updbanner', 'data-remote': u.remote }, h('span', { class: 'icwrap' }, icon('spark')), text, run, more,
-    h('button', { class: 'iconbtn', title: 'Not now (hidden until the next version)', onclick: () => { try { localStorage.setItem(DISMISSED_UPDATE, u.remote); } catch { /* private mode */ } b.remove(); } }, icon('close')));
-  document.body.append(b);
 }
 
 // ---------- accounts: sign-in, the account menu, Settings › Account (people, roles and proxy sign-in: Settings › Security) ----------

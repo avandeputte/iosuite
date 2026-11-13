@@ -151,7 +151,6 @@ body.home #main { top: env(safe-area-inset-top); }
 .app .st { display: inline-flex; align-items: center; gap: 6px; }
 .app .st .dot { width: 8px; height: 8px; border-radius: 50%; }
 .st .dot.ok { background: var(--ok); } .st .dot.down { background: var(--danger); }
-.app .upd { font-size: var(--fs-xs); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--warn); background: color-mix(in srgb, var(--warn) var(--mix), transparent); border-radius: var(--r-pill); padding: 1px 7px; }
 .bm.down .bmname { color: var(--fg2); }
 .bm.down .bmname::after { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--danger); margin-left: 6px; vertical-align: middle; }
 /* Customize the page */
@@ -411,10 +410,10 @@ table.t td .dot { display: inline-block; width: 10px; height: 10px; border-radiu
 .av.big { width: 48px; height: 48px; font-size: 18px; }
 .av.other { background: var(--bg3); color: var(--fg2); }
 .err { color: var(--danger); font-size: var(--fs-m); min-height: 18px; margin-top: 6px; }
-#updbanner { position: fixed; right: 16px; bottom: 16px; z-index: 90; max-width: min(460px, calc(100vw - 32px)); display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+#updnote { position: fixed; right: 16px; bottom: 16px; z-index: 90; max-width: min(460px, calc(100vw - 32px)); display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
   padding: 12px 14px; background: var(--bg); border: 1px solid var(--line); border-radius: var(--r-l); box-shadow: var(--shadow); }
-#updbanner > .ic { color: var(--brand); }
-#updbanner > span:not(.ic) { flex: 1 1 200px; }
+#updnote > .ic { color: var(--brand); }
+#updnote > span:not(.ic) { flex: 1 1 200px; }
 
 /* ---- tablets: the weather under the greeting, the tiles two to a row */
 @media (max-width: 900px) {
