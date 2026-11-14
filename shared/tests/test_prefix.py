@@ -68,3 +68,10 @@ def test_an_address_with_a_folder_ranks_like_its_host():
     assert suite._rank("https://home.example.com/calendar") == suite._rank("https://home.example.com")
     assert suite._rank("http://127.0.0.1:8620/calendar") == -1
     assert suite.clean_url("https://home.example.com/calendar/") == "https://home.example.com/calendar"
+
+
+def test_the_shared_panels_ask_with_relative_addresses():
+    from pathlib import Path
+    import iosuite_shared
+    from iosuite_shared import testing
+    testing.check_relative(Path(iosuite_shared.__file__).parent)  # account, suite admin, server, related, the push worker
