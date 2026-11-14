@@ -357,8 +357,8 @@ def iocalendar_add(request: Request, b: dict) -> dict:
 # ------------------------------------------------------------------ the search box: events, tasks, recipes and notes
 
 def _soon_first(items: list[dict], tz: str) -> list[dict]:
-    """Events as ioCalendar's own search page orders them: those still to come (or going on) soonest first, then the
-    earlier ones, the latest first. An all-day event is still to come until its day is over in the viewer's zone."""
+    """The events still to come (or going on), soonest first; the ones that are over are left out. An all-day event
+    is still to come until its day is over in the viewer's zone."""
     zone = _zone(tz)
     now = dt.datetime.now(zone)
     today = now.date().isoformat()
@@ -391,42 +391,38 @@ def _soon_first(items: list[dict], tz: str) -> list[dict]:
     def when(x: dict) -> float:
         a = at(x)
         return a.timestamp() if a else float("-inf")
-    soon = sorted((x for x in items if ahead(x) and at(x)), key=when)
-    past = sorted((x for x in items if not (ahead(x) and at(x))), key=when, reverse=True)
-    return soon + past
+    return sorted((x for x in items if ahead(x) and at(x)), key=when)
 
 
 def iocalendar_search(request: Request, q: str, tz: str = "", n: int = 5) -> dict:
     """{items: [{id, title, start, end, allDay, recurring, recurrenceId, location, color}], more}: the events
-    whose title, place, notes or people match q (the search box), the coming ones first, each at its next (or last)
-    occurrence, with its calendar's colour."""
+    still to come whose title, place, notes or people match q (the search box), soonest first, each at its next
+    occurrence, with its calendar's colour. Events that are over are not listed (ioCalendar's own search has them)."""
     cals, got = _both(lambda: fetch(request, "iocalendar", "/api/calendars"),
-                      lambda: fetch(request, "iocalendar", "/api/events", {"q": q[:80], "limit": 50}))
+                      lambda: fetch(request, "iocalendar", "/api/events", {"q": q[:80], "limit": 200}))
     colors = {c["id"]: c.get("color") for c in cals.get("items", [])}
-    found = got.get("items", [])
-    ordered = _soon_first(found, tz)
+    ordered = _soon_first(got.get("items", []), tz)
     out = []
     for x in ordered[:n]:
         nx = x.get("next") or {}
         out.append({"id": x.get("id"), "title": x.get("title") or "(no title)", "start": nx.get("start"), "end": nx.get("end"),
                     "allDay": bool(x.get("allDay")), "recurring": bool(x.get("recurring")), "recurrenceId": nx.get("recurrenceId"),
                     "location": x.get("location"), "color": colors.get(x.get("calendarId"))})
-    return {"items": out, "more": len(found) > n}
+    return {"items": out, "more": len(ordered) > n}
 
 
 def iotask_search(request: Request, q: str, tz: str = "", n: int = 5) -> dict:
-    """{items: [{id, title, due, allDay, done, color}], more}: the tasks whose title or notes match q (the search box),
-    the open ones first (soonest due first, as ioTask sorts them), then the done ones (the latest first), up to n."""
+    """{items: [{id, title, due, allDay, color}], more}: the open tasks whose title or notes match q (the search box),
+    soonest due first, as ioTask sorts them, up to n. Done tasks are not listed (ioTask's own search has them)."""
     p = {"q": q[:80], "limit": n + 1}
     if tz:
         p["tz"] = tz
-    lists, open_, done = _both(lambda: fetch(request, "iotask", "/api/lists"),
-                               lambda: fetch(request, "iotask", "/api/tasks", {**p, "status": "open"}),
-                               lambda: fetch(request, "iotask", "/api/tasks", {**p, "status": "done"}))
+    lists, open_ = _both(lambda: fetch(request, "iotask", "/api/lists"),
+                         lambda: fetch(request, "iotask", "/api/tasks", {**p, "status": "open"}))
     colors = {c["id"]: c.get("color") for c in lists.get("items", [])}
-    rows = open_.get("items", []) + done.get("items", [])
+    rows = [t for t in open_.get("items", []) if not t.get("done")]
     return {"items": [{"id": t.get("id"), "title": t.get("title") or "(no title)", "due": t.get("due"), "allDay": bool(t.get("dueAllDay")),
-                       "done": bool(t.get("done")), "color": colors.get(t.get("listId"))} for t in rows[:n]],
+                       "color": colors.get(t.get("listId"))} for t in rows[:n]],
             "more": len(rows) > n}
 
 
