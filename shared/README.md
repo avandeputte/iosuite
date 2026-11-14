@@ -165,7 +165,13 @@ commit), and `tx()` begins and commits a transaction. An app uses `db.Database` 
 on a thread share the transaction, and `q` / `ex` inside the block run in it).
 
 Validation raises `iosuite_shared.Invalid` (a `ValueError`): `raise Invalid("A name is needed")` is a 400 with that
-message. ioCalendar and ioContact share their WebDAV plumbing in `iosuite_shared.dav` (the `dav` extra).
+message.
+
+ioCalendar, ioTask and ioContact share one WebDAV server, `iosuite_shared.dav` (the `dav` extra): `dav.Server` does
+discovery, PROPFIND, PROPPATCH, GET, PUT and DELETE with their preconditions, MKCOL, sync-collection and multiget, and
+`dav.CalDAV` adds calendar-query, MKCALENDAR and the calendar properties for a collection of one component (VEVENT,
+VTODO). An app subclasses one and fills in the hooks (its collections, rows, what a PUT keeps), then includes
+`MyServer().router([access.public])`.
 
 A request to an address somebody else chose (a profile's link, a bookmark) goes through `iosuite_shared.outbound`:
 `outbound.opener()` is an urllib opener whose connections go to the address that was checked, a redirect's too
