@@ -66,14 +66,15 @@ def test_cloudflare_access_token_is_verified(monkeypatch, account):
     opt("CF_ACCESS_TEAM", "myteam.cloudflareaccess.com")
     opt("CF_ACCESS_AUD", "aud-tag")
 
-    class Signing:
-        def __init__(self, k):
-            self.key = k
-    monkeypatch.setattr(jwt.PyJWKClient, "get_signing_key_from_jwt", lambda self, t: Signing(key.public_key()))
+    class Signing:  # the team's published keys, as PyJWKClient gives them (proxyauth._cf_key picks one by its kid)
+        def __init__(self, k, kid):
+            self.key, self.key_id = k, kid
+    monkeypatch.setattr(jwt.PyJWKClient, "get_signing_keys", lambda self, refresh=False: [Signing(key.public_key(), "k1")])
+    proxyauth._jwks.update(team=None, client=None, refreshed_at=0.0)
 
     def token(k=key, **over):
         claims = {"email": "probe@example.com", "aud": ["aud-tag"], "iss": "https://myteam.cloudflareaccess.com", "exp": int(time.time()) + 300} | over
-        return jwt.encode(claims, k, algorithm="RS256")
+        return jwt.encode(claims, k, algorithm="RS256", headers={"kid": "k1"})
     hdr = proxyauth.CF_JWT_HEADER
     # from anywhere: the token is the proof, and the email comes from it, not from a header someone could set
     assert auth_shared.proxy.identity({hdr: token(), proxyauth.CF_HEADER: "someone@else"}, "203.0.113.9") == "probe@example.com"
@@ -138,7 +139,7 @@ def test_from_outside_a_password_is_required(client, monkeypatch, account):
     outside = {"Cf-Ray": "abc-EWR", "Cf-Connecting-Ip": "203.0.113.9"}
     names = lambda hd: {a["name"] for a in client.get("/api/auth/accounts", headers=hd).json()["accounts"]}
     assert {"oneclick-probe", "proxy-probe"} <= names({})
-    assert "oneclick-probe" not in names(outside) and "proxy-probe" in names(outside)
+    assert names(outside) == set(), "from outside the sign-in screen asks for a name: no account is listed"
     assert client.post("/api/auth/login", json={"name": "oneclick-probe"}, headers=outside).status_code == 403
     r = client.post("/api/auth/login", json={"name": "oneclick-probe"})  # on the LAN: one click still works
     assert r.status_code == 200

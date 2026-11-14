@@ -1,6 +1,7 @@
 """The pages: the photo grid, Explore, People, Folders and Albums, the quality and suggestion pages, the map, the import page,
 Settings."""
 import json
+import re
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -610,7 +611,7 @@ def test_a_paused_job_says_why_and_can_be_tried_again(page, server):
     assert _eventually(lambda: asked == [{"job": "quality"}]), asked
 
 
-SHOWN = "(id) => { return [...document.querySelectorAll('#grid img')].some((i) => new RegExp(`/thumb/${id}(\\D|$)`).test(i.getAttribute('src'))); }"  # the photo's tile is on the page
+SHOWN = "(id) => { return [...document.querySelectorAll('#grid img')].some((i) => new RegExp(`(^|/)thumb/${id}(\\D|$)`).test(i.getAttribute('src'))); }"  # the photo's tile is on the page
 
 def test_delete_key_asks_then_moves_to_the_trash_at_once_and_undo_restores(page, server, lib):
     """Delete asks first (the app's own dialog, never the browser's); on OK the tile is gone at once and a message
@@ -620,7 +621,7 @@ def test_delete_key_asks_then_moves_to_the_trash_at_once_and_undo_restores(page,
     page.goto(server + "/#/photos?sort=old"); page.wait_for_selector("#grid .tile img", timeout=20000); _wait_flags(page)
     page.wait_for_timeout(500)  # a fixed wait on purpose: the grid settles its first rows (nothing in the DOM says when) before the selection click
     tile = page.locator("#grid .tile").first
-    pid = int(tile.locator("img").get_attribute("src").split("/thumb/")[1].split("?")[0].split("-")[0])
+    pid = int(re.search(r"(?:^|/)thumb/(\d+)", tile.locator("img").get_attribute("src")).group(1))  # thumb/<id>?h=... (a relative address)
     tile.hover()
     tile.locator(".tcheck").click(force=True)
     page.wait_for_selector("#selbar", timeout=5000)
