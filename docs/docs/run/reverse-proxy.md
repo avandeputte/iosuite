@@ -82,6 +82,20 @@ Two things differ from a name per app. Phones find a CalDAV or CardDAV account b
 (`redir /.well-known/caldav /calendar/dav/ 301`), and give the others their full address
 (`https://home.example.com/tasks/dav/`). And devices set up with the old addresses need the new one once.
 
+## The proxy as the only way in
+
+With the proxy on the same server as the apps, each app can listen on that machine only, so nobody on your network
+goes around the proxy to the app's own port. In each app's `config.env`:
+
+```sh
+HOST=127.0.0.1
+```
+
+and restart the app. The proxy then forwards to `127.0.0.1` and the app's port. The suite's apps on that server go
+on reaching each other directly. `HOST` can also name one address of a machine that has several, or several with
+commas between them ([Configuration](../reference/configuration.md)). In Docker, leave `HOST` alone and publish the
+port on the machine only: `ports: ["127.0.0.1:8620:8620"]`.
+
 ## Tell the apps where the proxy is
 
 A reverse proxy on another machine connects from a private address, like any visitor in your home. The apps have to

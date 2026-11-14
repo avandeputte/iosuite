@@ -146,9 +146,20 @@ def test_local_url(monkeypatch):
     monkeypatch.setenv("PORT", "9000")
     assert suite.local_url("iostart") == "http://192.168.1.151:9000"
     monkeypatch.setenv("HOST", "127.0.0.1")
-    assert suite.local_url("iostart") is None  # behind a reverse proxy on the same host
+    assert suite.local_url("iostart") == "http://127.0.0.1:9000"  # behind a reverse proxy on the same host: for the apps beside it
+    monkeypatch.setenv("HOST", "localhost")
+    assert suite.local_url("iostart") == "http://127.0.0.1:9000"
+    monkeypatch.setenv("HOST", "::1")
+    assert suite.local_url("iostart") == "http://[::1]:9000"
+    monkeypatch.setattr(suite, "in_container", lambda: True)
+    assert suite.local_url("iostart") is None  # a container's loopback is its own
+    monkeypatch.setattr(suite, "in_container", lambda: False)
     monkeypatch.setenv("HOST", "10.0.0.7")
     assert suite.local_url("iostart") == "http://10.0.0.7:9000"
+    monkeypatch.setenv("HOST", "127.0.0.1, 10.0.0.7")
+    assert suite.local_url("iostart") == "http://10.0.0.7:9000"  # of several, the one the network reaches
+    monkeypatch.setenv("HOST", "127.0.0.1 ::1")
+    assert suite.local_url("iostart") == "http://127.0.0.1:9000"
     monkeypatch.setenv("HOST", "::")
     monkeypatch.setattr(suite, "in_container", lambda: True)
     assert suite.local_url("iostart") is None  # a container's own address is no use
