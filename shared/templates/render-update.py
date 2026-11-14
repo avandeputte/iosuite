@@ -1,5 +1,5 @@
-"""update.sh of every app, made from templates/update.sh: only the block "the app" (NAME, LABEL, ITEMS, groups,
-after_install) is the app's own, and it is read from the app's update.sh as it stands.
+"""update.sh of every app, made from templates/update.sh: only the block "the app" (NAME, LABEL, ITEMS, groups) is
+the app's own, and it is read from the app's update.sh as it stands.
 
     python3 shared/templates/render-update.py            write <app>/update.sh for every app folder of the repository
     python3 shared/templates/render-update.py --check    say which differ from the template, and fail when one does
@@ -18,9 +18,8 @@ def render(current: str) -> str:
     label = re.search(r"^LABEL=(\S+)$", current, re.M).group(1)
     items = re.search(r'^ITEMS="([^"]*)"$', current, re.M).group(1)
     groups = re.search(r"^groups\(\) \{\n(.*?)\n\}$", current, re.M | re.S).group(1)
-    after = re.search(r"^after_install\(\) \{\n(.*?)\n\}$", current, re.M | re.S).group(1)
     return (TEMPLATE.replace("@@NAME@@", name).replace("@@LABEL@@", label).replace("@@UP@@", name.upper())
-            .replace("@@ITEMS@@", items).replace("@@GROUPS@@", groups).replace("@@AFTER@@", after))
+            .replace("@@ITEMS@@", items).replace("@@GROUPS@@", groups))
 
 
 def main() -> int:

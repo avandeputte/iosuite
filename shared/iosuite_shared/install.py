@@ -147,7 +147,7 @@ def shared_answers(cfg):
 
 
 def base_dir(config_dir):
-    """/opt/iosuite/app -> /opt (the companions go to /opt/<app>/app); /srv/iosuite -> /srv."""
+    """/opt/iostart/app -> /opt (the companions go to /opt/<app>/app); /srv/iostart -> /srv."""
     d = Path(config_dir).resolve()
     return d.parent.parent if d.name == "app" else d.parent
 
@@ -881,7 +881,7 @@ def choose(base, config_dir, ask=input, log=print, reach=None):
 
 def add_parser(sub):
     p = sub.add_parser("install", help="install other apps of the suite here, sharing the answers of the app in --config")
-    p.add_argument("apps", nargs="+", help="iosuite, iopix, ionote, iocalendar, iocontact, iotask, iorecipe, iohealth, iodns, iobackup (comma-separated or several), or all")
+    p.add_argument("apps", nargs="+", help="iostart, iopix, ionote, iocalendar, iocontact, iotask, iorecipe, iohealth, iodns, iobackup (comma-separated or several), or all")
     _install_options(p)
     r = sub.add_parser("remove", help="remove apps of the suite from this machine; their databases and data stay unless --delete-data")
     r.add_argument("apps", nargs="+", help="the apps to remove (comma-separated or several)")

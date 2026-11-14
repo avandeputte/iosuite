@@ -10,6 +10,7 @@ this removes the chosen ones, on request (Settings › Library), in one go:
   cannot bring it back;
 - every photo gets an edit-log entry whose Undo puts its label back.
 """
+import contextvars
 import logging
 import re
 import threading
@@ -63,7 +64,7 @@ def clear(levels: list, require_digikam_closed: bool = True, after=None) -> int:
     history.record([{"photo_id": i, "action": "edit", "summary": f"Pick label {LEVELS[lv]} cleared (Settings › Library › Clear pick labels)",
                      "path": paths.get(i), "undo": {"pick": lv}} for i, lv in photos])
     progress.start(len(photos), cleared=len(photos), sidecars=0)
-    threading.Thread(target=_sidecars, args=([paths[i] for i, _lv in photos if i in paths], after), name="picklabels", daemon=True).start()
+    threading.Thread(target=contextvars.copy_context().run, args=(_sidecars, [paths[i] for i, _lv in photos if i in paths], after), name="picklabels", daemon=True).start()
     return len(photos)
 
 

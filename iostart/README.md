@@ -223,7 +223,7 @@ password is used once and not written anywhere.
 | `TLS_CERT_FILE`, `TLS_KEY_FILE` | serve HTTPS directly instead of behind a reverse proxy |
 | `PUBLIC_URL` | the address people use (behind a proxy); also what ioStart registers in the suite's list of apps |
 | `ACCUWEATHER_API_KEY`, `ACCUWEATHER_LOCATION` | the weather: an AccuWeather key and a location key (or Settings › Home page, which finds the location from a city name) |
-| `HA_URL`, `HA_TOKEN` | Home Assistant: its address (`http://homeassistant.local:8123`) and a long-lived access token (or Settings › Home Assistant) |
+| `HA_URL` | Home Assistant's address (`http://homeassistant.local:8123`), or Settings › Home Assistant; its long-lived access token is kept in Settings › Suite › Keys and tokens |
 | `HA_FEED` | `0` turns off the websocket to Home Assistant (the page then polls every few seconds) |
 | `SITE_ICONS` | `0`: the server does not fetch the bookmarked sites' icons (links show their badge, or the icon you gave them) |
 | `ADMIN_USER`, `ADMIN_PASSWORD` | the first admin, made on the first start when there are no accounts |

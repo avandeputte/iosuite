@@ -402,13 +402,12 @@ the result file. `suiteupdates.summary()` makes one answer of the rows: the vers
 one, and the apps still behind.
 
 Every app's `update.sh` is the same script, rendered from `templates/update.sh`; only the block "the app" differs
-(name, label, repository, the `server` subfolder for ioHealth, the files an installed copy gets, optional package
-groups). Render it from a checkout of this repository:
+(name, label, the files an installed copy gets, and its optional package groups, one `  has <group> <module>` line
+each, such as `  has ocr rapidocr`). Change the template here, then render it into every app from the repository's
+root (the block is read from each app's update.sh as it stands):
 
-    python3 templates/render-update.py <app dir> iopix ioPix avandeputte/iopix "" "app static pyproject.toml ..." [groups-file] [after-file]
-
-A groups file holds one `  has <group> <module>` line per optional extra (`  has ocr rapidocr`); the after file is shell
-that runs once the new code is in place. Change the template here, then render it into every app.
+    python3 shared/templates/render-update.py            # write every app's update.sh
+    python3 shared/templates/render-update.py --check    # fail when one differs (CI)
 
 `updates.setup_log(LOG_FILE)` sets logging up the same way in every app: INFO to stderr, and a rotating copy of
 everything (5 MB, 3 old files, uvicorn's lines included) in `LOG_FILE`, which `tail()` and `GET /api/log` read. The daily-check switch is a setting of the app in the Shared ioSuite
@@ -531,9 +530,9 @@ Keys and tokens shows and changes them all. Values never leave the server: the p
 
 ```python
 from iosuite_shared import credentials
-credentials.declare("iosuite", [{"name": "ha_token", "label": "Home Assistant token", "hint": "...", "env": "HA_TOKEN"}])  # at start
-token = os.environ.get("HA_TOKEN") or credentials.get("iosuite", "ha_token")
-credentials.put("iosuite", "ha_token", value, by=user["name"])  # '' clears it
+credentials.declare("iostart", [{"name": "ha_token", "label": "Home Assistant token", "hint": "...", "env": "HA_TOKEN"}])  # at start
+token = os.environ.get("HA_TOKEN") or credentials.get("iostart", "ha_token")
+credentials.put("iostart", "ha_token", value, by=user["name"])  # '' clears it
 ```
 
 An `env` variable that is set still wins inside the app; the panel shows that (`envSet`).
@@ -624,7 +623,7 @@ server** (`DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`; each app gets its own 
 `notes`, `health`, `iopix`, `suite`, created when the user may, so the user needs rights on those names too), the same
 **Shared ioSuite database** (`IOSUITE_DB_*`), the same sign-in domain (`COOKIE_DOMAIN`) and, with `--admin`, the same
 admin account. Each companion is fetched from GitHub into `<base>/<app>/app` (`/opt/iocalendar/app` beside
-`/opt/iosuite/app`, with its commit in `COMMIT`, the layout the Proxmox installers make), and its own `setup.sh --yes`
+`/opt/iostart/app`, with its commit in `COMMIT`, the layout the Proxmox installers make), and its own `setup.sh --yes`
 installs the packages, writes config.env, creates the tables and the systemd service. The passwords travel in the
 environment (`IOCALENDAR_DB`, `IOCALENDAR_SUITE_DB`, `IOCALENDAR_ADMIN`, ...), never on a command line. What differs
 per app keeps its default: the usual port, no public address, the machine's time zone; ioPix gets `--no-digikam`,

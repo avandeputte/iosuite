@@ -241,25 +241,21 @@ def _new_values(regions: list, fn) -> tuple:
 INVERSE = {"right": "left", "left": "right", "180": "180", "fliph": "fliph", "flipv": "flipv"}
 
 
-def _write_db(pid: int, w: int, h: int, orientation: int, size: int, kept: list, dropped: list, require_digikam_closed: bool, restore_regions: list = None,
+def _write_db(pid: int, w: int, h: int, orientation: int, size: int, kept: list, dropped: list, require_digikam_closed: bool,
               add_regions: list = (), con=None):
     """The photo's rows after a pixel change: in its own guarded transaction, or inside a batch's (con given)."""
     if con is not None:
-        _write_rows(con, pid, w, h, orientation, size, kept, dropped, restore_regions, add_regions)
+        _write_rows(con, pid, w, h, orientation, size, kept, dropped, add_regions)
         return
     db_path = dkdb.sqlite_path()
     dkdb.backup(db_path)
     with dbsync.write_transaction(db_path, require_digikam_closed) as con:
-        _write_rows(con, pid, w, h, orientation, size, kept, dropped, restore_regions, add_regions)
+        _write_rows(con, pid, w, h, orientation, size, kept, dropped, add_regions)
 
 
-def _write_rows(con, pid, w, h, orientation, size, kept, dropped, restore_regions, add_regions):
+def _write_rows(con, pid, w, h, orientation, size, kept, dropped, add_regions):
     con.execute("UPDATE ImageInformation SET width = ?, height = ?, orientation = ? WHERE imageid = ?", (w, h, orientation, pid))
     con.execute("UPDATE Images SET fileSize = ?, modificationDate = NULL WHERE id = ?", (size, pid))
-    if restore_regions is not None:
-        con.execute("DELETE FROM ImageTagProperties WHERE imageid = ? AND value LIKE '%<rect%'", (pid,))
-        for tagid, prop, val in restore_regions:
-            con.execute("INSERT INTO ImageTagProperties (imageid, tagid, property, value) VALUES (?, ?, ?, ?)", (pid, tagid, prop, val))
     for tagid, prop, old, new in kept:
         con.execute("UPDATE ImageTagProperties SET value = ? WHERE imageid = ? AND tagid = ? AND property = ? AND value = ?", (new, pid, tagid, prop, old))
     for tagid, prop, old in dropped:
@@ -403,6 +399,9 @@ def crop(pid: int, rect: list, require_digikam_closed: bool = True, reencode_dam
             with Image.open(p["path"]) as im:
                 fmt = im.format
                 up = ImageOps.exif_transpose(im) if p["orientation"] != 1 else im
+                if up.size != (W, H):  # turned here by its flag only (a HEIC: the sidecar and the database), not in the file
+                    raise SyncError("This photo was turned without changing its file, so it cannot be cropped here as it is: "
+                                    "undo the turn first, or crop it in another app")
                 out = up.crop((x, y, x + w, y + h))
                 kw = {"icc_profile": im.info.get("icc_profile")} if im.info.get("icc_profile") else {}
                 if fmt == "WEBP":
@@ -466,7 +465,7 @@ def undo(entry: dict, require_digikam_closed: bool = True) -> dict:
     d = entry.get("details") or {}
     op = d.get("lossless")
     W, H = upright_size(p["w"], p["h"], p["orientation"])
-    kept, dropped, restore = [], [], None
+    restore = []
     if op in INVERSE:
         kept, dropped = _new_values(p["regions"], lambda r: turn_rect(r, INVERSE[op], W, H))
     elif op == "crop" and d.get("box"):
@@ -474,19 +473,16 @@ def undo(entry: dict, require_digikam_closed: bool = True) -> dict:
         kept, dropped = _new_values(p["regions"], lambda r: (r[0] + cx, r[1] + cy, r[2], r[3]))
         # and the faces the crop cut away, as they were (they cannot have changed since)
         bw, bh = d["box"][2], d["box"][3]
-        lost = [tuple(r) for r in u.get("regions") or [] if _new_values([tuple(r)], lambda q: crop_rect(q, (cx, cy, bw, bh)))[1]]
-        restore = lost
-    else:  # an entry from before this was recorded: the saved boxes
-        restore = [tuple(r) for r in u.get("regions") or []]
+        restore = [tuple(r) for r in u.get("regions") or [] if _new_values([tuple(r)], lambda q: crop_rect(q, (cx, cy, bw, bh)))[1]]
+    else:
+        raise Invalid("This change has nothing to undo")
     shutil.copy2(copy, p["path"])
     size = os.stat(p["path"]).st_size
-    if restore is not None and op not in INVERSE and op != "crop":
-        _write_db(p["id"], u["width"], u["height"], u["orientation"], size, [], [], require_digikam_closed, restore_regions=restore)
-    else:
-        _write_db(p["id"], u["width"], u["height"], u["orientation"], size, kept, dropped, require_digikam_closed, add_regions=restore or [])
+    _write_db(p["id"], u["width"], u["height"], u["orientation"], size, kept, dropped, require_digikam_closed, add_regions=restore)
     _sidecar(p["path"], u["orientation"])
     facemgr.write_regions_many([p["id"]])
     thumbs.forget(p["id"])
     forget_checksum(p["id"])
-    history.record([{"photo_id": p["id"], "action": "restore", "summary": f"Change #{entry['id']} undone: the file is as it was before", "path": p["path"]}])
+    history.record([{"photo_id": p["id"], "action": "restore", "summary": f"Change #{entry['id']} undone: the file is as it was before", "path": p["path"],
+                     "details": {"undid": entry["id"]}}])
     return {"undone": 1, "id": p["id"]}

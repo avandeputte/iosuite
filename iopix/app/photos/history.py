@@ -152,7 +152,6 @@ def entries(photo_id: int = None, limit: int = 100, offset: int = 0, action: str
         total = con.execute(f"SELECT count(*) FROM pix_photo_history{w}", params).fetchone()[0]
         rows = con.execute(f"SELECT id, photo_id, created_at, user_name, action, summary, details, undo_values, sidecar_copy, path, file_copy FROM pix_photo_history{w} "
                            f"ORDER BY id DESC LIMIT ? OFFSET ?", params + [int(limit), int(offset)]).fetchall()
-    from app.faces import facemgr  # lazy: faces.facemgr -> photos.history would be an import cycle
     known_paths = _paths([r[1] for r in rows if not r[9]])
     out = []
     for r in rows:
@@ -162,7 +161,7 @@ def entries(photo_id: int = None, limit: int = 100, offset: int = 0, action: str
         d = {"id": r[0], "photo": r[1], "ts": r[2], "user": r[3], "action": r[4], "summary": r[5], "details": details, "path": path,
              "sidecar_copy": r[8] if r[8] and os.path.isfile(r[8]) else None, "file_copy": backup}
         restore = []
-        if r[7] or (r[4] == "face" and isinstance(details, dict) and facemgr.inverse_ops(details)):
+        if r[7]:
             restore.append("undo")
         if r[4] == "trashed" and isinstance(details, dict) and details.get("info") and os.path.isfile(details["info"]):
             restore.append("trash")
@@ -170,8 +169,8 @@ def entries(photo_id: int = None, limit: int = 100, offset: int = 0, action: str
             restore.append("sidecar")
         if r[4] == "deleted" and r[9] and _deleted_backup(r[6]):
             restore.append("deleted")
-        elif backup and r[4] != "restore":
-            restore.append("original")  # the image file as it was before the viewer first wrote into it
+        elif backup and r[4] not in ("restore", "lossless", "filerepair"):
+            restore.append("original")  # the image file as it was before the viewer first wrote into it (a rotate, crop or repair: Undo)
         d["restore"] = restore
         out.append(d)
     return {"total": total, "entries": out}
@@ -241,7 +240,7 @@ def restore(entry_id: int, kind: str) -> dict:
         raise LookupError("That photo is not in the library any more")
     if kind == "undo" and e["action"] == "face":
         from app.faces import facemgr  # lazy: faces.facemgr -> photos.history would be an import cycle
-        ops = (e["undo"] or {}).get("face_ops") or facemgr.inverse_ops(e["details"] or {})
+        ops = (e["undo"] or {}).get("face_ops")
         if not ops:
             raise Invalid("This face change cannot be undone")
         res = facemgr.apply_many([{**o, "image": pid} for o in ops], background=True)
@@ -271,10 +270,14 @@ def restore(entry_id: int, kind: str) -> dict:
         b = Path(e["file_copy"]) if e.get("file_copy") and os.path.isfile(e["file_copy"]) else edits.file_backup_path(photo["path"])
         if not b.exists():
             raise FileNotFoundError("The original of this file is no longer in file-backups")
-        with appdb.reader() as vcon:  # a rotate or crop made since changed the size, orientation and face regions in digiKam too:
-            later = vcon.execute("SELECT count(*) FROM pix_photo_history WHERE photo_id = ? AND action = 'lossless' AND id > ?", (pid, entry_id)).fetchone()[0]
+        with appdb.reader() as vcon:  # a rotate, crop or repair from this entry on changed the size, orientation and face regions in digiKam too:
+            edits_since = [r[0] for r in vcon.execute("SELECT id FROM pix_photo_history WHERE photo_id = ? AND action IN ('lossless', 'filerepair') AND id >= ?",
+                                                      (pid, entry_id))]
+            undone = {(_json(r[0]) or {}).get("undid") for r in vcon.execute("SELECT details FROM pix_photo_history WHERE photo_id = ? AND action = 'restore' AND id > ?",
+                                                                            (pid, entry_id))}
+        later = len([i for i in edits_since if i not in undone])
         if later:  # putting the old pixels back under those rows would leave them wrong: those edits are undone first, each restoring its rows
-            raise Invalid(f"Undo the {later} later rotate/crop {'edit' if later == 1 else 'edits'} of this photo first (each puts its size and face regions back), then restore the original")
+            raise Invalid(f"Undo the {later} rotate/crop/repair {'edit' if later == 1 else 'edits'} of this photo from here on first (each puts its size and face regions back), then restore the original")
         from app.photos import lossless  # lazy: photos.lossless -> photos.history would be an import cycle
         from app.digikam import dbsync, dkdb  # lazy: digikam.dbsync -> photos.history would be an import cycle
         db_path = dkdb.sqlite_path()
@@ -290,6 +293,14 @@ def restore(entry_id: int, kind: str) -> dict:
         index.build()  # digiKam rescans the file on its own (its time and size changed) and reads it back
         return {"restored": "original"}
     raise Invalid("Unknown kind of restore")
+
+
+def _json(text):
+    try:
+        v = json.loads(text) if text else None
+    except ValueError:
+        return None
+    return v if isinstance(v, dict) else None
 
 
 def _photo(pid: int):
@@ -342,9 +353,9 @@ def _restore_deleted(e: dict) -> dict:
     d = e["details"] or {}
     backup = Path(d.get("backup") or "")
     files = d.get("files") or []
-    if not backup.is_dir() or not files:
+    if not backup.is_dir() or not files or not d.get("root"):
         raise FileNotFoundError("The copy of this photo is no longer in deleted-photos")
-    root = Path(d.get("root") or str(config.PHOTOS_ROOT))  # the album root it was deleted from (older entries: the first root)
+    root = Path(d["root"])  # the album root it was deleted from
     main_file = root / files[0]
     if main_file.exists():
         raise FileExistsError(f"A file is already at {main_file}; move it away first")

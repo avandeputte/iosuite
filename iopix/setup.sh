@@ -62,7 +62,6 @@ fi
 [ -n "$MYSQL" ] || MYSQL="${IOPIX_DIGIKAM_DB:-}"
 [ -n "$VIEWERDB" ] || VIEWERDB="${IOPIX_DB:-}"
 [ -n "$SUITE" ] || SUITE="${IOPIX_SUITE_DB:-}"
-[ "$VIEWERDB" != sqlite ] || die "iopix's own database is on MySQL/MariaDB only (no SQLite file): --db local installs MariaDB here, or give HOST:PORT/DB:USER:PASS"
 if [ -n "$VIEWERDB" ] && [ "$VIEWERDB" != local ] && [ -n "${IOPIX_DB_PASSWORD:-}" ]; then
   case "${VIEWERDB#*/}" in *:*:*) ;; *) VIEWERDB="$VIEWERDB:$IOPIX_DB_PASSWORD";; esac
 fi

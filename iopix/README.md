@@ -193,7 +193,7 @@ A sign-in at the proxy also starts a session in the viewer, so the same browser 
 
 The built-in sign-in keeps working alongside: anyone the proxy does not vouch for (on your own network, where the hostname points straight at the server, or someone whose email has no account) gets the viewer's usual sign-in screen. Requests that come through Cloudflare (they carry `Cf-Ray`) never get one-click sign-in: passwordless accounts are left out of the picker and refused, and a passwordless session started at home does not work from outside.
 
-These settings can also be set in the app instead of `config.env` (Settings › Security › Sign-in at the proxy, by a suite admin); saved that way they are kept in the Shared ioSuite database for the whole suite, so one Cloudflare Access application covering every app (`*.example.com`, one AUD tag) is set up once. The shared settings are the only ones read: a `config.env` value only fills an empty shared setting on the first start, and its line is then commented out and ignored.
+These settings are kept in the Shared ioSuite database for the whole suite and set in the app (Settings › Security › Sign-in at the proxy, by a suite admin), never in `config.env`, so one Cloudflare Access application covering every app (`*.example.com`, one AUD tag) is set up once.
 
 ### Sidecar file names
 

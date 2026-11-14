@@ -7,6 +7,7 @@ via the tag manager). Assigning them goes through the normal edit path, so the
 sidecars (and files, if enabled) are written and the assignment waits for
 "Apply to digiKam database" like any other edit.
 """
+import contextvars
 import threading
 
 from app import jobs
@@ -105,4 +106,4 @@ def run(photo_ids: list = None):
         finally:
             progress.finish()
 
-    threading.Thread(target=work, name="placetags", daemon=True).start()
+    threading.Thread(target=contextvars.copy_context().run, args=(work,), name="placetags", daemon=True).start()

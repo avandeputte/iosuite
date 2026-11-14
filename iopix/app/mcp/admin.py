@@ -2,6 +2,7 @@
 offer, so an assistant can run the same reports, suggestions, edits and background jobs. Each tool
 calls the module the page calls, with the same checks (read-only mode, digiKam closed, editing on),
 so a change made here is logged and undoable exactly like one made in the browser."""
+import contextvars
 import threading
 import time
 from typing import Literal, Optional
@@ -219,7 +220,7 @@ def set_date_precision(precision: Literal["exact", "month", "year", "unknown"], 
             precision_job["error"] = str(e)[:jobs.ERROR_TEXT_MAX]
         finally:
             precision_job["running"] = False
-    threading.Thread(target=run, name="date-precision", daemon=True).start()
+    threading.Thread(target=contextvars.copy_context().run, args=(run,), name="date-precision", daemon=True).start()
     return {**out, "started": len(todo)}
 
 

@@ -54,8 +54,8 @@ def _app(request: Request, key: str) -> dict:
     try:
         s = widgets.fetch(request, key, "/api/status")
     except widgets.Unavailable as e:
-        # 401/403 from the app: it is up, the viewer is just not an account there (or no session); 404: an older app
-        return {"ok": e.status in (403, 404), "version": None, "why": str(e)}
+        # 403 from the app: it is up, the viewer is just not an account there (or no session)
+        return {"ok": e.status == 403, "version": None, "why": str(e)}
     if not isinstance(s, dict):
         return {"ok": False, "version": None, "why": f"{key} did not answer with its status"}
     return {"ok": True, "version": s.get("version"), "why": None}

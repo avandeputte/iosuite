@@ -4,7 +4,9 @@ client signed in with an app password."""
 import sys
 
 from app import config, users
+from app.data import state as appstate
 from app.mcp import current_user, server
+from app.photos import history
 
 
 def _pick_user():
@@ -27,5 +29,8 @@ def _pick_user():
 
 
 users.init()
-current_user.set(_pick_user())
+me = _pick_user()
+current_user.set(me)
+appstate.viewer.set(me)  # private albums and favourites: theirs, as over HTTP
+history.user.set(me["name"])  # the change log names them, not "system"
 server.run()

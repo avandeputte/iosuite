@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "iosuite-shared"
 dynamic = ["version"]  # the suite's: iosuite_shared.__version__
-description = "Shared accounts, sessions, roles and per-user settings for the ioThing apps (ioPix, ioNote, ioCalendar, ioContact, ioTask, ioRecipe, ioHealth, ioSuite)"
+description = "Shared accounts, sessions, roles and per-user settings for the ioThing apps (ioStart, ioPix, ioNote, ioCalendar, ioContact, ioTask, ioRecipe, ioHealth, ioDNS, ioBackup)"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "GPL-3.0-or-later"

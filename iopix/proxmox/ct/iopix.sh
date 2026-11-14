@@ -63,7 +63,6 @@ ask_app_settings() {
       IOPIX_DIGIKAM_DB="sqlite:$f"
     fi
   fi
-  [[ "${IOPIX_DB:-}" != sqlite ]] || { msg_error "iopix's own database is on MySQL/MariaDB only (no SQLite file any more): IOPIX_DB=local, or HOST:PORT/DB:USER:PASS"; exit 1; }
   if [[ -z "${IOPIX_DB:-}" ]]; then  # IOPIX_DB: local (MariaDB in the container) or HOST:PORT/DB:USER:PASS
     local holds="settings, accounts, favorites, albums, face groups, the edit log and AI results"
     [[ "$IOPIX_DIGIKAM_DB" == none ]] && holds="the whole library (folders, tags, people and faces, captions, places) plus settings, accounts, favorites, albums and AI results"
@@ -151,10 +150,7 @@ function update_script() {
     exit
   fi
   msg_info "Updating ${APP}"
-  REPO="${IOPIX_REPO:-https://github.com/avandeputte/iosuite}"  # the suite's repository: this app in iopix/, the shared library in shared/
-  # the app's own updater: latest code, same settings, data and packages, service restarted.
-  # Installs made before update.sh existed fetch it first; its output is shown, not hidden.
-  [[ -f /opt/iopix/app/update.sh ]] || curl -fsSL "https://raw.githubusercontent.com/avandeputte/iosuite/main/iopix/update.sh" -o /opt/iopix/app/update.sh
+  # the app's own updater: latest code, same settings, data and packages, service restarted; its output is shown
   if sh /opt/iopix/app/update.sh; then msg_ok "Updated successfully!"; else msg_error "update.sh failed; see the lines above"; exit 1; fi
   exit
 }

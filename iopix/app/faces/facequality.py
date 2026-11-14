@@ -132,8 +132,6 @@ def _untagged() -> list:
             "AND NOT EXISTS (SELECT 1 FROM faces f WHERE f.photo_id = p.id) "
             "AND NOT EXISTS (SELECT 1 FROM photo_tags pt JOIN tags t ON t.id = pt.tag_id WHERE pt.photo_id = p.id AND t.person = 1) "
             "ORDER BY p.npeople DESC, p.ts DESC").fetchall()
-    except Exception:  # an index from before object detection: nothing to say
-        return []
     finally:
         con.close()
     return [{"photo": r[0], "people": r[1], "signature": f"p{r[1]}"} for r in rows]
