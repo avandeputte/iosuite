@@ -113,3 +113,11 @@ def test_hrefs_carry_the_folder_the_app_is_served_in(client, family_id, monkeypa
     assert client.get("/api/connect", headers=h).json()["carddav"] == "http://home.example.com/contacts/dav/"
     monkeypatch.delenv("PUBLIC_URL")
     assert "<d:href>/dav/principals/alex/</d:href>" in dav(client, "PROPFIND", "/dav/", PF, depth="0").text, "at the root as before"
+
+
+def test_the_principal_is_named_after_the_account(client):
+    from iosuite_shared import db as shared_db, users
+    shared_db.ex("UPDATE ios_users SET display_name = 'Alex V' WHERE name = 'alex'")
+    users.invalidate()
+    r = dav(client, "PROPFIND", "/dav/principals/alex/", '<d:propfind xmlns:d="DAV:"><d:prop><d:displayname/></d:prop></d:propfind>', depth="0")
+    assert r.status_code == 207 and "<d:displayname>Alex V</d:displayname>" in r.text
