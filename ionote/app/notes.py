@@ -2,9 +2,14 @@
 
 The apps keep an offline copy and send their changes when they can. Conflicts are settled per record by
 `updated_at` (the time of the edit on the device that made it, never later than the server's clock): the later edit
-wins, an older one is answered with the record as the server has it, so the device takes that instead. Every change gets a new `rev`, and
+wins, an older one is answered with the record as the server has it, so the device takes that instead. A client that
+sends `baseRev` (the rev its edit started from) is checked by that instead: the edit is refused as stale when the note
+changed since, whatever the clocks say. The web app sends neither: it sends only the fields typed, stamped with the
+server's time, so a browser whose clock is behind never loses what was typed. Every change gets a new `rev`, and
 GET /api/sync?since=<rev> hands a device everything that changed after the last rev it saw, tombstones of
-deleted records included.
+deleted records included. Changes to many notes at once (renaming or removing a tag, deleting a folder) give each note
+a new rev but keep its `updated_at`: they are not an edit of the note, and an edit a device made before them still
+counts as the later one.
 
 Every note, folder, tag colour and change-log line belongs to one account (user_id: its id in the suite's auth
 database); nobody sees or changes another account's notes. Who is asking is set per request (current_owner, by
@@ -35,6 +40,10 @@ NOTE_COLS = ("uuid, title, body, ocr_text, source, source_app, created_at, updat
              "has_image, image_sha, deleted, rev, changed_by")
 SORTS = {"updated": "updated_at DESC", "created": "created_at DESC", "oldest": "created_at ASC", "title": "lower(title) ASC, updated_at DESC"}
 MAX_TEXT = 4 << 20  # 4 MB of text per field is more than any note needs
+MAX_TAG, MAX_TAGS = 100, 150  # a tag's length and a note's tags: 150 of 100 characters still fit the tags column (TEXT)
+# InnoDB's default full-text stop words: never in its index, so a required +word* term on one matches nothing
+FT_STOPWORDS = frozenset("a about an are as at be by com de en for from how i in is it la of on or that the this to was what "
+                         "when where who will with und www".split())
 _UUID = re.compile(r"^[A-Za-z0-9-]{8,64}$")
 TRASH_DAYS = 30
 PURGED = 2  # nts_notes.deleted: 1 in the trash, 2 purged (a tombstone with nothing in it)
@@ -80,11 +89,11 @@ def clean_tags(tags) -> list:
         t = str(raw).strip()
         while t.startswith("#"):
             t = t[1:]
-        t = t.strip()[:100]
+        t = t.strip()[:MAX_TAG]
         if t and t.lower() not in seen:
             seen.add(t.lower())
             out.append(t)
-    return out
+    return out[:MAX_TAGS]
 
 
 def _text(v, limit=MAX_TEXT) -> str:
@@ -111,7 +120,7 @@ def tag_dict(r) -> dict:
 
 def log_change(con, user: str, action: str, kind: str, uid: str, summary: str):
     con.execute("INSERT INTO nts_change_log (created_at, user_name, action, kind, uuid, summary, user_id) VALUES (?,?,?,?,?,?,?)",
-                (int(time.time()), user, action, kind, uid, summary[:300], owner()))
+                (int(time.time()), (user or "")[:191], action, kind, (uid or "")[:64], summary[:300], owner()))  # a tag's key may be longer than an id
 
 
 def display_title(n: dict) -> str:
@@ -172,15 +181,18 @@ def with_attachments(con, out: list) -> list:
 
 def _search_clause(con, q: str):
     """(sql, params) matching every word of q (prefix match) in the title, text, text in the image or tags.
-    MariaDB: its FULLTEXT index in boolean mode; words shorter than InnoDB's smallest indexed token, and
-    SQLite, fall back to LIKE."""
+    MariaDB: its FULLTEXT index in boolean mode; words shorter than InnoDB's smallest indexed token, its stop words
+    ("for", "the", "what"...), and SQLite, fall back to LIKE."""
     words = [w for w in re.findall(r"[\w'’.@-]+", q.lower()) if w.strip("'’.@-")]
     if not words:
         return "", []
     clauses, params, ft = [], [], []
+    def indexed(core):  # every part is a word InnoDB keeps in its full-text index
+        return con.mysql and core and all(len(c) >= 3 and c not in FT_STOPWORDS for c in core)
+
     for w in words[:12]:
         core = re.sub(r"[^\w]", " ", w).split()
-        if con.mysql and core and all(len(c) >= 3 for c in core):
+        if indexed(core):
             ft.extend("+" + c + "*" for c in core)
         else:
             like = "%" + w.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
@@ -195,7 +207,7 @@ def _search_clause(con, q: str):
     aclauses, aparams = [], []
     for w in words[:12]:
         core = re.sub(r"[^\w]", " ", w).split()
-        if con.mysql and core and all(len(c) >= 3 for c in core):
+        if indexed(core):
             aclauses.append("MATCH (a.name, a.text) AGAINST (? IN BOOLEAN MODE)")
             aparams.append(" ".join("+" + c + "*" for c in core))
         else:
@@ -278,14 +290,24 @@ def save_note(uid: str, data: dict, user: str, force: bool = False) -> dict:
             raise NotFound("No such note")  # another account's id: refused without saying so
         old = note_dict(cur) if cur else None
         ts = edit_time(data.get("updatedAt"), now)
-        if old and not force and ts < old["updatedAt"]:
-            raise Stale(old)
+        if old and not force:
+            base_rev = data.get("baseRev")
+            if base_rev is not None:  # the client says which version it edited: that decides, not the clocks
+                try:
+                    base_rev = int(base_rev)
+                except (TypeError, ValueError):
+                    raise Invalid("baseRev is the rev the edit started from") from None
+                if base_rev != old["rev"]:
+                    raise Stale(old)
+                ts = max(ts, old["updatedAt"])
+            elif ts < old["updatedAt"]:
+                raise Stale(old)
         base = old or {"title": "", "body": "", "ocrText": "", "source": "manual", "sourceApp": None, "createdAt": now,
                        "tags": [], "pinned": False, "folderID": None, "hasImage": False, "imageSHA": None, "deleted": False}
         n = dict(base)
         for k in ("title", "body", "sourceApp"):
             if k in data:
-                n[k] = _text(data[k], 1000 if k != "body" else MAX_TEXT) if data[k] is not None else (None if k == "sourceApp" else "")
+                n[k] = _text(data[k], {"body": MAX_TEXT, "sourceApp": 191}.get(k, 1000)) if data[k] is not None else (None if k == "sourceApp" else "")
         if "ocrText" in data and (data["ocrText"] or not base.get("ocrText")):  # an empty ocrText never erases text read earlier
             n["ocrText"] = _text(data["ocrText"])
         if "source" in data:
@@ -315,9 +337,6 @@ def save_note(uid: str, data: dict, user: str, force: bool = False) -> dict:
                         "folder_id=?, has_image=?, image_sha=?, deleted=?, rev=?, changed_by=? WHERE uuid=?", vals + (uid,))
         else:
             con.execute(f"INSERT INTO nts_notes ({NOTE_COLS}, user_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", (uid,) + vals + (owner(),))
-        if n["deleted"] and n["hasImage"]:
-            con.execute("DELETE FROM nts_note_images WHERE uuid = ?", (uid,))
-            con.execute("UPDATE nts_notes SET has_image = 0, image_sha = NULL WHERE uuid = ?", (uid,))
         action = "delete" if n["deleted"] and not (old and old["deleted"]) else ("create" if not old or old["deleted"] else "edit")
         log_change(con, user, action, "note", uid, display_title(n))
         return get_note(uid, con)
@@ -336,8 +355,8 @@ def restore_note(uid: str, user: str) -> dict:
 
 
 def trash(limit: int = 200) -> list:
-    """The notes in the trash, newest delete first (their text is kept; an image goes with the delete, attachments
-    stay until the note is purged)."""
+    """The notes in the trash, newest delete first (their text, picture and attachments are kept until the note is
+    purged, so a restored note comes back whole)."""
     with db.connect() as con:
         rows = con.execute(f"SELECT {NOTE_COLS} FROM nts_notes WHERE user_id = ? AND deleted = 1 ORDER BY updated_at DESC LIMIT ?",
                            (owner(), limit)).fetchall()
@@ -436,7 +455,7 @@ def save_folder(uid: str, data: dict, user: str, force: bool = False) -> dict:
         if f["deleted"] and not (old and old["deleted"]):
             # its notes stay, in no folder (what the apps do when a folder is deleted)
             for (nid,) in con.execute("SELECT uuid FROM nts_notes WHERE folder_id = ? AND user_id = ?", (uid, owner())).fetchall():
-                con.execute("UPDATE nts_notes SET folder_id = NULL, rev = ?, updated_at = ? WHERE uuid = ?", (db.next_rev(con), max(ts, now), nid))
+                con.execute("UPDATE nts_notes SET folder_id = NULL, rev = ? WHERE uuid = ?", (db.next_rev(con), nid))
         log_change(con, user, "delete" if f["deleted"] else ("create" if not old else "edit"), "folder", uid, f["name"])
         r = con.execute("SELECT uuid, name, color, created_at, updated_at, deleted, rev FROM nts_folders WHERE uuid = ?", (uid,)).fetchone()
         return folder_dict(r)
@@ -515,8 +534,8 @@ def rename_tag(old: str, new: str, user: str) -> int:
             if not any(tag_key(t) == ok for t in tags):
                 continue
             tags = clean_tags([new if tag_key(t) == ok else t for t in tags])
-            con.execute("UPDATE nts_notes SET tags = ?, updated_at = ?, rev = ?, changed_by = ? WHERE uuid = ?",
-                        (json.dumps(tags, ensure_ascii=False), now, db.next_rev(con), user, r["uuid"]))
+            con.execute("UPDATE nts_notes SET tags = ?, rev = ?, changed_by = ? WHERE uuid = ?",
+                        (json.dumps(tags, ensure_ascii=False), db.next_rev(con), user, r["uuid"]))
             changed += 1
         nk = tag_key(new)
         if nk != ok:  # the colour goes with the name, unless the tag it merges into has one of its own
@@ -546,8 +565,8 @@ def remove_tag(name: str, user: str) -> int:
             keep = [t for t in tags if tag_key(t) != k]
             if len(keep) == len(tags):
                 continue
-            con.execute("UPDATE nts_notes SET tags = ?, updated_at = ?, rev = ?, changed_by = ? WHERE uuid = ?",
-                        (json.dumps(keep, ensure_ascii=False), now, db.next_rev(con), user, r["uuid"]))
+            con.execute("UPDATE nts_notes SET tags = ?, rev = ?, changed_by = ? WHERE uuid = ?",
+                        (json.dumps(keep, ensure_ascii=False), db.next_rev(con), user, r["uuid"]))
             changed += 1
         _drop_tag_color(con, k, now)
         log_change(con, user, "remove", "tag", k, f"{name} ({changed} notes)")

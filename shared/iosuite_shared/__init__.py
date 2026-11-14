@@ -16,7 +16,7 @@ such as a LAN address, gets a cookie for that host only).
 """
 # The version of the suite: one number for every app (each app's __version__ is this one) and for this library.
 # Bump it with every change that reaches users; an install is offered an update when this line is higher on GitHub.
-__version__ = "3.7.9"
+__version__ = "3.7.10"
 
 from iosuite_shared.errors import Invalid
 

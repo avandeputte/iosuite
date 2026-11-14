@@ -411,3 +411,6 @@ def _one(fn):
         return {"status": "error", "error": str(e)}
     except (ValueError, TypeError) as e:
         return {"status": "error", "error": str(e)[:200]}
+    except notes.db.Error as e:  # too long for its column, say: this item is refused, the rest of the push goes on
+        notes.log.warning("sync push: an item could not be saved: %s", e)
+        return {"status": "error", "error": "Could not be saved: " + str(e)[:160]}

@@ -16,6 +16,12 @@ const SOURCES = { clipboard: 'Copied', service: 'Saved with right-click', screen
 
 export async function openNote(id) {
   await flush();
+  if (note && note.id !== id && Object.keys(pending).length) await flush();  // one more try before leaving the note
+  if (note && note.id !== id && Object.keys(pending).length) {  // still not saved: stay, so what was typed is not lost
+    toast('This note is not saved yet, so it stays open. Try again in a moment.');
+    status('Not saved');
+    return;
+  }
   if (!id) { note = null; renderEmpty(); return; }
   try { note = await api(`api/notes/${id}`); } catch (e) { note = null; renderEmpty(e.status === 404 ? 'That note is gone.' : e.message); return; }
   pending = {};
@@ -32,21 +38,31 @@ function renderEmpty(msg) {
 
 const save = debounce(() => { flush(); }, 700);
 
-export async function flush(keepalive = false) {
-  if (!note || !Object.keys(pending).length) return saving;
-  const body = { ...pending, updatedAt: Date.now() / 1000 };
+export function flush(keepalive = false) {
+  // one save at a time, in order: each waits for the one before, and sends what is pending when its turn comes
+  saving = (saving || Promise.resolve()).then(() => saveNow(keepalive));
+  const mine = saving;
+  mine.finally(() => { if (saving === mine) saving = null; });
+  return mine;
+}
+
+async function saveNow(keepalive) {
+  if (!note || !Object.keys(pending).length) return;
+  // only the fields typed, and no clock of ours: the server stamps the time, so a browser whose clock is behind
+  // never sees its edit refused (and thrown away) as older than the one it replaces
+  const id = note.id, body = { ...pending };
   pending = {};
   status('Saving…');
-  saving = api(`api/notes/${note.id}`, { method: 'PUT', body, keepalive }).then((n) => {
-    const image = note.image;
-    note = { ...n, image, body: pending.body !== undefined ? pending.body : n.body };
+  try {
+    const n = await api(`api/notes/${id}`, { method: 'PUT', body, keepalive });
+    if (!note || note.id !== id) return;  // another note is open by now: this answer is not for it
+    note = { ...n, image: note.image, body: pending.body !== undefined ? pending.body : n.body };
     updateCard(note);
-    status('Saved');
-  }).catch((e) => {
-    if (e.status === 409 && e.body && e.body.current) { note = e.body.current; render(); toast('Someone changed this note meanwhile; showing their version'); }
-    else { pending = { ...body, ...pending }; delete pending.updatedAt; status('Not saved: ' + e.message); }
-  }).finally(() => { saving = null; });
-  return saving;
+    status(Object.keys(pending).length ? 'Editing…' : 'Saved');
+  } catch (e) {
+    if (note && note.id === id) pending = { ...body, ...pending };  // kept, to be sent again with the next save
+    status('Not saved: ' + e.message);
+  }
 }
 
 function status(text) { const s = $('.edbar .status'); if (s) s.textContent = text; }
