@@ -29,6 +29,7 @@ from iosuite_shared.proxyauth import Forwarded, Proxy, authlog, peer_of, seen
 from iosuite_shared.errors import Invalid
 
 STATUS_PATH = routers.STATUS_PATH
+MCP_PATH = "/mcp"  # where every app serves its MCP server (iosuite_shared.mcp.PATH)
 __all__ = ["Auth", "Access", "ACCESS_ROLES", "BodyCap", "TooLarge", "content_type", "json_body", "public_user", "peer_of", "STATUS_PATH"]
 
 
@@ -168,6 +169,9 @@ class Auth:
             authlog.warning("%s from %s refused: %d s to wait after repeated wrong passwords", "Basic sign-in as %r" % name if name else "bearer token", self.proxy.source(request), wait)
             return JSONResponse({"detail": f"Too many attempts; try again in {wait} seconds"}, status_code=429, headers={"Retry-After": str(wait)})
         user, scope = apppasswords.authenticate_scoped(name or None, pw, self.app)
+        if not user and (request.url.path == MCP_PATH or request.url.path.startswith(MCP_PATH + "/")):
+            # the suite's one MCP server: an ioStart app password reaches every app's /mcp (apppasswords.HUB)
+            user, scope = apppasswords.authenticate_hub(name or None, pw, self.app), ""
         if not user:
             wait = users.attempt_failed(visitor, name)
             authlog.warning("wrong %s from %s%s", f"password for {name!r} (Basic)" if name else "bearer token", self.proxy.source(request), f"; {wait} s wait" if wait else "")
@@ -324,12 +328,13 @@ class Auth:
         return appleprofile.router(self, base_url)
 
     # ---- the MCP endpoint's gate
-    def mcp_gate(self, enabled, path: str = "/mcp", on_user=None):
+    def mcp_gate(self, enabled, path: str = MCP_PATH, on_user=None, on_request=None):
         """A `before` hook for middleware() (or something an app's own hook calls first): a request to the MCP endpoint
         is refused with 404 while the switch is off (`enabled()` is false), with 403 when a page in a browser sends it
         under a host name the app is not known by (suite.known_host: a page on another site that points its own name
         at this server; an MCP client is not a browser and is not asked), with 401 when nobody is signed in (MCP clients sign in with an app password: HTTP Basic, or a bearer token),
-        and otherwise `on_user(user)` runs (an app sets its MCP context variable there). Anything else passes."""
+        and otherwise `on_user(user)` runs (an app sets its MCP context variable there), and `on_request(request)` (the
+        start page keeps the sign-in it passes on to the other apps' MCP servers). Anything else passes."""
         auth = self
 
         def gate(request: Request):
@@ -350,6 +355,8 @@ class Auth:
                                     status_code=401, headers={"WWW-Authenticate": f'Basic realm="{auth.realm}", Bearer realm="{auth.realm}"'})
             if on_user:
                 on_user(user)
+            if on_request:
+                on_request(request)
             return None
         return gate
 
