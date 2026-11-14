@@ -17,7 +17,6 @@ def make_app(name="iocontact", register=False, **kw):
     app = FastAPI()
     app.middleware("http")(auth.middleware(open_paths=("/",), open_prefixes=("/static/",)))
     app.include_router(auth.router())
-    app.include_router(auth.users_router())
     app.include_router(auth.admin_router())
 
     @app.get("/")
@@ -53,37 +52,29 @@ def clean():
 
 
 # ---- an admin of one app and the suite's accounts
-def test_an_app_admin_sets_roles_here_and_nothing_beyond():
+def test_an_app_admin_has_no_say_over_accounts():
+    """Accounts belong to the whole suite: adding one, its role anywhere, its sessions and deleting it are a suite
+    admin's, on the panel. The old /api/users, where an admin of one app listed every account and added some, is gone."""
     app, _ = make_app()
     boss = users.create("alex", "secret123", suite_admin=True, email="alex@example.com")
     users.create("bob", "secret123", "admin", "iocontact")
     ann = users.create("ann", "secret123", "viewer", "iocontact", email="ann@example.com")
     bob = signed_in(app, "bob")
-    # the role here: his to give
-    assert bob.patch(f"/api/users/{ann['id']}", json={"role": "editor"}).status_code == 200
-    assert users.get(ann["id"], "iocontact")["role"] == "editor"
-    # a form that sends the other fields back unchanged is fine
-    assert bob.patch(f"/api/users/{ann['id']}", json={"role": "viewer", "name": "ann", "email": "ann@example.com"}).status_code == 200
-    # the account itself is the suite's: sign-in at a proxy finds it by email and name, a password opens every app
-    for body in ({"email": "alex@example.com"}, {"name": "ann2"}, {"password": "another-secret"}, {"displayName": "X"},
-                 {"listed": False}, {"suiteAdmin": True}, {"roles": {"iopix": "admin"}}):
-        r = bob.patch(f"/api/users/{ann['id']}", json=body)
-        assert r.status_code == 403 and "suite admin" in r.json()["detail"], body
-    for body in ({"name": "bob2"}, {"email": "bob@example.com"}, {"role": "viewer"}):
-        assert bob.patch(f"/api/users/{boss['id']}", json=body).status_code == 403, body
-    again = users.get(ann["id"], "iocontact")
-    assert (again["name"], again["email"], again["suiteAdmin"]) == ("ann", "ann@example.com", False)
-    assert users.get(boss["id"])["name"] == "alex" and users.authenticate("ann", "secret123")
-    # nor its sessions, nor deleting it
-    assert bob.get(f"/api/users/{ann['id']}/sessions").status_code == 403
-    assert bob.delete(f"/api/users/{ann['id']}/sessions").status_code == 403
-    assert bob.delete(f"/api/users/{ann['id']}").status_code == 403 and users.get(ann["id"])
+    for method, path in (("GET", "/api/users"), ("POST", "/api/users"), ("PATCH", f"/api/users/{ann['id']}"), ("DELETE", f"/api/users/{ann['id']}")):
+        assert bob.request(method, path, json={"name": "x", "password": "secret123"}).status_code in (404, 405), path
+    assert bob.get("/api/suite-admin").status_code == 403
+    assert bob.post("/api/suite-admin/users", json={"name": "x", "password": "secret123"}).status_code == 403
+    for body in ({"roles": {"iocontact": "editor"}}, {"email": "x@example.com"}, {"suiteAdmin": True}):
+        assert bob.patch(f"/api/suite-admin/users/{ann['id']}", json=body).status_code == 403, body
+    assert bob.get(f"/api/suite-admin/users/{ann['id']}/sessions").status_code == 403
+    assert bob.delete(f"/api/suite-admin/users/{ann['id']}").status_code == 403 and users.get(ann["id"])
+    assert users.get(ann["id"], "iocontact")["role"] == "viewer" and users.get(boss["id"])["name"] == "alex"
     # a suite admin does all of it
     alex = signed_in(app, "alex")
-    assert alex.patch(f"/api/users/{ann['id']}", json={"email": "ann@new.example.com", "role": "editor"}).status_code == 200
-    assert users.get(ann["id"])["email"] == "ann@new.example.com"
-    assert alex.get(f"/api/users/{ann['id']}/sessions").status_code == 200
-    assert alex.delete(f"/api/users/{ann['id']}").status_code == 200 and not users.get(ann["id"])
+    assert alex.patch(f"/api/suite-admin/users/{ann['id']}", json={"email": "ann@new.example.com", "roles": {"iocontact": "editor"}}).status_code == 200
+    assert users.get(ann["id"], "iocontact")["email"] == "ann@new.example.com" and users.get(ann["id"], "iocontact")["role"] == "editor"
+    assert alex.get(f"/api/suite-admin/users/{ann['id']}/sessions").status_code == 200
+    assert alex.delete(f"/api/suite-admin/users/{ann['id']}").status_code == 200 and not users.get(ann["id"])
 
 
 def test_an_app_admin_cannot_name_himself_the_proxy():
@@ -162,7 +153,6 @@ def test_no_accounts_is_open_inside_and_shut_outside():
         r = out.get("/api/data")
         assert r.status_code == 403 and r.json()["unclaimed"] and "inside your network" in r.json()["detail"]
         assert out.post("/api/change").status_code == 403
-        assert out.post("/api/users", json={"name": "mallory", "password": "secret123", "suiteAdmin": True}).status_code == 403
         assert out.post("/api/suite-admin/users", json={"name": "mallory", "password": "secret123", "suiteAdmin": True}).status_code == 403
         assert out.put("/api/suite-admin/proxy", json={"AUTH_PROXY": "header", "AUTH_PROXY_TRUSTED": "8.8.8.8"}).status_code == 403
         assert out.delete("/api/auth/suite/iopix").status_code == 403           # under /api/auth/, which the middleware lets through

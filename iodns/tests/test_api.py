@@ -1,6 +1,7 @@
 """The API end to end against MariaDB, with in-memory DNS servers (tests/fake.py)."""
 from app.providers import record
 from tests import fake
+from iosuite_shared import testing
 
 
 def add_server(client, name, url, view="internal", **opts):
@@ -169,7 +170,7 @@ def test_an_admin_tool_for_suite_admins_only(client):
     client.get("/api/auth/me")                    # the middleware registers the app
     assert suite.get("iodns")["adminTool"] is True
     assert users.default_role("iodns") == "none"
-    ed = client.post("/api/users", json={"name": "ed", "password": "secret123", "role": "admin"})
+    ed = testing.add_account(client, {"name": "ed", "password": "secret123", "role": "admin"})
     assert ed.status_code == 400                  # takes no roles: suite admins only
     ed = users.create("ed", "secret123")
     users.set_role(ed["id"], "iodns", "admin")    # a role from before the rule: ignored

@@ -3,6 +3,7 @@ allowlist for switching, the search, and what needs attention."""
 import json
 
 from app import homeassistant as ha
+from iosuite_shared import testing
 
 STATES = [
     {"entity_id": "light.kitchen", "state": "on", "attributes": {"friendly_name": "Kitchen", "brightness": 128}, "last_changed": "2026-11-06T04:00:00+00:00"},
@@ -101,8 +102,8 @@ def test_switching_needs_the_admins_tick(client, monkeypatch):
     assert ("POST", "/api/services/lock/unlock", {"entity_id": "lock.front_door"}) in calls
     assert [i["control"] for i in client.get("/api/ha").json()["items"]] == [True, False, True, True]
     # an editor switches the ticked ones too; a viewer reads the states and switches nothing
-    client.post("/api/users", json={"name": "mum", "password": "secret123", "role": "editor"})
-    client.post("/api/users", json={"name": "kid", "password": "secret123", "role": "viewer"})
+    testing.add_account(client, {"name": "mum", "password": "secret123", "role": "editor"})
+    testing.add_account(client, {"name": "kid", "password": "secret123", "role": "viewer"})
     client.post("/api/auth/logout")
     assert client.post("/api/auth/login", json={"name": "mum", "password": "secret123"}).status_code == 200
     assert client.post("/api/ha/light.kitchen/toggle").status_code == 200

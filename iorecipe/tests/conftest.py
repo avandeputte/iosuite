@@ -56,7 +56,7 @@ def client(_client):
 def as_user(client):
     """as_user(name, role): an account with that role here, signed in on the shared client (alex is signed out)."""
     def go(name, role):
-        r = client.post("/api/users", json={"name": name, "password": "secret123", "role": role})
+        r = _authtest.add_account(client, {"name": name, "password": "secret123", "role": role})
         assert r.status_code in (200, 201), r.text
         client.cookies.clear()
         assert client.post("/api/auth/login", json={"name": name, "password": "secret123"}).status_code == 200

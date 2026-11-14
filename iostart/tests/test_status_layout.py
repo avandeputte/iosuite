@@ -2,6 +2,7 @@
 import pytest
 
 from app import status, widgets
+from iosuite_shared import testing
 
 
 @pytest.fixture(autouse=True)
@@ -114,7 +115,7 @@ def test_my_layout(client):
     assert client.put("/api/me/layout", json=[]).status_code == 400
     assert client.put("/api/me/layout", json={}).json() == {"hidden": [], "order": [], "cards": [], "strip": None, "search": None, "stripMove": None, "stripEvery": None}
     # another account has its own
-    client.post("/api/users", json={"name": "kid", "password": "secret123", "role": "viewer"})
+    testing.add_account(client, {"name": "kid", "password": "secret123", "role": "viewer"})
     client.put("/api/me/layout", json={"hidden": ["iohealth"]})
     client.post("/api/auth/logout")
     client.post("/api/auth/login", json={"name": "kid", "password": "secret123"})

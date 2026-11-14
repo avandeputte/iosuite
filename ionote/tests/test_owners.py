@@ -5,6 +5,7 @@ import json
 import zipfile
 
 from helpers import NID, png
+from iosuite_shared import testing
 
 OTHER = "BBBBBBBB-1111-2222-3333-444444444444"
 
@@ -17,7 +18,7 @@ def _as(client, name, password):
 
 def _two(client, admin):
     """alex (admin, signed in) and sam (editor)."""
-    r = client.post("/api/users", json={"name": "sam", "password": "secretpw2", "role": "editor"})
+    r = testing.add_account(client, {"name": "sam", "password": "secretpw2", "role": "editor"})
     assert r.status_code == 200, r.text
 
 
@@ -64,7 +65,7 @@ def test_ids_never_reach_another_accounts_note(client, admin):
 
 
 def test_visitors_see_no_notes_once_accounts_exist(client, admin):
-    assert client.post("/api/settings", json={"require_login": False}).status_code == 200  # on by default; off, a visitor still sees nobody's notes
+    assert client.patch("/api/suite-admin/apps/ionote", json={"requireLogin": False}).status_code == 200  # on by default; off, a visitor still sees nobody's notes
     client.put(f"/api/notes/{NID}", json={"title": "mine", "updatedAt": 1})
     client.post("/api/auth/logout")
     client.cookies.clear()

@@ -8,6 +8,7 @@ import time
 import pytest
 
 from helpers import NID, png
+from iosuite_shared import testing
 
 HEADERS = {"content-type": "application/json", "accept": "application/json, text/event-stream"}
 
@@ -79,7 +80,7 @@ def test_read_tools_and_a_picture(client, on):
 
 
 def test_writes_need_an_editor(client, on):
-    client.post("/api/users", json={"name": "vic", "password": "viewerpw1", "role": "viewer"})
+    testing.add_account(client, {"name": "vic", "password": "viewerpw1", "role": "viewer"})
     bad = _call(anon(), "create_note", {"text": "hi"}, headers=app_password(signed_in("vic", "viewerpw1"), "vic's"))
     assert bad["isError"] and "editor" in bad["content"][0]["text"]
     ok = _call(client, "create_note", {"title": "From Claude", "text": "hello", "tags": ["ai"], "folder": None}, headers=on)
@@ -93,14 +94,14 @@ def test_writes_need_an_editor(client, on):
 
 
 def test_the_server_tools_need_an_admin(client, on):
-    sam = client.post("/api/users", json={"name": "sam", "password": "secretpw2", "role": "editor"}).json()
+    sam = testing.add_account(client, {"name": "sam", "password": "secretpw2", "role": "editor"}).json()
     assert sam["id"]
     assert _call(anon(), "diagnostics", {}, headers=app_password(signed_in("sam", "secretpw2"), "sam's"))["isError"]
     assert _call(client, "diagnostics", {}, headers=on)["structuredContent"]["version"]
 
 
 def test_with_sign_in_required_the_endpoint_wants_an_app_password(client, on):
-    client.post("/api/settings", json={"require_login": True})
+    client.patch("/api/suite-admin/apps/ionote", json={"requireLogin": True})
     client.post("/api/auth/logout")
     r = client.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, headers=HEADERS)
     assert r.status_code == 401 and "app password" in r.text
@@ -109,7 +110,7 @@ def test_with_sign_in_required_the_endpoint_wants_an_app_password(client, on):
 
 def test_each_account_works_on_its_own_notes(client, on):
     client.put(f"/api/notes/{NID}", json={"title": "alex's note", "updatedAt": 1})
-    client.post("/api/users", json={"name": "sam", "password": "secretpw2", "role": "editor"})
+    testing.add_account(client, {"name": "sam", "password": "secretpw2", "role": "editor"})
     ov = _call(client, "notes_overview", {}, headers=on)["structuredContent"]
     assert ov["notes"] == 1 and ov["account"] == "alex"
     s = signed_in("sam", "secretpw2")
@@ -126,7 +127,7 @@ def test_nobody_reads_notes_through_mcp_without_signing_in(client, on):
     """Notes are private: /mcp shows a visitor nothing (even with sign-in not required), and the session cookie of a
     signed-in browser reaches only that account's notes."""
     client.put(f"/api/notes/{NID}", json={"title": "alex's secret", "updatedAt": 1})
-    client.post("/api/users", json={"name": "sam", "password": "secretpw2", "role": "editor"})
+    testing.add_account(client, {"name": "sam", "password": "secretpw2", "role": "editor"})
     client.cookies.clear()
     r = client.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "tools/call",
                                   "params": {"name": "search_notes", "arguments": {"text": "secret"}}}, headers=HEADERS)

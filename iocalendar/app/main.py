@@ -105,7 +105,6 @@ def _server_apply(body: dict) -> None:
 
 
 app.include_router(auth.router())        # /api/auth/*: sign-in, accounts, me, settings, password, sessions, app passwords, suite
-app.include_router(auth.users_router())  # /api/users: accounts and their role here (admins)
 app.include_router(auth.admin_router())  # /api/suite-admin (+ ui.js, the panel of Settings › Security and Global settings): the whole suite (suite admins)
 app.include_router(auth.related_router())  # /api/related (+ ui.js, the "Linked" panel): items linked across the apps
 app.include_router(auth.status_router(updater, extra=_status_extra))  # /api/status: public, the same shape in every app

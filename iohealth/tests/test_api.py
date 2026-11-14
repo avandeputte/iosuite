@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from app import db
+from iosuite_shared import testing
 
 UTC = timezone.utc
 
@@ -113,7 +114,7 @@ def test_accounts_see_only_their_own_data(client, admin):
         "uuid": "w1", "activityType": "running", "activityTypeRaw": 37, "start": "2026-10-01T07:00:00Z", "end": "2026-10-01T07:30:00Z", "duration": 1800,
         "source": {"name": "Watch"}, "statistics": [{"type": "distance_walking_running", "unit": "km", "sum": 5}], "events": [], "activities": []}}})
     # a second account: a member, who uploads their own
-    r = client.post("/api/users", json={"name": "bo", "password": "secretpw2", "role": "member"})
+    r = testing.add_account(client, {"name": "bo", "password": "secretpw2", "role": "member"})
     assert r.status_code == 200, r.text
     client.cookies.clear()
     assert client.post("/api/auth/login", json={"name": "bo", "password": "secretpw2"}).status_code == 200
@@ -135,7 +136,7 @@ def test_accounts_see_only_their_own_data(client, admin):
     rec = client.get("/api/records").json()
     assert rec["totals"][0]["count"] == 1 and any(r["name"] == "Farthest" for r in rec["records"])
     # a viewer may not upload
-    client.post("/api/users", json={"name": "cy", "password": "secretpw3", "role": "viewer"})
+    testing.add_account(client, {"name": "cy", "password": "secretpw3", "role": "viewer"})
     client.cookies.clear()
     client.post("/api/auth/login", json={"name": "cy", "password": "secretpw3"})
     cy_pw = app_password(client)
@@ -201,7 +202,7 @@ def test_workout_children_follow_the_workout(client, admin):
 def test_another_account_cannot_add_to_a_workout(client, admin):
     alex_pw = app_password(client)
     upload(client, alex_pw, workout_msg("w1", [("distance_walking_running", 5)]), route_point("w1", "r1", 1), route_point("w1", "r1", 2))
-    client.post("/api/users", json={"name": "bo", "password": "secretpw2", "role": "editor"})
+    testing.add_account(client, {"name": "bo", "password": "secretpw2", "role": "editor"})
     client.cookies.clear()
     client.post("/api/auth/login", json={"name": "bo", "password": "secretpw2"})
     bo_pw = app_password(client, "Bo's phone")

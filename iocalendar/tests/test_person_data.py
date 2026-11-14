@@ -2,6 +2,7 @@
 from iosuite_shared import related, users
 
 from app import db
+from iosuite_shared import testing
 
 
 def _as(client, name, password="secret123"):
@@ -11,7 +12,7 @@ def _as(client, name, password="secret123"):
 
 
 def test_deleting_someone_removes_their_calendars_and_keeps_the_family_ones(client, family_id):
-    assert client.post("/api/users", json={"name": "ann", "password": "secret123", "role": "editor"}).status_code == 200
+    assert testing.add_account(client, {"name": "ann", "password": "secret123", "role": "editor"}).status_code == 200
     ann = _as(client, "ann")
     mine = next(c["id"] for c in client.get("/api/calendars").json()["items"] if c["mine"])
     own = [client.post(f"/api/events?calendar={mine}", json={"title": t, "start": "2026-11-10T10:00"}).json()["id"] for t in ("Dentist", "Gym")]

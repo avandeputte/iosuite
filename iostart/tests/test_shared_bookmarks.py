@@ -3,6 +3,7 @@ admin of the start page manages them), in one tree; the Bookmarks page, the star
 import base64
 
 from app import bookmarks, db
+from iosuite_shared import testing
 
 EXT = "/dav/ext"
 
@@ -11,7 +12,7 @@ def _as(name, role, admin_client):
     """A client signed in as a new account with this role on the start page."""
     from fastapi.testclient import TestClient
     from app.main import app
-    r = admin_client.post("/api/users", json={"name": name, "password": "secret123", "role": role})
+    r = testing.add_account(admin_client, {"name": name, "password": "secret123", "role": role})
     assert r.status_code == 200, r.text
     c = TestClient(app)
     assert c.post("/api/auth/login", json={"name": name, "password": "secret123"}).status_code == 200

@@ -9,12 +9,13 @@ from fastapi.testclient import TestClient
 
 from app import db, enrich, iopix, model
 from tests.test_api import mk
+from iosuite_shared import testing
 
 
 def other_account(client, name="ann", role="editor"):
     """A second account, signed in with its own client."""
     from app.main import app
-    assert client.post("/api/users", json={"name": name, "password": "secret123", "role": role}).status_code == 200
+    assert testing.add_account(client, {"name": name, "password": "secret123", "role": role}).status_code == 200
     c = TestClient(app)
     assert c.post("/api/auth/login", json={"name": name, "password": "secret123"}).status_code == 200
     return c

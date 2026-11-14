@@ -7,6 +7,7 @@ import json
 import re
 
 from app import bookmarkfiles, bookmarks
+from iosuite_shared import testing
 
 NC = "/dav/nextcloud/index.php/apps/bookmarks/public/rest/v2"
 DAV = "/dav/bookmarks"
@@ -161,7 +162,7 @@ def test_nextcloud_api_as_floccus_uses_it(client):
     client.patch(f"/api/bookmarks/links/{js['id']}", json={"start": True})
     assert [(g["name"], [l["href"] for l in g["links"]]) for g in client.get("/api/bookmarks").json()["groups"]] == [("Bookmarks Bar", ["https://a.example/2"])]
     # a viewer's sync app reads, and is told it may not write
-    client.post("/api/users", json={"name": "kid", "password": "secret123", "role": "viewer"})
+    testing.add_account(client, {"name": "kid", "password": "secret123", "role": "viewer"})
     kid = _basic("kid", "secret123")
     assert anon.get(f"{NC}/folder/-1/children?layers=-1", headers=kid).status_code == 200
     assert anon.post(f"{NC}/bookmark", headers=kid, json={"url": "https://k.example", "title": "K", "folders": [-1]}).status_code == 403
@@ -269,7 +270,7 @@ def test_webdav_file_as_floccus_uses_it(client):
     assert {x["name"]: x["id"] for x in again} == names
     assert req("PUT", "notes.txt", content=b"x").status_code == 404
     # a viewer reads the file and cannot upload one
-    client.post("/api/users", json={"name": "kid", "password": "secret123", "role": "viewer"})
+    testing.add_account(client, {"name": "kid", "password": "secret123", "role": "viewer"})
     assert anon.get(f"{DAV}/bookmarks.xbel", headers=_basic("kid", "secret123")).status_code == 200
     assert anon.put(f"{DAV}/bookmarks.xbel", headers=_basic("kid", "secret123"), content=up2.encode()).status_code == 403
 

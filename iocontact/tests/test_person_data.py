@@ -2,6 +2,7 @@
 from iosuite_shared import users
 
 from app import db
+from iosuite_shared import testing
 
 
 def _as(client, name, password="secret123"):
@@ -11,7 +12,7 @@ def _as(client, name, password="secret123"):
 
 
 def test_deleting_someone_removes_their_address_book(client, family_id):
-    assert client.post("/api/users", json={"name": "ann", "password": "secret123", "role": "editor"}).status_code == 200
+    assert testing.add_account(client, {"name": "ann", "password": "secret123", "role": "editor"}).status_code == 200
     ann = _as(client, "ann")
     mine = next(b["id"] for b in client.get("/api/books").json()["items"] if not b["shared"])
     for fn in ("Dr Who", "Hair salon"):

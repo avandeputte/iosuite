@@ -1,6 +1,7 @@
 """The MCP server at /mcp: off until switched on, signed in with an app password, acting as that account."""
 import base64
 import json
+from iosuite_shared import testing
 
 H = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json"}
 
@@ -91,7 +92,7 @@ def test_mcp_contacts_relations_and_permissions(client, family_id):
     assert not call(client, auth, "get_contact", contact="Tim Ray").get("relations")
     assert call(client, auth, "delete_contact", contact="Bob Lee")["deleted"] == "Bob Lee"
     # a member: reads the family book, changes only their own
-    client.post("/api/users", json={"name": "kid", "password": "secret123", "role": "member"})
+    testing.add_account(client, {"name": "kid", "password": "secret123", "role": "member"})
     client.post("/api/auth/logout")
     client.post("/api/auth/login", json={"name": "kid", "password": "secret123"})
     kid, _ = app_password(client)

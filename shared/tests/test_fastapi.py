@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 
 from iosuite_shared import users
 from iosuite_shared.fastapi import Auth
+from iosuite_shared import testing
 
 
 def make_app(name="iopix", read_only=False):
@@ -10,7 +11,7 @@ def make_app(name="iopix", read_only=False):
     app = FastAPI()
     app.middleware("http")(auth.middleware(open_paths=("/", "/api/status"), open_prefixes=("/api/auth/",)))
     app.include_router(auth.router())
-    app.include_router(auth.users_router())
+    app.include_router(auth.admin_router())
 
     @app.get("/api/status", dependencies=[auth.access.public])
     def status():
@@ -92,20 +93,19 @@ def test_users_admin_api_and_read_only():
     c = TestClient(app, base_url="http://photo.example.com")
     c.post("/api/auth/login", json={"name": "alex", "password": "secret123"})
     assert c.post("/api/edit").status_code == 403  # read-only
-    r = c.post("/api/users", json={"name": "bob", "password": "secret123", "role": "editor"})
-    assert r.status_code == 200 and r.json()["role"] == "editor"
+    r = testing.add_account(c, {"name": "bob", "password": "secret123", "role": "editor"})
+    assert r.status_code == 200 and r.json()["roles"] == {"iopix": "editor"}
     uid = r.json()["id"]
-    assert c.patch(f"/api/users/{uid}", json={"role": "viewer", "roles": {"ionote": "admin"}}).status_code == 200
-    lst = c.get("/api/users").json()
-    bob = next(u for u in lst["users"] if u["name"] == "bob")
-    assert bob["role"] == "viewer" and bob["roles"] == {"iopix": "viewer", "ionote": "admin"}
+    assert c.patch(f"/api/suite-admin/users/{uid}", json={"roles": {"iopix": "viewer", "ionote": "admin"}}).status_code == 200
+    bob = next(u for u in c.get("/api/suite-admin").json()["users"] if u["name"] == "bob")
+    assert bob["roles"] == {"iopix": "viewer", "ionote": "admin"}
     assert c.post("/api/auth/settings", json={"theme": "dark"}).json() == {"theme": "dark"}
     assert c.post("/api/auth/password", json={"current": "wrong", "password": "newpass123"}).status_code == 403
     assert c.post("/api/auth/password", json={"current": "secret123", "password": ""}).status_code == 400  # never removes the password
     assert c.post("/api/auth/password", json={"current": "secret123", "password": "newpass123"}).status_code == 200
     assert c.get("/api/private").status_code == 200  # this session went on
-    assert c.post(f"/api/users/{uid}", json={"delete": True}).status_code == 405  # one way to delete: DELETE
-    assert c.delete(f"/api/users/{uid}").status_code == 200
+    assert c.get("/api/users").status_code == 404  # the old accounts route is gone: Settings › Suite is where accounts live
+    assert c.delete(f"/api/suite-admin/users/{uid}").status_code == 200
     assert users.get(uid) is None
 
 
@@ -140,7 +140,7 @@ def test_unreachable_auth_database_answers_503_not_open(monkeypatch):
 def test_sessions_record_where_they_began_and_were_seen():
     from iosuite_shared import sessions
     app, _ = make_app()
-    users.create("alex", "secret123", "admin", "iopix", suite_admin=True)
+    u = users.create("alex", "secret123", "admin", "iopix", suite_admin=True)
     web = TestClient(app, base_url="http://photo.example.com", headers={"user-agent": "Mozilla/5.0 (Macintosh) Safari/605"})
     web.post("/api/auth/login", json={"name": "alex", "password": "secret123"})
     phone = TestClient(app, base_url="http://photo.example.com", headers={"user-agent": "iopix/312 CFNetwork/1498 Darwin/25.0", "cf-ray": "abc", "cf-connecting-ip": "203.0.113.9"})
@@ -152,8 +152,8 @@ def test_sessions_record_where_they_began_and_were_seen():
     assert not by["iopix"]["current"] and by["iopix"]["cloudflare"] and by["iopix"]["userAgent"].startswith("iopix/312") and by["iopix"]["lastSeen"]
     assert web.delete(f"/api/auth/sessions/{by['iopix']['id']}").status_code == 200
     assert phone.get("/api/auth/me").json()["user"] is None  # ended
-    assert len(web.get("/api/users/1/sessions").json()["sessions"]) == 1  # admins see an account's sessions
-    assert web.delete("/api/users/1/sessions").status_code == 200
+    assert len(web.get(f"/api/suite-admin/users/{u['id']}/sessions").json()["sessions"]) == 1  # admins see an account's sessions
+    assert web.delete(f"/api/suite-admin/users/{u['id']}/sessions").status_code == 200
     sessions.invalidate()
     assert web.get("/api/auth/me").json()["user"] is None
     assert sessions.classify("curl/8.0") == "curl" and sessions.classify("") == "other"

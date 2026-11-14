@@ -71,12 +71,8 @@ def linked_persons() -> set:
 
 
 def require_login() -> bool:
-    """Settings › Global settings › Apps › Sign-in required: nothing but the sign-in screen for visitors."""
+    """Sign-in required (Settings › Suite › Apps, suite admins): nothing but the sign-in screen for visitors."""
     return shared.require_login(APP)
-
-
-def set_require_login(on: bool):
-    authdb.set_setting("require_login", "" if on else "0", APP)  # on is the default: no row
 
 
 def get_settings(user_id: int) -> dict:

@@ -109,7 +109,6 @@ def _server_apply(body: dict) -> None:
 app.include_router(auth.status_router(updater, extra=_status_extra))  # /api/status: public, the same shape in every app
 app.include_router(auth.server_router(updater, log_file=config.LOG_FILE, info=_server_info, apply=_server_apply))  # /api/server, /api/log (admins)
 app.include_router(auth.router())   # /api/auth/*: sign-in, accounts, me, password, sessions, app passwords, suite (the same in every app)
-app.include_router(auth.users_router())  # /api/users: accounts and their role here (admins)
 app.include_router(auth.profile_router(api.base_url))  # /profile/<token>/<file> and the profile for all the apps that sync
 app.include_router(api.router)      # the contacts; also an account's own fields (its "me" contact, the face on its tile)
 app.include_router(auth.admin_router())  # /api/suite-admin (+ ui.js, the panel of Settings › Security and Global settings): the whole suite (suite admins)

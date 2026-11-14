@@ -1,4 +1,5 @@
 import io
+from iosuite_shared import testing
 
 
 def mk(client, book, **kw):
@@ -76,7 +77,7 @@ def test_import_export(client, family_id):
 
 
 def test_roles_and_private_books(client, family_id):
-    client.post("/api/users", json={"name": "kid", "password": "kidpass99", "role": "member"})
+    testing.add_account(client, {"name": "kid", "password": "kidpass99", "role": "member"})
     mine = next(b for b in client.get("/api/books").json()["items"] if not b["shared"])
     mk(client, mine["id"], fn="Secret Friend")
     from fastapi.testclient import TestClient
@@ -154,12 +155,12 @@ def test_apple_profile_link_needs_no_cookie(client):
 def test_account_picker_and_one_click(client, family_id):
     """Like ioPix: the sign-in screen lists the accounts; a viewer without a password signs in with one click,
     but never from outside (through Cloudflare)."""
-    client.post("/api/users", json={"name": "gran", "password": "granpass1", "role": "viewer"})
-    client.post("/api/users", json={"name": "ed", "password": "edpass123", "role": "editor"})
-    gran = next(u for u in client.get("/api/users").json()["users"] if u["name"] == "gran")
-    ed = next(u for u in client.get("/api/users").json()["users"] if u["name"] == "ed")
-    assert client.patch(f"/api/users/{ed['id']}", json={"password": ""}).status_code == 400  # only viewers
-    assert client.patch(f"/api/users/{gran['id']}", json={"password": ""}).status_code == 200
+    testing.add_account(client, {"name": "gran", "password": "granpass1", "role": "viewer"})
+    testing.add_account(client, {"name": "ed", "password": "edpass123", "role": "editor"})
+    gran = next(u for u in client.get("/api/suite-admin").json()["users"] if u["name"] == "gran")
+    ed = next(u for u in client.get("/api/suite-admin").json()["users"] if u["name"] == "ed")
+    assert client.patch(f"/api/suite-admin/users/{ed['id']}", json={"password": ""}).status_code == 400  # only viewers
+    assert client.patch(f"/api/suite-admin/users/{gran['id']}", json={"password": ""}).status_code == 200
     from fastapi.testclient import TestClient
     from app.main import app
     anon = TestClient(app)  # no lifespan: the session's app is already running
@@ -408,7 +409,7 @@ def test_suite_admin_panel(client):
     r = client.get("/api/suite-admin/ui.js")  # the first account (alex) is a suite admin
     assert r.status_code == 200 and "export async function mount" in r.text
     assert any(u["name"] == "alex" for u in client.get("/api/suite-admin").json()["users"])
-    assert client.post("/api/users", json={"name": "ann", "password": "secret123", "role": "admin"}).status_code == 200
+    assert testing.add_account(client, {"name": "ann", "password": "secret123", "role": "admin"}).status_code == 200
     client.cookies.clear()
     assert client.post("/api/auth/login", json={"name": "ann", "password": "secret123"}).status_code == 200
     assert client.get("/api/suite-admin/ui.js").status_code == 403

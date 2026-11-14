@@ -30,7 +30,7 @@ from app.geo import maps, places
 from app.ai.semantic import enabled as semantic_enabled, semantic
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from app.routes import auth as auth_routes, backup, browse, images, albums, editing, geo, tools, review, organize, faces, settings, users as users_routes
+from app.routes import auth as auth_routes, backup, browse, images, albums, editing, geo, tools, review, organize, faces, settings
 from app.runtime import state, kick, refresh, auto, watch, resolve, prewarmer, models_arrived, APP_NAME_DEFAULT, app_name, app_stamp, public_version
 from app import __version__ as APP_VERSION
 
@@ -257,7 +257,6 @@ def _server_apply(body: dict) -> None:
 
 app.include_router(auth.server_router(updater, log_file=config.LOG_FILE, info=_server_info, apply=_server_apply))  # /api/server, /api/log: admins
 app.include_router(auth_routes.router)
-app.include_router(users_routes.router)
 app.include_router(auth.admin_router())  # /api/suite-admin (+ ui.js, the Settings › Security and Global settings panel): the whole suite (suite admins)
 app.include_router(geo.router)
 app.include_router(backup.router)

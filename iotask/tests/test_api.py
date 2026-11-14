@@ -3,6 +3,7 @@
 import datetime as dt
 import plistlib
 from zoneinfo import ZoneInfo
+from iosuite_shared import testing
 
 
 def new(client, **f):
@@ -103,7 +104,7 @@ def test_subtasks(client, family_id):
 
 
 def test_members(client, family_id):
-    client.post("/api/users", json={"name": "emma", "password": "secret123", "role": "editor"})
+    testing.add_account(client, {"name": "emma", "password": "secret123", "role": "editor"})
     fam = client.get("/api/members").json()["items"]
     emma = next(m for m in fam if m["name"] == "emma")
     t = new(client, title="Pack the swim bag", members=["emma"], categories=["Sport"])
@@ -113,7 +114,7 @@ def test_members(client, family_id):
 
 
 def test_roles(client, family_id):
-    client.post("/api/users", json={"name": "vic", "password": "secret123", "role": "viewer"})
+    testing.add_account(client, {"name": "vic", "password": "secret123", "role": "viewer"})
     t = new(client, title="Shared", listId=family_id)
     client.cookies.clear()
     assert client.post("/api/auth/login", json={"name": "vic", "password": "secret123"}).status_code == 200
@@ -126,7 +127,7 @@ def test_roles(client, family_id):
 
 
 def test_member_keeps_own_lists(client, family_id):
-    client.post("/api/users", json={"name": "meg", "password": "secret123", "role": "member"})
+    testing.add_account(client, {"name": "meg", "password": "secret123", "role": "member"})
     t = new(client, title="Shared", listId=family_id)
     client.cookies.clear()
     assert client.post("/api/auth/login", json={"name": "meg", "password": "secret123"}).status_code == 200

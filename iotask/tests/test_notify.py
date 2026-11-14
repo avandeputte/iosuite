@@ -7,6 +7,7 @@ from iosuite_shared import push, users
 
 from app import notify
 from tests.test_api import new
+from iosuite_shared import testing
 
 NY = ZoneInfo("America/New_York")
 
@@ -33,7 +34,7 @@ def test_nothing_without_a_device(client, family_id, sent):
 
 def test_due_alert_and_morning(client, family_id, sent):
     alex = users.find("alex")["id"]
-    bob = client.post("/api/users", json={"name": "bob", "password": "secret123", "role": "member"}).json()
+    bob = testing.add_account(client, {"name": "bob", "password": "secret123", "role": "member"}).json()
     bob = bob.get("id") or users.find("bob")["id"]
     device(alex)
     device(bob)

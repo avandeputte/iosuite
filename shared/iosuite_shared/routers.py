@@ -1,5 +1,5 @@
 """The routers every app mounts: /api/auth/* (sign-in, the account's own settings, passwords, sessions, app
-passwords), /api/users (this app's admins), /api/suite-admin (suite admins), /api/server + /api/log (maintenance)
+passwords), /api/suite-admin (suite admins), /api/server + /api/log (maintenance)
 and /api/status. Each takes the app's Auth; Auth.router() and friends call them."""
 import logging
 from pathlib import Path
@@ -265,78 +265,6 @@ def auth_router(self) -> APIRouter:
         if key == app:
             auth._registered = False
         return {"items": suite.visible(auth.current_user(request)), "app": app}
-
-    return r
-
-def users_router(self) -> APIRouter:
-    """Accounts, as this app's admins see them: the role column is the role here. An admin of this app lists the
-    accounts, adds one, and sets an account's role here (and the app's own fields: ioPix's person). Everything that
-    reaches beyond this app is a suite admin's: an account's name, email, password and suiteAdmin, its roles in
-    other apps ({roles: {app: role}}), its sessions, and deleting it."""
-    auth, access, app = self, self.access, self.app
-    r = APIRouter()
-
-    @r.get("/api/users", dependencies=[access.admin])
-    def api_users(request: Request):
-        out = []
-        for u in users.list_users(app):
-            u = auth.decorate(u)
-            u["roles"] = users.roles_of(u["id"])
-            out.append(u)
-        return {"users": out, "roles": list(users.APP_ROLES), "app": app, "suiteAdmin": users.is_suite_admin(auth.current_user(request))}
-
-    @r.post("/api/users", dependencies=[access.admin])
-    async def api_users_create(request: Request):
-        body = await json_body(request)
-        try:
-            u = users.create(str(body.get("name", "")), str(body.get("password", "")), str(body.get("role") or "") or (None if suite.is_admin_tool(app) else users.DEFAULT_ROLE), app,
-                             email=str(body.get("email") or ""), display_name=str(body.get("displayName") or ""),
-                             suite_admin=bool(body.get("suiteAdmin")) and users.is_suite_admin(auth.current_user(request)))
-        except ValueError as e:
-            raise HTTPException(400, str(e))
-        return auth.decorate(u)
-
-    @r.patch("/api/users/{user_id}", dependencies=[access.admin])
-    async def api_users_update(user_id: int, request: Request):
-        body = await json_body(request)
-        if not users.get(user_id):
-            raise HTTPException(404, "No such user")
-        try:
-            auth._update(auth.current_user(request), user_id, body)
-        except PermissionError as e:
-            raise HTTPException(403, str(e))
-        except ValueError as e:
-            raise HTTPException(400, str(e))
-        return {"ok": True, "user": auth.decorate(users.get(user_id, app))}
-
-    @r.get("/api/users/{user_id}/sessions", dependencies=[access.suite_admin])
-    def api_user_sessions(user_id: int):
-        """An account's sessions (suite admins): app, client, address, through Cloudflare or not, last seen."""
-        if not users.get(user_id):
-            raise HTTPException(404, "No such user")
-        return {"sessions": sessions.list_sessions(user_id)}
-
-    @r.delete("/api/users/{user_id}/sessions", dependencies=[access.suite_admin])
-    def api_user_end_sessions(user_id: int, request: Request):
-        """Sign an account out everywhere (suite admins), or one session with ?session=<id>."""
-        if not users.get(user_id):
-            raise HTTPException(404, "No such user")
-        sid = request.query_params.get("session")
-        if sid:
-            sessions.end_one(user_id, sid)
-        else:
-            sessions.end_all(user_id)
-        return {"ok": True}
-
-    @r.delete("/api/users/{user_id}", dependencies=[access.suite_admin])
-    def api_users_delete(user_id: int, request: Request):
-        """The account and what the person kept in every app, as Settings › Security › People deletes it."""
-        try:
-            return {"ok": True, **persondata.delete_account(auth, request, auth.current_user(request), user_id)}
-        except LookupError as e:
-            raise HTTPException(404, str(e).strip("'\""))
-        except ValueError as e:
-            raise HTTPException(400, str(e))
 
     return r
 
