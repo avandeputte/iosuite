@@ -19,7 +19,7 @@ dependencies = [
   "defusedxml<1",                 # an uploaded SVG icon
   "pyyaml<7",                     # importing a homepage bookmarks.yaml
   "websockets<16",                # Home Assistant's live feed (app/ha_feed.py)
-  "mcp<3",                        # the MCP server at /mcp: updating every app at once
+  "mcp<3",                        # the suite's one MCP server at /mcp (and its client, to pass calls on to every app)
 ]
 
 [project.optional-dependencies]
