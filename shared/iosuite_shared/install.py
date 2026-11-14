@@ -53,8 +53,12 @@ switch in the Shared ioSuite database (iosuite_shared.suite.one_address; the sta
 
 `--address URL` names where the suite is: the start page's PUBLIC_URL, and with `proxy` every other app's folder of it
 too (https://home.example.com/calendar), for a proxy that serves one name with a folder per app. The apps whose
-config.env changed are restarted; an app added later follows what the others do. ioContact's LDAP directory, which
-is not HTTP and so passes through neither, stays where it listened.
+config.env changed are restarted; an app added later follows what the others do (with `proxy`, the address is kept
+in BASE/iosuite-reach.env, so an app added while the start page is alone still gets its folder). ioContact's LDAP
+directory, which is not HTTP and so passes through neither, stays where it listened. Going back undoes it: an
+address the person had named for HOST (kept as HOST_BEFORE while the app listens on this machine only) comes back,
+and a PUBLIC_URL that was only the app's folder of the proxy's address is taken out. Removing the start page while
+it answers at the one address puts every app back on its own port first.
 """
 import atexit
 import os
@@ -589,12 +593,47 @@ def _local_only(mode, name):
 
 
 def _local_env(name, cfg):
-    """What makes an app listen on this machine only. ioContact's LDAP directory listens where the web app does
-    unless told otherwise: it is not HTTP, no proxy and no start page passes it on, so it stays where it was."""
+    """What makes an app listen on this machine only. An address the person named for HOST is kept as HOST_BEFORE,
+    for the way back (_network_env). ioContact's LDAP directory listens where the web app does unless told
+    otherwise: it is not HTTP, no proxy and no start page passes it on, so it stays where it was."""
     out = {"HOST": LOCAL}
+    if cfg.get("HOST") and not _is_local(cfg["HOST"]) and "HOST_BEFORE" not in cfg:  # no line (every address) needs no note
+        out["HOST_BEFORE"] = cfg["HOST"]
     if name == "iocontact" and not cfg.get("LDAP_HOST") and cfg.get("LDAP_PORT") != "0" and not _is_local(cfg.get("HOST")):
         out["LDAP_HOST"] = cfg.get("HOST") or "0.0.0.0"
     return out
+
+
+def _network_env(name, cfg):
+    """The way back to the network: HOST as it was before _local_env (no line: every address), and ioContact's
+    LDAP directory pin taken out when it only kept the directory where the web app now listens again."""
+    out = {}
+    if cfg.get("HOST_BEFORE"):
+        out["HOST"], out["HOST_BEFORE"] = cfg["HOST_BEFORE"], None
+    elif _is_local(cfg.get("HOST")):  # an address the person named (one of several on this machine) stays
+        out["HOST"] = None
+    if name == "iocontact" and cfg.get("LDAP_HOST") in ("0.0.0.0", cfg.get("HOST_BEFORE") or "0.0.0.0"):
+        out["LDAP_HOST"] = None
+    return out
+
+
+REACH_FILE = "iosuite-reach.env"  # in BASE: how the apps on this machine are reached, and the proxy's address
+
+
+def stored_reach(base):
+    return read_env_file(Path(base) / REACH_FILE) if base else {}
+
+
+def _store_reach(base, mode, address):
+    """Kept for an app added later: with proxy, its folder of that address (shared_address)."""
+    p = Path(base) / REACH_FILE
+    try:
+        if mode == "proxy" and address:
+            write_env_file(p, {"MODE": mode, "ADDRESS": address})
+        elif p.is_file():
+            p.unlink()
+    except OSError:
+        pass  # a base this cannot write (the tests' own folder, a read-only mount): inferred from config.env then
 
 
 def _switch():
@@ -628,6 +667,9 @@ def reach_now(base, config_dir, switch=None):
 def shared_address(base, config_dir):
     """The one address a proxy serves every app in a folder of (the start page's PUBLIC_URL), when another app here
     is set up as a folder of it; None otherwise (a name per app, or no public address)."""
+    kept = stored_reach(base)
+    if kept.get("MODE") == "proxy" and kept.get("ADDRESS"):
+        return kept["ADDRESS"].rstrip("/")
     here = installed(base, config_dir)
     if "iostart" not in here:
         return None
@@ -643,6 +685,7 @@ def shared_address(base, config_dir):
 def reach_plan(mode, base, config_dir, address=None):
     """[(app, its folder, {KEY: value, or None to take the line out})] for the apps whose config.env changes."""
     out = []
+    was = shared_address(base, config_dir) if mode != "proxy" else None  # the folders a proxy served until now
     for n in installed(base, config_dir):
         folder = _folder(base, config_dir, n)
         cfg = read_env_file(folder / "config.env")
@@ -650,14 +693,13 @@ def reach_plan(mode, base, config_dir, address=None):
         if _local_only(mode, n):
             ch.update(_local_env(n, cfg))
         else:
-            if _is_local(cfg.get("HOST")):  # an address the person named (one of several on this machine) stays
-                ch["HOST"] = None
-            if n == "iocontact" and cfg.get("LDAP_HOST") == "0.0.0.0":
-                ch["LDAP_HOST"] = None
+            ch.update(_network_env(n, cfg))
         if address and n == "iostart":
             ch["PUBLIC_URL"] = address
         elif address and mode == "proxy":
             ch["PUBLIC_URL"] = f"{address}/{folder_of(n)}"
+        elif was and n != "iostart" and (cfg.get("PUBLIC_URL") or "").rstrip("/") == f"{was}/{folder_of(n)}":
+            ch["PUBLIC_URL"] = None  # only its folder of the proxy's address: no longer how it is reached
         ch = {k: v for k, v in ch.items() if (cfg.get(k) or None) != v}
         if ch:
             out.append((n, folder, ch))
@@ -721,6 +763,10 @@ def set_reach(mode, config_dir, base=None, address=None, switcher=None, restarte
             log(f"  note: could not read or turn off the suite's one address in the Shared ioSuite database ({str(exc)[:160]}); "
                 f"a suite admin can, in Settings › Global settings › Apps")
             ok = False
+    if mode == "proxy":
+        _store_reach(base, mode, address or shared_address(base, config_dir))
+    else:
+        _store_reach(base, mode, None)
     for line in _reach_notes(mode, base, config_dir, address):
         log(line)
     return ok
@@ -956,6 +1002,20 @@ def main_apps(a):
         if not picked:
             return 0
         add, rem, delete, redo = picked
+    # what set_reach would refuse is refused before anything is installed or removed (an app installed for a way
+    # that is then refused would listen on this machine only, with nothing to reach it through)
+    after = (set(installed(base, a.config)) | set(add)) - set(rem)
+    if reach.get("mode") in ("one", "one-proxy") and "iostart" not in after:
+        raise SystemExit("error: one address needs the start page (ioStart) on this server: add it (--add iostart), or keep it")
+    if reach.get("address") and not ADDRESS.match(reach["address"].rstrip("/")):
+        raise SystemExit(f"error: {reach['address']}: not an address (https://home.example.com)")
+    if "iostart" in rem and not reach.get("mode") and reach_now(base, a.config) in ("one", "one-proxy"):
+        say("The start page answers at the one address: every app goes back on its own port before it is removed")
+        reach = {"mode": "ports", "address": None}
+        if not set_reach("ports", a.config, base=base):
+            print("\nerror: the apps could not be put back on their own port; ioStart was not removed", file=sys.stderr)
+            return 1
+        reach = {}  # done
     own = app_of(a.config)
     not_removed = remove([n for n in rem if n != own], a.config, base=base, delete_data=delete, db_admin=a.db_admin) if rem else []
     service = a.service
