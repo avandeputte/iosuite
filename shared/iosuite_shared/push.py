@@ -51,7 +51,7 @@ SUBJECT = "https://github.com/avandeputte/iosuite"  # who sends, for the push se
 
 # What there is to get. app: the app it comes from (offered only to people who use it); admin: suite admins only.
 KINDS = [
-    {"kind": "tasks", "app": "iotask", "label": "Tasks", "hint": "When a task with a time is due, and in the morning what is due today"},
+    {"kind": "tasks", "app": "iotask", "label": "Tasks", "hint": "A task’s alert when it goes off, and in the morning what is due today"},
     {"kind": "events", "app": "iocalendar", "label": "Event reminders", "hint": "The reminders set on events"},
     {"kind": "birthdays", "app": "iocontact", "label": "Birthdays", "hint": "In the morning, whose birthday or anniversary it is"},
     {"kind": "health", "app": "iohealth", "label": "Health goals", "hint": "When you reach one of your daily goals"},
