@@ -1,4 +1,4 @@
-"""iosuite-shared: init | check | list | create | admin | role | password | edge | install (see install.py) | provision (see provision.py).
+"""iosuite-shared: init | check | list | create | admin | role | password | edge | install, remove, apps (see install.py) | provision (see provision.py).
 
 Every app's setup.sh makes its first admin with `iosuite-shared admin NAME --app APP` (the password from ADMIN_PASSWORD,
 else asked for) and checks the Shared ioSuite database with `iosuite-shared check`; run them with the app's config.env
@@ -39,7 +39,7 @@ def main(argv=None):
         from iosuite_shared import config
         config.load_file(a.config)
 
-    if a.cmd == "install":  # no database needed here: the companions' setup.sh check theirs
+    if a.cmd in ("install", "remove", "apps"):  # no database needed to start: the companions' setup.sh check theirs
         return install.main(a)
     if a.cmd == "provision":  # connects as the administrator, not as the app
         return provision.main(a)

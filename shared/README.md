@@ -595,8 +595,8 @@ ADMIN_PASSWORD=… iosuite-shared --config /opt/iosuite/app install iocalendar i
 iosuite-shared --config /opt/iopix/app install all --no-service
 ```
 
-Every app's `setup.sh` ends with "Also install other apps of the suite here?" (flag `--also iopix,ionote`; `--also all`;
-the `IO<APP>_ALSO` environment variable in the Proxmox installers). The answer comes here, so the questions every app
+Every app's `setup.sh` ends with the list of the suite's apps on the machine (`apps`, below), and takes `--also
+iopix,ionote` (`--also all`; the `IO<APP>_ALSO` environment variable in the Proxmox installers). What is ticked or named comes here, so the questions every app
 shares are asked once: `install` reads the calling app's config.env and hands each companion the same **app database
 server** (`DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`; each app gets its own database name, `calendar`, `contacts`,
 `notes`, `health`, `iopix`, `suite`, created when the user may, so the user needs rights on those names too), the same
@@ -608,6 +608,32 @@ environment (`IOCALENDAR_DB`, `IOCALENDAR_SUITE_DB`, `IOCALENDAR_ADMIN`, ...), n
 per app keeps its default: the usual port, no public address, the machine's time zone; ioPix gets `--no-digikam`,
 `--features none` and the photos folder of `--photos` (default `/library/photos`). An app already set up in its folder
 is left alone. Afterwards each app updates itself as always (its `update.sh`, or Settings › Server in the web app).
+
+### The same machine, later: `apps`, `remove`, reconfigure
+
+```sh
+iosuite-shared --config /opt/iostart/app apps                      # the list: tick, untick, r<number> to reconfigure
+iosuite-shared --config /opt/iostart/app apps --list
+iosuite-shared --config /opt/iostart/app apps --add iotask --remove iohealth --reconfigure iocalendar
+iosuite-shared --config /opt/iostart/app remove iohealth [--delete-data] [--db-admin root]
+```
+
+`apps` is what `./setup.sh --apps`, the end of every `setup.sh` and the repository's `install.sh`
+(`curl -fsSL …/install.sh | bash`, which also does the first install) run. An app is on the machine when
+`<base>/<app>/app/config.env` exists.
+
+**Removing** stops the app's service and deletes the unit (only when it points at that folder; the login item on a
+Mac), deletes the program files (code, Python environment, config.env) and takes the app out of `ios_apps` and
+`ios_updates`, so no switcher shows it and no app calls it. It keeps the app's database, its data folder, the
+accounts' roles in the app, its keys and app passwords: adding the app again finds everything. `--delete-data`
+(a separate question in the list, answered by typing `DELETE`) also drops the app's own database (as the app's user, or
+as `--db-admin`) and deletes `<base>/<app>`. It never drops the Shared ioSuite database or a database another app on
+the machine uses, never deletes a data folder outside `<base>/<app>`, the photos (`PHOTOS_ROOT`) or the backups
+(`BACKUP_DIR`). The app the command runs from is removed by another app that stays; the last app is not removed.
+
+**Reconfiguring** runs the app's own `setup.sh --also none` in its folder with the person at the keyboard: every
+question again with the current answer as the default. Without questions, give that `setup.sh` the flags:
+`sh /opt/iotask/app/setup.sh --yes --port 8700`.
 
 ### A MariaDB administrator makes the databases and users: `provision`
 
