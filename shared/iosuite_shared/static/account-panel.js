@@ -8,6 +8,7 @@
      el.append(ui.unitsRow(current, (k) => applyUnits(k)));         // 'auto' | 'metric' | 'imperial'
      await ui.mountAppPasswords(el, { toast, syncOnly: 'Calendar apps only (CalDAV)' });
      await ui.mountNotifications(el, { toast });                   // also part of mountAccount: this device, what to get
+     await ui.mountFeeds(el, { toast, title, intro });             // the app's subscription links (/api/feeds), each shown once
 
    ui.box(icon, title, ...kids) and ui.row(label, hint, control) build the app's own boxes in the same look.
 */
@@ -344,4 +345,33 @@ export async function mountAppPasswords(el, opts = {}) {
       } catch (e) { fail(e); }
     } }, 'New app password')), syncRow, shown, list));
   await draw();
+}
+
+/** The signed-in person's subscription links of this app (iosuite_shared.feeds: /api/feeds): an address with a secret,
+    for apps that cannot sign in. A new one is shown once, with every address the app makes from it; each is named and
+    stopped by itself. opts: { toast, title, intro, icon, open: 'Open in my calendar app' (the first address, as webcal://) }. */
+export async function mountFeeds(el, opts = {}) {
+  styles(); setToast(opts.toast);
+  el.classList.add('iosv');
+  const label = h('input', { class: 'sv-in', placeholder: 'Name, e.g. Kitchen tablet', 'aria-label': 'Name' });
+  const shown = h('div'), list = h('div');
+  const draw = (items) => list.replaceChildren(items.length ? h('table', { class: 'sv-t' }, h('tr', null, h('th', null, 'Name'), h('th', null, 'Made'), h('th', null, 'Last used'), h('th')),
+    items.map((f) => h('tr', null, h('td', null, f.label), h('td', null, when(f.created)), h('td', null, f.lastUsed ? when(f.lastUsed) : 'never'),
+      h('td', { style: 'text-align:right' }, h('button', { class: 'sv-btn', onclick: async () => {
+        if (!await confirmDialog('Stop subscription link', `Stop “${f.label}”? Calendars subscribed with it stop updating.`, 'Stop')) return;
+        try { await api(`feeds/${f.id}`, { method: 'DELETE' }); draw((await api('feeds')).feeds); } catch (e) { fail(e); }
+      } }, 'Stop'))))) : h('p', { class: 'sv-muted' }, 'No subscription links yet.'));
+  el.replaceChildren(h('div', { class: 'sv-box' }, h('h2', null, icon(opts.icon || 'devices'), opts.title || 'Subscribe (read-only)'),
+    h('p', { class: 'sv-muted' }, opts.intro || 'For apps that cannot sign in. Anyone with a link can read what it shows, so make one per app or device and stop it when it is no longer used.'),
+    h('div', { class: 'sv-row' }, label, h('button', { class: 'sv-btn primary', onclick: async () => {
+      try {
+        const r = await api('feeds', { json: { label: label.value.trim() } });
+        const first = r.links[0];
+        shown.replaceChildren(h('p', null, h('b', null, 'Copy the address now, it is shown only once.')),
+          ...r.links.map((l) => h('div', { class: 'sv-row' }, h('span', { style: 'min-width:120px' }, l.name), h('code', { class: 'sv-code' }, l.url))),
+          first && opts.open !== false ? h('p', null, h('a', { class: 'sv-btn', href: first.url.replace(/^https?:/, 'webcal:') }, opts.open || 'Open in my calendar app')) : null);
+        label.value = ''; draw(r.feeds);
+      } catch (e) { fail(e); }
+    } }, 'New link')), shown, list));
+  draw((await api('feeds')).feeds);
 }

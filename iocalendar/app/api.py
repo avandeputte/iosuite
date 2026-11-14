@@ -569,31 +569,30 @@ def vfreebusy(cals: list[dict], who: dict, days_back: int = 7, days_ahead: int =
 
 @router.get("/api/connect", dependencies=[access.signed_in])
 def connect_info(request: Request):
-    """What to type into a calendar app: CalDAV, the subscription links, free/busy, the API."""
+    """What to type into a calendar app: CalDAV, free/busy, the API. The subscription links are made one at a time
+    (POST /api/feeds: feed_links) and shown only then."""
     u = request.state.user
     base = base_url(request)
-    tok = users.feed_token(u["id"])
     cals = model.calendars_for(u)
     return {"user": u["name"], "server": base, "caldav": f"{base}/dav/", "principal": f"{base}/dav/principals/{u['name']}/",
-            "calendars": [{"id": c["id"], "name": c["name"], "caldav": f"{base}/dav/calendars/{u['name']}/{c['slug']}/",
-                           "ics": f"{base}/ics/{tok}/{c['slug']}.ics"} for c in cals],
-            "all": f"{base}/ics/{tok}/all.ics", "webcal": re.sub(r"^https?://", "webcal://", f"{base}/ics/{tok}/all.ics"),
-            "freebusy": f"{base}/ics/{tok}/freebusy.vfb", "api": f"{base}/api/docs", "mcp": f"{base}/mcp"}
+            "calendars": [{"id": c["id"], "name": c["name"], "caldav": f"{base}/dav/calendars/{u['name']}/{c['slug']}/"} for c in cals],
+            "api": f"{base}/api/docs", "mcp": f"{base}/mcp"}
 
 
-@router.post("/api/feeds/reset", dependencies=[access.signed_in])
-def feeds_reset(request: Request):
-    """A new private link for your subscriptions (the old ones stop working)."""
-    users.reset_feed_token(request.state.user["id"])
-    return {"ok": True}
+def feed_links(request: Request, u: dict, secret: str) -> list:
+    """A new subscription link's addresses (iosuite_shared.feeds): every calendar you see (first: what "Open in my
+    calendar app" opens), when you are busy, then each calendar."""
+    base = f"{base_url(request)}/ics/{secret}"
+    return ([{"name": "Everything", "url": f"{base}/all.ics"}, {"name": "Free/busy", "url": f"{base}/freebusy.vfb"}]
+            + [{"name": c["name"], "calendarId": c["id"], "url": f"{base}/{c['slug']}.ics"} for c in model.calendars_for(u)])
 
 
 @router.get("/ics/{token}/{name}", dependencies=[access.public])
 def feed(token: str, name: str, request: Request, member: str | None = None):
-    """The subscription links (no sign-in: the token in the link is the secret): one calendar (<slug>.ics), every
+    """The subscription links (no sign-in: the secret in the link is the sign-in, iosuite_shared.feeds): one calendar (<slug>.ics), every
     calendar you see (all.ics) or when you are busy (freebusy.vfb / .ifb). ?member=<name>: only the events tagged
     with that family member (one person's own subscription)."""
-    u = users.user_from_feed_token(token)
+    u = users.user_from_feed(token)
     if not u:
         raise HTTPException(404)
     cals = model.calendars_for(u)

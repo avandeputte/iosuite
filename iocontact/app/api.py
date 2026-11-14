@@ -11,7 +11,7 @@ import re
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
-from iosuite_shared import appleprofile, prefix, users as shared_users
+from iosuite_shared import appleprofile, feeds, prefix, users as shared_users
 from iosuite_shared.access import json_body
 
 from app import access, calendar, config, csvio, db, enrich, iopix, limits, model, quality, relations as rel, users, vcard
@@ -83,7 +83,7 @@ async def body_contact(request: Request) -> dict:
     ct = request.headers.get("content-type", "").split(";")[0].strip().lower()
     raw = await limits.body(request)
     if ct in VCARD_TYPES:
-        cards = vcard.parse(raw.decode("utf-8", "replace"))
+        cards = await run_in_threadpool(vcard.parse, raw.decode("utf-8", "replace"))  # a large card is not read on the event loop
         if not cards:
             raise HTTPException(400, "No vCard in the body")
         return cards[0]
@@ -209,6 +209,10 @@ def get_contact(cid: int, request: Request, format: str | None = None):
 @router.post("/api/contacts", dependencies=[access.signed_in])
 async def create_contact(request: Request, book: str | None = None):
     u = auth.current_user(request)
+    if book:
+        writable_book(u, book)  # before the body is read: somebody who may not write here costs no parsing
+    elif not any(model.can_write_book(u, b) for b in model.books_for(u)):
+        raise HTTPException(403, "You cannot add contacts to any address book")
     data = await body_contact(request)
     bid = book or data.get("bookId") or next((b["id"] for b in model.books_for(u) if model.can_write_book(u, b)), None)
     b = writable_book(u, bid)
@@ -532,7 +536,7 @@ async def import_file(request: Request, file: UploadFile = File(...), book: str 
         raise limits.too_big(limits.MAX_IMPORT)
     raw = data.decode("utf-8-sig", "replace")
     try:
-        cards = parse_cards(raw, file.filename or "")
+        cards = await run_in_threadpool(parse_cards, raw, file.filename or "")
     except (ValueError, KeyError, IndexError) as e:
         raise HTTPException(400, f"Could not read the file: {e}")
     return await run_in_threadpool(import_cards, u, b, cards, mode)
@@ -617,15 +621,19 @@ def connect_info(request: Request):
     """What to type into a mail, contacts or calendar app."""
     u = auth.current_user(request)
     base = base_url(request)
-    tok = users.calendar_token(u["id"])
     host = re.sub(r"^https?://", "", base).split("/")[0].split(":")[0]
     return {"user": u["name"], "server": base, "carddav": f"{base}/dav/", "principal": f"{base}/dav/principals/{u['name']}/",
             "books": [{"name": b["name"], "url": f"{base}/dav/addressbooks/{u['name']}/{b['slug']}/"} for b in model.books_for(u)],
             "ldap": {"enabled": config.LDAP_PORT > 0, "host": host, "port": config.LDAP_PORT, "base": config.LDAP_BASE,
                      "bindDn": f"cn={u['name']},ou=users,{config.LDAP_BASE}"},
-            "calendar": {"family": f"{base}/cal/{tok}/family.ics", "all": f"{base}/cal/{tok}/all.ics",
-                         "webcalFamily": re.sub(r"^https?://", "webcal://", f"{base}/cal/{tok}/family.ics")},
             "api": f"{base}/api/docs"}
+
+
+def feed_links(request: Request, u: dict, secret: str) -> list:
+    """A new birthday calendar link's addresses (iosuite_shared.feeds): the family's (first: what "Open in my calendar
+    app" opens), then every address book you see."""
+    base = f"{base_url(request)}/cal/{secret}"
+    return [{"name": "Family birthdays", "url": f"{base}/family.ics"}, {"name": "Birthdays from all my books", "url": f"{base}/all.ics"}]
 
 
 def _apple_profile(request: Request, label: str, password: str, calendar: str, ldap: bool) -> tuple:
@@ -648,7 +656,7 @@ def _apple_profile(request: Request, label: str, password: str, calendar: str, l
     who = u.get("displayName") or u["name"]
     content = [appleprofile.account(config.APP, "ioContact", base, u, secret)]
     if calendar in ("family", "all"):
-        tok = users.calendar_token(u["id"])
+        tok = feeds.create(u["id"], config.APP, f"{label or 'Device'} (profile)")  # the device's own link: stopped by itself
         content.append({"PayloadType": "com.apple.subscribedcalendar.account", "PayloadVersion": 1,
                         "PayloadIdentifier": ident + ".birthdays", "PayloadUUID": str(uuid.uuid4()).upper(),
                         "PayloadDisplayName": "Birthday calendar",
@@ -688,16 +696,23 @@ async def apple_profile_link(request: Request):
                                                       str(b.get("calendar") or "family"), bool(b.get("ldap"))))
 
 
-@router.post("/api/calendar/reset", dependencies=[access.signed_in])
-def calendar_reset(request: Request):
-    users.reset_calendar_token(auth.current_user(request)["id"])
-    return {"ok": True}
+@router.get("/api/calendar/{which}.ics", dependencies=[access.signed_in])
+def calendar_signed_in(which: str, request: Request):
+    """The birthday calendar for whoever is signed in (ioCalendar's Birthdays calendar reads it as its service account)."""
+    return _birthdays(auth.current_user(request), which, request)
 
 
 @router.get("/cal/{token}/{which}.ics", dependencies=[access.public])
 def calendar_feed(token: str, which: str, request: Request):
-    u = users.user_from_calendar_token(token)
+    """The birthday calendar links (no sign-in: the secret in the link is the sign-in, iosuite_shared.feeds)."""
+    u = users.user_from_feed(token)
     if not u:
+        raise HTTPException(404)
+    return _birthdays(u, which, request)
+
+
+def _birthdays(u: dict, which: str, request: Request):
+    if which not in ("family", "all"):
         raise HTTPException(404)
     books = model.books_for(u)
     if which == "family":

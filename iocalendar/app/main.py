@@ -6,7 +6,6 @@ app password), whether sign-in is required at all, and refuses cross-site writes
 suite.
 """
 import logging
-import re
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -20,19 +19,6 @@ from app.auth import auth, updater
 setup_log(config.LOG_FILE)  # the server log that Settings › Server shows; the app runs without it
 log = logging.getLogger("iocalendar")
 
-
-class FeedTokenFilter(logging.Filter):
-    """A subscription link carries its secret in the address (/ics/<token>/...). The request log, which admins read in
-    Settings › Server, keeps the line without the token: with it an admin could read another account's calendars."""
-
-    def filter(self, record: logging.LogRecord) -> bool:
-        a = record.args
-        if isinstance(a, tuple) and len(a) > 2 and isinstance(a[2], str) and ("/ics/" in a[2] or "/profile/" in a[2]):
-            record.args = (*a[:2], re.sub(r"/(ics|profile)/[^/?\s]+", r"/\1/-", a[2], count=1), *a[3:])
-        return True
-
-
-logging.getLogger("uvicorn.access").addFilter(FeedTokenFilter())
 
 # what a visitor may still fetch when sign-in is required: the app shell and its files, the API docs, the subscription
 # links and CalDAV (their own sign-in), and the MCP endpoint (its gate below)
@@ -98,6 +84,7 @@ app.include_router(auth.status_router(updater, extra=_status_extra))  # /api/sta
 app.include_router(auth.server_router(updater, log_file=config.LOG_FILE, info=mcp_switch.info, apply=mcp_switch.apply))  # /api/server, /api/log (admins)
 app.include_router(auth.profile_router(api.base_url))  # /profile/<token>/<file> and the profile for all the apps that sync
 app.include_router(api.router)
+app.include_router(auth.feeds_router(api.feed_links))  # /api/feeds: your subscription links (Shared ioSuite database, shown once)
 app.include_router(caldav.router)
 shared_mcp.mount(app, mcp.server)  # MCP over streamable HTTP at /mcp, ahead of everything else
 

@@ -77,11 +77,6 @@ SCHEMA = [
         name VARCHAR(255) NULL, email VARCHAR(255) NULL, contact_id INT NULL, role VARCHAR(16) NULL,
         KEY idx_cal_event_people_event (event_id), KEY idx_cal_event_people_email (email), KEY idx_cal_event_people_contact (contact_id),
         FOREIGN KEY (event_id) REFERENCES cal_events(id) ON DELETE CASCADE)""",
-    # the private links of the iCalendar subscriptions (/ics/<token>/...), one per account
-    """CREATE TABLE IF NOT EXISTS cal_feed_tokens (
-        id INT AUTO_INCREMENT PRIMARY KEY, user_id INT NOT NULL, token CHAR(40) NOT NULL,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE KEY uq_cal_feed_tokens_token (token), KEY idx_cal_feed_tokens_user (user_id))""",
 ]
 
 def connect(database: str | None = None):

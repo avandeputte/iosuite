@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 
 from app import calendar, enrich, users, vcard
 from app.main import app
-from iosuite_shared import testing
+from iosuite_shared import feeds, testing
 
 
 def mk(client, book, **kw):
@@ -42,11 +42,11 @@ def test_viewer_cannot_mark_shared_contacts(client, family_id):
 
 def test_no_access_means_no_calendar_feed(client, family_id):
     _k, uid, _own = member(client)
-    tok = users.calendar_token(uid)
-    assert users.user_from_calendar_token(tok)
+    tok = feeds.create(uid, "iocontact", "x")
+    assert users.user_from_feed(tok)
     users.update(uid, role="none")
     users.forget_cached_auth()
-    assert users.user_from_calendar_token(tok) is None
+    assert users.user_from_feed(tok) is None
 
 
 def test_lookups_reach_public_hosts_only():

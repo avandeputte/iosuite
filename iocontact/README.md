@@ -138,7 +138,7 @@ account password.
 | Any app that reads contact files | **vCard 3.0** (RFC 2426) and **4.0** (RFC 6350), with Apple's extensions (relations, dates, social profiles and custom labels survive in Apple Contacts); vCard 2.1 is read | CardDAV, `/api/…?format=vcard`, import/export |
 | Web and JSON clients | **REST/JSON** with **jCard** (RFC 7095) by content negotiation (`Accept: application/vcard+json` or `text/vcard; version=4.0`) | `/api/`, OpenAPI docs at `/api/docs` |
 | Mail apps, desk phones, printers | **LDAP v3** (RFC 4511), read-only, inetOrgPerson plus Thunderbird's mozillaAbPersonAlpha attributes | port 3890 (389 in the Proxmox container) |
-| Calendars: Apple Calendar, Google Calendar, Outlook, Thunderbird | **iCalendar** (RFC 5545) subscription of birthdays and anniversaries, yearly events | `/cal/<private token>/family.ics` |
+| Calendars: Apple Calendar, Google Calendar, Outlook, Thunderbird | **iCalendar** (RFC 5545) subscription of birthdays and anniversaries, yearly events: each link has a secret of its own, made in Settings › Apps and devices and shown once (an Apple profile gets its own; only a hash is kept, in the Shared ioSuite database) | `/cal/<secret>/family.ics`, `/cal/<secret>/all.ics` |
 | Moving in and out | vCard files, jCard, and **CSV in Google Contacts' and Outlook's layouts** | Import and export page, `/api/import`, `/api/export` |
 | AI assistants: Claude and anything else that speaks MCP | **Model Context Protocol** (streamable HTTP, and stdio) | `https://host/mcp` (switched on in Settings › Server) |
 

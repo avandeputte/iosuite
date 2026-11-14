@@ -76,7 +76,7 @@ def test_jcal_params_and_freebusy_names_stay_on_their_line(client, family_id):
     assert r.json()["title"] == "Lunch" and r.json()["people"][0]["name"] == "Ann; Lee"
     assert ical._param('a"b\nc;d') == '"abc;d"'
     client.patch("/api/auth/me", json={"displayName": "Alex; the \"first\"\r\nATTENDEE:x", "email": "alex@x.org"})
-    tok = re.search(r"/ics/([^/]+)/", client.get("/api/connect").json()["all"]).group(1)
+    tok = re.search(r"/ics/([^/]+)/", client.post("/api/feeds", json={"label": "x"}).json()["links"][0]["url"]).group(1)
     vfb = client.get(f"/ics/{tok}/freebusy.vfb").text
     assert 'ORGANIZER;CN="Alex; the firstATTENDEE:x":mailto:alex@x.org' in vfb
 

@@ -11,7 +11,7 @@ import logging
 import re
 import secrets
 
-from iosuite_shared import apppasswords, db as authdb, users as shared
+from iosuite_shared import apppasswords, db as authdb, feeds, users as shared
 
 from app import db
 from app.auth import APP, row_of
@@ -86,12 +86,11 @@ def forget_me_contact(cid: int) -> None:
 
 
 def forget_gone(*uids: int) -> None:
-    """The private address book (with its contacts) and the calendar link of accounts that are gone."""
+    """The private address book (with its contacts) of accounts that are gone (their calendar links go with the account)."""
     for uid in uids:
         for b in db.q("SELECT id FROM con_address_books WHERE owner_id = %s", (uid,)):
             db.ex("DELETE FROM con_contacts WHERE address_book_id = %s", (b["id"],))
         db.ex("DELETE FROM con_address_books WHERE owner_id = %s", (uid,))
-        db.ex("DELETE FROM con_feed_tokens WHERE user_id = %s", (uid,))
     if uids:
         from app import quality
         quality.purge_merges()  # merges of their contacts can no longer be undone, and hold copies of them
@@ -175,6 +174,17 @@ def ldap_bind(name: str, password: str) -> dict | None:
     return row_of(user)
 
 
+def ldap_still_good(user_id: int, password: str) -> dict | None:
+    """The account behind an LDAP session that bound earlier, checked again at each search: its app password still
+    there with a scope the directory takes, and its access to ioContact not taken away; None otherwise."""
+    m = APP_PASSWORD.match(password or "")
+    r = m and authdb.one("SELECT scope FROM ios_app_passwords WHERE user_id = %s AND app = %s AND prefix = %s", (user_id, APP, m.group(1)))
+    if not r or (r["scope"] or "") not in ("", apppasswords.DAV):
+        return None
+    u = get(user_id)
+    return u if u and u["role"] != "none" else None
+
+
 def forget_cached_auth() -> None:
     apppasswords.forget()
     shared.invalidate()
@@ -184,23 +194,10 @@ def forget_cached_auth() -> None:
 attempt_wait, attempt_failed, attempt_succeeded = shared.attempt_wait, shared.attempt_failed, shared.attempt_succeeded
 
 
-# ---------------------------------------------------------------- calendar feed tokens (ioContact's own)
+# ---------------------------------------------------------------- birthday calendar links (iosuite_shared.feeds)
 
-def calendar_token(uid: int) -> str:
-    r = db.one("SELECT token FROM con_feed_tokens WHERE user_id = %s ORDER BY id LIMIT 1", (uid,))
-    if r:
-        return r["token"]
-    tok = secrets.token_hex(20)
-    db.ex("INSERT INTO con_feed_tokens (user_id, token) VALUES (%s, %s)", (uid, tok))
-    return tok
-
-
-def reset_calendar_token(uid: int) -> str:
-    db.ex("DELETE FROM con_feed_tokens WHERE user_id = %s", (uid,))
-    return calendar_token(uid)
-
-
-def user_from_calendar_token(tok: str) -> dict | None:
-    r = db.one("SELECT user_id FROM con_feed_tokens WHERE token = %s", (tok,))
-    u = get(r["user_id"]) if r else None
+def user_from_feed(secret: str) -> dict | None:
+    """The account a birthday calendar link (/cal/<secret>/...) reads as; None when the link is unknown or stopped."""
+    uid = feeds.user_id(APP, secret)
+    u = get(uid) if uid else None
     return u if u and u["role"] != "none" else None  # an account whose access here was taken away loses the feed too

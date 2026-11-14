@@ -129,11 +129,6 @@ SCHEMA = [
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, decided_at TIMESTAMP NULL,
         KEY idx_con_contact_suggestions_contact_status (contact_id, status), UNIQUE KEY uq_con_contact_suggestions_value (contact_id, field, vkey),
         FOREIGN KEY (contact_id) REFERENCES con_contacts(id) ON DELETE CASCADE)""",
-    # the private links of the birthday calendar subscription, one per account
-    """CREATE TABLE IF NOT EXISTS con_feed_tokens (
-        id INT AUTO_INCREMENT PRIMARY KEY, user_id INT NOT NULL, token CHAR(40) NOT NULL,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE KEY uq_con_feed_tokens_token (token), KEY idx_con_feed_tokens_user (user_id))""",
 ]
 
 

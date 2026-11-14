@@ -133,13 +133,13 @@ def test_import_export_and_feeds(client, family_id):
     assert r.json()["updated"] == 2
     out = client.get(f"/api/calendars/{family_id}/export").text
     assert out.count("BEGIN:VEVENT") == 3 and "X-WR-CALNAME:Family" in out
-    info = client.get("/api/connect").json()
-    fam = next(c for c in info["calendars"] if c["name"] == "Family")
+    links = feed_links(client)
+    assert "/ics/" not in str(client.get("/api/connect").json())  # a link is shown once, when it is made
     client.cookies.clear()
-    feed = client.get(fam["ics"].split("testserver", 1)[1])
+    feed = client.get(links["Family"])
     assert feed.status_code == 200 and feed.text.count("BEGIN:VEVENT") == 3
-    assert client.get(info["all"].split("testserver", 1)[1]).status_code == 200
-    fb = client.get(info["freebusy"].split("testserver", 1)[1]).text
+    assert client.get(links["Everything"]).status_code == 200
+    fb = client.get(links["Free/busy"]).text
     assert "BEGIN:VFREEBUSY" in fb
     assert client.get("/ics/" + "0" * 40 + "/all.ics").status_code == 404
     assert client.get("/api/calendars").status_code == 401
@@ -310,3 +310,28 @@ def test_a_shared_calendar_never_takes_the_address_of_a_private_one(client):
     again = model.create_calendar(ann, "Trips")
     slugs = {r["id"]: r["slug"] for r in db.q("SELECT id, slug FROM cal_calendars WHERE id IN (%s, %s, %s)", (mine, shared, again))}
     assert slugs[mine] == "trips" and len(set(slugs.values())) == 3, slugs
+
+
+def feed_links(client, label="Kitchen tablet") -> dict:
+    """A new subscription link's addresses, by name ("Everything", "Free/busy", each calendar), as paths."""
+    r = client.post("/api/feeds", json={"label": label})
+    assert r.status_code == 200, r.text
+    return {l["name"]: l["url"].split("testserver", 1)[1] for l in r.json()["links"]}
+
+
+def test_subscription_links_are_kept_hashed_shown_once_and_stopped_one_by_one(client, family_id):
+    from iosuite_shared import db as shared_db
+    a, b = feed_links(client, "iPad"), feed_links(client, "Office PC")
+    secret = a["Everything"].split("/")[2]
+    row = shared_db.one("SELECT * FROM ios_feed_tokens WHERE label = 'iPad'")
+    assert row["app"] == "iocalendar" and secret not in str(row) and len(row["token_hash"]) == 64
+    feeds = client.get("/api/feeds").json()["feeds"]
+    assert [f["label"] for f in feeds] == ["iPad", "Office PC"] and "url" not in str(feeds)
+    assert client.get(a["Everything"]).status_code == 200 and client.get("/api/feeds").json()["feeds"][0]["lastUsed"]
+    assert client.delete(f"/api/feeds/{feeds[0]['id']}").json() == {"ok": True}
+    assert client.get(a["Everything"]).status_code == 404 and client.get(b["Everything"]).status_code == 200
+    assert client.delete(f"/api/feeds/{feeds[0]['id']}").status_code == 404
+    # another app's link does not open ioCalendar's feeds
+    from iosuite_shared import feeds as shared_feeds
+    other = shared_feeds.create(1, "iocontact", "x")
+    assert client.get(f"/ics/{other}/all.ics").status_code == 404

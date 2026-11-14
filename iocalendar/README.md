@@ -167,7 +167,7 @@ them with a Bypass policy:
 | Path | Used by | Still protected by |
 |---|---|---|
 | `/dav/*` and `/.well-known/caldav` | CalDAV (Apple Calendar, the Apple profile, DAVx⁵, Thunderbird) | your user name and an app password |
-| `/ics/*` | subscription links and free/busy | the private token in the link (the request log keeps the address without it) |
+| `/ics/*` | subscription links and free/busy | the secret in the link (the request log keeps the address without it) |
 | `/mcp` | AI assistants (only if MCP is on) | an app password as a Bearer token |
 
 Everything else, the web app and `/api/`, stays behind Access. A script that calls `/api/` from outside needs a
@@ -189,7 +189,7 @@ account password.
 | --- | --- | --- |
 | Calendar apps, two-way: Apple Calendar (Mac, iPhone, iPad), DAVx⁵ on Android, Thunderbird, Evolution, GNOME Calendar, KDE, Outlook with a CalDAV add-in | **CalDAV** (RFC 4791) with sync-collection (RFC 6578), getctag, MKCALENDAR and extended MKCOL, PROPPATCH (name, colour, description, time zone), calendar-query with time ranges and `expand`, calendar-multiget, free-busy-query, If-Match / If-None-Match, discovery via `/.well-known/caldav` (RFC 6764) and current-user-principal | `https://host/dav/` |
 | Any app that reads calendar files | **iCalendar** (RFC 5545): every event is kept as the iCalendar object it came in as, so properties ioCalendar does not edit (attachments, other apps' X- properties) survive a round trip; VTIMEZONE, RRULE / RDATE / EXDATE, RECURRENCE-ID overrides and VALARM included | CalDAV, `/api/events/<id>?format=ics`, import/export |
-| Calendars that cannot sign in: Google Calendar, Outlook, Apple Calendar subscriptions | **iCalendar subscriptions** (`webcal://`) with a private token, one calendar or all of them, and **free/busy** (VFREEBUSY) | `/ics/<token>/<calendar>.ics`, `/ics/<token>/all.ics`, `/ics/<token>/freebusy.vfb` |
+| Calendars that cannot sign in: Google Calendar, Outlook, Apple Calendar subscriptions | **iCalendar subscriptions** (`webcal://`), one calendar or all of them, and **free/busy** (VFREEBUSY): each link has a secret of its own, made in Settings › Apps and devices and shown once (one per app or device, stopped one at a time; only a hash of it is kept, in the Shared ioSuite database) | `/ics/<token>/<calendar>.ics`, `/ics/<token>/all.ics`, `/ics/<token>/freebusy.vfb` |
 | Web and JSON clients | **REST/JSON** with **jCal** (RFC 7265) and iCalendar by content negotiation (`Accept: application/calendar+json` or `text/calendar`): occurrences in a range (repeating events expanded), events, calendars, free/busy, import/export | `/api/`, OpenAPI docs at `/api/docs` |
 | iPhone, iPad and Mac in one step | **Apple configuration profile** (`com.apple.caldav.account`) | Settings › Apps and devices |
 | AI assistants: Claude and anything else that speaks MCP | **Model Context Protocol** (streamable HTTP, and stdio) | `https://host/mcp` (switched on in Settings › Server) |
@@ -266,7 +266,7 @@ app/holiday.py     the Holidays calendars (one per country, with region and lang
 app/members.py     family members on events (kept as CATEGORIES), and the member filter
 app/mcp/           the MCP server: base (the server, finding events; who is asking comes from iosuite_shared.mcp), read, write and admin tools
 app/access.py      who may call a route (the markers come from iosuite-shared)
-app/users.py       accounts, app passwords and subscription tokens (the suite's, through iosuite-shared)
+app/users.py       accounts, app passwords and subscription links (the suite's, through iosuite-shared)
 static/            the web app (index.html, app.js, app.css, icons)
 proxmox/           the community-scripts LXC installer      setup.sh, run.sh, update.sh, Dockerfile
 ```

@@ -345,6 +345,12 @@ class Auth:
         from iosuite_shared import appleprofile
         return appleprofile.router(self, base_url)
 
+    def feeds_router(self, addresses) -> APIRouter:
+        """The person's subscription links (iosuite_shared.feeds): GET/POST /api/feeds, DELETE /api/feeds/<id>.
+        addresses(request, user, secret): the app's links made with a new secret."""
+        from iosuite_shared import feeds
+        return feeds.router(self, addresses)
+
     # ---- the MCP endpoint's gate
     def mcp_gate(self, enabled, path: str = MCP_PATH, on_user=None, on_request=None):
         """A `before` hook for middleware() (or something an app's own hook calls first): a request to the MCP endpoint

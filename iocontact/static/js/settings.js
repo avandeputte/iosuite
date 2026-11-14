@@ -54,6 +54,7 @@ export async function setDevices(el) {
   const isApple = /iPhone|iPad|Macintosh/.test(navigator.userAgent);
   const plabel = h('input', { class: 't', name: 'label', value: /iPad/.test(navigator.userAgent) ? 'iPad' : /Macintosh/.test(navigator.userAgent) ? 'Mac' : 'iPhone', style: 'max-width:200px' });
   const how = (summary, ...kids) => h('details', null, h('summary', { class: 'lnk' }, summary), ...kids);
+  const subs = h('div');
   el.append(...[
     S.user.passwordless ? null : h('div', { class: 'box' }, h('h2', null, icon('devices'), 'iPhone, iPad and Mac'),
       h('p', null, 'A profile that adds your contacts and, if you like, a birthday calendar in one step.'),
@@ -72,11 +73,7 @@ export async function setDevices(el) {
       kv('Server', info.server), kv('User name', info.user), kv('CardDAV address', info.carddav),
       how('Address of each address book', info.books.map((b) => kv(b.name, b.url))),
       how('How to connect', h('p', { class: 'muted small' }, 'Apple Contacts: Settings › Contacts › Accounts › Add Account › Other › Add CardDAV Account. Android: DAVx⁵. Also Thunderbird, Evolution, GNOME, KDE.'))),
-    h('div', { class: 'box' }, h('h2', null, icon('event'), 'Family birthday calendar'),
-      h('p', null, 'A calendar subscription with birthdays and anniversaries. Anyone with the link can read the dates.'),
-      kv('Family', info.calendar.family), kv('All my books', info.calendar.all),
-      h('p', null, h('a', { class: 'pillbtn', href: info.calendar.webcalFamily }, icon('event', 's'), 'Open in my calendar app'), ' ',
-        h('button', { class: 'pillbtn noic', onclick: async () => { if (await confirmDialog('New calendar link', 'The old link stops working; subscribed calendars need the new one.', 'Make a new link')) { await api('api/calendar/reset', { method: 'POST' }); onRoute(); } } }, 'New link'))),
+    subs,
     info.ldap.enabled ? h('div', { class: 'box' }, h('h2', null, icon('mail'), 'Mail apps (LDAP directory)'),
       h('p', null, 'Read-only address lookup for mail apps, desk phones and printers. Sign in with an app password; plain LDAP, so keep it on your own network.'),
       kv('Host', info.ldap.host), kv('Port', String(info.ldap.port)), kv('Base DN', info.ldap.base), kv('Bind DN', info.ldap.bindDn)) : null,
@@ -90,6 +87,8 @@ export async function setDevices(el) {
     h('div', { class: 'box' }, h('h2', null, icon('link'), 'Other apps (REST API)'),
       h('p', null, 'JSON, vCard or jCard with your user name and an app password. ', h('a', { class: 'lnk', href: 'api/docs', target: '_blank' }, 'API documentation')),
       copyRow(`curl -u ${info.user}:APP-PASSWORD -H 'Accept: application/vcard+json' ${info.server}/api/contacts?q=smith`))].filter(Boolean));
+  (await accountUi()).mountFeeds(subs, { toast, icon: 'devices', title: 'Family birthday calendar',
+    intro: 'A calendar subscription with birthdays and anniversaries, for calendar apps. Anyone with a link can read the dates, so make one per app or device and stop it when it is no longer used.' }).catch(fail);
 }
 
 export async function setBooks(el) {

@@ -98,6 +98,7 @@ app.include_router(auth.server_router(updater, log_file=config.LOG_FILE, info=mc
 app.include_router(auth.router())   # /api/auth/*: sign-in, accounts, me, password, sessions, app passwords, suite (the same in every app)
 app.include_router(auth.profile_router(api.base_url))  # /profile/<token>/<file> and the profile for all the apps that sync
 app.include_router(api.router)      # the contacts; also an account's own fields (its "me" contact, the face on its tile)
+app.include_router(auth.feeds_router(api.feed_links))  # /api/feeds: your birthday calendar links (Shared ioSuite database, shown once)
 app.include_router(auth.admin_router())  # /api/suite-admin (+ ui.js, the panel of Settings › Security and Global settings): the whole suite (suite admins)
 app.include_router(auth.related_router())  # /api/related (+ ui.js, the "Linked" panel): items linked across the apps
 app.include_router(carddav.router)

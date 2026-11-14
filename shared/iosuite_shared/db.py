@@ -95,6 +95,20 @@ SCHEMA = [
         INDEX idx_ios_app_passwords_user (user_id),
         FOREIGN KEY (user_id) REFERENCES ios_users(id) ON DELETE CASCADE
     )""",
+    # subscription links (iosuite_shared.feeds): an address with a secret for apps that cannot sign in (a calendar app
+    # subscribed to ioCalendar or to ioContact's birthdays); only a SHA-256 of the secret, shown once, stopped one at a time
+    """CREATE TABLE IF NOT EXISTS ios_feed_tokens (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        app VARCHAR(32) NOT NULL,
+        label VARCHAR(128) NOT NULL,
+        token_hash CHAR(64) NOT NULL,
+        created_at BIGINT NOT NULL,
+        last_used_at BIGINT NULL,
+        UNIQUE KEY uq_ios_feed_tokens_hash (token_hash),
+        INDEX idx_ios_feed_tokens_user (user_id, app),
+        FOREIGN KEY (user_id) REFERENCES ios_users(id) ON DELETE CASCADE
+    )""",
     # suite-wide (app '') and per-app settings: proxy sign-in, require_login, default_role
     """CREATE TABLE IF NOT EXISTS ios_settings (
         app VARCHAR(32) NOT NULL,

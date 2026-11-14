@@ -44,8 +44,8 @@ def test_holidays_calendars(client, family_id):
     assert client.post("/api/holidays/settings", json={"country": "BE"}).status_code == 400
     assert len(holidays_cals(client)) == 2
     # also over CalDAV and the subscription links: an ordinary (read-only) calendar
-    feeds = client.get("/api/connect").json()
-    ics = client.get(next(f["ics"] for f in feeds["calendars"] if f["id"] == be_cal["id"]).split("testserver", 1)[1]).text
+    links = client.post("/api/feeds", json={"label": "x"}).json()["links"]
+    ics = client.get(next(f["url"] for f in links if f.get("calendarId") == be_cal["id"]).split("testserver", 1)[1]).text
     assert "Nationale feestdag" in ics and "TRANSP:TRANSPARENT" in ics
     # a country taken off the list loses its calendar; none left: no Holidays calendars
     client.post("/api/holidays/settings", json={"items": [{"country": "BE", "language": "nl"}]})
@@ -109,7 +109,7 @@ def test_family_member_tags(client, family_id):
     titles = [i["title"] for i in client.get("/api/occurrences", params={**p, "member": "emma"}).json()["items"]]
     assert "Piano" in titles
     # one person's own subscription link
-    tok_url = client.get("/api/connect").json()["calendars"][0]["ics"].split("testserver", 1)[1]
+    tok_url = next(f["url"] for f in client.post("/api/feeds", json={"label": "Emma"}).json()["links"] if f.get("calendarId")).split("testserver", 1)[1]
     feed = client.get(tok_url, params={"member": "emma"}).text
     assert "Swimming" in feed and "Piano" in feed and "Dinner" not in feed
 
