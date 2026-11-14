@@ -78,7 +78,7 @@ def test_database_row_tests_a_connection(page, server, lib):
     assert row.locator("input[placeholder='host']").is_visible() and row.locator("input[placeholder='folder with digikam4.db']").is_hidden()
 
 def test_container_mode_writes_without_a_confirmation(page, server):
-    """DIGIKAM_CHECK=ask/none (the browser tests' server runs that way): the viewer cannot see digiKam,
+    """DIGIKAM_CHECK=none (the browser tests' server runs that way): the viewer cannot see digiKam,
     so a database write goes through without asking whether digiKam is closed."""
     con = ui_db(); con.cursor().execute("REPLACE INTO pix_settings (name, value) VALUES ('digikam_closed_until', '0')"); con.close()
     assert _get(server, "/api/status")["digikamCheck"] == "none"
@@ -195,7 +195,7 @@ def test_folders_and_albums_are_separate_pages(page, server, lib):
         assert page.locator(".tree .trow").count() > before or "open" in (node.get_attribute("class") or "")
     # upload one JPEG from the library into the first top-level folder
     src = next(p for p in lib["root"].rglob("*") if p.suffix.lower() in (".jpg", ".jpeg") and "zz-" not in str(p))
-    page.on("dialog", lambda d: d.accept())  # "is digiKam closed?" (the UI server runs with DIGIKAM_CHECK=ask)
+    page.on("dialog", lambda d: d.accept())  # "is digiKam closed?" (the UI server runs with DIGIKAM_CHECK=none)
     first = page.locator(".tree .trow").first
     first.hover()  # the row's actions appear on hover
     with page.expect_file_chooser() as fc:

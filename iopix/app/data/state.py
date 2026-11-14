@@ -136,9 +136,8 @@ def summary(user=...) -> dict:
         con.close()
 
 
-# ---- favorites: every account keeps its own. While there are no accounts there is one list (user 0), which is also
-# where the favorites of before 1.151 are, when they were one list for everyone. That list goes to one account, the
-# first admin who uses the app once accounts exist; every other account starts with none.
+# ---- favorites: every account keeps its own. While there are no accounts there is one list (user 0). That list goes
+# to one account, the first admin who uses the app once accounts exist; every other account starts with none.
 _taken = False  # the one list is known to be empty (taken, or never there): not looked at again until it is added to
 
 
