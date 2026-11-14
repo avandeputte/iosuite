@@ -331,14 +331,10 @@ def _dec(v):
     return v
 
 
-PHOTO_COLUMNS = ("photo", "photo_type")  # no longer used: the linked ioPix person is a contact's only photo
-
-
 def snapshot(ids: list[int]) -> dict:
     """The database rows of these contacts and of every relation to or from them."""
     marks = ",".join(["%s"] * len(ids))
-    contacts = [{k: v for k, v in r.items() if k not in PHOTO_COLUMNS} for r in _rows("con_contacts", "id", ids)]
-    snap = {"contacts": contacts, **{t: _rows(t, "contact_id", ids) for t in TABLES},
+    snap = {"contacts": _rows("con_contacts", "id", ids), **{t: _rows(t, "contact_id", ids) for t in TABLES},
             "relations": db.q(f"SELECT * FROM con_contact_relations WHERE contact_id IN ({marks}) OR related_id IN ({marks})", (*ids, *ids))}
     return {k: [{c: _enc(v) for c, v in r.items()} for r in rows] for k, rows in snap.items()}
 
@@ -415,7 +411,7 @@ def undo(merge_id: int) -> dict:
     with db.tx():
         touched = {r["contact_id"] for r in db.q(f"SELECT contact_id FROM con_contact_relations WHERE related_id IN ({marks})", ids)}
         for r in snap["contacts"]:
-            cols = {k: v for k, v in r.items() if k not in ("id", "created_at", "updated_at", *PHOTO_COLUMNS)}
+            cols = {k: v for k, v in r.items() if k not in ("id", "created_at", "updated_at")}
             db.ex("UPDATE con_contacts SET " + ", ".join(f"`{k}` = %s" for k in cols) + " WHERE id = %s", (*cols.values(), r["id"]))
         for t in TABLES:
             db.ex(f"DELETE FROM {t} WHERE contact_id IN ({marks})", ids)

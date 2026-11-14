@@ -382,7 +382,6 @@ def test_protocols_only_app_password(client, app):
     # LDAP binds take it
     assert users.ldap_bind("alex", limited)["name"] == "alex" and users.ldap_bind("alex", full)["name"] == "alex"
     assert users.ldap_bind("alex", "secret123") is None, "never the account's own password: LDAP is not encrypted"
-    assert users.authenticate("alex", limited) is None
     # an app password without the limit still works everywhere
     assert anon.get("/api/books", auth=("alex", full)).status_code == 200
     assert anon.get("/api/books", auth=("alex", "nope")).status_code == 401

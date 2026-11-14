@@ -21,7 +21,7 @@ def test_a_bookmark_is_a_web_address_or_a_mailto(client):
         assert r.status_code == 200 and r.json()["href"] == kept, (href, r.text)
     lid = r.json()["id"]
     assert client.patch(f"/api/bookmarks/links/{lid}", json={"href": "javascript:alert(1)"}).status_code == 400
-    r = client.post("/api/bookmarks/import", json={"yaml": "- Home:\n    - Bad:\n        - href: javascript:alert(1)\n    - Good:\n        - href: https://example.com\n"})
+    r = client.post("/api/bookmarks/import", json={"file": '<DL><p><DT><A HREF="javascript:alert(1)">Bad</A><DT><A HREF="https://example.com">Good</A></DL>'})
     assert "javascript:" not in str(client.get("/api/bookmarks").json())
 
 

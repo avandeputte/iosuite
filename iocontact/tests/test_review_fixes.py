@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 
 from app import calendar, enrich, users, vcard
 from app.main import app
-from iosuite_shared import feeds, testing
+from iosuite_shared import apppasswords, feeds, testing, users as shared_users
 
 
 def mk(client, book, **kw):
@@ -45,7 +45,7 @@ def test_no_access_means_no_calendar_feed(client, family_id):
     tok = feeds.create(uid, "iocontact", "x")
     assert users.user_from_feed(tok)
     users.update(uid, role="none")
-    users.forget_cached_auth()
+    shared_users.invalidate()
     assert users.user_from_feed(tok) is None
 
 
@@ -254,7 +254,7 @@ def test_ldap_bind_is_throttled_after_repeated_failures(client):
                 assert not ldap3.Connection(s, "cn=alex,ou=users,dc=iocontact", "wrong").bind()
             n = len(checked)
             assert n == shared.LOCK_AFTER + 1
-            c = ldap3.Connection(s, "cn=alex,ou=users,dc=iocontact", users.create_app_password(users.find("alex")["id"], "Mail"))
+            c = ldap3.Connection(s, "cn=alex,ou=users,dc=iocontact", apppasswords.create(users.find("alex")["id"], "iocontact", "Mail"))
             assert not c.bind() and "try again" in str(c.result.get("message", ""))
             assert len(checked) == n  # refused without checking the password
         finally:

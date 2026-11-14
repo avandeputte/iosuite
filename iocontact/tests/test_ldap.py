@@ -28,7 +28,8 @@ def test_ldap_search(client, family_id):
         refused = ldap3.Connection(s, "cn=alex,ou=users,dc=iocontact", "secret123")
         assert not refused.bind() and "app password" in refused.result["message"]
         from app import users
-        c = ldap3.Connection(s, "cn=alex,ou=users,dc=iocontact", users.create_app_password(users.find("alex")["id"], "Mail"), auto_bind=True)
+        from iosuite_shared import apppasswords
+        c = ldap3.Connection(s, "cn=alex,ou=users,dc=iocontact", apppasswords.create(users.find("alex")["id"], "iocontact", "Mail"), auto_bind=True)
         c.search("dc=iocontact", "(|(cn=*ann*)(mail=*ann*)(sn=*ann*))", attributes=["cn", "mail", "mobile", "o", "mozillaHomeLocalityName", "c"])
         assert len(c.entries) == 1
         e = c.entries[0]
@@ -53,8 +54,7 @@ def test_ldap_search(client, family_id):
         assert c.result["result"] == 50 and not c.entries
         c.unbind()
         # an app password revoked while a mail app is connected: its next search is refused and the connection closed
-        from iosuite_shared import apppasswords
-        pw = users.create_app_password(users.find("alex")["id"], "Phone")
+        pw = apppasswords.create(users.find("alex")["id"], "iocontact", "Phone")
         d = ldap3.Connection(s, "cn=alex,ou=users,dc=iocontact", pw, auto_bind=True)
         d.search("dc=iocontact", "(cn=Ann Lee)")
         assert len(d.entries) == 1

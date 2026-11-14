@@ -259,7 +259,7 @@ def listing(book_ids: list[int], status: str = "pending", contact_id: int | None
         extra = " AND s.contact_id = %s"
         args.append(contact_id)
     rows = db.q(f"SELECT s.*, c.fn, c.address_book_id FROM con_contact_suggestions s JOIN con_contacts c ON c.id = s.contact_id "
-                f"WHERE s.status = %s AND s.field <> 'photo' AND c.deleted = 0 AND c.address_book_id IN ({marks}){extra} "
+                f"WHERE s.status = %s AND c.deleted = 0 AND c.address_book_id IN ({marks}){extra} "
                 f"ORDER BY c.fn, s.contact_id, s.field, s.id LIMIT %s", (*args, limit))
     from app import users
     names = users.names_of({r["created_by"] for r in rows if r["created_by"]})  # the accounts live in the Shared ioSuite database
@@ -273,7 +273,7 @@ def pending_count(book_ids: list[int]) -> int:
     if not book_ids:
         return 0
     marks = ",".join(["%s"] * len(book_ids))
-    return db.one(f"SELECT count(*) AS n FROM con_contact_suggestions s JOIN con_contacts c ON c.id = s.contact_id WHERE s.status = 'pending' AND s.field <> 'photo' "
+    return db.one(f"SELECT count(*) AS n FROM con_contact_suggestions s JOIN con_contacts c ON c.id = s.contact_id WHERE s.status = 'pending' "
                   f"AND c.deleted = 0 AND c.address_book_id IN ({marks})", book_ids)["n"]
 
 

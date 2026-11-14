@@ -20,10 +20,7 @@ import tempfile
 import threading
 import time
 
-try:
-    import requests
-except ImportError:  # pragma: no cover - the package depends on it
-    requests = None
+import requests
 
 DEVICE_URL = "https://oauth2.googleapis.com/device/code"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
@@ -43,11 +40,6 @@ class DriveError(Exception):
     pass
 
 
-def _need_requests():
-    if requests is None:
-        raise DriveError("python3-requests is not installed")
-
-
 def _err(resp):
     try:
         e = resp.json().get("error")
@@ -63,7 +55,6 @@ def _err(resp):
 # --------------------------------------------------------------------------
 
 def start_device_flow(client_id):
-    _need_requests()
     r = requests.post(DEVICE_URL, data={"client_id": client_id, "scope": SCOPE_USER}, timeout=20)
     if r.status_code != 200:
         raise DriveError("Google refused the client ID: %s" % _err(r))
@@ -119,7 +110,6 @@ def _sa_assertion(sa):
 
 
 def access_token(dest):
-    _need_requests()
     with _tok_lock:
         tok = _tokens.get(dest["id"])
         if tok and tok[1] > time.time() + 60:

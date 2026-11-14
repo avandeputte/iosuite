@@ -25,7 +25,7 @@ from app import config
 log = logging.getLogger("app.db")
 SQLITE_FILE = config.DATA_DIR / "ionote.db"
 KEYS = ("type", "host", "port", "database", "user", "password")
-SCHEMA_VERSION = 4  # 2: notes, folders, tag colours and the change log belong to an account; 3: the suite naming convention (nts_ tables); 4: attachments and templates
+SCHEMA_VERSION = 4  # recorded in nts_schema_version; the tables are made as SCHEMA says (pre-release: no upgrade steps)
 PREFIX = "nts"
 _cfg = None
 _lock = threading.Lock()

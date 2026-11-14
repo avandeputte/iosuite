@@ -16,11 +16,6 @@ PREFIX = "bkp"
 # Passwords and Google keys are never here: they are kept with the suite's keys and tokens (iosuite_shared.credentials,
 # app iobackup: server_<id>_password, destination_<id>_client_secret / _refresh_token / _service_account).
 SCHEMA = [
-    """CREATE TABLE IF NOT EXISTS bkp_settings (
-        name VARCHAR(191) PRIMARY KEY,
-        value MEDIUMTEXT NOT NULL,
-        updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3)
-    )""",
     # a MariaDB (or Galera node) to back up and restore onto: host and port, or a socket on this machine
     """CREATE TABLE IF NOT EXISTS bkp_servers (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -141,18 +136,6 @@ def ex(sql: str, args=None) -> int:
 
 def marks(n: int) -> str:
     return ",".join(["%s"] * n) if n else "NULL"
-
-
-def get_setting(k: str, default: str | None = None) -> str | None:
-    r = one("SELECT value FROM bkp_settings WHERE name = %s", (k,))
-    return r["value"] if r else default
-
-
-def set_setting(k: str, v: str | None) -> None:
-    if v is None:
-        ex("DELETE FROM bkp_settings WHERE name = %s", (k,))
-    else:
-        ex("INSERT INTO bkp_settings (name, value) VALUES (%s, %s) ON DUPLICATE KEY UPDATE value = VALUES(value)", (k, v))
 
 
 def ensure_database() -> None:

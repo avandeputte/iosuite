@@ -389,7 +389,7 @@ def link_iopix_person(contact: str, person: Optional[str] = None) -> dict:
     p = hit[0]
     c["iopix"] = {"personId": p["id"], "name": p["name"]}
     _save(u, r["address_book_id"], c, r["id"])
-    out = {"contact": r["fn"], "iopix": {"personId": p["id"], "name": p["name"], "url": iopix.person_url(p["id"], p["name"])}}
+    out = {"contact": r["fn"], "iopix": {"personId": p["id"], "name": p["name"], "url": iopix.person_url(p["id"])}}
     return out
 
 

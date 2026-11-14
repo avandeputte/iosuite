@@ -83,8 +83,7 @@ what the app will show on the start page later (today's events, the newest photo
   nothing; a site without one shows a two-letter badge. An icon you give a link wins: an image address, a file name
   from the dashboard-icons collection (`github.png`), or a file of your own uploaded for the link (an SVG, which stays sharp at any size, or a PNG). The groups pack into columns (as many 250 px columns as
   fit). Editors and admins add, change, reorder and move folders and links (drag by the handle, with a mouse or a
-  finger), import a bookmarks file a browser exported (HTML) or an XBEL file, and export either;
-  `POST /api/bookmarks/import` still takes a homepage `bookmarks.yaml`.
+  finger), import a bookmarks file a browser exported (HTML) or an XBEL file, and export either.
 - **The Bookmarks app** at `<address>/bookmarks`: the Bookmarks page as an app of its own, with its own name, icon
   and manifest (`static/bookmarks.webmanifest`), opening straight on the bookmarks. On an iPhone or iPad open that
   address (Safari, or Vivaldi, Chrome, Edge, Firefox) and choose Share › Add to Home Screen; on Android or a desktop,
@@ -295,7 +294,7 @@ app/widgets.py     what the tiles and cards show: ioPix, ioCalendar, ioTask, ioH
 app/weather.py     AccuWeather: the settings, the place search, the cached conditions and forecast
 app/homeassistant.py  Home Assistant: the settings, the chosen entities and their state, switching them, the search, the alerts
 app/ha_feed.py     Home Assistant's websocket: state changes folded into the copy, streamed to the pages
-app/bookmarks.py   the bookmark groups and links, and the homepage bookmarks.yaml import
+app/bookmarks.py   the bookmark groups and links
 app/auth.py        the shared accounts and the updater (iosuite-shared), as ioStart uses them
 app/db.py          MariaDB access and the schema (the meta settings table, the bookmarks)
 app/config.py      the settings: the suite's standard names (iosuite_shared.config) and ioStart's own

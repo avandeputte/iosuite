@@ -557,51 +557,6 @@ def delete_link(lid: int) -> None:
     remove(lid)
 
 
-def import_yaml(text: str, replace: bool = False) -> dict:
-    """A homepage bookmarks.yaml: a list of {Group: [{Name: [{abbr, href, icon, description}]}]}. Groups with a name
-    already at the top get the links added; replace=True empties the bookmarks first. Returns {groups, links} counts.
-    What comes in is for the start page."""
-    import yaml
-    try:
-        doc = yaml.safe_load(text or "")
-    except yaml.YAMLError as e:
-        raise BadBookmark(f"Not valid YAML: {str(e)[:200]}")
-    if not isinstance(doc, list):
-        raise BadBookmark("A homepage bookmarks.yaml is a list of groups")
-    ng = nl = 0
-    with writing():
-        _need_member()
-        if replace:  # the viewer's own, at the top (and what is in it)
-            for r in Tree().children(None):
-                if not r["shared"] and may_change(r):
-                    remove(r["id"])
-        existing = {g["name"].lower(): g["id"] for g in Tree().children(None) if g["folder"] and may_change(g)}
-        for group in doc:
-            if not isinstance(group, dict) or len(group) != 1:
-                continue
-            (gname, items), = group.items()
-            gid = existing.get(str(gname).lower())
-            if gid is None:
-                gid = add_group(str(gname))["id"]
-                existing[str(gname).lower()] = gid
-                ng += 1
-            else:
-                change(gid, {"start": True})
-            for item in items if isinstance(items, list) else []:
-                if not isinstance(item, dict) or len(item) != 1:
-                    continue
-                (lname, props), = item.items()
-                p = props[0] if isinstance(props, list) and props and isinstance(props[0], dict) else props if isinstance(props, dict) else {}
-                if not p.get("href"):
-                    continue
-                try:
-                    add_link(gid, str(lname), str(p["href"]), p.get("abbr"), p.get("description"), p.get("icon"))
-                    nl += 1
-                except BadBookmark:
-                    continue
-    return {"groups": ng, "links": nl}
-
-
 def add_items(parent, items: list[dict], start=None) -> list[dict]:
     """A parsed bookmarks file (app/bookmarkfiles.py: [{type, title, url?, tags?, children?}]) added under `parent`.
     Returns the same shape with the ids made. An address that cannot be kept is skipped."""

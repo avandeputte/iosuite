@@ -27,8 +27,8 @@ that registers as an admin tool (`Auth(..., admin_tool=True)`; `adminTool` in wh
 behind the scenes) is for suite admins only (`is_admin_tool`: users.role_of gives everybody else none there, whatever
 role row or default role says), and a switcher shows it apart from the others.
 
-A suite admin may forget an app that was uninstalled (`DELETE /api/auth/suite/{app}`); it comes back the next time it
-starts.
+A suite admin may forget an app that was uninstalled (Settings › Global settings › Apps: `DELETE
+/api/suite-admin/apps/{app}`); it comes back the next time it starts.
 """
 import ipaddress
 import os

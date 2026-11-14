@@ -25,7 +25,6 @@ LDAP_BASE = env("LDAP_BASE", "dc=iocontact")
 
 # ioPix is found in the suite's list of apps and signed in to by itself (app/iopix.py): nothing to set
 
-MAX_PHOTO_BYTES = 2 * 1024 * 1024
 MAX_IMPORT_BYTES = 64 * 1024 * 1024   # a vCard, CSV or JSON file to import
 MAX_JSON_BYTES = 16 * 1024 * 1024     # any other request body: a contact (JSON or vCard, a photo inline) or a CardDAV request
 

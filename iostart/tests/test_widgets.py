@@ -4,18 +4,6 @@ import json
 from app import weather
 from iosuite_shared import testing
 
-YAML = """
-- Developer:
-    - Github:
-        - abbr: GH
-          href: https://github.com/
-- Social:
-    - Reddit:
-        - icon: reddit.png
-          href: https://reddit.com/
-          description: The front page of the internet
-"""
-
 
 def _fake_accuweather(calls):
     def get(path, **params):
@@ -93,15 +81,9 @@ def test_bookmarks(client):
     assert client.patch(f"/api/bookmarks/links/{l1['id']}", json={"groupId": g2["id"], "name": "HN"}).json()["abbr"] == "HN"
     gs = client.get("/api/bookmarks").json()["groups"]
     assert [(x["name"], [y["name"] for y in x["links"]]) for x in gs] == [("Social", ["HN"]), ("Developer", ["Github"])]
-    # import from homepage: Developer already exists and gets the link; Social gets Reddit
-    r = client.post("/api/bookmarks/import", json={"yaml": YAML}).json()
-    assert r == {"groups": 0, "links": 2}
-    gs = client.get("/api/bookmarks").json()["groups"]
-    reddit = next(y for x in gs for y in x["links"] if y["name"] == "Reddit")
-    assert reddit["icon"] == "reddit.png" and reddit["description"] == "The front page of the internet"
-    assert client.post("/api/bookmarks/import", json={"yaml": "not: [a list"}).status_code == 400
-    assert client.post("/api/bookmarks/import", json={"yaml": "- Only:\n    - X:\n        - href: https://x.org\n", "replace": True}).json() == {"groups": 1, "links": 1}
-    assert [x["name"] for x in client.get("/api/bookmarks").json()["groups"]] == ["Only"]
+    assert client.post("/api/bookmarks/import", json={"yaml": "- Only: []"}).status_code == 400  # a browser's file only
+    for x in client.get("/api/bookmarks").json()["groups"][1:]:
+        client.delete(f"/api/bookmarks/groups/{x['id']}")
     client.delete(f"/api/bookmarks/groups/{client.get('/api/bookmarks').json()['groups'][0]['id']}")
     assert client.get("/api/bookmarks").json() == {"groups": []}
 

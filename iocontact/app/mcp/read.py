@@ -276,6 +276,6 @@ def list_iopix_people(text: str = "", unlinked_only: bool = False) -> list:
         if unlinked_only and c:
             continue
         out.append({"personId": p["id"], "name": p["name"], "photos": p.get("count"), "contact": c,
-                    "url": iopix.person_url(p["id"], p["name"])})
+                    "url": iopix.person_url(p["id"])})
     return out[:500]
 

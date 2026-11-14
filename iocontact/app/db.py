@@ -8,7 +8,7 @@ from app import config
 
 from iosuite_shared import db as shared_db, schema
 
-SCHEMA_VERSION = 6  # 5: the suite naming convention (con_ tables, *_at times, con_settings, named indexes); 6: no photo columns
+SCHEMA_VERSION = 6  # recorded in con_schema_version; the tables are made as SCHEMA says (pre-release: no upgrade steps)
 PREFIX = "con"
 
 # Every table is con_<name> (the suite's naming convention: the apps can share one database) and InnoDB/utf8mb4. Child rows (emails, phones...) are replaced as a whole when a contact is saved.

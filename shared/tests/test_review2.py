@@ -155,7 +155,6 @@ def test_no_accounts_is_open_inside_and_shut_outside():
         assert out.post("/api/change").status_code == 403
         assert out.post("/api/suite-admin/users", json={"name": "mallory", "password": "secret123", "suiteAdmin": True}).status_code == 403
         assert out.put("/api/suite-admin/proxy", json={"AUTH_PROXY": "header", "AUTH_PROXY_TRUSTED": "8.8.8.8"}).status_code == 403
-        assert out.delete("/api/auth/suite/iopix").status_code == 403           # under /api/auth/, which the middleware lets through
         assert out.get("/api/auth/app-passwords").status_code == 403
         assert out.post("/api/auth/setup", json={"name": "mallory", "password": "secret123"}).status_code == 403
         me = out.get("/api/auth/me").json()
