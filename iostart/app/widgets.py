@@ -6,38 +6,30 @@ The start page asks on the viewer's behalf: the request goes out from this serve
 person may see there and nothing more. Nothing is kept here. The browser never talks to the apps itself (the page's
 Content-Security-Policy allows only this origin), so ioPix's thumbnails come through here too.
 
-The app is found in the suite's list of apps and asked the way the apps ask each other (iosuite_shared.links):
-on localhost when it runs on this machine, then at its address inside the network, then at its public one; the
-suite's Cloudflare Access service token goes with every request when one is set (Settings › Global settings › Keys and
+The app is found in the suite's list of apps and asked on the viewer's behalf (iosuite_shared.links.as_viewer): on
+localhost when it runs on this machine, then at its address inside the network, then at its public one; the suite's
+Cloudflare Access service token goes with every request when one is set (Settings › Global settings › Keys and
 tokens). Only the address and the Cloudflare headers come from there: the credentials stay the viewer's own.
 
 Every app is asked with a short timeout: an app that is down, or that this account has no access to, leaves its tile
 as it was (the page hides the block) instead of holding up the others. An app that did not answer at any of its
-addresses is left alone for BREAK_S seconds (the tile says so at once, no thread waits for it again), the address that
-answered last is tried first, and a tile that needs several answers asks for them at the same time.
+addresses is left alone for links.BREAK_S seconds (the tile says so at once, no thread waits for it again), the address
+that answered last is tried first, and a tile that needs several answers asks for them at the same time.
 """
 import datetime as dt
 import json
 import random
 import re
-import threading
-import time
 import urllib.error
-import urllib.parse
-import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import Request
-from iosuite_shared import links, sessions
+from iosuite_shared import links
 
 from app import apps
 
 TIMEOUT = 4  # seconds, per request to an app
-BREAK_S = 30  # seconds an app that did not answer is left alone
-_down: dict[str, float] = {}  # app key -> until when it is left alone (time.monotonic)
-_good: dict[str, str] = {}    # app key -> the address that answered last
-_state_lock = threading.Lock()
 _pool = ThreadPoolExecutor(max_workers=8, thread_name_prefix="widgets")
 UA = "ioStart page"
 WIDGETS = ("iopix", "iocalendar", "iotask", "iohealth", "iocontact", "iorecipe", "ionote")
@@ -52,43 +44,13 @@ class Unavailable(Exception):
         self.status = status
 
 
-def _headers(request: Request) -> dict:
-    """The viewer's credentials, passed on as they came: the shared session cookie, else Basic / Bearer."""
-    h = {"User-Agent": UA, "Accept": "application/json", "Accept-Encoding": "identity"}
-    tok = request.cookies.get(sessions.COOKIE)
-    if tok:
-        h["Cookie"] = f"{sessions.COOKIE}={tok}"
-    elif request.headers.get("authorization"):
-        h["Authorization"] = request.headers["authorization"]
-    return h
-
-
-def _cf_headers() -> dict:
-    """The suite's Cloudflare Access service token, when one is set ({} otherwise, or while the database is away)."""
-    try:
-        return links.headers(apps.SELF, "", sign_in=False)
-    except Exception:  # noqa: BLE001
-        return {}
-
-
-def _bases(key: str) -> list[str]:
-    """Where to ask the app, in order: localhost, its LAN address, its public one."""
-    try:
-        got = links.addresses(key)
-    except Exception:  # noqa: BLE001  the shared database is away
-        got = []
-    return got or ([apps.url_for(key)] if apps.url_for(key) else [])
-
-
 def _host(request: Request) -> str:
     return request.headers.get("x-forwarded-host") or request.headers.get("host") or request.url.netloc
 
 
 def forget() -> None:
     """Every app may be asked again, from its first address on (the tests; an admin changed the addresses)."""
-    with _state_lock:
-        _down.clear()
-        _good.clear()
+    links.ask_again()
 
 
 def _together(*calls) -> list:
@@ -111,56 +73,17 @@ def _both(*calls) -> list:
     return out
 
 
-def _send(request: Request, key: str, path: str, params, raw: bool, body, timeout: float):
-    """Ask each address in turn until one answers (an HTTP error is an answer), the one that answered last first."""
-    bases = _bases(key)
-    last = _good.get(key)
-    if last in bases:
-        bases = [last] + [b for b in bases if b != last]
-    query = "?" + urllib.parse.urlencode(params) if params else ""
-    headers = {**_headers(request), **_cf_headers()}
-    if raw:
-        headers["Accept"] = "image/*"
-    data = None
-    if body is not None:
-        data, headers = json.dumps(body).encode(), {**headers, "Content-Type": "application/json"}
-    for i, base in enumerate(bases):
-        req = urllib.request.Request(base + path + query, data=data, headers=headers, method="POST" if body is not None else "GET")
-        try:
-            got = _ask(req, raw, timeout)
-            _good[key] = base
-            return got
-        except urllib.error.HTTPError:
-            _good[key] = base
-            raise  # it answered
-        except (urllib.error.URLError, OSError):
-            if i == len(bases) - 1:
-                raise
-    raise urllib.error.URLError("not in the suite's list of apps")
-
-
-def _ask(req, raw: bool, timeout: float):
-    with urllib.request.urlopen(req, timeout=timeout) as r:  # noqa: S310 - an http(s) address from the suite's list
-        got = r.read()
-        if raw:
-            return got, r.headers.get("Content-Type", "application/octet-stream")
-        return json.loads(got)
-
-
 def fetch(request: Request, key: str, path: str, params: dict | None = None, raw: bool = False, body: dict | None = None, timeout: float = TIMEOUT):
     """GET path from the app (JSON, or (bytes, content type) with raw); with body, POST that JSON instead."""
-    wait = _down.get(key, 0) - time.monotonic()
+    name = apps.name_of(key)
+    wait = links.resting(key)
     if wait > 0:
-        raise Unavailable(502, f"{apps.name_of(key)} did not answer a moment ago (asked again in {int(wait) + 1} s)")
-    bases = _bases(key)
-    base = bases[0] if bases else "(no address)"
+        raise Unavailable(502, f"{name} did not answer a moment ago (asked again in {int(wait) + 1} s)")
     try:
-        got = _send(request, key, path, params, raw, body, timeout)
-        _down.pop(key, None)
-        return got
+        # a picture that took too long says nothing about the app (patient)
+        return links.as_viewer(request, key, path, params, body, raw=raw, accept="image/*" if raw else None, timeout=timeout,
+                               user_agent=UA, patient=raw, public=True)
     except urllib.error.HTTPError as e:
-        _down.pop(key, None)
-        name = apps.name_of(key)
         if body is not None and e.code in (400, 403, 409):  # ioCalendar's own word on what it would not take
             try:
                 why = json.loads(e.read()).get("detail")
@@ -172,12 +95,8 @@ def fetch(request: Request, key: str, path: str, params: dict | None = None, raw
         if e.code == 404:
             raise Unavailable(404, f"{name} has no {path} (an older version, or the address is not {name}'s)")
         raise Unavailable(502, f"{name} answered {e.code}")
-    except (urllib.error.URLError, OSError) as e:
-        if not raw:  # a picture that took too long says nothing about the app
-            _down[key] = time.monotonic() + BREAK_S
-        raise Unavailable(502, f"{apps.name_of(key)} is not reachable at {base} ({type(e).__name__})")
-    except ValueError as e:
-        raise Unavailable(502, f"{apps.name_of(key)} is not reachable at {base} ({type(e).__name__})")
+    except links.Unreachable as e:
+        raise Unavailable(502, f"{name} is not reachable at {e.at or '(no address)'} ({type(e.why or e).__name__})")
 
 
 def _zone(tz: str):

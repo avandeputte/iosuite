@@ -5,25 +5,20 @@ Nothing to set up: ioTask is found in the suite's list of apps. It is asked on t
 out from this server with the viewer's own credentials (the suite's shared session cookie, or the Authorization header
 they came with), so ioTask offers the lists that person may add to and takes the tasks as theirs. Nothing is kept here.
 
-ioTask is asked at the addresses the apps use for each other (iosuite_shared.links: localhost on this machine, its
+ioTask is asked on the viewer's behalf (iosuite_shared.links.as_viewer: localhost on this machine, its
 address inside the network, its public one), with the suite's Cloudflare Access service token when one is set. One
-that did not answer is left alone for BREAK_S seconds.
+that did not answer is left alone for links.BREAK_S seconds.
 """
 import json
-import time
 import urllib.error
-import urllib.parse
-import urllib.request
 
 from fastapi import Request
-from iosuite_shared import links, sessions
+from iosuite_shared import links
 from iosuite_shared.errors import Invalid
 
-APP, PROVIDER = "iorecipe", "iotask"
+PROVIDER = "iotask"
 TIMEOUT = 8     # seconds, per request
-BREAK_S = 30    # seconds ioTask is left alone after it did not answer
 MAX_LINES = 200
-_state = {"down": 0.0, "good": None}  # until when it is left alone (time.monotonic); the address that answered last
 
 
 class Unavailable(Exception):
@@ -51,68 +46,29 @@ def url() -> str:
 
 def forget() -> None:
     """ioTask may be asked again, from its first address on (the tests)."""
-    _state.update(down=0.0, good=None)
-
-
-def _headers(request: Request) -> dict:
-    """The viewer's credentials, passed on as they came, and the suite's Cloudflare Access service token."""
-    h = {"User-Agent": "ioRecipe", "Accept": "application/json", "Accept-Encoding": "identity"}
-    tok = request.cookies.get(sessions.COOKIE)
-    if tok:
-        h["Cookie"] = f"{sessions.COOKIE}={tok}"
-    elif request.headers.get("authorization"):
-        h["Authorization"] = request.headers["authorization"]
-    try:
-        h.update(links.headers(APP, "", sign_in=False))
-    except Exception:  # noqa: BLE001 - the shared database is away: without the token
-        pass
-    return h
-
-
-def _open(req, timeout: float):
-    with urllib.request.urlopen(req, timeout=timeout) as r:  # noqa: S310 - an http(s) address from the suite's list
-        return json.loads(r.read())
+    links.ask_again(PROVIDER)
 
 
 def ask(request: Request, path: str, params: dict | None = None, body: dict | None = None):
     """GET path from ioTask as the viewer (with body: POST that JSON); its JSON answer, or Unavailable."""
     if not enabled():
         raise Unavailable(404, "ioTask is not part of the suite")
-    if _state["down"] > time.monotonic():
+    if links.resting(PROVIDER):
         raise Unavailable(502, "ioTask did not answer a moment ago")
     try:
-        bases = links.addresses(PROVIDER)
-    except Exception:  # noqa: BLE001
-        bases = []
-    if _state["good"] in bases:
-        bases = [_state["good"]] + [b for b in bases if b != _state["good"]]
-    headers = _headers(request)
-    data = None
-    if body is not None:
-        data, headers = json.dumps(body).encode(), {**headers, "Content-Type": "application/json"}
-    query = "?" + urllib.parse.urlencode(params) if params else ""
-    why = "no address"
-    for base in bases:
-        req = urllib.request.Request(base + path + query, data=data, headers=headers, method="POST" if body is not None else "GET")
+        return links.as_viewer(request, PROVIDER, path, params, body, timeout=TIMEOUT, user_agent="ioRecipe")
+    except urllib.error.HTTPError as e:  # it answered
+        if e.code in (401, 403) and body is None:
+            raise Unavailable(403, "ioTask does not let this account in: open it once and sign in there")
         try:
-            got = _open(req, TIMEOUT)
-            _state["good"] = base
-            return got
-        except urllib.error.HTTPError as e:  # it answered
-            _state["good"] = base
-            if e.code in (401, 403) and body is None:
-                raise Unavailable(403, "ioTask does not let this account in: open it once and sign in there")
-            try:
-                detail = json.loads(e.read()).get("detail")
-            except (ValueError, AttributeError):
-                detail = None
-            if e.code in (400, 403, 404, 409, 412) and isinstance(detail, str):
-                raise Unavailable(e.code, detail)  # its own word on what it would not take
-            raise Unavailable(502, f"ioTask answered {e.code}")
-        except (urllib.error.URLError, OSError, ValueError) as e:
-            why = type(e).__name__
-    _state["down"] = time.monotonic() + BREAK_S
-    raise Unavailable(502, f"ioTask is not reachable ({why})")
+            detail = json.loads(e.read()).get("detail")
+        except (ValueError, AttributeError):
+            detail = None
+        if e.code in (400, 403, 404, 409, 412) and isinstance(detail, str):
+            raise Unavailable(e.code, detail)  # its own word on what it would not take
+        raise Unavailable(502, f"ioTask answered {e.code}")
+    except links.Unreachable as e:
+        raise Unavailable(502, f"ioTask is not reachable ({type(e.why).__name__ if e.why else 'no address'})")
 
 
 def lists(request: Request) -> list[dict]:

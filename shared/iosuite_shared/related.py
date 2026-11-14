@@ -17,26 +17,24 @@ The picker searches every app that has items (the same way the start page's sear
 and the open tasks first. Adding or removing a link needs a role of member or more in the app the item is in, and
 both items must be ones the viewer sees. An app that deletes an item for good calls forget(kind, id).
 
-The other app is asked the way the start page asks it: on localhost when it runs on this machine, then at its
-address inside the network, then at its public one, with the suite's Cloudflare Access service token when one is set
-(iosuite_shared.links), and with the viewer's own credentials (the shared session cookie, or the Authorization header
+The other app is asked on the viewer's behalf (iosuite_shared.links.as_viewer): on localhost when it runs on this
+machine, then at its address inside the network, then at its public one, with the suite's Cloudflare Access service
+token when one is set, and with the viewer's own credentials (the shared session cookie, or the Authorization header
 the request came with), so each app answers with what that person may see there.
 """
 import datetime as dt
-import json
 import logging
 import re
 import time
 import urllib.error
 import urllib.parse
-import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, Response
 
-from iosuite_shared import db, links, sessions, suite, users
+from iosuite_shared import db, links, suite, users
 from iosuite_shared.access import json_body
 
 log = logging.getLogger("iosuite_shared.related")
@@ -134,47 +132,17 @@ def forget_many(kind: str, ids) -> int:
 
 # ------------------------------------------------------------------ asking the item's app, as the viewer
 
-def _headers(request: Request, image: bool = False) -> dict:
-    h = {"User-Agent": UA, "Accept": "image/*" if image else "application/json", "Accept-Encoding": "identity"}
-    tok = request.cookies.get(sessions.COOKIE)
-    if tok:
-        h["Cookie"] = f"{sessions.COOKIE}={tok}"
-    elif request.headers.get("authorization"):
-        h["Authorization"] = request.headers["authorization"]
-    try:
-        h.update(links.headers("", "", sign_in=False))  # the suite's Cloudflare Access service token, when one is set
-    except Exception:  # noqa: BLE001  the database is away
-        pass
-    return h
-
-
-def _bases(app: str) -> list[str]:
-    try:
-        got = links.addresses(app)
-    except Exception:  # noqa: BLE001
-        got = []
-    return got or ([links.url(app)] if links.url(app) else [])
-
-
 def ask(request: Request, app: str, path: str, params: dict = None, image: bool = False, timeout: float = TIMEOUT):
-    """GET path at the app as the viewer: its JSON, or (bytes, content type) for an image. Unavailable otherwise:
-    the app's own status (a 401 there is a 403 here: signed in here, not let in there), 502 when it does not answer."""
-    bases = _bases(app)
-    if not bases:
-        raise Unavailable(502, f"{app} is not in the suite's list of apps")
-    query = "?" + urllib.parse.urlencode(params) if params else ""
-    h = _headers(request, image)
-    for i, base in enumerate(bases):
-        try:
-            with urllib.request.urlopen(urllib.request.Request(base + path + query, headers=h), timeout=timeout) as r:  # noqa: S310  http(s) from the suite's list
-                body = r.read(8 << 20)
-                return (body, r.headers.get("Content-Type", "")) if image else json.loads(body or b"null")
-        except urllib.error.HTTPError as e:
-            raise Unavailable(403 if e.code == 401 else e.code, f"{app} answered {e.code}") from None
-        except (urllib.error.URLError, OSError, ValueError) as e:
-            if i == len(bases) - 1:
-                raise Unavailable(502, f"{app} does not answer ({e})") from None
-    raise Unavailable(502, f"{app} does not answer")
+    """GET path at the app as the viewer (links.as_viewer): its JSON, or (bytes, content type) for an image.
+    Unavailable otherwise: the app's own status (a 401 there is a 403 here: signed in here, not let in there), 502
+    when it does not answer."""
+    try:
+        return links.as_viewer(request, app, path, params, raw=image, accept="image/*" if image else None, timeout=timeout,
+                               user_agent=UA, patient=True, public=True, limit=8 << 20)
+    except urllib.error.HTTPError as e:
+        raise Unavailable(403 if e.code == 401 else e.code if e.code >= 400 else 502, f"{app} answered {e.code}") from None
+    except (urllib.error.URLError, OSError) as e:
+        raise Unavailable(502, str(getattr(e, "reason", "")) or f"{app} does not answer") from None
 
 
 # ------------------------------------------------------------------ what an item looks like: one function per kind

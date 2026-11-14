@@ -24,7 +24,6 @@ import json
 import logging
 import threading
 import urllib.error
-import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
 from iosuite_shared import db, links, sessions, suite, users
@@ -86,42 +85,22 @@ def shared_part(user_id: int) -> list:
 
 
 # ---- asking the other apps, as the suite admin
-def _headers(request) -> dict:
-    """The suite admin's own sign-in (the suite's session cookie, else the Authorization they came with) and the suite's
-    Cloudflare Access service token."""
-    h = {"User-Agent": UA, "Accept": "application/json", "Accept-Encoding": "identity"}
-    tok = request.cookies.get(sessions.COOKIE) if request is not None else None
-    if tok:
-        h["Cookie"] = f"{sessions.COOKIE}={tok}"
-    elif request is not None and request.headers.get("authorization"):
-        h["Authorization"] = request.headers["authorization"]
+def _ask(request, app: str, method: str, user_id: int) -> list:
+    """The app's part, asked with the suite admin's own sign-in (links.as_viewer). RuntimeError with what went wrong."""
     try:
-        h.update(links.headers("", "", sign_in=False))
-    except Exception:  # noqa: BLE001  the keys store is away: no Cloudflare token
-        pass
-    return h
-
-
-def _ask(headers: dict, app: str, method: str, user_id: int) -> list:
-    """The app's part, asked over HTTP at each of its addresses in turn. RuntimeError with what went wrong."""
-    bases = links.addresses(app)
-    if not bases:
-        raise RuntimeError("it has no address to reach it at (PUBLIC_URL or INTERNAL_URL)")
-    last = None
-    for base in bases:
-        req = urllib.request.Request(f"{base}{PATH}{int(user_id)}", headers=headers, method=method)
-        try:
-            with urllib.request.urlopen(req, timeout=REMOVE_S if method == "DELETE" else COUNT_S) as r:  # noqa: S310  http(s), from links.addresses()
-                return clean(json.loads(r.read()).get("items"))
-        except urllib.error.HTTPError as e:
-            if e.code == 404:
-                raise RuntimeError("it is on an older version that cannot do this")
-            if e.code in (401, 403):
-                raise RuntimeError(f"it did not take your sign-in ({e.code}); open it once and sign in there")
-            raise RuntimeError(f"it answered {e.code}")
-        except (urllib.error.URLError, OSError, ValueError) as e:
-            last = e
-    raise RuntimeError(f"it did not answer ({type(last).__name__})")
+        got = links.as_viewer(request, app, f"{PATH}{int(user_id)}", method=method, user_agent=UA, patient=True,
+                              timeout=REMOVE_S if method == "DELETE" else COUNT_S)
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            raise RuntimeError("it is on an older version that cannot do this")
+        if e.code in (401, 403):
+            raise RuntimeError(f"it did not take your sign-in ({e.code}); open it once and sign in there")
+        raise RuntimeError(f"it answered {e.code}")
+    except links.Unreachable as e:
+        if e.why is None:
+            raise RuntimeError("it has no address to reach it at (PUBLIC_URL or INTERNAL_URL)")
+        raise RuntimeError(f"it did not answer ({type(e.why).__name__})")
+    return clean(got.get("items") if isinstance(got, dict) else None)
 
 
 def everywhere(auth, request, user_id: int, remove: bool = False) -> list:
@@ -130,12 +109,10 @@ def everywhere(auth, request, user_id: int, remove: bool = False) -> list:
     entries = [a for a in suite.apps() if not a.get("adminTool")]
     if not any(a["app"] == auth.app for a in entries) and not suite.is_admin_tool(auth.app):
         entries.insert(0, {"app": auth.app, "name": auth.label})
-    headers = _headers(request)
-
     def one(a):
         out = {"app": a["app"], "name": a.get("name") or a["app"], "items": [], "error": None}
         try:
-            out["items"] = local(auth, user_id, remove) if a["app"] == auth.app else _ask(headers, a["app"], "DELETE" if remove else "GET", user_id)
+            out["items"] = local(auth, user_id, remove) if a["app"] == auth.app else _ask(request, a["app"], "DELETE" if remove else "GET", user_id)
         except Exception as e:  # noqa: BLE001  one app's trouble never stops the others
             if a["app"] == auth.app:
                 log.exception("%s: the data of account %s", auth.app, user_id)

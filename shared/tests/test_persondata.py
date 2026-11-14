@@ -4,7 +4,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from iosuite_shared import apppasswords, db, persondata, sessions, suite, users
+from iosuite_shared import apppasswords, db, links, persondata, sessions, suite, users
 from iosuite_shared.fastapi import Auth
 
 
@@ -43,11 +43,11 @@ def suite_of_two(monkeypatch):
     suite.register("iodns", name="ioDNS", url="https://dns.example.com", admin_tool=True)  # keeps nothing per person: not asked
     away = set()
 
-    def ask(headers, app, method, uid):
+    def ask(request, app, method, uid):
         assert app == "iotask"
         if app in away:
             raise RuntimeError("it did not answer (URLError)")
-        r = TestClient(task_app, base_url="http://tasks.example.com").request(method, f"{persondata.PATH}{uid}", headers=headers)
+        r = TestClient(task_app, base_url="http://tasks.example.com").request(method, f"{persondata.PATH}{uid}", headers=links.viewer_headers(request))
         if r.status_code != 200:
             raise RuntimeError(f"it answered {r.status_code}")
         return persondata.clean(r.json()["items"])
