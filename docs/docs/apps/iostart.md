@@ -24,6 +24,19 @@ every app works without it. It earns its place once you run two or more apps.
   a folder (`…/calendar/`, `…/notes/`), so one name, one certificate and one port reach them all. See
   [Reverse proxy and HTTPS](../run/reverse-proxy.md#one-address-without-a-proxy-the-start-page-answers-for-every-app).
 
+## Bookmarks in your browser
+
+The **ioSuite Bookmarks** extension keeps a browser's own bookmarks the same as the start page's, both ways: the
+bookmarks bar, Other bookmarks (and Firefox's bookmarks menu) match folders on the start page, and an add, change or
+delete in one browser reaches every other browser within a minute.
+
+- **Chrome, Edge, Vivaldi, Brave, Opera**: [install it from the Chrome Web Store](https://chromewebstore.google.com/detail/iosuite-bookmarks/nldealkpbjiholobfadimblcmdlphkoe).
+- **Firefox**: open the signed `.xpi` of the newest `extension-v…` [release](https://github.com/avandeputte/iosuite/releases?q=extension).
+
+Then type the start page's address in the extension, choose how the first sync goes, and sign in: it gets an app
+password of its own, for bookmark sync only. Settings › Bookmarks on the start page also takes Floccus and other apps
+that sync over Nextcloud Bookmarks or WebDAV. What it sends and keeps: [privacy policy](../privacy/iostart-bookmarks.md).
+
 ## With the other apps
 
 ioStart is all about them: it shows a tile and widgets for each app it finds, asks each app with the viewer's own
