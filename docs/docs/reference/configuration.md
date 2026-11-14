@@ -27,7 +27,7 @@ IOSUITE_DB_PASSWORD=…
 
 PUBLIC_URL=https://calendar.example.com   # the address people and the other apps reach it at
 COOKIE_DOMAIN=example.com                 # one sign-in for every app under this domain
-HOST=0.0.0.0                              # where the server listens
+HOST=0.0.0.0                              # where the server listens (see below)
 PORT=8620                                 # each app has its own default
 INTERNAL_URL=http://192.168.1.151:8620    # where the app is inside the network (default: the host's LAN address)
 TLS_CERT_FILE=… TLS_KEY_FILE=…            # serve HTTPS directly instead of behind a proxy
@@ -41,6 +41,19 @@ MCP=1                                     # the MCP server on (apps that have on
 
 On/off switches take `1`/`0`, `true`/`false`, `yes`/`no` or `on`/`off`. Each app adds its own settings (the photo
 folder and digiKam for ioPix, the LDAP port for ioContact...); see its README.
+
+`HOST` is every address of the machine by default. Three other ways to set it:
+
+| `HOST` | The app listens on |
+| --- | --- |
+| `127.0.0.1` | this machine only: for a reverse proxy on the same server, which is then the only way in |
+| `192.168.1.151` | that one address, when the machine has several |
+| `127.0.0.1,192.168.1.151` | each address named |
+
+With `HOST=127.0.0.1` the suite's other apps on the same server still reach the app directly; apps on other machines
+go through `PUBLIC_URL`, so set it. ioContact's LDAP directory listens where `HOST` says unless `LDAP_HOST` names
+something else. In Docker, leave `HOST` alone and publish the port where you want it instead
+(`ports: ["127.0.0.1:8620:8620"]`). Restart the app after changing it.
 
 `KEEP_DELETED_DAYS` is for the apps that phones and other devices sync with. A deleted event (ioCalendar), task (ioTask) or contact
 (ioContact) leaves a marker, so a device learns of the deletion at its next sync; the marker goes after this many days,
