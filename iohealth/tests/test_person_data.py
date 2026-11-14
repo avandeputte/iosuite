@@ -2,6 +2,7 @@
 from iosuite_shared import users
 
 from app import db, persondata
+from iosuite_shared import testing
 
 
 def _sample(uid, n):
@@ -10,7 +11,7 @@ def _sample(uid, n):
 
 
 def test_deleting_someone_removes_their_health_data(client, admin):
-    assert client.post("/api/users", json={"name": "sam", "password": "secretpw2", "role": "member"}).status_code == 200
+    assert testing.add_account(client, {"name": "sam", "password": "secretpw2", "role": "member"}).status_code == 200
     sam = users.find("sam")["id"]
     for n in range(3):
         _sample(sam, n)

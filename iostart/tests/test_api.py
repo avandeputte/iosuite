@@ -1,4 +1,5 @@
 """The REST API: status and sign-in, the tiles and where they point, the admin settings."""
+from iosuite_shared import testing
 
 
 def test_status_and_signin(client):
@@ -33,7 +34,7 @@ def test_home_settings_photo_strip(client):
 
 
 def test_viewer_cannot_change_settings(client):
-    r = client.post("/api/users", json={"name": "kid", "password": "secret123", "role": "viewer"})
+    r = testing.add_account(client, {"name": "kid", "password": "secret123", "role": "viewer"})
     assert r.status_code in (200, 201), r.text
     client.post("/api/auth/logout")
     assert client.post("/api/auth/login", json={"name": "kid", "password": "secret123"}).status_code == 200
@@ -51,7 +52,7 @@ def test_server_info(client):
 
 
 def test_the_server_log_is_for_admins_only(client):
-    client.post("/api/users", json={"name": "kid2", "password": "secret123", "role": "viewer"})
+    testing.add_account(client, {"name": "kid2", "password": "secret123", "role": "viewer"})
     client.post("/api/auth/logout")
     assert client.post("/api/auth/login", json={"name": "kid2", "password": "secret123"}).status_code == 200
     assert client.get("/api/log").status_code in (403, 404)  # 404: the tests run without a log file, so the route is not there
@@ -103,7 +104,7 @@ def test_suite_admin_screen(client):
     # ann administers ioStart, but not the suite: Settings › Security is not hers
     client.post("/api/auth/logout")
     assert client.post("/api/auth/login", json={"name": "ann", "password": "secret123"}).status_code == 200
-    assert client.get("/api/users").status_code == 200
+    assert client.get("/api/server").status_code == 200
     assert client.get("/api/suite-admin").status_code == 403
     assert client.post("/api/suite-admin/users", json={"name": "x", "password": "secret123"}).status_code == 403
 
@@ -114,7 +115,7 @@ def test_tiles_are_the_apps_each_person_may_use(client):
     suite.register("iodns", "ioDNS", url="https://dns.example.com", admin_tool=True)
     shared_db.set_setting("default_role", "none", "iohealth")   # ioHealth: only the accounts given a role there
     apps.forget_registry()
-    assert client.post("/api/users", json={"name": "kid", "password": "secret123", "role": "viewer"}).status_code in (200, 201)
+    assert testing.add_account(client, {"name": "kid", "password": "secret123", "role": "viewer"}).status_code in (200, 201)
     by = {t["key"]: t for t in client.get("/api/apps").json()["items"]}
     assert "iohealth" in by and by["iodns"]["adminTool"] is True and by["iopix"]["adminTool"] is False  # alex: a suite admin
     client.post("/api/auth/logout")

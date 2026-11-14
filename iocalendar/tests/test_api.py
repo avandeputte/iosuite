@@ -1,5 +1,6 @@
 """The REST API: calendars, events, repeating events and their occurrences, scopes, formats, roles, feeds."""
 import io
+from iosuite_shared import testing
 
 
 def mk(client, cal, **kw):
@@ -145,7 +146,7 @@ def test_import_export_and_feeds(client, family_id):
 
 
 def test_roles_members_keep_their_own(client, family_id):
-    assert client.post("/api/users", json={"name": "kid", "password": "kidpass99", "role": "member"}).status_code == 200
+    assert testing.add_account(client, {"name": "kid", "password": "kidpass99", "role": "member"}).status_code == 200
     e = mk(client, family_id, title="Family thing", start="2026-11-10T10:00")
     client.cookies.clear()
     assert client.post("/api/auth/login", json={"name": "kid", "password": "kidpass99"}).status_code == 200
@@ -164,7 +165,7 @@ def test_roles_members_keep_their_own(client, family_id):
 
 
 def test_roles_viewers_only_look(client, family_id):
-    assert client.post("/api/users", json={"name": "vic", "password": "vicpass99", "role": "viewer"}).status_code == 200
+    assert testing.add_account(client, {"name": "vic", "password": "vicpass99", "role": "viewer"}).status_code == 200
     e = mk(client, family_id, title="Family thing", start="2026-11-10T10:00")
     client.cookies.clear()
     assert client.post("/api/auth/login", json={"name": "vic", "password": "vicpass99"}).status_code == 200

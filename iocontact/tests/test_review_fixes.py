@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 
 from app import calendar, enrich, users, vcard
 from app.main import app
+from iosuite_shared import testing
 
 
 def mk(client, book, **kw):
@@ -13,7 +14,7 @@ def mk(client, book, **kw):
 
 
 def member(client):
-    uid = client.post("/api/users", json={"name": "kid", "password": "kidpass99", "role": "member"}).json()["id"]
+    uid = testing.add_account(client, {"name": "kid", "password": "kidpass99", "role": "member"}).json()["id"]
     k = TestClient(app)
     assert k.post("/api/auth/login", json={"name": "kid", "password": "kidpass99"}).status_code == 200
     own = next(b for b in k.get("/api/books").json()["items"] if not b["shared"])
@@ -266,7 +267,7 @@ def test_ldap_bind_is_throttled_after_repeated_failures(client):
 
 
 def test_a_viewer_only_reads(client, family_id):
-    client.post("/api/users", json={"name": "vic", "password": "vicpass99", "role": "viewer"})
+    testing.add_account(client, {"name": "vic", "password": "vicpass99", "role": "viewer"})
     k = TestClient(app)
     assert k.post("/api/auth/login", json={"name": "vic", "password": "vicpass99"}).status_code == 200
     books = k.get("/api/books").json()["items"]

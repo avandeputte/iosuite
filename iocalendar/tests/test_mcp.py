@@ -1,6 +1,7 @@
 """The MCP server at /mcp: off until switched on, signed in with an app password, acting as that account."""
 import base64
 import json
+from iosuite_shared import testing
 
 H = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json"}
 
@@ -83,7 +84,7 @@ def test_mcp_events(client, family_id):
 
 def test_mcp_member_cannot_change_shared(client, family_id):
     client.post("/api/server", json={"mcpEnabled": True})
-    client.post("/api/users", json={"name": "kid", "password": "kidpass123", "role": "member"})
+    testing.add_account(client, {"name": "kid", "password": "kidpass123", "role": "member"})
     client.cookies.clear()
     assert client.post("/api/auth/login", json={"name": "kid", "password": "kidpass123"}).status_code == 200
     auth, _ = app_password(client)
@@ -95,7 +96,7 @@ def test_mcp_member_cannot_change_shared(client, family_id):
 
 def test_mcp_viewer_only_reads(client, family_id):
     client.post("/api/server", json={"mcpEnabled": True})
-    client.post("/api/users", json={"name": "vic", "password": "vicpass123", "role": "viewer"})
+    testing.add_account(client, {"name": "vic", "password": "vicpass123", "role": "viewer"})
     client.cookies.clear()
     assert client.post("/api/auth/login", json={"name": "vic", "password": "vicpass123"}).status_code == 200
     auth, _ = app_password(client)

@@ -3,6 +3,7 @@ cross-site writes refused; every API route declares its access)."""
 import json
 
 from helpers import NID
+from iosuite_shared import testing
 
 
 def test_open_until_the_first_account_exists(client):
@@ -10,28 +11,28 @@ def test_open_until_the_first_account_exists(client):
 
 
 def test_a_member_writes_their_own_notes(client, admin):
-    client.post("/api/users", json={"name": "meg", "password": "memberpw1", "role": "member"})
+    testing.add_account(client, {"name": "meg", "password": "memberpw1", "role": "member"})
     client.post("/api/auth/logout")
     assert client.post("/api/auth/login", json={"name": "meg", "password": "memberpw1"}).status_code == 200
     assert client.get("/api/auth/me").json()["canWrite"]  # what the Mac and iPhone apps look at
     assert client.put(f"/api/notes/{NID}", json={"title": "Mine"}).status_code == 200
-    assert client.get("/api/users").status_code == 403
+    assert client.get("/api/suite-admin").status_code == 403
 
 
 def test_writes_need_a_member_once_accounts_exist(client, admin):
-    assert client.post("/api/settings", json={"require_login": False}).status_code == 200  # on by default
-    client.post("/api/users", json={"name": "vic", "password": "viewerpw1", "role": "viewer"})
+    assert client.patch("/api/suite-admin/apps/ionote", json={"requireLogin": False}).status_code == 200  # on by default
+    testing.add_account(client, {"name": "vic", "password": "viewerpw1", "role": "viewer"})
     client.post("/api/auth/logout")
     assert client.get("/api/notes").status_code == 200  # reading stays open, as in iopix
     assert client.put(f"/api/notes/{NID}", json={"title": "x"}).status_code == 401
     assert client.post("/api/auth/login", json={"name": "vic", "password": "viewerpw1"}).status_code == 200
     assert not client.get("/api/auth/me").json()["canWrite"]
     assert client.put(f"/api/notes/{NID}", json={"title": "x"}).status_code == 403
-    assert client.get("/api/users").status_code == 403
+    assert client.get("/api/suite-admin").status_code == 403
 
 
 def test_require_sign_in_closes_everything_but_the_shell(client, admin):
-    assert client.post("/api/settings", json={"require_login": True}).status_code == 200
+    assert client.patch("/api/suite-admin/apps/ionote", json={"requireLogin": True}).status_code == 200
     client.post("/api/auth/logout")
     assert client.get("/api/notes").status_code == 401
     assert client.get("/api/status").status_code == 200
@@ -64,7 +65,7 @@ def test_cloudflare_access_needs_the_team_and_aud_before_any_header_is_believed(
 
 
 def test_a_header_proxy_signs_in_only_from_a_trusted_address(client, admin):
-    client.post("/api/users/1", json={"email": "alex@example.com"})
+    client.patch("/api/suite-admin/users/1", json={"email": "alex@example.com"})
     assert client.put("/api/suite-admin/proxy", json={"AUTH_PROXY": "header", "AUTH_PROXY_TRUSTED": "10.9.9.9"}).status_code == 200
     client.post("/api/auth/logout")
     r = client.get("/api/auth/me", headers={"Remote-User": "alex@example.com"})
@@ -90,7 +91,7 @@ def test_ionote_registers_in_the_suites_list_of_apps(client):
 
 
 def test_the_suite_icon_is_served_to_visitors_even_with_sign_in_required(client, admin):
-    assert client.post("/api/settings", json={"require_login": True}).status_code == 200
+    assert client.patch("/api/suite-admin/apps/ionote", json={"requireLogin": True}).status_code == 200
     client.post("/api/auth/logout")
     r = client.get("/static/icons/mark.svg")
     assert r.status_code == 200 and r.headers["content-type"].startswith("image/svg")
@@ -100,7 +101,7 @@ def test_the_shell_its_files_and_the_icon_are_public(client, admin):
     """The suite's layout: the page at /, every file it names under /static/, the mark at suite.ICON."""
     import re
     from iosuite_shared import suite
-    assert client.post("/api/settings", json={"require_login": True}).status_code == 200
+    assert client.patch("/api/suite-admin/apps/ionote", json={"requireLogin": True}).status_code == 200
     client.post("/api/auth/logout")
     html = client.get("/").text
     paths = re.findall(r'(?:src|href)="(static/[^"?]+)', html)
@@ -138,7 +139,7 @@ def test_settings_server_is_the_shared_panel(client, admin):
 
 def test_proxy_sign_in_is_not_set_from_this_app(client, admin):
     # the suite-wide settings are the suite admin's page (/api/suite-admin/proxy); an app admin has no route to them
-    client.post("/api/users", json={"name": "ann", "password": "adminpw12", "role": "admin"})
+    testing.add_account(client, {"name": "ann", "password": "adminpw12", "role": "admin"})
     client.post("/api/auth/logout")
     assert client.post("/api/auth/login", json={"name": "ann", "password": "adminpw12"}).status_code == 200
     assert client.get("/api/settings/proxy").status_code == 404

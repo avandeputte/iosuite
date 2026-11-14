@@ -2,6 +2,7 @@
 import json
 
 from app import weather
+from iosuite_shared import testing
 
 YAML = """
 - Developer:
@@ -66,7 +67,7 @@ def test_weather_setup_and_cache(client, monkeypatch):
     w = client.get("/api/weather").json()
     assert w["current"]["text"] == "Sunny" and w["stale"] and "down" in w["error"]
     # a viewer may read the weather, not the settings
-    client.post("/api/users", json={"name": "kid", "password": "secret123", "role": "viewer"})
+    testing.add_account(client, {"name": "kid", "password": "secret123", "role": "viewer"})
     client.post("/api/auth/logout")
     client.post("/api/auth/login", json={"name": "kid", "password": "secret123"})
     assert client.get("/api/weather").json()["enabled"]
@@ -106,8 +107,8 @@ def test_bookmarks(client):
 
 
 def test_viewer_reads_bookmarks_editor_changes_them(client):
-    client.post("/api/users", json={"name": "kid", "password": "secret123", "role": "viewer"})
-    client.post("/api/users", json={"name": "sam", "password": "secret123", "role": "editor"})
+    testing.add_account(client, {"name": "kid", "password": "secret123", "role": "viewer"})
+    testing.add_account(client, {"name": "sam", "password": "secret123", "role": "editor"})
     client.post("/api/auth/logout")
     client.post("/api/auth/login", json={"name": "kid", "password": "secret123"})
     assert client.get("/api/bookmarks").status_code == 200
@@ -161,7 +162,7 @@ def test_uploaded_svg_icon(client):
     l2 = client.post(f"/api/bookmarks/groups/{g['id']}/links", json={"name": "Wiki", "href": "https://wiki.example"}).json()
     assert l2["shared"] is True
     client.put(f"/api/bookmarks/links/{l2['id']}/icon", content=SVG)
-    client.post("/api/users", json={"name": "kid", "password": "secret123", "role": "viewer"})
+    testing.add_account(client, {"name": "kid", "password": "secret123", "role": "viewer"})
     client.post("/api/auth/logout")
     client.post("/api/auth/login", json={"name": "kid", "password": "secret123"})
     assert client.get(f"/api/bookmarks/links/{l2['id']}/icon.svg").status_code == 200

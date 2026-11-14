@@ -100,7 +100,7 @@ def test_require_sign_in_shows_only_the_login_dialog(page, server, browser):
     """With Require sign-in on, a visitor loading the app sees the sign-in dialog and nothing of
     the library; signing in from it loads the library in place."""
     make_admin(page, "alex", "correct horse")
-    assert page.request.post(server + "/api/settings", data={"require_login": True}).ok
+    assert page.request.patch(server + "/api/suite-admin/apps/iopix", data={"requireLogin": True}).ok
     try:
         ctx = browser.new_context(bypass_csp=True, viewport={"width": 1280, "height": 900}); visitor = ctx.new_page()
         visitor.goto(server + "/#/photos")
@@ -120,7 +120,7 @@ def test_require_sign_in_shows_only_the_login_dialog(page, server, browser):
         assert visitor.locator(".iosa tr:has-text('iopix') input[type=checkbox]").is_checked()
         ctx.close()
     finally:
-        assert page.request.post(server + "/api/settings", data={"require_login": False}).ok
+        assert page.request.patch(server + "/api/suite-admin/apps/iopix", data={"requireLogin": False}).ok
 
 def test_proxy_sign_in_settings(page, server):
     """Settings › Security › Sign-in at the proxy: picking Cloudflare shows the team and AUD fields, saving them turns

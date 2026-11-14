@@ -10,6 +10,7 @@ import threading
 import time
 
 import pytest
+from iosuite_shared import testing
 
 EXT = "/dav/ext"
 HERE = os.path.dirname(os.path.dirname(__file__))
@@ -87,7 +88,7 @@ def test_sync_api(client):
 
 
 def test_a_viewer_reads_but_does_not_change(client):
-    r = client.post("/api/users", json={"name": "vera", "password": "secret123", "role": "viewer"})
+    r = testing.add_account(client, {"name": "vera", "password": "secret123", "role": "viewer"})
     assert r.status_code in (200, 201), r.text
     from iosuite_shared import apppasswords
     from app.auth import auth as a

@@ -4,7 +4,7 @@ import time
 
 from fastapi import APIRouter, HTTPException, Request, UploadFile, File
 from fastapi.responses import StreamingResponse
-from iosuite_shared import admin as suite_admin, users
+from iosuite_shared import users
 from iosuite_shared.access import json_body
 from starlette.concurrency import run_in_threadpool
 
@@ -24,14 +24,9 @@ def api_settings(request: Request):
 @router.post("/api/settings", dependencies=[access.admin])
 async def api_settings_set(request: Request):
     body = await json_body(request)
-    for k, v in body.items():
-        if k == "require_login":  # Settings › Global settings › Apps, in the Shared ioSuite database, per app
-            if v and not users.any_users():
-                raise HTTPException(400, "Create an account first, or nobody could sign in")
-            suite_admin.set_app(config.APP, require_login=bool(v))
-        elif k in TEXTS:
+    for k, v in body.items():  # sign-in required is a suite admin's, on Settings › Suite › Apps
+        if k in TEXTS:
             db.set_setting(k, str(v or "").strip()[:40])
-    users.invalidate()
     return {"ok": True}
 
 

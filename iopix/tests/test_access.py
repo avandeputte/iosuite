@@ -9,7 +9,7 @@ from pathlib import Path
 from fastapi.routing import APIRoute
 
 from app import access
-from app.routes import albums, auth, backup, browse, editing, faces, geo, images, tools, organize, review, settings, users
+from app.routes import albums, auth, backup, browse, editing, faces, geo, images, tools, organize, review, settings
 
 TABLE = json.loads((Path(__file__).parent / "access_table.json").read_text())
 
@@ -18,7 +18,7 @@ def _api_routes():
     """Every route of the route modules, whatever its address, and the ones app/main.py serves itself."""
     from app.main import app
     seen = set()
-    for routes in [mod.router.routes for mod in (browse, images, albums, editing, settings, tools, auth, users, geo, backup, review, organize, faces)] + [app.routes]:
+    for routes in [mod.router.routes for mod in (browse, images, albums, editing, settings, tools, auth, geo, backup, review, organize, faces)] + [app.routes]:
         for r in routes:
             if isinstance(r, APIRoute) and (r.path, tuple(sorted(r.methods))) not in seen:
                 seen.add((r.path, tuple(sorted(r.methods))))
@@ -47,5 +47,5 @@ def test_markers_refuse_the_right_people(client):
         pytest.skip("no accounts in this library: everyone may edit")
     r = client.post("/api/photos/trash", json={"ids": []})
     assert r.status_code in (401, 403) and "editor" in r.json()["detail"].lower()
-    r = client.get("/api/users")
+    r = client.get("/api/server")
     assert r.status_code in (401, 403) and r.json()["detail"] == "Admins only"

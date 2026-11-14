@@ -2,6 +2,7 @@
 from app import members
 
 from test_mcp import app_password, call
+from iosuite_shared import testing
 
 
 def holidays_cals(client):
@@ -72,7 +73,7 @@ def test_country_from_time_zone():
 
 def test_family_member_tags(client, family_id):
     members.TTL = 0
-    assert client.post("/api/users", json={"name": "emma", "password": "emmapass99", "role": "viewer", "displayName": "Emma"}).status_code == 200
+    assert testing.add_account(client, {"name": "emma", "password": "emmapass99", "role": "viewer", "displayName": "Emma"}).status_code == 200
     fam = client.get("/api/members").json()["items"]
     emma = next(m for m in fam if m["name"] == "emma")
     alex = next(m for m in fam if m["name"] == "alex")
@@ -116,7 +117,7 @@ def test_family_member_tags(client, family_id):
 def test_mcp_members(client, family_id):
     members.TTL = 0
     client.post("/api/server", json={"mcpEnabled": True})
-    client.post("/api/users", json={"name": "emma", "password": "emmapass99", "role": "viewer", "displayName": "Emma"})
+    testing.add_account(client, {"name": "emma", "password": "emmapass99", "role": "viewer", "displayName": "Emma"})
     auth, _ = app_password(client)
     ov = call(client, auth, "overview")
     assert "Emma" in ov["family"]
@@ -143,8 +144,8 @@ def test_leave_accounts_out_of_the_family(client, family_id):
     """The family is the suite's (Settings › Security › Family, iosuite_shared.family): taking someone out there takes
     them out of ioCalendar's tags and filters too."""
     members.TTL = 0
-    client.post("/api/users", json={"name": "admin2", "password": "adminpass99", "role": "admin"})
-    client.post("/api/users", json={"name": "emma", "password": "emmapass99", "role": "viewer", "displayName": "Emma"})
+    testing.add_account(client, {"name": "admin2", "password": "adminpass99", "role": "admin"})
+    testing.add_account(client, {"name": "emma", "password": "emmapass99", "role": "viewer", "displayName": "Emma"})
     fam = client.get("/api/members").json()["items"]
     admin2 = next(m for m in fam if m["name"] == "admin2")
     assert {"initials", "color", "hasFace"} <= set(admin2) and admin2["color"].startswith("#")

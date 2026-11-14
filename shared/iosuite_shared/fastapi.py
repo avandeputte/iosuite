@@ -5,7 +5,6 @@ dependencies that say who may call a route, and the routers with the sign-in and
     app.middleware("http")(auth.middleware(open_paths=..., open_prefixes=..., before=..., after=...))
     @router.get("/api/x", dependencies=[auth.access.admin])
     app.include_router(auth.router())        # /api/auth/* : login, accounts, logout, me, settings, password, setup
-    app.include_router(auth.users_router())  # /api/users  : list, create, role here (admins of this app); the rest (suite admins)
     app.include_router(auth.admin_router())  # /api/suite-admin: every account, role, app password, session and app (suite admins)
     app.include_router(auth.status_router(updater, extra=...))   # GET /api/status, public, the same shape in every app
     app.include_router(auth.server_router(updater, log_file=...)) # GET/POST /api/server, GET /api/log (admins)
@@ -320,10 +319,6 @@ class Auth:
         """/api/auth/*: login, accounts, logout, me, settings, password, setup, sessions, app-passwords, proxy, suite."""
         return routers.auth_router(self)
 
-    def users_router(self) -> APIRouter:
-        """/api/users: the accounts as this app's admins see them."""
-        return routers.users_router(self)
-
     def admin_router(self) -> APIRouter:
         """/api/suite-admin/*: everything in the Shared ioSuite database, for suite admins."""
         return routers.admin_router(self)
@@ -443,36 +438,3 @@ class Auth:
             app.add_middleware(outer)
         # added last: the outermost layer, so the peer is the real one; FastAPI's own two pages learn the folder the app is served in
         app.add_middleware(Forwarded, rooted=tuple(p for p in (app.docs_url, app.openapi_url, app.redoc_url) if p))
-
-    def _update(self, me, user_id: int, body: dict):
-        """PATCH /api/users/{id}. An admin of this app sets the account's role here; the account itself (name, email,
-        display name, password, listed, suiteAdmin, roles elsewhere) belongs to the whole suite, so only a suite admin
-        changes it: sign-in at a proxy finds an account by its email and name, and a password opens every app."""
-        target = users.get(user_id, self.app)
-        suite = users.is_suite_admin(me)
-        if not suite:
-            same = {"name": target["name"], "email": target.get("email") or "", "displayName": target.get("displayName") or "",
-                    "listed": bool(target.get("listed", True)), "suiteAdmin": bool(target["suiteAdmin"])}
-            beyond = [k for k in ("name", "email", "displayName", "password", "listed", "suiteAdmin", "roles")
-                      if body.get(k) is not None and (k not in same or body[k] != same[k])]  # a form that sends them unchanged is fine
-            if beyond:
-                raise PermissionError(f"Only a suite admin can change an account's {', '.join(beyond)} (Settings › Security)")
-            if target["suiteAdmin"] and body.get("role") is not None:
-                raise PermissionError("Only a suite admin can change a suite admin's role")
-        role = body.get("role")
-        if role is not None and me and me["id"] == user_id and role != "admin" and users.admins_of(self.app) <= 1:
-            raise Invalid("That is the only admin; make someone else admin first")
-        if suite:
-            users.update(user_id, role=role, app=self.app, password=body.get("password"), name=body.get("name"), email=body.get("email"),
-                         display_name=body.get("displayName"), listed=None if body.get("listed") is None else bool(body.get("listed")),
-                         suite_admin=None if body.get("suiteAdmin") is None else bool(body.get("suiteAdmin")))
-        elif role is not None:
-            users.update(user_id, role=role, app=self.app)
-        if suite and isinstance(body.get("roles"), dict):
-            for a, rr in body["roles"].items():
-                users.set_role(user_id, str(a)[:32], str(rr))
-        if self.on_update:
-            self.on_update(user_id, body)
-        apppasswords.forget()
-        from iosuite_shared import proxyauth
-        proxyauth.forget_identities()

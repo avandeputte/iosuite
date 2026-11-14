@@ -3,13 +3,13 @@ viewers keep settings on the server, members also favorites, editors write the l
 manage settings, maintenance and users; sessions are signed cookies."""
 from app import users
 from helpers import login as _login
+from iosuite_shared import testing, users as shared_users
 
 
 def test_open_until_first_user(client, fresh):
     s = client.get("/api/status").json()
     assert s["usersExist"] is False and s["isAdmin"] is True and s["editing"] is True
     assert client.post("/api/favorites", json={"ids": [], "on": True}).status_code == 200
-    assert client.post("/api/users", json={"name": "x", "password": "password1", "role": "viewer"}).status_code == 200, "open mode: anyone may create (that is how the first admin gets made)"
 
 
 def test_setup_creates_the_admin_once(client, fresh):
@@ -39,7 +39,7 @@ def test_roles(client, fresh, lib):
     assert client.post("/api/favorites", json={"ids": [lib["ids"][0]], "on": True}).status_code == 200
     assert client.post("/api/edit", json={"ids": [lib["ids"][0]], "rating": 3}).status_code == 403
     assert client.post("/api/settings", json={"bg_threads": 2}).status_code == 403
-    assert client.get("/api/users").status_code == 403
+    assert client.get("/api/suite-admin").status_code == 403
     # reads that are not for everyone: the server log and the merge plan (admins), the change log and the elevation lookup (editors)
     assert client.get("/api/log").status_code == 403 and client.get("/api/log/download").status_code == 403
     assert client.get("/api/library/merge").status_code == 403
@@ -50,12 +50,12 @@ def test_roles(client, fresh, lib):
     assert s["editing"] is True and s["isAdmin"] is False
     assert client.post("/api/settings", json={"bg_threads": 2}).status_code == 403
     assert client.get("/api/history").status_code == 200 and client.get("/api/log").status_code == 403
-    assert client.post("/api/users", json={"name": "z", "password": "password1", "role": "viewer"}).status_code == 403
+    assert client.post("/api/suite-admin/users", json={"name": "z", "password": "password1"}).status_code == 403
     _login(client, "alex", "correct horse")
     assert client.get("/api/status").json()["isAdmin"] is True
     assert client.get("/api/log").status_code == 200 and "paths" in client.get("/api/tools").json()
     assert client.post("/api/settings", json={"bg_threads": 2}).status_code == 200
-    assert client.get("/api/users").status_code == 200 and len(client.get("/api/users").json()["users"]) == 3
+    assert client.get("/api/users").status_code == 404, "accounts are a suite admin's, on Settings › Suite"
 
 
 def test_wrong_password_and_bad_cookie(client, fresh):
@@ -73,22 +73,6 @@ def test_per_user_settings_roundtrip(client, fresh):
     assert client.post("/api/auth/settings", json={"badges": None}).json() == {"tile": "L"}
 
 
-def test_admin_manages_users_and_cannot_remove_the_last_admin(client, fresh):
-    users.create("alex", "correct horse", "admin")
-    _login(client, "alex", "correct horse")
-    u = client.post("/api/users", json={"name": "ed", "password": "editor-pass", "role": "editor"}).json()
-    assert client.post(f"/api/users/{u['id']}", json={"role": "admin"}).status_code == 200
-    assert client.post(f"/api/users/{u['id']}", json={"password": "new-password-1"}).status_code == 200
-    client.cookies.clear(); _login(client, "ed", "new-password-1")
-    me = client.get("/api/auth/me").json()["user"]
-    assert client.post(f"/api/users/{me['id']}", json={"delete": True}).status_code == 400, "not while signed in as that user"
-    alex = next(x for x in client.get("/api/users").json()["users"] if x["name"] == "alex")
-    assert client.post(f"/api/users/{alex['id']}", json={"role": "viewer"}).status_code == 200
-    assert client.post(f"/api/users/{me['id']}", json={"role": "viewer"}).status_code == 400, "the only admin left"
-    assert client.post("/api/users", json={"name": "ed", "password": "password1", "role": "viewer"}).status_code == 400, "name taken"
-    assert client.post("/api/users", json={"name": "short", "password": "short", "role": "viewer"}).status_code == 400
-
-
 def test_own_password_change(client, fresh):
     users.create("vi", "viewer-pass", "viewer")
     _login(client, "vi", "viewer-pass")
@@ -98,14 +82,10 @@ def test_own_password_change(client, fresh):
 
 
 def test_passwordless_viewer_one_click_and_limits(client, fresh):
-    users.create("alex", "correct horse", "admin")
+    shared_users.create("alex", "correct horse", suite_admin=True)
     _login(client, "alex", "correct horse")
-    assert client.post("/api/users", json={"name": "kid", "password": "", "role": "editor"}).status_code == 400, "no password means a member at most"
-    kid = client.post("/api/users", json={"name": "kid", "password": "", "role": "viewer"}).json()
+    kid = testing.add_account(client, {"name": "kid", "password": "", "role": "viewer"}).json()
     assert kid["passwordless"] is True
-    assert client.post(f"/api/users/{kid['id']}", json={"role": "editor"}).status_code == 400, "cannot be promoted without a password"
-    alex = next(x for x in client.get("/api/users").json()["users"] if x["name"] == "alex")
-    assert client.post(f"/api/users/{alex['id']}", json={"password": ""}).status_code == 400, "an admin keeps a password"
     client.cookies.clear()
     acc = client.get("/api/auth/accounts").json()["accounts"]
     assert [(a["name"], a["passwordless"]) for a in acc] == [("alex", False), ("kid", True)]
@@ -117,22 +97,21 @@ def test_passwordless_viewer_one_click_and_limits(client, fresh):
     client.cookies.clear()
     assert client.post("/api/auth/login", json={"name": "alex"}).status_code == 401, "a protected account still needs its password"
     _login(client, "alex", "correct horse")
-    assert client.post(f"/api/users/{kid['id']}", json={"password": "now-protected"}).status_code == 200
+    assert client.patch(f"/api/suite-admin/users/{kid['id']}", json={"password": "now-protected"}).status_code == 200
     client.cookies.clear()
     assert client.post("/api/auth/login", json={"name": "kid"}).status_code == 401
 
 
 def test_account_linked_to_a_person(client, fresh):
-    users.create("alex", "correct horse", "admin")
+    shared_users.create("alex", "correct horse", suite_admin=True)
     _login(client, "alex", "correct horse")
     tags = client.get("/api/meta").json()["tags"]
     person = next(t for t in tags if t.get("person") and t["full"] != "People")
     plain = next(t for t in tags if not t.get("person"))
     me = client.get("/api/auth/me").json()["user"]
-    assert client.post(f"/api/users/{me['id']}", json={"person": plain["id"]}).status_code == 400, "only a person tag"
+    assert client.patch(f"/api/suite-admin/users/{me['id']}", json={"person": plain["id"]}).status_code == 400, "only a person tag"
     assert client.post("/api/auth/person", json={"person": person["id"]}).json()["person"] == person["id"]
     assert client.get("/api/status").json()["user"]["person"] == person["id"]
-    assert client.get("/api/users").json()["users"][0]["person"] == person["id"]
     client.cookies.clear()
     assert client.get("/api/auth/accounts").json()["accounts"][0]["person"] == person["id"], "the picker can show the face"
     _login(client, "alex", "correct horse")
@@ -142,35 +121,14 @@ def test_account_linked_to_a_person(client, fresh):
     _login(client, "ed", "editor-pass")
     assert client.post("/api/auth/person", json={"person": person["id"]}).status_code == 403
     _login(client, "alex", "correct horse")
-    ed = next(u for u in client.get("/api/users").json()["users"] if u["name"] == "ed")
-    assert client.post(f"/api/users/{ed['id']}", json={"person": person["id"]}).status_code == 200
-
-
-def test_optional_email_on_accounts(client, fresh):
-    """An account may carry an email address (for a proxy to identify users by later): set at
-    creation or afterwards, validated, unique, clearable, and shown in the admin's list."""
-    users.create("alex", "correct horse", "admin")
-    _login(client, "alex", "correct horse")
-    u = client.post("/api/users", json={"name": "ed", "password": "editor-pass", "role": "editor", "email": " Ed@Example.com "}).json()
-    assert u["email"] == "ed@example.com", "trimmed and lower-cased"
-    assert client.post("/api/users", json={"name": "ann", "password": "", "role": "viewer", "email": "not-an-address"}).status_code == 400
-    assert client.post("/api/users", json={"name": "ann", "password": "", "role": "viewer", "email": "ed@example.com"}).status_code == 400, "unique"
-    ann = client.post("/api/users", json={"name": "ann", "password": "", "role": "viewer"}).json()
-    assert ann["email"] == ""
-    assert client.post(f"/api/users/{ann['id']}", json={"email": "ann@example.com"}).status_code == 200
-    assert client.post(f"/api/users/{ann['id']}", json={"email": "ed@example.com"}).status_code == 400
-    listed = {x["name"]: x["email"] for x in client.get("/api/users").json()["users"]}
-    assert listed == {"alex": "", "ed": "ed@example.com", "ann": "ann@example.com"}
-    assert client.post(f"/api/users/{ann['id']}", json={"email": ""}).status_code == 200
-    assert next(x for x in client.get("/api/users").json()["users"] if x["name"] == "ann")["email"] == ""
-    assert "email" not in client.get("/api/auth/accounts").json()["accounts"][0], "the public picker shows no addresses"
+    ed = next(u for u in client.get("/api/suite-admin").json()["users"] if u["name"] == "ed")
+    assert client.patch(f"/api/suite-admin/users/{ed['id']}", json={"person": person["id"]}).status_code == 200
 
 
 def test_require_login_locks_everything_but_the_sign_in(client, fresh, lib):
-    assert client.post("/api/settings", json={"require_login": True}).status_code == 400, "no account yet: nobody could sign in"
-    users.create("alex", "correct horse", "admin")
+    shared_users.create("alex", "correct horse", suite_admin=True)
     _login(client, "alex", "correct horse")
-    assert client.post("/api/settings", json={"require_login": True}).status_code == 200
+    assert client.patch("/api/suite-admin/apps/iopix", json={"requireLogin": True}).status_code == 200  # Settings › Suite › Apps
     assert client.get("/api/status").json()["requireLogin"] is True
     client.cookies.clear()
     # a visitor: the shell and the sign-in endpoints work, nothing else does
@@ -178,7 +136,7 @@ def test_require_login_locks_everything_but_the_sign_in(client, fresh, lib):
         assert client.get(path).status_code == 200, path
     assert client.get("/api/auth/me").json()["requireLogin"] is True
     pid = lib["ids"][0] if isinstance(lib, dict) and "ids" in lib else client.get("/api/photos", cookies={}).json().get("id", [None])[0]
-    for path in ("/api/meta", "/api/photos", "/api/users", "/api/tags", "/api/concepts"):
+    for path in ("/api/meta", "/api/photos", "/api/settings", "/api/tags", "/api/concepts"):
         assert client.get(path).status_code == 401, path
     if pid:
         for path in (f"/thumb/{pid}", f"/preview/{pid}", f"/orig/{pid}", f"/api/photo/{pid}"):
@@ -208,7 +166,7 @@ def test_require_login_locks_everything_but_the_sign_in(client, fresh, lib):
     # signed in again: everything is back
     _login(client, "alex", "correct horse")
     assert client.get("/api/meta").status_code == 200
-    assert client.post("/api/settings", json={"require_login": False}).status_code == 200
+    assert client.patch("/api/suite-admin/apps/iopix", json={"requireLogin": False}).status_code == 200
     client.cookies.clear()
     assert client.get("/api/meta").status_code == 200, "open browsing again"
 
@@ -236,18 +194,17 @@ def test_backup_downloads_are_for_admins(client, fresh, lib):
 def test_an_account_can_be_left_off_the_sign_in_list(client, fresh):
     """Settings › Users › Sign-in list: an unticked account is not offered on the sign-in screen; "Other" with
     its name (and password) still signs it in."""
-    users.create("alex", "correct horse", "admin")
+    alex = shared_users.create("alex", "correct horse", suite_admin=True)
     _login(client, "alex", "correct horse")
-    kid = client.post("/api/users", json={"name": "kid", "password": "", "role": "viewer"}).json()
-    alex = next(x for x in client.get("/api/users").json()["users"] if x["name"] == "alex")
-    assert alex["listed"] is True and kid["listed"] is True
-    assert client.post(f"/api/users/{alex['id']}", json={"listed": False}).status_code == 200
-    assert next(x for x in client.get("/api/users").json()["users"] if x["name"] == "alex")["listed"] is False
+    kid = testing.add_account(client, {"name": "kid", "password": "", "role": "viewer"}).json()
+    assert kid["listed"] is True
+    assert client.patch(f"/api/suite-admin/users/{alex['id']}", json={"listed": False}).status_code == 200
+    assert next(x for x in client.get("/api/suite-admin").json()["users"] if x["name"] == "alex")["listed"] is False
     client.cookies.clear()
     assert [a["name"] for a in client.get("/api/auth/accounts").json()["accounts"]] == ["kid"], "the picker leaves the account out"
     _login(client, "alex", "correct horse")  # "Other": the name and password still sign in
     assert client.get("/api/status").json()["user"]["name"] == "alex"
-    assert client.post(f"/api/users/{alex['id']}", json={"listed": True}).status_code == 200
+    assert client.patch(f"/api/suite-admin/users/{alex['id']}", json={"listed": True}).status_code == 200
     client.cookies.clear()
     assert [a["name"] for a in client.get("/api/auth/accounts").json()["accounts"]] == ["alex", "kid"]
 

@@ -28,7 +28,6 @@ def make_app(key, store):
     app = FastAPI()
     app.middleware("http")(auth.middleware(open_prefixes=("/api/auth/",)))
     app.include_router(auth.router())
-    app.include_router(auth.users_router())
     app.include_router(auth.admin_router())
     return auth, app
 
@@ -134,19 +133,8 @@ def test_only_suite_admins_see_or_remove_anyones_data(suite_of_two):
     c = signed_in(s["task_app"], "ann")  # an admin of the app, not of the suite
     assert c.get(f"{persondata.PATH}{ann['id']}").status_code == 403
     assert c.delete(f"{persondata.PATH}{ann['id']}").status_code == 403
-    assert c.delete(f"/api/users/{ann['id']}").status_code == 403
+    assert c.delete(f"/api/suite-admin/users/{ann['id']}").status_code == 403
     assert s["task"].private[ann["id"]] == 2
-
-
-def test_the_old_users_route_deletes_the_data_too(suite_of_two):
-    s = suite_of_two
-    users.create("alex", "secret123", suite_admin=True)
-    ann = users.create("ann", "secret123")
-    s["start"].private[ann["id"]] = 1
-    s["task"].private[ann["id"]] = 1
-    r = signed_in(s["start_app"], "alex").delete(f"/api/users/{ann['id']}")
-    assert r.status_code == 200 and users.get(ann["id"]) is None
-    assert ann["id"] not in s["start"].private and ann["id"] not in s["task"].private
 
 
 def test_an_app_without_an_address_says_so():

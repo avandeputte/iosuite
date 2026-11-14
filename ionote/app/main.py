@@ -17,7 +17,7 @@ from iosuite_shared.updates import setup_log
 from app import __version__, config, db, mcp, suitedb
 from app import notes as notes_mod
 from app.auth import auth, updater
-from app.routes import auth as auth_routes, notes as notes_routes, settings, users as users_routes
+from app.routes import auth as auth_routes, notes as notes_routes, settings
 
 setup_log(config.LOG_FILE)  # the server log that Settings › Server shows; the app runs without it
 log = logging.getLogger("app")
@@ -120,7 +120,6 @@ def _status_extra(request: Request) -> dict:
 
 
 app.include_router(auth_routes.router)   # /api/auth/*: sign-in, accounts, me, settings, password, sessions, app passwords, suite
-app.include_router(users_routes.router)  # /api/users: accounts and their role here (admins)
 app.include_router(auth.admin_router())  # /api/suite-admin (+ ui.js, the Settings › Security panel): the whole suite (suite admins)
 app.include_router(auth.related_router())  # /api/related (+ ui.js, the "Linked" panel): items linked across the apps
 app.include_router(auth.status_router(updater, extra=_status_extra))  # /api/status: public, the same shape in every app

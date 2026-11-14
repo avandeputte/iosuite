@@ -222,3 +222,13 @@ def check_access_declared(app, declared, ignore=("/api/openapi.json", "/api/docs
     assert routes, f"no API routes under {prefix}: nothing was checked"
     missing = [f"{sorted(m)} {p}" for m, p, r in routes if declared(r) is None]
     assert not missing, "routes without exactly one access marker (dependencies=[access.<level>]):\n" + "\n".join(missing)
+
+
+def add_account(client, body: dict):
+    """Make an account the way Settings › Security › People does (POST /api/suite-admin/users), as the suite admin
+    `client` is signed in as. {role} is the account's role in the app `client` talks to; the rest is the panel's body."""
+    body = dict(body)
+    role = body.pop("role", None)
+    if role:
+        body["roles"] = {**body.get("roles", {}), client.get("/api/auth/me").json()["app"]: role}
+    return client.post("/api/suite-admin/users", json=body)

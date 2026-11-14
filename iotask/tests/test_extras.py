@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 
 from tests.test_api import new
 from tests.test_caldav import TODO
+from iosuite_shared import testing
 
 NY = ZoneInfo("America/New_York")
 
@@ -167,7 +168,7 @@ def test_the_log_says_what_a_reminders_app_did(client, family_id, dav):  # noqa:
 
 def test_viewers_see_the_log_but_do_not_undo(client, family_id):
     t = new(client, title="Shared thing", listId=family_id)
-    client.post("/api/users", json={"name": "kid", "password": "kidpass123", "role": "viewer"})
+    testing.add_account(client, {"name": "kid", "password": "kidpass123", "role": "viewer"})
     client.cookies.clear()
     assert client.post("/api/auth/login", json={"name": "kid", "password": "kidpass123"}).status_code == 200
     log = client.get("/api/activity").json()["items"]

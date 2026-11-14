@@ -332,13 +332,6 @@ def _max_role(user_id: int, except_app: str = "") -> str:
     return best
 
 
-def admins_of(app: str) -> int:
-    """How many accounts administer the app (suite admins included)."""
-    n = db.one("SELECT count(*) AS n FROM ios_users WHERE suite_admin = 1")["n"]
-    n += db.one("SELECT count(*) AS n FROM ios_user_roles r JOIN ios_users u ON u.id = r.user_id WHERE r.app = %s AND r.role = 'admin' AND u.suite_admin = 0", (app,))["n"]
-    return n
-
-
 # ---- permissions (the "no accounts yet: open" rule included)
 def is_signed_in(user) -> bool:
     return not any_users() or (user is not None and user.get("role", "viewer") != "none")

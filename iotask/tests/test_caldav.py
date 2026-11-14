@@ -1,6 +1,7 @@
 """CalDAV for to-dos, as Apple Reminders uses it: discovery, VTODO-only lists, PUT with preconditions and UID
 conflicts, multiget, calendar-query for the open tasks, sync-collection with deletions, MKCALENDAR, PROPPATCH."""
 import re
+from iosuite_shared import testing
 
 
 TODO = ("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Apple Inc.//iOS 18//EN\r\nBEGIN:VTODO\r\nUID:{uid}\r\nDTSTAMP:20260101T000000Z\r\n"
@@ -109,7 +110,7 @@ def test_caldav_refuses_xml_entities(client, dav):
 
 
 def test_a_viewer_only_reads_over_caldav(client, family_id):
-    client.post("/api/users", json={"name": "vic", "password": "secret123", "role": "viewer"})
+    testing.add_account(client, {"name": "vic", "password": "secret123", "role": "viewer"})
     client.cookies.clear()
     assert client.post("/api/auth/login", json={"name": "vic", "password": "secret123"}).status_code == 200
     pw = client.post("/api/auth/app-passwords", json={"label": "iPhone"}).json()["password"]

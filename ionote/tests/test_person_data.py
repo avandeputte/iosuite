@@ -4,6 +4,7 @@ from iosuite_shared import users
 
 from app import db
 from helpers import NID
+from iosuite_shared import testing
 
 OTHER = "BBBBBBBB-1111-2222-3333-444444444444"
 
@@ -14,7 +15,7 @@ def _as(client, name, password):
 
 
 def test_deleting_someone_removes_their_notes(client, admin):
-    assert client.post("/api/users", json={"name": "sam", "password": "secretpw2", "role": "editor"}).status_code == 200
+    assert testing.add_account(client, {"name": "sam", "password": "secretpw2", "role": "editor"}).status_code == 200
     client.put(f"/api/notes/{NID}", json={"title": "alex's", "updatedAt": 1})
     _as(client, "sam", "secretpw2")
     sam = users.find("sam")["id"]

@@ -214,7 +214,7 @@ account) stay with the open install: export them before making the first account
 **Sign-in required** (Settings › Global settings › Apps, on by default) also closes the open routes to visitors, but for the app shell, `/api/status` and the sign-in routes (the MCP endpoint wants an app password either way).
 Sessions are random tokens in an HttpOnly cookie (`iothing_session`, shared by the apps on the domain) valid for
 30 days and renewed while in use; each records where it began and was last seen (address, through Cloudflare or
-not, web or which app): `GET /api/auth/sessions` for your own, `GET /api/users/<id>/sessions` for admins. Passwords
+not, web or which app): `GET /api/auth/sessions` for your own, `GET /api/suite-admin/users/<id>/sessions` for suite admins. Passwords
 are Argon2id-hashed; wrong passwords cost a growing wait. Write requests from another site are refused.
 
 ionote writes its row in the **suite's list of apps** (iosuite-shared's `suite_apps` table: name, version, colour,

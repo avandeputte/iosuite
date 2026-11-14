@@ -112,8 +112,7 @@ auth.write_role = "member"   # only in an app where everything is one's own (ioN
 app.middleware("http")(auth.middleware(open_paths=("/", "/index.html"), open_prefixes=("/static/", "/api/auth/"), before=my_gate))
 app.include_router(auth.router())         # /api/auth/login, accounts, logout, me, settings, password, setup,
                                           #           sessions (list, DELETE one), app-passwords, suite
-app.include_router(auth.users_router())   # /api/users: list, add, the role here (admins of this app); the rest of an account,
-                                          #           its sessions and deleting it (suite admins)
+app.include_router(auth.admin_router())   # /api/suite-admin: accounts, roles, sessions, app passwords, keys (suite admins)
 app.include_router(auth.status_router(updater, extra=lambda request: {...}))   # GET /api/status (below)
 app.include_router(auth.server_router(updater, log_file=LOG_FILE))   # /api/server, /api/log (below)
 auth.install(app, limit_for=lambda path, ctype: 4 << 20)   # 400 for bad input, the headers, the body cap, the forwarded headers (below)
@@ -127,16 +126,13 @@ def tag(request: Request):
 `_write` ones answer 403 while `read_only()` says so. A rule of the app's own gets a marker of its own,
 `auth.access.custom("uploader", lambda user, request: ..., "Uploads need an editor")`, so the route says what it needs
 instead of carrying `public` and checking inside. The marker is the check: a route does not test the role again in
-its body. The JSON shapes are those of iopix's API, so its pages and the ionote/iocontact ones (which copied them)
-keep working: `PATCH /api/users/{id}` changes an account, `DELETE /api/users/{id}` removes it;
-`POST /api/auth/password {current, password}` changes the caller's own password (never removes it: that is an
-admin's decision on the users route).
+its body. `POST /api/auth/password {current, password}` changes the caller's own password (never removes it: that is
+a suite admin's decision on the panel).
 
-An account belongs to the whole suite, so an **admin of one app** only lists the accounts, adds one and sets an
-account's role in that app (`PATCH /api/users/{id} {role}`, and the app's own fields through `auth.on_update`).
-The name, email, display name, password, `listed`, `suiteAdmin`, the roles in other apps, the sessions and deleting
-the account take a **suite admin** (403 otherwise): sign-in at a proxy finds an account by its email and name, and a
-password opens every app.
+An account belongs to the whole suite, so everything about accounts (adding one, its name, email, password, `listed`,
+`suiteAdmin`, its role in every app, its sessions, deleting it) is a **suite admin's**, on Settings › Suite at
+`/api/suite-admin/*`; an admin of one app has no say over accounts. The app's own fields of an account reach it through
+`auth.on_update`.
 
 **Before the first account** everything is open, to the network the server is on: a request from outside
 (`auth.outside`, above) gets the app's shell and the sign-in routes and a 403 `{detail, unclaimed: true}` for

@@ -185,3 +185,31 @@ def test_person_in_photos(monkeypatch):
     assert p["available"] and p["people"] == [] and "down" in p["error"]
     monkeypatch.setattr("iosuite_shared.links.get", away)
     assert c.get("/api/suite-admin/photo-people/42/face.jpg").status_code == 404
+
+
+def test_the_panel_checks_what_it_is_given_for_an_account():
+    """What the old per-app accounts route checked, now on Settings › Suite › People: a taken name, a short password,
+    no password for more than a member, an email trimmed, valid and unique, and the sign-in list."""
+    app = make_app()
+    users.create("alex", "secret123", suite_admin=True)
+    c = signed_in(app, "alex", "secret123")
+    add = lambda body: c.post("/api/suite-admin/users", json=body)
+    ed = add({"name": "ed", "password": "editor-pass", "roles": {"iopix": "editor"}, "email": " Ed@Example.com "})
+    assert ed.status_code == 200 and ed.json()["email"] == "ed@example.com", "trimmed and lower-cased"
+    ed = ed.json()
+    assert add({"name": "ed", "password": "password1"}).status_code == 400, "name taken"
+    assert add({"name": "short", "password": "short"}).status_code == 400
+    assert add({"name": "kid", "password": "", "roles": {"iopix": "editor"}}).status_code == 400, "no password: a member at most"
+    assert add({"name": "ann", "password": "", "email": "not-an-address"}).status_code == 400
+    assert add({"name": "ann", "password": "", "email": "ed@example.com"}).status_code == 400, "unique"
+    kid = add({"name": "kid", "password": "", "roles": {"iopix": "viewer"}}).json()
+    assert kid["passwordless"] and kid["email"] == "" and kid["listed"]
+    assert c.patch(f"/api/suite-admin/users/{kid['id']}", json={"roles": {"iopix": "editor"}}).status_code == 400, "not without a password"
+    assert c.patch(f"/api/suite-admin/users/{ed['id']}", json={"password": ""}).status_code == 400, "an editor keeps a password"
+    assert c.patch(f"/api/suite-admin/users/{kid['id']}", json={"email": "ed@example.com"}).status_code == 400
+    assert c.patch(f"/api/suite-admin/users/{kid['id']}", json={"email": "kid@example.com", "listed": False}).status_code == 200
+    got = {u["name"]: u for u in c.get("/api/suite-admin").json()["users"]}
+    assert got["kid"]["email"] == "kid@example.com" and not got["kid"]["listed"]
+    assert "kid" not in [a["name"] for a in TestClient(app).get("/api/auth/accounts").json()["accounts"]]
+    assert c.patch(f"/api/suite-admin/users/{kid['id']}", json={"email": ""}).status_code == 200
+    assert users.get(kid["id"])["email"] == ""

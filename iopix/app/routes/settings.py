@@ -101,13 +101,6 @@ def _digikam_sync(value, _body):
     events.kick()
 
 
-def _require_login(value, _body):
-    """Visitors get the sign-in screen and nothing else."""
-    if value and not users.any_users():
-        raise HTTPException(400, "Create an account first, or nobody could sign in")
-    users.set_require_login(bool(value))  # in the Shared ioSuite database, per app
-
-
 def _digikam_closed(value, _body):
     """Docker: the owner vouches that digiKam is closed, for 10 minutes."""
     if value:
@@ -198,7 +191,6 @@ SETTINGS = {
     "app_name": _text("app_name", 40),  # how the viewer brands itself; empty puts the default back
     "library_replace": _library_replace,
     "digikam_sync": _digikam_sync,
-    "require_login": _require_login,
     "digikam_closed": _digikam_closed,
     "templates": _templates,
     "database": _database,

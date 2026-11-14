@@ -2,6 +2,7 @@
 import time
 
 from helpers import NID, NID2, png
+from iosuite_shared import testing
 
 
 def test_create_read_update_with_the_apps_ids(client, admin):
@@ -205,7 +206,7 @@ def test_removing_a_picture_takes_its_text_and_a_new_web_picture_is_read_again(c
 def test_status_rev_moves_only_with_this_accounts_changes(client, admin):
     client.put(f"/api/notes/{NID}", json={"title": "a", "updatedAt": 1})
     rev = client.get("/api/status").json()["rev"]
-    client.post("/api/users", json={"name": "sam", "password": "secretpw2", "role": "editor"})
+    testing.add_account(client, {"name": "sam", "password": "secretpw2", "role": "editor"})
     client.cookies.clear()
     client.post("/api/auth/login", json={"name": "sam", "password": "secretpw2"})
     client.put(f"/api/notes/{NID2}", json={"title": "sam's", "updatedAt": 1})
