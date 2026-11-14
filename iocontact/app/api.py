@@ -11,7 +11,7 @@ import re
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
-from iosuite_shared import appleprofile, users as shared_users
+from iosuite_shared import appleprofile, prefix, users as shared_users
 from iosuite_shared.access import json_body
 
 from app import access, calendar, config, csvio, db, enrich, iopix, limits, model, quality, relations as rel, users, vcard
@@ -213,7 +213,7 @@ async def create_contact(request: Request, book: str | None = None):
     bid = book or data.get("bookId") or next((b["id"] for b in model.books_for(u) if model.can_write_book(u, b)), None)
     b = writable_book(u, bid)
     cid = await run_in_threadpool(model.save, b["id"], data, None, None, book_ids(u))
-    return JSONResponse(contact_out(model.full(cid)), status_code=201, headers={"Location": f"/api/contacts/{cid}"})
+    return JSONResponse(contact_out(model.full(cid)), status_code=201, headers={"Location": f"{prefix.of(request)}/api/contacts/{cid}"})
 
 
 @router.put("/api/contacts/{cid}", dependencies=[access.signed_in])
@@ -607,11 +607,9 @@ def export_text(ids: list[int], format: str = "vcf") -> tuple[str, str, str]:
 # ------------------------------------------------------------------ calendar and connection details
 
 def base_url(request: Request) -> str:
-    if config.PUBLIC_URL:
-        return config.PUBLIC_URL
-    proto = request.headers.get("x-forwarded-proto") or request.url.scheme
-    host = request.headers.get("x-forwarded-host") or request.headers.get("host") or request.url.netloc
-    return f"{proto}://{host}"
+    """The address links are made with: PUBLIC_URL, else the one the request came to, with the folder the app is
+    served in (iosuite_shared.prefix)."""
+    return prefix.base_url(request, config.PUBLIC_URL)
 
 
 @router.get("/api/connect", dependencies=[access.signed_in])

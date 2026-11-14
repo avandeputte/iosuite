@@ -19,7 +19,7 @@ from urllib.parse import unquote, urlsplit
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import Response
-from iosuite_shared import dav
+from iosuite_shared import dav, prefix
 
 from app import bookmarkfiles, bookmarks, bookmarksync as sync, config, db
 
@@ -131,11 +131,11 @@ async def folder(request: Request):
 
     def work():
         ms = ET.Element(dav.q(dav.D, "multistatus"))
-        _props(ms, BASE + "/", None, None, _modified())
+        _props(ms, prefix.of(request) + BASE + "/", None, None, _modified())
         if request.headers.get("depth", "0") != "0":
             for n in NAMES:
                 kind = _kind(n)[1]
-                _props(ms, f"{BASE}/{n}", len(body_of(n, kind, True).encode("utf-8")), _ctype(kind), _modified())
+                _props(ms, f"{prefix.of(request)}{BASE}/{n}", len(body_of(n, kind, True).encode("utf-8")), _ctype(kind), _modified())
         return dav.xml(ms)
     return await run_in_threadpool(work)
 
@@ -169,7 +169,7 @@ async def file(name: str, request: Request):
         body = "<html><body>I am a lock file</body></html>"
         if m == "PROPFIND":
             ms = ET.Element(dav.q(dav.D, "multistatus"))
-            _props(ms, f"{BASE}/{name}.lock", len(body), "text/html", when)
+            _props(ms, f"{prefix.of(request)}{BASE}/{name}.lock", len(body), "text/html", when)
             return dav.xml(ms)
         return Response(body, media_type="text/html", headers={"Last-Modified": dav.http_date(when)})
 
@@ -197,7 +197,7 @@ async def file(name: str, request: Request):
         raw = kept.encode("utf-8")
         if m == "PROPFIND":
             ms = ET.Element(dav.q(dav.D, "multistatus"))
-            _props(ms, f"{BASE}/{name}.temp", len(raw), _ctype(kind))
+            _props(ms, f"{prefix.of(request)}{BASE}/{name}.temp", len(raw), _ctype(kind))
             return dav.xml(ms)
         return Response(raw, media_type=_ctype(kind))
 
@@ -212,7 +212,7 @@ async def file(name: str, request: Request):
             raise HTTPException(403, "The bookmarks file stays where it is")
         if m == "PROPFIND":
             ms = ET.Element(dav.q(dav.D, "multistatus"))
-            _props(ms, f"{BASE}/{name}", len(body_of(name, kind, True).encode("utf-8")), _ctype(kind), _modified())
+            _props(ms, f"{prefix.of(request)}{BASE}/{name}", len(body_of(name, kind, True).encode("utf-8")), _ctype(kind), _modified())
             return dav.xml(ms)
         rev = bookmarks.revision()
         raw = body_of(name, kind).encode("utf-8")

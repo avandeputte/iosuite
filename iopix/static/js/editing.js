@@ -62,15 +62,15 @@ export async function metadataEditor(d) {
         return h('tr', null, h('td', { class: 'mdk', title: key }, x.tag), h('td', null, cell));
       }))))) : h('div', { class: 'muted' }, which.value === 'sidecar' && !m.hasSidecar ? 'This photo has no sidecar yet; the first edit creates one.' : 'No field matches.'));
   };
-  const load = async () => { try { m = await api(`/api/metadata/${d.id}`); } catch (e) { fill(body, h('div', { class: 'warn' }, e.message)); return; } draw(); };
+  const load = async () => { try { m = await api(`api/metadata/${d.id}`); } catch (e) { fill(body, h('div', { class: 'warn' }, e.message)); return; } draw(); };
   const save = async () => {
     saveBtn.disabled = true; fill(saveBtn, 'Saving…');
-    try { await post(`/api/metadata/${d.id}`, { changes: [...changed.values()] }); } catch (e) { toastError(e, 10000); saveBtn.disabled = false; fill(saveBtn, `Save ${plural(changed.size, 'change')}`); return; }
+    try { await post(`api/metadata/${d.id}`, { changes: [...changed.values()] }); } catch (e) { toastError(e, 10000); saveBtn.disabled = false; fill(saveBtn, `Save ${plural(changed.size, 'change')}`); return; }
     toast(`${plural(changed.size, 'field')} saved; the library now says the same.`); changed.clear(); fill(saveBtn, 'Save changes');
     details.delete(d.id); S.keepView = true; pollSoon(600); load();
   };
   const reread = h('button', { class: 'pillbtn', title: 'Fill the library’s fields for this photo again from its file and sidecar (digiKam: Read Metadata From File)', onclick: async () => {
-    try { await post(`/api/metadata/${d.id}/reread`, {}); toast('Read again from the file and sidecar.'); details.delete(d.id); S.keepView = true; pollSoon(600); } catch (e) { toastError(e); } } }, 'Reread from file');
+    try { await post(`api/metadata/${d.id}/reread`, {}); toast('Read again from the file and sidecar.'); details.delete(d.id); S.keepView = true; pollSoon(600); } catch (e) { toastError(e); } } }, 'Reread from file');
   const add = S.CAN_MANAGE ? (() => {
     const g = h('select', { class: 'sharepick' }, ['XMP-dc', 'XMP-photoshop', 'XMP-iptcCore', 'XMP-xmp', 'XMP-xmpRights', 'IFD0', 'ExifIFD', 'GPS', 'IPTC'].map((x) => h('option', null, x)));
     const t = h('input', { class: 'einput', placeholder: 'Field, e.g. Headline', style: 'width:160px' });
@@ -86,7 +86,7 @@ export async function metadataEditor(d) {
 /** Copy chosen fields from one photo to the others of a selection, through the normal edit path. */
 export async function copyMetadata(ids) {
   let src = ids[0];
-  const thumbs = h('div', { class: 'fcovers' }, ids.slice(0, 60).map((id) => h('img', { class: 'fcov' + (id === src ? ' on' : ''), src: `/thumb/${id}`, alt: '', onclick: (e) => {
+  const thumbs = h('div', { class: 'fcovers' }, ids.slice(0, 60).map((id) => h('img', { class: 'fcov' + (id === src ? ' on' : ''), src: `thumb/${id}`, alt: '', onclick: (e) => {
     src = id; thumbs.querySelectorAll('.fcov').forEach((x) => x.classList.toggle('on', x === e.currentTarget)); } })));
   const F = [['rating', 'Rating'], ['labels', 'Pick and color labels'], ['title', 'Title'], ['caption', 'Caption'], ['tags', 'Keywords (added)'], ['gps', 'Location'], ['taken', 'Date and time taken'], ['rights', 'Creator and copyright']];
   const boxes = Object.fromEntries(F.map(([k]) => [k, h('input', { type: 'checkbox', checked: ['tags', 'gps', 'rights'].includes(k) })]));
@@ -113,7 +113,7 @@ export async function copyMetadata(ids) {
 }
 export async function editPhotos(ids, changes) {
   let r;
-  try { r = await post('/api/edit', { ids, changes }); } catch (e) { toast('Could not save the change: ' + e.message); return false; }
+  try { r = await post('api/edit', { ids, changes }); } catch (e) { toast('Could not save the change: ' + e.message); return false; }
   // a time shift lands differently on each photo, so those are re-fetched rather than patched locally
   for (const id of ids) { if ('shift' in changes) details.delete(id); else details.get(id)?.then((d) => applyLocal(d, changes)).catch(() => details.delete(id)); }
   // the location and face badges of their thumbnails change at once
@@ -143,8 +143,8 @@ function flashEdit(ch) {
   if (msg) toast(msg, null, null, 1200);
 }
 
-async function recentTags() { if (!S.RECENT_TAGS) try { S.RECENT_TAGS = (await api('/api/tools')).recentTags || []; } catch { S.RECENT_TAGS = []; } return S.RECENT_TAGS; }
-async function noteRecent(ids) { try { S.RECENT_TAGS = (await post('/api/tags/recent', { ids })).recent; } catch { /* cosmetic */ } }
+async function recentTags() { if (!S.RECENT_TAGS) try { S.RECENT_TAGS = (await api('api/tools')).recentTags || []; } catch { S.RECENT_TAGS = []; } return S.RECENT_TAGS; }
+async function noteRecent(ids) { try { S.RECENT_TAGS = (await post('api/tags/recent', { ids })).recent; } catch { /* cosmetic */ } }
 async function createTagThenPick(full, onPick) {
   // "Parent/Child" creates the child under an existing parent; a bare name makes a top-level tag
   const parts = full.split('/').map((s) => s.trim()).filter(Boolean);
@@ -153,7 +153,7 @@ async function createTagThenPick(full, onPick) {
   if (parts.length) { const p = S.META.tags.find((t) => !t.person && t.full.toLowerCase() === parts.join('/').toLowerCase()); if (!p) { toast(`Parent tag “${parts.join(' › ')}” does not exist.`); return; } parent = p.id; }
   if (!await confirmDialog(S.NO_DK ? `Create the tag “${full}”?` : `Create the tag “${full}” in digiKam’s database? digiKam must be closed; a backup is made first.`)) return;
   let r;
-  try { r = await post('/api/tags/op', { op: 'add', parent, name }); } catch (e) { toastError(e); return; }
+  try { r = await post('api/tags/op', { op: 'add', parent, name }); } catch (e) { toastError(e); return; }
   await awaitReindex((m) => m.tags.some((t) => t.id === r.id));
   $('#taglist')?.remove();
   const t = S.tagById.get(r.id);
@@ -218,14 +218,14 @@ export function editDialog(ids) {
 
 export async function dbDialog() {
   let st;
-  try { st = await api('/api/edits/db'); } catch { toast('Could not check the digiKam database status.'); return; }
+  try { st = await api('api/edits/db'); } catch { toast('Could not check the digiKam database status.'); return; }
   const msg = h('p', { class: st.digikamRunning ? 'warn' : '' }, st.digikamRunning
     ? 'digiKam is running. Quit digiKam first; its database must not be changed while it is open.'
     : st.ask ? `${S.APP_NAME} cannot see from here whether digiKam is open, so it does not check.` : 'digiKam is closed, so its database can be updated now.');
   const applyBtn = h('button', { class: 'pillbtn on', disabled: !!st.digikamRunning || !st.pending, onclick: async () => {
     applyBtn.textContent = 'Updating…';
     try {
-      const r = await post('/api/edits/db', {});
+      const r = await post('api/edits/db', {});
       back.remove();
       toast(`Updated ${plural(r.applied, 'photo')} in digiKam’s database.` + (r.skipped.length ? ` ${r.skipped.length} skipped: ${r.skipped[0].reason}.` : ''), null, null, 9000);
       S.keepView = true; pollSoon();
@@ -241,7 +241,7 @@ export async function dbDialog() {
 const TEMPLATE_LABEL = { creator: 'Creator', copyrightNotice: 'Copyright notice', rightsUsageTerms: 'Usage terms', creatorJobTitle: 'Job title', provider: 'Credit', source: 'Source', instructions: 'Instructions',
   'creatorContactInfo.address': 'Address', 'creatorContactInfo.city': 'City', 'creatorContactInfo.provinceState': 'State / province', 'creatorContactInfo.postalCode': 'Postal code', 'creatorContactInfo.country': 'Country', 'creatorContactInfo.phone': 'Phone', 'creatorContactInfo.email': 'Email', 'creatorContactInfo.webUrl': 'Web' };
 
-async function loadTemplates() { if (!S.TEMPLATES) try { S.TEMPLATES = (await api('/api/tools')).templates || []; } catch { S.TEMPLATES = []; } return S.TEMPLATES; }
+async function loadTemplates() { if (!S.TEMPLATES) try { S.TEMPLATES = (await api('api/tools')).templates || []; } catch { S.TEMPLATES = []; } return S.TEMPLATES; }
 export function dateEditor(ids, current, after, precision) {
   // current: "YYYY-MM-DDTHH:MM:SS" for one photo, or null for a batch; precision: how well that date is known
   // (exact, month, year, unknown). An approximate date is saved as a placeholder (1 January of the year, or the 1st of
@@ -296,7 +296,7 @@ export async function detectFaces(ids, folder) {
   if (folder && !await confirmDialog(`Look for faces in the ${nf.format(folder.nAll)} photos of “${folder.path.replace(/^\//, '')}” (with its subfolders)? New faces are added ${S.NO_DK ? 'to the library' : 'to digiKam’s database'} as unnamed faces; faces already marked stay as they are.`)) return;
   if (!folder) toast('Looking for faces…', null, null, 30000);
   let r;
-  try { r = await post('/api/faces/detect', folder ? { album: folder.id } : { ids }); } catch (e) { toastError(e); return; }
+  try { r = await post('api/faces/detect', folder ? { album: folder.id } : { ids }); } catch (e) { toastError(e); return; }
   if (!r.done) { toast(`Looking for faces in ${plural(r.queued, 'photo')} in the background; progress in Settings › AI.`, null, null, 9000); return; }
   toast(r.added ? `Found ${plural(r.added, 'new face')}; ${r.found - r.added ? `${plural(r.found - r.added, 'face was', 'faces were')} already marked.` : ''} Name ${r.added === 1 ? 'it' : 'them'} under People or here.` : r.found ? `No new faces: the ${plural(r.found, 'face')} found ${r.found === 1 ? 'is' : 'are'} already marked.` : 'No faces found.', null, null, 9000);
   if (r.added && LB.open) { (ids || []).forEach((i) => details.delete(i)); S.keepView = true; setTimeout(() => { pollStatus().then(() => { if (LB.open) showItem(); }); }, 800); }
@@ -318,7 +318,7 @@ export async function locationDialog(ids, current, after) {
     altTimer = setTimeout(async () => {
       const la = lat.value, lo = lon.value;
       try {
-        const r = await api(`/api/elevation?lat=${encodeURIComponent(la)}&lon=${encodeURIComponent(lo)}`);
+        const r = await api(`api/elevation?lat=${encodeURIComponent(la)}&lon=${encodeURIComponent(lo)}`);
         if (!altAuto || la !== lat.value || lo !== lon.value) return;
         setAlt(r.alt); fill(altNote, `ground height from ${r.source}`);
       } catch { fill(altNote, 'no altitude service reachable'); }
@@ -359,7 +359,7 @@ export async function locationDialog(ids, current, after) {
     const q = search.value.trim();
     if (q.length < 2) { results.hidden = true; return; }
     let r;
-    try { r = await api('/api/geocode?q=' + encodeURIComponent(q)); } catch (e) { toastError(e); return; }
+    try { r = await api('api/geocode?q=' + encodeURIComponent(q)); } catch (e) { toastError(e); return; }
     if (search.value.trim() !== q) return;
     results.hidden = false;
     const note = r.note ? h('div', { class: 'muted', style: 'padding:4px 8px;font-size:12px' }, r.note) : null;
@@ -375,16 +375,16 @@ export async function locationDialog(ids, current, after) {
   const ago = (m) => { const a = Math.abs(m); const t = a < 60 ? `${a} min` : a < 1440 ? `${Math.round(a / 6) / 10} h` : `${Math.round(a / 144) / 10} days`; return m === 0 ? 'same time' : m < 0 ? `${t} before` : `${t} after`; };
   const suggest = async () => {
     sugBox.hidden = false; fill(sugBox, h('div', { class: 'muted', style: 'padding:6px 8px' }, 'Looking at the photos taken around the same time…'));
-    let r; try { r = await api(`/api/location/suggest?id=${ids[0]}`); } catch (e) { fill(sugBox, h('div', { class: 'muted', style: 'padding:6px 8px' }, e.message)); return; }
+    let r; try { r = await api(`api/location/suggest?id=${ids[0]}`); } catch (e) { fill(sugBox, h('div', { class: 'muted', style: 'padding:6px 8px' }, e.message)); return; }
     const landmark = r.landmarks ? h('div', { class: 'frow wrapbtn wrapbtn wrapbtn wrapbtn', onclick: async (e) => {
       const row = e.currentTarget; fill(row, icon('spark'), h('span', { class: 'nm muted' }, 'Asking Google Cloud Vision…'));
-      let L2; try { L2 = await post('/api/location/landmark', { id: ids[0] }); } catch (err) { fill(row, icon('spark'), h('span', { class: 'nm muted' }, err.message)); return; }
+      let L2; try { L2 = await post('api/location/landmark', { id: ids[0] }); } catch (err) { fill(row, icon('spark'), h('span', { class: 'nm muted' }, err.message)); return; }
       row.replaceWith(...(L2.landmarks.length ? L2.landmarks.map((x) => h('div', { class: 'frow', onclick: () => useSpot(x) }, icon('spark'),
         h('span', { class: 'nm' }, x.name, h('span', { class: 'muted' }, ` · landmark, ${Math.round(x.score * 100)}% sure`))))
         : [h('div', { class: 'muted', style: 'padding:6px 8px' }, 'Google recognized no landmark in this photo.')]));
     } }, icon('spark'), h('span', { class: 'nm' }, 'Recognise a landmark in the photo', h('span', { class: 'muted' }, ' · Google Cloud Vision, about $0.0015 a photo after 1,000 free a month'))) : null;
     fill(sugBox, r.suggestions.length ? r.suggestions.map((x) => h('div', { class: 'frow wrapbtn', title: `${x.lat}, ${x.lon}`, onclick: () => useSpot(x) },
-      h('img', { src: `/thumb/${x.id}`, alt: '', style: 'width:34px;height:34px;object-fit:cover;border-radius:5px;flex:none' }),
+      h('img', { src: `thumb/${x.id}`, alt: '', style: 'width:34px;height:34px;object-fit:cover;border-radius:5px;flex:none' }),
       h('span', { class: 'nm wrapbtn' }, x.place || `${x.lat.toFixed(4)}, ${x.lon.toFixed(4)}`, h('span', { class: 'muted' }, ` · ${x.name}, taken ${ago(x.minutes)}${x.same_camera ? '' : ' (another camera)'}`))))
       : h('div', { class: 'muted', style: 'padding:6px 8px' }, 'No photo with a location was taken within 6 hours of this one.'), landmark);
   };
@@ -450,7 +450,7 @@ async function gpxDialog(ids) {
     Object.entries(params()).forEach(([k, v]) => fd.append(k, v === true ? '1' : v === false ? '0' : v));
     fill(result, h('p', { class: 'muted' }, 'Matching…'));
     let r;
-    try { r = await send('/api/gpx/preview', fd); } catch (e) { fill(result, h('p', { class: 'warn' }, e.message)); return; }
+    try { r = await send('api/gpx/preview', fd); } catch (e) { fill(result, h('p', { class: 'warn' }, e.message)); return; }
     token = r.token; preview = r;
     const t = r.track;
     fill(result,
@@ -481,7 +481,7 @@ async function gpxDialog(ids) {
       h('button', { class: 'pillbtn on', onclick: async () => {
         if (!token || !preview?.matched) { toast('Match first.'); return; }
         if (!await confirmDialog(`Write positions to ${nf.format(preview.matched)} photos? Sidecars are backed up first; digiKam gets them with “Apply edits to digiKam database”.`)) return;
-        try { const r = await post('/api/gpx/apply', { token, ids, ...params() }); back.remove(); toast(`Positions written to ${nf.format(r.edited)} photos.`); S.keepView = true; pollSoon(); }
+        try { const r = await post('api/gpx/apply', { token, ids, ...params() }); back.remove(); toast(`Positions written to ${nf.format(r.edited)} photos.`); S.keepView = true; pollSoon(); }
         catch (e) { toastError(e); }
       } }, icon('place'), 'Apply positions')] });
   file.onchange = run;
@@ -498,7 +498,7 @@ export async function templatePicker(ids, after) {
 export function templatesSection(m) {
   const list = h('div');
   let tpls = (m.templates || []).map((t) => ({ ...t, fields: { ...t.fields } }));
-  const save = async () => { try { await post('/api/settings', { templates: tpls }); S.TEMPLATES = null; toast('Templates saved.'); } catch (e) { toastError(e); } draw(); };
+  const save = async () => { try { await post('api/settings', { templates: tpls }); S.TEMPLATES = null; toast('Templates saved.'); } catch (e) { toastError(e); } draw(); };
   const edit = (t, isNew) => {
     const name = h('input', { class: 'einput', style: 'margin:0', placeholder: 'Template name', value: t.name || '' });
     const inputs = Object.keys(TEMPLATE_LABEL).map((k) => [k, h('input', { class: 'einput', style: 'margin:0', placeholder: TEMPLATE_LABEL[k], value: t.fields[k] || '' })]);

@@ -23,7 +23,7 @@ import time
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, JSONResponse, Response
-from iosuite_shared import apppasswords, sessions
+from iosuite_shared import apppasswords, prefix, sessions
 
 from app import __version__, bookmarkfiles, bookmarks, bookmarksync as sync, config
 from app.auth import auth
@@ -106,8 +106,8 @@ def _guard(fn):
 def route(method: str, path: str):
     """A route of the bookmarks API, at .../index.php/apps/bookmarks/... and without index.php (pretty URLs)."""
     def deco(fn):
-        for prefix in (f"{BASE}/index.php/apps/bookmarks/public/rest/v2", f"{BASE}/apps/bookmarks/public/rest/v2"):
-            router.add_api_route(prefix + path, fn, methods=[method], include_in_schema=False)
+        for root in (f"{BASE}/index.php/apps/bookmarks/public/rest/v2", f"{BASE}/apps/bookmarks/public/rest/v2"):
+            router.add_api_route(root + path, fn, methods=[method], include_in_schema=False)
         return fn
     return deco
 
@@ -150,7 +150,7 @@ def _root(request: Request) -> str:
     """The address this server is reached at, as the client reached it."""
     host = request.headers.get("x-forwarded-host") or request.headers.get("host") or ""
     scheme = "https" if sessions.over_https(request) else request.url.scheme
-    return (config.PUBLIC_URL.rstrip("/") if config.PUBLIC_URL and not host else f"{scheme}://{host}")
+    return (config.PUBLIC_URL.rstrip("/") if config.PUBLIC_URL and not host else f"{scheme}://{host}{prefix.of(request)}")
 
 
 def _flow_by_page(page: str):
@@ -203,13 +203,13 @@ def flow_page(page: str, request: Request):
         # the start page, which brings the visitor back here once signed in (static/app.js: ?flow=): one tab, so it
         # also works where there is only one, as in the sign-in sheet of the iPhone app
         return _page("ioStart", '<h1>Sign in to ioStart first</h1><p>Then you are asked whether the app may sync the bookmarks.</p>'
-                                f'<p><a class="btn" href="/?flow={html.escape(page)}">Sign in</a></p>')
+                                f'<p><a class="btn" href="{prefix.of(request)}/?flow={html.escape(page)}">Sign in</a></p>')
     who = html.escape(f["ua"] or "An app")
     can = "read and change" if sync.users.is_member(u) else "read"
     return _page("Sync bookmarks with ioStart", f"""<h1>Let this app sync the bookmarks?</h1>
 <p><b>{who}</b> asks to {can} your bookmarks and the shared ones as <b>{html.escape(u["name"])}</b>.</p>
 <p class="muted">It gets an app password of its own, for sync only. You can revoke it any time in Settings.</p>
-<form method="post" action="{BASE}/index.php/login/v2/grant"><input type="hidden" name="page" value="{html.escape(page)}"><button>Allow</button></form>""")
+<form method="post" action="{prefix.of(request)}{BASE}/index.php/login/v2/grant"><input type="hidden" name="page" value="{html.escape(page)}"><button>Allow</button></form>""")
 
 
 @router.post(BASE + "/index.php/login/v2/grant", include_in_schema=False)

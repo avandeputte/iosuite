@@ -97,3 +97,19 @@ def test_phone_round_trip_keeps_relations_single(client, family_id):
     assert "item1.X-ADDRESSING-GRAMMAR:abcd" in back and "X-IMAGEHASH" not in back and "X-IMAGETYPE" not in back
     assert "item1.X-ABRELATEDNAMES" not in back and "item2.X-ABRELATEDNAMES:Mary Doe" in back
     assert back.endswith("END:VCARD\r\n")
+
+
+def test_hrefs_carry_the_folder_the_app_is_served_in(client, family_id, monkeypatch):
+    """https://home.example.com/contacts/ (the suite on one address): every href a client is sent starts with the folder."""
+    monkeypatch.setenv("PUBLIC_URL", "https://home.example.com/contacts")
+    h = {"host": "home.example.com"}
+    r = client.request("PROPFIND", "/.well-known/carddav", headers=h, follow_redirects=False)
+    assert r.status_code == 301 and r.headers["location"] == "/contacts/dav/"
+    for kept in ("/contacts", ""):  # the proxy left the folder on the path; it took it off
+        r = dav(client, "PROPFIND", kept + "/dav/", PF, depth="0", **h)
+        assert r.status_code == 207 and "<d:href>/contacts/dav/principals/alex/</d:href>" in r.text and ">/dav/" not in r.text
+        r = dav(client, "PROPFIND", kept + "/dav/addressbooks/alex/", PF, **h)
+        assert "<d:href>/contacts/dav/addressbooks/alex/family/</d:href>" in r.text and ">/dav/" not in r.text
+    assert client.get("/api/connect", headers=h).json()["carddav"] == "http://home.example.com/contacts/dav/"
+    monkeypatch.delenv("PUBLIC_URL")
+    assert "<d:href>/dav/principals/alex/</d:href>" in dav(client, "PROPFIND", "/dav/", PF, depth="0").text, "at the root as before"

@@ -16,7 +16,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
 
 from app import access, config, ical, members, model, quick
-from iosuite_shared import appleprofile, users as shared_users
+from iosuite_shared import appleprofile, prefix, users as shared_users
 from iosuite_shared.access import json_body
 
 router = APIRouter()
@@ -77,16 +77,9 @@ def wants_ics(request: Request, fmt: str | None) -> bool:
 
 
 def base_url(request: Request) -> str:
-    """The address links are made with: PUBLIC_URL, else what the proxy (or the client) says, kept to a scheme and a
-    host[:port] (a forged header only changes the links in that client's own answer, but it stays an address)."""
-    if config.PUBLIC_URL:
-        return config.PUBLIC_URL
-    proto = (request.headers.get("x-forwarded-proto") or request.url.scheme or "").split(",")[0].strip().lower()
-    proto = proto if proto in ("http", "https") else "http"
-    host = (request.headers.get("x-forwarded-host") or request.headers.get("host") or request.url.netloc or "").split(",")[0].strip()
-    if not re.fullmatch(r"[A-Za-z0-9.\-]+(:\d{1,5})?|\[[0-9A-Fa-f:.]+\](:\d{1,5})?", host):
-        host = request.url.netloc if re.fullmatch(r"[A-Za-z0-9.\-:\[\]]+", request.url.netloc or "") else "localhost"
-    return f"{proto}://{host}"
+    """The address links are made with: PUBLIC_URL, else the one the request came to, with the folder the app is
+    served in (iosuite_shared.prefix)."""
+    return prefix.base_url(request, config.PUBLIC_URL)
 
 
 async def body_object(request: Request) -> tuple[dict | None, object | None]:

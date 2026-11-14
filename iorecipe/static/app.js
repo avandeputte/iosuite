@@ -78,7 +78,7 @@ async function api(path, opts = {}) {
   const o = { credentials: 'same-origin', ...opts, headers: { ...(opts.headers || {}) } };
   if (o.json !== undefined) { o.body = JSON.stringify(o.json); o.headers['Content-Type'] = 'application/json'; delete o.json; }
   const r = await fetch(path, o);
-  if (r.status === 401 && !path.startsWith('/api/auth') && path !== '/api/status') { showSignIn(); throw new Error('Sign in first'); }
+  if (r.status === 401 && !path.startsWith('api/auth') && path !== 'api/status') { showSignIn(); throw new Error('Sign in first'); }
   if (!r.ok) {
     let msg = r.statusText;
     try { const j = await r.json(); msg = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail); } catch { /* not JSON */ }
@@ -153,10 +153,10 @@ const canFamily = () => roleAtLeast('editor');
 const canAdd = () => canOwn() || canFamily();
 /** What goes around the recipes: how many, the tags, the cookbooks (every list of recipes brings them along). */
 function around(d) { S.counts = d.counts; S.tags = d.tags; S.books = d.books || []; }
-async function refreshAround() { try { around(await api('/api/summary')); } catch { /* the page says so */ } drawNav(); }
+async function refreshAround() { try { around(await api('api/summary')); } catch { /* the page says so */ } drawNav(); }
 async function saveSettings(changes) {
   Object.assign(S.settings, changes);
-  try { await api('/api/auth/settings', { method: 'POST', json: changes }); } catch { /* kept for this visit */ }
+  try { await api('api/auth/settings', { method: 'POST', json: changes }); } catch { /* kept for this visit */ }
 }
 /** Minutes as people say them: 45 min, 1 h, 1 h 35 min. */
 function fmtMin(n) {
@@ -178,7 +178,7 @@ function drawUser() {
     menu = h('div', { class: 'menu' },
       h('div', { class: 'who' }, h('b', null, S.user.displayName), h('div', { class: 'muted small' }, `${S.user.name} · ${S.user.role}`)),
       h('a', { class: 'mi', href: '#/settings', onclick: closeMenu }, icon('settings', 's'), 'Settings'),
-      h('button', { class: 'mi', onclick: async () => { const r = await api('/api/auth/logout', { method: 'POST' }); if (r && r.cloudflareLogout) location.href = r.cloudflareLogout; else location.reload(); } }, icon('logout', 's'), 'Sign out'));
+      h('button', { class: 'mi', onclick: async () => { const r = await api('api/auth/logout', { method: 'POST' }); if (r && r.cloudflareLogout) location.href = r.cloudflareLogout; else location.reload(); } }, icon('logout', 's'), 'Sign out'));
     m.append(menu);
     setTimeout(() => document.addEventListener('click', outside), 0);
   };
@@ -188,7 +188,7 @@ function drawUser() {
    the top bar on a phone) opens a menu of them, each a link to that app. Alone, the mark stays the link to all the recipes. */
 async function loadSuite() {
   try {
-    const r = await api('/api/auth/suite');
+    const r = await api('api/auth/suite');
     S.suite = (r.items || []).filter((a) => a.url); suiteSelf = r.app;  // in the suite's one order, this app too
     if (!S.suite.some((a) => a.app !== r.app)) S.suite = [];  // only this app: no menu
   } catch { S.suite = []; }
@@ -352,7 +352,7 @@ async function fetchRecipes(r) {
   if (r.view === 'book') q.set('book', r.id);
   if (r.view === 'search') q.set('q', r.q);
   if (SORTS[S.settings.sort] && S.settings.sort !== 'title') q.set('sort', S.settings.sort);
-  const d = await api(`/api/recipes?${q}`);
+  const d = await api(`api/recipes?${q}`);
   around(d);
   return d.items;
 }
@@ -410,7 +410,7 @@ async function bookDialog(book) {
   if (!ok) return null;
   const body = { name: name.value, description: about.value };
   if (!book && canFamily()) body.family = where.value === '1';
-  try { return await api(book ? `/api/books/${book.id}` : '/api/books', { method: book ? 'PATCH' : 'POST', json: body }); } catch (e) { fail(e); return null; }
+  try { return await api(book ? `api/books/${book.id}` : 'api/books', { method: book ? 'PATCH' : 'POST', json: body }); } catch (e) { fail(e); return null; }
 }
 async function newBook(go = true) {
   const b = await bookDialog(null);
@@ -422,7 +422,7 @@ async function newBook(go = true) {
 async function editBook(book) { if (await bookDialog(book)) onRoute(); }
 async function removeBook(book) {
   if (!await confirmDialog('Delete this cookbook?', `“${book.name}” goes; its recipes stay.`, 'Delete', true)) return;
-  try { await api(`/api/books/${book.id}`, { method: 'DELETE' }); toast('Deleted'); await refreshAround(); location.hash = '#/'; } catch (e) { fail(e); }
+  try { await api(`api/books/${book.id}`, { method: 'DELETE' }); toast('Deleted'); await refreshAround(); location.hash = '#/'; } catch (e) { fail(e); }
 }
 /** The cookbooks a recipe is in, to tick and untick (each tick is saved at once). */
 async function recipeBooks(x) {
@@ -432,7 +432,7 @@ async function recipeBooks(x) {
     const cant = !b.writable || (b.family && !x.family);
     return h('label', { class: `check${cant ? ' off' : ''}`, title: !b.writable ? 'You can see this cookbook but not change it' : cant ? 'A family cookbook holds family recipes; this one is private' : null },
       h('input', { type: 'checkbox', checked: inside.has(b.id), disabled: cant, onchange: async (e) => {
-        try { await api(`/api/books/${b.id}/recipes/${x.id}`, { method: e.target.checked ? 'PUT' : 'DELETE' }); if (e.target.checked) inside.add(b.id); else inside.delete(b.id); } catch (err) { e.target.checked = !e.target.checked; fail(err); }
+        try { await api(`api/books/${b.id}/recipes/${x.id}`, { method: e.target.checked ? 'PUT' : 'DELETE' }); if (e.target.checked) inside.add(b.id); else inside.delete(b.id); } catch (err) { e.target.checked = !e.target.checked; fail(err); }
       } }), h('span', null, b.name, h('span', { class: 'muted small' }, b.family ? ' · family' : ' · yours')));
   }) : h('p', { class: 'muted' }, 'No cookbooks yet.'));
   draw();
@@ -494,7 +494,7 @@ function groups(lines) {
 }
 /** ioTask's lists that take the ingredients, asked once per visit (and again when the dialog opens). */
 let shop = null;
-const shopping = (fresh = false) => { if (!shop || fresh) shop = api('/api/shopping').catch(() => ({ available: false, lists: [] })); return shop; };
+const shopping = (fresh = false) => { if (!shop || fresh) shop = api('api/shopping').catch(() => ({ available: false, lists: [] })); return shop; };
 /** A picture, large, over the page: the others of its row with the arrows, and (for who may) taking it away. */
 function lightbox(pics, at, x) {
   let i = at;
@@ -508,7 +508,7 @@ function lightbox(pics, at, x) {
   };
   const remove = async () => {
     if (!await confirmDialog('Remove this photo?', 'It goes for good.', 'Remove', true)) return;
-    try { await api(`/api/recipes/${x.id}/photos/${pics[i].id}`, { method: 'DELETE' }); close(); onRoute(); } catch (e) { fail(e); }
+    try { await api(`api/recipes/${x.id}/photos/${pics[i].id}`, { method: 'DELETE' }); close(); onRoute(); } catch (e) { fail(e); }
   };
   const back = h('div', { class: 'lightbox', onclick: (e) => { if (e.target === back) close(); } },
     img,
@@ -534,7 +534,7 @@ function pickFile(accept, multiple = false) {
 const sendPhoto = (path, file) => api(path, { method: 'POST', body: file, headers: { 'Content-Type': file.type || 'application/octet-stream' } });
 
 async function showRecipe(page, r) {
-  const x = await api(`/api/recipes/${r.id}`);
+  const x = await api(`api/recipes/${r.id}`);
   document.title = `${x.title} · ioRecipe`;
   const own = x.photos.filter((p) => p.step == null), ofStep = new Map(x.photos.filter((p) => p.step != null).map((p) => [p.step, p]));
   const comma = x.ingredients.some((l) => /^\s*\d+,\d/.test(l));
@@ -543,7 +543,7 @@ async function showRecipe(page, r) {
   // ---- the head: the heart, Print, Edit and the rest
   const heart = canOwn() ? h('button', { class: 'iconbtn heart' }) : null;
   const drawHeart = () => { if (!heart) return; fill(heart, icon(x.favourite ? 'favorite' : 'favoriteBorder')); heart.classList.toggle('on', x.favourite); heart.title = x.favourite ? 'One of your favourites (click to take it off)' : 'Make it a favourite'; };
-  if (heart) heart.onclick = async () => { try { Object.assign(x, await api(`/api/recipes/${x.id}/mark`, { method: 'PUT', json: { favourite: !x.favourite } })); drawHeart(); refreshAround(); } catch (e) { fail(e); } };
+  if (heart) heart.onclick = async () => { try { Object.assign(x, await api(`api/recipes/${x.id}/mark`, { method: 'PUT', json: { favourite: !x.favourite } })); drawHeart(); refreshAround(); } catch (e) { fail(e); } };
   drawHeart();
   const more = h('button', { class: 'iconbtn', title: 'More', onclick: (e) => popMenu(e.currentTarget, [
     S.books.length || canOwn() ? ['books', 'Cookbooks…', () => recipeBooks(x)] : null,
@@ -555,7 +555,7 @@ async function showRecipe(page, r) {
   const drawRating = () => fill(rating,
     canOwn() ? h('span', { class: 'stars', role: 'group', 'aria-label': 'Your rating' }, [1, 2, 3, 4, 5].map((n) => h('button', { class: n <= (x.rating || 0) ? 'on' : null,
       title: n === x.rating ? 'Take your rating away' : `${n} of 5`, 'aria-label': `${n} of 5`, onclick: async () => {
-        try { Object.assign(x, await api(`/api/recipes/${x.id}/mark`, { method: 'PUT', json: { rating: n === x.rating ? null : n } })); drawRating(); } catch (e) { fail(e); }
+        try { Object.assign(x, await api(`api/recipes/${x.id}/mark`, { method: 'PUT', json: { rating: n === x.rating ? null : n } })); drawRating(); } catch (e) { fail(e); }
       } }, icon(n <= (x.rating || 0) ? 'star' : 'starBorder')))) : null,
     h('span', { class: 'muted small' }, !x.ratingCount ? (canOwn() ? 'Not rated yet' : '')
       : x.ratingCount === 1 && x.rating ? 'Your rating' : `${x.ratingAverage} of 5, from ${x.ratingCount} ${x.ratingCount === 1 ? 'rating' : 'ratings'}`));
@@ -602,7 +602,7 @@ async function showRecipe(page, r) {
   const stepPhoto = async (i) => {
     const file = await pickFile('image/*');
     if (!file) return;
-    try { await sendPhoto(`/api/recipes/${x.id}/photos?step=${i}`, file); onRoute(); } catch (e) { fail(e); }
+    try { await sendPhoto(`api/recipes/${x.id}/photos?step=${i}`, file); onRoute(); } catch (e) { fail(e); }
   };
   const steps = groups(x.steps).map((g) => [g.heading ? h('h3', null, g.heading) : null,
     h('ol', { class: 'steps' }, g.lines.map((l) => {
@@ -667,7 +667,7 @@ async function shoppingDialog(x, lines, have) {
   const picked = items.filter((l, k) => boxes[k].checked).map((l) => l.text);
   if (!picked.length) { toast('Nothing was ticked'); return; }
   try {
-    const got = await api(`/api/recipes/${x.id}/shopping`, { method: 'POST', json: { listId: +list.value, lines: picked } });
+    const got = await api(`api/recipes/${x.id}/shopping`, { method: 'POST', json: { listId: +list.value, lines: picked } });
     const name = sh.lists.find((l) => l.id === +list.value).name;
     toast(`${got.added} added to “${name}”`);
     saveSettings({ shoppingList: +list.value });
@@ -675,13 +675,13 @@ async function shoppingDialog(x, lines, have) {
 }
 async function removeRecipe(x) {
   if (!await confirmDialog('Delete this recipe?', `“${x.title}” and its photos go for good.`, 'Delete', true)) return;
-  try { await api(`/api/recipes/${x.id}`, { method: 'DELETE' }); toast('Deleted'); location.hash = '#/'; } catch (e) { fail(e); }
+  try { await api(`api/recipes/${x.id}`, { method: 'DELETE' }); toast('Deleted'); location.hash = '#/'; } catch (e) { fail(e); }
 }
 
 // ------------------------------------------------------------------ one recipe: the form
 async function showForm(page, r) {
   // a new recipe starts empty, or from the draft an import left (pasted text, a photo)
-  const x = r.view === 'edit' ? await api(`/api/recipes/${r.id}`) : { ingredients: [], steps: [], tags: [], family: canFamily(), photos: [], ...(S.draft || {}) };
+  const x = r.view === 'edit' ? await api(`api/recipes/${r.id}`) : { ingredients: [], steps: [], tags: [], family: canFamily(), photos: [], ...(S.draft || {}) };
   const draft = r.view === 'new' && !!S.draft;
   S.draft = null;
   if (r.view === 'edit' && !x.writable) { location.hash = `#/recipe/${x.id}`; return; }
@@ -727,15 +727,15 @@ async function showForm(page, r) {
     if (canFamily()) body.family = where.value === '1';
     const btn = $('.formbar .primary', page); btn.disabled = true;
     try {
-      let got = await api(x.id ? `/api/recipes/${x.id}` : '/api/recipes', { method: x.id ? 'PATCH' : 'POST', json: body });
+      let got = await api(x.id ? `api/recipes/${x.id}` : 'api/recipes', { method: x.id ? 'PATCH' : 'POST', json: body });
       try {
-        for (const id of gone) await api(`/api/recipes/${got.id}/photos/${id}`, { method: 'DELETE' });
+        for (const id of gone) await api(`api/recipes/${got.id}/photos/${id}`, { method: 'DELETE' });
         for (const p of pics.filter((q) => q.file)) {
           const before = new Set(got.photos.map((q) => q.id));
-          got = await sendPhoto(`/api/recipes/${got.id}/photos`, p.file);
+          got = await sendPhoto(`api/recipes/${got.id}/photos`, p.file);
           p.id = got.photos.find((q) => !before.has(q.id)).id;
         }
-        if (pics.length > 1) await api(`/api/recipes/${got.id}/photos/order`, { method: 'PUT', json: { ids: pics.map((q) => q.id) } });
+        if (pics.length > 1) await api(`api/recipes/${got.id}/photos/order`, { method: 'PUT', json: { ids: pics.map((q) => q.id) } });
       } catch (err) { toast(`Saved, but not every photo: ${err.message}`); location.hash = `#/recipe/${got.id}`; return; }
       toast('Saved');
       location.hash = `#/recipe/${got.id}`;
@@ -782,7 +782,7 @@ async function showImport(page, r) {
   await ({ web: importWeb, text: importText, photo: importPhoto, file: importFile, export: exportBox }[r.tab] || importWeb)();
 
   async function importWeb() {
-    const ai = await api('/api/import').then((w) => w.aiState, () => 'off');
+    const ai = await api('api/import').then((w) => w.aiState, () => 'off');
     const url = h('input', { class: 't', type: 'url', placeholder: 'https://www.example.com/recipes/oat-cookies', autocapitalize: 'none', spellcheck: 'false' });
     const kept = where();
     const btn = h('button', { class: 'pillbtn primary', type: 'submit' }, icon('download', 's'), 'Import');
@@ -793,7 +793,7 @@ async function showImport(page, r) {
       try {
         const body = { url: url.value.trim() };
         if (canFamily()) body.family = kept.value === '1';
-        const got = await api('/api/import', { method: 'POST', json: body });
+        const got = await api('api/import', { method: 'POST', json: body });
         toast(got.readBy === 'ai' ? `Imported “${got.title}”, read from the page by the AI model. Check it against the page.`
           : got.readBy === 'page' ? `Imported “${got.title}” from the page’s text${got.steps.length ? '' : ' (the page writes out no steps)'}. Check it against the page.`
           : `Imported “${got.title}”. Have a look, and edit what needs it.`);
@@ -815,7 +815,7 @@ async function showImport(page, r) {
       e.preventDefault();
       if (!text.value.trim()) { text.focus(); return; }
       busy(btn, 'Reading…');
-      try { toForm((await api('/api/import/text', { method: 'POST', json: { text: text.value } })).draft); } catch (err) { failed(btn, err); }
+      try { toForm((await api('api/import/text', { method: 'POST', json: { text: text.value } })).draft); } catch (err) { failed(btn, err); }
     };
     put(page, h('form', { class: 'box importbox', onsubmit: go },
       h('h2', null, icon('text'), 'A recipe as text'),
@@ -825,7 +825,7 @@ async function showImport(page, r) {
   }
 
   async function importPhoto() {
-    const ways = await api('/api/import');
+    const ways = await api('api/import');
     if (!ways.photo) {
       put(page, h('div', { class: 'box importbox' }, h('h2', null, icon('camera'), 'A photo of a recipe'),
         h('p', null, 'This server cannot read photos yet: the program that reads them (Tesseract) is not installed on it.'),
@@ -846,7 +846,7 @@ async function showImport(page, r) {
       e.preventDefault();
       if (!file) return;
       busy(btn, 'Reading the text on the photo… this can take half a minute.');
-      try { toForm((await sendPhoto('/api/import/photo', file)).draft); } catch (err) { failed(btn, err); }
+      try { toForm((await sendPhoto('api/import/photo', file)).draft); } catch (err) { failed(btn, err); }
     };
     put(page, h('form', { class: 'box importbox', onsubmit: go },
       h('h2', null, icon('camera'), 'A photo of a recipe'),
@@ -867,7 +867,7 @@ async function showImport(page, r) {
       if (!file) return;
       busy(btn, 'Importing…');
       try {
-        const got = await api(`/api/import/file${canFamily() ? `?family=${kept.value === '1'}` : ''}`, { method: 'POST', body: file, headers: { 'Content-Type': 'application/octet-stream' } });
+        const got = await api(`api/import/file${canFamily() ? `?family=${kept.value === '1'}` : ''}`, { method: 'POST', body: file, headers: { 'Content-Type': 'application/octet-stream' } });
         note.textContent = ''; btn.disabled = false;
         fill(out, h('p', null, h('b', null, `${got.imported.length} ${got.imported.length === 1 ? 'recipe' : 'recipes'} imported.`)),
           h('div', { class: 'chiprow' }, got.imported.slice(0, 60).map((x) => h('a', { class: 'chip', href: `#/recipe/${x.id}` }, x.title))),
@@ -962,7 +962,7 @@ function showSignIn() {
   const btn = h('button', { class: 'pillbtn primary noic', type: 'submit' }, first ? 'Create the admin account' : 'Sign in');
   const login = async (n, p) => {
     err.textContent = '';
-    try { await api(first ? '/api/auth/setup' : '/api/auth/login', { method: 'POST', json: { name: n, password: p } }); location.reload(); } catch (x) { err.textContent = x.message; }
+    try { await api(first ? 'api/auth/setup' : 'api/auth/login', { method: 'POST', json: { name: n, password: p } }); location.reload(); } catch (x) { err.textContent = x.message; }
   };
   const submit = (e) => { e.preventDefault(); login(name.value.trim(), pw.value); };
   document.body.append(h('div', { class: 'signin' }, h('form', { class: 'dialog', onsubmit: submit },
@@ -971,7 +971,7 @@ function showSignIn() {
     tiles, form, err, h('div', { class: 'btns' }, btn))));
   if (first) { name.focus(); return; }
   const pick = (t) => tiles.querySelectorAll('.account').forEach((x) => x.classList.toggle('on', x === t));
-  api('/api/auth/accounts').then((d) => {
+  api('api/auth/accounts').then((d) => {
     if (!d.accounts.length) { name.focus(); return; }
     form.hidden = true; btn.hidden = true;
     tiles.append(...d.accounts.map((a) => {
@@ -991,10 +991,10 @@ function showSignIn() {
 async function start() {
   applyTheme();
   document.querySelectorAll('[data-ic]').forEach((el) => el.replaceWith(icon(el.dataset.ic)));
-  S.status = await api('/api/status');
+  S.status = await api('api/status');
   if (!S.status.user) { showSignIn(); return; }
   S.user = S.status.user;
-  try { S.settings = (await api('/api/auth/me')).settings || {}; } catch { S.settings = {}; }
+  try { S.settings = (await api('api/auth/me')).settings || {}; } catch { S.settings = {}; }
   if (S.settings.theme) applyTheme(S.settings.theme);
   drawUser();
   const nb = $('#newbtn');
@@ -1021,7 +1021,7 @@ async function start() {
     else if (e.key === 'n' && canAdd()) location.hash = '#/new';
   });
   addEventListener('hashchange', () => { document.title = 'ioRecipe'; onRoute(); });
-  try { around(await api('/api/summary')); } catch { /* the page says so */ }
+  try { around(await api('api/summary')); } catch { /* the page says so */ }
   await onRoute();
   loadSuite();
 }

@@ -257,7 +257,7 @@ export const store = {
       SETTINGS.flush = setTimeout(() => {
         const b = SETTINGS.pending; SETTINGS.pending = {};
         // not saved: the keys go back in the queue (a value set since wins) and leave with the next change
-        post('/api/auth/settings', b).catch(() => { for (const [kk, vv] of Object.entries(b)) if (!(kk in SETTINGS.pending)) SETTINGS.pending[kk] = vv; });
+        post('api/auth/settings', b).catch(() => { for (const [kk, vv] of Object.entries(b)) if (!(kk in SETTINGS.pending)) SETTINGS.pending[kk] = vv; });
       }, 400);
       return;
     }

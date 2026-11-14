@@ -3,7 +3,7 @@
 import { $, h, api, state, dialog, fail, initials, icon, menu } from './core.js';
 
 export async function loadMe() {
-  state.me = await api('/api/auth/me');
+  state.me = await api('api/auth/me');
   return state.me;
 }
 
@@ -25,7 +25,7 @@ export async function signIn(required = false) {
   const tiles = h('div.accounts');
   const login = async (body) => {
     try {
-      await api('/api/auth/login', { method: 'POST', body });
+      await api('api/auth/login', { method: 'POST', body });
       location.reload();
       return true;
     } catch (e) { fail(e); return false; }
@@ -36,7 +36,7 @@ export async function signIn(required = false) {
     h('p.muted.small', `Sign in to see your notes. Notes are private to each account.`)),
   [required ? null : { label: 'Cancel', value: null }, { label: 'Sign in', primary: true, action: submit }].filter(Boolean),
   { required, head: signinBrand() });
-  api('/api/auth/accounts').then((d) => {
+  api('api/auth/accounts').then((d) => {
     if (!d.accounts.length) { name.focus(); return; }
     form.hidden = true;
     tiles.append(...d.accounts.map((a) => h('button.account', { type: 'button', 'data-n': a.name, title: a.passwordless ? `Sign in as ${a.name}` : `${a.name} (password)`, onclick: () => {
@@ -57,13 +57,13 @@ async function firstAdmin() {
   const msg = h('p.err.small');
   return dialog('Create the admin account', h('div', h('p.muted', 'Right now ioNote is open to anyone who can reach it. Once an admin exists, every account has notes of its own, visible to nobody else; notes made so far stay with the open install, so export them first (Import and export) and import them once signed in.'), h('div.signin-form', name, pw), msg), [
     { label: 'Cancel', value: null },
-    { label: 'Create', primary: true, action: async () => { try { await api('/api/auth/setup', { method: 'POST', body: { name: name.value, password: pw.value } }); location.reload(); } catch (e) { msg.textContent = e.message; return false; } } },
+    { label: 'Create', primary: true, action: async () => { try { await api('api/auth/setup', { method: 'POST', body: { name: name.value, password: pw.value } }); location.reload(); } catch (e) { msg.textContent = e.message; return false; } } },
   ]);
 }
 
 async function signOut() {
   try {
-    const r = await api('/api/auth/logout', { method: 'POST' });
+    const r = await api('api/auth/logout', { method: 'POST' });
     if (r && r.cloudflareLogout) { location.href = r.cloudflareLogout; return; }
   } catch (e) { fail(e); }
   location.reload();

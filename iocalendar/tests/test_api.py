@@ -265,7 +265,7 @@ def test_apple_profile_link_needs_no_cookie(client):
     the same profile (one app password) each time it is opened, and a made-up link gives nothing."""
     import plistlib
     r = client.post("/api/apple-profile/link", json={"label": "iPhone", "password": "new"}).json()
-    assert r["url"].startswith("/profile/") and r["url"].endswith(".mobileconfig")
+    assert r["url"].startswith("profile/") and r["url"].endswith(".mobileconfig")
     client.cookies.clear()
     first, again = client.get(r["url"]), client.get(r["url"])
     assert first.status_code == 200 and first.headers["content-type"] == "application/x-apple-aspen-config"

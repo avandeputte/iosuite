@@ -128,3 +128,27 @@ def test_caldav_refuses_xml_entities(client, dav):
            '<C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:prop>&e;</D:prop></C:calendar-query>')
     r = dav("REPORT", base, ext, Depth="1")
     assert r.status_code == 400 and "root:" not in r.text
+
+
+def test_hrefs_carry_the_folder_the_app_is_served_in(client, dav, monkeypatch):
+    """https://home.example.com/calendar/ (the suite on one address): every href a client is sent starts with the folder."""
+    monkeypatch.setenv("PUBLIC_URL", "https://home.example.com/calendar")
+    h = {"host": "home.example.com"}
+    r = client.request("PROPFIND", "/.well-known/caldav", headers=h, follow_redirects=False)
+    assert r.status_code == 301 and r.headers["location"] == "/calendar/dav/"
+    body = '<d:propfind xmlns:d="DAV:"><d:prop><d:current-user-principal/><d:displayname/></d:prop></d:propfind>'
+    for kept in ("/calendar", ""):  # the proxy left the folder on the path; it took it off
+        r = dav("PROPFIND", kept + "/dav/", body, Depth="0", **h)
+        assert r.status_code == 207 and "<d:href>/calendar/dav/principals/alex/</d:href>" in r.text and ">/dav/" not in r.text
+        r = dav("PROPFIND", kept + "/dav/calendars/alex/", body, Depth="1", **h)
+        assert "<d:href>/calendar/dav/calendars/alex/family/</d:href>" in r.text and ">/dav/" not in r.text
+    ics = ICS.format(uid="F1", start="20260105T100000", end="20260105T110000", title="In a folder", extra="")
+    assert dav("PUT", "/calendar/dav/calendars/alex/family/F1.ics", ics, **{"Content-Type": "text/calendar"}, **h).status_code == 201
+    multiget = ('<c:calendar-multiget xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav"><d:prop><d:getetag/></d:prop>'
+                '<d:href>/calendar/dav/calendars/alex/family/F1.ics</d:href></c:calendar-multiget>')
+    r = dav("REPORT", "/calendar/dav/calendars/alex/family/", multiget, Depth="1", **h)
+    assert r.status_code == 207 and "<d:href>/calendar/dav/calendars/alex/family/F1.ics</d:href>" in r.text
+    r = dav("PROPPATCH", "/calendar/dav/calendars/alex/family/", '<d:propertyupdate xmlns:d="DAV:"><d:set><d:prop><d:displayname>Family</d:displayname></d:prop></d:set></d:propertyupdate>', **h)
+    assert "<d:href>/calendar/dav/calendars/alex/family/</d:href>" in r.text
+    monkeypatch.delenv("PUBLIC_URL")
+    assert "<d:href>/dav/principals/alex/</d:href>" in dav("PROPFIND", "/dav/", body, Depth="0").text, "at the root as before"

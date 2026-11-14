@@ -73,7 +73,7 @@ async function api(path, opts = {}) {
   const o = { credentials: 'same-origin', ...opts, headers: { ...(opts.headers || {}) } };
   if (o.json !== undefined) { o.body = JSON.stringify(o.json); o.headers['Content-Type'] = 'application/json'; delete o.json; }
   const r = await fetch(path, o);
-  if (r.status === 401 && !path.startsWith('/api/auth') && path !== '/api/status') { showSignIn(); throw new Error('Sign in first'); }
+  if (r.status === 401 && !path.startsWith('api/auth') && path !== 'api/status') { showSignIn(); throw new Error('Sign in first'); }
   if (!r.ok) {
     let msg = r.statusText;
     try { const j = await r.json(); msg = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail); } catch { /* not JSON */ }
@@ -92,7 +92,7 @@ function toast(msg, undo) {
   clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, undo ? 10000 : 3500);
 }
 async function undoStep(batch) {
-  try { await api(`/api/undo/${batch}`, { method: 'POST' }); await refresh(); toast('Undone'); } catch (e) { fail(e); }
+  try { await api(`api/undo/${batch}`, { method: 'POST' }); await refresh(); toast('Undone'); } catch (e) { fail(e); }
 }
 const fail = (e) => toast(e.message || String(e));
 
@@ -289,7 +289,7 @@ function toggleWho(id) {
 }
 
 async function loadLists() {
-  const [lists, fam, counts] = await Promise.all([api(`/api/lists?${TZQ}`), api('/api/members').catch(() => ({ items: S.members })), api(`/api/counts?${TZQ}`).catch(() => S.counts)]);
+  const [lists, fam, counts] = await Promise.all([api(`api/lists?${TZQ}`), api('api/members').catch(() => ({ items: S.members })), api(`api/counts?${TZQ}`).catch(() => S.counts)]);
   S.lists = lists.items;
   S.members = fam.items || [];
   S.counts = counts || {};
@@ -299,7 +299,7 @@ async function loadLists() {
 }
 async function saveSettings(changes) {
   Object.assign(S.settings, changes);
-  try { await api('/api/auth/settings', { method: 'POST', json: changes }); } catch { /* kept for this visit */ }
+  try { await api('api/auth/settings', { method: 'POST', json: changes }); } catch { /* kept for this visit */ }
 }
 
 // ------------------------------------------------------------------ chrome
@@ -315,7 +315,7 @@ function drawUser() {
     menu = h('div', { class: 'menu' },
       h('div', { class: 'who' }, h('b', null, S.user.displayName), h('div', { class: 'muted small' }, `${S.user.name} · ${S.user.role}`)),
       h('a', { class: 'mi', href: '#/settings', onclick: closeMenu }, icon('settings', 's'), 'Settings'),
-      h('button', { class: 'mi', onclick: async () => { const r = await api('/api/auth/logout', { method: 'POST' }); if (r && r.cloudflareLogout) location.href = r.cloudflareLogout; else location.reload(); } }, icon('logout', 's'), 'Sign out'));
+      h('button', { class: 'mi', onclick: async () => { const r = await api('api/auth/logout', { method: 'POST' }); if (r && r.cloudflareLogout) location.href = r.cloudflareLogout; else location.reload(); } }, icon('logout', 's'), 'Sign out'));
     m.append(menu);
     setTimeout(() => document.addEventListener('click', outside), 0);
   };
@@ -325,7 +325,7 @@ function drawUser() {
    the top bar on a phone) opens a menu of them, each a link to that app. Alone, the mark stays the link to Today. */
 async function loadSuite() {
   try {
-    const r = await api('/api/auth/suite');
+    const r = await api('api/auth/suite');
     S.suite = (r.items || []).filter((a) => a.url); suiteSelf = r.app;  // in the suite's one order, this app too
     if (!S.suite.some((a) => a.app !== r.app)) S.suite = [];  // only this app: no menu
   } catch { S.suite = []; }
@@ -429,7 +429,7 @@ function drawNav() {
   $('.navmore')?.classList.toggle('on', ['list', 'import', 'settings', 'search', 'activity'].includes(r.view));
 }
 async function orderLists(ids) {
-  try { await api('/api/lists/order', { method: 'POST', json: { ids } }); await loadLists(); } catch (e) { fail(e); drawNav(); }
+  try { await api('api/lists/order', { method: 'POST', json: { ids } }); await loadLists(); } catch (e) { fail(e); drawNav(); }
 }
 function applySidebar() {
   const body = document.body, btn = $('#sidebtn');
@@ -479,15 +479,15 @@ function colorPicker(value, onPick) {
 async function newList(shared) {
   const name = h('input', { class: 't', placeholder: shared ? 'Name, e.g. Groceries or Chores' : 'Name, e.g. Work' });
   const col = colorPicker(SWATCHES[S.lists.length % SWATCHES.length]);
-  const tpls = (await api('/api/templates').catch(() => ({ items: [] }))).items;
+  const tpls = (await api('api/templates').catch(() => ({ items: [] }))).items;
   const from = h('select', { class: 't' }, h('option', { value: '' }, 'An empty list'), tpls.map((t) => h('option', { value: t.id }, `The template ${t.name} (${t.count} tasks)`)));
   const body = h('div', { style: { display: 'grid', gap: '12px' } }, name, col, tpls.length ? h('label', { class: 'field' }, h('span', null, 'Start with'), from) : null,
     h('p', { class: 'muted small', style: { margin: 0 } }, shared ? 'Everyone in the family sees it and ticks tasks off; editors change it.' : 'Only you see it.'));
   if (!await dialog(shared ? 'New shared list' : 'New private list', body, [{ label: 'Cancel', value: false }, { label: 'Create', value: true, primary: true }])) return;
   try {
     const picked = tpls.find((t) => t.id === +from.value);
-    const r = await api('/api/lists', { method: 'POST', json: { name: name.value || (picked ? picked.name : ''), shared, color: col.get() } });
-    if (picked) await api(`/api/templates/${picked.id}/apply`, { method: 'POST', json: { listId: r.list.id } });
+    const r = await api('api/lists', { method: 'POST', json: { name: name.value || (picked ? picked.name : ''), shared, color: col.get() } });
+    if (picked) await api(`api/templates/${picked.id}/apply`, { method: 'POST', json: { listId: r.list.id } });
     await loadLists();
     location.hash = `#/list/${r.list.id}`;
   } catch (e) { fail(e); }
@@ -559,17 +559,17 @@ async function fetchTasks(r) {
   if (r.view === 'list') {
     const c = listOf(r.id);
     if (!c.id) throw new Error('That list is not here (any more)');
-    const items = (await api(`/api/tasks?list=${c.id}&status=${showDone(c.id) ? 'all' : 'open'}&limit=2000${byHand(c.id) ? '&sort=manual' : ''}${who}`)).items;
+    const items = (await api(`api/tasks?list=${c.id}&status=${showDone(c.id) ? 'all' : 'open'}&limit=2000${byHand(c.id) ? '&sort=manual' : ''}${who}`)).items;
     return [items, c.name, c.color, c];
   }
   if (r.view === 'search') {
     S.q = r.q;
     if ($('#q').value !== r.q) $('#q').value = r.q;
     if (!r.q) return [[], 'Search', null, null];
-    return [(await api(`/api/tasks?q=${encodeURIComponent(r.q)}&status=all&limit=300${who}`)).items, `“${r.q}”`, null, null];
+    return [(await api(`api/tasks?q=${encodeURIComponent(r.q)}&status=all&limit=300${who}`)).items, `“${r.q}”`, null, null];
   }
   const qs = { today: 'status=open&due=today', scheduled: 'status=open&due=scheduled', all: 'status=open', done: 'status=done&limit=300' }[r.view];
-  return [(await api(`/api/tasks?${qs}${who}`)).items, SMART[r.view][0], `var(${SMART[r.view][2]})`, null];
+  return [(await api(`api/tasks?${qs}${who}`)).items, SMART[r.view][0], `var(${SMART[r.view][2]})`, null];
 }
 
 /** The tasks without a parent among them, in the server's order, and a function that gives a task's subtasks. */
@@ -591,7 +591,7 @@ function taskGroup(t, kidsOf, depth, o) {
 /** Put tasks off to a day (each keeps its time; the alerts follow), with Undo. */
 async function postpone(ids, day) {
   try {
-    const r = await api('/api/tasks/postpone', { method: 'POST', json: { ids, due: ymd(day), tz: LOCAL_TZ } });
+    const r = await api('api/tasks/postpone', { method: 'POST', json: { ids, due: ymd(day), tz: LOCAL_TZ } });
     await refresh();
     const w = dayWords(day);
     toast(`${r.moved === 1 ? 'Now due' : `${r.moved} tasks now due`} ${/^(Today|Tomorrow)$/.test(w) ? w.toLowerCase() : w}`, r.undo);
@@ -623,7 +623,7 @@ async function drawTasks(page, r) {
     const hand = byHand(list.id) && list.writable;
     roots.forEach((t) => rows.append(taskGroup(t, kidsOf, 0, { grip: hand })));
     if (hand) {
-      const order = (ids) => api(`/api/lists/${list.id}/order`, { method: 'POST', json: { ids } }).catch((e) => { fail(e); redraw(); });
+      const order = (ids) => api(`api/lists/${list.id}/order`, { method: 'POST', json: { ids } }).catch((e) => { fail(e); redraw(); });
       [rows, ...rows.querySelectorAll('.tkids')].forEach((box) => dragSort(box, '.tgrp', '.grip', order));
     }
   } else if (r.view === 'today') {
@@ -671,7 +671,7 @@ function listMenu(c) {
       ['template', 'Save as a template…', () => saveTemplate(c)],
       ['history', 'Activity', `#/activity?list=${c.id}`],
       ['print', 'Print', () => window.print()],
-      ['download', 'Export (.ics)', `/api/lists/${c.id}/export`],
+      ['download', 'Export (.ics)', `api/lists/${c.id}/export`],
       c.writable ? ['upload', 'Import', `#/import?list=${c.id}`] : null,
       c.writable ? ['delete', 'Clear completed', () => clearCompleted(c)] : null,
       ['settings', 'List settings', `#/settings/lists/${c.id}`]]);
@@ -687,12 +687,12 @@ async function saveTemplate(c) {
     h('p', { class: 'muted small', style: { margin: 0 } }, 'Every task of the list with its notes, priority, link, people and subtasks. Due dates, repeats and what is ticked off are left out.'));
   if (!await dialog('Save as a template', body, [{ label: 'Cancel', value: false }, { label: 'Save', value: true, primary: true }])) return;
   try {
-    const r = await api('/api/templates', { method: 'POST', json: { name: name.value, listId: c.id, shared: shared.checked } });
+    const r = await api('api/templates', { method: 'POST', json: { name: name.value, listId: c.id, shared: shared.checked } });
     toast(`Template ${r.template.name} saved (${r.template.count} tasks)`);
   } catch (e) { fail(e); }
 }
 async function addFromTemplate(c) {
-  const tpls = (await api('/api/templates')).items;
+  const tpls = (await api('api/templates')).items;
   if (!tpls.length) { await dialog('Templates', h('p', null, 'There are no templates yet. Make one of a list with “Save as a template…” in its ⋯ menu.')); return; }
   const sel = h('select', { class: 't' }, tpls.map((t) => h('option', { value: t.id }, `${t.name} (${t.count} tasks)`)));
   const hasDue = h('input', { type: 'checkbox' });
@@ -702,14 +702,14 @@ async function addFromTemplate(c) {
     h('div', { class: 'when-row' }, h('label', { class: 'check' }, hasDue, ' All due on'), date));
   if (!await dialog(`Add to ${c.name}`, body, [{ label: 'Cancel', value: false }, { label: 'Add', value: true, primary: true }])) return;
   try {
-    const r = await api(`/api/templates/${sel.value}/apply`, { method: 'POST', json: { listId: c.id, due: hasDue.checked ? date.value : null } });
+    const r = await api(`api/templates/${sel.value}/apply`, { method: 'POST', json: { listId: c.id, due: hasDue.checked ? date.value : null } });
     await refresh();
     toast(`${r.created} tasks added`, r.undo);
   } catch (e) { fail(e); }
 }
 async function clearCompleted(c) {
   if (!await confirmDialog('Clear completed', `Delete the completed tasks of ${c.name}? Apps that sync the list lose them too.`, 'Delete', true)) return;
-  try { const r = await api(`/api/lists/${c.id}/clear-completed`, { method: 'POST' }); await refresh(); toast(`${r.deleted} deleted`, r.undo); } catch (e) { fail(e); }
+  try { const r = await api(`api/lists/${c.id}/clear-completed`, { method: 'POST' }); await refresh(); toast(`${r.deleted} deleted`, r.undo); } catch (e) { fail(e); }
 }
 
 /** The new-task line reads plain English unless that is switched off (Settings › Display). */
@@ -746,7 +746,7 @@ function quickAdd(r, list) {
     if (!smartAdd() || !text) { hint.hidden = true; return; }
     timer = setTimeout(async () => {
       try {
-        const p = await api(`/api/quick?text=${encodeURIComponent(text)}&${TZQ}`);
+        const p = await api(`api/quick?text=${encodeURIComponent(text)}&${TZQ}`);
         if (my !== seq) return;
         const chips = quickChips(p);
         fill(hint, h('span', { class: 'qt' }, p.title), chips.map((c) => h('span', { class: 'qchip' }, c)));
@@ -763,7 +763,7 @@ function quickAdd(r, list) {
     if (S.who.size) data.members = [...S.who];
     input.disabled = true;
     try {
-      const t = await api('/api/tasks', { method: 'POST', json: data });
+      const t = await api('api/tasks', { method: 'POST', json: data });
       input.value = ''; seq += 1; hint.hidden = true;
       await refresh();
       if (t.title !== text) toast(`Added “${t.title}”${t.due ? `, ${dueText(t).toLowerCase()}` : ''}${t.listId !== target.id ? ` to ${listOf(t.listId).name}` : ''}`, t.undo);
@@ -810,7 +810,7 @@ function taskRow(t, o = {}) {
     const done = !t.done;
     tick.classList.toggle('on', done); row.classList.toggle('done', done);
     try {
-      const res = await api(`/api/tasks/${t.id}/complete`, { method: 'POST', json: { done, tz: LOCAL_TZ } });
+      const res = await api(`api/tasks/${t.id}/complete`, { method: 'POST', json: { done, tz: LOCAL_TZ } });
       if (done) toast(res.moved ? `Done. Next: ${dueText(res) || 'again'}` : 'Done', res.undo);
       // a moment to see the tick before the row leaves a list of open tasks
       setTimeout(() => refresh().catch(fail), done && !res.moved ? 700 : 0);
@@ -842,11 +842,11 @@ async function showTaskPage(page, r) {
 
 /** The task form: everything a task has, saved with Save (or Enter in the title). opts: {id} or {list, parent}. */
 async function taskForm(el, opts, done) {
-  const t = opts.id ? await api(`/api/tasks/${opts.id}`) : null;
+  const t = opts.id ? await api(`api/tasks/${opts.id}`) : null;
   const lid = t ? t.listId : (opts.list || defaultList()?.id);
   const c = listOf(lid);
   const ro = t ? !c.writable : false;
-  const parent = !t && opts.parent ? await api(`/api/tasks/${opts.parent}`).catch(() => null) : null;
+  const parent = !t && opts.parent ? await api(`api/tasks/${opts.parent}`).catch(() => null) : null;
   const dd = t ? dueOf(t) : null;
 
   const title = h('input', { class: 't big', value: t ? t.title : '', placeholder: 'Title', disabled: ro || null });
@@ -919,7 +919,7 @@ async function taskForm(el, opts, done) {
   const linked = h('div', { class: 'linked' });
   const drawSubs = async () => {
     if (!t) return;
-    const j = await api(`/api/tasks/${t.id}`);
+    const j = await api(`api/tasks/${t.id}`);
     fill(subs, h('div', { class: 'fsec' }, icon('subtask'), 'Subtasks'), h('div', { class: 'tasks' }, j.children.map((x) => {
       const row = taskRow(x, {});
       row.querySelector('.tbody').onclick = () => { closeDialogs(); openTask(x.id); };
@@ -929,7 +929,7 @@ async function taskForm(el, opts, done) {
     ro ? null : h('input', { class: 'qadd', placeholder: 'Add a subtask', onkeydown: async (e) => {
       if (e.key !== 'Enter' || !e.target.value.trim()) return;
       e.preventDefault();
-      try { await api('/api/tasks', { method: 'POST', json: { title: e.target.value.trim(), parent: t.id, listId: t.listId } }); await drawSubs(); subs.querySelector('.qadd')?.focus(); } catch (err) { fail(err); }
+      try { await api('api/tasks', { method: 'POST', json: { title: e.target.value.trim(), parent: t.id, listId: t.listId } }); await drawSubs(); subs.querySelector('.qadd')?.focus(); } catch (err) { fail(err); }
     } }));
   };
 
@@ -954,12 +954,12 @@ async function taskForm(el, opts, done) {
     try {
       if (t) {
         if (+list.value !== t.listId) data.listId = +list.value;
-        const r = await api(`/api/tasks/${t.id}`, { method: 'PATCH', json: data });
+        const r = await api(`api/tasks/${t.id}`, { method: 'PATCH', json: data });
         toast('Saved', r.undo);
       } else {
         data.listId = +list.value;
         if (parent) { data.parent = parent.id; data.listId = parent.listId; }
-        await api('/api/tasks', { method: 'POST', json: data });
+        await api('api/tasks', { method: 'POST', json: data });
         toast('Saved');
       }
       done();
@@ -968,7 +968,7 @@ async function taskForm(el, opts, done) {
   const del = async () => {
     const n = t.subtasks ? t.subtasks.total : 0;
     if (!await confirmDialog('Delete task', `Delete “${t.title || 'this task'}”${n ? ` and its ${n} subtask${n > 1 ? 's' : ''}` : ''}?`, 'Delete', true)) return;
-    try { const r = await api(`/api/tasks/${t.id}`, { method: 'DELETE' }); toast('Deleted', r.undo); done(); } catch (e) { fail(e); }
+    try { const r = await api(`api/tasks/${t.id}`, { method: 'DELETE' }); toast('Deleted', r.undo); done(); } catch (e) { fail(e); }
   };
   title.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); save(); } });
   const fld = (l, e, cls) => h('label', { class: `field ${cls || ''}` }, h('span', null, l), e);
@@ -976,7 +976,7 @@ async function taskForm(el, opts, done) {
   fill(el,
     h('div', { class: 'taskhead', style: { '--c': listOf(+list.value).color || 'var(--brand)' } },
       t ? h('button', { class: `tick big ${t.done ? 'on' : ''}`, title: t.done ? 'Not done after all' : 'Done', disabled: ro || null, onclick: async (e) => {
-        try { const res = await api(`/api/tasks/${t.id}/complete`, { method: 'POST', json: { done: !t.done, tz: LOCAL_TZ } }); toast(res.moved ? `Done. Next: ${dueText(res)}` : res.done ? 'Done' : 'Open again', res.undo); done(); } catch (err) { fail(err); }
+        try { const res = await api(`api/tasks/${t.id}/complete`, { method: 'POST', json: { done: !t.done, tz: LOCAL_TZ } }); toast(res.moved ? `Done. Next: ${dueText(res)}` : res.done ? 'Done' : 'Open again', res.undo); done(); } catch (err) { fail(err); }
         e.stopPropagation();
       } }) : null,
       title),
@@ -1037,7 +1037,7 @@ async function showActivity(page, r) {
   const more = h('p', { class: 'center' });
   let last = null, lastDay = null;
   const load = async () => {
-    const items = (await api(`/api/activity?limit=60${c && c.id ? `&list=${c.id}` : ''}${last ? `&before=${last}` : ''}`)).items;
+    const items = (await api(`api/activity?limit=60${c && c.id ? `&list=${c.id}` : ''}${last ? `&before=${last}` : ''}`)).items;
     for (const a of items) {
       const at = new Date(a.at), day = dayWords(at);
       if (day !== lastDay) { rows.append(h('div', { class: 'tsec' }, day)); lastDay = day; }
@@ -1073,7 +1073,7 @@ async function showImport(page, r) {
     for (const f of file.files) {
       const fd = new FormData(); fd.append('file', f);
       try {
-        const res = await api(`/api/lists/${sel.value}/import?replace=${replace.checked}`, { method: 'POST', body: fd });
+        const res = await api(`api/lists/${sel.value}/import?replace=${replace.checked}`, { method: 'POST', body: fd });
         tot.created += res.created; tot.updated += res.updated; tot.skipped += res.skipped; tot.errors.push(...res.errors);
       } catch (e) { tot.errors.push(`${f.name}: ${e.message}`); }
     }
@@ -1138,7 +1138,7 @@ async function downloadProfile(e) {
   if (btn) btn.disabled = true;
   try {
     const all = f.elements.scope && f.elements.scope.value === 'suite';
-    const res = await api(all ? '/api/apple-profile/suite/link' : '/api/apple-profile/link', { method: 'POST', json: { label: f.elements.label.value, password: f.elements.password.value } });
+    const res = await api(all ? 'api/apple-profile/suite/link' : 'api/apple-profile/link', { method: 'POST', json: { label: f.elements.label.value, password: f.elements.password.value } });
     location.href = res.url;
   } catch (err) {
     toast(err.message);
@@ -1154,7 +1154,7 @@ function profileScope(apps, own) {
   const names = apps.map((a) => a.name);
   const pick = (e) => {
     const f = e.target.form, all = e.target.value === 'suite';
-    f.action = all ? '/api/apple-profile/suite' : '/api/apple-profile';
+    f.action = all ? 'api/apple-profile/suite' : 'api/apple-profile';
     f.querySelectorAll('[data-own]').forEach((x) => { x.hidden = all; });
   };
   return fld('Set up', h('select', { class: 't', name: 'scope', onchange: pick },
@@ -1164,8 +1164,8 @@ function profileScope(apps, own) {
 
 /** Settings › Apps and devices: how to connect each kind of app (the app passwords themselves are on Settings › Account). */
 async function setDevices(el) {
-  const info = await api('/api/connect');
-  const suiteApps = S.user.passwordless ? [] : (await api('/api/apple-profile/suite').catch(() => ({ apps: [] }))).apps;
+  const info = await api('api/connect');
+  const suiteApps = S.user.passwordless ? [] : (await api('api/apple-profile/suite').catch(() => ({ apps: [] }))).apps;
   const canPw = !S.user.passwordless;
   const isApple = /iPhone|iPad|Macintosh/.test(navigator.userAgent);
   const plabel = h('input', { class: 't', name: 'label', value: /iPad/.test(navigator.userAgent) ? 'iPad' : /Macintosh/.test(navigator.userAgent) ? 'Mac' : 'iPhone', style: 'max-width:200px' });
@@ -1173,7 +1173,7 @@ async function setDevices(el) {
   el.append(...[
     canPw ? h('div', { class: 'box' }, h('h2', null, icon('devices'), 'iPhone, iPad and Mac'),
       h('p', null, 'A profile that adds your lists to Apple Reminders in one step. Tasks you add or tick off there show up here, and the other way round.'),
-      h('form', { method: 'POST', action: '/api/apple-profile', class: 'pform', onsubmit: downloadProfile },
+      h('form', { method: 'POST', action: 'api/apple-profile', class: 'pform', onsubmit: downloadProfile },
         profileScope(suiteApps, 'ioTask'),
         fld('Device name', plabel),
         fld('Password', h('select', { class: 't', name: 'password' }, h('option', { value: 'new' }, 'Include a new app password'), h('option', { value: 'ask' }, 'Ask on the device'))),
@@ -1202,9 +1202,9 @@ async function setDevices(el) {
 
 async function setLists(el, r) {
   await loadLists();
-  const tpls = (await api('/api/templates').catch(() => ({ items: [] }))).items;
+  const tpls = (await api('api/templates').catch(() => ({ items: [] }))).items;
   const box = (c) => {
-    const save = async (body) => { try { await api(`/api/lists/${c.id}`, { method: 'PATCH', json: body }); await loadLists(); toast('Saved'); } catch (e) { fail(e); } };
+    const save = async (body) => { try { await api(`api/lists/${c.id}`, { method: 'PATCH', json: body }); await loadLists(); toast('Saved'); } catch (e) { fail(e); } };
     const name = h('input', { class: 't', value: c.name, onchange: (e) => save({ name: e.target.value }) });
     const desc = h('input', { class: 't', value: c.description || '', placeholder: 'What it is for', onchange: (e) => save({ description: e.target.value }) });
     const col = colorPicker(c.color, (v) => save({ color: v }));
@@ -1212,11 +1212,11 @@ async function setLists(el, r) {
       h('h2', null, c.writable ? h('span', { class: 'grip', title: 'Drag to move the list' }, icon('grip', 's')) : null, h('span', { class: 'ldot', style: { '--hue': c.color } }), c.name,
         h('span', { class: 'muted small', style: { fontWeight: 400 } }, c.shared ? 'shared with everyone' : 'only you')),
       c.writable ? [h('div', { class: 'grid' }, fld('Name', name), fld('Description', desc)), h('div', { style: { margin: '10px 0' } }, col),
-        h('p', null, h('a', { class: 'pillbtn noic', href: `/api/lists/${c.id}/export` }, 'Export (.ics)'), ' ',
+        h('p', null, h('a', { class: 'pillbtn noic', href: `api/lists/${c.id}/export` }, 'Export (.ics)'), ' ',
           h('button', { class: 'pillbtn noic', onclick: () => saveTemplate(c).then(() => onRoute()) }, 'Save as a template…'), ' ',
           !c.shared || S.user.role === 'admin' ? h('button', { class: 'pillbtn noic danger', onclick: async () => {
             if (!await confirmDialog('Delete list', `Delete ${c.name} and its tasks? Apps that sync it lose it too.`, 'Delete', true)) return;
-            try { await api(`/api/lists/${c.id}`, { method: 'DELETE' }); await loadLists(); onRoute(); } catch (e) { fail(e); }
+            try { await api(`api/lists/${c.id}`, { method: 'DELETE' }); await loadLists(); onRoute(); } catch (e) { fail(e); }
           } }, 'Delete') : null)]
         : h('p', { class: 'muted' }, `${c.count || 0} open tasks. Editors and admins change shared lists.`));
   };
@@ -1227,11 +1227,11 @@ async function setLists(el, r) {
     return g;
   };
   const tplRow = (t) => h('tr', null,
-    h('td', null, t.writable ? h('input', { class: 't', value: t.name, 'aria-label': 'Name', onchange: async (e) => { try { await api(`/api/templates/${t.id}`, { method: 'PATCH', json: { name: e.target.value } }); toast('Saved'); } catch (x) { fail(x); } } }) : t.name),
+    h('td', null, t.writable ? h('input', { class: 't', value: t.name, 'aria-label': 'Name', onchange: async (e) => { try { await api(`api/templates/${t.id}`, { method: 'PATCH', json: { name: e.target.value } }); toast('Saved'); } catch (x) { fail(x); } } }) : t.name),
     h('td', { class: 'muted' }, `${t.count} tasks`), h('td', { class: 'muted' }, t.shared ? 'shared with everyone' : 'only you'),
     h('td', { style: { textAlign: 'right' } }, t.writable ? h('button', { class: 'pillbtn noic danger', onclick: async () => {
       if (!await confirmDialog('Delete template', `Delete the template ${t.name}? The lists made from it stay.`, 'Delete', true)) return;
-      try { await api(`/api/templates/${t.id}`, { method: 'DELETE' }); onRoute(); } catch (x) { fail(x); }
+      try { await api(`api/templates/${t.id}`, { method: 'DELETE' }); onRoute(); } catch (x) { fail(x); }
     } }, 'Delete') : null));
   el.append(h('p', null, canShared() ? h('button', { class: 'pillbtn', onclick: () => newList(true) }, icon('add', 's'), 'New shared list') : null, ' ',
     canOwn() ? h('button', { class: 'pillbtn', onclick: () => newList(false) }, icon('add', 's'), 'New private list') : null),
@@ -1264,7 +1264,7 @@ async function setServer(el) {
     h('p', null, 'Each list as an .ics file.'),
     h('table', { class: 't' }, S.lists.map((c) => h('tr', null, h('td', null, h('span', { class: 'ldot', style: { '--hue': c.color } }), ' ', c.name),
       h('td', { class: 'muted' }, `${c.count || 0} open tasks`),
-      h('td', { style: { textAlign: 'right' } }, h('a', { class: 'pillbtn noic', href: `/api/lists/${c.id}/export` }, 'Download')))))));
+      h('td', { style: { textAlign: 'right' } }, h('a', { class: 'pillbtn noic', href: `api/lists/${c.id}/export` }, 'Download')))))));
 }
 const serverUi = () => import(new URL('api/server/ui.js', document.baseURI).href);
 
@@ -1281,7 +1281,7 @@ function showSignIn() {
   const btn = h('button', { class: 'pillbtn primary noic', type: 'submit' }, first ? 'Create the admin account' : 'Sign in');
   const login = async (n, p) => {
     err.textContent = '';
-    try { await api(first ? '/api/auth/setup' : '/api/auth/login', { method: 'POST', json: { name: n, password: p } }); location.reload(); } catch (x) { err.textContent = x.message; }
+    try { await api(first ? 'api/auth/setup' : 'api/auth/login', { method: 'POST', json: { name: n, password: p } }); location.reload(); } catch (x) { err.textContent = x.message; }
   };
   const submit = (e) => { e.preventDefault(); login(name.value.trim(), pw.value); };
   document.body.append(h('div', { class: 'signin' }, h('form', { class: 'dialog', onsubmit: submit },
@@ -1290,7 +1290,7 @@ function showSignIn() {
     tiles, form, err, h('div', { class: 'btns' }, btn))));
   if (first) { name.focus(); return; }
   const pick = (t) => tiles.querySelectorAll('.account').forEach((x) => x.classList.toggle('on', x === t));
-  api('/api/auth/accounts').then((d) => {
+  api('api/auth/accounts').then((d) => {
     if (!d.accounts.length) { name.focus(); return; }
     form.hidden = true; btn.hidden = true;
     tiles.append(...d.accounts.map((a) => {
@@ -1310,10 +1310,10 @@ function showSignIn() {
 async function start() {
   applyTheme();
   document.querySelectorAll('[data-ic]').forEach((el) => el.replaceWith(icon(el.dataset.ic)));
-  S.status = await api('/api/status');
+  S.status = await api('api/status');
   if (!S.status.user) { showSignIn(); return; }
   S.user = S.status.user;
-  try { S.settings = (await api('/api/auth/me')).settings || {}; } catch { S.settings = {}; }
+  try { S.settings = (await api('api/auth/me')).settings || {}; } catch { S.settings = {}; }
   if (S.settings.theme) applyTheme(S.settings.theme);
   S.who = new Set(String(S.settings.memberFilter || '').split(',').filter(Boolean).map(Number));
   drawUser();

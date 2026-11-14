@@ -11,10 +11,11 @@ const FILES = ['./', './static/app.js', ...JS, './static/app.css', './manifest.w
 // the shell must all be there; the map's files may be refused to a visitor who still has to sign in (cached on first use then)
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(SHELL).then((c) => c.addAll(FILES).then(() => Promise.all(VENDOR.map((f) => c.add(f).catch(() => {}))))).then(() => self.skipWaiting())); });
 self.addEventListener('activate', (e) => { e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== SHELL).map((k) => caches.delete(k)))).then(() => self.clients.claim())); });
+const ROOT = new URL('./', location.href).pathname;  // where the app is served: / or, behind one address for the whole suite, its own folder (/pix/)
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== location.origin) return;
-  const shell = url.pathname === '/' || url.pathname === '/manifest.webmanifest' || url.pathname.startsWith('/static/');
+  const shell = url.pathname === ROOT || url.pathname === ROOT + 'manifest.webmanifest' || url.pathname.startsWith(ROOT + 'static/');
   if (!shell) return;  // /api, /thumb, /preview, /orig, /face…: straight to the server
   // only a good answer replaces the cached copy: a 503 while the server restarts must not become the offline fallback
   e.respondWith(fetch(e.request).then((r) => { if (r.ok) { const copy = r.clone(); caches.open(SHELL).then((c) => c.put(e.request, copy)); } return r; })

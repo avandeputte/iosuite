@@ -55,7 +55,7 @@ async function api(path, opts = {}) {
   const o = { credentials: 'same-origin', ...opts, headers: { ...(opts.headers || {}) } };
   if (o.json !== undefined) { o.body = JSON.stringify(o.json); o.headers['Content-Type'] = 'application/json'; delete o.json; }
   const r = await fetch(path, o);
-  if (r.status === 401 && !path.startsWith('/api/auth') && path !== '/api/status') { showSignIn(); throw new Error('Sign in first'); }
+  if (r.status === 401 && !path.startsWith('api/auth') && path !== 'api/status') { showSignIn(); throw new Error('Sign in first'); }
   if (!r.ok) {
     let msg = r.statusText;
     try { const j = await r.json(); msg = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail); } catch { /* not JSON */ }
@@ -114,13 +114,13 @@ const cftunnels = () => S.servers.filter((s) => s.kind === 'cftunnel');
 const fmtVal = (r) => r.type === 'TUNNEL' ? r.value.replace('|', ' → ') : r.value;
 
 async function loadOverview() {
-  const o = await api('/api/overview');
+  const o = await api('api/overview');
   Object.assign(S, { views: o.views, servers: o.servers, providers: o.providers, ddns: o.ddns, types: o.types });
   drawNav();
 }
 async function saveSettings(changes) {
   Object.assign(S.settings, changes);
-  try { await api('/api/auth/settings', { method: 'POST', json: changes }); } catch { /* kept for this visit */ }
+  try { await api('api/auth/settings', { method: 'POST', json: changes }); } catch { /* kept for this visit */ }
 }
 
 // ------------------------------------------------------------------ chrome
@@ -140,7 +140,7 @@ function drawUser() {
       h('button', { class: 'mi', onclick: () => { const n = { system: 'light', light: 'dark', dark: 'system' }[theme]; applyTheme(n); closeMenu(); toast(`Appearance: ${n}`); } },
         icon('theme', 's'), `Appearance: ${theme}`),
       h('a', { class: 'mi', href: '#/settings', onclick: closeMenu }, icon('settings', 's'), 'Settings'),
-      h('button', { class: 'mi', onclick: async () => { const r = await api('/api/auth/logout', { method: 'POST' }); if (r && r.cloudflareLogout) location.href = r.cloudflareLogout; else location.reload(); } }, icon('logout', 's'), 'Sign out'));
+      h('button', { class: 'mi', onclick: async () => { const r = await api('api/auth/logout', { method: 'POST' }); if (r && r.cloudflareLogout) location.href = r.cloudflareLogout; else location.reload(); } }, icon('logout', 's'), 'Sign out'));
     m.append(menu);
     setTimeout(() => document.addEventListener('click', outside), 0);
   };
@@ -149,7 +149,7 @@ function drawUser() {
 /* The suite (iosuite-shared's suite_apps): when other ioThing apps are registered, the app mark opens a menu of them. */
 async function loadSuite() {
   try {
-    const r = await api('/api/auth/suite');
+    const r = await api('api/auth/suite');
     S.suite = (r.items || []).filter((a) => a.url); suiteSelf = r.app;  // in the suite's one order, this app too
     if (!S.suite.some((a) => a.app !== r.app)) S.suite = [];  // only this app: no menu
   } catch { S.suite = []; }
@@ -290,7 +290,7 @@ const recChip = (r) => h('span', { class: `rec t-${r.type}`, title: r.source ? `
 const matches = (e, q) => !q || e.name.includes(q) || (e.comment || '').toLowerCase().includes(q) || Object.values(e.records).flat().some((r) => r.value.includes(q));
 
 async function showRecords(page) {
-  S.entries = (await api('/api/entries')).items;
+  S.entries = (await api('api/entries')).items;
   const body = h('div');
   const draw = () => {
     const q = S.q.toLowerCase();
@@ -324,9 +324,9 @@ async function editEntry(e) {
   const comment = h('input', { class: 't', value: e.comment || '', placeholder: 'What it is (optional)' });
   const ts = tailscales();
   const devices = {};
-  const loadDevices = async (sid) => { if (!devices[sid]) devices[sid] = api(`/api/servers/${sid}/devices`).then((r) => r.items).catch((x) => { fail(x); return []; }); return devices[sid]; };
+  const loadDevices = async (sid) => { if (!devices[sid]) devices[sid] = api(`api/servers/${sid}/devices`).then((r) => r.items).catch((x) => { fail(x); return []; }); return devices[sid]; };
   let tunnelNames = null;
-  const loadTunnels = () => tunnelNames = tunnelNames || Promise.all(cftunnels().map((s) => api(`/api/servers/${s.id}/tunnels`).then((r) => r.items).catch((x) => { fail(x); return []; })))
+  const loadTunnels = () => tunnelNames = tunnelNames || Promise.all(cftunnels().map((s) => api(`api/servers/${s.id}/tunnels`).then((r) => r.items).catch((x) => { fail(x); return []; })))
     .then((ls) => [...new Set(ls.flat().filter((t) => t.remote).map((t) => t.name))]);
   const rows = {};
   const viewBox = (v) => {
@@ -401,9 +401,9 @@ async function editEntry(e) {
   const body = h('div', { class: 'pform' }, h('div', { class: 'grid' }, fld('Name', name), fld('Note', comment)), S.views.map(viewBox),
     h('p', { class: 'muted small' }, 'A view without records leaves that name out of its servers (an internal-only name never reaches public DNS). After saving, ioDNS offers to push the change to the servers.'));
   const buttons = [
-    !isNew ? { label: 'Delete', danger: true, value: async () => { if (!await confirmDialog('Delete', `Take ${e.name} out of the master list? ioDNS then offers to remove it from the servers too.`, 'Delete', true)) return undefined; await api(`/api/entries/${e.id}`, { method: 'DELETE' }); return 'deleted'; } } : null,
+    !isNew ? { label: 'Delete', danger: true, value: async () => { if (!await confirmDialog('Delete', `Take ${e.name} out of the master list? ioDNS then offers to remove it from the servers too.`, 'Delete', true)) return undefined; await api(`api/entries/${e.id}`, { method: 'DELETE' }); return 'deleted'; } } : null,
     { label: 'Cancel', value: null },
-    { label: isNew ? 'Add' : 'Save', primary: true, value: async () => api(isNew ? '/api/entries' : `/api/entries/${e.id}`, { method: isNew ? 'POST' : 'PUT', json: collect() }) },
+    { label: isNew ? 'Add' : 'Save', primary: true, value: async () => api(isNew ? 'api/entries' : `api/entries/${e.id}`, { method: isNew ? 'POST' : 'PUT', json: collect() }) },
   ].filter(Boolean);
   const r = await dialog(isNew ? 'New entry' : e.name, body, buttons, true);
   if (!r) return;
@@ -418,7 +418,7 @@ async function editEntry(e) {
 async function offerPush(names, done) {
   if (!canEdit()) { toast(done); return; }
   let preview;
-  try { preview = await api('/api/push', { method: 'POST', json: { names, dryRun: true } }); } catch (e) { toast(`${done}. Compare to push it (${e.message})`); return; }
+  try { preview = await api('api/push', { method: 'POST', json: { names, dryRun: true } }); } catch (e) { toast(`${done}. Compare to push it (${e.message})`); return; }
   const ops = preview.views.flatMap((v) => v.servers.flatMap((s) => s.ops.map((o) => ({ ...o, server: s.name, view: v.name }))));
   if (!ops.length) { toast(`${done}: the servers hold it already`); return; }
   const many = new Set(preview.views.map((v) => v.view)).size > 1;
@@ -428,7 +428,7 @@ async function offerPush(names, done) {
     h('ul', { class: 'ops' }, ops.map(opline)));
   if (!await dialog('Push now?', body, [{ label: 'Later', value: false }, { label: `Push ${ops.length}`, value: true, primary: true }], true)) { toast(`${done}: Compare pushes it later`); return; }
   try {
-    const res = await api('/api/push', { method: 'POST', json: { names } });
+    const res = await api('api/push', { method: 'POST', json: { names } });
     const errs = res.views.flatMap((v) => v.servers.flatMap((s) => s.errors.map((x) => `${s.name}: ${x}`)));
     if (errs.length) await dialog('Some changes failed', h('ul', { class: 'ops' }, errs.map((x) => h('li', { class: 'warn' }, x))));
     else toast(`Pushed: ${res.views.reduce((a, v) => a + v.servers.reduce((b, s) => b + s.ops.length, 0), 0)} change(s) on the servers`);
@@ -446,8 +446,8 @@ async function showCompare(page, r) {
   const out = h('div', null, h('p', { class: 'muted' }, 'Reading every server of this view…'));
   page.append(head, tabs, out);
   let st;
-  try { st = await api(`/api/sync/${encodeURIComponent(v.slug)}`); } catch (e) { out.replaceChildren(h('p', { class: 'warn' }, e.message)); return; }
-  api('/api/servers').then((x) => { S.servers = x.items; drawNav(); }).catch(() => {});
+  try { st = await api(`api/sync/${encodeURIComponent(v.slug)}`); } catch (e) { out.replaceChildren(h('p', { class: 'warn' }, e.message)); return; }
+  api('api/servers').then((x) => { S.servers = x.items; drawNav(); }).catch(() => {});
   if (!st.servers.length) {
     out.replaceChildren(h('div', { class: 'empty' }, icon('dns'), h('p', null, `No server answers for the ${v.name} view yet.`), isAdmin() ? h('a', { class: 'pillbtn primary', href: '#/servers' }, icon('add', 's'), 'Add a server') : null));
     return;
@@ -490,7 +490,7 @@ async function showCompare(page, r) {
   const only = h('input', { type: 'checkbox', checked: onlyDiff, onchange: () => { onlyDiff = S.cmp.onlyDiff = only.checked; draw(); } });
   const prune = h('input', { type: 'checkbox' });
   async function run(all) {
-    const path = all ? `/api/sync/${v.slug}/push` : `/api/sync/${v.slug}/apply`;
+    const path = all ? `api/sync/${v.slug}/push` : `api/sync/${v.slug}/apply`;
     const payload = all ? { prune: prune.checked } : { decisions };
     let preview;
     try { preview = await api(path, { method: 'POST', json: { ...payload, dryRun: true } }); } catch (e) { fail(e); return; }
@@ -539,7 +539,7 @@ async function showServers(page) {
 function serverCard(s) {
   const st = s.check.ok === null ? 'unk' : s.check.ok ? (s.check.differences ? 'diff' : 'ok') : 'unr';
   const msg = h('div', { class: 'muted small' }, s.check.at ? `${s.check.ok ? (s.check.differences != null ? (s.check.differences ? `${s.check.differences} name(s) differ` : 'Matches the master list') : s.check.message) : s.check.message} · ${ago(s.check.at)}` : 'Not checked yet');
-  const test = async () => { msg.textContent = 'Testing…'; try { const r = await api(`/api/servers/${s.id}/test`, { method: 'POST' }); msg.textContent = r.message; msg.className = r.ok ? 'small' : 'warn small'; } catch (e) { msg.textContent = e.message; } };
+  const test = async () => { msg.textContent = 'Testing…'; try { const r = await api(`api/servers/${s.id}/test`, { method: 'POST' }); msg.textContent = r.message; msg.className = r.ok ? 'small' : 'warn small'; } catch (e) { msg.textContent = e.message; } };
   return h('div', { class: `card srvcard s-${st}` + (s.enabled ? '' : ' off') },
     h('h3', null, h('span', { class: 'dot' }), s.name, h('span', { class: 'muted small kind' }, s.kindLabel)),
     h('div', { class: 'small' }, s.url || '', s.enabled ? null : h('b', null, ' · off')),
@@ -601,12 +601,12 @@ async function editServer(s) {
     h('p', { class: 'muted small' }, 'The password or key is kept with the suite\'s keys and tokens (Settings › Global settings), never shown again.'));
   kind.onchange = drawFields;
   drawFields();
-  const testIt = async () => { status.textContent = 'Testing…'; status.className = 'muted small'; try { const r = await api('/api/servers/test', { method: 'POST', json: { ...collect(), id: s ? s.id : null } }); status.textContent = r.message; status.className = r.ok ? 'okmsg small' : 'warn small'; } catch (e) { status.textContent = e.message; status.className = 'warn small'; } return undefined; };
+  const testIt = async () => { status.textContent = 'Testing…'; status.className = 'muted small'; try { const r = await api('api/servers/test', { method: 'POST', json: { ...collect(), id: s ? s.id : null } }); status.textContent = r.message; status.className = r.ok ? 'okmsg small' : 'warn small'; } catch (e) { status.textContent = e.message; status.className = 'warn small'; } return undefined; };
   const r = await dialog(isNew ? 'Add a DNS server' : s.name, body, [
-    !isNew ? { label: 'Remove', danger: true, value: async () => { if (!await confirmDialog('Remove', `Forget ${s.name}? Nothing on the server itself changes.`, 'Remove', true)) return undefined; await api(`/api/servers/${s.id}`, { method: 'DELETE' }); return 'removed'; } } : null,
+    !isNew ? { label: 'Remove', danger: true, value: async () => { if (!await confirmDialog('Remove', `Forget ${s.name}? Nothing on the server itself changes.`, 'Remove', true)) return undefined; await api(`api/servers/${s.id}`, { method: 'DELETE' }); return 'removed'; } } : null,
     { label: 'Test', value: testIt },
     { label: 'Cancel', value: null },
-    { label: isNew ? 'Add' : 'Save', primary: true, value: () => api(isNew ? '/api/servers' : `/api/servers/${s.id}`, { method: isNew ? 'POST' : 'PATCH', json: collect() }) },
+    { label: isNew ? 'Add' : 'Save', primary: true, value: () => api(isNew ? 'api/servers' : `api/servers/${s.id}`, { method: isNew ? 'POST' : 'PATCH', json: collect() }) },
   ].filter(Boolean), true);
   if (r) { toast(r === 'removed' ? 'Removed' : 'Saved'); onRoute(); }
 }
@@ -620,7 +620,7 @@ async function importDialog(s) {
   const ok = await confirmDialog(`Import from ${s.name}`, h('div', null, h('p', null, `Load the master list's ${viewOf(s.view).name} records from ${s.name}. ioDNS then offers to push what changed to the other servers.`), mode), 'Import');
   if (!ok) return;
   try {
-    const r = await api(`/api/servers/${s.id}/import`, { method: 'POST', json: { mode: mode.querySelector('input:checked').value } });
+    const r = await api(`api/servers/${s.id}/import`, { method: 'POST', json: { mode: mode.querySelector('input:checked').value } });
     location.hash = '#/';
     const done = `${r.records} records read: ${r.added} added, ${r.changed} changed, ${r.removed} removed`;
     if (r.added || r.changed || r.removed) offerPush(null, done); else toast(done);
@@ -629,25 +629,25 @@ async function importDialog(s) {
 
 async function splitDns(s) {
   let cur = {};
-  try { cur = (await api(`/api/servers/${s.id}/split-dns`)).domains || {}; } catch (e) { fail(e); return; }
+  try { cur = (await api(`api/servers/${s.id}/split-dns`)).domains || {}; } catch (e) { fail(e); return; }
   const domain = h('input', { class: 't', placeholder: 'example.com', autocapitalize: 'none' });
   const ns = h('input', { class: 't', placeholder: '100.101.102.103 (the tailnet address of the DNS server)' });
   const list = h('table', { class: 't' }, Object.entries(cur).map(([d, v]) => h('tr', null, h('td', null, d), h('td', null, (v || []).join(', ')),
-    h('td', null, h('button', { class: 'pillbtn noic tiny', onclick: async () => { try { await api(`/api/servers/${s.id}/split-dns`, { method: 'PUT', json: { domain: d, nameservers: [] } }); toast(`${d}: off`); closeDialogs(); } catch (e) { fail(e); } } }, 'Stop')))));
+    h('td', null, h('button', { class: 'pillbtn noic tiny', onclick: async () => { try { await api(`api/servers/${s.id}/split-dns`, { method: 'PUT', json: { domain: d, nameservers: [] } }); toast(`${d}: off`); closeDialogs(); } catch (e) { fail(e); } } }, 'Stop')))));
   const r = await dialog('Tailscale split DNS', h('div', { class: 'pform' },
     h('p', { class: 'muted' }, 'Devices on the tailnet ask these name servers for these domains. Point your domain at the DNS server that holds the Tailscale view.'),
     Object.keys(cur).length ? list : h('p', { class: 'muted small' }, 'No split DNS yet.'),
     h('div', { class: 'grid' }, fld('Domain', domain), fld('Name server', ns))), [
     { label: 'Close', value: null },
-    { label: 'Save', primary: true, value: () => api(`/api/servers/${s.id}/split-dns`, { method: 'PUT', json: { domain: domain.value.trim(), nameservers: ns.value.split(',').map((x) => x.trim()).filter(Boolean) } }) }], true);
+    { label: 'Save', primary: true, value: () => api(`api/servers/${s.id}/split-dns`, { method: 'PUT', json: { domain: domain.value.trim(), nameservers: ns.value.split(',').map((x) => x.trim()).filter(Boolean) } }) }], true);
   if (r) toast('Split DNS saved');
 }
 
 // ------------------------------------------------------------------ dynamic DNS
 async function showDdns(page) {
-  const d = await api('/api/ddns');
+  const d = await api('api/ddns');
   const unifi = S.servers.filter((s) => s.kind === 'unifi');
-  const entries = (await api('/api/entries')).items.filter((e) => Object.values(e.records).flat().some((r) => r.source === 'publicip' || r.source === 'publicip6'));
+  const entries = (await api('api/entries')).items.filter((e) => Object.values(e.records).flat().some((r) => r.source === 'publicip' || r.source === 'publicip6'));
   const detect = h('select', { class: 't', disabled: !isAdmin() },
     h('option', { value: 'auto', selected: d.detect === 'auto' ? true : null }, 'Ask an address service (ipify, icanhazip)'),
     unifi.map((s) => h('option', { value: `unifi:${s.id}`, selected: d.detect === `unifi:${s.id}` ? true : null }, `The WAN address of ${s.name}`)),
@@ -655,9 +655,9 @@ async function showDdns(page) {
   const url = h('input', { class: 't', value: d.detect.startsWith('http') ? d.detect : '', placeholder: 'https://… (answers with the address alone)', hidden: !d.detect.startsWith('http') });
   const minutes = h('input', { class: 't', type: 'number', min: 0, max: 1440, value: d.minutes, disabled: !isAdmin() });
   detect.onchange = () => { url.hidden = detect.value !== 'url'; if (detect.value !== 'url') save(); };
-  const save = async () => { try { await api('/api/ddns', { method: 'PUT', json: { detect: detect.value === 'url' ? url.value.trim() : detect.value, minutes: +minutes.value } }); toast('Saved'); } catch (e) { fail(e); } };
+  const save = async () => { try { await api('api/ddns', { method: 'PUT', json: { detect: detect.value === 'url' ? url.value.trim() : detect.value, minutes: +minutes.value } }); toast('Saved'); } catch (e) { fail(e); } };
   url.onchange = save; minutes.onchange = save;
-  const now = async (push) => { try { const r = await api('/api/ddns/run', { method: 'POST', json: { push } }); toast(r.changed ? `New address: ${r.ipv4 || ''} ${r.ipv6 || ''}` : push ? 'Pushed' : `Unchanged: ${r.ipv4 || r.ipv6 || 'none found'}`); onRoute(); } catch (e) { fail(e); } };
+  const now = async (push) => { try { const r = await api('api/ddns/run', { method: 'POST', json: { push } }); toast(r.changed ? `New address: ${r.ipv4 || ''} ${r.ipv6 || ''}` : push ? 'Pushed' : `Unchanged: ${r.ipv4 || r.ipv6 || 'none found'}`); onRoute(); } catch (e) { fail(e); } };
   page.append(h('div', { class: 'pagehead' }, h('h1', null, 'Dynamic DNS')),
     h('div', { class: 'box' }, h('h2', null, icon('globe'), 'The public address'),
       h('div', { class: 'kv' }, h('div', { class: 'k' }, 'IPv4'), h('div', { class: 'v' }, h('code', null, d.ipv4 || 'not found yet'))),
@@ -676,7 +676,7 @@ async function showDdns(page) {
 
 // ------------------------------------------------------------------ history
 async function showHistory(page) {
-  const items = (await api('/api/history?limit=300')).items;
+  const items = (await api('api/history?limit=300')).items;
   const LABEL = { edit: 'Changed', delete: 'Deleted', push: 'Pushed', resolve: 'Resolved', import: 'Imported', server: 'Server', ddns: 'Dynamic DNS', tailscale: 'Tailscale' };
   page.append(h('div', { class: 'pagehead' }, h('h1', null, 'History')),
     items.length ? h('div', { class: 'hist' }, items.map((x) => h('div', { class: `hrow ${x.ok ? '' : 'bad'}` },
@@ -714,17 +714,17 @@ async function setViews(el) {
     h('p', { class: 'muted' }, 'A view is one answer to "who is asking": the house, the internet, the tailnet… Each server answers for one view, and each entry can hold different records in each.'),
     h('table', { class: 't' }, h('tr', null, h('th', null, 'Name'), h('th', null, 'What it is'), h('th', null, 'Servers'), h('th', null, 'Entries'), h('th', null)),
       S.views.map((v) => {
-        const nm = h('input', { class: 't', value: v.name, disabled: !isAdmin(), onchange: async (e) => { try { await api(`/api/views/${v.id}`, { method: 'PATCH', json: { name: e.target.value } }); await loadOverview(); toast('Saved'); } catch (x) { fail(x); } } });
-        const ds = h('input', { class: 't', value: v.description, disabled: !isAdmin(), onchange: async (e) => { try { await api(`/api/views/${v.id}`, { method: 'PATCH', json: { description: e.target.value } }); toast('Saved'); } catch (x) { fail(x); } } });
+        const nm = h('input', { class: 't', value: v.name, disabled: !isAdmin(), onchange: async (e) => { try { await api(`api/views/${v.id}`, { method: 'PATCH', json: { name: e.target.value } }); await loadOverview(); toast('Saved'); } catch (x) { fail(x); } } });
+        const ds = h('input', { class: 't', value: v.description, disabled: !isAdmin(), onchange: async (e) => { try { await api(`api/views/${v.id}`, { method: 'PATCH', json: { description: e.target.value } }); toast('Saved'); } catch (x) { fail(x); } } });
         return h('tr', null, h('td', null, nm), h('td', null, ds), h('td', null, v.servers), h('td', null, v.entries),
           h('td', null, isAdmin() ? h('button', { class: 'pillbtn noic danger tiny', onclick: async () => {
             if (!await confirmDialog('Delete the view', `Delete ${v.name} and its records in the master list (${v.entries} entries have some)? Its servers are kept, without a view.`, 'Delete', true)) return;
-            try { await api(`/api/views/${v.id}`, { method: 'DELETE' }); onRoute(); } catch (x) { fail(x); }
+            try { await api(`api/views/${v.id}`, { method: 'DELETE' }); onRoute(); } catch (x) { fail(x); }
           } }, 'Delete') : null));
       })),
     isAdmin() ? h('p', null, h('button', { class: 'pillbtn', onclick: async () => {
       const name = h('input', { class: 't', placeholder: 'Guests' });
-      const r = await dialog('New view', fld('Name', name), [{ label: 'Cancel', value: null }, { label: 'Add', primary: true, value: () => api('/api/views', { method: 'POST', json: { name: name.value.trim() } }) }]);
+      const r = await dialog('New view', fld('Name', name), [{ label: 'Cancel', value: null }, { label: 'Add', primary: true, value: () => api('api/views', { method: 'POST', json: { name: name.value.trim() } }) }]);
       if (r) onRoute();
     } }, icon('add', 's'), 'New view')) : null));
 }
@@ -732,12 +732,12 @@ async function setData(el) {
   const file = h('input', { type: 'file', accept: '.json,application/json' });
   const replace = h('input', { type: 'checkbox' });
   el.append(h('div', { class: 'box' }, h('h2', null, icon('download'), 'Export'), h('p', null, 'The master list (views and entries) as a JSON file.'),
-    h('p', null, h('a', { class: 'pillbtn', href: '/api/export', download: 'iodns.json' }, icon('download', 's'), 'Download'))),
+    h('p', null, h('a', { class: 'pillbtn', href: 'api/export', download: 'iodns.json' }, icon('download', 's'), 'Download'))),
   canEdit() ? h('div', { class: 'box' }, h('h2', null, icon('upload'), 'Import a file'), h('p', null, 'An ioDNS export back in: entries are added, or replaced when the name is already here.'),
     h('div', { class: 'pform' }, file, h('label', { class: 'check' }, replace, ' Remove the entries that are not in the file'),
       h('p', null, h('button', { class: 'pillbtn primary', onclick: async () => {
         const f = file.files[0]; if (!f) { toast('Pick a file'); return; }
-        try { const data = JSON.parse(await f.text()); const r = await api('/api/import/file', { method: 'POST', json: { data, replace: replace.checked } }); offerPush(null, `${r.entries} entries imported${r.removed ? `, ${r.removed} removed` : ''}`); } catch (e) { fail(e); }
+        try { const data = JSON.parse(await f.text()); const r = await api('api/import/file', { method: 'POST', json: { data, replace: replace.checked } }); offerPush(null, `${r.entries} entries imported${r.removed ? `, ${r.removed} removed` : ''}`); } catch (e) { fail(e); }
       } }, icon('upload', 's'), 'Import')))) : null);
 }
 async function setSuite(el, r) {
@@ -762,7 +762,7 @@ function showSignIn() {
   const btn = h('button', { class: 'pillbtn primary noic', type: 'submit' }, first ? 'Create the admin account' : 'Sign in');
   const login = async (n, p) => {
     err.textContent = '';
-    try { await api(first ? '/api/auth/setup' : '/api/auth/login', { method: 'POST', json: { name: n, password: p } }); location.reload(); } catch (x) { err.textContent = x.message; }
+    try { await api(first ? 'api/auth/setup' : 'api/auth/login', { method: 'POST', json: { name: n, password: p } }); location.reload(); } catch (x) { err.textContent = x.message; }
   };
   const submit = (e) => { e.preventDefault(); login(name.value.trim(), pw.value); };
   document.body.append(h('div', { class: 'signin' }, h('form', { class: 'dialog', onsubmit: submit },
@@ -771,7 +771,7 @@ function showSignIn() {
     tiles, form, err, h('div', { class: 'btns' }, btn))));
   if (first) { name.focus(); return; }
   const pick = (t) => tiles.querySelectorAll('.account').forEach((x) => x.classList.toggle('on', x === t));
-  api('/api/auth/accounts').then((d) => {
+  api('api/auth/accounts').then((d) => {
     if (!d.accounts.length) { name.focus(); return; }
     form.hidden = true; btn.hidden = true;
     tiles.append(...d.accounts.map((a) => {
@@ -790,10 +790,10 @@ function showSignIn() {
 async function start() {
   applyTheme();
   document.querySelectorAll('[data-ic]').forEach((el) => el.replaceWith(icon(el.dataset.ic)));
-  S.status = await api('/api/status');
+  S.status = await api('api/status');
   if (!S.status.user) { showSignIn(); return; }
   S.user = S.status.user;
-  try { S.settings = (await api('/api/auth/me')).settings || {}; } catch { S.settings = {}; }
+  try { S.settings = (await api('api/auth/me')).settings || {}; } catch { S.settings = {}; }
   if (S.settings.theme) { try { localStorage.setItem('iodns.theme', S.settings.theme); } catch { /* */ } applyTheme(); }
   drawUser();
   await loadOverview();

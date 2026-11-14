@@ -40,7 +40,7 @@ function title() {
 }
 
 // ---- sidebar
-export async function loadMeta() { state.meta = await api('/api/meta'); return state.meta; }
+export async function loadMeta() { state.meta = await api('api/meta'); return state.meta; }
 
 /** A sidebar destination, as in iopix: a link with its icon in its own colour (--hue), the count on the right. */
 function navItem(label, ic, count, on, href, hue, cls = '') {
@@ -57,7 +57,7 @@ function dropTarget(el, folderId) {
     e.preventDefault(); el.classList.remove('drop');
     const id = e.dataTransfer.getData('application/x-ionote-note');
     if (!id) return;
-    try { await api(`/api/notes/${id}`, { method: 'PUT', body: { folderID: folderId, updatedAt: Date.now() / 1000 } }); toast(folderId ? 'Moved to the folder' : 'Taken out of its folder'); refresh(); } catch (err) { fail(err); }
+    try { await api(`api/notes/${id}`, { method: 'PUT', body: { folderID: folderId, updatedAt: Date.now() / 1000 } }); toast(folderId ? 'Moved to the folder' : 'Taken out of its folder'); refresh(); } catch (err) { fail(err); }
   });
   return el;
 }
@@ -141,19 +141,19 @@ function moreSheet() {
 async function newFolder() {
   const name = await ask('New folder', 'Folder name', '', 'Create');
   if (!name) return;
-  try { const f = await api('/api/folders', { method: 'POST', body: { name } }); await refresh(); go({ v: 'folder', f: f.id, n: null }); } catch (e) { fail(e); }
+  try { const f = await api('api/folders', { method: 'POST', body: { name } }); await refresh(); go({ v: 'folder', f: f.id, n: null }); } catch (e) { fail(e); }
 }
 
 function folderMenu(e, f) {
   menu({ x: e.clientX, y: e.clientY }, [
     { head: f.name },
-    { icon: 'edit', label: 'Rename…', action: async () => { const n = await ask('Rename folder', 'Folder name', f.name, 'Rename'); if (n) { await api(`/api/folders/${f.id}`, { method: 'PUT', body: { name: n, updatedAt: Date.now() / 1000 } }).catch(fail); refresh(); } } },
+    { icon: 'edit', label: 'Rename…', action: async () => { const n = await ask('Rename folder', 'Folder name', f.name, 'Rename'); if (n) { await api(`api/folders/${f.id}`, { method: 'PUT', body: { name: n, updatedAt: Date.now() / 1000 } }).catch(fail); refresh(); } } },
     { head: 'Colour' },
-    { node: colorPicker(f.color, async (c) => { await api(`/api/folders/${f.id}`, { method: 'PUT', body: { color: c, updatedAt: Date.now() / 1000 } }).catch(fail); refresh(); }) },
+    { node: colorPicker(f.color, async (c) => { await api(`api/folders/${f.id}`, { method: 'PUT', body: { color: c, updatedAt: Date.now() / 1000 } }).catch(fail); refresh(); }) },
     '-',
     { icon: 'trash', label: 'Delete folder…', action: async () => {
       if (!await confirmIt('Delete folder', `Delete "${f.name}"? Its ${f.count} notes stay, in no folder.`, 'Delete', true)) return;
-      await api(`/api/folders/${f.id}`, { method: 'DELETE' }).catch(fail);
+      await api(`api/folders/${f.id}`, { method: 'DELETE' }).catch(fail);
       if (view.f === f.id) go({ v: 'all', f: null }); else refresh();
     } },
   ]);
@@ -162,13 +162,13 @@ function folderMenu(e, f) {
 function tagMenu(e, t) {
   menu({ x: e.clientX, y: e.clientY }, [
     { head: '#' + t.name },
-    { icon: 'edit', label: 'Rename on every note…', action: async () => { const n = await ask('Rename tag', 'Tag name', t.name, 'Rename'); if (n) { await api('/api/tags/rename', { method: 'POST', body: { from: t.name, to: n } }).catch(fail); refresh(); } } },
+    { icon: 'edit', label: 'Rename on every note…', action: async () => { const n = await ask('Rename tag', 'Tag name', t.name, 'Rename'); if (n) { await api('api/tags/rename', { method: 'POST', body: { from: t.name, to: n } }).catch(fail); refresh(); } } },
     { head: 'Colour' },
-    { node: colorPicker(t.color, async (c) => { await api(`/api/tags/${encodeURIComponent(t.name)}/color`, { method: 'PUT', body: { color: c, updatedAt: Date.now() / 1000 } }).catch(fail); refresh(); }) },
+    { node: colorPicker(t.color, async (c) => { await api(`api/tags/${encodeURIComponent(t.name)}/color`, { method: 'PUT', body: { color: c, updatedAt: Date.now() / 1000 } }).catch(fail); refresh(); }) },
     '-',
     { icon: 'trash', label: 'Remove from every note…', action: async () => {
       if (!await confirmIt('Remove tag', `Take #${t.name} off its ${t.count} notes?`, 'Remove', true)) return;
-      await api('/api/tags/remove', { method: 'POST', body: { name: t.name } }).catch(fail);
+      await api('api/tags/remove', { method: 'POST', body: { name: t.name } }).catch(fail);
       if (view.v === 'tag') go({ v: 'all', t: null }); else refresh();
     } },
   ]);
@@ -191,10 +191,10 @@ export async function loadList(append = false) {
   loading = true;
   try {
     if (view.v === 'trash') {
-      const r = await api('/api/trash');
+      const r = await api('api/trash');
       shown = r.notes; total = r.notes.length;
     } else {
-      const r = await api('/api/notes?' + query(append ? shown.length : 0));
+      const r = await api('api/notes?' + query(append ? shown.length : 0));
       shown = append ? shown.concat(r.notes) : r.notes;
       total = r.total;
     }
@@ -212,7 +212,7 @@ function card(n) {
   const nfiles = (n.attachments || []).length;
   const title = displayTitle(n);
   const c = h('div.card' + (n.id === view.n ? '.on' : ''), { draggable: canWrite() && view.v !== 'trash', onclick: () => onOpen(n.id), 'data-id': n.id },
-    n.hasImage ? h('img.th', { src: `/api/notes/${n.id}/thumb?v=${(n.imageSHA || '').slice(0, 8)}`, alt: '', loading: 'lazy' }) : null,
+    n.hasImage ? h('img.th', { src: `api/notes/${n.id}/thumb?v=${(n.imageSHA || '').slice(0, 8)}`, alt: '', loading: 'lazy' }) : null,
     h('div.body', h('div.t', title), prev && prev !== title ? h('div.p', prev) : null,
       h('div.m', h('span', fmtDate(view.sort === 'created' || view.sort === 'oldest' ? n.createdAt : n.updatedAt)),
         folder && view.v !== 'folder' ? h('span', '· ' + folder.name) : null,
@@ -246,7 +246,7 @@ export function renderList() {
 
 async function emptyTrash() {
   if (!await confirmIt('Empty trash', `Delete the ${shown.length} notes in the trash for good, with their pictures and files? This cannot be undone, on any device.`, 'Delete for good', true)) return;
-  try { const r = await api('/api/trash/empty', { method: 'POST' }); toast(`${r.purged} notes deleted for good`); go({ n: null }); refresh(); } catch (e) { fail(e); }
+  try { const r = await api('api/trash/empty', { method: 'POST' }); toast(`${r.purged} notes deleted for good`); go({ n: null }); refresh(); } catch (e) { fail(e); }
 }
 
 export function markSelected() {

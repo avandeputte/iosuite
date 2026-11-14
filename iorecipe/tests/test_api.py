@@ -105,7 +105,7 @@ def test_photos(client):
     assert j.status_code == 201
     j = j.json()
     first = j["photos"][0]
-    assert j["photo"] == first["url"] == f"/api/recipes/{rid}/photos/{first['id']}" and first["step"] is None
+    assert j["photo"] == first["url"] == f"api/recipes/{rid}/photos/{first['id']}" and first["step"] is None
     got = client.get(j["photo"])
     assert got.headers["content-type"] == "image/jpeg" and "immutable" in got.headers["cache-control"]
     assert Image.open(io.BytesIO(got.content)).size == (1600, 1067)
