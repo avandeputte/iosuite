@@ -175,6 +175,7 @@ def test_roles_viewers_only_look(client, family_id):
     assert client.patch(f"/api/events/{e['id']}", json={"title": "x"}).status_code == 403
     assert client.post("/api/calendars", json={"name": "Mine"}).status_code == 403
     assert client.post("/api/events", json={"title": "x", "start": "2026-11-10T10:00"}).status_code == 403
+    assert client.get("/api/people", params={"q": "a"}).status_code == 403, "the names ioContact holds are for members"
 
 
 def test_free_busy(client, family_id):

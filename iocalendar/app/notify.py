@@ -1,8 +1,8 @@
 """Notifications from ioCalendar (iosuite_shared.push): the reminders set on events, when they go off, for the
 people who turned notifications on.
 
-An event is for the family members it is tagged with; untagged, for the owner of its private calendar, else (a shared
-calendar) for whoever added it. A reminder of an all-day event counts from the start of its day. The app runs this
+An event of a private calendar is for its owner only, the one person who can read it, whoever it is tagged with. An
+event of a shared calendar is for the family members it is tagged with; untagged, for whoever added it. A reminder of an all-day event counts from the start of its day. The app runs this
 every minute for the reminders of the next day, and every quarter of an hour for the ones further ahead (up to four
 weeks, what the web app offers); each goes out once. It does nothing while nobody has a device.
 """
@@ -68,8 +68,8 @@ def run(now: dt.datetime = None, long: bool = False) -> int:
                 at = start - dt.timedelta(minutes=m)
                 if not (now - late < at <= now):
                     continue
-                whom = set(members.ids_of(o["categories"], fam)) or ({c["owner_id"]} if c["owner_id"] is not None else
-                                                                     {r["created_by"]} if r.get("created_by") else set())
+                whom = ({c["owner_id"]} if c["owner_id"] is not None else  # a private calendar: nobody else reads it
+                        set(members.ids_of(o["categories"], fam)) or ({r["created_by"]} if r.get("created_by") else set()))
                 body = " · ".join(x for x in (_when(start, o["allDay"], now), o["location"], c["name"]) if x)
                 day = start.astimezone(ical.zone(c.get("timezone"))).date().isoformat()
                 for uid in whom & people:

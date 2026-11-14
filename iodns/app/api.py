@@ -146,12 +146,15 @@ def _test(s: dict, secret: str) -> dict:
 
 @router.post("/servers/test", dependencies=[access.admin_write])
 async def test_unsaved(request: Request):
-    """Try the server form before saving it: {kind, url, options, secret, id?} (no secret: the saved one of id)."""
+    """Try the server form before saving it: {kind, url, options, secret, id?} (no secret: the saved one of id, for its own address only)."""
     b = await body(request)
-    secret = b.get("secret")
-    if secret is None and b.get("id"):
-        secret = model.secret(int(b["id"]))
     s = {"name": b.get("name") or b.get("kind"), "kind": str(b.get("kind") or ""), "url": str(b.get("url") or ""), "options": b.get("options") or {}}
+    secret = b.get("secret")
+    if not secret and b.get("id"):
+        saved = model.server(int(b["id"]))  # the saved secret goes to the saved address only
+        if saved["kind"] != s["kind"] or (saved["url"] or "").rstrip("/") != s["url"].strip().rstrip("/"):
+            raise ValueError("Type the secret again to test another address")
+        secret = model.secret(int(b["id"]))
     return await run_in_threadpool(_test, s, secret or "")
 
 

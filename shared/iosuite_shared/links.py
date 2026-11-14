@@ -137,7 +137,8 @@ _opener = urllib.request.build_opener(_SameHost)
 
 
 def call(req, timeout: float):
-    """Send a request to another app of the suite (a urllib response): every such request goes out here."""
+    """Send a request to another app of the suite, or anywhere a stored secret goes along (a urllib response): every
+    such request goes out here, so no redirect takes the secret to another host."""
     return _opener.open(req, timeout=timeout)
 
 

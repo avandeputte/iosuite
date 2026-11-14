@@ -47,3 +47,19 @@ def test_reminders(client, family_id, sent):
     assert len(sent) == 4
     assert notify._when(start, False, start - dt.timedelta(minutes=30)) == "In 30 minutes"
     assert notify._when(start, False, start - dt.timedelta(days=1)) == "Tomorrow at 14:00"
+
+
+def test_a_private_calendars_reminder_goes_to_its_owner_only(client, sent):
+    """Whoever it is tagged with, an event of a private calendar is read by its owner only, and so said to them only."""
+    from iosuite_shared import testing
+    alex = users.find("alex")["id"]
+    assert testing.add_account(client, {"name": "bob", "password": "secret123", "role": "member"}).status_code == 200
+    bob = users.find("bob")["id"]
+    device(alex)
+    device(bob)
+    mine = next(c["id"] for c in client.get("/api/calendars").json()["items"] if not c["shared"] and c["kind"] == "events")
+    start = dt.datetime(2026, 11, 20, 14, 0, tzinfo=NY)
+    mk(client, mine, title="Bob's surprise party", start="2026-11-20T14:00", end="2026-11-20T15:00", timezone="America/New_York",
+       reminders=[30], members=[bob])
+    assert notify.run(start - dt.timedelta(minutes=29)) == 1
+    assert [e.rsplit("/", 1)[1] for e in sent] == [str(alex)], "never to bob, who cannot read alex's calendar"

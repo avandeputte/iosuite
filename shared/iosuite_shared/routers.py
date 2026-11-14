@@ -93,8 +93,8 @@ def auth_router(self) -> APIRouter:
         except ValueError as e:
             raise HTTPException(400, str(e))
         apppasswords.forget()
-        if auth.on_update:
-            auth.on_update(u["id"], body)
+        if auth.on_update:  # only what one may change oneself: an app's own fields (ioPix's person tag) are the panel's
+            auth.on_update(u["id"], {k: body[k] for k in ("displayName", "email") if k in body})
         return {"user": public_user(nu)}
 
     @r.get("/api/auth/ui.js", dependencies=[access.public])

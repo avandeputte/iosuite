@@ -56,7 +56,7 @@ class Auth:
         self.realm = basic_realm or self.label
         self.log = logging.getLogger(f"iosuite_shared.{app}")
         self.decorate = lambda user: user  # the app may add fields to the user dict it serves (iopix: the person tag)
-        self.on_update = None  # on_update(user_id, body) after an admin changed an account: the app's own fields (iopix: the person tag)
+        self.on_update = None  # on_update(user_id, body) after an account changed: an admin's change carries the app's own fields (iopix: the person tag); one's own change (PATCH /api/auth/me) only displayName and email
         # person_data(user_id, remove) -> [{what, count, kept}]: what the person keeps in this app, counted, or removed
         # when their account is deleted (iosuite_shared.persondata); None: nothing per person
         self.person_data = None
@@ -230,7 +230,8 @@ class Auth:
 
     def middleware(self, open_paths=(), open_prefixes=("/api/auth/",), is_open=None, before=None, after=None, api_prefix="/api/"):
         """A complete auth middleware: resolve, the require-sign-in rule (open_paths / open_prefixes, or whatever
-        `is_open(request)` says, stay reachable; /api/auth/ and /api/status always are), the cross-site check on writes,
+        `is_open(request)` says, stay reachable; /api/auth/ and /api/status always are), the cross-site check on writes
+        (the API, and /dav when signed in by the cookie),
         and the cookie afterwards. `before(request)` runs once the user is known and may return a response (the app's own gates:
         MCP tokens...); `after(request, response)` runs at the end."""
         auth = self
@@ -268,7 +269,9 @@ class Auth:
                         return auth.no_access(request, request.state.no_role_user["name"])
                     return JSONResponse({"detail": f"Sign in to use {auth.label}."}, status_code=401,
                                         headers={"WWW-Authenticate": f'Basic realm="{auth.realm}"'} if "authorization" in request.headers else {})
-            if path.startswith(api_prefix) and auth.cross_site(request):
+            # the sync protocols (/dav) too when the browser's cookie is what signs the request in: a sync client and
+            # the bookmarks extension send their app password in Authorization, which a page on another site cannot set
+            if (path.startswith(api_prefix) or (path.startswith("/dav") and "authorization" not in request.headers)) and auth.cross_site(request):
                 return JSONResponse({"detail": "Requests from another site are refused"}, status_code=403)
             response = await call_next(request)
             auth.finish(request, response)

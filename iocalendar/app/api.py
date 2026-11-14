@@ -496,7 +496,7 @@ def family_members(request: Request):
     return {"items": members.public(members.family())}
 
 
-@router.get("/api/people", dependencies=[access.signed_in])
+@router.get("/api/people", dependencies=[access.member])
 async def people(request: Request, q: str = "", limit: int = 12):
     """Names for the people on an event: from ioContact when it is connected, and the people on earlier events."""
     u = request.state.user

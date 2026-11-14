@@ -709,7 +709,7 @@ def calendar_feed(token: str, which: str, request: Request):
 
 # ------------------------------------------------------------------ ioPix
 
-@router.get("/api/iopix/people", dependencies=[access.signed_in])
+@router.get("/api/iopix/people", dependencies=[access.member])
 async def iopix_people(request: Request, q: str = "", refresh: bool = False):
     u = auth.current_user(request)
     try:
@@ -723,7 +723,7 @@ async def iopix_people(request: Request, q: str = "", refresh: bool = False):
     return {"items": [{**p, "contact": linked.get(p["id"])} for p in ppl if not ql or ql in fold(p["name"])]}
 
 
-@router.get("/api/iopix/face/{pid}", dependencies=[access.signed_in])
+@router.get("/api/iopix/face/{pid}", dependencies=[access.member])
 async def iopix_face(pid: int, request: Request):
     auth.current_user(request)
     try:

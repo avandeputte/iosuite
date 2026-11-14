@@ -39,6 +39,9 @@ def test_secret_is_never_shown_and_lives_in_the_suites_keys(client):
     assert client.post(f"/api/servers/{s['id']}/test").json()["ok"] is True
     r = client.post("/api/servers/test", json={"kind": "fake", "url": "http://ag1", "secret": "nope"})
     assert r.json() == {"ok": False, "message": "http://ag1: wrong password"}
+    assert client.post("/api/servers/test", json={"kind": "fake", "url": "http://ag1/", "id": s["id"]}).json()["ok"] is True, "the saved secret, for its own address"
+    r = client.post("/api/servers/test", json={"kind": "fake", "url": "http://elsewhere", "secret": "", "id": s["id"]})
+    assert r.status_code == 400 and "Type the secret again" in r.json()["detail"], "never sent to another address"
 
 
 def test_compare_resolve_and_push(client):

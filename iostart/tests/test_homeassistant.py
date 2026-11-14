@@ -60,6 +60,10 @@ def test_test_and_card(client, monkeypatch):
     calls = _setup(client, monkeypatch)
     t = client.post("/api/ha/test", json={}).json()
     assert t == {"ok": True, "name": "Casa", "version": "2026.11.1", "entities": len(STATES)}
+    n = len(calls)
+    r = client.post("/api/ha/test", json={"url": "http://elsewhere.example"})
+    assert r.status_code == 400 and "Type the token again" in r.json()["detail"], "the saved token goes to the saved address only"
+    assert len(calls) == n, "nothing was sent"
     ents = [{"id": "light.kitchen", "control": True}, {"id": "lock.front_door", "name": "Front", "control": True, "wall": True},
             {"id": "binary_sensor.garage", "wall": True, "alert": "on"}, {"id": "sensor.living_temp", "wall": True},
             {"id": "scene.movie", "control": True}, {"id": "person.alex"}, {"id": "light.gone"}]
