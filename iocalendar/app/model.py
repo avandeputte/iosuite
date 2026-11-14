@@ -12,7 +12,7 @@ import threading
 from collections import OrderedDict
 
 from app import config, db, ical, members
-from iosuite_shared import users as shared_users
+from iosuite_shared import related, users as shared_users
 from iosuite_shared.errors import Invalid
 
 PALETTE = ["#8e44d6", "#0b8a9e", "#1a73e8", "#e0426a", "#1e8e3e", "#e8710a", "#4b53c7", "#e8a100", "#5f6b7a", "#1294b8"]
@@ -253,7 +253,12 @@ def purge_deleted(days: int | None = None) -> int:
                    "AND updated_at < NOW() - INTERVAL %s DAY GROUP BY calendar_id", (days,))
         for r in old:
             db.set_setting(f"{PURGED}{r['cal']}", str(max(r["tok"], purged_before(r["cal"]))))
-        return db.ex("DELETE FROM cal_events WHERE deleted = 1 AND updated_at < NOW() - INTERVAL %s DAY", (days,)) if old else 0
+        if not old:
+            return 0
+        gone = [r["id"] for r in db.q("SELECT id FROM cal_events WHERE deleted = 1 AND updated_at < NOW() - INTERVAL %s DAY", (days,))]
+        n = db.ex("DELETE FROM cal_events WHERE deleted = 1 AND updated_at < NOW() - INTERVAL %s DAY", (days,))
+    related.forget_many("event", gone)  # their links to other items of the suite go too
+    return n
 
 
 def purged_before(cid: int) -> int:

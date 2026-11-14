@@ -16,7 +16,7 @@ import threading
 from collections import OrderedDict
 
 from app import config, db, ical, members, users
-from iosuite_shared import users as shared_users
+from iosuite_shared import related, users as shared_users
 from iosuite_shared.errors import Invalid
 
 PALETTE = ["#146b5e", "#1a73e8", "#e0426a", "#8e44d6", "#e8710a", "#0b8a9e", "#1e8e3e", "#4b53c7", "#e8a100", "#5f6b7a"]
@@ -390,7 +390,12 @@ def purge_deleted(days: int | None = None) -> int:
         for r in old:
             db.set_setting(f"{PURGED}{r['lst']}", str(max(r["tok"], purged_before(r["lst"]))))
         db.ex("DELETE FROM tsk_activity WHERE at < UTC_TIMESTAMP() - INTERVAL %s DAY", (days,))  # the log is kept as long
-        return db.ex("DELETE FROM tsk_tasks WHERE deleted = 1 AND updated_at < NOW() - INTERVAL %s DAY", (days,)) if old else 0
+        if not old:
+            return 0
+        gone = [r["id"] for r in db.q("SELECT id FROM tsk_tasks WHERE deleted = 1 AND updated_at < NOW() - INTERVAL %s DAY", (days,))]
+        n = db.ex("DELETE FROM tsk_tasks WHERE deleted = 1 AND updated_at < NOW() - INTERVAL %s DAY", (days,))
+    related.forget_many("task", gone)  # their links to other items of the suite go too
+    return n
 
 
 def purged_before(lid: int) -> int:
