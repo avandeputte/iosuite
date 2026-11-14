@@ -153,8 +153,8 @@ def test_ping_trusts_a_self_signed_certificate(monkeypatch):
 
 
 def test_events_tasks_recipes_and_notes_for_the_search_box(client, monkeypatch):
-    """The search box asks ioCalendar, ioTask and ioRecipe with the viewer's sign-in: the coming events first, the open
-    tasks before the done ones, a recipe with its small picture."""
+    """The search box asks ioCalendar, ioTask and ioRecipe with the viewer's sign-in: the coming events only, the open
+    tasks only, a recipe with its small picture."""
     asked = []
 
     def fake(request, key, path, params=None, raw=False):
@@ -173,9 +173,8 @@ def test_events_tasks_recipes_and_notes_for_the_search_box(client, monkeypatch):
         if path == "/api/lists":
             return {"items": [{"id": 4, "color": "#146b5e"}]}
         if path == "/api/tasks":
-            if params["status"] == "open":
-                return {"items": [{"id": 1, "title": "Call the dentist", "due": "2026-11-20", "dueAllDay": True, "done": False, "listId": 4}]}
-            return {"items": [{"id": 2, "title": "Pay the dentist", "due": None, "dueAllDay": False, "done": True, "listId": 4}]}
+            assert params["status"] == "open"
+            return {"items": [{"id": 1, "title": "Call the dentist", "due": "2026-11-20", "dueAllDay": True, "done": False, "listId": 4}]}
         if path == "/api/recipes":
             return {"items": [{"id": 3, "title": "Tarte Tatin", "photo": "/api/recipes/3/photos/12", "totalMinutes": 75, "tags": ["dessert", "apple", "french", "oven"], "favourite": True},
                               {"id": 5, "title": "Tartiflette", "photo": None, "totalMinutes": None, "tags": [], "favourite": False}]}
@@ -189,13 +188,12 @@ def test_events_tasks_recipes_and_notes_for_the_search_box(client, monkeypatch):
         raise AssertionError(path)
     monkeypatch.setattr(widgets, "fetch", fake)
     d = client.get("/api/widgets/iocalendar?q=dentist&tz=Europe/Brussels").json()
-    assert [x["id"] for x in d["items"]] == [8, 9, 6, 7] and d["more"] is False
+    assert [x["id"] for x in d["items"]] == [8, 9] and d["more"] is False  # the two that are over are left out
     assert d["items"][0] == {"id": 8, "title": "Dentist soon", "start": "2999-01-01T09:00:00+00:00", "end": "2999-01-01T10:00:00+00:00", "allDay": False,
                              "recurring": True, "recurrenceId": "29990101T090000Z", "location": None, "color": "#c00"}
-    assert ("iocalendar", "/api/events", {"q": "dentist", "limit": 50}) in asked
+    assert ("iocalendar", "/api/events", {"q": "dentist", "limit": 200}) in asked
     d = client.get("/api/widgets/iotask?q=dentist").json()
-    assert d == {"items": [{"id": 1, "title": "Call the dentist", "due": "2026-11-20", "allDay": True, "done": False, "color": "#146b5e"},
-                           {"id": 2, "title": "Pay the dentist", "due": None, "allDay": False, "done": True, "color": "#146b5e"}], "more": False}
+    assert d == {"items": [{"id": 1, "title": "Call the dentist", "due": "2026-11-20", "allDay": True, "color": "#146b5e"}], "more": False}
     d = client.get("/api/widgets/iorecipe?q=tart").json()
     assert d == {"items": [{"id": 3, "title": "Tarte Tatin", "photo": 12, "minutes": 75, "tags": ["dessert", "apple", "french"], "favourite": True},
                            {"id": 5, "title": "Tartiflette", "photo": None, "minutes": None, "tags": [], "favourite": False}], "more": False}

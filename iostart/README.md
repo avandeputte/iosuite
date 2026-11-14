@@ -20,7 +20,7 @@ what the app will show on the start page later (today's events, the newest photo
   the same machine, else at its LAN address, else its public one, with the suite's Cloudflare Access service token
   (Settings › Global settings › Keys and tokens) when one is set.
 - **A search box** at the top (⌘K / Ctrl-K): as you type it lists the bookmarks that match, what the apps find
-  for you (ioContact's people, ioCalendar's events, ioTask's tasks, ioRecipe's recipes, your ioNote notes; each asked
+  for you (ioContact's people, ioCalendar's coming events, ioTask's open tasks, ioRecipe's recipes, your ioNote notes; each asked
   with your own sign-in, so you see what you may see there), and a row per app that searches itself (each opens on
   its own results). Arrows
   pick a row, Enter opens it. When nothing of the suite matches, Enter searches the web (DuckDuckGo, or the engine
