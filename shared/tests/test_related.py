@@ -94,6 +94,10 @@ def test_link_list_and_unlink(suite_apps):
     assert c.post("/api/related/task/12", json={"kind": "event", "id": 99}).status_code == 404, "both items must be seen"
     assert c.post("/api/related/task/13", json={"kind": "recipe", "id": 3}).status_code == 404
     assert c.post("/api/related/task/12", json={"kind": "task", "id": 12}).status_code == 400
+    # a recipe's links are changed in ioRecipe, where this person's role there counts: here they are only shown
+    assert not c.get("/api/related/recipe/3").json()["canEdit"]
+    assert c.post("/api/related/recipe/3", json={"kind": "event", "id": 5}).status_code == 403
+    assert c.delete(f"/api/related/recipe/3/{got['link']}").status_code == 403
     assert c.delete(f"/api/related/task/12/{got['link']}").status_code == 200
     assert c.get("/api/related/task/12").json()["items"] == []
     assert c.delete(f"/api/related/task/12/{got['link']}").status_code == 404
