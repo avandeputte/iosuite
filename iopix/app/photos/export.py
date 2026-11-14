@@ -32,9 +32,15 @@ def wants_change(opts: dict) -> bool:
     return bool(opts.get("size") or opts.get("fmt") == "jpeg" or opts.get("nogps"))
 
 
-def _exiftool(args: list, path: str):
-    subprocess.run([*edits.exiftool_cmd(), "-q", "-m", "-overwrite_original", "-charset", "filename=utf8", *args, path],
-                   capture_output=True, text=True, timeout=600)
+class NotRemoved(Exception):
+    """The location could not be taken out of a copy: that copy is not handed out."""
+
+
+def _exiftool(args: list, path: str) -> bool:
+    """Whether exiftool did it."""
+    res = subprocess.run([*edits.exiftool_cmd(), "-q", "-m", "-overwrite_original", "-charset", "filename=utf8", *args, path],
+                         capture_output=True, text=True, timeout=600)
+    return res.returncode == 0
 
 
 @contextlib.contextmanager
@@ -72,8 +78,8 @@ def prepare(path: str, opts: dict):
             with open(path, "rb") as src, open(out, "wb") as dst:
                 while chunk := src.read(1 << 20):
                     dst.write(chunk)
-        if opts.get("nogps"):
-            _exiftool(GPS_TAGS, out)
+        if opts.get("nogps") and not _exiftool(GPS_TAGS, out):  # asked for and not done is never "done"
+            raise NotRemoved(os.path.basename(path))
         yield out
 
 

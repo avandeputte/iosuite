@@ -242,7 +242,9 @@ class Auth:
             path = request.url.path
             if not await run_in_threadpool(db.available):  # the Shared ioSuite database is down: the shell and the open paths only, with a clear answer
                 request.state.user, request.state.via_proxy = None, False
-                if path in open_paths or (path.startswith(open_prefixes) and not path.startswith("/api/auth/")):
+                # not the MCP endpoint, open prefix or not: who may use it is the before hook's to say (mcp_gate), and that takes the accounts
+                mcp = path == MCP_PATH or path.startswith(MCP_PATH + "/")
+                if path in open_paths or (path.startswith(open_prefixes) and not path.startswith("/api/auth/") and not mcp):
                     return await call_next(request)
                 return JSONResponse({"detail": f"The Shared ioSuite database cannot be reached ({db.error}); sign-in is unavailable until it is back."}, status_code=503)
             refused = await auth.resolve(request)

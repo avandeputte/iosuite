@@ -133,7 +133,24 @@ def find_binary(*names):
 
 
 def _opt_value(v):
-    return '"' + str(v).replace("\\", "\\\\").replace('"', '\\"') + '"'
+    return '"' + str(v).replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r") + '"'
+
+
+_sql_only = {}
+
+
+def sql_only(client):
+    """The option that keeps a client from doing anything but SQL with what it is fed: --sandbox where the client
+    knows it (no \\! or other command that touches this machine), --binary-mode on an older one (no backslash
+    commands at all). A dump made today asks for the sandbox itself in its first line, but a restore reads whatever
+    file is in the backup folder: what that file says is not what decides."""
+    if client not in _sql_only:
+        try:
+            text = subprocess.run([client, "--help"], capture_output=True, text=True, timeout=30).stdout
+        except (OSError, subprocess.SubprocessError):
+            text = ""
+        _sql_only[client] = "--sandbox" if "--sandbox" in text else "--binary-mode"
+    return _sql_only[client]
 
 
 # --------------------------------------------------------------------------
@@ -199,7 +216,7 @@ class Connection:
         return rows[0][0] if rows and rows[0] else None
 
     def client_process(self, force=False):
-        cmd = self._base(self.client) + ["--default-character-set=utf8mb4", "--batch"]
+        cmd = self._base(self.client) + ["--default-character-set=utf8mb4", "--batch", sql_only(self.client)]
         if force:
             cmd.append("--force")
         return subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
@@ -217,7 +234,7 @@ class Connection:
         ]
         cmd.append("--lock-all-tables" if lock_all else "--single-transaction")
         cmd += list(extra or [])
-        cmd += ["--databases"] + list(databases)
+        cmd += ["--databases", "--"] + list(databases)  # "--": a database named like an option is a name
         errf = tempfile.TemporaryFile()
         return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=errf), errf
 

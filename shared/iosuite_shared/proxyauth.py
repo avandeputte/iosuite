@@ -112,36 +112,44 @@ class Proxy:
         except Exception:
             pass
 
+    @staticmethod
+    def passes_on(peer: str) -> bool:
+        """Is this address believed about where its visitor is? This machine and the listed reverse proxies
+        (forwarders()): the same addresses whose X-Forwarded-For the Forwarded middleware reads, so the visitor's
+        address, the sign-in throttle and "from outside" all go by one list. Who is signed in is another matter,
+        and takes a proxy that is listed (from_trusted)."""
+        return Forwarded.allows(peer)
+
     def forwarded_for(self, headers_in) -> str:
-        """The visitor a trusted proxy passes on: the right-most address in X-Forwarded-For that is not a trusted
+        """The visitor a proxy of ours passes on: the right-most address in X-Forwarded-For that is not such a
         proxy itself. Every proxy appends the address it was reached from, so anything further left is whatever
         the visitor chose to send and is never believed. '' when there is none."""
         hops = [x.strip() for x in (headers_in.get("x-forwarded-for") or "").split(",") if x.strip()]
         for hop in reversed(hops):
-            if not self.from_trusted(hop):
+            if not self.passes_on(hop):
                 return hop
         return ""
 
     def external(self, headers_in, peer: str = "") -> bool:
         """Did the request come in from outside? Through Cloudflare (its headers), from a public address, forwarded
-        by a trusted proxy on behalf of a public address, or forwarded by a proxy that is not in AUTH_PROXY_TRUSTED
-        (a reverse proxy on another machine of the network looks like a local visitor, so where its visitors are
-        cannot be known until its address is listed). Outside, the first account cannot be made, an install without
+        by a proxy of ours (this machine, or one listed in AUTH_PROXY_TRUSTED) on behalf of a public address, or
+        forwarded by a proxy on another machine that is not listed (it looks like a local visitor, so where its
+        visitors are cannot be known until its address is listed). Outside, the first account cannot be made, an install without
         accounts answers nothing but its sign-in screen, and one-click sign-in to a passwordless account is not
         offered. A forged header can only take those away from the one who forges it, never grant anything."""
         if any(headers_in.get(h) for h in EXTERNAL_HEADERS) or headers_in.get(OUTSIDE_HEADER):
             return True
         if peer and _public(peer):
             return True
-        if peer and self.from_trusted(peer):
+        if peer and self.passes_on(peer):
             fwd = self.forwarded_for(headers_in)
             return bool(fwd) and _public(fwd)
         return any(headers_in.get(h) for h in FORWARDING_HEADERS)
 
     def visitor_of(self, request) -> str:
-        """The address the sign-in throttle counts by: the visitor's own, as a trusted proxy reports it, else the connection's."""
+        """The address the sign-in throttle counts by: the visitor's own, as a proxy of ours reports it, else the connection's."""
         peer = peer_of(request)
-        if peer and self.from_trusted(peer):
+        if peer and self.passes_on(peer):
             h = request.headers
             fwd = h.get("cf-connecting-ip") or self.forwarded_for(h)
             if fwd:

@@ -182,7 +182,6 @@ def test_trash_keeps_a_compat_sidecar_of_a_name_with_two_dots(client, lib):
     shutil.move(path, new)
     side = os.path.splitext(new)[0] + ".xmp"
     Path(side).write_text("<x:xmpmeta xmlns:x='adobe:ns:meta/'/>\n")
-    import sqlite3
     con = sqlite3.connect(lib["db"]); con.execute("UPDATE Images SET name = ? WHERE id = ?", (os.path.basename(new), pid)); con.commit(); con.close()
     index.build()
     r = client.post("/api/photos/trash", json={"ids": [pid]})
@@ -197,3 +196,14 @@ def test_trash_keeps_a_compat_sidecar_of_a_name_with_two_dots(client, lib):
     assert r.status_code == 200 and r.json()["restored"] == [pid], r.text
     assert os.path.exists(new) and os.path.exists(side), "the photo and its sidecar are back"
     assert not list((root / ".dtrash" / "files").iterdir()), "nothing left behind in the trash"
+
+
+def test_emptying_the_trash_drops_only_rows_that_are_in_the_trash():
+    """A trash record names its photo by number, and SQLite gives a freed number to the next photo: the row of a
+    photo that is not in the trash stays, whatever an old record says."""
+    from app.photos import organize
+    con = sqlite3.connect(":memory:")
+    con.execute("CREATE TABLE Images (id INTEGER PRIMARY KEY, status INTEGER)")
+    con.executemany("INSERT INTO Images VALUES (?, ?)", [(1, organize.VISIBLE), (2, organize.TRASHED), (3, organize.TRASHED), (4, 2)])
+    assert organize._in_trash(con, [1, 2, 3, 4, 99, 2]) == [2, 3]
+    assert organize._in_trash(con, []) == []

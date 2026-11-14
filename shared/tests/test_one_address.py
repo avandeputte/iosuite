@@ -5,7 +5,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from iosuite_shared import admin, proxyauth, suite, users
+from iosuite_shared import admin, db, proxyauth, suite, users
 from iosuite_shared.errors import Invalid
 from iosuite_shared.fastapi import Auth
 
@@ -91,3 +91,23 @@ def test_the_start_page_says_when_a_request_came_from_outside():
     assert not p.external({}, "127.0.0.1")
     assert p.external({proxyauth.OUTSIDE_HEADER: "1"}, "127.0.0.1")  # passed on by the start page for a visitor outside
     assert p.external({proxyauth.OUTSIDE_HEADER: "1"}, "192.168.1.50")  # from anyone: it can only take away
+
+
+def test_behind_the_start_page_an_app_still_knows_where_its_visitor_is():
+    """A reverse proxy on another machine is listed, this machine is not: what the start page passes on from this
+    machine is still read for the visitor's address, as the Forwarded middleware reads it."""
+    db.set_setting("auth_proxy_trusted", "10.0.0.5", "")
+    db.settings_cache.clear()
+    p = proxyauth.Proxy("iocalendar")
+    door = {"x-forwarded-proto": "https", "x-forwarded-host": "home.example.com", "x-forwarded-prefix": "/calendar"}
+    assert not p.external({**door, "x-forwarded-for": "192.168.1.20, 10.0.0.5"}, "127.0.0.1"), "a visitor on the network"
+    assert p.external({**door, "x-forwarded-for": "8.8.8.8, 10.0.0.5"}, "127.0.0.1"), "a visitor outside"
+    assert not p.external({**door, "x-forwarded-for": "192.168.1.20"}, "127.0.0.1"), "straight to the start page"
+    assert p.external({**door, "x-forwarded-for": "192.168.1.20"}, "192.168.1.9"), "a proxy nobody listed is still not believed"
+
+    class R:
+        scope = {"iothing.peer": "127.0.0.1"}
+        client = None
+        headers = {"x-forwarded-for": "1.2.3.4, 8.8.8.8, 10.0.0.5"}
+    assert p.visitor_of(R) == "8.8.8.8 via 127.0.0.1", "the sign-in throttle counts by the visitor, not by this machine"
+    assert not p.from_trusted("127.0.0.1"), "who is signed in is still only a listed proxy's word"
