@@ -2,7 +2,6 @@
   "DELETE /api/auth/app-passwords/{pid}": "signed_in",
   "DELETE /api/auth/push/devices/{device_id}": "signed_in",
   "DELETE /api/auth/sessions/{session_id}": "signed_in",
-  "DELETE /api/auth/suite/{key}": "suite_admin",
   "DELETE /api/people/groups/{group_id}": "editor",
   "GET /": "public",
   "GET /api/analysis": "public",
