@@ -15,7 +15,8 @@ Where an app is (`url` in what `apps()` answers), in this order:
 Each app also says where it is inside the network (`internal_url`, `internalUrl` in what `apps()` answers): plain
 http(s)://LAN-address:port, which works without the public domain, a reverse proxy or Cloudflare. The app's INTERNAL_URL
 names it; failing that, `local_url()` makes it from the host's LAN address and the app's PORT (not inside a Docker
-container, whose own address the network cannot reach: there INTERNAL_URL has to say it). Nothing links people to it
+container, whose own address the network cannot reach: there INTERNAL_URL has to say it; and with HOST=127.0.0.1,
+behind a reverse proxy on the same server, the loopback address, which only the apps on that server can use). Nothing links people to it
 (`url` stays PUBLIC_URL or the address the app is reached at); only the apps' own server-to-server calls use it
 (iosuite_shared.links: localhost when it is on the same machine, then it, then PUBLIC_URL; never the address the app
 was merely reached at, since those calls carry credentials).
@@ -90,8 +91,10 @@ def in_container() -> bool:
 
 def local_url(app: str = None, port: int = None, host: str = None, https: bool = None) -> str | None:
     """Where the app is inside the network: INTERNAL_URL when set, else http(s)://<address>:<PORT>, the address being
-    HOST when it names one, else the host's LAN address. None when there is none to give: the server listens on
-    loopback only (behind a reverse proxy on the same host), or runs in a container without INTERNAL_URL. https when
+    HOST when it names one (of several, the first the network reaches), else the host's LAN address. With HOST on loopback (HOST=127.0.0.1, localhost or ::1:
+    everything through a reverse proxy on the same server) it is the loopback address itself: the apps on the same
+    server go on calling it directly (iosuite_shared.links), and the ones elsewhere find nobody at their own
+    loopback and go on to PUBLIC_URL. None when there is none to give: a container without INTERNAL_URL. https when
     the app serves TLS itself (TLS_CERT_FILE and TLS_KEY_FILE)."""
     from iosuite_shared.config import env
     named = env("INTERNAL_URL")
@@ -104,16 +107,27 @@ def local_url(app: str = None, port: int = None, host: str = None, https: bool =
             return None
     if not port:
         return None
-    host = (env("HOST", "0.0.0.0") if host is None else host).strip("[]")
-    if host.lower() == "localhost":
-        return None
+    from iosuite_shared import serve
+    named = [h.strip("[]") for h in serve.hosts(env("HOST") if host is None else host)]
+
+    def kind(h):  # 0: every address, 1: one the network reaches, 2: loopback
+        if h.lower() == "localhost":
+            return 2
+        try:
+            ip = ipaddress.ip_address(h)
+        except ValueError:
+            return 1
+        return 0 if ip.is_unspecified else 2 if ip.is_loopback else 1
+    host = min(named, key=kind)  # of several (HOST=127.0.0.1,192.168.1.151), the one the other machines can use too
     try:
         ip = ipaddress.ip_address(host)
     except ValueError:  # a name: as it is
         ip = None
-    if ip is not None and ip.is_loopback:
-        return None
-    if ip is not None and ip.is_unspecified:
+    if host.lower() == "localhost" or (ip is not None and ip.is_loopback):
+        if in_container():
+            return None
+        host = "::1" if ip is not None and ip.version == 6 else "127.0.0.1"
+    elif ip is not None and ip.is_unspecified:
         if in_container():
             return None
         host = _lan_ip()

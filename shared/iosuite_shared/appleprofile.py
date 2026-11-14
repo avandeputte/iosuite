@@ -80,7 +80,7 @@ def asks(secret) -> str:
 # ---- the suite profile
 def _address(a: dict) -> str | None:
     for u in (a.get("url"), a.get("internalUrl")):
-        if u and urlsplit(u).scheme in ("http", "https") and urlsplit(u).hostname:
+        if u and urlsplit(u).scheme in ("http", "https") and urlsplit(u).hostname not in (None, "127.0.0.1", "::1"):  # a device cannot use the server's loopback
             return u.rstrip("/")
     return None
 

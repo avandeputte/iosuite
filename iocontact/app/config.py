@@ -2,7 +2,7 @@
 lives in MariaDB. The settings every app of the suite shares come from iosuite_shared.config.standard."""
 from pathlib import Path
 
-from iosuite_shared import config as shared
+from iosuite_shared import config as shared, serve
 
 APP = "iocontact"
 APP_DIR = Path(__file__).resolve().parent.parent
@@ -18,9 +18,9 @@ globals().update(shared.standard(APP, APP_DIR))
 _db = shared.own_db("contacts")
 DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD = _db["host"], _db["port"], _db["database"], _db["user"], _db["password"]
 
-# LDAP directory (read-only): port 0 turns it off
+# LDAP directory (read-only): port 0 turns it off; it listens where the web app does unless told otherwise
 LDAP_PORT = env_int("LDAP_PORT", 3890)
-LDAP_HOST = env("LDAP_HOST", "0.0.0.0")
+LDAP_HOST = [h.strip("[]") for h in serve.hosts(env("LDAP_HOST", env("HOST")))]
 LDAP_BASE = env("LDAP_BASE", "dc=iocontact")
 
 # ioPix is found in the suite's list of apps and signed in to by itself (app/iopix.py): nothing to set
