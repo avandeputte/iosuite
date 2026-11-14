@@ -181,6 +181,20 @@ SCHEMA = [
         INDEX idx_ios_push_sent_at (sent_at),
         FOREIGN KEY (user_id) REFERENCES ios_users(id) ON DELETE CASCADE
     )""",
+    # linked items (iosuite_shared.related): two items of the suite, each a kind (event, task, note, contact, recipe,
+    # photo) and its id in its app; one row for both ways, the smaller end first
+    """CREATE TABLE IF NOT EXISTS ios_related (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        a_kind VARCHAR(16) NOT NULL,
+        a_id VARCHAR(64) NOT NULL,
+        b_kind VARCHAR(16) NOT NULL,
+        b_id VARCHAR(64) NOT NULL,
+        created_by INT NULL,
+        created_at BIGINT NOT NULL,
+        UNIQUE KEY uq_ios_related (a_kind, a_id, b_kind, b_id),
+        INDEX idx_ios_related_b (b_kind, b_id),
+        FOREIGN KEY (created_by) REFERENCES ios_users(id) ON DELETE SET NULL
+    )""",
 ]
 
 _overrides: dict = {}  # the tests point the library at another database

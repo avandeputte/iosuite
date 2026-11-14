@@ -113,6 +113,7 @@ app.include_router(auth.users_router())  # /api/users: accounts and their role h
 app.include_router(auth.profile_router(api.base_url))  # /profile/<token>/<file> and the profile for all the apps that sync
 app.include_router(api.router)      # the contacts; also an account's own fields (its "me" contact, the face on its tile)
 app.include_router(auth.admin_router())  # /api/suite-admin (+ ui.js, the panel of Settings › Security and Global settings): the whole suite (suite admins)
+app.include_router(auth.related_router())  # /api/related (+ ui.js, the "Linked" panel): items linked across the apps
 app.include_router(carddav.router)
 shared_mcp.mount(app, mcp.server)  # MCP over streamable HTTP at /mcp, ahead of everything else
 
