@@ -19,11 +19,11 @@ export async function showConsistency() {
   const item = (r) => {
     const cb = h('input', { type: 'checkbox', checked: selected.has(r.id), onchange: (e) => { e.target.checked ? selected.add(r.id) : selected.delete(r.id); bar(); } });
     if (field === 'nosidecar') return h('div', { class: 'crec slim' + (selected.has(r.id) ? ' sel' : '') },
-      h('div', { class: 'chead' }, S.EDITING ? cb : null, h('img', { src: `/thumb/${r.id}`, loading: 'lazy', alt: '', onclick: () => openLightbox({ id: [r.id] }, 0, true) }),
+      h('div', { class: 'chead' }, S.EDITING ? cb : null, h('img', { src: `thumb/${r.id}`, loading: 'lazy', alt: '', onclick: () => openLightbox({ id: [r.id] }, 0, true) }),
         h('div', { style: 'flex:1;min-width:0' }, h('b', null, r.name), h('div', { class: 'muted smaller' }, r.path.replace(/^.*\/photos\//, ''))),
         S.EDITING ? h('button', { class: 'pillbtn', style: 'height:30px', onclick: () => makeSidecars([r.id]) }, 'Create sidecar') : null));
     return h('div', { class: 'crec' + (selected.has(r.id) ? ' sel' : '') },
-      h('div', { class: 'chead' }, S.EDITING ? cb : null, h('img', { src: `/thumb/${r.id}`, loading: 'lazy', alt: '', onclick: () => openLightbox({ id: [r.id] }, 0, true) }),
+      h('div', { class: 'chead' }, S.EDITING ? cb : null, h('img', { src: `thumb/${r.id}`, loading: 'lazy', alt: '', onclick: () => openLightbox({ id: [r.id] }, 0, true) }),
         h('div', null, h('b', null, r.name), h('div', { class: 'muted smaller' }, r.path.replace(/^.*\/photos\//, ''), !r.has_sidecar ? ' · no sidecar' : '', !r.file_xmp ? (r.file_editable ? ' · no metadata in the file' : ' · file type cannot hold metadata') : ''))),
       h('table', { class: 'ctable' }, h('tr', null, h('th'), ...['db', 'sidecar', 'file'].map((s) => h('th', null, SRC_LABEL[s]))),
         ...r.mismatch.map((f) => h('tr', null, h('td', null, FIELD_LABEL[f] || f), ...['db', 'sidecar', 'file'].map((s) => h('td', null, fmtv(f, r.fields[f][s], s === 'file' && !r.file_xmp && !r.file_editable)))))),
@@ -36,7 +36,7 @@ export async function showConsistency() {
     toast(`Creating ${plural(ids.length, 'sidecar')}…`, null, null, 60000);
     let done = 0, skipped = [];
     for (let i = 0; i < ids.length; i += 200) {
-      try { const r = await post('/api/consistency/sync', { ids: ids.slice(i, i + 200), source: 'db', targets: ['sidecar'], fields: Object.keys(FIELD_LABEL) }); done += r.synced; skipped = skipped.concat(r.skipped); }
+      try { const r = await post('api/consistency/sync', { ids: ids.slice(i, i + 200), source: 'db', targets: ['sidecar'], fields: Object.keys(FIELD_LABEL) }); done += r.synced; skipped = skipped.concat(r.skipped); }
       catch (e) { toastError(e); break; }
     }
     toast(`Created ${plural(done, 'sidecar')}${skipped.length ? `; ${nf.format(skipped.length)} skipped (${skipped[0].reason})` : ''}.`, null, null, 9000);
@@ -46,7 +46,7 @@ export async function showConsistency() {
   const fixOne = async (r, src) => {
     const targets = ['db', 'sidecar', 'file'].filter((t) => t !== src && (t !== 'file' || r.file_editable));
     if (!await confirmDialog(`Copy ${r.mismatch.map((f) => (FIELD_LABEL[f] || f).toLowerCase()).join(', ')} from the ${SRC_LABEL[src].toLowerCase()} to the ${targets.map((t) => SRC_LABEL[t].toLowerCase()).join(' and ')} for ${r.name}?` + (targets.includes('db') ? '\n\nThis writes into digiKam’s database.' : ''))) return;
-    try { const res = await post('/api/consistency/sync', { ids: [r.id], source: src, targets, fields: r.mismatch }); toast(res.synced ? `Fixed ${r.name}.` : `Not fixed: ${res.skipped[0]?.reason || 'nothing to copy'}`, null, null, TOAST_LONG); } catch (e) { toastError(e); return; }
+    try { const res = await post('api/consistency/sync', { ids: [r.id], source: src, targets, fields: r.mismatch }); toast(res.synced ? `Fixed ${r.name}.` : `Not fixed: ${res.skipped[0]?.reason || 'nothing to copy'}`, null, null, TOAST_LONG); } catch (e) { toastError(e); return; }
     load();
   };
   // the bulk bar: fixed at the bottom of the page, wraps on narrow screens. One click per source ("take the values
@@ -60,7 +60,7 @@ export async function showConsistency() {
       (targets.includes('db') ? '\n\nThis writes into digiKam’s database.' : '') + (targets.includes('file') ? `\n\nImage files are rewritten in place (metadata only; pixels untouched); the original of each is kept in ${S.APP_NAME}’s file-backups folder. Files that cannot hold metadata are skipped.` : '') + '\n\nSidecars are backed up before they change.')) return;
     fill(syncBar, h('span', { class: 'n' }, `Syncing ${nf.format(n)} photos…`));
     try {
-      const r = await post('/api/consistency/sync', { ids: [...selected], source: src, targets, fields });
+      const r = await post('api/consistency/sync', { ids: [...selected], source: src, targets, fields });
       toast(`Synced ${nf.format(r.synced)} ${r.synced === 1 ? 'photo' : 'photos'}${r.skipped.length ? `; ${nf.format(r.skipped.length)} skipped (${r.skipped[0].reason})` : ''}.`, null, null, 9000);
     } catch (e) { toastError(e); bar(); return; }
     selected.clear(); bar(); load();
@@ -93,7 +93,7 @@ export async function showConsistency() {
   };
   const load = async (append) => {
     if (!append) offset = 0;
-    try { d = await api(`/api/consistency?field=${field}&offset=${offset}&limit=60`); } catch (e) { list.replaceChildren(errorBox(e)); return; }
+    try { d = await api(`api/consistency?field=${field}&offset=${offset}&limit=60`); } catch (e) { list.replaceChildren(errorBox(e)); return; }
     if (S.route.view !== 'consistency' || !list.isConnected) return;
     const s = d.summary, p = d.progress;
     const tile = (hue, ic, n, label, f) => h(f == null ? 'div' : 'a', { class: 'stat' + (f != null && f === field ? ' on' : '') + (f != null ? ' click' : ''), style: `--hue:var(--c-${hue})`,
@@ -114,7 +114,7 @@ export async function showConsistency() {
         h('span', { class: 'muted' }, nf.format(d.total)),
         h('span', { class: 'sp' }),
         S.EDITING && d.total ? h('button', { type: 'button', class: 'lnk', style: 'font-size:13px;font-weight:400', onclick: async () => {  // every photo listed (on this filter), not only the ones shown
-          try { const all = await api(`/api/consistency?field=${field}&offset=0&limit=5000`); all.items.forEach((r) => selected.add(r.id)); } catch (e) { toastError(e); return; }
+          try { const all = await api(`api/consistency?field=${field}&offset=0&limit=5000`); all.items.forEach((r) => selected.add(r.id)); } catch (e) { toastError(e); return; }
           bar(); load();
         } }, `Select all ${nf.format(d.total)}`) : null) : null,
       field === 'nosidecar' && d.total ? h('p', { class: 'muted mt0' }, `These photos keep their metadata only in digiKam’s database (and the file, when it can hold it). A sidecar is not required, but digiKam and other programs read it, and ${S.APP_NAME} writes edits there. Creating one copies the rating, title, caption and tags from digiKam’s database.`) : null,
@@ -134,7 +134,7 @@ export async function showConsistency() {
     const q = subset ? filterParams() : new URLSearchParams();
     q.set('rescan_all', rescanAll ? '1' : '0');
     try {
-      const r = await send('/api/consistency/scan', q);
+      const r = await send('api/consistency/scan', q);
       toast(`Checking ${nf.format(r.queued)} photos in the background.`);
     } catch (e) { toast('Could not start the check: ' + e.message, null, null, TOAST_LONG); return; }
     wasRunning = true;
@@ -153,7 +153,7 @@ export async function showConsistency() {
 
 export async function placeTagsDialog(ids) {
   let p;
-  try { p = await api('/api/placetags' + (ids ? '?ids=' + ids.join(',') : '')); } catch (e) { toastError(e); return; }
+  try { p = await api('api/placetags' + (ids ? '?ids=' + ids.join(',') : '')); } catch (e) { toastError(e); return; }
   const body = h('div');
   const draw = () => fill(body,
     h('p', null, `${nf.format(p.to_tag)} of ${nf.format(p.photos)} geotagged photos would get a place tag they do not have yet.`),
@@ -167,8 +167,8 @@ export async function placeTagsDialog(ids) {
     h('p', { class: 'muted small' }, 'Town names come from the offline place lookup and can be a neighboring town. Tags are assigned through the normal edit path, so they reach digiKam’s database with “Apply edits to digiKam database”.'),
     { buttons: ['Close',
       h('button', { class: 'pillbtn on', disabled: !p.to_tag || p.progress.running || !!(p.missing_tags.length && p.digikamRunning), onclick: async () => {
-        try { const r = await post('/api/placetags', { ids: ids || [] }); toast(`Tagging ${nf.format(r.to_tag)} photos${r.creating ? `, creating ${r.creating} tags` : ''} in the background.`); } catch (e) { toastError(e); return; }
-        const poll = async () => { try { p = await api('/api/placetags' + (ids ? '?ids=' + ids.join(',') : '')); } catch { return; } draw(); if (p.progress.running && back.isConnected) setTimeout(poll, 3000); else if (back.isConnected) { indexMeta(await api('/api/meta')); } };
+        try { const r = await post('api/placetags', { ids: ids || [] }); toast(`Tagging ${nf.format(r.to_tag)} photos${r.creating ? `, creating ${r.creating} tags` : ''} in the background.`); } catch (e) { toastError(e); return; }
+        const poll = async () => { try { p = await api('api/placetags' + (ids ? '?ids=' + ids.join(',') : '')); } catch { return; } draw(); if (p.progress.running && back.isConnected) setTimeout(poll, 3000); else if (back.isConnected) { indexMeta(await api('api/meta')); } };
         setTimeout(poll, 1500);
       } }, icon('place'), 'Create and assign')] });
 }
@@ -183,7 +183,7 @@ async function facesBatch(ops, msg) {
   toast(`${msg}: ${plural(ops.length, 'face')}.`, null, null, 4000);
   const named = [...new Set(ops.filter((o) => ['name', 'add', 'confirm'].includes(o.op)).map((o) => o.image))];
   if (named.length) setBadges(named, { faces: true });
-  post('/api/faces/batch', { ops }).then(async (r) => {
+  post('api/faces/batch', { ops }).then(async (r) => {
     if (r.failed.length) {
       r.failed.forEach((f) => { const o = ops.find((x) => x.image === f.image); if (o) DECIDED.delete(faceKey(o)); });
       toast(`${r.failed.length} of those could not be changed (${r.failed[0].error}).`, null, null, 9000);
@@ -210,7 +210,7 @@ export async function showFaces(vp) {
   main.replaceChildren(page);
   page.append(crumbs([['People', '#/people'], ['Faces', null]]), pageTitle('face', 'amber', 'Faces'), tabs, body);
   let d;
-  try { d = await api(`/api/faces/queue?kind=${tab}&limit=500`); } catch (e) { body.replaceChildren(errorBox(e)); return; }
+  try { d = await api(`api/faces/queue?kind=${tab}&limit=500`); } catch (e) { body.replaceChildren(errorBox(e)); return; }
   if (S.route.view !== 'faces') return;
   if (DECIDED.size) {  // decided here a moment ago, not in the index yet: not shown again
     const before = d.faces.length;
@@ -218,7 +218,7 @@ export async function showFaces(vp) {
     d.total = Math.max(0, (d.total || 0) - (before - d.faces.length));
     if (d.groups) d.groups = d.groups.map(([tag, name, count]) => [tag, name, d.faces.filter((f) => f.tag === tag).length]).filter((g) => g[2] > 0);
   }
-  const crop = (f) => h('img', { class: 'fcrop', src: `/facecrop/${f.photo}/${f.x}/${f.y}/${f.w}/${f.h}.jpg`, alt: '', loading: 'lazy', title: `${f.file} · ${dfDay.format(date(f.ts))} · click to open the photo`, onclick: () => openLightbox({ id: [f.photo] }, 0, true) });
+  const crop = (f) => h('img', { class: 'fcrop', src: `facecrop/${f.photo}/${f.x}/${f.y}/${f.w}/${f.h}.jpg`, alt: '', loading: 'lazy', title: `${f.file} · ${dfDay.format(date(f.ts))} · click to open the photo`, onclick: () => openLightbox({ id: [f.photo] }, 0, true) });
   const op = (f, o, extra) => ({ op: o, image: f.photo, rect: [f.x, f.y, f.w, f.h], ...extra });
   const refresh = () => showFaces(vp);
   if (!d.faces.length) { body.append(h('div', { class: 'empty' }, tab === 'suggested' ? 'No suggestions waiting. digiKam makes suggestions when you run face recognition there.' : tab === 'unknown' ? 'No unnamed faces.' : 'No ignored faces.')); return; }
@@ -248,7 +248,7 @@ export async function showFaces(vp) {
   // unnamed faces: look-alikes grouped (SFace embeddings), each group named or ignored in one go; the viewer never proposes a name
   if (tab === 'unknown' && store.get(PREF.faceGroups, '1') !== '0') {
     let g = null;
-    try { g = await api('/api/faces/groups?kind=unknown'); } catch { g = null; }
+    try { g = await api('api/faces/groups?kind=unknown'); } catch { g = null; }
     if (g && DECIDED.size) {  // decided here a moment ago: gone from the groups too
       const keep = (f) => !DECIDED.has(faceKey(f));
       g.groups = g.groups.map((grp) => ({ ...grp, faces: grp.faces.filter(keep) })).map((grp) => ({ ...grp, n: grp.faces.length })).filter((grp) => grp.faces.length);
@@ -314,7 +314,7 @@ export async function showFaces(vp) {
 export async function showDuplicates() {
   main.replaceChildren(h('div', { class: 'empty' }, 'Looking for duplicates…'));
   let d;
-  try { d = await api('/api/duplicates'); } catch { if (S.route.view === 'duplicates') main.replaceChildren(h('div', { class: 'empty' }, 'Could not load duplicates.')); return; }
+  try { d = await api('api/duplicates'); } catch { if (S.route.view === 'duplicates') main.replaceChildren(h('div', { class: 'empty' }, 'Could not load duplicates.')); return; }
   if (S.route.view !== 'duplicates') return;
   const src = { id: d.groups.flatMap((g) => g.items.map((x) => x.id)) };
   let k = 0;
@@ -323,7 +323,7 @@ export async function showDuplicates() {
       : 'No byte-identical files found. digiKam’s file hashes say every item is unique.'),
     d.groups.map((g) => h('div', { class: 'dupgroup' }, h('div', { class: 'muted' }, `${g.items.length} copies · ${fmtBytes(g.size)} each`),
       h('div', { class: 'duprow' }, g.items.map((x) => { const i = k++; return h('div', { class: 'dupitem' },
-        h('div', { class: 'tile', 'data-id': x.id, style: `width:${Math.round(150 * Math.min(2, x.w / (x.h || 1)))}px;height:150px`, onclick: () => openLightbox(src, i, true) }, h('img', { src: `/thumb/${x.id}`, loading: 'lazy', alt: '' })),
+        h('div', { class: 'tile', 'data-id': x.id, style: `width:${Math.round(150 * Math.min(2, x.w / (x.h || 1)))}px;height:150px`, onclick: () => openLightbox(src, i, true) }, h('img', { src: `thumb/${x.id}`, loading: 'lazy', alt: '' })),
         h('div', { class: 'nm', title: x.name }, x.name), h('a', { class: 'sb lnk', href: hashFor('photos', photosWith({ album: albumIdByPath(x.album), sort: 'old' })) }, x.album.replace(/^\//, ''))); })))),
     nearDupsSection(src)));
   badgeTiles(main);
@@ -335,11 +335,11 @@ function nearDupsSection(src) {
   let timer = 0;
   const later = (ms) => { clearTimeout(timer); timer = setTimeout(() => { if (S.route.view === 'duplicates' && sec.isConnected) draw(); }, ms); };
   const draw = async () => {
-    let d; try { d = await api('/api/neardups'); } catch (e) { fill(sec, errorBox(e)); return; }
+    let d; try { d = await api('api/neardups'); } catch (e) { fill(sec, errorBox(e)); return; }
     if (S.route.view !== 'duplicates' || !sec.isConnected) return;
     const p = d.progress;
     const level = h('select', null, Object.keys(d.levels).map((k) => h('option', { value: k, selected: k === d.level }, `${k} (${d.levels[k]})`)));
-    const run = S.IS_ADMIN ? h('button', { class: 'pillbtn on', disabled: p.running || !d.enabled, onclick: async () => { try { await post('/api/neardups', { level: level.value }); toast('Looking for similar photos in the background.'); } catch (e) { toastError(e, TOAST_LONG); } later(1500); } }, icon('spark'), d.gen ? 'Find again' : 'Find similar photos') : null;
+    const run = S.IS_ADMIN ? h('button', { class: 'pillbtn on', disabled: p.running || !d.enabled, onclick: async () => { try { await post('api/neardups', { level: level.value }); toast('Looking for similar photos in the background.'); } catch (e) { toastError(e, TOAST_LONG); } later(1500); } }, icon('spark'), d.gen ? 'Find again' : 'Find similar photos') : null;
     const note = !d.enabled ? 'Needs content search (SigLIP 2 or CLIP) installed: the similarity comes from its embeddings.'
       : p.running ? `Comparing… ${nf.format(p.done)} / ${nf.format(p.total)} photos.`
       : p.error ? `Last run failed: ${p.error}`
@@ -350,7 +350,7 @@ function nearDupsSection(src) {
       h('div', { class: 'toolbar my10',}, S.IS_ADMIN ? h('span', null, 'Strictness: ', level) : null, run, h('span', { class: 'muted' }, note)),
       d.groups.map((g) => h('div', { class: 'dupgroup' }, h('div', { class: 'muted' }, `${g.n} similar · ${Math.round(g.score * 100)}% alike${g.identical ? ' · also byte-identical' : ''}`),
         h('div', { class: 'duprow' }, g.items.map((x) => { const i = src.id.push(x.id) - 1; return h('div', { class: 'dupitem' },
-          h('div', { class: 'tile', 'data-id': x.id, style: `width:${Math.round(150 * Math.min(2, x.w / (x.h || 1)))}px;height:150px`, onclick: () => openLightbox(src, i, true) }, h('img', { src: `/thumb/${x.id}`, loading: 'lazy', alt: '' })),
+          h('div', { class: 'tile', 'data-id': x.id, style: `width:${Math.round(150 * Math.min(2, x.w / (x.h || 1)))}px;height:150px`, onclick: () => openLightbox(src, i, true) }, h('img', { src: `thumb/${x.id}`, loading: 'lazy', alt: '' })),
           h('div', { class: 'nm', title: x.name }, x.name), h('div', { class: 'sb' }, `${fmtBytes(x.size || 0)}${x.sharpn != null ? ' · sharpness ' + Math.round(x.sharpn * 100) + '%' : ''}`),
           h('a', { class: 'sb lnk', href: hashFor('photos', photosWith({ album: albumIdByPath(x.album), sort: 'old' })) }, x.album.replace(/^\//, ''))); })))));
     badgeTiles(sec);
@@ -363,7 +363,7 @@ const albumIdByPath = (path) => S.META.albums.find((a) => a.path === path)?.id ?
 
 export async function tagOp(op, t) {
   let r;
-  try { r = await post('/api/tags/op', op); } catch (e) { toastError(e); return; }
+  try { r = await post('api/tags/op', op); } catch (e) { toastError(e); return; }
   toast(op.op === 'icon' ? `“${r.path}” now uses this photo.` : op.op === 'notperson' ? `“${r.path}” is a keyword tag again, no longer listed under People.` : op.op === 'person' ? `“${r.path}” is a person now.` : op.op === 'merge' ? `Merged “${r.path}” into “${r.new_path}” (${nf.format(r.photos)} photos).` : op.op === 'add' ? `Created “${r.path}”.` : `${{ rename: 'Renamed', move: 'Moved', delete: 'Deleted' }[op.op]} “${r.path}”${r.new_path ? ` → “${r.new_path}”` : ''}.` +
     (r.sidecars ? ` Updating ${nf.format(r.photos)} photos’ sidecars in the background.` : ''), null, null, TOAST_LONG);
   await awaitReindex();
@@ -427,7 +427,7 @@ export function showTags() {
     box.hidden = true;
     if (!flat && kids.length && openTags.has(t.id)) expand(true);
     const cover = t.face ? h('img', { class: 'rnd', src: faceUrl(t.face), loading: 'lazy', alt: '' })
-      : t.cover ? h('img', { src: `/thumb/${t.cover}`, loading: 'lazy', alt: '' }) : h('span', { class: 'ph' }, icon('tag'));
+      : t.cover ? h('img', { src: `thumb/${t.cover}`, loading: 'lazy', alt: '' }) : h('span', { class: 'ph' }, icon('tag'));
     const special = t.full === 'People' || isFaceBucket(t);
     const can = S.manageTags && !special;
     const isPerson = t.person || t.full.startsWith('People/');

@@ -54,3 +54,7 @@ def test_an_approximate_date_without_digikam(run):
 def test_trash_and_restore_without_digikam(run):
     assert run["trash"] == [200, True]
     assert run["restore"] == [200, True, True]
+
+
+def test_served_in_a_folder_of_an_address(run):
+    assert run["folder"] == "ok"  # the whole suite on one address: the page, its files and the API under /suite-app/

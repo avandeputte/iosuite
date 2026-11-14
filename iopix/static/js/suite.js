@@ -16,7 +16,7 @@ export async function loadSuite() {
   let list = [];
   if (who != null) {
     try {
-      const r = await api('/api/auth/suite');
+      const r = await api('api/auth/suite');
       list = (r.items || []).filter((a) => a.url); suiteSelf = r.app;  // in the suite's one order, this app too
       if (!list.some((a) => a.app !== r.app)) list = [];  // only this app: no menu
     } catch { list = []; }  // a convenience: no menu rather than an error

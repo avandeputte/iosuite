@@ -17,7 +17,7 @@ const SOURCES = { clipboard: 'Copied', service: 'Saved with right-click', screen
 export async function openNote(id) {
   await flush();
   if (!id) { note = null; renderEmpty(); return; }
-  try { note = await api(`/api/notes/${id}`); } catch (e) { note = null; renderEmpty(e.status === 404 ? 'That note is gone.' : e.message); return; }
+  try { note = await api(`api/notes/${id}`); } catch (e) { note = null; renderEmpty(e.status === 404 ? 'That note is gone.' : e.message); return; }
   pending = {};
   mode = prefMode() === 'preview' && note.body.trim() ? 'preview' : 'edit';
   render();
@@ -37,7 +37,7 @@ export async function flush(keepalive = false) {
   const body = { ...pending, updatedAt: Date.now() / 1000 };
   pending = {};
   status('Saving…');
-  saving = api(`/api/notes/${note.id}`, { method: 'PUT', body, keepalive }).then((n) => {
+  saving = api(`api/notes/${note.id}`, { method: 'PUT', body, keepalive }).then((n) => {
     const image = note.image;
     note = { ...n, image, body: pending.body !== undefined ? pending.body : n.body };
     updateCard(note);
@@ -105,7 +105,7 @@ function picture() {
     const file = h('input', { type: 'file', accept: 'image/*', hidden: true, onchange: (e) => e.target.files[0] && uploadPicture(note.id, e.target.files[0]) });
     return h('div.picture', file, h('button.pillbtn', { onclick: () => file.click() }, icon('upload'), 'Add a picture'));
   }
-  const src = `/api/notes/${note.id}/image?v=${(note.imageSHA || '').slice(0, 8)}`;
+  const src = `api/notes/${note.id}/image?v=${(note.imageSHA || '').slice(0, 8)}`;
   const img = h('img', { src, alt: displayTitle(note), onclick: () => { const z = h('div.zoom', { onclick: () => z.remove() }, h('img', { src })); document.body.append(z); } });
   const info = note.image ? `${note.image.width}×${note.image.height} · ${Math.round(note.image.bytes / 1024)} KB` : '';
   return h('div.picture', img, h('div.acts',
@@ -113,14 +113,14 @@ function picture() {
     h('button.pillbtn', { onclick: copyPicture }, icon('copy'), 'Copy picture'),
     canWrite() && !note.deleted ? h('button.pillbtn', { onclick: async () => {
       if (!await confirmIt('Remove picture', 'Remove the picture from this note? The text read from it stays.', 'Remove', true)) return;
-      try { note = { ...(await api(`/api/notes/${note.id}/image`, { method: 'DELETE' })), image: null }; render(); updateCard(note); } catch (e) { fail(e); }
+      try { note = { ...(await api(`api/notes/${note.id}/image`, { method: 'DELETE' })), image: null }; render(); updateCard(note); } catch (e) { fail(e); }
     } }, icon('trash'), 'Remove') : null,
     h('span.muted.small', info)));
 }
 
 async function copyPicture() {
   try {
-    const blob = await (await fetch(`/api/notes/${note.id}/image`)).blob();
+    const blob = await (await fetch(`api/notes/${note.id}/image`)).blob();
     const png = blob.type === 'image/png' ? blob : await toPng(blob);
     await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
     toast('Picture copied');
@@ -138,7 +138,7 @@ export async function uploadPicture(id, file) {
   fd.append('file', file, file.name || 'picture.png');
   toast('Uploading the picture…', 10000);
   try {
-    const n = await api(`/api/notes/${id}/image`, { method: 'POST', body: fd });
+    const n = await api(`api/notes/${id}/image`, { method: 'POST', body: fd });
     toast(n.ocrQueued ? 'Picture saved; its text is being read' : 'Picture saved');
     if (note && note.id === id) { await openNote(id); }
     refresh();
@@ -156,7 +156,7 @@ function files() {
   if (!list.length && !w) return null;
   const input = h('input', { type: 'file', multiple: true, hidden: true, onchange: (e) => { attachFiles(note.id, [...e.target.files]); e.target.value = ''; } });
   const items = list.map((a) => {
-    const url = `/api/notes/${note.id}/attachments/${a.id}`;
+    const url = `api/notes/${note.id}/attachments/${a.id}`;
     const isImg = a.mime.startsWith('image/') && a.width;
     const thumb = isImg ? h('img', { src: `${url}/thumb?v=${(a.sha || '').slice(0, 8)}`, alt: '', loading: 'lazy' }) : h('span.fic', icon(a.mime === 'application/pdf' ? 'pdf' : 'file'));
     return h('div.file', h('a.fopen', { href: url, target: '_blank', rel: 'noopener', title: 'Open ' + a.name }, thumb,
@@ -178,7 +178,7 @@ export async function attachFiles(id, list) {
     const fd = new FormData();
     fd.append('file', f, f.name || 'file');
     toast(list.length > 1 ? `Attaching ${i + 1} of ${list.length}…` : `Attaching ${f.name}…`, 10000);
-    try { last = await api(`/api/notes/${id}/attachments`, { method: 'POST', body: fd }); } catch (e) { fail(e); return; }
+    try { last = await api(`api/notes/${id}/attachments`, { method: 'POST', body: fd }); } catch (e) { fail(e); return; }
   }
   toast(list.length > 1 ? `${list.length} files attached` : 'File attached');
   if (note && note.id === id && last) { note = { ...last, image: note.image }; render(); updateCard(note); }
@@ -188,7 +188,7 @@ export async function attachFiles(id, list) {
 // ---- related notes and suggestions
 async function related(box, id) {
   let r;
-  try { r = await api(`/api/notes/${id}/related`); } catch (e) { return; }
+  try { r = await api(`api/notes/${id}/related`); } catch (e) { return; }
   if (!note || note.id !== id || !box.isConnected) return;
   box.textContent = '';
   const w = canWrite() && !note.deleted;
@@ -202,7 +202,7 @@ async function related(box, id) {
   if (sugg.length) box.append(h('div.suggest', h('span.muted.small', 'Suggested'), sugg));
   if (r.notes.length) {
     box.append(h('h4.relh', 'Related notes'), h('div.rel', r.notes.slice(0, 5).map((n) => h('a.relitem', { href: '#', onclick: (e) => { e.preventDefault(); go({ n: n.id }); } },
-      n.hasImage ? h('img', { src: `/api/notes/${n.id}/thumb?v=${(n.imageSHA || '').slice(0, 8)}`, alt: '', loading: 'lazy' }) : h('span.fic', icon('notes')),
+      n.hasImage ? h('img', { src: `api/notes/${n.id}/thumb?v=${(n.imageSHA || '').slice(0, 8)}`, alt: '', loading: 'lazy' }) : h('span.fic', icon('notes')),
       h('span.t', displayTitle(n)), h('span.muted.small', fmtDate(n.updatedAt))))));
   }
 }
@@ -215,7 +215,7 @@ async function copyNote() {
 function moreMenu(btn) {
   menu(btn, [
     { icon: 'copy', label: 'Copy text', action: copyNote },
-    { icon: 'copy', label: 'Copy link', action: async () => { await navigator.clipboard.writeText(location.origin + '/#/note/' + note.id); toast('Link copied'); } },
+    { icon: 'copy', label: 'Copy link', action: async () => { await navigator.clipboard.writeText(new URL('#/note/' + note.id, document.baseURI).href); toast('Link copied'); } },
     note.hasImage ? { icon: 'copy', label: 'Copy picture', action: copyPicture } : null,
     canWrite() && !note.deleted ? '-' : null,
     canWrite() && !note.deleted ? { icon: 'attach', label: 'Attach files…', action: () => { const i = $('.files input[type=file]'); if (i) i.click(); } } : null,
@@ -231,7 +231,7 @@ async function saveAsTemplate() {
   if (!name) return;
   try {
     await flush();
-    await api('/api/templates', { method: 'POST', body: { name, title: note.title, body: note.body, tags: note.tags, folderID: note.folderID } });
+    await api('api/templates', { method: 'POST', body: { name, title: note.title, body: note.body, tags: note.tags, folderID: note.folderID } });
     toast('Template saved: New note ▾ offers it');
     refresh();
   } catch (e) { fail(e); }
@@ -240,7 +240,7 @@ async function saveAsTemplate() {
 async function deleteNote() {
   try {
     await flush();
-    await api(`/api/notes/${note.id}`, { method: 'DELETE' });
+    await api(`api/notes/${note.id}`, { method: 'DELETE' });
     toast('Moved to the trash');
     go({ n: null });
     refresh();
@@ -258,10 +258,10 @@ function render() {
     h('button#backbtn.iconbtn', { title: 'Back to the list', 'aria-label': 'Back', onclick: () => go({ n: null }) }, icon('back')),
     note.deleted ? null : folderSelect(), note.deleted ? null : pin,
     h('span.sp'), h('span.status'),
-    note.deleted && canWrite() ? h('button.pillbtn.primary', { onclick: async () => { await api(`/api/notes/${note.id}/restore`, { method: 'POST' }).catch(fail); toast('Restored'); go({ v: 'all', n: note.id }); refresh(); } }, icon('restore'), 'Restore') : null,
+    note.deleted && canWrite() ? h('button.pillbtn.primary', { onclick: async () => { await api(`api/notes/${note.id}/restore`, { method: 'POST' }).catch(fail); toast('Restored'); go({ v: 'all', n: note.id }); refresh(); } }, icon('restore'), 'Restore') : null,
     note.deleted && canWrite() ? h('button.pillbtn.danger', { onclick: async () => {
       if (!await confirmIt('Delete for good', 'Delete this note for good, with its files? This cannot be undone.', 'Delete for good', true)) return;
-      try { await api(`/api/trash/${note.id}`, { method: 'DELETE' }); toast('Deleted for good'); go({ n: null }); refresh(); } catch (e) { fail(e); }
+      try { await api(`api/trash/${note.id}`, { method: 'DELETE' }); toast('Deleted for good'); go({ n: null }); refresh(); } catch (e) { fail(e); }
     } }, 'Delete for good') : null,
     h('button.iconbtn', { title: 'Copy (⌘C with nothing selected)', 'aria-label': 'Copy', onclick: copyNote }, icon('copy')),
     canWrite() && !note.deleted ? h('button.iconbtn', { title: 'Delete', 'aria-label': 'Delete', onclick: deleteNote }, icon('trash')) : null,

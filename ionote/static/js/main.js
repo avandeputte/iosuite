@@ -76,7 +76,7 @@ async function newNote(extra = {}, fromTemplate = false) {
     if (view.v === 'folder' && !(fromTemplate && extra.folderID)) body.folderID = view.f;
     if (view.v === 'tag') body.tags = [...new Set([...(extra.tags || []), view.t])];
     if (view.v === 'pinned') body.pinned = true;
-    const n = await api('/api/notes', { method: 'POST', body });
+    const n = await api('api/notes', { method: 'POST', body });
     await refresh();
     const page = location.hash.replace(/^#/, '').split(/[?/]/)[1] || 'notes';
     go({ n: n.id, v: view.v === 'trash' || view.v === 'images' || !['notes', 'note'].includes(page) ? 'all' : view.v, q: '' });
@@ -155,7 +155,7 @@ function wire() {
   setInterval(async () => {
     if (document.hidden) return;
     try {
-      const s = await api('/api/status');
+      const s = await api('api/status');
       setStatus(`ionote ${s.version || ''}`.trim());
       if (!$('#list')) return;
       if (rev !== null && s.rev !== undefined && s.rev !== rev && !document.activeElement.closest('.editor')) { lastList = ''; await loadMeta(); renderNav(); await loadList(); markSelected(); }
@@ -168,7 +168,7 @@ async function start() {
   paintIcons();
   initSidebar();
   state.onSignedOut = () => { if (state.me && state.me.user) location.reload(); };
-  try { state.settings = await api('/api/settings'); } catch (e) { state.settings = {}; }
+  try { state.settings = await api('api/settings'); } catch (e) { state.settings = {}; }
   await loadMe();
   renderUserMenu();
   // notes are private to each account: once accounts exist, nothing shows until someone signs in
@@ -178,7 +178,7 @@ async function start() {
   await loadMeta();
   loadSuite();
   wire();
-  api('/api/status').then((s) => { state.version = s.version; setStatus(`ioNote ${s.version}`); }).catch(() => {});
+  api('api/status').then((s) => { state.version = s.version; setStatus(`ioNote ${s.version}`); }).catch(() => {});
   if (!location.hash) history.replaceState(null, '', '#/notes');
   await route();
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});

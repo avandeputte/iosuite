@@ -54,3 +54,7 @@ def test_no_settings_file_beside_config_env():
     """The database connection lives in config.env (DB_*), not in a file of its own under data/."""
     for f in ("app/data/appdb.py", "setup.sh", "README.md", "static/js/settings.js", "app/main.py", "proxmox/ct/iopix.sh"):
         assert "viewer-db.json" not in (ROOT / f).read_text(), f
+
+
+def test_served_in_a_folder_of_an_address(client):
+    testing.check_folder(client)  # https://home.example.com/suite-app/, the whole suite on one address

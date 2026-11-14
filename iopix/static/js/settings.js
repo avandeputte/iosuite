@@ -16,11 +16,11 @@ import { placeTagsDialog } from './admin.js';
 function aiSection(view) {
   const body = h('div');
   let timer = 0;
-  const checkBtn = h('button', { class: 'pillbtn', onclick: async () => { checkBtn.disabled = true; checkBtn.textContent = 'Checking…'; await act(() => post('/api/models/check', {})); draw(); } }, icon('spark'), 'Check models for updates');
+  const checkBtn = h('button', { class: 'pillbtn', onclick: async () => { checkBtn.disabled = true; checkBtn.textContent = 'Checking…'; await act(() => post('api/models/check', {})); draw(); } }, icon('spark'), 'Check models for updates');
   const wrap = h('div', { class: 'sbox' }, h('h2', null, 'AI analysis and models'),
     h('div', { class: 'muted', style: 'max-width:860px' }, `Everything runs here; nothing is written to digiKam. New photos are picked up automatically. The default model is the small, fast one; models never update on their own.`),
     h('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;margin:14px 0' },
-      h('button', { class: 'pillbtn on', onclick: async () => { await act(() => post('/api/analysis/run', { job: 'all' }), { toast: 'Checking for new and changed photos…' }); draw(); } }, icon('spark'), 'Check new and changed photos'), checkBtn),
+      h('button', { class: 'pillbtn on', onclick: async () => { await act(() => post('api/analysis/run', { job: 'all' }), { toast: 'Checking for new and changed photos…' }); draw(); } }, icon('spark'), 'Check new and changed photos'), checkBtn),
     body);
   const fmtDate = (t) => (t ? dfDayLocal.format(new Date(t * 1000)) : '');  // when the model was installed: a real moment, in this browser's zone
   // a job's models: fixed ones (vision: RapidOCR; photo quality: the aesthetic and eye models; ages: MiVOLO) or the one
@@ -39,7 +39,7 @@ function aiSection(view) {
   };
   const draw = async () => {
     let a, md;
-    try { [a, md] = await Promise.all([api('/api/analysis'), api('/api/models')]); } catch { return; }
+    try { [a, md] = await Promise.all([api('api/analysis'), api('api/models')]); } catch { return; }
     if (S.route.view !== view || !body.isConnected) return;  // the page was drawn again meanwhile: this copy of the section is gone
     const q = a.queue || {}, p = md.progress || {};
     if (p.finished && !p.running && p.error) toast(`Download of ${p.finished} failed: ${p.error}`, null, null, 9000);
@@ -55,7 +55,7 @@ function aiSection(view) {
         if (!m.installed) {
           e.target.value = c.chosen;
           if (!await confirmDialog(`${m.label} is not installed. Download it (${m.size})? ${S.APP_NAME} keeps working meanwhile; choose it here again once it has arrived.`)) return;
-          await act(() => post('/api/models/download', { key }), { toast: `Downloading ${m.label}…` });
+          await act(() => post('api/models/download', { key }), { toast: `Downloading ${m.label}…` });
           draw(); return;
         }
         const note = group === 'search_model' ? ' The library is indexed again with it in the background; search stays on the current model until that finishes.'
@@ -63,7 +63,7 @@ function aiSection(view) {
           : group === 'face_detector' ? ' Used by the next face detection run.'
           : ' New photos use it from now on; “Run again” redoes the whole library with it.';
         
-        try { await post('/api/settings', { [group]: key }); toast(`${c.label}: now ${m.label}.${note}`, null, null, 9000); } catch (err) { e.target.value = c.chosen; toastError(err); }
+        try { await post('api/settings', { [group]: key }); toast(`${c.label}: now ${m.label}.${note}`, null, null, 9000); } catch (err) { e.target.value = c.chosen; toastError(err); }
         draw();
       } }, c.options.map((k) => h('option', { value: k, selected: k === c.chosen }, models[k] ? models[k].label + (models[k].installed ? '' : ' (not installed)') : k)));
       return sel;
@@ -99,7 +99,7 @@ function aiSection(view) {
       return h('button', { class: 'pillbtn small' + (!m.installed || upd ? ' on' : ''), disabled: !!p.running, title: m.installed ? `Download ${m.label} again (${m.size})` : `Download ${m.label} (${m.size})`,
         onclick: async () => {
           if (!await confirmDialog(`Download ${m.label} (${m.size})${m.installed ? ' again, replacing the installed files' : ''}? ${S.APP_NAME} keeps working meanwhile.` + (m.kind === 'pip' ? `\n\nA package update takes effect after a restart of ${S.APP_NAME}.` : ''))) return;
-          await act(() => post('/api/models/download', { key: m.key }), { toast: `Downloading ${m.label}…` });
+          await act(() => post('api/models/download', { key: m.key }), { toast: `Downloading ${m.label}…` });
           draw();
         } }, m.installed ? 'Update' : 'Download');
     };
@@ -116,7 +116,7 @@ function aiSection(view) {
           j.current && j.current.length ? ` · ${j.current.map((x) => x.split('/').pop()).join(', ')}` : '', stuck ? ` · probably stuck on that file: see the server log, or restart ${S.APP_NAME}` : '') : null,
         paused ? h('div', { class: 'warn mheld' }, `Stopped twice, ${fmtWhen(j.held.at)}: ${j.held.reason}. What it had finished is kept. `,
           h('button', { type: 'button', class: 'lnk', title: `Run “${j.label}” again for the photos it has not done yet`, onclick: async () => {
-            await act(() => post('/api/analysis/run', { job: j.key }), { toast: `Trying “${j.label}” again.` });
+            await act(() => post('api/analysis/run', { job: j.key }), { toast: `Trying “${j.label}” again.` });
             draw();
           } }, 'Try again')) : null,
         extra);
@@ -136,12 +136,12 @@ function aiSection(view) {
     // face detection writes to digiKam's database, so it never starts by itself: a Run link for the photos not looked at yet
     const runNow = (j) => j && j.key === 'facedetect' && j.enabled && !j.running && j.done < j.total ? h('button', { type: 'button', class: 'lnk mrerun', style: 'margin-right:12px', title: 'Look for faces in every photo not looked at yet', onclick: async () => {
       if (!await confirmDialog(`Look for faces in the ${nf.format(j.total - j.done)} photos not checked yet? New faces are added to digiKam’s database as unnamed faces; faces already marked are kept as they are.`)) return;
-      try { const r = await post('/api/analysis/run', { job: 'facedetect' }); toast(`Looking for faces in ${nf.format(r.queued)} photos.`); } catch (e) { toastError(e); }
+      try { const r = await post('api/analysis/run', { job: 'facedetect' }); toast(`Looking for faces in ${nf.format(r.queued)} photos.`); } catch (e) { toastError(e); }
       draw();
     } }, 'Run') : null;
     const rerun = (j) => j && j.rerun && j.enabled ? h('button', { type: 'button', class: 'lnk mrerun', title: `Discard the results of “${j.label}” and compute them again for every photo`, onclick: async () => {
       if (!await confirmDialog(`Run “${j.label}” again from scratch for all ${nf.format(j.total)} photos? The current results for it are discarded first. This can take from several minutes to a few hours.`)) return;
-      await act(() => post('/api/analysis/run', { job: j.key, reset: true }), { toast: `Re-running “${j.label}”.` });
+      await act(() => post('api/analysis/run', { job: j.key, reset: true }), { toast: `Re-running “${j.label}”.` });
       draw();
     } }, 'Run again') : null;
     const row = (label, detail, j, m, group) => h('tr', { 'data-job': j?.key || '', 'data-model': m.filter(Boolean).map((x) => x.key).join(' ') },
@@ -163,7 +163,7 @@ function aiSection(view) {
     fill(body,
       h('div', { class: 'muted', style: 'font-size:13px;margin-bottom:8px' }, h('b', { style: 'color:var(--fg)' }, 'Background work: '), q.running ? `running ${(a.jobs.find((j) => (j.key === 'quality' && q.running === 'pixels') || j.key === q.running) || {}).label || q.running}` : 'idle',
         `. Jobs run one at a time, in the order below, so ${S.APP_NAME} and other apps stay responsive; each may use up to `,
-        h('select', { onchange: async (e) => { await act(() => post('/api/settings', { bg_threads: +e.target.value }), { toast: 'Applies when the next job starts.' }); } },
+        h('select', { onchange: async (e) => { await act(() => post('api/settings', { bg_threads: +e.target.value }), { toast: 'Applies when the next job starts.' }); } },
           Array.from({ length: Math.max(1, (q.cores || 4) - 1) }, (_, i) => h('option', { value: i + 1, selected: i + 1 === q.threads }, String(i + 1)))),
         ` of ${q.cores || '?'} cores.`, q.queued?.length ? ` Waiting: ${q.queued.length}.` : ''),
       memoryLine(q.memory),
@@ -189,12 +189,12 @@ function scannerRow(c) {
   const last = sc.last;
   const said = last ? `Last pass ${fmtWhen(last.finished)}: ${[last.added && plural(last.added, 'new file'), last.modified && plural(last.modified, 'changed file'), last.removed && plural(last.removed, 'file') + ' gone', last.folders && plural(last.folders, 'new folder')].filter(Boolean).join(', ') || 'nothing new'}.${last.skipped?.length ? ' ' + last.skipped.join(' ') : ''}${last.error ? ' Error: ' + last.error : ''}` : 'No pass yet.';
   const on = switchField('file_scanner', !!sc.enabled, { on: 'File scanner on: a first pass starts now.', off: 'File scanner off.', cls: 'chk' });
-  const every = h('select', { class: 'sharepick', onchange: async (e) => { await act(() => post('/api/settings', { scan_interval: +e.target.value }), { toast: 'Saved' }); } },
+  const every = h('select', { class: 'sharepick', onchange: async (e) => { await act(() => post('api/settings', { scan_interval: +e.target.value }), { toast: 'Saved' }); } },
     [[5, 'every 5 minutes'], [15, 'every 15 minutes'], [60, 'every hour'], [360, 'every 6 hours'], [1440, 'once a day']].map(([v, l]) => h('option', { value: v, selected: v === sc.interval }, l)));
   return row('File scanner',
     h('span', null, `Finds photos added, changed or removed outside ${S.APP_NAME}. ${S.NO_DK ? 'Without digiKam, this is how copied photos get in.' : 'Not needed if everything comes in through Upload or Import.'} `, h('span', { class: 'muted' }, sc.running ? 'Scanning now…' : said)),
     h('span', { class: 'toolbar' }, on, every,
-      btn('Scan now', async () => { try { await post('/api/scan', {}); toast('Scanning the album folders…'); setTimeout(again, 4000); } catch (e) { toastError(e); } })));
+      btn('Scan now', async () => { try { await post('api/scan', {}); toast('Scanning the album folders…'); setTimeout(again, 4000); } catch (e) { toastError(e); } })));
 }
 const OPEN_COMPARE = new Set();  // model groups whose "Compare the models" fold is open on the AI tab
 // Settings is split into tabs, in the order every io app uses: each stab() marks where one begins; what comes before
@@ -249,7 +249,7 @@ function settingsContext(m, view) {
   const when = (t) => (t ? fmtWhen(t) : 'never');
   const maint = async (action, msg, confirmText) => {
     if (confirmText && !await confirmDialog(confirmText)) return;
-    await act(() => post('/api/tools', { action }), { toast: msg });
+    await act(() => post('api/tools', { action }), { toast: msg });
     setTimeout(again, 1500);
   };
   const row = (label, detail, btn) => h('div', { class: 'srow' }, h('div', null, h('b', null, label), h('div', { class: 'muted note' }, detail)), btn);
@@ -257,9 +257,9 @@ function settingsContext(m, view) {
   /** A checkbox that saves one on/off setting the moment it is clicked, says what it did, and springs back if the save failed. */
   const switchField = (key, checked, { label = 'On', on, off, disabled = false, after, cls } = {}) => h('label', { class: cls, style: cls ? null : 'display:flex;gap:8px;align-items:center;cursor:pointer;white-space:nowrap' },
     h('input', { type: 'checkbox', checked, disabled, onchange: async (e) => {
-      try { await post('/api/settings', { [key]: e.target.checked }); toast(e.target.checked ? on : off); if (after) after(); } catch (err) { e.target.checked = !e.target.checked; toastError(err); } } }), label);
+      try { await post('api/settings', { [key]: e.target.checked }); toast(e.target.checked ? on : off); if (after) after(); } catch (err) { e.target.checked = !e.target.checked; toastError(err); } } }), label);
   /** A setting saved the moment it changes, with a "Saved" toast; the page is drawn again when `redraw`. */
-  const save = async (body, redraw) => { try { await post('/api/settings', body); toast('Saved'); } catch (e) { toastError(e); } if (redraw) again(); };
+  const save = async (body, redraw) => { try { await post('api/settings', body); toast('Saved'); } catch (e) { toastError(e); } if (redraw) again(); };
   return { m, view, again, when, maint, row, btn, switchField, save };
 }
 /** Settings › Account: iosuite-shared's panels (the account, then its app passwords), the same in every io app, plus who you are in People. */
@@ -276,7 +276,7 @@ function accountTab() {
     const who = S.USER.person && S.tagById.get(S.USER.person);
     el.append(ui.box('person', 'You in People',
       h('div', { class: 'toolbar' }, avatarOf(S.USER, true), h('span', null, who ? who.name : 'Not linked to a person yet.'),
-        S.IS_ADMIN ? h('button', { class: 'pillbtn', onclick: () => personPicker(async (t) => { try { S.USER = await post('/api/auth/person', { person: t.id }); renderUserMenu(); toast('Saved'); settingsPage('settings'); } catch (e) { toastError(e); } }) }, who ? 'Change' : 'Link to a person') : null,
+        S.IS_ADMIN ? h('button', { class: 'pillbtn', onclick: () => personPicker(async (t) => { try { S.USER = await post('api/auth/person', { person: t.id }); renderUserMenu(); toast('Saved'); settingsPage('settings'); } catch (e) { toastError(e); } }) }, who ? 'Change' : 'Link to a person') : null,
         who ? h('a', { class: 'lnk', href: hashFor('photos', photosWith({ tag: S.USER.person })) }, 'Photos of me') : null)));
     const pw = h('div'); el.append(pw);
     await ui.mountAppPasswords(pw, { toast });
@@ -335,7 +335,7 @@ function libraryTab(c) {
       const show = () => { sq.hidden = type.value !== 'sqlite'; my.hidden = type.value !== 'mysql'; backup.hidden = test.hidden = type.value === 'none'; }; type.onchange = show;
       const payload = () => ({ type: type.value, sqlite_dir: f.sqlite_dir.value, host: f.host.value, port: f.port.value, database: f.database.value, user: f.user.value, password: f.password.value, backup: backup.value });
       const result = h('div', { class: 'muted', style: 'font-size:12.5px;margin-top:6px' });
-      const test = btn('Test connection', async () => { fill(result, 'Testing…'); try { const r = await post('/api/db/test', payload()); fill(result, `OK: ${nf.format(r.images)} photos, ${nf.format(r.tags)} tags, DBVersion ${r.dbVersion}, album root ${r.roots.join(', ')}`); } catch (e) { fill(result, e.message); } });
+      const test = btn('Test connection', async () => { fill(result, 'Testing…'); try { const r = await post('api/db/test', payload()); fill(result, `OK: ${nf.format(r.images)} photos, ${nf.format(r.tags)} tags, DBVersion ${r.dbVersion}, album root ${r.roots.join(', ')}`); } catch (e) { fill(result, e.message); } });
       show();
       return row('digiKam database', d.type === 'none'
         ? `None: ${S.APP_NAME} keeps the library itself and the file scanner finds the photos. To start using digiKam later, let it read the folder first, then choose its database here.`
@@ -343,13 +343,13 @@ function libraryTab(c) {
         h('div', null, h('div', { class: 'toolbar tight' }, type, backup), sq, my,
           h('div', { style: 'display:flex;gap:6px;margin-top:8px' },
             test,
-            btn('Save and switch', async () => { if (!await confirmDialog(type.value === 'none' ? `Stop using digiKam’s database? ${S.APP_NAME} keeps working from its own copy of the library.` : `Switch ${S.APP_NAME} to this digiKam database now?`)) return; try { await post('/api/settings', { database: payload() }); toast('Database settings saved; the index is rebuilding.'); } catch (e) { toastError(e); return; } setTimeout(again, 2500); }, true)),
+            btn('Save and switch', async () => { if (!await confirmDialog(type.value === 'none' ? `Stop using digiKam’s database? ${S.APP_NAME} keeps working from its own copy of the library.` : `Switch ${S.APP_NAME} to this digiKam database now?`)) return; try { await post('api/settings', { database: payload() }); toast('Database settings saved; the index is rebuilding.'); } catch (e) { toastError(e); return; } setTimeout(again, 2500); }, true)),
           result));
     })(),
     (() => {
       const body = h('div', { class: 'muted small' }, 'Loading…');
       const draw = async () => {
-        let d; try { d = await api('/api/roots'); } catch (e) { fill(body, e.message); return; }
+        let d; try { d = await api('api/roots'); } catch (e) { fill(body, e.message); return; }
         const inputs = new Map();
         fill(body, h('div', { class: 'stack' }, d.roots.map((r) => {
           const inp = h('input', { class: 'einput', placeholder: r.localPath, value: r.overridden ? r.localPath : '', style: 'width:340px', onkeydown: (e) => e.stopPropagation() });
@@ -359,7 +359,7 @@ function libraryTab(c) {
               h('span', { class: 'muted smaller' }, r.exists ? `found: ${r.localPath} (${r.sample >= 2000 ? '2,000+' : nf.format(r.sample)} files)` : `not found: ${r.localPath}`)));
         }), h('div', { style: 'display:flex;gap:6px' },
           btn('Check', draw),
-          btn('Save', async () => { const m = {}; inputs.forEach((inp, k) => { m[k] = inp.value.trim(); }); try { await post('/api/settings', { album_roots: m }); toast('Album roots saved; the index is rebuilding.'); } catch (e) { toastError(e); return; } setTimeout(draw, 2500); }, true))));
+          btn('Save', async () => { const m = {}; inputs.forEach((inp, k) => { m[k] = inp.value.trim(); }); try { await post('api/settings', { album_roots: m }); toast('Album roots saved; the index is rebuilding.'); } catch (e) { toastError(e); return; } setTimeout(draw, 2500); }, true))));
       };
       draw();
       return row('Album roots', 'Where each digiKam album root is on this machine. Empty: the default. Changing it rebuilds the index.', body);
@@ -370,12 +370,12 @@ function libraryTab(c) {
       if (d.none) return null;  // no digiKam at all: nothing to sync with
       if (d.conflict) {
         const planEl = h('div', { class: 'muted note mt6' }, 'Working out what changed…');
-        api('/api/library/merge').then((p) => fill(planEl, p.total ? 'To merge: ' + p.summary.join(', ') + '.' : 'Nothing to merge.')).catch((e) => fill(planEl, e.message));
+        api('api/library/merge').then((p) => fill(planEl, p.total ? 'To merge: ' + p.summary.join(', ') + '.' : 'Nothing to merge.')).catch((e) => fill(planEl, e.message));
         const wrap = row('Sync with digiKam', `On, but ${plural(d.localChanges, 'change')} made while it was off ${d.localChanges === 1 ? 'is' : 'are'} not in digiKam yet. Merge writes them into digiKam after a backup; Replace drops them and copies digiKam’s library again.`,
           h('span', { style: 'display:flex;gap:6px;flex-wrap:wrap' },
-            btn('Merge into digiKam', async () => { if (!await confirmDialog('Write the changes made while sync was off into digiKam’s database? digiKam must be closed; its database is backed up first.')) return; try { const r = await post('/api/library/merge', {}); toast(`Merged: ${Object.entries(r.applied).map(([k, v]) => `${v} ${k.replace('_', ' ')}`).join(', ') || 'nothing to do'}${r.conflicts ? `; ${r.conflicts} rows digiKam had also changed (the viewer’s values won)` : ''}.`, null, null, 12000); } catch (e) { toastError(e, 10000); } setTimeout(again, 2500); }, true),
-            btn('Replace with digiKam’s', async () => { if (!await confirmDialog(`Drop the ${plural(d.localChanges, 'change')} made while sync was off and copy the library from digiKam again? Edits in sidecars are kept.`)) return; await act(() => post('/api/settings', { library_replace: true }), { toast: 'Copying the library from digiKam…' }); setTimeout(again, 2500); }),
-            btn('Turn sync off', async () => { await act(() => post('/api/settings', { digikam_sync: false })); again(); })));
+            btn('Merge into digiKam', async () => { if (!await confirmDialog('Write the changes made while sync was off into digiKam’s database? digiKam must be closed; its database is backed up first.')) return; try { const r = await post('api/library/merge', {}); toast(`Merged: ${Object.entries(r.applied).map(([k, v]) => `${v} ${k.replace('_', ' ')}`).join(', ') || 'nothing to do'}${r.conflicts ? `; ${r.conflicts} rows digiKam had also changed (the viewer’s values won)` : ''}.`, null, null, 12000); } catch (e) { toastError(e, 10000); } setTimeout(again, 2500); }, true),
+            btn('Replace with digiKam’s', async () => { if (!await confirmDialog(`Drop the ${plural(d.localChanges, 'change')} made while sync was off and copy the library from digiKam again? Edits in sidecars are kept.`)) return; await act(() => post('api/settings', { library_replace: true }), { toast: 'Copying the library from digiKam…' }); setTimeout(again, 2500); }),
+            btn('Turn sync off', async () => { await act(() => post('api/settings', { digikam_sync: false })); again(); })));
         wrap.firstChild.append(planEl);
         return wrap;
       }
@@ -406,7 +406,7 @@ export async function showTools() {
   let m;
   if (!main.querySelector('.tpage')) main.replaceChildren(h('div', { class: 'page spage tpage' }, loadingBox('Loading…')));
   if (!S.IS_ADMIN) { main.replaceChildren(h('div', { class: 'empty' }, 'Tools are for admins.')); return; }
-  try { m = await api('/api/tools'); } catch (e) { if (S.route.view === 'tools') main.replaceChildren(h('div', { class: 'empty' }, 'Could not load the tools: ' + e.message)); return; }
+  try { m = await api('api/tools'); } catch (e) { if (S.route.view === 'tools') main.replaceChildren(h('div', { class: 'empty' }, 'Could not load the tools: ' + e.message)); return; }
   if (S.route.view !== 'tools') return;
   const c = settingsContext(m, 'tools');
   const { row, btn, maint, when, again } = c;
@@ -420,17 +420,17 @@ export async function showTools() {
   const page = h('div', { class: 'page spage tpage' },
     pageTitle('wrench', 'slate', 'Tools'),
     h('h2', null, 'Checks'),
-    toolRow('Metadata consistency', '/api/consistency?limit=1', (d) => d.progress.running ? `Checking… ${nf.format(d.progress.done)} / ${nf.format(d.progress.total)} photos. `
+    toolRow('Metadata consistency', 'api/consistency?limit=1', (d) => d.progress.running ? `Checking… ${nf.format(d.progress.done)} / ${nf.format(d.progress.total)} photos. `
       : !d.summary.scanned ? 'Not checked yet. ' : `${d.summary.mismatched ? plural(d.summary.mismatched, 'photo disagrees', 'photos disagree') : 'Everything agrees'}${d.summary.scanned_at ? ` (checked ${fmtWhen(d.summary.scanned_at)})` : ''}. `,
       'Rating, title, caption and tags in digiKam, the sidecars and the files.', 'consistency'),
-    toolRow('Metadata quality', '/api/quality', (q) => (q.near.extra ? `${plural(q.near.extra, 'face is', 'faces are')} stored twice. ` : '')
+    toolRow('Metadata quality', 'api/quality', (q) => (q.near.extra ? `${plural(q.near.extra, 'face is', 'faces are')} stored twice. ` : '')
       + (q.separate.count ? `${plural(q.separate.count, 'photo has', 'photos have')} the same person twice. ` : '')
       + (q.unnamed.count ? `${plural(q.unnamed.count, 'photo has', 'photos have')} faces but no names. ` : '')
       + (q.invalid.count ? `${plural(q.invalid.count, 'box is', 'boxes are')} outside the photo. ` : ''),
       'Missing locations, odd dates, duplicate faces and boxes outside the photo.', 'quality'),
-    toolRow('Duplicate files', '/api/duplicates', (d) => d.groups.length ? `${plural(d.groups.length, 'set')} of identical files, ${fmtBytes(d.wasted)} that could be freed. ` : 'No identical copies. ',
+    toolRow('Duplicate files', 'api/duplicates', (d) => d.groups.length ? `${plural(d.groups.length, 'set')} of identical files, ${fmtBytes(d.wasted)} that could be freed. ` : 'No identical copies. ',
       'From digiKam’s fingerprints; remove the extras in digiKam.', 'duplicates'),
-    toolRow('Damaged files', '/api/filecheck', (d) => d.progress.running ? `Checking… ${nf.format(d.progress.done)} / ${nf.format(d.progress.total)} files. `
+    toolRow('Damaged files', 'api/filecheck', (d) => d.progress.running ? `Checking… ${nf.format(d.progress.done)} / ${nf.format(d.progress.total)} files. `
       : !d.checked ? 'Not checked yet. ' : d.found.length ? `${plural(d.found.length, 'damaged file')} (${nf.format(d.found.filter((x) => x.fixable).length)} repairable). ` : 'Nothing damaged. ',
       'Files that stop early or cannot be decoded, with a safe repair where there is one.', 'damaged'),
     h('h2', null, 'Suggestions'),
@@ -439,7 +439,7 @@ export async function showTools() {
       ['jerseys', 'Jersey numbers', 'Players read from shirt numbers.', 'suggestion'],
       ['clothing', 'Clothing matches', 'People recognised by what they wear at the same event.', 'suggestion'],
       ['rotation', 'Wrongly rotated', 'Photos on their side or upside down.', 'photo']].map(([view, label, what, noun]) =>
-      toolRow(label, `/api/${view}?limit=1`, (d) => d.ready === false ? 'Not analysed yet. ' : `${d.total ? plural(d.total, noun) : `No ${noun}s`}. `, what, view)),
+      toolRow(label, `api/${view}?limit=1`, (d) => d.ready === false ? 'Not analysed yet. ' : `${d.total ? plural(d.total, noun) : `No ${noun}s`}. `, what, view)),
     S.EDITING ? row('Place tags', 'Places/Country/Region/Town tags from each photo’s GPS position.', h('button', { class: 'pillbtn', onclick: placeTagsDialog }, icon('place'), 'Review and run')) : null,
     h('h2', null, 'Library'),
     row('Rescan the library', `The index is rebuilt whenever digiKam saves (last saved ${when(m.digikamSaved)}, index built ${when(m.indexBuilt)}).`, btn('Rescan now', () => maint('reindex', 'Rescanning the library…'), true)),
@@ -450,14 +450,14 @@ export async function showTools() {
       const boxes = { 1: h('input', { type: 'checkbox', checked: true }), 2: h('input', { type: 'checkbox' }), 3: h('input', { type: 'checkbox' }) };
       const names = { 1: 'Rejected', 2: 'Pending', 3: 'Accepted' };
       const wrap = h('span', { class: 'toolbar' });
-      api('/api/picklabels').then((d) => {
+      api('api/picklabels').then((d) => {
         const cnt = d.counts, p = d.progress;
         fill(line, p.running ? `Clearing… sidecars ${nf.format(p.done)} / ${nf.format(p.total)}. ` : `${['Rejected', 'Pending', 'Accepted'].map((n, i) => `${n}: ${nf.format(cnt[i + 1])}`).join(', ')}. `);
         fill(wrap, [1, 2, 3].map((k) => h('label', { class: 'chk' }, boxes[k], names[k])), btn('Clear…', async () => {
           const ks = [1, 2, 3].filter((k) => boxes[k].checked), n = ks.reduce((a, k) => a + cnt[k], 0);
           if (!ks.length || !n) { toast('No photo carries the chosen labels.'); return; }
           if (!await confirmDialog(`Take the ${ks.map((k) => names[k]).join(', ')} pick label off ${plural(n, 'photo')}? digiKam’s database is backed up first, sidecars that carry the label are cleaned too (each backed up), and every photo’s change is in the edit log with undo.`, { ok: 'Clear', danger: true })) return;
-          try { const r = await post('/api/picklabels/clear', { levels: ks }); toast(`Pick label cleared from ${plural(r.cleared, 'photo')}.`); } catch (e) { toastError(e); }
+          try { const r = await post('api/picklabels/clear', { levels: ks }); toast(`Pick label cleared from ${plural(r.cleared, 'photo')}.`); } catch (e) { toastError(e); }
           again();
         }, true));
       }).catch(() => fill(line, ''));
@@ -474,7 +474,7 @@ export const serverUi = () => import(new URL('api/server/ui.js', document.baseUR
 /** A backup is made by a POST (it writes a large dump, so no link on another site may start one): a form, whose
  * answer the browser saves as a download. */
 function backupButton(which, label) {
-  return h('form', { method: 'post', action: `/api/backup/${which}`, style: 'display:contents' },
+  return h('form', { method: 'post', action: `api/backup/${which}`, style: 'display:contents' },
     h('button', { class: 'pillbtn', type: 'submit' }, icon('download'), h('span', null, label)));
 }
 
@@ -491,7 +491,7 @@ function serverTab(c) {
 async function settingsPage(view) {
   let m;
   if (!main.querySelector('.spage:not(.tpage)')) main.replaceChildren(h('div', { class: 'page spage' }, loadingBox('Loading the settings…')));
-  try { m = await api('/api/tools'); } catch (e) { if (S.route.view === view) main.replaceChildren(h('div', { class: 'empty' }, 'Could not load settings: ' + e.message)); return; }
+  try { m = await api('api/tools'); } catch (e) { if (S.route.view === view) main.replaceChildren(h('div', { class: 'empty' }, 'Could not load settings: ' + e.message)); return; }
   if (S.route.view !== view) return;
   const c = settingsContext(m, view);
   const { row, btn } = c;
@@ -518,13 +518,13 @@ export function viewerDbPanel({ setup = false } = {}) {
   const body = h('div', { class: 'muted note' }, 'Loading…');
   const btn = (label, fn, primary) => h('button', { class: 'pillbtn' + (primary ? ' on' : ''), onclick: fn }, label);
   (async () => {
-    let d; try { d = await api('/api/database'); } catch (e) { fill(body, e.message); return; }
+    let d; try { d = await api('api/database'); } catch (e) { fill(body, e.message); return; }
     if (d.locked) {  // configured but not answering, and nobody signed in: only Retry (the connection is changed in the DB_* settings of config.env)
       const result = h('div', { class: 'muted', style: 'font-size:12.5px;margin-top:6px' });
       fill(body, h('div', null, `${S.APP_NAME}’s database is configured but not answering: `, h('span', { class: 'warn' }, d.error || ''),
         h('div', { class: 'muted note mt6' }, 'Start the database server (or wait for it) and retry. To use another server, change the DB_* settings in config.env and restart.')),
         h('div', { class: 'btnrow', style: 'margin-top:8px' },
-          btn('Retry the configured database', async () => { fill(result, 'Trying…'); try { await post('/api/database/retry', {}); fill(result, 'It answers now. Restarting…'); setTimeout(() => location.reload(), 4000); } catch (e) { fill(result, e.message); } }, true)), result);
+          btn('Retry the configured database', async () => { fill(result, 'Trying…'); try { await post('api/database/retry', {}); fill(result, 'It answers now. Restarting…'); setTimeout(() => location.reload(), 4000); } catch (e) { fill(result, e.message); } }, true)), result);
       return;
     }
     const inp = (k, ph, type = 'text', w = 160) => h('input', { class: 'einput', type, placeholder: ph, value: type === 'password' ? '' : (d[k] ?? ''), autocomplete: 'off', style: `margin:0;width:${w}px`, onkeydown: (e) => e.stopPropagation() });
@@ -546,13 +546,13 @@ export function viewerDbPanel({ setup = false } = {}) {
     fill(body, h('div', null, current, d.error && d.configured ? h('span', { class: 'warn' }, ` · not answering: ${d.error}`) : null),
       fixed, fields, opts,
       h('div', { class: 'btnrow', style: 'margin-top:8px' },
-        btn('Test connection', async () => { fill(result, 'Testing…'); try { const r = await post('/api/database/test', payload()); const t = Object.entries(r.tables); fill(result, `OK: ${r.version}. ${t.length ? `${S.APP_NAME} tables already there: ` + t.map(([k, n]) => `${k} ${nf.format(n)}`).join(', ') : 'An empty database.'}`); } catch (e) { fill(result, e.message); } }),
-        d.configured && d.error ? btn('Retry the configured database', async () => { fill(result, 'Trying…'); try { await post('/api/database/retry', {}); restartThen('It answers now.'); } catch (e) { fill(result, e.message); } }) : null,
+        btn('Test connection', async () => { fill(result, 'Testing…'); try { const r = await post('api/database/test', payload()); const t = Object.entries(r.tables); fill(result, `OK: ${r.version}. ${t.length ? `${S.APP_NAME} tables already there: ` + t.map(([k, n]) => `${k} ${nf.format(n)}`).join(', ') : 'An empty database.'}`); } catch (e) { fill(result, e.message); } }),
+        d.configured && d.error ? btn('Retry the configured database', async () => { fill(result, 'Trying…'); try { await post('api/database/retry', {}); restartThen('It answers now.'); } catch (e) { fill(result, e.message); } }) : null,
         fixed ? null : btn(d.configured ? 'Switch' : 'Use this database', async () => {
           const p = payload();
           if (!await confirmDialog(`${d.configured ? 'Switch' : 'Set up'} ${S.APP_NAME} on MySQL ${p.user}@${p.host}:${p.port}/${p.database}?` + (copyLabel && copy.checked ? `\n\nEvery row is copied there first${drop.checked ? ', after dropping and recreating the tables there' : ''}.` : drop.checked ? '\n\nThe tables there are dropped and created again.' : '') + `\n\n${S.APP_NAME} restarts on the new database.`, { ok: d.configured ? 'Switch' : 'Use it' })) return;
           fill(result, 'Copying… this can take a minute on a large library.');
-          try { const r = await post('/api/database/switch', { ...p, copy: !!copyLabel && copy.checked, drop: drop.checked }); restartThen(`Set up on ${r.database}: ` + Object.entries(r.copied).map(([k, n]) => `${k} ${nf.format(n)}`).join(', ') + '.'); } catch (e) { fill(result, e.message); }
+          try { const r = await post('api/database/switch', { ...p, copy: !!copyLabel && copy.checked, drop: drop.checked }); restartThen(`Set up on ${r.database}: ` + Object.entries(r.copied).map(([k, n]) => `${k} ${nf.format(n)}`).join(', ') + '.'); } catch (e) { fill(result, e.message); }
         }, true)), result);
   })();
   return body;

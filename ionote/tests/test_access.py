@@ -86,7 +86,7 @@ def test_ionote_registers_in_the_suites_list_of_apps(client):
     client.get("/api/notes")
     row = suite.get("ionote")
     assert row["name"] == "ioNote" and row["version"] == __version__
-    assert row["description"] == "Notes" and row["color"] == "#1c5a5e" and row["icon"] == "/static/icons/mark.svg"
+    assert row["description"] == "Notes" and row["color"] == "#1c5a5e" and row["icon"] == "static/icons/mark.svg"
 
 
 def test_the_suite_icon_is_served_to_visitors_even_with_sign_in_required(client, admin):

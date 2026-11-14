@@ -156,7 +156,7 @@ export function faceOp(op, undo, said) {  // exported for test_ui.py, which call
   said = said || { name: `Named ${name}.`, confirm: 'Confirmed.', ignore: 'Face ignored.', unknown: 'Name removed; the face stays as unknown.', remove: 'Face region removed.', add: `Added ${name}.`, move: 'Region moved.', detected: 'Face put back.', suggest: 'Suggestion put back.', untag: `${name} taken off this photo.`, tagonly: `Added ${name}.` }[op.op];
   if (said) undo ? toast(said, 'Undo', undo, 7000) : toast(said);
   const prev = FACE_Q.get(id) || Promise.resolve();
-  const send = () => ops.length === 1 ? post('/api/faces/op', op) : post('/api/faces/batch', { ops }).then((r) => { if (r.failed?.length) throw new Error(r.failed[0].error); });
+  const send = () => ops.length === 1 ? post('api/faces/op', op) : post('api/faces/batch', { ops }).then((r) => { if (r.failed?.length) throw new Error(r.failed[0].error); });
   const mine = prev.then(send).then(() => true, (e) => {
     toast(`That face change did not go through: ${e.message}`, null, null, 9000);
     RECENT_FACE_OPS.set(id, (RECENT_FACE_OPS.get(id) || []).filter((x) => !recs.includes(x)));
@@ -183,7 +183,7 @@ export function personPicker(onPick, photoId) {
   const families = S.META.tags.filter((t) => !t.person && t.full.startsWith('People/') && t.full.split('/').length === 2);
   // the people of the nearby photos in the same folder, nearest in time first: most likely the same people
   let near = [], picker;
-  if (photoId) api(`/api/faces/nearby?photo=${photoId}`).then((r) => { near = r.people.map((x) => x.tag).filter((id) => S.tagById.has(id)); picker.draw(); }).catch(() => {});
+  if (photoId) api(`api/faces/nearby?photo=${photoId}`).then((r) => { near = r.people.map((x) => x.tag).filter((id) => S.tagById.has(id)); picker.draw(); }).catch(() => {});
   const rows = (f, pick) => {
     const rank = (t) => { const k = near.indexOf(t.id); return k < 0 ? 1e9 : k; };
     const hits = people.filter((t) => !f || t._n.includes(f)).sort((a, b) => (rank(a) - rank(b)) || (b.nAll - a.nAll)).slice(0, 30);
@@ -199,7 +199,7 @@ export function personPicker(onPick, photoId) {
       h('p', { class: 'muted small' }, S.NO_DK ? 'Created as a person in the library.' : 'Created in digiKam’s database as a person tag.'),
       { buttons: ['Cancel', ['Create', async () => {
         let r;
-        try { r = await post('/api/faces/person', { name, parent: +fam.value || (S.META.tags.find((t) => t.full === 'People')?.id || 0) }); } catch (e) { toastError(e); return; }
+        try { r = await post('api/faces/person', { name, parent: +fam.value || (S.META.tags.find((t) => t.full === 'People')?.id || 0) }); } catch (e) { toastError(e); return; }
         sub.remove(); picker.back.remove();
         await awaitReindex((m) => m.tags.some((t) => t.id === r.id), 50, 300);
         const t = S.tagById.get(r.id); if (t) onPick(t); else toast('Person created; it will appear shortly.');

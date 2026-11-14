@@ -75,7 +75,7 @@ async function api(path, opts = {}) {
   const o = { credentials: 'same-origin', ...opts, headers: { ...(opts.headers || {}) } };
   if (o.json !== undefined) { o.body = JSON.stringify(o.json); o.headers['Content-Type'] = 'application/json'; delete o.json; }
   const r = await fetch(path, o);
-  if (r.status === 401 && !path.startsWith('/api/auth') && path !== '/api/status') { showSignIn(); throw new Error('Sign in first'); }
+  if (r.status === 401 && !path.startsWith('api/auth') && path !== 'api/status') { showSignIn(); throw new Error('Sign in first'); }
   if (!r.ok) {
     let msg = r.statusText;
     try { const j = await r.json(); msg = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail); } catch { /* not JSON */ }
@@ -100,7 +100,7 @@ async function downloadProfile(e) {
   if (btn) btn.disabled = true;
   try {
     const all = el.scope && el.scope.value === 'suite';
-    const r = await api(all ? '/api/apple-profile/suite/link' : '/api/apple-profile/link', { method: 'POST', json: { label: el.label.value, password: el.password.value,
+    const r = await api(all ? 'api/apple-profile/suite/link' : 'api/apple-profile/link', { method: 'POST', json: { label: el.label.value, password: el.password.value,
       calendar: el.calendar ? el.calendar.value : 'none', ldap: !!(el.ldap && el.ldap.checked) } });
     location.href = r.url;
   } catch (err) {
@@ -153,7 +153,7 @@ function avatar(c, size = '') {
   // the face of the linked ioPix person is a contact's only photo
   if ((c.iopixPersonId || (c.iopix && c.iopix.personId)) && S.status.iopix) {
     const pid = c.iopixPersonId || c.iopix.personId;
-    el.append(h('img', { src: `/api/iopix/face/${pid}`, alt: '', loading: 'lazy', onerror: (e) => { e.target.remove(); el.textContent = initials(c.fn); } }));
+    el.append(h('img', { src: `api/iopix/face/${pid}`, alt: '', loading: 'lazy', onerror: (e) => { e.target.remove(); el.textContent = initials(c.fn); } }));
   } else el.textContent = initials(c.fn);
   return el;
 }
@@ -185,17 +185,17 @@ const scopeTitle = () => S.scope.kind === 'fav' ? 'Favorites' : S.scope.kind ===
   : S.scope.kind === 'tag' ? S.scope.name : 'All contacts';
 
 async function loadMeta() {
-  const [b, t] = await Promise.all([api('/api/books'), api('/api/tags')]);
+  const [b, t] = await Promise.all([api('api/books'), api('api/tags')]);
   S.books = b.items; S.tags = t.items;
-  if (!S.rel) { S.rel = await api('/api/relation-types'); S.social = (await api('/api/social-services')).items; }
+  if (!S.rel) { S.rel = await api('api/relation-types'); S.social = (await api('api/social-services')).items; }
   drawNav();
 }
 async function loadList() {
-  const r = await api('/api/contacts?' + scopeParams());
+  const r = await api('api/contacts?' + scopeParams());
   S.list = r.items; S.total = r.total;
 }
 async function allContacts() {
-  if (!S.all) S.all = (await api('/api/contacts?limit=20000')).items;
+  if (!S.all) S.all = (await api('api/contacts?limit=20000')).items;
   return S.all;
 }
 // Case- and accent-insensitive matching ("celia" finds "Célia"), like the server's search.
@@ -221,7 +221,7 @@ function drawUser() {
       h('button', { class: 'mi', onclick: () => { const n = { system: 'light', light: 'dark', dark: 'system' }[theme]; localStorage.setItem('iocontact.theme', n); applyTheme(); closeMenu(); toast(`Appearance: ${n}`); } },
         icon('theme', 's'), `Appearance: ${theme}`),
       h('a', { class: 'mi', href: '#/settings', onclick: closeMenu }, icon('settings', 's'), 'Settings'),
-      h('button', { class: 'mi', onclick: async () => { await api('/api/auth/logout', { method: 'POST' }); location.reload(); } }, icon('logout', 's'), 'Sign out'));
+      h('button', { class: 'mi', onclick: async () => { await api('api/auth/logout', { method: 'POST' }); location.reload(); } }, icon('logout', 's'), 'Sign out'));
     m.append(menu);
     setTimeout(() => document.addEventListener('click', outside), 0);
   };
@@ -231,7 +231,7 @@ function drawUser() {
    the top bar on a phone) opens a menu of them, each a link to that app. Alone, the mark stays the link to All contacts. */
 async function loadSuite() {
   try {
-    const r = await api('/api/auth/suite');
+    const r = await api('api/auth/suite');
     S.suite = (r.items || []).filter((a) => a.url); suiteSelf = r.app;  // in the suite's one order, this app too
     if (!S.suite.some((a) => a.app !== r.app)) S.suite = [];  // only this app: no menu
   } catch { S.suite = []; }
@@ -370,7 +370,7 @@ async function newBook() {
   const shared = h('input', { type: 'checkbox' });
   const body = h('div', null, name, canShared() ? h('label', { class: 'prefck', style: { marginTop: '10px' } }, shared, 'Shared with the whole family') : null);
   if (!await dialog('New address book', body, [{ label: 'Cancel', value: false }, { label: 'Create', value: true, primary: true }])) return;
-  try { const r = await api('/api/books', { method: 'POST', json: { name: name.value, shared: shared.checked } }); await loadMeta(); location.hash = `#/book/${r.book.id}`; } catch (e) { fail(e); }
+  try { const r = await api('api/books', { method: 'POST', json: { name: name.value, shared: shared.checked } }); await loadMeta(); location.hash = `#/book/${r.book.id}`; } catch (e) { fail(e); }
 }
 
 // ------------------------------------------------------------------ routing
@@ -433,7 +433,7 @@ function drawList() {
       h('button', { class: `iconbtn ${S.selecting ? 'on' : ''}`, title: 'Select', onclick: () => { S.selecting = !S.selecting; S.sel.clear(); drawList(); } }, icon('select', 's')),
       h('button', { class: 'iconbtn', title: `Sort by ${order === 'given' ? 'last name' : 'first name'}`, onclick: () => { localStorage.setItem('iocontact.order', order === 'given' ? 'family' : 'given'); onRoute(); } },
         h('span', { class: 'small', style: { fontWeight: 600 } }, order === 'given' ? 'A·first' : 'A·last')),
-      h('a', { class: 'iconbtn', title: 'Download these as vCards', href: `/api/contacts?${scopeParams()}&format=vcard` }, icon('download', 's'))));
+      h('a', { class: 'iconbtn', title: 'Download these as vCards', href: `api/contacts?${scopeParams()}&format=vcard` }, icon('download', 's'))));
   const kids = [head];
   if (S.selecting) kids.push(selBar());
   let last = null;
@@ -459,7 +459,7 @@ function selBar() {
   const act = async (action, extra = {}) => {
     if (!ids.length) return toast('Select some contacts first');
     if (action === 'delete' && !await confirmDialog('Delete contacts', `Delete ${ids.length} contact(s)? This cannot be undone.`, 'Delete', true)) return;
-    try { await api('/api/contacts/bulk', { method: 'POST', json: { ids, action, ...extra } }); S.sel.clear(); S.all = null; await loadMeta(); onRoute(); toast('Done'); } catch (e) { fail(e); }
+    try { await api('api/contacts/bulk', { method: 'POST', json: { ids, action, ...extra } }); S.sel.clear(); S.all = null; await loadMeta(); onRoute(); toast('Done'); } catch (e) { fail(e); }
   };
   return h('div', { class: 'selbar' }, h('b', null, `${ids.length} selected`),
     h('button', { class: 'pillbtn noic', onclick: () => { S.list.forEach((c) => S.sel.add(c.id)); drawList(); } }, 'All'),
@@ -474,20 +474,20 @@ function selBar() {
       const v = await dialog('Move to', sel, [{ label: 'Cancel', value: null }, { label: 'Move', value: () => sel.value, primary: true }]);
       if (v) act('move', { book: +v });
     } }, 'Move'),
-    h('a', { class: 'pillbtn noic', href: `/api/export?format=vcf&ids=${ids.join(',')}` }, 'Export'),
+    h('a', { class: 'pillbtn noic', href: `api/export?format=vcf&ids=${ids.join(',')}` }, 'Export'),
     h('button', { class: 'pillbtn noic danger', onclick: () => act('delete') }, 'Delete'));
 }
 
 // ------------------------------------------------------------------ a contact
 async function showContact(id, pane) {
-  const c = await api(`/api/contacts/${id}`);
+  const c = await api(`api/contacts/${id}`);
   S.current = c;
   const book = S.books.find((b) => b.id === c.bookId);
   const canEdit = book && book.writable;
   const back = h('button', { class: 'iconbtn back', title: 'Back', onclick: () => { location.hash = scopeHash(); } }, icon('back'));
   const sub = [c.title, c.department, c.org].filter(Boolean).join(' · ');
   const fav = h('button', { class: `iconbtn ${c.favorite ? 'on' : ''}`, title: c.favorite ? 'Remove from favorites' : 'Add to favorites', disabled: !canEdit,
-    onclick: async () => { try { await api(`/api/contacts/${id}`, { method: 'PATCH', json: { favorite: !c.favorite } }); onRoute(); } catch (e) { fail(e); } } }, icon(c.favorite ? 'star' : 'starO'));
+    onclick: async () => { try { await api(`api/contacts/${id}`, { method: 'PATCH', json: { favorite: !c.favorite } }); onRoute(); } catch (e) { fail(e); } } }, icon(c.favorite ? 'star' : 'starO'));
   const a = age(c.birthday);
   const headChips = [c.nickname ? h('span', { class: 'chip' }, `“${c.nickname}”`) : null,
     book ? h('a', { class: 'chip', href: `#/book/${book.id}` }, h('span', { class: 'dot', style: { width: '8px', height: '8px', borderRadius: '50%', background: book.color || (book.shared ? 'var(--c-purple)' : 'var(--c-teal)') } }), book.name) : null,
@@ -514,7 +514,7 @@ async function showContact(id, pane) {
       const rels = c.relations.map((x) => ({ type: x.type, relatedId: x.relatedId || null, relatedName: x.relatedId ? null : x.relatedName, label: x.label || null }));
       const payload = { ...c, relations: [...rels, { type: r.type, relatedId: r.relatedId }] };
       delete payload.hasPhoto; delete payload.etag; delete payload.impliedRelations;
-      try { await api(`/api/contacts/${id}`, { method: 'PUT', json: payload }); toast(`${r.relatedFn} saved as ${r.typeLabel.toLowerCase()}`); onRoute(); } catch (e) { fail(e); }
+      try { await api(`api/contacts/${id}`, { method: 'PUT', json: payload }); toast(`${r.relatedFn} saved as ${r.typeLabel.toLowerCase()}`); onRoute(); } catch (e) { fail(e); }
     };
     const ichip = (r) => h('span', { class: 'chip rel implied', title: `Implied: ${r.viaLabel.toLowerCase()} ${r.viaFn}` },
       h('a', { href: `#/c/${r.relatedId}` }, avatar({ id: r.relatedId, fn: r.relatedFn, hasPhoto: r.relatedHasPhoto, iopixPersonId: r.relatedIopixPersonId }, 's')),
@@ -537,29 +537,29 @@ async function showContact(id, pane) {
   }))));
   if (c.urls.length) cards.push(card('link', 'Websites', '--c-cyan', c.urls.map((u) => kv(u.label, h('a', { class: 'lnk', href: /^[a-z]+:/i.test(u.value) ? u.value : `https://${u.value}`, target: '_blank', rel: 'noopener' }, u.value)))));
   if (c.iopix) cards.push(card('image', 'ioPix', '--c-indigo', h('div', { class: 'iopixcard' },
-    h('img', { src: `/api/iopix/face/${c.iopix.personId}`, alt: '', onerror: (e) => { e.target.style.visibility = 'hidden'; } }),
+    h('img', { src: `api/iopix/face/${c.iopix.personId}`, alt: '', onerror: (e) => { e.target.style.visibility = 'hidden'; } }),
     h('div', null, h('div', null, h('b', null, c.iopix.name || `Person ${c.iopix.personId}`)),
       c.iopix.url ? h('a', { class: 'lnk', href: c.iopix.url, target: '_blank', rel: 'noopener' }, 'Photos in ioPix ', icon('open', 's')) : null,
       canEdit ? h('div', { style: { marginTop: '6px', display: 'flex', gap: '6px', flexWrap: 'wrap' } },
-        h('button', { class: 'pillbtn noic', onclick: async () => { await api(`/api/contacts/${id}`, { method: 'PATCH', json: { iopix: null } }); onRoute(); } }, 'Unlink')) : null))));
+        h('button', { class: 'pillbtn noic', onclick: async () => { await api(`api/contacts/${id}`, { method: 'PATCH', json: { iopix: null } }); onRoute(); } }, 'Unlink')) : null))));
   if (c.notes) cards.push(card('note', 'Notes', '--c-slate', h('div', { class: 'notes' }, c.notes)));
   const meCard = S.user.meContactId === c.id;
   const tools = h('div', { class: 'dtools' },
     canEdit ? h('a', { class: 'pillbtn primary', href: `#/c/${id}/edit` }, icon('edit', 's'), 'Edit') : null,
-    h('a', { class: 'pillbtn', href: `/api/contacts/${id}?format=vcard` }, icon('download', 's'), 'vCard'),
+    h('a', { class: 'pillbtn', href: `api/contacts/${id}?format=vcard` }, icon('download', 's'), 'vCard'),
     S.status.iopix && !c.iopix && canEdit ? h('button', { class: 'pillbtn', onclick: () => pickIopix(c, true) }, icon('image', 's'), 'Link to ioPix') : null,
     !canEdit ? null : h('button', { class: 'pillbtn', title: 'Look this person up (Gravatar by email, and their GitHub, Mastodon and Bluesky profiles). What is found waits for you to accept it.', onclick: async (e) => {
       e.currentTarget.disabled = true;
-      try { const r = await api(`/api/contacts/${id}/lookup`, { method: 'POST' }); toast(r.added ? `${r.added} suggestion${r.added === 1 ? '' : 's'} found` : r.errors.length ? `Nothing new (${r.errors[0]})` : 'Nothing new found'); await refreshStatus(); onRoute(); } catch (err) { fail(err); }
+      try { const r = await api(`api/contacts/${id}/lookup`, { method: 'POST' }); toast(r.added ? `${r.added} suggestion${r.added === 1 ? '' : 's'} found` : r.errors.length ? `Nothing new (${r.errors[0]})` : 'Nothing new found'); await refreshStatus(); onRoute(); } catch (err) { fail(err); }
     } }, icon('bulb', 's'), 'Look up'),
-    h('button', { class: 'pillbtn', title: 'Tell CardDAV apps that this card is you', onclick: async () => { await api('/api/me-contact', { method: 'PUT', json: { contactId: meCard ? null : c.id } }); S.user = (await api('/api/auth/me')).user; toast(meCard ? 'Not you any more' : 'This is now your own card'); onRoute(); } },
+    h('button', { class: 'pillbtn', title: 'Tell CardDAV apps that this card is you', onclick: async () => { await api('api/me-contact', { method: 'PUT', json: { contactId: meCard ? null : c.id } }); S.user = (await api('api/auth/me')).user; toast(meCard ? 'Not you any more' : 'This is now your own card'); onRoute(); } },
       icon('person', 's'), meCard ? 'This is me ✓' : 'This is me'),
     canEdit ? h('button', { class: 'pillbtn danger', onclick: async () => {
       if (!await confirmDialog('Delete contact', `Delete ${c.fn}? Apps synced over CardDAV will delete it too.`, 'Delete', true)) return;
-      try { await api(`/api/contacts/${id}`, { method: 'DELETE' }); S.all = null; await loadMeta(); location.hash = scopeHash(); } catch (e) { fail(e); }
+      try { await api(`api/contacts/${id}`, { method: 'DELETE' }); S.all = null; await loadMeta(); location.hash = scopeHash(); } catch (e) { fail(e); }
     } }, icon('delete', 's'), 'Delete') : null);
   let sugg = [];
-  try { sugg = (await api(`/api/suggestions?contact=${id}`)).items; } catch { /* none */ }
+  try { sugg = (await api(`api/suggestions?contact=${id}`)).items; } catch { /* none */ }
   if (sugg.length) cards.unshift(h('div', { class: 'card sugg', style: { '--hue': 'var(--c-amber)' } }, h('h3', null, icon('bulb'), `Suggestions (${sugg.length})`),
     h('p', { class: 'muted small' }, 'Found by a lookup or an assistant. Nothing changes until you accept.'), suggList(sugg, canEdit, () => onRoute())));
   pane.replaceChildren(h('div', { class: 'detail' },
@@ -572,7 +572,7 @@ async function showContact(id, pane) {
 
 // ------------------------------------------------------------------ the edit form
 async function showEdit(id, pane) {
-  const c = id ? await api(`/api/contacts/${id}`) : { name: {}, phones: [{ label: 'mobile', value: '' }], emails: [{ label: 'home', value: '' }], addresses: [], urls: [], social: [], dates: [], relations: [], tags: [],
+  const c = id ? await api(`api/contacts/${id}`) : { name: {}, phones: [{ label: 'mobile', value: '' }], emails: [{ label: 'home', value: '' }], addresses: [], urls: [], social: [], dates: [], relations: [], tags: [],
     bookId: ((S.scope.kind === 'book' && writableBooks().find((b) => b.id === +S.scope.id)) || writableBooks().find((b) => b.shared) || writableBooks()[0] || {}).id, kind: 'individual' };
   const f = JSON.parse(JSON.stringify(c));
   f.name = f.name || {};
@@ -646,7 +646,7 @@ async function showEdit(id, pane) {
   // ioPix
   const iopixBox = h('div');
   const drawIopixBox = () => iopixBox.replaceChildren(f.iopix && f.iopix.personId
-    ? h('div', { class: 'iopixcard' }, h('img', { src: `/api/iopix/face/${f.iopix.personId}`, alt: '' }), h('b', null, f.iopix.name), h('button', { class: 'pillbtn noic', type: 'button', onclick: () => { f.iopix = null; drawIopix(); } }, 'Unlink'))
+    ? h('div', { class: 'iopixcard' }, h('img', { src: `api/iopix/face/${f.iopix.personId}`, alt: '' }), h('b', null, f.iopix.name), h('button', { class: 'pillbtn noic', type: 'button', onclick: () => { f.iopix = null; drawIopix(); } }, 'Unlink'))
     : h('button', { class: 'pillbtn', type: 'button', onclick: async () => { const p = await pickIopix(f, false); if (p) { f.iopix = { personId: p.id, name: p.name }; drawIopix(); } } }, icon('image', 's'), 'Link to an ioPix person'));
 
   // photo: only ever the face of the linked ioPix person
@@ -669,7 +669,7 @@ async function showEdit(id, pane) {
     const payload = { ...f };
     delete payload.hasPhoto; delete payload.etag;
     try {
-      const out = id ? await api(`/api/contacts/${id}`, { method: 'PUT', json: payload }) : await api(`/api/contacts?book=${f.bookId}`, { method: 'POST', json: payload });
+      const out = id ? await api(`api/contacts/${id}`, { method: 'PUT', json: payload }) : await api(`api/contacts?book=${f.bookId}`, { method: 'POST', json: payload });
       S.all = null; await loadMeta();
       toast('Saved'); location.hash = `#/c/${out.id}`;
     } catch (err) { fail(err); }
@@ -703,7 +703,7 @@ async function showEdit(id, pane) {
 
 async function pickIopix(c, saveNow) {
   let ppl;
-  try { ppl = (await api('/api/iopix/people')).items; } catch (e) { fail(e); return null; }
+  try { ppl = (await api('api/iopix/people')).items; } catch (e) { fail(e); return null; }
   const q = h('input', { class: 't', placeholder: 'Search people in ioPix', value: c.fn || '' });
   const list = h('div', { style: { maxHeight: '50vh', overflowY: 'auto', marginTop: '10px' } });
   let chosen = null, resolveFn;
@@ -711,7 +711,7 @@ async function pickIopix(c, saveNow) {
     const s = fold(q.value).trim();
     const hits = ppl.filter((p) => !s || s.split(/\s+/).every((w) => fold(p.name).includes(w))).slice(0, 80);
     list.replaceChildren(...hits.map((p) => h('div', { class: 'row', onclick: () => { chosen = p; resolveFn(); } },
-      h('span', { class: 'av' }, h('img', { src: `/api/iopix/face/${p.id}`, alt: '', loading: 'lazy', onerror: (e) => { e.target.remove(); } })),
+      h('span', { class: 'av' }, h('img', { src: `api/iopix/face/${p.id}`, alt: '', loading: 'lazy', onerror: (e) => { e.target.remove(); } })),
       h('div', { class: 'who' }, h('div', { class: 'nm' }, p.name), h('div', { class: 'sub' }, `${p.count} photos${p.contact ? ` · linked to ${p.contact.fn}` : ''}`)))));
     if (!hits.length) list.append(h('p', { class: 'muted' }, 'Nobody by that name in ioPix.'));
   };
@@ -722,7 +722,7 @@ async function pickIopix(c, saveNow) {
   await Promise.race([dlg, done]);
   document.querySelector('.dialog-back')?.remove();
   if (chosen && saveNow) {
-    try { await api(`/api/contacts/${c.id}`, { method: 'PATCH', json: { iopix: { personId: chosen.id, name: chosen.name } } }); toast(`Linked to ${chosen.name} in ioPix`); onRoute(); } catch (e) { fail(e); }
+    try { await api(`api/contacts/${c.id}`, { method: 'PATCH', json: { iopix: { personId: chosen.id, name: chosen.name } } }); toast(`Linked to ${chosen.name} in ioPix`); onRoute(); } catch (e) { fail(e); }
   }
   return chosen;
 }
@@ -730,7 +730,7 @@ async function pickIopix(c, saveNow) {
 // ------------------------------------------------------------------ pages
 async function showUpcoming(page) {
   const days = +(localStorage.getItem('iocontact.days') || 60);
-  const r = await api(`/api/upcoming?days=${days}`);
+  const r = await api(`api/upcoming?days=${days}`);
   const range = h('select', { class: 't', style: 'width:auto', onchange: (e) => { localStorage.setItem('iocontact.days', e.target.value); onRoute(); } },
     [14, 30, 60, 90, 180, 366].map((d) => h('option', { value: d, selected: d === days ? true : null }, d === 366 ? 'The next year' : `The next ${d} days`)));
   const when = (x) => x.inDays === 0 ? 'Today' : x.inDays === 1 ? 'Tomorrow' : `In ${x.inDays} days`;
@@ -744,7 +744,7 @@ async function showUpcoming(page) {
     x.label === 'birthday' && x.remind != null ? h('label', { class: 'check remind', title: 'Checked: this birthday is in the birthday calendar feed' },
       h('input', { type: 'checkbox', checked: x.remind, onchange: async (e) => {
         const box = e.target; box.disabled = true;
-        try { await api(`/api/contacts/${x.contactId}`, { method: 'PATCH', json: { birthdayRemind: box.checked } }); x.remind = box.checked; toast(box.checked ? `${x.fn}'s birthday is in the calendar feed` : `${x.fn}'s birthday is left out of the calendar feed`); }
+        try { await api(`api/contacts/${x.contactId}`, { method: 'PATCH', json: { birthdayRemind: box.checked } }); x.remind = box.checked; toast(box.checked ? `${x.fn}'s birthday is in the calendar feed` : `${x.fn}'s birthday is left out of the calendar feed`); }
         catch (err) { box.checked = !box.checked; fail(err); } finally { box.disabled = false; }
       } }), ' Remind me') : h('span', { class: 'remind' }))))
     : h('div', { class: 'empty' }, icon('cake'), h('p', null, 'No birthdays or anniversaries in that time.')));
@@ -1076,7 +1076,7 @@ function familyLayout(g, famTypes, typeWord, hidden = new Set()) {
 const treeFolds = new Map();  // root id -> the people whose branch is folded (kept while the app is open)
 
 async function showTree(page, r) {
-  const g = await api(`/api/contacts/${r.id}/family?depth=4`);
+  const g = await api(`api/contacts/${r.id}/family?depth=4`);
   const types = S.rel.groups[0].types;
   const famTypes = new Set(types.map((t) => t.type));
   const typeWord = (t, gender) => { const x = types.find((y) => y.type === t); return x ? (gender === 'M' ? x.male : gender === 'F' ? x.female : x.label) : t; };
@@ -1214,7 +1214,7 @@ async function showTree(page, r) {
 }
 
 // ------------------------------------------------------------------ clean up: duplicates, data quality, suggestions, merges
-async function refreshStatus() { try { S.status = await api('/api/status'); drawNav(); } catch { /* */ } }
+async function refreshStatus() { try { S.status = await api('api/status'); drawNav(); } catch { /* */ } }
 const bookName = (id) => (S.books.find((b) => b.id === id) || {}).name;
 const LEVEL_HUE = { 'very likely': '--c-rose', likely: '--c-amber', possible: '--c-slate' };
 
@@ -1231,7 +1231,7 @@ async function showCleanup(page, r) {
 }
 
 async function maintDups(el) {
-  const r = await api('/api/duplicates');
+  const r = await api('api/duplicates');
   el.replaceChildren(h('p', { class: 'muted' }, 'Contacts that are probably the same person: the same email or phone, the same or a similar name, a nickname (Bob for Robert), the same birthday or company. Other birthdays, genders or a Sr./Jr. count against. The first name has to fit: people who only share a last name, an address, a home phone or a family email are never offered. Merging keeps everything (you choose where they disagree) and can be undone.'));
   if (!r.groups.length) { el.append(h('div', { class: 'empty' }, icon('check'), h('p', null, 'No duplicates found.'))); return; }
   for (const g of r.groups) {
@@ -1244,7 +1244,7 @@ async function maintDups(el) {
       !g.contacts.every((c) => (S.books.find((b) => b.id === c.bookId) || {}).writable) ? null : h('div', { class: 'btns' },
         h('button', { class: 'pillbtn primary', onclick: () => mergeDialog(g.contacts.map((c) => c.id), () => onRoute()) }, icon('merge', 's'), 'Compare and merge…'),
         h('button', { class: 'pillbtn noic', title: 'They are different people: do not offer them again', onclick: async () => {
-          await api('/api/duplicates/dismiss', { method: 'POST', json: { ids: g.contacts.map((c) => c.id) } }); box.remove(); toast('Kept apart');
+          await api('api/duplicates/dismiss', { method: 'POST', json: { ids: g.contacts.map((c) => c.id) } }); box.remove(); toast('Kept apart');
         } }, 'Not duplicates')));
     el.append(box);
   }
@@ -1269,7 +1269,7 @@ const FIELD_LABEL = { name: 'Name', nickname: 'Nickname', maiden: 'Maiden name',
   emails: 'Emails', phones: 'Phones', addresses: 'Addresses', urls: 'Websites', social: 'Social profiles', dates: 'Dates', tags: 'Labels', relations: 'Relations' };
 
 async function mergeDialog(ids, done, keepId) {
-  let pv; try { pv = await api(`/api/merge/preview?ids=${ids.join(',')}&keep=${keepId || ids[0]}`); } catch (e) { fail(e); return; }
+  let pv; try { pv = await api(`api/merge/preview?ids=${ids.join(',')}&keep=${keepId || ids[0]}`); } catch (e) { fail(e); return; }
   const byId = Object.fromEntries(pv.contacts.map((c) => [c.id, c]));
   const pick = {}; const keepLists = {};
   const body = h('div', { class: 'mergedlg' });
@@ -1305,7 +1305,7 @@ async function mergeDialog(ids, done, keepId) {
         }
         for (const [field, flags] of Object.entries(keepLists)) res[field] = (pv.merged[field] || []).filter((_, i) => flags[i]);
         try {
-          await api('/api/contacts/merge', { method: 'POST', json: { keep: pv.keep, others: ids.filter((x) => x !== pv.keep), result: res } });
+          await api('api/contacts/merge', { method: 'POST', json: { keep: pv.keep, others: ids.filter((x) => x !== pv.keep), result: res } });
           close(); S.all = null; await loadMeta(); toast('Merged. Clean up › Merge history can undo it.'); done && done(pv.keep);
         } catch (e) { fail(e); }
       } }, 'Merge'))));
@@ -1313,7 +1313,7 @@ async function mergeDialog(ids, done, keepId) {
 }
 
 async function maintQuality(el) {
-  const r = await api('/api/quality');
+  const r = await api('api/quality');
   const found = r.checks.filter((c) => c.count), clear = r.checks.filter((c) => !c.count);
   el.replaceChildren(h('p', { class: 'muted' }, 'Checks for untidy or doubtful data. Where a fix is offered it changes only contacts you may change; everything else links to the contact to correct by hand.'));
   if (!found.length) el.append(h('div', { class: 'empty' }, icon('check'), h('p', null, 'Everything looks tidy.')));
@@ -1323,7 +1323,7 @@ async function maintQuality(el) {
     const fixBtn = c.fix ? h('button', { class: 'pillbtn', onclick: async () => {
       const json = { check: c.check };
       if (c.check === 'national_phone') { if (!cc.value.trim()) { toast('Type the country code first, such as +32'); cc.focus(); return; } json.countryCode = cc.value; try { localStorage.setItem('iocontact.cc', cc.value); } catch { /* */ } }
-      try { const res = await api('/api/quality/fix', { method: 'POST', json }); toast(`Fixed ${res.fixed.length}${res.skipped.length ? `, ${res.skipped.length} left (not yours to change, or nothing found)` : ''}`); S.all = null; onRoute(); } catch (e) { fail(e); }
+      try { const res = await api('api/quality/fix', { method: 'POST', json }); toast(`Fixed ${res.fixed.length}${res.skipped.length ? `, ${res.skipped.length} left (not yours to change, or nothing found)` : ''}`); S.all = null; onRoute(); } catch (e) { fail(e); }
     } }, icon('check', 's'), c.fix) : null;
     el.append(h('details', { class: 'qcheck' }, h('summary', null, h('span', { class: 'lvl', style: { '--hue': `var(${SEV[c.severity]})` } }, c.count), h('b', null, c.title)),
       h('div', { class: 'qbody' }, c.fix ? h('p', null, c.check === 'national_phone' ? [h('span', { class: 'muted' }, 'Country code to add: '), cc, ' '] : null, fixBtn) : null,
@@ -1341,21 +1341,21 @@ function suggList(items, canEdit, after) {
       h('div', { class: 'sv' }, fmtValue(x.field, x.value),
         h('div', { class: 'muted small' }, x.source, x.by ? ` · via ${x.by}` : '', x.evidence && /^https?:\/\//i.test(x.evidence) ? [' · ', h('a', { class: 'lnk', href: x.evidence, target: '_blank', rel: 'noopener noreferrer' }, 'source ', icon('open', 's'))] : null, x.note ? ` · ${x.note}` : '')),
       h('div', { class: 'sb' },
-        canEdit ? h('button', { class: 'pillbtn noic primary', onclick: async () => { try { await api(`/api/suggestions/${x.id}/accept`, { method: 'POST' }); row.remove(); await refreshStatus(); after && after(x); } catch (e) { fail(e); } } }, 'Accept') : null,
-        canEdit ? h('button', { class: 'pillbtn noic', onclick: async () => { await api(`/api/suggestions/${x.id}/dismiss`, { method: 'POST' }); row.remove(); await refreshStatus(); } }, 'Dismiss') : null));
+        canEdit ? h('button', { class: 'pillbtn noic primary', onclick: async () => { try { await api(`api/suggestions/${x.id}/accept`, { method: 'POST' }); row.remove(); await refreshStatus(); after && after(x); } catch (e) { fail(e); } } }, 'Accept') : null,
+        canEdit ? h('button', { class: 'pillbtn noic', onclick: async () => { await api(`api/suggestions/${x.id}/dismiss`, { method: 'POST' }); row.remove(); await refreshStatus(); } }, 'Dismiss') : null));
     wrap.append(row);
   }
   return wrap;
 }
 
 async function maintSuggest(el) {
-  const r = await api('/api/suggestions');
+  const r = await api('api/suggestions');
   const prog = h('span', { class: 'muted' });
   const run = h('button', { class: 'pillbtn', onclick: async () => {
     run.disabled = true; let offset = 0, total = 1, added = 0;
     while (offset < total) {
       prog.textContent = `Looking up… ${offset} of ${total === 1 ? '?' : total}`;
-      try { const res = await api('/api/lookup', { method: 'POST', json: { offset, limit: 20 } }); total = res.total; offset += Math.max(res.done, 1); added += res.added; } catch (e) { fail(e); break; }
+      try { const res = await api('api/lookup', { method: 'POST', json: { offset, limit: 20 } }); total = res.total; offset += Math.max(res.done, 1); added += res.added; } catch (e) { fail(e); break; }
     }
     prog.textContent = `${added} new suggestion${added === 1 ? '' : 's'}`; await refreshStatus(); setTimeout(onRoute, 800);
   } }, icon('bulb', 's'), 'Look up all contacts');
@@ -1370,17 +1370,17 @@ async function maintSuggest(el) {
     const box = h('div', { class: 'dup' }, h('div', { class: 'duprow' }, avatar({ id: cid, fn: list[0].fn }), h('a', { class: 'lnk', href: `#/c/${cid}` }, h('b', null, list[0].fn)),
       h('span', { style: { flex: 1 } }),
       canEdit ? h('button', { class: 'pillbtn noic', onclick: async () => {
-        for (const x of list) { try { await api(`/api/suggestions/${x.id}/accept`, { method: 'POST' }); } catch { /* a rival value already taken */ } }
+        for (const x of list) { try { await api(`api/suggestions/${x.id}/accept`, { method: 'POST' }); } catch { /* a rival value already taken */ } }
         await refreshStatus(); onRoute();
       } }, 'Accept all') : null,
-      canEdit ? h('button', { class: 'pillbtn noic', onclick: async () => { for (const x of list) await api(`/api/suggestions/${x.id}/dismiss`, { method: 'POST' }); await refreshStatus(); box.remove(); } }, 'Dismiss all') : null),
+      canEdit ? h('button', { class: 'pillbtn noic', onclick: async () => { for (const x of list) await api(`api/suggestions/${x.id}/dismiss`, { method: 'POST' }); await refreshStatus(); box.remove(); } }, 'Dismiss all') : null),
     suggList(list, canEdit, () => {}));
     el.append(box);
   }
 }
 
 async function maintMerges(el) {
-  const r = await api('/api/merges');
+  const r = await api('api/merges');
   el.replaceChildren(h('p', { class: 'muted' }, 'Every merge is kept with the contacts as they were before it, so it can be undone: the merged contacts come back as they were, with their relations.'));
   if (!r.items.length) { el.append(h('div', { class: 'empty' }, h('p', null, 'No merges yet.'))); return; }
   el.append(h('table', { class: 't' }, h('tr', null, h('th', null, 'When'), h('th', null, 'Contacts'), h('th', null, 'By'), h('th')),
@@ -1389,7 +1389,7 @@ async function maintMerges(el) {
       h('td', null, m.by || ''),
       h('td', null, m.undone ? h('span', { class: 'muted' }, 'undone') : m.canUndo ? h('button', { class: 'pillbtn noic', onclick: async () => {
         if (!await confirmDialog('Undo merge', `Put ${m.names} back as they were before the merge?${m.changedSince ? ' Changes made to the merged contact since then are lost.' : ''}`, 'Undo merge')) return;
-        try { await api(`/api/merges/${m.id}/undo`, { method: 'POST' }); S.all = null; await loadMeta(); toast('Merge undone'); onRoute(); } catch (e) { fail(e); }
+        try { await api(`api/merges/${m.id}/undo`, { method: 'POST' }); S.all = null; await loadMeta(); toast('Merge undone'); onRoute(); } catch (e) { fail(e); }
       } }, 'Undo') : null)))));
 }
 
@@ -1400,7 +1400,7 @@ async function showImport(page) {
   const file = h('input', { type: 'file', accept: '.vcf,.vcard,.csv,.json,text/vcard,text/csv,application/json' });
   const out = h('div', { class: 'muted', style: { marginTop: '8px' } });
   const ebook = h('select', { class: 't', style: 'width:auto' }, h('option', { value: 'all' }, 'All address books'), S.books.map((b) => h('option', { value: b.id }, b.name)));
-  const exp = (fmt) => { location.href = `/api/export?format=${fmt}&book=${ebook.value}`; };
+  const exp = (fmt) => { location.href = `api/export?format=${fmt}&book=${ebook.value}`; };
   page.append(h('div', { class: 'pagehead' }, h('h1', null, 'Import and export')),
     h('div', { class: 'box' }, h('h2', null, icon('upload'), 'Import'),
       h('p', { class: 'muted' }, 'vCard files (.vcf, from Apple Contacts, iPhone, Android, Outlook, Thunderbird, Google… vCard 2.1, 3.0 and 4.0; many contacts in one file), jCard (.json), or a CSV exported from Google Contacts or Outlook.'),
@@ -1409,7 +1409,7 @@ async function showImport(page) {
           if (!file.files[0]) return toast('Pick a file first');
           const fd = new FormData(); fd.append('file', file.files[0]); fd.append('book', book.value); fd.append('mode', mode.value);
           out.textContent = 'Importing…';
-          try { const r = await api('/api/import', { method: 'POST', body: fd }); out.textContent = `Read ${r.read}: ${r.created} new, ${r.updated} updated, ${r.skipped} skipped.`; S.all = null; await loadMeta(); } catch (e) { out.textContent = ''; fail(e); }
+          try { const r = await api('api/import', { method: 'POST', body: fd }); out.textContent = `Read ${r.read}: ${r.created} new, ${r.updated} updated, ${r.skipped} skipped.`; S.all = null; await loadMeta(); } catch (e) { out.textContent = ''; fail(e); }
         } }, icon('upload', 's'), 'Import')), out),
     h('div', { class: 'box' }, h('h2', null, icon('download'), 'Export'), h('div', { class: 'multi' }, h('span', null, 'From'), ebook),
       h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
@@ -1419,27 +1419,27 @@ async function showImport(page) {
 }
 
 async function showIopix(page) {
-  const r = await api('/api/iopix/people');
+  const r = await api('api/iopix/people');
   const q = h('input', { class: 't', placeholder: 'Search', style: 'max-width:280px' });
   const grid = h('div', { class: 'ppl' });
   const draw = () => {
     const s = fold(q.value).trim();
     grid.replaceChildren(...r.items.filter((p) => !s || fold(p.name).includes(s)).map((p) => h('div', { class: 'pcard' },
-      h('img', { src: `/api/iopix/face/${p.id}`, alt: '', loading: 'lazy', onerror: (e) => { e.target.style.visibility = 'hidden'; } }), h('div', { class: 'nm' }, p.name), h('div', { class: 'muted small' }, `${p.count} photos`),
+      h('img', { src: `api/iopix/face/${p.id}`, alt: '', loading: 'lazy', onerror: (e) => { e.target.style.visibility = 'hidden'; } }), h('div', { class: 'nm' }, p.name), h('div', { class: 'muted small' }, `${p.count} photos`),
       p.contact ? h('a', { class: 'lnk small', href: `#/c/${p.contact.id}` }, p.contact.fn)
         : h('button', { class: 'pillbtn noic', onclick: async () => {
           const parts = p.name.split(' ');
-          try { const c = await api(`/api/contacts?book=${(writableBooks().find((b) => b.shared) || writableBooks()[0]).id}`, { method: 'POST', json: { name: { given: parts[0], family: parts.slice(1).join(' ') }, iopix: { personId: p.id, name: p.name } } });
+          try { const c = await api(`api/contacts?book=${(writableBooks().find((b) => b.shared) || writableBooks()[0]).id}`, { method: 'POST', json: { name: { given: parts[0], family: parts.slice(1).join(' ') }, iopix: { personId: p.id, name: p.name } } });
             S.all = null; await loadMeta(); location.hash = `#/c/${c.id}/edit`; } catch (e) { fail(e); }
         } }, 'Make a contact'))));
   };
   q.oninput = draw; draw();
   page.append(h('div', { class: 'pagehead' }, h('h1', null, 'ioPix people'), q,
     h('button', { class: 'pillbtn', onclick: async () => {
-      const s = await api('/api/iopix/auto-link?dry=true', { method: 'POST' });
+      const s = await api('api/iopix/auto-link?dry=true', { method: 'POST' });
       if (!s.items.length) return toast('No unlinked contact has the exact name of an ioPix person');
       if (!await dialog('Link by name', h('div', null, h('p', null, `${s.items.length} contact(s) have the exact name of one ioPix person:`), h('ul', null, s.items.slice(0, 40).map((x) => h('li', null, x.fn)))), [{ label: 'Cancel', value: false }, { label: 'Link them', value: true, primary: true }])) return;
-      await api('/api/iopix/auto-link?dry=false', { method: 'POST' }); toast('Linked'); onRoute();
+      await api('api/iopix/auto-link?dry=false', { method: 'POST' }); toast('Linked'); onRoute();
     } }, icon('link', 's'), 'Link by name')),
   h('p', { class: 'muted' }, 'Everyone named in ioPix. A linked contact shows the face from ioPix and links to their photos.'), grid);
 }
@@ -1481,7 +1481,7 @@ function profileScope(apps, own) {
   const names = apps.map((a) => a.name);
   const pick = (e) => {
     const f = e.target.form, all = e.target.value === 'suite';
-    f.action = all ? '/api/apple-profile/suite' : '/api/apple-profile';
+    f.action = all ? 'api/apple-profile/suite' : 'api/apple-profile';
     f.querySelectorAll('[data-own]').forEach((x) => { x.hidden = all; });
   };
   return fld('Set up', h('select', { class: 't', name: 'scope', onchange: pick },
@@ -1491,15 +1491,15 @@ function profileScope(apps, own) {
 
 /** Settings › Apps and devices: how to connect each kind of app (the app passwords themselves are on Settings › Account). */
 async function setDevices(el) {
-  const info = await api('/api/connect');
-  const suiteApps = S.user.passwordless ? [] : (await api('/api/apple-profile/suite').catch(() => ({ apps: [] }))).apps;
+  const info = await api('api/connect');
+  const suiteApps = S.user.passwordless ? [] : (await api('api/apple-profile/suite').catch(() => ({ apps: [] }))).apps;
   const isApple = /iPhone|iPad|Macintosh/.test(navigator.userAgent);
   const plabel = h('input', { class: 't', name: 'label', value: /iPad/.test(navigator.userAgent) ? 'iPad' : /Macintosh/.test(navigator.userAgent) ? 'Mac' : 'iPhone', style: 'max-width:200px' });
   const how = (summary, ...kids) => h('details', null, h('summary', { class: 'lnk' }, summary), ...kids);
   el.append(...[
     S.user.passwordless ? null : h('div', { class: 'box' }, h('h2', null, icon('devices'), 'iPhone, iPad and Mac'),
       h('p', null, 'A profile that adds your contacts and, if you like, a birthday calendar in one step.'),
-      h('form', { method: 'POST', action: '/api/apple-profile', class: 'pform', onsubmit: downloadProfile },
+      h('form', { method: 'POST', action: 'api/apple-profile', class: 'pform', onsubmit: downloadProfile },
         profileScope(suiteApps, 'ioContact'),
         fld('Device name', plabel),
         fld('Password', h('select', { class: 't', name: 'password' }, h('option', { value: 'new' }, 'Include a new app password'), h('option', { value: 'ask' }, 'Ask on the device'))),
@@ -1518,7 +1518,7 @@ async function setDevices(el) {
       h('p', null, 'A calendar subscription with birthdays and anniversaries. Anyone with the link can read the dates.'),
       kv('Family', info.calendar.family), kv('All my books', info.calendar.all),
       h('p', null, h('a', { class: 'pillbtn', href: info.calendar.webcalFamily }, icon('event', 's'), 'Open in my calendar app'), ' ',
-        h('button', { class: 'pillbtn noic', onclick: async () => { if (await confirmDialog('New calendar link', 'The old link stops working; subscribed calendars need the new one.', 'Make a new link')) { await api('/api/calendar/reset', { method: 'POST' }); onRoute(); } } }, 'New link'))),
+        h('button', { class: 'pillbtn noic', onclick: async () => { if (await confirmDialog('New calendar link', 'The old link stops working; subscribed calendars need the new one.', 'Make a new link')) { await api('api/calendar/reset', { method: 'POST' }); onRoute(); } } }, 'New link'))),
     info.ldap.enabled ? h('div', { class: 'box' }, h('h2', null, icon('mail'), 'Mail apps (LDAP directory)'),
       h('p', null, 'Read-only address lookup for mail apps, desk phones and printers. Sign in with an app password; plain LDAP, so keep it on your own network.'),
       kv('Host', info.ldap.host), kv('Port', String(info.ldap.port)), kv('Base DN', info.ldap.base), kv('Bind DN', info.ldap.bindDn)) : null,
@@ -1530,7 +1530,7 @@ async function setDevices(el) {
         copyRow(JSON.stringify({ mcpServers: { iocontact: { command: 'npx', args: ['-y', 'mcp-remote', `${info.server}/mcp`, '--header', 'Authorization: Bearer APP-PASSWORD'] } } }))))
       : (S.user.role === 'admin' ? h('div', { class: 'box' }, h('h2', null, icon('ai'), 'AI assistants (MCP)'), h('p', { class: 'muted' }, 'Off. Turn it on in ', h('a', { class: 'lnk', href: '#/settings/server' }, 'Settings › Server'), '.')) : null),
     h('div', { class: 'box' }, h('h2', null, icon('link'), 'Other apps (REST API)'),
-      h('p', null, 'JSON, vCard or jCard with your user name and an app password. ', h('a', { class: 'lnk', href: '/api/docs', target: '_blank' }, 'API documentation')),
+      h('p', null, 'JSON, vCard or jCard with your user name and an app password. ', h('a', { class: 'lnk', href: 'api/docs', target: '_blank' }, 'API documentation')),
       copyRow(`curl -u ${info.user}:APP-PASSWORD -H 'Accept: application/vcard+json' ${info.server}/api/contacts?q=smith`))].filter(Boolean));
 }
 
@@ -1538,14 +1538,14 @@ async function setBooks(el) {
   el.append(h('p', null, canOwn() ? h('button', { class: 'pillbtn primary', onclick: newBook }, icon('add', 's'), 'New address book') : null),
     h('table', { class: 't' }, h('tr', null, h('th', null, 'Name'), h('th', null, 'Who sees it'), h('th', null, 'Contacts'), h('th', null, 'Colour'), h('th')),
       S.books.map((b) => {
-        const save = async (body) => { try { await api(`/api/books/${b.id}`, { method: 'PATCH', json: body }); await loadMeta(); toast('Saved'); } catch (e) { fail(e); } };
+        const save = async (body) => { try { await api(`api/books/${b.id}`, { method: 'PATCH', json: body }); await loadMeta(); toast('Saved'); } catch (e) { fail(e); } };
         const name = h('input', { class: 't', value: b.name, disabled: !b.writable, onchange: (e) => save({ name: e.target.value }) });
         const col = h('input', { type: 'color', value: b.color || (b.shared ? '#8e44d6' : '#0b8a9e'), disabled: !b.writable, onchange: (e) => save({ color: e.target.value }) });
         return h('tr', null, h('td', null, name), h('td', null, b.shared ? 'Everyone' : 'Only you'), h('td', null, b.count), h('td', null, col),
           h('td', { style: { whiteSpace: 'nowrap' } },
             b.writable && (!b.shared || S.user.role === 'admin') ? h('button', { class: 'pillbtn noic danger', onclick: async () => {
               if (!await confirmDialog('Delete address book', `Delete ${b.name} and its ${b.count} contacts?`, 'Delete', true)) return;
-              try { await api(`/api/books/${b.id}`, { method: 'DELETE' }); await loadMeta(); onRoute(); } catch (e) { fail(e); }
+              try { await api(`api/books/${b.id}`, { method: 'DELETE' }); await loadMeta(); onRoute(); } catch (e) { fail(e); }
             } }, 'Delete') : null));
       })));
 }
@@ -1582,7 +1582,7 @@ function showSignIn() {
   const btn = h('button', { class: 'pillbtn primary noic', type: 'submit' }, first ? 'Create the admin account' : 'Sign in');
   const login = async (n, p) => {
     err.textContent = '';
-    try { await api(first ? '/api/auth/setup' : '/api/auth/login', { method: 'POST', json: { name: n, password: p } }); location.reload(); } catch (x) { err.textContent = x.message; }
+    try { await api(first ? 'api/auth/setup' : 'api/auth/login', { method: 'POST', json: { name: n, password: p } }); location.reload(); } catch (x) { err.textContent = x.message; }
   };
   const go = (e) => { e.preventDefault(); login(name.value.trim(), pw.value); };
   document.body.append(h('div', { class: 'signin' }, h('form', { class: 'dialog', onsubmit: go },
@@ -1591,12 +1591,12 @@ function showSignIn() {
     tiles, form, err, h('div', { class: 'btns' }, btn))));
   if (first) { name.focus(); return; }
   const pick = (t) => tiles.querySelectorAll('.account').forEach((x) => x.classList.toggle('on', x === t));
-  api('/api/auth/accounts').then((d) => {
+  api('api/auth/accounts').then((d) => {
     if (!d.accounts.length) { name.focus(); return; }
     form.hidden = true; btn.hidden = true;
     const face = (a) => {
       const el = h('span', { class: 'av big', style: { '--h': hue(a.displayName || a.name) } }, initials(a.displayName || a.name));
-      if (a.meContactId) { const img = h('img', { src: `/api/auth/accounts/${a.id}/photo`, alt: '', onerror: () => img.remove() }); el.append(img); }
+      if (a.meContactId) { const img = h('img', { src: `api/auth/accounts/${a.id}/photo`, alt: '', onerror: () => img.remove() }); el.append(img); }
       return el;
     };
     tiles.append(...d.accounts.map((a) => {
@@ -1616,10 +1616,10 @@ function showSignIn() {
 async function start() {
   applyTheme();
   document.querySelectorAll('[data-ic]').forEach((el) => el.replaceWith(icon(el.dataset.ic)));
-  S.status = await api('/api/status');
+  S.status = await api('api/status');
   if (!S.status.user) { showSignIn(); return; }
   S.user = S.status.user;
-  try { S.settings = (await api('/api/auth/me')).settings || {}; } catch { S.settings = {}; }
+  try { S.settings = (await api('api/auth/me')).settings || {}; } catch { S.settings = {}; }
   if (S.settings.theme) applyTheme(S.settings.theme);
   drawUser();
   await loadMeta();

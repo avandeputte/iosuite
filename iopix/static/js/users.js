@@ -9,7 +9,7 @@ import { popMenu } from './lightbox.js';
 
 // ---- users: sign in / out, own password, first-admin setup, admin user management
 export async function loadUser() {
-  try { const me = await api('/api/auth/me'); S.USER = me.user; SETTINGS.user = me.user ? me.settings : null; S.IS_ADMIN = me.isAdmin; S.IS_MEMBER = !!me.isMember; S.USERS_EXIST = me.usersExist; S.REQUIRE_LOGIN = !!me.requireLogin; S.VIA_PROXY = !!me.viaProxy; } catch { S.USER = null; SETTINGS.user = null; }
+  try { const me = await api('api/auth/me'); S.USER = me.user; SETTINGS.user = me.user ? me.settings : null; S.IS_ADMIN = me.isAdmin; S.IS_MEMBER = !!me.isMember; S.USERS_EXIST = me.usersExist; S.REQUIRE_LOGIN = !!me.requireLogin; S.VIA_PROXY = !!me.viaProxy; } catch { S.USER = null; SETTINGS.user = null; }
   renderUserMenu();
 }
 export function renderUserMenu() {
@@ -34,18 +34,18 @@ export function loginDialog(required) {
   const pw = h('input', { class: 'einput', type: 'password', placeholder: 'Password', autocomplete: 'current-password' });
   const form = h('div', { style: 'display:grid;gap:8px;margin-top:10px' }, name, pw);
   const tiles = h('div', { class: 'accounts' });
-  const submit = async () => { try { const me = await post('/api/auth/login', { name: name.value.trim(), password: pw.value }); back.remove(); await afterLogin(me); toast(`Signed in as ${me.user.name}.`); } catch (e) { toastError(e); } };
+  const submit = async () => { try { const me = await post('api/auth/login', { name: name.value.trim(), password: pw.value }); back.remove(); await afterLogin(me); toast(`Signed in as ${me.user.name}.`); } catch (e) { toastError(e); } };
   [name, pw].forEach((i) => { i.onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Enter') submit(); }; });
   const back = modal('Sign in', tiles, form,
     h('p', { class: 'muted small' }, required ? `Sign in to use ${S.APP_NAME}.` : 'Without signing in you can browse everything; signing in keeps your display settings, favorites and albums on the server, and editors can change the library.'),
     { buttons: [required ? null : 'Cancel', ['Sign in', submit, 'on']] });
   back.querySelector('.modal').prepend(h('div', { class: 'signin-brand' }, h('span', { class: 'logo' }), brandName()));  // the logo and the name above the title
   if (required) { back.onclick = null; back.classList.add('required'); }
-  api('/api/auth/accounts').then((d) => {
+  api('api/auth/accounts').then((d) => {
     if (!d.accounts.length) { name.focus(); return; }
     form.hidden = true;
     fill(tiles, d.accounts.map((a) => h('button', { class: 'account', title: a.passwordless ? `Sign in as ${a.name}` : `${a.name} (password)`, onclick: async () => {
-      if (a.passwordless) { try { const me = await post('/api/auth/login', { name: a.name }); back.remove(); await afterLogin(me); toast(`Signed in as ${a.name}.`); } catch (e) { toastError(e); } return; }
+      if (a.passwordless) { try { const me = await post('api/auth/login', { name: a.name }); back.remove(); await afterLogin(me); toast(`Signed in as ${a.name}.`); } catch (e) { toastError(e); } return; }
       name.value = a.name; form.hidden = false; tiles.querySelectorAll('.account').forEach((t) => t.classList.toggle('on', t === tiles.querySelector(`[data-n="${CSS.escape(a.name)}"]`))); pw.focus();
     }, 'data-n': a.name }, avatarOf(a, true), h('span', { class: 'nm' }, a.name), a.passwordless ? null : h('span', { class: 'muted', style: 'font-size:11px' }, 'password'))),
       h('button', { class: 'account', title: 'Type a user name', onclick: () => { form.hidden = false; name.value = ''; name.focus(); } }, h('span', { class: 'avatar big', style: 'background:var(--bg3);color:var(--fg2)' }, '…'), h('span', { class: 'nm' }, 'Other')));
@@ -54,7 +54,7 @@ export function loginDialog(required) {
 export function setupDialog() {
   const name = h('input', { class: 'einput', placeholder: 'Admin user name', autocomplete: 'username' });
   const pw = h('input', { class: 'einput', type: 'password', placeholder: 'Password (8 characters or more)', autocomplete: 'new-password' });
-  const submit = async () => { try { const me = await post('/api/auth/setup', { name: name.value.trim(), password: pw.value }); back.remove(); await afterLogin({ user: me.user, settings: {} }); toast('Admin account created; you are signed in.'); } catch (e) { toastError(e); } };
+  const submit = async () => { try { const me = await post('api/auth/setup', { name: name.value.trim(), password: pw.value }); back.remove(); await afterLogin({ user: me.user, settings: {} }); toast('Admin account created; you are signed in.'); } catch (e) { toastError(e); } };
   [name, pw].forEach((i) => { i.onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Enter') submit(); }; });
   const back = modal('Create the admin account', h('p', { class: 'muted' }, `Right now ${S.APP_NAME} is open to anyone who can reach it. Once an admin exists, visitors browse read-only, signed-in users keep their settings on the server, and only editors and admins can change the library or the settings.`),
     h('div', { class: 'stack',}, name, pw),
@@ -63,7 +63,7 @@ export function setupDialog() {
 }
 /** Sign out of this browser; through Cloudflare Access, its own sign-out page ends its session too. */
 async function signOut() {
-  let r; try { r = await post('/api/auth/logout', {}); } catch (e) { toastError(e); return; }
+  let r; try { r = await post('api/auth/logout', {}); } catch (e) { toastError(e); return; }
   if (r && r.cloudflareLogout) { location.href = r.cloudflareLogout; return; }
   if (S.REQUIRE_LOGIN) { location.reload(); return; }
   S.USER = null; SETTINGS.user = null; renderUserMenu(); await pollStatus(); applyBadgePref(); applyTheme(); S.viewKey = null; onRoute(); toast('Signed out.');

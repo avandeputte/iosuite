@@ -14,8 +14,8 @@ function card({ img, fallback, name, sub, onclick, focus }) {
   if (im && fallback) im.onerror = () => { im.onerror = null; im.src = fallback; };
   return h('div', { class: 'card', tabindex: 0, role: 'button', onclick }, h('span', { class: 'cv' }, im), h('div', { class: 'nm', title: name }, name), sub ? h('div', { class: 'sb' }, sub) : null);
 }
-const thumbCard = (cover, name, sub, params) => card({ img: cover ? `/thumb/${cover}` : null, name, sub, focus: cover, onclick: () => go('photos', photosWith(params)) });
-const personCard = (t) => card({ img: faceUrl(t.id), fallback: t.cover ? `/thumb/${t.cover}` : null, name: t.name, sub: nf.format(t.nAll), onclick: () => go('photos', photosWith({ tag: t.id })) });
+const thumbCard = (cover, name, sub, params) => card({ img: cover ? `thumb/${cover}` : null, name, sub, focus: cover, onclick: () => go('photos', photosWith(params)) });
+const personCard = (t) => card({ img: faceUrl(t.id), fallback: t.cover ? `thumb/${t.cover}` : null, name: t.name, sub: nf.format(t.nAll), onclick: () => go('photos', photosWith({ tag: t.id })) });
 /** Leaf person tags with photos (a person tag with children is a family/group). */
 export const people = () => S.META.tags.filter((t) => t.person && t.n > 0 && !t.hasKids).sort((a, b) => b.nAll - a.nAll);
 
@@ -37,10 +37,10 @@ export async function showExplore() {
   // Rediscover: three dozen photos picked at random from the whole library, new ones on every visit or with Shuffle
   const rediscover = h('div', { hidden: true });
   const shuffle = async () => {
-    let r; try { r = await api('/api/random?n=36'); } catch { return; }
+    let r; try { r = await api('api/random?n=36'); } catch { return; }
     if (!r.id.length || !rediscover.isConnected) return;
     const tiles = r.id.map((id, i) => h('div', { class: 'tile', 'data-id': id, style: `--ar:${Math.max(0.5, Math.min(2.2, r.w[i] / (r.h[i] || 1))).toFixed(3)}`, title: fmtKnown(r.ts[i], r.dp?.[i]),
-      onclick: () => openLightbox({ id: r.id }, i, true) }, h('img', { src: `/thumb/${id}`, alt: '', loading: 'lazy' })));
+      onclick: () => openLightbox({ id: r.id }, i, true) }, h('img', { src: `thumb/${id}`, alt: '', loading: 'lazy' })));
     fill(rediscover, h('h2', { style: '--hue:var(--c-indigo)' }, h('span', { class: 'hic' }, icon('spark')), 'Rediscover', h('button', { type: 'button', class: 'lnk', onclick: shuffle }, 'Shuffle')), h('div', { class: 'jrows' }, tiles));
     rediscover.hidden = false;
     badgeTiles(rediscover);
@@ -50,10 +50,10 @@ export async function showExplore() {
   const thenNow = h('div', { hidden: true });
   const years = (ts) => new Date(ts * 1000).getUTCFullYear();  // photo times are the camera's clock stored as UTC (core.js dfDay)
   const drawThenNow = async () => {
-    let r; try { r = await api('/api/thenandnow?n=3'); } catch { return; }
+    let r; try { r = await api('api/thenandnow?n=3'); } catch { return; }
     if (!r.pairs.length || !thenNow.isConnected) return;
     const face = (e, label) => h('button', { type: 'button', class: 'tnface', onclick: () => openLightbox({ id: [e.photo] }, 0, true) },
-      h('img', { src: `/facecrop/${e.photo}/${e.rect.join('/')}.jpg`, alt: '', loading: 'lazy' }), h('span', null, label));
+      h('img', { src: `facecrop/${e.photo}/${e.rect.join('/')}.jpg`, alt: '', loading: 'lazy' }), h('span', null, label));
     fill(thenNow, h('h2', { style: '--hue:var(--c-amber)' }, h('span', { class: 'hic' }, icon('person')), 'Then and now', h('button', { type: 'button', class: 'lnk', onclick: drawThenNow }, 'Others')),
       h('div', { class: 'tnrow' }, r.pairs.map((p) => h('div', { class: 'tncard' },
         h('div', { class: 'tnfaces' }, face(p.then, String(years(p.then.ts))), h('span', { class: 'tnarrow' }, '→'), face(p.now, String(years(p.now.ts)))),
@@ -109,24 +109,24 @@ export async function showExplore() {
     S.META.creators.length ? [sec('rose', 'copyright', 'Photographers'), group('rose', S.META.creators.slice(0, 30).map(([c, n]) => pill(c, n, { creator: c })))] : null,
     sec('slate', 'photo', 'File types'),
     group('slate', S.META.formats.map(([c, n]) => pill(c, n, { fmt: c }))));
-  api('/api/events').then((ev) => {
+  api('api/events').then((ev) => {
     const list = ev.events.filter((e) => e.kind === 'trip').slice(0, 8);
     if (S.route.view !== 'explore' || !list.length) return;
     fill(trips, h('h2', { style: '--hue:var(--c-cyan)' }, h('span', { class: 'hic' }, icon('map')), 'Trips', h('a', { href: '#/events' }, 'All events & trips')), h('div', { class: 'cards' }, list.map(eventCard)));
     trips.hidden = false;
   }).catch(() => {});
-  if (S.SEM.enabled) api('/api/concepts').then((c) => {
+  if (S.SEM.enabled) api('api/concepts').then((c) => {
     if (S.route.view !== 'explore' || !c.concepts.length) return;
     fill(detected, h('h2', { style: '--hue:var(--c-purple)' }, h('span', { class: 'hic' }, icon('spark')), 'Detected content', h('a', { href: '#/detected' }, 'See all')),
       h('div', { class: 'cards' }, c.concepts.sort((a, b) => b.n - a.n).slice(0, 12).map(conceptCard)));
     detected.hidden = false;
   }).catch(() => {});
   try {
-    const d = await api(`/api/photos?md=${md}`);
+    const d = await api(`api/photos?md=${md}`);
     if (S.route.view !== 'explore' || !d.count) return;
     for (let i = 0; i < Math.min(d.count, 8); i++) {  // one row or so; "See all" has the rest
       strip.append(h('div', { class: 'tile', style: `--ar:${Math.max(0.5, Math.min(2.2, d.w[i] / (d.h[i] || 1))).toFixed(3)}`, title: dfDay.format(date(d.ts[i])),
-        onclick: () => go('photos', photosWith({ md, p: d.id[i] })) }, h('img', { src: `/thumb/${d.id[i]}`, loading: 'lazy', alt: '' }),
+        onclick: () => go('photos', photosWith({ md, p: d.id[i] })) }, h('img', { src: `thumb/${d.id[i]}`, loading: 'lazy', alt: '' }),
         tileBadges(d.id[i], { video: d.video[i], faces: d.faces.includes(i), geo: d.geo.includes(i) })));
     }
     otd.hidden = false;
@@ -140,19 +140,19 @@ export async function showPeople() {
   const all = people(), byId = new Map(all.map((t) => [t.id, t]));
   let groups = [], canEdit = false, editing = false, filter = '';  // editing survives a redraw (S.arrangePeople)
   if (!main.querySelector('.cards')) main.replaceChildren(h('div', { class: 'page' }, loadingBox('Loading the people…')));
-  try { const r = await api('/api/people/groups'); groups = r.groups; canEdit = r.canEdit && S.CAN_MANAGE; } catch { /* the groups are optional */ }
+  try { const r = await api('api/people/groups'); groups = r.groups; canEdit = r.canEdit && S.CAN_MANAGE; } catch { /* the groups are optional */ }
   if (S.route.view !== 'people') return;
   editing = canEdit && !!S.arrangePeople;
   const body = h('div');
   // drawn again in place: the row of faces to review keeps its height until its counts arrive, so the cards below stay put
   const todo = h('div', { class: 'pills', style: `margin:6px 0 4px;min-height:${main.querySelector('.page > .pills')?.offsetHeight || 0}px` });
-  api('/api/faces/summary').finally(() => { todo.style.minHeight = ''; }).then((s) => fill(todo,
+  api('api/faces/summary').finally(() => { todo.style.minHeight = ''; }).then((s) => fill(todo,
     s.suggested[0] ? h('a', { class: 'pill', href: '#/faces?tab=suggested' }, 'Suggestions to confirm', h('b', null, `${nf.format(s.suggested[1])} in ${nf.format(s.suggested[0])} photos`)) : null,
     s.unknown[0] ? h('a', { class: 'pill', href: '#/faces?tab=unknown' }, 'Unnamed faces', h('b', null, `${nf.format(s.unknown[1])} in ${nf.format(s.unknown[0])} photos`)) : null,
     s.ignored[0] ? h('a', { class: 'pill', href: '#/faces?tab=ignored' }, 'Ignored faces', h('b', null, nf.format(s.ignored[1]))) : null)).catch(() => {});
   // birthdays in the next month, from ioContact (found in the suite by itself): nothing shows when it is off or not reached
   const bdays = h('div', { class: 'pills bdays' });
-  if (S.USER || !S.USERS_EXIST) api('/api/people/birthdays').then((r) => {
+  if (S.USER || !S.USERS_EXIST) api('api/people/birthdays').then((r) => {
     const list = r.upcoming.filter((b) => byId.has(b.tag)).slice(0, 12);
     const when = (b) => b.in === 0 ? 'today' : b.in === 1 ? 'tomorrow' : new Date(`${b.date}T12:00`).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
     if (list.length) fill(bdays, h('span', { class: 'muted' }, 'Birthdays'), list.map((b) => h('a', { class: 'pill' + (b.in === 0 ? ' today' : ''), href: `#/photos?tag=${b.tag}`, title: `Photos of ${byId.get(b.tag).name}` },
@@ -162,9 +162,9 @@ export async function showPeople() {
   const snap = () => groups.map((g) => ({ ...g, members: [...g.members] }));
   const undo = (was) => { groups = was; draw(); };
   const save = async (g, change, was) => {
-    try { await post(`/api/people/groups/${g.id}`, change); } catch (e) { toastError(e); if (was) undo(was); }
+    try { await post(`api/people/groups/${g.id}`, change); } catch (e) { toastError(e); if (was) undo(was); }
   };
-  const saveOrder = async (was) => { try { await post('/api/people/groups/order', { ids: groups.map((g) => g.id) }); } catch (e) { toastError(e); undo(was); } };
+  const saveOrder = async (was) => { try { await post('api/people/groups/order', { ids: groups.map((g) => g.id) }); } catch (e) { toastError(e); undo(was); } };
   // move person `tid` into group `to` (null: out of `from`) before person `before` (null: at the end)
   const place = (tid, from, to, before) => {
     const was = snap();
@@ -204,7 +204,7 @@ export async function showPeople() {
     return c;
   };
   const newGroup = async (name, members = []) => {
-    let r; try { r = await post('/api/people/groups', { name }); } catch (e) { toastError(e); return; }
+    let r; try { r = await post('api/people/groups', { name }); } catch (e) { toastError(e); return; }
     const g = { id: r.id, name, members };
     groups.push(g); draw();
     if (members.length) { const was = snap(); was[was.length - 1].members = []; await save(g, { members }, was); }  // the group exists either way; its members may not
@@ -218,7 +218,7 @@ export async function showPeople() {
       k < groups.length - 1 ? h('button', { class: 'iconbtn turn', title: 'Move this group down', onclick: () => { const was = snap(); groups.splice(k + 1, 0, groups.splice(k, 1)[0]); saveOrder(was); draw(); } }, icon('right')) : null,
       h('button', { class: 'iconbtn', title: 'Delete this group (the people stay)', onclick: async () => {
         if (!await confirmDialog(`Delete the group “${g.name}”? The people in it stay; only the group goes.`, { ok: 'Delete', danger: true })) return;
-        try { await del(`/api/people/groups/${g.id}`); } catch (e) { toastError(e); return; }
+        try { await del(`api/people/groups/${g.id}`); } catch (e) { toastError(e); return; }
         groups = groups.filter((x) => x !== g); draw(); } }, icon('trash'))) : null;
     const sec = h('section', { class: 'pgroup' + (editing ? ' editing' : '') },
       title ? h('h2', { class: 'sec pghead' }, title, h('span', { class: 'muted' }, nf.format(list.length)), tools) : null,
@@ -297,15 +297,15 @@ async function folderProperties(f, all, after) {
   let icon_ = f.icon ?? null;
   const covers = h('div', { class: 'fcovers' }, h('div', { class: 'muted' }, 'Loading photos…'));
   const pick = (id) => { icon_ = id; covers.querySelectorAll('.fcov').forEach((el) => el.classList.toggle('on', String(el.dataset.id) === String(id ?? 'auto'))); };
-  api('/api/photos?' + photosWith({ album: f.id, sort: 'old' }).toString()).then((d) => {
+  api('api/photos?' + photosWith({ album: f.id, sort: 'old' }).toString()).then((d) => {
     const ids = (d.id || []).slice(0, 80);
     fill(covers, h('div', { class: 'fcov auto', 'data-id': 'auto', title: 'Chosen automatically: the best-rated photo', onclick: () => pick(null) }, 'Auto'),
-      ids.map((id) => h('img', { class: 'fcov', 'data-id': id, src: `/thumb/${id}`, alt: '', onclick: () => pick(id) })));
+      ids.map((id) => h('img', { class: 'fcov', 'data-id': id, src: `thumb/${id}`, alt: '', onclick: () => pick(id) })));
     pick(icon_);
   }).catch(() => fill(covers, h('div', { class: 'muted' }, 'This folder has no photos yet.')));
   const save = async () => {
     try {
-      await post(`/api/folders/${f.id}/properties`, { caption: caption.value, date: date.value, category: category.value, icon: icon_ });
+      await post(`api/folders/${f.id}/properties`, { caption: caption.value, date: date.value, category: category.value, icon: icon_ });
     } catch (e) { toastError(e); return; }
     back.remove(); toast('Folder properties saved.'); after?.();
   };
@@ -322,7 +322,7 @@ async function folderProperties(f, all, after) {
 export async function showFolders() {
   let d;
   if (!main.querySelector('.tree')) main.replaceChildren(h('div', { class: 'page' }, loadingBox('Loading the folders…')));
-  try { d = await api('/api/folders'); } catch (e) { if (S.route.view === 'folders') main.replaceChildren(h('div', { class: 'page' }, errorBox(e))); return; }
+  try { d = await api('api/folders'); } catch (e) { if (S.route.view === 'folders') main.replaceChildren(h('div', { class: 'page' }, errorBox(e))); return; }
   if (S.route.view !== 'folders') return;
   const all = d.folders.map((f) => ({ ...f, _n: norm(f.path) }));
   const tops = all.filter((f) => f.pid == null).sort((a, b) => b.path.localeCompare(a.path, undefined, { numeric: true }));
@@ -330,7 +330,7 @@ export async function showFolders() {
   const refresh = () => { S.viewKey = null; pollSoon(600); setTimeout(() => { if (S.route.view === 'folders') showFolders(); }, 900); };
   const newFolder = async (parent) => {
     const n = await promptDialog(`Name for the new folder in ${parent.path}`); if (!n || !n.trim()) return;
-    try { const r = await post('/api/folders', { parent: parent.id, name: n.trim() }); toast(`Created ${r.path}.${S.NO_DK ? '' : ' digiKam sees it on its next start.'}`); } catch (e) { toastError(e); return; }
+    try { const r = await post('api/folders', { parent: parent.id, name: n.trim() }); toast(`Created ${r.path}.${S.NO_DK ? '' : ' digiKam sees it on its next start.'}`); } catch (e) { toastError(e); return; }
     refresh();
   };
   const uploadTo = (folder) => {
@@ -341,7 +341,7 @@ export async function showFolders() {
       const upload = async () => {  // (not "send": that is core's upload helper, used inside)
         const fd = new FormData(); files.forEach((f) => fd.append('files', f));
         toast(`Uploading ${plural(files.length, 'file')} to ${folder.path}…`, null, null, 120000);
-        return send(`/api/folders/${folder.id}/upload`, fd);
+        return send(`api/folders/${folder.id}/upload`, fd);
       };
       try {
         const r = await upload();
@@ -361,13 +361,13 @@ export async function showFolders() {
     const expand = (on) => { if (on && !box.children.length) box.append(...kids.map((k) => row(k))); node.classList.toggle('open', on); box.hidden = !on; on ? openFolders.add(f.id) : openFolders.delete(f.id); };
     const tw = h('span', { class: 'tw', style: kids.length ? '' : 'visibility:hidden', onclick: (e) => { e.stopPropagation(); expand(!node.classList.contains('open')); } }, icon('right'));
     const a = S.albumById.get(f.id);
-    const cover = a?.cover ? h('img', { src: `/thumb/${a.cover}`, loading: 'lazy', alt: '' }) : h('span', { class: 'ph' }, icon('folder'));
+    const cover = a?.cover ? h('img', { src: `thumb/${a.cover}`, loading: 'lazy', alt: '' }) : h('span', { class: 'ph' }, icon('folder'));
     const trow = h('div', { class: 'trow', title: f.path, tabindex: 0, role: 'button', onclick: () => { if (f.nAll) go('photos', photosWith({ album: f.id, sort: 'old' })); else if (can) uploadTo(f); else expand(!node.classList.contains('open')); } },
       tw, cover, h('span', { class: 'nm' }, flat ? f.path.replace(/^\//, '').replaceAll('/', ' › ') : f.name,
         f.caption || f.category ? h('span', { class: 'muted fcap' }, [f.category, f.caption].filter(Boolean).join(' · ')) : null),
       can ? h('span', { class: 'tacts' }, actBtn('add', 'Upload photos into this folder', () => uploadTo(f)), actBtn('folder', 'New folder inside this one', () => newFolder(f)),
-        f.pid != null ? actBtn('edit', 'Rename this folder', async () => { const n = await promptDialog('Folder name', f.name); if (!n || n.trim() === f.name) return; try { await post(`/api/folders/${f.id}/rename`, { name: n.trim() }); toast(`Renamed to ${n.trim()}.`); } catch (e) { toastError(e); return; } refresh(); }) : null,
-        f.pid != null ? actBtn('open', 'Move this folder under another one', () => folderPicker(`Move “${f.name}” under…`, async (p) => { try { const r = await post(`/api/folders/${f.id}/move`, { parent: p.id }); toast(`Moved to ${r.path}.`); } catch (e) { toastError(e); return; } refresh(); }, (x) => x.id === f.id || x.path.startsWith(f.path + '/'))) : null,
+        f.pid != null ? actBtn('edit', 'Rename this folder', async () => { const n = await promptDialog('Folder name', f.name); if (!n || n.trim() === f.name) return; try { await post(`api/folders/${f.id}/rename`, { name: n.trim() }); toast(`Renamed to ${n.trim()}.`); } catch (e) { toastError(e); return; } refresh(); }) : null,
+        f.pid != null ? actBtn('open', 'Move this folder under another one', () => folderPicker(`Move “${f.name}” under…`, async (p) => { try { const r = await post(`api/folders/${f.id}/move`, { parent: p.id }); toast(`Moved to ${r.path}.`); } catch (e) { toastError(e); return; } refresh(); }, (x) => x.id === f.id || x.path.startsWith(f.path + '/'))) : null,
         actBtn('info', 'Folder properties: caption, date, category, cover', () => folderProperties(f, all, refresh)),
         f.nAll ? actBtn('download', 'Download this folder as a zip', () => downloadDialog(photosWith({ album: f.id }))) : null,
         f.nAll && S.CAN_MANAGE && S.FACE_DETECT ? actBtn('face', 'Detect faces in this folder and its subfolders', () => detectFaces(null, f)) : null) : null,
@@ -401,17 +401,17 @@ export function showAlbums() {
     const c = thumbCard(a.cover, a.name, plural(a.n, 'photo'), { ualbum: a.id });
     if (!a.shared) c.querySelector('.cv').append(h('span', { class: 'privbadge', title: 'Private: only you see this album' }, icon('lock')));
     c.querySelector('.cv').append(h('span', { class: 'cardacts' },
-      cardBtn('link', 'Copy a link to this album', () => copyLink(location.origin + '/' + hashFor('photos', photosWith({ ualbum: a.id })), a.shared ? `Link copied. It works for anyone who can reach ${S.APP_NAME}.` : 'Link copied. The album is private: it opens only for you.')),
-      a.canEdit ? cardBtn('edit', 'Rename', async () => { const n = await promptDialog('Album name', a.name); if (n && n.trim()) return change(`/api/ualbums/${a.id}`, { name: n.trim() }); }) : null,
+      cardBtn('link', 'Copy a link to this album', () => copyLink(new URL(hashFor('photos', photosWith({ ualbum: a.id })), document.baseURI).href, a.shared ? `Link copied. It works for anyone who can reach ${S.APP_NAME}.` : 'Link copied. The album is private: it opens only for you.')),
+      a.canEdit ? cardBtn('edit', 'Rename', async () => { const n = await promptDialog('Album name', a.name); if (n && n.trim()) return change(`api/ualbums/${a.id}`, { name: n.trim() }); }) : null,
       a.canEdit && ST.canShare && ST.canPrivate ? cardBtn(a.shared ? 'lock' : 'group', a.shared ? 'Make private (only you will see it)' : 'Share with everyone',
-        async () => { if (await confirmDialog(a.shared ? `Make “${a.name}” private? Only you will see it; other users lose it from their Albums.` : `Share “${a.name}” with everyone who can use ${S.APP_NAME}? Editors and admins can then change it.`)) return change(`/api/ualbums/${a.id}`, { shared: !a.shared }); }) : null,
+        async () => { if (await confirmDialog(a.shared ? `Make “${a.name}” private? Only you will see it; other users lose it from their Albums.` : `Share “${a.name}” with everyone who can use ${S.APP_NAME}? Editors and admins can then change it.`)) return change(`api/ualbums/${a.id}`, { shared: !a.shared }); }) : null,
       cardBtn('download', 'Download as a zip', () => downloadDialog(photosWith({ ualbum: a.id }))),
-      a.canEdit ? cardBtn('trash', 'Delete this album (photos are not touched)', async () => { if (await confirmDialog(`Delete the album “${a.name}”? The photos themselves are not affected.`, { ok: 'Delete', danger: true })) return change(`/api/ualbums/${a.id}`, { delete: true }); }) : null));
+      a.canEdit ? cardBtn('trash', 'Delete this album (photos are not touched)', async () => { if (await confirmDialog(`Delete the album “${a.name}”? The photos themselves are not affected.`, { ok: 'Delete', danger: true })) return change(`api/ualbums/${a.id}`, { delete: true }); }) : null));
     return c;
   };
   const newAlbum = () => {
     const name = h('input', { class: 'einput', placeholder: 'Album name' }), share = sharingPick();
-    const create = () => { if (!name.value.trim()) { name.focus(); return; } back.remove(); change('/api/ualbums', { name: name.value.trim(), shared: pickedShared(share) }); };
+    const create = () => { if (!name.value.trim()) { name.focus(); return; } back.remove(); change('api/ualbums', { name: name.value.trim(), shared: pickedShared(share) }); };
     name.onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Enter') create(); };
     const back = modal('New album', h('div', { style: 'display:grid;gap:10px' }, name, share), { buttons: ['Cancel', ['Create', create, 'on']] });
     name.focus();
@@ -423,14 +423,14 @@ export function showAlbums() {
     const q = new URLSearchParams(s.query);
     const c = thumbCard(null, s.name, '…', Object.fromEntries(q.entries()));
     const key = `${s.id}:${S.META.version}`;
-    if (!SMART.has(key)) { for (const k of SMART.keys()) if (!k.endsWith(`:${S.META.version}`)) SMART.delete(k); SMART.set(key, api('/api/photos?' + q.toString())); }
-    SMART.get(key).then((d) => { c.querySelector('.sb').textContent = plural(d.count, 'photo'); if (d.count) c.querySelector('.cv').prepend(h('img', { src: `/thumb/${d.id[0]}`, alt: '', loading: 'lazy' })); })
+    if (!SMART.has(key)) { for (const k of SMART.keys()) if (!k.endsWith(`:${S.META.version}`)) SMART.delete(k); SMART.set(key, api('api/photos?' + q.toString())); }
+    SMART.get(key).then((d) => { c.querySelector('.sb').textContent = plural(d.count, 'photo'); if (d.count) c.querySelector('.cv').prepend(h('img', { src: `thumb/${d.id[0]}`, alt: '', loading: 'lazy' })); })
       .catch(() => { SMART.delete(key); c.querySelector('.sb').textContent = 'could not run the search'; });
     c.querySelector('.cv').append(h('span', { class: 'cardacts' },
-      cardBtn('link', 'Copy a link to this smart album', () => copyLink(location.origin + '/' + hashFor('photos', q), 'Link copied.')),
-      cardBtn('edit', 'Rename', async () => { const n = await promptDialog('Smart album name', s.name); if (n && n.trim()) return change(`/api/searches/${s.id}`, { name: n.trim() }); }),
+      cardBtn('link', 'Copy a link to this smart album', () => copyLink(new URL(hashFor('photos', q), document.baseURI).href, 'Link copied.')),
+      cardBtn('edit', 'Rename', async () => { const n = await promptDialog('Smart album name', s.name); if (n && n.trim()) return change(`api/searches/${s.id}`, { name: n.trim() }); }),
       cardBtn('download', 'Download as a zip', () => downloadDialog(q)),
-      cardBtn('trash', 'Delete this smart album (the photos are not touched)', async () => { if (await confirmDialog(`Delete the smart album “${s.name}”?`, { ok: 'Delete', danger: true })) return change(`/api/searches/${s.id}`, { delete: true }); })));
+      cardBtn('trash', 'Delete this smart album (the photos are not touched)', async () => { if (await confirmDialog(`Delete the smart album “${s.name}”?`, { ok: 'Delete', danger: true })) return change(`api/searches/${s.id}`, { delete: true }); })));
     c.classList.add('smart');
     return c;
   };
@@ -454,7 +454,7 @@ export function showAlbums() {
   draw('');
 }
 
-const placeCard = ([city, region, country, n, cover]) => card({ img: `/thumb/${cover}`, focus: cover, name: city, sub: `${[region, country].filter(Boolean).join(', ')} · ${nf.format(n)}`,
+const placeCard = ([city, region, country, n, cover]) => card({ img: `thumb/${cover}`, focus: cover, name: city, sub: `${[region, country].filter(Boolean).join(', ')} · ${nf.format(n)}`,
   onclick: () => go('photos', photosWith({ place: city, ...(region ? { region } : {}), ...(country ? { country } : {}) })) });
 export function showPlaces(vp) {
   if (!S.META.places.length) {
@@ -475,9 +475,9 @@ export function showPlaces(vp) {
   }
   const list = [...groups.values()].sort((a, b) => b.n - a.n);
   const mk = (g) => level === 2
-    ? card({ img: `/thumb/${g.cover}`, name: g.name, sub: `${nf.format(g.n)} · ${plural(g.kids.size, 'region')}`, onclick: () => go('places', photosWith({ country: g.name })) })
+    ? card({ img: `thumb/${g.cover}`, name: g.name, sub: `${nf.format(g.n)} · ${plural(g.kids.size, 'region')}`, onclick: () => go('places', photosWith({ country: g.name })) })
     : level === 1
-      ? card({ img: `/thumb/${g.cover}`, name: g.name, sub: `${nf.format(g.n)} · ${plural(g.kids.size, 'town')}`, onclick: () => go('places', photosWith({ country, region: g.name })) })
+      ? card({ img: `thumb/${g.cover}`, name: g.name, sub: `${nf.format(g.n)} · ${plural(g.kids.size, 'town')}`, onclick: () => go('places', photosWith({ country, region: g.name })) })
       : thumbCard(g.cover, g.name, nf.format(g.n), { place: g.name, ...(g.row[1] ? { region: g.row[1] } : {}), country });
   const here = level === 2 ? {} : level === 1 ? { country } : { country, ...(region !== 'Other' ? { region } : {}) };
   const total = rows.reduce((a, x) => a + x[3], 0);
@@ -507,7 +507,7 @@ const conceptCard = (c) => thumbCard(c.cover, c.name[0].toUpperCase() + c.name.s
 export async function showDetected() {
   main.replaceChildren(h('div', { class: 'empty' }, 'Looking at what the model sees…'));
   let d;
-  try { d = await api('/api/concepts'); } catch { if (S.route.view === 'detected') main.replaceChildren(h('div', { class: 'empty' }, 'Could not load detected content.')); return; }
+  try { d = await api('api/concepts'); } catch { if (S.route.view === 'detected') main.replaceChildren(h('div', { class: 'empty' }, 'Could not load detected content.')); return; }
   if (S.route.view !== 'detected') return;
   if (!d.enabled) { main.replaceChildren(h('div', { class: 'empty' }, 'Content search is not enabled (see the README).')); return; }
   const body = h('div');
@@ -530,7 +530,7 @@ const eventCard = (e) => thumbCard(e.cover, e.title, `${e.when} · ${nf.format(e
 export async function showEvents() {
   main.replaceChildren(h('div', { class: 'empty' }, 'Working out events and trips…'));
   let d;
-  try { d = await api('/api/events'); } catch { if (S.route.view === 'events') main.replaceChildren(h('div', { class: 'empty' }, 'Could not load events.')); return; }
+  try { d = await api('api/events'); } catch { if (S.route.view === 'events') main.replaceChildren(h('div', { class: 'empty' }, 'Could not load events.')); return; }
   if (S.route.view !== 'events') return;
   let kind = '';
   const body = h('div');
@@ -594,7 +594,7 @@ async function suggestionPage({ view, loading, endpoint, trail, icon: ic, hue, t
   const card = (x, g) => {  // `g.drop` is set once the grid is built, before any click
     const open = () => openLightbox({ id: items.map((i) => i.id) }, items.indexOf(x), true);
     const el = h('div', { class: 'dupitem sugg-item' },
-      tile ? tile(x, open) : h('div', { class: 'tile sugg-tile', 'data-id': x.id, onclick: open }, h('img', { src: `/thumb/${x.id}`, loading: 'lazy', alt: '' })),
+      tile ? tile(x, open) : h('div', { class: 'tile sugg-tile', 'data-id': x.id, onclick: open }, h('img', { src: `thumb/${x.id}`, loading: 'lazy', alt: '' })),
       ...body(x),
       act.can || dismiss?.can ? h('div', { class: 'btnrow' },
         act.can ? h('button', { type: 'button', class: 'pillbtn', title: act.title(x), onclick: async (e) => { if (await run([x], e.currentTarget)) g.drop(x, el); } }, act.label(x)) : null,
@@ -643,7 +643,7 @@ export function showDateSuggest() {
   const birthBtn = (p) => S.EDITING ? h('button', { type: 'button', class: 'lnk', onclick: async () => {
     const v = await promptDialog(`${p.name}’s year of birth (leave empty to work it out from photos with a date)`, { value: p.entered && !p.fromContacts ? String(p.birth) : '', placeholder: 'e.g. 1942' });
     if (v === null || v === undefined) return;
-    try { await post('/api/people/birth', { tag: p.tag, year: v || null }); } catch (e) { toastError(e); return; }
+    try { await post('api/people/birth', { tag: p.tag, year: v || null }); } catch (e) { toastError(e); return; }
     if (S.route.view === 'datesuggest') showDateSuggest();
   } }, p.entered && !p.fromContacts ? 'change' : 'enter birth year') : null;
   const yearIn = (f, k) => h('input', { type: 'number', min: 1800, max: new Date().getFullYear(), value: f[k] ?? '', placeholder: k === 'not_before' ? 'earliest' : 'latest', style: 'width:84px', disabled: !S.EDITING });
@@ -651,13 +651,13 @@ export function showDateSuggest() {
   const hintRow = (f) => {
     const a = yearIn(f, 'not_before'), b = yearIn(f, 'not_after');
     const save = S.EDITING ? h('button', { type: 'button', class: 'lnk', onclick: async () => {
-      try { await post('/api/datehints', { album: f.album, not_before: a.value || null, not_after: b.value || null }); toast('Hint saved.'); if (S.route.view === 'datesuggest') showDateSuggest(); } catch (e) { toastError(e); }
+      try { await post('api/datehints', { album: f.album, not_before: a.value || null, not_after: b.value || null }); toast('Hint saved.'); if (S.route.view === 'datesuggest') showDateSuggest(); } catch (e) { toastError(e); }
     } }, 'Save') : null;
     return h('div', { class: 'hrow' }, h('div', { class: 'hmain', style: 'display:flex;gap:8px;align-items:center;flex-wrap:wrap' },
       h('b', null, f.path || '/'), h('span', { class: 'muted' }, f.n ? ` ${nf.format(f.n)} undated` : ''), ' not before ', a, ' not after ', b, save));
   };
   return suggestionPage({
-    view: 'datesuggest', loading: 'Working out the years…', endpoint: '/api/datesuggest?limit=500', trail: [['Explore', '#/explore'], ['Date suggestions', null]],
+    view: 'datesuggest', loading: 'Working out the years…', endpoint: 'api/datesuggest?limit=500', trail: [['Explore', '#/explore'], ['Date suggestions', null]],
     icon: 'calendar', hue: 'amber', title: 'Date suggestions',
     intro: 'A year for each photo marked “Date unknown”, from every clue the library has about it: how old the named people in it look, the years those people are photographed in (together, when they are), the photos with a date that look most like it, and the camera. Each person’s photos with a known date teach the age model how that person ages; a birth year you enter helps someone with few dated photos. Every suggestion is a range and lists its clues. Nothing is saved until you use a year: it is then saved as a year-only date, with undo in the edit log.',
     waiting: (d) => !d.ready ? h('div', { class: 'enote' }, 'Install “MiVOLO v2 (age)” or a content-search model under Settings › AI to get suggestions.')
@@ -665,7 +665,7 @@ export function showDateSuggest() {
       : d.faces[0] < d.faces[1] ? h('div', { class: 'enote' }, `Estimating ages: ${nf.format(d.faces[0])} of ${nf.format(d.faces[1])} faces so far; more suggestions appear as it goes.`) : null,
     extra: async (d) => {
       let hints = { folders: [] };
-      try { hints = await api('/api/datehints'); } catch { /* shown without */ }
+      try { hints = await api('api/datehints'); } catch { /* shown without */ }
       const people = h('div', { class: 'hlist' }, d.people.map((p) => h('div', { class: 'hrow' },
         h('img', { class: 'avatar', src: faceUrl(p.tag), alt: '' }),
         h('div', { class: 'hmain' }, h('b', null, p.name), ' · ', p.birth ? `born ${p.entered ? '' : 'about '}${p.birth}` : 'birth year unknown', h('span', { class: 'muted' }, ` (${p.fromContacts && p.basis !== 'entered' ? `${basis(p)}; birth year from ioContact` : basis(p)}) `), birthBtn(p)))));
@@ -711,7 +711,7 @@ export function showPlaceSuggest() {
   const where = (x) => [x.place, x.region, x.country].filter(Boolean).join(', ') || `${x.lat.toFixed(4)}, ${x.lon.toFixed(4)}`;
   const within = (x) => x.km < 1 ? `within ${Math.round(x.km * 1000)} m` : `within ${x.km.toFixed(1)} km`;
   return suggestionPage({
-    view: 'placesuggest', loading: 'Working out the places…', endpoint: '/api/placesuggest?limit=1000', trail: [['Explore', '#/explore'], ['Place suggestions', null]],
+    view: 'placesuggest', loading: 'Working out the places…', endpoint: 'api/placesuggest?limit=1000', trail: [['Explore', '#/explore'], ['Place suggestions', null]],
     icon: 'map', hue: 'green', title: 'Place suggestions',
     intro: 'Where each photo without a position was probably taken, from the photos around it that have one: between two taken shortly before and after, the one nearest in time, the places photographed that day (the one it looks most like, when there are several), or a stay with positions the day before and after. Each suggestion says how far off it may be. Nothing is saved until you use one: it is then saved as an approximate position, with undo in the edit log.',
     waiting: () => null,
@@ -740,7 +740,7 @@ function personSuggestions(kind) {
  * (jerseys.py), grouped by player. Nothing is tagged until a suggestion is used; a number is searchable as jersey=10. */
 export function showJerseys() {
   return suggestionPage({
-    view: 'jerseys', loading: 'Reading the numbers…', endpoint: '/api/jerseys?limit=2000', trail: [['Explore', '#/explore'], ['Jersey numbers', null]],
+    view: 'jerseys', loading: 'Reading the numbers…', endpoint: 'api/jerseys?limit=2000', trail: [['Explore', '#/explore'], ['Jersey numbers', null]],
     icon: 'text', hue: 'blue', title: 'Jersey numbers',
     intro: (d) => `The number on each detected person’s shirt is read. Where a named face wears a number, that player is learnt for the folder and the year; a number on someone whose face is not named, seen from behind or too small for a face, then suggests the player. Tagging adds the person to the photo without a face region, with undo in the edit log; nothing is tagged until you do. ${nf.format(d.read)} numbers read, ${nf.format(d.named)} on named people.`,
     waiting: (d) => !d.ready ? h('div', { class: 'enote' }, 'Install text recognition (RapidOCR) and an object detection model under Settings › AI to read jersey numbers.')
@@ -758,7 +758,7 @@ export function showJerseys() {
  * event where their face is named (clothing.py), grouped by person. Nothing is tagged until a suggestion is used. */
 export function showClothing() {
   return suggestionPage({
-    view: 'clothing', loading: 'Matching clothes…', endpoint: '/api/clothing?limit=2000', trail: [['Explore', '#/explore'], ['Clothing matches', null]],
+    view: 'clothing', loading: 'Matching clothes…', endpoint: 'api/clothing?limit=2000', trail: [['Explore', '#/explore'], ['Clothing matches', null]],
     icon: 'people', hue: 'purple', title: 'Clothing matches',
     intro: 'At an event everyone wears the same clothes all day. Within the photos of one folder on one day, each detected person whose face is not named (from behind, too far, too small) is compared with the people whose face is named, and a clear match suggests that person is in the photo too. Tagging adds the person to the photo without a face region, with undo in the edit log; nothing is tagged until you do.',
     waiting: (d) => !d.ready ? h('div', { class: 'enote' }, 'Install a content-search model and an object detection model under Settings › AI to match people by their clothes.')
@@ -774,7 +774,7 @@ export function showClothing() {
 export function showRotation() {
   const angle = { left: -90, right: 90, 180: 180 };
   return suggestionPage({
-    view: 'rotation', loading: 'Checking which way up…', endpoint: '/api/rotation?limit=1000', trail: [['Tools', '#/tools'], ['Wrongly rotated', null]],
+    view: 'rotation', loading: 'Checking which way up…', endpoint: 'api/rotation?limit=1000', trail: [['Tools', '#/tools'], ['Wrongly rotated', null]],
     icon: 'rotate', hue: 'amber', title: 'Wrongly rotated',
     intro: (d) => `Photos stored on their side or upside down, usually scans and old files. Your own photos teach the content-search model what upright looks like; every photo whose embedding reads as turned is then checked in all four turns, and only the ones the four readings agree on are listed, each shown the way it would look after the turn. Rotating is the lossless rotate (the file is turned, the metadata kept, undo in the edit log); nothing is changed until you do.${d.dismissed ? ` ${nf.format(d.dismissed)} marked as fine are left out.` : ''}`,
     waiting: (d) => !d.ready ? h('div', { class: 'enote' }, 'Install a content-search model under Settings › AI: the check learns what upright looks like from its embeddings of your own photos.')
@@ -782,7 +782,7 @@ export function showRotation() {
       : !S.LOSSLESS ? h('div', { class: 'enote' }, 'Rotating needs jpegtran on the server (libjpeg-turbo); until then the list is only shown.') : null,
     // the thumbnail already turned the way the fix would leave it
     tile: (x, open) => h('div', { class: 'tile sugg-tile', 'data-id': x.id, style: 'height:200px;display:flex;align-items:center;justify-content:center;overflow:hidden', onclick: open },
-      h('img', { src: `/thumb/${x.id}`, loading: 'lazy', alt: '', style: `max-width:180px;max-height:180px;object-fit:contain;transform:rotate(${angle[x.op] || 0}deg)`, title: 'Shown the way it would look after the turn' })),
+      h('img', { src: `thumb/${x.id}`, loading: 'lazy', alt: '', style: `max-width:180px;max-height:180px;object-fit:contain;transform:rotate(${angle[x.op] || 0}deg)`, title: 'Shown the way it would look after the turn' })),
     body: (x) => [h('div', null, h('b', null, x.text), h('span', { class: 'muted' }, ` · ${Math.round(x.score * 100)}%`))],
     act: { can: S.CAN_MANAGE && S.LOSSLESS, label: (x) => TRANSFORMS.find((t) => t[0] === x.op)?.[1] || 'Rotate', title: () => 'Lossless rotate (undo from the edit log)', run: async (list) => {
       const byOp = new Map();

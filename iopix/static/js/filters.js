@@ -22,7 +22,7 @@ export async function renderFilters() {
   const p = filterParams();
   const token = ++S.facetToken;
   let f;
-  try { f = await api('/api/facets?' + p.toString()); } catch { return; }
+  try { f = await api('api/facets?' + p.toString()); } catch { return; }
   if (token !== S.facetToken) return;
   drawFilters(el, f, p);
 }

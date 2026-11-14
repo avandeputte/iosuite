@@ -24,7 +24,7 @@ from icalendar import vDDDTypes
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import RedirectResponse, Response
 from iosuite_shared import dav as webdav  # `dav` is the route below
-from iosuite_shared import users as shared_users
+from iosuite_shared import prefix, users as shared_users
 from iosuite_shared.dav import AP, CS, D, q
 
 from app import access, config, ical, model
@@ -55,7 +55,7 @@ def _opts_headers() -> dict:
 class Ctx:
     def __init__(self, request: Request, user: dict):
         self.request, self.user = request, user
-        self.base = "/dav"
+        self.base = prefix.of(request) + "/dav"  # /dav, or /calendar/dav when the suite shares one address: what every href starts with
         self.uname = quote(user["name"])
 
     @property
@@ -310,8 +310,8 @@ def _utc(s: str | None) -> dt.datetime | None:
 # ------------------------------------------------------------------ the handler
 
 @router.api_route("/.well-known/caldav", methods=["GET", "PROPFIND", "OPTIONS", "HEAD"], include_in_schema=False, dependencies=[access.public])
-def well_known():
-    return RedirectResponse("/dav/", status_code=301)
+def well_known(request: Request):
+    return RedirectResponse(prefix.of(request) + "/dav/", status_code=301)
 
 
 @router.api_route("/dav", methods=METHODS, include_in_schema=False, dependencies=[access.public])
@@ -415,7 +415,7 @@ def _proppatch(ctx: Ctx, parts, body) -> Response:
     c = _cal(ctx, parts[2]) if len(parts) == 3 and parts[0] == "calendars" else None
     w = bool(c) and model.can_write(ctx.user, c)
     r = _sub(ms, D, "response")
-    _sub(r, D, "href", "/dav/" + "/".join(quote(p) for p in parts) + "/")
+    _sub(r, D, "href", ctx.base + "/" + "/".join(quote(p) for p in parts) + "/")
     ps = _sub(r, D, "propstat")
     p = _sub(ps, D, "prop")
     changes: dict = {}  # all the properties in one update (one sync token for the request)

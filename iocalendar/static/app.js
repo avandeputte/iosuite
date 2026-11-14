@@ -87,7 +87,7 @@ async function api(path, opts = {}) {
   const o = { credentials: 'same-origin', ...opts, headers: { ...(opts.headers || {}) } };
   if (o.json !== undefined) { o.body = JSON.stringify(o.json); o.headers['Content-Type'] = 'application/json'; delete o.json; }
   const r = await fetch(path, o);
-  if (r.status === 401 && !path.startsWith('/api/auth') && path !== '/api/status') { showSignIn(); throw new Error('Sign in first'); }
+  if (r.status === 401 && !path.startsWith('api/auth') && path !== 'api/status') { showSignIn(); throw new Error('Sign in first'); }
   if (!r.ok) {
     let msg = r.statusText;
     try { const j = await r.json(); msg = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail); } catch { /* not JSON */ }
@@ -238,7 +238,7 @@ function tickBtn(o) {
 }
 async function tickTask(o) {
   try {
-    const r = await api(`/api/tasks/${o.id}/complete`, { method: 'POST', json: { done: !o.done, tz: LOCAL_TZ } });
+    const r = await api(`api/tasks/${o.id}/complete`, { method: 'POST', json: { done: !o.done, tz: LOCAL_TZ } });
     const next = r.moved && r.due ? fmtDay(r.allDay ? parseDay(r.due) : new Date(r.due), { weekday: 'short', month: 'short', day: 'numeric' }) : null;
     toast(next ? `Done. It comes back on ${next}` : r.done ? 'Done' : 'Open again');
   } catch (e) { fail(e); }
@@ -260,7 +260,7 @@ function toggleWho(id) {
 }
 
 async function loadCals() {
-  const [cals, fam] = await Promise.all([api('/api/calendars'), api('/api/members').catch(() => ({ items: S.members }))]);
+  const [cals, fam] = await Promise.all([api('api/calendars'), api('api/members').catch(() => ({ items: S.members }))]);
   S.cals = cals.items;
   S.members = fam.items || [];
   for (const id of [...S.who]) if (!memberOf(id)) S.who.delete(id);
@@ -268,7 +268,7 @@ async function loadCals() {
 }
 async function saveSettings(changes) {
   Object.assign(S.settings, changes);
-  try { await api('/api/auth/settings', { method: 'POST', json: changes }); } catch { /* kept for this visit */ }
+  try { await api('api/auth/settings', { method: 'POST', json: changes }); } catch { /* kept for this visit */ }
 }
 function toggleCal(id) {
   if (S.hidden.has(id)) S.hidden.delete(id); else S.hidden.add(id);
@@ -295,7 +295,7 @@ function drawUser() {
       h('button', { class: 'mi', onclick: () => { const n = { system: 'light', light: 'dark', dark: 'system' }[theme]; localStorage.setItem('iocalendar.theme', n); applyTheme(); closeMenu(); toast(`Appearance: ${n}`); } },
         icon('theme', 's'), `Appearance: ${theme}`),
       h('a', { class: 'mi', href: '#/settings', onclick: closeMenu }, icon('settings', 's'), 'Settings'),
-      h('button', { class: 'mi', onclick: async () => { const r = await api('/api/auth/logout', { method: 'POST' }); if (r && r.cloudflareLogout) location.href = r.cloudflareLogout; else location.reload(); } }, icon('logout', 's'), 'Sign out'));
+      h('button', { class: 'mi', onclick: async () => { const r = await api('api/auth/logout', { method: 'POST' }); if (r && r.cloudflareLogout) location.href = r.cloudflareLogout; else location.reload(); } }, icon('logout', 's'), 'Sign out'));
     m.append(menu);
     setTimeout(() => document.addEventListener('click', outside), 0);
   };
@@ -305,7 +305,7 @@ function drawUser() {
    the top bar on a phone) opens a menu of them, each a link to that app. Alone, the mark stays the link to the calendar. */
 async function loadSuite() {
   try {
-    const r = await api('/api/auth/suite');
+    const r = await api('api/auth/suite');
     S.suite = (r.items || []).filter((a) => a.url); suiteSelf = r.app;  // in the suite's one order, this app too
     if (!S.suite.some((a) => a.app !== r.app)) S.suite = [];  // only this app: no menu
   } catch { S.suite = []; }
@@ -483,7 +483,7 @@ async function newCalendar(shared) {
   const body = h('div', { style: { display: 'grid', gap: '12px' } }, name, col,
     h('p', { class: 'muted small', style: { margin: 0 } }, shared ? 'Everyone in the family sees it; editors change it.' : 'Only you see it.'));
   if (!await dialog(shared ? 'New shared calendar' : 'New private calendar', body, [{ label: 'Cancel', value: false }, { label: 'Create', value: true, primary: true }])) return;
-  try { await api('/api/calendars', { method: 'POST', json: { name: name.value, shared, color: col.get(), timezone: LOCAL_TZ } }); await loadCals(); drawView(); } catch (e) { fail(e); }
+  try { await api('api/calendars', { method: 'POST', json: { name: name.value, shared, color: col.get(), timezone: LOCAL_TZ } }); await loadCals(); drawView(); } catch (e) { fail(e); }
 }
 
 // ------------------------------------------------------------------ routing
@@ -586,8 +586,8 @@ async function drawView() {
   const seq = ++drawSeq;
   const ids = shownCals().map((c) => c.id);
   const [occ, tasks] = await Promise.all([
-    ids.length ? api(`/api/occurrences?start=${encodeURIComponent(s.toISOString())}&end=${encodeURIComponent(e.toISOString())}&calendars=${ids.join(',')}`) : { items: [] },
-    tasksOn() ? api(`/api/tasks?start=${ymd(s)}&end=${ymd(e)}&tz=${encodeURIComponent(LOCAL_TZ)}`).catch((x) => ({ available: false, reason: x.message, items: [] })) : null]);
+    ids.length ? api(`api/occurrences?start=${encodeURIComponent(s.toISOString())}&end=${encodeURIComponent(e.toISOString())}&calendars=${ids.join(',')}`) : { items: [] },
+    tasksOn() ? api(`api/tasks?start=${ymd(s)}&end=${ymd(e)}&tz=${encodeURIComponent(LOCAL_TZ)}`).catch((x) => ({ available: false, reason: x.message, items: [] })) : null]);
   if (seq !== drawSeq) return;
   if (tasks) {
     const was = `${S.tasks.available}|${S.tasks.url}`;
@@ -679,7 +679,7 @@ async function saveOccurrence(o, data, verb) {
   let scope = 'all';
   if (o.recurring && o.recurrenceId) { scope = await askScope(verb); if (!scope) return; }
   const qs = o.recurrenceId ? `?scope=${scope}&recurrenceId=${encodeURIComponent(o.recurrenceId)}` : '';
-  try { await api(`/api/events/${o.id}${qs}`, { method: 'PATCH', json: data }); toast('Moved'); } catch (e) { fail(e); }
+  try { await api(`api/events/${o.id}${qs}`, { method: 'PATCH', json: data }); toast('Moved'); } catch (e) { fail(e); }
   drawView();
 }
 function askScope(verb) {
@@ -830,7 +830,7 @@ function eventCard(j, inDialog) {
     h('div', { class: 'tools' },
       w ? h('a', { class: 'iconbtn', title: 'Change (e)', href: `#/edit/${j.id}${j.recurrenceId ? `?rid=${encodeURIComponent(j.recurrenceId)}` : ''}`, onclick: closeDialogs }, icon('edit')) : null,
       writable().length ? h('a', { class: 'iconbtn', title: 'Duplicate', href: `#/new?copy=${j.id}`, onclick: closeDialogs }, icon('dup')) : null,
-      h('a', { class: 'iconbtn', title: 'Download (.ics)', href: `/api/events/${j.id}?format=ics`, download: `${(j.title || 'event').replace(/[^\w -]/g, '')}.ics` }, icon('download')),
+      h('a', { class: 'iconbtn', title: 'Download (.ics)', href: `api/events/${j.id}?format=ics`, download: `${(j.title || 'event').replace(/[^\w -]/g, '')}.ics` }, icon('download')),
       w ? h('button', { class: 'iconbtn', title: 'Delete', onclick: () => deleteEvent(occ) }, icon('delete')) : null,
       inDialog ? h('button', { class: 'iconbtn', title: 'Close', onclick: closeDialogs }, icon('close')) : null),
     h('h2', null, h('span', { class: 'sq' }), h('span', null, j.title || '(no title)',
@@ -854,7 +854,7 @@ function eventCard(j, inDialog) {
 function closeDialogs() { document.querySelectorAll('.dialog-back').forEach((d) => d.remove()); }
 async function openEvent(o) {
   let j;
-  try { j = await api(`/api/events/${o.id}${ridQ(o.recurrenceId)}`); } catch (e) { fail(e); return; }
+  try { j = await api(`api/events/${o.id}${ridQ(o.recurrenceId)}`); } catch (e) { fail(e); return; }
   j = forOccurrence(j, o.recurrenceId);
   if (o.recurrenceId) j.recurrenceId = o.recurrenceId;
   closeDialogs();
@@ -865,7 +865,7 @@ async function openEvent(o) {
   S.open = j;
 }
 async function showEventPage(page, r) {
-  let j = await api(`/api/events/${r.id}${ridQ(r.rid)}`);
+  let j = await api(`api/events/${r.id}${ridQ(r.rid)}`);
   j = forOccurrence(j, r.rid);
   if (r.rid) j.recurrenceId = r.rid;
   S.open = j;
@@ -877,7 +877,7 @@ async function deleteEvent(o) {
   if (o.recurring && o.recurrenceId) { scope = await askScope('Delete'); if (!scope) return; }
   else if (!await confirmDialog('Delete event', `Delete “${o.title || 'this event'}”${o.recurring ? ' and every time it repeats' : ''}?`, 'Delete', true)) return;
   const qs = o.recurrenceId ? `?scope=${scope}&recurrenceId=${encodeURIComponent(o.recurrenceId)}` : '';
-  try { await api(`/api/events/${o.id}${qs}`, { method: 'DELETE' }); closeDialogs(); toast('Deleted'); } catch (e) { fail(e); return; }
+  try { await api(`api/events/${o.id}${qs}`, { method: 'DELETE' }); closeDialogs(); toast('Deleted'); } catch (e) { fail(e); return; }
   await loadCals();
   if (['month', 'week', 'day', 'agenda'].includes(route().view)) drawView(); else go(S.view, S.date);
 }
@@ -946,9 +946,9 @@ async function showEdit(page, r) {
   if (!cals.length) { page.append(h('div', { class: 'empty' }, icon('today'), h('p', null, 'You cannot add events to any calendar.'))); return; }
   let j;
   if (editing) {
-    j = forOccurrence(await api(`/api/events/${r.id}${ridQ(r.rid)}`), r.rid);
+    j = forOccurrence(await api(`api/events/${r.id}${ridQ(r.rid)}`), r.rid);
   } else if (r.copy) {
-    j = await api(`/api/events/${r.copy}`);
+    j = await api(`api/events/${r.copy}`);
     delete j.id;
   } else {
     const d = r.date ? parseDay(r.date) : dayStart(new Date());
@@ -1042,7 +1042,7 @@ async function showEdit(page, r) {
     pt = setTimeout(async () => {
       const n = ++pseq;
       let res = { items: [] };
-      try { res = await api(`/api/people?q=${encodeURIComponent(v)}&limit=8`); } catch { /* typed only */ }
+      try { res = await api(`api/people?q=${encodeURIComponent(v)}&limit=8`); } catch { /* typed only */ }
       if (n !== pseq) return;
       fill(drop, ...res.items.map((p) => h('div', { class: 'row', onmousedown: (e) => { e.preventDefault(); addPerson({ name: p.name, email: p.email, contactId: p.contactId }); } },
         p.contactId ? icon('contacts', 's') : icon('person', 's'), h('div', { class: 'who' }, h('div', { class: 'nm' }, p.name || p.email), p.email && p.name ? h('div', { class: 'sub' }, p.email) : null))),
@@ -1094,7 +1094,7 @@ async function showEdit(page, r) {
     if (!editing || rule !== (original.rrule || null) || !r.rid) data.rrule = rule;
     try {
       if (!editing) {
-        await api('/api/events', { method: 'POST', json: data });
+        await api('api/events', { method: 'POST', json: data });
         saveSettings({ lastCalendar: data.calendarId });
         toast('Saved');
       } else {
@@ -1105,7 +1105,7 @@ async function showEdit(page, r) {
           qs = `?scope=${scope}&recurrenceId=${encodeURIComponent(r.rid)}`;
           if (scope === 'this') delete data.rrule;
         }
-        await api(`/api/events/${r.id}${qs}`, { method: 'PATCH', json: data });
+        await api(`api/events/${r.id}${qs}`, { method: 'PATCH', json: data });
         toast('Saved');
       }
       await loadCals();
@@ -1141,7 +1141,7 @@ async function showSearch(page, r) {
   if ($('#q').value !== r.q) $('#q').value = r.q;
   page.append(h('div', { class: 'pagehead' }, h('h1', null, r.q ? `“${r.q}”` : 'Search')));
   if (!r.q) { page.append(h('p', { class: 'muted' }, 'Type in the search box: a title, a place, a name or words from the notes.')); return; }
-  const res = await api(`/api/events?q=${encodeURIComponent(r.q)}&limit=300`);
+  const res = await api(`api/events?q=${encodeURIComponent(r.q)}&limit=300`);
   const now = Date.now();
   const at = (x) => (x.next ? (x.allDay ? parseDay(x.next.start) : new Date(x.next.start)) : null);
   const soon = res.items.filter((x) => at(x) && (x.allDay ? +addDays(at(x), 1) : +new Date(x.next.end)) >= now).sort((a, b) => at(a) - at(b));
@@ -1172,7 +1172,7 @@ async function showImport(page) {
     for (const f of file.files) {
       const fd = new FormData(); fd.append('file', f);
       try {
-        const r = await api(`/api/calendars/${sel.value}/import?replace=${replace.checked}`, { method: 'POST', body: fd });
+        const r = await api(`api/calendars/${sel.value}/import?replace=${replace.checked}`, { method: 'POST', body: fd });
         tot.created += r.created; tot.updated += r.updated; tot.skipped += r.skipped; tot.errors.push(...r.errors);
       } catch (e) { tot.errors.push(`${f.name}: ${e.message}`); }
     }
@@ -1234,7 +1234,7 @@ async function downloadProfile(e) {
   if (btn) btn.disabled = true;
   try {
     const all = f.elements.scope && f.elements.scope.value === 'suite';
-    const r = await api(all ? '/api/apple-profile/suite/link' : '/api/apple-profile/link', { method: 'POST', json: { label: f.elements.label.value, password: f.elements.password.value } });
+    const r = await api(all ? 'api/apple-profile/suite/link' : 'api/apple-profile/link', { method: 'POST', json: { label: f.elements.label.value, password: f.elements.password.value } });
     location.href = r.url;
   } catch (err) {
     toast(err.message);
@@ -1250,7 +1250,7 @@ function profileScope(apps, own) {
   const names = apps.map((a) => a.name);
   const pick = (e) => {
     const f = e.target.form, all = e.target.value === 'suite';
-    f.action = all ? '/api/apple-profile/suite' : '/api/apple-profile';
+    f.action = all ? 'api/apple-profile/suite' : 'api/apple-profile';
     f.querySelectorAll('[data-own]').forEach((x) => { x.hidden = all; });
   };
   return fld('Set up', h('select', { class: 't', name: 'scope', onchange: pick },
@@ -1260,8 +1260,8 @@ function profileScope(apps, own) {
 
 /** Settings › Apps and devices: how to connect each kind of app (the app passwords themselves are on Settings › Account). */
 async function setDevices(el) {
-  const info = await api('/api/connect');
-  const suiteApps = S.user.passwordless ? [] : (await api('/api/apple-profile/suite').catch(() => ({ apps: [] }))).apps;
+  const info = await api('api/connect');
+  const suiteApps = S.user.passwordless ? [] : (await api('api/apple-profile/suite').catch(() => ({ apps: [] }))).apps;
   const canPw = !S.user.passwordless;
   const isApple = /iPhone|iPad|Macintosh/.test(navigator.userAgent);
   const plabel = h('input', { class: 't', name: 'label', value: /iPad/.test(navigator.userAgent) ? 'iPad' : /Macintosh/.test(navigator.userAgent) ? 'Mac' : 'iPhone', style: 'max-width:200px' });
@@ -1269,7 +1269,7 @@ async function setDevices(el) {
   el.append(...[
     canPw ? h('div', { class: 'box' }, h('h2', null, icon('devices'), 'iPhone, iPad and Mac'),
       h('p', null, 'A profile that adds your calendars to Apple Calendar in one step.'),
-      h('form', { method: 'POST', action: '/api/apple-profile', class: 'pform', onsubmit: downloadProfile },
+      h('form', { method: 'POST', action: 'api/apple-profile', class: 'pform', onsubmit: downloadProfile },
         profileScope(suiteApps, 'ioCalendar'),
         fld('Device name', plabel),
         fld('Password', h('select', { class: 't', name: 'password' }, h('option', { value: 'new' }, 'Include a new app password'), h('option', { value: 'ask' }, 'Ask on the device'))),
@@ -1289,7 +1289,7 @@ async function setDevices(el) {
       how('One calendar at a time', info.calendars.map((c) => kv(c.name, c.ics))),
       kv('Free/busy', info.freebusy),
       h('p', null, h('a', { class: 'pillbtn', href: info.webcal }, icon('today', 's'), 'Open in my calendar app'), ' ',
-        h('button', { class: 'pillbtn noic', onclick: async () => { if (await confirmDialog('New subscription links', 'The old links stop working; subscribed calendars need the new ones.', 'Make new links')) { await api('/api/feeds/reset', { method: 'POST' }); onRoute(); } } }, 'New links'))),
+        h('button', { class: 'pillbtn noic', onclick: async () => { if (await confirmDialog('New subscription links', 'The old links stop working; subscribed calendars need the new ones.', 'Make new links')) { await api('api/feeds/reset', { method: 'POST' }); onRoute(); } } }, 'New links'))),
     S.status.mcp ? h('div', { class: 'box' }, h('h2', null, icon('ai'), 'AI assistants (MCP)'),
       h('p', null, 'Give the assistant its own app password (not “Calendar apps only”), sent as a Bearer token.'),
       kv('MCP address', info.mcp),
@@ -1309,7 +1309,7 @@ async function setCalendars(el) {
     canOwn() ? h('button', { class: 'pillbtn', onclick: async () => { await newCalendar(false); onRoute(); } }, icon('add', 's'), 'New private calendar') : null),
   ...S.cals.map((c) => {
     const auto = isAuto(c);
-    const save = async (body) => { try { await api(`/api/calendars/${c.id}`, { method: 'PATCH', json: body }); await loadCals(); toast('Saved'); } catch (e) { fail(e); } };
+    const save = async (body) => { try { await api(`api/calendars/${c.id}`, { method: 'PATCH', json: body }); await loadCals(); toast('Saved'); } catch (e) { fail(e); } };
     const name = h('input', { class: 't', value: c.name, onchange: (e) => save({ name: e.target.value }) });
     const col = colorPicker(c.color, (v) => save({ color: v }));
     const tz = h('select', { class: 't', onchange: (e) => save({ timezone: e.target.value || null }) }, h('option', { value: '' }, `Server default (${S.status.timezone})`), tzs.map((z) => h('option', { value: z, selected: z === c.timezone ? true : null }, z.replace(/_/g, ' '))));
@@ -1322,7 +1322,7 @@ async function setCalendars(el) {
         h('p', null,
         !auto && (!c.shared || S.user.role === 'admin') ? h('button', { class: 'pillbtn noic danger', onclick: async () => {
           if (!await confirmDialog('Delete calendar', `Delete ${c.name} and its ${c.count || 0} events? Apps that sync it lose it too.`, 'Delete', true)) return;
-          try { await api(`/api/calendars/${c.id}`, { method: 'DELETE' }); await loadCals(); onRoute(); } catch (e) { fail(e); }
+          try { await api(`api/calendars/${c.id}`, { method: 'DELETE' }); await loadCals(); onRoute(); } catch (e) { fail(e); }
         } }, 'Delete') : null)] : h('p', { class: 'muted' }, auto ? (c.kind === 'holidays' ? 'Filled from Settings › Holidays and birthdays.' : 'Filled from ioContact (Settings › Holidays and birthdays).') : `${c.count || 0} events. Editors and admins change shared calendars.`));
   }));
 }
@@ -1330,7 +1330,7 @@ async function setCalendars(el) {
 /** Who is in the family: the people events can be tagged with, each with a private calendar of their own. Accounts,
     passwords and roles are the suite's (Settings › Security, suite admins). */
 async function setFamily(el) {
-  const [r, fam] = await Promise.all([api('/api/users'), api('/api/members')]);
+  const [r, fam] = await Promise.all([api('api/users'), api('api/members')]);
   const leftOut = new Set(fam.leftOut || []);
   el.append(h('div', { class: 'box' }, h('h2', null, icon('people'), 'Family members'),
     h('p', { class: 'muted' }, 'The people events can be for, each with a private calendar. Accounts are added under Settings › Security.'),
@@ -1338,7 +1338,7 @@ async function setFamily(el) {
       r.users.map((u) => {
         const fk = h('input', { type: 'checkbox', checked: !leftOut.has(u.id), title: `${u.displayName} is someone events can be for` });
         fk.onchange = async () => {
-          try { await api(`/api/members/${u.id}`, { method: 'PUT', json: { inFamily: fk.checked } }); await loadCals(); toast(fk.checked ? `${u.displayName} is in the family` : `${u.displayName} is left out of the family`); } catch (e) { fk.checked = !fk.checked; fail(e); }
+          try { await api(`api/members/${u.id}`, { method: 'PUT', json: { inFamily: fk.checked } }); await loadCals(); toast(fk.checked ? `${u.displayName} is in the family` : `${u.displayName} is left out of the family`); } catch (e) { fk.checked = !fk.checked; fail(e); }
         };
         return h('tr', null, h('td', null, u.name, u.suiteAdmin ? h('span', { class: 'muted small' }, ' · suite admin') : null), h('td', null, u.displayName), h('td', { class: 'muted' }, u.role), h('td', null, h('label', { class: 'check' }, fk)));
       }))));
@@ -1356,12 +1356,12 @@ async function setSuite(el, r) {
 /** Settings › Holidays and birthdays, for admins: the Birthdays calendar ioContact fills (the suite connects the two by
     itself, so there is nothing else to set). */
 async function birthdaysBox(el) {
-  const s = await api('/api/iocontact/settings');
+  const s = await api('api/iocontact/settings');
   const out = h('p', { class: 'muted small' }, s.lastSync && s.lastSync.synced ? `Last brought up to date ${new Date(s.lastSync.synced * 1000).toLocaleString()} (${s.lastSync.count} dates).` : s.lastSync && s.lastSync.error ? `The last sync failed: ${s.lastSync.error}` : '');
   const bdays = h('input', { type: 'checkbox', checked: s.birthdays, onchange: async (e) => {
     try {
-      const r = await api('/api/iocontact/settings', { method: 'POST', json: { birthdays: e.target.checked } });
-      S.status = await api('/api/status'); await loadCals();
+      const r = await api('api/iocontact/settings', { method: 'POST', json: { birthdays: e.target.checked } });
+      S.status = await api('api/status'); await loadCals();
       out.className = r.sync && !r.sync.ok ? 'warn' : 'muted small';
       out.textContent = r.sync ? (r.sync.ok ? (r.sync.count ? `${r.sync.count} dates.` : 'The Birthdays calendar is off.') : r.sync.error) : '';
       toast('Saved');
@@ -1371,11 +1371,11 @@ async function birthdaysBox(el) {
     h('p', { class: 'muted' }, s.enabled ? ['Birthdays and anniversaries from ', h('a', { href: s.url, target: '_blank', rel: 'noopener' }, 'ioContact'), ', updated every six hours.']
       : 'Shown once ioContact runs in the same suite.'),
     h('p', null, h('label', { class: 'check' }, bdays, ' Show the Birthdays calendar'), ' ',
-      s.enabled ? h('button', { class: 'pillbtn noic', onclick: async () => { try { const r = await api('/api/iocontact/sync', { method: 'POST' }); await loadCals(); toast(r.ok ? `Birthdays: ${r.count} dates` : r.error); } catch (e) { fail(e); } } }, 'Update now') : null), out));
+      s.enabled ? h('button', { class: 'pillbtn noic', onclick: async () => { try { const r = await api('api/iocontact/sync', { method: 'POST' }); await loadCals(); toast(r.ok ? `Birthdays: ${r.count} dates` : r.error); } catch (e) { fail(e); } } }, 'Update now') : null), out));
 }
 
 async function setHolidays(el) {
-  const s = await api('/api/holidays/settings');
+  const s = await api('api/holidays/settings');
   const adm = S.user.role === 'admin';
   const last = (x) => (x && x.synced ? `Last filled ${new Date(x.synced * 1000).toLocaleString()} (${x.count} holidays, last year to three years ahead).` : x && x.error ? `The last fill failed: ${x.error}` : '');
   const shown = s.items.map((x) => x.where).join('; ');
@@ -1384,7 +1384,7 @@ async function setHolidays(el) {
     h('p', null, shown ? `Showing the holidays of ${shown}${s.guessed ? ' (from the time zone; pick another below)' : ''}.` : 'Off: no country picked.'));
   el.append(box);
   if (!adm) { box.append(h('p', { class: 'muted small' }, 'An admin picks the countries.')); return; }
-  const countries = (await api('/api/holidays/countries')).items;
+  const countries = (await api('api/holidays/countries')).items;
   const LANG = (code) => { try { return new Intl.DisplayNames([], { type: 'language' }).of(code.replace('_', '-')) || code; } catch { return code; } };
   const list = h('div');
   const rows = [];
@@ -1393,7 +1393,7 @@ async function setHolidays(el) {
   const save = async () => {
     try {
       const items = rows.filter((r) => r.country.value).map((r) => ({ country: r.country.value, region: r.region.value, language: r.lang.value }));
-      const r = await api('/api/holidays/settings', { method: 'POST', json: { items } });
+      const r = await api('api/holidays/settings', { method: 'POST', json: { items } });
       await loadCals();
       fill(out, h('p', { class: r.sync && !r.sync.ok ? 'warn' : 'muted small' }, !r.items.length ? 'The Holidays calendars are off.' : r.sync.ok ? `Holidays of ${r.items.map((x) => x.where).join('; ')}: ${r.sync.count} dates.` : r.sync.error));
       toast('Saved');
@@ -1408,7 +1408,7 @@ async function setHolidays(el) {
     const draw = async (keep) => {
       const code = country.value;
       if (!code) { fill(region, h('option', { value: '' }, '—')); fill(lang, h('option', { value: '' }, '—')); region.disabled = lang.disabled = true; return; }
-      const info = await api(`/api/holidays/countries/${code}`);
+      const info = await api(`api/holidays/countries/${code}`);
       fill(region, h('option', { value: '' }, info.regions.length ? 'The whole country' : 'No regions'),
         info.regions.map((r) => h('option', { value: r.code, selected: keep && r.code === it.region ? true : null }, r.name === r.code ? r.code : `${r.name} (${r.code})`)));
       fill(lang, h('option', { value: '' }, info.defaultLanguage ? `${LANG(info.defaultLanguage)} (default)` : 'Default'),
@@ -1441,7 +1441,7 @@ async function setServer(el) {
       h('p', null, 'Each calendar as an .ics file.'),
       h('table', { class: 't' }, S.cals.map((c) => h('tr', null, h('td', null, h('span', { class: 'chip-ev', style: { '--c': c.color, display: 'inline-flex' } }, h('span', { class: 'dot' }), h('span', { class: 'nm' }, c.name))),
         h('td', { class: 'muted' }, c.kind === 'birthdays' ? 'from ioContact' : `${c.count || 0} events`),
-        h('td', { style: { textAlign: 'right' } }, h('a', { class: 'pillbtn noic', href: `/api/calendars/${c.id}/export` }, 'Download'))))),
+        h('td', { style: { textAlign: 'right' } }, h('a', { class: 'pillbtn noic', href: `api/calendars/${c.id}/export` }, 'Download'))))),
       ));
 }
 const serverUi = () => import(new URL('api/server/ui.js', document.baseURI).href);
@@ -1459,7 +1459,7 @@ function showSignIn() {
   const btn = h('button', { class: 'pillbtn primary noic', type: 'submit' }, first ? 'Create the admin account' : 'Sign in');
   const login = async (n, p) => {
     err.textContent = '';
-    try { await api(first ? '/api/auth/setup' : '/api/auth/login', { method: 'POST', json: { name: n, password: p } }); location.reload(); } catch (x) { err.textContent = x.message; }
+    try { await api(first ? 'api/auth/setup' : 'api/auth/login', { method: 'POST', json: { name: n, password: p } }); location.reload(); } catch (x) { err.textContent = x.message; }
   };
   const submit = (e) => { e.preventDefault(); login(name.value.trim(), pw.value); };
   document.body.append(h('div', { class: 'signin' }, h('form', { class: 'dialog', onsubmit: submit },
@@ -1468,7 +1468,7 @@ function showSignIn() {
     tiles, form, err, h('div', { class: 'btns' }, btn))));
   if (first) { name.focus(); return; }
   const pick = (t) => tiles.querySelectorAll('.account').forEach((x) => x.classList.toggle('on', x === t));
-  api('/api/auth/accounts').then((d) => {
+  api('api/auth/accounts').then((d) => {
     if (!d.accounts.length) { name.focus(); return; }
     form.hidden = true; btn.hidden = true;
     tiles.append(...d.accounts.map((a) => {
@@ -1488,10 +1488,10 @@ function showSignIn() {
 async function start() {
   applyTheme();
   document.querySelectorAll('[data-ic]').forEach((el) => el.replaceWith(icon(el.dataset.ic)));
-  S.status = await api('/api/status');
+  S.status = await api('api/status');
   if (!S.status.user) { showSignIn(); return; }
   S.user = S.status.user;
-  try { S.settings = (await api('/api/auth/me')).settings || {}; } catch { S.settings = {}; }
+  try { S.settings = (await api('api/auth/me')).settings || {}; } catch { S.settings = {}; }
   if (S.settings.theme) applyTheme(S.settings.theme);
   S.hidden = new Set(String(S.settings.hiddenCalendars || '').split(',').filter(Boolean).map(Number));
   S.who = new Set(String(S.settings.memberFilter || '').split(',').filter(Boolean).map(Number));
