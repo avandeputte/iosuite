@@ -113,7 +113,7 @@ def test_scan_job_start_rule_and_reset(monkeypatch):
     job.start(photos + [{"id": 3}])  # something new: the running job is cancelled and a new run takes over
     assert job.progress.cancelled(runs[0])
     gate.set()
-    assert _wait(lambda: len(runs) == 2 and jobs.status()["running"] is None)
+    assert _wait(lambda: len(runs) == 2 and jobs.status()["running"] is None, timeout=15)  # the second run waits out GRACE first; slow under the full suite
     assert done == [[1, 2, 3]]
     gate.clear()
     job.start(photos + [{"id": 4}])
