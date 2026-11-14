@@ -168,8 +168,8 @@ def admin_app(auth: Auth, monkeypatch):
 
 
 def test_server_router(tmp_path, monkeypatch):
+    (tmp_path / "COMMIT").write_text("abcdef0123456789\n")  # read as the updater starts
     u = make_updater(tmp_path, monkeypatch)
-    (tmp_path / "COMMIT").write_text("abcdef0123456789\n")
     log = tmp_path / "app.log"
     log.write_text("2026-11-05 10:00:03 ERROR app: boom\n2026-11-05 10:00:04 INFO app: fine\n")
     restarted = []

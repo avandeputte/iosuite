@@ -128,12 +128,16 @@ ask_app_settings() {
     fi
   fi
   if [[ -z "${IOPIX_ALSO+x}" ]]; then  # the other apps of the suite in the same container
-    IOPIX_ALSO=$(whiptail --backtitle "$bt" --checklist "Also install in this container (same database server, each app its own database; same accounts and admin; each on its usual port):" 15 78 5 \
+    IOPIX_ALSO=$(whiptail --backtitle "$bt" --checklist "Also install in this container (same database server, each app its own database; same accounts and admin; each on its usual port):" 19 78 9 \
       iostart "ioStart (the start page)  (8630)" OFF \
       iocalendar "ioCalendar  (8620)" OFF \
       iocontact "ioContact  (8640, LDAP 3890)" OFF \
-      ionote "ionote  (8610)" OFF \
-      iohealth "ioHealth  (8650)" OFF 3>&1 1>&2 2>&3) || exit 1
+      ionote "ioNote  (8610)" OFF \
+      iohealth "ioHealth  (8650)" OFF \
+      iotask "ioTask  (8670)" OFF \
+      iorecipe "ioRecipe  (8690)" OFF \
+      iodns "ioDNS  (8660, admin tool)" OFF \
+      iobackup "ioBackup  (8680, admin tool)" OFF 3>&1 1>&2 2>&3) || exit 1
     IOPIX_ALSO=$(echo "$IOPIX_ALSO" | tr -d '"' | tr ' ' ',')
   fi
   if [[ -n "$IOPIX_ALSO" ]]; then  # room for more than one app
@@ -150,8 +154,15 @@ function update_script() {
     exit
   fi
   msg_info "Updating ${APP}"
-  # the app's own updater: latest code, same settings, data and packages, service restarted; its output is shown
-  if sh /opt/iopix/app/update.sh; then msg_ok "Updated successfully!"; else msg_error "update.sh failed; see the lines above"; exit 1; fi
+  # every app of the suite in this container, each with its own updater: latest code, same settings and data,
+  # service restarted (they share the Shared ioSuite database, so they move together)
+  local u failed=""
+  for u in /opt/*/app/update.sh; do
+    [[ -f "$u" ]] || continue
+    msg_info "Updating $(basename "$(dirname "$(dirname "$u")")")"
+    sh "$u" || failed+=" $(basename "$(dirname "$(dirname "$u")")")"
+  done
+  if [[ -z "$failed" ]]; then msg_ok "Updated successfully!"; else msg_error "update.sh failed for:$failed; see the lines above"; exit 1; fi
   exit
 }
 
@@ -208,7 +219,7 @@ echo -e "${CREATING}${GN}${APP} setup has been successfully initialized!${CL}"
 echo -e "${INFO}${YW}Access it using the following URL:${CL}"
 echo -e "${GATEWAY}${BGN}http://${IP}:8600${CL}"
 for a in ${IOPIX_ALSO//,/ }; do
-  case "$a" in iostart) p=8630;; iocalendar) p=8620;; iocontact) p=8640;; ionote) p=8610;; iohealth) p=8650;; iopix) p=8600;; *) p="";; esac
+  case "$a" in iostart) p=8630;; iocalendar) p=8620;; iocontact) p=8640;; ionote) p=8610;; iohealth) p=8650;; iotask) p=8670;; iorecipe) p=8690;; iodns) p=8660;; iobackup) p=8680;; iopix) p=8600;; *) p="";; esac
   [[ -n "$p" ]] && echo -e "${INFO}${YW}$a:${CL} ${BGN}http://${IP}:$p${CL}"
 done
 [[ "${IOPIX_DB:-local}" == local ]] && echo -e "${INFO}${YW}iopix's own database: MariaDB inside the container (database iopix; the credentials are in /opt/iopix/app/config.env).${CL}" || echo -e "${INFO}${YW}iopix's own database: the MySQL/MariaDB server you named (DB_* in /opt/iopix/app/config.env).${CL}"

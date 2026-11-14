@@ -59,6 +59,9 @@ if [ "$APPSONLY" = 1 ]; then  # the apps on this server: what is here, tick and 
   exec "$APP/.venv/bin/iosuite-shared" --config "$APP" apps --from iopix
 fi
 [ -n "$DBADMIN" ] || DBADMIN="${IOPIX_DB_ADMIN:-}"
+case "$DBADMIN" in ''|*:*) ;; *) DBADMIN="$DBADMIN:${DB_ADMIN_PASSWORD:-}";; esac  # the name only: the password comes from the environment
+ENVF="$APP/config.env"
+getenv() { [ -f "$ENVF" ] && sed -n "s/^$1=//p" "$ENVF" | tail -n 1; true; }  # a run again: what config.env says is the default
 [ -n "$MYSQL" ] || MYSQL="${IOPIX_DIGIKAM_DB:-}"
 [ -n "$VIEWERDB" ] || VIEWERDB="${IOPIX_DB:-}"
 [ -n "$SUITE" ] || SUITE="${IOPIX_SUITE_DB:-}"
@@ -147,8 +150,18 @@ command -v ffmpeg >/dev/null 2>&1 || echo "note: ffmpeg is still not installed; 
 
 # --- the library ------------------------------------------------------------------------------------
 say "Your library"
+[ -n "$PHOTOS" ] || PHOTOS="$(getenv PHOTOS_ROOT)"
 ask PHOTOS "Folder with your photos" "${PHOTOS:-$HOME/Pictures/photos}"
 [ -d "$PHOTOS" ] || die "folder not found: $PHOTOS"
+# digiKam's database as config.env names it stays, unless asked to change it (also with --yes)
+DKNOW="$(getenv DIGIKAM_DB_TYPE)"; [ -n "$DKNOW" ] || { [ -n "$(getenv DIGIKAM_DB_DIR)" ] && DKNOW=sqlite; }
+if [ "$NODK" = 0 ] && [ -z "$MYSQL" ] && [ -z "$SQLITE" ] && [ -n "$DKNOW" ] && ! yesno "config.env already names digiKam's database ($DKNOW); change it?" n; then
+  case "$DKNOW" in
+    none) NODK=1;;
+    mysql) MYSQL="$(getenv DIGIKAM_DB_HOST):$(getenv DIGIKAM_DB_PORT)/$(getenv DIGIKAM_DB_NAME):$(getenv DIGIKAM_DB_USER):$(getenv DIGIKAM_DB_PASSWORD)";;
+    *) SQLITE="$(getenv DIGIKAM_DB_DIR)";;
+  esac
+fi
 if [ "$NODK" = 0 ] && [ -z "$MYSQL" ] && [ -z "$SQLITE" ] && [ "$YES" = 0 ] && [ -n "$TTY" ]; then
   yesno "Do you use digiKam with these photos (no: iopix keeps the library itself and finds the photos in the folder)?" y || NODK=1
 fi
@@ -162,10 +175,10 @@ if [ "$NODK" = 0 ] && [ -z "$MYSQL" ] && [ -z "$SQLITE" ]; then
   fi
 fi
 [ -z "$SQLITE" ] || [ -f "$SQLITE/digikam4.db" ] || die "digikam4.db not found in $SQLITE"
+[ -n "$DATA" ] || DATA="$(getenv DATA_DIR)"
 ask DATA "Folder for the viewer's own data (index, thumbnails, models, backups)" "${DATA:-$APP/data}"
 # iopix's own database (settings, accounts, favorites, albums, AI results, and the library without digiKam) lives on
 # MySQL/MariaDB. Asked once: a later run keeps the DB_* lines of config.env (the Settings page writes them too).
-ENVF="$APP/config.env"
 OLDVDB="$(grep '^DB_' "$ENVF" 2>/dev/null || true)"
 CANLOCAL=0; [ "$OS" != Darwin ] && [ "$(id -u)" = 0 ] && command -v apt-get >/dev/null 2>&1 && CANLOCAL=1  # Debian, Ubuntu, Proxmox as root
 if [ -z "$VIEWERDB" ] && [ -z "$OLDVDB" ]; then
@@ -207,6 +220,23 @@ FLUSH PRIVILEGES;
 SQL
   echo "  created the database iopix and the user iopix (random password) on this machine's MariaDB"
   VIEWERDB="127.0.0.1:3306/iopix:iopix:$VW"
+  # the Shared ioSuite database on the same MariaDB, when nothing names one yet: a new user with a random password
+  # (one that exists already belongs to the other apps here, and is never given another password)
+  if [ -z "$SUITE" ] && ! grep -qE '^IOSUITE_DB_' "$ENVF" 2>/dev/null; then
+    if [ "$(mariadb -N -e "SELECT COUNT(*) FROM mysql.user WHERE user = 'iosuite'" 2>/dev/null)" = 0 ]; then
+      SW="$(LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 24)"
+      mariadb <<SQL || die "could not create the Shared ioSuite database and user on the local MariaDB"
+CREATE DATABASE IF NOT EXISTS \`iosuite\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'iosuite'@'localhost' IDENTIFIED BY '$SW'; CREATE USER 'iosuite'@'127.0.0.1' IDENTIFIED BY '$SW';
+GRANT ALL PRIVILEGES ON \`iosuite\`.* TO 'iosuite'@'localhost'; GRANT ALL PRIVILEGES ON \`iosuite\`.* TO 'iosuite'@'127.0.0.1';
+FLUSH PRIVILEGES;
+SQL
+      echo "  created the Shared ioSuite database iosuite and its user iosuite (random password) on this machine's MariaDB"
+      SUITE="127.0.0.1:3306/iosuite:iosuite:$SW"
+    else
+      echo "  the user iosuite exists on this MariaDB already: give its password with --suite-db 127.0.0.1:3306/iosuite:iosuite:PASSWORD"
+    fi
+  fi
 fi
 if [ -n "$VIEWERDB" ]; then  # a quick test with the command-line client, when there is one (the venv's pymysql tests again later and creates the database)
   vhp=${VIEWERDB%%/*}; vrest=${VIEWERDB#*/}; vrest=${vrest#*:}; VU=${vrest%%:*}; VW=${vrest#*:}; VH=${vhp%%:*}; VP=${vhp##*:}
@@ -226,11 +256,12 @@ if [ -z "$SUITE" ]; then
     SUITE="keep"; [ "$SUITE_SET" = 1 ] || echo "not named: iopix uses the defaults (its own database's server, database and user iosuite); set IOSUITE_DB_* in config.env"
   else
     case "$VIEWERDB" in ''|local) SH=127.0.0.1;; *) SH="${VIEWERDB%%/*}"; SH="${SH%%:*}";; esac
-    ask SH "Shared ioSuite database host" "$SH"; ask SP "port" "3306"; ask SD "database (created if the user may)" "iosuite"; ask SU "user" "iosuite"; secret SW "password"
+    SP="$(getenv IOSUITE_DB_PORT)"; SD="$(getenv IOSUITE_DB_NAME)"; SU="$(getenv IOSUITE_DB_USER)"
+    ask SH "Shared ioSuite database host" "$(getenv IOSUITE_DB_HOST | grep . || echo "$SH")"; ask SP "port" "${SP:-3306}"; ask SD "database (created if the user may)" "${SD:-iosuite}"; ask SU "user" "${SU:-iosuite}"
+    secret SW "password (empty: keep the current one)"; [ -n "$SW" ] || SW="$(getenv IOSUITE_DB_PASSWORD)"
     SUITE="$SH:$SP/$SD:$SU:$SW"
   fi
 fi
-getenv() { [ -f "$ENVF" ] && sed -n "s/^$1=//p" "$ENVF" | tail -n 1; true; }
 ask PORT "Port" "${PORT:-$(getenv PORT | grep . || echo 8600)}"
 [ -n "$PUBURL" ] || ask PUBURL "Public address, e.g. https://photo.example.com (empty: as reached)" "$(getenv PUBLIC_URL)"
 [ -n "$COOKIE" ] || ask COOKIE "Domain the sign-in is shared on, e.g. example.com (empty: this host only)" "$(getenv COOKIE_DOMAIN)"
@@ -238,12 +269,23 @@ ask PORT "Port" "${PORT:-$(getenv PORT | grep . || echo 8600)}"
 # --- features ---------------------------------------------------------------------------------------
 say "Features (each one downloads a model into $DATA/models)"
 if [ -z "$FEATURES" ]; then
+  # a first install: the usual ones on; a run again: what is installed now (the models config.env fetches, the text reader in .venv)
+  dS=y; dP=y; dO=y; dT=y; dC=n
+  if [ -f "$ENVF" ]; then
+    AM=",$(getenv AUTO_MODELS),"
+    case "$AM" in *,siglip2,*|*,clip,*) dS=y;; *) dS=n;; esac
+    case "$AM" in *,geonames,*) dP=y;; *) dP=n;; esac
+    case "$AM" in *,yolox,*) dO=y;; *) dO=n;; esac
+    case "$AM" in *,blip,*) dC=y;; *) dC=n;; esac
+    "$APP/.venv/bin/python" -c 'import rapidocr' 2>/dev/null && dT=y || dT=n
+    [ -n "$SEARCH_MODEL" ] || case "$AM" in *,clip,*) SEARCH_MODEL=clip;; *,siglip2,*) SEARCH_MODEL=siglip2;; esac
+  fi
   F=""
-  yesno "Content search: find photos by what is in them (SigLIP 2, ~1.5 GB; or CLIP, ~600 MB)" y && F="$F,search"
-  yesno "Places: town/region/country for GPS positions, offline (GeoNames, ~30 MB)" y && F="$F,places"
-  yesno "Object detection: people, animals, vehicles... (YOLOX, 35 MB)" y && F="$F,objects"
-  yesno "Text in photos: signs, jerseys, documents (RapidOCR, ~60 MB)" y && F="$F,ocr"
-  yesno "Photo descriptions: one sentence per photo (BLIP + PyTorch, ~1.5 GB, slow without a GPU)" n && F="$F,captions"
+  yesno "Content search: find photos by what is in them (SigLIP 2, ~1.5 GB; or CLIP, ~600 MB)" $dS && F="$F,search"
+  yesno "Places: town/region/country for GPS positions, offline (GeoNames, ~30 MB)" $dP && F="$F,places"
+  yesno "Object detection: people, animals, vehicles... (YOLOX, 35 MB)" $dO && F="$F,objects"
+  yesno "Text in photos: signs, jerseys, documents (RapidOCR, ~60 MB)" $dT && F="$F,ocr"
+  yesno "Photo descriptions: one sentence per photo (BLIP + PyTorch, ~1.5 GB, slow without a GPU)" $dC && F="$F,captions"
   FEATURES="${F#,}"
 fi
 has() { case ",$FEATURES," in *",$1,"*) return 0;; *) return 1;; esac; }
@@ -430,7 +472,10 @@ OOMPolicy=continue
 WantedBy=multi-user.target
 UEOF
   $SUDO systemctl daemon-reload || die "systemctl daemon-reload failed"
-  $SUDO systemctl enable --now iopix || die "the iopix service could not be started (see above; journalctl -u iopix)"
+  $SUDO systemctl enable -q iopix || die "the iopix service could not be enabled (see above)"
+  $SUDO systemctl restart iopix || die "the iopix service could not be started (see above; journalctl -u iopix)"  # restart: a running one reads the new settings
+  sleep 2
+  $SUDO systemctl is-active -q iopix || die "the service did not start: journalctl -u iopix -n 50"
   echo "  started (systemd)"
 else
   echo "  not installed as a service. Start the viewer with:"

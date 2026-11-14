@@ -410,10 +410,16 @@ def test_an_app_added_later_is_reached_like_the_others(tmp_path, monkeypatch):
 
     def runner(entry, log):
         seen[entry["name"]] = (install.read_env_file(entry["target"] / "config.env"), entry["args"][entry["args"].index("--public-url") + 1])
-        return 1 if entry["name"] == "iohealth" else 0
+        if entry["name"] == "iohealth":  # its answers were written, then the database check failed
+            with open(entry["target"] / "config.env", "a") as f:
+                f.write("DB_PASSWORD=typed\n")
+            return 1
+        return 0
     failed = install.install(["iorecipe", "iohealth"], own, base=opt, fetcher=fetcher, runner=runner, log=lambda line: None)
     assert seen["iorecipe"] == ({"HOST": "127.0.0.1"}, "https://home.example.com/recipes")  # before its setup.sh starts it
     assert failed == ["iohealth"] and not (opt / "iohealth" / "app" / "config.env").exists()  # a failed setup leaves no half an app
+    assert install.read_env_file(opt / "iohealth" / "app" / "config.env.failed")["DB_PASSWORD"] == "typed", "its answers, for the next run"
+    assert "iohealth" not in install.installed(opt, own)
     _reach("ports", own, opt)
     install.install(["iodns"], own, base=opt, fetcher=fetcher, runner=runner, log=lambda line: None)
     assert seen["iodns"] == ({}, "")

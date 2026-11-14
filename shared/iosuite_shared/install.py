@@ -290,8 +290,11 @@ def install(names, config_dir, base=None, admin=None, service=None, photos=None,
             write_env_file(e["target"] / "config.env", pre)
             log(f"  {e['label']} listens on this machine only, like the other apps here ({REACH[mode][0]})")
         rc = runner(e, log=log)
-        if rc != 0 and pre and read_env_file(e["target"] / "config.env") == pre:
-            (e["target"] / "config.env").unlink()  # its setup.sh never got to its settings: not "installed"
+        cfg_file = e["target"] / "config.env"
+        if rc != 0 and cfg_file.exists():
+            # a first setup that failed is not an install (config.env is what makes an app "here"): its answers are
+            # kept aside, and its setup.sh takes them as the defaults on the next run
+            cfg_file.replace(e["target"] / "config.env.failed")
         if rc != 0:
             log(f"  {e['label']}'s setup.sh failed (exit {rc}); fix the cause and run `sh {e['target']}/setup.sh` yourself")
             failed.append(e["name"])

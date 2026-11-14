@@ -10,6 +10,8 @@
 #     (right after a push GitHub may still report the previous commit; naming the sha avoids that)
 #   IONOTE_RESULT=<file>  write the outcome ("ok: ..." or "error: ...") there before the restart, so the web app
 #     can show it afterwards (its own child process dies in the restart)
+#   IONOTE_RUNNING=<version>  the version the running app is (the web app says it): in a checkout that another app of
+#     the suite already brought up to date, the packages are refreshed and the service restarted all the same
 #
 # Every app lives in a folder of one repository (ionote/ here), with the suite's shared library beside it in shared/;
 # both are installed from the same commit. Keeps config.env, the data folder and the Python environment. A git checkout
@@ -41,6 +43,7 @@ eval "REPO=\"\${${UP}_REPO:-$REPO_DEFAULT}\""
 eval "BRANCH=\"\${${UP}_BRANCH:-main}\""
 eval "REF=\"\${${UP}_REF:-\$BRANCH}\""
 eval "RESULT=\"\${${UP}_RESULT:-}\""
+eval "RUNNING=\"\${${UP}_RUNNING:-}\""
 case "$REF" in -*|*..*|*/*/*) printf 'error: bad ref: %s\n' "$REF" >&2; exit 1;; esac  # a commit id or a branch, never an option or a path
 FORCE=0; CHECK=0
 for a in "$@"; do case "$a" in --force) FORCE=1;; --check) CHECK=1;; *) printf 'error: unknown option %s (--check, --force)\n' "$a" >&2; exit 2;; esac; done
@@ -81,7 +84,13 @@ say "Fetching the latest code"
 if [ -n "$GITROOT" ]; then
   git -C "$GITROOT" fetch -q origin "$REF" || die "git fetch failed (could not reach GitHub?)"
   if [ "$FORCE" = 0 ] && [ "$(git -C "$GITROOT" rev-parse HEAD)" = "$(git -C "$GITROOT" rev-parse FETCH_HEAD)" ]; then
-    say "Already up to date ($(local_commit | cut -c1-7)); nothing to do"; note "ok: already up to date ($(local_commit | cut -c1-7))"; exit 0
+    # one checkout holds every app: another app's update may have pulled this code already, while this app still runs
+    # the version it started with. Then it is not up to date: its packages are refreshed and it is restarted
+    DISKV="$(sed -n 's/^__version__ = "\([^"]*\)".*/\1/p' "$SHARED/iosuite_shared/__init__.py")"
+    if [ -z "$RUNNING" ] || [ "$RUNNING" = "$DISKV" ]; then
+      say "Already up to date ($(local_commit | cut -c1-7)); nothing to do"; note "ok: already up to date ($(local_commit | cut -c1-7))"; exit 0
+    fi
+    say "The code here is already v$DISKV (fetched for another app of this checkout); $LABEL still runs v$RUNNING: restarting it on the new code"
   fi
   # what would make the merge fail is checked now, before any package is touched
   git -C "$GITROOT" merge-base --is-ancestor HEAD FETCH_HEAD || die "this checkout has commits that are not on $REF (not a fast-forward); update it by hand"
