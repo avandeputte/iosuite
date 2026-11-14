@@ -1,5 +1,7 @@
 # Publishing ioStart Bookmarks to the Chrome Web Store
 
+Published: <https://chromewebstore.google.com/detail/iosuite-bookmarks/nldealkpbjiholobfadimblcmdlphkoe>
+
 Everything the store's forms ask for. The package is the `.zip` of the newest `extension-v…` release (or the download
 on the start page's Bookmarks page). Chrome, Edge, Vivaldi, Brave and Opera all install from the Chrome Web Store.
 

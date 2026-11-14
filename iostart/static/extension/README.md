@@ -17,11 +17,13 @@ change?"), and when the browser starts. Deletes travel both ways. The first sync
 
 ## Install
 
-**Chrome, Edge, Vivaldi, Brave and other Chromium browsers**: from the Chrome Web Store once it is published there
-(`docs/extension/STORE.md`). Until then, or for a build of your own: download the .zip from the start page's Bookmarks page (or a release), unpack it, open
-`chrome://extensions` (`edge://extensions`, `vivaldi://extensions`), turn on *Developer mode*, *Load unpacked*, pick the folder. Keep the
-folder where it is: the browser loads the extension from it. To update, replace the folder's contents and press the
-reload arrow on the extension's card.
+**Chrome, Edge, Vivaldi, Brave and other Chromium browsers**: install it from the Chrome Web Store:
+**[ioSuite Bookmarks on the Chrome Web Store](https://chromewebstore.google.com/detail/iosuite-bookmarks/nldealkpbjiholobfadimblcmdlphkoe)**. The browser keeps it up to date.
+
+For a build of your own (or a version not yet in the store): download the .zip from the start page's Bookmarks page
+(or a release), unpack it, open `chrome://extensions` (`edge://extensions`, `vivaldi://extensions`), turn on
+*Developer mode*, *Load unpacked*, pick the folder. Keep the folder where it is: the browser loads the extension from
+it. To update, replace the folder's contents and press the reload arrow on the extension's card.
 
 **Firefox**: open the signed `.xpi` of a release (`extension-v…` in the repository's releases). Firefox only keeps
 extensions Mozilla has signed; unsigned, it can be tried until the next restart from `about:debugging` › *This
@@ -37,8 +39,8 @@ it). The browser asks once whether the extension may reach that one address; it 
   <https://addons.mozilla.org/developers/addon/api/key/> and put it in the repository's secrets as `AMO_JWT_ISSUER`
   and `AMO_JWT_SECRET`. The workflow `Browser extension` then has Mozilla sign each new version and attaches the
   `.xpi` to the release.
-- **Chrome Web Store** (Chrome, Edge, Vivaldi, Brave and Opera install from it): `docs/extension/STORE.md` has the
-  steps, every text the forms ask for, the screenshots and the privacy policy.
+- **Chrome Web Store** (Chrome, Edge, Vivaldi, Brave and Opera install from it): [published](https://chromewebstore.google.com/detail/iosuite-bookmarks/nldealkpbjiholobfadimblcmdlphkoe);
+  `docs/extension/STORE.md` has the steps, every text the forms ask for, the screenshots and the privacy policy.
 
 ## Files
 
