@@ -202,11 +202,24 @@ def execute(rid: int) -> None:
             if not isinstance(e, (engine.EngineError, model.NotFound)):
                 log.error("run %s crashed:\n%s", rid, traceback.format_exc())
             _update(rid, status="failed", finished=_now())
+            _tell_failed(rid, r["kind"], e)
     finally:
         _cancel.pop(rid, None)
         _lines.pop(rid, None)
         if _queue.empty():
             shutil.rmtree(config.WORK_DIR, ignore_errors=True)
+
+
+def _tell_failed(rid: int, kind: str, e: Exception) -> None:
+    """A notification to the suite admins who want it (iosuite_shared.push): a backup or a restore did not finish."""
+    try:
+        from iosuite_shared import push
+        title = db.one("SELECT title FROM bkp_runs WHERE id = %s", (rid,))
+        what = "Backup" if kind == "backup" else "Restore"
+        push.notify_admins("backups", f"{what} failed: {(title or {}).get('title') or 'run %d' % rid}", str(e)[:300],
+                           url=push.link("iobackup", f"#/run/{rid}"), once=f"backup-failed:{rid}", urgency="high")
+    except Exception:  # noqa: BLE001 - the run's own outcome is what counts
+        log.warning("could not send the notification for run %s", rid, exc_info=True)
 
 
 def _worker() -> None:

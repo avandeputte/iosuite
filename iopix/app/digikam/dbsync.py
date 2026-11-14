@@ -45,10 +45,9 @@ _running_seen = [False, float("-inf")]  # [answer, when]
 
 
 def digikam_running() -> bool:
-    """Whether digiKam is open, as far as this machine can tell. DIGIKAM_CHECK=none (and "ask", its name
-    before v1.19): the viewer cannot see digiKam's process (a container, digiKam on another machine), so
+    """Whether digiKam is open, as far as this machine can tell. DIGIKAM_CHECK=none: the viewer cannot see digiKam's process (a container, digiKam on another machine), so
     it does not check and does not ask; a write goes ahead."""
-    if config.DIGIKAM_CHECK in ("none", "ask") or dkdb.standalone():
+    if config.DIGIKAM_CHECK == "none" or dkdb.standalone():
         return False
     now = time.monotonic()
     if now - _running_seen[1] < RUNNING_MEMO:  # status pages ask several times a second; two pgrep runs each time is wasteful

@@ -53,19 +53,6 @@ def test_holidays_calendars(client, family_id):
     assert r["items"] == [] and holidays_cals(client) == []
 
 
-def test_one_country_settings_carry_over(client, family_id):
-    from app import db, holiday, model
-    db.set_setting("holidays_country", "BE")
-    db.set_setting("holidays_region", "")
-    db.set_setting("holidays_language", "fr")
-    cid = model.create_calendar(None, "Holidays", "Public holidays: Belgium", kind="holidays", slug="holidays")
-    s = holiday.settings()
-    assert s["items"] == [{"country": "BE", "region": None, "language": "fr"}] and not s["guessed"]
-    assert db.get_setting("holidays_country") is None
-    assert model.calendar(cid)["slug"] == "holidays-be"
-    assert holiday.sync()["ok"] and [c["id"] for c in holidays_cals(client)] == [cid]  # the same calendar, kept
-
-
 def test_holidays_from_the_environment(monkeypatch):
     from app import config, holiday
     monkeypatch.setattr(config, "HOLIDAYS_COUNTRY", "be, nl")

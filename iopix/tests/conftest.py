@@ -96,7 +96,7 @@ def _cleanup():
 
 @pytest.fixture(autouse=True)
 def _digikam_vouched_closed():
-    """DIGIKAM_CHECK=ask (Docker mode): the owner vouches that digiKam is closed for a while,
+    """DIGIKAM_CHECK=none (Docker mode): the owner vouches that digiKam is closed for a while,
     exactly as the Settings page does; the tests vouch before every test."""
     import time
     from app.data import state

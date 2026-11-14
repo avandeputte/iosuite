@@ -113,7 +113,7 @@ def test_batch_runs_in_one_transaction(dk):
 
 
 def test_container_mode_writes_without_asking(client, dk):
-    """DIGIKAM_CHECK=ask/none (containers): the viewer cannot see digiKam, so it neither checks nor asks."""
+    """DIGIKAM_CHECK=none (containers): the viewer cannot see digiKam, so it neither checks nor asks."""
     from app.data import state
     assert client.get("/api/status").json()["digikamCheck"] == "none"
     state.set_setting("digikam_closed_until", "0")  # no vouch in force

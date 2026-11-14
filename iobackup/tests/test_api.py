@@ -101,14 +101,24 @@ def test_backup_retention_verify_and_restore(client, source):
     assert len(client.get(f"/api/destinations/{dst['id']}/backups").json()["items"]) == 1
 
 
-def test_a_failed_backup_says_why(client, source):
+def test_a_failed_backup_says_why(client, source, monkeypatch):
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from iosuite_shared import push, users
+
     from app import tasks
+    sent = []
+    monkeypatch.setattr(push, "_post", lambda endpoint, body, headers: sent.append(endpoint) or 201)
+    monkeypatch.setattr(push.outbound, "check", lambda url, allowed=None: "142.250.0.1")
+    k = ec.generate_private_key(ec.SECP256R1())
+    push.add_device(users.find("alex")["id"], {"endpoint": "https://fcm.googleapis.com/fcm/send/b",
+                    "keys": {"p256dh": push.b64u(push._raw_public(k.public_key())), "auth": push.b64u(b"0123456789abcdef")}}, "iobackup")
     srv, dst, job = setup_all(client)
     assert client.put(f"/api/servers/{srv['id']}", json={**srv, "password": "wrong"}).status_code == 200
     rid = client.post(f"/api/jobs/{job['id']}/run").json()["runId"]
     tasks.execute(rid)
     run = client.get(f"/api/runs/{rid}").json()
     assert run["status"] == "failed" and any("FAILED" in line for line in run["log"])
+    assert sent == ["https://fcm.googleapis.com/fcm/send/b"], "the suite admin hears of it (Failed backups)"
 
 
 def test_secrets_go_to_keys_and_tokens(client):
