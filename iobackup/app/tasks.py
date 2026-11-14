@@ -12,7 +12,6 @@ import json
 import logging
 import os
 import queue
-import shutil
 import threading
 import time
 import traceback
@@ -28,6 +27,7 @@ MAX_LOG_LINES = 5000     # lines kept per run; after that only errors and the ou
 _queue: queue.Queue = queue.Queue()
 _cancel: dict[int, threading.Event] = {}
 _lines: dict[int, int] = {}
+_unsaved: dict[int, dict] = {}  # how a run ended, while ioBackup's own database could not take it (saved at the next chance)
 _started = False
 
 
@@ -105,8 +105,37 @@ def _logger(rid: int):
             else:
                 return
         line = "%s %s\n" % (_dt.datetime.now().strftime("%H:%M:%S"), msg)
-        db.ex("UPDATE bkp_runs SET log = CONCAT(log, %s) WHERE id = %s", (line, rid))
+        try:
+            db.ex("UPDATE bkp_runs SET log = CONCAT(log, %s) WHERE id = %s", (line, rid))
+        except Exception:  # noqa: BLE001 - ioBackup's own database away: the backup goes on, the line is in the service log
+            log.warning("[run %s] the log line could not be saved", rid)
     return emit
+
+
+def _finish(rid: int, tries: int = 6, wait: float = 2.0, **fields) -> None:
+    """Save how a run ended. ioBackup's own database may be the server that just went away (it is often one of the
+    servers backed up): try a few times, and if it is still away keep the outcome to save at the next chance, so the
+    run never stays "running" and its job never stays blocked."""
+    for i in range(tries):
+        try:
+            _update(rid, **fields)
+            _unsaved.pop(rid, None)
+            return
+        except Exception:  # noqa: BLE001
+            if i + 1 < tries:
+                time.sleep(wait * (2 ** i))
+    log.warning("run %s: its outcome (%s) could not be saved yet; it will be when the database answers", rid, fields.get("status"))
+    _unsaved[rid] = fields
+
+
+def save_unsaved() -> None:
+    """Save the outcomes kept by _finish (the worker and the scheduler call it)."""
+    for rid, fields in list(_unsaved.items()):
+        try:
+            _update(rid, **fields)
+            _unsaved.pop(rid, None)
+        except Exception:  # noqa: BLE001 - still away
+            return
 
 
 def enqueue(kind: str, title: str, payload: dict, job_id: int | None = None, trigger: str = "manual", by: str | None = None) -> int:
@@ -192,22 +221,20 @@ def execute(rid: int) -> None:
         fn = _do_backup if r["kind"] == "backup" else _do_restore
         result = fn(json.loads(r["payload"]), emit, ev)
         emit("Finished in %s" % _dur(time.time() - t0))
-        _update(rid, status="ok", finished=_now(), result=result)
+        _finish(rid, status="ok", finished=_now(), result=result)
     except Exception as e:
         if isinstance(e, engine.Cancelled) or ev.is_set():
             emit("Cancelled")
-            _update(rid, status="cancelled", finished=_now())
+            _finish(rid, status="cancelled", finished=_now())
         else:
             emit("FAILED: %s" % e)
             if not isinstance(e, (engine.EngineError, model.NotFound)):
                 log.error("run %s crashed:\n%s", rid, traceback.format_exc())
-            _update(rid, status="failed", finished=_now())
+            _finish(rid, status="failed", finished=_now())
             _tell_failed(rid, r["kind"], e)
     finally:
         _cancel.pop(rid, None)
         _lines.pop(rid, None)
-        if _queue.empty():
-            shutil.rmtree(config.WORK_DIR, ignore_errors=True)
 
 
 def _tell_failed(rid: int, kind: str, e: Exception) -> None:
@@ -225,10 +252,12 @@ def _tell_failed(rid: int, kind: str, e: Exception) -> None:
 def _worker() -> None:
     while True:
         rid = _queue.get()
+        save_unsaved()
         try:
             execute(rid)
-        except Exception:  # the database went away: the run stays as it was, the worker carries on
+        except Exception:  # the database went away before the run began: it ends as failed once the database is back
             log.exception("run %s could not be carried out", rid)
+            _unsaved.setdefault(rid, {"status": "failed", "finished": _now()})
 
 
 # ---------------------------------------------------------------- the scheduler
@@ -262,6 +291,7 @@ def _scheduler() -> None:
             minutes.append(t)
             t += _dt.timedelta(minutes=1)
         last = now
+        save_unsaved()
         try:
             pending = pending_jobs()
             for j in due(model.jobs(), minutes):
