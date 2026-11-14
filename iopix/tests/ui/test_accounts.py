@@ -56,8 +56,8 @@ def test_users_flow_in_the_browser(page, server, browser):
     _open_photo(visitor, server, pid)
     if visitor.locator(".lb-info").is_hidden():
         visitor.locator('[title^="Info"]').click()
-    visitor.wait_for_selector(".lb-info h4", timeout=10000)
-    assert visitor.locator(".lb-info input[placeholder='Title']").count() == 1, "the admin can edit"
+    # the panel still shows what the visitor saw until the photo's details arrive again: wait for the editor itself
+    visitor.wait_for_selector(".lb-info input[placeholder='Title']", timeout=10000)  # the admin can edit
     visitor.keyboard.press("Escape"); visitor.wait_for_selector("#lightbox", state="hidden", timeout=5000)
     # a display setting now lives on the server
     visitor.goto(server + "/#/settings/display"); visitor.wait_for_selector("label:has-text('Show badges')", timeout=10000)

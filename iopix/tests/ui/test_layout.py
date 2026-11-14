@@ -331,4 +331,4 @@ def test_the_name_opens_the_other_suite_apps(page, server, browser):
     box = page.locator(".suitepop").bounding_box()
     assert box["x"] >= 0 and box["x"] + box["width"] <= 390
     page.mouse.click(200, 600)
-    assert page.locator(".suitepop").count() == 0
+    page.wait_for_selector(".suitepop", state="detached", timeout=5000)  # a click outside closes it

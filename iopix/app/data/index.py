@@ -468,6 +468,7 @@ class _Hidden:
 
 
 HIDDEN = _Hidden()
+DROPS = 0  # photos taken out of the live index (drop_photos) without a new version: part of /api/photos' ETag
 
 
 def _drop(con, ids):
@@ -492,6 +493,8 @@ def drop_photos(ids, dst_path: Path = config.INDEX_DB):
     finally:
         con.close()
     HIDDEN.update(int(i) for i in ids)  # only once they are out: a failed drop hides nothing
+    global DROPS
+    DROPS += 1
 
 
 def build(dst_path: Path = config.INDEX_DB, source: tuple = None) -> dict:
