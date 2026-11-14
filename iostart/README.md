@@ -257,6 +257,12 @@ sudo bash rename-install.sh --dry-run    # then without --dry-run
 Run it behind a reverse proxy that terminates HTTPS (Caddy, Nginx Proxy Manager, HAProxy, Cloudflare Tunnel), on a
 host under the same `COOKIE_DOMAIN` as the apps, so the sign-in carries over.
 
+The start page can also be the one address of the whole suite: with **Settings › Global settings › Apps › Serve the
+suite on one address** on, it passes `/calendar/…`, `/notes/…` and the other apps' folders on to each app
+(`app/frontdoor.py`), so one name, one certificate and one port reach every app, and the proxy needs one upstream.
+Off by default; the suite's installer sets it up with `--reach one` (see the documentation, Run › Reverse proxy and
+HTTPS).
+
 ## Tests
 
 ```sh
@@ -278,6 +284,7 @@ app/main.py        the application: start-up (tables, first admin, the update ch
 app/mcp.py         the suite's one MCP server (/mcp): every app's tools passed on as the person asking, suite_apps, suite_version and update_suite
 app/access.py      who may call a route: the markers every /api route carries (public, signed_in, editor, admin)
 app/api.py         the REST API: the apps and their settings (sign-in, accounts, status, the server, updates and the log: iosuite_shared's routers)
+app/frontdoor.py   the suite on one address: passes /calendar/…, /notes/… on to the app that owns the folder, while the suite's switch is on
 app/apps.py        the suite's apps as they registered (iosuite_shared.suite) and the order of their tiles
 app/status.py      is each app up (its /api/status) and does it have an update; is each bookmark reachable
 app/layout.py      each account's own layout: hidden tiles and cards, the tiles' order, the photo strip

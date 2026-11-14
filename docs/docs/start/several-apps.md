@@ -34,6 +34,34 @@ typing `DELETE`; the accounts, the photos and the backups are never touched.
 
 Without questions: `... | bash -s -- --add iotask,ionote`, `--remove iohealth`, `--reconfigure iocalendar`, `--list`.
 
+## How the apps are reached
+
+A new install has every app on its own port, open to your network. In the list, `a` changes that for every app on the
+server at once (`--reach` without questions):
+
+| | `--reach` | What it sets |
+| --- | --- | --- |
+| Each app on its own port | `ports` | how a new install starts: `http://server:8620` for ioCalendar, and so on |
+| One address | `one` | the start page answers for every app (`http://server:8630/calendar/`, `…/notes/`); the other apps listen on the server itself only |
+| One address behind a reverse proxy on the server | `one-proxy` | the same, and the start page listens on the server itself only too: your Caddy or nginx does HTTPS with one site and one upstream |
+| A reverse proxy on the server reaches each app | `proxy` | every app listens on the server itself only; the proxy has an upstream per app |
+
+With `one-proxy` and `proxy` it also asks for the address the suite is at (`--address https://home.example.com`): the
+start page's public address and, with `proxy`, every other app's folder of it (`https://home.example.com/calendar`),
+for a proxy that serves one name with a folder per app. Leave it empty when each app has a name of its own; those
+stay each app's own setting (`r` and its number). It then prints the Caddy site to paste.
+
+```sh
+... | bash -s -- --reach one
+... | bash -s -- --reach one-proxy --address https://home.example.com
+... | bash -s -- --yes --db ... --admin ... --add all --reach one     # a new server, no questions
+```
+
+The answer is written as `HOST` in each app's `config.env` and as the suite's one-address switch (Settings › Global
+settings › Apps); the apps it changes are restarted, and an app you add later follows the others. ioContact's LDAP
+directory is not HTTP and keeps listening where it did. See [Reverse proxy and HTTPS](../run/reverse-proxy.md) for
+what each way means and the proxy's side of it.
+
 ## From an app's own installer
 
 Whichever app you install first, its installer ends with the same list (`./setup.sh --apps` shows only the list), and

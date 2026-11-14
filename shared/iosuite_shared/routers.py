@@ -518,6 +518,21 @@ def admin_router(self) -> APIRouter:
             auth._registered = False
         return {"ok": True}
 
+    @r.get("/address", dependencies=[access.suite_admin])
+    def api_address(request: Request):
+        """The suite on one address (iosuite_shared.suite.one_address): the switch, the address (the start page's)
+        and every app's folder there, with whether the start page can pass requests on to it."""
+        return suite_admin.one_address()
+
+    @r.put("/address", dependencies=[access.suite_admin])
+    async def api_address_save(request: Request):
+        """Body {on: bool}."""
+        body = await json_body(request)
+        who = me(request)
+        out = await run_in_threadpool(call, suite_admin.set_one_address, bool(body.get("on")))
+        authlog.info("suite admin: one address for the suite switched %s by %s", "on" if out["on"] else "off", (who or {}).get("name"))
+        return out
+
     def updates_now():
         from iosuite_shared import updates as upd
         return {**suiteupdates.summary(), "autoCheck": upd.auto_check_enabled()}

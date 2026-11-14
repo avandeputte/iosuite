@@ -16,6 +16,16 @@
 #   --delete-data         with --remove: also drop the app's own database and delete its data folder (cannot be undone)
 #   --list                only show what is installed
 #   --service | --no-service   the apps you add run as a service (the default as root with systemd), or are started by hand
+#   --reach ports | one | one-proxy | proxy   how every app here is reached (a in the list asks the same):
+#                         ports      each app on its own port, from anywhere on the network (how a new install starts)
+#                         one        one address: the start page answers for every app (…/calendar/, …/notes/);
+#                                    the other apps listen on this machine only
+#                         one-proxy  the same behind a reverse proxy on this server (Caddy, nginx: HTTPS): the start
+#                                    page listens on this machine only too
+#                         proxy      a reverse proxy on this server reaches each app on its own port: every app
+#                                    listens on this machine only
+#   --address URL         with --reach: where the suite is (https://home.example.com): the start page's public address,
+#                         and with --reach proxy every other app's folder of it too (https://home.example.com/calendar)
 #   --db-admin USER:PASSWORD   a MariaDB administrator: the databases and users of the apps you add are created for you
 # On a new server every other option goes to the first app's setup.sh, so an install without questions is e.g.
 #   ... | bash -s -- --yes --db 127.0.0.1:3306/suite:suite:PASSWORD --admin alex:PASSWORD --db-admin root:PASSWORD --add all
@@ -28,7 +38,7 @@ say() { printf '\n\033[1;34m==>\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
 main() {
-  local base="${IOSUITE_BASE:-}" first="iostart" add="" dbadmin="" svc="" rest=() manage=()
+  local base="${IOSUITE_BASE:-}" first="iostart" add="" dbadmin="" svc="" reach=() rest=() manage=()
   while [ $# -gt 0 ]; do
     case "$1" in
       --into) base="$2"; shift 2;;
@@ -38,7 +48,8 @@ main() {
       --delete-data|--list) manage+=("$1"); shift;;
       --db-admin) dbadmin="$2"; shift 2;;
       --service|--no-service) manage+=("$1"); svc="$1"; shift;;
-      -h|--help) sed -n '2,22p' "${BASH_SOURCE[0]:-/dev/null}" 2>/dev/null | sed 's/^# \{0,1\}//' || true
+      --reach|--address) manage+=("$1" "$2"); reach+=("$1" "$2"); shift 2;;
+      -h|--help) sed -n '2,32p' "${BASH_SOURCE[0]:-/dev/null}" 2>/dev/null | sed 's/^# \{0,1\}//' || true
                  [ -n "${BASH_SOURCE[0]:-}" ] || echo "see the top of $REPO/blob/main/install.sh"; exit 0;;
       *) rest+=("$1"); shift;;
     esac
@@ -84,6 +95,8 @@ main() {
   [ -z "$svc" ] || rest+=("$svc")
   cd "$target"
   IOSUITE_REPO="$REPO" sh ./setup.sh ${rest[@]+"${rest[@]}"}
+  # how every app is reached: once they are all here
+  [ ${#reach[@]} -eq 0 ] || "$target/.venv/bin/iosuite-shared" --config "$target" apps --into "$base" "${reach[@]}"
   say "ioSuite is installed in $base. Run this again at any time to add, remove or reconfigure apps."
 }
 main "$@"

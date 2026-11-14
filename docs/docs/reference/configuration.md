@@ -63,8 +63,9 @@ that long (the trash shows 30 days); after that an empty marker stays.
 There is no default password for the Shared ioSuite database: `IOSUITE_DB_PASSWORD` is set by the installer, or by you.
 
 Settings that hold for the whole suite are not in `config.env` but in the Shared ioSuite database, changed in any app:
-sign-in at the proxy and the addresses of your reverse proxies (Settings › Security), each app's default role and sign-in requirement (Settings › Global settings ›
-Apps), and the keys for services outside the suite (Settings › Global settings › Keys and tokens).
+sign-in at the proxy and the addresses of your reverse proxies (Settings › Security), each app's default role and sign-in requirement and
+whether the start page serves the whole suite on one address (Settings › Global settings › Apps), and the keys for services outside the suite
+(Settings › Global settings › Keys and tokens).
 
 ## Default ports
 

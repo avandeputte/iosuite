@@ -333,6 +333,27 @@ def end_sessions(user_id: int, session_id: str = None):
         sessions.end_all(user_id)
 
 
+def one_address() -> dict:
+    """{on, address, start, apps: [{app, name, folder, url, reachable}]}: the switch, the suite's one address (the
+    start page's, None while the start page is not in the list or has no address yet), whether the start page is
+    installed at all, and every other app's folder there. reachable: the app recorded where it is inside the
+    network, so the start page can pass its requests on (an app in a container needs INTERNAL_URL for that)."""
+    rows = db.q("SELECT app, name, configured_url, seen_url, internal_url FROM ios_apps ORDER BY name, app")
+    start = next((r for r in rows if r["app"] == suite.DOOR), None)
+    address = ((start or {}).get("configured_url") or (start or {}).get("seen_url") or "").rstrip("/") or None
+    return {"on": db.get_setting(suite.ONE_ADDRESS, "", "") == "1", "address": address, "start": bool(start),
+            "apps": [{"app": r["app"], "name": r["name"], "folder": suite.folder_of(r["app"]), "reachable": bool(r["internal_url"]),
+                      "url": f"{address}/{suite.folder_of(r['app'])}" if address else None}
+                     for r in rows if suite.folder_of(r["app"])]}
+
+
+def set_one_address(on: bool) -> dict:
+    if on and not db.one("SELECT 1 AS x FROM ios_apps WHERE app = %s", (suite.DOOR,)):
+        raise Invalid("The start page (ioStart) is not installed: it is the one that answers at the address and passes every app's requests on")
+    suite.set_one_address(on)
+    return one_address()
+
+
 def overview() -> dict:
     return {"apps": apps(), "users": accounts(), "roles": list(users.ROLES), "defaultRoles": list(DEFAULT_ROLES),
             "scopes": list(PERSON_SCOPES)}

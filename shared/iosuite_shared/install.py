@@ -39,6 +39,22 @@ deletes its data folder under BASE/<app>; never the Shared ioSuite database (the
 stay as they are), never a database another app here uses, never the photos or digiKam's own database (ioPix) or the
 backups (ioBackup): the folders config.env names for them (KEPT) stay wherever they are, inside the app's folder too.
 The app this runs from is removed by another app that stays; the last app here is not removed.
+
+How the apps are reached (`a` in the list, or `apps --reach ports|one|one-proxy|proxy [--address URL]`) is one answer
+for every app on the machine, written as HOST in each config.env (iosuite_shared.serve) and as the suite's one-address
+switch in the Shared ioSuite database (iosuite_shared.suite.one_address; the start page passes each app's folder on):
+
+  ports      each app on its own port, reachable from the network (how a new install starts)
+  one        one address: the start page answers for every app (…/calendar/); the other apps listen on this
+             machine only (HOST=127.0.0.1)
+  one-proxy  the same behind a reverse proxy on this server (Caddy, nginx: HTTPS): the start page listens on this
+             machine only too
+  proxy      a reverse proxy on this server reaches each app on its own port: every app listens on this machine only
+
+`--address URL` names where the suite is: the start page's PUBLIC_URL, and with `proxy` every other app's folder of it
+too (https://home.example.com/calendar), for a proxy that serves one name with a folder per app. The apps whose
+config.env changed are restarted; an app added later follows what the others do. ioContact's LDAP directory, which
+is not HTTP and so passes through neither, stays where it listened.
 """
 import atexit
 import os
@@ -231,14 +247,21 @@ def run_setup(entry, log=print):
     return subprocess.run(cmd, cwd=str(entry["target"]), env=env).returncode
 
 
-def install(names, config_dir, base=None, admin=None, service=None, photos=None, from_app=None, db_admin=None, fetcher=fetch, runner=run_setup, log=print):
-    """Install every app in NAMES; returns the names that failed (empty when all went well)."""
+def install(names, config_dir, base=None, admin=None, service=None, photos=None, from_app=None, db_admin=None, fetcher=fetch, runner=run_setup, log=print,
+            reach=None):
+    """Install every app in NAMES; returns the names that failed (empty when all went well). A new app is reached
+    the way the others here are (REACH; `reach`: the way that is about to be set)."""
     cfg = read_env_file(Path(config_dir) / "config.env") if config_dir else {}
     base = Path(base) if base else base_dir(config_dir or os.getcwd())
     entries = plan(names, cfg, base, admin=admin, service=service, photos=photos, from_app=from_app)
     if not entries:
         log("nothing to install")
         return []
+    mode = reach or reach_now(base, config_dir)
+    shared = shared_address(base, config_dir) if mode == "proxy" else None
+    for e in entries:
+        if shared and e["name"] != "iostart":  # the proxy serves one name, a folder per app: this one's folder of it
+            e["args"][e["args"].index("--public-url") + 1] = f"{shared}/{folder_of(e['name'])}"
     if any(APPS[e["name"]].get("photos") for e in entries):
         p = Path(photos or DEFAULT_PHOTOS)
         if not p.is_dir():
@@ -262,7 +285,13 @@ def install(names, config_dir, base=None, admin=None, service=None, photos=None,
             log(f"  could not fetch {e['label']}: {exc}")
             failed.append(e["name"])
             continue
+        pre = _local_env(e["name"], {}) if _local_only(mode, e["name"]) else None
+        if pre:  # before it first starts: its setup.sh keeps what config.env already says
+            write_env_file(e["target"] / "config.env", pre)
+            log(f"  {e['label']} listens on this machine only, like the other apps here ({REACH[mode][0]})")
         rc = runner(e, log=log)
+        if rc != 0 and pre and read_env_file(e["target"] / "config.env") == pre:
+            (e["target"] / "config.env").unlink()  # its setup.sh never got to its settings: not "installed"
         if rc != 0:
             log(f"  {e['label']}'s setup.sh failed (exit {rc}); fix the cause and run `sh {e['target']}/setup.sh` yourself")
             failed.append(e["name"])
@@ -512,6 +541,249 @@ def reconfigure(names, config_dir, base=None, runner=None, log=print):
 
 
 # ---------------------------------------------------------------------------------------------------------------------
+# how the apps are reached: each on its own port, all at the start page's address, or behind a reverse proxy here
+
+# mode -> (in a few words, the whole line of the menu)
+REACH = {
+    "ports": ("each app on its own port", "Each app on its own port, from anywhere on the network (http://this-server:8620 for ioCalendar, and so on)"),
+    "one": ("one address, the start page answers for every app",
+            "One address: the start page answers for every app (http://this-server:8630/calendar/, …/notes/). The other apps listen on this machine only"),
+    "one-proxy": ("one address, behind a reverse proxy on this server",
+                  "One address behind a reverse proxy on this server (Caddy, nginx…: HTTPS): as 2, and the start page listens on this machine only too"),
+    "proxy": ("a reverse proxy on this server reaches each app",
+              "A reverse proxy on this server reaches each app on its own port: every app listens on this machine only"),
+}
+LOCAL = "127.0.0.1"
+ADDRESS = re.compile(r"^https?://[^/\s?#]+(/[^\s?#]*)?$")
+
+
+def folder_of(name):
+    from iosuite_shared import suite
+    return suite.folder_of(name)
+
+
+def write_env_file(path, changes):
+    """Set (or, with None, take out) KEY=VALUE lines of a config.env; every other line stays as it is, and so do the
+    file's owner and mode (a new file is the owner's alone: it will hold passwords)."""
+    p = Path(path)
+    new = not p.is_file()
+    lines = [] if new else p.read_text(encoding="utf-8", errors="replace").splitlines()
+    keep = [ln for ln in lines if ln.lstrip().startswith("#") or "=" not in ln or ln.split("=", 1)[0].strip() not in changes]
+    keep += [f"{k}={v}" for k, v in changes.items() if v is not None]
+    if new:
+        p.touch(mode=0o600)
+    p.write_text("\n".join(keep) + "\n", encoding="utf-8")
+
+
+def _is_local(value):
+    hosts = [h.strip("[]").lower() for h in re.split(r"[,\s]+", value or "") if h]
+    return bool(hosts) and all(h in ("127.0.0.1", "localhost", "::1") for h in hosts)
+
+
+def _local_only(mode, name):
+    """Whether the app listens on this machine only in that mode."""
+    return mode in ("proxy", "one-proxy") or (mode == "one" and name != "iostart")
+
+
+def _local_env(name, cfg):
+    """What makes an app listen on this machine only. ioContact's LDAP directory listens where the web app does
+    unless told otherwise: it is not HTTP, no proxy and no start page passes it on, so it stays where it was."""
+    out = {"HOST": LOCAL}
+    if name == "iocontact" and not cfg.get("LDAP_HOST") and cfg.get("LDAP_PORT") != "0" and not _is_local(cfg.get("HOST")):
+        out["LDAP_HOST"] = cfg.get("HOST") or "0.0.0.0"
+    return out
+
+
+def _switch():
+    """The suite's one-address switch, from the Shared ioSuite database the calling app's config.env names; off
+    when it cannot be read."""
+    try:
+        from iosuite_shared import db, suite
+        return db.get_setting(suite.ONE_ADDRESS, "", "") == "1"
+    except Exception:  # noqa: BLE001 - no database to ask (yet)
+        return False
+
+
+def _set_switch(on):
+    from iosuite_shared import suite
+    suite.set_one_address(on)
+
+
+def _folder(base, config_dir, name):
+    return Path(config_dir) if name == app_of(config_dir) and config_dir else Path(base) / name / "app"
+
+
+def reach_now(base, config_dir, switch=None):
+    """How the apps here are reached now (a key of REACH), from the switch and each app's HOST."""
+    here = installed(base, config_dir)
+    local = {n: _is_local(read_env_file(_folder(base, config_dir, n) / "config.env").get("HOST")) for n in here}
+    if (switch or _switch)() and "iostart" in here:
+        return "one-proxy" if local["iostart"] else "one"
+    return "proxy" if here and all(local.values()) else "ports"
+
+
+def shared_address(base, config_dir):
+    """The one address a proxy serves every app in a folder of (the start page's PUBLIC_URL), when another app here
+    is set up as a folder of it; None otherwise (a name per app, or no public address)."""
+    here = installed(base, config_dir)
+    if "iostart" not in here:
+        return None
+    url = (read_env_file(_folder(base, config_dir, "iostart") / "config.env").get("PUBLIC_URL") or "").rstrip("/")
+    if not url:
+        return None
+    for n in here:
+        if n != "iostart" and (read_env_file(_folder(base, config_dir, n) / "config.env").get("PUBLIC_URL") or "").rstrip("/") == f"{url}/{folder_of(n)}":
+            return url
+    return None
+
+
+def reach_plan(mode, base, config_dir, address=None):
+    """[(app, its folder, {KEY: value, or None to take the line out})] for the apps whose config.env changes."""
+    out = []
+    for n in installed(base, config_dir):
+        folder = _folder(base, config_dir, n)
+        cfg = read_env_file(folder / "config.env")
+        ch = {}
+        if _local_only(mode, n):
+            ch.update(_local_env(n, cfg))
+        else:
+            if _is_local(cfg.get("HOST")):  # an address the person named (one of several on this machine) stays
+                ch["HOST"] = None
+            if n == "iocontact" and cfg.get("LDAP_HOST") == "0.0.0.0":
+                ch["LDAP_HOST"] = None
+        if address and n == "iostart":
+            ch["PUBLIC_URL"] = address
+        elif address and mode == "proxy":
+            ch["PUBLIC_URL"] = f"{address}/{folder_of(n)}"
+        ch = {k: v for k, v in ch.items() if (cfg.get(k) or None) != v}
+        if ch:
+            out.append((n, folder, ch))
+    return out
+
+
+def restart_service(name, target, log=print, run=subprocess.run):
+    """Start the app again so it reads its config.env: its systemd unit (only when it points at TARGET) or its login
+    item on a Mac. Without either the app was started by hand, and the person does it."""
+    unit = Path(f"/etc/systemd/system/{name}.service")
+    label = APPS[name].get("launchd")
+    plist = Path.home() / "Library" / "LaunchAgents" / f"{label}.plist" if label else None
+    if unit.is_file() and shutil.which("systemctl") and str(target) in unit.read_text(errors="replace"):
+        sudo = [] if os.geteuid() == 0 else ["sudo"]
+        if run(sudo + ["systemctl", "restart", name], capture_output=True).returncode == 0:
+            log(f"  restarted the service {name}")
+            return True
+        log(f"  could not restart the service {name}: journalctl -u {name} -n 50")
+        return False
+    if plist is not None and plist.is_file():
+        run(["launchctl", "kickstart", "-k", f"gui/{os.getuid()}/{label}"], capture_output=True)
+        log(f"  restarted the login item {label}")
+        return True
+    log(f"  {APPS[name]['label']} is started by hand here: stop it and start it again (./run.sh) for this to count")
+    return True
+
+
+def set_reach(mode, config_dir, base=None, address=None, switcher=None, restarter=restart_service, log=print):
+    """Make every app here reached that way (see the module's text). Returns True when everything was done."""
+    base = Path(base) if base else base_dir(config_dir or os.getcwd())
+    address = (address or "").rstrip("/") or None
+    here = installed(base, config_dir)
+    say(f"How the apps are reached: {REACH[mode][0]}")
+    if mode in ("one", "one-proxy") and "iostart" not in here:
+        log("  one address needs the start page (ioStart) on this server: it is the app that answers at the address. Add it first")
+        return False
+    if address and not ADDRESS.match(address):
+        log(f"  {address}: not an address (https://home.example.com)")
+        return False
+    one = mode in ("one", "one-proxy")
+    switcher = switcher or _set_switch
+    ok = True
+    if one:  # first: the start page passes the folders on before the apps stop answering the network themselves
+        try:
+            switcher(True)
+            log("  the suite's one address is on (Settings › Global settings › Apps shows it)")
+        except Exception as exc:  # noqa: BLE001
+            log(f"  could not turn the suite's one address on in the Shared ioSuite database ({str(exc)[:160]}): nothing changed")
+            return False
+    for n, folder, ch in reach_plan(mode, base, config_dir, address):
+        write_env_file(folder / "config.env", ch)
+        what = ", ".join(f"{k}={v}" if v is not None else f"{k} taken out" for k, v in ch.items())
+        log(f"  {APPS[n]['label']}: {what}")
+        if "LDAP_HOST" in ch and ch["LDAP_HOST"]:
+            log("    its LDAP directory is not HTTP and goes on listening where it did (LDAP_HOST in its config.env)")
+        ok = restarter(n, folder, log=log) and ok
+    if not one:
+        try:
+            switcher(False)
+        except Exception as exc:  # noqa: BLE001
+            log(f"  note: could not read or turn off the suite's one address in the Shared ioSuite database ({str(exc)[:160]}); "
+                f"a suite admin can, in Settings › Global settings › Apps")
+            ok = False
+    for line in _reach_notes(mode, base, config_dir, address):
+        log(line)
+    return ok
+
+
+def _reach_notes(mode, base, config_dir, address):
+    """What the person does next, and a Caddyfile for the two ways with a reverse proxy."""
+    here = installed(base, config_dir)
+    port = {n: read_env_file(_folder(base, config_dir, n) / "config.env").get("PORT") or APPS[n]["port"] for n in here}
+    others = [n for n in here if n != "iostart"]
+    start = address or (read_env_file(_folder(base, config_dir, "iostart") / "config.env").get("PUBLIC_URL") or "").rstrip("/") if "iostart" in here else address
+    host = re.sub(r"^https?://", "", address or "").split("/")[0]
+    out = [""]
+    if mode == "ports":
+        out.append("  Every app answers on its own port: " + ", ".join(f"{APPS[n]['label']} {port[n]}" for n in here))
+    elif mode == "one":
+        at = start or f"http://<this server>:{port['iostart']}"
+        out.append(f"  The suite is at {at}: " + ", ".join(f"{at}/{folder_of(n)}/" for n in others[:3]) + (" and so on" if len(others) > 3 else ""))
+        out.append("  Phones and apps that sync calendars, contacts, tasks or bookmarks need the new address of their account.")
+    elif mode == "one-proxy":
+        out.append(f"  Point the reverse proxy at 127.0.0.1:{port['iostart']} (the start page): it passes every app's folder on. For Caddy:")
+        out += ["", f"      {host or 'home.example.com'} {{", f"          reverse_proxy 127.0.0.1:{port['iostart']}", "      }"]
+        if not start:
+            out += ["", "  Give the start page its address: run this again with --address https://…, or r and its number in the list."]
+    else:
+        if address and "iostart" in here:
+            out += ["  For Caddy, one name with a folder per app:", "", f"      {host} {{"]
+            for n in others:
+                f = folder_of(n)
+                out += [f"          redir /{f} /{f}/", f"          handle_path /{f}/* {{", f"              reverse_proxy 127.0.0.1:{port[n]}", "          }"]
+            for wk, n in (("caldav", "iocalendar"), ("carddav", "iocontact")):
+                if n in here:
+                    out.append(f"          redir /.well-known/{wk} /{folder_of(n)}/dav/ 301")
+            out += ["          handle {", f"              reverse_proxy 127.0.0.1:{port['iostart']}", "          }", "      }"]
+        else:
+            out.append("  Point the reverse proxy at each app: " + ", ".join(f"{APPS[n]['label']} 127.0.0.1:{port[n]}" for n in here))
+            out.append("  Each app's public address is its own setting: r and its number in the list, or --reconfigure APP.")
+    if mode in ("proxy", "one-proxy"):
+        out.append("  The documentation has the same for nginx and the rest: Run › Reverse proxy and HTTPS.")
+    return out
+
+
+def ask_reach(base, config_dir, now, ask=input, log=print):
+    """The menu: (mode, address) or None when the person leaves it as it is."""
+    modes = list(REACH)
+    log("\nHow the apps are reached:")
+    for i, m in enumerate(modes, 1):
+        log(f"  {i}  {REACH[m][1]}{'  (now)' if m == now else ''}")
+    try:
+        ans = ask("Number (Enter: leave it as it is): ").strip().lower()
+        mode = modes[int(ans) - 1] if ans.isdigit() and 1 <= int(ans) <= len(modes) else ans if ans in REACH else None
+        if not mode:
+            return None
+        address = ""
+        if mode != "ports":
+            q = ("The one address the proxy serves every app in a folder of, e.g. https://home.example.com (Enter: each app has a name of its own, or leave them as they are): "
+                 if mode == "proxy" else "The address the suite is at, e.g. https://home.example.com (Enter: leave the start page's as it is): ")
+            address = ask(q).strip().rstrip("/")
+            while address and not ADDRESS.match(address):
+                address = ask("An address starts with http:// or https:// (Enter: leave it): ").strip().rstrip("/")
+    except EOFError:
+        return None
+    return mode, address or None
+
+
+# ---------------------------------------------------------------------------------------------------------------------
 # `apps`: what is here; tick and untick
 
 def _table(base, config_dir, want=None, redo=()):
@@ -531,22 +803,34 @@ def _table(base, config_dir, want=None, redo=()):
     return lines
 
 
-def choose(base, config_dir, ask=input, log=print):
-    """The checklist: returns (add, remove, delete_data, reconfigure), or None when the person changes nothing or backs out."""
+def choose(base, config_dir, ask=input, log=print, reach=None):
+    """The checklist: returns (add, remove, delete_data, reconfigure), or None when the person changes nothing or backs out.
+    With `reach` (a dict), `a` asks how the apps are reached and leaves the answer there as mode and address."""
     here = installed(base, config_dir)
     want = list(here)
     redo = []
     names = list(APPS)
+    now = reach_now(base, config_dir) if reach is not None else None
     while True:
         log("")
         for line in _table(base, config_dir, want, redo):
             log(line)
+        if reach is not None:
+            log(f"  Reached: {REACH[now][0]}" + (f"  (to change to: {REACH[reach['mode']][0]})" if reach.get("mode") and reach["mode"] != now else ""))
         try:
-            ans = ask("Numbers or names to tick or untick (e.g. 3 5), r and a number to change an installed app's settings (e.g. r2), Enter when it is right: ").strip()
+            ans = ask("Numbers or names to tick or untick (e.g. 3 5), r and a number to change an installed app's settings (e.g. r2), "
+                      + ("a to change how the apps are reached, " if reach is not None else "") + "Enter when it is right: ").strip()
         except EOFError:
             return None
         if not ans:
             break
+        if reach is not None and ans.lower() == "a":
+            picked = ask_reach(base, config_dir, now, ask=ask, log=log)
+            if picked and picked[0] in ("one", "one-proxy") and "iostart" not in want:
+                log("  one address needs the start page: tick ioStart first")
+            elif picked:
+                reach.update(mode=picked[0], address=picked[1])
+            continue
         for tok in re.sub(r"\b[rR]\s+(?=\S)", "r", ans.replace(",", " ")).split():
             again = tok[:1] in "rR" and tok.lower() not in APPS and len(tok) > 1
             if again:
@@ -568,7 +852,9 @@ def choose(base, config_dir, ask=input, log=print):
     add = [n for n in names if n in want and n not in here]
     rem = [n for n in names if n in here and n not in want]
     redo = [n for n in names if n in redo and n not in rem]
-    if not add and not rem and not redo:
+    if reach and reach.get("mode") == now and not reach.get("address"):
+        reach.clear()
+    if not add and not rem and not redo and not reach:
         log("nothing to change")
         return None
     delete = False
@@ -576,6 +862,9 @@ def choose(base, config_dir, ask=input, log=print):
         log(f"\nTo add: {', '.join(APPS[n]['label'] for n in add)}")
     if redo:
         log(f"\nTo reconfigure: {', '.join(APPS[n]['label'] for n in redo)} (its own questions again, the current answers as the defaults)")
+    if reach:
+        log(f"\nHow the apps are reached: {REACH[reach['mode']][0]}" + (f", at {reach['address']}" if reach.get("address") else "")
+            + " (the apps whose settings change are restarted)")
     if rem:
         log(f"\nTo remove: {', '.join(APPS[n]['label'] for n in rem)}")
         log("Removing stops the app and deletes its program files. Its database and its data stay, so adding it again later brings everything back.")
@@ -605,6 +894,10 @@ def add_parser(sub):
     c.add_argument("--delete-data", action="store_true", help="with --remove: also drop each app's own database and delete its data folder (cannot be undone)")
     c.add_argument("--reconfigure", default=None, help="installed apps whose own setup questions are asked again (the current answers are the defaults)")
     c.add_argument("--list", action="store_true", help="only show what is installed")
+    c.add_argument("--reach", choices=list(REACH), default=None,
+                   help="how every app here is reached: " + "; ".join(f"{k}: {v[0]}" for k, v in REACH.items()))
+    c.add_argument("--address", default=None, help="with --reach: the address the suite is at (https://home.example.com): the start page's public "
+                                                    "address, and with --reach proxy every other app's folder of it too")
     _install_options(c)
     return p
 
@@ -646,13 +939,17 @@ def main_apps(a):
     both = [n for n in add + redo if n in rem]
     if both:
         raise SystemExit(f"error: {', '.join(both)}: to remove and to add or reconfigure")
-    if a.add is None and a.remove is None and a.reconfigure is None:
+    if a.address and not a.reach:
+        raise SystemExit("error: --address goes with --reach (ports, one, one-proxy or proxy)")
+    reach = {"mode": a.reach, "address": a.address} if a.reach else {}
+    if a.add is None and a.remove is None and a.reconfigure is None and not a.reach:
         say(f"The apps of the suite on this server (under {base})")
         if a.list or not sys.stdin.isatty():
             for line in _table(base, a.config):
                 print(line)
+            print(f"  Reached: {REACH[reach_now(base, a.config)][0]}")
             return 0
-        picked = choose(base, a.config)
+        picked = choose(base, a.config, reach=reach)
         if not picked:
             return 0
         add, rem, delete, redo = picked
@@ -662,10 +959,13 @@ def main_apps(a):
     if service is None and own and Path(f"/etc/systemd/system/{own}.service").is_file():
         service = True  # the app this runs from is a service: so are the ones added beside it
     not_installed = install(add, a.config, base=base, admin=a.admin, service=service, photos=a.photos,
-                            from_app=a.from_app or app_of(a.config), db_admin=a.db_admin) if add else []
+                            from_app=a.from_app or app_of(a.config), db_admin=a.db_admin, reach=reach.get("mode")) if add else []
     not_redone = reconfigure(redo, a.config, base=base) if redo else []
+    reached = set_reach(reach["mode"], a.config, base=base, address=reach.get("address")) if reach.get("mode") else True
     if own in rem:  # last: another app that is here removes this one
         not_removed += remove([own], a.config, base=base, delete_data=delete, db_admin=a.db_admin)
     if not_redone:
         print(f"\nerror: not reconfigured: {', '.join(not_redone)}", file=sys.stderr)
-    return 1 if not_redone else _report(not_installed, not_removed)
+    if not reached:
+        print("\nerror: how the apps are reached was not (fully) changed; see the lines above", file=sys.stderr)
+    return 1 if not_redone or not reached else _report(not_installed, not_removed)

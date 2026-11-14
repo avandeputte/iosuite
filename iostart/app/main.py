@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from iosuite_shared import mcp as shared_mcp, users
 from iosuite_shared.updates import setup_log
 
-from app import __version__, api, bookmarkdav, bookmarkext, bookmarks, config, db, keys, mcp, ncbookmarks
+from app import __version__, api, bookmarkdav, bookmarkext, bookmarks, config, db, frontdoor, keys, mcp, ncbookmarks
 from app.auth import auth, updater
 
 setup_log(config.LOG_FILE)  # the server log that Settings › Server shows; the app runs without it
@@ -38,6 +38,7 @@ async def lifespan(app: FastAPI):
     log.info("ioStart %s started, database %s:%s/%s", __version__, config.DB_HOST, config.DB_PORT, config.DB_NAME)
     async with shared_mcp.running(mcp.server):  # the MCP endpoint (/mcp) lives in this process
         yield
+    await frontdoor.close()
 
 
 app = FastAPI(title="ioStart", version=__version__, lifespan=lifespan, docs_url="/api/docs", redoc_url=None,
@@ -60,8 +61,9 @@ def _limit_for(path: str, ctype: str) -> int:
     return config.MAX_IMPORT_BYTES if "/import" in path or path.startswith("/dav/") else config.MAX_JSON_BYTES
 
 
-# 400 for bad input, the headers, no-store on the API, the body cap: the same in every app of the suite
-auth.install(app, limit_for=_limit_for)
+# 400 for bad input, the headers, no-store on the API, the body cap: the same in every app of the suite. The front door
+# (the suite on one address, app/frontdoor.py) sees a request first and passes on what belongs to another app
+auth.install(app, limit_for=_limit_for, outer=frontdoor.FrontDoor)
 
 
 def _server_info() -> dict:

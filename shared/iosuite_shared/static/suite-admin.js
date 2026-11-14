@@ -671,6 +671,33 @@ function apps(el, ctx) {
           h('td', { class: 'sa-small' }, `${a.roles} role${a.roles === 1 ? '' : 's'}, ${a.appPasswords} app password${a.appPasswords === 1 ? '' : 's'}`),
           h('td', { style: { textAlign: 'right' } }, h('button', { class: 'sa-btn danger', onclick: () => forgetApp(ctx, a) }, 'Forget')));
       }))));
+  const one = h('div');
+  el.append(one);
+  oneAddress(one);
+}
+/* One address for the whole suite: the start page answers at it and passes …/calendar/, …/notes/ on to the apps
+   (iosuite_shared.suite.one_address, iostart: app/frontdoor.py). One switch; the apps' addresses in every list and
+   link follow it within seconds. */
+async function oneAddress(el) {
+  let d;
+  try { d = await api('address'); } catch { return; }
+  const draw = () => {
+    const sw = h('input', { type: 'checkbox', checked: d.on, disabled: d.start ? null : true, onchange: async (e) => {
+      try { d = await api('address', { method: 'PUT', json: { on: e.target.checked } }); toast(d.on ? 'The suite is on one address' : 'Every app at its own address again'); draw(); }
+      catch (err) { e.target.checked = !e.target.checked; fail(err); }
+    } });
+    const others = d.apps.filter((a) => a.folder);
+    el.replaceChildren(box('apps', 'One address',
+      h('p', { class: 'sa-muted' }, 'Every app at the start page’s address, each in a folder of it, so one name, one certificate and one port reach the whole suite. The start page passes the requests on; the apps keep running where they are. With it on, every app can be reached wherever the start page can.'),
+      h('label', { class: 'sa-check' }, sw, h('span', null, 'Serve the suite on one address', d.start ? null : h('span', { class: 'sa-muted sa-small' }, ' (needs the start page, ioStart)'))),
+      d.address && others.length ? h('table', { class: 'sa-t' }, h('tr', null, h('th', null, 'App'), h('th', null, d.on ? 'Address' : 'Address when on')),
+        others.map((a) => h('tr', null, h('td', null, a.name),
+          h('td', { class: 'sa-small' }, a.reachable ? (d.on ? h('a', { href: `${a.url}/`, target: '_blank', rel: 'noopener' }, `${a.url}/`) : `${a.url}/`)
+            : h('span', { class: 'sa-muted' }, 'keeps its own address: it recorded none inside the network (in Docker, set INTERNAL_URL)'))))) : null,
+      d.start && !d.address ? h('p', { class: 'sa-muted sa-small' }, 'The start page has no address yet: open it once as an admin, or set its PUBLIC_URL.') : null,
+      d.on ? h('p', { class: 'sa-muted sa-small' }, 'Phones and apps that sync calendars, contacts, tasks or bookmarks keep the address they were set up with; give them the new one when the old one goes away.') : null));
+  };
+  draw();
 }
 /* Updates: the suite has one version and one update, every app at once (iosuite_shared.suiteupdates). The apps pick a
    request up within seconds, so the page follows along while an update runs, and loads again when it is over: the app

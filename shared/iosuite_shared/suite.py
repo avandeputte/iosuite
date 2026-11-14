@@ -166,6 +166,8 @@ def register(app: str, name: str = None, url: str = None, version: str = None, d
                internal_url = VALUES(internal_url), admin_tool = VALUES(admin_tool), updated_at = VALUES(updated_at), last_seen_at = VALUES(last_seen_at)""",
           (app, row["name"], row["description"], row["version"], row["color"], row["icon"], row["configured_url"],
            row["internal_url"], row["admin_tool"], now, now, now))
+    with _lock:  # the suite's one address is the start page's, and an app has a folder there once it says where it is
+        _door.update(at=0.0, rev=_door["rev"] + 1)
     return get(app)
 
 
@@ -226,8 +228,83 @@ def note_seen(app: str, request, take_address: bool = True) -> None:
             _seen.pop(app, None)
 
 
+# ---- one address for the whole suite: every app in a folder of the start page's address
+# The start page passes https://home.example.com/calendar/… on to ioCalendar (iostart: app/frontdoor.py), so one name,
+# one certificate and one port serve every app. One switch for the suite (Settings › Global settings › Apps), kept in
+# the Shared ioSuite database; while it is on, the address of an app in the suite's list is its folder there.
+FOLDERS = {"iopix": "pix", "ionote": "notes", "iocalendar": "calendar", "iocontact": "contacts", "iohealth": "health",
+           "iodns": "dns", "iotask": "tasks", "iobackup": "backup", "iorecipe": "recipes"}
+DOOR = "iostart"            # the app that answers at the address itself
+TAKEN = frozenset(("api", "static", "dav", "mcp", "bookmarks"))  # the start page's own first folders: never an app's
+ONE_ADDRESS = "one_address"  # the setting (ios_settings, app ''): "1" while it is on
+_door = {"at": 0.0, "on": False, "url": None, "rev": 0}  # rev: counts the changes made in this process
+DOOR_S = 10.0
+
+
+def folder_of(app: str) -> str | None:
+    """The folder an app is served in on the suite's one address: "calendar" for ioCalendar; an app the suite does
+    not know (it registered itself) by its own key; none for the start page, which is the address itself."""
+    if app == DOOR:
+        return None
+    f = FOLDERS.get(app) or app
+    return f if f and f not in TAKEN and all(c.isalnum() or c in "-_" for c in f) else None
+
+
+def one_address() -> bool:
+    """Whether the suite is served on one address (read at most every DOOR_S seconds)."""
+    return _door_now()["on"]
+
+
+def door_url() -> str | None:
+    """The suite's one address (the start page's: its PUBLIC_URL, else the best it has been reached at) while the
+    switch is on and the start page is in the list; None otherwise."""
+    d = _door_now()
+    return d["url"] if d["on"] else None
+
+
+def _door_now() -> dict:
+    now = time.time()
+    if now - _door["at"] >= DOOR_S:
+        try:
+            on = db.get_setting(ONE_ADDRESS, "", "") == "1"
+            r = db.one("SELECT configured_url, seen_url FROM ios_apps WHERE app = %s", (DOOR,)) if on else None
+            url = ((r or {}).get("configured_url") or (r or {}).get("seen_url") or "").rstrip("/") or None
+        except Exception:  # noqa: BLE001 - the database is away: what was known
+            on, url = _door["on"], _door["url"]
+        with _lock:
+            _door.update(at=now, on=on, url=url)
+    return _door
+
+
+def set_one_address(on: bool) -> None:
+    db.set_setting(ONE_ADDRESS, "1" if on else "", "")
+    with _lock:
+        _door.update(at=0.0, rev=_door["rev"] + 1)
+        _hosts.clear()
+
+
+def door_rev() -> int:
+    """Changes each time the switch or the list of apps is changed in this process: the start page's front door reads
+    both again at once then, instead of at its next look."""
+    return _door["rev"]
+
+
+def upstream_of(r: dict) -> str | None:
+    """Where the start page passes an app's requests on to: the app on this machine's loopback when its recorded
+    internal address is one of this machine's, else that address. Never the public one, which may be the start page
+    itself. None for an app that recorded none (in a container without INTERNAL_URL)."""
+    from iosuite_shared import links
+    internal = (r.get("internalUrl") or r.get("internal_url") or "").rstrip("/")
+    if internal.startswith("https://"):  # the app serves TLS itself: by the name its certificate is for
+        return internal
+    return links._local(internal) or internal or None
+
+
 def _out(r: dict) -> dict:
     url = r["configured_url"] or r["seen_url"]
+    door = door_url()
+    if door and r.get("internal_url") and folder_of(r["app"]):  # on the suite's one address: its folder there
+        url = f"{door}/{folder_of(r['app'])}"
     icon = r["icon"]
     if icon and url and not icon.startswith(("http://", "https://")):
         icon = url + "/" + icon.lstrip("/")
@@ -299,7 +376,7 @@ def known_host(app: str, host: str) -> bool:
     hit = _hosts.get(app)
     if not hit or time.time() - hit[1] > 30:
         r = get(app) or {}
-        names = {(urlsplit(u).hostname or "").lower() for u in (r.get("configuredUrl"), r.get("seenUrl"), r.get("internalUrl")) if u}
+        names = {(urlsplit(u).hostname or "").lower() for u in (r.get("url"), r.get("configuredUrl"), r.get("seenUrl"), r.get("internalUrl")) if u}
         hit = _hosts[app] = (names, time.time())
     return host in hit[0]
 
@@ -337,6 +414,7 @@ def forget(app: str) -> bool:
     with _lock:
         _seen.pop(app, None)
         _tools["at"] = 0.0
+        _door.update(at=0.0, rev=_door["rev"] + 1)
     return db.ex("DELETE FROM ios_apps WHERE app = %s", (app,)) > 0
 
 
@@ -346,4 +424,5 @@ def invalidate():
         _seen.clear()
         _declared.clear()
         _tools.update(set=frozenset(), at=0.0)
+        _door.update(at=0.0, on=False, url=None, rev=_door["rev"] + 1)
     _hosts.clear()
