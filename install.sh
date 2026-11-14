@@ -26,10 +26,12 @@
 #                                    listens on this machine only
 #   --address URL         with --reach: where the suite is (https://home.example.com): the start page's public address,
 #                         and with --reach proxy every other app's folder of it too (https://home.example.com/calendar)
-#   --db-admin USER:PASSWORD   a MariaDB administrator: the databases and users of the apps you add are created for you
+#   --db-admin USER[:PASSWORD]  a MariaDB administrator: the databases and users of the apps you add are created for
+#                         you (without :PASSWORD, from DB_ADMIN_PASSWORD in the environment)
 # On a new server every other option goes to the first app's setup.sh, so an install without questions is e.g.
-#   ... | bash -s -- --yes --db 127.0.0.1:3306/suite:suite:PASSWORD --admin alex:PASSWORD --db-admin root:PASSWORD --add all
-# (see that app's `setup.sh --help`; the passwords can come from the environment instead, e.g. IOSTART_DB).
+#   ... | IOSTART_DB=127.0.0.1:3306/suite:suite:PASSWORD IOSTART_ADMIN=alex:PASSWORD DB_ADMIN_PASSWORD=PASSWORD \
+#         bash -s -- --yes --db-admin root --add all
+# (see that app's `setup.sh --help`): passwords in the environment stay out of the process list and the shell history.
 # The apps: iostart iocalendar iocontact ionote iohealth iotask iorecipe iopix iodns iobackup
 set -euo pipefail
 REPO="${IOSUITE_REPO:-https://github.com/avandeputte/iosuite}"
@@ -54,6 +56,9 @@ main() {
       *) rest+=("$1"); shift;;
     esac
   done
+  # a MariaDB administrator's password reaches the apps' setup through the environment (DB_ADMIN_PASSWORD), never as
+  # an argument a process list shows: given as USER:PASSWORD, it moves there now
+  case "$dbadmin" in *:*) export DB_ADMIN_PASSWORD="${dbadmin#*:}"; dbadmin="${dbadmin%%:*}";; esac
   if [ -z "$base" ]; then if [ "$(id -u)" = 0 ]; then base=/opt; else base="$HOME/iosuite"; fi; fi
   case " $APPS " in *" $first "*) ;; *) die "--first $first: not one of the apps ($APPS)";; esac
 
@@ -67,7 +72,7 @@ main() {
   done
   if [ -n "$home" ]; then
     [ ${#rest[@]} -eq 0 ] || die "ioSuite is already on this server (in $base): ${rest[*]} is for a first install. To change an app's settings: --reconfigure APP"
-    [ -z "$dbadmin" ] || { manage+=(--db-admin "${dbadmin%%:*}"); export DB_ADMIN_PASSWORD="${dbadmin#*:}"; }
+    [ -z "$dbadmin" ] || manage+=(--db-admin "${dbadmin%%:*}")
     exec "$home/.venv/bin/iosuite-shared" --config "$home" apps --into "$base" ${manage[@]+"${manage[@]}"}
   fi
 
@@ -90,7 +95,7 @@ main() {
   git -C "$src" rev-parse HEAD > "$target/COMMIT"
   say "Setting up $first in $target"
   [ -z "$add" ] || rest+=(--also "$add")
-  [ -z "$dbadmin" ] || rest+=(--db-admin "$dbadmin")
+  [ -z "$dbadmin" ] || rest+=(--db-admin "${dbadmin%%:*}")  # the password goes in the environment, never in a command line
   [ -z "$svc" ] || rest+=("$svc")
   cd "$target"
   IOSUITE_REPO="$REPO" sh ./setup.sh ${rest[@]+"${rest[@]}"}

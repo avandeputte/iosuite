@@ -1,7 +1,6 @@
 """Place suggestions for photos without a position (app/geo/placeguess.py)."""
 import sqlite3
 
-import pytest
 
 from app.data import index
 from app.geo import placeguess

@@ -2,6 +2,7 @@
 another database with ids intact, the dump is the backup form, and the viewer waits for a database instead of
 starting on a file."""
 
+from iosuite_shared import users as shared_users
 import pytest
 
 import mariadb
@@ -76,8 +77,8 @@ def test_private_albums_and_accounts_on_the_server(client, fresh):
     state.set_setting("zz_probe", "héllo ? %s"); state._settings = (-1, {})
     assert state.get_setting("zz_probe") == "héllo ? %s"
     me = users.get(next(u["id"] for u in users.list_users() if u["name"] == "alex"))
-    assert me["role"] == "admin" and users.authenticate("alex", "correct horse") and not users.authenticate("alex", "wrong")
-    assert users.authenticate("vi", ""), "a passwordless viewer signs in with one click"
+    assert me["role"] == "admin" and shared_users.authenticate("alex", "correct horse", "iopix") and not shared_users.authenticate("alex", "wrong", "iopix")
+    assert shared_users.authenticate("vi", "", "iopix"), "a passwordless viewer signs in with one click"
     u = users.create("new", "password-1", "editor", "New@Example.com")
     assert u["email"] == "new@example.com" and users.get(u["id"])["name"] == "new"
     aid = state.create_album("Trip"); state.set_album_items(aid, [(1, "h1")], True)

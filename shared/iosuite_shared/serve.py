@@ -48,3 +48,11 @@ def run(target: str, host: str, port: int, **settings) -> None:
             sys.exit(f"HOST={host}: cannot listen on {h} port {port}: {e}")
     print(f"listening on {', '.join(names)} port {port}", file=sys.stderr)  # uvicorn names no address for sockets it is handed
     uvicorn.Server(uvicorn.Config(target, host=names[0].strip("[]"), port=port, **settings)).run(sockets=socks)
+
+
+def app(config, target: str = "app.main:app", **settings) -> None:
+    """`python -m app` of every app: HOST and PORT from its config (every address, this machine only, or the addresses
+    named), HTTPS directly when TLS_CERT_FILE and TLS_KEY_FILE are set. The app reads X-Forwarded-* itself (from this
+    machine and the reverse proxies listed under Settings › Security), so uvicorn must not rewrite the peer."""
+    run(target, config.HOST, config.PORT, proxy_headers=False, ssl_certfile=config.TLS_CERT_FILE or None,
+        ssl_keyfile=config.TLS_KEY_FILE or None, **settings)

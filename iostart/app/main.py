@@ -45,9 +45,11 @@ app = FastAPI(title="ioStart", version=__version__, lifespan=lifespan, docs_url=
               openapi_url="/api/openapi.json",
               description="The start page of the ioThing suite: one place with every io app, and the accounts they share.")
 
-def mcp_enabled() -> bool:
-    """Settings › Server › MCP server: off until an admin turns it on (or MCP=1 in the environment)."""
-    return shared_mcp.enabled(db.get_setting, config.MCP_FORCED)
+# Settings › Server › MCP server: off until an admin turns it on (or MCP=1 in the environment); the MCP box of the panel
+mcp_switch = shared_mcp.Switch(db.get_setting, db.set_setting, config.MCP_FORCED,
+                               "The suite's one MCP server: an AI assistant connected here with an ioStart app password uses every "
+                               "app's tools as you (each app's own MCP server has to be on), and suite admins can update every app at once.")
+mcp_enabled = mcp_switch.enabled
 
 
 # who is asking, whether sign-in is required at all, the cross-site check on writes, and the MCP endpoint's gate (the
@@ -66,23 +68,10 @@ def _limit_for(path: str, ctype: str) -> int:
 auth.install(app, limit_for=_limit_for, outer=frontdoor.FrontDoor)
 
 
-def _server_info() -> dict:
-    """What Settings › Server shows beside the updater's own fields: the MCP box."""
-    return {"mcpEnabled": mcp_enabled(), "mcpLocked": config.MCP_FORCED,
-            "mcpAbout": "The suite's one MCP server: an AI assistant connected here with an ioStart app password uses every "
-                        "app's tools as you (each app's own MCP server has to be on), and suite admins can update every app at once."}
-
-
-def _server_apply(body: dict) -> None:
-    """The MCP switch, sent to POST /api/server as {mcpEnabled: bool}."""
-    if "mcpEnabled" in body:
-        shared_mcp.set_enabled(db.set_setting, bool(body["mcpEnabled"]), config.MCP_FORCED)
-
-
 app.include_router(auth.router())        # /api/auth/*: sign-in, accounts, me, settings, password, sessions, app passwords, suite
 app.include_router(auth.admin_router())  # /api/suite-admin: every account, role, app password, session and app of the suite (suite admins; Settings › Security and Global settings)
 app.include_router(auth.status_router(updater))  # /api/status: public, the same shape in every app
-app.include_router(auth.server_router(updater, log_file=config.LOG_FILE, info=_server_info, apply=_server_apply))  # /api/server, /api/log (admins)
+app.include_router(auth.server_router(updater, log_file=config.LOG_FILE, info=mcp_switch.info, apply=mcp_switch.apply))  # /api/server, /api/log (admins)
 app.include_router(api.router)
 app.include_router(ncbookmarks.router)  # /dav/nextcloud: the Nextcloud Bookmarks API, for Floccus and other sync apps
 app.include_router(bookmarkdav.router)  # /dav/bookmarks: the bookmarks as a file over WebDAV

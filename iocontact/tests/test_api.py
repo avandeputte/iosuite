@@ -173,6 +173,7 @@ def test_account_picker_and_one_click(client, family_id):
     assert anon.get("/api/auth/accounts/%d/photo" % gran["id"]).status_code == 404
     assert anon.post("/api/auth/login", json={"name": "gran"}).status_code == 200
     assert anon.get("/api/status").json()["user"]["name"] == "gran"
+    assert anon.get("/api/iopix/people").status_code == 403 and anon.get("/api/iopix/face/1").status_code == 403, "ioPix's people are for members"
     assert anon.get("/api/status", headers=out).json()["user"] is None  # the session does not work from outside
     # an empty password never works for HTTP Basic (CardDAV, LDAP)
     import base64

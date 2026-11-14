@@ -142,7 +142,6 @@ name and the same names), or in the environment, which wins. `config.env.example
 | `KEEP_DELETED_DAYS` | `90` | how long the change log's entries and the names of deleted folders are kept; after that only an empty marker stays, so devices still learn of the deletion (a deleted note goes sooner: after its 30 days in the trash) |
 | `MCP` / `MCP_USER` | | `MCP=1` keeps the endpoint on whatever Settings says; the account `python -m app.mcp` (stdio) acts as |
 | `UPDATE_CHECK` | `1` | `0`: this app never asks GitHub for a newer version |
-| `AUTH_PROXY`... | `off` | sign-in at a reverse proxy, above |
 
 ## Updates
 
@@ -167,10 +166,10 @@ buffer that path.
 When the proxy already makes people sign in, ionote takes that sign-in, exactly as iopix does: the proxy passes who
 signed in in a header, and ionote treats that person as signed in when an account exists for them (matched on the
 account's email address, then its name). Settings › Security › Sign-in at the proxy (saved there, the settings are kept in the
-Shared ioSuite database for the whole suite: one Cloudflare Access application covering every app, set up once), or
-in `config.env`, which wins:
+Shared ioSuite database for the whole suite: one Cloudflare Access application covering every app, set up once; never
+in `config.env`). The fields, by the names the Shared ioSuite database keeps them under:
 
-| Variable | |
+| Setting | |
 | --- | --- |
 | `AUTH_PROXY` | `cloudflare`, `haproxy`, `nginx`, `caddy`, `traefik` or `header`; `off` by default |
 | `AUTH_PROXY_HEADER` | the header(s) with the user; default for `cloudflare`: `Cf-Access-Authenticated-User-Email`; for the others: `Remote-User`, `X-Forwarded-User`, `X-Auth-Request-User`, `X-Auth-Request-Email`, `X-Forwarded-Email` |

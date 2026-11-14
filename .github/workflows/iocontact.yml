@@ -1,6 +1,7 @@
 # Tests against a MariaDB service, then builds the container image and pushes it to ghcr.io on pushes to main
 # (pull requests only build). The image of a push to main is also tagged v<the suite's version>
-# (shared/iosuite_shared/__init__.py).
+# (shared/iosuite_shared/__init__.py); the release itself is made once for the suite, by shared.yml.
+# Made from shared/templates/workflow.yml (shared/templates/render.py): only the "own:" blocks are this app's.
 name: ioContact
 
 on:
@@ -42,20 +43,27 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      # >>> own: setup
+      # <<< own: setup
       - name: Syntax checks
         run: |
           python -m pip install -q -e ../shared
           python -m pip install -q -e ".[test]" pyflakes
           python3 ../shared/templates/render-update.py --check
+          python3 ../shared/templates/render.py --check
           python -m pyflakes app tests
-          node --input-type=module --check < static/app.js
+          for f in static/app.js static/js/*.js; do [ -e "$f" ] || continue; node --input-type=module --check < "$f" || exit 1; done  # ES modules, parsed as modules
           for f in *.sh; do sh -n "$f"; done
           bash -n proxmox/ct/iocontact.sh proxmox/install/iocontact-install.sh
+          # >>> own: checks
+          # <<< own: checks
       - name: Tests
-        # scratch databases on the service (iosuite_shared.testing)
+        # scratch databases contacts_test and contacts_test_auth on the service (iosuite_shared.testing)
         env:
           IOSUITE_TEST_DB: 127.0.0.1:3306:root:root
         run: python -m pytest -q -p no:cacheprovider tests
+      # >>> own: tests
+      # <<< own: tests
 
   image:
     needs: tests
@@ -85,9 +93,12 @@ jobs:
         with:
           context: .
           file: iocontact/Dockerfile
+          # >>> own: platforms
           platforms: linux/amd64,linux/arm64
+          # <<< own: platforms
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: COMMIT=${{ github.sha }}
-
+          # >>> own: build
+          # <<< own: build

@@ -174,7 +174,6 @@ for the important ones, and `config.env.example` lists them all) or in the envir
 | `TZ` | no | fallback time zone (e.g. `Europe/Brussels`) for days and weeks; the browser sends its own, so this only matters for API calls without `tz` |
 | `MAP_TILE_URL`, `MAP_TILE_ATTRIBUTION` | no | map tiles for routes, default OpenStreetMap (`https://tile.openstreetmap.org/{z}/{x}/{y}.png`) |
 | `HOST`, `PORT` | no | where the server listens, default `0.0.0.0` and `8650` (every app of the suite has its own port) |
-| `AUTH_PROXY`… | no | sign-in at a reverse proxy or Cloudflare Access, see [HTTPS](#reverse-proxy-and-https) below |
 | `UPDATE_CHECK` | no | `0`: never ask GitHub whether a newer version exists (the daily check, see [Updates](#updates)) |
 | `DATA_DIR` | no | what ioHealth writes on its own (the server log, the outcome of an update); default `data/` in the app folder |
 | `LOG_FILE` | no | the server log shown at Settings › Server (`data/iohealth.log`; empty: no file) |
@@ -228,12 +227,11 @@ network addresses; anything else must be `https://`.
 When the proxy already makes people sign in (Cloudflare Access, Authelia, oauth2-proxy…), ioHealth takes that sign-in,
 exactly as the other apps in the suite do: the proxy passes who signed in in a header, and ioHealth treats that person
 as signed in when an account exists for them (matched on the account's email address, then its name). Set it up once
-for the whole suite in Settings › Security › Sign-in at the proxy (it's kept in the shared account database), or in the
-environment, which wins: `AUTH_PROXY` (`cloudflare`, `haproxy`, `nginx`, `caddy`, `traefik` or `header`),
-`AUTH_PROXY_HEADER`, `AUTH_PROXY_TRUSTED` (the addresses the proxy connects from), `AUTH_PROXY_CREATE` (`viewer`,
-`member` or `editor` to create an account for someone new, `deny` for a "No access" page), and for Cloudflare Access
-`CF_ACCESS_TEAM` and `CF_ACCESS_AUD` (the signed token Cloudflare adds to every request is checked against your
-team's keys). The header is believed only from the proxy's own addresses. The iPhone's uploads carry the account's own
+for the whole suite in Settings › Security › Sign-in at the proxy (it's kept in the shared account database, never in
+config.env): the proxy (`cloudflare`, `haproxy`, `nginx`, `caddy`, `traefik` or `header`), its header, the addresses it
+connects from, what happens to someone new (`viewer`, `member` or `editor` to create an account, `deny` for a "No access"
+page), and for Cloudflare Access the team and AUD tag (the signed token Cloudflare adds to every request is checked
+against your team's keys). The header is believed only from the proxy's own addresses. The iPhone's uploads carry the account's own
 user name and password instead, so for a server behind Cloudflare Access the upload paths (`/v1/`) need a bypass
 rule or a Cloudflare service token.
 

@@ -69,8 +69,11 @@ class AddressBooks(webdav.Server):
     def rows(self, b, since=None, names=()):
         return _rows(b["id"], since)
 
-    def by_href(self, b, name):
-        return model.by_href(b["id"], name)
+    def by_href(self, b, name, lock=False):
+        return model.by_href(b["id"], name, lock)
+
+    def transaction(self):
+        return model.db.tx()
 
     def purged_before(self, b):
         return model.purged_before(b["id"])

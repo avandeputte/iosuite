@@ -3,11 +3,13 @@ markers come from iosuite-shared (app/auth.py). Every /api route carries one, an
 
 - public: the sign-in endpoints, the status, the birthday calendar links (their own secret) and CardDAV (it challenges itself)
 - signed_in: an account: everything else (what it may change is an address book's business: app/model.py)
+- member: ioPix's people and faces, to link a contact to a person: not for viewers
 - admin: users, the server and ioPix
 """
 from app.auth import auth
 
 public = auth.access.public
 signed_in = auth.access.signed_in
+member = auth.access.member
 admin = auth.access.admin
 declared = auth.access.declared

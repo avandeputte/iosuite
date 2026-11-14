@@ -60,7 +60,7 @@ The common ones are `IO<APP>_DB`, `IO<APP>_SUITE_DB` (`host:port/database:user:p
 Tick them in the "Also install" checklist, or set `IO<APP>_ALSO`:
 
 ```sh
-IOSUITE_ALSO=iocalendar,iocontact \
+IOSTART_ALSO=iocalendar,iocontact \
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/iostart/proxmox/ct/iostart.sh)"
 ```
 

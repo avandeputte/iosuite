@@ -1,6 +1,7 @@
-"""The family tree's layout code (static/app.js, the <kin> block) run under node: labels relative to the viewed
+"""The family tree's layout code (static/js/tree.js, the <kin> block) run under node: labels relative to the viewed
 contact, generations and a tree drawn without overlaps."""
 import json
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -10,8 +11,8 @@ import pytest
 NODE = shutil.which("node")
 pytestmark = pytest.mark.skipif(not NODE, reason="node is not installed")
 
-SRC = (Path(__file__).resolve().parent.parent / "static" / "app.js").read_text(encoding="utf-8")
-KIN = SRC[SRC.index("// <kin>"):SRC.index("// </kin>")]
+SRC = (Path(__file__).resolve().parent.parent / "static" / "js" / "tree.js").read_text(encoding="utf-8")
+KIN = re.sub(r"^export ", "", SRC[SRC.index("// <kin>"):SRC.index("// </kin>")], flags=re.M)  # run as a plain script
 
 PEOPLE = {  # id: (name, gender, born)
     1: ("Bernadette", "F", 1951), 2: ("Paul", "M", 1950), 3: ("Alexandra", "F", 1981), 4: ("Grandpa", "M", 1920),

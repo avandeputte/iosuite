@@ -66,3 +66,21 @@ def test_morning_summary(client, family_id, sent):
     assert notify.run(at) == 1
     assert notify.run(at) == 0, "one summary a day"
     assert push.was_sent(alex, f"tasks:morning:{today}")
+
+
+def test_a_private_lists_alert_goes_to_its_owner_only(client, family_id, sent):
+    """Whoever it is tagged with, a task of a private list is read by its owner only, and so said to them only."""
+    alex = users.find("alex")["id"]
+    bob = testing.add_account(client, {"name": "bob", "password": "secret123", "role": "member"}).json()
+    bob = bob.get("id") or users.find("bob")["id"]
+    device(alex)
+    device(bob)
+    mine = next(lst["id"] for lst in client.get("/api/lists").json()["items"] if not lst["shared"])
+    now = dt.datetime.now(NY)
+    alert_at = (now - dt.timedelta(minutes=1)).astimezone(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M+00:00")
+    new(client, title="Bob's surprise party", due=(now + dt.timedelta(days=2)).date().isoformat(), listId=mine, members=[bob], alarms=[alert_at])
+    later = (now + dt.timedelta(hours=1)).strftime("%H:%M")
+    push.set_prefs(alex, morning=later)
+    push.set_prefs(bob, morning=later)
+    assert notify.run() == 1
+    assert [e.rsplit("/", 1)[1] for e in sent] == [f"{alex}-1"], "never to bob, who cannot read alex's list"

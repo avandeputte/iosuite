@@ -360,11 +360,11 @@ def get_task(tid: int, request: Request, format: str | None = None):
 def change(u: dict, r: dict, c: dict, data: dict, partial: bool = True) -> dict:
     """Change a task from JSON fields. listId moves it (with its subtasks); done: true on a repeating task moves it on
     to its next occurrence. PermissionError when a list may not be changed."""
+    target = None  # another list: moved there with the change, in one transaction once the change is known to be good
     if data.get("listId") not in (None, "") and int(data["listId"]) != r["list_id"]:
         target = model.task_list(int(data["listId"]))
         if not model.can_write(u, target):
             raise PermissionError("You cannot add tasks to that list")
-        r = model.move(r["id"], target["id"], u["id"])
         c = target
     cal = ical.parse(r["ics"])
     if "members" in data:
@@ -379,7 +379,10 @@ def change(u: dict, r: dict, c: dict, data: dict, partial: bool = True) -> dict:
     moved = False
     if done is not None and bool(done) != ical.todo_json(cal)["done"]:
         moved = ical.complete(cal, bool(done), zone_name(data.get("timezone")))
-    return model.save(r["list_id"], ical.finish(cal), r["id"], None, u["id"], *_next(cal, moved))
+    with model.db.tx():
+        if target:
+            r = model.move(r["id"], target["id"], u["id"])
+        return model.save(r["list_id"], ical.finish(cal), r["id"], None, u["id"], *_next(cal, moved))
 
 
 def _next(cal, moved: bool) -> tuple:
@@ -456,7 +459,7 @@ async def postpone_tasks(request: Request):
 
     def run():
         n = 0
-        with model.step() as step:
+        with model.step() as step, model.db.tx():  # all of them or none: a task that cannot be moved leaves the others too
             for tid in ids:
                 r, _ = writable_task(u, tid)
                 cal = ical.parse(r["ics"])

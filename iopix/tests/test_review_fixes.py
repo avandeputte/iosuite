@@ -1,5 +1,6 @@
 """Fixes from the code review: writes that must never wipe a photo's rows, duplicate files that keep their own
 identity, and values that must not be mistaken for timestamps."""
+from iosuite_shared import users as shared_users
 import sqlite3
 
 import pytest
@@ -117,7 +118,7 @@ def test_old_password_hashes_are_upgraded_at_sign_in(client, fresh):
     salt = secrets.token_bytes(16)
     old = "scrypt2$16384$8$1$" + base64.b64encode(salt).decode() + "$" + base64.b64encode(hashlib.scrypt(b"longpassword1", salt=salt, n=2 ** 14, r=8, p=1, dklen=32)).decode()
     authdb.ex("UPDATE ios_users SET hash = %s WHERE id = %s", (old, u["id"]))
-    users.invalidate()
+    shared_users.invalidate()
     assert needs_rehash(old)
     login(client, "legacy-probe", "longpassword1")
     h = authdb.one("SELECT hash FROM ios_users WHERE id = %s", (u["id"],))["hash"]

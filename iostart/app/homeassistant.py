@@ -25,7 +25,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from iosuite_shared import credentials
+from iosuite_shared import credentials, links
 
 from app import config, db
 
@@ -272,7 +272,7 @@ def _call(method: str, path: str, body: dict | None = None, base: str = "", tok:
                                  headers={"Authorization": f"Bearer {tok}", "Accept": "application/json",
                                           "Content-Type": "application/json", "User-Agent": "iostart"})
     try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+        with links.call(req, timeout=TIMEOUT) as r:  # the token never follows a redirect to another host
             raw = r.read().decode("utf-8", "replace")
             return json.loads(raw) if raw else None
     except urllib.error.HTTPError as e:
@@ -287,9 +287,13 @@ def _call(method: str, path: str, body: dict | None = None, base: str = "", tok:
 
 def test(base: str = "", tok: str = "") -> dict:
     """Tries the address and token (the saved ones when empty): {ok, name, version, entities}. Keeps the instance's
-    name for the card's title."""
+    name for the card's title. The saved token goes to the saved address only."""
     base = (base or "").strip().rstrip("/") or url()
-    tok = (tok or "").strip() or token()
+    tok = (tok or "").strip()
+    if not tok:
+        if url() and base != url():
+            raise HAError("Type the token again to test another address", 400)
+        tok = token()
     if not base or not tok:
         raise HAError("An address and a token first", 400)
     cfg = _call("GET", "/api/config", base=base, tok=tok)

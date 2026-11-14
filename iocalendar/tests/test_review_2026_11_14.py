@@ -71,3 +71,14 @@ def test_links_follow_an_event_to_another_calendar_and_go_with_a_calendar(client
     assert related.of("event", e["id"]) == []
     assert client.delete(f"/api/calendars/{mine}").status_code == 200
     assert related.of("event", moved["id"]) == []
+
+
+def test_a_move_with_a_bad_change_moves_nothing(client, family_id):
+    mine = client.post("/api/calendars", json={"name": "Work"}).json()["calendar"]["id"]
+    e = client.post(f"/api/events?calendar={family_id}", json={"title": "Dentist", "start": "2026-11-10T10:00"}).json()
+    r = client.patch(f"/api/events/{e['id']}", json={"calendarId": mine, "start": "not a date"})
+    assert r.status_code == 400
+    still = client.get(f"/api/events/{e['id']}").json()
+    assert still["calendarId"] == family_id and still["title"] == "Dentist"
+    moved = client.patch(f"/api/events/{e['id']}", json={"calendarId": mine, "title": "Dentist at 10"}).json()
+    assert moved["calendarId"] == mine and moved["title"] == "Dentist at 10"

@@ -29,4 +29,3 @@ services:
       # PUBLIC_URL: https://dns.example.com   # behind a reverse proxy: the address the other apps of the suite link to
       # INTERNAL_URL: http://192.168.1.151:8660   # the host's LAN address and port, kept in the suite's list of apps (a container cannot tell)
       # COOKIE_DOMAIN: example.com                 # one sign-in for every app of the suite under this domain
-      # AUTH_PROXY: cloudflare        # sign-in at the proxy, as in the other io apps (see README)

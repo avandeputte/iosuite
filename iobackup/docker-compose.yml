@@ -29,7 +29,6 @@ services:
       # PUBLIC_URL: https://backup.example.com   # behind a reverse proxy: the address the other apps of the suite link to
       # INTERNAL_URL: http://192.168.1.151:8680   # the host's LAN address and port, kept in the suite's list of apps (a container cannot tell)
       # COOKIE_DOMAIN: example.com                 # one sign-in for every app of the suite under this domain
-      # AUTH_PROXY: cloudflare        # sign-in at the proxy, as in the other io apps (see README)
     volumes:
       - iobackup-data:/data                # where a backup is put together before it is stored
       - /srv/backups/iobackup:/backups     # CHANGE ME: the folder a local destination keeps the backups in

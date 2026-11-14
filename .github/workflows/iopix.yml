@@ -48,6 +48,7 @@ jobs:
           python -m pip install -q -e ../shared
           python -m pip install -q -e ".[test]"
           python3 ../shared/templates/render-update.py --check
+          python3 ../shared/templates/render.py --check
           python -m pyflakes app
           python -c "import app.main"
           for f in static/app.js static/js/*.js; do node --input-type=module --check < "$f" || exit 1; done; node --check static/sw.js  # ES modules parsed as modules (a plain --check can miss errors), then the service worker

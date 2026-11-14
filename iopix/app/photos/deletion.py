@@ -27,6 +27,7 @@ from app.digikam import dbsync, dkdb
 from app.data import appdb
 from app.digikam.dkdb import chunked
 from app.photos import history
+from app.photos.paths import sidecars
 from app.ai import semantic
 
 log = logging.getLogger("app.photos.deletion")
@@ -37,23 +38,6 @@ VIEWER_TABLES = (("pix_favorite_photos", "photo_id"), ("pix_album_photos", "phot
                  ("pix_ai_text", "photo_id"), ("pix_ai_face_count", "photo_id"), ("pix_ai_objects", "photo_id"), ("pix_ai_descriptions", "photo_id"), ("pix_ai_looks", "photo_id"), ("pix_ai_face_ages", "photo_id"),
                  ("pix_ai_face_embeddings", "photo_id"), ("pix_ai_person_references", "photo_id"), ("pix_metadata_check", "photo_id"), ("pix_image_data_checksums", "photo_id"), ("pix_quality_accepted", "photo_id"),
                  ("pix_ai_similar_photos", "photo_id"), ("pix_ai_similar_photos", "similar_photo_id"))
-
-
-def sidecars(path: str) -> list:
-    """The sidecar files that belong to this photo."""
-    out = []
-    a = path + ".xmp"
-    if os.path.isfile(a):
-        out.append(a)
-    base, _ext = os.path.splitext(path)
-    b = base + ".xmp"
-    if os.path.isfile(b):
-        stem = os.path.basename(base)
-        siblings = [f for f in os.listdir(os.path.dirname(path) or ".")
-                    if f != os.path.basename(path) and os.path.splitext(f)[0] == stem and not f.lower().endswith(".xmp")]
-        if not siblings:
-            out.append(b)
-    return out
 
 
 def _roots() -> list:

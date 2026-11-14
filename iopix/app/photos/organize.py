@@ -27,6 +27,7 @@ from pathlib import Path
 from app.digikam import dbsync, dkdb
 from app.digikam.dbsync import SyncError
 from app.photos import deletion, edits, export, folders, history, scanner
+from app.photos.paths import sidecar_beside, sidecars
 from app.digikam.dkdb import in_chunks
 from app.photos.folders import album_of, clean_name
 from app.data import index
@@ -45,10 +46,6 @@ def _rows(con, ids: list) -> list:
         d = Path(roots[root]) / rel.strip("/")
         out.append({"id": iid, "album": album, "name": name, "root": root, "rel": rel, "dir": d, "path": str(d / name), "root_path": str(roots[root]).rstrip("/")})
     return out
-
-
-def sidecars_of(path: str) -> list:
-    return deletion.sidecars(path)
 
 
 def _free(d: Path, name: str) -> str:
@@ -102,12 +99,12 @@ def trash(ids: list, require_digikam_closed: bool = True) -> dict:
             base = _trash_base(info_dir, r["name"])
             suffix = r["name"].rsplit(".", 1)[1] if "." in r["name"] else ""  # the extension only: "my.photo.jpg" keeps one stem
             dst = files_dir / (f"{base}.{suffix}" if suffix else base)
-            sides = sidecars_of(r["path"])
+            sides = sidecars(r["path"])
             shutil.move(r["path"], dst)
             done_moves.append((str(dst), r["path"]))
             side_moves, side_from = [], []
             for s in sides:  # sidecars ride along, beside the file, under the trash name (photo.jpg.xmp, or photo.xmp as restore() looks for it)
-                sdst = files_dir / (dst.name + ".xmp") if s.startswith(r["path"]) else dst.with_suffix(".xmp")
+                sdst = sidecar_beside(s, r["path"], dst)
                 shutil.move(s, sdst)
                 done_moves.append((str(sdst), s))
                 side_moves.append(str(sdst)); side_from.append(s)
@@ -228,7 +225,7 @@ def restore(infos: list, require_digikam_closed: bool = True) -> dict:
             tf = Path(t["trash"])
             moves = [(t["trash"], str(dest))]
             for s in _trash_sidecars(tf):
-                sdst = str(dest) + ".xmp" if s.name.startswith(tf.name) else str(dest.with_suffix(".xmp"))
+                sdst = sidecar_beside(s, tf, dest)
                 shutil.move(s, sdst)
                 moves.append((str(s), sdst))
             done.append({**t, "album": album, "dest": dest, "moves": moves})
@@ -382,12 +379,11 @@ def move_photos(ids: list, album_id, require_digikam_closed: bool = True, new_na
                 raise SyncError("the file is not on disk")
             final = name if (folder["dir"] / name) == Path(r["path"]) else _free(folder["dir"], name)
             dst = folder["dir"] / final
-            sides = sidecars_of(r["path"])
+            sides = sidecars(r["path"])
             shutil.move(r["path"], dst)
             moves.append((r["path"], str(dst)))
             for s in sides:
-                tail = s[len(r["path"]):] if s.startswith(r["path"]) else None
-                sdst = str(dst) + tail if tail else str(dst.with_suffix(".xmp"))
+                sdst = sidecar_beside(s, r["path"], dst)
                 shutil.move(s, sdst)
                 moves.append((s, sdst))
             if str(dst) != r["path"]:

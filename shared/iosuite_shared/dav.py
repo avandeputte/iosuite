@@ -9,9 +9,11 @@ Needs defusedxml and FastAPI (the `dav` extra): a client's XML is parsed without
 import datetime as dt
 import re
 import xml.etree.ElementTree as ET
+from contextlib import nullcontext
 from email.utils import format_datetime
 from urllib.parse import quote, unquote
 
+import pymysql
 from defusedxml import DefusedXmlException
 from defusedxml.ElementTree import fromstring as parse_xml
 from fastapi import Request
@@ -255,8 +257,13 @@ class Server:
         properties asked for, when the app can leave the objects' text out (none of them is `data`)."""
         raise NotImplementedError
 
-    def by_href(self, c: dict, name: str) -> dict | None:
+    def by_href(self, c: dict, name: str, lock: bool = False) -> dict | None:
+        """The object at `name`; lock: held (SELECT ... FOR UPDATE) until the transaction() it is read in ends."""
         raise NotImplementedError
+
+    def transaction(self):
+        """The app's database transaction, which a PUT checks its preconditions and writes in."""
+        return nullcontext()
 
     def purged_before(self, c: dict) -> int:
         """The sync token up to which the collection's deletion markers are gone (0: none were purged)."""
@@ -655,14 +662,18 @@ class Server:
             return Response(status_code=409)
         if not self.can_write(ctx.user, c):
             return Response(status_code=403)
-        row = self.by_href(c, parts[3])
-        if row and row["deleted"]:
-            row = None
-        if headers.get("if-none-match", "").strip() == "*" and row:
+        try:
+            with self.transaction():  # If-Match holds the object it checked until the new one is written
+                row = self.by_href(c, parts[3], lock=bool(headers.get("if-match")))
+                if row and row["deleted"]:
+                    row = None
+                if headers.get("if-none-match", "").strip() == "*" and row:
+                    return Response(status_code=412)
+                if headers.get("if-match") and (not row or not etag_match(headers.get("if-match"), row["etag"])):
+                    return Response(status_code=412)
+                return self.save(ctx, c, row, parts[3], body)
+        except pymysql.err.IntegrityError:  # another PUT made an object at this address at the same moment
             return Response(status_code=412)
-        if headers.get("if-match") and (not row or not etag_match(headers.get("if-match"), row["etag"])):
-            return Response(status_code=412)
-        return self.save(ctx, c, row, parts[3], body)
 
     def conflict(self, ctx: Ctx, c: dict, row: dict | None, other: dict | None) -> Response | None:
         """no-uid-conflict (RFC 4791 5.3.2.1, RFC 6352 6.3.2.1): the same UID twice in one collection is refused, with

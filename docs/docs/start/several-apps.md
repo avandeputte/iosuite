@@ -54,7 +54,7 @@ stay each app's own setting (`r` and its number). It then prints the Caddy site 
 ```sh
 ... | bash -s -- --reach one
 ... | bash -s -- --reach one-proxy --address https://home.example.com
-... | bash -s -- --yes --db ... --admin ... --add all --reach one     # a new server, no questions
+... | IOSTART_DB=... IOSTART_ADMIN=... DB_ADMIN_PASSWORD=... bash -s -- --yes --db-admin root --add all --reach one     # a new server, no questions
 ```
 
 The answer is written as `HOST` in each app's `config.env` and as the suite's one-address switch (Settings › Global
@@ -76,7 +76,7 @@ takes the lists as flags:
 === "Proxmox VE"
 
     ```sh
-    IOSUITE_ALSO=iocalendar,iocontact \
+    IOSTART_ALSO=iocalendar,iocontact \
     bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/iostart/proxmox/ct/iostart.sh)"
     ```
 

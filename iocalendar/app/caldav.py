@@ -80,8 +80,11 @@ class Calendars(webdav.CalDAV):
     def rows(self, c, since=None, names=()):
         return model.rows(c["id"], since, listing=bool(names) and self.rows_listing(names))
 
-    def by_href(self, c, name):
-        return model.by_href(c["id"], name)
+    def by_href(self, c, name, lock=False):
+        return model.by_href(c["id"], name, lock)
+
+    def transaction(self):
+        return model.db.tx()
 
     def purged_before(self, c):
         return model.purged_before(c["id"])

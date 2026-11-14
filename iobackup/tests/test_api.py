@@ -129,6 +129,11 @@ def test_secrets_go_to_keys_and_tokens(client):
     r = client.put(f"/api/servers/{srv['id']}", json={"name": "renamed", "host": srv["host"], "port": srv["port"], "user": srv["user"]})
     assert r.status_code == 200 and r.json()["passwordSet"]
     assert "password" not in str(client.get("/api/overview").json()).lower().replace("passwordset", "")
+    # the saved password is tried on the saved address and user only
+    r = client.post("/api/servers/test", json={"id": srv["id"], "name": "x", "host": "elsewhere.example", "port": srv["port"], "user": srv["user"], "password": None})
+    assert r.status_code == 400 and "Type the password again" in r.json()["detail"]
+    r = client.post("/api/servers/test", json={"id": srv["id"], "name": "x", "host": srv["host"], "port": srv["port"], "user": "someone_else", "password": None})
+    assert r.status_code == 400
     # a server or destination in use by a job stays
     assert client.delete(f"/api/servers/{srv['id']}").status_code == 400
     assert client.delete(f"/api/destinations/{dst['id']}").status_code == 400

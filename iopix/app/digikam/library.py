@@ -106,11 +106,10 @@ def _vconn_class():
 
         def begin_write(self):
             ensure_base()  # before the first change made here: what digiKam held, for the merge back
-            self.raw.execute("BEGIN IMMEDIATE") if not self.mysql else self.raw.cursor().execute("START TRANSACTION")
+            self.raw.cursor().execute("START TRANSACTION")
 
         def begin_read(self):
-            if self.mysql:
-                self.raw.cursor().execute("START TRANSACTION WITH CONSISTENT SNAPSHOT")
+            self.raw.cursor().execute("START TRANSACTION WITH CONSISTENT SNAPSHOT")
 
         def commit(self):
             if self.changed:  # a change made here, not copied from digiKam: count it (see note_local_change)
@@ -135,6 +134,11 @@ def connect(write: bool = False):
         _CLASS = _vconn_class()
     v = appdb.connect()
     return _CLASS(v.raw, v.mysql, write)
+
+
+def _q(col: str) -> str:
+    """A column name quoted for MariaDB/MySQL (digiKam's names include reserved words)."""
+    return f"`{col}`"
 
 
 def _info(con, key: str, default=None):
@@ -213,14 +217,11 @@ def copy_from_digikam(src) -> dict:
     con = appdb.connect()
     written, photos = {}, len(theirs["photos"])
     try:
-        if con.mysql:  # digiKam's MySQL root tag has id 0, which AUTO_INCREMENT would otherwise renumber
-            con.execute("SET SESSION sql_mode = CONCAT(@@sql_mode, ',NO_AUTO_VALUE_ON_ZERO')")
-        else:
-            con.raw.execute("BEGIN IMMEDIATE")
+        # digiKam's MySQL root tag has id 0, which AUTO_INCREMENT would otherwise renumber
+        con.execute("SET SESSION sql_mode = CONCAT(@@sql_mode, ',NO_AUTO_VALUE_ON_ZERO')")
         for name, (dk, cols, *_rest) in SPEC.items():
             names = [c for c, _s, _m in cols]
-            q = (lambda c: f"`{c}`") if con.mysql else (lambda c: c)
-            ql = ", ".join(q(c) for c in names)
+            ql = ", ".join(_q(c) for c in names)
             insert = f"INSERT INTO {TABLE[name]} ({ql}) VALUES ({', '.join('?' * len(names))})"
             keys = _key_cols(cols)
             gone, add = [], []
@@ -235,7 +236,7 @@ def copy_from_digikam(src) -> dict:
                         add.append(r)
                 gone += [(k,) for k in mine]
                 for chunk in chunked(gone, 2000):
-                    con.executemany(f"DELETE FROM {TABLE[name]} WHERE {q(keys[0])} = ?", chunk)
+                    con.executemany(f"DELETE FROM {TABLE[name]} WHERE {_q(keys[0])} = ?", chunk)
             else:  # no key: rows are compared whole, duplicates counted
                 from collections import Counter
                 mine, want, raw_of = Counter(), Counter(), {}
@@ -245,8 +246,7 @@ def copy_from_digikam(src) -> dict:
                     c = tuple(_canon(v) for v in r)
                     want[c] += 1
                     raw_of.setdefault(c, r)
-                same = "<=>" if con.mysql else "IS"
-                where = " AND ".join(f"{q(c)} {same} ?" for c in names)
+                where = " AND ".join(f"{_q(c)} <=> ?" for c in names)
                 for c in set(mine) | set(want):
                     if mine[c] != want[c]:
                         if mine[c]:

@@ -2,6 +2,8 @@
 import datetime as dt
 import xml.etree.ElementTree as ET
 
+import pymysql
+
 from iosuite_shared import dav
 
 C = "urn:ietf:params:xml:ns:caldav"
@@ -85,7 +87,8 @@ def notes_app():
         def rows(self, c, since=None, names=()):
             return [r for r in store["rows"] if r["cid"] == c["id"] and (r["token"] > since if since is not None else not r["deleted"])]
 
-        def by_href(self, c, name):
+        def by_href(self, c, name, lock=False):
+            store.setdefault("locks", []).append(lock)
             return next((r for r in store["rows"] if r["cid"] == c["id"] and r["href"] == name), None)
 
         def purged_before(self, c):
@@ -114,6 +117,8 @@ def notes_app():
 
         def save(self, ctx, c, row, name, body):
             text = body.decode()
+            if text == "race":  # another PUT inserted this address after the check
+                raise pymysql.err.IntegrityError(1062, "Duplicate entry")
             refused = self.conflict(ctx, c, row, next((r for r in self.rows(c) if r["text"] == text), None))
             if refused:
                 return refused
@@ -181,6 +186,11 @@ def test_the_shared_server_does_discovery_preconditions_and_sync():
     r = dav_("PUT", "/dav/notes/alex/family/c.txt", "x" * 401)
     assert r.status_code == 403 and "max-resource-size" in r.text
     assert dav_("PUT", "/dav/notes/alex/nowhere/c.txt", "x").status_code == 409
+    assert dav_("PUT", "/dav/notes/alex/family/e.txt", "race").status_code == 412  # not a 500
+    store["locks"].clear()
+    dav_("PUT", "/dav/notes/alex/family/a.txt", "again", **{"If-Match": '"nope"'})
+    assert dav_("PUT", "/dav/notes/alex/family/f.txt", "hello").status_code == 409  # (the same text twice: nothing kept)
+    assert store["locks"] == [True, False], "If-Match holds the object it checked; a new address takes no lock"
     got = dav_("GET", "/dav/notes/alex/family/a.txt")
     assert got.text == "hello" and got.headers["etag"] == '"ehello"' and dav_("GET", "/dav/notes/alex/family/").text == "hello"
     assert dav_("GET", "/dav/").text == "notes here"

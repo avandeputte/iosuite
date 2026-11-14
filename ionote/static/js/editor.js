@@ -1,7 +1,7 @@
 /** One note: title, text (Markdown, with checklists you can tick), tags, folder, pin, its picture and the text read
  *  from it, its attached files, and the notes related to it. Saved as you type. */
 import { $, h, api, state, icon, fmtDate, colorVar, toast, fail, canWrite, debounce, confirmIt, menu, displayTitle } from './core.js';
-import { view, go, updateCard, refresh, markSelected } from './notes.js';
+import { go, updateCard, refresh, markSelected } from './notes.js';
 import { renderMarkdown, toggleTask, continueList, applyFormat, FORMATS } from './markdown.js';
 
 let note = null;     // the note as the server last answered

@@ -2,8 +2,8 @@
 when it falls due), and at each person's morning time what is on today (due today, and what is late), for the people
 who turned notifications on.
 
-A task is for the family members it is tagged with; untagged, for the owner of its private list, else (a shared list)
-for whoever added it. Run every minute by the app (chores.start); it does nothing while nobody has a device.
+A task of a private list is for its owner only, the one person who can read it, whoever it is tagged with. A task of
+a shared list is for the family members it is tagged with; untagged, for whoever added it. Run every minute by the app (chores.start); it does nothing while nobody has a device.
 """
 import datetime as dt
 
@@ -17,14 +17,14 @@ MORNING_LIST = 5                   # titles named in the morning summary; the re
 
 
 def for_whom(r: dict, owner_id, fam: list) -> set[int]:
+    if owner_id is not None:
+        return {owner_id}  # a private list: nobody else reads it
     try:
         ids = set(members.ids_of(ical.categories_of(ical.todo(model.parsed(r))), fam))
     except Exception:  # noqa: BLE001 - an object that cannot be read: its list says whose it is
         ids = set()
     if ids:
         return ids
-    if owner_id is not None:
-        return {owner_id}
     return {r["created_by"]} if r.get("created_by") else set()
 
 

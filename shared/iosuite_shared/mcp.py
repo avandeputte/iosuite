@@ -145,6 +145,25 @@ def set_enabled(set_setting, on: bool, forced: bool = False) -> None:
     set_setting(SETTING, "1" if on else "0")
 
 
+class Switch:
+    """One app's Settings › Server › MCP server: `enabled` is the switch (the gate's test), `info` and `apply` the MCP
+    box of the server panel (Auth.server_router's info= and apply=). `about` says what an assistant may do there."""
+
+    def __init__(self, get_setting, set_setting, forced: bool, about: str):
+        self._get, self._set, self.forced, self.about = get_setting, set_setting, forced, about
+
+    def enabled(self) -> bool:
+        return enabled(self._get, self.forced)
+
+    def info(self) -> dict:
+        return {"mcpEnabled": self.enabled(), "mcpLocked": self.forced, "mcpAbout": self.about}
+
+    def apply(self, body: dict) -> None:
+        """{mcpEnabled: bool} sent to POST /api/server."""
+        if "mcpEnabled" in body:
+            set_enabled(self._set, bool(body["mcpEnabled"]), self.forced)
+
+
 def mount(app, server: MCPServer, path: str = PATH) -> None:
     """Serve the MCP server over streamable HTTP at `path` on the app's own port, ahead of every other route. The MCP
     library's own DNS rebinding protection is off: it takes a fixed list of hosts, and the apps are reached by LAN

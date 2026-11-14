@@ -28,6 +28,10 @@ def make_app(name="iopix", read_only=False):
     @app.get("/api/admin", dependencies=[auth.access.admin])
     def admin():
         return {"ok": True}
+
+    @app.api_route("/dav/{path:path}", methods=["PUT"], dependencies=[auth.access.public])
+    def dav_put(path: str):
+        return {"ok": True}
     return app, auth
 
 
@@ -85,6 +89,11 @@ def test_require_login_and_cross_site():
     assert c.get("/api/private").status_code == 200
     assert c.post("/api/edit", headers={"origin": "http://evil.example"}).status_code == 403
     assert c.post("/api/edit", headers={"origin": "http://photo.example.com"}).status_code == 200
+    # /dav too, while the cookie is what signs the request in; a sync client's (or an extension's) Authorization is
+    # not something a page on another site can send
+    assert c.put("/dav/x", headers={"origin": "http://evil.example"}).status_code == 403
+    assert c.put("/dav/x", headers={"sec-fetch-site": "cross-site"}).status_code == 403
+    assert c.put("/dav/x", headers={"origin": "chrome-extension://abc", "authorization": "Basic eDp5"}).status_code != 403
 
 
 def test_users_admin_api_and_read_only():
@@ -209,6 +218,8 @@ def test_settings_account_panel_and_its_own_fields():
     assert r.status_code == 200 and r.json()["user"]["displayName"] == "Alex V" and r.json()["user"]["email"] == "alex@example.com"
     assert c.get("/api/auth/me").json()["user"]["displayName"] == "Alex V" and seen and seen[-1][1] == ["displayName", "email"]
     assert c.patch("/api/auth/me", json={"displayName": ""}).json()["user"]["displayName"] in (None, "", "alex")
+    c.patch("/api/auth/me", json={"email": "", "person": 7})
+    assert seen[-1][1] == ["email"], "an app's own fields (ioPix's person tag) are not one's own to set"
     c.post("/api/auth/logout")
     assert c.patch("/api/auth/me", json={"displayName": "x"}).status_code in (401, 403)
 

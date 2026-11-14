@@ -187,3 +187,26 @@ def test_me_says_what_the_account_may_change():
     assert me["isMember"] and not me["canWrite"]
     auth.write_role = "member"  # an app where everything is one's own
     assert c.get("/api/auth/me").json()["canWrite"]
+
+
+_one = users.db.one
+
+
+def test_account_changes_are_one_transaction_and_a_name_taken_meanwhile_is_no_500(monkeypatch):
+    users.create("txa", "password1", role="member", app="iotest", email="txa@example.com")
+    # another request takes the name between the check and the insert: the unique key answers, as "taken"
+    monkeypatch.setattr(users, "find", lambda *a, **k: None)
+    with pytest.raises(users.Invalid, match="user name is taken"):
+        users.create("txa", "password1")
+    monkeypatch.setattr(users.db, "one", lambda *a, **k: None if "email = %s" in a[0] else _one(*a, **k))
+    with pytest.raises(users.Invalid, match="email address"):
+        users.create("txb", "password1", email="txa@example.com")
+    monkeypatch.undo()
+    # a role that fails to save leaves the name as it was
+    u = users.find("txa")
+    monkeypatch.setattr(users, "set_role", lambda *a: (_ for _ in ()).throw(RuntimeError("down")))
+    with pytest.raises(RuntimeError):
+        users.update(u["id"], name="txa2", role="viewer", app="iotest")
+    monkeypatch.undo()
+    assert users.find("txa") and not users.find("txa2")
+    users.delete(u["id"])

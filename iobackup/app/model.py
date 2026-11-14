@@ -84,10 +84,14 @@ def clean_server(b: dict) -> dict:
 
 
 def unsaved_server(b: dict) -> dict:
-    """A server from the form, to test before saving it: no password typed in keeps the saved one of id."""
+    """A server from the form, to test before saving it: no password typed in keeps the saved one of id, but only for
+    the saved server's own address and user (an admin cannot point the test at another host to read the password)."""
     s = clean_server({**b, "name": b.get("name") or "test"})
     s["password"] = b.get("password")
     if s["password"] is None and b.get("id"):
+        saved = server(int(b["id"]))
+        if any(str(s[k] or "") != str(saved[k] or "") for k in ("host", "port", "socket", "user")):
+            raise Invalid("Type the password again to test another address or user")
         s["password"] = credentials.get(APP, _secret("server", int(b["id"]), "password"))
     return s
 

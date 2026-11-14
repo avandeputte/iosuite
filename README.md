@@ -56,8 +56,9 @@ Numbers or names to tick or untick (e.g. 3 5), r and a number to change an insta
 
 Without questions: `... | bash -s -- --add iotask,ionote`, `--remove iohealth` (`--delete-data` to drop its database
 and data too), `--reconfigure iocalendar`, `--list`; `--into DIR` when the apps are not in `/opt`. A first install
-without questions passes the first app's `setup.sh` flags: `... | bash -s -- --yes --db HOST:3306/suite:suite:PASSWORD
---admin NAME:PASSWORD --db-admin root:PASSWORD --add all`. In an app's folder, `./setup.sh --apps` shows the same
+without questions passes the first app's `setup.sh` flags, with the passwords in the environment so that no process
+list or shell history shows them: `... | IOSTART_DB=HOST:3306/suite:suite:PASSWORD IOSTART_ADMIN=NAME:PASSWORD
+DB_ADMIN_PASSWORD=PASSWORD bash -s -- --yes --db-admin root --add all`. In an app's folder, `./setup.sh --apps` shows the same
 list, and `./setup.sh --also`, `--remove` and `--reconfigure` take the same lists.
 
 Each app's README has the details of the other ways; they are the same in every app.

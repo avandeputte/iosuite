@@ -182,8 +182,9 @@ def get_row(eid: int) -> dict | None:
     return db.one("SELECT * FROM cal_events WHERE id = %s", (eid,))
 
 
-def by_href(cid: int, href: str) -> dict | None:
-    return db.one("SELECT * FROM cal_events WHERE calendar_id = %s AND href = %s", (cid, href))
+def by_href(cid: int, href: str, lock: bool = False) -> dict | None:
+    """lock: held until the open transaction ends (a PUT with If-Match)."""
+    return db.one("SELECT * FROM cal_events WHERE calendar_id = %s AND href = %s" + (" FOR UPDATE" if lock else ""), (cid, href))
 
 
 def by_uid(cid: int, uid: str) -> dict | None:

@@ -20,8 +20,6 @@ def _downloads_allowed(user, _request) -> bool:
     from app import users  # zips re-encode and ship whole folders: once accounts exist they are for signed-in users
     return not users.any_users() or users.is_signed_in(user)
 
-ROLES = ("public", "signed_in", "member", "editor", "admin")
-
 public = auth.access.public
 signed_in = auth.access.signed_in
 member = auth.access.member
@@ -29,6 +27,5 @@ editor = auth.access.editor
 editor_write = auth.access.editor_write
 admin = auth.access.admin
 admin_write = auth.access.admin_write
-require = auth.access.require
 downloads = auth.access.custom("downloads", _downloads_allowed, message="Sign in to download photos")  # /api/zip*
 declared = auth.access.declared

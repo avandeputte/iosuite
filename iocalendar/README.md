@@ -97,7 +97,6 @@ accounts are the suite's: `.venv/bin/iosuite-shared --config . admin NAME --app 
 | `TZ` | the family's time zone (default: the server's), for times written without one and all-day events |
 | `PUBLIC_URL` | the address people use (behind a proxy), for links in Settings, the Apple profile and the MCP tools |
 | `ADMIN_USER`, `ADMIN_PASSWORD` | the first admin, made on the first start when there are no accounts |
-| `AUTH_PROXY`, `AUTH_PROXY_HEADER`, `AUTH_PROXY_TRUSTED`, `CF_ACCESS_TEAM`, `CF_ACCESS_AUD` | sign-in at a reverse proxy, as in the other io apps (Cloudflare Access, Authelia, Authentik, oauth2-proxy…) |
 | `CF_KV_ACCOUNT_ID`, `CF_KV_NAMESPACE_ID`, `CF_KV_API_TOKEN` | optional edge check of app passwords: the Workers KV namespace a Cloudflare Worker on `/dav*` reads; normally stored once for the whole suite in Settings › Global settings › Keys and tokens, these override it ([setup](https://github.com/avandeputte/iosuite/blob/main/shared/cloudflare/edge-auth/README.md)) |
 | `HOLIDAYS_COUNTRY`, `HOLIDAYS_REGION`, `HOLIDAYS_LANGUAGE` | the first choice for Settings › Holidays and birthdays: a two-letter country code, or several comma-separated (`BE,NL`; `off`: no Holidays calendar), a region code and the language of the names for the first one; until set, the country of `TZ`, else US |
 | `MCP` | `1` keeps the MCP server on, whatever the setting says |

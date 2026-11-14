@@ -56,6 +56,25 @@ def compat_owner(photo_path: str) -> bool:
     return True
 
 
+def sidecars(photo_path: str) -> list:
+    """The sidecar files on disk that belong to this photo: photo.jpg.xmp, and photo.xmp when no other file
+    (photo.cr2 beside photo.jpg) would share it."""
+    a, b = sidecar_candidates(photo_path)
+    out = [a] if os.path.isfile(a) else []
+    if b != a and os.path.isfile(b) and compat_owner(photo_path):
+        out.append(b)
+    return out
+
+
+def sidecar_beside(sidecar, photo, new_photo) -> str:
+    """Where a sidecar goes when its photo becomes new_photo (moved, renamed, trashed, put back): photo.jpg.xmp
+    becomes new.jpg.xmp, photo.xmp becomes new.xmp."""
+    sidecar, photo, new_photo = str(sidecar), str(photo), str(new_photo)
+    if sidecar.startswith(photo):
+        return new_photo + sidecar[len(photo):]
+    return os.path.splitext(new_photo)[0] + ".xmp"
+
+
 def sidecar_path(photo_path: str) -> str:
     """The sidecar this photo uses: the one that exists (photo.jpg.xmp first, then photo.xmp when it is this
     photo's alone), else the name a new one gets (compatible naming when that setting is on)."""

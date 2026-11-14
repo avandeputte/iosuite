@@ -8,9 +8,9 @@ name: Shared library
 on:
   push:
     branches: [main]
-    paths: ["shared/**", "*/update.sh", ".github/workflows/shared.yml"]
+    paths: ["shared/**", "*/update.sh", "*/setup.sh", "*/run.sh", ".github/workflows/shared.yml"]
   pull_request:
-    paths: ["shared/**", "*/update.sh", ".github/workflows/shared.yml"]
+    paths: ["shared/**", "*/update.sh", "*/setup.sh", "*/run.sh", ".github/workflows/shared.yml"]
   workflow_dispatch:
 
 defaults:
@@ -47,8 +47,9 @@ jobs:
           node --input-type=module --check < iosuite_shared/static/server-panel.js
           node --input-type=module --check < iosuite_shared/static/account-panel.js
           node --check iosuite_shared/static/push-sw.js
-          sh -n templates/update.sh
+          sh -n templates/update.sh templates/setup.sh templates/run.sh
           python3 templates/render-update.py --check
+          python3 templates/render.py --check  # setup.sh and run.sh of every app, made from the templates
       - name: Tests
         env:
           IOSUITE_TEST_DB: 127.0.0.1:3306:root:root

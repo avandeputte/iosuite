@@ -51,6 +51,12 @@ if [ "$APPSONLY" = 1 ]; then  # the apps on this server: what is here, tick and 
   exec "$APP/.venv/bin/iosuite-shared" --config "$APP" apps --from ionote
 fi
 [ -n "$DBADMIN" ] || DBADMIN="${IONOTE_DB_ADMIN:-}"
+case "$DBADMIN" in ''|*:*) ;; *) DBADMIN="$DBADMIN:${DB_ADMIN_PASSWORD:-}";; esac  # the name only: the password comes from the environment
+# a first install whose database check failed left its answers in config.env.failed: they are the defaults now
+FRESH=0; [ -f "$APP/config.env" ] || FRESH=1
+[ "$FRESH" = 0 ] || [ ! -f "$APP/config.env.failed" ] || mv "$APP/config.env.failed" "$APP/config.env"
+getenv() { [ -f "$APP/config.env" ] && sed -n "s/^$1=//p" "$APP/config.env" | tail -n 1; true; }
+failed() { [ "$FRESH" = 0 ] || [ ! -f "$APP/config.env" ] || mv "$APP/config.env" "$APP/config.env.failed"; die "$*"; }
 [ -n "$MYSQL" ] || MYSQL="${IONOTE_DB:-}"
 [ -n "$SUITE" ] || SUITE="${IONOTE_SUITE_DB:-}"
 if [ "$YES" = 1 ]; then TTY=""; else TTY=/dev/stdin; fi
@@ -100,12 +106,16 @@ pyok "$PY" || die "python3 (3.10 or newer) is needed (found ${PY:-none})"
 "$PY" -c 'import venv' 2>/dev/null || die "the python3 venv module is missing (Debian/Ubuntu: apt install python3-venv)"
 
 say "Database"
-ask DATA "Folder for ionote' own files (session secret, log)" "${DATA:-$APP/data}"
+[ -n "$DATA" ] || DATA="$(getenv DATA_DIR)"
+ask DATA "Folder for ioNote's own files (session secret, log)" "${DATA:-$APP/data}"
 if [ -z "$MYSQL" ] && [ "$SQLITE" = 0 ]; then
-  if [ -f "$APP/config.env" ] && grep -q '^DB_TYPE=mysql' "$APP/config.env" && ! yesno "config.env already names a database; change it?" n; then
+  # what config.env names stays, unless asked to change it (a SQLite install stays one too, also with --yes)
+  if [ -n "$(getenv DB_TYPE)" ] && ! yesno "config.env already names a database ($(getenv DB_TYPE)); change it?" n; then
     MYSQL="keep"
   elif yesno "Keep the notes in MariaDB/MySQL (no: a SQLite file in the data folder, for a quick try)?" y; then
-    ask MH "MariaDB host" "127.0.0.1"; ask MP "port" "3306"; ask MD "database (created if the user may)" "notes"; ask MU "user" "notes"; secret MW "password"
+    MH="$(getenv DB_HOST)"; MP="$(getenv DB_PORT)"; MD="$(getenv DB_NAME)"; MU="$(getenv DB_USER)"
+    ask MH "MariaDB host" "${MH:-127.0.0.1}"; ask MP "port" "${MP:-3306}"; ask MD "database (created if the user may)" "${MD:-notes}"; ask MU "user" "${MU:-notes}"
+    secret MW "password (empty: keep the current one)"; [ -n "$MW" ] || MW="$(getenv DB_PASSWORD)"
     MYSQL="$MH:$MP/$MD:$MU:$MW"
   else
     SQLITE=1
@@ -122,16 +132,18 @@ if [ -z "$SUITE" ]; then
     SUITE="keep"; [ "$SUITE_SET" = 1 ] || echo "not named: ionote uses the defaults (the notes' server, database and user iosuite); set IOSUITE_DB_* in config.env"
   else
     case "$MYSQL" in ''|keep) SH="$(grep -E '^DB_HOST=' "$APP/config.env" 2>/dev/null | head -1 | cut -d= -f2-)"; SH="${SH:-127.0.0.1}";; *) SH="${MYSQL%%:*}"; SH="${SH%%/*}";; esac
-    ask SH "Shared ioSuite database host" "$SH"; ask SP "port" "3306"; ask SD "database (created if the user may)" "iosuite"; ask SU "user" "iosuite"; secret SW "password"
+    SP="$(getenv IOSUITE_DB_PORT)"; SD="$(getenv IOSUITE_DB_NAME)"; SU="$(getenv IOSUITE_DB_USER)"
+    ask SH "Shared ioSuite database host" "$(getenv IOSUITE_DB_HOST | grep . || echo "$SH")"; ask SP "port" "${SP:-3306}"; ask SD "database (created if the user may)" "${SD:-iosuite}"; ask SU "user" "${SU:-iosuite}"
+    secret SW "password (empty: keep the current one)"; [ -n "$SW" ] || SW="$(getenv IOSUITE_DB_PASSWORD)"
     SUITE="$SH:$SP/$SD:$SU:$SW"
   fi
 fi
-getenv() { [ -f "$APP/config.env" ] && sed -n "s/^$1=//p" "$APP/config.env" | tail -n 1; true; }
 ask PORT "Port" "${PORT:-$(getenv PORT | grep . || echo 8610)}"
 [ -n "$PUBURL" ] || ask PUBURL "Public address, e.g. https://notes.example.com (empty: as reached)" "$(getenv PUBLIC_URL)"
 [ -n "$COOKIE" ] || ask COOKIE "Domain the sign-in is shared on, e.g. example.com (empty: this host only)" "$(getenv COOKIE_DOMAIN)"
 if [ -z "$FEATURES" ]; then
-  yesno "Read the text in pictures added in the web app (RapidOCR, ~60 MB; the Mac and iPhone apps read it themselves)?" y && FEATURES=ocr || FEATURES=none
+  case "$(getenv OCR)" in 0) OCRD=n;; *) OCRD=y;; esac  # what config.env says, else on
+  yesno "Read the text in pictures added in the web app (RapidOCR, ~60 MB; the Mac and iPhone apps read it themselves)?" "$OCRD" && FEATURES=ocr || FEATURES=none
 fi
 if [ -z "$ADMIN" ] && [ "$NO_ADMIN" = 0 ]; then
   if yesno "Create an admin account now (until one exists, anyone who can reach ionote can read and change the notes)?" y; then
@@ -196,11 +208,11 @@ echo "wrote $ENVF"
 
 if [ -n "$DBADMIN" ]; then
   say "Creating the databases and users as ${DBADMIN%%:*}"
-  DB_ADMIN_PASSWORD="${DBADMIN#*:}" "$VENV/bin"/iosuite-shared --config "$APP" provision --admin "${DBADMIN%%:*}" || die "could not create the databases and users (see above): check the administrator's name and password"
+  DB_ADMIN_PASSWORD="${DBADMIN#*:}" "$VENV/bin"/iosuite-shared --config "$APP" provision --admin "${DBADMIN%%:*}" || failed "could not create the databases and users (see above): check the administrator's name and password"
 fi
 if [ "${DB_TYPE:-}" = mysql ]; then
   echo "testing the database, creating it if needed"
-  "$VPY" - <<'PYEOF' || die "could not use that MariaDB/MySQL database (see above); run setup.sh again"
+  "$VPY" - <<'PYEOF' || failed "could not use that MariaDB/MySQL database (see above); run setup.sh again"
 import os
 from app import db
 c = db.settings()
@@ -293,7 +305,10 @@ RestartSec=5
 WantedBy=multi-user.target
 UEOF
   $SUDO systemctl daemon-reload || die "systemctl daemon-reload failed"
-  $SUDO systemctl enable --now ionote || die "the ionote service could not be started (see above; journalctl -u ionote)"
+  $SUDO systemctl enable -q ionote || die "the ionote service could not be enabled (see above)"
+  $SUDO systemctl restart ionote || die "the ionote service could not be started (see above; journalctl -u ionote)"  # restart: a running one reads the new settings
+  sleep 2
+  $SUDO systemctl is-active -q ionote || die "the service did not start: journalctl -u ionote -n 50"
   echo "  started (systemd)"
 else
   echo "  not installed as a service. Start ionote with:"

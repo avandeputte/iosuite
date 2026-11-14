@@ -96,7 +96,7 @@ def api_tools(request: Request):
         "scanner": _scanner_state(),
     }
     if not users.is_admin(request.state.user):
-        for k in ("paths", "database", "albumRoots", "album_roots"):
+        for k in ("paths", "database"):
             out.pop(k, None)
         out["digikam"] = {k: v for k, v in out["digikam"].items() if k != "error"}  # the error names hosts and paths
     if not users.can_write(request.state.user):

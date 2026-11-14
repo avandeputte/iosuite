@@ -68,6 +68,8 @@ class Updater:
         self.check_locked = _env_flag_off("UPDATE_CHECK")
         self._run_lock = threading.Lock()
         self._commit = None
+        self.local_commit()  # read now, as the process starts: in a checkout shared by several apps, another app's update
+        # moves HEAD while this one still runs the code it started with
         self.progress: dict = {"running": False, "error": None, "log": "", "started": None, "finished": None}
 
     # ---- what is installed
@@ -266,7 +268,8 @@ class Updater:
                 raise RuntimeError("An update is already running")
             self.progress.update(running=True, error=None, log="", started=int(time.time()), finished=None)
         suiteupdates.publish(self.app, state="running", message=f"update.sh started at version {self.version}")
-        env = dict(os.environ, **{f"{self.prefix}_RESULT": str(self.result_file), f"{self.prefix}_REPO": self.repo, f"{self.prefix}_BRANCH": self.branch})
+        env = dict(os.environ, **{f"{self.prefix}_RESULT": str(self.result_file), f"{self.prefix}_REPO": self.repo, f"{self.prefix}_BRANCH": self.branch,
+                                  f"{self.prefix}_RUNNING": self.version})  # a checkout another app already updated: restarted all the same
         env.pop(f"{self.prefix}_REF", None)  # never inherited: the service installs the tip of its branch
         try:
             self.result_file.unlink()
