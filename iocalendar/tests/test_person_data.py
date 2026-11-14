@@ -1,5 +1,5 @@
 """Deleting someone in Settings › Security removes their private calendars here; their events on the Family calendar stay."""
-from iosuite_shared import users
+from iosuite_shared import related, users
 
 from app import db
 
@@ -14,9 +14,9 @@ def test_deleting_someone_removes_their_calendars_and_keeps_the_family_ones(clie
     assert client.post("/api/users", json={"name": "ann", "password": "secret123", "role": "editor"}).status_code == 200
     ann = _as(client, "ann")
     mine = next(c["id"] for c in client.get("/api/calendars").json()["items"] if c["mine"])
-    for t in ("Dentist", "Gym"):
-        assert client.post(f"/api/events?calendar={mine}", json={"title": t, "start": "2026-11-10T10:00"}).status_code == 201
-    assert client.post(f"/api/events?calendar={family_id}", json={"title": "Party", "start": "2026-11-12T18:00"}).status_code == 201
+    own = [client.post(f"/api/events?calendar={mine}", json={"title": t, "start": "2026-11-10T10:00"}).json()["id"] for t in ("Dentist", "Gym")]
+    party = client.post(f"/api/events?calendar={family_id}", json={"title": "Party", "start": "2026-11-12T18:00"}).json()["id"]
+    related.add(("event", own[0]), ("event", party))
     _as(client, "alex")
     got = client.get(f"/api/suite-admin/person-data/{ann}").json()["items"]
     assert {i["what"]: (i["count"], i["kept"]) for i in got} == {
@@ -24,6 +24,7 @@ def test_deleting_someone_removes_their_calendars_and_keeps_the_family_ones(clie
     r = client.delete(f"/api/suite-admin/users/{ann}")
     assert r.status_code == 200, r.text
     assert not db.q("SELECT id FROM cal_calendars WHERE owner_id = %s", (ann,))
+    assert related.of("event", party) == []  # the link to her private event went with it
     assert [e["title"] for e in db.q("SELECT summary AS title FROM cal_events WHERE calendar_id = %s AND deleted = 0", (family_id,))] == ["Party"]
     assert client.get(f"/api/suite-admin/person-data/{ann}").json()["items"] == [
         {"what": "event they added to a shared calendar", "count": 1, "kept": True}]

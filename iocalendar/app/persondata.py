@@ -1,6 +1,8 @@
 """What a person keeps in ioCalendar, counted or removed when their account is deleted (iosuite_shared.persondata):
 their private calendars with every event in them, and their calendar feed link. Events they put on a shared calendar
 (the Family calendar) stay: the family still needs them."""
+from iosuite_shared import related
+
 from app import db, model
 
 
@@ -12,8 +14,10 @@ def of(user_id: int, remove: bool) -> list:
     shared = db.one("SELECT count(*) AS n FROM cal_events e JOIN cal_calendars c ON c.id = e.calendar_id "
                     "WHERE c.owner_id IS NULL AND e.created_by = %s AND e.deleted = 0", (user_id,))["n"]
     if remove:
+        gone = [r["id"] for r in db.q("SELECT e.id FROM cal_events e JOIN cal_calendars c ON c.id = e.calendar_id WHERE c.owner_id = %s", (user_id,))]
         for cid in cals:
             model.delete_calendar(cid)
+        related.forget_many("event", gone)  # their links to other items of the suite go too
         db.ex("DELETE FROM cal_feed_tokens WHERE user_id = %s", (user_id,))
     return [{"what": "private calendars", "one": "private calendar", "count": len(cals)},
             {"what": "events in them", "one": "event in them", "count": events},
