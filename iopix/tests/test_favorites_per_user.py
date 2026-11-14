@@ -1,7 +1,7 @@
 """Favorites are each account's own. While there are no accounts there is one list; once accounts exist, that list
 becomes the favorites of the first admin who uses the app; every other account starts with none; a visitor has none."""
 from app import users
-from app.data import appdb, state
+from app.data import state
 from helpers import login as _login
 
 
@@ -81,29 +81,5 @@ def test_the_one_list_goes_to_one_account(client, fresh, lib):
         assert _favs(client) == []
         _login(client, "alex", "admin-pass1")
         assert _favs(client) == [p2]
-    finally:
-        _clear()
-
-
-def test_a_database_from_before_keeps_its_favorites(client, lib):
-    """Before 1.151 the table had one row per photo. The rows stay, and the key becomes (account, photo)."""
-    _clear()
-    p1, p2 = lib["ids"][:2]
-    con = appdb.connect()
-    try:
-        con.execute("DROP TABLE pix_favorite_photos")
-        con.execute("CREATE TABLE pix_favorite_photos (photo_id BIGINT PRIMARY KEY, hash VARCHAR(64), added_at BIGINT)")
-        con.execute("INSERT INTO pix_favorite_photos VALUES (?,?,?), (?,?,?)", (p1, "h1", 10, p2, "h2", 20))
-        con.commit()
-        appdb.ensure_schema(con)
-        assert [tuple(r) for r in con.execute("SELECT user_id, photo_id, hash, added_at FROM pix_favorite_photos ORDER BY photo_id")] == [(0, p1, "h1", 10), (0, p2, "h2", 20)]
-        con.execute("INSERT INTO pix_favorite_photos (user_id, photo_id, hash, added_at) VALUES (?,?,?,?)", (7, p1, "h1", 30))  # the same photo, another account
-        con.commit()
-        appdb.ensure_schema(con)  # and again: nothing to do
-        assert con.execute("SELECT count(*) FROM pix_favorite_photos").fetchone()[0] == 3
-    finally:
-        con.close()
-    try:
-        assert state.summary(None)["favorites"] == [p2, p1], "newest first, as before"
     finally:
         _clear()

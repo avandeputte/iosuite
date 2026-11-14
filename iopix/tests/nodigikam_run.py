@@ -20,7 +20,7 @@ subprocess.run(["exiftool", "-q", "-overwrite_original", "-DateTimeOriginal=2024
                 "-XMP-dc:Description=At the beach", str(beach_file)], check=True)
 os.environ.update({"DATA_DIR": str(data), "PHOTOS_ROOT": str(photos), "DIGIKAM_DB_TYPE": "none", "DIGIKAM_DB_DIR": str(tmp / "no-digikam"),
                    "PREWARM": "0", "SEMANTIC": "0", "ANALYSIS": "0", "CAPTIONS": "0", "REINDEX_POLL": "3600", "AUTO_MODELS": "",
-                   "DIGIKAM_CHECK": "ask", "BG_THREADS": "1", "HF_HUB_OFFLINE": "1", "SCANNER_LOOP": "0", "UPDATE_CHECK": "0"})
+                   "DIGIKAM_CHECK": "none", "BG_THREADS": "1", "HF_HUB_OFFLINE": "1", "SCANNER_LOOP": "0", "UPDATE_CHECK": "0"})
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from fastapi.testclient import TestClient  # noqa: E402

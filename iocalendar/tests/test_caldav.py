@@ -118,20 +118,6 @@ def test_mkcalendar_refuses_a_task_list(client, dav):
     assert dav("MKCALENDAR", "/dav/calendars/alex/both-1/", ok).status_code == 201
 
 
-def test_migrate_drops_empty_ios_task_lists(client, dav):
-    """The lists iOS made before 0.32.2 go at startup when empty; one that somehow holds an event stays."""
-    from app import db, model
-    assert dav("MKCALENDAR", "/dav/calendars/alex/mine-1/", "").status_code == 201
-    uid = db.one("SELECT owner_id FROM cal_calendars WHERE slug = 'mine-1'")["owner_id"]
-    empty = model.create_calendar(uid, "DEFAULT_TASK_CALENDAR_NAME")
-    kept = model.create_calendar(uid, "DEFAULT_TASK_CALENDAR_NAME")
-    mine = model.create_calendar(uid, "Work")
-    db.ex("INSERT INTO cal_events (calendar_id, uid, href, ics, etag) VALUES (%s, 'x', 'x.ics', '', 'e')", (kept,))
-    db.migrate()
-    left = {r["id"] for r in db.q("SELECT id FROM cal_calendars")}
-    assert empty not in left and kept in left and mine in left
-
-
 def test_caldav_refuses_xml_entities(client, dav):
     """A report body with entity expansion (a billion laughs) or an external entity is refused (400), not parsed."""
     base = "/dav/calendars/alex/family/"

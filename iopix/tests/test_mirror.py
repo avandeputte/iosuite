@@ -78,7 +78,7 @@ def test_index_builds_from_the_copy_while_digikam_is_unreachable_and_edits_still
     assert index.probe()[0] == "digikam" and index.offline["since"] is None
     if not edits.available():
         return
-    # back online and digiKam closed (vouched, DIGIKAM_CHECK=ask): the queued edit goes into digiKam's database
+    # back online and digiKam closed (vouched, DIGIKAM_CHECK=none): the queued edit goes into digiKam's database
     from app import main
     main.auto["at"] = 0
     monkeypatch.setattr(edits, "newest_pending", lambda: int(time.time()) - 120)

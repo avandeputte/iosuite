@@ -144,28 +144,10 @@ def ensure_database() -> None:
 def migrate() -> None:
     ensure_database()
     with tx() as con, con.cursor() as cur:
-        old = _photos_of_schema_1(cur)
         for stmt in SCHEMA:
             cur.execute(stmt + " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci")
-        if old:  # schema 1 kept one picture per recipe, by the recipe's id: each becomes the recipe's first
-            cur.execute(f"INSERT INTO rcp_photos (recipe_id, picture, thumb, width, height) SELECT recipe_id, picture, thumb, width, height FROM `{old}`")
-            cur.execute("UPDATE rcp_recipes r SET photo = COALESCE((SELECT MIN(p.id) FROM rcp_photos p WHERE p.recipe_id = r.id), 0)")
-            cur.execute(f"DROP TABLE `{old}`")
         schema.ensure_version_table(cur, PREFIX)
         schema.record_version(cur, PREFIX, SCHEMA_VERSION)
-
-
-def _photos_of_schema_1(cur) -> str | None:
-    """Schema 1's rcp_photos (no id column), set aside under another name so the new table can be made; else None."""
-    cur.execute("SELECT COUNT(*) AS n FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'rcp_photos'")
-    if not cur.fetchone()["n"]:
-        return None
-    cur.execute("SELECT COUNT(*) AS n FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'rcp_photos' AND column_name = 'id'")
-    if cur.fetchone()["n"]:
-        return None
-    cur.execute("DROP TABLE IF EXISTS rcp_photos_1")
-    cur.execute("RENAME TABLE rcp_photos TO rcp_photos_1")
-    return "rcp_photos_1"
 
 
 def reset_all() -> None:
