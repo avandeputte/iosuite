@@ -100,6 +100,24 @@ def test_an_app_admin_cannot_name_himself_the_proxy():
     assert anyone.get("/api/auth/me", headers={"Remote-User": "alex"}).json()["user"] is None
 
 
+# ---- what an app opens to visitors may depend on where they are
+def test_what_an_app_opens_to_visitors_is_asked_with_the_request():
+    """Auth.middleware(is_open=...) gets the request: ioPix opens the sign-in screen's avatars on the network only."""
+    auth = Auth("iopix", register=False)
+    app = FastAPI()
+    app.middleware("http")(auth.middleware(is_open=lambda request: request.url.path == "/face/1" and not auth.outside(request)))
+
+    @app.get("/face/{n}", dependencies=[auth.access.public])
+    def face(n: int):
+        return {"face": n}
+
+    users.create("alex", "secret123", "admin", "iopix", suite_admin=True)  # an account: sign-in is required from here on
+    inside = TestClient(app, base_url="http://pix.lan:8610", client=LAN)
+    assert inside.get("/face/1").status_code == 200 and inside.get("/face/2").status_code == 401
+    outside = TestClient(app, base_url="http://pix.lan:8610", client=LAN, headers={"cf-connecting-ip": "8.8.8.8"})
+    assert outside.get("/face/1").status_code == 401
+
+
 # ---- no accounts yet: open, but only to the network
 def test_no_accounts_is_open_inside_and_shut_outside():
     app, _ = make_app()

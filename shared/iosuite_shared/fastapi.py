@@ -231,7 +231,7 @@ class Auth:
 
     def middleware(self, open_paths=(), open_prefixes=("/api/auth/",), is_open=None, before=None, after=None, api_prefix="/api/"):
         """A complete auth middleware: resolve, the require-sign-in rule (open_paths / open_prefixes, or whatever
-        `is_open(path)` says, stay reachable; /api/auth/ and /api/status always are), the cross-site check on writes,
+        `is_open(request)` says, stay reachable; /api/auth/ and /api/status always are), the cross-site check on writes,
         and the cookie afterwards. `before(request)` runs once the user is known and may return a response (the app's own gates:
         MCP tokens...); `after(request, response)` runs at the end."""
         auth = self
@@ -242,7 +242,7 @@ class Auth:
             path = request.url.path
             if not await run_in_threadpool(db.available):  # the Shared ioSuite database is down: the shell and the open paths only, with a clear answer
                 request.state.user, request.state.via_proxy = None, False
-                if path in open_paths or (is_open and is_open(path)) or (path.startswith(open_prefixes) and not path.startswith("/api/auth/")):
+                if path in open_paths or (path.startswith(open_prefixes) and not path.startswith("/api/auth/")):
                     return await call_next(request)
                 return JSONResponse({"detail": f"The Shared ioSuite database cannot be reached ({db.error}); sign-in is unavailable until it is back."}, status_code=503)
             refused = await auth.resolve(request)
@@ -257,7 +257,7 @@ class Auth:
                     r = await r
                 if r is not None:
                     return r
-            if request.state.user is None and path not in open_paths and not path.startswith(open_prefixes) and not (is_open and is_open(path)):
+            if request.state.user is None and path not in open_paths and not path.startswith(open_prefixes) and not (is_open and is_open(request)):
                 # what a visitor who is not signed in may not reach: everything while sign-in is required, and
                 # everything from outside the network while no account exists (the open rule is for the LAN)
                 if await run_in_threadpool(auth.unclaimed, request):

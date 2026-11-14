@@ -192,6 +192,7 @@ def test_require_login_locks_everything_but_the_sign_in(client, fresh, lib):
         client.cookies.clear()
         assert client.get(f"/face/{people[0]['id']}").status_code != 401
         assert client.get(f"/face/{people[1]['id']}").status_code == 401
+        assert client.get(f"/face/{people[0]['id']}", headers={"cf-ray": "1"}).status_code == 401, "from outside: no faces, as no tiles"
     client.cookies.clear()
     from app.data import state as _st
     _st.set_setting("mcp_enabled", "1")  # the endpoint itself is off by default
@@ -274,3 +275,21 @@ def test_registers_in_the_suite(client, fresh):
     client.get("/api/status")
     app = suite.get("iopix")
     assert app["name"] == "ioPix" and app["version"] == __version__ and app["color"] == "#3b4a8c"
+
+
+def test_the_sign_in_screens_faces_are_for_the_network_only(monkeypatch):
+    """What a visitor gets while sign-in is required (main._open_to_visitors): the face of a person an account is
+    linked to, and like the account tiles only on the network the server is on. Needs no library."""
+    from starlette.requests import Request
+    from app import main
+
+    def visitor(path, peer, **headers):
+        return Request({"type": "http", "method": "GET", "path": path, "query_string": b"", "scheme": "http", "server": ("pix.lan", 8610),
+                        "client": (peer, 50000), "headers": [(k.replace("_", "-").encode(), v.encode()) for k, v in headers.items()]})
+    monkeypatch.setattr(users, "linked_persons", lambda: {7})
+    assert main._open_to_visitors(visitor("/face/7", "192.168.1.20"))
+    assert not main._open_to_visitors(visitor("/face/8", "192.168.1.20")), "a face no account is linked to"
+    assert not main._open_to_visitors(visitor("/thumb/7", "192.168.1.20"))
+    assert not main._open_to_visitors(visitor("/face/7", "8.8.8.8")), "from the internet"
+    assert not main._open_to_visitors(visitor("/face/7", "192.168.1.20", cf_ray="1")), "through Cloudflare"
+    assert not main._open_to_visitors(visitor("/face/7", "192.168.1.5", x_forwarded_for="8.8.8.8")), "through a reverse proxy"

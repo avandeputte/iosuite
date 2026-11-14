@@ -80,8 +80,11 @@ OPEN_PATHS = ("/", "/sw.js", "/manifest.webmanifest", "/share", "/api/docs", "/a
 OPEN_PREFIXES = ("/static/", "/mcp")
 
 
-def _open_to_visitors(path: str) -> bool:
-    if path.startswith("/face/"):  # the avatars on the sign-in screen: only the faces accounts are linked to
+def _open_to_visitors(request: Request) -> bool:
+    """What a visitor gets while sign-in is required: the avatars on the sign-in screen. Only the faces accounts are
+    linked to, and like the account tiles themselves (/api/auth/accounts) only on the network the server is on."""
+    path = request.url.path
+    if path.startswith("/face/") and not auth.outside(request):
         tail = path[6:].split("/")[0]
         return tail.isdigit() and int(tail) in users.linked_persons()
     return False

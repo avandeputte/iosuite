@@ -14,8 +14,9 @@ Every app with items mounts the router (Auth.related_router(): /api/related/*) a
     rel.mount(el, { kind: 'task', id: 12, toast });   // "Linked" under the task, and the picker behind its + button
 
 The picker searches every app that has items (the same way the start page's search box does), the coming events
-and the open tasks first. Adding or removing a link needs a role of member or more in the app the item is in, and
-both items must be ones the viewer sees. An app that deletes an item for good calls forget(kind, id).
+and the open tasks first. Adding or removing a link needs a role of member or more in the app the item is in, so it
+is done there (an app answers 403 for another app's kind), and both items must be ones the viewer sees. An app that
+deletes an item for good calls forget(kind, id).
 
 The other app is asked on the viewer's behalf (iosuite_shared.links.as_viewer): on localhost when it runs on this
 machine, then at its address inside the network, then at its public one, with the suite's Cloudflare Access service
@@ -342,6 +343,15 @@ def router(auth) -> APIRouter:
         except ValueError as e:
             raise HTTPException(404, str(e)) from None
 
+    def own(kind: str) -> bool:
+        """Whether items of this kind are this app's: an item's links are changed in its own app, where the role that
+        lets someone change it is the one they have (the member of one app is not one of every other)."""
+        return KINDS[kind]["app"] == auth.app
+
+    def changed_here(kind: str):
+        if not own(kind):
+            raise HTTPException(403, f"The links of a {KINDS[kind]['label'].lower()} are changed in its own app")
+
     def seen(request: Request, kind: str, item_id: str) -> dict:
         try:
             return get(request, kind, item_id)
@@ -387,7 +397,7 @@ def router(auth) -> APIRouter:
         u = me(request)
         kind, item_id = item(kind, item_id)
         seen(request, kind, item_id)
-        return {"items": resolved(request, kind, item_id), "canEdit": users.at_least(u, "member")}
+        return {"items": resolved(request, kind, item_id), "canEdit": own(kind) and users.at_least(u, "member")}
 
     @r.post("/api/related/{kind}/{item_id}", dependencies=[access.member_write])
     async def api_add(kind: str, item_id: str, request: Request):
@@ -395,6 +405,7 @@ def router(auth) -> APIRouter:
         from starlette.concurrency import run_in_threadpool
         u = writer(request)
         kind, item_id = item(kind, item_id)
+        changed_here(kind)
         b = await json_body(request)
         try:
             other = check(b.get("kind"), b.get("id"))
@@ -416,6 +427,7 @@ def router(auth) -> APIRouter:
         """Remove one of this item's links."""
         writer(request)
         kind, item_id = item(kind, item_id)
+        changed_here(kind)
         seen(request, kind, item_id)
         if not remove(kind, item_id, link_id):
             raise HTTPException(404, "No such link")
