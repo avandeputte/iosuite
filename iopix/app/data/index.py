@@ -333,15 +333,21 @@ def sync_photo_ids(images: list, paths: dict) -> dict:
                 if dk is not None:
                     by_dk[dk] = (vid, h, sz)
             inserts, updates, rewritten, touched, remap = [], [], [], [], {}
+            claimed = set()  # rows a renumbered photo has taken over: one photo each
+            # a file at its row's own path goes first, so that a renumbered photo keeps its row even when a copy of
+            # the same bytes appeared elsewhere in the same build (the copy is then a new photo, not the other way)
+            at_home = lambda item: any(stored[v][1] == item[1][2] for v, _d in by_key.get(item[1][:2], ()))  # noqa: E731
             # only what changed is written: on MySQL every statement is a round trip, and a statement per photo
             # on every build (30,000 of them) made each rebuild seconds slower. last_seen is refreshed daily.
-            for dk, (h, sz, path, name) in current.items():
+            for dk, (h, sz, path, name) in sorted(current.items(), key=lambda item: not at_home(item)):
                 known = by_key.get((h, sz))
                 match = next(((v, d) for v, d in known if d == dk), None) if known else None
                 if match is None and known:
                     # the same bytes under another number: that photo's row follows it only when its old number is
                     # gone (digiKam renumbered it); while both numbers exist they are two copies, each its own photo
-                    match = next(((v, d) for v, d in known if d is None or d not in current), None)
+                    match = next(((v, d) for v, d in known if (d is None or d not in current) and v not in claimed), None)
+                    if match:
+                        claimed.add(match[0])
                 if match:
                     vid, old = match
                     if old != dk and old is not None and old not in current:

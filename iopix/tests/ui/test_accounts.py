@@ -61,7 +61,7 @@ def test_users_flow_in_the_browser(page, server, browser):
     visitor.keyboard.press("Escape"); visitor.wait_for_selector("#lightbox", state="hidden", timeout=5000)
     # a display setting now lives on the server
     visitor.goto(server + "/#/settings/display"); visitor.wait_for_selector("label:has-text('Show badges')", timeout=10000)
-    with visitor.expect_response(lambda r: r.url.endswith("/api/auth/settings") and r.request.method == "POST", timeout=5000):  # saved to the account (core.js flushes 400 ms after the change)
+    with visitor.expect_response(lambda r: r.url.endswith("/api/auth/settings") and r.request.method == "POST" and "badges" in (r.request.post_data or ""), timeout=5000):  # saved to the account (core.js flushes 400 ms after the change; the lightbox's own flush may come first)
         visitor.locator("label:has-text('Show badges') input[type=checkbox]").uncheck()
     me = visitor.evaluate("async () => (await (await fetch('/api/auth/settings', {method:'POST', headers:{'content-type':'application/json'}, body:'{}'})).json())")
     assert me.get("badges") == "0"

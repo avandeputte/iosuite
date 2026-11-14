@@ -10,6 +10,15 @@ from helpers import wait_for as _wait
 from app import jobs
 
 
+@pytest.fixture(autouse=True)
+def idle_worker():
+    """These tests time the one worker thread, so it starts idle: jobs queued by earlier tests (a library's scans, in
+    the full suite on a real library) are dropped, and one still running is waited out."""
+    with jobs._lock:
+        jobs._queue.clear()
+    assert _wait(lambda: jobs.status()["running"] is None, timeout=120), f"a job from an earlier test still runs: {jobs.status()['running']}"
+
+
 def test_unknown_key_is_rejected():
     with pytest.raises(ValueError):
         jobs.submit("not-a-job", lambda: None)
@@ -113,7 +122,7 @@ def test_scan_job_start_rule_and_reset(monkeypatch):
     job.start(photos + [{"id": 3}])  # something new: the running job is cancelled and a new run takes over
     assert job.progress.cancelled(runs[0])
     gate.set()
-    assert _wait(lambda: len(runs) == 2 and jobs.status()["running"] is None, timeout=15)  # the second run waits out GRACE first; slow under the full suite
+    assert _wait(lambda: len(runs) == 2 and jobs.status()["running"] is None)
     assert done == [[1, 2, 3]]
     gate.clear()
     job.start(photos + [{"id": 4}])
