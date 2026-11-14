@@ -20,6 +20,9 @@ every app works without it. It earns its place once you run two or more apps.
 - **Weather** (AccuWeather, a free key), **Home Assistant** entities you can switch from the page, and **bookmarks**.
 - **A wall display** for a tablet: photos behind a big clock, the weather, today's and the coming days' events.
 - **Your own page**: each person hides and orders tiles and cards.
+- **One address for the whole suite**, when a suite admin turns it on: the start page answers for every app, each in
+  a folder (`…/calendar/`, `…/notes/`), so one name, one certificate and one port reach them all. See
+  [Reverse proxy and HTTPS](../run/reverse-proxy.md#one-address-without-a-proxy-the-start-page-answers-for-every-app).
 
 ## With the other apps
 

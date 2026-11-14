@@ -622,6 +622,7 @@ is left alone. Afterwards each app updates itself as always (its `update.sh`, or
 iosuite-shared --config /opt/iostart/app apps                      # the list: tick, untick, r<number> to reconfigure
 iosuite-shared --config /opt/iostart/app apps --list
 iosuite-shared --config /opt/iostart/app apps --add iotask --remove iohealth --reconfigure iocalendar
+iosuite-shared --config /opt/iostart/app apps --reach one          # how every app is reached: ports | one | one-proxy | proxy [--address URL]
 iosuite-shared --config /opt/iostart/app remove iohealth [--delete-data] [--db-admin root]
 ```
 

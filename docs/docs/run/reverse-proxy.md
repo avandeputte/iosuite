@@ -1,5 +1,5 @@
 ---
-description: HTTPS for the ioThing apps behind Caddy, nginx, HAProxy or Traefik, and one sign-in across them.
+description: HTTPS for the ioThing apps behind Caddy, nginx, HAProxy or Traefik, one address for the whole suite, and one sign-in across them.
 ---
 
 # Reverse proxy and HTTPS
@@ -81,6 +81,43 @@ Two things differ from a name per app. Phones find a CalDAV or CardDAV account b
 `/.well-known/caldav`, which belongs to the whole host: send it to the app that should answer
 (`redir /.well-known/caldav /calendar/dav/ 301`), and give the others their full address
 (`https://home.example.com/tasks/dav/`). And devices set up with the old addresses need the new one once.
+
+## One address without a proxy: the start page answers for every app
+
+The start page (ioStart) can do the same by itself. With **Settings › Global settings › Apps › Serve the suite on one
+address** on, it answers at its own address as before and passes `…/calendar/`, `…/notes/`, `…/contacts/`,
+`…/tasks/`, `…/pix/`, `…/recipes/`, `…/health/`, `…/dns/` and `…/backup/` on to the app that owns the folder, as the
+request came: uploads, video, CalDAV and CardDAV, MCP.
+
+```
+http://192.168.1.10:8630/            ioStart
+http://192.168.1.10:8630/calendar/   ioCalendar
+http://192.168.1.10:8630/notes/      ioNote
+```
+
+- One switch for the suite, off until a suite admin turns it on: with it, every app can be reached wherever the start
+  page can. Each app goes on asking for its own sign-in, and one sign-in covers them all, since it is one host.
+- The tiles on the start page, the app switchers and the links between apps follow the switch within seconds. Each
+  app's own port keeps answering too, until you close it (`HOST=127.0.0.1`, [below](#the-proxy-as-the-only-way-in)).
+- `/.well-known/caldav` and `/.well-known/carddav` at the address lead to ioCalendar and ioContact. ioTask's CalDAV
+  account takes its full address (`…/tasks/dav/`), and phones set up with the old addresses need the new one once.
+- For HTTPS, put one reverse proxy in front of the start page alone: one site, one upstream.
+
+    ```caddy
+    home.example.com {
+        reverse_proxy 127.0.0.1:8630
+    }
+    ```
+
+- The start page reaches an app at the address the app recorded inside your network, so the apps on the same server
+  need nothing. An app in Docker has to say where it is (`INTERNAL_URL=http://iocalendar:8620`), and an app in
+  another container or on another machine has to know where the start page connects from (Settings › Security ›
+  Sign-in at the proxy › Reverse proxy addresses: its address, or the Docker network, `172.18.0.0/16`), like any
+  reverse proxy. An app that serves HTTPS itself needs an `INTERNAL_URL` with the name on its certificate.
+- When your proxy signs people in with a header (`Remote-User`...), add `127.0.0.1` to the reverse proxy addresses:
+  the apps then take the header the start page passes on from your proxy. Cloudflare Access needs nothing.
+
+The [installer](../start/several-apps.md#how-the-apps-are-reached) sets all of this up in one answer.
 
 ## The proxy as the only way in
 

@@ -34,6 +34,10 @@ CF_JWT_HEADER = "Cf-Access-Jwt-Assertion"
 GENERIC_HEADERS = ("Remote-User", "X-Forwarded-User", "X-Auth-Request-User", "X-Auth-Request-Email", "X-Forwarded-Email")
 KEYS = ("AUTH_PROXY", "AUTH_PROXY_HEADER", "AUTH_PROXY_TRUSTED", "AUTH_PROXY_CREATE", "CF_ACCESS_TEAM", "CF_ACCESS_AUD")
 EXTERNAL_HEADERS = ("cf-ray", "cf-connecting-ip", "cf-access-jwt-assertion")
+# What the start page adds when it passes a request on to an app (the suite on one address) and the request reached
+# it from outside: the app sees a connection from this machine, so it is told. Believed from anyone, like every sign
+# of "outside": it can only take away.
+OUTSIDE_HEADER = "x-iosuite-outside"
 # What a reverse proxy adds to the requests it passes on. A connection that carries one of them comes from a proxy,
 # and only a proxy listed in AUTH_PROXY_TRUSTED is believed about where its visitor is.
 FORWARDING_HEADERS = ("x-forwarded-for", "forwarded", "x-real-ip", "x-forwarded-host", "x-forwarded-proto", "via")
@@ -125,7 +129,7 @@ class Proxy:
         cannot be known until its address is listed). Outside, the first account cannot be made, an install without
         accounts answers nothing but its sign-in screen, and one-click sign-in to a passwordless account is not
         offered. A forged header can only take those away from the one who forges it, never grant anything."""
-        if any(headers_in.get(h) for h in EXTERNAL_HEADERS):
+        if any(headers_in.get(h) for h in EXTERNAL_HEADERS) or headers_in.get(OUTSIDE_HEADER):
             return True
         if peer and _public(peer):
             return True

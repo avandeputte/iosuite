@@ -379,7 +379,7 @@ class Auth:
         return gate
 
     # ---- what every app's FastAPI gets the same way
-    def install(self, app, api_prefix: str = "/api/", body_limit: int = 4 << 20, limit_for=None, not_found=()) -> None:
+    def install(self, app, api_prefix: str = "/api/", body_limit: int = 4 << 20, limit_for=None, not_found=(), outer=None) -> None:
         """The pieces every app of the suite adds to its FastAPI, once:
         - errors.Invalid (what the suite's validation raises) or malformed JSON out of a route is the client's mistake:
           a 400 that says so. Any other ValueError is answered 400 as well, and logged with its traceback, since it
@@ -437,6 +437,8 @@ class Auth:
             return response
 
         app.add_middleware(BodyCap, limit_for=limit_for, error=error)
+        if outer is not None:  # an ASGI middleware of the app's own that sees every request first, with the peer and the scheme already settled (the start page's front door)
+            app.add_middleware(outer)
         # added last: the outermost layer, so the peer is the real one; FastAPI's own two pages learn the folder the app is served in
         app.add_middleware(Forwarded, rooted=tuple(p for p in (app.docs_url, app.openapi_url, app.redoc_url) if p))
 
