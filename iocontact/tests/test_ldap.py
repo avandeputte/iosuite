@@ -42,7 +42,29 @@ def test_ldap_search(client, family_id):
         c.search("dc=iocontact", "(mobile=15551234)", attributes=["cn"])
         assert len(c.entries) == 1
         assert not c.add("cn=x,dc=iocontact", "inetOrgPerson", {"sn": "x"})
+        # a filter nested too deeply (match() is recursive) is refused, the connection stays
+        c.search("dc=iocontact", "(&" * 20 + "(cn=a)" + ")" * 20)
+        assert c.result["result"] == 2 and not c.entries
+        c.search("dc=iocontact", "(cn=Ann Lee)", attributes=["cn"])
+        assert len(c.entries) == 1
+        # a failed bind on a bound connection leaves it anonymous, not as the account before
+        assert not c.rebind("cn=alex,ou=users,dc=iocontact", "wrong")
+        c.search("dc=iocontact", "(cn=Ann Lee)")
+        assert c.result["result"] == 50 and not c.entries
         c.unbind()
+        # an app password revoked while a mail app is connected: its next search is refused and the connection closed
+        from iosuite_shared import apppasswords
+        pw = users.create_app_password(users.find("alex")["id"], "Phone")
+        d = ldap3.Connection(s, "cn=alex,ou=users,dc=iocontact", pw, auto_bind=True)
+        d.search("dc=iocontact", "(cn=Ann Lee)")
+        assert len(d.entries) == 1
+        pid = next(p["id"] for p in apppasswords.list_for(users.find("alex")["id"], "iocontact") if p["label"] == "Phone")
+        apppasswords.delete(users.find("alex")["id"], pid)
+        try:
+            d.search("dc=iocontact", "(cn=Ann Lee)")
+            assert d.result["result"] == 49 and not d.entries
+        except ldap3.core.exceptions.LDAPException:
+            pass  # the server closed the connection
     finally:
         loop.call_soon_threadsafe(srv.close)
         loop.call_soon_threadsafe(loop.stop)

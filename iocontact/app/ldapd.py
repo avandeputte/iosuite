@@ -282,6 +282,32 @@ def match(f, entry: dict) -> bool:
     return False
 
 
+def filter_ok(f, depth: int = 0, seen: list = None) -> bool:
+    """A search filter small enough to match: at most MAX_FILTER_NODES terms, nested at most MAX_FILTER_DEPTH deep
+    (match() is recursive, and runs once per entry)."""
+    seen = seen if seen is not None else [0]
+    seen[0] += 1
+    if seen[0] > MAX_FILTER_NODES or depth > MAX_FILTER_DEPTH:
+        return False
+    tag, content = f
+    if tag in (0xA0, 0xA1, 0xA2):
+        return all(filter_ok(x, depth + 1, seen) for x in children(content))
+    return True
+
+
+def find(user: dict, want_photo: bool, base_dn: str, scope: int, flt, size_limit: int = 0) -> tuple[list, list]:
+    """(every entry the account sees, the ones the search asks for): in a worker thread, not on the event loop. One
+    more than size_limit at most, so the reply can say the limit was reached."""
+    entries = directory(user, want_photo)
+    hits = []
+    for dn, attrs in entries:
+        if in_scope(dn, base_dn, scope) and match(flt, attrs):
+            hits.append((dn, attrs))
+            if size_limit and len(hits) > size_limit:
+                break
+    return entries, hits
+
+
 def in_scope(dn: str, base_dn: str, scope: int) -> bool:
     d, b = norm_dn(dn), norm_dn(base_dn)
     if scope == 0:
@@ -319,6 +345,9 @@ MAX_SESSIONS = 128        # connections open at once, all clients together
 MAX_PER_ADDRESS = 16      # and from one address
 IDLE_S = 600              # a bound connection that sends nothing for this long is closed (mail apps reconnect)
 IDLE_UNBOUND_S = 30       # one that has not bound yet
+MAX_MESSAGE = 64 * 1024   # one request (a search filter is a few hundred bytes); a larger one closes the connection
+MAX_FILTER_NODES = 256    # and, in a search filter: its terms, all levels together
+MAX_FILTER_DEPTH = 16     # and how deeply and/or/not nest
 _open: dict = {}          # address -> its open connections
 
 
@@ -326,6 +355,7 @@ class Session:
     def __init__(self, reader, writer):
         self.r, self.w = reader, writer
         self.user = None
+        self.password = None  # the app password it bound with: checked again at each search (users.ldap_still_good)
         self.peer = writer.get_extra_info("peername")
 
     async def run(self):
@@ -336,7 +366,7 @@ class Session:
                 if not chunk:
                     break
                 buf += chunk
-                if len(buf) > 1_000_000:
+                if len(buf) > MAX_MESSAGE + 16:
                     break
                 while True:
                     t = read_tlv(buf)
@@ -347,6 +377,7 @@ class Session:
                         return
                     if not await self.handle(t[1]):
                         return
+                    await asyncio.sleep(0)  # a client sending many requests at once does not keep the others waiting
         except (ConnectionError, asyncio.IncompleteReadError, asyncio.TimeoutError):
             pass
         except Exception:  # noqa: BLE001
@@ -372,7 +403,7 @@ class Session:
         elif op == 0x42:  # unbind
             return False
         elif op == 0x63:  # search
-            await self.search(msgid, body)
+            return await self.search(msgid, body)
         elif op == 0x50:  # abandon
             pass
         elif op == 0x77:  # extended (StartTLS, whoami...)
@@ -384,6 +415,7 @@ class Session:
         return True
 
     async def bind(self, msgid: int, body: bytes):
+        self.user = self.password = None  # a failed bind leaves the connection anonymous, not as the account before
         parts = children(body)
         name = parts[1][1].decode("utf-8", "replace") if len(parts) > 1 else ""
         auth_tag, auth = parts[2] if len(parts) > 2 else (0x80, b"")
@@ -392,7 +424,6 @@ class Session:
             return
         pw = auth.decode("utf-8", "replace")
         if not name and not pw:
-            self.user = None
             await self.send(result(msgid, 0x61, SUCCESS))
             return
         ident = name
@@ -413,10 +444,11 @@ class Session:
                                                                      "from Settings › Account, not the account's own password)"))
             return
         users.attempt_succeeded(visitor, ident)
-        self.user = u
+        self.user, self.password = u, pw
         await self.send(result(msgid, 0x61, SUCCESS))
 
-    async def search(self, msgid: int, body: bytes):
+    async def search(self, msgid: int, body: bytes) -> bool:
+        """False closes the connection."""
         parts = children(body)
         base_dn = parts[0][1].decode("utf-8", "replace")
         scope = as_int(parts[1][1])
@@ -428,29 +460,36 @@ class Session:
             dse = dict(ROOT_DSE, namingContexts=[base()])
             await self.send(entry_msg(msgid, "", dse, wanted or ["*"], types_only))
             await self.send(result(msgid, 0x65, SUCCESS))
-            return
+            return True
         if not self.user:
             await self.send(result(msgid, 0x65, INSUFFICIENT_ACCESS, "Bind with your ioContact account first"))
-            return
+            return True
+        loop = asyncio.get_running_loop()
+        u = await loop.run_in_executor(None, users.ldap_still_good, self.user["id"], self.password)
+        if not u:  # its app password was revoked, or its access to ioContact taken away, since it bound
+            log.info("LDAP session of %s closed: its app password or access is gone", self.user["name"])
+            await self.send(result(msgid, 0x65, INVALID_CREDENTIALS, "Your app password or access to ioContact is gone: bind again"))
+            return False
+        self.user = u
+        if not filter_ok(flt):
+            await self.send(result(msgid, 0x65, PROTOCOL_ERROR, "Search filter too large"))
+            return True
         bd, root = norm_dn(base_dn), norm_dn(base())
         if base_dn and not (bd == root or bd.endswith("," + root) or root.endswith("," + bd)):
             await self.send(result(msgid, 0x65, NO_SUCH_OBJECT, "", base()))
-            return
+            return True
         want_photo = any(w.lower() == "jpegphoto" for w in wanted)
-        entries = await asyncio.get_running_loop().run_in_executor(None, directory, self.user, want_photo)
-        sent = 0
-        for dn, attrs in entries:
-            if not in_scope(dn, base_dn, scope) or not match(flt, attrs):
-                continue
-            if size_limit and sent >= size_limit:
+        entries, hits = await loop.run_in_executor(None, find, self.user, want_photo, base_dn, scope, flt, size_limit)
+        for i, (dn, attrs) in enumerate(hits):
+            if size_limit and i >= size_limit:
                 await self.send(result(msgid, 0x65, SIZE_LIMIT))
-                return
+                return True
             await self.send(entry_msg(msgid, dn, attrs, wanted, types_only))
-            sent += 1
-        if base_dn and scope == 0 and not sent and not any(norm_dn(dn) == norm_dn(base_dn) for dn, _ in entries):
+        if base_dn and scope == 0 and not hits and not any(norm_dn(dn) == norm_dn(base_dn) for dn, _ in entries):
             await self.send(result(msgid, 0x65, NO_SUCH_OBJECT, "", base()))
-            return
+            return True
         await self.send(result(msgid, 0x65, SUCCESS))
+        return True
 
 
 async def serve(host, port: int):  # host: one address, or a list of them

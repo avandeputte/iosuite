@@ -73,6 +73,7 @@ def _confirmed_closed() -> bool:
 def preflight(db_path: Path, require_digikam_closed: bool = True, holds: str = None):
     """The checks every writer runs before backing up: digiKam closed, no interrupted
     write left behind. `holds` names what lives in the database for the message."""
+    writes_allowed()
     if require_digikam_closed and digikam_running():
         raise SyncError("digiKam is running. Quit digiKam first" + (f"; {holds} live in its database." if holds else ", then try again."))
     with dkdb.write_lock:  # a write of the viewer's own still running is not an unfinished write
@@ -82,11 +83,19 @@ def preflight(db_path: Path, require_digikam_closed: bool = True, holds: str = N
                         "Open and close digiKam once so it can recover, then try again.")
 
 
+def writes_allowed():
+    """DB_WRITE=0 keeps digiKam's database untouched: every writer comes through here (preflight, write_transaction),
+    so a route or MCP tool that forgets its own check still writes nothing."""
+    if not config.DB_WRITE:
+        raise SyncError("Writing to digiKam's database is turned off (DB_WRITE=0); nothing was changed.")
+
+
 @contextmanager
 def write_transaction(db_path: Path = None, require_digikam_closed: bool = True):
     """One guarded write to digiKam's database: BEGIN, schema-version check, the caller's
     statements, integrity check, a last look for a running digiKam, COMMIT. Any error
     rolls back; the connection is always closed."""
+    writes_allowed()
     dkdb.write_lock.acquire()
     try:
         con = dkdb.connect(write=True, db_path=db_path)
