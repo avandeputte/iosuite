@@ -5,8 +5,22 @@ import time
 import pytest
 
 from app import users
-from iosuite_shared import proxyauth
+from iosuite_shared import db, proxyauth
 from app.auth import auth as auth_shared
+
+
+def opt(name: str, value: str = ""):
+    """A proxy sign-in setting: suite-wide, in the Shared ioSuite database (the environment is not read)."""
+    db.set_setting(name.lower(), value, "")
+
+
+@pytest.fixture(autouse=True)
+def no_proxy_settings():
+    for k in proxyauth.KEYS:
+        opt(k)
+    yield
+    for k in proxyauth.KEYS:
+        opt(k)
 
 
 @pytest.fixture
@@ -18,29 +32,28 @@ def account(fresh):
 
 
 def test_off_by_default(monkeypatch, account):
-    monkeypatch.delenv("AUTH_PROXY", raising=False)
+    opt("AUTH_PROXY")
     assert auth_shared.proxy.identity({"Remote-User": "proxy-probe"}, "127.0.0.1") is None
 
 
 @pytest.mark.parametrize("preset", ["haproxy", "nginx", "caddy", "traefik", "header"])
 def test_header_from_the_proxy_only(monkeypatch, account, preset):
-    monkeypatch.setenv("AUTH_PROXY", preset)
-    monkeypatch.delenv("AUTH_PROXY_HEADER", raising=False)
-    monkeypatch.delenv("AUTH_PROXY_TRUSTED", raising=False)
+    opt("AUTH_PROXY", preset)
+    opt("AUTH_PROXY_TRUSTED", "127.0.0.1,::1")  # this machine: the proxy (a proxy mode with no address listed signs nobody in)
     assert auth_shared.proxy.identity({"Remote-User": "proxy-probe"}, "127.0.0.1") == "proxy-probe"
     assert auth_shared.proxy.identity({"X-Auth-Request-Email": "probe@example.com"}, "::ffff:127.0.0.1") == "probe@example.com"
     assert auth_shared.proxy.identity({"Remote-User": "proxy-probe"}, "192.168.1.50") is None, "not from the proxy: ignored"
-    monkeypatch.setenv("AUTH_PROXY_TRUSTED", "192.168.1.0/24")
+    opt("AUTH_PROXY_TRUSTED", "192.168.1.0/24")
     assert auth_shared.proxy.identity({"Remote-User": "proxy-probe"}, "192.168.1.50") == "proxy-probe"
-    monkeypatch.setenv("AUTH_PROXY_HEADER", "X-Custom-User")
+    opt("AUTH_PROXY_HEADER", "X-Custom-User")
     assert auth_shared.proxy.identity({"Remote-User": "x", "X-Custom-User": "proxy-probe"}, "192.168.1.50") == "proxy-probe"
     assert auth_shared.proxy.user_for("PROBE@example.com")["id"] == account["id"] and auth_shared.proxy.user_for("Proxy-Probe")["id"] == account["id"]
 
 
 def test_unknown_people_are_created_only_when_allowed(monkeypatch, account):
-    monkeypatch.delenv("AUTH_PROXY_CREATE", raising=False)
+    opt("AUTH_PROXY_CREATE")
     assert auth_shared.proxy.user_for("new-person@example.com") is None
-    monkeypatch.setenv("AUTH_PROXY_CREATE", "editor")
+    opt("AUTH_PROXY_CREATE", "editor")
     u = auth_shared.proxy.user_for("new-person@example.com")
     assert u and u["role"] == "editor" and u["email"] == "new-person@example.com"
 
@@ -49,9 +62,9 @@ def test_cloudflare_access_token_is_verified(monkeypatch, account):
     import jwt
     from cryptography.hazmat.primitives.asymmetric import rsa
     key, other = (rsa.generate_private_key(public_exponent=65537, key_size=2048) for _ in range(2))
-    monkeypatch.setenv("AUTH_PROXY", "cloudflare")
-    monkeypatch.setenv("CF_ACCESS_TEAM", "myteam.cloudflareaccess.com")
-    monkeypatch.setenv("CF_ACCESS_AUD", "aud-tag")
+    opt("AUTH_PROXY", "cloudflare")
+    opt("CF_ACCESS_TEAM", "myteam.cloudflareaccess.com")
+    opt("CF_ACCESS_AUD", "aud-tag")
 
     class Signing:
         def __init__(self, k):
@@ -70,13 +83,13 @@ def test_cloudflare_access_token_is_verified(monkeypatch, account):
     assert auth_shared.proxy.identity({proxyauth.CF_HEADER: "probe@example.com"}, "127.0.0.1") is None, "no token: nobody"
     # without the team settings nobody is signed in: for Cloudflare the signed token is the only proof (a plain
     # header from the tunnel's address could be set by anything on that machine)
-    monkeypatch.delenv("CF_ACCESS_TEAM")
+    opt("CF_ACCESS_TEAM")
     assert auth_shared.proxy.identity({proxyauth.CF_HEADER: "probe@example.com"}, "127.0.0.1") is None
     assert auth_shared.proxy.identity({proxyauth.CF_HEADER: "probe@example.com"}, "203.0.113.9") is None
 
 
 def test_requests_through_the_proxy_are_signed_in(client, monkeypatch, account):
-    monkeypatch.setenv("AUTH_PROXY", "nginx")
+    opt("AUTH_PROXY", "nginx")
     monkeypatch.setattr("iosuite_shared.proxyauth.Proxy.from_trusted", lambda self, peer: True)
     me = client.get("/api/auth/me", headers={"Remote-User": "proxy-probe"}).json()
     assert me["user"]["name"] == "proxy-probe" and me["viaProxy"] and me["canWrite"]
@@ -102,16 +115,14 @@ def test_the_real_peer_survives_the_forwarded_rewrite():
 
 
 def test_settings_from_the_app_and_the_token_seen(monkeypatch, account):
-    """Proxy sign-in can be set up in the app (the environment still wins), and the Cloudflare team and application
+    """Proxy sign-in is set up suite-wide (the environment is not read), and the Cloudflare team and application
     of the requests are noted (unverified) so they can be set up from them."""
     import jwt
-    for k in proxyauth.KEYS:
-        monkeypatch.delenv(k, raising=False)
     proxyauth.save_suite({"AUTH_PROXY": "nginx", "AUTH_PROXY_TRUSTED": "10.0.0.0/8"})
     try:
         assert auth_shared.proxy.mode() == "nginx" and auth_shared.proxy.identity({"Remote-User": "proxy-probe"}, "10.1.2.3") == "proxy-probe"
         monkeypatch.setenv("AUTH_PROXY", "off")
-        assert auth_shared.proxy.mode() == "off", "the environment wins"
+        assert auth_shared.proxy.mode() == "nginx", "the environment is not read: the setting is the suite's"
         tok = jwt.encode({"iss": "https://myteam.cloudflareaccess.com", "aud": ["aud-x"], "email": "probe@example.com"}, "k", algorithm="HS256")
         auth_shared.proxy.note({proxyauth.CF_JWT_HEADER: tok}, "10.1.2.3")  # from the proxy's own address: anyone else's header is ignored
         proxyauth.seen.clear(); auth_shared.proxy.note({proxyauth.CF_JWT_HEADER: tok}, "203.0.113.9"); assert not proxyauth.seen, "not from the proxy: not noted"
@@ -122,7 +133,7 @@ def test_settings_from_the_app_and_the_token_seen(monkeypatch, account):
 
 
 def test_from_outside_a_password_is_required(client, monkeypatch, account):
-    monkeypatch.delenv("AUTH_PROXY", raising=False)
+    opt("AUTH_PROXY")
     users.create("oneclick-probe", "", "viewer")
     outside = {"Cf-Ray": "abc-EWR", "Cf-Connecting-Ip": "203.0.113.9"}
     names = lambda hd: {a["name"] for a in client.get("/api/auth/accounts", headers=hd).json()["accounts"]}
@@ -139,12 +150,12 @@ def test_from_outside_a_password_is_required(client, monkeypatch, account):
 
 def test_sign_ins_are_logged(client, monkeypatch, account, caplog):
     import logging
-    monkeypatch.delenv("AUTH_PROXY", raising=False)
+    opt("AUTH_PROXY")
     with caplog.at_level(logging.INFO, logger="iosuite_shared.auth"):
         assert client.post("/api/auth/login", json={"name": "proxy-probe", "password": "nope"}, headers={"Cf-Connecting-Ip": "203.0.113.9"}).status_code == 401
         assert client.post("/api/auth/login", json={"name": "proxy-probe", "password": "longpassword1"}).status_code == 200
         client.post("/api/auth/logout", json={})
-        monkeypatch.setenv("AUTH_PROXY", "nginx")
+        opt("AUTH_PROXY", "nginx")
         monkeypatch.setattr("iosuite_shared.proxyauth.Proxy.from_trusted", lambda self, peer: True)
         proxyauth._logged.clear()
         for _ in range(3):
@@ -158,7 +169,7 @@ def test_sign_ins_are_logged(client, monkeypatch, account, caplog):
 
 
 def test_a_proxy_sign_in_carries_over_to_the_home_network(client, monkeypatch, account):
-    monkeypatch.setenv("AUTH_PROXY", "nginx")
+    opt("AUTH_PROXY", "nginx")
     monkeypatch.setattr("iosuite_shared.proxyauth.Proxy.from_trusted", lambda self, peer: True)
     client.cookies.clear()
     outside = {"Remote-User": "proxy-probe", "Cf-Ray": "abc-EWR"}
@@ -172,18 +183,18 @@ def test_a_proxy_sign_in_carries_over_to_the_home_network(client, monkeypatch, a
     assert client.post("/api/auth/logout", json={}).json()["cloudflareLogout"] is None
     client.cookies.clear()
     assert client.post("/api/auth/login", json={"name": "proxy-probe", "password": "longpassword1"}).status_code == 200
-    monkeypatch.setenv("AUTH_PROXY", "off")
+    opt("AUTH_PROXY", "off")
     assert client.get("/api/auth/me").json()["signedInBy"] == "password"
     client.post("/api/auth/logout", json={})
 
 
 def test_someone_with_no_account_can_be_denied(client, monkeypatch, account):
-    monkeypatch.setenv("AUTH_PROXY", "nginx")
+    opt("AUTH_PROXY", "nginx")
     monkeypatch.setattr("iosuite_shared.proxyauth.Proxy.from_trusted", lambda self, peer: True)
     client.cookies.clear()
     stranger = {"Remote-User": "stranger@example.com"}
     assert client.get("/api/auth/me", headers=stranger).json()["user"] is None, "default: the sign-in screen"
-    monkeypatch.setenv("AUTH_PROXY_CREATE", "deny")
+    opt("AUTH_PROXY_CREATE", "deny")
     proxyauth._cache.clear()
     r = client.get("/api/auth/accounts", headers=stranger)
     assert r.status_code == 403 and r.json()["noAccess"]

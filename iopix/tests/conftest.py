@@ -47,7 +47,7 @@ os.environ.update({
     "DATA_DIR": str(_data), "DIGIKAM_DB_DIR": str(_lib / "db"), "PHOTOS_ROOT": str(LIB["root"] if LIB else _lib / "photos"),
     "PREWARM": "0", "SEMANTIC": "0", "ANALYSIS": "0", "CAPTIONS": "0", "REINDEX_POLL": "3600",
     "DIGIKAM_CHECK": "none", "BG_THREADS": "2", "JOBS_PROCESS": "0",  # the jobs run in this process, where the tests can reach into them (test_jobproc.py turns the job process on)
-     "HF_HUB_OFFLINE": "1", "SCANNER_LOOP": "0", "LOG_FILE": "",  # no server log from the tests
+     "HF_HUB_OFFLINE": "1", "SCANNER_LOOP": "0", "LOG_FILE": str(_data / "iopix.log"),  # a server log of its own, in the scratch data folder (/api/log answers)
     # the shared accounts (iosuite-shared) in a database of their own on the test server, never the suite's `iosuite`
     "IOSUITE_DB_NAME": AUTH_DB["database"], "IOSUITE_DB_HOST": AUTH_DB["host"], "IOSUITE_DB_PORT": str(AUTH_DB["port"]),
     "IOSUITE_DB_USER": AUTH_DB["user"], "IOSUITE_DB_PASSWORD": AUTH_DB["password"],

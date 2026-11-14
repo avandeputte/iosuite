@@ -321,10 +321,13 @@ def summary() -> dict:
         scanned, mism, no_side, last = con.execute(
             "SELECT count(*), sum(mismatch > 0), sum(has_sidecar = 0), max(checked_at) FROM pix_metadata_check").fetchone()
         by_field = {f: 0 for f in FIELDS}
+        mism = 0  # counted from the stored records: a result kept from before a field was dropped (pick, colour) may name it
         for (data,) in con.execute("SELECT data FROM pix_metadata_check WHERE mismatch > 0"):
-            for f in json.loads(data)["mismatch"]:
+            fs = [f for f in json.loads(data)["mismatch"] if f in by_field]
+            for f in fs:
                 by_field[f] += 1
-        return {"scanned": int(scanned or 0), "mismatched": int(mism or 0), "no_sidecar": int(no_side or 0), "by_field": by_field, "scanned_at": int(last) if last else None}
+            mism += bool(fs)
+        return {"scanned": int(scanned or 0), "mismatched": mism, "no_sidecar": int(no_side or 0), "by_field": by_field, "scanned_at": int(last) if last else None}
     except Exception:
         return empty
     finally:
@@ -342,7 +345,13 @@ def report(field: str = None, offset: int = 0, limit: int = 100) -> dict:
         rows = con.execute("SELECT data FROM pix_metadata_check WHERE mismatch > 0 ORDER BY photo_id DESC").fetchall()
     finally:
         con.close()
-    recs = [json.loads(data) for (data,) in rows]
+    recs = []
+    for (data,) in rows:  # a result kept from before a field was dropped may name it: shown without it
+        r = json.loads(data)
+        r["mismatch"] = [f for f in r["mismatch"] if f in FIELDS]
+        if r["mismatch"]:
+            r["fields"] = {f: v for f, v in r["fields"].items() if f in FIELDS}
+            recs.append(r)
     if field:
         recs = [r for r in recs if field in r["mismatch"]]
     return {"total": len(recs), "offset": offset, "items": recs[offset:offset + limit]}
