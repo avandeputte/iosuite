@@ -9,7 +9,7 @@ import { loadUser, loginDialog, renderUserMenu } from './users.js';
 import { viewerDbPanel } from './settings.js';
 import { M } from './map.js';
 import { toggleFilters } from './filters.js';
-import { LB, details } from './lightbox.js';
+import { LB, details, showItem } from './lightbox.js';
 
 export function indexMeta(meta) {
   S.META = meta;
@@ -140,7 +140,7 @@ export async function pollStatus() {
     S.SEM = s.semantic; S.EDITING = s.editing; S.FACE_DETECT = !!s.faceDetect; S.LOSSLESS = s.lossless || null; S.SYNC_OFF = !!(s.digikam && !s.digikam.sync); S.NO_DK = !!(s.digikam && s.digikam.none); S.PENDING = s.pendingEdits; S.WRITE_FILES = s.writeFiles; S.CAN_MANAGE = s.editing && s.dbWrite;
     S.AUTO_DB = !!(s.dbWrite && s.digikam && (s.digikam.none || s.digikam.sync && s.digikam.reachable));  // edits go into the database by themselves, a minute later
     S.IS_ADMIN = s.isAdmin; S.USERS_EXIST = s.usersExist; S.DIGIKAM_CHECK = s.digikamCheck || 'pgrep';
-    if (s.version) { S.APP_VERSION = s.version; S.APP_COMMIT = s.commit || ''; const b = $('.brand'); if (b) b.title = `${S.APP_NAME} v${S.APP_VERSION}`; } if ((s.user && s.user.id) !== (S.USER && S.USER.id)) { S.USER = s.user; renderUserMenu(); }  // before the banner, which names the installed version
+    if (s.version) { S.APP_VERSION = s.version; S.APP_COMMIT = s.commit || ''; const b = $('.brand'); if (b) b.title = `${S.APP_NAME} v${S.APP_VERSION}`; } if ((s.user && s.user.id) !== (S.USER && S.USER.id)) { S.USER = s.user; details.clear(); renderUserMenu(); if (LB.open) showItem(); }  // before the banner, which names the installed version; a photo's details depend on who asks (its folder, ages, the editor), so they are asked again and an open photo is drawn again
     dkBanner(s.digikam);
     if (s.appName && s.appName !== S.APP_NAME) { S.APP_NAME = s.appName; applyAppName(); }
     document.body.classList.toggle('noadmin', !S.IS_ADMIN);

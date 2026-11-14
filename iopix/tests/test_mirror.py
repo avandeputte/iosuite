@@ -291,7 +291,11 @@ def test_library_follows_digikam_row_by_row(client, lib):
     finally:
         src.rollback(); src.close()
     assert set(written) == {"photo_information", "photo_tags", "face_regions"} and sum(written.values()) <= 6, written
-    a = index.read_rows(library.connect())
+    lc = library.connect()  # the thread's pooled connection, leased until it is closed
+    try:
+        a = index.read_rows(lc)
+    finally:
+        lc.close()
     src = dkdb.connect(real=True)
     b = index.read_rows(src); src.close()
     assert all(sorted(map(repr, a[k])) == sorted(map(repr, b[k])) for k in a)

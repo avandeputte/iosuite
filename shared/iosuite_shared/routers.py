@@ -70,10 +70,18 @@ def auth_router(self) -> APIRouter:
     def api_me(request: Request):
         return auth.me(request)
 
+    def account(request: Request) -> dict:
+        """The signed-in account, for the routes about one's own account: before the first account exists everyone
+        passes `signed_in`, but there is nobody to keep app passwords, notifications or settings for."""
+        u = auth.current_user(request)
+        if not u:
+            raise HTTPException(401, "Sign in first")
+        return u
+
     @r.patch("/api/auth/me", dependencies=[access.signed_in])
     async def api_patch_me(request: Request):
         """The signed-in account's display name and email ({displayName, email}; empty clears). Settings › Account."""
-        u = auth.current_user(request)
+        u = account(request)
         body = await json_body(request)
         f = {}
         if "displayName" in body:
@@ -98,16 +106,12 @@ def auth_router(self) -> APIRouter:
 
     @r.post("/api/auth/settings", dependencies=[access.signed_in])
     async def api_my_settings(request: Request):
-        u = auth.current_user(request)
-        if not u:
-            raise HTTPException(401, "Sign in first")
+        u = account(request)
         return users.set_settings(u["id"], app, await json_body(request))
 
     @r.post("/api/auth/password", dependencies=[access.signed_in])
     async def api_my_password(request: Request):
-        u = auth.current_user(request)
-        if not u:
-            raise HTTPException(401, "Sign in first")
+        u = account(request)
         body = await json_body(request)
         if u.get("passwordless"):
             raise HTTPException(403, "This account signs in with one click; a suite admin can give it a password under Settings › Security")
@@ -161,9 +165,7 @@ def auth_router(self) -> APIRouter:
     @r.delete("/api/auth/sessions/{session_id}", dependencies=[access.signed_in])
     def api_end_session(session_id: str, request: Request):
         """End one of the signed-in account's sessions (another browser or device)."""
-        u = auth.current_user(request)
-        if not u:
-            raise HTTPException(401, "Sign in first")
+        u = account(request)
         sessions.end_one(u["id"], session_id)
         return {"ok": True}
 
@@ -171,11 +173,11 @@ def auth_router(self) -> APIRouter:
     def api_app_passwords(request: Request):
         """The account's app passwords here; scope '' works everywhere, 'dav' for the sync protocols only. scopes:
         what this app offers (no 'dav' in an app without DAV)."""
-        return {"items": apppasswords.list_for(auth.current_user(request)["id"], app), "scopes": ["", *auth.scope_paths]}
+        return {"items": apppasswords.list_for(account(request)["id"], app), "scopes": ["", *auth.scope_paths]}
 
     @r.post("/api/auth/app-passwords", dependencies=[access.signed_in])
     async def api_new_app_password(request: Request):
-        u = auth.current_user(request)
+        u = account(request)
         if u.get("passwordless"):
             raise HTTPException(403, "A one-click account cannot have app passwords")
         body = await json_body(request)
@@ -187,7 +189,7 @@ def auth_router(self) -> APIRouter:
 
     @r.delete("/api/auth/app-passwords/{pid}", dependencies=[access.signed_in])
     def api_del_app_password(pid: int, request: Request):
-        apppasswords.delete(auth.current_user(request)["id"], pid)
+        apppasswords.delete(account(request)["id"], pid)
         return {"ok": True}
 
     # ---- notifications (iosuite_shared.push): Settings › Account › Notifications, the same in every app
@@ -201,19 +203,19 @@ def auth_router(self) -> APIRouter:
     @r.get("/api/auth/push", dependencies=[access.signed_in])
     def api_push(request: Request):
         """{key, morning, kinds: [{kind, label, hint, on, admin}], devices: [{id, label, app, appName, created, lastOk, endpointHash}]}."""
-        return push.overview(auth.current_user(request))
+        return push.overview(account(request))
 
     @r.post("/api/auth/push/devices", dependencies=[access.signed_in])
     async def api_push_add(request: Request):
         """This browser's push subscription ({subscription: {endpoint, keys}, standalone}): notifications on here."""
-        u, body = auth.current_user(request), await json_body(request)
+        u, body = account(request), await json_body(request)
         d = await run_in_threadpool(push.add_device, u["id"], body.get("subscription") or {}, app,
                                     request.headers.get("user-agent") or "", bool(body.get("standalone")))
         return {"device": d, **push.overview(u)}
 
     @r.delete("/api/auth/push/devices/{device_id}", dependencies=[access.signed_in])
     def api_push_remove(device_id: int, request: Request):
-        u = auth.current_user(request)
+        u = account(request)
         if not push.remove_device(u["id"], device_id):
             raise HTTPException(404, "No such device")
         return push.overview(u)
@@ -221,14 +223,14 @@ def auth_router(self) -> APIRouter:
     @r.put("/api/auth/push/prefs", dependencies=[access.signed_in])
     async def api_push_prefs(request: Request):
         """{kinds: {kind: bool}, morning: 'HH:MM'}: what this account gets, on every device."""
-        u, body = auth.current_user(request), await json_body(request)
+        u, body = account(request), await json_body(request)
         push.set_prefs(u["id"], body.get("kinds") if isinstance(body.get("kinds"), dict) else None, body.get("morning"))
         return push.overview(u)
 
     @r.post("/api/auth/push/test", dependencies=[access.signed_in])
     async def api_push_test(request: Request):
         """A test notification to every device of this account: {sent, devices}."""
-        u = auth.current_user(request)
+        u = account(request)
         n = await run_in_threadpool(push.notify, u["id"], "test", "Notifications work",
                                     f"Sent from {auth.label}. Every app of the suite reaches you here.", push.link(app), None,
                                     "test", 600, "normal", False)

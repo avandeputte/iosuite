@@ -241,7 +241,8 @@ def test_units_follow_the_browser_region_and_the_setting(browser, server):
         ctx.close()
     ctx, pg = _units_page(browser, server, "de-DE")
     try:
-        assert pg.locator("#unitseg [data-units=auto]").inner_text() == "Automatic (kilometres here)"
+        assert pg.locator("#unitseg [data-units=auto]").inner_text() == "Automatic"
+        assert "kilometres here" in pg.locator(".srow", has=pg.locator("#unitseg")).inner_text()
         assert pg.evaluate(_FMT, "auto")[1] == "1,6 km"
         assert pg.evaluate(_FMT, "mi")[1] == "1 mi"
     finally:
@@ -316,9 +317,10 @@ def test_the_name_opens_the_other_suite_apps(page, server, browser):
     page.locator("#nav .navhead button.suitebtn").click()
     page.wait_for_selector(".suitepop .apptile", timeout=5000)
     tiles = page.locator(".suitepop .apptile")
-    assert page.locator(".suitepop .appnm").all_inner_texts() == ["ioContact", "ioNote"]  # the others, not iopix itself
-    assert [tiles.nth(i).get_attribute("href") for i in range(2)] == ["https://contacts.example.com", "https://notes.example.com"]
-    page.wait_for_selector(".suitepop .apptile:nth-child(2) .appic.fb", timeout=5000)
+    assert page.locator(".suitepop .appnm").all_inner_texts() == ["iopix", "ioContact", "ioNote"]  # the suite's one order, this app too
+    assert page.locator(".suitepop .apptile.cur[aria-current=page] .appnm").inner_text() == "iopix", "this app is marked"
+    assert [tiles.nth(i).get_attribute("href") for i in range(1, 3)] == ["https://contacts.example.com", "https://notes.example.com"]
+    page.wait_for_selector(".suitepop .apptile:nth-child(3) .appic.fb", timeout=5000)
     page.keyboard.press("Escape")
     assert page.locator(".suitepop").count() == 0
     # a phone: the sidebar is the bottom bar, so the menu is in the top bar
@@ -329,4 +331,4 @@ def test_the_name_opens_the_other_suite_apps(page, server, browser):
     box = page.locator(".suitepop").bounding_box()
     assert box["x"] >= 0 and box["x"] + box["width"] <= 390
     page.mouse.click(200, 600)
-    assert page.locator(".suitepop").count() == 0
+    page.wait_for_selector(".suitepop", state="detached", timeout=5000)  # a click outside closes it

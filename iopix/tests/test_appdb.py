@@ -23,9 +23,9 @@ def other_db():
 
 
 def _seed():
-    users.create("alex", "correct horse", "admin")
+    alex = users.create("alex", "correct horse", "admin")
     state.set_setting("zz_probe", "value with ? and %s and `key`")
-    state.set_favorites([(1, "h1"), (2, "h2")], True)
+    assert state.set_favorites([(1, "h1"), (2, "h2")], True, user=alex), "favorites are an account's own"
     aid = state.create_album("Trip"); state.set_album_items(aid, [(1, "h1")], True)
     with appdb.writer() as con:
         con.execute("INSERT OR REPLACE INTO pix_ai_quality VALUES (?,?,?,?,?)", (1, 0.5, 0.4, 0, 0))
