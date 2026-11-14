@@ -10,7 +10,7 @@ private one is its owner's).
 import json
 import re
 
-from iosuite_shared import users as shared_users
+from iosuite_shared import related, users as shared_users
 from iosuite_shared.errors import Invalid
 
 from app import db, images
@@ -265,6 +265,7 @@ def delete(u: dict, r: dict) -> None:
     if not can_write(u, r):
         raise Forbidden("You can see this recipe but not delete it")
     db.ex("DELETE FROM rcp_recipes WHERE id = %s", (r["id"],))
+    related.forget("recipe", r["id"])  # its links to other items of the suite go too
 
 
 # ---- the photos

@@ -566,8 +566,20 @@ async function showContact(id, pane) {
     h('div', { class: 'dhead' }, back, avatar(c, 'xl'), h('div', { style: { flex: 1, minWidth: '200px' } },
       h('h1', null, c.fn), sub ? h('div', { class: 'sub' }, sub) : null, c.maiden ? h('div', { class: 'sub' }, `née ${c.maiden}`) : null, h('div', { class: 'chips' }, headChips)), fav),
     tools, cards.length ? h('div', { class: 'cards' }, cards) : h('p', { class: 'muted' }, 'Nothing else is known about this contact yet.'),
+    linkedBox(id),
     h('p', { class: 'muted small', style: { marginTop: '24px' } }, `Changed ${new Date(c.updated).toLocaleString()} · UID ${c.uid}`)));
   pane.scrollTop = 0;
+}
+
+/** "Linked" under a contact: the events, tasks, notes, recipes and photos of the other apps linked to it (the suite's panel). */
+let linkUi = null;
+function linkedBox(id) {
+  const el = h('div', { class: 'linked' });
+  (async () => {
+    try { linkUi = linkUi || await import(new URL('api/related/ui.js', document.baseURI).href); } catch (e) { return; }
+    linkUi.mount(el, { kind: 'contact', id, toast });
+  })();
+  return el;
 }
 
 // ------------------------------------------------------------------ the edit form

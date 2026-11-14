@@ -16,7 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from iosuite_shared import chores, mcp as shared_mcp
 from iosuite_shared.updates import setup_log
 
-from app import __version__, api, caldav, config, db, ical, mcp, model, users
+from app import __version__, api, caldav, config, db, ical, mcp, model, notify, users
 from app.auth import auth, updater
 
 setup_log(config.LOG_FILE)  # the server log that Settings › Server shows; the app runs without it
@@ -48,10 +48,12 @@ async def lifespan(app: FastAPI):
     await run_in_threadpool(users.init)
     updater.start_daily()   # the daily "is there a newer version" check, while the setting allows it
     purge = chores.start(model.purge_deleted, name="purge of old deletion markers")  # once a day: KEEP_DELETED_DAYS
+    notes = chores.start(notify.run, every_s=60, first_s=20, name="notifications")  # tasks falling due, the morning summary
     log.info("ioTask %s started, database %s:%s/%s", __version__, config.DB_HOST, config.DB_PORT, config.DB_NAME)
     async with shared_mcp.running(mcp.server):  # the MCP endpoint (/mcp) lives in this process
         yield
     purge.cancel()
+    notes.cancel()
 
 
 app = FastAPI(title="ioTask", version=__version__, lifespan=lifespan, docs_url="/api/docs", redoc_url=None,
@@ -105,6 +107,7 @@ def _server_apply(body: dict) -> None:
 app.include_router(auth.router())        # /api/auth/*: sign-in, accounts, me, settings, password, sessions, app passwords, suite
 app.include_router(auth.users_router())  # /api/users: accounts and their role here (admins)
 app.include_router(auth.admin_router())  # /api/suite-admin (+ ui.js, the panel of Settings › Security and Global settings): the whole suite (suite admins)
+app.include_router(auth.related_router())  # /api/related (+ ui.js, the "Linked" panel): items linked across the apps
 app.include_router(auth.status_router(updater, extra=_status_extra))  # /api/status: public, the same shape in every app
 app.include_router(auth.server_router(updater, log_file=config.LOG_FILE, info=_server_info, apply=_server_apply))  # /api/server, /api/log (admins)
 app.include_router(auth.profile_router(api.base_url))  # /profile/<token>/<file> and the profile for all the apps that sync

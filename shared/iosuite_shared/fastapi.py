@@ -9,6 +9,7 @@ dependencies that say who may call a route, and the routers with the sign-in and
     app.include_router(auth.admin_router())  # /api/suite-admin: every account, role, app password, session and app (suite admins)
     app.include_router(auth.status_router(updater, extra=...))   # GET /api/status, public, the same shape in every app
     app.include_router(auth.server_router(updater, log_file=...)) # GET/POST /api/server, GET /api/log (admins)
+    app.include_router(auth.related_router()) # /api/related: linked items across the apps (+ ui.js, the panel)
     auth.install(app, limit_for=...)         # 400 for bad input, the security headers, no-store on the API, the body cap
 
 The API shapes are those of iopix (ionote copied them), so the apps' pages keep working.
@@ -320,6 +321,11 @@ class Auth:
     def status_router(self, updater=None, extra=None) -> APIRouter:
         """GET /api/status, open to everyone: the same shape in every app."""
         return routers.status_router(self, updater, extra)
+
+    def related_router(self) -> APIRouter:
+        """/api/related/*: linked items (iosuite_shared.related), and the panel that shows them (GET /api/related/ui.js)."""
+        from iosuite_shared import related
+        return related.router(self)
 
     def profile_router(self, base_url) -> APIRouter:
         """The Apple profile downloads (iosuite_shared.appleprofile): /profile/<token>/<file> and the profile for all

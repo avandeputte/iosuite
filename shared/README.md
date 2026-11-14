@@ -286,6 +286,51 @@ await ui.mountAppPasswords(pw, { toast, syncOnly: 'Calendar apps only (CalDAV)' 
 
 `ui.box(icon, title, ...rows)` and `ui.row(label, hint, control)` draw the app's own Settings boxes in the same look.
 
+## Notifications
+
+Web push from any app to the people who turned it on (`iosuite_shared.push`). Settings › Account › Notifications
+(part of `ui.mountAccount`, so every app has it; `ui.mountNotifications(el, {toast})` on its own) turns them on for
+the device it is opened on and says what the account gets; one app per device is enough, since every app sends to
+every device of the account and a tap opens the app the notification is about. On an iPhone or iPad it works in a
+home-screen app (iOS 16.4 and later). The service worker (`/api/auth/push/sw.js`, `static/push-sw.js`) only shows
+notifications: no fetch handler and no cache, and its scope is its own folder, so it never stands between an app and
+its pages.
+
+| Kind | From | When | Who |
+|------|------|------|-----|
+| `tasks` | ioTask | a task's alert goes off (a task with a time and no alert: when it falls due); at the person's morning time, what is due today and late | the members a task is tagged with, else the owner of its private list, else whoever added it |
+| `events` | ioCalendar | an event's reminder goes off (an all-day event's counts from the start of its day) | the same rule, with calendars |
+| `birthdays` | ioContact | at the person's morning time: today's birthdays ("Remind me" on) and anniversaries | whoever sees the address book |
+| `health` | ioHealth | a sync brings today's value up to one of the account's daily "at least" goals (steps, minutes, kcal, hours, the rings) | the account itself |
+| `backups` | ioBackup | a backup or restore fails | suite admins |
+| `updates` | every app's daily check | a newer version of the suite is on GitHub | suite admins |
+
+A kind is offered only to people who use its app (a role there that is not `none`, and the app installed); each can be
+turned off, and the morning time (08:00 by default, the server's time zone) is the account's. A message that must go
+out once (`once=` key) goes out once, whichever app or restart gets there, through `ios_push_sent`.
+
+```python
+from iosuite_shared import push
+for u in push.recipients("tasks"):            # who has a device, may get the kind and wants it
+    push.notify(u["id"], "tasks", "Pack the swim bag", "Due now", url=push.link("iotask", "#/today"), once=f"task:{uid}:{due}")
+push.notify_admins("backups", "Backup failed: nightly", str(error))
+push.is_morning(user_id)                       # the person's morning time came, within the last 6 hours
+```
+
+The sender's key (VAPID) is made the first time it is needed and kept with the suite's keys (Settings › Global
+settings › Keys and tokens, "Notifications sender key"); clearing it there makes a new one, and every device has to
+turn notifications on again. Messages are encrypted for the device (RFC 8291), so the push service between the
+server and the device (Apple's, Google's, Mozilla's) cannot read them. A device the push service says is gone (404,
+410) is removed.
+
+| Route | What |
+|---|---|
+| `GET /api/auth/push` | `{key, morning, kinds: [{kind, label, hint, on, admin}], devices: [{id, label, app, appName, created, lastOk, endpointHash}]}` |
+| `POST /api/auth/push/devices` | `{subscription: {endpoint, keys: {p256dh, auth}}, standalone}`: notifications on for this browser |
+| `DELETE /api/auth/push/devices/{id}` | off for that device |
+| `PUT /api/auth/push/prefs` | `{kinds: {kind: bool}, morning: "HH:MM"}` |
+| `POST /api/auth/push/test` | a test to every device of the account: `{sent, devices}` |
+
 ## Updates, restart and the server log
 
 The suite has one version: `iosuite_shared.__version__`, which every app reports as its own

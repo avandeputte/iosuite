@@ -207,6 +207,16 @@ async function related(box, id) {
   }
 }
 
+// ---- items of the other apps linked to this note (an event, a task, a contact, a recipe, a photo): the suite's panel
+let linkUi = null;
+let linkPanel = null;
+async function mountLinks(el, id) {
+  linkPanel = null;
+  try { linkUi = linkUi || await import(new URL('api/related/ui.js', document.baseURI).href); } catch (e) { return; }
+  if (!note || note.id !== id || !el.isConnected) return;
+  linkPanel = linkUi.mount(el, { kind: 'note', id, toast, canEdit: canWrite() });
+}
+
 async function copyNote() {
   const text = [note.title, note.body].filter((s) => s && s.trim()).join('\n\n') || note.ocrText;
   try { await navigator.clipboard.writeText(text); toast('Copied'); } catch (e) { fail(e); }
@@ -220,6 +230,7 @@ function moreMenu(btn) {
     canWrite() && !note.deleted ? '-' : null,
     canWrite() && !note.deleted ? { icon: 'attach', label: 'Attach files…', action: () => { const i = $('.files input[type=file]'); if (i) i.click(); } } : null,
     canWrite() && !note.deleted ? { icon: 'template', label: 'Save as a template…', action: saveAsTemplate } : null,
+    canWrite() && !note.deleted && linkPanel ? { icon: 'link', label: 'Link an event, task, contact…', action: () => linkPanel.pick() } : null,
     canWrite() ? '-' : null,
     canWrite() ? { icon: 'trash', label: 'Delete note', action: deleteNote } : null,
   ]);
@@ -316,12 +327,13 @@ function render() {
     note.changedBy ? h('span', 'by ' + note.changedBy) : null);
   const ocr = note.ocrText ? h('details.ocr', { open: !note.body }, h('summary', 'Text in the picture'), h('pre', note.ocrText)) : null;
   const rel = h('div.related');
-  const ed = h('div.editor', bar, t, meta, tagEditor(), picture(), ocr, preview, b, files(), rel);
+  const linked = h('div.linked');
+  const ed = h('div.editor', bar, t, meta, tagEditor(), picture(), ocr, preview, b, files(), linked, rel);
   pane.append(ed);
   setMode(mode);
   if (mode === 'edit') requestAnimationFrame(() => grow(b));
   if (!note.title && !note.body && !note.hasImage && w) t.focus();
-  if (!note.deleted) related(rel, note.id);
+  if (!note.deleted) { related(rel, note.id); mountLinks(linked, note.id); }
   // files dropped on the note are attached to it
   if (w) {
     ed.addEventListener('dragover', (e) => { if ([...e.dataTransfer.types].includes('Files')) { e.preventDefault(); e.stopPropagation(); ed.classList.add('dropping'); } });

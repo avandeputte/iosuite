@@ -849,7 +849,18 @@ function eventCard(j, inDialog) {
     j.url ? line('link', safeUrl(j.url) ? h('a', { class: 'lnk', href: j.url, target: '_blank', rel: 'noopener' }, j.url) : h('span', null, j.url)) : null,
     line('today', c.name || '', j.busy === false ? h('span', { class: 'muted' }, ' · shown as free') : null,
       c.kind === 'birthdays' ? h('div', { class: 'muted small' }, 'From ioContact; change the birthday there.') : null,
-      c.kind === 'holidays' ? h('div', { class: 'muted small' }, 'A public holiday (Settings › Holidays and birthdays).') : null));
+      c.kind === 'holidays' ? h('div', { class: 'muted small' }, 'A public holiday (Settings › Holidays and birthdays).') : null),
+    /^\d+$/.test(String(j.id)) && !['birthdays', 'holidays'].includes(c.kind) ? linkedBox(j.id) : null);
+}
+/** "Linked" under an event: its meeting notes, tasks, contacts, recipes and photos from the other apps (the suite's panel). */
+let linkUi = null;
+function linkedBox(id) {
+  const el = h('div', { class: 'linked' });
+  (async () => {
+    try { linkUi = linkUi || await import(new URL('api/related/ui.js', document.baseURI).href); } catch (e) { return; }
+    linkUi.mount(el, { kind: 'event', id, toast, onOpen: closeDialogs });
+  })();
+  return el;
 }
 function closeDialogs() { document.querySelectorAll('.dialog-back').forEach((d) => d.remove()); }
 async function openEvent(o) {
