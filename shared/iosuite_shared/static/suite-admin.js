@@ -1,6 +1,7 @@
 /* The Suite admin panel: everything in the Shared ioSuite database for the whole suite, the same screen in every io
    app (suite admins only). People and their role in every app, sessions, app passwords (with their scope), every app's
-   keys and tokens, the apps with their default role and sign-in requirement, and sign-in at a reverse proxy.
+   keys and tokens, the apps with their default role and sign-in requirement, sign-in at a reverse proxy, and the family
+   (who is in it, their colour, their ioContact card and their person in photos: the same in every app).
 
    It fills two Settings tabs, Security (people, roles, app passwords, sign-in at the proxy) and Global settings (the
    apps, keys and tokens): TABS.
@@ -29,7 +30,7 @@ function h(tag, attrs, ...kids) {
   for (const [k, v] of Object.entries(attrs || {})) {
     if (v == null || v === false) continue;
     if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
-    else if (k === 'style' && typeof v === 'object') Object.assign(el.style, v);
+    else if (k === 'style' && typeof v === 'object') for (const [sk, sv] of Object.entries(v)) { if (sk.startsWith('--')) el.style.setProperty(sk, sv); else el.style[sk] = sv; }
     else if (k === 'value') el.value = v;
     else if (k === 'checked') el.checked = !!v;
     else el.setAttribute(k, v === true ? '' : v);
@@ -139,6 +140,29 @@ const CSS = `
 .iosa-back .sa-pd ul { margin: 0; padding-left: 18px; }
 .iosa-back .sa-pd li.kept { color: var(--sa-fg2); list-style: circle; }
 .iosa-back .sa-pd .sa-gone { color: var(--sa-danger); font-weight: 600; }
+.iosa .sa-fam { display: flex; flex-direction: column; }
+.iosa .sa-famrow { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; padding: 12px 0; border-bottom: 1px solid var(--sa-line); }
+.iosa .sa-famrow:last-child { border-bottom: 0; }
+.iosa .sa-famrow.out > :not(.sa-famwho):not(.sa-famin) { display: none; }
+.iosa .sa-famrow.out .sa-famwho { opacity: .6; }
+.iosa .sa-famwho { display: flex; align-items: center; gap: 10px; min-width: 190px; flex: 1 1 190px; }
+.iosa .sa-fammem { position: relative; flex: none; width: 36px; height: 36px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+  color: #fff; font-weight: 700; font-size: 13px; background: var(--mc); }
+.iosa .sa-fammem img { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 50%; object-fit: cover; box-shadow: 0 0 0 2px var(--mc); }
+.iosa .sa-famin { flex: none; margin: 0 !important; align-items: center !important; }
+.iosa .sa-famin input { margin-top: 0 !important; }
+.iosa .sa-swatches { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; flex: 0 1 auto; }
+.iosa .sa-sw { width: 22px; height: 22px; border-radius: 50%; border: 0; padding: 0; cursor: pointer; background: var(--c); box-shadow: inset 0 0 0 1px rgba(0,0,0,.12); }
+.iosa .sa-sw.on { box-shadow: 0 0 0 2px var(--sa-bg), 0 0 0 4px var(--c); }
+.iosa .sa-sw.custom { position: relative; overflow: hidden; background: conic-gradient(#e0426a, #e8a100, #1e8e3e, #0b8a9e, #1a73e8, #8e44d6, #e0426a); }
+.iosa .sa-sw.custom input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; border: 0; padding: 0; }
+.iosa .sa-famlinks { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: flex-end; flex: 1 1 100%; padding-left: 46px; }
+.iosa .sa-famlinks .sa-field { flex: 0 1 260px; }
+@media (max-width: 600px) { .iosa .sa-famlinks { padding-left: 0; } .iosa .sa-famlinks .sa-field { flex: 1 1 200px; } }
+.iosa .sa-famlinks select.sa-in, .iosa .sa-famlinks .sa-btn { height: 34px; width: 100%; justify-content: flex-start; overflow: hidden; text-overflow: ellipsis; }
+.iosa-back .sa-cards { max-height: 320px; overflow: auto; margin-top: 8px; }
+.iosa-back .sa-cards button { font: inherit; color: inherit; display: flex; width: 100%; text-align: left; border: 0; background: none; padding: 8px 10px; border-radius: 8px; cursor: pointer; gap: 8px; align-items: center; }
+.iosa-back .sa-cards button:hover { background: color-mix(in srgb, var(--sa-accent) 14%, transparent); color: var(--sa-accent); }
 .iosa-toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: #323232; color: #fff; padding: 12px 18px; border-radius: 8px; z-index: 1001; font-size: 14px; max-width: calc(100vw - 32px); }
 `;
 function styles() {
@@ -202,11 +226,11 @@ function sinceText(ts) {
 const appLabel = (o, key) => (o.apps.find((a) => a.app === key) || {}).name || key;
 
 // ------------------------------------------------------------------ the panel
-export const SUBS = [['people', 'People'], ['roles', 'Roles'], ['passwords', 'App passwords'], ['signin', 'Sign-in at the proxy'], ['apps', 'Apps'], ['updates', 'Updates'], ['keys', 'Keys and tokens']];
+export const SUBS = [['people', 'People'], ['family', 'Family'], ['roles', 'Roles'], ['passwords', 'App passwords'], ['signin', 'Sign-in at the proxy'], ['apps', 'Apps'], ['updates', 'Updates'], ['keys', 'Keys and tokens']];
 /** The two Settings tabs the panel fills, in every app: #/settings/security/<sub> and #/settings/global/<sub>. */
 export const TABS = {
-  security: { label: 'Security', subs: ['people', 'roles', 'passwords', 'signin'],
-    intro: 'Who can sign in to the io apps, and with which role. Changes apply to every app.' },
+  security: { label: 'Security', subs: ['people', 'family', 'roles', 'passwords', 'signin'],
+    intro: 'Who can sign in to the io apps, who is in the family, and with which role. Changes apply to every app.' },
   global: { label: 'Global settings', subs: ['apps', 'updates', 'keys'],
     intro: 'Settings for every io app: default roles, sign-in, updates and keys.' },
 };
@@ -233,7 +257,7 @@ export async function mount(el, opts = {}) {
       h('div', { class: 'sa-segs' }, subs.map(([k, l]) => h('button', { class: sub === k ? 'on' : '', onclick: () => go(k) }, l))),
       body);
     const ctx = { o, redraw: draw, go, photoPeople };
-    await ({ people: people, roles: roles, passwords: passwords, keys: keys, apps: apps, updates: updates, signin: signin })[sub](body, ctx);
+    await ({ people: people, family: family, roles: roles, passwords: passwords, keys: keys, apps: apps, updates: updates, signin: signin })[sub](body, ctx);
   };
   const go = (k) => { sub = k; if (opts.onSub) opts.onSub(k); draw(); };
   await draw();
@@ -279,6 +303,78 @@ function people(el, ctx) {
         h('td', { class: 'sa-small' }, sinceText(u.lastSeen || u.last_login), h('div', { class: 'sa-muted' }, `${u.sessions} session${u.sessions === 1 ? '' : 's'}`)),
         h('td', { style: { textAlign: 'right' } }, h('button', { class: 'sa-btn', onclick: () => editAccount(ctx, u) }, 'Manage'))))),
     h('p', null, h('button', { class: 'sa-btn primary', onclick: () => editAccount(ctx, null) }, icon('add'), 'Add someone'))));
+}
+
+/** Family: the one list of the family for every app (iosuite_shared.family). Everyone with an account is in it unless
+    taken out here; each member has a colour (picked, or the next free one), their ioContact card and their person in
+    ioPix's People (their face). ioCalendar tags events with them, ioTask gives them tasks. */
+async function family(el, ctx) {
+  let r;
+  try { r = await api('family'); } catch (e) { el.append(h('p', { class: 'sa-err' }, e.message)); return; }
+  const list = h('div', { class: 'sa-fam' });
+  const memFace = (m) => {
+    const b = h('span', { class: 'sa-fammem', style: { '--mc': m.color } }, m.initials);
+    if (m.hasFace) b.append(h('img', { src: new URL(`../auth/family/${m.id}/face?${m.photoPerson || ''}-${m.contactId || ''}`, API).href, alt: '', onerror: (e) => e.currentTarget.remove() }));
+    return b;
+  };
+  const save = async (m, body, msg) => {
+    try { await api(`family/${m.id}`, { method: 'PATCH', json: body }); r = await api('family'); draw(); if (msg) toast(msg); } catch (e) { fail(e); }
+  };
+  let people = null;
+  ctx.photoPeople().then((p) => { people = p; if (p.available) draw(); });
+  const row = (m) => {
+    const inF = h('input', { type: 'checkbox', checked: m.inFamily, onchange: () => save(m, { inFamily: inF.checked }, inF.checked ? `${m.displayName} is in the family` : `${m.displayName} is out of the family`) });
+    const sw = (c) => h('button', { class: `sa-sw ${m.color.toLowerCase() === c.toLowerCase() ? 'on' : ''}`, style: { '--c': c }, title: c, 'aria-label': `Colour ${c}`,
+      onclick: () => save(m, { color: c }) });
+    const custom = h('input', { type: 'color', value: m.color, title: 'Another colour', onchange: (e) => save(m, { color: e.target.value }) });
+    const isPalette = r.palette.some((c) => c.toLowerCase() === m.color.toLowerCase());
+    const swatches = h('div', { class: 'sa-swatches' }, r.palette.map(sw),
+      h('span', { class: `sa-sw custom ${isPalette ? '' : 'on'}`, style: isPalette ? null : { '--c': m.color, background: m.color }, title: 'Another colour' }, custom),
+      m.colorPicked ? h('button', { class: 'sa-link', title: 'Give back the colour, so the next free one is used', onclick: () => save(m, { color: null }) }, 'Reset') : null);
+    const card = h('button', { class: 'sa-btn', title: 'Their card in ioContact', onclick: () => pickCard(m) },
+      m.contactId ? (m.contactName || `Card #${m.contactId}`) : h('span', { class: 'sa-muted' }, 'Link a card…'));
+    let photo = null;
+    if (people && people.available) {
+      const list2 = people.people.slice().sort((a, b) => a.name.localeCompare(b.name));
+      if (m.photoPerson && !list2.some((x) => x.id === m.photoPerson)) list2.unshift({ id: m.photoPerson, name: `#${m.photoPerson} (not in People any more)` });
+      photo = h('select', { class: 'sa-in', onchange: (e) => save(m, { photoPerson: e.target.value ? Number(e.target.value) : null }) },
+        h('option', { value: '' }, 'not linked'), list2.map((x) => h('option', { value: x.id, selected: x.id === m.photoPerson ? true : null }, x.name)));
+    }
+    return h('div', { class: `sa-famrow ${m.inFamily ? '' : 'out'}` },
+      h('div', { class: 'sa-famwho' }, memFace(m), h('div', null, h('b', null, m.displayName), h('div', { class: 'sa-muted sa-small' }, m.name, m.inFamily ? '' : ' · not in the family'))),
+      h('label', { class: 'sa-check sa-famin', title: 'In the family: events and tasks can be for them, and they get a private calendar and list' }, inF, h('span', null, 'In the family')),
+      swatches,
+      h('div', { class: 'sa-famlinks' }, fld('ioContact card', card), photo ? fld('Person in photos (ioPix)', photo) : null));
+  };
+  const pickCard = async (m) => {
+    const q = h('input', { class: 'sa-in', placeholder: 'Search ioContact', value: m.displayName });
+    const out = h('div', { class: 'sa-cards' });
+    let chosen;
+    const done = { close: null };
+    const find = async () => {
+      let res; try { res = await api(`family/contacts?q=${encodeURIComponent(q.value.trim())}`); } catch (e) { out.replaceChildren(h('p', { class: 'sa-err' }, e.message)); return; }
+      if (!res.available) { out.replaceChildren(h('p', { class: 'sa-muted' }, 'ioContact is not in the suite.')); return; }
+      out.replaceChildren(...(res.error ? [h('p', { class: 'sa-err' }, res.error)] : []),
+        ...(res.items.length ? res.items.map((c) => h('button', { onclick: () => { chosen = c; done.close(); } }, c.fn || `#${c.id}`, c.iopixPersonId ? h('span', { class: 'sa-muted sa-small' }, ' · has a face') : null))
+          : [h('p', { class: 'sa-muted' }, 'No card matches.')]));
+    };
+    let t; q.addEventListener('input', () => { clearTimeout(t); t = setTimeout(find, 250); });
+    find();
+    const body = h('div', null, h('p', { class: 'sa-muted' }, `${m.displayName}’s own card in ioContact (the one ioContact calls “This is me”). Its photo is their face when no person in photos is linked.`), q, out);
+    const p = dialog(`${m.displayName}’s card`, body, [...(m.contactId ? [{ label: 'Unlink', value: 'unlink', danger: true }] : []), { label: 'Cancel', value: null }]);
+    done.close = () => out.closest('.iosa-back')?.dispatchEvent(new MouseEvent('click'));  // a pick closes the dialog, as a click beside it does
+    const v = await p;
+    if (chosen) {
+      const b = { contactId: chosen.id };
+      if (chosen.iopixPersonId && !m.photoPerson) b.photoPerson = chosen.iopixPersonId;  // the card's face, linked too
+      await save(m, b, `${m.displayName}: ${chosen.fn}`);
+    } else if (v === 'unlink') await save(m, { contactId: null }, `${m.displayName}: no card`);
+  };
+  const draw = () => list.replaceChildren(...r.items.map(row));
+  draw();
+  el.append(box('people', 'Family',
+    h('p', { class: 'sa-muted' }, 'One list for every app: events in ioCalendar and tasks in ioTask can be for these people, and they show with the same colour, initials and face everywhere. Everyone with an account is in the family unless taken out here (an admin or guest account is not family).'),
+    list));
 }
 
 /** The account dialog: who they are, how they sign in, their role in every app, and (existing accounts) their

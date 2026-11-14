@@ -15,6 +15,8 @@
   "GET /api/auth/push/sw.js": "public",
   "GET /api/auth/sessions": "signed_in",
   "GET /api/auth/suite": "signed_in",
+  "GET /api/auth/family": "signed_in",
+  "GET /api/auth/family/{uid}/face": "signed_in",
   "GET /api/auth/ui.js": "public",
   "GET /api/badges": "public",
   "GET /api/clothing": "editor",

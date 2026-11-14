@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 from starlette.concurrency import run_in_threadpool
 
-from iosuite_shared import admin as suite_admin, apppasswords, persondata, proxyauth, push, sessions, suite, suiteupdates, users
+from iosuite_shared import admin as suite_admin, apppasswords, family, persondata, proxyauth, push, sessions, suite, suiteupdates, users
 from iosuite_shared.access import UNCLAIMED, json_body, public_user
 from iosuite_shared.proxyauth import authlog, peer_of
 
@@ -240,6 +240,23 @@ def auth_router(self) -> APIRouter:
         (suite.visible: the apps it has a role in; an admin tool only where it is an admin)."""
         return {"items": suite.visible(auth.current_user(request)), "app": app}
 
+    @r.get("/api/auth/family", dependencies=[access.signed_in])
+    def api_family(request: Request):
+        """The family (iosuite_shared.family): [{id, name, displayName, initials, color, hasFace}], by display name. The
+        same list, colours and initials in every app; suite admins change it in Settings › Security › Family."""
+        return {"items": [family.public(m) for m in family.members()]}
+
+    @r.get("/api/auth/family/{uid}/face", dependencies=[access.signed_in])
+    def api_family_face(uid: int, request: Request):
+        """A member's face: their person's in ioPix, else their ioContact card's photo; 404 when there is none."""
+        if not family.get(uid):
+            raise HTTPException(404, "No such member")
+        try:
+            data, ctype = family.face(app, uid)
+        except LookupError:
+            raise HTTPException(404, "No face")
+        return Response(data, media_type=ctype, headers={"Cache-Control": "private, max-age=3600"})
+
     @r.delete("/api/auth/suite/{key}", dependencies=[access.suite_admin])
     def api_suite_forget(key: str, request: Request):
         """Forget an app that was uninstalled (suite admins); it registers again if it starts."""
@@ -401,6 +418,32 @@ def admin_router(self) -> APIRouter:
     def api_photo_face(person: int, request: Request):
         return Response(call(suite_admin.photo_face, auth.app, person), media_type="image/jpeg",
                         headers={"Cache-Control": "private, max-age=3600"})
+
+    @r.get("/family", dependencies=[access.suite_admin])
+    def api_family_all(request: Request):
+        """Everyone with an account, in the family or not, with their colour, initials and links (iosuite_shared.family),
+        and the names of their ioContact cards."""
+        items = family.everyone()
+        cards = {}
+        for m in items:
+            if m["contactId"] and m["contactId"] not in cards:
+                cards[m["contactId"]] = (family.contact(auth.app, m["contactId"]) or {}).get("fn")
+        return {"items": [{**m, "contactName": cards.get(m["contactId"])} for m in items], "palette": family.PALETTE}
+
+    @r.patch("/family/{user_id}", dependencies=[access.suite_admin])
+    async def api_family_update(user_id: int, request: Request):
+        """{inFamily?, color?, contactId?, photoPerson?} for one account (iosuite_shared.family.update)."""
+        body = await json_body(request)
+        m = await run_in_threadpool(call, family.update, user_id, body)
+        authlog.info("suite admin: family entry of %s changed by %s: %s", m["name"], (me(request) or {}).get("name"), ", ".join(sorted(body)))
+        if self.on_update:
+            self.on_update(user_id, body)
+        return m
+
+    @r.get("/family/contacts", dependencies=[access.suite_admin])
+    def api_family_contacts(request: Request, q: str = ""):
+        """Cards in ioContact to link a member to, read from ioContact."""
+        return family.contacts(auth.app, q[:100])
 
     @r.get("/users/{user_id}/sessions", dependencies=[access.suite_admin])
     def api_sessions(user_id: int, request: Request):

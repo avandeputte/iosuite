@@ -193,7 +193,7 @@ app's colour variables when it has them.
 ```js
 const ui = await import(new URL('api/suite-admin/ui.js', document.baseURI).href);
 ui.mount(el, { tab: 'security', sub: 'people', toast, onSub: (s) => history.replaceState(null, '', `#/settings/security/${s}`) });
-// tab security (Security): people, roles, passwords, signin; tab global (Global settings): apps, keys
+// tab security (Security): people, family, roles, passwords, signin; tab global (Global settings): apps, updates, keys
 ```
 
 The routes:
@@ -206,6 +206,9 @@ The routes:
 | `GET /api/suite-admin/users/{id}/data` | what deleting it would remove: `{apps: [{app, name, items: [{what, count, kept}], error}], shared}`, every app asked with the suite admin's own sign-in (`iosuite_shared.persondata`) |
 | `DELETE /api/suite-admin/users/{id}` | the account, everywhere, with what the person kept in every app; answers what was removed (same shape; `pending` on an app that could not be reached and removes it at its next start) |
 | `GET`/`DELETE /api/suite-admin/person-data/{id}` | this app's part alone: counted, or removed (the panel calls every app's) |
+| `GET /api/suite-admin/family` | `{items, palette}`: every account people use with `inFamily`, `initials`, `color`, `colorPicked`, `contactId` (+ `contactName`), `photoPerson`, `hasFace` (the family, below) |
+| `PATCH /api/suite-admin/family/{id}` | `{inFamily, color ('#rrggbb'; null: the next free one), contactId, photoPerson}` |
+| `GET /api/suite-admin/family/contacts?q=` | cards in ioContact to link a member to (read from ioContact) |
 | `GET`/`DELETE /api/suite-admin/users/{id}/sessions` | its sessions; end all, or one with `?session=` |
 | `GET /api/suite-admin/app-passwords?user=&app=` | every app password (never the secret) |
 | `POST /api/suite-admin/app-passwords` | `{userId, app, label, scope}`: a new one for that account, shown once |
@@ -223,6 +226,14 @@ An app says what a person keeps in it with `auth.person_data = fn`, where `fn(us
 `[{"what": "private calendars", "count": 2}, {"what": "events they added to shared calendars", "count": 5, "kept": True}]`,
 counting with `remove` False and removing (everything not `kept`) with `remove` True. What someone added to something
 everyone shares is never removed. An app without one keeps nothing per person.
+
+**The family** (`iosuite_shared.family`, Settings › Security › Family) is one list for every app: ioCalendar tags
+events with its members, ioTask gives them tasks. Everyone with an account people use is in it unless a suite admin
+took them out; each member has a colour (picked, else the next free one of `family.PALETTE` by their place in the
+list), initials, their ioContact card (the account's "me" contact) and their person in ioPix's People. Every signed-in
+account reads it at `GET /api/auth/family` (`[{id, name, displayName, initials, color, hasFace}]`) and a member's face
+at `GET /api/auth/family/{id}/face` (their ioPix person's, else their card's photo), so the same person looks the same
+in every app. An app calls `family.members()` and keeps the ones with a role there.
 
 The usual rules hold: a one-click account is a member at most and has no app passwords, an admin tool takes no roles, the last suite admin stays, and
 the signed-in admin cannot delete their own account, drop their own suite admin or remove their own password here.

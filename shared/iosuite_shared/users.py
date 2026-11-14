@@ -44,8 +44,9 @@ CACHE_S = 3.0
 
 def invalidate():
     _cache.update(any=None, any_at=0.0)
-    from iosuite_shared import sessions
+    from iosuite_shared import family, sessions
     sessions.invalidate()
+    family.forget()  # names and accounts show in the family list
 
 
 def init() -> bool:
