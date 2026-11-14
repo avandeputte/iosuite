@@ -5,7 +5,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from iosuite_shared import apppasswords, db, links, proxyauth, suite, users
+from iosuite_shared import apppasswords, db, links, proxyauth, sessions, suite, users
 from iosuite_shared.fastapi import Auth
 
 LAN = ("192.168.1.20", 50000)       # a browser on the network
@@ -116,6 +116,33 @@ def test_what_an_app_opens_to_visitors_is_asked_with_the_request():
     assert inside.get("/face/1").status_code == 200 and inside.get("/face/2").status_code == 401
     outside = TestClient(app, base_url="http://pix.lan:8610", client=LAN, headers={"cf-connecting-ip": "8.8.8.8"})
     assert outside.get("/face/1").status_code == 401
+
+
+def test_the_mcp_endpoint_is_shut_while_the_shared_database_is_down(monkeypatch):
+    """The MCP endpoint is an open prefix whose gate is the before hook (Auth.mcp_gate: the switch, an app password).
+    With the Shared ioSuite database down nobody can be told from anybody, so it answers 503 like the rest; the shell
+    still loads."""
+    auth = Auth("ionote", register=False)
+    app = FastAPI()
+    app.middleware("http")(auth.middleware(open_paths=("/",), open_prefixes=("/static/", "/mcp"), before=auth.mcp_gate(lambda: True)))
+
+    @app.get("/")
+    def shell():
+        return {"shell": True}
+
+    @app.post("/mcp")
+    def mcp():
+        return {"tools": "everything"}
+
+    users.create("alex", "secret123", "admin", "ionote", suite_admin=True)
+    c = TestClient(app, base_url="http://notes.lan:8650", client=LAN)
+    assert c.post("/mcp").status_code == 401, "an app password, please"
+    monkeypatch.setattr(db, "available", lambda: False)
+    monkeypatch.setattr(db, "error", "connection refused", raising=False)
+    assert c.get("/").status_code == 200
+    r = c.post("/mcp")
+    assert r.status_code == 503 and "cannot be reached" in r.json()["detail"]
+    assert c.post("/mcp/").status_code == 503
 
 
 # ---- no accounts yet: open, but only to the network
@@ -256,3 +283,34 @@ def test_a_counter_starts_over_after_a_quiet_quarter_of_an_hour(monkeypatch):
     now = users.time.time()
     monkeypatch.setattr(users.time, "time", lambda: now + users.LOCK_BASE * 2 + users.LOCK_MAX + 5)
     assert users.login_wait("k") == 0 and users.login_failed("k") == 0, "the first failure after the quiet time is free again"
+
+
+def test_a_refused_one_click_sign_in_from_outside_does_not_start_the_counters_over(monkeypatch):
+    """A right password starts the address's counter over; picking a passwordless account from outside is refused,
+    and must not do the same for whoever is guessing at the other accounts from that address."""
+    app, _ = make_app()
+    users.create("alex", "secret123", suite_admin=True)
+    users.create("kid", "", "viewer", "iocontact")
+    done = []
+    monkeypatch.setattr(users, "attempt_succeeded", lambda visitor, name: done.append(name))
+    out = TestClient(app, base_url="http://contacts.lan:8640", client=("8.8.8.8", 50000))
+    assert out.post("/api/auth/login", json={"name": "kid", "password": ""}).status_code == 403
+    assert done == []
+    assert out.post("/api/auth/login", json={"name": "alex", "password": "secret123"}).status_code == 200
+    assert done == ["alex"]
+
+
+def test_saving_an_account_unchanged_signs_nobody_out(monkeypatch):
+    """The panel's form sends suiteAdmin with every save: only a new password, or suite admin given or taken, ends
+    the account's sessions."""
+    alex = users.create("alex", "secret123", suite_admin=True)["id"]
+    bob = users.create("bob", "secret123", "member", "iocontact")["id"]
+    ended = []
+    monkeypatch.setattr(sessions, "end_all", lambda uid: ended.append(uid))
+    users.update(alex, suite_admin=True, display_name="Alex")
+    users.update(bob, suite_admin=False, role="editor", app="iocontact")
+    assert ended == []
+    users.update(bob, suite_admin=True)
+    users.update(bob, suite_admin=False)
+    users.update(bob, password="another-one")
+    assert ended == [bob, bob, bob]

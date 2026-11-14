@@ -286,3 +286,21 @@ def test_a_file_of_an_unknown_kind_is_not_reported_gone(lib, tmp_path):
     finally:
         crw.unlink(missing_ok=True); nfd.unlink(missing_ok=True)
         con = sqlite3.connect(lib["db"]); con.execute("DELETE FROM Images WHERE name IN ('old.crw', ?)", (unicodedata.normalize("NFC", "café.jpg"),)); con.commit(); con.close()
+
+
+def test_a_file_name_is_never_read_as_exiftool_arguments(tmp_path, monkeypatch):
+    """Every exiftool run takes its file names from an argument file. A name with a line break in it (from a sync tool,
+    a share, an unpacked archive) must stay one name: raw, its lines would be more arguments, and -if runs Perl.
+    Needs no library."""
+    from PIL import Image
+    from app.photos import consistency, pixelguard
+    monkeypatch.chdir(tmp_path)  # where the Perl of the name would leave its mark
+    odd = str(tmp_path / "a\n-if\nsystem(q(touch marked))\nb.jpg")
+    plain = str(tmp_path / "plain.jpg")
+    for p in (odd, plain):
+        Image.new("RGB", (8, 8), "white").save(p, format="JPEG")
+    got = scanner._exif([plain, odd])
+    assert set(got) == {plain, odd} and got[odd]["ImageWidth"] == 8, "both files read, the odd one under its own name"
+    assert set(pixelguard.hashes([plain, odd])) == {plain, odd} and pixelguard.hashes([odd])[odd]
+    assert set(consistency.exif_read([plain, odd])) == {plain, odd}
+    assert not (tmp_path / "marked").exists(), "nothing in a file name is run"

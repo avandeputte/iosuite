@@ -220,7 +220,8 @@ def update(user_id: int, name=None, password=None, email=None, display_name=None
         db.ex("UPDATE ios_users SET " + ", ".join(f"{k} = %s" for k in sets) + " WHERE id = %s", (*sets.values(), user_id))
     if role is not None:
         set_role(user_id, app, role)
-    if "hash" in sets or "suite_admin" in sets:
+    # a new password, or suite admin given or taken (a form that sends it unchanged signs nobody out)
+    if "hash" in sets or ("suite_admin" in sets and bool(sets["suite_admin"]) != bool(cur["suite_admin"])):
         from iosuite_shared import sessions
         sessions.end_all(user_id)
     invalidate()

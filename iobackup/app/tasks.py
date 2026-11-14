@@ -140,7 +140,7 @@ def _do_backup(p: dict, emit, ev) -> dict:
     emit("Backing up %s to %s" % (server["name"], dest["name"]))
     config.WORK_DIR.mkdir(parents=True, exist_ok=True)
     tar, manifest = engine.run_backup(
-        server, job["databases"] or "all", include_users=job["includeUsers"], workdir=str(config.WORK_DIR), label=label,
+        server, job["databases"], include_users=job["includeUsers"], workdir=str(config.WORK_DIR), label=label,
         lock_all=job["lockAll"], desync=job["desync"], compress_level=int(job["compressLevel"] or 6),
         log=emit, cancel=ev, source_name=server["name"])
     try:

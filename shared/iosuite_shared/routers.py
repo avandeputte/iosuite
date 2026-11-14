@@ -34,10 +34,10 @@ def auth_router(self) -> APIRouter:
             wait = users.attempt_failed(visitor, name)
             authlog.warning("failed sign-in as %r from %s (wrong user name or password%s)", name, src, f"; {wait} s wait" if wait else "")
             raise HTTPException(401, "Wrong user name or password")
-        users.attempt_succeeded(visitor, name)
         if u.get("passwordless") and proxy.external(request.headers, peer_of(request)):
             authlog.warning("one-click sign-in as %s refused from %s (outside: a password is required)", u["name"], src)
             raise HTTPException(403, "From outside your network, sign in with an account that has a password")
+        users.attempt_succeeded(visitor, name)
         if u["role"] == "none":
             authlog.warning("sign-in as %s refused: no access to %s", u["name"], app)
             raise HTTPException(403, f"Your account has no access to {auth.label}")

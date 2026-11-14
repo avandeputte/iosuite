@@ -82,3 +82,20 @@ def test_rename_by_date_keeps_ids_and_undo_puts_names_back(client, lib):
     assert {i: con.execute("SELECT name FROM Images WHERE id = ?", (i,)).fetchone()[0] for i in ids} == before
     con.close()
     assert client.post("/api/photos/rename-pattern", json={"ids": ids, "pattern": "nonsense"}).status_code == 409
+
+
+def test_a_copy_whose_location_could_not_be_removed_is_not_handed_out(tmp_path, monkeypatch):
+    """Asked for without the location, a copy that still has it is worse than no copy: exiftool failing (a format it
+    cannot write, a damaged file) is an error, never a copy passed on as it was."""
+    import pytest
+    from app import config
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+    src = tmp_path / "a.jpg"
+    Image.new("RGB", (40, 30), (10, 120, 200)).save(src, "JPEG")
+    monkeypatch.setattr(export, "_exiftool", lambda args, path: False)
+    with pytest.raises(export.NotRemoved):
+        with export.prepare(str(src), {"nogps": True}):
+            pass
+    monkeypatch.setattr(export, "_exiftool", lambda args, path: True)
+    with export.prepare(str(src), {"nogps": True}) as made:
+        assert made and Path(made).read_bytes() == src.read_bytes()

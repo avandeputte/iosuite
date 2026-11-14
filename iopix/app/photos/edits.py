@@ -274,6 +274,13 @@ def _cstr(arg: str) -> str:
     return "#[CSTR]" + arg.replace("\\", "\\\\").replace("\n", "\\n").replace("\r", "\\r")
 
 
+def arg_lines(args) -> str:
+    """The text of an exiftool argument file (-@): one argument a line, each written so that a line break or a
+    backslash in it stays part of it. A file name never goes into such a file raw: one with a line break in it
+    would be read as more arguments, and -if runs Perl."""
+    return "\n".join(_cstr(str(a)) for a in args) + "\n"
+
+
 def run_exiftool(jobs: list, undone: list = None) -> list:
     """jobs: [(target file, [args])]. One exiftool process handles them all, each
     target backed up first. Returns the targets that failed (or were skipped because

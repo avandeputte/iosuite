@@ -189,11 +189,19 @@ async def _database_gate(request: Request, call_next):
     return await call_next(request)
 
 
+UPLOAD_PATHS = ("/api/import", "/api/import/stage", "/share")  # and /api/folders/<id>/upload: where photos are sent
+MAX_TRACK_BYTES = 64 << 20  # a GPS track to match photos with (/api/gpx/preview)
+
+
 def _limit_for(path: str, ctype: str) -> int:
-    """What BodyCap lets through: JSON and forms a few MiB, multipart uploads up to MAX_UPLOAD_BYTES (the upload routes
-    refuse larger files themselves too), anything else as JSON."""
+    """What BodyCap lets through: JSON and forms a few MiB, and a multipart upload up to MAX_UPLOAD_BYTES on the
+    routes that take uploads (which refuse larger files themselves too). Never by the content type alone: a request
+    that only calls itself multipart would be read whole by a route that expects JSON, the sign-in among them."""
     if ctype.startswith("multipart/"):
-        return MAX_UPLOAD_BYTES
+        if path in UPLOAD_PATHS or (path.startswith("/api/folders/") and path.endswith("/upload")):
+            return MAX_UPLOAD_BYTES
+        if path == "/api/gpx/preview":
+            return MAX_TRACK_BYTES
     return MAX_JSON_BYTES
 
 

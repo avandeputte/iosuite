@@ -307,6 +307,16 @@ def _restore_new(done: list, ids: list, require_digikam_closed: bool):
 
 
 
+def _in_trash(con, ids: list) -> list:
+    """Those of these rows that are in the trash (status 3). A trash record names its photo by number, and SQLite
+    reuses numbers: a record left from long ago may name a photo that was added since, whose row must stay."""
+    out = []
+    for part in dkdb.chunked(sorted({int(i) for i in ids}), 300):
+        marks = ",".join(map(str, part))
+        out += [r[0] for r in con.execute(f"SELECT id FROM Images WHERE id IN ({marks}) AND status = ?", (TRASHED,)).fetchall()]
+    return out
+
+
 def empty(infos: list = None, require_digikam_closed: bool = True) -> dict:
     """Delete these trash entries for good (all of them when infos is None): files, records and database rows."""
     db_path = dkdb.sqlite_path()
@@ -318,6 +328,7 @@ def empty(infos: list = None, require_digikam_closed: bool = True) -> dict:
     if ids:
         dkdb.backup(db_path, force=True)
         with dbsync.write_transaction(db_path, require_digikam_closed) as con:
+            ids = _in_trash(con, ids)
             deletion.drop_rows(con, ids)
     gone, failed = [], []
     for t in items:
@@ -331,7 +342,8 @@ def empty(infos: list = None, require_digikam_closed: bool = True) -> dict:
         except OSError as e:
             failed.append({"info": t["info"], "error": str(e)})
     if ids:
-        history.record([{"photo_id": t["id"], "action": "deleted", "summary": "Deleted for good from the trash", "path": t["path"]} for t in items if t["id"]])
+        dropped = set(ids)
+        history.record([{"photo_id": t["id"], "action": "deleted", "summary": "Deleted for good from the trash", "path": t["path"]} for t in items if t["id"] in dropped])
         deletion.forget(ids)
     return {"deleted": len(gone), "failed": failed}
 

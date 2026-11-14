@@ -168,3 +168,36 @@ def test_no_role_by_default(client):
     client.cookies.clear()
     r = client.post("/api/auth/login", json={"name": "nora", "password": "secret123"})
     assert r.status_code == 403 or client.get("/api/overview").status_code == 403
+
+
+def test_a_job_of_the_users_alone_takes_no_database(client, source):
+    srv, dst, _ = setup_all(client)
+    job = client.post("/api/jobs", json={"name": "Accounts", "serverId": srv["id"], "destinationId": dst["id"], "databases": [],
+                                         "includeUsers": True, "schedule": {"mode": "manual"}}).json()
+    log = "\n".join(run_now(client, job["id"])["log"])
+    assert "Dumping" not in log and "bkt_shop" not in log, log
+
+
+def test_the_client_a_restore_is_fed_to_does_sql_only(client, tmp_path):
+    """A restore replays whatever file is in the backup folder. The client program has commands of its own (\\! runs
+    a program on this machine): it is started so that it knows none of them, whatever the file says."""
+    from app import engine
+    mark = tmp_path / "ran"
+    with engine.Connection(conftest.SERVER) as conn:
+        assert engine.sql_only(conn.client) in ("--sandbox", "--binary-mode")
+        p = conn.client_process(force=True)
+        p.communicate(f"SELECT 1;\n\\! touch {mark}\nSELECT 2;\n".encode(), timeout=60)
+    assert not mark.exists()
+    assert "\n" not in engine._opt_value("a\nb\rc") and "\r" not in engine._opt_value("a\nb\rc")  # one line of the option file
+
+
+def test_a_database_named_like_an_option_is_a_name(client, monkeypatch):
+    from app import engine
+    seen = []
+
+    class P:
+        stdout = None
+    monkeypatch.setattr(engine.subprocess, "Popen", lambda cmd, **kw: seen.append(cmd) or P())
+    with engine.Connection(conftest.SERVER) as conn:
+        conn.dump_process(["--no-data", "shop"])
+    assert seen[0][-4:] == ["--databases", "--", "--no-data", "shop"]

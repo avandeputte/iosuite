@@ -293,3 +293,30 @@ def test_the_sign_in_screens_faces_are_for_the_network_only(monkeypatch):
     assert not main._open_to_visitors(visitor("/face/7", "8.8.8.8")), "from the internet"
     assert not main._open_to_visitors(visitor("/face/7", "192.168.1.20", cf_ray="1")), "through Cloudflare"
     assert not main._open_to_visitors(visitor("/face/7", "192.168.1.5", x_forwarded_for="8.8.8.8")), "through a reverse proxy"
+
+
+def test_only_the_upload_routes_take_a_large_body():
+    """The body cap is by route, not by what the request calls itself: 2 GiB for the routes that take photos, a few
+    MiB for the rest (a "multipart" body sent to the sign-in would otherwise be read whole). Needs no library."""
+    from app import main
+    big, small = main.MAX_UPLOAD_BYTES, main.MAX_JSON_BYTES
+    for path in ("/api/import", "/api/import/stage", "/share", "/api/folders/12/upload"):
+        assert main._limit_for(path, "multipart/form-data; boundary=x") == big, path
+        assert main._limit_for(path, "application/json") == small, path
+    assert small < main._limit_for("/api/gpx/preview", "multipart/form-data") < big
+    for path in ("/api/auth/login", "/api/photos", "/api/zip", "/mcp", "/api/folders/12", "/api/import/abc/run"):
+        assert main._limit_for(path, "multipart/form-data; boundary=x") == small, path
+
+
+def test_an_answer_that_depends_on_the_viewer_is_kept_per_account():
+    """The cached photo lists and counts are kept per account as soon as a filter depends on who asks (favourites, an
+    album of the app), whatever way the filter's name is written in the address. Needs no library."""
+    from starlette.requests import Request
+    from app.routes import browse
+
+    def asked(query):
+        return Request({"type": "http", "method": "GET", "path": "/api/facets", "query_string": query.encode(), "headers": []})
+    for q in ("fav=1", "tag=3&fav=1", "ualbum=7", "f%61v=1", "u%61lbum=7"):
+        assert browse._by_viewer(asked(q)), q
+    for q in ("", "tag=3", "q=favourites", "album=7"):
+        assert not browse._by_viewer(asked(q)), q

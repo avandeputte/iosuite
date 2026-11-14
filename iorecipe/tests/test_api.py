@@ -2,6 +2,8 @@
 ratings, and the cookbooks."""
 import io
 
+import pytest
+
 from PIL import Image
 
 from conftest import sign_in
@@ -214,3 +216,19 @@ def test_the_shell_its_files_and_the_icon_are_public(client):
         r = client.get(path)
         assert r.status_code == 200 and kind in r.headers["content-type"], path
     assert client.get("/api/recipes").status_code == 401
+
+
+def test_a_small_file_that_unpacks_to_a_huge_picture_is_refused_before_it_is_unpacked():
+    """Pillow itself refuses at twice its limit only; a one-colour PNG of that many pixels is a few kilobytes."""
+    import zlib
+    import struct
+    from app import images
+    from iosuite_shared.errors import Invalid
+    w = h = 10_000  # 100 megapixels: over the limit, under Pillow's own refusal
+
+    def chunk(kind, data):
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+    raw = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 0, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(b"")) + chunk(b"IEND", b"")
+    assert w * h > images.MAX_PIXELS and w * h < 2 * images.MAX_PIXELS
+    with pytest.raises(Invalid, match="megapixels"):
+        images.opened(raw)

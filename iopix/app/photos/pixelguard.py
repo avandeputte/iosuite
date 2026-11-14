@@ -29,7 +29,7 @@ def hashes(paths: list) -> dict:
     if not paths:
         return {}
     with tempfile.NamedTemporaryFile("w", suffix=".args", dir=config.DATA_DIR, delete=False, encoding="utf-8") as f:
-        f.write("\n".join(paths) + "\n")
+        f.write(edits.arg_lines(paths))
         argfile = f.name
     try:
         res = subprocess.run([*edits.exiftool_cmd(), "-j", "-api", "ImageHashType=SHA256", "-ImageDataHash", "-charset", "filename=utf8", "-@", argfile],

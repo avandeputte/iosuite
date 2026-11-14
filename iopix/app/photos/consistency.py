@@ -184,7 +184,7 @@ def exif_read(paths: list) -> dict:
     # the paths go in an argument file (one per line), as every exiftool run here does: a sync of thousands of
     # photos would otherwise exceed the command line's length
     with tempfile.NamedTemporaryFile("w", suffix=".args", dir=config.DATA_DIR, delete=False, encoding="utf-8") as f:
-        f.write("\n".join(READ_TAGS) + "\n--\n" + "\n".join(paths) + "\n")
+        f.write("\n".join(READ_TAGS) + "\n--\n" + edits.arg_lines(paths))
         argfile = f.name
     try:
         res = subprocess.run([*edits.exiftool_cmd(), "-j", "-m", "-q", "-charset", "utf8", "-charset", "filename=utf8", "-n", "-@", argfile],

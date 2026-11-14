@@ -268,7 +268,7 @@ def _zip_response(items, sidecars: int, name: str):
     opts = {"size": int(d.get("xsize") or 0), "fmt": d.get("xfmt") or "keep", "quality": int(d.get("xquality") or 90),
             "nogps": d.get("nogps") == "1"}
     pattern, flat = d.get("xname") or "keep", d.get("flat") == "1"
-    used = {}
+    used, left_out = {}, []
 
     def entries():
         for path, album, fname, _size, ts in rows:
@@ -283,10 +283,21 @@ def _zip_response(items, sidecars: int, name: str):
                     else:
                         yield made, arc  # streamed from the temp copy while it exists
             except Exception:  # a file Pillow cannot read: the original goes in instead
-                yield path, f"{folder}/{export.name_for(pattern, ts, fname, used[folder])}".lstrip("/")
+                plain = f"{folder}/{export.name_for(pattern, ts, fname, used[folder])}".lstrip("/")
+                if not opts["nogps"]:
+                    yield path, plain
+                else:  # never with the location it was asked to leave out: a plain copy without it, or not at all
+                    try:
+                        with export.prepare(path, {"nogps": True}) as made:
+                            yield made, plain
+                    except Exception:  # noqa: BLE001
+                        left_out.append(plain)
             side = edits.sidecar_path(path)
             if sidecars and os.path.isfile(side) and not opts["nogps"]:
                 yield side, (arc + ".xmp" if side == path + ".xmp" else os.path.splitext(arc)[0] + ".xmp")
+        if left_out:
+            yield ("These files are not in the download: their location could not be removed, and you asked for copies "
+                   "without it.\r\n\r\n" + "\r\n".join(left_out) + "\r\n").encode(), "NOT INCLUDED.txt"
 
     safe = re.sub(r"[^\w .()+-]+", "_", name).strip(" ._")[:80] or "photos"
     if len(parts) > 1:

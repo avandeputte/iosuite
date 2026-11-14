@@ -135,6 +135,13 @@ def api_then_and_now(n: int = 3, person: int = None):
     return {"pairs": pairs}
 
 
+def _by_viewer(request: Request) -> bool:
+    """Whether the filters make the answer depend on who asks: the favourites (each account's own) or an album of the
+    app (private ones are their owner's). Decided on the names as the filters read them, not on the text of the
+    address: "f%61v=1" is fav=1 too, and its answer must not be kept for everyone."""
+    return any(k in request.query_params for k in ("fav", "ualbum"))
+
+
 @router.get("/api/photos", dependencies=[access.public])
 def api_photos(request: Request):
     """The whole result set in compact column form; the browser lays it out and
@@ -142,8 +149,9 @@ def api_photos(request: Request):
     try:
         # the prefix makes cached results expire when favorites, albums or embeddings change
         # an album or favorites filter depends on who asks (private albums, each account's own favorites), so the cached answer is kept per user then
-        who = f".u{(request.state.user or {}).get('id')}" if ("ualbum" in request.url.query or "fav" in request.url.query) else ""
-        rev = appstate.rev if ("fav" in request.url.query or "ualbum" in request.url.query) else 0  # only those depend on the viewer's tables
+        mine = _by_viewer(request)
+        who = f".u{(request.state.user or {}).get('id')}" if mine else ""
+        rev = appstate.rev if mine else 0  # only those depend on the viewer's tables
         key = f"{rev}.{semantic.key}{who}|{request.url.query}"
         # the answer is fixed by the index version and the cache key: their hash is its ETag (304 while unchanged)
         etag = 'W/"' + hashlib.blake2b(f"{state['version']}|{key}".encode(), digest_size=12).hexdigest() + '"'
@@ -218,8 +226,9 @@ def api_meta(request: Request):
 def api_facets(request: Request):
     """Counts of every metadata value within the current result set (computed once per index version and query)."""
     q = request.url.query
-    who = f".u{(request.state.user or {}).get('id')}" if "ualbum" in q else ""
-    rev = f".{appstate.rev}" if ("fav" in q or "ualbum" in q) else ""  # only those depend on the viewer's own tables
+    mine = _by_viewer(request)  # the answer is kept per account then, as /api/photos keeps it
+    who = f".u{(request.state.user or {}).get('id')}" if mine else ""
+    rev = f".{appstate.rev}" if mine else ""  # only those depend on the viewer's own tables
     try:  # keyed by the index file's own time too: a rebuilt (or, in tests, patched) index is never answered from before
         stamp = int(os.stat(config.INDEX_DB).st_mtime_ns) if config.INDEX_DB.exists() else 0
         return jresp(request, _facets_cached(f"{state['version']}:{stamp}", f"{rev}{who}|{q}"))

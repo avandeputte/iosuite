@@ -8,11 +8,11 @@ import io
 import shutil
 import subprocess
 
-from PIL import Image, ImageOps, UnidentifiedImageError
+from PIL import Image, ImageOps
 
 from iosuite_shared.errors import Invalid
 
-from app import config
+from app import config, images
 
 TIMEOUT = 90     # seconds for one photo
 SIDE = 2600      # the longest side handed to Tesseract: enough for a page, quick enough
@@ -52,12 +52,7 @@ def read(raw: bytes) -> str:
     """The text on the picture. Invalid when it is not a picture, when nothing can be read, or without Tesseract."""
     if not available():
         raise Invalid("This server cannot read photos: Tesseract is not installed on it")
-    try:
-        im = Image.open(io.BytesIO(raw))
-        im.load()
-    except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError) as e:
-        raise Invalid("That is not a picture this server can read (JPEG, PNG, WebP or GIF)") from e
-    im = ImageOps.exif_transpose(im).convert("L")
+    im = ImageOps.exif_transpose(images.opened(raw)).convert("L")
     if max(im.size) > SIDE:
         im.thumbnail((SIDE, SIDE), Image.LANCZOS)
     elif max(im.size) < 1400:  # small print reads better enlarged
