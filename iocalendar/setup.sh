@@ -58,6 +58,8 @@ asksecret() { _v="$1"; _q="$2"
   if [ "$YES" = 1 ] || [ ! -t 0 ]; then eval "$_v=''"; return; fi
   printf '%s: ' "$_q"; stty -echo 2>/dev/null; read -r _a || _a=""; stty echo 2>/dev/null; printf '\n'; eval "$_v=\"\$_a\""; }
 getenv() { [ -f config.env ] && sed -n "s/^$1=//p" config.env | tail -n 1; true; }
+newpw() { head -c 18 /dev/urandom | base64 | tr -d '/+=\n'; }  # a database password nobody guesses (there is no default)
+NEWPW=""
 getsuite() { getenv "IOSUITE_DB_$1"; }
 split() { # HOST:PORT/DATABASE:USER:PASSWORD into $1_HOST, $1_PORT, $1_NAME, $1_USER, $1_PASSWORD
   _p="$1"; _s="$2"; _h="${_s%%:*}"; _r="${_s#*:}"; _o="${_r%%/*}"; _r="${_r#*/}"; _n="${_r%%:*}"; _r="${_r#*:}"; _u="${_r%%:*}"; _w="${_r#*:}"
@@ -78,7 +80,7 @@ if [ -z "$DBS" ]; then
   say "The calendar database (MariaDB / MySQL)"
   H="$(getenv DB_HOST)"; P="$(getenv DB_PORT)"; D="$(getenv DB_NAME)"; U="$(getenv DB_USER)"
   ask H "Host" "${H:-127.0.0.1}"; ask P "Port" "${P:-3306}"; ask D "Database" "${D:-calendar}"; ask U "User" "${U:-calendar}"
-  asksecret W "Password (empty: keep the current one, or 'calendar')"; [ -n "$W" ] || W="$(getenv DB_PASSWORD)"; [ -n "$W" ] || W=calendar
+  asksecret W "Password (empty: keep the current one, or a new random one)"; [ -n "$W" ] || W="$(getenv DB_PASSWORD)"; [ -n "$W" ] || { W="$(newpw)"; NEWPW="$NEWPW $U"; }
   DBS="$H:$P/$D:$U:$W"
 fi
 split DB "$DBS"
@@ -86,7 +88,7 @@ if [ -z "$ADBS" ]; then
   say "The Shared ioSuite database: accounts and suite-wide settings, shared by every app of the suite"
   H="$(getsuite HOST)"; P="$(getsuite PORT)"; D="$(getsuite NAME)"; U="$(getsuite USER)"
   ask H "Host" "${H:-$DB_HOST}"; ask P "Port" "${P:-$DB_PORT}"; ask D "Database" "${D:-iosuite}"; ask U "User" "${U:-iosuite}"
-  asksecret W "Password (empty: keep the current one, or 'iosuite')"; [ -n "$W" ] || W="$(getsuite PASSWORD)"; [ -n "$W" ] || W=iosuite
+  asksecret W "Password (empty: keep the current one, or a new random one; if the user exists, the one in another app's config.env)"; [ -n "$W" ] || W="$(getsuite PASSWORD)"; [ -n "$W" ] || { W="$(newpw)"; NEWPW="$NEWPW $U"; }
   ADBS="$H:$P/$D:$U:$W"
 fi
 split SUITE "$ADBS"
@@ -105,6 +107,7 @@ if [ -z "$DBADMIN" ] && [ "$YES" = 0 ]; then
   ask DAU "MariaDB administrator who may create the databases and users above, e.g. root (empty: they exist already)" ""
   if [ -n "$DAU" ]; then asksecret DAW "Password of $DAU"; DBADMIN="$DAU:$DAW"; fi
 fi
+[ -z "$NEWPW" ] || [ -n "$DBADMIN" ] || say "A new random password was made for the database user(s)$NEWPW; it goes in config.env. Create the user(s) with it on the server, or run this again with --db-admin"
 
 # ---- Python environment
 say "Installing the Python packages"

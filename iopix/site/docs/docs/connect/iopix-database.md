@@ -13,9 +13,12 @@ On your MariaDB or MySQL server:
 
 ```sql
 CREATE DATABASE iopix CHARACTER SET utf8mb4;
-CREATE USER 'iopix'@'%' IDENTIFIED BY 'choose-a-password';
-GRANT ALL ON iopix.* TO 'iopix'@'%';
+CREATE USER 'iopix'@'app-host' IDENTIFIED BY 'choose-a-password';
+GRANT ALL ON iopix.* TO 'iopix'@'app-host';
 ```
+
+`app-host` is the machine the app runs on (`localhost` when MariaDB is on the same machine); a user for any host (`'%'`)
+with a password someone could guess is what to avoid. The installers make the user this way when given a MariaDB administrator.
 
 The account needs full rights on that one database: iopix creates and changes its own tables there.
 

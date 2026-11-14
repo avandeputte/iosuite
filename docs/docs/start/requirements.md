@@ -25,13 +25,16 @@ To make them yourself instead:
 
 ```sql
 CREATE DATABASE calendar CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'calendar'@'%' IDENTIFIED BY 'a-good-password';
-GRANT ALL ON calendar.* TO 'calendar'@'%';
+CREATE USER 'calendar'@'app-host' IDENTIFIED BY 'a-good-password';
+GRANT ALL ON calendar.* TO 'calendar'@'app-host';
 
 CREATE DATABASE iosuite CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'iosuite'@'%' IDENTIFIED BY 'another-good-password';
-GRANT ALL ON iosuite.* TO 'iosuite'@'%';
+CREATE USER 'iosuite'@'app-host' IDENTIFIED BY 'another-good-password';
+GRANT ALL ON iosuite.* TO 'iosuite'@'app-host';
 ```
+
+`app-host` is the machine the app runs on (`localhost` when MariaDB is on the same machine); a user for any host (`'%'`)
+with a password someone could guess is what to avoid. The installers make the user this way when given a MariaDB administrator.
 
 The tables are created on the first start, and later versions bring them up to date by themselves. The database users
 must be allowed to connect from where the app runs (a container has an address of its own).

@@ -142,9 +142,12 @@ and user, for example:
 
 ```sql
 CREATE DATABASE suite CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'suite'@'%' IDENTIFIED BY 'suite';
-GRANT ALL ON suite.* TO 'suite'@'%';
+CREATE USER 'suite'@'app-host' IDENTIFIED BY 'a-long-random-password';
+GRANT ALL ON suite.* TO 'suite'@'app-host';
 ```
+
+`app-host` is the machine the app runs on (`localhost` when MariaDB is on the same machine); a user for any host (`'%'`)
+with a password someone could guess is what to avoid. The installers make the user this way when given a MariaDB administrator.
 
 The accounts, and the settings the whole suite shares (such as the list of apps and where each one is), live in the
 **Shared ioSuite database**, the one every io app uses (`iosuite`, user `iosuite`, by default); a new install of the
