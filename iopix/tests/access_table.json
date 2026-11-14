@@ -1,5 +1,6 @@
 {
   "DELETE /api/auth/app-passwords/{pid}": "signed_in",
+  "DELETE /api/auth/push/devices/{device_id}": "signed_in",
   "DELETE /api/auth/sessions/{session_id}": "signed_in",
   "DELETE /api/auth/suite/{key}": "suite_admin",
   "DELETE /api/people/groups/{group_id}": "editor",
@@ -10,6 +11,8 @@
   "GET /api/auth/accounts": "public",
   "GET /api/auth/app-passwords": "signed_in",
   "GET /api/auth/me": "public",
+  "GET /api/auth/push": "signed_in",
+  "GET /api/auth/push/sw.js": "public",
   "GET /api/auth/sessions": "signed_in",
   "GET /api/auth/suite": "signed_in",
   "GET /api/auth/ui.js": "public",
@@ -88,6 +91,8 @@
   "POST /api/auth/logout": "public",
   "POST /api/auth/password": "signed_in",
   "POST /api/auth/person": "admin",
+  "POST /api/auth/push/devices": "signed_in",
+  "POST /api/auth/push/test": "signed_in",
   "POST /api/auth/settings": "signed_in",
   "POST /api/auth/setup": "public",
   "POST /api/backup/{which}": "admin",
@@ -163,5 +168,6 @@
   "POST /api/users": "admin",
   "POST /api/zip": "downloads",
   "POST /api/zip/plan": "downloads",
-  "POST /share": "public"
+  "POST /share": "public",
+  "PUT /api/auth/push/prefs": "signed_in"
 }
