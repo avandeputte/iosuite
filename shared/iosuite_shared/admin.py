@@ -223,11 +223,19 @@ def photo_face(reader: str, person: int) -> bytes:
         raise LookupError(f"No face: {e}")
 
 
-def delete(me, user_id: int):
+def check_delete(me, user_id: int):
+    """Raises when the account cannot be deleted (before anything of the person's goes: persondata.delete_account)."""
     if not person(user_id):
         raise LookupError("No such user")
     if me and me.get("id") == user_id:
         raise Invalid("You cannot delete your own account while signed in")
+    users.check_delete(user_id)
+
+
+def delete(me, user_id: int):
+    """The account alone, with what the Shared ioSuite database keeps for it; the panel deletes it with the person's
+    data in every app (persondata.delete_account)."""
+    check_delete(me, user_id)
     users.delete(user_id)
     _forget_caches()
 

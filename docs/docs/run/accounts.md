@@ -41,6 +41,18 @@ From a shell, in any app's folder:
 .venv/bin/iosuite-shared --config . password emma
 ```
 
+## Deleting someone
+
+Delete an account under **Settings › Security › People**: open the person and press Delete. Before anything happens,
+the panel asks every app what is only that person's and lists it: their private calendars, lists, address book,
+recipes and cookbooks, notes, health data, favourites, private albums, own bookmarks and home page layout, and their
+sessions, app passwords and notification devices. To go ahead you type their user name. Each app then removes its
+part, the account goes, and the panel shows what was removed.
+
+What they added to something everyone shares stays for the others: events on the Family calendar, tasks on a shared
+list, family recipes, shared bookmarks and albums. An app that cannot be reached at that moment removes the person's
+data the next time it starts.
+
 ## App passwords
 
 Phones, sync apps, scripts and AI assistants sign in with an **app password** instead of your password: one per device

@@ -130,6 +130,15 @@ const CSS = `
 .iosa-back .sa-rolerow select.sa-in.sa-sm { width: 150px; flex: none; }
 .iosa-back .sa-minirow { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--sa-line); font-size: 13px; }
 .iosa-back .sa-minirow > span { min-width: 0; overflow-wrap: anywhere; }
+.iosa-back .sa-btn.danger.solid { background: var(--sa-danger); color: #fff; border-color: transparent; }
+.iosa-back .sa-btn:disabled { opacity: .45; cursor: default; pointer-events: none; }
+.iosa-back .sa-pd { margin: 10px 0; border: 1px solid var(--sa-line); border-radius: 12px; overflow: hidden; }
+.iosa-back .sa-pd > div { padding: 10px 14px; border-bottom: 1px solid var(--sa-line); }
+.iosa-back .sa-pd > div:last-child { border-bottom: 0; }
+.iosa-back .sa-pd b { display: block; font-weight: 600; margin-bottom: 2px; }
+.iosa-back .sa-pd ul { margin: 0; padding-left: 18px; }
+.iosa-back .sa-pd li.kept { color: var(--sa-fg2); list-style: circle; }
+.iosa-back .sa-pd .sa-gone { color: var(--sa-danger); font-weight: 600; }
 .iosa-toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: #323232; color: #fff; padding: 12px 18px; border-radius: 8px; z-index: 1001; font-size: 14px; max-width: calc(100vw - 32px); }
 `;
 function styles() {
@@ -155,7 +164,7 @@ function dialog(title, body, buttons, wide = false) {
     addEventListener('keydown', esc);
     back.addEventListener('click', (e) => { if (e.target === back) close(null); });
     const btns = (buttons || [{ label: 'OK', value: true, primary: true }]).map((b) =>
-      h('button', { class: `sa-btn ${b.primary ? 'primary' : ''} ${b.danger ? 'danger' : ''}`, onclick: () => close(typeof b.value === 'function' ? b.value() : b.value) }, b.label));
+      h('button', { class: `sa-btn ${b.primary ? 'primary' : ''} ${b.danger ? 'danger' : ''} ${b.solid ? 'solid' : ''}`, 'data-id': b.id, onclick: () => close(typeof b.value === 'function' ? b.value() : b.value) }, b.label));
     back.append(h('div', { class: `sa-dialog${wide ? ' wide' : ''}`, role: 'dialog' }, h('h2', null, title), body, h('div', { class: 'sa-btns' }, btns)));
     document.body.append(back);
     const f = back.querySelector('input:not([type=checkbox]),select,textarea'); if (f) f.focus();
@@ -336,14 +345,62 @@ async function editAccount(ctx, u) {
     const v = await dialog(isNew ? 'Add someone' : u.displayName, body, buttons, true);
     if (v === 'save') { if (await save()) break; continue; }
     if (v === 'delete') {
-      if (await confirmDialog('Delete account', `Delete ${u.name}? The account, its roles, sessions and app passwords go from every io app.`, 'Delete', true)) {
-        try { await api(`users/${u.id}`, { method: 'DELETE' }); toast('Deleted'); break; } catch (e) { fail(e); }
-      }
+      if (await deletePerson(u)) break;
       continue;
     }
     break;
   }
   ctx.redraw();
+}
+// ---- deleting someone: what goes in every app (GET users/<id>/data), a typed confirmation, then what went
+const num = (n) => Number(n).toLocaleString();
+function personData(d, done, who) {
+  const box = h('div', { class: 'sa-pd' });
+  const empty = [];
+  for (const a of d.apps || []) {
+    const gone = a.items.filter((i) => !i.kept), kept = a.items.filter((i) => i.kept);
+    if (!a.items.length && !a.error) { empty.push(a.name); continue; }
+    box.append(h('div', null, h('b', null, a.name),
+      a.error ? h('p', { class: 'sa-err sa-small' }, done
+        ? `${a.name} could not be reached (${a.error}); it removes ${who}’s data the next time it starts.`
+        : `${a.name} could not be asked (${a.error}). If you delete now, it removes ${who}’s data the next time it starts.`) : null,
+      gone.length || kept.length ? h('ul', null,
+        gone.map((i) => h('li', null, h('span', { class: 'sa-gone' }, num(i.count)), ` ${i.what}`)),
+        kept.map((i) => h('li', { class: 'kept' }, `${num(i.count)} ${i.what}: ${done ? 'kept' : 'stay'}, shared with everyone`))) : null));
+  }
+  if (d.shared) box.append(h('div', null, h('b', null, 'The account'), h('ul', null,
+    h('li', null, `${who}’s sign-in, from every app`), d.shared.map((i) => h('li', null, h('span', { class: 'sa-gone' }, num(i.count)), ` ${i.what}`)))));
+  if (empty.length) box.append(h('div', { class: 'sa-muted sa-small' }, `Nothing of ${who}’s in ${empty.join(', ')}.`));
+  return box;
+}
+async function deletePerson(u) {
+  const who = u.displayName || u.name;
+  const list = h('div', null, h('p', { class: 'sa-muted' }, `Looking at what ${who} keeps in each app…`));
+  const typed = h('input', { class: 'sa-in', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', placeholder: u.name });
+  const body = h('div', null,
+    h('p', null, `This deletes ${who}’s account and removes everything that is only theirs, in every app. It cannot be undone.`),
+    list,
+    h('p', { class: 'sa-muted sa-small' }, 'What they added to something everyone shares (the Family calendar, shared lists, family recipes, shared bookmarks and albums) stays for the others.'),
+    fld(`Type ${u.name} to confirm`, typed));
+  const asked = dialog(`Delete ${who}?`, body, [{ label: 'Cancel', value: false }, { label: 'Delete for good', value: true, danger: true, solid: true, id: 'go' }], true);
+  const go = [...document.querySelectorAll('.iosa-back')].pop().querySelector('[data-id=go]');
+  let looked = false;
+  const check = () => { go.disabled = !(looked && typed.value.trim() === u.name); };
+  typed.addEventListener('input', check);
+  check();
+  api(`users/${u.id}/data`)
+    .then((d) => list.replaceChildren(personData(d, false, who)))
+    .catch((e) => list.replaceChildren(h('p', { class: 'sa-err' }, `Could not look at the apps: ${e.message}`)))
+    .finally(() => { looked = true; check(); });
+  if (!await asked) return false;
+  const busy = h('div', { class: 'iosa-back' }, h('div', { class: 'sa-dialog', role: 'dialog' }, h('h2', null, `Deleting ${who}…`),
+    h('p', { class: 'sa-muted' }, 'Each app removes their data; with a lot of health data or photos this can take a minute.')));
+  document.body.append(busy);
+  let res;
+  try { res = await api(`users/${u.id}`, { method: 'DELETE' }); } catch (e) { busy.remove(); fail(e); return false; }
+  busy.remove();
+  await dialog(`${who} is deleted`, h('div', null, h('p', null, 'This is what was removed:'), personData(res, true, who)), null, true);
+  return true;
 }
 async function accountExtra(el, o, u) {
   let ses, pws;

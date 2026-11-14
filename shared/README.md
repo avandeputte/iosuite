@@ -203,7 +203,9 @@ The routes:
 | `GET /api/suite-admin` | `{apps, users, roles, defaultRoles, me}`: every app the database knows (the registered ones, plus keys only seen in roles, settings or app passwords: `registered: false`) with `defaultRole`, `requireLogin` and counts; every account people use (never a service account) with `roles` (explicit, per app), `effective` (the role it holds in each app), `appPasswords`, `sessions`, `lastSeen` |
 | `POST /api/suite-admin/users` | a new account: `{name, password ('': one-click, member at most), email, displayName, suiteAdmin, listed, roles: {app: role}}` |
 | `PATCH /api/suite-admin/users/{id}` | any of those; `roles: {app: null}` removes the row, so the app's default role applies |
-| `DELETE /api/suite-admin/users/{id}` | the account, everywhere |
+| `GET /api/suite-admin/users/{id}/data` | what deleting it would remove: `{apps: [{app, name, items: [{what, count, kept}], error}], shared}`, every app asked with the suite admin's own sign-in (`iosuite_shared.persondata`) |
+| `DELETE /api/suite-admin/users/{id}` | the account, everywhere, with what the person kept in every app; answers what was removed (same shape; `pending` on an app that could not be reached and removes it at its next start) |
+| `GET`/`DELETE /api/suite-admin/person-data/{id}` | this app's part alone: counted, or removed (the panel calls every app's) |
 | `GET`/`DELETE /api/suite-admin/users/{id}/sessions` | its sessions; end all, or one with `?session=` |
 | `GET /api/suite-admin/app-passwords?user=&app=` | every app password (never the secret) |
 | `POST /api/suite-admin/app-passwords` | `{userId, app, label, scope}`: a new one for that account, shown once |
@@ -216,6 +218,11 @@ The routes:
 | `DELETE /api/suite-admin/keys/{app}/{name}` | clear it |
 | `GET /api/suite-admin/updates` | the suite as one thing: `{installed, latest, status: current / update / updating / error, checked, behind, failed, canUpdate, autoCheck, apps}`; `apps` has every app's own line: its version and commit, whether it runs (`watching`), whether it is `behind`, its last update (`iosuite_shared.suiteupdates`, below) |
 | `POST /api/suite-admin/updates` | `{action: check}` asks every app to look at GitHub again, `{action: update}` updates every app that is behind; `{autoCheck: bool}` is the daily check, one switch for the suite |
+
+An app says what a person keeps in it with `auth.person_data = fn`, where `fn(user_id, remove)` returns
+`[{"what": "private calendars", "count": 2}, {"what": "events they added to shared calendars", "count": 5, "kept": True}]`,
+counting with `remove` False and removing (everything not `kept`) with `remove` True. What someone added to something
+everyone shares is never removed. An app without one keeps nothing per person.
 
 The usual rules hold: a one-click account is a member at most and has no app passwords, an admin tool takes no roles, the last suite admin stays, and
 the signed-in admin cannot delete their own account, drop their own suite admin or remove their own password here.
