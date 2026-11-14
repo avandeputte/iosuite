@@ -63,8 +63,17 @@ class Local:
     def store(self, tmp_path, log=None, cancel=None):
         os.makedirs(self.path, exist_ok=True)
         final = os.path.join(self.path, os.path.basename(tmp_path))
-        shutil.move(tmp_path, final)
-        os.chmod(final, 0o600)
+        part = final + ".part"  # not a backup's name until it is whole: a copy cut short (a full disk) is never the newest backup
+        try:
+            shutil.move(tmp_path, part)
+            os.chmod(part, 0o600)
+            os.replace(part, final)
+        except BaseException:
+            try:
+                os.remove(part)
+            except OSError:
+                pass
+            raise
         return final
 
     def fetch(self, name):

@@ -208,3 +208,22 @@ def test_push_right_after_a_change_reaches_every_view_and_only_those_names(clien
     client.post("/api/push", json={"names": None})
     assert sorted(r.name for r in fake.SERVERS["http://ag1"]) == ["a.lan", "other.lan"]
     assert client.post("/api/push", json={"names": "x"}).status_code == 400
+
+
+def test_a_dynamic_dns_run_does_not_wait_for_itself(client, monkeypatch):
+    """A record on the public IPv6 address while none is known (an import on a new server): placing the records
+    looked for the address again, from inside the run that holds the lock."""
+    import threading
+    from app import db, ddns
+    monkeypatch.setattr(ddns, "detect", lambda: {"ipv4": "203.0.113.5", "ipv6": "2001:db8::5"})
+    add_server(client, "CF", "http://cf", view="external")
+    entry(client, "nas.example.com", external=[{"type": "A", "source": "publicip"}, {"type": "AAAA", "source": "publicip6"}])
+    db.set_setting("public_ipv6", None)
+    monkeypatch.setattr(ddns, "detect", lambda: {"ipv4": "198.51.100.7", "ipv6": None})
+    got = {}
+    t = threading.Thread(target=lambda: got.update(ddns.run()), daemon=True)
+    t.start()
+    t.join(20)
+    assert not t.is_alive(), "the run is waiting for its own lock"
+    assert got["changed"] is True and got["ipv4"] == "198.51.100.7"
+    assert not ddns.running()

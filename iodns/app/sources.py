@@ -40,7 +40,7 @@ def resolve(source: str, type_: str, cache: dict | None = None) -> str:
         if ddns.SOURCES[source] != type_:
             raise ValueError(f"The public {'IPv6' if source == 'publicip6' else 'IPv4'} address goes in an {ddns.SOURCES[source]} record")
         addr = ddns.address(source)
-        if not addr:
+        if not addr and not ddns.running():  # not found yet: look now (unless this is that look, placing its records)
             ddns.run()
             addr = ddns.address(source)
         if not addr:

@@ -14,9 +14,15 @@ def test_deleting_someone_removes_their_bookmarks_and_keeps_the_shared_ones(clie
     bob.post(f"/api/bookmarks/groups/{mine['id']}/links", json={"name": "Mail", "href": "https://mail.example"})
     bob.post(f"/api/bookmarks/groups/{family['id']}/links", json={"name": "Bob's photos", "href": "https://bobphotos.example"})
     assert bob.put("/api/me/layout", json={"hidden": ["ionote"]}).status_code == 200
+    # the copy of his bookmarks file a browser synced with is his too; another account's stays
+    for what in ("bookmarkfile", "bookmarkfile-base"):
+        db.set_setting(f"{what}:{b}:bookmarks.xbel", "1")
+        db.set_setting(f"{what}:{b}1:bookmarks.xbel", "1")
     got = client.get(f"/api/suite-admin/person-data/{b}").json()["items"]
-    assert {i["what"]: i["count"] for i in got} == {"own bookmarks and folders": 3, "home page layout": 1}
+    assert {i["what"]: i["count"] for i in got} == {"own bookmarks and folders": 3, "home page layout": 1, "synced bookmarks file": 1}
     assert client.delete(f"/api/suite-admin/users/{b}").status_code == 200
+    assert db.get_setting(f"bookmarkfile:{b}:bookmarks.xbel") is None and db.get_setting(f"bookmarkfile-base:{b}:bookmarks.xbel") is None
+    assert db.get_setting(f"bookmarkfile:{b}1:bookmarks.xbel") == "1"
     assert not db.q("SELECT id FROM prt_bookmark_nodes WHERE owner = %s", (b,))
     assert db.q("SELECT id FROM prt_bookmark_nodes WHERE id = %s", (family["id"],))
     assert db.get_setting(f"user:{b}:layout") is None

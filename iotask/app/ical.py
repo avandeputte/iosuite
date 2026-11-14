@@ -677,16 +677,15 @@ def complete(cal: Calendar, done: bool, tzname: str | None = None) -> bool:
         step = next_due(t, tzname)
         if step is not None:
             delta, r = step
+            by = "DUE" if _val(t, "DUE") is not None else "DTSTART"
+            was = _val(t, by)
             for k in ("DUE", "DTSTART"):
                 v = _val(t, k)
                 if v is not None:
                     _set(t, k, v + delta if isinstance(v, dt.datetime) else v + dt.timedelta(days=delta.days))
             t["RRULE"] = r
+            shift_alarms(t, was, _val(t, by), tzname)  # on the clock: an alert at 9:00 stays at 9:00 when the clocks change in between
             for a in t.walk("VALARM"):
-                tr = a.get("TRIGGER")
-                if tr is not None and isinstance(tr.dt, dt.datetime):
-                    a["TRIGGER"] = vDDDTypes(tr.dt + delta)
-                    a["TRIGGER"].params["VALUE"] = "DATE-TIME"
                 if "ACKNOWLEDGED" in a:
                     del a["ACKNOWLEDGED"]
             set_done(t, False)

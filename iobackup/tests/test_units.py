@@ -169,3 +169,25 @@ class AccountTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_a_copy_cut_short_is_never_a_backup(tmp_path, monkeypatch):
+    """The work folder and the destination are often on different disks: the archive is copied, and a copy that
+    stops half way (the disk is full) must not be listed as the newest backup, with older ones pruned to make room."""
+    import pytest
+    from app import destinations
+    dest = destinations.open_destination({"type": "local", "path": str(tmp_path / "dest")})
+    src = tmp_path / "nightly-20261114-023000.mdbk.tar"
+    src.write_bytes(b"x" * 1000)
+
+    def cut_short(a, b):
+        with open(b, "wb") as f:
+            f.write(b"x" * 10)
+        raise OSError(28, "No space left on device")
+    monkeypatch.setattr(destinations.shutil, "move", cut_short)
+    with pytest.raises(OSError):
+        dest.store(str(src))
+    assert os.listdir(tmp_path / "dest") == [] and dest.list() == []
+    monkeypatch.undo()
+    final = dest.store(str(src))
+    assert os.path.getsize(final) == 1000 and os.listdir(tmp_path / "dest") == [os.path.basename(final)]

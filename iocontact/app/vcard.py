@@ -414,8 +414,17 @@ def to_contact(props: list[Prop]) -> dict:
             seen.add(key)
             rels.append(r)
     c["relations"] = rels
-    c["extra"] = [_line(p, "4.0") for p in c["extra"]]
+    c["extra"] = [_kept(p) for p in c["extra"]]
     return c
+
+
+def _kept(p: Prop) -> str:
+    """A property ioContact does not model, as the line it is kept as. Its value is still escaped as it came, so it
+    is written as it is: escaping it again would double every backslash each time the card is saved."""
+    if "QUOTED-PRINTABLE" in [e.upper() for e in p.params.get("encoding", [])]:  # vCard 2.1, decoded when it was read
+        return _line(p, "4.0")
+    name = f"{p.group}.{p.name}" if p.group else p.name
+    return f"{name}{_param_str(p.params)}:" + re.sub(r"[\r\n]+", " ", str(p.value))
 
 
 def _photo(p: Prop):

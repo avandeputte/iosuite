@@ -270,7 +270,7 @@ def _plain(v) -> str:
         v = " ".join(_plain(x) for x in v)
     s = html.unescape(str(v))
     s = re.sub(r"(?i)<\s*(br|/p|/li|/div)\s*/?>", "\n", s)
-    s = html.unescape(re.sub(r"<[^>]+>", "", s))
+    s = html.unescape(re.sub(r"<[^<>]+>", "", s))  # [^<>]: a page of "<" alone is read once, not once for every "<"
     return "\n".join(x for x in (re.sub(r"[ \t\xa0]+", " ", ln).strip() for ln in s.split("\n")) if x)
 
 

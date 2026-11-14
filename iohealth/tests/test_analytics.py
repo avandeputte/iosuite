@@ -24,6 +24,20 @@ def test_fold_hours_cumulative_takes_biggest_source():
     assert [p["v"] for p in pts] == [5000, 100]
 
 
+def test_a_week_of_a_cumulative_type_is_the_sum_of_its_days():
+    """Monday the phone counted the steps, Tuesday the Watch: the week holds both days, not the busier source alone."""
+    mon = datetime(2026, 9, 28, tzinfo=UTC)
+    rows = [an.HourRow(mon + timedelta(hours=9), "iPhone", 5000, 10, 1, 900), an.HourRow(mon + timedelta(hours=33), "Watch", 8000, 10, 1, 900),
+            an.HourRow(mon + timedelta(hours=34), "iPhone", 300, 2, 1, 200), an.HourRow(mon + timedelta(days=7, hours=9), "Watch", 1000, 1, 1, 1000)]
+    days = an.fold_hours(rows, "day", UTC, True)
+    assert [p["v"] for p in days] == [5000, 8000, 1000]
+    for bucket, want in (("week", [13000, 1000]), ("month", [13000, 1000]), ("year", [14000])):
+        pts = an.fold_hours(rows, bucket, UTC, True)
+        assert [p["v"] for p in pts] == want, bucket
+        assert sum(p["n"] for p in pts) == 23
+    assert an.fold_hours(rows, "week", BRU, True)[0]["t"] == int(datetime(2026, 9, 28, tzinfo=BRU).timestamp())
+
+
 def test_fold_hours_average():
     day = datetime(2026, 10, 1, tzinfo=UTC)
     pts = an.fold_hours([an.HourRow(day, "Watch", 600, 10, 50, 70), an.HourRow(day + timedelta(hours=1), "Watch", 900, 10, 80, 120)], "day", UTC, False)

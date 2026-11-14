@@ -92,18 +92,26 @@ def clean_book(f: dict) -> dict:
 SLUG = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}")  # the last part of a book's CardDAV address
 
 
+def _slug_taken(slug: str, owner_id: int | None) -> bool:
+    """CardDAV lists a person's own address books and the shared ones under one home: a private one's address must
+    not hide a shared one's, nor a new shared one's anybody's private one."""
+    if owner_id is None:
+        return bool(db.one("SELECT 1 AS x FROM con_address_books WHERE slug = %s", (slug,)))
+    return bool(db.one("SELECT 1 AS x FROM con_address_books WHERE slug = %s AND (owner_id IS NULL OR owner_id = %s)", (slug, owner_id)))
+
+
 def create_book(owner_id: int | None, name: str, description: str | None = None, color: str | None = None, slug: str | None = None) -> int:
     """A new address book; `slug` (a CardDAV client's choice of address) must be free and plain, else one is made from the name."""
     f = clean_book({"name": name, "description": description, "color": color})
     if slug is not None:
         if not SLUG.fullmatch(slug):
             raise Invalid("An address book's address is letters, digits, dots, dashes and underscores (up to 64)")
-        if db.one("SELECT 1 AS x FROM con_address_books WHERE slug = %s AND owner_id <=> %s", (slug, owner_id)):
+        if _slug_taken(slug, owner_id):
             raise Invalid("There is an address book at that address already")
     else:
         base = re.sub(r"[^a-z0-9]+", "-", f["name"].lower()).strip("-")[:56] or "contacts"
         slug, n = base, 1
-        while db.one("SELECT 1 AS x FROM con_address_books WHERE slug = %s AND owner_id <=> %s", (slug, owner_id)):
+        while _slug_taken(slug, owner_id):
             n += 1
             slug = f"{base}-{n}"
     return db.ex("INSERT INTO con_address_books (owner_id, slug, name, description, color) VALUES (%s, %s, %s, %s, %s)",

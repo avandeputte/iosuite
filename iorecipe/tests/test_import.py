@@ -251,3 +251,12 @@ def test_the_ai_model_and_where_it_is_kept(monkeypatch, tmp_path):
     part = ai._window(lines, lambda s: len(s.split()), 200).split("\n")
     assert "# Ingredients" in part and "2 eggs" in part and part[0] == "story 375" and len(part) < 100
     assert ai._window(lines[:20], lambda s: len(s.split()), 200) == "\n".join(lines[:20])
+
+
+def test_a_page_of_opening_brackets_is_read_in_no_time():
+    import time
+    from app import scrape
+    t = time.time()
+    assert scrape._plain("<" * 300_000 + "b>Stir</b> well") == "<" * 299_999 + "Stir well"
+    assert time.time() - t < 2, "one pass, not one for every bracket"
+    assert scrape._plain("Mix <b>the</b> flour<br>and <i class='x'>salt</i>") == "Mix the flour\nand salt"

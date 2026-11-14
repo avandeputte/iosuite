@@ -206,3 +206,12 @@ def test_tasks_between_two_days(client, family_id):
     got = client.get("/api/tasks", params={"from": "2026-11-10", "to": "2026-11-11", "tz": "America/New_York"}).json()["items"]
     assert sorted(t["title"] for t in got) == ["b", "c"]
     assert client.get("/api/tasks?from=nope").status_code == 400
+
+
+def test_ticking_off_a_repeating_task_keeps_its_alert_on_the_clock(client, family_id):
+    """The clocks go back between two Fridays: the alert half an hour before a task due at 9:00 stays at 8:30."""
+    t = new(client, title="Bins out", due="2026-10-23T09:00", timezone="Europe/Brussels", rrule="FREQ=WEEKLY", alarms=["2026-10-23T08:30+02:00"], listId=family_id)
+    assert t["alarms"] == ["2026-10-23T06:30:00+00:00"]
+    r = client.post(f"/api/tasks/{t['id']}/complete", json={"tz": "Europe/Brussels"}).json()
+    assert r["moved"] and r["due"] == "2026-10-30T09:00:00+01:00"
+    assert r["alarms"] == ["2026-10-30T07:30:00+00:00"]
