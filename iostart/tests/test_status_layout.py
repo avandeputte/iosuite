@@ -150,3 +150,62 @@ def test_ping_trusts_a_self_signed_certificate(monkeypatch):
     assert status._ping("https://192.168.1.1") == {"ok": True, "status": None}
     monkeypatch.setattr(status, "_opener", Opener(urllib.error.URLError(ConnectionRefusedError(111, "refused"))))
     assert status._ping("https://192.168.1.1") == {"ok": False, "status": None}
+
+
+def test_events_tasks_recipes_and_notes_for_the_search_box(client, monkeypatch):
+    """The search box asks ioCalendar, ioTask and ioRecipe with the viewer's sign-in: the coming events first, the open
+    tasks before the done ones, a recipe with its small picture."""
+    asked = []
+
+    def fake(request, key, path, params=None, raw=False):
+        asked.append((key, path, dict(params or {})))
+        if path == "/api/calendars":
+            return {"items": [{"id": 1, "color": "#c00"}]}
+        if path == "/api/events":
+            return {"items": [{"id": 7, "calendarId": 1, "title": "Dentist 2020", "allDay": False, "recurring": False, "location": None,
+                               "next": {"start": "2020-03-01T09:00:00+00:00", "end": "2020-03-01T10:00:00+00:00"}},
+                              {"id": 9, "calendarId": 1, "title": "Dentist far", "allDay": True, "recurring": False, "location": "Town",
+                               "next": {"start": "2999-05-02", "end": "2999-05-03"}},
+                              {"id": 8, "calendarId": 1, "title": "Dentist soon", "allDay": False, "recurring": True, "location": None,
+                               "next": {"start": "2999-01-01T09:00:00+00:00", "end": "2999-01-01T10:00:00+00:00", "recurrenceId": "29990101T090000Z"}},
+                              {"id": 6, "calendarId": 2, "title": "Dentist 2021", "allDay": True, "recurring": False, "location": None,
+                               "next": {"start": "2021-03-01", "end": "2021-03-02"}}]}
+        if path == "/api/lists":
+            return {"items": [{"id": 4, "color": "#146b5e"}]}
+        if path == "/api/tasks":
+            if params["status"] == "open":
+                return {"items": [{"id": 1, "title": "Call the dentist", "due": "2026-11-20", "dueAllDay": True, "done": False, "listId": 4}]}
+            return {"items": [{"id": 2, "title": "Pay the dentist", "due": None, "dueAllDay": False, "done": True, "listId": 4}]}
+        if path == "/api/recipes":
+            return {"items": [{"id": 3, "title": "Tarte Tatin", "photo": "/api/recipes/3/photos/12", "totalMinutes": 75, "tags": ["dessert", "apple", "french", "oven"], "favourite": True},
+                              {"id": 5, "title": "Tartiflette", "photo": None, "totalMinutes": None, "tags": [], "favourite": False}]}
+        if path == "/api/notes":
+            return {"total": 9, "notes": [{"id": "ab-1", "title": "", "body": "# Dentist\n\nDr. Molar, 02 555 01 23", "pinned": True, "updatedAt": 1.5},
+                                          {"id": "ab-2", "title": "Insurance", "body": "- dentist: 80 %", "pinned": False, "updatedAt": 1.0},
+                                          {"id": "ab-3", "title": "", "body": "", "ocrText": "", "hasImage": True, "pinned": False, "updatedAt": 0.5}]}
+        if path == "/api/recipes/3/photos/12":
+            assert raw and params == {"size": "small"}
+            return b"jpeg", "image/jpeg"
+        raise AssertionError(path)
+    monkeypatch.setattr(widgets, "fetch", fake)
+    d = client.get("/api/widgets/iocalendar?q=dentist&tz=Europe/Brussels").json()
+    assert [x["id"] for x in d["items"]] == [8, 9, 6, 7] and d["more"] is False
+    assert d["items"][0] == {"id": 8, "title": "Dentist soon", "start": "2999-01-01T09:00:00+00:00", "end": "2999-01-01T10:00:00+00:00", "allDay": False,
+                             "recurring": True, "recurrenceId": "29990101T090000Z", "location": None, "color": "#c00"}
+    assert ("iocalendar", "/api/events", {"q": "dentist", "limit": 50}) in asked
+    d = client.get("/api/widgets/iotask?q=dentist").json()
+    assert d == {"items": [{"id": 1, "title": "Call the dentist", "due": "2026-11-20", "allDay": True, "done": False, "color": "#146b5e"},
+                           {"id": 2, "title": "Pay the dentist", "due": None, "allDay": False, "done": True, "color": "#146b5e"}], "more": False}
+    d = client.get("/api/widgets/iorecipe?q=tart").json()
+    assert d == {"items": [{"id": 3, "title": "Tarte Tatin", "photo": 12, "minutes": 75, "tags": ["dessert", "apple", "french"], "favourite": True},
+                           {"id": 5, "title": "Tartiflette", "photo": None, "minutes": None, "tags": [], "favourite": False}], "more": False}
+    assert ("iorecipe", "/api/recipes", {"q": "tart", "limit": 6}) in asked
+    r = client.get("/api/widgets/iorecipe/photo/3/12")
+    assert r.status_code == 200 and r.content == b"jpeg" and r.headers["content-type"] == "image/jpeg"
+    assert client.get("/api/widgets/iorecipe").status_code == 404  # no tile of its own
+    d = client.get("/api/widgets/ionote?q=dentist").json()
+    assert d == {"items": [{"id": "ab-1", "title": "Dentist", "text": "Dr. Molar, 02 555 01 23", "pinned": True, "updated": 1.5},
+                           {"id": "ab-2", "title": "Insurance", "text": "dentist: 80 %", "pinned": False, "updated": 1.0},
+                           {"id": "ab-3", "title": "Image", "text": "", "pinned": False, "updated": 0.5}], "more": True}
+    assert ("ionote", "/api/notes", {"q": "dentist", "limit": 5}) in asked
+    assert client.get("/api/widgets/ionote").status_code == 404

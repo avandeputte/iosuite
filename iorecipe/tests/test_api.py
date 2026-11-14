@@ -54,6 +54,7 @@ def test_search_tags_and_counts(client):
     titles = lambda **q: [r["title"] for r in client.get("/api/recipes", params=q).json()["items"]]  # noqa: E731
     assert titles(q="LEMON chick") == ["Lemon chicken"]        # every word, in the ingredients too
     assert titles(q="butter") == ["Oat cookies"]
+    assert titles(limit=2) == ["Brownies", "Lemon chicken"]      # at most so many (the start page's search box)
     assert titles(q="100%") == []                                # a % is a %, not "anything"
     assert titles(tag="dessert") == ["Brownies", "Oat cookies"]
     assert titles(scope="mine") == ["Lemon chicken"] and titles(scope="family") == ["Brownies", "Oat cookies"]
