@@ -5,8 +5,10 @@ from iosuite_shared import cli, install
 
 
 @pytest.fixture
-def fresh_db():
-    """Overrides conftest's autouse database fixture: nothing here needs MariaDB."""
+def fresh_db(monkeypatch):
+    """Overrides conftest's autouse database fixture: nothing here needs MariaDB. The suite's one-address switch,
+    which lives there, is off unless a test says otherwise."""
+    monkeypatch.setattr(install, "_switch", lambda: False)
     yield
 
 
@@ -274,3 +276,157 @@ def test_reconfigure_runs_the_apps_own_setup(tmp_path):
     assert install.reconfigure(["iotask"], own) == []  # the real runner: sh ./setup.sh --also none, in the app's folder
     with pytest.raises(SystemExit):
         cli.main(["--config", str(own), "apps", "--reconfigure", "iotask", "--remove", "iotask"])
+
+
+# ---- how the apps are reached: each on its own port, all at the start page's address, or behind a reverse proxy here
+def _reach(mode, own, opt, **kw):
+    calls = {"switch": [], "restart": [], "lines": []}
+    ok = install.set_reach(mode, own, base=opt, switcher=calls["switch"].append,
+                           restarter=lambda n, folder, log=print: calls["restart"].append(n) or True, log=calls["lines"].append, **kw)
+    return ok, calls
+
+
+def _env(opt, name):
+    return install.read_env_file(opt / name / "app" / "config.env")
+
+
+def test_reach_one_address_the_start_page_answers_for_every_app(tmp_path):
+    opt, own = _server(tmp_path)
+    assert install.reach_now(opt, own) == "ports"
+    ok, calls = _reach("one", own, opt)
+    assert ok and calls["switch"] == [True] and calls["restart"] == ["iocalendar", "ionote", "iotask"]
+    assert "HOST" not in _env(opt, "iostart")  # the start page is the one the network reaches
+    assert _env(opt, "iocalendar")["HOST"] == "127.0.0.1" and _env(opt, "ionote")["HOST"] == "127.0.0.1"
+    assert _env(opt, "iocalendar")["DB_PASSWORD"] == "s3cret" and _env(opt, "ionote")["DATA_DIR"]  # every other line as it was
+    assert install.reach_now(opt, own, switch=lambda: True) == "one"
+    assert any("/calendar/" in line for line in calls["lines"])
+    ok, calls = _reach("one", own, opt)  # again: nothing to write, nobody restarted
+    assert ok and calls["restart"] == []
+    # behind a reverse proxy on this server: the start page too, with its address
+    ok, calls = _reach("one-proxy", own, opt, address="https://home.example.com/")
+    assert ok and calls["restart"] == ["iostart"] and _env(opt, "iostart")["HOST"] == "127.0.0.1"
+    assert _env(opt, "iostart")["PUBLIC_URL"] == "https://home.example.com" and "PUBLIC_URL" not in _env(opt, "iotask")
+    assert install.reach_now(opt, own, switch=lambda: True) == "one-proxy"
+    assert any("reverse_proxy 127.0.0.1:8630" in line for line in calls["lines"]) and any("home.example.com {" in line for line in calls["lines"])
+    # and back: every app on its own port again
+    ok, calls = _reach("ports", own, opt)
+    assert ok and calls["switch"] == [False] and set(calls["restart"]) == {"iostart", "iocalendar", "iotask", "ionote"}
+    assert all("HOST" not in _env(opt, n) for n in ("iostart", "iocalendar", "iotask", "ionote"))
+    assert install.reach_now(opt, own) == "ports"
+
+
+def test_reach_behind_a_proxy_of_ones_own(tmp_path):
+    opt, own = _server(tmp_path)
+    with open(opt / "iotask" / "app" / "config.env", "a") as f:
+        f.write("HOST=192.168.1.151\n# HOST=0.0.0.0\n")
+    ok, calls = _reach("proxy", own, opt, address="https://home.example.com")
+    assert ok and calls["switch"] == [False] and install.reach_now(opt, own) == "proxy"
+    assert _env(opt, "iostart")["PUBLIC_URL"] == "https://home.example.com" and _env(opt, "iostart")["HOST"] == "127.0.0.1"
+    assert _env(opt, "iocalendar")["PUBLIC_URL"] == "https://home.example.com/calendar" and _env(opt, "ionote")["PUBLIC_URL"] == "https://home.example.com/notes"
+    assert _env(opt, "iotask")["HOST"] == "127.0.0.1" and "# HOST=0.0.0.0" in (opt / "iotask" / "app" / "config.env").read_text()
+    text = "\n".join(calls["lines"])  # a Caddyfile for what is here
+    assert "handle_path /calendar/* {" in text and "reverse_proxy 127.0.0.1:8630" in text and "redir /.well-known/caldav /calendar/dav/ 301" in text
+    assert "/contacts" not in text  # ioContact is not on this server
+    assert install.shared_address(opt, own) == "https://home.example.com"
+    # an address the person named is not ours to take out, a name per app is each app's own setting
+    with open(opt / "iotask" / "app" / "config.env", "a") as f:
+        f.write("HOST=192.168.1.151\n")
+    ok, calls = _reach("ports", own, opt)
+    assert _env(opt, "iotask")["HOST"] == "192.168.1.151" and "HOST" not in _env(opt, "iocalendar")
+    assert _env(opt, "iocalendar")["PUBLIC_URL"] == "https://home.example.com/calendar"
+    ok, calls = _reach("proxy", own, opt)
+    assert any("r and its number" in line for line in calls["lines"])
+
+
+def test_reach_refuses_what_cannot_be(tmp_path):
+    opt, own = _server(tmp_path)
+    ok, calls = _reach("one", opt / "iotask" / "app", tmp_path / "elsewhere")  # a server without the start page
+    assert not ok and calls["switch"] == [] and any("needs the start page" in line for line in calls["lines"])
+    ok, calls = _reach("one", own, opt, address="home.example.com")
+    assert not ok and calls["switch"] == [] and "HOST" not in _env(opt, "iocalendar")
+
+    def broken(on):
+        raise RuntimeError("no database")
+    ok = install.set_reach("one", own, base=opt, switcher=broken, restarter=lambda *a, **k: True, log=lambda line: None)
+    assert not ok and "HOST" not in _env(opt, "iocalendar")  # the switch first: the apps never go quiet behind a door that is shut
+
+
+def test_reach_keeps_the_ldap_directory_where_it_listened(tmp_path):
+    opt, own = _server(tmp_path)
+    d = opt / "iocontact" / "app"
+    d.mkdir(parents=True)
+    (d / "config.env").write_text(CFG.replace("DB_NAME=suite", "DB_NAME=contacts"))
+    _reach("one", own, opt)
+    assert _env(opt, "iocontact")["HOST"] == "127.0.0.1" and _env(opt, "iocontact")["LDAP_HOST"] == "0.0.0.0"
+    _reach("ports", own, opt)
+    assert "HOST" not in _env(opt, "iocontact") and "LDAP_HOST" not in _env(opt, "iocontact")
+    (d / "config.env").write_text(CFG + "LDAP_PORT=0\n")  # the directory is off: nothing to keep
+    _reach("proxy", own, opt)
+    assert "LDAP_HOST" not in _env(opt, "iocontact")
+
+
+def test_an_app_added_later_is_reached_like_the_others(tmp_path, monkeypatch):
+    opt, own = _server(tmp_path)
+    _reach("proxy", own, opt, address="https://home.example.com")
+    seen = {}
+
+    def fetcher(name, target, log):
+        target.mkdir(parents=True, exist_ok=True)
+
+    def runner(entry, log):
+        seen[entry["name"]] = (install.read_env_file(entry["target"] / "config.env"), entry["args"][entry["args"].index("--public-url") + 1])
+        return 1 if entry["name"] == "iohealth" else 0
+    failed = install.install(["iorecipe", "iohealth"], own, base=opt, fetcher=fetcher, runner=runner, log=lambda line: None)
+    assert seen["iorecipe"] == ({"HOST": "127.0.0.1"}, "https://home.example.com/recipes")  # before its setup.sh starts it
+    assert failed == ["iohealth"] and not (opt / "iohealth" / "app" / "config.env").exists()  # a failed setup leaves no half an app
+    _reach("ports", own, opt)
+    install.install(["iodns"], own, base=opt, fetcher=fetcher, runner=runner, log=lambda line: None)
+    assert seen["iodns"] == ({}, "")
+    monkeypatch.setattr(install, "_switch", lambda: True)  # one address: the new app behind the start page at once
+    install.install(["iobackup"], own, base=opt, fetcher=fetcher, runner=runner, log=lambda line: None)
+    assert seen["iobackup"] == ({"HOST": "127.0.0.1"}, "")
+
+
+def test_choose_how_the_apps_are_reached(tmp_path):
+    opt, own = _server(tmp_path)
+
+    def answers(*a):
+        it = iter(a)
+        return lambda prompt: next(it)
+    out, reach = [], {}
+    assert install.choose(opt, own, ask=answers("a", "2", "", ""), log=out.append, reach=reach) == ([], [], False, [])
+    assert reach == {"mode": "one", "address": None}
+    assert any("Reached: each app on its own port" in line for line in out) and any("to change to: one address" in line for line in out)
+    reach = {}
+    assert install.choose(opt, own, ask=answers("a", "4", "home.example.com", "https://home.example.com/", "iorecipe", ""), log=out.append, reach=reach) == (["iorecipe"], [], False, [])
+    assert reach == {"mode": "proxy", "address": "https://home.example.com"}
+    reach = {}
+    assert install.choose(opt, own, ask=answers("a", "", ""), log=out.append, reach=reach) is None and reach == {}  # left as it is
+    assert install.choose(opt, own, ask=answers("a", "1", ""), log=out.append, reach=reach) is None and reach == {}  # what it already is
+    assert install.choose(opt, own, ask=answers("iostart", "a", "2", "", "iostart", ""), log=out.append, reach=reach) is None  # not without the start page
+    assert any("tick ioStart first" in line for line in out)
+    assert install.choose(opt, own, ask=answers("a", ""), log=out.append) is None  # the old list has no such letter
+    assert any("a: not one of the apps" in line for line in out)
+
+
+def test_cli_reach(tmp_path, monkeypatch, capsys):
+    opt, own = _server(tmp_path)
+    seen = {}
+    monkeypatch.setattr(install, "set_reach", lambda mode, cfg, **kw: seen.update(mode=mode, address=kw["address"], base=kw["base"]) or True)
+    monkeypatch.setattr(install, "install", lambda names, cfg, **kw: seen.update(add=names, reach=kw["reach"]) or [])
+    assert cli.main(["--config", str(own), "apps", "--reach", "one-proxy", "--address", "https://home.example.com", "--add", "iorecipe"]) == 0
+    assert seen == {"mode": "one-proxy", "address": "https://home.example.com", "base": opt, "add": ["iorecipe"], "reach": "one-proxy"}
+    monkeypatch.setattr(install, "set_reach", lambda mode, cfg, **kw: False)
+    assert cli.main(["--config", str(own), "apps", "--reach", "ports"]) == 1
+    assert cli.main(["--config", str(own), "apps", "--list"]) == 0 and "Reached: each app on its own port" in capsys.readouterr().out
+    with pytest.raises(SystemExit):
+        cli.main(["--config", str(own), "apps", "--address", "https://home.example.com"])
+    with pytest.raises(SystemExit):
+        cli.main(["--config", str(own), "apps", "--reach", "sideways"])
+
+
+def test_restart_service_without_systemd_says_so(tmp_path, monkeypatch):
+    monkeypatch.setattr(install.shutil, "which", lambda x: None)
+    lines = []
+    assert install.restart_service("iotask", tmp_path, log=lines.append, run=lambda *a, **k: pytest.fail("nothing to run")) is True
+    assert "started by hand" in lines[0]

@@ -50,6 +50,9 @@ Numbers or names to tick or untick (e.g. 3 5), r and a number to change an insta
   touched.
 * **`r` and the number** asks an installed app's setup questions again, the current answers as the defaults (port,
   public address, database, the app's own settings), and restarts it.
+* **`a`** changes how every app is reached: each on its own port (how a new install starts), all at the start page's
+  address in a folder each (`http://server:8630/calendar/`), or behind a reverse proxy on the server, with the apps
+  listening on the server itself only. `--reach ports|one|one-proxy|proxy` and `--address URL` do it without questions.
 
 Without questions: `... | bash -s -- --add iotask,ionote`, `--remove iohealth` (`--delete-data` to drop its database
 and data too), `--reconfigure iocalendar`, `--list`; `--into DIR` when the apps are not in `/opt`. A first install
