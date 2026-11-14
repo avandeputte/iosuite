@@ -1,57 +1,40 @@
 """Family members on tasks: a task on the Family list (or any list) can be for one or more people of the family
 ("Emma: pack the swim bag", "Dad: renew the passport").
 
-The family is the accounts that use ioTask (the suite's shared accounts, iosuite-shared), except the ones an admin
-took out of it (Settings › Family: an "admin" or service account is not a person). Those cannot be picked and get no
-private list of their own here. The tag is kept in the task itself as an iCalendar CATEGORIES value with the member's
+The family is the suite's one list (iosuite_shared.family, Settings › Security › Family for suite admins), less the
+accounts with no role in ioTask: the same people, colours and initials as in every app. Only a member of the family
+gets a private list of their own here. The tag is kept in the task itself as an iCalendar CATEGORIES value with the member's
 display name, so reminders apps that show categories show it, and a category typed there with a member's name (or
 account name, in any case) tags the task here too. The other categories of a task stay as they are.
 """
 import time
 
-from app import db, users
+from app import users
+from iosuite_shared import family as suite_family
 from iosuite_shared.errors import Invalid
 
 _cache: dict = {"at": 0.0, "list": None}
 TTL = 30
 
 
-def left_out() -> set[int]:
-    """The accounts an admin took out of the family."""
-    try:
-        return {int(x) for x in (db.get_setting("family_left_out") or "").split(",") if x.strip().isdigit()}
-    except Exception:  # noqa: BLE001 - no database yet
-        return set()
-
-
 def in_family(uid: int) -> bool:
-    return int(uid) not in left_out()
-
-
-def set_in_family(uid: int, yes: bool) -> None:
-    ids = left_out()
-    ids.discard(int(uid)) if yes else ids.add(int(uid))
-    db.set_setting("family_left_out", ",".join(str(i) for i in sorted(ids)) or None)
-    if not yes:  # its empty private lists go (one with tasks stays: nothing is lost)
-        db.ex("DELETE FROM tsk_lists WHERE owner_id = %s AND NOT EXISTS (SELECT 1 FROM tsk_tasks t WHERE t.list_id = tsk_lists.id AND t.deleted = 0)",
-              (int(uid),))
-    forget()
+    return suite_family.in_family(uid)
 
 
 def family() -> list[dict]:
-    """[{id, name, displayName}] of every account that may use ioTask and is in the family, by display name."""
+    """[{id, name, displayName, initials, color, hasFace}] of the suite's family members who may use this app, by display name."""
     now = time.monotonic()
     if _cache["list"] is None or now - _cache["at"] > TTL:
-        out_ = left_out()
-        out = [{"id": u["id"], "name": u["name"], "displayName": u.get("displayName") or u["name"]}
-               for u in users.all_users() if u.get("role") in users.ROLES and u["id"] not in out_]
-        out.sort(key=lambda m: m["displayName"].lower())
-        _cache.update(at=now, list=out)
+        if TTL <= 0:
+            suite_family.forget()
+        here = {u["id"] for u in users.all_users() if u.get("role") in users.ROLES}
+        _cache.update(at=now, list=[suite_family.public(m) for m in suite_family.members() if m["id"] in here])
     return _cache["list"]
 
 
 def forget() -> None:
     _cache.update(at=0.0, list=None)
+    suite_family.forget()
 
 
 def _keys(m: dict) -> set[str]:
@@ -113,4 +96,4 @@ def fold(data: dict, current_categories: list[str] | None = None) -> dict:
 
 
 def public(ms: list[dict]) -> list[dict]:
-    return [{"id": m["id"], "name": m["name"], "displayName": m["displayName"]} for m in ms]
+    return [suite_family.public(m) for m in ms]

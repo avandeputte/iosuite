@@ -463,7 +463,9 @@ label.check input { margin-top: 3px; accent-color: var(--brand); }
 
 /* family members: a round badge with initials (on event chips, in the sidebar filter and the event form) */
 .mem { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%;
-  font-size: 9px; font-weight: 700; letter-spacing: 0; color: #fff; background: var(--mc, #5f6b7a); }
+  font-size: 9px; font-weight: 700; letter-spacing: 0; color: #fff; background: var(--mc, #5f6b7a); position: relative; }
+/* with a face (the suite's family: ioPix, else the ioContact card): the photo over the initials, ringed in the member's colour */
+.mem.face img { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 50%; object-fit: cover; box-shadow: 0 0 0 2px var(--mc, #5f6b7a); }
 .chip-ev .mem { width: 16px; height: 16px; font-size: 8px; margin-left: auto; }
 .chip-ev .mem + .mem { margin-left: -4px; box-shadow: 0 0 0 1.5px var(--bg); }
 .chip-ev.allday .mem { box-shadow: 0 0 0 1.5px rgba(255,255,255,.7); }
