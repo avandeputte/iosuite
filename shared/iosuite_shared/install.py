@@ -36,8 +36,9 @@ Removing an app (`remove`, or unticking it) stops its service and takes the serv
 showing and calling it. What the person made stays: the app's database, its data folder, the photos, the backups.
 Adding the app again finds them. Only `--delete-data` (asked apart, default no) also drops the app's own database and
 deletes its data folder under BASE/<app>; never the Shared ioSuite database (the accounts, their roles and the keys
-stay as they are), never a database another app here uses, never the photos (ioPix) or the backups (ioBackup). The
-app this runs from is removed by another app that stays; the last app here is not removed.
+stay as they are), never a database another app here uses, never the photos or digiKam's own database (ioPix) or the
+backups (ioBackup): the folders config.env names for them (KEPT) stay wherever they are, inside the app's folder too.
+The app this runs from is removed by another app that stays; the last app here is not removed.
 """
 import atexit
 import os
@@ -67,6 +68,8 @@ APPS = {
                   extra=["--no-digikam", "--features", "none"], photos=True, launchd="com.iopix"),
 }
 DEFAULT_PHOTOS = "/library/photos"
+# What a person keeps that no removal deletes, by the config.env setting that names its folder: (setting, what it is)
+KEPT = (("PHOTOS_ROOT", "photos"), ("BACKUP_DIR", "backups"), ("DIGIKAM_DB_DIR", "digiKam database"))
 IDENT = re.compile(r"^[A-Za-z0-9_]+$")
 
 
@@ -291,6 +294,30 @@ def _inside(path, folder):
     return path == folder or folder in path.parents
 
 
+def _clear(folder, keep=()):
+    """Delete what is in FOLDER, but never a path in KEEP: such a folder stays whole, with the folders that lead to it
+    (their other contents go). A link is removed, never followed. Returns whether FOLDER is empty now."""
+    folder = Path(folder)
+    empty = True
+    for child in sorted(folder.iterdir()):
+        if child.is_symlink() or not child.is_dir():
+            if any(_inside(k, child) for k in keep):  # a kept file, or a link to something kept
+                empty = False
+            else:
+                child.unlink(missing_ok=True)
+        elif any(Path(k).resolve() == child.resolve() for k in keep):
+            empty = False
+        elif any(_inside(k, child) for k in keep):
+            if _clear(child, keep):
+                child.rmdir()
+            else:
+                empty = False
+        else:
+            shutil.rmtree(child, ignore_errors=True)
+            empty = empty and not child.exists()
+    return empty
+
+
 def _db_key(cfg, default_name=None):
     """(host, port, database) of an app's own MariaDB database, None when it has none (SQLite, or nothing set)."""
     if cfg.get("DB_TYPE", "mysql") not in ("mysql", "mariadb") or not cfg.get("DB_HOST"):
@@ -331,8 +358,13 @@ def removal_plan(name, base, caller_cfg=None, config_dir=None):
                 if _db_key(ocfg, APPS[other]["db"]) == key:
                     kept = f"{APPS[other]['label']} uses it too"
                     break
+    keep = []
+    for setting, what in KEPT:
+        if cfg.get(setting):
+            where = Path(cfg[setting]).expanduser()
+            keep.append((what, where if where.is_absolute() else target / where))
     return dict(name=name, label=a["label"], root=root, target=target, cfg=cfg, data=data, data_inside=_inside(data, root),
-                db=key, db_kept=kept, photos=cfg.get("PHOTOS_ROOT") or None, backups=cfg.get("BACKUP_DIR") or None)
+                db=key, db_kept=kept, keep=keep)
 
 
 def stop_service(name, target, log=print, run=subprocess.run):
@@ -428,14 +460,9 @@ def remove(names, config_dir, base=None, delete_data=False, db_admin=None, stopp
             continue
         stopper(n, p["target"], log=log)
         forgetter(n, log=log)
-        # the program files: everything in the app's folder but the data folder
-        for child in sorted(p["target"].iterdir()):
-            if _inside(p["data"], child):
-                continue
-            if child.is_dir() and not child.is_symlink():
-                shutil.rmtree(child, ignore_errors=True)
-            else:
-                child.unlink(missing_ok=True)
+        # the program files: everything in the app's folder but the data folder and what is never deleted (KEPT)
+        kept = [where for _, where in p["keep"]]
+        _clear(p["target"], [p["data"]] + kept)
         log(f"  deleted the program files in {p['target']}")
         if delete_data:
             if p["db"] and not p["db_kept"]:
@@ -443,11 +470,14 @@ def remove(names, config_dir, base=None, delete_data=False, db_admin=None, stopp
                     failed.append(n)
             elif p["db"]:
                 log(f"  kept the database {p['db'][2]}: {p['db_kept']}")
+            # the data folder goes when it is under the app's own folder; one elsewhere is the person's to delete
+            folder = p["root"] if p["data_inside"] else p["target"]
+            if _clear(folder, kept):
+                folder.rmdir()
             if p["data_inside"]:
-                shutil.rmtree(p["root"], ignore_errors=True)
-                log(f"  deleted {p['root']} with the app's data folder")
+                log(f"  deleted {p['root']} with the app's data folder" if not folder.exists() else
+                    f"  deleted the app's data folder; {p['root']} stays for what is never deleted")
             else:
-                shutil.rmtree(p["target"], ignore_errors=True)
                 log(f"  kept the data folder {p['data']}: it is outside {p['root']}, delete it yourself if you want it gone")
         else:
             if p["db"]:
@@ -455,9 +485,8 @@ def remove(names, config_dir, base=None, delete_data=False, db_admin=None, stopp
             if p["data"].exists():
                 log(f"  kept the data folder {p['data']}")
             log(f"  adding {a['label']} again later finds them")
-        for what, where in (("photos", p["photos"]), ("backups", p["backups"])):
-            if where:
-                log(f"  the {what} in {where} are never touched")
+        for what, where in p["keep"]:
+            log(f"  the {what} in {where} are never touched" if what.endswith("s") else f"  the {what} in {where} is never touched")
     return failed
 
 

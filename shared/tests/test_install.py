@@ -193,6 +193,41 @@ def test_delete_data_never_drops_a_shared_or_borrowed_database(tmp_path, capsys)
     assert outside.is_dir() and not (opt / "iotask" / "app").exists()  # a data folder elsewhere is the person's to delete
 
 
+def test_remove_never_deletes_the_photos_the_backups_or_digikams_database(tmp_path, capsys):
+    """The folders config.env names for them stay, wherever they are: inside the app's own folder too."""
+    opt, own = _server(tmp_path, apps=("iopix", "iobackup"), data=())
+    photos, dk = opt / "iopix" / "photos", opt / "iopix" / "app" / "library" / "digikam"
+    backups = opt / "iobackup" / "app" / "backups"
+    for d, f in ((photos, "holiday.jpg"), (dk, "digikam4.db"), (backups, "monday.sql.gz")):
+        d.mkdir(parents=True)
+        (d / f).write_text("x")
+    (dk.parent / "notes.txt").write_text("x")  # beside digiKam's folder, in a folder of the app: goes
+    pix, bak = opt / "iopix" / "app" / "config.env", opt / "iobackup" / "app" / "config.env"
+    pix.write_text(pix.read_text() + f"PHOTOS_ROOT={photos}\nDIGIKAM_DB_DIR={dk}\n")
+    bak.write_text(bak.read_text() + "BACKUP_DIR=backups\n")  # as config.env may name it: from the app's folder
+    failed, _ = _remove(["iobackup"], own)  # a plain remove: the program files go, the backups among them stay
+    assert failed == [] and (backups / "monday.sql.gz").is_file() and (opt / "iobackup" / "app" / "data").is_dir()
+    assert not (opt / "iobackup" / "app" / "app").exists() and not bak.exists()
+    failed, _ = _remove(["iopix"], own, delete_data=True)  # with the data: everything of the app but those two folders
+    assert failed == [] and (photos / "holiday.jpg").is_file() and (dk / "digikam4.db").is_file()
+    assert not (opt / "iopix" / "app" / "data").exists() and not pix.exists() and not (dk.parent / "notes.txt").exists()
+    assert sorted(x.name for x in (opt / "iopix").iterdir()) == ["app", "photos"]
+    out = capsys.readouterr().out
+    assert f"the photos in {photos} are never touched" in out and f"the digiKam database in {dk} is never touched" in out
+    assert f"{opt / 'iopix'} stays for what is never deleted" in out
+
+
+def test_clear_never_follows_a_link(tmp_path):
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "keep.me").write_text("x")
+    folder = tmp_path / "folder"
+    folder.mkdir()
+    (folder / "link").symlink_to(outside, target_is_directory=True)
+    (folder / "file").write_text("x")
+    assert install._clear(folder) is True and list(folder.iterdir()) == [] and (outside / "keep.me").is_file()
+
+
 def test_remove_of_the_calling_app_is_done_by_another_and_never_the_last(tmp_path):
     opt, own = _server(tmp_path)
     failed, calls = _remove(["iostart", "iorecipe"], own, delete_data=True, delegate=lambda *a: 1 / 0)
