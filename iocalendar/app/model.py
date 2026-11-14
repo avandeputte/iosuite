@@ -29,10 +29,6 @@ class NotFound(Exception):
     pass
 
 
-class Forbidden(Exception):
-    pass
-
-
 # ------------------------------------------------------------------ calendars
 
 def calendar(cid: int) -> dict | None:

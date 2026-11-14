@@ -1035,10 +1035,6 @@ def _parts(source: str) -> dict:
             "analysis": analysis.signature(), "videos": videos.signature(), "embed": _embed_signature()}
 
 
-def _version_for(source: str) -> str:
-    return ":".join(_parts(source).values())
-
-
 # ---- the index updated in place -----------------------------------------------------------------------------------
 # A change to a few photos (a rating, a tag, a title, a face named, the edits written into digiKam's database) used to
 # rebuild the whole index: every row of the library read and written again, seconds on a large one, for each change.

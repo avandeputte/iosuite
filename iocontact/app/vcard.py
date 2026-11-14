@@ -47,7 +47,6 @@ SOCIAL_BASE = {"linkedin": "https://www.linkedin.com/in/", "facebook": "https://
                "github": "https://github.com/", "pinterest": "https://www.pinterest.com/", "reddit": "https://www.reddit.com/user/",
                "snapchat": "https://www.snapchat.com/add/", "flickr": "https://www.flickr.com/people/", "telegram": "https://t.me/"}
 
-STRUCTURED = {"N", "ADR", "ORG", "GENDER", "CLIENTPIDMAP"}
 KEEP_OUT = {"BEGIN", "END", "VERSION", "PRODID", "REV", "UID", "FN", "N", "NICKNAME", "BDAY", "X-IOCONTACT-BDAY", "ANNIVERSARY", "GENDER",
             "X-GENDER", "ORG", "TITLE", "ROLE", "NOTE", "EMAIL", "TEL", "ADR", "URL", "PHOTO", "CATEGORIES", "RELATED",
             "X-ABRELATEDNAMES", "X-ABDATE", "X-ABLABEL", "X-SOCIALPROFILE", "SOCIALPROFILE", "KIND", "X-ADDRESSBOOKSERVER-KIND",

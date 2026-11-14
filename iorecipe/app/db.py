@@ -100,7 +100,6 @@ def connect(database: str | None = None):
 # a statement on its own is one round trip, tx() is one transaction (committed on success, rolled back on error), and
 # q / one / ex inside a `with tx():` block run in it.
 _db = shared_db.Database(connect)
-pool = _db.pool
 tx, q, one, ex, many = _db.tx, _db.q, _db.one, _db.ex, _db.many
 
 

@@ -21,7 +21,6 @@ from app.auth import uid as uid_of
 
 router = APIRouter(default_response_class=ORJSONResponse)
 UTC = timezone.utc
-EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 
 ready = rollup.Ready()
 

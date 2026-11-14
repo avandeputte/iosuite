@@ -44,11 +44,6 @@ def url() -> str:
         return ""
 
 
-def forget() -> None:
-    """ioTask may be asked again, from its first address on (the tests)."""
-    links.ask_again(PROVIDER)
-
-
 def ask(request: Request, path: str, params: dict | None = None, body: dict | None = None):
     """GET path from ioTask as the viewer (with body: POST that JSON); its JSON answer, or Unavailable."""
     if not enabled():

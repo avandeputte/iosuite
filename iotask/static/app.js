@@ -186,7 +186,6 @@ const hm = (d) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 const parseDay = (s) => { const [y, m, d] = s.slice(0, 10).split('-').map(Number); return new Date(y, m - 1, d); };
 const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
 const dayStart = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
-const sameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 const fmtTime = (d) => d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 const LOCAL_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
 const TZQ = `tz=${encodeURIComponent(LOCAL_TZ)}`;  // whose "today" the server counts with
@@ -269,7 +268,6 @@ const roleAtLeast = (r) => (RANK[S.user && S.user.role] || 0) >= RANK[r];
 const canOwn = () => roleAtLeast('member');
 const canShared = () => roleAtLeast('editor');
 const listOf = (id) => S.lists.find((c) => c.id === id) || {};
-const colorOf = (id) => listOf(id).color || 'var(--brand)';
 const writable = () => S.lists.filter((c) => c.writable);
 /** Where a new task goes when no list is open: the one chosen in Settings › Display, else your own first list. */
 function defaultList() {

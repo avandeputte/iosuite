@@ -100,9 +100,6 @@ export function taskCounts(text) {
   return [done, total];
 }
 
-/** Whether a text uses any markdown worth drawing (plain text is shown as it is). */
-export const looksLikeMarkdown = (text) => /(^|\n)\s*(#{1,6}\s|[-*+]\s|\d+[.)]\s|>\s|```|---\s*$)|\*\*[^*]+\*\*|\[[^\]]+\]\(https?:|`[^`]+`|https?:\/\//.test(text || '');
-
 /** Enter in the text box: a list item continues the list (a checklist with an empty box); Enter on an empty item ends
  *  the list. Returns true when it handled the key. */
 export function continueList(ta) {
@@ -159,9 +156,6 @@ export function formatEdit(value, s, e, cmd) {
 export function applyFormat(ta, cmd) {
   put(ta, formatEdit(ta.value, ta.selectionStart, ta.selectionEnd, cmd));
 }
-
-/** Make the lines the selection touches checklist items (or plain lines again when they all are). */
-export const toggleChecklist = (ta) => applyFormat(ta, 'checklist');
 
 /** Replace a part of the text box the way typing does, so ⌘Z undoes it (setRangeText where the browser can't). */
 function put(ta, ed) {

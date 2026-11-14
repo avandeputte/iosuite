@@ -383,13 +383,6 @@ def init():
         _ready = True
 
 
-def reset_for_tests():
-    """Forget the cached settings (the tests point DATA_DIR and DB_* elsewhere)."""
-    global _cfg, _ready
-    _cfg, _ready = None, False
-    _pool.drain()
-
-
 # ---- settings table
 def get_setting(key: str, default: str = None):
     with connect() as con:

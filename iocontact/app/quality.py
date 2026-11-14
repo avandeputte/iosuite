@@ -577,7 +577,3 @@ def fix(u: dict, check: str, contact_ids: list[int] | None, book_ids: list[int],
     return {"check": check, "fixed": done, "skipped": skipped}
 
 
-def summary_counts(book_ids: list[int]) -> dict:
-    return {x["check"]: x["count"] for x in run_checks(book_ids)}
-
-

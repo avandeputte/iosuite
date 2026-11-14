@@ -45,7 +45,3 @@ def db_env(key: str):
     return v if v not in (None, "") else None
 
 
-def proxy_env(name: str):
-    """A proxy sign-in setting from the environment, or None when it is not set there."""
-    v = os.environ.get(name)
-    return v if v is not None and v.strip() != "" else None
