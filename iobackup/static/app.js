@@ -2,6 +2,8 @@
    page), the backups in each destination (with verify, download, delete and a restore of exactly what you pick),
    activity (every run with its log), servers, destinations and Settings (account, display, and for admins the
    server, for suite admins security and global settings). */
+import { client, h } from '../api/auth/ui.js';  // the suite's shared helpers (iosuite-shared static/account-panel.js)
+const api = client(document.baseURI, { signIn: () => showSignIn() });
 
 // ------------------------------------------------------------------ helpers
 const $ = (s, el = document) => el.querySelector(s);
@@ -28,35 +30,6 @@ const ICONS = {
   job: 'M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z',
 };
 const icon = (n, cls = '') => { const s = document.createElement('span'); s.className = 'ic ' + cls; s.innerHTML = `<svg viewBox="0 0 24 24"><path d="${ICONS[n] || ''}"/></svg>`; return s; };
-
-function h(tag, attrs, ...kids) {
-  const el = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs || {})) {
-    if (v == null || v === false) continue;
-    if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
-    else if (k === 'style' && typeof v === 'object') for (const [sk, sv] of Object.entries(v)) { if (sk.startsWith('--')) el.style.setProperty(sk, sv); else el.style[sk] = sv; }
-    else if (k === 'value') el.value = v;
-    else if (k === 'checked') el.checked = !!v;
-    else el.setAttribute(k, v === true ? '' : v);
-  }
-  const add = (k) => { if (k == null || k === false) return; if (Array.isArray(k)) k.forEach(add); else el.append(k instanceof Node ? k : String(k)); };
-  kids.forEach(add);
-  return el;
-}
-
-async function api(path, opts = {}) {
-  const o = { credentials: 'same-origin', ...opts, headers: { ...(opts.headers || {}) } };
-  if (o.json !== undefined) { o.body = JSON.stringify(o.json); o.headers['Content-Type'] = 'application/json'; delete o.json; }
-  const r = await fetch(path, o);
-  if (r.status === 401 && !path.startsWith('api/auth') && path !== 'api/status') { showSignIn(); throw new Error('Sign in first'); }
-  if (!r.ok) {
-    let msg = r.statusText;
-    try { const j = await r.json(); msg = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail); } catch { /* not JSON */ }
-    throw new Error(msg || `Error ${r.status}`);
-  }
-  const ct = r.headers.get('content-type') || '';
-  return ct.includes('json') ? r.json() : r.text();
-}
 
 let toastTimer;
 function toast(msg) {
@@ -94,7 +67,6 @@ const ago = (iso) => {
   if (s < 86400) return `${Math.round(s / 3600)} h ago`;
   return new Date(iso).toLocaleString();
 };
-
 
 // ------------------------------------------------------------------ state
 const S = { status: {}, user: null, suite: [], settings: {}, servers: [], destinations: [], jobs: [], busy: false, now: null, backupDir: '', suiteServer: {} };
@@ -675,7 +647,6 @@ function moreSheet() {
   grid.addEventListener('click', (e) => { if (e.target.closest('a')) closeDialogs(); });
   return dialog('More', grid, [{ label: 'Close', value: null }]);
 }
-
 
 // ------------------------------------------------------------------ routes
 function route() {

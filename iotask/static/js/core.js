@@ -1,5 +1,8 @@
 import { drawNav, showSignIn } from './shell.js';
 import { onRoute, refresh } from './main.js';
+import { client, h, safeUrl } from '../../api/auth/ui.js';  // the suite's shared helpers (iosuite-shared static/account-panel.js)
+export { h, safeUrl };
+export const api = client(document.baseURI, { signIn: () => showSignIn() });
 
 // The helpers every page uses (api, h, icon, drag to sort), dates and repeat rules, and the app's state.
 
@@ -50,35 +53,6 @@ export const ICONS = {
   sort: 'M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z',
 };
 export const icon = (n, cls = '') => { const s = document.createElement('span'); s.className = 'ic ' + cls; s.innerHTML = `<svg viewBox="0 0 24 24"><path d="${ICONS[n] || ''}"/></svg>`; return s; };
-
-export function h(tag, attrs, ...kids) {
-  const el = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs || {})) {
-    if (v == null || v === false) continue;
-    if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
-    else if (k === 'style' && typeof v === 'object') for (const [sk, sv] of Object.entries(v)) { if (sk.startsWith('--')) el.style.setProperty(sk, sv); else el.style[sk] = sv; }
-    else if (k === 'value') el.value = v;
-    else if (k === 'checked') el.checked = !!v;
-    else el.setAttribute(k, v === true ? '' : v);
-  }
-  const add = (k) => { if (k == null || k === false) return; if (Array.isArray(k)) k.forEach(add); else el.append(k instanceof Node ? k : String(k)); };
-  kids.forEach(add);
-  return el;
-}
-
-export async function api(path, opts = {}) {
-  const o = { credentials: 'same-origin', ...opts, headers: { ...(opts.headers || {}) } };
-  if (o.json !== undefined) { o.body = JSON.stringify(o.json); o.headers['Content-Type'] = 'application/json'; delete o.json; }
-  const r = await fetch(path, o);
-  if (r.status === 401 && !path.startsWith('api/auth') && path !== 'api/status') { showSignIn(); throw new Error('Sign in first'); }
-  if (!r.ok) {
-    let msg = r.statusText;
-    try { const j = await r.json(); msg = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail); } catch { /* not JSON */ }
-    throw new Error(msg || `Error ${r.status}`);
-  }
-  const ct = r.headers.get('content-type') || '';
-  return ct.includes('json') ? r.json() : r.text();
-}
 
 export let toastTimer;
 /** A note at the foot of the page. With undo (the step a change answered with): an Undo button, for ten seconds. */
@@ -173,7 +147,6 @@ export const hue = (s) => { let x = 0; for (const c of s || '') x = (x * 31 + c.
 export const initials = (fn) => { const p = (fn || '?').trim().split(/\s+/); return ((p[0] || '?')[0] + (p.length > 1 ? p[p.length - 1][0] : '')).toUpperCase(); };
 export async function copyText(t) { try { await navigator.clipboard.writeText(t); toast('Copied'); } catch { toast(t); } }
 export const copyRow = (v) => h('div', { class: 'copy' }, h('code', null, v), h('button', { class: 'iconbtn', title: 'Copy', onclick: () => copyText(v) }, icon('copy', 's')));
-export const safeUrl = (u) => /^(https?:\/\/|mailto:)/i.test(u || '');  // a link that is a link (never javascript:)
 export const store = { get: (k) => { try { return localStorage.getItem(`iotask.${k}`); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(`iotask.${k}`, v); } catch { /* private mode */ } } };
 
 // ------------------------------------------------------------------ dates
