@@ -30,7 +30,6 @@ from iosuite_shared.errors import Invalid
 
 PATH = "/mcp"
 SETTING = "mcp_enabled"
-SETTINGS_PAGE = "Settings › Server"
 
 READ_ONLY = ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False)
 # a tool that changes something but can be repeated with the same outcome (an edit, a setting)

@@ -379,10 +379,6 @@ def sign_in_required(app: str) -> bool:
 
 
 # ---- per-user, per-app data (display settings; the ioPix person tag; the ioContact "me" contact)
-def get_data(user_id: int, app: str) -> dict:
-    return {r["name"]: db.json_load(r["value"]) for r in db.q("SELECT name, value FROM ios_user_data WHERE user_id = %s AND app = %s", (user_id, app))}
-
-
 def get_value(user_id: int, app: str, key: str, default=None):
     r = db.one("SELECT value FROM ios_user_data WHERE user_id = %s AND app = %s AND name = %s", (user_id, app, key))
     return db.json_load(r["value"], default) if r else default

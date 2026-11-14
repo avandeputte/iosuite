@@ -273,9 +273,6 @@ def copy_from_digikam(src) -> dict:
     return written
 
 
-BASE_FILE = None  # set from config below
-
-
 def _base_path():
     return config.DATA_DIR / "library-base.sqlite"
 

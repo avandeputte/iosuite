@@ -159,12 +159,6 @@ def mysql_dates_env() -> str:
     return os.environ.get("DIGIKAM_MYSQL_DATES", "").strip().lower()
 
 
-def proxy_env(name: str):
-    """One of iosuite_shared.proxyauth.KEYS (AUTH_PROXY, CF_ACCESS_TEAM...) from config.env, or None when not set there."""
-    v = os.environ.get(name)
-    return v if v not in (None, "") else None
-
-
 # the names of iopix's own database settings in config.env, by appdb.KEYS
 DB_ENV = {"type": "DB_TYPE", "host": "DB_HOST", "port": "DB_PORT", "database": "DB_NAME", "user": "DB_USER", "password": "DB_PASSWORD"}
 

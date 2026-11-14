@@ -769,7 +769,6 @@ const TREE = { W: 150, H: 136, GAP: 20, CGAP: 12, ROW: 206, PAD: 24 };
 const UP_STEP = { parent: 1, step_parent: 1, parent_in_law: 1, grandparent: 2, great_grandparent: 3, aunt_uncle: 1, godparent: 1,
   child: -1, step_child: -1, child_in_law: -1, grandchild: -2, great_grandchild: -3, niece_nephew: -1, godchild: -1 };
 const SPOUSE_TYPES = new Set(['spouse', 'partner', 'ex_spouse']);
-const PC_INV = { parent: 'child', child: 'parent', step_parent: 'step_child', step_child: 'step_parent' };
 
 // The relation a blood path "u generations up, then d down" reads as, for someone of `gender`.
 function kinWord(u, d, gender, flags = {}) {

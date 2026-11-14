@@ -38,8 +38,6 @@ def _str(v, n: int, label: str, required: bool = False) -> str:
 
 # ---------------------------------------------------------------- servers
 
-SERVER_SECRETS = ("password",)
-
 
 def _server_public(r: dict) -> dict:
     return {"id": r["id"], "name": r["name"], "host": r["host"], "port": r["port"], "socket": r["socket"],

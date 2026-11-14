@@ -81,7 +81,6 @@ const NAV = [
 const NAV_GROUPS = { correlations: 'Analysis', sleep: 'Health' };  // the first page of each group after the first
 const NAV_FOOT = [['settings', 'Settings', 'gear', 'slate']];
 const PHONE_BAR = ['dashboard', 'day', 'metrics', 'workouts'];
-const navHue = page => [...NAV, ...NAV_FOOT].find(n => n[0] === page)?.[3] || 'slate';
 const navLink = ([page, label, ic]) => h('a', { href: page === 'dashboard' ? '#/' : `#/${page}`, 'data-page': page }, icon(ic), h('span', { class: 'nl' }, label));
 const pageTitle = (ic, hue, ...kids) => h('h1', { class: 'ptitle', style: { '--hue': `var(--c-${hue})` } }, h('span', { class: 'pic' }, icon(ic)), ...kids);
 

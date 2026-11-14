@@ -33,7 +33,6 @@ from app.data import index
 
 log = logging.getLogger("app.photos.organize")
 TRASHED, VISIBLE = 3, 1
-IMAGE_SIDE_MARKERS = (".xmp",)
 
 
 def _rows(con, ids: list) -> list:
