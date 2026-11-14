@@ -22,7 +22,6 @@
 #                       (default: ask; local with --yes; IOPIX_DB in the environment does the same)
 #   --suite-db HOST:PORT/DB:USER:PASS  the Shared ioSuite database (IOPIX_SUITE_DB does the same)
 #   --public-url URL    the address people reach iopix at    --cookie-domain DOMAIN  the domain the sign-in is shared on
-#   --models LIST       kept for compatibility: "none" means --features none
 #   --captions          shorthand for all features including captions
 #   --no-service        do not install/start the systemd unit (prints the run command)
 #   --no-system-deps    do not touch the package manager (you install python3-venv, ffmpeg, exiftool, libheif)
@@ -38,7 +37,7 @@
 # only ever read unless you edit metadata from the viewer, which backs every file up first.
 set -e
 PREFIX=/opt/iopix; DATA=""; PHOTOS=""; DKDB=""; MYSQL=""; NODK=0; VIEWERDB=""; SUITE=""; PUBURL=""; COOKIE=""; PORT=8600; HOST=0.0.0.0; USER_NAME=iopix
-MODELS=""; FEATURES=""; ADMIN=""; CAPTIONS=0; SERVICE=1; SYSDEPS=1; YES=0
+FEATURES=""; ADMIN=""; CAPTIONS=0; SERVICE=1; SYSDEPS=1; YES=0
 say() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 while [ $# -gt 0 ]; do
@@ -46,7 +45,7 @@ while [ $# -gt 0 ]; do
     --photos) PHOTOS="$2"; shift 2;; --digikam-sqlite) DKDB="$2"; shift 2;; --digikam-db) MYSQL="$2"; shift 2;; --no-digikam) NODK=1; shift;; --db) VIEWERDB="$2"; shift 2;;
     --suite-db) SUITE="$2"; shift 2;; --public-url) PUBURL="$2"; shift 2;; --cookie-domain) COOKIE="$2"; shift 2;;
     --prefix) PREFIX="$2"; shift 2;; --data) DATA="$2"; shift 2;; --port) PORT="$2"; shift 2;; --host) HOST="$2"; shift 2;;
-    --user) USER_NAME="$2"; shift 2;; --models) MODELS="$2"; shift 2;; --features) FEATURES="$2"; shift 2;; --admin) ADMIN="$2"; shift 2;; --captions) CAPTIONS=1; shift;;
+    --user) USER_NAME="$2"; shift 2;; --features) FEATURES="$2"; shift 2;; --admin) ADMIN="$2"; shift 2;; --captions) CAPTIONS=1; shift;;
     --no-service) SERVICE=0; shift;; --no-system-deps) SYSDEPS=0; shift;; --yes) YES=1; shift;;
     -h|--help) sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'; exit 0;;
     *) die "unknown option $1 (try --help)";;
@@ -56,7 +55,6 @@ done
 [ -n "$MYSQL" ] || MYSQL="${IOPIX_DIGIKAM_DB:-}"
 [ -n "$VIEWERDB" ] || VIEWERDB="${IOPIX_DB:-}"
 [ -n "$SUITE" ] || SUITE="${IOPIX_SUITE_DB:-}"
-[ "$VIEWERDB" != sqlite ] || die "iopix's own database is on MySQL/MariaDB only (no SQLite file): --db local, or HOST:PORT/DB:USER:PASS"
 [ -n "$VIEWERDB" ] || [ "$YES" = 0 ] || VIEWERDB=local  # no questions: MariaDB on this machine
 [ -n "$PHOTOS" ] || die "--photos DIR is required"
 [ -d "$PHOTOS" ] || die "photo folder not found: $PHOTOS"
@@ -96,7 +94,6 @@ if [ "$NODK" = 1 ]; then set -- "$@" --no-digikam; elif [ -n "$MYSQL" ]; then ex
 [ -n "$ADMIN" ] && export IOPIX_ADMIN="$ADMIN"
 # iopix's own database: "local" is a word for setup.sh (it installs MariaDB and creates the database); server details carry a password, so they go in the environment
 if [ "$VIEWERDB" = local ]; then set -- "$@" --db local; elif [ -n "$VIEWERDB" ]; then export IOPIX_DB="$VIEWERDB"; fi
-[ "$MODELS" = none ] && set -- "$@" --features none
 [ -n "$FEATURES" ] && set -- "$@" --features "$FEATURES"
 [ "$CAPTIONS" = 1 ] && set -- "$@" --features search,places,objects,ocr,captions
 [ "$SERVICE" = 0 ] && set -- "$@" --no-service

@@ -370,5 +370,6 @@ def undo(entry: dict, require_digikam_closed: bool = True) -> dict:
         con.execute("UPDATE Images SET fileSize = ?, modificationDate = NULL WHERE id = ?", (os.path.getsize(p["path"]), p["id"]))
     lossless.forget_checksum(p["id"])
     thumbs.forget(p["id"])
-    history.record([{"photo_id": p["id"], "action": "restore", "summary": f"Change #{entry['id']} undone: the file is as it was before the repair", "path": p["path"]}])
+    history.record([{"photo_id": p["id"], "action": "restore", "summary": f"Change #{entry['id']} undone: the file is as it was before the repair", "path": p["path"],
+                     "details": {"undid": entry["id"]}}])
     return {"undone": 1, "id": p["id"]}

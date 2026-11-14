@@ -1,4 +1,5 @@
 """Organizing the library: lossless edits, trash, move and rename, delete, folders, upload, import and the share target."""
+import contextvars
 import logging
 import os
 import re
@@ -134,7 +135,7 @@ def _trash_in_background(ids: list) -> dict:
         TRASH_JOBS[job]["result"] = r
         TRASH_JOBS[job]["done"].set()
         events.after_write()  # the photos that could not be moved come back
-    threading.Thread(target=work, name="trash", daemon=True).start()
+    threading.Thread(target=contextvars.copy_context().run, args=(work,), name="trash", daemon=True).start()
     return {"job": job, "queued": ids}
 
 

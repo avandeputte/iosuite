@@ -29,7 +29,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-ocr = ["rapidocr<4", "onnxruntime<2", "numpy<3"]   # text in pictures added in the web app
+ocr = ["rapidocr>=2,<4", "onnxruntime<2", "numpy<3"]   # text in pictures added in the web app
 test = ["pytest<10", "httpx<1", "pyflakes<4"]
 
 [project.urls]

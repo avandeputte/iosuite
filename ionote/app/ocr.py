@@ -41,10 +41,7 @@ def _read(data: bytes) -> str:
     img = Image.open(io.BytesIO(data)).convert("RGB")
     img.thumbnail((2400, 2400))
     res = _engine(np.array(img))
-    txts = getattr(res, "txts", None)
-    if txts is None and isinstance(res, tuple):  # older rapidocr: ([box, text, score], ...), elapsed
-        txts = [r[1] for r in (res[0] or [])]
-    return "\n".join(t for t in (txts or []) if t and t.strip())
+    return "\n".join(t for t in (res.txts or []) if t and t.strip())
 
 
 def _work():

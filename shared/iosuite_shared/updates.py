@@ -58,9 +58,9 @@ class Updater:
     avandeputte/iosuite and main. UPDATE_CHECK=0 in the environment keeps this app from asking GitHub by itself."""
 
     def __init__(self, app: str, version: str, root, repo: str = None, branch: str = None, result_file=None,
-                 env_prefix: str = None, user_agent: str = None):
+                 user_agent: str = None):
         self.app, self.version, self.root = app, version, Path(root)
-        self.prefix = (env_prefix or app).upper()
+        self.prefix = app.upper()
         self.repo = repo or os.environ.get(f"{self.prefix}_REPO") or SUITE_REPO
         self.branch = branch or os.environ.get(f"{self.prefix}_BRANCH") or "main"
         self.result_file = Path(result_file) if result_file else self.root / ".update-result"

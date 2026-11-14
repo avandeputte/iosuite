@@ -31,15 +31,11 @@ ITEMS="app static proxmox pyproject.toml README.md setup.sh run.sh update.sh Doc
 groups() {
   :
 }
-after_install() {
-  :
-}
 # ----
 
 APP="$(pwd)"
 # the suite's repository (followed unless IOCONTACT_REPO says otherwise) and the app's folder in it
 REPO_DEFAULT=avandeputte/iosuite
-SUBDIR="$NAME"
 UP="$(printf '%s' "$NAME" | tr '[:lower:]' '[:upper:]')"
 eval "REPO=\"\${${UP}_REPO:-$REPO_DEFAULT}\""
 eval "BRANCH=\"\${${UP}_BRANCH:-main}\""
@@ -93,7 +89,7 @@ if [ -n "$GITROOT" ]; then
     [ -n "$f" ] && ! git -C "$GITROOT" diff --quiet HEAD FETCH_HEAD -- "$f" && { printf '  locally changed and also changed by the update: %s\n' "$f" >&2; exit 1; }
     :
   done || die "local changes to files the update also changes (git stash them first)"
-  git -C "$GITROOT" show "FETCH_HEAD:$SUBDIR/pyproject.toml" > "$TMP/pyproject.toml" 2>/dev/null || die "the fetched commit has no $SUBDIR/pyproject.toml"
+  git -C "$GITROOT" show "FETCH_HEAD:$NAME/pyproject.toml" > "$TMP/pyproject.toml" 2>/dev/null || die "the fetched commit has no $NAME/pyproject.toml"
   git -C "$GITROOT" show "FETCH_HEAD:shared/pyproject.toml" > "$TMP/shared.toml" 2>/dev/null || die "the fetched commit has no shared/pyproject.toml"
 else
   # the archive is fetched by commit id, so the code and the recorded COMMIT always match
@@ -103,8 +99,8 @@ else
   fi
   fetch "https://github.com/$REPO/archive/$R.tar.gz" "$TMP/src.tgz" || die "download failed"
   tar xzf "$TMP/src.tgz" -C "$TMP"
-  TOP="$(ls -d "$TMP"/*/ | head -1)"; SRC="$TOP$SUBDIR"
-  [ -d "$SRC" ] && [ -f "$TOP/shared/pyproject.toml" ] || die "the downloaded archive has no $SUBDIR/ or no shared/ folder (is $REPO the suite's repository?)"
+  TOP="$(ls -d "$TMP"/*/ | head -1)"; SRC="$TOP$NAME"
+  [ -d "$SRC" ] && [ -f "$TOP/shared/pyproject.toml" ] || die "the downloaded archive has no $NAME/ or no shared/ folder (is $REPO the suite's repository?)"
   # stage everything first; the swap comes after the packages are in. Settings, data and the environment live outside
   # these items and are never touched
   STAGE="$APP/.update-stage"; rm -rf "${STAGE:?}"; mkdir -p "$STAGE"
@@ -118,7 +114,7 @@ else
 fi
 
 say "Refreshing the Python packages (the new version's, before the code moves)"
-G=""; PIPX=""
+G=""
 has() { "$VPY" -c "import $2" 2>/dev/null && G="$G,$1"; :; }
 groups
 G="${G#,}"
@@ -153,8 +149,7 @@ else:
 print("\n".join(d for d in deps if not re.match(r"iosuite[-_]shared\b", d)))
 PYEOF
 pipi() { if command -v uv >/dev/null 2>&1; then uv pip install -q -p "$VPY" "$@"; else "$VPY" -m pip install -q --disable-pip-version-check "$@"; fi; }
-# shellcheck disable=SC2086
-pipi $PIPX -r "$TMP/requirements.txt" || { [ -n "$STAGE" ] && rm -rf "${STAGE:?}"; die "installing the Python packages failed; the installed version is unchanged (code and packages)"; }
+pipi -r "$TMP/requirements.txt" || { [ -n "$STAGE" ] && rm -rf "${STAGE:?}"; die "installing the Python packages failed; the installed version is unchanged (code and packages)"; }
 
 say "Installing the new code"
 if [ -n "$GITROOT" ]; then
@@ -179,9 +174,8 @@ chmod 755 setup.sh update.sh run.sh 2>/dev/null || true
 pipi --no-deps -e "$SHARED" 2>/dev/null || echo "  note: the shared library's package metadata could not be refreshed (pip install -e $SHARED); $LABEL runs regardless"
 pipi --no-deps -e . 2>/dev/null || echo "  note: the package metadata could not be refreshed (pip install -e .); $LABEL runs regardless"
 # the database is brought up to date now when the app has a command line for it (app/cli.py); otherwise the app does it as it starts
-CLI=app.cli
+CLI=app.cli  # named through a variable: ioPix, which has no app/cli.py, checks that every module its scripts run exists
 [ ! -f app/cli.py ] || "$VPY" -m "$CLI" migrate >/dev/null 2>&1 || echo "  note: the database could not be updated now; $LABEL does it when it starts"
-after_install
 
 NEWV="$(sed -n 's/^__version__ = "\([^"]*\)".*/\1/p' "$SHARED/iosuite_shared/__init__.py")"  # the suite's version
 # the outcome goes to the result file now: the service restart below also ends this script when the web app started it

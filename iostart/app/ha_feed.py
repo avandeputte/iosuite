@@ -5,7 +5,7 @@ The thread keeps the connection up (it reconnects with a growing pause), primes 
 connects, and folds each event into app.homeassistant's copy of the states. A change to something the page shows (a
 chosen entity, or one the built-in alerts watch) bumps `version`; the page's
 event stream (GET /api/ha/events) sends the Home card anew when it sees the version move. While the feed is live the
-copy never goes stale, so the REST polling stops; when it is down (Home Assistant restarting, no websockets package),
+copy never goes stale, so the REST polling stops; when it is down (Home Assistant restarting),
 the page falls back to the REST copy, a few seconds old at most.
 """
 import asyncio
@@ -13,16 +13,12 @@ import json
 import logging
 import threading
 import time
+
 from iosuite_shared.errors import Invalid
+from websockets.exceptions import WebSocketException
+from websockets.sync.client import connect as _ws_connect
 
 log = logging.getLogger("app.ha_feed")
-
-try:
-    from websockets.sync.client import connect as _ws_connect
-    from websockets.exceptions import WebSocketException
-except ImportError:  # the package is in pyproject; an install from before it still runs, without the live feed
-    _ws_connect = None
-    WebSocketException = Exception
 
 
 class Feed:
@@ -41,7 +37,7 @@ class Feed:
 
     def ensure(self) -> None:
         """Starts the thread when Home Assistant is set up and it is not running (called from the requests)."""
-        if _ws_connect is None or not self.ha.enabled() or not self.ha.config.HA_FEED:
+        if not self.ha.enabled() or not self.ha.config.HA_FEED:
             return
         with self._lock:
             if self._thread and self._thread.is_alive():

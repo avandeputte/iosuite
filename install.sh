@@ -67,7 +67,6 @@ main() {
   done
   if [ -n "$home" ]; then
     [ ${#rest[@]} -eq 0 ] || die "ioSuite is already on this server (in $base): ${rest[*]} is for a first install. To change an app's settings: --reconfigure APP"
-    "$home/.venv/bin/iosuite-shared" apps --help >/dev/null 2>&1 || die "the apps in $base are older than this installer: update them first (Settings › Global settings › Updates, or $home/update.sh)"
     [ -z "$dbadmin" ] || { manage+=(--db-admin "${dbadmin%%:*}"); export DB_ADMIN_PASSWORD="${dbadmin#*:}"; }
     exec "$home/.venv/bin/iosuite-shared" --config "$home" apps --into "$base" ${manage[@]+"${manage[@]}"}
   fi

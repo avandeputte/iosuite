@@ -93,7 +93,7 @@ def fetch(request: Request, key: str, path: str, params: dict | None = None, raw
         if e.code in (401, 403):
             raise Unavailable(403, f"{name} does not let this account in ({e.code}); open it once and sign in there")
         if e.code == 404:
-            raise Unavailable(404, f"{name} has no {path} (an older version, or the address is not {name}'s)")
+            raise Unavailable(404, f"{name} has no {path} (is the address {name}'s?)")
         raise Unavailable(502, f"{name} answered {e.code}")
     except links.Unreachable as e:
         raise Unavailable(502, f"{name} is not reachable at {e.at or '(no address)'} ({type(e.why or e).__name__})")
@@ -151,9 +151,8 @@ def iopix_preview(request: Request, photo_id: int) -> tuple[bytes, str]:
 # ------------------------------------------------------------------ ioCalendar: the rest of today, else what's next
 
 def _covers(o: dict, day: dt.date) -> bool:
-    """Whether an all-day occurrence (dates, end exclusive) falls on `day`. ioCalendar answers a window with the all-day
-    events of the days around it too (it pads by 14 hours for other time zones), so yesterday's birthday comes back
-    for today's window: this keeps only what is on the day."""
+    """Whether an all-day occurrence (dates, end exclusive) falls on `day`. ioCalendar picks whole days by the dates in
+    the calendar's own zone; the page's day is the viewer's, which may be another: this keeps only what is on it."""
     try:
         s = dt.date.fromisoformat(str(o.get("start"))[:10])
         e = dt.date.fromisoformat(str(o.get("end") or o.get("start"))[:10])

@@ -368,6 +368,7 @@ def move_photos(ids: list, album_id, require_digikam_closed: bool = True, new_na
     moved, failed = [], []
     for r in rows:
         folder = folders[int(album_id)] if album_id is not None else folders[r["album"]]
+        moves = []  # (from, to) of this photo's files so far: put back if a later one fails
         try:
             name = r["name"]
             if r["id"] in names:
@@ -383,7 +384,7 @@ def move_photos(ids: list, album_id, require_digikam_closed: bool = True, new_na
             dst = folder["dir"] / final
             sides = sidecars_of(r["path"])
             shutil.move(r["path"], dst)
-            moves = [(r["path"], str(dst))]
+            moves.append((r["path"], str(dst)))
             for s in sides:
                 tail = s[len(r["path"]):] if s.startswith(r["path"]) else None
                 sdst = str(dst) + tail if tail else str(dst.with_suffix(".xmp"))
@@ -393,6 +394,8 @@ def move_photos(ids: list, album_id, require_digikam_closed: bool = True, new_na
                 edits.move_backups(r["path"], str(dst))
             moved.append({**r, "dst": str(dst), "final": final, "to_album": folder["id"], "to_rel": folder["rel"], "moves": moves})
         except (OSError, SyncError) as e:
+            if moves:  # half moved (a sidecar could not follow): the file and what went with it go back
+                _move_back([(dst, src) for src, dst in reversed(moves)], None)
             failed.append({"id": r["id"], "error": str(e)})
     if moved:
         try:

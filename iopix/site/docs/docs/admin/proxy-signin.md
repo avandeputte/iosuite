@@ -69,6 +69,6 @@ The header is believed **only from the proxy's address**. The proxy must replace
     http-request set-header Remote-User %[var(req.auth_response_header.remote_user)]
     ```
 
-These settings live in the Shared ioSuite database and apply to every app in the suite; change them in **Settings › Security › Sign-in at the proxy**. A `config.env` value only fills an empty setting on the first start; its line is then commented out and ignored.
+These settings live in the Shared ioSuite database and apply to every app in the suite; change them in **Settings › Security › Sign-in at the proxy**.
 
 Keep **Sign-in required** (Settings › Global settings › Apps) on, as it is by default, so nobody gets in without the proxy's sign-in.

@@ -94,13 +94,13 @@ def test_face_changes_can_be_undone(client, lib, op):
         time.sleep(0.1)
 
 
-def test_older_face_entries_without_undo_data_are_undone_from_their_details(client, lib):
+def test_each_face_change_records_the_changes_that_take_it_back(client, lib):
     from app.faces import facemgr
     assert facemgr.inverse_ops({"op": "remove", "was": "confirmed", "from_tag": 26, "rect": [1, 2, 3, 4]}) == [{"op": "add", "rect": [1, 2, 3, 4], "tag": 26}]
     assert facemgr.inverse_ops({"op": "name", "tag": 194, "was": "confirmed", "from_tag": 89, "rect": [1, 2, 3, 4]}) == [{"op": "name", "rect": [1, 2, 3, 4], "tag": 89}]
     assert facemgr.inverse_ops({"op": "add", "tag": 26, "rect": [1, 2, 3, 4]}) == [{"op": "remove", "rect": [1, 2, 3, 4]}]
     assert facemgr.inverse_ops({"op": "confirm", "was": "suggested", "from_tag": 7, "rect": [1, 2, 3, 4]})[-1] == {"op": "suggest", "rect": [1, 2, 3, 4], "tag": 7}
-    assert facemgr.inverse_ops({"op": "move", "rect": [1, 2, 3, 4]}) == [], "an old move without its new rectangle cannot be undone"
+    assert facemgr.inverse_ops({"op": "move", "rect": [1, 2, 3, 4]}) == [], "a move without its new rectangle cannot be undone"
 
 
 def test_backed_up_image_file_can_be_restored_from_any_change(client, lib):

@@ -14,6 +14,7 @@ tags may be created under People; deleting a person stays with digiKam, which
 turns their faces back into unknown faces, and digiKam's internal and special
 face tags are never touched.
 """
+import contextvars
 import os
 import shutil
 import threading
@@ -441,4 +442,4 @@ def start_worker():
             progress.finish()
             _worker_lock.release()
 
-    threading.Thread(target=run, name="tag-sidecars", daemon=True).start()
+    threading.Thread(target=contextvars.copy_context().run, args=(run,), name="tag-sidecars", daemon=True).start()

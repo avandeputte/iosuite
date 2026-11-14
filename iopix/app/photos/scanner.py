@@ -615,16 +615,20 @@ def _snapshot():
         version = hash_version(con)
         albums = {(r[1], r[2]): r[0] for r in con.execute("SELECT id, albumRoot, relativePath FROM Albums")}
         known = {}
-        for iid, album, name, mdate, size, root, rel in con.execute(
-                "SELECT i.id, i.album, i.name, i.modificationDate, i.fileSize, a.albumRoot, a.relativePath FROM Images i JOIN Albums a ON a.id = i.album WHERE i.status = 1"):
-            known[(root, rel, name)] = (iid, mdate, size, album)
+        for iid, album, name, mdate, size, root, rel, uh in con.execute(
+                "SELECT i.id, i.album, i.name, i.modificationDate, i.fileSize, a.albumRoot, a.relativePath, i.uniqueHash FROM Images i "
+                "JOIN Albums a ON a.id = i.album WHERE i.status = 1"):
+            known[(root, rel, name)] = (iid, mdate, size, album, uh)
     return roots, version, albums, known
 
 
 def _discover(roots: dict, known: dict):
-    """Walk every album root and compare it with the snapshot. Returns (new files, modified, vanished):
-    new files as (root id, folder, name, path), modified as (id, path), vanished as (id, album, name, path)."""
-    new_files, modified, vanished = [], [], []
+    """Walk every album root and compare it with the snapshot. Returns (new files, modified, vanished, incomplete):
+    new files as (root id, folder, name, path), modified as (id, path), vanished as (id, album, name, path), incomplete
+    as ids. A row with no stamp (modificationDate NULL) is one the viewer wrote: registered and never completed (no
+    hash either: incomplete), or a file it changed itself, a rotate, crop, repair or restore (its rows are read again,
+    as a modified file's)."""
+    new_files, modified, vanished, incomplete = [], [], [], []
     for root_id, root_dir in roots.items():
         rd = Path(root_dir)
         mine = {k: v for k, v in known.items() if k[0] == root_id}
@@ -648,13 +652,17 @@ def _discover(roots: dict, known: dict):
                 if k not in mine:
                     new_files.append((root_id, rel, name, path))
                     continue
-                iid, mdate, size, _album = mine[k]
+                iid, mdate, size, _album, uh = mine[k]
                 if mdate is None:
-                    continue  # registered by the viewer: completed below, not "modified"
+                    if uh:
+                        modified.append((iid, path))
+                    else:
+                        incomplete.append(iid)
+                    continue
                 st = dkdb.file_stamp(path)
                 if st and (not _same_time(st[0], mdate) or st[1] != size):
                     modified.append((iid, path))
-    return new_files, modified, vanished
+    return new_files, modified, vanished, incomplete
 
 
 def _add_folders(new_files: list, albums: dict, require_digikam_closed: bool) -> dict:
@@ -735,7 +743,7 @@ def scan(require_digikam_closed: bool = True) -> dict:
             progress["skipped"].append("digiKam is running; it scans the collection itself")
             return progress
         roots, version, albums, known = _snapshot()
-        new_files, modified, vanished = _discover(roots, known)
+        new_files, modified, vanished, incomplete = _discover(roots, known)
         made = _add_folders(new_files, albums, require_digikam_closed)
         with dkdb.reader() as con:
             progress["folders"] = con.execute("SELECT count(*) FROM Albums").fetchone()[0] - (len(albums) - len(made))
@@ -746,6 +754,8 @@ def scan(require_digikam_closed: bool = True) -> dict:
             progress["modified"] = len(modified)
         if vanished:
             progress["removed"] = len(_remove_vanished(vanished, require_digikam_closed))
+        if incomplete:  # registered by the viewer, and the completion then failed (a file that could not be read)
+            progress["added"] += complete(incomplete, require_digikam_closed)["completed"]
         if added_ids or modified or vanished or made:
             log.info("scanner: %d added, %d modified, %d removed, %d folders", len(added_ids), len(modified), progress["removed"], progress["folders"])
     except Exception as e:

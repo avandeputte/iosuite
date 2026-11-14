@@ -164,6 +164,10 @@ def test_heic_crops_by_re_encoding(client, lib):
         # rotation of a HEIC is by the flag, the file untouched
         r = client.post("/api/photos/transform", json={"ids": [pid], "op": "left"})
         assert r.json()["done"][0]["orientation"] == 8 and heic.read_bytes() == original
+        # turned by its flag only: a crop is refused (it would cut the unturned picture and lose the turn)
+        r = client.post("/api/photos/crop", json={"id": pid, "rect": [10, 10, 200, 150]})
+        assert r.status_code in (400, 409) and "turned" in r.text and heic.read_bytes() == original
+        assert _info(lib["db"], pid)[0][2] == 8
     finally:
         con = sqlite3.connect(lib["db"])
         con.execute("DELETE FROM ImageInformation WHERE imageid = ?", (pid,)); con.execute("DELETE FROM Images WHERE id = ?", (pid,)); con.commit(); con.close()

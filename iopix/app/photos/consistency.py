@@ -11,6 +11,7 @@ Syncing writes with the same code paths as editing: digiKam's writers for the
 sidecar / file (edits.write_args), and dbsync for the database (digiKam closed,
 backup first).
 """
+import contextvars
 import json
 import logging
 import os
@@ -308,7 +309,7 @@ def scan(photos: list, rescan_all: bool = True):
                 log.info("consistency: done, %d of %d photos checked, %d disagree%s", progress["done"] - progress.get("failed", 0),
                          progress["total"], progress["mismatched"], f", {progress['failed']} failed ({progress['error']})" if progress.get("failed") else "")
 
-    threading.Thread(target=work, name="consistency", daemon=True).start()
+    threading.Thread(target=contextvars.copy_context().run, args=(work,), name="consistency", daemon=True).start()
 
 
 def summary() -> dict:
@@ -320,13 +321,10 @@ def summary() -> dict:
         scanned, mism, no_side, last = con.execute(
             "SELECT count(*), sum(mismatch > 0), sum(has_sidecar = 0), max(checked_at) FROM pix_metadata_check").fetchone()
         by_field = {f: 0 for f in FIELDS}
-        mism = 0  # counted from the stored records: results from before a field was dropped may name it
         for (data,) in con.execute("SELECT data FROM pix_metadata_check WHERE mismatch > 0"):
-            fs = [f for f in json.loads(data)["mismatch"] if f in by_field]
-            for f in fs:
+            for f in json.loads(data)["mismatch"]:
                 by_field[f] += 1
-            mism += bool(fs)
-        return {"scanned": int(scanned or 0), "mismatched": mism, "no_sidecar": int(no_side or 0), "by_field": by_field, "scanned_at": int(last) if last else None}
+        return {"scanned": int(scanned or 0), "mismatched": int(mism or 0), "no_sidecar": int(no_side or 0), "by_field": by_field, "scanned_at": int(last) if last else None}
     except Exception:
         return empty
     finally:
@@ -344,13 +342,7 @@ def report(field: str = None, offset: int = 0, limit: int = 100) -> dict:
         rows = con.execute("SELECT data FROM pix_metadata_check WHERE mismatch > 0 ORDER BY photo_id DESC").fetchall()
     finally:
         con.close()
-    recs = []
-    for (data,) in rows:
-        r = json.loads(data)
-        r["mismatch"] = [f for f in r["mismatch"] if f in FIELDS]
-        if r["mismatch"]:
-            r["fields"] = {f: v for f, v in r["fields"].items() if f in FIELDS}
-            recs.append(r)
+    recs = [json.loads(data) for (data,) in rows]
     if field:
         recs = [r for r in recs if field in r["mismatch"]]
     return {"total": len(recs), "offset": offset, "items": recs[offset:offset + limit]}
@@ -385,7 +377,7 @@ def recheck(photo_ids: list):
                 c.executemany("INSERT OR REPLACE INTO pix_metadata_check VALUES (?,?,?,?,?,?,?)", rows)
         except Exception:
             log.warning("consistency: re-checking %d edited photos failed", len(photos), exc_info=True)
-    threading.Thread(target=work, name="consistency-recheck", daemon=True).start()
+    threading.Thread(target=contextvars.copy_context().run, args=(work,), name="consistency-recheck", daemon=True).start()
 
 
 def forget(photo_ids: list):

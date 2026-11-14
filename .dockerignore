@@ -2,7 +2,6 @@
 .git
 .github
 docs
-tools
 **/.venv
 **/__pycache__
 **/*.pyc
