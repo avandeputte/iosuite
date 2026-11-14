@@ -147,9 +147,6 @@ def migrate() -> None:
         if not cur.fetchone():
             cur.execute("INSERT INTO cal_calendars (owner_id, slug, name, description, color) VALUES "
                         "(NULL, 'family', 'Family', 'Shared with everyone in the family', '#8e44d6')")
-        # iOS Reminders' empty task lists, made before MKCALENDAR refused them (0.32.2): gone, unless one holds events
-        cur.execute("DELETE FROM cal_calendars WHERE owner_id IS NOT NULL AND name LIKE 'DEFAULT_TASK_CALENDAR%' "
-                    "AND NOT EXISTS (SELECT 1 FROM cal_events e WHERE e.calendar_id = cal_calendars.id)")
 
 
 def reset_all() -> None:

@@ -421,7 +421,7 @@ _CONSTRAINT = re.compile(r"^(PRIMARY\s+KEY|FOREIGN\s+KEY|CONSTRAINT\b|CHECK\s*\(
 
 def add_missing_columns(con: VConn) -> list:
     """Every column TABLES declares that a table lacks, added with its declared definition; returns what was
-    added (a column added to the schema after a database was created, v1.63.0's session_gen for one)."""
+    added."""
     added = []
     for name, (cols, ddl) in TABLES.items():
         have = set(columns(con, name))
@@ -437,23 +437,6 @@ def add_missing_columns(con: VConn) -> list:
     if added:
         log.info("viewer database: columns added: %s", ", ".join(added))
     return added
-
-
-def favorites_per_user(con: VConn):
-    """A database from before 1.151: favorites were one list (a row per photo). The rows stay, as user 0's, and the
-    key becomes (user, photo) so every account can keep its own (state.take_favorites gives that list to one)."""
-    if not con.mysql:
-        return
-    key = "SELECT column_name FROM information_schema.key_column_usage WHERE table_schema = DATABASE() AND table_name = 'pix_favorite_photos' AND constraint_name = 'PRIMARY'"
-    if [r[0] for r in con.execute(key)] != ["photo_id"]:
-        return
-    try:
-        con.execute("ALTER TABLE pix_favorite_photos DROP PRIMARY KEY, ADD PRIMARY KEY (user_id, photo_id), ADD INDEX idx_pix_favorite_photos_photo (photo_id)")
-    except Exception:  # another process did it a moment ago
-        if [r[0] for r in con.execute(key)] == ["photo_id"]:
-            raise
-        return
-    log.info("viewer database: favorites are kept per account from now on")
 
 
 # ---- the suite's naming convention: every table pix_<name>, *_at timestamps, name/value settings, idx_/uq_ index names
@@ -515,7 +498,6 @@ def ensure_schema(con: VConn = None):
         for name, (cols, ddl) in TABLES.items():
             con.execute(ddl)
         add_missing_columns(con)  # a column added to TABLES later reaches databases made before it
-        favorites_per_user(con)
         schema.ensure_version_table(con.raw.cursor(), PREFIX)
         schema.record_version(con.raw.cursor(), PREFIX, SCHEMA_VERSION)
         con.commit()

@@ -190,19 +190,3 @@ def test_webdav_file_is_each_ones_own(client):
     up = body.replace("Everyone", "Renamed")
     assert anon.put("/dav/bookmarks/bookmarks.html", headers=_basic("bob", pw), content=up.encode()).status_code in (200, 201, 204)
     assert _names(client.get("/api/bookmarks/tree").json()["items"]) == ["Private/", "Everyone/"]
-
-
-def test_bookmarks_of_another_admin_go_back_to_alex(client):
-    """Once (0.49.2): what 0.49.0 gave an admin other than alex is alex's again; other people's own stay theirs."""
-    client.post("/api/bookmarks/groups", json={"name": "Alex's"})
-    _as("root", "admin", client)
-    bob = _as("bob", "member", client)
-    bob.post("/api/bookmarks/groups", json={"name": "Bob's"})
-    from iosuite_shared import users
-    root, alex = users.find("root")["id"], users.find("alex")["id"]
-    db.ex("UPDATE prt_bookmark_nodes SET owner = %s WHERE name = %s", (root, "Alex's"))
-    assert _names(client.get("/api/bookmarks/tree").json()["items"]) == []
-    bookmarks.give_back_to_alex()
-    assert _names(client.get("/api/bookmarks/tree").json()["items"]) == ["Alex's/"]
-    assert _names(bob.get("/api/bookmarks/tree").json()["items"]) == ["Bob's/"]
-    assert db.one("SELECT owner FROM prt_bookmark_nodes WHERE name = %s", ("Alex's",))["owner"] == alex

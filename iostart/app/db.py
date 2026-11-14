@@ -78,15 +78,6 @@ SCHEMA = [
     )""",
 ]
 
-# columns a table got after it was first made: added to a database made before them, like any new table
-COLUMNS = {
-    "prt_bookmark_nodes": [("owner", "INT NULL AFTER created_rev"), ("shared", "TINYINT(1) NOT NULL DEFAULT 0 AFTER owner")],
-}
-INDEXES = {
-    "prt_bookmark_nodes": [("idx_prt_bookmark_nodes_owner", "(owner, shared)")],
-}
-
-
 def connect(database: str | None = None):
     return pymysql.connect(host=config.DB_HOST, port=config.DB_PORT, user=config.DB_USER, password=config.DB_PASSWORD,
                            database=database if database is not None else config.DB_NAME, charset="utf8mb4",
@@ -134,16 +125,6 @@ def migrate() -> None:
     with tx() as con, con.cursor() as cur:
         for stmt in SCHEMA:
             cur.execute(stmt + " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci")
-        for table, cols in COLUMNS.items():
-            have = schema.columns(cur, table)
-            for name, definition in cols:
-                if name not in have:
-                    cur.execute(f"ALTER TABLE `{table}` ADD COLUMN `{name}` {definition}")
-        for table, idx in INDEXES.items():
-            have = schema.indexes(cur, table)
-            for name, cols in idx:
-                if name not in have:
-                    cur.execute(f"ALTER TABLE `{table}` ADD KEY `{name}` {cols}")
         schema.ensure_version_table(cur, PREFIX)
         schema.record_version(cur, PREFIX, SCHEMA_VERSION)
 

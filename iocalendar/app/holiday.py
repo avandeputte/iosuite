@@ -105,22 +105,6 @@ def country_info(code: str) -> dict:
 OFF = ("OFF", "NONE", "0", "NO")
 
 
-def _carry_over() -> None:
-    """The one-country settings (holidays_country/region/language) become the first entry of the list, and the old
-    Holidays calendar becomes that country's."""
-    old = db.get_setting("holidays_country")
-    if old is None:
-        return
-    c = old.strip().upper()
-    items = [{"country": c, "region": db.get_setting("holidays_region") or None, "language": db.get_setting("holidays_language") or None}] if c else []
-    db.set_setting("holidays_countries", json.dumps(items))
-    for k in ("holidays_country", "holidays_region", "holidays_language"):
-        db.set_setting(k, None)
-    cal = db.one("SELECT id FROM cal_calendars WHERE kind = 'holidays' AND owner_id IS NULL AND slug = 'holidays'")
-    if cal and c:
-        db.ex("UPDATE cal_calendars SET slug = %s WHERE id = %s", (_slug(c), cal["id"]))
-
-
 def _from_env() -> tuple[list[dict], bool]:
     """HOLIDAYS_COUNTRY (one code or several, comma-separated; HOLIDAYS_REGION and HOLIDAYS_LANGUAGE go with the first),
     else the country of the family's time zone, else the United States."""
@@ -149,7 +133,6 @@ def _clean(items) -> list[dict]:
 
 def settings() -> dict:
     """{items: [{country, region, language}], guessed}: one Holidays calendar per item; no items, none."""
-    _carry_over()
     raw = db.get_setting("holidays_countries")
     guessed = False
     if raw is None:  # never chosen: the environment, else the time zone's country
