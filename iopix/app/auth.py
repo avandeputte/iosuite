@@ -10,7 +10,6 @@ from iosuite_shared import users as shared
 from iosuite_shared.updates import Updater
 
 from app import __version__, config
-from iosuite_shared.errors import Invalid
 
 APP = config.APP
 
@@ -55,17 +54,6 @@ def set_person(user_id: int, tag_id):
     """Link the account to a digiKam person tag (None unlinks). The caller checks the tag is a person."""
     shared.set_value(user_id, APP, "person", int(tag_id) if tag_id else None)
     shared.invalidate()
-
-
-def _on_update(user_id: int, body: dict):
-    """A change to an account may carry {person}: the account's face badge."""
-    if "person" in body:
-        if not person_tag(body["person"]):
-            raise Invalid("That tag is not a person")
-        set_person(user_id, body["person"])
-
-
-auth.on_update = _on_update
 
 
 def _person_data(user_id: int, remove: bool) -> list:

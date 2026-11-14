@@ -240,8 +240,9 @@ def get_row(cid: int) -> dict | None:
     return db.one("SELECT * FROM con_contacts WHERE id = %s", (cid,))
 
 
-def by_href(book_id: int, href: str) -> dict | None:
-    return db.one("SELECT * FROM con_contacts WHERE address_book_id = %s AND href = %s", (book_id, href))
+def by_href(book_id: int, href: str, lock: bool = False) -> dict | None:
+    """lock: held until the open transaction ends (a PUT with If-Match)."""
+    return db.one("SELECT * FROM con_contacts WHERE address_book_id = %s AND href = %s" + (" FOR UPDATE" if lock else ""), (book_id, href))
 
 
 def by_uid(book_id: int, uid: str) -> dict | None:

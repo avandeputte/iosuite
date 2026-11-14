@@ -39,12 +39,6 @@ def enabled() -> bool:
     return bool(settings()["url"])
 
 
-def public_settings() -> dict:
-    s = settings()
-    return {"url": s["url"], "enabled": bool(s["url"]), "matched": len(_state["people"] or {}), "contacts": _state["contacts"],
-            "error": _state["error"], "fetched": int(_state["at"]) or None}
-
-
 def _get(path: str, timeout: float = 15):
     if not settings()["url"]:
         raise RuntimeError("ioContact is not part of the suite (it has not started on this Shared ioSuite database)")

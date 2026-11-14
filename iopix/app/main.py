@@ -14,7 +14,7 @@ from contextlib import asynccontextmanager
 from fastapi import Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi import HTTPException
-from iosuite_shared import mcp as shared_mcp
+from iosuite_shared import mcp as shared_mcp, pages
 from iosuite_shared.fastapi import public_user
 from iosuite_shared.proxyauth import peer_of
 from iosuite_shared.updates import setup_log
@@ -29,7 +29,6 @@ from app.digikam import dkdb
 from app.geo import maps, places
 from app.ai.semantic import enabled as semantic_enabled, semantic
 from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
 from app.routes import auth as auth_routes, backup, browse, images, albums, editing, geo, tools, review, organize, faces, settings
 from app.runtime import state, kick, refresh, auto, watch, resolve, prewarmer, models_arrived, APP_NAME_DEFAULT, app_name, app_stamp, public_version
 from app import __version__ as APP_VERSION
@@ -90,9 +89,10 @@ def _open_to_visitors(request: Request) -> bool:
     return False
 
 
-def mcp_enabled() -> bool:
-    """Settings › Server › MCP server: off unless an admin turns it on (or MCP=1 in the environment)."""
-    return shared_mcp.enabled(appstate.get_setting, config.MCP_FORCED)
+# Settings › Server › MCP server: off until an admin turns it on (or MCP=1 in the environment); the MCP box of the panel
+mcp_switch = shared_mcp.Switch(appstate.get_setting, appstate.set_setting, config.MCP_FORCED,
+                               "Lets an AI assistant search, look at and organize your photos, as you.")
+mcp_enabled = mcp_switch.enabled
 
 
 def _mcp_user(user):
@@ -176,7 +176,7 @@ async def _without_database(request: Request, call_next):
         except HTTPException as e:
             return JSONResponse({"detail": e.detail}, status_code=e.status_code)
         return JSONResponse({"detail": "Not found"}, status_code=404)
-    if path in OPEN_PATHS or path.startswith("/static/") or path.endswith((".png", ".svg", ".ico")):  # the shell and its files, not the sign-in API
+    if path in OPEN_PATHS or path.startswith("/static/"):  # the shell and its files, not the sign-in API
         return await call_next(request)
     return JSONResponse({"detail": f"{APP_NAME_DEFAULT} has no database yet ({appdb.error}); open the viewer to set one up", "needsDatabase": True}, status_code=503)
 
@@ -243,19 +243,7 @@ app.include_router(editing.router)
 app.include_router(settings.router)
 app.include_router(tools.router)
 app.include_router(auth.status_router(updater, extra=_status_extra))  # /api/status: public, the same shape in every app
-def _server_info() -> dict:
-    """What Settings › Server shows beside the updater's own fields: the MCP box."""
-    return {"mcpEnabled": mcp_enabled(), "mcpLocked": config.MCP_FORCED,
-            "mcpAbout": "Lets an AI assistant search, look at and organize your photos, as you."}
-
-
-def _server_apply(body: dict) -> None:
-    """The MCP switch, sent to POST /api/server as {mcpEnabled: bool}."""
-    if "mcpEnabled" in body:
-        shared_mcp.set_enabled(appstate.set_setting, bool(body["mcpEnabled"]), config.MCP_FORCED)
-
-
-app.include_router(auth.server_router(updater, log_file=config.LOG_FILE, info=_server_info, apply=_server_apply))  # /api/server, /api/log: admins
+app.include_router(auth.server_router(updater, log_file=config.LOG_FILE, info=mcp_switch.info, apply=mcp_switch.apply))  # /api/server, /api/log: admins
 app.include_router(auth_routes.router)
 app.include_router(auth.admin_router())  # /api/suite-admin (+ ui.js, the Settings › Security and Global settings panel): the whole suite (suite admins)
 app.include_router(geo.router)
@@ -283,4 +271,4 @@ def service_worker():
     return FileResponse(config.STATIC_DIR / "sw.js", media_type="text/javascript")
 
 
-app.mount("/static", StaticFiles(directory=config.STATIC_DIR), name="static")
+app.mount("/static", pages.Static(directory=config.STATIC_DIR), name="static")  # modules marked no-cache

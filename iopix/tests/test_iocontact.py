@@ -94,7 +94,7 @@ def test_settings_fetch_birthdays_and_ages(client, lib, fake_contacts):
     today = datetime.date.today()
     _Fake.contacts = [_c(7, "someone else", {"year": 1950, "month": today.month, "day": today.day}, pid=tag)]
     url = f"http://127.0.0.1:{fake_contacts.server_port}"
-    assert iocontact.public_settings()["enabled"] is False
+    assert not iocontact.settings()["url"]
     suite.register("iocontact", name="ioContact", url=url, version="1")
     try:
         _Fake.refuse = True  # every app password refused: nothing to show, no error
@@ -102,8 +102,7 @@ def test_settings_fetch_birthdays_and_ages(client, lib, fake_contacts):
         assert client.get("/api/people/birthdays").json()["upcoming"] == []
         _Fake.refuse = False
         assert iocontact.refresh() == {"ok": True, "contacts": 1, "matched": 1}
-        s = iocontact.public_settings()
-        assert s["url"] == url and s["enabled"] and "password" not in str(s) and s["matched"] == 1
+        assert iocontact.settings()["url"] == url and len(iocontact.people()) == 1
         up = client.get("/api/people/birthdays").json()["upcoming"]
         assert up == [{"tag": tag, "month": today.month, "day": today.day, "year": 1950, "turns": today.year - 1950, "in": 0,
                        "date": today.isoformat(), "url": f"{url}/#/c/7"}]
@@ -114,7 +113,7 @@ def test_settings_fetch_birthdays_and_ages(client, lib, fake_contacts):
         # ioContact down: the last good list stays in use, and the error is kept (the server log has it too)
         fake_contacts.shutdown(); fake_contacts.server_close()
         assert not iocontact.refresh()["ok"]
-        assert iocontact.public_settings()["error"]
+        assert iocontact._state["error"]
         assert client.get("/api/people/birthdays").json()["upcoming"][0]["tag"] == tag
     finally:
         suite.forget("iocontact")

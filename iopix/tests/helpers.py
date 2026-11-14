@@ -3,6 +3,7 @@ library probes several modules use (a JPEG with a face, a dated copy, forgetting
 
 IOPIX_TEST_STRICT=1 turns the skips for a missing exiftool, jpegtran, ffmpeg or Playwright into
 failures, for a machine that is supposed to have them all (CI with the tools installed)."""
+from iosuite_shared import users as shared_users
 import importlib.util
 import os
 import shutil
@@ -46,10 +47,10 @@ def clear_accounts(db_path=None):
     authdb.ex("DELETE FROM ios_apps")
     from app.auth import auth
     auth._registered = False  # the next request registers iopix in the list of apps again
-    users.invalidate()  # the accounts cache must not outlive the rows
+    shared_users.invalidate()  # the accounts cache must not outlive the rows
     if db_path is not None:  # another process (the browser tests' server) keeps its own cache: let it expire
         import time
-        time.sleep(users.CACHE_S + 0.2)
+        time.sleep(shared_users.CACHE_S + 0.2)
 
 
 def make_admin(target, name: str = "alex", password: str = "correct horse"):

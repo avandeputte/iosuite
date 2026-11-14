@@ -227,7 +227,6 @@ password is used once and not written anywhere.
 | `HA_FEED` | `0` turns off the websocket to Home Assistant (the page then polls every few seconds) |
 | `SITE_ICONS` | `0`: the server does not fetch the bookmarked sites' icons (links show their badge, or the icon you gave them) |
 | `ADMIN_USER`, `ADMIN_PASSWORD` | the first admin, made on the first start when there are no accounts |
-| `AUTH_PROXY`, `AUTH_PROXY_HEADER`, `AUTH_PROXY_TRUSTED`, `CF_ACCESS_TEAM`, `CF_ACCESS_AUD` | sign-in at a reverse proxy, as in the other io apps (Cloudflare Access, Authelia, Authentik, oauth2-proxy…) |
 | `UPDATE_CHECK` | `0` turns the daily version check off for good |
 | `IOSTART_REPO`, `IOSTART_BRANCH` | what the version check and `update.sh` follow (`avandeputte/iosuite`, `main`) |
 | `DATA_DIR` | where the app writes on its own: the log and the update result (`data/` in the app folder) |

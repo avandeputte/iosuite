@@ -228,52 +228,40 @@ def _row_class(keys: tuple):
 
 
 class _VCursor(Cursor):
-    def __init__(self, cur, mysql: bool):
-        super().__init__(cur, mysql)
+    def __init__(self, cur):
+        super().__init__(cur, True)
         desc = getattr(cur, "description", None)
-        self._cls = _row_class(tuple(d[0] for d in desc)) if mysql and desc else tuple
+        self._cls = _row_class(tuple(d[0] for d in desc)) if desc else tuple
 
     def _fix(self, row):
-        if row is None or not self._mysql:
-            return row
-        return self._cls(norm_plain(v) for v in row)
+        return None if row is None else self._cls(norm_plain(v) for v in row)
 
 
 class VConn(Conn):
-    """The dialect bridge for the viewer's own SQL (written for SQLite). `mysql` is False only for the
-    read-only import of a viewer.db from before v1.113."""
+    """The dialect bridge for the viewer's own SQL, written in the SQLite dialect it grew up in, on MariaDB/MySQL."""
 
     def _sql(self, sql: str) -> str:
-        if not self.mysql:
-            return sql
         return super()._sql(sql).replace(" COLLATE NOCASE", "")
 
     def _params(self, params):  # text stamps stay text: no datetime coercion here
         return tuple(params)
 
     def execute(self, sql: str, params=()):
-        if self.mysql:
-            cur = self.raw.cursor()
-            cur.execute(self._sql(sql), self._params(params))
-            return _VCursor(cur, True)
-        return _VCursor(self.raw.execute(sql, params), False)
+        cur = self.raw.cursor()
+        cur.execute(self._sql(sql), self._params(params))
+        return _VCursor(cur)
 
     def executemany(self, sql: str, rows):
-        if self.mysql:
-            cur = self.raw.cursor()
-            rows = [self._params(r) for r in rows]
-            if rows:
-                cur.executemany(self._sql(sql), rows)
-            return _VCursor(cur, True)
-        return _VCursor(self.raw.executemany(sql, rows), False)
+        cur = self.raw.cursor()
+        rows = [self._params(r) for r in rows]
+        if rows:
+            cur.executemany(self._sql(sql), rows)
+        return _VCursor(cur)
 
     def executescript(self, script: str):
-        if self.mysql:
-            for stmt in script.split(";"):
-                if stmt.strip():
-                    self.execute(stmt)
-        else:
-            self.raw.executescript(script)
+        for stmt in script.split(";"):
+            if stmt.strip():
+                self.execute(stmt)
 
 
 def _mysql_raw(c: dict):
@@ -385,10 +373,8 @@ def writer(timeout: float = 30):
 
 def columns(con: VConn, table: str) -> list:
     """The table's column names in order; empty for a table that does not exist (a fresh, empty database)."""
-    if con.mysql:
-        return [r[0] for r in con.execute("SELECT column_name FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ? "
-                                          "ORDER BY ordinal_position", (table,))]
-    return [r[1] for r in con.execute(f"PRAGMA table_info({table})")]
+    return [r[0] for r in con.execute("SELECT column_name FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ? "
+                                      "ORDER BY ordinal_position", (table,))]
 
 
 def declared_columns(create_sql: str) -> dict:
@@ -446,9 +432,7 @@ SCHEMA_VERSION = 1  # 1: the suite naming convention
 
 def table_names(con: VConn) -> set:
     """Every table in the viewer database."""
-    if con.mysql:
-        return {r[0] for r in con.execute("SHOW TABLES")}
-    return {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    return {r[0] for r in con.execute("SHOW TABLES")}
 
 
 def dump_tool() -> str:

@@ -20,6 +20,9 @@ import json
 import re
 import threading
 import time
+from contextlib import contextmanager
+
+import pymysql
 
 from iosuite_shared import db
 from iosuite_shared.passwords import burn, check_password, hash_password, needs_rehash
@@ -148,82 +151,95 @@ def accounts(app: str | None = None) -> list:
     return out
 
 
+@contextmanager
+def _atomic():
+    """One transaction for a change made in several statements (its checks included), and a name or email address that
+    another request takes at the same moment answered as taken rather than with a 500."""
+    try:
+        with db.tx():
+            yield
+    except pymysql.err.IntegrityError as e:
+        raise Invalid("Another account already has that email address" if "email" in str(e) else "That user name is taken") from e
+
+
 def create(name: str, password: str, role: str | None = None, app: str | None = None, email: str = "", display_name: str = "",
            suite_admin: bool = False) -> dict:
     """A new account; with app and role, that role there too. ValueError with the message to show."""
-    name, email = clean_name(name), clean_email(email)
-    if role is not None and role not in ROLES:
-        raise Invalid("Unknown role")
-    if app and role and not suite_admin:
-        _not_a_tool(app)
-    if password == "" and (suite_admin or _capped(role or DEFAULT_ROLE)):
-        raise Invalid(NO_PASSWORD)
-    if password != "" and len(password) < 8:
-        raise Invalid("The password needs at least 8 characters")
-    if find(name):
-        raise Invalid("That user name is taken")
-    if email and db.one("SELECT 1 AS x FROM ios_users WHERE email = %s", (email,)):
-        raise Invalid("Another account already has that email address")
-    uid = db.ex("INSERT INTO ios_users (name, display_name, email, hash, suite_admin, created_at) VALUES (%s, %s, %s, %s, %s, %s)",
-                (name, (display_name or "").strip()[:128] or None, email or None, hash_password(password) if password else "", 1 if suite_admin else 0, int(time.time())))
-    if app and role and not (suite_admin and _is_tool(app)):  # a suite admin is admin in an admin tool without a row
-        set_role(uid, app, role)
+    with _atomic():
+        name, email = clean_name(name), clean_email(email)
+        if role is not None and role not in ROLES:
+            raise Invalid("Unknown role")
+        if app and role and not suite_admin:
+            _not_a_tool(app)
+        if password == "" and (suite_admin or _capped(role or DEFAULT_ROLE)):
+            raise Invalid(NO_PASSWORD)
+        if password != "" and len(password) < 8:
+            raise Invalid("The password needs at least 8 characters")
+        if find(name):
+            raise Invalid("That user name is taken")
+        if email and db.one("SELECT 1 AS x FROM ios_users WHERE email = %s", (email,)):
+            raise Invalid("Another account already has that email address")
+        uid = db.ex("INSERT INTO ios_users (name, display_name, email, hash, suite_admin, created_at) VALUES (%s, %s, %s, %s, %s, %s)",
+                    (name, (display_name or "").strip()[:128] or None, email or None, hash_password(password) if password else "", 1 if suite_admin else 0, int(time.time())))
+        if app and role and not (suite_admin and _is_tool(app)):  # a suite admin is admin in an admin tool without a row
+            set_role(uid, app, role)
     invalidate()
     return get(uid, app)
 
 
 def update(user_id: int, name=None, password=None, email=None, display_name=None, listed=None, suite_admin=None, role=None, app=None):
     """Change the given fields (None: unchanged). A new password or a changed suite_admin ends the account's other sessions."""
-    cur = db.one(f"SELECT {COLS} FROM ios_users WHERE id = %s", (user_id,))
-    if not cur:
-        raise Invalid("No such user")
-    sets = {}
-    if email is not None:
-        email = clean_email(email)
-        if email and db.one("SELECT 1 AS x FROM ios_users WHERE email = %s AND id != %s", (email, user_id)):
-            raise Invalid("Another account already has that email address")
-        sets["email"] = email or None
-    if name is not None:
-        name = clean_name(name)
-        if db.one("SELECT 1 AS x FROM ios_users WHERE name = %s AND id != %s", (name, user_id)):
-            raise Invalid("That user name is taken")
-        sets["name"] = name
-    if display_name is not None:
-        sets["display_name"] = display_name.strip()[:128] or None
-    if listed is not None:
-        sets["listed"] = 1 if listed else 0
-    if suite_admin is not None:
-        if suite_admin and not cur["hash"] and password in (None, ""):
-            raise Invalid(NO_PASSWORD)
-        if not suite_admin and cur["suite_admin"] and db.one("SELECT count(*) AS n FROM ios_users WHERE suite_admin = 1 AND id != %s", (user_id,))["n"] == 0:
-            raise Invalid("That is the only suite admin; make someone else one first")
-        sets["suite_admin"] = 1 if suite_admin else 0
-    if password is not None:
-        if password == "":  # remove the password: one-click sign-in, a member at most
-            still_admin = cur["suite_admin"] if suite_admin is None else suite_admin
-            if still_admin or _capped(_max_role(user_id)):
+    with _atomic():
+        cur = db.one(f"SELECT {COLS} FROM ios_users WHERE id = %s FOR UPDATE", (user_id,))
+        if not cur:
+            raise Invalid("No such user")
+        sets = {}
+        if email is not None:
+            email = clean_email(email)
+            if email and db.one("SELECT 1 AS x FROM ios_users WHERE email = %s AND id != %s", (email, user_id)):
+                raise Invalid("Another account already has that email address")
+            sets["email"] = email or None
+        if name is not None:
+            name = clean_name(name)
+            if db.one("SELECT 1 AS x FROM ios_users WHERE name = %s AND id != %s", (name, user_id)):
+                raise Invalid("That user name is taken")
+            sets["name"] = name
+        if display_name is not None:
+            sets["display_name"] = display_name.strip()[:128] or None
+        if listed is not None:
+            sets["listed"] = 1 if listed else 0
+        if suite_admin is not None:
+            if suite_admin and not cur["hash"] and password in (None, ""):
                 raise Invalid(NO_PASSWORD)
-            sets["hash"] = ""
-        else:
-            if len(password) < 8:
-                raise Invalid("The password needs at least 8 characters")
-            sets["hash"] = hash_password(password)
-    if role is not None:
-        if not app:
-            raise Invalid("A role needs an app")
-        if role not in ROLES:
-            raise Invalid("Unknown role")
-        _not_a_tool(app)
-        if _capped(role) and not (cur["hash"] or sets.get("hash")):
-            raise Invalid(NO_PASSWORD)
-    if sets:
-        db.ex("UPDATE ios_users SET " + ", ".join(f"{k} = %s" for k in sets) + " WHERE id = %s", (*sets.values(), user_id))
-    if role is not None:
-        set_role(user_id, app, role)
-    # a new password, or suite admin given or taken (a form that sends it unchanged signs nobody out)
-    if "hash" in sets or ("suite_admin" in sets and bool(sets["suite_admin"]) != bool(cur["suite_admin"])):
-        from iosuite_shared import sessions
-        sessions.end_all(user_id)
+            if not suite_admin and cur["suite_admin"] and db.one("SELECT count(*) AS n FROM ios_users WHERE suite_admin = 1 AND id != %s", (user_id,))["n"] == 0:
+                raise Invalid("That is the only suite admin; make someone else one first")
+            sets["suite_admin"] = 1 if suite_admin else 0
+        if password is not None:
+            if password == "":  # remove the password: one-click sign-in, a member at most
+                still_admin = cur["suite_admin"] if suite_admin is None else suite_admin
+                if still_admin or _capped(_max_role(user_id)):
+                    raise Invalid(NO_PASSWORD)
+                sets["hash"] = ""
+            else:
+                if len(password) < 8:
+                    raise Invalid("The password needs at least 8 characters")
+                sets["hash"] = hash_password(password)
+        if role is not None:
+            if not app:
+                raise Invalid("A role needs an app")
+            if role not in ROLES:
+                raise Invalid("Unknown role")
+            _not_a_tool(app)
+            if _capped(role) and not (cur["hash"] or sets.get("hash")):
+                raise Invalid(NO_PASSWORD)
+        if sets:
+            db.ex("UPDATE ios_users SET " + ", ".join(f"{k} = %s" for k in sets) + " WHERE id = %s", (*sets.values(), user_id))
+        if role is not None:
+            set_role(user_id, app, role)
+        # a new password, or suite admin given or taken (a form that sends it unchanged signs nobody out)
+        if "hash" in sets or ("suite_admin" in sets and bool(sets["suite_admin"]) != bool(cur["suite_admin"])):
+            from iosuite_shared import sessions
+            sessions.end_all(user_id)
     invalidate()
     return get(user_id, app)
 
@@ -235,10 +251,11 @@ def check_delete(user_id: int):
 
 
 def delete(user_id: int):
-    check_delete(user_id)
     from iosuite_shared import apppasswords
-    apppasswords.forget_user(user_id)
-    db.ex("DELETE FROM ios_users WHERE id = %s", (user_id,))
+    with _atomic():
+        check_delete(user_id)
+        apppasswords.forget_user(user_id)
+        db.ex("DELETE FROM ios_users WHERE id = %s", (user_id,))
     invalidate()
 
 

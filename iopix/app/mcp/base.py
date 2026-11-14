@@ -12,7 +12,7 @@ from typing import Optional
 from urllib.parse import quote
 
 from iosuite_shared import mcp as shared_mcp
-from iosuite_shared.mcp import READ_ONLY, UPDATES, WRITES, current_user, who
+from iosuite_shared.mcp import READ_ONLY, WRITES, current_user, who
 from mcp.server.mcpserver.exceptions import ToolError
 
 from app import __version__, config, users
@@ -21,7 +21,7 @@ from app.data import index, state as appstate
 from app.data.query import DATE_RE, build_where
 from app.ai.semantic import semantic, enabled as semantic_enabled
 
-__all__ = ["READ_ONLY", "UPDATES", "WRITES", "current_user", "who", "need_admin", "server", "db", "list_rows", "clamp_limit",
+__all__ = ["READ_ONLY", "WRITES", "current_user", "who", "need_admin", "server", "db", "list_rows", "clamp_limit",
            "anon_paths_ok", "resolve_tag", "resolve_album", "filter_items", "where_for", "FILTER_DOC", "PICKS", "VIEWER"]
 
 VIEWER = config.BASE_URL  # for the links in results

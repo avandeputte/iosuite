@@ -1,4 +1,4 @@
-"""Settings: the Settings page, the databases, album roots, the map provider and sign-in at a proxy."""
+"""Settings: the Settings page, the databases, album roots and the map provider."""
 import json
 import os
 import threading
@@ -55,7 +55,7 @@ def api_settings_get(request: Request):
     if not users.is_admin(request.state.user):
         out.pop("database", None); out.pop("album_roots", None)
     if not users.can_write(request.state.user):  # the owner's name and contact (the edit templates) and recent tags are the editors' business
-        out.pop("templates", None); out.pop("recent_tags", None); out.pop("google_maps_key_set", None)
+        out.pop("templates", None); out.pop("google_maps_key_set", None)
     return out
 
 

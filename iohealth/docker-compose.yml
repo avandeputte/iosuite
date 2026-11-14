@@ -41,7 +41,6 @@ services:
       # MAP_TILE_URL: https://tile.openstreetmap.org/{z}/{x}/{y}.png   # map tiles for workout routes
       # MAP_TILE_ATTRIBUTION: "&copy; OpenStreetMap contributors"
       # UPDATE_CHECK: "0"                         # never ask GitHub whether a newer version exists
-      # sign-in at Cloudflare Access (see README): AUTH_PROXY: cloudflare, CF_ACCESS_TEAM, CF_ACCESS_AUD
       # HTTPS served directly: set both and mount the files below
       # TLS_CERT_FILE: /certs/fullchain.pem
       # TLS_KEY_FILE: /certs/privkey.pem

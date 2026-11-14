@@ -98,7 +98,6 @@ accounts are the suite's: `.venv/bin/iosuite-shared --config . admin NAME --app 
 | `TZ` | the time zone the server log is written in (default: the server's) |
 | `PUBLIC_URL` | the address people use (behind a proxy), for the links the MCP tools give |
 | `ADMIN_USER`, `ADMIN_PASSWORD` | the first admin, made on the first start when there are no accounts |
-| `AUTH_PROXY`, `AUTH_PROXY_HEADER`, `AUTH_PROXY_TRUSTED`, `CF_ACCESS_TEAM`, `CF_ACCESS_AUD` | sign-in at a reverse proxy, as in the other io apps (Cloudflare Access, Authelia, Authentik, oauth2-proxy…) |
 | `OCR_LANGUAGES` | the languages a photo of a recipe is read in, as Tesseract's codes (`eng+nld+fra`); left out, every language installed |
 | `AI`, `AI_MODEL`, `AI_TIMEOUT` | the AI model on this server that reads a web page without recipe data: `AI=0` turns it off; another GGUF model (a file, or its address); the seconds a page may take (300) |
 | `MCP` | `1` keeps the MCP server on, whatever the setting says |

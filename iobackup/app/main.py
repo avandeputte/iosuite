@@ -10,9 +10,8 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
-from iosuite_shared import users as shared_users
+from fastapi.responses import JSONResponse
+from iosuite_shared import pages, users as shared_users
 from iosuite_shared.updates import setup_log
 
 from app import __version__, api, config, db, engine, gdrive, model, tasks
@@ -67,19 +66,4 @@ app.include_router(auth.server_router(updater, log_file=config.LOG_FILE))  # /ap
 app.include_router(api.router)
 
 
-@app.get("/", include_in_schema=False)
-def index():
-    """The page, with the version stamped on the script and stylesheet: after an update the browser (and Cloudflare,
-    which caches .js and .css at the edge) fetches the new ones instead of serving what it kept."""
-    html = (config.STATIC_DIR / "index.html").read_text(encoding="utf-8")
-    for f in ("static/app.js", "static/app.css", "static/js/theme.js"):
-        html = html.replace(f'"{f}"', f'"{f}?v={__version__}"')
-    return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
-
-
-@app.get("/manifest.webmanifest", include_in_schema=False)
-def manifest():
-    return FileResponse(config.STATIC_DIR / "manifest.webmanifest", media_type="application/manifest+json")
-
-
-app.mount("/static", StaticFiles(directory=config.STATIC_DIR), name="static")
+pages.mount(app, config.STATIC_DIR, __version__)  # /, the manifest and /static

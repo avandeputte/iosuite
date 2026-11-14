@@ -57,12 +57,6 @@ SETTINGS = {
     "db_password": ("", str, "MySQL password; empty: DIGIKAM_DB_PASSWORD"),
     "db_backup": ("", str, "auto or skip; empty: DIGIKAM_DB_BACKUP"),
     # sign-in at a reverse proxy (iosuite_shared.proxyauth.KEYS, lower-cased): the environment wins when set there
-    "auth_proxy": ("", str, "off, or a preset (cloudflare, nginx, ...): the proxy whose identity header is trusted"),
-    "auth_proxy_header": ("", str, "the header that carries the signed-in user, when not the preset's"),
-    "auth_proxy_trusted": ("", str, "the proxy addresses (CIDRs) whose identity headers are believed"),
-    "auth_proxy_create": ("", str, "someone with no account: the sign-in screen (empty), deny, or a viewer or editor account"),
-    "cf_access_team": ("", str, "the Cloudflare Access team domain whose tokens are verified"),
-    "cf_access_aud": ("", str, "the Cloudflare Access application's AUD tag"),
 }
 _unknown_keys = set()  # logged once each
 

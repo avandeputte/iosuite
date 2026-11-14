@@ -169,7 +169,7 @@ With the proxy in place the addresses in this README change from `http://<host>:
 
 ### Sign-in at the proxy (Cloudflare Access, Authelia, Authentik, oauth2-proxy…)
 
-When the proxy already makes people sign in, the viewer can take that sign-in instead of asking again. The proxy passes who signed in in a request header, and the viewer treats that person as signed in when an account exists for them. It matches the account's email address first, then its name. Set this in `config.env` (or the container's environment) and restart:
+When the proxy already makes people sign in, the viewer can take that sign-in instead of asking again. The proxy passes who signed in in a request header, and the viewer treats that person as signed in when an account exists for them. It matches the account's email address first, then its name. Set it up once for the whole suite under Settings › Security › Sign-in at the proxy (kept in the Shared ioSuite database, never in `config.env`):
 
 | Setting | Meaning |
 | --- | --- |
@@ -187,7 +187,7 @@ So the header can't be faked, the proxy must replace it on every request, and th
 - **Traefik**: a `forwardAuth` middleware with `authResponseHeaders: [Remote-User, Remote-Email]`
 - **nginx**: `auth_request` to the auth service, then `auth_request_set $user $upstream_http_remote_user; proxy_set_header Remote-User $user;`; with oauth2-proxy, `X-Auth-Request-Email` works as is
 - **HAProxy**: `http-request del-header Remote-User` first, then after the auth check (e.g. haproxy-auth-request) `http-request set-header Remote-User %[var(req.auth_response_header.remote_user)]`; with HAProxy's own basic auth, `http-request auth unless { http_auth(users) }` and `http-request set-header Remote-User %[http_auth_user]`
-- **Cloudflare Tunnel**: add an Access application with a policy for your hostname, then set `AUTH_PROXY=cloudflare`, `CF_ACCESS_TEAM` and `CF_ACCESS_AUD` (Zero Trust › Access › Applications › your app › Overview › Application Audience tag)
+- **Cloudflare Tunnel**: add an Access application with a policy for your hostname, then pick Cloudflare under Settings › Security › Sign-in at the proxy and fill in `CF_ACCESS_TEAM` and `CF_ACCESS_AUD` (Zero Trust › Access › Applications › your app › Overview › Application Audience tag)
 
 A sign-in at the proxy also starts a session in the viewer, so the same browser stays signed in when it is back on the home network, where requests skip the proxy. Through Cloudflare, Sign out also ends Cloudflare Access's session (its sign-out page, `/cdn-cgi/access/logout`); with the other proxies, sign out at the proxy. Keep Sign-in required (Settings › Global settings › Apps) on, as it is by default, so nobody gets in without the proxy's sign-in.
 

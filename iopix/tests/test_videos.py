@@ -29,7 +29,6 @@ def test_cover_picks_the_sharp_lit_frame(monkeypatch):
     from PIL import Image
     import numpy as np
     rng = np.random.default_rng(0)
-    frames = {}
 
     def fake_frame(src, t, height=480):
         if t < 10:   # dark and flat

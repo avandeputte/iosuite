@@ -1,6 +1,7 @@
 """Users and permissions: open until the first user exists; then anonymous is read-only,
 viewers only look, members keep favorites, editors write the library, admins
 manage settings, maintenance and users; sessions are signed cookies."""
+from iosuite_shared import sessions
 from app import users
 from helpers import login as _login
 from iosuite_shared import testing, users as shared_users
@@ -14,7 +15,7 @@ def test_open_until_first_user(client, fresh):
 
 def test_setup_creates_the_admin_once(client, fresh):
     r = client.post("/api/auth/setup", json={"name": "alex", "password": "correct horse"})
-    assert r.status_code == 200 and r.json()["user"]["role"] == "admin" and users.COOKIE in r.cookies
+    assert r.status_code == 200 and r.json()["user"]["role"] == "admin" and sessions.COOKIE in r.cookies
     assert client.post("/api/auth/setup", json={"name": "eve", "password": "hackhackhack"}).status_code == 409
     me = client.get("/api/auth/me").json()
     assert me["user"]["name"] == "alex" and me["isAdmin"]
@@ -61,7 +62,7 @@ def test_roles(client, fresh, lib):
 def test_wrong_password_and_bad_cookie(client, fresh):
     users.create("alex", "correct horse", "admin")
     assert client.post("/api/auth/login", json={"name": "alex", "password": "nope"}).status_code == 401
-    client.cookies.set(users.COOKIE, "1.9999999999.deadbeef")
+    client.cookies.set(sessions.COOKIE, "1.9999999999.deadbeef")
     assert client.get("/api/auth/me").json()["user"] is None
 
 
@@ -221,7 +222,7 @@ def test_a_session_in_use_is_renewed(client, fresh):
     sessions.invalidate()
     r = client.get("/api/auth/me")
     assert r.json()["user"]["name"] == "alex"
-    assert r.cookies.get(users.COOKIE) == client.cookies.get(users.COOKIE), r.headers.get("set-cookie")  # the cookie is set again, for another 30 days
+    assert r.cookies.get(sessions.COOKIE) == client.cookies.get(sessions.COOKIE), r.headers.get("set-cookie")  # the cookie is set again, for another 30 days
     assert authdb.one("SELECT expires_at FROM ios_sessions")["expires_at"] > now + 29 * 86400
 
 def test_registers_in_the_suite(client, fresh):

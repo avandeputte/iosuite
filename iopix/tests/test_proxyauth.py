@@ -1,5 +1,6 @@
 """Sign-in by a reverse proxy: the user header is believed only from the proxy (or a verified Cloudflare Access
 token), matched to an account by email or name, optionally creating one."""
+from iosuite_shared import sessions
 import time
 
 import pytest
@@ -176,7 +177,7 @@ def test_a_proxy_sign_in_carries_over_to_the_home_network(client, monkeypatch, a
     outside = {"Remote-User": "proxy-probe", "Cf-Ray": "abc-EWR"}
     me = client.get("/api/auth/me", headers=outside).json()
     assert me["viaProxy"] and me["signedInBy"] == "proxy" and me["throughCloudflare"]
-    assert client.cookies.get(users.COOKIE), "a session for this browser"
+    assert client.cookies.get(sessions.COOKIE), "a session for this browser"
     me = client.get("/api/auth/me").json()  # back home: no proxy header, the session does it
     assert me["user"]["name"] == "proxy-probe" and not me["viaProxy"] and me["signedInBy"] == "proxy" and not me["throughCloudflare"]
     r = client.post("/api/auth/logout", json={}, headers={"Cf-Ray": "x"})

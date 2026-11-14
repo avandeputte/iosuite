@@ -1,5 +1,5 @@
 /** The sidebar (views, folders, tags) and the list of notes. */
-import { $, h, api, state, icon, fmtDate, colorVar, menu, colorPicker, ask, confirmIt, toast, fail, canWrite, isAdmin, dialog, displayTitle } from './core.js';
+import { $, h, api, state, icon, fmtDate, colorVar, menu, colorPicker, ask, confirmIt, toast, fail, canWrite, dialog, displayTitle } from './core.js';
 import { taskCounts } from './markdown.js';
 
 export const view = { v: 'all', f: null, t: null, q: '', sort: localSort(), n: null };

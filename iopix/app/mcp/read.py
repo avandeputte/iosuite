@@ -1,4 +1,4 @@
-"""The read-only tools any client may call without a token: the library overview, search and
+"""The read-only tools (any account the MCP gate let in): the library overview, search and
 counts over the same filters the web app has, everything about one photo, the people / tag /
 album / place lists, duplicate sets, and looking at a picture. File paths are left out of
 answers unless the client signed in as an admin (base.anon_paths_ok)."""

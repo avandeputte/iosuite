@@ -194,8 +194,9 @@ def get_row(tid: int) -> dict | None:
     return db.one("SELECT * FROM tsk_tasks WHERE id = %s", (tid,))
 
 
-def by_href(lid: int, href: str) -> dict | None:
-    return db.one("SELECT * FROM tsk_tasks WHERE list_id = %s AND href = %s", (lid, href))
+def by_href(lid: int, href: str, lock: bool = False) -> dict | None:
+    """lock: held until the open transaction ends (a PUT with If-Match)."""
+    return db.one("SELECT * FROM tsk_tasks WHERE list_id = %s AND href = %s" + (" FOR UPDATE" if lock else ""), (lid, href))
 
 
 def by_uid(lid: int, uid: str) -> dict | None:

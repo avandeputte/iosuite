@@ -52,7 +52,7 @@ jobs:
           python3 ../shared/templates/render-update.py --check
           python3 ../shared/templates/render.py --check
           python -m pyflakes app tests
-          node --input-type=module --check < static/app.js
+          for f in static/app.js static/js/*.js; do [ -e "$f" ] || continue; node --input-type=module --check < "$f" || exit 1; done  # ES modules, parsed as modules
           for f in *.sh; do sh -n "$f"; done
           bash -n proxmox/ct/iocontact.sh proxmox/install/iocontact-install.sh
           # >>> own: checks

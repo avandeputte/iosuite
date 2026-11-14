@@ -8,7 +8,7 @@ import json
 import subprocess
 from collections import Counter
 
-from app.photos import edits, organize
+from app.photos import edits, paths
 from app.digikam.dkdb import chunked
 from app.data import index
 from app.faces import facequality
@@ -45,7 +45,7 @@ def report(items: list, detail: bool = False) -> dict:
     files, cars = [], {}
     for it in items:
         files.append(it["path"])
-        for sc in organize.sidecars_of(it["path"]):
+        for sc in paths.sidecars(it["path"]):
             cars.setdefault(it["path"], []).append(str(sc))
             files.append(str(sc))
     found = dates(files)

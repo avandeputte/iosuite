@@ -46,6 +46,11 @@ class SyncError(Exception):
     pass
 
 
+def _sidecar_names(path: str) -> tuple:
+    from app.photos.paths import sidecar_candidates  # lazy: photos.paths -> data.state -> digikam.dkdb would be a cycle
+    return sidecar_candidates(path)
+
+
 def settings() -> dict:
     """The effective connection settings: a `db_<key>` setting wins over the environment."""
     from app.data import state  # lazy: data.state -> data.appdb -> digikam.dkdb would be an import cycle
@@ -166,7 +171,7 @@ def _detect_mysql_dates() -> bool:
                 m = os.stat(p).st_mtime
             except OSError:
                 continue
-            for side in (p + ".xmp", os.path.splitext(p)[0] + ".xmp"):
+            for side in _sidecar_names(p):
                 try:
                     m = max(m, os.stat(side).st_mtime)
                 except OSError:
@@ -509,7 +514,7 @@ def file_stamp(path: str):
     except OSError:
         return None
     m = st.st_mtime
-    for side in (path + ".xmp", os.path.splitext(path)[0] + ".xmp"):
+    for side in _sidecar_names(path):
         try:
             m = max(m, os.stat(side).st_mtime)
         except OSError:

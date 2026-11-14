@@ -365,14 +365,21 @@ def change(u: dict, r: dict, c: dict, data: dict, partial: bool = True, scope: s
     """Change an event from JSON fields, for the series or (with recurrence_id) one occurrence (scope this) or it and
     the ones after (scope following: the series is split, and the new one is returned). ValueError with the message to
     show, PermissionError when a calendar may not be changed. (row, the occurrence the row is shown for, made new)."""
-    tzname = c.get("timezone")
+    target = None  # another calendar: moved there with the change, in one transaction once the change is known to be good
     if data.get("calendarId") not in (None, "") and int(data["calendarId"]) != r["calendar_id"]:
         target = model.calendar(int(data["calendarId"]))
         if not model.can_write(u, target):
             raise PermissionError("You cannot add events to that calendar")
-        r = model.move(r["id"], target["id"])
         c = target
-        tzname = c.get("timezone")
+    tzname = c.get("timezone")
+
+    def store(cal):
+        """Save the changed series (after the move, when there is one); inside the caller's transaction."""
+        nonlocal r
+        if target:
+            r = model.move(r["id"], target["id"])
+        return model.save(r["calendar_id"], cal, r["id"], None, u["id"])
+
     cal = copy.deepcopy(model.parsed(r))
     if "members" in data:
         cur = ical.event_json(cal, recurrence_id if scope == "this" else None)["categories"]
@@ -392,11 +399,13 @@ def change(u: dict, r: dict, c: dict, data: dict, partial: bool = True, scope: s
         if recurrence_id and repeating:
             data = _shift_series(cal, data, recurrence_id, tzname)
         ical.edit(cal, data, tzname)
-        return model.save(r["calendar_id"], cal, r["id"], None, u["id"]), None, False
+        with model.db.tx():
+            return store(cal), None, False
     if scope == "this":
         data.pop("rrule", None)
         ical.edit(cal, data, tzname, recurrence_id)
-        return model.save(r["calendar_id"], cal, r["id"], None, u["id"]), recurrence_id, False
+        with model.db.tx():
+            return store(cal), recurrence_id, False
     left = ical.remaining_count(cal, recurrence_id, tzname)
     os_, oe = _occurrence_start(cal, recurrence_id)
     j = ical.event_json(cal)
@@ -409,8 +418,9 @@ def change(u: dict, r: dict, c: dict, data: dict, partial: bool = True, scope: s
     if not any(k in data for k in ("start", "end", "allDay", "timezone", "rrule")):  # the same schedule: what was changed
         ical.carry_over(cal, newc, recurrence_id, data, tzname)                      # or left out after the split stays so
     ical.end_series_before(cal, recurrence_id)
-    model.save(r["calendar_id"], cal, r["id"], None, u["id"])
-    return model.save(r["calendar_id"], newc, None, None, u["id"]), None, True
+    with model.db.tx():  # the shortened series and the new one: both or neither
+        store(cal)
+        return model.save(r["calendar_id"], newc, None, None, u["id"]), None, True
 
 
 def remove(u: dict, r: dict, c: dict, scope: str = "all", recurrence_id: str | None = None) -> None:
