@@ -40,7 +40,7 @@ _good: dict[str, str] = {}    # app key -> the address that answered last
 _state_lock = threading.Lock()
 _pool = ThreadPoolExecutor(max_workers=8, thread_name_prefix="widgets")
 UA = "ioStart page"
-WIDGETS = ("iopix", "iocalendar", "iotask", "iohealth", "iocontact")
+WIDGETS = ("iopix", "iocalendar", "iotask", "iohealth", "iocontact", "iorecipe", "ionote")
 
 
 class Unavailable(Exception):
@@ -354,6 +354,120 @@ def iocalendar_add(request: Request, b: dict) -> dict:
     return {"id": eid, "url": f"{apps.url_for('iocalendar')}/#/event/{eid}" if eid is not None else None}
 
 
+# ------------------------------------------------------------------ the search box: events, tasks, recipes and notes
+
+def _soon_first(items: list[dict], tz: str) -> list[dict]:
+    """Events as ioCalendar's own search page orders them: those still to come (or going on) soonest first, then the
+    earlier ones, the latest first. An all-day event is still to come until its day is over in the viewer's zone."""
+    zone = _zone(tz)
+    now = dt.datetime.now(zone)
+    today = now.date().isoformat()
+
+    def moment(s: str) -> dt.datetime:
+        t = dt.datetime.fromisoformat(s)
+        return t if t.tzinfo else t.replace(tzinfo=zone)  # a floating time: the viewer's
+
+    def at(x: dict):
+        s = (x.get("next") or {}).get("start")
+        if not s:
+            return None
+        try:
+            return dt.datetime.combine(dt.date.fromisoformat(s[:10]), dt.time(), zone) if x.get("allDay") else moment(s)
+        except ValueError:
+            return None
+
+    def ahead(x: dict) -> bool:
+        n = x.get("next") or {}
+        if not n.get("start"):
+            return False
+        if x.get("allDay"):
+            end = str(n.get("end") or n["start"])[:10]
+            return end > today or str(n["start"])[:10] >= today
+        try:
+            return moment(n.get("end") or n["start"]) >= now
+        except ValueError:
+            return False
+
+    def when(x: dict) -> float:
+        a = at(x)
+        return a.timestamp() if a else float("-inf")
+    soon = sorted((x for x in items if ahead(x) and at(x)), key=when)
+    past = sorted((x for x in items if not (ahead(x) and at(x))), key=when, reverse=True)
+    return soon + past
+
+
+def iocalendar_search(request: Request, q: str, tz: str = "", n: int = 5) -> dict:
+    """{items: [{id, title, start, end, allDay, recurring, recurrenceId, location, color}], more}: the events
+    whose title, place, notes or people match q (the search box), the coming ones first, each at its next (or last)
+    occurrence, with its calendar's colour."""
+    cals, got = _both(lambda: fetch(request, "iocalendar", "/api/calendars"),
+                      lambda: fetch(request, "iocalendar", "/api/events", {"q": q[:80], "limit": 50}))
+    colors = {c["id"]: c.get("color") for c in cals.get("items", [])}
+    found = got.get("items", [])
+    ordered = _soon_first(found, tz)
+    out = []
+    for x in ordered[:n]:
+        nx = x.get("next") or {}
+        out.append({"id": x.get("id"), "title": x.get("title") or "(no title)", "start": nx.get("start"), "end": nx.get("end"),
+                    "allDay": bool(x.get("allDay")), "recurring": bool(x.get("recurring")), "recurrenceId": nx.get("recurrenceId"),
+                    "location": x.get("location"), "color": colors.get(x.get("calendarId"))})
+    return {"items": out, "more": len(found) > n}
+
+
+def iotask_search(request: Request, q: str, tz: str = "", n: int = 5) -> dict:
+    """{items: [{id, title, due, allDay, done, color}], more}: the tasks whose title or notes match q (the search box),
+    the open ones first (soonest due first, as ioTask sorts them), then the done ones (the latest first), up to n."""
+    p = {"q": q[:80], "limit": n + 1}
+    if tz:
+        p["tz"] = tz
+    lists, open_, done = _both(lambda: fetch(request, "iotask", "/api/lists"),
+                               lambda: fetch(request, "iotask", "/api/tasks", {**p, "status": "open"}),
+                               lambda: fetch(request, "iotask", "/api/tasks", {**p, "status": "done"}))
+    colors = {c["id"]: c.get("color") for c in lists.get("items", [])}
+    rows = open_.get("items", []) + done.get("items", [])
+    return {"items": [{"id": t.get("id"), "title": t.get("title") or "(no title)", "due": t.get("due"), "allDay": bool(t.get("dueAllDay")),
+                       "done": bool(t.get("done")), "color": colors.get(t.get("listId"))} for t in rows[:n]],
+            "more": len(rows) > n}
+
+
+def iorecipe_search(request: Request, q: str, n: int = 5) -> dict:
+    """{items: [{id, title, photo, minutes, tags, favourite}], more}: the recipes with every word of q in their title,
+    ingredients, steps or tags (the search box), by title. photo: the id of its first picture, if any."""
+    got = fetch(request, "iorecipe", "/api/recipes", {"q": q[:80], "limit": n + 1})
+    rows = got.get("items", [])
+    out = []
+    for r in rows[:n]:
+        m = re.search(r"/photos/(\d+)$", str(r.get("photo") or ""))
+        out.append({"id": r.get("id"), "title": r.get("title") or "(no title)", "photo": int(m.group(1)) if m else None,
+                    "minutes": r.get("totalMinutes"), "tags": (r.get("tags") or [])[:3], "favourite": bool(r.get("favourite"))})
+    return {"items": out, "more": len(rows) > n}
+
+
+def _lines(text) -> list[str]:
+    return [ln.strip().lstrip("#>*- ").strip() for ln in str(text or "").splitlines() if ln.strip().lstrip("#>*- ").strip()]
+
+
+def ionote_search(request: Request, q: str, n: int = 5) -> dict:
+    """{items: [{id, title, text, pinned, updated}], more}: the viewer's own notes with every word of q in their title,
+    text, tags, or the text of a picture or attachment (the search box), pinned first, then the last changed first.
+    title: as ioNote shows it (the title, else the first line); text: the line after it."""
+    got = fetch(request, "ionote", "/api/notes", {"q": q[:80], "limit": n})
+    out = []
+    for x in got.get("notes", [])[:n]:
+        body = _lines(x.get("body")) or _lines(x.get("ocrText"))
+        title = str(x.get("title") or "").strip()
+        if not title:
+            title, body = (body[0], body[1:]) if body else ("Image" if x.get("hasImage") else "Untitled", [])
+        out.append({"id": x.get("id"), "title": title[:80], "text": (body[0] if body else "")[:120], "pinned": bool(x.get("pinned")),
+                    "updated": x.get("updatedAt")})
+    return {"items": out, "more": int(got.get("total") or 0) > n}
+
+
+def iorecipe_photo(request: Request, recipe_id: int, photo_id: int) -> tuple[bytes, str]:
+    """A recipe's small picture (the card's), from ioRecipe."""
+    return fetch(request, "iorecipe", f"/api/recipes/{int(recipe_id)}/photos/{int(photo_id)}", {"size": "small"}, raw=True)
+
+
 # ------------------------------------------------------------------ ioContact: birthdays and anniversaries ahead
 
 def iocontact(request: Request, days: int = 30, n: int = 8) -> dict:
@@ -466,6 +580,11 @@ def get(request: Request, key: str, tz: str = "", kind: str = "", n: int = 0, q:
         tz = ""
     if key == "iopix":
         return iopix(request, tz, min(max(int(n or 0), 1), 24) if n else 4, kind if kind in ("onthisday", "rediscover") else "")
+    if q.strip() and key in ("iocalendar", "iotask", "iorecipe", "ionote"):
+        return {"iocalendar": lambda: iocalendar_search(request, q.strip(), tz), "iotask": lambda: iotask_search(request, q.strip(), tz),
+                "iorecipe": lambda: iorecipe_search(request, q.strip()), "ionote": lambda: ionote_search(request, q.strip())}[key]()
+    if key in ("iorecipe", "ionote"):
+        raise Unavailable(404, f"{apps.name_of(key)} shows only in the search box")
     if key == "iocalendar" and kind == "week":
         return iocalendar_week(request, tz)
     if key == "iocontact":

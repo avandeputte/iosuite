@@ -30,6 +30,9 @@ const ICONS = {
   delete: 'M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z',
   wall: 'M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h5v2h8v-2h5c1.1 0 1.99-.9 1.99-2L23 5c0-1.1-.9-2-2-2zm0 14H3V5h18v12z',
   fullscreen: 'M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z',
+  task: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z',
+  taskDone: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z',
+  recipe: 'M11 9H9V2H7v7H5V2H3v7c0 2.12 1.66 3.84 3.75 3.97V22h2.5v-9.03C11.34 12.84 13 11.12 13 9V2h-2v7zm5-3v8h2.5v8H21V2c-2.76 0-5 2.24-5 4z',
   event: 'M17 12h-5v5h5v-5zM16 1v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2h-1V1h-2zm3 18H5V8h14v11z',
   web: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z',
   home: 'M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z',
@@ -323,17 +326,46 @@ const CARDS = ['home', 'birthdays', 'week', 'strip', 'bookmarks'];
 const cardOrder = (L) => [...(L.cards || []), ...CARDS.filter((k) => !(L.cards || []).includes(k))];
 
 // ------------------------------------------------------------------ the search box (⌘K / Ctrl-K)
-/* Type, and the box lists the bookmarks that match, the contacts ioContact finds, and a row per app that searches
-   itself (ioPix, ioCalendar, ioNote open on their own results). Arrows pick a row, Enter opens it, Escape clears. */
+/* Type, and the box lists the bookmarks that match, what the apps find for this viewer (ioContact's people,
+   ioCalendar's events, ioTask's tasks, ioRecipe's recipes, ioNote's notes, Home Assistant's things), and a row per app that searches
+   itself (each opens on its own results). Arrows pick a row, Enter opens it, Escape clears. */
 // Lower case without accents, so "celia" finds "Célia" (and "Celia" finds "célia"); a few letters NFD does not split.
 const FOLD = { ß: 'ss', æ: 'ae', œ: 'oe', ø: 'o', ł: 'l', đ: 'd', ð: 'd', þ: 'th', ı: 'i' };
 const fold = (s) => String(s || '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[ßæœøłđðþı]/g, (c) => FOLD[c]);
-const APP_SEARCH = { iopix: (q) => `#/photos?q=${encodeURIComponent(q)}`, iocalendar: (q) => `#/search/${encodeURIComponent(q)}`, ionote: (q) => `#/notes?q=${encodeURIComponent(q)}` };
+const APP_SEARCH = { iopix: (q) => `#/photos?q=${encodeURIComponent(q)}`, iocalendar: (q) => `#/search/${encodeURIComponent(q)}`, iotask: (q) => `#/search/${encodeURIComponent(q)}`,
+  iorecipe: (q) => `#/search/${encodeURIComponent(q)}`, ionote: (q) => `#/notes?q=${encodeURIComponent(q)}` };
+// what the apps find, in the order their sections come under the bookmarks
+const FINDERS = ['iocontact', 'iocalendar', 'iotask', 'iorecipe', 'ionote'];
+/** "Today 19:00", "Tomorrow", "Fri 21 Nov", "12 Mar 2024": when a found event or task is, short. */
+function whenShort(iso, allDay) {
+  if (!iso) return '';
+  const d = allDay ? new Date(`${iso.slice(0, 10)}T00:00`) : new Date(iso);
+  if (isNaN(d)) return '';
+  const n = Math.round((new Date(d).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)) / 86400000);
+  const day = n === 0 ? 'Today' : n === 1 ? 'Tomorrow' : n === -1 ? 'Yesterday'
+    : d.toLocaleDateString([], { weekday: n > 0 && n < 7 ? 'short' : undefined, day: 'numeric', month: 'short', year: d.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' });
+  return allDay ? day : `${day} ${d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
+}
+/** A row of the search box for what an app found: events, tasks, recipes and notes (people have contactFace). */
+const FOUND = {
+  iocalendar: { head: 'Calendar', href: (a, x) => `${a.url}/#/event/${x.id}${x.recurrenceId ? `?rid=${encodeURIComponent(x.recurrenceId)}` : ''}`,
+    kids: (x) => [h('span', { class: 'bmic hit', style: { '--c': x.color || 'var(--fg2)' } }, icon('event', 's')), h('span', { class: 'qname' }, x.title),
+      h('span', { class: 'muted small when' }, [whenShort(x.start, x.allDay), x.recurring ? '↻' : ''].filter(Boolean).join(' '))] },
+  iotask: { head: 'Tasks', href: (a, x) => `${a.url}/#/task/${x.id}`,
+    kids: (x) => [h('span', { class: 'bmic hit', style: { '--c': x.color || 'var(--fg2)' } }, icon(x.done ? 'taskDone' : 'task', 's')), h('span', { class: `qname${x.done ? ' done' : ''}` }, x.title),
+      h('span', { class: 'muted small when' }, x.done ? 'Done' : whenShort(x.due, x.allDay))] },
+  iorecipe: { head: 'Recipes', href: (a, x) => `${a.url}/#/recipe/${x.id}`,
+    kids: (x) => [x.photo ? h('span', { class: 'bmic pic' }, h('img', { src: `/api/widgets/iorecipe/photo/${x.id}/${x.photo}`, alt: '', onerror: (e) => e.target.replaceWith(icon('recipe', 's')) })) : h('span', { class: 'bmic hit' }, icon('recipe', 's')),
+      h('span', { class: 'qname' }, x.title), h('span', { class: 'muted small' }, x.minutes ? hm(x.minutes) : x.tags.join(', '))] },
+  ionote: { head: 'Notes', href: (a, x) => `${a.url}/#/note/${x.id}`,
+    kids: (x) => [h('span', { class: 'bmic hit' }, icon('note', 's')), h('span', { class: 'qname' }, x.title), h('span', { class: 'muted small rest' }, x.text || '')] },
+};
 function searchBox() {
-  const inp = h('input', { class: 'q', type: 'search', placeholder: 'Search, or add an event', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Search bookmarks, contacts, the apps and the web, or add an event' });
+  const inp = h('input', { class: 'q', type: 'search', placeholder: 'Search, or add an event', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Search bookmarks, people, events, tasks, recipes, notes and the web, or add an event' });
   const list = h('div', { class: 'qlist', hidden: true });
   const box = h('div', { class: 'search' }, icon('search', 's'), inp, h('kbd', null, /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘K' : 'Ctrl K'), list);
-  let rows = [], sel = 0, timer = null, people = { q: '', items: [] }, things = { q: '', items: [] };
+  let rows = [], sel = 0, timer = null, things = { q: '', items: [] };
+  const got = {};  // app key: {q, items} it found for that text
   const hide = () => { list.hidden = true; list.replaceChildren(); rows = []; };
   const row = (href, kids, ext) => { const a = h('a', { class: 'qrow', href, ...(ext ? { target: '_blank', rel: 'noreferrer' } : {}), onmousedown: (e) => e.preventDefault() }, kids); rows.push(a); return a; };
   const build = () => {
@@ -341,19 +373,20 @@ function searchBox() {
     rows = [];
     if (!q) return hide();
     const links = (S.bookmarks || []).filter((l) => fold(`${l.name} ${l.description || ''} ${l.href}`).includes(fold(q))).slice(0, 6);
-    const contacts = S.apps.find((a) => a.key === 'iocontact');
+    const finders = FINDERS.map((k) => [k, S.apps.find((a) => a.key === k), got[k]]).filter(([, a, g]) => a && g && g.q === ql && g.items.length);
     const bang = webBang(q), site = bang ? null : looksLikeSite(q), cal = !bang && S.apps.find((a) => a.key === 'iocalendar') && parseEvent(q);
     const eng = bang ? bang.engine : webEngine(), wq = bang ? bang.q : q;
     const webRow = () => row(eng.url(wq), [h('span', { class: 'bmic' }, icon('web', 's')), h('span', { class: 'qname' }, `“${wq}”`), h('span', { class: 'muted small' }, eng.name)], true);
-    const found = links.length || (contacts && people.q === ql && people.items.length) || (things.q === ql && things.items.length);
+    const found = links.length || finders.length || (things.q === ql && things.items.length);
     const kids = [
       // a site typed in full, or a prefix (g, w, yt…): that first, Enter goes there
       site ? [h('div', { class: 'qhead' }, 'Open'), row(site, [h('span', { class: 'bmic' }, icon('link', 's')), h('span', { class: 'qname' }, site.replace(/^https?:\/\//, '')), h('span', { class: 'muted small' }, 'New tab')], true)] : null,
       bang ? [h('div', { class: 'qhead' }, eng.name), webRow()] : null,
       links.length ? h('div', { class: 'qhead' }, 'Bookmarks') : null,
       links.map((l) => { const src = bmIcon(l); return row(l.href, [h('span', { class: 'bmic' }, src ? h('img', { src, alt: '' }) : l.abbr), h('span', { class: 'qname' }, l.name), h('span', { class: 'muted small' }, l.description || l.href)], true); }),
-      contacts && people.q === ql && people.items.length ? h('div', { class: 'qhead' }, 'People') : null,
-      contacts && people.q === ql ? people.items.map((c) => row(`${contacts.url}/#/c/${c.id}`, [contactFace(c, false), h('span', { class: 'qname' }, c.name), h('span', { class: 'muted small' }, c.org || '')])) : null,
+      finders.flatMap(([k, a, g]) => [h('div', { class: 'qhead' }, k === 'iocontact' ? 'People' : FOUND[k].head),
+        ...(k === 'iocontact' ? g.items.map((c) => row(`${a.url}/#/c/${c.id}`, [contactFace(c, false), h('span', { class: 'qname' }, c.name), h('span', { class: 'muted small' }, c.org || '')]))
+          : g.items.map((x) => row(FOUND[k].href(a, x), FOUND[k].kids(x))))]),
       // Home Assistant: an entity's state, and a tap switches the ones the admin lets the page control
       things.q === ql && things.items.length ? h('div', { class: 'qhead' }, 'Home') : null,
       things.q === ql ? things.items.map((t) => { const a = row(t.control ? '#' : haLink(t), [h('span', { class: `bmic ha${t.on ? ' on' : ''}` }, icon(haIcon(t), 's')), h('span', { class: 'qname' }, t.name), h('span', { class: `muted small${t.control ? ' tap' : ''}` }, t.control ? `${t.text || t.state} · tap` : t.text || t.state)]);
@@ -372,12 +405,17 @@ function searchBox() {
     rows.forEach((r, i) => r.classList.toggle('on', i === sel));
     list.replaceChildren(...kids.flat().filter(Boolean)); list.hidden = false;
   };
-  const askPeople = async () => {
+  // each app answers on its own: the box grows as they do, a slow or absent one holds up none of the others
+  const askApps = () => {
     const q = inp.value.trim(), ql = q.toLowerCase();
-    if (q.length < 2 || !S.apps.some((a) => a.key === 'iocontact')) return;
-    const d = await widget('iocontact', { q });
-    if (inp.value.trim().toLowerCase() !== ql) return;
-    people = { q: ql, items: (d && d.items) || [] }; build();
+    if (q.length < 2) return;
+    for (const k of FINDERS) {
+      if (!S.apps.some((a) => a.key === k)) continue;
+      widget(k, { q }).then((d) => {
+        if (inp.value.trim().toLowerCase() !== ql) return;
+        got[k] = { q: ql, items: (d && d.items) || [] }; build();
+      });
+    }
   };
   const askThings = async () => {
     const q = inp.value.trim(), ql = q.toLowerCase();
@@ -387,7 +425,7 @@ function searchBox() {
     if (inp.value.trim().toLowerCase() !== ql) return;
     things = { q: ql, items: (d && d.items) || [] }; build();
   };
-  inp.oninput = () => { sel = 0; build(); clearTimeout(timer); timer = setTimeout(() => { askPeople(); askThings(); }, 250); };
+  inp.oninput = () => { sel = 0; build(); clearTimeout(timer); timer = setTimeout(() => { askApps(); askThings(); }, 250); };
   inp.onfocus = () => { if (inp.value.trim()) build(); };
   inp.onblur = () => setTimeout(hide, 150);
   inp.onkeydown = (e) => {

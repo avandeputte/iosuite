@@ -19,8 +19,10 @@ what the app will show on the start page later (today's events, the newest photo
   with the viewer's own sign-in (so each person sees only what they may see there), on localhost when the app runs on
   the same machine, else at its LAN address, else its public one, with the suite's Cloudflare Access service token
   (Settings › Global settings › Keys and tokens) when one is set.
-- **A search box** at the top (⌘K / Ctrl-K): as you type it lists the bookmarks that match, the people ioContact
-  finds, and a row per app that searches itself (ioPix, ioCalendar and ioNote open on their own results). Arrows
+- **A search box** at the top (⌘K / Ctrl-K): as you type it lists the bookmarks that match, what the apps find
+  for you (ioContact's people, ioCalendar's events, ioTask's tasks, ioRecipe's recipes, your ioNote notes; each asked
+  with your own sign-in, so you see what you may see there), and a row per app that searches itself (each opens on
+  its own results). Arrows
   pick a row, Enter opens it. When nothing of the suite matches, Enter searches the web (DuckDuckGo, or the engine
   picked in Customize the page); a prefix picks a site (`g` Google, `w` Wikipedia, `yt` YouTube, `m` Maps, `gh`
   GitHub…, also as `!g`), and an address typed in full (`github.com`) opens.

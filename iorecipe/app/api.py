@@ -24,12 +24,13 @@ def _family(u: dict, b: dict) -> bool:
 
 @router.get("/api/recipes", dependencies=[access.signed_in])
 def list_recipes(request: Request, q: str = "", tag: str | None = None, scope: str | None = None, book: int | None = None,
-                 sort: str | None = None):
+                 sort: str | None = None, limit: int = 500):
     """The recipes you see, without their ingredients and steps. q: words to find (in the title, the ingredients, the
     steps, the tags); tag: only those with this tag; scope: family, mine or favourites; book: only those in this
-    cookbook; sort: title (as left out), new (the newest first) or rating (the best rated first)."""
+    cookbook; sort: title (as left out), new (the newest first) or rating (the best rated first); limit: at most this
+    many (500 as left out)."""
     u = request.state.user
-    return {"items": [model.public(r, u, full=False) for r in model.find(u, q, tag, scope, book=book, sort=sort)], **_around(u)}
+    return {"items": [model.public(r, u, full=False) for r in model.find(u, q, tag, scope, limit, book=book, sort=sort)], **_around(u)}
 
 
 def _around(u: dict) -> dict:

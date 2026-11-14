@@ -102,6 +102,10 @@ input, select, textarea { font: inherit; color: inherit; }
 .qrow.on, .qrow:hover { background: var(--bg2); }
 .qrow .bmic { width: 28px; height: 28px; border-radius: var(--r-s); }
 .qrow .bmic img { width: 18px; height: 18px; }
+.qrow .bmic.hit .ic { width: 18px; height: 18px; color: var(--c, var(--fg2)); }
+.qrow .bmic.pic { overflow: hidden; } .qrow .bmic.pic img { width: 100%; height: 100%; object-fit: cover; }
+.qrow .muted.when { flex: none; max-width: none; } .qrow .muted.rest { flex-shrink: 50; }
+.qrow .qname.done { text-decoration: line-through; color: var(--fg2); }
 .qrow .face { width: 28px; height: 28px; font-size: var(--fs-xs); }
 .qrow .qapp { width: 28px; height: 28px; border-radius: 22%; }
 .qrow .qname { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

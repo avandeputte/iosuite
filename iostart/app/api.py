@@ -412,7 +412,7 @@ def widget(key: str, request: Request, tz: str = "", kind: str = "", n: int = 0,
     (IANA, e.g. Europe/Brussels), for what "today" is. For iopix, kind (onthisday | rediscover; empty: on this day
     when there are photos, else rediscover) and n (how many, up to 24) pick what the photo strip shows; for iocalendar,
     kind=week gives the coming week instead of today; for iocontact, q searches the contacts (the search box) instead
-    of listing the birthdays ahead. 404 for an app without one; 401/403 when the app refuses this account; 502 when it does not answer. The page leaves the
+    of listing the birthdays ahead, and so does it for iocalendar (events), iotask (tasks), iorecipe (recipes) and ionote (notes). 404 for an app without one; 401/403 when the app refuses this account; 502 when it does not answer. The page leaves the
     tile as it is on any of these."""
     try:
         return widgets.get(request, key, tz, kind, n, q)
@@ -456,6 +456,17 @@ def widget_contact_face(person_id: int, request: Request):
     """A contact's ioPix face, through ioContact (a contact linked to an ioPix person, without a photo of its own)."""
     try:
         body, ctype = widgets.iocontact_face(request, person_id)
+    except widgets.Unavailable as e:
+        raise HTTPException(e.status, str(e))
+    return Response(body, media_type=ctype if ctype.startswith("image/") else "image/jpeg",
+                    headers={"Cache-Control": "private, max-age=86400"})
+
+
+@router.get("/api/widgets/iorecipe/photo/{recipe_id}/{photo_id}", dependencies=[access.signed_in])
+def widget_recipe_photo(recipe_id: int, photo_id: int, request: Request):
+    """A recipe's small picture from ioRecipe, passed through (the search box)."""
+    try:
+        body, ctype = widgets.iorecipe_photo(request, recipe_id, photo_id)
     except widgets.Unavailable as e:
         raise HTTPException(e.status, str(e))
     return Response(body, media_type=ctype if ctype.startswith("image/") else "image/jpeg",
