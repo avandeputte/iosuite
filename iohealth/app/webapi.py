@@ -1,6 +1,7 @@
 """The web app's read API. Every figure is the signed-in account's own. Times in replies are Unix seconds; dates are
 local to the `tz` parameter (an IANA name the browser sends), falling back to TZ."""
 import json
+import logging
 import math
 import threading
 import time
@@ -18,6 +19,8 @@ from iosuite_shared.errors import Invalid
 
 from app import access, analytics as an, config, db, glucose as gl, rollup
 from app.auth import uid as uid_of
+
+log = logging.getLogger("app.webapi")
 
 router = APIRouter(default_response_class=ORJSONResponse)
 UTC = timezone.utc
@@ -156,16 +159,43 @@ def cached(request: Request, ttl: float, make):
 
 # ---- parameters
 
+def _zone_named(name):
+    try:
+        return ZoneInfo(name) if name else None
+    except (ZoneInfoNotFoundError, ValueError):
+        return None
+
+
+_zones = {}  # account: the zone last remembered for it (hlt_user_settings "zone"), so it is written only when it changes
+
+
+def remember_zone(uid: int, name) -> None:
+    """The zone the account's phone or browser is in (an IANA name), kept for what the server does on its own: the
+    goal notifications' "today"."""
+    if not uid or not _zone_named(name) or _zones.get(uid) == name:
+        return
+    db.ex("INSERT INTO hlt_user_settings (user_id, name, value) VALUES (%s, 'zone', %s) ON DUPLICATE KEY UPDATE value = VALUES(value)",
+          (uid, name[:64]))
+    _zones[uid] = name
+
+
+def zone_of(uid: int):
+    """The account's zone as last remembered, else the server's TZ, else UTC."""
+    r = db.one("SELECT value FROM hlt_user_settings WHERE user_id = %s AND name = 'zone'", (uid,))
+    return _zone_named(r[0] if r else None) or _zone_named(config.TZ) or UTC
+
+
 def location(request: Request):
-    """The time zone the reply is in: ?tz=, else the server's TZ, else UTC."""
+    """The time zone the reply is in: ?tz= (remembered for the account: remember_zone), else the server's TZ, else UTC."""
     tz = request.query_params.get("tz")
-    for name in (tz, config.TZ, "UTC"):
-        if name:
-            try:
-                return ZoneInfo(name)
-            except (ZoneInfoNotFoundError, ValueError):
-                continue
-    return UTC
+    loc = _zone_named(tz)
+    if loc:
+        try:
+            remember_zone(uid_of(request), tz)
+        except Exception:  # noqa: BLE001 - never in the way of an answer
+            log.warning("could not remember the zone of a request", exc_info=True)
+        return loc
+    return _zone_named(config.TZ) or UTC
 
 
 def time_range(request: Request, loc, days: int) -> tuple:

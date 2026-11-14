@@ -22,6 +22,19 @@ def test_a_link_works_both_ways_and_once():
     assert related.forget("note", NOTE) == 1 and related.of("task", 12) == []
 
 
+def test_a_moved_item_takes_its_links_along():
+    """An event moved to another calendar gets a new id there: its links follow, with who made them and when."""
+    related.add(("event", 7), ("note", NOTE))
+    related.add(("event", 7), ("task", 5))
+    related.add(("event", 8), ("task", 5))  # the new id already has this link: kept once
+    when = {x["kind"]: x["createdAt"] for x in related.of("event", 7)}
+    assert related.move("event", 7, 8) == 2
+    assert related.of("event", 7) == []
+    got = {x["kind"]: x for x in related.of("event", 8)}
+    assert set(got) == {"note", "task"} and got["note"]["createdAt"] == when["note"]
+    assert related.move("event", "nope", 9) == 0  # never raises: the app's move has happened
+
+
 @pytest.mark.parametrize("a, b", [(("task", 1), ("task", "1")), (("thing", 1), ("task", 2)), (("task", "1; DROP"), ("note", NOTE)),
                                   (("note", "12"), ("task", 1)), (("event", "0"), ("task", 1))])
 def test_bad_links_are_refused(a, b):

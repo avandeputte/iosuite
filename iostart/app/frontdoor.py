@@ -28,13 +28,17 @@ public one, which may be this very address. An app that recorded none (in a cont
 folder here. Phones look for a calendar or contacts account at /.well-known/caldav and /.well-known/carddav of the
 name they are given: those go to ioCalendar's and ioContact's folders.
 
+The answer comes back as the app gave it, but for a redirect to a place on this address that lost its folder
+(Starlette's own trailing-slash redirect): the folder goes back in front. Websockets are not passed on (no app uses
+one): asked for in an app's folder, they are refused.
+
 A pure ASGI middleware, the first to see a request after the forwarded headers are settled (Auth.install(outer=)):
 ioStart's own sign-in, body cap and routes never see what belongs to another app.
 """
 import asyncio
 import logging
 import time
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit, urlunsplit
 
 import httpx2
 from iosuite_shared import prefix, proxyauth, suite
@@ -117,6 +121,8 @@ def _headers(scope: dict, folder: str, proxy) -> list:  # folder: "/calendar", w
     drop = set(HOP) | SET_HERE
     for name in (named.get("connection") or "").split(","):  # what the sender tied to its own connection
         drop.add(name.strip().lower())
+    if "transfer-encoding" in named:  # sent in pieces: a length beside it is not the body's (and h11 would refuse it)
+        drop.add("content-length")
     if not from_proxy:  # a visitor's own word for who is signed in, or for the address Cloudflare saw, is nobody's word
         drop.update(h.lower() for h in (*proxyauth.GENERIC_HEADERS, proxyauth.CF_HEADER, *proxy.headers(), "cf-connecting-ip"))
     out = [(k, v) for k, v in got if k not in drop]
@@ -129,6 +135,21 @@ def _headers(scope: dict, folder: str, proxy) -> list:  # folder: "/calendar", w
     if proxy.external(named, peer):
         out.append((proxyauth.OUTSIDE_HEADER, "1"))
     return out
+
+
+def _location(value: str, hosts: set, folder: str) -> str:
+    """An app's redirect to a place on this address that lost its folder: Starlette's own trailing-slash redirect
+    builds it from the request, where the folder is not the root path (iosuite_shared.prefix). The folder goes back
+    in front; a redirect elsewhere, relative to the page, or already in the folder stays as it is."""
+    p = urlsplit(value)
+    if p.scheme or p.netloc:
+        if p.netloc.lower() not in hosts:
+            return value
+    elif not value.startswith("/"):
+        return value
+    if p.path == folder or p.path.startswith(folder + "/"):
+        return value
+    return urlunsplit((p.scheme, p.netloc, folder + (p.path or "/"), p.query, p.fragment))
 
 
 async def _plain(send, status: int, text: str, headers=()) -> None:
@@ -147,6 +168,8 @@ class FrontDoor:
         self.app = app
 
     async def __call__(self, scope, receive, send):
+        if scope.get("type") == "websocket":
+            return await self.socket(scope, receive, send)
         if scope.get("type") != "http":
             return await self.app(scope, receive, send)
         st = await state()
@@ -169,6 +192,17 @@ class FrontDoor:
         raw = (scope.get("raw_path") or b"").decode("latin-1")  # as it was sent: nothing decoded and encoded again
         raw = raw[len(first) + 1:] if raw.startswith(f"/{first}/") else quote(path[len(first) + 1:], safe="/:@!$&'()*+,;=-._~")
         await self.forward(scope, receive, send, upstream + raw + (f"?{query}" if query else ""), f"{own}/{first}")
+
+    async def socket(self, scope, receive, send) -> None:
+        """No app of the suite uses a websocket (server-sent events stream through forward): one asked for in an
+        app's folder is refused here, plainly, rather than landing on the start page's own routes."""
+        st = await state()
+        first = (scope.get("path") or "/")[1:].partition("/")[0]
+        if not st["on"] or first not in st["folders"]:
+            return await self.app(scope, receive, send)
+        if (await receive())["type"] == "websocket.connect":
+            log.info("websocket to %s refused: the front door passes on plain requests only", scope.get("path"))
+            await send({"type": "websocket.close", "code": 1008})
 
     async def forward(self, scope, receive, send, url: str, folder: str) -> None:
         headers = _headers(scope, folder, auth.proxy)
@@ -194,6 +228,8 @@ class FrontDoor:
         try:
             req = client().build_request(scope["method"], url, headers=headers, content=body() if has_body else None)
             resp = await client().send(req, stream=True)
+        except httpx2.InvalidURL:  # a path longer than any app takes
+            return await _plain(send, 414, "That address is too long.\n")
         except (httpx2.ConnectError, httpx2.ConnectTimeout) as e:
             log.info("%s is not answering at %s (%s)", folder, url.split("/", 3)[2], e)
             return await _plain(send, 502, f"The app in {folder}/ is not answering. It may be starting or updating: try again in a moment.\n")
@@ -215,6 +251,8 @@ class FrontDoor:
         try:
             # date and server: this server writes its own
             out = [(k.lower(), v) for k, v in resp.headers.raw if k.decode("latin-1").lower() not in HOP and k.lower() not in (b"date", b"server")]
+            hosts = {sent.get(h, b"").decode("latin-1").split(",")[0].strip().lower() for h in ("host", "x-forwarded-host")} - {""}
+            out = [(k, _location(v.decode("latin-1"), hosts, folder).encode("latin-1") if k == b"location" else v) for k, v in out]
             await send({"type": "http.response.start", "status": resp.status_code, "headers": out})
             chunks = resp.aiter_raw().__aiter__()
             while True:
@@ -237,7 +275,7 @@ class FrontDoor:
         except (httpx2.HTTPError, OSError) as e:  # the app went away mid-answer: the connection is cut, as it would be without us
             if not gone.is_set():
                 log.info("%s stopped answering mid-way on %s: %s", folder, scope.get("path"), e)
-            raise
+            return  # one line, no traceback: the answer is left unfinished, so the server closes the connection
         finally:
             watcher.cancel()
             await resp.aclose()

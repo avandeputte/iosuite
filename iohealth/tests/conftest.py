@@ -49,6 +49,7 @@ def clean(_client):
     webapi.effort_cache.clear()
     webapi._all_types["at"] = 0.0
     webapi._kinds.clear()
+    webapi._zones.clear()
     webapi.ready.types = set()
     yield
 

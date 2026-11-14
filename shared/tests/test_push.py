@@ -121,6 +121,20 @@ def test_notify_once_and_what_the_push_service_gets(sent):
     assert [d["app"] for d in push.devices(bob)] == ["iostart"]
 
 
+def test_a_once_key_is_kept_only_when_a_device_took_it(sent):
+    """A push service that is down (500, or not reached) leaves the key free: the next run sends it after all."""
+    suite.register("iotask", "ioTask", url="https://tasks.example.com")
+    bob = users.create("bob", "secret123", "member", "iotask")["id"]
+    sub = subscription(1)
+    push.add_device(bob, sub, "iotask")
+    sent.codes[sub["endpoint"]] = 503
+    assert push.notify(bob, "tasks", "Swim", once="task:9") == 0
+    assert not push.was_sent(bob, "task:9")
+    del sent.codes[sub["endpoint"]]
+    assert push.notify(bob, "tasks", "Swim", once="task:9") == 1 and push.was_sent(bob, "task:9")
+    assert push.notify(bob, "tasks", "Swim", once="task:9") == 0
+
+
 def test_admin_kinds_go_to_suite_admins_only(sent):
     alex = users.create("alex", "secret123", "admin", "iostart", suite_admin=True)["id"]
     bob = users.create("bob", "secret123", "admin", "iostart")["id"]

@@ -311,7 +311,7 @@ async def merge(request: Request):
         r = readable_contact(u, cid)
         writable_book(u, r["address_book_id"])
     result = b.get("result") if isinstance(b.get("result"), dict) else None
-    mid = await run_in_threadpool(quality.merge, u, keep, others, result)
+    mid = await run_in_threadpool(quality.merge, u, keep, others, result, book_ids(u))
     return {**contact_out(model.full(keep)), "mergeId": mid}
 
 

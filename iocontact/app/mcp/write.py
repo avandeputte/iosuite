@@ -228,7 +228,7 @@ def merge_contacts(keep: str, others: list[str], choices: Optional[dict] = None)
     added to `keep`, its empty fields are filled from them, relations pointing at the others move to it, and the
     others are deleted. choices: {field: contact} to take a field (name, nickname, birthday, org, title, notes, gender...)
     from a given contact instead (preview_merge lists where they disagree).
-    It can be undone with undo_merge. Ask first."""
+    It can be undone with undo_merge for 30 days. Ask first."""
     from app import quality
     u = who()
     k = find_contact(u, keep, writable=True)
@@ -250,7 +250,7 @@ def merge_contacts(keep: str, others: list[str], choices: Optional[dict] = None)
                 result[field] = full[src][field]
             else:
                 raise ToolError(f"'{field}' is not a field to choose")
-    mid = quality.merge(u, k["id"], ids[1:], result)
+    mid = quality.merge(u, k["id"], ids[1:], result, book_ids(u))
     return {"merged": [r["fn"] for r in rows], "mergeId": mid, "into": contact_out(u, k["id"])}
 
 

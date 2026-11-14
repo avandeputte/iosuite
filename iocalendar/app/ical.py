@@ -28,6 +28,7 @@ FAR = dt.datetime(2200, 1, 1, tzinfo=UTC)
 MAX_LAST = 20000  # occurrences counted to find where a bounded series ends; beyond that it counts as endless
 MAX_PER_DAY = 48  # a series repeats every half hour at most ...
 MAX_DENSE = 1000  # ... or more often when it ends within this many occurrences
+SLACK = dt.timedelta(hours=15)  # the farthest a floating time or a whole day is from UTC (UTC+14 to UTC-12)
 MAX_EXPAND = dt.timedelta(days=1830)  # the longest period CalDAV's expand writes out as separate occurrences
 REMINDER_DESC = "Reminder"
 
@@ -415,16 +416,24 @@ def occurrences(cal: Calendar, start: dt.datetime, end: dt.datetime, tzname: str
         return []
     recurring = _repeats(m) or any("RECURRENCE-ID" in c for c in comps)
     out = []
+    # the library compares a floating time's clock, and a whole day's UTC midnight, with the bounds as they are: ask it
+    # for a wider window, then keep what really overlaps (a floating time in the calendar's zone; a whole day by date)
     try:
-        found = None if too_frequent(m) else recurring_ical_events.of(cal).between(start, end)
+        found = None if too_frequent(m) else recurring_ical_events.of(cal).between(start - SLACK, end + SLACK)
     except Exception:  # noqa: BLE001 - an object the library cannot expand: its master only
         found = None
+    z = zone(tzname)
+    first_day, last_day = start.astimezone(z).date(), (end - dt.timedelta(microseconds=1)).astimezone(z).date()
     for occ in ([m] if found is None else found):
         s, e = _start_end(occ)
-        if to_utc(e, tzname) <= start and not (to_utc(s, tzname) >= start):
-            continue
-        if found is None and to_utc(s, tzname) >= end:
-            continue
+        if isinstance(s, dt.datetime):
+            su, eu = to_utc(s, tzname), to_utc(e, tzname)
+            if su >= end or (eu <= start and su < start):
+                continue
+        else:  # whole days: the dates of [start, end) in the calendar's zone (the end date is the day after)
+            last = e - dt.timedelta(days=1) if e > s else s
+            if s > last_day or last < first_day:
+                continue
         rid = occ.get("RECURRENCE-ID")
         out.append({"start": s, "end": e, "allDay": not isinstance(s, dt.datetime),
                     "recurrenceId": iso(rid.dt) if (recurring and rid is not None) else None,

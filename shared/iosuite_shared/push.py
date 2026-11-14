@@ -292,6 +292,11 @@ def claim(user_id: int, key: str) -> bool:
     return bool(db.ex("INSERT IGNORE INTO ios_push_sent (user_id, tag, sent_at) VALUES (%s, %s, %s)", (user_id, _tag(key), int(time.time()))))
 
 
+def release(user_id: int, key: str) -> None:
+    """Give the key back: nothing reached a device, so the next run may try again."""
+    db.ex("DELETE FROM ios_push_sent WHERE user_id = %s AND tag = %s", (user_id, _tag(key)))
+
+
 def _tag(key: str) -> str:
     return hashlib.sha256(key.encode()).hexdigest() if len(key) > 191 else key
 
@@ -339,8 +344,9 @@ def _send(rows: list, message: dict, ttl: int, urgency: str) -> int:
 def notify(user_id: int, kind: str, title: str, body: str = "", url: str = None, once: str = None, tag: str = None,
            ttl: int = 86400, urgency: str = "normal", check: bool = True) -> int:
     """Send one notification to every device of this account, if it wants this kind (check=False: it asked, as for a
-    test). once: a key that is sent at most once per account. tag: a notification with the same tag replaces the one
-    on the screen. How many devices took it."""
+    test). once: a key that is sent at most once per account (claimed before sending, so two apps never both send it;
+    given back when no device took it, so the next run tries again). tag: a notification with the same tag replaces
+    the one on the screen. How many devices took it."""
     if kind not in KIND and kind != "test":
         raise Invalid(f"Unknown kind of notification: {kind}")
     if check:
@@ -354,7 +360,15 @@ def notify(user_id: int, kind: str, title: str, body: str = "", url: str = None,
         return 0
     message = {"title": str(title or "")[:120], "body": str(body or "")[:600], "kind": kind, "url": url or None,
                "tag": (tag or once or "")[:64] or None, "app": KIND.get(kind, {}).get("app")}
-    return _send(rows, message, ttl, urgency)
+    try:
+        ok = _send(rows, message, ttl, urgency)
+    except Exception:
+        if once:
+            release(user_id, once)
+        raise
+    if once and not ok:
+        release(user_id, once)
+    return ok
 
 
 def notify_admins(kind: str, title: str, body: str = "", url: str = None, once: str = None, **kw) -> int:

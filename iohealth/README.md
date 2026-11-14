@@ -265,7 +265,7 @@ are JSON `{"detail": "…"}` with 400, 401, 403, 404 or 413.
 | request | body | reply |
 |---|---|---|
 | `GET /v1/health` | | `{"ok":true,"schemaVersion":N}` |
-| `POST /v1/sessions` | `{"deviceName","systemVersion","fullResync"}` | 201 `{"sessionId":N}` |
+| `POST /v1/sessions` | `{"deviceName","systemVersion","fullResync","timeZone"}` (timeZone: the phone's IANA zone, for goal notifications) | 201 `{"sessionId":N}` |
 | `POST /v1/sessions/{id}/items` | NDJSON lines as in `Shared/SyncProtocol.swift` (in iohealth-apps), optionally `Content-Encoding: gzip`; header `X-Batch-Seq: n` | `{"applied":k}` |
 | `POST /v1/sessions/{id}/finish` | `{"totalSent":N}` | `{"received":N}` (items the session applied) |
 
