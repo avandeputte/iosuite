@@ -175,7 +175,12 @@ def save_destination(b: dict, by: str | None, did: int | None = None) -> dict:
         path = _str(b.get("path"), 1024, "folder", True)
         if not os.path.isabs(path):
             raise Invalid("The folder is an absolute path, like /var/backups/iobackup")
-        opts = {"path": os.path.normpath(path)}
+        path = os.path.normpath(path)
+        for kind_of, d in (("work", config.WORK_DIR), ("download cache", config.CACHE_DIR)):
+            mine = os.path.realpath(str(d))
+            if os.path.commonpath([os.path.realpath(path), mine]) == mine:
+                raise Invalid(f"Pick a folder apart from ioBackup's {kind_of} folder ({d}): it is emptied as ioBackup works")
+        opts = {"path": path}
     elif kind == "gdrive":
         auth = "service_account" if b.get("auth") == "service_account" else "oauth"
         opts = {"auth": auth, "folder_name": _str(b.get("folderName"), 200, "folder name") or "ioBackup",

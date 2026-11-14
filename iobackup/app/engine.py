@@ -316,10 +316,12 @@ def _unq(raw, kind):
 def split_dump(stream, outdir, level=6, progress=None, cancel=None):
     """Split a ``mariadb-dump --databases`` stream into per-object gzip files.
 
-    Returns (header_bytes, footer_bytes, databases).
+    Returns (header_bytes, footer_bytes, databases). The marker comments and the footer's first line are only believed
+    outside a ``DELIMITER ;;`` block: inside one, a stored routine, trigger or event body is being written, and its
+    lines are whatever its author typed (a body holding "-- Current Database: `x`" must not start a database).
     """
     header, footer, dbs, by_name = [], [], [], {}
-    st = {"db": None, "w": None, "sec": None, "zone": "header", "bytes": 0}
+    st = {"db": None, "w": None, "sec": None, "zone": "header", "bytes": 0, "block": False, "mid": False}
 
     def close_section():
         if st["w"] is None:
@@ -358,6 +360,17 @@ def split_dump(stream, outdir, level=6, progress=None, cancel=None):
         if zone == "footer":
             if not DUMP_END.match(stripped):
                 footer.append(line)
+            continue
+        if st["block"]:  # a body: copied as it is; only the end of the block counts
+            if not st["mid"] and stripped == b"DELIMITER ;":
+                st["block"] = False
+            else:
+                st["mid"] = not stripped.endswith(b";;")
+            st["w"][0].write(line)
+            continue
+        if stripped == b"DELIMITER ;;" and st["w"] is not None:
+            st["block"], st["mid"] = True, False
+            st["w"][0].write(line)
             continue
         if stripped == FOOTER_START and zone != "header":
             close_section()
@@ -422,114 +435,122 @@ def run_backup(server, databases, include_users=True, workdir=None, label="backu
     name = "%s-%s" % (slug(label), stamp)
     stage = tempfile.mkdtemp(prefix=name + ".", dir=workdir)
     os.chmod(stage, 0o700)
-    tar_path = os.path.join(workdir, name + ARCHIVE_SUFFIX)
-    desynced = False
-    with Connection(server) as conn:
+    try:  # the stage folder goes, whatever happens (a failed or cancelled dump included)
+        tar_path = os.path.join(workdir, name + ARCHIVE_SUFFIX)
+        desynced = False
+        with Connection(server) as conn:
+            try:
+                info = server_info(conn)
+                names = [d["name"] for d in info["databases"]]
+                if databases == "all" or databases is None:
+                    selected = [d["name"] for d in info["databases"] if not d["system"]]
+                else:
+                    missing = [d for d in databases if d not in names]
+                    if missing:
+                        raise EngineError("Database(s) not on the server: %s" % ", ".join(missing))
+                    selected = list(databases)
+                if not selected and not include_users:
+                    raise EngineError("Nothing to back up: no databases selected and users excluded.")
+                log("Server %s%s" % (info["version"], ", Galera node (%s, cluster of %d)" % (
+                    info["galera"]["state"], info["galera"]["cluster_size"]) if info["galera"] else ""))
+                odd = [d for d in info["databases"] if d["name"] in selected and d["non_innodb"]]
+                for d in odd:
+                    log("warning: %s has %d non-InnoDB table(s); they are not covered by the "
+                        "transaction snapshot%s" % (d["name"], d["non_innodb"],
+                                                    " and Galera does not replicate them" if info["galera"] else ""))
+                if info["galera"] and desync:
+                    conn.query("SET GLOBAL wsrep_desync = ON")
+                    desynced = True
+                    log("Galera: node desynced for the backup (wsrep_desync=ON)")
+
+                manifest = {
+                    "format": FORMAT_VERSION, "label": label, "name": name,
+                    "created": _dt.datetime.now().astimezone().isoformat(timespec="seconds"),
+                    "server_version": info["version"],
+                    "source": source_name or server.get("host") or "localhost",
+                    "galera": bool(info["galera"]),
+                    "consistency": "lock-all-tables" if lock_all else "single-transaction",
+                    "databases": [], "accounts": None, "dump_bytes": 0,
+                }
+                if selected:
+                    log("Dumping %d database(s): %s" % (len(selected), ", ".join(selected)))
+                    proc, errf = conn.dump_process(selected, lock_all)
+                    seen = set()
+
+                    def progress(db, kind, obj):
+                        if db not in seen:
+                            seen.add(db)
+                            log("  dumping %s" % db)
+
+                    try:
+                        header, footer, dbs, nbytes = split_dump(proc.stdout, stage, compress_level,
+                                                                 progress, cancel)
+                    except BaseException:
+                        proc.kill()
+                        proc.wait()
+                        raise
+                    proc.stdout.close()
+                    rc = proc.wait()
+                    errf.seek(0)
+                    err = errf.read().decode("utf-8", "replace").strip()
+                    if rc != 0:
+                        raise EngineError("mariadb-dump failed (exit %d): %s" % (rc, err))
+                    if err:
+                        log("mariadb-dump: " + err)
+                    found = [d["name"] for d in dbs]
+                    if sorted(found) != sorted(selected):  # the dump did not split as written: never keep such a backup
+                        raise EngineError("The dump did not come apart as expected (databases found: %s; asked for: %s); "
+                                          "the backup is not kept" % (", ".join(found) or "none", ", ".join(selected)))
+                    with open(os.path.join(stage, "header.sql"), "wb") as f:
+                        f.write(header)
+                    with open(os.path.join(stage, "footer.sql"), "wb") as f:
+                        f.write(footer)
+                    manifest["header_sha256"] = hashlib.sha256(header).hexdigest()
+                    manifest["footer_sha256"] = hashlib.sha256(footer).hexdigest()
+                    for db in dbs:
+                        s = summarize_db(db)
+                        log("  %-28s %d tables, %d views%s%s" % (
+                            db["name"], s["tables"], s["views"],
+                            ", routines" if s["routines"] else "", ", events" if s["events"] else ""))
+                    manifest["databases"] = dbs
+                    manifest["dump_bytes"] = nbytes
+                if include_users:
+                    accts = export_accounts(conn, log)
+                    data = json.dumps(accts, indent=2).encode()
+                    with open(os.path.join(stage, "accounts.json"), "wb") as f:
+                        f.write(data)
+                    manifest["accounts"] = {"file": "accounts.json",
+                                            "sha256": hashlib.sha256(data).hexdigest(),
+                                            "users": len(accts["users"]), "roles": len(accts["roles"])}
+                    log("Accounts: %d users, %d roles" % (len(accts["users"]), len(accts["roles"])))
+            finally:
+                if desynced:
+                    try:
+                        conn.query("SET GLOBAL wsrep_desync = OFF")
+                        log("Galera: node back in sync (wsrep_desync=OFF)")
+                    except EngineError as e:
+                        log("warning: could not turn wsrep_desync off again: %s" % e)
+
         try:
-            info = server_info(conn)
-            names = [d["name"] for d in info["databases"]]
-            if databases == "all" or databases is None:
-                selected = [d["name"] for d in info["databases"] if not d["system"]]
-            else:
-                missing = [d for d in databases if d not in names]
-                if missing:
-                    raise EngineError("Database(s) not on the server: %s" % ", ".join(missing))
-                selected = list(databases)
-            if not selected and not include_users:
-                raise EngineError("Nothing to back up: no databases selected and users excluded.")
-            log("Server %s%s" % (info["version"], ", Galera node (%s, cluster of %d)" % (
-                info["galera"]["state"], info["galera"]["cluster_size"]) if info["galera"] else ""))
-            odd = [d for d in info["databases"] if d["name"] in selected and d["non_innodb"]]
-            for d in odd:
-                log("warning: %s has %d non-InnoDB table(s); they are not covered by the "
-                    "transaction snapshot%s" % (d["name"], d["non_innodb"],
-                                                " and Galera does not replicate them" if info["galera"] else ""))
-            if info["galera"] and desync:
-                conn.query("SET GLOBAL wsrep_desync = ON")
-                desynced = True
-                log("Galera: node desynced for the backup (wsrep_desync=ON)")
-
-            manifest = {
-                "format": FORMAT_VERSION, "label": label, "name": name,
-                "created": _dt.datetime.now().astimezone().isoformat(timespec="seconds"),
-                "server_version": info["version"],
-                "source": source_name or server.get("host") or "localhost",
-                "galera": bool(info["galera"]),
-                "consistency": "lock-all-tables" if lock_all else "single-transaction",
-                "databases": [], "accounts": None, "dump_bytes": 0,
-            }
-            if selected:
-                log("Dumping %d database(s): %s" % (len(selected), ", ".join(selected)))
-                proc, errf = conn.dump_process(selected, lock_all)
-                seen = set()
-
-                def progress(db, kind, obj):
-                    if db not in seen:
-                        seen.add(db)
-                        log("  dumping %s" % db)
-
-                try:
-                    header, footer, dbs, nbytes = split_dump(proc.stdout, stage, compress_level,
-                                                             progress, cancel)
-                except BaseException:
-                    proc.kill()
-                    proc.wait()
-                    raise
-                proc.stdout.close()
-                rc = proc.wait()
-                errf.seek(0)
-                err = errf.read().decode("utf-8", "replace").strip()
-                if rc != 0:
-                    raise EngineError("mariadb-dump failed (exit %d): %s" % (rc, err))
-                if err:
-                    log("mariadb-dump: " + err)
-                with open(os.path.join(stage, "header.sql"), "wb") as f:
-                    f.write(header)
-                with open(os.path.join(stage, "footer.sql"), "wb") as f:
-                    f.write(footer)
-                for db in dbs:
-                    s = summarize_db(db)
-                    log("  %-28s %d tables, %d views%s%s" % (
-                        db["name"], s["tables"], s["views"],
-                        ", routines" if s["routines"] else "", ", events" if s["events"] else ""))
-                manifest["databases"] = dbs
-                manifest["dump_bytes"] = nbytes
-            if include_users:
-                accts = export_accounts(conn, log)
-                data = json.dumps(accts, indent=2).encode()
-                with open(os.path.join(stage, "accounts.json"), "wb") as f:
-                    f.write(data)
-                manifest["accounts"] = {"file": "accounts.json",
-                                        "sha256": hashlib.sha256(data).hexdigest(),
-                                        "users": len(accts["users"]), "roles": len(accts["roles"])}
-                log("Accounts: %d users, %d roles" % (len(accts["users"]), len(accts["roles"])))
+            with open(os.path.join(stage, "manifest.json"), "w") as f:
+                json.dump(manifest, f, indent=2)
+            partial = tar_path + ".partial"
+            with tarfile.open(partial, "w", format=tarfile.PAX_FORMAT) as tar:
+                # manifest first, so listing a backup reads only the start of the file
+                for rel in ["manifest.json", "header.sql", "footer.sql", "accounts.json"]:
+                    p = os.path.join(stage, rel)
+                    if os.path.exists(p):
+                        tar.add(p, arcname=rel)
+                for db in manifest["databases"]:
+                    for s in db["sections"]:
+                        tar.add(os.path.join(stage, s["file"]), arcname=s["file"])
+            os.chmod(partial, 0o600)
+            os.rename(partial, tar_path)
         finally:
-            if desynced:
-                try:
-                    conn.query("SET GLOBAL wsrep_desync = OFF")
-                    log("Galera: node back in sync (wsrep_desync=OFF)")
-                except EngineError as e:
-                    log("warning: could not turn wsrep_desync off again: %s" % e)
-
-    try:
-        with open(os.path.join(stage, "manifest.json"), "w") as f:
-            json.dump(manifest, f, indent=2)
-        partial = tar_path + ".partial"
-        with tarfile.open(partial, "w", format=tarfile.PAX_FORMAT) as tar:
-            # manifest first, so listing a backup reads only the start of the file
-            for rel in ["manifest.json", "header.sql", "footer.sql", "accounts.json"]:
-                p = os.path.join(stage, rel)
-                if os.path.exists(p):
-                    tar.add(p, arcname=rel)
-            for db in manifest["databases"]:
-                for s in db["sections"]:
-                    tar.add(os.path.join(stage, s["file"]), arcname=s["file"])
-        os.chmod(partial, 0o600)
-        os.rename(partial, tar_path)
+            if os.path.exists(tar_path + ".partial"):
+                os.unlink(tar_path + ".partial")
     finally:
         shutil.rmtree(stage, ignore_errors=True)
-        if os.path.exists(tar_path + ".partial"):
-            os.unlink(tar_path + ".partial")
     log("Backup file %s (%s)" % (os.path.basename(tar_path), human_size(os.path.getsize(tar_path))))
     return tar_path, manifest
 
@@ -624,11 +645,20 @@ class Archive:
                 "galera": m.get("galera"), "consistency": m.get("consistency"),
                 "databases": dbs, "accounts": accts, "has_accounts": self.accounts is not None}
 
-    def verify(self):
+    def checksums(self, sections=None):
+        """(file, sha256) of what a restore reads: the header and footer, the accounts and the sections (every one, or
+        those given). Backups made before 3.7.9 carry no checksum for the header and footer; theirs are not checked."""
+        m = self.manifest
+        sections = [s for db in m["databases"] for s in db["sections"]] if sections is None else sections
+        files = [(s["file"], s["sha256"]) for s in sections]
+        files += [(rel, m[key]) for rel, key in (("header.sql", "header_sha256"), ("footer.sql", "footer_sha256")) if m.get(key)]
+        if m.get("accounts"):
+            files.append((m["accounts"]["file"], m["accounts"]["sha256"]))
+        return files
+
+    def verify(self, sections=None):
         problems = []
-        files = [(s["file"], s["sha256"]) for db in self.manifest["databases"] for s in db["sections"]]
-        if self.manifest.get("accounts"):
-            files.append((self.manifest["accounts"]["file"], self.manifest["accounts"]["sha256"]))
+        files = self.checksums(sections)
         for rel, want in files:
             if not self._exists(rel):
                 problems.append("missing " + rel)
@@ -823,13 +853,26 @@ def account_statements(norm):
     return stmts
 
 
-def write_db_sql(out, archive, header, footer, db, target, objects, schema_only, log=_noop):
+def restore_passes(norm):
+    """What a restore writes, in order: (db, target, sections, create). First every database with everything but its
+    final views, then the final views of all of them, as mariadb-dump itself orders a dump of several databases: a view
+    may read a table of a database restored after its own."""
+    first, views = [], []
+    for db, target, objs in norm["dbs"]:
+        secs = selected_sections(db, objs, norm["schema_only"])
+        first.append((db, target, [s for s in secs if s["kind"] != "view"], True))
+        if any(s["kind"] == "view" for s in secs):
+            views.append((db, target, [s for s in secs if s["kind"] == "view"], False))
+    return first + views
+
+
+def write_db_sql(out, archive, header, footer, db, target, sections, create=True, log=_noop):
     out.mark("database %s" % target)
     out.write(header)
-    out.write(("\n%s\nUSE %s;\n" % (rewrite_create_db(db["create_sql"], db["name"], target),
-                                     qident(target))).encode())
+    made = rewrite_create_db(db["create_sql"], db["name"], target) + "\n" if create else ""
+    out.write(("\n%sUSE %s;\n" % (made, qident(target))).encode())
     last = None
-    for s in selected_sections(db, objects, schema_only):
+    for s in sections:
         name = s["object"] if s["kind"] not in ("routines", "events") else None
         label = "%s.%s" % (target, name) if name else "%s %s" % (target, s["kind"])
         if label != last:
@@ -844,10 +887,23 @@ def write_db_sql(out, archive, header, footer, db, target, objects, schema_only,
     out.write(footer)
 
 
-def write_restore_sql(out, archive, norm, log=_noop):
+def write_databases(out, archive, norm, log=_noop):
     header, footer = archive.read("header.sql"), archive.read("footer.sql")
-    for db, target, objs in norm["dbs"]:
-        write_db_sql(out, archive, header, footer, db, target, objs, norm["schema_only"], log)
+    for db, target, sections, create in restore_passes(norm):
+        write_db_sql(out, archive, header, footer, db, target, sections, create, log)
+
+
+def check_archive(archive, norm):
+    """Every file the restore will read matches the checksum the backup recorded, before anything is sent to the server."""
+    sections = [s for _, _, secs, _ in restore_passes(norm) for s in secs]
+    _, problems = archive.verify(sections)
+    if problems:
+        raise EngineError("The backup file is damaged, nothing was restored: %s%s" % (
+            "; ".join(problems[:5]), " …" if len(problems) > 5 else ""))
+
+
+def write_restore_sql(out, archive, norm, log=_noop):
+    write_databases(out, archive, norm, log)
     stmts = account_statements(norm)
     for sql, lab in stmts:
         out.mark(lab)
@@ -897,7 +953,7 @@ def run_restore(server, archive, plan, log=_noop, cancel=None):
     norm = normalize_plan(archive, plan)
     for line in describe(norm):
         log("Will restore " + line)
-    header, footer = archive.read("header.sql"), archive.read("footer.sql")
+    check_archive(archive, norm)
     errors = []
     with Connection(server) as conn:
         info = server_info(conn)
@@ -908,9 +964,7 @@ def run_restore(server, archive, plan, log=_noop, cancel=None):
             log("note: " + w)
         if norm["dbs"]:
             log("Restoring databases")
-            errors += _feed(conn, lambda out: [write_db_sql(
-                out, archive, header, footer, db, target, objs, norm["schema_only"], log)
-                for db, target, objs in norm["dbs"]], norm["force"], cancel)
+            errors += _feed(conn, lambda out: write_databases(out, archive, norm, log), norm["force"], cancel)
             if errors and not norm["force"]:
                 log("Stopped at the first error (turn on 'continue past errors' to carry on)")
         if (norm["roles"] or norm["users"]) and (not errors or norm["force"]):
