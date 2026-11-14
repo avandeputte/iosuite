@@ -66,10 +66,10 @@ These are extras, switched on by having both apps; neither app needs the other:
 
 ## All of them at once
 
-Every installer ends with **"Also install …?"**: tick the other apps and they go in the same machine or container,
+Every installer ends with **the list of apps**: tick the other apps and they go in the same machine or container,
 each with its own database and port, with the shared answers (database server, Shared ioSuite database, sign-in domain,
 admin) asked only once. Or run the [whole-suite Docker stack](docker.md#the-whole-suite-in-one-stack), MariaDB
-included. See [Several apps on one host](several-apps.md).
+included. Run it again later to add, remove or reconfigure apps. See [Several apps on one host](several-apps.md).
 
 ## Removing an app
 

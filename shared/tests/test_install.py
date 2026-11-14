@@ -113,3 +113,164 @@ def test_local_mariadb_gets_the_databases(tmp_path, monkeypatch):
     seen.clear()
     install.prepare_local_databases(entries, dict(DB_HOST="db.lan", DB_USER="suite"), log=lambda *_: None)
     assert not seen  # a remote server is left to its administrator
+
+
+# ---- what is here, removing, the checklist
+
+def _server(tmp_path, apps=("iocalendar", "iotask"), data=("ionote",)):
+    """An /opt with ioStart (the caller) and some companions, as `install` leaves them."""
+    opt = tmp_path / "opt"
+    own = opt / "iostart" / "app"
+    own.mkdir(parents=True)
+    (own / "config.env").write_text(CFG)
+    for n in apps + tuple(data):
+        d = opt / n / "app"
+        (d / ".venv").mkdir(parents=True)
+        (d / "app").mkdir()
+        (d / "app" / "main.py").write_text("x")
+        (d / "data").mkdir()
+        (d / "data" / f"{n}.log").write_text("log")
+        cfg = CFG.replace("DB_NAME=suite", f"DB_NAME={install.APPS[n]['db']}")
+        if n in data:
+            (opt / n / "data").mkdir()
+            (opt / n / "data" / "keep.me").write_text("x")
+            cfg += f"DATA_DIR={opt / n / 'data'}\n"
+        (d / "config.env").write_text(cfg)
+    return opt, own
+
+
+def _remove(names, own, **kw):
+    calls = {"stop": [], "forget": [], "drop": []}
+    failed = install.remove(names, own, stopper=lambda n, t, log=print: calls["stop"].append(n),
+                            forgetter=lambda n, log=print: calls["forget"].append(n),
+                            dropper=lambda p, db_admin=None, log=print: calls["drop"].append(p["db"]) or True, **kw)
+    return failed, calls
+
+
+def test_installed_lists_the_caller_and_what_has_a_config(tmp_path):
+    opt, own = _server(tmp_path)
+    assert install.app_of(own) == "iostart"
+    assert install.installed(opt, own) == ["iostart", "iocalendar", "ionote", "iotask"]
+    (opt / "iorecipe" / "app" / "data").mkdir(parents=True)  # what a removed app leaves: no config.env, not installed
+    assert "iorecipe" not in install.installed(opt, own)
+
+
+def test_remove_keeps_the_database_and_the_data(tmp_path, capsys):
+    opt, own = _server(tmp_path)
+    failed, calls = _remove(["iocalendar", "ionote"], own)
+    assert failed == [] and calls["stop"] == calls["forget"] == ["iocalendar", "ionote"] and calls["drop"] == []
+    cal = opt / "iocalendar" / "app"
+    assert not (cal / "config.env").exists() and not (cal / ".venv").exists() and not (cal / "app").exists()
+    assert (cal / "data" / "iocalendar.log").is_file()  # the data folder inside the app's folder stays
+    assert (opt / "ionote" / "data" / "keep.me").is_file() and not (opt / "ionote" / "app" / "config.env").exists()
+    assert install.installed(opt, own) == ["iostart", "iotask"]
+    assert (opt / "iotask" / "app" / "config.env").is_file() and (own / "config.env").is_file()  # nobody else is touched
+    out = capsys.readouterr().out
+    assert "kept the database calendar" in out and "adding ioCalendar again later finds them" in out
+
+
+def test_remove_with_delete_data_drops_only_the_apps_own_database(tmp_path):
+    opt, own = _server(tmp_path)
+    failed, calls = _remove(["iocalendar", "ionote"], own, delete_data=True)
+    assert failed == [] and calls["drop"] == [("db.lan", "3307", "calendar"), ("db.lan", "3307", "notes")]
+    assert not (opt / "iocalendar").exists() and not (opt / "ionote").exists()
+    assert (opt / "iotask" / "app" / "data").is_dir()
+
+
+def test_delete_data_never_drops_a_shared_or_borrowed_database(tmp_path, capsys):
+    opt, own = _server(tmp_path)
+    cal = opt / "iocalendar" / "app" / "config.env"
+    cal.write_text(cal.read_text().replace("DB_NAME=calendar", "DB_NAME=iostart"))  # the Shared ioSuite database's name here
+    task = opt / "iotask" / "app" / "config.env"
+    task.write_text(task.read_text().replace("DB_NAME=tasks", "DB_NAME=suite"))  # ioStart's own database
+    outside = tmp_path / "elsewhere"
+    outside.mkdir()
+    task.write_text(task.read_text() + f"DATA_DIR={outside}\n")
+    failed, calls = _remove(["iocalendar", "iotask"], own, delete_data=True)
+    assert failed == [] and calls["drop"] == []
+    out = capsys.readouterr().out
+    assert "it is the Shared ioSuite database" in out and "ioStart uses it too" in out
+    assert outside.is_dir() and not (opt / "iotask" / "app").exists()  # a data folder elsewhere is the person's to delete
+
+
+def test_remove_of_the_calling_app_is_done_by_another_and_never_the_last(tmp_path):
+    opt, own = _server(tmp_path)
+    failed, calls = _remove(["iostart", "iorecipe"], own, delete_data=True, delegate=lambda *a: 1 / 0)
+    assert failed == ["iostart"] and calls == {"stop": [], "forget": [], "drop": []}  # no other app has an environment to run it
+    assert (own / "config.env").is_file()
+    (opt / "iotask" / "app" / ".venv" / "bin").mkdir()
+    (opt / "iotask" / "app" / ".venv" / "bin" / "iosuite-shared").write_text("")
+    asked = []
+    failed, calls = _remove(["iostart", "iocalendar"], own, delegate=lambda other, n, base, dd, dba: asked.append((other, n, dd)) or 0)
+    assert failed == [] and asked == [("iotask", "iostart", False)] and calls["stop"] == ["iocalendar"]
+    failed, _ = _remove(["iostart", "iotask"], own, delegate=lambda *a: 1 / 0)  # iotask goes too: nobody left to do it
+    assert failed == ["iostart"]
+
+
+def test_stop_service_without_systemd_runs_nothing(tmp_path, monkeypatch):
+    ran = []
+    monkeypatch.setattr(install.shutil, "which", lambda x: None)
+    install.stop_service("iotask", tmp_path, run=lambda *a, **k: ran.append(a))
+    assert ran == []  # no systemd here: nothing run, the person is told
+
+
+def test_choose_ticks_and_unticks(tmp_path):
+    opt, own = _server(tmp_path)
+    names = list(install.APPS)
+
+    def answers(*a):
+        it = iter(a)
+        return lambda prompt: next(it)
+
+    out = []
+    # untick ioCalendar (by number), tick ioRecipe (by name), try the caller; keep the data; go ahead
+    picked = install.choose(opt, own, ask=answers(f"{names.index('iocalendar') + 1} iorecipe", "", "", ""), log=out.append)
+    assert picked == (["iorecipe"], ["iocalendar"], False, [])
+    assert any("to remove" in line for line in out)
+    assert install.choose(opt, own, ask=answers(""), log=out.append) is None  # nothing ticked: nothing to do
+    # deleting the data needs the word and a yes (Enter is no)
+    assert install.choose(opt, own, ask=answers("iotask", "", "DELETE", ""), log=out.append) is None
+    assert install.choose(opt, own, ask=answers("iotask", "", "DELETE", "y"), log=out.append) == ([], ["iotask"], True, [])
+    assert install.choose(opt, own, ask=answers("iotask", "", "delete", "y"), log=out.append) == ([], ["iotask"], False, [])
+
+
+def test_cli_apps_adds_and_removes(tmp_path, monkeypatch, capsys):
+    opt, own = _server(tmp_path)
+    seen = {}
+    monkeypatch.setattr(install, "remove", lambda names, cfg, **kw: seen.update(remove=(names, kw["delete_data"])) or [])
+    monkeypatch.setattr(install, "install", lambda names, cfg, **kw: seen.update(add=(names, kw["from_app"])) or [])
+    assert cli.main(["--config", str(own), "apps", "--add", "iorecipe", "--remove", "iotask,iocalendar"]) == 0
+    assert seen == {"remove": (["iotask", "iocalendar"], False), "add": (["iorecipe"], "iostart")}
+    assert cli.main(["--config", str(own), "apps", "--list"]) == 0
+    out = capsys.readouterr().out
+    assert "[x] ioCalendar" in out and "[ ] ioRecipe" in out and "this app" in out
+    with pytest.raises(SystemExit):
+        cli.main(["--config", str(own), "apps", "--add", "iotask", "--remove", "iotask"])
+
+
+def test_choose_reconfigure(tmp_path):
+    opt, own = _server(tmp_path)
+    names = list(install.APPS)
+    out = []
+
+    def answers(*a):
+        it = iter(a)
+        return lambda prompt: next(it)
+
+    n = names.index("iotask") + 1
+    assert install.choose(opt, own, ask=answers(f"r{n} r iostart riorecipe", ""), log=out.append) == ([], [], False, ["iostart", "iotask"])
+    assert any("ioRecipe is not installed here" in line for line in out) and any("to reconfigure" in line for line in out)
+    # an app that is unticked is removed, not reconfigured
+    assert install.choose(opt, own, ask=answers(f"r{n} {n}", "", "", ""), log=out.append) == ([], ["iotask"], False, [])
+
+
+def test_reconfigure_runs_the_apps_own_setup(tmp_path):
+    opt, own = _server(tmp_path)
+    for d in (own, opt / "iotask" / "app"):
+        (d / "setup.sh").write_text("exit 0\n")
+    ran = []
+    assert install.reconfigure(["iostart", "iotask", "iorecipe"], own, runner=lambda folder: ran.append(folder) or 0) == ["iorecipe"]
+    assert ran == [own, opt / "iotask" / "app"]
+    assert install.reconfigure(["iotask"], own) == []  # the real runner: sh ./setup.sh --also none, in the app's folder
+    with pytest.raises(SystemExit):
+        cli.main(["--config", str(own), "apps", "--reconfigure", "iotask", "--remove", "iotask"])

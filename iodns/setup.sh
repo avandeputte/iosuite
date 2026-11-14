@@ -13,9 +13,15 @@
 #        --service | --no-service   --system-deps | --no-system-deps   --python PATH
 #   --db-admin USER:PASSWORD      a MariaDB / MySQL administrator (root...): the databases and users above are created
 #                                 for you, with the passwords you answered (IODNS_DB_ADMIN does the same; empty: they exist)
-#   --also APP,APP | all | none   also install other apps of the suite here (iostart, iocalendar, iocontact, ionote, iohealth, iopix), beside this one,
-#                                 with the same database server (each app its own database), Shared ioSuite database,
-#                                 sign-in domain and admin: those questions are asked once (IODNS_ALSO does the same)
+#   --also APP,APP | all        add other apps of the suite to this server, beside this one, with the same database
+#                                 server (each app its own database), Shared ioSuite database, sign-in domain and
+#                                 admin: those questions are asked once (IODNS_ALSO does the same)
+#   --remove APP,APP              take apps of the suite off this server: the service and the program files go, the
+#                                 app's database and data stay (IODNS_REMOVE does the same)
+#   --reconfigure APP,APP         ask the setup questions of other apps that are already here again, the current
+#                                 answers as the defaults (each app's own setup.sh)
+#   --apps                        only that: show the apps that are here; tick or untick them, or pick one to
+#                                 reconfigure (no other question). Without --yes, every run ends with this list
 #        --timezone ZONE (the times in History)
 # Secrets can stay off the command line: IODNS_DB, IODNS_SUITE_DB and IODNS_ADMIN in the environment do
 # what --db, --suite-db and --admin do. Run it again at any time: it keeps config.env and only changes what you answer.
@@ -24,14 +30,14 @@ cd "$(dirname "$0")"
 APP="$(pwd)"
 say() { printf '\n\033[1;34m==>\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
-YES=0; DBS=""; ADBS=""; ADMIN=""; NO_ADMIN=0; PORT=""; TZONE=""; PUBURL=""; COOKIE=""; SERVICE=""; SYSDEPS=""; PY=""; ALSO=""; DBADMIN=""
+YES=0; DBS=""; ADBS=""; ADMIN=""; NO_ADMIN=0; PORT=""; TZONE=""; PUBURL=""; COOKIE=""; SERVICE=""; SYSDEPS=""; PY=""; ALSO=""; DBADMIN=""; REMOVE=""; REDO=""; APPSONLY=0; NOAPPS=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --yes) YES=1; shift;; --db) DBS="$2"; shift 2;; --suite-db) ADBS="$2"; shift 2;; --admin) ADMIN="$2"; shift 2;; --no-admin) NO_ADMIN=1; shift;;
     --port) PORT="$2"; shift 2;; --timezone) TZONE="$2"; shift 2;; --public-url) PUBURL="$2"; shift 2;; --cookie-domain) COOKIE="$2"; shift 2;;
     --service) SERVICE=1; shift;; --no-service) SERVICE=0; shift;; --system-deps) SYSDEPS=1; shift;; --no-system-deps) SYSDEPS=0; shift;;
-    --python) PY="$2"; shift 2;; --also) ALSO="$2"; shift 2;; --db-admin) DBADMIN="$2"; shift 2;;
-    -h|--help) sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'; exit 0;;
+    --python) PY="$2"; shift 2;; --also) ALSO="$2"; shift 2;; --remove) REMOVE="$2"; shift 2;; --reconfigure) REDO="$2"; shift 2;; --apps) APPSONLY=1; shift;; --db-admin) DBADMIN="$2"; shift 2;;
+    -h|--help) sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//'; exit 0;;
     *) die "unknown option $1 (try --help)";;
   esac
 done
@@ -39,6 +45,11 @@ done
 [ -n "$ADBS" ] || ADBS="${IODNS_SUITE_DB:-}"
 [ -n "$ADMIN" ] || ADMIN="${IODNS_ADMIN:-}"
 [ -n "$ALSO" ] || ALSO="${IODNS_ALSO:-}"
+[ -n "$REMOVE" ] || REMOVE="${IODNS_REMOVE:-}"
+if [ "$APPSONLY" = 1 ]; then  # the apps on this server: what is here, tick and untick (iosuite-shared apps)
+  [ -x "$APP/.venv/bin/iosuite-shared" ] || die "set this app up first: ./setup.sh"
+  exec "$APP/.venv/bin/iosuite-shared" --config "$APP" apps --from iodns
+fi
 [ -n "$DBADMIN" ] || DBADMIN="${IODNS_DB_ADMIN:-}"
 ask() { _v="$1"; _q="$2"; _d="$3"
   if [ "$YES" = 1 ] || [ ! -t 0 ]; then eval "$_v=\"\$_d\""; return; fi
@@ -94,10 +105,6 @@ if [ -z "$DBADMIN" ] && [ "$YES" = 0 ]; then
   ask DAU "MariaDB administrator who may create the databases and users above, e.g. root (empty: they exist already)" ""
   if [ -n "$DAU" ]; then asksecret DAW "Password of $DAU"; DBADMIN="$DAU:$DAW"; fi
 fi
-if [ -z "$ALSO" ]; then
-  say "The other apps of the suite can be installed here too, beside ioDNS, with the same database server (each app gets its own database), the same Shared ioSuite database, sign-in domain and admin"
-  ask ALSO "Also install (iostart, iocalendar, iocontact, ionote, iohealth, iopix; comma-separated, 'all', or 'none')" "none"
-fi
 
 # ---- Python environment
 say "Installing the Python packages"
@@ -131,7 +138,7 @@ fi
 
 # ---- the service
 if [ -z "$SERVICE" ]; then
-  if command -v systemctl >/dev/null && [ "$(id -u)" = 0 ]; then SERVICE=1; else SERVICE=0; fi
+  if command -v systemctl >/dev/null && [ -d /run/systemd/system ] && [ "$(id -u)" = 0 ]; then SERVICE=1; else SERVICE=0; fi
 fi
 if [ "$SERVICE" = 1 ]; then
   say "Installing the iodns service"
@@ -164,14 +171,16 @@ else
   say "Done. Start it with ./run.sh (port $PORT)"
 fi
 
-# ---- the other apps of the suite, beside this one (iosuite-shared install: the shared answers from config.env)
-case "$ALSO" in ''|none|no) ;;
-  *) say "Installing the other apps: $ALSO"
-     if [ "$SERVICE" = 1 ]; then SVC="--service"; else SVC="--no-service"; fi
-     DBA=""; [ -z "$DBADMIN" ] || { DBA="--db-admin ${DBADMIN%%:*}"; DB_ADMIN_PASSWORD="${DBADMIN#*:}"; export DB_ADMIN_PASSWORD; }
-     if [ -n "$ADMIN" ]; then
-       ADMIN_PASSWORD="${ADMIN#*:}" .venv/bin/iosuite-shared --config "$APP" install "$ALSO" --admin "${ADMIN%%:*}" --from iodns $SVC $DBA
-     else
-       .venv/bin/iosuite-shared --config "$APP" install "$ALSO" --from iodns $SVC $DBA
-     fi || die "not every app could be installed; see the lines above (each one can be set up again with its own setup.sh)";;
-esac
+# ---- the other apps of the suite on this server (iosuite-shared apps): --also adds, --remove removes, --reconfigure
+# asks an app's questions again; with none of them and somebody at the keyboard, the list of what is here, to tick and untick
+case "$ALSO" in none|no) ALSO=""; NOAPPS=1;; esac  # --also none: no list either (how the list itself runs a setup.sh)
+case "$REMOVE" in none|no) REMOVE="";; esac
+if [ -n "$ALSO$REMOVE$REDO" ] || { [ "$YES" = 0 ] && [ "$NOAPPS" = 0 ] && [ -t 0 ]; }; then
+  if [ "$SERVICE" = 1 ]; then set -- --service; else set -- --no-service; fi
+  [ -z "$ALSO" ] || set -- "$@" --add "$ALSO"
+  [ -z "$REMOVE" ] || set -- "$@" --remove "$REMOVE"
+  [ -z "$REDO" ] || set -- "$@" --reconfigure "$REDO"
+  [ -z "$DBADMIN" ] || { set -- "$@" --db-admin "${DBADMIN%%:*}"; DB_ADMIN_PASSWORD="${DBADMIN#*:}"; export DB_ADMIN_PASSWORD; }
+  [ -z "$ADMIN" ] || { set -- "$@" --admin "${ADMIN%%:*}"; ADMIN_PASSWORD="${ADMIN#*:}"; export ADMIN_PASSWORD; }
+  "$APP/.venv/bin/iosuite-shared" --config "$APP" apps --from iodns "$@" || die "not every app could be added or removed; see the lines above (./setup.sh --apps shows what is here)"
+fi

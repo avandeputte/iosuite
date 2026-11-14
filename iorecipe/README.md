@@ -62,7 +62,7 @@ git clone https://github.com/avandeputte/iosuite && cd iosuite/iorecipe
 ./update.sh         # later: the latest code, same settings
 ```
 
-Its last question, "Also install …?" (flag `--also iocalendar,ionote`, `--also all`; `IORECIPE_ALSO` in the environment), puts
+Its last step is the list of the suite's apps on this machine: tick one to add it, untick one to remove it (its database and data stay), `r` and its number to ask its questions again; `./setup.sh --apps` shows only that list, and the [one-line installer](../README.md#install) does the same from anywhere. Adding (flag `--also iocalendar,ionote`, `--also all`; `--remove` and `--reconfigure` take lists too; `IORECIPE_ALSO` in the environment), puts
 other apps of the suite in this same machine, beside ioRecipe (`/opt/iocalendar/app` next to `/opt/iorecipe/app`),
 without asking the shared questions again: the same database server (each app gets its own database: `suite`,
 `calendar`, `contacts`, `notes`, `health`, `iopix`, `tasks`, `recipe`; the user needs rights on those names too), the same Shared ioSuite
