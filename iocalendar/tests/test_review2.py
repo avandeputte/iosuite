@@ -7,7 +7,7 @@ import time
 import pytest
 
 from app import db, ical, model
-from app.main import FeedTokenFilter
+from iosuite_shared.updates import SecretPaths
 from tests.test_api import mk, occ
 from tests.test_review_fixes import ICS
 
@@ -57,6 +57,17 @@ def test_the_size_of_a_series_is_read_from_its_rule():
     assert ical._size(master("FREQ=WEEKLY;UNTIL=20271102T000000Z")) < 60
     assert not ical.too_frequent(master("FREQ=HOURLY")) and not ical.too_frequent(master("FREQ=SECONDLY;COUNT=600"))
     assert ical.too_frequent(master("FREQ=SECONDLY;COUNT=5000")) and ical.too_frequent(master("FREQ=HOURLY;BYMINUTE=0,15,30,45"))
+    # rules together, not one at a time; many rules or extra dates; a frequent series from long ago (walked from DTSTART)
+    def raw(start, extra):
+        return ical.master_of(ical.events_of(ical.parse(ICS.format(uid="x", start=start, end=start[:9] + "235959", title="x", extra=extra))))
+    assert ical.too_frequent(raw("20261102T000000", "".join(f"RRULE:FREQ=DAILY;BYHOUR={h}\r\n" for h in range(8)) + "RRULE:FREQ=DAILY\r\n"))
+    assert ical.too_frequent(raw("20261102T000000", "".join(f"RRULE:FREQ=HOURLY;BYMINUTE={m}\r\n" for m in (0, 20, 40))))
+    assert ical.too_frequent(raw("20261102T000000", "RDATE:" + ",".join(f"2027{d // 28 + 1:02d}{d % 28 + 1:02d}T090000" for d in range(1001)) + "\r\n"))
+    assert ical.too_frequent(raw("19000101T000000", "RRULE:FREQ=MINUTELY;INTERVAL=30\r\n"))
+    assert ical.too_frequent(raw("19000101T000000", "RRULE:FREQ=HOURLY\r\n"))
+    assert not ical.too_frequent(raw("19000101T000000", "RRULE:FREQ=DAILY\r\n"))  # a birthday or a daily habit kept since long ago
+    assert not ical.too_frequent(raw("00010101T000000", "RRULE:FREQ=YEARLY\r\n"))
+    assert not ical.too_frequent(raw("19000101T000000", "RRULE:FREQ=HOURLY;COUNT=500\r\n"))  # ends soon after it starts
     # a long series counts as endless without being expanded
     cal = ical.parse(ICS.format(uid="x", start="20261102T090000", end="20261102T100000", title="x", extra="RRULE:FREQ=HOURLY;COUNT=10000000\r\n"))
     t = time.time()
@@ -97,11 +108,11 @@ def test_a_move_that_fails_keeps_the_event(client, family_id, monkeypatch):
 def test_the_subscription_token_stays_out_of_the_request_log():
     rec = logging.LogRecord("uvicorn.access", logging.INFO, "", 0, '%s - "%s %s HTTP/%s" %d',
                             ("10.0.0.5:1234", "GET", "/ics/0123456789abcdef/all.ics?member=Ann", "1.1", 200), None)
-    assert FeedTokenFilter().filter(rec) is True
+    assert SecretPaths().filter(rec) is True
     line = rec.getMessage()
     assert "0123456789abcdef" not in line and "/ics/-/all.ics?member=Ann" in line
     plain = logging.LogRecord("uvicorn.access", logging.INFO, "", 0, '%s - "%s %s HTTP/%s" %d', ("10.0.0.5:1234", "GET", "/api/calendars", "1.1", 200), None)
-    FeedTokenFilter().filter(plain)
+    SecretPaths().filter(plain)
     assert "/api/calendars" in plain.getMessage()
 
 

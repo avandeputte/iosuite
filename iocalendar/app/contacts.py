@@ -46,10 +46,10 @@ def save_settings(birthdays=None) -> None:
         db.set_setting("iocontact_birthdays", "1" if birthdays else "0")
 
 
-def _req(path: str, timeout: float = 15, accept: str = "application/json", sign_in: bool = True):
+def _req(path: str, timeout: float = 15, accept: str = "application/json"):
     if not enabled():
         raise RuntimeError("ioContact is not part of the suite (it has not started on this Shared ioSuite database)")
-    return links.get(APP, PROVIDER, path, timeout=timeout, accept=accept, user_agent="ioCalendar", sign_in=sign_in)
+    return links.get(APP, PROVIDER, path, timeout=timeout, accept=accept, user_agent="ioCalendar")
 
 
 def _json(path: str, timeout: float = 15):
@@ -103,9 +103,7 @@ def sync_birthdays() -> dict:
             _state.update(synced=None, error=None, count=None)
             return {"ok": True, "count": 0, "removed": bool(cal)}
         try:
-            info = _json("/api/connect")
-            path = urllib.parse.urlsplit(info["calendar"]["all"]).path
-            with _req(path, timeout=60, accept="text/calendar", sign_in=False) as r:  # the feed's address carries its own token
+            with _req("/api/calendar/all.ics", timeout=60, accept="text/calendar") as r:  # the birthdays, as the service account
                 text = r.read().decode("utf-8", "replace")
             feed = ical.parse(text)
         except Exception as e:  # noqa: BLE001

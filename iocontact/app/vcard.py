@@ -71,15 +71,24 @@ class Prop:
 # ------------------------------------------------------------------ low level text
 
 def _unfold(text: str) -> list[str]:
+    """The logical lines: continuation lines (a leading space or tab) and vCard 2.1 quoted-printable soft breaks (a
+    trailing '=') joined. Each line is kept as its pieces until it ends, so a long folded value costs linear time."""
     text = text.replace("\r\n", "\n").replace("\r", "\n")
     out: list[str] = []
+    cur: list[str] = []   # the pieces of the line being read
+    qp = False            # it is quoted-printable (decided on its first piece: the property's parameters)
     for line in text.split("\n"):
-        if line[:1] in (" ", "\t") and out:
-            out[-1] += line[1:]
-        elif out and out[-1].upper().find("QUOTED-PRINTABLE") >= 0 and out[-1].endswith("="):
-            out[-1] = out[-1][:-1] + line   # vCard 2.1 soft line break
+        if cur and line[:1] in (" ", "\t"):
+            cur.append(line[1:])
+        elif cur and qp and cur[-1].endswith("="):
+            cur[-1] = cur[-1][:-1]   # vCard 2.1 soft line break
+            cur.append(line)
         else:
-            out.append(line)
+            if cur:
+                out.append("".join(cur))
+            cur, qp = [line], "QUOTED-PRINTABLE" in line.split(":", 1)[0].upper()
+    if cur:
+        out.append("".join(cur))
     return [x for x in out if x.strip()]
 
 

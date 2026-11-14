@@ -142,10 +142,8 @@ def free_busy(start: str, end: Optional[str] = None, calendars: Optional[list[st
 @server.tool(annotations=READ_ONLY)
 def connection_details() -> dict:
     """What to type into a calendar app for your account: the CalDAV address and user name (with an app password from
-    Settings › Account), and the private subscription links (.ics) of your calendars."""
-    from app import users
+    Settings › Account). Read-only subscription links (.ics) are made, and shown once, in Settings › Apps and devices."""
     u = who()
     base = config.PUBLIC_URL or "(this server's address)"
-    tok = users.feed_token(u["id"])
-    return {"user": u["name"], "caldav": f"{base}/dav/", "subscriptions": {c["name"]: f"{base}/ics/{tok}/{c['slug']}.ics" for c in calendars(u)},
-            "all": f"{base}/ics/{tok}/all.ics", "freeBusy": f"{base}/ics/{tok}/freebusy.vfb", "api": f"{base}/api/docs"}
+    return {"user": u["name"], "caldav": f"{base}/dav/", "calendars": [c["name"] for c in calendars(u)],
+            "subscriptions": "Settings › Apps and devices › Subscribe: a new link is shown once", "api": f"{base}/api/docs"}

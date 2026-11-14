@@ -348,6 +348,18 @@ def tail(path, lines: int = 300, contains: str = "", level: str = "any", request
 
 # ---- the server log file
 LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
+# addresses whose path holds a secret (subscription links /ics/<secret>/ and /cal/<secret>/, iosuite_shared.feeds; the
+# Apple profile downloads /profile/<secret>/): the request log, which app admins read in Settings › Server, shows "-"
+SECRET_PATHS = re.compile(r"/(ics|cal|profile)/[^/?\s]+")
+
+
+class SecretPaths:
+    """A logging filter for uvicorn's request lines: the secret in those paths becomes "-"."""
+    def filter(self, record):
+        a = record.args
+        if isinstance(a, tuple) and any(isinstance(x, str) and SECRET_PATHS.search(x) for x in a):
+            record.args = tuple(SECRET_PATHS.sub(r"/\1/-", x) if isinstance(x, str) else x for x in a)
+        return True
 
 
 def setup_log(path, level: int = None) -> bool:
@@ -364,6 +376,9 @@ def setup_log(path, level: int = None) -> bool:
         root.setLevel(level)
     if root.level > logging.INFO or root.level == logging.NOTSET:
         root.setLevel(logging.INFO)
+    access = logging.getLogger("uvicorn.access")
+    if not any(isinstance(f, SecretPaths) for f in access.filters):
+        access.addFilter(SecretPaths())
     if not path:
         return False
     if any(isinstance(h, logging.handlers.RotatingFileHandler) and h.baseFilename == str(Path(path).resolve()) for h in root.handlers):

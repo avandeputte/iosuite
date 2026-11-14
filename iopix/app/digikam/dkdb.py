@@ -533,7 +533,7 @@ def stamp_files(items: list):
     size (DImg::createUniqueHash), so a file rewritten in place needs digiKam's own rescan, which recomputes the
     hash and reads back what the viewer wrote; that photo is left to it. Albums.modificationDate is left alone:
     digiKam still looks into the folder, and finds these files unchanged and any other file that is."""
-    if not items or standalone():
+    if not items or standalone() or not config.DB_WRITE:  # DB_WRITE=0: digiKam's database is not touched (its rescan does it)
         return 0
     rows = []
     try:

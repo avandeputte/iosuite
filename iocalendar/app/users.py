@@ -9,11 +9,9 @@ private token per account instead, since calendar apps cannot sign in to a subsc
 What is here is ioCalendar's own: the accounts with their role here, app passwords with the CalDAV-only scope, and the
 subscription links. Whether an account may write or is an admin is asked of iosuite_shared.users directly.
 """
-import secrets
 
-from iosuite_shared import users as shared
+from iosuite_shared import feeds, users as shared
 
-from app import db
 from app.auth import APP
 
 ROLES = shared.APP_ROLES
@@ -36,25 +34,11 @@ def init() -> None:
     shared.init()
 
 
-# ---------------------------------------------------------------- subscription links (ioCalendar's own)
+# ---------------------------------------------------------------- subscription links (iosuite_shared.feeds)
 
-def feed_token(uid: int) -> str:
-    r = db.one("SELECT token FROM cal_feed_tokens WHERE user_id = %s ORDER BY id LIMIT 1", (uid,))
-    if r:
-        return r["token"]
-    tok = secrets.token_hex(20)
-    db.ex("INSERT INTO cal_feed_tokens (user_id, token) VALUES (%s, %s)", (uid, tok))
-    return tok
-
-
-def reset_feed_token(uid: int) -> str:
-    db.ex("DELETE FROM cal_feed_tokens WHERE user_id = %s", (uid,))
-    return feed_token(uid)
-
-
-def user_from_feed_token(tok: str) -> dict | None:
-    r = db.one("SELECT user_id FROM cal_feed_tokens WHERE token = %s", (tok,))
-    if not r:
-        return None
-    u = get(r["user_id"])
+def user_from_feed(secret: str) -> dict | None:
+    """The account a subscription link (/ics/<secret>/...) reads as; None when the link is unknown or stopped, or the
+    account may no longer use ioCalendar."""
+    uid = feeds.user_id(APP, secret)
+    u = get(uid) if uid else None
     return u if u and u.get("role") != "none" else None

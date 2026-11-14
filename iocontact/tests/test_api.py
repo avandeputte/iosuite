@@ -104,8 +104,7 @@ def test_calendar_and_duplicates(client, family_id):
     mk(client, family_id, fn="Gran Ma", birthday={"year": 1940, "month": 2, "day": 29}, dates=[{"label": "anniversary", "month": 7, "day": 1}])
     mk(client, family_id, fn="Dup One", emails=[{"value": "same@x.org"}])
     mk(client, family_id, fn="Dup Two", emails=[{"value": "SAME@x.org"}])
-    info = client.get("/api/connect").json()
-    r = client.get(info["calendar"]["family"].split("testserver")[1])
+    r = client.get(family_feed(client))
     assert r.status_code == 200 and "RRULE:FREQ=YEARLY" in r.text and "Gran Ma's birthday" in r.text and "DTSTART;VALUE=DATE:19400229" in r.text
     assert client.get("/cal/bogus/family.ics").status_code == 404
     groups = client.get("/api/duplicates").json()["groups"]
@@ -124,6 +123,8 @@ def test_apple_profile(client):
     assert dav["PayloadType"] == "com.apple.carddav.account" and dav["CardDAVUsername"] == "alex"
     assert dav["CardDAVPrincipalURL"] == "/dav/principals/alex/" and dav["CardDAVPassword"].startswith("iocontact-")
     assert cal["PayloadType"] == "com.apple.subscribedcalendar.account" and cal["SubCalAccountHostName"].endswith("/family.ics")
+    assert client.get(cal["SubCalAccountHostName"].split("testserver")[1]).status_code == 200
+    assert [f["label"] for f in client.get("/api/feeds").json()["feeds"]] == ["Alex iPhone (profile)"]  # the device's own link
     # the app password in the profile works for CardDAV
     client.cookies.clear()
     assert client.request("PROPFIND", "/dav/", auth=("alex", dav["CardDAVPassword"]), headers={"Depth": "0"}).status_code == 207
@@ -223,8 +224,7 @@ def test_birthday_without_reminder(client, family_id):
     assert on["birthdayRemind"] is True and off["birthdayRemind"] is False and off["birthday"]["year"] == 1981
     flags = {x["fn"]: x["remind"] for x in client.get("/api/upcoming?days=10").json()["items"]}
     assert flags["Remind Yes"] is True and flags["Remind No"] is False
-    info = client.get("/api/connect").json()
-    ics = client.get(info["calendar"]["family"].split("testserver")[1]).text
+    ics = client.get(family_feed(client)).text
     assert "Remind Yes's birthday" in ics and "Remind No" not in ics
     assert "BDAY" in client.get(f"/api/contacts/{off['id']}", headers={"Accept": "text/vcard"}).text
     # a CardDAV client (or anything else that does not know the flag) writing the card back keeps it off
@@ -236,10 +236,10 @@ def test_birthday_without_reminder(client, family_id):
     assert back["birthdayRemind"] is True
     # the Birthdays page toggles it with a PATCH of only the flag
     assert client.patch(f"/api/contacts/{off['id']}", json={"birthdayRemind": False}).json()["birthdayRemind"] is False
-    ics = client.get(info["calendar"]["family"].split("testserver")[1]).text
+    ics = client.get(family_feed(client)).text
     assert "Remind No" not in ics and client.get(f"/api/contacts/{off['id']}").json()["birthday"]["year"] == 1981
     assert client.patch(f"/api/contacts/{off['id']}", json={"birthdayRemind": True}).json()["birthdayRemind"] is True
-    assert "Remind No's birthday" in client.get(info["calendar"]["family"].split("testserver")[1]).text
+    assert "Remind No's birthday" in client.get(family_feed(client)).text
 
 
 def test_the_shell_its_files_and_the_icon_are_public(client):
@@ -314,7 +314,7 @@ def test_partial_birthdays(client, family_id):
     # feeds: only a month and day make a date to remind of
     up = {x["fn"] for x in client.get("/api/upcoming?days=10").json()["items"]}
     assert {"Month Day", "Full Date"} <= up and not {"Year Only", "Year Month"} & up
-    ics = client.get(client.get("/api/connect").json()["calendar"]["family"].split("testserver")[1]).text
+    ics = client.get(family_feed(client)).text
     assert "Full Date's birthday" in ics and "Month Day's birthday" in ics and "Year Only" not in ics and "Year Month" not in ics
     # exports keep every form, and importing them back changes nothing
     for fmt in ("vcf", "vcf4", "jcard", "csv-google"):
@@ -461,3 +461,28 @@ def test_a_shared_address_book_never_takes_the_address_of_a_private_one(client):
     assert slugs[mine] == "trips" and len(set(slugs.values())) == 3, slugs
     with pytest.raises(Invalid):
         model.create_book(None, "Other", slug="trips")  # a CardDAV client's own choice of address: refused the same way
+
+
+def family_feed(client, label="Kitchen tablet") -> str:
+    """A new birthday calendar link (shown once), the family's address, as a path."""
+    r = client.post("/api/feeds", json={"label": label})
+    assert r.status_code == 200, r.text
+    return r.json()["links"][0]["url"].split("testserver")[1]
+
+
+def test_birthday_links_are_hashed_in_the_shared_database_and_stopped_one_by_one(client, family_id):
+    from iosuite_shared import db as shared_db
+    mk(client, family_id, fn="Gran Ma", birthday={"year": 1940, "month": 2, "day": 29})
+    a, b = family_feed(client, "iPad"), family_feed(client, "Office")
+    assert "/cal/" not in str(client.get("/api/connect").json())
+    secret = a.split("/")[2]
+    assert secret not in str(shared_db.q("SELECT * FROM ios_feed_tokens"))
+    feeds = client.get("/api/feeds").json()["feeds"]
+    assert client.delete(f"/api/feeds/{feeds[0]['id']}").json() == {"ok": True}
+    assert client.get(a).status_code == 404 and "Gran Ma" in client.get(b).text
+    # signed in (ioCalendar's Birthdays calendar, as its service account): the same calendar without a link
+    r = client.get("/api/calendar/all.ics")
+    assert r.status_code == 200 and "Gran Ma's birthday" in r.text
+    assert client.get("/api/calendar/other.ics").status_code == 404
+    client.cookies.clear()
+    assert client.get("/api/calendar/all.ics").status_code == 401

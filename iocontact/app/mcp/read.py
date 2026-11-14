@@ -4,7 +4,7 @@ from typing import Literal, Optional
 from mcp.server.mcpserver import Image
 from mcp.server.mcpserver.exceptions import ToolError
 
-from app import __version__, config, db, iopix, model, relations as rel, users, vcard
+from app import __version__, config, db, iopix, model, relations as rel, vcard
 from app.fold import fold
 from app.mcp.base import READ_ONLY, book_ids, brief, clamp, contact_out, find_contact, readable_books, server, who
 
@@ -239,16 +239,16 @@ def export_contacts(format: Literal["vcf", "vcf4", "jcard", "csv-google", "csv-o
 
 @server.tool(annotations=READ_ONLY)
 def connection_details() -> dict:
-    """The addresses to type into a phone, a mail app or a calendar: CardDAV, LDAP, the birthday calendar feeds and the
-    REST API. Phones and apps sign in with your user name and an app password (Settings › Account)."""
+    """The addresses to type into a phone or a mail app: CardDAV, LDAP and the REST API. Phones and apps sign in with
+    your user name and an app password (Settings › Account). Birthday calendar links are made, and shown once, in
+    Settings › Apps and devices."""
     u = who()
     base = config.PUBLIC_URL or "(this server's address)"
-    tok = users.calendar_token(u["id"])
     return {"user": u["name"], "carddav": f"{base}/dav/", "books": [{"name": b["name"], "url": f"{base}/dav/addressbooks/{u['name']}/{b['slug']}/"}
                                                                    for b in readable_books(u)],
             "ldap": {"enabled": config.LDAP_PORT > 0, "port": config.LDAP_PORT, "base": config.LDAP_BASE,
                      "bindDn": f"cn={u['name']},ou=users,{config.LDAP_BASE}"},
-            "calendar": {"family": f"{base}/cal/{tok}/family.ics", "all": f"{base}/cal/{tok}/all.ics"},
+            "calendar": "Settings › Apps and devices › Family birthday calendar: a new link is shown once",
             "restApi": f"{base}/api/docs", "mcp": f"{base}/mcp"}
 
 

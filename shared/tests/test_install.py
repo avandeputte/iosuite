@@ -363,12 +363,11 @@ def test_reach_behind_a_proxy_of_ones_own(tmp_path):
     assert "handle_path /calendar/* {" in text and "reverse_proxy 127.0.0.1:8630" in text and "redir /.well-known/caldav /calendar/dav/ 301" in text
     assert "/contacts" not in text  # ioContact is not on this server
     assert install.shared_address(opt, own) == "https://home.example.com"
-    # an address the person named is not ours to take out, a name per app is each app's own setting
-    with open(opt / "iotask" / "app" / "config.env", "a") as f:
-        f.write("HOST=192.168.1.151\n")
+    # and back: the address the person named comes back, a folder of the proxy's address goes
     ok, calls = _reach("ports", own, opt)
-    assert _env(opt, "iotask")["HOST"] == "192.168.1.151" and "HOST" not in _env(opt, "iocalendar")
-    assert _env(opt, "iocalendar")["PUBLIC_URL"] == "https://home.example.com/calendar"
+    assert _env(opt, "iotask")["HOST"] == "192.168.1.151" and "HOST_BEFORE" not in _env(opt, "iotask") and "HOST" not in _env(opt, "iocalendar")
+    assert "PUBLIC_URL" not in _env(opt, "iocalendar") and _env(opt, "iostart")["PUBLIC_URL"] == "https://home.example.com"
+    assert not (opt / install.REACH_FILE).exists()
     ok, calls = _reach("proxy", own, opt)
     assert any("r and its number" in line for line in calls["lines"])
 
@@ -398,6 +397,36 @@ def test_reach_keeps_the_ldap_directory_where_it_listened(tmp_path):
     (d / "config.env").write_text(CFG + "LDAP_PORT=0\n")  # the directory is off: nothing to keep
     _reach("proxy", own, opt)
     assert "LDAP_HOST" not in _env(opt, "iocontact")
+
+
+def test_a_proxy_address_given_with_the_start_page_alone_reaches_an_app_added_later(tmp_path):
+    opt, own = _server(tmp_path)
+    for n in ("iocalendar", "iotask", "ionote"):
+        (opt / n / "app" / "config.env").unlink()
+    ok, calls = _reach("proxy", own, opt, address="https://home.example.com")
+    assert ok and install.stored_reach(opt) == {"MODE": "proxy", "ADDRESS": "https://home.example.com"}
+    assert install.shared_address(opt, own) == "https://home.example.com"
+
+
+def test_apps_refuses_a_way_that_cannot_be_before_installing(tmp_path, monkeypatch):
+    opt, own = _server(tmp_path)
+    monkeypatch.setattr(install, "install", lambda *a, **k: pytest.fail("nothing is installed"))
+    with pytest.raises(SystemExit, match="not an address"):
+        cli.main(["--config", str(own), "apps", "--reach", "proxy", "--address", "home.example.com", "--add", "iorecipe"])
+    task = opt / "iotask" / "app"
+    with pytest.raises(SystemExit, match="needs the start page"):
+        cli.main(["--config", str(task), "apps", "--reach", "one", "--add", "iorecipe", "--remove", "iostart"])
+
+
+def test_removing_the_start_page_behind_the_one_address_puts_the_apps_back_on_their_ports(tmp_path, monkeypatch):
+    opt, own = _server(tmp_path)
+    _reach("one", own, opt)
+    monkeypatch.setattr(install, "_switch", lambda: True)
+    seen = []
+    monkeypatch.setattr(install, "set_reach", lambda mode, cfg, **kw: seen.append(mode) or True)
+    monkeypatch.setattr(install, "remove", lambda names, cfg, **kw: seen.append(("remove", names)) or [])
+    assert cli.main(["--config", str(opt / "iotask" / "app"), "apps", "--remove", "iostart"]) == 0
+    assert seen == ["ports", ("remove", ["iostart"])]
 
 
 def test_an_app_added_later_is_reached_like_the_others(tmp_path, monkeypatch):

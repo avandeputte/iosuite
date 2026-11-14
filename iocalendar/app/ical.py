@@ -28,6 +28,10 @@ FAR = dt.datetime(2200, 1, 1, tzinfo=UTC)
 MAX_LAST = 20000  # occurrences counted to find where a bounded series ends; beyond that it counts as endless
 MAX_PER_DAY = 48  # a series repeats every half hour at most ...
 MAX_DENSE = 1000  # ... or more often when it ends within this many occurrences
+MAX_RULES = 8  # RRULE lines in one event (one is the usual; a few for an odd pattern)
+MAX_RDATES = 1000  # extra dates (RDATE) in one event
+MAX_WALK = 200_000  # occurrences the library may have to step through from DTSTART to two years from now (daily since 1900: 46k)
+MAX_OCCURRENCES = 5000  # occurrences of one object in one answer
 SLACK = dt.timedelta(hours=15)  # the farthest a floating time or a whole day is from UTC (UTC+14 to UTC-12)
 MAX_EXPAND = dt.timedelta(days=1830)  # the longest period CalDAV's expand writes out as separate occurrences
 REMINDER_DESC = "Reminder"
@@ -291,23 +295,34 @@ def _size(ev: Event) -> int | None:
             total += math.ceil(_per_day(r) * (max(0, (until - day0).days) + 2))
         else:
             return None
+    return total + _rdates(ev)
+
+
+def _rdates(ev: Event) -> int:
     extra = ev.get("RDATE")
-    for x in (extra if isinstance(extra, list) else [extra] if extra is not None else []):
-        total += len(getattr(x, "dts", None) or [x])
-    return total
+    return sum(len(getattr(x, "dts", None) or [x]) for x in (extra if isinstance(extra, list) else [extra] if extra is not None else []))
 
 
 def too_frequent(ev: Event) -> bool:
-    """A series that repeats more often than every half hour and does not end within MAX_DENSE occurrences. Expanding
-    one takes the server's time and memory (a rule for every second fills both), so it is refused when saved and
-    drawn as its first occurrence alone when it is in the database already."""
+    """A series too costly to expand: its rules together repeat more often than every half hour and do not end within
+    MAX_DENSE occurrences; or it has more than MAX_RULES rules or MAX_RDATES extra dates; or it starts so long ago that
+    the library would step through more than MAX_WALK occurrences to reach today (it walks from DTSTART on every
+    query). Expanding one takes the server's time and memory, so it is refused when saved and drawn as its first
+    occurrence alone when it is in the database already."""
     try:
-        if not any(_per_day(r) > MAX_PER_DAY for r in _rules(ev)):
-            return False
+        rules = _rules(ev)
+        if len(rules) > MAX_RULES or _rdates(ev) > MAX_RDATES:
+            return True
+        per_day = sum(_per_day(r) for r in rules)
         n = _size(ev)
+        if per_day > MAX_PER_DAY and (n is None or n > MAX_DENSE):
+            return True
+        start = ev["DTSTART"].dt
+        day0 = start.date() if isinstance(start, dt.datetime) else start
+        walk = per_day * max(0, (dt.date.today() - day0).days + 730)
+        return walk > MAX_WALK and (n is None or n > MAX_WALK)
     except Exception:  # noqa: BLE001 - a rule this cannot read is not expanded either
         return True
-    return n is None or n > MAX_DENSE
 
 
 def people_of(ev: Event) -> list[dict]:
@@ -367,8 +382,9 @@ def index(cal: Calendar, tzname: str | None = None) -> dict:
         lo, hi = min(lo, to_utc(s2, tzname)), max(hi, to_utc(e2, tzname))
     if _repeats(m):
         if too_frequent(m):
-            raise Invalid("An event repeats every half hour at most, or more often when it ends within "
-                             f"{MAX_DENSE} times")
+            raise Invalid("An event repeats every half hour at most (or more often when it ends within "
+                          f"{MAX_DENSE} times), with at most {MAX_RULES} rules and {MAX_RDATES} extra dates, and a "
+                          "series that repeats several times a day cannot start decades ago")
         last = _last_end(cal, m, lo, tzname)
         endless = last is None
         hi = max(hi, last or hi)
@@ -424,7 +440,7 @@ def occurrences(cal: Calendar, start: dt.datetime, end: dt.datetime, tzname: str
         found = None
     z = zone(tzname)
     first_day, last_day = start.astimezone(z).date(), (end - dt.timedelta(microseconds=1)).astimezone(z).date()
-    for occ in ([m] if found is None else found):
+    for occ in ([m] if found is None else found[:MAX_OCCURRENCES]):
         s, e = _start_end(occ)
         if isinstance(s, dt.datetime):
             su, eu = to_utc(s, tzname), to_utc(e, tzname)

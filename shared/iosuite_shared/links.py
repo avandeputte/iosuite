@@ -185,11 +185,9 @@ def headers(reader: str, provider: str, fresh: bool = False, sign_in: bool = Tru
     return h
 
 
-def get(reader: str, provider: str, path: str, timeout: float = 15, accept: str = "application/json", user_agent: str = None,
-        sign_in: bool = True):
+def get(reader: str, provider: str, path: str, timeout: float = 15, accept: str = "application/json", user_agent: str = None):
     """GET path at the provider as the reader (a urllib response). RuntimeError when the provider is not in the suite;
-    urllib's HTTPError and URLError otherwise. A 401 makes the app password again once (it was revoked). For an
-    address that carries its own token (a feed), sign_in=False sends no app password."""
+    urllib's HTTPError and URLError otherwise. A 401 makes the app password again once (it was revoked)."""
     bases = addresses(provider)
     if not bases:
         raise RuntimeError(f"{provider} is not in the suite's list of apps")
@@ -197,12 +195,12 @@ def get(reader: str, provider: str, path: str, timeout: float = 15, accept: str 
     for i, base in enumerate(bases):
         last = i == len(bases) - 1
         for attempt in (0, 1):
-            h = {"Accept": accept, "User-Agent": user_agent or reader, **headers(reader, provider, fresh=fresh, sign_in=sign_in)}
+            h = {"Accept": accept, "User-Agent": user_agent or reader, **headers(reader, provider, fresh=fresh)}
             fresh = False
             try:
                 return call(urllib.request.Request(base + path, headers=h), timeout)  # noqa: S310  http(s), checked in addresses()
             except urllib.error.HTTPError as e:
-                if e.code != 401 or attempt or not sign_in:
+                if e.code != 401 or attempt:
                     raise
                 log.info("%s: %s did not take its app password; making a new one", reader, provider)
                 fresh = True

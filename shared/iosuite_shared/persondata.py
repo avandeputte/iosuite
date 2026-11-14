@@ -40,6 +40,7 @@ SHARED = (
     ("ios_user_roles", "roles in the apps", "role in the apps"),
     ("ios_sessions", "sessions", "session"),
     ("ios_app_passwords", "app passwords", "app password"),
+    ("ios_feed_tokens", "subscription links", "subscription link"),
     ("ios_push_devices", "devices with notifications", "device with notifications"),
     ("ios_user_data", "settings and links (family, person in photos, own contact card)", "setting or link (family, person in photos, own contact card)"),
 )

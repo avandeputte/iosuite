@@ -81,6 +81,7 @@ export async function setDevices(el) {
   const isApple = /iPhone|iPad|Macintosh/.test(navigator.userAgent);
   const plabel = h('input', { class: 't', name: 'label', value: /iPad/.test(navigator.userAgent) ? 'iPad' : /Macintosh/.test(navigator.userAgent) ? 'Mac' : 'iPhone', style: 'max-width:200px' });
   const how = (summary, ...kids) => h('details', null, h('summary', { class: 'lnk' }, summary), ...kids);
+  const subs = h('div');
   el.append(...[
     canPw ? h('div', { class: 'box' }, h('h2', null, icon('devices'), 'iPhone, iPad and Mac'),
       h('p', null, 'A profile that adds your calendars to Apple Calendar in one step.'),
@@ -98,13 +99,7 @@ export async function setDevices(el) {
       how('Address of each calendar', info.calendars.map((c) => kv(c.name, c.caldav))),
       how('How to connect', h('p', { class: 'muted small' }, 'Apple Calendar: Settings › Accounts › Add › Other CalDAV Account (iPhone: Settings › Calendar › Accounts). Android: DAVx⁵. Also Thunderbird, Evolution, GNOME, KDE.'),
         h('p', { class: 'muted small' }, 'Behind Cloudflare Access, add a Bypass policy for /dav/*, /.well-known/caldav and /ics/* (and /mcp).'))),
-    h('div', { class: 'box' }, h('h2', null, icon('link'), 'Subscribe (read-only)'),
-      h('p', null, 'For apps that cannot sign in. Anyone with a link can read those events.'),
-      kv('Everything', info.all),
-      how('One calendar at a time', info.calendars.map((c) => kv(c.name, c.ics))),
-      kv('Free/busy', info.freebusy),
-      h('p', null, h('a', { class: 'pillbtn', href: info.webcal }, icon('today', 's'), 'Open in my calendar app'), ' ',
-        h('button', { class: 'pillbtn noic', onclick: async () => { if (await confirmDialog('New subscription links', 'The old links stop working; subscribed calendars need the new ones.', 'Make new links')) { await api('api/feeds/reset', { method: 'POST' }); onRoute(); } } }, 'New links'))),
+    subs,
     S.status.mcp ? h('div', { class: 'box' }, h('h2', null, icon('ai'), 'AI assistants (MCP)'),
       h('p', null, 'Give the assistant its own app password (not “Calendar apps only”), sent as a Bearer token.'),
       kv('MCP address', info.mcp),
@@ -115,6 +110,8 @@ export async function setDevices(el) {
     h('div', { class: 'box' }, h('h2', null, icon('link'), 'Other apps (REST API)'),
       h('p', null, 'JSON, iCalendar or jCal with your user name and an app password. ', h('a', { class: 'lnk', href: info.api, target: '_blank' }, 'API documentation')),
       copyRow(`curl -u ${info.user}:APP-PASSWORD "${info.server}/api/occurrences?start=${ymd(new Date())}&end=${ymd(addDays(new Date(), 7))}"`))].filter(Boolean));
+  (await accountUi()).mountFeeds(subs, { toast, icon: 'devices', title: 'Subscribe (read-only)',
+    intro: 'For calendar apps that cannot sign in: every calendar you see, free/busy, or one calendar. Anyone with a link can read those events, so make one per app or device and stop it when it is no longer used.' }).catch(fail);
 }
 
 export async function setCalendars(el) {
