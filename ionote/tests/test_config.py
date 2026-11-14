@@ -22,3 +22,7 @@ def test_standard_paths():
     assert config.APP_DIR == ROOT and config.STATIC_DIR == ROOT / "static"
     assert config.DATA_DIR == Path(os.environ["DATA_DIR"]).resolve()  # the tests' scratch folder
     assert config.LOG_FILE is None  # LOG_FILE= in the tests' environment
+
+
+def test_served_in_a_folder_of_an_address(client):
+    testing.check_folder(client)  # https://home.example.com/suite-app/, the whole suite on one address

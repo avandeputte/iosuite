@@ -75,7 +75,7 @@ export const S = {
 };
 
 /** A person's badge picture; the version key busts the cache when digiKam's tag icon changes. */
-export const faceUrl = (tagId) => `/face/${tagId}?v=${S.tagById.get(tagId)?.icon || 0}`;
+export const faceUrl = (tagId) => `face/${tagId}?v=${S.tagById.get(tagId)?.icon || 0}`;
 // an account's avatar: the linked person's face badge from People, else the first letter
 export const avatarOf = (u, big) => u.person ? h('img', { class: 'avatar' + (big ? ' big' : ''), src: faceUrl(u.person), alt: '' }) : h('span', { class: 'avatar' + (big ? ' big' : '') }, u.name[0].toUpperCase());
 export { toast, toastError } from './core.js';  // defined there so core's act() can use them; every module keeps importing them from here
@@ -105,7 +105,7 @@ const PARAM_VIEWS = ['places', 'faces', 'history', 'import'];  // views whose ow
 export const ST = { rev: -1, fav: new Set(), albums: [], searches: [] };
 
 
-export function loadConcepts() { if (S.CONCEPTS || !S.SEM.enabled) return; S.CONCEPTS = []; api('/api/concepts').then((c) => { S.CONCEPTS = c.concepts.map((x) => ({ ...x, _n: norm(x.name) })); }).catch(() => { S.CONCEPTS = null; }); }
+export function loadConcepts() { if (S.CONCEPTS || !S.SEM.enabled) return; S.CONCEPTS = []; api('api/concepts').then((c) => { S.CONCEPTS = c.concepts.map((x) => ({ ...x, _n: norm(x.name) })); }).catch(() => { S.CONCEPTS = null; }); }
 
 export const applyBadgePref = () => document.body.classList.toggle('nobadges', store.get(PREF.badges, '1') === '0');
 // The photo info panel's sections, each one a user can hide (Settings › Display › Info panel, or the gear in the
@@ -149,7 +149,7 @@ export function applyAppName() {
 /** Re-check server status soon (after an edit) instead of waiting for the regular poll. */
 export function pollSoon(ms = 1500) { clearTimeout(S.pollTimer); S.pollTimer = setTimeout(pollStatus, document.hidden ? Math.max(ms, 120000) : ms); }  // a hidden tab asks every two minutes at most
 export async function loadState() {
-  const s = await api('/api/state');
+  const s = await api('api/state');
   ST.rev = s.rev; ST.fav = new Set(s.favorites); ST.albums = s.albums; ST.searches = s.searches || []; ST.canShare = !!s.canShareAlbums; ST.canPrivate = !!s.canPrivateAlbums;
 }
 export const ualbumById = (id) => ST.albums.find((a) => a.id === +id);

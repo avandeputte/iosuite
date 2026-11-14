@@ -70,7 +70,7 @@ def test_duplicates_can_be_imported_on_purpose_and_staging_can_be_discarded(clie
 def test_share_target_stages_the_files_and_opens_the_import_page(client, lib):
     src = _src(lib)[0]
     r = client.post("/share", files=[("files", ("shared.jpg", src.read_bytes(), "image/jpeg"))], follow_redirects=False)
-    assert r.status_code == 303 and r.headers["location"].startswith("/#/import?staged="), r.text
+    assert r.status_code == 303 and r.headers["location"].startswith("./#/import?staged="), r.text
     token = r.headers["location"].split("staged=")[1]
     plan = client.get(f"/api/import/{token}").json()
     assert plan["items"][0]["name"] == "shared.jpg" and plan["duplicates"] == 1

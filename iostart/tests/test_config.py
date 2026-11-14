@@ -31,3 +31,7 @@ def test_a_stop_does_not_wait_for_open_event_streams(monkeypatch):
     monkeypatch.setattr(uvicorn, "run", lambda *a, **kw: got.update(kw))
     m.main()
     assert 0 < got["timeout_graceful_shutdown"] <= 10
+
+
+def test_served_in_a_folder_of_an_address(client):
+    testing.check_folder(client)  # https://home.example.com/suite-app/, the whole suite on one address

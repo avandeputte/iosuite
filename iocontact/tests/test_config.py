@@ -51,3 +51,7 @@ def test_standard_paths():
     root = Path(ROOT)
     assert config.APP_DIR == root and config.STATIC_DIR == root / "static" and config.DATA_DIR == root / "data"
     assert config.LOG_FILE is None  # LOG_FILE= in the tests' environment
+
+
+def test_served_in_a_folder_of_an_address(client):
+    testing.check_folder(client)  # https://home.example.com/suite-app/, the whole suite on one address

@@ -437,7 +437,8 @@ class Auth:
             return response
 
         app.add_middleware(BodyCap, limit_for=limit_for, error=error)
-        app.add_middleware(Forwarded)  # added last: the outermost layer, so the peer is the real one
+        # added last: the outermost layer, so the peer is the real one; FastAPI's own two pages learn the folder the app is served in
+        app.add_middleware(Forwarded, rooted=tuple(p for p in (app.docs_url, app.openapi_url, app.redoc_url) if p))
 
     def _update(self, me, user_id: int, body: dict):
         """PATCH /api/users/{id}. An admin of this app sets the account's role here; the account itself (name, email,

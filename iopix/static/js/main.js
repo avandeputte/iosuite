@@ -43,10 +43,10 @@ async function _awaitReindex(until, tries, ms) {
   for (let i = 0; i < tries; i++) {
     await sleep(ms);
     try {
-      const s = await api('/api/status');
+      const s = await api('api/status');
       if (s.index === seen) continue;
       seen = s.index;
-      const m = await api('/api/meta');
+      const m = await api('api/meta');
       if (until(m)) { indexMeta(m); return true; }
     } catch { /* retry */ }
   }
@@ -114,7 +114,7 @@ function updateReadyNote() {
 export async function pollStatus() {
   let delay = 20000;
   try {
-    const s = await api('/api/status');
+    const s = await api('api/status');
     if (NET.lost) reconnected();
     if (s.requireLogin && !s.user && S.USER) { location.reload(); return; }  // the session ended: the sign-in screen, not a dead page
     const el = $('#status');
@@ -148,7 +148,7 @@ export async function pollStatus() {
       `${nf.format(S.PENDING)} ${S.PENDING === 1 ? 'edit' : 'edits'} not in digiKam yet`));
     if (s.rev !== ST.rev && ST.rev >= 0) { const mine = ST.rev; await loadState(); if (mine !== ST.rev && S.route.view === 'albums') showAlbums(); }
     if (S.META && s.index && s.index !== S.META.version) {
-      indexMeta(await api('/api/meta'));
+      indexMeta(await api('api/meta'));
       details.clear();
       // pages that are only lists of the library are redrawn in place; pages holding work in progress (the map
       // while placing, forms, dialogs, the edit log's search) keep what is on screen and refresh their data quietly
@@ -175,7 +175,7 @@ window.addEventListener('online', lookAgain);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') pollSoon(300); });  // back in view: catch up now
 async function start() {
   let st = null;
-  try { st = await api('/api/status'); } catch { /* the poll below says what is wrong */ }
+  try { st = await api('api/status'); } catch { /* the poll below says what is wrong */ }
   if (st?.needsDatabase) { setupDatabasePage(st); return; }
   await loadUser();
   // the sidebar: the destinations in groups (a gap after Favorites, Places and Map), then Settings at
@@ -237,7 +237,7 @@ function initSidebar() {
 export async function boot() {
   S.BOOTED = true; document.body.classList.remove('locked');
   // (a search typed before the metadata arrived draws its list once it is here)
-  try { indexMeta(await api('/api/meta')); await loadState(); const q = $('#q'); if (q && q.value && document.activeElement === q) q.dispatchEvent(new Event('input')); } catch (e) { main.replaceChildren(h('div', { class: 'empty' }, 'Could not reach the server: ' + e.message)); S.BOOTED = false; setTimeout(boot, 5000); return; }  // tried again until it answers (the index may not be readable yet after a first start)
+  try { indexMeta(await api('api/meta')); await loadState(); const q = $('#q'); if (q && q.value && document.activeElement === q) q.dispatchEvent(new Event('input')); } catch (e) { main.replaceChildren(h('div', { class: 'empty' }, 'Could not reach the server: ' + e.message)); S.BOOTED = false; setTimeout(boot, 5000); return; }  // tried again until it answers (the index may not be readable yet after a first start)
   if (store.get(PREF.filters, '0') === '1' && innerWidth >= DOCK_MIN && FILTER_VIEWS.includes(parseHash().view)) toggleFilters(true, false);
   await pollStatus();
   onRoute();

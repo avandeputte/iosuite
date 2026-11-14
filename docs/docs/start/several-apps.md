@@ -18,14 +18,31 @@ container or one database server:
 | ioTask | 8670 | `tasks` | `/opt/iotask/app` |
 | ioRecipe | 8690 | `recipe` | `/opt/iorecipe/app` |
 
-## "Also install …?"
+## One line: install, add, remove, reconfigure
 
-Whichever app you install first, its installer's last question puts others beside it:
+```sh
+curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/install.sh | bash
+```
+
+On a new server this sets up ioStart and then shows the list of apps. Run it again at any time: it shows what is
+installed. Tick an app to add it, untick one to remove it, type `r` and its number to answer its setup questions again
+(port, public address, database...).
+
+Removing an app stops it, deletes its program files and takes it out of the other apps' switchers. **Its database and
+its data stay**, so adding it again brings everything back. Deleting those too is a separate question that you answer by
+typing `DELETE`; the accounts, the photos and the backups are never touched.
+
+Without questions: `... | bash -s -- --add iotask,ionote`, `--remove iohealth`, `--reconfigure iocalendar`, `--list`.
+
+## From an app's own installer
+
+Whichever app you install first, its installer ends with the same list (`./setup.sh --apps` shows only the list), and
+takes the lists as flags:
 
 === "setup.sh"
 
     ```sh
-    ./setup.sh --also iocalendar,iocontact     # or --also all, or --also none
+    ./setup.sh --also iocalendar,iocontact     # or --also all; --remove iohealth; --reconfigure iotask
     ```
 
 === "Proxmox VE"
@@ -45,7 +62,7 @@ sign-in domain and the admin. Each companion is fetched from GitHub into `/opt/<
 
 ioPix installed this way starts without digiKam and without AI features; run its `setup.sh` again to add them.
 
-## Adding an app to an existing install
+## An app on another machine
 
 Install the new app on its own, anywhere, and answer the Shared ioSuite database question with the one your other
 apps use. That's all it takes for the accounts to be shared. To have one sign-in, give every app the same

@@ -14,7 +14,7 @@ self.addEventListener('push', (e) => {
 
 self.addEventListener('notificationclick', (e) => {
   e.notification.close();
-  const target = new URL((e.notification.data && e.notification.data.url) || '/', self.location.origin).href;
+  const target = new URL((e.notification.data && e.notification.data.url) || '../../../', self.location.href).href;  // no address: the app itself, three folders up from api/auth/push/ (it may be in a folder of the address)
   e.waitUntil((async () => {
     const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     const same = wins.find((w) => w.url.split('#')[0] === target.split('#')[0]);

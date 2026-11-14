@@ -135,7 +135,8 @@ def check_conventions(root, app: str, version: str, config, port_files=("Dockerf
     """The conventions every app's repository follows (one test per app calls this): the suite's port for the app
     (config.PORT, and named in the files that bind it), the suite's version as the app's (`version` is the app's
     __version__; its pyproject.toml carries no number of its own), config.env as the settings file (ignored by git, no
-    older name left in the scripts or the README)."""
+    older name left in the scripts or the README), and a page that asks for everything with relative addresses
+    (check_relative: the app may be served in a folder of an address)."""
     import re
     from pathlib import Path
     import iosuite_shared
@@ -151,6 +152,59 @@ def check_conventions(root, app: str, version: str, config, port_files=("Dockerf
         if (root / f).exists():
             text = (root / f).read_text()
             assert f"{app}.env" not in text and not re.search(r"(?<![\w.])\.env\b", text), f"{f} still names a settings file other than config.env"
+    check_relative(root)
+
+
+ABSOLUTE = r"""(?:["'`]|url\(\s*)/(?:api|static|dav|mcp|ics|cal|profile|thumb|preview|orig|video|face|facecrop|share|v1|manifest\.webmanifest|sw\.js)(?![\w-])"""
+ABSOLUTE_ATTR = r"""(?:src|href|action)\s*=\s*["']/(?!/)"""
+
+
+def check_relative(root, skip=("extension", "vendor")) -> None:
+    """The page asks for everything with relative addresses (api/events, static/app.js), never from the root of the
+    address (/api/events): an app may be served in a folder of it (https://home.example.com/calendar/, the whole suite
+    on one address: iosuite_shared.prefix), where /api/… is somebody else's. Every script, page, stylesheet and
+    manifest under static/ is read, but for the folders in `skip` (the browser extension talks to a server it is
+    given the address of; vendor code is not ours)."""
+    import re
+    from pathlib import Path
+    found = []
+    for f in sorted(Path(root, "static").rglob("*")):
+        if f.suffix not in (".js", ".html", ".css", ".webmanifest") or set(f.relative_to(root).parts) & set(skip):
+            continue
+        for n, line in enumerate(f.read_text(encoding="utf-8").splitlines(), 1):
+            if re.search(ABSOLUTE, line) or (f.suffix == ".html" and re.search(ABSOLUTE_ATTR, line)):
+                found.append(f"{f.relative_to(root)}:{n}: {line.strip()[:120]}")
+    assert not found, "addresses from the root of the server in the page (write api/…, static/… without the first slash):\n" + "\n".join(found)
+
+
+def check_folder(client, folder: str = "/suite-app", host: str = "home.example.com") -> None:
+    """The app answers in a folder of an address (iosuite_shared.prefix) as it does at the root: the page, its files,
+    the manifest and the API, whether the proxy in front took the folder off the path or left it; the folder without
+    its slash goes to the one with it; the API's docs find their document; and a request that names another host
+    (straight to the app's port) has no folder. One test per app calls this with its client."""
+    import re
+    old = os.environ.get("PUBLIC_URL")
+    os.environ["PUBLIC_URL"] = f"https://{host}{folder}"
+    try:
+        h = {"host": host}
+        for kept in (folder, ""):  # the proxy left the folder on the path; it took it off
+            r = client.get(kept + "/", headers=h)
+            assert r.status_code == 200 and "<html" in r.text.lower(), f"GET {kept}/ answers {r.status_code}"
+            assert not re.search(ABSOLUTE_ATTR, r.text) and not re.search(ABSOLUTE, r.text), "the page names an address from the root of the server"
+            assert client.get(kept + "/api/status", headers=h).status_code == 200, f"GET {kept}/api/status"
+            for name in re.findall(r"""(?:src|href)="(static/[^"?]+|manifest\.webmanifest)""", r.text):
+                assert client.get(f"{kept}/{name}", headers=h).status_code == 200, f"GET {kept}/{name}"
+        r = client.get(folder + "?x=1", headers=h, follow_redirects=False)
+        assert r.status_code == 308 and r.headers["location"] == folder + "/?x=1", "the folder without its slash goes to the folder"
+        r = client.get("/api/docs", headers=h)
+        if r.status_code == 200:
+            assert f"{folder}/api/openapi.json" in r.text, "the API's docs page looks for its document outside the folder"
+        assert client.get(folder + "/api/status").status_code == 404, "a request that does not name the public host has no folder"
+    finally:
+        if old is None:
+            os.environ.pop("PUBLIC_URL", None)
+        else:
+            os.environ["PUBLIC_URL"] = old
 
 
 def api_routes(app) -> list:

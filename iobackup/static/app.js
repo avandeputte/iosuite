@@ -61,7 +61,7 @@ async function api(path, opts = {}) {
   const o = { credentials: 'same-origin', ...opts, headers: { ...(opts.headers || {}) } };
   if (o.json !== undefined) { o.body = JSON.stringify(o.json); o.headers['Content-Type'] = 'application/json'; delete o.json; }
   const r = await fetch(path, o);
-  if (r.status === 401 && !path.startsWith('/api/auth') && path !== '/api/status') { showSignIn(); throw new Error('Sign in first'); }
+  if (r.status === 401 && !path.startsWith('api/auth') && path !== 'api/status') { showSignIn(); throw new Error('Sign in first'); }
   if (!r.ok) {
     let msg = r.statusText;
     try { const j = await r.json(); msg = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail); } catch { /* not JSON */ }
@@ -118,13 +118,13 @@ const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 let pollTimer = null;
 
 async function loadOverview() {
-  const o = await api('/api/overview');
+  const o = await api('api/overview');
   Object.assign(S, { servers: o.servers, destinations: o.destinations, jobs: o.jobs, busy: o.busy, now: o.now, backupDir: o.backupDir, suiteServer: o.suiteServer });
   drawNav();
 }
 async function saveSettings(changes) {
   Object.assign(S.settings, changes);
-  try { await api('/api/auth/settings', { method: 'POST', json: changes }); } catch { /* kept for this visit */ }
+  try { await api('api/auth/settings', { method: 'POST', json: changes }); } catch { /* kept for this visit */ }
 }
 
 const size = (n) => {
@@ -165,7 +165,7 @@ const fail2 = (el) => (e) => el.replaceChildren(h('p', { class: 'warn' }, e.mess
 // ------------------------------------------------------------------ jobs (the start page)
 async function showJobs(page) {
   await loadOverview();
-  const { items: runs } = await api('/api/runs?limit=8');
+  const { items: runs } = await api('api/runs?limit=8');
   page.append(h('div', { class: 'pagehead' }, h('h1', null, 'Backup jobs'),
     isAdmin() ? h('button', { class: 'pillbtn primary', disabled: !S.servers.length || !S.destinations.length, onclick: () => editJob(null) }, icon('add', 's'), 'New job') : null));
   const steps = [];
@@ -201,7 +201,7 @@ function jobRow(j) {
       isAdmin() ? h('button', { class: 'pillbtn noic tiny', onclick: () => editJob(j) }, 'Edit') : null));
 }
 async function runJob(j) {
-  try { const r = await api(`/api/jobs/${j.id}/run`, { method: 'POST' }); location.hash = `#/run/${r.runId}`; } catch (e) { fail(e); }
+  try { const r = await api(`api/jobs/${j.id}/run`, { method: 'POST' }); location.hash = `#/run/${r.runId}`; } catch (e) { fail(e); }
 }
 async function editJob(j) {
   const isNew = !j;
@@ -247,7 +247,7 @@ async function editJob(j) {
   async function loadDbs() {
     if (f.some.checked) dbBox.replaceChildren(h('span', { class: 'muted small' }, 'Reading the databases from the server…'));
     try {
-      const info = await api(`/api/servers/${f.server.value}/info`);
+      const info = await api(`api/servers/${f.server.value}/info`);
       galeraNote.textContent = info.galera ? `This server is a Galera node (${info.galera.state}, a cluster of ${info.galera.cluster_size}). Desync keeps a long dump from slowing the cluster down.` : '';
       if (!f.some.checked) return;
       const dbs = info.databases.filter((d) => !d.system);
@@ -266,12 +266,12 @@ async function editJob(j) {
     const json = { name: f.name.value, serverId: +f.server.value, destinationId: +f.dest.value, databases: f.all.checked ? 'all' : [...picked],
       includeUsers: f.users.checked, keep: +f.keep.value || 0, enabled: f.enabled.checked, desync: f.desync.checked, lockAll: f.lock.checked,
       compressLevel: +f.level.value, schedule };
-    await api(isNew ? '/api/jobs' : `/api/jobs/${j.id}`, { method: isNew ? 'POST' : 'PUT', json });
+    await api(isNew ? 'api/jobs' : `api/jobs/${j.id}`, { method: isNew ? 'POST' : 'PUT', json });
     return true;
   };
   const del = async () => {
     if (!await confirmDialog(`Delete ${j.name}`, 'The job and its schedule go. The backups it made stay where they are.', 'Delete', true)) return undefined;
-    await api(`/api/jobs/${j.id}`, { method: 'DELETE' }); return true;
+    await api(`api/jobs/${j.id}`, { method: 'DELETE' }); return true;
   };
   const body = h('div', { class: 'pform' },
     fld('Name', f.name, 'The backup files are named after it.'),
@@ -301,7 +301,7 @@ async function showServers(page) {
   if (!S.servers.length) { page.append(h('div', { class: 'empty' }, icon('dns'), h('p', null, 'No server yet.'))); return; }
   page.append(h('div', { class: 'cards' }, S.servers.map((s) => {
     const msg = h('div', { class: 'muted small' });
-    const test = async () => { msg.textContent = 'Connecting…'; try { msg.replaceChildren(serverInfoView(await api(`/api/servers/${s.id}/info`))); } catch (e) { msg.textContent = e.message; msg.className = 'warn small'; } };
+    const test = async () => { msg.textContent = 'Connecting…'; try { msg.replaceChildren(serverInfoView(await api(`api/servers/${s.id}/info`))); } catch (e) { msg.textContent = e.message; msg.className = 'warn small'; } };
     return h('div', { class: 'card' },
       h('h3', null, icon('dns'), s.name),
       h('div', { class: 'small' }, s.host ? `${s.host}${s.port ? `:${s.port}` : ''}` : (s.socket || 'the local socket'), ' · ', s.user || 'the default user', s.tls ? ' · TLS' : ''),
@@ -332,7 +332,7 @@ async function editServer(s) {
   } }, 'The suite\'s own database server'), h('span', { class: 'muted small' }, ' fills in its address; give it an account that may read every database.')) : null;
   const del = async () => {
     if (!await confirmDialog(`Remove ${s.name}`, 'Only the connection settings go; nothing on the server changes.', 'Remove', true)) return undefined;
-    await api(`/api/servers/${s.id}`, { method: 'DELETE' }); return true;
+    await api(`api/servers/${s.id}`, { method: 'DELETE' }); return true;
   };
   const r = await dialog(isNew ? 'Add a server' : `Edit ${s.name}`, h('div', { class: 'pform' }, suite,
     fld('Name', f.name), fld('Host', f.host), fld('Port', f.port), fld('Socket (instead of a host)', f.socket), fld('User', f.user), fld('Password', f.password),
@@ -341,8 +341,8 @@ async function editServer(s) {
       h('pre', { class: 'log', style: { maxHeight: 'none', whiteSpace: 'pre-wrap' } }, "CREATE USER 'backup'@'%' IDENTIFIED BY '…';\nGRANT SELECT, SHOW VIEW, TRIGGER, EVENT, LOCK TABLES,\n  SHOW DATABASES ON *.* TO 'backup'@'%';\n-- Galera desync (SET GLOBAL wsrep_desync) also needs SUPER.\n-- A restore makes databases, users and grants: restore onto a server\n-- added with an administrator's account (root…).")),
     result),
   [...(isNew ? [] : [{ label: 'Remove', danger: true, value: del }]), { label: 'Cancel', value: null },
-    { label: 'Test', value: async () => { result.replaceChildren(h('p', { class: 'muted small' }, 'Connecting…')); try { result.replaceChildren(serverInfoView(await api('/api/servers/test', { method: 'POST', json: json() }))); } catch (e) { result.replaceChildren(h('p', { class: 'warn small' }, e.message)); } return undefined; } },
-    { label: 'Save', primary: true, value: async () => { await api(isNew ? '/api/servers' : `/api/servers/${s.id}`, { method: isNew ? 'POST' : 'PUT', json: json() }); return true; } }], true);
+    { label: 'Test', value: async () => { result.replaceChildren(h('p', { class: 'muted small' }, 'Connecting…')); try { result.replaceChildren(serverInfoView(await api('api/servers/test', { method: 'POST', json: json() }))); } catch (e) { result.replaceChildren(h('p', { class: 'warn small' }, e.message)); } return undefined; } },
+    { label: 'Save', primary: true, value: async () => { await api(isNew ? 'api/servers' : `api/servers/${s.id}`, { method: isNew ? 'POST' : 'PUT', json: json() }); return true; } }], true);
   if (r) { toast('Saved'); onRoute(); }
 }
 
@@ -355,7 +355,7 @@ async function showDestinations(page) {
   if (!S.destinations.length) { page.append(h('div', { class: 'empty' }, icon('folder'), h('p', null, 'No destination yet.'))); return; }
   page.append(h('div', { class: 'cards' }, S.destinations.map((d) => {
     const msg = h('div', { class: 'muted small' });
-    const test = async () => { msg.textContent = 'Testing…'; try { msg.textContent = (await api(`/api/destinations/${d.id}/test`, { method: 'POST' })).message; msg.className = 'small'; } catch (e) { msg.textContent = e.message; msg.className = 'warn small'; } };
+    const test = async () => { msg.textContent = 'Testing…'; try { msg.textContent = (await api(`api/destinations/${d.id}/test`, { method: 'POST' })).message; msg.className = 'small'; } catch (e) { msg.textContent = e.message; msg.className = 'warn small'; } };
     const g = d.kind === 'gdrive';
     return h('div', { class: 'card' },
       h('h3', null, icon(g ? 'cloud' : 'folder'), d.name, h('span', { class: 'muted small' }, g ? ' Google Drive' : ' Folder')),
@@ -392,11 +392,11 @@ async function editDest(d) {
   show();
   const del = async () => {
     if (!await confirmDialog(`Remove ${d.name}`, 'Only the settings go; the backup files stay where they are.', 'Remove', true)) return undefined;
-    await api(`/api/destinations/${d.id}`, { method: 'DELETE' }); return true;
+    await api(`api/destinations/${d.id}`, { method: 'DELETE' }); return true;
   };
   const r = await dialog(isNew ? 'Add a destination' : `Edit ${d.name}`, h('div', { class: 'pform' }, fld('Name', f.name), fld('Kind', f.kind), box),
     [...(isNew ? [] : [{ label: 'Remove', danger: true, value: del }]), { label: 'Cancel', value: null },
-      { label: 'Save', primary: true, value: () => api(isNew ? '/api/destinations' : `/api/destinations/${d.id}`, { method: isNew ? 'POST' : 'PUT', json: {
+      { label: 'Save', primary: true, value: () => api(isNew ? 'api/destinations' : `api/destinations/${d.id}`, { method: isNew ? 'POST' : 'PUT', json: {
         name: f.name.value, kind: f.kind.value, path: f.path.value, auth: f.auth.value, clientId: f.clientId.value, folderName: f.folderName.value, folderId: f.folderId.value,
         clientSecret: f.clientSecret.value || (d.clientSecretSet ? null : ''), serviceAccount: f.sa.value || (d.serviceAccountSet ? null : '') } }) }], true);
   if (!r) return;
@@ -409,14 +409,14 @@ async function googleSignIn(d) {
   let open = true;
   dialog('Sign in with Google', out, [{ label: 'Close', value: null }]).then(() => { open = false; });
   let flow;
-  try { flow = await api(`/api/destinations/${d.id}/google`, { method: 'POST' }); } catch (e) { out.replaceChildren(h('p', { class: 'warn' }, e.message)); return; }
+  try { flow = await api(`api/destinations/${d.id}/google`, { method: 'POST' }); } catch (e) { out.replaceChildren(h('p', { class: 'warn' }, e.message)); return; }
   const status = h('p', { class: 'muted' }, 'Waiting for you to approve…');
   out.replaceChildren(h('p', null, 'Open ', h('a', { class: 'lnk', href: flow.url, target: '_blank', rel: 'noopener' }, flow.url), ' on any device and type:'),
     h('p', { style: { fontSize: '28px', fontWeight: 600, letterSpacing: '3px', textAlign: 'center' } }, flow.code), status);
   const tick = async () => {
     if (!open) return;
     try {
-      const st = await api(`/api/google/${flow.id}`);
+      const st = await api(`api/google/${flow.id}`);
       if (st.status === 'ok') { status.className = ''; status.textContent = 'Signed in: backups can go to Google Drive now.'; onRoute(); return; }
       if (st.status !== 'pending') { status.className = 'warn'; status.textContent = st.error || `The sign-in ${st.status === 'denied' ? 'was refused' : 'ran out of time'}.`; return; }
     } catch (e) { status.textContent = e.message; }
@@ -441,9 +441,9 @@ async function showBackups(page, r) {
   const list = h('div', null, h('p', { class: 'muted' }, d.kind === 'gdrive' ? 'Reading the Google Drive folder…' : 'Reading the folder…'));
   page.append(list);
   try {
-    const { items, free } = await api(`/api/destinations/${did}/backups`);
+    const { items, free } = await api(`api/destinations/${did}/backups`);
     const total = items.reduce((a, b) => a + b.size, 0);
-    const base = (b) => `/api/destinations/${did}/backups/${encodeURIComponent(b.name)}`;
+    const base = (b) => `api/destinations/${did}/backups/${encodeURIComponent(b.name)}`;
     list.replaceChildren(h('p', { class: 'muted' }, `${items.length} backup(s) in ${d.name}, ${size(total)}${free != null ? ` · ${size(free)} free` : ''}`),
       !items.length ? h('div', { class: 'empty' }, icon('backup'), h('p', null, 'No backup here yet.')) :
         h('div', { class: 'tablewrap' }, h('table', { class: 't' }, h('tr', null, h('th', null, 'Backup'), h('th', null, 'Taken'), h('th', null, 'Size'), h('th', null)),
@@ -473,7 +473,7 @@ async function showRestore(page, r) {
   const wrap = h('div', null, h('p', { class: 'muted' }, d && d.kind === 'gdrive' ? 'Downloading the backup from Google Drive and reading it (a big one takes a while)…' : 'Reading the backup…'));
   page.append(wrap);
   let c;
-  try { c = await api(`/api/destinations/${did}/backups/${encodeURIComponent(name)}`); } catch (e) { fail2(wrap)(e); return; }
+  try { c = await api(`api/destinations/${did}/backups/${encodeURIComponent(name)}`); } catch (e) { fail2(wrap)(e); return; }
   wrap.replaceChildren(restoreForm(did, name, c));
 }
 function restoreForm(did, name, c) {
@@ -506,7 +506,7 @@ function restoreForm(did, name, c) {
     for (const a of accts) if (a.cb.checked) (a.kind === 'role' ? p.roles : p.users).push(a.name);
     return p;
   };
-  const base = `/api/destinations/${did}/backups/${encodeURIComponent(name)}`;
+  const base = `api/destinations/${did}/backups/${encodeURIComponent(name)}`;
   async function review() {
     const p = plan();
     if (!p.databases.length && !p.roles.length && !p.users.length) { toast('Pick something to restore'); return; }
@@ -555,15 +555,15 @@ function runsTable(runs) {
         : (r.status === 'failed' ? r.last.replace(/^\S+ /, '') : ''))))));
 }
 async function showActivity(page) {
-  const { items } = await api('/api/runs?limit=200');
+  const { items } = await api('api/runs?limit=200');
   page.append(h('div', { class: 'pagehead' }, h('h1', null, 'Activity')), runsTable(items));
   if (items.some((r) => ['running', 'queued'].includes(r.status))) pollTimer = setTimeout(onRoute, 4000);
 }
 async function showRun(page, r) {
-  const run = await api(`/api/runs/${r.id}`);
+  const run = await api(`api/runs/${r.id}`);
   const active = ['queued', 'running'].includes(run.status);
   page.append(h('div', { class: 'pagehead' }, h('a', { class: 'iconbtn', href: '#/activity', title: 'Activity' }, icon('back')), h('h1', null, run.title), pill(run.status),
-    active && canEdit() ? h('button', { class: 'pillbtn noic danger', onclick: async () => { try { await api(`/api/runs/${run.id}/cancel`, { method: 'POST' }); onRoute(); } catch (e) { fail(e); } } }, 'Cancel') : null),
+    active && canEdit() ? h('button', { class: 'pillbtn noic danger', onclick: async () => { try { await api(`api/runs/${run.id}/cancel`, { method: 'POST' }); onRoute(); } catch (e) { fail(e); } } }, 'Cancel') : null),
   h('p', { class: 'muted' }, `${run.trigger === 'schedule' ? 'Scheduled' : `Started by ${run.user || 'hand'}`} · queued ${when(run.queued)}${run.finished ? ` · took ${dur(run.started, run.finished)}` : ''}`),
   run.status === 'ok' && run.kind === 'backup' && run.result ? h('p', null, `Backup ${run.result.file} (${size(run.result.size)}) stored. `, h('a', { class: 'lnk', href: `#/backups/${run.result.destinationId}` }, 'See the backups')) : null,
   run.log.length ? h('pre', { class: 'runlog' }, run.log.map((l) => h('div', { class: /FAILED|error/.test(l) ? 'e' : /warning|note:/.test(l) ? 'w' : '' }, l))) : h('p', { class: 'muted' }, 'Waiting to start…'));
@@ -587,7 +587,7 @@ function drawUser() {
       h('button', { class: 'mi', onclick: () => { const n = { system: 'light', light: 'dark', dark: 'system' }[theme]; applyTheme(n); closeMenu(); toast(`Appearance: ${n}`); } },
         icon('theme', 's'), `Appearance: ${theme}`),
       h('a', { class: 'mi', href: '#/settings', onclick: closeMenu }, icon('settings', 's'), 'Settings'),
-      h('button', { class: 'mi', onclick: async () => { const r = await api('/api/auth/logout', { method: 'POST' }); if (r && r.cloudflareLogout) location.href = r.cloudflareLogout; else location.reload(); } }, icon('logout', 's'), 'Sign out'));
+      h('button', { class: 'mi', onclick: async () => { const r = await api('api/auth/logout', { method: 'POST' }); if (r && r.cloudflareLogout) location.href = r.cloudflareLogout; else location.reload(); } }, icon('logout', 's'), 'Sign out'));
     m.append(menu);
     setTimeout(() => document.addEventListener('click', outside), 0);
   };
@@ -595,7 +595,7 @@ function drawUser() {
 }
 /* The suite (iosuite-shared's suite_apps): when other ioThing apps are registered, the app mark opens a menu of them. */
 async function loadSuite() {
-  try { const r = await api('/api/auth/suite'); S.suite = (r.items || []).filter((a) => a.app !== r.app && a.url); } catch { S.suite = []; }
+  try { const r = await api('api/auth/suite'); S.suite = (r.items || []).filter((a) => a.app !== r.app && a.url); } catch { S.suite = []; }
   const b = $('#suitebtn');
   if (b) { b.hidden = !S.suite.length; b.onclick = () => toggleSuite(b); }
   drawNav();
@@ -765,7 +765,7 @@ function showSignIn() {
   const btn = h('button', { class: 'pillbtn primary noic', type: 'submit' }, first ? 'Create the admin account' : 'Sign in');
   const login = async (n, p) => {
     err.textContent = '';
-    try { await api(first ? '/api/auth/setup' : '/api/auth/login', { method: 'POST', json: { name: n, password: p } }); location.reload(); } catch (x) { err.textContent = x.message; }
+    try { await api(first ? 'api/auth/setup' : 'api/auth/login', { method: 'POST', json: { name: n, password: p } }); location.reload(); } catch (x) { err.textContent = x.message; }
   };
   const submit = (e) => { e.preventDefault(); login(name.value.trim(), pw.value); };
   document.body.append(h('div', { class: 'signin' }, h('form', { class: 'dialog', onsubmit: submit },
@@ -774,7 +774,7 @@ function showSignIn() {
     tiles, form, err, h('div', { class: 'btns' }, btn))));
   if (first) { name.focus(); return; }
   const pick = (t) => tiles.querySelectorAll('.account').forEach((x) => x.classList.toggle('on', x === t));
-  api('/api/auth/accounts').then((d) => {
+  api('api/auth/accounts').then((d) => {
     if (!d.accounts.length) { name.focus(); return; }
     form.hidden = true; btn.hidden = true;
     tiles.append(...d.accounts.map((a) => {
@@ -793,10 +793,10 @@ function showSignIn() {
 async function start() {
   applyTheme();
   document.querySelectorAll('[data-ic]').forEach((el) => el.replaceWith(icon(el.dataset.ic)));
-  S.status = await api('/api/status');
+  S.status = await api('api/status');
   if (!S.status.user) { showSignIn(); return; }
   S.user = S.status.user;
-  try { S.settings = (await api('/api/auth/me')).settings || {}; } catch { S.settings = {}; }
+  try { S.settings = (await api('api/auth/me')).settings || {}; } catch { S.settings = {}; }
   if (S.settings.theme) { try { localStorage.setItem('iobackup.theme', S.settings.theme); } catch { /* */ } applyTheme(); }
   drawUser();
   await loadOverview();

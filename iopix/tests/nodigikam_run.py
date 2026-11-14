@@ -91,4 +91,10 @@ with TestClient(app) as c:
     r = c.post("/api/trash/restore", json={"infos": [items[0]["info"]]})
     out["restore"] = [r.status_code, r.json().get("restored") == [dunes], (photos / "2024" / "Summer" / "dunes.jpg").exists()]
     out["digikam_files"] = sorted(str(p.relative_to(tmp)) for p in tmp.rglob("digikam4.db*"))
+    try:  # the page, its files and the API in a folder of an address (https://home.example.com/suite-app/): iosuite_shared.testing
+        from iosuite_shared import testing
+        testing.check_folder(c)
+        out["folder"] = "ok"
+    except AssertionError as e:
+        out["folder"] = str(e)
 print("RESULT " + json.dumps(out), flush=True)

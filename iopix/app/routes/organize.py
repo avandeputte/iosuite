@@ -477,22 +477,23 @@ def api_import_discard(token: str):
     return {"ok": True}
 
 
+    # "./": the app may be served in a folder of the address (/pix/share lands on /pix/#/import)
 @router.post("/share", dependencies=[access.public])  # the route itself sends whoever may not import to a page that says so
 async def share_target(request: Request):
     """The installed app as a share target (Android): files shared to it are staged, then the Import page opens."""
     if not users.can_write(request.state.user):  # the share sheet cannot show a JSON error: the page explains
-        return RedirectResponse("/#/import?error=signin", status_code=303)
+        return RedirectResponse("./#/import?error=signin", status_code=303)
     if not (config.DB_WRITE and edits.available()):
-        return RedirectResponse("/#/import?error=off", status_code=303)
+        return RedirectResponse("./#/import?error=off", status_code=303)
     form = await request.form()
     ups = [f for f in form.getlist("files") if hasattr(f, "filename")]
     if not ups:
-        return RedirectResponse("/#/import", status_code=303)
+        return RedirectResponse("./#/import", status_code=303)
     if any((f.size or 0) > 2 * 1024 ** 3 for f in ups):
-        return RedirectResponse("/#/import?error=toolarge", status_code=303)
+        return RedirectResponse("./#/import?error=toolarge", status_code=303)
     files = [(f.filename, f.file) for f in ups[:200]]
     token = await run_in_threadpool(importer.stage, files)
-    return RedirectResponse(f"/#/import?staged={token}", status_code=303)
+    return RedirectResponse(f"./#/import?staged={token}", status_code=303)
 
 
 @router.post("/api/folders/{album_id}/upload", dependencies=[access.editor_write])

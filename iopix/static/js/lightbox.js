@@ -14,7 +14,7 @@ export const details = new Map();  // photo id -> promise of /api/photo/:id, bou
 const NATIVE = new Set(['JPG', 'PNG', 'GIF', 'WEBP']);
 export function getDetail(id) {
   if (!details.has(id)) {
-    details.set(id, api(`/api/photo/${id}`).then((d) => reapplyRecent(id, d)).catch((e) => { details.delete(id); throw e; }));  // not cached: asked again next time
+    details.set(id, api(`api/photo/${id}`).then((d) => reapplyRecent(id, d)).catch((e) => { details.delete(id); throw e; }));  // not cached: asked again next time
     if (details.size > 400) details.delete(details.keys().next().value);
   }
   return details.get(id);
@@ -105,7 +105,7 @@ async function shareNow() {
 /** The picture a share attaches (the screen-size JPEG, named after the photo); null for a video, or when it cannot be fetched (the link is shared then). */
 async function shareFile(id, d) {
   if (!d || d.video) return null;
-  try { const r = await fetch(`/preview/${id}`); if (!r.ok) return null; const blob = await r.blob(); return new File([blob], d.name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' }); } catch { return null; }
+  try { const r = await fetch(`preview/${id}`); if (!r.ok) return null; const blob = await r.blob(); return new File([blob], d.name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' }); } catch { return null; }
 }
 
 /** The fallback menu: a link to the photo here, the original or a smaller JPEG as a download,
@@ -118,9 +118,9 @@ function shareMenu(anchor) {
   const done = (msg) => { menu.remove(); if (msg) toast(msg); };
   const menu = h('div', { class: 'facemenu sharemenu' }, h('div', { class: 'fmh' }, 'Share'),
     item('Copy link', { onclick: async () => { try { await navigator.clipboard.writeText(url); done('Link copied.'); } catch { done('Could not copy; the address bar has the link.'); } } }, `to this photo in ${S.APP_NAME}`),
-    item('Download original', { href: `/orig/${id}?dl=1`, download: name, onclick: () => menu.remove() }, d?.bytes ? `${name} · ${fmtBytes(d.bytes)}` : name),
-    !d?.video ? item('Download preview', { href: `/preview/${id}?dl=1`, onclick: () => menu.remove() }, 'a smaller JPEG for messages and email') : null,
-    item('Open original in a new tab', { href: `/orig/${id}`, target: '_blank', rel: 'noopener', onclick: () => menu.remove() }),
+    item('Download original', { href: `orig/${id}?dl=1`, download: name, onclick: () => menu.remove() }, d?.bytes ? `${name} · ${fmtBytes(d.bytes)}` : name),
+    !d?.video ? item('Download preview', { href: `preview/${id}?dl=1`, onclick: () => menu.remove() }, 'a smaller JPEG for messages and email') : null,
+    item('Open original in a new tab', { href: `orig/${id}`, target: '_blank', rel: 'noopener', onclick: () => menu.remove() }),
     item('Email a link', { href: `mailto:?subject=${encodeURIComponent(name)}&body=${encodeURIComponent(url)}`, onclick: () => menu.remove() }));
   const { stage } = LB.el;
   stage.append(menu);
@@ -141,10 +141,10 @@ function peek(id) {
     let im = LB.peekEl;
     if (!im) { im = LB.peekEl = h('img', { class: 'lb-peek', alt: '', draggable: 'false' }); stage.append(im); }
     im.dataset.id = id;
-    im.src = `/thumb/${id}`;
+    im.src = `thumb/${id}`;
     const full = new Image();
     full.onload = () => { if (LB.peekEl === im && im.dataset.id === String(id)) im.src = full.src; };
-    full.src = `/preview/${id}`;
+    full.src = `preview/${id}`;
   }, 90);
 }
 function unpeek() {
@@ -165,7 +165,7 @@ function renderStrip() {
     const kids = [];
     for (let k = lo; k <= hi; k++) {
       const ar = src.w ? Math.max(0.6, Math.min(2.2, src.w[k] / (src.h[k] || 1))) : 1;
-      kids.push(h('img', { src: `/thumb/${src.id[k]}?h=120`, alt: '', loading: 'lazy', draggable: 'false', 'data-i': k, style: `width:${Math.round(56 * ar)}px`,
+      kids.push(h('img', { src: `thumb/${src.id[k]}?h=120`, alt: '', loading: 'lazy', draggable: 'false', 'data-i': k, style: `width:${Math.round(56 * ar)}px`,
         onpointerenter: (ev) => { if (ev.pointerType === 'mouse' && k !== LB.i) peek(src.id[k]); else unpeek(); },
         onclick: () => { unpeek(); if (LB.i === k) return; LB.i = k; setPhotoParam(src.id[k], false); showItem(); } }));
     }
@@ -231,8 +231,8 @@ export function popMenu(anchor, items) {
   return menu;
 }
 async function refreshImages(id) {
-  await Promise.all([fetch(`/thumb/${id}`, { cache: 'reload' }), fetch(`/preview/${id}`, { cache: 'reload' })]).catch(() => {});
-  document.querySelectorAll(`img[src$="/thumb/${id}"], img[src$="/preview/${id}"]`).forEach((img) => { const u = img.src; img.src = ''; img.src = u; });
+  await Promise.all([fetch(`thumb/${id}`, { cache: 'reload' }), fetch(`preview/${id}`, { cache: 'reload' })]).catch(() => {});
+  document.querySelectorAll(`img[src$="thumb/${id}"], img[src$="preview/${id}"]`).forEach((img) => { const u = img.src; img.src = ''; img.src = u; });
 }
 async function afterFileChange(id, d) {
   details.delete(id);
@@ -246,15 +246,15 @@ async function afterFileChange(id, d) {
 }
 async function undoLast(id) {
   try {
-    const e = (await api(`/api/history?photo=${id}&limit=1`)).entries[0];
+    const e = (await api(`api/history?photo=${id}&limit=1`)).entries[0];
     if (!e || e.action !== 'lossless') throw new Error('Nothing to undo');
-    await post(`/api/history/${e.id}/restore`, { kind: 'undo' });
+    await post(`api/history/${e.id}/restore`, { kind: 'undo' });
     await afterFileChange(id, null); toast('Put back as it was.');
   } catch (err) { toastError(err, TOAST_LONG); }
 }
 export async function transformPhotos(ids, op) {
   let r;
-  try { r = await post('/api/photos/transform', { ids, op }); } catch (e) { toastError(e); return false; }
+  try { r = await post('api/photos/transform', { ids, op }); } catch (e) { toastError(e); return false; }
   for (const d of r.done) await afterFileChange(d.id, d);
   const label = TRANSFORMS.find((t) => t[0] === op)[1].toLowerCase();
   if (r.failed.length) toast(`${r.done.length ? `${plural(r.done.length, 'photo')} ${label.replace('rotate', 'rotated').replace('flip', 'flipped').replace('turn', 'turned')}; ` : ''}${plural(r.failed.length, 'photo')} not: ${r.failed[0].error}`, null, null, 10000);
@@ -293,7 +293,7 @@ function startAdjust() {
   const save = async () => {
     fill(saveBtn, 'Saving…'); saveBtn.disabled = true;
     let r;
-    try { r = await post('/api/photos/adjust', { id: d.id, ...v }); } catch (e) { toastError(e); saveBtn.disabled = false; fill(saveBtn, 'Save as new version'); return; }
+    try { r = await post('api/photos/adjust', { id: d.id, ...v }); } catch (e) { toastError(e); saveBtn.disabled = false; fill(saveBtn, 'Save as new version'); return; }
     stop(); S.keepView = true; pollSoon(600); details.delete(d.id);
     toast(`Saved as ${r.name}, next to the original (which is unchanged).`, 'Show', () => openLightbox({ id: [r.id, d.id] }, 0, true), 10000);
   };
@@ -353,7 +353,7 @@ function startCrop() {
     const id = d.id, rect = [Math.round(r.x), Math.round(r.y), Math.round(r.w), Math.round(r.h)];
     stop();
     let res;
-    try { res = await post('/api/photos/crop', { id, rect }); } catch (e) { toastError(e); return; }
+    try { res = await post('api/photos/crop', { id, rect }); } catch (e) { toastError(e); return; }
     await afterFileChange(id, res);
     toast(`Cropped to ${res.w} × ${res.h}${res.how === 're-encoded' ? ' (re-encoded: this format cannot be cut without it)' : ''}${res.faces_dropped ? `; ${plural(res.faces_dropped, 'face')} outside it removed` : ''}.`, 'Undo', () => undoLast(id), 10000);
   };
@@ -442,7 +442,7 @@ export function showItem() {
   const id = src.id[i], token = ++LB.token;
   endMode(); unpeek(); $('.sharemenu')?.remove();
   LB.scale = 1; LB.tx = LB.ty = 0; LB.detail = null; LB.hires = false;
-  const img = h('img', { src: `/thumb/${id}`, alt: '', draggable: 'false' });
+  const img = h('img', { src: `thumb/${id}`, alt: '', draggable: 'false' });
   LB.img = img;
   el.frame.replaceChildren(img);
   if (src.w) LB.ar = src.w[i] / (src.h[i] || 1);
@@ -452,17 +452,17 @@ export function showItem() {
   // the strip's thumbnails come after the photo and its details, not in competition with them
   setTimeout(() => { if (token === LB.token) renderStrip(); }, LB.stripSrc === src ? 0 : 350);
   updateFavBtn();
-  el.dl.href = `/orig/${id}?dl=1`;
+  el.dl.href = `orig/${id}?dl=1`;
   el.prev.style.visibility = i > 0 ? '' : 'hidden';
   el.next.style.visibility = i < src.id.length - 1 ? '' : 'hidden';
   let isVideo = src.video ? i in src.video : undefined;
   const loadPreview = () => {
     const pre = new Image();
     pre.onload = () => { if (token === LB.token && !LB.hires) img.src = pre.src; };
-    pre.src = `/preview/${id}`;
+    pre.src = `preview/${id}`;
   };
   const mountVideo = () => {
-    const v = h('video', { src: `/orig/${id}`, poster: `/preview/${id}`, controls: true, autoplay: true, playsinline: true });
+    const v = h('video', { src: `orig/${id}`, poster: `preview/${id}`, controls: true, autoplay: true, playsinline: true });
     v.onerror = () => { if (token === LB.token) { v.remove(); toast('This video format cannot play in the browser.', 'Download', () => el.dl.click()); } };
     v.onended = () => { if (LB.play) step(1); };
     el.frame.append(v);
@@ -475,7 +475,7 @@ export function showItem() {
     if (!ch.length || !LB.video) return;
     const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
     el.chapters = h('div', { class: 'lb-chapters', onclick: (e) => e.stopPropagation() }, ch.map((t) => h('button', { type: 'button', title: `Jump to ${fmt(t)}`, onclick: () => { if (LB.video) { LB.video.currentTime = t; LB.video.play(); } } },
-      h('img', { src: `/video/${id}/frame?t=${t}&h=120`, alt: '', loading: 'lazy' }), h('span', null, fmt(t)))));
+      h('img', { src: `video/${id}/frame?t=${t}&h=120`, alt: '', loading: 'lazy' }), h('span', null, fmt(t)))));
     el.stage.append(el.chapters);
   };
   if (isVideo === true) mountVideo(); else if (isVideo === false) loadPreview();
@@ -502,8 +502,8 @@ export function showItem() {
   // warm the neighbors so stepping feels instant
   for (const j of [i + 1, i - 1, i + 2]) {
     if (j < 0 || j >= src.id.length) continue;
-    new Image().src = `/thumb/${src.id[j]}`;
-    if (src.video && !(j in src.video) && Math.abs(j - i) === 1) new Image().src = `/preview/${src.id[j]}`;
+    new Image().src = `thumb/${src.id[j]}`;
+    if (src.video && !(j in src.video) && Math.abs(j - i) === 1) new Image().src = `preview/${src.id[j]}`;
   }
 }
 /** The title and date over the photo, from LB.detail: drawn on opening and again after an edit of either. */
@@ -538,7 +538,7 @@ function applyZoom() {
     LB.hires = true;
     const token = LB.token, full = new Image();
     full.onload = () => { if (token === LB.token) LB.img.src = full.src; };
-    full.src = `/orig/${d.id}`;
+    full.src = `orig/${d.id}`;
   }
 }
 function zoomAt(factor, cx, cy) {

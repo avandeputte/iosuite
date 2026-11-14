@@ -40,7 +40,7 @@ export async function downloadDialog(p, selected) {
     if (nogps.checked) q.set('nogps', '1');
     if (flat.checked) q.set('flat', '1');
     if (!document.querySelector('iframe[name=dlframe]')) document.body.append(h('iframe', { name: 'dlframe', style: 'display:none', title: 'download' }));
-    const form = h('form', { method: 'post', action: '/api/zip', target: 'dlframe', style: 'display:none' }, [...q].map(([k, v]) => h('input', { type: 'hidden', name: k, value: v })));
+    const form = h('form', { method: 'post', action: 'api/zip', target: 'dlframe', style: 'display:none' }, [...q].map(([k, v]) => h('input', { type: 'hidden', name: k, value: v })));
     document.body.append(form); form.submit(); form.remove();  // an error reply lands in the hidden frame, not over the app
   };
   const plan = async () => {
@@ -48,7 +48,7 @@ export async function downloadDialog(p, selected) {
     q.set('part_mb', size.value);
     let r;
     try {
-      r = await send('/api/zip/plan', q);
+      r = await send('api/zip/plan', q);
     } catch (e) { fill(body, h('p', { class: 'warn' }, String(e.message || e))); return; }
     if (!r.files) { fill(body, h('p', null, 'Nothing to download.')); return; }
     const one = r.parts.length === 1;

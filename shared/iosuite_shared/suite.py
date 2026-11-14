@@ -37,7 +37,7 @@ import threading
 import time
 from urllib.parse import urlsplit
 
-from iosuite_shared import config, db
+from iosuite_shared import config, db, prefix
 from iosuite_shared.errors import Invalid
 
 # Every app's default port: different for each, so all of them can run on one host. The apps' tests check theirs.
@@ -46,7 +46,7 @@ PORTS = {"iopix": 8600, "ionote": 8610, "iocalendar": 8620, "iostart": 8630, "io
 FIELDS = ("name", "description", "version", "color", "icon")
 # Where every app serves its mark (static/icons/mark.svg in its repo, the web app's files under /static/): the same in
 # every app, so it is not something an app passes.
-ICON = "/static/icons/mark.svg"
+ICON = "static/icons/mark.svg"
 SEEN_EVERY_S = 3600  # last_seen is refreshed at most this often per app (the address itself is written when it changes)
 
 _lock = threading.Lock()
@@ -173,7 +173,7 @@ def _rank(origin: str) -> int:
     """How good an address is for the others to link to: -1 never (loopback, test hosts), 0 an IP address, 1 a LAN
     name, 2 a host under the cookie domain; +1 over HTTPS."""
     scheme, _, rest = origin.partition("://")
-    host = rest.rsplit("@", 1)[-1]
+    host = rest.split("/", 1)[0].rsplit("@", 1)[-1]
     host = host[1:].split("]")[0] if host.startswith("[") else host.split(":")[0]
     host = host.lower()
     if not host or host in ("localhost", "testserver", "testclient") or host.endswith(".localhost"):
@@ -190,11 +190,12 @@ def _rank(origin: str) -> int:
 
 
 def origin_of(request) -> str:
-    """scheme://host[:port] as the browser used it (through a proxy: X-Forwarded-Proto / -Host)."""
+    """scheme://host[:port] as the browser used it (through a proxy: X-Forwarded-Proto / -Host), with the folder the
+    app is served in when the suite shares one address (https://home.example.com/calendar)."""
     h = request.headers
     host = (h.get("x-forwarded-host") or h.get("host") or "").split(",")[0].strip()
     proto = (h.get("x-forwarded-proto") or "").split(",")[0].strip().lower() or request.url.scheme
-    return f"{proto}://{host}" if host else ""
+    return f"{proto}://{host}{prefix.of(request)}" if host else ""
 
 
 def note_seen(app: str, request, take_address: bool = True) -> None:

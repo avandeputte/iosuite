@@ -32,7 +32,7 @@ export function chipList(p) {
     else if (k === 'ualbum') add(k, v, ualbumById(v)?.name || 'Album', { ic: 'album' });
     else if (k === 'place' || k === 'region' || k === 'country') add(k, v, v, { ic: 'place' });
     else if (k === 'sem') add(k, v, `Looks like “${v}”`, { ic: 'spark' });
-    else if (k === 'like') add(k, v, 'Similar photos', { img: `/thumb/${v}` });
+    else if (k === 'like') add(k, v, 'Similar photos', { img: `thumb/${v}` });
     else if (k === 'concept') add(k, v, `Detected: ${v}`, { ic: 'spark' });
     else if (k === 'blurry') add(k, v, 'Blurry', { ic: 'spark' });
     else if (k === 'sharpest') add(k, v, 'Sharpest', { ic: 'spark' });

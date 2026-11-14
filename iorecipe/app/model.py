@@ -462,7 +462,7 @@ def book_public(b: dict, u: dict) -> dict:
 # ---- as JSON
 
 def photo_url(rid: int, pid: int) -> str:
-    return f"/api/recipes/{rid}/photos/{pid}"
+    return f"api/recipes/{rid}/photos/{pid}"  # relative to the page, which may be in a folder (/recipes/)
 
 
 def public(r: dict, u: dict, full: bool = True) -> dict:

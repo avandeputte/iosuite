@@ -27,7 +27,7 @@ It needs Python 3.10 or later (ioHealth: 3.11) and git, and asks for:
 - what is particular to the app: the photos and digiKam for ioPix (it also installs exiftool, ffmpeg and the other
   tools it needs, with apt, dnf, zypper, pacman or Homebrew), the time zone for ioCalendar, ioTask and ioHealth, the optional
   text recognition for ioNote...;
-- **Also install other apps of the suite here?** Say no for one app.
+- last, **the list of the suite's apps on this machine**: press Enter for one app, tick others to add them. Running `./setup.sh --apps` later shows it again, to add, remove or reconfigure apps.
 
 Then it makes a Python virtual environment in `.venv`, installs the packages, writes `config.env` (readable by the owner
 only), creates the tables and the admin, and installs a service: systemd on Linux when run as root, launchd on a Mac.
@@ -36,7 +36,7 @@ Run it again at any time: it keeps what is there.
 ## Without questions
 
 The flags are the same in every app: `--db`, `--suite-db`, `--admin`, `--port`, `--public-url`, `--cookie-domain`,
-`--service`, `--also`, `--db-admin`, `--yes`, plus the app's own (`./setup.sh --help`). Passwords can stay off the
+`--service`, `--also`, `--remove`, `--reconfigure`, `--db-admin`, `--yes`, plus the app's own (`./setup.sh --help`). Passwords can stay off the
 command line in `IO<APP>_DB`, `IO<APP>_SUITE_DB`, `IO<APP>_ADMIN` and `IO<APP>_DB_ADMIN`:
 
 ```sh

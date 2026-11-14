@@ -75,7 +75,7 @@ async function api(path, opts = {}) {
   const o = { credentials: 'same-origin', ...opts, headers: { ...(opts.headers || {}) } };
   if (o.json !== undefined) { o.body = JSON.stringify(o.json); o.headers['Content-Type'] = 'application/json'; delete o.json; }
   const r = await fetch(path, o);
-  if (r.status === 401 && !path.startsWith('/api/auth') && path !== '/api/status') { showSignIn(); throw new Error('Sign in first'); }
+  if (r.status === 401 && !path.startsWith('api/auth') && path !== 'api/status') { showSignIn(); throw new Error('Sign in first'); }
   if (!r.ok) {
     let msg = r.statusText;
     try { const j = await r.json(); msg = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail); } catch { /* not JSON */ }
@@ -110,7 +110,7 @@ const hue = (s) => { let x = 0; for (const c of s || '') x = (x * 31 + c.charCod
 const initials = (fn) => { const p = (fn || '?').trim().split(/\s+/); return ((p[0] || '?')[0] + (p.length > 1 ? p[p.length - 1][0] : '')).toUpperCase(); };
 /** A contact's face as ioContact shows it: its own photo, else its face in ioPix (when linked), else its initials. */
 function contactFace(c, lazy = true) {
-  const src = c.hasPhoto ? `/api/widgets/iocontact/photo/${c.id}` : c.iopixPersonId ? `/api/widgets/iocontact/face/${c.iopixPersonId}` : null;
+  const src = c.hasPhoto ? `api/widgets/iocontact/photo/${c.id}` : c.iopixPersonId ? `api/widgets/iocontact/face/${c.iopixPersonId}` : null;
   return h('span', { class: 'face' }, src ? h('img', { src, alt: '', loading: lazy ? 'lazy' : undefined, onerror: (e) => e.target.replaceWith(initials(c.name)) }) : initials(c.name));
 }
 /** An app's name as the apps write it: "io" in gold, the rest in the app's colour. */
@@ -183,18 +183,18 @@ function drawUser() {
         ...t.map((a) => h('a', { class: 'mi', href: a.url, onclick: closeMenu }, h('img', { src: a.icon, alt: '' }), a.name)));
     };
     if (S.allApps) listTools(S.allApps);
-    else api('/api/apps').then((got) => { S.allApps = got.items; listTools(got.items); }).catch(() => {});
+    else api('api/apps').then((got) => { S.allApps = got.items; listTools(got.items); }).catch(() => {});
     menu = h('div', { class: 'menu' },
       h('div', { class: 'who' }, h('b', null, S.user.displayName), h('div', { class: 'muted small' }, `${S.user.name} · ${S.user.role}`)),
       h('a', { class: 'mi', href: '#/settings/account', onclick: closeMenu }, icon('person', 's'), 'Account'),
       h('a', { class: 'mi', href: '#/bookmarks', onclick: closeMenu }, icon('link', 's'), 'Bookmarks'),
       h('button', { class: 'mi', onclick: () => { closeMenu(); customize(); } }, icon('tune', 's'), 'Customize the page'),
       h('button', { class: 'mi', onclick: () => { closeMenu(); enterWall(); } }, icon('wall', 's'), 'Wall display'),
-      h('button', { class: 'mi', onclick: () => { const n = { system: 'light', light: 'dark', dark: 'system' }[theme]; setTheme(n); api('/api/auth/settings', { method: 'POST', json: { theme: n } }).catch(() => {}); closeMenu(); toast(`Appearance: ${n}`); } },
+      h('button', { class: 'mi', onclick: () => { const n = { system: 'light', light: 'dark', dark: 'system' }[theme]; setTheme(n); api('api/auth/settings', { method: 'POST', json: { theme: n } }).catch(() => {}); closeMenu(); toast(`Appearance: ${n}`); } },
         icon('theme', 's'), `Appearance: ${theme}`),
       tools,
       h('a', { class: 'mi', href: '#/settings', onclick: closeMenu }, icon('settings', 's'), 'Settings'),
-      h('button', { class: 'mi', onclick: async () => { const r = await api('/api/auth/logout', { method: 'POST' }); if (r && r.cloudflareLogout) location.href = r.cloudflareLogout; else location.reload(); } }, icon('logout', 's'), 'Sign out'));
+      h('button', { class: 'mi', onclick: async () => { const r = await api('api/auth/logout', { method: 'POST' }); if (r && r.cloudflareLogout) location.href = r.cloudflareLogout; else location.reload(); } }, icon('logout', 's'), 'Sign out'));
     m.append(menu);
     setTimeout(() => document.addEventListener('click', outside), 0);
   };
@@ -241,7 +241,7 @@ async function onRoute() {
 const greeting = () => { const hr = new Date().getHours(); return hr < 5 ? 'Good night' : hr < 12 ? 'Good morning' : hr < 18 ? 'Good afternoon' : 'Good evening'; };
 
 async function showHome(page) {
-  const got = await api('/api/apps');
+  const got = await api('api/apps');
   // the viewer's own layout (Customize the page) on top of the admin's: tiles and cards hidden, tiles in their order
   const L = S.layout = got.layout || { hidden: [], order: [], cards: [], strip: null };
   S.photoStrip = got.photoStrip;  // the admin's choice, what Customize calls "as the admin set it"
@@ -354,7 +354,7 @@ const FOUND = {
     kids: (x) => [h('span', { class: 'bmic hit', style: { '--c': x.color || 'var(--fg2)' } }, icon('task', 's')), h('span', { class: 'qname' }, x.title),
       h('span', { class: 'muted small when' }, whenShort(x.due, x.allDay))] },
   iorecipe: { head: 'Recipes', href: (a, x) => `${a.url}/#/recipe/${x.id}`,
-    kids: (x) => [x.photo ? h('span', { class: 'bmic pic' }, h('img', { src: `/api/widgets/iorecipe/photo/${x.id}/${x.photo}`, alt: '', onerror: (e) => e.target.replaceWith(icon('recipe', 's')) })) : h('span', { class: 'bmic hit' }, icon('recipe', 's')),
+    kids: (x) => [x.photo ? h('span', { class: 'bmic pic' }, h('img', { src: `api/widgets/iorecipe/photo/${x.id}/${x.photo}`, alt: '', onerror: (e) => e.target.replaceWith(icon('recipe', 's')) })) : h('span', { class: 'bmic hit' }, icon('recipe', 's')),
       h('span', { class: 'qname' }, x.title), h('span', { class: 'muted small' }, x.minutes ? hm(x.minutes) : x.tags.join(', '))] },
   ionote: { head: 'Notes', href: (a, x) => `${a.url}/#/note/${x.id}`,
     kids: (x) => [h('span', { class: 'bmic hit' }, icon('note', 's')), h('span', { class: 'qname' }, x.title), h('span', { class: 'muted small rest' }, x.text || '')] },
@@ -420,7 +420,7 @@ function searchBox() {
     const q = inp.value.trim(), ql = q.toLowerCase();
     if (q.length < 2 || S.ha === false) return;
     let d = null;
-    try { d = await api(`/api/ha/search?${new URLSearchParams({ q, n: 5 })}`); } catch { d = null; }
+    try { d = await api(`api/ha/search?${new URLSearchParams({ q, n: 5 })}`); } catch { d = null; }
     if (inp.value.trim().toLowerCase() !== ql) return;
     things = { q: ql, items: (d && d.items) || [] }; build();
   };
@@ -567,7 +567,7 @@ function eventWhen(ev) {
 async function quickAdd(ev) {
   const cal = S.apps.find((a) => a.key === 'iocalendar');
   let cals = [];
-  try { cals = (await api('/api/widgets/iocalendar/calendars')).items || []; } catch (e) { fail(e); return; }
+  try { cals = (await api('api/widgets/iocalendar/calendars')).items || []; } catch (e) { fail(e); return; }
   if (!cals.length) { toast('ioCalendar has no calendar you may add events to'); return; }
   const title = h('input', { class: 't', value: ev.title });
   const date = h('input', { class: 't', type: 'date', value: ymdOf(ev.date) });
@@ -589,7 +589,7 @@ async function quickAdd(ev) {
     Object.assign(json, { allDay: false, start: isoLocal(s), ...(e ? { end: isoLocal(e) } : {}) });
   } else Object.assign(json, { allDay: true, start: date.value });
   try {
-    await api('/api/widgets/iocalendar/events', { method: 'POST', json });
+    await api('api/widgets/iocalendar/events', { method: 'POST', json });
     localStorage.setItem('iostart.quickadd.calendar', which.value);
     toast(`Added to ${cal ? cal.name : 'ioCalendar'}: ${json.title}`);
     $('.search .q') && ($('.search .q').value = '');
@@ -601,7 +601,7 @@ async function quickAdd(ev) {
 /** A dot by each app's name (green: it answers; red: it does not). */
 async function drawAppStatus(page) {
   let d;
-  try { d = await api('/api/apps/status'); } catch { return; }
+  try { d = await api('api/apps/status'); } catch { return; }
   if (!page.isConnected) return;
   for (const [key, s] of Object.entries(d.items || {})) {
     const st = page.querySelector(`.app[data-app="${key}"] .st`);
@@ -612,7 +612,7 @@ async function drawAppStatus(page) {
 /** The bookmarks the server could not reach get a red dot and a tooltip. */
 async function drawBookmarkStatus(el) {
   let d;
-  try { d = await api('/api/bookmarks/status'); } catch { return; }
+  try { d = await api('api/bookmarks/status'); } catch { return; }
   if (!el.isConnected) return;
   for (const a of el.querySelectorAll('.bm[data-id]')) {
     const s = d.items[a.dataset.id];
@@ -644,7 +644,7 @@ async function customize() {
     return list;
   };
   const adminStrip = { rediscover: 'Rediscover', onthisday: 'On this day', off: 'Off' }[S.photoStrip] || 'Rediscover';
-  const strip = h('select', { class: 't', onchange: async () => { try { await api('/api/home/settings', { method: 'POST', json: { photoStrip: strip.value } }); toast('Saved'); } catch (e) { fail(e); } } }, [[null, `Default (${adminStrip})`], ['rediscover', 'Rediscover: photos at random'], ['onthisday', 'On this day'], ['off', 'Off']].map(([v, t]) => h('option', { value: v || '', selected: (v || '') === (L.strip || '') ? true : null }, t)));
+  const strip = h('select', { class: 't', onchange: async () => { try { await api('api/home/settings', { method: 'POST', json: { photoStrip: strip.value } }); toast('Saved'); } catch (e) { fail(e); } } }, [[null, `Default (${adminStrip})`], ['rediscover', 'Rediscover: photos at random'], ['onthisday', 'On this day'], ['off', 'Off']].map(([v, t]) => h('option', { value: v || '', selected: (v || '') === (L.strip || '') ? true : null }, t)));
   const moves = h('select', { class: 't' }, Object.entries(STRIP_MOVES).map(([k, t]) => h('option', { value: k, selected: k === (L.stripMove || STRIP_DEFAULT.move) ? true : null }, t)));
   const everies = h('select', { class: 't' }, STRIP_EVERY.map((s) => h('option', { value: s, selected: s === (L.stripEvery || STRIP_DEFAULT.every) ? true : null }, `Every ${everyText(s)}`)));
   const engines = h('select', { class: 't' }, Object.entries(ENGINES).map(([k, e]) => h('option', { value: k === 'duckduckgo' ? '' : k, selected: (k === 'duckduckgo' ? '' : k) === (L.search || '') ? true : null }, e.name)));
@@ -657,13 +657,13 @@ async function customize() {
   if (!v) return;
   const json = v === 'reset' ? {} : { hidden: [...tiles, ...cards].filter((t) => !t.on).map((t) => t.key), order: tiles.map((t) => t.key), cards: cards.map((c) => c.key), strip: strip.value || null, search: engines.value || null,
     stripMove: moves.value === STRIP_DEFAULT.move ? null : moves.value, stripEvery: +everies.value === STRIP_DEFAULT.every ? null : +everies.value };
-  try { await api('/api/me/layout', { method: 'PUT', json }); toast(v === 'reset' ? 'Back to the default' : 'Saved'); if (route().view === 'home') onRoute(); } catch (e) { fail(e); }
+  try { await api('api/me/layout', { method: 'PUT', json }); toast(v === 'reset' ? 'Back to the default' : 'Saved'); if (route().view === 'home') onRoute(); } catch (e) { fail(e); }
 }
 
 /** /api/widgets/<key>?... as JSON, or null when the app is down, not open to this account, or the answer is not JSON. */
 async function widget(key, params = {}) {
   try {
-    const r = await fetch(`/api/widgets/${key}?${new URLSearchParams({ tz: viewerTz(), ...params })}`, { credentials: 'same-origin' });
+    const r = await fetch(`api/widgets/${key}?${new URLSearchParams({ tz: viewerTz(), ...params })}`, { credentials: 'same-origin' });
     return r.ok ? await r.json() : null;
   } catch { return null; }
 }
@@ -726,7 +726,7 @@ async function drawStrip(el, kind) {
   const pix = S.apps.find((a) => a.key === 'iopix');
   let d;
   try {
-    const r = await fetch(`/api/widgets/iopix?${new URLSearchParams({ tz: viewerTz(), kind, n: 16 })}`, { credentials: 'same-origin' });
+    const r = await fetch(`api/widgets/iopix?${new URLSearchParams({ tz: viewerTz(), kind, n: 16 })}`, { credentials: 'same-origin' });
     d = r.ok ? await r.json() : null;
   } catch { d = null; }
   if (!d || !d.items || !d.items.length || !el.isConnected) { el.remove(); return; }
@@ -737,7 +737,7 @@ async function drawStrip(el, kind) {
   const shuffle = otd ? null : h('button', { class: 'lnk shuffle', title: 'Another row of photos', onclick: (e) => { e.preventDefault(); reshuffle(); } }, icon('update', 's'), 'Shuffle');
   el.classList.remove('busy');
   const row = h('div', { class: 'row' }, d.items.map((it) => h('a', { class: 'wgph', href: pixPhotoUrl(pix, it.id), title: String(cap(it)) },
-    h('img', { src: `/api/widgets/iopix/thumb/${it.id}`, alt: '', loading: 'lazy', onerror: (e) => e.target.parentNode.remove() }),
+    h('img', { src: `api/widgets/iopix/thumb/${it.id}`, alt: '', loading: 'lazy', onerror: (e) => e.target.parentNode.remove() }),
     cap(it) ? h('span', null, cap(it)) : null)));
   el.replaceChildren(h('div', { class: 'wghead' }, h('span', null, otd ? 'On this day' : 'Rediscover'), shuffle,
     h('a', { class: 'muted', href: pix.url, title: pix.url }, otd && d.count > d.items.length ? `${d.count} photos · ioPix` : 'ioPix')), row);
@@ -794,7 +794,7 @@ function drawWidgets(page, again = false) {
     const draw = WIDGETS[tile.dataset.app], box = tile.querySelector('.more');
     if (!draw || !box) continue;
     const why = (text) => { if (box.isConnected) box.replaceChildren(h('div', { class: 'wg' }, h('div', { class: 'muted small wgwhy' }, text))); };
-    fetch(`/api/widgets/${tile.dataset.app}?tz=${encodeURIComponent(tz)}`, { credentials: 'same-origin' })
+    fetch(`api/widgets/${tile.dataset.app}?tz=${encodeURIComponent(tz)}`, { credentials: 'same-origin' })
       .then(async (r) => { if (r.ok) return r.json(); let detail = ''; try { detail = (await r.json()).detail || ''; } catch { /* no body */ } throw new Error(detail || `${r.status}`); })
       .then((d) => { if (!box.isConnected) return; const kids = draw(d); if (kids) box.replaceChildren(h('div', { class: 'wg' }, kids)); else why(EMPTY[tile.dataset.app] || 'Nothing to show'); })
       .catch((e) => { if (!again || !box.querySelector('.wg .wghead')) why(e.message); });  // the app is down, or not open to this account: the tile says so (a refresh that fails keeps what it showed)
@@ -813,7 +813,7 @@ function drawPixWidget(d) {
     h('div', { class: 'wgpix' }, d.items.slice(0, 4).map((it) => h('span', { class: 'wgph', title: String(cap(it)), role: 'link', tabindex: '0',
       onclick: (e) => { e.preventDefault(); e.stopPropagation(); location.href = pixPhotoUrl(S.apps.find((a) => a.key === 'iopix'), it.id); },
       onkeydown: (e) => { if (e.key === 'Enter') e.target.click(); } },
-      h('img', { src: `/api/widgets/iopix/thumb/${it.id}`, alt: '', loading: 'lazy', onerror: (e) => e.target.parentNode.remove() }),
+      h('img', { src: `api/widgets/iopix/thumb/${it.id}`, alt: '', loading: 'lazy', onerror: (e) => e.target.parentNode.remove() }),
       it.year ? h('span', null, it.year) : null)))];
 }
 
@@ -922,7 +922,7 @@ function haIcon(t) {
 const haLink = (t) => `${(S.ha && S.ha.url) || ''}${t.device ? `/config/devices/device/${encodeURIComponent(t.device)}` : `/history?entity_id=${encodeURIComponent(t.id)}`}`;
 /** toggle | on | off, by way of the server; the entity's new state, or null (a toast says why). */
 async function haAct(id, action) {
-  try { return await api(`/api/ha/${encodeURIComponent(id)}/${action}`, { method: 'POST' }); } catch (e) { fail(e); return null; }
+  try { return await api(`api/ha/${encodeURIComponent(id)}/${action}`, { method: 'POST' }); } catch (e) { fail(e); return null; }
 }
 const haTile = (t) => {
   const kids = [icon(haIcon(t), 's'), h('span', { class: 'hbody' }, h('span', { class: 'hname' }, t.name), h('span', { class: 'hstate small' }, t.text || t.state))];
@@ -948,7 +948,7 @@ const haTile = (t) => {
 const HA_POPUPS = { climate: true, cover: true };
 const haWord = (m) => ({ heat_cool: 'Heat · cool', fan_only: 'Fan', not_home: 'Away' })[m] || (m ? m.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase()) : '');
 async function haSet(id, body) {
-  try { return await api(`/api/ha/${encodeURIComponent(id)}/set`, { method: 'POST', json: body }); } catch (e) { fail(e); return null; }
+  try { return await api(`api/ha/${encodeURIComponent(id)}/set`, { method: 'POST', json: body }); } catch (e) { fail(e); return null; }
 }
 function haPopup(t, onChange) {
   const body = h('div', { class: 'hapop' });
@@ -1002,7 +1002,7 @@ function haPopup(t, onChange) {
   const timer = S.haStream ? 0 : setInterval(async () => {
     if (!body.isConnected) { clearInterval(timer); return; }
     if (busy || document.hidden) return;
-    let d; try { d = await api('/api/ha'); } catch { return; }
+    let d; try { d = await api('api/ha'); } catch { return; }
     take(d);
   }, 3000);
   dialog(cur.name, body, [{ label: 'Done', value: true, primary: true }]).then(() => { off(); if (timer) clearInterval(timer); });
@@ -1015,7 +1015,7 @@ const haListeners = new Set();
 function haSubscribe(fn) {
   haListeners.add(fn);
   if (!S.haStream && window.EventSource) {
-    S.haStream = new EventSource('/api/ha/events');
+    S.haStream = new EventSource('api/ha/events');
     S.haStream.onmessage = (e) => { let d; try { d = JSON.parse(e.data); } catch { return; } S.ha = d.enabled ? d : false; for (const f of [...haListeners]) { try { f(d); } catch { /* one listener's problem */ } } };
   }
   return () => { haListeners.delete(fn); };
@@ -1030,7 +1030,7 @@ async function drawHomeCard(el, alertsEl, again = false) {
     const off = haSubscribe((d) => { if (!el.isConnected) { off(); return; } renderHomeCard(el, alertsEl, d); });
   }
   let d;
-  try { d = await api('/api/ha'); } catch (e) { if (!again) { el.hidden = false; el.replaceChildren(h('div', { class: 'muted small' }, e.message)); } return; }
+  try { d = await api('api/ha'); } catch (e) { if (!again) { el.hidden = false; el.replaceChildren(h('div', { class: 'muted small' }, e.message)); } return; }
   if (!el.isConnected) return;
   renderHomeCard(el, alertsEl, d);
 }
@@ -1057,7 +1057,7 @@ function renderHomeCard(el, alertsEl, d) {
 
 async function drawWeather(el, again = false) {
   let w;
-  try { w = await api('/api/weather'); } catch (e) { if (!again) el.replaceChildren(h('div', { class: 'muted small' }, e.message)); return; }
+  try { w = await api('api/weather'); } catch (e) { if (!again) el.replaceChildren(h('div', { class: 'muted small' }, e.message)); return; }
   if (!el.isConnected) return;
   if (!w.enabled) { el.replaceChildren(S.user.role === 'admin' ? h('a', { class: 'lnk small', href: '#/settings/weather' }, 'Add the weather') : null); return; }
   if (!w.current) { el.replaceChildren(h('div', { class: 'wxerr' }, wxIcon(7, 'big'), h('div', null, h('div', null, 'No weather right now'), h('div', { class: 'muted small' }, w.error || '')))); return; }
@@ -1115,7 +1115,7 @@ function hourRow(w, hours) {
 /** The bookmarks, as homepage lays them out: a column per group, a row per link with its abbreviation (or icon), name and host. */
 async function drawBookmarks(el) {
   let gs;
-  try { gs = (await api('/api/bookmarks')).groups; } catch (e) { el.replaceChildren(h('div', { class: 'muted small' }, e.message)); return; }
+  try { gs = (await api('api/bookmarks')).groups; } catch (e) { el.replaceChildren(h('div', { class: 'muted small' }, e.message)); return; }
   if (!el.isConnected) return;
   const canEdit = ['editor', 'admin'].includes(S.user.role);
   S.bookmarks = gs.flatMap((g) => g.links);  // the search box looks through them
@@ -1130,7 +1130,7 @@ async function drawBookmarks(el) {
     canEdit && !g.links.length ? h('a', { class: 'lnk small', href: '#/bookmarks' }, 'Nothing shown: add or pick links') : null));
   packBookmarks(el, groups);
   drawBookmarkStatus(el);
-  bmIconsLater(el, S.bookmarks, async () => (await api('/api/bookmarks')).groups.flatMap((g) => g.links));
+  bmIconsLater(el, S.bookmarks, async () => (await api('api/bookmarks')).groups.flatMap((g) => g.links));
 }
 
 /** The groups packed into columns: each goes, in order, under the shortest column so far, so a short group fills the
@@ -1168,7 +1168,7 @@ function enterWall() {
   if (el.requestFullscreen && !document.fullscreenElement) el.requestFullscreen().catch(() => { /* not allowed here: the page still fills the window */ });
 }
 async function showWall(page) {
-  const got = await api('/api/apps');
+  const got = await api('api/apps');
   S.allApps = got.items; S.layout = got.layout || { hidden: [], order: [], cards: [], strip: null };
   S.apps = got.items.filter((a) => !a.adminTool);
   const has = (k) => S.apps.some((a) => a.key === k);
@@ -1212,7 +1212,7 @@ async function showWall(page) {
 /** The Home Assistant entities ticked "wall" (Settings › Home Assistant), name and state each; what needs attention first. */
 async function wallSensors(el) {
   let d;
-  try { d = await api('/api/ha'); } catch { return; }
+  try { d = await api('api/ha'); } catch { return; }
   renderWallSensors(el, d);
 }
 function renderWallSensors(el, d) {
@@ -1243,7 +1243,7 @@ function wallSlideshow(el, caption, kind) {
       if (!it) return;
       const img = new Image();
       img.alt = ''; img.className = 'wallimg';
-      img.src = `/api/widgets/iopix/preview/${it.id}`;
+      img.src = `api/widgets/iopix/preview/${it.id}`;
       await img.decode().catch(() => null);
       if (!img.naturalWidth || !el.isConnected) return;
       const old = [...el.children];
@@ -1258,7 +1258,7 @@ function wallSlideshow(el, caption, kind) {
 }
 async function wallWeather(el, hoursEl) {
   let w;
-  try { w = await api('/api/weather'); } catch { return; }
+  try { w = await api('api/weather'); } catch { return; }
   if (!el.isConnected || !w.enabled || !w.current) { if (w && !w.enabled) { el.replaceChildren(); hoursEl.replaceChildren(); } return; }
   const c = w.current, imp = w.units === 'imperial', u = imp ? 'imperial' : 'metric', t = (v) => fmtTemp(imp ? degF(v) : v);
   const rain = rainNote(w);
@@ -1318,8 +1318,8 @@ async function setDisplay(el) {
   el.append(ui.box('theme', 'Appearance', ui.themeRow(S.settings?.theme || 'system', setTheme)));
 }
 async function setHome(el) {
-  const got = await api('/api/home/settings');
-  const strip = h('select', { class: 't', onchange: async () => { try { await api('/api/home/settings', { method: 'POST', json: { photoStrip: strip.value } }); toast('Saved'); } catch (e) { fail(e); } } }, [['rediscover', 'Rediscover: photos at random'], ['onthisday', 'On this day (at random when there are none)'], ['off', 'Off']].map(([v, t]) => h('option', { value: v, selected: v === got.photoStrip ? true : null }, t)));
+  const got = await api('api/home/settings');
+  const strip = h('select', { class: 't', onchange: async () => { try { await api('api/home/settings', { method: 'POST', json: { photoStrip: strip.value } }); toast('Saved'); } catch (e) { fail(e); } } }, [['rediscover', 'Rediscover: photos at random'], ['onthisday', 'On this day (at random when there are none)'], ['off', 'Off']].map(([v, t]) => h('option', { value: v, selected: v === got.photoStrip ? true : null }, t)));
   el.append(h('div', { class: 'box' }, h('h2', null, icon('apps'), 'Home page'),
     h('p', { class: 'muted' }, 'The default for everyone. Each person can change it in Customize.'),
     h('div', { class: 'grid' }, fld('Photo strip under the tiles (ioPix)', strip))));
@@ -1327,17 +1327,17 @@ async function setHome(el) {
 }
 
 async function setWeather(el) {
-  const s = await api('/api/weather/settings');
+  const s = await api('api/weather/settings');
   const key = h('input', { class: 't', type: 'password', placeholder: s.hasKey ? '(kept)' : 'API key from developer.accuweather.com', disabled: s.keyFromEnv ? true : null, autocomplete: 'off', onchange: async () => { if (key.value.trim() && await save({ key: key.value.trim() })) { key.value = ''; key.placeholder = '(kept)'; } } });
   const units = h('select', { class: 't', style: 'width:auto', onchange: () => save({ units: units.value }) }, [['metric', '°C, km/h'], ['imperial', '°F, mph']].map(([v, l]) => h('option', { value: v, selected: v === s.units ? true : null }, l)));
   const q = h('input', { class: 't', placeholder: 'City, e.g. Boston or Antwerp', disabled: s.locationFromEnv ? true : null });
   const found = h('div', { class: 'found' });
   const where = h('p', null, s.locationKey ? `Place: ${s.locationName || s.locationKey}${s.locationFromEnv ? ' (ACCUWEATHER_LOCATION in the environment)' : ''}` : 'No place chosen yet.');
-  const save = async (body) => { try { const r = await api('/api/weather/settings', { method: 'POST', json: body }); toast('Saved'); return r; } catch (e) { fail(e); return null; } };
+  const save = async (body) => { try { const r = await api('api/weather/settings', { method: 'POST', json: body }); toast('Saved'); return r; } catch (e) { fail(e); return null; } };
   const search = async () => {
     found.replaceChildren(h('span', { class: 'muted small' }, 'Looking…'));
     try {
-      const r = await api(`/api/weather/search?${new URLSearchParams({ q: q.value.trim(), ...(key.value.trim() ? { key: key.value.trim() } : {}) })}`);
+      const r = await api(`api/weather/search?${new URLSearchParams({ q: q.value.trim(), ...(key.value.trim() ? { key: key.value.trim() } : {}) })}`);
       found.replaceChildren(...(r.items.length ? r.items.map((p) => h('button', { class: 'pillbtn noic', onclick: async () => {
         const name = [p.name, p.region, p.country].filter(Boolean).join(', ');
         if (await save({ ...(key.value.trim() ? { key: key.value.trim() } : {}), locationKey: p.key, locationName: name })) { where.textContent = `Place: ${name}`; key.value = ''; key.placeholder = '(kept)'; found.replaceChildren(); }
@@ -1358,16 +1358,16 @@ async function setWeather(el) {
 /** Settings › Home Assistant: the address and token, a test, and the entities the page shows, each with its name, whether
     a tap may switch it, whether it goes on the wall, and the state that needs attention. */
 async function setHomeAssistant(el) {
-  const s = await api('/api/ha/settings');
+  const s = await api('api/ha/settings');
   const saveConn = async () => { if (await save(conn())) { if (tok.value.trim()) s.hasToken = true; tok.value = ''; tok.placeholder = s.hasToken ? '(kept)' : tok.placeholder; if (s.hasToken || s.tokenFromEnv) test(); } };
   const url = h('input', { class: 't', type: 'url', value: s.url || '', placeholder: 'http://homeassistant.local:8123', disabled: s.urlFromEnv ? true : null, autocomplete: 'off', onchange: () => saveConn() });
   const tok = h('input', { class: 't', type: 'password', placeholder: s.hasToken ? '(kept)' : 'Long-lived access token', disabled: s.tokenFromEnv ? true : null, autocomplete: 'off', onchange: () => saveConn() });
   const result = h('span', { class: 'muted small' });
   const conn = () => ({ ...(s.urlFromEnv ? {} : { url: url.value.trim() }), ...(tok.value.trim() ? { token: tok.value.trim() } : {}) });
-  const save = async (body) => { try { const r = await api('/api/ha/settings', { method: 'POST', json: body }); toast('Saved'); return r; } catch (e) { fail(e); return null; } };
+  const save = async (body) => { try { const r = await api('api/ha/settings', { method: 'POST', json: body }); toast('Saved'); return r; } catch (e) { fail(e); return null; } };
   const test = async () => {
     result.className = 'muted small'; result.textContent = 'Asking…';
-    try { const r = await api('/api/ha/test', { method: 'POST', json: conn() }); result.className = 'small ok'; result.textContent = `${r.name} · Home Assistant ${r.version || ''} · ${r.entities} entities`; } catch (e) { result.className = 'small err'; result.textContent = e.message; }
+    try { const r = await api('api/ha/test', { method: 'POST', json: conn() }); result.className = 'small ok'; result.textContent = `${r.name} · Home Assistant ${r.version || ''} · ${r.entities} entities`; } catch (e) { result.className = 'small err'; result.textContent = e.message; }
   };
   // the entities picked, as rows
   let items = (s.entities || []).map((e) => ({ ...e }));
@@ -1395,7 +1395,7 @@ async function setHomeAssistant(el) {
     if (!q.value.trim()) { found.replaceChildren(); return; }
     found.replaceChildren(h('span', { class: 'muted small' }, 'Looking…'));
     try {
-      const r = await api(`/api/ha/search?${new URLSearchParams({ q: q.value.trim(), n: 30 })}`);
+      const r = await api(`api/ha/search?${new URLSearchParams({ q: q.value.trim(), n: 30 })}`);
       const have = new Set(items.map((e) => e.id));
       found.replaceChildren(...(r.items.length ? r.items.map((t) => h('button', { class: 'pillbtn', disabled: have.has(t.id) ? true : null, title: t.id, onclick: () => { items.push({ id: t.id, name: '', control: !!HA_ICONS[t.domain] && !['climate', 'media_player', 'person', 'device_tracker', 'weather', 'camera'].includes(t.domain), wall: false, alert: '' }); persist(); find(); } },
         icon(haIcon(t), 's'), `${t.name}`, h('span', { class: 'muted small' }, ` ${t.text || t.state}`))) : [h('span', { class: 'muted small' }, 'Nothing found')]));
@@ -1449,11 +1449,11 @@ const bmOpen = new Set();  // the folders unfolded, kept while the page is open
 async function setBookmarks(el) {
   let tree = null;
   const draw = async () => {
-    tree = await api('/api/bookmarks/tree');
+    tree = await api('api/bookmarks/tree');
     if (!el.isConnected) return;
     paint();
     const mine = el.bmDrawn = {};  // a later draw makes the wait for icons of this one moot
-    bmIconsLater(el, bmFlat(tree.items), async () => (el.bmDrawn === mine ? bmFlat((await api('/api/bookmarks/tree')).items) : []));
+    bmIconsLater(el, bmFlat(tree.items), async () => (el.bmDrawn === mine ? bmFlat((await api('api/bookmarks/tree')).items) : []));
   };
   // the search box redraws from the tree in hand; changes fetch it again (draw)
   const paint = () => {
@@ -1499,9 +1499,9 @@ async function setBookmarks(el) {
       const v = await dialog(l ? 'Change the link' : 'New link', f.body, [{ label: 'Cancel', value: null }, { label: l ? 'Save' : 'Add', value: () => ({ link: f.value(), file: f.file(), drop: f.drop() }), primary: true }]);
       if (!v) return;
       try {
-        const saved = await api(l ? `/api/bookmarks/links/${l.id}` : `/api/bookmarks/groups/${v.link.groupId}/links`, { method: l ? 'PATCH' : 'POST', json: v.link });
-        if (v.file) await api(`/api/bookmarks/links/${saved.id}/icon`, { method: 'PUT', body: v.file, headers: { 'Content-Type': v.file.type || 'application/octet-stream' } });
-        else if (v.drop) await api(`/api/bookmarks/links/${saved.id}/icon`, { method: 'DELETE' });
+        const saved = await api(l ? `api/bookmarks/links/${l.id}` : `api/bookmarks/groups/${v.link.groupId}/links`, { method: l ? 'PATCH' : 'POST', json: v.link });
+        if (v.file) await api(`api/bookmarks/links/${saved.id}/icon`, { method: 'PUT', body: v.file, headers: { 'Content-Type': v.file.type || 'application/octet-stream' } });
+        else if (v.drop) await api(`api/bookmarks/links/${saved.id}/icon`, { method: 'DELETE' });
         toast('Saved');
       } catch (e) { fail(e); }
       await draw();
@@ -1510,7 +1510,7 @@ async function setBookmarks(el) {
       const i = h('input', { class: 't', placeholder: 'Name, e.g. Developer' });
       const st = h('input', { type: 'checkbox', checked: true });
       const v = await dialog('New folder', h('div', null, fld('Name', i), h('label', { class: 'check' }, st, 'Show it on the start page')), [{ label: 'Cancel', value: null }, { label: 'Add', value: () => ({ name: i.value, start: st.checked }), primary: true }]);
-      if (v && v.name.trim()) { bmOpen.add(parentId); await call('/api/bookmarks/groups', { method: 'POST', json: { ...v, parentId } }, 'Folder made'); }
+      if (v && v.name.trim()) { bmOpen.add(parentId); await call('api/bookmarks/groups', { method: 'POST', json: { ...v, parentId } }, 'Folder made'); }
     };
     const grip = (title, kind, x) => (canEdit && x.canChange ? h('button', { class: 'iconbtn grip', title, 'aria-label': title, 'data-kind': kind }, icon('grip', 's'))
       : canEdit ? h('span', { class: 'gripgap' }) : null);
@@ -1528,12 +1528,12 @@ async function setBookmarks(el) {
         open: { label: 'Open', icon: 'web', run: () => window.open(l.href, '_blank', 'noreferrer'), hidden: !l.linkable },
         start: { label: l.onStart ? 'Take it off the start page' : 'Show it on the start page', icon: 'home', disabled: !l.linkable, run: () => {
           const want = !l.onStart;  // as its folder when that already says so, else this link's own choice
-          call(`/api/bookmarks/links/${l.id}`, { method: 'PATCH', json: { start: want === !!(f && f.start) ? null : want } });
+          call(`api/bookmarks/links/${l.id}`, { method: 'PATCH', json: { start: want === !!(f && f.start) ? null : want } });
         } },
-        share: shareAct(l, `/api/bookmarks/links/${l.id}`),
+        share: shareAct(l, `api/bookmarks/links/${l.id}`),
         change: { label: 'Change', icon: 'edit', run: () => editLink(f ? f.id : 0, l), hidden: !l.canChange },
         copy: { label: 'Copy the address', icon: 'copy', run: async () => { try { await navigator.clipboard.writeText(l.href); toast('Copied'); } catch { toast(l.href); } } },
-        del: { label: 'Delete', icon: 'delete', danger: true, hidden: !l.canChange, run: async () => { if (await confirmDialog('Delete the link', `Delete "${l.name || l.href}"? ${l.shared ? 'It is shared: everyone loses it, and so do the browsers that sync.' : 'Browsers that sync lose it too.'}`, 'Delete', true)) call(`/api/bookmarks/links/${l.id}`, { method: 'DELETE' }, 'Deleted'); } },
+        del: { label: 'Delete', icon: 'delete', danger: true, hidden: !l.canChange, run: async () => { if (await confirmDialog('Delete the link', `Delete "${l.name || l.href}"? ${l.shared ? 'It is shared: everyone loses it, and so do the browsers that sync.' : 'Browsers that sync lose it too.'}`, 'Delete', true)) call(`api/bookmarks/links/${l.id}`, { method: 'DELETE' }, 'Deleted'); } },
       };
       return Object.assign(Object.values(a).filter((x) => !x.hidden), a);
     };
@@ -1542,7 +1542,7 @@ async function setBookmarks(el) {
       h('span', { class: 'bmic' }, bmIcon(l) ? h('img', { src: bmIcon(l), alt: '', onerror: (e) => { e.target.replaceWith(l.abbr); } }) : l.abbr), l.linkable ? h('a', { class: 'bmname', href: l.href, target: '_blank', rel: 'noreferrer', title: l.href }, l.name || l.href) : h('span', { class: 'bmname', title: l.href }, l.name || l.href),
       h('span', { class: 'muted small bmdesc' }, path === undefined ? l.description : path || 'Top level'),
       !canEdit && !l.shared ? null : h('span', { class: 'bmtools' },
-        share(l, `/api/bookmarks/links/${l.id}`),
+        share(l, `api/bookmarks/links/${l.id}`),
         house(l.onStart, !l.linkable ? 'Only web addresses can go on the start page' : (l.onStart ? 'On the start page: click to take it off' : 'Not on the start page: click to show it') + (l.shared && !canShare ? ' (yours only)' : ''), linkActions(l, f).start.run, !l.linkable),
         l.canChange ? h('button', { class: 'iconbtn', title: 'Change', onclick: () => editLink(f ? f.id : 0, l) }, icon('edit', 's')) : null,
         l.canChange ? h('button', { class: 'iconbtn', title: 'Delete', onclick: linkActions(l, f).del.run }, icon('delete', 's')) : null),
@@ -1550,12 +1550,12 @@ async function setBookmarks(el) {
       canEdit || l.shared ? moreBtn(l.name || l.href, linkActions(l, f)) : null);
     const count = (f) => f.items.reduce((n, x) => n + (x.type === 'folder' ? count(x) : 1), 0);
     const folderActions = (f, n) => [
-      { label: f.start ? 'Take it off the start page' : 'Show it on the start page', icon: 'home', run: () => call(`/api/bookmarks/groups/${f.id}`, { method: 'PATCH', json: { start: !f.start } }) },
-      shareAct(f, `/api/bookmarks/groups/${f.id}`),
+      { label: f.start ? 'Take it off the start page' : 'Show it on the start page', icon: 'home', run: () => call(`api/bookmarks/groups/${f.id}`, { method: 'PATCH', json: { start: !f.start } }) },
+      shareAct(f, `api/bookmarks/groups/${f.id}`),
       { label: 'Add a link', icon: 'add', hidden: !canEdit, run: () => { bmOpen.add(f.id); bmOpen.delete(-f.id); editLink(f.id, null); } },
       { label: 'Add a folder inside', icon: 'folder', hidden: !canEdit, run: () => { bmOpen.delete(-f.id); newFolder(f.id); } },
-      { label: 'Rename', icon: 'edit', hidden: !f.canChange, run: async () => { const i = h('input', { class: 't', value: f.name }); const v = await dialog('Rename the folder', i, [{ label: 'Cancel', value: null }, { label: 'Save', value: () => i.value, primary: true }]); if (v) call(`/api/bookmarks/groups/${f.id}`, { method: 'PATCH', json: { name: v } }, 'Saved'); } },
-      { label: 'Delete the folder', icon: 'delete', danger: true, hidden: !f.canChange, run: async () => { if (await confirmDialog('Delete the folder', `Delete "${f.name}" and the ${n} link(s) in it? ${f.shared ? 'It is shared: everyone loses it (what others added of their own in it stays theirs), and so do the browsers that sync.' : 'Browsers that sync lose them too.'}`, 'Delete', true)) call(`/api/bookmarks/groups/${f.id}`, { method: 'DELETE' }, 'Deleted'); } },
+      { label: 'Rename', icon: 'edit', hidden: !f.canChange, run: async () => { const i = h('input', { class: 't', value: f.name }); const v = await dialog('Rename the folder', i, [{ label: 'Cancel', value: null }, { label: 'Save', value: () => i.value, primary: true }]); if (v) call(`api/bookmarks/groups/${f.id}`, { method: 'PATCH', json: { name: v } }, 'Saved'); } },
+      { label: 'Delete the folder', icon: 'delete', danger: true, hidden: !f.canChange, run: async () => { if (await confirmDialog('Delete the folder', `Delete "${f.name}" and the ${n} link(s) in it? ${f.shared ? 'It is shared: everyone loses it (what others added of their own in it stays theirs), and so do the browsers that sync.' : 'Browsers that sync lose them too.'}`, 'Delete', true)) call(`api/bookmarks/groups/${f.id}`, { method: 'DELETE' }, 'Deleted'); } },
     ].filter((a) => !a.hidden);
     const folderBox = (f) => {
       const open = isOpen(f), n = count(f), acts = folderActions(f, n);
@@ -1564,7 +1564,7 @@ async function setBookmarks(el) {
           h('button', { class: 'bmfold', 'aria-expanded': open ? 'true' : 'false', title: open ? 'Fold' : 'Unfold', onclick: () => { if (open) { bmOpen.delete(f.id); bmOpen.add(-f.id); } else { bmOpen.add(f.id); bmOpen.delete(-f.id); } paint(); } },
             icon(open ? 'down' : 'right', 's'), icon('folder', 's'), h('b', null, f.name || '(no name)'), h('span', { class: 'muted small' }, `${n}`)),
           !canEdit && !f.shared ? null : h('span', { class: 'bmtools' },
-            share(f, `/api/bookmarks/groups/${f.id}`),
+            share(f, `api/bookmarks/groups/${f.id}`),
             house(f.start, (f.start ? 'On the start page, as a group with its links: click to take it off' : 'Not on the start page: click to show it as a group') + (f.shared && !canShare ? ' (yours only)' : ''), acts[0].run),
             ...acts.slice(1).filter((a) => a.icon !== 'people').map((a) => h('button', { class: 'iconbtn', title: a.label, onclick: a.run }, icon(a.icon, 's')))),
           f.shared ? h('span', { class: 'bmsharedtag', title: 'Shared with everyone' }, icon('people', 's')) : null,
@@ -1593,7 +1593,7 @@ async function setBookmarks(el) {
     const root = el.querySelector('.bmgroups');
     if (!root || !canEdit) return;
     // drag the grip (mouse, pen or finger): a link lands in any folder's links, a folder among any folder's folders
-    const save = (list) => call(`/api/bookmarks/groups/${list.dataset.gid}/order`, { method: 'POST', json: { ids: [...list.children].filter((x) => x.dataset.id).map((x) => +x.dataset.id) } });
+    const save = (list) => call(`api/bookmarks/groups/${list.dataset.gid}/order`, { method: 'POST', json: { ids: [...list.children].filter((x) => x.dataset.id).map((x) => +x.dataset.id) } });
     for (const g of root.querySelectorAll('.grip')) {
       const group = g.dataset.kind === 'group', item = g.closest(group ? '.bmedit' : '.bmrow');
       dragSort(g, item, {
@@ -1609,7 +1609,7 @@ async function setBookmarks(el) {
 /** Settings › Bookmarks: syncing with browsers (the extension, other sync apps), the Bookmarks app on a phone, and
  * files in and out. The Bookmarks page itself is only the tree. */
 async function setBookmarkSettings(el) {
-  const [tree, sync] = await Promise.all([api('/api/bookmarks/tree'), api('/api/bookmarks/sync')]);
+  const [tree, sync] = await Promise.all([api('api/bookmarks/tree'), api('api/bookmarks/sync')]);
   const canEdit = !!tree.canEdit;
   const copy = (text) => h('button', { class: 'iconbtn', title: 'Copy', onclick: async () => { try { await navigator.clipboard.writeText(text); toast('Copied'); } catch { toast(text); } } }, icon('copy', 's'));
   const addr = (label, text) => h('div', { class: 'bmaddr' }, h('span', { class: 'muted small' }, label), h('code', null, text), copy(text));
@@ -1617,7 +1617,7 @@ async function setBookmarkSettings(el) {
   const importFile = async () => {
     const f = file.files[0];
     if (!f) { toast('Choose a bookmarks file first'); return; }
-    try { const r = await api('/api/bookmarks/import', { method: 'POST', json: { file: await f.text() } }); toast(`Added ${r.links} link(s) in ${r.groups} folder(s)`); file.value = ''; } catch (e) { fail(e); }
+    try { const r = await api('api/bookmarks/import', { method: 'POST', json: { file: await f.text() } }); toast(`Added ${r.links} link(s) in ${r.groups} folder(s)`); file.value = ''; } catch (e) { fail(e); }
   };
   el.append(
   h('div', { class: 'box' }, h('h2', null, icon('update'), 'Sync with browsers'),
@@ -1745,7 +1745,7 @@ const serverUi = () => import(new URL('api/server/ui.js', document.baseURI).href
 async function updateNote() {
   if (!S.user || !S.user.suiteAdmin) return;
   let u;
-  try { u = await api('/api/suite-admin/updates'); } catch { return; }
+  try { u = await api('api/suite-admin/updates'); } catch { return; }
   $('#updnote')?.remove();
   let dismissed = null; try { dismissed = localStorage.getItem('iostart.updateDismissed'); } catch { /* private mode */ }
   if (u.status !== 'update' || !u.latest || dismissed === u.latest) return;
@@ -1754,7 +1754,7 @@ async function updateNote() {
     h('span', null, `ioSuite v${u.latest} is available (now v${u.installed || '?'}).`),
     u.canUpdate ? h('button', { class: 'pillbtn primary noic', onclick: async () => {
       if (!await confirmDialog(`Update to v${u.latest}`, 'Update every app and restart them? Each one is away for a moment.', 'Update now')) return;
-      try { await api('/api/suite-admin/updates', { method: 'POST', json: { action: 'update' } }); } catch (e) { fail(e); return; }
+      try { await api('api/suite-admin/updates', { method: 'POST', json: { action: 'update' } }); } catch (e) { fail(e); return; }
       b.remove(); location.hash = page;
     } }, 'Update now') : null,
     h('a', { class: 'pillbtn noic', href: page, onclick: () => b.remove() }, 'Details'),
@@ -1775,7 +1775,7 @@ function showSignIn() {
   const btn = h('button', { class: 'pillbtn primary noic', type: 'submit' }, first ? 'Create the admin account' : 'Sign in');
   const login = async (n, p) => {
     err.textContent = '';
-    try { await api(first ? '/api/auth/setup' : '/api/auth/login', { method: 'POST', json: { name: n, password: p } }); location.reload(); } catch (x) { err.textContent = x.message; }
+    try { await api(first ? 'api/auth/setup' : 'api/auth/login', { method: 'POST', json: { name: n, password: p } }); location.reload(); } catch (x) { err.textContent = x.message; }
   };
   const submit = (e) => { e.preventDefault(); login(name.value.trim(), pw.value); };
   document.body.append(h('div', { class: 'signin' }, h('form', { class: 'dialog', onsubmit: submit },
@@ -1784,7 +1784,7 @@ function showSignIn() {
     tiles, form, err, h('div', { class: 'btns' }, btn))));
   if (first) { name.focus(); return; }
   const pick = (t) => tiles.querySelectorAll('.account').forEach((x) => x.classList.toggle('on', x === t));
-  api('/api/auth/accounts').then((d) => {
+  api('api/auth/accounts').then((d) => {
     if (!d.accounts.length) { name.focus(); return; }
     form.hidden = true; btn.hidden = true;
     tiles.append(...d.accounts.map((a) => {
@@ -1803,13 +1803,13 @@ function showSignIn() {
 // ------------------------------------------------------------------ start
 async function start() {
   applyTheme();
-  S.status = await api('/api/status');
+  S.status = await api('api/status');
   if (!S.status.user) { showSignIn(); return; }
   S.user = S.status.user;
   // sent here to sign in by a sync app's "may it sync?" page (app/ncbookmarks.py): back to it, now signed in
   const flow = new URLSearchParams(location.search).get('flow');
   if (flow && /^[\w-]{20,}$/.test(flow)) { location.replace('dav/nextcloud/index.php/login/v2/flow/' + flow); return; }
-  try { S.settings = (await api('/api/auth/me')).settings || {}; } catch { S.settings = {}; }
+  try { S.settings = (await api('api/auth/me')).settings || {}; } catch { S.settings = {}; }
   if (S.settings.theme && S.settings.theme !== (localStorage.getItem('iostart.theme') || 'system')) setTheme(S.settings.theme);
   drawUser();
   if (BM_APP) { document.body.classList.add('bmapp'); $('#topbar .brand').href = './'; $('#topbar .brand').title = 'The start page'; }

@@ -22,7 +22,7 @@ import logging
 import threading
 import time
 
-from iosuite_shared import db, users
+from iosuite_shared import db, prefix, users
 from iosuite_shared.errors import Invalid
 
 log = logging.getLogger("iosuite_shared.proxyauth")
@@ -364,10 +364,11 @@ class Forwarded:
     in scope["iothing.peer"], which is what proxy sign-in and the throttles trust, and then, for a connection from this
     machine or a listed reverse proxy (forwarders()), takes the visitor's address and scheme from X-Forwarded-For and
     X-Forwarded-Proto the way uvicorn's own proxy-headers middleware does. The apps start uvicorn with
-    proxy_headers=False so that this is the one place the headers are read."""
+    proxy_headers=False so that this is the one place the headers are read. It is also where the folder an app is
+    served in behind one address for the whole suite is found and taken off the path (iosuite_shared.prefix)."""
 
-    def __init__(self, app):
-        self.app = app
+    def __init__(self, app, rooted=()):
+        self.app, self.rooted = app, tuple(rooted)
 
     @staticmethod
     def allows(peer: str) -> bool:
@@ -383,8 +384,15 @@ class Forwarded:
         if scope.get("type") in ("http", "websocket") and scope.get("client"):
             peer = scope["client"][0]
             scope["iothing.peer"] = peer
-            if self.allows(peer):
-                headers = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in scope.get("headers") or []}
+            trusted = self.allows(peer)
+            headers = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in scope.get("headers") or []}
+            # the folder the app is served in behind one address for the whole suite (/calendar): off the path, kept for the links
+            go = prefix.apply(scope, prefix.resolve(headers, trusted), self.rooted)
+            if go and scope["type"] == "http":
+                await send({"type": "http.response.start", "status": 308, "headers": [(b"location", go.encode("latin-1")), (b"content-length", b"0")]})
+                await send({"type": "http.response.body", "body": b""})
+                return
+            if trusted:
                 proto = (headers.get("x-forwarded-proto") or "").split(",")[0].strip().lower()
                 if proto in ("http", "https", "ws", "wss"):
                     scope["scheme"] = proto if scope["type"] == "http" else ("wss" if proto in ("https", "wss") else "ws")

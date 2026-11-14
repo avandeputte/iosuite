@@ -118,3 +118,21 @@ def test_a_viewer_only_reads_over_caldav(client, family_id):
     assert dav("MKCALENDAR", "/dav/calendars/vic/mine/").status_code == 403
     assert dav("PUT", "/dav/calendars/vic/family/x.ics", TODO.format(uid="x", title="No", extra="")).status_code == 403
     assert dav("PROPFIND", "/dav/calendars/vic/family/").status_code == 207
+
+
+def test_hrefs_carry_the_folder_the_app_is_served_in(client, dav, monkeypatch):
+    """https://home.example.com/tasks/ (the suite on one address): every href a client is sent starts with the folder."""
+    monkeypatch.setenv("PUBLIC_URL", "https://home.example.com/tasks")
+    h = {"host": "home.example.com"}
+    r = client.request("PROPFIND", "/.well-known/caldav", headers=h, follow_redirects=False)
+    assert r.status_code == 301 and r.headers["location"] == "/tasks/dav/"
+    body = '<d:propfind xmlns:d="DAV:"><d:prop><d:current-user-principal/><d:displayname/></d:prop></d:propfind>'
+    for kept in ("/tasks", ""):  # the proxy left the folder on the path; it took it off
+        r = dav("PROPFIND", kept + "/dav/", body, Depth="0", **h)
+        assert r.status_code == 207 and "<d:href>/tasks/dav/principals/alex/</d:href>" in r.text and ">/dav/" not in r.text
+        r = dav("PROPFIND", kept + "/dav/calendars/alex/", body, Depth="1", **h)
+        assert "<d:href>/tasks/dav/calendars/alex/family/</d:href>" in r.text and ">/dav/" not in r.text
+    r = dav("PROPPATCH", "/tasks/dav/calendars/alex/family/", '<d:propertyupdate xmlns:d="DAV:"><d:set><d:prop><d:displayname>Family</d:displayname></d:prop></d:set></d:propertyupdate>', **h)
+    assert "<d:href>/tasks/dav/calendars/alex/family/</d:href>" in r.text
+    monkeypatch.delenv("PUBLIC_URL")
+    assert "<d:href>/dav/principals/alex/</d:href>" in dav("PROPFIND", "/dav/", body, Depth="0").text, "at the root as before"

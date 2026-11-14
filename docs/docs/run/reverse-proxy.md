@@ -35,6 +35,53 @@ each app keeps its own sign-in (still with the same accounts). `PUBLIC_URL` is t
 list of apps, so the start page and the other apps link to the right place; unset, the app keeps the best address it
 has been reached at.
 
+## Or one name, an app per folder
+
+The apps can also share one address, each in a folder of it: `https://home.example.com/calendar/`,
+`https://home.example.com/notes/` and so on, with one certificate, one DNS name and one port. Each app still runs on
+its own port; the proxy picks the app by the first part of the path. Put the folder in each app's `PUBLIC_URL`:
+
+```sh
+PUBLIC_URL=https://home.example.com/calendar   # ioCalendar's config.env; no COOKIE_DOMAIN needed, it is one host
+```
+
+The app then writes that folder into everything it hands out (the CalDAV and CardDAV links, the addresses under
+Settings, the links in notifications), and the proxy may either take the folder off the path or leave it on: both
+work. In Caddy:
+
+```caddy
+home.example.com {
+    redir /calendar /calendar/
+    handle_path /calendar/* {
+        reverse_proxy 192.168.1.10:8620
+    }
+    redir /notes /notes/
+    handle_path /notes/* {
+        reverse_proxy 192.168.1.10:8610
+    }
+    # ... one pair per app
+}
+```
+
+and in nginx, with the same `proxy_set_header` lines as [below](#nginx) in each (the app knows its folder by the
+`Host` it is asked for; no trailing slash after the port, so the folder stays on the path):
+
+```nginx
+location = /calendar { return 308 /calendar/; }
+location /calendar/  { proxy_pass http://192.168.1.10:8620; proxy_set_header Host $host; }
+location = /notes    { return 308 /notes/; }
+location /notes/     { proxy_pass http://192.168.1.10:8610; proxy_set_header Host $host; }
+```
+
+A proxy that cannot be told the public address can send `X-Forwarded-Prefix: /calendar` instead (Traefik's
+StripPrefix does it by itself); it is believed from the proxies listed under Settings › Security. Reached straight on
+its own port (`http://192.168.1.10:8620`), an app answers at the root as before.
+
+Two things differ from a name per app. Phones find a CalDAV or CardDAV account by asking the host for
+`/.well-known/caldav`, which belongs to the whole host: send it to the app that should answer
+(`redir /.well-known/caldav /calendar/dav/ 301`), and give the others their full address
+(`https://home.example.com/tasks/dav/`). And devices set up with the old addresses need the new one once.
+
 ## The proxy as the only way in
 
 With the proxy on the same server as the apps, each app can listen on that machine only, so nobody on your network

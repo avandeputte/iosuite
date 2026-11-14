@@ -74,11 +74,11 @@ export function renderImport() {
     const f = e.target.files[0]; if (!f) return;
     const fd = new FormData(); fd.append('file', f);
     toast('Importing…', 60000);
-    try { const r = await api('/api/import', { method: 'POST', body: fd }); toast(`Imported ${r.notes} notes, ${r.pictures} pictures, ${r.files || 0} files, ${r.folders} folders, ${r.templates || 0} templates${r.skipped ? `; ${r.skipped} were newer here` : ''}`, 6000); } catch (err) { fail(err); }
+    try { const r = await api('api/import', { method: 'POST', body: fd }); toast(`Imported ${r.notes} notes, ${r.pictures} pictures, ${r.files || 0} files, ${r.folders} folders, ${r.templates || 0} templates${r.skipped ? `; ${r.skipped} were newer here` : ''}`, 6000); } catch (err) { fail(err); }
   } });
   main.append(h('div.page', h('div.pagein', pageTitle('Import and export', 'download', 'var(--c-green)'),
     h('section.sec', h('h2', 'Export'), h('p.intro', 'Your notes as Markdown files with their pictures, plus notes.json with everything.'),
-      h('div.row', h('a.pillbtn', { href: '/api/export.zip' }, icon('download'), 'Export all notes'), h('a.pillbtn', { href: '/api/export.zip?trash=1' }, 'With the trash'))),
+      h('div.row', h('a.pillbtn', { href: 'api/export.zip' }, icon('download'), 'Export all notes'), h('a.pillbtn', { href: 'api/export.zip?trash=1' }, 'With the trash'))),
     canWrite() ? h('section.sec', h('h2', 'Import'), h('p.intro', 'A zip or notes.json from any ioNote server. Newer copies here are kept.'),
       h('div.row', h('button.pillbtn', { onclick: () => file.click() }, icon('upload'), 'Import…'), file)) : null)));
 }
@@ -94,7 +94,7 @@ export async function renderChanges() {
   let before = null;
   const more = h('button.pillbtn.more', { onclick: () => load() }, 'Older');
   const load = async () => {
-    const r = await api('/api/changes?limit=200' + (before ? '&before=' + before : ''));
+    const r = await api('api/changes?limit=200' + (before ? '&before=' + before : ''));
     for (const c of r.changes) {
       tbody.append(h('tr', h('td.small', fmtDate(c.ts, true)), h('td', c.user), h('td', `${c.action} ${c.kind}`),
         h('td', c.kind === 'note' && c.action !== 'delete' ? h('a', { href: '#/note/' + c.uuid }, c.summary) : c.summary)));

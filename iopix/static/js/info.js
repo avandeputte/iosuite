@@ -32,7 +32,7 @@ export function photoActions(anchor, d) {
     manage ? ['Rename…', () => renamePhoto(d)] : null,
     manage ? ['Move to a folder…', () => movePhotos([d.id], () => { LB.detail = null; details.delete(d.id); setTimeout(showItem, 1500); })] : null,
     manage && S.LOSSLESS && !d.video ? ['Rotate, flip or crop…', () => editMenu([d.id], anchor, true)] : null,
-    manage && d.album && !d.video ? ['Use as folder cover', async () => { try { await post(`/api/folders/${d.album.id}/properties`, { icon: d.id }); toast(`Now the cover of “${d.album.name}” in Folders.`); S.keepView = true; pollSoon(600); } catch (e) { toastError(e); } }] : null,
+    manage && d.album && !d.video ? ['Use as folder cover', async () => { try { await post(`api/folders/${d.album.id}/properties`, { icon: d.id }); toast(`Now the cover of “${d.album.name}” in Folders.`); S.keepView = true; pollSoon(600); } catch (e) { toastError(e); } }] : null,
     'Share',
     ['Add to album…', () => albumDialog([d.id])],
     ['Download the original', () => LB.el.dl.click()],
@@ -133,7 +133,7 @@ function infoEditor(c) {
       h('textarea', { class: 'einput', placeholder: 'Caption', rows: 2, onkeydown: (e) => e.stopPropagation(), onchange: (e) => saveOne({ caption: e.target.value }) }, d.caption || ''),
       d.edited ? h('div', { class: 'enote' }, S.WRITE_FILES ? 'Changed here and saved to the sidecar and the image file. ' : 'Changed here and saved to the sidecar. ',
         S.NO_DK ? '' : S.AUTO_DB ? 'It goes into digiKam’s database by itself within a minute (once digiKam is closed). ' : 'digiKam shows it after “Reread Metadata From File”, or apply it to digiKam’s database from Explore. ',
-        h('button', { type: 'button', class: 'lnk', onclick: async () => { try { await post('/api/edit/revert', { ids: [d.id] }); } catch (e) { toastError(e); return; } details.delete(d.id); toast('Edits undone; sidecar restored.'); S.keepView = true; clearTimeout(S.pollTimer); S.pollTimer = setTimeout(async () => { await pollStatus(); if (LB.open && LB.src.id[LB.i] === d.id) showItem(); }, 1500); } }, 'Undo')) : null];
+        h('button', { type: 'button', class: 'lnk', onclick: async () => { try { await post('api/edit/revert', { ids: [d.id] }); } catch (e) { toastError(e); return; } details.delete(d.id); toast('Edits undone; sidecar restored.'); S.keepView = true; clearTimeout(S.pollTimer); S.pollTimer = setTimeout(async () => { await pollStatus(); if (LB.open && LB.src.id[LB.i] === d.id) showItem(); }, 1500); } }, 'Undo')) : null];
 }
 
 /** One row per face (named, suggested, unknown); a person tag without a face region gets a row with the badge picture. */
@@ -153,7 +153,7 @@ function infoPeople(c) {
           else if (S.CAN_MANAGE && f.kind === 'tagonly') tagOnlyMenu(e.currentTarget, f, d);
           else if (f.kind === 'confirmed' || f.kind === 'tagonly') filterFromLightbox({ tag: f.tag });
         } },
-        h('img', { src: f.kind === 'tagonly' ? faceUrl(f.tag) : `/facecrop/${d.id}/${f.x}/${f.y}/${f.w}/${f.h}.jpg`, alt: '' }),
+        h('img', { src: f.kind === 'tagonly' ? faceUrl(f.tag) : `facecrop/${d.id}/${f.x}/${f.y}/${f.w}/${f.h}.jpg`, alt: '' }),
         h('span', { class: 'nm' }, f.kind === 'confirmed' || f.kind === 'tagonly' ? [f.name, d.ages?.[f.tag] ? h('span', { class: 'muted', title: 'Age in this photo, from the birthday in ioContact' }, ` · ${d.ages[f.tag]}`) : null] : f.kind === 'suggested' ? [h('i', null, 'Suggestion: '), f.name] : h('i', null, 'Unknown face')),
         S.CAN_MANAGE ? h('span', { class: 'muted smaller' }, f.kind === 'tagonly' ? 'no face box ▾' : 'options ▾') : null)))];
 }
@@ -216,7 +216,7 @@ function infoDetails(c) {
 /** Tags each suggested person on its photo without a face box (digiKam's own person tag, sidecar included); false when any failed. */
 export async function tagOnly(list) {
   let r;
-  try { r = await post('/api/faces/batch', { ops: list.map((x) => ({ op: 'tagonly', image: x.id, tag: x.tag })) }); } catch (e) { toastError(e); return false; }
+  try { r = await post('api/faces/batch', { ops: list.map((x) => ({ op: 'tagonly', image: x.id, tag: x.tag })) }); } catch (e) { toastError(e); return false; }
   if (r.failed?.length) { toast(`${plural(r.failed.length, 'photo')} not tagged: ${r.failed[0].error}`, null, null, TOAST_LONG); return false; }
   setBadges(list.map((x) => x.id), { faces: true });
   list.forEach((x) => details.delete(x.id));  // a photo open in the viewer shows the person at its next draw
@@ -225,7 +225,7 @@ export async function tagOnly(list) {
 }
 /** Never suggest `tag` for this photo again (jersey, clothing), or say it is the right way up (rotation); throws on failure. */
 export function dismissSuggestion(kind, id, tag) {
-  return kind === 'rotation' ? post('/api/rotation/dismiss', { photos: [id], on: true }) : post('/api/suggestions/dismiss', { kind, pairs: [[id, tag]] });
+  return kind === 'rotation' ? post('api/rotation/dismiss', { photos: [id], on: true }) : post('api/suggestions/dismiss', { kind, pairs: [[id, tag]] });
 }
 /** One suggestion line of the info panel: its text, the button that applies it, "not this one" (disabled while it posts) and the link to the page. */
 function suggestionRow(attrs, text, act, dismiss, all) {
@@ -276,7 +276,7 @@ function infoHistory(c) {
       const box = h('details', { class: 'hfold' });
       const list = h('div', { class: 'hlist small' });
       box.hidden = true;
-      api(`/api/history?photo=${d.id}&limit=6`).then((r) => {
+      api(`api/history?photo=${d.id}&limit=6`).then((r) => {
         if (!r.entries.length || !box.isConnected) return;
         box.append(h('summary', null, `Edit log · ${plural(r.total, 'change')}`), list);
         if (r.total > 6) box.append(h('a', { class: 'lnk small', href: `#/history?photo=${d.id}` }, `See all ${nf.format(r.total)}`));

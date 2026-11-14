@@ -8,7 +8,7 @@ let apps = [], pop = null;
 
 export async function loadSuite() {
   try {
-    const r = await api('/api/auth/suite');
+    const r = await api('api/auth/suite');
     apps = (r.items || []).filter((a) => a.url); suiteSelf = r.app;  // in the suite's one order, this app too
     if (!apps.some((a) => a.app !== r.app)) apps = [];  // only this app: no menu
   } catch (e) { apps = []; }

@@ -13,19 +13,19 @@ export function loadLeaflet(cluster) {
   const js = (src) => new Promise((ok, fail) => document.head.append(h('script', { src, onload: ok, onerror: () => fail(new Error('offline')) })));
   // Leaflet and its cluster plugin ship with the app (static/vendor): no third party, and the page's Content Security
   // Policy stays 'self'. Leaflet finds its marker and layer-switch images next to its stylesheet.
-  S.leafletP ||= (css('/static/vendor/leaflet/leaflet.css'), js('/static/vendor/leaflet/leaflet.js')).catch((e) => { S.leafletP = null; throw e; });  // failed once is not failed for the session
+  S.leafletP ||= (css('static/vendor/leaflet/leaflet.css'), js('static/vendor/leaflet/leaflet.js')).catch((e) => { S.leafletP = null; throw e; });  // failed once is not failed for the session
   if (!cluster) return S.leafletP;
   S.clusterP ||= S.leafletP.then(() => {
-    css('/static/vendor/leaflet.markercluster/MarkerCluster.css');
-    css('/static/vendor/leaflet.markercluster/MarkerCluster.Default.css');
-    return js('/static/vendor/leaflet.markercluster/leaflet.markercluster.js');
+    css('static/vendor/leaflet.markercluster/MarkerCluster.css');
+    css('static/vendor/leaflet.markercluster/MarkerCluster.Default.css');
+    return js('static/vendor/leaflet.markercluster/leaflet.markercluster.js');
   });
   return S.clusterP;
 }
 // tile provider from the server (OpenStreetMap, or Google Maps with the owner's key); fetched once, OSM until it arrives
 
 
-export async function loadMaps() { if (S.mapsLoaded) return S.MAPS; try { S.MAPS = await api('/api/maps'); if (S.MAPS.error) toast(S.MAPS.error, null, null, TOAST_LONG); } catch { /* keep OSM */ } S.mapsLoaded = true; return S.MAPS; }
+export async function loadMaps() { if (S.mapsLoaded) return S.MAPS; try { S.MAPS = await api('api/maps'); if (S.MAPS.error) toast(S.MAPS.error, null, null, TOAST_LONG); } catch { /* keep OSM */ } S.mapsLoaded = true; return S.MAPS; }
 export const tiles = () => window.L.tileLayer(S.MAPS.url, { maxZoom: S.MAPS.maxZoom, attribution: S.MAPS.attribution });
 /** Map and Satellite base layers with a switcher; the choice is remembered. Returns the layer shown. */
 export function baseLayers(map, position = 'topright') {
@@ -60,7 +60,7 @@ export async function showMap(fp) {
   const bar = h('div', { class: 'mapbar' });
   main.replaceChildren(el, bar);
   let d;
-  try { [d] = await Promise.all([api('/api/map?' + fp.toString()), loadLeaflet(true)]); } catch (e) {
+  try { [d] = await Promise.all([api('api/map?' + fp.toString()), loadLeaflet(true)]); } catch (e) {
     if (token !== M.token || S.route.view !== 'map') return;
     // the map library not loading is the one case the notice is about; a failing server answer says what it said
     main.replaceChildren(e?.message === 'offline' ? h('div', { class: 'empty' }, 'The map needs an internet connection for map tiles. Everything else works offline.') : errorBox(e));
@@ -81,7 +81,7 @@ export async function showMap(fp) {
   // the library changed (an edit here, digiKam, a background job): new markers, same view, tray and pin untouched
   M.update = async () => {
     if (token !== M.token || S.route.view !== 'map') return;
-    let nd; try { nd = await api('/api/map?' + fp.toString()); } catch { return; }
+    let nd; try { nd = await api('api/map?' + fp.toString()); } catch { return; }
     if (token !== M.token) return;
     M.data = nd; d = nd;
     group.clearLayers();
@@ -101,7 +101,7 @@ export async function showMap(fp) {
       go('photos', q);
     };
     const el = h('div', { class: 'mpop' },
-      h('div', { class: 'mthumbs' }, idxs.slice(0, 8).map((i) => h('img', { src: `/thumb/${d.id[i]}`, alt: '', onclick: () => { map.closePopup(); openLightbox(M.data, i, true); } }))),
+      h('div', { class: 'mthumbs' }, idxs.slice(0, 8).map((i) => h('img', { src: `thumb/${d.id[i]}`, alt: '', onclick: () => { map.closePopup(); openLightbox(M.data, i, true); } }))),
       h('div', { class: 'mbtns' },
         h('button', { class: 'pillbtn on', onclick: openAll }, icon('photo'), `Open all ${nf.format(idxs.length)} photos`),
         h('button', { class: 'pillbtn', onclick: () => { map.closePopup(); ev.layer.zoomToBounds({ padding: [30, 30] }); } }, 'Zoom in')));
@@ -110,7 +110,7 @@ export async function showMap(fp) {
   map.addLayer(group);
   if (d.id.length) map.fitBounds(L.latLngBounds(d.id.map((_, i) => [d.lat[i], d.lon[i]])).pad(0.1), { maxZoom: 15 });
   const trailDay = fp.get('trail') || (fp.get('from') && fp.get('from') === fp.get('to') ? fp.get('from') : null);
-  if (trailDay) api(`/api/trail?day=${trailDay}`).then((t) => {
+  if (trailDay) api(`api/trail?day=${trailDay}`).then((t) => {
     if (token !== M.token || t.id.length < 2) return;
     const pts = t.id.map((_, i) => [t.lat[i], t.lon[i]]);
     L.polyline(pts, { color: cssVar('--danger'), weight: 3, opacity: .8, dashArray: '6 6' }).addTo(map);
@@ -147,7 +147,7 @@ function mapSearch(map) {
   const look = async () => {
     const q = input.value.trim();
     if (q.length < 2) { results.hidden = true; return; }
-    let r; try { r = await api('/api/geocode?q=' + encodeURIComponent(q)); } catch (e) { toastError(e); return; }
+    let r; try { r = await api('api/geocode?q=' + encodeURIComponent(q)); } catch (e) { toastError(e); return; }
     if (input.value.trim() !== q) return;
     results.hidden = false;
     fill(results, r.results.length ? r.results.map((x) => h('div', { class: 'frow wrapbtn', onclick: () => go(x) },
@@ -179,7 +179,7 @@ async function placeTray(map, fp, el) {
   const tray = h('aside', { class: 'maptray' }, h('div', { class: 'muted' }, 'Loading the photos without a location…'));
   el.parentElement.append(tray);
   let d;
-  try { d = await api('/api/photos?' + q.toString()); } catch (e) { fill(tray, errorBox(e)); return; }
+  try { d = await api('api/photos?' + q.toString()); } catch (e) { fill(tray, errorBox(e)); return; }
   const sel = new Set();
   let last = -1, shown = 240;
   const count = h('b');
@@ -188,7 +188,7 @@ async function placeTray(map, fp, el) {
   const ids = d.id.slice();
   const refreshHead = () => { fill(count, sel.size ? `${nf.format(sel.size)} selected` : `${nf.format(ids.length)} without a location`); fill(hint, sel.size ? 'Click the map where they were taken, or drag them onto it.' : 'Click photos to select them (Shift for a range), or drag one straight onto the map.'); };
   const tile = (id, k) => {
-    const im = h('img', { src: `/thumb/${id}`, alt: '', loading: 'lazy', draggable: 'true', title: d.ts ? dfDay.format(date(d.ts[d.id.indexOf(id)])) : '',
+    const im = h('img', { src: `thumb/${id}`, alt: '', loading: 'lazy', draggable: 'true', title: d.ts ? dfDay.format(date(d.ts[d.id.indexOf(id)])) : '',
       class: sel.has(id) ? 'on' : '',
       onclick: (e) => {
         if (e.shiftKey && last >= 0) { const [a, b] = [Math.min(last, k), Math.max(last, k)]; for (let j = a; j <= b; j++) sel.add(ids[j]); }
@@ -228,7 +228,7 @@ async function placeTray(map, fp, el) {
   const look = async () => {
     const q = search.value.trim();
     if (q.length < 2) { results.hidden = true; return; }
-    let r; try { r = await api('/api/geocode?q=' + encodeURIComponent(q)); } catch (e) { toastError(e); return; }
+    let r; try { r = await api('api/geocode?q=' + encodeURIComponent(q)); } catch (e) { toastError(e); return; }
     if (search.value.trim() !== q) return;
     results.hidden = false;
     fill(results, r.results.length ? r.results.map((x) => h('div', { class: 'frow wrapbtn', onclick: () => { results.hidden = true; search.value = x.name; found(x); } },

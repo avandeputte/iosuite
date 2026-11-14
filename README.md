@@ -25,7 +25,39 @@ The iPhone, iPad, Mac and Apple TV apps are in [iosuite-apps](https://github.com
 
 ## Install
 
-Each app's README has the details; the ways are the same in every app.
+**The suite on one server, one line.** On a Linux server with a MariaDB or MySQL database within reach:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/install.sh | bash
+```
+
+The first time it sets up ioStart (the start page) by asking its questions, then shows the list of apps to tick the
+others; they share the database server, the Shared ioSuite database, the sign-in domain and the admin. **Run the same
+line again at any time** to change what is on the server:
+
+```
+   1 [x] ioStart     iostart     port 8630  this app
+   2 [x] ioCalendar  iocalendar  port 8620  installed
+   3 [ ] ioContact   iocontact   port 8640
+   ...
+Numbers or names to tick or untick (e.g. 3 5), r and a number to change an installed app's settings (e.g. r2), Enter when it is right:
+```
+
+* **Tick** an app to add it.
+* **Untick** an app to remove it: its service and program files go, and it leaves the other apps' switchers. Its
+  database and its data stay, so adding it again later brings everything back. Deleting them as well is a separate
+  question (type `DELETE`); the Shared ioSuite database (accounts, roles, keys), the photos and the backups are never
+  touched.
+* **`r` and the number** asks an installed app's setup questions again, the current answers as the defaults (port,
+  public address, database, the app's own settings), and restarts it.
+
+Without questions: `... | bash -s -- --add iotask,ionote`, `--remove iohealth` (`--delete-data` to drop its database
+and data too), `--reconfigure iocalendar`, `--list`; `--into DIR` when the apps are not in `/opt`. A first install
+without questions passes the first app's `setup.sh` flags: `... | bash -s -- --yes --db HOST:3306/suite:suite:PASSWORD
+--admin NAME:PASSWORD --db-admin root:PASSWORD --add all`. In an app's folder, `./setup.sh --apps` shows the same
+list, and `./setup.sh --also`, `--remove` and `--reconfigure` take the same lists.
+
+Each app's README has the details of the other ways; they are the same in every app.
 
 **One app, on any Linux or Mac.** Python 3.10+ and a MariaDB or MySQL database:
 
@@ -35,8 +67,8 @@ git clone https://github.com/avandeputte/iosuite && cd iosuite/iocalendar
 ```
 
 `setup.sh` asks for the database, makes the Python environment in the app's folder, installs the shared library from
-`shared/` and offers a service. `./setup.sh --also iotask,ionote` installs other apps beside it, with the same
-database server, sign-in domain and admin.
+`shared/` and offers a service. It ends with the list of apps above, to add others beside it
+(`./setup.sh --also iotask,ionote` without questions).
 
 **The whole suite in Docker.** [`docker-compose.yml`](docker-compose.yml) here starts MariaDB and every app:
 

@@ -32,7 +32,7 @@ export async function showPhotos(fp) {
   const grid = h('div', { id: 'grid' }, h('div', { class: 'empty' }, 'Loading…'));
   if (!G.anchor) main.replaceChildren(grid);  // drawn again in place: the grid on screen stays until the new one is ready
   let data;
-  try { data = await api('/api/photos?' + fp.toString()); } catch (e) { main.replaceChildren(grid); grid.replaceChildren(h('div', { class: 'empty' }, 'Could not load photos: ' + e.message)); return; }
+  try { data = await api('api/photos?' + fp.toString()); } catch (e) { main.replaceChildren(grid); grid.replaceChildren(h('div', { class: 'empty' }, 'Could not load photos: ' + e.message)); return; }
   if (token !== G.token || S.route.view !== 'photos') return;
   if (G.anchor) main.replaceChildren(grid);
   G.data = data;
@@ -150,7 +150,7 @@ function layoutGrid() {
     [...filterParams().keys()].some((k) => k !== 'sort') && (S.USER || !S.USERS_EXIST) && !savedSearchFor(filterParams()) ? h('button', { class: 'pillbtn dlbtn', title: 'Save this search as a smart album (it updates itself)', onclick: async () => {
       const n = await promptDialog('Name for this smart album'); if (!n || !n.trim()) return;
       const q = filterParams(); q.delete('sort');
-      try { await post('/api/searches', { name: n.trim(), query: q.toString() }); toast(`Saved “${n.trim()}” under Albums.`); await loadState(); layoutGrid(); renderGrid(true); } catch (e) { toastError(e); }
+      try { await post('api/searches', { name: n.trim(), query: q.toString() }); toast(`Saved “${n.trim()}” under Albums.`); await loadState(); layoutGrid(); renderGrid(true); } catch (e) { toastError(e); }
     } }, icon('album'), h('span', null, 'Save search')) : null,
     byDate ? h('select', { title: 'Group the photos by day or by month', class: 'groupsel', onchange: (e) => {
       const anchor = firstVisibleIndex();
@@ -229,7 +229,7 @@ export async function badgeTiles(root) {
   const all = [...tiles, ...imgs];
   for (let k = 0; k < all.length; k += 300) {
     const part = all.slice(k, k + 300);
-    let r; try { r = await api(`/api/badges?ids=${[...new Set(part.map((t) => t.dataset.id || t.dataset.focus))].join(',')}`); } catch { continue; }
+    let r; try { r = await api(`api/badges?ids=${[...new Set(part.map((t) => t.dataset.id || t.dataset.focus))].join(',')}`); } catch { continue; }
     const geo = new Set(r.geo), faces = new Set(r.faces);
     for (const t of part) {
       if (t.dataset.focus) { focusImage(t, r.focus?.[t.dataset.focus]); continue; }
@@ -269,7 +269,7 @@ export function renderGrid(force) {
       for (let i = it.s; i < it.e; i++) {
         const img = document.createElement('img');
         img.alt = ''; img.decoding = 'async'; img.draggable = false;
-        const u = G.size === 'S' ? `/thumb/${d.id[i]}?h=160` : `/thumb/${d.id[i]}`;  // the smallest tiles get a smaller picture
+        const u = G.size === 'S' ? `thumb/${d.id[i]}?h=160` : `thumb/${d.id[i]}`;  // the smallest tiles get a smaller picture
         if (fast) img.dataset.src = u; else img.src = u;
         const tile = h('div', { class: 'tile' + (G.sel.has(d.id[i]) ? ' sel' : ''), 'data-i': i, 'data-id': d.id[i], tabindex: 0, role: 'button', style: `width:${(G.ar[i] * it.h).toFixed(2)}px` }, img,
           h('span', { class: 'tcheck', title: 'Select' }, icon('check')), tileBadges(d.id[i], { video: d.video[i], faces: G.faces.has(i), geo: G.geo.has(i) }));
@@ -361,7 +361,7 @@ function buildScrubber(byDate) {
     const ids = [];
     for (let j = it.s; j < Math.min(d.count, it.s + 4); j++) ids.push(d.id[j]);
     fill(bubble, h('div', { class: 'bt' }, h('b', null, dfMonth.format(date(d.ts[it.s]))), h('span', { class: 'muted' }, plural(monthCount(it.s), 'photo'))),
-      h('div', { class: 'bth' }, ids.map((id) => h('img', { src: `/thumb/${id}?h=120`, alt: '', loading: 'eager', decoding: 'async' }))));
+      h('div', { class: 'bth' }, ids.map((id) => h('img', { src: `thumb/${id}?h=120`, alt: '', loading: 'eager', decoding: 'async' }))));
   };
   let drag = false;
   sc.onpointerdown = (e) => { drag = true; sc.classList.add('drag'); sc.setPointerCapture(e.pointerId); main.scrollTop = at(e) * (G.total - main.clientHeight); label(at(e)); };

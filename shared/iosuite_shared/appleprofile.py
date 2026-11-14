@@ -136,7 +136,7 @@ def link(body: bytes, name: str) -> dict:
         _links.pop(t, None)
     token = secrets.token_urlsafe(24)
     _links[token] = (now + LINK_SECONDS, body, name)
-    return {"url": f"/profile/{token}/{name}", "expiresIn": LINK_SECONDS}
+    return {"url": f"profile/{token}/{name}", "expiresIn": LINK_SECONDS}  # relative: the page may be in a folder (/calendar/)
 
 
 def router(auth, base_url):

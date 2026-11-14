@@ -26,7 +26,7 @@ export async function renderTemplates() {
         w ? h('button.iconbtn', { title: 'Edit', 'aria-label': 'Edit ' + t.name, onclick: () => { editing = { ...t }; renderTemplates(); } }, icon('edit')) : null,
         w ? h('button.iconbtn', { title: 'Delete', 'aria-label': 'Delete ' + t.name, onclick: async () => {
           if (!await confirmIt('Delete template', `Delete the template "${t.name}"? Notes made from it stay.`, 'Delete', true)) return;
-          try { await api(`/api/templates/${t.id}`, { method: 'DELETE' }); await reload(); } catch (e) { fail(e); }
+          try { await api(`api/templates/${t.id}`, { method: 'DELETE' }); await reload(); } catch (e) { fail(e); }
         } }, icon('trash')) : null),
       h('div.muted.small', [t.title ? 'Title: ' + t.title : null, folder ? 'Folder: ' + folder.name : null, t.tags.length ? t.tags.map((x) => '#' + x).join(' ') : null].filter(Boolean).join(' · ')),
       t.body ? h('pre.tplbody', t.body.slice(0, 400)) : null));
@@ -40,7 +40,7 @@ export async function renderTemplates() {
 
 async function addStandard() {
   try {
-    const r = await api('/api/templates/standard', { method: 'POST' });
+    const r = await api('api/templates/standard', { method: 'POST' });
     toast(r.added ? `Added ${r.added} standard template${r.added > 1 ? 's' : ''}` : 'All the standard templates are here');
     await reload();
   } catch (e) { fail(e); }
@@ -58,8 +58,8 @@ function form(t) {
     if (!name.value.trim()) { toast('Give the template a name'); name.focus(); return; }
     const data = { name: name.value.trim(), title: title.value, body: body.value, tags: tags.value.split(','), folderID: folder.value || null, updatedAt: Date.now() / 1000 };
     try {
-      if (t.id) await api(`/api/templates/${t.id}`, { method: 'PUT', body: data });
-      else await api('/api/templates', { method: 'POST', body: data });
+      if (t.id) await api(`api/templates/${t.id}`, { method: 'PUT', body: data });
+      else await api('api/templates', { method: 'POST', body: data });
       editing = null;
       toast('Template saved');
       await reload();
