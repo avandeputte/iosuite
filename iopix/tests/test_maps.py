@@ -142,12 +142,10 @@ def test_maps_config_offers_satellite_and_street_view(client):
     assert "{lat}" in c["streetview"]["link"] and "map_action=pano" in c["streetview"]["link"]
 
 
-def test_keys_move_to_the_suite(client):
-    state.write(lambda c: c.execute("INSERT OR REPLACE INTO pix_settings (name, value) VALUES ('google_server_key', 'AIza-server')"))
-    credentials.put("iopix", "google_server_key", "")
+def test_the_keys_are_the_suites(client):
+    """The Google keys are kept in the Shared ioSuite database (Settings › Suite › Keys and tokens), declared at start."""
     maps.declare_keys()
+    assert {k["name"] for k in credentials.listing("iopix")} >= {"google_maps_key", "google_server_key"}
+    credentials.put("iopix", "google_server_key", "AIza-server")
     assert credentials.get("iopix", "google_server_key") == "AIza-server" and maps.server_key_set()
-    assert state.connect().execute("SELECT count(*) FROM pix_settings WHERE name = 'google_server_key'").fetchone()[0] == 0
-    names = {k["name"] for k in credentials.listing("iopix")}
-    assert {"google_maps_key", "google_server_key"} <= names
     credentials.put("iopix", "google_server_key", "")

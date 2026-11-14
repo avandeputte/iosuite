@@ -76,7 +76,7 @@ def test_share_target_stages_the_files_and_opens_the_import_page(client, lib):
     assert plan["items"][0]["name"] == "shared.jpg" and plan["duplicates"] == 1
     client.post(f"/api/import/{token}/discard")
     r = client.post("/share", follow_redirects=False)
-    assert r.status_code == 303 and r.headers["location"] == "/#/import"
+    assert r.status_code == 303 and r.headers["location"] == "./#/import"
     man = client.get("/manifest.webmanifest").json()
     assert man["share_target"]["action"] == "share" and man["share_target"]["method"] == "POST" and man["share_target"]["params"]["files"][0]["name"] == "files"
 

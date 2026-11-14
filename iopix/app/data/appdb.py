@@ -537,9 +537,9 @@ def retry():
 def _with_stored(c: dict) -> dict:
     """The given settings over the stored ones; an empty password keeps the stored one, but only for the
     stored server, database and user (it is never sent to another host the caller names)."""
-    cur = settings()
+    cur, typed = settings(), bool(c.get("password"))
     c = {**cur, **{k: v for k, v in c.items() if k in KEYS and v not in (None, "")}}
-    if any(str(c[k]) != str(cur[k]) for k in ("host", "port", "database", "user")) and not (c.get("password") and c["password"] != cur["password"]):
+    if any(str(c[k]) != str(cur[k]) for k in ("host", "port", "database", "user")) and not typed:
         c["password"] = ""
     return c
 

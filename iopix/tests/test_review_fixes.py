@@ -161,3 +161,29 @@ def test_only_people_with_a_face_box_are_protected_by_the_sync(client, lib):
     assert any(p.endswith(path) for p in b.get(pid, ())), "the person with the box is protected on that photo"
     assert not b.get(other), "the same person without a box is an ordinary tag on the other photo"
     con = sqlite3.connect(lib["db"]); con.execute("DELETE FROM ImageTags WHERE imageid = ? AND tagid = ?", (other, tid)); con.commit(); con.close()
+
+
+def test_a_renumbered_photo_keeps_its_row_when_a_copy_appears_in_the_same_build():
+    """digiKam renumbers a photo while a byte-identical copy appears elsewhere (one build sees both): the photo at its
+    own path keeps its viewer id, whichever number comes first; the copy is a new photo."""
+    from app.data import index, state
+
+    def forget():
+        con = state.connect()
+        try:
+            con.execute("DELETE FROM pix_photo_identity WHERE dk_id IN (900111, 900112, 900115) OR hash = 'samehash2'"); con.commit()
+        finally:
+            con.close()
+    forget()
+    try:
+        assert index.sync_photo_ids([(900111, 0, "a.jpg", 99, "samehash2")], {900111: "/lib/a.jpg"}) == {}
+        images = [(900112, 0, "a.jpg", 99, "samehash2"), (900115, 0, "a.jpg", 99, "samehash2")]  # the copy first
+        assert index.sync_photo_ids(images, {900112: "/lib/copy/a.jpg", 900115: "/lib/a.jpg"}) == {900111: 900115}
+        con = state.connect()
+        try:
+            rows = dict(con.execute("SELECT dk_id, path FROM pix_photo_identity WHERE hash = 'samehash2'").fetchall())
+        finally:
+            con.close()
+        assert rows == {900115: "/lib/a.jpg", 900112: "/lib/copy/a.jpg"}
+    finally:
+        forget()

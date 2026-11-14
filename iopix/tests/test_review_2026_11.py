@@ -100,6 +100,7 @@ def test_the_stored_password_goes_to_the_stored_server_only(monkeypatch):
     assert appdb._with_stored({"host": "other.example", "password": ""})["password"] == "", "another host never gets the stored password"
     assert appdb._with_stored({"user": "root"})["password"] == ""
     assert appdb._with_stored({"host": "other.example", "password": "given"})["password"] == "given"
+    assert appdb._with_stored({"database": "other", "password": "s3cret"})["password"] == "s3cret", "typed again for another database: used"
     # digiKam's connection test keeps the same rule
     seen = {}
 

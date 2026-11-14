@@ -84,5 +84,7 @@ function toggleSuite(btn) {
   pop.style.top = `${Math.round(r.bottom + 6)}px`;
   pop.style.left = `${Math.round(Math.max(8, Math.min(r.left - 4, innerWidth - pop.offsetWidth - 8)))}px`;
   pop.querySelector('a')?.focus({ preventScroll: true });
-  setTimeout(() => { document.addEventListener('click', outside, true); document.addEventListener('keydown', onKey, true); addEventListener('resize', closeSuite); }, 0);
+  // at once, not after a timer: a busy page runs a tap before a timer, so a quick tap outside left the menu open (the
+  // click that opened it has passed the document already, and outside() ignores the button anyway)
+  document.addEventListener('click', outside, true); document.addEventListener('keydown', onKey, true); addEventListener('resize', closeSuite);
 }

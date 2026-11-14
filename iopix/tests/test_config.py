@@ -21,7 +21,7 @@ def test_every_api_route_declares_who_may_call_it():
 def test_standard_paths():
     assert config.APP_DIR == ROOT and config.STATIC_DIR == ROOT / "static"
     assert config.INDEX_DB == config.DATA_DIR / "index.db"
-    assert config.LOG_FILE is None  # LOG_FILE= in the tests' environment
+    assert config.LOG_FILE == (config.DATA_DIR / "iopix.log").resolve()  # the tests keep a log in their scratch data folder
 
 
 def test_settings_are_written_into_config_env(tmp_path, monkeypatch):

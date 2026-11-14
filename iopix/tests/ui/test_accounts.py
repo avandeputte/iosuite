@@ -8,9 +8,12 @@ from ui.conftest import _eventually, _get, _open_photo, _post  # noqa: E402
 
 
 def test_pwa_service_worker_caches_the_shell(page, server):
+    import re
+    from pathlib import Path
+    shell = re.search(r"const SHELL = '([^']+)'", (Path(__file__).parents[2] / "static" / "sw.js").read_text()).group(1)  # bumped now and then
     page.goto(server + "/#/photos")
-    out = page.evaluate("""async () => { const r = await navigator.serviceWorker.ready; const c = await caches.open('iopix-shell-v5');
-        return { state: r.active && r.active.state, cached: (await c.keys()).map((k) => new URL(k.url).pathname) }; }""")
+    out = page.evaluate("""async (name) => { const r = await navigator.serviceWorker.ready; const c = await caches.open(name);
+        return { state: r.active && r.active.state, cached: (await c.keys()).map((k) => new URL(k.url).pathname) }; }""", shell)
     assert out["state"] in ("activating", "activated")  # ready resolves while the worker may still be activating for a tick
     assert {"/", "/static/app.js", "/static/js/core.js", "/static/js/lightbox.js", "/static/app.css", "/manifest.webmanifest", "/static/icons/icon-192.png"} <= set(out["cached"]), "the shell and every module are cached"
     assert not any(p.startswith("/api") or p.startswith("/thumb") for p in out["cached"]), "photos and the API are never cached"
@@ -53,13 +56,13 @@ def test_users_flow_in_the_browser(page, server, browser):
     _open_photo(visitor, server, pid)
     if visitor.locator(".lb-info").is_hidden():
         visitor.locator('[title^="Info"]').click()
-    visitor.wait_for_selector(".lb-info h4", timeout=10000)
-    assert visitor.locator(".lb-info input[placeholder='Title']").count() == 1, "the admin can edit"
+    # the panel still shows what the visitor saw until the photo's details arrive again: wait for the editor itself
+    visitor.wait_for_selector(".lb-info input[placeholder='Title']", timeout=10000)  # the admin can edit
     visitor.keyboard.press("Escape"); visitor.wait_for_selector("#lightbox", state="hidden", timeout=5000)
     # a display setting now lives on the server
-    visitor.goto(server + "/#/settings"); visitor.wait_for_selector("h1:has-text('Settings')", timeout=10000)
-    with visitor.expect_response(lambda r: r.url.endswith("/api/auth/settings") and r.request.method == "POST", timeout=5000):  # saved to the account (core.js flushes 400 ms after the change)
-        visitor.locator("input[type=checkbox]").first.uncheck()
+    visitor.goto(server + "/#/settings/display"); visitor.wait_for_selector("label:has-text('Show badges')", timeout=10000)
+    with visitor.expect_response(lambda r: r.url.endswith("/api/auth/settings") and r.request.method == "POST" and "badges" in (r.request.post_data or ""), timeout=5000):  # saved to the account (core.js flushes 400 ms after the change; the lightbox's own flush may come first)
+        visitor.locator("label:has-text('Show badges') input[type=checkbox]").uncheck()
     me = visitor.evaluate("async () => (await (await fetch('/api/auth/settings', {method:'POST', headers:{'content-type':'application/json'}, body:'{}'})).json())")
     assert me.get("badges") == "0"
     ctx.close()
@@ -148,6 +151,7 @@ def test_csp_lets_the_app_and_the_vendored_map_run(browser, server):
     """The page carries a Content Security Policy: the inline theme script is hashed, Leaflet comes from /vendor (and finds
     its marker images there), and nothing the pages do is refused. Its own context: the shared fixture bypasses the policy."""
     ctx = browser.new_context(viewport={"width": 1280, "height": 900})
+    ctx.add_init_script("try { localStorage.setItem('iopix.theme', 'light'); } catch (e) {}")  # a chosen theme: the inline script sets it
     page = ctx.new_page()
     errors, blocked, vendor = [], [], []
     page.on("pageerror", lambda e: errors.append(str(e)))

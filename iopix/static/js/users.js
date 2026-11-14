@@ -5,7 +5,7 @@ import { S, applyBadgePref, applyTheme, avatarOf, brandName, hashFor, onRoute, t
 import { modal } from './actions.js';
 import { boot, pollStatus } from './main.js';
 import { loadSuite } from './suite.js';
-import { popMenu } from './lightbox.js';
+import { LB, details, popMenu, showItem } from './lightbox.js';
 
 // ---- users: sign in / out, own password, first-admin setup, admin user management
 export async function loadUser() {
@@ -25,8 +25,10 @@ export function renderUserMenu() {
 async function afterLogin(me) {
   S.USER = me.user; SETTINGS.user = me.settings || {}; renderUserMenu();
   if (!S.BOOTED) { applyBadgePref(); applyTheme(); await boot(); return; }  // sign-in was required: load the library now
-  await pollStatus(); applyBadgePref(); applyTheme(); S.viewKey = null; onRoute();
+  await pollStatus(); applyBadgePref(); applyTheme(); S.viewKey = null; onRoute(); accountChanged();
 }
+/** A photo's details depend on who asks (its folder, ages, the editor): asked again, and an open photo drawn again. */
+function accountChanged() { details.clear(); if (LB.open) showItem(); }
 /** required: the viewer shows nothing else until someone signs in (no Cancel, no closing). */
 export function loginDialog(required) {
   // the account picker: a tile per account; one click for a passwordless viewer, a password for the others
@@ -66,7 +68,7 @@ async function signOut() {
   let r; try { r = await post('api/auth/logout', {}); } catch (e) { toastError(e); return; }
   if (r && r.cloudflareLogout) { location.href = r.cloudflareLogout; return; }
   if (S.REQUIRE_LOGIN) { location.reload(); return; }
-  S.USER = null; SETTINGS.user = null; renderUserMenu(); await pollStatus(); applyBadgePref(); applyTheme(); S.viewKey = null; onRoute(); toast('Signed out.');
+  S.USER = null; SETTINGS.user = null; renderUserMenu(); await pollStatus(); applyBadgePref(); applyTheme(); S.viewKey = null; onRoute(); accountChanged(); toast('Signed out.');
 }
 /** Settings › Security (people, roles, app passwords, sign-in at the proxy) or Settings › Global settings (the apps, keys
  *  and tokens), for suite admins and the whole suite. The same panel in every io app, served by iosuite-shared. */

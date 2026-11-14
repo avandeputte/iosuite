@@ -278,3 +278,13 @@ def test_suite_profile_only_for_two_or_more_apps_the_account_may_use():
     b.post("/api/auth/login", json={"name": "bob", "password": "secret123"})
     assert [a["app"] for a in b.get("/api/apple-profile/suite").json()["apps"]] == ["iotask"], "not an app the account has no role in"
     assert b.post("/api/apple-profile/suite", data={}).status_code == 409
+
+
+def test_routes_about_ones_own_account_need_an_account():
+    """Before the first account exists everyone passes `signed_in`, but app passwords, notifications and settings
+    belong to an account: a clear 401, not a server error."""
+    app, _ = make_app()
+    c = TestClient(app, raise_server_exceptions=False)
+    for m, path in (("GET", "/api/auth/app-passwords"), ("POST", "/api/auth/app-passwords"), ("GET", "/api/auth/push"),
+                    ("PATCH", "/api/auth/me"), ("POST", "/api/auth/settings")):
+        assert c.request(m, path, json={}).status_code == 401, path

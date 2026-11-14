@@ -152,7 +152,8 @@ def api_photos(request: Request):
         mine = _by_viewer(request)
         who = f".u{(request.state.user or {}).get('id')}" if mine else ""
         rev = appstate.rev if mine else 0  # only those depend on the viewer's tables
-        key = f"{rev}.{semantic.key}{who}|{request.url.query}"
+        key = f"{rev}.{semantic.key}.{index.DROPS}{who}|{request.url.query}"  # DROPS: a photo moved to the trash leaves the
+        # live index without a new version, and a browser that kept the old answer must not be told it is still good
         # the answer is fixed by the index version and the cache key: their hash is its ETag (304 while unchanged)
         etag = 'W/"' + hashlib.blake2b(f"{state['version']}|{key}".encode(), digest_size=12).hexdigest() + '"'
         headers = {"Cache-Control": "private, no-cache", "ETag": etag, "Vary": "Accept-Encoding, Cookie"}

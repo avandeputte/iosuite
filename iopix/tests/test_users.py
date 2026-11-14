@@ -1,5 +1,5 @@
 """Users and permissions: open until the first user exists; then anonymous is read-only,
-viewers keep settings on the server, members also favorites, editors write the library, admins
+viewers only look, members keep favorites, editors write the library, admins
 manage settings, maintenance and users; sessions are signed cookies."""
 from app import users
 from helpers import login as _login
@@ -36,7 +36,7 @@ def test_roles(client, fresh, lib):
     _login(client, "vi", "viewer-pass")
     s = client.get("/api/status").json()
     assert s["user"]["role"] == "viewer" and s["editing"] is False and s["signedIn"] is True
-    assert client.post("/api/favorites", json={"ids": [lib["ids"][0]], "on": True}).status_code == 200
+    assert client.post("/api/favorites", json={"ids": [lib["ids"][0]], "on": True}).status_code == 403, "favorites are a member's"
     assert client.post("/api/edit", json={"ids": [lib["ids"][0]], "rating": 3}).status_code == 403
     assert client.post("/api/settings", json={"bg_threads": 2}).status_code == 403
     assert client.get("/api/suite-admin").status_code == 403
