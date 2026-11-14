@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 from starlette.concurrency import run_in_threadpool
 
-from iosuite_shared import admin as suite_admin, apppasswords, family, proxyauth, sessions, suite, suiteupdates, users
+from iosuite_shared import admin as suite_admin, apppasswords, family, proxyauth, push, sessions, suite, suiteupdates, users
 from iosuite_shared.access import UNCLAIMED, json_body, public_user
 from iosuite_shared.proxyauth import authlog, peer_of
 
@@ -189,6 +189,50 @@ def auth_router(self) -> APIRouter:
     def api_del_app_password(pid: int, request: Request):
         apppasswords.delete(auth.current_user(request)["id"], pid)
         return {"ok": True}
+
+    # ---- notifications (iosuite_shared.push): Settings › Account › Notifications, the same in every app
+    @r.get("/api/auth/push/sw.js", dependencies=[access.public])
+    def api_push_worker():
+        """The service worker that shows the notifications: push only (no caching, no fetch handler), registered with
+        this folder as its scope so it never stands between the app and its pages."""
+        return FileResponse(Path(__file__).with_name("static") / "push-sw.js", media_type="text/javascript",
+                            headers={"Cache-Control": "no-cache"})
+
+    @r.get("/api/auth/push", dependencies=[access.signed_in])
+    def api_push(request: Request):
+        """{key, morning, kinds: [{kind, label, hint, on, admin}], devices: [{id, label, app, appName, created, lastOk, endpointHash}]}."""
+        return push.overview(auth.current_user(request))
+
+    @r.post("/api/auth/push/devices", dependencies=[access.signed_in])
+    async def api_push_add(request: Request):
+        """This browser's push subscription ({subscription: {endpoint, keys}, standalone}): notifications on here."""
+        u, body = auth.current_user(request), await json_body(request)
+        d = await run_in_threadpool(push.add_device, u["id"], body.get("subscription") or {}, app,
+                                    request.headers.get("user-agent") or "", bool(body.get("standalone")))
+        return {"device": d, **push.overview(u)}
+
+    @r.delete("/api/auth/push/devices/{device_id}", dependencies=[access.signed_in])
+    def api_push_remove(device_id: int, request: Request):
+        u = auth.current_user(request)
+        if not push.remove_device(u["id"], device_id):
+            raise HTTPException(404, "No such device")
+        return push.overview(u)
+
+    @r.put("/api/auth/push/prefs", dependencies=[access.signed_in])
+    async def api_push_prefs(request: Request):
+        """{kinds: {kind: bool}, morning: 'HH:MM'}: what this account gets, on every device."""
+        u, body = auth.current_user(request), await json_body(request)
+        push.set_prefs(u["id"], body.get("kinds") if isinstance(body.get("kinds"), dict) else None, body.get("morning"))
+        return push.overview(u)
+
+    @r.post("/api/auth/push/test", dependencies=[access.signed_in])
+    async def api_push_test(request: Request):
+        """A test notification to every device of this account: {sent, devices}."""
+        u = auth.current_user(request)
+        n = await run_in_threadpool(push.notify, u["id"], "test", "Notifications work",
+                                    f"Sent from {auth.label}. Every app of the suite reaches you here.", push.link(app), None,
+                                    "test", 600, "normal", False)
+        return {"sent": n, "devices": len(push.devices(u["id"]))}
 
     @r.get("/api/auth/suite", dependencies=[access.signed_in])
     def api_suite(request: Request):

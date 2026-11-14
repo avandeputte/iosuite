@@ -153,6 +153,34 @@ SCHEMA = [
         message VARCHAR(300) NULL,
         updated_at BIGINT NOT NULL
     )""",
+    # notifications (iosuite_shared.push): each device a person turned them on on (a browser's push subscription;
+    # key_id: the sender key it was made for), whichever app it was turned on in, and every app sends to all of them
+    """CREATE TABLE IF NOT EXISTS ios_push_devices (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        endpoint VARCHAR(1024) NOT NULL,
+        endpoint_hash CHAR(64) NOT NULL,
+        p256dh VARCHAR(128) NOT NULL,
+        auth VARCHAR(64) NOT NULL,
+        label VARCHAR(128) NOT NULL DEFAULT '',
+        app VARCHAR(32) NOT NULL DEFAULT '',
+        key_id CHAR(16) NOT NULL DEFAULT '',
+        created_at BIGINT NOT NULL,
+        last_ok_at BIGINT NULL,
+        failures INT NOT NULL DEFAULT 0,
+        UNIQUE KEY uq_ios_push_devices_endpoint (endpoint_hash),
+        INDEX idx_ios_push_devices_user (user_id),
+        FOREIGN KEY (user_id) REFERENCES ios_users(id) ON DELETE CASCADE
+    )""",
+    # what was sent once (a reminder, a morning summary, a new version), so no app sends it again after a restart
+    """CREATE TABLE IF NOT EXISTS ios_push_sent (
+        user_id INT NOT NULL,
+        tag VARCHAR(191) NOT NULL,
+        sent_at BIGINT NOT NULL,
+        PRIMARY KEY (user_id, tag),
+        INDEX idx_ios_push_sent_at (sent_at),
+        FOREIGN KEY (user_id) REFERENCES ios_users(id) ON DELETE CASCADE
+    )""",
 ]
 
 _overrides: dict = {}  # the tests point the library at another database

@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from iosuite_shared import users as shared
 from iosuite_shared.updates import setup_log
 
-from app import __version__, config, db, upload, webapi
+from app import __version__, config, db, notify, upload, webapi
 from app.auth import APP, auth, updater
 
 setup_log(config.LOG_FILE)  # the server log that Settings › Server shows; the app runs without it
@@ -46,6 +46,7 @@ app = FastAPI(title="ioHealth", version=__version__, lifespan=lifespan, docs_url
 # who is asking, whether sign-in is required at all, the cross-site check on writes: iosuite-shared's middleware
 app.middleware("http")(auth.middleware(open_paths=OPEN_PATHS, open_prefixes=OPEN_PREFIXES))
 upload.on_sync.append(webapi.sync_finished)
+upload.on_user_sync.append(notify.after_sync_quietly)  # "goal reached" notifications
 
 
 def _limit_for(path: str, ctype: str) -> int:
