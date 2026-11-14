@@ -9,7 +9,9 @@
     async with shared_mcp.running(server): yield                 # in the app's lifespan
 
 MCP clients sign in like any other client of the suite: HTTP Basic with the user name and an app password, or a bearer
-app password (Settings › Account); every tool acts as that account. The switch is a setting of the app
+app password (Settings › Account); every tool acts as that account. An ioStart app password (without a limit) signs in
+at every app's /mcp too: the start page's /mcp is the suite's one MCP server and passes calls on with it
+(apppasswords.HUB, iostart/app/mcp.py). The switch is a setting of the app
 (`enabled(get_setting, forced)`): off until an admin turns it on under Settings › Server, or MCP=1 in the environment.
 """
 import contextvars

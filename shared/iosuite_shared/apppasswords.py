@@ -31,6 +31,10 @@ DAV = "dav"
 READ = "read"
 READ_NEVER = ("/mcp", "/dav", "/.well-known/")
 SCOPES = ("", DAV, READ)
+# The start page is the suite's one MCP server (ioStart's /mcp offers every app's tools): an ioStart app password with
+# no limit (scope '') also signs in at every other app's /mcp, as the same person with their role in that app. That is
+# how the start page passes a call on, and an assistant may as well connect to an app's /mcp with it directly.
+HUB = "iostart"
 
 
 def create(user_id: int, app: str, label: str, scope: str = "") -> str:
@@ -82,10 +86,21 @@ def authenticate(name: str | None, password: str, app: str):
     return authenticate_scoped(name, password, app)[0]
 
 
-def authenticate_scoped(name: str | None, password: str, app: str):
+def authenticate_hub(name: str | None, password: str, app: str):
+    """The account, with its role in `app`, for an ioStart app password without a limit (HUB): what an app's /mcp
+    takes besides its own. None for anything else (an account password is not tried here: the app's own check did)."""
+    if app == HUB:
+        return None
+    user, scope = authenticate_scoped(name, password, HUB, accounts=False)
+    if not user or scope != "":
+        return None
+    return users.get(user["id"], app)
+
+
+def authenticate_scoped(name: str | None, password: str, app: str, accounts: bool = True):
     """(account, scope) as authenticate finds them: scope is the app password's ('' everything, 'dav'...), '' for the
-    account password, None with no account."""
-    key = hashlib.sha256(f"{app}\0{name or ''}\0{password}".encode()).hexdigest()
+    account password, None with no account. accounts False: app passwords only, not the account password."""
+    key = hashlib.sha256(f"{app}\0{name or ''}\0{password}{'' if accounts else chr(0) + 'apppw'}".encode()).hexdigest()
     hit = _cache.get(key)
     if hit and hit[0] > time.time():
         found = _still_good(hit, app)
@@ -110,7 +125,7 @@ def authenticate_scoped(name: str | None, password: str, app: str):
                     edge.publish(app, r["prefix"], password)  # made before the edge check was on, or since a restart
                     user, scope, pid = u, r.get("scope") or "", r["id"]
                     break
-    if not user and name:
+    if not user and name and accounts:
         user = users.authenticate(name, password, app)
         if user and user["passwordless"]:
             user = None  # a one-click account is for the LAN sign-in screen, not for clients

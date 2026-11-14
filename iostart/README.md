@@ -132,7 +132,7 @@ what the app will show on the start page later (today's events, the newest photo
   invitation-only) and sign-in requirement; forget an uninstalled app. **Sign-in at the proxy** for the whole suite. The
   panel is iosuite-shared's (`/api/suite-admin/ui.js` on `/api/suite-admin`), so every io app shows the same one.
 - **Updates**: the suite has one version, the same for every app. When a newer one is out, suite admins see one note on the start page with **Update now**; Settings › Global settings › Updates shows the installed version against GitHub with one **Update** button (each app runs its own `update.sh`) and every app's own line under Details. The version, the server log and Restart are under Settings › Server, as in every ioThing app.
-- **MCP** (`/mcp`, off until switched on at Settings › Server): `suite_version` and `update_suite` let an AI assistant do the same, signed in with a suite admin's user name and an ioStart app password (Settings › Account).
+- **One MCP server for the whole suite** (`/mcp`, off until switched on at Settings › Server): connect an AI assistant here once, with your user name and an ioStart app password (Settings › Account), and it gets every app's tools, named after the app (`iocalendar_…`, `iotask_…`, `iorecipe_…`), so one request can span apps ("put Friday's dinner ingredients on the shopping list"). Each call is passed on to that app's own MCP server as you, so each app still decides what you may see and change there; an app whose own MCP server is off (its Settings › Server), or where you have no role, offers nothing. `suite_apps` lists the apps with their status and their own instructions. An ioStart app password (one without a limit) also signs in at any app's `/mcp` directly. ioStart's own tools: `suite_version` and `update_suite` update every app at once (suite admins).
 - Light and dark, a phone layout, installable as a web app (manifest and icons).
 
 ## Run
@@ -275,7 +275,7 @@ what a viewer may not change. CI runs them against MariaDB.
 
 ```
 app/main.py        the application: start-up (tables, first admin, the update check), the suite's middleware, status and routes
-app/mcp.py         the MCP server (/mcp): suite_version and update_suite (iosuite_shared), suite admins only
+app/mcp.py         the suite's one MCP server (/mcp): every app's tools passed on as the person asking, suite_apps, suite_version and update_suite
 app/access.py      who may call a route: the markers every /api route carries (public, signed_in, editor, admin)
 app/api.py         the REST API: the apps and their settings (sign-in, accounts, status, the server, updates and the log: iosuite_shared's routers)
 app/apps.py        the suite's apps as they registered (iosuite_shared.suite) and the order of their tiles
