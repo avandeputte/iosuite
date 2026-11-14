@@ -20,12 +20,13 @@ from iosuite_shared import config, schema
 
 log = logging.getLogger("iosuite_shared.db")
 
-SCHEMA_VERSION = 11  # 4: the suite naming convention (ios_ tables, *_at times, name/value, named indexes); 5: ios_apps.admin_tool;
+SCHEMA_VERSION = 12  # 4: the suite naming convention (ios_ tables, *_at times, name/value, named indexes); 5: ios_apps.admin_tool;
 # 6: the member role (between viewer and editor); the viewers of before, who kept their own things, became members;
 # 7: ios_updates (updating the apps from one place); 8: ioNotes, ioTasks and ioContacts became ioNote, ioTask, ioContact;
 # 9: the start page, ioSuite until then, became ioStart (ioSuite is the suite and its repository);
 # 10: ios_updates.shared and latest_shared (an update could be the shared library's alone);
 # 11: one version for the whole suite: those two columns go again, and the daily check is one setting for the suite
+# 12: notifications (ios_push_devices, ios_push_sent)
 PREFIX = "ios"
 OPTIONS = " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
 
@@ -159,6 +160,34 @@ SCHEMA = [
         state VARCHAR(16) NULL,
         message VARCHAR(300) NULL,
         updated_at BIGINT NOT NULL
+    )""",
+    # notifications (iosuite_shared.push): each device a person turned them on on (a browser's push subscription;
+    # key_id: the sender key it was made for), whichever app it was turned on in, and every app sends to all of them
+    """CREATE TABLE IF NOT EXISTS ios_push_devices (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        endpoint VARCHAR(1024) NOT NULL,
+        endpoint_hash CHAR(64) NOT NULL,
+        p256dh VARCHAR(128) NOT NULL,
+        auth VARCHAR(64) NOT NULL,
+        label VARCHAR(128) NOT NULL DEFAULT '',
+        app VARCHAR(32) NOT NULL DEFAULT '',
+        key_id CHAR(16) NOT NULL DEFAULT '',
+        created_at BIGINT NOT NULL,
+        last_ok_at BIGINT NULL,
+        failures INT NOT NULL DEFAULT 0,
+        UNIQUE KEY uq_ios_push_devices_endpoint (endpoint_hash),
+        INDEX idx_ios_push_devices_user (user_id),
+        FOREIGN KEY (user_id) REFERENCES ios_users(id) ON DELETE CASCADE
+    )""",
+    # what was sent once (a reminder, a morning summary, a new version), so no app sends it again after a restart
+    """CREATE TABLE IF NOT EXISTS ios_push_sent (
+        user_id INT NOT NULL,
+        tag VARCHAR(191) NOT NULL,
+        sent_at BIGINT NOT NULL,
+        PRIMARY KEY (user_id, tag),
+        INDEX idx_ios_push_sent_at (sent_at),
+        FOREIGN KEY (user_id) REFERENCES ios_users(id) ON DELETE CASCADE
     )""",
 ]
 

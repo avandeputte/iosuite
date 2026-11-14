@@ -142,7 +142,19 @@ class Updater:
         latest = out.get("remoteVersion") or (self.version if out["status"] == "current" else None)
         suiteupdates.publish(self.app, installed=self.version, git_commit=mine[:7], latest=latest, status=out["status"],
                              checked_at=out["checked"])
+        if out["status"] == "update" and out.get("remoteVersion"):
+            self._announce(out["remoteVersion"])
         return out
+
+    def _announce(self, version: str) -> None:
+        """Tell the suite admins who want it that a newer version is out: once per version, whichever app saw it first."""
+        try:
+            from iosuite_shared import push
+            push.notify_admins("updates", f"ioSuite {version} is out", f"This server has {self.version}. Update every app in one go "
+                               "under Settings › Global settings › Updates.", url=push.link("iostart", "#/settings/global/updates"),
+                               once=f"update:{version}")
+        except Exception:  # noqa: BLE001 - a notification that cannot go out never stops the check
+            pass
 
     def start_daily(self, first_after: float = 60, watch: bool = True) -> threading.Thread:
         """Ask GitHub once a day (the first time a minute after start) whether the branch has moved on, while the
@@ -156,6 +168,11 @@ class Updater:
                 try:
                     if self.auto_check_enabled():
                         self.check()
+                except Exception:  # noqa: BLE001
+                    pass
+                try:
+                    from iosuite_shared import push
+                    push.purge()  # the notifications' sent-once keys of long ago
                 except Exception:  # noqa: BLE001
                     pass
                 time.sleep(DAILY)
