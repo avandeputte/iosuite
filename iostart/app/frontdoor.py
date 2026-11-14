@@ -76,7 +76,11 @@ def _stale() -> bool:
 
 
 async def state() -> dict:
+    """The switch and the list of apps, read again every REFRESH_S. While one request reads them, the others go on
+    with what was read before (only the very first read is waited for): a slow database does not hold up every app."""
     if _stale():
+        if _lock.locked() and _state["rev"] != -1:
+            return _state
         async with _lock:
             if _stale():
                 rev = suite.door_rev()
@@ -205,7 +209,11 @@ class FrontDoor:
             await send({"type": "websocket.close", "code": 1008})
 
     async def forward(self, scope, receive, send, url: str, folder: str) -> None:
-        headers = _headers(scope, folder, auth.proxy)
+        try:  # the proxy settings come from the Shared ioSuite database (cached): read off the event loop
+            headers = await asyncio.to_thread(_headers, scope, folder, auth.proxy)
+        except Exception as e:  # noqa: BLE001 - the database is away: this request, plainly, not a traceback
+            log.warning("front door: could not read the proxy settings (%s)", e)
+            return await _plain(send, 503, "The Shared ioSuite database does not answer: try again in a moment.\n")
         gone = asyncio.Event()  # the browser went away
         sent = {k.decode("latin-1").lower(): v for k, v in scope.get("headers") or []}
         has_body = "transfer-encoding" in sent or sent.get("content-length", b"0").strip() not in (b"", b"0")

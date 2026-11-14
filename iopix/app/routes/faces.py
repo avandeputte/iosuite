@@ -98,14 +98,16 @@ def api_people_groups(request: Request):
 async def api_people_group_create(request: Request):
     """Body {name}: a new group, last in the order."""
     _groups_writer(request)
-    return {"id": appstate.create_people_group(_group_name(await json_body(request)))}
+    name = _group_name(await json_body(request))
+    return {"id": await run_in_threadpool(appstate.create_people_group, name)}
 
 
 @router.post("/api/people/groups/order", dependencies=[access.editor])
 async def api_people_groups_order(request: Request):
     """Body {ids: [group ids]}: the order of the groups on the People page."""
     _groups_writer(request)
-    appstate.order_people_groups([int(i) for i in (await json_body(request)).get("ids") or []])
+    ids = [int(i) for i in (await json_body(request)).get("ids") or []]
+    await run_in_threadpool(appstate.order_people_groups, ids)
     return {"ok": True}
 
 
@@ -114,19 +116,22 @@ async def api_people_group_update(group_id: int, request: Request):
     """Body {name?, members?: [person tag ids in order]}: rename the group and/or set who is in it."""
     _groups_writer(request)
     body = await json_body(request)
-    name = _group_name(body) if "name" in body else None
-    members = body.get("members")
-    if members is not None:
-        members = [int(t) for t in members][:5000]
-        con = db()
-        try:
-            people = {r[0] for r in in_chunks(con, "SELECT id FROM tags WHERE person = 1 AND id IN ({ids})", members)}
-        finally:
-            con.close()
-        members = [t for t in members if t in people]  # people only; a tag that is no longer a person drops out
-    if not appstate.update_people_group(group_id, name, members):
-        raise HTTPException(404, "No such group")
-    return {"ok": True}
+
+    def work():
+        name = _group_name(body) if "name" in body else None
+        members = body.get("members")
+        if members is not None:
+            members = [int(t) for t in members][:5000]
+            con = db()
+            try:
+                people = {r[0] for r in in_chunks(con, "SELECT id FROM tags WHERE person = 1 AND id IN ({ids})", members)}
+            finally:
+                con.close()
+            members = [t for t in members if t in people]  # people only; a tag that is no longer a person drops out
+        if not appstate.update_people_group(group_id, name, members):
+            raise HTTPException(404, "No such group")
+        return {"ok": True}
+    return await run_in_threadpool(work)
 
 
 @router.delete("/api/people/groups/{group_id}", dependencies=[access.editor])
