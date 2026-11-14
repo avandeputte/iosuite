@@ -915,6 +915,7 @@ async function taskForm(el, opts, done) {
   drawWho();
 
   const subs = h('div', { class: 'subs' });
+  const linked = h('div', { class: 'linked' });
   const drawSubs = async () => {
     if (!t) return;
     const j = await api(`/api/tasks/${t.id}`);
@@ -989,6 +990,7 @@ async function taskForm(el, opts, done) {
     h('div', { class: 'grid' }, fld('List', list), fld('Priority', prio), fld('Link', url, 'wide')),
     S.members.length > 1 ? [h('div', { class: 'fsec' }, icon('people'), 'For'), who] : null,
     subs,
+    linked,
     t ? h('p', { class: 'muted small' }, [t.created ? `Added ${new Date(t.created).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}` : null, t.done && t.completedAt ? `done ${new Date(t.completedAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}` : null].filter(Boolean).join(', ')) : null,
     h('div', { class: 'formbar' },
       ro ? null : h('button', { class: 'pillbtn primary noic', onclick: save }, 'Save'),
@@ -998,8 +1000,16 @@ async function taskForm(el, opts, done) {
       t && !ro ? h('button', { class: 'pillbtn noic danger', onclick: del }, 'Delete') : null));
   list.onchange = () => el.querySelector('.taskhead').style.setProperty('--c', listOf(+list.value).color || 'var(--brand)');
   drawWhen();
+  if (t) mountLinks(linked, t.id);
   await drawSubs();
   if (!t) title.focus();
+}
+
+/** "Linked" under a task: the events, notes, contacts, recipes and photos of the other apps linked to it (the suite's panel). */
+let linkUi = null;
+async function mountLinks(el, id) {
+  try { linkUi = linkUi || await import(new URL('api/related/ui.js', document.baseURI).href); } catch (e) { return; }
+  if (el.isConnected) linkUi.mount(el, { kind: 'task', id, toast, onOpen: closeDialogs });
 }
 
 // ------------------------------------------------------------------ activity

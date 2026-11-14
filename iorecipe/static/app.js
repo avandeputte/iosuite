@@ -632,9 +632,20 @@ async function showRecipe(page, r) {
         ingBox, shopBtn),
       h('section', { class: 'stepcol' }, h('h2', null, 'Steps'), steps.length ? steps : h('p', { class: 'muted' }, 'None listed.'),
         x.notes ? [h('h2', null, 'Notes'), h('p', { class: 'notes' }, x.notes)] : null)),
+    linkedBox(x.id),
     x.sourceUrl || x.sourceName ? h('p', { class: 'muted source' }, 'From ',
       safeUrl(x.sourceUrl) ? h('a', { class: 'lnk', href: x.sourceUrl, target: '_blank', rel: 'noopener noreferrer' }, x.sourceName || host) : x.sourceName,
       x.sourceName && host && x.sourceName.toLowerCase() !== host ? ` (${host})` : '') : null);
+}
+/** "Linked" under a recipe: the events, tasks, notes, contacts and photos of the other apps linked to it (the suite's panel). */
+let linkUi = null;
+function linkedBox(id) {
+  const el = h('div', { class: 'linked' });
+  (async () => {
+    try { linkUi = linkUi || await import(new URL('api/related/ui.js', document.baseURI).href); } catch (e) { return; }
+    linkUi.mount(el, { kind: 'recipe', id, toast });
+  })();
+  return el;
 }
 /** The ingredients (as the page shows them, for the servings asked) to send to one of your lists in ioTask: those
     ticked off on the page start unticked here (you have them). */
