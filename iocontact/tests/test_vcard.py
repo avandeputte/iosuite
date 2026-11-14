@@ -121,3 +121,14 @@ def test_partial_birthdays():
         assert vcard.from_jcard(j)["birthday"] == b
         jd = [p for p in j[1] if p[0] == "bday"][0][3]
         assert jd in ("1980", "1980-05", "--05-17", "1980-05-17"), jd
+
+
+def test_a_line_that_is_kept_as_it_came_stays_the_same_however_often_the_card_is_saved():
+    """What ioContact does not model is written back as received: escaped again, every save doubled its backslashes."""
+    line = r"X-CUSTOM-THING;TYPE=home:one\, two\; three\\four\nfive"
+    text = "BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Ann Example\r\nN:Example;Ann;;;\r\nitem1." + line + "\r\nEND:VCARD\r\n"
+    c = vcard.parse(text)[0]
+    assert c["extra"] == ["item1." + line]
+    for _ in range(3):
+        c = vcard.parse(vcard.from_contact(c, "4.0"))[0]
+    assert c["extra"] == ["item1." + line]

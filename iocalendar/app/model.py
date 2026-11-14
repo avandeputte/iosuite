@@ -101,10 +101,10 @@ def create_calendar(owner_id: int | None, name: str, description: str | None = N
                     kind: str = "events", slug: str | None = None, timezone: str | None = None) -> int:
     name = (name or "").strip()[:128] or "Calendar"
     base = (slug or _slug(name))[:56]
-    taken = {r["slug"] for r in db.q("SELECT slug FROM cal_calendars WHERE " + ("owner_id IS NULL" if owner_id is None else "owner_id = %s"),
+    # CalDAV lists a person's own and the shared ones under one home: a private calendar's address must not hide a
+    # shared one's, nor a new shared one's anybody's private one
+    taken = {r["slug"] for r in db.q("SELECT slug FROM cal_calendars" + ("" if owner_id is None else " WHERE owner_id IS NULL OR owner_id = %s"),
                                      () if owner_id is None else (owner_id,))}
-    # a private calendar's address must not hide a shared one's (CalDAV lists both under the same home)
-    taken |= {r["slug"] for r in db.q("SELECT slug FROM cal_calendars WHERE owner_id IS NULL")}
     s, i = base, 2
     while s in taken:
         s, i = f"{base}-{i}", i + 1

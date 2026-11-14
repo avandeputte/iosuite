@@ -27,6 +27,7 @@ SOURCES = {"publicip": "A", "publicip6": "AAAA"}
 ECHO = {4: ["https://api.ipify.org", "https://ipv4.icanhazip.com", "https://ifconfig.co/ip"],
         6: ["https://api64.ipify.org", "https://ipv6.icanhazip.com"]}
 _lock = threading.Lock()
+_here = threading.local()
 
 
 def settings() -> dict:
@@ -116,38 +117,51 @@ def address(source: str) -> str | None:
 def run(by: str | None = None, force_push: bool = False) -> dict:
     """Find the public address; when it changed (or force_push), the publicip records take it and their servers are
     updated. Returns {ipv4, ipv6, changed, pushed: [view results]}."""
-    from app import sources, sync
     with _lock:
-        before = (db.get_setting("public_ipv4"), db.get_setting("public_ipv6"))
+        _here.running = True  # sources.resolve looks here: it must not start a second run from inside this one
         try:
-            now = detect()
-        except Exception as e:  # a gateway away, no network: try again next time
-            db.set_setting("public_error", str(e)[:500])
-            raise
-        db.set_setting("public_checked_at", str(int(time.time())))
-        if not now["ipv4"] and not now["ipv6"]:
-            db.set_setting("public_error", "No public address found")
-            return {**now, "changed": False, "pushed": []}
-        db.set_setting("public_error", None)
-        if now["ipv4"]:
-            db.set_setting("public_ipv4", now["ipv4"])
-        if now["ipv6"]:
-            db.set_setting("public_ipv6", now["ipv6"])
-        changed = (now["ipv4"] or before[0], now["ipv6"] or before[1]) != before
-        pushed = []
-        if changed:
-            model.log(by, "ddns", detail=f"public address {before[0] or '-'} → {now['ipv4'] or before[0] or '-'}"
-                      + (f", {before[1] or '-'} → {now['ipv6']}" if now["ipv6"] and now["ipv6"] != before[1] else ""))
-        if changed or force_push:
-            sources.refresh(by)
-            rows = db.q("SELECT DISTINCT e.name, v.slug FROM dns_records r JOIN dns_entries e ON e.id = r.entry_id "
-                        "JOIN dns_views v ON v.id = r.view_id WHERE r.source IN ('publicip', 'publicip6')")
-            per_view: dict = {}
-            for r in rows:
-                per_view.setdefault(r["slug"], {})[r["name"]] = "master"
-            for slug, decisions in per_view.items():
-                pushed.append({"view": slug, **sync.apply(slug, decisions, by or "dynamic DNS")})
-        return {**now, "changed": changed, "pushed": pushed}
+            return _run(by, force_push)
+        finally:
+            _here.running = False
+
+
+def running() -> bool:
+    """Is this thread inside run()? (Its lock is not one to take twice.)"""
+    return getattr(_here, "running", False)
+
+
+def _run(by: str | None, force_push: bool) -> dict:
+    from app import sources, sync
+    before = (db.get_setting("public_ipv4"), db.get_setting("public_ipv6"))
+    try:
+        now = detect()
+    except Exception as e:  # a gateway away, no network: try again next time
+        db.set_setting("public_error", str(e)[:500])
+        raise
+    db.set_setting("public_checked_at", str(int(time.time())))
+    if not now["ipv4"] and not now["ipv6"]:
+        db.set_setting("public_error", "No public address found")
+        return {**now, "changed": False, "pushed": []}
+    db.set_setting("public_error", None)
+    if now["ipv4"]:
+        db.set_setting("public_ipv4", now["ipv4"])
+    if now["ipv6"]:
+        db.set_setting("public_ipv6", now["ipv6"])
+    changed = (now["ipv4"] or before[0], now["ipv6"] or before[1]) != before
+    pushed = []
+    if changed:
+        model.log(by, "ddns", detail=f"public address {before[0] or '-'} → {now['ipv4'] or before[0] or '-'}"
+                  + (f", {before[1] or '-'} → {now['ipv6']}" if now["ipv6"] and now["ipv6"] != before[1] else ""))
+    if changed or force_push:
+        sources.refresh(by)
+        rows = db.q("SELECT DISTINCT e.name, v.slug FROM dns_records r JOIN dns_entries e ON e.id = r.entry_id "
+                    "JOIN dns_views v ON v.id = r.view_id WHERE r.source IN ('publicip', 'publicip6')")
+        per_view: dict = {}
+        for r in rows:
+            per_view.setdefault(r["slug"], {})[r["name"]] = "master"
+        for slug, decisions in per_view.items():
+            pushed.append({"view": slug, **sync.apply(slug, decisions, by or "dynamic DNS")})
+    return {**now, "changed": changed, "pushed": pushed}
 
 
 def start() -> None:

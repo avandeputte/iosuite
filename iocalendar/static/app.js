@@ -818,7 +818,7 @@ function forOccurrence(j, rid) {
   if (!rid || (j.overrides || []).includes(rid) || !j.rrule) return j;
   const s = j.allDay ? parseDay(j.start) : new Date(j.start), e = j.allDay ? parseDay(j.end) : new Date(j.end);
   const ns = j.allDay ? parseDay(rid) : new Date(rid);
-  const ne = new Date(+ns + (e - s));
+  const ne = j.allDay ? addDays(ns, Math.round((e - s) / 864e5)) : new Date(+ns + (e - s));  // whole days: a day of 23 or 25 hours is one day
   return { ...j, start: j.allDay ? ymd(ns) : ns.toISOString(), end: j.allDay ? ymd(ne) : ne.toISOString() };
 }
 function mapsLink(place) { return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place)}`; }
@@ -904,6 +904,18 @@ function zones(cur) {
   return [...new Set([cur, LOCAL_TZ, ...list].filter(Boolean))];
 }
 const hm = (d) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+/** The clock of a moment in a time zone, as a Date whose own fields carry it: what the date and time fields show, and
+    send back as the time in that zone (the browser's zone is not the event's: one made elsewhere, or read abroad). */
+function wallIn(d, zone) {
+  try {
+    const p = {};
+    new Intl.DateTimeFormat('en-CA', { timeZone: zone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+      .formatToParts(d).forEach((x) => { p[x.type] = +x.value; });
+    return new Date(p.year, p.month - 1, p.day, p.hour, p.minute);
+  } catch (e) { return d; }
+}
+/** A time the server sent, on the clock of a zone; one without an offset is a clock time already (a floating event). */
+const clockIn = (iso, zone) => (/(Z|[+-]\d\d:?\d\d)$/.test(iso) ? wallIn(new Date(iso), zone) : new Date(iso));
 const nthOf = (d) => { const n = Math.ceil(d.getDate() / 7); return n >= 5 || addDays(d, 7).getMonth() !== d.getMonth() && n === 5 ? -1 : n; };
 const WEEKDAYS = ['MO', 'TU', 'WE', 'TH', 'FR'];
 
@@ -980,16 +992,17 @@ async function showEdit(page, r) {
   const calSel = h('select', { class: 't' }, cals.map((c) => h('option', { value: c.id, selected: c.id === j.calendarId ? true : null }, `${c.name}${c.shared ? ' (shared)' : ''}`)));
   if (editing && !cals.some((c) => c.id === j.calendarId)) calSel.prepend(h('option', { value: j.calendarId, selected: true }, C.name || 'This calendar'));
   // when
-  const s0 = j.allDay ? parseDay(j.start) : new Date(j.start), e0 = j.allDay ? addDays(parseDay(j.end), -1) : new Date(j.end);
+  const zone0 = j.timezone || C.timezone || LOCAL_TZ;  // the zone the fields are in: the one the selector starts on, and the times are saved in
+  const s0 = j.allDay ? parseDay(j.start) : clockIn(j.start, zone0), e0 = j.allDay ? addDays(parseDay(j.end), -1) : clockIn(j.end, zone0);
   const allDay = h('input', { type: 'checkbox', checked: j.allDay });
   const sd = h('input', { class: 't', type: 'date', value: ymd(s0), required: true }), st = h('input', { class: 't', type: 'time', value: hm(s0), step: 300 });
   const ed = h('input', { class: 't', type: 'date', value: ymd(e0), required: true }), et = h('input', { class: 't', type: 'time', value: hm(e0), step: 300 });
-  const tz = h('select', { class: 't', style: { width: 'auto', maxWidth: '260px' } }, zones(j.timezone || C.timezone || LOCAL_TZ).map((z) => h('option', { value: z, selected: z === (j.timezone || C.timezone || LOCAL_TZ) ? true : null }, z.replace(/_/g, ' '))));
+  const tz = h('select', { class: 't', style: { width: 'auto', maxWidth: '260px' } }, zones(zone0).map((z) => h('option', { value: z, selected: z === zone0 ? true : null }, z.replace(/_/g, ' '))));
   const tzWrap = h('span', { class: 'prefck' }, icon('globe', 's'), tz);
   const startAt = () => (allDay.checked ? parseDay(sd.value) : new Date(`${sd.value}T${st.value || '00:00'}`));
   const endAt = () => (allDay.checked ? parseDay(ed.value) : new Date(`${ed.value}T${et.value || '00:00'}`));
   let length = endAt() - startAt();
-  const onStart = () => { if (!sd.value) return; const e = new Date(+startAt() + Math.max(0, length)); ed.value = ymd(e); if (!allDay.checked) et.value = hm(e); drawRepeat(); drawReminders(); };
+  const onStart = () => { if (!sd.value) return; const e = allDay.checked ? addDays(startAt(), Math.round(Math.max(0, length) / 864e5)) : new Date(+startAt() + Math.max(0, length)); ed.value = ymd(e); if (!allDay.checked) et.value = hm(e); drawRepeat(); drawReminders(); };
   const onEnd = () => { if (!ed.value) return; length = endAt() - startAt(); if (length < 0) { length = allDay.checked ? 0 : 3600e3; onStart(); } };
   sd.onchange = st.onchange = onStart; ed.onchange = et.onchange = onEnd;
   const timedBits = [st, et, tzWrap];

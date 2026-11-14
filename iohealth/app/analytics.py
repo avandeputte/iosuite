@@ -64,7 +64,17 @@ def auto_bucket(start: datetime, end: datetime) -> str:
 
 def fold_hours(rows, bucket: str, loc, cumulative: bool) -> list:
     """Hourly per-source groups as local buckets. Cumulative types take the source that recorded the most (an
-    iPhone and a Watch both counting steps aren't added together); the others are averaged, with min and max."""
+    iPhone and a Watch both counting steps aren't added together); the others are averaged, with min and max.
+    The source that recorded the most is picked a day at a time: a week, a month or a year is the sum of its days,
+    so a day the Watch stayed at home counts with the phone's steps."""
+    if cumulative and bucket in ("week", "month", "year"):
+        longer = {}
+        for p in fold_hours(rows, "day", loc, True):
+            k = int(bucket_start(datetime.fromtimestamp(p["t"], loc), bucket, loc).timestamp())
+            a = longer.setdefault(k, {"t": k, "v": 0.0, "n": 0})
+            a["v"] += p["v"]
+            a["n"] += p["n"]
+        return [longer[k] for k in sorted(longer)]
     buckets = {}
     memo = {}
     for r in rows:

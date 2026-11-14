@@ -202,3 +202,15 @@ def test_profile_for_all_apps_that_sync(client):
     client.cookies.clear()
     assert client.request("PROPFIND", "/dav/", auth=("alex", pw), headers={"Depth": "0"}).status_code == 207
     assert client.request("PROPFIND", "/dav/", auth=("alex", other["CardDAVPassword"]), headers={"Depth": "0"}).status_code == 401
+
+
+def test_a_shared_list_never_takes_the_address_of_a_private_one(client):
+    """CalDAV lists a person's own lists and the shared ones under one home: two with one address, and one hides the other."""
+    from iosuite_shared import users
+    from app import db, model
+    ann = users.create("ann", "secret123", "member", "iotask")["id"]
+    mine = model.create_list(ann, "Trips")
+    shared = model.create_list(None, "Trips")
+    again = model.create_list(ann, "Trips")
+    slugs = {r["id"]: r["slug"] for r in db.q("SELECT id, slug FROM tsk_lists WHERE id IN (%s, %s, %s)", (mine, shared, again))}
+    assert slugs[mine] == "trips" and len(set(slugs.values())) == 3, slugs
