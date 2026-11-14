@@ -52,7 +52,8 @@ def mcp_enabled() -> bool:
 # who is asking, whether sign-in is required at all, the cross-site check on writes, and the MCP endpoint's gate (the
 # switch; an app password or session; every tool acts as that account): iosuite-shared's middleware
 app.middleware("http")(auth.middleware(open_paths=OPEN_PATHS, open_prefixes=OPEN_PREFIXES,
-                                       before=auth.mcp_gate(mcp_enabled, on_user=mcp.current_user.set)))
+                                       before=auth.mcp_gate(mcp_enabled, on_user=mcp.current_user.set,
+                                                                    on_request=mcp.remember_sign_in)))
 
 
 def _limit_for(path: str, ctype: str) -> int:
@@ -66,7 +67,8 @@ auth.install(app, limit_for=_limit_for)
 def _server_info() -> dict:
     """What Settings › Server shows beside the updater's own fields: the MCP box."""
     return {"mcpEnabled": mcp_enabled(), "mcpLocked": config.MCP_FORCED,
-            "mcpAbout": "Lets an AI assistant check and update every app of the suite at once (suite admins)."}
+            "mcpAbout": "The suite's one MCP server: an AI assistant connected here with an ioStart app password uses every "
+                        "app's tools as you (each app's own MCP server has to be on), and suite admins can update every app at once."}
 
 
 def _server_apply(body: dict) -> None:
