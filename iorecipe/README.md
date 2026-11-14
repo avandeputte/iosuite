@@ -28,9 +28,12 @@ and user, for example:
 
 ```sql
 CREATE DATABASE recipe CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'recipe'@'%' IDENTIFIED BY 'recipe';
-GRANT ALL ON recipe.* TO 'recipe'@'%';
+CREATE USER 'recipe'@'app-host' IDENTIFIED BY 'a-long-random-password';
+GRANT ALL ON recipe.* TO 'recipe'@'app-host';
 ```
+
+`app-host` is the machine the app runs on (`localhost` when MariaDB is on the same machine); a user for any host (`'%'`)
+with a password someone could guess is what to avoid. The installers make the user this way when given a MariaDB administrator.
 
 The accounts and the suite-wide settings live in the Shared ioSuite database (`iosuite`, user `iosuite`; the one every
 app of the suite uses); a new install of the suite creates it the same way. The tables are created on the first start and updated by later versions by themselves.

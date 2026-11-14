@@ -669,8 +669,13 @@ Every app's `setup.sh` asks, right after the database questions, for a MariaDB /
 `--db-admin USER:PASSWORD`, or `IO<APP>_DB_ADMIN`; empty: the databases and users exist already). With one, `provision`
 creates what config.env names: the app's own database and user (`DB_*`), the Shared ioSuite database and user
 (`IOSUITE_DB_*`) and, with `--also`, the companions' databases for the same app user. Nothing is dropped: databases and
-users are created when missing, the users' passwords are set to the ones answered, and each user gets all privileges
-on its own databases only; users are made for `'%'` (and `'localhost'` when the server is this machine). The
+users are created when missing, and each user gets all privileges on its own databases only. The app's own user gets
+the password answered (a re-run with a new one works); the Shared ioSuite user is only created when missing, since the
+other apps sign in with it too: when it exists with another password, `provision` stops and says so instead of changing
+it under them. Users are made for this machine only: `'localhost'` and `'127.0.0.1'` when the server is this machine,
+else the address this machine reaches the server from (`--client-host HOST`, or `DB_CLIENT_HOST` in config.env, for
+another, such as `'192.168.1.%'` for a container whose address changes); never for any host (`'%'`). When a password
+question is left empty and none is in config.env, `setup.sh` makes a random one: there is no default password. The
 administrator's password travels in `DB_ADMIN_PASSWORD`, never on a command line, and is not written anywhere.
 
 ## Tests

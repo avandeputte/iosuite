@@ -22,9 +22,12 @@ ioContact needs Python 3.10+ and a MariaDB or MySQL database. Give it its own da
 
 ```sql
 CREATE DATABASE contacts CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'contacts'@'%' IDENTIFIED BY 'a-good-password';
-GRANT ALL ON contacts.* TO 'contacts'@'%';
+CREATE USER 'contacts'@'app-host' IDENTIFIED BY 'a-good-password';
+GRANT ALL ON contacts.* TO 'contacts'@'app-host';
 ```
+
+`app-host` is the machine the app runs on (`localhost` when MariaDB is on the same machine); a user for any host (`'%'`)
+with a password someone could guess is what to avoid. The installers make the user this way when given a MariaDB administrator.
 
 The tables are created on the first start and updated by later versions by themselves.
 

@@ -58,6 +58,8 @@ asksecret() { _v="$1"; _q="$2"
   if [ "$YES" = 1 ] || [ ! -t 0 ]; then eval "$_v=''"; return; fi
   printf '%s: ' "$_q"; stty -echo 2>/dev/null; read -r _a || _a=""; stty echo 2>/dev/null; printf '\n'; eval "$_v=\"\$_a\""; }
 getenv() { [ -f config.env ] && sed -n "s/^$1=//p" config.env | tail -n 1; true; }
+newpw() { head -c 18 /dev/urandom | base64 | tr -d '/+=\n'; }  # a database password nobody guesses (there is no default)
+NEWPW=""
 
 # ---- system packages (Python 3.10+ and venv)
 if [ "$SYSDEPS" != 0 ] && ! python3 -c 'import sys, venv, ensurepip; assert sys.version_info >= (3, 10)' 2>/dev/null; then
@@ -73,7 +75,7 @@ PY="${PY:-python3}"
 if [ -z "$DBS" ]; then
   H="$(getenv DB_HOST)"; P="$(getenv DB_PORT)"; D="$(getenv DB_NAME)"; U="$(getenv DB_USER)"
   ask H "MariaDB host" "${H:-127.0.0.1}"; ask P "Port" "${P:-3306}"; ask D "Database" "${D:-contacts}"; ask U "User" "${U:-contacts}"
-  asksecret W "Password (empty: keep the current one, or 'contacts')"; [ -n "$W" ] || W="$(getenv DB_PASSWORD)"; [ -n "$W" ] || W=contacts
+  asksecret W "Password (empty: keep the current one, or a new random one)"; [ -n "$W" ] || W="$(getenv DB_PASSWORD)"; [ -n "$W" ] || { W="$(newpw)"; NEWPW="$NEWPW $U"; }
   DBS="$H:$P/$D:$U:$W"
 fi
 DB_HOST="${DBS%%:*}"; r="${DBS#*:}"; DB_PORT="${r%%/*}"; r="${r#*/}"; DB_NAME="${r%%:*}"; r="${r#*:}"; DB_USER="${r%%:*}"; DB_PASSWORD="${r#*:}"
@@ -83,7 +85,7 @@ if [ -z "$SDBS" ]; then
   SD0=iosuite; SU0=iosuite
   H="$(suiteenv HOST)"; P="$(suiteenv PORT)"; D="$(suiteenv NAME)"; U="$(suiteenv USER)"
   ask H "Shared ioSuite database: host" "${H:-$DB_HOST}"; ask P "Port" "${P:-$DB_PORT}"; ask D "Database" "${D:-$SD0}"; ask U "User" "${U:-$SU0}"
-  asksecret W "Password (empty: keep the current one, or '$SU0')"; [ -n "$W" ] || W="$(suiteenv PASSWORD)"; [ -n "$W" ] || W="$SU0"
+  asksecret W "Password (empty: keep the current one, or a new random one; if the user exists, the one in another app's config.env)"; [ -n "$W" ] || W="$(suiteenv PASSWORD)"; [ -n "$W" ] || { W="$(newpw)"; NEWPW="$NEWPW $U"; }
   SDBS="$H:$P/$D:$U:$W"
 fi
 SUITE_HOST="${SDBS%%:*}"; r="${SDBS#*:}"; SUITE_PORT="${r%%/*}"; r="${r#*/}"; SUITE_NAME="${r%%:*}"; r="${r#*:}"; SUITE_USER="${r%%:*}"; SUITE_PASSWORD="${r#*:}"
@@ -99,6 +101,7 @@ if [ -z "$DBADMIN" ] && [ "$YES" = 0 ]; then
   ask DAU "MariaDB administrator who may create the databases and users above, e.g. root (empty: they exist already)" ""
   if [ -n "$DAU" ]; then asksecret DAW "Password of $DAU"; DBADMIN="$DAU:$DAW"; fi
 fi
+[ -z "$NEWPW" ] || [ -n "$DBADMIN" ] || say "A new random password was made for the database user(s)$NEWPW; it goes in config.env. Create the user(s) with it on the server, or run this again with --db-admin"
 
 # ---- Python environment
 say "Installing the Python packages"

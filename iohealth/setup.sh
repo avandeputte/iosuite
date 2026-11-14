@@ -60,6 +60,8 @@ asksecret() { _v="$1"; _q="$2"
   printf '%s: ' "$_q"; stty -echo 2>/dev/null; read -r _a || _a=""; stty echo 2>/dev/null; printf '\n'; eval "$_v=\"\$_a\""; }
 ENVF="$APP/config.env"
 getenv() { [ -f "$ENVF" ] && sed -n "s/^$1=//p" "$ENVF" | tail -n 1; true; }
+newpw() { head -c 18 /dev/urandom | base64 | tr -d '/+=\n'; }  # a database password nobody guesses (there is no default)
+NEWPW=""
 split() {  # HOST:PORT/DATABASE:USER:PASSWORD into $1_HOST, $1_PORT, $1_NAME, $1_USER, $1_PASSWORD
   _s="$2"; eval "$1_HOST=\"\${_s%%:*}\""; _r="${_s#*:}"; eval "$1_PORT=\"\${_r%%/*}\""; _r="${_r#*/}"
   eval "$1_NAME=\"\${_r%%:*}\""; _r="${_r#*:}"; eval "$1_USER=\"\${_r%%:*}\""; eval "$1_PASSWORD=\"\${_r#*:}\""; }
@@ -83,7 +85,7 @@ if [ -n "$DBS" ]; then
 elif [ -z "$(getenv DB_HOST)" ] || [ "$YES" = 0 ]; then
   H="$(getenv DB_HOST)"; P="$(getenv DB_PORT)"; D="$(getenv DB_NAME)"; U="$(getenv DB_USER)"
   ask H "MariaDB host (the health data)" "${H:-127.0.0.1}"; ask P "Port" "${P:-3306}"; ask D "Database" "${D:-health}"; ask U "User" "${U:-health}"
-  asksecret W "Password (empty: keep the current one)"; [ -n "$W" ] || W="$(getenv DB_PASSWORD)"
+  asksecret W "Password (empty: keep the current one, or a new random one)"; [ -n "$W" ] || W="$(getenv DB_PASSWORD)"; [ -n "$W" ] || { W="$(newpw)"; NEWPW="$NEWPW $U"; }
   setenv DB_HOST "$H"; setenv DB_PORT "$P"; setenv DB_NAME "$D"; setenv DB_USER "$U"; setenv DB_PASSWORD "$W"
 fi
 # the Shared ioSuite database (IOSUITE_DB_*)
@@ -94,7 +96,7 @@ if [ -n "$SUITES" ]; then
 elif [ "$YES" = 0 ] && [ -t 0 ]; then
   N="$(getenv IOSUITE_DB_NAME)"; U="$(getenv IOSUITE_DB_USER)"
   ask N "Shared ioSuite database (accounts and suite-wide settings, on the same server)" "${N:-iosuite}"; ask U "Its user" "${U:-iosuite}"
-  asksecret W "Its password (empty: keep the current one)"; [ -n "$W" ] || W="$(getenv IOSUITE_DB_PASSWORD)"
+  asksecret W "Its password (empty: keep the current one, or a new random one; if the user exists, the one in another app's config.env)"; [ -n "$W" ] || W="$(getenv IOSUITE_DB_PASSWORD)"; [ -n "$W" ] || { W="$(newpw)"; NEWPW="$NEWPW $U"; }
   setenv IOSUITE_DB_NAME "$N"; setenv IOSUITE_DB_USER "$U"; setenv IOSUITE_DB_PASSWORD "$W"
 fi
 [ -n "$PUBURL" ] || ask PUBURL "Public address, e.g. https://health.example.com (empty: as reached)" "$(getenv PUBLIC_URL)"
@@ -113,6 +115,7 @@ if [ -z "$DBADMIN" ] && [ "$YES" = 0 ]; then
   ask DAU "MariaDB administrator who may create the databases and users above, e.g. root (empty: they exist already)" ""
   if [ -n "$DAU" ]; then asksecret DAW "Password of $DAU"; DBADMIN="$DAU:$DAW"; fi
 fi
+[ -z "$NEWPW" ] || [ -n "$DBADMIN" ] || say "A new random password was made for the database user(s)$NEWPW; it goes in config.env. Create the user(s) with it on the server, or run this again with --db-admin"
 
 # ---- Python environment
 say "Installing the Python packages"
