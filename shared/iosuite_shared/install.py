@@ -505,7 +505,6 @@ def _table(base, config_dir, want=None, redo=()):
 def choose(base, config_dir, ask=input, log=print):
     """The checklist: returns (add, remove, delete_data, reconfigure), or None when the person changes nothing or backs out."""
     here = installed(base, config_dir)
-    own = app_of(config_dir)
     want = list(here)
     redo = []
     names = list(APPS)
