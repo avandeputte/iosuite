@@ -277,10 +277,11 @@ function defaultList() {
   return w.find((c) => c.id === +S.settings.defaultList) || w.find((c) => c.mine) || w[0] || null;
 }
 const memberOf = (id) => S.members.find((m) => m.id === id);
-const MEMBER_COLORS = ['#1e8e3e', '#e0426a', '#1a73e8', '#e8710a', '#8e44d6', '#0b8a9e', '#b5452f', '#4b53c7', '#e8a100', '#5f6b7a'];
-/** Each family member gets a colour of their own (by their place in the family list, so two never look alike). */
-const memberColor = (m) => MEMBER_COLORS[Math.max(0, S.members.findIndex((x) => x.id === m.id)) % MEMBER_COLORS.length];
-const memberBadge = (m) => h('span', { class: 'mem', title: m.displayName, style: { '--mc': memberColor(m) } }, initials(m.displayName));
+/** Each family member's colour, initials and face are the suite's (Settings › Security › Family), the same in every io app. */
+const memberColor = (m) => m.color || '#5f6b7a';
+/** A member's badge: their initials on their colour; `face`: their face (ioPix, else their ioContact card) when they have one. */
+const memberBadge = (m, face = false) => h('span', { class: `mem${face && m.hasFace ? ' face' : ''}`, title: m.displayName, style: { '--mc': memberColor(m) } }, m.initials || initials(m.displayName),
+  face && m.hasFace ? h('img', { src: `api/auth/family/${m.id}/face`, alt: '', loading: 'lazy', onerror: (e) => { e.currentTarget.parentNode.classList.remove('face'); e.currentTarget.remove(); } }) : null);
 function toggleWho(id) {
   if (id == null) S.who.clear(); else if (S.who.has(id)) S.who.delete(id); else S.who.add(id);
   saveSettings({ memberFilter: [...S.who].join(',') });
@@ -389,7 +390,7 @@ function drawNav() {
     h('span', { class: `n ${c.overdue ? 'late' : ''}`, title: c.overdue ? `${c.overdue} overdue` : null }, c.count || ''));
   const whoRow = (m) => h('a', { href: '#', 'data-v': 'who', class: `who ${S.who.has(m.id) ? 'picked' : ''}`, style: { '--mc': memberColor(m) },
     title: S.who.has(m.id) ? `Stop showing only ${m.displayName}'s tasks` : `Show only ${m.displayName}'s tasks`,
-    onclick: (e) => { e.preventDefault(); toggleWho(m.id); } }, memberBadge(m), h('span', { class: 'nl' }, m.displayName));
+    onclick: (e) => { e.preventDefault(); toggleWho(m.id); } }, memberBadge(m, true), h('span', { class: 'nl' }, m.displayName));
   const shared = S.lists.filter((c) => c.shared), mine = S.lists.filter((c) => !c.shared);
   // the lists of a kind, in the order they were put in: drag one (with a mouse) to move it
   const group = (lists, can) => {
@@ -911,7 +912,7 @@ async function taskForm(el, opts, done) {
 
   const who = h('div', { class: 'chiprow' });
   const drawWho = () => fill(who, S.members.map((m) => h('button', { type: 'button', class: `chip toggle mchip ${picked.has(m.id) ? 'on' : ''}`, disabled: ro || null,
-    onclick: () => { if (picked.has(m.id)) picked.delete(m.id); else picked.add(m.id); drawWho(); } }, memberBadge(m), m.displayName)));
+    onclick: () => { if (picked.has(m.id)) picked.delete(m.id); else picked.add(m.id); drawWho(); } }, memberBadge(m, true), m.displayName)));
   drawWho();
 
   const subs = h('div', { class: 'subs' });
@@ -1092,12 +1093,12 @@ async function showImport(page, r) {
 async function showSettings(page, r) {
   const adm = S.user.role === 'admin';
   const tabs = [['account', 'Account'], ['display', 'Display'], ['devices', 'Apps and devices'], ['lists', 'Lists'],
-    ...(adm ? [['family', 'Family'], ['server', 'Server']] : []),
+    ...(adm ? [['server', 'Server']] : []),
     ...(S.user.suiteAdmin ? [['security', SUITE_TABS.security], ['global', SUITE_TABS.global]] : [])];
   page.append(h('div', { class: 'pagehead' }, h('h1', null, 'Settings')),
     h('div', { class: 'tabs' }, tabs.map(([k, l]) => h('button', { class: r.tab === k ? 'on' : '', onclick: () => { location.hash = `#/settings/${k}`; } }, l))));
   const body = h('div'); page.append(body);
-  await ({ account: setAccount, display: setDisplay, devices: setDevices, lists: setLists, family: setFamily, server: setServer,
+  await ({ account: setAccount, display: setDisplay, devices: setDevices, lists: setLists, server: setServer,
     security: setSuite, global: setSuite }[r.tab] || setAccount)(body, r);
 }
 const fld = (l, e) => h('label', { class: 'field' }, h('span', null, l), e);
@@ -1239,23 +1240,6 @@ async function setLists(el, r) {
     h('p', { class: 'muted' }, 'A list’s tasks kept to add again: a packing list, the weekly shop. Save one from a list (here, or in the list’s ⋯ menu); add its tasks with “Add from a template…” in a list’s ⋯ menu, or start a new list with it.'),
     tpls.length ? h('table', { class: 't' }, tpls.map(tplRow)) : null));
   if (r.sub) setTimeout(() => $(`#list-${r.sub}`)?.scrollIntoView({ block: 'start' }), 0);
-}
-
-/** Who is in the family: the people tasks can be for, each with a private list of their own. Accounts, passwords and
-    roles are the suite's (Settings › Security, suite admins). */
-async function setFamily(el) {
-  const [res, fam] = await Promise.all([api('api/users'), api('api/members')]);
-  const leftOut = new Set(fam.leftOut || []);
-  el.append(h('div', { class: 'box' }, h('h2', null, icon('people'), 'Family members'),
-    h('p', { class: 'muted' }, 'The people tasks can be for, each with a private list. Accounts are added under Settings › Security.'),
-    h('table', { class: 't' }, h('tr', null, h('th', null, 'Name'), h('th', null, 'Display name'), h('th', null, 'Role here'), h('th', null, 'In the family')),
-      res.users.map((u) => {
-        const fk = h('input', { type: 'checkbox', checked: !leftOut.has(u.id), title: `${u.displayName} is someone tasks can be for` });
-        fk.onchange = async () => {
-          try { await api(`api/members/${u.id}`, { method: 'PUT', json: { inFamily: fk.checked } }); await loadLists(); toast(fk.checked ? `${u.displayName} is in the family` : `${u.displayName} is left out of the family`); } catch (e) { fk.checked = !fk.checked; fail(e); }
-        };
-        return h('tr', null, h('td', null, u.name, u.suiteAdmin ? h('span', { class: 'muted small' }, ' · suite admin') : null), h('td', null, u.displayName), h('td', { class: 'muted' }, u.role), h('td', null, h('label', { class: 'check' }, fk)));
-      }))));
 }
 
 /** Settings › Security and Global settings (suite admins): the people, their role in every app, app

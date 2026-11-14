@@ -15,7 +15,7 @@ from fastapi import APIRouter, Form, HTTPException, Query, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
 
-from app import access, config, ical, members, model, quick, users
+from app import access, config, ical, members, model, quick
 from iosuite_shared import appleprofile, prefix, users as shared_users
 from iosuite_shared.access import json_body
 
@@ -595,30 +595,11 @@ async def apply_template(tid: int, request: Request):
 
 @router.get("/api/members", dependencies=[access.signed_in])
 def family_members(request: Request):
-    """The family members a task can be for (the accounts that use ioTask, less the ones taken out of the family):
-    [{id, name, displayName}]. Filter with ?member= on /api/tasks. Admins also get leftOut."""
-    u = request.state.user
-    out = {"items": members.public(members.family())}
-    if shared_users.is_admin(u):
-        out["leftOut"] = sorted(members.left_out())
-    return out
+    """The family members a task can be for: the suite's family (Settings › Security › Family) less the accounts with no role
+    here, [{id, name, displayName, initials, color, hasFace}]; a face is at /api/auth/family/{id}/face. Filter with
+    ?member= (ids or names)."""
+    return {"items": members.public(members.family())}
 
-
-@router.put("/api/members/{uid}", dependencies=[access.admin])
-async def set_family_member(uid: int, request: Request):
-    """Admins: {inFamily: bool}. An account out of the family (an admin or service account, not a person) is not
-    offered as a member and gets no private list here."""
-    b = await json_body(request)
-
-    def set_():
-        if not users.get(uid):
-            raise HTTPException(404, "No such account")
-        members.set_in_family(uid, bool(b.get("inFamily", True)))
-        return {"id": uid, "inFamily": members.in_family(uid), "items": members.public(members.family())}
-    return await run_in_threadpool(set_)
-
-
-# ------------------------------------------------------------------ connection details, Apple profile
 
 @router.get("/api/connect", dependencies=[access.signed_in])
 def connect_info(request: Request):

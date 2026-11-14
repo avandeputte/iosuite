@@ -140,31 +140,41 @@ def test_mcp_members(client, family_id):
 
 
 def test_leave_accounts_out_of_the_family(client, family_id):
+    """The family is the suite's (Settings › Security › Family, iosuite_shared.family): taking someone out there takes
+    them out of ioCalendar's tags and filters too."""
     members.TTL = 0
     client.post("/api/users", json={"name": "admin2", "password": "adminpass99", "role": "admin"})
     client.post("/api/users", json={"name": "emma", "password": "emmapass99", "role": "viewer", "displayName": "Emma"})
-    fam = client.get("/api/members").json()
-    admin2 = next(m for m in fam["items"] if m["name"] == "admin2")
-    assert fam["leftOut"] == []
-    # signing in makes a Personal calendar; leaving the family removes it while it is empty
+    fam = client.get("/api/members").json()["items"]
+    admin2 = next(m for m in fam if m["name"] == "admin2")
+    assert {"initials", "color", "hasFace"} <= set(admin2) and admin2["color"].startswith("#")
+    assert len({m["color"] for m in fam}) == len(fam)  # no two alike
+    # out of the family (a suite admin, in the shared panel)
+    r = client.patch(f"/api/suite-admin/family/{admin2['id']}", json={"inFamily": False})
+    assert r.status_code == 200 and r.json()["inFamily"] is False
+    assert "admin2" not in [m["name"] for m in client.get("/api/members").json()["items"]]
     client.cookies.clear()
     assert client.post("/api/auth/login", json={"name": "admin2", "password": "adminpass99"}).status_code == 200
-    assert [c["name"] for c in client.get("/api/calendars").json()["items"] if not c["shared"]] == ["Personal"]
-    r = client.put(f"/api/members/{admin2['id']}", json={"inFamily": False})
-    assert r.status_code == 200 and r.json()["inFamily"] is False
-    assert "admin2" not in [m["name"] for m in r.json()["items"]]
-    assert [c for c in client.get("/api/calendars").json()["items"] if not c["shared"]] == []  # and none is made again
-    assert client.get("/api/members").json()["leftOut"] == [admin2["id"]]
+    assert [c for c in client.get("/api/calendars").json()["items"] if not c["shared"]] == []  # no private calendar made
     # it can no longer be a tag or a filter
     r = client.post(f"/api/events?calendar={family_id}", json={"title": "x", "start": "2026-11-20T10:00", "members": ["admin2"]})
     assert r.status_code == 400
     assert client.get("/api/occurrences", params={"start": "2026-11-01", "end": "2026-12-01", "member": "admin2"}).status_code == 400
-    # viewers may not change the family; back in, it gets its calendar again
+    # only suite admins change the family; ioCalendar has no screen of its own for it
     client.cookies.clear()
     client.post("/api/auth/login", json={"name": "emma", "password": "emmapass99"})
-    assert client.put(f"/api/members/{admin2['id']}", json={"inFamily": True}).status_code == 403
-    assert "leftOut" not in client.get("/api/members").json()
+    assert client.patch(f"/api/suite-admin/family/{admin2['id']}", json={"inFamily": True}).status_code == 403
+    assert client.put(f"/api/members/{admin2['id']}", json={"inFamily": True}).status_code in (404, 405)
+    # a picked colour shows here as it does in every app
+    client.cookies.clear()
+    client.post("/api/auth/login", json={"name": "alex", "password": "secret123"})
+    emma = next(m for m in client.get("/api/members").json()["items"] if m["name"] == "emma")
+    assert client.patch(f"/api/suite-admin/family/{emma['id']}", json={"color": "#123456"}).status_code == 200
+    assert next(m for m in client.get("/api/members").json()["items"] if m["name"] == "emma")["color"] == "#123456"
+    assert client.get("/api/auth/family").json()["items"] == client.get("/api/members").json()["items"]
+    # back in, it gets its calendar again
+    client.patch(f"/api/suite-admin/family/{admin2['id']}", json={"inFamily": True})
     client.cookies.clear()
     client.post("/api/auth/login", json={"name": "admin2", "password": "adminpass99"})
-    assert client.put(f"/api/members/{admin2['id']}", json={"inFamily": True}).json()["inFamily"] is True
     assert [c["name"] for c in client.get("/api/calendars").json()["items"] if not c["shared"]] == ["Personal"]
+

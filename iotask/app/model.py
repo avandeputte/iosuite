@@ -52,7 +52,7 @@ def can_write(u: dict | None, c: dict | None) -> bool:
 def ensure_personal(u: dict) -> None:
     """Every member gets their private Personal list the first time they use ioTask (accounts are made in any app of the
     suite, so not necessarily here). A viewer keeps nothing of their own."""
-    if not u or not u.get("id") or not members.in_family(u["id"]):  # not a person (Settings › Family): no list of its own
+    if not u or not u.get("id") or not members.in_family(u["id"]):  # not in the suite's family (Settings › Security › Family): no list of its own
         return
     if not shared_users.is_member(u):
         return
