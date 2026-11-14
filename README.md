@@ -8,7 +8,7 @@ Shared ioSuite database) through the library in [`shared/`](shared/).
 
 | Folder | App | What it is | Port |
 |---|---|---|---|
-| [`iostart/`](iostart/) | ioStart | the start page: a tile per app, bookmarks | 8630 |
+| [`iostart/`](iostart/) | ioStart | the start page: a tile per app, bookmarks ([Chrome extension](https://chromewebstore.google.com/detail/iosuite-bookmarks/nldealkpbjiholobfadimblcmdlphkoe)) | 8630 |
 | [`iopix/`](iopix/) | ioPix | the photo library, with or without digiKam | 8600 |
 | [`ionote/`](ionote/) | ioNote | notes | 8610 |
 | [`iocalendar/`](iocalendar/) | ioCalendar | the family calendar, CalDAV | 8620 |

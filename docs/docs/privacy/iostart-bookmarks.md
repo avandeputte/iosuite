@@ -55,5 +55,5 @@ the top.
 ## Contact
 
 Questions about this policy: open an issue at
-[github.com/avandeputte/iosuite/issues](https://github.com/avandeputte/iosuite/issues). The extension's source is in
-the same repository, in `iostart/static/extension/`.
+[github.com/avandeputte/iosuite/issues](https://github.com/avandeputte/iosuite/issues). It is on the [Chrome Web Store](https://chromewebstore.google.com/detail/iosuite-bookmarks/nldealkpbjiholobfadimblcmdlphkoe). The extension's
+source is in the same repository, in `iostart/static/extension/`.
