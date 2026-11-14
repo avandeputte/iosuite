@@ -7,6 +7,7 @@
      el.append(ui.themeRow(current, (k) => applyTheme(k)));         // 'light' | 'dark' | 'system', saved with the account
      el.append(ui.unitsRow(current, (k) => applyUnits(k)));         // 'auto' | 'metric' | 'imperial'
      await ui.mountAppPasswords(el, { toast, syncOnly: 'Calendar apps only (CalDAV)' });
+     await ui.mountNotifications(el, { toast });                   // also part of mountAccount: this device, what to get
 
    ui.box(icon, title, ...kids) and ui.row(label, hint, control) build the app's own boxes in the same look.
 */
@@ -23,6 +24,7 @@ export const ICONS = {
   theme: 'M12 3a9 9 0 1 0 0 18c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c2.76 0 5-2.24 5-5 0-4.42-4.03-8-9-8zm-5.5 9c-.83 0-1.5-.67-1.5-1.5S5.67 9 6.5 9 8 9.67 8 10.5 7.33 12 6.5 12zm3-4C8.67 8 8 7.33 8 6.5S8.67 5 9.5 5s1.5.67 1.5 1.5S10.33 8 9.5 8zm5 0c-.83 0-1.5-.67-1.5-1.5S13.67 5 14.5 5s1.5.67 1.5 1.5S15.33 8 14.5 8zm3 4c-.83 0-1.5-.67-1.5-1.5S16.67 9 17.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z',
   devices: 'M4 6h18V4H4c-1.1 0-2 .9-2 2v11H0v3h14v-3H4V6zm19 2h-6c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h6c.55 0 1-.45 1-1V9c0-.55-.45-1-1-1zm-1 9h-4v-7h4v7z',
   download: 'M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z',
+  bell: 'M12 22c1.1 0 2-.9 2-2h-4a2 2 0 0 0 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z',
 };
 export const icon = (n) => { const s = document.createElement('span'); s.className = 'sv-ic'; s.innerHTML = `<svg viewBox="0 0 24 24"><path d="${ICONS[n] || ''}"/></svg>`; return s; };
 
@@ -206,6 +208,102 @@ export async function mountAccount(el, opts = {}) {
             h('div', { class: 'sv-row' }, h('button', { class: 'sv-btn', onclick: async () => {
               try { await api('auth/password', { json: { current: cur.value, password: nw.value } }); cur.value = nw.value = ''; toast('Password changed; your other sessions are signed out'); } catch (e) { fail(e); }
             } }, 'Change password'))]));
+  const notes = h('div');
+  el.append(notes);
+  await mountNotifications(notes, opts).catch(() => notes.remove());
+}
+
+// ------------------------------------------------------------------ Settings › Account: notifications
+const SW = new URL('auth/push/sw.js', API);
+const SCOPE = new URL('auth/push/', API);
+const fromB64u = (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
+const sameKey = (buf, key) => { if (!buf) return false; const a = new Uint8Array(buf), b = fromB64u(key); return a.length === b.length && a.every((x, i) => x === b[i]); };
+const sha256 = async (s) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)))].map((b) => b.toString(16).padStart(2, '0')).join('');
+const standalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const appleMobile = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const MORNING_KINDS = ['tasks', 'birthdays'];
+
+async function workerRegistration(create) {
+  let reg = await navigator.serviceWorker.getRegistration(SCOPE.href);
+  if (!reg && create) reg = await navigator.serviceWorker.register(SW.href, { scope: SCOPE.href });
+  if (!reg) return null;
+  const w = reg.installing || reg.waiting;
+  if (!reg.active && w) await new Promise((ok) => w.addEventListener('statechange', () => { if (w.state === 'activated') ok(); }));
+  return reg;
+}
+
+/** Notifications: turn them on or off on this device (any app of the suite reaches it), what this account gets (on
+ *  every device), the morning time of the morning summaries, the devices, a test. opts: toast. */
+export async function mountNotifications(el, opts = {}) {
+  styles(); setToast(opts.toast);
+  el.classList.add('iosv');
+  const can = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window && window.isSecureContext;
+  let info = await api('auth/push');
+  let sub = null, hash = '';
+  const body = h('div');
+  const read = async () => {
+    if (!can) return;
+    const reg = await navigator.serviceWorker.getRegistration(SCOPE.href);
+    sub = reg ? await reg.pushManager.getSubscription() : null;
+    hash = sub ? await sha256(sub.endpoint) : '';
+  };
+  const save = async (path, init) => { info = await api(path, init); draw(); };
+  const turnOn = async () => {
+    if (await Notification.requestPermission() !== 'granted') { toast('Notifications are blocked for this site; allow them in the browser’s settings'); draw(); return; }
+    const reg = await workerRegistration(true);
+    let s = await reg.pushManager.getSubscription();
+    if (s && !sameKey(s.options && s.options.applicationServerKey, info.key)) { await s.unsubscribe(); s = null; }
+    s = s || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: fromB64u(info.key) });
+    await save('auth/push/devices', { json: { subscription: s.toJSON(), standalone: standalone() } });
+    await read(); draw();
+    toast('Notifications are on for this device');
+  };
+  const turnOff = async () => {
+    const here = info.devices.find((d) => d.endpointHash === hash);
+    if (sub) await sub.unsubscribe().catch(() => {});
+    if (here) info = await api(`auth/push/devices/${here.id}`, { method: 'DELETE' });
+    await read(); draw();
+    toast('Notifications are off for this device');
+  };
+  const busy = (fn) => async (e) => { const b = e.currentTarget; b.disabled = true; try { await fn(); } catch (err) { fail(err); } finally { b.disabled = false; } };
+
+  const draw = () => {
+    const here = info.devices.find((d) => d.endpointHash === hash);
+    let device;
+    if (!can) {
+      device = h('p', { class: 'sv-muted' }, appleMobile() && !standalone()
+        ? 'On an iPhone or iPad, add this app to the Home Screen first (Share › Add to Home Screen), open it from there and turn notifications on in it.'
+        : 'This browser cannot show notifications here (they need an https address).');
+    } else if (Notification.permission === 'denied') {
+      device = h('p', { class: 'sv-warn' }, 'Notifications are blocked for this site. Allow them in the browser’s site settings, then come back here.');
+    } else {
+      device = row('This device', here ? `On: ${here.label}.` : 'Off. One app per device is enough: every app’s notifications arrive through it.',
+        here ? h('button', { class: 'sv-btn', onclick: busy(turnOff) }, 'Turn off') : h('button', { class: 'sv-btn primary', onclick: busy(turnOn) }, 'Turn on'));
+    }
+    const kinds = info.kinds.length ? h('div', null, h('p', { class: 'sv-small sv-muted', style: 'margin-top:12px' }, 'What you get, on every device:'),
+      info.kinds.map((k) => h('label', { class: 'sv-check' }, h('input', { type: 'checkbox', checked: k.on,
+        onchange: async (e) => { try { await save('auth/push/prefs', { method: 'PUT', json: { kinds: { [k.kind]: e.target.checked } } }); toast('Saved'); } catch (err) { fail(err); } } }),
+      h('span', null, h('b', null, k.label), h('span', { class: 'sv-muted sv-small' }, ` · ${k.hint}`))))) : null;
+    const morning = info.kinds.some((k) => MORNING_KINDS.includes(k.kind)) ? row('Morning summary', 'When the tasks and birthdays of the day arrive.',
+      h('input', { class: 'sv-in', type: 'time', step: 300, value: info.morning, style: 'max-width:130px',
+        onchange: async (e) => { try { await save('auth/push/prefs', { method: 'PUT', json: { morning: e.target.value } }); toast('Saved'); } catch (err) { fail(err); } } })) : null;
+    const list = info.devices.length ? h('table', { class: 'sv-t' }, h('tr', null, h('th', null, 'Device'), h('th', null, 'Turned on in'), h('th', null, 'Last delivered'), h('th')),
+      info.devices.map((d) => h('tr', null, h('td', null, d.label, d.endpointHash === hash ? h('span', { class: 'sv-muted' }, ' (this one)') : null), h('td', null, d.appName || '—'),
+        h('td', null, d.lastOk ? when(d.lastOk) : 'not yet'),
+        h('td', { style: 'text-align:right' }, h('button', { class: 'sv-btn', onclick: busy(async () => {
+          if (d.endpointHash === hash) return turnOff();
+          await save(`auth/push/devices/${d.id}`, { method: 'DELETE' });
+        }) }, 'Remove'))))) : null;
+    const test = info.devices.length ? h('div', { class: 'sv-row' }, h('button', { class: 'sv-btn', onclick: busy(async () => {
+      const r = await api('auth/push/test', { json: {} });
+      toast(r.sent ? `Sent to ${r.sent} of ${r.devices} device${r.devices === 1 ? '' : 's'}` : 'No device took it; turn notifications on again there');
+      info = await api('auth/push'); draw();
+    }) }, 'Send a test')) : null;
+    body.replaceChildren(device, kinds, morning, list, test);
+  };
+  el.replaceChildren(h('div', { class: 'sv-box' }, h('h2', null, icon('bell'), 'Notifications'), body));
+  await read();
+  draw();
 }
 
 // ------------------------------------------------------------------ Settings › Account: app passwords

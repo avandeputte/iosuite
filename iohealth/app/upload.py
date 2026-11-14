@@ -12,6 +12,7 @@ being applied twice. The line shapes mirror Shared/SyncProtocol.swift.
 """
 import gzip
 import logging
+import threading
 import time
 import zlib
 from datetime import datetime, timezone
@@ -30,6 +31,7 @@ BATCH_ROWS = 1000
 WORKOUT_CHILDREN = ("hlt_workout_statistics", "hlt_workout_events", "hlt_workout_activities", "hlt_workout_route_points")
 
 on_sync = []  # callbacks after a sync finishes (the web API's caches)
+on_user_sync = []  # callbacks with the account after a sync finishes, in a thread of their own (the goal notifications)
 
 
 # ---- decoding
@@ -367,6 +369,8 @@ async def finish(session_id: int, request: Request):
         applied = db.one("SELECT applied FROM hlt_sync_log WHERE id = %s AND user_id = %s", (session_id, uid))[0]
         for f in on_sync:
             f()
+        for f in on_user_sync:
+            threading.Thread(target=f, args=(uid,), name="after-sync", daemon=True).start()
         log.info("session %d: finished, %s items sent, %d applied", session_id, d.get("totalSent"), applied)
         return {"received": applied}
     return await run_in_threadpool(work)
