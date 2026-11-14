@@ -11,7 +11,7 @@ import time
 import uuid as uuidlib
 from contextvars import ContextVar
 
-from iosuite_shared import users as shared_users
+from iosuite_shared import related, users as shared_users
 from iosuite_shared.errors import Invalid
 
 from app import config, db, iopix, relations as rel, users, vcard
@@ -592,7 +592,12 @@ def purge_deleted(days: int | None = None) -> int:
                    "AND updated_at < NOW() - INTERVAL %s DAY GROUP BY address_book_id", (days,))
         for r in old:
             db.set_setting(f"{PURGED}{r['book']}", str(max(r["tok"], purged_before(r["book"]))))
-        return db.ex("DELETE FROM con_contacts WHERE deleted = 1 AND updated_at < NOW() - INTERVAL %s DAY", (days,)) if old else 0
+        if not old:
+            return 0
+        gone = [r["id"] for r in db.q("SELECT id FROM con_contacts WHERE deleted = 1 AND updated_at < NOW() - INTERVAL %s DAY", (days,))]
+        n = db.ex("DELETE FROM con_contacts WHERE deleted = 1 AND updated_at < NOW() - INTERVAL %s DAY", (days,))
+    related.forget_many("contact", gone)  # their links to other items of the suite go too
+    return n
 
 
 def purged_before(book_id: int) -> int:
