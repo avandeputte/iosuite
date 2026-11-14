@@ -79,7 +79,7 @@ password is used once and not written anywhere.
 | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | the MariaDB / MySQL database |
 | `HOST`, `PORT` | where the server listens (`0.0.0.0`, 8640; every app of the suite has its own port) |
 | `TLS_CERT_FILE`, `TLS_KEY_FILE` | serve HTTPS directly instead of behind a reverse proxy |
-| `LDAP_PORT`, `LDAP_HOST`, `LDAP_BASE` | the LDAP directory (3890, all addresses, `dc=iocontact`); `LDAP_PORT=0` turns it off |
+| `LDAP_PORT`, `LDAP_HOST`, `LDAP_BASE` | the LDAP directory (3890, the addresses `HOST` names, `dc=iocontact`); `LDAP_PORT=0` turns it off |
 | `PUBLIC_URL` | the address people use (behind a proxy), for links in the calendar feed and Settings |
 | `ADMIN_USER`, `ADMIN_PASSWORD` | the first admin, made on the first start when there are no accounts |
 | `IOSUITE_DB_HOST`, `_PORT`, `_NAME`, `_USER`, `_PASSWORD` | the Shared ioSuite database (MariaDB; by default on the contacts' server, database, user and password `iosuite`): accounts, passwords, sessions, app passwords, roles and the suite-wide settings, shared by every app of the suite (the `iosuite-shared` library, from [iosuite-shared](https://github.com/avandeputte/iosuite/tree/main/shared)); only the role an account holds here and its "me" contact are ioContact's own. `iosuite-shared migrate --iocontact` folds a 0.3 install's `users` table into it |

@@ -453,7 +453,7 @@ class Session:
         await self.send(result(msgid, 0x65, SUCCESS))
 
 
-async def serve(host: str, port: int):
+async def serve(host, port: int):  # host: one address, or a list of them
     async def handler(r, w):
         peer = w.get_extra_info("peername")
         addr = str(peer[0] if isinstance(peer, tuple) else peer)

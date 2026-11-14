@@ -4,6 +4,7 @@ Every ioThing app keeps its settings in `config.env` in its folder: KEY=value li
 the environment (a container's, a service's) win over the file.
 """
 import os
+import sys
 from pathlib import Path
 
 FILE_NAME = "config.env"
@@ -94,7 +95,9 @@ def standard(app: str, app_dir, log_name: str = None) -> dict:
       DATA_DIR              DATA_DIR, else APP_DIR/data: what the app writes on its own (made when missing)
       STATIC_DIR            APP_DIR/static: the web app's files, served under /static/
       LOG_FILE              LOG_FILE, else DATA_DIR/<app>.log; LOG_FILE= with nothing after it: None (no file)
-      HOST, PORT            where the server listens: 0.0.0.0 and the app's own default port (suite.PORTS)
+      HOST, PORT            where the server listens (iosuite_shared.serve): every address (0.0.0.0) and the app's own
+                            default port (suite.PORTS); HOST=127.0.0.1: this machine only, for a reverse proxy on the
+                            same server; HOST=192.168.1.151: one address of several; several: commas between them
       PUBLIC_URL            the address people and the other apps reach the app at; empty: the one it is reached at
       INTERNAL_URL          where the app is inside the network (http://192.168.1.151:8630); empty: the host's LAN
                             address and PORT (suite.local_url; inside a Docker container nothing unless it is set)
@@ -113,9 +116,14 @@ def standard(app: str, app_dir, log_name: str = None) -> dict:
     data_dir.mkdir(parents=True, exist_ok=True)
     port = env_int("PORT", suite.PORTS[app])
     public_url = env("PUBLIC_URL").rstrip("/")
+    host = env("HOST", "0.0.0.0")
+    from iosuite_shared import serve
+    if suite.in_container() and all(h.strip("[]").lower() in ("127.0.0.1", "localhost", "::1") for h in serve.hosts(host)):
+        print(f"{app}: HOST={host} inside a container: nothing outside it can reach the app. Leave HOST alone and "
+              f"publish the port on this machine only instead (ports: [\"127.0.0.1:{port}:{port}\"])", file=sys.stderr)
     log_file = Path(env("LOG_FILE", str(data_dir / f"{log_name or app}.log"))).expanduser().resolve() if os.environ.get("LOG_FILE", "x") else None
     return {"APP_DIR": app_dir, "DATA_DIR": data_dir, "STATIC_DIR": app_dir / "static", "LOG_FILE": log_file,
-            "HOST": env("HOST", "0.0.0.0"), "PORT": port, "PUBLIC_URL": public_url,
+            "HOST": host, "PORT": port, "PUBLIC_URL": public_url,
             "INTERNAL_URL": env("INTERNAL_URL").rstrip("/"), "BASE_URL": public_url or f"http://localhost:{port}",
             "TLS_CERT_FILE": env("TLS_CERT_FILE"), "TLS_KEY_FILE": env("TLS_KEY_FILE"),
             "MCP_FORCED": env_flag("MCP"), "KEEP_DELETED_DAYS": max(1, env_int("KEEP_DELETED_DAYS", 90)), "ADMIN_USER": ADMIN_USER, "ADMIN_PASSWORD": ADMIN_PASSWORD}
