@@ -102,6 +102,10 @@ def test_scan_job_start_rule_and_reset(monkeypatch):
     from app.data import appdb
     monkeypatch.setattr(jobs.config, "ANALYSIS", True)  # the tests run with analysis off; start() refuses otherwise
     monkeypatch.setattr(jobs, "GRACE", 0.2)
+    # with analysis on, a rebuild by an earlier test's threads would queue the real scans (thumbs first by ORDER) on
+    # the whole library ahead of this one: only this test's job reaches the worker
+    submit = jobs.submit
+    monkeypatch.setattr(jobs, "submit", lambda key, fn: submit(key, fn) if key == "captions" else None)
     gate = threading.Event()
     runs, done = [], []
 
