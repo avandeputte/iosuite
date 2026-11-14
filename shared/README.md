@@ -565,6 +565,25 @@ Behind Cloudflare Access, the whole suite's keys `cf_access_client_id` / `cf_acc
 Access service token, set on Settings › Global settings › Keys and tokens) go with every request. Service accounts are not in
 `users.list_users()` (pass `services=True`), do not count for the first-run setup, and cannot sign in with a password.
 
+**On a person's behalf.** A page that shows something of another app to the person looking (the start page's tiles,
+the calendar's tasks, a recipe's shopping list, the linked items, what a person keeps in each app) asks with that
+person's own sign-in instead, passed on as it came (the suite's session cookie, else the `Authorization` header), so
+the other app answers with what they may see there and no app password is involved:
+
+```python
+tasks = links.as_viewer(request, "iotask", "/api/tasks", {"status": "open"}, user_agent="ioCalendar")   # its JSON
+body, ctype = links.as_viewer(request, "iopix", "/thumb/5", raw=True, patient=True)                      # a picture
+```
+
+The addresses are asked in the same order, the one that answered last first. An answer that is not a 2xx is urllib's
+`HTTPError` as the app gave it; `links.Unreachable` when it answered nowhere, and the app is then left alone for
+`links.BREAK_S` seconds (`links.resting(app)` says so; `patient=True` for a request that should not count). This is
+the one place such requests are made: an app does not build them itself.
+
+Every request to another app, either way, goes out through `links.call()`: a redirect is followed on the host that
+was asked and nowhere else, because urllib would carry the cookie, the app password and the Cloudflare Access secret
+along to wherever it points (the sign-in page of a proxy in front of the app, say).
+
 ## Edge check of app passwords (Cloudflare Worker, optional)
 
 Behind Cloudflare, a Worker on `/dav*` can turn a wrong app password away before it reaches the server. The apps keep

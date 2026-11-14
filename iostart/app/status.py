@@ -12,7 +12,7 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import Request
-from iosuite_shared import outbound
+from iosuite_shared import outbound, sessions
 
 from app import apps, bookmarks, widgets
 
@@ -64,7 +64,7 @@ def _app(request: Request, key: str) -> dict:
 def of_apps(request: Request) -> dict:
     """{key: {ok, version, why}} for every app on the page, asked in parallel; cached per viewer for APP_TTL."""
     host = widgets._host(request)
-    tok = request.cookies.get(widgets.sessions.COOKIE) or request.headers.get("authorization") or ""
+    tok = request.cookies.get(sessions.COOKIE) or request.headers.get("authorization") or ""
     keys = [t["key"] for t in apps.tiles(getattr(request.state, "user", None))]
 
     def ask(key):

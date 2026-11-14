@@ -33,10 +33,14 @@ def iotask(client, monkeypatch):
         got = answers[path.split("?")[0]]
         if isinstance(got, Exception):
             raise got
-        return got
-    monkeypatch.setattr(tasks, "_open", fake)
+        return Answer(json.dumps(got).encode())
+    monkeypatch.setattr(tasks.links, "call", fake)
     yield seen, answers
     tasks.forget()
+
+
+class Answer(io.BytesIO):
+    headers = {"Content-Type": "application/json"}
 
 
 def refusal(code: int, detail: str):

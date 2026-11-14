@@ -192,7 +192,7 @@ def test_app_refusal_is_not_a_sign_out(client, monkeypatch):
 
     def refuse(*a, **kw):
         raise urllib.error.HTTPError("http://x", 401, "no", {}, None)
-    monkeypatch.setattr(widgets.urllib.request, "urlopen", refuse)
+    monkeypatch.setattr(widgets.links, "call", refuse)
     assert client.get("/api/widgets/iohealth").status_code == 403
     assert client.get("/api/widgets/iopix/thumb/5").status_code == 403
 
@@ -253,7 +253,7 @@ def test_apps_asked_like_the_apps_ask_each_other(client, monkeypatch):
         if "127.0.0.1" in req.full_url:
             raise urllib.error.URLError("refused")
         return Answer(json.dumps({"id": [], "ts": []}).encode())
-    monkeypatch.setattr(widgets.urllib.request, "urlopen", urlopen)
+    monkeypatch.setattr(widgets.links, "call", urlopen)
     try:
         assert client.get("/api/widgets/iopix?kind=rediscover").status_code == 200
         assert [u.split("/api")[0] for u, _ in tried] == ["http://127.0.0.1:8031", "http://10.0.0.5:8031"]

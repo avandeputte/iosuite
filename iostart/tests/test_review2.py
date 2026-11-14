@@ -26,7 +26,7 @@ def test_an_app_that_is_down_is_left_alone_for_a_while(client, monkeypatch):
     def down(req, timeout=None):
         tried.append(req.full_url)
         raise urllib.error.URLError("refused")
-    monkeypatch.setattr(widgets.urllib.request, "urlopen", down)
+    monkeypatch.setattr(widgets.links, "call", down)
     assert client.get("/api/widgets/iocontact").status_code == 502
     assert len(tried) == 2  # both addresses, once
     r = client.get("/api/widgets/iocontact")
@@ -38,14 +38,14 @@ def test_an_app_that_is_down_is_left_alone_for_a_while(client, monkeypatch):
     n = len(tried)
     assert client.get("/api/widgets/iopix/thumb/5").status_code == 502 and len(tried) == n + 2
     # when the time is up the app is asked again, and an answer clears it
-    widgets._down["iocontact"] = time.monotonic() - 1
+    widgets.links._resting["iocontact"] = time.monotonic() - 1
 
     def up(req, timeout=None):
         tried.append(req.full_url)
         if "127.0.0.1" in req.full_url:
             raise urllib.error.URLError("refused")
         return Answer(json.dumps({"items": []}).encode())
-    monkeypatch.setattr(widgets.urllib.request, "urlopen", up)
+    monkeypatch.setattr(widgets.links, "call", up)
     del tried[:]
     assert client.get("/api/widgets/iocontact").status_code == 200
     assert [u.split("/api")[0] for u in tried] == ["http://127.0.0.1:8650", "http://10.0.0.5:8650"]

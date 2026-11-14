@@ -19,6 +19,15 @@ store (iosuite_shared.credentials) under the reader, and made again when the oth
 Settings › Security, say). When the other app sits behind Cloudflare Access, the suite-wide Cloudflare Access service
 token (keys `cf_access_client_id` and `cf_access_client_secret` of the whole suite, Settings › Global settings › Keys and tokens)
 goes with every request.
+
+The other way to ask: on a person's behalf, as_viewer(). A page that shows something of another app (the start page's
+tiles, the calendar's tasks, a recipe's shopping list, the linked items, what a person keeps in each app) asks with
+that person's own sign-in instead of an app password, so the other app answers with what they may see there:
+
+    tasks = links.as_viewer(request, "iotask", "/api/tasks", {"status": "open"}, user_agent="ioCalendar")
+    body, ctype = links.as_viewer(request, "iopix", "/thumb/5", raw=True)
+
+Both ways send through call(): a redirect to another host is never followed, since the sign-in would travel with it.
 """
 import base64
 import ipaddress
@@ -26,11 +35,12 @@ import json as _json
 import logging
 import socket
 import threading
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
 
-from iosuite_shared import apppasswords, credentials, db, suite, users
+from iosuite_shared import apppasswords, credentials, db, sessions, suite, users
 
 log = logging.getLogger("iosuite_shared.links")
 _lock = threading.Lock()
@@ -110,6 +120,27 @@ def addresses(provider: str) -> list:
     return out
 
 
+class _SameHost(urllib.request.HTTPRedirectHandler):
+    """A redirect is followed on the host that was asked (http to https, a missing slash) and nowhere else: urllib
+    would send every header along, the Cookie, the Authorization and the Cloudflare Access secret among them, and the
+    sign-in page a proxy in front of the app redirects to is not the app. A redirect to another host is the answer
+    itself: an HTTPError with its 3xx."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        asked, to = urllib.parse.urlsplit(req.full_url).hostname, urllib.parse.urlsplit(newurl).hostname
+        if not to or (asked or "").lower() != to.lower():
+            return None
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+_opener = urllib.request.build_opener(_SameHost)
+
+
+def call(req, timeout: float):
+    """Send a request to another app of the suite (a urllib response): every such request goes out here."""
+    return _opener.open(req, timeout=timeout)
+
+
 def _declare_suite_keys():
     global _declared
     if not _declared:
@@ -168,7 +199,7 @@ def get(reader: str, provider: str, path: str, timeout: float = 15, accept: str 
             h = {"Accept": accept, "User-Agent": user_agent or reader, **headers(reader, provider, fresh=fresh, sign_in=sign_in)}
             fresh = False
             try:
-                return urllib.request.urlopen(urllib.request.Request(base + path, headers=h), timeout=timeout)  # noqa: S310  http(s), checked in addresses()
+                return call(urllib.request.Request(base + path, headers=h), timeout)  # noqa: S310  http(s), checked in addresses()
             except urllib.error.HTTPError as e:
                 if e.code != 401 or attempt or not sign_in:
                     raise
@@ -184,6 +215,103 @@ def get(reader: str, provider: str, path: str, timeout: float = 15, accept: str 
 def json(reader: str, provider: str, path: str, timeout: float = 15):
     with get(reader, provider, path, timeout) as r:
         return _json.loads(r.read())
+
+
+# ------------------------------------------------------------------ asking another app as the viewer
+
+BREAK_S = 30          # seconds an app that answered at none of its addresses is left alone
+_resting: dict = {}   # app -> until when it is left alone (time.monotonic)
+_answered: dict = {}  # app -> the address that answered last: asked first
+
+
+class Unreachable(urllib.error.URLError):
+    """The app answered at none of its addresses (why: what the last one raised; at: the first one asked), or has none
+    (why and at None)."""
+
+    def __init__(self, app: str, why: Exception = None, at: str = None):
+        self.app, self.why, self.at = app, why, at
+        super().__init__(f"{app} does not answer ({type(why).__name__})" if why else f"{app} has no address to ask it at")
+
+
+def viewer_headers(request, user_agent: str = "ioSuite", accept: str = "application/json") -> dict:
+    """The headers of a request made on a person's behalf: their own sign-in, passed on as it came (the suite's session
+    cookie, else the Authorization header they sent), and the suite's Cloudflare Access service token when one is set.
+    No app password. request None: nobody's sign-in."""
+    h = {"User-Agent": user_agent, "Accept": accept, "Accept-Encoding": "identity"}
+    if request is not None:
+        tok = request.cookies.get(sessions.COOKIE)
+        if tok:
+            h["Cookie"] = f"{sessions.COOKIE}={tok}"
+        elif request.headers.get("authorization"):
+            h["Authorization"] = request.headers["authorization"]
+    try:
+        h.update(headers("", "", sign_in=False))
+    except Exception:  # noqa: BLE001  the shared database is away: without the token
+        pass
+    return h
+
+
+def resting(app: str) -> float:
+    """The seconds the app is still left alone after it did not answer (0: it is asked)."""
+    return max(0.0, _resting.get(app, 0.0) - time.monotonic())
+
+
+def ask_again(app: str = None) -> None:
+    """The app (or every app) is asked again at once, from its first address on (an admin changed the addresses; the tests)."""
+    for d in (_resting, _answered):
+        if app is None:
+            d.clear()
+        else:
+            d.pop(app, None)
+
+
+def as_viewer(request, app: str, path: str, params: dict = None, body: dict = None, method: str = None, raw: bool = False,
+              timeout: float = 5, user_agent: str = "ioSuite", accept: str = None, patient: bool = False, public: bool = False,
+              limit: int = 64 << 20):
+    """Ask the app on the viewer's behalf (viewer_headers): GET path, with params as its query; with body, POST that
+    JSON; method for another one. The answer's JSON, or with raw (the body, its content type).
+
+    The app's addresses are asked in turn (addresses(); public: the address it is known by when it recorded no other),
+    the one that answered last first. An answer that is not a 2xx is urllib's HTTPError, as the app gave it (so is a
+    redirect to another host: call()). Unreachable when it answered nowhere; it is then left alone for BREAK_S seconds:
+    resting() says so, for a caller that would rather not wait for it again. patient: this request does not count
+    (a picture that took too long says nothing about the app)."""
+    try:
+        bases = addresses(app)
+    except Exception:  # noqa: BLE001  the shared database is away
+        bases = []
+    if not bases and public and url(app):
+        bases = [url(app)]
+    if not bases:
+        raise Unreachable(app)
+    last = _answered.get(app)
+    if last in bases:
+        bases = [last] + [b for b in bases if b != last]
+    h = viewer_headers(request, user_agent, accept or ("*/*" if raw else "application/json"))
+    data = None
+    if body is not None:
+        data, h["Content-Type"] = _json.dumps(body).encode(), "application/json"
+    query = "?" + urllib.parse.urlencode(params) if params else ""
+    why = None
+    for base in bases:
+        req = urllib.request.Request(base + path + query, data=data, headers=h, method=method or ("POST" if body is not None else "GET"))
+        try:
+            with call(req, timeout) as r:  # noqa: S310  http(s), checked in addresses()
+                got = r.read(limit)
+                out = (got, r.headers.get("Content-Type") or "application/octet-stream") if raw else _json.loads(got or b"null")
+        except urllib.error.HTTPError:
+            _answered[app] = base
+            _resting.pop(app, None)
+            raise  # it answered
+        except (urllib.error.URLError, OSError, ValueError) as e:  # ValueError: not JSON, so not the app
+            why = e
+            continue
+        _answered[app] = base
+        _resting.pop(app, None)
+        return out
+    if not patient:
+        _resting[app] = time.monotonic() + BREAK_S
+    raise Unreachable(app, why, bases[0])
 
 
 def forget(reader: str, provider: str = None) -> None:
