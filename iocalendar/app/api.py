@@ -497,28 +497,10 @@ def delete_event(eid: int, request: Request, scope: str = "all", recurrenceId: s
 
 @router.get("/api/members", dependencies=[access.signed_in])
 def family_members(request: Request):
-    """The family members an event can be tagged with (the accounts that use ioCalendar, less the ones taken out of the
-    family): [{id, name, displayName}]. Filter with ?member= on /api/occurrences, /api/events and the subscription links.
-    Admins also get leftOut: the ids of the accounts taken out."""
-    u = request.state.user
-    out = {"items": members.public(members.family())}
-    if shared_users.is_admin(u):
-        out["leftOut"] = sorted(members.left_out())
-    return out
-
-
-@router.put("/api/members/{uid}", dependencies=[access.admin])
-async def set_family_member(uid: int, request: Request):
-    """Admins: {inFamily: bool}. An account out of the family (an admin or service account, not a person) is not
-    offered as a tag and gets no private calendar here; its tags on events stay as plain categories."""
-    b = await json_body(request)
-
-    def set_():
-        if not users.get(uid):
-            raise HTTPException(404, "No such account")
-        members.set_in_family(uid, bool(b.get("inFamily", True)))
-        return {"id": uid, "inFamily": members.in_family(uid), "items": members.public(members.family())}
-    return await run_in_threadpool(set_)
+    """The family members an event can be tagged with: the suite's family (Settings › Security › Family) less the accounts with no role
+    here, [{id, name, displayName, initials, color, hasFace}]; a face is at /api/auth/family/{id}/face. Filter with
+    ?member= (ids or names)."""
+    return {"items": members.public(members.family())}
 
 
 @router.get("/api/people", dependencies=[access.signed_in])

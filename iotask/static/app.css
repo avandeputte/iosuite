@@ -226,7 +226,9 @@ label.check input { margin-top: 3px; accent-color: var(--brand); }
 
 /* family members: a round badge with initials (on event chips, in the sidebar filter and the event form) */
 .mem { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%;
-  font-size: 9px; font-weight: 700; letter-spacing: 0; color: #fff; background: var(--mc, #5f6b7a); }
+  font-size: 9px; font-weight: 700; letter-spacing: 0; color: #fff; background: var(--mc, #5f6b7a); position: relative; }
+/* with a face (the suite's family: ioPix, else the ioContact card): the photo over the initials, ringed in the member's colour */
+.mem.face img { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 50%; object-fit: cover; box-shadow: 0 0 0 2px var(--mc, #5f6b7a); }
 #nav a.who .mem { width: 20px; height: 20px; font-size: 9px; opacity: .55; }
 #nav a.who.picked { background: color-mix(in srgb, var(--mc) var(--mix), transparent); font-weight: 600; }
 #nav a.who.picked .mem, #nav a.who:hover .mem { opacity: 1; }
