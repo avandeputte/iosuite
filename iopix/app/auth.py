@@ -66,3 +66,12 @@ def _on_update(user_id: int, body: dict):
 
 
 auth.on_update = _on_update
+
+
+def _person_data(user_id: int, remove: bool) -> list:
+    """What the person keeps here, when a suite admin deletes their account (iosuite_shared.persondata)."""
+    from app import persondata
+    return persondata.of(user_id, remove)
+
+
+auth.person_data = _person_data

@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 from starlette.concurrency import run_in_threadpool
 
-from iosuite_shared import admin as suite_admin, apppasswords, family, proxyauth, push, sessions, suite, suiteupdates, users
+from iosuite_shared import admin as suite_admin, apppasswords, family, persondata, proxyauth, push, sessions, suite, suiteupdates, users
 from iosuite_shared.access import UNCLAIMED, json_body, public_user
 from iosuite_shared.proxyauth import authlog, peer_of
 
@@ -330,13 +330,13 @@ def users_router(self) -> APIRouter:
 
     @r.delete("/api/users/{user_id}", dependencies=[access.suite_admin])
     def api_users_delete(user_id: int, request: Request):
-        if not users.get(user_id):
-            raise HTTPException(404, "No such user")
+        """The account and what the person kept in every app, as Settings › Security › People deletes it."""
         try:
-            auth._delete(auth.current_user(request), user_id)
+            return {"ok": True, **persondata.delete_account(auth, request, auth.current_user(request), user_id)}
+        except LookupError as e:
+            raise HTTPException(404, str(e).strip("'\""))
         except ValueError as e:
             raise HTTPException(400, str(e))
-        return {"ok": True}
 
     return r
 
@@ -385,10 +385,29 @@ def admin_router(self) -> APIRouter:
             self.on_update(user_id, body)
         return u
 
+    @r.get("/users/{user_id}/data", dependencies=[access.suite_admin])
+    def api_person_data_everywhere(user_id: int, request: Request):
+        """What deleting the account would remove: {apps: [{app, name, items: [{what, count, kept}], error}], shared}."""
+        if not suite_admin.person(user_id):
+            raise HTTPException(404, "No such user")
+        return {"apps": persondata.everywhere(auth, request, user_id), "shared": persondata.shared_part(user_id)}
+
     @r.delete("/users/{user_id}", dependencies=[access.suite_admin])
     def api_delete(user_id: int, request: Request):
-        call(suite_admin.delete, me(request), user_id)
-        return {"ok": True}
+        """The account and what the person kept in every app; what was removed: {ok, apps, shared}."""
+        got = call(persondata.delete_account, auth, request, me(request), user_id)
+        authlog.info("suite admin: account %s deleted with its data in every app by %s", user_id, (me(request) or {}).get("name"))
+        return {"ok": True, **got}
+
+    @r.get("/person-data/{user_id}", dependencies=[access.suite_admin])
+    def api_person_data(user_id: int):
+        """This app's part of what the person keeps (persondata): {items: [{what, count, kept}]}."""
+        return {"items": persondata.local(auth, user_id)}
+
+    @r.delete("/person-data/{user_id}", dependencies=[access.suite_admin])
+    def api_person_data_remove(user_id: int):
+        """Remove this app's part (the panel asks every app before it deletes the account): what was removed."""
+        return {"items": persondata.local(auth, user_id, remove=True)}
 
     @r.get("/photo-people", dependencies=[access.suite_admin])
     def api_photo_people(request: Request):

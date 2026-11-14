@@ -20,3 +20,12 @@ auth.deny_exempt = ("/mcp",)  # assistants sign in with app passwords, whatever 
 # the daily-check switch is kept with ioRecipe's own settings
 updater = Updater(APP, __version__, config.APP_DIR, result_file=config.DATA_DIR / ".update-result",
                   user_agent=APP)
+
+
+def _person_data(user_id: int, remove: bool) -> list:
+    """What the person keeps here, when a suite admin deletes their account (iosuite_shared.persondata)."""
+    from app import persondata
+    return persondata.of(user_id, remove)
+
+
+auth.person_data = _person_data

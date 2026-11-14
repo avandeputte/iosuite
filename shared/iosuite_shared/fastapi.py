@@ -17,6 +17,7 @@ The API shapes are those of iopix (ionote copied them), so the apps' pages keep 
 import base64
 import json
 import logging
+import threading
 import time
 from urllib.parse import urlsplit
 
@@ -57,6 +58,9 @@ class Auth:
         self.log = logging.getLogger(f"iosuite_shared.{app}")
         self.decorate = lambda user: user  # the app may add fields to the user dict it serves (iopix: the person tag)
         self.on_update = None  # on_update(user_id, body) after an admin changed an account: the app's own fields (iopix: the person tag)
+        # person_data(user_id, remove) -> [{what, count, kept}]: what the person keeps in this app, counted, or removed
+        # when their account is deleted (iosuite_shared.persondata); None: nothing per person
+        self.person_data = None
         # the role `canWrite` in /api/auth/me stands for: "editor" where the app has things shared with everyone; an app
         # where everything is one's own (ioNote, ioHealth) sets "member", so its pages and native apps offer changes to members
         self.write_role = "editor"
@@ -74,6 +78,7 @@ class Auth:
         try:
             suite.register(self.app, **self.suite_entry)
             self._registered = True
+            self._run_pending()
         except ValueError as e:  # a PUBLIC_URL or INTERNAL_URL that is not an address: registered without it
             self.log.warning("suite registration: %s; registering without the address", e)
             entry = dict(self.suite_entry)
@@ -84,9 +89,16 @@ class Auth:
                     entry[k] = None
             suite.register(self.app, **entry)
             self._registered = True
+            self._run_pending()
         except Exception as e:  # noqa: BLE001 - the table is the suite's convenience, never a reason to fail
             self.log.warning("could not register %s in the suite's list of apps (tried again in a minute): %s", self.app, e)
             self._retry_at = time.time() + 60
+
+    def _run_pending(self) -> None:
+        """Once per start: the data of accounts deleted while this app could not be reached (persondata.PENDING)."""
+        if self.person_data:
+            from iosuite_shared import persondata
+            threading.Thread(target=persondata.run_pending, args=(self,), name="persondata", daemon=True).start()
 
     def note(self, request: Request, user=None) -> None:
         """Register (once), note that the app is up, and take the address the request reached it at when an admin
@@ -427,12 +439,6 @@ class Auth:
         app.add_middleware(BodyCap, limit_for=limit_for, error=error)
         # added last: the outermost layer, so the peer is the real one; FastAPI's own two pages learn the folder the app is served in
         app.add_middleware(Forwarded, rooted=tuple(p for p in (app.docs_url, app.openapi_url, app.redoc_url) if p))
-
-    def _delete(self, me, user_id: int):
-        """DELETE /api/users/{id} (suite admins: an account is the whole suite's)."""
-        if me and me["id"] == user_id:
-            raise Invalid("You cannot delete your own account while signed in")
-        users.delete(user_id)
 
     def _update(self, me, user_id: int, body: dict):
         """PATCH /api/users/{id}. An admin of this app sets the account's role here; the account itself (name, email,

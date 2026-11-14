@@ -22,3 +22,12 @@ auth = Auth(APP, app_label="ioStart", basic_realm="ioStart", version=__version__
 # GET/POST /api/server and GET /api/log (main.py mounts the router)
 updater = Updater(APP, __version__, config.APP_DIR, user_agent="iostart",
                   result_file=config.DATA_DIR / ".update-result")
+
+
+def _person_data(user_id: int, remove: bool) -> list:
+    """What the person keeps here, when a suite admin deletes their account (iosuite_shared.persondata)."""
+    from app import persondata
+    return persondata.of(user_id, remove)
+
+
+auth.person_data = _person_data

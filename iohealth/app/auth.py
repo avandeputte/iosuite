@@ -41,3 +41,12 @@ def me(request: Request) -> dict:
 def uid(request: Request) -> int:
     return int(me(request)["id"])
 
+
+
+def _person_data(user_id: int, remove: bool) -> list:
+    """What the person keeps here, when a suite admin deletes their account (iosuite_shared.persondata)."""
+    from app import persondata
+    return persondata.of(user_id, remove)
+
+
+auth.person_data = _person_data
